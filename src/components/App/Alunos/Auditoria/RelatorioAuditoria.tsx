@@ -4,6 +4,7 @@ import {
     BookOpen, Copy, Download, Sparkles
 } from 'lucide-react';
 import type { RelatorioAuditoria, Divergencia } from './useAuditoriaEmusys';
+import { copyTextToClipboard } from '@/lib/clipboard';
 
 interface RelatorioAuditoriaProps {
     relatorio: RelatorioAuditoria;
@@ -102,9 +103,9 @@ export function RelatorioAuditoriaView({ relatorio, analiseIA }: RelatorioAudito
         relatorio.cursosFaltando.length +
         relatorio.duplicatas.length;
 
-    const handleCopiar = () => {
+    const handleCopiar = async () => {
         const texto = gerarTextoRelatorio(relatorio, analiseIA);
-        navigator.clipboard.writeText(texto);
+        await copyTextToClipboard(texto);
     };
 
     const handleDownload = () => {

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
+import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
 
 interface ResumoUnidade {
   unidade_id: string;
@@ -230,10 +231,17 @@ export function RelatorioDiario() {
     return texto;
   };
 
-  const copiarParaWhatsApp = () => {
+  const copiarParaWhatsApp = async () => {
     const texto = gerarTextoWhatsApp();
-    navigator.clipboard.writeText(texto);
-    toast.success('Texto copiado! Cole no WhatsApp.');
+    const result = await copyTextToClipboard(texto);
+
+    if (result.ok) {
+      toast.success('Texto copiado! Cole no WhatsApp.');
+      return;
+    }
+
+    console.error('Erro ao copiar relatório de entrada:', result.error);
+    toast.error(`Erro ao copiar. Selecione o texto e pressione ${getManualCopyShortcut()}.`);
   };
 
   if (loading) {

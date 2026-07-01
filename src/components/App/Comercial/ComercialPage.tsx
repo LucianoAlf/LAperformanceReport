@@ -49,6 +49,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
 import { ehMatriculaComercialCanonica } from '@/lib/comercialMatriculasCanonicas';
 import { resolverProfessorExperimentalCanonico } from '@/lib/comercialProfessorExperimental.js';
 import { calcularRangeRelatorioMensalComercial } from '@/lib/relatorioComercialMensal';
@@ -473,7 +474,7 @@ export function ComercialPage() {
   const [numeroTeste, setNumeroTeste] = useState('');
   
   // Estado para período do relatório (simplificado)
-  const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'personalizado'>('hoje');
+  const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'mes_anterior' | 'personalizado'>('hoje');
   const [relatorioDataInicio, setRelatorioDataInicio] = useState<Date>(new Date());
   const [relatorioDataFim, setRelatorioDataFim] = useState<Date>(new Date());
   const [canais, setCanais] = useState<Option[]>([]);
@@ -2494,6 +2495,10 @@ export function ComercialPage() {
         dataInicio = ontem;
         dataFim = ontem;
         break;
+      case 'mes_anterior':
+        dataInicio = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+        dataFim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+        break;
       case 'personalizado':
         dataInicio = relatorioDataInicio;
         dataFim = relatorioDataFim;
@@ -3117,6 +3122,14 @@ export function ComercialPage() {
   };
 
   const obterCompetenciaRelatorioMensalComercial = () => {
+    if (relatorioPeriodo === 'mes_anterior') {
+      const { dataInicioObj } = calcularRangeDatas();
+      return {
+        ano: dataInicioObj.getFullYear(),
+        mes: dataInicioObj.getMonth() + 1,
+      };
+    }
+
     if (relatorioPeriodo !== 'personalizado') {
       return {
         ano: competencia.filtro.ano,
@@ -3779,41 +3792,15 @@ export function ComercialPage() {
     }
     
     // Clipboard API primeiro (confiável em HTTPS / dentro de modais)
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      try {
-        await navigator.clipboard.writeText(texto);
-        toast.success('Relatório copiado!');
-        return;
-      } catch (err) {
-        console.error('Clipboard API falhou, tentando fallback:', err);
-      }
+    const copyResult = await copyTextToClipboard(texto);
+
+    if (copyResult.ok) {
+      toast.success('Relatório copiado!');
+      return;
     }
 
-    // Fallback execCommand (navegadores antigos / contexto não-seguro)
-    const textarea = document.createElement('textarea');
-    textarea.value = texto;
-    textarea.style.position = 'fixed';
-    textarea.style.left = '-9999px';
-    textarea.style.top = '0';
-    textarea.setAttribute('readonly', '');
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-
-    try {
-      const successful = document.execCommand('copy');
-      if (successful) {
-        toast.success('Relatório copiado!');
-      } else {
-        console.error('execCommand retornou false');
-        toast.error('Erro ao copiar. Tente selecionar e copiar manualmente.');
-      }
-    } catch (err) {
-      console.error('Erro ao copiar:', err);
-      toast.error('Erro ao copiar. Tente selecionar e copiar manualmente.');
-    }
-
-    document.body.removeChild(textarea);
+    console.error('Erro ao copiar relatório comercial:', copyResult.error);
+    toast.error(`Erro ao copiar. Selecione o texto e pressione ${getManualCopyShortcut()}.`);
   };
 
   // Enviar relatório via WhatsApp para o grupo
@@ -7045,6 +7032,7 @@ export function ComercialPage() {
                 {[
                   { id: 'hoje', label: 'Hoje' },
                   { id: 'ontem', label: 'Ontem' },
+                  { id: 'mes_anterior', label: 'Mês anterior' },
                   { id: 'personalizado', label: 'Personalizado' },
                 ].map((p) => (
                   <button
@@ -7060,6 +7048,11 @@ export function ComercialPage() {
                         ontem.setDate(ontem.getDate() - 1);
                         setRelatorioDataInicio(ontem);
                         setRelatorioDataFim(ontem);
+                      } else if (p.id === 'mes_anterior') {
+                        const inicioAnterior = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+                        const fimAnterior = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+                        setRelatorioDataInicio(inicioAnterior);
+                        setRelatorioDataFim(fimAnterior);
                       }
                     }}
                     className={cn(
@@ -7274,42 +7267,15 @@ export function ComercialPage() {
               <Button
                 onClick={async () => {
                   if (relatorioTexto) {
-                    // Clipboard API primeiro (confiável em HTTPS / dentro de modais)
-                    if (navigator.clipboard && navigator.clipboard.writeText) {
-                      try {
-                        await navigator.clipboard.writeText(relatorioTexto);
-                        toast.success('Relatório copiado!');
-                        return;
-                      } catch (err) {
-                        console.error('Clipboard API falhou, tentando fallback:', err);
-                      }
+                    const copyResult = await copyTextToClipboard(relatorioTexto);
+
+                    if (copyResult.ok) {
+                      toast.success('Relatório copiado!');
+                      return;
                     }
 
-                    // Fallback execCommand (navegadores antigos / contexto não-seguro)
-                    const textarea = document.createElement('textarea');
-                    textarea.value = relatorioTexto;
-                    textarea.style.position = 'fixed';
-                    textarea.style.left = '-9999px';
-                    textarea.style.top = '0';
-                    textarea.setAttribute('readonly', '');
-                    document.body.appendChild(textarea);
-                    textarea.focus();
-                    textarea.select();
-
-                    try {
-                      const successful = document.execCommand('copy');
-                      if (successful) {
-                        toast.success('Relatório copiado!');
-                      } else {
-                        console.error('execCommand retornou false');
-                        toast.error('Erro ao copiar. Tente selecionar e copiar manualmente.');
-                      }
-                    } catch (err) {
-                      console.error('Erro ao copiar:', err);
-                      toast.error('Erro ao copiar. Tente selecionar e copiar manualmente.');
-                    }
-
-                    document.body.removeChild(textarea);
+                    console.error('Erro ao copiar relatório comercial:', copyResult.error);
+                    toast.error(`Erro ao copiar. Selecione o texto e pressione ${getManualCopyShortcut()}.`);
                   } else {
                     toast.error('Aguarde o relatório ser gerado');
                   }

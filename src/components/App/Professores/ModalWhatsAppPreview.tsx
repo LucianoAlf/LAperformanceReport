@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { MessageSquare, Copy, Send, Check, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
 
 interface ToleranciaInfo {
   ocorrencia_numero: number;
@@ -132,13 +133,16 @@ Em caso de dúvidas, procure a coordenação.`;
 
   // Copiar mensagem
   const handleCopiar = async () => {
-    try {
-      await navigator.clipboard.writeText(mensagem);
+    const result = await copyTextToClipboard(mensagem);
+
+    if (result.ok) {
       setCopiado(true);
       setTimeout(() => setCopiado(false), 2000);
-    } catch (err) {
-      console.error('Erro ao copiar:', err);
+      return;
     }
+
+    console.error('Erro ao copiar mensagem do professor:', result.error);
+    toast.error(`Erro ao copiar. Selecione o texto e pressione ${getManualCopyShortcut()}.`);
   };
 
   // Formatar número para WhatsApp Web

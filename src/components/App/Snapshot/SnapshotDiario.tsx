@@ -5,6 +5,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { cn } from '../../../lib/utils';
 import { EditableCell } from '../Spreadsheet';
 import { toast } from 'sonner';
+import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
 
 interface SnapshotData {
   id?: number;
@@ -319,15 +320,17 @@ Bolsista Parcial: ${snapshot.bolsistas_parcial}
   // Copiar para clipboard
   const copiarRelatorio = async () => {
     const relatorio = gerarRelatorioWhatsApp();
-    try {
-      await navigator.clipboard.writeText(relatorio);
+    const result = await copyTextToClipboard(relatorio);
+
+    if (result.ok) {
       setCopied(true);
       toast.success('Relatório copiado!');
       setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      console.error('Erro ao copiar:', error);
-      toast.error('Erro ao copiar relatório');
+      return;
     }
+
+    console.error('Erro ao copiar relatório do snapshot:', result.error);
+    toast.error(`Erro ao copiar relatório. Selecione o texto e pressione ${getManualCopyShortcut()}.`);
   };
 
   if (loading) {

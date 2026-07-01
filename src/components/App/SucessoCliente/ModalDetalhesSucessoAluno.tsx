@@ -12,6 +12,7 @@ import { TimelinePesquisasAluno } from './TimelinePesquisasAluno';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
 } from '@/components/ui/dialog';
+import { copyTextToClipboard } from '@/lib/clipboard';
 
 interface AlunoSucesso {
   id: number;
@@ -317,33 +318,15 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
   const copiarRelatorio = async () => {
     if (!relatorioTexto) return;
 
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(relatorioTexto);
-        setCopiado(true);
-        setTimeout(() => setCopiado(false), 2000);
-        return;
-      }
-      
-      // Fallback
-      const textarea = document.createElement('textarea');
-      textarea.value = relatorioTexto;
-      textarea.style.position = 'fixed';
-      textarea.style.left = '-9999px';
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      
-      const success = document.execCommand('copy');
-      document.body.removeChild(textarea);
-      
-      if (success) {
-        setCopiado(true);
-        setTimeout(() => setCopiado(false), 2000);
-      }
-    } catch (error) {
-      console.error('Erro ao copiar:', error);
+    const result = await copyTextToClipboard(relatorioTexto);
+
+    if (result.ok) {
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+      return;
     }
+
+    console.error('Erro ao copiar relatório de sucesso do aluno:', result.error);
   };
 
   if (!aluno) return null;

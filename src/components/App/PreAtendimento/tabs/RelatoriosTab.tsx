@@ -26,6 +26,7 @@ import { useLeadsCRM } from '../hooks/useLeadsCRM';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import type { LeadCRM } from '../types';
+import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
 
 interface RelatoriosTabProps {
   unidadeId: string;
@@ -106,21 +107,16 @@ export function RelatoriosTab({ unidadeId, ano, mes }: RelatoriosTabProps) {
   };
 
   const copiarRelatorio = async () => {
-    try {
-      await navigator.clipboard.writeText(textoRelatorio);
+    const result = await copyTextToClipboard(textoRelatorio);
+
+    if (result.ok) {
       setCopiado(true);
       setTimeout(() => setCopiado(false), 2000);
-    } catch {
-      // Fallback
-      const textarea = document.createElement('textarea');
-      textarea.value = textoRelatorio;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      setCopiado(true);
-      setTimeout(() => setCopiado(false), 2000);
+      return;
     }
+
+    console.error('Erro ao copiar relatório de pré-atendimento:', result.error);
+    toast.error(`Erro ao copiar. Selecione o texto e pressione ${getManualCopyShortcut()}.`);
   };
 
   if (loading) {

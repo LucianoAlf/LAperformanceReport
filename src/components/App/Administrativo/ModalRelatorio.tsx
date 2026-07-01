@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import type { MovimentacaoAdmin, ResumoMes } from './AdministrativoPage';
+import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
 import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
 import {
   aplicarFallbacksRetencao,
@@ -247,7 +248,7 @@ export function ModalRelatorio({
   };
   
   // Estado para período do relatório
-  const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'semana' | 'mes' | 'personalizado'>('hoje');
+  const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'semana' | 'mes' | 'mes_anterior' | 'personalizado'>('hoje');
   const [relatorioDataInicio, setRelatorioDataInicio] = useState<Date>(new Date());
   const [relatorioDataFim, setRelatorioDataFim] = useState<Date>(new Date());
 
@@ -292,6 +293,13 @@ export function ModalRelatorio({
   const hoje = new Date().toLocaleDateString('pt-BR');
 
   const obterCompetenciaGerencial = () => {
+    if (relatorioPeriodo === 'mes_anterior') {
+      return {
+        anoRelatorio: relatorioDataInicio.getFullYear(),
+        mesRelatorio: relatorioDataInicio.getMonth() + 1,
+      };
+    }
+
     if (relatorioPeriodo !== 'personalizado') {
       return { anoRelatorio: ano, mesRelatorio: mes };
     }
@@ -310,6 +318,14 @@ export function ModalRelatorio({
   };
 
   const obterCompetenciaMensalAdministrativa = () => {
+    if (relatorioPeriodo === 'mes_anterior') {
+      return {
+        anoRelatorio: relatorioDataInicio.getFullYear(),
+        mesRelatorio: relatorioDataInicio.getMonth() + 1,
+        precisaBuscar: true,
+      };
+    }
+
     if (relatorioPeriodo !== 'personalizado') {
       return { anoRelatorio: ano, mesRelatorio: mes, precisaBuscar: false };
     }
@@ -1551,51 +1567,17 @@ export function ModalRelatorio({
 
   async function copiarRelatorio() {
     if (!textoRelatorio) return;
-    
-    try {
-      // Tentar usar a API moderna primeiro
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(textoRelatorio);
-        setCopiado(true);
-        setTimeout(() => setCopiado(false), 2000);
-        return;
-      }
-      
-      // Fallback para método legado
-      const textarea = document.createElement('textarea');
-      textarea.value = textoRelatorio;
-      textarea.style.position = 'fixed';
-      textarea.style.top = '0';
-      textarea.style.left = '0';
-      textarea.style.width = '2em';
-      textarea.style.height = '2em';
-      textarea.style.padding = '0';
-      textarea.style.border = 'none';
-      textarea.style.outline = 'none';
-      textarea.style.boxShadow = 'none';
-      textarea.style.background = 'transparent';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      
-      const successful = document.execCommand('copy');
-      document.body.removeChild(textarea);
-      
-      if (successful) {
-        setCopiado(true);
-        setTimeout(() => setCopiado(false), 2000);
-      } else {
-        throw new Error('execCommand retornou false');
-      }
-    } catch (err) {
-      console.error('Erro ao copiar:', err);
-      // Tentar abrir em nova janela como último recurso
-      const blob = new Blob([textoRelatorio], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      URL.revokeObjectURL(url);
+
+    const result = await copyTextToClipboard(textoRelatorio);
+
+    if (result.ok) {
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+      return;
     }
+
+    console.error('Erro ao copiar relatório administrativo:', result.error);
+    toast.error('Erro ao copiar', `Selecione o texto manualmente e pressione ${getManualCopyShortcut()}`);
   }
 
   function voltar() {
@@ -1667,6 +1649,7 @@ export function ModalRelatorio({
               <div className="flex flex-wrap gap-2 mb-3">
                 {[
                   { id: 'ontem', label: 'Ontem' },
+                  { id: 'mes_anterior', label: 'Mês anterior' },
                   { id: 'personalizado', label: 'Personalizado' },
                 ].map((p) => (
                   <button
@@ -1679,6 +1662,11 @@ export function ModalRelatorio({
                         ontem.setDate(ontem.getDate() - 1);
                         setRelatorioDataInicio(ontem);
                         setRelatorioDataFim(ontem);
+                      } else if (p.id === 'mes_anterior') {
+                        const inicioAnterior = new Date(hojeDate.getFullYear(), hojeDate.getMonth() - 1, 1);
+                        const fimAnterior = new Date(hojeDate.getFullYear(), hojeDate.getMonth(), 0);
+                        setRelatorioDataInicio(inicioAnterior);
+                        setRelatorioDataFim(fimAnterior);
                       }
                     }}
                     className={cn(

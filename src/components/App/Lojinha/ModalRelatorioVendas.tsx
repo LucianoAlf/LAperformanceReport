@@ -10,6 +10,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
 
 // Mapeamento de UUIDs para nomes de unidade
 const UUID_NOME_MAP: Record<string, string> = {
@@ -43,10 +44,25 @@ export function ModalRelatorioVendas({ open, onOpenChange, unidadeId }: ModalRel
   const { usuario } = useAuth();
 
   // Estado para período do relatório
-  const [relatorioPeriodo, setRelatorioPeriodo] = useState<'ontem' | 'personalizado'>('ontem');
+  const [relatorioPeriodo, setRelatorioPeriodo] = useState<'ontem' | 'mes_anterior' | 'personalizado'>('ontem');
   const [relatorioData, setRelatorioData] = useState<Date>(new Date());
 
   const unidadeNome = UUID_NOME_MAP[unidadeId] || 'Consolidado';
+
+  function formatarPeriodoSelecionado() {
+    if (relatorioPeriodo === 'ontem') {
+      return new Date(Date.now() - 86400000).toLocaleDateString('pt-BR');
+    }
+
+    if (relatorioPeriodo === 'mes_anterior') {
+      const hoje = new Date();
+      const inicioAnterior = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+      const fimAnterior = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+      return `${inicioAnterior.toLocaleDateString('pt-BR')} até ${fimAnterior.toLocaleDateString('pt-BR')}`;
+    }
+
+    return relatorioData.toLocaleDateString('pt-BR');
+  }
 
   function resetModal() {
     setTipoSelecionado(null);
@@ -69,18 +85,24 @@ export function ModalRelatorioVendas({ open, onOpenChange, unidadeId }: ModalRel
         ontem.setDate(ontem.getDate() - 1);
         dataInicio = ontem.toISOString().split('T')[0];
         dataFim = ontem.toISOString().split('T')[0];
+      } else if (relatorioPeriodo === 'mes_anterior') {
+        const inicioAnterior = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+        const fimAnterior = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+        dataInicio = inicioAnterior.toISOString().split('T')[0];
+        dataFim = fimAnterior.toISOString().split('T')[0];
       } else {
         dataInicio = relatorioData.toISOString().split('T')[0];
         dataFim = relatorioData.toISOString().split('T')[0];
       }
 
       // Ajustar período baseado no tipo
-      if (tipo === 'semanal') {
+      const usaPeriodoFechado = relatorioPeriodo === 'mes_anterior' || relatorioPeriodo === 'personalizado';
+      if (tipo === 'semanal' && !usaPeriodoFechado) {
         const inicioSemana = new Date(hoje);
         inicioSemana.setDate(inicioSemana.getDate() - 7);
         dataInicio = inicioSemana.toISOString().split('T')[0];
         dataFim = hoje.toISOString().split('T')[0];
-      } else if (tipo === 'mensal' || tipo === 'meta_fideliza') {
+      } else if ((tipo === 'mensal' || tipo === 'meta_fideliza') && !usaPeriodoFechado) {
         const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
         dataInicio = inicioMes.toISOString().split('T')[0];
         dataFim = hoje.toISOString().split('T')[0];
@@ -113,14 +135,17 @@ export function ModalRelatorioVendas({ open, onOpenChange, unidadeId }: ModalRel
   }
 
   async function copiarRelatorio() {
-    try {
-      await navigator.clipboard.writeText(textoRelatorio);
+    const result = await copyTextToClipboard(textoRelatorio);
+
+    if (result.ok) {
       setCopiado(true);
       toast.success('Relatório copiado!');
       setTimeout(() => setCopiado(false), 2000);
-    } catch (error) {
-      toast.error('Erro ao copiar');
+      return;
     }
+
+    console.error('Erro ao copiar relatório da lojinha:', result.error);
+    toast.error(`Erro ao copiar. Selecione o texto e pressione ${getManualCopyShortcut()}.`);
   }
 
   async function enviarWhatsApp() {
@@ -176,6 +201,13 @@ export function ModalRelatorioVendas({ open, onOpenChange, unidadeId }: ModalRel
                   Ontem
                 </Button>
                 <Button
+                  variant={relatorioPeriodo === 'mes_anterior' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setRelatorioPeriodo('mes_anterior')}
+                >
+                  Mês anterior
+                </Button>
+                <Button
                   variant={relatorioPeriodo === 'personalizado' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setRelatorioPeriodo('personalizado')}
@@ -192,10 +224,7 @@ export function ModalRelatorioVendas({ open, onOpenChange, unidadeId }: ModalRel
                 </div>
               )}
               <p className="text-xs text-slate-500 mt-1">
-                📅 {relatorioPeriodo === 'ontem' 
-                  ? new Date(Date.now() - 86400000).toLocaleDateString('pt-BR')
-                  : relatorioData.toLocaleDateString('pt-BR')
-                }
+                📅 {formatarPeriodoSelecionado()}
               </p>
             </div>
 

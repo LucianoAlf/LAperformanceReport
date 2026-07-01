@@ -11,6 +11,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
 import { invokeWithRetry } from '@/lib/supabase';
 import { formatarDataCaixa, formatarMoedaCaixa, formatarRelatorioCaixaWhatsApp } from '@/lib/caixaFinanceiro';
 import type { CaixaDiario, CaixaMovimentacao } from '@/types/caixa';
@@ -40,8 +41,15 @@ export function CaixaWhatsAppPreview({
   const caixaFechado = caixa?.status === 'fechado';
 
   async function copiar() {
-    await navigator.clipboard.writeText(texto);
-    onStatus('Preview copiado para a area de transferencia.', 'success');
+    const result = await copyTextToClipboard(texto);
+
+    if (result.ok) {
+      onStatus('Preview copiado para a area de transferencia.', 'success');
+      return;
+    }
+
+    console.error('Erro ao copiar preview do caixa:', result.error);
+    onStatus(`Erro ao copiar. Selecione o texto e pressione ${getManualCopyShortcut()}.`, 'error');
   }
 
   async function enviarDryRun() {

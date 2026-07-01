@@ -234,7 +234,7 @@ Deno.serve(async (req) => {
     const topMatriculadores = dados.top_matriculadores || [];
     const topRetencao = dados.top_retencao || [];
 
-    // Professores em alerta (baseado em presença, para a seção de alertas)
+    // Professores com presença baixa. Esta lista não é a mesma classificação do Health Score.
     const professoresAlerta = dados.professores_alerta || [];
     const professorCriticos = professoresAlerta.filter((p: any) => p.status === 'critico');
     const professorAtencao = professoresAlerta.filter((p: any) => p.status === 'atencao');
@@ -364,14 +364,14 @@ Deno.serve(async (req) => {
       relatorioTemplate += `\n`;
     }
 
-    // PROFESSORES EM ALERTA
+    // PROFESSORES COM PRESENÇA BAIXA
     if (professoresAlerta.length > 0) {
       relatorioTemplate += `───────────────────────\n`;
-      relatorioTemplate += `⚠️ *PROFESSORES EM ALERTA*\n`;
+      relatorioTemplate += `⚠️ *ALERTAS DE PRESENÇA E EVASÃO*\n`;
       relatorioTemplate += `───────────────────────\n\n`;
 
       if (professorCriticos.length > 0) {
-        relatorioTemplate += `🔴 *CRÍTICOS (${professorCriticos.length})*\n`;
+        relatorioTemplate += `🔴 *PRESENÇA/EVASÃO CRÍTICA (${professorCriticos.length})*\n`;
         professorCriticos.slice(0, 5).forEach((p: any) => {
           relatorioTemplate += `• ${p.professor} - Presença ${p.presenca}%${p.evasoes > 0 ? ` | ${p.evasoes} evasões` : ''}\n`;
         });
@@ -382,7 +382,7 @@ Deno.serve(async (req) => {
       }
 
       if (professorAtencao.length > 0) {
-        relatorioTemplate += `🟡 *ATENÇÃO (${professorAtencao.length})*\n`;
+        relatorioTemplate += `🟡 *PRESENÇA/EVASÃO EM ATENÇÃO (${professorAtencao.length})*\n`;
         professorAtencao.slice(0, 5).forEach((p: any) => {
           relatorioTemplate += `• ${p.professor} - Presença ${p.presenca}%${p.evasoes > 0 ? ` | ${p.evasoes} evasões` : ''}\n`;
         });

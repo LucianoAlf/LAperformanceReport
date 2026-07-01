@@ -15,6 +15,7 @@ import {
 import { JornadaProfessor } from './JornadaProfessor';
 import { calcularHealthScore } from '@/hooks/useHealthScore';
 import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
+import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
 
 interface ProfessorPerformance {
   id: number;
@@ -493,45 +494,16 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
   const copiarRelatorio = async () => {
     if (!relatorioTexto) return;
 
-    try {
-      // Tentar Clipboard API primeiro (método moderno)
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(relatorioTexto);
-        setCopiado(true);
-        setTimeout(() => setCopiado(false), 2000);
-        return;
-      }
-      
-      // Fallback: execCommand com textarea
-      const textarea = document.createElement('textarea');
-      textarea.value = relatorioTexto;
-      textarea.style.position = 'fixed';
-      textarea.style.left = '-9999px';
-      textarea.style.top = '0';
-      textarea.setAttribute('readonly', '');
-      document.body.appendChild(textarea);
-      
-      textarea.focus();
-      textarea.select();
-      
-      const success = document.execCommand('copy');
-      document.body.removeChild(textarea);
-      
-      if (success) {
-        setCopiado(true);
-        setTimeout(() => setCopiado(false), 2000);
-      } else {
-        throw new Error('execCommand falhou');
-      }
-    } catch (error) {
-      console.error('Erro ao copiar:', error);
-      // Fallback final: selecionar o texto do textarea visível
-      const textareaEl = document.querySelector('textarea[value="' + CSS.escape(relatorioTexto.substring(0, 50)) + '"], textarea');
-      if (textareaEl) {
-        (textareaEl as HTMLTextAreaElement).select();
-        alert('Texto selecionado. Use Ctrl+C para copiar.');
-      }
+    const result = await copyTextToClipboard(relatorioTexto);
+
+    if (result.ok) {
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+      return;
     }
+
+    console.error('Erro ao copiar relatório individual do professor:', result.error);
+    alert(`Erro ao copiar. Selecione o texto manualmente e pressione ${getManualCopyShortcut()}.`);
   };
 
   // Usar Health Score já calculado na lista (para evitar divergências por arredondamento)
