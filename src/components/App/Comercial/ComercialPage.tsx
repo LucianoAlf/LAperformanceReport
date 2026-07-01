@@ -3017,9 +3017,12 @@ export function ComercialPage() {
         texto += `🎸 Prof. Experimental: ${mat.professores_exp_relatorio || mat.professor_exp_nome || 'Não teve'}\n`;
         texto += `📱 Canal: ${mat.canal_nome || 'Não informado'}\n`;
         texto += `👤 Hunter: ${mat.hunter_nome || hunterNome}\n`;
-        texto += `💵 Pass: R$ ${fmtBRL(Number(mat.valor_passaporte) || 0)}\n`;
-        texto += `💵 Parc: ${formatarParcelasMatriculaRelatorio(mat)}\n`;
-        texto += `💳 Pag: ${mat.formas_pagamento_relatorio || mat.forma_pagamento_nome || 'Não informado'}\n\n`;
+        texto += `💵 Pass: R$ ${fmtBRL(Number(mat.valor_passaporte) || 0)}`;
+        if (mat.forma_pagamento_passaporte_nome) texto += ` (${mat.forma_pagamento_passaporte_nome})`;
+        texto += `\n`;
+        texto += `💵 Parc: ${formatarParcelasMatriculaRelatorio(mat)}`;
+        if (mat.formas_pagamento_relatorio || mat.forma_pagamento_nome) texto += ` (${mat.formas_pagamento_relatorio || mat.forma_pagamento_nome})`;
+        texto += `\n\n`;
       });
     }
 
