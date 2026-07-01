@@ -762,7 +762,7 @@ export function AdministrativoPage() {
 
       const retencaoRows: RetencaoOperacionalPorUnidade[] = kpisAlunosCanonicos.fonte === 'vivo'
         ? calcularRetencaoOperacionalCanonica({
-            movimentacoes: movDataComAlunos,
+            movimentacoes: movRetencaoCanonicas,
             unidades: unidadesFromKPIsCanonicos(kpisAlunosCanonicos.porUnidade),
             alunosPagantesPorUnidade: pagantesMapFromKPIsCanonicos(kpisAlunosCanonicos.porUnidade),
             ano,

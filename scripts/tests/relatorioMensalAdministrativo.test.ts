@@ -38,4 +38,41 @@ assert.equal(kpis.ltv, 7605);
 assert.equal(kpis.mrrPerdido, 1027);
 assert.equal(kpis.churnRate.toFixed(1), '2.8');
 
+const evasoesCampoGrandeJunho = [
+  { tipo: 'evasao', valor_parcela_evasao: 350 },
+  { tipo: 'evasao', valor_parcela_evasao: 367 },
+  { tipo: 'evasao', valor_parcela_evasao: 387 },
+  { tipo: 'evasao', valor_parcela_evasao: 397 },
+  { tipo: 'evasao', valor_parcela_evasao: 397 },
+  { tipo: 'evasao', valor_parcela_evasao: 397 },
+  { tipo: 'evasao', valor_parcela_evasao: 397 },
+  { tipo: 'evasao', valor_parcela_evasao: 397 },
+  { tipo: 'evasao', valor_parcela_evasao: 397 },
+  { tipo: 'evasao', valor_parcela_evasao: 245 },
+];
+
+const naoRenovacoesCampoGrandeJunho = [
+  { tipo: 'nao_renovacao', valor_parcela_evasao: 367 },
+  { tipo: 'nao_renovacao', valor_parcela_evasao: 374 },
+];
+
+const kpisCampoGrandeJunho = calcularKpisMensaisAdministrativos({
+  resumo: {
+    alunos_pagantes: 431,
+    ticket_medio: 390,
+    faturamento: 167700,
+    ltv_meses: 19.5,
+    churn_rate: 0,
+    mrr_perdido: 0,
+    evasoes_interrompido: 10,
+    evasoes_nao_renovou: 2,
+  },
+  evasoes: evasoesCampoGrandeJunho,
+  naoRenovacoes: naoRenovacoesCampoGrandeJunho,
+});
+
+assert.equal(kpisCampoGrandeJunho.mrrPerdido, 4472);
+assert.equal(kpisCampoGrandeJunho.mrrAtual, 167700);
+assert.equal(kpisCampoGrandeJunho.churnRate.toFixed(1), '2.8');
+
 console.log('relatorioMensalAdministrativo OK');

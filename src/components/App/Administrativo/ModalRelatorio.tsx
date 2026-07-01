@@ -11,7 +11,7 @@ import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import type { MovimentacaoAdmin, ResumoMes } from './AdministrativoPage';
-import { calcularReajusteMedioCanonico } from '@/lib/retencaoOperacionalCanonica';
+import { calcularReajusteMedioCanonico, valorPerdidoMovimentacao } from '@/lib/retencaoOperacionalCanonica';
 import {
   calcularKpisMensaisAdministrativos,
   valorPerdidoRelatorioMensal,
@@ -23,6 +23,42 @@ const UUID_NOME_MAP: Record<string, string> = {
   '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'Campo Grande',
   '95553e96-971b-4590-a6eb-0201d013c14d': 'Recreio',
 };
+
+const tipoEvasaoLabels: Record<string, string> = {
+  interrompido: 'Interrompido',
+  interrompido_2_curso: 'Interrompido 2º Curso',
+  interrompido_bolsista: 'Interrompido Bolsista',
+  interrompido_banda: 'Interrompido Banda',
+  transferencia: 'Transferência',
+};
+
+function labelTipoEvasao(tipo: string): string {
+  return tipoEvasaoLabels[tipo] || tipo || 'Interrompido';
+}
+
+function formatarParcelaEvasaoDiaria(valor: number): string {
+  if (!Number.isFinite(valor) || valor <= 0) return 'N/I';
+  return `R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function classificarTipoEvasaoMovimentacao(e: any): string {
+  const tipoInformado = String(e?.tipo_evasao || '').trim();
+  if (tipoInformado) return tipoInformado;
+
+  const aluno = e?.alunos || {};
+  const tipoMatriculaId = Number(e?.tipo_matricula_id ?? aluno?.tipo_matricula_id ?? 0);
+  const isSegundoCurso = Boolean(e?.is_segundo_curso ?? aluno?.is_segundo_curso);
+  const tipoMovimento = String(e?.tipo || '').trim();
+  const motivo = String(e?.motivo || '').toLowerCase();
+
+  if (tipoMovimento === 'transferencia' || motivo.includes('transfer')) return 'transferencia';
+  if (tipoMovimento === 'nao_renovacao') return 'nao_renovou';
+  if (tipoMatriculaId === 5) return 'interrompido_banda';
+  if (isSegundoCurso || tipoMatriculaId === 2) return 'interrompido_2_curso';
+  if ([3, 4].includes(tipoMatriculaId)) return 'interrompido_bolsista';
+
+  return 'interrompido';
+}
 
 interface ModalRelatorioProps {
   open: boolean;
@@ -493,16 +529,7 @@ export function ModalRelatorio({
     // Evasões
     texto += `🚪 *EVASÕES (Saíram esse mês)*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    const getTipoEvasao = (e: any): string => {
-      const aluno = e.alunos;
-      if (aluno) {
-        if (aluno.tipo_matricula_id === 5) return 'interrompido_banda';
-        if (aluno.is_segundo_curso || aluno.tipo_matricula_id === 2) return 'interrompido_2_curso';
-        if ([3, 4].includes(aluno.tipo_matricula_id)) return 'interrompido_bolsista';
-        return 'interrompido';
-      }
-      return e.tipo_evasao || 'interrompido';
-    };
+    const getTipoEvasao = classificarTipoEvasaoMovimentacao;
     texto += `• Total de evasões: *${evasoes.length + naoRenovacoes.length}*\n`;
     texto += `• Interrompido: *${evasoes.filter(e => getTipoEvasao(e) === 'interrompido').length}*\n`;
     texto += `• Interrompido 2º Curso: *${evasoes.filter(e => getTipoEvasao(e) === 'interrompido_2_curso').length}*\n`;
@@ -514,8 +541,11 @@ export function ModalRelatorio({
     if (evasoesHoje.length > 0) {
       texto += `Evasões do dia: *${evasoesHoje.length}*\n\n`;
       evasoesHoje.forEach((e, i) => {
+        const tipo = getTipoEvasao(e);
+        const parcela = valorPerdidoMovimentacao(e);
         texto += `${i + 1}) *${e.aluno_nome}*\n`;
-        texto += `   Tipo: ${e.tipo_evasao || 'N/A'}\n`;
+        texto += `   Tipo: ${labelTipoEvasao(tipo)}\n`;
+        texto += `   Parcela: ${formatarParcelaEvasaoDiaria(parcela)}\n`;
         texto += `   Motivo: ${e.motivo || 'Não informado'}\n\n`;
       });
     } else {
@@ -741,11 +771,12 @@ export function ModalRelatorio({
     // SEÇÃO 9: EVASÕES
     texto += `🚪 *EVASÕES (Saíram no mês)*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    const interrompidos = evasoes.filter(e => e.tipo_evasao === 'interrompido').length;
-    const interrompidos2Curso = evasoes.filter(e => e.tipo_evasao === 'interrompido_2_curso').length;
-    const interrompidosBolsista = evasoes.filter(e => e.tipo_evasao === 'interrompido_bolsista').length;
-    const interrompidosBanda = evasoes.filter(e => e.tipo_evasao === 'interrompido_banda').length;
-    const naoRenovou = evasoes.filter(e => e.tipo_evasao === 'nao_renovou').length;
+    const tipoEvasaoMensal = (e: any) => classificarTipoEvasaoMovimentacao(e);
+    const interrompidos = evasoes.filter(e => tipoEvasaoMensal(e) === 'interrompido').length;
+    const interrompidos2Curso = evasoes.filter(e => tipoEvasaoMensal(e) === 'interrompido_2_curso').length;
+    const interrompidosBolsista = evasoes.filter(e => tipoEvasaoMensal(e) === 'interrompido_bolsista').length;
+    const interrompidosBanda = evasoes.filter(e => tipoEvasaoMensal(e) === 'interrompido_banda').length;
+    const naoRenovou = evasoes.filter(e => tipoEvasaoMensal(e) === 'nao_renovou').length;
     
     texto += `• Total no mês: *${evasoes.length}*\n`;
     texto += `• Não renovou: *${naoRenovou}*\n`;
@@ -850,7 +881,7 @@ export function ModalRelatorio({
     const mesNomeUpper = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
     
     const porTipo = evasoes.reduce((acc, e) => {
-      const tipo = e.tipo_evasao || 'outros';
+      const tipo = classificarTipoEvasaoMovimentacao(e);
       acc[tipo] = (acc[tipo] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
@@ -874,11 +905,9 @@ export function ModalRelatorio({
       texto += `📈 *POR TIPO*\n`;
       texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
       Object.entries(porTipo).forEach(([tipo, count]) => {
-        const label = tipo === 'interrompido' ? '⏸️ Interrompido' : 
-          tipo === 'nao_renovou' ? '❌ Não Renovou' : 
-          tipo === 'interrompido_2_curso' ? '⏸️ Interrompido 2º Curso' :
-          tipo === 'interrompido_bolsista' ? '⏸️ Interrompido Bolsista' :
-          tipo === 'interrompido_banda' ? '⏸️ Interrompido Banda' : tipo;
+        const label = tipo === 'nao_renovou'
+          ? '❌ Não Renovou'
+          : `⏸️ ${labelTipoEvasao(tipo)}`;
         texto += `• ${label}: *${count}*\n`;
       });
       texto += `\n`;
@@ -890,11 +919,10 @@ export function ModalRelatorio({
       texto += `📋 *LISTA DE EVASÕES*\n`;
       texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
       evasoes.forEach((e, i) => {
-        const tipoLabel = e.tipo_evasao === 'interrompido' ? '⏸️ Interrompido' : 
-          e.tipo_evasao === 'nao_renovou' ? '❌ Não Renovou' : 
-          e.tipo_evasao === 'interrompido_2_curso' ? '⏸️ 2º Curso' :
-          e.tipo_evasao === 'interrompido_bolsista' ? '⏸️ Bolsista' :
-          e.tipo_evasao === 'interrompido_banda' ? '⏸️ Banda' : e.tipo_evasao || 'N/A';
+        const tipo = classificarTipoEvasaoMovimentacao(e);
+        const tipoLabel = tipo === 'nao_renovou'
+          ? '❌ Não Renovou'
+          : `⏸️ ${labelTipoEvasao(tipo)}`;
         const dataFormatada = new Date(e.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
         texto += `${i + 1}. *${e.aluno_nome}*\n`;
         texto += `   📅 ${dataFormatada} | ${tipoLabel}\n`;

@@ -51,6 +51,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ehMatriculaComercialCanonica } from '@/lib/comercialMatriculasCanonicas';
 import { resolverProfessorExperimentalCanonico } from '@/lib/comercialProfessorExperimental.js';
+import { calcularRangeRelatorioMensalComercial } from '@/lib/relatorioComercialMensal';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { format } from 'date-fns';
@@ -3115,15 +3116,13 @@ export function ComercialPage() {
 
   // Gerar relatório mensal completo
   const gerarRelatorioMensal = async () => {
-    const { dataInicio, dataFim, dataInicioObj, dataFimObj } = calcularRangeDatas();
-    const hoje = dataFimObj;
-    const dia = hoje.getDate().toString().padStart(2, '0');
-    const mesNome = hoje.toLocaleString('pt-BR', { month: 'long' });
-    const mesNomeUpper = mesNome.toUpperCase();
-    const ano = hoje.getFullYear();
-    const periodoLabel = relatorioPeriodo === 'personalizado'
-      ? `${format(dataInicioObj, 'dd/MM/yyyy')} - ${format(dataFimObj, 'dd/MM/yyyy')}`
-      : `${mesNomeUpper}/${ano}`;
+    const {
+      ano,
+      mes,
+      dataInicio,
+      dataFim,
+      periodoLabel,
+    } = calcularRangeRelatorioMensalComercial(competencia.filtro.ano, competencia.filtro.mes);
 
     // Buscar informações da unidade incluindo o Hunter
     const unidadeId = isAdmin ? context?.unidadeSelecionada : usuario?.unidade_id;
@@ -3159,7 +3158,7 @@ export function ComercialPage() {
     const taxaExpMatMes = await buscarTaxaExpMatCanonica(
       unidadeRelatorioId,
       ano,
-      hoje.getMonth() + 1,
+      mes,
       'mensal'
     );
     const experimentaisMes = taxaExpMatMes.realizadasConfirmadas || taxaExpMatMes.denominador;
@@ -3359,7 +3358,8 @@ export function ComercialPage() {
 
     // Rodapé
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `📅 Gerado em: ${dia}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${ano} às ${hoje.getHours()}:${hoje.getMinutes().toString().padStart(2, '0')}\n`;
+    const agora = new Date();
+    texto += `📅 Gerado em: ${agora.getDate().toString().padStart(2, '0')}/${(agora.getMonth() + 1).toString().padStart(2, '0')}/${agora.getFullYear()} às ${agora.getHours()}:${agora.getMinutes().toString().padStart(2, '0')}\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━`;
 
     return texto;

@@ -2,7 +2,10 @@ import { Pencil, Trash2, Info } from 'lucide-react';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { calcularTempoPermanenciaMovimentacao } from '@/lib/retencaoOperacionalCanonica';
+import {
+  calcularTempoPermanenciaMovimentacao,
+  valorPerdidoMovimentacao,
+} from '@/lib/retencaoOperacionalCanonica';
 import type { MovimentacaoAdmin } from './AdministrativoPage';
 
 interface TabelaEvasoesProps {
@@ -19,9 +22,17 @@ const tipoCancelamentoLabels: Record<string, { label: string; color: string }> =
   transferencia: { label: 'Transferência', color: 'bg-amber-500/20 text-amber-400' },
 };
 
+function formatCurrency(value: number): string {
+  return value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  });
+}
+
 export function TabelaEvasoes({ data, onEdit, onDelete }: TabelaEvasoesProps) {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
+  const mrrPerdidoTotal = data.reduce((acc, item) => acc + valorPerdidoMovimentacao(item), 0);
 
   // Contar por tipo
   const porTipo = data.reduce((acc, item) => {
@@ -40,6 +51,7 @@ export function TabelaEvasoes({ data, onEdit, onDelete }: TabelaEvasoesProps) {
             <th className="py-3 px-4 text-left">Aluno</th>
             <th className="py-3 px-4 text-left">Escola</th>
             <th className="py-3 px-4 text-left">Tipo</th>
+            <th className="py-3 px-4 text-right">Parcela</th>
             <th className="py-3 px-4 text-center">Permanência</th>
             <th className="py-3 px-4 text-left">Professor</th>
             <th className="py-3 px-4 text-left">Motivo</th>
@@ -49,7 +61,7 @@ export function TabelaEvasoes({ data, onEdit, onDelete }: TabelaEvasoesProps) {
         <tbody>
           {data.length === 0 ? (
             <tr>
-              <td colSpan={9} className="py-8 text-center text-slate-500">
+              <td colSpan={10} className="py-8 text-center text-slate-500">
                 Nenhum cancelamento registrado neste período 🎉
               </td>
             </tr>
@@ -57,6 +69,7 @@ export function TabelaEvasoes({ data, onEdit, onDelete }: TabelaEvasoesProps) {
             data.map((item, index) => {
               const tipoInfo = tipoCancelamentoLabels[item.tipo_evasao || 'interrompido'] || tipoCancelamentoLabels.interrompido;
               const permanenciaMeses = calcularTempoPermanenciaMovimentacao(item);
+              const valorPerdido = valorPerdidoMovimentacao(item);
               return (
                 <tr key={item.id} className="border-t border-slate-700/30 hover:bg-slate-800/30">
                   <td className="py-3 px-4 text-slate-500">{index + 1}</td>
@@ -85,10 +98,19 @@ export function TabelaEvasoes({ data, onEdit, onDelete }: TabelaEvasoesProps) {
                       {tipoInfo.label}
                     </span>
                   </td>
+                  <td className="py-3 px-4 text-right">
+                    {valorPerdido > 0 ? (
+                      <span className="text-emerald-400 font-semibold">
+                        {formatCurrency(valorPerdido)}
+                      </span>
+                    ) : (
+                      <span className="text-slate-500 text-sm">-</span>
+                    )}
+                  </td>
                   <td className="py-3 px-4 text-center">
                     {permanenciaMeses ? (
                       <span className="text-slate-300 font-medium">
-                        {item.tempo_permanencia_meses} {item.tempo_permanencia_meses === 1 ? 'mês' : 'meses'}
+                        {permanenciaMeses} {permanenciaMeses === 1 ? 'mês' : 'meses'}
                       </span>
                     ) : (
                       <span className="text-slate-500 text-sm">-</span>
@@ -138,12 +160,15 @@ export function TabelaEvasoes({ data, onEdit, onDelete }: TabelaEvasoesProps) {
               <td colSpan={4} className="py-3 px-4 text-slate-400 font-medium">
                 Total: {data.length} cancelamento{data.length !== 1 ? 's' : ''}
               </td>
-              <td colSpan={5} className="py-3 px-4 text-slate-400">
+              <td colSpan={4} className="py-3 px-4 text-slate-400">
                 {Object.entries(porTipo).map(([tipo, count]) => (
                   <span key={tipo} className="mr-3">
                     {tipoCancelamentoLabels[tipo]?.label || tipo}: <span className="text-rose-400 font-medium">{count}</span>
                   </span>
                 ))}
+              </td>
+              <td colSpan={2} className="py-3 px-4 text-right text-slate-300 font-medium">
+                MRR perdido: <span className="text-emerald-400">{formatCurrency(mrrPerdidoTotal)}</span>
               </td>
             </tr>
           </tfoot>

@@ -33,6 +33,7 @@ import { TabAutomacao } from './Automacao/TabAutomacao';
 import { TabHistoricoLTV } from './TabHistoricoLTV';
 import { ToastContainer } from '@/components/ui/toast';
 import { useToast } from '@/hooks/useToast';
+import { isMatriculaBandaAtivaOperacional } from '@/lib/alunosFiltrosCanonicos';
 // Interfaces
 export interface Aluno {
   id: number;
@@ -948,27 +949,28 @@ export function AlunosPage() {
       } else if (tipoId === 5) {
         // Matrícula em Banda: mostrar APENAS o registro da banda (sem curso principal)
         const cursosBandaIds = cursos.filter(c => c.is_projeto_banda).map(c => c.id);
+        const isBandaAtiva = (r: any) => isMatriculaBandaAtivaOperacional(r, cursosBandaIds);
         resultado = resultado
           .filter(a =>
-            cursosBandaIds.includes(a.curso_id) ||
-            a.outros_cursos?.some(oc => cursosBandaIds.includes(oc.curso_id))
+            isBandaAtiva(a) ||
+            a.outros_cursos?.some(oc => isBandaAtiva(oc))
           )
           .map(a => {
-            // Se o curso principal já é banda, manter (sem outros cursos não-banda)
-            if (cursosBandaIds.includes(a.curso_id)) {
+            // Se o curso principal já é banda ativa, manter (sem outros cursos não-banda)
+            if (isBandaAtiva(a)) {
               return {
                 ...a,
-                outros_cursos: a.outros_cursos?.filter(oc => cursosBandaIds.includes(oc.curso_id)) || [],
+                outros_cursos: a.outros_cursos?.filter(oc => isBandaAtiva(oc)) || [],
               };
             }
 
             // Senão, encontrar o registro de banda em outros_cursos e "promovê-lo"
-            const registroBanda = a.outros_cursos?.find(oc => cursosBandaIds.includes(oc.curso_id));
+            const registroBanda = a.outros_cursos?.find(oc => isBandaAtiva(oc));
             if (!registroBanda) return a;
 
             // Mostrar apenas a banda (sem o curso principal, apenas outras bandas se houver)
             const outrasBandas = a.outros_cursos?.filter(oc =>
-              oc.id !== registroBanda.id && cursosBandaIds.includes(oc.curso_id)
+              oc.id !== registroBanda.id && isBandaAtiva(oc)
             ) || [];
 
             return {

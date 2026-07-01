@@ -193,6 +193,23 @@ function valorPerdidoMovimentacao(mov: any): number {
   );
 }
 
+const tipoEvasaoLabels: Record<string, string> = {
+  interrompido: 'Interrompido',
+  interrompido_2_curso: 'Interrompido 2º Curso',
+  interrompido_bolsista: 'Interrompido Bolsista',
+  interrompido_banda: 'Interrompido Banda',
+  transferencia: 'Transferência',
+};
+
+function labelTipoEvasao(tipo: string): string {
+  return tipoEvasaoLabels[tipo] || tipo || 'Interrompido';
+}
+
+function formatarParcelaEvasaoDiaria(valor: number): string {
+  if (!Number.isFinite(valor) || valor <= 0) return 'N/I';
+  return `R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 function parseDateOnly(value: string | null | undefined): Date | null {
   if (!value) return null;
   const [year, month, day] = value.split('T')[0].split('-').map(Number);
@@ -718,8 +735,11 @@ async function gerarRelatorioDiario(
   if (evasoesHoje.length > 0) {
     texto += `Evasões do dia: *${evasoesHoje.length}*\n\n`;
     evasoesHoje.forEach((e: any, i: number) => {
+      const tipo = getTipoEvasao(e);
+      const parcela = valorPerdidoMovimentacao(e);
       texto += `${i + 1}) *${e.aluno_nome}*\n`;
-      texto += `   Tipo: ${e.tipo_evasao || 'N/A'}\n`;
+      texto += `   Tipo: ${labelTipoEvasao(tipo)}\n`;
+      texto += `   Parcela: ${formatarParcelaEvasaoDiaria(parcela)}\n`;
       texto += `   Motivo: ${e.motivo || 'Não informado'}\n\n`;
     });
   } else {
