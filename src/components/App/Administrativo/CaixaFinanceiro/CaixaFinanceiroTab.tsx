@@ -27,7 +27,7 @@ import {
   hojeISOBrt,
   isoParaDateCaixa,
   parseMoedaCaixa,
-  primeiroDiaMesISO,
+  primeiroDiaMesAnteriorISO,
   somarDiasIsoCaixa,
 } from '@/lib/caixaFinanceiro';
 import { CaixaHistoricoPanel } from './CaixaHistorico';
@@ -48,11 +48,11 @@ export function CaixaFinanceiroTab({
   unidadeCodigo,
 }: CaixaFinanceiroTabProps) {
   const { usuario } = useAuth();
-  // Data operacional do caixa: estado proprio, sempre dentro do mes corrente (BRT).
+  // Data operacional do caixa: permite consultar o mes anterior para reenvio/conferencia apos virada do mes.
   // Desacoplado do filtro de competencia do Administrativo.
   const [dataCaixa, setDataCaixa] = useState(() => hojeISOBrt());
   const hojeIso = hojeISOBrt();
-  const minDataIso = primeiroDiaMesISO(hojeIso);
+  const minDataIso = primeiroDiaMesAnteriorISO(hojeIso);
   const podeVoltar = dataCaixa > minDataIso;
   const podeAvancar = dataCaixa < hojeIso;
   const [saldoInicial, setSaldoInicial] = useState('');
@@ -80,6 +80,7 @@ export function CaixaFinanceiroTab({
     loading,
     saving,
     error,
+    carregar,
     abrirCaixa,
     adicionarMovimento,
     atualizarMovimento,
@@ -230,7 +231,11 @@ export function CaixaFinanceiroTab({
       </div>
 
       {historicoAberto && (
-        <CaixaHistoricoPanel unidadeId={unidadeId} dataCaixaAtual={dataCaixa} />
+        <CaixaHistoricoPanel
+          unidadeId={unidadeId}
+          dataCaixaAtual={dataCaixa}
+          onSelecionarData={setDataCaixa}
+        />
       )}
 
       {caixaFechado && (
@@ -452,6 +457,7 @@ export function CaixaFinanceiroTab({
               conferidoPor={fechadoPor || caixa.fechado_por || usuario?.nome || ''}
               disabled={saving}
               onStatus={setMensagem}
+              onEnvioFinalizado={carregar}
             />
 
             <form onSubmit={(event) => event.preventDefault()} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">

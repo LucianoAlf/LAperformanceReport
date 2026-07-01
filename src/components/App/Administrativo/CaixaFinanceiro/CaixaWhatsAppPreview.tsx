@@ -24,6 +24,7 @@ interface CaixaWhatsAppPreviewProps {
   conferidoPor: string;
   disabled?: boolean;
   onStatus: (message: string, type?: 'success' | 'error' | 'info') => void;
+  onEnvioFinalizado?: () => void | Promise<void>;
 }
 
 export function CaixaWhatsAppPreview({
@@ -34,6 +35,7 @@ export function CaixaWhatsAppPreview({
   conferidoPor,
   disabled = false,
   onStatus,
+  onEnvioFinalizado,
 }: CaixaWhatsAppPreviewProps) {
   const texto = caixa
     ? formatarRelatorioCaixaWhatsApp({ caixa, movimentos, unidadeNome, unidadeCodigo, conferidoPor })
@@ -82,6 +84,8 @@ export function CaixaWhatsAppPreview({
         modo: 'send',
       },
     });
+
+    await onEnvioFinalizado?.();
 
     if (error || data?.error) {
       onStatus(error?.message || data?.error || 'Falha ao enviar WhatsApp.', 'error');

@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Clock, Send, Unlock } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Clock, Send, Unlock } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { formatarDataCaixa, formatarMoedaCaixa } from '@/lib/caixaFinanceiro';
@@ -10,6 +10,7 @@ import type { CaixaDiario } from '@/types/caixa';
 interface CaixaHistoricoPainelProps {
   unidadeId?: string | null;
   dataCaixaAtual: string;
+  onSelecionarData?: (dataCaixa: string) => void;
 }
 
 function formatarHora(iso: string | null) {
@@ -81,7 +82,13 @@ function MovimentosExpandidos({ caixaDiarioId }: { caixaDiarioId: string }) {
   );
 }
 
-function CaixaHistoricoLinha({ caixa }: { caixa: CaixaDiario }) {
+function CaixaHistoricoLinha({
+  caixa,
+  onSelecionarData,
+}: {
+  caixa: CaixaDiario;
+  onSelecionarData?: (dataCaixa: string) => void;
+}) {
   const [expandido, setExpandido] = useState(false);
   const horaAbertura = formatarHora(caixa.aberto_em);
   const horaFechamento = formatarHora(caixa.fechado_em);
@@ -149,10 +156,25 @@ function CaixaHistoricoLinha({ caixa }: { caixa: CaixaDiario }) {
           ) : <span className="text-slate-500 text-xs">—</span>}
         </td>
         <td className="px-4 py-3 text-slate-400">
-          {expandido
-            ? <ChevronUp className="h-4 w-4" />
-            : <ChevronDown className="h-4 w-4" />
-          }
+          <div className="flex items-center justify-end gap-2">
+            {onSelecionarData && (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-cyan-500/50 hover:bg-cyan-500/10 hover:text-cyan-200"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSelecionarData(caixa.data_caixa);
+                }}
+              >
+                <CalendarDays className="h-3 w-3" />
+                Abrir dia
+              </button>
+            )}
+            {expandido
+              ? <ChevronUp className="h-4 w-4" />
+              : <ChevronDown className="h-4 w-4" />
+            }
+          </div>
         </td>
       </tr>
       {expandido && (
@@ -166,7 +188,7 @@ function CaixaHistoricoLinha({ caixa }: { caixa: CaixaDiario }) {
   );
 }
 
-export function CaixaHistoricoPanel({ unidadeId, dataCaixaAtual }: CaixaHistoricoPainelProps) {
+export function CaixaHistoricoPanel({ unidadeId, dataCaixaAtual, onSelecionarData }: CaixaHistoricoPainelProps) {
   const { historico, loading, error } = useCaixaHistorico({
     unidadeId,
     excluirData: dataCaixaAtual,
@@ -177,7 +199,7 @@ export function CaixaHistoricoPanel({ unidadeId, dataCaixaAtual }: CaixaHistoric
     <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
       <div className="border-b border-slate-800 px-4 py-3">
         <h3 className="text-sm font-semibold text-white">Histórico de caixas</h3>
-        <p className="text-xs text-slate-400">Clique em uma linha para ver os lançamentos do dia</p>
+        <p className="text-xs text-slate-400">Clique em uma linha para ver os lançamentos ou use Abrir dia para reenviar/corrigir.</p>
       </div>
 
       {loading && (
@@ -201,12 +223,16 @@ export function CaixaHistoricoPanel({ unidadeId, dataCaixaAtual }: CaixaHistoric
                 <th className="px-4 py-3">Abertura</th>
                 <th className="px-4 py-3">Fechamento</th>
                 <th className="px-4 py-3">WA</th>
-                <th className="px-4 py-3"></th>
+                <th className="px-4 py-3 text-right">Ação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
               {historico.map((caixa) => (
-                <CaixaHistoricoLinha key={caixa.id} caixa={caixa} />
+                <CaixaHistoricoLinha
+                  key={caixa.id}
+                  caixa={caixa}
+                  onSelecionarData={onSelecionarData}
+                />
               ))}
             </tbody>
           </table>

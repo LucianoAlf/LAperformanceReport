@@ -49,6 +49,12 @@ export function primeiroDiaMesISO(dataIso: string): string {
   return `${dataIso.slice(0, 7)}-01`;
 }
 
+export function primeiroDiaMesAnteriorISO(dataIso: string): string {
+  const base = isoParaDateCaixa(dataIso);
+  base.setMonth(base.getMonth() - 1, 1);
+  return dateParaIsoCaixa(base);
+}
+
 // Converte YYYY-MM-DD em Date ao meio-dia local, evitando shift de fuso.
 export function isoParaDateCaixa(dataIso: string): Date {
   return new Date(`${dataIso}T12:00:00`);
