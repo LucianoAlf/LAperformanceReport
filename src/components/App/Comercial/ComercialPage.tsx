@@ -3114,23 +3114,30 @@ export function ComercialPage() {
     return texto;
   };
 
+  const obterCompetenciaRelatorioMensalComercial = () => {
+    if (relatorioPeriodo !== 'personalizado') {
+      return {
+        ano: competencia.filtro.ano,
+        mes: competencia.filtro.mes,
+      };
+    }
+
+    const mesmoMes = relatorioDataInicio.getFullYear() === relatorioDataFim.getFullYear()
+      && relatorioDataInicio.getMonth() === relatorioDataFim.getMonth();
+
+    if (!mesmoMes) {
+      throw new Error('O relatorio mensal precisa estar dentro de uma unica competencia. Selecione datas do mesmo mes.');
+    }
+
+    return {
+      ano: relatorioDataInicio.getFullYear(),
+      mes: relatorioDataInicio.getMonth() + 1,
+    };
+  };
+
   // Gerar relatório mensal completo
   const gerarRelatorioMensal = async () => {
-    const competenciaRelatorioMensal = relatorioPeriodo === 'personalizado'
-      ? (() => {
-          const mesmoMes = relatorioDataInicio.getFullYear() === relatorioDataFim.getFullYear()
-            && relatorioDataInicio.getMonth() === relatorioDataFim.getMonth();
-
-          if (!mesmoMes) {
-            throw new Error('O relatorio mensal precisa estar dentro de uma unica competencia. Selecione datas do mesmo mes.');
-          }
-
-          return {
-            ano: relatorioDataInicio.getFullYear(),
-            mes: relatorioDataInicio.getMonth() + 1,
-          };
-        })()
-      : competencia.filtro;
+    const competenciaRelatorioMensal = obterCompetenciaRelatorioMensalComercial();
 
     const {
       ano,
@@ -3385,9 +3392,11 @@ export function ComercialPage() {
   const gerarRelatorioMatriculas = async () => {
     const hoje = new Date();
     const dia = hoje.getDate().toString().padStart(2, '0');
-    const mesNome = hoje.toLocaleString('pt-BR', { month: 'long' });
+    const competenciaRelatorioMatriculas = obterCompetenciaRelatorioMensalComercial();
+    const ano = competenciaRelatorioMatriculas.ano;
+    const mesRelatorio = competenciaRelatorioMatriculas.mes;
+    const mesNome = new Date(ano, mesRelatorio - 1, 1).toLocaleString('pt-BR', { month: 'long' });
     const mesNomeUpper = mesNome.toUpperCase();
-    const ano = hoje.getFullYear();
     
     // Buscar informações da unidade incluindo o Hunter
     const unidadeId = isAdmin ? context?.unidadeSelecionada : usuario?.unidade_id;
@@ -3409,8 +3418,8 @@ export function ComercialPage() {
     }
 
     // Calcular totais e estatísticas — apenas matrículas novas (exclui 2º curso/banda/passaporte zerado)
-    const dataInicioMes = `${ano}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
-    const dataFimMes = `${ano}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${new Date(ano, hoje.getMonth() + 1, 0).getDate()}`;
+    const dataInicioMes = `${ano}-${String(mesRelatorio).padStart(2, '0')}-01`;
+    const dataFimMes = `${ano}-${String(mesRelatorio).padStart(2, '0')}-${new Date(ano, mesRelatorio, 0).getDate()}`;
     const matriculasNovas = agruparMatriculasParaRelatorio(await buscarMatriculasAlunos(unidadeRelatorioId, dataInicioMes, dataFimMes))
       .filter(ehMatriculaNova)
       .sort((a: any, b: any) => (a.data_matricula || '').localeCompare(b.data_matricula || ''));
@@ -3529,7 +3538,7 @@ export function ComercialPage() {
 
     // Rodapé
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `📅 Gerado em: ${dia}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${ano} às ${hoje.getHours()}:${hoje.getMinutes().toString().padStart(2, '0')}\n`;
+    texto += `📅 Gerado em: ${dia}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${hoje.getFullYear()} às ${hoje.getHours()}:${hoje.getMinutes().toString().padStart(2, '0')}\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━`;
 
     return texto;
@@ -3538,8 +3547,9 @@ export function ComercialPage() {
   // Gerar relatório comparativo mensal (mês atual vs mês anterior)
   const gerarRelatorioComparativoMensal = async () => {
     const hoje = new Date();
-    const mesAtual = hoje.getMonth();
-    const anoAtual = hoje.getFullYear();
+    const competenciaComparativo = obterCompetenciaRelatorioMensalComercial();
+    const mesAtual = competenciaComparativo.mes - 1;
+    const anoAtual = competenciaComparativo.ano;
     
     // Mês anterior
     const mesAnterior = mesAtual === 0 ? 11 : mesAtual - 1;
@@ -3565,7 +3575,7 @@ export function ComercialPage() {
 
     // Buscar dados do mês atual
     const inicioMesAtual = new Date(anoAtual, mesAtual, 1);
-    const fimMesAtual = hoje;
+    const fimMesAtual = new Date(anoAtual, mesAtual + 1, 0);
     
     let dadosMesAtualQuery = supabase
       .from('leads')
@@ -3642,8 +3652,9 @@ export function ComercialPage() {
   // Gerar relatório comparativo anual (mesmo mês ano atual vs ano anterior)
   const gerarRelatorioComparativoAnual = async () => {
     const hoje = new Date();
-    const mesAtual = hoje.getMonth();
-    const anoAtual = hoje.getFullYear();
+    const competenciaComparativo = obterCompetenciaRelatorioMensalComercial();
+    const mesAtual = competenciaComparativo.mes - 1;
+    const anoAtual = competenciaComparativo.ano;
     const anoAnterior = anoAtual - 1;
     
     const unidadeId = isAdmin ? context?.unidadeSelecionada : usuario?.unidade_id;
@@ -3666,7 +3677,7 @@ export function ComercialPage() {
 
     // Buscar dados do mês atual no ano atual
     const inicioMesAtual = new Date(anoAtual, mesAtual, 1);
-    const fimMesAtual = hoje;
+    const fimMesAtual = new Date(anoAtual, mesAtual + 1, 0);
     
     let dadosAnoAtualQuery = supabase
       .from('leads')

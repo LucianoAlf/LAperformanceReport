@@ -1351,27 +1351,50 @@ export function ModalRelatorio({
     return texto;
   }
 
-  function gerarRelatorioRenovacoes(): string {
-    const mesNomeUpper = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+  async function obterDadosRelatorioAvulsoAdministrativo(): Promise<DadosRelatorioMensalAdministrativo> {
+    const { anoRelatorio, mesRelatorio, precisaBuscar } = obterCompetenciaMensalAdministrativa();
+
+    if (precisaBuscar) {
+      return buscarDadosMensaisAdministrativos(anoRelatorio, mesRelatorio);
+    }
+
+    return {
+      resumo: resumo as ResumoMes,
+      renovacoes,
+      naoRenovacoes,
+      avisosPrevios,
+      evasoes,
+      transferencias,
+      ano,
+      mes,
+    };
+  }
+
+  async function gerarRelatorioRenovacoes(): Promise<string> {
+    const dadosMensais = await obterDadosRelatorioAvulsoAdministrativo();
+    const renovacoesRelatorio = dadosMensais.renovacoes || [];
+    const anoTextoRelatorio = dadosMensais.ano;
+    const mesTextoRelatorio = dadosMensais.mes;
+    const mesNomeUpper = new Date(anoTextoRelatorio, mesTextoRelatorio - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
     
-    const reajusteMedio = calcularReajusteMedioCanonico(renovacoes).media;
+    const reajusteMedio = calcularReajusteMedioCanonico(renovacoesRelatorio).media;
 
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `✅ *RELATÓRIO DE RENOVAÇÕES*\n`;
-    texto += `📅 *${mesNomeUpper}/${ano}*\n`;
+    texto += `📅 *${mesNomeUpper}/${anoTextoRelatorio}*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     texto += `📊 *RESUMO*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `Total: *${renovacoes.length} renovações*\n`;
+    texto += `Total: *${renovacoesRelatorio.length} renovações*\n`;
     texto += `Reajuste médio: *+${reajusteMedio.toFixed(1)}%*\n\n`;
 
-    if (renovacoes.length === 0) {
+    if (renovacoesRelatorio.length === 0) {
       texto += `Nenhuma renovação registrada neste período.\n\n`;
     } else {
       texto += `📋 *LISTA DE RENOVAÇÕES*\n`;
       texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-      renovacoes.forEach((r, i) => {
+      renovacoesRelatorio.forEach((r, i) => {
         const reajuste = r.valor_parcela_anterior && r.valor_parcela_novo
           ? ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100
           : 0;
@@ -1387,26 +1410,30 @@ export function ModalRelatorio({
     return texto;
   }
 
-  function gerarRelatorioAvisos(): string {
-    const mesNomeUpper = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
-    const perdaPotencial = avisosPrevios.reduce((acc, a) => acc + (a.valor_parcela_novo || 0), 0);
+  async function gerarRelatorioAvisos(): Promise<string> {
+    const dadosMensais = await obterDadosRelatorioAvulsoAdministrativo();
+    const avisosRelatorio = dadosMensais.avisosPrevios || [];
+    const anoTextoRelatorio = dadosMensais.ano;
+    const mesTextoRelatorio = dadosMensais.mes;
+    const mesNomeUpper = new Date(anoTextoRelatorio, mesTextoRelatorio - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+    const perdaPotencial = avisosRelatorio.reduce((acc, a) => acc + (a.valor_parcela_novo || 0), 0);
 
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `⚠️ *RELATÓRIO DE AVISOS PRÉVIOS*\n`;
-    texto += `📅 *${mesNomeUpper}/${ano}*\n`;
+    texto += `📅 *${mesNomeUpper}/${anoTextoRelatorio}*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     texto += `📊 *RESUMO*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `Total: *${avisosPrevios.length} avisos prévios*\n`;
+    texto += `Total: *${avisosRelatorio.length} avisos prévios*\n`;
     texto += `Perda potencial: *R$ ${perdaPotencial.toFixed(2)}/mês*\n\n`;
 
-    if (avisosPrevios.length === 0) {
+    if (avisosRelatorio.length === 0) {
       texto += `Nenhum aviso prévio registrado neste período. 🎉\n\n`;
     } else {
       texto += `📋 *LISTA DE AVISOS*\n`;
       texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-      avisosPrevios.forEach((a, i) => {
+      avisosRelatorio.forEach((a, i) => {
         const dataAviso = new Date(a.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
         const mesSaida = a.mes_saida ? new Date(a.mes_saida).toLocaleDateString('pt-BR', { month: 'long' }) : 'N/A';
         texto += `${i + 1}. *${a.aluno_nome}*\n`;
@@ -1420,25 +1447,29 @@ export function ModalRelatorio({
     return texto;
   }
 
-  function gerarRelatorioEvasoes(): string {
-    const mesNomeUpper = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+  async function gerarRelatorioEvasoes(): Promise<string> {
+    const dadosMensais = await obterDadosRelatorioAvulsoAdministrativo();
+    const evasoesRelatorio = dadosMensais.evasoes || [];
+    const anoTextoRelatorio = dadosMensais.ano;
+    const mesTextoRelatorio = dadosMensais.mes;
+    const mesNomeUpper = new Date(anoTextoRelatorio, mesTextoRelatorio - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
     
-    const porTipo = evasoes.reduce((acc, e) => {
+    const porTipo = evasoesRelatorio.reduce((acc, e) => {
       const tipo = classificarTipoEvasaoMovimentacao(e);
       acc[tipo] = (acc[tipo] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
-    const mrrPerdido = evasoes.reduce((acc, e) => acc + valorPerdidoRelatorioMensal(e), 0);
+    const mrrPerdido = evasoesRelatorio.reduce((acc, e) => acc + valorPerdidoRelatorioMensal(e), 0);
 
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `🚪 *RELATÓRIO DE EVASÕES*\n`;
-    texto += `📅 *${mesNomeUpper}/${ano}*\n`;
+    texto += `📅 *${mesNomeUpper}/${anoTextoRelatorio}*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     texto += `📊 *RESUMO*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `Total: *${evasoes.length} evasões*\n`;
+    texto += `Total: *${evasoesRelatorio.length} evasões*\n`;
     if (mrrPerdido > 0) {
       texto += `MRR Perdido: *R$ ${mrrPerdido.toFixed(2)}/mês*\n`;
     }
@@ -1456,12 +1487,12 @@ export function ModalRelatorio({
       texto += `\n`;
     }
 
-    if (evasoes.length === 0) {
+    if (evasoesRelatorio.length === 0) {
       texto += `Nenhuma evasão registrada neste período. 🎉\n\n`;
     } else {
       texto += `📋 *LISTA DE EVASÕES*\n`;
       texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-      evasoes.forEach((e, i) => {
+      evasoesRelatorio.forEach((e, i) => {
         const tipo = classificarTipoEvasaoMovimentacao(e);
         const tipoLabel = tipo === 'nao_renovou'
           ? '❌ Não Renovou'
@@ -1506,13 +1537,13 @@ export function ModalRelatorio({
         texto = await gerarRelatorioMensal();
         break;
       case 'renovacoes':
-        texto = gerarRelatorioRenovacoes();
+        texto = await gerarRelatorioRenovacoes();
         break;
       case 'avisos':
-        texto = gerarRelatorioAvisos();
+        texto = await gerarRelatorioAvisos();
         break;
       case 'evasoes':
-        texto = gerarRelatorioEvasoes();
+        texto = await gerarRelatorioEvasoes();
         break;
     }
     setTextoRelatorio(texto);
