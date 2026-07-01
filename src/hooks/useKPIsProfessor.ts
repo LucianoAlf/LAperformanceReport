@@ -151,7 +151,7 @@ export function useKPIsProfessor(
               id: p.id,
               nome: p.nome,
               valor: p.matriculas || 0,
-              subvalor: `Exp -> Mat bloqueada (diag. ${(Number(p.taxa_conversao) || 0).toFixed(0)}%)`,
+              subvalor: `Exp -> Mat ${(Number(p.taxa_conversao) || 0).toFixed(0)}%`,
             }))
         );
 

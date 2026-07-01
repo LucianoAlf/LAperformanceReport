@@ -217,7 +217,7 @@ export function ModalDetalhesConversao({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-white">Conversao diagnostica (legado) — {professorNome}</DialogTitle>
+          <DialogTitle className="text-white">Conversao Exp-&gt;Mat — {professorNome}</DialogTitle>
           <p className="text-sm text-slate-400 capitalize">{labelPeriodo}</p>
         </DialogHeader>
 
@@ -231,8 +231,8 @@ export function ModalDetalhesConversao({
           </div>
         ) : (
           <>
-            <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-100 mb-4">
-              Diagnostico operacional legado. Nao usar como KPI oficial ate presenca individual + vinculo canonico estarem fechados.
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100 mb-4">
+              Leitura operacional por professor usando experimentais realizadas e matriculas pos-experimental do periodo.
             </div>
 
             {/* Resumo */}
@@ -283,7 +283,7 @@ export function ModalDetalhesConversao({
                   side="top"
                   content={
                     <div className="text-xs max-w-[280px]">
-                      <p className="font-semibold text-slate-200 mb-1">Formula diagnostica legada</p>
+                      <p className="font-semibold text-slate-200 mb-1">Formula operacional</p>
                       <p className="text-slate-400 mb-1">
                         <span className="text-cyan-400">Matriculas pos-exp</span> = leads que matricularam tendo experimental no periodo (mesmo que `experimental_realizada=false`).
                       </p>
@@ -291,20 +291,20 @@ export function ModalDetalhesConversao({
                         <span className="text-emerald-400">Realizadas</span> = leads com `experimental_realizada=true` no periodo.
                       </p>
                       <p className="text-amber-400">
-                        Leads "Ambiguos" entram no numerador mas nao no denominador → taxa pode passar de 100%.
+                        Leads ambiguos entram no numerador mas nao no denominador; por isso a taxa pode passar de 100%.
                       </p>
                     </div>
                   }
                 >
                   <span className="cursor-help">
-                    Conversao legada = <span className="text-cyan-400">{totais.matPos}</span> ÷{' '}
+                    Conversao = <span className="text-cyan-400">{totais.matPos}</span> /{' '}
                     <span className="text-emerald-400">{totais.realizadas}</span>
                   </span>
                 </Tooltip>
               </div>
               <div className="text-right">
-                <span className="text-sm font-bold text-amber-300">Oficial bloqueada</span>
-                <span className="block text-[11px] text-slate-400">diag. legado {taxaConversao.toFixed(1)}%</span>
+                <span className="text-sm font-bold text-emerald-300">{taxaConversao.toFixed(1)}%</span>
+                <span className="block text-[11px] text-slate-400">{totais.matPos}/{totais.realizadas} no periodo</span>
               </div>
             </div>
 

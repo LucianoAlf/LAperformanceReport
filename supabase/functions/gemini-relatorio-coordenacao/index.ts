@@ -184,7 +184,7 @@ Deno.serve(async (req) => {
     const mediaAlunosProfessor = totais.media_alunos_professor || 0;
     const mediaAlunosTurma = totais.media_alunos_turma || 0;
     const mediaPresenca = totais.media_presenca || 0;
-    const taxaConversaoMedia = totais.taxa_conversao_media || 0; // legado/bloqueada para KPI oficial
+    const taxaConversaoMedia = totais.taxa_conversao_media || 0;
     const taxaRenovacaoMedia = totais.taxa_renovacao_media || 0;
     const totalEvasoes = totais.total_evasoes || 0;
     const totalMatriculas = totais.total_matriculas || 0;
@@ -299,7 +299,7 @@ Deno.serve(async (req) => {
     relatorioTemplate += `🔄 *RETENÇÃO & DIAGNÓSTICO COMERCIAL*\n`;
     relatorioTemplate += `───────────────────────\n`;
     relatorioTemplate += `• Taxa Renovação Média: *${taxaRenovacaoMedia.toFixed(1)}%*\n`;
-    relatorioTemplate += `• Conversao Exp->Mat media (legado/bloqueada): *${taxaConversaoMedia.toFixed(1)}%* - nao usar como KPI oficial\n`;
+    relatorioTemplate += `• Conversao Exp->Mat media: *${taxaConversaoMedia.toFixed(1)}%*\n`;
     relatorioTemplate += `• Evasões no Mês: *${totalEvasoes}*\n`;
     relatorioTemplate += `• Matrículas no Mês: *${totalMatriculas}*\n`;
     relatorioTemplate += `• Saldo Líquido: *${totalMatriculas - totalEvasoes >= 0 ? '+' : ''}${totalMatriculas - totalEvasoes}*\n\n`;
@@ -416,8 +416,7 @@ Deno.serve(async (req) => {
       if (metasProfessores.taxa_conversao_exp) {
         const pct = Math.min((taxaConversaoMedia / metasProfessores.taxa_conversao_exp) * 100, 100);
         const status = pct >= 100 ? '✅' : (pct >= 70 ? '⚠️' : '❌');
-        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Conversao Exp->Mat legado/bloqueada (${taxaConversaoMedia.toFixed(1)}%/${metasProfessores.taxa_conversao_exp}%) ${status}\n`;
-        relatorioTemplate += `_Nao usar Conversao Exp->Mat como KPI oficial ate regra canonica de presenca/vinculo._\n`;
+        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Conversao Exp->Mat (${taxaConversaoMedia.toFixed(1)}%/${metasProfessores.taxa_conversao_exp}%) ${status}\n`;
       }
     } else {
       relatorioTemplate += `• Metas ainda não cadastradas para este período\n`;

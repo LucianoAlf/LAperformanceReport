@@ -722,10 +722,10 @@ export function ProfessoresPage() {
 
               {/* Conversão */}
               <div className="space-y-3">
-                <p className="text-sm font-semibold text-white">Conversão (legado)</p>
+                <p className="text-sm font-semibold text-white">Conversão Exp-&gt;Mat</p>
                 <div className="space-y-2 text-sm">
-                  <p className="flex items-center gap-2 text-yellow-300"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Diagnóstico operacional</p>
-                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-slate-500"></span> Não usar como KPI oficial</p>
+                  <p className="flex items-center gap-2 text-emerald-300"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Leitura operacional</p>
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-slate-500"></span> Calculada por professor no período</p>
                 </div>
               </div>
 

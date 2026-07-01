@@ -562,6 +562,12 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
 
   if (!professor) return null;
 
+  const expMatRealizadas = professor.experimentais ?? 0;
+  const expMatConversoes = professor.matriculas_pos_exp ?? 0;
+  const expMatTaxa = expMatRealizadas > 0
+    ? (expMatConversoes / expMatRealizadas) * 100
+    : null;
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'critico': return 'text-red-400 bg-red-500/20';
@@ -737,12 +743,14 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                 <p className="text-xs text-slate-400">Retenção</p>
               </div>
               <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                <p className="text-xl font-bold text-amber-300">
-                  Bloq.
+                <p className={`text-xl font-bold ${expMatTaxa === null ? 'text-slate-500' : getMetricaColor(expMatTaxa, { critico: 30, atencao: 50 })}`}>
+                  {expMatTaxa === null ? '-' : `${expMatTaxa.toFixed(0)}%`}
                 </p>
-                <p className="text-xs text-yellow-300">Exp→Mat bloqueada</p>
+                <p className="text-xs text-slate-400">Exp-&gt;Mat</p>
                 <p className="text-[10px] text-slate-500 mt-0.5">
-                  diag. legado {professor.taxa_conversao.toFixed(0)}%
+                  {expMatRealizadas > 0
+                    ? `${expMatConversoes}/${expMatRealizadas} canonicas`
+                    : 'sem experimentais no periodo'}
                 </p>
                 {(professor.matriculas_diretas ?? 0) > 0 && (
                   <p className="text-[10px] text-blue-400/70 mt-0.5">+{professor.matriculas_diretas} direta{(professor.matriculas_diretas ?? 0) > 1 ? 's' : ''}</p>
@@ -1047,8 +1055,8 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                     </div>
                     <div className="bg-cyan-500/10 rounded-lg px-3 py-2 text-center">
                       <p className="text-cyan-400 text-lg font-bold">{convRate}%</p>
-                      <p className="text-yellow-300 text-xs">Conversão (legado)</p>
-                      <p className="text-slate-500 text-[9px] mt-0.5">diagnóstico operacional</p>
+                      <p className="text-cyan-300 text-xs">Conversão Exp-&gt;Mat</p>
+                      <p className="text-slate-500 text-[9px] mt-0.5">leitura operacional</p>
                     </div>
                   </>
                 );

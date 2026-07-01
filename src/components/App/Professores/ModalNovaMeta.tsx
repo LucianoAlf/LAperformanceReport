@@ -24,7 +24,7 @@ interface Props {
 const TIPOS_META = [
   { value: 'media_turma', label: 'Média de Alunos por Turma' },
   { value: 'retencao', label: 'Taxa de Retenção' },
-  { value: 'conversao', label: 'Conversao Exp->Mat legado' },
+  { value: 'conversao', label: 'Conversao Exp->Mat' },
   { value: 'presenca', label: 'Taxa de Presença' },
   { value: 'max_evasoes', label: 'Máximo de Evasões' }
 ];

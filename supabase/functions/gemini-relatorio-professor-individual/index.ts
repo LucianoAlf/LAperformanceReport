@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
     relatorio += `• Média Alunos/Turma: *${professor.media_alunos_turma.toFixed(2)}*\n`;
     relatorio += `• Taxa de Presença: *${professor.taxa_presenca.toFixed(1)}%*\n`;
     relatorio += `• Taxa de Retenção: *${professor.taxa_retencao.toFixed(1)}%*\n`;
-    relatorio += `• Conversao Exp->Mat (legado/bloqueada): *${professor.taxa_conversao.toFixed(1)}%* - nao usar como KPI oficial\n`;
+    relatorio += `• Conversao Exp->Mat: *${professor.taxa_conversao.toFixed(1)}%*\n`;
     relatorio += `• Fator de Demanda: *${(professor.fator_demanda_ponderado || 1.0).toFixed(1)}*\n`;
     relatorio += `• Evasões no Mês: *${professor.evasoes_mes}*\n\n`;
 
@@ -214,7 +214,7 @@ Responda EXATAMENTE neste formato JSON:
       media_alunos_turma: professor.media_alunos_turma,
       taxa_presenca: professor.taxa_presenca,
       taxa_retencao: professor.taxa_retencao,
-      taxa_conversao_legado_bloqueada: professor.taxa_conversao,
+      taxa_conversao_exp_mat: professor.taxa_conversao,
       fator_demanda_ponderado: professor.fator_demanda_ponderado || 1.0,
       evasoes_mes: professor.evasoes_mes,
       especialidades: professor.especialidades,
