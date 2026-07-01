@@ -1425,6 +1425,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         }[unidadeAtual] || unidadeAtual) : 'Consolidado'}
         ano={parseInt(competencia.split('-')[0])}
         mes={parseInt(competencia.split('-')[1])}
+        professores={professores}
       />
 
       <ModalDetalhesPresenca

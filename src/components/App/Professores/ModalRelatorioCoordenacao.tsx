@@ -20,12 +20,20 @@ import {
   Sparkles,
   Calendar,
   Trophy,
+  Activity,
+  BriefcaseBusiness,
+  ShieldAlert,
   Send
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
 import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
+import {
+  gerarRelatorioCoordenacaoInstantaneo,
+  type ProfessorRelatorioCoordenacao,
+  type TipoRelatorioCoordenacaoInstantaneo,
+} from '@/lib/relatorioCoordenacaoInstantaneo';
 
 interface ModalRelatorioCoordenacaoProps {
   open: boolean;
@@ -34,9 +42,10 @@ interface ModalRelatorioCoordenacaoProps {
   unidadeNome: string;
   ano: number;
   mes: number;
+  professores?: ProfessorRelatorioCoordenacao[];
 }
 
-type TipoRelatorio = 'mensal' | 'ranking';
+type TipoRelatorio = 'mensal' | TipoRelatorioCoordenacaoInstantaneo;
 type ModoPeriodo = 'mes_anterior' | 'competencia_tela' | 'personalizado';
 
 function inicioMes(ano: number, mes: number): Date {
@@ -68,7 +77,8 @@ export function ModalRelatorioCoordenacao({
   unidadeId,
   unidadeNome,
   ano,
-  mes
+  mes,
+  professores = [],
 }: ModalRelatorioCoordenacaoProps) {
   const toast = useToast();
   const [tipoRelatorio, setTipoRelatorio] = useState<TipoRelatorio | null>(null);
@@ -157,7 +167,8 @@ export function ModalRelatorioCoordenacao({
     };
   };
 
-  const gerarRelatorioIA = async (tipo: TipoRelatorio) => {
+  const gerarRelatorioIA = async () => {
+    const tipo: TipoRelatorio = 'mensal';
     setTipoRelatorio(tipo);
     setLoadingIA(true);
     setTextoRelatorio('');
@@ -178,10 +189,8 @@ export function ModalRelatorioCoordenacao({
         throw new Error('Erro ao buscar dados do relatório');
       }
 
-      // Escolher Edge Function baseado no tipo de relatório
-      const edgeFunctionName = tipo === 'ranking' 
-        ? 'gemini-ranking-professores' 
-        : 'gemini-relatorio-coordenacao';
+      // Edge Function apenas para o relatório mensal narrativo com IA.
+      const edgeFunctionName = 'gemini-relatorio-coordenacao';
 
       // Chamar Edge Function
       const { data: responseIA, error: errorIA } = await supabase.functions.invoke(
@@ -216,10 +225,7 @@ export function ModalRelatorioCoordenacao({
 
       if (responseIA?.success && responseIA?.relatorio) {
         setTextoRelatorio(responseIA.relatorio);
-        const mensagem = tipo === 'ranking' 
-          ? 'Ranking de professores gerado com sucesso'
-          : 'Relatório de coordenação gerado com sucesso';
-        toast.success('Relatório gerado!', mensagem);
+        toast.success('Relatório gerado!', 'Relatório de coordenação gerado com sucesso');
       } else {
         throw new Error(responseIA?.error || 'Erro desconhecido');
       }
@@ -230,6 +236,32 @@ export function ModalRelatorioCoordenacao({
     } finally {
       setLoadingIA(false);
     }
+  };
+
+  const gerarRelatorioInstantaneo = (tipo: TipoRelatorioCoordenacaoInstantaneo) => {
+    try {
+      validarCompetenciaMensal();
+      setTipoRelatorio(tipo);
+      setTextoRelatorio(gerarRelatorioCoordenacaoInstantaneo({
+        tipo,
+        professores,
+        unidadeNome,
+        periodoLabel: periodoSelecionado.label,
+        intervaloLabel: periodoSelecionado.intervalo,
+      }));
+      toast.success('Relatório gerado!', 'Relatório instantâneo gerado com os indicadores da tela');
+    } catch (error) {
+      toast.error('Erro', error instanceof Error ? error.message : 'Erro ao gerar relatório');
+    }
+  };
+
+  const regenerarRelatorio = () => {
+    if (!tipoRelatorio) return;
+    if (tipoRelatorio === 'mensal') {
+      gerarRelatorioIA();
+      return;
+    }
+    gerarRelatorioInstantaneo(tipoRelatorio);
   };
 
   const copiarRelatorio = async () => {
@@ -379,7 +411,7 @@ export function ModalRelatorioCoordenacao({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button
-              onClick={() => gerarRelatorioIA('mensal')}
+              onClick={() => gerarRelatorioIA()}
               disabled={!periodoSelecionado.mesmoMes}
               className={cn(
                 'group p-6 rounded-xl border-2 border-slate-700 bg-slate-800/50 transition-all text-left',
@@ -404,7 +436,7 @@ export function ModalRelatorioCoordenacao({
             </button>
 
             <button
-              onClick={() => gerarRelatorioIA('ranking')}
+              onClick={() => gerarRelatorioInstantaneo('ranking')}
               disabled={!periodoSelecionado.mesmoMes}
               className={cn(
                 'group p-6 rounded-xl border-2 border-slate-700 bg-slate-800/50 transition-all text-left',
@@ -423,8 +455,80 @@ export function ModalRelatorioCoordenacao({
                 </div>
               </div>
               <p className="text-sm text-slate-400">
-                Rankings detalhados por carteira, retenção, presença, conversão e 
-                média de alunos por turma. Ideal para reuniões de equipe.
+                Rankings detalhados por carteira, retenção, presença, conversão e
+                média de alunos por turma. Sem IA e sem Edge Function.
+              </p>
+            </button>
+
+            <button
+              onClick={() => gerarRelatorioInstantaneo('carteira')}
+              disabled={!periodoSelecionado.mesmoMes}
+              className={cn(
+                'group p-6 rounded-xl border-2 border-slate-700 bg-slate-800/50 transition-all text-left',
+                periodoSelecionado.mesmoMes
+                  ? 'hover:border-cyan-500/50 hover:bg-slate-800'
+                  : 'opacity-60 cursor-not-allowed'
+              )}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 rounded-xl bg-cyan-500/20 flex items-center justify-center group-hover:bg-cyan-500/30 transition-colors">
+                  <BriefcaseBusiness className="w-6 h-6 text-cyan-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white">Carteira e Carga</h3>
+                  <p className="text-xs text-slate-400">Alunos, turmas e concentração</p>
+                </div>
+              </div>
+              <p className="text-sm text-slate-400">
+                Mostra maiores carteiras, volume de turmas e professores com média baixa de alunos por turma.
+              </p>
+            </button>
+
+            <button
+              onClick={() => gerarRelatorioInstantaneo('presenca')}
+              disabled={!periodoSelecionado.mesmoMes}
+              className={cn(
+                'group p-6 rounded-xl border-2 border-slate-700 bg-slate-800/50 transition-all text-left',
+                periodoSelecionado.mesmoMes
+                  ? 'hover:border-emerald-500/50 hover:bg-slate-800'
+                  : 'opacity-60 cursor-not-allowed'
+              )}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center group-hover:bg-emerald-500/30 transition-colors">
+                  <Activity className="w-6 h-6 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white">Presença e Alertas</h3>
+                  <p className="text-xs text-slate-400">Regularidade pedagógica</p>
+                </div>
+              </div>
+              <p className="text-sm text-slate-400">
+                Lista professores abaixo das faixas de presença e prioriza acompanhamentos da coordenação.
+              </p>
+            </button>
+
+            <button
+              onClick={() => gerarRelatorioInstantaneo('retencao')}
+              disabled={!periodoSelecionado.mesmoMes}
+              className={cn(
+                'group p-6 rounded-xl border-2 border-slate-700 bg-slate-800/50 transition-all text-left',
+                periodoSelecionado.mesmoMes
+                  ? 'hover:border-rose-500/50 hover:bg-slate-800'
+                  : 'opacity-60 cursor-not-allowed'
+              )}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 rounded-xl bg-rose-500/20 flex items-center justify-center group-hover:bg-rose-500/30 transition-colors">
+                  <ShieldAlert className="w-6 h-6 text-rose-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white">Retenção e Evasões</h3>
+                  <p className="text-xs text-slate-400">Riscos por professor</p>
+                </div>
+              </div>
+              <p className="text-sm text-slate-400">
+                Consolida evasões, não renovações e MRR perdido já vinculado aos indicadores carregados.
               </p>
             </button>
             </div>
@@ -471,10 +575,14 @@ export function ModalRelatorioCoordenacao({
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => gerarRelatorioIA(tipoRelatorio || 'mensal')}
+                  onClick={regenerarRelatorio}
                   className="border-slate-600 text-slate-300 hover:bg-slate-800"
                 >
-                  <Sparkles className="w-4 h-4 mr-2" />
+                  {tipoRelatorio === 'mensal' ? (
+                    <Sparkles className="w-4 h-4 mr-2" />
+                  ) : (
+                    <FileText className="w-4 h-4 mr-2" />
+                  )}
                   Regenerar
                 </Button>
 
