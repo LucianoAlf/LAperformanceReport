@@ -820,6 +820,82 @@ GROUP BY dia ORDER BY dia DESC;
 
 ---
 
+### N. Renovação auto-aprovada (`processar-matricula-emusys` v25, desde 2026-07-01)
+
+Renovações vindas do webhook Emusys agora podem nascer já confirmadas — sem passar pela validação manual do DM — quando `matricula.tipo_pagamento` + `matricula.usuario_realizou_matricula.nome` + valor válido estão presentes no payload (checar `handleRenovacao` no código-fonte antes de afirmar detalhes, versão pode ter mudado). Quando falta algum dos três, cai no fluxo pendente de sempre (fallback).
+
+```sql
+-- 1. Taxa de auto-aprovação nos últimos 30 dias
+SELECT
+  COUNT(*) FILTER (WHERE detalhes->>'renovacao_auto_aprovada' = 'true') AS auto_aprovadas,
+  COUNT(*) FILTER (WHERE detalhes->>'renovacao_auto_aprovada' = 'false') AS caiu_pendente,
+  COUNT(*) AS total
+FROM automacao_log
+WHERE evento = 'matricula_renovacao'
+  AND acao NOT LIKE 'erro%'
+  AND created_at >= NOW() - INTERVAL '30 days';
+
+-- 2. Renovações que caíram em pendente — por que? (forma não mapeada, agente ausente, valor zerado)
+SELECT aluno_nome, unidade_nome,
+       payload_bruto->'matricula'->>'tipo_pagamento' AS tipo_pagamento_recebido,
+       payload_bruto->'matricula'->'usuario_realizou_matricula'->>'nome' AS agente_recebido,
+       detalhes->>'forma_pagamento_id' AS forma_mapeada,
+       created_at
+FROM automacao_log
+WHERE evento = 'matricula_renovacao'
+  AND detalhes->>'renovacao_auto_aprovada' = 'false'
+  AND created_at >= NOW() - INTERVAL '30 days'
+ORDER BY created_at DESC LIMIT 30;
+
+-- 3. `renovacoes` (legada) e `movimentacoes_admin` desincronizadas — só relevante pra renovações
+--    confirmadas MANUALMENTE (pela tela Administrativo), não pelas auto-aprovadas (essas gravam
+--    as duas tabelas já no estado final no mesmo request). Ver risco de arquitetura na integracao-infra.md.
+SELECT r.id, r.status AS status_renovacoes, ma.renovacao_status AS status_movimentacoes,
+       r.agente AS agente_renovacoes, ma.agente_comercial AS agente_movimentacoes
+FROM renovacoes r
+JOIN movimentacoes_admin ma ON ma.aluno_id = r.aluno_id AND ma.competencia_referencia = r.data_renovacao
+WHERE ma.renovacao_status IN ('confirmada','antecipada_confirmada')
+  AND r.status = 'pendente'
+LIMIT 30;
+
+-- 4. `tipo_pagamento` novo não mapeado (sinal de que o Emusys começou a mandar um valor fora do mapa hardcoded)
+SELECT DISTINCT payload_bruto->'matricula'->>'tipo_pagamento' AS tipo_pagamento
+FROM automacao_log
+WHERE evento = 'matricula_renovacao'
+  AND created_at >= NOW() - INTERVAL '30 days'
+  AND payload_bruto->'matricula'->>'tipo_pagamento' IS NOT NULL
+  AND payload_bruto->'matricula'->>'tipo_pagamento' NOT IN ('Pgto Recorrente','Cheque Pré Datado','Pix','Boleto','Cartão de Crédito');
+```
+
+**Quando reportar:**
+- Query #1: taxa de auto-aprovação caindo (era ~100% em jun/2026 na amostra que validou o design) → **ATENÇÃO**, investigar #2.
+- Query #3: qualquer linha → **ATENÇÃO** — dessincronia conhecida (não corrigida, ver integracao-infra.md), reportar como achado, não como bug novo.
+- Query #4: qualquer linha → **ATENÇÃO** — `tipo_pagamento` novo do Emusys sem mapeamento em `MAPA_TIPO_PAGAMENTO` (código da edge) nem em `formas_pagamento`; renovações com esse valor caem sempre em pendente até alguém atualizar o mapa.
+
+### O. `emusys_api_payload` — snapshot para auditoria de divergências de matrícula
+
+Tabela independente (sem FK com nada) que guarda o payload bruto do `GET /matriculas` da API Emusys — feita pra comparar "o que o Emusys diz" vs "o que está no nosso banco". Só 1 rodada até agora (~4.755 linhas, `synced_at` 2026-06-27) — **não é populada por nenhum processo agendado conhecido**; confirmar antes de assumir que está atualizada.
+
+```sql
+-- 1. Quão atual é o snapshot? (se > alguns dias, não confiar sem checar de novo)
+SELECT unidade_codigo, COUNT(*), MAX(synced_at) AS mais_recente
+FROM emusys_api_payload GROUP BY unidade_codigo;
+
+-- 2. Divergência de status: Emusys diz uma coisa, nosso banco diz outra
+SELECT eap.emusys_student_id, eap.aluno_nome, eap.status AS status_emusys,
+       a.status AS status_banco, a.id AS aluno_id
+FROM emusys_api_payload eap
+LEFT JOIN alunos a ON a.emusys_matricula_id = eap.emusys_id::text
+WHERE eap.endpoint = 'matriculas'
+  AND (a.id IS NULL OR a.status IS DISTINCT FROM
+       CASE eap.status WHEN 'ativa' THEN 'ativo' WHEN 'trancada' THEN 'trancado' WHEN 'finalizada' THEN 'evadido' END)
+LIMIT 50;
+```
+
+**Quando reportar:** trate como ponto de partida, não fonte de verdade — o snapshot pode estar desatualizado. Sempre mencionar a data do `synced_at` usado na comparação.
+
+---
+
 ## Boundaries (regras inegociáveis)
 
 - **Read-only:** nunca rode `UPDATE`, `INSERT`, `DELETE`, `TRUNCATE`, `ALTER`, `DROP`, `CREATE`, `GRANT`, `REVOKE`. Se um achado exigir mutação, reporta — não faz.

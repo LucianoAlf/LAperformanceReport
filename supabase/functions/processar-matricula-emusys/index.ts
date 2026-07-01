@@ -1,7 +1,23 @@
 /// <reference lib="deno.ns" />
 
-// Edge Function: processar-matricula-emusys v23
+// Edge Function: processar-matricula-emusys v25
 // Processa webhooks de matrícula do Emusys: nova, renovação, trancamento, evasão
+//
+// MUDANÇAS v25 (2026-07-01):
+// - handleRenovacao passa a capturar tipo_pagamento e usuario_realizou_matricula do payload
+//   (sempre vêm preenchidos desde que a captura de payload bruto amadureceu, jun/2026).
+//   Quando Forma (mapeada via MAPA_TIPO_PAGAMENTO) + Agente + valor > 0 estão presentes,
+//   a renovação já nasce confirmada (renovacoes.status='renovado',
+//   movimentacoes_admin.renovacao_status='confirmada'/'antecipada_confirmada') — sem passar
+//   pela validação manual do DM. Sem os 3 dados, cai no fluxo pendente de sempre.
+// - Corrige bug: valor_parcela_novo da renovação usava o valor cheio do webhook antes do
+//   desconto_condicional ser aplicado (complementarDescontoMatricula rodava depois de
+//   montar o insert). Agora complementarDescontoMatricula retorna o valor líquido e ele é
+//   usado tanto em renovacoes quanto em movimentacoes_admin — corrige reajuste inflado.
+// - Corrige bug de timezone: "hoje" usado pra classificar antecipada/normal
+//   (handleRenovacao) e pra gravar movimentacoes_admin.data (registrarMovimentacao) usava
+//   new Date().toISOString() em UTC puro, recuando 1 dia perto da virada BRT. Novo helper
+//   hojeISOBRT() (offset fixo -3h) substitui os dois pontos.
 //
 // MUDANÇAS v23 (2026-06-20):
 // - Raw event store: grava o payload BRUTO em automacao_log (acao='webhook_recebido') no
@@ -72,7 +88,7 @@ import {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const VERSAO = 'v24';
+const VERSAO = 'v25';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -119,12 +135,12 @@ async function buscarMatriculaApiPorData(escolaId: number, matriculaId: number, 
 
 async function complementarDescontoMatricula(
   supabase: any, escolaId: number, alunoId: number, matriculaId: number, dataMatricula: string,
-) {
+): Promise<number | null> {
   try {
-    if (!alunoId || !matriculaId || !dataMatricula) return;
+    if (!alunoId || !matriculaId || !dataMatricula) return null;
     const mat = await buscarMatriculaApiPorData(escolaId, matriculaId, dataMatricula);
     const c = mat?.contrato_atual;
-    if (!c || c.valor_mensalidade == null) return;
+    if (!c || c.valor_mensalidade == null) return null;
 
     const cheio = Number(c.valor_mensalidade);
     const fixo = Number(c.desconto_fixo || 0);
@@ -175,8 +191,11 @@ async function complementarDescontoMatricula(
       },
       created_at: new Date().toISOString(),
     });
+
+    return parcelaComercial;
   } catch (_e) {
     // best-effort — desconto será reconciliado pela varredura horária
+    return null;
   }
 }
 
@@ -262,6 +281,14 @@ function dateOnlyISO(value: string | null | undefined): string | null {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+// "Hoje" em BRT (offset fixo -3h, sem DST no Brasil desde 2019). new Date().toISOString()
+// pega o dia em UTC — perto da virada de mês/dia em BRT isso recua a data errada e pode
+// classificar renovação como antecipada/normal incorretamente.
+function hojeISOBRT(): string {
+  const agoraBRT = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  return agoraBRT.toISOString().split('T')[0];
+}
+
 interface Payload {
   evento: string;
   matriculaIdEmusys: string | null;
@@ -295,6 +322,8 @@ interface Payload {
   emusysCursoId: number | null;
   fotoAlunoUrl: string | null;
   instagram: string | null;
+  tipoPagamento: string | null;
+  agenteNome: string | null;
   rawPayload: any;
 }
 
@@ -343,8 +372,26 @@ function parsePayload(body: any): Payload | null {
     emusysCursoId: m.curso_id ? Number(m.curso_id) : null,
     fotoAlunoUrl: m.foto_aluno_url || null,
     instagram: m.campos_personalizados_aluno?.find((c: any) => c.nome === 'Instagram')?.valor || null,
+    tipoPagamento: m.tipo_pagamento || null,
+    agenteNome: m.usuario_realizou_matricula?.nome || null,
     rawPayload: body,
   };
+}
+
+// Mapeamento tipo_pagamento (texto livre do Emusys) -> formas_pagamento.id.
+// Validado com dados reais de automacao_log (jun/2026). Retorna null se não reconhecer
+// o valor — usado como sinal de fallback seguro (não auto-aprova sem forma mapeada).
+const MAPA_TIPO_PAGAMENTO: Record<string, number> = {
+  'pgto recorrente': 1,       // Crédito Recorrente
+  'cheque pre datado': 2,     // Cheque
+  'pix': 3,
+  'boleto': 6,
+  'cartao de credito': 8,
+};
+
+function mapTipoPagamentoToFormaId(tipo: string | null): number | null {
+  if (!tipo) return null;
+  return MAPA_TIPO_PAGAMENTO[normalizar(tipo)] ?? null;
 }
 
 // ==================== RESOLVERS ====================
@@ -550,9 +597,11 @@ async function registrarMovimentacao(
     renovacaoPrimeiraAulaNovoCiclo?: string | null;
     renovacaoAntecipada?: boolean;
     renovacaoStatus?: RenovacaoStatusOperacional;
+    formaPagamentoId?: number | null;
+    agenteComercial?: string | null;
   } = {},
 ): Promise<boolean> {
-  const hoje = new Date().toISOString().split('T')[0];
+  const hoje = hojeISOBRT();
   const inicioMes = inicioMesISO(hoje);
   const competenciaReferencia = valores.competenciaReferencia ?? inicioMes;
 
@@ -595,7 +644,7 @@ async function registrarMovimentacao(
 
   const payload: any = {
     unidade_id: p.unidadeId,
-    data: new Date().toISOString().split('T')[0],
+    data: hoje,
     tipo,
     aluno_nome: p.nomeAluno,
     aluno_id: alunoId,
@@ -613,6 +662,8 @@ async function registrarMovimentacao(
     payload.renovacao_primeira_aula_novo_ciclo = valores.renovacaoPrimeiraAulaNovoCiclo ?? null;
     payload.renovacao_antecipada = valores.renovacaoAntecipada ?? false;
     payload.renovacao_status = valores.renovacaoStatus ?? 'pendente_validacao';
+    payload.forma_pagamento_id = valores.formaPagamentoId ?? null;
+    payload.agente_comercial = valores.agenteComercial ?? null;
   }
 
   if (tipo === 'evasao' || tipo === 'nao_renovacao') {
@@ -903,7 +954,7 @@ async function handleRenovacao(supabase: any, p: Payload) {
 
     const aluno = found.aluno;
     const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId, p.professorNome);
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = hojeISOBRT();
     const dataPrimeiraAulaNovoCiclo = dateOnlyISO(p.dataInicioContrato);
     const dataFimNovoCiclo = dateOnlyISO(p.dataFimContrato);
     const classificacaoCompetencia = classificarRenovacaoPorCompetencia(hoje, dataPrimeiraAulaNovoCiclo);
@@ -941,9 +992,18 @@ async function handleRenovacao(supabase: any, p: Payload) {
     // Renovação pode trazer desconto/valor novo (o webhook manda só o cheio). Complementa pela
     // API igual na matrícula nova — data_matricula vem a ORIGINAL, então a busca por data acha o
     // contrato renovado pelo matricula_id. Best-effort: não bloqueia a renovação.
-    await complementarDescontoMatricula(
+    // Retorna o valor líquido (cheio - desconto_condicional); se a API falhar, cai no valor
+    // cheio do webhook (comportamento anterior).
+    const parcelaComercial = await complementarDescontoMatricula(
       supabase, p.escolaId, aluno.id, Number(p.matriculaIdEmusys), p.dataMatricula ?? '',
     );
+    const valorParcelaNovoFinal = parcelaComercial ?? p.valorMensalidade ?? null;
+
+    // Auto-aprovação: quando Forma + Agente + valor vêm confiáveis do Emusys, a renovação
+    // nasce já confirmada — sem passar pela validação manual do DM.
+    const formaPagamentoId = mapTipoPagamentoToFormaId(p.tipoPagamento);
+    const agente = p.agenteNome;
+    const podeAutoAprovar = Boolean(formaPagamentoId) && Boolean(agente) && (valorParcelaNovoFinal ?? 0) > 0;
 
     let renovacaoLegadaPendente = false;
     if (!renovacaoDuplicada) {
@@ -952,12 +1012,15 @@ async function handleRenovacao(supabase: any, p: Payload) {
         unidade_id: p.unidadeId,
         data_renovacao: classificacaoCompetencia.competenciaReferencia,
         valor_parcela_anterior: aluno.valor_parcela || null,
-        valor_parcela_novo: p.valorMensalidade || null,
-        status: 'pendente',
+        valor_parcela_novo: valorParcelaNovoFinal,
+        status: podeAutoAprovar ? 'renovado' : 'pendente',
+        agente: agente || null,
         professor_id: professorId || aluno.professor_atual_id || null,
         data_inicio_novo_contrato: dataPrimeiraAulaNovoCiclo,
         data_fim_novo_contrato: dataFimNovoCiclo,
-        observacoes: `Pendente de validação DM via Emusys — ${p.nomeCurso || 'curso não informado'}`,
+        observacoes: podeAutoAprovar
+          ? `Renovação automática via Emusys — ${p.nomeCurso || 'curso não informado'}`
+          : `Pendente de validação DM via Emusys — ${p.nomeCurso || 'curso não informado'}`,
       });
       renovacaoLegadaPendente = true;
     }
@@ -969,18 +1032,24 @@ async function handleRenovacao(supabase: any, p: Payload) {
       `Renovação automática via Emusys — ${p.nomeCurso || 'curso não informado'}`,
       {
         valorParcelaAnterior: aluno.valor_parcela || null,
-        valorParcelaNovo: p.valorMensalidade || null,
+        valorParcelaNovo: valorParcelaNovoFinal,
         competenciaReferencia: classificacaoCompetencia.competenciaReferencia,
         renovacaoPrimeiraAulaNovoCiclo: dataPrimeiraAulaNovoCiclo,
         renovacaoAntecipada: classificacaoCompetencia.antecipada,
-        renovacaoStatus: classificacaoCompetencia.statusPendente,
+        renovacaoStatus: podeAutoAprovar
+          ? classificacaoCompetencia.statusConfirmada
+          : classificacaoCompetencia.statusPendente,
+        formaPagamentoId,
+        agenteComercial: agente || null,
       }
     );
 
     const result = {
-      action: classificacaoCompetencia.antecipada
-        ? 'renovacao_antecipada_pendente_validacao_dm'
-        : 'renovacao_pendente_validacao_dm',
+      action: podeAutoAprovar
+        ? (classificacaoCompetencia.antecipada ? 'renovacao_antecipada_auto_aprovada' : 'renovacao_auto_aprovada')
+        : (classificacaoCompetencia.antecipada
+            ? 'renovacao_antecipada_pendente_validacao_dm'
+            : 'renovacao_pendente_validacao_dm'),
       aluno_id: aluno.id,
       matched_via: found.fonte,
       professor_id: professorId,
@@ -988,7 +1057,12 @@ async function handleRenovacao(supabase: any, p: Payload) {
       competencia_referencia: classificacaoCompetencia.competenciaReferencia,
       primeira_aula_novo_ciclo: dataPrimeiraAulaNovoCiclo,
       renovacao_antecipada: classificacaoCompetencia.antecipada,
-      renovacao_status: classificacaoCompetencia.statusPendente,
+      renovacao_auto_aprovada: podeAutoAprovar,
+      renovacao_status: podeAutoAprovar
+        ? classificacaoCompetencia.statusConfirmada
+        : classificacaoCompetencia.statusPendente,
+      forma_pagamento_id: formaPagamentoId,
+      agente: agente,
       renovacao_legada_pendente: renovacaoLegadaPendente,
       movimentacao_registrada: movRegistrada,
       dedup: !renovacaoLegadaPendente,

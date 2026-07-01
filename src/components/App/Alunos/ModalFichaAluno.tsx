@@ -857,7 +857,10 @@ export function ModalFichaAluno({
   }
 
   function formatarData(data: string) {
-    return new Date(data).toLocaleDateString('pt-BR');
+    // Datas puras (YYYY-MM-DD) sao interpretadas como meia-noite UTC pelo JS;
+    // forcar horario local evita recuar um dia ao formatar em BRT.
+    const dataApenas = /^\d{4}-\d{2}-\d{2}$/.test(data);
+    return new Date(dataApenas ? data + 'T00:00:00' : data).toLocaleDateString('pt-BR');
   }
 
   function formatarMoeda(valor: number | null | undefined) {
