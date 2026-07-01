@@ -3116,13 +3116,29 @@ export function ComercialPage() {
 
   // Gerar relatório mensal completo
   const gerarRelatorioMensal = async () => {
+    const competenciaRelatorioMensal = relatorioPeriodo === 'personalizado'
+      ? (() => {
+          const mesmoMes = relatorioDataInicio.getFullYear() === relatorioDataFim.getFullYear()
+            && relatorioDataInicio.getMonth() === relatorioDataFim.getMonth();
+
+          if (!mesmoMes) {
+            throw new Error('O relatorio mensal precisa estar dentro de uma unica competencia. Selecione datas do mesmo mes.');
+          }
+
+          return {
+            ano: relatorioDataInicio.getFullYear(),
+            mes: relatorioDataInicio.getMonth() + 1,
+          };
+        })()
+      : competencia.filtro;
+
     const {
       ano,
       mes,
       dataInicio,
       dataFim,
       periodoLabel,
-    } = calcularRangeRelatorioMensalComercial(competencia.filtro.ano, competencia.filtro.mes);
+    } = calcularRangeRelatorioMensalComercial(competenciaRelatorioMensal.ano, competenciaRelatorioMensal.mes);
 
     // Buscar informações da unidade incluindo o Hunter
     const unidadeId = isAdmin ? context?.unidadeSelecionada : usuario?.unidade_id;

@@ -11,11 +11,31 @@ import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import type { MovimentacaoAdmin, ResumoMes } from './AdministrativoPage';
-import { calcularReajusteMedioCanonico, valorPerdidoMovimentacao } from '@/lib/retencaoOperacionalCanonica';
+import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
+import {
+  aplicarFallbacksRetencao,
+  calcularReajusteMedioCanonico,
+  calcularRetencaoOperacionalCanonica,
+  consolidarRetencaoOperacional,
+  isRenovacaoConfirmadaOperacional,
+  pagantesMapFromKPIsCanonicos,
+  unidadesFromKPIsCanonicos,
+  valorPerdidoMovimentacao,
+} from '@/lib/retencaoOperacionalCanonica';
 import {
   calcularKpisMensaisAdministrativos,
   valorPerdidoRelatorioMensal,
 } from '@/lib/relatorioMensalAdministrativo';
+import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
+import {
+  direcaoTransferenciaNaUnidade,
+  isAlunoNovoForaComercial,
+  isAlunoNovoPaganteAdministrativo,
+  isAlunoTransferenciaAdministrativa,
+  transferenciaPertenceAUnidade,
+  transferenciaRecebidaNaUnidade,
+} from '@/lib/administrativoTransferencias';
+import { isCompetenciaNoPeriodo } from '@/lib/renovacoesAntecipadas';
 
 // Mapeamento de UUIDs para nomes de unidade
 const UUID_NOME_MAP: Record<string, string> = {
@@ -31,6 +51,59 @@ const tipoEvasaoLabels: Record<string, string> = {
   interrompido_banda: 'Interrompido Banda',
   transferencia: 'Transferência',
 };
+
+function inicioMesISO(ano: number, mes: number): string {
+  return `${ano}-${String(mes).padStart(2, '0')}-01`;
+}
+
+function fimMesISO(ano: number, mes: number): string {
+  return `${ano}-${String(mes).padStart(2, '0')}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}`;
+}
+
+function isMesAtual(ano: number, mes: number): boolean {
+  const hoje = new Date();
+  return ano === hoje.getFullYear() && mes === hoje.getMonth() + 1;
+}
+
+async function fetchKPIsAlunosAdminOperacionalRelatorio({
+  unidadeId,
+  ano,
+  mes,
+}: {
+  unidadeId?: string | 'todos' | null;
+  ano: number;
+  mes: number;
+}) {
+  const unidadeFiltro = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
+  const { data, error } = await supabase.rpc('get_kpis_alunos_admin_operacional', {
+    p_unidade_id: unidadeFiltro,
+    p_ano: ano,
+    p_mes: mes,
+  });
+
+  if (error) throw error;
+
+  return (data?.por_unidade || []).map((row: any) => ({
+    unidade_id: row.unidade_id,
+    total_alunos_ativos: Number(row.alunos_ativos) || 0,
+    total_alunos_pagantes: Number(row.alunos_pagantes) || 0,
+    total_bolsistas_integrais: Number(row.bolsistas_integrais) || 0,
+    total_bolsistas_integrais_regulares: Number(row.bolsistas_integrais_regulares) || 0,
+    total_bolsistas_integrais_segundo_curso: Number(row.bolsistas_integrais_segundo_curso) || 0,
+    total_bolsistas_parciais: Number(row.bolsistas_parciais) || 0,
+    ticket_medio: 0,
+    faturamento_previsto: 0,
+    churn_rate: 0,
+    tempo_permanencia_medio: 0,
+    _matriculas_ativas: Number(row.matriculas_ativas) || 0,
+    _matriculas_base_alunos_ativos: Number(row.matriculas_base_alunos_ativos) || 0,
+    _matriculas_banda: Number(row.matriculas_banda) || 0,
+    _matriculas_2_curso: Number(row.matriculas_2_curso) || 0,
+    _alunos_com_2_curso: Number(row.alunos_com_2_curso) || 0,
+    _matriculas_2_curso_extras: Number(row.matriculas_2_curso_extras) || 0,
+    _alunos_coral: Number(row.matriculas_coral) || 0,
+  }));
+}
 
 function labelTipoEvasao(tipo: string): string {
   return tipoEvasaoLabels[tipo] || tipo || 'Interrompido';
@@ -91,6 +164,17 @@ interface TransferenciaRelatorio {
   } | null;
 }
 
+interface DadosRelatorioMensalAdministrativo {
+  resumo: ResumoMes;
+  renovacoes: MovimentacaoAdmin[];
+  naoRenovacoes: MovimentacaoAdmin[];
+  avisosPrevios: MovimentacaoAdmin[];
+  evasoes: MovimentacaoAdmin[];
+  transferencias: TransferenciaRelatorio[];
+  ano: number;
+  mes: number;
+}
+
 type TipoRelatorio = 'gerencial_ia' | 'diario' | 'mensal' | 'renovacoes' | 'avisos' | 'evasoes';
 
 const tiposRelatorio: { id: TipoRelatorio; label: string; icon: React.ReactNode; desc: string; destaque?: boolean }[] = [
@@ -125,38 +209,38 @@ export function ModalRelatorio({
   const [numeroTeste, setNumeroTeste] = useState('');
   const { usuario } = useAuth();
 
-  const formatarBolsistasIntegrais = () => {
-    const total = resumo?.bolsistas_integrais || 0;
-    const regulares = resumo?.bolsistas_integrais_regulares || 0;
-    const segundoCurso = resumo?.bolsistas_integrais_segundo_curso || 0;
+  const formatarBolsistasIntegrais = (resumoBase: ResumoMes | null = resumo) => {
+    const total = resumoBase?.bolsistas_integrais || 0;
+    const regulares = resumoBase?.bolsistas_integrais_regulares || 0;
+    const segundoCurso = resumoBase?.bolsistas_integrais_segundo_curso || 0;
     return regulares || segundoCurso
       ? `*${total}* (${regulares} regulares + ${segundoCurso} em 2o curso)`
       : `*${total}*`;
   };
 
-  const formatarBolsistasIntegraisTexto = () => {
-    const total = resumo?.bolsistas_integrais || 0;
-    const regulares = resumo?.bolsistas_integrais_regulares || 0;
-    const segundoCurso = resumo?.bolsistas_integrais_segundo_curso || 0;
+  const formatarBolsistasIntegraisTexto = (resumoBase: ResumoMes | null = resumo) => {
+    const total = resumoBase?.bolsistas_integrais || 0;
+    const regulares = resumoBase?.bolsistas_integrais_regulares || 0;
+    const segundoCurso = resumoBase?.bolsistas_integrais_segundo_curso || 0;
     return regulares || segundoCurso
       ? `${total} integrais (${regulares} regulares + ${segundoCurso} em 2o curso)`
       : `${total} integrais`;
   };
 
-  const formatarMatriculasSegundoCurso = () => {
-    const total = resumo?.matriculas_2_curso || 0;
-    const alunos = resumo?.alunos_com_2_curso || 0;
-    const extras = resumo?.matriculas_2_curso_extras || 0;
+  const formatarMatriculasSegundoCurso = (resumoBase: ResumoMes | null = resumo) => {
+    const total = resumoBase?.matriculas_2_curso || 0;
+    const alunos = resumoBase?.alunos_com_2_curso || 0;
+    const extras = resumoBase?.matriculas_2_curso_extras || 0;
     return alunos || extras
       ? `*${total}* (${alunos} alunos${extras ? ` + ${extras} extras` : ''})`
       : `*${total}*`;
   };
 
-  const formatarMatriculasAtivas = () => {
-    const total = resumo?.matriculas_ativas || 0;
-    const baseAlunos = resumo?.matriculas_base_alunos_ativos || resumo?.alunos_ativos || 0;
-    const banda = resumo?.matriculas_banda || 0;
-    const segundoCurso = resumo?.matriculas_2_curso || 0;
+  const formatarMatriculasAtivas = (resumoBase: ResumoMes | null = resumo) => {
+    const total = resumoBase?.matriculas_ativas || 0;
+    const baseAlunos = resumoBase?.matriculas_base_alunos_ativos || resumoBase?.alunos_ativos || 0;
+    const banda = resumoBase?.matriculas_banda || 0;
+    const segundoCurso = resumoBase?.matriculas_2_curso || 0;
     return baseAlunos || banda || segundoCurso
       ? `*${total}* (${baseAlunos} base alunos + ${banda} banda + ${segundoCurso} 2o curso)`
       : `*${total}*`;
@@ -224,6 +308,444 @@ export function ModalRelatorio({
       mesRelatorio: relatorioDataInicio.getMonth() + 1,
     };
   };
+
+  const obterCompetenciaMensalAdministrativa = () => {
+    if (relatorioPeriodo !== 'personalizado') {
+      return { anoRelatorio: ano, mesRelatorio: mes, precisaBuscar: false };
+    }
+
+    const mesmoMes = relatorioDataInicio.getFullYear() === relatorioDataFim.getFullYear()
+      && relatorioDataInicio.getMonth() === relatorioDataFim.getMonth();
+
+    if (!mesmoMes) {
+      throw new Error('O relatorio mensal precisa estar dentro de uma unica competencia. Selecione datas do mesmo mes.');
+    }
+
+    return {
+      anoRelatorio: relatorioDataInicio.getFullYear(),
+      mesRelatorio: relatorioDataInicio.getMonth() + 1,
+      precisaBuscar: true,
+    };
+  };
+
+  async function buscarDadosMensaisAdministrativos(
+    anoRelatorio: number,
+    mesRelatorio: number
+  ): Promise<DadosRelatorioMensalAdministrativo> {
+    const dataInicioMes = inicioMesISO(anoRelatorio, mesRelatorio);
+    const dataFimMes = fimMesISO(anoRelatorio, mesRelatorio);
+
+    let query = supabase
+      .from('movimentacoes_admin')
+      .select('*, unidades!movimentacoes_admin_unidade_id_fkey(codigo)')
+      .or(`and(data.gte.${dataInicioMes},data.lte.${dataFimMes}),and(competencia_referencia.gte.${dataInicioMes},competencia_referencia.lte.${dataFimMes})`)
+      .order('data', { ascending: false });
+
+    const mesSaidaDate = new Date(anoRelatorio, mesRelatorio, 1);
+    const mesSaidaAno = mesSaidaDate.getFullYear();
+    const mesSaidaMes = mesSaidaDate.getMonth() + 1;
+    const mesSaidaStart = inicioMesISO(mesSaidaAno, mesSaidaMes);
+    const mesSaidaEnd = fimMesISO(mesSaidaAno, mesSaidaMes);
+
+    let queryAvisos = supabase
+      .from('movimentacoes_admin')
+      .select('*, unidades!movimentacoes_admin_unidade_id_fkey(codigo)')
+      .eq('tipo', 'aviso_previo')
+      .gte('mes_saida', mesSaidaStart)
+      .lte('mes_saida', mesSaidaEnd)
+      .order('data', { ascending: false });
+
+    if (unidade !== 'todos') {
+      query = query.eq('unidade_id', unidade);
+      queryAvisos = queryAvisos.eq('unidade_id', unidade);
+    }
+
+    const [movResult, avisosResult, profsResult, fpResult, cursosResult] = await Promise.all([
+      query,
+      queryAvisos,
+      supabase.from('professores').select('id, nome').eq('ativo', true).order('nome'),
+      supabase.from('formas_pagamento').select('id, nome, sigla').order('nome'),
+      supabase.from('cursos').select('id, nome, is_projeto_banda').order('nome'),
+    ]);
+
+    if (movResult.error) throw movResult.error;
+    if (avisosResult.error) throw avisosResult.error;
+
+    const idsJaPresentes = new Set((movResult.data || []).map((m: any) => m.id));
+    const movCombinado = [
+      ...(movResult.data || []),
+      ...(avisosResult.data || []).filter((a: any) => !idsJaPresentes.has(a.id)),
+    ];
+
+    const alunosIds = movCombinado.filter((m: any) => m.aluno_id).map((m: any) => m.aluno_id) || [];
+    let alunosMap = new Map<string, any>();
+    if (alunosIds.length > 0) {
+      const { data: alunosData } = await supabase
+        .from('alunos')
+        .select('id, classificacao, valor_parcela, data_matricula, data_saida, tipo_matricula_id, is_segundo_curso')
+        .in('id', alunosIds);
+      alunosMap = new Map((alunosData || []).map((a: any) => [String(a.id), a]));
+    }
+
+    const cursosMap = new Map((cursosResult.data || []).map((c: any) => [c.id, c]));
+    const movDataComAlunos = movCombinado.map((m: any) => {
+      const curso = m.curso_id ? cursosMap.get(m.curso_id) : null;
+      return aplicarFallbacksRetencao({
+        ...m,
+        alunos: m.aluno_id ? alunosMap.get(String(m.aluno_id)) : null,
+        curso_nome: curso?.nome || null,
+        cursos: curso ? { nome: curso.nome, is_projeto_banda: curso.is_projeto_banda } : null,
+      });
+    });
+
+    const isPeriodoAtual = isMesAtual(anoRelatorio, mesRelatorio);
+    const kpisAlunosCanonicos = await fetchKPIsAlunosCanonicos({
+      unidadeId: unidade,
+      ano: anoRelatorio,
+      mes: mesRelatorio,
+    });
+
+    let kpisData: any[] = [];
+    if (isPeriodoAtual) {
+      kpisData = await fetchKPIsAlunosAdminOperacionalRelatorio({
+        unidadeId: unidade,
+        ano: anoRelatorio,
+        mes: mesRelatorio,
+      });
+
+      if (kpisAlunosCanonicos.fonte !== 'indisponivel') {
+        const canonicosPorUnidade = new Map(
+          kpisAlunosCanonicos.porUnidade.map(row => [row.unidade_id, row])
+        );
+
+        kpisData = kpisData.map((row: any) => {
+          const canonico = canonicosPorUnidade.get(row.unidade_id);
+          if (!canonico) return row;
+
+          return {
+            ...row,
+            ticket_medio: canonico.ticketMedio,
+            faturamento_previsto: canonico.faturamentoPrevisto,
+            churn_rate: canonico.churnRate,
+            tempo_permanencia_medio: canonico.tempoPermanencia,
+            _matriculas_ativas: row._matriculas_ativas || canonico.matriculasAtivas,
+            _matriculas_base_alunos_ativos: row._matriculas_base_alunos_ativos || canonico.matriculasBaseAlunosAtivos,
+            _matriculas_banda: row._matriculas_banda || canonico.matriculasBanda,
+            _matriculas_2_curso: row._matriculas_2_curso || canonico.matriculasSegundoCurso,
+            _alunos_com_2_curso: row._alunos_com_2_curso || canonico.alunosComSegundoCurso,
+            _matriculas_2_curso_extras: row._matriculas_2_curso_extras || canonico.matriculasSegundoCursoExtras,
+            _alunos_coral: row._alunos_coral || canonico.matriculasCoral,
+          };
+        });
+      }
+    } else if (kpisAlunosCanonicos.fonte !== 'indisponivel') {
+      kpisData = kpisAlunosCanonicos.porUnidade.map(row => ({
+        unidade_id: row.unidade_id,
+        total_alunos_ativos: row.alunosAtivos,
+        total_alunos_pagantes: row.alunosPagantes,
+        total_bolsistas_integrais: row.bolsistasIntegrais,
+        total_bolsistas_integrais_regulares: row.bolsistasIntegraisRegulares,
+        total_bolsistas_integrais_segundo_curso: row.bolsistasIntegraisSegundoCurso,
+        total_bolsistas_parciais: row.bolsistasParciais,
+        ticket_medio: row.ticketMedio,
+        faturamento_previsto: row.faturamentoPrevisto,
+        churn_rate: row.churnRate,
+        tempo_permanencia_medio: row.tempoPermanencia,
+        _matriculas_ativas: row.matriculasAtivas,
+        _matriculas_base_alunos_ativos: row.matriculasBaseAlunosAtivos,
+        _matriculas_banda: row.matriculasBanda,
+        _matriculas_2_curso: row.matriculasSegundoCurso,
+        _alunos_com_2_curso: row.alunosComSegundoCurso,
+        _matriculas_2_curso_extras: row.matriculasSegundoCursoExtras,
+        _alunos_coral: row.matriculasCoral,
+      }));
+    }
+
+    if (!isPeriodoAtual && kpisAlunosCanonicos.fonte === 'indisponivel') {
+      throw new Error(`Snapshot indisponivel para ${String(mesRelatorio).padStart(2, '0')}/${anoRelatorio}.`);
+    }
+
+    const snapshotMatriculas = kpisData.length > 0 && kpisData[0]._matriculas_ativas != null;
+    let matriculasAtivas = 0;
+    let matriculasBanda = 0;
+    let matriculas2Curso = 0;
+    let alunosCoral = 0;
+
+    if (snapshotMatriculas) {
+      matriculasAtivas = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_ativas || 0), 0);
+      matriculasBanda = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_banda || 0), 0);
+      matriculas2Curso = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_2_curso || 0), 0);
+      alunosCoral = kpisData.reduce((acc: number, k: any) => acc + (k._alunos_coral || 0), 0);
+    } else if (isPeriodoAtual) {
+      let matriculasQuery = supabase
+        .from('alunos')
+        .select('id, is_segundo_curso, curso_id, cursos:curso_id!left(nome, is_projeto_banda)')
+        .in('status', ['ativo', 'aviso_previo', 'trancado']);
+
+      if (unidade !== 'todos') {
+        matriculasQuery = matriculasQuery.eq('unidade_id', unidade);
+      }
+
+      const { data: matriculasData } = await matriculasQuery;
+      matriculasAtivas = matriculasData?.length || 0;
+      matriculasBanda = matriculasData?.filter((m: any) => m.cursos?.is_projeto_banda).length || 0;
+      matriculas2Curso = matriculasData?.filter((m: any) =>
+        m.is_segundo_curso
+        && !m.cursos?.is_projeto_banda
+        && !m.cursos?.nome?.toLowerCase()?.includes('coral')
+      ).length || 0;
+      alunosCoral = matriculasData?.filter((m: any) =>
+        m.cursos?.nome?.toLowerCase()?.includes('canto coral')
+      ).length || 0;
+    }
+
+    const kpis = kpisData.reduce((acc, k) => ({
+      alunos_ativos: (acc.alunos_ativos || 0) + (k.total_alunos_ativos || 0),
+      alunos_pagantes: (acc.alunos_pagantes || 0) + (k.total_alunos_pagantes || 0),
+      alunos_nao_pagantes: (acc.alunos_nao_pagantes || 0) + ((k.total_alunos_ativos || 0) - (k.total_alunos_pagantes || 0)),
+      bolsistas_integrais: (acc.bolsistas_integrais || 0) + (k.total_bolsistas_integrais || 0),
+      bolsistas_integrais_regulares: (acc.bolsistas_integrais_regulares || 0) + (k.total_bolsistas_integrais_regulares || 0),
+      bolsistas_integrais_segundo_curso: (acc.bolsistas_integrais_segundo_curso || 0) + (k.total_bolsistas_integrais_segundo_curso || 0),
+      bolsistas_parciais: (acc.bolsistas_parciais || 0) + (k.total_bolsistas_parciais || 0),
+      matriculas_banda: matriculasBanda,
+      matriculas_base_alunos_ativos: (acc.matriculas_base_alunos_ativos || 0) + (k._matriculas_base_alunos_ativos || 0),
+      matriculas_2_curso: matriculas2Curso,
+      alunos_com_2_curso: (acc.alunos_com_2_curso || 0) + (k._alunos_com_2_curso || 0),
+      matriculas_2_curso_extras: (acc.matriculas_2_curso_extras || 0) + (k._matriculas_2_curso_extras || 0),
+      alunos_coral: alunosCoral,
+      faturamento: (acc.faturamento || 0) + (Number(k.faturamento_previsto) || 0),
+      churn_rate: k.churn_rate || acc.churn_rate || 0,
+      ltv_meses: Number(k.tempo_permanencia_medio) || acc.ltv_meses || 0,
+    }), {} as any);
+
+    const tempoPermanenciaCanonico = unidade === 'todos'
+      ? Number(kpisAlunosCanonicos.tempoPermanencia) || 0
+      : Number(kpisAlunosCanonicos.porUnidade.find(row => row.unidade_id === unidade)?.tempoPermanencia) || 0;
+
+    if ((!kpis.ltv_meses || Number(kpis.ltv_meses) <= 0) && tempoPermanenciaCanonico > 0) {
+      kpis.ltv_meses = tempoPermanenciaCanonico;
+    }
+
+    kpis.ticket_medio = kpis.alunos_pagantes > 0
+      ? kpis.faturamento / kpis.alunos_pagantes
+      : 0;
+
+    const profMap = new Map((profsResult.data || []).map((p: any) => [p.id, p.nome]));
+    const fpMap = new Map((fpResult.data || []).map((f: any) => [f.id, { nome: f.nome, sigla: f.sigla }]));
+    const movimentacoesEnriquecidas = (movDataComAlunos || []).map((m: any) => ({
+      ...m,
+      professor_nome: m.professor_id ? profMap.get(m.professor_id) : undefined,
+      forma_pagamento_nome: m.forma_pagamento_id ? (fpMap.get(m.forma_pagamento_id) as any)?.sigla : undefined,
+    })) as MovimentacaoAdmin[];
+
+    const movRetencaoCanonicas = filtrarRetencaoCanonica(movDataComAlunos);
+    const trancamentos = movimentacoesEnriquecidas.filter(m => m.tipo === 'trancamento');
+    const renovacoesDaCompetencia = movimentacoesEnriquecidas.filter(m =>
+      m.tipo === 'renovacao' && isCompetenciaNoPeriodo(m, dataInicioMes, dataFimMes)
+    );
+    const renovacoes = renovacoesDaCompetencia.filter(isRenovacaoConfirmadaOperacional);
+    const renovacoesPendentesConfirmacao = renovacoesDaCompetencia.filter(m => !isRenovacaoConfirmadaOperacional(m));
+    const naoRenovacoes = movimentacoesEnriquecidas.filter(m => m.tipo === 'nao_renovacao');
+    const avisosPrevios = movimentacoesEnriquecidas.filter(m => m.tipo === 'aviso_previo');
+    const evasoes = movimentacoesEnriquecidas.filter(m => m.tipo === 'evasao');
+
+    let novosAlunosQuery = supabase
+      .from('alunos')
+      .select('id, nome, data_matricula, unidade_id, valor_parcela, is_segundo_curso, tipo_matricula_id, agente_comercial, cursos(nome), professores:professor_atual_id(nome), tipos_matricula(codigo, conta_como_pagante), formas_pagamento:forma_pagamento_id(nome, sigla), unidades(codigo)')
+      .gte('data_matricula', dataInicioMes)
+      .lte('data_matricula', dataFimMes)
+      .order('data_matricula', { ascending: false });
+
+    if (unidade !== 'todos') {
+      novosAlunosQuery = novosAlunosQuery.eq('unidade_id', unidade);
+    }
+
+    const { data: todosNovosData } = await novosAlunosQuery;
+    const todosNovos = todosNovosData || [];
+
+    let transferenciasHistorico: any[] = [];
+    try {
+      let transferenciasQuery = supabase
+        .from('aluno_transferencias')
+        .select('id, aluno_id, unidade_origem_id, unidade_destino_id, data_transferencia, observacao')
+        .gte('data_transferencia', dataInicioMes)
+        .lte('data_transferencia', dataFimMes)
+        .order('data_transferencia', { ascending: false });
+
+      if (unidade !== 'todos') {
+        transferenciasQuery = transferenciasQuery.or(`unidade_origem_id.eq.${unidade},unidade_destino_id.eq.${unidade}`);
+      }
+
+      const { data: transferenciasData, error: transferenciasError } = await transferenciasQuery;
+      if (transferenciasError) throw transferenciasError;
+      transferenciasHistorico = transferenciasData || [];
+    } catch (error: any) {
+      if (!['PGRST205', '42P01'].includes(error?.code)) {
+        console.warn('Historico de transferencias indisponivel:', error);
+      }
+    }
+
+    const unidadeIdsTransferencia = Array.from(new Set(
+      transferenciasHistorico
+        .flatMap(t => [t.unidade_origem_id, t.unidade_destino_id])
+        .filter(Boolean)
+    ));
+    let unidadesTransferenciaMap = new Map<string, { codigo?: string | null; nome?: string | null }>();
+
+    if (unidadeIdsTransferencia.length > 0) {
+      const { data: unidadesTransferenciaData } = await supabase
+        .from('unidades')
+        .select('id, codigo, nome')
+        .in('id', unidadeIdsTransferencia);
+
+      unidadesTransferenciaMap = new Map(
+        (unidadesTransferenciaData || []).map((u: any) => [String(u.id), { codigo: u.codigo, nome: u.nome }])
+      );
+    }
+
+    const alunoIdsTransferencia = Array.from(new Set(
+      transferenciasHistorico.map((t: any) => t.aluno_id).filter(Boolean)
+    ));
+    let alunosTransferenciaMap = new Map<string, any>();
+
+    if (alunoIdsTransferencia.length > 0) {
+      const { data: alunosTransferenciaData } = await supabase
+        .from('alunos')
+        .select('id, nome, data_matricula, unidade_id, valor_parcela, is_segundo_curso, tipo_matricula_id, agente_comercial, cursos(nome), professores:professor_atual_id(nome), tipos_matricula(codigo, conta_como_pagante), formas_pagamento:forma_pagamento_id(nome, sigla), unidades(codigo, nome)')
+        .in('id', alunoIdsTransferencia);
+
+      alunosTransferenciaMap = new Map(
+        (alunosTransferenciaData || []).map((a: any) => [String(a.id), a])
+      );
+    }
+
+    const transferenciasAdministrativasPeriodo = transferenciasHistorico
+      .map((t: any) => {
+        const origem = unidadesTransferenciaMap.get(String(t.unidade_origem_id));
+        const destino = unidadesTransferenciaMap.get(String(t.unidade_destino_id));
+        const transferencia = {
+          ...t,
+          unidade_origem_nome: origem?.nome || null,
+          unidade_origem_codigo: origem?.codigo || null,
+          unidade_destino_nome: destino?.nome || null,
+          unidade_destino_codigo: destino?.codigo || null,
+          direcao: direcaoTransferenciaNaUnidade(t, unidade),
+        };
+        const aluno = alunosTransferenciaMap.get(String(t.aluno_id));
+
+        return {
+          ...(aluno || {
+            id: Number(t.aluno_id) || t.id,
+            nome: 'Aluno transferido',
+            data_matricula: t.data_transferencia,
+            valor_parcela: null,
+            cursos: null,
+            professores: null,
+            unidades: {
+              codigo: destino?.codigo || null,
+              nome: destino?.nome || null,
+            },
+          }),
+          transferencia,
+        };
+      })
+      .filter((t: any) => transferenciaPertenceAUnidade(t.transferencia, unidade));
+
+    const transferenciasRecebidasPeriodo = unidade === 'todos'
+      ? transferenciasAdministrativasPeriodo
+      : transferenciasAdministrativasPeriodo.filter((t: any) => (
+          transferenciaRecebidaNaUnidade(t.transferencia, unidade)
+        ));
+
+    const novosAlunos = todosNovos.filter(isAlunoNovoPaganteAdministrativo);
+    const novosSegundoCurso = todosNovos.filter((a: any) => a.is_segundo_curso).length;
+    const novasTransferencias = transferenciasRecebidasPeriodo.length;
+    const novosBolsistas = todosNovos.filter((a: any) =>
+      isAlunoNovoForaComercial(a) && !isAlunoTransferenciaAdministrativa(a)
+    ).length;
+
+    const retencaoRows = kpisAlunosCanonicos.fonte === 'vivo'
+      ? calcularRetencaoOperacionalCanonica({
+          movimentacoes: movRetencaoCanonicas,
+          unidades: unidadesFromKPIsCanonicos(kpisAlunosCanonicos.porUnidade),
+          alunosPagantesPorUnidade: pagantesMapFromKPIsCanonicos(kpisAlunosCanonicos.porUnidade),
+          ano: anoRelatorio,
+          mes: mesRelatorio,
+        })
+      : kpisAlunosCanonicos.porUnidade.map(row => ({
+          unidade_id: row.unidade_id,
+          unidade_nome: row.unidade_nome,
+          ano: row.ano,
+          mes: row.mes,
+          total_evasoes: row.evasoes,
+          evasoes_interrompidas: row.evasoes,
+          avisos_previos: 0,
+          transferencias: 0,
+          taxa_evasao: row.churnRate,
+          mrr_perdido: 0,
+          renovacoes_previstas: 0,
+          renovacoes_realizadas: 0,
+          nao_renovacoes: 0,
+          renovacoes_pendentes: 0,
+          renovacoes_atrasadas: 0,
+          taxa_renovacao: 0,
+          taxa_nao_renovacao: 0,
+          evasoes_por_motivo: {},
+          evasoes_por_professor: {},
+          base_alunos_pagantes: row.alunosPagantes,
+        }));
+
+    const retConsolidado = consolidarRetencaoOperacional(retencaoRows, unidade, anoRelatorio, mesRelatorio);
+    const naoRenovacoesCount = retConsolidado.nao_renovacoes || naoRenovacoes.length;
+    const renovacoesRealizadasCount = retConsolidado.renovacoes_realizadas || renovacoes.length;
+    const renovacoesPendentesCount = retConsolidado.renovacoes_pendentes || renovacoesPendentesConfirmacao.length;
+
+    const resumoMensal: ResumoMes = {
+      alunos_ativos: kpis.alunos_ativos || 0,
+      alunos_pagantes: kpis.alunos_pagantes || 0,
+      alunos_nao_pagantes: kpis.alunos_nao_pagantes || 0,
+      alunos_trancados: trancamentos.length,
+      bolsistas_integrais: kpis.bolsistas_integrais || 0,
+      bolsistas_integrais_regulares: kpis.bolsistas_integrais_regulares || 0,
+      bolsistas_integrais_segundo_curso: kpis.bolsistas_integrais_segundo_curso || 0,
+      bolsistas_parciais: kpis.bolsistas_parciais || 0,
+      alunos_novos: novosAlunos.length,
+      matriculas_ativas: matriculasAtivas,
+      matriculas_base_alunos_ativos: kpis.matriculas_base_alunos_ativos || 0,
+      matriculas_banda: matriculasBanda,
+      matriculas_2_curso: matriculas2Curso,
+      alunos_com_2_curso: kpis.alunos_com_2_curso || 0,
+      matriculas_2_curso_extras: kpis.matriculas_2_curso_extras || 0,
+      alunos_coral: alunosCoral,
+      renovacoes_previstas: renovacoesRealizadasCount + naoRenovacoesCount + renovacoesPendentesCount,
+      renovacoes_realizadas: renovacoesRealizadasCount,
+      renovacoes_pendentes: renovacoesPendentesCount,
+      nao_renovacoes: naoRenovacoesCount,
+      avisos_previos: retConsolidado.avisos_previos || avisosPrevios.length,
+      evasoes_total: retConsolidado.total_evasoes || 0,
+      evasoes_interrompido: retConsolidado.evasoes_interrompidas || 0,
+      evasoes_nao_renovou: naoRenovacoesCount,
+      ticket_medio: kpis.ticket_medio || 0,
+      faturamento: kpis.faturamento || 0,
+      churn_rate: kpis.churn_rate || 0,
+      ltv_meses: kpis.ltv_meses || 0,
+      mrr_perdido: retConsolidado.mrr_perdido || 0,
+      novos_segundo_curso: novosSegundoCurso,
+      novos_bolsistas: novosBolsistas,
+      novas_transferencias: novasTransferencias,
+    };
+
+    return {
+      resumo: resumoMensal,
+      renovacoes,
+      naoRenovacoes,
+      avisosPrevios,
+      evasoes,
+      transferencias: transferenciasRecebidasPeriodo,
+      ano: anoRelatorio,
+      mes: mesRelatorio,
+    };
+  }
 
   async function gerarRelatorioGerencialIA(): Promise<string> {
     setLoadingIA(true);
@@ -561,7 +1083,28 @@ export function ModalRelatorio({
   }
 
   async function gerarRelatorioMensal(): Promise<string> {
-    const mesNomeUpper = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+    const { anoRelatorio, mesRelatorio, precisaBuscar } = obterCompetenciaMensalAdministrativa();
+    const dadosMensais = precisaBuscar
+      ? await buscarDadosMensaisAdministrativos(anoRelatorio, mesRelatorio)
+      : {
+          resumo: resumo as ResumoMes,
+          renovacoes,
+          naoRenovacoes,
+          avisosPrevios,
+          evasoes,
+          transferencias,
+          ano,
+          mes,
+        };
+    const resumoRelatorio = dadosMensais.resumo;
+    const renovacoesRelatorio = dadosMensais.renovacoes || [];
+    const naoRenovacoesRelatorio = dadosMensais.naoRenovacoes || [];
+    const avisosPreviosRelatorio = dadosMensais.avisosPrevios || [];
+    const evasoesRelatorio = dadosMensais.evasoes || [];
+    const transferenciasRelatorio = dadosMensais.transferencias || [];
+    const anoTextoRelatorio = dadosMensais.ano;
+    const mesTextoRelatorio = dadosMensais.mes;
+    const mesNomeUpper = new Date(anoTextoRelatorio, mesTextoRelatorio - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
     
     // Buscar nome da unidade e farmers do banco
     let unidadeNome = 'CONSOLIDADO';
@@ -584,8 +1127,8 @@ export function ModalRelatorio({
     let metasQuery = supabase
       .from('metas_kpi')
       .select('tipo, valor')
-      .eq('ano', ano)
-      .eq('mes', mes);
+      .eq('ano', anoTextoRelatorio)
+      .eq('mes', mesTextoRelatorio);
     
     if (unidade && unidade !== 'todos') {
       metasQuery = metasQuery.eq('unidade_id', unidade);
@@ -600,14 +1143,14 @@ export function ModalRelatorio({
     });
     
     // Calcular KPIs
-    const reajusteMedio = calcularReajusteMedioCanonico(renovacoes).media;
+    const reajusteMedio = calcularReajusteMedioCanonico(renovacoesRelatorio).media;
 
-    const totalBolsistas = (resumo?.bolsistas_integrais || 0) + (resumo?.bolsistas_parciais || 0);
-    const taxaInadimplencia = resumo?.alunos_ativos 
-      ? ((resumo?.alunos_nao_pagantes || 0) / resumo.alunos_ativos * 100)
+    const totalBolsistas = (resumoRelatorio?.bolsistas_integrais || 0) + (resumoRelatorio?.bolsistas_parciais || 0);
+    const taxaInadimplencia = resumoRelatorio?.alunos_ativos
+      ? ((resumoRelatorio?.alunos_nao_pagantes || 0) / resumoRelatorio.alunos_ativos * 100)
       : 0;
-    const taxaRenovacao = resumo?.renovacoes_previstas && resumo.renovacoes_previstas > 0
-      ? ((resumo?.renovacoes_realizadas || 0) / resumo.renovacoes_previstas * 100)
+    const taxaRenovacao = resumoRelatorio?.renovacoes_previstas && resumoRelatorio.renovacoes_previstas > 0
+      ? ((resumoRelatorio?.renovacoes_realizadas || 0) / resumoRelatorio.renovacoes_previstas * 100)
       : 0;
     const {
       ticketMedio,
@@ -617,9 +1160,9 @@ export function ModalRelatorio({
       mrrPerdido,
       tempoPermanenciaMeses,
     } = calcularKpisMensaisAdministrativos({
-      resumo,
-      evasoes,
-      naoRenovacoes,
+      resumo: resumoRelatorio,
+      evasoes: evasoesRelatorio,
+      naoRenovacoes: naoRenovacoesRelatorio,
     });
 
     // Função para gerar barra de progresso WhatsApp
@@ -637,28 +1180,28 @@ export function ModalRelatorio({
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `📊 *RELATÓRIO MENSAL ADMINISTRATIVO*\n`;
     texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
-    texto += `📅 *${mesNomeUpper}/${ano}*\n`;
+    texto += `📅 *${mesNomeUpper}/${anoTextoRelatorio}*\n`;
     texto += `👥 Por ${farmersNomes}\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     // SEÇÃO 1: ALUNOS
     texto += `👥 *ALUNOS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `• Ativos: *${resumo?.alunos_ativos || 0}*\n`;
-    texto += `• Pagantes: *${resumo?.alunos_pagantes || 0}*\n`;
-    texto += `• Não Pagantes: *${resumo?.alunos_nao_pagantes || 0}*\n`;
-    texto += `- Bolsistas: *${totalBolsistas}* (${formatarBolsistasIntegraisTexto()} + ${resumo?.bolsistas_parciais || 0} parciais)\n`;
-    texto += `• Trancados: *${resumo?.alunos_trancados || 0}*\n`;
-    texto += `• Novos no mês: *${resumo?.alunos_novos || 0}*\n`;
-    texto += `• Transferências recebidas no mês: *${transferencias.length || resumo?.novas_transferencias || 0}*\n`;
-    texto += `• Entradas administrativas no mês: *${(resumo?.alunos_novos || 0) + (transferencias.length || resumo?.novas_transferencias || 0)}*\n\n`;
+    texto += `• Ativos: *${resumoRelatorio?.alunos_ativos || 0}*\n`;
+    texto += `• Pagantes: *${resumoRelatorio?.alunos_pagantes || 0}*\n`;
+    texto += `• Não Pagantes: *${resumoRelatorio?.alunos_nao_pagantes || 0}*\n`;
+    texto += `- Bolsistas: *${totalBolsistas}* (${formatarBolsistasIntegraisTexto(resumoRelatorio)} + ${resumoRelatorio?.bolsistas_parciais || 0} parciais)\n`;
+    texto += `• Trancados: *${resumoRelatorio?.alunos_trancados || 0}*\n`;
+    texto += `• Novos no mês: *${resumoRelatorio?.alunos_novos || 0}*\n`;
+    texto += `• Transferências recebidas no mês: *${transferenciasRelatorio.length || resumoRelatorio?.novas_transferencias || 0}*\n`;
+    texto += `• Entradas administrativas no mês: *${(resumoRelatorio?.alunos_novos || 0) + (transferenciasRelatorio.length || resumoRelatorio?.novas_transferencias || 0)}*\n\n`;
 
     // SEÇÃO 2: MATRÍCULAS
     texto += `📚 *MATRÍCULAS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `• Matrículas Ativas: ${formatarMatriculasAtivas()}\n`;
-    texto += `• Matrículas em Banda: *${resumo?.matriculas_banda || 0}*\n`;
-    texto += `- Matriculas de 2o Curso: ${formatarMatriculasSegundoCurso()}\n`;
+    texto += `• Matrículas Ativas: ${formatarMatriculasAtivas(resumoRelatorio)}\n`;
+    texto += `• Matrículas em Banda: *${resumoRelatorio?.matriculas_banda || 0}*\n`;
+    texto += `- Matriculas de 2o Curso: ${formatarMatriculasSegundoCurso(resumoRelatorio)}\n`;
 
     // SEÇÃO 3: KPIs FINANCEIROS
     texto += `💰 *KPIs FINANCEIROS*\n`;
@@ -677,8 +1220,8 @@ export function ModalRelatorio({
     texto += `• Reajuste Médio: *${reajusteMedio.toFixed(1)}%*\n`;
     texto += `• Inadimplência: *${taxaInadimplencia.toFixed(1)}%*\n`;
     texto += `• MRR Perdido: *R$ ${mrrPerdido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
-    texto += `• Total Evasões: *${evasoes.length}*\n`;
-    texto += `• Não Renovações: *${naoRenovacoes.length}*\n\n`;
+    texto += `• Total Evasões: *${evasoesRelatorio.length}*\n`;
+    texto += `• Não Renovações: *${naoRenovacoesRelatorio.length}*\n\n`;
 
     // SEÇÃO 5: BARRAS DE METAS (Fideliza+ LA)
     texto += `🎯 *METAS FIDELIZA+ LA*\n`;
@@ -710,12 +1253,12 @@ export function ModalRelatorio({
     // SEÇÃO 6: RENOVAÇÕES
     texto += `🔄 *RENOVAÇÕES DO MÊS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `• Total previsto: *${resumo?.renovacoes_previstas || 0}*\n`;
-    texto += `• Realizadas: *${renovacoes.length}*\n`;
+    texto += `• Total previsto: *${resumoRelatorio?.renovacoes_previstas || 0}*\n`;
+    texto += `• Realizadas: *${renovacoesRelatorio.length}*\n`;
     texto += `• Porcentagem: *${taxaRenovacao.toFixed(0)}%*\n\n`;
     
-    if (renovacoes.length > 0) {
-      renovacoes.forEach((r, i) => {
+    if (renovacoesRelatorio.length > 0) {
+      renovacoesRelatorio.forEach((r, i) => {
         const reajuste = r.valor_parcela_anterior && r.valor_parcela_novo
           ? ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100
           : 0;
@@ -729,16 +1272,16 @@ export function ModalRelatorio({
     // SEÇÃO 7: NÃO RENOVAÇÕES
     texto += `❌ *NÃO RENOVAÇÕES DO MÊS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `• Total: *${naoRenovacoes.length}*\n`;
-    if (resumo?.renovacoes_previstas && resumo.renovacoes_previstas > 0) {
-      const pctNaoRenov = (naoRenovacoes.length / resumo.renovacoes_previstas) * 100;
+    texto += `• Total: *${naoRenovacoesRelatorio.length}*\n`;
+    if (resumoRelatorio?.renovacoes_previstas && resumoRelatorio.renovacoes_previstas > 0) {
+      const pctNaoRenov = (naoRenovacoesRelatorio.length / resumoRelatorio.renovacoes_previstas) * 100;
       texto += `• Porcentagem: *${pctNaoRenov.toFixed(0)}%*\n\n`;
     } else {
       texto += `\n`;
     }
     
-    if (naoRenovacoes.length > 0) {
-      naoRenovacoes.forEach((n, i) => {
+    if (naoRenovacoesRelatorio.length > 0) {
+      naoRenovacoesRelatorio.forEach((n, i) => {
         const reajuste = n.valor_parcela_anterior && n.valor_parcela_novo
           ? ((n.valor_parcela_novo - n.valor_parcela_anterior) / n.valor_parcela_anterior) * 100
           : 0;
@@ -753,13 +1296,13 @@ export function ModalRelatorio({
     }
 
     // SEÇÃO 8: AVISOS PRÉVIOS
-    const proximoMes = new Date(ano, mes).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+    const proximoMes = new Date(anoTextoRelatorio, mesTextoRelatorio).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
     texto += `⚠️ *AVISOS PRÉVIOS para sair em ${proximoMes}*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `• Total no mês: *${avisosPrevios.length}*\n\n`;
+    texto += `• Total no mês: *${avisosPreviosRelatorio.length}*\n\n`;
     
-    if (avisosPrevios.length > 0) {
-      avisosPrevios.forEach((a, i) => {
+    if (avisosPreviosRelatorio.length > 0) {
+      avisosPreviosRelatorio.forEach((a, i) => {
         texto += `${i + 1}) Nome: *${a.aluno_nome}*\n`;
         texto += `   Motivo: ${a.motivo || 'Não informado'}\n`;
         texto += `   Prof: ${a.professor_nome || 'N/A'}\n\n`;
@@ -772,13 +1315,13 @@ export function ModalRelatorio({
     texto += `🚪 *EVASÕES (Saíram no mês)*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
     const tipoEvasaoMensal = (e: any) => classificarTipoEvasaoMovimentacao(e);
-    const interrompidos = evasoes.filter(e => tipoEvasaoMensal(e) === 'interrompido').length;
-    const interrompidos2Curso = evasoes.filter(e => tipoEvasaoMensal(e) === 'interrompido_2_curso').length;
-    const interrompidosBolsista = evasoes.filter(e => tipoEvasaoMensal(e) === 'interrompido_bolsista').length;
-    const interrompidosBanda = evasoes.filter(e => tipoEvasaoMensal(e) === 'interrompido_banda').length;
-    const naoRenovou = evasoes.filter(e => tipoEvasaoMensal(e) === 'nao_renovou').length;
+    const interrompidos = evasoesRelatorio.filter(e => tipoEvasaoMensal(e) === 'interrompido').length;
+    const interrompidos2Curso = evasoesRelatorio.filter(e => tipoEvasaoMensal(e) === 'interrompido_2_curso').length;
+    const interrompidosBolsista = evasoesRelatorio.filter(e => tipoEvasaoMensal(e) === 'interrompido_bolsista').length;
+    const interrompidosBanda = evasoesRelatorio.filter(e => tipoEvasaoMensal(e) === 'interrompido_banda').length;
+    const naoRenovou = evasoesRelatorio.filter(e => tipoEvasaoMensal(e) === 'nao_renovou').length;
     
-    texto += `• Total no mês: *${evasoes.length}*\n`;
+    texto += `• Total no mês: *${evasoesRelatorio.length}*\n`;
     texto += `• Não renovou: *${naoRenovou}*\n`;
     texto += `• Interrompido: *${interrompidos}*\n`;
     if (interrompidos2Curso > 0) texto += `• Interrompido 2º Curso: *${interrompidos2Curso}*\n`;
@@ -786,8 +1329,8 @@ export function ModalRelatorio({
     if (interrompidosBanda > 0) texto += `• Interrompido Banda: *${interrompidosBanda}*\n`;
     texto += `\n`;
     
-    if (evasoes.length > 0) {
-      evasoes.forEach((e, i) => {
+    if (evasoesRelatorio.length > 0) {
+      evasoesRelatorio.forEach((e, i) => {
         const valorPerdido = valorPerdidoRelatorioMensal(e);
         texto += `${i + 1}) Nome: *${e.aluno_nome}*\n`;
         texto += `   Motivo: ${e.motivo || 'Não informado'}\n`;
