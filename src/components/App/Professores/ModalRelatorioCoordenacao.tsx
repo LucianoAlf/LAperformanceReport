@@ -31,6 +31,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
 import {
   gerarRelatorioCoordenacaoInstantaneo,
+  normalizarKpisProfessoresCoordenacao,
   type ProfessorRelatorioCoordenacao,
   type TipoRelatorioCoordenacaoInstantaneo,
 } from '@/lib/relatorioCoordenacaoInstantaneo';
@@ -167,6 +168,24 @@ export function ModalRelatorioCoordenacao({
     };
   };
 
+  const buscarDadosRelatorioCoordenacao = async () => {
+    const { anoRelatorio, mesRelatorio } = validarCompetenciaMensal();
+
+    const { data: dadosRelatorio, error: errorDados } = await supabase
+      .rpc('get_dados_relatorio_coordenacao', {
+        p_unidade_id: unidadeId,
+        p_ano: anoRelatorio,
+        p_mes: mesRelatorio
+      });
+
+    if (errorDados) {
+      console.error('Erro ao buscar dados:', errorDados);
+      throw new Error('Erro ao buscar dados do relatório');
+    }
+
+    return dadosRelatorio;
+  };
+
   const gerarRelatorioIA = async () => {
     const tipo: TipoRelatorio = 'mensal';
     setTipoRelatorio(tipo);
@@ -174,20 +193,7 @@ export function ModalRelatorioCoordenacao({
     setTextoRelatorio('');
 
     try {
-      const { anoRelatorio, mesRelatorio } = validarCompetenciaMensal();
-
-      // Buscar dados via função SQL
-      const { data: dadosRelatorio, error: errorDados } = await supabase
-        .rpc('get_dados_relatorio_coordenacao', {
-          p_unidade_id: unidadeId,
-          p_ano: anoRelatorio,
-          p_mes: mesRelatorio
-        });
-
-      if (errorDados) {
-        console.error('Erro ao buscar dados:', errorDados);
-        throw new Error('Erro ao buscar dados do relatório');
-      }
+      const dadosRelatorio = await buscarDadosRelatorioCoordenacao();
 
       // Edge Function apenas para o relatório mensal narrativo com IA.
       const edgeFunctionName = 'gemini-relatorio-coordenacao';
@@ -238,20 +244,35 @@ export function ModalRelatorioCoordenacao({
     }
   };
 
-  const gerarRelatorioInstantaneo = (tipo: TipoRelatorioCoordenacaoInstantaneo) => {
+  const gerarRelatorioInstantaneo = async (tipo: TipoRelatorioCoordenacaoInstantaneo) => {
+    setTipoRelatorio(tipo);
+    setLoadingIA(true);
+    setTextoRelatorio('');
+
     try {
-      validarCompetenciaMensal();
-      setTipoRelatorio(tipo);
+      const dadosRelatorio = await buscarDadosRelatorioCoordenacao();
+      const professoresDaCompetencia = normalizarKpisProfessoresCoordenacao(
+        (dadosRelatorio as { kpis_professores?: unknown } | null)?.kpis_professores
+      );
+      const podeUsarFallbackTela = periodoSelecionado.ano === ano
+        && periodoSelecionado.mes === mes
+        && professores.length > 0;
       setTextoRelatorio(gerarRelatorioCoordenacaoInstantaneo({
         tipo,
-        professores,
+        professores: professoresDaCompetencia.length > 0
+          ? professoresDaCompetencia
+          : podeUsarFallbackTela
+            ? professores
+            : [],
         unidadeNome,
         periodoLabel: periodoSelecionado.label,
         intervaloLabel: periodoSelecionado.intervalo,
       }));
-      toast.success('Relatório gerado!', 'Relatório instantâneo gerado com os indicadores da tela');
+      toast.success('Relatório gerado!', 'Relatório instantâneo gerado com a competência selecionada');
     } catch (error) {
       toast.error('Erro', error instanceof Error ? error.message : 'Erro ao gerar relatório');
+    } finally {
+      setLoadingIA(false);
     }
   };
 
@@ -543,8 +564,14 @@ export function ModalRelatorioCoordenacao({
               <Sparkles className="w-6 h-6 text-violet-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
             </div>
             <div className="text-center">
-              <p className="text-white font-medium">Gerando relatório com IA...</p>
-              <p className="text-sm text-slate-400 mt-1">Analisando dados da equipe pedagógica</p>
+              <p className="text-white font-medium">
+                {tipoRelatorio === 'mensal' ? 'Gerando relatório com IA...' : 'Gerando relatório instantâneo...'}
+              </p>
+              <p className="text-sm text-slate-400 mt-1">
+                {tipoRelatorio === 'mensal'
+                  ? 'Analisando dados da equipe pedagógica'
+                  : 'Buscando indicadores da competência selecionada'}
+              </p>
             </div>
           </div>
         )}

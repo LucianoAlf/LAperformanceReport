@@ -38,6 +38,8 @@ interface GerarRelatorioParams {
   dataGeracao?: Date;
 }
 
+type KpiProfessorCoordenacaoRaw = Record<string, unknown>;
+
 const moeda = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL',
@@ -51,6 +53,117 @@ const numero = new Intl.NumberFormat('pt-BR', {
 
 function n(valor: number | null | undefined, casas = 1): string {
   return Number(valor || 0).toFixed(casas);
+}
+
+function numeroSeguro(valor: unknown): number {
+  const numero = Number(valor ?? 0);
+  return Number.isFinite(numero) ? numero : 0;
+}
+
+function textoSeguro(valor: unknown, fallback = ''): string {
+  return typeof valor === 'string' && valor.trim() ? valor.trim() : fallback;
+}
+
+function listaTextoSeguro(valor: unknown): string[] {
+  if (!Array.isArray(valor)) return [];
+  return valor
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean);
+}
+
+function statusPorHealth(score: number): ProfessorRelatorioCoordenacao['status'] {
+  if (score >= 80) return 'excelente';
+  if (score >= 60) return 'atencao';
+  return 'critico';
+}
+
+function healthStatusPorScore(score: number): ProfessorRelatorioCoordenacao['health_status'] {
+  if (score >= 80) return 'saudavel';
+  if (score >= 60) return 'atencao';
+  return 'critico';
+}
+
+function normalizarStatus(
+  status: unknown,
+  score: number
+): ProfessorRelatorioCoordenacao['status'] {
+  const valor = textoSeguro(status).toLowerCase();
+  if (valor === 'excelente' || valor === 'atencao' || valor === 'critico') {
+    return valor;
+  }
+  if (valor === 'saudavel') return 'excelente';
+  return statusPorHealth(score);
+}
+
+function normalizarHealthStatus(
+  status: unknown,
+  score: number
+): ProfessorRelatorioCoordenacao['health_status'] {
+  const valor = textoSeguro(status).toLowerCase();
+  if (valor === 'saudavel' || valor === 'atencao' || valor === 'critico') {
+    return valor;
+  }
+  if (valor === 'excelente') return 'saudavel';
+  return healthStatusPorScore(score);
+}
+
+function calcularHealthFallback(row: KpiProfessorCoordenacaoRaw): number {
+  const presenca = Math.min(numeroSeguro(row.media_presenca ?? row.taxa_presenca), 100);
+  const retencao = Math.min(numeroSeguro(row.taxa_retencao ?? row.taxa_renovacao), 100);
+  const conversao = Math.min(numeroSeguro(row.taxa_conversao), 100);
+  const evasoes = numeroSeguro(row.evasoes ?? row.evasoes_mes);
+  const alunos = numeroSeguro(row.carteira_alunos ?? row.total_alunos);
+  const penalidadeEvasao = alunos > 0 ? Math.min((evasoes / alunos) * 100, 20) : 0;
+  const score = (presenca * 0.35) + (retencao * 0.35) + (conversao * 0.15) + 15 - penalidadeEvasao;
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+export function normalizarKpisProfessoresCoordenacao(
+  kpisProfessores: unknown
+): ProfessorRelatorioCoordenacao[] {
+  if (!Array.isArray(kpisProfessores)) return [];
+
+  return kpisProfessores.map((row, index) => {
+    const item = row as KpiProfessorCoordenacaoRaw;
+    const totalAlunos = numeroSeguro(item.carteira_alunos ?? item.total_alunos);
+    const mediaAlunosTurma = numeroSeguro(item.media_alunos_turma);
+    const totalTurmasInformado = numeroSeguro(item.total_turmas);
+    const totalTurmas = totalTurmasInformado > 0
+      ? totalTurmasInformado
+      : mediaAlunosTurma > 0
+        ? Math.round(totalAlunos / mediaAlunosTurma)
+        : 0;
+    const experimentais = numeroSeguro(item.experimentais);
+    const matriculasPosExp = numeroSeguro(item.matriculas_pos_exp ?? item.matriculas);
+    const healthScore = numeroSeguro(item.health_score ?? item.health) || calcularHealthFallback(item);
+
+    return {
+      id: numeroSeguro(item.professor_id ?? item.id) || index + 1,
+      nome: textoSeguro(item.professor_nome ?? item.nome, 'Professor sem nome'),
+      especialidades: listaTextoSeguro(item.cursos ?? item.especialidades),
+      total_alunos: totalAlunos,
+      total_turmas: totalTurmas,
+      alunos_via_turmas: numeroSeguro(item.alunos_via_turmas) || totalAlunos,
+      media_alunos_turma: mediaAlunosTurma,
+      taxa_retencao: numeroSeguro(item.taxa_retencao ?? item.taxa_renovacao),
+      taxa_conversao: numeroSeguro(item.taxa_conversao) || (
+        experimentais > 0 ? (matriculasPosExp / experimentais) * 100 : 0
+      ),
+      experimentais,
+      experimentais_faltas: numeroSeguro(item.experimentais_faltas),
+      matriculas_pos_exp: matriculasPosExp,
+      matriculas_diretas: numeroSeguro(item.matriculas_diretas),
+      taxa_presenca: numeroSeguro(item.media_presenca ?? item.taxa_presenca),
+      taxa_faltas: numeroSeguro(item.taxa_faltas),
+      evasoes_mes: numeroSeguro(item.evasoes ?? item.evasoes_mes),
+      nao_renovacoes_mes: numeroSeguro(item.nao_renovacoes ?? item.nao_renovacoes_mes),
+      mrr_perdido: numeroSeguro(item.mrr_perdido),
+      status: normalizarStatus(item.status ?? item.health_status, healthScore),
+      health_score: healthScore,
+      health_status: normalizarHealthStatus(item.health_status ?? item.status, healthScore),
+      fator_demanda_ponderado: numeroSeguro(item.fator_demanda_ponderado) || 1,
+    };
+  });
 }
 
 function formatarMoeda(valor: number | null | undefined): string {
@@ -88,7 +201,7 @@ function cabecalho(titulo: string, params: GerarRelatorioParams): string[] {
     `🗓 Periodo: ${params.intervaloLabel}`,
     '━━━━━━━━━━━━━━━━━━━━━━',
     '',
-    '_Fonte: indicadores ja carregados na tela de Professores do LA Report._',
+    '_Fonte: indicadores canonicos da competencia selecionada no LA Report._',
     '_Relatorio instantaneo, sem IA e sem Edge Function._',
     '',
   ];

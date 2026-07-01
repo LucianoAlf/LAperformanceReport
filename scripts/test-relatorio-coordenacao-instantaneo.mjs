@@ -13,6 +13,36 @@ const transpiled = ts.transpileModule(source, {
 
 const mod = await import(`data:text/javascript;base64,${Buffer.from(transpiled).toString('base64')}`);
 
+const professoresNormalizados = mod.normalizarKpisProfessoresCoordenacao([
+  {
+    professor_id: 77,
+    professor_nome: 'Carlos Canonico',
+    cursos: ['Piano', 'Canto'],
+    carteira_alunos: 21,
+    total_turmas: 12,
+    media_alunos_turma: 1.75,
+    taxa_retencao: 95.2,
+    taxa_conversao: 40,
+    experimentais: 5,
+    matriculas_pos_exp: 2,
+    matriculas: 3,
+    media_presenca: 82.5,
+    evasoes: 1,
+    nao_renovacoes: 1,
+    mrr_perdido: 720,
+    health_score: 88,
+  },
+]);
+
+assert.equal(professoresNormalizados.length, 1);
+assert.equal(professoresNormalizados[0].nome, 'Carlos Canonico');
+assert.equal(professoresNormalizados[0].total_alunos, 21);
+assert.equal(professoresNormalizados[0].total_turmas, 12);
+assert.equal(professoresNormalizados[0].taxa_presenca, 82.5);
+assert.equal(professoresNormalizados[0].evasoes_mes, 1);
+assert.equal(professoresNormalizados[0].nao_renovacoes_mes, 1);
+assert.equal(professoresNormalizados[0].mrr_perdido, 720);
+
 const professores = [
   {
     id: 1,
@@ -75,7 +105,7 @@ const base = {
 const ranking = mod.gerarRelatorioCoordenacaoInstantaneo({ ...base, tipo: 'ranking' });
 assert.match(ranking, /RELATORIO RANKING DE PROFESSORES/);
 assert.match(ranking, /Ana Forte - 92 pontos/);
-assert.match(ranking, /Fonte: indicadores ja carregados na tela de Professores do LA Report/);
+assert.match(ranking, /Fonte: indicadores canonicos da competencia selecionada no LA Report/);
 
 const presenca = mod.gerarRelatorioCoordenacaoInstantaneo({ ...base, tipo: 'presenca' });
 assert.match(presenca, /Bruno Alerta - 61\.0%/);
