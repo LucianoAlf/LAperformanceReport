@@ -2,7 +2,24 @@
 
 > Data: 2026-06-30 · Fonte: Supabase advisor (657 lints, 100% security) + inspeção manual de RLS/policies/grants + grep do frontend.
 > Projeto Supabase: `ouqwbbermlzqqvtqwlul`.
-> Status: **diagnóstico fechado, correções pendentes**. Marcar cada item ao resolver.
+> Status: **bloco anon RESOLVIDO (C1 funções + A1 tabelas); demais itens pendentes**. Marcar cada item ao resolver.
+
+## ✅ Progresso (2026-06-30)
+
+| Item | Estado |
+|---|---|
+| **C1 — funções `SECURITY DEFINER` executáveis por anon** | ✅ **RESOLVIDO** — 98 funções revogadas de anon em 6 sprints (migrations `130000`–`136000`). 6 exceções justificadas (2 anamnese pública + 4 helpers RLS). Commitado (`824c157`). |
+| **A1 — tabelas sem RLS** | ✅ **RESOLVIDO** — 0 tabelas sem RLS. Grupo A (15) + C (5 backups, `140000`) + B (9 front, `141000`). *Migrations B/C ainda não commitadas.* |
+| **A3 — 40 views `vw_*` SECURITY DEFINER** | ✅ **RESOLVIDO** — 40 views → `security_invoker=on` (`150000`). 0 views definer restantes. Verificado: todas as tabelas-base têm RLS+policy p/ `authenticated`, resultado idêntico p/ logados. Teste validado no front (Sucesso do Aluno CG: 506 alunos). Isolamento real por unidade segue na camada 2. |
+| C2 — tokens whatsapp_caixas/mila_config | ✅ fechado p/ anon (`122000`). Fase 2 (mascarar openai/meta p/ logado) pendente |
+| C1 — 5 funções SQL arbitrário | ✅ fechado (`121000`) |
+
+**Pendências abertas (o "anon" está fechado; falta o resto):**
+- **Camada 2** — funções de escrita sem guarda interna (qualquer *autenticado* chama sem checagem admin/unidade); policies do Grupo B são `USING(true)` (sem filtro por unidade). Falta a regra de negócio.
+- **n8n conecta como `postgres`** (superuser-equivalente) → migrar p/ role dedicado de escrita.
+- **A2** — 207 policies `USING(true)`/`WITH CHECK(true)` a refinar.
+- **A4** — `VITE_UAZAPI_TOKEN` no bundle do front → mover p/ edge.
+- Tokens Fase 2 (openai/meta legíveis por logado); 138 funções `search_path` mutável; 6 buckets públicos; leaked-password protection off; 3 extensões em `public`; DROP dos 5 backups; bug `lead_nome` no webhook de leads.
 
 ## Sumário executivo
 
@@ -60,8 +77,8 @@ Achados principais:
 
 ## 🟠 ALTO
 
-### A1. 29 tabelas sem RLS (`rls_disabled_in_public`)
-Plano detalhado na seção "Plano RLS" abaixo.
+### A1. 29 tabelas sem RLS (`rls_disabled_in_public`) — ✅ CONCLUÍDO 2026-06-30
+Todas as tabelas de `public` agora têm RLS. Grupo A (15, backend-only) + Grupo C (5 backups, migration `20260630140000`) + Grupo B (9 front, migration `20260630141000`). **0 tabelas sem RLS.** Grupo B usa policy `FOR ALL TO authenticated, mila_acesso_restrito, sol_acesso_restrito USING(true)` (fecha anon, preserva front + agentes). Refino por unidade/admin = camada 2. Plano detalhado na seção "Plano RLS" abaixo.
 
 ### A2. 207 policies `USING(true)`/`WITH CHECK(true)` em 111 tabelas (`rls_policy_always_true`)
 RLS ligado mas neutralizado para INSERT/UPDATE/DELETE/ALL. Substituir por checagem real.
@@ -143,3 +160,5 @@ Não deveriam estar em produção. Após confirmar que nada usa: `DROP TABLE` ou
 
 ## Histórico
 - 2026-06-30: auditoria inicial (Claude + advisor). Nada alterado no banco.
+- 2026-06-30: **C1 concluída** — 98 funções SECURITY DEFINER revogadas de anon (6 sprints, migrations 130000–136000). Investigado que o n8n conecta como `postgres` via Postgres direto (não anon/PostgREST) → revogação segura. Logs pós-sprints sem `permission denied`. Commit+push (`824c157`).
+- 2026-06-30: **A1 concluída** — RLS habilitado nas 14 tabelas restantes (Grupo C backups `140000`, Grupo B front `141000`). 0 tabelas sem RLS. Grupo B validado em tela (Agenda, Comercial, Projetos, Salas) por conta admin — nada quebrou. Migrations B/C ainda não commitadas.
