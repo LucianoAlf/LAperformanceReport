@@ -1407,7 +1407,7 @@ export function AdministrativoPage() {
           <QuickInputCard
             icon={RefreshCw}
             title="Renovação"
-            count={resumo?.renovacoes_realizadas || 0}
+            count={renovacoes.length}
             variant="emerald"
             onClick={() => openModalRenovacao('confirmada')}
           />
