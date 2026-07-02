@@ -53,6 +53,20 @@ Adicionar um índice único em `movimentacoes_admin` que impede fisicamente duas
 - **Pérola Madeira Maturano** (Barra, curso Canto, competência jan/2026) — duplicata clássica do bug: duas linhas idênticas (mesmo valor, mesmo agente, mesma forma), criadas com 27 segundos de diferença. Mesmo padrão que estamos corrigindo, só que de fevereiro — prova que o bug é anterior a julho.
 - **Letícia Ferreira Vasconcelos** (Recreio, curso 16, competência fev/2026) — **causa diferente**, não é webhook duplicado: uma linha `pendente_validacao` de 18/02 (sem valor, sem agente, nunca confirmada) e uma linha `confirmada` de 28/02 (10 dias depois, dados completos) — parece pendência esquecida seguida de um registro manual novo pra fechar a renovação. Precisa de julgamento caso a caso (provavelmente manter a confirmada e arquivar a pendente), não um merge automático.
 
+**Impacto em outros consumidores de `movimentacoes_admin` (levantamento completo, não só a edge)**
+
+A tabela é compartilhada por 5 tipos de movimentação (evasão 684, renovação 420, não-renovação 191, aviso prévio 105, trancamento 62) mais `ajuste_valor` e `destrancamento`. Como o índice é **parcial** (`WHERE tipo = 'renovacao'`), ele não existe fisicamente para os outros tipos — confirmado revisando todos os pontos de escrita:
+- `ModalFichaAluno.tsx` grava `tipo: 'ajuste_valor'` — fora do escopo do índice.
+- `AdministrativoPage.tsx` (destrancamento) grava `tipo: 'destrancamento'` — fora do escopo.
+- `PlanilhaRetencao.tsx` (ramo evasão) grava `tipo: 'evasao'`/`'nao_renovacao'` — fora do escopo (só o ramo de renovação, tipo `'renovacao'`, é afetado).
+
+**Mas existem 3 pontos que gravam `tipo = 'renovacao'` além da edge**, e a implementação precisa cobrir todos, não só o webhook:
+1. **`AdministrativoPage.tsx`** (modal "Lançamento Rápido") — já tem checagem própria de duplicidade (aluno+unidade+curso+competência) antes de inserir, mostrando "Renovação já registrada" ao usuário. O índice novo é redundante no caminho feliz, mas se a checagem falhar (ex: corrida entre dois cliques), o `insert` hoje só faz `throw error` — precisa capturar `23505` e mostrar a mesma mensagem amigável, em vez de erro cru do Postgres.
+2. **`PlanilhaRetencao.tsx`** (página órfã, sem checagem de duplicidade hoje) — precisa do mesmo tratamento de `23505`.
+3. **`FormRenovacao.tsx`** (página órfã, sem checagem de duplicidade hoje) — precisa do mesmo tratamento de `23505`.
+
+Sem esse tratamento, um usuário usando qualquer uma dessas 3 telas manualmente veria um erro técnico feio em vez de uma mensagem entendível, no caso raro de bater na chave única. Isso agora é tarefa explícita da implementação.
+
 ### Camada 2 — Reconhecimento de reprocessamento por edição (`qtd_contratos`)
 
 Antes de tratar um evento de `matricula_renovacao` como renovação nova:
