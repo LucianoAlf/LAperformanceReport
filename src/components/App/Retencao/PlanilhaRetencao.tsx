@@ -113,13 +113,14 @@ export function PlanilhaRetencao() {
 
       // Buscar renovações
       let renovacoesQuery = sb
-        .from('renovacoes')
+        .from('movimentacoes_admin')
         .select(`
-          id, unidade_id, data_renovacao, aluno_id, valor_parcela_anterior, valor_parcela_novo,
-          percentual_reajuste, status, motivo_nao_renovacao_id, agente, observacoes,
+          id, unidade_id, data, aluno_id, valor_parcela_anterior, valor_parcela_novo,
+          tipo, renovacao_status, motivo_saida_id, agente_comercial, observacoes,
           alunos(nome)
         `)
-        .order('data_renovacao', { ascending: false });
+        .eq('tipo', 'renovacao')
+        .order('data', { ascending: false });
 
       if (usuario?.perfil !== 'admin' && usuario?.unidade_id) {
         renovacoesQuery = renovacoesQuery.eq('unidade_id', usuario.unidade_id);
@@ -157,23 +158,26 @@ export function PlanilhaRetencao() {
       // Processar renovações
       if (renovacoesRes.data) {
         renovacoesRes.data.forEach((r: any) => {
-          const tipo: RetencaoRow['tipo'] = r.status === 'nao_renovou' ? 'nao_renovacao' : 'renovacao';
+          const status = ['confirmada', 'antecipada_confirmada'].includes(r.renovacao_status) ? 'renovado' : 'pendente';
+          const percentualReajuste = r.valor_parcela_anterior > 0
+            ? Math.round(((r.valor_parcela_novo / r.valor_parcela_anterior) - 1) * 100 * 10) / 10
+            : 0;
 
           allRows.push({
             id: r.id,
-            tipo,
+            tipo: 'renovacao',
             unidade_id: r.unidade_id,
-            data: r.data_renovacao,
+            data: r.data,
             aluno_id: r.aluno_id,
             aluno_nome: r.alunos?.nome,
             professor_id: null,
             valor_parcela: r.valor_parcela_novo || r.valor_parcela_anterior,
             valor_parcela_anterior: r.valor_parcela_anterior,
             valor_parcela_novo: r.valor_parcela_novo,
-            percentual_reajuste: r.percentual_reajuste,
-            status: r.status,
-            motivo_nao_renovacao_id: r.motivo_nao_renovacao_id,
-            agente: r.agente,
+            percentual_reajuste: percentualReajuste,
+            status,
+            motivo_nao_renovacao_id: r.motivo_saida_id,
+            agente: r.agente_comercial,
             observacoes: r.observacoes,
             isNew: false,
             isDirty: false,
@@ -348,25 +352,25 @@ export function PlanilhaRetencao() {
           });
         }
       } else {
-        // Renovações
+        // Renovações (e não-renovações, que compartilham este ramo de escrita)
         const dataToSave = {
           unidade_id: row.unidade_id,
-          data_renovacao: row.data,
+          data: row.data,
           aluno_id: row.aluno_id,
+          tipo: row.tipo === 'nao_renovacao' ? 'nao_renovacao' : 'renovacao',
           valor_parcela_anterior: row.valor_parcela_anterior,
           valor_parcela_novo: row.valor_parcela_novo,
-          percentual_reajuste: row.percentual_reajuste,
-          status: row.status,
-          motivo_nao_renovacao_id: row.motivo_nao_renovacao_id,
-          agente: row.agente,
+          renovacao_status: row.status === 'renovado' ? 'confirmada' : 'pendente_validacao',
+          motivo_saida_id: row.motivo_nao_renovacao_id,
+          agente_comercial: row.agente,
           observacoes: row.observacoes,
           updated_at: new Date().toISOString(),
         };
 
         if (row.isNew) {
           const { data, error } = await sb
-            .from('renovacoes')
-            .insert({ ...dataToSave, created_by: usuario?.id })
+            .from('movimentacoes_admin')
+            .insert(dataToSave)
             .select()
             .single();
 
@@ -379,7 +383,7 @@ export function PlanilhaRetencao() {
           });
         } else {
           const { error } = await sb
-            .from('renovacoes')
+            .from('movimentacoes_admin')
             .update(dataToSave)
             .eq('id', row.id);
 
@@ -416,8 +420,9 @@ export function PlanilhaRetencao() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sb = supabase as any;
+      // row.tabela é um discriminador interno de forma de escrita; a tabela física é sempre movimentacoes_admin
       const { error } = await sb
-        .from(row.tabela)
+        .from('movimentacoes_admin')
         .delete()
         .eq('id', row.id);
 
