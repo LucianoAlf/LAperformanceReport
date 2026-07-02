@@ -555,7 +555,6 @@ async function gerarRelatorioDiario(
   const alunosNaoPagantes = kpisAlunos.alunosNaoPagantes;
   const bolsistasIntegrais = kpisAlunos.bolsistasIntegrais;
   const bolsistasIntegraisRegulares = kpisAlunos.bolsistasIntegraisRegulares;
-  const bolsistasIntegraisSegundoCurso = kpisAlunos.bolsistasIntegraisSegundoCurso;
   const bolsistasParciais = kpisAlunos.bolsistasParciais;
 
   // Novos no mes: pessoas pagantes novas, sem 2o curso, banda/coral ou bolsista.
@@ -737,9 +736,7 @@ async function gerarRelatorioDiario(
 
   // === 2. MONTAR TEXTO (idêntico ao frontend) ===
   const taxaInadimplencia = alunosAtivos > 0 ? (alunosNaoPagantes / alunosAtivos * 100) : 0;
-  const bolsistasIntegraisTexto = bolsistasIntegraisRegulares || bolsistasIntegraisSegundoCurso
-    ? `*${bolsistasIntegrais}* (${bolsistasIntegraisRegulares} regulares + ${bolsistasIntegraisSegundoCurso} em 2o curso)`
-    : `*${bolsistasIntegrais}*`;
+  const bolsistasIntegraisTexto = `*${bolsistasIntegraisRegulares || bolsistasIntegrais}*`;
   const matriculas2CursoTexto = alunosCom2Curso || matriculas2CursoExtras
     ? `*${matriculas2Curso}* (${alunosCom2Curso} alunos${matriculas2CursoExtras ? ` + ${matriculas2CursoExtras} extras` : ''})`
     : `*${matriculas2Curso}*`;
@@ -774,7 +771,7 @@ async function gerarRelatorioDiario(
   texto += `• Trancados: *${trancados || 0}*\n`;
   texto += `• Novos no mês: *${novosAlunos}*\n`;
   texto += `• Transferências recebidas no mês: *${transferenciasRecebidasDetalhadas.length}*\n`;
-  texto += `• Entradas administrativas no mês: *${entradasAdministrativas}* (${novosAlunos} novos + ${transferenciasRecebidasDetalhadas.length} transferência${transferenciasRecebidasDetalhadas.length !== 1 ? 's' : ''})\n\n`;
+  texto += `• Entrada de novos alunos no mês: *${entradasAdministrativas}* (${novosAlunos} novos + ${transferenciasRecebidasDetalhadas.length} transferência${transferenciasRecebidasDetalhadas.length !== 1 ? 's' : ''})\n\n`;
 
   texto += `📚 *MATRÍCULAS*\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;

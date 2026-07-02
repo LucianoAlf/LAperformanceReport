@@ -139,6 +139,10 @@ function tipoRow(row: AlunoRow) {
   return firstRelation(row.tipos_matricula);
 }
 
+function tipoCodigo(row: AlunoRow): string {
+  return String(tipoRow(row)?.codigo || '');
+}
+
 function isBanda(row: AlunoRow): boolean {
   return cursoRow(row)?.is_projeto_banda === true;
 }
@@ -149,7 +153,7 @@ function isCoral(row: AlunoRow): boolean {
 }
 
 function isSegundoCursoExecutivo(row: AlunoRow): boolean {
-  return row.is_segundo_curso === true && !isBanda(row) && !isCoral(row);
+  return row.is_segundo_curso === true && tipoCodigo(row) !== 'REGULAR' && !isBanda(row) && !isCoral(row);
 }
 
 function isBolsaIntegral(row: AlunoRow): boolean {
@@ -338,7 +342,7 @@ export function calcularKPIsAlunosVivosCanonicos(
       matriculasSegundoCursoExtras: Math.max(matriculasSegundoCurso - alunosComSegundoCurso, 0),
       matriculasCoral,
       novasMatriculas: novasMatriculasKeys.size,
-      bolsistasIntegrais: pessoasArray.filter(pessoa => pessoa.bolsistaIntegral).length,
+      bolsistasIntegrais: pessoasArray.filter(pessoa => pessoa.bolsistaIntegralRegular).length,
       bolsistasIntegraisRegulares: pessoasArray.filter(pessoa => pessoa.bolsistaIntegralRegular).length,
       bolsistasIntegraisSegundoCurso: pessoasArray.filter(pessoa =>
         pessoa.bolsistaIntegralSegundoCurso && !pessoa.bolsistaIntegralRegular

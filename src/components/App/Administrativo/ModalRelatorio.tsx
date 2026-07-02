@@ -211,21 +211,15 @@ export function ModalRelatorio({
   const { usuario } = useAuth();
 
   const formatarBolsistasIntegrais = (resumoBase: ResumoMes | null = resumo) => {
-    const total = resumoBase?.bolsistas_integrais || 0;
     const regulares = resumoBase?.bolsistas_integrais_regulares || 0;
-    const segundoCurso = resumoBase?.bolsistas_integrais_segundo_curso || 0;
-    return regulares || segundoCurso
-      ? `*${total}* (${regulares} regulares + ${segundoCurso} em 2o curso)`
-      : `*${total}*`;
+    const total = regulares || resumoBase?.bolsistas_integrais || 0;
+    return `*${total}*`;
   };
 
   const formatarBolsistasIntegraisTexto = (resumoBase: ResumoMes | null = resumo) => {
-    const total = resumoBase?.bolsistas_integrais || 0;
     const regulares = resumoBase?.bolsistas_integrais_regulares || 0;
-    const segundoCurso = resumoBase?.bolsistas_integrais_segundo_curso || 0;
-    return regulares || segundoCurso
-      ? `${total} integrais (${regulares} regulares + ${segundoCurso} em 2o curso)`
-      : `${total} integrais`;
+    const total = regulares || resumoBase?.bolsistas_integrais || 0;
+    return `${total} integrais`;
   };
 
   const formatarMatriculasSegundoCurso = (resumoBase: ResumoMes | null = resumo) => {
@@ -942,7 +936,7 @@ export function ModalRelatorio({
     texto += `• Trancados: *${resumo?.alunos_trancados || 0}*\n`;
     texto += `• Novos no mês: *${resumo?.alunos_novos || 0}*\n`;
     texto += `• Transferências recebidas no mês: *${totalTransferenciasMes}*\n`;
-    texto += `• Entradas administrativas no mês: *${totalEntradasAdministrativas}* (${resumo?.alunos_novos || 0} novos + ${totalTransferenciasMes} transferência${totalTransferenciasMes !== 1 ? 's' : ''})\n\n`;
+    texto += `• Entrada de novos alunos no mês: *${totalEntradasAdministrativas}* (${resumo?.alunos_novos || 0} novos + ${totalTransferenciasMes} transferência${totalTransferenciasMes !== 1 ? 's' : ''})\n\n`;
 
     texto += `📚 *MATRÍCULAS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -1161,7 +1155,8 @@ export function ModalRelatorio({
     // Calcular KPIs
     const reajusteMedio = calcularReajusteMedioCanonico(renovacoesRelatorio).media;
 
-    const totalBolsistas = (resumoRelatorio?.bolsistas_integrais || 0) + (resumoRelatorio?.bolsistas_parciais || 0);
+    const bolsistasIntegraisRelatorio = resumoRelatorio?.bolsistas_integrais_regulares || resumoRelatorio?.bolsistas_integrais || 0;
+    const totalBolsistas = bolsistasIntegraisRelatorio + (resumoRelatorio?.bolsistas_parciais || 0);
     const taxaInadimplencia = resumoRelatorio?.alunos_ativos
       ? ((resumoRelatorio?.alunos_nao_pagantes || 0) / resumoRelatorio.alunos_ativos * 100)
       : 0;
@@ -1210,7 +1205,7 @@ export function ModalRelatorio({
     texto += `• Trancados: *${resumoRelatorio?.alunos_trancados || 0}*\n`;
     texto += `• Novos no mês: *${resumoRelatorio?.alunos_novos || 0}*\n`;
     texto += `• Transferências recebidas no mês: *${transferenciasRelatorio.length || resumoRelatorio?.novas_transferencias || 0}*\n`;
-    texto += `• Entradas administrativas no mês: *${(resumoRelatorio?.alunos_novos || 0) + (transferenciasRelatorio.length || resumoRelatorio?.novas_transferencias || 0)}*\n\n`;
+    texto += `• Entrada de novos alunos no mês: *${(resumoRelatorio?.alunos_novos || 0) + (transferenciasRelatorio.length || resumoRelatorio?.novas_transferencias || 0)}*\n\n`;
 
     // SEÇÃO 2: MATRÍCULAS
     texto += `📚 *MATRÍCULAS*\n`;
