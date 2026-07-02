@@ -58,7 +58,8 @@ Path alias: `@/` = `./src/`
 ## Banco de Dados
 
 - PostgreSQL via Supabase
-- Tabelas principais: `unidades`, `alunos`, `leads`, `matriculas`, `renovacoes`, `evasoes`, `professores`, `turmas`, `cursos`, `dados_mensais`, `metas`
+- Tabelas principais: `unidades`, `alunos`, `leads`, `matriculas`, `movimentacoes_admin` (renovações/evasões/trancamentos — **fonte de verdade**), `professores`, `turmas`, `cursos`, `dados_mensais`, `metas`
+- ⚠️ **`renovacoes` foi APOSENTADA (2026-07-01)** → renomeada para `renovacoes_legado` (arquivo read-only, não usar). A fonte de renovações é `movimentacoes_admin` (`tipo='renovacao'`, `renovacao_status`). Ver `docs/superpowers/plans/2026-07-01-aposentar-tabela-renovacoes.md`.
 - RPC functions para queries complexas (ex: `get_kpis_consolidados`, `get_kpis_professor_periodo`)
 - Tipos gerados: `src/types/database.types.ts`
 - `motivos_saida`: tabela com campo `conta_score_professor` (bool) — controla quais motivos penalizam o professor no score. NULL sem match = não conta.
