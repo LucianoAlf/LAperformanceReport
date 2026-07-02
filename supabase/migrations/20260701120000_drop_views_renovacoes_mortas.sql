@@ -1,0 +1,34 @@
+-- Fase 1 da aposentadoria da tabela renovacoes: dropa 2 views mortas (zero consumo no front,
+-- confirmado por grep; ambas usavam status inexistentes 'realizada'/'nao_renovada'/'concluida').
+-- A tabela base `renovacoes` NAO e tocada. Definicoes preservadas abaixo para recriar se preciso.
+--
+-- BACKUP vw_renovacoes_pendentes:
+--   SELECT a.unidade_id, u.nome AS unidade_nome,
+--     date_trunc('month', a.data_fim_contrato)::date AS mes_vencimento,
+--     count(*) AS total_vencendo,
+--     count(*) FILTER (WHERE r.status='realizada') AS renovadas,
+--     count(*) FILTER (WHERE r.status='nao_renovada') AS nao_renovadas,
+--     count(*) FILTER (WHERE r.id IS NULL AND a.data_fim_contrato >= CURRENT_DATE) AS pendentes,
+--     count(*) FILTER (WHERE r.id IS NULL AND a.data_fim_contrato < CURRENT_DATE) AS atrasadas
+--   FROM alunos a LEFT JOIN unidades u ON a.unidade_id=u.id
+--     LEFT JOIN renovacoes r ON a.id=r.aluno_id
+--   WHERE a.status='ativo' AND a.data_fim_contrato >= CURRENT_DATE - interval '60 days'
+--     AND a.data_fim_contrato <= CURRENT_DATE + interval '60 days'
+--   GROUP BY a.unidade_id, u.nome, date_trunc('month', a.data_fim_contrato);
+--
+-- BACKUP vw_renovacoes_mensal:
+--   SELECT u.nome AS unidade, EXTRACT(year FROM r.data_renovacao)::int AS ano,
+--     EXTRACT(month FROM r.data_renovacao)::int AS mes,
+--     to_char(r.data_renovacao,'YYYY-MM') AS ano_mes,
+--     count(*) FILTER (WHERE r.status='renovado') AS renovacoes,
+--     count(*) FILTER (WHERE r.status='nao_renovou') AS nao_renovacoes,
+--     count(*) FILTER (WHERE r.status='pendente') AS pendentes,
+--     count(*) FILTER (WHERE r.status='negociando') AS negociando,
+--     round(avg(r.percentual_reajuste) FILTER (WHERE r.status='renovado'),2) AS reajuste_medio,
+--     round(100.0*count(*) FILTER (WHERE r.status='renovado')/NULLIF(count(*),0),1) AS taxa_renovacao
+--   FROM renovacoes r JOIN unidades u ON r.unidade_id=u.id
+--   GROUP BY u.nome, EXTRACT(year FROM r.data_renovacao), EXTRACT(month FROM r.data_renovacao),
+--     to_char(r.data_renovacao,'YYYY-MM');
+
+DROP VIEW IF EXISTS public.vw_renovacoes_pendentes;
+DROP VIEW IF EXISTS public.vw_renovacoes_mensal;
