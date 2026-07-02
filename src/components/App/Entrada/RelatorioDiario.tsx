@@ -122,11 +122,13 @@ export function RelatorioDiario() {
 
         // Renovações do mês
         const { count: renovacoesMes } = await supabase
-          .from('renovacoes')
+          .from('movimentacoes_admin')
           .select('*', { count: 'exact', head: true })
           .eq('unidade_id', unidade.id)
-          .gte('data_renovacao', `${mesAtual}-01`)
-          .lte('data_renovacao', dataRelatorio);
+          .eq('tipo', 'renovacao')
+          .in('renovacao_status', ['confirmada', 'antecipada_confirmada'])
+          .gte('data', `${mesAtual}-01`)
+          .lte('data', dataRelatorio);
 
         // Ticket médio
         const kpiFinanceiro = kpisPorUnidade.get(unidade.id);
