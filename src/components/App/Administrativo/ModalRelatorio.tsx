@@ -134,6 +134,13 @@ function classificarTipoEvasaoMovimentacao(e: any): string {
   return 'interrompido';
 }
 
+function isMovimentoBaseAlunosParaRetencao(mov: any): boolean {
+  if (mov?.tipo !== 'evasao') return true;
+
+  const tipoEvasao = classificarTipoEvasaoMovimentacao(mov);
+  return tipoEvasao === 'interrompido' || tipoEvasao === 'transferencia';
+}
+
 interface ModalRelatorioProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -548,7 +555,8 @@ export function ModalRelatorio({
       forma_pagamento_nome: m.forma_pagamento_id ? (fpMap.get(m.forma_pagamento_id) as any)?.sigla : undefined,
     })) as MovimentacaoAdmin[];
 
-    const movRetencaoCanonicas = filtrarRetencaoCanonica(movDataComAlunos);
+    const movRetencaoCanonicas = filtrarRetencaoCanonica(movDataComAlunos)
+      .filter(isMovimentoBaseAlunosParaRetencao);
     const trancamentos = movimentacoesEnriquecidas.filter(m => m.tipo === 'trancamento');
     const renovacoesDaCompetencia = movimentacoesEnriquecidas.filter(m =>
       m.tipo === 'renovacao' && isCompetenciaNoPeriodo(m, dataInicioMes, dataFimMes)
@@ -674,36 +682,13 @@ export function ModalRelatorio({
       isAlunoNovoForaComercial(a) && !isAlunoTransferenciaAdministrativa(a)
     ).length;
 
-    const retencaoRows = kpisAlunosCanonicos.fonte === 'vivo'
-      ? calcularRetencaoOperacionalCanonica({
-          movimentacoes: movRetencaoCanonicas,
-          unidades: unidadesFromKPIsCanonicos(kpisAlunosCanonicos.porUnidade),
-          alunosPagantesPorUnidade: pagantesMapFromKPIsCanonicos(kpisAlunosCanonicos.porUnidade),
-          ano: anoRelatorio,
-          mes: mesRelatorio,
-        })
-      : kpisAlunosCanonicos.porUnidade.map(row => ({
-          unidade_id: row.unidade_id,
-          unidade_nome: row.unidade_nome,
-          ano: row.ano,
-          mes: row.mes,
-          total_evasoes: row.evasoes,
-          evasoes_interrompidas: row.evasoes,
-          avisos_previos: 0,
-          transferencias: 0,
-          taxa_evasao: row.churnRate,
-          mrr_perdido: 0,
-          renovacoes_previstas: 0,
-          renovacoes_realizadas: 0,
-          nao_renovacoes: 0,
-          renovacoes_pendentes: 0,
-          renovacoes_atrasadas: 0,
-          taxa_renovacao: 0,
-          taxa_nao_renovacao: 0,
-          evasoes_por_motivo: {},
-          evasoes_por_professor: {},
-          base_alunos_pagantes: row.alunosPagantes,
-        }));
+    const retencaoRows = calcularRetencaoOperacionalCanonica({
+      movimentacoes: movRetencaoCanonicas,
+      unidades: unidadesFromKPIsCanonicos(kpisAlunosCanonicos.porUnidade),
+      alunosPagantesPorUnidade: pagantesMapFromKPIsCanonicos(kpisAlunosCanonicos.porUnidade),
+      ano: anoRelatorio,
+      mes: mesRelatorio,
+    });
 
     const retConsolidado = consolidarRetencaoOperacional(retencaoRows, unidade, anoRelatorio, mesRelatorio);
     const naoRenovacoesCount = retConsolidado.nao_renovacoes || naoRenovacoes.length;
