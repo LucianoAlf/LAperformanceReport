@@ -878,11 +878,12 @@ export function TabelaAlunos({
         .eq('aluno_id', aluno.id)
         .order('created_at', { ascending: false });
 
-      // Buscar renovações do aluno
+      // Buscar renovações do aluno (fonte: movimentacoes_admin)
       const { data: renovacoes } = await supabase
-        .from('renovacoes')
+        .from('movimentacoes_admin')
         .select('*')
         .eq('aluno_id', aluno.id)
+        .eq('tipo', 'renovacao')
         .order('created_at', { ascending: false });
 
       // Buscar anotações do aluno
@@ -897,6 +898,7 @@ export function TabelaAlunos({
 
       if (movimentacoes) {
         movimentacoes.forEach(m => {
+          if (m.tipo === 'renovacao') return; // renovações tratadas no bloco dedicado abaixo
           historico.push({
             tipo: m.tipo || 'Movimentação',
             data: m.created_at,
@@ -914,11 +916,14 @@ export function TabelaAlunos({
 
       if (renovacoes) {
         renovacoes.forEach(r => {
+          const ant = Number(r.valor_parcela_anterior) || 0;
+          const nov = Number(r.valor_parcela_novo) || 0;
+          const reaj = ant > 0 ? Math.round((nov / ant - 1) * 1000) / 10 : 0;
           historico.push({
             tipo: 'Renovação',
             data: r.created_at,
-            descricao: `Renovação de contrato - R$ ${r.valor_parcela_anterior || 0} → R$ ${r.valor_parcela_novo || 0} (${r.percentual_reajuste || 0}% reajuste)`,
-            agente: r.agente || '-'
+            descricao: `Renovação de contrato - R$ ${r.valor_parcela_anterior || 0} → R$ ${r.valor_parcela_novo || 0} (${reaj}% reajuste)`,
+            agente: r.agente_comercial || '-'
           });
         });
       }
