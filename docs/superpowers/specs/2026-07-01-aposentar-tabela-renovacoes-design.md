@@ -23,6 +23,7 @@ Tornar `movimentacoes_admin` a **única fonte de verdade** de renovações, deix
 
 - Não backfillar as 44 renovações órfãs de baixa qualidade (ver decisão abaixo).
 - **NUNCA deletar (`DROP TABLE`) a tabela `renovacoes`.** Em nenhuma fase. O máximo é renomear para `renovacoes_legado` (Fase 3). Um eventual `DROP` no futuro seria uma decisão à parte, fora do escopo deste design.
+- **NÃO deletar nenhum componente/arquivo** (nem os órfãos de navegação). Decisão do Hugo (2026-07-01): apenas **reapontar** as referências à tabela para `movimentacoes_admin`. Faxina de código morto é outro projeto.
 - Não mexer em métricas que já usam `movimentacoes_admin` (score de professor, Fideliza+ canônico do front).
 
 ## Diagnóstico — dependências reais da tabela
@@ -38,11 +39,11 @@ Varredura completa no banco (functions, views, triggers, FKs) + frontend:
 | `TabelaAlunos` | Alunos → expandir aluno | leitura (histórico) |
 | `useProfessorDependencies` | Excluir professor | contagem-guarda |
 
-**Frontend — código morto (deletar):**
-- `RelatorioDiario` — rota `/app/relatorios/diario`, órfã de navegação (não está no `AppSidebar` nem acessível pelo menu).
-- `FormRenovacao` — insert com colunas erradas (escrita quebrada).
-- `PlanilhaRetencao` — órfã (fora do menu), lê e escreve.
-- `SnapshotDiario` — não montada em rota nenhuma.
+**Frontend — órfãos de navegação (reapontar, NÃO deletar):**
+- `RelatorioDiario` — rota `/app/relatorios/diario` existe, mas nada no `AppSidebar` leva a ela; só por URL direta. Todo o módulo Entrada é órfão (os `navigate('/app/entrada')` são internos da própria pasta). Leitura → reapontar.
+- `FormRenovacao` — rota `/app/entrada/renovacao` (órfã). Insert com colunas erradas (escrita quebrada). Escrita → reapontar para `movimentacoes_admin`.
+- `PlanilhaRetencao` — rota `/app/retencao` (órfã, fora do menu). Lê e escreve → reapontar ambos.
+- `SnapshotDiario` — sem rota, sem import (100% morto). Mesmo assim, só reapontar a leitura (não deletar, por decisão).
 
 **Backend:**
 - `get_programa_fideliza_dados` (RPC) — CTE `renovacoes_trim` lê a tabela. O front sobrescreve com canônico, mas corrigir por higiene.
@@ -80,23 +81,26 @@ Validação via API do Emusys (`GET /matriculas?aluno_id=`): **são renovações
 
 ## Solução em 3 fases
 
-### Fase 1 — Estancar e limpar (risco quase zero, não toca nada vivo)
+### Fase 1 — Estancar (risco quase zero, não toca nada vivo)
 1. **Edge `processar-matricula-emusys`**: remover os writes em `renovacoes` no `handleRenovacao`, mantendo só `movimentacoes_admin`. Bump para v27. Deploy via CLI `--no-verify-jwt`.
-2. **Deletar código morto:** `RelatorioDiario.tsx` (+ rota no `router.tsx` e card no `EntradaMenu.tsx`), `FormRenovacao.tsx`, `PlanilhaRetencao.tsx`, `SnapshotDiario.tsx` (+ imports/rotas órfãs).
-3. **Dropar views mortas:** `vw_renovacoes_pendentes`, `vw_renovacoes_mensal`.
+2. **Dropar views mortas:** `vw_renovacoes_pendentes`, `vw_renovacoes_mensal` (zero consumo, confirmado por grep).
 
-### Fase 2 — Reapontar consumidores vivos (com validação número a número)
-Para cada item, rodar a query comparativa **antes** (ver Validação) e só trocar se os números baterem:
-4. `ModalFichaAluno` — "Histórico de Renovações" lê `movimentacoes_admin` (`tipo='renovacao'`), reajuste calculado no map.
-5. `TabRetencao` — contagem do mês por `movimentacoes_admin` (renovadas/não-renovadas/pendentes derivadas de `renovacao_status`/`tipo`).
-6. `useMetas` — count de `movimentacoes_admin` (`tipo='renovacao'`, `renovacao_status` confirmada) por `data`.
-7. `TabelaAlunos` — histórico por `movimentacoes_admin`.
-8. `useProfessorDependencies` — contagem-guarda por `movimentacoes_admin`.
-9. `get_programa_fideliza_dados` — reapontar CTE `renovacoes_trim` para `movimentacoes_admin` (manter shape do retorno; é `SECURITY DEFINER`).
-10. `vw_alertas_inteligentes` — reescrever o ramo `CONTRATO_VENCENDO` para derivar renovação de `movimentacoes_admin` (ou remover o ramo, já que está quebrado). `CREATE OR REPLACE VIEW`; testar o Dashboard depois.
+### Fase 2 — Reapontar TODAS as referências (com validação número a número)
+Reapontar todos os consumidores (vivos **e** órfãos) para `movimentacoes_admin`, **sem deletar componentes**. Para cada leitura, rodar a query comparativa **antes** (ver Validação) e só trocar se os números baterem:
+3. `ModalFichaAluno` — "Histórico de Renovações" lê `movimentacoes_admin` (`tipo='renovacao'`), reajuste calculado no map.
+4. `TabRetencao` — contagem do mês por `movimentacoes_admin` (renovadas/não-renovadas/pendentes derivadas de `renovacao_status`/`tipo`).
+5. `useMetas` — count de `movimentacoes_admin` (`tipo='renovacao'`, `renovacao_status` confirmada) por `data`.
+6. `TabelaAlunos` — histórico por `movimentacoes_admin`.
+7. `useProfessorDependencies` — contagem-guarda por `movimentacoes_admin`.
+8. `RelatorioDiario` (órfão) — contagem do mês por `movimentacoes_admin`.
+9. `SnapshotDiario` (órfão) — leitura de status por `movimentacoes_admin`.
+10. `FormRenovacao` (órfão) — reapontar o `insert` para `movimentacoes_admin` (mapear colunas + `tipo='renovacao'`).
+11. `PlanilhaRetencao` (órfã) — reapontar leitura e escrita (`insert`/`update`) para `movimentacoes_admin`.
+12. `get_programa_fideliza_dados` — reapontar CTE `renovacoes_trim` para `movimentacoes_admin` (manter shape do retorno; é `SECURITY DEFINER`).
+13. `vw_alertas_inteligentes` — reescrever o ramo `CONTRATO_VENCENDO` para derivar renovação de `movimentacoes_admin` (ou remover o ramo, já que está quebrado). `CREATE OR REPLACE VIEW`; testar o Dashboard depois.
 
 ### Fase 3 — Arquivar (futuro, trivial, depois de confirmar zero referências)
-11. **Renomear** `renovacoes` → `renovacoes_legado` (read-only) — `ALTER TABLE ... RENAME`, **nunca `DROP`**. Confirmar que nenhuma referência restou (grep + `pg_depend`). Triggers seguem inertes. Os dados (452 linhas, incl. as 44 órfãs) permanecem intactos.
+14. **Renomear** `renovacoes` → `renovacoes_legado` (read-only) — `ALTER TABLE ... RENAME`, **nunca `DROP`**. Confirmar que nenhuma referência restou (grep + `pg_depend`). Triggers seguem inertes. Os dados (452 linhas, incl. as 44 órfãs) permanecem intactos.
 
 ## Validação (antes × depois)
 
