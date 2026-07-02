@@ -292,6 +292,13 @@ function dateOnlyISO(value: string | null | undefined): string | null {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+// Soma (ou subtrai, com n negativo) dias a uma data ISO 'YYYY-MM-DD', retornando ISO date-only.
+function addDiasISO(dataISO: string, dias: number): string {
+  const d = parseDateOnly(dataISO) ?? new Date(dataISO);
+  d.setDate(d.getDate() + dias);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // "Hoje" em BRT (offset fixo -3h, sem DST no Brasil desde 2019). new Date().toISOString()
 // pega o dia em UTC — perto da virada de mês/dia em BRT isso recua a data errada e pode
 // classificar renovação como antecipada/normal incorretamente.
@@ -628,6 +635,25 @@ async function registrarMovimentacao(
     .eq('tipo', tipo);
 
   if (tipo === 'renovacao') {
+    // Camada 1 (chave estavel): dedup por matricula_id do Emusys. O mesmo contrato reenvia
+    // o webhook `matricula_renovacao` a cada edicao de cronograma, e a competencia calculada
+    // muda entre as entregas (antecipada<->normal) — entao competencia NAO serve de chave.
+    // matricula_id e identico entre reenvios. Janela de 60 dias: maior que qualquer reenvio
+    // observado (<1 a ~30 dias) e muito menor que um ciclo real de renovacao (>= ~6 meses),
+    // entao nunca bloqueia a renovacao legitima do ciclo seguinte. Multi-curso e seguro:
+    // cada curso tem matricula_id proprio (validado: Carlos Eduardo Canto 1205 / Contrabaixo 1316).
+    if (p.matriculaIdEmusys) {
+      const { data: jaExistePorMatricula } = await supabase.from('movimentacoes_admin')
+        .select('id')
+        .eq('tipo', 'renovacao')
+        .eq('emusys_matricula_id', p.matriculaIdEmusys)
+        .gte('data', addDiasISO(hoje, -60))
+        .limit(1);
+      if (jaExistePorMatricula?.length) return false;
+    }
+
+    // Camada 2 (rede): dedup antigo por aluno+curso+competencia. Cobre a janela de transicao
+    // (renovacoes cuja 1a entrega foi antes do deploy, com emusys_matricula_id null).
     if (alunoId) {
       existingQuery = existingQuery.eq('aluno_id', alunoId);
     } else {
@@ -681,6 +707,7 @@ async function registrarMovimentacao(
     payload.renovacao_status = valores.renovacaoStatus ?? 'pendente_validacao';
     payload.forma_pagamento_id = valores.formaPagamentoId ?? null;
     payload.agente_comercial = valores.agenteComercial ?? null;
+    payload.emusys_matricula_id = p.matriculaIdEmusys ?? null;
   }
 
   if (tipo === 'evasao' || tipo === 'nao_renovacao') {
@@ -977,16 +1004,25 @@ async function handleRenovacao(supabase: any, p: Payload) {
 
     await backfillMatriculaId(supabase, aluno.id, p.matriculaIdEmusys, aluno.emusys_matricula_id);
 
-    // Dedup: ja existe renovacao para este aluno/unidade/competencia? (protege contra reentrega de webhook)
+    // Dedup: ja existe renovacao para esta matricula? (protege contra reentrega de webhook +
+    // reenvio pos-edicao de cronograma). matricula_id e estavel entre reenvios; a competencia
+    // NAO (muda com a edicao). Fallback por aluno+competencia cobre a janela de transicao (linhas
+    // antigas sem emusys_matricula_id). So decide se incrementa numero_renovacoes; o insert e
+    // gated de novo (mesma regra) dentro de registrarMovimentacao.
     // Fonte = movimentacoes_admin (a tabela legada renovacoes deixou de ser gravada na v27).
     const inicioMes = classificacaoCompetencia.competenciaReferencia;
-    const { data: existente } = await supabase.from('movimentacoes_admin')
-      .select('id')
-      .eq('aluno_id', aluno.id)
-      .eq('unidade_id', p.unidadeId)
-      .eq('tipo', 'renovacao')
-      .eq('competencia_referencia', inicioMes)
-      .limit(1);
+    let existenteQuery = supabase.from('movimentacoes_admin').select('id').eq('tipo', 'renovacao');
+    if (p.matriculaIdEmusys) {
+      existenteQuery = existenteQuery
+        .eq('emusys_matricula_id', p.matriculaIdEmusys)
+        .gte('data', addDiasISO(hoje, -60));
+    } else {
+      existenteQuery = existenteQuery
+        .eq('aluno_id', aluno.id)
+        .eq('unidade_id', p.unidadeId)
+        .eq('competencia_referencia', inicioMes);
+    }
+    const { data: existente } = await existenteQuery.limit(1);
     const renovacaoDuplicada = !!existente?.length;
 
     const alunoUpdate: any = {

@@ -60,6 +60,7 @@ Path alias: `@/` = `./src/`
 - PostgreSQL via Supabase
 - Tabelas principais: `unidades`, `alunos`, `leads`, `matriculas`, `movimentacoes_admin` (renovações/evasões/trancamentos — **fonte de verdade**), `professores`, `turmas`, `cursos`, `dados_mensais`, `metas`
 - ⚠️ **`renovacoes` foi APOSENTADA (2026-07-01)** → renomeada para `renovacoes_legado` (arquivo read-only, não usar). A fonte de renovações é `movimentacoes_admin` (`tipo='renovacao'`, `renovacao_status`). Ver `docs/superpowers/plans/2026-07-01-aposentar-tabela-renovacoes.md`.
+- **`movimentacoes_admin.emusys_matricula_id`** (2026-07-02): coluna nullable/forward-only usada p/ **deduplicar renovações** reenviadas pelo Emusys. O Emusys reenvia o webhook `matricula_renovacao` inteiro a cada edição de cronograma; a `competencia` é calculada e muda entre entregas (antecipada↔normal), então NÃO serve de chave de dedup. `matricula_id` é estável → dedup na edge por `emusys_matricula_id` (janela 60 dias), mantendo o check antigo (aluno+curso+competência) como rede. Seguro p/ multi-curso (cada curso = matricula_id próprio). Ver `docs/superpowers/plans/2026-07-02-dedup-renovacao-matricula-id.md`.
 - RPC functions para queries complexas (ex: `get_kpis_consolidados`, `get_kpis_professor_periodo`)
 - Tipos gerados: `src/types/database.types.ts`
 - `motivos_saida`: tabela com campo `conta_score_professor` (bool) — controla quais motivos penalizam o professor no score. NULL sem match = não conta.

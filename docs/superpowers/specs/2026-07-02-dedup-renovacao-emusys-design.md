@@ -1,8 +1,17 @@
 # Deduplicar webhooks de renovação do Emusys — Design
 
+> ⚠️ **SUPERSEDIDO em 2026-07-02.** O diagnóstico deste doc (corrida de concorrência →
+> índice único parcial + comparação de `qtd_contratos`) foi **descartado** após inspeção dos
+> payloads reais. A causa raiz verdadeira é a **`competencia_referencia` na chave do dedup**:
+> a competência é calculada pela edge a partir de `data_primeira_aula`, que muda quando o
+> cronograma é editado, fazendo a mesma renovação cair em duas competências e escapar do dedup.
+> **Não é corrida.** A solução correta (mais simples, sem índice, sem `qtd_contratos`) está em
+> **`docs/superpowers/plans/2026-07-02-dedup-renovacao-matricula-id.md`**: dedup por
+> `emusys_matricula_id` (valor estável entre reenvios). Este doc fica só como registro histórico.
+
 **Data:** 2026-07-02
 **Autor:** Hugo (via Claude)
-**Status:** Proposto (aguardando revisão)
+**Status:** SUPERSEDIDO — ver plano `2026-07-02-dedup-renovacao-matricula-id.md`
 
 ## Problema
 
