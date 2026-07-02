@@ -31,7 +31,6 @@ interface Evasao {
 
 interface Renovacao {
   id: number;
-  data_vencimento: string;
   data_renovacao: string;
   aluno_id: number;
   status: string;
@@ -80,8 +79,8 @@ export function TabRetencao({ ano, mes, unidade }: TabRetencaoProps) {
         let renovacoesQuery = supabase
           .from('renovacoes')
           .select('*')
-          .gte('data_vencimento', startDate)
-          .lte('data_vencimento', endDate);
+          .gte('data_renovacao', startDate)
+          .lte('data_renovacao', endDate);
 
         // Filtrar por unidade se não for consolidado
         if (unidade !== 'todos') {
@@ -151,7 +150,7 @@ export function TabRetencao({ ano, mes, unidade }: TabRetencaoProps) {
         const pendentes = renovacoesData.filter(r => r.status === 'pendente').length;
         const atrasadas = renovacoesData.filter(r => {
           if (r.status !== 'pendente') return false;
-          const vencimento = new Date(r.data_vencimento);
+          const vencimento = new Date(r.data_renovacao);
           return vencimento < new Date();
         }).length;
         const totalRenovacoes = renovadas + naoRenovadas;

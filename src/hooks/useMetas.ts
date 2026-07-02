@@ -139,8 +139,8 @@ export function useMetas(
       let renovacoesQuery = supabase
         .from('renovacoes')
         .select('*', { count: 'exact', head: true })
-        .gte('data_vencimento', startDate)
-        .lte('data_vencimento', endDate)
+        .gte('data_renovacao', startDate)
+        .lte('data_renovacao', endDate)
         .eq('status', 'renovado');
 
       if (unidadeId !== 'todos') {

@@ -1,7 +1,12 @@
 /// <reference lib="deno.ns" />
 
-// Edge Function: processar-matricula-emusys v25
+// Edge Function: processar-matricula-emusys v26
 // Processa webhooks de matrícula do Emusys: nova, renovação, trancamento, evasão
+//
+// MUDANÇAS v26 (2026-07-01):
+// - MAPA_TIPO_PAGAMENTO completado com as formas que faltavam (Dinheiro=4, Link=5,
+//   Cartão de Débito=7). Antes, renovação paga em Dinheiro (e afins) não mapeava a forma
+//   e caía em pendente mesmo tendo Agente+valor. Agora auto-aprova como as demais.
 //
 // MUDANÇAS v25 (2026-07-01):
 // - handleRenovacao passa a capturar tipo_pagamento e usuario_realizou_matricula do payload
@@ -385,7 +390,10 @@ const MAPA_TIPO_PAGAMENTO: Record<string, number> = {
   'pgto recorrente': 1,       // Crédito Recorrente
   'cheque pre datado': 2,     // Cheque
   'pix': 3,
+  'dinheiro': 4,
+  'link': 5,
   'boleto': 6,
+  'cartao de debito': 7,      // Cartão de Débito
   'cartao de credito': 8,
 };
 
