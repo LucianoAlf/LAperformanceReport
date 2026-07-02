@@ -31,9 +31,11 @@ interface Evasao {
 
 interface Renovacao {
   id: number;
-  data_renovacao: string;
-  aluno_id: number;
-  status: string;
+  data: string;
+  tipo: string;
+  renovacao_status: string;
+  valor_parcela_anterior: number | null;
+  valor_parcela_novo: number | null;
   unidade_id: string;
 }
 
@@ -77,10 +79,11 @@ export function TabRetencao({ ano, mes, unidade }: TabRetencaoProps) {
 
         // Buscar renovações do mês
         let renovacoesQuery = supabase
-          .from('renovacoes')
-          .select('*')
-          .gte('data_renovacao', startDate)
-          .lte('data_renovacao', endDate);
+          .from('movimentacoes_admin')
+          .select('id, data, tipo, renovacao_status, valor_parcela_anterior, valor_parcela_novo, unidade_id')
+          .in('tipo', ['renovacao', 'nao_renovacao'])
+          .gte('data', startDate)
+          .lte('data', endDate);
 
         // Filtrar por unidade se não for consolidado
         if (unidade !== 'todos') {
@@ -145,13 +148,12 @@ export function TabRetencao({ ano, mes, unidade }: TabRetencaoProps) {
 
         // Calcular totais de renovações
         const renovacoesData = renovacoesRes.data || [];
-        const renovadas = renovacoesData.filter(r => r.status === 'renovado').length;
-        const naoRenovadas = renovacoesData.filter(r => r.status === 'nao_renovou').length;
-        const pendentes = renovacoesData.filter(r => r.status === 'pendente').length;
+        const renovadas = renovacoesData.filter(r => r.tipo === 'renovacao' && ['confirmada', 'antecipada_confirmada'].includes(r.renovacao_status)).length;
+        const naoRenovadas = renovacoesData.filter(r => r.tipo === 'nao_renovacao').length;
+        const pendentes = renovacoesData.filter(r => r.tipo === 'renovacao' && ['pendente_validacao', 'antecipada_pendente'].includes(r.renovacao_status)).length;
         const atrasadas = renovacoesData.filter(r => {
-          if (r.status !== 'pendente') return false;
-          const vencimento = new Date(r.data_renovacao);
-          return vencimento < new Date();
+          if (!(r.tipo === 'renovacao' && ['pendente_validacao', 'antecipada_pendente'].includes(r.renovacao_status))) return false;
+          return new Date(r.data) < new Date();
         }).length;
         const totalRenovacoes = renovadas + naoRenovadas;
         const taxaRenovacao = totalRenovacoes > 0 ? (renovadas / totalRenovacoes) * 100 : 0;
