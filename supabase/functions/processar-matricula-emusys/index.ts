@@ -1,7 +1,13 @@
 /// <reference lib="deno.ns" />
 
-// Edge Function: processar-matricula-emusys v26
+// Edge Function: processar-matricula-emusys v27
 // Processa webhooks de matrícula do Emusys: nova, renovação, trancamento, evasão
+//
+// MUDANÇAS v27 (2026-07-01):
+// - Para de gravar na tabela legada `renovacoes` (handleRenovacao). movimentacoes_admin passa
+//   a ser a única fonte de renovações. A dedup anti-reentrega e o incremento de
+//   numero_renovacoes agora consultam movimentacoes_admin (tipo='renovacao' + competencia).
+//   Parte da aposentadoria da tabela renovacoes.
 //
 // MUDANÇAS v26 (2026-07-01):
 // - MAPA_TIPO_PAGAMENTO completado com as formas que faltavam (Dinheiro=4, Link=5,
@@ -967,18 +973,19 @@ async function handleRenovacao(supabase: any, p: Payload) {
     const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId, p.professorNome);
     const hoje = hojeISOBRT();
     const dataPrimeiraAulaNovoCiclo = dateOnlyISO(p.dataInicioContrato);
-    const dataFimNovoCiclo = dateOnlyISO(p.dataFimContrato);
     const classificacaoCompetencia = classificarRenovacaoPorCompetencia(hoje, dataPrimeiraAulaNovoCiclo);
 
     await backfillMatriculaId(supabase, aluno.id, p.matriculaIdEmusys, aluno.emusys_matricula_id);
 
     // Dedup: ja existe renovacao para este aluno/unidade/competencia? (protege contra reentrega de webhook)
+    // Fonte = movimentacoes_admin (a tabela legada renovacoes deixou de ser gravada na v27).
     const inicioMes = classificacaoCompetencia.competenciaReferencia;
-    const { data: existente } = await supabase.from('renovacoes')
+    const { data: existente } = await supabase.from('movimentacoes_admin')
       .select('id')
       .eq('aluno_id', aluno.id)
       .eq('unidade_id', p.unidadeId)
-      .eq('data_renovacao', inicioMes)
+      .eq('tipo', 'renovacao')
+      .eq('competencia_referencia', inicioMes)
       .limit(1);
     const renovacaoDuplicada = !!existente?.length;
 
@@ -1016,26 +1023,8 @@ async function handleRenovacao(supabase: any, p: Payload) {
     const agente = p.agenteNome;
     const podeAutoAprovar = Boolean(formaPagamentoId) && Boolean(agente) && (valorParcelaNovoFinal ?? 0) > 0;
 
-    let renovacaoLegadaPendente = false;
-    if (!renovacaoDuplicada) {
-      await supabase.from('renovacoes').insert({
-        aluno_id: aluno.id,
-        unidade_id: p.unidadeId,
-        data_renovacao: classificacaoCompetencia.competenciaReferencia,
-        valor_parcela_anterior: aluno.valor_parcela || null,
-        valor_parcela_novo: valorParcelaNovoFinal,
-        status: podeAutoAprovar ? 'renovado' : 'pendente',
-        agente: agente || null,
-        professor_id: professorId || aluno.professor_atual_id || null,
-        data_inicio_novo_contrato: dataPrimeiraAulaNovoCiclo,
-        data_fim_novo_contrato: dataFimNovoCiclo,
-        observacoes: podeAutoAprovar
-          ? `Renovação automática via Emusys — ${p.nomeCurso || 'curso não informado'}`
-          : `Pendente de validação DM via Emusys — ${p.nomeCurso || 'curso não informado'}`,
-      });
-      renovacaoLegadaPendente = true;
-    }
-
+    // v27: a tabela legada `renovacoes` deixou de ser gravada. movimentacoes_admin (abaixo) é a
+    // única fonte de renovações. Dedup e numero_renovacoes usam renovacaoDuplicada (movimentacoes_admin).
     const movRegistrada = await registrarMovimentacao(
       supabase, 'renovacao', p, aluno.id,
       professorId || aluno.professor_atual_id || null,
@@ -1074,9 +1063,8 @@ async function handleRenovacao(supabase: any, p: Payload) {
         : classificacaoCompetencia.statusPendente,
       forma_pagamento_id: formaPagamentoId,
       agente: agente,
-      renovacao_legada_pendente: renovacaoLegadaPendente,
       movimentacao_registrada: movRegistrada,
-      dedup: !renovacaoLegadaPendente,
+      dedup: renovacaoDuplicada,
     };
 
     const resultado: ResultadoMatricula = {
