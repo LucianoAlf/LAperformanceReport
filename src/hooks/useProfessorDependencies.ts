@@ -112,9 +112,10 @@ export function useProfessorDependencies() {
           .or(`professor_id.eq.${professorId},professor_anterior_id.eq.${professorId}`),
         
         supabase
-          .from('renovacoes')
+          .from('movimentacoes_admin')
           .select('id', { count: 'exact', head: true })
-          .eq('professor_id', professorId),
+          .eq('professor_id', professorId)
+          .eq('tipo', 'renovacao'),
         
         supabase
           .from('movimentacoes_admin')
