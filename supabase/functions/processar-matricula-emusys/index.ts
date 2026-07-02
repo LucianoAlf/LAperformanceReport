@@ -374,7 +374,10 @@ function parsePayload(body: any): Payload | null {
     trancamentoDataFinal: tranc?.data_final || null,
     finalizacaoMotivo: finaliz?.motivo || null,
     finalizacaoObservacoes: finaliz?.observacoes || null,
-    emusysCursoId: m.curso_id ? Number(m.curso_id) : null,
+    // IDs do Emusys sao por unidade. Para curso no LA Report, o ID confiavel e o
+    // da disciplina da matricula, resolvido via curso_emusys_depara(unidade, disciplina).
+    // Em alguns payloads, disc.id e o vinculo matricula-disciplina; fica so como ultimo fallback.
+    emusysCursoId: (disc?.disciplina_id ?? m.curso_id ?? disc?.id) ? Number(disc?.disciplina_id ?? m.curso_id ?? disc?.id) : null,
     fotoAlunoUrl: m.foto_aluno_url || null,
     instagram: m.campos_personalizados_aluno?.find((c: any) => c.nome === 'Instagram')?.valor || null,
     tipoPagamento: m.tipo_pagamento || null,
@@ -404,15 +407,22 @@ function mapTipoPagamentoToFormaId(tipo: string | null): number | null {
 
 // ==================== RESOLVERS ====================
 
-async function resolverCursoId(supabase: any, nomeCurso: string | null, emusysCursoId: number | null = null): Promise<number | null> {
-  // 1. Match por emusys_curso_id (exato)
-  if (emusysCursoId) {
+async function resolverCursoId(
+  supabase: any,
+  nomeCurso: string | null,
+  emusysCursoId: number | null = null,
+  unidadeId: string | null = null,
+): Promise<number | null> {
+  // 1. Match canonico por unidade + disciplina Emusys.
+  // Nao usar cursos.emusys_ids como fonte primaria: IDs Emusys colidem entre unidades.
+  if (emusysCursoId && unidadeId) {
     const { data } = await supabase
-      .from('cursos')
-      .select('id')
-      .contains('emusys_ids', [emusysCursoId])
+      .from('curso_emusys_depara')
+      .select('curso_id')
+      .eq('unidade_id', unidadeId)
+      .eq('emusys_disciplina_id', emusysCursoId)
       .limit(1);
-    if (data?.[0]?.id) return data[0].id;
+    if (data?.[0]?.curso_id) return data[0].curso_id;
   }
 
   // 2. Fallback: match por nome normalizado
@@ -421,23 +431,16 @@ async function resolverCursoId(supabase: any, nomeCurso: string | null, emusysCu
 
   const { data: todos } = await supabase
     .from('cursos')
-    .select('id, nome, emusys_ids');
+    .select('id, nome, ativo');
 
-  const curso = (todos || []).find((c: any) => normalizar(c.nome) === nomeNorm)
-    || (todos || []).find((c: any) => normalizar(c.nome).startsWith(nomeNorm));
+  const ativos = (todos || []).filter((c: any) => c.ativo !== false);
+  const curso = ativos.find((c: any) => normalizar(c.nome) === nomeNorm)
+    || ativos.find((c: any) => {
+      const local = normalizar(c.nome);
+      return local.startsWith(nomeNorm) || nomeNorm.startsWith(local);
+    });
 
   if (!curso) return null;
-
-  // 3. Auto-preencher emusys_ids se encontrou por nome
-  if (emusysCursoId && curso.id) {
-    const idsAtuais = curso.emusys_ids || [];
-    if (!idsAtuais.includes(emusysCursoId)) {
-      await supabase
-        .from('cursos')
-        .update({ emusys_ids: [...idsAtuais, emusysCursoId] })
-        .eq('id', curso.id);
-    }
-  }
 
   return curso.id;
 }
@@ -691,7 +694,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
   );
 
   try {
-    const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId);
+    const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId, p.unidadeId);
     const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId, p.professorNome);
 
     // Tenta encontrar aluno EXATO (por matricula_id ou nome+curso)
@@ -925,7 +928,7 @@ async function handleRenovacao(supabase: any, p: Payload) {
   );
 
   try {
-    const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId);
+    const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId, p.unidadeId);
     const found = await buscarAluno(supabase, p, cursoId);
 
     if (!found?.aluno) {
@@ -1134,7 +1137,7 @@ async function handleTrancamento(supabase: any, p: Payload) {
   );
 
   try {
-    const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId);
+    const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId, p.unidadeId);
     const found = await buscarAluno(supabase, p, cursoId);
 
     if (!found?.aluno) {
@@ -1347,7 +1350,7 @@ async function handleEvasao(supabase: any, p: Payload) {
   );
 
   try {
-    const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId);
+    const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId, p.unidadeId);
     const found = await buscarAluno(supabase, p, cursoId);
 
     if (!found?.aluno) {

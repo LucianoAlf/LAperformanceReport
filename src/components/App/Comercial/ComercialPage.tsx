@@ -472,6 +472,8 @@ export function ComercialPage() {
   const [enviadoWhatsApp, setEnviadoWhatsApp] = useState(false);
   const [erroWhatsApp, setErroWhatsApp] = useState<string | null>(null);
   const [numeroTeste, setNumeroTeste] = useState('');
+  const [cronComercialAtivo, setCronComercialAtivo] = useState(false);
+  const [loadingCronComercial, setLoadingCronComercial] = useState(false);
   
   // Estado para período do relatório (simplificado)
   const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'mes_anterior' | 'personalizado'>('hoje');
@@ -508,6 +510,51 @@ export function ComercialPage() {
   
   // Registros do dia
   const [registrosHoje, setRegistrosHoje] = useState<LeadDiario[]>([]);
+
+  useEffect(() => {
+    const unidadeCron = unidadeParaSalvar;
+    if (!relatorioOpen || !unidadeCron || unidadeCron === 'todos') {
+      setCronComercialAtivo(false);
+      return;
+    }
+
+    supabase
+      .from('unidades')
+      .select('relatorio_comercial_diario_cron_ativo')
+      .eq('id', unidadeCron)
+      .single()
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn('[Comercial] Erro ao carregar cron comercial:', error);
+          setCronComercialAtivo(false);
+          return;
+        }
+        setCronComercialAtivo(Boolean(data?.relatorio_comercial_diario_cron_ativo));
+      });
+  }, [relatorioOpen, unidadeParaSalvar]);
+
+  const toggleCronComercial = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const unidadeCron = unidadeParaSalvar;
+    if (!unidadeCron || unidadeCron === 'todos') return;
+
+    const novoValor = !cronComercialAtivo;
+    setLoadingCronComercial(true);
+    const { error } = await supabase.rpc('toggle_relatorio_comercial_cron', {
+      p_unidade_id: unidadeCron,
+      p_ativo: novoValor,
+    });
+    setLoadingCronComercial(false);
+
+    if (error) {
+      console.error('[Comercial] Erro ao atualizar cron comercial:', error);
+      toast.error('Erro ao atualizar envio automático comercial');
+      return;
+    }
+
+    setCronComercialAtivo(novoValor);
+    toast.success(novoValor ? 'Relatório comercial automático ativado' : 'Relatório comercial automático desativado');
+  };
   
   // Gerar relatório automaticamente quando o tipo ou período muda
   useEffect(() => {
@@ -2884,6 +2931,19 @@ export function ComercialPage() {
       }
     }
 
+    const inicioDiaBRT = `${dataFim}T00:00:00-03:00`;
+    const fimDiaBRT = `${dataFim}T23:59:59.999-03:00`;
+    let experimentaisAgendadasDiaQuery = supabase
+      .from('lead_experimentais')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'experimental_agendada')
+      .gte('created_at', inicioDiaBRT)
+      .lte('created_at', fimDiaBRT);
+
+    if (unidadeRelatorioId) {
+      experimentaisAgendadasDiaQuery = experimentaisAgendadasDiaQuery.eq('unidade_id', unidadeRelatorioId);
+    }
+
     const [
       kpisMesResponse,
       kpisDiaResponse,
@@ -2891,6 +2951,7 @@ export function ComercialPage() {
       conciliacaoDiaResponse,
       emusysMesResponse,
       emusysDiaResponse,
+      experimentaisAgendadasDiaResponse,
     ] = await Promise.all([
       supabase.rpc('get_kpis_comercial_canonicos_v2', {
         p_unidade_id: unidadeRelatorioId,
@@ -2934,6 +2995,7 @@ export function ComercialPage() {
         p_periodo: 'diario',
         p_data: dataFim,
       }),
+      experimentaisAgendadasDiaQuery,
     ]);
 
     if (kpisMesResponse.error) throw kpisMesResponse.error;
@@ -2942,6 +3004,7 @@ export function ComercialPage() {
     if (conciliacaoDiaResponse.error) throw conciliacaoDiaResponse.error;
     if (emusysMesResponse.error) throw emusysMesResponse.error;
     if (emusysDiaResponse.error) throw emusysDiaResponse.error;
+    if (experimentaisAgendadasDiaResponse.error) throw experimentaisAgendadasDiaResponse.error;
 
     const kpisMes = ((kpisMesResponse.data as any)?.kpis || {}) as Record<string, unknown>;
     const kpisDia = ((kpisDiaResponse.data as any)?.kpis || {}) as Record<string, unknown>;
@@ -2955,6 +3018,7 @@ export function ComercialPage() {
     const experimentaisAgendadasMes = experimentaisEmusysMes;
     const experimentaisFaltasMes = numeroResumo(resumoEmusysMes.faltas);
     const totalExpAgendadasV2 = numeroResumo(resumoEmusysDia.linhas_raw);
+    const experimentaisAgendadasDia = experimentaisAgendadasDiaResponse.count || 0;
     const visitasDiaTotalV2 = numeroResumo(kpisDia.visitas);
 
     const visitasDiaTotal = visitasDiaTotalV2;
@@ -2964,6 +3028,17 @@ export function ComercialPage() {
     const matriculasNovas = agruparMatriculasParaRelatorio(await buscarMatriculasAlunos(unidadeRelatorioId, dataInicioMes, dataFim))
       .filter(ehMatriculaNova)
       .sort((a: any, b: any) => (a.data_matricula || '').localeCompare(b.data_matricula || ''));
+
+    const taxaExpMatMes: TaxaExpMatCanonica = {
+      liberada: resumoConciliacaoMes.taxa_exp_mat_liberada === true,
+      taxa: numeroResumo(resumoConciliacaoMes.taxa_exp_mat_canonica),
+      denominador: numeroResumo(resumoConciliacaoMes.denominador_taxa_exp_mat),
+      conversoes: numeroResumo(resumoConciliacaoMes.conversoes_exp_mat_canonicas),
+      pendencias: numeroResumo(resumoConciliacaoMes.pendencias_taxa_exp_mat),
+      realizadasConfirmadas: experimentaisRealizadasMes,
+    };
+    const conversaoLeadExp = leadsPeriodo > 0 ? (experimentaisRealizadasMes / leadsPeriodo) * 100 : 0;
+    const conversaoLeadMat = leadsPeriodo > 0 ? (matriculasNovas.length / leadsPeriodo) * 100 : 0;
 
     const totalExpAgendadas = totalExpAgendadasV2;
 
@@ -2977,10 +3052,15 @@ export function ComercialPage() {
     texto += `🎸 Experimentais agendadas no mês: *${experimentaisAgendadasMes}*\n`;
     texto += `✅ Experimentais realizadas confirmadas: *${experimentaisRealizadasMes}*\n`;
     texto += `❌ Faltas em experimentais no mês: *${experimentaisFaltasMes}*\n`;
-    texto += `📆 Experimentais agendadas no dia: *${totalExpAgendadas}*\n`;
+    texto += `📆 Experimentais no dia (Emusys): *${totalExpAgendadas}*\n`;
+    texto += `🗓️ Experimentais agendadas no dia: *${experimentaisAgendadasDia}*\n`;
     texto += `🏫 Visitas: *${visitasDiaTotal}*\n\n`;
 
     texto += `✅ Matrículas no período: *${matriculasNovas.length}*\n\n`;
+    texto += `📊 *FUNIL DO MÊS*\n`;
+    texto += `Lead → Experimental: *${conversaoLeadExp.toFixed(1)}%* (${experimentaisRealizadasMes}/${leadsPeriodo})\n`;
+    texto += `Experimental → Matrícula: ${textoTaxaExpMat(taxaExpMatMes)}\n`;
+    texto += `Lead → Matrícula: *${conversaoLeadMat.toFixed(1)}%* (${matriculasNovas.length}/${leadsPeriodo})\n\n`;
 
     texto = texto
       .replace(
@@ -2994,10 +3074,6 @@ export function ComercialPage() {
       .replace(
         new RegExp(`^.*Faltas em experimentais no m.*\\*${experimentaisFaltasMes}\\*\\n`, 'm'),
         `\u274C Faltas em experimentais no m\u00eas (Emusys): *${experimentaisFaltasMes}*\n`,
-      )
-      .replace(
-        new RegExp(`^.*Experimentais agendadas no dia: \\*${totalExpAgendadas}\\*\\n`, 'm'),
-        `\u{1F4C6} Experimentais no dia (Emusys): *${totalExpAgendadas}*\n`,
       );
 
     if (matriculasNovas.length > 0) {
@@ -3821,7 +3897,7 @@ export function ComercialPage() {
       const { data, error } = await supabase.functions.invoke('relatorio-admin-whatsapp', {
         body: {
           texto: relatorioTexto,
-          tipoRelatorio: tipoRelatorio,
+          tipoRelatorio: tipoRelatorio ? `comercial_${tipoRelatorio}` : 'comercial',
           unidade: unidadeEnvio,
           competencia: `${competencia.filtro.ano}-${String(competencia.filtro.mes).padStart(2, '0')}`,
           ...(numeroTeste ? { numero_teste: numeroTeste } : {}),
@@ -7113,6 +7189,32 @@ export function ComercialPage() {
               <div className="flex-1">
                 <h4 className="font-medium text-white">Relatório Diário</h4>
                 <p className="text-xs text-slate-400">Resumo do período: leads, experimentais, visitas e matrículas</p>
+                <div className="flex items-center gap-2 mt-1.5" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={toggleCronComercial}
+                    disabled={loadingCronComercial || !unidadeParaSalvar || unidadeParaSalvar === 'todos'}
+                    className={cn(
+                      "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+                      cronComercialAtivo ? "bg-emerald-600" : "bg-slate-600",
+                      (!unidadeParaSalvar || unidadeParaSalvar === 'todos') && "opacity-40 cursor-not-allowed"
+                    )}
+                    title={!unidadeParaSalvar || unidadeParaSalvar === 'todos'
+                      ? 'Selecione uma unidade'
+                      : cronComercialAtivo
+                        ? 'Desativar envio automático comercial'
+                        : 'Ativar envio automático comercial'
+                    }
+                  >
+                    <span className={cn(
+                      "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
+                      cronComercialAtivo ? "translate-x-[18px]" : "translate-x-[3px]"
+                    )} />
+                  </button>
+                  <span className="flex items-center gap-1 text-[10px] text-slate-500">
+                    <Clock className="w-3 h-3" />
+                    {cronComercialAtivo ? 'Envio automático 20h ativo' : 'Envio automático 20h'}
+                  </span>
+                </div>
               </div>
               <span className="text-slate-500">→</span>
             </button>

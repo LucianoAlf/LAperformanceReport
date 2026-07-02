@@ -1,0 +1,4 @@
+project_id = "ouqwbbermlzqqvtqwlul"
+
+[functions.relatorio-admin-whatsapp]
+verify_jwt = false

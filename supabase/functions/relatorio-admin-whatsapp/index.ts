@@ -112,7 +112,7 @@ interface RelatorioPayload {
   unidade?: string;
   competencia?: string;
   numero_teste?: string;
-  modo?: 'cron' | 'dry_run'; // dry_run gera o texto real sem enfileirar/enviar
+  modo?: 'cron' | 'dry_run' | 'dry_run_comercial'; // dry_run gera o texto real sem enfileirar/enviar
 }
 
 function n(value: unknown): number {
@@ -208,6 +208,168 @@ function labelTipoEvasao(tipo: string): string {
 function formatarParcelaEvasaoDiaria(valor: number): string {
   if (!Number.isFinite(valor) || valor <= 0) return 'N/I';
   return `R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatarMoedaComercial(valor: number): string {
+  return (valor || 0).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatarDataCurtaComercial(valor?: string | null): string {
+  if (!valor) return '-';
+  const texto = String(valor).trim();
+  if (!texto) return '-';
+  const iso = texto.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[3]}/${iso[2]}`;
+  const br = texto.match(/^(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})?$/);
+  if (br) return `${br[1].padStart(2, '0')}/${br[2].padStart(2, '0')}`;
+  const data = new Date(texto);
+  if (Number.isNaN(data.getTime())) return '-';
+  return data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
+
+function normalizarTelefoneComercial(valor?: string | null): string {
+  return String(valor || '').replace(/\D/g, '');
+}
+
+function valoresUnicosComercial(valores: unknown[]): string[] {
+  return Array.from(new Set(
+    valores
+      .filter((valor) => valor !== null && valor !== undefined)
+      .map((valor) => String(valor).trim())
+      .filter(Boolean)
+  ));
+}
+
+function firstRelation<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) return value[0] || null;
+  return value || null;
+}
+
+function toMoneyNumberComercial(valor: unknown): number {
+  if (typeof valor === 'number') return Number.isFinite(valor) ? valor : 0;
+  if (typeof valor === 'string') {
+    const trimmed = valor.trim();
+    const normalizado = trimmed.includes(',')
+      ? trimmed.replace(/\./g, '').replace(',', '.')
+      : trimmed;
+    const parsed = Number(normalizado);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+const codigosTipoMatriculaForaNovaComercial = new Set([
+  'BOLSISTA_INT',
+  'BOLSISTA_PARC',
+  'BANDA',
+  'SEGUNDO_CURSO',
+  'TRANSFERENCIA',
+]);
+
+function ehMatriculaComercialCanonicaEdge(matricula: any): boolean {
+  const tipo = firstRelation(matricula?.tipos_matricula);
+  const curso = firstRelation(matricula?.cursos);
+  const cursoNome = String(curso?.nome || matricula?.curso_nome || '').toLowerCase();
+  const status = String(matricula?.status || '').toLowerCase();
+  const codigoTipo = String(tipo?.codigo || '').trim().toUpperCase();
+  const ehBanda =
+    matricula?.is_banda === true ||
+    curso?.is_projeto_banda === true ||
+    cursoNome.includes('banda');
+  const ehCoral = cursoNome.includes('canto coral');
+
+  if (['excluido', 'excluida', 'cancelado', 'cancelada'].includes(status)) return false;
+  if (matricula?.is_segundo_curso === true) return false;
+  if (ehBanda || ehCoral) return false;
+  if (codigosTipoMatriculaForaNovaComercial.has(codigoTipo)) return false;
+
+  return (
+    (tipo?.conta_como_pagante === true || tipo?.entra_ticket_medio === true) &&
+    toMoneyNumberComercial(matricula?.valor_parcela) > 0
+  );
+}
+
+function statusExperimentalRealizadaComercial(status?: string | null): boolean {
+  return ['experimental_realizada', 'realizada', 'presente']
+    .includes(String(status || '').trim().toLowerCase());
+}
+
+function resolverProfessorExperimentalComercial(experimentais: any[], dataMatricula?: string | null): string | null {
+  const limite = dataMatricula ? new Date(dataMatricula).getTime() : 0;
+  const candidatas = (experimentais || [])
+    .filter((item) => statusExperimentalRealizadaComercial(item?.status))
+    .filter((item) => item?.professorExperimentalNome || item?.professor_experimental_nome)
+    .sort((a, b) => {
+      const dataA = a?.data_experimental ? new Date(a.data_experimental).getTime() : 0;
+      const dataB = b?.data_experimental ? new Date(b.data_experimental).getTime() : 0;
+      const aAntesMatricula = limite > 0 && dataA > 0 && dataA <= limite;
+      const bAntesMatricula = limite > 0 && dataB > 0 && dataB <= limite;
+      if (aAntesMatricula !== bAntesMatricula) return aAntesMatricula ? -1 : 1;
+      return dataB - dataA;
+    });
+
+  const selecionada = candidatas[0] || null;
+  return selecionada?.professorExperimentalNome || selecionada?.professor_experimental_nome || null;
+}
+
+function chaveTelefoneUnidadeComercial(unidadeId?: string | null, telefone?: string | null): string {
+  return `${unidadeId || 'sem_unidade'}|${normalizarTelefoneComercial(telefone)}`;
+}
+
+function chaveGrupoMatriculaComercial(mat: any): string {
+  const telefone = normalizarTelefoneComercial(mat?.telefone || mat?.responsavel_telefone);
+  const nome = normalizarTexto(mat?.nome);
+  return `${mat?.unidade_id || 'sem_unidade'}|${mat?.data_matricula || ''}|${nome}|${telefone}`;
+}
+
+function formatarParcelasMatriculaComercial(mat: any): string {
+  const parcelas = Array.isArray(mat?.parcelas_relatorio)
+    ? mat.parcelas_relatorio.filter((valor: number) => Number(valor) > 0)
+    : [];
+  if (parcelas.length > 1) {
+    return parcelas.map((valor: number) => `R$ ${formatarMoedaComercial(Number(valor) || 0)}`).join(' + ');
+  }
+  return `R$ ${formatarMoedaComercial(Number(mat?.valor_parcela) || 0)}`;
+}
+
+function agruparMatriculasComerciais(matriculas: any[]): any[] {
+  const grupos = new Map<string, any[]>();
+  (matriculas || []).forEach((mat) => {
+    const chave = chaveGrupoMatriculaComercial(mat);
+    const grupo = grupos.get(chave) || [];
+    grupo.push(mat);
+    grupos.set(chave, grupo);
+  });
+
+  return Array.from(grupos.values()).map((grupo) => {
+    const ordenadas = [...grupo].sort((a, b) => Number(a?.is_segundo_curso) - Number(b?.is_segundo_curso));
+    const principal = ordenadas.find((mat) => ehMatriculaComercialCanonicaEdge(mat)) || ordenadas[0];
+    const cursos = valoresUnicosComercial(ordenadas.map((mat) => mat?.curso_nome));
+    const professores = valoresUnicosComercial(ordenadas.map((mat) => mat?.professor_fixo_nome));
+    const professoresExp = valoresUnicosComercial(
+      ordenadas.flatMap((mat) => (
+        Array.isArray(mat?.professor_exp_nomes) && mat.professor_exp_nomes.length > 0
+          ? mat.professor_exp_nomes
+          : (mat?.professor_exp_nome ? [mat.professor_exp_nome] : [])
+      ))
+    );
+    const parcelas = ordenadas
+      .map((mat) => Number(mat?.valor_parcela) || 0)
+      .filter((valor) => valor > 0);
+    const formas = valoresUnicosComercial(ordenadas.map((mat) => mat?.forma_pagamento_nome));
+
+    return {
+      ...principal,
+      cursos_relatorio: cursos.join(' e '),
+      professores_relatorio: professores.join(' e '),
+      professores_exp_relatorio: professoresExp.join(' e '),
+      parcelas_relatorio: parcelas,
+      formas_pagamento_relatorio: formas.join(' / '),
+    };
+  });
 }
 
 function parseDateOnly(value: string | null | undefined): Date | null {
@@ -753,13 +915,451 @@ async function gerarRelatorioDiario(
   return texto;
 }
 
+async function buscarMatriculasComerciaisAlunos(
+  supabase: any,
+  unidadeId: string,
+  dataInicio: string,
+  dataFim: string
+): Promise<any[]> {
+  const { data, error } = await supabase
+    .from('alunos')
+    .select('id, nome, telefone, responsavel_telefone, idade_atual, data_matricula, tipo_aluno, valor_passaporte, valor_parcela, is_segundo_curso, curso_id, canal_origem_id, professor_atual_id, professor_experimental_id, forma_pagamento_id, tipo_matricula_id, unidade_id, modalidade, status, emusys_matricula_id, emusys_lead_id, emusys_student_id, cursos:curso_id(nome, is_projeto_banda), canais_origem:canal_origem_id(nome), tipos_matricula:tipo_matricula_id!left(codigo, conta_como_pagante, entra_ticket_medio), unidades:unidade_id(codigo, nome, hunter_nome), formas_pagamento:forma_pagamento_id(nome)')
+    .not('data_matricula', 'is', null)
+    .gte('data_matricula', dataInicio)
+    .lte('data_matricula', dataFim)
+    .eq('unidade_id', unidadeId);
+
+  if (error) throw error;
+
+  const alunos = (data || []) as any[];
+  const alunoIds = alunos.map((aluno) => aluno.id).filter(Boolean);
+  const telefonesBusca = valoresUnicosComercial(
+    alunos.flatMap((aluno) => [aluno.telefone, aluno.responsavel_telefone])
+  );
+  const emusysLeadIds = Array.from(new Set(
+    alunos
+      .map((aluno) => Number(aluno.emusys_lead_id))
+      .filter((id) => Number.isFinite(id) && id > 0)
+  ));
+
+  const leadSelect = 'id, nome, telefone, aluno_id, unidade_id, emusys_lead_id, status, data_contato, data_experimental, canal_origem_id, professor_experimental_id, canais_origem:canal_origem_id(nome)';
+  const leadQueries: Promise<any>[] = [
+    alunoIds.length
+      ? supabase.from('leads').select(leadSelect).in('aluno_id', alunoIds)
+      : Promise.resolve({ data: [] }),
+  ];
+
+  if (telefonesBusca.length) {
+    leadQueries.push(
+      supabase
+        .from('leads')
+        .select(leadSelect)
+        .in('telefone', telefonesBusca)
+        .eq('unidade_id', unidadeId)
+    );
+  }
+
+  if (emusysLeadIds.length) {
+    leadQueries.push(
+      supabase
+        .from('leads')
+        .select(leadSelect)
+        .in('emusys_lead_id', emusysLeadIds)
+        .eq('unidade_id', unidadeId)
+    );
+  }
+
+  const leadResults = await Promise.all(leadQueries);
+  const leadsCanonicos = Array.from(
+    new Map(
+      leadResults
+        .flatMap((result: any) => result.data || [])
+        .filter((lead: any) => lead?.id)
+        .map((lead: any) => [lead.id, lead])
+    ).values()
+  );
+
+  const leadIds = leadsCanonicos.map((lead: any) => lead.id).filter(Boolean);
+  const emusysLeadIdsComLeads = Array.from(new Set([
+    ...emusysLeadIds,
+    ...leadsCanonicos
+      .map((lead: any) => Number(lead.emusys_lead_id))
+      .filter((id: number) => Number.isFinite(id) && id > 0),
+  ]));
+
+  const [
+    { data: experimentaisPorAluno },
+    { data: experimentaisPorEmusys },
+    { data: experimentaisPorLead },
+  ] = await Promise.all([
+    alunoIds.length
+      ? supabase
+          .from('lead_experimentais')
+          .select('id, lead_id, aluno_id, emusys_lead_id, nome_aluno, status, data_experimental, professor_experimental_id')
+          .in('aluno_id', alunoIds)
+      : Promise.resolve({ data: [] }),
+    emusysLeadIdsComLeads.length
+      ? supabase
+          .from('lead_experimentais')
+          .select('id, lead_id, aluno_id, emusys_lead_id, nome_aluno, status, data_experimental, professor_experimental_id')
+          .in('emusys_lead_id', emusysLeadIdsComLeads)
+      : Promise.resolve({ data: [] }),
+    leadIds.length
+      ? supabase
+          .from('lead_experimentais')
+          .select('id, lead_id, aluno_id, emusys_lead_id, nome_aluno, status, data_experimental, professor_experimental_id')
+          .in('lead_id', leadIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const experimentaisCanonicas = Array.from(
+    new Map(
+      [...(experimentaisPorAluno || []), ...(experimentaisPorEmusys || []), ...(experimentaisPorLead || [])]
+        .filter((exp: any) => exp?.id)
+        .map((exp: any) => [exp.id, exp])
+    ).values()
+  );
+
+  const professorIds = Array.from(new Set([
+    ...alunos.map((aluno) => aluno.professor_atual_id),
+    ...alunos.map((aluno) => aluno.professor_experimental_id),
+    ...leadsCanonicos.map((lead: any) => lead.professor_experimental_id),
+    ...experimentaisCanonicas.map((exp: any) => exp.professor_experimental_id),
+  ].filter(Boolean)));
+
+  const { data: professores, error: professoresError } = professorIds.length
+    ? await supabase.from('professores').select('id, nome').in('id', professorIds)
+    : { data: [], error: null };
+
+  if (professoresError) throw professoresError;
+
+  const professoresPorId = new Map((professores || []).map((professor: any) => [professor.id, professor.nome]));
+  const leadsPorAluno = new Map();
+  const leadsPorEmusysLeadId = new Map();
+  const leadsPorTelefone = new Map();
+
+  leadsCanonicos.forEach((lead: any) => {
+    if (lead.aluno_id && !leadsPorAluno.has(lead.aluno_id)) leadsPorAluno.set(lead.aluno_id, lead);
+
+    const emusysLeadId = Number(lead.emusys_lead_id);
+    if (Number.isFinite(emusysLeadId) && emusysLeadId > 0 && !leadsPorEmusysLeadId.has(emusysLeadId)) {
+      leadsPorEmusysLeadId.set(emusysLeadId, lead);
+    }
+
+    const tel = normalizarTelefoneComercial(lead.telefone);
+    if (tel) {
+      const key = chaveTelefoneUnidadeComercial(lead.unidade_id, lead.telefone);
+      const lista = leadsPorTelefone.get(key) || [];
+      lista.push(lead);
+      leadsPorTelefone.set(key, lista);
+    }
+  });
+
+  const experimentaisPorAlunoId = new Map();
+  const experimentaisPorEmusysLeadId = new Map();
+  const experimentaisPorLeadId = new Map();
+
+  experimentaisCanonicas.forEach((exp: any) => {
+    const enriquecida = {
+      ...exp,
+      professorExperimentalNome: professoresPorId.get(exp.professor_experimental_id) || null,
+    };
+
+    if (exp.aluno_id) {
+      const lista = experimentaisPorAlunoId.get(exp.aluno_id) || [];
+      lista.push(enriquecida);
+      experimentaisPorAlunoId.set(exp.aluno_id, lista);
+    }
+
+    if (exp.emusys_lead_id) {
+      const emusysLeadId = Number(exp.emusys_lead_id);
+      const lista = experimentaisPorEmusysLeadId.get(emusysLeadId) || [];
+      lista.push(enriquecida);
+      experimentaisPorEmusysLeadId.set(emusysLeadId, lista);
+    }
+
+    if (exp.lead_id) {
+      const lista = experimentaisPorLeadId.get(exp.lead_id) || [];
+      lista.push(enriquecida);
+      experimentaisPorLeadId.set(exp.lead_id, lista);
+    }
+  });
+
+  const selecionarLeadParaAluno = (aluno: any) => {
+    const candidatos: any[] = [];
+    const direto = leadsPorAluno.get(aluno.id);
+    if (direto) candidatos.push(direto);
+
+    const emusysLeadId = Number(aluno.emusys_lead_id);
+    if (Number.isFinite(emusysLeadId) && leadsPorEmusysLeadId.has(emusysLeadId)) {
+      candidatos.push(leadsPorEmusysLeadId.get(emusysLeadId));
+    }
+
+    [aluno.telefone, aluno.responsavel_telefone].forEach((tel: string | null) => {
+      const normalizado = normalizarTelefoneComercial(tel);
+      if (!normalizado) return;
+      const porTelefone = leadsPorTelefone.get(chaveTelefoneUnidadeComercial(aluno.unidade_id, tel)) || [];
+      candidatos.push(...porTelefone);
+    });
+
+    const unicos = Array.from(new Map(candidatos.filter(Boolean).map((lead: any) => [lead.id, lead])).values());
+    if (!unicos.length) return null;
+
+    const nomeAluno = normalizarTexto(aluno.nome);
+    const dataMatricula = aluno.data_matricula ? new Date(aluno.data_matricula).getTime() : 0;
+    const emusysLeadAluno = Number(aluno.emusys_lead_id);
+
+    return unicos.sort((a: any, b: any) => {
+      const score = (lead: any) => {
+        let s = 0;
+        if (lead.aluno_id === aluno.id) s += 100;
+        if (Number(lead.emusys_lead_id) === emusysLeadAluno) s += 80;
+        if (normalizarTexto(lead.nome) === nomeAluno) s += 35;
+        if (normalizarTelefoneComercial(lead.telefone) && [aluno.telefone, aluno.responsavel_telefone].some((tel: string | null) => normalizarTelefoneComercial(tel) === normalizarTelefoneComercial(lead.telefone))) s += 20;
+        if (String(lead.status || '').toLowerCase() === 'convertido') s += 15;
+        const dataLead = lead.data_contato || lead.data_experimental;
+        const timeLead = dataLead ? new Date(dataLead).getTime() : 0;
+        if (dataMatricula && timeLead && timeLead <= dataMatricula) s += 5;
+        if (dataMatricula && timeLead && timeLead > dataMatricula) s -= 10;
+        return s;
+      };
+
+      const diff = score(b) - score(a);
+      if (diff !== 0) return diff;
+      return String(b.data_contato || b.data_experimental || '').localeCompare(String(a.data_contato || a.data_experimental || ''));
+    })[0];
+  };
+
+  return alunos.map((aluno: any) => {
+    const lead = selecionarLeadParaAluno(aluno);
+    const canalAluno = firstRelation(aluno.canais_origem)?.nome;
+    const canalLead = firstRelation(lead?.canais_origem)?.nome;
+    const emusysLeadId = Number(aluno.emusys_lead_id);
+    const experimentaisAluno = [
+      ...(experimentaisPorAlunoId.get(aluno.id) || []),
+      ...(Number.isFinite(emusysLeadId) ? (experimentaisPorEmusysLeadId.get(emusysLeadId) || []) : []),
+      ...(lead?.emusys_lead_id ? (experimentaisPorEmusysLeadId.get(Number(lead.emusys_lead_id)) || []) : []),
+      ...(lead?.id ? (experimentaisPorLeadId.get(lead.id) || []) : []),
+    ];
+    const experimentaisUnicasAluno = Array.from(
+      new Map(experimentaisAluno.filter((exp: any) => exp?.id).map((exp: any) => [exp.id, exp])).values()
+    );
+    const professoresExpNomes = valoresUnicosComercial([
+      ...experimentaisUnicasAluno
+        .filter((exp: any) => statusExperimentalRealizadaComercial(exp.status))
+        .map((exp: any) => exp.professorExperimentalNome || exp.professor_experimental_nome),
+      lead?.professor_experimental_id ? professoresPorId.get(lead.professor_experimental_id) : null,
+    ]);
+    const professorExpFallbackAluno = !lead && !experimentaisUnicasAluno.length && aluno.professor_experimental_id && aluno.professor_experimental_id !== aluno.professor_atual_id
+      ? professoresPorId.get(aluno.professor_experimental_id)
+      : null;
+    const professorExpCanonico = professoresExpNomes.join(' e ') ||
+      resolverProfessorExperimentalComercial(experimentaisUnicasAluno, aluno.data_matricula) ||
+      professorExpFallbackAluno;
+
+    return {
+      ...aluno,
+      curso_nome: firstRelation(aluno.cursos)?.nome || '',
+      is_banda: Boolean(firstRelation(aluno.cursos)?.is_projeto_banda || String(aluno.modalidade || '').toLowerCase().includes('banda')),
+      idade: aluno.idade_atual,
+      canal_origem_id: aluno.canal_origem_id || lead?.canal_origem_id,
+      canal_nome: canalAluno || canalLead || 'Não informado',
+      unidade_codigo: firstRelation(aluno.unidades)?.codigo,
+      unidade_nome: firstRelation(aluno.unidades)?.nome,
+      hunter_nome: firstRelation(aluno.unidades)?.hunter_nome,
+      professor_fixo_nome: professoresPorId.get(aluno.professor_atual_id) || null,
+      professor_exp_nome: professorExpCanonico,
+      professor_exp_nomes: professoresExpNomes.length ? professoresExpNomes : (professorExpCanonico ? [professorExpCanonico] : []),
+      lead_id: lead?.id || null,
+      lead_nome: lead?.nome || null,
+      forma_pagamento_nome: firstRelation(aluno.formas_pagamento)?.nome || null,
+    };
+  });
+}
+
+function textoTaxaExpMatComercial(resumo: Record<string, unknown>, realizadasConfirmadas: number): string {
+  const liberada = resumo.taxa_exp_mat_liberada === true;
+  const taxa = n(resumo.taxa_exp_mat_canonica);
+  const denominador = n(resumo.denominador_taxa_exp_mat);
+  const conversoes = n(resumo.conversoes_exp_mat_canonicas);
+  const pendencias = n(resumo.pendencias_taxa_exp_mat);
+
+  if (liberada) return `*${taxa.toFixed(1)}%* (${conversoes}/${denominador})`;
+  if (denominador === 0 && pendencias === 0 && realizadasConfirmadas === 0) {
+    return '*SEM BASE* (0 pendencia(s); aguardando experimentais confirmadas)';
+  }
+  return `*BLOQUEADA* (${pendencias} pendencia(s) de conciliacao)`;
+}
+
+async function gerarRelatorioComercialDiario(
+  supabase: any,
+  unidadeId: string
+): Promise<string> {
+  const now = new Date();
+  const brt = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+  const dataFim = brt.toISOString().split('T')[0];
+  const ano = brt.getFullYear();
+  const mes = brt.getMonth() + 1;
+  const dia = String(brt.getDate()).padStart(2, '0');
+  const mesNome = brt.toLocaleString('pt-BR', { month: 'long' });
+  const horaStr = `${String(brt.getHours()).padStart(2, '0')}:${String(brt.getMinutes()).padStart(2, '0')}`;
+  const dataInicioMes = `${ano}-${String(mes).padStart(2, '0')}-01`;
+
+  const { data: unidadeData, error: unidadeError } = await supabase
+    .from('unidades')
+    .select('id, nome, hunter_nome')
+    .eq('id', unidadeId)
+    .single();
+
+  if (unidadeError) throw unidadeError;
+
+  const inicioDiaBRT = `${dataFim}T00:00:00-03:00`;
+  const fimDiaBRT = `${dataFim}T23:59:59.999-03:00`;
+
+  const [
+    kpisMesResponse,
+    kpisDiaResponse,
+    conciliacaoMesResponse,
+    emusysMesResponse,
+    emusysDiaResponse,
+    experimentaisAgendadasDiaResponse,
+  ] = await Promise.all([
+    supabase.rpc('get_kpis_comercial_canonicos_v2', {
+      p_unidade_id: unidadeId,
+      p_ano: ano,
+      p_mes: mes,
+      p_periodo: 'mensal',
+      p_data: null,
+    }),
+    supabase.rpc('get_kpis_comercial_canonicos_v2', {
+      p_unidade_id: unidadeId,
+      p_ano: ano,
+      p_mes: mes,
+      p_periodo: 'diario',
+      p_data: dataFim,
+    }),
+    supabase.rpc('get_conciliacao_experimentais_v2', {
+      p_unidade_id: unidadeId,
+      p_ano: ano,
+      p_mes: mes,
+      p_periodo: 'mensal',
+      p_data: null,
+    }),
+    supabase.rpc('get_experimentais_emusys_operacional_v1', {
+      p_unidade_id: unidadeId,
+      p_ano: ano,
+      p_mes: mes,
+      p_periodo: 'mensal',
+      p_data: null,
+    }),
+    supabase.rpc('get_experimentais_emusys_operacional_v1', {
+      p_unidade_id: unidadeId,
+      p_ano: ano,
+      p_mes: mes,
+      p_periodo: 'diario',
+      p_data: dataFim,
+    }),
+    supabase
+      .from('lead_experimentais')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'experimental_agendada')
+      .eq('unidade_id', unidadeId)
+      .gte('created_at', inicioDiaBRT)
+      .lte('created_at', fimDiaBRT),
+  ]);
+
+  if (kpisMesResponse.error) throw kpisMesResponse.error;
+  if (kpisDiaResponse.error) throw kpisDiaResponse.error;
+  if (conciliacaoMesResponse.error) throw conciliacaoMesResponse.error;
+  if (emusysMesResponse.error) throw emusysMesResponse.error;
+  if (emusysDiaResponse.error) throw emusysDiaResponse.error;
+  if (experimentaisAgendadasDiaResponse.error) throw experimentaisAgendadasDiaResponse.error;
+
+  const kpisMes = (kpisMesResponse.data?.kpis || {}) as Record<string, unknown>;
+  const kpisDia = (kpisDiaResponse.data?.kpis || {}) as Record<string, unknown>;
+  const resumoConciliacaoMes = (conciliacaoMesResponse.data?.resumo || {}) as Record<string, unknown>;
+  const resumoEmusysMes = (emusysMesResponse.data?.resumo || {}) as Record<string, unknown>;
+  const resumoEmusysDia = (emusysDiaResponse.data?.resumo || {}) as Record<string, unknown>;
+
+  const leadsPeriodo = n(kpisMes.leads_entrantes);
+  const experimentaisRealizadasMes = n(resumoConciliacaoMes.experimentais_realizadas_confirmadas);
+  const experimentaisEmusysMes = n(resumoEmusysMes.realizadas_emusys);
+  const experimentaisFaltasMes = n(resumoEmusysMes.faltas);
+  const totalExpAgendadasDia = n(resumoEmusysDia.linhas_raw);
+  const experimentaisAgendadasDia = experimentaisAgendadasDiaResponse.count || 0;
+  const visitasDiaTotal = n(kpisDia.visitas);
+
+  const matriculasNovas = agruparMatriculasComerciais(
+    await buscarMatriculasComerciaisAlunos(supabase, unidadeId, dataInicioMes, dataFim)
+  )
+    .filter(ehMatriculaComercialCanonicaEdge)
+    .sort((a: any, b: any) => String(a.data_matricula || '').localeCompare(String(b.data_matricula || '')));
+
+  const conversaoLeadExp = leadsPeriodo > 0 ? (experimentaisRealizadasMes / leadsPeriodo) * 100 : 0;
+  const conversaoLeadMat = leadsPeriodo > 0 ? (matriculasNovas.length / leadsPeriodo) * 100 : 0;
+  const taxaExpMatTexto = textoTaxaExpMatComercial(resumoConciliacaoMes, experimentaisRealizadasMes);
+
+  let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
+  texto += `📅 *RELATÓRIO DIÁRIO*\n`;
+  texto += `🏢 *${String(unidadeData?.nome || 'Unidade').toUpperCase()}*\n`;
+  texto += `📆 ${dia}/${mesNome}/${ano}\n`;
+  texto += `👤 ${unidadeData?.hunter_nome || 'Comercial'}\n`;
+  texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  texto += `🎯 Leads no mês: *${leadsPeriodo}*\n`;
+  texto += `🎸 Experimentais realizadas no mês (Emusys): *${experimentaisEmusysMes}*\n`;
+  texto += `✅ Presença + vínculo confirmados: *${experimentaisRealizadasMes}*\n`;
+  texto += `❌ Faltas em experimentais no mês (Emusys): *${experimentaisFaltasMes}*\n`;
+  texto += `📆 Experimentais no dia (Emusys): *${totalExpAgendadasDia}*\n`;
+  texto += `🗓️ Experimentais agendadas no dia: *${experimentaisAgendadasDia}*\n`;
+  texto += `🏫 Visitas: *${visitasDiaTotal}*\n\n`;
+  texto += `✅ Matrículas no período: *${matriculasNovas.length}*\n\n`;
+  texto += `📊 *FUNIL DO MÊS*\n`;
+  texto += `Lead → Experimental: *${conversaoLeadExp.toFixed(1)}%* (${experimentaisRealizadasMes}/${leadsPeriodo})\n`;
+  texto += `Experimental → Matrícula: ${taxaExpMatTexto}\n`;
+  texto += `Lead → Matrícula: *${conversaoLeadMat.toFixed(1)}%* (${matriculasNovas.length}/${leadsPeriodo})\n\n`;
+
+  if (matriculasNovas.length > 0) {
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `📝 *LISTA DETALHADA*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    matriculasNovas.forEach((mat: any, i: number) => {
+      const dataFormatada = formatarDataCurtaComercial(mat.data_matricula || mat.data_contato);
+      texto += `MAT. ${(i + 1).toString().padStart(2, '0')}\n`;
+      texto += `📅 Data: ${dataFormatada}\n`;
+      texto += `👤 Aluno: ${mat.nome || 'Não informado'}`;
+      if (mat.idade) texto += ` (${mat.idade} anos)`;
+      texto += `\n`;
+      texto += `🎵 Curso: ${mat.cursos_relatorio || mat.curso_nome || 'Não informado'}\n`;
+      texto += `👨‍🏫 Professor: ${mat.professores_relatorio || mat.professor_fixo_nome || 'Não informado'}\n`;
+      texto += `🎸 Prof. Experimental: ${mat.professores_exp_relatorio || mat.professor_exp_nome || 'Não teve'}\n`;
+      texto += `📱 Canal: ${mat.canal_nome || 'Não informado'}\n`;
+      texto += `👤 Hunter: ${mat.hunter_nome || unidadeData?.hunter_nome || 'Comercial'}\n`;
+      texto += `💵 Pass: R$ ${formatarMoedaComercial(Number(mat.valor_passaporte) || 0)}`;
+      if (mat.forma_pagamento_passaporte_nome) texto += ` (${mat.forma_pagamento_passaporte_nome})`;
+      texto += `\n`;
+      texto += `💵 Parc: ${formatarParcelasMatriculaComercial(mat)}`;
+      if (mat.formas_pagamento_relatorio || mat.forma_pagamento_nome) {
+        texto += ` (${mat.formas_pagamento_relatorio || mat.forma_pagamento_nome})`;
+      }
+      texto += `\n\n`;
+    });
+  }
+
+  texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+  texto += `📅 Gerado em: ${dia}/${String(mes).padStart(2, '0')}/${ano} às ${horaStr}\n`;
+  texto += `━━━━━━━━━━━━━━━━━━━━━━`;
+
+  return texto;
+}
+
 /**
  * Modo CRON: gera relatórios e enfileira na fila_relatorios_whatsapp com 1 min de intervalo
  * O processamento real é feito pelo cron processar-mensagens-agendadas (a cada minuto)
  */
 async function processarCron(
   supabase: any
-): Promise<{ unidades_processadas: number; resultados: any[] }> {
+): Promise<{ unidades_processadas: number; unidades_admin_processadas: number; unidades_comercial_processadas: number; resultados: any[] }> {
   console.log('[relatorio-admin-whatsapp] 🕐 Modo CRON iniciado — enfileirando');
 
   const { data: unidades } = await supabase
@@ -768,18 +1368,28 @@ async function processarCron(
     .eq('relatorio_diario_cron_ativo', true)
     .order('nome');
 
-  if (!unidades || unidades.length === 0) {
+  const { data: unidadesComerciais } = await supabase
+    .from('unidades')
+    .select('id, nome')
+    .eq('relatorio_comercial_diario_cron_ativo', true)
+    .order('nome');
+
+  const unidadesAdmin = unidades || [];
+  const unidadesComercial = unidadesComerciais || [];
+
+  if (unidadesAdmin.length === 0 && unidadesComercial.length === 0) {
     console.log('[relatorio-admin-whatsapp] Nenhuma unidade com cron ativo');
-    return { unidades_processadas: 0, resultados: [] };
+    return { unidades_processadas: 0, unidades_admin_processadas: 0, unidades_comercial_processadas: 0, resultados: [] };
   }
 
-  console.log(`[relatorio-admin-whatsapp] ${unidades.length} unidade(s) — gerando e enfileirando`);
+  console.log(`[relatorio-admin-whatsapp] Admin: ${unidadesAdmin.length} unidade(s). Comercial: ${unidadesComercial.length} unidade(s).`);
 
   const agora = new Date();
   const resultados: any[] = [];
+  let offsetFilaMinutos = 0;
 
-  for (let i = 0; i < unidades.length; i++) {
-    const unidade = unidades[i];
+  for (let i = 0; i < unidadesAdmin.length; i++) {
+    const unidade = unidadesAdmin[i];
 
     try {
       const { data: destinatarios } = await supabase
@@ -798,7 +1408,8 @@ async function processarCron(
       const texto = await gerarRelatorioDiario(supabase, unidade.id);
 
       // Escalonar: unidade 0 = agora, unidade 1 = agora+1min, unidade 2 = agora+2min, ...
-      const agendadaPara = new Date(agora.getTime() + i * 60_000);
+      const agendadaPara = new Date(agora.getTime() + offsetFilaMinutos * 60_000);
+      offsetFilaMinutos += 1;
 
       for (const dest of destinatarios) {
         const { error } = await supabase
@@ -815,15 +1426,79 @@ async function processarCron(
 
         if (error) {
           console.error(`[relatorio-admin-whatsapp] ❌ Erro ao enfileirar ${unidade.nome}:`, error.message);
-          resultados.push({ unidade: unidade.nome, grupo: dest.nome, status: 'erro_fila', error: error.message });
+          resultados.push({ tipo: 'relatorio_admin', unidade: unidade.nome, grupo: dest.nome, status: 'erro_fila', error: error.message });
         } else {
           console.log(`[relatorio-admin-whatsapp] ✅ ${unidade.nome} → ${dest.nome} enfileirado para ${agendadaPara.toISOString()}`);
-          resultados.push({ unidade: unidade.nome, grupo: dest.nome, status: 'enfileirado', agendada_para: agendadaPara.toISOString() });
+          resultados.push({ tipo: 'relatorio_admin', unidade: unidade.nome, grupo: dest.nome, status: 'enfileirado', agendada_para: agendadaPara.toISOString() });
         }
       }
     } catch (error) {
       console.error(`[relatorio-admin-whatsapp] ❌ Erro ao processar ${unidade.nome}:`, error);
       resultados.push({
+        tipo: 'relatorio_admin',
+        unidade: unidade.nome,
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Erro desconhecido',
+      });
+    }
+  }
+
+  for (let i = 0; i < unidadesComercial.length; i++) {
+    const unidade = unidadesComercial[i];
+
+    try {
+      let { data: destinatarios } = await supabase
+        .from('whatsapp_destinatarios_relatorio')
+        .select('jid, nome')
+        .eq('tipo', 'relatorio_comercial')
+        .eq('ativo', true)
+        .eq('unidade_id', unidade.id);
+
+      if (!destinatarios || destinatarios.length === 0) {
+        const fallback = await supabase
+          .from('whatsapp_destinatarios_relatorio')
+          .select('jid, nome')
+          .eq('tipo', 'relatorio_admin')
+          .eq('ativo', true)
+          .eq('unidade_id', unidade.id);
+        destinatarios = fallback.data || [];
+      }
+
+      if (!destinatarios || destinatarios.length === 0) {
+        console.warn(`[relatorio-admin-whatsapp] ⚠️ Comercial ${unidade.nome}: sem destinatários, pulando`);
+        resultados.push({ tipo: 'relatorio_comercial', unidade: unidade.nome, status: 'skip', motivo: 'sem_destinatarios' });
+        continue;
+      }
+
+      const texto = await gerarRelatorioComercialDiario(supabase, unidade.id);
+      const agendadaPara = new Date(agora.getTime() + offsetFilaMinutos * 60_000);
+      offsetFilaMinutos += 1;
+
+      for (const dest of destinatarios) {
+        const { error } = await supabase
+          .from('fila_relatorios_whatsapp')
+          .insert({
+            unidade_id: unidade.id,
+            unidade_nome: unidade.nome,
+            jid: dest.jid,
+            grupo_nome: dest.nome,
+            texto,
+            status: 'pendente',
+            agendada_para: agendadaPara.toISOString(),
+          });
+
+        if (error) {
+          console.error(`[relatorio-admin-whatsapp] ❌ Erro ao enfileirar comercial ${unidade.nome}:`, error.message);
+          resultados.push({ tipo: 'relatorio_comercial', unidade: unidade.nome, grupo: dest.nome, status: 'erro_fila', error: error.message });
+        } else {
+          console.log(`[relatorio-admin-whatsapp] ✅ Comercial ${unidade.nome} → ${dest.nome} enfileirado para ${agendadaPara.toISOString()}`);
+          resultados.push({ tipo: 'relatorio_comercial', unidade: unidade.nome, grupo: dest.nome, status: 'enfileirado', agendada_para: agendadaPara.toISOString() });
+        }
+      }
+    } catch (error) {
+      console.error(`[relatorio-admin-whatsapp] ❌ Erro ao processar comercial ${unidade.nome}:`, error);
+      resultados.push({
+        tipo: 'relatorio_comercial',
         unidade: unidade.nome,
         status: 'error',
         error: error instanceof Error ? error.message : 'Erro desconhecido',
@@ -832,7 +1507,12 @@ async function processarCron(
   }
 
   console.log(`[relatorio-admin-whatsapp] 🕐 Modo CRON finalizado. ${resultados.length} item(ns) enfileirado(s)`);
-  return { unidades_processadas: unidades.length, resultados };
+  return {
+    unidades_processadas: unidadesAdmin.length + unidadesComercial.length,
+    unidades_admin_processadas: unidadesAdmin.length,
+    unidades_comercial_processadas: unidadesComercial.length,
+    resultados,
+  };
 }
 
 serve(async (req) => {
@@ -861,6 +1541,21 @@ serve(async (req) => {
       const texto = await gerarRelatorioDiario(supabase, payload.unidade);
       return new Response(
         JSON.stringify({ success: true, dry_run: true, unidade: payload.unidade, texto }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (payload.modo === 'dry_run_comercial') {
+      if (!payload.unidade || payload.unidade === 'todos') {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Unidade obrigatória para dry_run_comercial' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const texto = await gerarRelatorioComercialDiario(supabase, payload.unidade);
+      return new Response(
+        JSON.stringify({ success: true, dry_run: true, tipo: 'relatorio_comercial', unidade: payload.unidade, texto }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -896,10 +1591,14 @@ serve(async (req) => {
     }
 
     // Buscar destinatários
+    const destinoRelatorio = String(payload.tipoRelatorio || '').startsWith('comercial_')
+      ? 'relatorio_comercial'
+      : 'relatorio_admin';
+
     let destQuery = supabase
       .from('whatsapp_destinatarios_relatorio')
       .select('jid, nome, unidade_id')
-      .eq('tipo', 'relatorio_admin')
+      .eq('tipo', destinoRelatorio)
       .eq('ativo', true);
 
     if (payload.unidade && payload.unidade !== 'todos') {
