@@ -137,11 +137,12 @@ export function useMetas(
 
       // Renovações realizadas
       let renovacoesQuery = supabase
-        .from('renovacoes')
+        .from('movimentacoes_admin')
         .select('*', { count: 'exact', head: true })
-        .gte('data_renovacao', startDate)
-        .lte('data_renovacao', endDate)
-        .eq('status', 'renovado');
+        .gte('data', startDate)
+        .lte('data', endDate)
+        .eq('tipo', 'renovacao')
+        .in('renovacao_status', ['confirmada', 'antecipada_confirmada']);
 
       if (unidadeId !== 'todos') {
         renovacoesQuery = renovacoesQuery.eq('unidade_id', unidadeId);
