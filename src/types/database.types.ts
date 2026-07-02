@@ -184,18 +184,6 @@ export interface Database {
           media_alunos_turma: number | null
         }
       }
-      vw_renovacoes_pendentes: {
-        Row: {
-          unidade_id: string
-          unidade_nome: string
-          mes_vencimento: string
-          total_vencendo: number
-          renovadas: number
-          nao_renovadas: number
-          pendentes: number
-          atrasadas: number
-        }
-      }
     }
     Functions: {
       get_kpis_consolidados: {
@@ -269,4 +257,3 @@ export type ConsolidadoAnual = Database['public']['Views']['vw_consolidado_anual
 export type UnidadeAnual = Database['public']['Views']['vw_unidade_anual']['Row']
 export type Sazonalidade = Database['public']['Views']['vw_sazonalidade']['Row']
 export type KPIProfessorCompleto = Database['public']['Views']['vw_kpis_professor_completo']['Row']
-export type RenovacoesPendentes = Database['public']['Views']['vw_renovacoes_pendentes']['Row']
