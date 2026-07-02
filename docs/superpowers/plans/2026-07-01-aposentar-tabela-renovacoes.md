@@ -299,9 +299,10 @@ git commit -m "TabRetencao: KPIs de renovacao vindos de movimentacoes_admin"
 ```
 (O filtro `.eq('unidade_id', ...)` logo abaixo permanece.)
 
-- [ ] **Step 3: Typecheck + teste manual**
+- [ ] **Step 3: Typecheck (sem teste visual)**
 
-Run: `npx tsc --noEmit` → ok. Abrir Metas; conferir contagem de renovações.
+Run: `npx tsc --noEmit` → ok.
+NOTA: o hook `src/hooks/useMetas.ts` é consumido apenas por `src/components/Metas2026.tsx`, que **não tem rota** (tela morta). A tela viva `/app/metas` (`MetasPageNew`) usa `useMetasKPI` (tabela `metas_kpi`), **não** este hook. Portanto não há impacto visual — validação é só pela query de baseline (Step 1).
 
 - [ ] **Step 4: Commit**
 
