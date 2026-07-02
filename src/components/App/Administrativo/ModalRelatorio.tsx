@@ -328,7 +328,7 @@ export function ModalRelatorio({
     }
 
     if (relatorioPeriodo !== 'personalizado') {
-      return { anoRelatorio: ano, mesRelatorio: mes, precisaBuscar: false };
+      return { anoRelatorio: ano, mesRelatorio: mes, precisaBuscar: true };
     }
 
     const mesmoMes = relatorioDataInicio.getFullYear() === relatorioDataFim.getFullYear()
