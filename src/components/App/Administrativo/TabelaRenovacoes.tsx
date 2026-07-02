@@ -170,8 +170,10 @@ export function TabelaRenovacoes({
     const valorNovo = toNumber(draft.valor_parcela_novo || item.valor_parcela_novo);
     const agente = draft.agente_comercial.trim() || item.agente_comercial || null;
     const formaPagamento = draft.forma_pagamento_id ? Number(draft.forma_pagamento_id) : item.forma_pagamento_id ?? null;
+    const semValidacaoFinanceira = isLinhaSemValidacaoFinanceira(item, valorAnteriorOperacional(item));
 
-    if (valorNovo <= 0 || !agente) return;
+    // Bolsista/banda/coral (sem validação financeira) confirma com 1 clique, sem exigir valor/agente.
+    if (!semValidacaoFinanceira && (valorNovo <= 0 || !agente)) return;
 
     setValidatingKey(key);
     try {
@@ -237,7 +239,7 @@ export function TabelaRenovacoes({
                 : toNumber(item.valor_parcela_novo);
               const agente = draft.agente_comercial.trim() || item.agente_comercial || '';
               const semValidacaoFinanceira = isLinhaSemValidacaoFinanceira(item, valorAnterior);
-              const podeValidar = !semValidacaoFinanceira && valorNovo > 0 && agente.trim().length > 0;
+              const podeValidar = semValidacaoFinanceira || (valorNovo > 0 && agente.trim().length > 0);
               const reajuste = valorAnterior > 0 && valorNovo > 0
                 ? ((valorNovo - valorAnterior) / valorAnterior) * 100
                 : 0;
