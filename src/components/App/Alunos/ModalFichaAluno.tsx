@@ -482,10 +482,11 @@ export function ModalFichaAluno({
           .order('data', { ascending: false })
           .limit(10),
         supabase
-          .from('renovacoes')
-          .select('id, data_renovacao, valor_parcela_anterior, valor_parcela_novo, percentual_reajuste')
+          .from('movimentacoes_admin')
+          .select('id, data, valor_parcela_anterior, valor_parcela_novo')
           .eq('aluno_id', aluno.id)
-          .order('data_renovacao', { ascending: false })
+          .eq('tipo', 'renovacao')
+          .order('data', { ascending: false })
           .limit(5),
         supabase
           .from('anotacoes_alunos')
@@ -505,7 +506,15 @@ export function ModalFichaAluno({
         .maybeSingle();
 
       setMovimentacoes(movRes.data || []);
-      setRenovacoes(renRes.data || []);
+      setRenovacoes((renRes.data || []).map((m: any) => ({
+        id: m.id,
+        data_renovacao: m.data,
+        valor_parcela_anterior: Number(m.valor_parcela_anterior) || 0,
+        valor_parcela_novo: Number(m.valor_parcela_novo) || 0,
+        percentual_reajuste: Number(m.valor_parcela_anterior) > 0
+          ? Math.round((Number(m.valor_parcela_novo)/Number(m.valor_parcela_anterior) - 1) * 1000) / 10
+          : 0,
+      })));
       setAnotacoes(anotRes.data || []);
       setAnamnese((anamneseData as AnamneseAluno | null) || null);
 
