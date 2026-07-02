@@ -114,17 +114,15 @@ export function FormRenovacao() {
         data_ultima_renovacao: data.data_renovacao,
       }).eq('id', data.aluno_id);
 
-      await supabase.from('renovacoes').insert({
+      await supabase.from('movimentacoes_admin').insert({
         aluno_id: data.aluno_id,
         unidade_id: selectedAluno?.unidade_id,
-        data_renovacao: data.data_renovacao,
-        valor_anterior: data.valor_anterior,
-        valor_novo: data.valor_novo,
-        percentual_reajuste: data.percentual_reajuste,
-        duracao_contrato_meses: data.duracao_contrato,
-        motivo_reajuste: data.motivo_reajuste || null,
+        tipo: 'renovacao',
+        data: data.data_renovacao,
+        valor_parcela_anterior: data.valor_anterior,
+        valor_parcela_novo: data.valor_novo,
+        renovacao_status: 'confirmada',
         observacoes: data.observacoes || null,
-        status: 'renovado',
       });
 
       await supabase.from('movimentacoes').insert({
