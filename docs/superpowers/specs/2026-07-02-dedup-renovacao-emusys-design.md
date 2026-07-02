@@ -37,6 +37,7 @@ A edge nunca mais cria uma segunda linha de renovação (nem grava "anterior" er
    - É por **matrícula específica**, não por aluno — validado com Alexandre Ayres Filho (mesmo `aluno_id`, 2 cursos: matrícula 890 com `qtd_contratos=5`, matrícula 1765 com `qtd_contratos=2`). Seguro para alunos com múltiplos cursos.
    - É mais confiável que comparar só o **valor** — porque uma renovação real pode legitimamente ter 0% de reajuste (aluno renovou sem aumento de preço nesse ciclo), e nesse caso comparar só o valor perderia silenciosamente uma renovação real. `qtd_contratos` não depende do preço ter mudado.
 2. **Checagem em código (`SELECT` antes do `INSERT`) não é suficiente contra concorrência** — confirmado: 10 de 24 casos testados do padrão "instantâneo" já duplicaram apesar da checagem atual. `automacao_log` já tem proteção real (índice único `automacao_log_idempotency_key_uq`, `WHERE idempotency_key IS NOT NULL`), e o código já sabe lidar com a violação (`if (error.code === '23505') return`) — mas essa proteção só existe pro log, não pra `movimentacoes_admin`.
+3. **A chave do índice precisa incluir `curso_id`** — testado inicialmente sem ele e quase gerou um problema sério: um aluno com 2 cursos (Carlos Eduardo Garcia do Nascimento, Canto + Contrabaixo, ambos renovando na competência de julho/2026) apareceu como "conflito" numa checagem preliminar com a chave `(aluno_id, unidade_id, tipo, competencia_referencia)` — sem `curso_id` essa chave trataria duas renovações reais de cursos diferentes como duplicata, bloqueando uma delas. Com `curso_id` na chave, o falso conflito desaparece (confirmado por query).
 
 ## Solução — duas camadas
 
@@ -44,9 +45,13 @@ A edge nunca mais cria uma segunda linha de renovação (nem grava "anterior" er
 
 Adicionar um índice único em `movimentacoes_admin` que impede fisicamente duas linhas de renovação para o mesmo evento, seguindo o mesmo padrão já usado (e comprovadamente funcional) em `automacao_log`.
 
-- Índice único parcial sobre `(aluno_id, unidade_id, tipo, competencia_referencia)` **WHERE tipo = 'renovacao'** (mesmo campo que a checagem atual já usa pra decidir duplicidade — só que agora como trava física, não só lógica de aplicação).
+- Índice único parcial sobre `(aluno_id, unidade_id, curso_id, tipo, competencia_referencia)` **WHERE tipo = 'renovacao'** — inclui `curso_id` (ver evidência #3 acima), essencial pra não bloquear alunos com múltiplos cursos renovando na mesma competência.
 - A edge tenta o `INSERT` diretamente; se vier erro `23505` (violação de unicidade), trata como duplicado e não faz nada — mesmo padrão já usado em `gravarLog`.
 - **Efeito:** fecha os ~29 casos de reenvio quase instantâneo, incluindo os 10 que já escaparam da checagem atual.
+
+**Pré-requisito — limpeza pontual antes de criar o índice:** o Postgres recusa criar índice único se já houver dados conflitantes. Com a chave corrigida (incluindo `curso_id`), sobram só **2 conflitos reais** hoje (não 3 — o terceiro, Carlos Eduardo, era falso positivo da chave sem curso, ver evidência #3):
+- **Pérola Madeira Maturano** (Barra, curso Canto, competência jan/2026) — duplicata clássica do bug: duas linhas idênticas (mesmo valor, mesmo agente, mesma forma), criadas com 27 segundos de diferença. Mesmo padrão que estamos corrigindo, só que de fevereiro — prova que o bug é anterior a julho.
+- **Letícia Ferreira Vasconcelos** (Recreio, curso 16, competência fev/2026) — **causa diferente**, não é webhook duplicado: uma linha `pendente_validacao` de 18/02 (sem valor, sem agente, nunca confirmada) e uma linha `confirmada` de 28/02 (10 dias depois, dados completos) — parece pendência esquecida seguida de um registro manual novo pra fechar a renovação. Precisa de julgamento caso a caso (provavelmente manter a confirmada e arquivar a pendente), não um merge automático.
 
 ### Camada 2 — Reconhecimento de reprocessamento por edição (`qtd_contratos`)
 
@@ -71,8 +76,9 @@ Só testamos `qtd_contratos` a fundo com Millene (validado com API ao vivo) e co
 
 ## Escopo fora desta correção (registrar para depois)
 
-- Limpeza dos ~37 alunos já duplicados esse mês (14 do padrão cronograma, ~29 do padrão instantâneo, com sobreposição a apurar).
+- Limpeza dos ~37 alunos já duplicados esse mês (14 do padrão cronograma, ~29 do padrão instantâneo, com sobreposição a apurar), além dos 2 casos antigos (Pérola, Letícia) que só serão resolvidos como pré-requisito do índice, não como limpeza geral.
 - Aviso pra Gabriela Leal/equipe sobre o padrão (editar cronograma logo após renovar reemite o evento) — não é erro dela, é limitação do Emusys, mas vale que a equipe saiba.
+- Card "Renovação" (26) vs aba "Renovações" (28) no Administrativo — achado paralelo, não relacionado a este bug (é sobre exclusão de cursos de atividade extra em métricas). Registrado em memória separadamente; decisão do Hugo pendente.
 
 ## Reversibilidade
 
