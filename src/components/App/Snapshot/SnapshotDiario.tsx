@@ -146,11 +146,12 @@ export function SnapshotDiario() {
 
       // Renovações do mês
       const { data: renovacoesData } = await sb
-        .from('renovacoes')
-        .select('status')
+        .from('movimentacoes_admin')
+        .select('tipo, renovacao_status')
         .eq('unidade_id', selectedUnidade)
-        .gte('data_renovacao', inicioMes)
-        .lte('data_renovacao', fimMes);
+        .in('tipo', ['renovacao', 'nao_renovacao'])
+        .gte('data', inicioMes)
+        .lte('data', fimMes);
 
       // Calcular resumo
       const resumo: ResumoMes = {
@@ -182,8 +183,8 @@ export function SnapshotDiario() {
 
       if (renovacoesData) {
         renovacoesData.forEach((r: any) => {
-          if (r.status === 'renovado') resumo.renovacoes += 1;
-          else if (r.status === 'nao_renovou') resumo.nao_renovacoes += 1;
+          if (r.tipo === 'nao_renovacao') resumo.nao_renovacoes += 1;
+          else if (['confirmada','antecipada_confirmada'].includes(r.renovacao_status)) resumo.renovacoes += 1;
         });
       }
 
