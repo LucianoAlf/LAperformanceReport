@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BookOpen,
@@ -133,6 +133,36 @@ function agruparPorLead(items: ConciliacaoLeadItem[]) {
   }));
 }
 
+// Atualizacao otimista: remove o item ja resolvido (RPC ja persistiu + auditou) e recalcula
+// os contadores derivaveis da lista visivel, sem refetch. Evita rebaixar tudo a cada "Aplicar".
+function aplicarResolucaoLocal(
+  payload: ConciliacaoLeadPayload | null,
+  resolvido: ConciliacaoLeadItem,
+): ConciliacaoLeadPayload | null {
+  if (!payload) return payload;
+  const items = (payload.items || []).filter(
+    (it) => !(it.lead_id === resolvido.lead_id && it.campo === resolvido.campo),
+  );
+  const resumoAtual = { ...resumoVazio, ...(payload.resumo || {}) };
+  const quantidade = resolvido.quantidade || 1;
+  const resumo: ConciliacaoLeadResumo = {
+    ...resumoAtual,
+    tarefas_total: items.length,
+    origem_pendente: items.filter((it) => it.campo === 'canal_origem_id').length,
+    curso_pendente: items.filter((it) => it.campo === 'curso_interesse_id').length,
+    leads_com_pendencia: new Set(items.map((it) => it.lead_id)).size,
+    impacto_sem_origem:
+      resolvido.campo === 'canal_origem_id'
+        ? Math.max(0, resumoAtual.impacto_sem_origem - quantidade)
+        : resumoAtual.impacto_sem_origem,
+    impacto_sem_curso:
+      resolvido.campo === 'curso_interesse_id'
+        ? Math.max(0, resumoAtual.impacto_sem_curso - quantidade)
+        : resumoAtual.impacto_sem_curso,
+  };
+  return { resumo, items };
+}
+
 export function ComercialConciliacaoLeads({
   unidadeId,
   ano,
@@ -148,6 +178,20 @@ export function ComercialConciliacaoLeads({
   const [busca, setBusca] = useState('');
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [salvandoKey, setSalvandoKey] = useState<string | null>(null);
+
+  // Sincronizacao do pai (loadData, pesado) fica adiada: so dispara quando o usuario sai da
+  // aba (unmount) se houve alguma resolucao. Ref evita closure velha no cleanup.
+  const onResolvidoRef = useRef(onResolvido);
+  useEffect(() => { onResolvidoRef.current = onResolvido; }, [onResolvido]);
+  const paiDesatualizado = useRef(false);
+  useEffect(() => {
+    return () => {
+      if (paiDesatualizado.current) {
+        paiDesatualizado.current = false;
+        void onResolvidoRef.current?.();
+      }
+    };
+  }, []);
 
   const carregar = async () => {
     setLoading(true);
@@ -228,8 +272,10 @@ export function ComercialConciliacaoLeads({
         delete next[key];
         return next;
       });
-      await carregar();
-      await onResolvido?.();
+      // Atualiza a lista na hora (sem refetch) e marca o pai como desatualizado — o loadData
+      // pesado so roda ao sair da aba.
+      setPayload((prev) => aplicarResolucaoLocal(prev, item));
+      paiDesatualizado.current = true;
     } catch (err: any) {
       toast.error(err?.message || 'Erro ao resolver pendencia do lead');
     } finally {
