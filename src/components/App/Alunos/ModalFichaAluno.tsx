@@ -510,16 +510,20 @@ function gerarRelatorioPedagogico(dados: RelatorioPedagogico) {
     </html>
   `;
 
-  // window.open deve ser síncrono no clique (dados já estão pré-carregados) para não ser
-  // bloqueado por popup blocker. O print é disparado pelo próprio HTML (window.onload).
-  const printWindow = window.open('', '_blank');
+  // Abrimos via Blob URL (documento real) em vez de window.open('', ...) + document.write.
+  // Numa janela about:blank o evento `load` já disparou antes do nosso <script> registrar o
+  // window.onload, então a impressão não dispara e a página pode ficar em branco. Com o Blob
+  // o navegador carrega o HTML como um documento normal: o conteúdo renderiza e o onload roda.
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const printWindow = window.open(url, '_blank');
   if (!printWindow) {
+    URL.revokeObjectURL(url);
     toast.error('Não foi possível abrir o relatório. Permita pop-ups para este site.');
     return;
   }
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
+  // Libera o objeto depois que a janela já carregou (não revogar antes ou o load falha).
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 function HistoricoPedagogicoTimeline({
