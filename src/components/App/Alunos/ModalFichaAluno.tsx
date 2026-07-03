@@ -6,7 +6,7 @@ const parseLocalDate = (s: string | null | undefined): Date | null =>
 const formatLocalDate = (d: Date | null | undefined): string | null =>
   d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : null;
 import { supabase } from '@/lib/supabase';
-import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil, Brain, ExternalLink, MessageCircle, Search, Star, BookOpen } from 'lucide-react';
+import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil, Brain, ExternalLink, MessageCircle, Search, Star, BookOpen, ClipboardList, Printer, CalendarDays } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -104,6 +104,42 @@ interface AulaHistorico {
   professor_nome: string | null;
   nr_da_aula: number;
   cancelada: boolean;
+}
+
+interface AulaPedagogica {
+  data_aula: string;
+  horario_aula: string | null;
+  status: 'presente' | 'ausente' | string;
+  curso_nome: string | null;
+  professor_nome: string | null;
+  tipo: string | null;
+  turma_nome: string | null;
+  anotacoes: string;
+}
+
+interface CoordenacaoMembro {
+  nome: string;
+  cargo: string;
+}
+
+interface RelatorioPedagogico {
+  aluno: {
+    id: number;
+    nome: string;
+    classificacao: string | null;
+    modalidade: string | null;
+    is_kids: boolean;
+  };
+  unidade: {
+    nome: string | null;
+    codigo: string | null;
+    endereco: string | null;
+    telefone: string | null;
+    gerente_nome: string | null;
+  };
+  coordenacao: CoordenacaoMembro[];
+  total_registros: number;
+  aulas: AulaPedagogica[];
 }
 
 interface GovernancaSemParcelaFichaState {
@@ -320,6 +356,260 @@ function AulasTurmasTabs({
   );
 }
 
+const DIAS_SEMANA_CURTO = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+function formatarDataPedagogica(dataAula: string): { dia: string; data: string } {
+  const d = new Date(dataAula + 'T00:00:00');
+  return {
+    dia: DIAS_SEMANA_CURTO[d.getDay()],
+    data: d.toLocaleDateString('pt-BR'),
+  };
+}
+
+function escapeHtml(texto: string | null | undefined): string {
+  if (!texto) return '';
+  return texto
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Gera relatório imprimível do histórico pedagógico (mesmo padrão dos demais PDFs do sistema:
+// janela nova + window.print). Layout limpo e profissional (logo + dados da escola) para
+// entregar ao responsável. Consome o JSON de get_relatorio_pedagogico_aluno — a MESMA fonte
+// que o agente Fábio usará na Fase 2 para gerar/enviar o relatório.
+function gerarRelatorioPedagogico(dados: RelatorioPedagogico) {
+  const dataEmissao = new Date().toLocaleDateString('pt-BR');
+  const { aluno, unidade, coordenacao, aulas } = dados;
+
+  const logoFile = aluno.is_kids ? 'logo-la-music-kids.png' : 'logo-la-music-school.png';
+  const logoUrl = `${window.location.origin}/${logoFile}`;
+  const marcaNome = aluno.is_kids ? 'LA Music Kids' : 'LA Music School';
+
+  // Instrumentos = cursos distintos do histórico
+  const instrumentos = Array.from(new Set(aulas.map(a => a.curso_nome).filter(Boolean))) as string[];
+
+  // Agrupar por curso/instrumento
+  const porCurso = aulas.reduce<Record<string, AulaPedagogica[]>>((acc, r) => {
+    const curso = r.curso_nome || 'Sem curso';
+    if (!acc[curso]) acc[curso] = [];
+    acc[curso].push(r);
+    return acc;
+  }, {});
+
+  const secoes = Object.entries(porCurso).map(([curso, lista]) => {
+    const professor = lista.find(a => a.professor_nome)?.professor_nome || 'Professor não registrado';
+    const linhas = lista.map(a => {
+      const { data } = formatarDataPedagogica(a.data_aula);
+      const presenca = a.status === 'presente' ? 'Presente' : a.status === 'ausente' ? 'Faltou' : '—';
+      return `
+        <div class="aula">
+          <div class="aula-head">
+            <span class="aula-data">${data}${a.horario_aula ? ` &middot; ${String(a.horario_aula).slice(0, 5)}` : ''}</span>
+            <span class="aula-presenca ${a.status === 'presente' ? 'presente' : 'faltou'}">${presenca}</span>
+          </div>
+          <div class="aula-conteudo">${escapeHtml(a.anotacoes)}</div>
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="curso-bloco">
+        <div class="curso-header">
+          <span>${escapeHtml(curso)}</span>
+          <span class="curso-prof">Prof. ${escapeHtml(professor)} &middot; ${lista.length} aula(s)</span>
+        </div>
+        ${linhas}
+      </div>
+    `;
+  }).join('');
+
+  const coordHtml = coordenacao.map(c => `
+    <div class="coord-item">
+      <span class="coord-nome">${escapeHtml(c.nome)}</span>
+      <span class="coord-cargo">${escapeHtml(c.cargo)}</span>
+    </div>
+  `).join('');
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="UTF-8">
+      <title>Histórico Pedagógico - ${escapeHtml(aluno.nome)}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; padding: 32px 36px; color: #1f2937; font-size: 12px; line-height: 1.55; }
+        .topo { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 14px; border-bottom: 3px solid #7c3aed; }
+        .topo img { height: 54px; width: auto; object-fit: contain; }
+        .escola { text-align: right; font-size: 10.5px; color: #6b7280; }
+        .escola .marca { font-size: 14px; font-weight: 700; color: #4c1d95; }
+        .escola .uni { font-weight: 600; color: #374151; margin-top: 2px; }
+        h1 { font-size: 19px; color: #4c1d95; text-align: center; margin: 22px 0 4px; }
+        .subtitulo { text-align: center; font-size: 11px; color: #9ca3af; margin-bottom: 20px; }
+        .aluno-box { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 24px; background: #f5f3ff; border: 1px solid #e9d5ff; border-radius: 8px; padding: 14px 18px; margin-bottom: 24px; }
+        .aluno-box .campo { font-size: 11px; }
+        .aluno-box .campo label { color: #7c3aed; font-weight: 700; text-transform: uppercase; font-size: 9.5px; letter-spacing: 0.03em; display: block; }
+        .aluno-box .campo span { color: #1f2937; font-size: 12.5px; }
+        .curso-bloco { margin-bottom: 20px; page-break-inside: avoid; }
+        .curso-header { display: flex; justify-content: space-between; align-items: center; background: #4c1d95; color: #fff; padding: 9px 14px; border-radius: 6px 6px 0 0; font-weight: 700; font-size: 13px; }
+        .curso-prof { font-weight: 400; font-size: 11px; opacity: 0.92; }
+        .aula { border: 1px solid #e5e7eb; border-top: none; padding: 11px 14px; }
+        .aula-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .aula-data { font-weight: 700; color: #4c1d95; font-size: 12px; }
+        .aula-presenca { font-size: 10px; font-weight: 700; padding: 2px 9px; border-radius: 10px; }
+        .aula-presenca.presente { background: #d1fae5; color: #065f46; }
+        .aula-presenca.faltou { background: #fee2e2; color: #991b1b; }
+        .aula-conteudo { white-space: pre-wrap; color: #374151; font-size: 11.5px; }
+        .rodape { margin-top: 30px; padding-top: 14px; border-top: 1px solid #e5e7eb; }
+        .rodape h3 { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #7c3aed; margin-bottom: 8px; }
+        .coord-lista { display: flex; flex-wrap: wrap; gap: 14px 28px; }
+        .coord-item { font-size: 11px; }
+        .coord-nome { font-weight: 700; color: #1f2937; display: block; }
+        .coord-cargo { color: #6b7280; font-size: 10px; }
+        .assinatura-legal { margin-top: 22px; text-align: center; font-size: 10px; color: #9ca3af; }
+        @media print { body { padding: 16px 20px; } }
+      </style>
+    </head>
+    <body>
+      <div class="topo">
+        <img src="${logoUrl}" alt="${marcaNome}" onerror="this.style.display='none'" />
+        <div class="escola">
+          <div class="marca">${marcaNome}</div>
+          ${unidade.nome ? `<div class="uni">Unidade ${escapeHtml(unidade.nome)}</div>` : ''}
+          ${unidade.endereco ? `<div>${escapeHtml(unidade.endereco)}</div>` : ''}
+          ${unidade.telefone ? `<div>Tel: ${escapeHtml(unidade.telefone)}</div>` : ''}
+        </div>
+      </div>
+
+      <h1>Relatório de Histórico Pedagógico</h1>
+      <div class="subtitulo">Emitido em ${dataEmissao} &middot; ${aulas.length} registro(s) de aula</div>
+
+      <div class="aluno-box">
+        <div class="campo"><label>Aluno</label><span>${escapeHtml(aluno.nome)}</span></div>
+        <div class="campo"><label>Instrumento(s)</label><span>${instrumentos.length ? escapeHtml(instrumentos.join(', ')) : '—'}</span></div>
+        <div class="campo"><label>Unidade</label><span>${escapeHtml(unidade.nome || '—')}</span></div>
+        <div class="campo"><label>Classificação</label><span>${escapeHtml(aluno.classificacao || '—')}</span></div>
+      </div>
+
+      ${secoes || '<p style="text-align:center;color:#9ca3af;">Nenhum registro pedagógico encontrado.</p>'}
+
+      <div class="rodape">
+        <h3>Coordenação</h3>
+        <div class="coord-lista">${coordHtml}</div>
+        <div class="assinatura-legal">
+          Documento gerado pelo LA Music Report &middot; ${marcaNome}${unidade.nome ? ` — ${escapeHtml(unidade.nome)}` : ''}
+        </div>
+      </div>
+
+      <script>
+        // Aguarda o carregamento (inclui a logo) antes de abrir o diálogo de impressão.
+        window.onload = function () { setTimeout(function () { window.print(); }, 350); };
+      </script>
+    </body>
+    </html>
+  `;
+
+  // window.open deve ser síncrono no clique (dados já estão pré-carregados) para não ser
+  // bloqueado por popup blocker. O print é disparado pelo próprio HTML (window.onload).
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    toast.error('Não foi possível abrir o relatório. Permita pop-ups para este site.');
+    return;
+  }
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
+
+function HistoricoPedagogicoTimeline({
+  dados,
+}: {
+  dados: RelatorioPedagogico;
+}) {
+  const registros = dados.aulas;
+  // Agrupar por curso/instrumento (aluno pode ter mais de um)
+  const porCurso = registros.reduce<Record<string, AulaPedagogica[]>>((acc, r) => {
+    const curso = r.curso_nome || 'Sem curso';
+    if (!acc[curso]) acc[curso] = [];
+    acc[curso].push(r);
+    return acc;
+  }, {});
+  const cursoKeys = Object.keys(porCurso);
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Ação: exportar */}
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-slate-400">
+          {registros.length} registro(s) pedagógico(s) · conteúdo preenchido pelo professor no Emusys
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => gerarRelatorioPedagogico(dados)}
+          className="gap-2"
+        >
+          <Printer className="w-4 h-4" />
+          Gerar Relatório
+        </Button>
+      </div>
+
+      {cursoKeys.map(curso => {
+        const aulas = porCurso[curso];
+        const professor = aulas.find(a => a.professor_nome)?.professor_nome;
+        return (
+          <div key={curso} className="flex flex-col gap-2">
+            <div className="flex items-center justify-between bg-slate-800 rounded-lg px-4 py-2.5">
+              <div>
+                <p className="font-medium text-slate-100 text-sm">{curso}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{professor || 'Professor não registrado'}</p>
+              </div>
+              <span className="text-xs text-slate-400">{aulas.length} aula(s)</span>
+            </div>
+
+            {/* Timeline */}
+            <div className="relative pl-5">
+              <div className="absolute left-[7px] top-1 bottom-1 w-px bg-slate-700" />
+              <div className="flex flex-col gap-3">
+                {aulas.map((aula, i) => {
+                  const { dia, data } = formatarDataPedagogica(aula.data_aula);
+                  const presente = aula.status === 'presente';
+                  return (
+                    <div key={i} className="relative">
+                      <div className={`absolute -left-[13px] top-1.5 w-2.5 h-2.5 rounded-full ring-2 ring-slate-900 ${presente ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                      <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg px-4 py-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2 text-sm">
+                            <CalendarDays className="w-3.5 h-3.5 text-slate-500" />
+                            <span className="text-slate-500 text-xs">{dia}</span>
+                            <span className="text-slate-200 font-medium">{data}</span>
+                            {aula.horario_aula && (
+                              <span className="text-slate-500 text-xs">{String(aula.horario_aula).slice(0, 5)}</span>
+                            )}
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${
+                            presente ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                          }`}>
+                            {presente ? 'Presente' : 'Faltou'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-300 whitespace-pre-wrap leading-relaxed">
+                          {aula.anotacoes}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ModalFichaAluno({
   aluno,
   onClose,
@@ -351,6 +641,11 @@ export function ModalFichaAluno({
   const [aulasHistorico, setAulasHistorico] = useState<AulaHistorico[]>([]);
   const [loadingAulas, setLoadingAulas] = useState(false);
   const [aulasCarregadas, setAulasCarregadas] = useState(false);
+
+  // Histórico Pedagógico (conteúdo de aula do Emusys)
+  const [relatorioPedagogico, setRelatorioPedagogico] = useState<RelatorioPedagogico | null>(null);
+  const [loadingPedagogico, setLoadingPedagogico] = useState(false);
+  const [pedagogicoCarregado, setPedagogicoCarregado] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -440,6 +735,18 @@ export function ModalFichaAluno({
     };
     carregar();
   }, [activeTab, aluno.id, aulasCarregadas]);
+
+  useEffect(() => {
+    if (activeTab !== 'pedagogico' || pedagogicoCarregado) return;
+    const carregar = async () => {
+      setLoadingPedagogico(true);
+      const { data } = await supabase.rpc('get_relatorio_pedagogico_aluno', { p_aluno_id: aluno.id });
+      setRelatorioPedagogico((data as RelatorioPedagogico) || null);
+      setPedagogicoCarregado(true);
+      setLoadingPedagogico(false);
+    };
+    carregar();
+  }, [activeTab, aluno.id, pedagogicoCarregado]);
 
   // Buscar turma quando professor, dia ou horário mudarem
   useEffect(() => {
@@ -1026,7 +1333,7 @@ export function ModalFichaAluno({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid grid-cols-8 flex-shrink-0">
+          <TabsList className="grid grid-cols-9 flex-shrink-0">
             <TabsTrigger value="pessoal" className="flex items-center gap-2">
               <User className="w-4 h-4" />
               <span className="hidden sm:inline">Pessoal</span>
@@ -1058,6 +1365,10 @@ export function ModalFichaAluno({
             <TabsTrigger value="aulas" className="flex items-center gap-2">
               <BookOpen className="w-4 h-4" />
               <span className="hidden sm:inline">Aulas</span>
+            </TabsTrigger>
+            <TabsTrigger value="pedagogico" className="flex items-center gap-2">
+              <ClipboardList className="w-4 h-4" />
+              <span className="hidden sm:inline">Pedagógico</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1856,6 +2167,25 @@ export function ModalFichaAluno({
                   <AulasTurmasTabs turmas={turmas} turmaKeys={turmaKeys} diasSemana={diasSemana} />
                 );
               })()}
+            </TabsContent>
+
+            {/* ABA HISTÓRICO PEDAGÓGICO */}
+            <TabsContent value="pedagogico" className="mt-0">
+              {loadingPedagogico ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                </div>
+              ) : !relatorioPedagogico || relatorioPedagogico.aulas.length === 0 ? (
+                <div className="text-center py-16 text-slate-400">
+                  <ClipboardList className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                  <p className="text-sm">Nenhum registro pedagógico encontrado para este aluno.</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    O conteúdo aparece aqui conforme os professores preenchem as aulas no Emusys.
+                  </p>
+                </div>
+              ) : (
+                <HistoricoPedagogicoTimeline dados={relatorioPedagogico} />
+              )}
             </TabsContent>
           </div>
         </Tabs>
