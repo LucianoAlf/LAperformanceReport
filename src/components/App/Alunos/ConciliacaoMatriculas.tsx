@@ -51,6 +51,7 @@ interface AtributoDivergencia {
   sugestao: any;
   severidade: 'baixa' | 'media' | 'alta' | string;
   detectado_em: string | null;
+  instagram_nao_possui?: boolean;
 }
 
 interface AtributoTotais {
@@ -224,6 +225,51 @@ function resolverFormaPagamentoIdUI(valor: any, formas: FormaPagamento[]): numbe
 
 function labelFormaPagamento(forma: FormaPagamento): string {
   return forma.sigla ? `${forma.nome} (${forma.sigla})` : forma.nome;
+}
+
+function textoIndicaSemInstagramUI(v: any): boolean {
+  const texto = String(v ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!texto) return false;
+  return [
+    'nao possui',
+    'nao possui instagram',
+    'nao possui insta',
+    'nao tem',
+    'nao tem instagram',
+    'nao tem insta',
+    'n possui',
+    'n possui instagram',
+    'n tem',
+    'n tem instagram',
+    'sem instagram',
+    'sem insta',
+    'nao usa',
+    'nao usa instagram',
+    'nao utiliza',
+    'nao utiliza instagram',
+  ].includes(texto)
+    || texto.startsWith('nao possui ')
+    || texto.startsWith('nao tem ')
+    || texto.startsWith('n possui ')
+    || texto.startsWith('n tem ')
+    || texto.startsWith('sem instagram')
+    || texto.startsWith('sem insta')
+    || texto.startsWith('nao usa ')
+    || texto.startsWith('nao utiliza ');
+}
+
+function atributoInstagramNaoSeAplica(item: AtributoDivergencia): boolean {
+  if (item.campo !== 'instagram' || !item.tipo_divergencia.includes('instagram')) return false;
+  return item.instagram_nao_possui === true
+    || textoIndicaSemInstagramUI(item.valor_emusys?.instagram)
+    || textoIndicaSemInstagramUI(item.sugestao?.instagram)
+    || textoIndicaSemInstagramUI(item.valor_nosso?.instagram);
 }
 
 // "tipo aplicável" = divergência com sugestão que dá pra aplicar direto da API
@@ -585,23 +631,44 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
         return String(b.detectado_em || '').localeCompare(String(a.detectado_em || ''));
       });
 
-      setAtributoTotais({
-        total: totalCount || 0,
-        grupos: Object.fromEntries(gruposCounts),
-      });
-
       const alunoIds = [...new Set(rows.map(r => r.aluno_id).filter(Boolean))] as number[];
-      const alunoMap = new Map<number, string>();
+      const alunoMap = new Map<number, { nome: string; instagram_nao_possui: boolean }>();
       if (alunoIds.length) {
         const { data: alunosData, error: alunosError } = await supabase
           .from('alunos')
-          .select('id, nome')
+          .select('id, nome, instagram_nao_possui')
           .in('id', alunoIds);
         if (alunosError) throw alunosError;
-        (alunosData || []).forEach((a: any) => alunoMap.set(a.id, a.nome));
+        (alunosData || []).forEach((a: any) => alunoMap.set(a.id, {
+          nome: a.nome,
+          instagram_nao_possui: a.instagram_nao_possui === true,
+        }));
       }
 
-      setAtributos(rows.map(row => ({ ...row, aluno_nome: row.aluno_id ? alunoMap.get(row.aluno_id) || null : null })));
+      const rowsComAluno = rows.map(row => {
+        const aluno = row.aluno_id ? alunoMap.get(row.aluno_id) : null;
+        return {
+          ...row,
+          aluno_nome: aluno?.nome || null,
+          instagram_nao_possui: aluno?.instagram_nao_possui === true,
+        };
+      });
+      const rowsVisiveis = rowsComAluno.filter(row => !atributoInstagramNaoSeAplica(row));
+      const ocultos = rowsComAluno.filter(row => atributoInstagramNaoSeAplica(row));
+      const ocultosPorGrupo = ocultos.reduce<Record<string, number>>((acc, row) => {
+        const grupo = grupoAtributo(row);
+        acc[grupo] = (acc[grupo] || 0) + 1;
+        return acc;
+      }, {});
+
+      setAtributoTotais({
+        total: Math.max(0, (totalCount || 0) - ocultos.length),
+        grupos: Object.fromEntries(gruposCounts.map(([grupo, count]) => [
+          grupo,
+          Math.max(0, (count || 0) - (ocultosPorGrupo[grupo] || 0)),
+        ])),
+      });
+      setAtributos(rowsVisiveis);
     } catch (e: any) {
       toast.error(e?.message || 'Erro ao carregar atributos da conciliacao');
       setAtributos([]);
@@ -895,6 +962,28 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
       );
     } catch (e: any) {
       toast.error(e?.message || 'Erro ao salvar atributo');
+    } finally {
+      setSalvandoAtributo(prev => { const n = new Set(prev); n.delete(item.id); return n; });
+    }
+  }, [removerAtributoDoEstado]);
+
+  const executarInstagramNaoPossui = useCallback(async (item: AtributoDivergencia) => {
+    const alunoKey = chaveAlunoAtributo(item);
+    setSalvandoAtributo(prev => new Set(prev).add(item.id));
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const { error } = await supabase.rpc('marcar_aluno_sem_instagram_conciliacao', {
+        p_divergencia_id: item.id,
+        p_decidido_por: authData.user?.email || 'usuario_app',
+      });
+      if (error) throw error;
+
+      setAlunosAtributosFixados(prev => new Set(prev).add(alunoKey));
+      setAlunosAtributosExpandidos(prev => new Set(prev).add(alunoKey));
+      removerAtributoDoEstado(item.id);
+      toast.success('Aluno marcado como sem Instagram.');
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao marcar sem Instagram');
     } finally {
       setSalvandoAtributo(prev => { const n = new Set(prev); n.delete(item.id); return n; });
     }
@@ -1640,6 +1729,16 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                         </span>
                                       ) : (
                                         <>
+                                          {item.campo === 'instagram' && item.tipo_divergencia.includes('instagram') && (
+                                            <button
+                                              type="button"
+                                              onClick={() => executarInstagramNaoPossui(item)}
+                                              className="inline-flex h-7 items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/10 px-2 text-[11px] font-medium text-violet-200 hover:bg-violet-500/20"
+                                            >
+                                              <AtSign className="h-3.5 w-3.5" />
+                                              Não tem Instagram
+                                            </button>
+                                          )}
                                           {podeAplicar && (
                                             <button
                                               type="button"

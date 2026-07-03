@@ -145,6 +145,40 @@ function normalizarInstagramValor(v: any): string {
     .trim();
 }
 
+function textoIndicaSemInstagramEmusys(v: any): boolean {
+  const texto = normalizarNome(String(v ?? ''))
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!texto) return false;
+  return [
+    'nao possui',
+    'nao possui instagram',
+    'nao possui insta',
+    'nao tem',
+    'nao tem instagram',
+    'nao tem insta',
+    'n possui',
+    'n possui instagram',
+    'n tem',
+    'n tem instagram',
+    'sem instagram',
+    'sem insta',
+    'nao usa',
+    'nao usa instagram',
+    'nao utiliza',
+    'nao utiliza instagram',
+  ].includes(texto)
+    || texto.startsWith('nao possui ')
+    || texto.startsWith('nao tem ')
+    || texto.startsWith('n possui ')
+    || texto.startsWith('n tem ')
+    || texto.startsWith('sem instagram')
+    || texto.startsWith('sem insta')
+    || texto.startsWith('nao usa ')
+    || texto.startsWith('nao utiliza ');
+}
+
 function normalizarFormaPagamentoValor(v: any): string {
   const s = normalizarTextoValor(v).replace(/\./g, '').replace(/\s+/g, ' ');
   if (!s) return '';
@@ -264,7 +298,10 @@ function gerarPatchAtributosVaziosConfiaveis(
     setCampoVazioConfiavel(patch, diffs, 'foto_url', fotoEmusys, a.foto_url, fixados);
   }
 
-  setCampoVazioConfiavel(patch, diffs, 'instagram', extrairInstagramAluno(mat), a.instagram, fixados);
+  const instagramEmusys = extrairInstagramAluno(mat);
+  if (!a.instagram_nao_possui && !textoIndicaSemInstagramEmusys(instagramEmusys)) {
+    setCampoVazioConfiavel(patch, diffs, 'instagram', instagramEmusys, a.instagram, fixados);
+  }
   setCampoVazioConfiavel(patch, diffs, 'telefone', mat?.aluno?.telefone, a.telefone || a.whatsapp, fixados);
   setCampoVazioConfiavel(patch, diffs, 'email', mat?.aluno?.email, a.email, fixados);
 
@@ -368,7 +405,8 @@ function detectarDivergenciasAtributosAluno(
 
   const instagramEmusys = extrairInstagramAluno(mat);
   const instagramNosso = a.instagram;
-  if (!fixados.has('instagram') && instagramEmusys && !temValor(instagramNosso)) {
+  const instagramSemPendencia = a.instagram_nao_possui === true || textoIndicaSemInstagramEmusys(instagramEmusys);
+  if (!instagramSemPendencia && !fixados.has('instagram') && instagramEmusys && !temValor(instagramNosso)) {
     rows.push(criarDivergenciaAtributo(
       a, mat, 'instagram_ausente', 'instagram',
       { instagram: instagramNosso ?? null },
@@ -376,7 +414,7 @@ function detectarDivergenciasAtributosAluno(
       { instagram: instagramEmusys },
       'baixa',
     ));
-  } else if (!fixados.has('instagram') && instagramEmusys && normalizarInstagramValor(instagramEmusys) !== normalizarInstagramValor(instagramNosso)) {
+  } else if (!instagramSemPendencia && !fixados.has('instagram') && instagramEmusys && normalizarInstagramValor(instagramEmusys) !== normalizarInstagramValor(instagramNosso)) {
     rows.push(criarDivergenciaAtributo(
       a, mat, 'instagram_divergente', 'instagram',
       { instagram: instagramNosso ?? null },
@@ -678,7 +716,7 @@ serve(async (req) => {
     const formasPagamentoMap = new Map<number, any>((formasPagamento || []).map((f: any) => [f.id, f]));
 
     const { data: alunos } = await supabase.from('alunos')
-      .select('id, unidade_id, nome, curso_id, professor_atual_id, emusys_matricula_id, emusys_student_id, status, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id, dia_aula, horario_aula, telefone, whatsapp, email, responsavel_nome, responsavel_telefone, foto_url, photo_url, instagram, status_pagamento, forma_pagamento_id, anamnese_preenchida, aguardando_renovacao')
+      .select('id, unidade_id, nome, curso_id, professor_atual_id, emusys_matricula_id, emusys_student_id, status, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id, dia_aula, horario_aula, telefone, whatsapp, email, responsavel_nome, responsavel_telefone, foto_url, photo_url, instagram, instagram_nao_possui, status_pagamento, forma_pagamento_id, anamnese_preenchida, aguardando_renovacao')
       .eq('unidade_id', u.id)
       .is('arquivado_em', null);
 
