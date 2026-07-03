@@ -71,6 +71,7 @@ interface AtributosAlunoGrupo {
 }
 
 interface TipoMatricula { id: number; codigo: string; nome: string }
+interface FormaPagamento { id: number; nome: string; sigla: string | null }
 
 const TIPO_META: Record<string, { label: string; descricao: string; icon: typeof Link2; cor: string }> = {
   ambiguo: { label: 'Ambíguo', descricao: 'Várias matrículas ativas, nenhuma casa o curso do nosso cadastro', icon: Copy, cor: 'amber' },
@@ -191,6 +192,40 @@ function fmtBRL(v: any): string {
   return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function normalizarFormaPagamentoUI(v: any): string {
+  const s = String(v ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\./g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!s) return '';
+  if (['credito recorrente', 'cr', 'c r', 'pgto recorrente', 'pagamento recorrente'].includes(s)) return 'credito_recorrente';
+  if (s.includes('cheque')) return 'cheque';
+  if (s.includes('pix')) return 'pix';
+  if (s.includes('dinheiro')) return 'dinheiro';
+  if (s.includes('boleto')) return 'boleto';
+  if (s.includes('link')) return 'link';
+  if (s.includes('debito')) return 'cartao_debito';
+  if (s.includes('credito') || s.includes('cartao')) return 'cartao_credito';
+  return s;
+}
+
+function resolverFormaPagamentoIdUI(valor: any, formas: FormaPagamento[]): number | null {
+  const alvo = normalizarFormaPagamentoUI(valor);
+  if (!alvo) return null;
+  const match = formas.find(forma => (
+    normalizarFormaPagamentoUI(forma.nome) === alvo ||
+    normalizarFormaPagamentoUI(forma.sigla) === alvo
+  ));
+  return match?.id ?? null;
+}
+
+function labelFormaPagamento(forma: FormaPagamento): string {
+  return forma.sigla ? `${forma.nome} (${forma.sigla})` : forma.nome;
+}
+
 // "tipo aplicável" = divergência com sugestão que dá pra aplicar direto da API
 const CAMPOS_ALTO_RISCO = new Set([
   'status',
@@ -284,6 +319,49 @@ function resumirGruposAluno(itens: AtributoDivergencia[]): Record<string, number
     grupos[grupo] = (grupos[grupo] || 0) + 1;
   }
   return grupos;
+}
+
+function compararAtributos(a: AtributoDivergencia, b: AtributoDivergencia): number {
+  const pa = ATRIBUTO_GRUPO_PRIORIDADE[grupoAtributo(a)] ?? 99;
+  const pb = ATRIBUTO_GRUPO_PRIORIDADE[grupoAtributo(b)] ?? 99;
+  if (pa !== pb) return pa - pb;
+  if (a.severidade === 'alta' && b.severidade !== 'alta') return -1;
+  if (b.severidade === 'alta' && a.severidade !== 'alta') return 1;
+  return String(b.detectado_em || '').localeCompare(String(a.detectado_em || ''));
+}
+
+function agruparAtributosPorAluno(itens: AtributoDivergencia[]): AtributosAlunoGrupo[] {
+  const porAluno = new Map<string, AtributosAlunoGrupo>();
+  for (const item of itens) {
+    const key = chaveAlunoAtributo(item);
+    if (!porAluno.has(key)) {
+      porAluno.set(key, {
+        key,
+        aluno_nome: item.aluno_nome || `Aluno LA Report #${item.aluno_id || 'sem vinculo'}`,
+        aluno_id: item.aluno_id,
+        unidade_id: item.unidade_id,
+        emusys_matriculas: [],
+        itens: [],
+        grupos: {},
+        severidadeAlta: false,
+        prioridade: 99,
+      });
+    }
+    const grupo = porAluno.get(key)!;
+    grupo.itens.push(item);
+    grupo.grupos = resumirGruposAluno(grupo.itens);
+    grupo.severidadeAlta = grupo.severidadeAlta || item.severidade === 'alta';
+    grupo.prioridade = Math.min(grupo.prioridade, ATRIBUTO_GRUPO_PRIORIDADE[grupoAtributo(item)] ?? 99);
+    if (item.emusys_matricula_id && !grupo.emusys_matriculas.includes(item.emusys_matricula_id)) {
+      grupo.emusys_matriculas.push(item.emusys_matricula_id);
+    }
+  }
+  return Array.from(porAluno.values()).sort((a, b) => {
+    if (a.prioridade !== b.prioridade) return a.prioridade - b.prioridade;
+    if (a.severidadeAlta !== b.severidadeAlta) return a.severidadeAlta ? -1 : 1;
+    if (b.itens.length !== a.itens.length) return b.itens.length - a.itens.length;
+    return a.aluno_nome.localeCompare(b.aluno_nome);
+  });
 }
 
 function camposDoItem(item: ConciliacaoItem): string[] {
@@ -394,6 +472,8 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const [salvando, setSalvando] = useState<Set<number>>(new Set());
   const [salvandoAtributo, setSalvandoAtributo] = useState<Set<number>>(new Set());
   const [tipos, setTipos] = useState<TipoMatricula[]>([]);
+  const [formasPagamento, setFormasPagamento] = useState<FormaPagamento[]>([]);
+  const [formaPagamentoDraft, setFormaPagamentoDraft] = useState<Record<number, string>>({});
   const [unidades, setUnidades] = useState<{ id: string; nome: string }[]>([]);
   // mapas id→nome para legibilizar os diffs do auto_preview (curso/professor)
   const [cursos, setCursos] = useState<{ id: number; nome: string }[]>([]);
@@ -406,6 +486,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const [filtroAtributoGrupo, setFiltroAtributoGrupo] = useState<string>('todos');
   const [filtroAtributoTipo, setFiltroAtributoTipo] = useState<string>('todos');
   const [alunosAtributosExpandidos, setAlunosAtributosExpandidos] = useState<Set<string>>(new Set());
+  const [alunosAtributosFixados, setAlunosAtributosFixados] = useState<Set<string>>(new Set());
   const [pagina, setPagina] = useState(1);
 
   // seleção em lote
@@ -573,6 +654,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
 
   useEffect(() => {
     supabase.from('tipos_matricula').select('id, codigo, nome').then(({ data }) => setTipos(data || []));
+    supabase.from('formas_pagamento').select('id, nome, sigla').eq('ativo', true).order('nome').then(({ data }) => setFormasPagamento(data || []));
     supabase.from('unidades').select('id, nome').eq('ativo', true).order('nome').then(({ data }) => setUnidades(data || []));
     supabase.from('cursos').select('id, nome').then(({ data }) => setCursos(data || []));
     supabase.from('professores').select('id, nome').then(({ data }) => setProfs(data || []));
@@ -630,49 +712,34 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
         if (!nome.includes(q) && !campo.includes(q) && !tipo.includes(q)) return false;
       }
       return true;
-    }).sort((a, b) => {
-      const pa = ATRIBUTO_GRUPO_PRIORIDADE[grupoAtributo(a)] ?? 99;
-      const pb = ATRIBUTO_GRUPO_PRIORIDADE[grupoAtributo(b)] ?? 99;
-      if (pa !== pb) return pa - pb;
-      if (a.severidade === 'alta' && b.severidade !== 'alta') return -1;
-      if (b.severidade === 'alta' && a.severidade !== 'alta') return 1;
-      return String(b.detectado_em || '').localeCompare(String(a.detectado_em || ''));
-    });
+    }).sort(compararAtributos);
   }, [atributos, busca, filtroUnidade, filtroAtributoGrupo, filtroAtributoTipo]);
-  const atributosPorAluno = useMemo<AtributosAlunoGrupo[]>(() => {
-    const porAluno = new Map<string, AtributosAlunoGrupo>();
-    for (const item of atributosFiltrados) {
-      const key = chaveAlunoAtributo(item);
-      if (!porAluno.has(key)) {
-        porAluno.set(key, {
-          key,
-          aluno_nome: item.aluno_nome || `Aluno LA Report #${item.aluno_id || 'sem vinculo'}`,
-          aluno_id: item.aluno_id,
-          unidade_id: item.unidade_id,
-          emusys_matriculas: [],
-          itens: [],
-          grupos: {},
-          severidadeAlta: false,
-          prioridade: 99,
-        });
+  const atributosPorAluno = useMemo<AtributosAlunoGrupo[]>(() => agruparAtributosPorAluno(atributosFiltrados), [atributosFiltrados]);
+  const atributosBaseParaFixados = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return atributos.filter(item => {
+      if (filtroUnidade !== 'todas' && item.unidade_id !== filtroUnidade) return false;
+      if (q) {
+        const nome = (item.aluno_nome || '').toLowerCase();
+        const campo = (item.campo || '').toLowerCase();
+        const tipo = (ATRIBUTO_TIPO_META[item.tipo_divergencia]?.label || item.tipo_divergencia).toLowerCase();
+        if (!nome.includes(q) && !campo.includes(q) && !tipo.includes(q)) return false;
       }
-      const grupo = porAluno.get(key)!;
-      grupo.itens.push(item);
-      grupo.grupos = resumirGruposAluno(grupo.itens);
-      grupo.severidadeAlta = grupo.severidadeAlta || item.severidade === 'alta';
-      grupo.prioridade = Math.min(grupo.prioridade, ATRIBUTO_GRUPO_PRIORIDADE[grupoAtributo(item)] ?? 99);
-      if (item.emusys_matricula_id && !grupo.emusys_matriculas.includes(item.emusys_matricula_id)) {
-        grupo.emusys_matriculas.push(item.emusys_matricula_id);
-      }
-    }
-    return Array.from(porAluno.values()).sort((a, b) => {
-      if (a.prioridade !== b.prioridade) return a.prioridade - b.prioridade;
-      if (a.severidadeAlta !== b.severidadeAlta) return a.severidadeAlta ? -1 : 1;
-      if (b.itens.length !== a.itens.length) return b.itens.length - a.itens.length;
-      return a.aluno_nome.localeCompare(b.aluno_nome);
-    });
-  }, [atributosFiltrados]);
-  const alunosAtributosVisiveis = atributosPorAluno.slice(0, 50);
+      return true;
+    }).sort(compararAtributos);
+  }, [atributos, busca, filtroUnidade]);
+  const gruposBaseParaFixados = useMemo<AtributosAlunoGrupo[]>(
+    () => agruparAtributosPorAluno(atributosBaseParaFixados),
+    [atributosBaseParaFixados],
+  );
+  const alunosAtributosVisiveis = useMemo(() => {
+    const principais = atributosPorAluno.slice(0, 50);
+    const chavesPrincipais = new Set(principais.map(grupo => grupo.key));
+    const gruposFixadosExtras = gruposBaseParaFixados.filter(grupo => (
+      alunosAtributosFixados.has(grupo.key) && !chavesPrincipais.has(grupo.key)
+    ));
+    return [...gruposFixadosExtras, ...principais];
+  }, [atributosPorAluno, gruposBaseParaFixados, alunosAtributosFixados]);
   const tiposAtributoDisponiveis = useMemo(() => {
     const tiposBase = filtroAtributoGrupo === 'todos'
       ? Object.keys(ATRIBUTO_TIPO_META)
@@ -734,6 +801,16 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
     });
   }, []);
 
+  useEffect(() => {
+    setAlunosAtributosFixados(prev => {
+      if (!prev.size) return prev;
+      const chavesAtuais = new Set(atributos.map(chaveAlunoAtributo));
+      const next = new Set([...prev].filter(key => chavesAtuais.has(key)));
+      if (next.size === prev.size && [...next].every(key => prev.has(key))) return prev;
+      return next;
+    });
+  }, [atributos]);
+
   const removerDoEstado = useCallback((ids: number[]) => {
     const idSet = new Set(ids);
     setDados(prev => {
@@ -792,6 +869,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
     item: AtributoDivergencia,
     decisao: 'aplicar_emusys' | 'manter_la' | 'ignorar' | 'revisar',
   ) => {
+    const alunoKey = chaveAlunoAtributo(item);
     setSalvandoAtributo(prev => new Set(prev).add(item.id));
     try {
       const { data: authData } = await supabase.auth.getUser();
@@ -801,7 +879,11 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
         p_decidido_por: authData.user?.email || 'usuario_app',
       });
       if (error) throw error;
-      if (decisao !== 'revisar') removerAtributoDoEstado(item.id);
+      if (decisao !== 'revisar') {
+        setAlunosAtributosFixados(prev => new Set(prev).add(alunoKey));
+        setAlunosAtributosExpandidos(prev => new Set(prev).add(alunoKey));
+        removerAtributoDoEstado(item.id);
+      }
       toast.success(
         decisao === 'aplicar_emusys'
           ? 'Dado do Emusys aplicado.'
@@ -817,6 +899,40 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
       setSalvandoAtributo(prev => { const n = new Set(prev); n.delete(item.id); return n; });
     }
   }, [removerAtributoDoEstado]);
+
+  const executarFormaPagamentoManual = useCallback(async (item: AtributoDivergencia, formaPagamentoIdRaw: string) => {
+    const formaPagamentoId = Number(formaPagamentoIdRaw);
+    if (!Number.isInteger(formaPagamentoId) || !formasPagamento.some(forma => forma.id === formaPagamentoId)) {
+      toast.error('Selecione uma forma de pagamento valida.');
+      return;
+    }
+
+    const alunoKey = chaveAlunoAtributo(item);
+    setSalvandoAtributo(prev => new Set(prev).add(item.id));
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const { error } = await supabase.rpc('definir_forma_pagamento_conciliacao_aluno', {
+        p_divergencia_id: item.id,
+        p_forma_pagamento_id: formaPagamentoId,
+        p_decidido_por: authData.user?.email || 'usuario_app',
+      });
+      if (error) throw error;
+
+      setFormaPagamentoDraft(prev => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+      setAlunosAtributosFixados(prev => new Set(prev).add(alunoKey));
+      setAlunosAtributosExpandidos(prev => new Set(prev).add(alunoKey));
+      removerAtributoDoEstado(item.id);
+      toast.success('Forma de pagamento definida no LA Report.');
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao definir forma de pagamento');
+    } finally {
+      setSalvandoAtributo(prev => { const n = new Set(prev); n.delete(item.id); return n; });
+    }
+  }, [formasPagamento, removerAtributoDoEstado]);
 
   const patchDeCandidato = useCallback((c: any): Record<string, any> => {
     const p: Record<string, any> = {
@@ -1397,6 +1513,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
               <div className="divide-y divide-slate-700/60">
                 {alunosAtributosVisiveis.map(grupo => {
                   const aberto = alunosAtributosExpandidos.has(grupo.key);
+                  const fixado = alunosAtributosFixados.has(grupo.key);
                   const unidadeNome = grupo.unidade_id ? (unidadesMap.get(grupo.unidade_id) || '-') : '-';
                   const resumoTipos = Object.entries(grupo.grupos)
                     .sort(([a], [b]) => (ATRIBUTO_GRUPO_PRIORIDADE[a] ?? 99) - (ATRIBUTO_GRUPO_PRIORIDADE[b] ?? 99));
@@ -1418,6 +1535,11 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                             {grupo.severidadeAlta && (
                               <span className="shrink-0 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-300">
                                 critico
+                              </span>
+                            )}
+                            {fixado && (
+                              <span className="shrink-0 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-200">
+                                em atendimento
                               </span>
                             )}
                           </div>
@@ -1471,6 +1593,11 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                               const origem = origemAtributo(item);
                               const podeAplicar = ATRIBUTO_CAMPOS_APLICAVEIS.has(item.campo);
                               const busy = salvandoAtributo.has(item.id);
+                              const formaPagamentoSugeridaId = item.tipo_divergencia === 'forma_pagamento_divergente'
+                                ? resolverFormaPagamentoIdUI(item.sugestao?.forma_pagamento ?? item.valor_emusys?.forma_pagamento, formasPagamento)
+                                : null;
+                              const formaPagamentoSelecionada = formaPagamentoDraft[item.id]
+                                ?? (formaPagamentoSugeridaId ? String(formaPagamentoSugeridaId) : '');
 
                               return (
                                 <div key={item.id} className="rounded-lg border border-slate-700/70 bg-slate-900/70 p-3">
@@ -1544,6 +1671,38 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                             Ignorar
                                           </button>
                                         </>
+                                      )}
+                                      {item.tipo_divergencia === 'forma_pagamento_divergente' && formasPagamento.length > 0 && (
+                                        <div className="basis-full rounded-md border border-slate-700 bg-slate-950/50 p-2">
+                                          <div className="mb-1 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                            Definir forma no LA Report
+                                          </div>
+                                          <div className="flex flex-wrap items-center justify-end gap-1.5">
+                                            <Select
+                                              value={formaPagamentoSelecionada}
+                                              onValueChange={(value) => setFormaPagamentoDraft(prev => ({ ...prev, [item.id]: value }))}
+                                            >
+                                              <SelectTrigger className="h-8 min-w-[190px] flex-1 border-slate-700 bg-slate-900 text-xs text-slate-200">
+                                                <SelectValue placeholder="Escolher forma" />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                {formasPagamento.map(forma => (
+                                                  <SelectItem key={forma.id} value={String(forma.id)}>
+                                                    {labelFormaPagamento(forma)}
+                                                  </SelectItem>
+                                                ))}
+                                              </SelectContent>
+                                            </Select>
+                                            <button
+                                              type="button"
+                                              disabled={busy || !formaPagamentoSelecionada}
+                                              onClick={() => executarFormaPagamentoManual(item, formaPagamentoSelecionada)}
+                                              className="inline-flex h-8 items-center rounded-md border border-violet-500/30 bg-violet-500/10 px-2.5 text-[11px] font-medium text-violet-200 hover:bg-violet-500/20 disabled:opacity-50"
+                                            >
+                                              Aplicar escolha
+                                            </button>
+                                          </div>
+                                        </div>
                                       )}
                                       {!podeAplicar && (
                                         <div className="basis-full text-right text-[10px] text-slate-500">
