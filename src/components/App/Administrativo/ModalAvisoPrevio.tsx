@@ -78,10 +78,11 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
           observacoes: editingItem.observacoes || '',
         });
       } else {
-        const [ano, mes] = competencia.split('-');
-        const proximoMes = new Date(parseInt(ano), parseInt(mes), 1);
+        const hoje = new Date();
+        const dataAvisoPadrao = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+        const proximoMes = new Date(dataAvisoPadrao.getFullYear(), dataAvisoPadrao.getMonth() + 1, 1);
         setFormData({
-          data: new Date(parseInt(ano), parseInt(mes) - 1, new Date().getDate()),
+          data: dataAvisoPadrao,
           mes_saida: `${proximoMes.getFullYear()}-${String(proximoMes.getMonth() + 1).padStart(2, '0')}-01`,
           aluno_nome: '',
           aluno_id: null,
