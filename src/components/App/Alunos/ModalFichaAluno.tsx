@@ -142,6 +142,70 @@ interface RelatorioPedagogico {
   aulas: AulaPedagogica[];
 }
 
+// Conteúdo estruturado gerado pela edge gerar-relatorio-pedagogico (Gemini).
+interface RelatorioIAConteudo {
+  instrumentos?: { curso: string; professor?: string; evolucao: string }[];
+  visao_geral?: string;
+  pontos_atencao?: string;
+  proximos_passos?: string;
+  sem_dados?: boolean;
+}
+
+interface RelatorioIARegistro {
+  id: string;
+  periodo_tipo: string;
+  data_inicio: string | null;
+  data_fim: string | null;
+  conteudo_json: RelatorioIAConteudo | null;
+  conteudo_editado: string | null;
+  status: string;
+  gerado_em: string;
+}
+
+type PeriodoTipo = 'mensal' | 'semestral' | 'anual' | 'custom';
+
+// Converte o conteúdo estruturado da IA num texto único, editável e pronto para impressão.
+function compilarTextoIA(c: RelatorioIAConteudo | null): string {
+  if (!c) return '';
+  const partes: string[] = [];
+  (c.instrumentos || []).forEach((i) => {
+    const titulo = i.professor ? `${i.curso} — Prof. ${i.professor}` : i.curso;
+    partes.push(`${titulo}\n${(i.evolucao || '').trim()}`);
+  });
+  if (c.visao_geral) partes.push(`Visão geral\n${c.visao_geral.trim()}`);
+  if (c.pontos_atencao) partes.push(`Pontos de atenção\n${c.pontos_atencao.trim()}`);
+  if (c.proximos_passos) partes.push(`Próximos passos\n${c.proximos_passos.trim()}`);
+  return partes.join('\n\n');
+}
+
+// Converte a escolha de período em datas (YYYY-MM-DD) + rótulo legível.
+function resolverPeriodo(
+  tipo: PeriodoTipo,
+  ano: number,
+  mes: number,
+  semestre: number,
+  custom: { inicio: string | null; fim: string | null },
+): { data_inicio: string | null; data_fim: string | null; label: string } {
+  const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const ultimoDia = (a: number, m: number) => new Date(a, m, 0).getDate();
+  const fmt = (a: number, m: number, d: number) => `${a}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  if (tipo === 'mensal') {
+    return { data_inicio: fmt(ano, mes, 1), data_fim: fmt(ano, mes, ultimoDia(ano, mes)), label: `${meses[mes - 1]}/${ano}` };
+  }
+  if (tipo === 'semestral') {
+    const mi = semestre === 1 ? 1 : 7;
+    const mf = semestre === 1 ? 6 : 12;
+    return { data_inicio: fmt(ano, mi, 1), data_fim: fmt(ano, mf, ultimoDia(ano, mf)), label: `${semestre}º semestre/${ano}` };
+  }
+  if (tipo === 'anual') {
+    return { data_inicio: fmt(ano, 1, 1), data_fim: fmt(ano, 12, 31), label: `Ano ${ano}` };
+  }
+  const l = custom.inicio && custom.fim
+    ? `${custom.inicio.split('-').reverse().join('/')} a ${custom.fim.split('-').reverse().join('/')}`
+    : 'Período personalizado';
+  return { data_inicio: custom.inicio, data_fim: custom.fim, label: l };
+}
+
 interface GovernancaSemParcelaFichaState {
   contexto: ContextoStatusPagamento;
   origem: OrigemGovernancaStatusPagamento;
@@ -379,7 +443,12 @@ function escapeHtml(texto: string | null | undefined): string {
 // janela nova + window.print). Layout limpo e profissional (logo + dados da escola) para
 // entregar ao responsável. Consome o JSON de get_relatorio_pedagogico_aluno — a MESMA fonte
 // que o agente Fábio usará na Fase 2 para gerar/enviar o relatório.
-function gerarRelatorioPedagogico(dados: RelatorioPedagogico) {
+// opcoes.textoIA: quando presente, o corpo do relatório é a narrativa gerada pela IA
+// (revisada pelo coordenador) em vez das anotações cruas de aula.
+function gerarRelatorioPedagogico(
+  dados: RelatorioPedagogico,
+  opcoes?: { textoIA?: string; periodoLabel?: string },
+) {
   const dataEmissao = new Date().toLocaleDateString('pt-BR');
   const { aluno, unidade, coordenacao, aulas } = dados;
 
@@ -433,6 +502,14 @@ function gerarRelatorioPedagogico(dados: RelatorioPedagogico) {
     </div>
   `).join('');
 
+  // Corpo: narrativa da IA (se fornecida) ou as seções por instrumento com as anotações cruas.
+  const corpoHtml = opcoes?.textoIA
+    ? `<div class="ia-corpo">${escapeHtml(opcoes.textoIA)}</div>`
+    : (secoes || '<p style="text-align:center;color:#9ca3af;">Nenhum registro pedagógico encontrado.</p>');
+  const subtitulo = opcoes?.textoIA
+    ? `Emitido em ${dataEmissao}${opcoes.periodoLabel ? ` &middot; ${escapeHtml(opcoes.periodoLabel)}` : ''}`
+    : `Emitido em ${dataEmissao} &middot; ${aulas.length} registro(s) de aula`;
+
   const html = `
     <!DOCTYPE html>
     <html lang="pt-BR">
@@ -463,6 +540,7 @@ function gerarRelatorioPedagogico(dados: RelatorioPedagogico) {
         .aula-presenca.presente { background: #d1fae5; color: #065f46; }
         .aula-presenca.faltou { background: #fee2e2; color: #991b1b; }
         .aula-conteudo { white-space: pre-wrap; color: #374151; font-size: 11.5px; }
+        .ia-corpo { white-space: pre-wrap; color: #374151; font-size: 12.5px; line-height: 1.7; text-align: justify; }
         .rodape { margin-top: 30px; padding-top: 14px; border-top: 1px solid #e5e7eb; }
         .rodape h3 { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #7c3aed; margin-bottom: 8px; }
         .coord-lista { display: flex; flex-wrap: wrap; gap: 14px 28px; }
@@ -485,7 +563,7 @@ function gerarRelatorioPedagogico(dados: RelatorioPedagogico) {
       </div>
 
       <h1>Relatório de Histórico Pedagógico</h1>
-      <div class="subtitulo">Emitido em ${dataEmissao} &middot; ${aulas.length} registro(s) de aula</div>
+      <div class="subtitulo">${subtitulo}</div>
 
       <div class="aluno-box">
         <div class="campo"><label>Aluno</label><span>${escapeHtml(aluno.nome)}</span></div>
@@ -494,7 +572,7 @@ function gerarRelatorioPedagogico(dados: RelatorioPedagogico) {
         <div class="campo"><label>Classificação</label><span>${escapeHtml(aluno.classificacao || '—')}</span></div>
       </div>
 
-      ${secoes || '<p style="text-align:center;color:#9ca3af;">Nenhum registro pedagógico encontrado.</p>'}
+      ${corpoHtml}
 
       <div class="rodape">
         <h3>Equipe</h3>
@@ -612,6 +690,245 @@ function HistoricoPedagogicoTimeline({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Painel de geração do Relatório Pedagógico com IA (Gemini). Escolhe período, gera um
+// rascunho editável, permite ajustar e imprimir, e lista o histórico já gerado.
+function RelatorioPedagogicoIA({ dados }: { dados: RelatorioPedagogico }) {
+  const anoAtual = new Date().getFullYear();
+  const mesAtual = new Date().getMonth() + 1;
+  const anos = [anoAtual, anoAtual - 1, anoAtual - 2];
+  const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+  const [tipo, setTipo] = useState<PeriodoTipo>('mensal');
+  const [ano, setAno] = useState(anoAtual);
+  const [mes, setMes] = useState(mesAtual);
+  const [semestre, setSemestre] = useState(mesAtual <= 6 ? 1 : 2);
+  const [customIni, setCustomIni] = useState<string | null>(null);
+  const [customFim, setCustomFim] = useState<string | null>(null);
+
+  const [gerando, setGerando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [texto, setTexto] = useState('');
+  const [relatorioId, setRelatorioId] = useState<string | null>(null);
+  const [periodoLabel, setPeriodoLabel] = useState('');
+  const [historico, setHistorico] = useState<RelatorioIARegistro[]>([]);
+
+  const carregarHistorico = async () => {
+    const { data } = await supabase
+      .from('relatorios_pedagogicos')
+      .select('id, periodo_tipo, data_inicio, data_fim, conteudo_json, conteudo_editado, status, gerado_em')
+      .eq('aluno_id', dados.aluno.id)
+      .order('gerado_em', { ascending: false });
+    setHistorico((data as RelatorioIARegistro[]) || []);
+  };
+
+  useEffect(() => {
+    carregarHistorico();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dados.aluno.id]);
+
+  const gerar = async () => {
+    const periodo = resolverPeriodo(tipo, ano, mes, semestre, { inicio: customIni, fim: customFim });
+    if (tipo === 'custom' && (!periodo.data_inicio || !periodo.data_fim)) {
+      toast.error('Selecione as datas de início e fim.');
+      return;
+    }
+    setGerando(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('gerar-relatorio-pedagogico', {
+        body: { aluno_id: dados.aluno.id, periodo_tipo: tipo, data_inicio: periodo.data_inicio, data_fim: periodo.data_fim },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Falha ao gerar relatório');
+      setTexto(compilarTextoIA(data.conteudo_json));
+      setRelatorioId(data.relatorio_id);
+      setPeriodoLabel(periodo.label);
+      if (data.total_aulas === 0) {
+        toast.warning('Nenhuma aula com conteúdo no período. O rascunho foi gerado vazio.');
+      } else {
+        toast.success('Relatório gerado! Revise e ajuste o texto antes de imprimir.');
+      }
+      carregarHistorico();
+    } catch (e) {
+      toast.error((e as Error).message || 'Erro ao gerar relatório com IA');
+    } finally {
+      setGerando(false);
+    }
+  };
+
+  const salvarEdicao = async () => {
+    if (!relatorioId) return;
+    setSalvando(true);
+    try {
+      const { error } = await supabase
+        .from('relatorios_pedagogicos')
+        .update({ conteudo_editado: texto, editado_em: new Date().toISOString(), status: 'finalizado' })
+        .eq('id', relatorioId);
+      if (error) throw error;
+      toast.success('Edição salva.');
+      carregarHistorico();
+    } catch (e) {
+      toast.error((e as Error).message || 'Erro ao salvar edição');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const imprimir = () => {
+    if (!texto.trim()) {
+      toast.error('Gere ou escreva o relatório antes de imprimir.');
+      return;
+    }
+    gerarRelatorioPedagogico(dados, { textoIA: texto, periodoLabel });
+  };
+
+  const abrirDoHistorico = (r: RelatorioIARegistro) => {
+    setTexto(r.conteudo_editado || compilarTextoIA(r.conteudo_json));
+    setRelatorioId(r.id);
+    const p = { mensal: 'Mensal', semestral: 'Semestral', anual: 'Anual', custom: 'Personalizado' }[r.periodo_tipo] || r.periodo_tipo;
+    const intervalo = r.data_inicio && r.data_fim
+      ? `${r.data_inicio.split('-').reverse().join('/')} a ${r.data_fim.split('-').reverse().join('/')}`
+      : '';
+    setPeriodoLabel(intervalo || p);
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Seletor de período + gerar */}
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 flex flex-col gap-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-slate-200">
+          <Brain className="w-4 h-4 text-purple-400" />
+          Gerar relatório pedagógico com IA
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-400">Período</label>
+            <Select value={tipo} onValueChange={(v) => setTipo(v as PeriodoTipo)}>
+              <SelectTrigger className="w-40 h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="mensal">Mensal</SelectItem>
+                <SelectItem value="semestral">Semestral</SelectItem>
+                <SelectItem value="anual">Anual</SelectItem>
+                <SelectItem value="custom">Personalizado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {tipo === 'mensal' && (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-400">Mês</label>
+              <Select value={String(mes)} onValueChange={(v) => setMes(Number(v))}>
+                <SelectTrigger className="w-36 h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {meses.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {tipo === 'semestral' && (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-400">Semestre</label>
+              <Select value={String(semestre)} onValueChange={(v) => setSemestre(Number(v))}>
+                <SelectTrigger className="w-36 h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1º semestre</SelectItem>
+                  <SelectItem value="2">2º semestre</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {tipo !== 'custom' && (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-400">Ano</label>
+              <Select value={String(ano)} onValueChange={(v) => setAno(Number(v))}>
+                <SelectTrigger className="w-28 h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {anos.map((a) => <SelectItem key={a} value={String(a)}>{a}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {tipo === 'custom' && (
+            <>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-slate-400">De</label>
+                <DatePicker date={parseLocalDate(customIni) ?? undefined} onDateChange={(d) => setCustomIni(formatLocalDate(d ?? null))} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-slate-400">Até</label>
+                <DatePicker date={parseLocalDate(customFim) ?? undefined} onDateChange={(d) => setCustomFim(formatLocalDate(d ?? null))} />
+              </div>
+            </>
+          )}
+
+          <Button size="sm" onClick={gerar} disabled={gerando} className="gap-2 h-9">
+            {gerando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
+            {gerando ? 'Gerando...' : 'Gerar com IA'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Editor do rascunho */}
+      {texto && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-400">
+              Rascunho gerado {periodoLabel && <span className="text-slate-300">· {periodoLabel}</span>} — revise e ajuste antes de imprimir.
+            </p>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={salvarEdicao} disabled={salvando || !relatorioId} className="gap-2">
+                {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Salvar edição
+              </Button>
+              <Button size="sm" variant="outline" onClick={imprimir} className="gap-2">
+                <Printer className="w-4 h-4" />
+                Imprimir
+              </Button>
+            </div>
+          </div>
+          <Textarea
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            className="min-h-[320px] text-sm leading-relaxed font-mono"
+            placeholder="O texto do relatório gerado pela IA aparece aqui para edição."
+          />
+        </div>
+      )}
+
+      {/* Histórico */}
+      {historico.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Relatórios já gerados</p>
+          <div className="flex flex-col gap-1.5">
+            {historico.map((r) => {
+              const intervalo = r.data_inicio && r.data_fim
+                ? `${r.data_inicio.split('-').reverse().join('/')} a ${r.data_fim.split('-').reverse().join('/')}`
+                : '—';
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => abrirDoHistorico(r)}
+                  className="text-left bg-slate-800/40 hover:bg-slate-800 border border-slate-700/50 rounded-lg px-3 py-2 flex items-center justify-between transition-colors"
+                >
+                  <span className="text-sm text-slate-200">{intervalo}</span>
+                  <span className="flex items-center gap-2 text-xs">
+                    <span className={`px-2 py-0.5 rounded ${r.status === 'finalizado' ? 'bg-emerald-500/20 text-emerald-400' : r.status === 'enviado' ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-600/40 text-slate-300'}`}>
+                      {r.status}
+                    </span>
+                    <span className="text-slate-500">{new Date(r.gerado_em).toLocaleDateString('pt-BR')}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2190,7 +2507,15 @@ export function ModalFichaAluno({
                   </p>
                 </div>
               ) : (
-                <HistoricoPedagogicoTimeline dados={relatorioPedagogico} />
+                <div className="flex flex-col gap-6">
+                  <RelatorioPedagogicoIA dados={relatorioPedagogico} />
+                  <div className="border-t border-slate-700/50 pt-4">
+                    <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-3">
+                      Conteúdo das aulas (registrado pelos professores)
+                    </p>
+                    <HistoricoPedagogicoTimeline dados={relatorioPedagogico} />
+                  </div>
+                </div>
               )}
             </TabsContent>
           </div>

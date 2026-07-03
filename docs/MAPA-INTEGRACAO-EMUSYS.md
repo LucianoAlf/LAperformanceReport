@@ -94,6 +94,7 @@ A edge faz `switch(evento)`:
 - **Quando:** pg_cron diário (CG 01:00, Barra 01:20, Recreio 01:40 UTC ≈ 22h BRT).
 - **Para quê:** (1) presença de aulas regulares → `aulas_emusys` + `aluno_presenca`; (2) **confirmar experimentais** → marca `experimental_realizada`/`faltou_experimental` no lead (ver 1.2).
 - ⚠️ Casa aula→aluno por nome+curso (ignora `status`). Professor matched por nome (API não retorna `professor_id`).
+- **Uso pedagógico do campo `anotacoes`:** o texto que o professor escreve na aula (Objetivo/Metodologia/Repertório) fica em `aulas_emusys.anotacoes`. É a matéria-prima do **Relatório Pedagógico com IA** (aba Histórico Pedagógico da ficha do aluno): RPC `get_relatorio_pedagogico_aluno` consolida por período e a edge `gerar-relatorio-pedagogico` (Gemini) transforma em relatório para o responsável. Mesma fonte que o agente Fábio reusará (Fase 4) para enviar via WhatsApp.
 
 ### 2.2 `GET /v1/professores` → `sync-professores-emusys` (cron semanal)
 - **Quando:** pg_cron Domingo 04:00 BRT.
