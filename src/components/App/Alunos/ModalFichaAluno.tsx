@@ -383,7 +383,9 @@ function gerarRelatorioPedagogico(dados: RelatorioPedagogico) {
   const dataEmissao = new Date().toLocaleDateString('pt-BR');
   const { aluno, unidade, coordenacao, aulas } = dados;
 
-  const logoFile = aluno.is_kids ? 'logo-la-music-kids.png' : 'logo-la-music-school.png';
+  // Versões "light" (texto escuro) para o documento de fundo branco — as versões usadas nas
+  // telas do app têm texto branco e sumiriam aqui.
+  const logoFile = aluno.is_kids ? 'logo-la-music-kids-light-completa.svg' : 'logo-la-music-light-completa.svg';
   const logoUrl = `${window.location.origin}/${logoFile}`;
   const marcaNome = aluno.is_kids ? 'LA Music Kids' : 'LA Music School';
 
@@ -495,7 +497,7 @@ function gerarRelatorioPedagogico(dados: RelatorioPedagogico) {
       ${secoes || '<p style="text-align:center;color:#9ca3af;">Nenhum registro pedagógico encontrado.</p>'}
 
       <div class="rodape">
-        <h3>Coordenação</h3>
+        <h3>Equipe</h3>
         <div class="coord-lista">${coordHtml}</div>
         <div class="assinatura-legal">
           Documento gerado pelo LA Music Report &middot; ${marcaNome}${unidade.nome ? ` — ${escapeHtml(unidade.nome)}` : ''}
