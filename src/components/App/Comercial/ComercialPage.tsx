@@ -89,6 +89,7 @@ import { AlertasComercial } from './AlertasComercial';
 import { PlanoAcaoComercial } from './PlanoAcaoComercial';
 import { TabProgramaMatriculador } from './TabProgramaMatriculador';
 import { ComercialConciliacaoExperimentais } from './ComercialConciliacaoExperimentais';
+import { ComercialConciliacaoLeads } from './ComercialConciliacaoLeads';
 import { ModalMatricular } from '../PreAtendimento/components/ModalMatricular';
 import { ModalArquivar } from '../PreAtendimento/components/ModalArquivar';
 import { ModalEditarLead } from '../PreAtendimento/components/ModalEditarLead';
@@ -3270,6 +3271,10 @@ export function ComercialPage() {
     const { data: registrosMes } = await registrosMesQuery;
 
     const leadsMes = registrosMes?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const pendenciasQualidadeLeads = {
+      origem: registrosMes?.filter(r => !r.canal_origem_id).reduce((acc, r) => acc + (r.quantidade || 1), 0) || 0,
+      curso: registrosMes?.filter(r => !r.curso_interesse_id).reduce((acc, r) => acc + (r.quantidade || 1), 0) || 0,
+    };
     // Experimentais do relatorio mensal usam a mesma conciliacao canonica
     // do diario/cards: endpoint Emusys v2 + decisoes humanas.
     const taxaExpMatMes = await buscarTaxaExpMatCanonica(
@@ -3384,6 +3389,19 @@ export function ComercialPage() {
     texto += `Lead → Experimental: *${conversaoLeadExp.toFixed(1)}%*\n`;
     texto += `Experimental → Matrícula: ${textoTaxaExpMat(taxaExpMatMes)}\n`;
     texto += `Lead → Matrícula: *${conversaoLeadMat.toFixed(1)}%*\n\n`;
+
+    // Dados de leads a completar: alerta nao bloqueante para fechamento comercial.
+    if (pendenciasQualidadeLeads.origem > 0 || pendenciasQualidadeLeads.curso > 0) {
+      texto += `⚠️ *Dados de leads a completar*\n`;
+      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+      if (pendenciasQualidadeLeads.origem > 0) {
+        texto += `Origem do lead pendente: *${pendenciasQualidadeLeads.origem}*\n`;
+      }
+      if (pendenciasQualidadeLeads.curso > 0) {
+        texto += `Curso de interesse pendente: *${pendenciasQualidadeLeads.curso}*\n`;
+      }
+      texto += `Resolva na aba Comercial → Conciliação → Qualidade dos Leads.\n\n`;
+    }
 
     // Matrículas por tipo
     texto += `👥 *MATRÍCULAS DO MÊS (${matriculasMes})*\n`;
@@ -4021,11 +4039,21 @@ export function ComercialPage() {
       {/* CONTEÚDO DA ABA PROGRAMA */}
       {/* ═══════════════════════════════════════════════════════════════ */}
       {abaPrincipal === 'conciliacao' && (
-        <ComercialConciliacaoExperimentais
-          unidadeId={isAdmin ? (context?.unidadeSelecionada || 'todos') : unidadeId}
-          ano={competencia.filtro.ano}
-          mes={competencia.filtro.mes}
-        />
+        <div className="space-y-6">
+          <ComercialConciliacaoLeads
+            unidadeId={isAdmin ? (context?.unidadeSelecionada || 'todos') : unidadeId}
+            ano={competencia.filtro.ano}
+            mes={competencia.filtro.mes}
+            canais={canais}
+            cursos={cursos}
+            onResolvido={loadData}
+          />
+          <ComercialConciliacaoExperimentais
+            unidadeId={isAdmin ? (context?.unidadeSelecionada || 'todos') : unidadeId}
+            ano={competencia.filtro.ano}
+            mes={competencia.filtro.mes}
+          />
+        </div>
       )}
 
       {abaPrincipal === 'programa' && (
