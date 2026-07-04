@@ -6,11 +6,13 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
   AlertTriangle, Heart, Search, MessageSquare,
   Loader2, RefreshCw, ChevronLeft, ChevronRight,
-  Table2, Kanban, FileQuestion, CalendarDays, BarChart3, UserX, Flag, Contact, Zap
+  Table2, Kanban, FileQuestion, CalendarDays, BarChart3, UserX, Flag, Contact, Zap,
+  ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/useToast';
 import { ModalDetalhesSucessoAluno } from './ModalDetalhesSucessoAluno';
 import { JornadaAlunoKanban } from './JornadaAlunoKanban';
@@ -37,6 +39,7 @@ interface AlunoSucesso {
   status_pagamento: string | null;
   valor_parcela: number | null;
   percentual_presenca: number | null;
+  dias_sem_presenca: number | null;
   data_matricula: string | null;
   dia_aula: string | null;
   horario_aula: string | null;
@@ -46,6 +49,8 @@ interface AlunoSucesso {
   health_score_numerico: number | null;
   health_status: string | null;
   ultimo_feedback: string | null;
+  ultimo_feedback_data: string | null;
+  ultimo_feedback_obs: string | null;
   total_acoes: number;
   metas_ativas: number;
   foto_url: string | null;
@@ -62,6 +67,60 @@ interface Props {
   onAbrirConversa?: (alunoId: number) => void;
 }
 
+type SortKey = 'nome' | 'health_score_numerico' | 'fase_jornada' | 'percentual_presenca' |
+  'status_pagamento' | 'tempo_permanencia_meses' | 'ultimo_feedback' | 'health_status';
+
+const FASE_RANK: Record<string, number> = { onboarding: 0, consolidacao: 1, encantamento: 2, renovacao: 3 };
+const PAGAMENTO_RANK: Record<string, number> = { inadimplente: 0, atrasado: 1, sem_parcela: 2, em_dia: 3 };
+const FEEDBACK_RANK: Record<string, number> = { vermelho: 0, amarelo: 1, verde: 2 };
+const STATUS_RANK: Record<string, number> = { critico: 0, atencao: 1, saudavel: 2 };
+
+const faseLabel = (fase: string) =>
+  fase === 'onboarding' ? 'Onboarding' :
+  fase === 'consolidacao' ? 'Consolidação' :
+  fase === 'encantamento' ? 'Encantamento' : 'Renovação';
+
+const faseDetalhe = (mesesRaw: number | null): string[] => {
+  const m = mesesRaw ?? 0;
+  if (m < 3) return [`Onboarding (0-3m de casa)`, `Faltam ${3 - m} mês(es) para Consolidação`];
+  if (m < 6) return [`Consolidação (3-6m de casa)`, `Faltam ${6 - m} mês(es) para Encantamento`];
+  if (m < 9) return [`Encantamento (6-9m de casa)`, `Faltam ${9 - m} mês(es) para Renovação`];
+  return [`Renovação (9m+ de casa)`, `Veterano`];
+};
+
+const TooltipList = ({ items }: { items: string[] }) => (
+  <ul className="list-disc pl-3 space-y-1">
+    {items.map((item, i) => <li key={i}>{item}</li>)}
+  </ul>
+);
+
+const pagamentoLabel = (status: string | null) =>
+  status === 'em_dia' ? 'Em dia' :
+  status === 'atrasado' ? 'Atrasado' :
+  status === 'sem_parcela' ? 'Sem parcela' : 'Inadimplente';
+
+const feedbackLabel = (fb: string | null) =>
+  fb === 'verde' ? 'Verde (tudo bem)' :
+  fb === 'amarelo' ? 'Amarelo (atenção)' :
+  fb === 'vermelho' ? 'Vermelho (risco)' : 'Sem feedback registrado';
+
+const statusLabel = (status: string) =>
+  status === 'critico' ? 'Crítico' : status === 'atencao' ? 'Atenção' : 'Saudável';
+
+const getSortValue = (aluno: AlunoSucesso, key: SortKey): number | string => {
+  switch (key) {
+    case 'nome': return aluno.nome?.toLowerCase() || '';
+    case 'health_score_numerico': return aluno.health_score_numerico ?? -1;
+    case 'fase_jornada': return FASE_RANK[aluno.fase_jornada] ?? -1;
+    case 'percentual_presenca': return aluno.percentual_presenca ?? -1;
+    case 'status_pagamento': return PAGAMENTO_RANK[aluno.status_pagamento || ''] ?? -1;
+    case 'tempo_permanencia_meses': return aluno.tempo_permanencia_meses ?? -1;
+    case 'ultimo_feedback': return FEEDBACK_RANK[aluno.ultimo_feedback || ''] ?? -1;
+    case 'health_status': return STATUS_RANK[aluno.health_status || ''] ?? -1;
+    default: return '';
+  }
+};
+
 export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
   const toast = useToast();
   const sentinelRef = useWidgetOverlapSentinel();
@@ -77,6 +136,23 @@ export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
   const [subAba, setSubAba] = useState<'tabela' | 'jornada' | 'pesquisa' | 'presenca' | 'faltas' | 'marcos' | 'analise' | 'cartoes' | 'automacoes'>('tabela');
   const [paginaAtual, setPaginaAtual] = useState(1);
   const itensPorPagina = 30;
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({
+    key: 'health_score_numerico',
+    dir: 'asc'
+  });
+
+  const handleSort = (key: SortKey) => {
+    setSortConfig(prev => prev.key === key
+      ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+      : { key, dir: 'asc' });
+  };
+
+  const SortIcon = ({ column }: { column: SortKey }) => {
+    if (sortConfig.key !== column) return <ArrowUpDown className="w-3 h-3 text-slate-600" />;
+    return sortConfig.dir === 'asc'
+      ? <ArrowUp className="w-3 h-3 text-emerald-400" />
+      : <ArrowDown className="w-3 h-3 text-emerald-400" />;
+  };
 
   useEffect(() => {
     carregarDados();
@@ -142,11 +218,18 @@ export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
       );
     }
 
-    // Ordenar por Health Score (menor primeiro = mais críticos)
-    resultado.sort((a, b) => (a.health_score_numerico || 0) - (b.health_score_numerico || 0));
+    // Ordenar pela coluna selecionada
+    resultado.sort((a, b) => {
+      const va = getSortValue(a, sortConfig.key);
+      const vb = getSortValue(b, sortConfig.key);
+      const cmp = typeof va === 'string' && typeof vb === 'string'
+        ? va.localeCompare(vb)
+        : (va as number) - (vb as number);
+      return sortConfig.dir === 'asc' ? cmp : -cmp;
+    });
 
     return resultado;
-  }, [alunos, filtroStatus, filtroBusca, filtroFase]);
+  }, [alunos, filtroStatus, filtroBusca, filtroFase, sortConfig]);
 
   // Paginação
   const totalPaginas = Math.ceil(alunosFiltrados.length / itensPorPagina);
@@ -556,24 +639,56 @@ export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-700">
-                <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Aluno</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">
+                  <button onClick={() => handleSort('nome')} className="flex items-center gap-1 hover:text-white transition-colors">
+                    <span>Aluno</span>
+                    <SortIcon column="nome" />
+                  </button>
+                </th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
-                  <div className="flex items-center justify-center gap-1">
+                  <button onClick={() => handleSort('health_score_numerico')} className="flex items-center justify-center gap-1 hover:text-white transition-colors mx-auto">
                     <Heart className="w-3 h-3 text-violet-400" />
                     <span>Health</span>
-                  </div>
+                    <SortIcon column="health_score_numerico" />
+                  </button>
                 </th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Fase</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Presença</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Pagamento</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Tempo</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
-                  <div className="flex items-center justify-center gap-1">
+                  <button onClick={() => handleSort('fase_jornada')} className="flex items-center justify-center gap-1 hover:text-white transition-colors mx-auto">
+                    <span>Fase</span>
+                    <SortIcon column="fase_jornada" />
+                  </button>
+                </th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
+                  <button onClick={() => handleSort('percentual_presenca')} className="flex items-center justify-center gap-1 hover:text-white transition-colors mx-auto">
+                    <span>Presença</span>
+                    <SortIcon column="percentual_presenca" />
+                  </button>
+                </th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
+                  <button onClick={() => handleSort('status_pagamento')} className="flex items-center justify-center gap-1 hover:text-white transition-colors mx-auto">
+                    <span>Pagamento</span>
+                    <SortIcon column="status_pagamento" />
+                  </button>
+                </th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
+                  <button onClick={() => handleSort('tempo_permanencia_meses')} className="flex items-center justify-center gap-1 hover:text-white transition-colors mx-auto">
+                    <span>Tempo</span>
+                    <SortIcon column="tempo_permanencia_meses" />
+                  </button>
+                </th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
+                  <button onClick={() => handleSort('ultimo_feedback')} className="flex items-center justify-center gap-1 hover:text-white transition-colors mx-auto">
                     <Heart className="w-3 h-3 text-emerald-400" />
                     <span>Feedback</span>
-                  </div>
+                    <SortIcon column="ultimo_feedback" />
+                  </button>
                 </th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Status</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
+                  <button onClick={() => handleSort('health_status')} className="flex items-center justify-center gap-1 hover:text-white transition-colors mx-auto">
+                    <span>Status</span>
+                    <SortIcon column="health_status" />
+                  </button>
+                </th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Ações</th>
               </tr>
             </thead>
@@ -607,67 +722,114 @@ export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
                     </td>
                     {/* Health Score */}
                     <td className="text-center px-4 py-3">
-                      <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border ${
-                        aluno.health_status === 'saudavel' 
-                          ? 'bg-emerald-900/30 border-emerald-700 text-emerald-400' 
-                          : aluno.health_status === 'atencao'
-                          ? 'bg-amber-900/30 border-amber-700 text-amber-400'
-                          : 'bg-rose-900/30 border-rose-700 text-rose-400'
-                      }`}>
-                        <span className="text-sm font-black">{aluno.health_score_numerico || 0}</span>
-                      </div>
+                      <Tooltip content={<TooltipList items={[
+                        `Pagamento: ${pagamentoLabel(aluno.status_pagamento)} (peso 30%)`,
+                        `Tempo de casa: ${aluno.tempo_permanencia_meses ?? 0}m (peso 20%)`,
+                        `Fase: ${faseLabel(aluno.fase_jornada)} (peso 20%)`,
+                        `Feedback: ${feedbackLabel(aluno.ultimo_feedback)} (peso 20%)`,
+                        `Presença: ${aluno.percentual_presenca ?? '—'}% (peso 10%)`
+                      ]} />}>
+                        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border cursor-help ${
+                          aluno.health_status === 'saudavel'
+                            ? 'bg-emerald-900/30 border-emerald-700 text-emerald-400'
+                            : aluno.health_status === 'atencao'
+                            ? 'bg-amber-900/30 border-amber-700 text-amber-400'
+                            : 'bg-rose-900/30 border-rose-700 text-rose-400'
+                        }`}>
+                          <span className="text-sm font-black">{aluno.health_score_numerico || 0}</span>
+                        </div>
+                      </Tooltip>
                     </td>
                     {/* Fase */}
                     <td className="text-center px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getFaseColor(aluno.fase_jornada)}`}>
-                        {aluno.fase_jornada === 'onboarding' ? 'Onboarding' :
-                         aluno.fase_jornada === 'consolidacao' ? 'Consolidação' :
-                         aluno.fase_jornada === 'encantamento' ? 'Encantamento' : 'Renovação'}
-                      </span>
+                      <Tooltip content={<TooltipList items={faseDetalhe(aluno.tempo_permanencia_meses)} />}>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium border cursor-help ${getFaseColor(aluno.fase_jornada)}`}>
+                          {faseLabel(aluno.fase_jornada)}
+                        </span>
+                      </Tooltip>
                     </td>
                     {/* Presença */}
                     <td className="text-center px-4 py-3">
-                      <span className={`font-medium ${
-                        (aluno.percentual_presenca || 0) >= 80 ? 'text-green-400' :
-                        (aluno.percentual_presenca || 0) >= 60 ? 'text-yellow-400' :
-                        'text-red-400'
-                      }`}>
-                        {aluno.percentual_presenca ? `${aluno.percentual_presenca.toFixed(0)}%` : '—'}
-                      </span>
+                      <Tooltip content={<TooltipList items={[
+                        `${aluno.percentual_presenca ?? '—'}% de presença desde a matrícula`,
+                        ...(aluno.data_matricula ? [`Matriculado em ${format(new Date(aluno.data_matricula), "dd/MM/yyyy", { locale: ptBR })}`] : []),
+                        ...(aluno.dias_sem_presenca != null ? [`Última aula presente há ${aluno.dias_sem_presenca} dia(s)`] : [])
+                      ]} />}>
+                        <div className="inline-block cursor-help">
+                          <span className={`font-medium ${
+                            (aluno.percentual_presenca || 0) >= 80 ? 'text-green-400' :
+                            (aluno.percentual_presenca || 0) >= 60 ? 'text-yellow-400' :
+                            'text-red-400'
+                          }`}>
+                            {aluno.percentual_presenca ? `${aluno.percentual_presenca.toFixed(0)}%` : '—'}
+                          </span>
+                          {aluno.dias_sem_presenca != null && (
+                            <p className={`text-[10px] mt-0.5 ${
+                              aluno.dias_sem_presenca > 30 ? 'text-red-400' :
+                              aluno.dias_sem_presenca > 14 ? 'text-yellow-400' :
+                              'text-slate-500'
+                            }`}>
+                              há {aluno.dias_sem_presenca}d
+                            </p>
+                          )}
+                        </div>
+                      </Tooltip>
                     </td>
                     {/* Pagamento */}
                     <td className="text-center px-4 py-3">
-                      <span className={`font-medium ${
-                        aluno.status_pagamento === 'em_dia' ? 'text-green-400' :
-                        aluno.status_pagamento === 'atrasado' ? 'text-yellow-400' :
-                        'text-red-400'
-                      }`}>
-                        {aluno.status_pagamento === 'em_dia' ? 'Em dia' :
-                         aluno.status_pagamento === 'atrasado' ? 'Atrasado' : 'Inadimplente'}
-                      </span>
+                      <Tooltip content={<TooltipList items={[
+                        pagamentoLabel(aluno.status_pagamento),
+                        ...(aluno.valor_parcela ? [`Parcela: R$ ${aluno.valor_parcela}`] : [])
+                      ]} />}>
+                        <span className={`font-medium cursor-help ${
+                          aluno.status_pagamento === 'em_dia' ? 'text-green-400' :
+                          aluno.status_pagamento === 'atrasado' ? 'text-yellow-400' :
+                          'text-red-400'
+                        }`}>
+                          {pagamentoLabel(aluno.status_pagamento)}
+                        </span>
+                      </Tooltip>
                     </td>
                     {/* Tempo */}
                     <td className="text-center px-4 py-3 text-white">
-                      {aluno.tempo_permanencia_meses || 0}m
+                      <Tooltip content={<TooltipList items={[
+                        aluno.data_matricula
+                          ? `Matriculado em ${format(new Date(aluno.data_matricula), "dd/MM/yyyy", { locale: ptBR })}`
+                          : 'Data de matrícula não registrada'
+                      ]} />}>
+                        <span className="cursor-help">{aluno.tempo_permanencia_meses || 0}m</span>
+                      </Tooltip>
                     </td>
                     {/* Feedback */}
                     <td className="text-center px-4 py-3">
-                      {aluno.ultimo_feedback === 'verde' ? (
-                        <span className="text-lg">💚</span>
-                      ) : aluno.ultimo_feedback === 'amarelo' ? (
-                        <span className="text-lg">💛</span>
-                      ) : aluno.ultimo_feedback === 'vermelho' ? (
-                        <span className="text-lg">❤️</span>
-                      ) : (
-                        <span className="text-slate-500">—</span>
-                      )}
+                      <Tooltip content={<TooltipList items={[
+                        feedbackLabel(aluno.ultimo_feedback),
+                        ...(aluno.ultimo_feedback_data ? [`Registrado em ${format(new Date(aluno.ultimo_feedback_data), "dd/MM/yyyy", { locale: ptBR })}`] : []),
+                        ...(aluno.ultimo_feedback_obs ? [`"${aluno.ultimo_feedback_obs}"`] : [])
+                      ]} />}>
+                        <span className="cursor-help">
+                          {aluno.ultimo_feedback === 'verde' ? (
+                            <span className="text-lg">💚</span>
+                          ) : aluno.ultimo_feedback === 'amarelo' ? (
+                            <span className="text-lg">💛</span>
+                          ) : aluno.ultimo_feedback === 'vermelho' ? (
+                            <span className="text-lg">❤️</span>
+                          ) : (
+                            <span className="text-slate-500">—</span>
+                          )}
+                        </span>
+                      </Tooltip>
                     </td>
                     {/* Status */}
                     <td className="text-center px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(aluno.health_status)}`}>
-                        {aluno.health_status === 'critico' ? 'Crítico' : 
-                         aluno.health_status === 'atencao' ? 'Atenção' : 'Saudável'}
-                      </span>
+                      <Tooltip content={<TooltipList items={[
+                        `Health Score: ${aluno.health_score_numerico ?? 0}`,
+                        `Classificação: ${statusLabel(aluno.health_status || '')}`
+                      ]} />}>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium border cursor-help ${getStatusColor(aluno.health_status)}`}>
+                          {statusLabel(aluno.health_status || '')}
+                        </span>
+                      </Tooltip>
                     </td>
                     {/* Ações */}
                     <td className="text-center px-4 py-3" onClick={(e) => e.stopPropagation()}>

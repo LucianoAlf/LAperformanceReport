@@ -27,6 +27,7 @@ interface AlunoSucesso {
   status_pagamento: string | null;
   valor_parcela: number | null;
   percentual_presenca: number | null;
+  dias_sem_presenca: number | null;
   data_matricula: string | null;
   dia_aula: string | null;
   horario_aula: string | null;
@@ -497,6 +498,15 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
                   {aluno.percentual_presenca ? `${aluno.percentual_presenca.toFixed(0)}%` : '—'}
                 </p>
                 <p className="text-xs text-slate-400">Presença</p>
+                {aluno.dias_sem_presenca != null && (
+                  <p className={`text-[10px] mt-0.5 ${
+                    aluno.dias_sem_presenca > 30 ? 'text-red-400' :
+                    aluno.dias_sem_presenca > 14 ? 'text-yellow-400' :
+                    'text-slate-500'
+                  }`}>
+                    há {aluno.dias_sem_presenca}d
+                  </p>
+                )}
               </div>
               <div className="bg-slate-800/50 rounded-lg p-3 text-center">
                 <p className={`text-xl font-bold ${getPagamentoColor(aluno.status_pagamento)}`}>
