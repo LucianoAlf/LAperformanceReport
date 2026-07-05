@@ -92,6 +92,10 @@ export function AppSidebar() {
   // Visibilidade do módulo Campanhas
   const DEV_EMAIL = 'hugo@lamusic.com.br'
   const isDev = usuario?.email === DEV_EMAIL
+
+  // Visibilidade do módulo Tráfego Pago (custo de mídia sensível): só e-mails fixos
+  const TRAFEGO_PAGO_EMAILS = ['hugo@gmail.com', 'lucianoalf.la@gmail.com']
+  const trafegoPagoVisivel = TRAFEGO_PAGO_EMAILS.includes((usuario?.email ?? '').toLowerCase())
   const [campanhasVisivel, setCampanhasVisivel] = useState(false)
   useEffect(() => {
     supabase.from('campanhas_config').select('visibilidade_global').single()
@@ -232,7 +236,10 @@ export function AppSidebar() {
             <Wrench className="w-3 h-3" /> Operacional
           </div>
         )}
-        {operacional.filter(item => item.path !== '/app/campanhas' || campanhasVisivel).map((item) => {
+        {operacional.filter(item =>
+          (item.path !== '/app/campanhas' || campanhasVisivel) &&
+          (item.path !== '/app/trafego-pago' || trafegoPagoVisivel)
+        ).map((item) => {
           const Icon = item.icon;
           return (
             <Tooltip key={item.path} content={item.label} enabled={isCollapsed}>

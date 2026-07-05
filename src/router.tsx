@@ -38,6 +38,16 @@ import { useAuth } from './contexts/AuthContext';
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 
+// Tráfego Pago: acesso restrito a um conjunto fixo de e-mails (custo de mídia sensível)
+const TRAFEGO_PAGO_EMAILS = ['hugo@gmail.com', 'lucianoalf.la@gmail.com']
+
+function TrafegoPagoGuard({ children }: { children: React.ReactNode }) {
+  const { usuario } = useAuth()
+  const email = usuario?.email?.toLowerCase()
+  if (!email || !TRAFEGO_PAGO_EMAILS.includes(email)) return <Navigate to="/app" replace />
+  return <>{children}</>
+}
+
 function CampanhasGuard({ children }: { children: React.ReactNode }) {
   const { usuario } = useAuth()
   const [permitido, setPermitido] = useState<boolean | null>(null)
@@ -240,7 +250,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'trafego-pago',
-            element: <Suspense fallback={<PageLoader />}><TrafegoPagoPage /></Suspense>,
+            element: <TrafegoPagoGuard><Suspense fallback={<PageLoader />}><TrafegoPagoPage /></Suspense></TrafegoPagoGuard>,
           },
           {
             path: 'administrativo',
