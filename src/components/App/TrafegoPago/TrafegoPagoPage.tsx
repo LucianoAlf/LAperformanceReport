@@ -5,8 +5,13 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   DollarSign, Eye, MousePointerClick, MessageCircle,
-  Loader2, RefreshCw, Users, Target, AlertTriangle
+  Loader2, RefreshCw, Users, Target, AlertTriangle,
+  TrendingUp, Image as ImageIcon, LayoutGrid, UsersRound, MapPin, Repeat
 } from 'lucide-react';
+import {
+  ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis,
+  Tooltip as RTooltip, CartesianGrid
+} from 'recharts';
 import { Button } from '@/components/ui/button';
 
 // ============================================================================
@@ -24,6 +29,8 @@ interface MetaInsight {
   clicks: string;
   cpm: string;
   ctr: string;
+  reach?: string;
+  frequency?: string;
   actions?: MetaAction[];
   campaign_id?: string;
   campaign_name?: string;
@@ -31,12 +38,29 @@ interface MetaInsight {
   date_stop?: string;
 }
 
+interface TendenciaPonto { data: string; spend: number; clicks: number; conversas: number; }
+interface AnuncioRow {
+  ad_id: string; ad_name: string; spend: number; impressions: number;
+  clicks: number; ctr: number; conversas: number; thumbnail: string | null;
+}
+interface PosicaoRow {
+  plataforma: string; posicao: string; spend: number;
+  impressions: number; clicks: number; conversas: number;
+}
+interface DemoRow { idade: string; genero: string; spend: number; impressions: number; conversas: number; }
+interface RegiaoRow { regiao: string; spend: number; impressions: number; conversas: number; }
+
 interface InsightsResponse {
   ok: boolean;
   error?: string;
   date_preset: string;
   conta: MetaInsight | null;
   campanhas: MetaInsight[];
+  tendencia: TendenciaPonto[];
+  anuncios: AnuncioRow[];
+  posicionamento: PosicaoRow[];
+  demografico: DemoRow[];
+  regiao: RegiaoRow[];
 }
 
 interface LeadAtribuido {
@@ -80,6 +104,42 @@ const brl = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: v >= 1000 ? 0 : 2 });
 
 const num = (v: number) => v.toLocaleString('pt-BR');
+
+const PLATAFORMA_LABEL: Record<string, string> = {
+  facebook: 'Facebook', instagram: 'Instagram', messenger: 'Messenger',
+  audience_network: 'Audience Network', threads: 'Threads', unknown: 'Outros',
+};
+const POSICAO_LABEL: Record<string, string> = {
+  feed: 'Feed', story: 'Stories', reels: 'Reels', instagram_reels: 'Reels',
+  instagram_stories: 'Stories', instant_article: 'Instant Article', instream_video: 'Vídeo in-stream',
+  marketplace: 'Marketplace', video_feeds: 'Feed de vídeo', search: 'Busca',
+  explore: 'Explorar', explore_home: 'Explorar', facebook_reels: 'Reels', right_hand_column: 'Coluna lateral',
+  biz_disco_feed: 'Descoberta', profile_feed: 'Feed de perfil', unknown: 'Outros',
+};
+const GENERO_LABEL: Record<string, string> = { male: 'Masculino', female: 'Feminino', unknown: 'Não informado' };
+const cap = (s: string) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+const plataformaLabel = (p: string) => PLATAFORMA_LABEL[p] ?? cap(p);
+const posicaoLabel = (p: string) => POSICAO_LABEL[p] ?? cap(p.replace(/_/g, ' '));
+const generoLabel = (g: string) => GENERO_LABEL[g] ?? cap(g);
+
+// Barra de ranking (gasto relativo ao topo) — usada em posicionamento/demográfico/região.
+function BarraRanking({ label, valor, max, extra }: { label: string; valor: number; max: number; extra?: string }) {
+  const pct = max > 0 ? Math.max((valor / max) * 100, 2) : 0;
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-slate-300 w-40 flex-shrink-0 truncate" title={label}>{label}</span>
+      <div className="flex-1 bg-slate-900/60 rounded-full h-6 overflow-hidden">
+        <div
+          className="h-full bg-gradient-to-r from-pink-600 to-fuchsia-500 rounded-full flex items-center px-2"
+          style={{ width: `${pct}%` }}
+        >
+          <span className="text-[11px] font-bold text-white whitespace-nowrap">{brl(valor)}</span>
+        </div>
+      </div>
+      {extra && <span className="text-xs text-slate-500 w-24 text-right flex-shrink-0">{extra}</span>}
+    </div>
+  );
+}
 
 // ============================================================================
 // Página
@@ -182,6 +242,34 @@ export function TrafegoPagoPage() {
 
   const convertidos = leadsAtribuidos.filter(l => l.converteu === true).length;
 
+  // ----- Grupo A: reach/frequência + rankings -----
+  const alcance = conta?.reach ? Number(conta.reach) : 0;
+  const frequencia = conta?.frequency ? Number(conta.frequency) : 0;
+  // Frequência alta = mesma pessoa vendo o anúncio muitas vezes (saturação/fadiga).
+  const fadiga = frequencia >= 4 ? 'alta' : frequencia >= 2.5 ? 'media' : 'ok';
+
+  const anuncios = insights?.anuncios ?? [];
+  const posicionamento = insights?.posicionamento ?? [];
+  const demografico = useMemo(
+    () => [...(insights?.demografico ?? [])].sort((a, b) => b.spend - a.spend),
+    [insights]
+  );
+  const regiao = insights?.regiao ?? [];
+  // Região só rende se a Meta segmentou (mais de 1 linha real); senão vem tudo agregado.
+  const regiaoUtil = regiao.length > 1;
+
+  const tendencia = useMemo(
+    () => (insights?.tendencia ?? []).map(t => ({
+      ...t,
+      label: t.data ? format(new Date(`${t.data}T12:00:00`), 'dd/MM', { locale: ptBR }) : '',
+    })),
+    [insights]
+  );
+
+  const maxPosic = Math.max(1, ...posicionamento.map(p => p.spend));
+  const maxDemo = Math.max(1, ...demografico.map(d => d.spend));
+  const maxRegiao = Math.max(1, ...regiao.map(r => r.spend));
+
   // ============================================================================
   return (
     <div className="space-y-6">
@@ -259,6 +347,40 @@ export function TrafegoPagoPage() {
         )}
       </div>
 
+      {/* Alcance & Frequência (fadiga de anúncio) */}
+      {!loadingInsights && conta && alcance > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-4">
+            <p className="text-xs text-slate-400 mb-1 flex items-center gap-1.5"><Eye className="w-3.5 h-3.5" /> Alcance</p>
+            <p className="text-xl font-bold text-white">{num(alcance)}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">pessoas únicas atingidas</p>
+          </div>
+          <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-4">
+            <p className="text-xs text-slate-400 mb-1 flex items-center gap-1.5"><Repeat className="w-3.5 h-3.5" /> Frequência</p>
+            <p className={`text-xl font-bold ${
+              fadiga === 'alta' ? 'text-rose-400' : fadiga === 'media' ? 'text-amber-400' : 'text-white'
+            }`}>{frequencia.toFixed(1)}x</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">vezes que cada pessoa viu o anúncio</p>
+          </div>
+          <div className={`rounded-2xl border p-4 flex flex-col justify-center ${
+            fadiga === 'alta'
+              ? 'bg-rose-900/20 border-rose-700/50'
+              : fadiga === 'media' ? 'bg-amber-900/15 border-amber-700/40' : 'bg-emerald-900/15 border-emerald-700/40'
+          }`}>
+            <p className="text-xs font-medium mb-1 flex items-center gap-1.5 text-slate-300">
+              {fadiga !== 'ok' && <AlertTriangle className="w-3.5 h-3.5" />} Saturação do público
+            </p>
+            <p className={`text-sm font-semibold ${
+              fadiga === 'alta' ? 'text-rose-300' : fadiga === 'media' ? 'text-amber-300' : 'text-emerald-300'
+            }`}>
+              {fadiga === 'alta'
+                ? 'Alta — considere renovar o criativo'
+                : fadiga === 'media' ? 'Moderada — de olho' : 'Saudável'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Funil de conversas WhatsApp */}
       {!loadingInsights && conta && (
         <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-5">
@@ -279,6 +401,153 @@ export function TrafegoPagoPage() {
                 </div>
                 <span className="text-xs text-slate-500 w-10 text-right">{etapa.pct}%</span>
               </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tendência diária */}
+      {!loadingInsights && tendencia.length > 1 && (
+        <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-5">
+          <h3 className="text-sm font-medium text-slate-400 mb-4 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4" /> Tendência diária — gasto e conversas
+          </h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart data={tendencia} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gGasto" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#ec4899" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#ec4899" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+              <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={20} />
+              <YAxis yAxisId="l" tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false}
+                tickFormatter={(v) => `R$${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
+              <YAxis yAxisId="r" orientation="right" tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} axisLine={false} />
+              <RTooltip
+                contentStyle={{ background: '#1e293b', border: '1px solid #475569', borderRadius: 12, fontSize: 12 }}
+                labelStyle={{ color: '#e2e8f0' }}
+                formatter={(value: number, name: string) =>
+                  name === 'Gasto' ? [brl(value), name] : [num(value), name]}
+              />
+              <Area yAxisId="l" type="monotone" dataKey="spend" name="Gasto" stroke="#ec4899" strokeWidth={2} fill="url(#gGasto)" />
+              <Line yAxisId="r" type="monotone" dataKey="conversas" name="Conversas" stroke="#34d399" strokeWidth={2} dot={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Por anúncio / criativo */}
+      {!loadingInsights && anuncios.length > 0 && (
+        <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-700">
+            <h3 className="text-sm font-medium text-slate-400 flex items-center gap-2">
+              <ImageIcon className="w-4 h-4" /> Por anúncio / criativo
+            </h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-700 text-xs text-slate-400">
+                  <th className="text-left px-5 py-3 font-medium">Anúncio</th>
+                  <th className="text-right px-4 py-3 font-medium">Gasto</th>
+                  <th className="text-right px-4 py-3 font-medium">Impressões</th>
+                  <th className="text-right px-4 py-3 font-medium">Cliques</th>
+                  <th className="text-right px-4 py-3 font-medium">CTR</th>
+                  <th className="text-right px-4 py-3 font-medium">Conversas</th>
+                  <th className="text-right px-5 py-3 font-medium">Custo/conversa</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/50">
+                {anuncios.map(a => (
+                  <tr key={a.ad_id} className="hover:bg-slate-700/30 transition-colors">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        {a.thumbnail ? (
+                          <img src={a.thumbnail} alt="" loading="lazy"
+                            className="w-10 h-10 rounded-lg object-cover flex-shrink-0 bg-slate-900" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center flex-shrink-0">
+                            <ImageIcon className="w-4 h-4 text-slate-600" />
+                          </div>
+                        )}
+                        <span className="text-sm text-white">{a.ad_name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-white">{brl(a.spend)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-slate-300">{num(a.impressions)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-slate-300">{num(a.clicks)}</td>
+                    <td className="px-4 py-3 text-sm text-right text-slate-300">{a.ctr.toFixed(2)}%</td>
+                    <td className="px-4 py-3 text-sm text-right text-emerald-400">{num(a.conversas)}</td>
+                    <td className="px-5 py-3 text-sm text-right text-amber-400">
+                      {a.conversas > 0 ? brl(a.spend / a.conversas) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Posicionamento + Demográfico lado a lado */}
+      {!loadingInsights && (posicionamento.length > 0 || demografico.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {posicionamento.length > 0 && (
+            <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-5">
+              <h3 className="text-sm font-medium text-slate-400 mb-4 flex items-center gap-2">
+                <LayoutGrid className="w-4 h-4" /> Por posicionamento
+              </h3>
+              <div className="space-y-2.5">
+                {posicionamento.map((p, i) => (
+                  <BarraRanking
+                    key={`${p.plataforma}-${p.posicao}-${i}`}
+                    label={`${plataformaLabel(p.plataforma)} · ${posicaoLabel(p.posicao)}`}
+                    valor={p.spend}
+                    max={maxPosic}
+                    extra={`${num(p.conversas)} conv.`}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          {demografico.length > 0 && (
+            <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-5">
+              <h3 className="text-sm font-medium text-slate-400 mb-4 flex items-center gap-2">
+                <UsersRound className="w-4 h-4" /> Por público (idade e gênero)
+              </h3>
+              <div className="space-y-2.5">
+                {demografico.map((d, i) => (
+                  <BarraRanking
+                    key={`${d.idade}-${d.genero}-${i}`}
+                    label={`${d.idade} · ${generoLabel(d.genero)}`}
+                    valor={d.spend}
+                    max={maxDemo}
+                    extra={`${num(d.conversas)} conv.`}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Por região */}
+      {!loadingInsights && regiaoUtil && (
+        <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-5">
+          <h3 className="text-sm font-medium text-slate-400 mb-4 flex items-center gap-2">
+            <MapPin className="w-4 h-4" /> Por região
+          </h3>
+          <div className="space-y-2.5">
+            {regiao.slice(0, 12).map((r, i) => (
+              <BarraRanking
+                key={`${r.regiao}-${i}`}
+                label={r.regiao}
+                valor={r.spend}
+                max={maxRegiao}
+                extra={`${num(r.conversas)} conv.`}
+              />
             ))}
           </div>
         </div>
