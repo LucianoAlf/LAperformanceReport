@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tooltip } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { useToast } from '@/hooks/useToast';
 import { ModalDetalhesSucessoAluno } from './ModalDetalhesSucessoAluno';
 import { JornadaAlunoKanban } from './JornadaAlunoKanban';
