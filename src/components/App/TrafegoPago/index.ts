@@ -1,0 +1,1 @@
+export { TrafegoPagoPage } from './TrafegoPagoPage';

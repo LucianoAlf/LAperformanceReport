@@ -25,7 +25,8 @@ import {
   TrendingUp,
   Megaphone,
   Activity,
-  Heart
+  Heart,
+  MousePointerClick
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -49,6 +50,7 @@ const prefetchMap: Record<string, () => Promise<any>> = {
   '/app/comercial': () => import('@/components/App/Comercial'),
   '/app/pre-atendimento': () => import('@/components/App/PreAtendimento'),
   '/app/campanhas': () => import('@/components/App/Campanhas'),
+  '/app/trafego-pago': () => import('@/components/App/TrafegoPago'),
   '/app/administrativo': () => import('@/components/App/Administrativo'),
   '/app/alunos': () => import('@/components/App/Alunos'),
   '/app/sucesso-aluno': () => import('@/components/App/SucessoCliente'),
@@ -73,6 +75,7 @@ const menuItems = [
 const operacional = [
   { path: '/app/pre-atendimento', label: 'Pré-Atendimento', icon: Phone },
   { path: '/app/campanhas', label: 'Campanhas', icon: Megaphone },
+  { path: '/app/trafego-pago', label: 'Tráfego Pago', icon: MousePointerClick },
   { path: '/app/comercial', label: 'Comercial', icon: Briefcase },
   { path: '/app/administrativo', label: 'Administrativo', icon: ClipboardList },
   { path: '/app/alunos', label: 'Alunos', icon: Users },
