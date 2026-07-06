@@ -41,6 +41,8 @@ const SLUGS_TEXTO = ['boas_vindas_equipe', 'pesquisa_1a_aula_direta', 'pesquisa_
 export function useAutomacoesSucessoAluno() {
   const [textos, setTextos] = useState<Record<string, string>>({});
   const [loadingTexto, setLoadingTexto] = useState(false);
+  const [autoPesquisaAtivo, setAutoPesquisaAtivo] = useState(false);
+  const [loadingConfig, setLoadingConfig] = useState(false);
 
   const carregarTextos = useCallback(async () => {
     setLoadingTexto(true);
@@ -61,7 +63,38 @@ export function useAutomacoesSucessoAluno() {
     }
   }, []);
 
-  useEffect(() => { carregarTextos(); }, [carregarTextos]);
+  const carregarConfig = useCallback(async () => {
+    setLoadingConfig(true);
+    try {
+      const { data, error } = await supabase
+        .from('automacoes_config').select('ativo').eq('slug', 'auto_pesquisa_1a_aula').maybeSingle();
+      if (error) throw error;
+      setAutoPesquisaAtivo(data?.ativo === true);
+    } catch (err) {
+      console.error('[useAutomacoesSucessoAluno] carregarConfig:', err);
+    } finally {
+      setLoadingConfig(false);
+    }
+  }, []);
+
+  const toggleAutoPesquisa = useCallback(async (novo: boolean) => {
+    const anterior = autoPesquisaAtivo;
+    setAutoPesquisaAtivo(novo); // otimista
+    try {
+      const { error } = await supabase
+        .from('automacoes_config')
+        .update({ ativo: novo, updated_at: new Date().toISOString() })
+        .eq('slug', 'auto_pesquisa_1a_aula');
+      if (error) throw error;
+      toast.success(novo ? 'Auto-disparo ligado' : 'Auto-disparo desligado');
+    } catch (err) {
+      console.error('[useAutomacoesSucessoAluno] toggleAutoPesquisa:', err);
+      setAutoPesquisaAtivo(anterior); // rollback
+      toast.error('Erro ao alterar o auto-disparo');
+    }
+  }, [autoPesquisaAtivo]);
+
+  useEffect(() => { carregarTextos(); carregarConfig(); }, [carregarTextos, carregarConfig]);
 
   const salvarTexto = useCallback(async (slug: string, novo: string): Promise<boolean> => {
     try {
@@ -106,6 +139,9 @@ export function useAutomacoesSucessoAluno() {
     carregarTextos,
     salvarTexto,
     dispararTeste,
+    autoPesquisaAtivo,
+    loadingConfig,
+    toggleAutoPesquisa,
     // Aliases de compatibilidade (carrossel).
     textoCarrossel: textos['boas_vindas_equipe'] || '',
     salvarTextoCarrossel: (novo: string) => salvarTexto('boas_vindas_equipe', novo),
