@@ -13,13 +13,14 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 // ===== MODO TESTE =====
 // Enquanto MODO_TESTE = true:
 //  - a boas-vindas NAO vai para o telefone real do responsavel, vai para NUMERO_TESTE;
-//  - a notificacao da Fabi tambem e redirecionada para NUMERO_TESTE (a Fabi nao recebe nada).
+//  - a notificacao da equipe tambem e redirecionada para NUMERO_TESTE.
 // Trocar para false quando for liberar em producao.
 const MODO_TESTE = false;
 const NUMERO_TESTE = '5521966583325'; // mesmo chatId de teste do workflow n8n
-// Equipe que recebe a notificacao de nova matricula (em modo teste, todos viram NUMERO_TESTE)
+// Equipe que recebe a notificacao de nova matricula (em modo teste, todos viram NUMERO_TESTE).
+// A Fabi saiu daqui (2026-07-06): ela agora recebe o resumo diario de 1a aula pela
+// edge notificar-primeira-aula-fabi (cron), a pedido dela. Matricula fica so com a Jessyca.
 const NOTIFICAR_EQUIPE = [
-  { nome: 'Fabi', numero: '5521994696489' },
   { nome: 'Jessyca', numero: '5521984695110' },
 ];
 
@@ -269,7 +270,7 @@ serve(async (req) => {
       }
     }
 
-    // Notifica a equipe (Fabi + Jessyca). Em modo teste, todos viram NUMERO_TESTE.
+    // Notifica a equipe (Jessyca). Em modo teste, todos viram NUMERO_TESTE.
     const cabecalhoNotif = MODO_TESTE
       ? '🧪 *TESTE — NÃO É UMA MATRÍCULA REAL* 🧪\n_Preview da notificação que a equipe receberia em produção._\n\n'
       : '';
