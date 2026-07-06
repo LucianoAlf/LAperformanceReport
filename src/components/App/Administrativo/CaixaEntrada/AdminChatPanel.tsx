@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone, Mic, X, Play, Pause, Settings, Trash2, Pencil, Zap, MapPin } from 'lucide-react';
+import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone, Mic, X, Play, Pause, Settings, Trash2, Pencil, Zap, MapPin, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -243,10 +243,13 @@ function MidiaRender({ msg, isSaida }: { msg: AdminMensagem; isSaida: boolean })
   return null;
 }
 
-function ChatBubble({ msg, onApagar, onEditar }: { msg: AdminMensagem; onApagar?: (id: string) => void; onEditar?: (msg: AdminMensagem) => void }) {
+function ChatBubble({ msg, onApagar, onEditar, nomeAgente }: { msg: AdminMensagem; onApagar?: (id: string) => void; onEditar?: (msg: AdminMensagem) => void; nomeAgente?: string }) {
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
+  // Fala do agente/bot: enviada pelo nosso lado (remetente='sistema'), mas NÃO é aviso de sistema.
+  // O aviso de sistema legítimo usa tipo='sistema' e segue como pílula centralizada.
+  const isAgente = msg.remetente === 'sistema' && msg.tipo !== 'sistema';
   const isSaida = msg.direcao === 'saida';
-  const isSistema = msg.remetente === 'sistema';
+  const isSistema = msg.tipo === 'sistema';
   const podeEditar = isSaida && msg.tipo === 'texto' && !!msg.whatsapp_message_id;
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
@@ -341,21 +344,27 @@ function ChatBubble({ msg, onApagar, onEditar }: { msg: AdminMensagem; onApagar?
     <div className={cn('flex mb-2', isSaida ? 'justify-end' : 'justify-start')} onContextMenu={handleContextMenu}>
       <div className={cn(
         'max-w-[70%] rounded-2xl px-3.5 py-2',
-        isSaida
+        isAgente
+          ? 'bg-cyan-600/25 border border-cyan-400/25 text-slate-100 rounded-br-md'
+          : isSaida
           ? 'bg-violet-600/80 text-white rounded-br-md'
           : 'bg-slate-700/70 text-slate-200 rounded-bl-md'
       )}>
         {/* Nome do remetente */}
-        {!isSaida && (
+        {isAgente ? (
+          <p className="text-[10px] font-semibold text-cyan-300 mb-0.5 flex items-center gap-1">
+            <Bot className="w-3 h-3" />
+            {nomeAgente || 'Assistente'}
+          </p>
+        ) : !isSaida ? (
           <p className="text-[10px] font-semibold text-slate-400 mb-0.5">
             {msg.remetente_nome || 'Aluno'}
           </p>
-        )}
-        {isSaida && msg.remetente_nome && (
+        ) : msg.remetente_nome ? (
           <p className="text-[10px] font-semibold text-violet-200/70 mb-0.5">
             {msg.remetente_nome}
           </p>
-        )}
+        ) : null}
 
         {/* Mídia */}
         <MidiaRender msg={msg} isSaida={isSaida} />
@@ -387,11 +396,11 @@ function ChatBubble({ msg, onApagar, onEditar }: { msg: AdminMensagem; onApagar?
         {/* Hora + Status */}
         <div className={cn('flex items-center gap-1 mt-1', isSaida ? 'justify-end' : 'justify-start')}>
           {msg.editada && (
-            <span className={cn('text-[10px] italic', isSaida ? 'text-violet-200/40' : 'text-slate-600')}>
+            <span className={cn('text-[10px] italic', isAgente ? 'text-cyan-200/50' : isSaida ? 'text-violet-200/40' : 'text-slate-600')}>
               editada
             </span>
           )}
-          <span className={cn('text-[10px]', isSaida ? 'text-violet-200/50' : 'text-slate-500')}>
+          <span className={cn('text-[10px]', isAgente ? 'text-cyan-200/60' : isSaida ? 'text-violet-200/50' : 'text-slate-500')}>
             {formatarHoraMsg(msg.created_at)}
           </span>
           {isSaida && msg.status_entrega === 'erro' ? (
@@ -458,6 +467,10 @@ export function AdminChatPanel({
   const unidadeCartoes = contexto === 'sucesso_aluno'
     ? (aluno?.unidade_id || conversa.unidade_id || null)
     : null;
+  // Nome do agente/bot vem da CAIXA da conversa (ex.: "Lia - Sucesso do Aluno" → "Lia").
+  // NÃO usar remetente_nome: o webhook grava "Sol" fixo/legado (caixa renomeada de Sol→Lia).
+  const nomeAgente = conversa.caixa?.nome?.split(/[-–—]/)[0].trim() || 'Assistente';
+
   const { cartoes: vcardsRaw } = useVcardsUnidade(unidadeCartoes || 'todos');
   const vcards: VcardChip[] = (contexto === 'sucesso_aluno' && unidadeCartoes)
     ? vcardsRaw.map(c => ({ id: c.id, titulo: c.titulo, full_name: c.full_name, qtdTelefones: c.telefones.length }))
@@ -875,7 +888,7 @@ export function AdminChatPanel({
             <p className="text-xs text-slate-600 mt-1">Envie a primeira mensagem para {aluno?.nome?.split(' ')[0] || conversa.nome_externo?.split(' ')[0] || 'este contato'}</p>
           </div>
         ) : (
-          mensagens.map(msg => <ChatBubble key={msg.id} msg={msg} onApagar={onApagarMensagem} onEditar={handleIniciarEdicao} />)
+          mensagens.map(msg => <ChatBubble key={msg.id} msg={msg} onApagar={onApagarMensagem} onEditar={handleIniciarEdicao} nomeAgente={nomeAgente} />)
         )}
 
         <div ref={messagesEndRef} />
