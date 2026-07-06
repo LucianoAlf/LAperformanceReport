@@ -1,7 +1,17 @@
 /// <reference lib="deno.ns" />
 
-// Edge Function: processar-matricula-emusys v27
+// Edge Function: processar-matricula-emusys v28
 // Processa webhooks de matrícula do Emusys: nova, renovação, trancamento, evasão
+//
+// MUDANÇAS v28 (2026-07-06):
+// - handleMatriculaNova passa a capturar tipo_pagamento do payload (mapTipoPagamentoToFormaId,
+//   já existente e usado só por handleRenovacao) e grava em alunos.forma_pagamento_id nos 3
+//   caminhos de escrita (segundo curso, update de matrícula existente, aluno novo). Antes a
+//   matrícula nova ignorava o campo mesmo quando o Emusys mandava preenchido (~36% dos
+//   webhooks reais têm tipo_pagamento, ex: "Pgto Recorrente", "Pix", "Cartão de Crédito").
+//   Reduz os casos de "forma de pagamento não informada" no relatório diário sem depender do
+//   sync noturno (que só cobre quando a API GET /matriculas já tem contrato_atual.forma_pagamento
+//   populado, campo que costuma demorar mais a aparecer que o do webhook).
 //
 // MUDANÇAS v27 (2026-07-01):
 // - Para de gravar na tabela legada `renovacoes` (handleRenovacao). movimentacoes_admin passa
@@ -99,7 +109,7 @@ import {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const VERSAO = 'v25';
+const VERSAO = 'v28';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -766,6 +776,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
           responsavel_telefone: p.telefoneResponsavel,
           foto_url: p.fotoAlunoUrl,
           instagram: p.instagram,
+          forma_pagamento_id: mapTipoPagamentoToFormaId(p.tipoPagamento),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }).select('id').single();
@@ -793,6 +804,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
           professor_atual_id: professorId || undefined,
           foto_url: p.fotoAlunoUrl || undefined,
           instagram: p.instagram || undefined,
+          forma_pagamento_id: mapTipoPagamentoToFormaId(p.tipoPagamento) || undefined,
           emusys_matricula_id: p.matriculaIdEmusys || undefined,
           emusys_lead_id: p.emusysLeadId != null ? String(p.emusysLeadId) : undefined,
           responsavel_nome: p.nomeResponsavel || undefined,
@@ -830,6 +842,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
         responsavel_telefone: p.telefoneResponsavel,
         foto_url: p.fotoAlunoUrl,
         instagram: p.instagram,
+        forma_pagamento_id: mapTipoPagamentoToFormaId(p.tipoPagamento),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }).select('id').single();
@@ -868,6 +881,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
       professor_id: professorId,
       curso_id: cursoId,
       sem_professor: !professorId,
+      forma_pagamento_id: mapTipoPagamentoToFormaId(p.tipoPagamento),
     };
 
     // ===== invariantes + gravarLog =====
