@@ -229,6 +229,11 @@ export function ModalGerenciarTemplates({ aberto, onFechar, contexto = 'pre_aten
 
   const templateExcluindo = templates.find(t => t.id === excluirId);
 
+  // Automações (tipo 'automacao_*') NÃO são mensagens prontas — elas se gerenciam na aba
+  // "Mensagens Automáticas". Aqui listamos só as mensagens prontas (texto manual no chat),
+  // para não haver dois lugares editando a mesma coisa.
+  const templatesVisiveis = templates.filter(t => !(t.tipo && t.tipo.startsWith('automacao')));
+
   return (
     <>
       <Dialog open={aberto} onOpenChange={(open) => { if (!open) { onFechar(); setTela('lista'); } }}>
@@ -260,12 +265,12 @@ export function ModalGerenciarTemplates({ aberto, onFechar, contexto = 'pre_aten
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="w-5 h-5 text-violet-400 animate-spin" />
                 </div>
-              ) : templates.length === 0 ? (
+              ) : templatesVisiveis.length === 0 ? (
                 <div className="text-center py-8 text-slate-500">
                   Nenhum template cadastrado
                 </div>
               ) : (
-                templates.map(t => {
+                templatesVisiveis.map(t => {
                   const automacao = !!t.tipo && t.tipo.startsWith('automacao');
                   const emoji = EMOJIS_TIPO[t.slug] || EMOJIS_TIPO[t.tipo] || '📝';
                   const cor = automacao ? 'text-amber-400' : (CORES_TIPO[t.slug] || CORES_TIPO[t.tipo] || 'text-slate-400');
