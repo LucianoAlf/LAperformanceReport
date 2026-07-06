@@ -288,6 +288,11 @@ function ChatBubble({ msg, onApagar, onEditar, nomeAgente }: { msg: AdminMensage
     try { interativoData = JSON.parse(msg.conteudo); } catch { /* fallback texto */ }
   }
 
+  let carrosselData: { texto: string; cards: { nome: string; cargo: string; foto: string | null }[]; botao?: { texto: string; url: string } } | null = null;
+  if (msg.tipo === 'carrossel' && msg.conteudo) {
+    try { carrosselData = JSON.parse(msg.conteudo); } catch { /* fallback texto */ }
+  }
+
   if (isSistema) {
     return (
       <div className="flex justify-center my-2">
@@ -370,7 +375,38 @@ function ChatBubble({ msg, onApagar, onEditar, nomeAgente }: { msg: AdminMensage
         <MidiaRender msg={msg} isSaida={isSaida} />
 
         {/* Conteúdo */}
-        {interativoData ? (
+        {carrosselData ? (
+          <div className="flex flex-col gap-2 min-w-[240px]">
+            <p className="text-sm whitespace-pre-wrap break-words">{formatarWhatsApp(carrosselData.texto)}</p>
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-0.5 px-0.5">
+              {(carrosselData.cards || []).map((c, i) => (
+                <div key={i} className="flex-shrink-0 w-24 bg-slate-900/50 border border-slate-600/40 rounded-xl overflow-hidden">
+                  {c.foto ? (
+                    <img src={c.foto} alt={c.nome} className="w-24 h-24 object-cover" loading="lazy" />
+                  ) : (
+                    <div className="w-24 h-24 bg-slate-700/60 flex items-center justify-center">
+                      <User className="w-7 h-7 text-slate-400" />
+                    </div>
+                  )}
+                  <div className="p-1.5">
+                    <p className="text-[11px] font-semibold text-slate-100 truncate">{c.nome}</p>
+                    <p className="text-[10px] text-slate-400 truncate">{c.cargo}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {carrosselData.botao?.url && (
+              <a
+                href={carrosselData.botao.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-center text-xs font-medium text-violet-200 bg-white/10 border border-white/20 rounded-lg py-1.5 hover:bg-white/20 transition"
+              >
+                {carrosselData.botao.texto || 'Abrir'}
+              </a>
+            )}
+          </div>
+        ) : interativoData ? (
           <div className="flex flex-col gap-2">
             <p className="text-sm whitespace-pre-wrap break-words">{formatarWhatsApp(interativoData.texto)}</p>
             <div className="flex flex-wrap gap-1.5 mt-0.5">

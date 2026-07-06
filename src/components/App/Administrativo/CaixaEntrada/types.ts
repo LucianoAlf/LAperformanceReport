@@ -42,7 +42,7 @@ export interface AdminConversa {
 }
 
 // Mensagem administrativa
-export type TipoMensagemAdmin = 'texto' | 'imagem' | 'audio' | 'video' | 'documento' | 'sticker' | 'sistema' | 'interativo' | 'contato' | 'localizacao';
+export type TipoMensagemAdmin = 'texto' | 'imagem' | 'audio' | 'video' | 'documento' | 'sticker' | 'sistema' | 'interativo' | 'contato' | 'localizacao' | 'carrossel';
 export type DirecaoMensagem = 'entrada' | 'saida';
 export type RemetenteAdmin = 'aluno' | 'admin' | 'sistema' | 'externo';
 export type StatusEntrega = 'enviando' | 'enviada' | 'entregue' | 'lida' | 'erro';
