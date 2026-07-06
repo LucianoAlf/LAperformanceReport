@@ -811,10 +811,9 @@ serve(async (req: Request) => {
             });
           }
 
-          if (aula.cancelada) continue;
-          aulasProcessadas++;
-
-          // 2a. UPSERT dados da aula na aulas_emusys
+          // 2a. UPSERT dados da aula na aulas_emusys (sempre, inclusive cancelada —
+          // se o Emusys marcou cancelada, nosso espelho tem que refletir isso, senão
+          // fica desalinhado: a aula simplesmente não existiria aqui).
           const { data: aulaDB, error: aulaError } = await supabase
             .from('aulas_emusys')
             .upsert(
@@ -833,7 +832,7 @@ serve(async (req: Request) => {
                 sala_nome: aula.sala_nome,
                 professor_nome: profNome,
                 professor_id: professorId,
-                cancelada: false,
+                cancelada: aula.cancelada,
                 nr_da_aula: aula.nr_da_aula,
                 qtd_alunos: aula.alunos?.length || 0,
                 anotacoes: aula.anotacoes || null,
@@ -852,6 +851,31 @@ serve(async (req: Request) => {
 
           // Resolver curso_id local da aula (para match composto)
           const cursoIdAula = cursoMapa.get(normalizarCurso(aula.curso_nome || '')) ?? null;
+
+          // Aula cancelada: só espelha em emusys_experimentais_raw (auditoria/conciliação
+          // já sabe lidar com situacao_operacional='cancelada'), sem processar presença —
+          // não houve aula de verdade, não há frequência real pra sincronizar.
+          if (aula.cancelada) {
+            if (aula.categoria === 'experimental') {
+              for (const aluno of aula.alunos || []) {
+                if (!aluno.nome_aluno?.trim()) continue;
+                await upsertExperimentalRaw(supabase, {
+                  aula,
+                  aulaLocalId,
+                  unidadeId: unidade.id,
+                  dataAula: dataAlvo,
+                  professorId,
+                  professorNome: profNome,
+                  cursoId: cursoIdAula,
+                  aluno,
+                  alunoId: null,
+                });
+              }
+            }
+            continue;
+          }
+
+          aulasProcessadas++;
 
           // 2b. Processar presença de cada aluno nesta aula
           for (const aluno of aula.alunos || []) {
