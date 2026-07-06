@@ -27,6 +27,40 @@ function montarTexto(nome, curso) {
   );
 }
 
+function normalizarNome(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// Substitui placeholders {nome} (aluno), {responsavel}, {curso}. Se curso vazio, remove os
+// wrappers comuns (" de {curso}", " ({curso})") para não deixar texto órfão.
+function aplicarPlaceholders(template, { aluno, responsavel, curso }) {
+  const pAluno = primeiroNome(aluno);
+  const pResp = primeiroNome(responsavel) || pAluno;
+  let txt = String(template || '').replace(/\{nome\}/g, pAluno).replace(/\{responsavel\}/g, pResp);
+  if (curso) {
+    txt = txt.replace(/\{curso\}/g, curso);
+  } else {
+    txt = txt.replace(/ de \{curso\}/g, '').replace(/ ?\(\{curso\}\)/g, '').replace(/\{curso\}/g, '');
+  }
+  return txt;
+}
+
+// Escolhe a variante do texto: responsável distinto do aluno => fala do filho (3ª pessoa);
+// mesma pessoa (ou sem responsável) => direto (2ª pessoa). Fallback ao texto do código.
+function montarTextoPesquisa(templates, { nome, curso, responsavelNome }) {
+  const temRespDistinto = !!responsavelNome
+    && normalizarNome(responsavelNome) !== ''
+    && normalizarNome(responsavelNome) !== normalizarNome(nome);
+  const slug = temRespDistinto ? 'pesquisa_1a_aula_responsavel' : 'pesquisa_1a_aula_direta';
+  const template = templates[slug];
+  if (!template) return montarTexto(nome, curso);
+  return aplicarPlaceholders(template, {
+    aluno: nome,
+    responsavel: temRespDistinto ? responsavelNome : nome,
+    curso,
+  });
+}
+
 // Formato UAZAPI /send/menu com type=list: choices = ["[Seção]", "label|id", ...]
 const CHOICES = [
   '[Sua avaliação]',
@@ -178,7 +212,9 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const { alunos } = await req.json();
+    const body = await req.json();
+    const alunos = body?.alunos;
+    const dryRun = body?.dry_run === true;
     if (!Array.isArray(alunos) || alunos.length === 0) {
       return new Response(JSON.stringify({ error: 'alunos obrigatorio e nao pode ser vazio' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -187,6 +223,44 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const resultados = [];
+
+    // Textos editáveis (aluno x responsável). Se ausentes, cai no texto do código.
+    const { data: tplRows } = await supabase
+      .from('crm_templates_whatsapp')
+      .select('slug, conteudo')
+      .in('slug', ['pesquisa_1a_aula_direta', 'pesquisa_1a_aula_responsavel']);
+    const templates = {};
+    for (const t of tplRows || []) templates[t.slug] = t.conteudo;
+
+    // Nome do responsável por aluno (decide se fala com o aluno ou com o responsável).
+    const idsAlunos = alunos.map((a) => a.aluno_id).filter(Boolean);
+    const respPorAluno = {};
+    if (idsAlunos.length) {
+      const { data: rowsAlunos } = await supabase
+        .from('alunos')
+        .select('id, responsavel_nome')
+        .in('id', idsAlunos);
+      for (const r of rowsAlunos || []) respPorAluno[r.id] = r.responsavel_nome || null;
+    }
+
+    // Dry-run: só monta os textos (não envia, não grava). Para validar as variantes.
+    if (dryRun) {
+      const previews = alunos.map((a) => {
+        const respNome = a.aluno_id ? respPorAluno[a.aluno_id] : null;
+        const variante = (respNome && normalizarNome(respNome) !== '' && normalizarNome(respNome) !== normalizarNome(a.nome))
+          ? 'responsavel' : 'direta';
+        return {
+          aluno_id: a.aluno_id,
+          nome: a.nome,
+          responsavel: respNome,
+          variante,
+          texto: montarTextoPesquisa(templates, { nome: a.nome, curso: a.curso, responsavelNome: respNome }),
+        };
+      });
+      return new Response(JSON.stringify({ dry_run: true, previews }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Agrupar por unidade para minimizar lookups de caixa
     const porUnidade = {};
@@ -235,7 +309,11 @@ serve(async (req) => {
         if (i > 0) await new Promise(r => setTimeout(r, 10000));
         const aluno = grupo[i];
         const { aluno_id, unidade_id, whatsapp_jid, data_matricula, nome, curso } = aluno;
-        const textoMsg = montarTexto(nome, curso);
+        const textoMsg = montarTextoPesquisa(templates, {
+          nome,
+          curso,
+          responsavelNome: aluno_id ? respPorAluno[aluno_id] : null,
+        });
 
         if (!whatsapp_jid) {
           resultados.push({ aluno_id, ok: false, erro: 'sem_contato' });

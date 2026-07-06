@@ -29,45 +29,51 @@ export const AUTOMACOES_SUCESSO_ALUNO: AutomacaoItem[] = [
   {
     slug: 'pesquisa_1a_aula',
     nome: 'Pesquisa pós-1ª aula',
-    descricao: 'Pesquisa de satisfação com botões após a primeira aula. Texto no código.',
+    descricao: 'Pesquisa de satisfação (botões de estrela) após a primeira aula. Dois textos: quando falamos com o próprio aluno e quando falamos com o responsável.',
     gatilho: 'manual',
-    editavel: false,
+    editavel: true,
   },
 ];
 
+// Slugs dos textos editáveis em crm_templates_whatsapp.
+const SLUGS_TEXTO = ['boas_vindas_equipe', 'pesquisa_1a_aula_direta', 'pesquisa_1a_aula_responsavel'];
+
 export function useAutomacoesSucessoAluno() {
-  const [textoCarrossel, setTextoCarrossel] = useState('');
+  const [textos, setTextos] = useState<Record<string, string>>({});
   const [loadingTexto, setLoadingTexto] = useState(false);
 
-  const carregarTexto = useCallback(async () => {
+  const carregarTextos = useCallback(async () => {
     setLoadingTexto(true);
     try {
       const { data, error } = await supabase
         .from('crm_templates_whatsapp')
-        .select('conteudo').eq('slug', 'boas_vindas_equipe').maybeSingle();
+        .select('slug, conteudo')
+        .in('slug', SLUGS_TEXTO);
       if (error) throw error;
-      setTextoCarrossel(data?.conteudo || '');
+      const map: Record<string, string> = {};
+      for (const t of data || []) map[t.slug] = t.conteudo || '';
+      setTextos(map);
     } catch (err) {
-      console.error('[useAutomacoesSucessoAluno] carregarTexto:', err);
-      toast.error('Erro ao carregar o texto da automação');
+      console.error('[useAutomacoesSucessoAluno] carregarTextos:', err);
+      toast.error('Erro ao carregar os textos das automações');
     } finally {
       setLoadingTexto(false);
     }
   }, []);
 
-  useEffect(() => { carregarTexto(); }, [carregarTexto]);
+  useEffect(() => { carregarTextos(); }, [carregarTextos]);
 
-  const salvarTextoCarrossel = useCallback(async (novo: string): Promise<boolean> => {
+  const salvarTexto = useCallback(async (slug: string, novo: string): Promise<boolean> => {
     try {
       const { error } = await supabase
         .from('crm_templates_whatsapp')
-        .update({ conteudo: novo }).eq('slug', 'boas_vindas_equipe');
+        .update({ conteudo: novo }).eq('slug', slug);
       if (error) throw error;
-      setTextoCarrossel(novo);
+      setTextos((prev) => ({ ...prev, [slug]: novo }));
       toast.success('Texto salvo');
       return true;
     } catch (err) {
-      console.error('[useAutomacoesSucessoAluno] salvar:', err);
+      console.error('[useAutomacoesSucessoAluno] salvarTexto:', err);
       toast.error('Erro ao salvar o texto');
       return false;
     }
@@ -93,5 +99,15 @@ export function useAutomacoesSucessoAluno() {
     }
   }, []);
 
-  return { automacoes: AUTOMACOES_SUCESSO_ALUNO, textoCarrossel, loadingTexto, carregarTexto, salvarTextoCarrossel, dispararTeste };
+  return {
+    automacoes: AUTOMACOES_SUCESSO_ALUNO,
+    textos,
+    loadingTexto,
+    carregarTextos,
+    salvarTexto,
+    dispararTeste,
+    // Aliases de compatibilidade (carrossel).
+    textoCarrossel: textos['boas_vindas_equipe'] || '',
+    salvarTextoCarrossel: (novo: string) => salvarTexto('boas_vindas_equipe', novo),
+  };
 }

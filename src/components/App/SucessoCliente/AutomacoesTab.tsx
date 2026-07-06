@@ -11,24 +11,71 @@ const UNIDADES = [
   { id: '368d47f5-2d88-4475-bc14-ba084a9a348e', nome: 'Barra' },
 ];
 
-export function AutomacoesTab({ unidadeAtual }: { unidadeAtual: UnidadeId }) {
-  const { automacoes, textoCarrossel, loadingTexto, salvarTextoCarrossel, dispararTeste } = useAutomacoesSucessoAluno();
+// Editor reutilizável de um texto de template (visualiza + edita inline).
+function EditorTexto({
+  valor, loading, placeholders, onSalvar, rotulo,
+}: {
+  valor: string;
+  loading: boolean;
+  placeholders: string;
+  onSalvar: (novo: string) => Promise<boolean>;
+  rotulo?: string;
+}) {
   const [editando, setEditando] = useState(false);
   const [rascunho, setRascunho] = useState('');
   const [salvando, setSalvando] = useState(false);
+
+  const abrir = () => { setRascunho(valor); setEditando(true); };
+  const salvar = async () => {
+    setSalvando(true);
+    const ok = await onSalvar(rascunho);
+    setSalvando(false);
+    if (ok) setEditando(false);
+  };
+
+  return (
+    <div className="space-y-2">
+      {rotulo && <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">{rotulo}</p>}
+      {!editando ? (
+        <>
+          <pre className="text-xs text-slate-300 whitespace-pre-wrap font-sans bg-slate-900/50 rounded-lg p-3 max-h-48 overflow-auto">
+            {loading ? 'Carregando…' : (valor || '(vazio)')}
+          </pre>
+          <Button variant="outline" size="sm" className="border-slate-700" onClick={abrir}>
+            <Pencil className="w-4 h-4 mr-2" /> Editar texto
+          </Button>
+        </>
+      ) : (
+        <>
+          <textarea
+            value={rascunho}
+            onChange={(e) => setRascunho(e.target.value)}
+            rows={12}
+            className="w-full bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-200 p-3 font-mono"
+          />
+          <p className="text-[11px] text-slate-500">Variáveis: {placeholders}</p>
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={salvar} disabled={salvando} className="bg-emerald-600 hover:bg-emerald-500">
+              {salvando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Salvar
+            </Button>
+            <Button size="sm" variant="outline" className="border-slate-700" onClick={() => setEditando(false)}>
+              <X className="w-4 h-4 mr-2" /> Cancelar
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export function AutomacoesTab({ unidadeAtual }: { unidadeAtual: UnidadeId }) {
+  const { automacoes, textos, loadingTexto, salvarTexto, salvarTextoCarrossel, textoCarrossel, dispararTeste } = useAutomacoesSucessoAluno();
 
   const unidadePadrao = unidadeAtual !== 'todos' ? String(unidadeAtual) : UNIDADES[1].id;
   const [unidadeDisparo, setUnidadeDisparo] = useState(unidadePadrao);
   const [numero, setNumero] = useState('');
   const [disparando, setDisparando] = useState(false);
 
-  const abrirEdicao = () => { setRascunho(textoCarrossel); setEditando(true); };
-  const salvar = async () => {
-    setSalvando(true);
-    const ok = await salvarTextoCarrossel(rascunho);
-    setSalvando(false);
-    if (ok) setEditando(false);
-  };
   const disparar = async () => {
     if (!numero.trim()) return;
     setDisparando(true);
@@ -66,55 +113,54 @@ export function AutomacoesTab({ unidadeAtual }: { unidadeAtual: UnidadeId }) {
             </div>
           </div>
 
-          {a.editavel && a.slug === 'boas_vindas_equipe' && (
+          {/* Carrossel de boas-vindas: editor + disparo de teste */}
+          {a.slug === 'boas_vindas_equipe' && (
             <div className="mt-4 border-t border-slate-700/50 pt-4 space-y-3">
-              {!editando ? (
-                <>
-                  <pre className="text-xs text-slate-300 whitespace-pre-wrap font-sans bg-slate-900/50 rounded-lg p-3 max-h-48 overflow-auto">
-                    {loadingTexto ? 'Carregando…' : textoCarrossel}
-                  </pre>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="outline" size="sm" className="border-slate-700" onClick={abrirEdicao}>
-                      <Pencil className="w-4 h-4 mr-2" /> Editar texto
-                    </Button>
-                    <div className="flex items-center gap-2 ml-auto">
-                      <select
-                        value={unidadeDisparo}
-                        onChange={(e) => setUnidadeDisparo(e.target.value)}
-                        className="bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-200 px-2 py-2"
-                      >
-                        {UNIDADES.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
-                      </select>
-                      <Input placeholder="Número (DDD)" value={numero} onChange={(e) => setNumero(e.target.value)} className="w-44" />
-                      <Button size="sm" onClick={disparar} disabled={disparando || !numero.trim()}
-                        className="bg-gradient-to-r from-pink-500 to-violet-500">
-                        {disparando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-                        Disparar teste
-                      </Button>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <textarea
-                    value={rascunho}
-                    onChange={(e) => setRascunho(e.target.value)}
-                    rows={12}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-200 p-3 font-mono"
-                  />
-                  <p className="text-[11px] text-slate-500">
-                    Variáveis: {'{responsavel}'} {'{aluno}'} {'{curso}'} {'{unidade}'} {'{secretaria_whatsapp}'} {'{secretaria_fixo}'} {'{equipe}'} (lista gerada da equipe).
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" onClick={salvar} disabled={salvando} className="bg-emerald-600 hover:bg-emerald-500">
-                      {salvando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Salvar
-                    </Button>
-                    <Button size="sm" variant="outline" className="border-slate-700" onClick={() => setEditando(false)}>
-                      <X className="w-4 h-4 mr-2" /> Cancelar
-                    </Button>
-                  </div>
-                </>
-              )}
+              <EditorTexto
+                valor={textoCarrossel}
+                loading={loadingTexto}
+                placeholders="{responsavel} {aluno} {curso} {unidade} {secretaria_whatsapp} {secretaria_fixo} {equipe} (lista da equipe)"
+                onSalvar={salvarTextoCarrossel}
+              />
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="text-[11px] text-slate-500">Disparar teste:</span>
+                <select
+                  value={unidadeDisparo}
+                  onChange={(e) => setUnidadeDisparo(e.target.value)}
+                  className="bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-200 px-2 py-2"
+                >
+                  {UNIDADES.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                </select>
+                <Input placeholder="Número (DDD)" value={numero} onChange={(e) => setNumero(e.target.value)} className="w-44" />
+                <Button size="sm" onClick={disparar} disabled={disparando || !numero.trim()}
+                  className="bg-gradient-to-r from-pink-500 to-violet-500">
+                  {disparando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                  Disparar teste
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Pesquisa pós-1ª aula: 2 textos (aluno x responsável). Botões de estrela são fixos. */}
+          {a.slug === 'pesquisa_1a_aula' && (
+            <div className="mt-4 border-t border-slate-700/50 pt-4 space-y-4">
+              <p className="text-[11px] text-slate-500">
+                O sistema escolhe o texto automaticamente: se o responsável é o próprio aluno (adulto), usa o texto do aluno; se o responsável é outra pessoa, usa o do responsável. As 5 estrelas (⭐ Esperava mais … ⭐⭐⭐⭐⭐ Amei) são fixas e não editáveis.
+              </p>
+              <EditorTexto
+                rotulo="Quando falamos com o próprio aluno"
+                valor={textos['pesquisa_1a_aula_direta'] || ''}
+                loading={loadingTexto}
+                placeholders="{nome} (aluno) {curso}"
+                onSalvar={(novo) => salvarTexto('pesquisa_1a_aula_direta', novo)}
+              />
+              <EditorTexto
+                rotulo="Quando falamos com o responsável"
+                valor={textos['pesquisa_1a_aula_responsavel'] || ''}
+                loading={loadingTexto}
+                placeholders="{responsavel} {nome} (aluno) {curso}"
+                onSalvar={(novo) => salvarTexto('pesquisa_1a_aula_responsavel', novo)}
+              />
             </div>
           )}
         </div>
