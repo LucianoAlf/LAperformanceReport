@@ -107,22 +107,25 @@ serve(async (req) => {
       caixaToken = caixa.uazapi_token;
     }
 
-    // Lookup pesquisa pendente pelo remote_jid
+    // Lookup pesquisa pendente pelo remote_jid.
+    // O jid pode chegar em formatos diferentes (número puro OU número@s.whatsapp.net):
+    // normaliza para dígitos e casa contra os formatos gravados. NÃO filtra por unidade
+    // (o match por número já é específico; o filtro de unidade derrubava a resposta quando
+    // a caixa não resolvia a unidade certa — causa do bug de notas zeradas).
+    const jidDigitos = String(remoteJid).replace(/\D/g, '');
+    const jidsCandidatos = [jidDigitos, `${jidDigitos}@s.whatsapp.net`, `${jidDigitos}@c.us`];
     const limiteEnvio = new Date(Date.now() - JANELA_RESPOSTA_DIAS * 24 * 60 * 60 * 1000).toISOString();
-    let query = supabase
+    const { data: pesquisa } = await supabase
       .from('pesquisas_whatsapp')
       .select('id, aluno_id, unidade_id')
-      .eq('remote_jid', remoteJid)
+      .in('remote_jid', jidsCandidatos)
       .eq('tipo', 'pos_primeira_aula')
       .eq('enviado_ok', true)
       .is('nota', null)
       .gte('enviado_em', limiteEnvio)
       .order('created_at', { ascending: false })
-      .limit(1);
-
-    if (unidadeId) query = query.eq('unidade_id', unidadeId);
-
-    const { data: pesquisa } = await query.maybeSingle();
+      .limit(1)
+      .maybeSingle();
 
     if (!pesquisa) {
       console.log('[processar-resposta] pesquisa nao encontrada para jid:', remoteJid);
