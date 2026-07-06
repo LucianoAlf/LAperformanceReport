@@ -27,13 +27,13 @@ export function usePesquisaPrimeiraAula(unidadeAtual: UnidadeId) {
   const [enviando, setEnviando] = useState(false);
   const [resultados, setResultados] = useState<ResultadoEnvio[]>([]);
 
-  const buscarCandidatos = useCallback(async (janelaDias: number) => {
+  const buscarCandidatos = useCallback(async () => {
     setLoading(true);
     setResultados([]);
     try {
       const { data, error } = await supabase.rpc('get_candidatos_pesquisa_primeira_aula', {
         p_unidade_id: unidadeAtual === 'todos' ? null : unidadeAtual,
-        p_janela_dias: janelaDias,
+        p_apenas_ontem: true,
       });
       if (error) throw error;
       setCandidatos((data as CandidatoPesquisa[]) || []);

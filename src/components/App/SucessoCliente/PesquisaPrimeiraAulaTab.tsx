@@ -3,7 +3,6 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Send, Loader2, RefreshCw, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { usePesquisaPrimeiraAula, type CandidatoPesquisa } from './hooks/usePesquisaPrimeiraAula';
 
@@ -21,7 +20,6 @@ function formatarJid(jid: string | null): string {
 }
 
 export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
-  const [janelaDias, setJanelaDias] = useState<number>(1);
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set());
   const { candidatos, loading, enviando, resultados, buscarCandidatos, enviar } =
     usePesquisaPrimeiraAula(unidadeAtual);
@@ -32,9 +30,9 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
 
   useEffect(() => {
     if (unidadeAtual !== 'todos') {
-      buscarCandidatos(janelaDias);
+      buscarCandidatos();
     }
-  }, [janelaDias, unidadeAtual]);
+  }, [unidadeAtual]);
 
   const toggleSelecionado = (alunoId: number) => {
     setSelecionados(prev => {
@@ -55,16 +53,12 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <Select value={String(janelaDias)} onValueChange={v => setJanelaDias(Number(v))}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1">Hoje</SelectItem>
-              <SelectItem value="3">Últimos 3 dias</SelectItem>
-              <SelectItem value="7">Últimos 7 dias</SelectItem>
-            </SelectContent>
-          </Select>
+          <span className="text-sm font-medium text-white">
+            1ª aula de ontem{' '}
+            <span className="text-slate-400 font-normal">
+              ({format(new Date(Date.now() - 86400000), 'dd/MM', { locale: ptBR })})
+            </span>
+          </span>
           <span className="text-sm text-slate-400">
             {loading
               ? 'Buscando...'
@@ -73,7 +67,7 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => buscarCandidatos(janelaDias)}
+            onClick={() => buscarCandidatos()}
             disabled={loading}
             className="text-slate-400"
           >
@@ -132,7 +126,7 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
               ) : candidatos.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-10 text-center text-slate-500">
-                    Nenhum calouro com primeira aula nos últimos {janelaDias} dias pendente de pesquisa
+                    Nenhum calouro fez a primeira aula ontem (pendente de pesquisa)
                   </td>
                 </tr>
               ) : (
