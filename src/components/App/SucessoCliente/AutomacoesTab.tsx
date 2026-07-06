@@ -71,7 +71,6 @@ function EditorTexto({
 export function AutomacoesTab({ unidadeAtual }: { unidadeAtual: UnidadeId }) {
   const {
     automacoes, textos, loadingTexto, salvarTexto, salvarTextoCarrossel, textoCarrossel, dispararTeste,
-    autoPesquisaAtivo, loadingConfig, toggleAutoPesquisa,
   } = useAutomacoesSucessoAluno();
 
   const unidadePadrao = unidadeAtual !== 'todos' ? String(unidadeAtual) : UNIDADES[1].id;
@@ -148,31 +147,8 @@ export function AutomacoesTab({ unidadeAtual }: { unidadeAtual: UnidadeId }) {
           {a.slug === 'pesquisa_1a_aula' && (
             <div className="mt-4 border-t border-slate-700/50 pt-4 space-y-4">
               <p className="text-[11px] text-slate-500">
-                O sistema escolhe o texto automaticamente: se o responsável é o próprio aluno (adulto), usa o texto do aluno; se o responsável é outra pessoa, usa o do responsável. As 5 estrelas (⭐ Esperava mais … ⭐⭐⭐⭐⭐ Amei) são fixas e não editáveis.
+                O sistema escolhe o texto automaticamente: se o responsável é o próprio aluno (adulto), usa o texto do aluno; se o responsável é outra pessoa, usa o do responsável. As 5 estrelas (⭐ Esperava mais … ⭐⭐⭐⭐⭐ Amei) são fixas e não editáveis. O liga/desliga do auto-disparo fica na aba <span className="text-slate-300 font-medium">Pesquisas → Pós-1ª Aula</span>.
               </p>
-              <div className="flex items-center justify-between rounded-xl border border-slate-700/50 bg-slate-900/40 px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium text-white">Auto-disparo diário (11h)</p>
-                  <p className="text-xs text-slate-400">
-                    Dispara sozinho a pesquisa de quem fez a 1ª aula ontem. Teto de 15/dia — acima disso,
-                    a Fabi completa o resto aqui na aba Pós-1ª Aula.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={autoPesquisaAtivo}
-                  disabled={loadingConfig}
-                  onClick={() => toggleAutoPesquisa(!autoPesquisaAtivo)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-                    autoPesquisaAtivo ? 'bg-violet-500' : 'bg-slate-600'
-                  } disabled:opacity-50`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    autoPesquisaAtivo ? 'translate-x-6' : 'translate-x-1'
-                  }`} />
-                </button>
-              </div>
               <EditorTexto
                 rotulo="Quando falamos com o próprio aluno"
                 valor={textos['pesquisa_1a_aula_direta'] || ''}

@@ -21,8 +21,10 @@ function formatarJid(jid: string | null): string {
 
 export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set());
-  const { candidatos, loading, enviando, resultados, buscarCandidatos, enviar } =
-    usePesquisaPrimeiraAula(unidadeAtual);
+  const {
+    candidatos, loading, enviando, resultados, buscarCandidatos, enviar,
+    autoPesquisaAtivo, loadingConfig, toggleAutoPesquisa,
+  } = usePesquisaPrimeiraAula(unidadeAtual);
 
   useEffect(() => {
     setSelecionados(new Set(candidatos.filter(c => c.whatsapp_jid).map(c => c.aluno_id)));
@@ -74,18 +76,42 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
-        <Button
-          onClick={() => enviar(selecionadosList)}
-          disabled={enviando || selecionadosList.length === 0}
-          className="bg-violet-500 hover:bg-violet-600 text-white"
-        >
-          {enviando ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Send className="w-4 h-4 mr-2" />
-          )}
-          Enviar pesquisa ({selecionadosList.length})
-        </Button>
+        <div className="flex items-center gap-4 flex-wrap">
+          {/* Auto-disparo diário (11h): dispara sozinho a pesquisa de quem fez a 1ª aula ontem.
+              Governa o robô desta mesma lista, por isso o liga/desliga vive aqui. */}
+          <div
+            className="flex items-center gap-2"
+            title="Dispara sozinho, às 11h, a pesquisa de quem fez a 1ª aula ontem. Teto de 15/dia — o restante fica aqui para você enviar."
+          >
+            <span className="text-sm text-slate-300">Auto-disparo diário (11h)</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoPesquisaAtivo}
+              disabled={loadingConfig}
+              onClick={() => toggleAutoPesquisa(!autoPesquisaAtivo)}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                autoPesquisaAtivo ? 'bg-violet-500' : 'bg-slate-600'
+              } disabled:opacity-50`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                autoPesquisaAtivo ? 'translate-x-6' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
+          <Button
+            onClick={() => enviar(selecionadosList)}
+            disabled={enviando || selecionadosList.length === 0}
+            className="bg-violet-500 hover:bg-violet-600 text-white"
+          >
+            {enviando ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4 mr-2" />
+            )}
+            Enviar pesquisa ({selecionadosList.length})
+          </Button>
+        </div>
       </div>
 
       <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">

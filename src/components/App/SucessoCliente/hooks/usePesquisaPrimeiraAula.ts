@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
@@ -80,5 +80,46 @@ export function usePesquisaPrimeiraAula(unidadeAtual: UnidadeId) {
     }
   }, []);
 
-  return { candidatos, loading, enviando, resultados, buscarCandidatos, enviar };
+  // Kill switch do auto-disparo (tabela automacoes_config). Fica aqui porque o toggle
+  // vive no cabeçalho desta aba (governa o robô que dispara esta mesma lista).
+  const [autoPesquisaAtivo, setAutoPesquisaAtivo] = useState(false);
+  const [loadingConfig, setLoadingConfig] = useState(false);
+
+  const carregarConfig = useCallback(async () => {
+    setLoadingConfig(true);
+    try {
+      const { data, error } = await supabase
+        .from('automacoes_config').select('ativo').eq('slug', 'auto_pesquisa_1a_aula').maybeSingle();
+      if (error) throw error;
+      setAutoPesquisaAtivo(data?.ativo === true);
+    } catch (err) {
+      console.error('[usePesquisaPrimeiraAula] carregarConfig:', err);
+    } finally {
+      setLoadingConfig(false);
+    }
+  }, []);
+
+  useEffect(() => { carregarConfig(); }, [carregarConfig]);
+
+  const toggleAutoPesquisa = useCallback(async (novo: boolean) => {
+    const anterior = autoPesquisaAtivo;
+    setAutoPesquisaAtivo(novo); // otimista
+    try {
+      const { error } = await supabase
+        .from('automacoes_config')
+        .update({ ativo: novo, updated_at: new Date().toISOString() })
+        .eq('slug', 'auto_pesquisa_1a_aula');
+      if (error) throw error;
+      toast.success(novo ? 'Auto-disparo ligado' : 'Auto-disparo desligado');
+    } catch (err) {
+      console.error('[usePesquisaPrimeiraAula] toggleAutoPesquisa:', err);
+      setAutoPesquisaAtivo(anterior); // rollback
+      toast.error('Erro ao alterar o auto-disparo');
+    }
+  }, [autoPesquisaAtivo]);
+
+  return {
+    candidatos, loading, enviando, resultados, buscarCandidatos, enviar,
+    autoPesquisaAtivo, loadingConfig, toggleAutoPesquisa,
+  };
 }
