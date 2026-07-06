@@ -4,6 +4,10 @@
 // disso, dispara 15 e avisa a Fabi (caixa 3) pra completar o resto na aba Pós-1ª Aula.
 // Reaproveita a edge enviar-pesquisa-pos-primeira-aula (1/1 com 10s, idempotente).
 // Responde rápido ao cron; o envio real roda em EdgeRuntime.waitUntil.
+// - Retry automático só nos que falharam (idempotente: quem recebeu é pulado). Se ainda
+//   sobrar falha, avisa a Fabi COM A LISTA de quem não recebeu (recuperação na aba).
+// - Modo teste (forcar) fura o kill switch — restrito a Hugo/Luciano (gate por e-mail,
+//   mesmo mecanismo do Tráfego Pago), pois a anon key é pública.
 // @ts-nocheck
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -15,6 +19,9 @@ const NUMERO_FABI = '5521994696489';
 const TETO_DIARIO = 15;
 const SLUG_CONFIG = 'auto_pesquisa_1a_aula';
 
+// Modo teste (forcar) só pode ser usado por estes e-mails (espelha o gate do Tráfego Pago).
+const EMAILS_AUTORIZADOS = new Set(['hugo@gmail.com', 'lucianoalf.la@gmail.com']);
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -23,6 +30,21 @@ const corsHeaders = {
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+}
+
+// Extrai o e-mail do payload do JWT (assinatura já validada pelo verify_jwt do gateway).
+function emailDoJwt(authHeader) {
+  if (!authHeader) return null;
+  const token = authHeader.replace(/^Bearer\s+/i, '');
+  const partes = token.split('.');
+  if (partes.length !== 3) return null;
+  try {
+    const b64 = partes[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)));
+    return (payload.email ?? payload.user_metadata?.email ?? null)?.toLowerCase() ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // Envia um texto simples pela caixa Sucesso do Aluno (id=3). Usado só para avisar a Fabi.
@@ -53,6 +75,14 @@ serve(async (req) => {
     try { body = await req.json(); } catch { /* cron manda body vazio */ }
     const dryRun = body.dry_run === true;
     const forcar = body.forcar === true;
+
+    // O modo teste (forcar) fura o kill switch → restrito a Hugo/Luciano.
+    if (forcar) {
+      const email = emailDoJwt(req.headers.get('authorization'));
+      if (!email || !EMAILS_AUTORIZADOS.has(email)) {
+        return json({ ok: false, erro: 'modo teste (forcar) restrito a usuários autorizados' }, 403);
+      }
+    }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -87,25 +117,47 @@ serve(async (req) => {
     }
 
     // 3) Dispara em background (a edge de envio leva ~10s por aluno). Responde já ao cron.
-    const tarefa = (async () => {
-      const payload = {
-        alunos: lote.map((a) => ({
-          aluno_id: a.aluno_id, unidade_id: a.unidade_id, whatsapp_jid: a.whatsapp_jid,
-          nome: a.nome, curso: a.curso_nome, data_matricula: a.data_matricula,
-        })),
-      };
-      const { data: envio, error: envErr } = await supabase.functions.invoke(
-        'enviar-pesquisa-pos-primeira-aula', { body: payload },
-      );
-      const resultados = (envio && envio.resultados) || [];
-      const enviados = resultados.filter((r) => r.ok).length;
-      console.log(`[disparar-pesquisa-auto] disparados=${lote.length} enviados=${enviados} excedente=${excedente}`, envErr?.message || '');
+    const mapAluno = (a) => ({
+      aluno_id: a.aluno_id, unidade_id: a.unidade_id, whatsapp_jid: a.whatsapp_jid,
+      nome: a.nome, curso: a.curso_nome, data_matricula: a.data_matricula,
+    });
 
+    const enviarLote = async (alunos) => {
+      const { data: envio, error: envErr } = await supabase.functions.invoke(
+        'enviar-pesquisa-pos-primeira-aula', { body: { alunos: alunos.map(mapAluno) } },
+      );
+      if (envErr) console.error('[disparar-pesquisa-auto] invoke erro:', envErr.message);
+      return (envio && envio.resultados) || [];
+    };
+
+    const tarefa = (async () => {
+      // 1ª tentativa
+      const r1 = await enviarLote(lote);
+      const okIds = new Set(r1.filter((r) => r.ok).map((r) => r.aluno_id));
+
+      // Retry SÓ nos que falharam (idempotente: quem já recebeu é pulado pela edge/RPC).
+      const falharam1 = lote.filter((a) => !okIds.has(a.aluno_id));
+      if (falharam1.length > 0) {
+        await new Promise((r) => setTimeout(r, 5000));
+        const r2 = await enviarLote(falharam1);
+        for (const r of r2) if (r.ok) okIds.add(r.aluno_id);
+      }
+
+      const naoEnviados = lote.filter((a) => !okIds.has(a.aluno_id));
+      const enviados = okIds.size;
+      console.log(`[disparar-pesquisa-auto] enviados=${enviados}/${lote.length} excedente=${excedente} falhas=${naoEnviados.length}`);
+
+      // Aviso à Fabi: excedente (acima do teto) e/ou falhas de envio (com a lista pra recuperar).
+      const blocos = [];
       if (excedente > 0) {
-        await avisarFabi(
-          supabase,
-          `⚠️ *Auto-disparo da pesquisa de 1ª aula*\n\nDisparei ${enviados} pesquisa(s) hoje (teto de ${TETO_DIARIO}/dia).\nAinda restam *${excedente}* na aba *Pós-1ª Aula* — dispare quando puder. 🙏`,
-        );
+        blocos.push(`Fiquei no teto de ${TETO_DIARIO}/dia — restam *${excedente}* na aba *Pós-1ª Aula* pra você disparar. 🙏`);
+      }
+      if (naoEnviados.length > 0) {
+        const nomes = naoEnviados.map((a) => `• ${a.nome}`).join('\n');
+        blocos.push(`⚠️ *${naoEnviados.length}* não receberam (falha no envio) — dispare na aba:\n${nomes}`);
+      }
+      if (blocos.length > 0) {
+        await avisarFabi(supabase, `*Auto-disparo da pesquisa de 1ª aula*\nEnviei ${enviados} hoje.\n\n${blocos.join('\n\n')}`);
       }
     })();
 
