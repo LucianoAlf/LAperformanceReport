@@ -1,0 +1,19 @@
+name: gitleaks
+
+# Varre o repo por segredos (tokens, chaves, senhas) a cada push e PR.
+# Não bloqueia commit local, mas falha o check no GitHub se achar segredo novo.
+on:
+  push:
+  pull_request:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Rodar gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_CONFIG: .gitleaks.toml

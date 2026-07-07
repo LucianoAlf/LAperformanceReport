@@ -6,7 +6,7 @@
 |--------------|----------------------------------------------------|
 | URL          | https://chatmusic.poliredeomnichat.com.br          |
 | Account ID   | 5                                                  |
-| API Token    | 3rm3paU3Yqm3wsaXQcGkevjH                          |
+| API Token    | ‹token — ver Supabase secret, NÃO versionar (redigido 07/07, rotacionar no Chatwoot)› |
 | Header auth  | `api_access_token: <token>`                        |
 
 ---

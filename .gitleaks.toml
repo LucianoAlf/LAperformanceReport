@@ -1,0 +1,21 @@
+# Config do gitleaks — barra segredos antes de entrarem no repo.
+# Roda no CI (.github/workflows/gitleaks.yml) a cada push.
+# Estende o conjunto padrão de regras do gitleaks.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Valores que NÃO são segredo (não devem gerar alerta)"
+regexes = [
+  # UUIDs das unidades (IDs públicos, aparecem em código e docs)
+  '''2ec861f6-023f-4d7b-9927-3960ad8c2a92''',
+  '''95553e96-971b-4590-a6eb-0201d013c14d''',
+  '''368d47f5-2d88-4475-bc14-ba084a9a348e''',
+  # Supabase anon/publishable key (pública por design — protegida por RLS, não por sigilo)
+  '''sb_publishable_[A-Za-z0-9_]+''',
+  # marcadores de token já redigido
+  '''‹token[^›]*›''',
+]
+paths = [
+  '''\.env\.example$''',
+]
