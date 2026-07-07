@@ -46,6 +46,7 @@ interface ConciliacaoLeadResumo {
   leads_com_pendencia?: number;
   origem_pendente?: number;
   curso_pendente?: number;
+  origem_revisao?: number;
 }
 
 interface ConciliacaoLeadItem {
@@ -87,6 +88,7 @@ const resumoVazio: Required<ConciliacaoLeadResumo> = {
   leads_com_pendencia: 0,
   origem_pendente: 0,
   curso_pendente: 0,
+  origem_revisao: 0,
 };
 
 function normalizarUnidade(unidadeId: ComercialConciliacaoLeadsProps['unidadeId']) {
@@ -359,6 +361,7 @@ export function ComercialConciliacaoLeads({
               <SelectItem value="todos">Todos os tipos</SelectItem>
               <SelectItem value="origem_pendente">Somente origem</SelectItem>
               <SelectItem value="curso_pendente">Somente curso</SelectItem>
+              <SelectItem value="origem_revisao">Revisar origem informada</SelectItem>
             </SelectContent>
           </Select>
         </div>

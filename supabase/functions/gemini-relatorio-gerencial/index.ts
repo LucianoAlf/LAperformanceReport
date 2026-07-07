@@ -215,7 +215,7 @@ async function montarRelatorio(dados: any): Promise<string> {
   const totalPagantes = n(kpiGestao.total_alunos_pagantes);
   const totalAtivos = n(kpiGestao.total_alunos_ativos);
   const ticketMedio = n(kpiGestao.ticket_medio);
-  const mrr = n(kpiGestao.mrr);
+  const mrr = n(kpiGestao.faturamento_realizado ?? kpiGestao.mrr);
   const churnRate = n(kpiGestao.churn_rate);
   const inadimplencia = n(kpiGestao.inadimplencia_pct ?? kpiGestao.inadimplencia);
   const tempoPermanencia = n(kpiGestao.tempo_permanencia_medio ?? kpiGestao.tempo_permanencia);
@@ -223,6 +223,12 @@ async function montarRelatorio(dados: any): Promise<string> {
   const reajusteMedio = n(kpiGestao.reajuste_medio ?? kpiGestao.reajuste_pct);
 
   const totalEvasoes = n(kpiRetencao.total_evasoes ?? kpiGestao.total_evasoes ?? kpiGestao.evasoes);
+  const totalEvasoesLabel = String(
+    kpiRetencao.total_evasoes_label ??
+      kpiGestao.total_evasoes_label ??
+      kpiGestao.evasoes_label ??
+      totalEvasoes,
+  );
   const mrrPerdido = n(kpiRetencao.mrr_perdido);
   const renovacoesPrevistas = n(kpiRetencao.renovacoes_previstas);
   const renovacoesRealizadas = n(kpiRetencao.renovacoes_realizadas);
@@ -237,11 +243,12 @@ async function montarRelatorio(dados: any): Promise<string> {
   );
   const experimentaisPresencaConfirmada = n(kpiComercial.experimentais_realizadas_presenca_confirmada);
   const experimentaisSemPresenca = n(kpiComercial.experimentais_status_operacional_sem_presenca);
-  const novasMatriculas = n(
+  const novosAlunosGestao = n(kpiGestao.novas_matriculas ?? dados?.novas_matriculas);
+  const matriculasComerciais = n(
     kpiComercial.novas_matriculas ??
-      kpiGestao.novas_matriculas ??
       kpiComercial.matriculas_comerciais_principais ??
-      kpiComercial.matriculas_academicas,
+      kpiComercial.matriculas_academicas ??
+      novosAlunosGestao,
   );
   const taxaLeadExp = n(kpiComercial.taxa_conversao_lead_exp ?? kpiComercial.taxa_lead_experimental);
   const taxaConversaoGeral = n(kpiComercial.taxa_conversao_geral ?? kpiComercial.taxa_lead_matricula);
@@ -282,9 +289,11 @@ async function montarRelatorio(dados: any): Promise<string> {
     inadimplencia,
     alunos_ativos: totalAtivos,
     alunos_pagantes: totalPagantes,
-    novas_matriculas: novasMatriculas,
+    novos_alunos: novosAlunosGestao,
+    novas_matriculas: matriculasComerciais,
     churn_rate: churnRate,
     evasoes: totalEvasoes,
+    evasoes_label: totalEvasoesLabel,
     taxa_renovacao: taxaRenovacao,
     leads: totalLeads,
     experimentais_status_operacional: totalExperimentais,
@@ -308,7 +317,7 @@ async function montarRelatorio(dados: any): Promise<string> {
   const metaTicketMatriculador = unidadeNome === "Campo Grande" ? 387 : unidadeNome === "Recreio" ? 435 : 450;
   const metaTaxaShowup = 18;
   const metaTaxaGeral = 13.5;
-  const mediaMatriculasMes = n(dados?.meses_com_dados) > 0 ? novasMatriculas / n(dados?.meses_com_dados) : novasMatriculas;
+  const mediaMatriculasMes = n(dados?.meses_com_dados) > 0 ? matriculasComerciais / n(dados?.meses_com_dados) : matriculasComerciais;
   const vendasLojinha = n(dados?.vendas_lojinha);
   const metaLojinha = unidadeNome === "Campo Grande" ? 5000 : 3000;
 
@@ -332,8 +341,8 @@ async function montarRelatorio(dados: any): Promise<string> {
   relatorio += `• Ativos: *${totalAtivos}*\n`;
   relatorio += `• Pagantes: *${totalPagantes}*\n`;
   relatorio += `• Bolsistas: *${totalBolsistas}*\n`;
-  relatorio += `• Novos no Mês: *${novasMatriculas}*\n`;
-  relatorio += `• Permanência Média: *${tempoPermanencia.toFixed(1).replace(".", ",")} meses*\n`;
+  relatorio += `• Novos no Mês: *${novosAlunosGestao}*\n`;
+  relatorio += `• Permanência Média: *${tempoPermanencia.toFixed(2).replace(".", ",")} meses*\n`;
   relatorio += `• LTV Médio: *R$ ${moeda(ltvMedio)}*\n\n`;
 
   relatorio += "📚 *MATRÍCULAS*\n";
@@ -345,7 +354,7 @@ async function montarRelatorio(dados: any): Promise<string> {
   relatorio += `• Leads: *${totalLeads}*\n`;
   relatorio += `• Experimentais operacionais: *${totalExperimentais}*\n`;
   relatorio += `• Presença experimental confirmada: *${experimentaisPresencaConfirmada}*\n`;
-  relatorio += `• Matrículas: *${novasMatriculas}*\n`;
+  relatorio += `• Matrículas: *${matriculasComerciais}*\n`;
   relatorio += `• Taxa Lead→Exp operacional: *${pct(taxaLeadExp, 2)}*\n`;
   relatorio += `• Taxa Exp→Mat: *${taxaExpMatLabel}*\n`;
   relatorio += `• Taxa Lead→Matrícula: *${pct(taxaConversaoGeral, 2)}*\n\n`;
@@ -353,16 +362,16 @@ async function montarRelatorio(dados: any): Promise<string> {
   relatorio += "🎯 *METAS COMERCIAIS*\n";
   relatorio += metasKpi.leads ? linhaMeta("Leads", totalLeads, n(metasKpi.leads)) : "• Leads: sem meta cadastrada\n";
   relatorio += metasKpi.experimentais ? linhaMeta("Experimentais operacionais", totalExperimentais, n(metasKpi.experimentais)) : "• Experimentais operacionais: sem meta cadastrada\n";
-  relatorio += metasKpi.matriculas ? linhaMeta("Matrículas", novasMatriculas, n(metasKpi.matriculas)) : "• Matrículas: sem meta cadastrada\n";
+  relatorio += metasKpi.matriculas ? linhaMeta("Matrículas", matriculasComerciais, n(metasKpi.matriculas)) : "• Matrículas: sem meta cadastrada\n";
   relatorio += "\n";
 
   relatorio += "───────────────────────\n📉 *RETENÇÃO*\n───────────────────────\n";
-  relatorio += `• Churn Rate: *${pct(churnRate)}*\n`;
-  relatorio += `• Evasões: *${totalEvasoes}*\n`;
+  relatorio += `• Churn Rate: *${pct(churnRate, 2)}*\n`;
+  relatorio += `• Evasões: *${totalEvasoesLabel}*\n`;
   relatorio += `• Não Renovações: *${naoRenovacoes}*\n`;
   relatorio += `• MRR Perdido: *R$ ${moeda(mrrPerdido)}*\n`;
   relatorio += `• Taxa Renovação: *${pct(taxaRenovacao)}*\n`;
-  relatorio += `• Reajuste Médio: *${pct(reajusteMedio)}*\n\n`;
+  relatorio += `• Reajuste Médio: *${pct(reajusteMedio, 2)}*\n\n`;
 
   if (motivosEvasao.length) {
     relatorio += "🔴 *TOP MOTIVOS DE EVASÃO*\n\n";
@@ -404,9 +413,9 @@ async function montarRelatorio(dados: any): Promise<string> {
     const a = mesAnterior[0] || {};
     relatorio += `• Alunos: *${a.alunos_pagantes ?? "N/D"} → ${totalPagantes}*\n`;
     relatorio += `• Ticket: *R$ ${moeda(a.ticket_medio)} → R$ ${moeda(ticketMedio)}*\n`;
-    relatorio += `• Churn: *${pct(a.churn_rate)} → ${pct(churnRate)}*\n`;
-    relatorio += `• Matrículas: *${a.novas_matriculas ?? "N/D"} → ${novasMatriculas}*\n`;
-    relatorio += `• Evasões: *${a.evasoes ?? "N/D"} → ${totalEvasoes}*\n\n`;
+    relatorio += `• Churn: *${pct(a.churn_rate)} → ${pct(churnRate, 2)}*\n`;
+    relatorio += `• Matrículas: *${a.novas_matriculas ?? "N/D"} → ${novosAlunosGestao}*\n`;
+    relatorio += `• Evasões: *${a.evasoes_label ?? a.evasoes ?? "N/D"} → ${totalEvasoesLabel}*\n\n`;
   } else {
     relatorio += "Sem dados do mês anterior.\n\n";
   }
@@ -415,10 +424,10 @@ async function montarRelatorio(dados: any): Promise<string> {
   if (anoPassado.length) {
     const a = anoPassado[0] || {};
     relatorio += `• Alunos: *${a.alunos_pagantes ?? "N/D"} → ${totalPagantes}*\n`;
-    relatorio += `• Churn: *${pct(a.churn_rate)} → ${pct(churnRate)}*\n`;
-    relatorio += `• Matrículas: *${a.novas_matriculas ?? "N/D"} → ${novasMatriculas}*\n`;
-    relatorio += `• Evasões: *${a.evasoes ?? "N/D"} → ${totalEvasoes}*\n`;
-    relatorio += `• Saldo Líquido: *${a.saldo_liquido ?? "N/D"} → ${novasMatriculas - totalEvasoes}*\n\n`;
+    relatorio += `• Churn: *${pct(a.churn_rate)} → ${pct(churnRate, 2)}*\n`;
+    relatorio += `• Matrículas: *${a.novas_matriculas ?? "N/D"} → ${novosAlunosGestao}*\n`;
+    relatorio += `• Evasões: *${a.evasoes_label ?? a.evasoes ?? "N/D"} → ${totalEvasoesLabel}*\n`;
+    relatorio += `• Saldo Líquido: *${a.saldo_liquido ?? "N/D"} → ${novosAlunosGestao - totalEvasoes}*\n\n`;
   } else {
     relatorio += "Sem referência do ano anterior.\n\n";
   }
@@ -440,7 +449,7 @@ async function montarRelatorio(dados: any): Promise<string> {
   relatorio += "\n📈 *COMERCIAL*\n\n";
   relatorio += metasKpi.leads ? linhaMeta("Leads", totalLeads, n(metasKpi.leads)) : "• Leads: sem meta cadastrada\n";
   relatorio += metasKpi.experimentais ? linhaMeta("Experimentais operacionais", totalExperimentais, n(metasKpi.experimentais)) : "• Experimentais operacionais: sem meta cadastrada\n";
-  relatorio += metasKpi.matriculas ? linhaMeta("Matrículas", novasMatriculas, n(metasKpi.matriculas)) : "• Matrículas: sem meta cadastrada\n";
+  relatorio += metasKpi.matriculas ? linhaMeta("Matrículas", matriculasComerciais, n(metasKpi.matriculas)) : "• Matrículas: sem meta cadastrada\n";
   relatorio += metasKpi.taxa_lead_exp ? linhaMeta("Lead→Exp operacional", taxaLeadExp, n(metasKpi.taxa_lead_exp)) : "• Lead→Exp operacional: sem meta cadastrada\n";
   relatorio += taxaExpMatLiberada
     ? `Exp→Mat: ${taxaExpMatLabel}\n`
@@ -449,10 +458,10 @@ async function montarRelatorio(dados: any): Promise<string> {
   relatorio += "\n";
 
   relatorio += "───────────────────────\n🏆 *PROGRAMA FIDELIZA+ LA* (Trimestral)\n───────────────────────\n";
-  relatorio += `⭐ *CHURN PREMIADO* (meta: ≤4%)\n${barra(churnRate <= 4 ? 100 : Math.max(0, 100 - (churnRate - 4) * 20))} ${pct(churnRate)} ${churnRate <= 4 ? "✅" : "❌"}\n\n`;
+  relatorio += `⭐ *CHURN PREMIADO* (meta: ≤4%)\n${barra(churnRate <= 4 ? 100 : Math.max(0, 100 - (churnRate - 4) * 20))} ${pct(churnRate, 2)} ${churnRate <= 4 ? "✅" : "❌"}\n\n`;
   relatorio += `⭐ *INADIMPLÊNCIA* (meta: ≤1%)\n${barra(inadimplencia <= 1 ? 100 : Math.max(0, 100 - (inadimplencia - 1) * 20))} ${pct(inadimplencia)} ${inadimplencia <= 1 ? "✅" : "❌"}\n\n`;
   relatorio += `⭐ *MAX RENOVAÇÃO* (meta: ≥90%)\n${barra((taxaRenovacao / 90) * 100)} ${pct(taxaRenovacao)} ${taxaRenovacao >= 90 ? "✅" : "❌"}\n\n`;
-  relatorio += `⭐ *REAJUSTE CAMPEÃO* (meta: ≥7%)\n${barra((reajusteMedio / 7) * 100)} ${pct(reajusteMedio)} ${reajusteMedio >= 7 ? "✅" : "❌"}\n\n`;
+  relatorio += `⭐ *REAJUSTE CAMPEÃO* (meta: ≥7%)\n${barra((reajusteMedio / 7) * 100)} ${pct(reajusteMedio, 2)} ${reajusteMedio >= 7 ? "✅" : "❌"}\n\n`;
   relatorio += `🛒 *MESTRES DA LOJINHA* (meta: R$ ${moeda(metaLojinha)})\n${barra((vendasLojinha / metaLojinha) * 100)} R$ ${moeda(vendasLojinha)} ${vendasLojinha >= metaLojinha ? "✅" : "❌"}\n\n`;
 
   relatorio += "───────────────────────\n🎯 *PROGRAMA MATRICULADOR+ LA*\n───────────────────────\n";
