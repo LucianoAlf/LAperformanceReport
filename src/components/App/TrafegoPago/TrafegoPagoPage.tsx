@@ -122,6 +122,72 @@ const plataformaLabel = (p: string) => PLATAFORMA_LABEL[p] ?? cap(p);
 const posicaoLabel = (p: string) => POSICAO_LABEL[p] ?? cap(p.replace(/_/g, ' '));
 const generoLabel = (g: string) => GENERO_LABEL[g] ?? cap(g);
 
+function usePaginacaoTabela<T>(itens: T[], porPagina: number) {
+  const [pagina, setPagina] = useState(1);
+  const totalPaginas = Math.max(1, Math.ceil(itens.length / porPagina));
+  const paginaSegura = Math.min(pagina, totalPaginas);
+  const paginados = useMemo(() => {
+    const inicio = (paginaSegura - 1) * porPagina;
+    return itens.slice(inicio, inicio + porPagina);
+  }, [itens, paginaSegura, porPagina]);
+  return { pagina: paginaSegura, setPagina, totalPaginas, paginados };
+}
+
+function PaginacaoTabela({ pagina, totalPaginas, setPagina, totalItens, porPagina, labelItem }: {
+  pagina: number;
+  totalPaginas: number;
+  setPagina: (updater: number | ((prev: number) => number)) => void;
+  totalItens: number;
+  porPagina: number;
+  labelItem: string;
+}) {
+  if (totalPaginas <= 1) return null;
+  const inicio = totalItens === 0 ? 0 : (pagina - 1) * porPagina + 1;
+  const fim = Math.min(pagina * porPagina, totalItens);
+  const paginas = Array.from({ length: Math.min(5, totalPaginas) }, (_, i) => {
+    let n = i + 1;
+    if (totalPaginas > 5) {
+      if (pagina > 3) n = pagina - 2 + i;
+      if (n > totalPaginas) n = totalPaginas - 4 + i;
+    }
+    return n;
+  });
+  return (
+    <div className="px-5 py-3 border-t border-slate-700 flex items-center justify-between flex-wrap gap-3">
+      <p className="text-xs text-slate-400">
+        Mostrando {inicio}-{fim} de {totalItens} {labelItem}
+      </p>
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => setPagina(p => Math.max(1, p - 1))}
+          disabled={pagina === 1}
+          className="px-2.5 py-1 bg-slate-700/70 hover:bg-slate-700 rounded-lg text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Anterior
+        </button>
+        {paginas.map(n => (
+          <button
+            key={n}
+            onClick={() => setPagina(n)}
+            className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${
+              pagina === n ? 'bg-pink-600 text-white' : 'bg-slate-700/70 hover:bg-slate-700 text-slate-300'
+            }`}
+          >
+            {n}
+          </button>
+        ))}
+        <button
+          onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
+          disabled={pagina === totalPaginas}
+          className="px-2.5 py-1 bg-slate-700/70 hover:bg-slate-700 rounded-lg text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Próximo
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Barra de ranking (gasto relativo ao topo) — usada em posicionamento/demográfico/região.
 function BarraRanking({ label, valor, max, extra }: { label: string; valor: number; max: number; extra?: string }) {
   const pct = max > 0 ? Math.max((valor / max) * 100, 2) : 0;
@@ -162,6 +228,7 @@ export function TrafegoPagoPage() {
   const [leadsAtribuidos, setLeadsAtribuidos] = useState<LeadAtribuido[]>([]);
   const [adsCache, setAdsCache] = useState<Map<string, AdCache>>(new Map());
   const [loadingLeads, setLoadingLeads] = useState(true);
+  const paginacaoLeads = usePaginacaoTabela(leadsAtribuidos, 15);
 
   // ----- Insights (via edge function meta-ads-insights, token fica no servidor) -----
   useEffect(() => {
@@ -201,6 +268,7 @@ export function TrafegoPagoPage() {
       ]);
       setLeadsAtribuidos((leads as unknown as LeadAtribuido[]) || []);
       setAdsCache(new Map((cache || []).map((c: AdCache) => [c.source_id, c])));
+      paginacaoLeads.setPagina(1);
     } catch (e) {
       console.error('Erro ao buscar leads atribuídos:', e);
     } finally {
@@ -249,6 +317,8 @@ export function TrafegoPagoPage() {
   const fadiga = frequencia >= 4 ? 'alta' : frequencia >= 2.5 ? 'media' : 'ok';
 
   const anuncios = insights?.anuncios ?? [];
+  const paginacaoAnuncios = usePaginacaoTabela(anuncios, 10);
+  useEffect(() => { paginacaoAnuncios.setPagina(1); }, [preset, paginacaoAnuncios.setPagina]);
   const posicionamento = insights?.posicionamento ?? [];
   const demografico = useMemo(
     () => [...(insights?.demografico ?? [])].sort((a, b) => b.spend - a.spend),
@@ -460,7 +530,7 @@ export function TrafegoPagoPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
-                {anuncios.map(a => (
+                {paginacaoAnuncios.paginados.map(a => (
                   <tr key={a.ad_id} className="hover:bg-slate-700/30 transition-colors">
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
@@ -488,6 +558,14 @@ export function TrafegoPagoPage() {
               </tbody>
             </table>
           </div>
+          <PaginacaoTabela
+            pagina={paginacaoAnuncios.pagina}
+            totalPaginas={paginacaoAnuncios.totalPaginas}
+            setPagina={paginacaoAnuncios.setPagina}
+            totalItens={anuncios.length}
+            porPagina={10}
+            labelItem="anúncios"
+          />
         </div>
       )}
 
@@ -637,7 +715,7 @@ export function TrafegoPagoPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
-                {leadsAtribuidos.map(lead => {
+                {paginacaoLeads.paginados.map(lead => {
                   const ad = adsCache.get(lead.meta_ad_source_id);
                   return (
                     <tr key={lead.id} className="hover:bg-slate-700/30 transition-colors">
@@ -664,6 +742,14 @@ export function TrafegoPagoPage() {
             </table>
           </div>
         )}
+        <PaginacaoTabela
+          pagina={paginacaoLeads.pagina}
+          totalPaginas={paginacaoLeads.totalPaginas}
+          setPagina={paginacaoLeads.setPagina}
+          totalItens={leadsAtribuidos.length}
+          porPagina={15}
+          labelItem="leads"
+        />
       </div>
     </div>
   );
