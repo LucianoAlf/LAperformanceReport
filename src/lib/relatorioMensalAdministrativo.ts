@@ -11,6 +11,8 @@ type ResumoFinanceiroMensal = {
   alunos_pagantes?: number | string | null;
   ticket_medio?: number | string | null;
   faturamento?: number | string | null;
+  faturamento_previsto?: number | string | null;
+  mrr_atual?: number | string | null;
   ltv_meses?: number | string | null;
   churn_rate?: number | string | null;
   mrr_perdido?: number | string | null;
@@ -21,6 +23,7 @@ type ResumoFinanceiroMensal = {
 export type KpisMensaisAdministrativos = {
   ticketMedio: number;
   mrrAtual: number;
+  faturamentoPrevisto: number;
   ltv: number;
   churnRate: number;
   mrrPerdido: number;
@@ -52,9 +55,10 @@ export function calcularKpisMensaisAdministrativos({
 }): KpisMensaisAdministrativos {
   const alunosPagantes = n(resumo?.alunos_pagantes);
   const faturamentoResumo = n(resumo?.faturamento);
+  const faturamentoPrevisto = n(resumo?.faturamento_previsto) || faturamentoResumo;
   const ticketResumo = n(resumo?.ticket_medio);
   const ticketMedio = ticketResumo || (alunosPagantes > 0 ? faturamentoResumo / alunosPagantes : 0);
-  const mrrAtual = faturamentoResumo || (alunosPagantes * ticketMedio);
+  const mrrAtual = n(resumo?.mrr_atual) || faturamentoResumo || (alunosPagantes * ticketMedio);
   const tempoPermanenciaMeses = n(resumo?.ltv_meses);
   const ltv = tempoPermanenciaMeses * ticketMedio;
 
@@ -73,6 +77,7 @@ export function calcularKpisMensaisAdministrativos({
   return {
     ticketMedio,
     mrrAtual,
+    faturamentoPrevisto,
     ltv,
     churnRate,
     mrrPerdido,

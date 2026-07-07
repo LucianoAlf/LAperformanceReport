@@ -94,6 +94,7 @@ async function fetchKPIsAlunosAdminOperacionalRelatorio({
     total_bolsistas_parciais: Number(row.bolsistas_parciais) || 0,
     ticket_medio: 0,
     faturamento_previsto: 0,
+    faturamento_realizado: 0,
     churn_rate: 0,
     tempo_permanencia_medio: 0,
     _matriculas_ativas: Number(row.matriculas_ativas) || 0,
@@ -104,6 +105,70 @@ async function fetchKPIsAlunosAdminOperacionalRelatorio({
     _matriculas_2_curso_extras: Number(row.matriculas_2_curso_extras) || 0,
     _alunos_coral: Number(row.matriculas_coral) || 0,
   }));
+}
+
+type FinanceiroFaturasRelatorio = {
+  unidade_id: string;
+  mrr_atual: number;
+  faturamento_previsto: number;
+  ticket_medio: number;
+  ticket_medio_previsto: number;
+  faturas_parcela: number;
+  faturas_parcela_pagas: number;
+  faturas_parcela_abertas: number;
+  alunos_locais_com_parcela_paga: number;
+  alunos_emusys_com_parcela_paga: number;
+  matriculas_sem_match: number;
+};
+
+function n(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function fetchFinanceiroFaturasEmusysRelatorio({
+  unidadeId,
+  ano,
+  mes,
+}: {
+  unidadeId?: string | 'todos' | null;
+  ano: number;
+  mes: number;
+}): Promise<Map<string, FinanceiroFaturasRelatorio>> {
+  const unidadeFiltro = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
+  const { data, error } = await supabase.rpc('get_financeiro_faturas_emusys', {
+    p_unidade_id: unidadeFiltro,
+    p_ano: ano,
+    p_mes: mes,
+  });
+
+  if (error) {
+    console.warn('[ModalRelatorio] financeiro faturas Emusys indisponivel:', error.message);
+    return new Map();
+  }
+
+  if (!data?.tem_dados || !Array.isArray(data.por_unidade)) {
+    return new Map();
+  }
+
+  return new Map(
+    data.por_unidade.map((row: any) => [
+      String(row.unidade_id),
+      {
+        unidade_id: String(row.unidade_id),
+        mrr_atual: n(row.mrr_atual),
+        faturamento_previsto: n(row.faturamento_previsto),
+        ticket_medio: n(row.ticket_medio),
+        ticket_medio_previsto: n(row.ticket_medio_previsto),
+        faturas_parcela: n(row.faturas_parcela),
+        faturas_parcela_pagas: n(row.faturas_parcela_pagas),
+        faturas_parcela_abertas: n(row.faturas_parcela_abertas),
+        alunos_locais_com_parcela_paga: n(row.alunos_locais_com_parcela_paga),
+        alunos_emusys_com_parcela_paga: n(row.alunos_emusys_com_parcela_paga),
+        matriculas_sem_match: n(row.matriculas_sem_match),
+      },
+    ])
+  );
 }
 
 function labelTipoEvasao(tipo: string): string {
@@ -443,6 +508,7 @@ export function ModalRelatorio({
             ...row,
             ticket_medio: canonico.ticketMedio,
             faturamento_previsto: canonico.faturamentoPrevisto,
+            faturamento_realizado: canonico.faturamentoRealizado,
             churn_rate: canonico.churnRate,
             tempo_permanencia_medio: canonico.tempoPermanencia,
             _matriculas_ativas: row._matriculas_ativas || canonico.matriculasAtivas,
@@ -466,6 +532,7 @@ export function ModalRelatorio({
         total_bolsistas_parciais: row.bolsistasParciais,
         ticket_medio: row.ticketMedio,
         faturamento_previsto: row.faturamentoPrevisto,
+        faturamento_realizado: row.faturamentoRealizado,
         churn_rate: row.churnRate,
         tempo_permanencia_medio: row.tempoPermanencia,
         _matriculas_ativas: row.matriculasAtivas,
@@ -480,6 +547,27 @@ export function ModalRelatorio({
 
     if (!isPeriodoAtual && kpisAlunosCanonicos.fonte === 'indisponivel') {
       throw new Error(`Snapshot indisponivel para ${String(mesRelatorio).padStart(2, '0')}/${anoRelatorio}.`);
+    }
+
+    const financeiroFaturas = await fetchFinanceiroFaturasEmusysRelatorio({
+      unidadeId: unidade,
+      ano: anoRelatorio,
+      mes: mesRelatorio,
+    });
+
+    if (financeiroFaturas.size > 0) {
+      kpisData = kpisData.map((row: any) => {
+        const financeiro = financeiroFaturas.get(String(row.unidade_id));
+        if (!financeiro) return row;
+
+        return {
+          ...row,
+          ticket_medio: financeiro.ticket_medio || row.ticket_medio || 0,
+          faturamento_previsto: financeiro.faturamento_previsto || row.faturamento_previsto || 0,
+          faturamento_realizado: financeiro.mrr_atual || row.faturamento_realizado || row.faturamento_previsto || 0,
+          _financeiro_faturas_emusys: financeiro,
+        };
+      });
     }
 
     const snapshotMatriculas = kpisData.length > 0 && kpisData[0]._matriculas_ativas != null;
@@ -530,7 +618,13 @@ export function ModalRelatorio({
       alunos_com_2_curso: (acc.alunos_com_2_curso || 0) + (k._alunos_com_2_curso || 0),
       matriculas_2_curso_extras: (acc.matriculas_2_curso_extras || 0) + (k._matriculas_2_curso_extras || 0),
       alunos_coral: alunosCoral,
-      faturamento: (acc.faturamento || 0) + (Number(k.faturamento_previsto) || 0),
+      faturamento: (acc.faturamento || 0) + (Number(k.faturamento_realizado ?? k.faturamento_previsto) || 0),
+      faturamento_previsto: (acc.faturamento_previsto || 0) + (Number(k.faturamento_previsto) || 0),
+      mrr_atual: (acc.mrr_atual || 0) + (Number(k.faturamento_realizado ?? k.faturamento_previsto) || 0),
+      ticket_denominador_faturas: (acc.ticket_denominador_faturas || 0)
+        + (Number(k._financeiro_faturas_emusys?.alunos_locais_com_parcela_paga)
+          || Number(k._financeiro_faturas_emusys?.alunos_emusys_com_parcela_paga)
+          || 0),
       churn_rate: k.churn_rate || acc.churn_rate || 0,
       ltv_meses: Number(k.tempo_permanencia_medio) || acc.ltv_meses || 0,
     }), {} as any);
@@ -543,8 +637,10 @@ export function ModalRelatorio({
       kpis.ltv_meses = tempoPermanenciaCanonico;
     }
 
-    kpis.ticket_medio = kpis.alunos_pagantes > 0
-      ? kpis.faturamento / kpis.alunos_pagantes
+    kpis.ticket_medio = kpis.ticket_denominador_faturas > 0
+      ? kpis.mrr_atual / kpis.ticket_denominador_faturas
+      : kpis.alunos_pagantes > 0
+        ? kpis.faturamento / kpis.alunos_pagantes
       : 0;
 
     const profMap = new Map((profsResult.data || []).map((p: any) => [p.id, p.nome]));
@@ -722,6 +818,8 @@ export function ModalRelatorio({
       evasoes_nao_renovou: naoRenovacoesCount,
       ticket_medio: kpis.ticket_medio || 0,
       faturamento: kpis.faturamento || 0,
+      faturamento_previsto: kpis.faturamento_previsto || kpis.faturamento || 0,
+      mrr_atual: kpis.mrr_atual || kpis.faturamento || 0,
       churn_rate: kpis.churn_rate || 0,
       ltv_meses: kpis.ltv_meses || 0,
       mrr_perdido: retConsolidado.mrr_perdido || 0,
@@ -1151,6 +1249,7 @@ export function ModalRelatorio({
     const {
       ticketMedio,
       mrrAtual,
+      faturamentoPrevisto,
       ltv,
       churnRate,
       mrrPerdido,
@@ -1203,7 +1302,7 @@ export function ModalRelatorio({
     texto += `💰 *KPIs FINANCEIROS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `• Ticket Médio: *R$ ${ticketMedio.toFixed(2)}*\n`;
-    texto += `• Faturamento Previsto: *R$ ${mrrAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
+    texto += `• Faturamento Previsto: *R$ ${faturamentoPrevisto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
     texto += `• MRR Atual: *R$ ${mrrAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
     texto += `• LTV (Tempo × Ticket): *R$ ${ltv.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
     texto += `• Tempo Permanência: *${tempoPermanenciaMeses.toFixed(1)} meses*\n\n`;

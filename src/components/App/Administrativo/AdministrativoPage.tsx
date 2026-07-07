@@ -183,6 +183,8 @@ export interface ResumoMes {
   evasoes_nao_renovou: number;
   ticket_medio: number;
   faturamento: number;
+  faturamento_previsto?: number;
+  mrr_atual?: number;
   churn_rate: number;
   ltv_meses: number;
   mrr_perdido: number;

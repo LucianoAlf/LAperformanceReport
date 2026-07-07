@@ -99,6 +99,52 @@ function listaIA(items: unknown, fallback: string[]): string {
   return final.map((item) => `* ${item}`).join("\n") + "\n";
 }
 
+function normalizarTextoControle(value: unknown): string {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function itemFalaBloqueioExpMat(value: unknown): boolean {
+  const texto = normalizarTextoControle(value);
+  return texto.includes("bloquead")
+    || texto.includes("sem publicar kpi")
+    || texto.includes("aguardando regra")
+    || texto.includes("validar vinculos")
+    || texto.includes("validar vinculo");
+}
+
+function protegerTextoExpMatLiberada(ia: any, taxaExpMatLiberada: boolean, taxaExpMatLabel: string) {
+  if (!taxaExpMatLiberada) return ia;
+
+  const fallbackLiberado = {
+    conquista: `Taxa Experimental -> Matricula liberada pela conciliacao canonica: ${taxaExpMatLabel}.`,
+    pontoAtencao: "Manter revisao diaria da conciliacao para preservar a taxa oficial sem pendencias.",
+  };
+
+  const conquistas = arr(ia?.conquistas).filter((item) => !itemFalaBloqueioExpMat(item));
+  if (!conquistas.some((item) => normalizarTextoControle(item).includes("conciliacao canonica"))) {
+    conquistas.push(fallbackLiberado.conquista);
+  }
+
+  const pontosAtencao = arr(ia?.pontos_atencao).filter((item) => !itemFalaBloqueioExpMat(item));
+  if (!pontosAtencao.length) pontosAtencao.push(fallbackLiberado.pontoAtencao);
+
+  const resumoExecutivo = itemFalaBloqueioExpMat(ia?.resumo_executivo)
+    ? String(ia?.resumo_executivo || "")
+        .replace(/A taxa Experimental -> Matricula[^.]*\./gi, fallbackLiberado.conquista)
+        .replace(/Taxa Experimental -> Matricula[^.]*bloquead[^.]*\./gi, fallbackLiberado.conquista)
+    : ia?.resumo_executivo;
+
+  return {
+    ...ia,
+    resumo_executivo: resumoExecutivo || ia?.resumo_executivo,
+    conquistas,
+    pontos_atencao: pontosAtencao,
+  };
+}
+
 async function fetchGeminiComRetry(url: string, options: RequestInit, maxRetries = 2): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await fetch(url, options);
@@ -279,7 +325,7 @@ async function montarRelatorio(dados: any): Promise<string> {
   const topPresenca = arr(dados?.top_professores_presenca);
   const topMediaTurma = arr(dados?.top_professores_media_turma);
 
-  const ia = await gerarIA({
+  const ia = protegerTextoExpMatLiberada(await gerarIA({
     unidade: unidadeNome,
     mes: mesNome,
     ano,
@@ -307,7 +353,7 @@ async function montarRelatorio(dados: any): Promise<string> {
     taxa_exp_mat_conversoes: conversoesExpMat,
     taxa_conversao_geral: taxaConversaoGeral,
     motivos_evasao: motivosEvasao.slice(0, 5),
-  }, mesNome, unidadeNome);
+  }, mesNome, unidadeNome), taxaExpMatLiberada, taxaExpMatLabel);
 
   const mesAnteriorLabel = mes === 1
     ? `${mesesPorExtenso[12].substring(0, 3).toUpperCase()}/${String(ano - 1).slice(-2)}`
@@ -397,13 +443,12 @@ async function montarRelatorio(dados: any): Promise<string> {
     ? cursosMaisProcurados.slice(0, 5).map((c: any, i: number) => `${i + 1}. ${c.curso || c.nome || "N/D"} - ${c.total_alunos ?? c.quantidade ?? 0}`).join("\n") + "\n\n"
     : "Sem dados suficientes.\n\n";
 
-  relatorio += "───────────────────────\n📱 *CANAIS COM MAIOR LEAD→MATRÍCULA*\n───────────────────────\n";
+  relatorio += "───────────────────────\n📱 *MATRÍCULAS POR CANAIS*\n───────────────────────\n";
   relatorio += canaisMaiorConversao.length
     ? canaisMaiorConversao.slice(0, 3).map((c: any, i: number) => {
       const canal = c.canal || c.origem || c.nome || "N/D";
-      const matriculas = c.matriculas != null ? `${c.matriculas} matrículas / ` : "";
-      const taxa = c.taxa_conversao != null ? `${pct(c.taxa_conversao, 2)}` : `${c.percentual ?? ""}`;
-      return `${i + 1}. ${canal} - ${matriculas}${taxa}`;
+      const matriculas = n(c.matriculas ?? c.quantidade ?? 0);
+      return `${i + 1}. ${canal} - ${matriculas} matrícula${matriculas === 1 ? "" : "s"}`;
     }).join("\n") + "\n\n"
     : "Sem dados suficientes.\n\n";
 
