@@ -6,16 +6,6 @@ Problemas/limitações **do lado do Emusys** (API ou plataforma) que afetam noss
 
 ---
 
-## 🚨 [API] Aulas tipo "turma" não vêm com professor
-
-**Identificado em:** 2026-05-04 · **Reverificado 2026-06-22: AINDA ABERTO** — aulas `turma` seguem com `professores: []` (ex. aulas 159430, 227713, 235195 em 16/06, todas turma, professores vazio), enquanto as `individual` agora trazem o professor com `id`.
-
-**Descrição:** Aula tipo `turma` (grupo) com categoria `normal` retorna `professores: []` (vazio), mesmo com professor designado. Aulas tipo `individual` retornam o professor corretamente.
-
-**Evidência:** turma `MpB_Sá_08` em 02/05/2026 08h — 1 registro `turma` (id 457226) com `professores: []` ❌ + 4 registros `individual` com `professores: [{ nome: "Pedro Sérgio Figueiredo da Glória", ... }]` ✅. (`turma` = encontro coletivo; `individual` = contrato de cada aluno. Não são duplicatas.)
-
-**Solicitação ideal (Emusys):** preencher `professores[]` também nas aulas tipo `turma`, já que internamente o Emusys associa um professor à turma.
-
 ---
 
 ## ⚠️ [API] Status de presença divergente entre aula "turma" e "individual"
@@ -108,10 +98,11 @@ Problemas/limitações **do lado do Emusys** (API ou plataforma) que afetam noss
 
 ## Resolvidos (histórico)
 
-- **✅ 2026-06-22** — `professores[].id` no `/aulas` (era de 2026-05-04). Corrigido na v1.2.0/21-06; vale só para aulas `individual`.
+- **✅ 2026-06-22** — `professores[].id` no `/aulas` (era de 2026-05-04). Corrigido na v1.2.0/21-06; na época valia só para aulas `individual`.
 - **✅ 2026-06-22** — `id_aluno`/`id_lead` em `alunos[]` no `/aulas` (era de 2026-06-12). Corrigido na v1.2.0/21-06; tornou o `/pessoas/buscar` por id desnecessário para mapear aluno.
+- **✅ 2026-07-07** — Aulas tipo `turma` agora vêm com `professores[]` preenchido (era de 2026-05-04, reaberto e reverificado 2026-06-22). Testado ao vivo (GET real) nas 3 unidades: CG 24/24 turmas com professor, Barra 27/27, Recreio 25/25 — 0 casos vazios. Provavelmente corrigido junto com a v1.2.2 (mesma leva que trouxe `/faturas`).
 
-Ainda abertas (reverificadas 2026-06-22): turma sem professor, `pessoa_id` não filtra professor, `/pessoas/buscar` não aceita id, troca de curso não propaga.
+Ainda abertas (reverificadas ao vivo 2026-07-07): `pessoa_id` não filtra professor (testado com `pessoa_id=3019`, um professor com aulas no dia → `items: []`), `/pessoas/buscar` não aceita `id` (testado `?id=3019` → erro "Informe email, cpf ou telefone"). Não reverificadas nesta rodada (precisam de caso específico conhecido, não testadas ao vivo hoje): troca de curso não propaga, aluno com presença sem vínculo `pessoa_id`, status divergente turma×individual.
 
 ---
 

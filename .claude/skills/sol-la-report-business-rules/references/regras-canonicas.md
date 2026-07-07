@@ -72,6 +72,22 @@ Interpretação operacional:
 
 Exemplo: se um aluno pagante tem 4 cursos de R$380 + R$355 + R$367 + R$127, o numerador recebe R$1.229 e o denominador recebe 1 pessoa.
 
+✅ **Refinamento validado em 2026-07-07 (Alf, resolvendo divergência com o Financeiro Emusys/ADM):** o denominador "por pessoa" acima **está correto e não muda**. O que estava incompleto era a fonte do valor de cada parcela no numerador — não é o campo cadastral estático `alunos.valor_parcela`, é a **fatura da competência** no Emusys (`GET /faturas`). Regra final:
+
+```text
+Ticket médio = soma das parcelas de mensalidade da competência / alunos pagantes únicos da competência
+```
+
+- Entra só fatura de **Parcela/Mensalidade** — passaporte, taxa de matrícula, lojinha, estoque etc. NÃO entram.
+- Aluno conta **uma vez só** no denominador (mesma regra de sempre).
+- Aluno com 2 cursos e 2 parcelas: as duas entram no numerador, mas ele conta uma vez no denominador.
+- **Inadimplente entra no denominador também** — não é "quem pagou no mês", é a base pagante/faturável do mês.
+- Valor de cada fatura:
+  - fatura **paga** → usar `valor_pago`;
+  - fatura **aberta/inadimplente** → usar o valor devido **atualizado**: sem o desconto condicional (pontualidade) perdido, + juros/multa quando aplicável.
+
+Implica buscar a fatura por competência (via `/faturas`, idealmente sincronizado), não usar o snapshot cadastral em `alunos.valor_parcela`. Detalhe/mapeamento técnico: `references/pendencias-bloqueadores.md`.
+
 ### MRR
 
 ✅ Regra canônica validada pelo Alf:
