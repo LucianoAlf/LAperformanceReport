@@ -62,8 +62,15 @@ function formatarHoraMsg(data: string): string {
 // Outros alunos que usam o MESMO número de WhatsApp (irmãos com o mesmo responsável,
 // ex.: Hugo/Vitor Rocha da Costa). Como só existe 1 conversa por número, o atendente
 // precisa saber que está falando por um número compartilhado.
+export interface AlunoAutomacaoAlvo {
+  id: number;
+  nome: string;
+  unidade_id: string;
+  cursos: { nome: string } | null;
+}
+
 function useIrmaosCompartilhandoNumero(whatsappJid: string | null | undefined, alunoIdAtual: number | null | undefined) {
-  const [irmaos, setIrmaos] = useState<{ id: number; nome: string }[]>([]);
+  const [irmaos, setIrmaos] = useState<AlunoAutomacaoAlvo[]>([]);
   useEffect(() => {
     const digits = (whatsappJid || '').replace(/\D/g, '').slice(-11);
     if (digits.length < 10) {
@@ -79,7 +86,7 @@ function useIrmaosCompartilhandoNumero(whatsappJid: string | null | undefined, a
     let cancelado = false;
     supabase
       .from('alunos')
-      .select('id, nome, telefone, whatsapp')
+      .select('id, nome, telefone, whatsapp, unidade_id, cursos:curso_id(nome)')
       .or(`telefone.like.%${ultimos4},whatsapp.like.%${ultimos4}`)
       .then(({ data }) => {
         if (cancelado) return;
@@ -89,7 +96,7 @@ function useIrmaosCompartilhandoNumero(whatsappJid: string | null | undefined, a
           const d2 = (a.whatsapp || '').replace(/\D/g, '').slice(-11);
           return d1 === digits || d2 === digits;
         });
-        setIrmaos(outros.map((a: any) => ({ id: a.id, nome: a.nome })));
+        setIrmaos(outros.map((a: any) => ({ id: a.id, nome: a.nome, unidade_id: a.unidade_id, cursos: a.cursos || null })));
       });
     return () => { cancelado = true; };
   }, [whatsappJid, alunoIdAtual]);
@@ -567,6 +574,9 @@ export function AdminChatPanel({
   const [tipoUpload, setTipoUpload] = useState<'imagem' | 'audio' | 'video' | 'documento'>('imagem');
   const [automacaoConfirmar, setAutomacaoConfirmar] = useState<TemplateWhatsApp | null>(null);
   const [disparandoAutomacao, setDisparandoAutomacao] = useState(false);
+  // A quem a automação (ex.: pesquisa 1ª aula) se refere. Default = aluno da conversa;
+  // quando o número é compartilhado (irmãos, mesmo responsável), pode ser trocado no modal.
+  const [alunoAutomacao, setAlunoAutomacao] = useState<AlunoAutomacaoAlvo | null>(null);
 
   // Cartões de contato (vCard) — só no inbox Sucesso do Aluno.
   // O hook é sempre chamado (regra dos hooks); o resultado só é usado quando há unidade real,
@@ -580,6 +590,13 @@ export function AdminChatPanel({
 
   const mensagensComSeparadores = useMemo(() => agruparPorData(mensagens), [mensagens]);
   const irmaosCompartilhando = useIrmaosCompartilhandoNumero(conversa.whatsapp_jid, aluno?.id ?? null);
+  // Opções de "enviar para" na automação: o aluno da conversa + irmãos que compartilham o número.
+  const opcoesAutomacao: AlunoAutomacaoAlvo[] = useMemo(() => {
+    const donoConversa: AlunoAutomacaoAlvo[] = aluno
+      ? [{ id: aluno.id, nome: aluno.nome, unidade_id: aluno.unidade_id, cursos: aluno.cursos || null }]
+      : [];
+    return [...donoConversa, ...irmaosCompartilhando];
+  }, [aluno, irmaosCompartilhando]);
 
   const { cartoes: vcardsRaw } = useVcardsUnidade(unidadeCartoes || 'todos');
   const vcards: VcardChip[] = (contexto === 'sucesso_aluno' && unidadeCartoes)
@@ -721,13 +738,17 @@ export function AdminChatPanel({
     setTemplateAberto(false);
     if (isTemplateAutomacao(t.tipo)) {
       setTexto('');
+      // Default: aluno da própria conversa. Se o número for compartilhado, o modal deixa trocar.
+      setAlunoAutomacao(aluno ? { id: aluno.id, nome: aluno.nome, unidade_id: aluno.unidade_id, cursos: aluno.cursos || null } : null);
       setAutomacaoConfirmar(t);
     } else {
       handleUsarTemplate(t.conteudo);
     }
-  }, [handleUsarTemplate]);
+  }, [handleUsarTemplate, aluno]);
 
   // Dispara a automação confirmada (hoje: pesquisa pós-1ª aula com botões).
+  // Usa `alunoAutomacao` (não `aluno`) para suportar número compartilhado entre irmãos —
+  // a Fabi pode escolher, no modal, para qual dos alunos a pesquisa é de fato.
   const dispararAutomacao = useCallback(async () => {
     if (!automacaoConfirmar) return;
     setDisparandoAutomacao(true);
@@ -735,25 +756,29 @@ export function AdminChatPanel({
       let jid = conversa.whatsapp_jid;
       let alunoPayload: Record<string, unknown>;
 
-      if (aluno) {
+      if (alunoAutomacao) {
         const { data: alunoRow } = await supabase
           .from('alunos')
           .select('data_matricula')
-          .eq('id', aluno.id)
+          .eq('id', alunoAutomacao.id)
           .maybeSingle();
 
         if (!jid) {
-          const tel = (aluno.whatsapp || aluno.telefone || '').replace(/\D/g, '');
-          if (!tel) { toast.error('Aluno sem telefone para envio'); setDisparandoAutomacao(false); return; }
-          jid = `${tel.startsWith('55') ? tel : '55' + tel}@s.whatsapp.net`;
+          // Fallback só se aplica ao aluno da própria conversa (é o único com telefone/whatsapp
+          // já carregados aqui); ao trocar para um irmão, o jid já vem preenchido — ver
+          // useIrmaosCompartilhandoNumero, que só encontra irmãos a partir de um jid existente.
+          const tel = alunoAutomacao.id === aluno?.id ? (aluno?.whatsapp || aluno?.telefone || '') : '';
+          const telDigits = tel.replace(/\D/g, '');
+          if (!telDigits) { toast.error('Aluno sem telefone para envio'); setDisparandoAutomacao(false); return; }
+          jid = `${telDigits.startsWith('55') ? telDigits : '55' + telDigits}@s.whatsapp.net`;
         }
 
         alunoPayload = {
-          aluno_id: aluno.id,
-          unidade_id: aluno.unidade_id || conversa.unidade_id,
+          aluno_id: alunoAutomacao.id,
+          unidade_id: alunoAutomacao.unidade_id || conversa.unidade_id,
           whatsapp_jid: jid,
-          nome: aluno.nome,
-          curso: aluno.cursos?.nome || null,
+          nome: alunoAutomacao.nome,
+          curso: alunoAutomacao.cursos?.nome || null,
           data_matricula: alunoRow?.data_matricula || new Date().toISOString().slice(0, 10),
         };
       } else {
@@ -785,7 +810,7 @@ export function AdminChatPanel({
       setDisparandoAutomacao(false);
       setAutomacaoConfirmar(null);
     }
-  }, [automacaoConfirmar, aluno, conversa.whatsapp_jid, conversa.unidade_id, conversa.nome_externo]);
+  }, [automacaoConfirmar, alunoAutomacao, aluno, conversa.whatsapp_jid, conversa.unidade_id, conversa.nome_externo]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     // Se o dropdown de templates está aberto, deixa ele capturar as teclas de navegação
@@ -1262,10 +1287,34 @@ export function AdminChatPanel({
               </span>
               <h3 className="text-sm font-semibold text-white">{automacaoConfirmar.nome}</h3>
             </div>
-            {aluno ? (
+            {opcoesAutomacao.length > 1 && (
+              <div className="mb-3">
+                <p className="text-[11px] font-medium text-slate-400 mb-1.5">
+                  Número compartilhado — enviar para:
+                </p>
+                <div className="flex gap-1.5 flex-wrap">
+                  {opcoesAutomacao.map(op => (
+                    <button
+                      key={op.id}
+                      onClick={() => setAlunoAutomacao(op)}
+                      disabled={disparandoAutomacao}
+                      className={cn(
+                        'px-3 py-1.5 rounded-lg text-xs font-medium transition border',
+                        alunoAutomacao?.id === op.id
+                          ? 'bg-violet-500/20 text-violet-300 border-violet-500/40'
+                          : 'bg-slate-700/40 text-slate-300 border-slate-600/40 hover:bg-slate-700/70'
+                      )}
+                    >
+                      {op.nome.split(' ')[0]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {alunoAutomacao ? (
               <p className="text-sm text-slate-300 mb-4">
-                Enviar a <strong>pesquisa de 1ª aula com botões</strong> para <strong>{aluno.nome}</strong>
-                {aluno.cursos?.nome ? <> ({aluno.cursos.nome})</> : null}? O nome e o curso são preenchidos automaticamente e a resposta fica registrada.
+                Enviar a <strong>pesquisa de 1ª aula com botões</strong> para <strong>{alunoAutomacao.nome}</strong>
+                {alunoAutomacao.cursos?.nome ? <> ({alunoAutomacao.cursos.nome})</> : null}? O nome e o curso são preenchidos automaticamente e a resposta fica registrada.
               </p>
             ) : (
               <p className="text-sm text-slate-300 mb-4">
