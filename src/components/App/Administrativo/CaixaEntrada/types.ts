@@ -6,6 +6,7 @@
 export interface AlunoInbox {
   id: number;
   nome: string;
+  responsavel_nome: string | null;
   telefone: string | null;
   whatsapp: string | null;
   email: string | null;

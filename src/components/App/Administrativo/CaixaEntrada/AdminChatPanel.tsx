@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone, Mic, X, Play, Pause, Settings, Trash2, Pencil, Zap, MapPin, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -241,6 +241,38 @@ function MidiaRender({ msg, isSaida }: { msg: AdminMensagem; isSaida: boolean })
   }
 
   return null;
+}
+
+type SeparadorItem = { tipo: 'separador'; key: string; label: string };
+type MensagemItem = { tipo: 'mensagem'; mensagem: AdminMensagem };
+
+function agruparPorData(mensagens: AdminMensagem[]): (SeparadorItem | MensagemItem)[] {
+  const resultado: (SeparadorItem | MensagemItem)[] = [];
+  let ultimaData = '';
+
+  for (const msg of mensagens) {
+    const data = new Date(msg.created_at);
+    const dataStr = data.toLocaleDateString('pt-BR');
+    const hoje = new Date().toLocaleDateString('pt-BR');
+    const ontem = new Date(Date.now() - 86400000).toLocaleDateString('pt-BR');
+
+    if (dataStr !== ultimaData) {
+      let label = dataStr;
+      if (dataStr === hoje) {
+        label = `Hoje, ${data.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })}`;
+      } else if (dataStr === ontem) {
+        label = `Ontem, ${data.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })}`;
+      } else {
+        label = data.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+      }
+      resultado.push({ tipo: 'separador', key: `sep-${dataStr}`, label });
+      ultimaData = dataStr;
+    }
+
+    resultado.push({ tipo: 'mensagem', mensagem: msg });
+  }
+
+  return resultado;
 }
 
 function ChatBubble({ msg, onApagar, onEditar, nomeAgente }: { msg: AdminMensagem; onApagar?: (id: string) => void; onEditar?: (msg: AdminMensagem) => void; nomeAgente?: string }) {
@@ -506,6 +538,8 @@ export function AdminChatPanel({
   // Nome do agente/bot vem da CAIXA da conversa (ex.: "Lia - Sucesso do Aluno" → "Lia").
   // NÃO usar remetente_nome: o webhook grava "Sol" fixo/legado (caixa renomeada de Sol→Lia).
   const nomeAgente = conversa.caixa?.nome?.split(/[-–—]/)[0].trim() || 'Assistente';
+
+  const mensagensComSeparadores = useMemo(() => agruparPorData(mensagens), [mensagens]);
 
   const { cartoes: vcardsRaw } = useVcardsUnidade(unidadeCartoes || 'todos');
   const vcards: VcardChip[] = (contexto === 'sucesso_aluno' && unidadeCartoes)
@@ -843,6 +877,12 @@ export function AdminChatPanel({
                 <p className="text-[11px] text-slate-500">
                   {aluno.cursos?.nome || 'Sem curso'} · {aluno.telefone || aluno.whatsapp || 'Sem telefone'}
                 </p>
+                {aluno.responsavel_nome && aluno.responsavel_nome.trim().toLowerCase() !== aluno.nome.trim().toLowerCase() && (
+                  <p className="text-[11px] text-violet-300 flex items-center gap-1 mt-0.5">
+                    <User className="w-2.5 h-2.5 flex-shrink-0" />
+                    Falando com o responsável: {aluno.responsavel_nome}
+                  </p>
+                )}
               </div>
             </>
           ) : (
@@ -924,7 +964,28 @@ export function AdminChatPanel({
             <p className="text-xs text-slate-600 mt-1">Envie a primeira mensagem para {aluno?.nome?.split(' ')[0] || conversa.nome_externo?.split(' ')[0] || 'este contato'}</p>
           </div>
         ) : (
-          mensagens.map(msg => <ChatBubble key={msg.id} msg={msg} onApagar={onApagarMensagem} onEditar={handleIniciarEdicao} nomeAgente={nomeAgente} />)
+          mensagensComSeparadores.map(item => {
+            if (item.tipo === 'separador') {
+              return (
+                <div key={item.key} className="flex items-center gap-3 py-2">
+                  <div className="flex-1 h-px bg-slate-700/50" />
+                  <span className="text-[10px] text-slate-500 font-medium bg-slate-800 px-3 py-1 rounded-full capitalize">
+                    {item.label}
+                  </span>
+                  <div className="flex-1 h-px bg-slate-700/50" />
+                </div>
+              );
+            }
+            return (
+              <ChatBubble
+                key={item.mensagem.id}
+                msg={item.mensagem}
+                onApagar={onApagarMensagem}
+                onEditar={handleIniciarEdicao}
+                nomeAgente={nomeAgente}
+              />
+            );
+          })
         )}
 
         <div ref={messagesEndRef} />

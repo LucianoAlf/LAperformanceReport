@@ -33,7 +33,7 @@ export function useAdminConversas({ unidadeId, departamento = 'administrativo', 
         .select(`
           *,
           aluno:aluno_id(
-            id, nome, telefone, whatsapp, email,
+            id, nome, responsavel_nome, telefone, whatsapp, email,
             curso_id, professor_atual_id, unidade_id,
             status, classificacao, status_pagamento,
             cursos:curso_id(nome),

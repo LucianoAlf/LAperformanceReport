@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Loader2, Inbox, Plus, GraduationCap, Phone, Building2 } from 'lucide-react';
+import { Search, Loader2, Inbox, Plus, GraduationCap, Phone, Building2, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AdminConversa, AlunoInbox, FiltroAdminInbox } from './types';
 
@@ -112,6 +112,12 @@ function AvatarContato({ foto, nome, isExterno, semConversa }: { foto: string | 
   );
 }
 
+function getResponsavelDivergente(nome: string, responsavelNome: string | null | undefined): string | null {
+  if (!responsavelNome) return null;
+  const normalizar = (s: string) => s.trim().toLowerCase();
+  return normalizar(responsavelNome) !== normalizar(nome) ? responsavelNome : null;
+}
+
 function formatTelefoneBR(raw: string | null | undefined): string {
   if (!raw) return '';
   let d = raw.replace(/\D/g, '');
@@ -133,6 +139,7 @@ function AdminInboxItem({ conversa, ativa, mostrarUnidade, onClick }: { conversa
   const statusPag = getStatusPagamentoTag(aluno?.status_pagamento || null);
   const statusAluno = getStatusAlunoTag(aluno?.status);
   const semConversa = !conversa.ultima_mensagem_at;
+  const responsavel = !isExterno && aluno ? getResponsavelDivergente(nome, aluno.responsavel_nome) : null;
 
   return (
     <div
@@ -237,6 +244,15 @@ function AdminInboxItem({ conversa, ativa, mostrarUnidade, onClick }: { conversa
             {professor && (
               <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400 font-medium">
                 {professor}
+              </span>
+            )}
+            {responsavel && (
+              <span
+                className="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 font-medium flex items-center gap-0.5 max-w-[168px] truncate"
+                title={`Responsável: ${responsavel}`}
+              >
+                <User className="w-2.5 h-2.5 flex-shrink-0" />
+                {responsavel}
               </span>
             )}
           </div>
