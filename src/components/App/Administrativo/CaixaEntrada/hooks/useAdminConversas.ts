@@ -14,6 +14,10 @@ export function useAdminConversas({ unidadeId, departamento = 'administrativo', 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalNaoLidas, setTotalNaoLidas] = useState(0);
+  // Mapa "irmãos por número" (últimos 11 dígitos do whatsapp_jid -> alunos que usam esse
+  // mesmo número, ex.: mesmo responsável). Permite sinalizar no card da lista, sem esperar
+  // o atendente abrir a conversa.
+  const [irmaosPorNumero, setIrmaosPorNumero] = useState<Record<string, { id: number; nome: string }[]>>({});
 
   const fetchConversas = useCallback(async () => {
     // null = sem seleção ainda. 'todos' = inbox unificada (todas as unidades; RLS restringe a admin).
@@ -106,6 +110,38 @@ export function useAdminConversas({ unidadeId, departamento = 'administrativo', 
 
       const total = (data || []).reduce((acc: number, c: any) => acc + (c.nao_lidas || 0), 0);
       setTotalNaoLidas(total);
+
+      // Monta o mapa de irmãos por número para os cards visíveis (1 query batched).
+      const digitsList = Array.from(new Set(
+        resultado
+          .filter(c => c.aluno_id && c.whatsapp_jid)
+          .map(c => (c.whatsapp_jid || '').replace(/\D/g, '').slice(-11))
+          .filter(d => d.length >= 10)
+      ));
+
+      if (digitsList.length > 0) {
+        const orParts = digitsList.flatMap(d => [`telefone.like.%${d}`, `whatsapp.like.%${d}`]).join(',');
+        const { data: alunosCompartilhando } = await supabase
+          .from('alunos')
+          .select('id, nome, telefone, whatsapp')
+          .or(orParts);
+
+        const novoMapa: Record<string, { id: number; nome: string }[]> = {};
+        (alunosCompartilhando || []).forEach((a: any) => {
+          [a.telefone, a.whatsapp].forEach((n: string | null) => {
+            const d = (n || '').replace(/\D/g, '').slice(-11);
+            if (d.length >= 10 && digitsList.includes(d)) {
+              if (!novoMapa[d]) novoMapa[d] = [];
+              if (!novoMapa[d].some(x => x.id === a.id)) {
+                novoMapa[d].push({ id: a.id, nome: a.nome });
+              }
+            }
+          });
+        });
+        setIrmaosPorNumero(novoMapa);
+      } else {
+        setIrmaosPorNumero({});
+      }
     } catch (err) {
       console.error('[useAdminConversas] Erro:', err);
       setError(err instanceof Error ? err.message : 'Erro ao buscar conversas');
@@ -182,6 +218,7 @@ export function useAdminConversas({ unidadeId, departamento = 'administrativo', 
     loading,
     error,
     totalNaoLidas,
+    irmaosPorNumero,
     refetch: fetchConversas,
     marcarComoLida,
   };

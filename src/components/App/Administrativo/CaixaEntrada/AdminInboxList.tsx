@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Loader2, Inbox, Plus, GraduationCap, Phone, Building2, User } from 'lucide-react';
+import { Search, Loader2, Inbox, Plus, GraduationCap, Phone, Building2, User, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AdminConversa, AlunoInbox, FiltroAdminInbox } from './types';
 
@@ -12,6 +12,8 @@ interface AdminInboxListProps {
   totalNaoLidas: number;
   /** Inbox unificada (todas as unidades): exibe badge da unidade em cada conversa */
   mostrarUnidade?: boolean;
+  /** Últimos 11 dígitos do número -> alunos que o compartilham (irmãos, mesmo responsável) */
+  irmaosPorNumero?: Record<string, { id: number; nome: string }[]>;
   onSelecionarConversa: (conversa: AdminConversa) => void;
   onFiltroChange: (filtro: FiltroAdminInbox) => void;
   onBuscaChange: (busca: string) => void;
@@ -127,7 +129,7 @@ function formatTelefoneBR(raw: string | null | undefined): string {
   return raw;
 }
 
-function AdminInboxItem({ conversa, ativa, mostrarUnidade, onClick }: { conversa: AdminConversa; ativa: boolean; mostrarUnidade?: boolean; onClick: () => void }) {
+function AdminInboxItem({ conversa, ativa, mostrarUnidade, irmaosPorNumero, onClick }: { conversa: AdminConversa; ativa: boolean; mostrarUnidade?: boolean; irmaosPorNumero?: Record<string, { id: number; nome: string }[]>; onClick: () => void }) {
   const aluno = conversa.aluno as AlunoInbox | undefined;
   const isExterno = conversa.aluno_id === null;
   const unidadeCodigo = (conversa as any).unidade?.codigo || aluno?.unidades?.codigo || null;
@@ -140,6 +142,8 @@ function AdminInboxItem({ conversa, ativa, mostrarUnidade, onClick }: { conversa
   const statusAluno = getStatusAlunoTag(aluno?.status);
   const semConversa = !conversa.ultima_mensagem_at;
   const responsavel = !isExterno && aluno ? getResponsavelDivergente(nome, aluno.responsavel_nome) : null;
+  const jidDigits = (conversa.whatsapp_jid || '').replace(/\D/g, '').slice(-11);
+  const outrosAlunosMesmoNumero = (irmaosPorNumero?.[jidDigits] || []).filter(a => a.id !== conversa.aluno_id);
 
   return (
     <div
@@ -255,6 +259,15 @@ function AdminInboxItem({ conversa, ativa, mostrarUnidade, onClick }: { conversa
                 {responsavel}
               </span>
             )}
+            {outrosAlunosMesmoNumero.length > 0 && (
+              <span
+                className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-medium flex items-center gap-0.5 max-w-[168px] truncate"
+                title={`Número compartilhado com: ${outrosAlunosMesmoNumero.map(a => a.nome).join(', ')}`}
+              >
+                <Users className="w-2.5 h-2.5 flex-shrink-0" />
+                Tb: {outrosAlunosMesmoNumero.map(a => a.nome.split(' ')[0]).join(', ')}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -270,6 +283,7 @@ export function AdminInboxList({
   busca,
   totalNaoLidas,
   mostrarUnidade,
+  irmaosPorNumero,
   onSelecionarConversa,
   onFiltroChange,
   onBuscaChange,
@@ -365,6 +379,7 @@ export function AdminInboxList({
               conversa={conversa}
               ativa={conversaSelecionada?.id === conversa.id}
               mostrarUnidade={mostrarUnidade}
+              irmaosPorNumero={irmaosPorNumero}
               onClick={() => onSelecionarConversa(conversa)}
             />
           ))

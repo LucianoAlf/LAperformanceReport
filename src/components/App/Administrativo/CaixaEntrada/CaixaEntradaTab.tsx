@@ -41,7 +41,7 @@ export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', mu
   const [toasts, setToasts] = useState<NotificacaoToast[]>([]);
   const ultimoAlunoDeepLink = useRef<number | null>(null);
 
-  const { conversas, loading: loadingConversas, totalNaoLidas, marcarComoLida, refetch } = useAdminConversas({
+  const { conversas, loading: loadingConversas, totalNaoLidas, irmaosPorNumero, marcarComoLida, refetch } = useAdminConversas({
     unidadeId,
     departamento,
     filtro,
@@ -125,6 +125,7 @@ export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', mu
           busca={busca}
           totalNaoLidas={totalNaoLidas}
           mostrarUnidade={todasUnidades}
+          irmaosPorNumero={irmaosPorNumero}
           onSelecionarConversa={handleSelecionarConversa}
           onFiltroChange={setFiltro}
           onBuscaChange={setBusca}
