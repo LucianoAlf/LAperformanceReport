@@ -35,9 +35,7 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
   }, [candidatos]);
 
   useEffect(() => {
-    if (unidadeAtual !== 'todos') {
-      buscarCandidatos();
-    }
+    buscarCandidatos();
   }, [unidadeAtual]);
 
   const toggleSelecionado = (alunoId: number) => {
