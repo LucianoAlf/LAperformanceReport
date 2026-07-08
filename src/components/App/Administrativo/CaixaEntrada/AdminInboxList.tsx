@@ -120,6 +120,13 @@ function getResponsavelDivergente(nome: string, responsavelNome: string | null |
   return normalizar(responsavelNome) !== normalizar(nome) ? responsavelNome : null;
 }
 
+// "Hugo" | "Hugo e Vitor" | "Hugo, Vitor e Priscila"
+function formatarListaComE(nomes: string[]): string {
+  if (nomes.length <= 1) return nomes[0] || '';
+  if (nomes.length === 2) return `${nomes[0]} e ${nomes[1]}`;
+  return `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`;
+}
+
 function formatTelefoneBR(raw: string | null | undefined): string {
   if (!raw) return '';
   let d = raw.replace(/\D/g, '');
@@ -144,6 +151,9 @@ function AdminInboxItem({ conversa, ativa, mostrarUnidade, irmaosPorNumero, onCl
   const responsavel = !isExterno && aluno ? getResponsavelDivergente(nome, aluno.responsavel_nome) : null;
   const jidDigits = (conversa.whatsapp_jid || '').replace(/\D/g, '').slice(-11);
   const outrosAlunosMesmoNumero = (irmaosPorNumero?.[jidDigits] || []).filter(a => a.id !== conversa.aluno_id);
+  const nomesCompletosMesmoNumero = outrosAlunosMesmoNumero.length > 0
+    ? [nome, ...outrosAlunosMesmoNumero.map(a => a.nome)]
+    : [];
 
   return (
     <div
@@ -259,13 +269,13 @@ function AdminInboxItem({ conversa, ativa, mostrarUnidade, irmaosPorNumero, onCl
                 {responsavel}
               </span>
             )}
-            {outrosAlunosMesmoNumero.length > 0 && (
+            {nomesCompletosMesmoNumero.length > 0 && (
               <span
-                className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-medium flex items-center gap-0.5 max-w-[168px] truncate"
-                title={`Número compartilhado com: ${outrosAlunosMesmoNumero.map(a => a.nome).join(', ')}`}
+                className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-medium flex items-center gap-0.5 max-w-[200px] truncate"
+                title={`Número compartilhado — alunos: ${nomesCompletosMesmoNumero.join(', ')}`}
               >
                 <Users className="w-2.5 h-2.5 flex-shrink-0" />
-                Tb: {outrosAlunosMesmoNumero.map(a => a.nome.split(' ')[0]).join(', ')}
+                Alunos: {formatarListaComE(nomesCompletosMesmoNumero.map(n => n.split(' ')[0]))}
               </span>
             )}
           </div>
