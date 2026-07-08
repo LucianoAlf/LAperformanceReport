@@ -5,6 +5,7 @@ import { Send, Loader2, RefreshCw, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { usePesquisaPrimeiraAula, type CandidatoPesquisa } from './hooks/usePesquisaPrimeiraAula';
+import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 
 interface Props {
   unidadeAtual: UnidadeId;
@@ -20,6 +21,7 @@ function formatarJid(jid: string | null): string {
 }
 
 export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
+  const sentinelRef = useWidgetOverlapSentinel();
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set());
   const {
     candidatos, loading, enviando, resultados, buscarCandidatos, enviar,
@@ -227,6 +229,7 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
           </table>
         </div>
       </div>
+      <div ref={sentinelRef} aria-hidden="true" className="h-px" />
     </div>
   );
 }

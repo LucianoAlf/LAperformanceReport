@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Check, X, FlaskConical } from 'lucide-react';
+import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 
 interface EvadidoPesquisa {
   evasao_id: number;
@@ -58,7 +59,8 @@ interface Props {
 
 export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
   const toast = useToast();
-  
+  const sentinelRef = useWidgetOverlapSentinel();
+
   const [evadidos, setEvadidos] = useState<EvadidoPesquisa[]>([]);
   const [stats, setStats] = useState<StatsPesquisa | null>(null);
   const [loading, setLoading] = useState(true);
@@ -682,6 +684,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
           </table>
         </div>
       </div>
+      <div ref={sentinelRef} aria-hidden="true" className="h-px" />
     </div>
   );
 }

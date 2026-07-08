@@ -11,6 +11,7 @@ import {
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { useAnalisePesquisas } from './hooks/useAnalisePesquisas';
 import { ModalLancarRespostaManual } from './ModalLancarRespostaManual';
+import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 
 interface Props {
   unidadeAtual: UnidadeId;
@@ -27,6 +28,7 @@ function Estrelas({ nota }: { nota: number }) {
 }
 
 export function RespostasPesquisaTab({ unidadeAtual, onAbrirConversa }: Props) {
+  const sentinelRef = useWidgetOverlapSentinel();
   const hoje = new Date();
   const [ano, setAno] = useState(hoje.getFullYear());
   const [mes, setMes] = useState(hoje.getMonth()); // 0-11
@@ -307,6 +309,8 @@ export function RespostasPesquisaTab({ unidadeAtual, onAbrirConversa }: Props) {
           </div>
         </>
       )}
+
+      <div ref={sentinelRef} aria-hidden="true" className="h-px" />
 
       <ModalLancarRespostaManual
         open={modalAberto}
