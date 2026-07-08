@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Search, X, Loader2, User, GraduationCap, Phone, Hash } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import type { AlunoInbox } from './types';
 
 // Tipo do contato selecionado (aluno cadastrado ou numero externo)
@@ -248,40 +249,58 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
       if (existente) {
         await supabase.from('admin_conversas').update({ status: 'aberta' }).eq('id', existente.id);
       } else {
-        // Conversa solta (externa) com esse número? Vincula ao aluno em vez de duplicar.
-        const { data: solta } = await supabase
+        // Número já tem conversa de OUTRO aluno (irmãos com o mesmo responsável)?
+        // Só pode existir 1 conversa por whatsapp_jid+departamento (é o mesmo WhatsApp) —
+        // em vez de tentar inserir e falhar na constraint UNIQUE, abre a conversa existente.
+        const { data: deOutroAluno } = await supabase
           .from('admin_conversas')
-          .select('id')
-          .is('aluno_id', null)
+          .select('id, aluno:aluno_id(nome)')
           .eq('departamento', departamento)
-          .or(`whatsapp_jid.eq.${jid},telefone_externo.eq.${jid}`)
+          .eq('whatsapp_jid', jid)
+          .not('aluno_id', 'is', null)
+          .neq('aluno_id', aluno.id)
           .maybeSingle();
 
-        const { data: caixa } = await supabase
-          .from('whatsapp_caixas')
-          .select('id')
-          .eq('funcao', 'administrativo')
-          .eq('departamento', departamento)
-          .eq('ativo', true)
-          .or(`unidade_id.eq.${unidadeConversa},unidade_id.is.null`)
-          .maybeSingle();
-
-        if (solta) {
-          await supabase
-            .from('admin_conversas')
-            .update({ aluno_id: aluno.id, unidade_id: unidadeConversa, whatsapp_jid: jid, status: 'aberta', caixa_id: caixa?.id || null })
-            .eq('id', solta.id);
+        if (deOutroAluno) {
+          await supabase.from('admin_conversas').update({ status: 'aberta' }).eq('id', deOutroAluno.id);
+          const nomeOutro = (deOutroAluno as any).aluno?.nome || 'outro aluno';
+          toast.info(`Número compartilhado com ${nomeOutro} (mesmo responsável) — abrindo a conversa existente.`);
         } else {
-          await supabase
+          // Conversa solta (externa) com esse número? Vincula ao aluno em vez de duplicar.
+          const { data: solta } = await supabase
             .from('admin_conversas')
-            .insert({
-              aluno_id: aluno.id,
-              unidade_id: unidadeConversa,
-              departamento,
-              caixa_id: caixa?.id || null,
-              whatsapp_jid: jid,
-              status: 'aberta',
-            });
+            .select('id')
+            .is('aluno_id', null)
+            .eq('departamento', departamento)
+            .or(`whatsapp_jid.eq.${jid},telefone_externo.eq.${jid}`)
+            .maybeSingle();
+
+          const { data: caixa } = await supabase
+            .from('whatsapp_caixas')
+            .select('id')
+            .eq('funcao', 'administrativo')
+            .eq('departamento', departamento)
+            .eq('ativo', true)
+            .or(`unidade_id.eq.${unidadeConversa},unidade_id.is.null`)
+            .maybeSingle();
+
+          if (solta) {
+            await supabase
+              .from('admin_conversas')
+              .update({ aluno_id: aluno.id, unidade_id: unidadeConversa, whatsapp_jid: jid, status: 'aberta', caixa_id: caixa?.id || null })
+              .eq('id', solta.id);
+          } else {
+            await supabase
+              .from('admin_conversas')
+              .insert({
+                aluno_id: aluno.id,
+                unidade_id: unidadeConversa,
+                departamento,
+                caixa_id: caixa?.id || null,
+                whatsapp_jid: jid,
+                status: 'aberta',
+              });
+          }
         }
       }
 
@@ -289,6 +308,7 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
       onClose();
     } catch (err) {
       console.error('[NovaConversaModal] Erro ao criar conversa:', err);
+      toast.error('Erro ao abrir conversa. Tente novamente.');
     } finally {
       setCriando(false);
     }

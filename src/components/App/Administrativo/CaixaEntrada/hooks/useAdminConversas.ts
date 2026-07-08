@@ -62,20 +62,43 @@ export function useAdminConversas({ unidadeId, departamento = 'administrativo', 
 
       let resultado = (data || []) as AdminConversa[];
 
-      // Filtro de busca local (nome/telefone do aluno ou contato externo)
+      // Filtro de busca local (nome/telefone do aluno ou contato externo).
+      // Também casa alunos que COMPARTILHAM o mesmo número (irmãos com o mesmo
+      // responsável, ex.: Hugo/Vitor Rocha da Costa) — a conversa só existe no nome
+      // de um deles (1 conversa por whatsapp_jid+departamento), então buscar pelo
+      // nome do outro irmão precisa achar a mesma conversa.
       if (busca && busca.trim()) {
         const termo = busca.toLowerCase().trim();
+
+        let alunosMatchQuery = supabase
+          .from('alunos')
+          .select('telefone, whatsapp')
+          .or(`nome.ilike.%${termo}%,telefone.like.%${termo}%,whatsapp.like.%${termo}%`);
+        if (!todasUnidades) alunosMatchQuery = alunosMatchQuery.eq('unidade_id', unidadeId);
+        const { data: alunosMatch } = await alunosMatchQuery;
+
+        const digitsCompartilhados = new Set<string>();
+        (alunosMatch || []).forEach((a: any) => {
+          [a.telefone, a.whatsapp].forEach((n: string | null) => {
+            const d = (n || '').replace(/\D/g, '');
+            if (d.length >= 10) digitsCompartilhados.add(d.slice(-11));
+          });
+        });
+
         resultado = resultado.filter(c => {
           const aluno = c.aluno as any;
           if (aluno) {
             const nome = (aluno.nome || '').toLowerCase();
             const telefone = (aluno.telefone || '');
-            return nome.includes(termo) || telefone.includes(termo);
+            if (nome.includes(termo) || telefone.includes(termo)) return true;
+          } else {
+            // Contato externo
+            const nomeExt = (c.nome_externo || '').toLowerCase();
+            const telExt = (c.telefone_externo || '');
+            if (nomeExt.includes(termo) || telExt.includes(termo)) return true;
           }
-          // Contato externo
-          const nomeExt = (c.nome_externo || '').toLowerCase();
-          const telExt = (c.telefone_externo || '');
-          return nomeExt.includes(termo) || telExt.includes(termo);
+          const jidDigits = (c.whatsapp_jid || '').replace(/\D/g, '').slice(-11);
+          return !!jidDigits && digitsCompartilhados.has(jidDigits);
         });
       }
 

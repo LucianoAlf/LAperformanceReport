@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone, Mic, X, Play, Pause, Settings, Trash2, Pencil, Zap, MapPin, Bot } from 'lucide-react';
+import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Users, Phone, Mic, X, Play, Pause, Settings, Trash2, Pencil, Zap, MapPin, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -56,6 +56,32 @@ function StatusIcon({ status }: { status: string }) {
 
 function formatarHoraMsg(data: string): string {
   return new Date(data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Outros alunos que usam o MESMO número de WhatsApp (irmãos com o mesmo responsável,
+// ex.: Hugo/Vitor Rocha da Costa). Como só existe 1 conversa por número, o atendente
+// precisa saber que está falando por um número compartilhado.
+function useIrmaosCompartilhandoNumero(whatsappJid: string | null | undefined, alunoIdAtual: number | null | undefined) {
+  const [irmaos, setIrmaos] = useState<{ id: number; nome: string }[]>([]);
+  useEffect(() => {
+    const digits = (whatsappJid || '').replace(/\D/g, '').slice(-11);
+    if (digits.length < 10) {
+      setIrmaos([]);
+      return;
+    }
+    let cancelado = false;
+    supabase
+      .from('alunos')
+      .select('id, nome, telefone, whatsapp')
+      .or(`telefone.like.%${digits},whatsapp.like.%${digits}`)
+      .then(({ data }) => {
+        if (cancelado) return;
+        const outros = (data || []).filter((a: any) => a.id !== alunoIdAtual);
+        setIrmaos(outros.map((a: any) => ({ id: a.id, nome: a.nome })));
+      });
+    return () => { cancelado = true; };
+  }, [whatsappJid, alunoIdAtual]);
+  return irmaos;
 }
 
 function AudioPlayer({ src, isSaida }: { src: string; isSaida: boolean }) {
@@ -540,6 +566,7 @@ export function AdminChatPanel({
   const nomeAgente = conversa.caixa?.nome?.split(/[-–—]/)[0].trim() || 'Assistente';
 
   const mensagensComSeparadores = useMemo(() => agruparPorData(mensagens), [mensagens]);
+  const irmaosCompartilhando = useIrmaosCompartilhandoNumero(conversa.whatsapp_jid, aluno?.id ?? null);
 
   const { cartoes: vcardsRaw } = useVcardsUnidade(unidadeCartoes || 'todos');
   const vcards: VcardChip[] = (contexto === 'sucesso_aluno' && unidadeCartoes)
@@ -881,6 +908,12 @@ export function AdminChatPanel({
                   <p className="text-[11px] text-violet-300 flex items-center gap-1 mt-0.5">
                     <User className="w-2.5 h-2.5 flex-shrink-0" />
                     Falando com o responsável: {aluno.responsavel_nome}
+                  </p>
+                )}
+                {irmaosCompartilhando.length > 0 && (
+                  <p className="text-[11px] text-amber-300 flex items-center gap-1 mt-0.5">
+                    <Users className="w-2.5 h-2.5 flex-shrink-0" />
+                    Número compartilhado com: {irmaosCompartilhando.map(i => i.nome).join(', ')}
                   </p>
                 )}
               </div>

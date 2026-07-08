@@ -79,9 +79,11 @@ export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', mu
       setTimeout(() => {
         let conversa: AdminConversa | undefined;
         if (contato.tipo === 'aluno' && contato.aluno) {
-          // Com múltiplos números por aluno, achar a conversa do número escolhido
+          // whatsapp_jid+departamento é único — casa por ele primeiro. Necessário quando o
+          // número é compartilhado por irmãos: a conversa pode pertencer a outro aluno_id
+          // (o "dono" original) mesmo quando quem foi selecionado no modal foi o irmão.
           conversa = (contato.whatsapp_jid
-            ? conversas.find(c => c.aluno_id === contato.aluno!.id && c.whatsapp_jid === contato.whatsapp_jid)
+            ? conversas.find(c => c.whatsapp_jid === contato.whatsapp_jid)
             : undefined)
             || conversas.find(c => c.aluno_id === contato.aluno!.id);
         } else if (contato.tipo === 'externo' && contato.telefone_externo) {
