@@ -19,6 +19,10 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { analisarFinanceiroContrato, deveIgnorarStatusFinanceiroPorTipo } from './financeiro.ts';
+import {
+  buildJornadaInputFromMatriculaApi,
+  buildJornadaRowsForUpsert,
+} from '../_shared/jornada-canonica.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -629,6 +633,69 @@ async function fetchTodasMatriculas(token: string) {
   return { porId, ativasPorNome: todasPorNome };
 }
 
+function numeroFinitoOuNull(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+type JornadaUpsertResumo = {
+  atualizadas: number;
+  erros: number;
+  mensagens: Array<{
+    mensagem: string;
+    emusys_matricula_id: number | null;
+    emusys_matricula_disciplina_id: number | null;
+    aluno_nome: string | null;
+    disciplina: string | null;
+  }>;
+};
+
+function mergeJornadaResumo(target: JornadaUpsertResumo, partial: JornadaUpsertResumo) {
+  target.atualizadas += partial.atualizadas;
+  target.erros += partial.erros;
+  target.mensagens.push(...partial.mensagens);
+  if (target.mensagens.length > 10) target.mensagens = target.mensagens.slice(0, 10);
+}
+
+async function upsertJornadasEmLote(supabase: any, rows: any[]) {
+  const result: JornadaUpsertResumo = { atualizadas: 0, erros: 0, mensagens: [] };
+  if (!rows.length) return result;
+
+  const porChave = new Map<string, any>();
+  for (const row of rows) {
+    porChave.set(`${row.unidade_id}|${row.emusys_matricula_disciplina_id}`, row);
+  }
+
+  const deduped = Array.from(porChave.values());
+  for (let i = 0; i < deduped.length; i += 20) {
+    const chunk = deduped.slice(i, i + 20);
+    const { error } = await supabase
+      .from('aluno_jornada_matricula_disciplina')
+      .upsert(chunk, { onConflict: 'unidade_id,emusys_matricula_disciplina_id' });
+
+    if (error) {
+      const sample = chunk[0];
+      mergeJornadaResumo(result, {
+        atualizadas: 0,
+        erros: chunk.length,
+        mensagens: [{
+          mensagem: error.message,
+          emusys_matricula_id: sample?.emusys_matricula_id ?? null,
+          emusys_matricula_disciplina_id: sample?.emusys_matricula_disciplina_id ?? null,
+          aluno_nome: sample?.payload_snapshot?.matricula?.nome_aluno ?? null,
+          disciplina: sample?.curso_nome_emusys ?? null,
+        }],
+      });
+      console.error('[jornada-canonica] erro no upsert em lote', error.message);
+    } else {
+      result.atualizadas += chunk.length;
+    }
+  }
+
+  return result;
+}
+
 function resolverCursoContrato(mat: any, depara: Map<number, number | null>, banda: Set<number>) {
   const cursos: number[] = [];
   const cursosBanda: number[] = [];
@@ -693,7 +760,15 @@ serve(async (req) => {
   if (!u) return new Response(JSON.stringify({ erro: 'unidade inválida; use ?u=cg|recreio|barra' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-  const resumo: any = { modo: 'sugestao', unidade: u.nome, auto: 0, fila: {}, atributos: {}, erros: 0 };
+  const resumo: any = {
+    modo: 'sugestao',
+    unidade: u.nome,
+    auto: 0,
+    fila: {},
+    atributos: {},
+    jornadas: { atualizadas: 0, puladas: 0, erros: 0 },
+    erros: 0,
+  };
   const logs: any[] = [];
   const divs: any[] = [];
   const attrDivs: any[] = [];
@@ -723,6 +798,37 @@ serve(async (req) => {
     const alunosParaReconciliar = (alunos || []).filter((a: any) => {
       return a.status === 'ativo' || temValor(a.emusys_matricula_id);
     });
+
+    const alunoIdPorMatriculaEmusys = new Map<number, number>();
+    const alunoIdPorAlunoEmusys = new Map<number, number>();
+    for (const aluno of alunos || []) {
+      const matriculaId = numeroFinitoOuNull(aluno.emusys_matricula_id);
+      if (matriculaId != null) alunoIdPorMatriculaEmusys.set(matriculaId, aluno.id);
+
+      const alunoEmusysId = numeroFinitoOuNull(aluno.emusys_student_id);
+      if (alunoEmusysId != null) alunoIdPorAlunoEmusys.set(alunoEmusysId, aluno.id);
+    }
+
+    const linhasJornada: any[] = [];
+    for (const mat of porId.values()) {
+      const input = buildJornadaInputFromMatriculaApi(mat, u.id, 'sync-matriculas-emusys');
+      if (!input) continue;
+      const { rows, skipped } = buildJornadaRowsForUpsert(input, {
+        alunoIdPorMatriculaEmusys,
+        alunoIdPorAlunoEmusys,
+        cursoIdPorDisciplinaEmusys: depara,
+        professorIdPorProfessorEmusys: profMap,
+      });
+      linhasJornada.push(...rows);
+      resumo.jornadas.puladas += skipped;
+    }
+
+    const jornadas = await upsertJornadasEmLote(supabase, linhasJornada);
+    resumo.jornadas.atualizadas += jornadas.atualizadas;
+    resumo.jornadas.erros += jornadas.erros;
+    if (jornadas.mensagens.length) {
+      resumo.jornadas.mensagens = jornadas.mensagens;
+    }
 
     const { data: decisoesCanonicas } = await supabase
       .from('matriculas_emusys_decisoes_canonicas')

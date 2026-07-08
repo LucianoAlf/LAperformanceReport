@@ -13,6 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle
 } from '@/components/ui/dialog';
 import { copyTextToClipboard } from '@/lib/clipboard';
+import { useJornadaAluno } from '@/hooks/useJornadaAluno';
 
 interface AlunoSucesso {
   id: number;
@@ -89,6 +90,7 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
   const [presencas, setPresencas] = useState<PresencaRegistro[]>([]);
   const [mostrarTodas, setMostrarTodas] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
+  const { data: jornadas, loading: loadingJornadas } = useJornadaAluno(open ? aluno?.id : null);
 
   // Limpar estados quando o aluno muda
   useEffect(() => {
@@ -542,6 +544,50 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
           </div>
 
           {/* Botão Relatório Individual */}
+          <div className="mt-4 rounded-lg border border-slate-700 bg-slate-900/60 p-4">
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
+              <Music className="h-4 w-4 text-cyan-300" />
+              Posicao no contrato
+            </h3>
+            {loadingJornadas ? (
+              <p className="text-sm text-slate-400">Carregando jornada...</p>
+            ) : jornadas.length === 0 ? (
+              <p className="text-sm text-slate-400">Sem jornada canonica vinculada ainda.</p>
+            ) : (
+              <div className="space-y-2">
+                {jornadas.map((jornada) => (
+                  <div
+                    key={jornada.id}
+                    className="flex min-h-[68px] items-center justify-between gap-3 rounded-md bg-slate-800/70 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-white">
+                        {jornada.curso_nome || 'Curso nao informado'}
+                      </p>
+                      <p className="truncate text-xs text-slate-400">
+                        {jornada.professor_nome || 'Professor nao vinculado'}
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        {jornada.dia_semana || 'Sem dia'} {jornada.horario ? `as ${jornada.horario}` : ''}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-semibold text-cyan-300">
+                        {jornada.jornada_label || 'Sem contador'}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {jornada.nr_aulas_passadas ?? 0} realizadas de {jornada.nr_aulas_contratadas ?? 0}
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        {jornada.presencas ?? 0} presencas / {jornada.faltas ?? 0} faltas
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="mt-4">
             <Button
               onClick={gerarRelatorioIndividual}

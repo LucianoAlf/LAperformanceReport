@@ -105,11 +105,23 @@ import {
   gravarLog,
   type ResultadoMatricula,
 } from '../_shared/invariantes.ts';
+import {
+  buildJornadaInputFromWebhook,
+  upsertJornadaMatriculaDisciplina,
+} from '../_shared/jornada-canonica.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const VERSAO = 'v28';
+const EVENTOS_JORNADA_CANONICA = new Set([
+  'matricula_nova',
+  'matricula_renovacao',
+  'matricula_renovada',
+  'matricula_trancamento',
+  'matricula_finalizacao',
+  'matricula_alterada',
+]);
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -407,6 +419,26 @@ function parsePayload(body: any): Payload | null {
     agenteNome: m.usuario_realizou_matricula?.nome || null,
     rawPayload: body,
   };
+}
+
+async function sincronizarJornadaCanonicaWebhook(supabase: any, p: Payload) {
+  if (!EVENTOS_JORNADA_CANONICA.has(p.evento)) {
+    return { updated: 0, skipped: 0, errors: [] as string[] };
+  }
+
+  try {
+    const input = buildJornadaInputFromWebhook(p.rawPayload, p.unidadeId, `webhook:${p.evento}`);
+    if (!input) return { updated: 0, skipped: 0, errors: ['payload_sem_matricula'] };
+    const result = await upsertJornadaMatriculaDisciplina(supabase, input);
+    if (result.errors.length > 0) {
+      console.error(`[${VERSAO}] jornada canonica falhou`, result.errors);
+    }
+    return result;
+  } catch (error: any) {
+    const message = error?.message ?? String(error);
+    console.error(`[${VERSAO}] jornada canonica excecao`, message);
+    return { updated: 0, skipped: 0, errors: [message] };
+  }
 }
 
 // Mapeamento tipo_pagamento (texto livre do Emusys) -> formas_pagamento.id.
@@ -1503,6 +1535,28 @@ async function handleEvasao(supabase: any, p: Payload) {
   }
 }
 
+async function handleMatriculaAlterada(supabase: any, p: Payload) {
+  const result = {
+    action: 'jornada_matricula_alterada_recebida',
+    emusys_matricula_id: p.matriculaIdEmusys,
+  };
+
+  await gravarLog(supabase, {
+    evento: p.evento,
+    acao: result.action,
+    aluno_nome: p.nomeAluno || '(desconhecido)',
+    unidade_nome: p.unidadeNome ?? undefined,
+    payload_bruto: p.rawPayload,
+    idempotency_key: null,
+    invariantes: [],
+    detalhes: { ...result, version: VERSAO },
+    workflow_id: 'processar-matricula-emusys',
+    execution_id: new Date().toISOString(),
+  });
+
+  return result;
+}
+
 // ==================== SERVE ====================
 
 serve(async (req: Request) => {
@@ -1552,6 +1606,9 @@ serve(async (req: Request) => {
       case 'matricula_finalizacao':
         result = await handleEvasao(supabase, p);
         break;
+      case 'matricula_alterada':
+        result = await handleMatriculaAlterada(supabase, p);
+        break;
       default:
         result = { action: 'evento_ignorado', motivo: `Evento não tratado: ${p.evento}` };
         // Evento ignorado: ainda registra para visibilidade (sem invariantes)
@@ -1571,6 +1628,10 @@ serve(async (req: Request) => {
 
     // Nota v17: o gravarLog ocorre dentro de cada handler. Aqui não inserimos mais
     // em automacao_log para evitar duplicidade.
+
+    if (EVENTOS_JORNADA_CANONICA.has(p.evento)) {
+      result.jornada = await sincronizarJornadaCanonicaWebhook(supabase, p);
+    }
 
     return new Response(JSON.stringify({ success: true, evento: p.evento, ...result }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
