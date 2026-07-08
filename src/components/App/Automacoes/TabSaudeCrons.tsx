@@ -40,6 +40,12 @@ function humanizarSchedule(expr: string): string {
   return expr;
 }
 
+// Duração <= 20ms num job de HTTP indica fire-and-forget (pg_cron + net.http_post):
+// o "succeeded" só mede o enfileiramento do POST, não o resultado real da edge function.
+function ehFireAndForget(job: CronJob): boolean {
+  return job.ultima_duracao_ms != null && job.ultima_duracao_ms <= 20;
+}
+
 function StatusBadge({ job }: { job: CronJob }) {
   if (!job.active) {
     return (
@@ -48,17 +54,62 @@ function StatusBadge({ job }: { job: CronJob }) {
       </span>
     );
   }
-  if (job.ultimo_status === 'succeeded') {
+
+  // Syncs Emusys medíveis: status vem da idade da última execução REAL, não do cron.
+  if (job.sync_status_real) {
+    const idade = job.sync_idade_horas != null ? `${job.sync_idade_horas}h` : '—';
+    const tol = job.sync_tolerancia_horas != null ? `${job.sync_tolerancia_horas}h` : '—';
+    if (job.sync_status_real === 'ok') {
+      return (
+        <span className="flex items-center gap-1 text-emerald-400 text-xs" title={`Última execução real há ${idade} (tolerância ${tol})`}>
+          <CheckCircle2 className="w-3.5 h-3.5" /> ok
+        </span>
+      );
+    }
+    if (job.sync_status_real === 'atrasado') {
+      return (
+        <span className="flex items-center gap-1 text-rose-400 text-xs" title={`Sem execução real há ${idade} (tolerância ${tol}). O sync pode ter parado.`}>
+          <XCircle className="w-3.5 h-3.5" /> atrasado
+        </span>
+      );
+    }
+    if (job.sync_status_real === 'sem_cron') {
+      return (
+        <span className="flex items-center gap-1 text-gray-500 text-xs" title="Sem agendamento (cron) — não há execução automática.">
+          <MinusCircle className="w-3.5 h-3.5" /> sem cron
+        </span>
+      );
+    }
     return (
-      <span className="flex items-center gap-1 text-emerald-400 text-xs">
-        <CheckCircle2 className="w-3.5 h-3.5" /> ok
+      <span className="flex items-center gap-1 text-gray-500 text-xs" title="Nenhuma execução real registrada.">
+        <MinusCircle className="w-3.5 h-3.5" /> nunca rodou
       </span>
     );
   }
+
+  // Falha SQL de verdade (o próprio comando do cron falhou) — vale independentemente do tipo.
   if (job.ultimo_status === 'failed') {
     return (
       <span className="flex items-center gap-1 text-rose-400 text-xs">
         <XCircle className="w-3.5 h-3.5" /> falhou
+      </span>
+    );
+  }
+
+  // Fire-and-forget sem evidência medível: "succeeded" NÃO prova que a função funcionou.
+  // Mostra estado neutro em vez de verde enganoso.
+  if (ehFireAndForget(job)) {
+    return (
+      <span className="flex items-center gap-1 text-amber-400/80 text-xs" title="Disparo via net.http_post: o pg_cron só confirma que enfileirou o POST, não o resultado da edge function. Resultado real não medido.">
+        <AlertTriangle className="w-3.5 h-3.5" /> não medido
+      </span>
+    );
+  }
+
+  if (job.ultimo_status === 'succeeded') {
+    return (
+      <span className="flex items-center gap-1 text-emerald-400 text-xs">
+        <CheckCircle2 className="w-3.5 h-3.5" /> ok
       </span>
     );
   }
@@ -87,8 +138,10 @@ function LinhaJob({ job }: { job: CronJob }) {
       : `${(job.ultima_duracao_ms / 1000).toFixed(1)}s`
     : '—';
 
-  // Aviso: duração <= 20ms num job de HTTP provavelmente é fire-and-forget (pg_cron + net.http_post)
-  const ehFireAndForget = job.ultima_duracao_ms != null && job.ultima_duracao_ms <= 20;
+  const fireAndForget = ehFireAndForget(job);
+  // Para syncs medíveis, a última execução exibida é a REAL (evidência no banco),
+  // não o horário em que o pg_cron enfileirou o POST.
+  const ultimaExibida = job.sync_status_real ? (job.sync_ultima_execucao ?? null) : job.ultima_execucao_brt;
 
   return (
     <tr className="border-t border-slate-800 hover:bg-slate-800/30 transition-colors">
@@ -99,19 +152,19 @@ function LinhaJob({ job }: { job: CronJob }) {
         <span title={job.schedule}>{humanizarSchedule(job.schedule)}</span>
       </td>
       <td className="py-2.5 px-3">
-        <UltimaExecucao iso={job.ultima_execucao_brt} />
+        <UltimaExecucao iso={ultimaExibida} />
+        {job.sync_status_real && (
+          <span className="block text-[10px] text-gray-600" title="Baseado em evidência real gravada pelo sync no banco, não no disparo do cron.">
+            execução real
+          </span>
+        )}
       </td>
       <td className="py-2.5 px-3">
         <StatusBadge job={job} />
       </td>
       <td className="py-2.5 px-3 text-right">
-        <span className={`text-xs ${ehFireAndForget ? 'text-amber-400' : 'text-gray-400'}`}>
+        <span className={`text-xs ${fireAndForget && !job.sync_status_real ? 'text-amber-400/70' : 'text-gray-400'}`}>
           {duracaoTexto}
-          {ehFireAndForget && (
-            <span title="Duração muito curta — provavelmente fire-and-forget (net.http_post). O status 'succeeded' não reflete o resultado real da função.">
-              {' '}<AlertTriangle className="w-3 h-3 inline" />
-            </span>
-          )}
         </span>
       </td>
       <td className="py-2.5 px-3 max-w-[260px]">
@@ -147,7 +200,14 @@ export function TabSaudeCrons() {
   const [sortCol, setSortCol] = useState<SortCol>('jobname');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
-  const falhos = jobs.filter(j => j.active && j.ultimo_status === 'failed').length;
+  // "Problemas" reflete a realidade: falha SQL do cron OU sync com execução real atrasada/inexistente.
+  const falhos = jobs.filter(j =>
+    j.active && (
+      j.sync_status_real === 'atrasado' ||
+      j.sync_status_real === 'nunca' ||
+      (!j.sync_status_real && j.ultimo_status === 'failed')
+    )
+  ).length;
 
   function toggleSort(col: SortCol) {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -186,7 +246,7 @@ export function TabSaudeCrons() {
           </span>
           {falhos > 0 && (
             <span className="flex items-center gap-1 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full">
-              <XCircle className="w-3 h-3" /> {falhos} com falha
+              <XCircle className="w-3 h-3" /> {falhos} com problema
             </span>
           )}
         </div>
@@ -243,7 +303,7 @@ export function TabSaudeCrons() {
       )}
 
       <p className="text-xs text-gray-600 mt-1">
-        Atualizado a cada 60s. Duração ≤ 20ms indica fire-and-forget (net.http_post) — status "ok" não reflete resultado real da edge function.
+        Atualizado a cada 60s. Os syncs Emusys (matrículas, presença, professores) mostram status <span className="text-gray-400">real</span>, pela idade da última execução de fato — verde só se rodou dentro da tolerância. Jobs marcados <span className="text-amber-400/80">"não medido"</span> são disparos fire-and-forget (net.http_post): o pg_cron confirma só o envio do POST, não o resultado da função.
       </p>
     </div>
   );
