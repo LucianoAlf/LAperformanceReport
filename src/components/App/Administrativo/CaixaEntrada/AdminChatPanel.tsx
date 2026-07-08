@@ -69,14 +69,25 @@ function useIrmaosCompartilhandoNumero(whatsappJid: string | null | undefined, a
       setIrmaos([]);
       return;
     }
+    // Pré-filtro SQL pelos últimos 4 dígitos (ficam contíguos mesmo com telefone formatado
+    // tipo "(21) 99897-9955") só para não trazer a tabela toda — o match exato é feito em
+    // JS comparando os 11 dígitos completos normalizados, já que `telefone` está salvo de
+    // forma inconsistente no banco (com ou sem pontuação), o que quebraria um LIKE direto
+    // pelos 11 dígitos.
+    const ultimos4 = digits.slice(-4);
     let cancelado = false;
     supabase
       .from('alunos')
       .select('id, nome, telefone, whatsapp')
-      .or(`telefone.like.%${digits},whatsapp.like.%${digits}`)
+      .or(`telefone.like.%${ultimos4},whatsapp.like.%${ultimos4}`)
       .then(({ data }) => {
         if (cancelado) return;
-        const outros = (data || []).filter((a: any) => a.id !== alunoIdAtual);
+        const outros = (data || []).filter((a: any) => {
+          if (a.id === alunoIdAtual) return false;
+          const d1 = (a.telefone || '').replace(/\D/g, '').slice(-11);
+          const d2 = (a.whatsapp || '').replace(/\D/g, '').slice(-11);
+          return d1 === digits || d2 === digits;
+        });
         setIrmaos(outros.map((a: any) => ({ id: a.id, nome: a.nome })));
       });
     return () => { cancelado = true; };

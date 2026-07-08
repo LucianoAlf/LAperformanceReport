@@ -66,27 +66,46 @@ export function useAdminConversas({ unidadeId, departamento = 'administrativo', 
 
       let resultado = (data || []) as AdminConversa[];
 
-      // Filtro de busca local (nome/telefone do aluno ou contato externo).
-      // Também casa alunos que COMPARTILHAM o mesmo número (irmãos com o mesmo
-      // responsável, ex.: Hugo/Vitor Rocha da Costa) — a conversa só existe no nome
-      // de um deles (1 conversa por whatsapp_jid+departamento), então buscar pelo
-      // nome do outro irmão precisa achar a mesma conversa.
+      // Conjunto de alunos do escopo (mesma unidade, ou unidades das conversas visíveis no
+      // modo consolidado) — usado tanto para achar irmãos por nome/telefone na busca quanto
+      // para montar o selo "número compartilhado" nos cards. Comparação de telefone é feita
+      // por DÍGITOS NORMALIZADOS em JS (não LIKE em texto cru): o campo `telefone` está
+      // inconsistente no banco — alguns alunos têm só dígitos ("5521998979955"), outros com
+      // formatação ("(21) 99897-9955") — e a pontuação quebra o match de um LIKE por dígitos
+      // puros (caso real: Hugo/Vitor Rocha da Costa, mesmo responsável, mesmo número).
+      let alunos: { id: number; nome: string; telefone: string | null; whatsapp: string | null }[] = [];
+      if (resultado.length > 0) {
+        const unidadesEnvolvidas = Array.from(new Set(resultado.map(c => c.unidade_id).filter(Boolean))) as string[];
+        let alunosQuery = supabase.from('alunos').select('id, nome, telefone, whatsapp');
+        if (!todasUnidades) {
+          alunosQuery = alunosQuery.eq('unidade_id', unidadeId);
+        } else if (unidadesEnvolvidas.length > 0) {
+          alunosQuery = alunosQuery.in('unidade_id', unidadesEnvolvidas);
+        }
+        const { data: alunosEscopo } = await alunosQuery;
+        alunos = (alunosEscopo || []) as typeof alunos;
+      }
+
+      const digitsDoAluno = (a: { telefone: string | null; whatsapp: string | null }): string[] =>
+        [a.telefone, a.whatsapp]
+          .map(n => (n || '').replace(/\D/g, '').slice(-11))
+          .filter(d => d.length >= 10);
+
+      // Filtro de busca local (nome/telefone do aluno ou contato externo). Também casa
+      // alunos que COMPARTILHAM o mesmo número (irmãos com o mesmo responsável) — a
+      // conversa só existe no nome de um deles (1 conversa por whatsapp_jid+departamento),
+      // então buscar pelo nome do outro irmão precisa achar a mesma conversa.
       if (busca && busca.trim()) {
         const termo = busca.toLowerCase().trim();
-
-        let alunosMatchQuery = supabase
-          .from('alunos')
-          .select('telefone, whatsapp')
-          .or(`nome.ilike.%${termo}%,telefone.like.%${termo}%,whatsapp.like.%${termo}%`);
-        if (!todasUnidades) alunosMatchQuery = alunosMatchQuery.eq('unidade_id', unidadeId);
-        const { data: alunosMatch } = await alunosMatchQuery;
+        const termoDigits = termo.replace(/\D/g, '');
 
         const digitsCompartilhados = new Set<string>();
-        (alunosMatch || []).forEach((a: any) => {
-          [a.telefone, a.whatsapp].forEach((n: string | null) => {
-            const d = (n || '').replace(/\D/g, '');
-            if (d.length >= 10) digitsCompartilhados.add(d.slice(-11));
-          });
+        alunos.forEach(a => {
+          const nomeMatch = (a.nome || '').toLowerCase().includes(termo);
+          const foneMatch = termoDigits.length >= 4 && digitsDoAluno(a).some(d => d.includes(termoDigits));
+          if (nomeMatch || foneMatch) {
+            digitsDoAluno(a).forEach(d => digitsCompartilhados.add(d));
+          }
         });
 
         resultado = resultado.filter(c => {
@@ -111,37 +130,26 @@ export function useAdminConversas({ unidadeId, departamento = 'administrativo', 
       const total = (data || []).reduce((acc: number, c: any) => acc + (c.nao_lidas || 0), 0);
       setTotalNaoLidas(total);
 
-      // Monta o mapa de irmãos por número para os cards visíveis (1 query batched).
-      const digitsList = Array.from(new Set(
+      // Monta o mapa de irmãos por número para os cards visíveis.
+      const digitsVisiveis = new Set(
         resultado
           .filter(c => c.aluno_id && c.whatsapp_jid)
           .map(c => (c.whatsapp_jid || '').replace(/\D/g, '').slice(-11))
           .filter(d => d.length >= 10)
-      ));
+      );
 
-      if (digitsList.length > 0) {
-        const orParts = digitsList.flatMap(d => [`telefone.like.%${d}`, `whatsapp.like.%${d}`]).join(',');
-        const { data: alunosCompartilhando } = await supabase
-          .from('alunos')
-          .select('id, nome, telefone, whatsapp')
-          .or(orParts);
-
-        const novoMapa: Record<string, { id: number; nome: string }[]> = {};
-        (alunosCompartilhando || []).forEach((a: any) => {
-          [a.telefone, a.whatsapp].forEach((n: string | null) => {
-            const d = (n || '').replace(/\D/g, '').slice(-11);
-            if (d.length >= 10 && digitsList.includes(d)) {
-              if (!novoMapa[d]) novoMapa[d] = [];
-              if (!novoMapa[d].some(x => x.id === a.id)) {
-                novoMapa[d].push({ id: a.id, nome: a.nome });
-              }
+      const novoMapa: Record<string, { id: number; nome: string }[]> = {};
+      alunos.forEach(a => {
+        digitsDoAluno(a).forEach(d => {
+          if (digitsVisiveis.has(d)) {
+            if (!novoMapa[d]) novoMapa[d] = [];
+            if (!novoMapa[d].some(x => x.id === a.id)) {
+              novoMapa[d].push({ id: a.id, nome: a.nome });
             }
-          });
+          }
         });
-        setIrmaosPorNumero(novoMapa);
-      } else {
-        setIrmaosPorNumero({});
-      }
+      });
+      setIrmaosPorNumero(novoMapa);
     } catch (err) {
       console.error('[useAdminConversas] Erro:', err);
       setError(err instanceof Error ? err.message : 'Erro ao buscar conversas');
