@@ -499,6 +499,7 @@ export function AdministrativoPage() {
             return {
               ...row,
               ticket_medio: canonico.ticketMedio,
+              mrr_atual: canonico.mrr,
               faturamento_previsto: canonico.faturamentoPrevisto,
               churn_rate: canonico.churnRate,
               tempo_permanencia_medio: canonico.tempoPermanencia,
@@ -523,6 +524,7 @@ export function AdministrativoPage() {
             total_bolsistas_integrais_segundo_curso: row.bolsistasIntegraisSegundoCurso,
             total_bolsistas_parciais: row.bolsistasParciais,
             ticket_medio: row.ticketMedio,
+            mrr_atual: row.mrr,
             faturamento_previsto: row.faturamentoPrevisto,
             churn_rate: row.churnRate,
             tempo_permanencia_medio: row.tempoPermanencia,
@@ -593,7 +595,7 @@ export function AdministrativoPage() {
         alunos_com_2_curso: (acc.alunos_com_2_curso || 0) + (k._alunos_com_2_curso || 0),
         matriculas_2_curso_extras: (acc.matriculas_2_curso_extras || 0) + (k._matriculas_2_curso_extras || 0),
         alunos_coral: alunosCoral,
-        faturamento: (acc.faturamento || 0) + (Number(k.faturamento_previsto) || 0),
+        faturamento: (acc.faturamento || 0) + (Number(k.mrr_atual ?? k.faturamento_previsto) || 0),
         churn_rate: k.churn_rate || acc.churn_rate || 0,
         ltv_meses: Number(k.tempo_permanencia_medio) || acc.ltv_meses || 0,
       }), {} as any) || {};
@@ -605,9 +607,19 @@ export function AdministrativoPage() {
         kpis.ltv_meses = tempoPermanenciaCanonico;
       }
 
-      kpis.ticket_medio = kpis.alunos_pagantes > 0
-        ? kpis.faturamento / kpis.alunos_pagantes
-        : 0;
+      if (kpisAlunosCanonicos.fonte !== 'indisponivel') {
+        const kpisUnidadeCanonica = unidade === 'todos'
+          ? kpisAlunosCanonicos
+          : kpisAlunosCanonicos.porUnidade.find(row => row.unidade_id === unidade);
+
+        kpis.ticket_medio = Number(kpisUnidadeCanonica?.ticketMedio) || 0;
+        kpis.faturamento = Number(kpisUnidadeCanonica?.mrr) || kpis.faturamento || 0;
+        kpis.mrr_atual = kpis.faturamento;
+      } else {
+        kpis.ticket_medio = kpis.alunos_pagantes > 0
+          ? kpis.faturamento / kpis.alunos_pagantes
+          : 0;
+      }
 
       // Contar movimentações por tipo
       const movRetencaoCanonicas = filtrarRetencaoCanonica(movDataComAlunos);

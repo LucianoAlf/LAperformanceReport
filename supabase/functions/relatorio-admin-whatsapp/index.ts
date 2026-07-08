@@ -514,6 +514,61 @@ async function enviarWhatsAppGrupo(
  * Replica EXATAMENTE a lógica do frontend (ModalRelatorio.tsx gerarRelatorioDiario)
  * Usa as mesmas views e queries que o AdministrativoPage usa
  */
+async function verificarSessaoWhatsApp(creds: WhatsAppCreds): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (creds.provedor === 'waha') {
+    if (!creds.wahaUrl || !creds.wahaSession) {
+      return { ok: false, error: `Caixa WhatsApp "${creds.caixaNome}" com credenciais WAHA incompletas.` };
+    }
+
+    try {
+      const headers: Record<string, string> = {};
+      if (creds.wahaApiKey) headers['X-Api-Key'] = creds.wahaApiKey;
+      const response = await fetch(`${creds.wahaUrl}/api/sessions/${encodeURIComponent(creds.wahaSession)}`, { headers });
+      const data = await response.json().catch(() => ({}));
+      const status = String(data?.status || data?.state || 'sem status');
+
+      if (response.ok && status === 'WORKING') {
+        return { ok: true };
+      }
+
+      return {
+        ok: false,
+        error: `WhatsApp da caixa "${creds.caixaNome}" não está conectado (${status}). Reconecte a sessão antes de enviar o relatório.`,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: `Não consegui validar a sessão WhatsApp da caixa "${creds.caixaNome}". ${error instanceof Error ? error.message : 'Erro de conexão'}`,
+      };
+    }
+  }
+
+  if (!creds.baseUrl || !creds.token) {
+    return { ok: false, error: `Caixa WhatsApp "${creds.caixaNome}" com credenciais UAZAPI incompletas.` };
+  }
+
+  return { ok: true };
+}
+
+async function enviarRelatorioParaDestino(
+  supabase: any,
+  destino: { jid: string; nome?: string | null; unidade_id?: string | null },
+  texto: string,
+  unidadeFallback?: string | null
+): Promise<{ grupo: string; success: boolean; messageId?: string; error?: string }> {
+  const unidadeId = destino.unidade_id || (unidadeFallback && unidadeFallback !== 'todos' ? unidadeFallback : undefined);
+  const creds = await getWhatsAppCredentials(supabase, { funcao: 'sistema', unidadeId });
+  const sessao = await verificarSessaoWhatsApp(creds);
+
+  if (sessao.ok === false) {
+    console.warn(`[relatorio-admin-whatsapp] Envio bloqueado para ${destino.nome || destino.jid}: ${sessao.error}`);
+    return { grupo: destino.nome || destino.jid, success: false, error: sessao.error };
+  }
+
+  const resultado = await enviarWhatsAppGrupo(destino.jid, texto, creds);
+  return { grupo: destino.nome || destino.jid, ...resultado };
+}
+
 async function gerarRelatorioDiario(
   supabase: any,
   unidadeId: string
@@ -1574,13 +1629,16 @@ serve(async (req) => {
       );
     }
 
-    const creds = await getWhatsAppCredentials(supabase, { funcao: 'sistema' });
-
     // Modo teste
     if (payload.numero_teste) {
       const numero = payload.numero_teste.replace(/\D/g, '');
       console.log(`[relatorio-admin-whatsapp] 🧪 MODO TESTE — enviando para ${numero}`);
-      const resultado = await enviarWhatsAppGrupo(numero, payload.texto, creds);
+      const resultado = await enviarRelatorioParaDestino(
+        supabase,
+        { jid: numero, nome: 'TESTE', unidade_id: payload.unidade && payload.unidade !== 'todos' ? payload.unidade : null },
+        payload.texto,
+        payload.unidade
+      );
       return new Response(
         JSON.stringify({ success: resultado.success, error: resultado.error, resultados: [{ grupo: 'TESTE', ...resultado }] }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -1624,8 +1682,8 @@ serve(async (req) => {
     const resultados: { grupo: string; success: boolean; messageId?: string; error?: string }[] = [];
 
     for (const grupo of gruposParaEnviar) {
-      const resultado = await enviarWhatsAppGrupo(grupo.jid, payload.texto, creds);
-      resultados.push({ grupo: grupo.nome, ...resultado });
+      const resultado = await enviarRelatorioParaDestino(supabase, grupo, payload.texto, payload.unidade);
+      resultados.push(resultado);
 
       if (gruposParaEnviar.length > 1) {
         await new Promise(resolve => setTimeout(resolve, 500));

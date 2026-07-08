@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchKPIsAlunosVivosCanonicos } from '@/lib/kpisAlunosVivosCanonicos';
+import {
+  fetchFinanceiroFaturasEmusys,
+  hasFinanceiroFaturas,
+  type FinanceiroFaturasUnidade,
+} from '@/lib/financeiroFaturasEmusys';
 
 export type FonteKPIAlunos = 'dados_mensais' | 'vivo' | 'preliminar' | 'indisponivel';
 
@@ -12,6 +17,10 @@ export interface KPIsAlunosCanonicosPorUnidade {
   alunosAtivos: number;
   alunosPagantes: number;
   ticketMedio: number;
+  ticketMedioPrevisto?: number;
+  ticketDenominadorFaturas?: number;
+  ticketDenominadorFaturasPrevisto?: number;
+  financeiroFaturasEmusys?: boolean;
   mrr: number;
   arr: number;
   churnRate: number;
@@ -53,6 +62,10 @@ export interface KPIsAlunosCanonicos {
   alunosAtivos: number;
   alunosPagantes: number;
   ticketMedio: number;
+  ticketMedioPrevisto?: number;
+  ticketDenominadorFaturas?: number;
+  ticketDenominadorFaturasPrevisto?: number;
+  financeiroFaturasEmusys?: boolean;
   mrr: number;
   arr: number;
   churnRate: number;
@@ -96,6 +109,10 @@ const ZERO_KPIS = {
   alunosAtivos: 0,
   alunosPagantes: 0,
   ticketMedio: 0,
+  ticketMedioPrevisto: 0,
+  ticketDenominadorFaturas: 0,
+  ticketDenominadorFaturasPrevisto: 0,
+  financeiroFaturasEmusys: false,
   mrr: 0,
   arr: 0,
   churnRate: 0,
@@ -158,6 +175,10 @@ function mapDadosMensais(row: any): KPIsAlunosCanonicosPorUnidade {
     alunosAtivos: n(row.alunos_ativos),
     alunosPagantes: n(row.alunos_pagantes),
     ticketMedio,
+    ticketMedioPrevisto: ticketMedio,
+    ticketDenominadorFaturas: 0,
+    ticketDenominadorFaturasPrevisto: 0,
+    financeiroFaturasEmusys: false,
     mrr,
     arr: mrr * 12,
     churnRate: n(row.churn_rate),
@@ -187,6 +208,80 @@ function mapDadosMensais(row: any): KPIsAlunosCanonicosPorUnidade {
   };
 }
 
+function aplicarFinanceiroFaturas(
+  row: KPIsAlunosCanonicosPorUnidade,
+  financeiro?: FinanceiroFaturasUnidade | null
+): KPIsAlunosCanonicosPorUnidade {
+  if (!hasFinanceiroFaturas(financeiro)) {
+    return row;
+  }
+
+  const ticketDenominador = financeiro.ticket_denominador || row.alunosPagantes;
+  const ticketDenominadorPrevisto = financeiro.ticket_denominador_previsto || ticketDenominador;
+  const mrr = financeiro.mrr_atual;
+  const faturamentoPrevisto = financeiro.faturamento_previsto || mrr;
+  const ticketMedio = financeiro.ticket_medio || (ticketDenominador > 0 ? mrr / ticketDenominador : row.ticketMedio);
+  const ticketMedioPrevisto = financeiro.ticket_medio_previsto || (
+    ticketDenominadorPrevisto > 0 ? faturamentoPrevisto / ticketDenominadorPrevisto : ticketMedio
+  );
+
+  return {
+    ...row,
+    ticketMedio,
+    ticketMedioPrevisto,
+    ticketDenominadorFaturas: ticketDenominador,
+    ticketDenominadorFaturasPrevisto: ticketDenominadorPrevisto,
+    financeiroFaturasEmusys: true,
+    mrr,
+    arr: mrr * 12,
+    ltv: ticketMedio * row.tempoPermanencia,
+    faturamentoPrevisto,
+    faturamentoRealizado: mrr,
+  };
+}
+
+async function aplicarFinanceiroFaturasPeriodo(
+  rows: KPIsAlunosCanonicosPorUnidade[],
+  {
+    unidadeId,
+    ano,
+    mes,
+    mesFim,
+  }: Required<Pick<FetchKPIsAlunosCanonicosParams, 'ano' | 'mes' | 'mesFim'>> & {
+    unidadeId?: string | 'todos' | null;
+  }
+): Promise<KPIsAlunosCanonicosPorUnidade[]> {
+  if (rows.length === 0) return rows;
+
+  const meses = Array.from({ length: Math.max(mesFim - mes + 1, 0) }, (_, index) => mes + index);
+  if (meses.length === 0) return rows;
+
+  try {
+    const payloads = await Promise.all(
+      meses.map(async mesAtual => ({
+        mes: mesAtual,
+        payload: await fetchFinanceiroFaturasEmusys({ unidadeId, ano, mes: mesAtual }),
+      }))
+    );
+
+    const financeiroPorUnidadeMes = new Map<string, FinanceiroFaturasUnidade>();
+    payloads.forEach(({ mes: mesAtual, payload }) => {
+      payload?.por_unidade.forEach(financeiro => {
+        if (!financeiro.unidade_id) return;
+        financeiroPorUnidadeMes.set(`${financeiro.unidade_id}:${mesAtual}`, financeiro);
+      });
+    });
+
+    return rows.map(row => aplicarFinanceiroFaturas(
+      row,
+      financeiroPorUnidadeMes.get(`${row.unidade_id}:${row.mes}`)
+    ));
+  } catch (error) {
+    console.warn('Falha ao aplicar financeiro por faturas Emusys; mantendo snapshot legado.', error);
+    return rows;
+  }
+}
+
 export function consolidarKPIsAlunosCanonicos(
   rows: KPIsAlunosCanonicosPorUnidade[],
   base: Pick<KPIsAlunosCanonicos, 'fonte' | 'competenciaFechada' | 'competenciaParcial' | 'alertasFonte' | 'ano' | 'mes'>,
@@ -194,10 +289,20 @@ export function consolidarKPIsAlunosCanonicos(
 ): KPIsAlunosCanonicos {
   const totalPagantes = rows.reduce((acc, row) => acc + row.alunosPagantes, 0);
   const totalMrr = rows.reduce((acc, row) => acc + row.mrr, 0);
+  const totalFaturamentoPrevisto = rows.reduce((acc, row) => acc + row.faturamentoPrevisto, 0);
+  const totalTicketDenominador = rows.reduce((acc, row) => acc + (row.ticketDenominadorFaturas || 0), 0);
+  const totalTicketDenominadorPrevisto = rows.reduce((acc, row) => acc + (row.ticketDenominadorFaturasPrevisto || 0), 0);
   const totalAtivos = rows.reduce((acc, row) => acc + row.alunosAtivos, 0);
   const totalEvasoes = rows.reduce((acc, row) => acc + row.evasoes, 0);
   const totalReajustesValidos = rows.reduce((acc, row) => acc + row.reajustesValidos, 0);
   const count = rows.length || 1;
+  const financeiroFaturasEmusys = rows.some(row => row.financeiroFaturasEmusys);
+  const ticketMedio = totalTicketDenominador > 0
+    ? totalMrr / totalTicketDenominador
+    : totalPagantes > 0 ? totalMrr / totalPagantes : 0;
+  const ticketMedioPrevisto = totalTicketDenominadorPrevisto > 0
+    ? totalFaturamentoPrevisto / totalTicketDenominadorPrevisto
+    : ticketMedio;
   const unidadeNome = unidadeId === 'todos'
     ? 'Consolidado'
     : rows[0]?.unidade_nome || 'Unidade';
@@ -207,12 +312,19 @@ export function consolidarKPIsAlunosCanonicos(
 
   return {
     ...base,
+    alertasFonte: financeiroFaturasEmusys
+      ? [...base.alertasFonte, 'Financeiro: MRR, faturamento previsto e ticket médio carregados das faturas Emusys.']
+      : base.alertasFonte,
     fonteLabel: fonteLabel(base.fonte),
     unidade_id: unidadeId,
     unidade_nome: unidadeNome,
     alunosAtivos: totalAtivos,
     alunosPagantes: totalPagantes,
-    ticketMedio: totalPagantes > 0 ? totalMrr / totalPagantes : 0,
+    ticketMedio,
+    ticketMedioPrevisto,
+    ticketDenominadorFaturas: totalTicketDenominador,
+    ticketDenominadorFaturasPrevisto: totalTicketDenominadorPrevisto,
+    financeiroFaturasEmusys,
     mrr: totalMrr,
     arr: totalMrr * 12,
     churnRate: rows.length === 1 ? rows[0].churnRate : rows.reduce((acc, row) => acc + row.churnRate, 0) / count,
@@ -235,7 +347,7 @@ export function consolidarKPIsAlunosCanonicos(
     kids: rows.reduce((acc, row) => acc + row.kids, 0),
     school: rows.reduce((acc, row) => acc + row.school, 0),
     semClassificacao: rows.reduce((acc, row) => acc + row.semClassificacao, 0),
-    faturamentoPrevisto: rows.reduce((acc, row) => acc + row.faturamentoPrevisto, 0),
+    faturamentoPrevisto: totalFaturamentoPrevisto,
     faturamentoRealizado: rows.reduce((acc, row) => acc + row.faturamentoRealizado, 0),
     reajustePct,
     reajustesValidos: totalReajustesValidos,
@@ -273,7 +385,8 @@ export async function fetchKPIsAlunosCanonicos({
   const competenciaParcial = !unidadeFiltro && fechadas.length > 0 && !competenciaFechada;
 
   if (periodoAtualUnico && fechadas.length === 0) {
-    const rows = await fetchKPIsAlunosVivosCanonicos({ unidadeId, ano, mes });
+    const rowsBase = await fetchKPIsAlunosVivosCanonicos({ unidadeId, ano, mes });
+    const rows = await aplicarFinanceiroFaturasPeriodo(rowsBase, { unidadeId, ano, mes, mesFim });
     return consolidarKPIsAlunosCanonicos(rows, {
       fonte: rows.length > 0 ? 'vivo' : 'indisponivel',
       competenciaFechada: false,
@@ -301,7 +414,8 @@ export async function fetchKPIsAlunosCanonicos({
   if (dadosMensaisError) throw dadosMensaisError;
 
   if (dadosMensais && dadosMensais.length > 0) {
-    const rows = dadosMensais.map(mapDadosMensais);
+    const rowsBase = dadosMensais.map(mapDadosMensais);
+    const rows = await aplicarFinanceiroFaturasPeriodo(rowsBase, { unidadeId, ano, mes, mesFim });
     return consolidarKPIsAlunosCanonicos(rows, {
       fonte: competenciaFechada || competenciaParcial ? 'dados_mensais' : 'preliminar',
       competenciaFechada,

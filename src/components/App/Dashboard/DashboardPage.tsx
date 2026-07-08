@@ -106,6 +106,8 @@ interface ResumoUnidade {
   alunos_ativos: number;
   alunos_pagantes: number;
   ticket_medio: number;
+  ticket_denominador_faturas?: number;
+  mrr_atual?: number;
   faturamento_previsto: number;
   tempo_medio: number;
 }
@@ -644,7 +646,7 @@ export function DashboardPage() {
         // Usar isPeriodoAtual já calculado acima para decidir fonte de dados
         // IMPORTANTE: Filtrar por unidade se não for consolidado
 
-        if (isPeriodoAtual) {
+        if (kpisAlunos.fonte !== 'indisponivel') {
           // Para período atual, usar fonte canônica viva (dados em tempo real)
           const resumo: ResumoUnidade[] = kpisAlunos.porUnidade.map(row => ({
             unidade: row.unidade_nome,
@@ -652,6 +654,8 @@ export function DashboardPage() {
             alunos_ativos: Math.round(row.alunosAtivos),
             alunos_pagantes: Math.round(row.alunosPagantes),
             ticket_medio: row.ticketMedio,
+            ticket_denominador_faturas: row.ticketDenominadorFaturas,
+            mrr_atual: row.mrr,
             faturamento_previsto: row.faturamentoPrevisto,
             tempo_medio: row.tempoPermanencia,
           }));
@@ -1119,8 +1123,9 @@ export function DashboardPage() {
                 <td className="py-3 text-right text-white font-bold">
                   {resumoUnidades.length > 0 
                     ? formatCurrency(
-                        resumoUnidades.reduce((acc, d) => acc + d.alunos_pagantes, 0) > 0
-                          ? resumoUnidades.reduce((acc, d) => acc + d.faturamento_previsto, 0) / resumoUnidades.reduce((acc, d) => acc + d.alunos_pagantes, 0)
+                        resumoUnidades.reduce((acc, d) => acc + (d.ticket_denominador_faturas || d.alunos_pagantes), 0) > 0
+                          ? resumoUnidades.reduce((acc, d) => acc + (d.mrr_atual ?? d.faturamento_previsto), 0) /
+                            resumoUnidades.reduce((acc, d) => acc + (d.ticket_denominador_faturas || d.alunos_pagantes), 0)
                           : 0
                       )
                     : formatCurrency(0)}
