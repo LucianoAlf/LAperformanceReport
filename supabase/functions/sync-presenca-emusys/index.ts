@@ -66,6 +66,7 @@ interface AulaEmusys {
   id: number;
   nr_da_aula: number | null;
   qtd_aulas_contrato: number | null;
+  matricula_disciplina_id?: number | null;
   tipo: string;
   categoria: string;
   turma_nome: string | null;
@@ -834,6 +835,8 @@ serve(async (req: Request) => {
                 professor_id: professorId,
                 cancelada: aula.cancelada,
                 nr_da_aula: aula.nr_da_aula,
+                matricula_disciplina_id: aula.matricula_disciplina_id ?? null,
+                qtd_aulas_contrato: aula.qtd_aulas_contrato,
                 qtd_alunos: aula.alunos?.length || 0,
                 anotacoes: aula.anotacoes || null,
               },

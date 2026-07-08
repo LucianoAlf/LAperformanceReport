@@ -6,3 +6,5 @@ export * from './useMetas';
 export * from './useHealthScore';
 export * from './useProjetos';
 export * from './useFidelizaPrograma';
+export * from './useJornadaAluno';
+export * from './useJornadaProfessor';
