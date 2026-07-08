@@ -34,6 +34,7 @@ import { TabHistoricoLTV } from './TabHistoricoLTV';
 import { ToastContainer } from '@/components/ui/toast';
 import { useToast } from '@/hooks/useToast';
 import { isMatriculaBandaAtivaOperacional } from '@/lib/alunosFiltrosCanonicos';
+import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
 // Interfaces
 export interface Aluno {
   id: number;
@@ -712,6 +713,7 @@ export function AlunosPage() {
       const turmasSozinhos = turmasViewData.filter((t: any) => t.total_alunos === 1).length;
 
       let kpisAdminOperacional: KPIsAlunosAdminOperacional | null = null;
+      let kpisAlunosCanonicos: Awaited<ReturnType<typeof fetchKPIsAlunosCanonicos>> | null = null;
       try {
         kpisAdminOperacional = await fetchKPIsAlunosAdminOperacional({
           unidadeId: unidadeAtual,
@@ -721,8 +723,24 @@ export function AlunosPage() {
       } catch (err) {
         console.error('Erro ao buscar KPIs operacionais de alunos:', err);
       }
+      try {
+        kpisAlunosCanonicos = await fetchKPIsAlunosCanonicos({
+          unidadeId: unidadeAtual,
+          ano: competenciaFiltro.ano,
+          mes: competenciaFiltro.mes,
+        });
+      } catch (err) {
+        console.error('Erro ao buscar KPIs financeiros canônicos de alunos:', err);
+      }
 
       const usarKpisAdminOperacional = !!kpisAdminOperacional;
+      const kpisFinanceirosCanonicos = kpisAlunosCanonicos?.fonte !== 'indisponivel'
+        ? unidadeAtual === 'todos'
+          ? kpisAlunosCanonicos
+          : kpisAlunosCanonicos?.porUnidade.find(row => row.unidade_id === unidadeAtual)
+        : null;
+      const ticketMedioCanonico = Number(kpisFinanceirosCanonicos?.ticketMedio) || 0;
+      const ltvCanonico = Number(kpisFinanceirosCanonicos?.ltv) || 0;
 
       setKpis({
         totalAtivos: usarKpisAdminOperacional ? kpisAdminOperacional.alunosAtivos : totalAtivos,
@@ -735,8 +753,8 @@ export function AlunosPage() {
           ? Math.round(kpisAdminOperacional.bolsistasIntegrais + kpisAdminOperacional.bolsistasParciais)
           : totalBolsistas,
         mediaAlunosTurma: Math.round(mediaAlunosTurma * 100) / 100,
-        ticketMedio: Math.round(ticketMedio),
-        ltvMedio: Math.round(ltvMedio * 10) / 10,
+        ticketMedio: Math.round(ticketMedioCanonico || ticketMedio),
+        ltvMedio: Math.round((ltvCanonico || ltvMedio) * 10) / 10,
         totalTurmas,
         turmasSozinhos
       });

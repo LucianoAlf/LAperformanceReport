@@ -132,9 +132,27 @@ export function useKPIsGestao(
         anterioresQuery = anterioresQuery.eq('unidade_id', unidadeId);
       }
 
-      const { data: dadosAnteriores } = await anterioresQuery;
+      const [{ data: dadosAnteriores }, canonicalAnterior] = await Promise.all([
+        anterioresQuery,
+        fetchKPIsAlunosCanonicos({
+          unidadeId,
+          ano: anoAnterior,
+          mes: mesAnterior,
+        }).catch(() => null),
+      ]);
 
-      if (dadosAnteriores && dadosAnteriores.length > 0) {
+      if (canonicalAnterior && canonicalAnterior.fonte !== 'indisponivel') {
+        setData(prev => prev ? {
+          ...prev,
+          anterior: {
+            total_alunos_ativos: canonicalAnterior.alunosAtivos,
+            total_alunos_pagantes: canonicalAnterior.alunosPagantes,
+            ticket_medio: canonicalAnterior.ticketMedio,
+            mrr: canonicalAnterior.mrr,
+            churn_rate: canonicalAnterior.churnRate,
+          },
+        } : null);
+      } else if (dadosAnteriores && dadosAnteriores.length > 0) {
         const totalPagantes = dadosAnteriores.reduce((acc, d) => acc + (Number(d.alunos_pagantes) || 0), 0);
         const mrr = dadosAnteriores.reduce((acc, d) => acc + (Number(d.faturamento_estimado) || 0), 0);
         const count = dadosAnteriores.length || 1;

@@ -50,6 +50,45 @@ const SEGMENTACAO_KIDS_SCHOOL_CG_MAIO_2026 = {
   nota: 'Segmentação Kids/School reconstruída por critério histórico; snapshot original não possui essas colunas.',
 };
 
+function mapKPIAlunoCanonicoParaGestao(row: any) {
+  return {
+    unidade_id: row.unidade_id,
+    unidade_nome: row.unidade_nome,
+    ano: row.ano,
+    mes: row.mes,
+    total_alunos_ativos: row.alunosAtivos,
+    total_alunos_pagantes: row.alunosPagantes,
+    total_bolsistas_integrais: row.bolsistasIntegrais,
+    total_bolsistas_integrais_regulares: row.bolsistasIntegraisRegulares,
+    total_bolsistas_integrais_segundo_curso: row.bolsistasIntegraisSegundoCurso,
+    total_bolsistas_parciais: row.bolsistasParciais,
+    total_banda: row.matriculasBanda,
+    total_matriculas_ativas: row.matriculasAtivas,
+    total_segundo_curso: row.matriculasSegundoCurso,
+    matriculas_2_curso: row.matriculasSegundoCurso,
+    alunos_com_2_curso: row.alunosComSegundoCurso,
+    matriculas_2_curso_extras: row.matriculasSegundoCursoExtras,
+    total_coral: row.matriculasCoral,
+    total_la_kids: row.kids,
+    total_la_adultos: row.school,
+    total_la_sem_classificação: row.semClassificacao,
+    ticket_medio: row.ticketMedio,
+    ticket_denominador_faturas: row.ticketDenominadorFaturas || 0,
+    mrr: row.mrr,
+    arr: row.arr,
+    tempo_permanencia_medio: row.tempoPermanencia,
+    ltv_medio: row.ltv,
+    inadimplencia_pct: row.inadimplencia,
+    faturamento_previsto: row.faturamentoPrevisto,
+    faturamento_realizado: row.faturamentoRealizado,
+    churn_rate: row.churnRate,
+    total_evasoes: row.evasoes,
+    novas_matriculas: row.novasMatriculas,
+    reajuste_pct: row.reajustePct,
+    reajustes_validos: row.reajustesValidos,
+  };
+}
+
 interface DadosGestao {
   // Alunos
   total_alunos_ativos: number;
@@ -350,6 +389,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
                 total_banda: row.matriculasBanda,
                 total_matriculas_ativas: row.matriculasAtivas,
                 total_segundo_curso: row.matriculasSegundoCurso,
+                matriculas_2_curso: row.matriculasSegundoCurso,
                 alunos_com_2_curso: row.alunosComSegundoCurso,
                 matriculas_2_curso_extras: row.matriculasSegundoCursoExtras,
                 total_coral: row.matriculasCoral,
@@ -357,6 +397,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
                 total_la_adultos: row.school,
                 total_la_sem_classificação: row.semClassificacao,
                 ticket_medio: row.ticketMedio,
+                ticket_denominador_faturas: row.ticketDenominadorFaturas || 0,
                 mrr: row.mrr,
                 arr: row.arr,
                 tempo_permanencia_medio: row.tempoPermanencia,
@@ -467,6 +508,13 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           const { data: historicoData, error: historicoError } = await historicoQuery;
           if (historicoError) throw historicoError;
 
+          const kpisAlunosCanonicosHistorico = await fetchKPIsAlunosCanonicos({
+            unidadeId: unidade,
+            ano,
+            mes: mesInicio,
+            mesFim: mesFinal,
+          });
+
           // Buscar dados de evasões detalhados de movimentacoes_admin
           const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
           const ultimoDia = new Date(ano, mesFinal, 0).getDate();
@@ -516,6 +564,10 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               reajuste_pct: Number(d.reajuste_parcelas) || 0,
             }));
 
+            if (kpisAlunosCanonicosHistorico.fonte !== 'indisponivel') {
+              gestaoData = kpisAlunosCanonicosHistorico.porUnidade.map(mapKPIAlunoCanonicoParaGestao);
+            }
+
             // Dados de retenção do histórico
             // Usar dados da tabela evasoes que tem tipos detalhados
             retencaoData = [{
@@ -552,6 +604,11 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
         }
 
         const { data: dadosMesAnteriorData } = await dadosMesAnteriorQuery;
+        const kpisMesAnterior = await fetchKPIsAlunosCanonicos({
+          unidadeId: unidade,
+          ano: anoMesAnterior,
+          mes: mesAnterior,
+        }).catch(() => null);
 
         // Consolidar dados do mês anterior
         if (dadosMesAnteriorData && dadosMesAnteriorData.length > 0) {
@@ -574,9 +631,14 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           
           const dadosMesAnteriorFinal = {
             ...consolidadoMesAnterior,
-            ticket_medio: consolidadoMesAnterior.alunos_pagantes > 0
-              ? consolidadoMesAnterior.faturamento_estimado / consolidadoMesAnterior.alunos_pagantes
-              : 0,
+            ticket_medio: kpisMesAnterior && kpisMesAnterior.fonte !== 'indisponivel'
+              ? kpisMesAnterior.ticketMedio
+              : consolidadoMesAnterior.alunos_pagantes > 0
+                ? consolidadoMesAnterior.faturamento_estimado / consolidadoMesAnterior.alunos_pagantes
+                : 0,
+            faturamento_estimado: kpisMesAnterior && kpisMesAnterior.fonte !== 'indisponivel'
+              ? kpisMesAnterior.mrr
+              : consolidadoMesAnterior.faturamento_estimado,
             churn_rate: consolidadoMesAnterior.count > 0 ? consolidadoMesAnterior.churn_rate / consolidadoMesAnterior.count : 0,
             taxa_renovacao: consolidadoMesAnterior.count > 0 ? consolidadoMesAnterior.taxa_renovacao / consolidadoMesAnterior.count : 0,
             tempo_permanencia: consolidadoMesAnterior.count > 0 ? consolidadoMesAnterior.tempo_permanencia / consolidadoMesAnterior.count : 0,
@@ -602,6 +664,11 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
         }
 
         const { data: dadosAnoAnteriorData } = await dadosAnoAnteriorQuery;
+        const kpisAnoAnterior = await fetchKPIsAlunosCanonicos({
+          unidadeId: unidade,
+          ano: ano - 1,
+          mes,
+        }).catch(() => null);
 
         // Consolidar dados do ano anterior
         if (dadosAnoAnteriorData && dadosAnoAnteriorData.length > 0) {
@@ -624,9 +691,14 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           
           const dadosAnoAnteriorFinal = {
             ...consolidadoAnoAnterior,
-            ticket_medio: consolidadoAnoAnterior.alunos_pagantes > 0
-              ? consolidadoAnoAnterior.faturamento_estimado / consolidadoAnoAnterior.alunos_pagantes
-              : 0,
+            ticket_medio: kpisAnoAnterior && kpisAnoAnterior.fonte !== 'indisponivel'
+              ? kpisAnoAnterior.ticketMedio
+              : consolidadoAnoAnterior.alunos_pagantes > 0
+                ? consolidadoAnoAnterior.faturamento_estimado / consolidadoAnoAnterior.alunos_pagantes
+                : 0,
+            faturamento_estimado: kpisAnoAnterior && kpisAnoAnterior.fonte !== 'indisponivel'
+              ? kpisAnoAnterior.mrr
+              : consolidadoAnoAnterior.faturamento_estimado,
             churn_rate: consolidadoAnoAnterior.count > 0 ? consolidadoAnoAnterior.churn_rate / consolidadoAnoAnterior.count : 0,
             taxa_renovacao: consolidadoAnoAnterior.count > 0 ? consolidadoAnoAnterior.taxa_renovacao / consolidadoAnoAnterior.count : 0,
             tempo_permanencia: consolidadoAnoAnterior.count > 0 ? consolidadoAnoAnterior.tempo_permanencia / consolidadoAnoAnterior.count : 0,
@@ -662,7 +734,8 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             total_la_kids_sum: acc.total_la_kids_sum + (item.total_la_kids || 0),
             total_la_adultos_sum: acc.total_la_adultos_sum + (item.total_la_adultos || 0),
             total_la_sem_classificação_sum: acc.total_la_sem_classificação_sum + (item.total_la_sem_classificação || 0),
-            ticket_medio_sum: acc.ticket_medio_sum + ((Number(item.ticket_medio) || 0) * (item.total_alunos_pagantes || 0)),
+            ticket_medio_sum: acc.ticket_medio_sum + ((Number(item.ticket_medio) || 0) * (item.ticket_denominador_faturas || item.total_alunos_pagantes || 0)),
+            ticket_denominador_sum: acc.ticket_denominador_sum + (item.ticket_denominador_faturas || item.total_alunos_pagantes || 0),
             mrr_sum: acc.mrr_sum + (Number(item.mrr) || 0),
             arr_sum: acc.arr_sum + (Number(item.arr) || 0),
             tempo_permanencia_medio_sum: acc.tempo_permanencia_medio_sum + (Number(item.tempo_permanencia_medio) || 0),
@@ -683,6 +756,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             total_bolsistas_parciais_sum: 0, total_banda_sum: 0, matriculas_2_curso_sum: 0,
             alunos_com_2_curso_sum: 0, matriculas_2_curso_extras_sum: 0, total_la_kids_sum: 0,
             total_la_adultos_sum: 0, total_la_sem_classificação_sum: 0, ticket_medio_sum: 0, mrr_sum: 0, arr_sum: 0,
+            ticket_denominador_sum: 0,
             tempo_permanencia_medio_sum: 0, ltv_medio_sum: 0, inadimplencia_pct_sum: 0,
             faturamento_previsto: 0, faturamento_realizado: 0, churn_rate_sum: 0, total_evasoes: 0, 
             novas_matriculas: 0, reajuste_pct_sum: 0, reajuste_pct_ponderado_sum: 0, reajustes_validos_sum: 0, count: 0
@@ -961,7 +1035,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             ],
             
             // Financeiro - ticket/taxas = MÉDIA, faturamento = SOMA
-            ticket_medio: g.total_alunos_pagantes_sum > 0 ? g.ticket_medio_sum / g.total_alunos_pagantes_sum : 0,
+            ticket_medio: g.ticket_denominador_sum > 0 ? g.ticket_medio_sum / g.ticket_denominador_sum : 0,
             mrr: mesesUnicos > 0 ? g.mrr_sum / mesesUnicos : 0, // MRR médio do período
             arr: mesesUnicos > 0 ? (g.mrr_sum / mesesUnicos) * 12 : 0, // ARR baseado no MRR médio
             faturamento_previsto: g.faturamento_previsto, // SOMA do período
@@ -1112,7 +1186,10 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
                 churn_rate: row.churnRate,
                 alunos_pagantes: row.alunosPagantes,
                 ticket_medio: row.ticketMedio,
+                ticket_denominador_faturas: row.ticketDenominadorFaturas || 0,
+                mrr_atual: row.mrr,
                 faturamento_estimado: row.faturamentoPrevisto,
+                faturamento_realizado: row.faturamentoRealizado,
                 taxa_renovacao: Number(retencaoAtual?.taxa_renovacao) || 0,
                 reajuste_parcelas: row.reajustePct,
               };
@@ -1130,6 +1207,46 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
         }
 
         // Buscar nomes das unidades para o gráfico de receita por unidade
+        if (financeiroData) {
+          const chavesFinanceiras = Array.from(new Set(
+            financeiroData
+              .map((item: any) => `${item.ano}-${String(item.mes).padStart(2, '0')}`)
+              .filter((key: string) => key <= selectedKey)
+          )).sort().slice(-12);
+
+          const kpisFinanceirosSerie = await Promise.all(
+            chavesFinanceiras.map(async key => {
+              const [anoKey, mesKey] = key.split('-').map(Number);
+              const kpis = await fetchKPIsAlunosCanonicos({
+                unidadeId: unidade,
+                ano: anoKey,
+                mes: mesKey,
+              }).catch(() => null);
+              return { kpis };
+            })
+          );
+
+          const kpisFinanceirosPorUnidadeMes = new Map<string, any>();
+          kpisFinanceirosSerie.forEach(({ kpis }) => {
+            if (!kpis || kpis.fonte === 'indisponivel') return;
+            kpis.porUnidade.forEach((row: any) => {
+              kpisFinanceirosPorUnidadeMes.set(`${row.ano}-${row.mes}-${row.unidade_id}`, row);
+            });
+          });
+
+          financeiroData.forEach((item: any) => {
+            const row = kpisFinanceirosPorUnidadeMes.get(`${item.ano}-${item.mes}-${item.unidade_id}`);
+            if (!row) return;
+
+            item.alunos_pagantes = row.alunosPagantes;
+            item.ticket_medio = row.ticketMedio;
+            item.ticket_denominador_faturas = row.ticketDenominadorFaturas || 0;
+            item.mrr_atual = row.mrr;
+            item.faturamento_estimado = row.faturamentoPrevisto;
+            item.faturamento_realizado = row.faturamentoRealizado;
+          });
+        }
+
         const { data: unidadesData } = await supabase.from('unidades').select('id, nome');
         const unidadeNomeMap = new Map<string, string>();
         unidadesData?.forEach((u: any) => unidadeNomeMap.set(u.id, u.nome));
@@ -1144,7 +1261,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             const key = `${item.ano}-${String(item.mes).padStart(2, '0')}`;
             if (key <= mesAtualKey) {
               const atual = mrrPorMes.get(key) || 0;
-              mrrPorMes.set(key, atual + (Number(item.faturamento_estimado) || 0));
+              mrrPorMes.set(key, atual + (Number(item.mrr_atual ?? item.faturamento_estimado) || 0));
             }
           });
           
@@ -1163,12 +1280,13 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           // 2. Previsto vs Realizado (últimos 6 meses até o mês selecionado)
           // Previsto = faturamento_estimado (MRR)
           // Realizado = faturamento_estimado - inadimplência
-          const previstoRealizadoPorMes = new Map<string, { previsto: number; inadimplencia: number; count: number }>();
+          const previstoRealizadoPorMes = new Map<string, { previsto: number; realizado: number; inadimplencia: number; count: number }>();
           financeiroData.forEach((item: any) => {
             const key = `${item.ano}-${String(item.mes).padStart(2, '0')}`;
             if (key <= mesAtualKey) {
-              const atual = previstoRealizadoPorMes.get(key) || { previsto: 0, inadimplencia: 0, count: 0 };
+              const atual = previstoRealizadoPorMes.get(key) || { previsto: 0, realizado: 0, inadimplencia: 0, count: 0 };
               atual.previsto += Number(item.faturamento_estimado) || 0;
+              atual.realizado += Number(item.faturamento_realizado ?? item.mrr_atual ?? item.faturamento_estimado) || 0;
               atual.inadimplencia += Number(item.inadimplencia) || 0;
               atual.count += 1;
               previstoRealizadoPorMes.set(key, atual);
@@ -1180,9 +1298,8 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             .slice(-6)
             .map(([key, valores]) => {
               const [anoKey, mesKey] = key.split('-');
-              const inadimplenciaMedia = valores.count > 0 ? valores.inadimplencia / valores.count : 0;
               const previsto = valores.previsto;
-              const realizado = previsto - (previsto * inadimplenciaMedia / 100);
+              const realizado = valores.realizado || previsto;
               return {
                 name: `${getMesNomeCurto(parseInt(mesKey))}/${anoKey.slice(2)}`,
                 previsto,
@@ -1205,7 +1322,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               .forEach((item: any) => {
                 const nomeUnidade = unidadeNomeMap.get(item.unidade_id) || 'N/A';
                 const mrrAtual = receitaPorUnidadeMap.get(nomeUnidade) || 0;
-                receitaPorUnidadeMap.set(nomeUnidade, mrrAtual + (Number(item.faturamento_estimado) || 0));
+                receitaPorUnidadeMap.set(nomeUnidade, mrrAtual + (Number(item.mrr_atual ?? item.faturamento_estimado) || 0));
               });
             
             const receitaArray = Array.from(receitaPorUnidadeMap.entries())
@@ -1241,14 +1358,14 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           setEvolucaoInadimplencia(inadimplenciaArray);
 
           // 5. Evolução do Ticket Médio (últimos 12 meses até o mês selecionado)
-          const ticketPorMes = new Map<string, { faturamento: number; pagantes: number; total: number; count: number }>();
+          const ticketPorMes = new Map<string, { faturamento: number; denominador: number; total: number; count: number }>();
           financeiroData.forEach((item: any) => {
             const key = `${item.ano}-${String(item.mes).padStart(2, '0')}`;
             // Incluir apenas dados até o mês selecionado
             if (key <= mesAtualKey) {
-              const atual = ticketPorMes.get(key) || { faturamento: 0, pagantes: 0, total: 0, count: 0 };
-              atual.faturamento += Number(item.faturamento_estimado) || 0;
-              atual.pagantes += Number(item.alunos_pagantes) || 0;
+              const atual = ticketPorMes.get(key) || { faturamento: 0, denominador: 0, total: 0, count: 0 };
+              atual.faturamento += Number(item.mrr_atual ?? item.faturamento_estimado) || 0;
+              atual.denominador += Number(item.ticket_denominador_faturas || item.alunos_pagantes) || 0;
               atual.total += Number(item.ticket_medio) || 0;
               atual.count += 1;
               ticketPorMes.set(key, atual);
@@ -1262,8 +1379,8 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               const [anoStr, mesStr] = key.split('-');
               return {
                 name: `${getMesNomeCurto(parseInt(mesStr))}/${anoStr.slice(2)}`,
-                ticket: valores.pagantes > 0
-                  ? valores.faturamento / valores.pagantes
+                ticket: valores.denominador > 0
+                  ? valores.faturamento / valores.denominador
                   : valores.count > 0 ? valores.total / valores.count : 0,
               };
             });
