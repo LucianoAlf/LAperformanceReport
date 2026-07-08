@@ -236,10 +236,10 @@ export function RespostasPesquisaTab({ unidadeAtual, onAbrirConversa }: Props) {
             </div>
           </div>
 
-          {/* Registro de respostas */}
+          {/* Registro de pesquisas */}
           <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-700">
-              <h3 className="font-medium text-white">Registro de respostas</h3>
+              <h3 className="font-medium text-white">Registro de pesquisas</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -258,21 +258,32 @@ export function RespostasPesquisaTab({ unidadeAtual, onAbrirConversa }: Props) {
                   {respostas.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="py-10 text-center text-slate-500">
-                        Nenhuma resposta neste período
+                        Nenhuma pesquisa enviada neste período
                       </td>
                     </tr>
                   ) : (
                     respostas.map((r) => {
-                      const baixa = r.nota <= 2;
+                      const aguardando = r.status === 'aguardando';
+                      const baixa = !aguardando && r.nota !== null && r.nota <= 2;
                       return (
                         <tr key={r.pesquisa_id} className={baixa ? 'bg-red-900/10' : 'hover:bg-slate-700/30'}>
                           <td className="px-4 py-3 text-white font-medium">{r.nome}</td>
-                          <td className="px-4 py-3 text-center"><Estrelas nota={r.nota} /></td>
+                          <td className="px-4 py-3 text-center">
+                            {aguardando ? (
+                              <span className="text-xs text-slate-400 bg-slate-700/50 px-2 py-1 rounded-full">
+                                Aguardando resposta
+                              </span>
+                            ) : (
+                              <Estrelas nota={r.nota!} />
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-slate-300">{r.curso_nome || '—'}</td>
                           <td className="px-4 py-3 text-slate-300">{r.professor_nome || '—'}</td>
                           <td className="px-4 py-3 text-slate-300">{r.unidade_nome || '—'}</td>
                           <td className="px-4 py-3 text-center text-slate-400 text-sm">
-                            {r.respondido_em ? format(new Date(r.respondido_em), 'dd/MM/yy', { locale: ptBR }) : '—'}
+                            {aguardando
+                              ? `Enviado ${r.enviado_em ? format(new Date(r.enviado_em), 'dd/MM/yy', { locale: ptBR }) : '—'}`
+                              : r.respondido_em ? format(new Date(r.respondido_em), 'dd/MM/yy', { locale: ptBR }) : '—'}
                           </td>
                           <td className="px-4 py-3 text-center">
                             {baixa && onAbrirConversa ? (

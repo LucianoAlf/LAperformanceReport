@@ -21,13 +21,14 @@ export interface RespostaPesquisa {
   pesquisa_id: string;
   aluno_id: number;
   nome: string;
-  nota: number;
+  nota: number | null;
   curso_nome: string | null;
   professor_nome: string | null;
   unidade_nome: string | null;
   whatsapp_jid: string | null;
   enviado_em: string | null;
   respondido_em: string | null;
+  status: 'respondida' | 'aguardando';
 }
 
 export function useAnalisePesquisas(unidadeAtual: UnidadeId, dataInicio: string, dataFim: string) {

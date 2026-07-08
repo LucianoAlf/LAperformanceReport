@@ -27,7 +27,9 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
   } = usePesquisaPrimeiraAula(unidadeAtual);
 
   useEffect(() => {
-    setSelecionados(new Set(candidatos.filter(c => c.whatsapp_jid).map(c => c.aluno_id)));
+    setSelecionados(new Set(
+      candidatos.filter(c => c.whatsapp_jid && c.status === 'pendente').map(c => c.aluno_id)
+    ));
   }, [candidatos]);
 
   useEffect(() => {
@@ -44,10 +46,11 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
     });
   };
 
-  const candidatosComContato = candidatos.filter(c => c.whatsapp_jid);
+  const pendentes = candidatos.filter(c => c.status === 'pendente');
+  const pendentesComContato = pendentes.filter(c => c.whatsapp_jid);
   const todosSelecionados =
-    candidatosComContato.length > 0 &&
-    candidatosComContato.every(c => selecionados.has(c.aluno_id));
+    pendentesComContato.length > 0 &&
+    pendentesComContato.every(c => selecionados.has(c.aluno_id));
   const selecionadosList = candidatos.filter(c => selecionados.has(c.aluno_id));
   const resultadoPorId = new Map(resultados.map(r => [r.aluno_id, r]));
 
@@ -64,7 +67,11 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
           <span className="text-sm text-slate-400">
             {loading
               ? 'Buscando...'
-              : `${candidatos.length} candidato${candidatos.length !== 1 ? 's' : ''} encontrado${candidatos.length !== 1 ? 's' : ''}`}
+              : candidatos.length === 0
+                ? 'Nenhum calouro fez a 1ª aula ontem'
+                : pendentes.length === 0
+                  ? `${candidatos.length} de ${candidatos.length} já processado${candidatos.length !== 1 ? 's' : ''}`
+                  : `${pendentes.length} pendente${pendentes.length !== 1 ? 's' : ''} de ${candidatos.length}`}
           </span>
           <Button
             variant="ghost"
@@ -126,7 +133,7 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
                     onChange={e =>
                       setSelecionados(
                         e.target.checked
-                          ? new Set(candidatosComContato.map(c => c.aluno_id))
+                          ? new Set(pendentesComContato.map(c => c.aluno_id))
                           : new Set()
                       )
                     }
@@ -152,13 +159,14 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
               ) : candidatos.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-10 text-center text-slate-500">
-                    Nenhum calouro fez a primeira aula ontem (pendente de pesquisa)
+                    Nenhum calouro fez a primeira aula ontem
                   </td>
                 </tr>
               ) : (
                 candidatos.map(c => {
                   const resultado = resultadoPorId.get(c.aluno_id);
                   const semContato = !c.whatsapp_jid;
+                  const naoSelecionavel = semContato || c.status !== 'pendente';
                   return (
                     <tr
                       key={c.aluno_id}
@@ -167,9 +175,9 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
-                          checked={selecionados.has(c.aluno_id) && !semContato}
-                          disabled={semContato}
-                          onChange={() => !semContato && toggleSelecionado(c.aluno_id)}
+                          checked={selecionados.has(c.aluno_id) && !naoSelecionavel}
+                          disabled={naoSelecionavel}
+                          onChange={() => !naoSelecionavel && toggleSelecionado(c.aluno_id)}
                           className="w-4 h-4 accent-violet-500 disabled:opacity-40"
                         />
                       </td>
@@ -191,7 +199,13 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
                         )}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        {resultado ? (
+                        {c.status === 'respondido' ? (
+                          <span className="text-xs text-amber-400">{'⭐'.repeat(c.nota ?? 0)}</span>
+                        ) : c.status === 'aguardando' ? (
+                          <span className="text-xs text-slate-400 bg-slate-700/50 px-2 py-1 rounded-full">
+                            Aguardando resposta
+                          </span>
+                        ) : resultado ? (
                           resultado.ok ? (
                             <span className="text-xs text-green-400">Enviado ✓</span>
                           ) : (

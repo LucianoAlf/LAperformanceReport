@@ -13,6 +13,8 @@ export interface CandidatoPesquisa {
   data_primeira_aula: string;
   data_matricula: string;
   whatsapp_jid: string | null;
+  status: 'pendente' | 'aguardando' | 'respondido';
+  nota: number | null;
 }
 
 export interface ResultadoEnvio {
@@ -34,6 +36,7 @@ export function usePesquisaPrimeiraAula(unidadeAtual: UnidadeId) {
       const { data, error } = await supabase.rpc('get_candidatos_pesquisa_primeira_aula', {
         p_unidade_id: unidadeAtual === 'todos' ? null : unidadeAtual,
         p_apenas_ontem: true,
+        p_incluir_enviados: true,
       });
       if (error) throw error;
       setCandidatos((data as CandidatoPesquisa[]) || []);
@@ -46,12 +49,14 @@ export function usePesquisaPrimeiraAula(unidadeAtual: UnidadeId) {
   }, [unidadeAtual]);
 
   const enviar = useCallback(async (selecionados: CandidatoPesquisa[]) => {
-    if (selecionados.length === 0) return;
+    // Defesa extra: só manda quem ainda está pendente (já enviados vêm só pra exibição).
+    const pendentes = selecionados.filter(a => a.status === 'pendente');
+    if (pendentes.length === 0) return;
     setEnviando(true);
     try {
       const { data, error } = await supabase.functions.invoke('enviar-pesquisa-pos-primeira-aula', {
         body: {
-          alunos: selecionados.map(a => ({
+          alunos: pendentes.map(a => ({
             aluno_id: a.aluno_id,
             unidade_id: a.unidade_id,
             whatsapp_jid: a.whatsapp_jid,
@@ -71,8 +76,10 @@ export function usePesquisaPrimeiraAula(unidadeAtual: UnidadeId) {
       if (enviados > 0) toast.success(`${enviados} pesquisa${enviados > 1 ? 's' : ''} enviada${enviados > 1 ? 's' : ''}`);
       if (falhas > 0) toast.error(`${falhas} envio${falhas > 1 ? 's' : ''} falhou`);
 
+      // Não remove da lista — atualiza o status pra "aguardando" (a linha continua visível
+      // pro acompanhamento, só sai da seleção/contagem de pendentes).
       const idsEnviados = new Set(resultadosData.filter(r => r.ok).map(r => r.aluno_id));
-      setCandidatos(prev => prev.filter(c => !idsEnviados.has(c.aluno_id)));
+      setCandidatos(prev => prev.map(c => idsEnviados.has(c.aluno_id) ? { ...c, status: 'aguardando' as const } : c));
     } catch (err: any) {
       toast.error('Erro ao enviar pesquisas: ' + (err.message || 'Erro desconhecido'));
     } finally {
