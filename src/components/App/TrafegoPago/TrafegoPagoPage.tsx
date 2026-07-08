@@ -13,6 +13,7 @@ import {
   Tooltip as RTooltip, CartesianGrid
 } from 'recharts';
 import { Button } from '@/components/ui/button';
+import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 
 // ============================================================================
 // Tipos
@@ -219,6 +220,7 @@ export function TrafegoPagoPage() {
     iconeCor: 'text-pink-400',
     iconeWrapperCor: 'bg-pink-500/20',
   });
+  const sentinelRef = useWidgetOverlapSentinel();
 
   const [preset, setPreset] = useState<Preset>('last_30d');
   const [insights, setInsights] = useState<InsightsResponse | null>(null);
@@ -751,6 +753,7 @@ export function TrafegoPagoPage() {
           labelItem="leads"
         />
       </div>
+      <div ref={sentinelRef} aria-hidden="true" className="h-px" />
     </div>
   );
 }
