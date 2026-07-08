@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Users, Phone, Mic, X, Play, Pause, Settings, Trash2, Pencil, Zap, MapPin, Bot } from 'lucide-react';
+import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Users, Phone, Mic, X, Play, Pause, Settings, Trash2, Pencil, Zap, MapPin, Bot, Smile } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { formatarWhatsApp } from '@/lib/whatsappFormat';
 import { TemplateSelector, isTemplateAutomacao } from '@/components/App/PreAtendimento/components/chat/TemplateSelector';
 import type { VcardChip } from '@/components/App/PreAtendimento/components/chat/TemplateSelector';
+import { EmojiPicker } from '@/components/App/PreAtendimento/components/chat/EmojiPicker';
 import { useVcardsUnidade } from '@/components/App/SucessoCliente/hooks/useVcardsUnidade';
 import { ModalGerenciarTemplates } from '@/components/App/PreAtendimento/components/chat/ModalGerenciarTemplates';
 import type { TemplateWhatsApp } from '@/components/App/PreAtendimento/types';
@@ -556,6 +557,7 @@ export function AdminChatPanel({
   const [menuAnexoAberto, setMenuAnexoAberto] = useState(false);
   const [templateAberto, setTemplateAberto] = useState(false);
   const [templateDropdownAberto, setTemplateDropdownAberto] = useState(false);
+  const [emojiPickerAberto, setEmojiPickerAberto] = useState(false);
   const [templateFiltroInicial, setTemplateFiltroInicial] = useState('');
   const [modalTemplatesAberto, setModalTemplatesAberto] = useState(false);
   const [fotoPerfil, setFotoPerfil] = useState<string | null>(conversa.foto_perfil_url || null);
@@ -679,6 +681,25 @@ export function AdminChatPanel({
       setTemplateDropdownAberto(false);
     }
   }, [templateDropdownAberto]);
+
+  // Inserir emoji no texto na posição do cursor
+  const handleInserirEmoji = useCallback((emoji: string) => {
+    const el = textareaRef.current;
+    if (el) {
+      const inicio = el.selectionStart ?? texto.length;
+      const fim = el.selectionEnd ?? texto.length;
+      const novoTexto = texto.slice(0, inicio) + emoji + texto.slice(fim);
+      setTexto(novoTexto);
+      // Reposicionar cursor após o emoji
+      requestAnimationFrame(() => {
+        el.focus();
+        const novaPosicao = inicio + emoji.length;
+        el.setSelectionRange(novaPosicao, novaPosicao);
+      });
+    } else {
+      setTexto(prev => prev + emoji);
+    }
+  }, [texto]);
 
   // Aplicar template: substitui placeholders com dados do aluno/contato
   const handleUsarTemplate = useCallback((conteudo: string) => {
@@ -1149,6 +1170,29 @@ export function AdminChatPanel({
                 <Settings className="w-5 h-5" />
               </button>
             </Tooltip>
+
+            {/* Botão emoji */}
+            <div className="relative">
+              <Tooltip content="Inserir emoji" side="top">
+                <button
+                  onClick={() => setEmojiPickerAberto(prev => !prev)}
+                  className={cn(
+                    'p-2 rounded-lg transition',
+                    emojiPickerAberto
+                      ? 'text-yellow-400 bg-slate-700/50'
+                      : 'text-slate-400 hover:text-yellow-400 hover:bg-slate-700/50'
+                  )}
+                >
+                  <Smile className="w-5 h-5" />
+                </button>
+              </Tooltip>
+              {emojiPickerAberto && (
+                <EmojiPicker
+                  onSelecionar={handleInserirEmoji}
+                  onFechar={() => setEmojiPickerAberto(false)}
+                />
+              )}
+            </div>
 
             {/* Textarea + dropdown de templates */}
             <div className="flex-1 relative">
