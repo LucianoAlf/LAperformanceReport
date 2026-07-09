@@ -150,6 +150,7 @@ export function FeedbackProfessorPage() {
           return {
             aluno_id: parseInt(alunoId),
             professor_id: sessao.professor_id,
+            unidade_id: sessao.unidade_id,
             competencia,
             feedback: fb.feedback,
             observacao: fb.observacao || null,
@@ -178,7 +179,7 @@ export function FeedbackProfessorPage() {
         .from('aluno_feedback_sessoes')
         .update({
           status: 'concluido',
-          total_respondidos: feedbacksParaSalvar.length,
+          respondidos: feedbacksParaSalvar.length,
         })
         .eq('id', sessao.id);
 

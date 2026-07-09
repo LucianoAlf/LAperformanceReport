@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { supabase } from '@/lib/supabase';
+import { invokeWithRetry, supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -12,25 +12,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   Loader2,
   Send,
   Search,
   CheckCircle2,
   Clock,
-  AlertCircle,
   Copy,
   ExternalLink,
   MessageSquare,
 } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
+import { formatarCompetenciaFeedback, normalizarTelefoneWhatsApp } from './feedbackSession';
 
 // =============================================================================
 // TIPOS
@@ -39,8 +32,7 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 interface Professor {
   id: number;
   nome: string;
-  apelido: string | null;
-  telefone: string | null;
+  telefone_whatsapp: string | null;
   unidade_id: string;
   total_alunos: number;
 }
@@ -52,8 +44,8 @@ interface SessaoFeedback {
   status: string;
   token: string;
   total_alunos: number;
-  total_respondidos: number;
-  expires_at: string;
+  respondidos: number;
+  enviado_em: string | null;
   created_at: string;
 }
 
@@ -77,9 +69,10 @@ export function ModalEnviarFeedback({ open, onClose, unidadeAtual }: ModalEnviar
   const [busca, setBusca] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [enviarWhatsApp, setEnviarWhatsApp] = useState(true);
+  const [numeroTeste, setNumeroTeste] = useState('');
 
   // Competência atual (mês/ano)
-  const competenciaAtual = format(new Date(), 'yyyy-MM');
+  const competenciaAtual = formatarCompetenciaFeedback();
 
   // Carregar dados
   useEffect(() => {
@@ -94,7 +87,7 @@ export function ModalEnviarFeedback({ open, onClose, unidadeAtual }: ModalEnviar
       // Buscar professores ativos
       const { data: profsData, error: profsError } = await supabase
         .from('professores')
-        .select('id, nome, apelido, telefone')
+        .select('id, nome, telefone_whatsapp')
         .eq('ativo', true)
         .order('nome');
 
@@ -123,11 +116,17 @@ export function ModalEnviarFeedback({ open, onClose, unidadeAtual }: ModalEnviar
         });
       }
 
-      // Contar alunos por professor
-      const { data: alunosCount } = await supabase
+      // Contar alunos por professor, respeitando a unidade do filtro.
+      let alunosQuery = supabase
         .from('alunos')
         .select('professor_atual_id')
         .eq('status', 'ativo');
+
+      if (unidadeAtual !== 'todos') {
+        alunosQuery = alunosQuery.eq('unidade_id', unidadeAtual);
+      }
+
+      const { data: alunosCount } = await alunosQuery;
 
       const countMap = new Map<number, number>();
       alunosCount?.forEach(a => {
@@ -142,7 +141,7 @@ export function ModalEnviarFeedback({ open, onClose, unidadeAtual }: ModalEnviar
           unidade_id: (profUnidadesMap.get(p.id) || [unidadeAtual])[0] || unidadeAtual,
           total_alunos: countMap.get(p.id) || 0,
         }))
-        .filter(p => p.total_alunos > 0);
+        .filter(p => p.total_alunos > 0 && p.unidade_id !== 'todos');
 
       setProfessores(professoresComAlunos);
 
@@ -167,8 +166,7 @@ export function ModalEnviarFeedback({ open, onClose, unidadeAtual }: ModalEnviar
     if (!busca) return professores;
     const termo = busca.toLowerCase();
     return professores.filter(p =>
-      p.nome.toLowerCase().includes(termo) ||
-      p.apelido?.toLowerCase().includes(termo)
+      p.nome.toLowerCase().includes(termo)
     );
   }, [professores, busca]);
 
@@ -220,70 +218,37 @@ export function ModalEnviarFeedback({ open, onClose, unidadeAtual }: ModalEnviar
     setEnviando(true);
     let sucessos = 0;
     let erros = 0;
+    let falhasWhatsApp = 0;
 
     for (const professorId of selecionados) {
       const professor = professores.find(p => p.id === professorId);
       if (!professor) continue;
 
       try {
-        // Verificar se já existe sessão
-        const sessaoExistente = getSessaoProfessor(professorId);
+        const { data, error } = await invokeWithRetry<{
+          success: boolean;
+          error?: string;
+          whatsapp?: { success: boolean; error?: string };
+        }>('criar-sessao-feedback', {
+          body: {
+            professor_id: professorId,
+            unidade_id: professor.unidade_id,
+            competencia: competenciaAtual,
+            enviar_whatsapp: enviarWhatsApp,
+            numero_teste: enviarWhatsApp ? normalizarTelefoneWhatsApp(numeroTeste) : null,
+            base_url: window.location.origin,
+          },
+        });
 
-        if (sessaoExistente) {
-          // Reenviar link existente via WhatsApp se solicitado
-          if (enviarWhatsApp && professor.telefone) {
-            const baseUrl = window.location.origin;
-            const link = `${baseUrl}/feedback/${sessaoExistente.token}`;
-            const mensagem = `Olá ${professor.apelido || professor.nome}! 🎵\n\nLembrete: precisamos do seu feedback sobre seus alunos.\n\nAcesse: ${link}\n\n⏰ O link expira em ${format(new Date(sessaoExistente.expires_at), "dd/MM 'às' HH:mm")}.\n\nObrigado! 💜`;
+        if (error || !data?.success) {
+          throw new Error(error?.message || data?.error || 'Erro ao criar sessão de feedback');
+        }
 
-            await supabase.functions.invoke('enviar-mensagem-lead', {
-              body: {
-                numero: professor.telefone,
-                mensagem,
-              },
-            });
-          }
-          sucessos++;
-        } else {
-          // Criar nova sessão
-          const token = crypto.randomUUID();
-          const expiresAt = new Date();
-          expiresAt.setDate(expiresAt.getDate() + 7);
+        sucessos++;
 
-          const { error: insertError } = await supabase
-            .from('aluno_feedback_sessoes')
-            .insert({
-              professor_id: professorId,
-              unidade_id: professor.unidade_id,
-              competencia: competenciaAtual,
-              token,
-              status: 'enviado',
-              expires_at: expiresAt.toISOString(),
-              total_alunos: professor.total_alunos,
-              total_respondidos: 0,
-            });
-
-          if (insertError) throw insertError;
-
-          // Enviar WhatsApp se solicitado
-          if (enviarWhatsApp && professor.telefone) {
-            const baseUrl = window.location.origin;
-            const link = `${baseUrl}/feedback/${token}`;
-            const mensagem = `Olá ${professor.apelido || professor.nome}! 🎵\n\nPrecisamos do seu feedback sobre seus alunos.\n\nAcesse: ${link}\n\n⏰ O link expira em 7 dias.\n\nObrigado! 💜`;
-
-            try {
-              await supabase.functions.invoke('enviar-mensagem-lead', {
-                body: {
-                  numero: professor.telefone,
-                  mensagem,
-                },
-              });
-            } catch (whatsappError) {
-              console.error('Erro ao enviar WhatsApp:', whatsappError);
-            }
-          }
-
-          sucessos++;
+        if (enviarWhatsApp && data.whatsapp && !data.whatsapp.success) {
+          falhasWhatsApp++;
+          console.warn(`Link criado, mas WhatsApp falhou para ${professor.nome}:`, data.whatsapp.error);
         }
       } catch (error) {
         console.error(`Erro ao enviar para ${professor.nome}:`, error);
@@ -294,9 +259,16 @@ export function ModalEnviarFeedback({ open, onClose, unidadeAtual }: ModalEnviar
     setEnviando(false);
 
     if (sucessos > 0) {
-      toast.success(`${sucessos} link(s) enviado(s) com sucesso!`);
+      toast.success(`${sucessos} link(s) gerado(s) com sucesso!`);
       await carregarDados();
       setSelecionados(new Set());
+    }
+
+    if (falhasWhatsApp > 0) {
+      toast.warning(
+        `${falhasWhatsApp} link(s) criado(s), mas o WhatsApp não confirmou envio`,
+        'Use o botão de copiar link como contingência.',
+      );
     }
 
     if (erros > 0) {
@@ -387,14 +359,14 @@ export function ModalEnviarFeedback({ open, onClose, unidadeAtual }: ModalEnviar
                         className="pointer-events-none"
                       />
 
-                      {/* Info do professor */}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-white truncate">
-                          {professor.apelido || professor.nome}
+                        {/* Info do professor */}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-white truncate">
+                          {professor.nome}
                         </p>
                         <p className="text-xs text-slate-400">
                           {professor.total_alunos} aluno{professor.total_alunos !== 1 ? 's' : ''}
-                          {professor.telefone && ' • WhatsApp disponível'}
+                          {professor.telefone_whatsapp && ' • WhatsApp disponível'}
                         </p>
                       </div>
 
@@ -404,9 +376,9 @@ export function ModalEnviarFeedback({ open, onClose, unidadeAtual }: ModalEnviar
                           {sessao.status === 'concluido' ? (
                             <span className="flex items-center gap-1 text-xs text-emerald-400">
                               <CheckCircle2 className="w-4 h-4" />
-                              {sessao.total_respondidos}/{sessao.total_alunos}
+                              {sessao.respondidos}/{sessao.total_alunos}
                             </span>
-                          ) : sessao.status === 'acessado' ? (
+                          ) : sessao.status === 'parcial' ? (
                             <span className="flex items-center gap-1 text-xs text-amber-400">
                               <Clock className="w-4 h-4" />
                               Acessado
@@ -457,6 +429,15 @@ export function ModalEnviarFeedback({ open, onClose, unidadeAtual }: ModalEnviar
                   />
                   Enviar via WhatsApp
                 </label>
+
+                {enviarWhatsApp && (
+                  <Input
+                    value={numeroTeste}
+                    onChange={(e) => setNumeroTeste(e.target.value)}
+                    placeholder="Número de teste opcional"
+                    className="max-w-[220px] h-9"
+                  />
+                )}
 
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-slate-400">

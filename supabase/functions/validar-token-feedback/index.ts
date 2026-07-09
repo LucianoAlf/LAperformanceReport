@@ -64,7 +64,7 @@ serve(async (req) => {
           completed: true,
           sessao: {
             id: sessao.id,
-            professor_nome: sessao.professor?.apelido || sessao.professor?.nome,
+            professor_nome: sessao.professor?.nome,
             unidade_nome: sessao.unidade?.nome,
             competencia: sessao.competencia,
           }
@@ -73,11 +73,11 @@ serve(async (req) => {
       );
     }
 
-    // Atualizar status para 'acessado' se ainda estiver 'enviado'
-    if (sessao.status === 'enviado') {
+    // Marcar como parcial ao primeiro acesso, sem concluir a sessão.
+    if (sessao.status === 'pendente') {
       await supabase
         .from('aluno_feedback_sessoes')
-        .update({ status: 'acessado' })
+        .update({ status: 'parcial' })
         .eq('id', sessao.id);
     }
 

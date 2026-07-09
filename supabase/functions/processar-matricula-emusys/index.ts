@@ -108,12 +108,14 @@ import {
 import {
   buildJornadaInputFromWebhook,
   upsertJornadaMatriculaDisciplina,
+  type JornadaDisciplinaInput,
+  type JornadaMatriculaInput,
 } from '../_shared/jornada-canonica.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const VERSAO = 'v28';
+const VERSAO = 'v29';
 const EVENTOS_JORNADA_CANONICA = new Set([
   'matricula_nova',
   'matricula_renovacao',
@@ -421,7 +423,205 @@ function parsePayload(body: any): Payload | null {
   };
 }
 
-async function sincronizarJornadaCanonicaWebhook(supabase: any, p: Payload) {
+function dataTransicaoFromPayload(raw: any): string {
+  const value = raw?.data_hora_criacao || raw?.data_hora_alteracao || raw?.created_at;
+  if (!value) return new Date().toISOString();
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
+
+function professorMudou(
+  atual: any,
+  professorNovoId: number | null,
+  emusysProfessorNovoId: number | null,
+): boolean {
+  const professorAtualId = atual?.professor_id != null ? Number(atual.professor_id) : null;
+  const emusysProfessorAtualId = atual?.emusys_professor_id != null ? Number(atual.emusys_professor_id) : null;
+
+  if (emusysProfessorAtualId != null && emusysProfessorNovoId != null) {
+    return emusysProfessorAtualId !== Number(emusysProfessorNovoId);
+  }
+
+  if (professorAtualId != null && professorNovoId != null) {
+    return professorAtualId !== Number(professorNovoId);
+  }
+
+  return false;
+}
+
+function temProfessorIdentificavel(atual: any): boolean {
+  return Boolean(
+    atual?.professor_id != null ||
+    atual?.emusys_professor_id != null ||
+    String(atual?.professor_nome_emusys || '').trim(),
+  );
+}
+
+async function resolverCursoTransicao(
+  supabase: any,
+  unidadeId: string,
+  disciplina: JornadaDisciplinaInput,
+): Promise<number | null> {
+  if (disciplina.disciplinaId == null) return null;
+  const { data } = await supabase
+    .from('curso_emusys_depara')
+    .select('curso_id')
+    .eq('unidade_id', unidadeId)
+    .eq('emusys_disciplina_id', disciplina.disciplinaId)
+    .maybeSingle();
+  return data?.curso_id ?? null;
+}
+
+async function resolverProfessorTransicao(
+  supabase: any,
+  unidadeId: string,
+  emusysProfessorId: number | null,
+): Promise<number | null> {
+  if (emusysProfessorId == null) return null;
+  const { data } = await supabase
+    .from('professores_unidades')
+    .select('professor_id')
+    .eq('unidade_id', unidadeId)
+    .eq('emusys_id', emusysProfessorId)
+    .maybeSingle();
+  return data?.professor_id ?? null;
+}
+
+async function registrarTransicaoProfessorSeNecessario(
+  supabase: any,
+  input: JornadaMatriculaInput,
+  p: Payload,
+  automacaoLogId: number | null,
+) {
+  const resultado = { criadas: 0, ignoradas: 0, erros: [] as string[] };
+  if (p.evento !== 'matricula_alterada') return resultado;
+
+  for (const disciplina of input.disciplinas) {
+    if (disciplina.matriculaDisciplinaId == null) {
+      resultado.ignoradas += 1;
+      continue;
+    }
+
+    try {
+      const { data: atual, error: atualError } = await supabase
+        .from('aluno_jornada_matricula_disciplina')
+        .select('aluno_id, curso_id, professor_id, emusys_professor_id, professor_nome_emusys')
+        .eq('unidade_id', input.unidadeId)
+        .eq('emusys_matricula_disciplina_id', disciplina.matriculaDisciplinaId)
+        .maybeSingle();
+
+      if (atualError) throw atualError;
+      if (!atual || !temProfessorIdentificavel(atual)) {
+        resultado.ignoradas += 1;
+        continue;
+      }
+
+      const [cursoNovoId, professorNovoId] = await Promise.all([
+        resolverCursoTransicao(supabase, input.unidadeId, disciplina),
+        resolverProfessorTransicao(supabase, input.unidadeId, disciplina.professorEmusysId),
+      ]);
+
+      if (!professorMudou(atual, professorNovoId, disciplina.professorEmusysId)) {
+        resultado.ignoradas += 1;
+        continue;
+      }
+
+      const tipoTransicao = atual.curso_id !== cursoNovoId
+        ? 'troca_professor_curso'
+        : 'troca_professor';
+      const payloadSnapshot = {
+        alteracao: input.raw?.alteracao ?? null,
+        matricula: {
+          id: input.emusysMatriculaId,
+          aluno_id: input.emusysAlunoId,
+          nome_aluno: input.nomeAluno,
+        },
+        disciplina: disciplina.raw,
+        jornada_anterior: atual,
+      };
+
+      const { data: transicao, error: transicaoError } = await supabase
+        .from('aluno_professor_transicoes')
+        .insert({
+          unidade_id: input.unidadeId,
+          aluno_id: atual.aluno_id ?? null,
+          emusys_matricula_id: input.emusysMatriculaId,
+          emusys_matricula_disciplina_id: disciplina.matriculaDisciplinaId,
+          curso_id: cursoNovoId,
+          curso_anterior_id: atual.curso_id ?? null,
+          professor_anterior_id: atual.professor_id ?? null,
+          professor_novo_id: professorNovoId,
+          emusys_professor_anterior_id: atual.emusys_professor_id ?? null,
+          emusys_professor_novo_id: disciplina.professorEmusysId,
+          data_transicao: dataTransicaoFromPayload(input.raw),
+          tipo_transicao: tipoTransicao,
+          descricao_emusys: input.raw?.alteracao?.descricao ?? null,
+          automacao_log_id: automacaoLogId,
+          payload_snapshot: payloadSnapshot,
+          fonte: `webhook:${p.evento}`,
+        })
+        .select('id')
+        .maybeSingle();
+
+      if (transicaoError) {
+        if (transicaoError.code === '23505') {
+          resultado.ignoradas += 1;
+          continue;
+        }
+        throw transicaoError;
+      }
+
+      if (!transicao?.id) {
+        resultado.ignoradas += 1;
+        continue;
+      }
+
+      const { error: bastaoError } = await supabase
+        .from('professor_passagem_bastao')
+        .upsert({
+          transicao_id: transicao.id,
+          aluno_id: atual.aluno_id ?? null,
+          emusys_matricula_disciplina_id: disciplina.matriculaDisciplinaId,
+          curso_id: cursoNovoId,
+          professor_origem_id: atual.professor_id ?? null,
+          professor_destino_id: professorNovoId,
+          status: 'pendente',
+        }, { onConflict: 'transicao_id' });
+
+      if (bastaoError) throw bastaoError;
+      resultado.criadas += 1;
+    } catch (error: any) {
+      const message = error?.message ?? String(error);
+      resultado.erros.push(message);
+      console.error(`[${VERSAO}] passagem de bastao falhou`, message);
+      try {
+        await gravarLog(supabase, {
+          evento: p.evento,
+          acao: 'passagem_bastao_transicao_erro',
+          aluno_nome: p.nomeAluno || input.nomeAluno || '(desconhecido)',
+          unidade_nome: p.unidadeNome ?? undefined,
+          payload_bruto: input.raw,
+          idempotency_key: null,
+          invariantes: [],
+          detalhes: {
+            version: VERSAO,
+            erro: message,
+            emusys_matricula_id: input.emusysMatriculaId,
+            emusys_matricula_disciplina_id: disciplina.matriculaDisciplinaId,
+          },
+          workflow_id: 'processar-matricula-emusys',
+          execution_id: new Date().toISOString(),
+        });
+      } catch (_logError) {
+        // Best-effort: a passagem de bastao nunca pode bloquear a atualizacao da jornada.
+      }
+    }
+  }
+
+  return resultado;
+}
+
+async function sincronizarJornadaCanonicaWebhook(supabase: any, p: Payload, automacaoLogId: number | null) {
   if (!EVENTOS_JORNADA_CANONICA.has(p.evento)) {
     return { updated: 0, skipped: 0, errors: [] as string[] };
   }
@@ -429,11 +629,12 @@ async function sincronizarJornadaCanonicaWebhook(supabase: any, p: Payload) {
   try {
     const input = buildJornadaInputFromWebhook(p.rawPayload, p.unidadeId, `webhook:${p.evento}`);
     if (!input) return { updated: 0, skipped: 0, errors: ['payload_sem_matricula'] };
+    const transicoesProfessor = await registrarTransicaoProfessorSeNecessario(supabase, input, p, automacaoLogId);
     const result = await upsertJornadaMatriculaDisciplina(supabase, input);
     if (result.errors.length > 0) {
       console.error(`[${VERSAO}] jornada canonica falhou`, result.errors);
     }
-    return result;
+    return { ...result, transicoes_professor: transicoesProfessor };
   } catch (error: any) {
     const message = error?.message ?? String(error);
     console.error(`[${VERSAO}] jornada canonica excecao`, message);
@@ -1565,19 +1766,22 @@ serve(async (req: Request) => {
   try {
     const body = await req.json();
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    let automacaoLogId: number | null = null;
 
     // Raw event store: arquiva o payload BRUTO antes de qualquer processamento.
     // Captura 100% dos eventos (inclusive os que falham no parse / escola não mapeada).
     // try/catch isolado (best-effort): falha ao arquivar nunca derruba a matrícula.
     try {
-      await supabase.from('automacao_log').insert({
+      const { data: rawLog, error: rawLogError } = await supabase.from('automacao_log').insert({
         evento: body?.evento ?? 'matricula_desconhecido',
         acao: 'webhook_recebido',
         aluno_nome: body?.matricula?.nome_aluno ?? '(desconhecido)',
         payload_bruto: body,
         workflow_id: 'processar-matricula-emusys',
         execution_id: new Date().toISOString(),
-      });
+      }).select('id').maybeSingle();
+      if (rawLogError) throw rawLogError;
+      automacaoLogId = rawLog?.id ?? null;
     } catch (e: any) {
       console.error(`[${VERSAO}] [raw] falha ao arquivar payload bruto:`, e?.message ?? e);
     }
@@ -1630,7 +1834,7 @@ serve(async (req: Request) => {
     // em automacao_log para evitar duplicidade.
 
     if (EVENTOS_JORNADA_CANONICA.has(p.evento)) {
-      result.jornada = await sincronizarJornadaCanonicaWebhook(supabase, p);
+      result.jornada = await sincronizarJornadaCanonicaWebhook(supabase, p, automacaoLogId);
     }
 
     return new Response(JSON.stringify({ success: true, evento: p.evento, ...result }),
