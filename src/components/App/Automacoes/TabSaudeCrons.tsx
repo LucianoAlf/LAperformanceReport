@@ -3,7 +3,9 @@ import { RefreshCw, CheckCircle2, XCircle, MinusCircle, AlertTriangle, ChevronUp
 import { useSaudeCrons, type CronJob } from '@/hooks/useSaudeCrons';
 import { formatDistanceToNow, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import type { Filtros } from '@/hooks/useAutomacoesData';
+import { Paginacao } from './Paginacao';
 
 function humanizarSchedule(expr: string): string {
   const map: Record<string, string> = {
@@ -40,10 +42,26 @@ function humanizarSchedule(expr: string): string {
   return expr;
 }
 
-// Duração <= 20ms num job de HTTP indica fire-and-forget (pg_cron + net.http_post):
-// o "succeeded" só mede o enfileiramento do POST, não o resultado real da edge function.
+// Fire-and-forget de verdade = comando dispara via net.http_post (pg_cron só confirma
+// o enqueue do POST, nunca o resultado da edge function). Duração não é um bom proxy:
+// SQL direto rápido (ex: reset-sol-stuck-messages) também fica abaixo de qualquer limiar.
 function ehFireAndForget(job: CronJob): boolean {
-  return job.ultima_duracao_ms != null && job.ultima_duracao_ms <= 20;
+  return job.is_http_post === true;
+}
+
+// Mesma precedência visual do StatusBadge, reduzida às 3 categorias do filtro
+// de Status compartilhado com as outras abas (ok/warn/erro).
+function categoriaJob(job: CronJob): 'ok' | 'warn' | 'erro' {
+  if (job.sync_status_real) {
+    if (job.sync_status_real === 'ok') return 'ok';
+    if (job.sync_status_real === 'falhou' || job.sync_status_real === 'atrasado') return 'erro';
+    return 'warn'; // 'nunca' | 'sem_cron'
+  }
+  if (!job.active) return 'warn';
+  if (job.ultimo_status === 'failed') return 'erro';
+  if (ehFireAndForget(job)) return 'warn';
+  if (job.ultimo_status === 'succeeded') return 'ok';
+  return 'warn'; // nunca rodou
 }
 
 function StatusBadge({ job }: { job: CronJob }) {
@@ -77,6 +95,13 @@ function StatusBadge({ job }: { job: CronJob }) {
       return (
         <span className="flex items-center gap-1 text-gray-500 text-xs" title="Sem agendamento (cron) — não há execução automática.">
           <MinusCircle className="w-3.5 h-3.5" /> sem cron
+        </span>
+      );
+    }
+    if (job.sync_status_real === 'falhou') {
+      return (
+        <span className="flex items-center gap-1 text-rose-400 text-xs" title="Falha real na entrega (evidência da fila): item com falha terminal após esgotar tentativas ou preso sem resolver há +3h — ex: número do WhatsApp desconectado.">
+          <XCircle className="w-3.5 h-3.5" /> falhou
         </span>
       );
     }
@@ -195,19 +220,33 @@ function SortIcon({ col, sortCol, sortDir }: { col: SortCol; sortCol: SortCol; s
     : <ChevronDown className="w-3 h-3 text-blue-400" />;
 }
 
-export function TabSaudeCrons() {
+export function TabSaudeCrons({ filtros }: { filtros?: Filtros }) {
   const { jobs, loading, erro, refetch } = useSaudeCrons();
   const [sortCol, setSortCol] = useState<SortCol>('jobname');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(25);
 
   // "Problemas" reflete a realidade: falha SQL do cron OU sync com execução real atrasada/inexistente.
+  // Contagem sempre sobre o total (independente do filtro de busca/status aplicado à tabela).
   const falhos = jobs.filter(j =>
     j.active && (
       j.sync_status_real === 'atrasado' ||
       j.sync_status_real === 'nunca' ||
+      j.sync_status_real === 'falhou' ||
       (!j.sync_status_real && j.ultimo_status === 'failed')
     )
   ).length;
+
+  const filtrados = useMemo(() => {
+    const busca = filtros?.busca.trim().toLowerCase() ?? '';
+    const status = filtros?.status ?? [];
+    return jobs.filter(j => {
+      if (busca && !j.jobname.toLowerCase().includes(busca)) return false;
+      if (status.length > 0 && !status.includes(categoriaJob(j))) return false;
+      return true;
+    });
+  }, [jobs, filtros?.busca, filtros?.status]);
 
   function toggleSort(col: SortCol) {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -215,7 +254,7 @@ export function TabSaudeCrons() {
   }
 
   const sorted = useMemo(() => {
-    return [...jobs].sort((a, b) => {
+    return [...filtrados].sort((a, b) => {
       let va: any = a[sortCol] ?? '';
       let vb: any = b[sortCol] ?? '';
       if (sortCol === 'ultima_execucao_brt') {
@@ -232,7 +271,20 @@ export function TabSaudeCrons() {
       if (va > vb) return sortDir === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [jobs, sortCol, sortDir]);
+  }, [filtrados, sortCol, sortDir]);
+
+  // Reseta pra página 1 sempre que muda filtro/ordenação ou o dataset encolhe
+  useEffect(() => { setPagina(1); }, [filtros?.busca, filtros?.status, sortCol, sortDir]);
+
+  const { paginados, totalPaginas } = useMemo(() => {
+    const tp = Math.max(1, Math.ceil(sorted.length / porPagina));
+    const p = Math.min(pagina, tp);
+    const inicio = (p - 1) * porPagina;
+    return {
+      paginados: sorted.slice(inicio, inicio + porPagina),
+      totalPaginas: tp,
+    };
+  }, [sorted, pagina, porPagina]);
 
   const thClass = "py-2.5 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide cursor-pointer select-none hover:text-gray-300 transition-colors";
   const thRightClass = "py-2.5 px-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wide cursor-pointer select-none hover:text-gray-300 transition-colors";
@@ -242,7 +294,8 @@ export function TabSaudeCrons() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-400">
-            {jobs.length} job{jobs.length !== 1 ? 's' : ''}
+            {filtrados.length} job{filtrados.length !== 1 ? 's' : ''}
+            {filtrados.length !== jobs.length && <span className="text-gray-600"> de {jobs.length}</span>}
           </span>
           {falhos > 0 && (
             <span className="flex items-center gap-1 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full">
@@ -268,11 +321,15 @@ export function TabSaudeCrons() {
         </div>
       )}
 
+      {!loading && !erro && jobs.length > 0 && filtrados.length === 0 && (
+        <div className="text-center py-12 text-gray-500 text-sm">Nenhum job corresponde ao filtro/busca.</div>
+      )}
+
       {!loading && !erro && jobs.length === 0 && (
         <div className="text-center py-12 text-gray-500 text-sm">Nenhum cron job encontrado.</div>
       )}
 
-      {!loading && !erro && jobs.length > 0 && (
+      {!loading && !erro && filtrados.length > 0 && (
         <div className="bg-slate-900/40 border border-slate-800 rounded-lg overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -296,9 +353,17 @@ export function TabSaudeCrons() {
               </tr>
             </thead>
             <tbody>
-              {sorted.map(job => <LinhaJob key={job.jobid} job={job} />)}
+              {paginados.map(job => <LinhaJob key={job.jobid} job={job} />)}
             </tbody>
           </table>
+          <Paginacao
+            pagina={pagina}
+            totalPaginas={totalPaginas}
+            totalItens={sorted.length}
+            porPagina={porPagina}
+            onMudarPagina={setPagina}
+            onMudarPorPagina={n => { setPorPagina(n); setPagina(1); }}
+          />
         </div>
       )}
 

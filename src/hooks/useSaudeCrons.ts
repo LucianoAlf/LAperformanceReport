@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 // Status REAL de um sync Emusys, calculado pela idade da última execução
 // (função de banco get_saude_syncs_emusys). Diferente do "succeeded" do pg_cron,
 // que para jobs net.http_post só reflete o enfileiramento do POST, não o resultado.
-export type SyncStatusReal = 'ok' | 'atrasado' | 'nunca' | 'sem_cron';
+export type SyncStatusReal = 'ok' | 'atrasado' | 'nunca' | 'sem_cron' | 'falhou';
 
 type SaudeSyncRow = {
   sync_tipo: string;
@@ -26,6 +26,9 @@ export type CronJob = {
   ultima_execucao_brt: string | null;
   ultima_duracao_ms: number | null;
   return_message: string | null;
+  // true quando o comando do job dispara via net.http_post (fire-and-forget real:
+  // pg_cron só confirma o enqueue do POST, nunca o resultado da edge function).
+  is_http_post: boolean;
   // Anexado quando o job é um sync Emusys medível por evidência real:
   sync_status_real?: SyncStatusReal;
   sync_ultima_execucao?: string | null;
@@ -44,6 +47,18 @@ function mapearJobParaSync(jobname: string): { tipo: string; codigo: string | nu
 
   if (jobname.startsWith('sync-professores-emusys')) return { tipo: 'professores', codigo: null };
   if (jobname.startsWith('sync-faturas-emusys')) return { tipo: 'faturas', codigo: null };
+
+  // relatorio-diario-20h e relatorio-diario-sabado-16h so enfileiram (fire-and-forget);
+  // o status real vem da evidencia de envio em fila_relatorios_whatsapp.
+  if (jobname.startsWith('relatorio-diario')) return { tipo: 'relatorio_diario', codigo: null };
+
+  // Alertas de projeto (mesma edge projeto-alertas-whatsapp, evidencia em notificacao_log).
+  if (jobname === 'alertas-diarios') return { tipo: 'alerta_diario', codigo: null };
+  if (jobname === 'alertas-tarefas-atrasadas') return { tipo: 'alerta_tarefa_atrasada', codigo: null };
+  if (jobname === 'resumo-semanal') return { tipo: 'resumo_semanal', codigo: null };
+
+  // Meta Ads: evidencia em meta_ads_cache.enriquecido_em/erro.
+  if (jobname === 'enriquecer-meta-ads-diario') return { tipo: 'meta_ads', codigo: null };
 
   return null;
 }

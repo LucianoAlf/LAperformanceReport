@@ -161,7 +161,7 @@ export function AutomacoesPage() {
 
       {aba === 'jornadas' && <TabJornadas filtros={filtros} />}
       {aba === 'feed' && <TabFeedEventos filtros={filtros} />}
-      {aba === 'crons' && <TabSaudeCrons />}
+      {aba === 'crons' && <TabSaudeCrons filtros={filtros} />}
       {aba === 'divergencias' && <TabDivergencias />}
     </div>
   );
