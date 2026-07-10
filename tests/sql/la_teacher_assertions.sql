@@ -106,6 +106,86 @@ end $$;
 
 do $$
 declare
+  v_ancora integer;
+  v_individual_1 integer;
+  v_individual_2 integer;
+  v_minutos integer;
+  v_aulas_creditadas integer;
+begin
+  insert into public.aulas_emusys (
+    emusys_id, unidade_id, data_aula, data_hora_inicio, data_hora_fim,
+    duracao_minutos, tipo, curso_nome, professor_id, cancelada
+  ) values
+    (1301, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', current_date - 3, (current_date - 3) + time '10:00', (current_date - 3) + time '10:50', 50, 'turma', 'Teste', 1, false),
+    (1302, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', current_date - 3, (current_date - 3) + time '10:00', (current_date - 3) + time '10:50', 50, 'individual', 'Teste', 1, false),
+    (1303, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', current_date - 3, (current_date - 3) + time '10:00', (current_date - 3) + time '10:50', 50, 'individual', 'Teste', 1, false);
+
+  select id into v_ancora from public.aulas_emusys where emusys_id = 1301;
+  select id into v_individual_1 from public.aulas_emusys where emusys_id = 1302;
+  select id into v_individual_2 from public.aulas_emusys where emusys_id = 1303;
+
+  insert into public.aluno_presenca (
+    aluno_id, professor_id, unidade_id, data_aula, status, status_presenca, aula_emusys_id
+  ) values
+    (1, 1, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', current_date - 3, 'presente', 'presente', v_ancora),
+    (1, 1, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', current_date - 3, 'presente', 'presente', v_individual_1),
+    (2, 1, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', current_date - 3, 'presente', 'presente', v_individual_2);
+
+  select minutos_creditados, aulas_creditadas
+  into v_minutos, v_aulas_creditadas
+  from public.vw_ponto_professor_diario
+  where professor_id = 1 and data_aula = current_date - 3;
+
+  if v_minutos <> 50 or v_aulas_creditadas <> 1 then
+    raise exception 'Slot paralelo deveria creditar 50 minutos uma vez, obtido % em % aulas',
+      v_minutos, v_aulas_creditadas;
+  end if;
+end $$;
+
+do $$
+declare
+  v_individual integer;
+begin
+  insert into public.aulas_emusys (
+    emusys_id, unidade_id, data_aula, data_hora_inicio, data_hora_fim,
+    duracao_minutos, tipo, curso_nome, professor_id, cancelada
+  ) values (
+    1401,
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    current_date,
+    now() - interval '20 minutes',
+    now() + interval '30 minutes',
+    50,
+    'individual',
+    'Teste',
+    1,
+    false
+  ) returning id into v_individual;
+
+  insert into public.aula_alunos_emusys (
+    aula_emusys_id, unidade_id, aluno_chave, aluno_id, aluno_nome, aluno_nome_normalizado
+  ) values (
+    v_individual,
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    'local:1',
+    1,
+    'Aluno Presente',
+    'aluno presente'
+  );
+
+  begin
+    perform public.app_registrar_presencas_aula(v_individual, '{}'::integer[]);
+    raise exception 'Chamada em aula individual deveria ser rejeitada';
+  exception
+    when others then
+      if sqlerrm <> 'chamada_somente_na_aula_ancora' then
+        raise;
+      end if;
+  end;
+end $$;
+
+do $$
+declare
   v_aula_13 integer;
   v_aula_14 integer;
   v_aula_15 integer;
