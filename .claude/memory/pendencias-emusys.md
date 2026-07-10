@@ -96,6 +96,18 @@ Problemas/limitações **do lado do Emusys** (API ou plataforma) que afetam noss
 
 ---
 
+## ⚠️ [Plataforma] Webhook = 1 evento → 1 destino (não dá pra mandar o mesmo evento a 2 URLs)
+
+**Identificado em:** 2026-07-07
+
+**Descrição:** Na config de webhooks (Administração → Funcionalidade do Sistema → API → "⚙️ Configurar Webhooks" → "Novo Webhook": Nome/Status/URL/Eventos), cada evento vai para **uma única URL**. A doc diz "URLs diferentes para eventos distintos" — não existe fan-out do mesmo evento para múltiplos destinos. **Consequência:** impossível rodar um "observador" **em paralelo** ao n8n para o mesmo evento (ex.: para mapear o payload real antes de migrar). Se `lead`/`matricula`/`experimental` já apontam para o n8n, criar um webhook novo com "todos os eventos" **não** faz esses eventos chegarem na URL nova. Migração do n8n → edge tem que ser **cutover** (repontar a URL do evento), não paralelo.
+
+**Evidência (ao vivo 07/07):** edge `debug-webhook-emusys-observador` (só grava payload bruto em `automacao_log`) configurada com "todos os eventos". Recebeu só `aula_cancelada` (18:50 Recreio, 20:05 UTC Barra) — evento que **não** estava em nenhum webhook n8n. No mesmo dia, o webhook n8n de leads (`EB0LibpOJCLhKp7M`) recebeu 7+ eventos de lead entre 21:56–22:46 UTC, e nesse intervalo a edge observador teve **0 requisições HTTP** (logs de invocação, não só falta de gravação) → prova que o Emusys nem bateu na URL nova para lead. Webhooks n8n atuais: leads=`EB0LibpOJCLhKp7M`, matrícula=`ZzuR9slRx8UqXg9N` (WF_Matricula_Funcional), experimental=`Fucq0bQwF4oeuWnv`.
+
+**Solicitação ideal (Emusys):** permitir cadastrar o **mesmo evento em mais de uma URL** (fan-out), para dar pra observar/testar um novo destino em paralelo antes do cutover.
+
+---
+
 ## Resolvidos (histórico)
 
 - **✅ 2026-06-22** — `professores[].id` no `/aulas` (era de 2026-05-04). Corrigido na v1.2.0/21-06; na época valia só para aulas `individual`.

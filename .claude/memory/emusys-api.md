@@ -131,6 +131,8 @@ NUNCA na raiz da matricula. Edge function le `disciplinas[0]` corretamente desde
 
 **Resolucao do `professor_atual_id`** (ver `regras-negocio.md`): 3 camadas — emusys_id+unidade → nome+unidade (auto-cura) → NULL.
 
+> ⚠️ Limitação de config de webhook (1 evento → 1 destino) documentada em `pendencias-emusys.md`.
+
 ## Versão
 - v1.2.2 (spec completa em `~/Downloads/api_emusys.json`, verificada 07/07/2026)
 
