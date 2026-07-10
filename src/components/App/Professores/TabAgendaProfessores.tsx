@@ -48,6 +48,7 @@ import { ModalNovaAcao } from './ModalNovaAcao';
 import { ModalTreinamento } from './ModalTreinamento';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
+import { GradeDisponibilidadeProfessores } from './GradeDisponibilidadeProfessores';
 
 interface Acao {
   id: string;
@@ -413,6 +414,7 @@ function KanbanBoard({ acoes, getTipoBadgeColor, onStatusChange, onExcluir, onRe
 export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
   const toast = useToast();
 
+  const [secaoAgenda, setSecaoAgenda] = useState<'acoes' | 'grade'>('acoes');
   const [acoes, setAcoes] = useState<Acao[]>([]);
   const [metas, setMetas] = useState<MetaEmAndamento[]>([]);
   const [treinamentos, setTreinamentos] = useState<Treinamento[]>([]);
@@ -807,6 +809,40 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
     return `${format(inicio, 'dd/MM')} - ${format(fim, 'dd/MM')}`;
   };
 
+  const navegacaoAgenda = (
+    <div className="flex w-fit rounded-md border border-slate-700 bg-slate-900/60 p-0.5">
+      <button
+        type="button"
+        onClick={() => setSecaoAgenda('acoes')}
+        className={`flex h-9 items-center gap-2 rounded px-3 text-xs font-medium transition ${
+          secaoAgenda === 'acoes' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'
+        }`}
+      >
+        <LayoutList className="h-4 w-4" />
+        Ações
+      </button>
+      <button
+        type="button"
+        onClick={() => setSecaoAgenda('grade')}
+        className={`flex h-9 items-center gap-2 rounded px-3 text-xs font-medium transition ${
+          secaoAgenda === 'grade' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'
+        }`}
+      >
+        <CalendarDays className="h-4 w-4" />
+        Grade e disponibilidade
+      </button>
+    </div>
+  );
+
+  if (secaoAgenda === 'grade') {
+    return (
+      <div className="space-y-4">
+        {navegacaoAgenda}
+        <GradeDisponibilidadeProfessores unidadeAtual={unidadeAtual} />
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -817,6 +853,7 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
 
   return (
     <div className="space-y-6">
+      {navegacaoAgenda}
       {/* Resumo da Semana */}
       <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
         <div className="flex items-center justify-between mb-4">

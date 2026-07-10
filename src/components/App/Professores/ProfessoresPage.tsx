@@ -496,15 +496,48 @@ export function ProfessoresPage() {
 
         if (error) throw error;
 
-        // Atualizar unidades (deletar e reinserir com disponibilidade)
-        await supabase.from('professores_unidades').delete().eq('professor_id', professorId);
-        if (data.unidades_ids.length > 0) {
-          const unidadesInsert = data.unidades_ids.map(unidade_id => ({
-            professor_id: professorId,
-            unidade_id,
-            disponibilidade: data.disponibilidade_por_unidade?.[unidade_id] || null
-          }));
-          await supabase.from('professores_unidades').insert(unidadesInsert);
+        // Preservar os metadados de conciliacao Emusys dos vinculos existentes.
+        const unidadesAtuais = modalProfessor.professor!.unidades || [];
+        const unidadesAtuaisPorId = new Map(
+          unidadesAtuais.map(unidade => [unidade.unidade_id, unidade])
+        );
+
+        for (const unidadeId of data.unidades_ids) {
+          const disponibilidade = data.disponibilidade_por_unidade?.[unidadeId] || null;
+          const unidadeAtual = unidadesAtuaisPorId.get(unidadeId);
+
+          if (unidadeAtual) {
+            const { error: unidadeUpdateError } = await supabase
+              .from('professores_unidades')
+              .update({ disponibilidade })
+              .eq('id', unidadeAtual.id);
+
+            if (unidadeUpdateError) throw unidadeUpdateError;
+            continue;
+          }
+
+          const { error: unidadeInsertError } = await supabase
+            .from('professores_unidades')
+            .insert({
+              professor_id: professorId,
+              unidade_id: unidadeId,
+              disponibilidade
+            });
+
+          if (unidadeInsertError) throw unidadeInsertError;
+        }
+
+        const unidadesRemovidas = unidadesAtuais
+          .filter(unidade => !data.unidades_ids.includes(unidade.unidade_id))
+          .map(unidade => unidade.id);
+
+        if (unidadesRemovidas.length > 0) {
+          const { error: unidadesDeleteError } = await supabase
+            .from('professores_unidades')
+            .delete()
+            .in('id', unidadesRemovidas);
+
+          if (unidadesDeleteError) throw unidadesDeleteError;
         }
 
         // Atualizar cursos (deletar e reinserir)
