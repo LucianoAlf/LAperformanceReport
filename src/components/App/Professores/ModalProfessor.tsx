@@ -383,6 +383,9 @@ export function ModalProfessor({
                 <Clock className="w-4 h-4 text-emerald-400" />
                 Disponibilidade por Unidade
               </Label>
+              <p className="text-xs text-slate-400 mb-3">
+                Espelho manual do Emusys. Faça a alteração oficial no Emusys antes de atualizar estes horários.
+              </p>
               <div className="space-y-4">
                 {formData.unidades_ids.map(unidadeId => {
                   const unidade = unidades.find(u => u.id === unidadeId);

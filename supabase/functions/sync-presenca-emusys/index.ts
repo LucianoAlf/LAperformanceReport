@@ -11,11 +11,18 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const EMUSYS_API = 'https://api.emusys.com.br/v1';
+const MATUREZA_FALTA_HORAS = 24;
+
+function requiredEnv(name: string): string {
+  const value = Deno.env.get(name)?.trim();
+  if (!value) throw new Error(`Secret obrigatorio ausente: ${name}`);
+  return value;
+}
 
 const UNIDADES = [
-  { nome: 'Campo Grande', id: '2ec861f6-023f-4d7b-9927-3960ad8c2a92', token: 'nEAlBC5gjtqojA7qberYVOttD1lXdx' },
-  { nome: 'Barra',        id: '368d47f5-2d88-4475-bc14-ba084a9a348e', token: '4reVMLdiBmdNTOBQKa4m7WGYQaRDKI' },
-  { nome: 'Recreio',      id: '95553e96-971b-4590-a6eb-0201d013c14d', token: 'rUI85cQTePX1ecpLwWLbAWY9UM9yiF' },
+  { nome: 'Campo Grande', id: '2ec861f6-023f-4d7b-9927-3960ad8c2a92', token: requiredEnv('EMUSYS_TOKEN_CG') },
+  { nome: 'Barra',        id: '368d47f5-2d88-4475-bc14-ba084a9a348e', token: requiredEnv('EMUSYS_TOKEN_BARRA') },
+  { nome: 'Recreio',      id: '95553e96-971b-4590-a6eb-0201d013c14d', token: requiredEnv('EMUSYS_TOKEN_RECREIO') },
 ];
 
 const corsHeaders = {
@@ -73,6 +80,7 @@ interface AulaEmusys {
   curso_id: number | null;
   curso_nome: string;
   cancelada: boolean;
+  justificada?: boolean;
   data_hora_inicio: string;
   data_hora_fim: string | null;
   duracao_minutos: number | null;
@@ -81,6 +89,39 @@ interface AulaEmusys {
   professores: { nome: string; presenca: string }[];
   alunos: AlunoEmusys[];
   anotacoes: string | null;
+}
+
+function podeMaterializarFalta(aula: AulaEmusys, agora = new Date()): boolean {
+  if (aula.cancelada) return false;
+
+  const fimIso = aula.data_hora_fim
+    ? parseDataHoraEmusys(aula.data_hora_fim)
+    : parseDataHoraEmusys(aula.data_hora_inicio);
+  const fimAula = new Date(fimIso);
+  const limite = new Date(agora.getTime() - MATUREZA_FALTA_HORAS * 60 * 60 * 1000);
+  return fimAula <= limite;
+}
+
+function criarAlunoChave(aluno: AlunoEmusys, alunoId: number | undefined): string {
+  if (aluno.id_aluno != null && aluno.id_aluno > 0) return `emusys:${aluno.id_aluno}`;
+  if (alunoId != null) return `local:${alunoId}`;
+  return `nome:${normalizarNome(aluno.nome_aluno || '')}:${aluno.data_nascimento_aluno || ''}`;
+}
+
+function resolverAlunoLocal(
+  aluno: AlunoEmusys,
+  cursoIdAula: number | null,
+  mapaAlunosComposto: Map<string, number[]>,
+  mapaAlunos: Map<string, number>
+): number | undefined {
+  const nomeNorm = normalizarNome(aluno.nome_aluno || '');
+  if (cursoIdAula != null) {
+    const chave = `${nomeNorm}|${aluno.data_nascimento_aluno ?? ''}|${cursoIdAula}`;
+    const candidatos = mapaAlunosComposto.get(chave) ?? [];
+    if (candidatos.length === 1) return candidatos[0];
+  }
+
+  return mapaAlunos.get(nomeNorm);
 }
 
 // Match professor: exato → prefixo → primeiro+último nome
@@ -673,11 +714,15 @@ serve(async (req: Request) => {
     // Parâmetros: data (YYYY-MM-DD, default hoje), dias (default 1), unidade_index (0-2, default todas)
     let dataFim: string;
     let dias = 1;
+    let diasFuturos = 14;
+    let modo: 'presenca' | 'agenda' = 'presenca';
     let unidadeIndex: number | null = null;
     try {
       const body = await req.json();
       dataFim = body.data || '';
       dias = Math.min(Math.max(body.dias || 1, 1), 30); // 1-30 dias
+      diasFuturos = Math.min(Math.max(body.dias_futuros || 14, 1), 30);
+      modo = body.modo === 'agenda' ? 'agenda' : 'presenca';
       unidadeIndex = body.unidade_index ?? null;
     } catch {
       dataFim = '';
@@ -689,16 +734,28 @@ serve(async (req: Request) => {
       dataFim = brt.toISOString().split('T')[0];
     }
 
-    // Gerar lista de datas a processar
+    // Gerar lista retrospectiva para presenca ou futura para o roster da agenda.
     const datasProcessar: string[] = [];
-    for (let d = dias - 1; d >= 0; d--) {
-      const dt = new Date(dataFim + 'T12:00:00');
-      dt.setDate(dt.getDate() - d);
-      datasProcessar.push(dt.toISOString().split('T')[0]);
+    if (modo === 'agenda') {
+      for (let d = 0; d < diasFuturos; d++) {
+        const dt = new Date(dataFim + 'T12:00:00');
+        dt.setDate(dt.getDate() + d);
+        datasProcessar.push(dt.toISOString().split('T')[0]);
+      }
+    } else {
+      for (let d = dias - 1; d >= 0; d--) {
+        const dt = new Date(dataFim + 'T12:00:00');
+        dt.setDate(dt.getDate() - d);
+        datasProcessar.push(dt.toISOString().split('T')[0]);
+      }
+    }
+
+    if (unidadeIndex !== null && !UNIDADES[unidadeIndex]) {
+      throw new Error('unidade_index invalido');
     }
 
     const unidadesProcessar = unidadeIndex !== null ? [UNIDADES[unidadeIndex]] : UNIDADES;
-    console.log(`[sync-presenca] Iniciando sync para ${dias} dia(s): ${datasProcessar[0]} a ${dataFim}, unidade: ${unidadeIndex !== null ? unidadesProcessar[0]?.nome : 'todas'}`);
+    console.log(`[sync-presenca] Modo ${modo}: ${datasProcessar[0]} a ${datasProcessar.at(-1)}, unidade: ${unidadeIndex !== null ? unidadesProcessar[0].nome : 'todas'}`);
 
     // Buscar todos os alunos ativos para matching (paginado para contornar limite de 1000 rows do PostgREST)
     const alunosDB: { id: number; nome: string; unidade_id: string; data_nascimento: string | null; curso_id: number | null }[] = [];
@@ -786,6 +843,8 @@ serve(async (req: Request) => {
         const nomesNaoEncontrados: string[] = [];
         let presentes = 0;
         let ausentes = 0;
+        let faltasAguardandoMaturidade = 0;
+        let rosterSincronizados = 0;
         let aulasProcessadas = 0;
 
         // 2. Processar aula por aula (não mais agrupado por dia)
@@ -855,6 +914,70 @@ serve(async (req: Request) => {
           // Resolver curso_id local da aula (para match composto)
           const cursoIdAula = cursoMapa.get(normalizarCurso(aula.curso_nome || '')) ?? null;
 
+          // Roster e justificativa sao sincronizados sem criar uma resposta de presenca.
+          for (const aluno of aula.alunos || []) {
+            const nome = aluno.nome_aluno?.trim();
+            if (!nome) continue;
+
+            const alunoId = resolverAlunoLocal(
+              aluno,
+              cursoIdAula,
+              mapaAlunosComposto,
+              mapaAlunos
+            );
+            const sincronizadoEm = new Date().toISOString();
+
+            const { error: rosterError } = await supabase
+              .from('aula_alunos_emusys')
+              .upsert(
+                {
+                  aula_emusys_id: aulaLocalId,
+                  unidade_id: unidade.id,
+                  aluno_chave: criarAlunoChave(aluno, alunoId),
+                  aluno_emusys_id: aluno.id_aluno ?? null,
+                  aluno_id: alunoId ?? null,
+                  aluno_nome: nome,
+                  aluno_nome_normalizado: normalizarNome(nome),
+                  sincronizado_em: sincronizadoEm,
+                  updated_at: sincronizadoEm,
+                },
+                {
+                  onConflict: 'aula_emusys_id,aluno_chave',
+                  ignoreDuplicates: false,
+                }
+              );
+
+            if (rosterError) {
+              console.error(`[sync-presenca] Roster ${nome} aula ${aula.id}:`, rosterError.message);
+            } else {
+              rosterSincronizados++;
+            }
+
+            if (alunoId != null) {
+              const { error: administrativoError } = await supabase
+                .from('aluno_presenca_administrativo')
+                .upsert(
+                  {
+                    aluno_id: alunoId,
+                    aula_emusys_id: aulaLocalId,
+                    unidade_id: unidade.id,
+                    justificada: aula.justificada === true,
+                    fonte: 'emusys',
+                    sincronizado_em: sincronizadoEm,
+                    updated_at: sincronizadoEm,
+                  },
+                  {
+                    onConflict: 'aluno_id,aula_emusys_id',
+                    ignoreDuplicates: false,
+                  }
+                );
+
+              if (administrativoError) {
+                console.error(`[sync-presenca] Administrativo ${nome} aula ${aula.id}:`, administrativoError.message);
+              }
+            }
+          }
+
           // Aula cancelada: só espelha em emusys_experimentais_raw (auditoria/conciliação
           // já sabe lidar com situacao_operacional='cancelada'), sem processar presença —
           // não houve aula de verdade, não há frequência real pra sincronizar.
@@ -880,23 +1003,22 @@ serve(async (req: Request) => {
 
           aulasProcessadas++;
 
+          if (modo === 'agenda') {
+            continue;
+          }
+
           // 2b. Processar presença de cada aluno nesta aula
           for (const aluno of aula.alunos || []) {
             const nome = aluno.nome_aluno?.trim();
             if (!nome) continue;
 
             totalPresencas++;
-            const nomeNorm = normalizarNome(nome);
-            // Resolver a matricula pelo CURSO da aula (matricula exata, evita embaralhar
-            // alunos com 2+ cursos). Fallback ao nome quando o curso nao resolve ou ha
-            // ambiguidade (ex: 2 matriculas do mesmo curso, homonimos).
-            let alunoId: number | undefined;
-            if (cursoIdAula != null) {
-              const chave = `${nomeNorm}|${aluno.data_nascimento_aluno ?? ''}|${cursoIdAula}`;
-              const candidatos = mapaAlunosComposto.get(chave) ?? [];
-              if (candidatos.length === 1) alunoId = candidatos[0];
-            }
-            if (alunoId == null) alunoId = mapaAlunos.get(nomeNorm);
+            const alunoId = resolverAlunoLocal(
+              aluno,
+              cursoIdAula,
+              mapaAlunosComposto,
+              mapaAlunos
+            );
 
             if (aula.categoria === 'experimental') {
               await upsertExperimentalRaw(supabase, {
@@ -934,7 +1056,11 @@ serve(async (req: Request) => {
             matched++;
             const status = aluno.presenca === 'presente' ? 'presente' : 'ausente';
             if (status === 'presente') presentes++;
-            else ausentes++;
+            else if (podeMaterializarFalta(aula)) ausentes++;
+            else {
+              faltasAguardandoMaturidade++;
+              continue;
+            }
 
             // UPSERT presença vinculada à aula
             const { error: upsertError } = await supabase
@@ -948,6 +1074,7 @@ serve(async (req: Request) => {
                   data_aula: dataAlvo,
                   horario_aula: aluno.horario_presenca,
                   status,
+                  status_presenca: status === 'presente' ? 'presente' : 'falta',
                   curso_nome: aula.curso_nome,
                   turma_nome: aula.turma_nome,
                   sala_nome: aula.sala_nome,
@@ -956,7 +1083,7 @@ serve(async (req: Request) => {
                 },
                 {
                   onConflict: 'aluno_id,aula_emusys_id',
-                  ignoreDuplicates: false,
+                  ignoreDuplicates: true,
                 }
               );
 
@@ -992,8 +1119,24 @@ serve(async (req: Request) => {
           nao_encontrados: naoEncontrados,
           presentes,
           ausentes,
+          faltas_aguardando_maturidade: faltasAguardandoMaturidade,
+          roster_sincronizados: rosterSincronizados,
         });
       }
+    }
+
+    if (modo === 'agenda') {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          modo,
+          dias: diasFuturos,
+          data_inicio: datasProcessar[0],
+          data_fim: datasProcessar.at(-1),
+          resultados,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Recalcular percentual_presenca para todas as unidades (uma vez no final)
@@ -1010,7 +1153,7 @@ serve(async (req: Request) => {
     console.log(`[sync-presenca] Experimentais processadas: ${logsExperimentais.length}`);
 
     return new Response(
-      JSON.stringify({ success: true, dias, data_inicio: datasProcessar[0], data_fim: dataFim, resultados, experimentais_reconciliadas: logsReconciliacao, experimentais_confirmadas: logsExperimentais }),
+      JSON.stringify({ success: true, modo, dias, data_inicio: datasProcessar[0], data_fim: datasProcessar.at(-1), resultados, experimentais_reconciliadas: logsReconciliacao, experimentais_confirmadas: logsExperimentais }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
