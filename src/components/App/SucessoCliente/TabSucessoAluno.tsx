@@ -54,6 +54,10 @@ interface AlunoSucesso {
   total_acoes: number;
   metas_ativas: number;
   foto_url: string | null;
+  // Risco de evasão do modelo (Random Forest) — separado do Health Score (regra).
+  risco_probabilidade: number | null;
+  risco_faixa: string | null;
+  risco_fatores: Array<{ fator: string; valor: unknown; importancia: number; sinal: string }> | null;
 }
 
 interface AlertaSaude {
@@ -68,7 +72,8 @@ interface Props {
 }
 
 type SortKey = 'nome' | 'health_score_numerico' | 'fase_jornada' | 'percentual_presenca' |
-  'status_pagamento' | 'tempo_permanencia_meses' | 'ultimo_feedback' | 'health_status';
+  'status_pagamento' | 'tempo_permanencia_meses' | 'ultimo_feedback' | 'health_status' |
+  'risco_probabilidade';
 
 const FASE_RANK: Record<string, number> = { onboarding: 0, consolidacao: 1, encantamento: 2, renovacao: 3 };
 const PAGAMENTO_RANK: Record<string, number> = { inadimplente: 0, atrasado: 1, sem_parcela: 2, em_dia: 3 };
@@ -107,6 +112,19 @@ const feedbackLabel = (fb: string | null) =>
 const statusLabel = (status: string) =>
   status === 'critico' ? 'Crítico' : status === 'atencao' ? 'Atenção' : 'Saudável';
 
+// Risco de evasão (modelo). Faixa: baixo / atencao / critico (mesma da tabela risco_evasao).
+const riscoFaixaLabel = (faixa: string | null) =>
+  faixa === 'critico' ? 'Alto' : faixa === 'atencao' ? 'Médio' : faixa === 'baixo' ? 'Baixo' : '—';
+
+const riscoColor = (faixa: string | null) =>
+  faixa === 'critico' ? 'text-rose-400 bg-rose-900/30 border-rose-700' :
+  faixa === 'atencao' ? 'text-amber-400 bg-amber-900/30 border-amber-700' :
+  faixa === 'baixo' ? 'text-emerald-400 bg-emerald-900/30 border-emerald-700' :
+  'text-slate-400 bg-slate-800/40 border-slate-700';
+
+const sinalIcon = (sinal: string) =>
+  sinal === 'risco' ? '🔴' : sinal === 'atencao' ? '🟡' : sinal === 'ok' ? '🟢' : '⚪';
+
 const getSortValue = (aluno: AlunoSucesso, key: SortKey): number | string => {
   switch (key) {
     case 'nome': return aluno.nome?.toLowerCase() || '';
@@ -117,6 +135,7 @@ const getSortValue = (aluno: AlunoSucesso, key: SortKey): number | string => {
     case 'tempo_permanencia_meses': return aluno.tempo_permanencia_meses ?? -1;
     case 'ultimo_feedback': return FEEDBACK_RANK[aluno.ultimo_feedback || ''] ?? -1;
     case 'health_status': return STATUS_RANK[aluno.health_status || ''] ?? -1;
+    case 'risco_probabilidade': return aluno.risco_probabilidade ?? -1;
     default: return '';
   }
 };
@@ -172,7 +191,28 @@ export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
 
       const { data, error } = await query;
       if (error) throw error;
-      setAlunos(data || []);
+
+      // Risco de evasão do modelo (view vw_risco_evasao_atual = último score por aluno).
+      // Merge por aluno_id; se a tabela ainda não tiver o aluno, campos ficam null.
+      let riscoQuery = supabase
+        .from('vw_risco_evasao_atual')
+        .select('aluno_id, probabilidade, faixa, fatores');
+      if (unidadeAtual !== 'todos') {
+        riscoQuery = riscoQuery.eq('unidade_id', unidadeAtual);
+      }
+      const { data: riscoData } = await riscoQuery;
+      const riscoMap = new Map((riscoData || []).map(r => [r.aluno_id, r]));
+
+      const alunosComRisco = (data || []).map(a => {
+        const r = riscoMap.get(a.id);
+        return {
+          ...a,
+          risco_probabilidade: r?.probabilidade ?? null,
+          risco_faixa: r?.faixa ?? null,
+          risco_fatores: r?.fatores ?? null,
+        };
+      });
+      setAlunos(alunosComRisco);
     } catch (error) {
       console.error('Erro ao carregar alunos:', error);
       toast.error('Erro ao carregar dados');
@@ -653,6 +693,14 @@ export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
                   </button>
                 </th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
+                  <button onClick={() => handleSort('risco_probabilidade')} className="flex items-center justify-center gap-1 hover:text-white transition-colors mx-auto">
+                    <Zap className="w-3 h-3 text-orange-400" />
+                    <span>Risco de Evasão</span>
+                    <span className="text-[9px] px-1 rounded bg-orange-500/20 text-orange-300 font-semibold">IA</span>
+                    <SortIcon column="risco_probabilidade" />
+                  </button>
+                </th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
                   <button onClick={() => handleSort('fase_jornada')} className="flex items-center justify-center gap-1 hover:text-white transition-colors mx-auto">
                     <span>Fase</span>
                     <SortIcon column="fase_jornada" />
@@ -695,7 +743,7 @@ export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
             <tbody className="divide-y divide-slate-700/50">
               {alunosFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-8 text-center text-slate-400">
+                  <td colSpan={10} className="p-8 text-center text-slate-400">
                     Nenhum aluno encontrado
                   </td>
                 </tr>
@@ -739,6 +787,24 @@ export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
                           <span className="text-sm font-black">{aluno.health_score_numerico || 0}</span>
                         </div>
                       </Tooltip>
+                    </td>
+                    {/* Risco de Evasão (modelo) */}
+                    <td className="text-center px-4 py-3">
+                      {aluno.risco_probabilidade == null ? (
+                        <span className="text-slate-600 text-xs">—</span>
+                      ) : (
+                        <Tooltip content={<TooltipList items={[
+                          `Probabilidade de evasão em ~30 dias: ${Math.round(aluno.risco_probabilidade * 100)}%`,
+                          `Modelo estatístico (Random Forest), separado do Health Score`,
+                          ...(aluno.risco_fatores || []).slice(0, 4).map(f =>
+                            `${sinalIcon(f.sinal)} ${f.fator}: ${f.valor}`),
+                        ]} />}>
+                          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border cursor-help ${riscoColor(aluno.risco_faixa)}`}>
+                            <span className="text-sm font-black">{Math.round(aluno.risco_probabilidade * 100)}%</span>
+                            <span className="text-[10px] font-medium opacity-80">{riscoFaixaLabel(aluno.risco_faixa)}</span>
+                          </div>
+                        </Tooltip>
+                      )}
                     </td>
                     {/* Fase */}
                     <td className="text-center px-4 py-3">
