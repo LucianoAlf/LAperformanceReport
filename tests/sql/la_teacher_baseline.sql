@@ -50,7 +50,8 @@ create table public.aulas_emusys (
   curso_nome text,
   sala_nome text,
   professor_id integer references public.professores(id),
-  cancelada boolean default false
+  cancelada boolean default false,
+  anotacoes_fabio text
 );
 
 create table public.aluno_presenca (

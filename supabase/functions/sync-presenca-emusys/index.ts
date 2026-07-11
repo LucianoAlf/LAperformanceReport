@@ -111,9 +111,15 @@ function criarAlunoChave(aluno: AlunoEmusys, alunoId: number | undefined): strin
 function resolverAlunoLocal(
   aluno: AlunoEmusys,
   cursoIdAula: number | null,
+  mapaAlunosEmusys: Map<string, number[]>,
   mapaAlunosComposto: Map<string, number[]>,
   mapaAlunos: Map<string, number>
 ): number | undefined {
+  if (aluno.id_aluno != null && aluno.id_aluno > 0) {
+    const candidatosEmusys = mapaAlunosEmusys.get(String(aluno.id_aluno)) ?? [];
+    if (candidatosEmusys.length === 1) return candidatosEmusys[0];
+  }
+
   const nomeNorm = normalizarNome(aluno.nome_aluno || '');
   if (cursoIdAula != null) {
     const chave = `${nomeNorm}|${aluno.data_nascimento_aluno ?? ''}|${cursoIdAula}`;
@@ -758,14 +764,21 @@ serve(async (req: Request) => {
     console.log(`[sync-presenca] Modo ${modo}: ${datasProcessar[0]} a ${datasProcessar.at(-1)}, unidade: ${unidadeIndex !== null ? unidadesProcessar[0].nome : 'todas'}`);
 
     // Buscar todos os alunos ativos para matching (paginado para contornar limite de 1000 rows do PostgREST)
-    const alunosDB: { id: number; nome: string; unidade_id: string; data_nascimento: string | null; curso_id: number | null }[] = [];
+    const alunosDB: {
+      id: number;
+      nome: string;
+      unidade_id: string;
+      data_nascimento: string | null;
+      curso_id: number | null;
+      emusys_student_id: string | null;
+    }[] = [];
     const PAGE_SIZE = 1000;
     let offset = 0;
     let hasMore = true;
     while (hasMore) {
       const { data: page, error: pageError } = await supabase
         .from('alunos')
-        .select('id, nome, unidade_id, data_nascimento, curso_id')
+        .select('id, nome, unidade_id, data_nascimento, curso_id, emusys_student_id')
         .in('status', ['ativo', 'aviso_previo'])
         .range(offset, offset + PAGE_SIZE - 1);
       if (pageError) throw new Error(`Erro ao buscar alunos: ${pageError.message}`);
@@ -803,6 +816,9 @@ serve(async (req: Request) => {
       cursoMapa.set(normalizarCurso(curso.nome), curso.id);
     }
 
+    // O ID do Emusys e namespaced por unidade e tem prioridade sobre matching textual.
+    const alunosPorUnidadeEmusys = new Map<string, Map<string, number[]>>();
+
     // Criar mapa de aluno por unidade com chave composta (nome + data_nasc + curso_id)
     // Entrada contem array de ids para detectar ambiguidade (nao atualizar se >1 match)
     // Tambem mantem um mapa de fallback com chave simples (nome) para compatibilidade do match de presenca.
@@ -810,8 +826,16 @@ serve(async (req: Request) => {
     const alunosPorUnidadeSimples = new Map<string, Map<string, number>>();
     for (const aluno of alunosDB || []) {
       const uid = aluno.unidade_id;
+      if (!alunosPorUnidadeEmusys.has(uid)) alunosPorUnidadeEmusys.set(uid, new Map());
       if (!alunosPorUnidadeComposta.has(uid)) alunosPorUnidadeComposta.set(uid, new Map());
       if (!alunosPorUnidadeSimples.has(uid)) alunosPorUnidadeSimples.set(uid, new Map());
+
+      if (aluno.emusys_student_id) {
+        const mapaEmusys = alunosPorUnidadeEmusys.get(uid)!;
+        const idsEmusys = mapaEmusys.get(aluno.emusys_student_id) ?? [];
+        idsEmusys.push(aluno.id);
+        mapaEmusys.set(aluno.emusys_student_id, idsEmusys);
+      }
 
       const nomeNorm = normalizarNome(aluno.nome);
       const chaveComposta = `${nomeNorm}|${aluno.data_nascimento ?? ''}|${aluno.curso_id ?? ''}`;
@@ -835,6 +859,7 @@ serve(async (req: Request) => {
         // 1. Buscar aulas do dia no Emusys
         const aulas = await fetchAulasDia(unidade.token, dataAlvo);
 
+        const mapaAlunosEmusys = alunosPorUnidadeEmusys.get(unidade.id) || new Map();
         const mapaAlunos = alunosPorUnidadeSimples.get(unidade.id) || new Map();
         const mapaAlunosComposto = alunosPorUnidadeComposta.get(unidade.id) || new Map();
         let totalPresencas = 0;
@@ -922,6 +947,7 @@ serve(async (req: Request) => {
             const alunoId = resolverAlunoLocal(
               aluno,
               cursoIdAula,
+              mapaAlunosEmusys,
               mapaAlunosComposto,
               mapaAlunos
             );
@@ -1016,6 +1042,7 @@ serve(async (req: Request) => {
             const alunoId = resolverAlunoLocal(
               aluno,
               cursoIdAula,
+              mapaAlunosEmusys,
               mapaAlunosComposto,
               mapaAlunos
             );

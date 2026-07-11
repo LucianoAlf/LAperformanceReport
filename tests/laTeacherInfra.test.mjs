@@ -4,6 +4,12 @@ import { test } from 'node:test';
 
 const migrationPath = 'supabase/migrations/20260710120000_la_teacher_presenca_ponto.sql';
 const disponibilidadeMigrationPath = 'supabase/migrations/20260710130000_disponibilidade_professor_espelho.sql';
+const validacaoClaudeCodeMigrationPath =
+  'supabase/migrations/20260710143000_la_teacher_validacao_claude_code.sql';
+const rosterD0MigrationPath =
+  'supabase/migrations/20260710145000_roster_d0_timeout_robusto.sql';
+const rosterConciliacaoMigrationPath =
+  'supabase/migrations/20260710150000_roster_conciliacao_emusys_id.sql';
 const pagePath = 'src/components/App/Professores/ProfessoresPage.tsx';
 const modalPath = 'src/components/App/Professores/ModalProfessor.tsx';
 const syncPath = 'supabase/functions/sync-presenca-emusys/index.ts';
@@ -55,6 +61,8 @@ test('sync usa roster, camada administrativa, maturidade e first-write-wins', ()
   assert.match(sync, /MATUREZA_FALTA_HORAS\s*=\s*24/);
   assert.match(sync, /podeMaterializarFalta/);
   assert.match(sync, /ignoreDuplicates:\s*true/);
+  assert.match(sync, /emusys_student_id/);
+  assert.match(sync, /mapaAlunosEmusys/);
   assert.doesNotMatch(
     sync,
     /from\('aluno_presenca'\)[\s\S]{0,800}ignoreDuplicates:\s*false/,
@@ -99,4 +107,75 @@ test('agenda da coordenacao cruza espelho, aulas e operacao de propostas', () =>
   assert.match(grade, /Tentar novamente/);
   assert.match(agenda, /GradeDisponibilidadeProfessores/);
   assert.match(agenda, /Grade e disponibilidade/);
+});
+
+test('roster concilia aluno somente por ID Emusys unico na unidade', () => {
+  assert.ok(
+    existsSync(rosterConciliacaoMigrationPath),
+    `migration ausente: ${rosterConciliacaoMigrationPath}`,
+  );
+  const migration = readFileSync(rosterConciliacaoMigrationPath, 'utf8');
+  assert.match(migration, /a\.unidade_id\s*=\s*r\.unidade_id/i);
+  assert.match(migration, /a\.emusys_student_id\s*=\s*r\.aluno_emusys_id::text/i);
+  assert.match(migration, /having count\(distinct a\.id\)\s*=\s*1/i);
+  assert.match(migration, /update public\.aula_alunos_emusys/i);
+});
+test('validacao Claude Code corrige ponto por slot e preserva contrato da agenda', () => {
+  assert.ok(
+    existsSync(validacaoClaudeCodeMigrationPath),
+    `migration ausente: ${validacaoClaudeCodeMigrationPath}`,
+  );
+  const migration = readFileSync(validacaoClaudeCodeMigrationPath, 'utf8');
+
+  assert.match(migration, /create or replace view public\.vw_ponto_professor_diario/i);
+  assert.match(migration, /select distinct on \(professor_id,\s*data_aula,\s*data_hora_inicio,\s*data_hora_fim\)/i);
+  assert.match(migration, /slots_creditados/i);
+  assert.match(migration, /create or replace function public\.app_meu_ponto/i);
+
+  assert.match(migration, /create or replace function public\.app_registrar_presencas_aula/i);
+  assert.match(migration, /chamada_somente_na_aula_ancora/i);
+  assert.match(migration, /coalesce\(v_aula\.tipo,\s*''\)\s*<>\s*'turma'/i);
+
+  assert.match(migration, /create or replace function public\.app_minha_agenda_sessao/i);
+  assert.match(migration, /aula_id_alvo/i);
+  assert.match(migration, /aula_id_ancora/i);
+  assert.match(migration, /roster_incompleto/i);
+  assert.match(migration, /justificada/i);
+  assert.match(migration, /anotacoes_fabio/i);
+  assert.match(migration, /tem_registro/i);
+});
+
+test('disponibilidade do professor tem RPC guardada e view nao vaza todos', () => {
+  assert.ok(
+    existsSync(validacaoClaudeCodeMigrationPath),
+    `migration ausente: ${validacaoClaudeCodeMigrationPath}`,
+  );
+  const migration = readFileSync(validacaoClaudeCodeMigrationPath, 'utf8');
+
+  assert.match(migration, /create or replace function public\.app_minha_disponibilidade\(\)/i);
+  assert.match(migration, /where d\.professor_id = public\.fn_professor_do_usuario\(\)/i);
+  assert.match(migration, /revoke all on function public\.app_minha_disponibilidade\(\) from public, anon/i);
+  assert.match(migration, /create or replace view public\.vw_disponibilidade_professores/i);
+  assert.match(migration, /pu\.professor_id = public\.fn_professor_do_usuario\(\)/i);
+  assert.match(migration, /usuario_tem_permissao/i);
+});
+
+test('roster D0 tem job futuro dedicado para todas as unidades', () => {
+  const cronMigration = readFileSync(
+    'supabase/migrations/20260710121000_cron_sync_agenda_professor_emusys.sql',
+    'utf8',
+  );
+
+  assert.match(cronMigration, /modo',\s*'agenda'/);
+  assert.match(cronMigration, /dias_futuros',\s*7/);
+  assert.match(cronMigration, /for v_indice in 0\.\.2 loop/);
+  assert.match(cronMigration, /sync-agenda-professor-emusys-u%s/);
+
+  assert.ok(existsSync(rosterD0MigrationPath), `migration ausente: ${rosterD0MigrationPath}`);
+  const rosterMigration = readFileSync(rosterD0MigrationPath, 'utf8');
+  assert.match(rosterMigration, /timeout_milliseconds\s*:=\s*180000/i);
+  assert.match(rosterMigration, /cron\.schedule/i);
+  assert.match(rosterMigration, /net\.http_post/i);
+  assert.match(rosterMigration, /modo',\s*'agenda'/i);
+  assert.match(rosterMigration, /dias_futuros',\s*7/i);
 });
