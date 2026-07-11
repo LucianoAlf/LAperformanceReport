@@ -6,7 +6,8 @@ const parseLocalDate = (s: string | null | undefined): Date | null =>
 const formatLocalDate = (d: Date | null | undefined): string | null =>
   d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : null;
 import { supabase } from '@/lib/supabase';
-import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil, Brain, ExternalLink, MessageCircle, Search, Star, BookOpen, ClipboardList, Printer, CalendarDays } from 'lucide-react';
+import { copyTextToClipboard } from '@/lib/clipboard';
+import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil, Brain, ExternalLink, MessageCircle, Search, Star, BookOpen, ClipboardList, Printer, Copy, Check, RotateCcw, Send, CalendarDays } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -1029,6 +1030,14 @@ export function ModalFichaAluno({
   const [justificativaSemParcela, setJustificativaSemParcela] = useState('');
   const [confirmacaoSemParcela, setConfirmacaoSemParcela] = useState('');
 
+  // Contato do professor atual do aluno (para enviar a anamnese direto ao professor via WhatsApp)
+  const [professorContato, setProfessorContato] = useState<{ nome: string; telefone_whatsapp: string | null } | null>(null);
+
+  // Preview editável da mensagem da anamnese (mesmo padrão do Relatório Diário: editar → copiar/WhatsApp)
+  const [modalMensagemAnamnese, setModalMensagemAnamnese] = useState(false);
+  const [textoMensagemAnamnese, setTextoMensagemAnamnese] = useState('');
+  const [copiadoMensagem, setCopiadoMensagem] = useState(false);
+
   // Estado para busca de anamnese pendente
   const [modalBuscaAnamnese, setModalBuscaAnamnese] = useState(false);
   const [buscandoAnamnese, setBuscandoAnamnese] = useState(false);
@@ -1147,6 +1156,18 @@ export function ModalFichaAluno({
       })));
       setAnotacoes(anotRes.data || []);
       setAnamnese((anamneseData as AnamneseAluno | null) || null);
+
+      // Contato do professor atual (nome + WhatsApp) para o botão "Enviar ao professor" na anamnese
+      if (alunoData.professor_atual_id) {
+        const { data: profData } = await supabase
+          .from('professores')
+          .select('nome, telefone_whatsapp')
+          .eq('id', alunoData.professor_atual_id)
+          .maybeSingle();
+        setProfessorContato(profData ? { nome: profData.nome, telefone_whatsapp: profData.telefone_whatsapp } : null);
+      } else {
+        setProfessorContato(null);
+      }
 
       // Buscar outros cursos do mesmo aluno (registros com mesmo nome + data_nascimento + unidade)
       if (alunoData.nome && alunoData.unidade_id) {
@@ -1596,6 +1617,86 @@ export function ModalFichaAluno({
   const primaryMeta = TEMPERAMENTO_META[primaryCode];
   const secondaryMeta = TEMPERAMENTO_META[secondaryCode];
   const codinomeMeta = TEMPERAMENTO_META[(anamnese?.temperamento_codinome || '').toUpperCase()];
+
+  const professorWhatsapp = normalizarTelefoneWhatsapp(professorContato?.telefone_whatsapp);
+  const linkPerfilAnamnese = anamnese?.share_token
+    ? `https://anamnese-la-music.vercel.app/perfil/${anamnese.share_token}`
+    : null;
+
+  // Monta o texto da anamnese formatado para envio manual pelo WhatsApp (copiar/colar ou envio direto).
+  // Usa os MESMOS dados já exibidos na aba, sem consulta extra.
+  function montarTextoAnamnese(): string {
+    if (!anamnese) return '';
+    const nome = dadosCompletos?.nome || aluno.nome;
+    const isKids = anamnese.tipo_formulario === 'LAMK';
+    const labelPrimario = primaryMeta?.label || anamnese.temperamento_primario || '-';
+    const labelSecundario = secondaryMeta?.label || anamnese.temperamento_secundario || '-';
+    const codinome = anamnese.temperamento_codinome ? ` (${anamnese.temperamento_codinome})` : '';
+
+    const linhas: string[] = [];
+    linhas.push(`*Anamnese — ${nome}*`);
+    linhas.push(`_Preenchida em ${formatarDataHora(anamnese.created_at)}${anamnese.entrevistador ? ` por ${anamnese.entrevistador}` : ''}_`);
+    linhas.push('');
+    linhas.push(`*🧠 Perfil de Temperamento*`);
+    linhas.push(`${labelPrimario} + ${labelSecundario}${codinome}`);
+    linhas.push(`Col ${colerico} · San ${sanguineo} · Fle ${fleumatico} · Mel ${melancolico}`);
+    linhas.push('');
+    linhas.push(`*⚠️ Saúde e Necessidades*`);
+    linhas.push(`Diagnósticos: ${diagnosticos.length ? diagnosticos.join(', ') : 'Não informado'}`);
+    linhas.push(`Medicação: ${anamnese.medicacao_continua || 'Não informado'}`);
+    linhas.push(`Cuidado médico: ${anamnese.cuidado_medico || 'Não informado'}`);
+    linhas.push(`Apoio necessário: ${anamnese.necessidade_apoio || 'Não informado'}`);
+    if (isKids) linhas.push(`Comunicação: ${anamnese.comunicacao_crianca || 'Não informado'}`);
+    linhas.push('');
+    linhas.push(`*🎯 Objetivos*`);
+    linhas.push(`Objetivos: ${objetivos.length ? objetivos.join(', ') : 'Não informado'}`);
+    linhas.push(`Tempo de estudo: ${anamnese.tempo_disponivel_estudo || 'Não informado'}`);
+    linhas.push(`Tem instrumento: ${formatarBooleano(anamnese.possui_instrumento)}`);
+    linhas.push(`Interesse bandas: ${formatarBooleano(anamnese.interesse_bandas)}`);
+    linhas.push(`Tempo para metas: ${anamnese.tempo_para_metas || 'Não informado'}`);
+    if (cursosEscolhidos.length) linhas.push(`Cursos escolhidos: ${cursosEscolhidos.join(', ')}`);
+    if (isKids) {
+      linhas.push(`Motivo dos pais: ${motivoPais.length ? motivoPais.join(', ') : 'Não informado'}`);
+      linhas.push(`Metas dos pais: ${metasPais.length ? metasPais.join(', ') : 'Não informado'}`);
+      linhas.push(`Exposição a telas: ${anamnese.exposicao_telas || 'Não informado'}`);
+    } else {
+      linhas.push(`Nível musical: ${anamnese.nivel_conhecimento_musical || 'Não informado'}`);
+      linhas.push(`Nível no instrumento: ${anamnese.nivel_habilidade_instrumento || 'Não informado'}`);
+      linhas.push(`Gêneros: ${generosMusicais.length ? generosMusicais.join(', ') : 'Não informado'}`);
+    }
+    if (anamnese.observacoes_entrevistador) {
+      linhas.push('');
+      linhas.push(`*📝 Observações do Entrevistador*`);
+      linhas.push(anamnese.observacoes_entrevistador);
+    }
+    if (linkPerfilAnamnese) {
+      linhas.push('');
+      linhas.push(`Perfil completo: ${linkPerfilAnamnese}`);
+    }
+    return linhas.join('\n');
+  }
+
+  // Abre o preview editável já com o texto montado (o usuário pode ajustar antes de copiar/enviar).
+  function abrirModalMensagemAnamnese() {
+    setTextoMensagemAnamnese(montarTextoAnamnese());
+    setCopiadoMensagem(false);
+    setModalMensagemAnamnese(true);
+  }
+
+  async function copiarMensagemAnamnese() {
+    const { ok } = await copyTextToClipboard(textoMensagemAnamnese);
+    if (ok) {
+      setCopiadoMensagem(true);
+      setTimeout(() => setCopiadoMensagem(false), 2500);
+    } else {
+      toast.error('Não foi possível copiar. Selecione o texto e copie manualmente.');
+    }
+  }
+
+  function enviarMensagemProfessor() {
+    if (!professorWhatsapp || !textoMensagemAnamnese) return;
+    window.open(`https://wa.me/${professorWhatsapp}?text=${encodeURIComponent(textoMensagemAnamnese)}`, '_blank', 'noopener,noreferrer');
+  }
 
   if (loading) {
     return (
@@ -2330,6 +2431,10 @@ export function ModalFichaAluno({
                           Reenviar WhatsApp
                         </Button>
                       )}
+                      <Button type="button" variant="outline" onClick={abrirModalMensagemAnamnese}>
+                        <Send className="w-4 h-4 mr-2" />
+                        Copiar / Enviar ao professor
+                      </Button>
                     </div>
                   </div>
                 </>
@@ -2900,6 +3005,61 @@ export function ModalFichaAluno({
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Preview editável da anamnese (mesmo padrão do Relatório Diário) */}
+      <Dialog open={modalMensagemAnamnese} onOpenChange={setModalMensagemAnamnese}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageCircle className="w-5 h-5" />
+              Mensagem da Anamnese
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { setTextoMensagemAnamnese(montarTextoAnamnese()); setCopiadoMensagem(false); }}
+              className="text-slate-400 hover:text-white"
+            >
+              <RotateCcw className="w-4 h-4 mr-1" />
+              Resetar
+            </Button>
+            <Button
+              onClick={copiarMensagemAnamnese}
+              disabled={!textoMensagemAnamnese}
+              className={copiadoMensagem ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-cyan-500 hover:bg-cyan-600'}
+            >
+              {copiadoMensagem ? (
+                <><Check className="w-4 h-4 mr-2" />Copiado!</>
+              ) : (
+                <><Copy className="w-4 h-4 mr-2" />Copiar</>
+              )}
+            </Button>
+            <Button
+              onClick={enviarMensagemProfessor}
+              disabled={!professorWhatsapp || !textoMensagemAnamnese}
+              title={professorWhatsapp
+                ? `Enviar para ${professorContato?.nome}`
+                : 'Professor sem WhatsApp cadastrado'}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <Send className="w-4 h-4 mr-2" />
+              WhatsApp
+            </Button>
+          </div>
+
+          <p className="text-xs text-slate-500">
+            💡 Você pode editar o texto antes de copiar ou enviar
+          </p>
+          <Textarea
+            value={textoMensagemAnamnese}
+            onChange={(e) => setTextoMensagemAnamnese(e.target.value)}
+            className="bg-slate-800 border-slate-700 font-mono text-sm min-h-[340px] resize-none"
+          />
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
