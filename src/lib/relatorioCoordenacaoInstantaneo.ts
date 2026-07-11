@@ -11,6 +11,7 @@ export interface ProfessorRelatorioCoordenacao {
   total_alunos: number;
   total_turmas: number;
   alunos_via_turmas?: number;
+  turmas_elegiveis_media?: number;
   media_alunos_turma: number;
   taxa_retencao: number;
   taxa_conversao: number;
@@ -135,7 +136,10 @@ export function normalizarKpisProfessoresCoordenacao(
         : 0;
     const experimentais = numeroSeguro(item.experimentais);
     const matriculasPosExp = numeroSeguro(item.matriculas_pos_exp ?? item.matriculas);
-    const healthScore = numeroSeguro(item.health_score ?? item.health) || calcularHealthFallback(item);
+    const healthInformado = Number(item.health_score ?? item.health);
+    const healthScore = Number.isFinite(healthInformado)
+      ? healthInformado
+      : calcularHealthFallback(item);
 
     return {
       id: numeroSeguro(item.professor_id ?? item.id) || index + 1,
@@ -143,7 +147,8 @@ export function normalizarKpisProfessoresCoordenacao(
       especialidades: listaTextoSeguro(item.cursos ?? item.especialidades),
       total_alunos: totalAlunos,
       total_turmas: totalTurmas,
-      alunos_via_turmas: numeroSeguro(item.alunos_via_turmas) || totalAlunos,
+      alunos_via_turmas: numeroSeguro(item.alunos_via_turmas),
+      turmas_elegiveis_media: numeroSeguro(item.turmas_elegiveis_media),
       media_alunos_turma: mediaAlunosTurma,
       taxa_retencao: numeroSeguro(item.taxa_retencao ?? item.taxa_renovacao),
       taxa_conversao: numeroSeguro(item.taxa_conversao) || (
@@ -220,6 +225,8 @@ function calcularResumo(professores: ProfessorRelatorioCoordenacao[]) {
   const totalProfessores = professores.length;
   const totalAlunos = professores.reduce((acc, p) => acc + Number(p.total_alunos || 0), 0);
   const totalTurmas = professores.reduce((acc, p) => acc + Number(p.total_turmas || 0), 0);
+  const totalOcupacoesElegiveis = professores.reduce((acc, p) => acc + Number(p.alunos_via_turmas || 0), 0);
+  const totalTurmasElegiveis = professores.reduce((acc, p) => acc + Number(p.turmas_elegiveis_media || 0), 0);
   const totalEvasoes = professores.reduce((acc, p) => acc + Number(p.evasoes_mes || 0), 0);
   const totalNaoRenovacoes = professores.reduce((acc, p) => acc + Number(p.nao_renovacoes_mes || 0), 0);
   const totalMrrPerdido = professores.reduce((acc, p) => acc + Number(p.mrr_perdido || 0), 0);
@@ -244,7 +251,9 @@ function calcularResumo(professores: ProfessorRelatorioCoordenacao[]) {
     totalMrrPerdido,
     totalExperimentais,
     totalMatriculasPosExp,
-    mediaAlunosTurma: totalTurmas > 0 ? totalAlunos / totalTurmas : 0,
+    mediaAlunosTurma: totalTurmasElegiveis > 0
+      ? totalOcupacoesElegiveis / totalTurmasElegiveis
+      : 0,
     mediaPresenca,
     mediaRetencao,
     mediaHealth,

@@ -25,6 +25,8 @@ interface ProfessorPerformance {
   unidades: { id: string; codigo: string; nome: string }[];
   total_alunos: number;
   total_turmas: number;
+  alunos_via_turmas: number;
+  turmas_elegiveis_media: number;
   media_alunos_turma: number;
   taxa_retencao: number;
   taxa_conversao: number;
@@ -108,6 +110,8 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
   const [loading, setLoading] = useState(false);
   const [alunosNoMes, setAlunosNoMes] = useState<number | null>(null);
   const [turmasNoMes, setTurmasNoMes] = useState<number | null>(null);
+  const [mediaAlunosTurmaNoMes, setMediaAlunosTurmaNoMes] = useState<number | null>(null);
+  const [turmasElegiveisMediaNoMes, setTurmasElegiveisMediaNoMes] = useState<number | null>(null);
   const [relatorioTexto, setRelatorioTexto] = useState('');
   const [loadingRelatorio, setLoadingRelatorio] = useState(false);
   const [copiado, setCopiado] = useState(false);
@@ -115,11 +119,14 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
   const [editingMeta, setEditingMeta] = useState<string | null>(null); // meta.id being edited
   const [editValues, setEditValues] = useState<{ valor_atual: string; valor_meta: string; observacoes: string }>({ valor_atual: '', valor_meta: '', observacoes: '' });
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null); // meta.id to confirm delete
+  const totalAlunosCompetencia = alunosNoMes ?? professor?.total_alunos ?? 0;
+  const totalTurmasCompetencia = turmasNoMes ?? professor?.total_turmas ?? 0;
+  const mediaTurmaCompetencia = mediaAlunosTurmaNoMes ?? professor?.media_alunos_turma ?? 0;
 
   // Sincronizar competência quando a prop muda (troca de professor ou mês externo)
   useEffect(() => {
     setCompetencia(competenciaInicial);
-  }, [competenciaInicial]);
+  }, [competenciaInicial, open, professor?.id]);
 
   function navegarMes(direcao: -1 | 1) {
     const [ano, mes] = competencia.split('-').map(Number);
@@ -179,31 +186,42 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
       const fimMesStr = format(fimMes, 'yyyy-MM-dd');
       const inicioMesStr = `${competencia}-01`;
 
-      // Alunos que estavam ativos nesse professor no final do mês:
-      let alunosQuery = supabase
-        .from('alunos')
-        .select('*', { count: 'exact', head: true })
-        .eq('professor_atual_id', professor.id)
-        .lte('data_matricula', fimMesStr)
-        .or(`data_saida.is.null,data_saida.gt.${fimMesStr}`)
-        .in('status', ['ativo', 'inativo', 'trancado', 'evadido']);
-      if (unidadeId) alunosQuery = alunosQuery.eq('unidade_id', unidadeId);
-      const { count: alunosCount } = await alunosQuery;
+      const { data: kpisCompetencia, error: kpisCompetenciaError } = await supabase
+        .rpc('get_kpis_professor_periodo_canonico', {
+          p_ano: anoComp,
+          p_mes: mesComp,
+          p_unidade_id: unidadeId || null,
+        });
+      if (kpisCompetenciaError) throw kpisCompetenciaError;
 
-      setAlunosNoMes(alunosCount ?? null);
+      const linhasProfessor = (kpisCompetencia || []).filter(
+        (row: any) => Number(row.professor_id) === professor.id
+      );
+      const alunosCompetencia = linhasProfessor.reduce(
+        (total: number, row: any) => total + Number(row.carteira_alunos || 0),
+        0
+      );
+      const turmasCompetencia = linhasProfessor.reduce(
+        (total: number, row: any) => total + Number(row.total_turmas || 0),
+        0
+      );
+      const ocupacoesElegiveis = linhasProfessor.reduce(
+        (total: number, row: any) => total + Number(row.alunos_via_turmas || 0),
+        0
+      );
+      const turmasElegiveis = linhasProfessor.reduce(
+        (total: number, row: any) => total + Number(row.turmas_elegiveis_media || 0),
+        0
+      );
 
-      // Turmas: contar cursos distintos dos alunos ativos naquele mês
-      let turmasQuery = supabase
-        .from('alunos')
-        .select('curso_id, dia_aula, horario_aula')
-        .eq('professor_atual_id', professor.id)
-        .lte('data_matricula', fimMesStr)
-        .or(`data_saida.is.null,data_saida.gt.${fimMesStr}`);
-      if (unidadeId) turmasQuery = turmasQuery.eq('unidade_id', unidadeId);
-      const { data: turmasData } = await turmasQuery;
-
-      const turmasSet = new Set((turmasData || []).map((a: any) => `${a.curso_id}-${a.dia_aula}-${a.horario_aula}`));
-      setTurmasNoMes(turmasSet.size);
+      setAlunosNoMes(alunosCompetencia);
+      setTurmasNoMes(turmasCompetencia);
+      setTurmasElegiveisMediaNoMes(turmasElegiveis);
+      setMediaAlunosTurmaNoMes(
+        turmasElegiveis > 0
+          ? Math.round((ocupacoesElegiveis / turmasElegiveis) * 100) / 100
+          : 0
+      );
 
       // Carregar evasões recentes
       let evasoesQuery = supabase
@@ -330,14 +348,14 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
 
     // Calcular Health Score V2 para enviar à IA
     const healthScoreAtual = calcularHealthScore({
-      mediaTurma: professor.media_alunos_turma,
+      mediaTurma: mediaTurmaCompetencia,
       retencao: professor.taxa_retencao,
       conversao: professor.taxa_conversao,
       presenca: professor.taxa_presenca,
       evasoes: professor.evasoes_mes,
       taxaCrescimentoAjustada: 0, // TODO: buscar da view quando disponível
-      taxaEvasao: professor.total_alunos > 0 ? (professor.evasoes_mes / professor.total_alunos) * 100 : 0,
-      carteiraAlunos: professor.total_alunos
+      taxaEvasao: totalAlunosCompetencia > 0 ? (professor.evasoes_mes / totalAlunosCompetencia) * 100 : 0,
+      carteiraAlunos: totalAlunosCompetencia
     }, healthWeights);
 
     const payload = {
@@ -350,9 +368,9 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
         tipo_contrato: 'PJ'
       },
       metricas_atuais: {
-        total_alunos: professor.total_alunos,
-        total_turmas: professor.total_turmas,
-        media_alunos_turma: professor.media_alunos_turma,
+        total_alunos: totalAlunosCompetencia,
+        total_turmas: totalTurmasCompetencia,
+        media_alunos_turma: mediaTurmaCompetencia,
         taxa_retencao: professor.taxa_retencao,
         taxa_conversao: professor.taxa_conversao,
         taxa_presenca: professor.taxa_presenca,
@@ -434,19 +452,16 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
     setRelatorioTexto('');
 
     try {
-      // Usar Health Score já calculado do professor (para consistência com o modal)
-      const healthScoreAtual = professor.health_score !== undefined && professor.health_status
-        ? { score: professor.health_score, status: professor.health_status }
-        : calcularHealthScore({
-            mediaTurma: professor.media_alunos_turma,
-            retencao: professor.taxa_retencao,
-            conversao: professor.taxa_conversao,
-            presenca: professor.taxa_presenca,
-            evasoes: professor.evasoes_mes,
-            taxaCrescimentoAjustada: 0,
-            taxaEvasao: professor.total_alunos > 0 ? (professor.evasoes_mes / professor.total_alunos) * 100 : 0,
-            carteiraAlunos: professor.total_alunos
-          }, healthWeights);
+      const healthScoreAtual = calcularHealthScore({
+        mediaTurma: mediaTurmaCompetencia,
+        retencao: professor.taxa_retencao,
+        conversao: professor.taxa_conversao,
+        presenca: professor.taxa_presenca,
+        evasoes: professor.evasoes_mes,
+        taxaCrescimentoAjustada: 0,
+        taxaEvasao: totalAlunosCompetencia > 0 ? (professor.evasoes_mes / totalAlunosCompetencia) * 100 : 0,
+        carteiraAlunos: totalAlunosCompetencia
+      }, healthWeights);
 
       const { data: responseIA, error: errorIA } = await supabase.functions.invoke(
         'gemini-relatorio-professor-individual',
@@ -456,9 +471,9 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
               id: professor.id,
               nome: professor.nome,
               especialidades: professor.especialidades,
-              total_alunos: professor.total_alunos,
-              total_turmas: professor.total_turmas,
-              media_alunos_turma: professor.media_alunos_turma,
+              total_alunos: totalAlunosCompetencia,
+              total_turmas: totalTurmasCompetencia,
+              media_alunos_turma: mediaTurmaCompetencia,
               taxa_retencao: professor.taxa_retencao,
               taxa_conversao: professor.taxa_conversao,
               taxa_presenca: professor.taxa_presenca,
@@ -510,27 +525,17 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
   const healthScore = useMemo(() => {
     if (!professor) return { score: 0, status: 'critico' as const, detalhes: [] };
     
-    // Se o professor já tem health_score calculado, usar esse valor
-    if (professor.health_score !== undefined && professor.health_status) {
-      return {
-        score: professor.health_score,
-        status: professor.health_status,
-        detalhes: []
-      };
-    }
-    
-    // Fallback: calcular se não tiver (V2)
     return calcularHealthScore({
-      mediaTurma: professor.media_alunos_turma,
+      mediaTurma: mediaTurmaCompetencia,
       retencao: professor.taxa_retencao,
       conversao: professor.taxa_conversao,
       presenca: professor.taxa_presenca,
       evasoes: professor.evasoes_mes,
       taxaCrescimentoAjustada: 0,
-      taxaEvasao: professor.total_alunos > 0 ? (professor.evasoes_mes / professor.total_alunos) * 100 : 0,
-      carteiraAlunos: professor.total_alunos
+      taxaEvasao: totalAlunosCompetencia > 0 ? (professor.evasoes_mes / totalAlunosCompetencia) * 100 : 0,
+      carteiraAlunos: totalAlunosCompetencia
     }, healthWeights);
-  }, [professor, healthWeights]);
+  }, [professor, healthWeights, mediaTurmaCompetencia, totalAlunosCompetencia]);
 
   if (!professor) return null;
 
@@ -703,10 +708,13 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                 <p className="text-xs text-slate-400">Turmas</p>
               </div>
               <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                <p className={`text-xl font-bold ${getMetricaColor(professor.media_alunos_turma, { critico: 1.3, atencao: 1.5 })}`}>
-                  {professor.media_alunos_turma.toFixed(1)}
+                <p className={`text-xl font-bold ${getMetricaColor(mediaAlunosTurmaNoMes ?? professor.media_alunos_turma, { critico: 1.3, atencao: 1.5 })}`}>
+                  {(mediaAlunosTurmaNoMes ?? professor.media_alunos_turma).toFixed(1)}
                 </p>
                 <p className="text-xs text-slate-400">Média/Turma</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  {turmasElegiveisMediaNoMes ?? professor.turmas_elegiveis_media} turmas regulares
+                </p>
               </div>
               <div className="bg-slate-800/50 rounded-lg p-3 text-center">
                 <p className={`text-xl font-bold ${getMetricaColor(professor.taxa_retencao, { critico: 70, atencao: 95 })}`}>

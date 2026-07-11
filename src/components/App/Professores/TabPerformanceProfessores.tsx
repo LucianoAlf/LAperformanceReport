@@ -39,6 +39,7 @@ interface ProfessorPerformance {
   total_alunos: number;
   total_turmas: number;
   alunos_via_turmas: number;
+  turmas_elegiveis_media: number;
   media_alunos_turma: number;
   taxa_retencao: number;
   taxa_conversao: number;
@@ -216,7 +217,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       }
 
       const { data: kpisRpc } = await supabase
-        .rpc('get_kpis_professor_periodo', rpcParams);
+        .rpc('get_kpis_professor_periodo_canonico', rpcParams);
 
       const kpisData: any[] = kpisRpc || [];
 
@@ -276,41 +277,6 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         .from('professores_cursos')
         .select('professor_id, curso_id, cursos:curso_id (nome)');
 
-      // Buscar turmas da view vw_turmas_implicitas (filtrado por unidade se selecionada)
-      let turmasQuery = supabase
-        .from('vw_turmas_implicitas')
-        .select('professor_id, total_alunos, unidade_id');
-      
-      if (unidadeAtual !== 'todos') {
-        turmasQuery = turmasQuery.eq('unidade_id', unidadeAtual);
-      }
-      
-      const { data: turmasImplicitas } = await turmasQuery;
-
-      // Buscar turmas explícitas (filtrado por unidade se selecionada)
-      let turmasExplicitasQuery = supabase
-        .from('turmas_explicitas')
-        .select('professor_id, id, unidade_id')
-        .eq('ativo', true);
-      
-      if (unidadeAtual !== 'todos') {
-        turmasExplicitasQuery = turmasExplicitasQuery.eq('unidade_id', unidadeAtual);
-      }
-      
-      const { data: turmasExplicitas } = await turmasExplicitasQuery;
-
-      // Buscar alunos de turmas explícitas (filtrado por unidade via turmas_explicitas)
-      let alunosTurmasQuery = supabase
-        .from('turmas_alunos')
-        .select('turma_id, aluno_id, turmas_explicitas!inner(professor_id, unidade_id)')
-        .eq('turmas_explicitas.ativo', true);
-      
-      if (unidadeAtual !== 'todos') {
-        alunosTurmasQuery = alunosTurmasQuery.eq('turmas_explicitas.unidade_id', unidadeAtual);
-      }
-      
-      const { data: alunosTurmasExplicitas } = await alunosTurmasQuery;
-
       // Criar mapa de KPIs por professor (agregar quando consolidado — professor com múltiplas unidades)
       const kpisPorProfessor = new Map<number, any>();
       kpisData?.forEach(kpi => {
@@ -334,11 +300,12 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           e.evasoes = (e.evasoes || 0) + (kpi.evasoes || 0);
           e.mrr_carteira = (Number(e.mrr_carteira) || 0) + (Number(kpi.mrr_carteira) || 0);
           e.mrr_perdido = (Number(e.mrr_perdido) || 0) + (Number(kpi.mrr_perdido) || 0);
-          // Turmas: soma direta. media_alunos_turma = alunos_via_turmas / total_turmas (mesma fórmula do modal)
+          // Carga total inclui projetos; a media pedagogica usa apenas turmas regulares.
           e.total_turmas = (e.total_turmas || 0) + (kpi.total_turmas || 0);
           e.alunos_via_turmas = (e.alunos_via_turmas || 0) + (kpi.alunos_via_turmas || 0);
-          e.media_alunos_turma = e.total_turmas > 0
-            ? Math.round((e.alunos_via_turmas / e.total_turmas) * 100) / 100
+          e.turmas_elegiveis_media = (e.turmas_elegiveis_media || 0) + (kpi.turmas_elegiveis_media || 0);
+          e.media_alunos_turma = e.turmas_elegiveis_media > 0
+            ? Math.round((e.alunos_via_turmas / e.turmas_elegiveis_media) * 100) / 100
             : 0;
           // Média ponderada por carteira (presença e ticket continuam ponderados — outras métricas)
           const totalCarteira = prevCarteira + kpiCarteira;
@@ -409,39 +376,6 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         }
       });
 
-      // Montar mapas de contagens
-      const turmasPorProfessor = new Map<number, number>();
-      const alunosPorProfessor = new Map<number, number>();
-      const totalAlunosTurmasPorProfessor = new Map<number, number[]>();
-
-      // Processar turmas implícitas
-      turmasImplicitas?.forEach(t => {
-        const profId = t.professor_id;
-        turmasPorProfessor.set(profId, (turmasPorProfessor.get(profId) || 0) + 1);
-        alunosPorProfessor.set(profId, (alunosPorProfessor.get(profId) || 0) + (t.total_alunos || 0));
-        const turmasAlunos = totalAlunosTurmasPorProfessor.get(profId) || [];
-        turmasAlunos.push(t.total_alunos || 0);
-        totalAlunosTurmasPorProfessor.set(profId, turmasAlunos);
-      });
-
-      // Processar turmas explícitas
-      const alunosPorTurmaExplicita = new Map<number, number>();
-      alunosTurmasExplicitas?.forEach(a => {
-        const turmaId = a.turma_id;
-        alunosPorTurmaExplicita.set(turmaId, (alunosPorTurmaExplicita.get(turmaId) || 0) + 1);
-      });
-
-      turmasExplicitas?.forEach(t => {
-        const profId = t.professor_id;
-        const alunosTurma = alunosPorTurmaExplicita.get(t.id) || 0;
-        if (alunosTurma === 0) return; // ignorar turmas sem alunos — evita média < 1.0
-        turmasPorProfessor.set(profId, (turmasPorProfessor.get(profId) || 0) + 1);
-        alunosPorProfessor.set(profId, (alunosPorProfessor.get(profId) || 0) + alunosTurma);
-        const turmasAlunos = totalAlunosTurmasPorProfessor.get(profId) || [];
-        turmasAlunos.push(alunosTurma);
-        totalAlunosTurmasPorProfessor.set(profId, turmasAlunos);
-      });
-
       // Montar professores com métricas
       const professoresCompletos: ProfessorPerformance[] = (professoresData || [])
         .map(prof => {
@@ -459,16 +393,15 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           const kpis = kpisPorProfessor.get(prof.id);
 
           // Carteira de alunos (com matricula viva)
-          const totalAlunos = kpis?.carteira_alunos || alunosPorProfessor.get(prof.id) || 0;
+          const totalAlunos = Number(kpis?.carteira_alunos ?? 0);
 
-          // Turmas e alunos via carteira (fallback para vw_turmas_implicitas se RPC retornar 0)
-          const turmasFallback = totalAlunosTurmasPorProfessor.get(prof.id) || [];
-          const totalTurmas = kpis?.total_turmas || turmasFallback.length || 0;
-          const alunosViaTurmas = kpis?.alunos_via_turmas || turmasFallback.reduce((sum, n) => sum + n, 0) || 0;
+          // A RPC canonica e a unica fonte para carteira, carga e media da competencia.
+          const totalTurmas = Number(kpis?.total_turmas ?? 0);
+          const alunosViaTurmas = Number(kpis?.alunos_via_turmas ?? 0);
+          const turmasElegiveisMedia = Number(kpis?.turmas_elegiveis_media ?? 0);
 
-          // Media = alunos_via_turmas / total_turmas (mesma formula da coluna e do modal)
-          const mediaAlunosTurma = totalTurmas > 0
-            ? (kpis?.media_alunos_turma ? Number(kpis.media_alunos_turma) : alunosViaTurmas / totalTurmas)
+          const mediaAlunosTurma = turmasElegiveisMedia > 0
+            ? Number(kpis?.media_alunos_turma ?? (alunosViaTurmas / turmasElegiveisMedia))
             : 0;
 
           // Metricas da RPC/view. Exp->Mat vem da fonte canonica do Emusys.
@@ -534,6 +467,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             total_alunos: totalAlunos,
             total_turmas: totalTurmas,
             alunos_via_turmas: alunosViaTurmas,
+            turmas_elegiveis_media: turmasElegiveisMedia,
             media_alunos_turma: Math.round(mediaAlunosTurma * 100) / 100,
             taxa_retencao: Math.round(taxaRetencao * 10) / 10,
             taxa_conversao: Math.round(taxaConversaoCanonica * 10) / 10,
@@ -1102,8 +1036,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                     </td>
                     <td className="text-center px-4 py-3 text-white">{professor.total_alunos}</td>
                     <td className="text-center px-4 py-3">
-                      <Tooltip side="top" content={professor.total_turmas > 0
-                        ? `${professor.alunos_via_turmas} alunos na carteira ÷ ${professor.total_turmas} turmas = ${professor.media_alunos_turma.toFixed(2)} alunos/turma · Clique para detalhes`
+                      <Tooltip side="top" content={professor.turmas_elegiveis_media > 0
+                        ? `${professor.alunos_via_turmas} ocupações regulares ÷ ${professor.turmas_elegiveis_media} turmas regulares = ${professor.media_alunos_turma.toFixed(2)} alunos/turma · Carga total: ${professor.total_turmas} turmas`
                         : 'Sem turmas ativas no período · Clique para detalhes'}>
                         <span
                           className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.media_alunos_turma, { critico: 1.3, atencao: 1.5 })}`}
@@ -1358,6 +1292,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             nome: p.nome,
             total_alunos: p.total_alunos,
             total_turmas: p.total_turmas,
+            alunos_via_turmas: p.alunos_via_turmas,
+            turmas_elegiveis_media: p.turmas_elegiveis_media,
             media_alunos_turma: p.media_alunos_turma,
             taxa_retencao: p.taxa_retencao,
             taxa_conversao: p.taxa_conversao,

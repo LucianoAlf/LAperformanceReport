@@ -20,6 +20,8 @@ const professoresNormalizados = mod.normalizarKpisProfessoresCoordenacao([
     cursos: ['Piano', 'Canto'],
     carteira_alunos: 21,
     total_turmas: 12,
+    turmas_elegiveis_media: 10,
+    alunos_via_turmas: 18,
     media_alunos_turma: 1.75,
     taxa_retencao: 95.2,
     taxa_conversao: 40,
@@ -38,6 +40,8 @@ assert.equal(professoresNormalizados.length, 1);
 assert.equal(professoresNormalizados[0].nome, 'Carlos Canonico');
 assert.equal(professoresNormalizados[0].total_alunos, 21);
 assert.equal(professoresNormalizados[0].total_turmas, 12);
+assert.equal(professoresNormalizados[0].turmas_elegiveis_media, 10);
+assert.equal(professoresNormalizados[0].alunos_via_turmas, 18);
 assert.equal(professoresNormalizados[0].taxa_presenca, 82.5);
 assert.equal(professoresNormalizados[0].evasoes_mes, 1);
 assert.equal(professoresNormalizados[0].nao_renovacoes_mes, 1);
@@ -51,6 +55,7 @@ const professores = [
     total_alunos: 30,
     total_turmas: 15,
     alunos_via_turmas: 30,
+    turmas_elegiveis_media: 15,
     media_alunos_turma: 2,
     taxa_retencao: 96,
     taxa_conversao: 50,
@@ -75,6 +80,7 @@ const professores = [
     total_alunos: 12,
     total_turmas: 10,
     alunos_via_turmas: 12,
+    turmas_elegiveis_media: 10,
     media_alunos_turma: 1.2,
     taxa_retencao: 82,
     taxa_conversao: 0,

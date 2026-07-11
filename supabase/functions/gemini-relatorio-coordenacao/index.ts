@@ -35,11 +35,11 @@ interface RelatorioCoordenacaoRequest {
 
 // Pesos padrão (fallback se não houver config no banco)
 const DEFAULT_HEALTH_WEIGHTS = {
-  taxaCrescimento: 15,
+  taxaCrescimento: 0,
   mediaTurma: 20,
   retencao: 25,
-  conversao: 15,
-  presenca: 15,
+  conversao: 20,
+  presenca: 25,
   evasoes: 10,
 };
 
@@ -196,19 +196,28 @@ Deno.serve(async (req) => {
     // KPIs de professores - calcular Health Score com pesos do banco
     const kpisProfessoresRaw = dados.kpis_professores || [];
     const kpisProfessores = kpisProfessoresRaw.map((p: any) => {
+      const numeroOu = (valor: unknown, fallback = 0) => {
+        if (valor === null || valor === undefined || valor === '') return fallback;
+        const numero = Number(valor);
+        return Number.isFinite(numero) ? numero : fallback;
+      };
       const healthResult = calcularHealthScore({
-        taxaCrescimento: Number(p.taxa_crescimento) || 0,
-        mediaTurma: Number(p.media_alunos_turma) || 0,
-        retencao: Number(p.taxa_retencao) || 100,
-        conversao: Number(p.taxa_conversao) || 0,
-        presenca: Number(p.media_presenca) || 0,
-        evasoes: Number(p.evasoes) || 0,
-        carteira: Number(p.carteira_alunos) || 0,
+        taxaCrescimento: numeroOu(p.taxa_crescimento),
+        mediaTurma: numeroOu(p.media_alunos_turma),
+        retencao: numeroOu(p.taxa_retencao, 100),
+        conversao: numeroOu(p.taxa_conversao),
+        presenca: numeroOu(p.media_presenca),
+        evasoes: numeroOu(p.evasoes),
+        carteira: numeroOu(p.carteira_alunos),
       }, weights);
+      const healthScoreInformado = Number(p.health_score);
+      const healthStatusInformado = p.health_status;
+      const usaHealthCanonico = Number.isFinite(healthScoreInformado)
+        && ['critico', 'atencao', 'saudavel'].includes(healthStatusInformado);
       return {
         ...p,
-        health_score: healthResult.score,
-        health_status: healthResult.status
+        health_score: usaHealthCanonico ? healthScoreInformado : healthResult.score,
+        health_status: usaHealthCanonico ? healthStatusInformado : healthResult.status
       };
     });
 
