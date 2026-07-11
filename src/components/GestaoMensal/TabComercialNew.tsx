@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Phone, Calendar, UserPlus, Percent, DollarSign, TrendingUp, Archive, XCircle, Music, Clock, Users, Baby, GraduationCap, AlertTriangle, Info, Lock, Unlock } from 'lucide-react';
+import { Phone, Calendar, UserPlus, Percent, DollarSign, TrendingUp, Archive, XCircle, Music, Clock, Users, Baby, GraduationCap, AlertTriangle, Info, Lock, Unlock, Headphones, MessageSquare, Timer, CheckCircle2 } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { FunnelChart } from '@/components/ui/FunnelChart';
 import { DistributionChart } from '@/components/ui/DistributionChart';
@@ -10,6 +10,8 @@ import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { useMetasKPI } from '@/hooks/useMetasKPI';
 import { getCompetenciaAbertaAlertCopy, useCompetenciaMensalStatus } from '@/hooks/useCompetenciaMensalStatus';
+import { useChatwootAtendimentoInsights } from '@/hooks/useChatwootAtendimentoInsights';
+import { formatarDuracaoSegundos, mediaMetrica } from '@/lib/chatwootAtendimento';
 import {
   fetchComercialOperacionalResumoV2,
   fetchExperimentaisDiagnosticoComercialV2,
@@ -26,12 +28,13 @@ interface TabComercialProps {
   unidade: string;
 }
 
-type SubTabId = 'leads' | 'experimentais' | 'matriculas';
+type SubTabId = 'leads' | 'experimentais' | 'matriculas' | 'atendimento';
 
 const subTabs = [
   { id: 'leads' as const, label: 'Leads', icon: Phone },
   { id: 'experimentais' as const, label: 'Experimentais', icon: Calendar },
   { id: 'matriculas' as const, label: 'Matrículas', icon: UserPlus },
+  { id: 'atendimento' as const, label: 'Atendimento', icon: Headphones },
 ];
 
 interface DadosComercial {
@@ -196,6 +199,14 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
   // Usar mesFim se fornecido, senão usar mes (para filtro mensal)
   const mesInicio = mes;
   const mesFinal = mesFim || mes;
+
+  // Performance de atendimento (Chatwoot) — fetch lazy, só quando a sub-aba está ativa.
+  const atendimento = useChatwootAtendimentoInsights({
+    ano,
+    mesInicio,
+    mesFim: mesFinal,
+    enabled: activeSubTab === 'atendimento',
+  });
 
   useEffect(() => {
     async function fetchDados() {
@@ -1043,6 +1054,118 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               />
             )}
           </div>
+        </div>
+      )}
+
+      {/* Sub-aba: Atendimento (Chatwoot) */}
+      {activeSubTab === 'atendimento' && (
+        <div className="space-y-6">
+          {/* Aviso: dado agregado da conta inteira, não filtrado por unidade */}
+          <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4 flex items-start gap-3">
+            <Info className="w-5 h-5 text-cyan-300 flex-shrink-0 mt-0.5" />
+            <p className="text-cyan-100 text-sm">
+              <strong>Performance de atendimento (Chatwoot):</strong> tempos médios por agente no período selecionado.
+              Estes números são <strong>agregados de toda a conta Chatwoot</strong> — o relatório do Chatwoot não permite
+              recorte por unidade, então o seletor de unidade no topo da página não afeta esta aba.
+            </p>
+          </div>
+
+          {atendimento.loading && (
+            <div className="flex items-center justify-center h-48">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
+            </div>
+          )}
+
+          {!atendimento.loading && atendimento.error && (
+            <EstadoVazio
+              titulo="Não foi possível carregar os dados de atendimento"
+              mensagem={atendimento.error}
+            />
+          )}
+
+          {!atendimento.loading && !atendimento.error && atendimento.agentes.length === 0 && (
+            <EstadoVazio
+              titulo="Sem atividade de atendimento no período"
+              mensagem="Nenhum agente com conversas atribuídas ou resolvidas no período selecionado."
+            />
+          )}
+
+          {!atendimento.loading && !atendimento.error && atendimento.agentes.length > 0 && (
+            <>
+              {/* KPIs gerais (agregados dos agentes com atividade) */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <KPICard
+                  icon={MessageSquare}
+                  label="Conversas Atribuídas"
+                  value={atendimento.agentes.reduce((soma, a) => soma + a.conversas, 0)}
+                  format="number"
+                  variant="cyan"
+                />
+                <KPICard
+                  icon={Timer}
+                  label="Tempo Médio de 1ª Resposta"
+                  value={formatarDuracaoSegundos(mediaMetrica(atendimento.agentes, 'avgFirstResponseTime'))}
+                  variant="violet"
+                />
+                <KPICard
+                  icon={Clock}
+                  label="Tempo Médio de Resposta"
+                  value={formatarDuracaoSegundos(mediaMetrica(atendimento.agentes, 'avgReplyTime'))}
+                  variant="amber"
+                />
+                <KPICard
+                  icon={CheckCircle2}
+                  label="Tempo Médio de Resolução"
+                  value={formatarDuracaoSegundos(mediaMetrica(atendimento.agentes, 'avgResolutionTime'))}
+                  variant="emerald"
+                />
+              </div>
+
+              {/* Tabela por agente */}
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-700/50 flex items-center gap-2">
+                  <Headphones className="w-4 h-4 text-cyan-400" />
+                  <h3 className="text-white font-semibold">Performance por Agente</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-slate-400 text-xs uppercase tracking-wide border-b border-slate-700/50">
+                        <th className="text-left font-medium px-5 py-3">Agente</th>
+                        <th className="text-right font-medium px-5 py-3">Conversas</th>
+                        <th className="text-right font-medium px-5 py-3">
+                          <span className="inline-flex items-center gap-1 justify-end">
+                            Resolvidas
+                            <span className="relative group">
+                              <Info size={12} className="text-slate-500 hover:text-slate-300 cursor-help" />
+                              <span className="absolute bottom-full right-0 mb-2 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-[11px] text-slate-200 normal-case tracking-normal font-normal whitespace-normal w-[240px] text-left opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-xl pointer-events-none">
+                                Conversas resolvidas no período — podem ter sido criadas antes dele. Não é subconjunto de "Conversas".
+                              </span>
+                            </span>
+                          </span>
+                        </th>
+                        <th className="text-right font-medium px-5 py-3">1ª Resposta</th>
+                        <th className="text-right font-medium px-5 py-3">Tempo de Resposta</th>
+                        <th className="text-right font-medium px-5 py-3">Resolução</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {atendimento.agentes.map((a) => (
+                        <tr key={a.id} className="border-b border-slate-700/30 last:border-0 hover:bg-slate-700/20 transition-colors">
+                          <td className="px-5 py-3 text-white font-medium">{a.nome}</td>
+                          <td className="px-5 py-3 text-right text-slate-200 tabular-nums">{a.conversas.toLocaleString('pt-BR')}</td>
+                          <td className="px-5 py-3 text-right text-slate-200 tabular-nums">{a.resolvidas.toLocaleString('pt-BR')}</td>
+                          <td className="px-5 py-3 text-right text-slate-300 tabular-nums">{formatarDuracaoSegundos(a.avgFirstResponseTime)}</td>
+                          <td className="px-5 py-3 text-right text-slate-300 tabular-nums">{formatarDuracaoSegundos(a.avgReplyTime)}</td>
+                          <td className="px-5 py-3 text-right text-slate-300 tabular-nums">{formatarDuracaoSegundos(a.avgResolutionTime)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

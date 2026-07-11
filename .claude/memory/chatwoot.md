@@ -4,10 +4,18 @@
 
 | Campo        | Valor                                              |
 |--------------|----------------------------------------------------|
-| URL          | https://chatmusic.poliredeomnichat.com.br          |
+| URL (REST)   | https://crmchat.agenticflowio.com.br               |
 | Account ID   | 5                                                  |
 | API Token    | ‹token — ver Supabase secret, NÃO versionar (redigido 07/07, rotacionar no Chatwoot)› |
 | Header auth  | `api_access_token: <token>`                        |
+
+> ⚠️ **URL corrigida (2026-07-11):** o domínio real da API REST é `crmchat.agenticflowio.com.br`.
+> O antigo `chatmusic.poliredeomnichat.com.br` (versões anteriores desta doc) retorna **404** — não usar.
+> ⚠️ **Token de BOT vs usuário:** o token no `.mcp.json` do projeto (`Api-Access-Token` do MCP `mcp-hugo`)
+> é um token de **bot** — funciona via gateway MCP, mas o Chatwoot rejeita bots em endpoints REST
+> (`401 "Access to this endpoint is not authorized for bots"`), inclusive `/agents` e `/summary_reports/agent`.
+> Para chamar a API REST direto (ex.: edge `chatwoot-atendimento-insights`) é preciso o `api_access_token`
+> de um **usuário administrador** (Luciano id 5 / Anne id 32), obtido em Profile Settings → Access Token.
 
 ---
 
