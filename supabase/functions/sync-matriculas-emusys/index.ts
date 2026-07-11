@@ -23,6 +23,7 @@ import {
   buildJornadaInputFromMatriculaApi,
   buildJornadaRowsForUpsert,
 } from '../_shared/jornada-canonica.ts';
+import { deveConverterFinalizadaEmNaoRenovacao } from '../_shared/nao-renovacao-canonica.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -754,6 +755,44 @@ function resolverProfessorContrato(mat: any, profMap: Map<number, number>) {
   return null;
 }
 
+function encontrarRenovacaoPendenteDaMesmaMatricula(
+  pendentes: any[],
+  aluno: any,
+  matriculaEmusys: any,
+  movimentacoesProcessadas: Set<number>,
+) {
+  const matriculaId = numeroFinitoOuNull(matriculaEmusys?.id);
+  if (matriculaId == null) return null;
+
+  const candidatas = pendentes.filter((mov: any) => {
+    if (movimentacoesProcessadas.has(Number(mov.id))) return false;
+    if (Number(mov.aluno_id) !== Number(aluno.id)) return false;
+    if (mov.curso_id && aluno.curso_id && Number(mov.curso_id) !== Number(aluno.curso_id)) return false;
+
+    const idRegistrado = numeroFinitoOuNull(mov.emusys_matricula_id);
+    return idRegistrado == null || idRegistrado === matriculaId;
+  });
+
+  if (candidatas.length !== 1) return null;
+  return { ...candidatas[0], emusys_matricula_id: matriculaId };
+}
+
+function temNaoRenovacaoCanonicaDaMesmaMatricula(
+  naoRenovacoesCanonicas: any[],
+  aluno: any,
+  matriculaEmusys: any,
+) {
+  const matriculaId = numeroFinitoOuNull(matriculaEmusys?.id);
+  if (matriculaId == null) return false;
+  if (String(matriculaEmusys?.status ?? '').toLowerCase() !== 'finalizada') return false;
+  if (String(aluno?.status ?? '').toLowerCase() !== 'inativo') return false;
+
+  return naoRenovacoesCanonicas.some((mov: any) => (
+    Number(mov.aluno_id) === Number(aluno.id)
+    && numeroFinitoOuNull(mov.emusys_matricula_id) === matriculaId
+  ));
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -772,6 +811,8 @@ serve(async (req) => {
     fila: {},
     atributos: {},
     jornadas: { atualizadas: 0, puladas: 0, erros: 0 },
+    nao_renovacoes_convertidas: 0,
+    nao_renovacoes_erros: [],
     erros: 0,
   };
   const logs: any[] = [];
@@ -799,6 +840,26 @@ serve(async (req) => {
       .select('id, unidade_id, nome, curso_id, professor_atual_id, emusys_matricula_id, emusys_student_id, status, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id, dia_aula, horario_aula, telefone, whatsapp, email, responsavel_nome, responsavel_telefone, foto_url, photo_url, instagram, instagram_nao_possui, status_pagamento, forma_pagamento_id, anamnese_preenchida, aguardando_renovacao')
       .eq('unidade_id', u.id)
       .is('arquivado_em', null);
+
+    const { data: renovacoesPendentes, error: renovacoesPendentesError } = await supabase
+      .from('movimentacoes_admin')
+      .select('id, unidade_id, aluno_id, curso_id, tipo, renovacao_status, emusys_matricula_id')
+      .eq('unidade_id', u.id)
+      .eq('tipo', 'renovacao')
+      .in('renovacao_status', ['pendente_validacao', 'antecipada_pendente']);
+
+    if (renovacoesPendentesError) throw renovacoesPendentesError;
+    const movimentacoesNaoRenovacaoProcessadas = new Set<number>();
+
+    const { data: naoRenovacoesCanonicas, error: naoRenovacoesCanonicasError } = await supabase
+      .from('movimentacoes_admin')
+      .select('id, aluno_id, emusys_matricula_id')
+      .eq('unidade_id', u.id)
+      .eq('tipo', 'nao_renovacao')
+      .not('emusys_matricula_id', 'is', null);
+
+    if (naoRenovacoesCanonicasError) throw naoRenovacoesCanonicasError;
+    const alunosComStatusCanonico = new Set<number>();
 
     const alunosParaReconciliar = (alunos || []).filter((a: any) => {
       return a.status === 'ativo' || temValor(a.emusys_matricula_id);
@@ -883,6 +944,62 @@ serve(async (req) => {
         const matAtributos = r.detalhes?.emusys_matricula_id
           ? porId.get(Number(r.detalhes.emusys_matricula_id))
           : (a.emusys_matricula_id ? porId.get(Number(a.emusys_matricula_id)) : null);
+        const renovacaoPendente = matAtributos
+          ? encontrarRenovacaoPendenteDaMesmaMatricula(
+            renovacoesPendentes || [],
+            a,
+            matAtributos,
+            movimentacoesNaoRenovacaoProcessadas,
+          )
+          : null;
+
+        if (
+          matAtributos
+          && !r.detalhes?.sync_ignorado_por_decisao_canonica
+          && deveConverterFinalizadaEmNaoRenovacao(matAtributos.status, matAtributos.id, renovacaoPendente)
+        ) {
+          const dataFinalizacao = matAtributos.contrato_atual?.data_original_ultima_aula
+            || matAtributos.contrato_atual?.data_ultima_aula
+            || new Date().toISOString().slice(0, 10);
+          const { error: conversaoError } = await supabase.rpc(
+            'converter_renovacao_pendente_em_nao_renovacao',
+            {
+              p_movimentacao_id: renovacaoPendente.id,
+              p_emusys_matricula_id: String(matAtributos.id),
+              p_data: String(dataFinalizacao).slice(0, 10),
+              p_origem: 'sync-matriculas-emusys',
+            },
+          );
+
+          movimentacoesNaoRenovacaoProcessadas.add(Number(renovacaoPendente.id));
+          if (conversaoError) {
+            console.error('[nao-renovacao] Falha ao converter renovacao pendente', {
+              movimentacao_id: renovacaoPendente.id,
+              aluno_id: a.id,
+              emusys_matricula_id: matAtributos.id,
+              erro: conversaoError.message,
+            });
+            resumo.nao_renovacoes_erros.push({
+              movimentacao_id: renovacaoPendente.id,
+              aluno_id: a.id,
+              emusys_matricula_id: matAtributos.id,
+              erro: conversaoError.message,
+            });
+          } else {
+            resumo.nao_renovacoes_convertidas++;
+            r.divergencias = r.divergencias.filter((dv: any) => dv.tipo !== 'status_divergente');
+            alunosComStatusCanonico.add(Number(a.id));
+          }
+        }
+
+        if (
+          matAtributos
+          && temNaoRenovacaoCanonicaDaMesmaMatricula(naoRenovacoesCanonicas || [], a, matAtributos)
+        ) {
+          r.divergencias = r.divergencias.filter((dv: any) => dv.tipo !== 'status_divergente');
+          alunosComStatusCanonico.add(Number(a.id));
+        }
+
         if (matAtributos && !r.detalhes?.sync_ignorado_por_decisao_canonica) {
           const formaPagamentoLocal = a.forma_pagamento_id ? formasPagamentoMap.get(Number(a.forma_pagamento_id)) : null;
           const decisaoAtributos = decisoesCanonicasPorMatricula.get(String(matAtributos.id));
@@ -951,6 +1068,18 @@ serve(async (req) => {
     // inserts em lote
     if (logs.length) await supabase.from('automacao_log').insert(logs);
     await persistirDivergenciasAtributos(supabase, u.id, attrDivs);
+    if (alunosComStatusCanonico.size) {
+      await supabase.from('matriculas_divergencias')
+        .update({
+          resolvido: true,
+          updated_at: new Date().toISOString(),
+          analise_sol: 'Resolvida: nao renovacao canonica registrada para a mesma matricula Emusys.',
+        })
+        .in('aluno_id', [...alunosComStatusCanonico])
+        .eq('unidade_id', u.id)
+        .eq('tipo_divergencia', 'status_divergente')
+        .eq('resolvido', false);
+    }
     await supabase.from('matriculas_divergencias')
       .update({ resolvido: true, updated_at: new Date().toISOString() })
       .eq('unidade_id', u.id)

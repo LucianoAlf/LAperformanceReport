@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Clock3 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock3, XCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,7 @@ interface ModalRenovacaoProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (data: Partial<MovimentacaoAdmin>) => Promise<boolean>;
+  onMarcarNaoRenovou?: (item: MovimentacaoAdmin) => void;
   editingItem: MovimentacaoAdmin | null;
   formasPagamento: { id: number; nome: string; sigla: string }[];
   cursos: { id: number; nome: string }[];
@@ -93,6 +94,7 @@ export function ModalRenovacao({
   open,
   onOpenChange,
   onSave,
+  onMarcarNaoRenovou,
   editingItem,
   formasPagamento,
   cursos,
@@ -355,13 +357,26 @@ export function ModalRenovacao({
             </div>
           </div>
 
-          <Button
-            type="submit"
-            disabled={loading || !formData.aluno_nome.trim() || (isAntecipada && !formData.renovacao_primeira_aula_novo_ciclo)}
-            className={`w-full bg-gradient-to-r ${config.buttonClass}`}
-          >
-            {loading ? 'Salvando...' : editingItem ? 'Salvar Alterações' : config.botao}
-          </Button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            {editingItem && modoEfetivo === 'pendente_validacao' && onMarcarNaoRenovou && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onMarcarNaoRenovou(editingItem)}
+                className="border-amber-500/40 text-amber-200 hover:bg-amber-500/10 hover:text-amber-100 sm:flex-1"
+              >
+                <XCircle className="mr-2 h-4 w-4" />
+                Não renovou
+              </Button>
+            )}
+            <Button
+              type="submit"
+              disabled={loading || !formData.aluno_nome.trim() || (isAntecipada && !formData.renovacao_primeira_aula_novo_ciclo)}
+              className={`bg-gradient-to-r ${config.buttonClass} sm:flex-1`}
+            >
+              {loading ? 'Salvando...' : editingItem ? 'Salvar Alterações' : config.botao}
+            </Button>
+          </div>
 
           {erro && (
             <p className="text-center text-sm text-rose-300">{erro}</p>

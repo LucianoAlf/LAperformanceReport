@@ -120,6 +120,8 @@ async function fetchKPIsAlunosAdminOperacional({
 export interface MovimentacaoAdmin {
   id?: number;
   unidade_id?: string | null;
+  aluno_id?: number | null;
+  emusys_matricula_id?: string | number | null;
   tipo: 'renovacao' | 'nao_renovacao' | 'aviso_previo' | 'evasao' | 'trancamento';
   data: string;
   competencia_referencia?: string | null;
@@ -149,6 +151,7 @@ export interface MovimentacaoAdmin {
   alunos?: {
     classificacao?: string | null;
     valor_parcela?: number | string | null;
+    tempo_permanencia_meses?: number | null;
     data_matricula?: string | null;
     data_saida?: string | null;
     tipo_matricula_id?: number | string | null;
@@ -447,7 +450,7 @@ export function AdministrativoPage() {
       if (alunosIds.length > 0) {
         const { data: alunosData } = await supabase
           .from('alunos')
-          .select('id, classificacao, valor_parcela, data_matricula, data_saida, tipo_matricula_id, is_segundo_curso')
+          .select('id, classificacao, valor_parcela, tempo_permanencia_meses, data_matricula, data_saida, tipo_matricula_id, is_segundo_curso')
           .in('id', alunosIds);
         
         alunosMap = new Map(alunosData?.map(a => [String(a.id), a]) || []);
@@ -852,6 +855,12 @@ export function AdministrativoPage() {
     setModalRenovacao(true);
   }
 
+  function openModalNaoRenovacaoDePendente(item: MovimentacaoAdmin) {
+    setEditingItem(item);
+    setModalRenovacao(false);
+    setModalNaoRenovacao(true);
+  }
+
   // Handlers para salvar
   async function handleSaveMovimentacao(data: Partial<MovimentacaoAdmin>) {
     try {
@@ -973,6 +982,39 @@ export function AdministrativoPage() {
     } catch (error) {
       console.error('Erro ao salvar:', error);
       toastError('Erro ao salvar', 'Ocorreu um erro ao salvar o registro. Tente novamente.');
+      return false;
+    }
+  }
+
+  async function handleSaveNaoRenovacao(data: Partial<MovimentacaoAdmin>) {
+    if (editingItem?.tipo !== 'renovacao' || !editingItem.id) {
+      return handleSaveMovimentacao(data);
+    }
+
+    try {
+      const { error } = await supabase.rpc('converter_renovacao_pendente_em_nao_renovacao', {
+        p_movimentacao_id: editingItem.id,
+        p_emusys_matricula_id: editingItem.emusys_matricula_id != null
+          ? String(editingItem.emusys_matricula_id)
+          : null,
+        p_data: data.data || new Date().toISOString().slice(0, 10),
+        p_motivo_saida_id: (data as any).motivo_saida_id ?? null,
+        p_motivo: data.motivo ?? null,
+        p_observacoes: data.observacoes ?? null,
+        p_agente_comercial: data.agente_comercial ?? null,
+        p_tempo_permanencia_meses: data.tempo_permanencia_meses ?? null,
+        p_valor_parcela: data.valor_parcela_evasao ?? null,
+        p_origem: 'administrativo-ui',
+      });
+
+      if (error) throw error;
+
+      await loadData();
+      setEditingItem(null);
+      return true;
+    } catch (error) {
+      console.error('Erro ao converter renovação pendente em não renovação:', error);
+      toastError('Erro ao registrar não renovação', 'Não foi possível concluir a operação. Tente novamente.');
       return false;
     }
   }
@@ -1823,6 +1865,7 @@ export function AdministrativoPage() {
               onEdit={handleEdit}
               onDelete={handleDeleteMovimentacao}
               onSaveInline={handleSaveRenovacaoInline}
+              onMarcarNaoRenovou={openModalNaoRenovacaoDePendente}
               formasPagamento={formasPagamento}
               status="pendente"
             />
@@ -1901,6 +1944,7 @@ export function AdministrativoPage() {
         open={modalRenovacao}
         onOpenChange={setModalRenovacao}
         onSave={handleSaveMovimentacao}
+        onMarcarNaoRenovou={openModalNaoRenovacaoDePendente}
         editingItem={editingItem}
         formasPagamento={formasPagamento}
         cursos={cursos}
@@ -1911,7 +1955,7 @@ export function AdministrativoPage() {
       <ModalNaoRenovacao
         open={modalNaoRenovacao}
         onOpenChange={setModalNaoRenovacao}
-        onSave={handleSaveMovimentacao}
+        onSave={handleSaveNaoRenovacao}
         editingItem={editingItem}
         professores={professores}
         competencia={competencia}

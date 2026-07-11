@@ -62,12 +62,20 @@ export function ModalNaoRenovacao({ open, onOpenChange, onSave, editingItem, pro
         setFormData({
           data: new Date(editingItem.data),
           aluno_nome: editingItem.aluno_nome,
+          aluno_id: editingItem.aluno_id ?? null,
           professor_id: editingItem.professor_id?.toString() || '',
           motivo_saida_id: (editingItem as any).motivo_saida_id?.toString() || '',
           observacoes: editingItem.motivo || '',
           agente_comercial: editingItem.agente_comercial || '',
-          tempo_permanencia_meses: editingItem.tempo_permanencia_meses?.toString() || '',
-          valor_parcela: editingItem.valor_parcela_evasao?.toString() || '',
+          tempo_permanencia_meses: (
+            editingItem.tempo_permanencia_meses
+            ?? editingItem.alunos?.tempo_permanencia_meses
+          )?.toString() || '',
+          valor_parcela: (
+            editingItem.valor_parcela_evasao
+            ?? editingItem.valor_parcela_anterior
+            ?? editingItem.alunos?.valor_parcela
+          )?.toString() || '',
         });
       } else {
         const [ano, mes] = competencia.split('-');
@@ -121,7 +129,11 @@ export function ModalNaoRenovacao({ open, onOpenChange, onSave, editingItem, pro
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center">
               <XCircle className="w-5 h-5 text-white" />
             </div>
-            {editingItem ? 'Editar Não Renovação' : 'Registrar Não Renovação'}
+            {editingItem?.tipo === 'renovacao'
+              ? 'Registrar Não Renovação'
+              : editingItem
+                ? 'Editar Não Renovação'
+                : 'Registrar Não Renovação'}
           </DialogTitle>
         </DialogHeader>
 

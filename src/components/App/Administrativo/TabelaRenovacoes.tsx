@@ -1,4 +1,4 @@
-import { CheckCircle2, Pencil, Trash2 } from 'lucide-react';
+import { CheckCircle2, Pencil, Trash2, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { CelulaEditavelInline } from '@/components/ui/CelulaEditavelInline';
@@ -11,6 +11,7 @@ interface TabelaRenovacoesProps {
   data: MovimentacaoAdmin[];
   onEdit: (item: MovimentacaoAdmin) => void;
   onDelete: (id: number) => void;
+  onMarcarNaoRenovou?: (item: MovimentacaoAdmin) => void;
   onSaveInline?: (
     item: MovimentacaoAdmin,
     patch: Partial<MovimentacaoAdmin>,
@@ -93,6 +94,7 @@ export function TabelaRenovacoes({
   data,
   onEdit,
   onDelete,
+  onMarcarNaoRenovou,
   onSaveInline,
   formasPagamento = [],
   status = 'confirmada',
@@ -399,6 +401,18 @@ export function TabelaRenovacoes({
                           title={podeValidar ? 'Validar renovação' : 'Preencha valor novo e agente para validar'}
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      {status === 'pendente' && onMarcarNaoRenovou && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          type="button"
+                          onClick={() => onMarcarNaoRenovou(item)}
+                          className="h-7 w-7 p-0 text-amber-300 hover:bg-amber-500/10 hover:text-amber-200"
+                          title="Marcar como não renovou"
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
                         </Button>
                       )}
                       <Button
