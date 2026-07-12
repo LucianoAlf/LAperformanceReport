@@ -33,6 +33,10 @@ import { MotivosScoreConfig } from './MotivosScoreConfig';
 import { FatorDemandaCursos } from './FatorDemandaCursos';
 import { ChecklistsTab } from '../Administrativo/PainelFarmer/ChecklistsTab';
 import { useHealthScoreConfig } from '@/hooks/useHealthScoreConfig';
+import {
+  buscarKpisProfessoresCanonicos,
+  indexarKpisProfessoresCanonicos,
+} from '@/lib/professoresKpisCanonicos';
 import type { 
   Professor, Unidade, Curso, KPIsProfessores, 
   FiltrosProfessores, ProfessorFormData
@@ -86,6 +90,8 @@ export function ProfessoresPage() {
   const [turmasPorProfessorUnidade, setTurmasPorProfessorUnidade] = useState<Map<string, number>>(new Map());
   const [alunosPorProfessorUnidade, setAlunosPorProfessorUnidade] = useState<Map<string, number>>(new Map());
   const [mediaAlunosTurmaPorProfessorUnidade, setMediaAlunosTurmaPorProfessorUnidade] = useState<Map<string, number>>(new Map());
+  const [ocupacoesRegularesPorProfessorUnidade, setOcupacoesRegularesPorProfessorUnidade] = useState<Map<string, number>>(new Map());
+  const [turmasRegularesPorProfessorUnidade, setTurmasRegularesPorProfessorUnidade] = useState<Map<string, number>>(new Map());
 
   // Estados de filtros
   const [filtros, setFiltros] = useState<FiltrosProfessores>({
@@ -189,62 +195,31 @@ export function ProfessoresPage() {
           cursos:curso_id (nome)
         `);
 
-      // Buscar turmas da view vw_turmas_implicitas (mesma fonte da aba Distribuição)
-      // CORREÇÃO: Incluir unidade_id para filtrar corretamente por unidade
-      const { data: turmasImplicitas } = await supabase
-        .from('vw_turmas_implicitas')
-        .select('professor_id, total_alunos, unidade_id');
+      const agora = new Date();
+      const kpisCanonicos = await buscarKpisProfessoresCanonicos({
+        ano: agora.getFullYear(),
+        mes: agora.getMonth() + 1,
+      });
+      const kpisPorProfessorUnidade = indexarKpisProfessoresCanonicos(kpisCanonicos);
 
-      // CORREÇÃO: Removidas queries de turmas_explicitas (vazias, diluem a média)
-      // Usar apenas vw_turmas_implicitas (mesma fonte do Analytics)
-
-      // Montar mapa de contagens por professor E por unidade
-      // Chave: "profId" para total, "profId_unidadeId" para por unidade
       const turmasPorProfessorUnidade = new Map<string, number>();
       const alunosPorProfessorUnidade = new Map<string, number>();
-      const totalAlunosTurmasPorProfessorUnidade = new Map<string, number[]>();
-
-      // Processar turmas implícitas (com filtro por unidade)
-      turmasImplicitas?.forEach(t => {
-        const profId = t.professor_id;
-        const unidadeId = t.unidade_id;
-        
-        // Chave por unidade específica
-        const keyUnidade = `${profId}_${unidadeId}`;
-        turmasPorProfessorUnidade.set(keyUnidade, (turmasPorProfessorUnidade.get(keyUnidade) || 0) + 1);
-        alunosPorProfessorUnidade.set(keyUnidade, (alunosPorProfessorUnidade.get(keyUnidade) || 0) + (t.total_alunos || 0));
-        
-        const turmasAlunos = totalAlunosTurmasPorProfessorUnidade.get(keyUnidade) || [];
-        turmasAlunos.push(t.total_alunos || 0);
-        totalAlunosTurmasPorProfessorUnidade.set(keyUnidade, turmasAlunos);
-        
-        // Também manter total (todas unidades) para quando filtro = 'todos'
-        const keyTotal = `${profId}_todos`;
-        turmasPorProfessorUnidade.set(keyTotal, (turmasPorProfessorUnidade.get(keyTotal) || 0) + 1);
-        alunosPorProfessorUnidade.set(keyTotal, (alunosPorProfessorUnidade.get(keyTotal) || 0) + (t.total_alunos || 0));
-        
-        const turmasAlunosTotal = totalAlunosTurmasPorProfessorUnidade.get(keyTotal) || [];
-        turmasAlunosTotal.push(t.total_alunos || 0);
-        totalAlunosTurmasPorProfessorUnidade.set(keyTotal, turmasAlunosTotal);
-      });
-
-      // CORREÇÃO: Não processar turmas explícitas pois estão vazias (0 alunos)
-      // Usar apenas vw_turmas_implicitas (mesma fonte do Analytics)
-
-      // Calcular média de alunos por turma para cada professor/unidade
       const mediaAlunosTurmaPorProfessorUnidade = new Map<string, number>();
-      totalAlunosTurmasPorProfessorUnidade.forEach((turmasAlunos, key) => {
-        if (turmasAlunos.length > 0) {
-          const media = turmasAlunos.reduce((sum, n) => sum + n, 0) / turmasAlunos.length;
-          mediaAlunosTurmaPorProfessorUnidade.set(key, Math.round(media * 10) / 10);
-        }
+      const ocupacoesRegulares = new Map<string, number>();
+      const turmasRegulares = new Map<string, number>();
+
+      kpisPorProfessorUnidade.forEach((kpi, key) => {
+        turmasPorProfessorUnidade.set(key, kpi.total_turmas);
+        alunosPorProfessorUnidade.set(key, kpi.carteira_alunos);
+        mediaAlunosTurmaPorProfessorUnidade.set(key, kpi.media_alunos_turma);
+        ocupacoesRegulares.set(key, kpi.alunos_via_turmas);
+        turmasRegulares.set(key, kpi.turmas_elegiveis_media);
       });
-      
-      // Criar mapas legados para compatibilidade (usando 'todos')
+
       const turmasPorProfessor = new Map<number, number>();
       const alunosPorProfessor = new Map<number, number>();
       const mediaAlunosTurmaPorProfessor = new Map<number, number>();
-      
+
       turmasPorProfessorUnidade.forEach((value, key) => {
         if (key.endsWith('_todos')) {
           const profId = parseInt(key.split('_')[0]);
@@ -300,6 +275,8 @@ export function ProfessoresPage() {
       setTurmasPorProfessorUnidade(turmasPorProfessorUnidade);
       setAlunosPorProfessorUnidade(alunosPorProfessorUnidade);
       setMediaAlunosTurmaPorProfessorUnidade(mediaAlunosTurmaPorProfessorUnidade);
+      setOcupacoesRegularesPorProfessorUnidade(ocupacoesRegulares);
+      setTurmasRegularesPorProfessorUnidade(turmasRegulares);
     } catch (error) {
       console.error('Erro ao carregar professores:', error);
       toast.error('Erro ao carregar professores');
@@ -413,19 +390,14 @@ export function ProfessoresPage() {
       ? professoresComNps.reduce((sum, p) => sum + (p.nps_medio || 0), 0) / professoresComNps.length
       : 0;
 
-    // CORREÇÃO: Média de alunos por turma (geral) - usar mesma fórmula do Analytics
-    // Média das médias por professor (não total/total)
-    const professoresComTurmas = ativos.filter(p => {
-      const key = `${p.id}_${unidadeKey}`;
-      return (turmasPorProfessorUnidade.get(key) || 0) > 0;
-    });
-    const mediaAlunosTurmaGeral = professoresComTurmas.length > 0 
-      ? professoresComTurmas.reduce((sum, p) => {
-          const key = `${p.id}_${unidadeKey}`;
-          const turmas = turmasPorProfessorUnidade.get(key) || 0;
-          const alunos = alunosPorProfessorUnidade.get(key) || 0;
-          return sum + (turmas > 0 ? alunos / turmas : 0);
-        }, 0) / professoresComTurmas.length
+    const totaisMedia = ativos.reduce((totais, professor) => {
+      const key = `${professor.id}_${unidadeKey}`;
+      totais.ocupacoes += ocupacoesRegularesPorProfessorUnidade.get(key) || 0;
+      totais.turmas += turmasRegularesPorProfessorUnidade.get(key) || 0;
+      return totais;
+    }, { ocupacoes: 0, turmas: 0 });
+    const mediaAlunosTurmaGeral = totaisMedia.turmas > 0
+      ? totaisMedia.ocupacoes / totaisMedia.turmas
       : 0;
 
     return {
@@ -440,7 +412,14 @@ export function ProfessoresPage() {
       mediaAlunosTurmaGeral,
       npsMedio
     };
-  }, [professores, unidadeAtual, turmasPorProfessorUnidade, alunosPorProfessorUnidade]);
+  }, [
+    professores,
+    unidadeAtual,
+    turmasPorProfessorUnidade,
+    alunosPorProfessorUnidade,
+    ocupacoesRegularesPorProfessorUnidade,
+    turmasRegularesPorProfessorUnidade,
+  ]);
 
   // Handlers de CRUD
   const handleSaveProfessor = async (data: ProfessorFormData) => {

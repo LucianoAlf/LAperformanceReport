@@ -14,6 +14,10 @@ import {
 } from '@/components/ui/dialog';
 import { JornadaProfessor } from './JornadaProfessor';
 import { calcularHealthScore } from '@/hooks/useHealthScore';
+import {
+  buscarKpisProfessoresCanonicos,
+  consolidarKpisProfessoresCanonicos,
+} from '@/lib/professoresKpisCanonicos';
 import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
 import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
 
@@ -186,33 +190,17 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
       const fimMesStr = format(fimMes, 'yyyy-MM-dd');
       const inicioMesStr = `${competencia}-01`;
 
-      const { data: kpisCompetencia, error: kpisCompetenciaError } = await supabase
-        .rpc('get_kpis_professor_periodo_canonico', {
-          p_ano: anoComp,
-          p_mes: mesComp,
-          p_unidade_id: unidadeId || null,
-        });
-      if (kpisCompetenciaError) throw kpisCompetenciaError;
-
-      const linhasProfessor = (kpisCompetencia || []).filter(
-        (row: any) => Number(row.professor_id) === professor.id
-      );
-      const alunosCompetencia = linhasProfessor.reduce(
-        (total: number, row: any) => total + Number(row.carteira_alunos || 0),
-        0
-      );
-      const turmasCompetencia = linhasProfessor.reduce(
-        (total: number, row: any) => total + Number(row.total_turmas || 0),
-        0
-      );
-      const ocupacoesElegiveis = linhasProfessor.reduce(
-        (total: number, row: any) => total + Number(row.alunos_via_turmas || 0),
-        0
-      );
-      const turmasElegiveis = linhasProfessor.reduce(
-        (total: number, row: any) => total + Number(row.turmas_elegiveis_media || 0),
-        0
-      );
+      const kpiCompetencia = consolidarKpisProfessoresCanonicos(
+        await buscarKpisProfessoresCanonicos({
+          ano: anoComp,
+          mes: mesComp,
+          unidadeId: unidadeId || null,
+        })
+      ).find((row) => row.professor_id === professor.id);
+      const alunosCompetencia = kpiCompetencia?.carteira_alunos || 0;
+      const turmasCompetencia = kpiCompetencia?.total_turmas || 0;
+      const ocupacoesElegiveis = kpiCompetencia?.alunos_via_turmas || 0;
+      const turmasElegiveis = kpiCompetencia?.turmas_elegiveis_media || 0;
 
       setAlunosNoMes(alunosCompetencia);
       setTurmasNoMes(turmasCompetencia);
@@ -246,19 +234,26 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
 
       setEvasoes(evasoesFormatadas);
 
-      // Carregar experimentais do professor no período
+      // Lista operacional usa o mesmo raw Emusys que alimenta a RPC canônica.
       let expQuery = supabase
-        .from('leads')
-        .select('id, nome, data_experimental, horario_experimental, status, experimental_realizada, faltou_experimental')
-        .eq('professor_experimental_id', professor.id)
-        .not('data_experimental', 'is', null)
-        .gte('data_experimental', inicioMesStr)
-        .lte('data_experimental', fimMesStr)
-        .order('data_experimental', { ascending: true });
+        .from('emusys_experimentais_raw')
+        .select('id, aluno_nome, data_aula, horario_aula, situacao_operacional')
+        .eq('professor_id', professor.id)
+        .gte('data_aula', inicioMesStr)
+        .lte('data_aula', fimMesStr)
+        .order('data_aula', { ascending: true });
       if (unidadeId) expQuery = expQuery.eq('unidade_id', unidadeId);
       const { data: expData } = await expQuery;
 
-      setExperimentais(expData || []);
+      setExperimentais((expData || []).map((exp: any) => ({
+        id: exp.id,
+        nome: exp.aluno_nome || 'Aluno',
+        data_experimental: exp.data_aula,
+        horario_experimental: exp.horario_aula,
+        status: exp.situacao_operacional || 'agendada',
+        experimental_realizada: ['presente', 'matriculado'].includes(exp.situacao_operacional),
+        faltou_experimental: exp.situacao_operacional === 'faltou',
+      })));
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {
@@ -270,39 +265,18 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
     if (!professor) return;
     const [anoComp, mesComp] = competencia.split('-').map(Number);
 
-    // Meses do ano atual: jan até o mês selecionado
-    const totalMeses = mesComp;
-    const promises = Array.from({ length: totalMeses }, (_, i) => {
+    const promises = Array.from({ length: mesComp }, async (_, i) => {
       const d = new Date(anoComp, i, 1);
-      const comp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const fimMes = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-      const fimStr = format(fimMes, 'yyyy-MM-dd');
-      const inicioStr = `${comp}-01`;
-
-      let alunosQ = supabase
-        .from('alunos')
-        .select('*', { count: 'exact', head: true })
-        .eq('professor_atual_id', professor.id)
-        .lte('data_matricula', fimStr)
-        .or(`data_saida.is.null,data_saida.gt.${fimStr}`);
-      if (unidadeId) alunosQ = alunosQ.eq('unidade_id', unidadeId);
-      const alunosP = alunosQ;
-
-      let evasoesQ = supabase
-        .from('movimentacoes_admin')
-        .select('data')
-        .eq('professor_id', professor.id)
-        .in('tipo', ['evasao', 'cancelamento'])
-        .gte('data', inicioStr)
-        .lte('data', fimStr);
-      if (unidadeId) evasoesQ = evasoesQ.eq('unidade_id', unidadeId);
-      const evasoesP = evasoesQ;
-
-      return Promise.all([alunosP, evasoesP]).then(([aRes, eRes]) => ({
+      const kpi = consolidarKpisProfessoresCanonicos(await buscarKpisProfessoresCanonicos({
+        ano: anoComp,
+        mes: i + 1,
+        unidadeId: unidadeId || null,
+      })).find((row) => row.professor_id === professor.id);
+      return {
         mes: format(d, 'MMM', { locale: ptBR }),
-        alunos: aRes.count ?? 0,
-        evasoes: (eRes.data || []).length,
-      }));
+        alunos: kpi?.carteira_alunos || 0,
+        evasoes: kpi?.evasoes || 0,
+      };
     });
 
     const resultados = await Promise.all(promises);

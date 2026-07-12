@@ -1,0 +1,4 @@
+interface:
+  display_name: "Operar Domínio do Aluno LA"
+  short_description: "Usa dados canônicos do aluno com segurança"
+  default_prompt: "Audite ou implemente esta tarefa do domínio do aluno usando as fontes canônicas do LA Report."

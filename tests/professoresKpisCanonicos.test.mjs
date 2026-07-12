@@ -4,6 +4,7 @@ import { test } from 'node:test';
 
 const migrationPath = 'supabase/migrations/20260711194341_kpis_professores_canonicos.sql';
 const conversionMigrationPath = 'supabase/migrations/20260711195600_kpis_professores_conversao_canonica.sql';
+const totalsMigrationPath = 'supabase/migrations/20260711213000_totais_professores_canonicos.sql';
 const performancePath = 'src/components/App/Professores/TabPerformanceProfessores.tsx';
 const modalPath = 'src/components/App/Professores/ModalDetalhesProfessorPerformance.tsx';
 const edgePath = 'supabase/functions/gemini-relatorio-coordenacao/index.ts';
@@ -43,7 +44,7 @@ test('tela e modal consomem competencia e denominador canonicos', () => {
   const performance = readOptional(performancePath);
   const modal = readOptional(modalPath);
 
-  assert.match(performance, /get_kpis_professor_periodo_canonico/);
+  assert.match(performance, /buscarKpisProfessoresCanonicos/);
   assert.match(performance, /turmas_elegiveis_media/);
   assert.match(modal, /turmas_elegiveis_media/);
   assert.match(modal, /\[competenciaInicial,\s*open,\s*professor\?\.id\]/);
@@ -55,4 +56,14 @@ test('relatorio com IA prioriza health score canonico', () => {
   assert.match(edge, /health_score/);
   assert.match(edge, /health_status/);
   assert.match(edge, /Number\.isFinite/);
+});
+
+test('totais do relatorio recomputam taxas pelos numeradores canonicos', () => {
+  const migration = readOptional(totalsMigrationPath);
+  assert.match(migration, /sum\s*\(\s*r\.alunos_via_turmas\s*\)/i);
+  assert.match(migration, /sum\s*\(\s*r\.turmas_elegiveis_media\s*\)/i);
+  assert.match(migration, /sum\s*\(\s*r\.matriculas_pos_exp\s*\)/i);
+  assert.match(migration, /sum\s*\(\s*r\.experimentais\s*\)/i);
+  assert.match(migration, /sum\s*\(\s*r\.renovacoes\s*\)/i);
+  assert.match(migration, /sum\s*\(\s*r\.nao_renovacoes\s*\)/i);
 });

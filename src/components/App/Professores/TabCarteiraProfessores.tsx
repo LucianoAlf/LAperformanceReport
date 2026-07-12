@@ -14,6 +14,10 @@ import { ModalCarteiraProfessor } from './ModalCarteiraProfessor';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { calcularHealthScore } from '@/hooks/useHealthScore';
 import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
+import {
+  buscarKpisProfessoresCanonicos,
+  consolidarKpisProfessoresCanonicos,
+} from '@/lib/professoresKpisCanonicos';
 
 // Interface para carteira do professor
 interface CarteiraProfessor {
@@ -104,38 +108,27 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
         return;
       }
 
-      // Buscar KPIs de performance para calcular Health Score (mesma fonte da aba Performance)
       const agora = new Date();
       const ano = agora.getFullYear();
       const mes = agora.getMonth() + 1;
-      
-      let kpisQuery = supabase
-        .from('vw_kpis_professor_mensal')
-        .select('professor_id, media_alunos_turma, taxa_cancelamento, taxa_conversao, media_presenca, evasoes, unidade_id')
-        .eq('ano', ano)
-        .eq('mes', mes);
-      
-      if (unidadeAtual !== 'todos') {
-        kpisQuery = kpisQuery.eq('unidade_id', unidadeAtual);
-      }
-      
-      const { data: kpisData } = await kpisQuery;
-      
-      // Criar mapa de KPIs por professor
+      const kpisData = consolidarKpisProfessoresCanonicos(
+        await buscarKpisProfessoresCanonicos({
+          ano,
+          mes,
+          unidadeId: unidadeAtual,
+        })
+      );
+
       const kpisPorProfessor = new Map<number, any>();
-      (kpisData || []).forEach((kpi: any) => {
-        if (!kpisPorProfessor.has(kpi.professor_id)) {
-          kpisPorProfessor.set(kpi.professor_id, kpi);
-        }
+      kpisData.forEach((kpi) => {
+        kpisPorProfessor.set(kpi.professor_id, kpi);
       });
 
       // Montar carteiras a partir da RPC
       const carteirasCalculadas: CarteiraProfessor[] = (carteiraData as any[]).map((row: any) => {
-        const totalAlunos = row.total_alunos;
-        const mediaAlunosTurma = Number(row.media_alunos_turma);
-
-        // Calcular Health Score usando os KPIs reais (mesma lógica da aba Performance)
         const kpis = kpisPorProfessor.get(row.professor_id);
+        const totalAlunos = Number(kpis?.carteira_alunos ?? row.total_alunos ?? 0);
+        const mediaAlunosTurma = Number(kpis?.media_alunos_turma || 0);
         const taxaRetencao = kpis?.taxa_cancelamento
           ? 100 - Number(kpis.taxa_cancelamento)
           : (totalAlunos > 0 ? 100 : 0);
@@ -164,7 +157,7 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
           mrr_total: Number(row.mrr_total),
           ticket_medio: Number(row.ticket_medio),
           tempo_medio_meses: Number(row.tempo_medio_meses),
-          total_turmas: row.total_turmas,
+          total_turmas: Number(kpis?.total_turmas ?? row.total_turmas ?? 0),
           media_alunos_turma: mediaAlunosTurma,
           cursos: row.cursos || [],
           unidades: row.unidades || [],

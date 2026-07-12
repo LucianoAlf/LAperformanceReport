@@ -29,6 +29,10 @@ import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
 import { HealthScoreCard } from './HealthScoreCard';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { cn } from '@/lib/utils';
+import {
+  buscarKpisProfessoresCanonicos,
+  consolidarKpisProfessoresCanonicos,
+} from '@/lib/professoresKpisCanonicos';
 
 interface ProfessorPerformance {
   id: number;
@@ -61,18 +65,6 @@ interface ProfessorPerformance {
   health_status: 'critico' | 'atencao' | 'saudavel';
   health_detalhes: { kpi: string; valor: number; scoreNormalizado: number; peso: number; contribuicao: number }[];
   fator_demanda_ponderado: number; // Fator de demanda ponderado pela composição da carteira
-}
-
-interface ConversaoProfessorCanonica {
-  professor_id: number;
-  professor_nome: string;
-  unidade_id: string;
-  unidade_nome: string;
-  realizadas_emusys: number;
-  faltas_emusys: number;
-  canceladas_emusys: number;
-  matriculas_pos_exp: number;
-  taxa_exp_mat: number;
 }
 
 interface AlertaPerformance {
@@ -208,53 +200,30 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       const { data: professoresData, error: profError } = await query;
       if (profError) throw profError;
 
-      // Buscar KPIs via RPC parametrizada (funciona para qualquer período)
-      const rpcParams: Record<string, any> = { p_ano: anoFiltro, p_mes: mesFiltro };
-      if (unidadeAtual !== 'todos') rpcParams.p_unidade_id = unidadeAtual;
-      if (modoVisualizacao === 'trimestre') {
-        rpcParams.p_data_inicio = trimestreInfo.dataInicio;
-        rpcParams.p_data_fim = trimestreInfo.dataFim;
-      }
+      const kpisData = consolidarKpisProfessoresCanonicos(
+        await buscarKpisProfessoresCanonicos({
+          ano: anoFiltro,
+          mes: mesFiltro,
+          unidadeId: unidadeAtual,
+          dataInicio: modoVisualizacao === 'trimestre' ? trimestreInfo.dataInicio : null,
+          dataFim: modoVisualizacao === 'trimestre' ? trimestreInfo.dataFim : null,
+        })
+      );
 
-      const { data: kpisRpc } = await supabase
-        .rpc('get_kpis_professor_periodo_canonico', rpcParams);
-
-      const kpisData: any[] = kpisRpc || [];
-
-      const mesInicioCanonico = modoVisualizacao === 'trimestre'
-        ? Number(trimestreInfo.dataInicio.slice(5, 7))
-        : mesFiltro;
-      const mesFimCanonico = modoVisualizacao === 'trimestre'
-        ? Number(trimestreInfo.dataFim.slice(5, 7))
-        : mesFiltro;
-      const anoInicioCanonico = modoVisualizacao === 'trimestre'
-        ? Number(trimestreInfo.dataInicio.slice(0, 4))
-        : anoFiltro;
-      const usaRangeCanonicoMesmoAno = anoInicioCanonico === anoFiltro;
-
-      const { data: conversaoProfessorRpc, error: conversaoProfessorError } = await supabase
-        .rpc('get_experimentais_professor_canonicos_v1', {
-          p_unidade_id: unidadeAtual !== 'todos' ? unidadeAtual : null,
-          p_ano: anoFiltro,
-          p_mes_inicio: usaRangeCanonicoMesmoAno ? mesInicioCanonico : mesFiltro,
-          p_mes_fim: usaRangeCanonicoMesmoAno ? mesFimCanonico : mesFiltro,
-        });
-
-      if (conversaoProfessorError) throw conversaoProfessorError;
-
-      // Buscar KPIs históricos para calcular tendências (filtrado por unidade se selecionada)
-      let historicoQuery = supabase
-        .from('vw_kpis_professor_mensal')
-        .select('professor_id, ano, mes, media_alunos_turma, unidade_id')
-        .gte('ano', ano - 1)
-        .order('ano', { ascending: false })
-        .order('mes', { ascending: false });
-      
-      if (unidadeAtual !== 'todos') {
-        historicoQuery = historicoQuery.eq('unidade_id', unidadeAtual);
-      }
-      
-      const { data: kpisHistorico } = await historicoQuery;
+      const referencia = new Date(anoFiltro, mesFiltro - 1, 1);
+      const referenciasHistoricas = [1, 2].map((mesesAntes) => {
+        const data = new Date(referencia.getFullYear(), referencia.getMonth() - mesesAntes, 1);
+        return { ano: data.getFullYear(), mes: data.getMonth() + 1 };
+      });
+      const kpisHistorico = (
+        await Promise.all(referenciasHistoricas.map(async (ref) =>
+          consolidarKpisProfessoresCanonicos(await buscarKpisProfessoresCanonicos({
+            ano: ref.ano,
+            mes: ref.mes,
+            unidadeId: unidadeAtual,
+          }))
+        ))
+      ).flat();
 
       // Buscar fator de demanda ponderado por professor
       let fatorDemandaQuery = supabase
@@ -323,35 +292,6 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         }
       });
 
-      // Criar mapa de histórico para calcular tendências
-      const conversaoCanonicaPorProfessor = new Map<number, ConversaoProfessorCanonica>();
-      (conversaoProfessorRpc || []).forEach((row: any) => {
-        const professorId = Number(row.professor_id);
-        if (!professorId) return;
-
-        const atual = conversaoCanonicaPorProfessor.get(professorId) || {
-          professor_id: professorId,
-          professor_nome: row.professor_nome || '',
-          unidade_id: row.unidade_id || '',
-          unidade_nome: row.unidade_nome || '',
-          realizadas_emusys: 0,
-          faltas_emusys: 0,
-          canceladas_emusys: 0,
-          matriculas_pos_exp: 0,
-          taxa_exp_mat: 0,
-        };
-
-        atual.realizadas_emusys += Number(row.realizadas_emusys) || 0;
-        atual.faltas_emusys += Number(row.faltas_emusys) || 0;
-        atual.canceladas_emusys += Number(row.canceladas_emusys) || 0;
-        atual.matriculas_pos_exp += Number(row.matriculas_pos_exp) || 0;
-        atual.taxa_exp_mat = atual.realizadas_emusys > 0
-          ? (atual.matriculas_pos_exp / atual.realizadas_emusys) * 100
-          : 0;
-
-        conversaoCanonicaPorProfessor.set(professorId, atual);
-      });
-
       const historicoMap = new Map<number, any[]>();
       kpisHistorico?.forEach(h => {
         if (!historicoMap.has(h.professor_id)) {
@@ -404,16 +344,11 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             ? Number(kpis?.media_alunos_turma ?? (alunosViaTurmas / turmasElegiveisMedia))
             : 0;
 
-          // Metricas da RPC/view. Exp->Mat vem da fonte canonica do Emusys.
-          const conversaoCanonica = conversaoCanonicaPorProfessor.get(prof.id);
-          const experimentaisCanonicas = conversaoCanonica?.realizadas_emusys || 0;
-          const faltasExperimentaisCanonicas = conversaoCanonica?.faltas_emusys || 0;
-          const canceladasExperimentaisCanonicas = conversaoCanonica?.canceladas_emusys || 0;
-          const matriculasPosExpCanonicas = conversaoCanonica?.matriculas_pos_exp || 0;
-          const eventosExperimentaisCanonicos = experimentaisCanonicas + faltasExperimentaisCanonicas + canceladasExperimentaisCanonicas;
-          const taxaConversaoCanonica = experimentaisCanonicas > 0
-            ? (matriculasPosExpCanonicas / experimentaisCanonicas) * 100
-            : 0;
+          const experimentaisCanonicas = Number(kpis?.experimentais || 0);
+          const faltasExperimentaisCanonicas = Number(kpis?.experimentais_faltas || 0);
+          const matriculasPosExpCanonicas = Number(kpis?.matriculas_pos_exp || 0);
+          const eventosExperimentaisCanonicos = Number(kpis?.experimentais_agendadas || 0);
+          const taxaConversaoCanonica = Number(kpis?.taxa_conversao || 0);
 
           const taxaPresenca = kpis?.media_presenca ? Number(kpis.media_presenca) : 0;
           const nps = kpis?.nps_medio ? Number(kpis.nps_medio) : null;
@@ -1437,6 +1372,16 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           ? trimestreInfo.dataFim
           : `${ano}-${String(mes).padStart(2, '0')}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}`}
         periodoLabel={periodoLabel}
+        resumoCanonico={(() => {
+          const professor = professores.find((item) => item.id === modalTurmas.professorId);
+          return professor ? {
+            totalTurmas: professor.total_turmas,
+            carteiraAlunos: professor.total_alunos,
+            ocupacoesRegulares: professor.alunos_via_turmas,
+            turmasRegulares: professor.turmas_elegiveis_media,
+            mediaAlunosTurma: professor.media_alunos_turma,
+          } : undefined;
+        })()}
       />
 
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />

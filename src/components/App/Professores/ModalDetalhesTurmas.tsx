@@ -40,6 +40,13 @@ interface Props {
   dataInicio?: string;
   dataFim?: string;
   periodoLabel?: string;
+  resumoCanonico?: {
+    totalTurmas: number;
+    carteiraAlunos: number;
+    ocupacoesRegulares: number;
+    turmasRegulares: number;
+    mediaAlunosTurma: number;
+  };
 }
 
 const POR_PAGINA = 15;
@@ -55,7 +62,7 @@ const DIA_ISO: Record<string, number> = {
 
 export function ModalDetalhesTurmas({
   open, onClose, professorId, professorNome, unidadeId, unidadeNome,
-  dataInicio, dataFim, periodoLabel,
+  dataInicio, dataFim, periodoLabel, resumoCanonico,
 }: Props) {
   const [linhas, setLinhas] = useState<LinhaAlunoTurma[]>([]);
   const [loading, setLoading] = useState(false);
@@ -154,18 +161,6 @@ export function ModalDetalhesTurmas({
   const totalPaginas = Math.max(1, Math.ceil(linhasFiltradas.length / POR_PAGINA));
   const linhasPaginadas = linhasFiltradas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
 
-  // Resumo (sempre considerando o conjunto completo, sem filtro)
-  // Conta apenas turmas com pelo menos 1 aluno ativo (alinha com RPC get_kpis_professor_periodo)
-  const totalTurmas = useMemo(() => {
-    const turmasComAtivos = new Set<string>();
-    linhas.forEach(l => { if (l.aluno_status === 'ativo') turmasComAtivos.add(l.turma_chave); });
-    return turmasComAtivos.size;
-  }, [linhas]);
-  const alunosAtivosUnicos = useMemo(() => {
-    const set = new Set<number>();
-    linhas.forEach(l => { if (l.aluno_status === 'ativo') set.add(l.aluno_id); });
-    return set.size;
-  }, [linhas]);
   const alunosOutrosUnicos = useMemo(() => {
     const set = new Set<number>();
     linhas.forEach(l => { if (l.aluno_status !== 'ativo') set.add(l.aluno_id); });
@@ -184,8 +179,9 @@ export function ModalDetalhesTurmas({
       .map(([status, set]) => ({ status, count: set.size }))
       .sort((a, b) => b.count - a.count);
   }, [linhas]);
-  // Média = ativos / turmas (alinha com o card da aba Performance)
-  const media = totalTurmas > 0 ? (alunosAtivosUnicos / totalTurmas).toFixed(1) : '0';
+  const totalTurmas = resumoCanonico?.totalTurmas ?? 0;
+  const alunosAtivos = resumoCanonico?.carteiraAlunos ?? 0;
+  const media = (resumoCanonico?.mediaAlunosTurma ?? 0).toFixed(1);
 
   if (!professorId) return null;
 
@@ -216,8 +212,8 @@ export function ModalDetalhesTurmas({
                 <p className="text-lg font-bold text-white">{totalTurmas}</p>
               </div>
               <div className="bg-emerald-500/10 rounded-lg p-3 text-center border border-emerald-500/20">
-                <p className="text-xs text-slate-400">Alunos ativos</p>
-                <p className="text-lg font-bold text-emerald-400">{alunosAtivosUnicos}</p>
+                <p className="text-xs text-slate-400">Vínculos ativos</p>
+                <p className="text-lg font-bold text-emerald-400">{alunosAtivos}</p>
               </div>
               <Tooltip
                 side="top"
@@ -260,6 +256,11 @@ export function ModalDetalhesTurmas({
                   Number(media) >= 1.5 ? 'text-emerald-400' :
                   Number(media) >= 1.3 ? 'text-amber-400' : 'text-rose-400'
                 )}>{media}</p>
+                {resumoCanonico && (
+                  <p className="mt-0.5 text-[10px] text-slate-500">
+                    {resumoCanonico.ocupacoesRegulares}/{resumoCanonico.turmasRegulares} regulares
+                  </p>
+                )}
               </div>
             </div>
 

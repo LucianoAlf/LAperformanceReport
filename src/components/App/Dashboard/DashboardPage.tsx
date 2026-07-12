@@ -42,6 +42,10 @@ import {
 } from '@/lib/comercialMatriculasCanonicas';
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 import { anexarCursosMovimentacoesAdmin } from '@/lib/movimentacoesAdminCursos';
+import {
+  buscarKpisProfessoresCanonicos,
+  calcularTotaisKpisProfessoresCanonicos,
+} from '@/lib/professoresKpisCanonicos';
 
 
 interface OutletContextType {
@@ -491,113 +495,35 @@ export function DashboardPage() {
         const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
         const ultimoDia = new Date(ano, mesFim, 0).getDate();
         const endDate = `${ano}-${String(mesFim).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
-        // Buscar renovações e não renovações de movimentacoes_admin (fonte de verdade)
-        let renovacoesQuery = supabase
-          .from('movimentacoes_admin')
-          .select('tipo, unidade_id, curso_id')
-          .in('tipo', ['renovacao', 'nao_renovacao'])
-          .gte('data', startDate)
-          .lte('data', endDate);
-        if (unidade !== 'todos') {
-          renovacoesQuery = renovacoesQuery.eq('unidade_id', unidade);
-        }
-
-        const [profsR, profUnidR, turmasR, perfR, renovR] = await Promise.all([
+        const [profsR, profUnidR, kpisProfessores] = await Promise.all([
           supabase.from('professores').select('id, nome, ativo').eq('ativo', true),
           supabase.from('professores_unidades').select('professor_id, unidade_id'),
-          supabase.from('vw_turmas_implicitas').select('professor_id, total_alunos, unidade_id'),
-          supabase.from('professores_performance').select('*').eq('ano', ano),
-          renovacoesQuery,
+          buscarKpisProfessoresCanonicos({
+            ano,
+            mes: mesInicio,
+            unidadeId: unidade,
+            dataInicio: startDate,
+            dataFim: endDate,
+          }),
         ]);
 
-        const professoresData = profsR.data;
-        const profUnidadesData = profUnidR.data;
-        const turmasImplicitas = turmasR.data;
-        const performanceData = perfR.data;
-        const renovacoesData = await anexarCursosMovimentacoesAdmin(renovR.data || []);
-
-        // Calcular KPIs
-        let totalProfs = 0;
-        let mediaAlunosProf = 0;
-        let taxaRenovacao = 0;
-        let mediaAlunosTurma = 0;
-
-        if (professoresData && professoresData.length > 0) {
-          // Mapear unidades por professor
-          const unidadesPorProfessor = new Map<number, string[]>();
-          if (profUnidadesData) {
-            profUnidadesData.forEach((pu: any) => {
-              const lista = unidadesPorProfessor.get(pu.professor_id) || [];
-              lista.push(pu.unidade_id);
-              unidadesPorProfessor.set(pu.professor_id, lista);
-            });
-          }
-
-          // Filtrar turmas por unidade ANTES de calcular
-          const turmasFiltradas = unidade !== 'todos' 
-            ? turmasImplicitas?.filter((t: any) => t.unidade_id === unidade) 
-            : turmasImplicitas;
-
-          // Calcular turmas e alunos por professor (das turmas implícitas FILTRADAS)
-          const turmasPorProfessor = new Map<number, number>();
-          const alunosPorProfessor = new Map<number, number>();
-          turmasFiltradas?.forEach((t: any) => {
-            const profId = t.professor_id;
-            turmasPorProfessor.set(profId, (turmasPorProfessor.get(profId) || 0) + 1);
-            alunosPorProfessor.set(profId, (alunosPorProfessor.get(profId) || 0) + (t.total_alunos || 0));
-          });
-
-          // Filtrar professores por unidade (MESMA LÓGICA da página Professores)
-          let professoreFiltrados = professoresData;
-          if (unidade !== 'todos') {
-            professoreFiltrados = professoresData.filter((p: any) => {
-              const unidadesProf = unidadesPorProfessor.get(p.id) || [];
-              return unidadesProf.includes(unidade);
-            });
-          }
-          
-          // Total de professores ativos
-          totalProfs = professoreFiltrados.length;
-          
-          // Total de alunos e turmas dos professores filtrados
-          let totalAlunos = 0;
-          let totalTurmas = 0;
-          professoreFiltrados.forEach((p: any) => {
-            totalAlunos += alunosPorProfessor.get(p.id) || 0;
-            totalTurmas += turmasPorProfessor.get(p.id) || 0;
-          });
-          
-          mediaAlunosProf = totalProfs > 0 ? Math.round((totalAlunos / totalProfs) * 10) / 10 : 0;
-          mediaAlunosTurma = totalTurmas > 0 ? Math.round((totalAlunos / totalTurmas) * 10) / 10 : 0;
-        }
-
-        // Taxa de renovação: usar movimentacoes_admin (fonte de verdade)
-        if (renovacoesData && renovacoesData.length > 0) {
-          const renovacoesCanonicas = filtrarRetencaoCanonica(renovacoesData);
-          const totalRenovacoes = renovacoesCanonicas.filter((r: any) => r.tipo === 'renovacao').length;
-          const totalContratos = renovacoesCanonicas.length; // renovacao + nao_renovacao sem atividades extras
-          taxaRenovacao = totalContratos > 0 ? (totalRenovacoes / totalContratos) * 100 : 0;
-        } else if (performanceData && performanceData.length > 0) {
-          // Fallback: professores_performance (dados históricos)
-          let perfFiltrada = performanceData;
-          if (unidade !== 'todos') {
-            const unidadeNome = unidade === '2ec861f6-023f-4d7b-9927-3960ad8c2a92' ? 'Campo Grande' 
-              : unidade === '95553e96-971b-4590-a6eb-0201d013c14d' ? 'Recreio'
-              : unidade === '368d47f5-2d88-4475-bc14-ba084a9a348e' ? 'Barra' : null;
-            if (unidadeNome) {
-              perfFiltrada = performanceData.filter((p: any) => p.unidade === unidadeNome);
-            }
-          }
-          const renovacoes = perfFiltrada.reduce((acc: number, p: any) => acc + (p.renovacoes || 0), 0);
-          const contratosVencer = perfFiltrada.reduce((acc: number, p: any) => acc + (p.contratos_vencer || 0), 0);
-          taxaRenovacao = contratosVencer > 0 ? (renovacoes / contratosVencer) * 100 : 0;
-        }
+        const professoresAtivos = new Set((profsR.data || []).map((p: any) => Number(p.id)));
+        const professoresRelacionados = new Set(
+          (profUnidR.data || [])
+            .filter((pu: any) => unidade === 'todos' || pu.unidade_id === unidade)
+            .map((pu: any) => Number(pu.professor_id))
+            .filter((id: number) => professoresAtivos.has(id))
+        );
+        const totaisProfessores = calcularTotaisKpisProfessoresCanonicos(kpisProfessores);
+        const totalProfs = professoresRelacionados.size || totaisProfessores.totalProfessores;
 
         setDadosProfessores({
           total_professores: totalProfs,
-          media_alunos_professor: mediaAlunosProf,
-          taxa_renovacao: taxaRenovacao,
-          media_alunos_turma: mediaAlunosTurma
+          media_alunos_professor: totalProfs > 0
+            ? Math.round((totaisProfessores.carteiraAlunos / totalProfs) * 10) / 10
+            : 0,
+          taxa_renovacao: totaisProfessores.taxaRenovacao,
+          media_alunos_turma: Math.round(totaisProfessores.mediaAlunosTurma * 10) / 10,
         });
 
         // ===== EVOLUÇÃO DE ALUNOS ATIVOS (12 meses) =====
