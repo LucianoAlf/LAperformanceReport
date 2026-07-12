@@ -1,9 +1,10 @@
 // Tipos e formatação da performance de atendimento (Chatwoot).
 // Consumido pela sub-aba "Atendimento" em Analytics → Comercial.
 //
-// A edge conta as conversas CRIADAS no período e agrega por agente/caixa/unidade, com a 1ª
-// resposta medida por MEDIANA do evento `first_response` do Chatwoot (handoff bot→humano até o
-// 1º retorno — não conta a janela do bot SDR). Ver edge chatwoot-atendimento-insights.
+// A edge conta as conversas CRIADAS no período e agrega por agente/caixa/unidade. A 1ª resposta
+// é a MEDIANA do evento `first_response` (handoff bot→humano até o 1º retorno — não conta a janela
+// do bot SDR); o tempo de resposta é a MEDIANA do `reply_time` (cada turno lead→resposta ao longo
+// da conversa). Ver edge chatwoot-atendimento-insights.
 
 export interface EntidadeAtendimento {
   id: number | string;
@@ -12,6 +13,8 @@ export interface EntidadeAtendimento {
   resolvidas: number;
   primeiraRespostaMedianaSeg: number | null; // mediana do first_response: handoff → 1ª resposta humana (seg)
   amostraPrimeiraResposta: number;            // nº de conversas com 1ª resposta (base da mediana)
+  tempoRespostaMedianaSeg: number | null;     // mediana do reply_time: cada turno lead → resposta (seg)
+  amostraTempoResposta: number;               // nº de turnos de resposta (base da mediana)
 }
 
 export interface CaixaAtendimento extends EntidadeAtendimento {
@@ -32,6 +35,8 @@ export interface ResumoAtendimento {
   resolvidas: number;
   primeiraRespostaMedianaSeg: number | null;
   amostraPrimeiraResposta: number;
+  tempoRespostaMedianaSeg: number | null;
+  amostraTempoResposta: number;
 }
 
 export interface ChatwootAtendimentoResposta {
@@ -42,6 +47,9 @@ export interface ChatwootAtendimentoResposta {
   agentes: AgenteAtendimento[];
   caixas: CaixaAtendimento[];
   unidades: UnidadeAtendimento[];
+  // Sinaliza que a edge bateu num teto e a amostra é parcial (números subestimados).
+  // conversas = atingiu MAX_PAGINAS; eventos = mais conversas respondidas que MAX_EVENTOS.
+  truncado?: { conversas: boolean; eventos: boolean };
   error?: string;
 }
 

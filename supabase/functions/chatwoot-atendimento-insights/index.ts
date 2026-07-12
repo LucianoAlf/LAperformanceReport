@@ -14,7 +14,12 @@
 // alguém assumir. É o número honesto de "quanto o humano demora depois que a bola chega nele".
 // Agregamos por MEDIANA (resistente a leads parados). Conversas 100% atendidas pelo bot (sem
 // resposta humana) e eventos com valor 0 (conversa iniciada pelo agente, sem espera do lead)
-// não entram na mediana. Tudo ao vivo, nada persistido.
+// não entram na mediana.
+//
+// Também devolvemos o TEMPO MÉDIO DE RESPOSTA (mediana dos eventos `reply_time` — cada turno
+// lead→resposta de agente humano), que já vem no mesmo GET reporting_events (custo de API zero
+// a mais). first_response = velocidade de PEGAR o lead; reply_time = ritmo AO LONGO da conversa.
+// Tudo ao vivo, nada persistido.
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -76,11 +81,12 @@ type Conversa = {
   inbox_id?: number;
   meta?: { assignee?: { id?: number } | null };
 };
-type ReportingEvent = { name?: string; value?: number };
+type ReportingEvent = { name?: string; value?: number; user_id?: number | null };
 
 // Acumulador por chave de grupo (agente/caixa/unidade).
-type Grupo = { conversas: number; resolvidas: number; gaps: number[] };
-const novoGrupo = (): Grupo => ({ conversas: 0, resolvidas: 0, gaps: [] });
+// gaps = 1ª resposta (evento first_response); respostas = cada turno lead→resposta (reply_time).
+type Grupo = { conversas: number; resolvidas: number; gaps: number[]; respostas: number[] };
+const novoGrupo = (): Grupo => ({ conversas: 0, resolvidas: 0, gaps: [], respostas: [] });
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -133,6 +139,7 @@ Deno.serve(async (req: Request) => {
       ],
     };
     const conversas: Conversa[] = [];
+    let truncConversas = false; // atingiu MAX_PAGINAS com página cheia → há conversas não lidas
     for (let pg = 1; pg <= MAX_PAGINAS; pg++) {
       const resp = await fetch(`${baseUrl}/api/v1/accounts/${accountId}/conversations/filter?page=${pg}`, {
         method: 'POST', headers, body: JSON.stringify(filtro),
@@ -146,15 +153,24 @@ Deno.serve(async (req: Request) => {
       const itens: Conversa[] = data?.payload ?? [];
       conversas.push(...itens);
       if (itens.length < 25) break;
+      if (pg === MAX_PAGINAS) truncConversas = true; // parou no teto, ainda havia página cheia
     }
 
     // Só as conversas realmente criadas no mês (recorte fino BRT).
-    const doMes = conversas.filter((c) => {
+    const doMesBruto = conversas.filter((c) => {
       const created = c.created_at ?? 0;
       return created >= since && created < until;
     });
 
-    // Passo 1 — volume por agente/caixa/unidade (todas as conversas do mês, com ou sem humano).
+    // Performance de atendimento HUMANO das unidades: só caixas que mapeiam para uma unidade
+    // (CG/Recreio/Barra). Caixas sem unidade — Instagram (bot) e Sol-Atendimento (adm) — ficam
+    // FORA de tudo: contagem, medianas e breakdown. Assim o `geral` = soma das unidades por
+    // construção (headline e contagens sempre no mesmo universo). (decisão 2026-07-12)
+    const doMes = doMesBruto.filter((c) =>
+      typeof c.inbox_id === 'number' && unidadeDaCaixa(nomeCaixa.get(c.inbox_id) ?? '') !== null
+    );
+
+    // Passo 1 — volume por agente/caixa/unidade (conversas de unidade do mês, com ou sem humano).
     const geral = novoGrupo();
     const porAgente = new Map<number, Grupo>();
     const porCaixa = new Map<number, Grupo>();
@@ -183,10 +199,14 @@ Deno.serve(async (req: Request) => {
 
     // Passo 2 — tempo até a 1ª resposta HUMANA via evento first_response (relativo ao handoff).
     // Só busca evento das conversas que tiveram resposta humana (first_reply_created_at > 0).
-    const comResposta = doMes
-      .filter((c) => typeof c.id === 'number' && (c.first_reply_created_at ?? 0) > 0)
-      .slice(0, MAX_EVENTOS);
+    const comRespostaTodas = doMes
+      .filter((c) => typeof c.id === 'number' && (c.first_reply_created_at ?? 0) > 0);
+    const comResposta = comRespostaTodas.slice(0, MAX_EVENTOS);
+    const truncEventos = comRespostaTodas.length > MAX_EVENTOS; // medianas sobre amostra parcial
 
+    // Para cada conversa com resposta humana, no MESMO GET reporting_events já vêm a 1ª resposta
+    // (first_response) e cada turno lead→resposta (reply_time, só de agente humano → tem user_id).
+    // Ou seja, o tempo médio de resposta não custa nenhuma chamada de API extra.
     const valores = await mapComLimite(comResposta, CONCORRENCIA_EVENTOS, async (c) => {
       try {
         const evts = await getJson(`${baseUrl}/api/v1/accounts/${accountId}/conversations/${c.id}/reporting_events`);
@@ -194,26 +214,33 @@ Deno.serve(async (req: Request) => {
         const fr = arr.find((e) => e?.name === 'first_response');
         const v = Number(fr?.value);
         // valor <= 0 = conversa iniciada pelo agente / sem espera real do lead → fora da mediana.
-        return Number.isFinite(v) && v > 0 ? v : null;
+        const primeira = Number.isFinite(v) && v > 0 ? v : null;
+        const respostas = arr
+          .filter((e) => e?.name === 'reply_time' && typeof e?.user_id === 'number')
+          .map((e) => Number(e?.value))
+          .filter((x) => Number.isFinite(x) && x > 0);
+        return { primeira, respostas };
       } catch {
-        return null;
+        return { primeira: null as number | null, respostas: [] as number[] };
       }
     });
 
-    const pushGap = (map: Map<string | number, Grupo>, chave: string | number, valor: number) => {
-      grupo(map, chave).gaps.push(valor);
+    // Distribui um valor no campo escolhido (gaps=1ª resposta, respostas=tempo de resposta) para
+    // geral + agente (assignee) + caixa (inbox) + unidade da conversa.
+    const distribuir = (c: Conversa, campo: 'gaps' | 'respostas', valor: number) => {
+      geral[campo].push(valor);
+      const agenteId = c.meta?.assignee?.id;
+      if (typeof agenteId === 'number') grupo(porAgente as Map<string | number, Grupo>, agenteId)[campo].push(valor);
+      if (typeof c.inbox_id === 'number') {
+        grupo(porCaixa as Map<string | number, Grupo>, c.inbox_id)[campo].push(valor);
+        const uni = unidadeDaCaixa(nomeCaixa.get(c.inbox_id) ?? '');
+        if (uni) grupo(porUnidade as Map<string | number, Grupo>, uni)[campo].push(valor);
+      }
     };
     comResposta.forEach((c, idx) => {
-      const valor = valores[idx];
-      if (valor == null) return;
-      geral.gaps.push(valor);
-      const agenteId = c.meta?.assignee?.id;
-      if (typeof agenteId === 'number') pushGap(porAgente as Map<string | number, Grupo>, agenteId, valor);
-      if (typeof c.inbox_id === 'number') {
-        pushGap(porCaixa as Map<string | number, Grupo>, c.inbox_id, valor);
-        const uni = unidadeDaCaixa(nomeCaixa.get(c.inbox_id) ?? '');
-        if (uni) pushGap(porUnidade as Map<string | number, Grupo>, uni, valor);
-      }
+      const { primeira, respostas } = valores[idx];
+      if (primeira != null) distribuir(c, 'gaps', primeira);
+      for (const r of respostas) distribuir(c, 'respostas', r);
     });
 
     const montar = <T>(map: Map<string | number, Grupo>, meta: (chave: string | number) => T) =>
@@ -225,6 +252,8 @@ Deno.serve(async (req: Request) => {
           resolvidas: g.resolvidas,
           primeiraRespostaMedianaSeg: mediana(g.gaps),
           amostraPrimeiraResposta: g.gaps.length,
+          tempoRespostaMedianaSeg: mediana(g.respostas),
+          amostraTempoResposta: g.respostas.length,
         }))
         .sort((a, b) => b.conversas - a.conversas);
 
@@ -244,9 +273,14 @@ Deno.serve(async (req: Request) => {
       resolvidas: geral.resolvidas,
       primeiraRespostaMedianaSeg: mediana(geral.gaps),
       amostraPrimeiraResposta: geral.gaps.length,
+      tempoRespostaMedianaSeg: mediana(geral.respostas),
+      amostraTempoResposta: geral.respostas.length,
     };
 
-    return json({ ok: true, since, until, geral: resumoGeral, agentes, caixas, unidades });
+    return json({
+      ok: true, since, until, geral: resumoGeral, agentes, caixas, unidades,
+      truncado: { conversas: truncConversas, eventos: truncEventos },
+    });
   } catch (e) {
     console.error('[chatwoot-atendimento-insights]', e);
     return json({ ok: false, error: e instanceof Error ? e.message : 'erro interno' }, 500);

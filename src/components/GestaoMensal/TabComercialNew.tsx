@@ -284,6 +284,11 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
       ? (atendimento.unidades.find((u) => u.nome === chaveUnidade)?.primeiraRespostaMedianaSeg ?? null)
       : (atendimento.geral?.primeiraRespostaMedianaSeg ?? null);
 
+    // Tempo médio de resposta (mediana do reply_time) — mesma lógica de escopo do KPI acima.
+    const kMedianaResposta = chaveUnidade
+      ? (atendimento.unidades.find((u) => u.nome === chaveUnidade)?.tempoRespostaMedianaSeg ?? null)
+      : (atendimento.geral?.tempoRespostaMedianaSeg ?? null);
+
     // Insight: pior 1ª resposta entre entidades com volume relevante (>=5) e mediana > 8h.
     const pior = linhas
       .filter((l) => l.primeiraRespostaMedianaSeg != null && l.conversas >= 5 && (l.primeiraRespostaMedianaSeg as number) >= 28800)
@@ -297,7 +302,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
     const maxResp = Math.max(...porResposta.map((l) => l.primeiraRespostaMedianaSeg as number), 1);
 
     return {
-      linhas, colLabel, avisoAgenteSemUnidade, totConversas, totRespondidas, kMediana, pior,
+      linhas, colLabel, avisoAgenteSemUnidade, totConversas, totRespondidas, kMediana, kMedianaResposta, pior,
       porConversas, porResposta, maxConv, maxResp,
     };
   }, [dimAtendimento, unidade, unidadesData, atendimento.unidades, atendimento.caixas, atendimento.agentes, atendimento.geral]);
@@ -1190,6 +1195,19 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             </p>
           </div>
 
+          {/* Aviso: amostra truncada (bateu no teto da edge) — números subestimados. */}
+          {!atendimento.loading && !atendimento.error && (atendimento.truncado?.conversas || atendimento.truncado?.eventos) && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+              <p className="text-amber-200 text-xs">
+                <strong>Amostra parcial:</strong>{' '}
+                {atendimento.truncado?.conversas && 'o volume de conversas do período passou do teto de leitura (1.500) — contagens subestimadas. '}
+                {atendimento.truncado?.eventos && 'há mais conversas respondidas do que o teto de análise (600) — as medianas usam só parte delas. '}
+                Reduza o intervalo de meses para números completos.
+              </p>
+            </div>
+          )}
+
           {atendimento.loading && (
             <div className="flex items-center justify-center h-48">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
@@ -1223,7 +1241,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               )}
 
               {/* KPIs da dimensão/unidade ativa */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <KPICard
                   icon={MessageSquare}
                   label="Conversas no período"
@@ -1246,6 +1264,13 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                   value={formatarDuracaoSegundos(dadosAtendimento.kMediana)}
                   subvalue="tempo típico até o 1º retorno"
                   variant="amber"
+                />
+                <KPICard
+                  icon={Clock}
+                  label="Tempo de resposta (mediana)"
+                  value={formatarDuracaoSegundos(dadosAtendimento.kMedianaResposta)}
+                  subvalue="ritmo ao longo da conversa"
+                  variant="emerald"
                 />
               </div>
 
@@ -1341,11 +1366,23 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                             </span>
                           </span>
                         </th>
+                        <th className="text-right font-medium px-5 py-3">
+                          <span className="inline-flex items-center gap-1 justify-end">
+                            Tempo de resposta (mediana)
+                            <span className="relative group">
+                              <Info size={12} className="text-slate-500 hover:text-slate-300 cursor-help" />
+                              <span className="absolute bottom-full right-0 mb-2 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-[11px] text-slate-200 normal-case tracking-normal font-normal whitespace-normal w-[240px] text-left opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-xl pointer-events-none">
+                                Mediana do tempo de cada resposta ao longo da conversa (lead → agente). O nº ao lado é a quantidade de respostas medidas.
+                              </span>
+                            </span>
+                          </span>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {dadosAtendimento.porConversas.map((l) => {
                         const cor = corTempoAtendimento(l.primeiraRespostaMedianaSeg);
+                        const corResp = corTempoAtendimento(l.tempoRespostaMedianaSeg);
                         return (
                           <tr key={l.id} className="border-b border-slate-700/30 last:border-0 hover:bg-slate-700/20 transition-colors">
                             <td className="px-5 py-3 text-white font-medium">
@@ -1358,6 +1395,18 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                               <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: `${cor}1e`, color: cor }}>
                                 {formatarDuracaoSegundos(l.primeiraRespostaMedianaSeg)}
                               </span>
+                            </td>
+                            <td className="px-5 py-3 text-right tabular-nums">
+                              {l.tempoRespostaMedianaSeg != null ? (
+                                <span className="inline-flex items-center gap-1.5 justify-end">
+                                  <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: `${corResp}1e`, color: corResp }}>
+                                    {formatarDuracaoSegundos(l.tempoRespostaMedianaSeg)}
+                                  </span>
+                                  <span className="text-slate-500 text-[10px]">{l.amostraTempoResposta}</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-600">—</span>
+                              )}
                             </td>
                           </tr>
                         );

@@ -1,5 +1,13 @@
 # Chatwoot — LA Music (Documentação)
 
+> 🎯 **Fonte de verdade do atendimento comercial = Chatwoot** (confirmado Hugo, 2026-07-12).
+> As tabelas `crm_mensagens`/`crm_conversas` (inbox UAZAPI interno) são **legado/residual** —
+> 12 conversas na história inteira, ~6 mensagens de saída/mês, vs **507 conversas/mês no Chatwoot**.
+> **NÃO** construir KPI de atendimento (tempo de resposta, volume, etc.) sobre `crm_mensagens`:
+> daria estatística de tabela vazia. O **tempo médio de resposta** sai dos eventos **`reply_time`**
+> do Chatwoot (pareamento entrada→resposta já pronto), por **mediana** — não de RPC em SQL.
+> **Implementado 2026-07-12** na edge `chatwoot-atendimento-insights` (v6, ver seção abaixo).
+
 ## Acesso
 
 | Campo        | Valor                                              |
@@ -277,11 +285,28 @@ GET /api/v2/accounts/5/summary_reports/inbox?since=&until=   # por caixa (mesma 
 > `value` → `value_in_business_hours` na edge — aí Vitória/CG caem pro tempo real de resposta em
 > horário útil. É forward-only (não recalcula histórico).
 >
+> ### Tempo médio de resposta (implementado 2026-07-12, edge v6)
+> Mediana dos eventos **`reply_time`** (1 por turno lead→resposta, só de agente humano → filtra por
+> `user_id` presente). Vem no **mesmo GET reporting_events** do first_response → **custo de API zero
+> a mais**. Atribuído ao `assignee`/inbox da conversa. Campos no retorno: `tempoRespostaMedianaSeg`
+> + `amostraTempoResposta` (nº de turnos). **Complementa** a 1ª resposta: first_response =
+> velocidade de PEGAR o lead; reply_time = ritmo AO LONGO da conversa. Ex. jul/2026: Vitória 1ª
+> resposta 7,4h (lenta pra pegar, madrugada) mas tempo de resposta 14min (ritmo rápido). Mesma
+> pendência de off-hours (`value_in_business_hours`=0 até ligar horário comercial).
+>
+> ### Escopo + truncamento (v7, 2026-07-12)
+> **Só caixas com unidade** (nome mapeia p/ CG/Recreio/Barra) entram na análise. As caixas órfãs —
+> **Instagram (209, bot)** e **Sol-Atendimento (198, adm)** — ficam FORA de contagem, medianas e
+> breakdown. Motivo: antes o `geral` (base das medianas do headline) somava as órfãs mas as
+> contagens não → dois universos diferentes no "Consolidado". Agora `geral` = soma das unidades por
+> construção. (Em jul/2026 o efeito era nulo: IG=40 e Sol=12 conversas, ambas com **0 resposta
+> humana**, então nunca entravam nas medianas — mas fica blindado p/ quando isso mudar.) Verificado
+> ao vivo p/ decidir o corte. A edge passou a devolver **`truncado:{conversas,eventos}`** (bateu em
+> `MAX_PAGINAS`=1.500 / `MAX_EVENTOS`=600) e a sub-aba mostra banner de amostra parcial.
+>
 > ### Métricas fora por ora
-> **Tempo médio de resposta** (`reply_time`) — o Chatwoot registra 1 evento por turno
-> (lead→resposta); média/mediana desses = tempo médio de resposta, por agente. Existe e é factível,
-> mas o Hugo pediu p/ **não implementar por enquanto** (2026-07-12). **Resolução** — objeto de
-> conversa não expõe `resolved_at`; fora. Sub-aba mostra só Volume + 1ª resposta (mediana).
+> **Resolução** — objeto de conversa não expõe `resolved_at`; fora. Sub-aba mostra Volume + 1ª
+> resposta (mediana) + tempo de resposta (mediana).
 
 ---
 

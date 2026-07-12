@@ -22,6 +22,7 @@ interface ChatwootAtendimentoInsights {
   geral: ResumoAtendimento | null;
   since: number | null;
   until: number | null;
+  truncado: { conversas: boolean; eventos: boolean } | null;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -42,6 +43,7 @@ export function useChatwootAtendimentoInsights({
   const [geral, setGeral] = useState<ResumoAtendimento | null>(null);
   const [since, setSince] = useState<number | null>(null);
   const [until, setUntil] = useState<number | null>(null);
+  const [truncado, setTruncado] = useState<{ conversas: boolean; eventos: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,6 +70,7 @@ export function useChatwootAtendimentoInsights({
       setGeral(resposta.geral ?? null);
       setSince(resposta.since ?? null);
       setUntil(resposta.until ?? null);
+      setTruncado(resposta.truncado ?? null);
     } catch (e) {
       if (requisicao !== requisicaoAtivaRef.current) return;
       console.error('Erro ao buscar insights de atendimento (Chatwoot):', e);
@@ -76,6 +79,7 @@ export function useChatwootAtendimentoInsights({
       setCaixas([]);
       setUnidades([]);
       setGeral(null);
+      setTruncado(null);
     } finally {
       if (requisicao === requisicaoAtivaRef.current) setLoading(false);
     }
@@ -86,5 +90,5 @@ export function useChatwootAtendimentoInsights({
     return () => { requisicaoAtivaRef.current++; };
   }, [fetchInsights]);
 
-  return { agentes, caixas, unidades, geral, since, until, loading, error, refetch: fetchInsights };
+  return { agentes, caixas, unidades, geral, since, until, truncado, loading, error, refetch: fetchInsights };
 }
