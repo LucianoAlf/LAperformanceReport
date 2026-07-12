@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { assinarMidiasDasMensagens, assinarUrlCrmMidia } from '@/lib/crmMedia';
 import type { MensagemCRM } from '../types';
 
 const MENSAGENS_POR_PAGINA = 50;
@@ -35,7 +36,9 @@ export function useMensagens({ conversaId, leadId }: UseMensagensParams) {
 
       if (error) throw error;
 
-      const msgs = (data || []).reverse() as MensagemCRM[];
+      const msgs = await assinarMidiasDasMensagens(
+        (data || []).reverse() as MensagemCRM[],
+      );
 
       if (offset === 0) {
         setMensagens(msgs);
@@ -82,8 +85,10 @@ export function useMensagens({ conversaId, leadId }: UseMensagensParams) {
           table: 'crm_mensagens',
           filter: `conversa_id=eq.${conversaId}`,
         },
-        (payload) => {
-          const novaMensagem = payload.new as MensagemCRM;
+        async (payload) => {
+          const [novaMensagem] = await assinarMidiasDasMensagens([
+            payload.new as MensagemCRM,
+          ]);
           setMensagens(prev => {
             // Evitar duplicatas por ID
             if (prev.some(m => m.id === novaMensagem.id)) return prev;
@@ -119,8 +124,10 @@ export function useMensagens({ conversaId, leadId }: UseMensagensParams) {
           table: 'crm_mensagens',
           filter: `conversa_id=eq.${conversaId}`,
         },
-        (payload) => {
-          const msgAtualizada = payload.new as MensagemCRM;
+        async (payload) => {
+          const [msgAtualizada] = await assinarMidiasDasMensagens([
+            payload.new as MensagemCRM,
+          ]);
           setMensagens(prev =>
             prev.map(m => m.id === msgAtualizada.id ? msgAtualizada : m)
           );
@@ -230,12 +237,8 @@ export function useMensagens({ conversaId, leadId }: UseMensagensParams) {
 
       if (uploadError) throw new Error(`Erro no upload: ${uploadError.message}`);
 
-      // 2. Gerar URL pública para a UAZAPI enviar
-      const { data: urlData } = supabase.storage
-        .from('crm-midia')
-        .getPublicUrl(uploadData.path);
-
-      const midiaUrl = urlData.publicUrl;
+      // 2. Gerar URL temporaria para a UAZAPI sem expor o bucket.
+      const midiaUrl = await assinarUrlCrmMidia(uploadData.path);
 
       // 3. Mensagem otimista
       const previewConteudo = caption || (tipo === 'imagem' ? '📷 Imagem' : tipo === 'audio' ? '🎵 Áudio' : tipo === 'video' ? '🎬 Vídeo' : `📄 ${arquivo.name}`);

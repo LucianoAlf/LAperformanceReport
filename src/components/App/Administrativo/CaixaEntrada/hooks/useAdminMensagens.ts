@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, invokeWithRetry } from '@/lib/supabase';
+import { assinarMidiasDasMensagens, assinarUrlCrmMidia } from '@/lib/crmMedia';
 import { toast } from 'sonner';
 import type { AdminMensagem } from '../types';
 
@@ -47,7 +48,9 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
 
       if (error) throw error;
 
-      const msgs = (data || []).reverse() as AdminMensagem[];
+      const msgs = await assinarMidiasDasMensagens(
+        (data || []).reverse() as AdminMensagem[],
+      );
 
       if (offset === 0) {
         setMensagens(msgs);
@@ -90,8 +93,10 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
           table: 'admin_mensagens',
           filter: `conversa_id=eq.${conversaId}`,
         },
-        (payload) => {
-          const novaMensagem = payload.new as AdminMensagem;
+        async (payload) => {
+          const [novaMensagem] = await assinarMidiasDasMensagens([
+            payload.new as AdminMensagem,
+          ]);
           setMensagens(prev => {
             if (prev.some(m => m.id === novaMensagem.id)) return prev;
             if (novaMensagem.whatsapp_message_id && prev.some(m => m.whatsapp_message_id === novaMensagem.whatsapp_message_id)) return prev;
@@ -122,8 +127,10 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
           table: 'admin_mensagens',
           filter: `conversa_id=eq.${conversaId}`,
         },
-        (payload) => {
-          const msgAtualizada = payload.new as AdminMensagem;
+        async (payload) => {
+          const [msgAtualizada] = await assinarMidiasDasMensagens([
+            payload.new as AdminMensagem,
+          ]);
           setMensagens(prev =>
             prev.map(m => m.id === msgAtualizada.id ? msgAtualizada : m)
           );
@@ -220,11 +227,7 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
 
       if (uploadError) throw new Error(`Erro no upload: ${uploadError.message}`);
 
-      const { data: urlData } = supabase.storage
-        .from('crm-midia')
-        .getPublicUrl(uploadData.path);
-
-      const midiaUrl = urlData.publicUrl;
+      const midiaUrl = await assinarUrlCrmMidia(uploadData.path);
 
       const msgOtimista: AdminMensagem = {
         id: gerarUUID(),

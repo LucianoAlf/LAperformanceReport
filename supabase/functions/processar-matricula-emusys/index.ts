@@ -265,7 +265,7 @@ function calcularIdade(dataNascimento: string | null): number | null {
 function calcularClassificacao(dataNascimento: string | null): string | null {
   const idade = calcularIdade(dataNascimento);
   if (idade === null) return null;
-  return idade <= 12 ? 'LAMK' : 'EMLA';
+  return idade < 12 ? 'LAMK' : 'EMLA';
 }
 
 function parseDateOnly(value: string | null | undefined): Date | null {
