@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Phone, Calendar, UserPlus, Percent, DollarSign, TrendingUp, Archive, XCircle, Music, Clock, Users, Baby, GraduationCap, AlertTriangle, Info, Lock, Unlock, Headphones, MessageSquare, Timer, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Phone, Calendar, UserPlus, Percent, DollarSign, TrendingUp, Archive, XCircle, Music, Clock, Users, Baby, GraduationCap, AlertTriangle, Info, Lock, Unlock, Headphones, MessageSquare, Timer, CheckCircle2, Building2, Inbox } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { FunnelChart } from '@/components/ui/FunnelChart';
 import { DistributionChart } from '@/components/ui/DistributionChart';
@@ -11,7 +11,13 @@ import { cn } from '@/lib/utils';
 import { useMetasKPI } from '@/hooks/useMetasKPI';
 import { getCompetenciaAbertaAlertCopy, useCompetenciaMensalStatus } from '@/hooks/useCompetenciaMensalStatus';
 import { useChatwootAtendimentoInsights } from '@/hooks/useChatwootAtendimentoInsights';
-import { formatarDuracaoSegundos, mediaMetrica } from '@/lib/chatwootAtendimento';
+import { useUnidades } from '@/hooks/useSupabase';
+import {
+  formatarDuracaoSegundos,
+  type AgenteAtendimento,
+  type CaixaAtendimento,
+  type UnidadeAtendimento,
+} from '@/lib/chatwootAtendimento';
 import {
   fetchComercialOperacionalResumoV2,
   fetchExperimentaisDiagnosticoComercialV2,
@@ -173,6 +179,40 @@ const classificarEscolaMatricula = (
   return 'NAO_CLASSIFICADO';
 };
 
+// Cor da barra/chip de tempo por faixa de severidade (menor é melhor). Hex alinhados à
+// paleta de charts do app (emerald/cyan/amber/rose).
+function corTempoAtendimento(seg: number | null): string {
+  if (seg === null || !Number.isFinite(seg)) return '#475569'; // slate-600 (sem amostra)
+  if (seg < 3600) return '#10b981';   // < 1h  — ótimo
+  if (seg < 14400) return '#06b6d4';  // 1–4h  — bom
+  if (seg < 86400) return '#f59e0b';  // 4–24h — atenção
+  return '#f43f5e';                    // > 24h — crítico
+}
+
+// Normaliza o nome de unidade (banco: "Campo Grande") para a chave usada nas caixas ("CG").
+function chaveUnidadeAtendimento(nome: string | null | undefined): string | null {
+  if (!nome) return null;
+  const n = nome.toLowerCase();
+  if (n.includes('recreio')) return 'Recreio';
+  if (n.includes('barra')) return 'Barra';
+  if (n.includes('campo grande') || /\bcg\b/.test(n)) return 'CG';
+  return null;
+}
+
+type LinhaAtendimento = AgenteAtendimento | CaixaAtendimento | UnidadeAtendimento;
+type DimensaoAtendimento = 'unidade' | 'caixa' | 'agente';
+
+const DIMS_ATENDIMENTO = [
+  { id: 'unidade' as const, label: 'Unidade', icon: Building2 },
+  { id: 'caixa' as const, label: 'Caixa de entrada', icon: Inbox },
+  { id: 'agente' as const, label: 'Agente', icon: Users },
+];
+const HINTS_ATENDIMENTO: Record<DimensaoAtendimento, string> = {
+  unidade: 'Agrupa as caixas por unidade (média ponderada por volume)',
+  caixa: 'Uma linha por caixa de entrada (dado direto do Chatwoot)',
+  agente: 'Uma linha por agente (dado direto do Chatwoot)',
+};
+
 export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTabId>('leads');
   const [loading, setLoading] = useState(true);
@@ -207,6 +247,60 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
     mesFim: mesFinal,
     enabled: activeSubTab === 'atendimento',
   });
+  const [dimAtendimento, setDimAtendimento] = useState<DimensaoAtendimento>('unidade');
+  const { data: unidadesData } = useUnidades();
+
+  // Deriva a lista da dimensão ativa, aplica o filtro de unidade do topo e calcula KPIs/insight.
+  const dadosAtendimento = useMemo(() => {
+    const chaveUnidade = unidade === 'todos'
+      ? null
+      : chaveUnidadeAtendimento(unidadesData.find((u) => u.id === unidade)?.nome);
+
+    let linhas: LinhaAtendimento[];
+    let colLabel: string;
+    let avisoAgenteSemUnidade = false;
+
+    if (dimAtendimento === 'unidade') {
+      linhas = atendimento.unidades;
+      if (chaveUnidade) linhas = (linhas as UnidadeAtendimento[]).filter((l) => l.nome === chaveUnidade);
+      colLabel = 'Unidade';
+    } else if (dimAtendimento === 'caixa') {
+      linhas = atendimento.caixas;
+      if (chaveUnidade) linhas = (linhas as CaixaAtendimento[]).filter((l) => l.unidade === chaveUnidade);
+      colLabel = 'Caixa';
+    } else {
+      // Agente: o Chatwoot não vincula agente a unidade → mostra todos, com aviso se houver filtro.
+      linhas = atendimento.agentes;
+      colLabel = 'Agente';
+      avisoAgenteSemUnidade = !!chaveUnidade;
+    }
+
+    const totConversas = linhas.reduce((s, l) => s + l.conversas, 0);
+    const totRespondidas = linhas.reduce((s, l) => s + l.amostraPrimeiraResposta, 0);
+
+    // KPI de 1ª resposta = MEDIANA do conjunto (não é média das medianas). Usa a linha da
+    // unidade filtrada, senão o geral (conta inteira). No modo agente, sempre geral.
+    const kMediana = chaveUnidade
+      ? (atendimento.unidades.find((u) => u.nome === chaveUnidade)?.primeiraRespostaMedianaSeg ?? null)
+      : (atendimento.geral?.primeiraRespostaMedianaSeg ?? null);
+
+    // Insight: pior 1ª resposta entre entidades com volume relevante (>=5) e mediana > 8h.
+    const pior = linhas
+      .filter((l) => l.primeiraRespostaMedianaSeg != null && l.conversas >= 5 && (l.primeiraRespostaMedianaSeg as number) >= 28800)
+      .sort((a, b) => (b.primeiraRespostaMedianaSeg as number) - (a.primeiraRespostaMedianaSeg as number))[0] || null;
+
+    // Arrays ordenados + máximos para as barras.
+    const porConversas = [...linhas].sort((a, b) => b.conversas - a.conversas);
+    const porResposta = linhas.filter((l) => l.primeiraRespostaMedianaSeg != null)
+      .sort((a, b) => (b.primeiraRespostaMedianaSeg as number) - (a.primeiraRespostaMedianaSeg as number));
+    const maxConv = Math.max(...porConversas.map((l) => l.conversas), 1);
+    const maxResp = Math.max(...porResposta.map((l) => l.primeiraRespostaMedianaSeg as number), 1);
+
+    return {
+      linhas, colLabel, avisoAgenteSemUnidade, totConversas, totRespondidas, kMediana, pior,
+      porConversas, porResposta, maxConv, maxResp,
+    };
+  }, [dimAtendimento, unidade, unidadesData, atendimento.unidades, atendimento.caixas, atendimento.agentes, atendimento.geral]);
 
   useEffect(() => {
     async function fetchDados() {
@@ -1060,13 +1154,39 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
       {/* Sub-aba: Atendimento (Chatwoot) */}
       {activeSubTab === 'atendimento' && (
         <div className="space-y-6">
-          {/* Aviso: dado agregado da conta inteira, não filtrado por unidade */}
+          {/* Cabeçalho: seletor de dimensão + hint */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="bg-slate-800/50 p-1 rounded-lg inline-flex gap-1 border border-slate-700">
+              {DIMS_ATENDIMENTO.map((d) => {
+                const DimIcon = d.icon;
+                return (
+                  <button
+                    key={d.id}
+                    onClick={() => setDimAtendimento(d.id)}
+                    className={cn(
+                      'px-3.5 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2',
+                      dimAtendimento === d.id
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                    )}
+                  >
+                    <DimIcon size={15} />
+                    {d.label}
+                  </button>
+                );
+              })}
+            </div>
+            <span className="text-xs text-slate-500">{HINTS_ATENDIMENTO[dimAtendimento]}</span>
+          </div>
+
+          {/* Aviso: fonte + metodologia */}
           <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4 flex items-start gap-3">
             <Info className="w-5 h-5 text-cyan-300 flex-shrink-0 mt-0.5" />
             <p className="text-cyan-100 text-sm">
-              <strong>Performance de atendimento (Chatwoot):</strong> tempos médios por agente no período selecionado.
-              Estes números são <strong>agregados de toda a conta Chatwoot</strong> — o relatório do Chatwoot não permite
-              recorte por unidade, então o seletor de unidade no topo da página não afeta esta aba.
+              <strong>Performance de atendimento (Chatwoot):</strong> considera as <strong>conversas criadas no período</strong> selecionado.
+              A 1ª resposta é a <strong>mediana</strong> do tempo do <strong>handoff para o humano até o primeiro retorno</strong> —
+              não conta o tempo em que o bot (Mila) segurou o lead. Tempos em relógio corrido (24/7): esperas na
+              madrugada/fim de semana ainda entram (o desconto por horário comercial será ligado depois).
             </p>
           </div>
 
@@ -1083,83 +1203,165 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             />
           )}
 
-          {!atendimento.loading && !atendimento.error && atendimento.agentes.length === 0 && (
+          {!atendimento.loading && !atendimento.error && dadosAtendimento.linhas.length === 0 && (
             <EstadoVazio
               titulo="Sem atividade de atendimento no período"
-              mensagem="Nenhum agente com conversas atribuídas ou resolvidas no período selecionado."
+              mensagem="Nenhum registro com conversas para esta dimensão no período/unidade selecionados."
             />
           )}
 
-          {!atendimento.loading && !atendimento.error && atendimento.agentes.length > 0 && (
+          {!atendimento.loading && !atendimento.error && dadosAtendimento.linhas.length > 0 && (
             <>
-              {/* KPIs gerais (agregados dos agentes com atividade) */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {dadosAtendimento.avisoAgenteSemUnidade && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex items-center gap-3">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                  <p className="text-amber-200 text-xs">
+                    O Chatwoot não vincula agente a unidade — no modo <strong>Agente</strong> os números são de toda a conta,
+                    independente da unidade selecionada no topo. Use <strong>Caixa</strong> ou <strong>Unidade</strong> para recorte por unidade.
+                  </p>
+                </div>
+              )}
+
+              {/* KPIs da dimensão/unidade ativa */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <KPICard
                   icon={MessageSquare}
-                  label="Conversas Atribuídas"
-                  value={atendimento.agentes.reduce((soma, a) => soma + a.conversas, 0)}
+                  label="Conversas no período"
+                  value={dadosAtendimento.totConversas}
+                  subvalue="abertas no mês selecionado"
+                  format="number"
+                  variant="violet"
+                />
+                <KPICard
+                  icon={CheckCircle2}
+                  label="Já respondidas"
+                  value={dadosAtendimento.totRespondidas}
+                  subvalue={`${dadosAtendimento.totConversas > 0 ? Math.round((dadosAtendimento.totRespondidas / dadosAtendimento.totConversas) * 100) : 0}% do total`}
                   format="number"
                   variant="cyan"
                 />
                 <KPICard
                   icon={Timer}
-                  label="Tempo Médio de 1ª Resposta"
-                  value={formatarDuracaoSegundos(mediaMetrica(atendimento.agentes, 'avgFirstResponseTime'))}
-                  variant="violet"
-                />
-                <KPICard
-                  icon={Clock}
-                  label="Tempo Médio de Resposta"
-                  value={formatarDuracaoSegundos(mediaMetrica(atendimento.agentes, 'avgReplyTime'))}
+                  label="1ª Resposta (mediana)"
+                  value={formatarDuracaoSegundos(dadosAtendimento.kMediana)}
+                  subvalue="tempo típico até o 1º retorno"
                   variant="amber"
-                />
-                <KPICard
-                  icon={CheckCircle2}
-                  label="Tempo Médio de Resolução"
-                  value={formatarDuracaoSegundos(mediaMetrica(atendimento.agentes, 'avgResolutionTime'))}
-                  variant="emerald"
                 />
               </div>
 
-              {/* Tabela por agente */}
+              {/* Insight automático (pior 1ª resposta com volume relevante) */}
+              {dadosAtendimento.pior && (
+                <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3.5 flex items-center gap-3">
+                  <AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0" />
+                  <p className="text-rose-100 text-sm">
+                    <strong className="text-white">{dadosAtendimento.pior.nome}</strong> está com a 1ª resposta (mediana) em{' '}
+                    <strong className="text-white">{formatarDuracaoSegundos(dadosAtendimento.pior.primeiraRespostaMedianaSeg)}</strong>{' '}
+                    — o maior tempo entre {dadosAtendimento.colLabel.toLowerCase()}s com volume relevante ({dadosAtendimento.pior.conversas} conversas).
+                  </p>
+                </div>
+              )}
+
+              {/* Volume de conversas */}
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5">
+                <div className="flex items-baseline justify-between mb-4">
+                  <h3 className="text-white font-semibold text-sm">Volume de conversas</h3>
+                  <span className="text-xs text-slate-500">quem concentra o atendimento</span>
+                </div>
+                <div className="space-y-2.5">
+                  {dadosAtendimento.porConversas.map((l) => (
+                    <div key={l.id} className="grid grid-cols-[110px_1fr_auto] sm:grid-cols-[150px_1fr_auto] items-center gap-3">
+                      <div className="text-xs text-slate-300 truncate" title={l.nome}>
+                        {l.nome}
+                        {'unidade' in l && l.unidade && <span className="text-slate-500 text-[10px] ml-1.5">{l.unidade}</span>}
+                      </div>
+                      <div className="h-5 bg-slate-700/40 rounded-md overflow-hidden">
+                        <div className="h-full rounded-md transition-all duration-500" style={{ width: `${Math.max((l.conversas / dadosAtendimento.maxConv) * 100, 2)}%`, background: '#8b5cf6' }} />
+                      </div>
+                      <div className="text-xs font-semibold text-white tabular-nums whitespace-nowrap">
+                        {l.conversas.toLocaleString('pt-BR')}
+                        <span className="text-slate-500 font-normal text-[10px] ml-1.5">{l.amostraPrimeiraResposta} resp.</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tempo até a 1ª resposta (mediana) */}
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5">
+                <div className="flex items-baseline justify-between mb-4">
+                  <h3 className="text-white font-semibold text-sm">Tempo até a 1ª resposta (mediana)</h3>
+                  <span className="text-xs text-slate-500">menor é melhor</span>
+                </div>
+                <div className="space-y-2.5">
+                  {dadosAtendimento.porResposta.map((l) => {
+                    const v = l.primeiraRespostaMedianaSeg as number;
+                    return (
+                      <div key={l.id} className="grid grid-cols-[110px_1fr_auto] sm:grid-cols-[150px_1fr_auto] items-center gap-3">
+                        <div className="text-xs text-slate-300 truncate" title={l.nome}>
+                          {l.nome}
+                          {'unidade' in l && l.unidade && <span className="text-slate-500 text-[10px] ml-1.5">{l.unidade}</span>}
+                        </div>
+                        <div className="h-5 bg-slate-700/40 rounded-md overflow-hidden">
+                          <div className="h-full rounded-md transition-all duration-500" style={{ width: `${Math.max((v / dadosAtendimento.maxResp) * 100, 2)}%`, background: corTempoAtendimento(v) }} />
+                        </div>
+                        <div className="text-xs font-semibold text-white tabular-nums whitespace-nowrap">{formatarDuracaoSegundos(v)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap gap-3 mt-4 pt-3 border-t border-slate-700/50 text-[11px] text-slate-400">
+                  <span className="inline-flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#10b981' }} /> &lt; 1h</span>
+                  <span className="inline-flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#06b6d4' }} /> 1–4h</span>
+                  <span className="inline-flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#f59e0b' }} /> 4–24h</span>
+                  <span className="inline-flex items-center gap-1.5"><i className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#f43f5e' }} /> &gt; 24h</span>
+                </div>
+              </div>
+
+              {/* Tabela detalhada */}
               <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
                 <div className="px-5 py-4 border-b border-slate-700/50 flex items-center gap-2">
                   <Headphones className="w-4 h-4 text-cyan-400" />
-                  <h3 className="text-white font-semibold">Performance por Agente</h3>
+                  <h3 className="text-white font-semibold">Detalhe por {dadosAtendimento.colLabel.toLowerCase()}</h3>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-slate-400 text-xs uppercase tracking-wide border-b border-slate-700/50">
-                        <th className="text-left font-medium px-5 py-3">Agente</th>
+                        <th className="text-left font-medium px-5 py-3">{dadosAtendimento.colLabel}</th>
                         <th className="text-right font-medium px-5 py-3">Conversas</th>
+                        <th className="text-right font-medium px-5 py-3">Respondidas</th>
                         <th className="text-right font-medium px-5 py-3">
                           <span className="inline-flex items-center gap-1 justify-end">
-                            Resolvidas
+                            1ª Resposta (mediana)
                             <span className="relative group">
                               <Info size={12} className="text-slate-500 hover:text-slate-300 cursor-help" />
                               <span className="absolute bottom-full right-0 mb-2 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-[11px] text-slate-200 normal-case tracking-normal font-normal whitespace-normal w-[240px] text-left opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-xl pointer-events-none">
-                                Conversas resolvidas no período — podem ter sido criadas antes dele. Não é subconjunto de "Conversas".
+                                Mediana do tempo entre abertura e 1º retorno, só das conversas criadas no período. Resiste a conversas paradas.
                               </span>
                             </span>
                           </span>
                         </th>
-                        <th className="text-right font-medium px-5 py-3">1ª Resposta</th>
-                        <th className="text-right font-medium px-5 py-3">Tempo de Resposta</th>
-                        <th className="text-right font-medium px-5 py-3">Resolução</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {atendimento.agentes.map((a) => (
-                        <tr key={a.id} className="border-b border-slate-700/30 last:border-0 hover:bg-slate-700/20 transition-colors">
-                          <td className="px-5 py-3 text-white font-medium">{a.nome}</td>
-                          <td className="px-5 py-3 text-right text-slate-200 tabular-nums">{a.conversas.toLocaleString('pt-BR')}</td>
-                          <td className="px-5 py-3 text-right text-slate-200 tabular-nums">{a.resolvidas.toLocaleString('pt-BR')}</td>
-                          <td className="px-5 py-3 text-right text-slate-300 tabular-nums">{formatarDuracaoSegundos(a.avgFirstResponseTime)}</td>
-                          <td className="px-5 py-3 text-right text-slate-300 tabular-nums">{formatarDuracaoSegundos(a.avgReplyTime)}</td>
-                          <td className="px-5 py-3 text-right text-slate-300 tabular-nums">{formatarDuracaoSegundos(a.avgResolutionTime)}</td>
-                        </tr>
-                      ))}
+                      {dadosAtendimento.porConversas.map((l) => {
+                        const cor = corTempoAtendimento(l.primeiraRespostaMedianaSeg);
+                        return (
+                          <tr key={l.id} className="border-b border-slate-700/30 last:border-0 hover:bg-slate-700/20 transition-colors">
+                            <td className="px-5 py-3 text-white font-medium">
+                              {l.nome}
+                              {'unidade' in l && l.unidade && <span className="text-slate-500 text-xs ml-2">{l.unidade}</span>}
+                            </td>
+                            <td className="px-5 py-3 text-right text-slate-200 tabular-nums">{l.conversas.toLocaleString('pt-BR')}</td>
+                            <td className="px-5 py-3 text-right text-slate-200 tabular-nums">{l.amostraPrimeiraResposta.toLocaleString('pt-BR')}</td>
+                            <td className="px-5 py-3 text-right tabular-nums">
+                              <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: `${cor}1e`, color: cor }}>
+                                {formatarDuracaoSegundos(l.primeiraRespostaMedianaSeg)}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type {
-  AgentePerformanceChatwoot,
+  AgenteAtendimento,
+  CaixaAtendimento,
+  UnidadeAtendimento,
+  ResumoAtendimento,
   ChatwootAtendimentoResposta,
 } from '@/lib/chatwootAtendimento';
 
@@ -13,7 +16,10 @@ interface UseChatwootAtendimentoInsightsParams {
 }
 
 interface ChatwootAtendimentoInsights {
-  agentes: AgentePerformanceChatwoot[];
+  agentes: AgenteAtendimento[];
+  caixas: CaixaAtendimento[];
+  unidades: UnidadeAtendimento[];
+  geral: ResumoAtendimento | null;
   since: number | null;
   until: number | null;
   loading: boolean;
@@ -21,7 +27,7 @@ interface ChatwootAtendimentoInsights {
   refetch: () => Promise<void>;
 }
 
-// Busca a performance de atendimento por agente (Chatwoot) via edge function.
+// Busca a performance de atendimento (Chatwoot) via edge function.
 // Fetch isolado e lazy: só dispara quando `enabled` (sub-aba ativa), pra não travar o
 // carregamento das outras sub-abas do Comercial com uma fonte externa mais lenta.
 export function useChatwootAtendimentoInsights({
@@ -30,7 +36,10 @@ export function useChatwootAtendimentoInsights({
   mesFim,
   enabled = true,
 }: UseChatwootAtendimentoInsightsParams): ChatwootAtendimentoInsights {
-  const [agentes, setAgentes] = useState<AgentePerformanceChatwoot[]>([]);
+  const [agentes, setAgentes] = useState<AgenteAtendimento[]>([]);
+  const [caixas, setCaixas] = useState<CaixaAtendimento[]>([]);
+  const [unidades, setUnidades] = useState<UnidadeAtendimento[]>([]);
+  const [geral, setGeral] = useState<ResumoAtendimento | null>(null);
   const [since, setSince] = useState<number | null>(null);
   const [until, setUntil] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,6 +63,9 @@ export function useChatwootAtendimentoInsights({
       const resposta = data as ChatwootAtendimentoResposta;
       if (!resposta?.ok) throw new Error(resposta?.error || 'Erro ao consultar o Chatwoot');
       setAgentes(resposta.agentes ?? []);
+      setCaixas(resposta.caixas ?? []);
+      setUnidades(resposta.unidades ?? []);
+      setGeral(resposta.geral ?? null);
       setSince(resposta.since ?? null);
       setUntil(resposta.until ?? null);
     } catch (e) {
@@ -61,6 +73,9 @@ export function useChatwootAtendimentoInsights({
       console.error('Erro ao buscar insights de atendimento (Chatwoot):', e);
       setError(e instanceof Error ? e.message : 'Erro ao consultar o Chatwoot');
       setAgentes([]);
+      setCaixas([]);
+      setUnidades([]);
+      setGeral(null);
     } finally {
       if (requisicao === requisicaoAtivaRef.current) setLoading(false);
     }
@@ -71,5 +86,5 @@ export function useChatwootAtendimentoInsights({
     return () => { requisicaoAtivaRef.current++; };
   }, [fetchInsights]);
 
-  return { agentes, since, until, loading, error, refetch: fetchInsights };
+  return { agentes, caixas, unidades, geral, since, until, loading, error, refetch: fetchInsights };
 }

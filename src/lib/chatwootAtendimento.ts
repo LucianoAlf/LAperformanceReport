@@ -1,26 +1,52 @@
-// Tipos e formatação da performance de atendimento por agente (Chatwoot).
+// Tipos e formatação da performance de atendimento (Chatwoot).
 // Consumido pela sub-aba "Atendimento" em Analytics → Comercial.
+//
+// A edge conta as conversas CRIADAS no período e agrega por agente/caixa/unidade, com a 1ª
+// resposta medida por MEDIANA do evento `first_response` do Chatwoot (handoff bot→humano até o
+// 1º retorno — não conta a janela do bot SDR). Ver edge chatwoot-atendimento-insights.
 
-export interface AgentePerformanceChatwoot {
-  id: number;
+export interface EntidadeAtendimento {
+  id: number | string;
   nome: string;
   conversas: number;
   resolvidas: number;
-  avgFirstResponseTime: number | null;
-  avgReplyTime: number | null;
-  avgResolutionTime: number | null;
+  primeiraRespostaMedianaSeg: number | null; // mediana do first_response: handoff → 1ª resposta humana (seg)
+  amostraPrimeiraResposta: number;            // nº de conversas com 1ª resposta (base da mediana)
+}
+
+export interface CaixaAtendimento extends EntidadeAtendimento {
+  id: number;
+  unidade: string | null; // 'CG' | 'Recreio' | 'Barra' | null (global)
+}
+
+export interface AgenteAtendimento extends EntidadeAtendimento {
+  id: number;
+}
+
+export interface UnidadeAtendimento extends EntidadeAtendimento {
+  id: string;
+}
+
+export interface ResumoAtendimento {
+  conversas: number;
+  resolvidas: number;
+  primeiraRespostaMedianaSeg: number | null;
+  amostraPrimeiraResposta: number;
 }
 
 export interface ChatwootAtendimentoResposta {
   ok: boolean;
   since: number;
   until: number;
-  agentes: AgentePerformanceChatwoot[];
+  geral: ResumoAtendimento;
+  agentes: AgenteAtendimento[];
+  caixas: CaixaAtendimento[];
+  unidades: UnidadeAtendimento[];
   error?: string;
 }
 
 // Converte segundos numa string curta e legível (ex: "2d 4h", "18h 21min", "45min", "12s").
-// null/indefinido → "N/A" (agente sem amostra para aquela métrica).
+// null/indefinido → "N/A" (entidade sem amostra para a métrica).
 export function formatarDuracaoSegundos(segundos: number | null | undefined): string {
   if (segundos === null || segundos === undefined || !Number.isFinite(segundos)) return 'N/A';
   const total = Math.round(segundos);
@@ -35,14 +61,4 @@ export function formatarDuracaoSegundos(segundos: number | null | undefined): st
   if (horas > 0) return minutos > 0 ? `${horas}h ${minutos}min` : `${horas}h`;
   if (minutos > 0) return `${minutos}min`;
   return `${segs}s`;
-}
-
-// Média simples (ignora null) de uma métrica de tempo ao longo dos agentes.
-export function mediaMetrica(
-  agentes: AgentePerformanceChatwoot[],
-  campo: 'avgFirstResponseTime' | 'avgReplyTime' | 'avgResolutionTime',
-): number | null {
-  const validos = agentes.map((a) => a[campo]).filter((v): v is number => v !== null && Number.isFinite(v));
-  if (validos.length === 0) return null;
-  return validos.reduce((soma, v) => soma + v, 0) / validos.length;
 }

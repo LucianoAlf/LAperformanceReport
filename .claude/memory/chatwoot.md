@@ -19,6 +19,33 @@
 
 ---
 
+## Business Hours / Horário útil (config 2026-07-11)
+
+Ativado `working_hours_enabled` + `timezone: America/Sao_Paulo` nos inboxes com unidade clara,
+com os horários reais de `unidades.horario_funcionamento` (LAReport). **Não dispara mensagem**:
+`out_of_office_message` está `null` e `greeting_enabled=false` em TODOS os inboxes (verificado) —
+ativar horário só afeta cálculo de SLA/relatório, nada é enviado ao cliente.
+
+| Inbox (id) | Unidade | Seg–Sex | Sáb | wh_on |
+|---|---|---|---|---|
+| 50 ADM Recreio, 168 Secretaria Recreio, 148 Mila_Recreio | Recreio | 08–21 | 08–16 | ✅ |
+| 179 Secretaria Barra, 147 Mila_Barra | Barra | 09–20 | 08–16 | ✅ |
+| 180 Secretaria CG, 155 Mila_CG | Campo Grande | 10–21 | 08–15 | ✅ |
+| 198 Sol-Atendimento, 209 instagram-direct | (global, sem unidade) | — | — | ❌ desativado (decisão Hugo) |
+
+> ⚠️ **Business hours do Chatwoot é FORWARD-ONLY.** O valor "em horário útil" é gravado no
+> `reporting_events` no momento do evento, com base nas working hours daquele instante — **não
+> recalcula retroativamente**. Dados de jun/início-jul (registrados sem horário) retornam `0` com
+> `business_hours=true`. Por isso a edge `chatwoot-atendimento-insights` roda em **tempo corrido
+> (24/7) por ora**; ligar `business_hours=true` (só adicionar `&business_hours=true` no GET do
+> `summary_reports/agent` — é parâmetro de LEITURA, não envia nada) planejado para **~fim de julho/2026**,
+> quando houver massa de dados novos coletados com horário ativo.
+
+> **Tabela de inboxes abaixo está DESATUALIZADA** (IDs 13/14/15… não existem mais). IDs reais
+> atuais: ver tabela de business hours acima + `Mila_*`/`LA_Secretaria_*`/`Sol-Atendimento`.
+
+---
+
 ## Caixas de Entrada (Inboxes)
 
 | ID  | Nome                            | Uso                          |
@@ -209,7 +236,52 @@ GET /api/v2/accounts/5/reports/summary?since=<unix>&until=<unix>&type=account
 # retorna: conversations_count, incoming_messages_count, outgoing_messages_count,
 #          avg_first_response_time (seg), avg_resolution_time (seg),
 #          resolutions_count, reply_time (seg)
+GET /api/v2/accounts/5/summary_reports/agent?since=&until=   # por agente (JSON limpo)
+GET /api/v2/accounts/5/summary_reports/inbox?since=&until=   # por caixa (mesma estrutura)
+#   → id, conversations_count, resolved_conversations_count,
+#     avg_resolution_time, avg_first_response_time, avg_reply_time (todos seg)
 ```
+
+> ⚠️ **`summary_reports/*` INFLA os tempos — não usar para métrica de atendimento.** O `avg_*`
+> é a média dos EVENTOS ocorridos no período: uma conversa criada há meses e respondida agora
+> entra com 1ª resposta de centenas de horas. Comprovado (jul/2026): Vitória deu
+> `avg_first_response_time` ~5 dias. `summary_reports/agent` também **ignora `inbox_id`**.
+>
+> ### 🏗️ Arquitetura SDR bot → humano (essencial pra entender a métrica)
+> Os leads entram numa caixa (ex.: `Mila_CG` id 155) e o **bot SDR IA (Mila)** — um `agent_bot`
+> do Chatwoot (Milla CG/Recreio/Barra etc.) — atende PRIMEIRO. Só quando escala é que um humano
+> (consultor/SDR) assume. Consequências:
+> - **`first_reply_created_at` só marca a 1ª msg de agente HUMANO** (`sender.type: user`); msgs do
+>   bot e do "WhatsApp Device" (agent_bot) NÃO contam. Conversa 100% atendida pelo bot →
+>   `first_reply_created_at = 0` (fica fora de qualquer mediana). ~80% das conversas ficam em 0.
+> - **`created_at → first_reply` NÃO é o tempo do humano** — empacota junto a janela em que a Mila
+>   segurou o lead + a madrugada. Ex. real (conv 17876): criada 00:18 BRT (Mila atende), handoff
+>   ~10:55, Vitória responde 14:40 → `created→reply` = **14h22**, mas a espera real do humano foi
+>   **3h45**.
+>
+> ### ✅ Métrica canônica (edge `chatwoot-atendimento-insights` v5+)
+> Varre `conversations/filter` (conversas CRIADAS no período) e, para cada uma com resposta humana
+> (`first_reply>0`), lê o **evento `first_response`** de
+> `GET /conversations/{id}/reporting_events`. Esse evento mede **handoff → 1ª resposta humana**
+> (`value` em seg), já descontando a janela do bot. Agrega por **MEDIANA**. Custo: **1 chamada
+> reporting_events por conversa com resposta** (~20% do total; concorrência 12; ~20-25s/mês) → fetch
+> lazy. Eventos com **`value` 0** (conversa iniciada pelo agente, sem espera do lead) ficam fora da
+> mediana. **Efeito medido jul/2026:** Kailane 22h52→**6min** (janela do bot era o vilão); Vitória
+> subiu p/ **~6,9h** (o que sobra são esperas reais, muitas na madrugada). Atribuição:
+> agente=`assignee`, caixa=`inbox_id`, unidade=nome da caixa.
+>
+> ### ⏰ Off-hours ainda pesa — próximo passo
+> Os tempos são 24/7 (relógio corrido). O evento traz `value_in_business_hours` (hoje **0** porque
+> o horário comercial não está configurado no Chatwoot). **Próximo passo:** ligar business hours em
+> todas as caixas (só métrica, `out_of_office_message: null` garante que nada dispara) e trocar
+> `value` → `value_in_business_hours` na edge — aí Vitória/CG caem pro tempo real de resposta em
+> horário útil. É forward-only (não recalcula histórico).
+>
+> ### Métricas fora por ora
+> **Tempo médio de resposta** (`reply_time`) — o Chatwoot registra 1 evento por turno
+> (lead→resposta); média/mediana desses = tempo médio de resposta, por agente. Existe e é factível,
+> mas o Hugo pediu p/ **não implementar por enquanto** (2026-07-12). **Resolução** — objeto de
+> conversa não expõe `resolved_at`; fora. Sub-aba mostra só Volume + 1ª resposta (mediana).
 
 ---
 
