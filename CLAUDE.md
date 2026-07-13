@@ -116,6 +116,13 @@ VITE_GEMINI_API_KEY=...  # opcional
 - **Edge function v12 + RPC** centralizam a regra "saiu de tudo": tempo só conta quando aluno encerra TODAS as matrículas. Trigger `fn_alunos_reentrada_historico` simplificada (só zera `data_saida` na reentrada — INSERT é da edge).
 - Detalhes: `regras-negocio.md` seção "Histórico LTV / Tempo de Permanência".
 
+## Risco de Evasão (Churn Preditivo — Sucesso do Aluno)
+
+- **Coluna "Risco de Evasão IA"** em `TabSucessoAluno.tsx` (Sucesso do Aluno) — modelo Random Forest treinado offline em notebook (`estudo/pesquisas/churn-alunos/notebooks/01_churn_alunos.ipynb`), exportado pra JS via `m2cgen` (`supabase/functions/calcular-risco-evasao/model.ts`). **EM PRODUÇÃO desde 2026-07-11.**
+- **Feature engineering em SQL**: RPC `features_churn_alunos_ativos()` (`SECURITY DEFINER`, só `service_role`) — 12 features numéricas (presença 30/60/90d, tempo de casa, dias desde renovação/última aula, % desconto, dia de vencimento…) + 10 categóricas (status pagamento, canal origem, forma pagamento, 2º curso, aluno retorno, anamnese preenchida…) por aluno ativo não arquivado. Fórmulas espelham exatamente o notebook de treino.
+- **Edge `calcular-risco-evasao`**: cron diário → busca features → pontua → grava em `risco_evasao` (histórico por dia, upsert por `aluno_id+calculado_em+modelo_versao`). `vw_risco_evasao_atual` é a **fonte canônica de leitura** (não usar `risco_evasao` bruta — ver `.agents/skills/operar-dominio-aluno-la/SKILL.md`).
+- ⚠️ Ainda não separa evasão voluntária de involuntária (inadimplência), sem valor esperado/custo-benefício nas ações de retenção, sem survival analysis pra LTV. A feature engineering é específica pro modelo — não é uma "assinatura do aluno" reutilizável por outros módulos (upsell, RFM etc.). Detalhes em `.claude/memory/dominio-alunos.md`.
+
 ## Regras Importantes
 
 - **Timezone:** BRT (UTC-3) — sempre usar offset ao trabalhar com datas do negócio

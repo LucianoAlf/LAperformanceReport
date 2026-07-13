@@ -111,6 +111,18 @@ WHERE lower(unaccent(ep.curso_nome)) != lower(unaccent(c.nome))
 - renovacoes_previstas/realizadas/pendentes, nao_renovacoes
 - ticket_medio, faturamento, churn_rate, ltv_meses, mrr_perdido
 
+## Risco de Evasão (Churn Preditivo) — desde 2026-07-11
+
+- **Modelo**: Random Forest treinado offline em `estudo/pesquisas/churn-alunos/notebooks/01_churn_alunos.ipynb`, exportado pra JS via `m2cgen` → `supabase/functions/calcular-risco-evasao/model.ts` (pesos embutidos, ~35k linhas). Validado contra o notebook Python em `validate_port.py` (0 divergências no port).
+- **Feature engineering (SQL)**: RPC `features_churn_alunos_ativos()` (migration `20260711120000_features_churn_alunos_ativos.sql`, `SECURITY DEFINER`, só `service_role`). Por aluno `status='ativo' AND arquivado_em IS NULL`:
+  - Numéricas (12): `idade_atual`, `tempo_permanencia_meses`, `valor_parcela`, `pct_desconto` (desconto/valor_cheio, 0 se valor_cheio≤0), `numero_renovacoes`, `dias_desde_renovacao` (NULL se nunca renovou), `nunca_renovou` (flag), `taxa_presenca_geral/60d/30d` (0 se sem aula no período), `dias_desde_ultima_aula` (NULL se sem aula), `dia_vencimento`.
+  - Categóricas (10): `classificacao`, `modalidade`, `tipo_aluno`, `status_pagamento`, `tipo_matricula_nome`, `canal_origem_nome`, `forma_pagamento_nome`, `is_segundo_curso`, `is_aluno_retorno`, `anamnese_preenchida` (booleanos viram string `'True'/'False'`, mesmo formato do `str(bool)` do pandas usado no treino).
+  - Presença: só status `'presente'` conta; janelas 60d/30d relativas a `CURRENT_DATE`.
+- **Edge `calcular-risco-evasao`** (`index.ts`): cron diário → pagina `features_churn_alunos_ativos()` em blocos de 1000 (PostgREST corta em 1000/página, sem isso alunos são descartados em silêncio) → `buildVector` (`preprocessing.ts`) → `score()` (probabilidade churn = `p_churn/(p_ativo+p_churn)`) → `faixaRisco()` (`contract.ts`) → upsert em `risco_evasao` por `(aluno_id, calculado_em, modelo_versao)` — múltiplas versões de modelo coexistem, permite comparação. Aceita body `{dry_run:true}` (calcula e devolve resumo/top10 sem gravar).
+- **"Fatores"** (JSON por linha): não é SHAP — é importância global do modelo (`FEATURE_IMPORTANCE` em `contract.ts`) cruzada com o valor cru do aluno, sinal `ok`/`atencao`/`risco`/`neutro` por limiar simples (ex: presença <50%=risco, dias desde última aula >14=risco, status_pagamento='inadimplente'=risco). Só cobre as 5 features de presença/pagamento, não as 17 restantes.
+- **Fonte canônica de leitura**: `vw_risco_evasao_atual` (não ler `risco_evasao` bruta — ela é histórico bruto por dia). Consumida por `TabSucessoAluno.tsx` (coluna "Risco de Evasão IA").
+- **Gaps conhecidos** (vs. práticas de churn de mercado): não separa voluntário/involuntário (competing risks — evasão por inadimplência e por desmotivação tratadas como um único evento); sem matriz de custo-benefício/valor esperado nas ações de retenção; sem survival analysis (LTV é média, não curva); a feature engineering é acoplada ao modelo (`SECURITY DEFINER` só `service_role`), não é uma assinatura do aluno genérica reutilizável por upsell/RFM.
+
 ## Hooks Relacionados
 - `useEvasoesData` — agregacao por mes, motivo, professor, unidade
 - `useKPIsRetencao` — KPIs consolidados de retencao
