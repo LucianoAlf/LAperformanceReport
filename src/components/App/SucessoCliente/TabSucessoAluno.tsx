@@ -177,30 +177,47 @@ export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
     carregarDados();
   }, [unidadeAtual]);
 
+  // PostgREST corta em 1000 linhas por padrao. Sem paginar, alunos com id/ordenacao
+  // além do corte somem em silêncio (achado real: Beatriz Gonçalves Pereira, aluno_id
+  // 1811, ficava de fora da lista de risco por estar na posição ~1146).
+  const buscarTudoPaginado = async <T,>(montarQuery: () => any): Promise<T[]> => {
+    const PAGE = 1000;
+    const linhas: T[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await montarQuery().range(from, from + PAGE - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      linhas.push(...(data as T[]));
+      if (data.length < PAGE) break;
+    }
+    return linhas;
+  };
+
   const carregarDados = async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from('vw_aluno_sucesso_lista')
-        .select('*')
-        .order('health_score_numerico', { ascending: true, nullsFirst: false });
-
-      if (unidadeAtual !== 'todos') {
-        query = query.eq('unidade_id', unidadeAtual);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
+      const data = await buscarTudoPaginado<AlunoSucesso>(() => {
+        let query = supabase
+          .from('vw_aluno_sucesso_lista')
+          .select('*')
+          .order('health_score_numerico', { ascending: true, nullsFirst: false });
+        if (unidadeAtual !== 'todos') {
+          query = query.eq('unidade_id', unidadeAtual);
+        }
+        return query;
+      });
 
       // Risco de evasão do modelo (view vw_risco_evasao_atual = último score por aluno).
       // Merge por aluno_id; se a tabela ainda não tiver o aluno, campos ficam null.
-      let riscoQuery = supabase
-        .from('vw_risco_evasao_atual')
-        .select('aluno_id, probabilidade, faixa, fatores');
-      if (unidadeAtual !== 'todos') {
-        riscoQuery = riscoQuery.eq('unidade_id', unidadeAtual);
-      }
-      const { data: riscoData } = await riscoQuery;
+      const riscoData = await buscarTudoPaginado<{ aluno_id: number; probabilidade: number; faixa: string; fatores: unknown }>(() => {
+        let riscoQuery = supabase
+          .from('vw_risco_evasao_atual')
+          .select('aluno_id, probabilidade, faixa, fatores');
+        if (unidadeAtual !== 'todos') {
+          riscoQuery = riscoQuery.eq('unidade_id', unidadeAtual);
+        }
+        return riscoQuery;
+      });
       const riscoMap = new Map((riscoData || []).map(r => [r.aluno_id, r]));
 
       const alunosComRisco = (data || []).map(a => {
