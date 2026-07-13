@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Upload, Users, Phone, FileText, Settings, CheckCircle, ArrowLeft, ArrowRight, X, AlertCircle, Building2, GraduationCap, Search, Loader2 } from 'lucide-react'
+import { Upload, Users, Phone, FileText, Settings, CheckCircle, ArrowLeft, ArrowRight, X, AlertCircle, Building2, GraduationCap, Target, Search, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -44,6 +44,13 @@ const STEPS = [
   { id: 3, label: 'Variáveis', icon: Settings },
   { id: 4, label: 'Revisão', icon: CheckCircle },
 ]
+
+function normTel(tel: string | null | undefined): string | null {
+  if (!tel) return null
+  const digits = tel.replace(/\D/g, '')
+  if (digits.length < 10) return null
+  return digits.length <= 11 ? '55' + digits : digits
+}
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 
@@ -156,7 +163,7 @@ function canAdvance(step: number, state: WizardState): boolean {
 function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K extends keyof WizardState>(k: K, v: WizardState[K]) => void; isAdmin: boolean }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [bulkText, setBulkText] = useState('')
-  const [modo, setModo] = useState<'csv' | 'manual' | 'alunos'>('csv')
+  const [modo, setModo] = useState<'csv' | 'manual' | 'alunos' | 'leads'>('csv')
   const [validacao, setValidacao] = useState<ValidacaoContatos | null>(null)
   const [unidades, setUnidades] = useState<{ id: string; nome: string }[]>([])
 
@@ -170,6 +177,17 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
   const [cursosLista, setCursosLista] = useState<{ id: number; nome: string }[]>([])
   const [enviarPara, setEnviarPara] = useState<'principal' | 'mae' | 'pai' | 'responsavel' | 'proprio'>('principal')
 
+  // Estado para modo leads
+  const [leadsDisponiveis, setLeadsDisponiveis] = useState<any[]>([])
+  const [leadsSelecionados, setLeadsSelecionados] = useState<Set<number>>(new Set())
+  const [carregandoLeads, setCarregandoLeads] = useState(false)
+  const [filtroStatusLead, setFiltroStatusLead] = useState('todos')
+  const [filtroCursoLead, setFiltroCursoLead] = useState('todos')
+  const [filtroOrigemLead, setFiltroOrigemLead] = useState('todos')
+  const [excluirConvertidosLead, setExcluirConvertidosLead] = useState(true)
+  const [buscaLead, setBuscaLead] = useState('')
+  const [canaisOrigemLista, setCanaisOrigemLista] = useState<{ id: number; nome: string }[]>([])
+
   useEffect(() => {
     if (!isAdmin) return
     supabase.from('unidades').select('id, nome').eq('ativo', true).order('nome').then(({ data }) => setUnidades(data ?? []))
@@ -178,6 +196,11 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
   // Carregar cursos
   useEffect(() => {
     supabase.from('cursos').select('id, nome').eq('ativo', true).order('nome').then(({ data }) => setCursosLista(data ?? []))
+  }, [])
+
+  // Carregar canais de origem
+  useEffect(() => {
+    supabase.from('canais_origem').select('id, nome').eq('ativo', true).order('nome').then(({ data }) => setCanaisOrigemLista(data ?? []))
   }, [])
 
   // Carregar alunos quando muda unidade, status ou curso
@@ -201,6 +224,35 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
       setCarregandoAlunos(false)
     })
   }, [modo, state.unidadeId, filtroStatusAluno, filtroCursoAluno])
+
+  // Carregar leads quando muda unidade ou filtros
+  useEffect(() => {
+    if (modo !== 'leads' || !state.unidadeId) return
+    setCarregandoLeads(true)
+    let query = supabase
+      .from('leads')
+      .select('id, nome, telefone, whatsapp, status, converteu, canais_origem(nome), cursos:curso_interesse_id(nome)')
+      .eq('unidade_id', state.unidadeId)
+      .eq('arquivado', false)
+
+    if (filtroStatusLead !== 'todos') {
+      query = query.eq('status', filtroStatusLead)
+    }
+    if (filtroCursoLead !== 'todos') {
+      query = query.eq('curso_interesse_id', Number(filtroCursoLead))
+    }
+    if (filtroOrigemLead !== 'todos') {
+      query = query.eq('canal_origem_id', Number(filtroOrigemLead))
+    }
+    if (excluirConvertidosLead) {
+      query = query.eq('converteu', false)
+    }
+
+    query.order('nome').then(({ data }) => {
+      setLeadsDisponiveis(data ?? [])
+      setCarregandoLeads(false)
+    })
+  }, [modo, state.unidadeId, filtroStatusLead, filtroCursoLead, filtroOrigemLead, excluirConvertidosLead])
 
   async function handleCSV(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -255,13 +307,6 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
     let telInvalido = 0
     let duplicados = 0
 
-    function normTel(tel: string | null | undefined): string | null {
-      if (!tel) return null
-      const digits = tel.replace(/\D/g, '')
-      if (digits.length < 10) return null
-      return digits.length <= 11 ? '55' + digits : digits
-    }
-
     for (const aluno of selecionados) {
       const alunoContatos = (aluno.aluno_contatos as any[]) || []
       let tel: string | null = null
@@ -311,9 +356,69 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
     toast.success(`${contatos.length} alunos importados${detalhes ? ` (${detalhes})` : ''}`)
   }
 
+  function toggleLead(id: number) {
+    setLeadsSelecionados(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function toggleTodosLeads() {
+    const filtrados = leadsFiltrados
+    if (leadsSelecionados.size === filtrados.length) {
+      setLeadsSelecionados(new Set())
+    } else {
+      setLeadsSelecionados(new Set(filtrados.map(l => l.id)))
+    }
+  }
+
+  function confirmarLeads() {
+    const selecionados = leadsDisponiveis.filter(l => leadsSelecionados.has(l.id))
+    const contatos: ContatoImportado[] = []
+    const telefones = new Set<string>()
+    let semTelefone = 0
+    let duplicados = 0
+
+    for (const lead of selecionados) {
+      const tel = normTel(lead.whatsapp) || normTel(lead.telefone)
+      if (!tel) { semTelefone++; continue }
+      if (telefones.has(tel)) { duplicados++; continue }
+      telefones.add(tel)
+      contatos.push({
+        telefone: tel,
+        variaveis: { nome: lead.nome ?? '', curso: (lead.cursos as any)?.nome || '' },
+      })
+    }
+
+    if (contatos.length === 0) {
+      toast.error('Nenhum lead selecionado com telefone válido')
+      return
+    }
+
+    set('contatos', contatos)
+    set('csvHeaders', ['nome', 'curso'])
+    setValidacao({
+      validos: contatos,
+      total: selecionados.length,
+      duplicatas: duplicados,
+      invalidos: semTelefone,
+    })
+    const detalhes = [
+      semTelefone > 0 && `${semTelefone} sem telefone`,
+      duplicados > 0 && `${duplicados} duplicados`,
+    ].filter(Boolean).join(', ')
+    toast.success(`${contatos.length} leads importados${detalhes ? ` (${detalhes})` : ''}`)
+  }
+
   const alunosFiltrados = alunosDisponiveis.filter(a => {
     if (!buscaAluno) return true
     return a.nome.toLowerCase().includes(buscaAluno.toLowerCase())
+  })
+
+  const leadsFiltrados = leadsDisponiveis.filter(l => {
+    if (!buscaLead) return true
+    return (l.nome ?? '').toLowerCase().includes(buscaLead.toLowerCase())
   })
 
   return (
@@ -353,6 +458,9 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
         <button onClick={() => setModo('alunos')} className={cn(tabCls, modo === 'alunos' && tabActiveCls)}>
           <span className="flex items-center gap-1"><GraduationCap className="w-3.5 h-3.5" />Alunos</span>
         </button>
+        <button onClick={() => setModo('leads')} className={cn(tabCls, modo === 'leads' && tabActiveCls)}>
+          <span className="flex items-center gap-1"><Target className="w-3.5 h-3.5" />Leads</span>
+        </button>
       </div>
 
       {modo === 'csv' ? (
@@ -378,7 +486,7 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
           />
           <Button onClick={handleBulk} variant="outline" size="sm">Importar telefones</Button>
         </div>
-      ) : (
+      ) : modo === 'alunos' ? (
         <div className="space-y-3">
           {!state.unidadeId ? (
             <div className="text-center py-6 text-gray-500">
@@ -470,6 +578,112 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
                               const princ = cts.find((c: any) => c.principal)
                               return princ?.telefone || aluno.whatsapp || aluno.telefone || aluno.responsavel_telefone || 'sem tel.'
                             })()}
+                          </div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {!state.unidadeId ? (
+            <div className="text-center py-6 text-gray-500">
+              <Building2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">Selecione uma unidade primeiro</p>
+            </div>
+          ) : (
+            <>
+              {/* Filtros */}
+              <div className="flex gap-2 flex-wrap">
+                <select value={filtroStatusLead} onChange={e => setFiltroStatusLead(e.target.value)} className={cn(inputCls, 'w-auto')}>
+                  <option value="todos">Todos os status</option>
+                  <option value="novo">Novo</option>
+                  <option value="em_contato">Em contato</option>
+                  <option value="agendado">Agendado</option>
+                  <option value="experimental_agendada">Experimental agendada</option>
+                  <option value="experimental_realizada">Experimental realizada</option>
+                  <option value="experimental_faltou">Experimental faltou</option>
+                  <option value="visita_escola">Visita à escola</option>
+                  <option value="realizado">Realizado</option>
+                  <option value="convertido">Convertido</option>
+                  <option value="matriculado">Matriculado</option>
+                  <option value="perdido">Perdido</option>
+                </select>
+                <select value={filtroCursoLead} onChange={e => setFiltroCursoLead(e.target.value)} className={cn(inputCls, 'w-auto')}>
+                  <option value="todos">Todos os cursos</option>
+                  {cursosLista.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+                <select value={filtroOrigemLead} onChange={e => setFiltroOrigemLead(e.target.value)} className={cn(inputCls, 'w-auto')}>
+                  <option value="todos">Todas as origens</option>
+                  {canaisOrigemLista.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+                <div className="relative flex-1 min-w-[140px]">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+                  <input value={buscaLead} onChange={e => setBuscaLead(e.target.value)} placeholder="Buscar lead..." className={cn(inputCls, 'pl-8')} />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer w-fit">
+                <input
+                  type="checkbox"
+                  checked={excluirConvertidosLead}
+                  onChange={e => setExcluirConvertidosLead(e.target.checked)}
+                  className="rounded border-slate-600 bg-slate-700 text-amber-500 focus:ring-amber-500"
+                />
+                Excluir leads já convertidos
+              </label>
+
+              {/* Lista de leads */}
+              {carregandoLeads ? (
+                <div className="flex items-center justify-center py-8 text-gray-500 gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">Carregando leads...</span>
+                </div>
+              ) : leadsFiltrados.length === 0 ? (
+                <div className="text-center py-6 text-gray-500">
+                  <Target className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">Nenhum lead encontrado</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={leadsSelecionados.size === leadsFiltrados.length && leadsFiltrados.length > 0}
+                        onChange={toggleTodosLeads}
+                        className="rounded border-slate-600 bg-slate-700 text-amber-500 focus:ring-amber-500"
+                      />
+                      Selecionar todos ({leadsFiltrados.length})
+                    </label>
+                    {leadsSelecionados.size > 0 && (
+                      <Button onClick={confirmarLeads} size="sm" className="bg-amber-500 hover:bg-amber-600 text-black text-xs">
+                        Importar {leadsSelecionados.size} lead(s)
+                      </Button>
+                    )}
+                  </div>
+                  <div className="max-h-48 overflow-y-auto border border-slate-700/50 rounded-lg divide-y divide-slate-700/30">
+                    {leadsFiltrados.map(lead => (
+                      <label
+                        key={lead.id}
+                        className={cn(
+                          'flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-slate-800/50 transition-colors',
+                          leadsSelecionados.has(lead.id) && 'bg-amber-500/5',
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={leadsSelecionados.has(lead.id)}
+                          onChange={() => toggleLead(lead.id)}
+                          className="rounded border-slate-600 bg-slate-700 text-amber-500 focus:ring-amber-500 flex-shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-white truncate">{lead.nome || '(sem nome)'}</div>
+                          <div className="text-[11px] text-gray-500 truncate">
+                            {(lead.cursos as any)?.nome || '-'} · {(lead.canais_origem as any)?.nome || 'origem desconhecida'} · {lead.whatsapp || lead.telefone || 'sem tel.'}
                           </div>
                         </div>
                       </label>
