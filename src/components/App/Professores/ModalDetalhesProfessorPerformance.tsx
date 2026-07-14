@@ -20,6 +20,7 @@ import {
 } from '@/lib/professoresKpisCanonicos';
 import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
 import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
+import { formatCompetencia } from '@/hooks/useCompetenciaMensalStatus';
 
 interface ProfessorPerformance {
   id: number;
@@ -594,7 +595,10 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <span className="text-sm font-medium text-slate-200 min-w-[90px] text-center capitalize">
-                {format(new Date(competencia + '-01'), 'MMM/yyyy', { locale: ptBR })}
+                {(() => {
+                  const [ano, mes] = competencia.split('-').map(Number);
+                  return formatCompetencia(ano, mes);
+                })()}
               </span>
               <button
                 onClick={() => navegarMes(1)}

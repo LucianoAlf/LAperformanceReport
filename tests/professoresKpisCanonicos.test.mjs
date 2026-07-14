@@ -5,6 +5,8 @@ import { test } from 'node:test';
 const migrationPath = 'supabase/migrations/20260711194341_kpis_professores_canonicos.sql';
 const conversionMigrationPath = 'supabase/migrations/20260711195600_kpis_professores_conversao_canonica.sql';
 const totalsMigrationPath = 'supabase/migrations/20260711213000_totais_professores_canonicos.sql';
+const carteiraHistoricaMigrationPath = 'supabase/migrations/20260713232404_kpis_professores_carteira_historica_canonica.sql';
+const carteiraSeguraMigrationPath = 'supabase/migrations/20260713233627_kpis_professores_carteira_rpc_segura.sql';
 const performancePath = 'src/components/App/Professores/TabPerformanceProfessores.tsx';
 const modalPath = 'src/components/App/Professores/ModalDetalhesProfessorPerformance.tsx';
 const edgePath = 'supabase/functions/gemini-relatorio-coordenacao/index.ts';
@@ -48,6 +50,31 @@ test('tela e modal consomem competencia e denominador canonicos', () => {
   assert.match(performance, /turmas_elegiveis_media/);
   assert.match(modal, /turmas_elegiveis_media/);
   assert.match(modal, /\[competenciaInicial,\s*open,\s*professor\?\.id\]/);
+  assert.match(modal, /formatCompetencia/);
+  assert.doesNotMatch(modal, /new Date\(competencia\s*\+\s*['"]-01['"]\)/);
+});
+
+test('carteira historica usa grade Emusys e jornada ativa sem vinculo legado', () => {
+  const migration = readOptional(carteiraHistoricaMigrationPath);
+
+  assert.match(migration, /aula_alunos_emusys/i);
+  assert.match(migration, /aluno_presenca/i);
+  assert.match(migration, /aluno_jornada_matricula_disciplina/i);
+  assert.match(migration, /status_matricula\s*=\s*'ativa'/i);
+  assert.match(migration, /pessoa_chave/i);
+  assert.match(migration, /turma_chave/i);
+  assert.match(migration, /count\s*\(\s*distinct\s+b\.pessoa_chave\s*\)/i);
+  assert.doesNotMatch(migration, /count\s*\(\s*\*\s*\)::integer\s+as\s+carteira_alunos/i);
+});
+
+test('rpc publica encapsula a carteira sem expor tabelas canonicas ao navegador', () => {
+  const migration = readOptional(carteiraSeguraMigrationPath);
+
+  assert.match(migration, /get_kpis_professor_periodo_canonico[\s\S]*security definer/i);
+  assert.match(migration, /set search_path\s*=\s*public/i);
+  assert.match(migration, /revoke[\s\S]*get_carteira_professor_periodo_canonica[\s\S]*authenticated/i);
+  assert.match(migration, /revoke[\s\S]*get_kpis_professor_periodo_canonico_base_20260711[\s\S]*authenticated/i);
+  assert.doesNotMatch(migration, /grant\s+select\s+on\s+(table\s+)?public\.aula_alunos_emusys/i);
 });
 
 test('relatorio com IA prioriza health score canonico', () => {
