@@ -448,6 +448,26 @@ async function reconciliarExperimentaisOrfas(
         expExistente = legado || null;
       }
 
+      // 2b. Match por CHAVE DE NEGÓCIO: acha a linha criada pelo WEBHOOK, que tem
+      //     emusys_aula_id de EVENTO (não da aula) e por isso escapa dos matches 1 e 2.
+      //     O Emusys reenvia o webhook de experimental com um id de evento diferente a
+      //     cada disparo; a identidade real da aula é unidade+data+horário+curso+aluno.
+      //     Sem este match, a sync INSERE uma 2ª linha e duplica as realizadas.
+      if (!expExistente && exp.cursoId != null) {
+        const { data: porNegocio } = await supabase
+          .from('lead_experimentais')
+          .select('id, status, lead_id, curso_interesse_id, professor_experimental_id, emusys_aula_id, aluno_id')
+          .eq('unidade_id', exp.unidadeId)
+          .eq('data_experimental', exp.dataAula)
+          .eq('horario_experimental', exp.horario + ':00')
+          .eq('curso_interesse_id', exp.cursoId)
+          .eq('nome_aluno', nomeAluno)
+          .neq('status', 'cancelada')
+          .limit(1)
+          .maybeSingle();
+        expExistente = porNegocio || null;
+      }
+
       if (expExistente) {
         // Sobrescrever SEMPRE curso/professor com a verdade do /aulas (pega remarcação/troca);
         // gravar emusys_aula_id/aluno_id se faltavam.
