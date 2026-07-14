@@ -692,6 +692,34 @@ Chave:
 
 Existem 43.706 aulas sincronizadas.
 
+#### 11.1.1 Regra canônica das anotações pedagógicas
+
+As duas fontes convivem na mesma aula, mas possuem colunas e escritores independentes:
+
+| Campo | Dono da escrita | Regra |
+|---|---|---|
+| `aulas_emusys.anotacoes` | sync do Emusys | Espelha somente o texto escrito pelo professor no Emusys |
+| `aulas_emusys.anotacoes_fabio` | RPC `registrar_aula_fabio` | Guarda somente o registro produzido pelo Fábio |
+
+Nenhum sync, webhook ou backfill do Emusys pode incluir `anotacoes_fabio` no payload de `INSERT`, `UPDATE` ou `UPSERT`. A RPC do Fábio atualiza somente `anotacoes_fabio` e nunca altera `anotacoes`.
+
+A leitura canônica da ficha do aluno é:
+
+```sql
+coalesce(nullif(btrim(aulas_emusys.anotacoes_fabio), ''), aulas_emusys.anotacoes)
+```
+
+Assim, a ficha prefere o registro do Fábio quando ele existe e usa a anotação do Emusys como fallback durante a transição.
+
+Defesa em profundidade:
+
+- trigger `trg_proteger_anotacoes_fabio` em `aulas_emusys`;
+- função `fn_proteger_anotacoes_fabio()` preserva o valor anterior se um update tentar esvaziá-lo;
+- tabela `fabio_protecao_log` registra cada proteção acionada;
+- `aula_registros_fabio_log` mantém a trilha normal de gravações feitas pela RPC.
+
+O trigger é um cinto de segurança. A regra primária continua sendo não enviar `anotacoes_fabio` nos payloads dos sincronizadores.
+
 ### 11.2 aula_alunos_emusys
 
 É o roster, isto é, a lista de alunos esperados em cada aula.

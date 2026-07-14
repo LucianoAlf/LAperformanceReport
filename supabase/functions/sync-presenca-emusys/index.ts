@@ -2,7 +2,7 @@
 
 // Edge Function: sync-presenca-emusys
 // Sincroniza aulas e presença dos alunos do Emusys para aulas_emusys + aluno_presenca
-// Chamada diariamente via pg_cron (22h BRT) com janela de 7 dias
+// Presenca completa em horarios fixos e metadados de agenda a cada 15 minutos.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -80,8 +80,10 @@ interface AulaEmusys {
   curso_id: number | null;
   curso_nome: string;
   cancelada: boolean;
+  reagendada?: boolean;
   justificada?: boolean;
   data_hora_inicio: string;
+  data_hora_inicio_original?: string | null;
   data_hora_fim: string | null;
   duracao_minutos: number | null;
   sala_id: number | null;
@@ -192,10 +194,126 @@ async function fetchAulasDia(token: string, data: string): Promise<AulaEmusys[]>
   return todas;
 }
 
+async function fetchAulasRange(
+  token: string,
+  dataInicio: string,
+  dataFim: string
+): Promise<AulaEmusys[]> {
+  const todas: AulaEmusys[] = [];
+  let cursor: string | null = null;
+  let temMais = true;
+
+  while (temMais) {
+    let url = `${EMUSYS_API}/aulas/?data_hora_inicial=${dataInicio}T00:00:00&data_hora_final=${dataFim}T23:59:59&limite=100`;
+    if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+
+    const response = await fetch(url, { headers: { token } });
+    if (!response.ok) {
+      throw new Error(`Emusys API ${response.status} no intervalo ${dataInicio}..${dataFim}`);
+    }
+
+    const json = await response.json();
+    todas.push(...(json.items || []));
+    temMais = json.paginacao?.tem_mais === true;
+    cursor = json.paginacao?.proximo_cursor || null;
+  }
+
+  return todas;
+}
+
 // Converter data_hora_inicio do Emusys ("2026-03-04 14:00") para ISO com timezone BRT
 function parseDataHoraEmusys(dataHora: string): string {
   // Emusys retorna "YYYY-MM-DD HH:mm" em horário local (BRT = UTC-3)
   return dataHora.replace(' ', 'T') + ':00-03:00';
+}
+
+async function sincronizarMetadadosAulas(
+  supabase: any,
+  unidades: typeof UNIDADES,
+  dataInicio: string,
+  dataFim: string
+) {
+  const { data: professoresDB, error: professoresError } = await supabase
+    .from('professores')
+    .select('id, nome')
+    .eq('ativo', true);
+  if (professoresError) {
+    throw new Error(`Erro ao buscar professores: ${professoresError.message}`);
+  }
+
+  const profMapa = new Map<string, number>();
+  const profNomes: string[] = [];
+  for (const professor of professoresDB || []) {
+    const nomeNormalizado = normalizarNome(professor.nome);
+    profMapa.set(nomeNormalizado, professor.id);
+    profNomes.push(nomeNormalizado);
+  }
+
+  const resultados: Array<Record<string, unknown>> = [];
+  const chunkSize = 500;
+
+  for (const unidade of unidades) {
+    const aulas = await fetchAulasRange(unidade.token, dataInicio, dataFim);
+    const linhas = aulas.map((aula) => {
+      const profNome = aula.professores?.[0]?.nome || null;
+      const professorId = profNome
+        ? matchProfessor(profNome, profMapa, profNomes)
+        : null;
+
+      return {
+        emusys_id: aula.id,
+        unidade_id: unidade.id,
+        data_aula: aula.data_hora_inicio.split(' ')[0],
+        data_hora_inicio: parseDataHoraEmusys(aula.data_hora_inicio),
+        data_hora_fim: aula.data_hora_fim
+          ? parseDataHoraEmusys(aula.data_hora_fim)
+          : null,
+        duracao_minutos: aula.duracao_minutos,
+        tipo: aula.tipo,
+        categoria: aula.categoria,
+        turma_nome: aula.turma_nome,
+        curso_emusys_id: aula.curso_id,
+        curso_nome: aula.curso_nome,
+        sala_nome: aula.sala_nome,
+        professor_nome: profNome,
+        professor_id: professorId,
+        cancelada: aula.cancelada === true,
+        reagendada: aula.reagendada === true,
+        justificada: aula.justificada === true,
+        data_hora_inicio_original: aula.data_hora_inicio_original
+          ? parseDataHoraEmusys(aula.data_hora_inicio_original)
+          : null,
+        professor_presenca: aula.professores?.[0]?.presenca ?? null,
+        nr_da_aula: aula.nr_da_aula,
+        matricula_disciplina_id: aula.matricula_disciplina_id ?? null,
+        qtd_aulas_contrato: aula.qtd_aulas_contrato,
+        qtd_alunos: aula.alunos?.length || 0,
+        anotacoes: aula.anotacoes || null,
+      };
+    });
+
+    let gravadas = 0;
+    for (let offset = 0; offset < linhas.length; offset += chunkSize) {
+      const lote = linhas.slice(offset, offset + chunkSize);
+      const { error } = await supabase
+        .from('aulas_emusys')
+        .upsert(lote, { onConflict: 'emusys_id,unidade_id', ignoreDuplicates: false });
+      if (error) {
+        throw new Error(
+          `Erro no lote ${offset} de ${unidade.nome}: ${error.message}`
+        );
+      }
+      gravadas += lote.length;
+    }
+
+    resultados.push({
+      unidade: unidade.nome,
+      aulas_recebidas: aulas.length,
+      aulas_gravadas: gravadas,
+    });
+  }
+
+  return resultados;
 }
 
 // Dados coletados de aulas experimentais para reconciliação
@@ -721,14 +839,18 @@ serve(async (req: Request) => {
     let dataFim: string;
     let dias = 1;
     let diasFuturos = 14;
-    let modo: 'presenca' | 'agenda' = 'presenca';
+    let modo: 'presenca' | 'agenda' | 'metadados' = 'presenca';
     let unidadeIndex: number | null = null;
     try {
       const body = await req.json();
       dataFim = body.data || '';
       dias = Math.min(Math.max(body.dias || 1, 1), 30); // 1-30 dias
-      diasFuturos = Math.min(Math.max(body.dias_futuros || 14, 1), 30);
-      modo = body.modo === 'agenda' ? 'agenda' : 'presenca';
+      diasFuturos = Math.min(Math.max(body.dias_futuros || 14, 1), 35);
+      modo = body.modo === 'agenda'
+        ? 'agenda'
+        : body.modo === 'metadados'
+          ? 'metadados'
+          : 'presenca';
       unidadeIndex = body.unidade_index ?? null;
     } catch {
       dataFim = '';
@@ -740,9 +862,20 @@ serve(async (req: Request) => {
       dataFim = brt.toISOString().split('T')[0];
     }
 
-    // Gerar lista retrospectiva para presenca ou futura para o roster da agenda.
+    // Metadados cobrem passado recente e futuro para detectar reagendamentos rapidamente.
     const datasProcessar: string[] = [];
-    if (modo === 'agenda') {
+    if (modo === 'metadados') {
+      for (let d = dias - 1; d >= 0; d--) {
+        const dt = new Date(dataFim + 'T12:00:00');
+        dt.setDate(dt.getDate() - d);
+        datasProcessar.push(dt.toISOString().split('T')[0]);
+      }
+      for (let d = 1; d <= diasFuturos; d++) {
+        const dt = new Date(dataFim + 'T12:00:00');
+        dt.setDate(dt.getDate() + d);
+        datasProcessar.push(dt.toISOString().split('T')[0]);
+      }
+    } else if (modo === 'agenda') {
       for (let d = 0; d < diasFuturos; d++) {
         const dt = new Date(dataFim + 'T12:00:00');
         dt.setDate(dt.getDate() + d);
@@ -762,6 +895,26 @@ serve(async (req: Request) => {
 
     const unidadesProcessar = unidadeIndex !== null ? [UNIDADES[unidadeIndex]] : UNIDADES;
     console.log(`[sync-presenca] Modo ${modo}: ${datasProcessar[0]} a ${datasProcessar.at(-1)}, unidade: ${unidadeIndex !== null ? unidadesProcessar[0].nome : 'todas'}`);
+
+    if (modo === 'metadados') {
+      const resultados = await sincronizarMetadadosAulas(
+        supabase,
+        unidadesProcessar,
+        datasProcessar[0],
+        datasProcessar.at(-1)!
+      );
+      return new Response(
+        JSON.stringify({
+          success: true,
+          modo,
+          dias,
+          data_inicio: datasProcessar[0],
+          data_fim: datasProcessar.at(-1),
+          resultados,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Buscar todos os alunos ativos para matching (paginado para contornar limite de 1000 rows do PostgREST)
     const alunosDB: {
@@ -918,6 +1071,12 @@ serve(async (req: Request) => {
                 professor_nome: profNome,
                 professor_id: professorId,
                 cancelada: aula.cancelada,
+                reagendada: aula.reagendada === true,
+                justificada: aula.justificada === true,
+                data_hora_inicio_original: aula.data_hora_inicio_original
+                  ? parseDataHoraEmusys(aula.data_hora_inicio_original)
+                  : null,
+                professor_presenca: aula.professores?.[0]?.presenca ?? null,
                 nr_da_aula: aula.nr_da_aula,
                 matricula_disciplina_id: aula.matricula_disciplina_id ?? null,
                 qtd_aulas_contrato: aula.qtd_aulas_contrato,

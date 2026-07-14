@@ -78,6 +78,8 @@ Nunca fazer upsert ou join por:
 | Anamnese | anamneses, anamnese_respostas_perfil |
 | Jornada por curso/disciplina | aluno_jornada_matricula_disciplina |
 | Aula e agenda | aulas_emusys |
+| Anotação do Emusys | aulas_emusys.anotacoes; escrita somente pelos syncs Emusys |
+| Registro do Fábio | aulas_emusys.anotacoes_fabio; escrita somente por registrar_aula_fabio |
 | Roster da aula | aula_alunos_emusys |
 | Presença e falta | aluno_presenca |
 | Justificativa | aluno_presenca_administrativo |
@@ -123,6 +125,16 @@ Tratar com atenção:
 - respostas da passagem de bastão.
 
 Essas áreas podem existir no schema e ainda estar vazias.
+
+### 5.1 Isolar anotações por origem
+
+Ao alterar qualquer rotina que escreva em `aulas_emusys`:
+
+1. sync, webhook e backfill do Emusys podem escrever `anotacoes`, mas nunca `anotacoes_fabio`;
+2. o Fábio escreve `anotacoes_fabio` somente por `registrar_aula_fabio` e nunca altera `anotacoes`;
+3. a ficha do aluno lê `coalesce(nullif(btrim(anotacoes_fabio), ''), anotacoes)`;
+4. manter o trigger `trg_proteger_anotacoes_fabio` e auditar `fabio_protecao_log` após mudanças de sync;
+5. uma linha em `fabio_protecao_log` prova que algum escritor tentou esvaziar conteúdo do Fábio e exige correção na origem.
 
 ### 6. Validar regra e segurança
 
@@ -175,6 +187,9 @@ Relatar o que foi validado e o que permaneceu sem cobertura.
 - Não usar **alunos.percentual_presenca** para dado atual.
 - Não considerar seguro por disciplina o percentual de **vw_jornada_aluno_com_presenca** sem revisar o join da aula.
 - Registrar correções na camada de retificação, sem apagar a primeira escrita.
+- Tratar **aulas_emusys.professor_presenca = 'ausente'** apenas como sinal operacional bruto de que a aula não ocorreu ou não foi registrada corretamente no Emusys.
+- Nunca converter esse campo isolado em falta do professor, métrica de RH, penalidade ou componente do Health Score.
+- Antes de classificar um caso, deduplicar o evento de turma e cruzar presença dos alunos, professor atribuído, cancelamento e existência de relatório da aula.
 
 ### Renovação e ciclo de vida
 
