@@ -68,7 +68,11 @@ function resumoCaixa(caixa: any, movimentos: any[]) {
     mov.ambiente === 'cofre' && mov.tipo === 'saida' && mov.forma_pagamento === 'dinheiro'
   );
   const vendasPorForma = (forma: string) =>
-    soma((mov) => mov.ambiente === 'venda' && mov.tipo === 'entrada' && mov.forma_pagamento === forma);
+    soma((mov) =>
+      mov.tipo === 'entrada'
+      && mov.forma_pagamento === forma
+      && (mov.ambiente === 'venda' || (mov.ambiente === 'cofre' && forma !== 'dinheiro'))
+    );
 
   return {
     saldoInicialCofre,
@@ -92,14 +96,24 @@ function linhasCofre(movimentos: any[], tipo: 'entrada' | 'saida'): string {
   return linhas.length ? linhas.join('\n') : '- R$ 0,00 -';
 }
 
-function linhasDetalheCartao(movimentos: any[]): string[] {
-  const cartoes = movimentos.filter(
-    (m) => m.forma_pagamento === 'cartao' && (m.cartao_modalidade || m.link_pagamento)
+function linhasDetalheRecebimentos(movimentos: any[]): string[] {
+  const recebimentos = movimentos.filter(
+    (m) => m.tipo === 'entrada'
+      && (m.ambiente === 'venda' || (m.ambiente === 'cofre' && m.forma_pagamento !== 'dinheiro'))
   );
-  if (!cartoes.length) return [];
+  if (!recebimentos.length) return [];
 
-  const linhas = cartoes.map((m) => {
-    const partes: string[] = [moeda(n(m.valor))];
+  const nomesForma: Record<string, string> = {
+    dinheiro: 'Dinheiro',
+    pix: 'Pix',
+    cartao: 'Cartao',
+    cheque: 'Cheque',
+    transferencia: 'Transferencia',
+    outro: 'Outro',
+  };
+
+  const linhas = recebimentos.map((m) => {
+    const partes: string[] = [nomesForma[m.forma_pagamento] || 'Outro', moeda(n(m.valor))];
     if (m.cartao_modalidade === 'debito') partes.push('Debito');
     if (m.cartao_modalidade === 'credito') {
       partes.push(`Credito${m.cartao_parcelas ? ` ${m.cartao_parcelas}x` : ''}`);
@@ -110,7 +124,7 @@ function linhasDetalheCartao(movimentos: any[]): string[] {
     return linha;
   });
 
-  return ['', '💳 *Cartao (detalhe):*', ...linhas];
+  return ['', '📋 *Detalhes dos recebimentos:*', ...linhas];
 }
 
 function formatarRelatorioCaixaWhatsApp(params: {
@@ -144,7 +158,7 @@ function formatarRelatorioCaixaWhatsApp(params: {
     `- Cartao: ${moeda(resumo.vendasCartao)}`,
     `- Cheque: ${moeda(resumo.vendasCheque)}`,
     `- Transferencia: ${moeda(resumo.vendasTransferencia)}`,
-    ...linhasDetalheCartao(movimentos),
+    ...linhasDetalheRecebimentos(movimentos),
     '',
     `✅ *Saldo final caixa dia ${data}:* ${moeda(resumo.saldoFinalCalculado)}`,
     '',

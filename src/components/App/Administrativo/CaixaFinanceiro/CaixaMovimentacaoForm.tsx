@@ -73,7 +73,10 @@ export function CaixaMovimentacaoForm({
   onCancel,
   onSubmit,
 }: CaixaMovimentacaoFormProps) {
-  const [ambiente, setAmbiente] = useState<CaixaAmbiente>(initialValues?.ambiente || 'cofre');
+  const ambienteInicial = initialValues?.ambiente === 'cofre' && initialValues?.forma_pagamento !== 'dinheiro'
+    ? 'venda'
+    : initialValues?.ambiente || 'cofre';
+  const [ambiente, setAmbiente] = useState<CaixaAmbiente>(ambienteInicial);
   const [tipo, setTipo] = useState<CaixaTipoMovimento>(initialValues?.tipo || 'entrada');
   const [formaPagamento, setFormaPagamento] = useState<CaixaFormaPagamento>(initialValues?.forma_pagamento || 'dinheiro');
   const [categoria, setCategoria] = useState<CaixaCategoria>(initialValues?.categoria || 'lojinha');
@@ -98,6 +101,9 @@ export function CaixaMovimentacaoForm({
     if (ambiente === 'venda') {
       setTipo('entrada');
     }
+    if (ambiente === 'cofre') {
+      setFormaPagamento('dinheiro');
+    }
   }, [ambiente]);
 
   useEffect(() => {
@@ -109,7 +115,11 @@ export function CaixaMovimentacaoForm({
   }, [categoria, categoriasDisponiveis]);
 
   useEffect(() => {
-    setAmbiente(initialValues?.ambiente || 'cofre');
+    setAmbiente(
+      initialValues?.ambiente === 'cofre' && initialValues?.forma_pagamento !== 'dinheiro'
+        ? 'venda'
+        : initialValues?.ambiente || 'cofre',
+    );
     setTipo(initialValues?.tipo || 'entrada');
     setFormaPagamento(initialValues?.forma_pagamento || 'dinheiro');
     setCategoria(initialValues?.categoria || 'lojinha');
@@ -151,6 +161,10 @@ export function CaixaMovimentacaoForm({
     }
     if (descricao.trim().length < 3) {
       setErro({ campo: 'descricao', msg: 'Descreva o motivo da movimentacao.' });
+      return;
+    }
+    if (ambiente === 'cofre' && formaPagamento !== 'dinheiro') {
+      setErro({ campo: null, msg: 'Caixa-cofre fisico deve usar forma dinheiro.' });
       return;
     }
 
@@ -237,7 +251,7 @@ export function CaixaMovimentacaoForm({
           Forma
           <Select
             value={formaPagamento}
-            disabled={disabled}
+            disabled={disabled || ambiente === 'cofre'}
             onValueChange={(value) => setFormaPagamento(value as CaixaFormaPagamento)}
           >
             <SelectTrigger className="h-10 rounded-lg bg-slate-950/70">

@@ -90,7 +90,11 @@ export function calcularResumoCaixa(
 
   const vendasPorForma = (forma: CaixaMovimentacao['forma_pagamento']) =>
     movimentos
-      .filter((m) => m.ambiente === 'venda' && m.tipo === 'entrada' && m.forma_pagamento === forma)
+      .filter((m) =>
+        m.tipo === 'entrada'
+        && m.forma_pagamento === forma
+        && (m.ambiente === 'venda' || (m.ambiente === 'cofre' && forma !== 'dinheiro'))
+      )
       .reduce((total, m) => total + Number(m.valor || 0), 0);
 
   const vendasDinheiro = vendasPorForma('dinheiro');
@@ -123,14 +127,24 @@ function linhasMovimentos(movimentos: CaixaMovimentacao[], tipo: 'entrada' | 'sa
   return linhas.length > 0 ? linhas.join('\n') : '- R$ 0,00 -';
 }
 
-function linhasDetalheCartao(movimentos: CaixaMovimentacao[]): string[] {
-  const cartoes = movimentos.filter(
-    (m) => m.forma_pagamento === 'cartao' && (m.cartao_modalidade || m.link_pagamento),
+function linhasDetalheRecebimentos(movimentos: CaixaMovimentacao[]): string[] {
+  const recebimentos = movimentos.filter(
+    (m) => m.tipo === 'entrada'
+      && (m.ambiente === 'venda' || (m.ambiente === 'cofre' && m.forma_pagamento !== 'dinheiro')),
   );
-  if (cartoes.length === 0) return [];
+  if (recebimentos.length === 0) return [];
 
-  const linhas = cartoes.map((m) => {
-    const partes: string[] = [formatarMoedaCaixa(Number(m.valor))];
+  const nomesForma: Record<CaixaMovimentacao['forma_pagamento'], string> = {
+    dinheiro: 'Dinheiro',
+    pix: 'Pix',
+    cartao: 'Cartao',
+    cheque: 'Cheque',
+    transferencia: 'Transferencia',
+    outro: 'Outro',
+  };
+
+  const linhas = recebimentos.map((m) => {
+    const partes: string[] = [nomesForma[m.forma_pagamento], formatarMoedaCaixa(Number(m.valor))];
     if (m.cartao_modalidade === 'debito') partes.push('Debito');
     if (m.cartao_modalidade === 'credito') {
       partes.push(`Credito${m.cartao_parcelas ? ` ${m.cartao_parcelas}x` : ''}`);
@@ -141,7 +155,7 @@ function linhasDetalheCartao(movimentos: CaixaMovimentacao[]): string[] {
     return linha;
   });
 
-  return ['', '💳 *Cartao (detalhe):*', ...linhas];
+  return ['', '📋 *Detalhes dos recebimentos:*', ...linhas];
 }
 
 export function formatarRelatorioCaixaWhatsApp(params: {
@@ -175,7 +189,7 @@ export function formatarRelatorioCaixaWhatsApp(params: {
     `- Cartao: ${formatarMoedaCaixa(resumo.vendasCartao)}`,
     `- Cheque: ${formatarMoedaCaixa(resumo.vendasCheque)}`,
     `- Transferencia: ${formatarMoedaCaixa(resumo.vendasTransferencia)}`,
-    ...linhasDetalheCartao(movimentos),
+    ...linhasDetalheRecebimentos(movimentos),
     '',
     `✅ *Saldo final caixa dia ${data}:* ${formatarMoedaCaixa(resumo.saldoFinalCalculado)}`,
     '',
