@@ -124,8 +124,10 @@ export function GradeHoraria({
       // Carregar professores (filtrado pela unidade selecionada via relacao N:N)
       let professoresQuery = supabase
         .from('professores')
-        .select('id, nome, professores_unidades!inner(unidade_id)')
+        .select('id, nome, professores_unidades!inner(unidade_id, emusys_ativo, validacao_status)')
         .eq('ativo', true)
+        .eq('professores_unidades.emusys_ativo', true)
+        .neq('professores_unidades.validacao_status', 'ignorado')
         .order('nome');
 
       if (filtros.unidadeId && filtros.unidadeId !== 'todos') {

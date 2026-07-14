@@ -121,7 +121,9 @@ export function ModalNovaTurma({
       const { data } = await supabase
         .from('professores_unidades')
         .select('unidade_id, unidades:unidade_id (id, nome)')
-        .eq('professor_id', formData.professor_id);
+        .eq('professor_id', formData.professor_id)
+        .eq('emusys_ativo', true)
+        .neq('validacao_status', 'ignorado');
       
       if (data && data.length > 0) {
         const unidadesFormatadas = data
@@ -176,6 +178,8 @@ export function ModalNovaTurma({
         .select('disponibilidade')
         .eq('professor_id', formData.professor_id)
         .eq('unidade_id', formData.unidade_id)
+        .eq('emusys_ativo', true)
+        .neq('validacao_status', 'ignorado')
         .single();
       
       setDisponibilidadeProfessor(data?.disponibilidade || null);

@@ -846,7 +846,9 @@ export function AlunosPage() {
         const { data: profUnidades } = await supabase
           .from('professores_unidades')
           .select('professor_id')
-          .eq('unidade_id', unidadeAtual);
+          .eq('unidade_id', unidadeAtual)
+          .eq('emusys_ativo', true)
+          .neq('validacao_status', 'ignorado');
         const profIds = profUnidades?.map(pu => pu.professor_id) || [];
         if (profIds.length > 0) {
           const { data } = await supabase

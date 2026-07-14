@@ -157,7 +157,13 @@ export function ProfessoresPage() {
       // Carregar professores com relacionamentos
       await carregarProfessores();
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+      const detalhe = error as { code?: string; message?: string; details?: string; hint?: string };
+      console.error('Erro ao carregar dados:', JSON.stringify({
+        code: detalhe?.code,
+        message: detalhe?.message,
+        details: detalhe?.details,
+        hint: detalhe?.hint,
+      }));
       toast.error('Erro ao carregar dados', 'Tente novamente mais tarde');
     } finally {
       setLoading(false);
@@ -183,7 +189,9 @@ export function ProfessoresPage() {
           unidade_id,
           disponibilidade,
           unidades:unidade_id (nome, codigo)
-        `);
+        `)
+        .eq('emusys_ativo', true)
+        .neq('validacao_status', 'ignorado');
 
       // Buscar relacionamentos de cursos
       const { data: cursosRelData } = await supabase
@@ -278,7 +286,13 @@ export function ProfessoresPage() {
       setOcupacoesRegularesPorProfessorUnidade(ocupacoesRegulares);
       setTurmasRegularesPorProfessorUnidade(turmasRegulares);
     } catch (error) {
-      console.error('Erro ao carregar professores:', error);
+      const detalhe = error as { code?: string; message?: string; details?: string; hint?: string };
+      console.error('Erro ao carregar professores:', JSON.stringify({
+        code: detalhe?.code,
+        message: detalhe?.message,
+        details: detalhe?.details,
+        hint: detalhe?.hint,
+      }));
       toast.error('Erro ao carregar professores');
     }
   };

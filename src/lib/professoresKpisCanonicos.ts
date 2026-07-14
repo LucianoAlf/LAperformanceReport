@@ -57,6 +57,10 @@ export interface TotaisKPIProfessorCanonico {
   mrrPerdido: number;
 }
 
+const consultasEmAndamento = new Map<string, Promise<KPIProfessorCanonico[]>>();
+const cacheConsultas = new Map<string, { dados: KPIProfessorCanonico[]; expiraEm: number }>();
+const CACHE_CONSULTA_MS = 15_000;
+
 const numero = (valor: unknown): number => {
   const convertido = Number(valor ?? 0);
   return Number.isFinite(convertido) ? convertido : 0;
@@ -98,16 +102,36 @@ export function normalizarKPIProfessorCanonico(row: Record<string, unknown>): KP
 export async function buscarKpisProfessoresCanonicos(
   filtro: FiltroKPIProfessorCanonico
 ): Promise<KPIProfessorCanonico[]> {
-  const { data, error } = await supabase.rpc('get_kpis_professor_periodo_canonico', {
+  const parametros = {
     p_ano: filtro.ano,
     p_mes: filtro.mes,
     p_unidade_id: filtro.unidadeId && filtro.unidadeId !== 'todos' ? filtro.unidadeId : null,
     p_data_inicio: filtro.dataInicio || null,
     p_data_fim: filtro.dataFim || null,
-  });
+  };
+  const chave = JSON.stringify(parametros);
+  const cache = cacheConsultas.get(chave);
+  if (cache && cache.expiraEm > Date.now()) return cache.dados;
 
-  if (error) throw error;
-  return ((data || []) as Record<string, unknown>[]).map(normalizarKPIProfessorCanonico);
+  const emAndamento = consultasEmAndamento.get(chave);
+  if (emAndamento) return emAndamento;
+
+  const consulta = (async () => {
+    const { data, error } = await supabase.rpc('get_kpis_professor_periodo_canonico', parametros);
+
+    if (error) throw error;
+    const dados = ((data || []) as Record<string, unknown>[]).map(normalizarKPIProfessorCanonico);
+    cacheConsultas.set(chave, { dados, expiraEm: Date.now() + CACHE_CONSULTA_MS });
+    return dados;
+  })();
+
+  consultasEmAndamento.set(chave, consulta);
+
+  try {
+    return await consulta;
+  } finally {
+    consultasEmAndamento.delete(chave);
+  }
 }
 
 export function consolidarKpisProfessoresCanonicos(

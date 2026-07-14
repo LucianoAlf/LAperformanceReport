@@ -96,7 +96,9 @@ export function ModalEnviarFeedback({ open, onClose, unidadeAtual }: ModalEnviar
       // Buscar relacionamentos de professores com unidades
       const { data: profUnidadesData } = await supabase
         .from('professores_unidades')
-        .select('professor_id, unidade_id');
+        .select('professor_id, unidade_id')
+        .eq('emusys_ativo', true)
+        .neq('validacao_status', 'ignorado');
 
       // Criar mapa de professor -> unidades
       const profUnidadesMap = new Map<number, string[]>();

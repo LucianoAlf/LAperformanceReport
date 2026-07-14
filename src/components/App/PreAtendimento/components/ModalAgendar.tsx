@@ -136,7 +136,9 @@ export function ModalAgendar({ aberto, onClose, onSalvo, lead }: ModalAgendarPro
       supabase.from('professores_cursos').select('professor_id, curso_id'),
       supabase.from('professores_unidades')
         .select('professor_id')
-        .eq('unidade_id', lead.unidade_id),
+        .eq('unidade_id', lead.unidade_id)
+        .eq('emusys_ativo', true)
+        .neq('validacao_status', 'ignorado'),
       supabase.from('vw_turmas_implicitas')
         .select('professor_id, professor_nome, curso_id, curso_nome, dia_semana, horario_inicio, total_alunos, nomes_alunos, ids_alunos')
         .eq('unidade_id', lead.unidade_id),
@@ -176,6 +178,8 @@ export function ModalAgendar({ aberto, onClose, onSalvo, lead }: ModalAgendarPro
       .select('disponibilidade')
       .eq('professor_id', Number(professorId))
       .eq('unidade_id', lead.unidade_id)
+      .eq('emusys_ativo', true)
+      .neq('validacao_status', 'ignorado')
       .single()
       .then(({ data: d }) => {
         setDisponibilidade(d?.disponibilidade || null);

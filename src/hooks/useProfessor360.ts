@@ -481,13 +481,9 @@ export function useProfessor360(competencia: string, unidadeId?: string) {
 
       const { data: unidadesRel } = await supabase
         .from('professores_unidades')
-        .select('professor_id, unidade_id, unidades:unidade_id (id, nome, codigo)');
-
-      // Buscar todas as unidades para associar professores sem unidade
-      const { data: todasUnidades } = await supabase
-        .from('unidades')
-        .select('id, nome, codigo')
-        .eq('ativo', true);
+        .select('professor_id, unidade_id, unidades:unidade_id (id, nome, codigo)')
+        .eq('emusys_ativo', true)
+        .neq('validacao_status', 'ignorado');
 
       const professoresComUnidades = (profs || []).map(prof => {
         const unidades = (unidadesRel || [])
@@ -497,12 +493,8 @@ export function useProfessor360(competencia: string, unidadeId?: string) {
         
         // Se professor não tem unidades associadas, usar todas as unidades
         // (para garantir que apareça no consolidado)
-        if (unidades.length === 0 && todasUnidades && todasUnidades.length > 0) {
-          return { ...prof, unidades: todasUnidades, semUnidadeDefinida: true };
-        }
-        
         return { ...prof, unidades };
-      });
+      }).filter(prof => prof.unidades.length > 0);
 
       // Filtrar por unidade se necessário
       if (unidadeId && unidadeId !== 'todos') {

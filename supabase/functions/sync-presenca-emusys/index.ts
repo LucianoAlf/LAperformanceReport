@@ -6,6 +6,11 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  carregarMapaProfessoresEmusys,
+  resolverProfessorDaAula,
+  type EmusysProfessorRef,
+} from '../_shared/professor-emusys.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -88,7 +93,7 @@ interface AulaEmusys {
   duracao_minutos: number | null;
   sala_id: number | null;
   sala_nome: string | null;
-  professores: { nome: string; presenca: string }[];
+  professores: Array<EmusysProfessorRef & { nome: string; presenca: string }>;
   alunos: AlunoEmusys[];
   anotacoes: string | null;
 }
@@ -130,40 +135,6 @@ function resolverAlunoLocal(
   }
 
   return mapaAlunos.get(nomeNorm);
-}
-
-// Match professor: exato → prefixo → primeiro+último nome
-function matchProfessor(
-  nomeEmusys: string,
-  profMapa: Map<string, number>,
-  profNomes: string[]
-): number | null {
-  const norm = normalizarNome(nomeEmusys);
-
-  // 1. Match exato
-  if (profMapa.has(norm)) return profMapa.get(norm)!;
-
-  // 2. Match por prefixo (nome DB é prefixo do nome Emusys)
-  for (const profNorm of profNomes) {
-    if (norm.startsWith(profNorm + ' ') || profNorm.startsWith(norm + ' ')) {
-      return profMapa.get(profNorm)!;
-    }
-  }
-
-  // 3. Match por primeiro + último nome
-  const partsEmusys = norm.split(' ');
-  if (partsEmusys.length >= 2) {
-    const primeiro = partsEmusys[0];
-    const ultimo = partsEmusys[partsEmusys.length - 1];
-    for (const profNorm of profNomes) {
-      const partsBD = profNorm.split(' ');
-      if (partsBD.length >= 2 && partsBD[0] === primeiro && partsBD[partsBD.length - 1] === ultimo) {
-        return profMapa.get(profNorm)!;
-      }
-    }
-  }
-
-  return null;
 }
 
 // Buscar todas as aulas de um dia no Emusys (com paginação)
@@ -233,32 +204,15 @@ async function sincronizarMetadadosAulas(
   dataInicio: string,
   dataFim: string
 ) {
-  const { data: professoresDB, error: professoresError } = await supabase
-    .from('professores')
-    .select('id, nome')
-    .eq('ativo', true);
-  if (professoresError) {
-    throw new Error(`Erro ao buscar professores: ${professoresError.message}`);
-  }
-
-  const profMapa = new Map<string, number>();
-  const profNomes: string[] = [];
-  for (const professor of professoresDB || []) {
-    const nomeNormalizado = normalizarNome(professor.nome);
-    profMapa.set(nomeNormalizado, professor.id);
-    profNomes.push(nomeNormalizado);
-  }
-
   const resultados: Array<Record<string, unknown>> = [];
   const chunkSize = 500;
 
   for (const unidade of unidades) {
+    const mapaProfessores = await carregarMapaProfessoresEmusys(supabase, unidade.id);
     const aulas = await fetchAulasRange(unidade.token, dataInicio, dataFim);
     const linhas = aulas.map((aula) => {
       const profNome = aula.professores?.[0]?.nome || null;
-      const professorId = profNome
-        ? matchProfessor(profNome, profMapa, profNomes)
-        : null;
+      const professor = resolverProfessorDaAula(aula.professores, mapaProfessores);
 
       return {
         emusys_id: aula.id,
@@ -276,7 +230,9 @@ async function sincronizarMetadadosAulas(
         curso_nome: aula.curso_nome,
         sala_nome: aula.sala_nome,
         professor_nome: profNome,
-        professor_id: professorId,
+        emusys_professor_id: professor.emusysProfessorId,
+        professor_id: professor.professorId,
+        sem_acompanhamento: professor.semAcompanhamento,
         cancelada: aula.cancelada === true,
         reagendada: aula.reagendada === true,
         justificada: aula.justificada === true,
@@ -945,18 +901,12 @@ serve(async (req: Request) => {
       throw new Error('Nenhum aluno ativo encontrado');
     }
 
-    // Buscar professores ativos para matching
-    const { data: professoresDB } = await supabase
-      .from('professores')
-      .select('id, nome')
-      .eq('ativo', true);
-
-    const profMapa = new Map<string, number>();
-    const profNomes: string[] = [];
-    for (const prof of professoresDB || []) {
-      const norm = normalizarNome(prof.nome);
-      profMapa.set(norm, prof.id);
-      profNomes.push(norm);
+    const mapasProfessoresPorUnidade = new Map<string, Map<number, number>>();
+    for (const unidade of unidadesProcessar) {
+      mapasProfessoresPorUnidade.set(
+        unidade.id,
+        await carregarMapaProfessoresEmusys(supabase, unidade.id),
+      );
     }
 
     // Mapa de cursos: nome_normalizado -> curso_id (nossa base)
@@ -1011,6 +961,7 @@ serve(async (req: Request) => {
 
         // 1. Buscar aulas do dia no Emusys
         const aulas = await fetchAulasDia(unidade.token, dataAlvo);
+        const mapaProfessores = mapasProfessoresPorUnidade.get(unidade.id) ?? new Map();
 
         const mapaAlunosEmusys = alunosPorUnidadeEmusys.get(unidade.id) || new Map();
         const mapaAlunos = alunosPorUnidadeSimples.get(unidade.id) || new Map();
@@ -1028,7 +979,8 @@ serve(async (req: Request) => {
         // 2. Processar aula por aula (não mais agrupado por dia)
         for (const aula of aulas) {
           const profNome = aula.professores?.[0]?.nome || null;
-          const professorId = profNome ? matchProfessor(profNome, profMapa, profNomes) : null;
+          const professor = resolverProfessorDaAula(aula.professores, mapaProfessores);
+          const professorId = professor.professorId;
 
           // Coletar aulas experimentais para reconciliação ANTES de pular canceladas:
           // a reconciliação precisa da aula cancelada p/ marcar status 'cancelada'
@@ -1069,7 +1021,9 @@ serve(async (req: Request) => {
                 curso_nome: aula.curso_nome,
                 sala_nome: aula.sala_nome,
                 professor_nome: profNome,
+                emusys_professor_id: professor.emusysProfessorId,
                 professor_id: professorId,
+                sem_acompanhamento: professor.semAcompanhamento,
                 cancelada: aula.cancelada,
                 reagendada: aula.reagendada === true,
                 justificada: aula.justificada === true,

@@ -6,6 +6,11 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  carregarMapaProfessoresEmusys,
+  resolverProfessorDaAula,
+  type EmusysProfessorRef,
+} from '../_shared/professor-emusys.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -54,42 +59,9 @@ interface AulaEmusys {
   data_hora_fim: string | null;
   duracao_minutos: number | null;
   sala_nome: string | null;
-  professores: { nome: string; presenca?: string | null }[];
+  professores: Array<EmusysProfessorRef & { nome: string; presenca?: string | null }>;
   alunos: { nome_aluno: string }[];
   anotacoes: string | null;
-}
-
-function matchProfessor(
-  nomeEmusys: string,
-  profMapa: Map<string, number>,
-  profNomes: string[],
-): number | null {
-  const norm = normalizarNome(nomeEmusys);
-  if (profMapa.has(norm)) return profMapa.get(norm)!;
-
-  for (const profNorm of profNomes) {
-    if (norm.startsWith(`${profNorm} `) || profNorm.startsWith(`${norm} `)) {
-      return profMapa.get(profNorm)!;
-    }
-  }
-
-  const parts = norm.split(' ');
-  if (parts.length >= 2) {
-    const primeiro = parts[0];
-    const ultimo = parts[parts.length - 1];
-    for (const profNorm of profNomes) {
-      const profParts = profNorm.split(' ');
-      if (
-        profParts.length >= 2 &&
-        profParts[0] === primeiro &&
-        profParts[profParts.length - 1] === ultimo
-      ) {
-        return profMapa.get(profNorm)!;
-      }
-    }
-  }
-
-  return null;
 }
 
 function parseDataHoraEmusys(dataHora: string): string {
@@ -144,21 +116,10 @@ serve(async (req: Request) => {
       .split('T')[0];
     const unidades = unidadeIndex !== null ? [UNIDADES[unidadeIndex]] : UNIDADES;
 
-    const { data: professoresDB } = await supabase
-      .from('professores')
-      .select('id, nome')
-      .eq('ativo', true);
-    const profMapa = new Map<string, number>();
-    const profNomes: string[] = [];
-    for (const professor of professoresDB || []) {
-      const nomeNormalizado = normalizarNome(professor.nome);
-      profMapa.set(nomeNormalizado, professor.id);
-      profNomes.push(nomeNormalizado);
-    }
-
     const resultados: Array<Record<string, unknown>> = [];
 
     for (const unidade of unidades) {
+      const mapaProfessores = await carregarMapaProfessoresEmusys(supabase, unidade.id);
       let aulas: AulaEmusys[];
       try {
         aulas = await fetchAulasRange(unidade.token, hoje, dataFim);
@@ -178,9 +139,7 @@ serve(async (req: Request) => {
 
         vivosEmusysId.add(aula.id);
         const profNome = aula.professores?.[0]?.nome || null;
-        const professorId = profNome
-          ? matchProfessor(profNome, profMapa, profNomes)
-          : null;
+        const professor = resolverProfessorDaAula(aula.professores, mapaProfessores);
 
         linhas.push({
           emusys_id: aula.id,
@@ -201,7 +160,9 @@ serve(async (req: Request) => {
           curso_nome: aula.curso_nome,
           sala_nome: aula.sala_nome,
           professor_nome: profNome,
-          professor_id: professorId,
+          emusys_professor_id: professor.emusysProfessorId,
+          professor_id: professor.professorId,
+          sem_acompanhamento: professor.semAcompanhamento,
           cancelada: aula.cancelada === true,
           reagendada: aula.reagendada === true,
           justificada: aula.justificada === true,

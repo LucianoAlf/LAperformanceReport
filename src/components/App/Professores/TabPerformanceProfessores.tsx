@@ -215,15 +215,26 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         const data = new Date(referencia.getFullYear(), referencia.getMonth() - mesesAntes, 1);
         return { ano: data.getFullYear(), mes: data.getMonth() + 1 };
       });
-      const kpisHistorico = (
-        await Promise.all(referenciasHistoricas.map(async (ref) =>
-          consolidarKpisProfessoresCanonicos(await buscarKpisProfessoresCanonicos({
+      const kpisHistorico: ReturnType<typeof consolidarKpisProfessoresCanonicos> = [];
+      for (const ref of referenciasHistoricas) {
+        try {
+          kpisHistorico.push(...consolidarKpisProfessoresCanonicos(
+            await buscarKpisProfessoresCanonicos({
+              ano: ref.ano,
+              mes: ref.mes,
+              unidadeId: unidadeAtual,
+            })
+          ));
+        } catch (error) {
+          const detalhe = error as { code?: string; message?: string };
+          console.warn('Falha ao carregar historico canonico:', JSON.stringify({
             ano: ref.ano,
             mes: ref.mes,
-            unidadeId: unidadeAtual,
-          }))
-        ))
-      ).flat();
+            code: detalhe?.code,
+            message: detalhe?.message,
+          }));
+        }
+      }
 
       // Buscar fator de demanda ponderado por professor
       let fatorDemandaQuery = supabase
@@ -239,7 +250,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       // Buscar relacionamentos de unidades
       const { data: unidadesRelData } = await supabase
         .from('professores_unidades')
-        .select('professor_id, unidade_id, unidades:unidade_id (nome, codigo)');
+        .select('professor_id, unidade_id, unidades:unidade_id (nome, codigo)')
+        .eq('emusys_ativo', true)
+        .neq('validacao_status', 'ignorado');
 
       // Buscar relacionamentos de cursos
       const { data: cursosRelData } = await supabase
@@ -436,7 +449,13 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
       setProfessores(professoresCompletos);
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+      const detalhe = error as { code?: string; message?: string; details?: string; hint?: string };
+      console.error('Erro ao carregar dados:', JSON.stringify({
+        code: detalhe?.code,
+        message: detalhe?.message,
+        details: detalhe?.details,
+        hint: detalhe?.hint,
+      }));
       toast.error('Erro ao carregar dados de performance');
     } finally {
       setLoading(false);

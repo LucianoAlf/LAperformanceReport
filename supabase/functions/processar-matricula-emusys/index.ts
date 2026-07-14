@@ -472,19 +472,45 @@ async function resolverCursoTransicao(
   return data?.curso_id ?? null;
 }
 
+async function resolverProfessorOperacional(
+  supabase: any,
+  unidadeId: string,
+  emusysProfessorId: number | null,
+): Promise<number | null> {
+  if (emusysProfessorId == null || emusysProfessorId <= 0) return null;
+
+  const { data: vinculo, error: vinculoError } = await supabase
+    .from('professores_unidades')
+    .select('professor_id, emusys_ativo, validacao_status, identidade_historica_valida')
+    .eq('unidade_id', unidadeId)
+    .eq('emusys_id', emusysProfessorId)
+    .maybeSingle();
+  if (vinculoError) throw vinculoError;
+  if (
+    !vinculo?.professor_id ||
+    vinculo.emusys_ativo !== true ||
+    vinculo.validacao_status === 'ignorado' ||
+    vinculo.identidade_historica_valida === true
+  ) {
+    return null;
+  }
+
+  const { data: professor, error: professorError } = await supabase
+    .from('professores')
+    .select('id')
+    .eq('id', vinculo.professor_id)
+    .eq('ativo', true)
+    .maybeSingle();
+  if (professorError) throw professorError;
+  return professor?.id ?? null;
+}
+
 async function resolverProfessorTransicao(
   supabase: any,
   unidadeId: string,
   emusysProfessorId: number | null,
 ): Promise<number | null> {
-  if (emusysProfessorId == null) return null;
-  const { data } = await supabase
-    .from('professores_unidades')
-    .select('professor_id')
-    .eq('unidade_id', unidadeId)
-    .eq('emusys_id', emusysProfessorId)
-    .maybeSingle();
-  return data?.professor_id ?? null;
+  return resolverProfessorOperacional(supabase, unidadeId, emusysProfessorId);
 }
 
 async function registrarTransicaoProfessorSeNecessario(
@@ -705,46 +731,8 @@ async function resolverProfessorId(
   supabase: any,
   emusysId: number | null,
   unidadeId: string,
-  payloadNome: string | null = null,
 ): Promise<number | null> {
-  // CAMADA 1: match exato por emusys_id + unidade (caminho feliz)
-  if (emusysId) {
-    const { data } = await supabase
-      .from('professores_unidades')
-      .select('professor_id')
-      .eq('emusys_id', emusysId)
-      .eq('unidade_id', unidadeId)
-      .limit(1);
-    if (data?.[0]?.professor_id) return data[0].professor_id;
-  }
-
-  // CAMADA 2: fallback por nome normalizado + unidade (auto-cura)
-  // Protege contra professores cadastrados sem emusys_id ou novos sem mapeamento.
-  // Ao achar, grava o emusys_id no vínculo pra próximas chamadas baterem na camada 1.
-  if (payloadNome) {
-    const nomeNorm = normalizar(payloadNome);
-    if (nomeNorm) {
-      const { data: candidatos } = await supabase
-        .from('professores_unidades')
-        .select('professor_id, professores(nome)')
-        .eq('unidade_id', unidadeId);
-      const match = (candidatos || []).find((pu: any) =>
-        normalizar(pu.professores?.nome) === nomeNorm
-      );
-      if (match?.professor_id) {
-        if (emusysId) {
-          await supabase
-            .from('professores_unidades')
-            .update({ emusys_id: emusysId })
-            .eq('professor_id', match.professor_id)
-            .eq('unidade_id', unidadeId);
-        }
-        return match.professor_id;
-      }
-    }
-  }
-
-  return null;
+  return resolverProfessorOperacional(supabase, unidadeId, emusysId);
 }
 
 const ALUNO_SELECT = 'id, professor_atual_id, curso_id, valor_parcela, numero_renovacoes, status, is_segundo_curso, emusys_matricula_id, nome';
@@ -971,7 +959,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
 
   try {
     const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId, p.unidadeId);
-    const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId, p.professorNome);
+    const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId);
 
     // Tenta encontrar aluno EXATO (por matricula_id ou nome+curso)
     const found = await buscarAluno(supabase, p, cursoId);
@@ -1244,7 +1232,7 @@ async function handleRenovacao(supabase: any, p: Payload) {
     }
 
     const aluno = found.aluno;
-    const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId, p.professorNome);
+    const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId);
     const hoje = hojeISOBRT();
     const dataPrimeiraAulaNovoCiclo = dateOnlyISO(p.dataInicioContrato);
     const classificacaoCompetencia = classificarRenovacaoPorCompetencia(hoje, dataPrimeiraAulaNovoCiclo);

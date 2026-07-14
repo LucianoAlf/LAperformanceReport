@@ -21,6 +21,18 @@ test('helper centraliza a RPC e a media ponderada canonica', () => {
   assert.match(helper, /totalOcupacoes\s*\/\s*totalTurmasElegiveis/);
 });
 
+test('helper deduplica consultas canonicas identicas em andamento', () => {
+  assert.match(helper, /consultasEmAndamento/);
+  assert.match(helper, /consultasEmAndamento\.get\(chave\)/);
+  assert.match(helper, /consultasEmAndamento\.set\(chave, consulta\)/);
+  assert.match(helper, /consultasEmAndamento\.delete\(chave\)/);
+});
+
+test('historico auxiliar nao derruba os KPIs atuais', () => {
+  assert.match(performance, /Falha ao carregar historico canonico/);
+  assert.match(performance, /kpisHistorico\.push/);
+});
+
 test('dashboard nao recalcula media de professores pela view operacional', () => {
   assert.match(dashboard, /buscarKpisProfessoresCanonicos/);
   assert.doesNotMatch(dashboard, /from\(['"]vw_turmas_implicitas['"]\)/);

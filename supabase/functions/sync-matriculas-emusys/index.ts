@@ -830,8 +830,37 @@ serve(async (req) => {
     const { data: dep } = await supabase.from('curso_emusys_depara').select('emusys_disciplina_id, curso_id').eq('unidade_id', u.id);
     const depara = new Map<number, number | null>((dep || []).map((d: any) => [d.emusys_disciplina_id, d.curso_id]));
 
-    const { data: prof } = await supabase.from('professores_unidades').select('emusys_id, professor_id').eq('unidade_id', u.id).not('emusys_id', 'is', null);
-    const profMap = new Map<number, number>((prof || []).map((p: any) => [p.emusys_id, p.professor_id]));
+    const { data: prof } = await supabase
+      .from('professores_unidades')
+      .select(`
+        emusys_id,
+        professor_id,
+        emusys_ativo,
+        validacao_status,
+        identidade_historica_valida,
+        professores:professor_id (ativo)
+      `)
+      .eq('unidade_id', u.id)
+      .not('emusys_id', 'is', null);
+    const profMap = new Map<number, number>();
+    const profMapJornada = new Map<number, number>();
+    for (const vinculo of prof || []) {
+      const emusysId = Number((vinculo as any).emusys_id);
+      if (!Number.isInteger(emusysId) || emusysId <= 0) continue;
+
+      const relacaoProfessor = Array.isArray((vinculo as any).professores)
+        ? (vinculo as any).professores[0]
+        : (vinculo as any).professores;
+      const historico = (vinculo as any).identidade_historica_valida === true;
+      const operacional = (vinculo as any).emusys_ativo === true
+        && (vinculo as any).validacao_status !== 'ignorado'
+        && relacaoProfessor?.ativo === true;
+
+      if (operacional) profMap.set(emusysId, (vinculo as any).professor_id);
+      if (operacional || historico) {
+        profMapJornada.set(emusysId, (vinculo as any).professor_id);
+      }
+    }
 
     const { data: formasPagamento } = await supabase.from('formas_pagamento').select('id, nome, sigla');
     const formasPagamentoMap = new Map<number, any>((formasPagamento || []).map((f: any) => [f.id, f]));
@@ -883,7 +912,7 @@ serve(async (req) => {
         alunoIdPorMatriculaEmusys,
         alunoIdPorAlunoEmusys,
         cursoIdPorDisciplinaEmusys: depara,
-        professorIdPorProfessorEmusys: profMap,
+        professorIdPorProfessorEmusys: profMapJornada,
       });
       linhasJornada.push(...rows);
       resumo.jornadas.puladas += skipped;

@@ -212,14 +212,28 @@ async function resolveProfessorId(
   unidadeId: string,
   professorEmusysId: number | null
 ): Promise<number | null> {
-  if (professorEmusysId == null) return null;
-  const { data } = await supabase
+  if (professorEmusysId == null || professorEmusysId <= 0) return null;
+  const { data: vinculo, error: vinculoError } = await supabase
     .from('professores_unidades')
-    .select('professor_id')
+    .select('professor_id, emusys_ativo, validacao_status, identidade_historica_valida')
     .eq('unidade_id', unidadeId)
     .eq('emusys_id', professorEmusysId)
     .maybeSingle();
-  return data?.professor_id ?? null;
+  if (vinculoError) throw vinculoError;
+  if (!vinculo?.professor_id) return null;
+  if (vinculo.identidade_historica_valida === true) {
+    return vinculo.professor_id;
+  }
+  if (vinculo.emusys_ativo !== true || vinculo.validacao_status === 'ignorado') return null;
+
+  const { data: professor, error: professorError } = await supabase
+    .from('professores')
+    .select('id')
+    .eq('id', vinculo.professor_id)
+    .eq('ativo', true)
+    .maybeSingle();
+  if (professorError) throw professorError;
+  return professor?.id ?? null;
 }
 
 function resolveAlunoIdFromRefs(input: JornadaMatriculaInput, refs: JornadaReferenciaMaps): number | null {

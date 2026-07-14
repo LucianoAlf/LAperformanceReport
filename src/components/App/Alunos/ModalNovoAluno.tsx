@@ -198,6 +198,8 @@ export function ModalNovoAluno({
         .select('disponibilidade')
         .eq('professor_id', formData.professor_fixo_id)
         .eq('unidade_id', formData.unidade_id)
+        .eq('emusys_ativo', true)
+        .neq('validacao_status', 'ignorado')
         .single();
       
       setDisponibilidadeProfessor(data?.disponibilidade || null);

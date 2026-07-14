@@ -497,7 +497,11 @@ export function DashboardPage() {
         const endDate = `${ano}-${String(mesFim).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
         const [profsR, profUnidR, kpisProfessores] = await Promise.all([
           supabase.from('professores').select('id, nome, ativo').eq('ativo', true),
-          supabase.from('professores_unidades').select('professor_id, unidade_id'),
+          supabase
+            .from('professores_unidades')
+            .select('professor_id, unidade_id')
+            .eq('emusys_ativo', true)
+            .neq('validacao_status', 'ignorado'),
           buscarKpisProfessoresCanonicos({
             ano,
             mes: mesInicio,
