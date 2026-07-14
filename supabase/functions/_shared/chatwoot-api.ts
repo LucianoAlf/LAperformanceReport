@@ -153,18 +153,6 @@ export async function toggleStatusConversa(config: ChatwootConfig, conversationI
   })
 }
 
-// ─── Quepasa ─────────────────────────────────────────────────────────────────
-
-export async function enviarMensagemQuepasa(quepasaUrl: string, botToken: string, chatId: string, text: string): Promise<void> {
-  const url = `${quepasaUrl}/v3/bot/${botToken}/sendtext`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chatid: chatId, text }),
-  })
-  if (!res.ok) console.error('Quepasa sendtext error:', res.status, await res.text().catch(() => ''))
-}
-
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
 export async function garantirContatoEConversa(

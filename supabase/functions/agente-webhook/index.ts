@@ -12,9 +12,9 @@ import { chatCompletion, transcreverAudio } from '../_shared/ai-client.ts'
 import type { ChatMessage, AIConfig } from '../_shared/ai-client.ts'
 import type { AgentToolDefinition, ToolCall, ToolResult, AIResponse, TransferToolConfig, TransferUnit } from '../_shared/tool-types.ts'
 import {
-  buscarContato, criarContato, criarConversa, enviarNotaPrivada,
+  buscarContato, criarContato, criarConversa, enviarNotaPrivada, enviarMensagem,
   buscarLabelsContato, atualizarLabelsContato, buscarLabelsConversa,
-  atualizarLabelsConversa, toggleStatusConversa, enviarMensagemQuepasa,
+  atualizarLabelsConversa, toggleStatusConversa,
 } from '../_shared/chatwoot-api.ts'
 import type { ChatwootConfig } from '../_shared/chatwoot-api.ts'
 
@@ -556,8 +556,9 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
       ].filter(Boolean).join('\n')
       await enviarNotaPrivada(cwCfg, conversa.id, nota)
 
-      // 4g. Notificar consultor via Quepasa
-      if (matchedUnit.consultant_phone && matchedUnit.quepasa_bot_token && config.quepasa_url) {
+      // 4g. Notificar consultor via WhatsApp — pela própria inbox do Chatwoot (WAHA por trás),
+      // sem credencial própria: usa o mesmo contato/conversa do consultor nessa inbox.
+      if (matchedUnit.consultant_phone) {
         const linkConversa = `${config.chatwoot_api_url}/app/accounts/${config.chatwoot_account_id}/conversations/${conversa.id}`
         const msg = [
           `Olá ${matchedUnit.consultant_name || 'Consultor'}! 👋`,
@@ -576,8 +577,14 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
           'Por favor, entre em contato o mais rápido possível! ⚡',
         ].filter(Boolean).join('\n')
 
-        await enviarMensagemQuepasa(config.quepasa_url, matchedUnit.quepasa_bot_token, matchedUnit.consultant_phone, msg)
-          .catch(e => console.error('Falha ao notificar consultor via Quepasa:', e))
+        try {
+          let contatoConsultor = await buscarContato(cwCfg, matchedUnit.consultant_phone)
+          if (!contatoConsultor) contatoConsultor = await criarContato(cwCfg, matchedUnit.consultant_phone, matchedUnit.consultant_name)
+          const conversaConsultor = await criarConversa(cwCfg, contatoConsultor.id, matchedUnit.inbox_id)
+          await enviarMensagem(cwCfg, conversaConsultor.id, msg)
+        } catch (e) {
+          console.error('Falha ao notificar consultor via Chatwoot:', e)
+        }
       }
     } catch (e) {
       console.error('Chatwoot/Quepasa integration error:', e)

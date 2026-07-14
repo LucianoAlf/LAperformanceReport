@@ -42,7 +42,6 @@ export interface TransferUnit {
   inbox_id: string
   consultant_phone?: string
   consultant_name?: string
-  quepasa_bot_token?: string
 }
 
 export interface TransferToolConfig {
@@ -50,7 +49,6 @@ export interface TransferToolConfig {
   chatwoot_api_url?: string
   chatwoot_api_token?: string
   chatwoot_account_id?: string
-  quepasa_url?: string
   campanha_label?: string  // ex: "lead-volta-as-aulas-2026"
 }
 

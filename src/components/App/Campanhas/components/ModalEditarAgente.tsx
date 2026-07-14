@@ -391,11 +391,10 @@ function AbaToolConfig({ form, set }: { form: AgenteForm; set: <K extends keyof 
 // ─── Transfer Config ──────────────────────────────────────────────────────────
 
 function TransferConfig({ config, onChange }: { config: Record<string, unknown>; onChange: (c: Record<string, unknown>) => void }) {
-  const units = (config.units as any[] ?? []) as Array<{ name: string; inbox_id: string; consultant_phone?: string; consultant_name?: string; quepasa_bot_token?: string }>
+  const units = (config.units as any[] ?? []) as Array<{ name: string; inbox_id: string; consultant_phone?: string; consultant_name?: string }>
   const cwUrl = (config.chatwoot_api_url as string) ?? ''
   const cwToken = (config.chatwoot_api_token as string) ?? ''
   const cwAccount = (config.chatwoot_account_id as string) ?? ''
-  const quepasaUrl = (config.quepasa_url as string) ?? ''
   const campanhaLabel = (config.campanha_label as string) ?? ''
 
   function update(field: string, value: unknown) {
@@ -403,7 +402,7 @@ function TransferConfig({ config, onChange }: { config: Record<string, unknown>;
   }
 
   function addUnit() {
-    update('units', [...units, { name: '', inbox_id: '', consultant_phone: '', consultant_name: '', quepasa_bot_token: '' }])
+    update('units', [...units, { name: '', inbox_id: '', consultant_phone: '', consultant_name: '' }])
   }
 
   function updateUnit(idx: number, field: string, value: string) {
@@ -447,19 +446,19 @@ function TransferConfig({ config, onChange }: { config: Record<string, unknown>;
                   </button>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <input value={u.name} onChange={e => updateUnit(idx, 'name', e.target.value)} placeholder="Nome (ex: Campo Grande)" className={cn(inputCls, 'text-xs py-1.5')} />
+                  <input value={u.name} onChange={e => updateUnit(idx, 'name', e.target.value)} placeholder="Nome (CG, Recreio ou Barra)" className={cn(inputCls, 'text-xs py-1.5')} />
                   <input value={u.inbox_id} onChange={e => updateUnit(idx, 'inbox_id', e.target.value)} placeholder="Inbox ID Chatwoot" className={cn(inputCls, 'text-xs py-1.5')} />
                   <input value={u.consultant_name ?? ''} onChange={e => updateUnit(idx, 'consultant_name', e.target.value)} placeholder="Nome do consultor" className={cn(inputCls, 'text-xs py-1.5')} />
                   <input value={u.consultant_phone ?? ''} onChange={e => updateUnit(idx, 'consultant_phone', e.target.value)} placeholder="Tel consultor (5521...)" className={cn(inputCls, 'text-xs py-1.5')} />
-                  <input value={u.quepasa_bot_token ?? ''} onChange={e => updateUnit(idx, 'quepasa_bot_token', e.target.value)} placeholder="Token bot Quepasa" className={cn(inputCls, 'text-xs py-1.5 col-span-2')} />
                 </div>
+                <p className="text-[11px] text-gray-600">Campo Grande deve ser digitado como <code>CG</code> (o motor normaliza assim antes de comparar).</p>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* Chatwoot + Quepasa */}
+      {/* Chatwoot */}
       <div className="border-t border-slate-700/30 pt-3">
         <p className="text-xs font-medium text-gray-400 mb-2">Integração Chatwoot</p>
         <div className="grid grid-cols-1 gap-2">
@@ -471,11 +470,9 @@ function TransferConfig({ config, onChange }: { config: Record<string, unknown>;
         </div>
       </div>
 
-      <div className="border-t border-slate-700/30 pt-3">
-        <p className="text-xs font-medium text-gray-400 mb-2">Quepasa (notificação consultor via WhatsApp)</p>
-        <input value={quepasaUrl} onChange={e => update('quepasa_url', e.target.value)} placeholder="URL Quepasa (ex: https://poliredeomnichat.apibridge.top)" className={cn(inputCls, 'text-xs')} />
-        <p className="text-xs text-gray-600 mt-1">Token do bot de cada unidade é configurado acima, por unidade</p>
-      </div>
+      <p className="text-xs text-gray-600">
+        A notificação do consultor é enviada pela própria API do Chatwoot (na inbox da unidade) — sem credencial adicional.
+      </p>
     </div>
   )
 }
