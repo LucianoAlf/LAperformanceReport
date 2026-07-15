@@ -537,6 +537,55 @@ async function reconciliarExperimentaisOrfas(
       // sendo capturado (match/raw) p/ quando a decisão for tomada.
       if (!leadId) continue;
 
+      // 2c. Último match por LEAD + chave de negócio (data+horário+curso), agora que o lead
+      //     está resolvido. Cobre o que o 2b não pega: curso NULL (2b exige cursoId) e
+      //     nome_aluno divergente. Espelha o índice único uq_lead_exp_negocio_novo (id>1227):
+      //     sem isto a sync tentaria INSERIR e o índice rejeitaria (presença ficaria sem
+      //     reconciliar). Aqui ATUALIZA a linha do webhook em vez de duplicar/falhar.
+      {
+        let qLead = supabase
+          .from('lead_experimentais')
+          .select('id, status, lead_id, curso_interesse_id, professor_experimental_id, emusys_aula_id, aluno_id')
+          .eq('lead_id', leadId)
+          .eq('data_experimental', exp.dataAula)
+          .eq('horario_experimental', exp.horario + ':00')
+          .neq('status', 'cancelada');
+        qLead = exp.cursoId != null
+          ? qLead.eq('curso_interesse_id', exp.cursoId)
+          : qLead.is('curso_interesse_id', null);
+        const { data: porLead } = await qLead.limit(1).maybeSingle();
+        if (porLead) {
+          const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+          const statusMudou = porLead.status !== novoStatus;
+          if (statusMudou) { patch.status = novoStatus; patch.etapa_pipeline_id = presente ? 7 : 9; }
+          if (exp.cursoId != null && porLead.curso_interesse_id !== exp.cursoId) patch.curso_interesse_id = exp.cursoId;
+          if (exp.professorId != null && porLead.professor_experimental_id !== exp.professorId) patch.professor_experimental_id = exp.professorId;
+          if (porLead.emusys_aula_id == null) patch.emusys_aula_id = exp.emusysAulaId;
+          if (idAluno != null && porLead.aluno_id == null) patch.aluno_id = idAluno;
+          if (Object.keys(patch).length > 1) {
+            await supabase.from('lead_experimentais').update(patch).eq('id', porLead.id);
+            if (statusMudou && porLead.lead_id) {
+              await supabase.from('leads').update({
+                experimental_realizada: presente,
+                faltou_experimental: !presente,
+                status: novoStatus,
+                etapa_pipeline_id: presente ? 7 : 9,
+                updated_at: new Date().toISOString()
+              }).eq('id', porLead.lead_id).not('status', 'in', '("convertido","matriculado")');
+            }
+          }
+          logs.push({
+            lead_id: porLead.lead_id,
+            lead_nome: nomeAluno,
+            unidade: unidadeNome,
+            data: exp.dataAula,
+            status: presente ? 'reconciliada_presente' : 'reconciliada_faltou',
+            motivo: `Experimental ${presente ? 'realizada' : 'faltou'} via match lead+negócio (aulaId=${exp.emusysAulaId}, curso=${exp.cursoId ?? 'null'})`
+          });
+          continue;
+        }
+      }
+
       // Inserir já no estado final (lead puro).
       const { error } = await supabase
         .from('lead_experimentais')
