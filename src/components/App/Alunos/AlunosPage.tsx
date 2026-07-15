@@ -101,6 +101,11 @@ export interface Aluno {
   foto_url?: string | null;
   photo_url?: string | null;
   instagram?: string | null;
+  emusys_matricula_id?: string | null;
+  // Inadimplencia/valor ao vivo da API Emusys (nao confundir com status_pagamento/valor_parcela, que sao manuais)
+  inadimplente_emusys?: boolean;
+  valor_mensalidade_emusys?: number | null;
+  _inadimplencia_atualizado_em?: string | null;
   anamnese_diagnosticos?: string[];
 }
 
@@ -524,7 +529,7 @@ export function AlunosPage() {
       status, status_pagamento, aguardando_renovacao, dia_vencimento, tipo_matricula_id, tipo_aluno, unidade_id, data_matricula,
       is_segundo_curso, data_nascimento, forma_pagamento_id, telefone, whatsapp, responsavel_telefone, data_saida,
       arquivado_em, arquivado_por, arquivado_motivo, arquivado_origem, arquivado_aluno_principal_id,
-      foto_url, photo_url, instagram,
+      foto_url, photo_url, instagram, emusys_matricula_id,
       anamnese_preenchida, anamnese_preenchida_em, temperamento_codinome,
       professores:professor_atual_id!left(nome),
       cursos:curso_id!left(nome, is_projeto_banda),
