@@ -1116,27 +1116,39 @@ serve(async (req) => {
       .eq('resolvido', false);
     if (divs.length) await supabase.from('matriculas_divergencias').upsert(divs, { onConflict: 'aluno_id,tipo_divergencia,campo' });
 
-    // Limpa ambíguos obsoletos: alunos processados nesta rodada que não geraram novo ambíguo.
-    // Caso típico: aluno era ambíguo (3 candidatos), sync filtrou candidatos já vinculados e
-    // agora tem match único → row antigo ficaria para sempre sem ser sobrescrito.
+    // Limpa alertas obsoletos: alunos processados nesta rodada que não geraram o mesmo tipo
+    // de novo. Caso típico do 'ambiguo': aluno tinha 3 candidatos, sync filtrou os já vinculados
+    // e agora tem match único → row antigo ficaria para sempre sem ser sobrescrito.
+    // Mesmo mecanismo agora cobre também status/valor/classificacao/disciplina — antes só
+    // 'ambiguo' e 'auto_preview' se limpavam sozinhos; um status_divergente parado numa
+    // matrícula que voltou a ficar ativa nunca fechava (achado manual 2026-07-15, caso
+    // Giovanna Azevedo Chipitelli/Recreio: matrícula 1004 renovada, Emusys reaproveitou o
+    // mesmo id, e a sync nunca soube que o alerta antigo de 'evadido' já não fazia sentido).
     {
-      const alunosComAmbiguo = new Set(divs.filter((d: any) => d.tipo_divergencia === 'ambiguo').map((d: any) => d.aluno_id));
-      const alunosSemAmbiguo = alunosParaReconciliar.map((a: any) => a.id).filter((id: number) => !alunosComAmbiguo.has(id));
-      if (alunosSemAmbiguo.length) {
-        await supabase.from('matriculas_divergencias')
-          .update({ resolvido: true, updated_at: new Date().toISOString() })
-          .in('aluno_id', alunosSemAmbiguo)
-          .eq('tipo_divergencia', 'ambiguo')
-          .eq('resolvido', false)
-          .eq('unidade_id', u.id);
+      const TIPOS_COM_LIMPEZA_POR_RODADA = ['ambiguo', 'status_divergente', 'valor_divergente', 'classificacao_divergente', 'disciplina_nao_mapeada'];
+      const idsProcessados = alunosParaReconciliar.map((a: any) => a.id);
+      for (const tipo of TIPOS_COM_LIMPEZA_POR_RODADA) {
+        const alunosComTipo = new Set(divs.filter((d: any) => d.tipo_divergencia === tipo).map((d: any) => d.aluno_id));
+        const alunosSemTipo = idsProcessados.filter((id: number) => !alunosComTipo.has(id));
+        if (alunosSemTipo.length) {
+          await supabase.from('matriculas_divergencias')
+            .update({ resolvido: true, updated_at: new Date().toISOString() })
+            .in('aluno_id', alunosSemTipo)
+            .eq('tipo_divergencia', tipo)
+            .eq('resolvido', false)
+            .eq('unidade_id', u.id);
+        }
       }
     }
 
     // ─── VARREDURA REVERSA: contratos Emusys sem matrícula nossa ───
-    // Detecta contratos ATIVOS no Emusys sem correspondência no banco.
+    // Detecta contratos ATIVOS OU TRANCADOS no Emusys sem correspondência no banco.
+    // Trancada entra porque o LA Report conta trancado como aluno ativo (regra de negócio) —
+    // sem isso, uma matrícula trancada órfã nunca vira alerta (achado manual 2026-07-15, caso Davi
+    // Lima Queiroz/Recreio: matrícula 53 trancada no Emusys, nunca linkada aqui, sem alerta na fila).
     // Casos cobertos:
     //   1. Pessoa sem nenhuma linha no banco → orphan direto
-    //   2. Pessoa COM linhas no banco mas com mais contratos Emusys ativos do que linhas
+    //   2. Pessoa COM linhas no banco mas com mais contratos Emusys ativos/trancados do que linhas
     //      disponíveis (ex: 2 linhas / 3 contratos → 1 orphan). Evita duplo-flag com ambiguo
     //      consultando os candidatos dos ambiguos existentes.
     {
@@ -1177,7 +1189,7 @@ serve(async (req) => {
       // Contagem de contratos Emusys ativos NÃO vinculados por nome
       const unlinkedEmusysPorNome = new Map<string, number>();
       for (const [eid, mat] of porId) {
-        if (mat.status !== 'ativa') continue;
+        if (mat.status !== 'ativa' && mat.status !== 'trancada') continue;
         if (idsVinculados.has(eid)) continue;
         const k = normalizarNome(mat.aluno?.nome || '');
         unlinkedEmusysPorNome.set(k, (unlinkedEmusysPorNome.get(k) || 0) + 1);
@@ -1200,7 +1212,7 @@ serve(async (req) => {
 
       const orfaosDivs: any[] = [];
       for (const [eid, mat] of porId) {
-        if (mat.status !== 'ativa') continue;
+        if (mat.status !== 'ativa' && mat.status !== 'trancada') continue;
         if (idsVinculados.has(eid)) continue;
         if (idsEmAmbiguo.has(eid)) continue; // já aparece como candidato em ambiguo
 
