@@ -739,11 +739,22 @@ export function AlunosPage() {
       const unidadesEnvolvidas = [...new Set(alunosComSegundoCurso.map(a => a.unidade_id).filter(Boolean))];
       const cacheMap = new Map<string, { inadimplente: boolean; valor_mensalidade_emusys: number | null; atualizado_em: string }>();
       if (unidadesEnvolvidas.length > 0) {
-        const { data: cacheRows } = await supabase
-          .from('inadimplencia_emusys_cache')
-          .select('unidade_id, emusys_matricula_id, inadimplente, valor_mensalidade_emusys, atualizado_em')
-          .in('unidade_id', unidadesEnvolvidas);
-        (cacheRows || []).forEach((row: any) => {
+        // Paginado (mesmo padrão de fetchAllAlunos) -- teto de 1000 linhas por resposta
+        // do PostgREST truncaria silenciosamente com as 3 unidades juntas (~1162 linhas ativas).
+        const cacheRows: any[] = [];
+        let cacheOffset = 0;
+        let cacheHasMore = true;
+        while (cacheHasMore) {
+          const { data: cachePage } = await supabase
+            .from('inadimplencia_emusys_cache')
+            .select('unidade_id, emusys_matricula_id, inadimplente, valor_mensalidade_emusys, atualizado_em')
+            .in('unidade_id', unidadesEnvolvidas)
+            .range(cacheOffset, cacheOffset + PAGE_SIZE - 1);
+          if (cachePage) cacheRows.push(...cachePage);
+          cacheHasMore = cachePage?.length === PAGE_SIZE;
+          cacheOffset += PAGE_SIZE;
+        }
+        cacheRows.forEach((row: any) => {
           cacheMap.set(`${row.unidade_id}|${row.emusys_matricula_id}`, row);
         });
       }

@@ -300,58 +300,9 @@ export function TabelaAlunos({
     );
   }, []);
 
-  // Contagem de inadimplentes (usa todosAlunos para não depender de filtros)
-  // Conta ALUNOS únicos, mas soma VALOR de todos os cursos (incluindo segundo curso)
-  const inadimplenciaInfo = useMemo(() => {
-    const fonte = todosAlunos || alunos;
-    const ativos = fonte.filter(a => {
-      const status = String(a.status || '').toLowerCase();
-      return status === 'ativo';
-    });
-    
-    // Contar alunos inadimplentes (únicos) e somar valor de todos os cursos
-    let totalAlunosInadimplentes = 0;
-    let valorInadimplente = 0;
-    
-    ativos.forEach(a => {
-      // Verificar se o aluno (ou algum curso dele) é inadimplente
-      const principalInadimplente = a.status_pagamento === 'inadimplente';
-      const outrosCursosInadimplentes = a.outros_cursos?.filter(oc => {
-        const statusCurso = String(oc.status || '').toLowerCase();
-        return statusCurso === 'ativo' && oc.status_pagamento === 'inadimplente';
-      }) || [];
-      
-      if (principalInadimplente || outrosCursosInadimplentes.length > 0) {
-        // Conta como 1 aluno (não importa quantos cursos)
-        totalAlunosInadimplentes++;
-        
-        // Soma valor do curso principal se inadimplente
-        if (principalInadimplente) {
-          valorInadimplente += a.valor_parcela || 0;
-        }
-        // Soma valor dos outros cursos inadimplentes
-        outrosCursosInadimplentes.forEach(oc => {
-          valorInadimplente += oc.valor_parcela || 0;
-        });
-      }
-    });
-    
-    const pendentes = ativos.filter(a => 
-      (!a.status_pagamento || a.status_pagamento === '-') &&
-      a.tipo_matricula_id !== 3 && a.tipo_matricula_id !== 4 && a.tipo_matricula_id !== 5
-    );
-    
-    return {
-      total: totalAlunosInadimplentes,
-      pendentes: pendentes.length,
-      valor: valorInadimplente,
-      mostrar: totalAlunosInadimplentes > 0 || pendentes.length > 0,
-    };
-  }, [todosAlunos, alunos]);
-
-  // Contagem de inadimplentes via sync Emusys ao vivo (inadimplente_emusys), em paralelo
-  // ao inadimplenciaInfo acima (que segue lendo status_pagamento manual). Fonte de dados
-  // preparada nas Tasks 4-6; este memo é o consumo visível no banner.
+  // Contagem de inadimplentes via sync Emusys ao vivo (inadimplente_emusys). Fonte de dados
+  // preparada nas Tasks 4-6; este memo é o consumo visível no banner. Substitui o memo
+  // antigo baseado em status_pagamento manual (removido na Task 8 por virar código morto).
   const inadimplenciaInfoEmusys = useMemo(() => {
     const fonte = todosAlunos || alunos;
     const ativos = fonte.filter(a => String(a.status || '').toLowerCase() === 'ativo');
@@ -413,6 +364,9 @@ export function TabelaAlunos({
       ));
 
       await onRecarregar();
+    } catch (error: any) {
+      console.error('Erro ao atualizar inadimplência:', error);
+      toast.addToast('Erro ao atualizar inadimplência', 'error', error.message || 'Não foi possível sincronizar com o Emusys agora.');
     } finally {
       setAtualizandoInadimplencia(false);
     }
