@@ -730,7 +730,46 @@ export function AlunosPage() {
       });
 
       alunosComSegundoCurso.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-      setAlunos(alunosComSegundoCurso);
+
+      // Merge com o cache de inadimplencia/valor ao vivo do Emusys (so leitura -- nao
+      // altera status_pagamento/valor_parcela). Match por (unidade_id, emusys_matricula_id)
+      // -- IDs do Emusys sao por unidade, nunca globais.
+      const unidadesEnvolvidas = [...new Set(alunosComSegundoCurso.map(a => a.unidade_id).filter(Boolean))];
+      const cacheMap = new Map<string, { inadimplente: boolean; valor_mensalidade_emusys: number | null; atualizado_em: string }>();
+      if (unidadesEnvolvidas.length > 0) {
+        const { data: cacheRows } = await supabase
+          .from('inadimplencia_emusys_cache')
+          .select('unidade_id, emusys_matricula_id, inadimplente, valor_mensalidade_emusys, atualizado_em')
+          .in('unidade_id', unidadesEnvolvidas);
+        (cacheRows || []).forEach((row: any) => {
+          cacheMap.set(`${row.unidade_id}|${row.emusys_matricula_id}`, row);
+        });
+      }
+
+      const alunosComInadimplenciaEmusys = alunosComSegundoCurso.map(aluno => {
+        const chavePrincipal = aluno.emusys_matricula_id ? `${aluno.unidade_id}|${aluno.emusys_matricula_id}` : null;
+        const cachePrincipal = chavePrincipal ? cacheMap.get(chavePrincipal) : undefined;
+
+        const outrosCursosComCache = aluno.outros_cursos?.map(oc => {
+          const chaveOc = oc.emusys_matricula_id ? `${oc.unidade_id}|${oc.emusys_matricula_id}` : null;
+          const cacheOc = chaveOc ? cacheMap.get(chaveOc) : undefined;
+          return {
+            ...oc,
+            inadimplente_emusys: cacheOc?.inadimplente,
+            valor_mensalidade_emusys: cacheOc?.valor_mensalidade_emusys ?? undefined,
+          };
+        });
+
+        return {
+          ...aluno,
+          inadimplente_emusys: cachePrincipal?.inadimplente,
+          valor_mensalidade_emusys: cachePrincipal?.valor_mensalidade_emusys ?? undefined,
+          _inadimplencia_atualizado_em: cachePrincipal?.atualizado_em ?? null,
+          outros_cursos: outrosCursosComCache,
+        };
+      });
+
+      setAlunos(alunosComInadimplenciaEmusys);
 
       // ── FASE 3: calcular KPIs no JS (elimina 5 queries) ──
       // KPIs usam apenas alunos da query principal (por data_matricula), não os mesclados por data_saida
