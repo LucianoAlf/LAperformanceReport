@@ -85,6 +85,7 @@ const TIPO_META: Record<string, { label: string; descricao: string; icon: typeof
   professor_nao_mapeado: { label: 'Professor novo', descricao: 'Professor do Emusys sem mapeamento', icon: HelpCircle, cor: 'violet' },
   valor_fixado_divergente: { label: 'Valor fixado diverge', descricao: 'Valor editado manualmente difere da API', icon: AlertTriangle, cor: 'orange' },
   auto_preview: { label: 'Sync matricula/grade', descricao: 'Diferencas de curso, professor, dia ou horario vindas do sync. Financeiro e fim de contrato exigem revisao.', icon: Zap, cor: 'emerald' },
+  status_divergente: { label: 'Status divergente', descricao: 'O status da matrícula no Emusys não bate com o status daqui', icon: AlertTriangle, cor: 'red' },
 };
 
 const COR_CLASSES: Record<string, string> = {
@@ -168,6 +169,20 @@ const CAMPO_LABEL: Record<string, string> = {
   dia_aula: 'dia da aula', horario_aula: 'horário',
 };
 const CAMPO_MONETARIO = new Set(['valor_cheio', 'valor_parcela', 'desconto_fixo', 'desconto_condicional']);
+
+// status cru do Emusys ('ativa'/'trancada'/'finalizada') e do nosso ('ativo'/'trancado'/'evadido') em pt-BR legível
+const STATUS_LABEL: Record<string, string> = {
+  ativa: 'Ativa', trancada: 'Trancada', finalizada: 'Finalizada',
+  ativo: 'Ativo', trancado: 'Trancado', evadido: 'Evadido', inativo: 'Inativo',
+};
+function fmtStatus(s: any): string {
+  return STATUS_LABEL[String(s || '').toLowerCase()] || String(s || '—');
+}
+function fmtDataCurta(d: any): string {
+  if (!d) return '—';
+  const data = new Date(String(d) + 'T00:00:00');
+  return Number.isNaN(data.getTime()) ? '—' : data.toLocaleDateString('pt-BR');
+}
 
 const PER_PAGE = 20;
 const EMAILS_SYNC_TECNICO = new Set([
@@ -288,6 +303,10 @@ function temSugestaoAplicavel(item: ConciliacaoItem): boolean {
   return item.tipo_divergencia === 'classificacao_divergente' && item.sugestao != null;
 }
 
+const STATUS_PAGAMENTO_LABEL: Record<string, string> = {
+  em_dia: 'Em dia', inadimplente: 'Inadimplente', atrasado: 'Atrasado',
+};
+
 function textoCurtoValor(v: any): string {
   if (v == null || v === '') return '—';
   if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v);
@@ -343,6 +362,25 @@ function descricaoAtributo(item: AtributoDivergencia): { nosso: string; emusys: 
   }
   if (item.tipo_divergencia === 'contrato_assinatura_pendente') {
     return { nosso: 'Contrato sem assinatura', emusys: 'Checklist interno do LA Report', sugestao: 'Regularizar assinatura' };
+  }
+  if (item.tipo_divergencia === 'forma_pagamento_divergente') {
+    const nossaForma = item.valor_nosso?.nome
+      ? `${item.valor_nosso.nome}${item.valor_nosso.sigla ? ` (${item.valor_nosso.sigla})` : ''}`
+      : 'Sem forma de pagamento definida';
+    const formaEmusys = item.valor_emusys?.forma_pagamento || '—';
+    return {
+      nosso: nossaForma,
+      emusys: formaEmusys,
+      sugestao: item.sugestao?.forma_pagamento ? `Definir como ${item.sugestao.forma_pagamento}` : '—',
+    };
+  }
+  if (item.tipo_divergencia === 'status_financeiro_divergente') {
+    const label = (s: any) => STATUS_PAGAMENTO_LABEL[String(s || '').toLowerCase()] || String(s || '—');
+    return {
+      nosso: label(item.valor_nosso?.status_pagamento),
+      emusys: label(item.valor_emusys?.status_pagamento),
+      sugestao: item.sugestao?.status_pagamento ? `Definir como ${label(item.sugestao.status_pagamento)}` : '—',
+    };
   }
   return {
     nosso: textoCurtoValor(item.valor_nosso),
@@ -474,6 +512,9 @@ function descreverNosso(item: ConciliacaoItem, tiposMap: Map<string, TipoMatricu
     return item.curso_nome || 'Sem valor de parcela';
   }
   if (item.tipo_divergencia === 'ausente_nosso_sistema') return 'Novo cadastro';
+  if (item.tipo_divergencia === 'status_divergente') {
+    return `Aqui: ${fmtStatus(item.valor_nosso?.status)}`;
+  }
   return item.curso_nome || (item.valor_nosso?.curso_id ? `curso ${item.valor_nosso.curso_id}` : '—');
 }
 
@@ -501,6 +542,14 @@ function descreverApi(item: ConciliacaoItem, tiposMap: Map<string, TipoMatricula
   }
   if (item.tipo_divergencia === 'ausente_nosso_sistema') {
     return [v.nome, v.disciplinas ? `(${v.disciplinas})` : null, `Emusys #${v.emusys_id}`].filter(Boolean).join(' · ');
+  }
+  if (item.tipo_divergencia === 'status_divergente') {
+    const partes = [
+      `Emusys: ${fmtStatus(v.status_emusys)}`,
+      v.data_fim ? `desde ${fmtDataCurta(v.data_fim)}` : null,
+      v.emusys_matricula_id ? `matrícula #${v.emusys_matricula_id}` : null,
+    ].filter(Boolean).join(' · ');
+    return `${partes} → sugestão: marcar como ${fmtStatus(v.status_sugerido_la_report)} aqui`;
   }
   if (v.nome) return '(não encontrado na API)';
   if (v.cursos) return `cursos: ${v.cursos.join(', ')}`;
