@@ -70,9 +70,28 @@ export function ModalDetalhesTurmas({
   const [filtroTurma, setFiltroTurma] = useState<string>('todos');
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
   const [pagina, setPagina] = useState(1);
+  const hoje = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  const periodoIncluiHoje = !dataInicio || !dataFim || (hoje >= dataInicio && hoje <= dataFim);
 
   useEffect(() => {
     if (!open || !professorId) return;
+
+    if (!periodoIncluiHoje) {
+      setLinhas([]);
+      setLoading(false);
+      setBusca('');
+      setFiltroTurma('todos');
+      setFiltroStatus('todos');
+      setPagina(1);
+      return;
+    }
+
+    let cancelado = false;
 
     async function fetchTurmas() {
       setLoading(true);
@@ -95,6 +114,7 @@ export function ModalDetalhesTurmas({
       }
 
       const { data } = await query;
+      if (cancelado) return;
 
       const lista: LinhaAlunoTurma[] = (data || []).map((row: any) => {
         const cursoNome = (row.cursos as any)?.nome || '';
@@ -122,8 +142,9 @@ export function ModalDetalhesTurmas({
       setLoading(false);
     }
 
-    fetchTurmas();
-  }, [open, professorId, unidadeId, dataInicio, dataFim]);
+    void fetchTurmas();
+    return () => { cancelado = true; };
+  }, [open, professorId, unidadeId, dataInicio, dataFim, periodoIncluiHoje]);
 
   // Lista de turmas únicas para o filtro (chave estável + label amigável)
   const turmasUnicas = useMemo(() => {
@@ -212,7 +233,7 @@ export function ModalDetalhesTurmas({
                 <p className="text-lg font-bold text-white">{totalTurmas}</p>
               </div>
               <div className="bg-emerald-500/10 rounded-lg p-3 text-center border border-emerald-500/20">
-                <p className="text-xs text-slate-400">Vínculos ativos</p>
+                <p className="text-xs text-slate-400">Alunos no período</p>
                 <p className="text-lg font-bold text-emerald-400">{alunosAtivos}</p>
               </div>
               <Tooltip
@@ -241,7 +262,9 @@ export function ModalDetalhesTurmas({
               >
                 <div className="bg-slate-700/30 rounded-lg p-3 text-center border border-slate-600/30 cursor-help">
                   <p className="text-xs text-slate-400">Outros</p>
-                  <p className="text-lg font-bold text-slate-300">{alunosOutrosUnicos}</p>
+                  <p className="text-lg font-bold text-slate-300">
+                    {periodoIncluiHoje ? alunosOutrosUnicos : '-'}
+                  </p>
                 </div>
               </Tooltip>
               <div className={cn(
@@ -258,12 +281,19 @@ export function ModalDetalhesTurmas({
                 )}>{media}</p>
                 {resumoCanonico && (
                   <p className="mt-0.5 text-[10px] text-slate-500">
-                    {resumoCanonico.ocupacoesRegulares}/{resumoCanonico.turmasRegulares} regulares
+                    {resumoCanonico.ocupacoesRegulares} alunos / {resumoCanonico.turmasRegulares} turmas regulares
                   </p>
                 )}
               </div>
             </div>
 
+            {!periodoIncluiHoje ? (
+              <div className="rounded-md border border-cyan-500/20 bg-cyan-500/5 px-4 py-3 text-sm text-slate-300">
+                A competencia fechada preserva os totais auditados. A lista nominal abaixo so e exibida
+                para o periodo atual, porque a API do Emusys nao fornece uma carteira historica retroativa.
+              </div>
+            ) : (
+              <>
             {/* Filtros */}
             <div className="flex items-center gap-2 mb-3">
               <div className="relative flex-1">
@@ -392,6 +422,8 @@ export function ModalDetalhesTurmas({
                     </div>
                   </div>
                 )}
+              </>
+            )}
               </>
             )}
           </>

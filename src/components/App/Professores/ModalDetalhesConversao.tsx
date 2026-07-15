@@ -285,13 +285,13 @@ export function ModalDetalhesConversao({
                     <div className="text-xs max-w-[280px]">
                       <p className="font-semibold text-slate-200 mb-1">Formula operacional</p>
                       <p className="text-slate-400 mb-1">
-                        <span className="text-cyan-400">Matriculas pos-exp</span> = leads que matricularam tendo experimental no periodo (mesmo que `experimental_realizada=false`).
+                        <span className="text-cyan-400">Matriculas pos-exp</span> = alunos matriculados com vinculo direto a uma experimental realizada por este professor no periodo.
                       </p>
                       <p className="text-slate-400 mb-1">
-                        <span className="text-emerald-400">Realizadas</span> = leads com `experimental_realizada=true` no periodo.
+                        <span className="text-emerald-400">Realizadas</span> = experimentais confirmadas no bruto operacional do Emusys.
                       </p>
-                      <p className="text-amber-400">
-                        Leads ambiguos entram no numerador mas nao no denominador; por isso a taxa pode passar de 100%.
+                      <p className="text-slate-400">
+                        Conversoes sem vinculo seguro permanecem na conciliacao da unidade e nao sao atribuidas artificialmente ao professor.
                       </p>
                     </div>
                   }

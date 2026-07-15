@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -127,6 +127,7 @@ function getTrimestreOperacional(ano: number, mes: number): { dataInicio: string
 
 export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPeriodoChange }: Props) {
   const toast = useToast();
+  const requisicaoAtivaRef = useRef(0);
 
   // Hook de competência (Mês/Trim/Sem/Ano)
   const competenciaFiltro = useCompetenciaFiltro();
@@ -182,9 +183,13 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
   useEffect(() => {
     carregarDados();
+    return () => {
+      requisicaoAtivaRef.current += 1;
+    };
   }, [unidadeAtual, ano, mes, modoVisualizacao]);
 
   const carregarDados = async () => {
+    const requisicaoId = ++requisicaoAtivaRef.current;
     setLoading(true);
     try {
       // Extrair ano e mês da competência (formato: YYYY-MM)
@@ -197,44 +202,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         .eq('ativo', true)
         .order('nome');
 
-      const { data: professoresData, error: profError } = await query;
-      if (profError) throw profError;
-
-      const kpisData = consolidarKpisProfessoresCanonicos(
-        await buscarKpisProfessoresCanonicos({
-          ano: anoFiltro,
-          mes: mesFiltro,
-          unidadeId: unidadeAtual,
-          dataInicio: modoVisualizacao === 'trimestre' ? trimestreInfo.dataInicio : null,
-          dataFim: modoVisualizacao === 'trimestre' ? trimestreInfo.dataFim : null,
-        })
-      );
-
       const referencia = new Date(anoFiltro, mesFiltro - 1, 1);
-      const referenciasHistoricas = [1, 2].map((mesesAntes) => {
-        const data = new Date(referencia.getFullYear(), referencia.getMonth() - mesesAntes, 1);
-        return { ano: data.getFullYear(), mes: data.getMonth() + 1 };
-      });
-      const kpisHistorico: ReturnType<typeof consolidarKpisProfessoresCanonicos> = [];
-      for (const ref of referenciasHistoricas) {
-        try {
-          kpisHistorico.push(...consolidarKpisProfessoresCanonicos(
-            await buscarKpisProfessoresCanonicos({
-              ano: ref.ano,
-              mes: ref.mes,
-              unidadeId: unidadeAtual,
-            })
-          ));
-        } catch (error) {
-          const detalhe = error as { code?: string; message?: string };
-          console.warn('Falha ao carregar historico canonico:', JSON.stringify({
-            ano: ref.ano,
-            mes: ref.mes,
-            code: detalhe?.code,
-            message: detalhe?.message,
-          }));
-        }
-      }
+      const referenciaAnterior = new Date(referencia.getFullYear(), referencia.getMonth() - 1, 1);
 
       // Buscar fator de demanda ponderado por professor
       let fatorDemandaQuery = supabase
@@ -244,20 +213,48 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       if (unidadeAtual !== 'todos') {
         fatorDemandaQuery = fatorDemandaQuery.eq('unidade_id', unidadeAtual);
       }
-      
-      const { data: fatoresDemanda } = await fatorDemandaQuery;
 
       // Buscar relacionamentos de unidades
-      const { data: unidadesRelData } = await supabase
+      const unidadesRelQuery = supabase
         .from('professores_unidades')
         .select('professor_id, unidade_id, unidades:unidade_id (nome, codigo)')
         .eq('emusys_ativo', true)
         .neq('validacao_status', 'ignorado');
 
       // Buscar relacionamentos de cursos
-      const { data: cursosRelData } = await supabase
+      const cursosRelQuery = supabase
         .from('professores_cursos')
         .select('professor_id, curso_id, cursos:curso_id (nome)');
+
+      const [
+        professoresResult,
+        kpisAtuais,
+        fatoresResult,
+        unidadesResult,
+        cursosResult,
+      ] = await Promise.all([
+        query,
+        buscarKpisProfessoresCanonicos({
+          ano: anoFiltro,
+          mes: mesFiltro,
+          unidadeId: unidadeAtual,
+          dataInicio: modoVisualizacao === 'trimestre' ? trimestreInfo.dataInicio : null,
+          dataFim: modoVisualizacao === 'trimestre' ? trimestreInfo.dataFim : null,
+        }),
+        fatorDemandaQuery,
+        unidadesRelQuery,
+        cursosRelQuery,
+      ]);
+
+      if (requisicaoId !== requisicaoAtivaRef.current) return;
+
+      const { data: professoresData, error: profError } = professoresResult;
+      if (profError) throw profError;
+
+      const kpisData = consolidarKpisProfessoresCanonicos(kpisAtuais);
+      const fatoresDemanda = fatoresResult.data;
+      const unidadesRelData = unidadesResult.data;
+      const cursosRelData = cursosResult.data;
 
       // Criar mapa de KPIs por professor (agregar quando consolidado — professor com múltiplas unidades)
       const kpisPorProfessor = new Map<number, any>();
@@ -303,14 +300,6 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           e.taxa_cancelamento = e.carteira_alunos > 0 ? ((e.evasoes || 0) / e.carteira_alunos) * 100 : 0;
           e._unidades_count += 1;
         }
-      });
-
-      const historicoMap = new Map<number, any[]>();
-      kpisHistorico?.forEach(h => {
-        if (!historicoMap.has(h.professor_id)) {
-          historicoMap.set(h.professor_id, []);
-        }
-        historicoMap.get(h.professor_id)!.push(h);
       });
 
       // Criar mapa de fator de demanda ponderado por professor (média quando múltiplas unidades)
@@ -373,14 +362,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             : (totalAlunos > 0 ? 100 : 0);
 
           // Calcular tendência da média de alunos/turma baseado no histórico real
-          let tendencia: 'subindo' | 'estavel' | 'caindo' = 'estavel';
-          const historico = historicoMap.get(prof.id) || [];
-          if (historico.length >= 2) {
-            const atual = Number(historico[0]?.media_alunos_turma || 0);
-            const anterior = Number(historico[1]?.media_alunos_turma || 0);
-            if (atual > anterior + 0.1) tendencia = 'subindo';
-            else if (atual < anterior - 0.1) tendencia = 'caindo';
-          }
+          const tendencia: 'subindo' | 'estavel' | 'caindo' = 'estavel';
 
           // Calcular Health Score V2 usando os KPIs reais
           const healthResult = calcularHealthScore({
@@ -447,8 +429,50 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           return true;
         });
 
+      if (requisicaoId !== requisicaoAtivaRef.current) return;
       setProfessores(professoresCompletos);
+
+      // Historical trend is complementary and must never block the current panel.
+      if (modoVisualizacao !== 'trimestre') {
+        void Promise.allSettled([
+          buscarKpisProfessoresCanonicos({
+            ano: referenciaAnterior.getFullYear(),
+            mes: referenciaAnterior.getMonth() + 1,
+            unidadeId: unidadeAtual,
+          }),
+        ]).then(([resultado]) => {
+          if (requisicaoId !== requisicaoAtivaRef.current) return;
+          if (resultado.status !== 'fulfilled') {
+            const detalhe = resultado.reason as { code?: string; message?: string };
+            console.warn('Falha ao carregar historico canonico:', JSON.stringify({
+              ano: referenciaAnterior.getFullYear(),
+              mes: referenciaAnterior.getMonth() + 1,
+              code: detalhe?.code,
+              message: detalhe?.message,
+            }));
+            return;
+          }
+
+          const anteriorPorProfessor = new Map(
+            consolidarKpisProfessoresCanonicos(resultado.value)
+              .map((kpi) => [kpi.professor_id, Number(kpi.media_alunos_turma || 0)] as const)
+          );
+
+          setProfessores((atuais) => atuais.map((professor) => {
+            const anterior = anteriorPorProfessor.get(professor.id);
+            if (anterior === undefined) return professor;
+            const atual = professor.media_alunos_turma;
+            const tendencia: 'subindo' | 'estavel' | 'caindo' = atual > anterior + 0.1
+              ? 'subindo'
+              : atual < anterior - 0.1
+                ? 'caindo'
+                : 'estavel';
+            return { ...professor, tendencia_media: tendencia };
+          }));
+        });
+      }
     } catch (error) {
+      if (requisicaoId !== requisicaoAtivaRef.current) return;
       const detalhe = error as { code?: string; message?: string; details?: string; hint?: string };
       console.error('Erro ao carregar dados:', JSON.stringify({
         code: detalhe?.code,
@@ -458,7 +482,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       }));
       toast.error('Erro ao carregar dados de performance');
     } finally {
-      setLoading(false);
+      if (requisicaoId === requisicaoAtivaRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -991,7 +1017,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                     <td className="text-center px-4 py-3 text-white">{professor.total_alunos}</td>
                     <td className="text-center px-4 py-3">
                       <Tooltip side="top" content={professor.turmas_elegiveis_media > 0
-                        ? `${professor.alunos_via_turmas} ocupações regulares ÷ ${professor.turmas_elegiveis_media} turmas regulares = ${professor.media_alunos_turma.toFixed(2)} alunos/turma · Carga total: ${professor.total_turmas} turmas`
+                        ? `${professor.alunos_via_turmas} alunos regulares únicos ÷ ${professor.turmas_elegiveis_media} turmas regulares = ${professor.media_alunos_turma.toFixed(2)} alunos/turma · Carga total: ${professor.total_turmas} turmas`
                         : 'Sem turmas ativas no período · Clique para detalhes'}>
                         <span
                           className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.media_alunos_turma, { critico: 1.3, atencao: 1.5 })}`}

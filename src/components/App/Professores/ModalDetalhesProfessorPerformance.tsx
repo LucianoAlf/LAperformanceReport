@@ -200,7 +200,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
       ).find((row) => row.professor_id === professor.id);
       const alunosCompetencia = kpiCompetencia?.carteira_alunos || 0;
       const turmasCompetencia = kpiCompetencia?.total_turmas || 0;
-      const ocupacoesElegiveis = kpiCompetencia?.alunos_via_turmas || 0;
+      const alunosRegularesUnicos = kpiCompetencia?.alunos_via_turmas || 0;
       const turmasElegiveis = kpiCompetencia?.turmas_elegiveis_media || 0;
 
       setAlunosNoMes(alunosCompetencia);
@@ -208,7 +208,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
       setTurmasElegiveisMediaNoMes(turmasElegiveis);
       setMediaAlunosTurmaNoMes(
         turmasElegiveis > 0
-          ? Math.round((ocupacoesElegiveis / turmasElegiveis) * 100) / 100
+          ? Math.round((alunosRegularesUnicos / turmasElegiveis) * 100) / 100
           : 0
       );
 
