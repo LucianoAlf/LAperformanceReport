@@ -1,7 +1,7 @@
 # Presenca Confiavel por Unidade e Conciliacao Operacional
 
 **Data:** 2026-07-15  
-**Status:** desenho aprovado, aguardando plano de implementacao  
+**Status:** implementado e validado em producao
 **Decisao de negocio:** Alf  
 **Implementacao:** Codex
 
@@ -165,7 +165,8 @@ Grao: um aluno em uma aula. A interface agrupa por aula para facilitar o uso.
 ### 5.4 RPCs
 
 - `get_conciliacao_presencas(p_unidade_id, p_data_inicio, p_data_fim,
-  p_status)`: retorna grupos por aula, alunos e totais.
+  p_status, p_busca, p_limite, p_offset)`: retorna grupos por aula, alunos,
+  totais globais e paginacao.
 - `admin_confirmar_presencas_aula(p_aula_emusys_id, p_motivo)`: confirma em
   lote as ausencias pendentes da chamada.
 - `admin_revisar_presenca_conciliacao(p_aluno_presenca_id, p_decisao,
@@ -276,3 +277,36 @@ conservadora sem apagar presencas, retificacoes ou revisoes ja registradas.
 - A pagina de Professores e a conciliacao exibem a mesma leitura canonica.
 - Agosto nao herda silenciosamente uma regra ainda nao confirmada.
 - Churn e demais pipelines fora do escopo permanecem intocados.
+
+## 12. Resultado da implantacao
+
+Migrations aplicadas no projeto `ouqwbbermlzqqvtqwlul`:
+
+- `20260715202505_presenca_politica_unidades_conciliacao.sql`;
+- `20260715202845_presenca_politica_conciliacao_privilegios.sql`;
+- `20260715203155_presenca_conciliacao_apenas_emusys.sql`;
+- `20260715203500_presenca_revisoes_indices.sql`.
+
+Validacao final em 15/07/2026:
+
+- Barra: `1.050` faltas confirmadas em junho/julho, sem fila posterior;
+- Recreio: `1.500` faltas confirmadas em junho/julho, sem fila posterior;
+- Campo Grande: `2.846` faltas confirmadas no periodo;
+- Campo Grande, junho: `1.572` registros pendentes em `1.326` aulas;
+- Campo Grande, julho: `1.270` registros pendentes em `1.036` aulas;
+- quatro respostas explicitas do LA Teacher em julho permaneceram publicadas,
+  mas fora da fila de revisao automatica;
+- nenhuma linha de revisao foi criada pela migration; a tabela guarda somente
+  decisoes humanas futuras;
+- `PUBLIC`, `anon`, `authenticated` e papeis de agentes nao possuem acesso
+  direto as tabelas/views sensiveis; o frontend usa apenas RPCs com guard de
+  usuario ativo e `professores.editar` por unidade;
+- a RPC canonica de KPI retornou presenca publicavel para `56/77` linhas de
+  professor/unidade em junho e `69/79` em julho; os demais bloqueios decorrem
+  de cobertura/confianca/base, nao da promocao temporal de ausencia;
+- a interface autenticada exibiu em Campo Grande o contador destacado, filtros
+  de junho/julho, agrupamento por aula, busca e acoes auditadas;
+- nenhuma acao de confirmacao/correcao foi executada durante o teste visual.
+
+Os totais sao dinamicos porque o sync do Emusys continua ativo. A validacao
+registra o estado observado, nao um fechamento imutavel da competencia.

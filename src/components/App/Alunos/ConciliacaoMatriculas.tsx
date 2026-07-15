@@ -12,6 +12,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ConciliacaoPresencas } from './ConciliacaoPresencas';
 
 interface ConciliacaoItem {
   id: number;
@@ -1183,6 +1184,8 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
           </button>
         </div>
       </div>
+
+      <ConciliacaoPresencas unidadeId={unidadeId} />
 
       {/* Faixa da previa de matricula/grade */}
       {previewQtd > 0 && (

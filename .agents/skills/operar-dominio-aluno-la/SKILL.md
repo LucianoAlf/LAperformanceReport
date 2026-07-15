@@ -81,7 +81,10 @@ Nunca fazer upsert ou join por:
 | Anotação do Emusys | aulas_emusys.anotacoes; escrita somente pelos syncs Emusys |
 | Registro do Fábio | aulas_emusys.anotacoes_fabio; escrita somente por registrar_aula_fabio |
 | Roster da aula | aula_alunos_emusys |
-| Presença e falta | aluno_presenca |
+| Presença bruta | aluno_presenca |
+| Presença semântica | vw_aluno_presenca_semantica_v1 |
+| Política temporal de confiança | presenca_politicas_confiabilidade |
+| Revisão operacional | aluno_presenca_revisoes_operacionais |
 | Justificativa | aluno_presenca_administrativo |
 | Retificação | aluno_presenca_retificacoes |
 | Renovação e movimentação | movimentacoes_admin |
@@ -183,10 +186,22 @@ Relatar o que foi validado e o que permaneceu sem cobertura.
 
 ### Presença
 
-- Usar **aluno_presenca** como fonte.
+- Usar **aluno_presenca** como evidência bruta e
+  **vw_aluno_presenca_semantica_v1** para resultado pedagógico.
 - Não usar **alunos.percentual_presenca** para dado atual.
 - Não considerar seguro por disciplina o percentual de **vw_jornada_aluno_com_presenca** sem revisar o join da aula.
 - Registrar correções na camada de retificação, sem apagar a primeira escrita.
+- Entre `2026-06-01` e `2026-07-31`, Barra, Recreio e Campo Grande possuem
+  política versionada que classifica `ausente` do Emusys como
+  `falta_confirmada`.
+- Nesse recorte, Campo Grande exige revisão operacional posterior em
+  **Alunos > Conciliação > Presenças a confirmar**, mas a pendência não bloqueia
+  a publicação do indicador.
+- Nunca reproduzir essa exceção por nome de unidade ou hardcode em consumidor.
+  Consultar **presenca_politicas_confiabilidade** e preservar fundamento, período
+  e versão da regra.
+- Fora do período coberto, manter a regra conservadora até existir nova decisão
+  explícita e versionada.
 - Tratar **aulas_emusys.professor_presenca = 'ausente'** apenas como sinal operacional bruto de que a aula não ocorreu ou não foi registrada corretamente no Emusys.
 - Nunca converter esse campo isolado em falta do professor, métrica de RH, penalidade ou componente do Health Score.
 - Antes de classificar um caso, deduplicar o evento de turma e cruzar presença dos alunos, professor atribuído, cancelamento e existência de relatório da aula.
