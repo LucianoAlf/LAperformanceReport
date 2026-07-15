@@ -2,13 +2,14 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { ptBR } from 'date-fns/locale';
 import {
   Users, DollarSign, BarChart3, Clock, Layers, AlertTriangle, BookOpen,
   Plus, Search, RotateCcw, Edit2, Trash2, Check, X, History,
-  Calendar, Upload, Zap, RefreshCw, Lock, Unlock, Link2
+  Calendar, Upload, Zap, RefreshCw, Lock, Unlock, Link2, GraduationCap
 } from 'lucide-react';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { COMPETENCIA_FECHADA_MESSAGE, useCompetenciaMensalStatus } from '@/hooks/useCompetenciaMensalStatus';
@@ -17,6 +18,8 @@ import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { KPICard } from '@/components/ui/KPICard';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { ModalPermanenciaDetalhe } from '@/components/GestaoMensal/ModalPermanenciaDetalhe';
+import { ModalDetalheKPI, BadgeUnidade, ValorParcela, TextoCurso } from '@/components/App/Dashboard/ModalDetalheKPI';
+import { codigoTipoMatriculaAdministrativo } from '@/lib/administrativoTransferencias';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TabelaAlunos } from './TabelaAlunos';
@@ -243,6 +246,11 @@ export function AlunosPage() {
   // Modal de drill-down de permanência
   const [modalPermanenciaOpen, setModalPermanenciaOpen] = useState(false);
 
+  // Modal de drill-down de matrículas ativas
+  const [modalMatriculasAtivas, setModalMatriculasAtivas] = useState(false);
+  const [dadosModalMatriculasAtivas, setDadosModalMatriculasAtivas] = useState<any[]>([]);
+  const [carregandoModalMatriculas, setCarregandoModalMatriculas] = useState(false);
+
   // Estados principais
   const [tabAtiva, setTabAtiva] = useState<TabAtiva>('lista');
   const [alunos, setAlunos] = useState<Aluno[]>([]);
@@ -339,6 +347,95 @@ export function AlunosPage() {
       setConfirmRecalcular(false);
     }
   }
+
+  // Detalhamento do card "Matrículas Ativas" — replica a classificação da RPC
+  // get_kpis_alunos_admin_operacional (pessoa + vínculos de banda/2º curso/coral)
+  // para que o total do modal bata exatamente com o valor do card.
+  const fetchMatriculasAtivasDetalhe = async () => {
+    setCarregandoModalMatriculas(true);
+    try {
+      let query = supabase
+        .from('alunos')
+        .select(`
+          id, nome, unidade_id, status, curso_id, is_segundo_curso, tipo_matricula_id, data_matricula, valor_parcela,
+          unidades:unidade_id!inner(nome),
+          cursos:curso_id!left(nome, is_projeto_banda),
+          tipos_matricula(codigo)
+        `)
+        .is('arquivado_em', null)
+        .in('status', ['ativo', 'trancado'])
+        .order('nome');
+
+      if (unidadeAtual && unidadeAtual !== 'todos') {
+        query = query.eq('unidade_id', unidadeAtual);
+      }
+
+      const { data } = await query;
+
+      const hoje = new Date().toISOString().slice(0, 10);
+      const ultimoDiaMes = new Date(competenciaFiltro.ano, competenciaFiltro.mes, 0).toISOString().slice(0, 10);
+      const dataCorte = hoje < ultimoDiaMes ? hoje : ultimoDiaMes;
+
+      const classificados = (data || [])
+        .filter((a: any) => !a.data_matricula || a.data_matricula <= dataCorte)
+        .map((a: any) => {
+          const cursoNome = a.cursos?.nome || '';
+          const cursoBanda = a.cursos?.is_projeto_banda === true;
+          const tipoCodigo = codigoTipoMatriculaAdministrativo(a);
+          const isBanda = cursoBanda || tipoCodigo === 'BANDA';
+          const isCoral = cursoNome.toLowerCase().includes('coral');
+          const isSegundoOperacional = a.is_segundo_curso === true && tipoCodigo !== 'REGULAR';
+          const entraCarteira = a.status === 'ativo' || (a.status === 'trancado' && !isBanda && !isCoral);
+          const pessoaKey = `${String(a.nome || '').trim().toLowerCase()}|${a.unidade_id}`;
+          return { ...a, cursoNome, isBanda, isCoral, isSegundoOperacional, entraCarteira, pessoaKey };
+        });
+
+      // Bucket "Aluno": 1 linha por pessoa entre as que entram na carteira,
+      // preferindo a linha "normal" (não banda/2º curso/coral) e desempatando pelo menor id
+      const porPessoa = new Map<string, any[]>();
+      classificados.filter((c: any) => c.entraCarteira).forEach((c: any) => {
+        const arr = porPessoa.get(c.pessoaKey) || [];
+        arr.push(c);
+        porPessoa.set(c.pessoaKey, arr);
+      });
+      const pessoaRows = Array.from(porPessoa.values()).map(arr => {
+        const ordenado = [...arr].sort((x, y) => {
+          const px = (!x.isBanda && !x.isSegundoOperacional && !x.isCoral) ? 0 : 1;
+          const py = (!y.isBanda && !y.isSegundoOperacional && !y.isCoral) ? 0 : 1;
+          if (px !== py) return px - py;
+          return x.id - y.id;
+        });
+        return { ...ordenado[0], _bucket: 'Aluno' };
+      });
+
+      const bandaRows = classificados
+        .filter((c: any) => c.status === 'ativo' && c.isBanda)
+        .map((c: any) => ({ ...c, _bucket: 'Banda' }));
+
+      const segundoRows = classificados
+        .filter((c: any) => c.entraCarteira && c.isSegundoOperacional && !c.isBanda && !c.isCoral)
+        .map((c: any) => ({ ...c, _bucket: '2º Curso' }));
+
+      const coralRows = classificados
+        .filter((c: any) => c.status === 'ativo' && c.isCoral)
+        .map((c: any) => ({ ...c, _bucket: 'Coral' }));
+
+      const tudo = [...pessoaRows, ...bandaRows, ...segundoRows, ...coralRows];
+
+      setDadosModalMatriculasAtivas(tudo.map((a: any) => ({
+        nome: a.nome,
+        unidade: a.unidades?.nome || '—',
+        data_matricula: a.data_matricula ? new Date(a.data_matricula + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
+        curso: a.cursoNome || '—',
+        tipo: a._bucket,
+        status: a.status === 'ativo' ? 'Ativo' : 'Trancado',
+        valor: a.valor_parcela ? `R$ ${Number(a.valor_parcela).toLocaleString('pt-BR')}` : '—',
+        _valor_raw: a.valor_parcela ? Number(a.valor_parcela) : 0,
+      })));
+    } finally {
+      setCarregandoModalMatriculas(false);
+    }
+  };
 
   // Calcular alunos sem status financeiro canônico (após dia 15)
   const alertaPagamentos = useMemo(() => {
@@ -1635,6 +1732,7 @@ export function AlunosPage() {
           subvalue={`${kpis.matriculasSegundoCurso || 0} 2º curso | ${kpis.matriculasBanda || 0} banda | ${kpis.matriculasCoral || 0} coral`}
           icon={BookOpen}
           variant="emerald"
+          onClick={() => { fetchMatriculasAtivasDetalhe(); setModalMatriculasAtivas(true); }}
         />
         <KPICard
           title="Alunos Ativos"
@@ -1857,6 +1955,64 @@ export function AlunosPage() {
         onOpenChange={setModalPermanenciaOpen}
         unidadeId={unidadeAtual || 'todos'}
         mediaAtual={kpis.ltvMedio}
+      />
+
+      {/* Modal Matrículas Ativas */}
+      <ModalDetalheKPI
+        open={modalMatriculasAtivas}
+        onClose={() => setModalMatriculasAtivas(false)}
+        titulo={`Matrículas Ativas (${competenciaRange.label})`}
+        descricao="Cada aluno conta 1x; banda, 2º curso e coral somam como vínculos extras — o total bate com o card."
+        dados={dadosModalMatriculasAtivas}
+        colunas={[
+          { key: 'nome', label: 'Aluno' },
+          { key: 'unidade', label: 'Unidade', render: (v: string) => <BadgeUnidade nome={v} /> },
+          { key: 'curso', label: 'Curso', render: (v: string) => <TextoCurso nome={v} /> },
+          { key: 'tipo', label: 'Tipo', render: (v: string) => (
+            <span className={cn(
+              'text-xs px-2 py-0.5 rounded-full whitespace-nowrap',
+              v === 'Banda' && 'bg-amber-500/20 text-amber-400',
+              v === 'Coral' && 'bg-pink-500/20 text-pink-400',
+              v === '2º Curso' && 'bg-violet-500/20 text-violet-400',
+              v === 'Aluno' && 'bg-cyan-500/20 text-cyan-400',
+            )}>{v}</span>
+          )},
+          { key: 'status', label: 'Status', render: (v: string) => (
+            <span className={cn(
+              'text-xs px-2 py-0.5 rounded-full',
+              v === 'Ativo' && 'bg-emerald-500/20 text-emerald-400',
+              v === 'Trancado' && 'bg-slate-500/20 text-slate-400',
+            )}>{v}</span>
+          )},
+          { key: 'data_matricula', label: 'Data Matrícula' },
+          { key: 'valor', label: 'Valor', render: (v: string) => <ValorParcela valor={v} /> },
+        ]}
+        carregando={carregandoModalMatriculas}
+        resumo={(() => {
+          const total = dadosModalMatriculasAtivas.length;
+          const alunosCount = dadosModalMatriculasAtivas.filter(d => d.tipo === 'Aluno').length;
+          const banda = dadosModalMatriculasAtivas.filter(d => d.tipo === 'Banda').length;
+          const segundo = dadosModalMatriculasAtivas.filter(d => d.tipo === '2º Curso').length;
+          const coral = dadosModalMatriculasAtivas.filter(d => d.tipo === 'Coral').length;
+          return [
+            { label: 'Total', valor: total, icone: <BookOpen size={14} />, cor: 'text-emerald-400', destaque: true },
+            { label: 'Alunos', valor: alunosCount, icone: <Users size={14} />, cor: 'text-cyan-400', filtroKey: 'tipo', filtroValor: 'Aluno' },
+            { label: 'Banda', valor: banda, icone: <Users size={14} />, cor: 'text-amber-400', filtroKey: 'tipo', filtroValor: 'Banda' },
+            { label: '2º Curso', valor: segundo, icone: <GraduationCap size={14} />, cor: 'text-violet-400', filtroKey: 'tipo', filtroValor: '2º Curso' },
+            { label: 'Coral', valor: coral, icone: <Users size={14} />, cor: 'text-pink-400', filtroKey: 'tipo', filtroValor: 'Coral' },
+          ];
+        })()}
+        distribuicao={unidadeAtual === 'todos' ? {
+          titulo: 'Por Unidade',
+          dados: (() => {
+            const contagem: Record<string, number> = {};
+            dadosModalMatriculasAtivas.forEach(d => { contagem[d.unidade] = (contagem[d.unidade] || 0) + 1; });
+            const cores: Record<string, string> = { 'Recreio': 'bg-violet-500/70', 'Barra': 'bg-amber-500/70', 'Campo Grande': 'bg-emerald-500/70' };
+            return Object.entries(contagem)
+              .sort((a, b) => b[1] - a[1])
+              .map(([label, valor]) => ({ label, valor, cor: cores[label] || 'bg-slate-500/70' }));
+          })(),
+        } : undefined}
       />
     </div>
   );
