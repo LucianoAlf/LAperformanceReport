@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown, Columns3, Phone, ArrowUp, ArrowDown, Brain } from 'lucide-react';
 import { CelulaEditavel } from '@/components/ui/CelulaEditavel';
@@ -195,6 +196,10 @@ export function TabelaAlunos({
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
   const sentinelRef = useWidgetOverlapSentinel();
+  // Mesma unidade selecionada no header (context do Outlet), lida aqui sem prop-drilling
+  // via AlunosPage — evita alterar a assinatura de TabelaAlunosProps.
+  const outletContext = useOutletContext<{ unidadeSelecionada?: string | null } | undefined>();
+  const unidadeAtual = outletContext?.unidadeSelecionada || 'todos';
 
   // Estado local para permitir edição otimista
   const toast = useToast();
@@ -259,6 +264,7 @@ export function TabelaAlunos({
   }, [filtros.nome, alunos]);
 
   const [alertaInadimplenciaDismissed, setAlertaInadimplenciaDismissed] = useState(false);
+  const [atualizandoInadimplencia, setAtualizandoInadimplencia] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [governancaSemParcela, setGovernancaSemParcela] = useState<GovernancaSemParcelaState | null>(null);
   const [justificativaSemParcela, setJustificativaSemParcela] = useState('');
@@ -342,6 +348,75 @@ export function TabelaAlunos({
       mostrar: totalAlunosInadimplentes > 0 || pendentes.length > 0,
     };
   }, [todosAlunos, alunos]);
+
+  // Contagem de inadimplentes via sync Emusys ao vivo (inadimplente_emusys), em paralelo
+  // ao inadimplenciaInfo acima (que segue lendo status_pagamento manual). Fonte de dados
+  // preparada nas Tasks 4-6; este memo é o consumo visível no banner.
+  const inadimplenciaInfoEmusys = useMemo(() => {
+    const fonte = todosAlunos || alunos;
+    const ativos = fonte.filter(a => String(a.status || '').toLowerCase() === 'ativo');
+
+    let total = 0;
+    let valor = 0;
+    let semDado = 0;
+    let atualizadoEm: string | null = null;
+
+    ativos.forEach(a => {
+      const principalInadimplente = a.inadimplente_emusys === true;
+      const outrosInadimplentes = a.outros_cursos?.filter(oc =>
+        String(oc.status || '').toLowerCase() === 'ativo' && oc.inadimplente_emusys === true
+      ) || [];
+
+      if (principalInadimplente || outrosInadimplentes.length > 0) {
+        total++;
+        if (principalInadimplente) {
+          valor += a.valor_mensalidade_emusys ?? a.valor_parcela ?? 0;
+        }
+        outrosInadimplentes.forEach(oc => {
+          valor += oc.valor_mensalidade_emusys ?? oc.valor_parcela ?? 0;
+        });
+      }
+
+      if (a.inadimplente_emusys === undefined) semDado++;
+      if (a._inadimplencia_atualizado_em && (!atualizadoEm || a._inadimplencia_atualizado_em > atualizadoEm)) {
+        atualizadoEm = a._inadimplencia_atualizado_em;
+      }
+    });
+
+    return { total, valor, semDado, atualizadoEm, mostrar: total > 0 || semDado > 0 };
+  }, [todosAlunos, alunos]);
+
+  function formatarTempoDecorrido(iso: string | null): string {
+    if (!iso) return 'nunca sincronizado';
+    const diffMs = Date.now() - new Date(iso).getTime();
+    const horas = Math.floor(diffMs / (1000 * 60 * 60));
+    if (horas < 1) return 'há menos de 1h';
+    if (horas === 1) return 'há 1h';
+    return `há ${horas}h`;
+  }
+
+  const UNIDADE_ID_PARA_CODIGO_SYNC: Record<string, 'cg' | 'recreio' | 'barra'> = {
+    '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'cg',
+    '95553e96-971b-4590-a6eb-0201d013c14d': 'recreio',
+    '368d47f5-2d88-4475-bc14-ba084a9a348e': 'barra',
+  };
+
+  async function atualizarInadimplenciaAgora() {
+    setAtualizandoInadimplencia(true);
+    try {
+      const codigos = unidadeAtual === 'todos'
+        ? Object.values(UNIDADE_ID_PARA_CODIGO_SYNC)
+        : [UNIDADE_ID_PARA_CODIGO_SYNC[unidadeAtual]].filter(Boolean);
+
+      await Promise.all(codigos.map(codigo =>
+        supabase.functions.invoke(`sync-inadimplencia-emusys?u=${codigo}`, { method: 'POST' })
+      ));
+
+      await onRecarregar();
+    } finally {
+      setAtualizandoInadimplencia(false);
+    }
+  }
 
   // Ícone da forma de pagamento
   const getFormaPagamentoIcon = (formaPagamentoId?: number | null, formaPagamentoNome?: string | null) => {
@@ -1941,45 +2016,46 @@ export function TabelaAlunos({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Alerta financeiro */}
-      {inadimplenciaInfo.mostrar && !alertaInadimplenciaDismissed && (
+      {/* Alerta financeiro (Emusys ao vivo) */}
+      {inadimplenciaInfoEmusys.mostrar && !alertaInadimplenciaDismissed && (
         <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border text-sm ${
-          inadimplenciaInfo.total > 0 ? 'bg-red-500/15 border-red-500/30' : 'bg-amber-500/15 border-amber-500/30'
+          inadimplenciaInfoEmusys.total > 0 ? 'bg-red-500/15 border-red-500/30' : 'bg-amber-500/15 border-amber-500/30'
         }`}>
-          <AlertTriangle className={`w-5 h-5 flex-shrink-0 ${inadimplenciaInfo.total > 0 ? 'text-red-400' : 'text-amber-300'}`} />
-          <span className={`${inadimplenciaInfo.total > 0 ? 'text-red-300' : 'text-amber-200'} flex-1`}>
-            <strong className={inadimplenciaInfo.total > 0 ? 'text-red-200' : 'text-amber-100'}>
-              {inadimplenciaInfo.total > 0 
-                ? `${inadimplenciaInfo.total} aluno${inadimplenciaInfo.total !== 1 ? 's' : ''} ativo${inadimplenciaInfo.total !== 1 ? 's' : ''} inadimplente${inadimplenciaInfo.total !== 1 ? 's' : ''}`
-                : `${inadimplenciaInfo.pendentes} aluno${inadimplenciaInfo.pendentes !== 1 ? 's' : ''} sem status financeiro sincronizado`
+          <AlertTriangle className={`w-5 h-5 flex-shrink-0 ${inadimplenciaInfoEmusys.total > 0 ? 'text-red-400' : 'text-amber-300'}`} />
+          <span className={`${inadimplenciaInfoEmusys.total > 0 ? 'text-red-300' : 'text-amber-200'} flex-1`}>
+            <strong className={inadimplenciaInfoEmusys.total > 0 ? 'text-red-200' : 'text-amber-100'}>
+              {inadimplenciaInfoEmusys.total > 0
+                ? `${inadimplenciaInfoEmusys.total} aluno${inadimplenciaInfoEmusys.total !== 1 ? 's' : ''} ativo${inadimplenciaInfoEmusys.total !== 1 ? 's' : ''} inadimplente${inadimplenciaInfoEmusys.total !== 1 ? 's' : ''} (Emusys ao vivo)`
+                : `${inadimplenciaInfoEmusys.semDado} aluno${inadimplenciaInfoEmusys.semDado !== 1 ? 's' : ''} ainda sem sync de inadimplência`
               }
             </strong>
-            {inadimplenciaInfo.total > 0 && (
-              <> — R$ {inadimplenciaInfo.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em parcelas marcadas como não pagas</>
+            {inadimplenciaInfoEmusys.total > 0 && (
+              <> — R$ {inadimplenciaInfoEmusys.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em parcelas inadimplentes</>
             )}
-            {inadimplenciaInfo.pendentes > 0 && inadimplenciaInfo.total > 0 && (
-              <> • {inadimplenciaInfo.pendentes} ainda estão sem status financeiro sincronizado</>
-            )}
-            {inadimplenciaInfo.pendentes > 0 && inadimplenciaInfo.total === 0 && (
-              <> — confirme pela aba Conciliação Emusys para gravar em dia/inadimplente no LA Report</>
-            )}
+            {' · '}
+            <span className="opacity-70">atualizado {formatarTempoDecorrido(inadimplenciaInfoEmusys.atualizadoEm)}</span>
           </span>
+          {inadimplenciaInfoEmusys.total > 0 && (
+            <button
+              onClick={() => setFiltros({ ...filtros, inadimplente_emusys_live: true })}
+              className="px-3 py-1 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap bg-red-500/20 hover:bg-red-500/30 border-red-500/30 text-red-200"
+            >
+              Filtrar ativos inadimplentes
+            </button>
+          )}
           <button
-            onClick={() => setFiltros({ ...filtros, status_pagamento: inadimplenciaInfo.total > 0 ? 'inadimplente' : '-' })}
-            className={`px-3 py-1 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap ${
-              inadimplenciaInfo.total > 0
-                ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500/30 text-red-200'
-                : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/30 text-amber-100'
-            }`}
+            onClick={atualizarInadimplenciaAgora}
+            disabled={atualizandoInadimplencia}
+            className="px-3 py-1 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap bg-slate-700/40 hover:bg-slate-700/60 border-slate-600 text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {inadimplenciaInfo.total > 0 ? 'Filtrar ativos inadimplentes' : 'Ver sem sincronizar'}
+            {atualizandoInadimplencia ? 'Atualizando...' : 'Atualizar agora'}
           </button>
           <button
             onClick={() => setAlertaInadimplenciaDismissed(true)}
             className="p-1 hover:bg-white/10 rounded transition-colors"
             title="Dispensar alerta"
           >
-            <X className={`w-4 h-4 ${inadimplenciaInfo.total > 0 ? 'text-red-400' : 'text-amber-300'}`} />
+            <X className={`w-4 h-4 ${inadimplenciaInfoEmusys.total > 0 ? 'text-red-400' : 'text-amber-300'}`} />
           </button>
         </div>
       )}
