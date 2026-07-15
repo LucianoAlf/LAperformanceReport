@@ -2397,6 +2397,18 @@ export function TabelaAlunos({
                           {vemDeOutroCurso && (
                             <span className="text-[10px] text-purple-400 ml-1" title="Valor do segundo curso">2º</span>
                           )}
+                          {aluno.valor_mensalidade_emusys != null && aluno.valor_parcela != null &&
+                            Math.abs(aluno.valor_mensalidade_emusys - aluno.valor_parcela) > 0.01 && (
+                            <Tooltip content={`Emusys cobra R$ ${aluno.valor_mensalidade_emusys.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} — aqui está R$ ${aluno.valor_parcela.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Clique para corrigir.`}>
+                              <button
+                                type="button"
+                                onClick={() => setAlunoFicha(aluno)}
+                                className="ml-1 text-amber-400 hover:text-amber-300"
+                              >
+                                ⚠️
+                              </button>
+                            </Tooltip>
+                          )}
                         </div>
                       </td>
                     );
@@ -2734,6 +2746,18 @@ export function TabelaAlunos({
                           placeholder="-"
                           className="min-w-[80px]"
                         />
+                        {outroCurso.valor_mensalidade_emusys != null && outroCurso.valor_parcela != null &&
+                          Math.abs(outroCurso.valor_mensalidade_emusys - outroCurso.valor_parcela) > 0.01 && (
+                          <Tooltip content={`Emusys cobra R$ ${outroCurso.valor_mensalidade_emusys.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} — aqui está R$ ${outroCurso.valor_parcela.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Clique para corrigir.`}>
+                            <button
+                              type="button"
+                              onClick={() => setAlunoFicha(outroCurso)}
+                              className="ml-1 text-amber-400 hover:text-amber-300"
+                            >
+                              ⚠️
+                            </button>
+                          </Tooltip>
+                        )}
                       </div>
                     </td>
                     )}
