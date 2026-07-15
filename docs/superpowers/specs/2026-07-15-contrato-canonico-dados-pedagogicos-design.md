@@ -19,7 +19,8 @@ faltas, Health Score, churn e KPIs de professor.
 3. `alunos.id` identifica uma linha operacional local, nao uma pessoa universal.
 4. Identidade Emusys e sempre escopada por unidade.
 5. Jornada e por matricula/disciplina; carteira e por pessoa; ocupacao e por pessoa/turma.
-6. Ausencia bruta do Emusys nao equivale, sozinha, a falta confirmada.
+6. Ausencia bruta do Emusys so equivale a falta confirmada quando houver resposta
+   humana explicita ou politica temporal de confiabilidade versionada para a unidade.
 7. Metricas temporais declaram inicio, fim, competencia e timezone.
 8. Toda metrica derivada declara fonte, confianca, versao e regra de exclusao.
 9. Objetos legados so sao aposentados depois do inventario de consumidores.
@@ -73,8 +74,25 @@ Cada leitura canonica deve carregar separadamente:
 - `regra_versao` e justificativa da classificacao.
 
 Ausencia registrada pelo LA Teacher e confirmada. Ausencia justificada na origem e
-falta justificada. Ausencia Emusys sem corroboracao e indeterminada. O historico nao
-sera promovido em massa a falta confirmada.
+falta justificada. Ausencia Emusys sem corroboracao ou politica aplicavel e
+indeterminada. O historico nao sera reescrito em massa para fabricar confianca.
+
+### 5.3 Politica temporal de junho e julho de 2026
+
+Decisao de negocio confirmada por Alf em 15/07/2026:
+
+- Barra, Recreio e Campo Grande tratam `ausente` do Emusys como
+  `falta_confirmada` entre `2026-06-01` e `2026-07-31`, inclusive;
+- a decisao e materializada em `presenca_politicas_confiabilidade`, com unidade,
+  periodo, evidencia e versao, sem alterar a evidencia bruta em `aluno_presenca`;
+- Barra foi atestada operacionalmente por Arthur e Recreio por Fernanda;
+- Campo Grande publica o resultado imediatamente, mas marca
+  `revisao_operacional_exigida = true` e envia a ausencia para a conciliacao;
+- a revisao de Campo Grande acontece depois da publicacao e nao bloqueia KPI;
+- confirmacoes ficam em `aluno_presenca_revisoes_operacionais`; correcoes para
+  presente tambem usam a retificacao auditada existente;
+- fora desse periodo, volta a classificacao conservadora ate nova politica
+  explicita e versionada.
 
 ## 6. Contratos por metrica
 
@@ -103,7 +121,8 @@ sera promovido em massa a falta confirmada.
 2. `service_role` mantem acesso para diagnostico controlado.
 3. Churn atual e preservado, mas recebe confianca baixa e aviso de auditoria.
 4. Nenhum score historico e apagado ou recalculado antes da nova feature engineering.
-5. Rankings de presenca/falta e alertas recorrentes nao sao tratados como fatos oficiais.
+5. Rankings de presenca/falta e alertas recorrentes so sao fatos oficiais quando a
+   competencia estiver coberta por evidencia humana ou politica temporal ativa.
 
 ## 9. Portoes de liberacao
 
@@ -112,7 +131,8 @@ Uma metrica so recebe status canonico quando:
 - o grao e a identidade estao documentados;
 - o periodo e a unidade estao isolados;
 - casos ouro das tres unidades passam;
-- indeterminado nunca e convertido em falta;
+- indeterminado nunca e convertido em falta sem evidencia humana ou politica
+  temporal versionada;
 - taxas e contagens respeitam invariantes;
 - consumidores ativos foram inventariados;
 - comparacao sombra antigo/novo foi revisada;
