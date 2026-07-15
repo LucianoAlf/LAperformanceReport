@@ -202,6 +202,7 @@ export interface Filtros {
   turma_size: string;
   tempo_permanencia: string;
   status_pagamento: string;
+  inadimplente_emusys_live: boolean;
   anamnese: string;
   temperamento: string;
   diagnostico: string;
@@ -285,6 +286,7 @@ export function AlunosPage() {
     turma_size: '',
     tempo_permanencia: '',
     status_pagamento: '',
+    inadimplente_emusys_live: false,
     anamnese: '',
     temperamento: '',
     diagnostico: '',
@@ -1192,6 +1194,18 @@ export function AlunosPage() {
       });
     }
 
+    // Filtro por inadimplencia ao vivo (Emusys) -- independente do status_pagamento manual
+    if (filtros.inadimplente_emusys_live) {
+      resultado = resultado.filter(a => {
+        if (String(a.status || '').toLowerCase() !== 'ativo') return false;
+        const principalInadimplente = a.inadimplente_emusys === true;
+        const outroCursoInadimplente = a.outros_cursos?.some(oc =>
+          String(oc.status || '').toLowerCase() === 'ativo' && oc.inadimplente_emusys === true
+        );
+        return principalInadimplente || outroCursoInadimplente;
+      });
+    }
+
     if (filtros.anamnese) {
       if (filtros.anamnese === 'preenchida') {
         resultado = resultado.filter(a => a.anamnese_preenchida === true);
@@ -1339,6 +1353,7 @@ export function AlunosPage() {
       turma_size: '',
       tempo_permanencia: '',
       status_pagamento: '',
+      inadimplente_emusys_live: false,
       anamnese: '',
       temperamento: '',
       diagnostico: '',
