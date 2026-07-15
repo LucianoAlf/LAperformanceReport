@@ -8,8 +8,8 @@ export interface KPIProfessorCanonico {
   mes: number;
   carteira_alunos: number;
   ticket_medio: number;
-  media_presenca: number;
-  taxa_faltas: number;
+  media_presenca: number | null;
+  taxa_faltas: number | null;
   mrr_carteira: number;
   nps_medio: number;
   media_alunos_turma: number;
@@ -29,6 +29,12 @@ export interface KPIProfessorCanonico {
   total_turmas: number;
   alunos_via_turmas: number;
   turmas_elegiveis_media: number;
+  presenca_publicavel: boolean;
+  presenca_cobertura: number;
+  presenca_confianca: string;
+  presenca_eventos_confirmados: number;
+  presenca_eventos_incertos: number;
+  presenca_regra_versao: string;
 }
 
 export interface FiltroKPIProfessorCanonico {
@@ -66,6 +72,12 @@ const numero = (valor: unknown): number => {
   return Number.isFinite(convertido) ? convertido : 0;
 };
 
+const numeroOuNull = (valor: unknown): number | null => {
+  if (valor === null || valor === undefined || valor === '') return null;
+  const convertido = Number(valor);
+  return Number.isFinite(convertido) ? convertido : null;
+};
+
 export function normalizarKPIProfessorCanonico(row: Record<string, unknown>): KPIProfessorCanonico {
   return {
     professor_id: numero(row.professor_id),
@@ -75,8 +87,8 @@ export function normalizarKPIProfessorCanonico(row: Record<string, unknown>): KP
     mes: numero(row.mes),
     carteira_alunos: numero(row.carteira_alunos),
     ticket_medio: numero(row.ticket_medio),
-    media_presenca: numero(row.media_presenca),
-    taxa_faltas: numero(row.taxa_faltas),
+    media_presenca: numeroOuNull(row.media_presenca),
+    taxa_faltas: numeroOuNull(row.taxa_faltas),
     mrr_carteira: numero(row.mrr_carteira),
     nps_medio: numero(row.nps_medio),
     media_alunos_turma: numero(row.media_alunos_turma),
@@ -96,6 +108,12 @@ export function normalizarKPIProfessorCanonico(row: Record<string, unknown>): KP
     total_turmas: numero(row.total_turmas),
     alunos_via_turmas: numero(row.alunos_via_turmas),
     turmas_elegiveis_media: numero(row.turmas_elegiveis_media),
+    presenca_publicavel: row.presenca_publicavel === true,
+    presenca_cobertura: numero(row.presenca_cobertura),
+    presenca_confianca: String(row.presenca_confianca ?? 'sem_base'),
+    presenca_eventos_confirmados: numero(row.presenca_eventos_confirmados),
+    presenca_eventos_incertos: numero(row.presenca_eventos_incertos),
+    presenca_regra_versao: String(row.presenca_regra_versao ?? ''),
   };
 }
 
@@ -117,7 +135,7 @@ export async function buscarKpisProfessoresCanonicos(
   if (emAndamento) return emAndamento;
 
   const consulta = (async () => {
-    const { data, error } = await supabase.rpc('get_kpis_professor_periodo_canonico', parametros);
+    const { data, error } = await supabase.rpc('get_kpis_professor_periodo_canonico_v2', parametros);
 
     if (error) throw error;
     const dados = ((data || []) as Record<string, unknown>[]).map(normalizarKPIProfessorCanonico);
@@ -159,14 +177,38 @@ export function consolidarKpisProfessoresCanonicos(
     const mediaPonderadaCarteira = (campo: keyof KPIProfessorCanonico) => carteira > 0
       ? grupo.reduce((total, linha) => total + numero(linha[campo]) * linha.carteira_alunos, 0) / carteira
       : 0;
+    const presencaPublicavel = grupo.length > 0 && grupo.every((linha) => linha.presenca_publicavel);
+    const eventosPresencaConfirmados = soma('presenca_eventos_confirmados');
+    const eventosPresencaIncertos = soma('presenca_eventos_incertos');
+    const mediaPresenca = presencaPublicavel && eventosPresencaConfirmados > 0
+      ? grupo.reduce(
+        (total, linha) => total + numero(linha.media_presenca) * linha.presenca_eventos_confirmados,
+        0,
+      ) / eventosPresencaConfirmados
+      : null;
+    const taxaFaltas = presencaPublicavel && eventosPresencaConfirmados > 0
+      ? grupo.reduce(
+        (total, linha) => total + numero(linha.taxa_faltas) * linha.presenca_eventos_confirmados,
+        0,
+      ) / eventosPresencaConfirmados
+      : null;
+    const coberturaPresenca = eventosPresencaConfirmados + eventosPresencaIncertos > 0
+      ? eventosPresencaConfirmados / (eventosPresencaConfirmados + eventosPresencaIncertos)
+      : 0;
+    const ordemConfianca: Record<string, number> = { sem_base: 0, baixa: 1, media: 2, alta: 3 };
+    const presencaConfianca = grupo.reduce((pior, linha) =>
+      (ordemConfianca[linha.presenca_confianca] ?? 0) < (ordemConfianca[pior] ?? 0)
+        ? linha.presenca_confianca
+        : pior,
+    grupo[0]?.presenca_confianca ?? 'sem_base');
 
     return {
       ...primeira,
       unidade_id: grupo.length === 1 ? primeira.unidade_id : null,
       carteira_alunos: carteira,
       ticket_medio: mediaPonderadaCarteira('ticket_medio'),
-      media_presenca: mediaPonderadaCarteira('media_presenca'),
-      taxa_faltas: mediaPonderadaCarteira('taxa_faltas'),
+      media_presenca: mediaPresenca,
+      taxa_faltas: taxaFaltas,
       mrr_carteira: soma('mrr_carteira'),
       nps_medio: mediaPonderadaCarteira('nps_medio'),
       media_alunos_turma: turmasElegiveis > 0 ? ocupacoes / turmasElegiveis : 0,
@@ -188,6 +230,12 @@ export function consolidarKpisProfessoresCanonicos(
       total_turmas: soma('total_turmas'),
       alunos_via_turmas: ocupacoes,
       turmas_elegiveis_media: turmasElegiveis,
+      presenca_publicavel: presencaPublicavel,
+      presenca_cobertura: coberturaPresenca,
+      presenca_confianca: presencaConfianca,
+      presenca_eventos_confirmados: eventosPresencaConfirmados,
+      presenca_eventos_incertos: eventosPresencaIncertos,
+      presenca_regra_versao: primeira.presenca_regra_versao,
     };
   });
 }

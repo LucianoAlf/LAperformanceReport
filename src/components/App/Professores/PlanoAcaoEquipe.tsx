@@ -15,9 +15,16 @@ interface ProfessorMetricas {
   taxa_retencao: number;
   taxa_conversao: number;
   nps: number | null;
-  taxa_presenca: number;
+  taxa_presenca: number | null;
+  presenca_publicavel: boolean;
+  presenca_confianca: string;
+  presenca_cobertura: number;
+  presenca_eventos_confirmados: number;
+  presenca_eventos_incertos: number;
   evasoes_mes: number;
   status: 'critico' | 'atencao' | 'excelente';
+  health_score: number | null;
+  health_score_confiavel: boolean;
   unidades: string[];
 }
 

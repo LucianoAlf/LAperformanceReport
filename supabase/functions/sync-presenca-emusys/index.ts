@@ -1271,30 +1271,24 @@ serve(async (req: Request) => {
               continue;
             }
 
-            // UPSERT presença vinculada à aula
+            // Reconcilia apenas a evidencia bruta do Emusys. A RPC preserva
+            // respostas humanas e permite corrigir um "ausente" default quando
+            // uma presenca positiva chega em sincronizacao posterior.
+            const sincronizadoEm = new Date().toISOString();
             const { error: upsertError } = await supabase
-              .from('aluno_presenca')
-              .upsert(
-                {
-                  aluno_id: alunoId,
-                  aula_emusys_id: aulaLocalId,
-                  professor_id: professorId,
-                  unidade_id: unidade.id,
-                  data_aula: dataAlvo,
-                  horario_aula: aluno.horario_presenca,
-                  status,
-                  status_presenca: status === 'presente' ? 'presente' : 'falta',
-                  curso_nome: aula.curso_nome,
-                  turma_nome: aula.turma_nome,
-                  sala_nome: aula.sala_nome,
-                  respondido_por: 'emusys',
-                  respondido_em: new Date().toISOString(),
-                },
-                {
-                  onConflict: 'aluno_id,aula_emusys_id',
-                  ignoreDuplicates: true,
-                }
-              );
+              .rpc('upsert_presenca_emusys_bruta', {
+                p_aluno_id: alunoId,
+                p_aula_emusys_id: aulaLocalId,
+                p_professor_id: professorId,
+                p_unidade_id: unidade.id,
+                p_data_aula: dataAlvo,
+                p_horario_aula: aluno.horario_presenca,
+                p_status_origem: aluno.presenca,
+                p_curso_nome: aula.curso_nome,
+                p_turma_nome: aula.turma_nome,
+                p_sala_nome: aula.sala_nome,
+                p_sincronizado_em: sincronizadoEm,
+              });
 
             if (upsertError) {
               console.error(`[sync-presenca] Upsert presença ${nome} aula ${aula.id}:`, upsertError.message);

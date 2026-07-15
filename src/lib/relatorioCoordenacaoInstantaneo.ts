@@ -19,14 +19,20 @@ export interface ProfessorRelatorioCoordenacao {
   experimentais_faltas: number;
   matriculas_pos_exp: number;
   matriculas_diretas: number;
-  taxa_presenca: number;
-  taxa_faltas: number;
+  taxa_presenca: number | null;
+  taxa_faltas: number | null;
+  presenca_publicavel: boolean;
+  presenca_confianca: string;
+  presenca_cobertura: number;
+  presenca_eventos_confirmados: number;
+  presenca_eventos_incertos: number;
   evasoes_mes: number;
   nao_renovacoes_mes: number;
   mrr_perdido: number;
   status: 'critico' | 'atencao' | 'excelente';
-  health_score: number;
-  health_status: 'critico' | 'atencao' | 'saudavel';
+  health_score: number | null;
+  health_status: 'critico' | 'atencao' | 'saudavel' | null;
+  health_score_confiavel: boolean;
   fator_demanda_ponderado: number;
 }
 
@@ -108,15 +114,10 @@ function normalizarHealthStatus(
   return healthStatusPorScore(score);
 }
 
-function calcularHealthFallback(row: KpiProfessorCoordenacaoRaw): number {
-  const presenca = Math.min(numeroSeguro(row.media_presenca ?? row.taxa_presenca), 100);
-  const retencao = Math.min(numeroSeguro(row.taxa_retencao ?? row.taxa_renovacao), 100);
-  const conversao = Math.min(numeroSeguro(row.taxa_conversao), 100);
-  const evasoes = numeroSeguro(row.evasoes ?? row.evasoes_mes);
-  const alunos = numeroSeguro(row.carteira_alunos ?? row.total_alunos);
-  const penalidadeEvasao = alunos > 0 ? Math.min((evasoes / alunos) * 100, 20) : 0;
-  const score = (presenca * 0.35) + (retencao * 0.35) + (conversao * 0.15) + 15 - penalidadeEvasao;
-  return Math.max(0, Math.min(100, Math.round(score)));
+function numeroOuNull(valor: unknown): number | null {
+  if (valor === null || valor === undefined || valor === '') return null;
+  const convertido = Number(valor);
+  return Number.isFinite(convertido) ? convertido : null;
 }
 
 export function normalizarKpisProfessoresCoordenacao(
@@ -136,10 +137,15 @@ export function normalizarKpisProfessoresCoordenacao(
         : 0;
     const experimentais = numeroSeguro(item.experimentais);
     const matriculasPosExp = numeroSeguro(item.matriculas_pos_exp ?? item.matriculas);
-    const healthInformado = Number(item.health_score ?? item.health);
-    const healthScore = Number.isFinite(healthInformado)
-      ? healthInformado
-      : calcularHealthFallback(item);
+    const presencaPublicavel = item.presenca_publicavel === true;
+    const taxaPresenca = presencaPublicavel
+      ? numeroOuNull(item.media_presenca ?? item.taxa_presenca)
+      : null;
+    const taxaFaltas = presencaPublicavel ? numeroOuNull(item.taxa_faltas) : null;
+    const healthScoreConfiavel = item.health_score_confiavel === true;
+    const healthInformado = healthScoreConfiavel
+      ? numeroOuNull(item.health_score ?? item.health)
+      : null;
 
     return {
       id: numeroSeguro(item.professor_id ?? item.id) || index + 1,
@@ -158,14 +164,24 @@ export function normalizarKpisProfessoresCoordenacao(
       experimentais_faltas: numeroSeguro(item.experimentais_faltas),
       matriculas_pos_exp: matriculasPosExp,
       matriculas_diretas: numeroSeguro(item.matriculas_diretas),
-      taxa_presenca: numeroSeguro(item.media_presenca ?? item.taxa_presenca),
-      taxa_faltas: numeroSeguro(item.taxa_faltas),
+      taxa_presenca: taxaPresenca,
+      taxa_faltas: taxaFaltas,
+      presenca_publicavel: presencaPublicavel && taxaPresenca !== null && taxaFaltas !== null,
+      presenca_confianca: textoSeguro(item.presenca_confianca, 'sem_base'),
+      presenca_cobertura: numeroSeguro(item.presenca_cobertura),
+      presenca_eventos_confirmados: numeroSeguro(item.presenca_eventos_confirmados),
+      presenca_eventos_incertos: numeroSeguro(item.presenca_eventos_incertos),
       evasoes_mes: numeroSeguro(item.evasoes ?? item.evasoes_mes),
       nao_renovacoes_mes: numeroSeguro(item.nao_renovacoes ?? item.nao_renovacoes_mes),
       mrr_perdido: numeroSeguro(item.mrr_perdido),
-      status: normalizarStatus(item.status ?? item.health_status, healthScore),
-      health_score: healthScore,
-      health_status: normalizarHealthStatus(item.health_status ?? item.status, healthScore),
+      status: healthInformado === null
+        ? 'atencao'
+        : normalizarStatus(item.status ?? item.health_status, healthInformado),
+      health_score: healthInformado,
+      health_status: healthInformado === null
+        ? null
+        : normalizarHealthStatus(item.health_status ?? item.status, healthInformado),
+      health_score_confiavel: healthScoreConfiavel && healthInformado !== null,
       fator_demanda_ponderado: numeroSeguro(item.fator_demanda_ponderado) || 1,
     };
   });
@@ -232,15 +248,21 @@ function calcularResumo(professores: ProfessorRelatorioCoordenacao[]) {
   const totalMrrPerdido = professores.reduce((acc, p) => acc + Number(p.mrr_perdido || 0), 0);
   const totalExperimentais = professores.reduce((acc, p) => acc + Number(p.experimentais || 0), 0);
   const totalMatriculasPosExp = professores.reduce((acc, p) => acc + Number(p.matriculas_pos_exp || 0), 0);
-  const mediaPresenca = totalProfessores > 0
-    ? professores.reduce((acc, p) => acc + Number(p.taxa_presenca || 0), 0) / totalProfessores
-    : 0;
+  const presencasPublicaveis = professores.filter((p) =>
+    p.presenca_publicavel && p.taxa_presenca !== null
+  );
+  const healthPublicaveis = professores.filter((p) =>
+    p.health_score_confiavel && p.health_score !== null
+  );
+  const mediaPresenca = presencasPublicaveis.length > 0
+    ? presencasPublicaveis.reduce((acc, p) => acc + Number(p.taxa_presenca), 0) / presencasPublicaveis.length
+    : null;
   const mediaRetencao = totalProfessores > 0
     ? professores.reduce((acc, p) => acc + Number(p.taxa_retencao || 0), 0) / totalProfessores
     : 0;
-  const mediaHealth = totalProfessores > 0
-    ? professores.reduce((acc, p) => acc + Number(p.health_score || 0), 0) / totalProfessores
-    : 0;
+  const mediaHealth = healthPublicaveis.length > 0
+    ? healthPublicaveis.reduce((acc, p) => acc + Number(p.health_score), 0) / healthPublicaveis.length
+    : null;
 
   return {
     totalProfessores,
@@ -255,8 +277,11 @@ function calcularResumo(professores: ProfessorRelatorioCoordenacao[]) {
       ? totalOcupacoesElegiveis / totalTurmasElegiveis
       : 0,
     mediaPresenca,
+    totalPresencasPublicaveis: presencasPublicaveis.length,
+    totalPresencasEmAuditoria: totalProfessores - presencasPublicaveis.length,
     mediaRetencao,
     mediaHealth,
+    totalHealthPublicaveis: healthPublicaveis.length,
     taxaConversao: totalExperimentais > 0 ? (totalMatriculasPosExp / totalExperimentais) * 100 : 0,
   };
 }
@@ -264,6 +289,8 @@ function calcularResumo(professores: ProfessorRelatorioCoordenacao[]) {
 function gerarRanking(params: GerarRelatorioParams): string {
   const professores = [...params.professores];
   const resumo = calcularResumo(professores);
+  const healthPublicaveis = professores.filter((p) => p.health_score_confiavel && p.health_score !== null);
+  const presencasPublicaveis = professores.filter((p) => p.presenca_publicavel && p.taxa_presenca !== null);
 
   const linhas = [
     ...cabecalho('RELATORIO RANKING DE PROFESSORES', params),
@@ -272,13 +299,15 @@ function gerarRanking(params: GerarRelatorioParams): string {
     `• Professores: *${resumo.totalProfessores}*`,
     `• Alunos em carteira: *${resumo.totalAlunos}*`,
     `• Media alunos/turma: *${n(resumo.mediaAlunosTurma, 2)}*`,
-    `• Presenca media: *${n(resumo.mediaPresenca, 1)}%*`,
-    `• Health medio: *${n(resumo.mediaHealth, 1)}*`,
+    `• Presenca media: *${resumo.mediaPresenca === null ? 'Em auditoria' : `${n(resumo.mediaPresenca, 1)}%`}*`,
+    `• Health medio: *${resumo.mediaHealth === null ? 'Em auditoria' : n(resumo.mediaHealth, 1)}*`,
     '',
     '🏆 *TOP HEALTH SCORE*',
-    ...limitar([...professores].sort((a, b) => b.health_score - a.health_score)).map((p, i) =>
-      linhaRanking(p, i, `${Math.round(p.health_score)} pontos`)
-    ),
+    ...(healthPublicaveis.length > 0
+      ? limitar([...healthPublicaveis].sort((a, b) => Number(b.health_score) - Number(a.health_score))).map((p, i) =>
+          linhaRanking(p, i, `${Math.round(Number(p.health_score))} pontos`)
+        )
+      : ['Em auditoria: nenhum Health Score atingiu confianca alta neste recorte.']),
     '',
     '👥 *TOP CARTEIRA*',
     ...limitar([...professores].sort((a, b) => b.total_alunos - a.total_alunos)).map((p, i) =>
@@ -291,9 +320,11 @@ function gerarRanking(params: GerarRelatorioParams): string {
     ),
     '',
     '✅ *TOP PRESENCA*',
-    ...limitar([...professores].sort((a, b) => b.taxa_presenca - a.taxa_presenca)).map((p, i) =>
-      linhaRanking(p, i, `${n(p.taxa_presenca, 1)}%`)
-    ),
+    ...(presencasPublicaveis.length > 0
+      ? limitar([...presencasPublicaveis].sort((a, b) => Number(b.taxa_presenca) - Number(a.taxa_presenca))).map((p, i) =>
+          linhaRanking(p, i, `${n(p.taxa_presenca, 1)}%`)
+        )
+      : ['Em auditoria: nenhuma taxa de presenca atingiu confianca alta neste recorte.']),
     '',
     '🎓 *TOP MATRICULADORES POS-EXPERIMENTAL*',
     ...limitar([...professores].sort((a, b) => b.matriculas_pos_exp - a.matriculas_pos_exp)).map((p, i) =>
@@ -343,20 +374,47 @@ function gerarCarteira(params: GerarRelatorioParams): string {
 }
 
 function gerarPresenca(params: GerarRelatorioParams): string {
-  const professores = [...params.professores];
+  const todosProfessores = [...params.professores];
+  const professores = todosProfessores.filter((p) => p.presenca_publicavel && p.taxa_presenca !== null);
+  if (professores.length === 0) {
+    const eventosConfirmados = todosProfessores.reduce(
+      (total, professor) => total + professor.presenca_eventos_confirmados,
+      0,
+    );
+    const eventosIncertos = todosProfessores.reduce(
+      (total, professor) => total + professor.presenca_eventos_incertos,
+      0,
+    );
+    return [
+      ...cabecalho('RELATORIO PRESENCA E ALERTAS PEDAGOGICOS', params),
+      '⚠️ *PRESENCA EM AUDITORIA*',
+      '━━━━━━━━━━━━━━━━━━━━━━',
+      'Nenhuma taxa de presenca atingiu confianca alta neste recorte.',
+      'O Emusys ainda mistura falta confirmada com chamada nao registrada em parte do historico.',
+      '',
+      `• Professores em auditoria: *${todosProfessores.length}*`,
+      `• Eventos confirmados: *${eventosConfirmados}*`,
+      `• Eventos incertos: *${eventosIncertos}*`,
+      '',
+      '_Nenhum ranking, alerta ou avaliacao de desempenho foi publicado._',
+      ...rodape(params),
+    ].join('\n');
+  }
   const resumo = calcularResumo(professores);
   const criticos = professores
-    .filter((p) => p.taxa_presenca < 70)
-    .sort((a, b) => a.taxa_presenca - b.taxa_presenca);
+    .filter((p) => Number(p.taxa_presenca) < 70)
+    .sort((a, b) => Number(a.taxa_presenca) - Number(b.taxa_presenca));
   const atencao = professores
-    .filter((p) => p.taxa_presenca >= 70 && p.taxa_presenca < 80)
-    .sort((a, b) => a.taxa_presenca - b.taxa_presenca);
+    .filter((p) => Number(p.taxa_presenca) >= 70 && Number(p.taxa_presenca) < 80)
+    .sort((a, b) => Number(a.taxa_presenca) - Number(b.taxa_presenca));
 
   const linhas = [
     ...cabecalho('RELATORIO PRESENCA E ALERTAS PEDAGOGICOS', params),
     '✅ *RESUMO DE PRESENCA*',
     '━━━━━━━━━━━━━━━━━━━━━━',
     `• Presenca media: *${n(resumo.mediaPresenca, 1)}%*`,
+    `• Professores com dado publicavel: *${professores.length}*`,
+    `• Professores em auditoria: *${todosProfessores.length - professores.length}*`,
     `• Professores abaixo de 70%: *${criticos.length}*`,
     `• Professores entre 70% e 80%: *${atencao.length}*`,
     '',

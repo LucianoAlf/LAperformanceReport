@@ -31,11 +31,17 @@ interface ProfessorMetricas {
   taxa_retencao: number;
   taxa_conversao: number;
   nps: number | null;
-  taxa_presenca: number;
+  taxa_presenca: number | null;
+  presenca_publicavel: boolean;
+  presenca_confianca?: string;
+  presenca_cobertura?: number;
+  presenca_eventos_confirmados?: number;
+  presenca_eventos_incertos?: number;
   evasoes_mes: number;
   status: 'critico' | 'atencao' | 'excelente';
   unidades: string[];
-  health_score?: number;
+  health_score?: number | null;
+  health_score_confiavel: boolean;
   health_status?: 'critico' | 'atencao' | 'saudavel';
 }
 
@@ -76,10 +82,12 @@ Deno.serve(async (req) => {
     const payload: InsightsEquipeRequest = await req.json();
     const { professores, metricas_gerais, competencia, unidade_nome } = payload;
 
-    // Preparar lista de professores críticos
-    const criticos = professores.filter(p => p.status === 'critico');
-    const atencao = professores.filter(p => p.status === 'atencao');
-    const excelentes = professores.filter(p => p.status === 'excelente');
+    const professoresComHealth = professores.filter((p) =>
+      p.health_score_confiavel === true && Number.isFinite(Number(p.health_score))
+    );
+    const criticos = professoresComHealth.filter(p => p.status === 'critico');
+    const atencao = professoresComHealth.filter(p => p.status === 'atencao');
+    const excelentes = professoresComHealth.filter(p => p.status === 'excelente');
 
     // Identificar problemas mais comuns
     const problemasMediaTurma = professores.filter(p => p.media_alunos_turma < 1.3);
@@ -104,7 +112,8 @@ IMPORTANTE:
 - Sugira professores exemplares como mentores
 - Proponha treinamentos em grupo quando houver problemas comuns
 - Seja direto e prático nas sugestões
-- USE O HEALTH SCORE como métrica principal de saúde do professor
+- Use Health Score e presenca somente quando os respectivos campos de publicacao/confianca estiverem liberados.
+- Nunca converta metrica indisponivel em zero e nunca classifique professor por dado em auditoria.
 
 METAS DE REFERÊNCIA:
 - Média de alunos por turma: ≥ 1.5 (ideal), 1.3-1.5 (aceitável), < 1.3 (crítico)
@@ -170,23 +179,26 @@ Responda APENAS em JSON válido, sem markdown, no formato:
   "mensagem_coordenacao": "Mensagem motivacional/estratégica para a coordenação (2-3 frases)"
 }`;
 
-    // Calcular Health Score médio da equipe
-    const professoresComHealth = professores.filter(p => p.health_score !== undefined);
-    const healthScoreMedio = professoresComHealth.length > 0 
-      ? professoresComHealth.reduce((acc, p) => acc + (p.health_score || 0), 0) / professoresComHealth.length 
-      : metricas_gerais.health_score_medio || 0;
-    const healthStatusEquipe = healthScoreMedio >= 80 ? 'SAUDÁVEL' : healthScoreMedio >= 60 ? 'ATENÇÃO' : 'CRÍTICO';
-    const healthEmoji = healthScoreMedio >= 80 ? '🟢' : healthScoreMedio >= 60 ? '🟡' : '🔴';
+    const healthDisponivel = professoresComHealth.length > 0;
+    const healthScoreMedio = healthDisponivel
+      ? professoresComHealth.reduce((acc, p) => acc + Number(p.health_score), 0) / professoresComHealth.length
+      : null;
+    const healthStatusEquipe = healthScoreMedio === null
+      ? 'EM AUDITORIA'
+      : healthScoreMedio >= 80 ? 'SAUDÁVEL' : healthScoreMedio >= 60 ? 'ATENÇÃO' : 'CRÍTICO';
+    const healthEmoji = healthScoreMedio === null
+      ? '⚪'
+      : healthScoreMedio >= 80 ? '🟢' : healthScoreMedio >= 60 ? '🟡' : '🔴';
 
     // Professores por Health Score
-    const healthCriticos = professores.filter(p => (p.health_score || 0) < 60);
-    const healthAtencao = professores.filter(p => (p.health_score || 0) >= 60 && (p.health_score || 0) < 80);
-    const healthSaudaveis = professores.filter(p => (p.health_score || 0) >= 80);
+    const healthCriticos = professoresComHealth.filter(p => Number(p.health_score) < 60);
+    const healthAtencao = professoresComHealth.filter(p => Number(p.health_score) >= 60 && Number(p.health_score) < 80);
+    const healthSaudaveis = professoresComHealth.filter(p => Number(p.health_score) >= 80);
 
     const userPrompt = `Analise a equipe de professores ${unidade_nome ? `da unidade ${unidade_nome}` : ''} em ${competencia}:
 
 💓 HEALTH SCORE DA EQUIPE:
-${healthEmoji} Score Médio: ${healthScoreMedio.toFixed(1)} pontos - ${healthStatusEquipe}
+${healthEmoji} Score Médio: ${healthScoreMedio === null ? 'Em auditoria' : `${healthScoreMedio.toFixed(1)} pontos`} - ${healthStatusEquipe}
 - 🟢 Saudáveis (≥80): ${healthSaudaveis.length} professores
 - 🟡 Atenção (60-79): ${healthAtencao.length} professores
 - 🔴 Críticos (<60): ${healthCriticos.length} professores
@@ -206,13 +218,13 @@ ${healthEmoji} Score Médio: ${healthScoreMedio.toFixed(1)} pontos - ${healthSta
 - 🟢 Excelentes: ${metricas_gerais.professores_excelentes} professores
 
 🔴 PROFESSORES COM HEALTH SCORE CRÍTICO (<60):
-${healthCriticos.map(p => `- ${p.nome}: Health ${(p.health_score || 0).toFixed(0)}, Média ${p.media_alunos_turma.toFixed(1)}, Retenção ${p.taxa_retencao.toFixed(0)}%, ${p.evasoes_mes} evasões`).join('\n') || 'Nenhum'}
+${healthCriticos.map(p => `- ${p.nome}: Health ${Number(p.health_score).toFixed(0)}, Média ${p.media_alunos_turma.toFixed(1)}, Retenção ${p.taxa_retencao.toFixed(0)}%, ${p.evasoes_mes} evasões`).join('\n') || (healthDisponivel ? 'Nenhum' : 'Métrica em auditoria')}
 
 🟡 PROFESSORES COM HEALTH SCORE EM ATENÇÃO (60-79):
-${healthAtencao.map(p => `- ${p.nome}: Health ${(p.health_score || 0).toFixed(0)}, Média ${p.media_alunos_turma.toFixed(1)}, Retenção ${p.taxa_retencao.toFixed(0)}%`).join('\n') || 'Nenhum'}
+${healthAtencao.map(p => `- ${p.nome}: Health ${Number(p.health_score).toFixed(0)}, Média ${p.media_alunos_turma.toFixed(1)}, Retenção ${p.taxa_retencao.toFixed(0)}%`).join('\n') || (healthDisponivel ? 'Nenhum' : 'Métrica em auditoria')}
 
 🟢 PROFESSORES COM HEALTH SCORE SAUDÁVEL (≥80):
-${healthSaudaveis.slice(0, 5).map(p => `- ${p.nome}: Health ${(p.health_score || 0).toFixed(0)}, Média ${p.media_alunos_turma.toFixed(1)}, NPS ${p.nps?.toFixed(1) || '-'}`).join('\n') || 'Nenhum'}
+${healthSaudaveis.slice(0, 5).map(p => `- ${p.nome}: Health ${Number(p.health_score).toFixed(0)}, Média ${p.media_alunos_turma.toFixed(1)}, NPS ${p.nps?.toFixed(1) || '-'}`).join('\n') || (healthDisponivel ? 'Nenhum' : 'Métrica em auditoria')}
 
 🏆 TOP PERFORMERS:
 - Melhor média de turma: ${topMediaTurma?.nome} (${topMediaTurma?.media_alunos_turma.toFixed(1)})
@@ -226,7 +238,7 @@ ${healthSaudaveis.slice(0, 5).map(p => `- ${p.nome}: Health ${(p.health_score ||
 - Conversao legada baixa (<70%): ${problemasConversao.length} professores - diagnostico, nao KPI oficial
 - NPS baixo (<7): ${problemasNPS.length} professores
 
-Gere um plano de ação estratégico para a coordenação pedagógica, priorizando os professores com Health Score mais baixo.`;
+Gere um plano de ação estratégico usando apenas métricas publicáveis. Se o Health Score estiver em auditoria, não crie classificação, ranking ou prioridade com base nele.`;
 
     // Chamar OpenAI API
     const response = await fetchOpenAIComRetry(

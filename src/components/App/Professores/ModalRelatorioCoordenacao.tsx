@@ -35,6 +35,10 @@ import {
   type ProfessorRelatorioCoordenacao,
   type TipoRelatorioCoordenacaoInstantaneo,
 } from '@/lib/relatorioCoordenacaoInstantaneo';
+import {
+  buscarKpisProfessoresCanonicos,
+  consolidarKpisProfessoresCanonicos,
+} from '@/lib/professoresKpisCanonicos';
 
 interface ModalRelatorioCoordenacaoProps {
   open: boolean;
@@ -171,19 +175,41 @@ export function ModalRelatorioCoordenacao({
   const buscarDadosRelatorioCoordenacao = async () => {
     const { anoRelatorio, mesRelatorio } = validarCompetenciaMensal();
 
-    const { data: dadosRelatorio, error: errorDados } = await supabase
-      .rpc('get_dados_relatorio_coordenacao', {
+    const [dadosResult, kpisResult] = await Promise.all([
+      supabase.rpc('get_dados_relatorio_coordenacao', {
         p_unidade_id: unidadeId,
         p_ano: anoRelatorio,
         p_mes: mesRelatorio
-      });
+      }),
+      buscarKpisProfessoresCanonicos({
+        ano: anoRelatorio,
+        mes: mesRelatorio,
+        unidadeId,
+      }),
+    ]);
+    const { data: dadosRelatorio, error: errorDados } = dadosResult;
 
     if (errorDados) {
       console.error('Erro ao buscar dados:', errorDados);
       throw new Error('Erro ao buscar dados do relatório');
     }
 
-    return dadosRelatorio;
+    const kpisCanonicos = consolidarKpisProfessoresCanonicos(kpisResult).map((kpi) => ({
+      ...kpi,
+      health_score: null,
+      health_status: null,
+      health_score_confiavel: false,
+    }));
+
+    return {
+      ...((dadosRelatorio || {}) as Record<string, unknown>),
+      kpis_professores: kpisCanonicos,
+      contrato_pedagogico: {
+        presenca_regra: 'publicar_somente_confianca_alta',
+        health_score: 'em_auditoria',
+        fonte_kpis: 'get_kpis_professor_periodo_canonico_v2',
+      },
+    };
   };
 
   const gerarRelatorioIA = async () => {

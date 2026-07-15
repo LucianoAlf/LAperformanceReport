@@ -33,10 +33,16 @@ interface RelatorioProfessorRequest {
     taxa_retencao: number;
     taxa_conversao: number;
     nps?: number | null; // DEPRECATED - mantido para compatibilidade
-    taxa_presenca: number;
+    taxa_presenca: number | null;
+    presenca_publicavel: boolean;
+    presenca_confianca?: string;
+    presenca_cobertura?: number;
+    presenca_eventos_confirmados?: number;
+    presenca_eventos_incertos?: number;
     evasoes_mes: number;
-    health_score: number;
-    health_status: string;
+    health_score: number | null;
+    health_status: string | null;
+    health_score_confiavel: boolean;
     fator_demanda_ponderado?: number; // V2: Fator de demanda ponderado pela carteira
   };
   metas: any[];
@@ -75,6 +81,10 @@ Deno.serve(async (req) => {
       9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
     };
     const mesNome = mesesPorExtenso[mes] || '';
+    const presencaPublicavel = professor.presenca_publicavel === true && professor.taxa_presenca !== null;
+    const healthPublicavel = professor.health_score_confiavel === true
+      && professor.health_score !== null
+      && professor.health_status !== null;
 
     // Determinar status geral
     const statusEmoji = professor.health_status === 'saudavel' ? '🟢' : 
@@ -100,7 +110,9 @@ Deno.serve(async (req) => {
     relatorio += `───────────────────────\n`;
     relatorio += `❤️ *HEALTH SCORE*\n`;
     relatorio += `───────────────────────\n`;
-    relatorio += `${criarBarraProgresso(professor.health_score)} *${professor.health_score.toFixed(0)}* ${statusEmoji} ${statusTexto}\n\n`;
+    relatorio += healthPublicavel
+      ? `${criarBarraProgresso(professor.health_score!)} *${professor.health_score!.toFixed(0)}* ${statusEmoji} ${statusTexto}\n\n`
+      : `*Em auditoria* — presença sem cobertura suficiente para publicar a nota composta.\n\n`;
 
     // KPIs do Professor
     relatorio += `───────────────────────\n`;
@@ -109,7 +121,9 @@ Deno.serve(async (req) => {
     relatorio += `• Carteira de Alunos: *${professor.total_alunos}*\n`;
     relatorio += `• Total de Turmas: *${professor.total_turmas}*\n`;
     relatorio += `• Média Alunos/Turma: *${professor.media_alunos_turma.toFixed(2)}*\n`;
-    relatorio += `• Taxa de Presença: *${professor.taxa_presenca.toFixed(1)}%*\n`;
+    relatorio += presencaPublicavel
+      ? `• Taxa de Presença: *${professor.taxa_presenca!.toFixed(1)}%*\n`
+      : `• Taxa de Presença: *Em auditoria* (cobertura ${((professor.presenca_cobertura || 0) * 100).toFixed(0)}%; ${professor.presenca_eventos_confirmados || 0} confirmados; ${professor.presenca_eventos_incertos || 0} incertos)\n`;
     relatorio += `• Taxa de Retenção: *${professor.taxa_retencao.toFixed(1)}%*\n`;
     relatorio += `• Conversao Exp->Mat: *${professor.taxa_conversao.toFixed(1)}%*\n`;
     relatorio += `• Fator de Demanda: *${(professor.fator_demanda_ponderado || 1.0).toFixed(1)}*\n`;
@@ -195,6 +209,9 @@ REGRAS:
 - Mencione o professor pelo primeiro nome
 - Cada item deve ter no máximo 1-2 linhas
 - Sugira ações práticas e específicas
+- Se presenca_publicavel=false, não avalie presença e não gere alerta ou recomendação baseada nela.
+- Se health_score_confiavel=false, não classifique o professor por Health Score.
+- Nunca converta presença ou Health Score nulos em zero.
 
 Responda EXATAMENTE neste formato JSON:
 {
@@ -207,12 +224,16 @@ Responda EXATAMENTE neste formato JSON:
 
     const dadosParaIA = {
       nome: professor.nome,
-      health_score: professor.health_score,
-      health_status: professor.health_status,
+      health_score: healthPublicavel ? professor.health_score : null,
+      health_status: healthPublicavel ? professor.health_status : null,
+      health_score_confiavel: healthPublicavel,
       total_alunos: professor.total_alunos,
       total_turmas: professor.total_turmas,
       media_alunos_turma: professor.media_alunos_turma,
-      taxa_presenca: professor.taxa_presenca,
+      taxa_presenca: presencaPublicavel ? professor.taxa_presenca : null,
+      presenca_publicavel: presencaPublicavel,
+      presenca_confianca: professor.presenca_confianca || 'sem_base',
+      presenca_cobertura: professor.presenca_cobertura || 0,
       taxa_retencao: professor.taxa_retencao,
       taxa_conversao_exp_mat: professor.taxa_conversao,
       fator_demanda_ponderado: professor.fator_demanda_ponderado || 1.0,
