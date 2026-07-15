@@ -183,7 +183,6 @@ Deno.serve(async (req) => {
     const totalAlunos = totais.total_alunos || 0;
     const mediaAlunosProfessor = totais.media_alunos_professor || 0;
     const mediaAlunosTurma = totais.media_alunos_turma || 0;
-    const mediaPresenca = totais.media_presenca || 0;
     const taxaConversaoMedia = totais.taxa_conversao_media || 0;
     const taxaRenovacaoMedia = totais.taxa_renovacao_media || 0;
     const totalEvasoes = totais.total_evasoes || 0;
@@ -201,50 +200,68 @@ Deno.serve(async (req) => {
         const numero = Number(valor);
         return Number.isFinite(numero) ? numero : fallback;
       };
+      const presencaPublicavel = p.presenca_publicavel === true
+        && p.media_presenca !== null
+        && p.media_presenca !== undefined;
       const healthResult = calcularHealthScore({
         taxaCrescimento: numeroOu(p.taxa_crescimento),
         mediaTurma: numeroOu(p.media_alunos_turma),
         retencao: numeroOu(p.taxa_retencao, 100),
         conversao: numeroOu(p.taxa_conversao),
-        presenca: numeroOu(p.media_presenca),
+        presenca: presencaPublicavel ? numeroOu(p.media_presenca) : 75,
         evasoes: numeroOu(p.evasoes),
         carteira: numeroOu(p.carteira_alunos),
       }, weights);
       const healthScoreInformado = Number(p.health_score);
       const healthStatusInformado = p.health_status;
-      const usaHealthCanonico = Number.isFinite(healthScoreInformado)
+      const usaHealthCanonico = p.health_score_confiavel === true
+        && presencaPublicavel
+        && Number.isFinite(healthScoreInformado)
         && ['critico', 'atencao', 'saudavel'].includes(healthStatusInformado);
       return {
         ...p,
-        health_score: usaHealthCanonico ? healthScoreInformado : healthResult.score,
-        health_status: usaHealthCanonico ? healthStatusInformado : healthResult.status
+        media_presenca: presencaPublicavel ? numeroOu(p.media_presenca) : null,
+        presenca_publicavel: presencaPublicavel,
+        health_score: usaHealthCanonico ? healthScoreInformado : null,
+        health_status: usaHealthCanonico ? healthStatusInformado : null,
+        health_score_confiavel: usaHealthCanonico,
+        health_score_diagnostico_interno: healthResult.score,
       };
     });
 
     // Calcular Health Score médio
-    const healthScoreMedio = kpisProfessores.length > 0
-      ? Math.round(kpisProfessores.reduce((sum: number, p: any) => sum + p.health_score, 0) / kpisProfessores.length * 10) / 10
-      : 0;
+    const kpisHealthPublicavel = kpisProfessores.filter((p: any) => p.health_score_confiavel);
+    const healthScoreMedio = kpisHealthPublicavel.length > 0
+      ? Math.round(kpisHealthPublicavel.reduce((sum: number, p: any) => sum + p.health_score, 0) / kpisHealthPublicavel.length * 10) / 10
+      : null;
+    const kpisPresencaPublicavel = kpisProfessores.filter((p: any) => p.presenca_publicavel);
+    const mediaPresenca = kpisPresencaPublicavel.length > 0
+      ? kpisPresencaPublicavel.reduce((sum: number, p: any) => sum + p.media_presenca, 0) / kpisPresencaPublicavel.length
+      : null;
 
     // Contar professores por status baseado no Health Score calculado
-    const professorCriticosHS = kpisProfessores.filter((p: any) => p.health_status === 'critico');
-    const professorAtencaoHS = kpisProfessores.filter((p: any) => p.health_status === 'atencao');
-    const professorSaudaveisHS = kpisProfessores.filter((p: any) => p.health_status === 'saudavel');
+    const professorCriticosHS = kpisHealthPublicavel.filter((p: any) => p.health_status === 'critico');
+    const professorAtencaoHS = kpisHealthPublicavel.filter((p: any) => p.health_status === 'atencao');
+    const professorSaudaveisHS = kpisHealthPublicavel.filter((p: any) => p.health_status === 'saudavel');
 
     // Top Health Score
-    const topHealthScore = [...kpisProfessores]
+    const topHealthScore = [...kpisHealthPublicavel]
       .sort((a: any, b: any) => b.health_score - a.health_score)
       .slice(0, 3);
     
     // Rankings
     const topCarteira = dados.top_carteira || [];
     const topMediaTurma = dados.top_media_turma || [];
-    const topPresenca = dados.top_presenca || [];
+    const topPresenca = [...kpisPresencaPublicavel]
+      .sort((a: any, b: any) => b.media_presenca - a.media_presenca)
+      .slice(0, 3)
+      .map((p: any) => ({ professor: p.professor_nome, presenca: p.media_presenca }));
     const topMatriculadores = dados.top_matriculadores || [];
     const topRetencao = dados.top_retencao || [];
 
     // Professores com presença baixa. Esta lista não é a mesma classificação do Health Score.
-    const professoresAlerta = dados.professores_alerta || [];
+    const professoresAlerta = (dados.professores_alerta || [])
+      .filter((p: any) => p.presenca_publicavel === true);
     const professorCriticos = professoresAlerta.filter((p: any) => p.status === 'critico');
     const professorAtencao = professoresAlerta.filter((p: any) => p.status === 'atencao');
 
@@ -288,10 +305,14 @@ Deno.serve(async (req) => {
     relatorioTemplate += `👨‍🏫 *VISÃO GERAL DA EQUIPE*\n`;
     relatorioTemplate += `───────────────────────\n`;
     relatorioTemplate += `• Total de Professores: *${totalProfessores}*\n`;
-    relatorioTemplate += `• Professores Críticos: *${professorCriticosHS.length}* 🔴\n`;
-    relatorioTemplate += `• Professores Atenção: *${professorAtencaoHS.length}* 🟡\n`;
-    relatorioTemplate += `• Professores Saudáveis: *${professorSaudaveisHS.length}* 🟢\n`;
-    relatorioTemplate += `• Health Score Médio: *${healthScoreMedio}*\n\n`;
+    if (healthScoreMedio !== null) {
+      relatorioTemplate += `• Professores Críticos: *${professorCriticosHS.length}* 🔴\n`;
+      relatorioTemplate += `• Professores Atenção: *${professorAtencaoHS.length}* 🟡\n`;
+      relatorioTemplate += `• Professores Saudáveis: *${professorSaudaveisHS.length}* 🟢\n`;
+      relatorioTemplate += `• Health Score Médio: *${healthScoreMedio}*\n\n`;
+    } else {
+      relatorioTemplate += `• Health Score: *Em auditoria* — presença sem cobertura suficiente para publicação.\n\n`;
+    }
 
     // KPIs CONSOLIDADOS
     relatorioTemplate += `───────────────────────\n`;
@@ -300,7 +321,9 @@ Deno.serve(async (req) => {
     relatorioTemplate += `• Total de Alunos: *${totalAlunos}*\n`;
     relatorioTemplate += `• Média Alunos/Professor: *${mediaAlunosProfessor.toFixed(1)}*\n`;
     relatorioTemplate += `• Média Alunos/Turma: *${mediaAlunosTurma ? mediaAlunosTurma.toFixed(2) : 'N/D'}*\n`;
-    relatorioTemplate += `• Presença Média: *${mediaPresenca.toFixed(1)}%*\n`;
+    relatorioTemplate += mediaPresenca !== null
+      ? `• Presença Média: *${mediaPresenca.toFixed(1)}%*\n`
+      : `• Presença Média: *Em auditoria*\n`;
     relatorioTemplate += `• MRR Total: *R$ ${formatarMoeda(mrrTotal)}*\n\n`;
 
     // RETENÇÃO & DIAGNOSTICO COMERCIAL
@@ -412,7 +435,7 @@ Deno.serve(async (req) => {
         const status = pct >= 100 ? '✅' : (pct >= 80 ? '⚠️' : '❌');
         relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Média/Turma (${mediaAlunosTurma?.toFixed(2) || 0}/${metasProfessores.media_alunos_turma}) ${status}\n`;
       }
-      if (metasProfessores.presenca_media) {
+      if (metasProfessores.presenca_media && mediaPresenca !== null) {
         const pct = Math.min((mediaPresenca / metasProfessores.presenca_media) * 100, 100);
         const status = pct >= 100 ? '✅' : (pct >= 90 ? '⚠️' : '❌');
         relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Presença (${mediaPresenca.toFixed(1)}%/${metasProfessores.presenca_media}%) ${status}\n`;
@@ -460,7 +483,7 @@ Deno.serve(async (req) => {
         relatorioTemplate += `📅 *VS MÊS ANTERIOR*\n`;
         const diffAlunos = totalAlunos - (mesAnterior.total_alunos || 0);
         relatorioTemplate += `• Alunos: ${mesAnterior.total_alunos || 0} → ${totalAlunos} (${diffAlunos >= 0 ? '↑' : '↓'}${Math.abs(diffAlunos)})\n`;
-        if (mesAnterior.media_presenca) {
+        if (mesAnterior.media_presenca && mediaPresenca !== null) {
           const diffPresenca = mediaPresenca - mesAnterior.media_presenca;
           relatorioTemplate += `• Presença: ${mesAnterior.media_presenca}% → ${mediaPresenca.toFixed(1)}% (${diffPresenca >= 0 ? '↑' : '↓'}${Math.abs(diffPresenca).toFixed(1)}pp)\n`;
         }
@@ -473,7 +496,7 @@ Deno.serve(async (req) => {
         relatorioTemplate += `📅 *VS MESMO MÊS ANO PASSADO*\n`;
         const diffAlunos = totalAlunos - (anoAnterior.total_alunos || 0);
         relatorioTemplate += `• Alunos: ${anoAnterior.total_alunos || 0} → ${totalAlunos} (${diffAlunos >= 0 ? '↑' : '↓'}${Math.abs(diffAlunos)})\n`;
-        if (anoAnterior.media_presenca) {
+        if (anoAnterior.media_presenca && mediaPresenca !== null) {
           const diffPresenca = mediaPresenca - anoAnterior.media_presenca;
           relatorioTemplate += `• Presença: ${anoAnterior.media_presenca}% → ${mediaPresenca.toFixed(1)}% (${diffPresenca >= 0 ? '↑' : '↓'}${Math.abs(diffPresenca).toFixed(1)}pp)\n`;
         }
@@ -527,6 +550,9 @@ REGRAS:
 - Mencione professores pelo nome quando relevante
 - Use emojis moderadamente
 - Cada item deve ter no máximo 1-2 linhas
+- Se presenca_publicavel=false ou a presença for nula, não avalie presença e não gere ranking, alerta ou recomendação baseada nela.
+- Se health_score_confiavel=false ou o Health Score for nulo, não classifique professores por Health Score.
+- Nunca converta presença ou Health Score nulos em zero.
 
 Responda EXATAMENTE neste formato JSON:
 {

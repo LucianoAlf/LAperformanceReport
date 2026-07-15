@@ -58,6 +58,8 @@ interface AlunoSucesso {
   risco_probabilidade: number | null;
   risco_faixa: string | null;
   risco_fatores: Array<{ fator: string; valor: unknown; importancia: number; sinal: string }> | null;
+  risco_confianca: string | null;
+  risco_motivo_confianca: string | null;
 }
 
 interface AlertaSaude {
@@ -135,7 +137,8 @@ const getSortValue = (aluno: AlunoSucesso, key: SortKey): number | string => {
     case 'tempo_permanencia_meses': return aluno.tempo_permanencia_meses ?? -1;
     case 'ultimo_feedback': return FEEDBACK_RANK[aluno.ultimo_feedback || ''] ?? -1;
     case 'health_status': return STATUS_RANK[aluno.health_status || ''] ?? -1;
-    case 'risco_probabilidade': return aluno.risco_probabilidade ?? -1;
+    case 'risco_probabilidade':
+      return aluno.risco_confianca === 'baixa' ? -1 : (aluno.risco_probabilidade ?? -1);
     default: return '';
   }
 };
@@ -209,10 +212,17 @@ export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
 
       // Risco de evasão do modelo (view vw_risco_evasao_atual = último score por aluno).
       // Merge por aluno_id; se a tabela ainda não tiver o aluno, campos ficam null.
-      const riscoData = await buscarTudoPaginado<{ aluno_id: number; probabilidade: number; faixa: string; fatores: unknown }>(() => {
+      const riscoData = await buscarTudoPaginado<{
+        aluno_id: number;
+        probabilidade: number;
+        faixa: string;
+        fatores: unknown;
+        confianca_dado: string;
+        motivo_confianca: string;
+      }>(() => {
         let riscoQuery = supabase
           .from('vw_risco_evasao_atual')
-          .select('aluno_id, probabilidade, faixa, fatores');
+          .select('aluno_id, probabilidade, faixa, fatores, confianca_dado, motivo_confianca');
         if (unidadeAtual !== 'todos') {
           riscoQuery = riscoQuery.eq('unidade_id', unidadeAtual);
         }
@@ -227,6 +237,8 @@ export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
           risco_probabilidade: r?.probabilidade ?? null,
           risco_faixa: r?.faixa ?? null,
           risco_fatores: r?.fatores ?? null,
+          risco_confianca: r?.confianca_dado ?? null,
+          risco_motivo_confianca: r?.motivo_confianca ?? null,
         };
       });
       setAlunos(alunosComRisco);
@@ -809,6 +821,17 @@ export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
                     <td className="text-center px-4 py-3">
                       {aluno.risco_probabilidade == null ? (
                         <span className="text-slate-600 text-xs">—</span>
+                      ) : aluno.risco_confianca === 'baixa' ? (
+                        <Tooltip content={<TooltipList items={[
+                          aluno.risco_motivo_confianca || 'Modelo em auditoria.',
+                          `Score anterior preservado apenas para auditoria tecnica: ${Math.round(aluno.risco_probabilidade * 100)}%`,
+                          'Nao use este valor para priorizar contato ou retencao.',
+                        ]} />}>
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border border-amber-700 bg-amber-900/30 text-amber-300 cursor-help">
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            <span className="text-[10px] font-semibold">Em auditoria</span>
+                          </div>
+                        </Tooltip>
                       ) : (
                         <Tooltip content={<TooltipList items={[
                           `Probabilidade de evasão em ~30 dias: ${Math.round(aluno.risco_probabilidade * 100)}%`,

@@ -54,18 +54,18 @@ test('migration cria camadas separadas e RPCs guardadas', () => {
   assert.match(migration, /revoke all on function public\.fn_professor_do_usuario\(\) from public, anon/i);
 });
 
-test('sync usa roster, camada administrativa, maturidade e first-write-wins', () => {
+test('sync usa roster, camada administrativa, maturidade e RPC de evidencia bruta', () => {
   assert.match(sync, /justificada\??:\s*boolean/);
   assert.match(sync, /aula_alunos_emusys/);
   assert.match(sync, /aluno_presenca_administrativo/);
   assert.match(sync, /MATUREZA_FALTA_HORAS\s*=\s*24/);
   assert.match(sync, /podeMaterializarFalta/);
-  assert.match(sync, /ignoreDuplicates:\s*true/);
+  assert.match(sync, /rpc\('upsert_presenca_emusys_bruta'/);
   assert.match(sync, /emusys_student_id/);
   assert.match(sync, /mapaAlunosEmusys/);
   assert.doesNotMatch(
     sync,
-    /from\('aluno_presenca'\)[\s\S]{0,800}ignoreDuplicates:\s*false/,
+    /from\('aluno_presenca'\)[\s\S]{0,800}\.upsert\(/,
   );
 });
 

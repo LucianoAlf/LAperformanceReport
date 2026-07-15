@@ -11,6 +11,7 @@ const analytics = read('src/components/GestaoMensal/TabProfessoresNew.tsx');
 const carteira = read('src/components/App/Professores/TabCarteiraProfessores.tsx');
 const hook = read('src/hooks/useKPIsProfessor.ts');
 const modalTurmas = read('src/components/App/Professores/ModalDetalhesTurmas.tsx');
+const modalPerformance = read('src/components/App/Professores/ModalDetalhesProfessorPerformance.tsx');
 const performance = read('src/components/App/Professores/TabPerformanceProfessores.tsx');
 const retencao = read('src/hooks/useProfessoresPerformance.ts');
 
@@ -30,7 +31,9 @@ test('helper deduplica consultas canonicas identicas em andamento', () => {
 
 test('historico auxiliar nao derruba os KPIs atuais', () => {
   assert.match(performance, /Falha ao carregar historico canonico/);
-  assert.match(performance, /kpisHistorico\.push/);
+  assert.match(performance, /Promise\.allSettled/);
+  assert.match(performance, /resultado\.status\s*!==\s*'fulfilled'/);
+  assert.match(performance, /setProfessores\(professoresCompletos\)/);
 });
 
 test('dashboard nao recalcula media de professores pela view operacional', () => {
@@ -61,6 +64,12 @@ test('carteira e hook nao publicam KPI de views legadas', () => {
 test('modal de turmas exibe resumo oficial recebido da fonte canonica', () => {
   assert.match(modalTurmas, /resumoCanonico/);
   assert.doesNotMatch(modalTurmas, /alunosAtivosUnicos\s*\/\s*totalTurmas/);
+});
+
+test('modal de performance evita fan-out concorrente da RPC canonica por mes', () => {
+  assert.match(modalPerformance, /await carregarDados\(\)/);
+  assert.match(modalPerformance, /for \(let mes = 1; mes <= mesComp; mes \+= 1\)/);
+  assert.doesNotMatch(modalPerformance, /Promise\.all\(promises\)/);
 });
 
 test('performance e retencao historica nao retornam para tabelas agregadas legadas', () => {

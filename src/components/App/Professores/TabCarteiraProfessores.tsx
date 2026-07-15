@@ -36,6 +36,9 @@ interface CarteiraProfessor {
   unidades: string[];
   health_score: number;
   health_status: 'critico' | 'atencao' | 'saudavel';
+  health_score_confiavel: boolean;
+  presenca_confianca: string;
+  presenca_cobertura: number;
 }
 
 // Interface para aluno na carteira
@@ -133,7 +136,10 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
           ? 100 - Number(kpis.taxa_cancelamento)
           : (totalAlunos > 0 ? 100 : 0);
         const taxaConversao = kpis?.taxa_conversao ? Number(kpis.taxa_conversao) : 0;
-        const taxaPresenca = kpis?.media_presenca ? Number(kpis.media_presenca) : 75;
+        const presencaPublicavel = Boolean(kpis?.presenca_publicavel)
+          && kpis?.media_presenca !== null
+          && kpis?.media_presenca !== undefined;
+        const taxaPresenca = presencaPublicavel ? Number(kpis.media_presenca) : 75;
         const evasoesMes = kpis?.evasoes || 0;
 
         const healthResult = calcularHealthScore({
@@ -162,7 +168,10 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
           cursos: row.cursos || [],
           unidades: row.unidades || [],
           health_score: healthResult.score,
-          health_status: healthResult.status
+          health_status: healthResult.status,
+          health_score_confiavel: presencaPublicavel,
+          presenca_confianca: kpis?.presenca_confianca || 'sem_base',
+          presenca_cobertura: Number(kpis?.presenca_cobertura || 0),
         };
       });
 
@@ -516,23 +525,29 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
                 </div>
 
                 {/* Badge Health Score */}
-                <Tooltip content={`Health Score: ${carteira.health_score} (${carteira.health_status === 'saudavel' ? 'Saudável' : carteira.health_status === 'atencao' ? 'Atenção' : 'Crítico'})`}>
+                <Tooltip content={carteira.health_score_confiavel
+                  ? `Health Score: ${carteira.health_score} (${carteira.health_status === 'saudavel' ? 'Saudável' : carteira.health_status === 'atencao' ? 'Atenção' : 'Crítico'})`
+                  : `Health Score em auditoria. Cobertura confirmada: ${(carteira.presenca_cobertura * 100).toFixed(0)}% (${carteira.presenca_confianca}).`}>
                   <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${
-                    carteira.health_status === 'saudavel' 
+                    !carteira.health_score_confiavel
+                      ? 'bg-slate-800 border-slate-600'
+                      : carteira.health_status === 'saudavel'
                       ? 'bg-emerald-500/10 border-emerald-500/20' 
                       : carteira.health_status === 'atencao' 
                         ? 'bg-amber-500/10 border-amber-500/20' 
                         : 'bg-rose-500/10 border-rose-500/20'
                   }`}>
                     <Heart className={`w-3.5 h-3.5 ${
+                      !carteira.health_score_confiavel ? 'text-slate-500' :
                       carteira.health_status === 'saudavel' ? 'text-emerald-400' : 
                       carteira.health_status === 'atencao' ? 'text-amber-400' : 'text-rose-400'
                     }`} />
                     <span className={`text-sm font-bold ${
+                      !carteira.health_score_confiavel ? 'text-slate-400' :
                       carteira.health_status === 'saudavel' ? 'text-emerald-400' : 
                       carteira.health_status === 'atencao' ? 'text-amber-400' : 'text-rose-400'
                     }`}>
-                      {Math.round(carteira.health_score)}
+                      {carteira.health_score_confiavel ? Math.round(carteira.health_score) : 'Em auditoria'}
                     </span>
                   </div>
                 </Tooltip>

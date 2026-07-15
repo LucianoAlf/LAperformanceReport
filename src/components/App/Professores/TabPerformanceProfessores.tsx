@@ -54,8 +54,13 @@ interface ProfessorPerformance {
   matriculas_pos_exp: number;
   matriculas_diretas: number;
   nps: number | null;
-  taxa_presenca: number;
-  taxa_faltas: number;
+  taxa_presenca: number | null;
+  taxa_faltas: number | null;
+  presenca_publicavel: boolean;
+  presenca_confianca: string;
+  presenca_cobertura: number;
+  presenca_eventos_confirmados: number;
+  presenca_eventos_incertos: number;
   evasoes_mes: number;
   nao_renovacoes_mes: number;
   mrr_perdido: number;
@@ -63,6 +68,7 @@ interface ProfessorPerformance {
   tendencia_media?: 'subindo' | 'estavel' | 'caindo';
   health_score: number;
   health_status: 'critico' | 'atencao' | 'saudavel';
+  health_score_confiavel: boolean;
   health_detalhes: { kpi: string; valor: number; scoreNormalizado: number; peso: number; contribuicao: number }[];
   fator_demanda_ponderado: number; // Fator de demanda ponderado pela composição da carteira
 }
@@ -352,7 +358,10 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           const eventosExperimentaisCanonicos = Number(kpis?.experimentais_agendadas || 0);
           const taxaConversaoCanonica = Number(kpis?.taxa_conversao || 0);
 
-          const taxaPresenca = kpis?.media_presenca ? Number(kpis.media_presenca) : 0;
+          const presencaPublicavel = Boolean(kpis?.presenca_publicavel)
+            && kpis?.media_presenca !== null
+            && kpis?.media_presenca !== undefined;
+          const taxaPresenca = presencaPublicavel ? Number(kpis?.media_presenca) : null;
           const nps = kpis?.nps_medio ? Number(kpis.nps_medio) : null;
           const evasoesMes = kpis?.evasoes || 0;
           
@@ -369,7 +378,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             mediaTurma: mediaAlunosTurma,
             retencao: taxaRetencao,
             conversao: taxaConversaoCanonica,
-            presenca: taxaPresenca,
+            // Presenca neutra impede penalizacao tecnica; o score permanece
+            // bloqueado na UI enquanto a metrica nao for publicavel.
+            presenca: taxaPresenca ?? 75,
             evasoes: evasoesMes,
             taxaCrescimentoAjustada: 0, // TODO: buscar da view vw_taxa_crescimento_professor
             taxaEvasao: totalAlunos > 0 ? (evasoesMes / totalAlunos) * 100 : 0,
@@ -408,8 +419,15 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             matriculas_pos_exp: matriculasPosExpCanonicas,
             matriculas_diretas: kpis?.matriculas_diretas || 0,
             nps: nps ? Math.round(nps * 10) / 10 : null,
-            taxa_presenca: Math.round(taxaPresenca * 10) / 10,
-            taxa_faltas: kpis?.taxa_faltas ? Math.round(Number(kpis.taxa_faltas) * 10) / 10 : 0,
+            taxa_presenca: taxaPresenca === null ? null : Math.round(taxaPresenca * 10) / 10,
+            taxa_faltas: presencaPublicavel && kpis?.taxa_faltas !== null
+              ? Math.round(Number(kpis?.taxa_faltas) * 10) / 10
+              : null,
+            presenca_publicavel: presencaPublicavel,
+            presenca_confianca: kpis?.presenca_confianca || 'sem_base',
+            presenca_cobertura: Number(kpis?.presenca_cobertura || 0),
+            presenca_eventos_confirmados: Number(kpis?.presenca_eventos_confirmados || 0),
+            presenca_eventos_incertos: Number(kpis?.presenca_eventos_incertos || 0),
             evasoes_mes: evasoesMes,
             nao_renovacoes_mes: kpis?.nao_renovacoes || 0,
             mrr_perdido: Number(kpis?.mrr_perdido) || 0,
@@ -417,6 +435,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             tendencia_media: tendencia,
             health_score: healthResult.score,
             health_status: healthResult.status,
+            health_score_confiavel: presencaPublicavel,
             health_detalhes: healthResult.detalhes,
             fator_demanda_ponderado: Math.round(fatorDemandaPonderado * 100) / 100
           };
@@ -493,7 +512,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     let resultado = [...professores];
 
     if (filtroStatus !== 'todos') {
-      resultado = resultado.filter(p => p.status === filtroStatus);
+      resultado = resultado.filter(p => p.health_score_confiavel && p.status === filtroStatus);
     }
 
     if (filtroBusca) {
@@ -501,17 +520,24 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       resultado = resultado.filter(p => p.nome.toLowerCase().includes(termo));
     }
 
-    // Ordenar por Health Score (maior para menor)
-    resultado.sort((a, b) => b.health_score - a.health_score);
+    // Health sem presenca publicavel nao participa de ranking.
+    resultado.sort((a, b) => {
+      if (a.health_score_confiavel !== b.health_score_confiavel) {
+        return a.health_score_confiavel ? -1 : 1;
+      }
+      if (a.health_score_confiavel) return b.health_score - a.health_score;
+      return a.nome.localeCompare(b.nome, 'pt-BR');
+    });
 
     return resultado;
   }, [professores, filtroStatus, filtroBusca]);
 
   // Calcular alertas
   const alertas = useMemo<AlertaPerformance[]>(() => {
-    const criticos = professores.filter(p => p.status === 'critico');
-    const atencao = professores.filter(p => p.status === 'atencao');
-    const excelentes = professores.filter(p => p.status === 'excelente');
+    const avaliaveis = professores.filter(p => p.health_score_confiavel);
+    const criticos = avaliaveis.filter(p => p.status === 'critico');
+    const atencao = avaliaveis.filter(p => p.status === 'atencao');
+    const excelentes = avaliaveis.filter(p => p.status === 'excelente');
 
     return [
       { tipo: 'critico', quantidade: criticos.length, descricao: 'Retencao ou media critica' },
@@ -549,9 +575,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       taxa_conversao_media: totalExperimentais > 0 ? (totalMatriculasPosExp / totalExperimentais) * 100 : 0,
       nps_medio: 0, // DEPRECATED - mantido para compatibilidade
       total_evasoes: totalEvasoes,
-      professores_criticos: professores.filter(p => p.status === 'critico').length,
-      professores_atencao: professores.filter(p => p.status === 'atencao').length,
-      professores_excelentes: professores.filter(p => p.status === 'excelente').length
+      professores_criticos: professores.filter(p => p.health_score_confiavel && p.status === 'critico').length,
+      professores_atencao: professores.filter(p => p.health_score_confiavel && p.status === 'atencao').length,
+      professores_excelentes: professores.filter(p => p.health_score_confiavel && p.status === 'excelente').length
     };
   }, [professores]);
 
@@ -568,11 +594,14 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
   }, [professores]);
 
   const healthScoreEquipe = useMemo(() => {
-    if (professores.length === 0) return { media: 0, status: 'atencao' as const };
-    const soma = professores.reduce((acc, p) => acc + p.health_score, 0);
-    const media = soma / professores.length;
+    const avaliaveis = professores.filter((professor) => professor.health_score_confiavel);
+    if (avaliaveis.length === 0) {
+      return { media: 0, status: 'atencao' as const, disponivel: false };
+    }
+    const soma = avaliaveis.reduce((acc, p) => acc + p.health_score, 0);
+    const media = soma / avaliaveis.length;
     const status = media >= 70 ? 'saudavel' : media >= 40 ? 'atencao' : 'critico';
-    return { media: Math.round(media * 10) / 10, status };
+    return { media: Math.round(media * 10) / 10, status, disponivel: true };
   }, [professores]);
 
   const getStatusColor = (status: string) => {
@@ -678,7 +707,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
         {/* HEALTH SCORE COM GAUGE - DESTAQUE NO CENTRO */}
         <div className={`bg-slate-900 rounded-2xl p-4 border-2 ${
-          healthScoreEquipe.status === 'saudavel' 
+          !healthScoreEquipe.disponivel
+            ? 'border-slate-700'
+            : healthScoreEquipe.status === 'saudavel'
             ? 'border-violet-500/50' 
             : healthScoreEquipe.status === 'atencao'
             ? 'border-amber-500/50'
@@ -687,14 +718,18 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
               <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                healthScoreEquipe.status === 'saudavel' 
+                !healthScoreEquipe.disponivel
+                  ? 'bg-slate-800'
+                  : healthScoreEquipe.status === 'saudavel'
                   ? 'bg-violet-500/20' 
                   : healthScoreEquipe.status === 'atencao'
                   ? 'bg-amber-500/20'
                   : 'bg-rose-500/20'
               }`}>
                 <Heart className={`w-4 h-4 ${
-                  healthScoreEquipe.status === 'saudavel' 
+                  !healthScoreEquipe.disponivel
+                    ? 'text-slate-500'
+                    : healthScoreEquipe.status === 'saudavel'
                     ? 'text-violet-400' 
                     : healthScoreEquipe.status === 'atencao'
                     ? 'text-amber-400'
@@ -722,30 +757,36 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
               {/* Arco de Fundo */}
               <path d="M 15 90 A 75 75 0 0 1 165 90" fill="none" stroke="#1e293b" strokeWidth="16" strokeLinecap="round"/>
               {/* Arco Ativo com Gradiente */}
-              <path d="M 15 90 A 75 75 0 0 1 165 90" fill="none" stroke="url(#healthGaugeGradient)" strokeWidth="16" strokeLinecap="round"/>
+              {healthScoreEquipe.disponivel && (
+                <path d="M 15 90 A 75 75 0 0 1 165 90" fill="none" stroke="url(#healthGaugeGradient)" strokeWidth="16" strokeLinecap="round"/>
+              )}
               {/* Ponteiro */}
-              <g style={{
-                transform: `rotate(${(healthScoreEquipe.media / 100) * 180 - 90}deg)`,
-                transformOrigin: '90px 90px',
-                transition: 'transform 1.5s cubic-bezier(0.34, 1.56, 0.64, 1)'
-              }}>
-                <path d="M 87 90 L 90 30 L 93 90 Z" fill="#94a3b8"/>
-                <circle cx="90" cy="90" r="5" fill="#94a3b8"/>
-                <circle cx="90" cy="90" r="2" fill="white"/>
-              </g>
+              {healthScoreEquipe.disponivel && (
+                <g style={{
+                  transform: `rotate(${(healthScoreEquipe.media / 100) * 180 - 90}deg)`,
+                  transformOrigin: '90px 90px',
+                  transition: 'transform 1.5s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                }}>
+                  <path d="M 87 90 L 90 30 L 93 90 Z" fill="#94a3b8"/>
+                  <circle cx="90" cy="90" r="5" fill="#94a3b8"/>
+                  <circle cx="90" cy="90" r="2" fill="white"/>
+                </g>
+              )}
             </svg>
             <div className="mt-[-12px] text-center z-10">
               <span className={`text-2xl font-black tracking-tighter ${
-                healthScoreEquipe.status === 'saudavel' 
+                !healthScoreEquipe.disponivel
+                  ? 'text-slate-500'
+                  : healthScoreEquipe.status === 'saudavel'
                   ? 'text-violet-400' 
                   : healthScoreEquipe.status === 'atencao'
                   ? 'text-amber-400'
                   : 'text-rose-400'
               }`}>
-                {healthScoreEquipe.media}
+                {healthScoreEquipe.disponivel ? healthScoreEquipe.media : '-'}
               </span>
               <p className="text-[8px] font-semibold text-slate-500 uppercase tracking-widest">
-                Média Geral
+                {healthScoreEquipe.disponivel ? 'Média Geral' : 'Em auditoria'}
               </p>
             </div>
           </div>
@@ -932,13 +973,15 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                   <tr
                     key={professor.id}
                     className={`hover:bg-slate-700/30 transition-colors cursor-pointer ${
-                      professor.status === 'critico' ? 'bg-red-500/5' : ''
+                      professor.health_score_confiavel && professor.status === 'critico' ? 'bg-red-500/5' : ''
                     }`}
                     onClick={() => setModalDetalhes({ open: true, professor })}
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getGradientByStatus(professor.status)} flex items-center justify-center text-white font-bold text-sm`}>
+                        <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getGradientByStatus(
+                          professor.health_score_confiavel ? professor.status : 'em_auditoria'
+                        )} flex items-center justify-center text-white font-bold text-sm`}>
                           {professor.foto_url ? (
                             <img src={professor.foto_url} alt="" className="w-full h-full rounded-full object-cover" />
                           ) : (
@@ -955,7 +998,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                     <td className="text-center px-4 py-3">
                       <Tooltip
                         side="top"
-                        content={
+                        content={professor.health_score_confiavel ? (
                           <div className="min-w-[260px] text-xs" onClick={(e) => e.stopPropagation()}>
                             <p className="font-bold text-slate-200 mb-2">Composição do Health Score</p>
                             <table className="w-full">
@@ -987,16 +1030,32 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                               </tfoot>
                             </table>
                           </div>
-                        }
+                        ) : (
+                          <div className="min-w-[230px] text-xs">
+                            <p className="font-bold text-slate-200 mb-1.5">Health Score em auditoria</p>
+                            <p className="text-slate-400">
+                              O score nao e publicado enquanto a presenca nao tiver confianca alta.
+                            </p>
+                            <div className="mt-2 space-y-1 text-slate-300">
+                              <p>Cobertura confirmada: <strong>{(professor.presenca_cobertura * 100).toFixed(1)}%</strong></p>
+                              <p>Eventos confirmados: <strong>{professor.presenca_eventos_confirmados}</strong></p>
+                              <p>Eventos incertos: <strong>{professor.presenca_eventos_incertos}</strong></p>
+                            </div>
+                          </div>
+                        )}
                       >
                         <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border cursor-help ${
-                          professor.health_status === 'saudavel'
+                          !professor.health_score_confiavel
+                            ? 'bg-slate-800 border-slate-600 text-slate-400'
+                            : professor.health_status === 'saudavel'
                             ? 'bg-emerald-900/30 border-emerald-700 text-emerald-400'
                             : professor.health_status === 'atencao'
                             ? 'bg-amber-900/30 border-amber-700 text-amber-400'
                             : 'bg-rose-900/30 border-rose-700 text-rose-400'
                         }`}>
-                          <span className="text-sm font-black">{Math.round(professor.health_score)}</span>
+                          <span className="text-sm font-black">
+                            {professor.health_score_confiavel ? Math.round(professor.health_score) : 'Em auditoria'}
+                          </span>
                         </div>
                       </Tooltip>
                     </td>
@@ -1146,32 +1205,55 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                       </Tooltip>
                     </td>
                     <td className="text-center px-4 py-3">
-                      <Tooltip
-                        side="top"
-                        content={
-                          <div className="text-xs min-w-[180px]">
-                            <p className="font-bold text-slate-200 mb-1.5">Presenca no Mes</p>
-                            <div className="space-y-1">
-                              <div className="flex justify-between gap-4">
-                                <span className="text-emerald-400">Presenca</span>
-                                <span className="text-white font-medium">{professor.taxa_presenca.toFixed(1)}%</span>
+                      {professor.presenca_publicavel && professor.taxa_presenca !== null && professor.taxa_faltas !== null ? (
+                        <Tooltip
+                          side="top"
+                          content={
+                            <div className="text-xs min-w-[180px]">
+                              <p className="font-bold text-slate-200 mb-1.5">Presenca no Mes</p>
+                              <div className="space-y-1">
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-emerald-400">Presenca</span>
+                                  <span className="text-white font-medium">{professor.taxa_presenca.toFixed(1)}%</span>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-red-400">Faltas</span>
+                                  <span className="text-white font-medium">{professor.taxa_faltas.toFixed(1)}%</span>
+                                </div>
                               </div>
-                              <div className="flex justify-between gap-4">
-                                <span className="text-red-400">Faltas</span>
-                                <span className="text-white font-medium">{professor.taxa_faltas.toFixed(1)}%</span>
+                              <p className="text-slate-500 mt-1.5 text-[10px]">Clique para ver por aluno</p>
+                            </div>
+                          }
+                        >
+                          <span
+                            className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.taxa_presenca, { critico: 70, atencao: 80 })}`}
+                            onClick={(e) => { e.stopPropagation(); setModalPresenca({ open: true, professorId: professor.id, professorNome: professor.nome }); }}
+                          >
+                            {professor.taxa_presenca.toFixed(0)}%
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip
+                          side="top"
+                          content={
+                            <div className="text-xs min-w-[220px]">
+                              <p className="font-bold text-slate-200 mb-1.5">Presenca em auditoria</p>
+                              <p className="text-slate-400">
+                                O Emusys ainda mistura falta confirmada com chamada nao registrada neste recorte.
+                              </p>
+                              <div className="mt-2 space-y-1 text-slate-300">
+                                <p>Cobertura confirmada: <strong>{(professor.presenca_cobertura * 100).toFixed(1)}%</strong></p>
+                                <p>Confirmados: <strong>{professor.presenca_eventos_confirmados}</strong></p>
+                                <p>Incertos: <strong>{professor.presenca_eventos_incertos}</strong></p>
                               </div>
                             </div>
-                            <p className="text-slate-500 mt-1.5 text-[10px]">Clique para ver por aluno</p>
-                          </div>
-                        }
-                      >
-                        <span
-                          className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.taxa_presenca, { critico: 70, atencao: 80 })}`}
-                          onClick={(e) => { e.stopPropagation(); setModalPresenca({ open: true, professorId: professor.id, professorNome: professor.nome }); }}
+                          }
                         >
-                          {professor.taxa_presenca.toFixed(0)}%
-                        </span>
-                      </Tooltip>
+                          <span className="inline-flex items-center rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-xs font-medium text-slate-400 cursor-help">
+                            Em auditoria
+                          </span>
+                        </Tooltip>
+                      )}
                     </td>
                     <td className="text-center px-4 py-3">
                       <Tooltip
@@ -1209,8 +1291,14 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                       </Tooltip>
                     </td>
                     <td className="text-center px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(professor.status)}`}>
-                        {professor.status === 'critico' ? 'Crítico' : professor.status === 'atencao' ? 'Atenção' : 'Excelente'}
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium border ${
+                        professor.health_score_confiavel
+                          ? getStatusColor(professor.status)
+                          : 'text-slate-400 bg-slate-500/10 border-slate-600'
+                      }`}>
+                        {professor.health_score_confiavel
+                          ? (professor.status === 'critico' ? 'Crítico' : professor.status === 'atencao' ? 'Atenção' : 'Excelente')
+                          : 'Em auditoria'}
                       </span>
                     </td>
                     <td className="text-center px-4 py-3" onClick={(e) => e.stopPropagation()}>
@@ -1257,9 +1345,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           </div>
           <div>
             <p className="text-slate-300 font-medium">Presença</p>
-            <p className="text-red-400">🔴 &lt;70% Crítico</p>
-            <p className="text-yellow-400">🟡 70-80% Atenção</p>
-            <p className="text-green-400">🟢 &gt;80% Ideal</p>
+            <p className="text-slate-400">Publicada apenas com confiança alta</p>
+            <p className="text-slate-500">Recortes incertos ficam em auditoria</p>
           </div>
         </div>
       </div>
@@ -1279,8 +1366,15 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             taxa_conversao: p.taxa_conversao,
             nps: p.nps,
             taxa_presenca: p.taxa_presenca,
+            presenca_publicavel: p.presenca_publicavel,
+            presenca_confianca: p.presenca_confianca,
+            presenca_cobertura: p.presenca_cobertura,
+            presenca_eventos_confirmados: p.presenca_eventos_confirmados,
+            presenca_eventos_incertos: p.presenca_eventos_incertos,
             evasoes_mes: p.evasoes_mes,
             status: p.status,
+            health_score: p.health_score_confiavel ? p.health_score : null,
+            health_score_confiavel: p.health_score_confiavel,
             unidades: p.unidades.map(u => u.codigo)
           }))}
           metricas_gerais={metricasGerais}

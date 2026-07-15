@@ -165,41 +165,49 @@ Deno.serve(async (req) => {
     // KPIs de professores - calcular Health Score com pesos do banco
     const kpisProfessoresRaw = dados.kpis_professores || [];
     const professores = kpisProfessoresRaw.map((p: any) => {
+      const presencaPublicavel = p.presenca_publicavel === true
+        && p.media_presenca !== null
+        && p.media_presenca !== undefined;
       const healthResult = calcularHealthScore({
         taxaCrescimento: Number(p.taxa_crescimento) || 0,
         mediaTurma: Number(p.media_alunos_turma) || 0,
         retencao: Number(p.taxa_retencao) || 100,
         conversao: Number(p.taxa_conversao) || 0,
-        presenca: Number(p.media_presenca) || 0,
+        presenca: presencaPublicavel ? Number(p.media_presenca) : 75,
         evasoes: Number(p.evasoes) || 0,
         carteira: Number(p.carteira_alunos) || 0,
       }, weights);
       return {
         ...p,
-        health_score: healthResult.score,
-        health_status: healthResult.status
+        media_presenca: presencaPublicavel ? Number(p.media_presenca) : null,
+        presenca_publicavel: presencaPublicavel,
+        health_score: presencaPublicavel ? healthResult.score : null,
+        health_status: presencaPublicavel ? healthResult.status : null,
+        health_score_confiavel: presencaPublicavel,
       };
     });
 
     // Calcular médias da unidade
     const totalProfessores = professores.length;
-    const mediaHealthScore = totalProfessores > 0
-      ? Math.round(professores.reduce((sum: number, p: any) => sum + p.health_score, 0) / totalProfessores * 10) / 10
-      : 0;
+    const professoresHealthPublicavel = professores.filter((p: any) => p.health_score_confiavel);
+    const professoresPresencaPublicavel = professores.filter((p: any) => p.presenca_publicavel);
+    const mediaHealthScore = professoresHealthPublicavel.length > 0
+      ? Math.round(professoresHealthPublicavel.reduce((sum: number, p: any) => sum + p.health_score, 0) / professoresHealthPublicavel.length * 10) / 10
+      : null;
     const mediaCarteira = totalProfessores > 0
       ? Math.round(professores.reduce((sum: number, p: any) => sum + (Number(p.carteira_alunos) || 0), 0) / totalProfessores * 10) / 10
       : 0;
-    const mediaPresenca = totalProfessores > 0
-      ? Math.round(professores.reduce((sum: number, p: any) => sum + (Number(p.media_presenca) || 0), 0) / totalProfessores * 10) / 10
-      : 0;
+    const mediaPresenca = professoresPresencaPublicavel.length > 0
+      ? Math.round(professoresPresencaPublicavel.reduce((sum: number, p: any) => sum + Number(p.media_presenca), 0) / professoresPresencaPublicavel.length * 10) / 10
+      : null;
     const mediaAlunosTurma = totalProfessores > 0
       ? Math.round(professores.reduce((sum: number, p: any) => sum + (Number(p.media_alunos_turma) || 0), 0) / totalProfessores * 100) / 100
       : 0;
 
     // Rankings ordenados
-    const rankingHealthScore = [...professores].sort((a: any, b: any) => b.health_score - a.health_score);
+    const rankingHealthScore = [...professoresHealthPublicavel].sort((a: any, b: any) => b.health_score - a.health_score);
     const rankingCarteira = [...professores].sort((a: any, b: any) => (b.carteira_alunos || 0) - (a.carteira_alunos || 0));
-    const rankingPresenca = [...professores].sort((a: any, b: any) => (b.media_presenca || 0) - (a.media_presenca || 0));
+    const rankingPresenca = [...professoresPresencaPublicavel].sort((a: any, b: any) => b.media_presenca - a.media_presenca);
     const rankingMediaTurma = [...professores].sort((a: any, b: any) => (b.media_alunos_turma || 0) - (a.media_alunos_turma || 0));
     const rankingMatriculas = [...professores].filter((p: any) => (p.matriculas || 0) > 0).sort((a: any, b: any) => (b.matriculas || 0) - (a.matriculas || 0));
 
@@ -228,19 +236,22 @@ Deno.serve(async (req) => {
     relatorioTemplate += `📊 *RANKING HEALTH SCORE*\n`;
     relatorioTemplate += `───────────────────────\n`;
     
-    rankingHealthScore.forEach((p: any, i: number) => {
-      const emoji = p.health_status === 'saudavel' ? '🟢' : (p.health_status === 'atencao' ? '🟡' : '🔴');
-      const pct = Math.round(p.health_score);
-      const gap = (p.health_score - metaHealthScore).toFixed(1);
-      const gapStr = Number(gap) >= 0 ? `+${gap}` : gap;
-      relatorioTemplate += `${i + 1}. ${p.professor_nome} - ${p.health_score.toFixed(1)} pts ${emoji}\n`;
-      relatorioTemplate += `   ${criarBarraProgresso(pct)} ${pct}% | Meta: ${metaHealthScore} | Gap: ${gapStr}\n`;
-      if (i < totalProfessores - 1) relatorioTemplate += `\n`;
-    });
-
-    relatorioTemplate += `\n📈 Média da Unidade: *${mediaHealthScore}* pts\n`;
-    relatorioTemplate += `🎯 Meta: *${metaHealthScore}* pts\n`;
-    relatorioTemplate += `📉 Gap Médio: *${(mediaHealthScore - metaHealthScore).toFixed(1)}* pts\n\n`;
+    if (mediaHealthScore !== null) {
+      rankingHealthScore.forEach((p: any, i: number) => {
+        const emoji = p.health_status === 'saudavel' ? '🟢' : (p.health_status === 'atencao' ? '🟡' : '🔴');
+        const pct = Math.round(p.health_score);
+        const gap = (p.health_score - metaHealthScore).toFixed(1);
+        const gapStr = Number(gap) >= 0 ? `+${gap}` : gap;
+        relatorioTemplate += `${i + 1}. ${p.professor_nome} - ${p.health_score.toFixed(1)} pts ${emoji}\n`;
+        relatorioTemplate += `   ${criarBarraProgresso(pct)} ${pct}% | Meta: ${metaHealthScore} | Gap: ${gapStr}\n`;
+        if (i < rankingHealthScore.length - 1) relatorioTemplate += `\n`;
+      });
+      relatorioTemplate += `\n📈 Média da Unidade: *${mediaHealthScore}* pts\n`;
+      relatorioTemplate += `🎯 Meta: *${metaHealthScore}* pts\n`;
+      relatorioTemplate += `📉 Gap Médio: *${(mediaHealthScore - metaHealthScore).toFixed(1)}* pts\n\n`;
+    } else {
+      relatorioTemplate += `*Em auditoria* — presença sem cobertura suficiente para publicar Health Score.\n\n`;
+    }
 
     // RANKING CARTEIRA DE ALUNOS
     relatorioTemplate += `───────────────────────\n`;
@@ -268,20 +279,21 @@ Deno.serve(async (req) => {
     relatorioTemplate += `📈 *RANKING PRESENÇA MÉDIA*\n`;
     relatorioTemplate += `───────────────────────\n`;
 
-    rankingPresenca.forEach((p: any, i: number) => {
-      const presenca = Number(p.media_presenca) || 0;
-      const pct = Math.round(presenca);
-      const vsMedia = formatarVariacao(presenca, mediaPresenca);
-      relatorioTemplate += `${i + 1}. ${p.professor_nome} - ${presenca.toFixed(1)}%\n`;
-      relatorioTemplate += `   ${criarBarraProgresso(pct)} ${pct}% | ${vsMedia} vs média\n`;
-      if (i < totalProfessores - 1) relatorioTemplate += `\n`;
-    });
-
-    const maxPresenca = rankingPresenca[0]?.media_presenca || 0;
-    const minPresenca = rankingPresenca[rankingPresenca.length - 1]?.media_presenca || 0;
-    relatorioTemplate += `\n📊 Média: *${mediaPresenca.toFixed(1)}%*\n`;
-    relatorioTemplate += `🎯 Meta: *${metaPresenca}%*\n`;
-    relatorioTemplate += `📉 Gap: *${(mediaPresenca - metaPresenca).toFixed(1)}%*\n\n`;
+    if (mediaPresenca !== null) {
+      rankingPresenca.forEach((p: any, i: number) => {
+        const presenca = Number(p.media_presenca);
+        const pct = Math.round(presenca);
+        const vsMedia = formatarVariacao(presenca, mediaPresenca);
+        relatorioTemplate += `${i + 1}. ${p.professor_nome} - ${presenca.toFixed(1)}%\n`;
+        relatorioTemplate += `   ${criarBarraProgresso(pct)} ${pct}% | ${vsMedia} vs média\n`;
+        if (i < rankingPresenca.length - 1) relatorioTemplate += `\n`;
+      });
+      relatorioTemplate += `\n📊 Média: *${mediaPresenca.toFixed(1)}%*\n`;
+      relatorioTemplate += `🎯 Meta: *${metaPresenca}%*\n`;
+      relatorioTemplate += `📉 Gap: *${(mediaPresenca - metaPresenca).toFixed(1)}%*\n\n`;
+    } else {
+      relatorioTemplate += `*Em auditoria* — nenhum professor atingiu cobertura suficiente para ranking de presença.\n\n`;
+    }
 
     // RANKING MÉDIA ALUNOS/TURMA
     relatorioTemplate += `───────────────────────\n`;
@@ -350,16 +362,22 @@ Deno.serve(async (req) => {
     relatorioTemplate += `> [ANALISE_GAPS_IA]\n\n`;
 
     // OPORTUNIDADES DE CRESCIMENTO
-    const abaixoMediaHS = professores.filter((p: any) => p.health_score < mediaHealthScore).length;
+    const abaixoMediaHS = mediaHealthScore === null
+      ? 0
+      : professoresHealthPublicavel.filter((p: any) => p.health_score < mediaHealthScore).length;
     const semMatriculas = professores.filter((p: any) => (p.matriculas || 0) === 0).length;
-    const presencaBaixa = professores.filter((p: any) => (p.media_presenca || 0) < 70).length;
+    const presencaBaixa = professoresPresencaPublicavel.filter((p: any) => p.media_presenca < 70).length;
 
     relatorioTemplate += `───────────────────────\n`;
     relatorioTemplate += `🚀 *OPORTUNIDADES DE CRESCIMENTO*\n`;
     relatorioTemplate += `───────────────────────\n`;
-    relatorioTemplate += `• *${abaixoMediaHS}* professores abaixo da média em Health Score\n`;
+    relatorioTemplate += mediaHealthScore !== null
+      ? `• *${abaixoMediaHS}* professores abaixo da média em Health Score\n`
+      : `• Health Score: *Em auditoria*\n`;
     relatorioTemplate += `• *${semMatriculas}* professores sem matrículas no mês\n`;
-    relatorioTemplate += `• *${presencaBaixa}* professores com presença < 70%\n\n`;
+    relatorioTemplate += mediaPresenca !== null
+      ? `• *${presencaBaixa}* professores com presença < 70%\n\n`
+      : `• Presença: *Em auditoria*\n\n`;
 
     // RECOMENDAÇÕES ESTRATÉGICAS
     relatorioTemplate += `───────────────────────\n`;
@@ -378,6 +396,12 @@ Deno.serve(async (req) => {
     const top3Carteira = rankingCarteira.slice(0, 3).map((p: any) => ({ nome: p.professor_nome, alunos: p.carteira_alunos }));
     const top3Presenca = rankingPresenca.slice(0, 3).map((p: any) => ({ nome: p.professor_nome, presenca: p.media_presenca }));
     const bottom3Presenca = rankingPresenca.slice(-3).map((p: any) => ({ nome: p.professor_nome, presenca: p.media_presenca }));
+    const blocoHealthIA = mediaHealthScore === null
+      ? 'EM AUDITORIA — não classificar nem recomendar por Health Score.'
+      : `Média da unidade: ${mediaHealthScore} pts (meta: ${metaHealthScore})\nTop 3: ${top3HS.map(p => `${p.nome} (${p.score})`).join(', ')}\nBottom 3: ${bottom3HS.map(p => `${p.nome} (${p.score})`).join(', ')}\n${abaixoMediaHS} professores abaixo da média`;
+    const blocoPresencaIA = mediaPresenca === null
+      ? 'EM AUDITORIA — não classificar nem recomendar por presença.'
+      : `Média: ${mediaPresenca.toFixed(1)}% (meta: ${metaPresenca}%)\nTop 3: ${top3Presenca.map(p => `${p.nome} (${p.presenca?.toFixed(1)}%)`).join(', ')}\nBottom 3: ${bottom3Presenca.map(p => `${p.nome} (${p.presenca?.toFixed(1)}%)`).join(', ')}\n${presencaBaixa} professores com presença < 70%`;
 
     // Prompt para a IA
     const promptIA = `Você é um analista de performance pedagógica da LA Music School.
@@ -386,10 +410,7 @@ Analise os rankings de professores e gere insights estratégicos.
 DADOS DO RANKING - ${unidadeNome} - ${mesNome}/${ano}:
 
 HEALTH SCORE:
-- Média da unidade: ${mediaHealthScore} pts (meta: ${metaHealthScore})
-- Top 3: ${top3HS.map(p => `${p.nome} (${p.score})`).join(', ')}
-- Bottom 3: ${bottom3HS.map(p => `${p.nome} (${p.score})`).join(', ')}
-- ${abaixoMediaHS} professores abaixo da média
+${blocoHealthIA}
 
 CARTEIRA:
 - Média: ${mediaCarteira} alunos/prof
@@ -397,10 +418,7 @@ CARTEIRA:
 - Amplitude: ${maxCarteira - minCarteira} alunos
 
 PRESENÇA:
-- Média: ${mediaPresenca.toFixed(1)}% (meta: ${metaPresenca}%)
-- Top 3: ${top3Presenca.map(p => `${p.nome} (${p.presenca?.toFixed(1)}%)`).join(', ')}
-- Bottom 3: ${bottom3Presenca.map(p => `${p.nome} (${p.presenca?.toFixed(1)}%)`).join(', ')}
-- ${presencaBaixa} professores com presença < 70%
+${blocoPresencaIA}
 
 MATRÍCULAS:
 - ${semMatriculas} de ${totalProfessores} professores sem matrículas no mês
@@ -419,7 +437,9 @@ Gere um JSON com:
   ]
 }
 
-IMPORTANTE: Seja direto, use nomes dos professores, foque em ações práticas.`;
+IMPORTANTE: Seja direto, use nomes dos professores e foque em ações práticas.
+Se presenca_publicavel=false, não use presença. Se health_score_confiavel=false, não use Health Score.
+Nunca converta presença ou Health Score nulos em zero.`;
 
     // Chamar API da OpenAI
     const response = await fetchOpenAIComRetry(

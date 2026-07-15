@@ -87,6 +87,9 @@ O Health Score é uma métrica composta que resume a saúde geral do professor e
 
 ## DIRETRIZES OBRIGATÓRIAS
 
+- Se presenca_publicavel=false, não avalie presença, não calcule Health Score e não gere alerta, ranking ou recomendação a partir dela.
+- Nunca converta presença nula em 0%. Trate-a como dado em auditoria.
+
 ### Tom e Estilo
 - Seja amigável e motivacional, nunca punitivo
 - Use linguagem clara e direta
@@ -166,7 +169,12 @@ interface MetricasAtuais {
   taxa_retencao: number;
   taxa_conversao: number;
   nps?: number | null; // DEPRECATED - mantido para compatibilidade
-  taxa_presenca: number;
+  taxa_presenca: number | null;
+  presenca_publicavel: boolean;
+  presenca_confianca?: string;
+  presenca_cobertura?: number;
+  presenca_eventos_confirmados?: number;
+  presenca_eventos_incertos?: number;
   evasoes_mes: number;
   fator_demanda_ponderado?: number; // V2: Fator de demanda ponderado
 }
@@ -235,7 +243,8 @@ interface ProfessorInsightsRequest {
     tipo_contrato: string;
   };
   metricas_atuais: MetricasAtuais;
-  health_score?: HealthScoreData;
+  health_score?: HealthScoreData | null;
+  health_score_confiavel?: boolean;
   historico: HistoricoItem[];
   evasoes_recentes: EvasaoRecente[];
   metas_ativas: MetaAtiva[];
@@ -252,7 +261,8 @@ function calcularStatus(metricas: MetricasAtuais): string {
   }
   // Atenção se qualquer métrica estiver em atenção
   if (metricas.taxa_retencao < 95 || metricas.media_alunos_turma < 1.5 ||
-      metricas.evasoes_mes >= 1 || metricas.taxa_presenca < 80) {
+      metricas.evasoes_mes >= 1 ||
+      (metricas.presenca_publicavel && metricas.taxa_presenca !== null && metricas.taxa_presenca < 80)) {
     return 'atencao';
   }
   return 'excelente';
@@ -263,7 +273,7 @@ function montarPromptUsuario(dados: ProfessorInsightsRequest): string {
   const statusEmoji = status === 'critico' ? '🔴' : status === 'atencao' ? '🟡' : '🟢';
   
   // Health Score
-  const healthScore = dados.health_score;
+  const healthScore = dados.health_score_confiavel === true ? dados.health_score : null;
   const healthEmoji = healthScore?.status === 'saudavel' ? '🟢' : healthScore?.status === 'atencao' ? '🟡' : '🔴';
   const healthLabel = healthScore?.status === 'saudavel' ? 'SAUDÁVEL' : healthScore?.status === 'atencao' ? 'ATENÇÃO' : 'CRÍTICO';
   
@@ -279,7 +289,7 @@ ${healthScore ? `**Score**: ${healthEmoji} ${healthScore.score.toFixed(1)} ponto
 
 **Detalhamento por KPI:**
 ${healthScore.detalhes.map(d => `- ${d.kpi}: valor ${d.valor.toFixed(1)} → score ${d.scoreNormalizado.toFixed(0)} (peso ${(d.peso * 100).toFixed(0)}%) = contribuição ${d.contribuicao.toFixed(1)} pts`).join('\n')}
-` : 'Health Score não calculado'}
+` : 'Health Score em auditoria: a presença ainda não atingiu cobertura suficiente para publicação.'}
 
 ### MÉTRICAS ATUAIS
 - Total de Alunos: ${dados.metricas_atuais.total_alunos}
@@ -288,7 +298,9 @@ ${healthScore.detalhes.map(d => `- ${d.kpi}: valor ${d.valor.toFixed(1)} → sco
 - Taxa de Retenção: ${dados.metricas_atuais.taxa_retencao}% ${dados.metricas_atuais.taxa_retencao < 70 ? '🔴' : dados.metricas_atuais.taxa_retencao < 95 ? '🟡' : '🟢'}
 - Conversao Exp->Mat (legado/bloqueada): ${dados.metricas_atuais.taxa_conversao}% - nao usar como KPI oficial
 - Fator de Demanda: ${(dados.metricas_atuais.fator_demanda_ponderado || 1.0).toFixed(1)} ${(dados.metricas_atuais.fator_demanda_ponderado || 1.0) <= 1.2 ? '🟢' : (dados.metricas_atuais.fator_demanda_ponderado || 1.0) <= 2.0 ? '🟡' : '🔴'}
-- Taxa de Presença: ${dados.metricas_atuais.taxa_presenca}% ${dados.metricas_atuais.taxa_presenca < 70 ? '🔴' : dados.metricas_atuais.taxa_presenca < 80 ? '🟡' : '🟢'}
+- Taxa de Presença: ${dados.metricas_atuais.presenca_publicavel && dados.metricas_atuais.taxa_presenca !== null
+  ? `${dados.metricas_atuais.taxa_presenca}% ${dados.metricas_atuais.taxa_presenca < 70 ? '🔴' : dados.metricas_atuais.taxa_presenca < 80 ? '🟡' : '🟢'}`
+  : `EM AUDITORIA (cobertura ${((dados.metricas_atuais.presenca_cobertura || 0) * 100).toFixed(0)}%; confirmados ${dados.metricas_atuais.presenca_eventos_confirmados || 0}; incertos ${dados.metricas_atuais.presenca_eventos_incertos || 0})`}
 - Evasões no Mês: ${dados.metricas_atuais.evasoes_mes} ${dados.metricas_atuais.evasoes_mes >= 3 ? '🔴' : dados.metricas_atuais.evasoes_mes >= 1 ? '🟡' : '🟢'}
 `;
 
