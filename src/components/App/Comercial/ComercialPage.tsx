@@ -469,6 +469,9 @@ export function ComercialPage() {
   const [relatorioOpen, setRelatorioOpen] = useState(false);
   const [tipoRelatorio, setTipoRelatorio] = useState<'diario' | 'semanal' | 'mensal' | 'matriculas' | 'comparativo_mensal' | 'comparativo_anual' | null>(null);
   const [relatorioTexto, setRelatorioTexto] = useState('');
+  const [relatorioGerando, setRelatorioGerando] = useState(false);
+  const [relatorioErro, setRelatorioErro] = useState<string | null>(null);
+  const relatorioGeracaoIdRef = useRef(0);
   const [enviandoWhatsApp, setEnviandoWhatsApp] = useState(false);
   const [enviadoWhatsApp, setEnviadoWhatsApp] = useState(false);
   const [erroWhatsApp, setErroWhatsApp] = useState<string | null>(null);
@@ -557,21 +560,61 @@ export function ComercialPage() {
     toast.success(novoValor ? 'Relatório comercial automático ativado' : 'Relatório comercial automático desativado');
   };
   
+  const gerarRelatorioSelecionado = async (
+    tipo: Exclude<typeof tipoRelatorio, null>,
+  ): Promise<string> => {
+    switch (tipo) {
+      case 'diario':
+        return gerarRelatorioDiario();
+      case 'semanal':
+        return gerarRelatorioSemanal();
+      case 'mensal':
+        return gerarRelatorioMensal();
+      case 'matriculas':
+        return gerarRelatorioMatriculas();
+      case 'comparativo_mensal':
+        return gerarRelatorioComparativoMensal();
+      case 'comparativo_anual':
+        return gerarRelatorioComparativoAnual();
+    }
+  };
+
+  const executarGeracaoRelatorio = async (
+    tipo: Exclude<typeof tipoRelatorio, null>,
+  ) => {
+    const geracaoId = relatorioGeracaoIdRef.current + 1;
+    relatorioGeracaoIdRef.current = geracaoId;
+    setRelatorioGerando(true);
+    setRelatorioErro(null);
+    setRelatorioTexto('');
+
+    try {
+      const texto = await gerarRelatorioSelecionado(tipo);
+      if (relatorioGeracaoIdRef.current === geracaoId) {
+        setRelatorioTexto(texto);
+      }
+    } catch (err) {
+      console.error('[Comercial] Erro ao gerar relatório:', err);
+      if (relatorioGeracaoIdRef.current === geracaoId) {
+        setRelatorioErro('Não foi possível gerar o relatório. Tente novamente.');
+        toast.error('Não foi possível gerar o relatório comercial');
+      }
+    } finally {
+      if (relatorioGeracaoIdRef.current === geracaoId) {
+        setRelatorioGerando(false);
+      }
+    }
+  };
+
   // Gerar relatório automaticamente quando o tipo ou período muda
   useEffect(() => {
-    if (tipoRelatorio === 'diario') {
-      gerarRelatorioDiario().then(texto => setRelatorioTexto(texto));
-    } else if (tipoRelatorio === 'semanal') {
-      gerarRelatorioSemanal().then(texto => setRelatorioTexto(texto));
-    } else if (tipoRelatorio === 'mensal') {
-      gerarRelatorioMensal().then(texto => setRelatorioTexto(texto));
-    } else if (tipoRelatorio === 'matriculas') {
-      gerarRelatorioMatriculas().then(texto => setRelatorioTexto(texto));
-    } else if (tipoRelatorio === 'comparativo_mensal') {
-      gerarRelatorioComparativoMensal().then(texto => setRelatorioTexto(texto));
-    } else if (tipoRelatorio === 'comparativo_anual') {
-      gerarRelatorioComparativoAnual().then(texto => setRelatorioTexto(texto));
+    if (tipoRelatorio) {
+      void executarGeracaoRelatorio(tipoRelatorio);
     }
+
+    return () => {
+      relatorioGeracaoIdRef.current += 1;
+    };
   }, [tipoRelatorio, relatorioPeriodo, relatorioDataInicio, relatorioDataFim, filtroAtivo, context?.unidadeSelecionada, usuario?.unidade_id, isAdmin]);
   
   // Matrículas do mês (para tabela)
@@ -7207,45 +7250,57 @@ export function ComercialPage() {
             <p className="text-slate-400 text-sm">Escolha o tipo de relatório:</p>
             
             {/* Relatório Diário */}
-            <button
-              onClick={() => setTipoRelatorio('diario')}
-              className="w-full flex items-center gap-4 p-4 bg-slate-800/50 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-xl transition-all text-left"
+            <div
+              data-testid="relatorio-diario-card"
+              className="w-full bg-slate-800/50 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-xl transition-all"
             >
-              <div className="w-10 h-10 bg-slate-700/50 rounded-lg flex items-center justify-center text-cyan-400">
-                <Calendar className="w-5 h-5" />
-              </div>
-              <div className="flex-1">
-                <h4 className="font-medium text-white">Relatório Diário</h4>
-                <p className="text-xs text-slate-400">Resumo do período: leads, experimentais, visitas e matrículas</p>
-                <div className="flex items-center gap-2 mt-1.5" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    onClick={toggleCronComercial}
-                    disabled={loadingCronComercial || !unidadeParaSalvar || unidadeParaSalvar === 'todos'}
-                    className={cn(
-                      "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-                      cronComercialAtivo ? "bg-emerald-600" : "bg-slate-600",
-                      (!unidadeParaSalvar || unidadeParaSalvar === 'todos') && "opacity-40 cursor-not-allowed"
-                    )}
-                    title={!unidadeParaSalvar || unidadeParaSalvar === 'todos'
-                      ? 'Selecione uma unidade'
-                      : cronComercialAtivo
-                        ? 'Desativar envio automático comercial'
-                        : 'Ativar envio automático comercial'
-                    }
-                  >
-                    <span className={cn(
-                      "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
-                      cronComercialAtivo ? "translate-x-[18px]" : "translate-x-[3px]"
-                    )} />
-                  </button>
-                  <span className="flex items-center gap-1 text-[10px] text-slate-500">
-                    <Clock className="w-3 h-3" />
-                    {cronComercialAtivo ? 'Envio automático 20h ativo' : 'Envio automático 20h'}
-                  </span>
+              <button
+                data-testid="selecionar-relatorio-diario"
+                onClick={() => setTipoRelatorio('diario')}
+                className="w-full flex items-center gap-4 p-4 pb-2 text-left"
+              >
+                <div className="w-10 h-10 bg-slate-700/50 rounded-lg flex items-center justify-center text-cyan-400">
+                  <Calendar className="w-5 h-5" />
                 </div>
+                <div className="flex-1">
+                  <h4 className="font-medium text-white">Relatório Diário</h4>
+                  <p className="text-xs text-slate-400">Resumo do período: leads, experimentais, visitas e matrículas</p>
+                </div>
+                <span className="text-slate-500">→</span>
+              </button>
+              <div
+                data-testid="cron-comercial-control"
+                className="flex items-center gap-2 px-4 pb-3 pl-[4.5rem]"
+              >
+                <button
+                  type="button"
+                  onClick={toggleCronComercial}
+                  disabled={loadingCronComercial || !unidadeParaSalvar || unidadeParaSalvar === 'todos'}
+                  aria-pressed={cronComercialAtivo}
+                  aria-label={cronComercialAtivo ? 'Desativar envio automático comercial' : 'Ativar envio automático comercial'}
+                  className={cn(
+                    "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+                    cronComercialAtivo ? "bg-emerald-600" : "bg-slate-600",
+                    (!unidadeParaSalvar || unidadeParaSalvar === 'todos') && "opacity-40 cursor-not-allowed"
+                  )}
+                  title={!unidadeParaSalvar || unidadeParaSalvar === 'todos'
+                    ? 'Selecione uma unidade'
+                    : cronComercialAtivo
+                      ? 'Desativar envio automático comercial'
+                      : 'Ativar envio automático comercial'
+                  }
+                >
+                  <span className={cn(
+                    "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
+                    cronComercialAtivo ? "translate-x-[18px]" : "translate-x-[3px]"
+                  )} />
+                </button>
+                <span className="flex items-center gap-1 text-[10px] text-slate-500">
+                  <Clock className="w-3 h-3" />
+                  {cronComercialAtivo ? 'Envio automático 20h ativo' : 'Envio automático 20h'}
+                </span>
               </div>
-              <span className="text-slate-500">→</span>
-            </button>
+            </div>
 
             {/* Relatório Semanal */}
             <button
@@ -7350,11 +7405,24 @@ export function ComercialPage() {
                'Comparativo Anual'}
             </span>
           } 
-          onClose={() => { setRelatorioOpen(false); setTipoRelatorio(null); setRelatorioTexto(''); }}
+          onClose={() => {
+            relatorioGeracaoIdRef.current += 1;
+            setRelatorioOpen(false);
+            setTipoRelatorio(null);
+            setRelatorioTexto('');
+            setRelatorioErro(null);
+            setRelatorioGerando(false);
+          }}
         >
           <div className="space-y-4">
             <button
-              onClick={() => { setTipoRelatorio(null); setRelatorioTexto(''); }}
+              onClick={() => {
+                relatorioGeracaoIdRef.current += 1;
+                setTipoRelatorio(null);
+                setRelatorioTexto('');
+                setRelatorioErro(null);
+                setRelatorioGerando(false);
+              }}
               className="text-sm text-slate-400 hover:text-white transition-colors flex items-center gap-1"
             >
               ← Voltar para seleção
@@ -7364,32 +7432,27 @@ export function ComercialPage() {
               <div className="flex items-center justify-between mb-2">
                 <Label className="text-slate-400 text-sm">Edite o relatório antes de copiar:</Label>
                 <button
-                  onClick={async () => {
-                    if (tipoRelatorio === 'diario') {
-                      const texto = await gerarRelatorioDiario();
-                      setRelatorioTexto(texto);
-                    } else if (tipoRelatorio === 'semanal') {
-                      const texto = await gerarRelatorioSemanal();
-                      setRelatorioTexto(texto);
-                    } else if (tipoRelatorio === 'mensal') {
-                      const texto = await gerarRelatorioMensal();
-                      setRelatorioTexto(texto);
-                    } else if (tipoRelatorio === 'matriculas') {
-                      const texto = await gerarRelatorioMatriculas();
-                      setRelatorioTexto(texto);
-                    }
-                  }}
+                  onClick={() => void executarGeracaoRelatorio(tipoRelatorio)}
+                  disabled={relatorioGerando}
                   className="flex items-center gap-1 px-3 py-1.5 text-xs text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-lg transition-colors"
                 >
-                  <RotateCcw className="w-3 h-3" />
+                  {relatorioGerando
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <RotateCcw className="w-3 h-3" />}
                   Resetar
                 </button>
               </div>
+              {relatorioErro && (
+                <div className="mb-3 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{relatorioErro}</span>
+                </div>
+              )}
               <textarea
                 value={relatorioTexto}
                 onChange={(e) => setRelatorioTexto(e.target.value)}
                 className="w-full h-96 p-4 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-300 font-mono resize-none focus:border-cyan-500 focus:outline-none scrollbar-thin scrollbar-thumb-slate-700 hover:scrollbar-thumb-slate-600"
-                placeholder="O relatório aparecerá aqui..."
+                placeholder={relatorioGerando ? 'Gerando relatório...' : 'O relatório aparecerá aqui...'}
               />
               <p className="text-xs text-slate-500 mt-2">
                 💡 Você pode editar qualquer parte do relatório: nomes, números, adicionar observações, etc.
@@ -7413,6 +7476,7 @@ export function ComercialPage() {
                     toast.error('Aguarde o relatório ser gerado');
                   }
                 }}
+                disabled={!relatorioTexto || relatorioGerando}
                 className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-500"
               >
                 <Copy className="w-5 h-5 mr-2" />
@@ -7429,7 +7493,7 @@ export function ComercialPage() {
               )}
               <Button
                 onClick={enviarWhatsAppGrupo}
-                disabled={!relatorioTexto || enviandoWhatsApp}
+                disabled={!relatorioTexto || relatorioGerando || enviandoWhatsApp}
                 className={cn(
                   'flex-1 transition-all',
                   enviadoWhatsApp 

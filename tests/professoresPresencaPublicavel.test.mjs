@@ -37,6 +37,6 @@ test('cliente preserva null e carrega metadados de confianca', () => {
   assert.match(client, /presenca_publicavel:\s*boolean/i);
   assert.match(client, /presenca_confianca:\s*string/i);
   assert.match(client, /presenca_cobertura:\s*number/i);
-  assert.match(client, /get_kpis_professor_periodo_canonico_v2/i);
+  assert.match(client, /get_kpis_professor_periodo_canonico_v3/i);
   assert.match(client, /numeroOuNull\s*\(\s*row\.media_presenca\s*\)/i);
 });

@@ -62,53 +62,49 @@ export function ModalDetalhesRetencao({ open, onClose, professorId, professorNom
         const ultimoDia = new Date(ano, mes, 0).getDate();
         const fim = dataFim ?? `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
 
-        let q = supabase
+        let renovacoesQuery = supabase
           .from('movimentacoes_admin')
           .select('id, aluno_nome, tipo, tipo_evasao, motivo, motivo_saida_id, data, valor_parcela_anterior, valor_parcela_novo, agente_comercial')
           .eq('professor_id', professorId)
-          .in('tipo', ['renovacao', 'nao_renovacao', 'evasao'])
+          .eq('tipo', 'renovacao')
           .gte('data', inicio)
           .lte('data', fim)
           .order('data', { ascending: false });
 
         if (unidadeId !== 'todos') {
-          q = q.eq('unidade_id', unidadeId);
+          renovacoesQuery = renovacoesQuery.eq('unidade_id', unidadeId);
         }
 
-        const [{ data: rawData }, { data: motivosData }] = await Promise.all([
-          q,
-          supabase.from('motivos_saida').select('id, nome, conta_score_professor').eq('ativo', true),
+        const [renovacoesResult, saidasResult] = await Promise.all([
+          renovacoesQuery,
+          supabase.rpc('get_saidas_professor_periodo_detalhes_v1', {
+            p_professor_id: professorId,
+            p_ano: ano,
+            p_mes: mes,
+            p_unidade_id: unidadeId !== 'todos' ? unidadeId : null,
+            p_data_inicio: inicio,
+            p_data_fim: fim,
+          }),
         ]);
 
-        const porId = new Map<number, boolean>();
-        const porNome = new Map<string, boolean>();
-        (motivosData || []).forEach((m: any) => {
-          porId.set(m.id, m.conta_score_professor);
-          porNome.set(m.nome.toLowerCase(), m.conta_score_professor);
-        });
+        if (renovacoesResult.error) throw renovacoesResult.error;
+        if (saidasResult.error) throw saidasResult.error;
 
-        const resultado: MovimentacaoRetencao[] = (rawData || []).map((m: any) => {
-          let conta_score = false;
-          let match_por_texto = false;
-
-          if (m.tipo !== 'renovacao') {
-            if (m.motivo_saida_id != null) {
-              conta_score = porId.get(m.motivo_saida_id) ?? false;
-            } else if (m.motivo) {
-              const val = porNome.get(m.motivo.toLowerCase());
-              if (val !== undefined) {
-                conta_score = val;
-                match_por_texto = true;
-              }
-            }
-          }
-
-          return {
-            ...m,
-            conta_score,
-            match_por_texto,
-          };
-        });
+        const renovacoes = (renovacoesResult.data || []).map((m: any) => ({
+          ...m,
+          conta_score: false,
+          match_por_texto: false,
+        }));
+        const saidas = (saidasResult.data || []).map((m: any) => ({
+          ...m,
+          valor_parcela_anterior: m.mrr_perdido,
+          valor_parcela_novo: null,
+          agente_comercial: null,
+          conta_score: Boolean(m.conta_score_professor),
+          match_por_texto: Boolean(m.match_por_texto),
+        }));
+        const resultado: MovimentacaoRetencao[] = [...renovacoes, ...saidas]
+          .sort((a, b) => String(b.data).localeCompare(String(a.data)));
 
         setDados(resultado);
       } catch (err) {
@@ -204,10 +200,10 @@ export function ModalDetalhesRetencao({ open, onClose, professorId, professorNom
             {/* Calculo */}
             <div className="flex items-center justify-between px-3 py-2 bg-slate-800/30 rounded-lg mb-3">
               <div className="text-xs text-slate-400">
-                <p>Evasoes: {evasoesMes} | Taxa canc.: {totalAlunos > 0 ? ((evasoesMes / totalAlunos) * 100).toFixed(1) : '0'}%</p>
+                <p>Saidas que impactam o score: {evasoesMes} | Taxa: {totalAlunos > 0 ? ((evasoesMes / totalAlunos) * 100).toFixed(1) : '0'}%</p>
               </div>
               <div className="text-right">
-                <span className="text-xs text-slate-400 mr-2">Retencao</span>
+                <span className="text-xs text-slate-400 mr-2">Retencao atribuivel</span>
                 <span className={cn('text-sm font-bold',
                   taxaRetencao >= 95 ? 'text-emerald-400' : taxaRetencao >= 70 ? 'text-amber-400' : 'text-rose-400'
                 )}>

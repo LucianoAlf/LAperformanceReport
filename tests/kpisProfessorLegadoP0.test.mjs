@@ -55,5 +55,5 @@ test('codigo executavel do repositorio nao chama a assinatura legada', () => {
     runtime,
     /\.rpc\(\s*['"]get_kpis_professor_periodo['"]/i,
   );
-  assert.match(runtime, /get_kpis_professor_periodo_canonico_v2/i);
+  assert.match(runtime, /get_kpis_professor_periodo_canonico_v3/i);
 });

@@ -35,6 +35,22 @@ export interface KPIProfessorCanonico {
   presenca_eventos_confirmados: number;
   presenca_eventos_incertos: number;
   presenca_regra_versao: string;
+  evasoes_validas: number;
+  nao_renovacoes_validas: number;
+  saidas_validas_total: number;
+  saidas_score_professor: number;
+  mrr_perdido_total: number;
+  mrr_perdido_score: number;
+  taxa_saidas_total: number;
+  taxa_impacto_score: number;
+  taxa_retencao_atribuivel: number;
+  saidas_regra_versao: string;
+  fator_demanda_ponderado: number | null;
+  fator_demanda_publicavel: boolean;
+  fator_demanda_cobertura: number;
+  fator_demanda_fonte: string;
+  fator_demanda_vinculos: number;
+  fator_demanda_pessoas: number;
 }
 
 export interface FiltroKPIProfessorCanonico {
@@ -114,6 +130,22 @@ export function normalizarKPIProfessorCanonico(row: Record<string, unknown>): KP
     presenca_eventos_confirmados: numero(row.presenca_eventos_confirmados),
     presenca_eventos_incertos: numero(row.presenca_eventos_incertos),
     presenca_regra_versao: String(row.presenca_regra_versao ?? ''),
+    evasoes_validas: numero(row.evasoes_validas),
+    nao_renovacoes_validas: numero(row.nao_renovacoes_validas),
+    saidas_validas_total: numero(row.saidas_validas_total),
+    saidas_score_professor: numero(row.saidas_score_professor),
+    mrr_perdido_total: numero(row.mrr_perdido_total),
+    mrr_perdido_score: numero(row.mrr_perdido_score),
+    taxa_saidas_total: numero(row.taxa_saidas_total),
+    taxa_impacto_score: numero(row.taxa_impacto_score),
+    taxa_retencao_atribuivel: numero(row.taxa_retencao_atribuivel),
+    saidas_regra_versao: String(row.saidas_regra_versao ?? ''),
+    fator_demanda_ponderado: numeroOuNull(row.fator_demanda_ponderado),
+    fator_demanda_publicavel: row.fator_demanda_publicavel === true,
+    fator_demanda_cobertura: numero(row.fator_demanda_cobertura),
+    fator_demanda_fonte: String(row.fator_demanda_fonte ?? 'sem_base'),
+    fator_demanda_vinculos: numero(row.fator_demanda_vinculos),
+    fator_demanda_pessoas: numero(row.fator_demanda_pessoas),
   };
 }
 
@@ -135,7 +167,7 @@ export async function buscarKpisProfessoresCanonicos(
   if (emAndamento) return emAndamento;
 
   const consulta = (async () => {
-    const { data, error } = await supabase.rpc('get_kpis_professor_periodo_canonico_v2', parametros);
+    const { data, error } = await supabase.rpc('get_kpis_professor_periodo_canonico_v3', parametros);
 
     if (error) throw error;
     const dados = ((data || []) as Record<string, unknown>[]).map(normalizarKPIProfessorCanonico);
@@ -174,6 +206,21 @@ export function consolidarKpisProfessoresCanonicos(
     const renovacoes = soma('renovacoes');
     const naoRenovacoes = soma('nao_renovacoes');
     const evasoes = soma('evasoes');
+    const evasoesValidas = soma('evasoes_validas');
+    const naoRenovacoesValidas = soma('nao_renovacoes_validas');
+    const saidasValidasTotal = soma('saidas_validas_total');
+    const saidasScoreProfessor = soma('saidas_score_professor');
+    const fatorDemandaVinculos = soma('fator_demanda_vinculos');
+    const fatorDemandaPessoas = soma('fator_demanda_pessoas');
+    const fatorDemandaPublicavel = grupo.length > 0
+      && grupo.every((linha) => linha.fator_demanda_publicavel)
+      && fatorDemandaVinculos > 0;
+    const fatorDemandaPonderado = fatorDemandaPublicavel
+      ? grupo.reduce(
+        (total, linha) => total + numero(linha.fator_demanda_ponderado) * linha.fator_demanda_vinculos,
+        0,
+      ) / fatorDemandaVinculos
+      : null;
     const mediaPonderadaCarteira = (campo: keyof KPIProfessorCanonico) => carteira > 0
       ? grupo.reduce((total, linha) => total + numero(linha[campo]) * linha.carteira_alunos, 0) / carteira
       : 0;
@@ -236,6 +283,29 @@ export function consolidarKpisProfessoresCanonicos(
       presenca_eventos_confirmados: eventosPresencaConfirmados,
       presenca_eventos_incertos: eventosPresencaIncertos,
       presenca_regra_versao: primeira.presenca_regra_versao,
+      evasoes_validas: evasoesValidas,
+      nao_renovacoes_validas: naoRenovacoesValidas,
+      saidas_validas_total: saidasValidasTotal,
+      saidas_score_professor: saidasScoreProfessor,
+      mrr_perdido_total: soma('mrr_perdido_total'),
+      mrr_perdido_score: soma('mrr_perdido_score'),
+      taxa_saidas_total: carteira > 0 ? (saidasValidasTotal / carteira) * 100 : 0,
+      taxa_impacto_score: carteira > 0 ? (saidasScoreProfessor / carteira) * 100 : 0,
+      taxa_retencao_atribuivel: carteira > 0 ? 100 - ((saidasScoreProfessor / carteira) * 100) : 0,
+      saidas_regra_versao: primeira.saidas_regra_versao,
+      fator_demanda_ponderado: fatorDemandaPonderado,
+      fator_demanda_publicavel: fatorDemandaPublicavel,
+      fator_demanda_cobertura: fatorDemandaVinculos > 0
+        ? grupo.reduce(
+          (total, linha) => total + linha.fator_demanda_cobertura * linha.fator_demanda_vinculos,
+          0,
+        ) / fatorDemandaVinculos
+        : 0,
+      fator_demanda_fonte: grupo.length === 1
+        ? primeira.fator_demanda_fonte
+        : Array.from(new Set(grupo.map((linha) => linha.fator_demanda_fonte))).join('+'),
+      fator_demanda_vinculos: fatorDemandaVinculos,
+      fator_demanda_pessoas: fatorDemandaPessoas,
     };
   });
 }

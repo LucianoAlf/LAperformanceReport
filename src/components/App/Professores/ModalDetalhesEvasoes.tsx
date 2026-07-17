@@ -66,58 +66,32 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
         const ultimoDia = new Date(ano, mes, 0).getDate();
         const fim = dataFim ?? `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
 
-        let q = supabase
-          .from('movimentacoes_admin')
-          .select('id, aluno_nome, tipo, tipo_evasao, motivo, motivo_saida_id, data, valor_parcela_evasao, valor_parcela_anterior')
-          .eq('professor_id', professorId)
-          .in('tipo', ['evasao', 'nao_renovacao'])
-          .gte('data', inicio)
-          .lte('data', fim)
-          .order('data', { ascending: false });
+        const { data: rawData, error } = await supabase.rpc(
+          'get_saidas_professor_periodo_detalhes_v1',
+          {
+            p_professor_id: professorId,
+            p_ano: ano,
+            p_mes: mes,
+            p_unidade_id: unidadeId !== 'todos' ? unidadeId : null,
+            p_data_inicio: inicio,
+            p_data_fim: fim,
+          },
+        );
 
-        if (unidadeId !== 'todos') {
-          q = q.eq('unidade_id', unidadeId);
-        }
+        if (error) throw error;
 
-        const [{ data: rawData }, { data: motivosData }] = await Promise.all([
-          q,
-          supabase.from('motivos_saida').select('id, nome, conta_score_professor').eq('ativo', true),
-        ]);
-
-        const porId = new Map<number, boolean>();
-        const porNome = new Map<string, boolean>();
-        (motivosData || []).forEach((m: any) => {
-          porId.set(m.id, m.conta_score_professor);
-          porNome.set(m.nome.toLowerCase(), m.conta_score_professor);
-        });
-
-        const resultado: EvasaoDetalhe[] = (rawData || []).map((m: any) => {
-          let conta_score = false;
-          let match_por_texto = false;
-
-          if (m.motivo_saida_id != null) {
-            conta_score = porId.get(m.motivo_saida_id) ?? false;
-          } else if (m.motivo) {
-            const val = porNome.get(m.motivo.toLowerCase());
-            if (val !== undefined) {
-              conta_score = val;
-              match_por_texto = true;
-            }
-          }
-
-          return {
-            id: m.id,
-            aluno_nome: m.aluno_nome || 'Sem nome',
-            tipo: m.tipo,
-            tipo_evasao: m.tipo_evasao,
-            motivo: m.motivo,
-            motivo_saida_id: m.motivo_saida_id,
-            data: m.data,
-            mrr_perdido: Number(m.valor_parcela_evasao || m.valor_parcela_anterior || 0),
-            conta_score,
-            match_por_texto,
-          };
-        });
+        const resultado: EvasaoDetalhe[] = (rawData || []).map((m: any) => ({
+          id: m.id,
+          aluno_nome: m.aluno_nome || 'Sem nome',
+          tipo: m.tipo,
+          tipo_evasao: m.tipo_evasao,
+          motivo: m.motivo,
+          motivo_saida_id: m.motivo_saida_id,
+          data: m.data,
+          mrr_perdido: Number(m.mrr_perdido || 0),
+          conta_score: Boolean(m.conta_score_professor),
+          match_por_texto: Boolean(m.match_por_texto),
+        }));
 
         setDados(resultado);
       } catch (err) {
@@ -165,7 +139,7 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-white">
-            Evasoes — {professorNome}
+            Saidas — {professorNome}
           </DialogTitle>
           <p className="text-sm text-slate-400 capitalize">{labelPeriodo}</p>
         </DialogHeader>
@@ -176,14 +150,14 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
           </div>
         ) : dados.length === 0 ? (
           <div className="text-center py-12 text-slate-500 text-sm">
-            Nenhuma evasao registrada para este professor no periodo
+            Nenhuma saida valida registrada para este professor no periodo
           </div>
         ) : (
           <>
             {/* Resumo */}
             <div className="grid grid-cols-4 gap-2 mb-4">
               <div className="bg-rose-500/10 rounded-lg p-3 text-center border border-rose-500/20">
-                <p className="text-xs text-slate-400">Cancelamentos</p>
+                <p className="text-xs text-slate-400">Evasoes</p>
                 <p className="text-lg font-bold text-rose-400">{totalCancelamentos}</p>
               </div>
               <div className="bg-amber-500/10 rounded-lg p-3 text-center border border-amber-500/20">
@@ -219,7 +193,7 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todos">Todos os tipos</SelectItem>
-                  <SelectItem value="evasao">Cancelamentos</SelectItem>
+                  <SelectItem value="evasao">Evasoes</SelectItem>
                   <SelectItem value="nao_renovacao">Nao Renovacoes</SelectItem>
                 </SelectContent>
               </Select>
@@ -255,7 +229,7 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
                       <span className={cn('text-xs px-2 py-0.5 rounded-full',
                         d.tipo === 'evasao' ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-400'
                       )}>
-                        {d.tipo_evasao ? (TIPO_EVASAO_LABELS[d.tipo_evasao] || d.tipo_evasao) : (d.tipo === 'evasao' ? 'Cancelamento' : 'Nao Renovou')}
+                        {d.tipo_evasao ? (TIPO_EVASAO_LABELS[d.tipo_evasao] || d.tipo_evasao) : (d.tipo === 'evasao' ? 'Evasao' : 'Nao Renovou')}
                       </span>
                     </td>
                     <td className="py-2 px-2 text-xs max-w-[120px]">
@@ -293,7 +267,7 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
                 {dadosPaginados.length === 0 && (
                   <tr>
                     <td colSpan={6} className="py-6 text-center text-slate-500 text-xs">
-                      Nenhuma evasao encontrada com os filtros atuais
+                      Nenhuma saida encontrada com os filtros atuais
                     </td>
                   </tr>
                 )}
@@ -304,7 +278,7 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
             {totalPaginas > 1 && (
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-700/50">
                 <span className="text-xs text-slate-500">
-                  {dadosFiltrados.length} evasao(oes) | Pagina {pagina} de {totalPaginas}
+                  {dadosFiltrados.length} saida(s) | Pagina {pagina} de {totalPaginas}
                 </span>
                 <div className="flex items-center gap-1">
                   <Button variant="ghost" size="icon" className="h-7 w-7" disabled={pagina <= 1} onClick={() => setPagina(p => p - 1)}>

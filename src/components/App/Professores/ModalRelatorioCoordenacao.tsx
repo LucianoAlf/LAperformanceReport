@@ -207,7 +207,7 @@ export function ModalRelatorioCoordenacao({
       contrato_pedagogico: {
         presenca_regra: 'publicar_somente_confianca_alta',
         health_score: 'em_auditoria',
-        fonte_kpis: 'get_kpis_professor_periodo_canonico_v2',
+        fonte_kpis: 'get_kpis_professor_periodo_canonico_v3',
       },
     };
   };

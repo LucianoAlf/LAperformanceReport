@@ -17,6 +17,7 @@ import { calcularHealthScore } from '@/hooks/useHealthScore';
 import {
   buscarKpisProfessoresCanonicos,
   consolidarKpisProfessoresCanonicos,
+  type KPIProfessorCanonico,
 } from '@/lib/professoresKpisCanonicos';
 import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
 import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
@@ -45,13 +46,21 @@ interface ProfessorPerformance {
   presenca_cobertura: number;
   presenca_eventos_confirmados: number;
   presenca_eventos_incertos: number;
+  evasoes_validas?: number;
+  nao_renovacoes_mes?: number;
+  saidas_validas_total?: number;
+  saidas_score_professor?: number;
   evasoes_mes: number;
   status: 'critico' | 'atencao' | 'excelente';
   tendencia_media?: 'subindo' | 'estavel' | 'caindo';
   health_score?: number;
   health_status?: 'critico' | 'atencao' | 'saudavel';
   health_score_confiavel: boolean;
-  fator_demanda_ponderado?: number; // V2: Fator de demanda ponderado pela carteira
+  fator_demanda_ponderado?: number | null;
+  fator_demanda_publicavel?: boolean;
+  fator_demanda_cobertura?: number;
+  fator_demanda_fonte?: string;
+  fator_demanda_vinculos?: number;
 }
 
 interface Meta {
@@ -79,6 +88,8 @@ interface Evasao {
   data: string;
   motivo: string;
   curso: string;
+  tipo: string;
+  conta_score: boolean;
 }
 
 interface InsightsIA {
@@ -119,6 +130,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
   const [insights, setInsights] = useState<InsightsIA | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [kpiCompetenciaSelecionada, setKpiCompetenciaSelecionada] = useState<KPIProfessorCanonico | null>(null);
   const [alunosNoMes, setAlunosNoMes] = useState<number | null>(null);
   const [turmasNoMes, setTurmasNoMes] = useState<number | null>(null);
   const [mediaAlunosTurmaNoMes, setMediaAlunosTurmaNoMes] = useState<number | null>(null);
@@ -141,6 +153,28 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
   const totalAlunosCompetencia = alunosNoMes ?? professor?.total_alunos ?? 0;
   const totalTurmasCompetencia = turmasNoMes ?? professor?.total_turmas ?? 0;
   const mediaTurmaCompetencia = mediaAlunosTurmaNoMes ?? professor?.media_alunos_turma ?? 0;
+  const saidasScoreCompetencia = kpiCompetenciaSelecionada?.saidas_score_professor
+    ?? professor?.saidas_score_professor
+    ?? professor?.evasoes_mes
+    ?? 0;
+  const saidasValidasCompetencia = kpiCompetenciaSelecionada?.saidas_validas_total
+    ?? professor?.saidas_validas_total
+    ?? 0;
+  const taxaRetencaoCompetencia = kpiCompetenciaSelecionada?.taxa_retencao_atribuivel
+    ?? professor?.taxa_retencao
+    ?? 0;
+  const fatorDemandaCompetencia = kpiCompetenciaSelecionada?.fator_demanda_ponderado
+    ?? professor?.fator_demanda_ponderado
+    ?? null;
+  const fatorDemandaPublicavel = kpiCompetenciaSelecionada?.fator_demanda_publicavel
+    ?? professor?.fator_demanda_publicavel
+    ?? false;
+  const matriculasDiretasCompetencia = kpiCompetenciaSelecionada?.matriculas_diretas
+    ?? professor?.matriculas_diretas
+    ?? 0;
+  const taxaConversaoCompetencia = kpiCompetenciaSelecionada?.taxa_conversao
+    ?? professor?.taxa_conversao
+    ?? 0;
 
   // Sincronizar competência quando a prop muda (troca de professor ou mês externo)
   useEffect(() => {
@@ -209,26 +243,14 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
       const fimMesStr = format(fimMes, 'yyyy-MM-dd');
       const inicioMesStr = `${competencia}-01`;
 
-      const kpiCompetencia = competencia === competenciaInicial
-        ? {
-            carteira_alunos: professor.total_alunos,
-            total_turmas: professor.total_turmas,
-            alunos_via_turmas: professor.alunos_via_turmas,
-            turmas_elegiveis_media: professor.turmas_elegiveis_media,
-            media_presenca: professor.taxa_presenca,
-            presenca_publicavel: professor.presenca_publicavel,
-            presenca_confianca: professor.presenca_confianca,
-            presenca_cobertura: professor.presenca_cobertura,
-            presenca_eventos_confirmados: professor.presenca_eventos_confirmados,
-            presenca_eventos_incertos: professor.presenca_eventos_incertos,
-          }
-        : consolidarKpisProfessoresCanonicos(
-            await buscarKpisProfessoresCanonicos({
-              ano: anoComp,
-              mes: mesComp,
-              unidadeId: unidadeId || null,
-            })
-          ).find((row) => row.professor_id === professor.id);
+      const kpiCompetencia = consolidarKpisProfessoresCanonicos(
+        await buscarKpisProfessoresCanonicos({
+          ano: anoComp,
+          mes: mesComp,
+          unidadeId: unidadeId || null,
+        })
+      ).find((row) => row.professor_id === professor.id);
+      setKpiCompetenciaSelecionada(kpiCompetencia || null);
       const alunosCompetencia = kpiCompetencia?.carteira_alunos || 0;
       const turmasCompetencia = kpiCompetencia?.total_turmas || 0;
       const alunosRegularesUnicos = kpiCompetencia?.alunos_via_turmas || 0;
@@ -253,25 +275,26 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
         incertos: Number(kpiCompetencia?.presenca_eventos_incertos || 0),
       });
 
-      // Carregar evasões recentes
-      let evasoesQuery = supabase
-        .from('movimentacoes_admin')
-        .select('*')
-        .eq('professor_id', professor.id)
-        .in('tipo', ['evasao', 'cancelamento'])
-        .limit(100);
-      if (unidadeId) evasoesQuery = evasoesQuery.eq('unidade_id', unidadeId);
-      const { data: evasoesRaw } = await evasoesQuery;
-      // Filtrar por mês no JS (evita conflito PostgREST com campo chamado "data")
-      const evasoesData = (evasoesRaw || []).filter((e: any) =>
-        e.data >= inicioMesStr && e.data <= fimMesStr
+      const { data: evasoesData, error: evasoesError } = await supabase.rpc(
+        'get_saidas_professor_periodo_detalhes_v1',
+        {
+          p_professor_id: professor.id,
+          p_ano: anoComp,
+          p_mes: mesComp,
+          p_unidade_id: unidadeId || null,
+          p_data_inicio: inicioMesStr,
+          p_data_fim: fimMesStr,
+        },
       );
+      if (evasoesError) throw evasoesError;
 
       const evasoesFormatadas: Evasao[] = (evasoesData || []).map((e: any) => ({
         aluno_nome: e.aluno_nome || 'Aluno',
         data: e.data,
         motivo: e.motivo || 'Não informado',
-        curso: e.cursos?.nome || ''
+        curso: '',
+        tipo: e.tipo,
+        conta_score: Boolean(e.conta_score_professor),
       }));
 
       setEvasoes(evasoesFormatadas);
@@ -316,7 +339,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
         resultados.push({
           mes: format(d, 'MMM', { locale: ptBR }),
           alunos: professor.total_alunos,
-          evasoes: professor.evasoes_mes,
+          evasoes: saidasValidasCompetencia,
         });
         continue;
       }
@@ -330,7 +353,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
         resultados.push({
           mes: format(d, 'MMM', { locale: ptBR }),
           alunos: kpi?.carteira_alunos || 0,
-          evasoes: kpi?.evasoes || 0,
+          evasoes: kpi?.saidas_validas_total || 0,
         });
       } catch (error) {
         console.warn(`Falha ao carregar evolucao canonica de ${anoComp}-${String(mes).padStart(2, '0')}`, error);
@@ -385,12 +408,12 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
     // Calcular Health Score V2 para enviar à IA
     const healthScoreAtual = calcularHealthScore({
       mediaTurma: mediaTurmaCompetencia,
-      retencao: professor.taxa_retencao,
-      conversao: professor.taxa_conversao,
+      retencao: taxaRetencaoCompetencia,
+      conversao: taxaConversaoCompetencia,
       presenca: presencaNoMes.taxa ?? 75,
-      evasoes: professor.evasoes_mes,
+      evasoes: saidasScoreCompetencia,
       taxaCrescimentoAjustada: 0, // TODO: buscar da view quando disponível
-      taxaEvasao: totalAlunosCompetencia > 0 ? (professor.evasoes_mes / totalAlunosCompetencia) * 100 : 0,
+      taxaEvasao: totalAlunosCompetencia > 0 ? (saidasScoreCompetencia / totalAlunosCompetencia) * 100 : 0,
       carteiraAlunos: totalAlunosCompetencia
     }, healthWeights);
 
@@ -407,16 +430,18 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
         total_alunos: totalAlunosCompetencia,
         total_turmas: totalTurmasCompetencia,
         media_alunos_turma: mediaTurmaCompetencia,
-        taxa_retencao: professor.taxa_retencao,
-        taxa_conversao: professor.taxa_conversao,
+        taxa_retencao: taxaRetencaoCompetencia,
+        taxa_conversao: taxaConversaoCompetencia,
         taxa_presenca: presencaNoMes.taxa,
         presenca_publicavel: presencaNoMes.publicavel,
         presenca_confianca: presencaNoMes.confianca,
         presenca_cobertura: presencaNoMes.cobertura,
         presenca_eventos_confirmados: presencaNoMes.confirmados,
         presenca_eventos_incertos: presencaNoMes.incertos,
-        evasoes_mes: professor.evasoes_mes,
-        fator_demanda_ponderado: professor.fator_demanda_ponderado || 1.0
+        saidas_validas_total: saidasValidasCompetencia,
+        saidas_score_professor: saidasScoreCompetencia,
+        fator_demanda_ponderado: fatorDemandaPublicavel ? fatorDemandaCompetencia : null,
+        fator_demanda_publicavel: fatorDemandaPublicavel,
       },
       health_score: presencaNoMes.publicavel ? {
         score: healthScoreAtual.score,
@@ -496,12 +521,12 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
     try {
       const healthScoreAtual = calcularHealthScore({
         mediaTurma: mediaTurmaCompetencia,
-        retencao: professor.taxa_retencao,
-        conversao: professor.taxa_conversao,
+        retencao: taxaRetencaoCompetencia,
+        conversao: taxaConversaoCompetencia,
         presenca: presencaNoMes.taxa ?? 75,
-        evasoes: professor.evasoes_mes,
+        evasoes: saidasScoreCompetencia,
         taxaCrescimentoAjustada: 0,
-        taxaEvasao: totalAlunosCompetencia > 0 ? (professor.evasoes_mes / totalAlunosCompetencia) * 100 : 0,
+        taxaEvasao: totalAlunosCompetencia > 0 ? (saidasScoreCompetencia / totalAlunosCompetencia) * 100 : 0,
         carteiraAlunos: totalAlunosCompetencia
       }, healthWeights);
 
@@ -516,19 +541,21 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
               total_alunos: totalAlunosCompetencia,
               total_turmas: totalTurmasCompetencia,
               media_alunos_turma: mediaTurmaCompetencia,
-              taxa_retencao: professor.taxa_retencao,
-              taxa_conversao: professor.taxa_conversao,
+              taxa_retencao: taxaRetencaoCompetencia,
+              taxa_conversao: taxaConversaoCompetencia,
               taxa_presenca: presencaNoMes.taxa,
               presenca_publicavel: presencaNoMes.publicavel,
               presenca_confianca: presencaNoMes.confianca,
               presenca_cobertura: presencaNoMes.cobertura,
               presenca_eventos_confirmados: presencaNoMes.confirmados,
               presenca_eventos_incertos: presencaNoMes.incertos,
-              evasoes_mes: professor.evasoes_mes,
+              saidas_validas_total: saidasValidasCompetencia,
+              saidas_score_professor: saidasScoreCompetencia,
               health_score: presencaNoMes.publicavel ? healthScoreAtual.score : null,
               health_status: presencaNoMes.publicavel ? healthScoreAtual.status : null,
               health_score_confiavel: presencaNoMes.publicavel,
-              fator_demanda_ponderado: professor.fator_demanda_ponderado || 1.0
+              fator_demanda_ponderado: fatorDemandaPublicavel ? fatorDemandaCompetencia : null,
+              fator_demanda_publicavel: fatorDemandaPublicavel,
             },
             metas: metas,
             acoes: acoes,
@@ -575,22 +602,31 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
     
     return calcularHealthScore({
       mediaTurma: mediaTurmaCompetencia,
-      retencao: professor.taxa_retencao,
-      conversao: professor.taxa_conversao,
+      retencao: taxaRetencaoCompetencia,
+      conversao: taxaConversaoCompetencia,
       presenca: presencaNoMes.taxa ?? 75,
-      evasoes: professor.evasoes_mes,
+      evasoes: saidasScoreCompetencia,
       taxaCrescimentoAjustada: 0,
-      taxaEvasao: totalAlunosCompetencia > 0 ? (professor.evasoes_mes / totalAlunosCompetencia) * 100 : 0,
+      taxaEvasao: totalAlunosCompetencia > 0 ? (saidasScoreCompetencia / totalAlunosCompetencia) * 100 : 0,
       carteiraAlunos: totalAlunosCompetencia
     }, healthWeights);
-  }, [professor, healthWeights, mediaTurmaCompetencia, totalAlunosCompetencia, presencaNoMes.taxa]);
+  }, [
+    professor,
+    healthWeights,
+    mediaTurmaCompetencia,
+    totalAlunosCompetencia,
+    presencaNoMes.taxa,
+    saidasScoreCompetencia,
+    taxaConversaoCompetencia,
+    taxaRetencaoCompetencia,
+  ]);
 
   const healthScorePublicavel = presencaNoMes.publicavel;
 
   if (!professor) return null;
 
-  const expMatRealizadas = professor.experimentais ?? 0;
-  const expMatConversoes = professor.matriculas_pos_exp ?? 0;
+  const expMatRealizadas = kpiCompetenciaSelecionada?.experimentais ?? professor.experimentais ?? 0;
+  const expMatConversoes = kpiCompetenciaSelecionada?.matriculas_pos_exp ?? professor.matriculas_pos_exp ?? 0;
   const expMatTaxa = expMatRealizadas > 0
     ? (expMatConversoes / expMatRealizadas) * 100
     : null;
@@ -784,10 +820,10 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                 </p>
               </div>
               <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                <p className={`text-xl font-bold ${getMetricaColor(professor.taxa_retencao, { critico: 70, atencao: 95 })}`}>
-                  {professor.taxa_retencao.toFixed(0)}%
+                <p className={`text-xl font-bold ${getMetricaColor(taxaRetencaoCompetencia, { critico: 70, atencao: 95 })}`}>
+                  {taxaRetencaoCompetencia.toFixed(0)}%
                 </p>
-                <p className="text-xs text-slate-400">Retenção</p>
+                <p className="text-xs text-slate-400">Retencao atribuivel</p>
               </div>
               <div className="bg-slate-800/50 rounded-lg p-3 text-center">
                 <p className={`text-xl font-bold ${expMatTaxa === null ? 'text-slate-500' : getMetricaColor(expMatTaxa, { critico: 30, atencao: 50 })}`}>
@@ -799,22 +835,26 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                     ? `${expMatConversoes}/${expMatRealizadas} canonicas`
                     : 'sem experimentais no periodo'}
                 </p>
-                {(professor.matriculas_diretas ?? 0) > 0 && (
-                  <p className="text-[10px] text-blue-400/70 mt-0.5">+{professor.matriculas_diretas} direta{(professor.matriculas_diretas ?? 0) > 1 ? 's' : ''}</p>
+                {matriculasDiretasCompetencia > 0 && (
+                  <p className="text-[10px] text-blue-400/70 mt-0.5">+{matriculasDiretasCompetencia} direta{matriculasDiretasCompetencia > 1 ? 's' : ''}</p>
                 )}
               </div>
               <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                <p className={`text-xl font-bold ${
-                  (professor.fator_demanda_ponderado || 1.0) <= 1.2 
-                    ? 'text-emerald-400' 
-                    : (professor.fator_demanda_ponderado || 1.0) <= 1.8
-                    ? 'text-cyan-400'
-                    : (professor.fator_demanda_ponderado || 1.0) <= 2.3
-                    ? 'text-amber-400'
-                    : 'text-rose-400'
-                }`}>
-                  {(professor.fator_demanda_ponderado || 1.0).toFixed(1)}
-                </p>
+                {fatorDemandaPublicavel && fatorDemandaCompetencia !== null ? (
+                  <p className={`text-xl font-bold ${
+                    fatorDemandaCompetencia <= 1.2
+                      ? 'text-emerald-400'
+                      : fatorDemandaCompetencia <= 1.8
+                      ? 'text-cyan-400'
+                      : fatorDemandaCompetencia <= 2.3
+                      ? 'text-amber-400'
+                      : 'text-rose-400'
+                  }`}>
+                    {fatorDemandaCompetencia.toFixed(1)}
+                  </p>
+                ) : (
+                  <p className="text-sm font-semibold text-slate-500">Sem base</p>
+                )}
                 <p className="text-xs text-slate-400">Fator Demanda</p>
               </div>
             </div>
@@ -1144,12 +1184,12 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
           )}
         </div>
 
-        {/* Evasões Recentes */}
+        {/* Saidas recentes */}
         {evasoes.length > 0 && (
           <div className="py-4 border-b border-slate-700">
             <h3 className="text-sm font-medium text-slate-400 mb-4 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-red-400" />
-              Evasões Recentes
+              Saidas recentes
             </h3>
             <div className="space-y-2">
               {evasoes.map((evasao, idx) => (
@@ -1160,7 +1200,10 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                       {format(new Date(evasao.data), 'dd/MM/yyyy')} • {evasao.motivo}
                     </p>
                   </div>
-                  <span className="text-red-400 text-xs">{evasao.curso}</span>
+                  <span className="text-red-400 text-xs">
+                    {evasao.tipo === 'nao_renovacao' ? 'Nao renovou' : 'Evasao'}
+                    {evasao.conta_score ? ' · impacta score' : ''}
+                  </span>
                 </div>
               ))}
             </div>

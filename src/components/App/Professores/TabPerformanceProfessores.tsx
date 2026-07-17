@@ -61,16 +61,24 @@ interface ProfessorPerformance {
   presenca_cobertura: number;
   presenca_eventos_confirmados: number;
   presenca_eventos_incertos: number;
+  evasoes_validas: number;
+  saidas_validas_total: number;
+  saidas_score_professor: number;
   evasoes_mes: number;
   nao_renovacoes_mes: number;
   mrr_perdido: number;
+  mrr_perdido_score: number;
   status: 'critico' | 'atencao' | 'excelente';
   tendencia_media?: 'subindo' | 'estavel' | 'caindo';
   health_score: number;
   health_status: 'critico' | 'atencao' | 'saudavel';
   health_score_confiavel: boolean;
   health_detalhes: { kpi: string; valor: number; scoreNormalizado: number; peso: number; contribuicao: number }[];
-  fator_demanda_ponderado: number; // Fator de demanda ponderado pela composição da carteira
+  fator_demanda_ponderado: number | null;
+  fator_demanda_publicavel: boolean;
+  fator_demanda_cobertura: number;
+  fator_demanda_fonte: string;
+  fator_demanda_vinculos: number;
 }
 
 interface AlertaPerformance {
@@ -211,15 +219,6 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       const referencia = new Date(anoFiltro, mesFiltro - 1, 1);
       const referenciaAnterior = new Date(referencia.getFullYear(), referencia.getMonth() - 1, 1);
 
-      // Buscar fator de demanda ponderado por professor
-      let fatorDemandaQuery = supabase
-        .from('vw_fator_demanda_professor')
-        .select('professor_id, fator_demanda_ponderado, total_alunos, unidade_id');
-      
-      if (unidadeAtual !== 'todos') {
-        fatorDemandaQuery = fatorDemandaQuery.eq('unidade_id', unidadeAtual);
-      }
-
       // Buscar relacionamentos de unidades
       const unidadesRelQuery = supabase
         .from('professores_unidades')
@@ -235,7 +234,6 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       const [
         professoresResult,
         kpisAtuais,
-        fatoresResult,
         unidadesResult,
         cursosResult,
       ] = await Promise.all([
@@ -247,7 +245,6 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           dataInicio: modoVisualizacao === 'trimestre' ? trimestreInfo.dataInicio : null,
           dataFim: modoVisualizacao === 'trimestre' ? trimestreInfo.dataFim : null,
         }),
-        fatorDemandaQuery,
         unidadesRelQuery,
         cursosRelQuery,
       ]);
@@ -258,71 +255,11 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       if (profError) throw profError;
 
       const kpisData = consolidarKpisProfessoresCanonicos(kpisAtuais);
-      const fatoresDemanda = fatoresResult.data;
       const unidadesRelData = unidadesResult.data;
       const cursosRelData = cursosResult.data;
 
-      // Criar mapa de KPIs por professor (agregar quando consolidado — professor com múltiplas unidades)
-      const kpisPorProfessor = new Map<number, any>();
-      kpisData?.forEach(kpi => {
-        if (!kpisPorProfessor.has(kpi.professor_id)) {
-          kpisPorProfessor.set(kpi.professor_id, { ...kpi, _unidades_count: 1 });
-        } else {
-          // Somar métricas de múltiplas unidades
-          const e = kpisPorProfessor.get(kpi.professor_id);
-          const prevCarteira = e.carteira_alunos || 0;
-          const kpiCarteira = kpi.carteira_alunos || 0;
-          // Somatórios
-          e.carteira_alunos = prevCarteira + kpiCarteira;
-          e.experimentais = (e.experimentais || 0) + (kpi.experimentais || 0);
-          e.experimentais_agendadas = (e.experimentais_agendadas || 0) + (kpi.experimentais_agendadas || 0);
-          e.experimentais_faltas = (e.experimentais_faltas || 0) + (kpi.experimentais_faltas || 0);
-          e.matriculas = (e.matriculas || 0) + (kpi.matriculas || 0);
-          e.matriculas_pos_exp = (e.matriculas_pos_exp || 0) + (kpi.matriculas_pos_exp || 0);
-          e.matriculas_diretas = (e.matriculas_diretas || 0) + (kpi.matriculas_diretas || 0);
-          e.renovacoes = (e.renovacoes || 0) + (kpi.renovacoes || 0);
-          e.nao_renovacoes = (e.nao_renovacoes || 0) + (kpi.nao_renovacoes || 0);
-          e.evasoes = (e.evasoes || 0) + (kpi.evasoes || 0);
-          e.mrr_carteira = (Number(e.mrr_carteira) || 0) + (Number(kpi.mrr_carteira) || 0);
-          e.mrr_perdido = (Number(e.mrr_perdido) || 0) + (Number(kpi.mrr_perdido) || 0);
-          // Carga total inclui projetos; a media pedagogica usa apenas turmas regulares.
-          e.total_turmas = (e.total_turmas || 0) + (kpi.total_turmas || 0);
-          e.alunos_via_turmas = (e.alunos_via_turmas || 0) + (kpi.alunos_via_turmas || 0);
-          e.turmas_elegiveis_media = (e.turmas_elegiveis_media || 0) + (kpi.turmas_elegiveis_media || 0);
-          e.media_alunos_turma = e.turmas_elegiveis_media > 0
-            ? Math.round((e.alunos_via_turmas / e.turmas_elegiveis_media) * 100) / 100
-            : 0;
-          // Média ponderada por carteira (presença e ticket continuam ponderados — outras métricas)
-          const totalCarteira = prevCarteira + kpiCarteira;
-          if (totalCarteira > 0) {
-            e.media_presenca = ((Number(e.media_presenca) || 0) * prevCarteira + (Number(kpi.media_presenca) || 0) * kpiCarteira) / totalCarteira;
-            e.ticket_medio = ((Number(e.ticket_medio) || 0) * prevCarteira + (Number(kpi.ticket_medio) || 0) * kpiCarteira) / totalCarteira;
-          }
-          // Recalcular taxas
-          const totalExp = e.experimentais || 0;
-          e.taxa_conversao = totalExp > 0 ? ((e.matriculas_pos_exp || 0) / totalExp) * 100 : 0;
-          const totalRenov = (e.renovacoes || 0) + (e.nao_renovacoes || 0);
-          e.taxa_renovacao = totalRenov > 0 ? ((e.renovacoes || 0) / totalRenov) * 100 : 0;
-          e.taxa_cancelamento = e.carteira_alunos > 0 ? ((e.evasoes || 0) / e.carteira_alunos) * 100 : 0;
-          e._unidades_count += 1;
-        }
-      });
-
-      // Criar mapa de fator de demanda ponderado por professor (média quando múltiplas unidades)
-      const fatorDemandaMap = new Map<number, number>();
-      const fatorDemandaCount = new Map<number, number>();
-      fatoresDemanda?.forEach(f => {
-        const val = Number(f.fator_demanda_ponderado) || 1.0;
-        if (!fatorDemandaMap.has(f.professor_id)) {
-          fatorDemandaMap.set(f.professor_id, val);
-          fatorDemandaCount.set(f.professor_id, 1);
-        } else {
-          const count = (fatorDemandaCount.get(f.professor_id) || 1) + 1;
-          const prev = fatorDemandaMap.get(f.professor_id) || 1.0;
-          fatorDemandaMap.set(f.professor_id, (prev * (count - 1) + val) / count);
-          fatorDemandaCount.set(f.professor_id, count);
-        }
-      });
+      // A consolidacao central resolve professores multiunidade sem perder o grao da competencia.
+      const kpisPorProfessor = new Map(kpisData.map((kpi) => [kpi.professor_id, kpi]));
 
       // Montar professores com métricas
       const professoresCompletos: ProfessorPerformance[] = (professoresData || [])
@@ -363,12 +300,15 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             && kpis?.media_presenca !== undefined;
           const taxaPresenca = presencaPublicavel ? Number(kpis?.media_presenca) : null;
           const nps = kpis?.nps_medio ? Number(kpis.nps_medio) : null;
-          const evasoesMes = kpis?.evasoes || 0;
+          const evasoesValidas = Number(kpis?.evasoes_validas || 0);
+          const naoRenovacoesValidas = Number(kpis?.nao_renovacoes_validas || 0);
+          const saidasValidasTotal = Number(kpis?.saidas_validas_total || 0);
+          const saidasScoreProfessor = Number(kpis?.saidas_score_professor || 0);
           
-          // Taxa de retenção = 100 - taxa de cancelamento
-          const taxaRetencao = kpis?.taxa_cancelamento 
-            ? 100 - Number(kpis.taxa_cancelamento) 
-            : (totalAlunos > 0 ? 100 : 0);
+          // Retencao atribuivel considera somente saidas que impactam o score do professor.
+          const taxaRetencao = totalAlunos > 0
+            ? Number(kpis?.taxa_retencao_atribuivel ?? 100)
+            : 0;
 
           // Calcular tendência da média de alunos/turma baseado no histórico real
           const tendencia: 'subindo' | 'estavel' | 'caindo' = 'estavel';
@@ -381,9 +321,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             // Presenca neutra impede penalizacao tecnica; o score permanece
             // bloqueado na UI enquanto a metrica nao for publicavel.
             presenca: taxaPresenca ?? 75,
-            evasoes: evasoesMes,
+            evasoes: saidasScoreProfessor,
             taxaCrescimentoAjustada: 0, // TODO: buscar da view vw_taxa_crescimento_professor
-            taxaEvasao: totalAlunos > 0 ? (evasoesMes / totalAlunos) * 100 : 0,
+            taxaEvasao: totalAlunos > 0 ? (saidasScoreProfessor / totalAlunos) * 100 : 0,
             carteiraAlunos: totalAlunos
           }, healthScoreWeights);
 
@@ -396,8 +336,12 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             status = 'atencao';
           }
 
-          // Obter fator de demanda ponderado do mapa
-          const fatorDemandaPonderado = fatorDemandaMap.get(prof.id) || 1.0;
+          const fatorDemandaPublicavel = Boolean(kpis?.fator_demanda_publicavel)
+            && kpis?.fator_demanda_ponderado !== null
+            && kpis?.fator_demanda_ponderado !== undefined;
+          const fatorDemandaPonderado = fatorDemandaPublicavel
+            ? Number(kpis?.fator_demanda_ponderado)
+            : null;
 
           return {
             id: prof.id,
@@ -428,16 +372,27 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             presenca_cobertura: Number(kpis?.presenca_cobertura || 0),
             presenca_eventos_confirmados: Number(kpis?.presenca_eventos_confirmados || 0),
             presenca_eventos_incertos: Number(kpis?.presenca_eventos_incertos || 0),
-            evasoes_mes: evasoesMes,
-            nao_renovacoes_mes: kpis?.nao_renovacoes || 0,
-            mrr_perdido: Number(kpis?.mrr_perdido) || 0,
+            evasoes_validas: evasoesValidas,
+            saidas_validas_total: saidasValidasTotal,
+            saidas_score_professor: saidasScoreProfessor,
+            // Compatibilidade: consumidores de Health usam este campo como subconjunto atribuivel.
+            evasoes_mes: saidasScoreProfessor,
+            nao_renovacoes_mes: naoRenovacoesValidas,
+            mrr_perdido: Number(kpis?.mrr_perdido_total) || 0,
+            mrr_perdido_score: Number(kpis?.mrr_perdido_score) || 0,
             status,
             tendencia_media: tendencia,
             health_score: healthResult.score,
             health_status: healthResult.status,
             health_score_confiavel: presencaPublicavel,
             health_detalhes: healthResult.detalhes,
-            fator_demanda_ponderado: Math.round(fatorDemandaPonderado * 100) / 100
+            fator_demanda_ponderado: fatorDemandaPonderado === null
+              ? null
+              : Math.round(fatorDemandaPonderado * 100) / 100,
+            fator_demanda_publicavel: fatorDemandaPublicavel,
+            fator_demanda_cobertura: Number(kpis?.fator_demanda_cobertura || 0),
+            fator_demanda_fonte: String(kpis?.fator_demanda_fonte || 'sem_base'),
+            fator_demanda_vinculos: Number(kpis?.fator_demanda_vinculos || 0),
           };
         })
         .filter(p => {
@@ -956,7 +911,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Retenção</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Exp → Mat</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Presença</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Evasões</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Saidas</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Status</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Ações</th>
               </tr>
@@ -1061,17 +1016,30 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                     </td>
                     {/* Fator de Demanda Ponderado */}
                     <td className="text-center px-4 py-3">
-                      <span className={`px-2 py-1 rounded-lg text-sm font-medium ${
-                        professor.fator_demanda_ponderado <= 1.2 
-                          ? 'bg-emerald-500/20 text-emerald-400' 
-                          : professor.fator_demanda_ponderado <= 1.8
-                          ? 'bg-cyan-500/20 text-cyan-400'
-                          : professor.fator_demanda_ponderado <= 2.3
-                          ? 'bg-amber-500/20 text-amber-400'
-                          : 'bg-rose-500/20 text-rose-400'
-                      }`}>
-                        {professor.fator_demanda_ponderado.toFixed(1)}
-                      </span>
+                      {professor.fator_demanda_publicavel && professor.fator_demanda_ponderado !== null ? (
+                        <Tooltip
+                          side="top"
+                          content={`Fonte: ${professor.fator_demanda_fonte} · ${professor.fator_demanda_vinculos} vinculos · ${(professor.fator_demanda_cobertura * 100).toFixed(0)}% de cobertura`}
+                        >
+                          <span className={`px-2 py-1 rounded-lg text-sm font-medium cursor-help ${
+                            professor.fator_demanda_ponderado <= 1.2
+                              ? 'bg-emerald-500/20 text-emerald-400'
+                              : professor.fator_demanda_ponderado <= 1.8
+                              ? 'bg-cyan-500/20 text-cyan-400'
+                              : professor.fator_demanda_ponderado <= 2.3
+                              ? 'bg-amber-500/20 text-amber-400'
+                              : 'bg-rose-500/20 text-rose-400'
+                          }`}>
+                            {professor.fator_demanda_ponderado.toFixed(1)}
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip side="top" content="Nao ha cobertura completa de pessoa e curso nesta competencia.">
+                          <span className="inline-flex rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-xs font-medium text-slate-400 cursor-help">
+                            Sem base
+                          </span>
+                        </Tooltip>
+                      )}
                     </td>
                     <td className="text-center px-4 py-3 text-white">{professor.total_alunos}</td>
                     <td className="text-center px-4 py-3">
@@ -1099,24 +1067,24 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                         side="top"
                         content={
                           <div className="text-xs min-w-[200px]">
-                            <p className="font-bold text-slate-200 mb-1.5">Cálculo da Retenção</p>
+                            <p className="font-bold text-slate-200 mb-1.5">Retencao atribuivel</p>
                             <div className="space-y-1">
                               <div className="flex justify-between gap-4">
                                 <span className="text-slate-400">Carteira de alunos</span>
                                 <span className="text-white font-medium">{professor.total_alunos}</span>
                               </div>
                               <div className="flex justify-between gap-4">
-                                <span className="text-slate-400">Evasões no mês</span>
-                                <span className="text-red-400 font-medium">{professor.evasoes_mes}</span>
+                                <span className="text-slate-400">Saidas que impactam o score</span>
+                                <span className="text-red-400 font-medium">{professor.saidas_score_professor}</span>
                               </div>
                               <div className="flex justify-between gap-4 border-t border-slate-600 pt-1 mt-1">
-                                <span className="text-slate-400">Taxa cancelamento</span>
+                                <span className="text-slate-400">Taxa de impacto</span>
                                 <span className="text-white font-medium">
-                                  {professor.total_alunos > 0 ? ((professor.evasoes_mes / professor.total_alunos) * 100).toFixed(1) : '0'}%
+                                  {professor.total_alunos > 0 ? ((professor.saidas_score_professor / professor.total_alunos) * 100).toFixed(1) : '0'}%
                                 </span>
                               </div>
                               <div className="flex justify-between gap-4">
-                                <span className="text-slate-300 font-semibold">Retenção (100 - canc.)</span>
+                                <span className="text-slate-300 font-semibold">Retencao atribuivel</span>
                                 <span className="text-white font-bold">{professor.taxa_retencao.toFixed(1)}%</span>
                               </div>
                             </div>
@@ -1125,7 +1093,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                       >
                         <span
                           className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.taxa_retencao, { critico: 70, atencao: 95 })}`}
-                          onClick={(e) => { e.stopPropagation(); setModalRetencao({ open: true, professorId: professor.id, professorNome: professor.nome, taxaRetencao: professor.taxa_retencao, totalAlunos: professor.total_alunos, evasoesMes: professor.evasoes_mes }); }}
+                          onClick={(e) => { e.stopPropagation(); setModalRetencao({ open: true, professorId: professor.id, professorNome: professor.nome, taxaRetencao: professor.taxa_retencao, totalAlunos: professor.total_alunos, evasoesMes: professor.saidas_score_professor }); }}
                         >
                           {professor.taxa_retencao.toFixed(0)}%
                         </span>
@@ -1260,15 +1228,23 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                         side="top"
                         content={
                           <div className="text-xs min-w-[200px]">
-                            <p className="font-bold text-slate-200 mb-1.5">Evasões no Mês</p>
+                            <p className="font-bold text-slate-200 mb-1.5">Saidas no periodo</p>
                             <div className="space-y-1">
                               <div className="flex justify-between gap-4">
-                                <span className="text-red-400">Cancelamentos</span>
-                                <span className="text-white font-medium">{professor.evasoes_mes}</span>
+                                <span className="text-red-400">Evasoes validas</span>
+                                <span className="text-white font-medium">{professor.evasoes_validas}</span>
                               </div>
                               <div className="flex justify-between gap-4">
                                 <span className="text-amber-400">Não renovações</span>
                                 <span className="text-white font-medium">{professor.nao_renovacoes_mes}</span>
+                              </div>
+                              <div className="flex justify-between gap-4 border-t border-slate-600 pt-1 mt-1">
+                                <span className="text-slate-300 font-semibold">Total de saidas</span>
+                                <span className="text-white font-bold">{professor.saidas_validas_total}</span>
+                              </div>
+                              <div className="flex justify-between gap-4">
+                                <span className="text-violet-300">Impactam o score</span>
+                                <span className="text-violet-200 font-medium">{professor.saidas_score_professor}</span>
                               </div>
                               {professor.mrr_perdido > 0 && (
                                 <div className="flex justify-between gap-4 border-t border-slate-600 pt-1 mt-1">
@@ -1283,10 +1259,10 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                         }
                       >
                         <span
-                          className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.evasoes_mes, { critico: 1, atencao: 3 }, true)}`}
+                          className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.saidas_validas_total, { critico: 1, atencao: 3 }, true)}`}
                           onClick={(e) => { e.stopPropagation(); setModalEvasoes({ open: true, professorId: professor.id, professorNome: professor.nome }); }}
                         >
-                          {professor.evasoes_mes}
+                          {professor.saidas_validas_total}
                         </span>
                       </Tooltip>
                     </td>

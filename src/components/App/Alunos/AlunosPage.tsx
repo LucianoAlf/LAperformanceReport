@@ -894,7 +894,7 @@ export function AlunosPage() {
           : kpisAlunosCanonicos?.porUnidade.find(row => row.unidade_id === unidadeAtual)
         : null;
       const ticketMedioCanonico = Number(kpisFinanceirosCanonicos?.ticketMedio) || 0;
-      const ltvCanonico = Number(kpisFinanceirosCanonicos?.ltv) || 0;
+      const tempoPermanenciaCanonico = Number(kpisFinanceirosCanonicos?.tempoPermanencia) || 0;
 
       setKpis({
         totalAtivos: usarKpisAdminOperacional ? kpisAdminOperacional.alunosAtivos : totalAtivos,
@@ -908,7 +908,7 @@ export function AlunosPage() {
           : totalBolsistas,
         mediaAlunosTurma: Math.round(mediaAlunosTurma * 100) / 100,
         ticketMedio: Math.round(ticketMedioCanonico || ticketMedio),
-        ltvMedio: Math.round((ltvCanonico || ltvMedio) * 10) / 10,
+        ltvMedio: Math.round((tempoPermanenciaCanonico || ltvMedio) * 10) / 10,
         totalTurmas,
         turmasSozinhos
       });

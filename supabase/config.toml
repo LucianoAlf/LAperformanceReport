@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.gerar-relatorio-pedagogico]
 verify_jwt = false
+
+[functions.backfill-historico-professor-emusys]
+verify_jwt = true
+
+[functions.reconstruir-periodos-professor]
+verify_jwt = true
