@@ -1,7 +1,13 @@
 /// <reference lib="deno.ns" />
 
-// Edge Function: processar-matricula-emusys v28
+// Edge Function: processar-matricula-emusys v30
 // Processa webhooks de matrícula do Emusys: nova, renovação, trancamento, evasão
+//
+// MUDANCAS v30 (2026-07-17):
+// - Gate 3 do Health Score Professor V3: delega troca de professor para RPC atomica,
+//   idempotente e service-role-only antes de atualizar a jornada atual.
+// - O enriquecimento continua best-effort e nao bloqueia a carteira do professor novo.
+// - Remove tokens Emusys literais; a Edge passa a ler os secrets oficiais por unidade.
 //
 // MUDANÇAS v28 (2026-07-06):
 // - handleMatriculaNova passa a capturar tipo_pagamento do payload (mapTipoPagamentoToFormaId,
@@ -106,6 +112,7 @@ import {
   type ResultadoMatricula,
 } from '../_shared/invariantes.ts';
 import {
+  buildTransicaoProfessorContextoSemPii,
   buildJornadaInputFromWebhook,
   upsertJornadaMatriculaDisciplina,
   type JornadaDisciplinaInput,
@@ -115,7 +122,7 @@ import {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const VERSAO = 'v29';
+const VERSAO = 'v30';
 const EVENTOS_JORNADA_CANONICA = new Set([
   'matricula_nova',
   'matricula_renovacao',
@@ -138,13 +145,15 @@ const ESCOLA_UNIDADE: Record<number, { id: string; nome: string }> = {
   316: { id: '368d47f5-2d88-4475-bc14-ba084a9a348e', nome: 'Barra' },
 };
 
-// API Emusys v1 — tokens por escola_id (mesmos da edge sync-presenca-emusys)
+// API Emusys v1 - secrets oficiais por escola_id.
 const EMUSYS_API = 'https://api.emusys.com.br/v1';
-const TOKENS_API: Record<number, string> = {
-  39: 'nEAlBC5gjtqojA7qberYVOttD1lXdx',   // Campo Grande
-  40: 'rUI85cQTePX1ecpLwWLbAWY9UM9yiF',   // Recreio
-  316: '4reVMLdiBmdNTOBQKa4m7WGYQaRDKI',  // Barra
-};
+
+function tokenApiEmusys(escolaId: number): string | null {
+  if (escolaId === 39) return Deno.env.get('EMUSYS_TOKEN_CG') ?? null;
+  if (escolaId === 40) return Deno.env.get('EMUSYS_TOKEN_RECREIO') ?? null;
+  if (escolaId === 316) return Deno.env.get('EMUSYS_TOKEN_BARRA') ?? null;
+  return null;
+}
 
 // ==================== FRENTE 1: COMPLEMENTO PONTUAL DE DESCONTO ====================
 // O webhook de matrícula NÃO traz desconto (manda o valor cheio). Aqui buscamos a matrícula
@@ -152,7 +161,7 @@ const TOKENS_API: Record<number, string> = {
 // o valor líquido + componentes de desconto. Best-effort: nunca derruba o handler.
 
 async function buscarMatriculaApiPorData(escolaId: number, matriculaId: number, data: string) {
-  const token = TOKENS_API[escolaId];
+  const token = tokenApiEmusys(escolaId);
   if (!token || !matriculaId || !data) return null;
   let cursor = '';
   for (let i = 0; i < 20; i++) {
@@ -555,67 +564,22 @@ async function registrarTransicaoProfessorSeNecessario(
       const tipoTransicao = atual.curso_id !== cursoNovoId
         ? 'troca_professor_curso'
         : 'troca_professor';
-      const payloadSnapshot = {
-        alteracao: input.raw?.alteracao ?? null,
-        matricula: {
-          id: input.emusysMatriculaId,
-          aluno_id: input.emusysAlunoId,
-          nome_aluno: input.nomeAluno,
-        },
-        disciplina: disciplina.raw,
-        jornada_anterior: atual,
-      };
+      const contexto = buildTransicaoProfessorContextoSemPii(input, disciplina, atual, {
+        cursoNovoId,
+        professorNovoId,
+        dataTransicao: dataTransicaoFromPayload(input.raw),
+        tipoTransicao,
+        descricaoEmusys: input.raw?.alteracao?.descricao ?? null,
+        automacaoLogId,
+        fonte: `webhook:${p.evento}`,
+      });
 
       const { data: transicao, error: transicaoError } = await supabase
-        .from('aluno_professor_transicoes')
-        .insert({
-          unidade_id: input.unidadeId,
-          aluno_id: atual.aluno_id ?? null,
-          emusys_matricula_id: input.emusysMatriculaId,
-          emusys_matricula_disciplina_id: disciplina.matriculaDisciplinaId,
-          curso_id: cursoNovoId,
-          curso_anterior_id: atual.curso_id ?? null,
-          professor_anterior_id: atual.professor_id ?? null,
-          professor_novo_id: professorNovoId,
-          emusys_professor_anterior_id: atual.emusys_professor_id ?? null,
-          emusys_professor_novo_id: disciplina.professorEmusysId,
-          data_transicao: dataTransicaoFromPayload(input.raw),
-          tipo_transicao: tipoTransicao,
-          descricao_emusys: input.raw?.alteracao?.descricao ?? null,
-          automacao_log_id: automacaoLogId,
-          payload_snapshot: payloadSnapshot,
-          fonte: `webhook:${p.evento}`,
-        })
-        .select('id')
-        .maybeSingle();
+        .rpc('registrar_transicao_professor_v3', { p_contexto: contexto });
 
-      if (transicaoError) {
-        if (transicaoError.code === '23505') {
-          resultado.ignoradas += 1;
-          continue;
-        }
-        throw transicaoError;
-      }
-
-      if (!transicao?.id) {
-        resultado.ignoradas += 1;
-        continue;
-      }
-
-      const { error: bastaoError } = await supabase
-        .from('professor_passagem_bastao')
-        .upsert({
-          transicao_id: transicao.id,
-          aluno_id: atual.aluno_id ?? null,
-          emusys_matricula_disciplina_id: disciplina.matriculaDisciplinaId,
-          curso_id: cursoNovoId,
-          professor_origem_id: atual.professor_id ?? null,
-          professor_destino_id: professorNovoId,
-          status: 'pendente',
-        }, { onConflict: 'transicao_id' });
-
-      if (bastaoError) throw bastaoError;
-      resultado.criadas += 1;
+      if (transicaoError) throw transicaoError;
+      if (transicao?.criada === true) resultado.criadas += 1;
+      else resultado.ignoradas += 1;
     } catch (error: any) {
       const message = error?.message ?? String(error);
       resultado.erros.push(message);
@@ -624,9 +588,8 @@ async function registrarTransicaoProfessorSeNecessario(
         await gravarLog(supabase, {
           evento: p.evento,
           acao: 'passagem_bastao_transicao_erro',
-          aluno_nome: p.nomeAluno || input.nomeAluno || '(desconhecido)',
+          aluno_nome: '(omitido)',
           unidade_nome: p.unidadeNome ?? undefined,
-          payload_bruto: input.raw,
           idempotency_key: null,
           invariantes: [],
           detalhes: {

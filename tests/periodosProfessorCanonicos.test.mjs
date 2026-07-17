@@ -11,6 +11,8 @@ const fallbackKeyMigrationPath =
   'supabase/migrations/20260716165705_health_score_v3_periodos_chave_fallback.sql';
 const minimumPrivilegesMigrationPath =
   'supabase/migrations/20260716183023_health_score_v3_periodos_service_role_minimo.sql';
+const transitionAttributionMigrationPath =
+  'supabase/migrations/20260717095000_health_score_v3_transicoes_atribuicao.sql';
 const helperPath =
   'supabase/functions/_shared/reconstrucao-periodos-professor.mjs';
 const edgePath =
@@ -460,4 +462,23 @@ test('edge reconstrutora usa staging, versao e RPC transacional', () => {
     config,
     /\[functions\.reconstruir-periodos-professor\][\s\S]*verify_jwt\s*=\s*true/i,
   );
+});
+
+test('gate 3 links the transition to the immutable origin period instead of rewriting a concluded reconstruction', () => {
+  assert.equal(
+    fs.existsSync(transitionAttributionMigrationPath),
+    true,
+    `${transitionAttributionMigrationPath} deve existir`,
+  );
+  const migration = read(transitionAttributionMigrationPath);
+  const rpcStart = migration.indexOf('create or replace function public.registrar_transicao_professor_v3');
+  const rpcEnd = migration.indexOf('comment on function public.registrar_transicao_professor_v3');
+  const rpc = migration.slice(rpcStart, rpcEnd);
+
+  assert.match(rpc, /professor_matricula_disciplina_periodos_v1/i);
+  assert.match(rpc, /periodo_origem_id/i);
+  assert.match(rpc, /status\s*=\s*'concluido'/i);
+  assert.doesNotMatch(rpc, /update\s+public\.professor_matricula_disciplina_periodos_v1/i);
+  assert.doesNotMatch(rpc, /insert\s+into\s+public\.professor_matricula_disciplina_periodos_v1/i);
+  assert.doesNotMatch(rpc, /delete\s+from\s+public\.professor_matricula_disciplina_periodos_v1/i);
 });

@@ -38,6 +38,50 @@ export interface JornadaReferenciaMaps {
   professorIdPorProfessorEmusys?: Map<number, number>;
 }
 
+export interface TransicaoProfessorJornadaAtual {
+  aluno_id?: number | null;
+  curso_id?: number | null;
+  professor_id?: number | null;
+  emusys_professor_id?: number | null;
+}
+
+export interface TransicaoProfessorResolvida {
+  cursoNovoId: number | null;
+  professorNovoId: number | null;
+  dataTransicao: string;
+  tipoTransicao: string;
+  descricaoEmusys: string | null;
+  automacaoLogId: number | null;
+  fonte: string;
+}
+
+export function buildTransicaoProfessorContextoSemPii(
+  input: JornadaMatriculaInput,
+  disciplina: JornadaDisciplinaInput,
+  jornadaAtual: TransicaoProfessorJornadaAtual,
+  resolvida: TransicaoProfessorResolvida,
+): Record<string, unknown> {
+  return {
+    unidade_id: input.unidadeId,
+    aluno_id: jornadaAtual.aluno_id ?? null,
+    emusys_aluno_id: input.emusysAlunoId,
+    emusys_matricula_id: input.emusysMatriculaId,
+    emusys_matricula_disciplina_id: disciplina.matriculaDisciplinaId,
+    emusys_disciplina_id: disciplina.disciplinaId,
+    curso_id: resolvida.cursoNovoId,
+    curso_anterior_id: jornadaAtual.curso_id ?? null,
+    professor_anterior_id: jornadaAtual.professor_id ?? null,
+    professor_novo_id: resolvida.professorNovoId,
+    emusys_professor_anterior_id: jornadaAtual.emusys_professor_id ?? null,
+    emusys_professor_novo_id: disciplina.professorEmusysId,
+    data_transicao: resolvida.dataTransicao,
+    tipo_transicao: resolvida.tipoTransicao,
+    descricao_emusys: resolvida.descricaoEmusys,
+    automacao_log_id: resolvida.automacaoLogId,
+    fonte: resolvida.fonte,
+  };
+}
+
 function numberOrNull(value: unknown): number | null {
   if (value == null || value === '') return null;
   const parsed = Number(value);

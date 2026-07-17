@@ -30,7 +30,18 @@ function createSupabaseMock() {
           return { data: { curso_id: Number(filters.emusys_disciplina_id) + 1000 }, error: null };
         }
         if (table === 'professores_unidades') {
-          return { data: { professor_id: Number(filters.emusys_id) + 2000 }, error: null };
+          return {
+            data: {
+              professor_id: Number(filters.emusys_id) + 2000,
+              emusys_ativo: true,
+              validacao_status: 'validado',
+              identidade_historica_valida: false,
+            },
+            error: null,
+          };
+        }
+        if (table === 'professores') {
+          return { data: { id: Number(filters.id) }, error: null };
         }
         return { data: null, error: null };
       },

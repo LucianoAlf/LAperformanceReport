@@ -478,19 +478,19 @@ Resultado em 16/07/2026: foram mapeados 2.660 periodos associados a 84 identidad
 - Modify: `tests/passagemBastaoBackend.test.mjs`
 - Modify: `tests/periodosProfessorCanonicos.test.mjs`
 
-- [ ] **Step 1: Testar campos aditivos**
+- [x] **Step 1: Testar campos aditivos**
 
 Adicionar a `aluno_professor_transicoes`: `motivo_saida_id`, `atribuicao_confirmada`, `conta_retencao_professor`, `revisado_por`, `revisado_em` e `periodo_origem_id`, todos nullable/compativeis.
 
-- [ ] **Step 2: Testar ordem transacional**
+- [x] **Step 2: Testar ordem transacional**
 
 Antes do upsert da jornada: ler periodo atual, gravar transicao/periodo de A, abrir B e seguir com jornada. Falha de enriquecimento e logada, mas nao bloqueia B.
 
-- [ ] **Step 3: Implementar migration aditiva**
+- [x] **Step 3: Implementar migration aditiva**
 
 Nao alterar nem reutilizar `movimentacoes` legada.
 
-- [ ] **Step 4: Implementar enriquecimento nao bloqueante**
+- [x] **Step 4: Implementar enriquecimento nao bloqueante**
 
 ```ts
 try {
@@ -501,12 +501,26 @@ try {
 await upsertJornadaCanonica(contexto.jornadaNova);
 ```
 
-- [ ] **Step 5: Rodar testes de webhook/jornada/passagem**
+- [x] **Step 5: Rodar testes de webhook/jornada/passagem**
 
 Run: `node --test tests/passagemBastaoBackend.test.mjs tests/periodosProfessorCanonicos.test.mjs`
 Expected: PASS.
 
 **Gate 3:** toda troca futura preserva anterior/novo sem impedir a carteira atual.
+
+Resultado em 17/07/2026: o Gate 3 foi implantado no projeto
+`ouqwbbermlzqqvtqwlul`. A RPC `registrar_transicao_professor_v3` grava a
+transicao fria e a passagem de bastao na mesma transacao, e liga o evento ao
+periodo ativo da ultima reconstrucao concluida por `periodo_origem_id`. As
+reconstrucoes concluidas permanecem imutaveis: os eventos futuros sao compostos
+com o baseline historico nos read models da Fase 4. O webhook v30 chama a RPC
+antes do upsert da jornada, trata a falha como enriquecimento nao bloqueante,
+nao copia payload pessoal para o log do Gate e passou a ler os tokens Emusys
+somente dos Edge secrets oficiais. A Edge publicada ficou ativa na versao 58.
+O smoke transacional com rollback confirmou criacao, idempotencia, uma unica
+passagem, resolucao do periodo de origem e zero mutacao dos periodos. A suite
+completa terminou com 185/185 testes e o build de producao concluiu. Nenhum
+consumidor V2 ou interface produtiva foi migrado.
 
 ---
 
@@ -518,11 +532,11 @@ Expected: PASS.
 - Create: `supabase/migrations/20260716130000_health_score_v3_metricas_sombra.sql`
 - Create: `tests/healthScoreProfessorV3Metricas.test.mjs`
 
-- [ ] **Step 1: Escrever testes de contrato de retorno**
+- [x] **Step 1: Escrever testes de contrato de retorno**
 
 Toda RPC deve retornar `valor_bruto`, `numerador`, `denominador`, `amostra`, `estado_base`, `publicavel`, `confianca`, `fonte`, `regra_versao` e `motivo_sem_base`.
 
-- [ ] **Step 2: Exigir ausencia de defaults fabricados**
+- [x] **Step 2: Exigir ausencia de defaults fabricados**
 
 ```js
 assert.doesNotMatch(migration, /coalesce\s*\([^,]+,\s*(0|75|100)\s*\)/i);
@@ -530,23 +544,23 @@ assert.doesNotMatch(migration, /coalesce\s*\([^,]+,\s*(0|75|100)\s*\)/i);
 
 Permitir `COALESCE` apenas em contadores internos cujo denominador/base existam e estiverem explicitamente tipados; revisar manualmente falsos positivos.
 
-- [ ] **Step 3: Implementar conversao**
+- [x] **Step 3: Implementar conversao**
 
 Usar experimental confirmada, credito unico para a ultima experimental anterior em ate 30 dias, matricula direta fora, amostra minima 3 e maturacao D+30.
 
-- [ ] **Step 4: Implementar media/turma**
+- [x] **Step 4: Implementar media/turma**
 
 Usar ocupacao unica pessoa+turma regular e agregacao trimestral ponderada por ocupacoes/turmas. Nao usar `alunos.professor_atual_id` nem inferir segunda aula.
 
-- [ ] **Step 5: Implementar numero de alunos**
+- [x] **Step 5: Implementar numero de alunos**
 
 Usar pessoa canonica unica por professor/unidade nos tres fechamentos mensais.
 
-- [ ] **Step 6: Implementar retencao**
+- [x] **Step 6: Implementar retencao**
 
 Usar periodos expostos e encerramentos confirmados com `conta_score_professor=true`; base minima 10; desconhecido fora do numerador negativo.
 
-- [ ] **Step 7: Implementar permanencia**
+- [x] **Step 7: Implementar permanencia**
 
 ```sql
 where p.status_periodo = 'encerrado'
@@ -557,24 +571,33 @@ where p.status_periodo = 'encerrado'
 
 Retornar media, mediana e amostra. Pontuacao somente com amostra >= 3.
 
-- [ ] **Step 8: Implementar presenca**
+- [x] **Step 8: Implementar presenca**
 
 Usar somente `vw_aluno_presenca_semantica_v1`, `data_aula >= date '2026-08-03'`, dez eventos e 95% de cobertura.
 
-- [ ] **Step 9: Implementar consolidado recalculado**
+- [x] **Step 9: Implementar consolidado recalculado**
 
 Com unidade nula, reunir eventos/vinculos e recalcular o valor bruto. Proibir media dos scores unitarios.
 
-- [ ] **Step 10: Aplicar grants seguros**
+- [x] **Step 10: Aplicar grants seguros**
 
 Sem public/anon. Authenticated apenas via guard por perfil/unidade. Staging nunca e retornado.
 
-- [ ] **Step 11: Rodar testes**
+- [x] **Step 11: Rodar testes**
 
 Run: `node --test tests/healthScoreProfessorV3Metricas.test.mjs tests/identidadeCarteiraPedagogica.test.mjs tests/frequenciaProfessorCanonica.test.mjs`
 Expected: PASS.
 
 **Gate 4:** seis pilares retornam dados auditaveis e `sem_base` real.
+
+Resultado em 17/07/2026: o Gate 4 foi implantado em sombra no projeto
+`ouqwbbermlzqqvtqwlul`. As seis RPCs retornam o contrato auditavel completo,
+recalculam o consolidado a partir dos eventos e nao publicam base insuficiente
+como zero. A media por turma foi otimizada de aproximadamente 19,2 s para
+236 ms no recorte auditado, sem alterar os valores. A suite dirigida terminou
+com 19/19 testes, a suite oficial completa com 196/196 e o build de producao
+concluiu. Nenhum consumidor produtivo foi migrado. Evidencias:
+`docs/auditorias/2026-07-17-health-score-professor-v3-gate-4.md`.
 
 ---
 
