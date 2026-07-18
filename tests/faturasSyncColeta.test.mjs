@@ -63,14 +63,33 @@ test('mapeia IDs bigint como texto e bloqueia ID, data ou competencia invalidos'
   assert.throws(() => mapFatura(rawFatura({ data_vencimento: '2026-07-10' }), 'cg', UNIDADE, COMPETENCIA), /competencia/i);
 });
 
-test('trata matricula zero do Emusys como ausencia sem afrouxar IDs obrigatorios', () => {
-  const mappedNumber = mapFatura(rawFatura({ matricula_id: 0 }), 'cg', UNIDADE, COMPETENCIA);
-  const mappedString = mapFatura(rawFatura({ matricula_id: '0' }), 'cg', UNIDADE, COMPETENCIA);
+test('trata matricula e contrato zero de cobranca avulsa como ausencia', () => {
+  const mappedNumber = mapFatura(
+    rawFatura({ matricula_id: 0, contrato_id: 0 }),
+    'cg',
+    UNIDADE,
+    COMPETENCIA,
+  );
+  const mappedString = mapFatura(
+    rawFatura({ matricula_id: '0', contrato_id: '0' }),
+    'cg',
+    UNIDADE,
+    COMPETENCIA,
+  );
 
   assert.equal(mappedNumber.emusys_matricula_id, null);
+  assert.equal(mappedNumber.emusys_contrato_id, null);
   assert.equal(mappedString.emusys_matricula_id, null);
+  assert.equal(mappedString.emusys_contrato_id, null);
+});
+
+test('mantem fatura e aluno como identificadores estritos', () => {
   assert.throws(
     () => mapFatura(rawFatura({ id: 0 }), 'cg', UNIDADE, COMPETENCIA),
+    /identificador.*invalido/i,
+  );
+  assert.throws(
+    () => mapFatura(rawFatura({ aluno_id: 0 }), 'cg', UNIDADE, COMPETENCIA),
     /identificador.*invalido/i,
   );
 });

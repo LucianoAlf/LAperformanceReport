@@ -124,7 +124,7 @@ export function mapFatura(
     unidade_codigo: unidadeCodigo,
     emusys_fatura_id: identifier(row.id, 'id', { required: true })!,
     emusys_matricula_id: identifier(row.matricula_id, 'matricula_id', { zeroAsNull: true }),
-    emusys_contrato_id: identifier(row.contrato_id, 'contrato_id'),
+    emusys_contrato_id: identifier(row.contrato_id, 'contrato_id', { zeroAsNull: true }),
     emusys_student_id: identifier(row.aluno_id, 'aluno_id'),
     descricao: String(row.descricao ?? '').trim(),
     status: cleanStatus(row.status),
