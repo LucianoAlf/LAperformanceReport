@@ -265,3 +265,78 @@ select *
 from revisoes
 where decisao = 'manter_revisao'
 order by codigo;
+
+-- 9. Gate 5: configuracao ativa, pesos e metas versionadas.
+select
+  c.versao,
+  c.status,
+  c.vigencia_inicio,
+  c.ativado_em,
+  sum(m.peso) as peso_total,
+  jsonb_object_agg(
+    m.metrica,
+    jsonb_build_object(
+      'peso', m.peso,
+      'meta', m.meta,
+      'meta_status', m.parametros->>'meta_status'
+    ) order by m.metrica
+  ) as metricas
+from public.health_score_professor_v3_config_versoes c
+join public.health_score_professor_v3_config_metricas m
+  on m.config_id = c.id
+where c.versao = 1
+group by c.versao, c.status, c.vigencia_inicio, c.ativado_em;
+
+-- 10. Gate 6: snapshots por unidade e estado. Publicados deve ser zero.
+select
+  coalesce(u.nome, 'Consolidado') as unidade,
+  s.estado,
+  count(*) as snapshots,
+  count(*) filter (where s.publicado) as publicados,
+  min(s.cobertura) as cobertura_minima,
+  max(s.cobertura) as cobertura_maxima
+from public.health_score_professor_v3_snapshots s
+left join public.unidades u on u.id = s.unidade_id
+where s.competencia = date '2026-07-01'
+group by coalesce(u.nome, 'Consolidado'), s.estado
+order by unidade, s.estado;
+
+-- 11. Gate 6: disponibilidade e transparencia das metricas.
+select
+  m.metrica,
+  count(*) as linhas,
+  count(*) filter (where m.valor_bruto is not null) as com_valor_real,
+  count(*) filter (where m.nota is not null) as com_nota,
+  count(*) filter (where m.publicavel) as publicaveis,
+  count(*) filter (where m.valor_bruto = 0 and m.estado_base <> 'com_base')
+    as zeros_fabricados_suspeitos
+from public.health_score_professor_v3_snapshot_metricas m
+join public.health_score_professor_v3_snapshots s on s.id = m.snapshot_id
+where s.competencia = date '2026-07-01'
+group by m.metrica
+order by m.metrica;
+
+-- 12. Gate 6: grants das tabelas internas. Esperado: apenas postgres e
+-- service_role; agentes/public/anon/authenticated nao devem aparecer.
+select
+  table_name,
+  grantee,
+  string_agg(privilege_type, ', ' order by privilege_type) as privilegios
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and table_name in (
+    'health_score_professor_v3_config_versoes',
+    'health_score_professor_v3_config_metricas',
+    'health_score_professor_v3_snapshots',
+    'health_score_professor_v3_snapshot_metricas'
+  )
+group by table_name, grantee
+order by table_name, grantee;
+
+-- 13. Gate 6: comparador interno. Executar somente em sessao service_role ou
+-- postgres, substituindo o UUID pela unidade desejada.
+-- select *
+-- from public.get_health_score_professor_v3_comparacao_sombra(
+--   date '2026-07-01',
+--   '<UNIDADE_ID>'::uuid
+-- );

@@ -12,6 +12,12 @@ const normalizationMigrationPath =
   'supabase/migrations/20260717180000_health_score_v3_normalizacao_meta.sql';
 const permanenceTargetMigrationPath =
   'supabase/migrations/20260718160000_health_score_v3_meta_permanencia_12_meses.sql';
+const conversionTargetMigrationPath =
+  'supabase/migrations/20260718183000_health_score_v3_meta_conversao_70_ativa.sql';
+const shadowComparisonMigrationPath =
+  'supabase/migrations/20260718190000_health_score_v3_comparacao_sombra.sql';
+const shadowRolesIsolationMigrationPath =
+  'supabase/migrations/20260718191500_health_score_v3_gate6_isolamento_roles.sql';
 
 function migration() {
   return existsSync(migrationPath) ? readFileSync(migrationPath, 'utf8') : '';
@@ -38,6 +44,24 @@ function normalizationMigration() {
 function permanenceTargetMigration() {
   return existsSync(permanenceTargetMigrationPath)
     ? readFileSync(permanenceTargetMigrationPath, 'utf8')
+    : '';
+}
+
+function conversionTargetMigration() {
+  return existsSync(conversionTargetMigrationPath)
+    ? readFileSync(conversionTargetMigrationPath, 'utf8')
+    : '';
+}
+
+function shadowComparisonMigration() {
+  return existsSync(shadowComparisonMigrationPath)
+    ? readFileSync(shadowComparisonMigrationPath, 'utf8')
+    : '';
+}
+
+function shadowRolesIsolationMigration() {
+  return existsSync(shadowRolesIsolationMigrationPath)
+    ? readFileSync(shadowRolesIsolationMigrationPath, 'utf8')
     : '';
 }
 
@@ -259,4 +283,90 @@ test('meta de permanencia aprovada usa 12 meses sem ativar a configuracao V3', (
   assert.match(sql, /metrica\s*=\s*'permanencia'/i);
   assert.doesNotMatch(sql, /ativar_health_score_professor_v3_config\s*\(/i);
   assert.doesNotMatch(sql, /set\s+status\s*=\s*'ativa'/i);
+});
+
+test('meta trimestral de conversao aprovada usa 70 por cento e ativa somente a V1 em sombra', () => {
+  const sql = conversionTargetMigration();
+
+  assert.equal(
+    existsSync(conversionTargetMigrationPath),
+    true,
+    `${conversionTargetMigrationPath} deve existir`,
+  );
+  assert.match(sql, /where\s+c\.versao\s*=\s*1[\s\S]*c\.status\s*=\s*'rascunho'/i);
+  assert.match(sql, /set\s+meta\s*=\s*70(?:\.0+)?/i);
+  assert.match(sql, /metrica\s*=\s*'conversao'/i);
+  assert.match(sql, /'meta_status'\s*,\s*'aprovada'/i);
+  assert.match(sql, /'meta_autoridade'\s*,\s*'Alf'/i);
+  assert.match(sql, /'meta_aprovada_em'\s*,\s*'2026-07-18'/i);
+  assert.match(sql, /'recorte'\s*,\s*'2026-Q2'/i);
+  assert.match(sql, /'eventos_confirmados'\s*,\s*78/i);
+  assert.match(sql, /'matriculas_creditadas'\s*,\s*34/i);
+  assert.match(sql, /'p50'\s*,\s*41\.43/i);
+  assert.match(sql, /'p75'\s*,\s*62\.5025/i);
+  assert.match(sql, /'p90'\s*,\s*66\.67/i);
+  assert.match(sql, /ativar_health_score_professor_v3_config\s*\(/i);
+  assert.match(sql, /sombra/i);
+  assert.doesNotMatch(sql, /set\s+publicado\s*=\s*true/i);
+  assert.doesNotMatch(sql, /config_health_score_professor/i);
+});
+
+test('Gate 6 cria comparador seguro V2 x V3 sem alterar consumidores produtivos', () => {
+  const sql = shadowComparisonMigration();
+  const block = functionBlock(
+    sql,
+    'get_health_score_professor_v3_comparacao_sombra',
+  );
+
+  assert.equal(
+    existsSync(shadowComparisonMigrationPath),
+    true,
+    `${shadowComparisonMigrationPath} deve existir`,
+  );
+  assert.match(block, /security definer/i);
+  assert.match(block, /set search_path = public, pg_temp/i);
+  assert.match(block, /auth\.role\s*\(\s*\)[\s\S]*service_role/i);
+  assert.match(block, /get_kpis_professor_periodo_canonico_v2/i);
+  assert.match(block, /health_score_professor_v3_snapshots/i);
+  assert.match(block, /health_score_professor_v3_snapshot_metricas/i);
+  assert.match(block, /valor_v2/i);
+  assert.match(block, /valor_v3/i);
+  assert.match(block, /delta/i);
+  assert.match(block, /nota_v3/i);
+  assert.match(block, /amostra_v3/i);
+  assert.match(block, /cobertura_score_v3/i);
+  assert.match(block, /confianca_v3/i);
+  assert.match(block, /explicacao/i);
+  assert.match(sql, /revoke all on function public\.get_health_score_professor_v3_comparacao_sombra[\s\S]*from public, anon, authenticated/i);
+  assert.match(sql, /grant execute on function public\.get_health_score_professor_v3_comparacao_sombra[\s\S]*to service_role/i);
+  assert.doesNotMatch(sql, /update\s+public\.config_health_score_professor/i);
+  assert.doesNotMatch(sql, /set\s+publicado\s*=\s*true/i);
+});
+
+test('Gate 6 remove acesso direto de agentes aos artefatos ainda em sombra', () => {
+  const sql = shadowRolesIsolationMigration();
+
+  assert.equal(
+    existsSync(shadowRolesIsolationMigrationPath),
+    true,
+    `${shadowRolesIsolationMigrationPath} deve existir`,
+  );
+  for (const role of [
+    'fabio_agent',
+    'lia_acesso_restrito',
+    'mila_acesso_restrito',
+    'sol_acesso_restrito',
+  ]) {
+    assert.match(sql, new RegExp(role, 'i'));
+  }
+  for (const table of [
+    'health_score_professor_v3_config_versoes',
+    'health_score_professor_v3_config_metricas',
+    'health_score_professor_v3_snapshots',
+    'health_score_professor_v3_snapshot_metricas',
+  ]) {
+    assert.match(sql, new RegExp(table, 'i'));
+  }
+  assert.match(sql, /revoke all privileges on table/i);
+  assert.doesNotMatch(sql, /revoke[\s\S]*from service_role/i);
 });
