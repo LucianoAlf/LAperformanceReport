@@ -8,6 +8,8 @@ const optimizationMigrationPath =
   'supabase/migrations/20260716185500_otimiza_eventos_reconstrucao_particionada.sql';
 const manifestMigrationPath =
   'supabase/migrations/20260716190500_manifesto_reconstrucao_particionada.sql';
+const manifestAuditMigrationPath =
+  'supabase/migrations/20260717225500_health_score_v3_manifesto_fonte_auditoria.sql';
 const edgePath = 'supabase/functions/reconstruir-periodos-professor/index.ts';
 const helperPath =
   'supabase/functions/_shared/reconstrucao-particionada-professor.mjs';
@@ -80,11 +82,27 @@ test('manifesto calcula identidade uma vez e indexa cada particao do recorte', (
   assert.match(sql, /revoke all[^;]+from public, anon, authenticated/is);
 });
 
+test('finalizador preserva e valida a versao-fonte do manifesto no cabecalho', () => {
+  assert.equal(
+    fs.existsSync(manifestAuditMigrationPath),
+    true,
+    `${manifestAuditMigrationPath} deve existir`,
+  );
+  const sql = read(manifestAuditMigrationPath);
+
+  assert.match(sql, /manifesto_versao_fonte/i);
+  assert.match(sql, /count\(distinct[\s\S]+manifesto_versao_fonte/i);
+  assert.match(sql, /MANIFESTO_VERSAO_FONTE_DIVERGENTE/i);
+  assert.match(sql, /parametros\s*=\s*r\.parametros\s*\|\|\s*jsonb_build_object/i);
+  assert.match(sql, /revoke all[^;]+from public, anon, authenticated/is);
+});
+
 test('edge usa RPC paginada no modo particionado e preserva modo pequeno', () => {
   const edge = read(edgePath);
 
   assert.match(edge, /particao_total/i);
   assert.match(edge, /particao_indice/i);
+  assert.match(edge, /manifesto_versao_fonte/i);
   assert.match(edge, /validarParticionamento/i);
   assert.match(edge, /listar_eventos_staging_particao_professor_v1/i);
   assert.match(edge, /preparar_manifesto_reconstrucao_professor_v1/i);
@@ -92,6 +110,22 @@ test('edge usa RPC paginada no modo particionado e preserva modo pequeno', () =>
   assert.match(edge, /finalizar_reconstrucao_particionada_professor_v1/i);
   assert.match(edge, /materializar_periodos_professor_v1/i);
   assert.match(edge, /processamento_particionado/i);
+  assert.match(
+    edge,
+    /preparar_manifesto_reconstrucao_professor_v1[\s\S]{0,500}p_versao_reconstrucao:\s*input\.manifesto_versao_fonte/i,
+  );
+  assert.match(
+    edge,
+    /listar_eventos_staging_particao_professor_v1[\s\S]{0,500}p_versao_reconstrucao:\s*input\.manifesto_versao_fonte/i,
+  );
+  assert.match(
+    edge,
+    /registrar_particao_periodos_professor_v1[\s\S]{0,500}p_versao_reconstrucao:\s*input\.versao_reconstrucao/i,
+  );
+  assert.match(
+    edge,
+    /finalizar_reconstrucao_particionada_professor_v1[\s\S]{0,500}p_versao_reconstrucao:\s*input\.versao_reconstrucao/i,
+  );
 });
 
 test('orquestrador chama cada indice e permite retomada idempotente', () => {
@@ -101,11 +135,18 @@ test('orquestrador chama cada indice e permite retomada idempotente', () => {
   assert.match(script, /indicesParticoes/i);
   assert.match(script, /--total-particoes/i);
   assert.match(script, /--inicio-particao/i);
+  assert.match(script, /--manifesto-versao-fonte/i);
+  assert.match(script, /--evidencia-inicio-completo/i);
+  assert.match(script, /INICIO_COMPLETO_EXIGE_EVIDENCIA/i);
+  assert.match(script, /evidencia_inicio_completo:\s*inicioCompleto/i);
   assert.match(script, /particao_indice/i);
   assert.match(script, /particao_total/i);
+  assert.match(script, /manifesto_versao_fonte:\s*manifestoVersaoFonte/i);
   assert.match(script, /reconstruir-periodos-professor/i);
   assert.match(script, /AbortSignal\.timeout\(30_000\)/);
   assert.match(script, /AbortSignal\.timeout\(120_000\)/);
+  assert.match(script, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(script, /tokenJwtValido\(process\.env\.SUPABASE_ACCESS_TOKEN\)/);
   assert.doesNotMatch(script, /250178Alf|lucianoalf\.la@gmail\.com/i);
 });
 

@@ -59,6 +59,7 @@ function professorLocalResolvido(emusysId, professorIdAtual, professoresPorEmusy
 
 export function resolverProfessoresNoContexto(contexto = {}, professoresPorEmusysId = new Map()) {
   return {
+    ...contexto,
     jornadas: (Array.isArray(contexto.jornadas) ? contexto.jornadas : []).map((jornada) => ({
       ...jornada,
       professor_id: professorLocalResolvido(
@@ -91,6 +92,13 @@ function pessoaChave(evento) {
   if (alunoEmusys !== null) return `emusys:${alunoEmusys}`;
   const alunoLocal = asNumber(evento.aluno_id);
   return alunoLocal === null ? null : `local:${alunoLocal}`;
+}
+
+function jornadasDoContexto(contexto = {}) {
+  if (Array.isArray(contexto.jornadas)) return contexto.jornadas;
+  // Compatibilidade com os primeiros testes/pilotos do reconstrutor.
+  if (Array.isArray(contexto.jornadas_atuais)) return contexto.jornadas_atuais;
+  return contexto.jornada_atual ? [contexto.jornada_atual] : [];
 }
 
 function chaveParticao(evento) {
@@ -133,16 +141,65 @@ function pushDiagnostico(diagnosticos, tipo, evento, detalhes = {}) {
   });
 }
 
-function normalizarDuplicatasEmusys(eventos, contexto, diagnosticos) {
+function normalizarDuplicatasEmusys(
+  eventos,
+  contexto,
+  diagnosticos,
+  evidenciasContinuidade = [],
+) {
   const gruposSemanticos = new Map();
   const suporte = new Map();
   const grafos = new Map();
   const segmentosPorEscopoProfessor = new Map();
+  const segmentosPorEscopo = new Map();
+  const jornadas = jornadasDoContexto(contexto);
   const idsJornada = new Set(
-    (Array.isArray(contexto.jornadas_atuais) ? contexto.jornadas_atuais : [])
+    jornadas
       .map((item) => matriculaDisciplinaId(item))
       .filter((item) => item !== null),
   );
+
+  const registrarSegmento = (evento, contabilizarSuporte = true) => {
+    const escopo = chaveEscopoMatriculaDisciplina(evento);
+    const matriculaDisciplina = matriculaDisciplinaId(evento);
+    if (!escopo || matriculaDisciplina === null) return;
+    const instante = asTime(evento.data_hora_inicio) ?? -Infinity;
+
+    if (contabilizarSuporte) {
+      const chaveSuporte = `${escopo}|md:${matriculaDisciplina}`;
+      const atual = suporte.get(chaveSuporte) ?? { total: 0, ultima: -Infinity };
+      atual.total += 1;
+      atual.ultima = Math.max(atual.ultima, instante);
+      suporte.set(chaveSuporte, atual);
+    }
+
+    const porEscopo = segmentosPorEscopo.get(escopo) ?? new Map();
+    const segmentoEscopo = porEscopo.get(matriculaDisciplina) ?? {
+      escopo,
+      matriculaDisciplina,
+      primeira: instante,
+      ultima: instante,
+    };
+    segmentoEscopo.primeira = Math.min(segmentoEscopo.primeira, instante);
+    segmentoEscopo.ultima = Math.max(segmentoEscopo.ultima, instante);
+    porEscopo.set(matriculaDisciplina, segmentoEscopo);
+    segmentosPorEscopo.set(escopo, porEscopo);
+
+    const professor = professorEmusysId(evento);
+    if (professor === null) return;
+    const chaveSegmento = `${escopo}|p:${professor}`;
+    const porMatricula = segmentosPorEscopoProfessor.get(chaveSegmento) ?? new Map();
+    const segmento = porMatricula.get(matriculaDisciplina) ?? {
+      escopo,
+      matriculaDisciplina,
+      primeira: instante,
+      ultima: instante,
+    };
+    segmento.primeira = Math.min(segmento.primeira, instante);
+    segmento.ultima = Math.max(segmento.ultima, instante);
+    porMatricula.set(matriculaDisciplina, segmento);
+    segmentosPorEscopoProfessor.set(chaveSegmento, porMatricula);
+  };
 
   for (const evento of eventos) {
     const chaveEvento = chaveEventoSemantico(evento);
@@ -152,31 +209,10 @@ function normalizarDuplicatasEmusys(eventos, contexto, diagnosticos) {
       gruposSemanticos.set(chaveEvento, grupo);
     }
 
-    const escopo = chaveEscopoMatriculaDisciplina(evento);
-    const matriculaDisciplina = matriculaDisciplinaId(evento);
-    if (!escopo || matriculaDisciplina === null) continue;
-    const chaveSuporte = `${escopo}|md:${matriculaDisciplina}`;
-    const atual = suporte.get(chaveSuporte) ?? { total: 0, ultima: -Infinity };
-    atual.total += 1;
-    atual.ultima = Math.max(atual.ultima, asTime(evento.data_hora_inicio) ?? -Infinity);
-    suporte.set(chaveSuporte, atual);
-
-    const professor = professorEmusysId(evento);
-    if (professor !== null) {
-      const chaveSegmento = `${escopo}|p:${professor}`;
-      const porMatricula = segmentosPorEscopoProfessor.get(chaveSegmento) ?? new Map();
-      const instante = asTime(evento.data_hora_inicio) ?? -Infinity;
-      const segmento = porMatricula.get(matriculaDisciplina) ?? {
-        escopo,
-        matriculaDisciplina,
-        primeira: instante,
-        ultima: instante,
-      };
-      segmento.primeira = Math.min(segmento.primeira, instante);
-      segmento.ultima = Math.max(segmento.ultima, instante);
-      porMatricula.set(matriculaDisciplina, segmento);
-      segmentosPorEscopoProfessor.set(chaveSegmento, porMatricula);
-    }
+    registrarSegmento(evento);
+  }
+  for (const evidencia of evidenciasContinuidade) {
+    registrarSegmento(evidencia, false);
   }
 
   for (const grupo of gruposSemanticos.values()) {
@@ -197,20 +233,65 @@ function normalizarDuplicatasEmusys(eventos, contexto, diagnosticos) {
     const segmentos = [...porMatricula.values()].sort((left, right) =>
       left.primeira - right.primeira || left.matriculaDisciplina - right.matriculaDisciplina
     );
+    let anterior = segmentos[0] ?? null;
     for (let index = 1; index < segmentos.length; index += 1) {
-      const anterior = segmentos[index - 1];
       const atual = segmentos[index];
+      if (!anterior) {
+        anterior = atual;
+        continue;
+      }
       const intervalo = atual.primeira - anterior.ultima;
-      if (intervalo <= 0 || intervalo > LIMITE_CONTINUIDADE_MS) continue;
-      const grafo = grafos.get(atual.escopo) ?? new Map();
-      const anteriores = grafo.get(anterior.matriculaDisciplina) ?? new Set();
-      const atuais = grafo.get(atual.matriculaDisciplina) ?? new Set();
-      anteriores.add(atual.matriculaDisciplina);
-      atuais.add(anterior.matriculaDisciplina);
-      grafo.set(anterior.matriculaDisciplina, anteriores);
-      grafo.set(atual.matriculaDisciplina, atuais);
-      grafos.set(atual.escopo, grafo);
+      // O Emusys pode abrir o ID renovado antes de encerrar toda a grade do ID
+      // anterior. Nesse caso os segmentos se sobrepoem, mas continuam sendo a
+      // mesma jornada pedagogica quando pessoa, disciplina e professor batem.
+      if (intervalo <= LIMITE_CONTINUIDADE_MS) {
+        const grafo = grafos.get(atual.escopo) ?? new Map();
+        const anteriores = grafo.get(anterior.matriculaDisciplina) ?? new Set();
+        const atuais = grafo.get(atual.matriculaDisciplina) ?? new Set();
+        anteriores.add(atual.matriculaDisciplina);
+        atuais.add(anterior.matriculaDisciplina);
+        grafo.set(anterior.matriculaDisciplina, anteriores);
+        grafo.set(atual.matriculaDisciplina, atuais);
+        grafos.set(atual.escopo, grafo);
+      }
+      if (atual.ultima > anterior.ultima) anterior = atual;
     }
+  }
+
+  // A jornada atual resolve a troca de ID causada por renovacao. O intervalo
+  // maior cobre o recesso escolar sem unir um retorno ocorrido anos depois.
+  const LIMITE_CONTINUIDADE_JORNADA_MS = 75 * 24 * 60 * 60 * 1000;
+  for (const jornada of jornadas) {
+    const escopo = chaveEscopoMatriculaDisciplina(jornada);
+    const matriculaDisciplinaJornada = matriculaDisciplinaId(jornada);
+    const inicioJornada = asTime(jornada.data_primeira_aula);
+    const fimJornada = asTime(jornada.data_ultima_aula) ??
+      (String(jornada.status_matricula ?? '').toLowerCase() === 'ativa'
+        ? Infinity
+        : inicioJornada);
+    if (!escopo || matriculaDisciplinaJornada === null || inicioJornada === null) continue;
+
+    const grafo = grafos.get(escopo) ?? new Map();
+    if (!grafo.has(matriculaDisciplinaJornada)) {
+      grafo.set(matriculaDisciplinaJornada, new Set());
+    }
+    for (const segmento of segmentosPorEscopo.get(escopo)?.values() ?? []) {
+      if (segmento.matriculaDisciplina === matriculaDisciplinaJornada) continue;
+      const distancia = segmento.ultima < inicioJornada
+        ? inicioJornada - segmento.ultima
+        : fimJornada !== null && fimJornada < segmento.primeira
+        ? segmento.primeira - fimJornada
+        : 0;
+      if (distancia > LIMITE_CONTINUIDADE_JORNADA_MS) continue;
+
+      const vizinhosSegmento = grafo.get(segmento.matriculaDisciplina) ?? new Set();
+      const vizinhosJornada = grafo.get(matriculaDisciplinaJornada) ?? new Set();
+      vizinhosSegmento.add(matriculaDisciplinaJornada);
+      vizinhosJornada.add(segmento.matriculaDisciplina);
+      grafo.set(segmento.matriculaDisciplina, vizinhosSegmento);
+      grafo.set(matriculaDisciplinaJornada, vizinhosJornada);
+    }
+    grafos.set(escopo, grafo);
   }
 
   const aliases = new Map();
@@ -266,6 +347,14 @@ function normalizarDuplicatasEmusys(eventos, contexto, diagnosticos) {
     candidatas.add(canonica);
     candidatasPorEscopo.set(escopo, candidatas);
   }
+  for (const jornada of jornadas) {
+    const escopo = chaveEscopoMatriculaDisciplina(jornada);
+    const matriculaDisciplina = matriculaDisciplinaId(jornada);
+    if (!escopo || matriculaDisciplina === null) continue;
+    const candidatas = candidatasPorEscopo.get(escopo) ?? new Set();
+    candidatas.add(matriculaDisciplina);
+    candidatasPorEscopo.set(escopo, candidatas);
+  }
 
   const resultado = [];
   for (const grupo of gruposSemanticos.values()) {
@@ -281,6 +370,27 @@ function normalizarDuplicatasEmusys(eventos, contexto, diagnosticos) {
       : associadaPorEscopo
       ? candidatasEscopo[0]
       : null;
+    if (
+      idsCanonicos.length === 0 &&
+      canonicaDoEvento === null &&
+      candidatasEscopo.length > 0
+    ) {
+      // Linhas de roster de turma sem matricula-disciplina costumam duplicar a
+      // aula individual. Se sobra uma linha isolada e existem duas ou mais
+      // jornadas concretas no mesmo escopo, usa-la criaria um periodo paralelo
+      // artificial atravessando renovacoes. Preservamos o diagnostico, nao o
+      // fato inferido.
+      pushDiagnostico(
+        diagnosticos,
+        'fallback_matricula_disciplina_ambiguo_ignorado',
+        grupo[0],
+        {
+          matriculas_disciplinas_candidatas: candidatasEscopo.sort((a, b) => a - b),
+          criterio: 'mais_de_uma_matricula_disciplina_concreta_no_escopo',
+        },
+      );
+      continue;
+    }
     const normalizados = grupo.map((evento) => {
       const original = matriculaDisciplinaId(evento);
       const canonica = original !== null
@@ -407,11 +517,7 @@ function normalizarSubstituicoes(runs, diagnosticos) {
 
 function contextoDaParticao(contexto, primeiroEvento) {
   const matriculaDisciplina = matriculaDisciplinaId(primeiroEvento);
-  const jornadas = Array.isArray(contexto.jornadas_atuais)
-    ? contexto.jornadas_atuais
-    : contexto.jornada_atual
-    ? [contexto.jornada_atual]
-    : [];
+  const jornadas = jornadasDoContexto(contexto);
   const jornada = jornadas.find((item) =>
     asNumber(item.emusys_matricula_disciplina_id) === matriculaDisciplina
   ) ?? null;
@@ -500,7 +606,6 @@ function confiancaPeriodo({
   eventos,
   matriculaDisciplina,
   inicioIncompleto,
-  substituicao,
   conflito,
 }) {
   if (
@@ -509,12 +614,14 @@ function confiancaPeriodo({
     eventos.some((item) => professorEmusysId(item) === null || item.professor_resolvido_por_id === false)
   ) return 'revisar';
   if (
-    inicioIncompleto || substituicao ||
+    inicioIncompleto ||
     eventos.some((item) =>
-      item.continuidade_matricula_disciplina_inferida === true ||
       item.fallback_matricula_disciplina_associado === true
     )
   ) return 'media';
+  // Renovacoes com IDs exatos e mesma pessoa/disciplina/professor preservam o
+  // vinculo pedagogico. Da mesma forma, um trecho curto A-B-A ja normalizado
+  // como substituicao nao reduz sozinho a confianca do periodo titular.
   return 'alta';
 }
 
@@ -538,7 +645,6 @@ function montarPeriodo({
     eventos,
     matriculaDisciplina,
     inicioIncompleto,
-    substituicao,
     conflito,
   });
   const professorResolvido = eventos.find((item) => item.professor_id !== null && item.professor_id !== undefined);
@@ -696,6 +802,117 @@ function reconstruirParticao(eventos, contexto, diagnosticos) {
   return periodos;
 }
 
+function fecharPeriodosHistoricosSemApoioAtual(periodos, contexto, diagnosticos) {
+  const jornadas = jornadasDoContexto(contexto);
+  const alunosContextualizados = new Set(
+    (Array.isArray(contexto.alunos_emusys_contextualizados)
+      ? contexto.alunos_emusys_contextualizados
+      : [])
+      .map(asNumber)
+      .filter((item) => item !== null),
+  );
+  if (jornadas.length === 0 && alunosContextualizados.size === 0) return periodos;
+
+  const encerrar = (periodo, criterio) => {
+    const ultimaEvidencia = iso(periodo.evidencias?.ultima_aula) ?? periodo.data_inicio;
+    periodo.data_fim = ultimaEvidencia;
+    periodo.status_periodo = 'encerrado';
+    periodo.tipo_fim = 'fim_evidencia_historica';
+    if (periodo.confianca === 'alta') periodo.confianca = 'media';
+    periodo.publicavel_sugerido = false;
+    pushDiagnostico(diagnosticos, 'periodo_historico_sem_apoio_na_jornada_atual', periodo, {
+      data_fim_inferida: ultimaEvidencia,
+      criterio,
+    });
+  };
+
+  const porEscopo = new Map();
+  for (const periodo of periodos) {
+    const escopo = chaveEscopoMatriculaDisciplina(periodo);
+    if (!escopo) continue;
+    const atuais = porEscopo.get(escopo) ?? [];
+    atuais.push(periodo);
+    porEscopo.set(escopo, atuais);
+  }
+
+  for (const [escopo, periodosEscopo] of porEscopo) {
+    const jornadasEscopo = jornadas.filter((item) =>
+      chaveEscopoMatriculaDisciplina(item) === escopo
+    );
+    if (jornadasEscopo.length === 0) continue;
+    const jornadasAtivas = jornadasEscopo.filter((item) =>
+      String(item.status_matricula ?? '').toLowerCase() === 'ativa'
+    );
+    const idsAtivos = new Set(jornadasAtivas.map(matriculaDisciplinaId));
+    const professoresAtivos = new Set(jornadasAtivas.map(professorEmusysId));
+    const existePeriodoAtualExato = periodosEscopo.some((item) =>
+      item.status_periodo === 'ativo' &&
+      idsAtivos.has(matriculaDisciplinaId(item)) &&
+      professoresAtivos.has(professorEmusysId(item))
+    );
+
+    for (const periodo of periodosEscopo) {
+      if (periodo.status_periodo !== 'ativo') continue;
+      const idPeriodo = matriculaDisciplinaId(periodo);
+      const professorPeriodo = professorEmusysId(periodo);
+      const apoiadoExatamente = idsAtivos.has(idPeriodo) &&
+        professoresAtivos.has(professorPeriodo);
+      if (apoiadoExatamente) continue;
+
+      const temMesmoProfessorAtivo = professoresAtivos.has(professorPeriodo);
+      const deveEncerrar = jornadasAtivas.length === 0 ||
+        !temMesmoProfessorAtivo || existePeriodoAtualExato;
+      if (!deveEncerrar) continue;
+
+      encerrar(
+        periodo,
+        jornadasAtivas.length === 0
+          ? 'sem_jornada_ativa_no_escopo'
+          : 'outra_jornada_ativa_sustenta_o_escopo',
+      );
+    }
+  }
+
+  const jornadasPorPessoa = new Map();
+  for (const jornada of jornadas) {
+    const pessoa = pessoaChave(jornada);
+    if (!pessoa) continue;
+    const atuais = jornadasPorPessoa.get(pessoa) ?? [];
+    atuais.push(jornada);
+    jornadasPorPessoa.set(pessoa, atuais);
+  }
+
+  for (const periodo of periodos) {
+    if (periodo.status_periodo !== 'ativo') continue;
+    const alunoEmusys = asNumber(periodo.emusys_aluno_id);
+    if (alunoEmusys === null || !alunosContextualizados.has(alunoEmusys)) continue;
+
+    const jornadasPessoa = jornadasPorPessoa.get(pessoaChave(periodo)) ?? [];
+    const jornadasAtivas = jornadasPessoa.filter((item) =>
+      String(item.status_matricula ?? '').toLowerCase() === 'ativa'
+    );
+    const idPeriodo = matriculaDisciplinaId(periodo);
+    const disciplinaPeriodo = asNumber(periodo.emusys_disciplina_id);
+    const professorPeriodo = professorEmusysId(periodo);
+    const apoiadoPorJornadaAtual = jornadasAtivas.some((item) => {
+      if (professorEmusysId(item) !== professorPeriodo) return false;
+      const idJornada = matriculaDisciplinaId(item);
+      const disciplinaJornada = asNumber(item.emusys_disciplina_id);
+      return (idPeriodo !== null && idJornada === idPeriodo) ||
+        (disciplinaPeriodo !== null && disciplinaJornada === disciplinaPeriodo);
+    });
+    if (apoiadoPorJornadaAtual) continue;
+
+    const criterio = jornadasPessoa.length === 0
+      ? 'aluno_consultado_sem_jornada_atual'
+      : jornadasAtivas.length === 0
+      ? 'aluno_sem_jornada_ativa_atual'
+      : 'jornada_atual_em_outro_vinculo';
+    encerrar(periodo, criterio);
+  }
+  return periodos;
+}
+
 export function calcularDuracaoMeses(dataInicio, dataFim) {
   const inicio = asTime(dataInicio);
   const fim = asTime(dataFim);
@@ -712,6 +929,7 @@ export function reconstruirPeriodos(eventosOriginais, contexto = {}) {
   const diagnosticos = [];
   const particoes = new Map();
   const eventosElegiveis = [];
+  const evidenciasContinuidade = [];
 
   for (const evento of Array.isArray(eventosOriginais) ? eventosOriginais : []) {
     if (String(evento.categoria ?? '').trim().toLowerCase() === 'experimental') {
@@ -720,6 +938,14 @@ export function reconstruirPeriodos(eventosOriginais, contexto = {}) {
     }
     if (evento.cancelada === true) {
       pushDiagnostico(diagnosticos, 'aula_cancelada_ignorada', evento);
+      const professor = professorEmusysId(evento);
+      if (
+        evento.sem_acompanhamento !== true &&
+        professor !== null && professor !== 0 &&
+        matriculaDisciplinaId(evento) !== null
+      ) {
+        evidenciasContinuidade.push(evento);
+      }
       continue;
     }
     const professor = professorEmusysId(evento);
@@ -738,6 +964,7 @@ export function reconstruirPeriodos(eventosOriginais, contexto = {}) {
     eventosElegiveis,
     contexto,
     diagnosticos,
+    evidenciasContinuidade,
   );
   for (const evento of eventosNormalizados) {
     const chave = chaveParticao(evento);
@@ -754,6 +981,8 @@ export function reconstruirPeriodos(eventosOriginais, contexto = {}) {
   for (const eventos of particoes.values()) {
     periodos.push(...reconstruirParticao(eventos, contexto, diagnosticos));
   }
+
+  fecharPeriodosHistoricosSemApoioAtual(periodos, contexto, diagnosticos);
 
   return {
     periodos: periodos.sort((a, b) =>

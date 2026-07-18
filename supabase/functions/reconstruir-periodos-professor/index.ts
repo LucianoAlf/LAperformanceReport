@@ -37,8 +37,10 @@ interface RebuildInput {
   data_inicio?: string;
   data_fim?: string;
   versao_reconstrucao?: string;
+  manifesto_versao_fonte?: string | null;
   execucao_backfill_id?: string | null;
   inicio_completo?: boolean;
+  evidencia_inicio_completo?: string | null;
   particao_total?: number | null;
   particao_indice?: number | null;
 }
@@ -48,8 +50,10 @@ interface ValidatedInput {
   data_inicio: string;
   data_fim: string;
   versao_reconstrucao: string;
+  manifesto_versao_fonte: string;
   execucao_backfill_id: string | null;
   inicio_completo: boolean;
+  evidencia_inicio_completo: string | null;
   particao_total: number | null;
   particao_indice: number | null;
 }
@@ -190,6 +194,10 @@ function validarInput(body: RebuildInput): ValidatedInput {
   if (!/^[a-z0-9][a-z0-9._-]{2,80}$/i.test(versao)) {
     throw new ReconstructionError('VERSAO_RECONSTRUCAO_INVALIDA', 400);
   }
+  const manifestoVersaoFonte = String(body.manifesto_versao_fonte ?? versao).trim();
+  if (!/^[a-z0-9][a-z0-9._-]{2,80}$/i.test(manifestoVersaoFonte)) {
+    throw new ReconstructionError('MANIFESTO_VERSAO_FONTE_INVALIDA', 400);
+  }
   const execucaoId = body.execucao_backfill_id === null || body.execucao_backfill_id === undefined
     ? null
     : String(body.execucao_backfill_id);
@@ -213,13 +221,22 @@ function validarInput(body: RebuildInput): ValidatedInput {
       throw new ReconstructionError(code, 400);
     }
   }
+  const inicioCompleto = body.inicio_completo === true;
+  const evidenciaInicioCompleto = typeof body.evidencia_inicio_completo === 'string'
+    ? body.evidencia_inicio_completo.trim()
+    : '';
+  if (inicioCompleto && evidenciaInicioCompleto.length < 12) {
+    throw new ReconstructionError('INICIO_COMPLETO_EXIGE_EVIDENCIA', 400);
+  }
   return {
     unidade_id: unidadeId,
     data_inicio: dataInicio,
     data_fim: dataFim,
     versao_reconstrucao: versao,
+    manifesto_versao_fonte: manifestoVersaoFonte,
     execucao_backfill_id: execucaoId,
-    inicio_completo: body.inicio_completo === true,
+    inicio_completo: inicioCompleto,
+    evidencia_inicio_completo: inicioCompleto ? evidenciaInicioCompleto : null,
     particao_total: particaoTotal,
     particao_indice: particaoIndice,
   };
@@ -301,7 +318,7 @@ async function carregarEventosParticionados(
       p_unidade_id: input.unidade_id,
       p_data_inicio: input.data_inicio,
       p_data_fim: input.data_fim,
-      p_versao_reconstrucao: input.versao_reconstrucao,
+      p_versao_reconstrucao: input.manifesto_versao_fonte,
       p_execucao_backfill_id: input.execucao_backfill_id,
       p_total_particoes: input.particao_total,
     },
@@ -313,7 +330,7 @@ async function carregarEventosParticionados(
       p_unidade_id: input.unidade_id,
       p_data_inicio: input.data_inicio,
       p_data_fim: input.data_fim,
-      p_versao_reconstrucao: input.versao_reconstrucao,
+      p_versao_reconstrucao: input.manifesto_versao_fonte,
       p_execucao_backfill_id: input.execucao_backfill_id,
       p_total_particoes: input.particao_total,
       p_particao_indice: input.particao_indice,
@@ -431,7 +448,12 @@ async function carregarContextoPedagogico(
   adminClient: SupabaseClient,
   unidadeId: string,
   matriculasDisciplinas: number[],
-): Promise<{ jornadas: JsonRecord[]; transicoes: JsonRecord[] }> {
+  alunosEmusys: number[],
+): Promise<{
+  jornadas: JsonRecord[];
+  transicoes: JsonRecord[];
+  alunos_emusys_contextualizados: number[];
+}> {
   const jornadas: JsonRecord[] = [];
   const transicoes: JsonRecord[] = [];
   for (const ids of chunk(matriculasDisciplinas, 250)) {
@@ -454,7 +476,34 @@ async function carregarContextoPedagogico(
     jornadas.push(...(jornadaResult.data ?? []));
     transicoes.push(...(transicaoResult.data ?? []));
   }
-  return { jornadas, transicoes };
+
+  // IDs de matricula-disciplina mudam em renovacoes. Carregar todas as jornadas
+  // da pessoa permite reconciliar o ID historico com a jornada atual.
+  for (const ids of chunk(alunosEmusys, 250)) {
+    if (ids.length === 0) continue;
+    const { data, error } = await adminClient
+      .from('aluno_jornada_matricula_disciplina')
+      .select('unidade_id, aluno_id, emusys_aluno_id, emusys_matricula_id, emusys_matricula_disciplina_id, emusys_disciplina_id, curso_id, professor_id, emusys_professor_id, status_matricula, data_primeira_aula, data_ultima_aula')
+      .eq('unidade_id', unidadeId)
+      .in('emusys_aluno_id', ids);
+    if (error) throw new ReconstructionError('CONTEXTO_PEDAGOGICO_FALHOU', 500);
+    jornadas.push(...(data ?? []));
+  }
+
+  const jornadasUnicas = new Map<string, JsonRecord>();
+  for (const jornada of jornadas) {
+    const chave = [
+      jornada.unidade_id,
+      jornada.emusys_aluno_id,
+      jornada.emusys_matricula_disciplina_id,
+    ].join(':');
+    jornadasUnicas.set(chave, jornada);
+  }
+  return {
+    jornadas: [...jornadasUnicas.values()],
+    transicoes,
+    alunos_emusys_contextualizados: uniqueNumbers(alunosEmusys),
+  };
 }
 
 async function validarExecucaoBackfill(
@@ -491,13 +540,17 @@ async function processarParticao(
     adminClient,
     input.unidade_id,
     matriculasDisciplinas,
+    uniqueNumbers(linhas.map((item) => item.emusys_aluno_id)),
   );
   const professores = await carregarProfessores(
     adminClient,
     input.unidade_id,
     coletarIdsEmusysProfessores(linhas, contextoBruto),
   );
-  const contexto = resolverProfessoresNoContexto(contextoBruto, professores);
+  const contexto = resolverProfessoresNoContexto(
+    contextoBruto,
+    professores,
+  ) as typeof contextoBruto;
   const cursos = await carregarCursos(
     adminClient,
     input.unidade_id,
@@ -536,6 +589,7 @@ async function processarParticao(
     data_inicio: input.data_inicio,
     data_fim: input.data_fim,
     versao_reconstrucao: input.versao_reconstrucao,
+    manifesto_versao_fonte: input.manifesto_versao_fonte,
     particao_total: input.particao_total,
     particao_indice: input.particao_indice,
     eventos: eventos.map((item) => ({
@@ -549,6 +603,8 @@ async function processarParticao(
     })),
     jornadas: contexto.jornadas,
     transicoes: contexto.transicoes,
+    alunos_emusys_contextualizados: contexto.alunos_emusys_contextualizados,
+    evidencia_inicio_completo: input.evidencia_inicio_completo,
   });
   const reconstruida = reconstruirPeriodos(eventos, {
     versao_reconstrucao: input.versao_reconstrucao,
@@ -556,8 +612,10 @@ async function processarParticao(
     data_inicio_recorte: input.data_inicio,
     data_fim_recorte: input.data_fim,
     inicio_completo: input.inicio_completo,
+    evidencia_inicio_completo: input.evidencia_inicio_completo,
     jornadas_atuais: contexto.jornadas,
     transicoes: contexto.transicoes,
+    alunos_emusys_contextualizados: contexto.alunos_emusys_contextualizados,
   });
   const periodos = reconstruida.periodos.map((periodo: JsonRecord) => ({
     ...periodo,
@@ -581,6 +639,9 @@ async function processarParticao(
       p_total_particoes_logicas: reconstruida.total_particoes,
       p_parametros: {
         processamento_particionado: true,
+        manifesto_versao_fonte: input.manifesto_versao_fonte,
+        inicio_completo: input.inicio_completo,
+        evidencia_inicio_completo: input.evidencia_inicio_completo,
         particao_total: input.particao_total,
         particao_indice: input.particao_indice,
         total_eventos_staging: linhas.length,
@@ -649,6 +710,7 @@ serve(async (req: Request) => {
       adminClient,
       input.unidade_id,
       matriculasDisciplinas,
+      uniqueNumbers(roster.map((item) => item.emusys_aluno_id)),
     );
     const identidades = await carregarIdentidades(
       adminClient,
@@ -660,7 +722,10 @@ serve(async (req: Request) => {
       input.unidade_id,
       coletarIdsEmusysProfessores(aulas, contextoBruto),
     );
-    const contexto = resolverProfessoresNoContexto(contextoBruto, professores);
+    const contexto = resolverProfessoresNoContexto(
+      contextoBruto,
+      professores,
+    ) as typeof contextoBruto;
     const cursos = await carregarCursos(
       adminClient,
       input.unidade_id,
@@ -719,6 +784,8 @@ serve(async (req: Request) => {
       })),
       jornadas: contexto.jornadas,
       transicoes: contexto.transicoes,
+      alunos_emusys_contextualizados: contexto.alunos_emusys_contextualizados,
+      evidencia_inicio_completo: input.evidencia_inicio_completo,
     });
 
     const reconstruida = reconstruirPeriodos(eventos, {
@@ -727,8 +794,10 @@ serve(async (req: Request) => {
       data_inicio_recorte: input.data_inicio,
       data_fim_recorte: input.data_fim,
       inicio_completo: input.inicio_completo,
+      evidencia_inicio_completo: input.evidencia_inicio_completo,
       jornadas_atuais: contexto.jornadas,
       transicoes: contexto.transicoes,
+      alunos_emusys_contextualizados: contexto.alunos_emusys_contextualizados,
     });
     const periodos = reconstruida.periodos.map((periodo: JsonRecord) => ({
       ...periodo,
@@ -747,6 +816,7 @@ serve(async (req: Request) => {
       p_total_eventos: reconstruida.total_eventos,
       p_parametros: {
         inicio_completo: input.inicio_completo,
+        evidencia_inicio_completo: input.evidencia_inicio_completo,
         total_aulas_staging: aulas.length,
         total_roster_staging: roster.length,
         total_particoes: reconstruida.total_particoes,

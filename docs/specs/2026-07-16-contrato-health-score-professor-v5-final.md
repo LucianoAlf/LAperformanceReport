@@ -174,7 +174,7 @@ Nao calcular a media simples das tres medias mensais. Se um snapshot mensal esti
 
 **Agregacao trimestral:** media aritmetica dos tres fechamentos mensais. Snapshot ausente deve ser reconstruido e auditado; nao substituir silenciosamente por zero nem calcular com dois meses.
 
-### 6.4 Retencao atribuivel
+### 6.4 Retencao atribuivel com regra historica de transicao
 
 **Mede:** capacidade de manter vinculos quando o encerramento foi confirmado como atribuivel ao professor.
 
@@ -182,7 +182,10 @@ Nao calcular a media simples das tres medias mensais. Se um snapshot mensal esti
 
 **Denominador:** periodos matricula-disciplina-professor distintos que estiveram ativos por pelo menos um dia na janela.
 
-**Numerador negativo:** periodos encerrados na janela com motivo confirmado e `motivos_saida.conta_score_professor = true`.
+**Numerador negativo:**
+
+- ate 02/08/2026, todos os periodos encerrados na janela, independentemente do motivo;
+- a partir de 03/08/2026, somente periodos encerrados com motivo confirmado e `motivos_saida.conta_score_professor = true`.
 
 **Formula:**
 
@@ -192,9 +195,14 @@ Nao calcular a media simples das tres medias mensais. Se um snapshot mensal esti
 
 **Base minima:** 10 vinculos expostos.
 
+**Regra transitoria aprovada em 17/07/2026:** a classificacao historica dos motivos nao possui cobertura integral. Por isso, nenhum encerramento ocorrido ate 02/08/2026 pode desaparecer do indicador por falta de motivo. A partir de 03/08/2026, a conciliacao passa a ser obrigatoria e somente `Desanimo`, `Desistencia` e `Insatisfacao`, quando confirmados como atribuiveis ao professor, penalizam. Encerramento posterior ao corte sem classificacao fica pendente de conciliacao e nao e classificado silenciosamente.
+
+Se futuramente a cobertura historica de motivos for comprovada como integral, qualquer reclassificacao exige nova versao de regra e nova revisao auditada; nao se reescreve o snapshot anterior.
+
 **Regras de atribuicao:**
 
-- troca A -> B so reduz a retencao de A quando o motivo confirmado for atribuivel;
+- ate 02/08/2026, troca A -> B ou encerramento do vinculo reduz a retencao de A independentemente do motivo;
+- a partir de 03/08/2026, troca A -> B so reduz a retencao de A quando o motivo confirmado for atribuivel;
 - preservar os motivos exatos `Desanimo`, `Desistencia` e `Insatisfacao` nos relatorios;
 - motivos neutros seguem `motivos_saida.conta_score_professor = false`;
 - motivo ausente, ambiguo ou inferido nao penaliza e vai para conciliacao;
@@ -238,11 +246,13 @@ quantidade de vinculos encerrados elegiveis e publicaveis
 - o vinculo encerrado precisa possuir duracao de pelo menos 4 meses para entrar na media e na pontuacao;
 - vinculo encerrado com menos de 4 meses permanece no historico com `elegivel_permanencia = false`, sem prejudicar o professor;
 - a elegibilidade usa a duracao precisa em dias dividida por 30,44, sem arredondamento anterior ao corte de 4 meses;
-- exibir media, mediana auxiliar e tamanho da amostra;
+- exibir como leitura principal a media historica dos encerrados e o tamanho da amostra;
+- manter mediana somente como diagnostico tecnico auxiliar, fora da nota e da leitura principal;
+- exibir separadamente a idade media da carteira ainda ativa, sem mistura-la ao numerador da permanencia;
 - valor bruto aparece a partir do primeiro vinculo encerrado elegivel e publicavel;
 - pontuacao exige inicialmente pelo menos 3 vinculos encerrados elegiveis e publicaveis.
 
-**Publicabilidade historica:** entram na pontuacao apenas vinculos de confianca `alta` ou `revisado_aprovado`. Confianca `media` e `revisar` ficam visiveis na auditoria, fora do score.
+**Publicabilidade historica:** entram na pontuacao apenas vinculos de confianca `alta` ou `revisado_aprovado`. Confianca `media` e `revisar` ficam visiveis na auditoria, fora do score. Se existir qualquer vinculo encerrado elegivel ainda nao publicavel, o KPI oficial permanece `aguardando_revisao_historica`; e proibido publicar somente o subconjunto ja revisado como se representasse todo o historico.
 
 **Fundamento da regra de 4 meses:** aplica o mesmo principio vigente no tempo de permanencia da escola. Em 16/07/2026, a definicao remota de `get_historico_ltv` foi auditada e confirmou `tempo_permanencia_meses >= 4`; `get_tempo_permanencia` apenas agrega essa base. A V3 reaplica o corte no grao correto professor-matricula-disciplina, sem consumir essas RPCs legadas como fonte do novo indicador.
 

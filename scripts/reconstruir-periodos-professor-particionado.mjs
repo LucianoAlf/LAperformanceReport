@@ -38,13 +38,22 @@ function obrigatorio(args, name) {
   return value.trim();
 }
 
+function tokenJwtValido(value) {
+  return typeof value === 'string' && value.trim().split('.').length === 3;
+}
+
 async function obterAccessToken(url, anonKey) {
-  if (process.env.SUPABASE_ACCESS_TOKEN) return process.env.SUPABASE_ACCESS_TOKEN;
+  if (tokenJwtValido(process.env.SUPABASE_ACCESS_TOKEN)) {
+    return process.env.SUPABASE_ACCESS_TOKEN.trim();
+  }
+  if (tokenJwtValido(process.env.SUPABASE_SERVICE_ROLE_KEY)) {
+    return process.env.SUPABASE_SERVICE_ROLE_KEY.trim();
+  }
   const email = process.env.LA_REPORT_ADMIN_EMAIL;
   const password = process.env.LA_REPORT_ADMIN_PASSWORD;
   if (!email || !password) {
     throw new Error(
-      'Defina SUPABASE_ACCESS_TOKEN ou LA_REPORT_ADMIN_EMAIL/LA_REPORT_ADMIN_PASSWORD.',
+      'Defina um JWT em SUPABASE_ACCESS_TOKEN/SUPABASE_SERVICE_ROLE_KEY ou o login administrativo.',
     );
   }
   const response = await fetch(`${url}/auth/v1/token?grant_type=password`, {
@@ -98,10 +107,21 @@ const unidadeId = obrigatorio(args, '--unidade-id');
 const dataInicio = obrigatorio(args, '--data-inicio');
 const dataFim = obrigatorio(args, '--data-fim');
 const versao = obrigatorio(args, '--versao');
+const manifestoVersaoFonte = String(args.get('--manifesto-versao-fonte') ?? versao).trim();
+if (!/^[a-z0-9][a-z0-9._-]{2,80}$/i.test(manifestoVersaoFonte)) {
+  throw new Error('MANIFESTO_VERSAO_FONTE_INVALIDA:--manifesto-versao-fonte');
+}
 const execucaoId = obrigatorio(args, '--execucao-backfill-id');
 const totalParticoes = Number(obrigatorio(args, '--total-particoes'));
 const inicioParticao = Number(args.get('--inicio-particao') ?? 0);
 const inicioCompleto = args.has('--inicio-completo');
+const evidenciaInicioCompleto = args.get('--evidencia-inicio-completo');
+if (
+  inicioCompleto &&
+  (typeof evidenciaInicioCompleto !== 'string' || !evidenciaInicioCompleto.trim())
+) {
+  throw new Error('INICIO_COMPLETO_EXIGE_EVIDENCIA:--evidencia-inicio-completo');
+}
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL;
 const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY;
@@ -117,8 +137,12 @@ for (const particaoIndice of indicesParticoes(totalParticoes, inicioParticao)) {
     data_inicio: dataInicio,
     data_fim: dataFim,
     versao_reconstrucao: versao,
+    manifesto_versao_fonte: manifestoVersaoFonte,
     execucao_backfill_id: execucaoId,
     inicio_completo: inicioCompleto,
+    evidencia_inicio_completo: inicioCompleto
+      ? evidenciaInicioCompleto.trim()
+      : null,
     particao_total: totalParticoes,
     particao_indice: particaoIndice,
   });

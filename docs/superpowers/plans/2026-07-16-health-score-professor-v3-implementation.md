@@ -606,30 +606,32 @@ concluiu. Nenhum consumidor produtivo foi migrado. Evidencias:
 ### Task 12: Criar configuracao e snapshots versionados
 
 **Files:**
-- Create: `supabase/migrations/20260716133000_health_score_v3_config_snapshots.sql`
+- Create: `supabase/migrations/20260717170000_health_score_v3_config_snapshots.sql`
+- Create: `supabase/migrations/20260717173000_health_score_v3_service_role_readonly.sql`
+- Create: `supabase/migrations/20260717174500_health_score_v3_fk_indexes.sql`
 - Create: `tests/healthScoreProfessorV3Snapshots.test.mjs`
 
-- [ ] **Step 1: Escrever testes de versao e imutabilidade**
+- [x] **Step 1: Escrever testes de versao e imutabilidade**
 
 Exigir seis metricas, soma 100, vigencia sem sobreposicao, snapshot fechado imutavel, retificacao por nova revisao e ausencia de grants anon/public.
 
-- [ ] **Step 2: Criar tabelas pai/filha**
+- [x] **Step 2: Criar tabelas pai/filha**
 
 Usar nomes da SPEC e constraints referenciais.
 
-- [ ] **Step 3: Criar RPC de ativacao**
+- [x] **Step 3: Criar RPC de ativacao**
 
 `ativar_health_score_professor_v3_config(p_config_id, p_justificativa)` valida tudo em transacao. Versao usada por snapshot fechado nao e editavel.
 
-- [ ] **Step 4: Criar RPC de materializacao**
+- [x] **Step 4: Criar RPC de materializacao**
 
 `materializar_health_score_professor_v3(p_competencia, p_config_versao, p_modo)` chama as seis metricas, calcula notas/cobertura e persiste pai/filhas.
 
-- [ ] **Step 5: Criar trigger de imutabilidade**
+- [x] **Step 5: Criar trigger de imutabilidade**
 
 Bloquear `UPDATE/DELETE` de snapshot fechado, exceto alteracao controlada de estado para `invalidado` via RPC de retificacao.
 
-- [ ] **Step 6: Inserir configuracao inicial rascunho**
+- [x] **Step 6: Inserir configuracao inicial rascunho**
 
 ```text
 retencao 25
@@ -640,9 +642,12 @@ numero_alunos 10
 presenca 10
 ```
 
-Metas de media/turma, alunos e permanencia permanecem rascunho ate calibracao e aprovacao; o motor nao inventa metas.
+Peso, meta, valor real e nota permanecem separados. Media/turma e numero de
+alunos possuem metas aprovadas; conversao e permanencia seguem em calibracao;
+retencao e presenca permanecem explicitamente sem meta. O motor nao inventa
+notas nem metas.
 
-- [ ] **Step 7: Rodar testes**
+- [x] **Step 7: Rodar testes**
 
 Run: `node --test tests/healthScoreProfessorV3Snapshots.test.mjs tests/healthScoreProfessorV3Metricas.test.mjs`
 Expected: PASS.
@@ -650,13 +655,13 @@ Expected: PASS.
 ### Task 13: Calibrar metas sem ativar configuracao
 
 **Files:**
-- Create: `docs/auditorias/2026-07-16-health-score-professor-v3-calibracao.md`
+- Create: `docs/auditorias/2026-07-17-health-score-professor-v3-calibracao.md`
 
-- [ ] **Step 1: Gerar distribuicoes P50/P75/P90**
+- [x] **Step 1: Gerar distribuicoes P50/P75/P90**
 
 Separar por unidade e consolidado, mas nao criar metas automaticas por instrumento.
 
-- [ ] **Step 2: Mostrar impacto dos candidatos**
+- [x] **Step 2: Mostrar impacto dos candidatos**
 
 Simular ranking, cobertura e quantidade de scores por faixa para cada meta candidata.
 
@@ -664,7 +669,9 @@ Simular ranking, cobertura e quantidade de scores por faixa para cada meta candi
 
 Registrar meta aprovada, justificativa e vigencia. Somente entao ativar config.
 
-**Gate 5:** motor versionado, snapshots imutaveis e configuracao homologada.
+**Gate 5:** motor versionado e snapshots imutaveis implantados. O gate segue
+aberto ate conversao e permanencia receberem metas homologadas; somente entao a
+configuracao pode ser ativada e a Fase 6 iniciada.
 
 ---
 
@@ -691,6 +698,9 @@ Validar numero de alunos e media/turma para os professores ja auditados, mais ca
 - [ ] **Step 4: Auditar permanencia nominalmente**
 
 Conferir pelo menos dez periodos encerrados por unidade, incluindo abaixo/acima de quatro meses.
+Separar no retorno a media historica dos vinculos encerrados da idade media da
+carteira ativa. A mediana permanece apenas em diagnostico tecnico. Nao publicar
+uma amostra parcialmente revisada como permanencia oficial.
 
 - [ ] **Step 5: Rodar seguranca e desempenho**
 
