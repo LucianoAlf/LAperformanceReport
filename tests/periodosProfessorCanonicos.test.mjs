@@ -185,6 +185,40 @@ test('reconstrutor preserva continuidade, troca sustentada e substituicao', asyn
   assert.equal(troca.periodos[1].status_periodo, 'ativo');
   assert.equal(troca.periodos[1].emusys_professor_id, 2);
 
+  const trocaSustentadaComFallbackResolvido = reconstruirPeriodos([
+    event(1, '2026-01-10', {
+      emusys_aula_id: 2026011001,
+      emusys_matricula_disciplina_id: 0,
+    }),
+    event(1, '2026-01-17', {
+      emusys_aula_id: 2026011701,
+      emusys_matricula_disciplina_id: 700,
+    }),
+    event(2, '2026-01-24'),
+    event(2, '2026-01-31'),
+    event(2, '2026-02-07'),
+  ], {
+    ...contexto,
+    inicio_completo: true,
+  });
+  assert.equal(trocaSustentadaComFallbackResolvido.periodos[0].tipo_fim, 'troca_sustentada');
+  assert.equal(trocaSustentadaComFallbackResolvido.periodos[0].confianca, 'alta');
+  assert.equal(trocaSustentadaComFallbackResolvido.periodos[0].publicavel_sugerido, true);
+  assert.deepEqual(
+    trocaSustentadaComFallbackResolvido.periodos[0].evidencias.promocao_confianca,
+    {
+      regra: 'encerramento_estruturado_sem_conflito',
+      tipo_fim: 'troca_sustentada',
+    },
+  );
+  assert.equal(
+    trocaSustentadaComFallbackResolvido.diagnosticos.some((item) =>
+      item.tipo === 'periodo_promovido_por_evidencia_terminal' &&
+      item.tipo_fim === 'troca_sustentada'
+    ),
+    true,
+  );
+
   const substituicao = reconstruirPeriodos([
     event(1, '2026-01-10'),
     event(1, '2026-01-17'),
@@ -213,6 +247,132 @@ test('reconstrutor preserva continuidade, troca sustentada e substituicao', asyn
   assert.equal(substituicaoComHistoricoCompleto.periodos[0].publicavel_sugerido, true);
   assert.equal(substituicaoComHistoricoCompleto.periodos[0].substituicao_candidata, true);
 
+  const duasCoberturasAntesDoRetorno = reconstruirPeriodos([
+    event(1, '2026-01-10'),
+    event(1, '2026-01-17'),
+    event(2, '2026-01-24'),
+    event(3, '2026-01-31'),
+    event(1, '2026-02-07'),
+    event(1, '2026-02-14'),
+    event(1, '2026-02-21'),
+  ], {
+    ...contexto,
+    inicio_completo: true,
+  });
+  assert.equal(duasCoberturasAntesDoRetorno.periodos.length, 1);
+  assert.equal(duasCoberturasAntesDoRetorno.periodos[0].emusys_professor_id, 1);
+  assert.equal(duasCoberturasAntesDoRetorno.periodos[0].status_periodo, 'ativo');
+  assert.equal(
+    duasCoberturasAntesDoRetorno.periodos[0].evidencias.substituicoes_candidatas.length,
+    2,
+  );
+  assert.equal(
+    duasCoberturasAntesDoRetorno.periodos[0].evidencias.substituicoes_candidatas.every(
+      (item) => item.criterio === 'retorno_titular_apos_ate_duas_aulas'
+    ),
+    true,
+  );
+
+  const tresCoberturasAntesDoRetornoContinuamEmRevisao = reconstruirPeriodos([
+    event(1, '2026-01-10'),
+    event(1, '2026-01-17'),
+    event(2, '2026-01-24'),
+    event(2, '2026-01-31'),
+    event(3, '2026-02-07'),
+    event(1, '2026-02-14'),
+    event(1, '2026-02-21'),
+    event(1, '2026-02-28'),
+  ], {
+    ...contexto,
+    inicio_completo: true,
+  });
+  assert.equal(
+    tresCoberturasAntesDoRetornoContinuamEmRevisao.periodos[0].tipo_fim,
+    'troca_nao_sustentada',
+  );
+  assert.equal(tresCoberturasAntesDoRetornoContinuamEmRevisao.periodos[0].confianca, 'revisar');
+
+  const coberturaFinalComTitularNaJornada = reconstruirPeriodos([
+    event(1, '2026-01-10'),
+    event(1, '2026-01-17'),
+    event(1, '2026-01-24'),
+    event(2, '2026-01-31'),
+  ], {
+    ...contexto,
+    inicio_completo: true,
+    jornadas: [{
+      emusys_matricula_disciplina_id: 700,
+      emusys_disciplina_id: 8,
+      emusys_professor_id: 1,
+      professor_id: 1,
+      status_matricula: 'ativa',
+    }],
+  });
+  assert.equal(coberturaFinalComTitularNaJornada.periodos.length, 1);
+  assert.equal(coberturaFinalComTitularNaJornada.periodos[0].emusys_professor_id, 1);
+  assert.equal(coberturaFinalComTitularNaJornada.periodos[0].status_periodo, 'ativo');
+  assert.equal(
+    coberturaFinalComTitularNaJornada.periodos[0].evidencias.substituicoes_candidatas[0].criterio,
+    'jornada_atual_confirma_titular_apos_cobertura_curta',
+  );
+
+  const trocaCorroboradaPorCadeiaPosterior = reconstruirPeriodos([
+    event(1, '2026-01-10'),
+    event(1, '2026-01-17'),
+    event(1, '2026-01-24'),
+    event(2, '2026-01-31'),
+    event(3, '2026-02-07'),
+    event(3, '2026-02-14'),
+    event(3, '2026-02-21'),
+  ], {
+    ...contexto,
+    inicio_completo: true,
+  });
+  assert.equal(
+    trocaCorroboradaPorCadeiaPosterior.periodos[0].tipo_fim,
+    'troca_confirmada_cadeia_posterior',
+  );
+  assert.equal(trocaCorroboradaPorCadeiaPosterior.periodos[0].confianca, 'alta');
+  assert.equal(trocaCorroboradaPorCadeiaPosterior.periodos[0].publicavel_sugerido, true);
+  assert.equal(
+    trocaCorroboradaPorCadeiaPosterior.periodos[0]
+      .evidencias.resolucao_troca_nao_sustentada.total_aulas_posterior,
+    3,
+  );
+
+  const fimHistoricoDepoisDeCoberturaInconclusiva = reconstruirPeriodos([
+    event(1, '2025-01-10'),
+    event(1, '2025-05-10'),
+    event(2, '2025-06-01'),
+  ], {
+    ...contexto,
+    inicio_completo: true,
+    data_inicio_recorte: '2025-01-01',
+    data_fim_recorte: '2025-12-31',
+    alunos_emusys_contextualizados: [101],
+    jornadas: [],
+  });
+  assert.equal(fimHistoricoDepoisDeCoberturaInconclusiva.periodos[0].tipo_fim, 'fim_evidencia_historica');
+  assert.equal(fimHistoricoDepoisDeCoberturaInconclusiva.periodos[0].data_fim, '2025-05-10T12:00:00.000Z');
+  assert.equal(fimHistoricoDepoisDeCoberturaInconclusiva.periodos[0].confianca, 'alta');
+  assert.equal(fimHistoricoDepoisDeCoberturaInconclusiva.periodos[0].publicavel_sugerido, true);
+
+  const fimHistoricoRecenteDepoisDeCobertura = reconstruirPeriodos([
+    event(1, '2026-01-10'),
+    event(1, '2026-07-03'),
+    event(2, '2026-07-10'),
+  ], {
+    ...contexto,
+    inicio_completo: true,
+    data_inicio_recorte: '2026-01-01',
+    data_fim_recorte: '2026-07-16',
+    alunos_emusys_contextualizados: [101],
+    jornadas: [],
+  });
+  assert.equal(fimHistoricoRecenteDepoisDeCobertura.periodos[0].tipo_fim, 'fim_evidencia_historica');
+  assert.equal(fimHistoricoRecenteDepoisDeCobertura.periodos[0].confianca, 'media');
+  assert.equal(fimHistoricoRecenteDepoisDeCobertura.periodos[0].publicavel_sugerido, false);
+
   const experimentalForaDoVinculo = reconstruirPeriodos([
     event(2, '2026-01-03', { categoria: 'experimental' }),
     event(1, '2026-01-10', { categoria: 'normal' }),
@@ -235,6 +395,7 @@ test('reconstrutor preserva continuidade, troca sustentada e substituicao', asyn
     event(2, '2026-01-31'),
   ], contexto);
   assert.equal(inconclusivo.periodos.every((item) => item.confianca === 'revisar'), true);
+  assert.equal(inconclusivo.periodos.every((item) => item.publicavel_sugerido === false), true);
   assert.equal(inconclusivo.diagnosticos.some((item) => item.tipo === 'troca_nao_sustentada'), true);
 
   const trocaPorWebhookSemAulaNova = reconstruirPeriodos([
@@ -354,6 +515,7 @@ test('reconstrutor preserva continuidade, troca sustentada e substituicao', asyn
     700,
   );
   assert.equal(fallbackIsoladoComUnicaMatriculaNoEscopo.periodos[0].confianca, 'media');
+  assert.equal(fallbackIsoladoComUnicaMatriculaNoEscopo.periodos[0].publicavel_sugerido, false);
   assert.equal(
     fallbackIsoladoComUnicaMatriculaNoEscopo.diagnosticos.some((item) =>
       item.tipo === 'fallback_matricula_disciplina_associado'
@@ -596,6 +758,43 @@ test('reconstrutor preserva continuidade, troca sustentada e substituicao', asyn
     [700, 701],
   );
 
+  const renovacaoHistoricaAposRecessoComSubstituicao = reconstruirPeriodos([
+    event(1, '2020-11-14', {
+      emusys_aula_id: 7030,
+      emusys_matricula_disciplina_id: 700,
+    }),
+    event(1, '2020-11-21', {
+      emusys_aula_id: 7031,
+      emusys_matricula_disciplina_id: 700,
+    }),
+    event(2, '2020-12-09', {
+      emusys_aula_id: 7032,
+      emusys_matricula_disciplina_id: 700,
+    }),
+    event(2, '2020-12-16', {
+      emusys_aula_id: 7033,
+      emusys_matricula_disciplina_id: 700,
+    }),
+    event(1, '2021-01-23', {
+      emusys_aula_id: 7034,
+      emusys_matricula_disciplina_id: 701,
+    }),
+    event(1, '2021-01-30', {
+      emusys_aula_id: 7035,
+      emusys_matricula_disciplina_id: 701,
+    }),
+  ], {
+    ...contexto,
+    jornadas: [],
+  });
+  const periodosProfessorTitular = renovacaoHistoricaAposRecessoComSubstituicao.periodos
+    .filter((item) => item.emusys_professor_id === 1);
+  assert.equal(periodosProfessorTitular.length, 1);
+  assert.deepEqual(
+    periodosProfessorTitular[0].evidencias.matriculas_disciplinas_origem,
+    [700, 701],
+  );
+
   const renovacaoComIdCurtoSobreposto = reconstruirPeriodos([
     event(1, '2023-11-28', {
       emusys_aula_id: 7050,
@@ -736,6 +935,40 @@ test('reconstrutor preserva continuidade, troca sustentada e substituicao', asyn
     701,
   );
 
+  const jornadaEncerradaComFallbackResolvido = reconstruirPeriodos([
+    event(1, '2024-01-06', {
+      emusys_aula_id: 7110,
+      emusys_matricula_disciplina_id: 0,
+    }),
+    event(1, '2024-01-13', {
+      emusys_aula_id: 7111,
+      emusys_matricula_disciplina_id: 700,
+    }),
+  ], {
+    ...contexto,
+    inicio_completo: true,
+    jornadas: [{
+      emusys_aluno_id: 101,
+      emusys_matricula_disciplina_id: 700,
+      emusys_disciplina_id: 8,
+      emusys_professor_id: 1,
+      data_primeira_aula: '2024-01-06T12:00:00.000Z',
+      data_ultima_aula: '2024-01-13T12:00:00.000Z',
+      status_matricula: 'trancada',
+    }],
+  });
+  assert.equal(jornadaEncerradaComFallbackResolvido.periodos.length, 1);
+  assert.equal(jornadaEncerradaComFallbackResolvido.periodos[0].tipo_fim, 'fim_jornada');
+  assert.equal(jornadaEncerradaComFallbackResolvido.periodos[0].confianca, 'alta');
+  assert.equal(jornadaEncerradaComFallbackResolvido.periodos[0].publicavel_sugerido, true);
+  assert.deepEqual(
+    jornadaEncerradaComFallbackResolvido.periodos[0].evidencias.promocao_confianca,
+    {
+      regra: 'encerramento_estruturado_sem_conflito',
+      tipo_fim: 'fim_jornada',
+    },
+  );
+
   const retornoDepoisDeLongaInterrupcao = reconstruirPeriodos([
     event(1, '2023-01-07', {
       emusys_aula_id: 7200,
@@ -772,6 +1005,52 @@ test('reconstrutor preserva continuidade, troca sustentada e substituicao', asyn
     retornoDepoisDeLongaInterrupcao.periodos[1].emusys_matricula_disciplina_id,
     701,
   );
+
+  const retornoDepoisDeNoveMeses = reconstruirPeriodos([
+    event(1, '2023-01-07', {
+      emusys_aula_id: 7250,
+      emusys_matricula_disciplina_id: 700,
+    }),
+    event(1, '2023-01-14', {
+      emusys_aula_id: 7251,
+      emusys_matricula_disciplina_id: 700,
+    }),
+    event(1, '2023-10-14', {
+      emusys_aula_id: 7252,
+      emusys_matricula_disciplina_id: 701,
+    }),
+    event(1, '2023-10-21', {
+      emusys_aula_id: 7253,
+      emusys_matricula_disciplina_id: 701,
+    }),
+  ], {
+    ...contexto,
+    jornadas: [],
+  });
+  assert.equal(retornoDepoisDeNoveMeses.periodos.length, 2);
+
+  const retornoDepoisDeSessentaDiasForaDoRecesso = reconstruirPeriodos([
+    event(1, '2023-05-27', {
+      emusys_aula_id: 7260,
+      emusys_matricula_disciplina_id: 700,
+    }),
+    event(1, '2023-06-03', {
+      emusys_aula_id: 7261,
+      emusys_matricula_disciplina_id: 700,
+    }),
+    event(1, '2023-08-05', {
+      emusys_aula_id: 7262,
+      emusys_matricula_disciplina_id: 701,
+    }),
+    event(1, '2023-08-12', {
+      emusys_aula_id: 7263,
+      emusys_matricula_disciplina_id: 701,
+    }),
+  ], {
+    ...contexto,
+    jornadas: [],
+  });
+  assert.equal(retornoDepoisDeSessentaDiasForaDoRecesso.periodos.length, 2);
 
   const jornadaEncerradaNoFormatoDaEdge = reconstruirPeriodos([
     event(1, '2026-01-10'),
@@ -821,6 +1100,41 @@ test('reconstrutor preserva continuidade, troca sustentada e substituicao', asyn
     '2025-06-28T12:00:00.000Z',
   );
 
+  const disciplinaAlteradaNoMesmoVinculoPermaneceAtiva = reconstruirPeriodos([
+    event(1, '2026-01-10', {
+      emusys_aula_id: 7350,
+      emusys_matricula_disciplina_id: 700,
+      emusys_disciplina_id: 8,
+    }),
+    event(1, '2026-07-11', {
+      emusys_aula_id: 7351,
+      emusys_matricula_disciplina_id: 700,
+      emusys_disciplina_id: 10,
+    }),
+  ], {
+    ...contexto,
+    alunos_emusys_contextualizados: [101],
+    jornadas: [{
+      emusys_aluno_id: 101,
+      emusys_matricula_disciplina_id: 900,
+      emusys_disciplina_id: 8,
+      emusys_professor_id: 1,
+      status_matricula: 'finalizada',
+    }, {
+      emusys_aluno_id: 101,
+      emusys_matricula_disciplina_id: 700,
+      emusys_disciplina_id: 10,
+      emusys_professor_id: 1,
+      status_matricula: 'ativa',
+    }],
+  });
+  assert.equal(disciplinaAlteradaNoMesmoVinculoPermaneceAtiva.periodos.length, 1);
+  assert.equal(
+    disciplinaAlteradaNoMesmoVinculoPermaneceAtiva.periodos[0].status_periodo,
+    'ativo',
+  );
+  assert.equal(disciplinaAlteradaNoMesmoVinculoPermaneceAtiva.periodos[0].data_fim, null);
+
   const alunoConsultadoSemJornadaAtual = reconstruirPeriodos([
     event(1, '2024-01-06', { emusys_aula_id: 7400 }),
     event(1, '2024-08-31', { emusys_aula_id: 7401 }),
@@ -832,6 +1146,59 @@ test('reconstrutor preserva continuidade, troca sustentada e substituicao', asyn
   assert.equal(alunoConsultadoSemJornadaAtual.periodos.length, 1);
   assert.equal(alunoConsultadoSemJornadaAtual.periodos[0].status_periodo, 'encerrado');
   assert.equal(alunoConsultadoSemJornadaAtual.periodos[0].tipo_fim, 'fim_evidencia_historica');
+
+  const historicoMaduroSemContinuidade = reconstruirPeriodos([
+    event(1, '2024-01-06', { emusys_aula_id: 7450 }),
+    event(1, '2024-08-31', { emusys_aula_id: 7451 }),
+  ], {
+    ...contexto,
+    inicio_completo: true,
+    data_fim_recorte: '2026-07-16T23:59:59.000Z',
+    alunos_emusys_contextualizados: [101],
+    jornadas: [{
+      emusys_aluno_id: 101,
+      emusys_matricula_disciplina_id: 901,
+      emusys_disciplina_id: 10,
+      emusys_professor_id: 2,
+      status_matricula: 'ativa',
+    }],
+  });
+  assert.equal(historicoMaduroSemContinuidade.periodos.length, 1);
+  assert.equal(historicoMaduroSemContinuidade.periodos[0].tipo_fim, 'fim_evidencia_historica');
+  assert.equal(historicoMaduroSemContinuidade.periodos[0].confianca, 'alta');
+  assert.equal(historicoMaduroSemContinuidade.periodos[0].publicavel_sugerido, true);
+  assert.deepEqual(
+    historicoMaduroSemContinuidade.periodos[0].evidencias.promocao_confianca,
+    {
+      regra: 'fim_historico_contextualizado_sem_continuidade',
+      dias_seguranca: 75,
+    },
+  );
+  assert.ok(
+    historicoMaduroSemContinuidade.diagnosticos.some((item) =>
+      item.tipo === 'periodo_promovido_por_fim_historico_contextualizado'
+    ),
+  );
+
+  const historicoRecenteSemContinuidade = reconstruirPeriodos([
+    event(1, '2026-01-10', { emusys_aula_id: 7460 }),
+    event(1, '2026-06-27', { emusys_aula_id: 7461 }),
+  ], {
+    ...contexto,
+    inicio_completo: true,
+    data_fim_recorte: '2026-07-16T23:59:59.000Z',
+    alunos_emusys_contextualizados: [101],
+    jornadas: [{
+      emusys_aluno_id: 101,
+      emusys_matricula_disciplina_id: 901,
+      emusys_disciplina_id: 10,
+      emusys_professor_id: 2,
+      status_matricula: 'ativa',
+    }],
+  });
+  assert.equal(historicoRecenteSemContinuidade.periodos.length, 1);
+  assert.equal(historicoRecenteSemContinuidade.periodos[0].confianca, 'media');
+  assert.equal(historicoRecenteSemContinuidade.periodos[0].publicavel_sugerido, false);
 
   const jornadaAtualMesmoVinculoPermaneceAtiva = reconstruirPeriodos([
     event(1, '2026-01-10', { emusys_aula_id: 7500 }),

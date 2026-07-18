@@ -669,6 +669,15 @@ Simular ranking, cobertura e quantidade de scores por faixa para cada meta candi
 
 Registrar meta aprovada, justificativa e vigencia. Somente entao ativar config.
 
+Resultado tecnico adicional em 18/07/2026: Peterson e mais 12
+professores-unidade foram auditados no historico integral de 2018 a 16/07/2026.
+A amostra de 12 ficou com P50 `11,16`, P75 `13,51` e P90 `14,32`; as 55 linhas
+atualmente publicaveis da rede ficaram com P75 `12,01`. Alf aprovou em
+18/07/2026 a meta operacional `> 12 meses`. Ela foi registrada na configuracao
+V1 em sombra como `meta = 12`, com comparador `>`, sem ativar a configuracao e
+sem migrar consumidores. Evidencias:
+`docs/auditorias/2026-07-18-permanencia-amostra-12-professores.md`.
+
 **Gate 5:** motor versionado e snapshots imutaveis implantados. O gate segue
 aberto ate conversao e permanencia receberem metas homologadas; somente entao a
 configuracao pode ser ativada e a Fase 6 iniciada.

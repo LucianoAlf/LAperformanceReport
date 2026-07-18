@@ -229,6 +229,7 @@ function normalizarDuplicatasEmusys(
   }
 
   const LIMITE_CONTINUIDADE_MS = 45 * 24 * 60 * 60 * 1000;
+  const LIMITE_CONTINUIDADE_RECESSO_MS = 75 * 24 * 60 * 60 * 1000;
   for (const porMatricula of segmentosPorEscopoProfessor.values()) {
     const segmentos = [...porMatricula.values()].sort((left, right) =>
       left.primeira - right.primeira || left.matriculaDisciplina - right.matriculaDisciplina
@@ -241,10 +242,17 @@ function normalizarDuplicatasEmusys(
         continue;
       }
       const intervalo = atual.primeira - anterior.ultima;
+      const atravessaRecessoFimDeAno =
+        new Date(anterior.ultima).getUTCFullYear() < new Date(atual.primeira).getUTCFullYear();
+      const limiteContinuidade = atravessaRecessoFimDeAno
+        ? LIMITE_CONTINUIDADE_RECESSO_MS
+        : LIMITE_CONTINUIDADE_MS;
       // O Emusys pode abrir o ID renovado antes de encerrar toda a grade do ID
       // anterior. Nesse caso os segmentos se sobrepoem, mas continuam sendo a
       // mesma jornada pedagogica quando pessoa, disciplina e professor batem.
-      if (intervalo <= LIMITE_CONTINUIDADE_MS) {
+      // Na virada do ano o recesso escolar amplia o intervalo aceitavel sem
+      // colar retornos ocorridos em outros periodos do calendario.
+      if (intervalo <= limiteContinuidade) {
         const grafo = grafos.get(atual.escopo) ?? new Map();
         const anteriores = grafo.get(anterior.matriculaDisciplina) ?? new Set();
         const atuais = grafo.get(atual.matriculaDisciplina) ?? new Set();
@@ -483,33 +491,79 @@ function construirRuns(eventos) {
   return runs;
 }
 
-function normalizarSubstituicoes(runs, diagnosticos) {
+function normalizarSubstituicoes(runs, diagnosticos, jornada = null) {
   const resultado = runs.map((run) => ({ ...run, eventos: [...run.eventos] }));
   const substituicoes = [];
 
-  for (let index = 1; index < resultado.length - 1;) {
-    const anterior = resultado[index - 1];
-    const atual = resultado[index];
-    const posterior = resultado[index + 1];
-    if (
-      atual.eventos.length <= 2 &&
-      anterior.emusys_professor_id === posterior.emusys_professor_id &&
-      atual.emusys_professor_id !== anterior.emusys_professor_id
-    ) {
+  const registrar = (titular, runsSubstitutos, criterio) => {
+    for (const atual of runsSubstitutos) {
       const detalhe = {
-        professor_titular_emusys_id: anterior.emusys_professor_id,
+        professor_titular_emusys_id: titular.emusys_professor_id,
         professor_substituto_emusys_id: atual.emusys_professor_id,
         aulas_substituicao: atual.eventos.map((item) => asNumber(item.emusys_aula_id)),
+        criterio,
       };
       pushDiagnostico(diagnosticos, 'substituicao_candidata', atual.eventos[0], detalhe);
       substituicoes.push(detalhe);
-      anterior.eventos = [...anterior.eventos, ...posterior.eventos].sort((a, b) =>
+    }
+  };
+
+  // Uma ou duas aulas intercaladas entre o mesmo titular sao cobertura curta,
+  // mesmo quando foram divididas entre dois substitutos diferentes.
+  for (let index = 0; index < resultado.length - 2;) {
+    const titular = resultado[index];
+    let totalIntermediario = 0;
+    let retornoIndex = -1;
+
+    for (let cursor = index + 1; cursor < resultado.length; cursor += 1) {
+      if (resultado[cursor].emusys_professor_id === titular.emusys_professor_id) {
+        if (totalIntermediario > 0 && totalIntermediario <= 2) retornoIndex = cursor;
+        break;
+      }
+      totalIntermediario += resultado[cursor].eventos.length;
+      if (totalIntermediario > 2) break;
+    }
+
+    if (retornoIndex > index) {
+      const intermediarios = resultado.slice(index + 1, retornoIndex);
+      const retorno = resultado[retornoIndex];
+      registrar(titular, intermediarios, 'retorno_titular_apos_ate_duas_aulas');
+      titular.eventos = [...titular.eventos, ...retorno.eventos].sort((a, b) =>
         (asTime(a.data_hora_inicio) ?? 0) - (asTime(b.data_hora_inicio) ?? 0)
       );
-      resultado.splice(index, 2);
+      resultado.splice(index + 1, retornoIndex - index);
       continue;
     }
     index += 1;
+  }
+
+  // A grade atual tambem confirma a titularidade quando a cauda historica tem
+  // no maximo duas aulas de cobertura e o titular permanece na jornada ativa.
+  const jornadaAtiva = jornada &&
+    String(jornada.status_matricula ?? '').toLowerCase() === 'ativa'
+    ? jornada
+    : null;
+  const professorAtual = jornadaAtiva ? professorEmusysId(jornadaAtiva) : null;
+  if (professorAtual !== null && resultado.length > 1) {
+    let titularIndex = -1;
+    for (let index = resultado.length - 1; index >= 0; index -= 1) {
+      if (resultado[index].emusys_professor_id === professorAtual) {
+        titularIndex = index;
+        break;
+      }
+    }
+    if (titularIndex >= 0 && titularIndex < resultado.length - 1) {
+      const cauda = resultado.slice(titularIndex + 1);
+      const totalCauda = cauda.reduce((total, run) => total + run.eventos.length, 0);
+      if (totalCauda > 0 && totalCauda <= 2) {
+        registrar(
+          resultado[titularIndex],
+          cauda,
+          'jornada_atual_confirma_titular_apos_cobertura_curta',
+        );
+        resultado.splice(titularIndex + 1);
+      }
+    }
   }
 
   return { runs: resultado, substituicoes };
@@ -704,7 +758,11 @@ function reconstruirParticao(eventos, contexto, diagnosticos) {
     contexto,
     diagnosticos,
   );
-  const { runs, substituicoes } = normalizarSubstituicoes(construirRuns(ordenados), diagnosticos);
+  const { runs, substituicoes } = normalizarSubstituicoes(
+    construirRuns(ordenados),
+    diagnosticos,
+    particao.jornada,
+  );
   const continuidadeInferida = deduplicados.some((item) =>
     item.continuidade_matricula_disciplina_inferida === true
   );
@@ -799,6 +857,7 @@ function reconstruirParticao(eventos, contexto, diagnosticos) {
     }
   }
 
+  resolverTrocasNaoSustentadasPorCadeia(periodos, particao, diagnosticos);
   return periodos;
 }
 
@@ -835,6 +894,20 @@ function fecharPeriodosHistoricosSemApoioAtual(periodos, contexto, diagnosticos)
     porEscopo.set(escopo, atuais);
   }
 
+  const apoiadoPorJornadaAtivaExata = (periodo) => {
+    const idPeriodo = matriculaDisciplinaId(periodo);
+    const professorPeriodo = professorEmusysId(periodo);
+    const pessoaPeriodo = pessoaChave(periodo);
+    if (idPeriodo === null || professorPeriodo === null || !pessoaPeriodo) return false;
+
+    return jornadas.some((item) =>
+      String(item.status_matricula ?? '').toLowerCase() === 'ativa' &&
+      pessoaChave(item) === pessoaPeriodo &&
+      matriculaDisciplinaId(item) === idPeriodo &&
+      professorEmusysId(item) === professorPeriodo
+    );
+  };
+
   for (const [escopo, periodosEscopo] of porEscopo) {
     const jornadasEscopo = jornadas.filter((item) =>
       chaveEscopoMatriculaDisciplina(item) === escopo
@@ -853,6 +926,7 @@ function fecharPeriodosHistoricosSemApoioAtual(periodos, contexto, diagnosticos)
 
     for (const periodo of periodosEscopo) {
       if (periodo.status_periodo !== 'ativo') continue;
+      if (apoiadoPorJornadaAtivaExata(periodo)) continue;
       const idPeriodo = matriculaDisciplinaId(periodo);
       const professorPeriodo = professorEmusysId(periodo);
       const apoiadoExatamente = idsAtivos.has(idPeriodo) &&
@@ -910,6 +984,242 @@ function fecharPeriodosHistoricosSemApoioAtual(periodos, contexto, diagnosticos)
       : 'jornada_atual_em_outro_vinculo';
     encerrar(periodo, criterio);
   }
+  return periodos;
+}
+
+function removerConflito(periodo, conflito) {
+  periodo.conflitos = (Array.isArray(periodo.conflitos) ? periodo.conflitos : [])
+    .filter((item) => item !== conflito);
+}
+
+function periodoComEstruturaCompleta(periodo) {
+  return matriculaDisciplinaId(periodo) !== null &&
+    asNumber(periodo.professor_id) !== null &&
+    professorEmusysId(periodo) !== null &&
+    asTime(periodo.data_inicio) !== null &&
+    asTime(periodo.data_fim) !== null &&
+    periodo.inicio_incompleto !== true &&
+    (Array.isArray(periodo.conflitos) ? periodo.conflitos.length === 0 : true);
+}
+
+function resolverTrocasNaoSustentadasPorCadeia(periodos, particao, diagnosticos) {
+  const ordenados = [...periodos].sort((a, b) =>
+    (asTime(a.data_inicio) ?? 0) - (asTime(b.data_inicio) ?? 0)
+  );
+  const jornadaAtiva = particao.jornada &&
+    String(particao.jornada.status_matricula ?? '').toLowerCase() === 'ativa'
+    ? particao.jornada
+    : null;
+
+  for (let index = 0; index < ordenados.length; index += 1) {
+    const periodo = ordenados[index];
+    const conflitos = Array.isArray(periodo.conflitos) ? periodo.conflitos : [];
+    if (
+      periodo.tipo_fim !== 'troca_nao_sustentada' ||
+      !conflitos.includes('troca_nao_sustentada')
+    ) continue;
+
+    const posteriores = ordenados.slice(index + 1);
+    const retornoIndex = posteriores.findIndex((item) =>
+      professorEmusysId(item) === professorEmusysId(periodo)
+    );
+    const anterioresAoRetorno = retornoIndex < 0
+      ? posteriores
+      : posteriores.slice(0, retornoIndex);
+    const alternativaSustentada = anterioresAoRetorno.find((item) =>
+      professorEmusysId(item) !== professorEmusysId(periodo) &&
+      Number(item.evidencias?.total_aulas ?? 0) >= 3
+    );
+    const periodoAnterior = ordenados[index - 1] ?? null;
+    const inicioTambemInconclusivo = periodoAnterior?.tipo_fim === 'troca_nao_sustentada';
+
+    if (alternativaSustentada && !inicioTambemInconclusivo) {
+      removerConflito(periodo, 'troca_nao_sustentada');
+      periodo.tipo_fim = 'troca_confirmada_cadeia_posterior';
+      periodo.evidencias = {
+        ...periodo.evidencias,
+        resolucao_troca_nao_sustentada: {
+          regra: 'alternativa_posterior_com_tres_ou_mais_aulas_sem_retorno_previo',
+          professor_posterior_emusys_id: professorEmusysId(alternativaSustentada),
+          primeira_aula_posterior: alternativaSustentada.data_inicio,
+          total_aulas_posterior: Number(alternativaSustentada.evidencias?.total_aulas ?? 0),
+        },
+      };
+      if (periodoComEstruturaCompleta(periodo)) {
+        periodo.confianca = 'alta';
+        periodo.publicavel_sugerido = true;
+      }
+      pushDiagnostico(
+        diagnosticos,
+        'troca_confirmada_por_cadeia_posterior',
+        periodo,
+        periodo.evidencias.resolucao_troca_nao_sustentada,
+      );
+      continue;
+    }
+
+    const titularAindaAtual = jornadaAtiva &&
+      professorEmusysId(jornadaAtiva) === professorEmusysId(periodo);
+    if (retornoIndex >= 0 || titularAindaAtual || inicioTambemInconclusivo) continue;
+
+    // Sem retorno do titular e sem outro professor sustentado, o unico limite
+    // objetivo e a ultima aula efetivamente ministrada pelo proprio titular.
+    // A janela de 75 dias continua sendo aplicada depois, antes de publicar.
+    const ultimaAulaPropria = iso(periodo.evidencias?.ultima_aula);
+    if (ultimaAulaPropria === null || asTime(ultimaAulaPropria) < asTime(periodo.data_inicio)) {
+      continue;
+    }
+    periodo.data_fim = ultimaAulaPropria;
+    periodo.status_periodo = 'encerrado';
+    periodo.tipo_fim = 'fim_evidencia_historica';
+    removerConflito(periodo, 'troca_nao_sustentada');
+    periodo.evidencias = {
+      ...periodo.evidencias,
+      resolucao_troca_nao_sustentada: {
+        regra: 'fim_na_ultima_aula_do_titular_sem_continuidade_confirmada',
+        aulas_posteriores_inconclusivas: posteriores.reduce(
+          (total, item) => total + Number(item.evidencias?.total_aulas ?? 0),
+          0,
+        ),
+      },
+    };
+    if (periodoComEstruturaCompleta(periodo)) periodo.confianca = 'media';
+    periodo.publicavel_sugerido = false;
+    pushDiagnostico(
+      diagnosticos,
+      'troca_inconclusiva_convertida_em_fim_historico',
+      periodo,
+      periodo.evidencias.resolucao_troca_nao_sustentada,
+    );
+  }
+
+  return periodos;
+}
+
+const TIPOS_FIM_COM_EVIDENCIA_TERMINAL_ESTRUTURADA = new Set([
+  'fim_jornada',
+  'troca_sustentada',
+  'troca_confirmada_jornada',
+  'troca_confirmada_transicao',
+  'troca_confirmada_cadeia_posterior',
+]);
+
+const DIAS_SEGURANCA_FIM_HISTORICO = 75;
+
+function promoverPeriodosComEvidenciaTerminalEstruturada(periodos, diagnosticos) {
+  for (const periodo of periodos) {
+    const conflitos = Array.isArray(periodo.conflitos) ? periodo.conflitos : [];
+    const elegivel =
+      periodo.status_periodo === 'encerrado' &&
+      periodo.confianca === 'media' &&
+      TIPOS_FIM_COM_EVIDENCIA_TERMINAL_ESTRUTURADA.has(periodo.tipo_fim) &&
+      matriculaDisciplinaId(periodo) !== null &&
+      asNumber(periodo.professor_id) !== null &&
+      professorEmusysId(periodo) !== null &&
+      asTime(periodo.data_inicio) !== null &&
+      asTime(periodo.data_fim) !== null &&
+      periodo.inicio_incompleto !== true &&
+      conflitos.length === 0;
+
+    if (!elegivel) continue;
+
+    const confiancaAnterior = periodo.confianca;
+    periodo.confianca = 'alta';
+    periodo.publicavel_sugerido = true;
+    periodo.evidencias = {
+      ...periodo.evidencias,
+      promocao_confianca: {
+        regra: 'encerramento_estruturado_sem_conflito',
+        tipo_fim: periodo.tipo_fim,
+      },
+    };
+    pushDiagnostico(diagnosticos, 'periodo_promovido_por_evidencia_terminal', periodo, {
+      tipo_fim: periodo.tipo_fim,
+      confianca_anterior: confiancaAnterior,
+      confianca_atual: periodo.confianca,
+      regra: 'encerramento_estruturado_sem_conflito',
+    });
+  }
+
+  return periodos;
+}
+
+function promoverPeriodosComFimHistoricoContextualizado(periodos, contexto, diagnosticos) {
+  const fimRecorte = asTime(contexto.data_fim_recorte);
+  if (fimRecorte === null) return periodos;
+
+  const alunosContextualizados = new Set(
+    (Array.isArray(contexto.alunos_emusys_contextualizados)
+      ? contexto.alunos_emusys_contextualizados
+      : [])
+      .map(asNumber)
+      .filter((item) => item !== null),
+  );
+  const jornadasPorPessoa = new Map();
+  for (const jornada of jornadasDoContexto(contexto)) {
+    const pessoa = pessoaChave(jornada);
+    if (!pessoa) continue;
+    const atuais = jornadasPorPessoa.get(pessoa) ?? [];
+    atuais.push(jornada);
+    jornadasPorPessoa.set(pessoa, atuais);
+  }
+
+  const janelaSeguraMs = DIAS_SEGURANCA_FIM_HISTORICO * 86_400_000;
+  for (const periodo of periodos) {
+    const fimPeriodo = asTime(periodo.data_fim);
+    const alunoEmusys = asNumber(periodo.emusys_aluno_id);
+    const conflitos = Array.isArray(periodo.conflitos) ? periodo.conflitos : [];
+    const estruturaCompleta =
+      periodo.status_periodo === 'encerrado' &&
+      periodo.tipo_fim === 'fim_evidencia_historica' &&
+      periodo.confianca === 'media' &&
+      alunoEmusys !== null &&
+      alunosContextualizados.has(alunoEmusys) &&
+      matriculaDisciplinaId(periodo) !== null &&
+      asNumber(periodo.emusys_disciplina_id) !== null &&
+      asNumber(periodo.professor_id) !== null &&
+      professorEmusysId(periodo) !== null &&
+      asTime(periodo.data_inicio) !== null &&
+      fimPeriodo !== null &&
+      periodo.inicio_incompleto !== true &&
+      conflitos.length === 0;
+    if (!estruturaCompleta || fimRecorte - fimPeriodo < janelaSeguraMs) continue;
+
+    const disciplinaPeriodo = asNumber(periodo.emusys_disciplina_id);
+    const professorPeriodo = professorEmusysId(periodo);
+    const limiteContinuidade = fimPeriodo + janelaSeguraMs;
+    const existeContinuidadeAtiva = (jornadasPorPessoa.get(pessoaChave(periodo)) ?? [])
+      .some((jornada) => {
+        if (String(jornada.status_matricula ?? '').toLowerCase() !== 'ativa') return false;
+        if (professorEmusysId(jornada) !== professorPeriodo) return false;
+        if (asNumber(jornada.emusys_disciplina_id) !== disciplinaPeriodo) return false;
+        const inicioJornada = asTime(jornada.data_primeira_aula);
+        return inicioJornada === null || inicioJornada <= limiteContinuidade;
+      });
+    if (existeContinuidadeAtiva) continue;
+
+    const confiancaAnterior = periodo.confianca;
+    periodo.confianca = 'alta';
+    periodo.publicavel_sugerido = true;
+    periodo.evidencias = {
+      ...periodo.evidencias,
+      promocao_confianca: {
+        regra: 'fim_historico_contextualizado_sem_continuidade',
+        dias_seguranca: DIAS_SEGURANCA_FIM_HISTORICO,
+      },
+    };
+    pushDiagnostico(
+      diagnosticos,
+      'periodo_promovido_por_fim_historico_contextualizado',
+      periodo,
+      {
+        confianca_anterior: confiancaAnterior,
+        confianca_atual: periodo.confianca,
+        dias_seguranca: DIAS_SEGURANCA_FIM_HISTORICO,
+      },
+    );
+  }
+
   return periodos;
 }
 
@@ -983,6 +1293,8 @@ export function reconstruirPeriodos(eventosOriginais, contexto = {}) {
   }
 
   fecharPeriodosHistoricosSemApoioAtual(periodos, contexto, diagnosticos);
+  promoverPeriodosComEvidenciaTerminalEstruturada(periodos, diagnosticos);
+  promoverPeriodosComFimHistoricoContextualizado(periodos, contexto, diagnosticos);
 
   return {
     periodos: periodos.sort((a, b) =>

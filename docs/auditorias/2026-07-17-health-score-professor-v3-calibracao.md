@@ -127,6 +127,30 @@ a meta da rede. Permanencia continua com meta nula ate existir uma amostra
 comparavel de professores historicamente completos/revisados e a direcao
 aprovar o alvo.
 
+### Amostra ampliada em 18/07/2026
+
+A metodologia do Peterson foi aplicada a mais 12 professores, quatro por
+unidade, usando a reconstrucao
+`periodos-professor-v1.23-disciplina-mesmo-vinculo-20260718`. Todos os 12
+retornaram `ok`, publicaveis, com confianca alta e sem bloqueio historico.
+
+| Recorte | N | P50 | P75 | P90 |
+|---|---:|---:|---:|---:|
+| Amostra auditada | 12 | 11,16 | 13,51 | 14,32 |
+| Rede atualmente publicavel | 55 | 10,36 | 12,01 | 14,58 |
+
+A contraprova com os exports administrativos confirmou que a data inicial da
+matricula nao pode ser atribuida retroativamente ao professor atual. Os
+professores antigos encontrados nas aulas foram preservados; nenhum alias
+historico artificial foi criado.
+
+O resultado sustentou `> 12 meses` como meta operacional tecnicamente
+defensavel, pois coincide aproximadamente com o P75 atual da rede publicavel.
+Alf aprovou a meta em 18/07/2026. A configuracao V1 em sombra registra
+`meta = 12`, comparador `>` e exibicao `> 12 meses`, permanecendo em
+`rascunho`. Evidencias completas:
+`docs/auditorias/2026-07-18-permanencia-amostra-12-professores.md`.
+
 ## 5. Pilares sem calibracao atual
 
 - **Retencao:** os 76 resultados estao em 100% porque a confirmacao humana dos
@@ -141,9 +165,10 @@ recebem zero fabricado.
 ## 6. Pendencias para fechar o Gate 5
 
 1. Aprovar uma meta trimestral de conversao com base suficiente.
-2. Ampliar a revisao historica para uma amostra representativa de professores.
-3. Recalcular a distribuicao somente com historias completas/revisadas e entao
-   propor uma meta de permanencia.
+2. Meta de permanencia aprovada e registrada na configuracao versionada em
+   sombra: `> 12 meses`.
+3. Gravar as demais metas aprovadas, justificativa e vigencia na configuracao
+   versionada.
 4. Reexecutar ativacao e smokes sem publicar consumidores.
 
 O Gate 6 nao deve iniciar antes dessas decisoes.

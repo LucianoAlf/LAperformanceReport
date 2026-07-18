@@ -10,6 +10,8 @@ const indexesMigrationPath =
   'supabase/migrations/20260717174500_health_score_v3_fk_indexes.sql';
 const normalizationMigrationPath =
   'supabase/migrations/20260717180000_health_score_v3_normalizacao_meta.sql';
+const permanenceTargetMigrationPath =
+  'supabase/migrations/20260718160000_health_score_v3_meta_permanencia_12_meses.sql';
 
 function migration() {
   return existsSync(migrationPath) ? readFileSync(migrationPath, 'utf8') : '';
@@ -30,6 +32,12 @@ function indexesMigration() {
 function normalizationMigration() {
   return existsSync(normalizationMigrationPath)
     ? readFileSync(normalizationMigrationPath, 'utf8')
+    : '';
+}
+
+function permanenceTargetMigration() {
+  return existsSync(permanenceTargetMigrationPath)
+    ? readFileSync(permanenceTargetMigrationPath, 'utf8')
     : '';
 }
 
@@ -231,4 +239,24 @@ test('ativacao exige quatro metas aprovadas e aceita os dois pilares pendentes e
     block,
     /parametros\s*->>\s*'normalizacao'[\s\S]*<>\s*'meta_versionada'/i,
   );
+});
+
+test('meta de permanencia aprovada usa 12 meses sem ativar a configuracao V3', () => {
+  const sql = permanenceTargetMigration();
+
+  assert.equal(
+    existsSync(permanenceTargetMigrationPath),
+    true,
+    `${permanenceTargetMigrationPath} deve existir`,
+  );
+  assert.match(sql, /where\s+c\.versao\s*=\s*1[\s\S]*c\.status\s*=\s*'rascunho'/i);
+  assert.match(sql, /set\s+meta\s*=\s*12(?:\.0+)?/i);
+  assert.match(sql, /'meta_status'\s*,\s*'aprovada'/i);
+  assert.match(sql, /'meta_autoridade'\s*,\s*'Alf'/i);
+  assert.match(sql, /'meta_aprovada_em'\s*,\s*'2026-07-18'/i);
+  assert.match(sql, /'meta_comparador_operacional'\s*,\s*'>'/i);
+  assert.match(sql, /'meta_regra_exibicao'\s*,\s*'> 12 meses'/i);
+  assert.match(sql, /metrica\s*=\s*'permanencia'/i);
+  assert.doesNotMatch(sql, /ativar_health_score_professor_v3_config\s*\(/i);
+  assert.doesNotMatch(sql, /set\s+status\s*=\s*'ativa'/i);
 });
