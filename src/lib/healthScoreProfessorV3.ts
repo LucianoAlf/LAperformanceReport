@@ -65,20 +65,35 @@ export interface HealthScoreV3Simulation {
 export interface HealthScoreV3SnapshotMetric {
   professorId: number;
   unidadeId: string | null;
+  escopo: string;
   competencia: string;
+  trimestreInicio: string;
+  configVersao: number;
   score: number | null;
   cobertura: number | null;
   classificacao: string | null;
   estado: string;
+  snapshotPublicavel: boolean;
+  publicado: boolean;
+  motivoBloqueio: string | null;
+  regraVersaoSnapshot: string;
   metrica: HealthMetricKeyV3;
   valorBruto: number | null;
+  numerador: number | null;
+  denominador: number | null;
   nota: number | null;
   peso: number;
+  pesoDisponivel: boolean;
+  contribuicao: number | null;
   meta: number | null;
   amostra: number | null;
   estadoBase: string;
+  metricaPublicavel: boolean;
   confianca: string | null;
+  fonte: string;
+  regraVersaoMetrica: string;
   motivoSemBase: string | null;
+  detalhes: Record<string, unknown>;
 }
 
 type UnknownRecord = Record<string, unknown>;

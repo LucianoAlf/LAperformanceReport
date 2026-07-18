@@ -843,11 +843,19 @@ painel V3.
 - Modify: `src/components/App/Professores/ModalDetalhesProfessorPerformance.tsx`
 - Modify: `tests/healthScoreProfessorV3Frontend.test.mjs`
 
-- [ ] Adicionar leitura V3 quando flag ativa.
-- [ ] Exibir valor, base, cobertura e recorte de cada pilar.
-- [ ] Exibir `sem_base`, nunca zero substituto.
-- [ ] Testar rollback desligando flag.
+- [x] Adicionar leitura V3 quando flag ativa.
+- [x] Exibir valor, base, cobertura e recorte de cada pilar.
+- [x] Exibir `sem_base`, nunca zero substituto.
+- [x] Testar rollback desligando flag.
 - [ ] Validar com Playwright em professor com base completa e incompleta.
+
+Checkpoint tecnico em 18/07/2026: o estado incompleto foi validado no
+navegador autenticado para Peterson Biancamano nos recortes Consolidado e
+Campo Grande. O modal preserva `null`, explicita amostra, base, fonte, regra,
+cobertura e motivo de exclusao. O rollback por flag foi coberto por teste. A
+validacao de base completa permanece aberta porque ainda nao existe snapshot
+V3 publicavel de julho; Performance e rankings nao devem migrar antes da
+homologacao deste modal.
 
 ### Task 18: Migrar tabela Performance e rankings
 

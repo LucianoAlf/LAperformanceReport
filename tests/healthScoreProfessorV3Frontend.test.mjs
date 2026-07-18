@@ -6,12 +6,16 @@ const migrationPath =
   'supabase/migrations/20260718210000_health_score_v3_config_ui_gate7.sql';
 const simulationGuardMigrationPath =
   'supabase/migrations/20260718211500_health_score_v3_config_simulation_guard_gate7.sql';
+const modalMigrationPath =
+  'supabase/migrations/20260718223000_health_score_v3_modal_gate8.sql';
 const typesPath = 'src/lib/healthScoreProfessorV3.ts';
 const hookPath = 'src/hooks/useHealthScoreProfessorV3Config.ts';
 const snapshotHookPath = 'src/hooks/useHealthScoreProfessorV3.ts';
 const componentPath =
   'src/components/App/Professores/HealthScoreV3Config.tsx';
 const pagePath = 'src/components/App/Professores/ProfessoresPage.tsx';
+const modalPath =
+  'src/components/App/Professores/ModalDetalhesProfessorPerformance.tsx';
 
 const read = (path) => fs.readFileSync(path, 'utf8');
 
@@ -117,7 +121,7 @@ test('hook V3 usa RPC e nunca acessa as tabelas internas diretamente', () => {
 test('hook de snapshot V3 preserva null sem fallback para V2 ou zero', () => {
   const source = read(snapshotHookPath);
 
-  assert.match(source, /get_health_score_professor_v3_snapshot_ui/i);
+  assert.match(source, /get_health_score_professor_v3_snapshot_modal/i);
   assert.match(source, /valorBruto:\s*row\.valor_bruto\s*\?\?\s*null/i);
   assert.match(source, /nota:\s*row\.nota\s*\?\?\s*null/i);
   assert.doesNotMatch(source, /get_kpis_professor_periodo|DEFAULT_HEALTH_WEIGHTS/i);
@@ -143,4 +147,64 @@ test('pagina protege V3 por feature flag e permissao sem remover V2', () => {
   assert.match(source, /hasPermission\('professores\.editar'\)/i);
   assert.match(source, /<HealthScoreV3Config/i);
   assert.match(source, /<HealthScoreConfig/i);
+});
+
+test('Gate 8 cria leitura auditavel e sem ambiguidade entre unidade e consolidado', () => {
+  const sql = read(modalMigrationPath);
+
+  assert.match(sql, /create or replace function public\.get_health_score_professor_v3_snapshot_modal/i);
+  assert.match(sql, /security definer/i);
+  assert.match(sql, /set search_path = public, pg_temp/i);
+  assert.match(sql, /fn_health_score_professor_v3_ator_gerenciador\(\)/i);
+  assert.match(sql, /s\.unidade_id\s+is\s+not\s+distinct\s+from\s+p_unidade_id/i);
+  for (const field of [
+    'numerador',
+    'denominador',
+    'fonte',
+    'regra_versao_metrica',
+    'detalhes',
+    'motivo_bloqueio',
+    'trimestre_inicio',
+  ]) {
+    assert.match(sql, new RegExp(field, 'i'));
+  }
+  assert.match(sql, /revoke all[\s\S]*from public, anon, authenticated/i);
+  assert.match(sql, /grant execute[\s\S]*to authenticated, service_role/i);
+});
+
+test('hook do modal preserva valor e evidencia V3 sem fallback numerico', () => {
+  const source = read(snapshotHookPath);
+
+  assert.match(source, /get_health_score_professor_v3_snapshot_modal/i);
+  assert.match(source, /numerador:\s*row\.numerador\s*\?\?\s*null/i);
+  assert.match(source, /denominador:\s*row\.denominador\s*\?\?\s*null/i);
+  assert.match(source, /detalhes:\s*row\.detalhes\s*\?\?\s*\{\}/i);
+  assert.match(source, /valorBruto:\s*row\.valor_bruto\s*\?\?\s*null/i);
+  assert.match(source, /nota:\s*row\.nota\s*\?\?\s*null/i);
+  assert.doesNotMatch(source, /get_kpis_professor_periodo|DEFAULT_HEALTH_WEIGHTS/i);
+});
+
+test('hook do modal descarta resposta obsoleta ao trocar professor ou unidade', () => {
+  const source = read(snapshotHookPath);
+
+  assert.match(source, /useRef/i);
+  assert.match(source, /requestIdRef\.current/i);
+  assert.match(source, /requestId\s*!==\s*requestIdRef\.current/i);
+  assert.match(source, /return\s*\(\)\s*=>\s*\{[\s\S]*requestIdRef\.current\s*\+=\s*1/i);
+});
+
+test('modal individual alterna V3 por flag e exibe base cobertura e recorte', () => {
+  const source = read(modalPath);
+
+  assert.match(source, /VITE_HEALTH_SCORE_V3_MODAL_ENABLED/i);
+  assert.match(source, /VITE_HEALTH_SCORE_V3_MODAL_ENABLED[\s\S]*!==\s*['"]false['"]/i);
+  assert.match(source, /useHealthScoreProfessorV3/i);
+  assert.match(source, /V3 em homologa[cç][aã]o/i);
+  assert.match(source, /Sem base/i);
+  assert.match(source, /Amostra/i);
+  assert.match(source, /Cobertura/i);
+  assert.match(source, /Recorte/i);
+  assert.match(source, /motivoSemBase/i);
+  assert.match(source, /HEALTH_SCORE_V3_MODAL_ENABLED\s*\?/i);
+  assert.match(source, /calcularHealthScore/i);
 });
