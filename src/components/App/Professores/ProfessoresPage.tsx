@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { format, differenceInMonths } from 'date-fns';
@@ -29,6 +30,7 @@ import { TabAgendaProfessores } from './TabAgendaProfessores';
 import { TabCarteiraProfessores } from './TabCarteiraProfessores';
 import { Tab360Professores } from './Tab360Professores';
 import { HealthScoreConfig } from './HealthScoreConfig';
+import { HealthScoreV3Config } from './HealthScoreV3Config';
 import { MotivosScoreConfig } from './MotivosScoreConfig';
 import { FatorDemandaCursos } from './FatorDemandaCursos';
 import { ChecklistsTab } from '../Administrativo/PainelFarmer/ChecklistsTab';
@@ -43,6 +45,9 @@ import type {
 } from './types';
 
 type AbaAtiva = 'cadastro' | 'performance' | 'carteira' | 'agenda' | '360' | 'checklists' | 'configuracoes';
+
+const HEALTH_SCORE_V3_CONFIG_ENABLED =
+  import.meta.env.DEV || import.meta.env.VITE_HEALTH_SCORE_V3_CONFIG_ENABLED === 'true';
 
 const professoresTabs: PageTab<AbaAtiva>[] = [
   { id: 'cadastro', label: 'Cadastro', shortLabel: 'Cadastro', icon: Users },
@@ -65,6 +70,7 @@ export function ProfessoresPage() {
 
   const context = useOutletContext<{ filtroAtivo: boolean; unidadeSelecionada: UnidadeId; setPeriodoLabel?: (label: string | null) => void }>();
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
+  const { hasPermission } = useAuth();
   const toast = useToast();
   const { weights: healthWeights, saveWeights } = useHealthScoreConfig(unidadeAtual);
 
@@ -695,6 +701,10 @@ export function ProfessoresPage() {
               <p className="text-slate-400 text-sm">Configure os pesos e parâmetros do Health Score dos professores</p>
             </div>
           </div>
+
+          {HEALTH_SCORE_V3_CONFIG_ENABLED && hasPermission('professores.editar') && (
+            <HealthScoreV3Config />
+          )}
           
           <HealthScoreConfig
             weights={healthWeights}

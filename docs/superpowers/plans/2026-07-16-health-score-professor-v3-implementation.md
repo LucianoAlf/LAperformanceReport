@@ -751,7 +751,7 @@ publicado, suite `232/232` e build de producao aprovados.
 - Create: `src/hooks/useHealthScoreProfessorV3Config.ts`
 - Create: `tests/healthScoreProfessorV3Frontend.test.mjs`
 
-- [ ] **Step 1: Escrever tipos**
+- [x] **Step 1: Escrever tipos**
 
 ```ts
 export type HealthMetricKeyV3 =
@@ -775,17 +775,17 @@ export interface HealthMetricSnapshotV3 {
 }
 ```
 
-- [ ] **Step 2: Implementar hook somente leitura de sombra**
+- [x] **Step 2: Implementar hook somente leitura de sombra**
 
 O hook recebe professor/unidade/competencia e nao faz fallback para V2 nem para zero.
 
-- [ ] **Step 3: Implementar hook de config rascunho**
+- [x] **Step 3: Implementar hook de config rascunho**
 
 Uma configuracao ativa e imutavel. Ao editar, o hook clona a versao ativa para
 um novo `rascunho`; salvar nunca altera a ativa. Ativacao e acao separada e
 exige vigencia, autor e justificativa.
 
-- [ ] **Step 4: Rodar teste**
+- [x] **Step 4: Rodar teste**
 
 Run: `node --test tests/healthScoreProfessorV3Frontend.test.mjs`
 Expected: PASS.
@@ -797,11 +797,11 @@ Expected: PASS.
 - Modify: `src/components/App/Professores/ProfessoresPage.tsx`
 - Modify: `tests/healthScoreProfessorV3Frontend.test.mjs`
 
-- [ ] **Step 1: Testar os seis fatores novos**
+- [x] **Step 1: Testar os seis fatores novos**
 
 Exigir ausencia de crescimento/fator de demanda/evasao duplicada e presenca explicita.
 
-- [ ] **Step 2: Implementar painel protegido por feature flag**
+- [x] **Step 2: Implementar painel protegido por feature flag**
 
 Exibir versao, status rascunho/ativa, vigencia, soma de pesos, metas e
 justificativa. Os sliders controlam somente os pesos. Cada pilar possui campo
@@ -814,17 +814,24 @@ protegida por `professores.editar`, com trilha de autoria. Nova meta ou peso
 vale somente a partir da vigencia escolhida e nunca recalcula snapshots
 fechados.
 
-- [ ] **Step 3: Validar layout desktop/mobile**
+- [x] **Step 3: Validar layout desktop/mobile**
 
 Usar Playwright/browser com coordenacao logada; confirmar que sliders nao alteram dimensoes nem estouram texto.
 
-- [ ] **Step 4: Rodar build e teste**
+- [x] **Step 4: Rodar build e teste**
 
 Run: `node --test tests/healthScoreProfessorV3Frontend.test.mjs`
 Run: `npm run build`
 Expected: PASS/exit 0.
 
-**Gate 7:** coordenacao consegue simular V3 sem publicar ou alterar V2.
+**Gate 7:** fechado tecnicamente em 18/07/2026. A coordenacao consegue criar
+rascunho, ajustar pesos e metas separadamente, salvar, simular e ativar uma
+nova versao futura sem publicar snapshots nem alterar V2. A ativacao exige no
+banco uma simulacao persistida da revisao exata do rascunho; qualquer mudanca
+posterior invalida essa simulacao. O painel foi validado no navegador em
+desktop e viewport mobile. O shell legado continua com largura minima e
+rolagem horizontal em telas estreitas, sem alterar a composicao interna do
+painel V3.
 
 ---
 
