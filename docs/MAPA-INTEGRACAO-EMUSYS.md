@@ -22,6 +22,7 @@
    (pull)       └───────────────────────────────────────────────┘
         GET /v1/aulas/       → sync-presenca-emusys    (cron diário)
         GET /v1/professores  → sync-professores-emusys (cron semanal)
+        GET /v1/faturas      → sync-faturas-emusys      (cron atual+anterior / refresh interno)
 
                 ┌───────────────────────────────────────────────┐
    UPSTREAM     │  Mila SDR (produto SEPARADO) alimenta o Emusys │
@@ -32,7 +33,7 @@
 ```
 
 - **Quem grava no Supabase é sempre o webhook** (EB0 / Fucq0 / edge), nunca a Mila.
-- **O nosso sistema só chama 2 endpoints do Emusys:** `/aulas` e `/professores`.
+- **Pulls operacionais documentados aqui:** `/aulas`, `/professores` e `/faturas`.
 - Webhooks chegam no host n8n `https://webhookla.latecnology.com.br/webhook/<evento>`.
 - **Escola_id → unidade:** `39` = Campo Grande, `40` = Recreio, `316` = Barra.
 
@@ -130,6 +131,7 @@ Quem é: os 3 agentes Mila SDR (CG `aHD4kJdzByLwFXA1`, Recreio `gSHJHYMOYDQZqleW
 | 5 | ⬅ entra | `matricula_nova/renovacao/trancamento/finalizacao` | n8n WF_Matricula → edge | Cria aluno / renovação / trancamento / evasão+LTV |
 | 6 | ➡ sai | `GET /v1/aulas/` | sync-presenca-emusys (diário) | Presença + confirma experimentais |
 | 7 | ➡ sai | `GET /v1/professores` | sync-professores-emusys (semanal) | Sync professores |
+| 8 | ➡ sai | `GET /v1/faturas` | sync-faturas-emusys (atual+anterior / sob demanda) | Espelho atual + snapshot financeiro auditável |
 | — | upstream | Mila → Emusys (cadastro/experimental) | fora do sistema | Origina os webhooks (ver seção 3) |
 
 ---
@@ -178,11 +180,13 @@ Detalhes em `pendencias-emusys.md`. Resumo:
 
 ## 10. Exportação de faturas para o Super Folha
 
-`export-contas-receber` expõe uma leitura interna das faturas já sincronizadas em `emusys_faturas`. O Super Folha chama a Edge com competência explícita (`YYYY-MM-01`) e segredo dedicado; não recebe credenciais de banco do LA Report.
+`refresh-contas-receber` recebe uma competência explícita (`YYYY-MM-01`), executa o sync completo das 3 unidades e devolve `sync_run_id`. Para o cron, a mesma Edge resolve `atual` e `anterior` em BRT e executa os dois em sequência. O segredo dedicado vem do Vault e não expõe credenciais do banco.
 
-O exportador cruza aluno/curso por `(unidade_id, emusys_matricula_id)`. Matrícula repetida na mesma unidade não multiplica faturas: a linha permanece única, recebe `cadastro_match_status='duplicado'` e carrega todos os candidatos para revisão humana. A resposta inclui `row_source_hash` e `manifest_hash` estáveis, sem timestamps voláteis, permitindo preflight seguido de apply protegido contra mudança da origem.
+`sync-faturas-emusys` cria o run `running` antes da coleta, usa mutex global no banco, limita chamadas a 50/min e só publica depois de validar paginação, IDs, datas e completude das 3 unidades. A publicação atômica atualiza `emusys_faturas` como espelho canônico atual e grava `sync_run_items` imutáveis, eventos e tombstones por competência. Baseline legado compara ausências, mas não prova frescor.
 
-Essa integração é **somente leitura** no LA Report. O espelho, o plano de contas e a auditoria da classificação ficam no projeto Super Folha.
+`export-contas-receber` lê somente snapshots live completos. Com `sync_run_id`, exporta o run exato; com `require_latest=true`, também exige que ele seja o último completo. Sem ID, seleciona o último completo da competência para o fallback read-only. O manifesto informa `sync_run_id` e `latest_complete_sync_run_id`. O exportador cruza aluno/curso por `(unidade_id, emusys_matricula_id)` e usa o UUID estável de `emusys_faturas` como `la_report_fatura_id`. `row_source_hash` e `manifest_hash` excluem IDs técnicos de run/item e timestamps operacionais.
+
+O plano de contas e a auditoria da classificação continuam no projeto Super Folha.
 - **Dash do rayan** (`emusys-webhook` no projeto `aexacbmirdlcssmjjbzx`) — recebe cópia dos webhooks, projeto separado.
 - **emusys-agent** (chat) — repositório separado.
 
@@ -197,5 +201,8 @@ Essa integração é **somente leitura** no LA Report. O espelho, o plano de con
 | Edge matrícula | `supabase/functions/processar-matricula-emusys/index.ts` |
 | Sync presença | `supabase/functions/sync-presenca-emusys/index.ts` |
 | Sync professores | `supabase/functions/sync-professores-emusys/index.ts` |
+| Sync faturas | `supabase/functions/sync-faturas-emusys/index.ts` |
+| Refresh interno de faturas | `supabase/functions/refresh-contas-receber/index.ts` |
+| Export financeiro por run | `supabase/functions/export-contas-receber/index.ts` |
 | Marcação compareceu/faltou (manual) | `src/components/App/PreAtendimento/tabs/AgendaTab.tsx` |
 | Mila SDR (upstream) | `aHD4kJdzByLwFXA1` / `gSHJHYMOYDQZqleW` / `yko5HstPTze0gsIM` |

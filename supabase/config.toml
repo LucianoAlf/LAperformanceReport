@@ -15,3 +15,7 @@ verify_jwt = true
 [functions.export-contas-receber]
 # Integracao servidor-servidor: autentica o segredo dedicado no proprio codigo.
 verify_jwt = false
+
+[functions.refresh-contas-receber]
+# Integracao servidor-servidor: autentica o segredo dedicado no proprio codigo.
+verify_jwt = false

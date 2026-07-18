@@ -6,14 +6,16 @@
 
 ## Integração financeira com o Super Folha
 
-- **Edge function:** `export-contas-receber`.
-- **Finalidade:** exportar, em modo somente leitura, as faturas Emusys de uma competência para o espelho financeiro do Super Folha.
+- **Edge functions:** `sync-faturas-emusys`, `refresh-contas-receber` e `export-contas-receber`.
+- **RPCs privadas:** `start_financeiro_sync_run`, `publish_financeiro_sync_run` e `fail_financeiro_sync_run`.
+- **Finalidade:** atualizar as 3 unidades, publicar um snapshot imutável completo e exportar esse run exato para o espelho financeiro do Super Folha.
 - **Autorização:** segredo interno dedicado no header `x-super-folha-sync-secret`; não aceita sessão de navegador nem expõe a service role do LA Report.
-- **Contrato:** uma linha por fatura, identidade `(la_report_unidade_id, emusys_fatura_id)`, match de aluno por `(unidade_id, emusys_matricula_id)`, candidatos explícitos quando o cadastro é duplicado e hashes determinísticos por linha/manifesto.
-- **Consistência:** a origem é lida duas vezes; mudança do manifesto durante a leitura retorna conflito e nenhuma importação deve prosseguir.
-- **Escrita:** nenhuma. Classificação e histórico operacional pertencem ao Super Folha.
+- **Contrato:** `emusys_faturas` continua como espelho canônico atual; `sync_run_items` congela cada competência e seus tombstones. `la_report_fatura_id` é o UUID estável da linha canônica, nunca o UUID técnico do snapshot.
+- **Consistência:** um mutex parcial global permite só um run `running`; as 3 unidades são coletadas antes de uma RPC de publicação atômica. O export nunca lê a tabela mutável: aceita um `sync_run_id` live completo, valida o mais recente com `require_latest`, ou seleciona o último completo para fallback read-only.
+- **Hash:** usa apenas unidade UUID, ID Emusys, competência, dados financeiros e estado/motivo de ausência; IDs de run/item e timestamps operacionais ficam fora.
+- **Cron:** competências atual e anterior, sequenciais, com segredo lido do Vault.
 >
-> Última atualização: 2026-06-23.
+> Última atualização: 2026-07-18.
 
 ## Índice de rotas
 
