@@ -129,7 +129,7 @@ async function registrarNaCaixa(supabase, { numero, tipo, conteudo, midiaUrl, mi
 
     if (!conversaId) { console.error('[boas-vindas] registro: sem conversa para', numero); return; }
 
-    await supabase.from('admin_mensagens').insert({
+    const registro = {
       conversa_id: conversaId,
       aluno_id: alunoIdMsg,
       direcao: 'saida',
@@ -141,7 +141,17 @@ async function registrarNaCaixa(supabase, { numero, tipo, conteudo, midiaUrl, mi
       remetente_nome: remetenteNome || 'Sucesso do Aluno',
       status_entrega: status,
       whatsapp_message_id: whatsappMessageId || null,
-    });
+    };
+    // Upsert por whatsapp_message_id (esta função é a FONTE DE VERDADE do envio):
+    // o webhook-whatsapp-inbox escuta o eco fromMe da MESMA mensagem e pode registrá-la
+    // primeiro como 'sistema'/texto (perdendo o vídeo). O eco usa o mesmo whatsapp_message_id,
+    // então sobrescrevemos com os dados corretos (tipo=video, remetente=admin, mídia).
+    // Sem id (envio falhou) não há conflito possível → insert simples.
+    if (whatsappMessageId) {
+      await supabase.from('admin_mensagens').upsert(registro, { onConflict: 'whatsapp_message_id' });
+    } else {
+      await supabase.from('admin_mensagens').insert(registro);
+    }
 
     const preview = (conteudo || `[${tipo}]`).substring(0, 100);
     await supabase.from('admin_conversas')
