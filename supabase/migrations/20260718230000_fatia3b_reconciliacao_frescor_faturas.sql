@@ -246,7 +246,7 @@ select
   'baseline',
   'succeeded',
   'migration',
-  '20260718190000_fatia3b_reconciliacao_frescor_faturas',
+  '20260718230000_fatia3b_reconciliacao_frescor_faturas',
   b.started_at,
   b.completed_at,
   b.completed_at,

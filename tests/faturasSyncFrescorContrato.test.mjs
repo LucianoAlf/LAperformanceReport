@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const migrationUrl = new URL(
-  '../supabase/migrations/20260718190000_fatia3b_reconciliacao_frescor_faturas.sql',
+  '../supabase/migrations/20260718230000_fatia3b_reconciliacao_frescor_faturas.sql',
   import.meta.url,
 );
 const syncUrl = new URL('../supabase/functions/sync-faturas-emusys/index.ts', import.meta.url);
