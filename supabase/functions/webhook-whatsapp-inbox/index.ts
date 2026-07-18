@@ -137,10 +137,47 @@ function normalizeUazapiPayload(payload: any): { key: any; message: any; message
       pushName: msg.senderName || payload.chat?.name || payload.chat?.wa_name || null,
       // Resposta de botão ou item de lista — ID selecionado pelo usuário
       buttonOrListid: msg.buttonOrListid || null,
+      // Edição de mensagem: UAZAPI envia msg.edited = whatsapp_message_id da mensagem ORIGINAL.
+      editedId: msg.edited || null,
     };
   }
 
   return null;
+}
+
+// Edição de mensagem: a UAZAPI reenvia a mensagem com msg.edited apontando para o
+// whatsapp_message_id da mensagem ORIGINAL. Em vez de inserir uma nova linha (o que
+// duplica a bolha na Caixa, mesmo o WhatsApp real mostrando 1 só), atualizamos o
+// conteúdo do registro original e marcamos editada=true. Retorna true se atualizou
+// algo (aí o webhook não insere). Fallback (original não encontrada) → segue fluxo normal.
+async function handleEdicaoMensagem(msg: any, editedId: string, supabase: any): Promise<boolean> {
+  const { tipo, conteudo, midia_url, midia_mimetype, midia_nome } = detectMessageType(msg);
+  const patch = { conteudo, tipo, midia_url, midia_mimetype, midia_nome, editada: true };
+  // Tolerante ao formato com prefixo (ex: "552123425316:3EB0...") e sem prefixo.
+  const filtro = `whatsapp_message_id.eq.${editedId},whatsapp_message_id.like.%:${editedId}`;
+
+  // Caixas administrativas
+  const { data: adminRows } = await supabase
+    .from('admin_mensagens').update(patch).or(filtro).select('id, conversa_id');
+  if (adminRows && adminRows.length) {
+    const preview = (conteudo || `[${tipo}]`).substring(0, 100);
+    await supabase.from('admin_conversas')
+      .update({ ultima_mensagem_preview: preview, updated_at: new Date().toISOString() })
+      .eq('id', adminRows[0].conversa_id);
+    console.log(`[webhook-inbox] Edição aplicada em admin_mensagens (original ${editedId})`);
+    return true;
+  }
+
+  // Conversas de lead (CRM)
+  const { data: crmRows } = await supabase
+    .from('crm_mensagens').update(patch).or(filtro).select('id');
+  if (crmRows && crmRows.length) {
+    console.log(`[webhook-inbox] Edição aplicada em crm_mensagens (original ${editedId})`);
+    return true;
+  }
+
+  console.log(`[webhook-inbox] Edição recebida mas original ${editedId} não encontrada — segue fluxo normal`);
+  return false;
 }
 
 // Determinar tipo de mensagem baseado no payload UAZAPI
@@ -996,6 +1033,15 @@ serve(async (req: Request) => {
           } catch (e) {
             console.error('[webhook-inbox] erro ao repassar para processar-resposta-pesquisa:', e);
           }
+        }
+
+        // ========== EDIÇÃO DE MENSAGEM ==========
+        // Evento de edição (msg.edited = id da original): atualiza a mensagem existente
+        // em vez de inserir nova (evita bolha duplicada). Precisa vir ANTES do filtro
+        // fromMe, pois edições fromMe também chegam aqui.
+        if (msg.editedId) {
+          const editou = await handleEdicaoMensagem(msg, msg.editedId, supabase);
+          if (editou) { processadas++; continue; }
         }
 
         // Ignorar mensagens enviadas por nos (fromMe = true) — EXCETO em caixas admin,
