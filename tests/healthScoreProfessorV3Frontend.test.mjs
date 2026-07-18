@@ -8,6 +8,12 @@ const simulationGuardMigrationPath =
   'supabase/migrations/20260718211500_health_score_v3_config_simulation_guard_gate7.sql';
 const modalMigrationPath =
   'supabase/migrations/20260718223000_health_score_v3_modal_gate8.sql';
+const modalObservationMigrationPath =
+  'supabase/migrations/20260718233000_health_score_v3_gate8_observacoes.sql';
+const modalObservationPerformanceMigrationPath =
+  'supabase/migrations/20260718234000_health_score_v3_gate8_observacoes_performance.sql';
+const modalObservationAuditMigrationPath =
+  'supabase/migrations/20260718235000_health_score_v3_gate8_presenca_auditoria.sql';
 const typesPath = 'src/lib/healthScoreProfessorV3.ts';
 const hookPath = 'src/hooks/useHealthScoreProfessorV3Config.ts';
 const snapshotHookPath = 'src/hooks/useHealthScoreProfessorV3.ts';
@@ -193,6 +199,55 @@ test('hook do modal descarta resposta obsoleta ao trocar professor ou unidade', 
   assert.match(source, /return\s*\(\)\s*=>\s*\{[\s\S]*requestIdRef\.current\s*\+=\s*1/i);
 });
 
+test('hook do modal nao expoe metricas do recorte anterior durante nova carga', () => {
+  const source = read(snapshotHookPath);
+
+  assert.match(source, /requestKey/i);
+  assert.match(source, /loadedRequestKey/i);
+  assert.match(source, /loadedRequestKey\s*===\s*requestKey\s*\?\s*metrics\s*:\s*\[\]/i);
+  assert.match(source, /loading:\s*loading\s*\|\|\s*\([^\n]*loadedRequestKey\s*!==\s*requestKey\)/i);
+});
+
+test('Gate 8 preserva valor observado de presenca sem antecipar pontuacao de agosto', () => {
+  const sql = read(modalObservationMigrationPath);
+
+  assert.match(sql, /create or replace function public\.get_professor_presenca_v3_sombra/i);
+  assert.match(sql, /valor_observado/i);
+  assert.match(sql, /cobertura_observada/i);
+  assert.match(sql, /observado_fora_score/i);
+  assert.match(sql, /s\.data_aula\s*>=\s*date\s*'2026-08-03'/i);
+  assert.match(sql, /vigencia_pontuavel[^\n]*2026-08-03/i);
+});
+
+test('observacao de presenca resolve identidade uma vez antes de materializar a rede', () => {
+  const sql = read(modalObservationPerformanceMigrationPath);
+
+  assert.match(sql, /identidade_mapa\s+as\s+materialized/i);
+  assert.match(sql, /unnest\(i\.aluno_ids_locais\)/i);
+  assert.doesNotMatch(sql, /=\s*any\(i\.aluno_ids_locais\)/i);
+});
+
+test('presenca observada respeita politica versionada de auditoria por unidade', () => {
+  const sql = read(modalObservationAuditMigrationPath);
+
+  assert.match(sql, /presenca_politicas_confiabilidade/i);
+  assert.match(sql, /exige_revisao_operacional/i);
+  assert.match(
+    sql,
+    /observacao_esperados_stats\s+as\s*\([\s\S]*?bool_or\(e\.observacao_exige_auditoria\)\s+as\s+exige_revisao_operacional/i,
+  );
+  assert.match(sql, /observacao_publicacao/i);
+  assert.match(sql, /em_auditoria/i);
+});
+
+test('modal nao publica percentual observado quando a politica exige auditoria', () => {
+  const source = read(modalPath);
+
+  assert.match(source, /observacao_publicacao/i);
+  assert.match(source, /Em auditoria/i);
+  assert.match(source, /preservado para auditoria/i);
+});
+
 test('modal individual alterna V3 por flag e exibe base cobertura e recorte', () => {
   const source = read(modalPath);
 
@@ -207,4 +262,17 @@ test('modal individual alterna V3 por flag e exibe base cobertura e recorte', ()
   assert.match(source, /motivoSemBase/i);
   assert.match(source, /HEALTH_SCORE_V3_MODAL_ENABLED\s*\?/i);
   assert.match(source, /calcularHealthScore/i);
+});
+
+test('modal distingue valor observado de valor pontuavel nos pilares incompletos', () => {
+  const source = read(modalPath);
+
+  assert.match(source, /alunos_fechamento/i);
+  assert.match(source, /valor_observado/i);
+  assert.match(source, /Valor observado/i);
+  assert.match(source, /Fechamentos:\s*\$\{formatV3BaseNumber\(meses\)\}\/3/i);
+  assert.match(source, /Eventos classificados:\s*\$\{formatV3BaseNumber\(classificados\)\}\/\$\{formatV3BaseNumber\(esperados\)\}/i);
+  assert.match(source, /observed\?\.evidenceLabel\s*\?\?/i);
+  assert.match(source, /fora do score/i);
+  assert.match(source, /pontua[cç][aã]o.*03\/08/i);
 });

@@ -847,15 +847,18 @@ painel V3.
 - [x] Exibir valor, base, cobertura e recorte de cada pilar.
 - [x] Exibir `sem_base`, nunca zero substituto.
 - [x] Testar rollback desligando flag.
-- [ ] Validar com Playwright em professor com base completa e incompleta.
+- [x] Validar com Playwright em professor com base incompleta.
+- [ ] Repetir a validacao quando existir professor com base completa e snapshot
+  publicavel.
 
 Checkpoint tecnico em 18/07/2026: o estado incompleto foi validado no
-navegador autenticado para Peterson Biancamano nos recortes Consolidado e
-Campo Grande. O modal preserva `null`, explicita amostra, base, fonte, regra,
-cobertura e motivo de exclusao. O rollback por flag foi coberto por teste. A
-validacao de base completa permanece aberta porque ainda nao existe snapshot
-V3 publicavel de julho; Performance e rankings nao devem migrar antes da
-homologacao deste modal.
+navegador autenticado para Peterson Biancamano nos recortes Consolidado,
+Campo Grande e Barra, e para Caio Tenorio no Recreio. O modal preserva `null`,
+explicita amostra, base, fonte, regra, cobertura e motivo de exclusao. O
+rollback por flag foi coberto por teste. A validacao de base completa permanece
+aberta porque ainda nao existe snapshot V3 publicavel de julho, mas o Alf
+homologou o comportamento incompleto e autorizou a migracao controlada da
+Performance sem fabricar score nem ranking.
 
 ### Task 18: Migrar tabela Performance e rankings
 
@@ -863,10 +866,21 @@ homologacao deste modal.
 - Modify: `src/components/App/Professores/TabPerformanceProfessores.tsx`
 - Modify: `tests/healthScoreProfessorV3Frontend.test.mjs`
 
-- [ ] Trocar somente depois da homologacao do modal.
-- [ ] Ordenar publicaveis; `sem_base` fica separado e nao recebe score 0.
-- [ ] Conferir totais, rankings, status e competencia.
-- [ ] Testar feature flag e rollback.
+- [x] Trocar somente depois da homologacao do modal.
+- [x] Ordenar publicaveis; `sem_base` fica separado e nao recebe score 0.
+- [x] Conferir totais, rankings, status e competencia.
+- [x] Testar feature flag e rollback.
+
+Checkpoint tecnico em 18/07/2026: a tabela Performance e seus rankings leem a
+ultima revisao V3 por professor por meio da RPC batch
+`get_health_score_professor_v3_performance`. A feature flag independente
+`VITE_HEALTH_SCORE_V3_PERFORMANCE_ENABLED` preserva rollback para V2; quando a
+V3 esta ativa, falha de leitura aparece como erro explicito e nao aciona
+fallback silencioso. Somente snapshot e metrica publicaveis entram em ranking.
+Valores observados/provisorios continuam visiveis e rotulados, Campo Grande
+mantem Presenca `Em auditoria`, e Barra/Recreio exibem o observado normal.
+Validacao autenticada confirmou Consolidado, Barra, Campo Grande e Recreio sem
+erro de console.
 
 ### Task 19: Migrar configuracao oficial
 

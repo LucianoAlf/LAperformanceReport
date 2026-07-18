@@ -33,6 +33,20 @@ import {
   buscarKpisProfessoresCanonicos,
   consolidarKpisProfessoresCanonicos,
 } from '@/lib/professoresKpisCanonicos';
+import { useHealthScoreProfessorV3Performance } from '@/hooks/useHealthScoreProfessorV3Performance';
+import {
+  isHealthScoreV3SnapshotRankable,
+  rankHealthScoreV3Metric,
+  resolveHealthScoreV3MetricDisplay,
+  type HealthScoreV3MetricDisplay,
+  type HealthScoreV3ProfessorPerformance,
+} from '@/lib/healthScoreProfessorV3Performance';
+import type { HealthMetricKeyV3 } from '@/lib/healthScoreProfessorV3';
+
+const HEALTH_SCORE_V3_PERFORMANCE_FLAG = import.meta.env.VITE_HEALTH_SCORE_V3_PERFORMANCE_ENABLED;
+const HEALTH_SCORE_V3_PERFORMANCE_ENABLED =
+  HEALTH_SCORE_V3_PERFORMANCE_FLAG === 'true'
+  || (import.meta.env.DEV && HEALTH_SCORE_V3_PERFORMANCE_FLAG !== 'false');
 
 interface ProfessorPerformance {
   id: number;
@@ -79,6 +93,107 @@ interface ProfessorPerformance {
   fator_demanda_cobertura: number;
   fator_demanda_fonte: string;
   fator_demanda_vinculos: number;
+}
+
+interface ProfessorPerformanceRow extends ProfessorPerformance {
+  healthV3: HealthScoreV3ProfessorPerformance | null;
+}
+
+const HEALTH_SCORE_V3_METRIC_LABELS: Record<HealthMetricKeyV3, string> = {
+  retencao: 'Retencao atribuivel',
+  permanencia: 'Permanencia com o professor',
+  conversao: 'Conversao Exp -> Mat',
+  media_turma: 'Media de alunos por turma',
+  numero_alunos: 'Numero de alunos',
+  presenca: 'Presenca dos alunos',
+};
+
+function formatHealthScoreV3MetricValue(metricKey: HealthMetricKeyV3, value: number): string {
+  if (metricKey === 'numero_alunos') return Math.round(value).toLocaleString('pt-BR');
+  if (metricKey === 'media_turma') return value.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+  if (metricKey === 'permanencia') return `${value.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} meses`;
+  return `${value.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}%`;
+}
+
+function HealthScoreV3MetricCell({
+  snapshot,
+  metricKey,
+  onOpen,
+}: {
+  snapshot: HealthScoreV3ProfessorPerformance | null;
+  metricKey: HealthMetricKeyV3;
+  onOpen: () => void;
+}) {
+  const display = snapshot
+    ? resolveHealthScoreV3MetricDisplay(snapshot, metricKey)
+    : ({ value: null, observedValue: null, state: 'sem_base', rankable: false, metric: null } satisfies HealthScoreV3MetricDisplay);
+  const metric = display.metric;
+  const renderedValue = display.value === null
+    ? display.state === 'auditoria' ? 'Em auditoria' : 'Sem base'
+    : formatHealthScoreV3MetricValue(metricKey, display.value);
+  const stateLabel = display.state === 'observado'
+    ? 'observado'
+    : display.state === 'provisorio'
+      ? 'provisorio'
+      : display.state === 'auditoria'
+        ? 'auditoria'
+        : display.state === 'sem_base'
+          ? 'sem base'
+          : null;
+  const stateClass = display.state === 'normal'
+    ? 'text-emerald-300'
+    : display.state === 'observado'
+      ? 'text-cyan-300'
+      : display.state === 'provisorio'
+        ? 'text-amber-300'
+        : 'text-slate-400';
+
+  return (
+    <Tooltip
+      side="top"
+      content={
+        <div className="min-w-[250px] text-xs">
+          <p className="mb-1.5 font-bold text-slate-200">{HEALTH_SCORE_V3_METRIC_LABELS[metricKey]}</p>
+          {display.state === 'auditoria' && display.observedValue !== null && (
+            <p className="mb-1 text-amber-300">
+              Valor observado preservado: {formatHealthScoreV3MetricValue(metricKey, display.observedValue)}
+            </p>
+          )}
+          <div className="space-y-1 text-slate-300">
+            <p>Estado: <strong>{stateLabel || 'publicavel'}</strong></p>
+            {metric?.amostra !== null && metric?.amostra !== undefined && <p>Amostra: <strong>{metric.amostra}</strong></p>}
+            {metric?.numerador !== null && metric?.denominador !== null && (
+              <p>Base: <strong>{metric.numerador}/{metric.denominador}</strong></p>
+            )}
+            {metric?.fonte && <p className="break-all">Fonte: <strong>{metric.fonte}</strong></p>}
+          </div>
+          {metric?.motivoSemBase && <p className="mt-1.5 text-amber-300">{metric.motivoSemBase}</p>}
+        </div>
+      }
+    >
+      <button
+        type="button"
+        className={cn('inline-flex flex-col items-center font-medium hover:underline', stateClass)}
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpen();
+        }}
+      >
+        <span>{renderedValue}</span>
+        {stateLabel && display.state !== 'auditoria' && display.state !== 'sem_base' && (
+          <span className="text-[9px] font-normal uppercase text-slate-500">{stateLabel}</span>
+        )}
+      </button>
+    </Tooltip>
+  );
+}
+
+function resolveHealthScoreV3Status(snapshot: HealthScoreV3ProfessorPerformance | null): ProfessorPerformance['status'] | null {
+  if (!snapshot || !isHealthScoreV3SnapshotRankable(snapshot)) return null;
+  if (snapshot.classificacao === 'critico') return 'critico';
+  if (snapshot.classificacao === 'atencao') return 'atencao';
+  if (snapshot.classificacao === 'saudavel') return 'excelente';
+  return null;
 }
 
 interface AlertaPerformance {
@@ -154,6 +269,16 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
   const trimestreInfo = useMemo(() => getTrimestreOperacional(ano, mes), [ano, mes]);
   const periodoLabel = modoVisualizacao === 'trimestre' ? trimestreInfo.label : competenciaFiltro.range.label;
   const healthScoreWeights = healthWeights ?? DEFAULT_HEALTH_WEIGHTS;
+  const healthV3UnitId = unidadeAtual === 'todos' ? null : unidadeAtual;
+  const {
+    snapshots: healthV3Snapshots,
+    loading: healthV3Loading,
+    error: healthV3Error,
+  } = useHealthScoreProfessorV3Performance({
+    competencia,
+    unidadeId: healthV3UnitId,
+    enabled: HEALTH_SCORE_V3_PERFORMANCE_ENABLED,
+  });
 
   // Sincronizar badge do header com o filtro local
   useEffect(() => {
@@ -462,55 +587,100 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     }
   };
 
-  // Filtrar e ordenar professores
+  const healthV3ByProfessor = useMemo(
+    () => new Map(healthV3Snapshots.map((snapshot) => [snapshot.professorId, snapshot])),
+    [healthV3Snapshots],
+  );
+
+  const professoresTabela = useMemo<ProfessorPerformanceRow[]>(
+    () => professores.map((professor) => ({
+      ...professor,
+      healthV3: healthV3ByProfessor.get(professor.id) || null,
+    })),
+    [healthV3ByProfessor, professores],
+  );
+
+  // Sob a flag V3, a tabela nunca recorre silenciosamente ao score V2.
   const professoresFiltrados = useMemo(() => {
-    let resultado = [...professores];
+    let resultado = [...professoresTabela];
 
     if (filtroStatus !== 'todos') {
-      resultado = resultado.filter(p => p.health_score_confiavel && p.status === filtroStatus);
+      resultado = HEALTH_SCORE_V3_PERFORMANCE_ENABLED
+        ? resultado.filter((professor) => resolveHealthScoreV3Status(professor.healthV3) === filtroStatus)
+        : resultado.filter((professor) => professor.health_score_confiavel && professor.status === filtroStatus);
     }
 
     if (filtroBusca) {
       const termo = filtroBusca.toLowerCase();
-      resultado = resultado.filter(p => p.nome.toLowerCase().includes(termo));
+      resultado = resultado.filter((professor) => professor.nome.toLowerCase().includes(termo));
     }
 
-    // Health sem presenca publicavel nao participa de ranking.
     resultado.sort((a, b) => {
-      if (a.health_score_confiavel !== b.health_score_confiavel) {
-        return a.health_score_confiavel ? -1 : 1;
+      if (HEALTH_SCORE_V3_PERFORMANCE_ENABLED) {
+        const aRankable = Boolean(a.healthV3 && isHealthScoreV3SnapshotRankable(a.healthV3));
+        const bRankable = Boolean(b.healthV3 && isHealthScoreV3SnapshotRankable(b.healthV3));
+        if (aRankable !== bRankable) return aRankable ? -1 : 1;
+        if (aRankable && bRankable) return Number(b.healthV3?.score) - Number(a.healthV3?.score);
+        return a.nome.localeCompare(b.nome, 'pt-BR');
       }
+
+      if (a.health_score_confiavel !== b.health_score_confiavel) return a.health_score_confiavel ? -1 : 1;
       if (a.health_score_confiavel) return b.health_score - a.health_score;
       return a.nome.localeCompare(b.nome, 'pt-BR');
     });
 
     return resultado;
-  }, [professores, filtroStatus, filtroBusca]);
+  }, [professoresTabela, filtroStatus, filtroBusca]);
 
-  // Calcular alertas
   const alertas = useMemo<AlertaPerformance[]>(() => {
+    if (HEALTH_SCORE_V3_PERFORMANCE_ENABLED) {
+      const status = healthV3Snapshots
+        .filter(isHealthScoreV3SnapshotRankable)
+        .map((snapshot) => resolveHealthScoreV3Status(snapshot));
+      return [
+        { tipo: 'critico', quantidade: status.filter((item) => item === 'critico').length, descricao: 'Health Score V3 critico' },
+        { tipo: 'atencao', quantidade: status.filter((item) => item === 'atencao').length, descricao: 'Health Score V3 em atencao' },
+        { tipo: 'excelente', quantidade: status.filter((item) => item === 'excelente').length, descricao: 'Health Score V3 saudavel' },
+      ];
+    }
+
     const avaliaveis = professores.filter(p => p.health_score_confiavel);
     const criticos = avaliaveis.filter(p => p.status === 'critico');
     const atencao = avaliaveis.filter(p => p.status === 'atencao');
     const excelentes = avaliaveis.filter(p => p.status === 'excelente');
-
     return [
       { tipo: 'critico', quantidade: criticos.length, descricao: 'Retencao ou media critica' },
       { tipo: 'atencao', quantidade: atencao.length, descricao: 'Metricas abaixo da meta' },
-      { tipo: 'excelente', quantidade: excelentes.length, descricao: 'Health Score saudavel' }
+      { tipo: 'excelente', quantidade: excelentes.length, descricao: 'Health Score saudavel' },
     ];
-  }, [professores]);
+  }, [healthV3Snapshots, professores]);
 
-  // Rankings
   const rankings = useMemo(() => {
+    if (HEALTH_SCORE_V3_PERFORMANCE_ENABLED) {
+      const professorById = new Map(professores.map((professor) => [professor.id, professor]));
+      const topRetencao = rankHealthScoreV3Metric(healthV3Snapshots, 'retencao')[0];
+      const topMediaTurma = rankHealthScoreV3Metric(healthV3Snapshots, 'media_turma')[0];
+      return {
+        topRetencao: topRetencao ? {
+          nome: professorById.get(topRetencao.professorId)?.nome || `Professor ${topRetencao.professorId}`,
+          valor: topRetencao.value,
+        } : null,
+        topMediaTurma: topMediaTurma ? {
+          nome: professorById.get(topMediaTurma.professorId)?.nome || `Professor ${topMediaTurma.professorId}`,
+          valor: topMediaTurma.value,
+        } : null,
+      };
+    }
+
     const comCarteira = professores.filter(p => p.total_alunos > 0);
     const comTurmas = professores.filter(p => p.total_turmas > 0);
-
+    const topRetencao = [...comCarteira].sort((a, b) => b.taxa_retencao - a.taxa_retencao)[0];
+    const topMediaTurma = [...comTurmas].sort((a, b) => b.media_alunos_turma - a.media_alunos_turma)[0];
     return {
-      topRetencao: [...comCarteira].sort((a, b) => b.taxa_retencao - a.taxa_retencao)[0],
-      topMediaTurma: [...comTurmas].sort((a, b) => b.media_alunos_turma - a.media_alunos_turma)[0]
+      topRetencao: topRetencao ? { nome: topRetencao.nome, valor: topRetencao.taxa_retencao } : null,
+      topMediaTurma: topMediaTurma ? { nome: topMediaTurma.nome, valor: topMediaTurma.media_alunos_turma } : null,
     };
-  }, [professores]);
+  }, [healthV3Snapshots, professores]);
 
   // Métricas gerais para o Plano de Ação da Equipe
   const metricasGerais = useMemo(() => {
@@ -538,6 +708,16 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
   // Health Score médio da equipe
   const conversaoEquipe = useMemo(() => {
+    if (HEALTH_SCORE_V3_PERFORMANCE_ENABLED) {
+      const metricas = healthV3Snapshots
+        .map((snapshot) => snapshot.metrics.get('conversao'))
+        .filter((metrica) => metrica && Number(metrica.denominador) > 0);
+      const realizadas = metricas.reduce((acc, metrica) => acc + Number(metrica?.denominador || 0), 0);
+      const matriculas = metricas.reduce((acc, metrica) => acc + Number(metrica?.numerador || 0), 0);
+      const taxa = realizadas > 0 ? (matriculas / realizadas) * 100 : 0;
+      return { realizadas, matriculas, taxa: Math.round(taxa * 10) / 10 };
+    }
+
     const realizadas = professores.reduce((acc, p) => acc + p.experimentais, 0);
     const matriculas = professores.reduce((acc, p) => acc + p.matriculas_pos_exp, 0);
     const taxa = realizadas > 0 ? (matriculas / realizadas) * 100 : 0;
@@ -546,9 +726,19 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       matriculas,
       taxa: Math.round(taxa * 10) / 10,
     };
-  }, [professores]);
+  }, [healthV3Snapshots, professores]);
 
   const healthScoreEquipe = useMemo(() => {
+    if (HEALTH_SCORE_V3_PERFORMANCE_ENABLED) {
+      const avaliaveis = healthV3Snapshots.filter(isHealthScoreV3SnapshotRankable);
+      if (avaliaveis.length === 0) {
+        return { media: 0, status: 'atencao' as const, disponivel: false };
+      }
+      const media = avaliaveis.reduce((acc, snapshot) => acc + Number(snapshot.score), 0) / avaliaveis.length;
+      const status = media >= 70 ? 'saudavel' : media >= 50 ? 'atencao' : 'critico';
+      return { media: Math.round(media * 10) / 10, status, disponivel: true };
+    }
+
     const avaliaveis = professores.filter((professor) => professor.health_score_confiavel);
     if (avaliaveis.length === 0) {
       return { media: 0, status: 'atencao' as const, disponivel: false };
@@ -557,7 +747,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     const media = soma / avaliaveis.length;
     const status = media >= 70 ? 'saudavel' : media >= 40 ? 'atencao' : 'critico';
     return { media: Math.round(media * 10) / 10, status, disponivel: true };
-  }, [professores]);
+  }, [healthV3Snapshots, professores]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -592,7 +782,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     }
   };
 
-  if (loading) {
+  if (loading || (HEALTH_SCORE_V3_PERFORMANCE_ENABLED && healthV3Loading)) {
     return (
       <div className="flex items-center justify-center h-96">
         <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
@@ -602,6 +792,11 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
   return (
     <div className="space-y-6">
+      {HEALTH_SCORE_V3_PERFORMANCE_ENABLED && healthV3Error && (
+        <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          A Performance V3 nao foi carregada. Nenhum indicador V2 foi usado como substituto: {healthV3Error}
+        </div>
+      )}
       {/* Alertas de Performance */}
       <div data-tour="professores-alertas" className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
         <div className="flex items-center gap-2 mb-3">
@@ -653,10 +848,10 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           {rankings.topRetencao ? (
             <>
               <p className="text-white font-semibold text-sm truncate">{rankings.topRetencao.nome}</p>
-              <p className="text-green-400 text-sm">{rankings.topRetencao.taxa_retencao.toFixed(1)}% retenção</p>
+              <p className="text-green-400 text-sm">{rankings.topRetencao.valor.toFixed(1)}% retenção</p>
             </>
           ) : (
-            <p className="text-slate-500 text-sm">-</p>
+            <p className="text-slate-500 text-sm">Sem ranking publicável</p>
           )}
         </div>
 
@@ -753,18 +948,24 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           {rankings.topMediaTurma ? (
             <>
               <p className="text-white font-semibold text-sm truncate">{rankings.topMediaTurma.nome}</p>
-              <p className="text-green-400 text-sm">{rankings.topMediaTurma.media_alunos_turma.toFixed(1)} alunos/turma</p>
+              <p className="text-green-400 text-sm">{rankings.topMediaTurma.valor.toFixed(1)} alunos/turma</p>
             </>
           ) : (
-            <p className="text-slate-500 text-sm">-</p>
+            <p className="text-slate-500 text-sm">Sem ranking publicável</p>
           )}
         </div>
       </div>
 
-      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-        Conversao de professores usando fonte canonica Emusys + vinculo LA Report.
-        Matriculas pos-exp contam matriculas/cursos gerados por experimentais confirmadas; no Health Score a contribuicao e limitada a 100.
-      </div>
+      {HEALTH_SCORE_V3_PERFORMANCE_ENABLED ? (
+        <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-100">
+          Health Score V3 em homologação. A tabela usa snapshots V3 da competência; apenas score e métricas publicáveis entram nos rankings.
+        </div>
+      ) : (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+          Conversao de professores usando fonte canonica Emusys + vinculo LA Report.
+          Matriculas pos-exp contam matriculas/cursos gerados por experimentais confirmadas; no Health Score a contribuicao e limitada a 100.
+        </div>
+      )}
 
       {/* Filtros e Relatório */}
       <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
@@ -900,18 +1101,25 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                     <span>Health</span>
                   </div>
                 </th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
-                  <div className="flex items-center justify-center gap-1">
-                    <TrendingUp className="w-3 h-3 text-amber-400" />
-                    <span>Fator</span>
-                  </div>
-                </th>
+                {!HEALTH_SCORE_V3_PERFORMANCE_ENABLED && (
+                  <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
+                    <div className="flex items-center justify-center gap-1">
+                      <TrendingUp className="w-3 h-3 text-amber-400" />
+                      <span>Fator</span>
+                    </div>
+                  </th>
+                )}
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Alunos</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Média/Turma</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Retenção</th>
+                {HEALTH_SCORE_V3_PERFORMANCE_ENABLED && (
+                  <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Permanência</th>
+                )}
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Exp → Mat</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Presença</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Saidas</th>
+                {!HEALTH_SCORE_V3_PERFORMANCE_ENABLED && (
+                  <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Saidas</th>
+                )}
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Status</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Ações</th>
               </tr>
@@ -919,7 +1127,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             <tbody className="divide-y divide-slate-700/50">
               {professoresFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="p-8 text-center text-slate-400">
+                  <td colSpan={HEALTH_SCORE_V3_PERFORMANCE_ENABLED ? 10 : 11} className="p-8 text-center text-slate-400">
                     Nenhum professor encontrado
                   </td>
                 </tr>
@@ -928,14 +1136,20 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                   <tr
                     key={professor.id}
                     className={`hover:bg-slate-700/30 transition-colors cursor-pointer ${
-                      professor.health_score_confiavel && professor.status === 'critico' ? 'bg-red-500/5' : ''
+                      (HEALTH_SCORE_V3_PERFORMANCE_ENABLED
+                        ? resolveHealthScoreV3Status(professor.healthV3) === 'critico'
+                        : professor.health_score_confiavel && professor.status === 'critico')
+                        ? 'bg-red-500/5'
+                        : ''
                     }`}
                     onClick={() => setModalDetalhes({ open: true, professor })}
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getGradientByStatus(
-                          professor.health_score_confiavel ? professor.status : 'em_auditoria'
+                          HEALTH_SCORE_V3_PERFORMANCE_ENABLED
+                            ? resolveHealthScoreV3Status(professor.healthV3) || 'em_auditoria'
+                            : professor.health_score_confiavel ? professor.status : 'em_auditoria'
                         )} flex items-center justify-center text-white font-bold text-sm`}>
                           {professor.foto_url ? (
                             <img src={professor.foto_url} alt="" className="w-full h-full rounded-full object-cover" />
@@ -951,7 +1165,42 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                     </td>
                     {/* Health Score */}
                     <td className="text-center px-4 py-3">
-                      <Tooltip
+                      {HEALTH_SCORE_V3_PERFORMANCE_ENABLED ? (
+                        <Tooltip
+                          side="top"
+                          content={
+                            <div className="min-w-[240px] text-xs">
+                              <p className="mb-1.5 font-bold text-slate-200">Health Score V3</p>
+                              <p className="text-slate-300">
+                                Cobertura: <strong>{professor.healthV3?.cobertura?.toFixed(1) ?? '0'}%</strong>
+                              </p>
+                              <p className="text-slate-300">
+                                Revisão: <strong>{professor.healthV3?.revisao ?? '-'}</strong>
+                              </p>
+                              {professor.healthV3?.motivoBloqueio && (
+                                <p className="mt-1.5 text-amber-300">{professor.healthV3.motivoBloqueio}</p>
+                              )}
+                            </div>
+                          }
+                        >
+                          <div className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 ${
+                            professor.healthV3 && isHealthScoreV3SnapshotRankable(professor.healthV3)
+                              ? resolveHealthScoreV3Status(professor.healthV3) === 'critico'
+                                ? 'border-rose-700 bg-rose-900/30 text-rose-400'
+                                : resolveHealthScoreV3Status(professor.healthV3) === 'atencao'
+                                  ? 'border-amber-700 bg-amber-900/30 text-amber-400'
+                                  : 'border-emerald-700 bg-emerald-900/30 text-emerald-400'
+                              : 'border-slate-600 bg-slate-800 text-slate-400'
+                          }`}>
+                            <span className="text-sm font-black">
+                              {professor.healthV3 && isHealthScoreV3SnapshotRankable(professor.healthV3)
+                                ? Math.round(Number(professor.healthV3.score))
+                                : 'Sem base'}
+                            </span>
+                          </div>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip
                         side="top"
                         content={professor.health_score_confiavel ? (
                           <div className="min-w-[260px] text-xs" onClick={(e) => e.stopPropagation()}>
@@ -1012,10 +1261,12 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                             {professor.health_score_confiavel ? Math.round(professor.health_score) : 'Em auditoria'}
                           </span>
                         </div>
-                      </Tooltip>
+                        </Tooltip>
+                      )}
                     </td>
-                    {/* Fator de Demanda Ponderado */}
-                    <td className="text-center px-4 py-3">
+                    {!HEALTH_SCORE_V3_PERFORMANCE_ENABLED && (
+                      <>{/* Fator de Demanda Ponderado */}
+                      <td className="text-center px-4 py-3">
                       {professor.fator_demanda_publicavel && professor.fator_demanda_ponderado !== null ? (
                         <Tooltip
                           side="top"
@@ -1040,9 +1291,25 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                           </span>
                         </Tooltip>
                       )}
+                      </td></>
+                    )}
+                    <td className="text-center px-4 py-3 text-white">
+                      {HEALTH_SCORE_V3_PERFORMANCE_ENABLED ? (
+                        <HealthScoreV3MetricCell
+                          snapshot={professor.healthV3}
+                          metricKey="numero_alunos"
+                          onOpen={() => setModalDetalhes({ open: true, professor })}
+                        />
+                      ) : professor.total_alunos}
                     </td>
-                    <td className="text-center px-4 py-3 text-white">{professor.total_alunos}</td>
                     <td className="text-center px-4 py-3">
+                      {HEALTH_SCORE_V3_PERFORMANCE_ENABLED ? (
+                        <HealthScoreV3MetricCell
+                          snapshot={professor.healthV3}
+                          metricKey="media_turma"
+                          onOpen={() => setModalDetalhes({ open: true, professor })}
+                        />
+                      ) : (<>
                       <Tooltip side="top" content={professor.turmas_elegiveis_media > 0
                         ? `${professor.alunos_via_turmas} alunos regulares únicos ÷ ${professor.turmas_elegiveis_media} turmas regulares = ${professor.media_alunos_turma.toFixed(2)} alunos/turma · Carga total: ${professor.total_turmas} turmas`
                         : 'Sem turmas ativas no período · Clique para detalhes'}>
@@ -1061,8 +1328,16 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                           {professor.tendencia_media === 'subindo' ? '↑' : professor.tendencia_media === 'caindo' ? '↓' : ''}
                         </span>
                       )}
+                      </>)}
                     </td>
                     <td className="text-center px-4 py-3">
+                      {HEALTH_SCORE_V3_PERFORMANCE_ENABLED ? (
+                        <HealthScoreV3MetricCell
+                          snapshot={professor.healthV3}
+                          metricKey="retencao"
+                          onOpen={() => setModalDetalhes({ open: true, professor })}
+                        />
+                      ) : (
                       <Tooltip
                         side="top"
                         content={
@@ -1098,8 +1373,25 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                           {professor.taxa_retencao.toFixed(0)}%
                         </span>
                       </Tooltip>
+                      )}
                     </td>
+                    {HEALTH_SCORE_V3_PERFORMANCE_ENABLED && (
+                      <td className="text-center px-4 py-3">
+                        <HealthScoreV3MetricCell
+                          snapshot={professor.healthV3}
+                          metricKey="permanencia"
+                          onOpen={() => setModalDetalhes({ open: true, professor })}
+                        />
+                      </td>
+                    )}
                     <td className="text-center px-4 py-3">
+                      {HEALTH_SCORE_V3_PERFORMANCE_ENABLED ? (
+                        <HealthScoreV3MetricCell
+                          snapshot={professor.healthV3}
+                          metricKey="conversao"
+                          onOpen={() => setModalDetalhes({ open: true, professor })}
+                        />
+                      ) : (
                       <Tooltip
                         side="top"
                         content={
@@ -1171,9 +1463,16 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                           )}
                         </span>
                       </Tooltip>
+                      )}
                     </td>
                     <td className="text-center px-4 py-3">
-                      {professor.presenca_publicavel && professor.taxa_presenca !== null && professor.taxa_faltas !== null ? (
+                      {HEALTH_SCORE_V3_PERFORMANCE_ENABLED ? (
+                        <HealthScoreV3MetricCell
+                          snapshot={professor.healthV3}
+                          metricKey="presenca"
+                          onOpen={() => setModalDetalhes({ open: true, professor })}
+                        />
+                      ) : professor.presenca_publicavel && professor.taxa_presenca !== null && professor.taxa_faltas !== null ? (
                         <Tooltip
                           side="top"
                           content={
@@ -1223,6 +1522,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                         </Tooltip>
                       )}
                     </td>
+                    {!HEALTH_SCORE_V3_PERFORMANCE_ENABLED && (
                     <td className="text-center px-4 py-3">
                       <Tooltip
                         side="top"
@@ -1266,15 +1566,26 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                         </span>
                       </Tooltip>
                     </td>
+                    )}
                     <td className="text-center px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium border ${
-                        professor.health_score_confiavel
-                          ? getStatusColor(professor.status)
-                          : 'text-slate-400 bg-slate-500/10 border-slate-600'
+                        HEALTH_SCORE_V3_PERFORMANCE_ENABLED
+                          ? getStatusColor(resolveHealthScoreV3Status(professor.healthV3) || 'sem_base')
+                          : professor.health_score_confiavel
+                            ? getStatusColor(professor.status)
+                            : 'text-slate-400 bg-slate-500/10 border-slate-600'
                       }`}>
-                        {professor.health_score_confiavel
-                          ? (professor.status === 'critico' ? 'Crítico' : professor.status === 'atencao' ? 'Atenção' : 'Excelente')
-                          : 'Em auditoria'}
+                        {HEALTH_SCORE_V3_PERFORMANCE_ENABLED
+                          ? resolveHealthScoreV3Status(professor.healthV3) === 'critico'
+                            ? 'Crítico'
+                            : resolveHealthScoreV3Status(professor.healthV3) === 'atencao'
+                              ? 'Atenção'
+                              : resolveHealthScoreV3Status(professor.healthV3) === 'excelente'
+                                ? 'Excelente'
+                                : 'Sem base'
+                          : professor.health_score_confiavel
+                            ? (professor.status === 'critico' ? 'Crítico' : professor.status === 'atencao' ? 'Atenção' : 'Excelente')
+                            : 'Em auditoria'}
                       </span>
                     </td>
                     <td className="text-center px-4 py-3" onClick={(e) => e.stopPropagation()}>
@@ -1294,7 +1605,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           </table>
         </div>
         <div className="p-4 border-t border-slate-700 text-sm text-slate-400">
-          Mostrando {professoresFiltrados.length} de {professores.length} professores
+          Mostrando {professoresFiltrados.length} de {professoresTabela.length} professores
         </div>
       </div>
 

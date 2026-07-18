@@ -55,13 +55,21 @@ export function useHealthScoreProfessorV3({
   const [metrics, setMetrics] = useState<HealthScoreV3SnapshotMetric[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadedRequestKey, setLoadedRequestKey] = useState<string | null>(null);
   const requestIdRef = useRef(0);
+  const requestKey = [
+    enabled ? 'enabled' : 'disabled',
+    competencia,
+    unidadeId ?? 'consolidado',
+    professorId ?? 'sem-professor',
+  ].join(':');
 
   const load = useCallback(async () => {
     const requestId = ++requestIdRef.current;
 
     if (!enabled) {
       setMetrics([]);
+      setLoadedRequestKey(requestKey);
       setLoading(false);
       setError(null);
       return;
@@ -117,14 +125,16 @@ export function useHealthScoreProfessorV3({
         motivoSemBase: row.motivo_sem_base ?? null,
         detalhes: row.detalhes ?? {},
       })));
+      setLoadedRequestKey(requestKey);
     } catch (caught) {
       if (requestId !== requestIdRef.current) return;
       setError(caught instanceof Error ? caught.message : 'Falha ao carregar o Health Score V3.');
       setMetrics([]);
+      setLoadedRequestKey(requestKey);
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [competencia, enabled, professorId, unidadeId]);
+  }, [competencia, enabled, professorId, requestKey, unidadeId]);
 
   useEffect(() => {
     void load();
@@ -133,5 +143,10 @@ export function useHealthScoreProfessorV3({
     };
   }, [load]);
 
-  return { metrics, loading, error, reload: load };
+  return {
+    metrics: loadedRequestKey === requestKey ? metrics : [],
+    loading: loading || (enabled && loadedRequestKey !== requestKey),
+    error: loadedRequestKey === requestKey ? error : null,
+    reload: load,
+  };
 }

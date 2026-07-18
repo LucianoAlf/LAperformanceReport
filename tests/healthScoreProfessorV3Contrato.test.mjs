@@ -8,9 +8,7 @@ const arquivosV2 = [
   'src/lib/professoresKpisCanonicos.ts',
   'src/lib/relatorioCoordenacaoInstantaneo.ts',
   'src/components/App/Professores/ProfessoresPage.tsx',
-  'src/components/App/Professores/TabPerformanceProfessores.tsx',
   'src/components/App/Professores/TabCarteiraProfessores.tsx',
-  'src/components/App/Professores/ModalDetalhesProfessorPerformance.tsx',
   'src/components/App/Professores/ModalRelatorioCoordenacao.tsx',
   'src/components/App/Dashboard/DashboardPage.tsx',
 ];
@@ -46,16 +44,24 @@ test('KPIs produtivos de professor continuam na RPC canonica vigente', () => {
   );
 });
 
-test('telas produtivas continuam compondo o score pelo motor V2', () => {
-  for (const arquivo of [
-    'src/components/App/Professores/TabPerformanceProfessores.tsx',
-    'src/components/App/Professores/TabCarteiraProfessores.tsx',
-    'src/components/App/Professores/ModalDetalhesProfessorPerformance.tsx',
-  ]) {
-    assert.match(
-      ler(arquivo),
-      /calcularHealthScore/,
-      `${arquivo} deve continuar no motor V2 durante a sombra`,
-    );
+test('consumidores migrados em homologacao preservam rollback explicito para V2', () => {
+  const migrados = [
+    ['src/components/App/Professores/TabPerformanceProfessores.tsx', 'VITE_HEALTH_SCORE_V3_PERFORMANCE_ENABLED'],
+    ['src/components/App/Professores/ModalDetalhesProfessorPerformance.tsx', 'VITE_HEALTH_SCORE_V3_MODAL_ENABLED'],
+  ];
+
+  for (const [arquivo, flag] of migrados) {
+    const fonte = ler(arquivo);
+    assert.match(fonte, new RegExp(flag));
+    assert.match(fonte, /calcularHealthScore/, `${arquivo} deve preservar rollback V2`);
   }
+});
+
+test('consumidores ainda nao migrados continuam compondo o score pelo motor V2', () => {
+  const arquivo = 'src/components/App/Professores/TabCarteiraProfessores.tsx';
+  assert.match(
+    ler(arquivo),
+    /calcularHealthScore/,
+    `${arquivo} deve continuar no motor V2 durante a sombra`,
+  );
 });

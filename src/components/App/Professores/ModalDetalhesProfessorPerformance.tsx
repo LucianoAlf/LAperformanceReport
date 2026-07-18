@@ -74,6 +74,73 @@ function formatV3Base(metric: HealthScoreV3SnapshotMetric): string | null {
   return `${formatV3BaseNumber(metric.numerador)} / ${formatV3BaseNumber(metric.denominador)}`;
 }
 
+interface V3ObservedValue {
+  value: number | null;
+  displayLabel: string | null;
+  stateLabel: 'observado' | 'em auditoria';
+  evidenceLabel: string;
+  note: string;
+}
+
+function v3DetailNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getV3ObservedValue(metric: HealthScoreV3SnapshotMetric): V3ObservedValue | null {
+  if (metric.valorBruto !== null) return null;
+
+  if (metric.metrica === 'numero_alunos') {
+    const fechamentos = Array.isArray(metric.detalhes.fechamentos)
+      ? metric.detalhes.fechamentos
+      : [];
+    const ultimoFechamento = fechamentos[fechamentos.length - 1];
+    if (!ultimoFechamento || typeof ultimoFechamento !== 'object') return null;
+
+    const alunos = v3DetailNumber(
+      (ultimoFechamento as Record<string, unknown>).alunos_fechamento,
+    );
+    if (alunos === null) return null;
+
+    const meses = v3DetailNumber(metric.detalhes.meses_com_base) ?? fechamentos.length;
+    return {
+      value: alunos,
+      displayLabel: null,
+      stateLabel: 'observado',
+      evidenceLabel: `Fechamentos: ${formatV3BaseNumber(meses)}/3`,
+      note: `${meses}/3 fechamentos disponíveis; valor trimestral ainda fora do score.`,
+    };
+  }
+
+  if (metric.metrica === 'presenca') {
+    const valorObservado = v3DetailNumber(metric.detalhes.valor_observado);
+    if (valorObservado === null) return null;
+
+    const cobertura = v3DetailNumber(metric.detalhes.cobertura_observada);
+    const classificados = v3DetailNumber(metric.detalhes.eventos_classificados_observados);
+    const esperados = v3DetailNumber(metric.detalhes.eventos_esperados_observados);
+    const coberturaLabel = cobertura === null
+      ? 'cobertura em apuração'
+      : `cobertura ${cobertura.toFixed(1)}%`;
+    const evidenceLabel = classificados !== null && esperados !== null
+      ? `Eventos classificados: ${formatV3BaseNumber(classificados)}/${formatV3BaseNumber(esperados)}`
+      : 'Eventos classificados: em apuração';
+    const emAuditoria = metric.detalhes.observacao_publicacao === 'em_auditoria';
+
+    return {
+      value: emAuditoria ? null : valorObservado,
+      displayLabel: emAuditoria ? 'Em auditoria' : null,
+      stateLabel: emAuditoria ? 'em auditoria' : 'observado',
+      evidenceLabel,
+      note: emAuditoria
+        ? `${coberturaLabel}; valor observado preservado para auditoria e não publicado como indicador.`
+        : `${coberturaLabel}; pontuação começa em 03/08 e permanece fora do score.`,
+    };
+  }
+
+  return null;
+}
+
 function getV3Transparency(metric: HealthScoreV3SnapshotMetric): string | null {
   const explicit = metric.detalhes.transparencia_exclusao;
   if (typeof explicit === 'string' && explicit.trim()) return explicit;
@@ -178,6 +245,10 @@ function HealthScoreV3MetricsPanel({
 
           const transparency = getV3Transparency(metric);
           const base = formatV3Base(metric);
+          const observed = getV3ObservedValue(metric);
+          const displayValue = metric.valorBruto ?? observed?.value ?? null;
+          const displayLabel = observed?.displayLabel ?? formatV3Value(key, displayValue);
+          const observedInAudit = observed?.stateLabel === 'em auditoria';
           const pillarCoverage = metric.pesoDisponivel && metric.peso !== null
             ? `${formatV3BaseNumber(metric.peso)}% disponível`
             : 'fora do score';
@@ -187,18 +258,26 @@ function HealthScoreV3MetricsPanel({
               <div className="flex items-start justify-between gap-2">
                 <p className="text-xs font-semibold text-slate-300">{HEALTH_SCORE_V3_LABELS[key]}</p>
                 <span className="rounded bg-slate-900/80 px-1.5 py-0.5 text-[10px] text-slate-400">
-                  {formatV3State(metric.estadoBase)}
+                  {observed?.stateLabel ?? formatV3State(metric.estadoBase)}
                 </span>
               </div>
-              <p className={`mt-2 text-xl font-bold ${metric.valorBruto === null ? 'text-slate-500' : 'text-white'}`}>
-                {formatV3Value(key, metric.valorBruto)}
+              <p className={`mt-2 text-xl font-bold ${observedInAudit ? 'text-amber-300' : displayValue === null ? 'text-slate-500' : 'text-white'}`}>
+                {displayLabel}
               </p>
+              {observed && (
+                <p className={`text-[10px] font-medium uppercase ${observedInAudit ? 'text-amber-300' : 'text-cyan-300'}`}>
+                  {observedInAudit ? 'Valor não publicado' : 'Valor observado'}
+                </p>
+              )}
               <div className="mt-2 space-y-0.5 text-[11px] text-slate-500">
-                <p>Amostra: {metric.amostra ?? 'sem base'}{base ? ` | Base: ${base}` : ''}</p>
+                <p>{observed?.evidenceLabel ?? `Amostra: ${metric.amostra ?? 'sem base'}${base ? ` | Base: ${base}` : ''}`}</p>
                 <p>Cobertura do pilar: {pillarCoverage}</p>
                 <p>Recorte: {recorte}</p>
                 <p className="truncate" title={metric.fonte}>Fonte: {metric.fonte}</p>
               </div>
+              {observed && (
+                <p className="mt-2 text-[11px] leading-snug text-cyan-200/80">{observed.note}</p>
+              )}
               {transparency && (
                 <p className="mt-2 text-[11px] leading-snug text-amber-200/80">{transparency}</p>
               )}
