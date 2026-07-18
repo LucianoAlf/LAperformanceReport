@@ -11,3 +11,7 @@ verify_jwt = true
 
 [functions.reconstruir-periodos-professor]
 verify_jwt = true
+
+[functions.export-contas-receber]
+# Integracao servidor-servidor: autentica o segredo dedicado no proprio codigo.
+verify_jwt = false

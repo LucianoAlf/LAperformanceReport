@@ -175,6 +175,14 @@ Detalhes em `pendencias-emusys.md`. Resumo:
 
 ## 9. Fora de escopo (tocam Emusys, mas outros sistemas)
 - **NocoDB** — CRM paralelo dos agentes Mila. Recebe dados direto dos agentes, mas **não alimenta o Performance Report** (ramos NocoDB nos webhooks de lead desconectados; sync NocoDB→Supabase desativado desde ~28/03/2026).
+
+## 10. Exportação de faturas para o Super Folha
+
+`export-contas-receber` expõe uma leitura interna das faturas já sincronizadas em `emusys_faturas`. O Super Folha chama a Edge com competência explícita (`YYYY-MM-01`) e segredo dedicado; não recebe credenciais de banco do LA Report.
+
+O exportador cruza aluno/curso por `(unidade_id, emusys_matricula_id)`. Matrícula repetida na mesma unidade não multiplica faturas: a linha permanece única, recebe `cadastro_match_status='duplicado'` e carrega todos os candidatos para revisão humana. A resposta inclui `row_source_hash` e `manifest_hash` estáveis, sem timestamps voláteis, permitindo preflight seguido de apply protegido contra mudança da origem.
+
+Essa integração é **somente leitura** no LA Report. O espelho, o plano de contas e a auditoria da classificação ficam no projeto Super Folha.
 - **Dash do rayan** (`emusys-webhook` no projeto `aexacbmirdlcssmjjbzx`) — recebe cópia dos webhooks, projeto separado.
 - **emusys-agent** (chat) — repositório separado.
 
