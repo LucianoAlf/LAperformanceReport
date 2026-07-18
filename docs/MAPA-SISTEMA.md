@@ -3,6 +3,15 @@
 > **Propósito:** guia de referência rápida. Para cada página: rota, componentes, hooks, **RPCs** (funções do Postgres) e **edge functions** que ela usa. Consulte aqui antes de mexer numa página para entender de onde vêm os dados.
 >
 > **Manutenção (obrigatória):** ao criar/alterar uma página, hook, RPC ou edge function, **atualizar este arquivo no mesmo commit**. Critérios de cálculo de métricas ficam em [`docs/METRICAS.md`](./METRICAS.md). Ciclo Emusys em [`docs/MAPA-INTEGRACAO-EMUSYS.md`](./MAPA-INTEGRACAO-EMUSYS.md).
+
+## Integração financeira com o Super Folha
+
+- **Edge function:** `export-contas-receber`.
+- **Finalidade:** exportar, em modo somente leitura, as faturas Emusys de uma competência para o espelho financeiro do Super Folha.
+- **Autorização:** segredo interno dedicado no header `x-super-folha-sync-secret`; não aceita sessão de navegador nem expõe a service role do LA Report.
+- **Contrato:** uma linha por fatura, identidade `(la_report_unidade_id, emusys_fatura_id)`, match de aluno por `(unidade_id, emusys_matricula_id)`, candidatos explícitos quando o cadastro é duplicado e hashes determinísticos por linha/manifesto.
+- **Consistência:** a origem é lida duas vezes; mudança do manifesto durante a leitura retorna conflito e nenhuma importação deve prosseguir.
+- **Escrita:** nenhuma. Classificação e histórico operacional pertencem ao Super Folha.
 >
 > Última atualização: 2026-06-23.
 
