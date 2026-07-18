@@ -46,6 +46,7 @@ export interface AlunoSource {
   nome: string;
   unidade_id: string;
   emusys_matricula_id: string | null;
+  emusys_student_id: string | null;
   curso_id: number | null;
 }
 
@@ -66,6 +67,13 @@ const normalizeUnit = (value: unknown) => {
   if (unit === 'barra') return 'bar';
   return unit;
 };
+
+const normalizePersonName = (value: unknown) => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLowerCase();
 
 const canonicalize = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -132,21 +140,33 @@ export async function buildExportRows({
   cursos: CursoSource[];
 }) {
   const courseById = new Map(cursos.map((course) => [course.id, course.nome]));
-  const candidatesByKey = new Map<string, AlunoSource[]>();
+  const candidatesByMatricula = new Map<string, AlunoSource[]>();
+  const candidatesByStudent = new Map<string, AlunoSource[]>();
 
   for (const aluno of alunos) {
     const matricula = String(aluno.emusys_matricula_id ?? '').trim();
-    if (!matricula) continue;
-    const key = `${aluno.unidade_id}:${matricula}`;
-    candidatesByKey.set(key, [...(candidatesByKey.get(key) ?? []), aluno]);
+    if (matricula && matricula !== '0') {
+      const key = `${aluno.unidade_id}:${matricula}`;
+      candidatesByMatricula.set(key, [...(candidatesByMatricula.get(key) ?? []), aluno]);
+    }
+    const student = String(aluno.emusys_student_id ?? '').trim();
+    if (student && student !== '0') {
+      const key = `${aluno.unidade_id}:${student}`;
+      candidatesByStudent.set(key, [...(candidatesByStudent.get(key) ?? []), aluno]);
+    }
   }
 
   const rows = [];
   for (const fatura of faturas) {
-    const matricula = String(fatura.emusys_matricula_id ?? '').trim();
+    const rawMatricula = String(fatura.emusys_matricula_id ?? '').trim();
+    const matricula = rawMatricula === '0' ? '' : rawMatricula;
+    const student = String(fatura.emusys_student_id ?? '').trim();
+    const matchedByStudent = !matricula && Boolean(student && student !== '0');
     const candidates = matricula
-      ? [...(candidatesByKey.get(`${fatura.unidade_id}:${matricula}`) ?? [])]
-      : [];
+      ? [...(candidatesByMatricula.get(`${fatura.unidade_id}:${matricula}`) ?? [])]
+      : (matchedByStudent
+        ? [...(candidatesByStudent.get(`${fatura.unidade_id}:${student}`) ?? [])]
+        : []);
     candidates.sort((left, right) => left.id - right.id);
 
     const cursoCandidatos = candidates.map((candidate) => ({
@@ -155,9 +175,20 @@ export async function buildExportRows({
       curso_id: candidate.curso_id,
       curso_nome: candidate.curso_id == null ? null : (courseById.get(candidate.curso_id) ?? null),
     }));
-    const matchStatus: CadastroMatchStatus = candidates.length === 1
-      ? 'unico'
-      : candidates.length === 0 ? 'nao_encontrado' : 'duplicado';
+    const personGroups = new Map<string, AlunoSource[]>();
+    for (const candidate of candidates) {
+      const personKey = normalizePersonName(candidate.nome);
+      personGroups.set(personKey, [...(personGroups.get(personKey) ?? []), candidate]);
+    }
+    const uniquePerson = matchedByStudent && personGroups.size === 1
+      ? candidates[0]
+      : null;
+    const matchStatus: CadastroMatchStatus = matchedByStudent
+      ? (uniquePerson ? 'unico' : (candidates.length === 0 ? 'nao_encontrado' : 'duplicado'))
+      : (candidates.length === 1 ? 'unico' : (candidates.length === 0 ? 'nao_encontrado' : 'duplicado'));
+    const matchedCandidate = matchStatus === 'unico'
+      ? (matchedByStudent ? uniquePerson : candidates[0])
+      : null;
     const valorOriginal = money(fatura.valor_original);
     const juros = money(fatura.juros_e_multa);
     const descontoAplicado = money(fatura.desconto_aplicado);
@@ -168,7 +199,7 @@ export async function buildExportRows({
       la_report_unidade_id: fatura.unidade_id,
       unidade: normalizeUnit(fatura.unidade_codigo),
       emusys_fatura_id: identifier(fatura.emusys_fatura_id),
-      emusys_matricula_id: identifier(fatura.emusys_matricula_id),
+      emusys_matricula_id: matricula || null,
       emusys_student_id: identifier(fatura.emusys_student_id),
       descricao: String(fatura.descricao ?? '').trim(),
       status_origem: String(fatura.status ?? '').trim().toLowerCase() || 'desconhecido',
@@ -183,9 +214,9 @@ export async function buildExportRows({
       desconto_condicional: money(fatura.desconto_condicional),
       valor_liquido: Number((valorOriginal + juros - descontoAplicado).toFixed(2)),
       cadastro_match_status: matchStatus,
-      aluno_nome: matchStatus === 'unico' ? candidates[0].nome : null,
-      curso_nome: matchStatus === 'unico' && candidates[0].curso_id != null
-        ? (courseById.get(candidates[0].curso_id) ?? null)
+      aluno_nome: matchedCandidate?.nome ?? null,
+      curso_nome: matchStatus === 'unico' && !matchedByStudent && matchedCandidate?.curso_id != null
+        ? (courseById.get(matchedCandidate.curso_id) ?? null)
         : null,
       curso_candidatos: cursoCandidatos,
       source_missing: Boolean(fatura.source_missing),

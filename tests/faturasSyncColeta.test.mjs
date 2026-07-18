@@ -63,6 +63,18 @@ test('mapeia IDs bigint como texto e bloqueia ID, data ou competencia invalidos'
   assert.throws(() => mapFatura(rawFatura({ data_vencimento: '2026-07-10' }), 'cg', UNIDADE, COMPETENCIA), /competencia/i);
 });
 
+test('trata matricula zero do Emusys como ausencia sem afrouxar IDs obrigatorios', () => {
+  const mappedNumber = mapFatura(rawFatura({ matricula_id: 0 }), 'cg', UNIDADE, COMPETENCIA);
+  const mappedString = mapFatura(rawFatura({ matricula_id: '0' }), 'cg', UNIDADE, COMPETENCIA);
+
+  assert.equal(mappedNumber.emusys_matricula_id, null);
+  assert.equal(mappedString.emusys_matricula_id, null);
+  assert.throws(
+    () => mapFatura(rawFatura({ id: 0 }), 'cg', UNIDADE, COMPETENCIA),
+    /identificador.*invalido/i,
+  );
+});
+
 test('coleta todas as paginas completas e limita globalmente a 50 requisicoes por minuto', async () => {
   const clock = fakeClock();
   const limiter = new GlobalRateLimiter(REQUEST_INTERVAL_MS, clock.sleep, clock.now);

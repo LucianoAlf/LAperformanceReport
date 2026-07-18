@@ -61,20 +61,33 @@ function chunks<T>(values: T[], size: number) {
 async function fetchAlunos(client: SupabaseClient, faturas: FaturaSource[]) {
   const matriculas = [...new Set(faturas
     .map((row) => String(row.emusys_matricula_id ?? '').trim())
-    .filter(Boolean))];
+    .filter((value) => Boolean(value) && value !== '0'))];
+  const students = [...new Set(faturas
+    .map((row) => String(row.emusys_student_id ?? '').trim())
+    .filter((value) => Boolean(value) && value !== '0'))];
   const unidades = [...new Set(faturas.map((row) => row.unidade_id))];
-  const rows: AlunoSource[] = [];
+  const rowsById = new Map<number, AlunoSource>();
   for (const matriculaChunk of chunks(matriculas, 150)) {
     const { data, error } = await client
       .from('alunos')
-      .select('id,nome,unidade_id,emusys_matricula_id,curso_id')
+      .select('id,nome,unidade_id,emusys_matricula_id,emusys_student_id,curso_id')
       .in('unidade_id', unidades)
       .in('emusys_matricula_id', matriculaChunk)
       .order('id', { ascending: true });
     if (error) throw error;
-    rows.push(...((data ?? []) as AlunoSource[]));
+    for (const row of (data ?? []) as AlunoSource[]) rowsById.set(row.id, row);
   }
-  return rows;
+  for (const studentChunk of chunks(students, 150)) {
+    const { data, error } = await client
+      .from('alunos')
+      .select('id,nome,unidade_id,emusys_matricula_id,emusys_student_id,curso_id')
+      .in('unidade_id', unidades)
+      .in('emusys_student_id', studentChunk)
+      .order('id', { ascending: true });
+    if (error) throw error;
+    for (const row of (data ?? []) as AlunoSource[]) rowsById.set(row.id, row);
+  }
+  return [...rowsById.values()].sort((left, right) => left.id - right.id);
 }
 
 async function fetchCursos(client: SupabaseClient, alunos: AlunoSource[]) {

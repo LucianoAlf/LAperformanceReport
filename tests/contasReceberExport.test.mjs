@@ -65,9 +65,9 @@ const faturas = [
 ];
 
 const alunos = [
-  { id: 1, nome: 'Alice', unidade_id: UNIDADE_CG, emusys_matricula_id: '9007199254740995', curso_id: 7 },
-  { id: 2, nome: 'Bruno A', unidade_id: UNIDADE_REC, emusys_matricula_id: '901', curso_id: 8 },
-  { id: 3, nome: 'Bruno B', unidade_id: UNIDADE_REC, emusys_matricula_id: '901', curso_id: 9 },
+  { id: 1, nome: 'Alice', unidade_id: UNIDADE_CG, emusys_matricula_id: '9007199254740995', emusys_student_id: '9007199254740997', curso_id: 7 },
+  { id: 2, nome: 'Bruno A', unidade_id: UNIDADE_REC, emusys_matricula_id: '901', emusys_student_id: '101', curso_id: 8 },
+  { id: 3, nome: 'Bruno B', unidade_id: UNIDADE_REC, emusys_matricula_id: '901', emusys_student_id: '101', curso_id: 9 },
 ];
 
 const cursos = [
@@ -101,6 +101,33 @@ test('join por unidade e matricula preserva uma linha por fatura e explicita dup
   assert.equal(rows[1].valor_liquido, 21);
 });
 
+test('venda avulsa identifica a pessoa pelo aluno sem inventar um curso entre varias matriculas', async () => {
+  const avulsa = [{
+    ...faturas[0],
+    emusys_fatura_id: '77',
+    emusys_matricula_id: null,
+    emusys_student_id: '623',
+    descricao: 'Venda no controle de estoque. Produto: Caderno de cordas.',
+  }];
+  const alunosDaPessoa = [
+    { id: 10, nome: 'Maria Fernanda', unidade_id: UNIDADE_CG, emusys_matricula_id: '372', emusys_student_id: '623', curso_id: 8 },
+    { id: 11, nome: 'Maria Fernanda', unidade_id: UNIDADE_CG, emusys_matricula_id: '736', emusys_student_id: '623', curso_id: 9 },
+  ];
+
+  const [row] = await buildExportRows({ faturas: avulsa, alunos: alunosDaPessoa, cursos });
+  const [rowSemCadastro] = await buildExportRows({ faturas: avulsa, alunos: [], cursos });
+
+  assert.equal(row.cadastro_match_status, 'unico');
+  assert.equal(row.aluno_nome, 'Maria Fernanda');
+  assert.equal(row.curso_nome, null);
+  assert.equal(row.curso_candidatos.length, 2);
+  assert.equal(row.row_source_hash, rowSemCadastro.row_source_hash);
+
+  const manifesto = await buildManifest('2026-07-01', [row]);
+  const manifestoSemCadastro = await buildManifest('2026-07-01', [rowSemCadastro]);
+  assert.equal(manifesto.manifest_hash, manifestoSemCadastro.manifest_hash);
+});
+
 test('fronteira Data API converte ids bigint para texto antes do JavaScript', () => {
   const source = readFileSync(
     new URL('../supabase/functions/export-contas-receber/index.ts', import.meta.url),
@@ -110,6 +137,8 @@ test('fronteira Data API converte ids bigint para texto antes do JavaScript', ()
   assert.match(source, /emusys_fatura_id::text/);
   assert.match(source, /emusys_matricula_id::text/);
   assert.match(source, /emusys_student_id::text/);
+  assert.match(source, /select\('id,nome,unidade_id,emusys_matricula_id,emusys_student_id,curso_id'\)/i);
+  assert.match(source, /\.in\('emusys_student_id',\s*studentChunk\)/i);
 });
 
 test('exportador rejeita identificador numerico fora da faixa segura', async () => {

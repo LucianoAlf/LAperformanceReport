@@ -49,7 +49,12 @@ export class GlobalRateLimiter {
   }
 }
 
-const identifier = (value: unknown, field: string, required = false) => {
+const identifier = (
+  value: unknown,
+  field: string,
+  options: { required?: boolean; zeroAsNull?: boolean } = {},
+) => {
+  const { required = false, zeroAsNull = false } = options;
   if (value == null || String(value).trim() === '') {
     if (required) throw new Error(`identificador invalido em ${field}`);
     return null;
@@ -58,6 +63,7 @@ const identifier = (value: unknown, field: string, required = false) => {
     throw new Error(`identificador invalido ou inseguro em ${field}`);
   }
   const normalized = String(value).trim();
+  if (zeroAsNull && normalized === '0') return null;
   if (!/^[1-9]\d*$/.test(normalized)) {
     throw new Error(`identificador invalido em ${field}`);
   }
@@ -116,8 +122,8 @@ export function mapFatura(
   return {
     unidade_id: unidade.id,
     unidade_codigo: unidadeCodigo,
-    emusys_fatura_id: identifier(row.id, 'id', true)!,
-    emusys_matricula_id: identifier(row.matricula_id, 'matricula_id'),
+    emusys_fatura_id: identifier(row.id, 'id', { required: true })!,
+    emusys_matricula_id: identifier(row.matricula_id, 'matricula_id', { zeroAsNull: true }),
     emusys_contrato_id: identifier(row.contrato_id, 'contrato_id'),
     emusys_student_id: identifier(row.aluno_id, 'aluno_id'),
     descricao: String(row.descricao ?? '').trim(),
