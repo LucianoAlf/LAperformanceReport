@@ -22,6 +22,193 @@ import {
 import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
 import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
 import { formatCompetencia } from '@/hooks/useCompetenciaMensalStatus';
+import { useHealthScoreProfessorV3 } from '@/hooks/useHealthScoreProfessorV3';
+import {
+  HEALTH_SCORE_V3_METRICS,
+  type HealthMetricKeyV3,
+  type HealthScoreV3SnapshotMetric,
+} from '@/lib/healthScoreProfessorV3';
+
+const HEALTH_SCORE_V3_MODAL_FLAG = import.meta.env.VITE_HEALTH_SCORE_V3_MODAL_ENABLED;
+const HEALTH_SCORE_V3_MODAL_ENABLED =
+  HEALTH_SCORE_V3_MODAL_FLAG === 'true'
+  || (import.meta.env.DEV && HEALTH_SCORE_V3_MODAL_FLAG !== 'false');
+
+const HEALTH_SCORE_V3_LABELS: Record<HealthMetricKeyV3, string> = {
+  retencao: 'Retenção atribuível',
+  permanencia: 'Permanência com o professor',
+  conversao: 'Conversão Exp → Mat',
+  media_turma: 'Média de alunos por turma',
+  numero_alunos: 'Número de alunos',
+  presenca: 'Presença dos alunos',
+};
+
+function formatV3Value(metric: HealthMetricKeyV3, value: number | null): string {
+  if (value === null) return 'Sem base';
+  if (['retencao', 'conversao', 'presenca'].includes(metric)) return `${value.toFixed(1)}%`;
+  if (metric === 'permanencia') return `${value.toFixed(1)} meses`;
+  if (metric === 'media_turma') return value.toFixed(2);
+  return Math.round(value).toString();
+}
+
+function formatV3State(value: string | null | undefined): string {
+  if (!value) return 'Sem base';
+  return value.replace(/_/g, ' ');
+}
+
+function formatV3BaseNumber(value: number): string {
+  return Number.isInteger(value) ? value.toString() : value.toFixed(1);
+}
+
+function formatV3Base(metric: HealthScoreV3SnapshotMetric): string | null {
+  if (metric.denominador === null) return null;
+
+  if (metric.metrica === 'permanencia') {
+    return `${formatV3BaseNumber(metric.denominador)} vínculos encerrados elegíveis`;
+  }
+
+  if (metric.numerador === null) {
+    return formatV3BaseNumber(metric.denominador);
+  }
+
+  return `${formatV3BaseNumber(metric.numerador)} / ${formatV3BaseNumber(metric.denominador)}`;
+}
+
+function getV3Transparency(metric: HealthScoreV3SnapshotMetric): string | null {
+  const explicit = metric.detalhes.transparencia_exclusao;
+  if (typeof explicit === 'string' && explicit.trim()) return explicit;
+
+  const excluded = metric.detalhes.excluidos_abaixo_quatro_meses;
+  if (typeof excluded === 'number' && excluded > 0) {
+    return `${excluded} vinculos abaixo de 4 meses preservados no historico e fora da media.`;
+  }
+
+  return metric.motivoSemBase;
+}
+
+interface HealthScoreV3MetricsPanelProps {
+  metrics: HealthScoreV3SnapshotMetric[];
+  loading: boolean;
+  error: string | null;
+  competencia: string;
+  unidadeLabel: string;
+}
+
+function HealthScoreV3MetricsPanel({
+  metrics,
+  loading,
+  error,
+  competencia,
+  unidadeLabel,
+}: HealthScoreV3MetricsPanelProps) {
+  const snapshot = metrics[0] ?? null;
+  const [ano, mes] = competencia.split('-').map(Number);
+  const recorte = `${formatCompetencia(ano, mes)} | ${unidadeLabel}`;
+
+  if (loading) {
+    return (
+      <div className="min-h-[220px] flex items-center justify-center rounded-lg border border-violet-500/20 bg-violet-500/5">
+        <Loader2 className="w-5 h-5 animate-spin text-violet-400" />
+        <span className="ml-2 text-sm text-slate-300">Carregando snapshot V3...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-4">
+        <p className="text-sm font-medium text-rose-300">Snapshot V3 indisponível</p>
+        <p className="mt-1 text-xs text-rose-200/80">{error}</p>
+      </div>
+    );
+  }
+
+  if (!snapshot) {
+    return (
+      <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-4">
+        <p className="text-sm font-medium text-slate-200">Sem snapshot V3 para este recorte</p>
+        <p className="mt-1 text-xs text-slate-400">Recorte: {recorte}. A V2 continua disponível ao desligar a feature flag.</p>
+      </div>
+    );
+  }
+
+  const scoreAvailable = snapshot.score !== null;
+  const scoreLabel = scoreAvailable ? Math.round(snapshot.score as number).toString() : 'Sem base';
+  const coverageLabel = snapshot.cobertura === null ? 'Sem base' : `${snapshot.cobertura.toFixed(0)}%`;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 rounded-lg border border-violet-500/25 bg-violet-500/5 p-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <Heart className="h-4 w-4 text-violet-400" />
+            <p className="text-sm font-semibold text-white">Health Score V3 em homologação</p>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">Recorte: {recorte} | Configuração V{snapshot.configVersao}</p>
+          {snapshot.motivoBloqueio && (
+            <p className="mt-1 text-xs text-amber-300">{snapshot.motivoBloqueio}</p>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-center">
+          <div className="min-w-[104px] rounded-md bg-slate-900/70 px-3 py-2">
+            <p className="text-lg font-bold text-white">{scoreLabel}</p>
+            <p className="text-[10px] uppercase text-slate-500">Score V3</p>
+          </div>
+          <div className="min-w-[104px] rounded-md bg-slate-900/70 px-3 py-2">
+            <p className="text-lg font-bold text-cyan-300">{coverageLabel}</p>
+            <p className="text-[10px] uppercase text-slate-500">Cobertura</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {HEALTH_SCORE_V3_METRICS.map((key) => {
+          const metric = metrics.find((item) => item.metrica === key);
+          if (!metric) {
+            return (
+              <div key={key} className="min-h-[168px] rounded-lg border border-slate-700 bg-slate-800/40 p-4">
+                <p className="text-xs font-semibold text-slate-300">{HEALTH_SCORE_V3_LABELS[key]}</p>
+                <p className="mt-3 text-lg font-bold text-slate-500">Sem base</p>
+                <p className="mt-2 text-xs text-slate-500">Amostra: sem base</p>
+                <p className="text-xs text-slate-500">Cobertura do pilar: fora do score</p>
+                <p className="text-xs text-slate-500">Recorte: {recorte}</p>
+              </div>
+            );
+          }
+
+          const transparency = getV3Transparency(metric);
+          const base = formatV3Base(metric);
+          const pillarCoverage = metric.pesoDisponivel && metric.peso !== null
+            ? `${formatV3BaseNumber(metric.peso)}% disponível`
+            : 'fora do score';
+
+          return (
+            <div key={key} className="min-h-[168px] rounded-lg border border-slate-700 bg-slate-800/40 p-4">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs font-semibold text-slate-300">{HEALTH_SCORE_V3_LABELS[key]}</p>
+                <span className="rounded bg-slate-900/80 px-1.5 py-0.5 text-[10px] text-slate-400">
+                  {formatV3State(metric.estadoBase)}
+                </span>
+              </div>
+              <p className={`mt-2 text-xl font-bold ${metric.valorBruto === null ? 'text-slate-500' : 'text-white'}`}>
+                {formatV3Value(key, metric.valorBruto)}
+              </p>
+              <div className="mt-2 space-y-0.5 text-[11px] text-slate-500">
+                <p>Amostra: {metric.amostra ?? 'sem base'}{base ? ` | Base: ${base}` : ''}</p>
+                <p>Cobertura do pilar: {pillarCoverage}</p>
+                <p>Recorte: {recorte}</p>
+                <p className="truncate" title={metric.fonte}>Fonte: {metric.fonte}</p>
+              </div>
+              {transparency && (
+                <p className="mt-2 text-[11px] leading-snug text-amber-200/80">{transparency}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 interface ProfessorPerformance {
   id: number;
@@ -115,6 +302,16 @@ interface Props {
 
 export function ModalDetalhesProfessorPerformance({ open, onClose, professor, competencia: competenciaInicial, onNovaMeta, onNovaAcao, healthWeights, unidadeId, unidadeNome }: Props) {
   const [competencia, setCompetencia] = useState(competenciaInicial);
+  const {
+    metrics: healthScoreV3Metrics,
+    loading: healthScoreV3Loading,
+    error: healthScoreV3Error,
+  } = useHealthScoreProfessorV3({
+    competencia,
+    unidadeId: unidadeId ?? null,
+    professorId: professor?.id ?? null,
+    enabled: HEALTH_SCORE_V3_MODAL_ENABLED && open && Boolean(professor),
+  });
   const [metas, setMetas] = useState<Meta[]>([]);
   const [acoes, setAcoes] = useState<Acao[]>([]);
   const [evasoes, setEvasoes] = useState<Evasao[]>([]);
@@ -175,6 +372,9 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
   const taxaConversaoCompetencia = kpiCompetenciaSelecionada?.taxa_conversao
     ?? professor?.taxa_conversao
     ?? 0;
+  const healthScoreV3UnidadeLabel = unidadeId
+    ? professor?.unidades.find((unidade) => unidade.id === unidadeId)?.nome || unidadeNome || 'Unidade'
+    : 'Consolidado';
 
   // Sincronizar competência quando a prop muda (troca de professor ou mês externo)
   useEffect(() => {
@@ -661,7 +861,10 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700">
+      <DialogContent
+        aria-describedby={undefined}
+        className={`${HEALTH_SCORE_V3_MODAL_ENABLED ? 'max-w-6xl' : 'max-w-4xl'} max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700`}
+      >
         {/* Header */}
         <DialogHeader className="border-b border-slate-700 pb-4">
           <div className="flex items-center justify-between">
@@ -686,9 +889,15 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
               </div>
             </div>
             <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-              healthScorePublicavel ? getStatusColor(professor.status) : 'text-slate-400 bg-slate-500/20'
+              HEALTH_SCORE_V3_MODAL_ENABLED
+                ? 'border border-violet-500/30 bg-violet-500/10 text-violet-300'
+                : healthScorePublicavel
+                ? getStatusColor(professor.status)
+                : 'text-slate-400 bg-slate-500/20'
             }`}>
-              {healthScorePublicavel
+              {HEALTH_SCORE_V3_MODAL_ENABLED
+                ? 'V3 em homologação'
+                : healthScorePublicavel
                 ? (professor.status === 'critico' ? 'Crítico' : professor.status === 'atencao' ? 'Atenção' : 'Excelente')
                 : 'Em auditoria'}
             </span>
@@ -725,6 +934,15 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
             </div>
           </div>
           
+          {HEALTH_SCORE_V3_MODAL_ENABLED ? (
+            <HealthScoreV3MetricsPanel
+              metrics={healthScoreV3Metrics}
+              loading={healthScoreV3Loading}
+              error={healthScoreV3Error}
+              competencia={competencia}
+              unidadeLabel={healthScoreV3UnidadeLabel}
+            />
+          ) : (
           <div className="flex gap-4 items-center">
             {/* Health Score com Gauge - Destaque à esquerda, proporcionalmente maior */}
             <div className={`bg-slate-800 rounded-xl p-3 border-2 ${
@@ -859,6 +1077,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
               </div>
             </div>
           </div>
+          )}
 
           {/* Gráfico de Evolução - Últimos 6 meses */}
           {evolucao.length > 0 && (

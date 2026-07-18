@@ -665,9 +665,13 @@ Separar por unidade e consolidado, mas nao criar metas automaticas por instrumen
 
 Simular ranking, cobertura e quantidade de scores por faixa para cada meta candidata.
 
-- [ ] **Step 3: Obter decisao da coordenacao**
+- [x] **Step 3: Obter decisao da autoridade pedagogica**
 
 Registrar meta aprovada, justificativa e vigencia. Somente entao ativar config.
+
+Alf homologou a meta trimestral inicial de conversao em `70%` em 18/07/2026.
+A distribuicao canonica de 2026-Q2 apresentou P90 `66,67%`; a meta foi
+arredondada para 70 e registrada com evidencia, autoridade e justificativa.
 
 Resultado tecnico adicional em 18/07/2026: Peterson e mais 12
 professores-unidade foram auditados no historico integral de 2018 a 16/07/2026.
@@ -678,9 +682,11 @@ V1 em sombra como `meta = 12`, com comparador `>`, sem ativar a configuracao e
 sem migrar consumidores. Evidencias:
 `docs/auditorias/2026-07-18-permanencia-amostra-12-professores.md`.
 
-**Gate 5:** motor versionado e snapshots imutaveis implantados. O gate segue
-aberto ate conversao e permanencia receberem metas homologadas; somente entao a
-configuracao pode ser ativada e a Fase 6 iniciada.
+**Gate 5:** fechado em 18/07/2026. Motor versionado e snapshots imutaveis
+implantados; metas iniciais de conversao `70%` e permanencia `12 meses`
+homologadas; configuracao V1 ativada exclusivamente para execucao em sombra.
+Retencao permanece sem meta ate possuir dados reais e presenca inicia em
+03/08/2026. Nenhum consumidor V2 foi migrado.
 
 ---
 
@@ -689,43 +695,49 @@ configuracao pode ser ativada e a Fase 6 iniciada.
 ### Task 14: Criar comparador V2 x V3
 
 **Files:**
-- Create: `docs/auditorias/2026-07-16-health-score-professor-v3-sombra.md`
+- Create: `docs/auditorias/2026-07-18-health-score-professor-v3-gate-6-sombra.md`
 - Modify: `scripts/verify-health-score-professor-v3.sql`
 
-- [ ] **Step 1: Materializar snapshots provisorios**
+- [x] **Step 1: Materializar snapshots provisorios**
 
-Junho/julho para os cinco pilares sem presenca; agosto/setembro inclui presenca a partir de 03/08.
+Julho foi materializado em 129 snapshots porque a V1 vigora a partir de
+01/07/2026. Junho permanece como baseline SELECT-only das RPCs do Gate 4; nao
+se retroage uma configuracao temporal para fabricar snapshot anterior.
+Agosto/setembro incluem presenca somente a partir de 03/08.
 
-- [ ] **Step 2: Comparar por professor/unidade/pilar**
+- [x] **Step 2: Comparar por professor/unidade/pilar**
 
 Listar V2, V3, delta, fonte V2, fonte V3, amostra, cobertura, confianca e explicacao.
 
-- [ ] **Step 3: Conferir lista ouro da coordenacao**
+- [x] **Step 3: Conferir lista ouro da coordenacao**
 
 Validar numero de alunos e media/turma para os professores ja auditados, mais casos multiunidade e dois cursos.
 
-- [ ] **Step 4: Auditar permanencia nominalmente**
+- [x] **Step 4: Auditar permanencia nominalmente**
 
 Conferir pelo menos dez periodos encerrados por unidade, incluindo abaixo/acima de quatro meses.
 Separar no retorno a media historica dos vinculos encerrados da idade media da
 carteira ativa. A mediana permanece apenas em diagnostico tecnico. Nao publicar
 uma amostra parcialmente revisada como permanencia oficial.
 
-- [ ] **Step 5: Rodar seguranca e desempenho**
+- [x] **Step 5: Rodar seguranca e desempenho**
 
 Consultar grants, RLS, explain analyze das RPCs e Supabase advisors. Nenhuma RPC V3 pode estar publica/anon.
 
-- [ ] **Step 6: Rodar suite completa**
+- [x] **Step 6: Rodar suite completa**
 
 Run: `node --test tests/*.test.mjs`
-Expected: todos PASS.
+Resultado em 18/07/2026: `232/232` PASS.
 
-- [ ] **Step 7: Rodar build**
+- [x] **Step 7: Rodar build**
 
 Run: `npm run build`
-Expected: exit 0.
+Resultado em 18/07/2026: exit `0`; avisos preexistentes de chunk/Recharts sem
+relacao com o motor V3.
 
-**Gate 6:** diferencas explicadas, seguranca aprovada e V2 sem regressao.
+**Gate 6:** fechado tecnicamente em sombra em 18/07/2026. Diferencas foram
+preservadas no comparador, seguranca foi endurecida, nenhum snapshot foi
+publicado, suite `232/232` e build de producao aprovados.
 
 ---
 
@@ -739,7 +751,7 @@ Expected: exit 0.
 - Create: `src/hooks/useHealthScoreProfessorV3Config.ts`
 - Create: `tests/healthScoreProfessorV3Frontend.test.mjs`
 
-- [ ] **Step 1: Escrever tipos**
+- [x] **Step 1: Escrever tipos**
 
 ```ts
 export type HealthMetricKeyV3 =
@@ -763,45 +775,63 @@ export interface HealthMetricSnapshotV3 {
 }
 ```
 
-- [ ] **Step 2: Implementar hook somente leitura de sombra**
+- [x] **Step 2: Implementar hook somente leitura de sombra**
 
 O hook recebe professor/unidade/competencia e nao faz fallback para V2 nem para zero.
 
-- [ ] **Step 3: Implementar hook de config rascunho**
+- [x] **Step 3: Implementar hook de config rascunho**
 
-Salvar cria/edita somente config `rascunho`; ativacao e acao separada com justificativa.
+Uma configuracao ativa e imutavel. Ao editar, o hook clona a versao ativa para
+um novo `rascunho`; salvar nunca altera a ativa. Ativacao e acao separada e
+exige vigencia, autor e justificativa.
 
-- [ ] **Step 4: Rodar teste**
+- [x] **Step 4: Rodar teste**
 
 Run: `node --test tests/healthScoreProfessorV3Frontend.test.mjs`
 Expected: PASS.
 
-### Task 16: Criar sliders V3 separados
+### Task 16: Criar pesos e metas V3 separados
 
 **Files:**
 - Create: `src/components/App/Professores/HealthScoreV3Config.tsx`
 - Modify: `src/components/App/Professores/ProfessoresPage.tsx`
 - Modify: `tests/healthScoreProfessorV3Frontend.test.mjs`
 
-- [ ] **Step 1: Testar os seis fatores novos**
+- [x] **Step 1: Testar os seis fatores novos**
 
 Exigir ausencia de crescimento/fator de demanda/evasao duplicada e presenca explicita.
 
-- [ ] **Step 2: Implementar painel protegido por feature flag**
+- [x] **Step 2: Implementar painel protegido por feature flag**
 
-Exibir versao, status rascunho/ativa, vigencia, soma de pesos, metas e justificativa. Nao substituir `HealthScoreConfig` V2.
+Exibir versao, status rascunho/ativa, vigencia, soma de pesos, metas e
+justificativa. Os sliders controlam somente os pesos. Cada pilar possui campo
+numerico de meta separado, unidade visivel e estado
+`aprovada/rascunho/sem_dados/bloqueada`. Antes da ativacao, a coordenacao deve
+simular o impacto da nova versao. Nao substituir `HealthScoreConfig` V2.
 
-- [ ] **Step 3: Validar layout desktop/mobile**
+O navegador nao escreve diretamente nas tabelas: toda gravacao usa RPC
+protegida por `professores.editar`, com trilha de autoria. Nova meta ou peso
+vale somente a partir da vigencia escolhida e nunca recalcula snapshots
+fechados.
+
+- [x] **Step 3: Validar layout desktop/mobile**
 
 Usar Playwright/browser com coordenacao logada; confirmar que sliders nao alteram dimensoes nem estouram texto.
 
-- [ ] **Step 4: Rodar build e teste**
+- [x] **Step 4: Rodar build e teste**
 
 Run: `node --test tests/healthScoreProfessorV3Frontend.test.mjs`
 Run: `npm run build`
 Expected: PASS/exit 0.
 
-**Gate 7:** coordenacao consegue simular V3 sem publicar ou alterar V2.
+**Gate 7:** fechado tecnicamente em 18/07/2026. A coordenacao consegue criar
+rascunho, ajustar pesos e metas separadamente, salvar, simular e ativar uma
+nova versao futura sem publicar snapshots nem alterar V2. A ativacao exige no
+banco uma simulacao persistida da revisao exata do rascunho; qualquer mudanca
+posterior invalida essa simulacao. O painel foi validado no navegador em
+desktop e viewport mobile. O shell legado continua com largura minima e
+rolagem horizontal em telas estreitas, sem alterar a composicao interna do
+painel V3.
 
 ---
 
@@ -813,11 +843,19 @@ Expected: PASS/exit 0.
 - Modify: `src/components/App/Professores/ModalDetalhesProfessorPerformance.tsx`
 - Modify: `tests/healthScoreProfessorV3Frontend.test.mjs`
 
-- [ ] Adicionar leitura V3 quando flag ativa.
-- [ ] Exibir valor, base, cobertura e recorte de cada pilar.
-- [ ] Exibir `sem_base`, nunca zero substituto.
-- [ ] Testar rollback desligando flag.
+- [x] Adicionar leitura V3 quando flag ativa.
+- [x] Exibir valor, base, cobertura e recorte de cada pilar.
+- [x] Exibir `sem_base`, nunca zero substituto.
+- [x] Testar rollback desligando flag.
 - [ ] Validar com Playwright em professor com base completa e incompleta.
+
+Checkpoint tecnico em 18/07/2026: o estado incompleto foi validado no
+navegador autenticado para Peterson Biancamano nos recortes Consolidado e
+Campo Grande. O modal preserva `null`, explicita amostra, base, fonte, regra,
+cobertura e motivo de exclusao. O rollback por flag foi coberto por teste. A
+validacao de base completa permanece aberta porque ainda nao existe snapshot
+V3 publicavel de julho; Performance e rankings nao devem migrar antes da
+homologacao deste modal.
 
 ### Task 18: Migrar tabela Performance e rankings
 
