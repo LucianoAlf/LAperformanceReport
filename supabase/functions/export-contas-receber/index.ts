@@ -31,18 +31,22 @@ function safeEqual(left: string, right: string) {
   return diff === 0;
 }
 
-async function fetchFaturas(client: SupabaseClient, competencia: string) {
+async function fetchFaturas(client: SupabaseClient, competencia: string, syncRunId: string) {
   const rows: FaturaSource[] = [];
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await client
-      .from('emusys_faturas')
-      .select('id,unidade_id,unidade_codigo,emusys_fatura_id::text,emusys_matricula_id::text,emusys_student_id::text,descricao,status,data_vencimento,data_pagamento,competencia,valor_original,valor_pago,juros_e_multa,desconto_aplicado,desconto_fixo,desconto_condicional,synced_at,updated_at')
+      .from('sync_run_items')
+      .select('id,canonical_fatura_id,run_id,unidade_id,unidade_codigo,emusys_fatura_id::text,emusys_matricula_id::text,emusys_student_id::text,descricao,status,data_vencimento,data_pagamento,competencia,valor_original,valor_pago,juros_e_multa,desconto_aplicado,desconto_fixo,desconto_condicional,source_missing,source_missing_reason,source_last_seen_at,source_missing_detected_at,source_missing_resolved_at')
+      .eq('run_id', syncRunId)
       .eq('competencia', competencia)
       .order('unidade_id', { ascending: true })
       .order('emusys_fatura_id', { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
-    rows.push(...((data ?? []) as FaturaSource[]));
+    rows.push(...((data ?? []).map((row) => ({
+      ...row,
+      sync_run_id: row.run_id,
+    })) as FaturaSource[]));
     if ((data?.length ?? 0) < PAGE_SIZE) break;
   }
   return rows;
@@ -88,12 +92,67 @@ async function fetchCursos(client: SupabaseClient, alunos: AlunoSource[]) {
   return rows;
 }
 
-async function readSnapshot(client: SupabaseClient, competencia: string) {
-  const faturas = await fetchFaturas(client, competencia);
+async function fetchRun(client: SupabaseClient, competencia: string, syncRunId: string) {
+  const { data, error } = await client
+    .from('sync_runs')
+    .select('id,competencia,run_type,status,completed_at,unidades_concluidas,snapshot_complete')
+    .eq('id', syncRunId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('sync_run_id nao encontrado');
+  if (data.competencia !== competencia) throw new Error('sync_run_id nao pertence a competencia solicitada');
+  if (
+    data.run_type !== 'live'
+    || data.status !== 'succeeded'
+    || data.snapshot_complete !== true
+    || data.unidades_concluidas !== 3
+    || !data.completed_at
+  ) {
+    throw new Error('sync_run_id nao representa snapshot live completo');
+  }
+  return data;
+}
+
+async function fetchLatestCompleteRun(client: SupabaseClient, competencia: string) {
+  const { data, error } = await client
+    .from('sync_runs')
+    .select('id,competencia,run_type,status,completed_at,unidades_concluidas,snapshot_complete')
+    .eq('competencia', competencia)
+    .eq('run_type', 'live')
+    .eq('status', 'succeeded')
+    .eq('snapshot_complete', true)
+    .eq('unidades_concluidas', 3)
+    .not('completed_at', 'is', null)
+    .order('completed_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('nenhum snapshot live completo encontrado para a competencia');
+  return data;
+}
+
+async function readSnapshot(
+  client: SupabaseClient,
+  competencia: string,
+  syncRunId: string | null,
+  requireLatest: boolean,
+) {
+  const latestRun = await fetchLatestCompleteRun(client, competencia);
+  const run = syncRunId ? await fetchRun(client, competencia, syncRunId) : latestRun;
+  if (requireLatest && run.id !== latestRun.id) {
+    throw new Error('run solicitado nao e o ultimo snapshot completo');
+  }
+
+  const faturas = await fetchFaturas(client, competencia, run.id);
   const alunos = await fetchAlunos(client, faturas);
   const cursos = await fetchCursos(client, alunos);
   const itens = await buildExportRows({ faturas, alunos, cursos });
-  const manifesto = await buildManifest(competencia, itens);
+  const latestAfterRead = await fetchLatestCompleteRun(client, competencia);
+  if (requireLatest && run.id !== latestAfterRead.id) {
+    throw new Error('run solicitado nao e o ultimo snapshot completo');
+  }
+  const manifesto = await buildManifest(competencia, itens, run, latestAfterRead.id);
   return { itens, manifesto };
 }
 
@@ -106,26 +165,32 @@ serve(async (request) => {
   }
 
   try {
-    const body = await request.json().catch(() => ({}));
+    const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     const competencia = validateCompetencia(body.competencia);
+    const rawSyncRunId = String(body.sync_run_id ?? '').trim();
+    const syncRunId = rawSyncRunId || null;
+    if (syncRunId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(syncRunId)) {
+      return json({ success: false, erro: 'sync_run_id deve ser UUID quando informado' }, 400);
+    }
+    if (body.require_latest != null && typeof body.require_latest !== 'boolean') {
+      return json({ success: false, erro: 'require_latest deve ser boolean' }, 400);
+    }
+    const requireLatest = body.require_latest === true;
     const client = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const first = await readSnapshot(client, competencia);
-    const second = await readSnapshot(client, competencia);
-    if (first.manifesto.manifest_hash !== second.manifesto.manifest_hash) {
-      return json({
-        success: false,
-        erro: 'fonte mudou durante a leitura; tente o preflight novamente',
-        manifest_hash_inicial: first.manifesto.manifest_hash,
-        manifest_hash_final: second.manifesto.manifest_hash,
-      }, 409);
-    }
-
-    return json({ success: true, manifesto: second.manifesto, itens: second.itens });
+    const snapshot = await readSnapshot(client, competencia, syncRunId, requireLatest);
+    return json({ success: true, manifesto: snapshot.manifesto, itens: snapshot.itens });
   } catch (error) {
     console.error('[export-contas-receber]', error);
-    const message = error instanceof Error ? error.message : String(error);
-    return json({ success: false, erro: message }, /competencia/i.test(message) ? 400 : 500);
+    const message = error instanceof Error
+      ? error.message
+      : (error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error));
+    const status = /competencia|UUID quando informado|require_latest deve/i.test(message)
+      ? 400
+      : (/nao encontrado|nenhum snapshot/i.test(message)
+        ? 404
+        : (/snapshot live completo|ultimo snapshot completo/i.test(message) ? 409 : 500));
+    return json({ success: false, erro: message }, status);
   }
 });

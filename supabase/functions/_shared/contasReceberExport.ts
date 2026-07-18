@@ -2,6 +2,8 @@ export type CadastroMatchStatus = 'unico' | 'nao_encontrado' | 'duplicado';
 
 export interface FaturaSource {
   id: string;
+  canonical_fatura_id: string;
+  sync_run_id: string;
   unidade_id: string;
   unidade_codigo: string;
   emusys_fatura_id: number | string;
@@ -20,6 +22,11 @@ export interface FaturaSource {
   desconto_condicional: number | string;
   synced_at?: string | null;
   updated_at?: string | null;
+  source_missing?: boolean;
+  source_missing_reason?: string | null;
+  source_last_seen_at?: string | null;
+  source_missing_detected_at?: string | null;
+  source_missing_resolved_at?: string | null;
 }
 
 const identifier = (value: unknown) => {
@@ -95,13 +102,24 @@ export function validateCompetencia(value: unknown) {
 }
 
 function rowHashPayload(row: Record<string, unknown>) {
-  const {
-    row_source_hash: _rowSourceHash,
-    source_synced_at: _sourceSyncedAt,
-    source_updated_at: _sourceUpdatedAt,
-    ...stable
-  } = row;
-  return stable;
+  return {
+    la_report_unidade_id: row.la_report_unidade_id,
+    emusys_fatura_id: row.emusys_fatura_id,
+    competencia: row.competencia,
+    descricao: row.descricao,
+    status_origem: row.status_origem,
+    data_vencimento: row.data_vencimento,
+    data_recebimento: row.data_recebimento,
+    valor_original: row.valor_original,
+    valor_pago: row.valor_pago,
+    juros_e_multa: row.juros_e_multa,
+    desconto_aplicado: row.desconto_aplicado,
+    desconto_fixo: row.desconto_fixo,
+    desconto_condicional: row.desconto_condicional,
+    valor_liquido: row.valor_liquido,
+    source_missing: row.source_missing,
+    source_missing_reason: row.source_missing_reason,
+  };
 }
 
 export async function buildExportRows({
@@ -144,7 +162,9 @@ export async function buildExportRows({
     const juros = money(fatura.juros_e_multa);
     const descontoAplicado = money(fatura.desconto_aplicado);
     const row: Record<string, unknown> = {
-      la_report_fatura_id: fatura.id,
+      la_report_fatura_id: fatura.canonical_fatura_id,
+      sync_run_id: fatura.sync_run_id,
+      sync_run_item_id: fatura.id,
       la_report_unidade_id: fatura.unidade_id,
       unidade: normalizeUnit(fatura.unidade_codigo),
       emusys_fatura_id: identifier(fatura.emusys_fatura_id),
@@ -168,8 +188,13 @@ export async function buildExportRows({
         ? (courseById.get(candidates[0].curso_id) ?? null)
         : null,
       curso_candidatos: cursoCandidatos,
+      source_missing: Boolean(fatura.source_missing),
+      source_missing_reason: fatura.source_missing_reason ?? null,
+      source_last_seen_at: fatura.source_last_seen_at ?? null,
+      source_missing_detected_at: fatura.source_missing_detected_at ?? null,
+      source_missing_resolved_at: fatura.source_missing_resolved_at ?? null,
       source_updated_at: fatura.updated_at ?? null,
-      source_synced_at: fatura.synced_at ?? null,
+      source_synced_at: fatura.source_last_seen_at ?? fatura.synced_at ?? null,
     };
     row.row_source_hash = await sha256(rowHashPayload(row));
     rows.push(row);
@@ -182,7 +207,19 @@ export async function buildExportRows({
   return rows;
 }
 
-export async function buildManifest(competenciaValue: unknown, rows: Record<string, unknown>[]) {
+export interface SyncRunManifestSource {
+  id: string;
+  completed_at: string;
+  unidades_concluidas: number;
+  snapshot_complete: boolean;
+}
+
+export async function buildManifest(
+  competenciaValue: unknown,
+  rows: Record<string, unknown>[],
+  run?: SyncRunManifestSource,
+  latestCompleteSyncRunId: string | null = run?.id ?? null,
+) {
   const competencia = validateCompetencia(competenciaValue);
   const ordered = [...rows].sort((left, right) => (
     String(left.la_report_unidade_id).localeCompare(String(right.la_report_unidade_id))
@@ -202,16 +239,6 @@ export async function buildManifest(competenciaValue: unknown, rows: Record<stri
     current.valor_pago = Number((current.valor_pago + money(row.valor_pago)).toFixed(2));
     units.set(key, current);
   }
-  const sourceUpdatedAt = ordered
-    .map((row) => String(row.source_updated_at ?? ''))
-    .filter(Boolean)
-    .sort()
-    .at(-1) ?? null;
-  const sourceSyncedAt = ordered
-    .map((row) => String(row.source_synced_at ?? ''))
-    .filter(Boolean)
-    .sort()
-    .at(-1) ?? null;
   const hashRows = ordered.map((row) => ({
     la_report_unidade_id: row.la_report_unidade_id,
     emusys_fatura_id: row.emusys_fatura_id,
@@ -220,6 +247,11 @@ export async function buildManifest(competenciaValue: unknown, rows: Record<stri
 
   return {
     competencia,
+    sync_run_id: run?.id ?? null,
+    latest_complete_sync_run_id: latestCompleteSyncRunId,
+    sync_completed_at: run?.completed_at ?? null,
+    unidades_concluidas: run?.unidades_concluidas ?? null,
+    snapshot_complete: run?.snapshot_complete ?? false,
     manifest_hash: await sha256({ competencia, rows: hashRows }),
     total_linhas: ordered.length,
     total_valor_liquido: Number(ordered.reduce((sum, row) => sum + money(row.valor_liquido), 0).toFixed(2)),
@@ -232,7 +264,5 @@ export async function buildManifest(competenciaValue: unknown, rows: Record<stri
     por_unidade: [...units.entries()]
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([la_report_unidade_id, summary]) => ({ la_report_unidade_id, ...summary })),
-    source_updated_at: sourceUpdatedAt,
-    source_synced_at: sourceSyncedAt,
   };
 }

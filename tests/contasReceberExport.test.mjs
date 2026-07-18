@@ -13,7 +13,9 @@ const UNIDADE_REC = '95553e96-971b-4590-a6eb-0201d013c14d';
 
 const faturas = [
   {
-    id: 'fatura-a',
+    id: 'snapshot-item-a',
+    canonical_fatura_id: 'fatura-canonica-a',
+    sync_run_id: 'run-a',
     unidade_id: UNIDADE_CG,
     unidade_codigo: 'CG',
     emusys_fatura_id: '9007199254740993',
@@ -32,9 +34,13 @@ const faturas = [
     desconto_condicional: 0,
     synced_at: '2026-07-17T10:00:00Z',
     updated_at: '2026-07-17T10:00:00Z',
+    source_missing: false,
+    source_missing_reason: null,
   },
   {
-    id: 'fatura-b',
+    id: 'snapshot-item-b',
+    canonical_fatura_id: 'fatura-canonica-b',
+    sync_run_id: 'run-a',
     unidade_id: UNIDADE_REC,
     unidade_codigo: 'REC',
     emusys_fatura_id: 12,
@@ -53,6 +59,8 @@ const faturas = [
     desconto_condicional: 0,
     synced_at: '2026-07-17T10:00:00Z',
     updated_at: '2026-07-17T10:00:00Z',
+    source_missing: true,
+    source_missing_reason: 'nao_confirmada_na_origem_nesta_competencia',
   },
 ];
 
@@ -79,6 +87,7 @@ test('join por unidade e matricula preserva uma linha por fatura e explicita dup
 
   assert.equal(rows.length, 2);
   assert.equal(rows[0].cadastro_match_status, 'unico');
+  assert.equal(rows[0].la_report_fatura_id, 'fatura-canonica-a');
   assert.equal(rows[0].aluno_nome, 'Alice');
   assert.equal(rows[0].curso_nome, 'Piano');
   assert.equal(rows[0].emusys_fatura_id, '9007199254740993');
@@ -133,4 +142,45 @@ test('hashes ignoram timestamps volateis e manifest e estavel com qualquer ordem
   const reversed = await buildManifest('2026-07-01', [...rows].reverse());
   assert.equal(manifest.manifest_hash, reversed.manifest_hash);
   assert.equal(manifest.total_linhas, 2);
+});
+
+test('manifesto identifica o ultimo snapshot completo separadamente do run exportado', async () => {
+  const rows = await buildExportRows({ faturas, alunos, cursos });
+  const manifest = await buildManifest('2026-07-01', rows, {
+    id: 'run-solicitado',
+    completed_at: '2026-07-18T12:00:00Z',
+    unidades_concluidas: 3,
+    snapshot_complete: true,
+  }, 'run-mais-recente');
+
+  assert.equal(manifest.sync_run_id, 'run-solicitado');
+  assert.equal(manifest.latest_complete_sync_run_id, 'run-mais-recente');
+});
+
+test('hash canonico ignora ids tecnicos de run/item e reage ao estado de ausencia', async () => {
+  const rows = await buildExportRows({ faturas, alunos, cursos });
+  const technicalIdsChanged = faturas.map((fatura) => ({
+    ...fatura,
+    id: `${fatura.id}-novo`,
+    sync_run_id: 'run-b',
+  }));
+  const rowsWithTechnicalIdsChanged = await buildExportRows({
+    faturas: technicalIdsChanged,
+    alunos,
+    cursos,
+  });
+  assert.deepEqual(
+    rows.map((row) => row.row_source_hash),
+    rowsWithTechnicalIdsChanged.map((row) => row.row_source_hash),
+  );
+
+  const missingReasonChanged = faturas.map((fatura, index) => index === 0
+    ? { ...fatura, source_missing: true, source_missing_reason: 'motivo_novo' }
+    : fatura);
+  const rowsWithMissingReasonChanged = await buildExportRows({
+    faturas: missingReasonChanged,
+    alunos,
+    cursos,
+  });
+  assert.notEqual(rows[0].row_source_hash, rowsWithMissingReasonChanged[0].row_source_hash);
 });
