@@ -985,7 +985,7 @@ bruto foi adicionado aos agentes.
   alinhado e o `pull --ff-only` confirmou `Already up to date`.
 - [x] Reexecutar suite/build depois da integracao.
 - [x] Revisar `git diff --stat` e arquivos staged.
-- [ ] Fazer commit descritivo e push somente com autorizacao do usuario.
+- [x] Fazer commit descritivo e push somente com autorizacao do usuario.
 
 ---
 
