@@ -17,9 +17,17 @@ import {
   consolidarKpisProfessoresCanonicos,
 } from '@/lib/professoresKpisCanonicos';
 import {
+  chaveProfessorUnidade,
+  filtrarKpisPorVinculosAtivos,
+} from '@/lib/professoresKpisAgregados';
+import {
   normalizeHealthScoreV3PerformanceRows,
   resolveHealthScoreV3MetricDisplay,
 } from '@/lib/healthScoreProfessorV3Performance';
+import {
+  buscarCarteiraProfessorDetalheCanonica,
+  type AlunoCarteiraCanonico,
+} from '@/lib/carteiraProfessorDetalheCanonica';
 
 // Interface para carteira do professor
 interface CarteiraProfessor {
@@ -44,22 +52,6 @@ interface CarteiraProfessor {
   health_score_motivo: string | null;
 }
 
-// Interface para aluno na carteira
-interface AlunoCarteira {
-  id: number;
-  nome: string;
-  classificacao: 'LAMK' | 'EMLA';
-  idade_atual: number | null;
-  curso: string;
-  dia_aula: string;
-  horario_aula: string;
-  valor_parcela: number;
-  tempo_permanencia_meses: number;
-  data_fim_contrato: string | null;
-  status: string;
-  health_score?: 'verde' | 'amarelo' | 'vermelho' | null;
-}
-
 interface Props {
   unidadeAtual: UnidadeId;
 }
@@ -81,7 +73,7 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
   
   // Accordion expandido
   const [expandido, setExpandido] = useState<number | null>(null);
-  const [alunosExpandido, setAlunosExpandido] = useState<AlunoCarteira[]>([]);
+  const [alunosExpandido, setAlunosExpandido] = useState<AlunoCarteiraCanonico[]>([]);
   const [loadingAlunos, setLoadingAlunos] = useState(false);
   
   // Modal de detalhes
@@ -108,18 +100,21 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
 
       // Buscar carteira agregada via RPC (evita truncamento de 1000 linhas e RLS bypass da vw_turmas_implicitas)
       const rpcParams = unidadeAtual !== 'todos' ? { p_unidade_id: unidadeAtual } : {};
-      const { data: carteiraData } = await supabase.rpc('get_carteira_professores', rpcParams);
-
-      if (!carteiraData) {
-        setCarteiras([]);
-        return;
-      }
-
       const agora = new Date();
       const ano = agora.getFullYear();
       const mes = agora.getMonth() + 1;
       const competencia = `${ano}-${String(mes).padStart(2, '0')}-01`;
-      const [kpisBrutos, healthV3Result] = await Promise.all([
+      const [
+        carteiraResult,
+        kpisBrutos,
+        healthV3Result,
+        professoresResult,
+        vinculosResult,
+        unidadesResult,
+        cursosRelResult,
+      ] = await Promise.all([
+        // Enriquecimento financeiro contratual; nao define mais a populacao da Carteira.
+        supabase.rpc('get_carteira_professores', rpcParams),
         buscarKpisProfessoresCanonicos({
           ano,
           mes,
@@ -130,35 +125,100 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
           p_unidade_id: unidadeAtual === 'todos' ? null : unidadeAtual,
           p_periodicidade: 'mensal',
         }),
+        supabase
+          .from('professores')
+          .select('id, nome, foto_url')
+          .eq('ativo', true),
+        supabase
+          .from('professores_unidades')
+          .select('professor_id, unidade_id')
+          .eq('emusys_ativo', true)
+          .neq('validacao_status', 'ignorado'),
+        supabase
+          .from('unidades')
+          .select('id, nome'),
+        supabase
+          .from('professores_cursos')
+          .select('professor_id, cursos:curso_id (nome)'),
       ]);
 
+      if (carteiraResult.error) throw carteiraResult.error;
       if (healthV3Result.error) {
         throw new Error(`Health Score V3 indisponível: ${healthV3Result.error.message}`);
       }
+      if (professoresResult.error) throw professoresResult.error;
+      if (vinculosResult.error) throw vinculosResult.error;
+      if (unidadesResult.error) throw unidadesResult.error;
+      if (cursosRelResult.error) throw cursosRelResult.error;
 
-      const kpisData = consolidarKpisProfessoresCanonicos(kpisBrutos);
+      const professoresAtivos = new Set(
+        (professoresResult.data || []).map((professor) => Number(professor.id)),
+      );
+      const vinculosAtivos = new Set(
+        (vinculosResult.data || [])
+          .map((vinculo) => chaveProfessorUnidade(
+            Number(vinculo.professor_id),
+            vinculo.unidade_id ? String(vinculo.unidade_id) : null,
+          ))
+          .filter((chave): chave is string => chave !== null),
+      );
+      const kpisData = consolidarKpisProfessoresCanonicos(
+        filtrarKpisPorVinculosAtivos(kpisBrutos, professoresAtivos, vinculosAtivos),
+      );
       const healthV3PorProfessor = new Map(
         normalizeHealthScoreV3PerformanceRows(healthV3Result.data || [])
           .map((snapshot) => [snapshot.professorId, snapshot]),
       );
 
-      const kpisPorProfessor = new Map<number, any>();
-      kpisData.forEach((kpi) => {
-        kpisPorProfessor.set(kpi.professor_id, kpi);
+      const carteirasFinanceirasPorProfessor = new Map<number, any>(
+        (carteiraResult.data || []).map((row: any) => [Number(row.professor_id), row]),
+      );
+      const professoresPorId = new Map(
+        (professoresResult.data || []).map((professor) => [Number(professor.id), professor]),
+      );
+      const unidadesPorId = new Map(
+        (unidadesResult.data || []).map((unidade) => [String(unidade.id), unidade.nome]),
+      );
+      const unidadesPorProfessor = new Map<number, string[]>();
+      (vinculosResult.data || [])
+        .filter((vinculo) => unidadeAtual === 'todos' || String(vinculo.unidade_id) === unidadeAtual)
+        .forEach((vinculo) => {
+          const professorId = Number(vinculo.professor_id);
+          const unidadeNome = unidadesPorId.get(String(vinculo.unidade_id));
+          if (!unidadeNome) return;
+          const nomes = unidadesPorProfessor.get(professorId) || [];
+          if (!nomes.includes(unidadeNome)) nomes.push(unidadeNome);
+          unidadesPorProfessor.set(professorId, nomes);
+        });
+      const cursosPorProfessor = new Map<number, string[]>();
+      (cursosRelResult.data || []).forEach((vinculo: any) => {
+        const professorId = Number(vinculo.professor_id);
+        const cursoRelacionado = Array.isArray(vinculo.cursos) ? vinculo.cursos[0] : vinculo.cursos;
+        const cursoNome = cursoRelacionado?.nome ? String(cursoRelacionado.nome) : null;
+        if (!cursoNome) return;
+        const nomes = cursosPorProfessor.get(professorId) || [];
+        if (!nomes.includes(cursoNome)) nomes.push(cursoNome);
+        cursosPorProfessor.set(professorId, nomes);
       });
 
-      // Montar carteiras a partir da RPC
-      const carteirasCalculadas: CarteiraProfessor[] = (carteiraData as any[]).map((row: any) => {
-        const kpis = kpisPorProfessor.get(row.professor_id);
-        const snapshot = healthV3PorProfessor.get(Number(row.professor_id));
+      // A populacao nasce da carteira canonica; a RPC legada apenas enriquece valores financeiros.
+      const carteirasCalculadas: CarteiraProfessor[] = kpisData.map((kpis) => {
+        const professorId = Number(kpis.professor_id);
+        const row = carteirasFinanceirasPorProfessor.get(professorId);
+        const professor = professoresPorId.get(professorId);
+        const snapshot = healthV3PorProfessor.get(professorId);
         const numeroAlunosV3 = snapshot
           ? resolveHealthScoreV3MetricDisplay(snapshot, 'numero_alunos').value
           : null;
         const mediaTurmaV3 = snapshot
           ? resolveHealthScoreV3MetricDisplay(snapshot, 'media_turma').value
           : null;
-        const totalAlunos = Number(numeroAlunosV3 ?? kpis?.carteira_alunos ?? row.total_alunos ?? 0);
-        const mediaAlunosTurma = Number(mediaTurmaV3 ?? kpis?.media_alunos_turma ?? 0);
+        const permanenciaV3 = snapshot
+          ? resolveHealthScoreV3MetricDisplay(snapshot, 'permanencia').value
+          : null;
+        const totalAlunos = Number(numeroAlunosV3 ?? kpis.carteira_alunos ?? 0);
+        const mediaAlunosTurma = Number(mediaTurmaV3 ?? kpis.media_alunos_turma ?? 0);
+        const mrrTotal = Number(row?.mrr_total ?? 0);
         const healthScoreExibivel = Boolean(
           snapshot?.scoreExibivel
           && snapshot.score !== null,
@@ -170,19 +230,20 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
           : null;
 
         return {
-          id: row.professor_id,
-          nome: row.professor_nome,
-          foto_url: row.foto_url,
+          id: professorId,
+          nome: professor?.nome ?? row?.professor_nome ?? kpis.professor_nome,
+          foto_url: professor?.foto_url ?? row?.foto_url ?? null,
           total_alunos: totalAlunos,
-          alunos_lamk: row.alunos_lamk,
-          alunos_emla: row.alunos_emla,
-          mrr_total: Number(row.mrr_total),
-          ticket_medio: Number(row.ticket_medio),
-          tempo_medio_meses: Number(row.tempo_medio_meses),
-          total_turmas: Number(kpis?.total_turmas ?? row.total_turmas ?? 0),
+          alunos_lamk: Number(row?.alunos_lamk ?? 0),
+          alunos_emla: Number(row?.alunos_emla ?? 0),
+          mrr_total: mrrTotal,
+          // Mantem o MRR contratual legado, mas divide pela mesma pessoa canonica do card.
+          ticket_medio: totalAlunos > 0 ? mrrTotal / totalAlunos : 0,
+          tempo_medio_meses: Number(permanenciaV3 ?? row?.tempo_medio_meses ?? 0),
+          total_turmas: Number(kpis.total_turmas ?? row?.total_turmas ?? 0),
           media_alunos_turma: mediaAlunosTurma,
-          cursos: row.cursos || [],
-          unidades: row.unidades || [],
+          cursos: row?.cursos?.length ? row.cursos : (cursosPorProfessor.get(professorId) || []),
+          unidades: unidadesPorProfessor.get(professorId) || row?.unidades || [],
           health_score: healthScoreExibivel ? snapshot!.score : null,
           health_status: healthStatus,
           health_score_exibivel: healthScoreExibivel,
@@ -207,53 +268,15 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
   const carregarAlunosProfessor = async (professorId: number) => {
     setLoadingAlunos(true);
     try {
-      let query = supabase
-        .from('alunos')
-        .select(`
-          id, nome, classificacao, idade_atual, valor_parcela, tempo_permanencia_meses,
-          dia_aula, horario_aula, data_fim_contrato, data_matricula, status, health_score,
-          cursos(nome)
-        `)
-        .eq('professor_atual_id', professorId)
-        .in('status', ['ativo', 'trancado'])
-        .order('status')
-        .order('nome');
-
-      if (unidadeAtual !== 'todos') {
-        query = query.eq('unidade_id', unidadeAtual);
-      }
-
-      const { data } = await query;
-
-      const alunosFormatados: AlunoCarteira[] = (data || []).map((a: any) => {
-        // Calcular data_fim_contrato se não existir: data_matricula + 12 meses
-        let fimContrato = a.data_fim_contrato;
-        if (!fimContrato && a.data_matricula) {
-          const dataMatricula = new Date(a.data_matricula);
-          const fimCalculado = new Date(dataMatricula);
-          fimCalculado.setFullYear(fimCalculado.getFullYear() + 1);
-          fimContrato = fimCalculado.toISOString().split('T')[0];
-        }
-
-        return {
-          id: a.id,
-          nome: a.nome,
-          classificacao: a.classificacao || 'EMLA',
-          idade_atual: a.idade_atual || null,
-          curso: (a.cursos as any)?.nome || '-',
-          dia_aula: a.dia_aula || '-',
-          horario_aula: a.horario_aula ? a.horario_aula.substring(0, 5) : '-',
-          valor_parcela: Number(a.valor_parcela) || 0,
-          tempo_permanencia_meses: a.tempo_permanencia_meses || 0,
-          data_fim_contrato: fimContrato,
-          status: a.status,
-          health_score: a.health_score || null
-        };
+      const detalhe = await buscarCarteiraProfessorDetalheCanonica({
+        professorId,
+        unidadeId: unidadeAtual,
       });
 
-      setAlunosExpandido(alunosFormatados);
+      setAlunosExpandido(detalhe.alunos);
     } catch (error) {
       console.error('Erro ao carregar alunos:', error);
+      setAlunosExpandido([]);
     } finally {
       setLoadingAlunos(false);
     }
@@ -378,7 +401,7 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
           icon={GraduationCap}
           label="Alunos na Carteira"
           value={kpis.totalAlunos}
-          subvalue="linhas operacionais"
+          subvalue="pessoas canônicas"
           variant="emerald"
         />
         <KPICard

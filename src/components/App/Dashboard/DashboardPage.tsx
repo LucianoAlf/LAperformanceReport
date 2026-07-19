@@ -47,6 +47,10 @@ import {
   buscarKpisProfessoresCanonicos,
   calcularTotaisKpisProfessoresCanonicos,
 } from '@/lib/professoresKpisCanonicos';
+import {
+  chaveProfessorUnidade,
+  filtrarKpisPorVinculosAtivos,
+} from '@/lib/professoresKpisAgregados';
 import { useHealthScoreProfessorV3Performance } from '@/hooks/useHealthScoreProfessorV3Performance';
 import { getHealthScoreV3Period } from '@/lib/healthScoreProfessorV3Periodos';
 
@@ -92,6 +96,7 @@ interface DadosProfessores {
   media_alunos_professor: number;
   taxa_renovacao: number;
   media_alunos_turma: number;
+  professores_ativos_ids: number[];
 }
 
 interface Alerta {
@@ -211,7 +216,11 @@ export function DashboardPage() {
     enabled: healthScoreV3Enabled,
   });
   const healthScoreV3Summary = useMemo(() => {
-    const visible = healthScoreV3Snapshots.filter(
+    const professoresAtivos = new Set(dadosProfessores?.professores_ativos_ids ?? []);
+    const snapshotsEquipe = healthScoreV3Snapshots.filter(
+      (snapshot) => professoresAtivos.has(snapshot.professorId),
+    );
+    const visible = snapshotsEquipe.filter(
       (snapshot) => snapshot.scoreExibivel && snapshot.score !== null,
     );
     const score = visible.length > 0
@@ -220,8 +229,8 @@ export function DashboardPage() {
     const official = visible.length > 0 && visible.every(
       (snapshot) => snapshot.estadoPublicacao === 'oficial',
     );
-    return { score, visible: visible.length, total: healthScoreV3Snapshots.length, official };
-  }, [healthScoreV3Snapshots]);
+    return { score, visible: visible.length, total: snapshotsEquipe.length, official };
+  }, [dadosProfessores?.professores_ativos_ids, healthScoreV3Snapshots]);
 
   // Fetch matrículas do período para o modal
   const fetchMatriculas = async () => {
@@ -548,13 +557,27 @@ export function DashboardPage() {
         ]);
 
         const professoresAtivos = new Set((profsR.data || []).map((p: any) => Number(p.id)));
+        const vinculosAtivos = new Set(
+          (profUnidR.data || [])
+            .filter((pu: any) => unidade === 'todos' || pu.unidade_id === unidade)
+            .map((pu: any) => chaveProfessorUnidade(
+              Number(pu.professor_id),
+              pu.unidade_id ? String(pu.unidade_id) : null,
+            ))
+            .filter((chave): chave is string => chave !== null),
+        );
         const professoresRelacionados = new Set(
           (profUnidR.data || [])
             .filter((pu: any) => unidade === 'todos' || pu.unidade_id === unidade)
             .map((pu: any) => Number(pu.professor_id))
             .filter((id: number) => professoresAtivos.has(id))
         );
-        const totaisProfessores = calcularTotaisKpisProfessoresCanonicos(kpisProfessores);
+        const kpisProfessoresAtivos = filtrarKpisPorVinculosAtivos(
+          kpisProfessores,
+          professoresAtivos,
+          vinculosAtivos,
+        );
+        const totaisProfessores = calcularTotaisKpisProfessoresCanonicos(kpisProfessoresAtivos);
         const totalProfs = professoresRelacionados.size || totaisProfessores.totalProfessores;
 
         setDadosProfessores({
@@ -564,6 +587,7 @@ export function DashboardPage() {
             : 0,
           taxa_renovacao: totaisProfessores.taxaRenovacao,
           media_alunos_turma: Math.round(totaisProfessores.mediaAlunosTurma * 10) / 10,
+          professores_ativos_ids: Array.from(professoresRelacionados),
         });
 
         // ===== EVOLUÇÃO DE ALUNOS ATIVOS (12 meses) =====

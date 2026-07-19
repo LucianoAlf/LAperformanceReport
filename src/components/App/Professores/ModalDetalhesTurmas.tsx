@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { supabase } from '@/lib/supabase';
 import { Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { buscarOcupacoesTurmasProfessorCanonicas } from '@/lib/carteiraProfessorDetalheCanonica';
 
 const STATUS_LABEL: Record<string, string> = {
   trancado: 'Trancados',
@@ -100,37 +100,13 @@ export function ModalDetalhesTurmas({
       setFiltroStatus('todos');
       setPagina(1);
 
-      // Fonte: carteira (alunos ativos + trancados), independente de aulas registradas
-      let query = supabase
-        .from('alunos')
-        .select('id, nome, status, dia_aula, horario_aula, cursos!inner(nome)')
-        .eq('professor_atual_id', professorId!)
-        .in('status', ['ativo', 'trancado'])
-        .not('dia_aula', 'is', null)
-        .not('horario_aula', 'is', null);
-
-      if (unidadeId && unidadeId !== 'todos') {
-        query = query.eq('unidade_id', unidadeId);
-      }
-
-      const { data } = await query;
+      const data = await buscarOcupacoesTurmasProfessorCanonicas({
+        professorId: professorId!,
+        unidadeId,
+      });
       if (cancelado) return;
 
-      const lista: LinhaAlunoTurma[] = (data || []).map((row: any) => {
-        const cursoNome = (row.cursos as any)?.nome || '';
-        const horario = row.horario_aula?.substring(0, 5) || '';
-        return {
-          aluno_id: row.id,
-          aluno_nome: row.nome,
-          aluno_status: row.status,
-          turma_chave: `${cursoNome}@${row.dia_aula}:${horario}`,
-          turma_nome: null,
-          curso_nome: cursoNome,
-          sala_nome: null,
-          dia_semana: row.dia_aula || '',
-          horario_inicio: horario,
-        };
-      }).sort((a, b) => {
+      const lista: LinhaAlunoTurma[] = data.sort((a, b) => {
         const diaA = DIA_ISO[a.dia_semana] ?? 9;
         const diaB = DIA_ISO[b.dia_semana] ?? 9;
         if (diaA !== diaB) return diaA - diaB;

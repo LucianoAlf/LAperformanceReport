@@ -2,7 +2,6 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
-  getHealthScoreV3Metric,
   isHealthScoreV3OfficialRankable,
   isHealthScoreV3Visible,
   parseHealthScoreV3Payload,
@@ -101,13 +100,18 @@ Deno.serve(async (req) => {
     const kpisProfessoresRaw = dados.kpis_professores || [];
     const kpisProfessores = kpisProfessoresRaw.map((p: any) => {
       const healthScoreV3 = parseHealthScoreV3Payload(p.health_score_v3);
-      const presenca = getHealthScoreV3Metric(healthScoreV3, 'presenca');
       const healthVisivel = isHealthScoreV3Visible(healthScoreV3);
+      const presencaOperacionalPublicavel = p.presenca_publicavel === true
+        && Number.isFinite(Number(p.media_presenca))
+        && Number(p.presenca_eventos_confirmados) > 0;
       return {
         ...p,
         health_score_v3: healthScoreV3,
-        media_presenca: presenca?.metrica_publicavel ? presenca.valor_bruto : null,
-        presenca_publicavel: presenca?.metrica_publicavel === true,
+        media_presenca: presencaOperacionalPublicavel ? Number(p.media_presenca) : null,
+        presenca_publicavel: presencaOperacionalPublicavel,
+        presenca_eventos_confirmados: presencaOperacionalPublicavel
+          ? Number(p.presenca_eventos_confirmados)
+          : 0,
         health_score: healthVisivel ? healthScoreV3!.score : null,
         health_status: healthVisivel ? healthScoreV3!.classificacao : null,
         health_score_confiavel: healthVisivel,
@@ -124,8 +128,15 @@ Deno.serve(async (req) => {
       ? Math.round(kpisHealthPublicavel.reduce((sum: number, p: any) => sum + p.health_score, 0) / kpisHealthPublicavel.length * 10) / 10
       : null;
     const kpisPresencaPublicavel = kpisProfessores.filter((p: any) => p.presenca_publicavel);
-    const mediaPresenca = kpisPresencaPublicavel.length > 0
-      ? kpisPresencaPublicavel.reduce((sum: number, p: any) => sum + p.media_presenca, 0) / kpisPresencaPublicavel.length
+    const totalEventosPresenca = kpisPresencaPublicavel.reduce(
+      (sum: number, p: any) => sum + p.presenca_eventos_confirmados,
+      0,
+    );
+    const mediaPresenca = totalEventosPresenca > 0
+      ? kpisPresencaPublicavel.reduce(
+        (sum: number, p: any) => sum + p.media_presenca * p.presenca_eventos_confirmados,
+        0,
+      ) / totalEventosPresenca
       : null;
 
     // Contar professores por status baseado no Health Score calculado

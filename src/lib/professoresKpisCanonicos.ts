@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { calcularPresencaMediaConfirmada } from '@/lib/professoresKpisAgregados';
 
 export interface KPIProfessorCanonico {
   professor_id: number;
@@ -77,6 +78,10 @@ export interface TotaisKPIProfessorCanonico {
   taxaRenovacao: number;
   evasoes: number;
   mrrPerdido: number;
+  mediaPresenca: number | null;
+  taxaFaltas: number | null;
+  presencaEventosConfirmados: number;
+  presencaEventosIncertos: number;
 }
 
 const consultasEmAndamento = new Map<string, Promise<KPIProfessorCanonico[]>>();
@@ -224,21 +229,22 @@ export function consolidarKpisProfessoresCanonicos(
     const mediaPonderadaCarteira = (campo: keyof KPIProfessorCanonico) => carteira > 0
       ? grupo.reduce((total, linha) => total + numero(linha[campo]) * linha.carteira_alunos, 0) / carteira
       : 0;
-    const presencaPublicavel = grupo.length > 0 && grupo.every((linha) => linha.presenca_publicavel);
-    const eventosPresencaConfirmados = soma('presenca_eventos_confirmados');
-    const eventosPresencaIncertos = soma('presenca_eventos_incertos');
-    const mediaPresenca = presencaPublicavel && eventosPresencaConfirmados > 0
-      ? grupo.reduce(
-        (total, linha) => total + numero(linha.media_presenca) * linha.presenca_eventos_confirmados,
-        0,
-      ) / eventosPresencaConfirmados
-      : null;
-    const taxaFaltas = presencaPublicavel && eventosPresencaConfirmados > 0
-      ? grupo.reduce(
-        (total, linha) => total + numero(linha.taxa_faltas) * linha.presenca_eventos_confirmados,
-        0,
-      ) / eventosPresencaConfirmados
-      : null;
+    const linhasPresencaPublicavel = grupo.filter(
+      (linha) => linha.presenca_publicavel
+        && linha.media_presenca !== null
+        && linha.presenca_eventos_confirmados > 0,
+    );
+    const eventosPresencaConfirmados = linhasPresencaPublicavel.reduce(
+      (total, linha) => total + linha.presenca_eventos_confirmados,
+      0,
+    );
+    const eventosPresencaIncertos = linhasPresencaPublicavel.reduce(
+      (total, linha) => total + linha.presenca_eventos_incertos,
+      0,
+    );
+    const mediaPresenca = calcularPresencaMediaConfirmada(linhasPresencaPublicavel);
+    const taxaFaltas = mediaPresenca === null ? null : 100 - mediaPresenca;
+    const presencaPublicavel = mediaPresenca !== null;
     const coberturaPresenca = eventosPresencaConfirmados + eventosPresencaIncertos > 0
       ? eventosPresencaConfirmados / (eventosPresencaConfirmados + eventosPresencaIncertos)
       : 0;
@@ -323,6 +329,20 @@ export function calcularTotaisKpisProfessoresCanonicos(
   const matriculasPosExp = total('matriculas_pos_exp');
   const renovacoes = total('renovacoes');
   const naoRenovacoes = total('nao_renovacoes');
+  const linhasPresencaPublicavel = linhas.filter(
+    (linha) => linha.presenca_publicavel
+      && linha.media_presenca !== null
+      && linha.presenca_eventos_confirmados > 0,
+  );
+  const mediaPresenca = calcularPresencaMediaConfirmada(linhasPresencaPublicavel);
+  const presencaEventosConfirmados = linhasPresencaPublicavel.reduce(
+    (soma, linha) => soma + linha.presenca_eventos_confirmados,
+    0,
+  );
+  const presencaEventosIncertos = linhasPresencaPublicavel.reduce(
+    (soma, linha) => soma + linha.presenca_eventos_incertos,
+    0,
+  );
 
   return {
     totalProfessores: consolidados.length,
@@ -342,6 +362,10 @@ export function calcularTotaisKpisProfessoresCanonicos(
       : 0,
     evasoes: total('evasoes'),
     mrrPerdido: total('mrr_perdido'),
+    mediaPresenca,
+    taxaFaltas: mediaPresenca === null ? null : 100 - mediaPresenca,
+    presencaEventosConfirmados,
+    presencaEventosIncertos,
   };
 }
 

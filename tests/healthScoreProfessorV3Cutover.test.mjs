@@ -14,6 +14,12 @@ const carteiraCorrectionMigration =
   'supabase/migrations/20260719123000_health_score_v3_carteira_canonica_periodo.sql';
 const optimizedMetricsMigration =
   'supabase/migrations/20260719123500_health_score_v3_metricas_periodo_otimizada.sql';
+const partialObservedReadModelMigration =
+  'supabase/migrations/20260719143000_health_score_v3_parcial_observado_readmodels.sql';
+const partialPresenceFallbackMigration =
+  'supabase/migrations/20260719150000_health_score_v3_presenca_parcial_canonica.sql';
+const presencePublicationPolicyMigration =
+  'supabase/migrations/20260719153000_presenca_publicavel_respeita_politica_unidade.sql';
 const periodsHelper = 'src/lib/healthScoreProfessorV3Periodos.ts';
 const performanceHook = 'src/hooks/useHealthScoreProfessorV3Performance.ts';
 const modalHook = 'src/hooks/useHealthScoreProfessorV3.ts';
@@ -170,6 +176,98 @@ test('frontend envia periodicidade e distingue score parcial de ranking oficial'
   assert.doesNotMatch(tab, /Per[iÃ­]odo N[aÃ£]o Considerado/i);
 });
 
+test('gauge e alertas usam score parcial visivel sem liberar ranking oficial', () => {
+  const tab = read(performanceTab);
+  const alertasBlock = tab.slice(
+    tab.indexOf('const alertas = useMemo'),
+    tab.indexOf('const rankings = useMemo'),
+  );
+  const equipeBlock = tab.slice(
+    tab.indexOf('const healthScoreEquipe = useMemo'),
+    tab.indexOf('const getStatusColor'),
+  );
+
+  assert.match(alertasBlock, /filter\(isHealthScoreV3SnapshotVisible\)/);
+  assert.doesNotMatch(alertasBlock, /filter\(isHealthScoreV3SnapshotRankable\)/);
+  assert.match(equipeBlock, /filter\(isHealthScoreV3SnapshotVisible\)/);
+  assert.doesNotMatch(equipeBlock, /filter\(isHealthScoreV3SnapshotRankable\)/);
+  assert.match(tab, /ranking[s]?[^\n]*oficial/i);
+});
+
+test('resumo V3 exclui snapshots historicos da equipe ativa', () => {
+  const tab = read(performanceTab);
+
+  assert.match(tab, /return p\.unidades\.length > 0/);
+  assert.match(tab, /const healthV3SnapshotsAtivos = useMemo/i);
+  assert.match(tab, /new Set\(professores\.map\(\(professor\) => professor\.id\)\)/i);
+  assert.match(tab, /healthV3Snapshots\.filter\(\(snapshot\) => professoresAtivos\.has\(snapshot\.professorId\)\)/i);
+
+  const alertasBlock = tab.slice(
+    tab.indexOf('const alertas = useMemo'),
+    tab.indexOf('const rankings = useMemo'),
+  );
+  const equipeBlock = tab.slice(
+    tab.indexOf('const healthScoreEquipe = useMemo'),
+    tab.indexOf('const getStatusColor'),
+  );
+  assert.match(alertasBlock, /healthV3SnapshotsAtivos/);
+  assert.match(equipeBlock, /healthV3SnapshotsAtivos/);
+});
+
+test('read model calcula parcial observado sem alterar o gate oficial', () => {
+  assert.equal(
+    fs.existsSync(partialObservedReadModelMigration),
+    true,
+    'migration do parcial observado ainda nao existe',
+  );
+  const sql = read(partialObservedReadModelMigration);
+
+  assert.match(sql, /nota_parcial_observada/i);
+  assert.match(sql, /cobertura_parcial_observada/i);
+  assert.match(sql, /score_parcial_observado/i);
+  assert.match(sql, /estado_publicacao\s*=\s*'oficial'/i);
+  assert.match(sql, /observacao_publicacao[\s\S]*em_auditoria/i);
+  assert.match(sql, /m\.valor_bruto\s+is\s+not\s+null/i);
+  assert.match(sql, /m\.meta_aplicada\s*>\s*0/i);
+  assert.match(sql, /ranking_habilitado/i);
+  assert.doesNotMatch(sql, /update\s+public\.health_score_professor_v3_snapshots/i);
+});
+
+test('presenca parcial reutiliza a camada semantica quando o roster historico nao existe', () => {
+  assert.equal(
+    fs.existsSync(partialPresenceFallbackMigration),
+    true,
+    'migration do fallback canonico de presenca ainda nao existe',
+  );
+  const sql = read(partialPresenceFallbackMigration);
+
+  assert.match(sql, /get_frequencia_professor_periodo_canonica_v1/i);
+  assert.match(sql, /presenca_politicas_confiabilidade/i);
+  assert.match(sql, /exige_revisao_operacional\s*=\s*false/i);
+  assert.match(sql, /vw_health_score_professor_v3_parcial_operacional/i);
+  assert.match(sql, /presenca-sem-roster-historico-v1/i);
+  assert.match(sql, /get_health_score_professor_v3_performance/i);
+  assert.match(sql, /get_health_score_professor_v3_snapshot_modal/i);
+  assert.doesNotMatch(sql, /update\s+public\.health_score_professor_v3_snapshot_metricas/i);
+  assert.doesNotMatch(sql, /update\s+public\.health_score_professor_v3_snapshots/i);
+});
+
+test('publicacao da presenca respeita a politica versionada da unidade', () => {
+  assert.equal(
+    fs.existsSync(presencePublicationPolicyMigration),
+    true,
+    'migration da politica de publicacao da presenca ainda nao existe',
+  );
+  const sql = read(presencePublicationPolicyMigration);
+
+  assert.match(sql, /get_frequencia_professor_periodo_publicavel_v1/i);
+  assert.match(sql, /presenca_politicas_confiabilidade/i);
+  assert.match(sql, /p\.exige_revisao_operacional\s*=\s*false/i);
+  assert.match(sql, /p\.data_inicio\s*<=\s*r\.data_fim/i);
+  assert.match(sql, /p\.data_fim\s*>=\s*r\.data_inicio/i);
+  assert.match(sql, /f\.confianca_presenca\s*=\s*'alta'\s+and\s+f\.politica_publicavel/i);
+});
+
 test('relatorio da coordenacao recebe snapshot V3 e nao recalcula Health Score', () => {
   const source = read(coordinationReport);
 
@@ -178,4 +276,13 @@ test('relatorio da coordenacao recebe snapshot V3 e nao recalcula Health Score',
   assert.match(source, /rankingHabilitado/i);
   assert.match(source, /parcial/i);
   assert.doesNotMatch(source, /calcularHealthScore\s*\(/i);
+});
+
+test('relatorio instantaneo aceita o payload snake_case produzido pelo modal', () => {
+  const source = read(coordinationReport);
+
+  assert.match(source, /item\.health_score_v3\s*\?\?\s*item\.healthV3/i);
+  assert.match(source, /score_exibivel\s*\?\?\s*healthV3Raw\.scoreExibivel/i);
+  assert.match(source, /estado_publicacao\s*\?\?\s*healthV3Raw\.estadoPublicacao/i);
+  assert.match(source, /ranking_habilitado\s*\?\?\s*healthV3Raw\.rankingHabilitado/i);
 });

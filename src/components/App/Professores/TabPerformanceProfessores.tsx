@@ -33,10 +33,13 @@ import {
   buscarKpisProfessoresCanonicos,
   consolidarKpisProfessoresCanonicos,
 } from '@/lib/professoresKpisCanonicos';
+import {
+  chaveProfessorUnidade,
+  filtrarKpisPorVinculosAtivos,
+} from '@/lib/professoresKpisAgregados';
 import { useHealthScoreProfessorV3Performance } from '@/hooks/useHealthScoreProfessorV3Performance';
 import {
   isHealthScoreV3SnapshotVisible,
-  isHealthScoreV3SnapshotRankable,
   rankHealthScoreV3Metric,
   resolveHealthScoreV3MetricDisplay,
   serializeHealthScoreV3ForAi,
@@ -355,9 +358,25 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       const { data: professoresData, error: profError } = professoresResult;
       if (profError) throw profError;
 
-      const kpisData = consolidarKpisProfessoresCanonicos(kpisAtuais);
       const unidadesRelData = unidadesResult.data;
       const cursosRelData = cursosResult.data;
+      const professoresAtivos = new Set(
+        (professoresData || []).map((professor) => Number(professor.id)),
+      );
+      const vinculosAtivos = new Set(
+        (unidadesRelData || [])
+          .map((vinculo) => chaveProfessorUnidade(
+            Number(vinculo.professor_id),
+            vinculo.unidade_id ? String(vinculo.unidade_id) : null,
+          ))
+          .filter((chave): chave is string => chave !== null),
+      );
+      const kpisAtivos = filtrarKpisPorVinculosAtivos(
+        kpisAtuais,
+        professoresAtivos,
+        vinculosAtivos,
+      );
+      const kpisData = consolidarKpisProfessoresCanonicos(kpisAtivos);
 
       // A consolidacao central resolve professores multiunidade sem perder o grao da competencia.
       const kpisPorProfessor = new Map(kpisData.map((kpi) => [kpi.professor_id, kpi]));
@@ -501,7 +520,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           if (unidadeAtual !== 'todos') {
             return p.unidades.some(u => u.id === unidadeAtual);
           }
-          return true;
+          // Identidades historicas permanecem no banco, mas nao compoem a
+          // equipe atual quando nao existe nenhum vinculo Emusys ativo.
+          return p.unidades.length > 0;
         });
 
       if (requisicaoId !== requisicaoAtivaRef.current) return;
@@ -576,6 +597,11 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     [healthV3ByProfessor, professores],
   );
 
+  const healthV3SnapshotsAtivos = useMemo(() => {
+    const professoresAtivos = new Set(professores.map((professor) => professor.id));
+    return healthV3Snapshots.filter((snapshot) => professoresAtivos.has(snapshot.professorId));
+  }, [healthV3Snapshots, professores]);
+
   // Sob a flag V3, a tabela nunca recorre silenciosamente ao score V2.
   const professoresFiltrados = useMemo(() => {
     let resultado = [...professoresTabela];
@@ -593,10 +619,10 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
     resultado.sort((a, b) => {
       if (HEALTH_SCORE_V3_PERFORMANCE_ENABLED) {
-        const aRankable = Boolean(a.healthV3 && isHealthScoreV3SnapshotRankable(a.healthV3));
-        const bRankable = Boolean(b.healthV3 && isHealthScoreV3SnapshotRankable(b.healthV3));
-        if (aRankable !== bRankable) return aRankable ? -1 : 1;
-        if (aRankable && bRankable) return Number(b.healthV3?.score) - Number(a.healthV3?.score);
+        const aVisible = Boolean(a.healthV3 && isHealthScoreV3SnapshotVisible(a.healthV3));
+        const bVisible = Boolean(b.healthV3 && isHealthScoreV3SnapshotVisible(b.healthV3));
+        if (aVisible !== bVisible) return aVisible ? -1 : 1;
+        if (aVisible && bVisible) return Number(b.healthV3?.score) - Number(a.healthV3?.score);
         return a.nome.localeCompare(b.nome, 'pt-BR');
       }
 
@@ -610,8 +636,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
   const alertas = useMemo<AlertaPerformance[]>(() => {
     if (HEALTH_SCORE_V3_PERFORMANCE_ENABLED) {
-      const status = healthV3Snapshots
-        .filter(isHealthScoreV3SnapshotRankable)
+      const status = healthV3SnapshotsAtivos
+        .filter(isHealthScoreV3SnapshotVisible)
         .map((snapshot) => resolveHealthScoreV3Status(snapshot));
       return [
         { tipo: 'critico', quantidade: status.filter((item) => item === 'critico').length, descricao: 'Health Score V3 critico' },
@@ -629,13 +655,13 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       { tipo: 'atencao', quantidade: atencao.length, descricao: 'Metricas abaixo da meta' },
       { tipo: 'excelente', quantidade: excelentes.length, descricao: 'Health Score saudavel' },
     ];
-  }, [healthV3Snapshots, professores]);
+  }, [healthV3SnapshotsAtivos, professores]);
 
   const rankings = useMemo(() => {
     if (HEALTH_SCORE_V3_PERFORMANCE_ENABLED) {
       const professorById = new Map(professores.map((professor) => [professor.id, professor]));
-      const topRetencao = rankHealthScoreV3Metric(healthV3Snapshots, 'retencao')[0];
-      const topMediaTurma = rankHealthScoreV3Metric(healthV3Snapshots, 'media_turma')[0];
+      const topRetencao = rankHealthScoreV3Metric(healthV3SnapshotsAtivos, 'retencao')[0];
+      const topMediaTurma = rankHealthScoreV3Metric(healthV3SnapshotsAtivos, 'media_turma')[0];
       return {
         topRetencao: topRetencao ? {
           nome: professorById.get(topRetencao.professorId)?.nome || `Professor ${topRetencao.professorId}`,
@@ -656,7 +682,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       topRetencao: topRetencao ? { nome: topRetencao.nome, valor: topRetencao.taxa_retencao } : null,
       topMediaTurma: topMediaTurma ? { nome: topMediaTurma.nome, valor: topMediaTurma.media_alunos_turma } : null,
     };
-  }, [healthV3Snapshots, professores]);
+  }, [healthV3SnapshotsAtivos, professores]);
 
   // Métricas gerais para o Plano de Ação da Equipe
   const metricasGerais = useMemo(() => {
@@ -685,7 +711,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
   // Health Score médio da equipe
   const conversaoEquipe = useMemo(() => {
     if (HEALTH_SCORE_V3_PERFORMANCE_ENABLED) {
-      const metricas = healthV3Snapshots
+      const metricas = healthV3SnapshotsAtivos
         .map((snapshot) => snapshot.metrics.get('conversao'))
         .filter((metrica) => metrica && Number(metrica.denominador) > 0);
       const realizadas = metricas.reduce((acc, metrica) => acc + Number(metrica?.denominador || 0), 0);
@@ -702,11 +728,11 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       matriculas,
       taxa: Math.round(taxa * 10) / 10,
     };
-  }, [healthV3Snapshots, professores]);
+  }, [healthV3SnapshotsAtivos, professores]);
 
   const healthScoreEquipe = useMemo(() => {
     if (HEALTH_SCORE_V3_PERFORMANCE_ENABLED) {
-      const avaliaveis = healthV3Snapshots.filter(isHealthScoreV3SnapshotRankable);
+      const avaliaveis = healthV3SnapshotsAtivos.filter(isHealthScoreV3SnapshotVisible);
       if (avaliaveis.length === 0) {
         return { media: 0, status: 'atencao' as const, disponivel: false };
       }
@@ -723,7 +749,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     const media = soma / avaliaveis.length;
     const status = media >= 70 ? 'saudavel' : media >= 40 ? 'atencao' : 'critico';
     return { media: Math.round(media * 10) / 10, status, disponivel: true };
-  }, [healthV3Snapshots, professores]);
+  }, [healthV3SnapshotsAtivos, professores]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1155,7 +1181,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                           }
                         >
                           <div className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 ${
-                            professor.healthV3 && isHealthScoreV3SnapshotRankable(professor.healthV3)
+                            professor.healthV3 && isHealthScoreV3SnapshotVisible(professor.healthV3)
                               ? resolveHealthScoreV3Status(professor.healthV3) === 'critico'
                                 ? 'border-rose-700 bg-rose-900/30 text-rose-400'
                                 : resolveHealthScoreV3Status(professor.healthV3) === 'atencao'

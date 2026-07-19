@@ -15,12 +15,17 @@ import {
 import { KPICard } from '@/components/ui/KPICard';
 import { RankingTableCollapsible } from '@/components/ui/RankingTableCollapsible';
 import { cn, formatCurrency } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
 import {
   buscarKpisProfessoresCanonicos,
   calcularTotaisKpisProfessoresCanonicos,
   consolidarKpisProfessoresCanonicos,
   type KPIProfessorCanonico,
 } from '@/lib/professoresKpisCanonicos';
+import {
+  chaveProfessorUnidade,
+  filtrarKpisPorVinculosAtivos,
+} from '@/lib/professoresKpisAgregados';
 import { useHealthScoreProfessorV3Performance } from '@/hooks/useHealthScoreProfessorV3Performance';
 import {
   isHealthScoreV3SnapshotRankable,
@@ -61,7 +66,7 @@ interface ProfessorKPI {
   taxa_cancelamento: number;
   mrr_perdido: number;
   nps: number;
-  media_presenca: number;
+  media_presenca: number | null;
 }
 
 interface DadosProfessores {
@@ -78,7 +83,7 @@ interface DadosProfessores {
   evasoes_total: number;
   mrr_perdido_total: number;
   nps_medio: number;
-  presenca_media: number;
+  presenca_media: number | null;
   ticket_medio_geral: number;
   professores: ProfessorKPI[];
 }
@@ -87,7 +92,7 @@ function montarDados(linhas: KPIProfessorCanonico[]): DadosProfessores {
   const professores = consolidarKpisProfessoresCanonicos(linhas);
   const totais = calcularTotaisKpisProfessoresCanonicos(linhas);
   const carteiraTotal = professores.reduce((soma, p) => soma + p.carteira_alunos, 0);
-  const mediaPonderada = (campo: 'ticket_medio' | 'media_presenca' | 'nps_medio') =>
+  const mediaPonderada = (campo: 'ticket_medio' | 'nps_medio') =>
     carteiraTotal > 0
       ? professores.reduce((soma, p) => soma + p[campo] * p.carteira_alunos, 0) / carteiraTotal
       : 0;
@@ -106,7 +111,7 @@ function montarDados(linhas: KPIProfessorCanonico[]): DadosProfessores {
     evasoes_total: totais.evasoes,
     mrr_perdido_total: totais.mrrPerdido,
     nps_medio: mediaPonderada('nps_medio'),
-    presenca_media: mediaPonderada('media_presenca'),
+    presenca_media: totais.mediaPresenca,
     ticket_medio_geral: mediaPonderada('ticket_medio'),
     professores: professores.map((p) => ({
       id: p.professor_id,
@@ -166,14 +171,45 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
     async function fetchDados() {
       setLoading(true);
       try {
-        const linhas = await buscarKpisProfessoresCanonicos({
-          ano,
-          mes,
-          unidadeId: unidade,
-          dataInicio: `${ano}-${String(mes).padStart(2, '0')}-01`,
-          dataFim: dataFinal(ano, mesFinal),
-        });
-        if (ativo) setDados(montarDados(linhas));
+        const [linhas, professoresResult, vinculosResult] = await Promise.all([
+          buscarKpisProfessoresCanonicos({
+            ano,
+            mes,
+            unidadeId: unidade,
+            dataInicio: `${ano}-${String(mes).padStart(2, '0')}-01`,
+            dataFim: dataFinal(ano, mesFinal),
+          }),
+          supabase
+            .from('professores')
+            .select('id')
+            .eq('ativo', true),
+          supabase
+            .from('professores_unidades')
+            .select('professor_id, unidade_id')
+            .eq('emusys_ativo', true)
+            .neq('validacao_status', 'ignorado'),
+        ]);
+        if (professoresResult.error) throw professoresResult.error;
+        if (vinculosResult.error) throw vinculosResult.error;
+
+        const professoresAtivos = new Set(
+          (professoresResult.data || []).map((professor) => Number(professor.id)),
+        );
+        const vinculosAtivos = new Set(
+          (vinculosResult.data || [])
+            .map((vinculo) => chaveProfessorUnidade(
+              Number(vinculo.professor_id),
+              vinculo.unidade_id ? String(vinculo.unidade_id) : null,
+            ))
+            .filter((chave): chave is string => chave !== null),
+        );
+        const linhasAtivas = filtrarKpisPorVinculosAtivos(
+          linhas,
+          professoresAtivos,
+          vinculosAtivos,
+        );
+
+        if (ativo) setDados(montarDados(linhasAtivas));
       } catch (error) {
         console.error('Erro ao carregar KPIs canônicos de professores:', error);
         if (ativo) setDados(null);
@@ -194,7 +230,11 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
     return <div className="py-12 text-center text-slate-400">Não foi possível carregar os dados canônicos do período.</div>;
   }
 
-  const visibleHealthSnapshots = healthSnapshots.filter(
+  const professoresNoRecorte = new Set(dados.professores.map((professor) => professor.id));
+  const healthSnapshotsEquipe = healthSnapshots.filter(
+    (snapshot) => professoresNoRecorte.has(snapshot.professorId),
+  );
+  const visibleHealthSnapshots = healthSnapshotsEquipe.filter(
     (snapshot) => snapshot.scoreExibivel && snapshot.score !== null,
   );
   const averageHealthScore = visibleHealthSnapshots.length > 0
@@ -205,9 +245,9 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
     ? visibleHealthSnapshots.reduce((total, snapshot) => total + Number(snapshot.cobertura || 0), 0)
       / visibleHealthSnapshots.length
     : null;
-  const rankingHabilitado = healthSnapshots.some(isHealthScoreV3SnapshotRankable);
+  const rankingHabilitado = healthSnapshotsEquipe.some(isHealthScoreV3SnapshotRankable);
   const professorNameById = new Map(dados.professores.map((professor) => [professor.id, professor.nome]));
-  const rankingHealthScore = healthSnapshots
+  const rankingHealthScore = healthSnapshotsEquipe
     .filter(isHealthScoreV3SnapshotRankable)
     .sort((a, b) => Number(b.score) - Number(a.score))
     .map((snapshot) => ({
@@ -291,7 +331,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             <p className="text-[11px] uppercase text-slate-500">Média exibível</p>
           </div>
           <div>
-            <p className="text-xl font-bold text-cyan-300">{visibleHealthSnapshots.length}/{healthSnapshots.length}</p>
+            <p className="text-xl font-bold text-cyan-300">{visibleHealthSnapshots.length}/{healthSnapshotsEquipe.length}</p>
             <p className="text-[11px] uppercase text-slate-500">Professores com score</p>
           </div>
           <div>
@@ -319,7 +359,12 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               tooltip="Ocupações distintas em turmas regulares divididas pelas turmas regulares. Projetos e bandas não entram nesta média."
             />
             <KPICard icon={DollarSign} label="Ticket Médio" value={dados.ticket_medio_geral} format="currency" variant="amber" />
-            <KPICard icon={Clock} label="Presença Média" value={`${dados.presenca_media.toFixed(1)}%`} variant="emerald" />
+            <KPICard
+              icon={Clock}
+              label="Presença Média"
+              value={dados.presenca_media === null ? 'Em auditoria' : `${dados.presenca_media.toFixed(1)}%`}
+              variant="emerald"
+            />
           </div>
           {rankingHabilitado ? (
             <RankingTableCollapsible

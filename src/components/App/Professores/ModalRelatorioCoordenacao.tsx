@@ -38,6 +38,7 @@ import {
 import {
   buscarKpisProfessoresCanonicos,
   consolidarKpisProfessoresCanonicos,
+  type KPIProfessorCanonico,
 } from '@/lib/professoresKpisCanonicos';
 import {
   normalizeHealthScoreV3PerformanceRows,
@@ -78,6 +79,47 @@ function deveAbrirMesAnterior(anoTela: number, mesTela: number): boolean {
   const hoje = new Date();
   const telaEhMesAtual = anoTela === hoje.getFullYear() && mesTela === hoje.getMonth() + 1;
   return telaEhMesAtual && hoje.getDate() <= 10;
+}
+
+function calcularTotaisRelatorioCoordenacao(kpis: KPIProfessorCanonico[]) {
+  const totalProfessores = kpis.length;
+  const totalAlunos = kpis.reduce((total, kpi) => total + kpi.carteira_alunos, 0);
+  const totalOcupacoes = kpis.reduce((total, kpi) => total + kpi.alunos_via_turmas, 0);
+  const totalTurmasElegiveis = kpis.reduce((total, kpi) => total + kpi.turmas_elegiveis_media, 0);
+  const totalExperimentais = kpis.reduce((total, kpi) => total + kpi.experimentais, 0);
+  const totalMatriculas = kpis.reduce((total, kpi) => total + kpi.matriculas_pos_exp, 0);
+  const totalRenovacoes = kpis.reduce((total, kpi) => total + kpi.renovacoes, 0);
+  const totalNaoRenovacoes = kpis.reduce((total, kpi) => total + kpi.nao_renovacoes, 0);
+  const presencasPublicaveis = kpis.filter((kpi) =>
+    kpi.presenca_publicavel
+    && kpi.media_presenca !== null
+    && kpi.presenca_eventos_confirmados > 0
+  );
+  const totalEventosPresenca = presencasPublicaveis.reduce(
+    (total, kpi) => total + kpi.presenca_eventos_confirmados,
+    0,
+  );
+  const somaPresencaPonderada = presencasPublicaveis.reduce(
+    (total, kpi) => total + Number(kpi.media_presenca) * kpi.presenca_eventos_confirmados,
+    0,
+  );
+
+  return {
+    total_professores: totalProfessores,
+    total_alunos: totalAlunos,
+    media_alunos_professor: totalProfessores > 0 ? totalAlunos / totalProfessores : 0,
+    media_alunos_turma: totalTurmasElegiveis > 0 ? totalOcupacoes / totalTurmasElegiveis : 0,
+    taxa_conversao_media: totalExperimentais > 0 ? (totalMatriculas / totalExperimentais) * 100 : 0,
+    taxa_renovacao_media: totalRenovacoes + totalNaoRenovacoes > 0
+      ? (totalRenovacoes / (totalRenovacoes + totalNaoRenovacoes)) * 100
+      : 0,
+    total_evasoes: kpis.reduce((total, kpi) => total + kpi.evasoes_validas, 0),
+    total_matriculas: totalMatriculas,
+    mrr_total: kpis.reduce((total, kpi) => total + kpi.mrr_carteira, 0),
+    media_presenca: totalEventosPresenca > 0 ? somaPresencaPonderada / totalEventosPresenca : null,
+    presenca_eventos_confirmados: totalEventosPresenca,
+    presenca_professores_publicaveis: presencasPublicaveis.length,
+  };
 }
 
 export function ModalRelatorioCoordenacao({
@@ -212,7 +254,9 @@ export function ModalRelatorioCoordenacao({
         .map((snapshot) => [snapshot.professorId, snapshot]),
     );
 
-    const kpisCanonicos = consolidarKpisProfessoresCanonicos(kpisResult).map((kpi) => ({
+    const kpisCanonicos = consolidarKpisProfessoresCanonicos(kpisResult);
+    const totaisCanonicos = calcularTotaisRelatorioCoordenacao(kpisCanonicos);
+    const kpisComHealthV3 = kpisCanonicos.map((kpi) => ({
       ...kpi,
       health_score: null,
       health_status: null,
@@ -224,11 +268,16 @@ export function ModalRelatorioCoordenacao({
 
     return {
       ...((dadosRelatorio || {}) as Record<string, unknown>),
-      kpis_professores: kpisCanonicos,
+      totais: {
+        ...(((dadosRelatorio as { totais?: Record<string, unknown> } | null)?.totais) || {}),
+        ...totaisCanonicos,
+      },
+      kpis_professores: kpisComHealthV3,
       contrato_pedagogico: {
-        presenca_regra: 'publicar_somente_confianca_alta',
+        presenca_regra: 'operacional_canonica_por_unidade',
         health_score: 'parcial_sem_ranking_ate_fechamento_oficial',
         fonte_kpis: 'get_kpis_professor_periodo_canonico_v3',
+        fonte_totais: 'kpis_professores_canonicos',
       },
     };
   };
