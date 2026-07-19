@@ -1,4 +1,13 @@
+/// <reference lib="deno.ns" />
+
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import {
+  formatHealthScoreV3MetricValue,
+  getHealthScoreV3Metric,
+  healthScoreV3PublicationLabel,
+  isHealthScoreV3Visible,
+  parseHealthScoreV3Payload,
+} from "../_shared/health-score-v3.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -40,11 +49,9 @@ interface RelatorioProfessorRequest {
     presenca_eventos_confirmados?: number;
     presenca_eventos_incertos?: number;
     evasoes_mes: number;
-    health_score: number | null;
-    health_status: string | null;
-    health_score_confiavel: boolean;
     fator_demanda_ponderado?: number; // V2: Fator de demanda ponderado pela carteira
   };
+  health_score_v3?: unknown;
   metas: any[];
   acoes: any[];
   evasoes_recentes: any[];
@@ -72,6 +79,7 @@ Deno.serve(async (req) => {
 
     const payload: RelatorioProfessorRequest = await req.json();
     const { professor, metas, acoes, evasoes_recentes, competencia, unidade_nome } = payload;
+    const healthScoreV3 = parseHealthScoreV3Payload(payload.health_score_v3);
 
     // Extrair ano e mês
     const [ano, mes] = competencia.split('-').map(Number);
@@ -81,16 +89,21 @@ Deno.serve(async (req) => {
       9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
     };
     const mesNome = mesesPorExtenso[mes] || '';
-    const presencaPublicavel = professor.presenca_publicavel === true && professor.taxa_presenca !== null;
-    const healthPublicavel = professor.health_score_confiavel === true
-      && professor.health_score !== null
-      && professor.health_status !== null;
+    const healthVisivel = isHealthScoreV3Visible(healthScoreV3);
+    const retencao = getHealthScoreV3Metric(healthScoreV3, 'retencao');
+    const permanencia = getHealthScoreV3Metric(healthScoreV3, 'permanencia');
+    const conversao = getHealthScoreV3Metric(healthScoreV3, 'conversao');
+    const mediaTurma = getHealthScoreV3Metric(healthScoreV3, 'media_turma');
+    const numeroAlunos = getHealthScoreV3Metric(healthScoreV3, 'numero_alunos');
+    const presenca = getHealthScoreV3Metric(healthScoreV3, 'presenca');
 
     // Determinar status geral
-    const statusEmoji = professor.health_status === 'saudavel' ? '🟢' : 
-                        professor.health_status === 'atencao' ? '🟡' : '🔴';
-    const statusTexto = professor.health_status === 'saudavel' ? 'SAUDÁVEL' : 
-                        professor.health_status === 'atencao' ? 'ATENÇÃO' : 'CRÍTICO';
+    const statusV3 = healthScoreV3?.classificacao;
+    const statusEmoji = statusV3 === 'saudavel' ? '🟢' : statusV3 === 'atencao' ? '🟡' : '🔴';
+    const statusTexto = statusV3 === 'saudavel' ? 'SAUDÁVEL' : statusV3 === 'atencao' ? 'ATENÇÃO' : 'CRÍTICO';
+    const coberturaTexto = healthScoreV3?.cobertura == null
+      ? 'Sem base'
+      : `${healthScoreV3.cobertura.toFixed(0)}%`;
 
     // Construir template do relatório
     let relatorio = '';
@@ -108,26 +121,22 @@ Deno.serve(async (req) => {
 
     // Health Score
     relatorio += `───────────────────────\n`;
-    relatorio += `❤️ *HEALTH SCORE*\n`;
+    relatorio += `❤️ *HEALTH SCORE V3 — ${healthScoreV3PublicationLabel(healthScoreV3).toUpperCase()}*\n`;
     relatorio += `───────────────────────\n`;
-    relatorio += healthPublicavel
-      ? `${criarBarraProgresso(professor.health_score!)} *${professor.health_score!.toFixed(0)}* ${statusEmoji} ${statusTexto}\n\n`
-      : `*Em auditoria* — presença sem cobertura suficiente para publicar a nota composta.\n\n`;
+    relatorio += healthVisivel
+      ? `${criarBarraProgresso(healthScoreV3!.score!)} *${healthScoreV3!.score!.toFixed(0)}* ${statusEmoji} ${statusTexto}\nCobertura: *${coberturaTexto}*\n\n`
+      : `*Sem base* — ${healthScoreV3?.motivo_bloqueio || 'snapshot canônico indisponível para o recorte'}.\n\n`;
 
     // KPIs do Professor
     relatorio += `───────────────────────\n`;
     relatorio += `📈 *INDICADORES DO MÊS*\n`;
     relatorio += `───────────────────────\n`;
-    relatorio += `• Carteira de Alunos: *${professor.total_alunos}*\n`;
-    relatorio += `• Total de Turmas: *${professor.total_turmas}*\n`;
-    relatorio += `• Média Alunos/Turma: *${professor.media_alunos_turma.toFixed(2)}*\n`;
-    relatorio += presencaPublicavel
-      ? `• Taxa de Presença: *${professor.taxa_presenca!.toFixed(1)}%*\n`
-      : `• Taxa de Presença: *Em auditoria* (cobertura ${((professor.presenca_cobertura || 0) * 100).toFixed(0)}%; ${professor.presenca_eventos_confirmados || 0} confirmados; ${professor.presenca_eventos_incertos || 0} incertos)\n`;
-    relatorio += `• Taxa de Retenção: *${professor.taxa_retencao.toFixed(1)}%*\n`;
-    relatorio += `• Conversao Exp->Mat: *${professor.taxa_conversao.toFixed(1)}%*\n`;
-    relatorio += `• Fator de Demanda: *${(professor.fator_demanda_ponderado || 1.0).toFixed(1)}*\n`;
-    relatorio += `• Evasões no Mês: *${professor.evasoes_mes}*\n\n`;
+    relatorio += `• Número de Alunos: *${formatHealthScoreV3MetricValue(numeroAlunos)}*\n`;
+    relatorio += `• Média Alunos/Turma: *${formatHealthScoreV3MetricValue(mediaTurma)}*\n`;
+    relatorio += `• Retenção Atribuível: *${formatHealthScoreV3MetricValue(retencao)}*\n`;
+    relatorio += `• Permanência com o Professor: *${formatHealthScoreV3MetricValue(permanencia)}*\n`;
+    relatorio += `• Conversão Exp->Mat: *${formatHealthScoreV3MetricValue(conversao)}*\n`;
+    relatorio += `• Presença dos Alunos: *${formatHealthScoreV3MetricValue(presenca)}*\n\n`;
 
     // Especialidades
     if (professor.especialidades && professor.especialidades.length > 0) {
@@ -209,9 +218,10 @@ REGRAS:
 - Mencione o professor pelo primeiro nome
 - Cada item deve ter no máximo 1-2 linhas
 - Sugira ações práticas e específicas
-- Se presenca_publicavel=false, não avalie presença e não gere alerta ou recomendação baseada nela.
-- Se health_score_confiavel=false, não classifique o professor por Health Score.
-- Nunca converta presença ou Health Score nulos em zero.
+- Use somente o objeto health_score_v3 recebido; não recalcule métricas, nota ou classificação.
+- Health Score parcial pode ser descrito como parcial, mas nunca usado em ranking ou premiação.
+- Métrica com estado_base sem_base ou valor_bruto nulo deve ser descrita como "Sem base" e ignorada em julgamentos.
+- Nunca converta valor nulo em zero e nunca deduza presença a partir de outro campo.
 
 Responda EXATAMENTE neste formato JSON:
 {
@@ -224,20 +234,7 @@ Responda EXATAMENTE neste formato JSON:
 
     const dadosParaIA = {
       nome: professor.nome,
-      health_score: healthPublicavel ? professor.health_score : null,
-      health_status: healthPublicavel ? professor.health_status : null,
-      health_score_confiavel: healthPublicavel,
-      total_alunos: professor.total_alunos,
-      total_turmas: professor.total_turmas,
-      media_alunos_turma: professor.media_alunos_turma,
-      taxa_presenca: presencaPublicavel ? professor.taxa_presenca : null,
-      presenca_publicavel: presencaPublicavel,
-      presenca_confianca: professor.presenca_confianca || 'sem_base',
-      presenca_cobertura: professor.presenca_cobertura || 0,
-      taxa_retencao: professor.taxa_retencao,
-      taxa_conversao_exp_mat: professor.taxa_conversao,
-      fator_demanda_ponderado: professor.fator_demanda_ponderado || 1.0,
-      evasoes_mes: professor.evasoes_mes,
+      health_score_v3: healthScoreV3,
       especialidades: professor.especialidades,
       metas_ativas: metas?.length || 0,
       acoes_pendentes: acoesPendentes.length,
@@ -279,7 +276,9 @@ Responda EXATAMENTE neste formato JSON:
       iaData = JSON.parse(jsonText);
     } catch (e) {
       iaData = {
-        resumo: `${professor.nome} apresentou desempenho ${professor.health_status === 'saudavel' ? 'positivo' : 'que requer atenção'} neste mês.`,
+        resumo: healthVisivel
+          ? `${professor.nome} possui Health Score V3 ${healthScoreV3!.estado_publicacao} no recorte.`
+          : `${professor.nome} ainda não possui base suficiente para o Health Score V3 neste recorte.`,
         pontos_fortes: ['Comprometimento com os alunos', 'Presença nas aulas'],
         pontos_atencao: ['Monitorar indicadores de retenção'],
         sugestoes: ['Realizar acompanhamento individual com alunos', 'Participar de treinamentos'],

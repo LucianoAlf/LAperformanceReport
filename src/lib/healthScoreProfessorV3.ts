@@ -68,6 +68,13 @@ export interface HealthScoreV3SnapshotMetric {
   escopo: string;
   competencia: string;
   trimestreInicio: string;
+  periodicidade: 'mensal' | 'ciclo' | 'legado_calendario';
+  periodoInicio: string;
+  periodoFim: string;
+  cicloCodigo: string;
+  estadoPublicacao: 'parcial' | 'oficial' | 'sem_base';
+  scoreExibivel: boolean;
+  rankingHabilitado: boolean;
   configVersao: number;
   score: number | null;
   cobertura: number | null;

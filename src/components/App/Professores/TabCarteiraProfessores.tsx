@@ -12,12 +12,14 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ModalCarteiraProfessor } from './ModalCarteiraProfessor';
 import { Tooltip } from '@/components/ui/Tooltip';
-import { calcularHealthScore } from '@/hooks/useHealthScore';
-import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
 import {
   buscarKpisProfessoresCanonicos,
   consolidarKpisProfessoresCanonicos,
 } from '@/lib/professoresKpisCanonicos';
+import {
+  normalizeHealthScoreV3PerformanceRows,
+  resolveHealthScoreV3MetricDisplay,
+} from '@/lib/healthScoreProfessorV3Performance';
 
 // Interface para carteira do professor
 interface CarteiraProfessor {
@@ -34,11 +36,12 @@ interface CarteiraProfessor {
   media_alunos_turma: number;
   cursos: string[];
   unidades: string[];
-  health_score: number;
-  health_status: 'critico' | 'atencao' | 'saudavel';
-  health_score_confiavel: boolean;
-  presenca_confianca: string;
-  presenca_cobertura: number;
+  health_score: number | null;
+  health_status: 'critico' | 'atencao' | 'saudavel' | null;
+  health_score_exibivel: boolean;
+  health_score_estado_publicacao: 'parcial' | 'oficial' | 'sem_base';
+  health_score_cobertura: number | null;
+  health_score_motivo: string | null;
 }
 
 // Interface para aluno na carteira
@@ -59,15 +62,15 @@ interface AlunoCarteira {
 
 interface Props {
   unidadeAtual: UnidadeId;
-  healthWeights?: typeof DEFAULT_HEALTH_WEIGHTS;
 }
 
 type OrdenacaoTipo = 'alunos' | 'mrr' | 'ticket' | 'media_turma';
 type OrdenacaoDirecao = 'asc' | 'desc';
 
-export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
+export function TabCarteiraProfessores({ unidadeAtual }: Props) {
   const [carteiras, setCarteiras] = useState<CarteiraProfessor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
   const [filtroBusca, setFiltroBusca] = useState('');
   const [filtroCurso, setFiltroCurso] = useState('todos');
   const [cursos, setCursos] = useState<{ id: number; nome: string }[]>([]);
@@ -93,6 +96,7 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
 
   const carregarDados = async () => {
     setLoading(true);
+    setErro(null);
     try {
       // Buscar cursos para filtro
       const { data: cursosData } = await supabase
@@ -114,12 +118,28 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
       const agora = new Date();
       const ano = agora.getFullYear();
       const mes = agora.getMonth() + 1;
-      const kpisData = consolidarKpisProfessoresCanonicos(
-        await buscarKpisProfessoresCanonicos({
+      const competencia = `${ano}-${String(mes).padStart(2, '0')}-01`;
+      const [kpisBrutos, healthV3Result] = await Promise.all([
+        buscarKpisProfessoresCanonicos({
           ano,
           mes,
           unidadeId: unidadeAtual,
-        })
+        }),
+        supabase.rpc('get_health_score_professor_v3_performance', {
+          p_competencia: competencia,
+          p_unidade_id: unidadeAtual === 'todos' ? null : unidadeAtual,
+          p_periodicidade: 'mensal',
+        }),
+      ]);
+
+      if (healthV3Result.error) {
+        throw new Error(`Health Score V3 indisponível: ${healthV3Result.error.message}`);
+      }
+
+      const kpisData = consolidarKpisProfessoresCanonicos(kpisBrutos);
+      const healthV3PorProfessor = new Map(
+        normalizeHealthScoreV3PerformanceRows(healthV3Result.data || [])
+          .map((snapshot) => [snapshot.professorId, snapshot]),
       );
 
       const kpisPorProfessor = new Map<number, any>();
@@ -130,28 +150,24 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
       // Montar carteiras a partir da RPC
       const carteirasCalculadas: CarteiraProfessor[] = (carteiraData as any[]).map((row: any) => {
         const kpis = kpisPorProfessor.get(row.professor_id);
-        const totalAlunos = Number(kpis?.carteira_alunos ?? row.total_alunos ?? 0);
-        const mediaAlunosTurma = Number(kpis?.media_alunos_turma || 0);
-        const taxaRetencao = kpis?.taxa_cancelamento
-          ? 100 - Number(kpis.taxa_cancelamento)
-          : (totalAlunos > 0 ? 100 : 0);
-        const taxaConversao = kpis?.taxa_conversao ? Number(kpis.taxa_conversao) : 0;
-        const presencaPublicavel = Boolean(kpis?.presenca_publicavel)
-          && kpis?.media_presenca !== null
-          && kpis?.media_presenca !== undefined;
-        const taxaPresenca = presencaPublicavel ? Number(kpis.media_presenca) : 75;
-        const evasoesMes = kpis?.evasoes || 0;
-
-        const healthResult = calcularHealthScore({
-          mediaTurma: mediaAlunosTurma,
-          retencao: taxaRetencao,
-          conversao: taxaConversao,
-          presenca: taxaPresenca,
-          evasoes: evasoesMes,
-          taxaCrescimentoAjustada: 0,
-          taxaEvasao: totalAlunos > 0 ? (evasoesMes / totalAlunos) * 100 : 0,
-          carteiraAlunos: totalAlunos
-        }, healthWeights);
+        const snapshot = healthV3PorProfessor.get(Number(row.professor_id));
+        const numeroAlunosV3 = snapshot
+          ? resolveHealthScoreV3MetricDisplay(snapshot, 'numero_alunos').value
+          : null;
+        const mediaTurmaV3 = snapshot
+          ? resolveHealthScoreV3MetricDisplay(snapshot, 'media_turma').value
+          : null;
+        const totalAlunos = Number(numeroAlunosV3 ?? kpis?.carteira_alunos ?? row.total_alunos ?? 0);
+        const mediaAlunosTurma = Number(mediaTurmaV3 ?? kpis?.media_alunos_turma ?? 0);
+        const healthScoreExibivel = Boolean(
+          snapshot?.scoreExibivel
+          && snapshot.score !== null,
+        );
+        const healthStatus = snapshot?.classificacao === 'critico'
+          || snapshot?.classificacao === 'atencao'
+          || snapshot?.classificacao === 'saudavel'
+          ? snapshot.classificacao
+          : null;
 
         return {
           id: row.professor_id,
@@ -167,11 +183,12 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
           media_alunos_turma: mediaAlunosTurma,
           cursos: row.cursos || [],
           unidades: row.unidades || [],
-          health_score: healthResult.score,
-          health_status: healthResult.status,
-          health_score_confiavel: presencaPublicavel,
-          presenca_confianca: kpis?.presenca_confianca || 'sem_base',
-          presenca_cobertura: Number(kpis?.presenca_cobertura || 0),
+          health_score: healthScoreExibivel ? snapshot!.score : null,
+          health_status: healthStatus,
+          health_score_exibivel: healthScoreExibivel,
+          health_score_estado_publicacao: snapshot?.estadoPublicacao || 'sem_base',
+          health_score_cobertura: snapshot?.cobertura ?? null,
+          health_score_motivo: snapshot?.motivoBloqueio || null,
         };
       });
 
@@ -179,6 +196,8 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
       setCarteiras(carteirasCalculadas.filter(c => c.total_alunos > 0));
     } catch (error) {
       console.error('Erro ao carregar carteiras:', error);
+      setCarteiras([]);
+      setErro(error instanceof Error ? error.message : 'Falha ao carregar a carteira dos professores.');
     } finally {
       setLoading(false);
     }
@@ -327,6 +346,14 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
     return (
       <div className="flex items-center justify-center h-96">
         <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
+      </div>
+    );
+  }
+
+  if (erro) {
+    return (
+      <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+        {erro}
       </div>
     );
   }
@@ -525,11 +552,11 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
                 </div>
 
                 {/* Badge Health Score */}
-                <Tooltip content={carteira.health_score_confiavel
-                  ? `Health Score: ${carteira.health_score} (${carteira.health_status === 'saudavel' ? 'Saudável' : carteira.health_status === 'atencao' ? 'Atenção' : 'Crítico'})`
-                  : `Health Score em auditoria. Cobertura confirmada: ${(carteira.presenca_cobertura * 100).toFixed(0)}% (${carteira.presenca_confianca}).`}>
+                <Tooltip content={carteira.health_score_exibivel
+                  ? `Health Score V3 ${carteira.health_score_estado_publicacao}: ${carteira.health_score?.toFixed(1)} (${carteira.health_status === 'saudavel' ? 'Saudável' : carteira.health_status === 'atencao' ? 'Atenção' : 'Crítico'}). Cobertura: ${carteira.health_score_cobertura?.toFixed(0) ?? '-'}%.`
+                  : `Health Score V3 sem base. ${carteira.health_score_motivo || 'Snapshot canônico indisponível para o recorte.'}`}>
                   <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${
-                    !carteira.health_score_confiavel
+                    !carteira.health_score_exibivel
                       ? 'bg-slate-800 border-slate-600'
                       : carteira.health_status === 'saudavel'
                       ? 'bg-emerald-500/10 border-emerald-500/20' 
@@ -538,17 +565,25 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
                         : 'bg-rose-500/10 border-rose-500/20'
                   }`}>
                     <Heart className={`w-3.5 h-3.5 ${
-                      !carteira.health_score_confiavel ? 'text-slate-500' :
+                      !carteira.health_score_exibivel ? 'text-slate-500' :
                       carteira.health_status === 'saudavel' ? 'text-emerald-400' : 
                       carteira.health_status === 'atencao' ? 'text-amber-400' : 'text-rose-400'
                     }`} />
                     <span className={`text-sm font-bold ${
-                      !carteira.health_score_confiavel ? 'text-slate-400' :
+                      !carteira.health_score_exibivel ? 'text-slate-400' :
                       carteira.health_status === 'saudavel' ? 'text-emerald-400' : 
                       carteira.health_status === 'atencao' ? 'text-amber-400' : 'text-rose-400'
                     }`}>
-                      {carteira.health_score_confiavel ? Math.round(carteira.health_score) : 'Em auditoria'}
+                      {carteira.health_score_exibivel && carteira.health_score !== null
+                        ? Math.round(carteira.health_score)
+                        : 'Sem base'}
                     </span>
+                    {carteira.health_score_exibivel
+                      && carteira.health_score_estado_publicacao === 'parcial' && (
+                      <span className="text-[9px] font-semibold uppercase text-violet-300">
+                        Parcial
+                      </span>
+                    )}
                   </div>
                 </Tooltip>
               </div>

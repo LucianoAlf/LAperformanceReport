@@ -1,4 +1,7 @@
-import type { HealthMetricKeyV3 } from './healthScoreProfessorV3';
+import type {
+  HealthMetricKeyV3,
+  HealthScoreV3SnapshotMetric,
+} from './healthScoreProfessorV3';
 
 export interface HealthScoreV3PerformanceMetric {
   metrica: HealthMetricKeyV3;
@@ -26,6 +29,13 @@ export interface HealthScoreV3ProfessorPerformance {
   escopo: string;
   competencia: string;
   trimestreInicio: string;
+  periodicidade: 'mensal' | 'ciclo' | 'legado_calendario';
+  periodoInicio: string;
+  periodoFim: string;
+  cicloCodigo: string;
+  estadoPublicacao: 'parcial' | 'oficial' | 'sem_base';
+  scoreExibivel: boolean;
+  rankingHabilitado: boolean;
   configVersao: number;
   revisao: number;
   score: number | null;
@@ -105,6 +115,13 @@ export function normalizeHealthScoreV3PerformanceRows(
         escopo: String(row.escopo || ''),
         competencia: String(row.competencia || ''),
         trimestreInicio: String(row.trimestre_inicio || ''),
+        periodicidade: String(row.periodicidade || 'legado_calendario') as HealthScoreV3ProfessorPerformance['periodicidade'],
+        periodoInicio: String(row.periodo_inicio || ''),
+        periodoFim: String(row.periodo_fim || ''),
+        cicloCodigo: String(row.ciclo_codigo || ''),
+        estadoPublicacao: String(row.estado_publicacao || 'sem_base') as HealthScoreV3ProfessorPerformance['estadoPublicacao'],
+        scoreExibivel: row.score_exibivel === true,
+        rankingHabilitado: row.ranking_habilitado === true,
         configVersao: asNumber(row.config_versao),
         revisao: asNumber(row.revisao),
         score: asNullableNumber(row.score),
@@ -226,5 +243,164 @@ export function rankHealthScoreV3Metric(
 export function isHealthScoreV3SnapshotRankable(
   snapshot: HealthScoreV3ProfessorPerformance,
 ): boolean {
-  return snapshot.snapshotPublicavel && snapshot.score !== null;
+  return snapshot.rankingHabilitado
+    && snapshot.estadoPublicacao === 'oficial'
+    && snapshot.snapshotPublicavel
+    && snapshot.score !== null;
+}
+
+export interface HealthScoreV3AiPayload {
+  versao_contrato: 'health_score_professor_v3';
+  professor_id: number;
+  unidade_id: string | null;
+  escopo: string;
+  competencia: string;
+  periodicidade: HealthScoreV3ProfessorPerformance['periodicidade'];
+  periodo_inicio: string;
+  periodo_fim: string;
+  ciclo_codigo: string;
+  estado_publicacao: HealthScoreV3ProfessorPerformance['estadoPublicacao'];
+  score_exibivel: boolean;
+  ranking_habilitado: boolean;
+  config_versao: number;
+  revisao: number;
+  score: number | null;
+  cobertura: number | null;
+  classificacao: string | null;
+  estado: string;
+  snapshot_publicavel: boolean;
+  publicado: boolean;
+  motivo_bloqueio: string | null;
+  regra_versao_snapshot: string;
+  metricas: Array<{
+    metrica: HealthMetricKeyV3;
+    valor_bruto: number | null;
+    numerador: number | null;
+    denominador: number | null;
+    nota: number | null;
+    peso: number;
+    peso_disponivel: boolean;
+    contribuicao: number | null;
+    meta: number | null;
+    amostra: number | null;
+    estado_base: string;
+    metrica_publicavel: boolean;
+    confianca: string | null;
+    fonte: string;
+    regra_versao_metrica: string;
+    motivo_sem_base: string | null;
+    detalhes: Record<string, unknown>;
+  }>;
+}
+
+export function isHealthScoreV3SnapshotVisible(
+  snapshot: HealthScoreV3ProfessorPerformance,
+): boolean {
+  return snapshot.scoreExibivel && snapshot.score !== null;
+}
+
+function serializeMetricForAi(metric: HealthScoreV3PerformanceMetric) {
+  return {
+    metrica: metric.metrica,
+    valor_bruto: metric.valorBruto,
+    numerador: metric.numerador,
+    denominador: metric.denominador,
+    nota: metric.nota,
+    peso: metric.peso,
+    peso_disponivel: metric.pesoDisponivel,
+    contribuicao: metric.contribuicao,
+    meta: metric.meta,
+    amostra: metric.amostra,
+    estado_base: metric.estadoBase,
+    metrica_publicavel: metric.metricaPublicavel,
+    confianca: metric.confianca,
+    fonte: metric.fonte,
+    regra_versao_metrica: metric.regraVersaoMetrica,
+    motivo_sem_base: metric.motivoSemBase,
+    detalhes: metric.detalhes,
+  };
+}
+
+function performanceFromMetricRows(
+  rows: HealthScoreV3SnapshotMetric[],
+): HealthScoreV3ProfessorPerformance | null {
+  const first = rows[0];
+  if (!first) return null;
+
+  return {
+    professorId: first.professorId,
+    unidadeId: first.unidadeId,
+    escopo: first.escopo,
+    competencia: first.competencia,
+    trimestreInicio: first.trimestreInicio,
+    periodicidade: first.periodicidade,
+    periodoInicio: first.periodoInicio,
+    periodoFim: first.periodoFim,
+    cicloCodigo: first.cicloCodigo,
+    estadoPublicacao: first.estadoPublicacao,
+    scoreExibivel: first.scoreExibivel,
+    rankingHabilitado: first.rankingHabilitado,
+    configVersao: first.configVersao,
+    revisao: 0,
+    score: first.score,
+    cobertura: first.cobertura,
+    classificacao: first.classificacao,
+    estado: first.estado,
+    snapshotPublicavel: first.snapshotPublicavel,
+    publicado: first.publicado,
+    motivoBloqueio: first.motivoBloqueio,
+    regraVersaoSnapshot: first.regraVersaoSnapshot,
+    metrics: new Map(rows.map((row) => [row.metrica, {
+      metrica: row.metrica,
+      valorBruto: row.valorBruto,
+      numerador: row.numerador,
+      denominador: row.denominador,
+      nota: row.nota,
+      peso: row.peso,
+      pesoDisponivel: row.pesoDisponivel,
+      contribuicao: row.contribuicao,
+      meta: row.meta,
+      amostra: row.amostra,
+      estadoBase: row.estadoBase,
+      metricaPublicavel: row.metricaPublicavel,
+      confianca: row.confianca,
+      fonte: row.fonte,
+      regraVersaoMetrica: row.regraVersaoMetrica,
+      motivoSemBase: row.motivoSemBase,
+      detalhes: row.detalhes,
+    }])),
+  };
+}
+
+export function serializeHealthScoreV3ForAi(
+  value: HealthScoreV3ProfessorPerformance | HealthScoreV3SnapshotMetric[] | null,
+): HealthScoreV3AiPayload | null {
+  const snapshot = Array.isArray(value) ? performanceFromMetricRows(value) : value;
+  if (!snapshot) return null;
+
+  return {
+    versao_contrato: 'health_score_professor_v3',
+    professor_id: snapshot.professorId,
+    unidade_id: snapshot.unidadeId,
+    escopo: snapshot.escopo,
+    competencia: snapshot.competencia,
+    periodicidade: snapshot.periodicidade,
+    periodo_inicio: snapshot.periodoInicio,
+    periodo_fim: snapshot.periodoFim,
+    ciclo_codigo: snapshot.cicloCodigo,
+    estado_publicacao: snapshot.estadoPublicacao,
+    score_exibivel: snapshot.scoreExibivel,
+    ranking_habilitado: snapshot.rankingHabilitado,
+    config_versao: snapshot.configVersao,
+    revisao: snapshot.revisao,
+    score: snapshot.score,
+    cobertura: snapshot.cobertura,
+    classificacao: snapshot.classificacao,
+    estado: snapshot.estado,
+    snapshot_publicavel: snapshot.snapshotPublicavel,
+    publicado: snapshot.publicado,
+    motivo_bloqueio: snapshot.motivoBloqueio,
+    regra_versao_snapshot: snapshot.regraVersaoSnapshot,
+    metricas: Array.from(snapshot.metrics.values()).map(serializeMetricForAi),
+  };
 }

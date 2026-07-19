@@ -35,18 +35,20 @@ import {
 } from '@/lib/professoresKpisCanonicos';
 import { useHealthScoreProfessorV3Performance } from '@/hooks/useHealthScoreProfessorV3Performance';
 import {
+  isHealthScoreV3SnapshotVisible,
   isHealthScoreV3SnapshotRankable,
   rankHealthScoreV3Metric,
   resolveHealthScoreV3MetricDisplay,
+  serializeHealthScoreV3ForAi,
   type HealthScoreV3MetricDisplay,
   type HealthScoreV3ProfessorPerformance,
 } from '@/lib/healthScoreProfessorV3Performance';
 import type { HealthMetricKeyV3 } from '@/lib/healthScoreProfessorV3';
+import { getHealthScoreV3Period } from '@/lib/healthScoreProfessorV3Periodos';
 
 const HEALTH_SCORE_V3_PERFORMANCE_FLAG = import.meta.env.VITE_HEALTH_SCORE_V3_PERFORMANCE_ENABLED;
 const HEALTH_SCORE_V3_PERFORMANCE_ENABLED =
-  HEALTH_SCORE_V3_PERFORMANCE_FLAG === 'true'
-  || (import.meta.env.DEV && HEALTH_SCORE_V3_PERFORMANCE_FLAG !== 'false');
+  HEALTH_SCORE_V3_PERFORMANCE_FLAG !== 'false';
 
 interface ProfessorPerformance {
   id: number;
@@ -189,7 +191,7 @@ function HealthScoreV3MetricCell({
 }
 
 function resolveHealthScoreV3Status(snapshot: HealthScoreV3ProfessorPerformance | null): ProfessorPerformance['status'] | null {
-  if (!snapshot || !isHealthScoreV3SnapshotRankable(snapshot)) return null;
+  if (!snapshot || !isHealthScoreV3SnapshotVisible(snapshot)) return null;
   if (snapshot.classificacao === 'critico') return 'critico';
   if (snapshot.classificacao === 'atencao') return 'atencao';
   if (snapshot.classificacao === 'saudavel') return 'excelente';
@@ -208,50 +210,20 @@ interface Props {
   onPeriodoChange?: (label: string | null) => void;
 }
 
-// Codigo do trimestre operacional baseado no mes
-function getTrimestreCodigo(mes: number): 'T1' | 'T2' | 'T3' | 'NC' {
-  if (mes >= 3 && mes <= 5) return 'T1';
-  if (mes >= 6 && mes <= 8) return 'T2';
-  if (mes >= 9 && mes <= 11) return 'T3';
-  return 'NC';
-}
+type HealthScoreV3CycleSelector = 'MAR-MAI' | 'JUN-AGO' | 'SET-NOV' | 'DEZ-FEV';
 
-// Mes representativo de cada trimestre (usado ao trocar trimestre no dropdown)
-const TRIMESTRE_MES_REPRESENTATIVO: Record<'T1' | 'T2' | 'T3' | 'NC', number> = {
-  T1: 4, // Abril
-  T2: 7, // Julho
-  T3: 10, // Outubro
-  NC: 1, // Janeiro (Periodo Nao Considerado: Dez(ano-1) + Jan/Fev(ano))
+const CICLO_MES_REPRESENTATIVO: Record<HealthScoreV3CycleSelector, number> = {
+  'MAR-MAI': 3,
+  'JUN-AGO': 6,
+  'SET-NOV': 9,
+  'DEZ-FEV': 12,
 };
 
-// Calcula trimestre operacional (T1/T2/T3 ou Período Não Considerado) a partir de ano + mes
-function getTrimestreOperacional(ano: number, mes: number): { dataInicio: string; dataFim: string; label: string } {
-  if (mes >= 3 && mes <= 5) {
-    return { dataInicio: `${ano}-03-01`, dataFim: `${ano}-05-31`, label: `T1 ${ano}` };
-  }
-  if (mes >= 6 && mes <= 8) {
-    return { dataInicio: `${ano}-06-01`, dataFim: `${ano}-08-31`, label: `T2 ${ano}` };
-  }
-  if (mes >= 9 && mes <= 11) {
-    return { dataInicio: `${ano}-09-01`, dataFim: `${ano}-11-30`, label: `T3 ${ano}` };
-  }
-  // Período Não Considerado: Dez(ano-1) + Jan/Fev(ano) (quando mes 1 ou 2)
-  // ou Dez(ano) + Jan/Fev(ano+1) (quando mes 12)
-  if (mes === 12) {
-    const ultimoDiaFev = new Date(ano + 1, 2, 0).getDate();
-    return {
-      dataInicio: `${ano}-12-01`,
-      dataFim: `${ano + 1}-02-${String(ultimoDiaFev).padStart(2, '0')}`,
-      label: `Período Não Considerado ${ano + 1}`,
-    };
-  }
-  // mes 1 ou 2
-  const ultimoDiaFev = new Date(ano, 2, 0).getDate();
-  return {
-    dataInicio: `${ano - 1}-12-01`,
-    dataFim: `${ano}-02-${String(ultimoDiaFev).padStart(2, '0')}`,
-    label: `Período Não Considerado ${ano}`,
-  };
+function getCicloSelecao(mes: number): HealthScoreV3CycleSelector {
+  if (mes >= 3 && mes <= 5) return 'MAR-MAI';
+  if (mes >= 6 && mes <= 8) return 'JUN-AGO';
+  if (mes >= 9 && mes <= 11) return 'SET-NOV';
+  return 'DEZ-FEV';
 }
 
 export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPeriodoChange }: Props) {
@@ -266,8 +238,11 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
   // Modo de visualização (mensal vs trimestral) — local desta aba
   const [modoVisualizacao, setModoVisualizacao] = useState<'mensal' | 'trimestre'>('mensal');
-  const trimestreInfo = useMemo(() => getTrimestreOperacional(ano, mes), [ano, mes]);
-  const periodoLabel = modoVisualizacao === 'trimestre' ? trimestreInfo.label : competenciaFiltro.range.label;
+  const periodoV3 = useMemo(
+    () => getHealthScoreV3Period(ano, mes, modoVisualizacao === 'trimestre' ? 'ciclo' : 'mensal'),
+    [ano, mes, modoVisualizacao],
+  );
+  const periodoLabel = periodoV3.label;
   const healthScoreWeights = healthWeights ?? DEFAULT_HEALTH_WEIGHTS;
   const healthV3UnitId = unidadeAtual === 'todos' ? null : unidadeAtual;
   const {
@@ -277,6 +252,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
   } = useHealthScoreProfessorV3Performance({
     competencia,
     unidadeId: healthV3UnitId,
+    periodicidade: modoVisualizacao === 'trimestre' ? 'ciclo' : 'mensal',
     enabled: HEALTH_SCORE_V3_PERFORMANCE_ENABLED,
   });
 
@@ -367,8 +343,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           ano: anoFiltro,
           mes: mesFiltro,
           unidadeId: unidadeAtual,
-          dataInicio: modoVisualizacao === 'trimestre' ? trimestreInfo.dataInicio : null,
-          dataFim: modoVisualizacao === 'trimestre' ? trimestreInfo.dataFim : null,
+          dataInicio: modoVisualizacao === 'trimestre' ? periodoV3.inicio : null,
+          dataFim: modoVisualizacao === 'trimestre' ? periodoV3.fim : null,
         }),
         unidadesRelQuery,
         cursosRelQuery,
@@ -958,7 +934,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
       {HEALTH_SCORE_V3_PERFORMANCE_ENABLED ? (
         <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-100">
-          Health Score V3 em homologação. A tabela usa snapshots V3 da competência; apenas score e métricas publicáveis entram nos rankings.
+          Health Score parcial visível no período selecionado. Rankings e premiações permanecem reservados ao ciclo oficial fechado.
         </div>
       ) : (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
@@ -1018,17 +994,17 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
               </Select>
             ) : (
               <Select
-                value={getTrimestreCodigo(mes)}
-                onValueChange={(v) => competenciaFiltro.setMes(TRIMESTRE_MES_REPRESENTATIVO[v as 'T1' | 'T2' | 'T3' | 'NC'])}
+                value={getCicloSelecao(mes)}
+                onValueChange={(v) => competenciaFiltro.setMes(CICLO_MES_REPRESENTATIVO[v as HealthScoreV3CycleSelector])}
               >
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="Trimestre" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="T1">T1 (Mar / Abr / Mai)</SelectItem>
-                  <SelectItem value="T2">T2 (Jun / Jul / Ago)</SelectItem>
-                  <SelectItem value="T3">T3 (Set / Out / Nov)</SelectItem>
-                  <SelectItem value="NC">Não Considerado (Dez / Jan / Fev)</SelectItem>
+                  <SelectItem value="MAR-MAI">Mar / Abr / Mai</SelectItem>
+                  <SelectItem value="JUN-AGO">Jun / Jul / Ago</SelectItem>
+                  <SelectItem value="SET-NOV">Set / Out / Nov</SelectItem>
+                  <SelectItem value="DEZ-FEV">Dez / Jan / Fev</SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -1038,16 +1014,11 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
               side="top"
               content={
                 <div className="text-xs max-w-[260px]">
-                  <p className="font-bold text-slate-200 mb-1">Visão Trimestral</p>
+                    <p className="font-bold text-slate-200 mb-1">Visão por ciclo</p>
                   <p className="text-slate-400 mb-1.5">
-                    Agrega 3 meses em trimestres operacionais para diluir distorções estatísticas em professores com poucas experimentais.
+                      Agrega os três meses do ciclo oficial sem fazer média simples de percentuais.
                   </p>
-                  <ul className="text-slate-400 text-[11px] space-y-0.5">
-                    <li><span className="text-violet-400 font-medium">T1:</span> Mar / Abr / Mai</li>
-                    <li><span className="text-violet-400 font-medium">T2:</span> Jun / Jul / Ago</li>
-                    <li><span className="text-violet-400 font-medium">T3:</span> Set / Out / Nov</li>
-                    <li><span className="text-slate-500 font-medium">Não Considerado:</span> Dez / Jan / Fev</li>
-                  </ul>
+                    <p className="text-slate-400 text-[11px]">Jun-Ago, Set-Nov, Dez-Fev e Mar-Mai.</p>
                 </div>
               }
             >
@@ -1071,7 +1042,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                   }`}
                 >
                   <Calendar className="w-3 h-3" />
-                  Trimestral
+                  Ciclo
                 </button>
               </div>
             </Tooltip>
@@ -1193,7 +1164,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                               : 'border-slate-600 bg-slate-800 text-slate-400'
                           }`}>
                             <span className="text-sm font-black">
-                              {professor.healthV3 && isHealthScoreV3SnapshotRankable(professor.healthV3)
+                              {professor.healthV3 && isHealthScoreV3SnapshotVisible(professor.healthV3)
                                 ? Math.round(Number(professor.healthV3.score))
                                 : 'Sem base'}
                             </span>
@@ -1660,8 +1631,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             presenca_eventos_incertos: p.presenca_eventos_incertos,
             evasoes_mes: p.evasoes_mes,
             status: p.status,
-            health_score: p.health_score_confiavel ? p.health_score : null,
-            health_score_confiavel: p.health_score_confiavel,
+            health_score_v3: serializeHealthScoreV3ForAi(
+              healthV3ByProfessor.get(p.id) || null,
+            ),
             unidades: p.unidades.map(u => u.codigo)
           }))}
           metricas_gerais={metricasGerais}
@@ -1687,6 +1659,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         healthWeights={healthWeights}
         unidadeId={unidadeAtual !== 'todos' ? unidadeAtual : null}
         unidadeNome={unidadeAtual !== 'todos' ? unidadeAtual : 'Consolidado'}
+        periodicidade={modoVisualizacao === 'trimestre' ? 'ciclo' : 'mensal'}
       />
 
       <ModalNovaMeta
@@ -1733,9 +1706,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         ano={parseInt(competencia.split('-')[0])}
         mes={parseInt(competencia.split('-')[1])}
         unidadeId={unidadeAtual}
-        dataInicio={modoVisualizacao === 'trimestre' ? trimestreInfo.dataInicio : undefined}
-        dataFim={modoVisualizacao === 'trimestre' ? trimestreInfo.dataFim : undefined}
-        periodoLabel={modoVisualizacao === 'trimestre' ? trimestreInfo.label : undefined}
+        dataInicio={modoVisualizacao === 'trimestre' ? periodoV3.inicio : undefined}
+        dataFim={modoVisualizacao === 'trimestre' ? periodoV3.fim : undefined}
+        periodoLabel={modoVisualizacao === 'trimestre' ? periodoV3.label : undefined}
       />
 
       <ModalDetalhesEvasoes
@@ -1746,9 +1719,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         ano={parseInt(competencia.split('-')[0])}
         mes={parseInt(competencia.split('-')[1])}
         unidadeId={unidadeAtual}
-        dataInicio={modoVisualizacao === 'trimestre' ? trimestreInfo.dataInicio : undefined}
-        dataFim={modoVisualizacao === 'trimestre' ? trimestreInfo.dataFim : undefined}
-        periodoLabel={modoVisualizacao === 'trimestre' ? trimestreInfo.label : undefined}
+        dataInicio={modoVisualizacao === 'trimestre' ? periodoV3.inicio : undefined}
+        dataFim={modoVisualizacao === 'trimestre' ? periodoV3.fim : undefined}
+        periodoLabel={modoVisualizacao === 'trimestre' ? periodoV3.label : undefined}
       />
 
       <ModalDetalhesRetencao
@@ -1762,9 +1735,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         taxaRetencao={modalRetencao.taxaRetencao}
         totalAlunos={modalRetencao.totalAlunos}
         evasoesMes={modalRetencao.evasoesMes}
-        dataInicio={modoVisualizacao === 'trimestre' ? trimestreInfo.dataInicio : undefined}
-        dataFim={modoVisualizacao === 'trimestre' ? trimestreInfo.dataFim : undefined}
-        periodoLabel={modoVisualizacao === 'trimestre' ? trimestreInfo.label : undefined}
+        dataInicio={modoVisualizacao === 'trimestre' ? periodoV3.inicio : undefined}
+        dataFim={modoVisualizacao === 'trimestre' ? periodoV3.fim : undefined}
+        periodoLabel={modoVisualizacao === 'trimestre' ? periodoV3.label : undefined}
       />
 
       <ModalDetalhesConversao
@@ -1775,9 +1748,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         ano={parseInt(competencia.split('-')[0])}
         mes={parseInt(competencia.split('-')[1])}
         unidadeId={unidadeAtual}
-        dataInicio={modoVisualizacao === 'trimestre' ? trimestreInfo.dataInicio : undefined}
-        dataFim={modoVisualizacao === 'trimestre' ? trimestreInfo.dataFim : undefined}
-        periodoLabel={modoVisualizacao === 'trimestre' ? trimestreInfo.label : undefined}
+        dataInicio={modoVisualizacao === 'trimestre' ? periodoV3.inicio : undefined}
+        dataFim={modoVisualizacao === 'trimestre' ? periodoV3.fim : undefined}
+        periodoLabel={modoVisualizacao === 'trimestre' ? periodoV3.label : undefined}
       />
 
       <ModalDetalhesTurmas
@@ -1792,10 +1765,10 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           '368d47f5-2d88-4475-bc14-ba084a9a348e': 'Barra'
         }[unidadeAtual] || undefined) : undefined}
         dataInicio={modoVisualizacao === 'trimestre'
-          ? trimestreInfo.dataInicio
+          ? periodoV3.inicio
           : `${ano}-${String(mes).padStart(2, '0')}-01`}
         dataFim={modoVisualizacao === 'trimestre'
-          ? trimestreInfo.dataFim
+          ? periodoV3.fim
           : `${ano}-${String(mes).padStart(2, '0')}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}`}
         periodoLabel={periodoLabel}
         resumoCanonico={(() => {

@@ -4,6 +4,17 @@ export type TipoRelatorioCoordenacaoInstantaneo =
   | 'presenca'
   | 'retencao';
 
+export interface HealthV3RelatorioCoordenacao {
+  score: number | null;
+  cobertura: number | null;
+  classificacao: string | null;
+  estadoPublicacao: 'parcial' | 'oficial' | 'sem_base';
+  scoreExibivel: boolean;
+  rankingHabilitado: boolean;
+  periodicidade: 'mensal' | 'ciclo' | 'legado_calendario';
+  cicloCodigo: string;
+}
+
 export interface ProfessorRelatorioCoordenacao {
   id: number;
   nome: string;
@@ -34,6 +45,7 @@ export interface ProfessorRelatorioCoordenacao {
   health_status: 'critico' | 'atencao' | 'saudavel' | null;
   health_score_confiavel: boolean;
   fator_demanda_ponderado: number;
+  healthV3?: HealthV3RelatorioCoordenacao | null;
 }
 
 interface GerarRelatorioParams {
@@ -146,6 +158,19 @@ export function normalizarKpisProfessoresCoordenacao(
     const healthInformado = healthScoreConfiavel
       ? numeroOuNull(item.health_score ?? item.health)
       : null;
+    const healthV3Raw = item.healthV3 && typeof item.healthV3 === 'object'
+      ? item.healthV3 as Record<string, unknown>
+      : null;
+    const healthV3: HealthV3RelatorioCoordenacao | null = healthV3Raw ? {
+      score: numeroOuNull(healthV3Raw.score),
+      cobertura: numeroOuNull(healthV3Raw.cobertura),
+      classificacao: healthV3Raw.classificacao ? String(healthV3Raw.classificacao) : null,
+      estadoPublicacao: String(healthV3Raw.estadoPublicacao || 'sem_base') as HealthV3RelatorioCoordenacao['estadoPublicacao'],
+      scoreExibivel: healthV3Raw.scoreExibivel === true,
+      rankingHabilitado: healthV3Raw.rankingHabilitado === true,
+      periodicidade: String(healthV3Raw.periodicidade || 'legado_calendario') as HealthV3RelatorioCoordenacao['periodicidade'],
+      cicloCodigo: String(healthV3Raw.cicloCodigo || ''),
+    } : null;
 
     return {
       id: numeroSeguro(item.professor_id ?? item.id) || index + 1,
@@ -183,6 +208,7 @@ export function normalizarKpisProfessoresCoordenacao(
         : normalizarHealthStatus(item.health_status ?? item.status, healthInformado),
       health_score_confiavel: healthScoreConfiavel && healthInformado !== null,
       fator_demanda_ponderado: numeroSeguro(item.fator_demanda_ponderado) || 1,
+      healthV3,
     };
   });
 }
@@ -252,16 +278,18 @@ function calcularResumo(professores: ProfessorRelatorioCoordenacao[]) {
     p.presenca_publicavel && p.taxa_presenca !== null
   );
   const healthPublicaveis = professores.filter((p) =>
-    p.health_score_confiavel && p.health_score !== null
+    p.healthV3?.rankingHabilitado && p.healthV3.estadoPublicacao === 'oficial'
+      && p.healthV3.score !== null
   );
+  const healthVisiveis = professores.filter((p) => p.healthV3?.scoreExibivel && p.healthV3.score !== null);
   const mediaPresenca = presencasPublicaveis.length > 0
     ? presencasPublicaveis.reduce((acc, p) => acc + Number(p.taxa_presenca), 0) / presencasPublicaveis.length
     : null;
   const mediaRetencao = totalProfessores > 0
     ? professores.reduce((acc, p) => acc + Number(p.taxa_retencao || 0), 0) / totalProfessores
     : 0;
-  const mediaHealth = healthPublicaveis.length > 0
-    ? healthPublicaveis.reduce((acc, p) => acc + Number(p.health_score), 0) / healthPublicaveis.length
+  const mediaHealth = healthVisiveis.length > 0
+    ? healthVisiveis.reduce((acc, p) => acc + Number(p.healthV3?.score), 0) / healthVisiveis.length
     : null;
 
   return {
@@ -282,6 +310,7 @@ function calcularResumo(professores: ProfessorRelatorioCoordenacao[]) {
     mediaRetencao,
     mediaHealth,
     totalHealthPublicaveis: healthPublicaveis.length,
+    totalHealthParciais: healthVisiveis.filter((p) => p.healthV3?.estadoPublicacao === 'parcial').length,
     taxaConversao: totalExperimentais > 0 ? (totalMatriculasPosExp / totalExperimentais) * 100 : 0,
   };
 }
@@ -289,7 +318,10 @@ function calcularResumo(professores: ProfessorRelatorioCoordenacao[]) {
 function gerarRanking(params: GerarRelatorioParams): string {
   const professores = [...params.professores];
   const resumo = calcularResumo(professores);
-  const healthPublicaveis = professores.filter((p) => p.health_score_confiavel && p.health_score !== null);
+  const healthPublicaveis = professores.filter((p) =>
+    p.healthV3?.rankingHabilitado && p.healthV3.estadoPublicacao === 'oficial'
+      && p.healthV3.score !== null
+  );
   const presencasPublicaveis = professores.filter((p) => p.presenca_publicavel && p.taxa_presenca !== null);
 
   const linhas = [
@@ -300,14 +332,15 @@ function gerarRanking(params: GerarRelatorioParams): string {
     `• Alunos em carteira: *${resumo.totalAlunos}*`,
     `• Media alunos/turma: *${n(resumo.mediaAlunosTurma, 2)}*`,
     `• Presenca media: *${resumo.mediaPresenca === null ? 'Em auditoria' : `${n(resumo.mediaPresenca, 1)}%`}*`,
-    `• Health medio: *${resumo.mediaHealth === null ? 'Em auditoria' : n(resumo.mediaHealth, 1)}*`,
+    `• Health Score parcial medio: *${resumo.mediaHealth === null ? 'Sem base' : n(resumo.mediaHealth, 1)}*`,
+    `• Scores parciais visiveis: *${resumo.totalHealthParciais}*`,
     '',
     '🏆 *TOP HEALTH SCORE*',
     ...(healthPublicaveis.length > 0
       ? limitar([...healthPublicaveis].sort((a, b) => Number(b.health_score) - Number(a.health_score))).map((p, i) =>
-          linhaRanking(p, i, `${Math.round(Number(p.health_score))} pontos`)
+          linhaRanking(p, i, `${Math.round(Number(p.healthV3?.score))} pontos`)
         )
-      : ['Em auditoria: nenhum Health Score atingiu confianca alta neste recorte.']),
+      : ['Ranking indisponivel: o Health Score parcial nao participa de ranking ou premiacao.']),
     '',
     '👥 *TOP CARTEIRA*',
     ...limitar([...professores].sort((a, b) => b.total_alunos - a.total_alunos)).map((p, i) =>

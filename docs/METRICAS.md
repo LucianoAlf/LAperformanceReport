@@ -131,13 +131,40 @@ Ex-alunos com **≥ 4 meses** e saída real (saiu de TODAS as matrículas). Excl
 
 ## Professores
 
-### Health Score (0–100, ponderado)
-6 dimensões (`HealthScoreConfig.tsx:11-18`): crescimento da carteira **15%**, média de alunos/turma **20%**, retenção **25%**, conversão **15%** (legado, somado à retenção na prática), presença **15%**, evasões **10%** (inverso).
-- Classificação: **Saudável ≥ 70** · **Atenção 50–69** · **Crítico < 50**.
-- Nível de risco por evasões: Crítico ≥ 15 · Alto ≥ 10 · Médio ≥ 5 · Normal < 5.
+### Health Score Professor V3 (0–100, ponderado)
 
-### Modo Mensal vs Trimestral
-Trimestres: T1 = mar–mai · T2 = jun–ago · T3 = set–nov · "Não considerado" = dez/jan/fev. RPC `get_kpis_professor_periodo` aceita `p_data_inicio`/`p_data_fim`.
+O V3 é calculado e persistido no banco. Frontend, relatórios e agentes apenas leem o snapshot; não recalculam e não substituem ausência de base por zero.
+
+| Pilar | Peso | Meta inicial | Grão/fonte canônica |
+|---|---:|---:|---|
+| Retenção atribuível | 25% | 90% | período matrícula-disciplina-professor exposto; `movimentacoes_admin` + `motivos_saida` |
+| Permanência com o professor | 25% | 12 meses | vínculos encerrados de `vw_professor_periodos_efetivos_v3_sombra` |
+| Conversão Exp→Mat | 15% | 70% | experimental confirmada e matrícula canonicamente vinculada |
+| Média de alunos/turma | 15% | 1,44 | ocupações únicas de pessoas por turma regular elegível |
+| Número de alunos | 10% | 33 | pessoas canônicas únicas na carteira professor+unidade |
+| Presença dos alunos | 10% | 80% | roster + `vw_aluno_presenca_semantica_v1` |
+
+`nota = min(100, valor_real / meta_versionada * 100)`. Sliders alteram somente pesos; metas são campos separados. Uma configuração ativa é imutável: alterações criam rascunho, passam por simulação e são ativadas em ação separada. Snapshots fechados não são reescritos.
+
+- Classificação inicial: **Saudável ≥ 70** · **Atenção 50–69** · **Crítico < 50**.
+- Métrica sem base possui valor pontuável e nota `null`; seu peso sai temporariamente do denominador.
+- Score exibível exige cobertura mínima de 60% e Retenção ou Permanência disponível.
+- Parcial é visível, mas nunca rankeável ou premiável. Ranking existe somente em ciclo oficial fechado.
+- Crescimento, fator de demanda e evasão duplicada pertencem à V2 histórica e não compõem o V3.
+
+### Recortes mensal e por ciclo
+
+Os ciclos fixos aprovados são **Jun-Ago**, **Set-Nov**, **Dez-Fev** e **Mar-Mai**. A RPC recebe a competência de referência selecionada e resolve o ciclo correspondente sem deslocar o mês.
+
+- Número de alunos: mês = fechamento atual; ciclo = média dos fechamentos disponíveis e oficial somente com três meses.
+- Média/turma: mês = ocupações/turmas elegíveis no mês; ciclo = soma das ocupações ÷ soma das turmas, nunca média simples das médias.
+- Retenção e conversão: janela/ciclo definido no snapshot, com numerador e denominador preservados.
+- Permanência: histórico acumulado de vínculos encerrados, não apenas os três meses do ciclo. Vínculos com menos de quatro meses ficam no histórico, mas não entram na média/nota.
+- Presença: observado de junho/julho fica auditável; a pontuação contratual começa em 03/08/2026. Barra e Recreio podem contribuir conforme política versionada e cobertura mínima; Campo Grande permanece visível em auditoria e fora do score até nivelamento operacional.
+
+### Health Score V2 (histórico/rollback)
+
+A composição antiga (crescimento, média/turma, renovação, conversão, presença e evasões) permanece somente para histórico e rollback controlado durante a observação. Ela não é a fonte dos cards, relatórios e agentes V3 migrados.
 
 ### Taxa de presença (faixas)
 Crítico < 70% · Atenção 70–79% · OK ≥ 80% (`ModalDetalhesPresenca.tsx`).

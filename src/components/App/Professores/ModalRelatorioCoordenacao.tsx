@@ -39,6 +39,10 @@ import {
   buscarKpisProfessoresCanonicos,
   consolidarKpisProfessoresCanonicos,
 } from '@/lib/professoresKpisCanonicos';
+import {
+  normalizeHealthScoreV3PerformanceRows,
+  serializeHealthScoreV3ForAi,
+} from '@/lib/healthScoreProfessorV3Performance';
 
 interface ModalRelatorioCoordenacaoProps {
   open: boolean;
@@ -175,7 +179,7 @@ export function ModalRelatorioCoordenacao({
   const buscarDadosRelatorioCoordenacao = async () => {
     const { anoRelatorio, mesRelatorio } = validarCompetenciaMensal();
 
-    const [dadosResult, kpisResult] = await Promise.all([
+    const [dadosResult, kpisResult, healthV3Result] = await Promise.all([
       supabase.rpc('get_dados_relatorio_coordenacao', {
         p_unidade_id: unidadeId,
         p_ano: anoRelatorio,
@@ -186,6 +190,11 @@ export function ModalRelatorioCoordenacao({
         mes: mesRelatorio,
         unidadeId,
       }),
+      supabase.rpc('get_health_score_professor_v3_performance', {
+        p_competencia: `${anoRelatorio}-${String(mesRelatorio).padStart(2, '0')}-01`,
+        p_unidade_id: unidadeId,
+        p_periodicidade: 'mensal',
+      }),
     ]);
     const { data: dadosRelatorio, error: errorDados } = dadosResult;
 
@@ -194,11 +203,23 @@ export function ModalRelatorioCoordenacao({
       throw new Error('Erro ao buscar dados do relatório');
     }
 
+    if (healthV3Result.error) {
+      console.error('Erro ao buscar Health Score V3:', healthV3Result.error);
+      throw new Error('Erro ao buscar o snapshot canônico do Health Score V3');
+    }
+    const healthV3ByProfessor = new Map(
+      normalizeHealthScoreV3PerformanceRows(healthV3Result.data || [])
+        .map((snapshot) => [snapshot.professorId, snapshot]),
+    );
+
     const kpisCanonicos = consolidarKpisProfessoresCanonicos(kpisResult).map((kpi) => ({
       ...kpi,
       health_score: null,
       health_status: null,
       health_score_confiavel: false,
+      health_score_v3: serializeHealthScoreV3ForAi(
+        healthV3ByProfessor.get(kpi.professor_id) || null,
+      ),
     }));
 
     return {
@@ -206,7 +227,7 @@ export function ModalRelatorioCoordenacao({
       kpis_professores: kpisCanonicos,
       contrato_pedagogico: {
         presenca_regra: 'publicar_somente_confianca_alta',
-        health_score: 'em_auditoria',
+        health_score: 'parcial_sem_ranking_ate_fechamento_oficial',
         fonte_kpis: 'get_kpis_professor_periodo_canonico_v3',
       },
     };

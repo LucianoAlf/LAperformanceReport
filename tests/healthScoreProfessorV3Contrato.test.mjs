@@ -2,27 +2,21 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
-const arquivosV2 = [
-  'src/hooks/useHealthScore.ts',
-  'src/hooks/useHealthScoreConfig.ts',
-  'src/lib/professoresKpisCanonicos.ts',
-  'src/lib/relatorioCoordenacaoInstantaneo.ts',
-  'src/components/App/Professores/ProfessoresPage.tsx',
-  'src/components/App/Professores/TabCarteiraProfessores.tsx',
-  'src/components/App/Professores/ModalRelatorioCoordenacao.tsx',
-  'src/components/App/Dashboard/DashboardPage.tsx',
-];
-
 const ler = (arquivo) => fs.readFileSync(arquivo, 'utf8');
 
-test('consumidores produtivos V2 nao apontam para objetos do Health Score V3', () => {
-  for (const arquivo of arquivosV2) {
+test('consumidores migrados apontam para o contrato V3 sem acesso direto às tabelas internas', () => {
+  const consumidores = [
+    ['src/lib/relatorioCoordenacaoInstantaneo.ts', /healthV3/],
+    ['src/components/App/Professores/ProfessoresPage.tsx', /HEALTH_SCORE_V3_CONFIG_ENABLED/],
+    ['src/components/App/Professores/ModalRelatorioCoordenacao.tsx', /health_score_v3/],
+    ['src/components/App/Dashboard/DashboardPage.tsx', /useHealthScoreProfessorV3Performance/],
+    ['src/components/App/Professores/TabCarteiraProfessores.tsx', /get_health_score_professor_v3_performance/],
+  ];
+
+  for (const [arquivo, contrato] of consumidores) {
     const fonte = ler(arquivo);
-    assert.doesNotMatch(
-      fonte,
-      /health_score_professor_v3_|get_(?:health_score|professor_\w+)_v3_sombra/i,
-      `${arquivo} nao pode consumir a camada V3 antes do cutover`,
-    );
+    assert.match(fonte, contrato, `${arquivo} deve consumir o contrato V3`);
+    assert.doesNotMatch(fonte, /\.from\(['"]health_score_professor_v3_/i);
   }
 });
 
@@ -57,11 +51,9 @@ test('consumidores migrados em homologacao preservam rollback explicito para V2'
   }
 });
 
-test('consumidores ainda nao migrados continuam compondo o score pelo motor V2', () => {
+test('Carteira migrada deixa de compor Health Score no navegador', () => {
   const arquivo = 'src/components/App/Professores/TabCarteiraProfessores.tsx';
-  assert.match(
-    ler(arquivo),
-    /calcularHealthScore/,
-    `${arquivo} deve continuar no motor V2 durante a sombra`,
-  );
+  const fonte = ler(arquivo);
+  assert.match(fonte, /get_health_score_professor_v3_performance/);
+  assert.doesNotMatch(fonte, /calcularHealthScore/);
 });

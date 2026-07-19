@@ -47,7 +47,7 @@ import type {
 type AbaAtiva = 'cadastro' | 'performance' | 'carteira' | 'agenda' | '360' | 'checklists' | 'configuracoes';
 
 const HEALTH_SCORE_V3_CONFIG_ENABLED =
-  import.meta.env.DEV || import.meta.env.VITE_HEALTH_SCORE_V3_CONFIG_ENABLED === 'true';
+  import.meta.env.VITE_HEALTH_SCORE_V3_CONFIG_ENABLED !== 'false';
 
 const professoresTabs: PageTab<AbaAtiva>[] = [
   { id: 'cadastro', label: 'Cadastro', shortLabel: 'Cadastro', icon: Users },
@@ -669,7 +669,7 @@ export function ProfessoresPage() {
 
       {/* Conteúdo da aba Carteira */}
       {abaAtiva === 'carteira' && (
-        <TabCarteiraProfessores unidadeAtual={unidadeAtual} healthWeights={healthWeights} />
+        <TabCarteiraProfessores unidadeAtual={unidadeAtual} />
       )}
 
       {/* Conteúdo da aba Agenda */}
@@ -705,26 +705,41 @@ export function ProfessoresPage() {
           {HEALTH_SCORE_V3_CONFIG_ENABLED && hasPermission('professores.editar') && (
             <HealthScoreV3Config />
           )}
-          
-          <HealthScoreConfig
-            weights={healthWeights}
-            onSave={async (weights) => {
-              const ok = await saveWeights(weights);
-              if (ok) {
-                toast.success('Configuração salva!', 'Os pesos do Health Score foram atualizados');
-              } else {
-                toast.error('Erro ao salvar', 'Não foi possível salvar a configuração');
-              }
-            }}
-          />
 
-          {/* Motivos de Evasão que Contam no Score */}
-          <MotivosScoreConfig />
+          {HEALTH_SCORE_V3_CONFIG_ENABLED ? (
+            <details className="overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/20">
+              <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-slate-300 hover:bg-slate-800/40">
+                Histórico V2 - somente leitura
+              </summary>
+              <div className="space-y-4 border-t border-slate-800 p-5">
+                <p className="text-xs leading-5 text-slate-400">
+                  Esta configuração permanece disponível apenas para auditoria e rollback.
+                  Crescimento, fator de demanda e evasão duplicada não fazem parte do Health Score V3.
+                </p>
+                <HealthScoreConfig weights={healthWeights} readOnly />
+              </div>
+            </details>
+          ) : (
+            <>
+              <HealthScoreConfig
+                weights={healthWeights}
+                onSave={async (weights) => {
+                  const ok = await saveWeights(weights);
+                  if (ok) {
+                    toast.success('Configuração salva!', 'Os pesos do Health Score foram atualizados');
+                  } else {
+                    toast.error('Erro ao salvar', 'Não foi possível salvar a configuração');
+                  }
+                }}
+              />
 
-          {/* Fator de Demanda por Curso */}
-          <FatorDemandaCursos 
-            unidadeId={unidadeAtual !== 'todos' ? unidadeAtual : undefined}
-          />
+              <MotivosScoreConfig />
+
+              <FatorDemandaCursos
+                unidadeId={unidadeAtual !== 'todos' ? unidadeAtual : undefined}
+              />
+            </>
+          )}
 
           {/* NOTA: Configurações do Professor 360° foram movidas para a aba 360° */}
 

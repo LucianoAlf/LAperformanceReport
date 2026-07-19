@@ -24,7 +24,8 @@ test('performance bloqueia presenca e health sem confianca alta', () => {
 test('plano de equipe transporta a qualidade da presenca sem converter null em zero', () => {
   assert.match(plano, /taxa_presenca:\s*number\s*\|\s*null/);
   assert.match(plano, /presenca_publicavel:\s*boolean/);
-  assert.match(plano, /health_score_confiavel:\s*boolean/);
+  assert.match(plano, /health_score_v3:\s*HealthScoreV3AiPayload\s*\|\s*null/);
+  assert.doesNotMatch(plano, /taxa_presenca\s*\|\|\s*0/);
 });
 
 test('relatorios instantaneos preservam null e bloqueiam ranking de presenca e health', () => {

@@ -11,6 +11,13 @@ interface SnapshotRow {
   escopo: string;
   competencia: string;
   trimestre_inicio: string;
+  periodicidade: 'mensal' | 'ciclo' | 'legado_calendario';
+  periodo_inicio: string;
+  periodo_fim: string;
+  ciclo_codigo: string;
+  estado_publicacao: 'parcial' | 'oficial' | 'sem_base';
+  score_exibivel: boolean;
+  ranking_habilitado: boolean;
   config_versao: number;
   score: number | null;
   cobertura: number | null;
@@ -43,6 +50,7 @@ interface UseHealthScoreProfessorV3Options {
   competencia: string;
   unidadeId?: string | null;
   professorId?: number | null;
+  periodicidade?: 'mensal' | 'ciclo';
   enabled?: boolean;
 }
 
@@ -50,6 +58,7 @@ export function useHealthScoreProfessorV3({
   competencia,
   unidadeId = null,
   professorId = null,
+  periodicidade = 'mensal',
   enabled = true,
 }: UseHealthScoreProfessorV3Options) {
   const [metrics, setMetrics] = useState<HealthScoreV3SnapshotMetric[]>([]);
@@ -62,6 +71,7 @@ export function useHealthScoreProfessorV3({
     competencia,
     unidadeId ?? 'consolidado',
     professorId ?? 'sem-professor',
+    periodicidade,
   ].join(':');
 
   const load = useCallback(async () => {
@@ -87,6 +97,7 @@ export function useHealthScoreProfessorV3({
           p_competencia: reference,
           p_unidade_id: unidadeId,
           p_professor_id: professorId,
+          p_periodicidade: periodicidade,
         },
       );
       if (rpcError) throw rpcError;
@@ -98,6 +109,13 @@ export function useHealthScoreProfessorV3({
         escopo: row.escopo,
         competencia: row.competencia,
         trimestreInicio: row.trimestre_inicio,
+        periodicidade: row.periodicidade,
+        periodoInicio: row.periodo_inicio,
+        periodoFim: row.periodo_fim,
+        cicloCodigo: row.ciclo_codigo,
+        estadoPublicacao: row.estado_publicacao,
+        scoreExibivel: Boolean(row.score_exibivel),
+        rankingHabilitado: Boolean(row.ranking_habilitado),
         configVersao: Number(row.config_versao),
         score: row.score ?? null,
         cobertura: row.cobertura ?? null,
@@ -134,7 +152,7 @@ export function useHealthScoreProfessorV3({
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [competencia, enabled, professorId, requestKey, unidadeId]);
+  }, [competencia, enabled, periodicidade, professorId, requestKey, unidadeId]);
 
   useEffect(() => {
     void load();

@@ -8,12 +8,14 @@ import {
 interface Options {
   competencia: string;
   unidadeId?: string | null;
+  periodicidade?: 'mensal' | 'ciclo';
   enabled?: boolean;
 }
 
 export function useHealthScoreProfessorV3Performance({
   competencia,
   unidadeId = null,
+  periodicidade = 'mensal',
   enabled = true,
 }: Options) {
   const [snapshots, setSnapshots] = useState<HealthScoreV3ProfessorPerformance[]>([]);
@@ -21,7 +23,12 @@ export function useHealthScoreProfessorV3Performance({
   const [error, setError] = useState<string | null>(null);
   const [loadedRequestKey, setLoadedRequestKey] = useState<string | null>(null);
   const requestIdRef = useRef(0);
-  const requestKey = [enabled ? 'enabled' : 'disabled', competencia, unidadeId ?? 'consolidado'].join(':');
+  const requestKey = [
+    enabled ? 'enabled' : 'disabled',
+    competencia,
+    unidadeId ?? 'consolidado',
+    periodicidade,
+  ].join(':');
 
   const load = useCallback(async () => {
     const requestId = ++requestIdRef.current;
@@ -44,6 +51,7 @@ export function useHealthScoreProfessorV3Performance({
         {
           p_competencia: reference,
           p_unidade_id: unidadeId,
+          p_periodicidade: periodicidade,
         },
       );
       if (rpcError) throw rpcError;
@@ -59,7 +67,7 @@ export function useHealthScoreProfessorV3Performance({
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [competencia, enabled, requestKey, unidadeId]);
+  }, [competencia, enabled, periodicidade, requestKey, unidadeId]);
 
   useEffect(() => {
     void load();

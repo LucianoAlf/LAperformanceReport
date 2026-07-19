@@ -137,9 +137,10 @@ test('rpc publica encapsula a carteira sem expor tabelas canonicas ao navegador'
 test('relatorio com IA prioriza health score canonico', () => {
   const edge = readOptional(edgePath);
 
-  assert.match(edge, /health_score/);
-  assert.match(edge, /health_status/);
-  assert.match(edge, /Number\.isFinite/);
+  assert.match(edge, /parseHealthScoreV3Payload/);
+  assert.match(edge, /isHealthScoreV3Visible/);
+  assert.match(edge, /health_score_v3/);
+  assert.doesNotMatch(edge, /calcularHealthScore/);
 });
 
 test('totais do relatorio recomputam taxas pelos numeradores canonicos', () => {
