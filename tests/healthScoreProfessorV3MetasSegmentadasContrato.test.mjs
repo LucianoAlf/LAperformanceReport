@@ -7,7 +7,6 @@ const schemaMigration =
 const professorSegmentMigration =
   'supabase/migrations/20260719201000_professor_unidade_curso_modalidade.sql';
 
-const targetMigrations = [schemaMigration, professorSegmentMigration];
 const read = (path) => readFileSync(path, 'utf8');
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const sqlIdentifier = (value) => {
@@ -60,6 +59,18 @@ const extractCreateTable = (sql, tableName) => {
   );
 
   assert.ok(match, `${tableName} deve ser criada pela migration esperada`);
+  return match[0];
+};
+
+const extractFunction = (sql, functionName) => {
+  const match = sql.match(
+    new RegExp(
+      `create\\s+or\\s+replace\\s+function\\s+public\\.${functionName}\\s*\\(\\s*\\)[\\s\\S]*?\\$\\$\\s*;`,
+      'i',
+    ),
+  );
+
+  assert.ok(match, `${functionName} deve ser criada pela migration esperada`);
   return match[0];
 };
 
@@ -127,7 +138,7 @@ const assertSecuredTable = (sql, tableName) => {
     `${tableName} deve habilitar RLS`,
   );
 
-  for (const role of ['public', 'anon']) {
+  for (const role of ['public', 'anon', 'authenticated']) {
     assert.match(
       sql,
       new RegExp(
@@ -137,6 +148,62 @@ const assertSecuredTable = (sql, tableName) => {
       `${tableName} deve revogar acesso de ${role}`,
     );
   }
+
+  assert.doesNotMatch(
+    sql,
+    new RegExp(
+      `grant\\s+[^;]+\\s+on\\s+(?:table\\s+)?public\\.${tableName}\\s+to\\s+[^;]*\\b(?:public|anon|authenticated)\\b`,
+      'i',
+    ),
+    `${tableName} nao pode conceder acesso direto ao browser`,
+  );
+  assert.doesNotMatch(
+    sql,
+    new RegExp(
+      `create\\s+policy\\s+[^;]+\\s+on\\s+public\\.${tableName}\\b`,
+      'i',
+    ),
+    `${tableName} nao deve criar policy de acesso direto`,
+  );
+};
+
+const assertRestrictForeignKey = ({ tableSql, columnName, referencedTable }) => {
+  assert.match(
+    tableSql,
+    new RegExp(
+      `\\b${columnName}\\b[\\s\\S]{0,160}references\\s+public\\.${referencedTable}\\s*\\(\\s*id\\s*\\)\\s*on\\s+delete\\s+restrict`,
+      'i',
+    ),
+    `${columnName} deve referenciar ${referencedTable} com ON DELETE RESTRICT`,
+  );
+};
+
+const assertLeadingIndex = ({ sql, tableName, columnName }) => {
+  assert.match(
+    sql,
+    new RegExp(
+      `create\\s+index\\s+if\\s+not\\s+exists\\s+[a-z_][a-z0-9_]*\\s+on\\s+public\\.${tableName}\\s*\\(\\s*\\b${columnName}\\b`,
+      'i',
+    ),
+    `${tableName}.${columnName} deve liderar um indice explicito`,
+  );
+};
+
+const assertTriggerFunctionHardened = (sql, functionName) => {
+  const block = extractFunction(sql, functionName);
+
+  assert.match(block, /security\s+definer/i);
+  assert.match(block, /set\s+search_path\s*=\s*public\s*,\s*pg_temp/i);
+  assert.match(
+    sql,
+    new RegExp(
+      `revoke\\s+all(?:\\s+privileges)?\\s+on\\s+function\\s+public\\.${functionName}\\s*\\(\\s*\\)\\s+from\\s+[^;]*\\bpublic\\b[^;]*\\banon\\b[^;]*\\bauthenticated\\b`,
+      'i',
+    ),
+    `${functionName} deve revogar EXECUTE dos papeis de browser`,
+  );
+
+  return block;
 };
 
 test('guarda reconhece mutacoes em tabelas operacionais com identificadores SQL quoted', () => {
@@ -186,37 +253,103 @@ test('guarda reconhece JOIN cartesiano com ON TRUE ou ON 1 = 1', () => {
   }
 });
 
-test('migrations futuras definem o contrato das metas segmentadas do Health Score Professor V3', () => {
-  const missingMigrations = targetMigrations.filter((path) => !existsSync(path));
-
-  assert.deepEqual(
-    missingMigrations,
-    [],
-    `migrations futuras ainda nao existem: ${missingMigrations.join(', ')}`,
+test('Task 2 disponibiliza a migration aditiva do schema segmentado', () => {
+  assert.equal(
+    existsSync(schemaMigration),
+    true,
+    `${schemaMigration} deve existir antes de validar o contrato da Task 2`,
   );
+});
 
-  const schemaSql = read(schemaMigration);
-  const professorSegmentSql = read(professorSegmentMigration);
-  const sql = `${schemaSql}\n${professorSegmentSql}`;
+test(
+  'Task 2 cria matriz de metas e segmentos de snapshot com FKs restritivas',
+  { skip: !existsSync(schemaMigration) },
+  () => {
+    const sql = read(schemaMigration);
+    const configTableName =
+      'health_score_professor_v3_config_metas_curso_modalidade';
+    const snapshotTableName =
+      'health_score_professor_v3_snapshot_metrica_segmentos';
+    const configTableSql = extractCreateTable(sql, configTableName);
+    const snapshotTableSql = extractCreateTable(sql, snapshotTableName);
 
-  const configMetasTableSql = extractCreateTable(
-    schemaSql,
-    'health_score_professor_v3_config_metas_curso_modalidade',
-  );
-  const snapshotSegmentosTableSql = extractCreateTable(
-    schemaSql,
-    'health_score_professor_v3_snapshot_metrica_segmentos',
-  );
-  const professorSegmentTableSql = extractCreateTable(
-    professorSegmentSql,
-    'professor_unidade_curso_modalidade',
-  );
+    assert.match(configTableSql, /\bid\s+uuid\s+primary\s+key\s+default\s+gen_random_uuid\s*\(\s*\)/i);
+    assert.match(snapshotTableSql, /\bid\s+uuid\s+primary\s+key\s+default\s+gen_random_uuid\s*\(\s*\)/i);
 
-  for (const [tableName, tableSql] of [
-    ['health_score_professor_v3_config_metas_curso_modalidade', configMetasTableSql],
-    ['health_score_professor_v3_snapshot_metrica_segmentos', snapshotSegmentosTableSql],
-    ['professor_unidade_curso_modalidade', professorSegmentTableSql],
-  ]) {
+    for (const foreignKey of [
+      {
+        tableSql: configTableSql,
+        columnName: 'config_id',
+        referencedTable: 'health_score_professor_v3_config_versoes',
+      },
+      {
+        tableSql: configTableSql,
+        columnName: 'unidade_id',
+        referencedTable: 'unidades',
+      },
+      {
+        tableSql: configTableSql,
+        columnName: 'curso_id',
+        referencedTable: 'cursos',
+      },
+      {
+        tableSql: snapshotTableSql,
+        columnName: 'snapshot_metrica_id',
+        referencedTable: 'health_score_professor_v3_snapshot_metricas',
+      },
+      {
+        tableSql: snapshotTableSql,
+        columnName: 'unidade_id',
+        referencedTable: 'unidades',
+      },
+      {
+        tableSql: snapshotTableSql,
+        columnName: 'curso_id',
+        referencedTable: 'cursos',
+      },
+    ]) {
+      assertRestrictForeignKey(foreignKey);
+    }
+
+    assert.doesNotMatch(
+      snapshotTableSql,
+      /\bconfig_meta_segmento_id\b\s+uuid\s+not\s+null/i,
+      'config_meta_segmento_id deve continuar nullable para registrar regra ausente',
+    );
+    assert.match(
+      configTableSql,
+      /unique\s*\(\s*config_id\s*,\s*unidade_id\s*,\s*curso_id\s*,\s*modalidade\s*\)/i,
+    );
+    assert.match(
+      configTableSql,
+      /unique\s*\(\s*id\s*,\s*unidade_id\s*,\s*curso_id\s*,\s*modalidade\s*\)/i,
+      'a matriz deve expor chave candidata composta para a FK do segmento',
+    );
+    assert.match(
+      snapshotTableSql,
+      /foreign\s+key\s*\(\s*config_meta_segmento_id\s*,\s*unidade_id\s*,\s*curso_id\s*,\s*modalidade\s*\)\s*references\s+public\.health_score_professor_v3_config_metas_curso_modalidade\s*\(\s*id\s*,\s*unidade_id\s*,\s*curso_id\s*,\s*modalidade\s*\)\s*on\s+delete\s+restrict/i,
+      'config_meta_segmento_id deve preservar unidade, curso e modalidade',
+    );
+    assert.doesNotMatch(
+      snapshotTableSql,
+      /\bconfig_meta_segmento_id\b\s+uuid[\s\S]{0,160}references\s+public\.health_score_professor_v3_config_metas_curso_modalidade\s*\(\s*id\s*\)/i,
+      'a FK simples por id nao impede meta de outro segmento',
+    );
+    assert.match(
+      snapshotTableSql,
+      /unique\s*\(\s*snapshot_metrica_id\s*,\s*unidade_id\s*,\s*curso_id\s*,\s*modalidade\s*\)/i,
+    );
+  },
+);
+
+test(
+  'Task 2 restringe modalidade e estados da matriz sem fallback numerico',
+  { skip: !existsSync(schemaMigration) },
+  () => {
+    const sql = read(schemaMigration);
+    const tableName = 'health_score_professor_v3_config_metas_curso_modalidade';
+    const tableSql = extractCreateTable(sql, tableName);
+
     assertColumnAllowedValues({
       tableSql,
       allSql: sql,
@@ -225,55 +358,295 @@ test('migrations futuras definem o contrato das metas segmentadas do Health Scor
       requiredValues: ['individual', 'turma'],
       exact: true,
     });
-  }
+    assertColumnAllowedValues({
+      tableSql,
+      allSql: sql,
+      tableName,
+      columnName: 'estado',
+      requiredValues: ['configurada', 'nao_ofertada'],
+      exact: true,
+    });
 
-  assert.match(
-    schemaSql,
-    /unique\s*\(\s*config_id\s*,\s*unidade_id\s*,\s*curso_id\s*,\s*modalidade\s*\)/i,
-  );
-  assert.match(
-    schemaSql,
-    /check\s*\([\s\S]{0,200}\bmeta_media_turma\b\s*<=\s*\bcapacidade_maxima\b[\s\S]{0,200}\)/i,
-  );
-  assertColumnAllowedValues({
-    tableSql: snapshotSegmentosTableSql,
-    allSql: sql,
-    tableName: 'health_score_professor_v3_snapshot_metrica_segmentos',
-    columnName: 'estado_base',
-    requiredValues: ['sem_base_zero_carteira'],
-  });
+    assert.match(
+      tableSql,
+      /check\s*\(\s*\(\s*estado\s*=\s*'nao_ofertada'\s+and\s+capacidade_maxima\s+is\s+null\s+and\s+meta_media_turma\s+is\s+null\s+and\s+meta_carteira_curso\s+is\s+null\s*\)\s+or\s+\(\s*estado\s*=\s*'configurada'\s+and\s+capacidade_maxima\s+is\s+not\s+null\s+and\s+meta_media_turma\s+is\s+not\s+null\s+and\s+meta_carteira_curso\s+is\s+not\s+null\s+and\s+capacidade_maxima\s*>\s*0\s+and\s+meta_media_turma\s*>\s*0\s+and\s+meta_carteira_curso\s*>\s*0\s+and\s+meta_media_turma\s*<=\s*capacidade_maxima\s*\)\s*\)/i,
+      'estado configurada exige tres metas positivas e nao_ofertada exige metas nulas',
+    );
+    assert.match(tableSql, /\bparametros\s+jsonb\s+not\s+null\s+default\s+'\{\}'::jsonb/i);
+    assert.match(tableSql, /\bcriado_em\s+timestamptz\s+not\s+null\s+default\s+now\s*\(\s*\)/i);
+    assert.match(tableSql, /\batualizado_em\s+timestamptz\s+not\s+null\s+default\s+now\s*\(\s*\)/i);
+  },
+);
 
-  assertSecuredTable(
-    schemaSql,
-    'health_score_professor_v3_config_metas_curso_modalidade',
-  );
-  assertSecuredTable(
-    schemaSql,
-    'health_score_professor_v3_snapshot_metrica_segmentos',
-  );
-  assertSecuredTable(professorSegmentSql, 'professor_unidade_curso_modalidade');
+test(
+  'Task 2 explicita bases, contagens e limites numericos dos segmentos',
+  { skip: !existsSync(schemaMigration) },
+  () => {
+    const sql = read(schemaMigration);
+    const tableName = 'health_score_professor_v3_snapshot_metrica_segmentos';
+    const tableSql = extractCreateTable(sql, tableName);
 
-  for (const protectedTable of ['aluno_presenca', 'aulas_emusys']) {
+    assertColumnAllowedValues({
+      tableSql,
+      allSql: sql,
+      tableName,
+      columnName: 'modalidade',
+      requiredValues: ['individual', 'turma'],
+      exact: true,
+    });
+    assertColumnAllowedValues({
+      tableSql,
+      allSql: sql,
+      tableName,
+      columnName: 'estado_base',
+      requiredValues: [
+        'ok',
+        'sem_base_zero_carteira',
+        'sem_base_sem_meta',
+        'segmentacao_incompleta',
+        'nao_ofertada',
+      ],
+    });
+
+    for (const column of [
+      'pessoas_unicas',
+      'vinculos_ativos',
+      'turmas_elegiveis',
+      'ocupacoes_unicas',
+    ]) {
+      assert.match(
+        tableSql,
+        new RegExp(
+          `\\b${column}\\b\\s+integer[\\s\\S]{0,100}check\\s*\\(\\s*${column}\\s*>=\\s*0\\s*\\)`,
+          'i',
+        ),
+        `${column} deve ser inteiro nao negativo`,
+      );
+    }
+
+    for (const column of [
+      'capacidade_maxima',
+      'meta_aplicada',
+      'numerador',
+      'denominador',
+    ]) {
+      assert.match(
+        tableSql,
+        new RegExp(
+          `\\b${column}\\b\\s+numeric(?:\\s*\\([^)]*\\))?[\\s\\S]{0,100}check\\s*\\(\\s*${column}\\s+is\\s+null\\s+or\\s+${column}\\s*>=\\s*0\\s*\\)`,
+          'i',
+        ),
+        `${column} deve ser nulo ou nao negativo`,
+      );
+    }
+
+    assert.match(
+      tableSql,
+      /\bnota\s+numeric(?:\s*\([^)]*\))?[\s\S]{0,100}check\s*\(\s*nota\s+is\s+null\s+or\s+nota\s+between\s+0\s+and\s+100\s*\)/i,
+    );
+    for (const column of ['fonte', 'regra_versao']) {
+      assert.match(
+        tableSql,
+        new RegExp(
+          `\\b${column}\\b\\s+text\\s+not\\s+null\\s+check\\s*\\(\\s*nullif\\s*\\(\\s*btrim\\s*\\(\\s*${column}\\s*\\)\\s*,\\s*''\\s*\\)\\s+is\\s+not\\s+null\\s*\\)`,
+          'i',
+        ),
+        `${column} deve ser texto nao vazio`,
+      );
+    }
+    assert.match(tableSql, /\bdetalhes\s+jsonb\s+not\s+null\s+default\s+'\{\}'::jsonb/i);
+    assert.match(tableSql, /\bcriado_em\s+timestamptz\s+not\s+null\s+default\s+now\s*\(\s*\)/i);
+  },
+);
+
+test(
+  'Task 2 torna matriz e segmentos imutaveis nos estados historicos',
+  { skip: !existsSync(schemaMigration) },
+  () => {
+    const sql = read(schemaMigration);
+    const configFunction = assertTriggerFunctionHardened(
+      sql,
+      'fn_health_score_professor_v3_bloquear_config_meta_segmentada',
+    );
+    const snapshotFunction = assertTriggerFunctionHardened(
+      sql,
+      'fn_health_score_professor_v3_bloquear_snapshot_segmento_fechado',
+    );
+    const configConsistencyFunction = assertTriggerFunctionHardened(
+      sql,
+      'fn_health_score_professor_v3_validar_snapshot_segmento_config',
+    );
+
+    assert.match(configFunction, /array\s*\[\s*old\.config_id\s*,\s*new\.config_id\s*\]/i);
+    assert.match(
+      configFunction,
+      /if\s+tg_op\s*=\s*'UPDATE'\s+and\s+new\.config_id\s+is\s+distinct\s+from\s+old\.config_id\s+and\s+exists\s*\([\s\S]*?from\s+public\.health_score_professor_v3_snapshot_metrica_segmentos\s+[a-z_][a-z0-9_]*[\s\S]*?config_meta_segmento_id\s*=\s*old\.id[\s\S]*?\)\s+then[\s\S]*?raise\s+exception/i,
+      'meta referenciada por segmento de snapshot nao pode mudar de configuracao',
+    );
+    assert.ok(
+      [
+        /c\.status\s+is\s+distinct\s+from\s+'rascunho'/i,
+        /c\.status\s*<>\s*'rascunho'/i,
+        /c\.status\s+in\s*\(\s*'ativa'\s*,\s*'arquivada'\s*\)/i,
+      ].some((pattern) => pattern.test(configFunction)),
+      'somente configuracao rascunho pode sofrer mutacao na matriz',
+    );
+    assert.doesNotMatch(
+      configFunction,
+      /c\.status\s*=\s*'ativa'\s+or\s+exists/i,
+      'bloquear apenas ativa deixaria configuracao arquivada mutavel',
+    );
+    assert.match(
+      configFunction,
+      /health_score_professor_v3_snapshots[\s\S]*s\.config_id\s*=\s*c\.id[\s\S]*s\.estado\s+in\s*\(\s*'fechado'\s*,\s*'invalidado'\s*\)/i,
+    );
+    assert.match(
+      sql,
+      /before\s+insert\s+or\s+update\s+or\s+delete\s+on\s+public\.health_score_professor_v3_config_metas_curso_modalidade/i,
+    );
+
+    assert.match(
+      snapshotFunction,
+      /array\s*\[\s*old\.snapshot_metrica_id\s*,\s*new\.snapshot_metrica_id\s*\]/i,
+    );
+    assert.match(
+      snapshotFunction,
+      /health_score_professor_v3_snapshot_metricas[\s\S]*health_score_professor_v3_snapshots[\s\S]*estado\s+in\s*\(\s*'fechado'\s*,\s*'invalidado'\s*\)/i,
+    );
+    assert.match(
+      sql,
+      /before\s+insert\s+or\s+update\s+or\s+delete\s+on\s+public\.health_score_professor_v3_snapshot_metrica_segmentos/i,
+    );
+
+    assert.match(
+      configConsistencyFunction,
+      /new\.config_meta_segmento_id\s+is\s+null[\s\S]*return\s+new/i,
+      'segmento sem meta configurada deve continuar permitido',
+    );
+    assert.match(
+      configConsistencyFunction,
+      /health_score_professor_v3_snapshot_metricas\s+sm[\s\S]*health_score_professor_v3_snapshots\s+s[\s\S]*health_score_professor_v3_config_metas_curso_modalidade\s+m/i,
+    );
+    assert.match(
+      configConsistencyFunction,
+      /m\.config_id\s+is\s+distinct\s+from\s+s\.config_id/i,
+      'a meta deve usar a mesma config do snapshot pai',
+    );
+    assert.match(
+      sql,
+      /create\s+trigger\s+[a-z_][a-z0-9_]*\s+before\s+insert\s+or\s+update\s+on\s+public\.health_score_professor_v3_snapshot_metrica_segmentos[\s\S]{0,180}execute\s+function\s+public\.fn_health_score_professor_v3_validar_snapshot_segmento_config\s*\(\s*\)/i,
+    );
+  },
+);
+
+test(
+  'Task 2 nasce privada, indexada e sem alterar dominios existentes',
+  { skip: !existsSync(schemaMigration) },
+  () => {
+    const sql = read(schemaMigration);
+    const configTableName =
+      'health_score_professor_v3_config_metas_curso_modalidade';
+    const snapshotTableName =
+      'health_score_professor_v3_snapshot_metrica_segmentos';
+
+    for (const tableName of [configTableName, snapshotTableName]) {
+      assertSecuredTable(sql, tableName);
+      assert.match(
+        sql,
+        new RegExp(
+          `revoke\\s+all(?:\\s+privileges)?\\s+on\\s+(?:table\\s+)?public\\.${tableName}\\s+from\\s+service_role`,
+          'i',
+        ),
+        `${tableName} deve limpar privilegios implicitos do service_role`,
+      );
+      assert.match(
+        sql,
+        new RegExp(
+          `grant\\s+select\\s+on\\s+table\\s+public\\.${tableName}\\s+to\\s+service_role`,
+          'i',
+        ),
+        `${tableName} deve conceder ao service_role somente leitura direta`,
+      );
+      assert.doesNotMatch(
+        sql,
+        new RegExp(
+          `grant\\s+(?:all|[^;]*(?:insert|update|delete|truncate|references|trigger)[^;]*)\\s+on\\s+(?:table\\s+)?public\\.${tableName}\\s+to\\s+service_role`,
+          'i',
+        ),
+        `${tableName} nao pode conceder DML direto ao service_role`,
+      );
+    }
+
+    for (const columnName of ['unidade_id', 'curso_id']) {
+      assertLeadingIndex({ sql, tableName: configTableName, columnName });
+    }
+    for (const columnName of [
+      'config_meta_segmento_id',
+      'unidade_id',
+      'curso_id',
+    ]) {
+      assertLeadingIndex({ sql, tableName: snapshotTableName, columnName });
+    }
+
+    const alteredTables = [
+      ...sql.matchAll(
+        /alter\s+table(?:\s+if\s+exists)?\s+public\.([a-z_][a-z0-9_]*)/gi,
+      ),
+    ].map((match) => match[1].toLowerCase());
+    assert.deepEqual(
+      [...new Set(alteredTables)].sort(),
+      [configTableName, snapshotTableName].sort(),
+      'a migration so pode alterar as duas tabelas novas para habilitar RLS',
+    );
+
     assert.doesNotMatch(
       sql,
-      protectedTableMutationPattern(protectedTable),
-      `migrations de metas segmentadas nao podem escrever ou alterar ${protectedTable}`,
+      /create\s+table(?:\s+if\s+not\s+exists)?\s+public\.professor_unidade_curso_modalidade/i,
+      'a tabela de atribuicao pertence exclusivamente a Task 3',
     );
-  }
+    for (const protectedTable of ['aluno_presenca', 'aulas_emusys']) {
+      assert.doesNotMatch(
+        sql,
+        protectedTableMutationPattern(protectedTable),
+        `Task 2 nao pode escrever ou alterar ${protectedTable}`,
+      );
+    }
+    assert.doesNotMatch(
+      sql,
+      /(?:insert\s+into|update|delete\s+from|merge\s+into|alter\s+table|truncate(?:\s+table)?|drop\s+table)\s+(?:if\s+exists\s+)?(?:only\s+)?(?:"?public"?\.)?"?[a-z_][a-z0-9_]*churn[a-z0-9_]*"?/i,
+      'Task 2 nao pode alterar tabelas do pipeline de churn',
+    );
+    assert.doesNotMatch(
+      sql,
+      /(?:alter\s+(?:function|(?:materialized\s+)?view)|drop\s+(?:function|(?:materialized\s+)?view)|create\s+or\s+replace\s+(?:function|(?:materialized\s+)?view))\s+(?:if\s+exists\s+)?(?:"?public"?\.)?"?[a-z_][a-z0-9_]*churn[a-z0-9_]*"?/i,
+      'Task 2 nao pode redefinir funcoes ou views do pipeline de churn',
+    );
+    assert.doesNotMatch(sql, /ativar_health_score_professor_v3_config\s*\(/i);
+  },
+);
 
-  assert.doesNotMatch(
-    sql,
-    /(?:insert\s+into|update|delete\s+from|merge\s+into|alter\s+table|truncate(?:\s+table)?|drop\s+table)\s+(?:if\s+exists\s+)?(?:only\s+)?(?:"?public"?\.)?"?[a-z_][a-z0-9_]*churn[a-z0-9_]*"?/i,
-    'migrations de metas segmentadas nao podem escrever ou alterar tabelas do pipeline de churn',
-  );
-  assert.doesNotMatch(
-    sql,
-    /(?:alter\s+(?:function|(?:materialized\s+)?view)|drop\s+(?:function|(?:materialized\s+)?view)|create\s+or\s+replace\s+(?:function|(?:materialized\s+)?view))\s+(?:if\s+exists\s+)?(?:"?public"?\.)?"?[a-z_][a-z0-9_]*churn[a-z0-9_]*"?/i,
-    'migrations de metas segmentadas nao podem redefinir funcoes ou views do pipeline de churn',
-  );
-
+test('Task 3 futura cria atribuicao formal sem produto cartesiano', () => {
   assert.equal(
-    hasProfessorCourseUnitCartesianProduct(professorSegmentSql),
+    existsSync(professorSegmentMigration),
+    true,
+    `${professorSegmentMigration} pertence a Task 3 e ainda deve ser implementada`,
+  );
+
+  const sql = read(professorSegmentMigration);
+  const tableName = 'professor_unidade_curso_modalidade';
+  const tableSql = extractCreateTable(sql, tableName);
+
+  assertColumnAllowedValues({
+    tableSql,
+    allSql: sql,
+    tableName,
+    columnName: 'modalidade',
+    requiredValues: ['individual', 'turma'],
+    exact: true,
+  });
+  assertSecuredTable(sql, tableName);
+  assert.equal(
+    hasProfessorCourseUnitCartesianProduct(sql),
     false,
     'professores_cursos e professores_unidades nao podem formar produto cartesiano',
   );
