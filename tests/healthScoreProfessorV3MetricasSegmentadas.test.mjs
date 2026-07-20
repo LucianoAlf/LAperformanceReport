@@ -7,6 +7,8 @@ const migrationPath =
   'supabase/migrations/20260719203000_health_score_v3_metricas_segmentadas.sql';
 const hardeningMigrationPath =
   'supabase/migrations/20260719203100_health_score_v3_metricas_segmentadas_hardening.sql';
+const canonicalTotalMigrationPath =
+  'supabase/migrations/20260719206000_health_score_v3_segmentos_preservar_total_canonico.sql';
 const baselineMetricsPath =
   'supabase/migrations/20260719123500_health_score_v3_metricas_periodo_otimizada.sql';
 const baselineClosePath =
@@ -25,6 +27,27 @@ function hardeningMigration() {
   );
   return readFileSync(hardeningMigrationPath, 'utf8');
 }
+
+function canonicalTotalMigration() {
+  assert.equal(
+    existsSync(canonicalTotalMigrationPath),
+    true,
+    `${canonicalTotalMigrationPath} deve existir`,
+  );
+  return readFileSync(canonicalTotalMigrationPath, 'utf8');
+}
+
+test('Gate 10 preserva a carteira canonica completa sem pontuar projetos', () => {
+  const sql = canonicalTotalMigration();
+
+  assert.match(sql, /get_carteira_professor_periodo_canonica\s*\(/i);
+  assert.match(sql, /hs_v3_segmentos_detalhe_base_canonica/i);
+  assert.match(sql, /pessoas_unicas_total/i);
+  assert.match(sql, /projeto_sem_segmento_pontuavel/i);
+  assert.match(sql, /revoke\s+all[\s\S]*hs_v3_segmentos_detalhe_base_canonica/i);
+  assert.match(sql, /grant\s+execute[\s\S]*metricas_segmentadas_v1[\s\S]*service_role/i);
+  assert.doesNotMatch(sql, /ativar_health_score_professor_v3_config/i);
+});
 
 function functionBlock(sql, name) {
   const start = sql.toLowerCase().indexOf(`create or replace function public.${name}`);

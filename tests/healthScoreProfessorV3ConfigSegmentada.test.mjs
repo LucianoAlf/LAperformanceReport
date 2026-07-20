@@ -4,6 +4,9 @@ import test from 'node:test';
 
 const migrationPath =
   'supabase/migrations/20260719204000_health_score_v3_config_segmentada_rpc.sql';
+const verificationScriptPath = 'scripts/verify-health-score-v3-segmentos.sql';
+const simulationReportPath =
+  'docs/auditorias/2026-07-19-health-score-v3-metas-segmentadas-simulacao.md';
 
 const readMigration = () => readFileSync(migrationPath, 'utf8');
 
@@ -590,3 +593,42 @@ test(
     );
   },
 );
+
+test('Gate 10 documenta simulacao privada e comparacao canonica reproduzivel', () => {
+  assert.equal(
+    existsSync(verificationScriptPath),
+    true,
+    `${verificationScriptPath} deve registrar as consultas de verificacao`,
+  );
+  assert.equal(
+    existsSync(simulationReportPath),
+    true,
+    `${simulationReportPath} deve registrar o resultado observado`,
+  );
+
+  const sql = readFileSync(verificationScriptPath, 'utf8');
+  const report = readFileSync(simulationReportPath, 'utf8');
+
+  assert.match(sql, /get_health_score_professor_v3_config_ui\s*\(/i);
+  assert.match(sql, /health_score_professor_v3_config_simulacoes/i);
+  assert.match(sql, /get_health_score_professor_v3_metricas_segmentadas_v1\s*\(/i);
+  assert.match(sql, /get_carteira_professor_periodo_canonica\s*\(/i);
+  assert.match(sql, /pessoas_unicas_total/i);
+  assert.match(sql, /vinculos_ativos/i);
+  assert.match(sql, /ocupacoes_unicas/i);
+  assert.match(sql, /turmas_elegiveis/i);
+  assert.match(sql, /regra_ausente/i);
+  assert.match(sql, /atribuicoes_pontuaveis_sem_meta/i);
+  assert.match(sql, /segmentacao_incompleta/i);
+  assert.match(sql, /nao_ofertada_observada/i);
+  assert.doesNotMatch(
+    sql,
+    /\b(?:select|perform)\s+public\.ativar_health_score_professor_v3_config\s*\(/i,
+  );
+
+  assert.match(report, /configura[cç][aã]o ativa[^\n]*permaneceu/i);
+  assert.match(report, /194 atribui[cç][oõ]es/i);
+  assert.match(report, /250 ocorr[eê]ncias/i);
+  assert.match(report, /n[aã]o inventar metas/i);
+  assert.match(report, /n[aã]o ativad[ao]/i);
+});
