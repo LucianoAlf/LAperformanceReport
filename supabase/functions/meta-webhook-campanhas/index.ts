@@ -191,24 +191,40 @@ async function processarMensagem(supabase: any, phoneNumberId: string, msg: any,
     return value != null ? query.eq(field, value) : query.is(field, null)
   }
 
-  // 7a. Conversa existente com agente ativo?
+  // 7a. Descobrir o agente ATUALMENTE ativo/atribuído a esta caixa (número específico, ou fallback da unidade)
+  // Isso é a fonte da verdade de roteamento — cada caixa tem no máximo 1 agente ativo respondendo.
+  let qAgNum = supabase.from('agentes').select('id, modo_teste, telefone_teste')
+    .eq('numero_meta_id', numeroMetaId).eq('is_active', true).eq('status', 'active')
+  qAgNum = eqOrNull(qAgNum, 'unidade_id', unidadeId)
+  const { data: agenteRoteado } = await qAgNum.limit(1).maybeSingle()
+
+  let agenteCaixa = agenteRoteado
+  if (!agenteCaixa) {
+    let qAgFallback = supabase.from('agentes').select('id, modo_teste, telefone_teste')
+      .eq('is_active', true).eq('status', 'active').is('numero_meta_id', null)
+    qAgFallback = eqOrNull(qAgFallback, 'unidade_id', unidadeId)
+    const { data } = await qAgFallback.limit(1).maybeSingle()
+    agenteCaixa = data
+  }
+
+  // 7b. Conversa em aberto (bot_ativo=true) com QUALQUER agente
   let qAgConv = supabase.from('agente_conversas').select('id, agente_id, bot_ativo')
     .eq('telefone', telefone).eq('bot_ativo', true)
   qAgConv = eqOrNull(qAgConv, 'unidade_id', unidadeId)
   const { data: agConvExistente } = await qAgConv.maybeSingle()
 
-  if (agConvExistente) {
-    const { data: ag } = await supabase.from('agentes')
-      .select('is_active, status, modo_teste, telefone_teste')
-      .eq('id', agConvExistente.agente_id).single()
-
-    if (ag?.is_active && ag.status === 'active') {
-      if (!ag.modo_teste || ag.telefone_teste === telefone) {
-        agenteParaInvocar = agConvExistente.agente_id
-      }
+  if (agConvExistente && agenteCaixa && agConvExistente.agente_id === agenteCaixa.id) {
+    // Continua a conversa em aberto — já é o agente ativo desta caixa
+    if (!agenteCaixa.modo_teste || agenteCaixa.telefone_teste === telefone) {
+      agenteParaInvocar = agenteCaixa.id
     }
   } else {
-    // 7a-bis: Lead já transferido? (anti-spam)
+    // Conversa presa em outro agente (desativado/trocado) — encerrar antes de rotear pro atual
+    if (agConvExistente) {
+      await supabase.from('agente_conversas').update({ bot_ativo: false }).eq('id', agConvExistente.id)
+    }
+
+    // 7c. Lead já transferido? (anti-spam)
     let qTransf = supabase.from('agente_conversas').select('id, agente_id, session_data')
       .eq('telefone', telefone).eq('status', 'transferred')
     qTransf = eqOrNull(qTransf, 'unidade_id', unidadeId)
@@ -235,36 +251,28 @@ async function processarMensagem(supabase: any, phoneNumberId: string, msg: any,
       return
     }
 
-    // 7b. Buscar agente mapeado para este número ou qualquer agente ativo da unidade
-    let qAgNum = supabase.from('agentes').select('id, modo_teste, telefone_teste')
-      .eq('numero_meta_id', numeroMetaId).eq('is_active', true).eq('status', 'active')
-    qAgNum = eqOrNull(qAgNum, 'unidade_id', unidadeId)
-    const { data: agenteRoteado } = await qAgNum.limit(1).maybeSingle()
-
-    let agente = agenteRoteado
-    if (!agente) {
-      let qAgFallback = supabase.from('agentes').select('id, modo_teste, telefone_teste')
-        .eq('is_active', true).eq('status', 'active').is('numero_meta_id', null)
-      qAgFallback = eqOrNull(qAgFallback, 'unidade_id', unidadeId)
-      const { data } = await qAgFallback.limit(1).maybeSingle()
-      agente = data
-    }
-
-    if (agente) {
-      if (agente.modo_teste && agente.telefone_teste !== telefone) {
+    // 7d. Rotear pro agente ativo da caixa atual
+    if (agenteCaixa) {
+      if (agenteCaixa.modo_teste && agenteCaixa.telefone_teste !== telefone) {
         // Modo teste ativo, número errado — pular
       } else {
-        // Criar agente_conversas
-        const { data: novaAgConv } = await supabase
-          .from('agente_conversas')
-          .insert({
-            agente_id: agente.id, unidade_id: unidadeId, telefone,
+        // Reabrir conversa já existente com esse agente, ou criar
+        const { data: convDoAgente } = await supabase.from('agente_conversas')
+          .select('id').eq('agente_id', agenteCaixa.id).eq('telefone', telefone).maybeSingle()
+
+        if (convDoAgente) {
+          await supabase.from('agente_conversas').update({
+            bot_ativo: true, unidade_id: unidadeId, ultima_mensagem_em: new Date().toISOString(),
+          }).eq('id', convDoAgente.id)
+        } else {
+          await supabase.from('agente_conversas').insert({
+            agente_id: agenteCaixa.id, unidade_id: unidadeId, telefone,
             bot_ativo: true, total_mensagens: 0,
             ultima_mensagem_em: new Date().toISOString(),
           })
-          .select('agente_id').single()
+        }
 
-        if (novaAgConv) agenteParaInvocar = novaAgConv.agente_id
+        agenteParaInvocar = agenteCaixa.id
       }
     } else if (numero.auto_reply_ativo && numero.auto_reply_message) {
       // Caixa de disparo sem agente — autoreply reorientando para os canais de atendimento.
@@ -295,7 +303,7 @@ async function processarMensagem(supabase: any, phoneNumberId: string, msg: any,
     }
   }
 
-  // 7c. Invocar agente-webhook
+  // 7e. Invocar agente-webhook
   if (agenteParaInvocar) {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!

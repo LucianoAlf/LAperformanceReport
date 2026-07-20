@@ -10,6 +10,7 @@ export interface NumeroMeta {
   access_token: string
   app_secret: string | null
   verify_token: string | null
+  numero_telefone: string | null
   limite_diario: number
   limite_por_segundo: number
   custo_por_categoria: { marketing: number; utility: number; authentication: number }
@@ -28,6 +29,7 @@ export interface NumeroMetaForm {
   access_token: string
   app_secret?: string
   verify_token?: string
+  numero_telefone?: string | null
   limite_diario: number
   orcamento_mensal?: number | null
   is_default: boolean
