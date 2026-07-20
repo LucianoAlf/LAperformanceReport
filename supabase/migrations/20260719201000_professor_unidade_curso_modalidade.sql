@@ -86,6 +86,11 @@ create index if not exists
     status
   );
 
+create index if not exists
+  idx_professor_curso_modalidade_revisado_por
+  on public.professor_unidade_curso_modalidade (revisado_por)
+  where revisado_por is not null;
+
 create or replace function public.fn_professor_curso_modalidade_data_local_la_v1()
 returns date
 language sql

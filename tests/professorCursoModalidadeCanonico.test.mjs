@@ -561,5 +561,10 @@ test(
       sql,
       new RegExp(`create\\s+policy\\s+[^;]+\\s+on\\s+public\\.${tableName}`, 'i'),
     );
+    assert.match(
+      sql,
+      /create\s+index\s+if\s+not\s+exists\s+idx_professor_curso_modalidade_revisado_por[\s\S]*?\(revisado_por\)[\s\S]*?where\s+revisado_por\s+is\s+not\s+null/i,
+      'a FK de revisao humana precisa de indice de cobertura',
+    );
   },
 );
