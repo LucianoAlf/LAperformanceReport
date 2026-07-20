@@ -6,6 +6,8 @@ const migrationPath =
   'supabase/migrations/20260717113000_health_score_v3_metricas_sombra.sql';
 const mediaPerformanceMigrationPath =
   'supabase/migrations/20260717114500_health_score_v3_media_turma_performance.sql';
+const segmentedMetricsMigrationPath =
+  'supabase/migrations/20260719203000_health_score_v3_metricas_segmentadas.sql';
 
 const rpcNames = [
   'get_professor_conversao_v3_sombra',
@@ -195,5 +197,34 @@ test('RPCs sombra validam escopo e nao expoem staging nem acesso anonimo', () =>
       sql,
       new RegExp(`grant execute on function public\\.${name}[\\s\\S]*?to authenticated, service_role`, 'i'),
     );
+  }
+});
+
+test('Task 5 troca apenas media turma e numero alunos pelo agregado segmentado', () => {
+  assert.equal(
+    existsSync(segmentedMetricsMigrationPath),
+    true,
+    `${segmentedMetricsMigrationPath} deve existir`,
+  );
+  const sql = readFileSync(segmentedMetricsMigrationPath, 'utf8');
+  const block = functionBlock(sql, 'get_health_score_professor_v3_metricas_periodo');
+
+  assert.match(block, /get_health_score_professor_v3_metricas_segmentadas_agregadas_v1/i);
+  assert.doesNotMatch(block, /get_health_score_professor_v3_carteira_periodo/i);
+
+  for (const source of [
+    'emusys_experimentais_raw',
+    'vw_professor_periodos_efetivos_v3_sombra',
+    'movimentacoes_admin',
+    'motivos_saida',
+    'vw_aluno_presenca_semantica_v1',
+    'aula_alunos_emusys',
+    'presenca_politicas_confiabilidade',
+  ]) {
+    assert.match(block, new RegExp(`\\b${source}\\b`, 'i'), `fonte removida: ${source}`);
+  }
+
+  for (const metrica of ['conversao', 'retencao', 'permanencia', 'presenca']) {
+    assert.match(block, new RegExp(`'${metrica}'::text`, 'i'));
   }
 });

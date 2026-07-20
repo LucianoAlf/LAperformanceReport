@@ -4,6 +4,8 @@ import test from 'node:test';
 
 const migrationPath =
   'supabase/migrations/20260719001000_health_score_v3_performance_gate8.sql';
+const segmentedMetricsMigrationPath =
+  'supabase/migrations/20260719203000_health_score_v3_metricas_segmentadas.sql';
 const helperPath = 'src/lib/healthScoreProfessorV3Performance.ts';
 const hookPath = 'src/hooks/useHealthScoreProfessorV3Performance.ts';
 const tabPath = 'src/components/App/Professores/TabPerformanceProfessores.tsx';
@@ -191,4 +193,31 @@ test('hook faz uma unica leitura batch e a tabela mantem rollback V2 por feature
   assert.match(tab, /Perman[eÃª]ncia/i);
   assert.match(tab, /Em auditoria/i);
   assert.match(tab, /Sem base/i);
+});
+
+test('Task 5 mantem leitura parcial sem recalcular pilares segmentados por meta global', () => {
+  assert.equal(
+    fs.existsSync(segmentedMetricsMigrationPath),
+    true,
+    `${segmentedMetricsMigrationPath} deve existir`,
+  );
+  const sql = read(segmentedMetricsMigrationPath);
+  const start = sql.toLowerCase().indexOf(
+    'create or replace view public.vw_health_score_professor_v3_parcial_observado',
+  );
+  assert.notEqual(start, -1, 'view parcial deve ser redefinida');
+  const rest = sql.slice(start);
+  const next = rest.slice(1).search(/\ncreate or replace function public\./i);
+  const view = next === -1 ? rest : rest.slice(0, next + 1);
+
+  assert.match(
+    view,
+    /when\s+m\.metrica\s+in\s*\(\s*'media_turma'\s*,\s*'numero_alunos'\s*\)\s+then\s+m\.nota/i,
+  );
+  assert.match(view, /m\.valor_bruto\s*\/\s*m\.meta_aplicada\s*\*\s*100/i);
+  assert.match(
+    sql,
+    /'nome_exibicao'\s*,\s*case[\s\S]*?numero_alunos'[\s\S]*?'Carteira por curso'/i,
+  );
+  assert.doesNotMatch(sql, /meta_global|fallback_global|rateio|proporcional/i);
 });
