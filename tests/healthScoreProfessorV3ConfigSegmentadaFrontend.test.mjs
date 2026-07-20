@@ -17,6 +17,15 @@ const segmentedGoalsComponentPath = path.join(
   repoRoot,
   'src/components/App/Professores/HealthScoreV3MetasSegmentadas.tsx',
 );
+const reconciliationHookPath = path.join(
+  repoRoot,
+  'src/hooks/useProfessorCursoModalidadeReconciliacao.ts',
+);
+const reconciliationComponentPath = path.join(
+  repoRoot,
+  'src/components/App/Professores/ProfessorCursoModalidadeReconciliacao.tsx',
+);
+const pageTabsPath = path.join(repoRoot, 'src/components/ui/page-tabs.tsx');
 
 const read = (filePath) => fs.readFileSync(filePath, 'utf8');
 
@@ -1268,6 +1277,7 @@ test('matriz mantem as tres unidades canonicas mesmo quando uma delas nao possui
 
 test('rascunho sujo protege saida e simulacao obsoleta nao permanece visivel', () => {
   const configSource = read(configComponentPath);
+  const pageTabsSource = read(pageTabsPath);
 
   assert.match(configSource, /addEventListener\(\s*'beforeunload'/);
   assert.match(configSource, /document\.addEventListener\(\s*'click'[\s\S]*?true\s*\)/);
@@ -1276,6 +1286,11 @@ test('rascunho sujo protege saida e simulacao obsoleta nao permanece visivel', (
   assert.match(configSource, /routeBlocker\.state\s*!==\s*'blocked'/);
   assert.match(configSource, /routeBlocker\.(?:proceed|reset)\s*\(/);
   assert.match(configSource, /window\.confirm/);
+  assert.match(
+    pageTabsSource,
+    /Mobile Tabs[\s\S]{0,180}data-tour=\{dataTour\}/,
+    'as abas mobile precisam expor o mesmo marcador das abas desktop',
+  );
   assert.match(
     configSource,
     /simulationIsCurrent\s*&&\s*simulation\s*&&\s*\(/,
@@ -1302,4 +1317,37 @@ test('filtros e controles da matriz possuem nomes acessiveis', () => {
   for (const inputLabel of ['Capacidade máxima', 'Meta média por turma', 'Meta de carteira']) {
     assert.match(matrixSource, new RegExp(`label=\\{[^\\n]{0,100}${inputLabel}`, 'i'));
   }
+});
+
+test('Gate 9 concilia atribuicoes somente por RPC sem tocar no cadastro legado', () => {
+  assert.equal(fs.existsSync(reconciliationHookPath), true);
+  assert.equal(fs.existsSync(reconciliationComponentPath), true);
+
+  const hookSource = read(reconciliationHookPath);
+  const panelSource = read(reconciliationComponentPath);
+  const configSource = read(configComponentPath);
+
+  assert.match(hookSource, /\.rpc\(\s*'get_professor_curso_modalidade_reconciliacao_v1'/);
+  assert.match(hookSource, /\.rpc\(\s*'salvar_professor_curso_modalidade_atribuicoes_v1'/);
+  assert.doesNotMatch(hookSource, /\.from\s*\(/);
+  assert.doesNotMatch(hookSource, /professores_cursos|ModalProfessor|ProfessoresPage/);
+
+  assert.match(panelSource, /aria-label=["']Filtrar por unidade["']/);
+  assert.match(panelSource, /aria-label=["']Filtrar por professor["']/);
+  assert.match(panelSource, /aria-label=["']Filtrar por estado["']/);
+  assert.match(panelSource, /Fonte|fonte/);
+  assert.match(panelSource, /Confian[cç]a|confianca/);
+  assert.match(panelSource, /manter/);
+  assert.match(panelSource, /encerrar/);
+  assert.match(panelSource, /revisar/);
+  assert.match(panelSource, /pista_professores_cursos_sem_escopo/);
+  assert.match(panelSource, /zero alunos|carteira vazia/i);
+  assert.match(panelSource, /justificativa/i);
+  assert.match(panelSource, /window\.confirm/);
+  assert.doesNotMatch(panelSource, /reativar|ativo\s*=|professor\.ativo/);
+  assert.match(panelSource, /row\.estado\s*!==\s*'historico'/);
+  assert.match(panelSource, /!row\.atribuicaoId\s*&&\s*row\.vigenciaInicio/);
+
+  assert.match(configSource, /ProfessorCursoModalidadeReconciliacao/);
+  assert.match(configSource, /onSaved=\{refreshAfterReconciliation\}/);
 });

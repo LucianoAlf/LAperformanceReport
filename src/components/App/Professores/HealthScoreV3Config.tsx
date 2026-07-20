@@ -23,6 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/useToast';
 import { useHealthScoreProfessorV3Config } from '@/hooks/useHealthScoreProfessorV3Config';
 import { HealthScoreV3MetasSegmentadas, areHealthScoreV3SegmentGoalsValid, ensureHealthScoreV3DraftSegmentGoals } from './HealthScoreV3MetasSegmentadas';
+import { ProfessorCursoModalidadeReconciliacao } from './ProfessorCursoModalidadeReconciliacao';
 import type {
   HealthMetricKeyV3,
   HealthScoreV3Config,
@@ -103,6 +104,7 @@ export function HealthScoreV3Config() {
     loading,
     mutating,
     error,
+    refresh,
     createDraft,
     saveDraft,
     simulate,
@@ -282,6 +284,11 @@ export function HealthScoreV3Config() {
     } catch {
       toast.error('Ativação bloqueada', 'A versão precisa estar válida e simulada antes da ativação.');
     }
+  };
+
+  const refreshAfterReconciliation = async () => {
+    setSimulationIsCurrent(false);
+    await refresh();
   };
 
   return (
@@ -513,6 +520,11 @@ export function HealthScoreV3Config() {
               onMetasChange={updateSegmentGoals}
             />
           </section>
+
+          <ProfessorCursoModalidadeReconciliacao
+            disabled={mutating || draftIsDirty}
+            onSaved={refreshAfterReconciliation}
+          />
 
           {!editable ? (
             <div className="grid gap-3 border-t border-slate-800 pt-5 md:grid-cols-[180px_1fr_auto] md:items-end">
