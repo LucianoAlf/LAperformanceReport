@@ -5,6 +5,7 @@ import {
   parseHealthScoreV3ConfigUi,
   parseHealthScoreV3Simulation,
   serializeHealthScoreV3Metrics,
+  serializeHealthScoreV3SegmentGoals,
   type HealthScoreV3Config,
   type HealthScoreV3ConfigUi,
   type HealthScoreV3Simulation,
@@ -16,6 +17,7 @@ interface UseHealthScoreProfessorV3ConfigReturn {
   loading: boolean;
   mutating: boolean;
   error: string | null;
+  refresh: () => Promise<void>;
   reload: () => Promise<void>;
   createDraft: (vigenciaInicio: string, justificativa: string) => Promise<HealthScoreV3Config>;
   saveDraft: (draft: HealthScoreV3Config) => Promise<HealthScoreV3Config>;
@@ -34,7 +36,7 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
   const [mutating, setMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const reload = useCallback(async () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -51,8 +53,8 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
   }, []);
 
   useEffect(() => {
-    void reload().catch(() => undefined);
-  }, [reload]);
+    void refresh().catch(() => undefined);
+  }, [refresh]);
 
   const createDraft = useCallback(async (vigenciaInicio: string, justificativa: string) => {
     setMutating(true);
@@ -64,7 +66,7 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
       if (rpcError) throw rpcError;
       const draft = parseHealthScoreV3Config(data);
       if (!draft) throw new Error('A RPC nao retornou o rascunho criado.');
-      await reload();
+      await refresh();
       return draft;
     } catch (caught) {
       setError(messageFrom(caught));
@@ -72,7 +74,7 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
     } finally {
       setMutating(false);
     }
-  }, [reload]);
+  }, [refresh]);
 
   const saveDraft = useCallback(async (draft: HealthScoreV3Config) => {
     setMutating(true);
@@ -84,6 +86,7 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
           p_vigencia_inicio: draft.vigenciaInicio,
           p_justificativa: draft.justificativa,
           p_metricas: serializeHealthScoreV3Metrics(draft.metricas),
+          p_metas_segmentadas: serializeHealthScoreV3SegmentGoals(draft.metasSegmentadas),
         },
       );
       if (rpcError) throw rpcError;
@@ -130,7 +133,7 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
       if (rpcError) throw rpcError;
       const active = parseHealthScoreV3Config(data);
       if (!active) throw new Error('A RPC nao retornou a versao ativada.');
-      await reload();
+      await refresh();
       setSimulation(null);
       return active;
     } catch (caught) {
@@ -139,7 +142,7 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
     } finally {
       setMutating(false);
     }
-  }, [reload]);
+  }, [refresh]);
 
   return {
     config,
@@ -147,7 +150,8 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
     loading,
     mutating,
     error,
-    reload,
+    refresh,
+    reload: refresh,
     createDraft,
     saveDraft,
     simulate,

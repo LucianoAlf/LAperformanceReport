@@ -26,6 +26,49 @@ export interface HealthScoreV3MetricConfig {
   parametros: Record<string, unknown>;
 }
 
+export type HealthScoreV3Modalidade = 'individual' | 'turma';
+
+export type HealthScoreV3SegmentGoalState = 'configurada' | 'nao_ofertada';
+
+export interface HealthScoreV3SegmentGoal {
+  id: string | null;
+  configId: string | null;
+  unidadeId: string | null;
+  unidadeNome: string | null;
+  cursoId: number | null;
+  cursoNome: string | null;
+  modalidade: HealthScoreV3Modalidade;
+  estado: HealthScoreV3SegmentGoalState;
+  capacidadeMaxima: number | null;
+  metaMediaTurma: number | null;
+  metaCarteiraCurso: number | null;
+  parametros: Record<string, unknown>;
+  criadoEm: string | null;
+  atualizadoEm: string | null;
+}
+
+export interface HealthScoreV3AssignmentSummary {
+  atribuicaoId: string | null;
+  professorId: number | null;
+  professorNome: string | null;
+  unidadeId: string | null;
+  unidadeNome: string | null;
+  cursoId: number | null;
+  cursoNome: string | null;
+  modalidade: HealthScoreV3Modalidade | null;
+  estado: string | null;
+  professoresAfetados: number | null;
+  metaCarteiraCurso: number | null;
+  evidencias: Record<string, unknown>;
+}
+
+export interface HealthScoreV3ConfigPendencias {
+  segmentosObservadosSemRegra: HealthScoreV3AssignmentSummary[];
+  atribuicoesSemRegra: HealthScoreV3AssignmentSummary[];
+  atribuicoesZeroCarteira: HealthScoreV3AssignmentSummary[];
+  divergenciasModalidade: HealthScoreV3AssignmentSummary[];
+}
+
 export interface HealthScoreV3Config {
   id: string;
   versao: number;
@@ -40,11 +83,13 @@ export interface HealthScoreV3Config {
   criadoEm: string;
   ativadoEm: string | null;
   metricas: HealthScoreV3MetricConfig[];
+  metasSegmentadas: HealthScoreV3SegmentGoal[];
 }
 
 export interface HealthScoreV3ConfigUi {
   ativa: HealthScoreV3Config | null;
   rascunho: HealthScoreV3Config | null;
+  pendencias: HealthScoreV3ConfigPendencias;
   modo: 'homologacao';
   publicacaoProdutiva: false;
 }
@@ -123,14 +168,110 @@ function asNullableNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function asDefensiveNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function asNullableString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
 function isMetric(value: unknown): value is HealthMetricKeyV3 {
   return HEALTH_SCORE_V3_METRICS.includes(value as HealthMetricKeyV3);
 }
 
-export function parseHealthScoreV3Config(value: unknown): HealthScoreV3Config | null {
-  if (!value) return null;
+function isModalidade(value: unknown): value is HealthScoreV3Modalidade {
+  return value === 'individual' || value === 'turma';
+}
+
+function isSegmentGoalState(value: unknown): value is HealthScoreV3SegmentGoalState {
+  return value === 'configurada' || value === 'nao_ofertada';
+}
+
+function parseAssignmentSummary(value: unknown): HealthScoreV3AssignmentSummary {
   const row = asRecord(value);
-  if (typeof row.id !== 'string') return null;
+  return {
+    atribuicaoId: asNullableString(row.atribuicao_id),
+    professorId: asDefensiveNullableNumber(row.professor_id),
+    professorNome: asNullableString(row.professor_nome),
+    unidadeId: asNullableString(row.unidade_id),
+    unidadeNome: asNullableString(row.unidade_nome),
+    cursoId: asDefensiveNullableNumber(row.curso_id),
+    cursoNome: asNullableString(row.curso_nome),
+    modalidade: isModalidade(row.modalidade) ? row.modalidade : null,
+    estado: asNullableString(row.estado),
+    professoresAfetados: asDefensiveNullableNumber(row.professores_afetados),
+    metaCarteiraCurso: asDefensiveNullableNumber(row.meta_carteira_curso),
+    evidencias: asRecord(row.evidencias),
+  };
+}
+
+function parseAssignmentSummaries(value: unknown): HealthScoreV3AssignmentSummary[] {
+  return Array.isArray(value) ? value.map(parseAssignmentSummary) : [];
+}
+
+interface ParsedSegmentGoals {
+  goals: HealthScoreV3SegmentGoal[];
+  modalidadesDesconhecidas: HealthScoreV3AssignmentSummary[];
+}
+
+function parseSegmentGoals(value: unknown): ParsedSegmentGoals {
+  if (!Array.isArray(value)) {
+    return { goals: [], modalidadesDesconhecidas: [] };
+  }
+
+  const goals: HealthScoreV3SegmentGoal[] = [];
+  const modalidadesDesconhecidas: HealthScoreV3AssignmentSummary[] = [];
+
+  for (const item of value) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const row = asRecord(item);
+    if (!isModalidade(row.modalidade)) {
+      modalidadesDesconhecidas.push(parseAssignmentSummary(row));
+      continue;
+    }
+    if (!isSegmentGoalState(row.estado)) continue;
+
+    goals.push({
+      id: asNullableString(row.id),
+      configId: asNullableString(row.config_id),
+      unidadeId: asNullableString(row.unidade_id),
+      unidadeNome: asNullableString(row.unidade_nome),
+      cursoId: asDefensiveNullableNumber(row.curso_id),
+      cursoNome: asNullableString(row.curso_nome),
+      modalidade: row.modalidade,
+      estado: row.estado,
+      capacidadeMaxima: asDefensiveNullableNumber(row.capacidade_maxima),
+      metaMediaTurma: asDefensiveNullableNumber(row.meta_media_turma),
+      metaCarteiraCurso: asDefensiveNullableNumber(row.meta_carteira_curso),
+      parametros: asRecord(row.parametros),
+      criadoEm: asNullableString(row.criado_em),
+      atualizadoEm: asNullableString(row.atualizado_em),
+    });
+  }
+
+  return { goals, modalidadesDesconhecidas };
+}
+
+export function parseHealthScoreV3SegmentGoals(value: unknown): HealthScoreV3SegmentGoal[] {
+  return parseSegmentGoals(value).goals;
+}
+
+interface ParsedConfig {
+  config: HealthScoreV3Config | null;
+  modalidadesDesconhecidas: HealthScoreV3AssignmentSummary[];
+}
+
+function parseConfig(value: unknown): ParsedConfig {
+  if (!value) return { config: null, modalidadesDesconhecidas: [] };
+  const row = asRecord(value);
+  if (typeof row.id !== 'string') {
+    return { config: null, modalidadesDesconhecidas: [] };
+  }
 
   const metricas = Array.isArray(row.metricas)
     ? row.metricas.flatMap((item): HealthScoreV3MetricConfig[] => {
@@ -147,29 +288,55 @@ export function parseHealthScoreV3Config(value: unknown): HealthScoreV3Config | 
         }];
       })
     : [];
+  const segmentGoals = parseSegmentGoals(row.metas_segmentadas);
 
   return {
-    id: row.id,
-    versao: asNumber(row.versao),
-    status: (row.status || 'rascunho') as HealthScoreV3Config['status'],
-    vigenciaInicio: String(row.vigencia_inicio || ''),
-    vigenciaFim: row.vigencia_fim ? String(row.vigencia_fim) : null,
-    coberturaMinima: asNumber(row.cobertura_minima),
-    faixaAtencaoMin: asNumber(row.faixa_atencao_min),
-    faixaSaudavelMin: asNumber(row.faixa_saudavel_min),
-    exigePilarFidelizacao: Boolean(row.exige_pilar_fidelizacao),
-    justificativa: String(row.justificativa || ''),
-    criadoEm: String(row.criado_em || ''),
-    ativadoEm: row.ativado_em ? String(row.ativado_em) : null,
-    metricas,
+    config: {
+      id: row.id,
+      versao: asNumber(row.versao),
+      status: (row.status || 'rascunho') as HealthScoreV3Config['status'],
+      vigenciaInicio: String(row.vigencia_inicio || ''),
+      vigenciaFim: row.vigencia_fim ? String(row.vigencia_fim) : null,
+      coberturaMinima: asNumber(row.cobertura_minima),
+      faixaAtencaoMin: asNumber(row.faixa_atencao_min),
+      faixaSaudavelMin: asNumber(row.faixa_saudavel_min),
+      exigePilarFidelizacao: Boolean(row.exige_pilar_fidelizacao),
+      justificativa: String(row.justificativa || ''),
+      criadoEm: String(row.criado_em || ''),
+      ativadoEm: row.ativado_em ? String(row.ativado_em) : null,
+      metricas,
+      metasSegmentadas: segmentGoals.goals,
+    },
+    modalidadesDesconhecidas: segmentGoals.modalidadesDesconhecidas,
   };
+}
+
+export function parseHealthScoreV3Config(value: unknown): HealthScoreV3Config | null {
+  return parseConfig(value).config;
 }
 
 export function parseHealthScoreV3ConfigUi(value: unknown): HealthScoreV3ConfigUi {
   const row = asRecord(value);
+  const ativa = parseConfig(row.ativa);
+  const rascunho = parseConfig(row.rascunho);
+  const pendencias = asRecord(row.pendencias);
   return {
-    ativa: parseHealthScoreV3Config(row.ativa),
-    rascunho: parseHealthScoreV3Config(row.rascunho),
+    ativa: ativa.config,
+    rascunho: rascunho.config,
+    pendencias: {
+      segmentosObservadosSemRegra: parseAssignmentSummaries(
+        pendencias.segmentos_observados_sem_regra,
+      ),
+      atribuicoesSemRegra: parseAssignmentSummaries(pendencias.atribuicoes_sem_regra),
+      atribuicoesZeroCarteira: parseAssignmentSummaries(
+        pendencias.atribuicoes_zero_carteira,
+      ),
+      divergenciasModalidade: [
+        ...parseAssignmentSummaries(pendencias.divergencias_modalidade),
+        ...ativa.modalidadesDesconhecidas,
+        ...rascunho.modalidadesDesconhecidas,
+      ],
+    },
     modo: 'homologacao',
     publicacaoProdutiva: false,
   };
@@ -197,5 +364,18 @@ export function serializeHealthScoreV3Metrics(metricas: HealthScoreV3MetricConfi
     peso: metric.peso,
     meta: metric.meta,
     meta_status: metric.meta === null ? metric.metaStatus : 'aprovada',
+  }));
+}
+
+export function serializeHealthScoreV3SegmentGoals(goals: HealthScoreV3SegmentGoal[]) {
+  return goals.map((goal) => ({
+    unidade_id: goal.unidadeId,
+    curso_id: asDefensiveNullableNumber(goal.cursoId),
+    modalidade: goal.modalidade,
+    estado: goal.estado,
+    capacidade_maxima: asDefensiveNullableNumber(goal.capacidadeMaxima),
+    meta_media_turma: asDefensiveNullableNumber(goal.metaMediaTurma),
+    meta_carteira_curso: asDefensiveNullableNumber(goal.metaCarteiraCurso),
+    parametros: asRecord(goal.parametros),
   }));
 }
