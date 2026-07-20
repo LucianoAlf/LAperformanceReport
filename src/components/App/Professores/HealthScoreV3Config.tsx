@@ -451,7 +451,7 @@ export function HealthScoreV3Config() {
                   <label className="space-y-1 text-xs font-medium text-slate-300">
                     Estado da meta
                     <select
-                      value={metric.meta === null ? metric.metaStatus : 'aprovada'}
+                      value={metric.metaStatus}
                       disabled={!editable || mutating || metric.meta !== null}
                       onChange={(event) => updateMetric(metric.metrica, {
                         metaStatus: event.target.value as HealthScoreV3MetaStatus,
