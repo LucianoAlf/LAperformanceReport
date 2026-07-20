@@ -10,8 +10,16 @@ alter table public.health_score_professor_v3_snapshot_metrica_segmentos
     on delete restrict,
   add column if not exists atribuicao_formal boolean,
   add column if not exists atribuicao_pontuavel boolean,
-  add column if not exists pessoas_unicas_total integer
+  add column if not exists pessoas_unicas_total numeric
     check (pessoas_unicas_total >= 0),
+  add column if not exists pessoas_fechamentos integer
+    check (pessoas_fechamentos >= 0),
+  add column if not exists meses_com_base integer
+    check (meses_com_base >= 0),
+  add column if not exists meses_com_base_consolidado integer
+    check (meses_com_base_consolidado >= 0),
+  add column if not exists meses_no_periodo integer
+    check (meses_no_periodo >= 1),
   add column if not exists capacidade_excedida boolean,
   add column if not exists alertas_capacidade jsonb
     check (
@@ -40,7 +48,7 @@ create table if not exists
     unidade_id uuid not null
       references public.unidades(id)
       on delete restrict,
-    pessoas_unicas_total integer not null default 0
+    pessoas_unicas_total numeric not null default 0
       check (pessoas_unicas_total >= 0),
     dados_sem_resolucao integer not null default 0
       check (dados_sem_resolucao >= 0),
@@ -91,6 +99,8 @@ begin
     'fabio_agent',
     'gabriel_agent',
     'juliana_agent',
+    'lia_acesso_restrito',
+    'mila_acesso_restrito',
     'sol_acesso_restrito'
   ]
   loop
@@ -129,7 +139,11 @@ returns table (
   atribuicao_formal boolean,
   atribuicao_pontuavel boolean,
   pessoas_unicas integer,
-  pessoas_unicas_total integer,
+  pessoas_unicas_total numeric,
+  pessoas_fechamentos integer,
+  meses_com_base integer,
+  meses_com_base_consolidado integer,
+  meses_no_periodo integer,
   vinculos_ativos integer,
   turmas_elegiveis integer,
   ocupacoes_unicas integer,
@@ -172,6 +186,22 @@ as $$
       p_competencia,
       p_periodicidade
     ) p
+  ), meses as (
+    select
+      gs::date as competencia_mes,
+      least(
+        (gs + interval '1 month - 1 day')::date,
+        p.fim_recorte
+      ) as mes_fim
+    from periodo p
+    cross join lateral generate_series(
+      p.periodo_inicio::timestamp,
+      date_trunc('month', p.fim_recorte)::timestamp,
+      interval '1 month'
+    ) gs
+  ), periodo_stats as (
+    select count(*)::integer as meses_no_periodo
+    from meses
   ), unidades_permitidas as (
     select up.unidade_id
     from public.fn_health_score_v3_unidades_permitidas_sombra(
@@ -179,17 +209,18 @@ as $$
     ) up
   ), canonico as (
     select
+      m.competencia_mes,
       d.*,
       curso.nome::text as curso_nome,
       coalesce(curso.is_projeto_banda, false) as is_projeto_banda
-    from periodo p
+    from meses m
     cross join lateral
       public.get_carteira_professor_periodo_detalhe_canonico_v1(
-        extract(year from p.competencia)::integer,
-        extract(month from p.competencia)::integer,
+        extract(year from m.competencia_mes)::integer,
+        extract(month from m.competencia_mes)::integer,
         p_unidade_id,
-        p.periodo_inicio,
-        p.fim_recorte
+        m.competencia_mes,
+        m.mes_fim
       ) d
     join unidades_permitidas up
       on up.unidade_id = d.unidade_id
@@ -197,8 +228,9 @@ as $$
       on curso.id = d.curso_id
     where d.curso_id is null
        or not coalesce(curso.is_projeto_banda, false)
-  ), totais_unidade as (
+  ), totais_unidade_mensais as (
     select
+      c.competencia_mes,
       c.professor_id,
       c.unidade_id,
       coalesce(
@@ -216,24 +248,48 @@ as $$
             not c.curso_resolvido
             or not c.modalidade_resolvida
           )
-      )::integer as dados_sem_resolucao,
-      coalesce(
-        jsonb_agg(distinct c.estado_resolucao)
-          filter (
-            where c.pessoa_chave is not null
-              and c.estado_resolucao <> 'resolvido'
-          ),
-        '[]'::jsonb
-      ) as estados_resolucao,
-      coalesce(
-        jsonb_agg(distinct c.fonte order by c.fonte)
-          filter (where c.fonte is not null),
-        '[]'::jsonb
-      ) as fontes
+      )::integer as dados_sem_resolucao
     from canonico c
-    group by c.professor_id, c.unidade_id
-  ), dados_resolvidos as (
+    group by c.competencia_mes, c.professor_id, c.unidade_id
+  ), totais_unidade as (
     select
+      t.professor_id,
+      t.unidade_id,
+      round(avg(t.pessoas_unicas_total::numeric), 2)
+        as pessoas_unicas_total,
+      sum(t.pessoas_unicas_total)::integer as pessoas_fechamentos,
+      count(*)::integer as meses_com_base,
+      (
+        select count(distinct tm.competencia_mes)::integer
+        from totais_unidade_mensais tm
+        where tm.professor_id = t.professor_id
+      ) as meses_com_base_consolidado,
+      max(ps.meses_no_periodo)::integer as meses_no_periodo,
+      coalesce(bool_or(t.segmentacao_incompleta), false)
+        as segmentacao_incompleta,
+      coalesce(sum(t.dados_sem_resolucao), 0)::integer
+        as dados_sem_resolucao,
+      coalesce((
+        select jsonb_agg(distinct c.estado_resolucao)
+        from canonico c
+        where c.professor_id = t.professor_id
+          and c.unidade_id = t.unidade_id
+          and c.pessoa_chave is not null
+          and c.estado_resolucao <> 'resolvido'
+      ), '[]'::jsonb) as estados_resolucao,
+      coalesce((
+        select jsonb_agg(distinct c.fonte order by c.fonte)
+        from canonico c
+        where c.professor_id = t.professor_id
+          and c.unidade_id = t.unidade_id
+          and c.fonte is not null
+      ), '[]'::jsonb) as fontes
+    from totais_unidade_mensais t
+    cross join periodo_stats ps
+    group by t.professor_id, t.unidade_id
+  ), dados_resolvidos_mensais as (
+    select
+      c.competencia_mes,
       c.professor_id,
       c.unidade_id,
       c.curso_id,
@@ -257,12 +313,7 @@ as $$
           and c.pessoa_chave is not null
       )::integer as ocupacoes_unicas,
       coalesce(bool_or(c.segmentacao_incompleta), false)
-        as segmentacao_incompleta,
-      coalesce(
-        jsonb_agg(distinct c.fonte order by c.fonte)
-          filter (where c.fonte is not null),
-        '[]'::jsonb
-      ) as fontes
+        as segmentacao_incompleta
     from canonico c
     where c.curso_resolvido
       and c.modalidade_resolvida
@@ -270,12 +321,44 @@ as $$
       and c.modalidade in ('individual', 'turma')
       and not coalesce(c.is_projeto_banda, false)
     group by
+      c.competencia_mes,
       c.professor_id,
       c.unidade_id,
       c.curso_id,
       c.modalidade
+  ), dados_resolvidos as (
+    select
+      d.professor_id,
+      d.unidade_id,
+      d.curso_id,
+      min(d.curso_nome)::text as curso_nome,
+      d.modalidade,
+      sum(d.pessoas_unicas)::integer as pessoas_unicas,
+      sum(d.vinculos_ativos)::integer as vinculos_ativos,
+      count(*) filter (where d.vinculos_ativos > 0)::integer
+        as fechamentos_com_vinculo,
+      sum(d.turmas_elegiveis)::integer as turmas_elegiveis,
+      sum(d.ocupacoes_unicas)::integer as ocupacoes_unicas,
+      coalesce(bool_or(d.segmentacao_incompleta), false)
+        as segmentacao_incompleta,
+      coalesce((
+        select jsonb_agg(distinct c.fonte order by c.fonte)
+        from canonico c
+        where c.professor_id = d.professor_id
+          and c.unidade_id = d.unidade_id
+          and c.curso_id = d.curso_id
+          and c.modalidade = d.modalidade
+          and c.fonte is not null
+      ), '[]'::jsonb) as fontes
+    from dados_resolvidos_mensais d
+    group by
+      d.professor_id,
+      d.unidade_id,
+      d.curso_id,
+      d.modalidade
   ), ocupacao_turmas as (
     select
+      c.competencia_mes,
       c.professor_id,
       c.unidade_id,
       c.curso_id,
@@ -295,6 +378,7 @@ as $$
       and c.pessoa_chave is not null
       and not coalesce(c.is_projeto_banda, false)
     group by
+      c.competencia_mes,
       c.professor_id,
       c.unidade_id,
       c.curso_id,
@@ -372,8 +456,8 @@ as $$
             'modalidade', o.modalidade,
             'ocupacoes_unicas', o.ocupacoes_unicas,
             'capacidade_maxima', r.capacidade_maxima,
-            'competencia', date_trunc('month', p_competencia)::date
-          ) order by o.turma_chave
+            'competencia', o.competencia_mes
+          ) order by o.competencia_mes, o.turma_chave
         ) filter (
           where o.ocupacoes_unicas > r.capacidade_maxima
         ),
@@ -410,7 +494,17 @@ as $$
       a.vigencia_fim as atribuicao_vigencia_fim,
       a.atribuicao_evidencias,
       coalesce(d.pessoas_unicas, 0)::integer as pessoas_unicas,
-      coalesce(t.pessoas_unicas_total, 0)::integer as pessoas_unicas_total,
+      coalesce(t.pessoas_unicas_total, 0::numeric) as pessoas_unicas_total,
+      coalesce(t.pessoas_fechamentos, 0)::integer as pessoas_fechamentos,
+      coalesce(t.meses_com_base, 0)::integer as meses_com_base,
+      coalesce(t.meses_com_base_consolidado, 0)::integer
+        as meses_com_base_consolidado,
+      coalesce(
+        t.meses_no_periodo,
+        (select ps.meses_no_periodo from periodo_stats ps)
+      )::integer as meses_no_periodo,
+      coalesce(d.fechamentos_com_vinculo, 0)::integer
+        as fechamentos_com_vinculo,
       coalesce(d.vinculos_ativos, 0)::integer as vinculos_ativos,
       coalesce(d.turmas_elegiveis, 0)::integer as turmas_elegiveis,
       coalesce(d.ocupacoes_unicas, 0)::integer as ocupacoes_unicas,
@@ -473,6 +567,11 @@ as $$
       '{}'::jsonb as atribuicao_evidencias,
       0::integer as pessoas_unicas,
       t.pessoas_unicas_total,
+      t.pessoas_fechamentos,
+      t.meses_com_base,
+      t.meses_com_base_consolidado,
+      t.meses_no_periodo,
+      0::integer as fechamentos_com_vinculo,
       0::integer as vinculos_ativos,
       0::integer as turmas_elegiveis,
       0::integer as ocupacoes_unicas,
@@ -539,7 +638,8 @@ as $$
         when l.estado_base_calculado = 'ok'
           and l.metrica = 'numero_alunos'
           and l.vinculos_ativos > 0
-          then l.meta_carteira_curso
+          then l.fechamentos_com_vinculo::numeric
+            * l.meta_carteira_curso
         else null::numeric
       end as denominador_calculado
     from linhas_metricas l
@@ -559,6 +659,10 @@ as $$
     c.atribuicao_pontuavel,
     c.pessoas_unicas,
     c.pessoas_unicas_total,
+    c.pessoas_fechamentos,
+    c.meses_com_base,
+    c.meses_com_base_consolidado,
+    c.meses_no_periodo,
     c.vinculos_ativos,
     c.turmas_elegiveis,
     c.ocupacoes_unicas,
@@ -566,10 +670,15 @@ as $$
       when c.metrica = 'media_turma' and c.turmas_elegiveis > 0
         then round(
           c.ocupacoes_unicas::numeric / c.turmas_elegiveis::numeric,
-          4
+          2
         )
-      when c.metrica = 'numero_alunos'
-        then c.vinculos_ativos::numeric
+      when c.metrica = 'numero_alunos' and c.fechamentos_com_vinculo > 0
+        then round(
+          c.vinculos_ativos::numeric
+            / c.fechamentos_com_vinculo::numeric,
+          2
+        )
+      when c.metrica = 'numero_alunos' then 0::numeric
       else null::numeric
     end as valor_observado,
     c.capacidade_maxima,
@@ -631,6 +740,10 @@ as $$
       'periodicidade', p_periodicidade,
       'config_id', p_config_id,
       'pessoas_unicas_total', c.pessoas_unicas_total,
+      'pessoas_fechamentos', c.pessoas_fechamentos,
+      'meses_com_base', c.meses_com_base,
+      'meses_com_base_consolidado', c.meses_com_base_consolidado,
+      'meses_no_periodo', c.meses_no_periodo,
       'vinculos_curso_modalidade', c.vinculos_ativos,
       'atribuicao_formal', c.atribuicao_formal,
       'atribuicao_pontuavel', c.atribuicao_pontuavel,
@@ -700,7 +813,12 @@ as $$
       d.professor_id,
       max(d.professor_nome)::text as professor_nome,
       d.unidade_id,
-      max(d.pessoas_unicas_total)::integer as pessoas_unicas_total,
+      max(d.pessoas_unicas_total)::numeric as pessoas_unicas_total,
+      max(d.pessoas_fechamentos)::integer as pessoas_fechamentos,
+      max(d.meses_com_base)::integer as meses_com_base,
+      max(d.meses_com_base_consolidado)::integer
+        as meses_com_base_consolidado,
+      max(d.meses_no_periodo)::integer as meses_no_periodo,
       coalesce(sum(d.vinculos_ativos) filter (
         where d.curso_id is not null
       ), 0)::integer as vinculos_curso_modalidade,
@@ -769,7 +887,24 @@ as $$
       u.professor_id,
       max(u.professor_nome)::text as professor_nome,
       p_unidade_id as unidade_saida,
-      sum(u.pessoas_unicas_total)::integer as pessoas_unicas_total,
+      case
+        when sum(u.pessoas_fechamentos) = 0 then 0::numeric
+        when p_unidade_id is null then round(
+          sum(u.pessoas_fechamentos)::numeric
+            / nullif(max(u.meses_com_base_consolidado), 0),
+          2
+        )
+        else round(
+          sum(u.pessoas_fechamentos)::numeric
+            / nullif(max(u.meses_com_base), 0),
+          2
+        )
+      end as pessoas_unicas_total,
+      sum(u.pessoas_fechamentos)::integer as pessoas_fechamentos,
+      max(u.meses_com_base)::integer as meses_com_base,
+      max(u.meses_com_base_consolidado)::integer
+        as meses_com_base_consolidado,
+      max(u.meses_no_periodo)::integer as meses_no_periodo,
       sum(u.vinculos_curso_modalidade)::integer
         as vinculos_curso_modalidade,
       sum(u.turmas_elegiveis)::integer as turmas_elegiveis,
@@ -835,7 +970,7 @@ as $$
         then round(
           a.ocupacoes_unicas::numeric
             / nullif(a.turmas_elegiveis, 0),
-          4
+          2
         )
       when a.metrica = 'numero_alunos'
         then a.pessoas_unicas_total::numeric
@@ -880,6 +1015,10 @@ as $$
       'periodicidade', p_periodicidade,
       'config_id', p_config_id,
       'pessoas_unicas_total', a.pessoas_unicas_total,
+      'pessoas_fechamentos', a.pessoas_fechamentos,
+      'meses_com_base', a.meses_com_base,
+      'meses_com_base_consolidado', a.meses_com_base_consolidado,
+      'meses_no_periodo', a.meses_no_periodo,
       'vinculos_curso_modalidade', a.vinculos_curso_modalidade,
       'vinculos_ativos_pontuaveis', case
         when a.metrica = 'numero_alunos' then a.numerador
@@ -891,7 +1030,7 @@ as $$
           then round(
             a.ocupacoes_unicas::numeric
               / nullif(a.turmas_elegiveis, 0),
-            4
+            2
           )
       end,
       'meta_assentos_pontuaveis', case
@@ -1797,7 +1936,11 @@ begin
       atribuicao_formal boolean,
       atribuicao_pontuavel boolean,
       pessoas_unicas integer,
-      pessoas_unicas_total integer,
+      pessoas_unicas_total numeric,
+      pessoas_fechamentos integer,
+      meses_com_base integer,
+      meses_com_base_consolidado integer,
+      meses_no_periodo integer,
       vinculos_ativos integer,
       turmas_elegiveis integer,
       ocupacoes_unicas integer,
@@ -1876,7 +2019,12 @@ begin
         d.professor_id,
         max(d.professor_nome)::text as professor_nome,
         d.unidade_id,
-        max(d.pessoas_unicas_total)::integer as pessoas_unicas_total,
+        max(d.pessoas_unicas_total)::numeric as pessoas_unicas_total,
+        max(d.pessoas_fechamentos)::integer as pessoas_fechamentos,
+        max(d.meses_com_base)::integer as meses_com_base,
+        max(d.meses_com_base_consolidado)::integer
+          as meses_com_base_consolidado,
+        max(d.meses_no_periodo)::integer as meses_no_periodo,
         coalesce(sum(d.vinculos_ativos) filter (
           where d.curso_id is not null
         ), 0)::integer as vinculos_curso_modalidade,
@@ -1945,7 +2093,24 @@ begin
         u.professor_id,
         max(u.professor_nome)::text as professor_nome,
         v_scope.unidade_id as unidade_saida,
-        sum(u.pessoas_unicas_total)::integer as pessoas_unicas_total,
+        case
+          when sum(u.pessoas_fechamentos) = 0 then 0::numeric
+          when v_scope.unidade_id is null then round(
+            sum(u.pessoas_fechamentos)::numeric
+              / nullif(max(u.meses_com_base_consolidado), 0),
+            2
+          )
+          else round(
+            sum(u.pessoas_fechamentos)::numeric
+              / nullif(max(u.meses_com_base), 0),
+            2
+          )
+        end as pessoas_unicas_total,
+        sum(u.pessoas_fechamentos)::integer as pessoas_fechamentos,
+        max(u.meses_com_base)::integer as meses_com_base,
+        max(u.meses_com_base_consolidado)::integer
+          as meses_com_base_consolidado,
+        max(u.meses_no_periodo)::integer as meses_no_periodo,
         sum(u.vinculos_curso_modalidade)::integer
           as vinculos_curso_modalidade,
         sum(u.turmas_elegiveis)::integer as turmas_elegiveis,
@@ -2011,7 +2176,7 @@ begin
           then round(
             a.ocupacoes_unicas::numeric
               / nullif(a.turmas_elegiveis, 0),
-            4
+            2
           )
         when a.metrica = 'numero_alunos'
           then a.pessoas_unicas_total::numeric
@@ -2054,6 +2219,10 @@ begin
         'periodicidade', p_periodicidade,
         'config_id', v_config.id,
         'pessoas_unicas_total', a.pessoas_unicas_total,
+        'pessoas_fechamentos', a.pessoas_fechamentos,
+        'meses_com_base', a.meses_com_base,
+        'meses_com_base_consolidado', a.meses_com_base_consolidado,
+        'meses_no_periodo', a.meses_no_periodo,
         'vinculos_curso_modalidade', a.vinculos_curso_modalidade,
         'vinculos_ativos_pontuaveis', case
           when a.metrica = 'numero_alunos' then a.numerador
@@ -2065,7 +2234,7 @@ begin
             then round(
               a.ocupacoes_unicas::numeric
                 / nullif(a.turmas_elegiveis, 0),
-              4
+              2
             )
         end,
         'meta_assentos_pontuaveis', case
@@ -2276,6 +2445,10 @@ begin
         atribuicao_pontuavel,
         pessoas_unicas,
         pessoas_unicas_total,
+        pessoas_fechamentos,
+        meses_com_base,
+        meses_com_base_consolidado,
+        meses_no_periodo,
         vinculos_ativos,
         turmas_elegiveis,
         ocupacoes_unicas,
@@ -2303,6 +2476,10 @@ begin
         d.atribuicao_pontuavel,
         d.pessoas_unicas,
         d.pessoas_unicas_total,
+        d.pessoas_fechamentos,
+        d.meses_com_base,
+        d.meses_com_base_consolidado,
+        d.meses_no_periodo,
         d.vinculos_ativos,
         d.turmas_elegiveis,
         d.ocupacoes_unicas,

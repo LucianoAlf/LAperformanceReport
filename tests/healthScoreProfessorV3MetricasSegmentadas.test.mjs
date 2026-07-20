@@ -106,6 +106,37 @@ test('detalhe deriva da base canonica unica e so pontua curso e modalidade ofici
   assert.doesNotMatch(detail, /rateio|proporcional/i);
 });
 
+test('ciclo preserva componentes mensais antes de somar e usa arredondamento canonico', () => {
+  const sql = migration();
+  const detail = functionBlock(
+    sql,
+    'get_health_score_professor_v3_metricas_segmentadas_v1',
+  );
+  const aggregate = functionBlock(
+    sql,
+    'get_health_score_professor_v3_metricas_segmentadas_agregadas_v1',
+  );
+
+  assert.match(detail, /meses\s+as\s*\([\s\S]*?generate_series/i);
+  assert.match(
+    detail,
+    /m\.competencia_mes[\s\S]*?get_carteira_professor_periodo_detalhe_canonico_v1\([\s\S]*?m\.competencia_mes[\s\S]*?m\.mes_fim/i,
+  );
+  assert.match(
+    detail,
+    /group\s+by[\s\S]*?competencia_mes[\s\S]*?turma_chave/i,
+  );
+  assert.match(detail, /fechamentos_com_vinculo/i);
+  assert.match(
+    detail,
+    /fechamentos_com_vinculo::numeric\s*\*\s*l\.meta_carteira_curso/i,
+  );
+  assert.match(detail, /'competencia'\s*,\s*o\.competencia_mes/i);
+  assert.match(detail, /ocupacoes_unicas::numeric[\s\S]*?turmas_elegiveis::numeric[\s\S]*?,\s*2\s*\)/i);
+  assert.match(aggregate, /a\.ocupacoes_unicas::numeric[\s\S]*?a\.turmas_elegiveis[\s\S]*?,\s*2\s*\)/i);
+  assert.doesNotMatch(aggregate, /a\.ocupacoes_unicas::numeric[\s\S]{0,180}?,\s*4\s*\)/i);
+});
+
 test('media turma preserva bruto e calcula nota pela soma de ocupacoes sobre meta de assentos', () => {
   const sql = migration();
   const detail = functionBlock(
@@ -337,6 +368,10 @@ test('snapshot segmentado persiste atribuicao, alertas e diagnostico nao resolvi
     'atribuicao_formal',
     'atribuicao_pontuavel',
     'pessoas_unicas_total',
+    'pessoas_fechamentos',
+    'meses_com_base',
+    'meses_com_base_consolidado',
+    'meses_no_periodo',
     'capacidade_excedida',
     'alertas_capacidade',
     'divergencias',
@@ -360,6 +395,20 @@ test('snapshot segmentado persiste atribuicao, alertas e diagnostico nao resolvi
     materializer,
     /and\s+not\s+d\.linha_diagnostico[\s\S]*?and\s+d\.curso_id\s+is\s+not\s+null/i,
   );
+
+  const diagnosticGrants = between(
+    sql,
+    'do $diagnostic_grants$',
+    '$diagnostic_grants$;',
+  );
+  for (const role of [
+    'fabio_agent',
+    'lia_acesso_restrito',
+    'mila_acesso_restrito',
+    'sol_acesso_restrito',
+  ]) {
+    assert.match(diagnosticGrants, new RegExp(`'${role}'`, 'i'));
+  }
 });
 
 test('materializador le detalhe canonico uma vez e deriva unidade e consolidado do cache', () => {
@@ -445,6 +494,7 @@ test(
 
     try {
       let ready = false;
+      let consecutiveReadyChecks = 0;
       for (let attempt = 0; attempt < 80; attempt += 1) {
         const readiness = spawnSync(
           'docker',
@@ -452,8 +502,13 @@ test(
           { encoding: 'utf8' },
         );
         if (readiness.status === 0) {
-          ready = true;
-          break;
+          consecutiveReadyChecks += 1;
+          if (consecutiveReadyChecks >= 3) {
+            ready = true;
+            break;
+          }
+        } else {
+          consecutiveReadyChecks = 0;
         }
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
       }
@@ -466,6 +521,8 @@ test(
         create role anon;
         create role authenticated;
         create role service_role;
+        create role lia_acesso_restrito;
+        create role mila_acesso_restrito;
         create schema auth;
         create function auth.role() returns text
         language sql stable as $$ select 'service_role'::text $$;
@@ -619,7 +676,8 @@ test(
           ocupacao_chave text,
           carteira_total_auditado integer,
           carteira_total_detalhado integer not null,
-          segmentacao_incompleta boolean not null
+          segmentacao_incompleta boolean not null,
+          competencia date not null
         );
         create sequence public.fixture_canonical_calls;
 
@@ -631,8 +689,14 @@ test(
           periodo_label text
         ) language sql stable as $$
           select
-            date_trunc('month', $1)::date,
-            (date_trunc('month', $1) + interval '1 month - 1 day')::date,
+            case
+              when $2 = 'ciclo' then (date_trunc('month', $1) - interval '1 month')::date
+              else date_trunc('month', $1)::date
+            end,
+            case
+              when $2 = 'ciclo' then (date_trunc('month', $1) + interval '2 month - 1 day')::date
+              else (date_trunc('month', $1) + interval '1 month - 1 day')::date
+            end,
             to_char($1, 'YYYY-MM'),
             to_char($1, 'YYYY-MM')
         $$;
@@ -664,9 +728,26 @@ test(
         begin
           perform nextval('public.fixture_canonical_calls');
           return query
-          select f.*
+          select
+            f.professor_id,
+            f.unidade_id,
+            f.pessoa_chave,
+            f.curso_id,
+            f.modalidade,
+            f.turma_chave,
+            f.elegivel_media,
+            f.fonte,
+            f.curso_resolvido,
+            f.modalidade_resolvida,
+            f.estado_resolucao,
+            f.ocupacao_chave,
+            f.carteira_total_auditado,
+            f.carteira_total_detalhado,
+            f.segmentacao_incompleta
           from public.fixture_carteira_canonica f
-          where $3 is null or f.unidade_id = $3;
+          where ($3 is null or f.unidade_id = $3)
+            and f.competencia between coalesce($4, make_date($1, $2, 1))
+              and coalesce($5, (make_date($1, $2, 1) + interval '1 month - 1 day')::date);
         end;
         $$;
 
@@ -695,12 +776,34 @@ test(
           motivo_sem_base text,
           detalhes jsonb
         ) language sql stable as $$
+          with alvos as (
+            select a.professor_id
+            from public.professor_unidade_curso_modalidade a
+            where p_unidade_id is null or a.unidade_id = p_unidade_id
+            union
+            select f.professor_id
+            from public.fixture_carteira_canonica f
+            where p_unidade_id is null or f.unidade_id = p_unidade_id
+          )
           select
-            null::text, null::integer, null::text, null::uuid, null::date,
-            null::numeric, null::numeric, null::numeric, null::integer,
-            null::text, null::boolean, null::text, null::text, null::text,
-            null::text, null::jsonb
-          where false
+            'retencao'::text,
+            p.id,
+            p.nome,
+            p_unidade_id,
+            date_trunc('month', p_competencia)::date,
+            80::numeric,
+            80::numeric,
+            100::numeric,
+            1,
+            'ok'::text,
+            true,
+            'alta'::text,
+            'fixture_pilar_legado'::text,
+            'fixture-retencao-1'::text,
+            null::text,
+            '{}'::jsonb
+          from alvos a
+          join public.professores p on p.id = a.professor_id
         $$;
 
         ${materializerDefinition}
@@ -757,13 +860,14 @@ test(
           ('00000000-0000-0000-0000-000000000006', 404, '11111111-1111-1111-1111-111111111111', 50, 'turma', 'ativo', 'fixture', 'alta', date '2026-01-01');
 
         insert into public.fixture_carteira_canonica values
-          (101, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-a', 10, 'turma', 'u1:t10', true, 'evento', true, true, 'resolvido', 'u1:t10', 1, 1, false),
-          (101, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-a', 20, 'individual', 'u1:i20', true, 'evento', true, true, 'resolvido', 'u1:i20', 1, 1, false),
-          (101, '22222222-2222-2222-2222-222222222222', 'u2:pessoa-b', 10, 'turma', 'u2:t10', true, 'evento', true, true, 'resolvido', 'u2:t10', 2, 2, false),
-          (101, '22222222-2222-2222-2222-222222222222', 'u2:pessoa-c', 10, 'turma', 'u2:t10', true, 'evento', true, true, 'resolvido', 'u2:t10', 2, 2, false),
-          (303, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-d', 40, 'turma', 'u1:t40', true, 'evento', true, true, 'resolvido', 'u1:t40', 1, 1, false),
-          (404, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-e', 50, 'turma', 'u1:t50', true, 'evento', true, true, 'resolvido', 'u1:t50', 1, 1, false),
-          (505, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-f', null, null, null, false, 'evento', false, false, 'curso_nao_resolvido', null, 1, 1, true);
+          (101, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-a', 10, 'turma', 'u1:t10', true, 'evento', true, true, 'resolvido', 'u1:t10', 1, 1, false, date '2026-06-10'),
+          (101, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-a', 10, 'turma', 'u1:t10', true, 'evento', true, true, 'resolvido', 'u1:t10', 1, 1, false, date '2026-07-10'),
+          (101, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-a', 20, 'individual', 'u1:i20', true, 'evento', true, true, 'resolvido', 'u1:i20', 1, 1, false, date '2026-07-10'),
+          (101, '22222222-2222-2222-2222-222222222222', 'u2:pessoa-b', 10, 'turma', 'u2:t10', true, 'evento', true, true, 'resolvido', 'u2:t10', 2, 2, false, date '2026-07-10'),
+          (101, '22222222-2222-2222-2222-222222222222', 'u2:pessoa-c', 10, 'turma', 'u2:t10', true, 'evento', true, true, 'resolvido', 'u2:t10', 2, 2, false, date '2026-07-10'),
+          (303, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-d', 40, 'turma', 'u1:t40', true, 'evento', true, true, 'resolvido', 'u1:t40', 1, 1, false, date '2026-07-10'),
+          (404, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-e', 50, 'turma', 'u1:t50', true, 'evento', true, true, 'resolvido', 'u1:t50', 1, 1, false, date '2026-07-10'),
+          (505, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-f', null, null, null, false, 'evento', false, false, 'curso_nao_resolvido', null, 1, 1, true, date '2026-07-10');
 
         do $fixture$
         declare
@@ -773,6 +877,10 @@ test(
           v_nota numeric;
           v_estado text;
           v_count integer;
+          v_media_valor numeric;
+          v_media_numerador numeric;
+          v_media_denominador numeric;
+          v_alertas integer;
           v_calls bigint;
           v_called boolean;
         begin
@@ -813,9 +921,110 @@ test(
           ) a
           where a.professor_id = 101 and a.metrica = 'media_turma';
           if row(v_valor, v_numerador, v_denominador, v_nota)
-             is distinct from row(1.3333::numeric, 4::numeric, 3::numeric, 100::numeric) then
+             is distinct from row(1.33::numeric, 4::numeric, 3::numeric, 100::numeric) then
             raise exception 'media multiunidade divergente: %, %, %, %', v_valor, v_numerador, v_denominador, v_nota;
           end if;
+
+          perform setval('public.fixture_canonical_calls', 1, false);
+          select
+            max(a.valor_bruto) filter (where a.metrica = 'numero_alunos'),
+            max(a.numerador) filter (where a.metrica = 'numero_alunos'),
+            max(a.denominador) filter (where a.metrica = 'numero_alunos'),
+            max(a.nota) filter (where a.metrica = 'numero_alunos'),
+            max(a.valor_bruto) filter (where a.metrica = 'media_turma'),
+            max(a.numerador) filter (where a.metrica = 'media_turma'),
+            max(a.denominador) filter (where a.metrica = 'media_turma'),
+            max((a.detalhes->>'segmentos_capacidade_excedida')::integer)
+              filter (where a.metrica = 'media_turma')
+            into
+              v_valor,
+              v_numerador,
+              v_denominador,
+              v_nota,
+              v_media_valor,
+              v_media_numerador,
+              v_media_denominador,
+              v_alertas
+          from public.get_health_score_professor_v3_metricas_segmentadas_agregadas_v1(
+            date '2026-07-01',
+            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            null,
+            'ciclo'
+          ) a
+          where a.professor_id = 101;
+          if row(v_valor, v_numerador, v_denominador, v_nota)
+             is distinct from row(2::numeric, 5::numeric, 8::numeric, 62.50::numeric) then
+            raise exception 'carteira ciclo colapsou fechamento mensal: %, %, %, %', v_valor, v_numerador, v_denominador, v_nota;
+          end if;
+          if row(v_media_valor, v_media_numerador, v_media_denominador, v_alertas)
+             is distinct from row(1.25::numeric, 5::numeric, 4::numeric, 1) then
+            raise exception 'media ciclo inflou ou colapsou componentes: %, %, %, %', v_media_valor, v_media_numerador, v_media_denominador, v_alertas;
+          end if;
+          select last_value, is_called into v_calls, v_called
+          from public.fixture_canonical_calls;
+          if not v_called or v_calls <> 2 then
+            raise exception 'ciclo deveria ler dois recortes mensais, leu %', v_calls;
+          end if;
+
+          select a.valor_bruto, a.estado_base, a.nota
+            into v_valor, v_estado, v_nota
+          from public.get_health_score_professor_v3_metricas_segmentadas_agregadas_v1(
+            date '2026-07-01',
+            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            null,
+            'ciclo'
+          ) a
+          where a.professor_id = 303 and a.metrica = 'numero_alunos';
+          if v_valor <> 1 or v_estado <> 'regra_ausente' or v_nota is not null then
+            raise exception 'ciclo alterou fechamento unico disponivel: %, %, %', v_valor, v_estado, v_nota;
+          end if;
+
+          select a.estado_base, a.nota
+            into v_estado, v_nota
+          from public.get_health_score_professor_v3_metricas_segmentadas_agregadas_v1(
+            date '2026-07-01',
+            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            '11111111-1111-1111-1111-111111111111',
+            'mensal'
+          ) a
+          where a.professor_id = 202 and a.metrica = 'numero_alunos';
+          if v_estado <> 'sem_base_zero_carteira' or v_nota is not null then
+            raise exception 'estado inicial zero carteira invalido: %, %', v_estado, v_nota;
+          end if;
+
+          insert into public.fixture_carteira_canonica values (
+            202,
+            '11111111-1111-1111-1111-111111111111',
+            'u1:pessoa-primeiro-vinculo',
+            30,
+            'turma',
+            'u1:t30',
+            true,
+            'evento',
+            true,
+            true,
+            'resolvido',
+            'u1:t30',
+            1,
+            1,
+            false,
+            date '2026-07-10'
+          );
+          select a.estado_base, a.numerador, a.denominador, a.nota
+            into v_estado, v_numerador, v_denominador, v_nota
+          from public.get_health_score_professor_v3_metricas_segmentadas_agregadas_v1(
+            date '2026-07-01',
+            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            '11111111-1111-1111-1111-111111111111',
+            'mensal'
+          ) a
+          where a.professor_id = 202 and a.metrica = 'numero_alunos';
+          if row(v_estado, v_numerador, v_denominador, v_nota)
+             is distinct from row('ok'::text, 1::numeric, 2::numeric, 50::numeric) then
+            raise exception 'primeiro vinculo nao tornou segmento pontuavel: %, %, %, %', v_estado, v_numerador, v_denominador, v_nota;
+          end if;
+          delete from public.fixture_carteira_canonica
+          where pessoa_chave = 'u1:pessoa-primeiro-vinculo';
 
           perform setval('public.fixture_canonical_calls', 1, false);
           perform public.materializar_health_score_professor_v3_periodo_impl(
@@ -831,6 +1040,27 @@ test(
           from public.health_score_professor_v3_snapshots;
           if v_count <> 11 then
             raise exception 'esperados 11 snapshots, obtidos %', v_count;
+          end if;
+
+          select s.score, s.cobertura
+            into v_valor, v_numerador
+          from public.health_score_professor_v3_snapshots s
+          where s.professor_id = 202 and s.unidade_id is null;
+          if row(v_valor, v_numerador)
+             is distinct from row(80::numeric, 17::numeric) then
+            raise exception 'peso sem base nao foi redistribuido: score %, cobertura %', v_valor, v_numerador;
+          end if;
+
+          select sm.nota, sm.contribuicao, sm.peso_disponivel
+            into v_nota, v_valor, v_called
+          from public.health_score_professor_v3_snapshots s
+          join public.health_score_professor_v3_snapshot_metricas sm
+            on sm.snapshot_id = s.id
+          where s.professor_id = 202
+            and s.unidade_id is null
+            and sm.metrica = 'numero_alunos';
+          if v_nota is not null or v_valor is not null or v_called then
+            raise exception 'zero carteira fabricou nota ou contribuicao: %, %, %', v_nota, v_valor, v_called;
           end if;
 
           select sm.valor_bruto, sm.numerador, sm.denominador, sm.nota
@@ -973,6 +1203,79 @@ test(
           where s.professor_id = 505 and s.unidade_id is null;
           if v_count <> 0 then
             raise exception 'escopo nao resolvido gerou segmento regular indevido';
+          end if;
+
+          perform setval('public.fixture_canonical_calls', 1, false);
+          perform public.materializar_health_score_professor_v3_periodo_impl(
+            date '2026-07-01', 'ciclo', null, null
+          );
+          select last_value, is_called into v_calls, v_called
+          from public.fixture_canonical_calls;
+          if not v_called or v_calls <> 2 then
+            raise exception 'materializador de ciclo deveria ler dois recortes, leu %', v_calls;
+          end if;
+
+          select sm.valor_bruto, sm.numerador, sm.denominador, sm.nota
+            into v_valor, v_numerador, v_denominador, v_nota
+          from public.health_score_professor_v3_snapshots s
+          join public.health_score_professor_v3_snapshot_metricas sm
+            on sm.snapshot_id = s.id
+          where s.professor_id = 101
+            and s.unidade_id is null
+            and s.periodicidade = 'ciclo'
+            and sm.metrica = 'numero_alunos';
+          if row(v_valor, v_numerador, v_denominador, v_nota)
+             is distinct from row(2::numeric, 5::numeric, 8::numeric, 62.50::numeric) then
+            raise exception 'pai ciclo carteira divergente: %, %, %, %', v_valor, v_numerador, v_denominador, v_nota;
+          end if;
+
+          select
+            round(
+              sum(x.pessoas_fechamentos)::numeric
+                / max(x.meses_com_base_consolidado),
+              2
+            ),
+            sum(x.numerador),
+            sum(x.denominador)
+            into v_valor, v_numerador, v_denominador
+          from (
+            select
+              c.unidade_id,
+              max(c.pessoas_fechamentos)::numeric as pessoas_fechamentos,
+              max(c.meses_com_base_consolidado)::numeric
+                as meses_com_base_consolidado,
+              sum(c.numerador)::numeric as numerador,
+              sum(c.denominador)::numeric as denominador
+            from public.health_score_professor_v3_snapshots s
+            join public.health_score_professor_v3_snapshot_metricas sm
+              on sm.snapshot_id = s.id and sm.metrica = 'numero_alunos'
+            join public.health_score_professor_v3_snapshot_metrica_segmentos c
+              on c.snapshot_metrica_id = sm.id
+            where s.professor_id = 101
+              and s.unidade_id is null
+              and s.periodicidade = 'ciclo'
+            group by c.unidade_id
+          ) x;
+          if row(v_valor, v_numerador, v_denominador)
+             is distinct from row(2::numeric, 5::numeric, 8::numeric) then
+            raise exception 'filhos ciclo carteira nao reproduzem pai: %, %, %', v_valor, v_numerador, v_denominador;
+          end if;
+
+          select sum(c.numerador), sum(c.denominador), count(*) filter (
+            where c.capacidade_excedida
+          )
+            into v_numerador, v_denominador, v_count
+          from public.health_score_professor_v3_snapshots s
+          join public.health_score_professor_v3_snapshot_metricas sm
+            on sm.snapshot_id = s.id and sm.metrica = 'media_turma'
+          join public.health_score_professor_v3_snapshot_metrica_segmentos c
+            on c.snapshot_metrica_id = sm.id
+          where s.professor_id = 101
+            and s.unidade_id is null
+            and s.periodicidade = 'ciclo';
+          if row(v_numerador, v_denominador, v_count)
+             is distinct from row(5::numeric, 4::numeric, 1::integer) then
+            raise exception 'filhos ciclo media inflaram componentes: %, %, %', v_numerador, v_denominador, v_count;
           end if;
         end;
         $fixture$;
