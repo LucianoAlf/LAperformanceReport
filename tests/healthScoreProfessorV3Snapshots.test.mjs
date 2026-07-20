@@ -20,6 +20,8 @@ const shadowRolesIsolationMigrationPath =
   'supabase/migrations/20260718191500_health_score_v3_gate6_isolamento_roles.sql';
 const segmentedGoalsSchemaMigrationPath =
   'supabase/migrations/20260719200000_health_score_v3_metas_segmentadas_schema.sql';
+const segmentedConfigMigrationPath =
+  'supabase/migrations/20260719204000_health_score_v3_config_segmentada_rpc.sql';
 
 function migration() {
   return existsSync(migrationPath) ? readFileSync(migrationPath, 'utf8') : '';
@@ -70,6 +72,12 @@ function shadowRolesIsolationMigration() {
 function segmentedGoalsSchemaMigration() {
   return existsSync(segmentedGoalsSchemaMigrationPath)
     ? readFileSync(segmentedGoalsSchemaMigrationPath, 'utf8')
+    : '';
+}
+
+function segmentedConfigMigration() {
+  return existsSync(segmentedConfigMigrationPath)
+    ? readFileSync(segmentedConfigMigrationPath, 'utf8')
     : '';
 }
 
@@ -260,6 +268,33 @@ test('Task 2 preserva a imutabilidade historica das metas e dos segmentos do sna
     configConsistencyBlock,
     /security definer[\s\S]*set search_path = public, pg_temp/i,
   );
+});
+
+test('Task 6 simula e ativa sem recalcular snapshots fechados', () => {
+  const sql = segmentedConfigMigration();
+
+  assert.equal(
+    existsSync(segmentedConfigMigrationPath),
+    true,
+    `${segmentedConfigMigrationPath} deve existir`,
+  );
+  assert.match(
+    sql,
+    /insert\s+into\s+public\.health_score_professor_v3_config_simulacoes/i,
+  );
+  assert.doesNotMatch(
+    sql,
+    /(?:insert\s+into|update|delete\s+from)\s+public\.health_score_professor_v3_snapshots/i,
+  );
+  assert.doesNotMatch(
+    sql,
+    /(?:insert\s+into|update|delete\s+from)\s+public\.health_score_professor_v3_snapshot_metricas/i,
+  );
+  assert.doesNotMatch(
+    sql,
+    /(?:insert\s+into|update|delete\s+from)\s+public\.health_score_professor_v3_snapshot_metrica_segmentos/i,
+  );
+  assert.doesNotMatch(sql, /materializar_health_score_professor_v3/i);
 });
 
 test('retificacao exige justificativa, invalida sem apagar e cria revisao fechada', () => {

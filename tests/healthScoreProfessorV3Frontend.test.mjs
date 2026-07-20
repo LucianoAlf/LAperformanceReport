@@ -6,6 +6,8 @@ const migrationPath =
   'supabase/migrations/20260718210000_health_score_v3_config_ui_gate7.sql';
 const simulationGuardMigrationPath =
   'supabase/migrations/20260718211500_health_score_v3_config_simulation_guard_gate7.sql';
+const segmentedConfigMigrationPath =
+  'supabase/migrations/20260719204000_health_score_v3_config_segmentada_rpc.sql';
 const modalMigrationPath =
   'supabase/migrations/20260718223000_health_score_v3_modal_gate8.sql';
 const modalObservationMigrationPath =
@@ -86,6 +88,30 @@ test('ativacao exige simulacao persistida da mesma revisao do rascunho', () => {
   assert.match(sql, /simulacao atual obrigatoria antes da ativacao/i);
   assert.match(sql, /revoke all on table public\.health_score_professor_v3_config_simulacoes/i);
   assert.doesNotMatch(sql, /grant (insert|update|delete)[\s\S]*health_score_professor_v3_config_simulacoes/i);
+});
+
+test('Task 6 evolui o contrato RPC sem expor tabelas segmentadas ao browser', () => {
+  assert.equal(
+    fs.existsSync(segmentedConfigMigrationPath),
+    true,
+    `${segmentedConfigMigrationPath} deve existir`,
+  );
+  const sql = read(segmentedConfigMigrationPath);
+
+  assert.match(sql, /'metas_segmentadas'/i);
+  assert.match(sql, /'pendencias'/i);
+  assert.match(
+    sql,
+    /salvar_health_score_professor_v3_config_rascunho\s*\([\s\S]*p_metas_segmentadas\s+jsonb/i,
+  );
+  assert.match(sql, /segmentada_unidade_curso_modalidade/i);
+  assert.match(sql, /security\s+definer/gi);
+  assert.match(sql, /set\s+search_path\s*=\s*public\s*,\s*pg_temp/gi);
+  assert.match(sql, /fn_health_score_professor_v3_ator_gerenciador\s*\(\s*\)/i);
+  assert.doesNotMatch(
+    sql,
+    /grant\s+(?:all|select|insert|update|delete)[\s\S]*on\s+table\s+public\.health_score_professor_v3_config_metas_curso_modalidade/i,
+  );
 });
 
 test('tipos V3 separam peso meta valor real e nota nos seis pilares', () => {
