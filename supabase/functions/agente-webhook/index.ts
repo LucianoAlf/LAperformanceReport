@@ -22,6 +22,11 @@ const DEFAULT_DEBOUNCE_MS = 3000
 const DEFAULT_MAX_PER_MINUTE = 20
 const MAX_TOOL_ITERATIONS = 5
 
+// Tools cuja execução JÁ é a resposta final ao lead (mandam mensagem direto pelo
+// WhatsApp) — depois delas não há nada a narrar, então o loop de tool-calling
+// deve parar em vez de perguntar de novo à IA (evita chamada e mensagem extras).
+const TOOLS_TERMINAIS = ['send_buttons', 'send_list']
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -106,7 +111,9 @@ Deno.serve(async (req) => {
       // Não adicionar mensagens vazias (ex: debounce_trigger)
       if (novaMensagem.text || novaMensagem.media_url) acumuladas.push(novaMensagem)
 
-      if (filaExistente.processando) {
+      // debounce_trigger é a própria chamada autorizada pelo cron (que já marcou
+      // processando=true ao reivindicar a fila) — não é um concorrente, deve seguir.
+      if (filaExistente.processando && tipo_mensagem !== 'debounce_trigger') {
         await supabase.from('agente_fila_mensagens').update({ mensagens_acumuladas: acumuladas }).eq('id', filaExistente.id)
         return json({ status: 'queued' })
       }
@@ -337,6 +344,10 @@ Deno.serve(async (req) => {
           }
           toolMessages.push({ role: 'tool', tool_call_id: tc.id, content: resultado.content })
         }
+
+        // Alguma tool terminal rodou (ex: send_buttons) — a resposta já foi
+        // enviada, não há necessidade de perguntar à IA de novo.
+        if (lastResponse.tool_calls.some(tc => TOOLS_TERMINAIS.includes(tc.name))) break
       }
     }
 

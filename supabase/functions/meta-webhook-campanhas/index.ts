@@ -252,28 +252,28 @@ async function processarMensagem(supabase: any, phoneNumberId: string, msg: any,
     }
 
     // 7d. Rotear pro agente ativo da caixa atual
-    if (agenteCaixa) {
-      if (agenteCaixa.modo_teste && agenteCaixa.telefone_teste !== telefone) {
-        // Modo teste ativo, número errado — pular
+    // Agente em modo_teste e número não é o de teste = agente indisponível pra
+    // esse lead (equivale a não ter agente na caixa) — cai no autoreply, se houver.
+    const agenteDisponivel = agenteCaixa && (!agenteCaixa.modo_teste || agenteCaixa.telefone_teste === telefone)
+
+    if (agenteDisponivel) {
+      // Reabrir conversa já existente com esse agente, ou criar
+      const { data: convDoAgente } = await supabase.from('agente_conversas')
+        .select('id').eq('agente_id', agenteCaixa.id).eq('telefone', telefone).maybeSingle()
+
+      if (convDoAgente) {
+        await supabase.from('agente_conversas').update({
+          bot_ativo: true, unidade_id: unidadeId, ultima_mensagem_em: new Date().toISOString(),
+        }).eq('id', convDoAgente.id)
       } else {
-        // Reabrir conversa já existente com esse agente, ou criar
-        const { data: convDoAgente } = await supabase.from('agente_conversas')
-          .select('id').eq('agente_id', agenteCaixa.id).eq('telefone', telefone).maybeSingle()
-
-        if (convDoAgente) {
-          await supabase.from('agente_conversas').update({
-            bot_ativo: true, unidade_id: unidadeId, ultima_mensagem_em: new Date().toISOString(),
-          }).eq('id', convDoAgente.id)
-        } else {
-          await supabase.from('agente_conversas').insert({
-            agente_id: agenteCaixa.id, unidade_id: unidadeId, telefone,
-            bot_ativo: true, total_mensagens: 0,
-            ultima_mensagem_em: new Date().toISOString(),
-          })
-        }
-
-        agenteParaInvocar = agenteCaixa.id
+        await supabase.from('agente_conversas').insert({
+          agente_id: agenteCaixa.id, unidade_id: unidadeId, telefone,
+          bot_ativo: true, total_mensagens: 0,
+          ultima_mensagem_em: new Date().toISOString(),
+        })
       }
+
+      agenteParaInvocar = agenteCaixa.id
     } else if (numero.auto_reply_ativo && numero.auto_reply_message) {
       // Caixa de disparo sem agente — autoreply reorientando para os canais de atendimento.
       // Responde a QUALQUER um que escreve (sem trava de campanha).
