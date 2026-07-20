@@ -92,7 +92,10 @@ begin
             'evento:' || ae.id::text
           )
       end as turma_chave,
-      not coalesce(c.is_projeto_banda, false) as elegivel_media,
+      (
+        lower(btrim(ae.tipo::text)) in ('individual', 'turma')
+        and not coalesce(c.is_projeto_banda, false)
+      ) as elegivel_media,
       'evento'::text as fonte,
       d.curso_id is not null as curso_resolvido,
       coalesce(
@@ -160,7 +163,10 @@ begin
             'evento:' || ae.id::text
           )
       end as turma_chave,
-      not coalesce(c.is_projeto_banda, false) as elegivel_media,
+      (
+        lower(btrim(ae.tipo::text)) in ('individual', 'turma')
+        and not coalesce(c.is_projeto_banda, false)
+      ) as elegivel_media,
       'evento'::text as fonte,
       d.curso_id is not null as curso_resolvido,
       coalesce(
@@ -257,7 +263,12 @@ begin
             j.id::text
           )
       end as turma_chave,
-      not coalesce(c.is_projeto_banda, false) as elegivel_media,
+      (
+        lower(
+          btrim(j.payload_snapshot #>> '{disciplina,tipo}')
+        ) in ('individual', 'turma')
+        and not coalesce(c.is_projeto_banda, false)
+      ) as elegivel_media,
       'jornada'::text as fonte,
       j.curso_id is not null as curso_resolvido,
       coalesce(

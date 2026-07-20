@@ -1,0 +1,73 @@
+{
+  "data": "2026-07-20",
+  "modo": "postgresql_remoto_transacao_revertida",
+  "migration": "20260719202000_professores_carteira_segmentos_canonicos.sql",
+  "rollback_confirmado": true,
+  "hashes": {
+    "agregado_antes": "3145ca7e057d1cebd9971d13f76d4171",
+    "agregado_dentro_da_transacao": "9de3e40f3f0c4968d0c8929a9bf7ffff",
+    "agregado_apos_rollback": "3145ca7e057d1cebd9971d13f76d4171",
+    "detalhe_existia_antes": false,
+    "detalhe_existia_dentro_da_transacao": true,
+    "detalhe_existe_apos_rollback": false
+  },
+  "equivalencia": {
+    "colunas": [
+      "carteira_alunos",
+      "media_alunos_turma",
+      "total_turmas",
+      "alunos_via_turmas",
+      "turmas_elegiveis_media",
+      "fonte_carteira"
+    ],
+    "diferencas_totais": 0,
+    "recortes": [
+      { "recorte": "2026-06-barra", "antes": 19, "depois": 19, "diferencas": 0 },
+      { "recorte": "2026-06-campo-grande", "antes": 31, "depois": 31, "diferencas": 0 },
+      { "recorte": "2026-06-consolidado", "antes": 75, "depois": 75, "diferencas": 0 },
+      { "recorte": "2026-06-recreio", "antes": 25, "depois": 25, "diferencas": 0 },
+      { "recorte": "2026-07-barra", "antes": 19, "depois": 19, "diferencas": 0 },
+      { "recorte": "2026-07-campo-grande", "antes": 32, "depois": 32, "diferencas": 0 },
+      { "recorte": "2026-07-consolidado", "antes": 75, "depois": 75, "diferencas": 0 },
+      { "recorte": "2026-07-recreio", "antes": 24, "depois": 24, "diferencas": 0 }
+    ],
+    "professores_alvo": [
+      "Ana Beatriz Paz de Almeida",
+      "Daiana Pacifico da Silva dos Anjos",
+      "Gabriel Antony Alves de Araujo",
+      "Isaque Mendes da Silva",
+      "Peterson Biancamano",
+      "Ramon Pina Morais"
+    ],
+    "cruzamentos_professor_recorte": 48,
+    "diferencas_professores_alvo": 0
+  },
+  "performance_ms": [
+    {
+      "escopo": "barra",
+      "antes": 1804.722,
+      "depois": 1825.221,
+      "razao": 1.0114
+    },
+    {
+      "escopo": "consolidado",
+      "antes": 7521.321,
+      "depois": 7592.377,
+      "razao": 1.0094
+    }
+  ],
+  "semantica": {
+    "modalidades_julho": {
+      "turma": 1195,
+      "individual": 15
+    },
+    "ensaio_elegivel_media": 0,
+    "grupos_segmentacao_incompleta_junho": 32,
+    "rateio_proporcional": false
+  },
+  "observacoes": [
+    "A validacao criou as funcoes dentro de BEGIN e executou ROLLBACK ao final.",
+    "A chave historica de turma foi preservada; modalidade oficial e um campo separado.",
+    "tests/professoresConvergenciaCanonica.test.mjs era arquivo untracked preexistente e nao foi alterado nem incluido."
+  ]
+}
