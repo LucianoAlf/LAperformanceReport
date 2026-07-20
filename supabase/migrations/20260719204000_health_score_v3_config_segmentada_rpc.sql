@@ -904,6 +904,9 @@ declare
   v_simulacao_id uuid;
   v_simulada_em timestamptz;
 begin
+  perform pg_advisory_xact_lock(
+    hashtextextended('health_score_professor_v3_config', 0)
+  );
   v_ator := public.fn_health_score_professor_v3_ator_gerenciador();
 
   if p_competencia is null then
@@ -913,7 +916,8 @@ begin
 
   select c.* into v_config
   from public.health_score_professor_v3_config_versoes c
-  where c.id = p_config_id;
+  where c.id = p_config_id
+  for update;
 
   if not found or v_config.status <> 'rascunho' then
     raise exception
@@ -1000,7 +1004,10 @@ begin
       cm.metrica,
       cm.peso,
       case
-        when cm.metrica in ('media_turma', 'numero_alunos') then se.nota
+        when cm.metrica in ('media_turma', 'numero_alunos')
+          and cm.parametros->>'normalizacao'
+            = 'segmentada_unidade_curso_modalidade'
+          then se.nota
         when sm.valor_bruto is null
           or cm.meta is null
           or cm.meta <= 0

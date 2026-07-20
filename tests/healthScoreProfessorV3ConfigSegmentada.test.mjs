@@ -286,6 +286,70 @@ test(
 );
 
 test(
+  'simulacao preserva metas globais legadas nos dois pilares segmentaveis',
+  { skip: !existsSync(migrationPath) },
+  () => {
+    const block = functionBlock(
+      readMigration(),
+      'simular_health_score_professor_v3_config',
+    );
+    const metricasStart = block.search(/\),\s*metricas\s+as\s*\(/i);
+    const scoresStart = block.slice(metricasStart + 1).search(/\),\s*scores\s+as\s*\(/i);
+    const metricasBlock = block.slice(
+      metricasStart,
+      metricasStart + 1 + scoresStart,
+    );
+
+    assert.ok(metricasStart >= 0 && scoresStart >= 0, 'CTE metricas deve existir');
+    assert.match(
+      metricasBlock,
+      /when\s+cm\.metrica\s+in\s*\(\s*'media_turma'\s*,\s*'numero_alunos'\s*\)[\s\S]*cm\.parametros\s*->>\s*'normalizacao'\s*=\s*'segmentada_unidade_curso_modalidade'\s+then\s+se\.nota/i,
+      'nota segmentada so pode substituir a nota global quando a normalizacao segmentada estiver ativa',
+    );
+    assert.doesNotMatch(
+      metricasBlock,
+      /when\s+cm\.metrica\s+in\s*\(\s*'media_turma'\s*,\s*'numero_alunos'\s*\)\s+then\s+se\.nota/i,
+      'configuracao legada nao pode usar se.nota incondicionalmente',
+    );
+    assert.match(
+      metricasBlock,
+      /sm\.valor_bruto\s*\/\s*cm\.meta\s*\*\s*100/i,
+      'modo legado deve continuar calculando a nota pela meta global',
+    );
+  },
+);
+
+test(
+  'simulacao serializa revisao antes do fingerprint e dos calculos',
+  { skip: !existsSync(migrationPath) },
+  () => {
+    const block = functionBlock(
+      readMigration(),
+      'simular_health_score_professor_v3_config',
+    );
+    const lockIndex = block.search(
+      /pg_advisory_xact_lock\s*\(\s*hashtextextended\s*\(\s*'health_score_professor_v3_config'\s*,\s*0\s*\)\s*\)/i,
+    );
+    const configLockIndex = block.search(
+      /select\s+c\.\*\s+into\s+v_config[\s\S]*where\s+c\.id\s*=\s*p_config_id\s+for\s+update/i,
+    );
+    const fingerprintIndex = block.search(
+      /v_fingerprint\s*:=\s*public\.fn_health_score_professor_v3_config_fingerprint/i,
+    );
+    const calculationIndex = block.search(/with\s+detalhe\s+as\s+materialized/i);
+
+    assert.ok(lockIndex >= 0, 'simulacao deve adquirir o advisory lock do ciclo');
+    assert.ok(configLockIndex >= 0, 'simulacao deve bloquear a linha do rascunho');
+    assert.ok(
+      lockIndex < configLockIndex
+        && configLockIndex < fingerprintIndex
+        && fingerprintIndex < calculationIndex,
+      'locks devem anteceder fingerprint e calculos da simulacao',
+    );
+  },
+);
+
+test(
   'ativacao usa simulacao atual e bloqueia matriz incompleta ou incoerente',
   { skip: !existsSync(migrationPath) },
   () => {
