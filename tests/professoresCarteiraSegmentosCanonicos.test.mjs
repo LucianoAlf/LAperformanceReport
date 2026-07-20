@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
@@ -37,13 +38,21 @@ test('Task 4 cria a migration da carteira detalhada canonica', () => {
 
 test('gate vivo registra equivalencia, performance e rollback', () => {
   assert.equal(validationExists, true, `validacao ausente: ${validationPath}`);
+  assert.equal(
+    validation.migration_sha256,
+    createHash('sha256').update(sql).digest('hex'),
+    'artefato vivo deve corresponder aos bytes atuais da migration',
+  );
   assert.equal(validation.rollback_confirmado, true);
   assert.equal(validation.equivalencia.diferencas_totais, 0);
   assert.equal(validation.equivalencia.cruzamentos_professor_recorte, 48);
   assert.equal(validation.equivalencia.diferencas_professores_alvo, 0);
   assert.equal(validation.equivalencia.recortes.length, 8);
   assert.equal(validation.semantica.ensaio_elegivel_media, 0);
+  assert.equal(validation.semantica.jornada_usa_data_civil_sao_paulo, true);
   assert.equal(validation.semantica.rateio_proporcional, false);
+  assert.equal(validation.metodo.performance.repeticoes_por_escopo, 1);
+  assert.equal(validation.metodo.performance.explain_analyze_persistido, false);
   assert.equal(validation.hashes.detalhe_existe_apos_rollback, false);
   for (const performance of validation.performance_ms) {
     assert.ok(
@@ -94,6 +103,22 @@ test(
     assert.match(detail, /language\s+plpgsql/i);
     assert.match(detail, /\bstable\b/i);
     assert.match(detail, /set\s+search_path\s*=\s*public/i);
+  },
+);
+
+test(
+  'jornada atual usa a data civil de Sao Paulo na virada mensal',
+  { skip: !migrationExists },
+  () => {
+    const detail = extractFunction(
+      'get_carteira_professor_periodo_detalhe_canonico_v1',
+    );
+
+    assert.match(
+      detail,
+      /where\s+\(\s*now\(\)\s+at\s+time\s+zone\s+'America\/Sao_Paulo'\s*\)::date\s+between\s+v_inicio\s+and\s+v_fim/i,
+    );
+    assert.doesNotMatch(detail, /where\s+current_date\s+between\s+v_inicio\s+and\s+v_fim/i);
   },
 );
 

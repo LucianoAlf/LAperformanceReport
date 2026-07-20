@@ -523,6 +523,7 @@ E verificar explicitamente:
 
 - [ ] **Step 6: Testes, performance e commit**
 
+    $env:TASK4_REQUIRE_POSTGRES_FIXTURE = '1'
     node --test tests/professoresCarteiraSegmentosCanonicos.test.mjs
     node --test tests/professoresKpisCanonicos.test.mjs
     node --test tests/healthScoreProfessorV3Metricas.test.mjs
@@ -1146,6 +1147,7 @@ Gate:
 
 - [ ] **Step 4: Rodar suite completa relacionada**
 
+    $env:TASK4_REQUIRE_POSTGRES_FIXTURE = '1'
     node --test tests/healthScoreProfessorV3*.test.mjs
     node --test tests/professorCursoModalidadeCanonico.test.mjs
     node --test tests/professoresCarteiraSegmentosCanonicos.test.mjs
@@ -1254,6 +1256,7 @@ MAPA-SISTEMA.md:
 - [ ] **Step 8: Verificacao final**
 
     git diff --check
+    $env:TASK4_REQUIRE_POSTGRES_FIXTURE = '1'
     node --test tests/healthScoreProfessorV3*.test.mjs
     node --test tests/professorCursoModalidadeCanonico.test.mjs
     node --test tests/professoresCarteiraSegmentosCanonicos.test.mjs

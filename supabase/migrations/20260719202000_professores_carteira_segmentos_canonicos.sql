@@ -289,7 +289,8 @@ begin
       on a.id = j.aluno_id
     left join public.cursos c
       on c.id = j.curso_id
-    where current_date between v_inicio and v_fim
+    where (now() at time zone 'America/Sao_Paulo')::date
+      between v_inicio and v_fim
       and j.status_matricula = 'ativa'
       and j.professor_id is not null
       and (p_unidade_id is null or j.unidade_id = p_unidade_id)
