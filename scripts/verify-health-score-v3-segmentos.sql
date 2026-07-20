@@ -175,3 +175,339 @@ where m.config_id = '0e6a01ab-073a-46f0-9148-5412e795d9da'::uuid
   )
 order by u.nome, c.nome, m.modalidade;
 
+-- 6. ACLs de tabela. O resultado esperado e zero DML para anon/authenticated;
+-- service_role le as bases e escreve somente o log privado de simulacao.
+select
+  table_name,
+  grantee,
+  string_agg(privilege_type, ', ' order by privilege_type) as privilegios
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and table_name in (
+    'health_score_professor_v3_config_metas_curso_modalidade',
+    'professor_unidade_curso_modalidade',
+    'health_score_professor_v3_snapshot_metrica_segmentos',
+    'health_score_professor_v3_snapshot_metrica_diagnosticos',
+    'health_score_professor_v3_config_simulacoes'
+  )
+  and grantee in ('anon', 'authenticated', 'service_role')
+group by table_name, grantee
+order by table_name, grantee;
+
+-- 7. EXECUTE, SECURITY DEFINER e search_path das RPCs de fronteira.
+select
+  p.proname,
+  pg_get_function_identity_arguments(p.oid) as assinatura,
+  p.prosecdef as security_definer,
+  p.proconfig,
+  has_function_privilege(
+    'anon',
+    p.oid,
+    'EXECUTE'
+  ) as anon_executa,
+  has_function_privilege(
+    'authenticated',
+    p.oid,
+    'EXECUTE'
+  ) as authenticated_executa,
+  has_function_privilege(
+    'service_role',
+    p.oid,
+    'EXECUTE'
+  ) as service_role_executa
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname in (
+    'get_health_score_professor_v3_metricas_segmentadas_v1',
+    'get_health_score_professor_v3_metricas_segmentadas_agregadas_v1',
+    'materializar_health_score_professor_v3_segmentos_v1',
+    'criar_health_score_professor_v3_config_rascunho',
+    'salvar_health_score_professor_v3_config',
+    'simular_health_score_professor_v3_config',
+    'ativar_health_score_professor_v3_config'
+  )
+order by p.proname, assinatura;
+
+-- O guard de escrita exige a permissao funcional professores.editar para o
+-- usuario autenticado. service_role e postgres sao os unicos bypasses.
+select pg_get_functiondef(p.oid) as guard_professores_editar
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname = 'fn_health_score_professor_v3_ator_gerenciador';
+
+-- 8. Triggers de imutabilidade instalados.
+select
+  c.relname as tabela,
+  t.tgname as trigger,
+  pg_get_triggerdef(t.oid) as definicao
+from pg_trigger t
+join pg_class c on c.oid = t.tgrelid
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and not t.tgisinternal
+  and t.tgname in (
+    'trg_health_score_professor_v3_config_meta_segmentada_imutavel',
+    'trg_health_score_professor_v3_snapshot_segmento_imutavel',
+    'trg_health_score_v3_snapshot_segmento_config_consistente'
+  )
+order by c.relname, t.tgname;
+
+-- 9. Prova transacional. Cria uma fixture isolada, demonstra os tres
+-- bloqueios e desfaz absolutamente tudo no final.
+begin;
+
+do $audit$
+declare
+  v_config_ativa uuid := '9af37ebb-761f-4234-bb74-9136d8399e3f'::uuid;
+  v_config_rascunho uuid := '0e6a01ab-073a-46f0-9148-5412e795d9da'::uuid;
+  v_unidade_id uuid;
+  v_curso_id integer;
+  v_professor_id integer;
+  v_meta_id uuid;
+  v_snapshot_id uuid;
+  v_snapshot_metrica_id uuid;
+  v_bloqueou_config boolean := false;
+  v_bloqueou_meta_referenciada boolean := false;
+  v_bloqueou_segmento boolean := false;
+begin
+  select u.id into strict v_unidade_id
+  from public.unidades u
+  where upper(u.nome) = 'BARRA'
+  limit 1;
+
+  select c.id into strict v_curso_id
+  from public.cursos c
+  where coalesce(c.is_projeto_banda, false) = false
+  order by c.id
+  limit 1;
+
+  select p.id into strict v_professor_id
+  from public.professores p
+  order by p.id
+  limit 1;
+
+  begin
+    insert into public.health_score_professor_v3_config_metas_curso_modalidade (
+      config_id,
+      unidade_id,
+      curso_id,
+      modalidade,
+      estado,
+      capacidade_maxima,
+      meta_media_turma,
+      meta_carteira_curso
+    ) values (
+      v_config_ativa,
+      v_unidade_id,
+      v_curso_id,
+      'turma',
+      'configurada',
+      2,
+      1.5,
+      10
+    );
+  exception
+    when others then
+      v_bloqueou_config := sqlerrm like '%HEALTH_SCORE_V3_CONFIG_IMUTAVEL%';
+  end;
+
+  if not v_bloqueou_config then
+    raise exception 'AUDITORIA_FALHOU: configuracao ativa aceitou meta segmentada';
+  end if;
+
+  insert into public.health_score_professor_v3_config_metas_curso_modalidade (
+    config_id,
+    unidade_id,
+    curso_id,
+    modalidade,
+    estado,
+    capacidade_maxima,
+    meta_media_turma,
+    meta_carteira_curso
+  ) values (
+    v_config_rascunho,
+    v_unidade_id,
+    v_curso_id,
+    'turma',
+    'configurada',
+    2,
+    1.5,
+    10
+  )
+  returning id into v_meta_id;
+
+  insert into public.health_score_professor_v3_snapshots (
+    professor_id,
+    escopo,
+    unidade_id,
+    competencia,
+    trimestre_inicio,
+    revisao,
+    estado,
+    config_id,
+    config_versao,
+    score,
+    cobertura,
+    classificacao,
+    publicavel,
+    publicado,
+    regra_versao,
+    periodicidade,
+    periodo_inicio,
+    periodo_fim,
+    estado_publicacao,
+    score_exibivel,
+    ranking_habilitado
+  ) values (
+    v_professor_id,
+    'unidade',
+    v_unidade_id,
+    date '2099-01-01',
+    date '2098-12-01',
+    999999,
+    'provisorio',
+    v_config_rascunho,
+    3,
+    null,
+    0,
+    'sem_base',
+    false,
+    false,
+    'auditoria-gate-11',
+    'mensal',
+    date '2099-01-01',
+    date '2099-01-31',
+    'sem_base',
+    false,
+    false
+  ) returning id into v_snapshot_id;
+
+  insert into public.health_score_professor_v3_snapshot_metricas (
+    snapshot_id,
+    metrica,
+    estado_base,
+    publicavel,
+    confianca,
+    fonte,
+    regra_versao,
+    peso,
+    peso_disponivel
+  ) values (
+    v_snapshot_id,
+    'media_turma',
+    'sem_base',
+    false,
+    'baixa',
+    'auditoria-gate-11',
+    'auditoria-gate-11',
+    15,
+    false
+  ) returning id into v_snapshot_metrica_id;
+
+  insert into public.health_score_professor_v3_snapshot_metrica_segmentos (
+    snapshot_metrica_id,
+    config_meta_segmento_id,
+    unidade_id,
+    curso_id,
+    modalidade,
+    estado_base,
+    fonte,
+    regra_versao
+  ) values (
+    v_snapshot_metrica_id,
+    v_meta_id,
+    v_unidade_id,
+    v_curso_id,
+    'turma',
+    'sem_base_zero_carteira',
+    'auditoria-gate-11',
+    'auditoria-gate-11'
+  );
+
+  perform set_config('app.health_score_v3_mutacao_controlada', 'on', true);
+  update public.health_score_professor_v3_snapshots
+  set estado = 'fechado', fechado_em = now()
+  where id = v_snapshot_id;
+  perform set_config('app.health_score_v3_mutacao_controlada', 'off', true);
+
+  begin
+    delete from public.health_score_professor_v3_config_metas_curso_modalidade
+    where id = v_meta_id;
+  exception
+    when others then
+      v_bloqueou_meta_referenciada :=
+        sqlerrm like '%HEALTH_SCORE_V3_CONFIG_IMUTAVEL%';
+  end;
+
+  begin
+    update public.health_score_professor_v3_snapshot_metrica_segmentos
+    set pessoas_unicas = 1
+    where snapshot_metrica_id = v_snapshot_metrica_id;
+  exception
+    when others then
+      v_bloqueou_segmento :=
+        sqlerrm like '%HEALTH_SCORE_V3_SNAPSHOT_IMUTAVEL%';
+  end;
+
+  if not v_bloqueou_meta_referenciada or not v_bloqueou_segmento then
+    raise exception 'AUDITORIA_FALHOU: imutabilidade de snapshot/config nao preservada';
+  end if;
+
+  raise notice 'Gate 11: config ativa, meta referenciada e snapshot fechado bloqueados';
+end;
+$audit$;
+
+rollback;
+
+-- 10. Indices das tabelas novas. Todos devem estar validos.
+select
+  t.relname as tabela,
+  ic.relname as indice,
+  i.indisunique as unico,
+  i.indisprimary as primario,
+  i.indisvalid as valido
+from pg_class t
+join pg_namespace n on n.oid = t.relnamespace
+join pg_index i on i.indrelid = t.oid
+join pg_class ic on ic.oid = i.indexrelid
+where n.nspname = 'public'
+  and t.relname in (
+    'health_score_professor_v3_config_metas_curso_modalidade',
+    'professor_unidade_curso_modalidade',
+    'health_score_professor_v3_snapshot_metrica_segmentos',
+    'health_score_professor_v3_snapshot_metrica_diagnosticos',
+    'health_score_professor_v3_config_simulacoes'
+  )
+order by t.relname, ic.relname;
+
+-- 11. Desempenho das leituras segmentadas: unidade e consolidado.
+explain (analyze, buffers, format text)
+select *
+from public.get_health_score_professor_v3_metricas_segmentadas_agregadas_v1(
+  date '2026-07-01',
+  '0e6a01ab-073a-46f0-9148-5412e795d9da'::uuid,
+  '368d47f5-2d88-4475-bc14-ba084a9a348e'::uuid,
+  'mensal'
+);
+
+explain (analyze, buffers, format text)
+select *
+from public.get_health_score_professor_v3_metricas_segmentadas_agregadas_v1(
+  date '2026-07-01',
+  '0e6a01ab-073a-46f0-9148-5412e795d9da'::uuid,
+  null,
+  'mensal'
+);
+
+-- A simulacao grava somente um log privado; o ROLLBACK remove a medicao.
+begin;
+
+explain (analyze, buffers, format text)
+select public.simular_health_score_professor_v3_config(
+  '0e6a01ab-073a-46f0-9148-5412e795d9da'::uuid,
+  date '2026-07-01'
+);
+
+rollback;
