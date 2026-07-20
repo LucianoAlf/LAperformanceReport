@@ -77,7 +77,6 @@
 - [ ] Rodar o baseline:
 
     node --test tests/professoresKpisCanonicos.test.mjs
-    node --test tests/professoresConvergenciaCanonica.test.mjs
     node --test tests/healthScoreProfessorV3Contrato.test.mjs
     node --test tests/healthScoreProfessorV3Metricas.test.mjs
     node --test tests/healthScoreProfessorV3Snapshots.test.mjs
@@ -420,7 +419,12 @@ Expected:
 - Create: supabase/migrations/20260719202000_professores_carteira_segmentos_canonicos.sql
 - Create: tests/professoresCarteiraSegmentosCanonicos.test.mjs
 - Modify: tests/professoresKpisCanonicos.test.mjs
-- Modify: tests/professoresConvergenciaCanonica.test.mjs
+
+Nota de execucao: `tests/professoresConvergenciaCanonica.test.mjs` e um artefato
+local preexistente e nao faz parte do gate versionado. Os invariantes necessarios
+foram incorporados em `tests/professoresCarteiraSegmentosCanonicos.test.mjs`. Se o
+arquivo local existir, ele pode ser executado como cobertura adicional, sem ser
+alterado ou incluido no commit desta tarefa.
 
 - [ ] **Step 1: Capturar equivalencia antes da mudanca**
 
@@ -521,12 +525,11 @@ E verificar explicitamente:
 
     node --test tests/professoresCarteiraSegmentosCanonicos.test.mjs
     node --test tests/professoresKpisCanonicos.test.mjs
-    node --test tests/professoresConvergenciaCanonica.test.mjs
     node --test tests/healthScoreProfessorV3Metricas.test.mjs
 
 Rodar EXPLAIN ANALYZE para uma unidade e consolidado. O novo detalhe nao pode tornar o agregado mais de duas vezes mais lento que o baseline sem aprovacao.
 
-    git add -- supabase/migrations/20260719202000_professores_carteira_segmentos_canonicos.sql tests/professoresCarteiraSegmentosCanonicos.test.mjs tests/professoresKpisCanonicos.test.mjs tests/professoresConvergenciaCanonica.test.mjs
+    git add -- supabase/migrations/20260719202000_professores_carteira_segmentos_canonicos.sql tests/professoresCarteiraSegmentosCanonicos.test.mjs tests/professoresKpisCanonicos.test.mjs
     git commit -m "refactor: compartilhar base canonica dos segmentos"
 
 ---
@@ -1147,7 +1150,6 @@ Gate:
     node --test tests/professorCursoModalidadeCanonico.test.mjs
     node --test tests/professoresCarteiraSegmentosCanonicos.test.mjs
     node --test tests/professoresKpisCanonicos.test.mjs
-    node --test tests/professoresConvergenciaCanonica.test.mjs
     npm run build
 
 - [ ] **Step 5: Commit**
@@ -1256,7 +1258,6 @@ MAPA-SISTEMA.md:
     node --test tests/professorCursoModalidadeCanonico.test.mjs
     node --test tests/professoresCarteiraSegmentosCanonicos.test.mjs
     node --test tests/professoresKpisCanonicos.test.mjs
-    node --test tests/professoresConvergenciaCanonica.test.mjs
     npm run build
 
 - [ ] **Step 9: Commit**
