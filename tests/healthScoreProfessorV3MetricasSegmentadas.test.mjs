@@ -5,12 +5,23 @@ import test from 'node:test';
 
 const migrationPath =
   'supabase/migrations/20260719203000_health_score_v3_metricas_segmentadas.sql';
+const hardeningMigrationPath =
+  'supabase/migrations/20260719203100_health_score_v3_metricas_segmentadas_hardening.sql';
 const baselineMetricsPath =
   'supabase/migrations/20260719123500_health_score_v3_metricas_periodo_otimizada.sql';
 
 function migration() {
   assert.equal(existsSync(migrationPath), true, `${migrationPath} deve existir`);
   return readFileSync(migrationPath, 'utf8');
+}
+
+function hardeningMigration() {
+  assert.equal(
+    existsSync(hardeningMigrationPath),
+    true,
+    `${hardeningMigrationPath} deve existir`,
+  );
+  return readFileSync(hardeningMigrationPath, 'utf8');
 }
 
 function functionBlock(sql, name) {
@@ -135,6 +146,95 @@ test('ciclo preserva componentes mensais antes de somar e usa arredondamento can
   assert.match(detail, /ocupacoes_unicas::numeric[\s\S]*?turmas_elegiveis::numeric[\s\S]*?,\s*2\s*\)/i);
   assert.match(aggregate, /a\.ocupacoes_unicas::numeric[\s\S]*?a\.turmas_elegiveis[\s\S]*?,\s*2\s*\)/i);
   assert.doesNotMatch(aggregate, /a\.ocupacoes_unicas::numeric[\s\S]{0,180}?,\s*4\s*\)/i);
+});
+
+test('vigencia da atribuicao e resolvida em cada componente mensal do ciclo', () => {
+  const detail = functionBlock(
+    migration(),
+    'get_health_score_professor_v3_metricas_segmentadas_v1',
+  );
+
+  assert.match(detail, /atribuicoes_mensais\s+as\s*\(/i);
+  assert.match(
+    detail,
+    /m\.competencia_mes[\s\S]*?a\.vigencia_inicio\s*<=\s*m\.mes_fim[\s\S]*?coalesce\s*\(\s*a\.vigencia_fim\s*,\s*m\.mes_fim\s*\)\s*>=\s*m\.competencia_mes/i,
+  );
+  assert.match(
+    detail,
+    /order\s+by[\s\S]*?m\.competencia_mes[\s\S]*?a\.vigencia_inicio\s+desc[\s\S]*?a\.confianca\s+in/i,
+  );
+  assert.match(
+    detail,
+    /dados_resolvidos_mensais[\s\S]*?competencia_mes[\s\S]*?atribuicoes_mensais/i,
+  );
+  assert.doesNotMatch(
+    detail,
+    /atribuicoes\s+as\s*\([\s\S]*?cross\s+join\s+periodo\s+p/i,
+  );
+});
+
+test('materializador serializa recortes global e unitario pela mesma chave', () => {
+  const materializer = functionBlock(
+    migration(),
+    'materializar_health_score_professor_v3_periodo_impl',
+  );
+  const lock = materializer.match(
+    /pg_advisory_xact_lock\s*\([\s\S]*?hashtextextended\s*\([\s\S]*?\)\s*\);/i,
+  )?.[0];
+
+  assert.ok(lock, 'materializador deve adquirir advisory lock transacional');
+  assert.match(lock, /date_trunc\s*\(\s*'month'\s*,\s*p_competencia/i);
+  assert.match(lock, /p_periodicidade/i);
+  assert.doesNotMatch(lock, /p_unidade_id|v_scope\.unidade_id|coalesce/i);
+});
+
+test('203100 endurece schema intermediario e fresh com tipos, checks, FK e indices', () => {
+  const sql = hardeningMigration();
+
+  assert.match(
+    sql,
+    /alter\s+column\s+pessoas_unicas_total\s+type\s+numeric\s+using\s+pessoas_unicas_total::numeric/i,
+  );
+  assert.match(
+    sql,
+    /health_score_professor_v3_snapshot_metrica_diagnosticos[\s\S]*?alter\s+column\s+pessoas_unicas_total\s+type\s+numeric\s+using\s+pessoas_unicas_total::numeric/i,
+  );
+  assert.match(
+    sql,
+    /check\s*\(\s*not\s+coalesce\s*\(\s*atribuicao_pontuavel\s*,\s*false\s*\)\s+or\s+coalesce\s*\(\s*atribuicao_formal\s*,\s*false\s*\)\s*\)/i,
+  );
+  assert.match(
+    sql,
+    /check\s*\(\s*not\s+coalesce\s*\(\s*atribuicao_formal\s*,\s*false\s*\)\s+or\s+atribuicao_id\s+is\s+not\s+null\s*\)/i,
+  );
+  assert.match(
+    sql,
+    /create\s+unique\s+index[\s\S]*?professor_unidade_curso_modalidade\s*\(\s*id\s*,\s*unidade_id\s*,\s*curso_id\s*,\s*modalidade\s*\)/i,
+  );
+  assert.match(
+    sql,
+    /foreign\s+key\s*\(\s*atribuicao_id\s*,\s*unidade_id\s*,\s*curso_id\s*,\s*modalidade\s*\)[\s\S]*?professor_unidade_curso_modalidade\s*\(\s*id\s*,\s*unidade_id\s*,\s*curso_id\s*,\s*modalidade\s*\)/i,
+  );
+  assert.match(sql, /not\s+valid[\s\S]*?validate\s+constraint/i);
+  assert.match(
+    sql,
+    /create\s+index[\s\S]*?health_score_professor_v3_snapshots\s*\([\s\S]*?competencia[\s\S]*?periodicidade[\s\S]*?revisao\s+desc/i,
+  );
+});
+
+test('203100 preserva ACL privada e metadados de seguranca dos objetos internos', () => {
+  const sql = hardeningMigration();
+
+  for (const role of [
+    'anon',
+    'authenticated',
+    'lia_acesso_restrito',
+    'mila_acesso_restrito',
+  ]) {
+    assert.match(sql, new RegExp(`(?:from|role_name\\s*=)[\\s\\S]*?${role}`, 'i'));
+  }
+  assert.match(sql, /security_invoker\s*=\s*true/i);
+  assert.match(sql, /set\s+search_path\s*=\s*public\s*,\s*pg_temp/i);
 });
 
 test('media turma preserva bruto e calcula nota pela soma de ocupacoes sobre meta de assentos', () => {
@@ -458,10 +558,16 @@ test(
     );
 
     const sql = migration();
+    const hardeningSql = hardeningMigration();
     const structuredSchema = between(
       sql,
       '-- Evidencia estruturada aditiva dos segmentos.',
       '-- Fim da evidencia estruturada aditiva.',
+    );
+    const hardeningSchema = between(
+      hardeningSql,
+      '-- Hardening de schema da evidencia segmentada.',
+      '-- Fim do hardening de schema da evidencia segmentada.',
     );
     const detailDefinition = functionDefinition(
       sql,
@@ -518,6 +624,7 @@ test(
         \set ON_ERROR_STOP on
 
         create extension if not exists pgcrypto;
+        create extension if not exists dblink;
         create role anon;
         create role authenticated;
         create role service_role;
@@ -808,6 +915,94 @@ test(
 
         ${materializerDefinition}
 
+        create function public.materializar_health_score_professor_v3_periodo(
+          p_competencia date,
+          p_periodicidade text default 'mensal',
+          p_unidade_id uuid default null,
+          p_professor_id integer default null
+        ) returns jsonb
+        language sql
+        security definer
+        set search_path = public, pg_temp
+        as $$
+          select public.materializar_health_score_professor_v3_periodo_impl(
+            p_competencia,
+            p_periodicidade,
+            p_unidade_id,
+            p_professor_id
+          )
+        $$;
+
+        create view public.vw_health_score_professor_v3_parcial_observado
+        with (security_invoker = false)
+        as select 1::integer as fixture;
+
+        ${hardeningSql}
+
+        do $security_fixture$
+        declare
+          v_search_path text[];
+          v_reloptions text[];
+        begin
+          if has_table_privilege(
+            'anon',
+            'public.health_score_professor_v3_snapshot_metrica_segmentos',
+            'select'
+          ) or has_table_privilege(
+            'authenticated',
+            'public.health_score_professor_v3_snapshot_metrica_diagnosticos',
+            'select'
+          ) or has_table_privilege(
+            'lia_acesso_restrito',
+            'public.health_score_professor_v3_snapshot_metrica_segmentos',
+            'select'
+          ) or has_table_privilege(
+            'mila_acesso_restrito',
+            'public.health_score_professor_v3_snapshot_metrica_diagnosticos',
+            'select'
+          ) then
+            raise exception 'ACL de tabelas segmentadas permaneceu aberta';
+          end if;
+
+          if not has_table_privilege(
+            'service_role',
+            'public.health_score_professor_v3_snapshot_metrica_segmentos',
+            'select'
+          ) or has_function_privilege(
+            'anon',
+            'public.get_health_score_professor_v3_metricas_segmentadas_v1(date,uuid,uuid,text)',
+            'execute'
+          ) or not has_function_privilege(
+            'service_role',
+            'public.get_health_score_professor_v3_metricas_segmentadas_v1(date,uuid,uuid,text)',
+            'execute'
+          ) then
+            raise exception 'ACL de RPCs segmentadas divergente';
+          end if;
+
+          select c.reloptions into v_reloptions
+          from pg_class c
+          join pg_namespace n on n.oid = c.relnamespace
+          where n.nspname = 'public'
+            and c.relname = 'vw_health_score_professor_v3_parcial_observado';
+          if not coalesce(v_reloptions @> array['security_invoker=true'], false) then
+            raise exception 'view sem security_invoker=true: %', v_reloptions;
+          end if;
+
+          select p.proconfig into v_search_path
+          from pg_proc p
+          join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public'
+            and p.proname = 'get_health_score_professor_v3_metricas_segmentadas_v1';
+          if not coalesce(
+            v_search_path @> array['search_path=public, pg_temp'],
+            false
+          ) then
+            raise exception 'RPC detalhada sem search_path fixo: %', v_search_path;
+          end if;
+        end;
+        $security_fixture$;
+
         insert into public.unidades (id) values
           ('11111111-1111-1111-1111-111111111111'),
           ('22222222-2222-2222-2222-222222222222');
@@ -816,13 +1011,17 @@ test(
           (20, 'Piano'),
           (30, 'Bateria'),
           (40, 'Violao'),
-          (50, 'Canto');
+          (50, 'Canto'),
+          (60, 'Temporal revisada'),
+          (70, 'Temporal julho');
         insert into public.professores (id, nome) values
           (101, 'Dois cursos'),
           (202, 'Zero carteira'),
           (303, 'Regra ausente'),
           (404, 'Nao ofertada'),
-          (505, 'Nao resolvido');
+          (505, 'Nao resolvido'),
+          (606, 'Troca de atribuicao'),
+          (707, 'Atribuicao somente julho');
 
         insert into public.health_score_professor_v3_config_versoes (
           id, versao, status, vigencia_inicio
@@ -846,6 +1045,8 @@ test(
           ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 20, 'individual', 'configurada', 1, 1, 2),
           ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 30, 'turma', 'configurada', 3, 2, 2),
           ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 50, 'turma', 'nao_ofertada', null, null, null),
+          ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 60, 'turma', 'configurada', 4, 2, 2),
+          ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 70, 'turma', 'configurada', 4, 2, 2),
           ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '22222222-2222-2222-2222-222222222222', 10, 'turma', 'configurada', 1, 1, 2);
 
         insert into public.professor_unidade_curso_modalidade (
@@ -857,7 +1058,25 @@ test(
           ('00000000-0000-0000-0000-000000000003', 101, '22222222-2222-2222-2222-222222222222', 10, 'turma', 'ativo', 'fixture', 'alta', date '2026-01-01'),
           ('00000000-0000-0000-0000-000000000004', 202, '11111111-1111-1111-1111-111111111111', 30, 'turma', 'ativo', 'fixture', 'alta', date '2026-01-01'),
           ('00000000-0000-0000-0000-000000000005', 303, '11111111-1111-1111-1111-111111111111', 40, 'turma', 'ativo', 'fixture', 'alta', date '2026-01-01'),
-          ('00000000-0000-0000-0000-000000000006', 404, '11111111-1111-1111-1111-111111111111', 50, 'turma', 'ativo', 'fixture', 'alta', date '2026-01-01');
+          ('00000000-0000-0000-0000-000000000006', 404, '11111111-1111-1111-1111-111111111111', 50, 'turma', 'ativo', 'fixture', 'alta', date '2026-01-01'),
+          ('00000000-0000-0000-0000-000000000008', 606, '11111111-1111-1111-1111-111111111111', 60, 'turma', 'ativo', 'fixture', 'media', date '2026-07-01'),
+          ('00000000-0000-0000-0000-000000000009', 707, '11111111-1111-1111-1111-111111111111', 70, 'turma', 'ativo', 'fixture', 'alta', date '2026-07-01');
+
+        insert into public.professor_unidade_curso_modalidade (
+          id, professor_id, unidade_id, curso_id, modalidade, status,
+          fonte, confianca, vigencia_inicio, vigencia_fim
+        ) values (
+          '00000000-0000-0000-0000-000000000007',
+          606,
+          '11111111-1111-1111-1111-111111111111',
+          60,
+          'turma',
+          'encerrado',
+          'fixture',
+          'alta',
+          date '2026-01-01',
+          date '2026-06-30'
+        );
 
         insert into public.fixture_carteira_canonica values
           (101, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-a', 10, 'turma', 'u1:t10', true, 'evento', true, true, 'resolvido', 'u1:t10', 1, 1, false, date '2026-06-10'),
@@ -867,7 +1086,11 @@ test(
           (101, '22222222-2222-2222-2222-222222222222', 'u2:pessoa-c', 10, 'turma', 'u2:t10', true, 'evento', true, true, 'resolvido', 'u2:t10', 2, 2, false, date '2026-07-10'),
           (303, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-d', 40, 'turma', 'u1:t40', true, 'evento', true, true, 'resolvido', 'u1:t40', 1, 1, false, date '2026-07-10'),
           (404, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-e', 50, 'turma', 'u1:t50', true, 'evento', true, true, 'resolvido', 'u1:t50', 1, 1, false, date '2026-07-10'),
-          (505, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-f', null, null, null, false, 'evento', false, false, 'curso_nao_resolvido', null, 1, 1, true, date '2026-07-10');
+          (505, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-f', null, null, null, false, 'evento', false, false, 'curso_nao_resolvido', null, 1, 1, true, date '2026-07-10'),
+          (606, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-g', 60, 'turma', 'u1:t60', true, 'evento', true, true, 'resolvido', 'u1:t60', 1, 1, false, date '2026-06-10'),
+          (606, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-g', 60, 'turma', 'u1:t60', true, 'evento', true, true, 'resolvido', 'u1:t60', 1, 1, false, date '2026-07-10'),
+          (707, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-h', 70, 'turma', 'u1:t70', true, 'evento', true, true, 'resolvido', 'u1:t70', 1, 1, false, date '2026-06-10'),
+          (707, '11111111-1111-1111-1111-111111111111', 'u1:pessoa-h', 70, 'turma', 'u1:t70', true, 'evento', true, true, 'resolvido', 'u1:t70', 1, 1, false, date '2026-07-10');
 
         do $fixture$
         declare
@@ -883,6 +1106,9 @@ test(
           v_alertas integer;
           v_calls bigint;
           v_called boolean;
+          v_atribuicao_id uuid;
+          v_atribuicao_formal boolean;
+          v_atribuicao_pontuavel boolean;
         begin
           select max(d.pessoas_unicas_total), sum(d.vinculos_ativos)
             into v_valor, v_numerador
@@ -923,6 +1149,72 @@ test(
           if row(v_valor, v_numerador, v_denominador, v_nota)
              is distinct from row(1.33::numeric, 4::numeric, 3::numeric, 100::numeric) then
             raise exception 'media multiunidade divergente: %, %, %, %', v_valor, v_numerador, v_denominador, v_nota;
+          end if;
+
+          select
+            d.estado_base,
+            d.numerador,
+            d.atribuicao_id,
+            d.atribuicao_formal,
+            d.atribuicao_pontuavel
+            into
+              v_estado,
+              v_numerador,
+              v_atribuicao_id,
+              v_atribuicao_formal,
+              v_atribuicao_pontuavel
+          from public.get_health_score_professor_v3_metricas_segmentadas_v1(
+            date '2026-07-01',
+            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            '11111111-1111-1111-1111-111111111111',
+            'ciclo'
+          ) d
+          where d.professor_id = 606
+            and d.metrica = 'numero_alunos'
+            and d.curso_id = 60;
+          if row(
+            v_estado,
+            v_numerador,
+            v_atribuicao_id,
+            v_atribuicao_formal,
+            v_atribuicao_pontuavel
+          ) is distinct from row(
+            'segmentacao_incompleta'::text,
+            null::numeric,
+            '00000000-0000-0000-0000-000000000008'::uuid,
+            true,
+            false
+          ) then
+            raise exception 'atribuicao posterior nao prevaleceu por componente: %, %, %, %, %', v_estado, v_numerador, v_atribuicao_id, v_atribuicao_formal, v_atribuicao_pontuavel;
+          end if;
+
+          select
+            d.estado_base,
+            d.numerador,
+            d.atribuicao_id,
+            d.atribuicao_formal
+            into
+              v_estado,
+              v_numerador,
+              v_atribuicao_id,
+              v_atribuicao_formal
+          from public.get_health_score_professor_v3_metricas_segmentadas_v1(
+            date '2026-07-01',
+            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            '11111111-1111-1111-1111-111111111111',
+            'ciclo'
+          ) d
+          where d.professor_id = 707
+            and d.metrica = 'numero_alunos'
+            and d.curso_id = 70;
+          if row(v_estado, v_numerador, v_atribuicao_id, v_atribuicao_formal)
+             is distinct from row(
+               'segmentacao_incompleta'::text,
+               null::numeric,
+               '00000000-0000-0000-0000-000000000009'::uuid,
+               false
+             ) then
+            raise exception 'atribuicao de julho pontuou junho: %, %, %, %', v_estado, v_numerador, v_atribuicao_id, v_atribuicao_formal;
           end if;
 
           perform setval('public.fixture_canonical_calls', 1, false);
@@ -1038,8 +1330,8 @@ test(
 
           select count(*) into v_count
           from public.health_score_professor_v3_snapshots;
-          if v_count <> 11 then
-            raise exception 'esperados 11 snapshots, obtidos %', v_count;
+          if v_count <> 15 then
+            raise exception 'esperados 15 snapshots, obtidos %', v_count;
           end if;
 
           select s.score, s.cobertura
@@ -1279,6 +1571,141 @@ test(
           end if;
         end;
         $fixture$;
+
+        do $lock_fixture$
+        declare
+          v_key bigint := hashtextextended(
+            'health_score_v3_periodo:2026-07-01:ciclo',
+            0
+          );
+          v_acquired boolean;
+          v_attempt integer;
+        begin
+          perform dblink_connect('task5_locker', 'dbname=postgres user=postgres');
+          perform dblink_send_query(
+            'task5_locker',
+            format(
+              'select 1 from (select pg_advisory_lock(%s)) l cross join lateral (select pg_sleep(1)) s',
+              v_key
+            )
+          );
+          perform pg_sleep(0.2);
+
+          select pg_try_advisory_lock(v_key) into v_acquired;
+          if v_acquired then
+            perform pg_advisory_unlock(v_key);
+            raise exception 'lock global e unitario nao se excluem mutuamente';
+          end if;
+
+          while dblink_is_busy('task5_locker') = 1 loop
+            perform pg_sleep(0.05);
+          end loop;
+          perform result
+          from dblink_get_result('task5_locker') as resposta(result integer);
+          perform dblink_disconnect('task5_locker');
+
+          v_acquired := false;
+          for v_attempt in 1..20 loop
+            select pg_try_advisory_lock(v_key) into v_acquired;
+            exit when v_acquired;
+            perform pg_sleep(0.05);
+          end loop;
+          if not v_acquired then
+            raise exception 'lock da sessao concorrente nao foi liberado';
+          end if;
+          perform pg_advisory_unlock(v_key);
+        exception
+          when others then
+            perform dblink_disconnect('task5_locker')
+            where 'task5_locker' = any(dblink_get_connections());
+            raise;
+        end;
+        $lock_fixture$;
+
+        insert into public.professores (id, nome)
+        values (808, 'Carga representativa');
+        insert into public.professor_unidade_curso_modalidade (
+          id, professor_id, unidade_id, curso_id, modalidade, status,
+          fonte, confianca, vigencia_inicio
+        ) values (
+          '00000000-0000-0000-0000-000000000010',
+          808,
+          '11111111-1111-1111-1111-111111111111',
+          10,
+          'turma',
+          'ativo',
+          'fixture',
+          'alta',
+          date '2026-01-01'
+        );
+        insert into public.fixture_carteira_canonica
+        select
+          808,
+          '11111111-1111-1111-1111-111111111111'::uuid,
+          format('perf:pessoa-%s', g),
+          10,
+          'turma',
+          'perf:t10',
+          true,
+          'evento',
+          true,
+          true,
+          'resolvido',
+          format('perf:ocupacao-%s', g),
+          500,
+          500,
+          false,
+          case
+            when g <= 500 then date '2026-06-10'
+            else date '2026-07-10'
+          end
+        from generate_series(1, 1000) g;
+
+        insert into public.health_score_professor_v3_snapshots (
+          professor_id,
+          escopo,
+          unidade_id,
+          competencia,
+          revisao,
+          estado,
+          config_id,
+          config_versao,
+          periodicidade,
+          periodo_inicio,
+          periodo_fim
+        )
+        select
+          900 + (g % 100),
+          'consolidado',
+          null,
+          (date '2025-01-01' + ((g % 12) * interval '1 month'))::date,
+          g,
+          'provisorio',
+          'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+          1,
+          case when g % 2 = 0 then 'mensal' else 'ciclo' end,
+          (date '2025-01-01' + ((g % 12) * interval '1 month'))::date,
+          (date '2025-01-01' + ((g % 12) * interval '1 month')
+            + interval '1 month - 1 day')::date
+        from generate_series(1, 20000) g;
+        analyze public.health_score_professor_v3_snapshots;
+
+        explain (analyze, buffers)
+        select *
+        from public.get_health_score_professor_v3_metricas_segmentadas_v1(
+          date '2026-07-01',
+          'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          null,
+          'ciclo'
+        );
+
+        explain (costs off)
+        select max(s.revisao)
+        from public.health_score_professor_v3_snapshots s
+        where s.professor_id = 101
+          and s.unidade_id is not distinct from null
+          and s.competencia = date '2026-07-01'
+          and s.periodicidade = 'ciclo';
       `;
 
       const executed = spawnSync(
@@ -1306,6 +1733,350 @@ test(
         executed.status,
         0,
         `fixture PostgreSQL falhou:\nSTDOUT:\n${executed.stdout}\nSTDERR:\n${executed.stderr}`,
+      );
+      const executionTime = executed.stdout.match(
+        /Execution Time:\s*([0-9.]+)\s*ms/i,
+      );
+      assert.ok(executionTime, 'EXPLAIN ANALYZE deve informar tempo local');
+      assert.ok(
+        Number(executionTime[1]) < 5_000,
+        `fixture representativa excedeu 5s: ${executionTime[1]}ms`,
+      );
+      assert.match(
+        executed.stdout,
+        /idx_health_score_v3_snapshots_materializacao_revisao/i,
+      );
+
+      const databaseName = `task5_intermediate_${process.pid}`;
+      const createdDatabase = spawnSync(
+        'docker',
+        [
+          'exec',
+          containerName,
+          'createdb',
+          '--username',
+          'postgres',
+          databaseName,
+        ],
+        { encoding: 'utf8' },
+      );
+      assert.equal(
+        createdDatabase.status,
+        0,
+        `nao criou banco intermediario:\n${createdDatabase.stderr}`,
+      );
+
+      const intermediateSql = String.raw`
+        \set ON_ERROR_STOP on
+
+        create extension if not exists pgcrypto;
+        create table public.unidades (id uuid primary key);
+        create table public.professor_unidade_curso_modalidade (
+          id uuid primary key,
+          unidade_id uuid not null,
+          curso_id integer not null,
+          modalidade text not null
+        );
+        create table public.health_score_professor_v3_snapshots (
+          id uuid primary key default gen_random_uuid(),
+          professor_id integer not null,
+          unidade_id uuid,
+          competencia date not null,
+          periodicidade text not null,
+          revisao integer not null
+        );
+        create table public.health_score_professor_v3_snapshot_metricas (
+          id uuid primary key default gen_random_uuid()
+        );
+        create table public.health_score_professor_v3_snapshot_metrica_segmentos (
+          id uuid primary key default gen_random_uuid(),
+          snapshot_metrica_id uuid not null,
+          config_meta_segmento_id uuid,
+          unidade_id uuid not null,
+          curso_id integer not null,
+          modalidade text not null,
+          pessoas_unicas integer not null default 0,
+          vinculos_ativos integer not null default 0,
+          turmas_elegiveis integer not null default 0,
+          ocupacoes_unicas integer not null default 0,
+          capacidade_maxima numeric,
+          meta_aplicada numeric,
+          numerador numeric,
+          denominador numeric,
+          nota numeric,
+          estado_base text not null,
+          fonte text not null,
+          regra_versao text not null,
+          detalhes jsonb not null default '{}'::jsonb
+        );
+        create function public.fn_health_score_professor_v3_bloquear_snapshot_segmento_fechado()
+        returns trigger language plpgsql as $$
+        begin
+          if tg_op = 'DELETE' then return old; end if;
+          return new;
+        end;
+        $$;
+
+        -- Estado intermediario observado no commit 38c6f93.
+        alter table public.health_score_professor_v3_snapshot_metrica_segmentos
+          add column atribuicao_id uuid
+            references public.professor_unidade_curso_modalidade(id),
+          add column atribuicao_formal boolean,
+          add column atribuicao_pontuavel boolean,
+          add column pessoas_unicas_total integer,
+          add column capacidade_excedida boolean,
+          add column alertas_capacidade jsonb,
+          add column divergencias jsonb;
+
+        create table public.health_score_professor_v3_snapshot_metrica_diagnosticos (
+          id uuid primary key default gen_random_uuid(),
+          snapshot_metrica_id uuid not null
+            references public.health_score_professor_v3_snapshot_metricas(id),
+          unidade_id uuid not null references public.unidades(id),
+          pessoas_unicas_total integer not null default 0,
+          dados_sem_resolucao integer not null default 0,
+          estados_resolucao jsonb not null default '[]'::jsonb,
+          estado_base text not null,
+          fonte text not null,
+          regra_versao text not null,
+          divergencias jsonb not null default '{}'::jsonb,
+          detalhes jsonb not null default '{}'::jsonb,
+          criado_em timestamptz not null default now(),
+          unique (snapshot_metrica_id, unidade_id)
+        );
+
+        insert into public.unidades values
+          ('11111111-1111-1111-1111-111111111111');
+        insert into public.professor_unidade_curso_modalidade values (
+          '00000000-0000-0000-0000-000000000001',
+          '11111111-1111-1111-1111-111111111111',
+          10,
+          'turma'
+        );
+        insert into public.health_score_professor_v3_snapshots (
+          professor_id, unidade_id, competencia, periodicidade, revisao
+        ) values (
+          101,
+          '11111111-1111-1111-1111-111111111111',
+          date '2026-07-01',
+          'mensal',
+          1
+        );
+        insert into public.health_score_professor_v3_snapshot_metricas (
+          id
+        ) values ('10000000-0000-0000-0000-000000000001');
+        insert into public.health_score_professor_v3_snapshot_metrica_segmentos (
+          snapshot_metrica_id,
+          unidade_id,
+          curso_id,
+          modalidade,
+          estado_base,
+          fonte,
+          regra_versao,
+          atribuicao_id,
+          atribuicao_formal,
+          atribuicao_pontuavel,
+          pessoas_unicas_total
+        ) values (
+          '10000000-0000-0000-0000-000000000001',
+          '11111111-1111-1111-1111-111111111111',
+          10,
+          'turma',
+          'ok',
+          'fixture_intermediaria',
+          'fixture-38c6f93',
+          '00000000-0000-0000-0000-000000000001',
+          true,
+          true,
+          3
+        );
+        insert into public.health_score_professor_v3_snapshot_metrica_diagnosticos (
+          snapshot_metrica_id,
+          unidade_id,
+          pessoas_unicas_total,
+          estado_base,
+          fonte,
+          regra_versao
+        ) values (
+          '10000000-0000-0000-0000-000000000001',
+          '11111111-1111-1111-1111-111111111111',
+          2,
+          'segmentacao_incompleta',
+          'fixture_intermediaria',
+          'fixture-38c6f93'
+        );
+
+        ${hardeningSchema}
+
+        do $upgrade_fixture$
+        declare
+          v_segmento_type text;
+          v_diagnostico_type text;
+          v_validated integer;
+          v_columns integer;
+        begin
+          select data_type into v_segmento_type
+          from information_schema.columns
+          where table_schema = 'public'
+            and table_name = 'health_score_professor_v3_snapshot_metrica_segmentos'
+            and column_name = 'pessoas_unicas_total';
+          select data_type into v_diagnostico_type
+          from information_schema.columns
+          where table_schema = 'public'
+            and table_name = 'health_score_professor_v3_snapshot_metrica_diagnosticos'
+            and column_name = 'pessoas_unicas_total';
+          if row(v_segmento_type, v_diagnostico_type)
+             is distinct from row('numeric'::text, 'numeric'::text) then
+            raise exception 'upgrade nao converteu integer para numeric: %, %', v_segmento_type, v_diagnostico_type;
+          end if;
+
+          select count(*) into v_columns
+          from information_schema.columns
+          where table_schema = 'public'
+            and table_name = 'health_score_professor_v3_snapshot_metrica_segmentos'
+            and column_name in (
+              'pessoas_fechamentos',
+              'meses_com_base',
+              'meses_com_base_consolidado',
+              'meses_no_periodo'
+            );
+          if v_columns <> 4 then
+            raise exception 'upgrade intermediario deixou colunas ausentes: %', v_columns;
+          end if;
+
+          select count(*) into v_validated
+          from pg_constraint c
+          join pg_class t on t.oid = c.conrelid
+          join pg_namespace n on n.oid = t.relnamespace
+          where n.nspname = 'public'
+            and t.relname = 'health_score_professor_v3_snapshot_metrica_segmentos'
+            and c.conname in (
+              'health_score_v3_segmento_atribuicao_pontuavel_chk',
+              'health_score_v3_segmento_atribuicao_formal_chk',
+              'health_score_v3_segmento_atribuicao_escopo_fk'
+            )
+            and c.convalidated;
+          if v_validated <> 3 then
+            raise exception 'constraints de hardening nao validadas: %', v_validated;
+          end if;
+
+          begin
+            insert into public.health_score_professor_v3_snapshot_metrica_segmentos (
+              snapshot_metrica_id,
+              unidade_id,
+              curso_id,
+              modalidade,
+              estado_base,
+              fonte,
+              regra_versao,
+              atribuicao_formal,
+              atribuicao_pontuavel,
+              pessoas_unicas_total
+            ) values (
+              '10000000-0000-0000-0000-000000000001',
+              '11111111-1111-1111-1111-111111111111',
+              11,
+              'turma',
+              'ok',
+              'fixture_invalida',
+              'fixture-38c6f93',
+              false,
+              true,
+              1
+            );
+            raise exception 'check pontuavel=>formal nao bloqueou linha invalida';
+          exception
+            when check_violation then null;
+          end;
+
+          begin
+            insert into public.health_score_professor_v3_snapshot_metrica_segmentos (
+              snapshot_metrica_id,
+              unidade_id,
+              curso_id,
+              modalidade,
+              estado_base,
+              fonte,
+              regra_versao,
+              atribuicao_formal,
+              atribuicao_pontuavel,
+              pessoas_unicas_total
+            ) values (
+              '10000000-0000-0000-0000-000000000001',
+              '11111111-1111-1111-1111-111111111111',
+              12,
+              'turma',
+              'ok',
+              'fixture_invalida',
+              'fixture-38c6f93',
+              true,
+              false,
+              1
+            );
+            raise exception 'check formal=>id nao bloqueou linha invalida';
+          exception
+            when check_violation then null;
+          end;
+
+          begin
+            insert into public.health_score_professor_v3_snapshot_metrica_segmentos (
+              snapshot_metrica_id,
+              unidade_id,
+              curso_id,
+              modalidade,
+              estado_base,
+              fonte,
+              regra_versao,
+              atribuicao_id,
+              atribuicao_formal,
+              atribuicao_pontuavel,
+              pessoas_unicas_total
+            ) values (
+              '10000000-0000-0000-0000-000000000001',
+              '11111111-1111-1111-1111-111111111111',
+              13,
+              'turma',
+              'ok',
+              'fixture_invalida',
+              'fixture-38c6f93',
+              '00000000-0000-0000-0000-000000000001',
+              true,
+              true,
+              1
+            );
+            raise exception 'FK composta aceitou atribuicao em escopo divergente';
+          exception
+            when foreign_key_violation then null;
+          end;
+        end;
+        $upgrade_fixture$;
+      `;
+
+      const upgradedIntermediate = spawnSync(
+        'docker',
+        [
+          'exec',
+          '--interactive',
+          containerName,
+          'psql',
+          '--no-psqlrc',
+          '--set',
+          'ON_ERROR_STOP=1',
+          '--username',
+          'postgres',
+          '--dbname',
+          databaseName,
+        ],
+        {
+          encoding: 'utf8',
+          input: intermediateSql,
+          maxBuffer: 16 * 1024 * 1024,
+        },
+      );
+      assert.equal(
+        upgradedIntermediate.status,
+        0,
+        `upgrade 38c6f93 -> 203100 falhou:\nSTDOUT:\n${upgradedIntermediate.stdout}\nSTDERR:\n${upgradedIntermediate.stderr}`,
       );
     } finally {
       spawnSync('docker', ['rm', '--force', containerName], { encoding: 'utf8' });

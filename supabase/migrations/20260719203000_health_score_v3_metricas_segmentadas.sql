@@ -326,6 +326,46 @@ as $$
       c.unidade_id,
       c.curso_id,
       c.modalidade
+  ), atribuicoes_mensais as (
+    select distinct on (
+      m.competencia_mes,
+      a.professor_id,
+      a.unidade_id,
+      a.curso_id,
+      a.modalidade
+    )
+      m.competencia_mes,
+      a.id as atribuicao_id,
+      a.professor_id,
+      a.unidade_id,
+      a.curso_id,
+      curso.nome::text as curso_nome,
+      a.modalidade,
+      a.fonte as atribuicao_fonte,
+      a.confianca as atribuicao_confianca,
+      a.vigencia_inicio,
+      a.vigencia_fim,
+      a.confianca in ('alta', 'revisada') as atribuicao_pontuavel,
+      a.evidencias as atribuicao_evidencias
+    from meses m
+    join public.professor_unidade_curso_modalidade a
+      on a.vigencia_inicio <= m.mes_fim
+     and coalesce(a.vigencia_fim, m.mes_fim) >= m.competencia_mes
+    join unidades_permitidas up
+      on up.unidade_id = a.unidade_id
+    join public.cursos curso
+      on curso.id = a.curso_id
+    where a.status in ('ativo', 'encerrado')
+      and not coalesce(curso.is_projeto_banda, false)
+    order by
+      m.competencia_mes,
+      a.professor_id,
+      a.unidade_id,
+      a.curso_id,
+      a.modalidade,
+      a.vigencia_inicio desc,
+      (a.confianca in ('alta', 'revisada')) desc,
+      a.id desc
   ), dados_resolvidos as (
     select
       d.professor_id,
@@ -341,6 +381,11 @@ as $$
       sum(d.ocupacoes_unicas)::integer as ocupacoes_unicas,
       coalesce(bool_or(d.segmentacao_incompleta), false)
         as segmentacao_incompleta,
+      coalesce(bool_and(a.atribuicao_id is not null), false)
+        as atribuicao_formal_componentes,
+      coalesce(bool_and(
+        a.atribuicao_id is not null and a.atribuicao_pontuavel
+      ), false) as atribuicao_pontuavel_componentes,
       coalesce((
         select jsonb_agg(distinct c.fonte order by c.fonte)
         from canonico c
@@ -351,6 +396,12 @@ as $$
           and c.fonte is not null
       ), '[]'::jsonb) as fontes
     from dados_resolvidos_mensais d
+    left join atribuicoes_mensais a
+      on a.competencia_mes = d.competencia_mes
+     and a.professor_id = d.professor_id
+     and a.unidade_id = d.unidade_id
+     and a.curso_id = d.curso_id
+     and a.modalidade = d.modalidade
     group by
       d.professor_id,
       d.unidade_id,
@@ -385,42 +436,51 @@ as $$
       c.modalidade,
       c.turma_chave
   ), atribuicoes as (
-    select distinct on (
+    select
+      (array_agg(
+        a.atribuicao_id
+        order by a.competencia_mes desc, a.vigencia_inicio desc
+      ))[1] as atribuicao_id,
+      a.professor_id,
+      a.unidade_id,
+      a.curso_id,
+      max(a.curso_nome)::text as curso_nome,
+      a.modalidade,
+      (array_agg(
+        a.atribuicao_fonte
+        order by a.competencia_mes desc, a.vigencia_inicio desc
+      ))[1] as atribuicao_fonte,
+      (array_agg(
+        a.atribuicao_confianca
+        order by a.competencia_mes desc, a.vigencia_inicio desc
+      ))[1] as atribuicao_confianca,
+      (array_agg(
+        a.vigencia_inicio
+        order by a.competencia_mes desc, a.vigencia_inicio desc
+      ))[1] as vigencia_inicio,
+      (array_agg(
+        a.vigencia_fim
+        order by a.competencia_mes desc, a.vigencia_inicio desc
+      ))[1] as vigencia_fim,
+      bool_and(a.atribuicao_pontuavel) as atribuicao_pontuavel,
+      jsonb_build_object(
+        'componentes_mensais',
+        jsonb_agg(jsonb_build_object(
+          'competencia', a.competencia_mes,
+          'atribuicao_id', a.atribuicao_id,
+          'fonte', a.atribuicao_fonte,
+          'confianca', a.atribuicao_confianca,
+          'vigencia_inicio', a.vigencia_inicio,
+          'vigencia_fim', a.vigencia_fim,
+          'evidencias', a.atribuicao_evidencias
+        ) order by a.competencia_mes)
+      ) as atribuicao_evidencias
+    from atribuicoes_mensais a
+    group by
       a.professor_id,
       a.unidade_id,
       a.curso_id,
       a.modalidade
-    )
-      a.id as atribuicao_id,
-      a.professor_id,
-      a.unidade_id,
-      a.curso_id,
-      curso.nome::text as curso_nome,
-      a.modalidade,
-      a.fonte as atribuicao_fonte,
-      a.confianca as atribuicao_confianca,
-      a.vigencia_inicio,
-      a.vigencia_fim,
-      a.confianca in ('alta', 'revisada') as atribuicao_pontuavel,
-      a.evidencias as atribuicao_evidencias
-    from public.professor_unidade_curso_modalidade a
-    cross join periodo p
-    join unidades_permitidas up
-      on up.unidade_id = a.unidade_id
-    join public.cursos curso
-      on curso.id = a.curso_id
-    where a.status in ('ativo', 'encerrado')
-      and a.vigencia_inicio <= p.fim_recorte
-      and coalesce(a.vigencia_fim, p.fim_recorte) >= p.periodo_inicio
-      and not coalesce(curso.is_projeto_banda, false)
-    order by
-      a.professor_id,
-      a.unidade_id,
-      a.curso_id,
-      a.modalidade,
-      (a.confianca in ('alta', 'revisada')) desc,
-      a.vigencia_inicio desc,
-      a.id desc
   ), segmentos as (
     select
       d.professor_id,
@@ -486,8 +546,16 @@ as $$
       r.meta_media_turma,
       r.meta_carteira_curso,
       a.atribuicao_id,
-      a.atribuicao_id is not null as atribuicao_formal,
-      coalesce(a.atribuicao_pontuavel, false) as atribuicao_pontuavel,
+      case
+        when d.professor_id is not null
+          then d.atribuicao_formal_componentes
+        else a.atribuicao_id is not null
+      end as atribuicao_formal,
+      case
+        when d.professor_id is not null
+          then d.atribuicao_pontuavel_componentes
+        else coalesce(a.atribuicao_pontuavel, false)
+      end as atribuicao_pontuavel,
       a.atribuicao_fonte,
       a.atribuicao_confianca,
       a.vigencia_inicio as atribuicao_vigencia_inicio,
@@ -1899,7 +1967,7 @@ begin
 
   perform pg_advisory_xact_lock(hashtextextended(
     'health_score_v3_periodo:' || date_trunc('month', p_competencia)::date::text
-      || ':' || p_periodicidade || ':' || coalesce(p_unidade_id::text, 'todos'), 0
+      || ':' || p_periodicidade, 0
   ));
 
   create temporary table if not exists health_score_v3_metricas_periodo_execucao (
