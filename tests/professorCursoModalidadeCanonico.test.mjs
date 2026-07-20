@@ -6,6 +6,10 @@ const migrationPath =
   'supabase/migrations/20260719201000_professor_unidade_curso_modalidade.sql';
 const migrationExists = existsSync(migrationPath);
 const sql = migrationExists ? readFileSync(migrationPath, 'utf8') : '';
+const scopeMigrationPath =
+  'supabase/migrations/20260719205000_professor_curso_modalidade_reconciliacao_scope.sql';
+const scopeMigrationExists = existsSync(scopeMigrationPath);
+const scopeSql = scopeMigrationExists ? readFileSync(scopeMigrationPath, 'utf8') : '';
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -568,3 +572,30 @@ test(
     );
   },
 );
+
+test('pistas globais da reconciliacao respeitam o escopo de unidade do editor', () => {
+  assert.equal(
+    scopeMigrationExists,
+    true,
+    `${scopeMigrationPath} deve endurecer a RPC antes da interface de conciliacao`,
+  );
+  assert.match(
+    scopeSql,
+    /create\s+or\s+replace\s+function\s+public\.get_professor_curso_modalidade_reconciliacao_v1\s*\(/i,
+  );
+  assert.match(
+    scopeSql,
+    /pistas_professores_cursos\s+as\s*\([\s\S]*?v_usuario_id\s+is\s+null[\s\S]*?exists\s*\([\s\S]*?from\s+public\.professores_unidades\s+pu[\s\S]*?pu\.professor_id\s*=\s*pc\.professor_id[\s\S]*?usuario_tem_permissao\s*\(\s*v_usuario_id\s*,\s*'professores\.editar'\s*,\s*pu\.unidade_id\s*\)/i,
+    'pista sem unidade so pode aparecer quando o professor possui vinculo em unidade editavel',
+  );
+  assert.match(scopeSql, /security\s+definer/i);
+  assert.match(scopeSql, /set\s+search_path\s*=\s*public\s*,\s*pg_temp/i);
+  assert.match(
+    scopeSql,
+    /revoke\s+all\s+on\s+function\s+public\.get_professor_curso_modalidade_reconciliacao_v1\s*\(\s*uuid\s*,\s*integer\s*\)\s+from\s+public\s*,\s*anon/i,
+  );
+  assert.match(
+    scopeSql,
+    /grant\s+execute\s+on\s+function\s+public\.get_professor_curso_modalidade_reconciliacao_v1\s*\(\s*uuid\s*,\s*integer\s*\)\s+to\s+authenticated\s*,\s*service_role/i,
+  );
+});
