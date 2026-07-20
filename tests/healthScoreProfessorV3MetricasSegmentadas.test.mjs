@@ -9,6 +9,8 @@ const hardeningMigrationPath =
   'supabase/migrations/20260719203100_health_score_v3_metricas_segmentadas_hardening.sql';
 const baselineMetricsPath =
   'supabase/migrations/20260719123500_health_score_v3_metricas_periodo_otimizada.sql';
+const baselineClosePath =
+  'supabase/migrations/20260719122000_health_score_v3_readmodels_cutover.sql';
 
 function migration() {
   assert.equal(existsSync(migrationPath), true, `${migrationPath} deve existir`);
@@ -235,6 +237,84 @@ test('203100 preserva ACL privada e metadados de seguranca dos objetos internos'
   }
   assert.match(sql, /security_invoker\s*=\s*true/i);
   assert.match(sql, /set\s+search_path\s*=\s*public\s*,\s*pg_temp/i);
+});
+
+test('203100 converge corpos funcionais para as definicoes finais da 203000', () => {
+  const fresh = migration();
+  const hardening = hardeningMigration();
+  const functions = [
+    'get_health_score_professor_v3_metricas_segmentadas_v1',
+    'get_health_score_professor_v3_metricas_segmentadas_agregadas_v1',
+    'get_health_score_professor_v3_metricas_periodo',
+    'materializar_health_score_professor_v3_periodo_impl',
+    'materializar_health_score_professor_v3_periodo',
+  ];
+
+  assert.match(hardening, /Convergencia funcional da Task 5/i);
+  for (const name of functions) {
+    assert.equal(
+      functionDefinition(hardening, name),
+      functionDefinition(fresh, name),
+      `${name} deve convergir para o mesmo corpo da instalacao fresh`,
+    );
+  }
+  assert.match(
+    hardening,
+    /drop\s+function\s+if\s+exists\s+public\.materializar_health_score_professor_v3_periodo[\s\S]*?drop\s+function\s+if\s+exists\s+public\.get_health_score_professor_v3_metricas_segmentadas_v1/i,
+  );
+});
+
+test('fechamento usa a chave advisory comum antes de calcular revisao', () => {
+  const hardening = hardeningMigration();
+  const close = functionDefinition(
+    hardening,
+    'fechar_health_score_professor_v3_ciclo',
+  );
+  const baselineClose = functionDefinition(
+    readFileSync(baselineClosePath, 'utf8'),
+    'fechar_health_score_professor_v3_ciclo',
+  );
+  const lockPosition = close.search(/pg_advisory_xact_lock/i);
+  const candidatePosition = close.search(/for\s+v_origem\s+in/i);
+  const revisionPosition = close.search(/max\s*\(\s*s\.revisao\s*\)/i);
+  const lock = close.match(
+    /pg_advisory_xact_lock\s*\([\s\S]*?hashtextextended\s*\([\s\S]*?\)\s*\);/i,
+  )?.[0];
+
+  assert.ok(
+    lockPosition >= 0
+      && lockPosition < candidatePosition
+      && candidatePosition < revisionPosition,
+  );
+  assert.ok(lock, 'fechamento deve adquirir advisory lock transacional');
+  assert.match(lock, /health_score_v3_periodo:/i);
+  assert.match(lock, /v_lock\.competencia/i);
+  assert.match(lock, /v_lock\.periodicidade/i);
+  assert.doesNotMatch(lock, /unidade_id|coalesce/i);
+  assert.match(
+    close,
+    /select\s+distinct[\s\S]*?date_trunc\s*\(\s*'month'\s*,\s*s\.competencia\s*\)[\s\S]*?s\.ciclo_codigo\s*=\s*p_ciclo_codigo[\s\S]*?order\s+by\s+competencia/i,
+  );
+  assert.equal(
+    close
+      .replace(/\n  v_lock record;/, '')
+      .replace(
+        /\n\n  for v_lock in[\s\S]*?\n  end loop;(?=\n\n  for v_origem in)/,
+        '',
+      ),
+    baselineClose,
+    'fora o lock comum, o fechamento deve permanecer byte a byte',
+  );
+  assert.match(close, /security\s+definer/i);
+  assert.match(close, /set\s+search_path\s*=\s*public\s*,\s*pg_temp/i);
+  assert.match(
+    hardening,
+    /revoke\s+all\s+on\s+function\s+public\.fechar_health_score_professor_v3_ciclo\(text,\s*text\)[\s\S]*?from\s+public,\s*anon,\s*authenticated/i,
+  );
+  assert.match(
+    hardening,
+    /grant\s+execute\s+on\s+function\s+public\.fechar_health_score_professor_v3_ciclo\(text,\s*text\)[\s\S]*?to\s+authenticated,\s*service_role/i,
+  );
 });
 
 test('media turma preserva bruto e calcula nota pela soma de ocupacoes sobre meta de assentos', () => {
@@ -581,6 +661,44 @@ test(
       sql,
       'materializar_health_score_professor_v3_periodo_impl',
     );
+    const intermediateMigrationResult = spawnSync(
+      'git',
+      [
+        'show',
+        `38c6f93:${migrationPath.replaceAll('\\', '/')}`,
+      ],
+      { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 },
+    );
+    assert.equal(
+      intermediateMigrationResult.status,
+      0,
+      `nao leu a migration intermediaria 38c6f93:\n${intermediateMigrationResult.stderr}`,
+    );
+    const intermediateMigration = intermediateMigrationResult.stdout;
+    const intermediateDetailDefinition = functionDefinition(
+      intermediateMigration,
+      'get_health_score_professor_v3_metricas_segmentadas_v1',
+    );
+    const intermediateAggregateDefinition = functionDefinition(
+      intermediateMigration,
+      'get_health_score_professor_v3_metricas_segmentadas_agregadas_v1',
+    );
+    const intermediateEngineDefinition = functionDefinition(
+      intermediateMigration,
+      'get_health_score_professor_v3_metricas_periodo',
+    );
+    const intermediateMaterializerDefinition = functionDefinition(
+      intermediateMigration,
+      'materializar_health_score_professor_v3_periodo_impl',
+    );
+    const intermediateWrapperDefinition = functionDefinition(
+      intermediateMigration,
+      'materializar_health_score_professor_v3_periodo',
+    );
+    const intermediateCloseDefinition = functionDefinition(
+      readFileSync(baselineClosePath, 'utf8'),
+      'fechar_health_score_professor_v3_ciclo',
+    );
     const containerName = `la-task5-postgres-${process.pid}-${Date.now()}`;
     const started = spawnSync(
       'docker',
@@ -713,7 +831,22 @@ test(
           classificacao text,
           publicavel boolean,
           publicado boolean,
-          motivo_bloqueio text
+          motivo_bloqueio text,
+          snapshot_anterior_id uuid,
+          justificativa_retificacao text,
+          criado_por integer,
+          fechado_em timestamptz
+        );
+        create table public.health_score_professor_v3_ciclos (
+          id uuid primary key default gen_random_uuid(),
+          codigo text not null unique,
+          data_fim date not null,
+          estado text not null default 'aberto',
+          publicacao_oficial boolean not null default false,
+          ranking_habilitado boolean not null default false,
+          fechado_em timestamptz,
+          fechado_por integer,
+          justificativa_fechamento text
         );
         create table public.health_score_professor_v3_snapshot_metricas (
           id uuid primary key default gen_random_uuid(),
@@ -765,6 +898,8 @@ test(
           return new;
         end;
         $$;
+        create function public.fn_health_score_professor_v3_ator_gerenciador()
+        returns integer language sql stable as $$ select null::integer $$;
 
         ${structuredSchema}
 
@@ -938,6 +1073,77 @@ test(
         as select 1::integer as fixture;
 
         ${hardeningSql}
+
+        create table public.fixture_function_defs_fresh (
+          assinatura text primary key,
+          definicao text not null,
+          definicao_hash text not null
+        );
+        insert into public.fixture_function_defs_fresh
+        select
+          f.assinatura,
+          pg_get_functiondef(f.assinatura::regprocedure::oid),
+          md5(pg_get_functiondef(f.assinatura::regprocedure::oid))
+        from unnest(array[
+          'public.get_health_score_professor_v3_metricas_segmentadas_v1(date,uuid,uuid,text)',
+          'public.get_health_score_professor_v3_metricas_segmentadas_agregadas_v1(date,uuid,uuid,text)',
+          'public.get_health_score_professor_v3_metricas_periodo(date,uuid,text)',
+          'public.materializar_health_score_professor_v3_periodo_impl(date,text,uuid,integer)',
+          'public.materializar_health_score_professor_v3_periodo(date,text,uuid,integer)',
+          'public.fechar_health_score_professor_v3_ciclo(text,text)'
+        ]) f(assinatura);
+
+        create or replace function public.get_health_score_professor_v3_metricas_periodo(
+          p_competencia date,
+          p_unidade_id uuid default null,
+          p_periodicidade text default 'mensal'
+        ) returns table (
+          metrica text,
+          professor_id integer,
+          professor_nome text,
+          unidade_id uuid,
+          competencia date,
+          valor_bruto numeric,
+          numerador numeric,
+          denominador numeric,
+          amostra integer,
+          estado_base text,
+          publicavel boolean,
+          confianca text,
+          fonte text,
+          regra_versao text,
+          motivo_sem_base text,
+          detalhes jsonb
+        ) language sql stable as $$
+          with alvos as (
+            select a.professor_id
+            from public.professor_unidade_curso_modalidade a
+            where p_unidade_id is null or a.unidade_id = p_unidade_id
+            union
+            select f.professor_id
+            from public.fixture_carteira_canonica f
+            where p_unidade_id is null or f.unidade_id = p_unidade_id
+          )
+          select
+            'retencao'::text,
+            p.id,
+            p.nome,
+            p_unidade_id,
+            date_trunc('month', p_competencia)::date,
+            80::numeric,
+            80::numeric,
+            100::numeric,
+            1,
+            'ok'::text,
+            true,
+            'alta'::text,
+            'fixture_pilar_legado'::text,
+            'fixture-retencao-1'::text,
+            null::text,
+            '{}'::jsonb
+          from alvos a
+          join public.professores p on p.id = a.professor_id
+        $$;
 
         do $security_fixture$
         declare
@@ -1572,6 +1778,137 @@ test(
         end;
         $fixture$;
 
+        insert into public.health_score_professor_v3_ciclos (
+          codigo,
+          data_fim
+        ) values (
+          '2026-07',
+          date '2000-01-01'
+        );
+
+        create function public.fixture_materializar_e_aguardar()
+        returns integer
+        language plpgsql
+        security definer
+        set search_path = public, pg_temp
+        as $$
+        declare
+          v_resultado jsonb;
+          v_atualizadas integer;
+        begin
+          v_resultado := public.materializar_health_score_professor_v3_periodo(
+            date '2026-07-01',
+            'ciclo',
+            null,
+            101
+          );
+
+          update public.health_score_professor_v3_snapshot_metricas m
+          set detalhes = m.detalhes || jsonb_build_object('apta_oficial', true)
+          where m.snapshot_id in (
+            select value::uuid
+            from jsonb_array_elements_text(v_resultado->'snapshot_ids') ids(value)
+          );
+          get diagnostics v_atualizadas = row_count;
+
+          perform pg_sleep(1);
+          return v_atualizadas;
+        end;
+        $$;
+
+        do $flow_lock_fixture$
+        declare
+          v_inicio timestamptz;
+          v_duracao interval;
+          v_fechamento jsonb;
+          v_atualizadas integer;
+          v_colisoes integer;
+          v_revisoes_fora_da_ordem integer;
+        begin
+          perform dblink_connect('task5_flow', 'dbname=postgres user=postgres');
+          perform dblink_send_query(
+            'task5_flow',
+            'select public.fixture_materializar_e_aguardar()'
+          );
+          perform pg_sleep(0.2);
+
+          v_inicio := clock_timestamp();
+          v_fechamento := public.fechar_health_score_professor_v3_ciclo(
+            '2026-07',
+            'fixture concorrente Task 5'
+          );
+          v_duracao := clock_timestamp() - v_inicio;
+
+          while dblink_is_busy('task5_flow') = 1 loop
+            perform pg_sleep(0.05);
+          end loop;
+          select result into v_atualizadas
+          from dblink_get_result('task5_flow') as resposta(result integer);
+          perform dblink_disconnect('task5_flow');
+
+          if v_atualizadas = 0 then
+            raise exception 'fluxo remoto nao materializou metricas';
+          end if;
+          if v_duracao < interval '600 milliseconds' then
+            raise exception
+              'fechamento nao aguardou o lock do materializador: %',
+              v_duracao;
+          end if;
+          if coalesce((v_fechamento->>'snapshots_fechados')::integer, 0) = 0 then
+            raise exception 'fechamento concorrente nao produziu snapshots';
+          end if;
+
+          select count(*) into v_colisoes
+          from (
+            select
+              s.professor_id,
+              s.unidade_id,
+              s.competencia,
+              s.periodicidade,
+              s.revisao
+            from public.health_score_professor_v3_snapshots s
+            where s.professor_id = 101
+              and s.competencia = date '2026-07-01'
+              and s.periodicidade = 'ciclo'
+            group by
+              s.professor_id,
+              s.unidade_id,
+              s.competencia,
+              s.periodicidade,
+              s.revisao
+            having count(*) > 1
+          ) duplicadas;
+          if v_colisoes <> 0 then
+            raise exception 'fluxos concorrentes colidiram revisoes: %', v_colisoes;
+          end if;
+
+          select count(*) into v_revisoes_fora_da_ordem
+          from public.health_score_professor_v3_snapshots oficial
+          where oficial.professor_id = 101
+            and oficial.competencia = date '2026-07-01'
+            and oficial.periodicidade = 'ciclo'
+            and oficial.estado_publicacao = 'oficial'
+            and oficial.revisao <> (
+              select max(s.revisao)
+              from public.health_score_professor_v3_snapshots s
+              where s.professor_id = oficial.professor_id
+                and s.unidade_id is not distinct from oficial.unidade_id
+                and s.competencia = oficial.competencia
+                and s.periodicidade = oficial.periodicidade
+            );
+          if v_revisoes_fora_da_ordem <> 0 then
+            raise exception
+              'fechamento nao consumiu a proxima revisao serializada: %',
+              v_revisoes_fora_da_ordem;
+          end if;
+        exception
+          when others then
+            perform dblink_disconnect('task5_flow')
+            where 'task5_flow' = any(dblink_get_connections());
+            raise;
+        end;
+        $flow_lock_fixture$;
+
         do $lock_fixture$
         declare
           v_key bigint := hashtextextended(
@@ -1623,43 +1960,112 @@ test(
         $lock_fixture$;
 
         insert into public.professores (id, nome)
-        values (808, 'Carga representativa');
+        select id, format('Carga representativa %s', id)
+        from generate_series(808, 823) id;
         insert into public.professor_unidade_curso_modalidade (
           id, professor_id, unidade_id, curso_id, modalidade, status,
           fonte, confianca, vigencia_inicio
-        ) values (
-          '00000000-0000-0000-0000-000000000010',
-          808,
-          '11111111-1111-1111-1111-111111111111',
-          10,
-          'turma',
+        )
+        select
+          gen_random_uuid(),
+          p.id,
+          case (p.id - 808) % 4
+            when 1 then '22222222-2222-2222-2222-222222222222'::uuid
+            else '11111111-1111-1111-1111-111111111111'::uuid
+          end,
+          case (p.id - 808) % 4
+            when 0 then 10
+            when 1 then 10
+            when 2 then 20
+            else 60
+          end,
+          case (p.id - 808) % 4
+            when 2 then 'individual'
+            else 'turma'
+          end,
           'ativo',
           'fixture',
           'alta',
           date '2026-01-01'
-        );
+        from public.professores p
+        where p.id between 808 and 823;
+        with carga as (
+          select
+            p.professor_id,
+            p.unidade_id,
+            p.curso_id,
+            p.modalidade,
+            g,
+            case
+              when g <= 512 then date '2026-06-10'
+              else date '2026-07-10'
+            end as competencia
+          from generate_series(1, 1000) g
+          join public.professor_unidade_curso_modalidade p
+            on p.professor_id = 808 + ((g - 1) % 16)
+        ), carga_auditada as (
+          select
+            carga.*,
+            count(*) over (
+              partition by professor_id, unidade_id, competencia
+            )::integer as carteira_total
+          from carga
+        )
         insert into public.fixture_carteira_canonica
         select
-          808,
-          '11111111-1111-1111-1111-111111111111'::uuid,
+          p.professor_id,
+          p.unidade_id,
           format('perf:pessoa-%s', g),
-          10,
-          'turma',
-          'perf:t10',
+          p.curso_id,
+          p.modalidade,
+          format('perf:turma-%s-%s', p.professor_id, p.curso_id),
           true,
           'evento',
           true,
           true,
           'resolvido',
           format('perf:ocupacao-%s', g),
-          500,
-          500,
+          p.carteira_total,
+          p.carteira_total,
           false,
-          case
-            when g <= 500 then date '2026-06-10'
-            else date '2026-07-10'
-          end
-        from generate_series(1, 1000) g;
+          p.competencia
+        from carga_auditada p;
+
+        create index idx_fixture_carteira_recorte_segmento
+          on public.fixture_carteira_canonica (
+            professor_id,
+            unidade_id,
+            competencia,
+            curso_id,
+            modalidade
+          );
+        analyze public.fixture_carteira_canonica;
+        analyze public.professor_unidade_curso_modalidade;
+        analyze public.health_score_professor_v3_config_metas_curso_modalidade;
+
+        do $scale_fixture$
+        declare
+          v_professores integer;
+          v_unidades integer;
+          v_segmentos integer;
+        begin
+          select
+            count(distinct f.professor_id),
+            count(distinct f.unidade_id),
+            count(distinct row(f.unidade_id, f.curso_id, f.modalidade))
+            into v_professores, v_unidades, v_segmentos
+          from public.fixture_carteira_canonica f
+          where f.professor_id between 808 and 823;
+          if row(v_professores, v_unidades, v_segmentos)
+             is distinct from row(16, 2, 4) then
+            raise exception
+              'carga nao foi distribuida: professores %, unidades %, segmentos %',
+              v_professores,
+              v_unidades,
+              v_segmentos;
+          end if;
+        end;
+        $scale_fixture$;
 
         insert into public.health_score_professor_v3_snapshots (
           professor_id,
@@ -1675,9 +2081,13 @@ test(
           periodo_fim
         )
         select
-          900 + (g % 100),
-          'consolidado',
-          null,
+          808 + (g % 16),
+          case when g % 3 = 0 then 'consolidado' else 'unidade' end,
+          case
+            when g % 3 = 0 then null
+            when g % 2 = 0 then '11111111-1111-1111-1111-111111111111'::uuid
+            else '22222222-2222-2222-2222-222222222222'::uuid
+          end,
           (date '2025-01-01' + ((g % 12) * interval '1 month'))::date,
           g,
           'provisorio',
@@ -1699,6 +2109,15 @@ test(
           'ciclo'
         );
 
+        explain (analyze, buffers)
+        select count(*)
+        from public.fixture_carteira_canonica f
+        where f.professor_id = 808
+          and f.unidade_id = '11111111-1111-1111-1111-111111111111'
+          and f.competencia between date '2026-06-01' and date '2026-07-31'
+          and f.curso_id = 10
+          and f.modalidade = 'turma';
+
         explain (costs off)
         select max(s.revisao)
         from public.health_score_professor_v3_snapshots s
@@ -1706,6 +2125,34 @@ test(
           and s.unidade_id is not distinct from null
           and s.competencia = date '2026-07-01'
           and s.periodicidade = 'ciclo';
+
+        create table public.fixture_behavior_fresh (
+          fluxo text primary key,
+          resultado_hash text not null
+        );
+        insert into public.fixture_behavior_fresh
+        select 'detalhe', md5(coalesce(jsonb_agg(
+          to_jsonb(d)
+          order by d.professor_id, d.unidade_id, d.metrica,
+            d.curso_id nulls last, d.modalidade nulls last
+        )::text, '[]'))
+        from public.get_health_score_professor_v3_metricas_segmentadas_v1(
+          date '2026-07-01',
+          'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          null,
+          'ciclo'
+        ) d;
+        insert into public.fixture_behavior_fresh
+        select 'agregado', md5(coalesce(jsonb_agg(
+          to_jsonb(a)
+          order by a.professor_id, a.unidade_id, a.metrica
+        )::text, '[]'))
+        from public.get_health_score_professor_v3_metricas_segmentadas_agregadas_v1(
+          date '2026-07-01',
+          'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          null,
+          'ciclo'
+        ) a;
       `;
 
       const executed = spawnSync(
@@ -1746,6 +2193,10 @@ test(
         executed.stdout,
         /idx_health_score_v3_snapshots_materializacao_revisao/i,
       );
+      assert.match(
+        executed.stdout,
+        /idx_fixture_carteira_recorte_segmento/i,
+      );
 
       const databaseName = `task5_intermediate_${process.pid}`;
       const createdDatabase = spawnSync(
@@ -1755,6 +2206,8 @@ test(
           containerName,
           'createdb',
           '--username',
+          'postgres',
+          '--template',
           'postgres',
           databaseName,
         ],
@@ -1769,102 +2222,55 @@ test(
       const intermediateSql = String.raw`
         \set ON_ERROR_STOP on
 
-        create extension if not exists pgcrypto;
-        create table public.unidades (id uuid primary key);
-        create table public.professor_unidade_curso_modalidade (
-          id uuid primary key,
-          unidade_id uuid not null,
-          curso_id integer not null,
-          modalidade text not null
-        );
-        create table public.health_score_professor_v3_snapshots (
-          id uuid primary key default gen_random_uuid(),
-          professor_id integer not null,
-          unidade_id uuid,
-          competencia date not null,
-          periodicidade text not null,
-          revisao integer not null
-        );
-        create table public.health_score_professor_v3_snapshot_metricas (
-          id uuid primary key default gen_random_uuid()
-        );
-        create table public.health_score_professor_v3_snapshot_metrica_segmentos (
-          id uuid primary key default gen_random_uuid(),
-          snapshot_metrica_id uuid not null,
-          config_meta_segmento_id uuid,
-          unidade_id uuid not null,
-          curso_id integer not null,
-          modalidade text not null,
-          pessoas_unicas integer not null default 0,
-          vinculos_ativos integer not null default 0,
-          turmas_elegiveis integer not null default 0,
-          ocupacoes_unicas integer not null default 0,
-          capacidade_maxima numeric,
-          meta_aplicada numeric,
-          numerador numeric,
-          denominador numeric,
-          nota numeric,
-          estado_base text not null,
-          fonte text not null,
-          regra_versao text not null,
-          detalhes jsonb not null default '{}'::jsonb
-        );
-        create function public.fn_health_score_professor_v3_bloquear_snapshot_segmento_fechado()
-        returns trigger language plpgsql as $$
-        begin
-          if tg_op = 'DELETE' then return old; end if;
-          return new;
-        end;
-        $$;
+        delete from public.health_score_professor_v3_snapshot_metrica_segmentos;
+        delete from public.health_score_professor_v3_snapshot_metrica_diagnosticos;
 
-        -- Estado intermediario observado no commit 38c6f93.
         alter table public.health_score_professor_v3_snapshot_metrica_segmentos
-          add column atribuicao_id uuid
-            references public.professor_unidade_curso_modalidade(id),
-          add column atribuicao_formal boolean,
-          add column atribuicao_pontuavel boolean,
-          add column pessoas_unicas_total integer,
-          add column capacidade_excedida boolean,
-          add column alertas_capacidade jsonb,
-          add column divergencias jsonb;
+          drop constraint health_score_v3_segmento_atribuicao_escopo_fk,
+          drop constraint health_score_v3_segmento_pessoas_fechamentos_chk,
+          drop constraint health_score_v3_segmento_meses_com_base_chk,
+          drop constraint health_score_v3_segmento_meses_consolidado_chk,
+          drop constraint health_score_v3_segmento_meses_periodo_chk,
+          drop constraint health_score_v3_segmento_atribuicao_pontuavel_chk,
+          drop constraint health_score_v3_segmento_atribuicao_formal_chk;
+        drop index public.idx_health_score_v3_snapshot_segmentos_atribuicao_escopo;
+        drop index public.idx_health_score_v3_snapshots_materializacao_revisao;
+        drop index public.uq_professor_curso_modalidade_id_escopo;
+        alter table public.health_score_professor_v3_snapshot_metrica_segmentos
+          drop column pessoas_fechamentos,
+          drop column meses_com_base,
+          drop column meses_com_base_consolidado,
+          drop column meses_no_periodo,
+          alter column pessoas_unicas_total type integer
+            using round(pessoas_unicas_total)::integer;
+        alter table public.health_score_professor_v3_snapshot_metrica_diagnosticos
+          alter column pessoas_unicas_total type integer
+            using round(pessoas_unicas_total)::integer;
 
-        create table public.health_score_professor_v3_snapshot_metrica_diagnosticos (
-          id uuid primary key default gen_random_uuid(),
-          snapshot_metrica_id uuid not null
-            references public.health_score_professor_v3_snapshot_metricas(id),
-          unidade_id uuid not null references public.unidades(id),
-          pessoas_unicas_total integer not null default 0,
-          dados_sem_resolucao integer not null default 0,
-          estados_resolucao jsonb not null default '[]'::jsonb,
-          estado_base text not null,
-          fonte text not null,
-          regra_versao text not null,
-          divergencias jsonb not null default '{}'::jsonb,
-          detalhes jsonb not null default '{}'::jsonb,
-          criado_em timestamptz not null default now(),
-          unique (snapshot_metrica_id, unidade_id)
+        drop function public.materializar_health_score_professor_v3_periodo(
+          date, text, uuid, integer
+        );
+        drop function public.materializar_health_score_professor_v3_periodo_impl(
+          date, text, uuid, integer
+        );
+        drop function public.get_health_score_professor_v3_metricas_periodo(
+          date, uuid, text
+        );
+        drop function
+          public.get_health_score_professor_v3_metricas_segmentadas_agregadas_v1(
+            date, uuid, uuid, text
+          );
+        drop function public.get_health_score_professor_v3_metricas_segmentadas_v1(
+          date, uuid, uuid, text
         );
 
-        insert into public.unidades values
-          ('11111111-1111-1111-1111-111111111111');
-        insert into public.professor_unidade_curso_modalidade values (
-          '00000000-0000-0000-0000-000000000001',
-          '11111111-1111-1111-1111-111111111111',
-          10,
-          'turma'
-        );
-        insert into public.health_score_professor_v3_snapshots (
-          professor_id, unidade_id, competencia, periodicidade, revisao
-        ) values (
-          101,
-          '11111111-1111-1111-1111-111111111111',
-          date '2026-07-01',
-          'mensal',
-          1
-        );
-        insert into public.health_score_professor_v3_snapshot_metricas (
-          id
-        ) values ('10000000-0000-0000-0000-000000000001');
+        ${intermediateDetailDefinition}
+        ${intermediateAggregateDefinition}
+        ${intermediateEngineDefinition}
+        ${intermediateMaterializerDefinition}
+        ${intermediateWrapperDefinition}
+        ${intermediateCloseDefinition}
+
         insert into public.health_score_professor_v3_snapshot_metrica_segmentos (
           snapshot_metrica_id,
           unidade_id,
@@ -1878,7 +2284,8 @@ test(
           atribuicao_pontuavel,
           pessoas_unicas_total
         ) values (
-          '10000000-0000-0000-0000-000000000001',
+          (select id from public.health_score_professor_v3_snapshot_metricas
+           order by id limit 1),
           '11111111-1111-1111-1111-111111111111',
           10,
           'turma',
@@ -1898,7 +2305,8 @@ test(
           fonte,
           regra_versao
         ) values (
-          '10000000-0000-0000-0000-000000000001',
+          (select id from public.health_score_professor_v3_snapshot_metricas
+           order by id limit 1),
           '11111111-1111-1111-1111-111111111111',
           2,
           'segmentacao_incompleta',
@@ -1906,7 +2314,7 @@ test(
           'fixture-38c6f93'
         );
 
-        ${hardeningSchema}
+        ${hardeningSql}
 
         do $upgrade_fixture$
         declare
@@ -1914,6 +2322,8 @@ test(
           v_diagnostico_type text;
           v_validated integer;
           v_columns integer;
+          v_definition_mismatch integer;
+          v_behavior_mismatch integer;
         begin
           select data_type into v_segmento_type
           from information_schema.columns
@@ -1960,6 +2370,52 @@ test(
             raise exception 'constraints de hardening nao validadas: %', v_validated;
           end if;
 
+          select count(*) into v_definition_mismatch
+          from public.fixture_function_defs_fresh f
+          where f.definicao is distinct from
+              pg_get_functiondef(f.assinatura::regprocedure::oid)
+             or f.definicao_hash is distinct from
+              md5(pg_get_functiondef(f.assinatura::regprocedure::oid));
+          if v_definition_mismatch <> 0 then
+            raise exception
+              'upgrade intermediario divergiu de fresh em % definicoes',
+              v_definition_mismatch;
+          end if;
+
+          with atual as (
+            select 'detalhe'::text as fluxo, md5(coalesce(jsonb_agg(
+              to_jsonb(d)
+              order by d.professor_id, d.unidade_id, d.metrica,
+                d.curso_id nulls last, d.modalidade nulls last
+            )::text, '[]')) as resultado_hash
+            from public.get_health_score_professor_v3_metricas_segmentadas_v1(
+              date '2026-07-01',
+              'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+              null,
+              'ciclo'
+            ) d
+            union all
+            select 'agregado'::text, md5(coalesce(jsonb_agg(
+              to_jsonb(a)
+              order by a.professor_id, a.unidade_id, a.metrica
+            )::text, '[]'))
+            from public.get_health_score_professor_v3_metricas_segmentadas_agregadas_v1(
+              date '2026-07-01',
+              'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+              null,
+              'ciclo'
+            ) a
+          )
+          select count(*) into v_behavior_mismatch
+          from public.fixture_behavior_fresh f
+          full join atual a using (fluxo)
+          where f.resultado_hash is distinct from a.resultado_hash;
+          if v_behavior_mismatch <> 0 then
+            raise exception
+              'upgrade intermediario divergiu de fresh em % comportamentos',
+              v_behavior_mismatch;
+          end if;
+
           begin
             insert into public.health_score_professor_v3_snapshot_metrica_segmentos (
               snapshot_metrica_id,
@@ -1973,7 +2429,9 @@ test(
               atribuicao_pontuavel,
               pessoas_unicas_total
             ) values (
-              '10000000-0000-0000-0000-000000000001',
+              (select id
+               from public.health_score_professor_v3_snapshot_metricas
+               order by id limit 1),
               '11111111-1111-1111-1111-111111111111',
               11,
               'turma',
@@ -2002,7 +2460,9 @@ test(
               atribuicao_pontuavel,
               pessoas_unicas_total
             ) values (
-              '10000000-0000-0000-0000-000000000001',
+              (select id
+               from public.health_score_professor_v3_snapshot_metricas
+               order by id limit 1),
               '11111111-1111-1111-1111-111111111111',
               12,
               'turma',
@@ -2032,7 +2492,9 @@ test(
               atribuicao_pontuavel,
               pessoas_unicas_total
             ) values (
-              '10000000-0000-0000-0000-000000000001',
+              (select id
+               from public.health_score_professor_v3_snapshot_metricas
+               order by id limit 1),
               '11111111-1111-1111-1111-111111111111',
               13,
               'turma',
