@@ -1,0 +1,835 @@
+import { useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle,
+  CircleHelp,
+  Filter,
+  GraduationCap,
+  LockKeyhole,
+  UserRound,
+  UsersRound,
+} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip } from '@/components/ui/Tooltip';
+import type {
+  HealthScoreV3AssignmentSummary,
+  HealthScoreV3ConfigPendencias,
+  HealthScoreV3Modalidade,
+  HealthScoreV3SegmentGoal,
+  HealthScoreV3SegmentGoalState,
+  HealthScoreV3SimulationCapacityAlert,
+} from '@/lib/healthScoreProfessorV3';
+
+const CANONICAL_UNIT_NAMES: Record<string, string> = {
+  '368d47f5-2d88-4475-bc14-ba084a9a348e': 'Barra',
+  '95553e96-971b-4590-a6eb-0201d013c14d': 'Recreio',
+  '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'Campo Grande',
+};
+
+const CANONICAL_UNIT_ORDER = ['Barra', 'Recreio', 'Campo Grande'];
+
+interface SegmentIdentity {
+  unidadeId: string;
+  unidadeNome: string | null;
+  cursoId: number;
+  cursoNome: string | null;
+  modalidade: HealthScoreV3Modalidade;
+}
+
+interface SegmentPendingState {
+  regraAusente: boolean;
+  zeroCarteira: boolean;
+  superlotacao: boolean;
+}
+
+export interface HealthScoreV3SegmentMatrixRow {
+  goal: HealthScoreV3SegmentGoal;
+  key: string;
+  synthetic: boolean;
+  pending: SegmentPendingState;
+}
+
+export interface HealthScoreV3SegmentGoalErrors {
+  capacidadeMaxima?: string;
+  metaMediaTurma?: string;
+  metaCarteiraCurso?: string;
+  estado?: string;
+}
+
+function normalizeName(value: string | null | undefined) {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLocaleLowerCase('pt-BR');
+}
+
+function resolveUnitName(unidadeId: string, unidadeNome?: string | null) {
+  return unidadeNome || CANONICAL_UNIT_NAMES[unidadeId] || unidadeId;
+}
+
+function hasCompleteSegmentIdentity(
+  summary: HealthScoreV3AssignmentSummary,
+): summary is HealthScoreV3AssignmentSummary & SegmentIdentity {
+  return Boolean(
+    summary.unidadeId?.trim()
+    && summary.cursoId !== null
+    && Number.isFinite(summary.cursoId)
+    && summary.cursoId > 0
+    && (summary.modalidade === 'individual' || summary.modalidade === 'turma'),
+  );
+}
+
+export function healthScoreV3SegmentKey(identity: {
+  unidadeId: string;
+  cursoId: number;
+  modalidade: HealthScoreV3Modalidade;
+}) {
+  return `${identity.unidadeId}|${identity.cursoId}|${identity.modalidade}`;
+}
+
+function createPendingGoal(
+  identity: SegmentIdentity,
+  source: 'segmento_observado_sem_regra' | 'atribuicao_sem_regra' | 'zero_carteira',
+): HealthScoreV3SegmentGoal {
+  return {
+    id: null,
+    configId: null,
+    unidadeId: identity.unidadeId,
+    unidadeNome: resolveUnitName(identity.unidadeId, identity.unidadeNome),
+    cursoId: identity.cursoId,
+    cursoNome: identity.cursoNome,
+    modalidade: identity.modalidade,
+    estado: 'configurada',
+    capacidadeMaxima: 0,
+    metaMediaTurma: 0,
+    metaCarteiraCurso: 0,
+    parametros: {
+      fonte: source,
+      origem_pendencia: source,
+    },
+    criadoEm: null,
+    atualizadoEm: null,
+  };
+}
+
+function unitSortRank(unitName: string | null) {
+  const normalized = normalizeName(unitName);
+  const index = CANONICAL_UNIT_ORDER.findIndex((name) => normalizeName(name) === normalized);
+  return index === -1 ? CANONICAL_UNIT_ORDER.length : index;
+}
+
+export function buildHealthScoreV3SegmentMatrix(
+  metas: HealthScoreV3SegmentGoal[],
+  pendencias: HealthScoreV3ConfigPendencias,
+  superlotacoes: HealthScoreV3SimulationCapacityAlert[] = [],
+): HealthScoreV3SegmentMatrixRow[] {
+  const unitNames = new Map<string, string>();
+  for (const goal of metas) {
+    unitNames.set(goal.unidadeId, resolveUnitName(goal.unidadeId, goal.unidadeNome));
+  }
+  for (const summary of [
+    ...pendencias.segmentosObservadosSemRegra,
+    ...pendencias.atribuicoesSemRegra,
+    ...pendencias.atribuicoesZeroCarteira,
+    ...pendencias.divergenciasModalidade,
+  ]) {
+    if (summary.unidadeId && summary.unidadeNome) {
+      unitNames.set(summary.unidadeId, summary.unidadeNome);
+    }
+  }
+
+  const rows = new Map<string, {
+    goal: HealthScoreV3SegmentGoal;
+    synthetic: boolean;
+  }>();
+  const pendingByKey = new Map<string, Omit<SegmentPendingState, 'superlotacao'>>();
+  const superlotacaoKeys = new Set(
+    superlotacoes.map((alerta) => healthScoreV3SegmentKey(alerta)),
+  );
+
+  for (const goal of metas) {
+    const key = healthScoreV3SegmentKey(goal);
+    if (rows.has(key)) continue;
+    rows.set(key, {
+      goal: {
+        ...goal,
+        unidadeNome: resolveUnitName(
+          goal.unidadeId,
+          goal.unidadeNome || unitNames.get(goal.unidadeId),
+        ),
+      },
+      synthetic: false,
+    });
+  }
+
+  const registerPending = (
+    summary: HealthScoreV3AssignmentSummary,
+    source: 'segmento_observado_sem_regra' | 'atribuicao_sem_regra' | 'zero_carteira',
+  ) => {
+    if (!hasCompleteSegmentIdentity(summary)) return;
+    const identity: SegmentIdentity = {
+      unidadeId: summary.unidadeId,
+      unidadeNome: summary.unidadeNome || unitNames.get(summary.unidadeId) || null,
+      cursoId: summary.cursoId,
+      cursoNome: summary.cursoNome,
+      modalidade: summary.modalidade,
+    };
+    const key = healthScoreV3SegmentKey(identity);
+    const currentPending = pendingByKey.get(key) || {
+      regraAusente: false,
+      zeroCarteira: false,
+    };
+    pendingByKey.set(key, {
+      regraAusente: currentPending.regraAusente || source !== 'zero_carteira',
+      zeroCarteira: currentPending.zeroCarteira || source === 'zero_carteira',
+    });
+
+    const current = rows.get(key);
+    if (current) {
+      if (!current.goal.cursoNome && identity.cursoNome) {
+        current.goal = { ...current.goal, cursoNome: identity.cursoNome };
+      }
+      return;
+    }
+    rows.set(key, {
+      goal: createPendingGoal(identity, source),
+      synthetic: true,
+    });
+  };
+
+  for (const summary of pendencias.segmentosObservadosSemRegra) {
+    registerPending(summary, 'segmento_observado_sem_regra');
+  }
+  for (const summary of pendencias.atribuicoesSemRegra) {
+    registerPending(summary, 'atribuicao_sem_regra');
+  }
+  for (const summary of pendencias.atribuicoesZeroCarteira) {
+    registerPending(summary, 'zero_carteira');
+  }
+
+  return [...rows.entries()]
+    .map(([key, row]) => {
+      const pending = pendingByKey.get(key) || {
+        regraAusente: false,
+        zeroCarteira: false,
+      };
+      return {
+        ...row,
+        key,
+        pending: {
+          ...pending,
+          superlotacao: superlotacaoKeys.has(key),
+        },
+      };
+    })
+    .sort((left, right) => {
+      const unitRank = unitSortRank(left.goal.unidadeNome) - unitSortRank(right.goal.unidadeNome);
+      if (unitRank !== 0) return unitRank;
+      const unitName = (left.goal.unidadeNome || '').localeCompare(
+        right.goal.unidadeNome || '',
+        'pt-BR',
+      );
+      if (unitName !== 0) return unitName;
+      const courseName = (left.goal.cursoNome || '').localeCompare(
+        right.goal.cursoNome || '',
+        'pt-BR',
+      );
+      if (courseName !== 0) return courseName;
+      return left.goal.modalidade === right.goal.modalidade
+        ? 0
+        : left.goal.modalidade === 'individual' ? -1 : 1;
+    });
+}
+
+export function countHealthScoreV3ZeroPortfolioProfessors(
+  atribuicoes: HealthScoreV3AssignmentSummary[],
+) {
+  return new Set(
+    atribuicoes
+      .map((summary) => summary.professorId)
+      .filter((professorId): professorId is number => professorId !== null),
+  ).size;
+}
+
+export function buildHealthScoreV3UnitTabs(matrix: HealthScoreV3SegmentMatrixRow[]) {
+  const unique = new Map(Object.entries(CANONICAL_UNIT_NAMES));
+  for (const { goal } of matrix) {
+    unique.set(goal.unidadeId, resolveUnitName(goal.unidadeId, goal.unidadeNome));
+  }
+  return [...unique.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((left, right) => {
+      const rank = unitSortRank(left.name) - unitSortRank(right.name);
+      return rank !== 0 ? rank : left.name.localeCompare(right.name, 'pt-BR');
+    });
+}
+
+export function ensureHealthScoreV3DraftSegmentGoals(
+  metas: HealthScoreV3SegmentGoal[],
+  pendencias: HealthScoreV3ConfigPendencias,
+  configId: string,
+) {
+  return buildHealthScoreV3SegmentMatrix(metas, pendencias).map(({ goal, synthetic }) => (
+    synthetic ? { ...goal, configId } : goal
+  ));
+}
+
+export function transitionHealthScoreV3SegmentGoalState(
+  goal: HealthScoreV3SegmentGoal,
+  estado: HealthScoreV3SegmentGoalState,
+): HealthScoreV3SegmentGoal {
+  if (estado === 'nao_ofertada') {
+    return {
+      ...goal,
+      estado: 'nao_ofertada',
+      capacidadeMaxima: null,
+      metaMediaTurma: null,
+      metaCarteiraCurso: null,
+    };
+  }
+  if (goal.estado === 'configurada') return goal;
+  return {
+    ...goal,
+    estado: 'configurada',
+    capacidadeMaxima: 0,
+    metaMediaTurma: 0,
+    metaCarteiraCurso: 0,
+  };
+}
+
+export function getHealthScoreV3SegmentGoalErrors(
+  goal: HealthScoreV3SegmentGoal,
+): HealthScoreV3SegmentGoalErrors {
+  if (goal.estado === 'nao_ofertada') {
+    return goal.capacidadeMaxima === null
+      && goal.metaMediaTurma === null
+      && goal.metaCarteiraCurso === null
+      ? {}
+      : { estado: 'Segmento não ofertado deve manter as três metas vazias.' };
+  }
+
+  const errors: HealthScoreV3SegmentGoalErrors = {};
+  if (!Number.isFinite(goal.capacidadeMaxima) || goal.capacidadeMaxima <= 0) {
+    errors.capacidadeMaxima = 'Informe uma capacidade maior que zero.';
+  }
+  if (!Number.isFinite(goal.metaMediaTurma) || goal.metaMediaTurma <= 0) {
+    errors.metaMediaTurma = 'Informe uma meta média/turma maior que zero.';
+  }
+  if (!Number.isFinite(goal.metaCarteiraCurso) || goal.metaCarteiraCurso <= 0) {
+    errors.metaCarteiraCurso = 'Informe uma meta de carteira maior que zero.';
+  }
+  if (
+    goal.metaMediaTurma > 0
+    && goal.capacidadeMaxima > 0
+    && goal.metaMediaTurma > goal.capacidadeMaxima
+  ) {
+    errors.metaMediaTurma = 'A meta média/turma não pode superar a capacidade máxima.';
+  }
+  return errors;
+}
+
+export function areHealthScoreV3SegmentGoalsValid(metas: HealthScoreV3SegmentGoal[]) {
+  return metas.every((goal) => Object.keys(getHealthScoreV3SegmentGoalErrors(goal)).length === 0);
+}
+
+export interface HealthScoreV3MetasSegmentadasProps {
+  metas: HealthScoreV3SegmentGoal[];
+  pendencias: HealthScoreV3ConfigPendencias;
+  superlotacoes?: HealthScoreV3SimulationCapacityAlert[];
+  superlotacaoDisponivel?: boolean;
+  editable: boolean;
+  disabled?: boolean;
+  onMetasChange: (metas: HealthScoreV3SegmentGoal[]) => void;
+}
+
+type PendingFilter = 'todas' | 'pendentes' | 'regra_ausente' | 'zero_carteira' | 'superlotacao';
+
+export function HealthScoreV3MetasSegmentadas({
+  metas,
+  pendencias,
+  superlotacoes = [],
+  superlotacaoDisponivel = false,
+  editable,
+  disabled = false,
+  onMetasChange,
+}: HealthScoreV3MetasSegmentadasProps) {
+  const [activeUnitId, setActiveUnitId] = useState('');
+  const [courseFilter, setCourseFilter] = useState('todos');
+  const [modalityFilter, setModalityFilter] = useState<'todas' | HealthScoreV3Modalidade>('todas');
+  const [pendingFilter, setPendingFilter] = useState<PendingFilter>('todas');
+  const matrix = useMemo(
+    () => buildHealthScoreV3SegmentMatrix(metas, pendencias, superlotacoes),
+    [metas, pendencias, superlotacoes],
+  );
+  const units = useMemo(() => buildHealthScoreV3UnitTabs(matrix), [matrix]);
+
+  useEffect(() => {
+    if (units.some((unit) => unit.id === activeUnitId)) return;
+    setActiveUnitId(units[0]?.id || '');
+  }, [activeUnitId, units]);
+
+  const courses = useMemo(() => {
+    const unique = new Map<number, string>();
+    for (const { goal } of matrix) {
+      if (goal.unidadeId !== activeUnitId) continue;
+      unique.set(goal.cursoId, goal.cursoNome || `Curso ${goal.cursoId}`);
+    }
+    return [...unique.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'));
+  }, [activeUnitId, matrix]);
+
+  useEffect(() => {
+    if (courseFilter === 'todos') return;
+    if (!courses.some((course) => String(course.id) === courseFilter)) {
+      setCourseFilter('todos');
+    }
+  }, [courseFilter, courses]);
+
+  const visibleRows = useMemo(() => matrix.filter((row) => {
+    if (row.goal.unidadeId !== activeUnitId) return false;
+    if (courseFilter !== 'todos' && String(row.goal.cursoId) !== courseFilter) return false;
+    if (modalityFilter !== 'todas' && row.goal.modalidade !== modalityFilter) return false;
+    if (pendingFilter === 'regra_ausente' && !row.pending.regraAusente) return false;
+    if (pendingFilter === 'zero_carteira' && !row.pending.zeroCarteira) return false;
+    if (pendingFilter === 'superlotacao' && !row.pending.superlotacao) return false;
+    if (
+      pendingFilter === 'pendentes'
+      && !row.synthetic
+      && !row.pending.regraAusente
+      && !row.pending.zeroCarteira
+      && !row.pending.superlotacao
+    ) return false;
+    return true;
+  }), [activeUnitId, courseFilter, matrix, modalityFilter, pendingFilter]);
+
+  const counters = {
+    regraAusente: matrix.filter((row) => row.pending.regraAusente).length,
+    zeroCarteira: countHealthScoreV3ZeroPortfolioProfessors(
+      pendencias.atribuicoesZeroCarteira,
+    ),
+    superlotacao: matrix.filter((row) => row.pending.superlotacao).length,
+    divergenciaModalidade: pendencias.divergenciasModalidade.length,
+  };
+  const reviewQueue = [
+    ...pendencias.atribuicoesSemRegra.map((summary) => ({
+      kind: hasCompleteSegmentIdentity(summary) ? 'regra_ausente' as const : 'identidade_incompleta' as const,
+      summary,
+    })),
+    ...pendencias.divergenciasModalidade.map((summary) => ({
+      kind: 'divergencia_modalidade' as const,
+      summary,
+    })),
+  ];
+
+  const updateGoal = (nextGoal: HealthScoreV3SegmentGoal) => {
+    if (!editable || disabled) return;
+    const key = healthScoreV3SegmentKey(nextGoal);
+    let found = false;
+    const nextMetas = metas.map((goal) => {
+      if (healthScoreV3SegmentKey(goal) !== key) return goal;
+      found = true;
+      return nextGoal;
+    });
+    onMetasChange(found ? nextMetas : [...nextMetas, nextGoal]);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <GraduationCap className="h-4 w-4 shrink-0 text-cyan-300" />
+          <span className="text-xs font-medium text-slate-300">
+            {matrix.length} segmentos canônicos
+          </span>
+        </div>
+        {!editable && (
+          <Badge variant="outline" className="gap-1 border-slate-700 text-slate-300">
+            <LockKeyhole className="h-3 w-3" />
+            Somente leitura
+          </Badge>
+        )}
+      </div>
+
+      <div className="grid border-y border-slate-800 bg-slate-950/30 sm:grid-cols-2 xl:grid-cols-4 xl:divide-x xl:divide-slate-800">
+        <CounterItem
+          label="Regra ausente"
+          value={counters.regraAusente}
+          tone="amber"
+          tooltip="Segmentos observados ou atribuídos que ainda não possuem uma meta exata."
+        />
+        <CounterItem
+          label="Zero carteira"
+          value={counters.zeroCarteira}
+          tone="cyan"
+          tooltip="Atribuições formais sem alunos ativos. Permanecem visíveis e sem penalização."
+        />
+        <CounterItem
+          label="Superlotação"
+          value={superlotacaoDisponivel ? counters.superlotacao : '—'}
+          tone="rose"
+          tooltip="Segmentos observados acima da capacidade na última simulação canônica salva."
+        />
+        <CounterItem
+          label="Divergência de modalidade"
+          value={counters.divergenciaModalidade}
+          tone="violet"
+          tooltip="Conflitos de modalidade aguardam revisão e nunca criam metas automaticamente."
+        />
+      </div>
+
+      {units.length > 0 ? (
+        <Tabs value={activeUnitId} onValueChange={setActiveUnitId}>
+          <div className="overflow-x-auto pb-1">
+            <TabsList className="h-auto w-max min-w-full justify-start rounded-md border border-slate-800 bg-slate-950/40 p-1">
+              {units.map((unit) => (
+                <TabsTrigger
+                  key={unit.id}
+                  value={unit.id}
+                  className="min-w-[132px] rounded-sm px-4 py-2 text-xs data-[state=active]:bg-slate-800"
+                >
+                  {unit.name}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
+        </Tabs>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-4">
+        <Filter className="h-4 w-4 shrink-0 text-slate-500" />
+        <Select value={courseFilter} onValueChange={setCourseFilter}>
+          <SelectTrigger
+            aria-label="Filtrar por curso"
+            className="h-9 w-full rounded-md border-slate-700 bg-slate-900 sm:w-[210px]"
+          >
+            <SelectValue placeholder="Todos os cursos" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos os cursos</SelectItem>
+            {courses.map((course) => (
+              <SelectItem key={course.id} value={String(course.id)}>{course.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={modalityFilter}
+          onValueChange={(value) => setModalityFilter(value as 'todas' | HealthScoreV3Modalidade)}
+        >
+          <SelectTrigger
+            aria-label="Filtrar por modalidade"
+            className="h-9 w-full rounded-md border-slate-700 bg-slate-900 sm:w-[190px]"
+          >
+            <SelectValue placeholder="Todas as modalidades" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Todas as modalidades</SelectItem>
+            <SelectItem value="individual">Individual</SelectItem>
+            <SelectItem value="turma">Turma</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={pendingFilter} onValueChange={(value) => setPendingFilter(value as PendingFilter)}>
+          <SelectTrigger
+            aria-label="Filtrar por pendência"
+            className="h-9 w-full rounded-md border-slate-700 bg-slate-900 sm:w-[190px]"
+          >
+            <SelectValue placeholder="Todas as linhas" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Todas as linhas</SelectItem>
+            <SelectItem value="pendentes">Com pendência</SelectItem>
+            <SelectItem value="regra_ausente">Regra ausente</SelectItem>
+            <SelectItem value="zero_carteira">Zero carteira</SelectItem>
+            <SelectItem value="superlotacao">Superlotação</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="overflow-x-auto border-b border-slate-800">
+        <table className="w-full min-w-[1120px] table-fixed text-left text-xs">
+          <thead>
+            <tr className="border-b border-slate-800 bg-slate-950/50 text-slate-400">
+              <th className="w-[190px] px-3 py-2 font-medium">Curso</th>
+              <th className="w-[125px] px-3 py-2 font-medium">Modalidade</th>
+              <th className="w-[150px] px-3 py-2 font-medium">Capacidade máxima</th>
+              <th className="w-[170px] px-3 py-2 font-medium">Meta média/turma</th>
+              <th className="w-[155px] px-3 py-2 font-medium">Meta carteira</th>
+              <th className="w-[165px] px-3 py-2 font-medium">Estado</th>
+              <th className="w-[165px] px-3 py-2 font-medium">Fonte</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800/80">
+            {visibleRows.map((row) => {
+              const errors = getHealthScoreV3SegmentGoalErrors(row.goal);
+              const rowId = row.key.replace(/[^a-zA-Z0-9_-]/g, '-');
+              return (
+                <tr key={row.key} className="min-h-[94px] align-top hover:bg-slate-900/40">
+                  <td className="px-3 py-3">
+                    <p className="break-words text-sm font-medium text-slate-100">
+                      {row.goal.cursoNome || `Curso ${row.goal.cursoId}`}
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-500">ID {row.goal.cursoId}</p>
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className="inline-flex items-center gap-1.5 text-slate-300">
+                      {row.goal.modalidade === 'individual'
+                        ? <UserRound className="h-3.5 w-3.5 text-emerald-400" />
+                        : <UsersRound className="h-3.5 w-3.5 text-violet-400" />}
+                      {row.goal.modalidade === 'individual' ? 'Individual' : 'Turma'}
+                    </span>
+                  </td>
+                  <SegmentNumberInput
+                    id={`${rowId}-capacidade`}
+                    label={`Capacidade máxima - ${row.goal.cursoNome || `Curso ${row.goal.cursoId}`}`}
+                    value={row.goal.estado === 'configurada' ? row.goal.capacidadeMaxima : null}
+                    error={errors.capacidadeMaxima}
+                    editable={editable && row.goal.estado === 'configurada'}
+                    disabled={disabled}
+                    step={0.1}
+                    onChange={(value) => {
+                      if (row.goal.estado !== 'configurada') return;
+                      updateGoal({ ...row.goal, capacidadeMaxima: value });
+                    }}
+                  />
+                  <SegmentNumberInput
+                    id={`${rowId}-media`}
+                    label={`Meta média por turma - ${row.goal.cursoNome || `Curso ${row.goal.cursoId}`}`}
+                    value={row.goal.estado === 'configurada' ? row.goal.metaMediaTurma : null}
+                    error={errors.metaMediaTurma}
+                    editable={editable && row.goal.estado === 'configurada'}
+                    disabled={disabled}
+                    step={0.1}
+                    onChange={(value) => {
+                      if (row.goal.estado !== 'configurada') return;
+                      updateGoal({ ...row.goal, metaMediaTurma: value });
+                    }}
+                  />
+                  <SegmentNumberInput
+                    id={`${rowId}-carteira`}
+                    label={`Meta de carteira - ${row.goal.cursoNome || `Curso ${row.goal.cursoId}`}`}
+                    value={row.goal.estado === 'configurada' ? row.goal.metaCarteiraCurso : null}
+                    error={errors.metaCarteiraCurso}
+                    editable={editable && row.goal.estado === 'configurada'}
+                    disabled={disabled}
+                    step={1}
+                    onChange={(value) => {
+                      if (row.goal.estado !== 'configurada') return;
+                      updateGoal({ ...row.goal, metaCarteiraCurso: value });
+                    }}
+                  />
+                  <td className="px-3 py-3">
+                    <Select
+                      value={row.goal.estado}
+                      disabled={!editable || disabled}
+                      onValueChange={(value) => updateGoal(
+                        transitionHealthScoreV3SegmentGoalState(
+                          row.goal,
+                          value as HealthScoreV3SegmentGoalState,
+                        ),
+                      )}
+                    >
+                      <SelectTrigger
+                        aria-label={`Estado da meta - ${row.goal.cursoNome || `Curso ${row.goal.cursoId}`} - ${row.goal.modalidade}`}
+                        aria-invalid={Boolean(errors.estado)}
+                        className="h-8 rounded-md border-slate-700 bg-slate-900 text-xs"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="configurada">Configurada</SelectItem>
+                        <SelectItem value="nao_ofertada">Não ofertada</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1 min-h-[28px] text-[10px] leading-3 text-rose-300">
+                      {errors.estado || '\u00a0'}
+                    </p>
+                  </td>
+                  <td className="px-3 py-3">
+                    <SourceStatus row={row} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {visibleRows.length === 0 && (
+          <div className="flex min-h-[112px] items-center justify-center px-4 text-sm text-slate-500">
+            Nenhum segmento para os filtros selecionados.
+          </div>
+        )}
+      </div>
+
+      <section className="border-t border-slate-800 pt-4">
+        <div className="flex items-center justify-between gap-3">
+          <h5 className="text-xs font-semibold text-slate-200">Pendências de atribuição</h5>
+          <Badge variant={reviewQueue.length > 0 ? 'warning' : 'success'}>
+            {reviewQueue.length}
+          </Badge>
+        </div>
+        {reviewQueue.length > 0 ? (
+          <div className="mt-2 max-h-[220px] overflow-y-auto border-y border-slate-800">
+            {reviewQueue.map(({ kind, summary }, index) => (
+              <div
+                key={[
+                  kind,
+                  summary.atribuicaoId,
+                  summary.professorId,
+                  summary.unidadeId,
+                  summary.cursoId,
+                  summary.modalidade,
+                  summary.estado,
+                  index,
+                ].filter((value) => value !== null && value !== undefined).join('-')}
+                className="grid gap-2 border-b border-slate-800/80 px-2 py-2 text-xs last:border-b-0 sm:grid-cols-[minmax(140px,1fr)_minmax(170px,1.4fr)_auto] sm:items-center"
+              >
+                <span className="truncate text-slate-200">
+                  {summary.professorNome || 'Professor não identificado'}
+                </span>
+                <span className="break-words text-slate-400">
+                  {[summary.unidadeNome, summary.cursoNome, summary.modalidade]
+                    .filter(Boolean)
+                    .join(' · ') || 'Unidade, curso ou modalidade não resolvidos'}
+                </span>
+                <Badge
+                  variant={kind === 'regra_ausente' ? 'warning' : 'error'}
+                  className="w-fit whitespace-nowrap"
+                >
+                  {kind === 'regra_ausente'
+                    ? 'Regra ausente'
+                    : kind === 'identidade_incompleta'
+                      ? 'Identidade incompleta'
+                      : 'Revisar modalidade'}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 text-xs text-slate-500">Nenhuma pendência de atribuição.</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function CounterItem({
+  label,
+  value,
+  tone,
+  tooltip,
+}: {
+  label: string;
+  value: number | string;
+  tone: 'amber' | 'cyan' | 'rose' | 'violet';
+  tooltip: string;
+}) {
+  const toneClass = {
+    amber: 'text-amber-300',
+    cyan: 'text-cyan-300',
+    rose: 'text-rose-300',
+    violet: 'text-violet-300',
+  }[tone];
+  return (
+    <div className="flex min-h-[64px] items-center justify-between gap-3 border-b border-slate-800 px-3 py-2 last:border-b-0 sm:[&:nth-last-child(-n+2)]:border-b-0 xl:border-b-0">
+      <div className="min-w-0">
+        <p className="break-words text-[11px] text-slate-400">{label}</p>
+        <p className={`text-lg font-semibold ${toneClass}`}>{value}</p>
+      </div>
+      <Tooltip content={tooltip} side="top">
+        <button
+          type="button"
+          aria-label={`Sobre ${label}`}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-800 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+        >
+          <CircleHelp className="h-4 w-4" />
+        </button>
+      </Tooltip>
+    </div>
+  );
+}
+
+function SegmentNumberInput({
+  id,
+  label,
+  value,
+  error,
+  editable,
+  disabled,
+  step,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: number | null;
+  error?: string;
+  editable: boolean;
+  disabled: boolean;
+  step: number;
+  onChange: (value: number) => void;
+}) {
+  const errorId = `${id}-error`;
+  return (
+    <td className="px-3 py-3">
+      <Input
+        id={id}
+        aria-label={label}
+        type="number"
+        min={0.01}
+        step={step}
+        value={value ?? ''}
+        placeholder="—"
+        disabled={!editable || disabled}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? errorId : undefined}
+        onChange={(event) => {
+          const nextValue = event.target.value === '' ? 0 : Number(event.target.value);
+          onChange(Number.isFinite(nextValue) ? nextValue : 0);
+        }}
+        className="h-8 rounded-md border-slate-700 bg-slate-900 px-2 text-xs"
+      />
+      <p id={errorId} className="mt-1 min-h-[28px] break-words text-[10px] leading-3 text-rose-300">
+        {error || '\u00a0'}
+      </p>
+    </td>
+  );
+}
+
+function SourceStatus({ row }: { row: HealthScoreV3SegmentMatrixRow }) {
+  const parameterSource = typeof row.goal.parametros.fonte === 'string'
+    ? row.goal.parametros.fonte.replaceAll('_', ' ')
+    : null;
+  const updatedAt = row.goal.atualizadoEm
+    ? new Intl.DateTimeFormat('pt-BR').format(new Date(row.goal.atualizadoEm))
+    : null;
+  return (
+    <div className="space-y-1.5">
+      {row.pending.regraAusente && <Badge variant="warning">Regra ausente</Badge>}
+      {row.pending.zeroCarteira && (
+        <div>
+          <Badge variant="outline" className="border-cyan-500/30 text-cyan-300">Zero carteira</Badge>
+          <p className="mt-1 text-[10px] text-slate-500">Sem penalização</p>
+        </div>
+      )}
+      {row.pending.superlotacao && (
+        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-rose-300">
+          <AlertTriangle className="h-3 w-3" />
+          Superlotação
+        </span>
+      )}
+      {!row.pending.regraAusente && !row.pending.zeroCarteira && (
+        <p className="break-words capitalize text-[11px] text-slate-400">
+          {parameterSource || 'Configuração'}
+        </p>
+      )}
+      {updatedAt && <p className="text-[10px] text-slate-500">{updatedAt}</p>}
+    </div>
+  );
+}

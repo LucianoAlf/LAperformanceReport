@@ -105,6 +105,24 @@ export interface HealthScoreV3ConfigUi {
   publicacaoProdutiva: false;
 }
 
+export interface HealthScoreV3SimulationCapacityAlertDetail {
+  turmaChave: string | null;
+  cursoId: number;
+  modalidade: HealthScoreV3Modalidade;
+  ocupacoesUnicas: number;
+  capacidadeMaxima: number;
+  competencia: string;
+}
+
+export interface HealthScoreV3SimulationCapacityAlert {
+  professorId: number | null;
+  unidadeId: string;
+  cursoId: number;
+  cursoNome: string | null;
+  modalidade: HealthScoreV3Modalidade;
+  alertasCapacidade: HealthScoreV3SimulationCapacityAlertDetail[];
+}
+
 export interface HealthScoreV3Simulation {
   configId: string;
   configVersao: number;
@@ -115,6 +133,7 @@ export interface HealthScoreV3Simulation {
   criticos: number;
   semBase: number;
   scoreMedio: number | null;
+  superlotacoes: HealthScoreV3SimulationCapacityAlert[];
   publica: false;
 }
 
@@ -223,6 +242,50 @@ function parseAssignmentSummary(value: unknown): HealthScoreV3AssignmentSummary 
 
 function parseAssignmentSummaries(value: unknown): HealthScoreV3AssignmentSummary[] {
   return Array.isArray(value) ? value.map(parseAssignmentSummary) : [];
+}
+
+function parseSimulationCapacityAlerts(
+  value: unknown,
+): HealthScoreV3SimulationCapacityAlert[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item): HealthScoreV3SimulationCapacityAlert[] => {
+    const row = asRecord(item);
+    const unidadeId = asNullableString(row.unidade_id);
+    const cursoId = asDefensiveNullableNumber(row.curso_id);
+    if (unidadeId === null || cursoId === null || !isModalidade(row.modalidade)) return [];
+
+    const alertasCapacidade = Array.isArray(row.alertas_capacidade)
+      ? row.alertas_capacidade.flatMap((rawAlert): HealthScoreV3SimulationCapacityAlertDetail[] => {
+        const alert = asRecord(rawAlert);
+        const alertCursoId = asDefensiveNullableNumber(alert.curso_id);
+        const competencia = asNullableString(alert.competencia);
+        if (
+          alertCursoId === null
+          || competencia === null
+          || !isModalidade(alert.modalidade)
+        ) return [];
+
+        return [{
+          turmaChave: asNullableString(alert.turma_chave),
+          cursoId: alertCursoId,
+          modalidade: alert.modalidade,
+          ocupacoesUnicas: asNumber(alert.ocupacoes_unicas),
+          capacidadeMaxima: asNumber(alert.capacidade_maxima),
+          competencia,
+        }];
+      })
+      : [];
+
+    return [{
+      professorId: asDefensiveNullableNumber(row.professor_id),
+      unidadeId,
+      cursoId,
+      cursoNome: asNullableString(row.curso_nome),
+      modalidade: row.modalidade,
+      alertasCapacidade,
+    }];
+  });
 }
 
 interface ParsedSegmentGoals {
@@ -399,6 +462,7 @@ export function parseHealthScoreV3Simulation(value: unknown): HealthScoreV3Simul
     criticos: asNumber(row.criticos),
     semBase: asNumber(row.sem_base),
     scoreMedio: asNullableNumber(row.score_medio),
+    superlotacoes: parseSimulationCapacityAlerts(row.superlotacao),
     publica: false,
   };
 }

@@ -9,11 +9,52 @@ import ts from 'typescript';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const typesPath = path.join(repoRoot, 'src/lib/healthScoreProfessorV3.ts');
 const hookPath = path.join(repoRoot, 'src/hooks/useHealthScoreProfessorV3Config.ts');
+const configComponentPath = path.join(
+  repoRoot,
+  'src/components/App/Professores/HealthScoreV3Config.tsx',
+);
+const segmentedGoalsComponentPath = path.join(
+  repoRoot,
+  'src/components/App/Professores/HealthScoreV3MetasSegmentadas.tsx',
+);
 
 const read = (filePath) => fs.readFileSync(filePath, 'utf8');
 
 async function loadHealthScoreModule() {
   const javascript = ts.transpileModule(read(typesPath), {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+  }).outputText;
+
+  return import(`data:text/javascript;base64,${Buffer.from(javascript).toString('base64')}`);
+}
+
+async function loadSegmentedGoalsHelpers() {
+  assert.equal(
+    fs.existsSync(segmentedGoalsComponentPath),
+    true,
+    'Task 8 deve criar HealthScoreV3MetasSegmentadas.tsx',
+  );
+  const source = read(segmentedGoalsComponentPath).replace(/\r\n/g, '\n');
+  const componentMarker = 'export function HealthScoreV3MetasSegmentadas';
+  const componentStart = source.indexOf(componentMarker);
+  assert.notEqual(
+    componentStart,
+    -1,
+    `componente deve exportar ${componentMarker}`,
+  );
+  const helpersSource = source
+    .slice(0, componentStart)
+    .replace(/import[\s\S]*?from ['"][^'"]+['"];\n/g, '');
+  assert.doesNotMatch(
+    helpersSource,
+    /^import /m,
+    'harness deve isolar helpers puros dos imports React',
+  );
+
+  const javascript = ts.transpileModule(helpersSource, {
     compilerOptions: {
       module: ts.ModuleKind.ESNext,
       target: ts.ScriptTarget.ES2022,
@@ -805,4 +846,460 @@ test('hook expoe refresh com alias reload e salva os dois payloads somente por R
   );
   assert.doesNotMatch(saveBlock, /ativar_health_score_professor_v3_config/);
   assert.doesNotMatch(simulateBlock, /ativar_health_score_professor_v3_config/);
+});
+
+function segmentedMatrixFixture() {
+  const barraId = '368d47f5-2d88-4475-bc14-ba084a9a348e';
+  const recreioId = '95553e96-971b-4590-a6eb-0201d013c14d';
+  const campoGrandeId = '2ec861f6-023f-4d7b-9927-3960ad8c2a92';
+  const existingGoal = {
+    id: 'goal-piano-individual',
+    configId: 'config-rascunho',
+    unidadeId: barraId,
+    unidadeNome: 'Barra',
+    cursoId: 10,
+    cursoNome: 'Piano',
+    modalidade: 'individual',
+    estado: 'configurada',
+    capacidadeMaxima: 8,
+    metaMediaTurma: 4,
+    metaCarteiraCurso: 20,
+    parametros: { fonte: 'manual' },
+    criadoEm: '2026-07-19T12:00:00Z',
+    atualizadoEm: '2026-07-20T12:00:00Z',
+  };
+
+  return {
+    barraId,
+    recreioId,
+    campoGrandeId,
+    existingGoal,
+    metas: [existingGoal],
+    pendencias: {
+      segmentosObservadosSemRegra: [
+        {
+          unidadeId: barraId,
+          unidadeNome: 'Barra',
+          cursoId: 10,
+          cursoNome: 'Piano',
+          modalidade: 'individual',
+        },
+        {
+          unidadeId: barraId,
+          unidadeNome: 'Barra',
+          cursoId: 10,
+          cursoNome: 'Piano',
+          modalidade: 'turma',
+        },
+      ],
+      atribuicoesSemRegra: [
+        {
+          atribuicaoId: 'atribuicao-canto',
+          professorId: 7,
+          professorNome: 'Ana',
+          unidadeId: recreioId,
+          unidadeNome: 'Recreio',
+          cursoId: 20,
+          cursoNome: 'Canto',
+          modalidade: 'turma',
+        },
+        {
+          atribuicaoId: 'atribuicao-incompleta',
+          professorId: 8,
+          professorNome: 'Bruno',
+          unidadeId: null,
+          unidadeNome: null,
+          cursoId: 30,
+          cursoNome: 'Violao',
+          modalidade: null,
+        },
+      ],
+      atribuicoesZeroCarteira: [
+        {
+          atribuicaoId: 'atribuicao-bateria-zero',
+          professorId: 9,
+          professorNome: 'Carla',
+          unidadeId: campoGrandeId,
+          unidadeNome: 'Campo Grande',
+          cursoId: 40,
+          cursoNome: 'Bateria',
+          modalidade: 'individual',
+          metaCarteiraCurso: 12,
+        },
+      ],
+      divergenciasModalidade: [
+        {
+          professorId: 10,
+          professorNome: 'Diego',
+          unidadeId: campoGrandeId,
+          unidadeNome: 'Campo Grande',
+          cursoId: 50,
+          cursoNome: 'Guitarra',
+          modalidade: 'turma',
+          estado: 'conflito_modalidade_jornada_aula',
+        },
+      ],
+    },
+  };
+}
+
+test('Task 8 separa pesos, metas globais e matriz segmentada no fluxo governado', () => {
+  assert.equal(
+    fs.existsSync(segmentedGoalsComponentPath),
+    true,
+    'Task 8 deve criar o componente focado de metas segmentadas',
+  );
+  const matrixSource = read(segmentedGoalsComponentPath);
+  const configSource = read(configComponentPath);
+
+  assert.match(matrixSource, /export function HealthScoreV3MetasSegmentadas/);
+  assert.match(matrixSource, /metas:\s*HealthScoreV3SegmentGoal\[\]/);
+  assert.match(matrixSource, /pendencias:\s*HealthScoreV3ConfigPendencias/);
+  assert.match(matrixSource, /editable:\s*boolean/);
+  assert.match(matrixSource, /onMetasChange/);
+  assert.match(matrixSource, /from '@\/components\/ui\/tabs'/);
+  assert.match(matrixSource, /from '@\/components\/ui\/select'/);
+  assert.match(matrixSource, /from '@\/components\/ui\/Tooltip'/);
+  assert.match(matrixSource, /overflow-x-auto/);
+  assert.match(matrixSource, /aria-invalid/);
+
+  for (const label of [
+    'Barra',
+    'Recreio',
+    'Campo Grande',
+    'Curso',
+    'Modalidade',
+    'Capacidade máxima',
+    'Meta média/turma',
+    'Meta carteira',
+    'Estado',
+    'Fonte',
+    'Regra ausente',
+    'Zero carteira',
+    'Superlotação',
+    'Divergência de modalidade',
+    'Pendências de atribuição',
+    'Somente leitura',
+  ]) {
+    assert.match(matrixSource, new RegExp(label));
+  }
+  assert.match(matrixSource, /Todos os cursos/);
+  assert.match(matrixSource, /Todas as modalidades/);
+  assert.match(matrixSource, /Com pendência/);
+  assert.doesNotMatch(matrixSource, /Ativar versão/);
+
+  assert.match(configSource, /import \{ HealthScoreV3MetasSegmentadas/);
+  assert.match(configSource, /Pesos dos pilares/);
+  assert.match(configSource, /Metas globais remanescentes/);
+  assert.match(configSource, /Metas por unidade, curso e modalidade/);
+  assert.match(configSource, /Simulação/);
+  assert.match(configSource, /Segmentada por unidade\/curso\/modalidade/);
+  assert.match(
+    configSource,
+    /metasSegmentadas:\s*config\.metasSegmentadas\.map\([\s\S]*?parametros:\s*\{\s*\.\.\.goal\.parametros\s*\}/,
+    'cloneConfig deve clonar a matriz e os parametros de cada meta',
+  );
+  assert.match(
+    configSource,
+    /GLOBAL_TARGET_METRICS[\s\S]*?retencao[\s\S]*?permanencia[\s\S]*?conversao[\s\S]*?presenca/,
+  );
+  const requiredTargetsBlock = configSource.slice(
+    configSource.indexOf('const hasRequiredTargets'),
+    configSource.indexOf('const canActivate'),
+  );
+  assert.match(requiredTargetsBlock, /GLOBAL_TARGET_METRICS/);
+  assert.doesNotMatch(requiredTargetsBlock, /media_turma|numero_alunos/);
+
+  const simulateBlock = configSource.slice(
+    configSource.indexOf('const handleSimulate'),
+    configSource.indexOf('const handleActivate'),
+  );
+  assert.doesNotMatch(simulateBlock, /saveDraft\(/);
+  assert.doesNotMatch(simulateBlock, /activate\(/);
+  const saveBlock = configSource.slice(
+    configSource.indexOf('const handleSave'),
+    configSource.indexOf('const handleSimulate'),
+  );
+  assert.doesNotMatch(saveBlock, /activate\(/);
+});
+
+test('matriz visivel e a uniao deduplicada sem cartesiano ou identidades inventadas', async () => {
+  const {
+    buildHealthScoreV3SegmentMatrix,
+    ensureHealthScoreV3DraftSegmentGoals,
+  } = await loadSegmentedGoalsHelpers();
+  const fixture = segmentedMatrixFixture();
+
+  const matrix = buildHealthScoreV3SegmentMatrix(fixture.metas, fixture.pendencias);
+  assert.deepEqual(
+    matrix.map(({ goal }) => [
+      goal.unidadeNome,
+      goal.cursoNome,
+      goal.modalidade,
+    ]),
+    [
+      ['Barra', 'Piano', 'individual'],
+      ['Barra', 'Piano', 'turma'],
+      ['Recreio', 'Canto', 'turma'],
+      ['Campo Grande', 'Bateria', 'individual'],
+    ],
+  );
+  assert.equal(matrix.length, 4, 'a uniao nao pode criar produto cartesiano');
+  assert.equal(
+    matrix.some(({ goal }) => goal.cursoNome === 'Guitarra'),
+    false,
+    'divergencia de modalidade fica na fila e nao vira meta',
+  );
+  assert.equal(
+    matrix.some(({ goal }) => goal.cursoNome === 'Violao'),
+    false,
+    'atribuicao sem identidade completa nao vira linha inventada',
+  );
+  assert.equal(
+    matrix.find(({ goal }) => goal.cursoNome === 'Bateria')?.pending.zeroCarteira,
+    true,
+    'curso formal com carteira zero permanece visivel',
+  );
+
+  const draftGoals = ensureHealthScoreV3DraftSegmentGoals(
+    fixture.metas,
+    fixture.pendencias,
+    'config-rascunho',
+  );
+  assert.equal(draftGoals.length, 4);
+  assert.equal(draftGoals[0].metaCarteiraCurso, 20, 'meta existente deve ser preservada');
+  for (const goal of draftGoals.slice(1)) {
+    assert.equal(goal.estado, 'configurada');
+    assert.equal(goal.capacidadeMaxima, 0);
+    assert.equal(goal.metaMediaTurma, 0);
+    assert.equal(goal.metaCarteiraCurso, 0);
+    assert.equal(goal.configId, 'config-rascunho');
+  }
+});
+
+test('estado nao ofertada limpa metas atomicamente e validacao local explica cada erro', async () => {
+  const {
+    areHealthScoreV3SegmentGoalsValid,
+    getHealthScoreV3SegmentGoalErrors,
+    transitionHealthScoreV3SegmentGoalState,
+  } = await loadSegmentedGoalsHelpers();
+  const { existingGoal } = segmentedMatrixFixture();
+
+  const naoOfertada = transitionHealthScoreV3SegmentGoalState(existingGoal, 'nao_ofertada');
+  assert.deepEqual(
+    {
+      estado: naoOfertada.estado,
+      capacidadeMaxima: naoOfertada.capacidadeMaxima,
+      metaMediaTurma: naoOfertada.metaMediaTurma,
+      metaCarteiraCurso: naoOfertada.metaCarteiraCurso,
+    },
+    {
+      estado: 'nao_ofertada',
+      capacidadeMaxima: null,
+      metaMediaTurma: null,
+      metaCarteiraCurso: null,
+    },
+  );
+
+  const reaberta = transitionHealthScoreV3SegmentGoalState(naoOfertada, 'configurada');
+  assert.equal(reaberta.capacidadeMaxima, 0);
+  assert.equal(reaberta.metaMediaTurma, 0);
+  assert.equal(reaberta.metaCarteiraCurso, 0);
+  assert.equal(areHealthScoreV3SegmentGoalsValid([reaberta]), false);
+
+  const acimaDaCapacidade = {
+    ...existingGoal,
+    capacidadeMaxima: 3,
+    metaMediaTurma: 4,
+  };
+  const errors = getHealthScoreV3SegmentGoalErrors(acimaDaCapacidade);
+  assert.match(errors.metaMediaTurma, /não pode superar a capacidade máxima/i);
+  assert.equal(areHealthScoreV3SegmentGoalsValid([acimaDaCapacidade]), false);
+  assert.equal(areHealthScoreV3SegmentGoalsValid([existingGoal]), true);
+});
+
+test('simulacao preserva a superlotacao canonica devolvida pelo backend', async () => {
+  const { parseHealthScoreV3Simulation } = await loadHealthScoreModule();
+
+  const simulation = parseHealthScoreV3Simulation({
+    config_id: 'config-rascunho',
+    config_versao: 2,
+    competencia: '2026-08-01',
+    total: 10,
+    saudaveis: 4,
+    atencao: 3,
+    criticos: 2,
+    sem_base: 1,
+    score_medio: 78.5,
+    superlotacao: [
+      {
+        professor_id: 9,
+        unidade_id: '368d47f5-2d88-4475-bc14-ba084a9a348e',
+        curso_id: 40,
+        curso_nome: 'Bateria',
+        modalidade: 'turma',
+        alertas_capacidade: [
+          {
+            turma_chave: 'T_Seg_18',
+            curso_id: 40,
+            modalidade: 'turma',
+            ocupacoes_unicas: 3,
+            capacidade_maxima: 2,
+            competencia: '2026-08-01',
+          },
+          {
+            turma_chave: 'T_Qua_18',
+            curso_id: 40,
+            modalidade: 'turma',
+            ocupacoes_unicas: 4,
+            capacidade_maxima: 2,
+            competencia: '2026-08-01',
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.deepEqual(simulation.superlotacoes, [
+    {
+      professorId: 9,
+      unidadeId: '368d47f5-2d88-4475-bc14-ba084a9a348e',
+      cursoId: 40,
+      cursoNome: 'Bateria',
+      modalidade: 'turma',
+      alertasCapacidade: [
+        {
+          turmaChave: 'T_Seg_18',
+          cursoId: 40,
+          modalidade: 'turma',
+          ocupacoesUnicas: 3,
+          capacidadeMaxima: 2,
+          competencia: '2026-08-01',
+        },
+        {
+          turmaChave: 'T_Qua_18',
+          cursoId: 40,
+          modalidade: 'turma',
+          ocupacoesUnicas: 4,
+          capacidadeMaxima: 2,
+          competencia: '2026-08-01',
+        },
+      ],
+    },
+  ]);
+});
+
+test('matriz usa superlotacao canonica e nao confunde meta local invalida com ocupacao observada', async () => {
+  const { buildHealthScoreV3SegmentMatrix } = await loadSegmentedGoalsHelpers();
+  const fixture = segmentedMatrixFixture();
+  const invalidGoal = {
+    ...fixture.existingGoal,
+    capacidadeMaxima: 3,
+    metaMediaTurma: 4,
+  };
+
+  const withoutCanonicalEvidence = buildHealthScoreV3SegmentMatrix(
+    [invalidGoal],
+    {
+      segmentosObservadosSemRegra: [],
+      atribuicoesSemRegra: [],
+      atribuicoesZeroCarteira: [],
+      divergenciasModalidade: [],
+    },
+    [],
+  );
+  assert.equal(withoutCanonicalEvidence[0].pending.superlotacao, false);
+
+  const withCanonicalEvidence = buildHealthScoreV3SegmentMatrix(
+    fixture.metas,
+    fixture.pendencias,
+    [{
+      professorId: 9,
+      unidadeId: fixture.barraId,
+      cursoId: 10,
+      cursoNome: 'Piano',
+      modalidade: 'individual',
+      alertasCapacidade: 2,
+    }],
+  );
+  assert.equal(withCanonicalEvidence[0].pending.superlotacao, true);
+});
+
+test('contador de carteira zero deduplica o mesmo professor em varias atribuicoes', async () => {
+  const { countHealthScoreV3ZeroPortfolioProfessors } = await loadSegmentedGoalsHelpers();
+  const fixture = segmentedMatrixFixture();
+
+  assert.equal(
+    countHealthScoreV3ZeroPortfolioProfessors([
+      ...fixture.pendencias.atribuicoesZeroCarteira,
+      {
+        ...fixture.pendencias.atribuicoesZeroCarteira[0],
+        atribuicaoId: 'atribuicao-bateria-zero-2',
+        cursoId: 41,
+        cursoNome: 'Percussao',
+      },
+      {
+        ...fixture.pendencias.atribuicoesZeroCarteira[0],
+        atribuicaoId: 'atribuicao-outro-professor',
+        professorId: 10,
+        professorNome: 'Diego',
+      },
+    ]),
+    2,
+  );
+});
+
+test('matriz mantem as tres unidades canonicas mesmo quando uma delas nao possui linhas', async () => {
+  const { buildHealthScoreV3UnitTabs } = await loadSegmentedGoalsHelpers();
+  const fixture = segmentedMatrixFixture();
+  const matrix = [{
+    goal: fixture.existingGoal,
+    key: `${fixture.barraId}|10|individual`,
+    synthetic: false,
+    pending: { regraAusente: false, zeroCarteira: false, superlotacao: false },
+  }];
+
+  assert.deepEqual(buildHealthScoreV3UnitTabs(matrix), [
+    { id: fixture.barraId, name: 'Barra' },
+    { id: fixture.recreioId, name: 'Recreio' },
+    { id: fixture.campoGrandeId, name: 'Campo Grande' },
+  ]);
+});
+
+test('rascunho sujo protege saida e simulacao obsoleta nao permanece visivel', () => {
+  const configSource = read(configComponentPath);
+
+  assert.match(configSource, /addEventListener\(\s*'beforeunload'/);
+  assert.match(configSource, /document\.addEventListener\(\s*'click'[\s\S]*?true\s*\)/);
+  assert.match(configSource, /import\s*\{\s*useBlocker\s*\}\s*from\s*'react-router-dom'/);
+  assert.match(configSource, /useBlocker\(\s*draftIsDirty\s*\)/);
+  assert.match(configSource, /routeBlocker\.state\s*!==\s*'blocked'/);
+  assert.match(configSource, /routeBlocker\.(?:proceed|reset)\s*\(/);
+  assert.match(configSource, /window\.confirm/);
+  assert.match(
+    configSource,
+    /simulationIsCurrent\s*&&\s*simulation\s*&&\s*\(/,
+    'resultado antigo nao pode continuar visivel depois de mudar rascunho ou competencia',
+  );
+});
+
+test('filtros e controles da matriz possuem nomes acessiveis', () => {
+  const matrixSource = read(segmentedGoalsComponentPath);
+
+  for (const accessibleName of [
+    'Filtrar por curso',
+    'Filtrar por modalidade',
+    'Filtrar por pendência',
+    'Estado da meta',
+  ]) {
+    assert.match(
+      matrixSource,
+      new RegExp(`aria-label[\\s\\S]{0,80}${accessibleName}`, 'i'),
+      `${accessibleName} deve nomear seu controle`,
+    );
+  }
+  assert.match(matrixSource, /<Input[\s\S]{0,180}aria-label=\{label\}/);
+  for (const inputLabel of ['Capacidade máxima', 'Meta média por turma', 'Meta de carteira']) {
+    assert.match(matrixSource, new RegExp(`label=\\{[^\\n]{0,100}${inputLabel}`, 'i'));
+  }
 });
