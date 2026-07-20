@@ -638,11 +638,11 @@ test(
   },
 );
 
-test('Task 3 futura cria atribuicao formal sem produto cartesiano', () => {
+test('Task 3 cria atribuicao formal, temporal e privada sem produto cartesiano', () => {
   assert.equal(
     existsSync(professorSegmentMigration),
     true,
-    `${professorSegmentMigration} pertence a Task 3 e ainda deve ser implementada`,
+    `${professorSegmentMigration} deve implementar exclusivamente a Task 3`,
   );
 
   const sql = read(professorSegmentMigration);
@@ -657,10 +657,57 @@ test('Task 3 futura cria atribuicao formal sem produto cartesiano', () => {
     requiredValues: ['individual', 'turma'],
     exact: true,
   });
+  assertColumnAllowedValues({
+    tableSql,
+    allSql: sql,
+    tableName,
+    columnName: 'fonte',
+    requiredValues: ['manual', 'jornada', 'aula', 'revisao'],
+    exact: true,
+  });
+  assertColumnAllowedValues({
+    tableSql,
+    allSql: sql,
+    tableName,
+    columnName: 'confianca',
+    requiredValues: ['alta', 'media', 'revisada'],
+    exact: true,
+  });
+
+  for (const foreignKey of [
+    { tableSql, columnName: 'professor_id', referencedTable: 'professores' },
+    { tableSql, columnName: 'unidade_id', referencedTable: 'unidades' },
+    { tableSql, columnName: 'curso_id', referencedTable: 'cursos' },
+    { tableSql, columnName: 'revisado_por', referencedTable: 'usuarios' },
+  ]) {
+    assertRestrictForeignKey(foreignKey);
+  }
+
+  assert.match(
+    sql,
+    /create\s+unique\s+index\s+if\s+not\s+exists\s+[a-z_][a-z0-9_]*\s+on\s+public\.professor_unidade_curso_modalidade\s*\(\s*professor_id\s*,\s*unidade_id\s*,\s*curso_id\s*,\s*modalidade\s*\)\s*where\s+status\s*=\s*'ativo'\s+and\s+vigencia_fim\s+is\s+null/i,
+  );
   assertSecuredTable(sql, tableName);
+  assert.match(sql, /get_professor_curso_modalidade_reconciliacao_v1/i);
+  assert.match(sql, /salvar_professor_curso_modalidade_atribuicoes_v1/i);
+  assert.match(sql, /reconciliar_professor_curso_modalidade_v1/i);
+  assert.match(sql, /fn_professor_curso_modalidade_ator_v1\s*\(\s*\)/i);
+  assert.doesNotMatch(
+    sql,
+    /fn_health_score_professor_v3_ator_gerenciador\s*\(\s*\)/i,
+    'a Task 3 deve autorizar por unidade sem exigir permissao global cumulativa',
+  );
+  assert.match(
+    sql,
+    /usuario_tem_permissao\s*\(\s*v_usuario_id\s*,\s*'professores\.editar'\s*,\s*v_unidade_id\s*\)/i,
+  );
+  assert.match(sql, /qualidade_vinculo\s*=\s*'vinculo_utilizavel'/i);
+  assert.match(sql, /conflito_modalidade_jornada_aula/i);
+  assert.match(sql, /ignorados_projeto_banda/i);
   assert.equal(
     hasProfessorCourseUnitCartesianProduct(sql),
     false,
     'professores_cursos e professores_unidades nao podem formar produto cartesiano',
   );
+  assert.doesNotMatch(sql, /\bqtd_alunos\b|\bturma_nome\b/i);
 });
