@@ -140,11 +140,27 @@ O V3 é calculado e persistido no banco. Frontend, relatórios e agentes apenas 
 | Retenção atribuível | 25% | 90% | período matrícula-disciplina-professor exposto; `movimentacoes_admin` + `motivos_saida` |
 | Permanência com o professor | 25% | 12 meses | vínculos encerrados de `vw_professor_periodos_efetivos_v3_sombra` |
 | Conversão Exp→Mat | 15% | 70% | experimental confirmada e matrícula canonicamente vinculada |
-| Média de alunos/turma | 15% | 1,44 | ocupações únicas de pessoas por turma regular elegível |
-| Número de alunos | 10% | 33 | pessoas canônicas únicas na carteira professor+unidade |
+| Média de alunos/turma | 15% | segmentada | ocupações únicas de pessoas por turma regular elegível |
+| Número de alunos | 10% | segmentada | pessoas canônicas únicas na carteira professor+unidade |
 | Presença dos alunos | 10% | 80% | roster + `vw_aluno_presenca_semantica_v1` |
 
 `nota = min(100, valor_real / meta_versionada * 100)`. Sliders alteram somente pesos; metas são campos separados. Uma configuração ativa é imutável: alterações criam rascunho, passam por simulação e são ativadas em ação separada. Snapshots fechados não são reescritos.
+
+#### Metas segmentadas de carteira e turma
+
+Média/turma e Número de alunos não usam uma meta global no V3. Cada regra pertence a `unidade + curso + modalidade`, com modalidade canônica `turma` ou `individual`:
+
+- `capacidade_maxima`: limite operacional do curso naquela unidade e modalidade;
+- `meta_media_turma`: meta de ocupação por turma daquele segmento;
+- `meta_carteira_curso`: meta de pessoas na carteira daquele segmento;
+- curso não ofertado é declarado explicitamente, sem valores numéricos;
+- curso formalmente atribuído e ainda sem alunos continua visível, mas não recebe nota zero nem penaliza o professor;
+- quando surgir o primeiro vínculo ativo, a regra segmentada passa a ser pontuável;
+- regra ausente ou atribuição ambígua produz `segmentacao_incompleta`, nunca fallback para meta global;
+- capacidade excedida gera alerta operacional, sem cortar ocupação, valor bruto ou nota;
+- o total de pessoas do professor continua vindo da carteira canônica e não pode ser inflado pela soma de cursos simultâneos.
+
+A configuração segmentada segue o mesmo ciclo governado: rascunho, validação, simulação e ativação separada. Enquanto houver regra inválida, os comandos de salvar, simular e ativar permanecem bloqueados.
 
 - Classificação inicial: **Saudável ≥ 70** · **Atenção 50–69** · **Crítico < 50**.
 - Métrica sem base possui valor pontuável e nota `null`; seu peso sai temporariamente do denominador.
