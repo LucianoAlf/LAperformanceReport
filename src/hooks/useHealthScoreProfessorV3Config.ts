@@ -92,7 +92,7 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
       if (rpcError) throw rpcError;
       const saved = parseHealthScoreV3Config(data);
       if (!saved) throw new Error('A RPC nao retornou o rascunho salvo.');
-      setConfig((current) => current ? { ...current, rascunho: saved } : current);
+      await refresh();
       setSimulation(null);
       return saved;
     } catch (caught) {
@@ -101,7 +101,7 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
     } finally {
       setMutating(false);
     }
-  }, []);
+  }, [refresh]);
 
   const simulate = useCallback(async (configId: string, competencia: string) => {
     setMutating(true);

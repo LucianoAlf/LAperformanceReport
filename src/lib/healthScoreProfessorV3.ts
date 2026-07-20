@@ -30,22 +30,33 @@ export type HealthScoreV3Modalidade = 'individual' | 'turma';
 
 export type HealthScoreV3SegmentGoalState = 'configurada' | 'nao_ofertada';
 
-export interface HealthScoreV3SegmentGoal {
+interface HealthScoreV3SegmentGoalBase {
   id: string | null;
   configId: string | null;
-  unidadeId: string | null;
+  unidadeId: string;
   unidadeNome: string | null;
-  cursoId: number | null;
+  cursoId: number;
   cursoNome: string | null;
   modalidade: HealthScoreV3Modalidade;
-  estado: HealthScoreV3SegmentGoalState;
-  capacidadeMaxima: number | null;
-  metaMediaTurma: number | null;
-  metaCarteiraCurso: number | null;
   parametros: Record<string, unknown>;
   criadoEm: string | null;
   atualizadoEm: string | null;
 }
+
+export type HealthScoreV3SegmentGoal = HealthScoreV3SegmentGoalBase & (
+  | {
+      estado: 'configurada';
+      capacidadeMaxima: number;
+      metaMediaTurma: number;
+      metaCarteiraCurso: number;
+    }
+  | {
+      estado: 'nao_ofertada';
+      capacidadeMaxima: null;
+      metaMediaTurma: null;
+      metaCarteiraCurso: null;
+    }
+);
 
 export interface HealthScoreV3AssignmentSummary {
   atribuicaoId: string | null;
@@ -236,21 +247,55 @@ function parseSegmentGoals(value: unknown): ParsedSegmentGoals {
     }
     if (!isSegmentGoalState(row.estado)) continue;
 
-    goals.push({
+    const unidadeId = asNullableString(row.unidade_id);
+    const cursoId = asDefensiveNullableNumber(row.curso_id);
+    if (unidadeId === null || cursoId === null) continue;
+
+    const base = {
       id: asNullableString(row.id),
       configId: asNullableString(row.config_id),
-      unidadeId: asNullableString(row.unidade_id),
+      unidadeId,
       unidadeNome: asNullableString(row.unidade_nome),
-      cursoId: asDefensiveNullableNumber(row.curso_id),
+      cursoId,
       cursoNome: asNullableString(row.curso_nome),
       modalidade: row.modalidade,
-      estado: row.estado,
-      capacidadeMaxima: asDefensiveNullableNumber(row.capacidade_maxima),
-      metaMediaTurma: asDefensiveNullableNumber(row.meta_media_turma),
-      metaCarteiraCurso: asDefensiveNullableNumber(row.meta_carteira_curso),
       parametros: asRecord(row.parametros),
       criadoEm: asNullableString(row.criado_em),
       atualizadoEm: asNullableString(row.atualizado_em),
+    };
+
+    if (row.estado === 'configurada') {
+      const capacidadeMaxima = asDefensiveNullableNumber(row.capacidade_maxima);
+      const metaMediaTurma = asDefensiveNullableNumber(row.meta_media_turma);
+      const metaCarteiraCurso = asDefensiveNullableNumber(row.meta_carteira_curso);
+      if (
+        capacidadeMaxima === null
+        || metaMediaTurma === null
+        || metaCarteiraCurso === null
+      ) continue;
+
+      goals.push({
+        ...base,
+        estado: 'configurada',
+        capacidadeMaxima,
+        metaMediaTurma,
+        metaCarteiraCurso,
+      });
+      continue;
+    }
+
+    if (
+      row.capacidade_maxima !== null
+      || row.meta_media_turma !== null
+      || row.meta_carteira_curso !== null
+    ) continue;
+
+    goals.push({
+      ...base,
+      estado: 'nao_ofertada',
+      capacidadeMaxima: null,
+      metaMediaTurma: null,
+      metaCarteiraCurso: null,
     });
   }
 
@@ -370,12 +415,12 @@ export function serializeHealthScoreV3Metrics(metricas: HealthScoreV3MetricConfi
 export function serializeHealthScoreV3SegmentGoals(goals: HealthScoreV3SegmentGoal[]) {
   return goals.map((goal) => ({
     unidade_id: goal.unidadeId,
-    curso_id: asDefensiveNullableNumber(goal.cursoId),
+    curso_id: goal.cursoId,
     modalidade: goal.modalidade,
     estado: goal.estado,
-    capacidade_maxima: asDefensiveNullableNumber(goal.capacidadeMaxima),
-    meta_media_turma: asDefensiveNullableNumber(goal.metaMediaTurma),
-    meta_carteira_curso: asDefensiveNullableNumber(goal.metaCarteiraCurso),
+    capacidade_maxima: goal.capacidadeMaxima,
+    meta_media_turma: goal.metaMediaTurma,
+    meta_carteira_curso: goal.metaCarteiraCurso,
     parametros: asRecord(goal.parametros),
   }));
 }

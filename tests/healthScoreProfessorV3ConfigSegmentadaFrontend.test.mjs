@@ -205,7 +205,7 @@ test('declara o contrato frontend das metas segmentadas', () => {
     source,
     /export type HealthScoreV3SegmentGoalState\s*=\s*'configurada'\s*\|\s*'nao_ofertada'/,
   );
-  assert.match(source, /export interface HealthScoreV3SegmentGoal\s*{/);
+  assert.match(source, /export type HealthScoreV3SegmentGoal\s*=/);
   assert.match(source, /export interface HealthScoreV3AssignmentSummary\s*{/);
   assert.match(
     source,
@@ -217,7 +217,7 @@ test('declara o contrato frontend das metas segmentadas', () => {
   );
 });
 
-test('parser preserva null e nao converte numero invalido em zero', async () => {
+test('parser aceita somente identidades e combinacoes de estado validas', async () => {
   const { parseHealthScoreV3SegmentGoals } = await loadHealthScoreModule();
   const goals = parseHealthScoreV3SegmentGoals([
     {
@@ -230,14 +230,109 @@ test('parser preserva null e nao converte numero invalido em zero', async () => 
       modalidade: 'turma',
       estado: 'configurada',
       capacidade_maxima: '8',
-      meta_media_turma: null,
-      meta_carteira_curso: 'numero-invalido',
+      meta_media_turma: '4',
+      meta_carteira_curso: '20',
       parametros: { fonte: 'manual' },
       criado_em: '2026-07-19T20:40:00Z',
       atualizado_em: null,
     },
     {
       id: 'goal-2',
+      config_id: 'config-1',
+      unidade_id: 'unidade-1',
+      unidade_nome: 'Barra',
+      curso_id: 42,
+      curso_nome: 'Piano',
+      modalidade: 'individual',
+      estado: 'nao_ofertada',
+      capacidade_maxima: null,
+      meta_media_turma: null,
+      meta_carteira_curso: null,
+      parametros: {},
+    },
+    {
+      unidade_id: null,
+      curso_id: 42,
+      modalidade: 'turma',
+      estado: 'configurada',
+      capacidade_maxima: 8,
+      meta_media_turma: 4,
+      meta_carteira_curso: 20,
+    },
+    {
+      unidade_id: 'unidade-1',
+      curso_id: 'numero-invalido',
+      modalidade: 'turma',
+      estado: 'configurada',
+      capacidade_maxima: 8,
+      meta_media_turma: 4,
+      meta_carteira_curso: 20,
+    },
+    {
+      unidade_id: 'unidade-1',
+      curso_id: 42,
+      modalidade: 'turma',
+      estado: 'configurada',
+      capacidade_maxima: 'numero-invalido',
+      meta_media_turma: 4,
+      meta_carteira_curso: 20,
+    },
+    {
+      unidade_id: 'unidade-1',
+      curso_id: 42,
+      modalidade: 'turma',
+      estado: 'configurada',
+      capacidade_maxima: 8,
+      meta_media_turma: null,
+      meta_carteira_curso: 20,
+    },
+    {
+      unidade_id: 'unidade-1',
+      curso_id: 42,
+      modalidade: 'turma',
+      estado: 'configurada',
+      capacidade_maxima: 8,
+      meta_media_turma: 4,
+      meta_carteira_curso: 'numero-invalido',
+    },
+    {
+      unidade_id: 'unidade-1',
+      curso_id: 42,
+      modalidade: 'individual',
+      estado: 'nao_ofertada',
+      capacidade_maxima: 1,
+      meta_media_turma: null,
+      meta_carteira_curso: null,
+    },
+    {
+      unidade_id: 'unidade-1',
+      curso_id: 42,
+      modalidade: 'individual',
+      estado: 'nao_ofertada',
+      capacidade_maxima: null,
+      meta_media_turma: 'numero-invalido',
+      meta_carteira_curso: null,
+    },
+    {
+      unidade_id: 'unidade-1',
+      curso_id: 42,
+      modalidade: 'individual',
+      estado: 'nao_ofertada',
+      capacidade_maxima: null,
+      meta_media_turma: null,
+      meta_carteira_curso: 20,
+    },
+    {
+      unidade_id: 'unidade-1',
+      curso_id: 42,
+      modalidade: 'turma',
+      estado: 'pendente',
+      capacidade_maxima: 8,
+      meta_media_turma: 4,
+      meta_carteira_curso: 20,
+    },
+    {
+      id: 'goal-ignorada',
       config_id: 'config-1',
       unidade_id: 'unidade-1',
       unidade_nome: 'Barra',
@@ -263,10 +358,26 @@ test('parser preserva null e nao converte numero invalido em zero', async () => 
       modalidade: 'turma',
       estado: 'configurada',
       capacidadeMaxima: 8,
-      metaMediaTurma: null,
-      metaCarteiraCurso: null,
+      metaMediaTurma: 4,
+      metaCarteiraCurso: 20,
       parametros: { fonte: 'manual' },
       criadoEm: '2026-07-19T20:40:00Z',
+      atualizadoEm: null,
+    },
+    {
+      id: 'goal-2',
+      configId: 'config-1',
+      unidadeId: 'unidade-1',
+      unidadeNome: 'Barra',
+      cursoId: 42,
+      cursoNome: 'Piano',
+      modalidade: 'individual',
+      estado: 'nao_ofertada',
+      capacidadeMaxima: null,
+      metaMediaTurma: null,
+      metaCarteiraCurso: null,
+      parametros: {},
+      criadoEm: null,
       atualizadoEm: null,
     },
   ]);
@@ -374,6 +485,7 @@ test('config antiga parseia sem matriz e modalidade descartada vira pendencia', 
 
 test('TypeScript aceita shapes validos e rejeita modalidade estado e campos obrigatorios', () => {
   const fixture = `
+import { serializeHealthScoreV3SegmentGoals } from '../src/lib/healthScoreProfessorV3';
 import type {
   HealthScoreV3AssignmentSummary,
   HealthScoreV3Config,
@@ -381,7 +493,7 @@ import type {
   HealthScoreV3SegmentGoal,
 } from '../src/lib/healthScoreProfessorV3';
 
-const validGoal: HealthScoreV3SegmentGoal = {
+const validConfigured: HealthScoreV3SegmentGoal = {
   id: null,
   configId: 'config-1',
   unidadeId: 'unidade-1',
@@ -397,6 +509,18 @@ const validGoal: HealthScoreV3SegmentGoal = {
   criadoEm: null,
   atualizadoEm: null,
 };
+
+const validNaoOfertada: HealthScoreV3SegmentGoal = {
+  ...validConfigured,
+  id: null,
+  configId: null,
+  estado: 'nao_ofertada',
+  capacidadeMaxima: null,
+  metaMediaTurma: null,
+  metaCarteiraCurso: null,
+};
+
+serializeHealthScoreV3SegmentGoals([validConfigured, validNaoOfertada]);
 
 const validAssignment: HealthScoreV3AssignmentSummary = {
   atribuicaoId: null,
@@ -427,7 +551,7 @@ const validConfig: HealthScoreV3Config = {
   criadoEm: '2026-07-20T12:00:00Z',
   ativadoEm: null,
   metricas: [],
-  metasSegmentadas: [validGoal],
+  metasSegmentadas: [validConfigured, validNaoOfertada],
 };
 
 const validUi: HealthScoreV3ConfigUi = {
@@ -444,16 +568,57 @@ const validUi: HealthScoreV3ConfigUi = {
 };
 
 // @ts-expect-error modalidade deve ser individual ou turma
-const invalidModalidade: HealthScoreV3SegmentGoal = { ...validGoal, modalidade: 'hibrida' };
+const invalidModalidade: HealthScoreV3SegmentGoal = { ...validConfigured, modalidade: 'hibrida' };
 // @ts-expect-error estado deve ser configurada ou nao_ofertada
-const invalidEstado: HealthScoreV3SegmentGoal = { ...validGoal, estado: 'pendente' };
+const invalidEstado: HealthScoreV3SegmentGoal = { ...validConfigured, estado: 'pendente' };
 
-const { unidadeId: _unidadeId, ...goalSemUnidade } = validGoal;
+const { unidadeId: _unidadeId, ...goalSemUnidade } = validConfigured;
 // @ts-expect-error unidadeId e obrigatorio
 const invalidSemUnidade: HealthScoreV3SegmentGoal = goalSemUnidade;
-const { parametros: _parametros, ...goalSemParametros } = validGoal;
+// @ts-expect-error unidadeId nao pode ser null
+const invalidUnidadeNula: HealthScoreV3SegmentGoal = { ...validConfigured, unidadeId: null };
+const { cursoId: _cursoId, ...goalSemCurso } = validConfigured;
+// @ts-expect-error cursoId e obrigatorio
+const invalidSemCurso: HealthScoreV3SegmentGoal = goalSemCurso;
+// @ts-expect-error cursoId nao pode ser null
+const invalidCursoNulo: HealthScoreV3SegmentGoal = { ...validConfigured, cursoId: null };
+const { parametros: _parametros, ...goalSemParametros } = validConfigured;
 // @ts-expect-error parametros e obrigatorio
 const invalidSemParametros: HealthScoreV3SegmentGoal = goalSemParametros;
+
+// @ts-expect-error configurada exige capacidadeMaxima number
+const invalidConfiguradaSemCapacidade: HealthScoreV3SegmentGoal = {
+  ...validConfigured,
+  capacidadeMaxima: null,
+};
+// @ts-expect-error configurada exige metaMediaTurma number
+const invalidConfiguradaSemMedia: HealthScoreV3SegmentGoal = {
+  ...validConfigured,
+  metaMediaTurma: null,
+};
+// @ts-expect-error configurada exige metaCarteiraCurso number
+const invalidConfiguradaSemCarteira: HealthScoreV3SegmentGoal = {
+  ...validConfigured,
+  metaCarteiraCurso: null,
+};
+// @ts-expect-error nao_ofertada exige capacidadeMaxima null
+const invalidNaoOfertadaComCapacidade: HealthScoreV3SegmentGoal = {
+  ...validNaoOfertada,
+  capacidadeMaxima: 8,
+};
+// @ts-expect-error nao_ofertada exige metaMediaTurma null
+const invalidNaoOfertadaComMedia: HealthScoreV3SegmentGoal = {
+  ...validNaoOfertada,
+  metaMediaTurma: 4,
+};
+// @ts-expect-error nao_ofertada exige metaCarteiraCurso null
+const invalidNaoOfertadaComCarteira: HealthScoreV3SegmentGoal = {
+  ...validNaoOfertada,
+  metaCarteiraCurso: 20,
+};
+// @ts-expect-error serializador aceita somente metas segmentadas validas
+serializeHealthScoreV3SegmentGoals([{ ...validNaoOfertada, metaCarteiraCurso: 20 }]);
+
 const { metasSegmentadas: _metasSegmentadas, ...configSemMetas } = validConfig;
 // @ts-expect-error metasSegmentadas e obrigatorio
 const invalidConfig: HealthScoreV3Config = configSemMetas;
@@ -466,7 +631,16 @@ void [
   invalidModalidade,
   invalidEstado,
   invalidSemUnidade,
+  invalidUnidadeNula,
+  invalidSemCurso,
+  invalidCursoNulo,
   invalidSemParametros,
+  invalidConfiguradaSemCapacidade,
+  invalidConfiguradaSemMedia,
+  invalidConfiguradaSemCarteira,
+  invalidNaoOfertadaComCapacidade,
+  invalidNaoOfertadaComMedia,
+  invalidNaoOfertadaComCarteira,
   invalidConfig,
   invalidUi,
 ];
@@ -483,14 +657,25 @@ void [
     '',
   );
   const controlledRed = compileTypeFixture(fixtureSemSupressoes);
-  assert.equal(controlledRed.length, 6, formatDiagnostics(controlledRed));
+  const expectedErrors = fixture.match(/^\/\/ @ts-expect-error/gm)?.length ?? 0;
+  assert.equal(controlledRed.length, expectedErrors, formatDiagnostics(controlledRed));
   assert.ok(controlledRed.some(({ code }) => code === 2322));
   assert.ok(controlledRed.some(({ code }) => code === 2741));
 });
 
-test('saveDraft e simulate executam payloads RPC sem ativacao automatica', async () => {
+test('saveDraft atualiza a UI canonica antes de simulate sem ativacao automatica', async () => {
   const calls = [];
   const rawConfig = rawDraftConfig();
+  const configUiResponse = {
+    ativa: null,
+    rascunho: rawConfig,
+    pendencias: {
+      segmentos_observados_sem_regra: [],
+      atribuicoes_sem_regra: [],
+      atribuicoes_zero_carteira: [],
+      divergencias_modalidade: [],
+    },
+  };
   const simulationResponse = {
     config_id: 'config-rascunho',
     config_versao: 2,
@@ -507,6 +692,9 @@ test('saveDraft e simulate executam payloads RPC sem ativacao automatica', async
       calls.push({ name, payload });
       if (name === 'salvar_health_score_professor_v3_config_rascunho') {
         return { data: rawConfig, error: null };
+      }
+      if (name === 'get_health_score_professor_v3_config_ui') {
+        return { data: configUiResponse, error: null };
       }
       if (name === 'simular_health_score_professor_v3_config') {
         return { data: simulationResponse, error: null };
@@ -532,6 +720,7 @@ test('saveDraft e simulate executam payloads RPC sem ativacao automatica', async
     assert.equal(simulation.scoreMedio, 78.5);
     assert.deepEqual(calls.map(({ name }) => name), [
       'salvar_health_score_professor_v3_config_rascunho',
+      'get_health_score_professor_v3_config_ui',
       'simular_health_score_professor_v3_config',
     ]);
 
@@ -563,7 +752,8 @@ test('saveDraft e simulate executam payloads RPC sem ativacao automatica', async
         parametros: { fonte: 'manual' },
       },
     ]);
-    assert.deepEqual(calls[1].payload, {
+    assert.equal(calls[1].payload, undefined);
+    assert.deepEqual(calls[2].payload, {
       p_config_id: 'config-rascunho',
       p_competencia: '2026-08-01',
     });
