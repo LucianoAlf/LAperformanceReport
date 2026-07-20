@@ -94,6 +94,9 @@ declare
   v_pendencias jsonb;
 begin
   perform public.fn_health_score_professor_v3_ator_gerenciador();
+  perform pg_advisory_xact_lock_shared(
+    hashtextextended('health_score_professor_v3_config', 0)
+  );
 
   select c.id into v_ativa_id
   from public.health_score_professor_v3_config_versoes c
@@ -531,7 +534,10 @@ begin
               'bloqueada_ate_inicio'
             )
           )
-          or (x.meta is not null and x.meta_status <> 'aprovada')
+          or (
+            x.meta is not null
+            and x.meta_status is distinct from 'aprovada'
+          )
         )
       )
   ) then
@@ -1270,6 +1276,7 @@ declare
   v_modo_segmentado boolean;
   v_fingerprint text;
   v_resultado_simulacao jsonb;
+  v_competencia_simulacao date;
   v_encerradas integer;
 begin
   perform pg_advisory_xact_lock(
@@ -1351,7 +1358,7 @@ begin
       and m.metrica in ('conversao', 'permanencia')
       and (
         m.meta is null
-        or m.parametros->>'meta_status' <> 'aprovada'
+        or m.parametros->>'meta_status' is distinct from 'aprovada'
       )
   ) then
     raise exception
@@ -1365,7 +1372,7 @@ begin
       and m.metrica in ('media_turma', 'numero_alunos')
       and (
         m.meta is null
-        or m.parametros->>'meta_status' <> 'aprovada'
+        or m.parametros->>'meta_status' is distinct from 'aprovada'
       )
   ) then
     raise exception
@@ -1432,17 +1439,46 @@ begin
     p_config_id
   );
 
-  select s.resultado into v_resultado_simulacao
+  select s.resultado, s.competencia
+    into v_resultado_simulacao, v_competencia_simulacao
   from public.health_score_professor_v3_config_simulacoes s
   where s.config_id = p_config_id
     and s.config_fingerprint = v_fingerprint
-    and s.criado_em >= v_config.atualizado_em
+    and s.criado_em > v_config.atualizado_em
+    and s.criado_em >= clock_timestamp() - interval '24 hours'
+    and coalesce((s.resultado->>'total')::integer, 0) > 0
   order by s.criado_em desc, s.id desc
   limit 1;
 
   if not found then
     raise exception
       'HEALTH_SCORE_V3_CONFIG_INVALIDA: simulacao atual obrigatoria antes da ativacao';
+  end if;
+
+  if v_modo_segmentado and exists (
+    select 1
+    from public.get_health_score_professor_v3_metricas_segmentadas_v1(
+      v_competencia_simulacao,
+      p_config_id,
+      null,
+      'mensal'
+    ) d
+    where d.metrica = 'numero_alunos'
+      and (
+        d.estado_base in (
+          'regra_ausente',
+          'divergencia_nao_ofertada',
+          'segmentacao_incompleta'
+        )
+        or (
+          d.atribuicao_pontuavel
+          and d.config_meta_segmento_id is null
+        )
+        or d.divergencias->>'nao_ofertada_com_dados' = 'true'
+      )
+  ) then
+    raise exception
+      'HEALTH_SCORE_V3_CONFIG_INVALIDA: diagnosticos segmentados atuais bloqueiam a ativacao';
   end if;
 
   if v_modo_segmentado and jsonb_array_length(

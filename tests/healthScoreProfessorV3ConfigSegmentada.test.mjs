@@ -98,6 +98,32 @@ test(
 );
 
 test(
+  'leitura da configuracao usa lock compartilhado antes de montar a revisao',
+  { skip: !existsSync(migrationPath) },
+  () => {
+    const block = functionBlock(
+      readMigration(),
+      'get_health_score_professor_v3_config_ui',
+    );
+    const guardIndex = block.search(
+      /fn_health_score_professor_v3_ator_gerenciador\s*\(\s*\)/i,
+    );
+    const sharedLockIndex = block.search(
+      /pg_advisory_xact_lock_shared\s*\(\s*hashtextextended\s*\(\s*'health_score_professor_v3_config'\s*,\s*0\s*\)\s*\)/i,
+    );
+    const firstConfigReadIndex = block.search(
+      /select\s+c\.id\s+into\s+v_ativa_id/i,
+    );
+
+    assert.ok(sharedLockIndex >= 0, 'leitura deve adquirir o lock compartilhado');
+    assert.ok(
+      guardIndex < sharedLockIndex && sharedLockIndex < firstConfigReadIndex,
+      'lock compartilhado deve proteger todas as leituras apos o guard',
+    );
+  },
+);
+
+test(
   'novo rascunho clona metricas globais e a matriz completa sem alterar a ativa',
   { skip: !existsSync(migrationPath) },
   () => {
@@ -162,6 +188,42 @@ test(
       /delete\s+from\s+public\.health_score_professor_v3_config_metas_curso_modalidade[\s\S]*config_id\s*=\s*p_config_id[\s\S]*not\s+exists/i,
     );
     assert.match(block, /segmentada_unidade_curso_modalidade/i);
+  },
+);
+
+test(
+  'meta positiva com meta_status nulo e rejeitada no salvar e na ativacao',
+  { skip: !existsSync(migrationPath) },
+  () => {
+    const sql = readMigration();
+    const saveBlock = overloadBlock(
+      sql,
+      'salvar_health_score_professor_v3_config_rascunho',
+      'p_metas_segmentadas',
+    );
+    const activationBlock = functionBlock(
+      sql,
+      'ativar_health_score_professor_v3_config',
+    );
+
+    assert.match(
+      saveBlock,
+      /x\.meta\s+is\s+not\s+null\s+and\s+x\.meta_status\s+is\s+distinct\s+from\s+'aprovada'/i,
+      'IS DISTINCT FROM deve tratar meta_status nulo como nao aprovado',
+    );
+    assert.doesNotMatch(saveBlock, /meta_status\s*<>\s*'aprovada'/i);
+
+    const activationChecks = activationBlock.match(
+      /m\.parametros\s*->>\s*'meta_status'\s+is\s+distinct\s+from\s+'aprovada'/gi,
+    ) || [];
+    assert.ok(
+      activationChecks.length >= 2,
+      'ativacao deve validar de forma NULL-safe metas calibraveis e legadas',
+    );
+    assert.doesNotMatch(
+      activationBlock,
+      /parametros\s*->>\s*'meta_status'\s*<>\s*'aprovada'/i,
+    );
   },
 );
 
@@ -360,7 +422,7 @@ test(
 
     assert.match(
       block,
-      /config_fingerprint\s*=\s*v_fingerprint[\s\S]*criado_em\s*>=\s*v_config\.atualizado_em/i,
+      /config_fingerprint\s*=\s*v_fingerprint[\s\S]*criado_em\s*>\s*v_config\.atualizado_em/i,
     );
     assert.match(block, /simulacao atual obrigatoria antes da ativacao/i);
     for (const field of [
@@ -393,6 +455,86 @@ test(
       block,
       /normalizacao[\s\S]*is\s+distinct\s+from\s+'segmentada_unidade_curso_modalidade'[\s\S]*meta\s+is\s+null/i,
       'configuracoes legadas continuam exigindo suas metas globais',
+    );
+  },
+);
+
+test(
+  'ativacao exige simulacao recente posterior e com impacto real',
+  { skip: !existsSync(migrationPath) },
+  () => {
+    const block = functionBlock(
+      readMigration(),
+      'ativar_health_score_professor_v3_config',
+    );
+
+    assert.match(block, /v_competencia_simulacao\s+date\s*;/i);
+    assert.match(
+      block,
+      /select\s+s\.resultado\s*,\s*s\.competencia\s+into\s+v_resultado_simulacao\s*,\s*v_competencia_simulacao/i,
+    );
+    assert.match(block, /s\.config_fingerprint\s*=\s*v_fingerprint/i);
+    assert.match(block, /s\.criado_em\s*>\s*v_config\.atualizado_em/i);
+    assert.match(
+      block,
+      /s\.criado_em\s*>=\s*(?:clock_timestamp\s*\(\s*\)|now\s*\(\s*\))\s*-\s*interval\s+'24 hours'/i,
+    );
+    assert.match(
+      block,
+      /coalesce\s*\(\s*\(\s*s\.resultado\s*->>\s*'total'\s*\)\s*::\s*integer\s*,\s*0\s*\)\s*>\s*0/i,
+    );
+  },
+);
+
+test(
+  'ativacao revalida diagnosticos canonicos sob lock sem auto simular',
+  { skip: !existsSync(migrationPath) },
+  () => {
+    const block = functionBlock(
+      readMigration(),
+      'ativar_health_score_professor_v3_config',
+    );
+    const bodyEnd = block.indexOf('\n$$;');
+    const activationBody = bodyEnd >= 0 ? block.slice(0, bodyEnd) : block;
+    const lockIndex = activationBody.search(
+      /pg_advisory_xact_lock\s*\(\s*hashtextextended\s*\(\s*'health_score_professor_v3_config'\s*,\s*0\s*\)\s*\)/i,
+    );
+    const simulationLookupIndex = activationBody.search(
+      /from\s+public\.health_score_professor_v3_config_simulacoes\s+s/i,
+    );
+    const diagnosticsIndex = activationBody.search(
+      /from\s+public\.get_health_score_professor_v3_metricas_segmentadas_v1\s*\(\s*v_competencia_simulacao\s*,\s*p_config_id\s*,\s*null\s*,\s*'mensal'\s*\)/i,
+    );
+    const activationUpdateIndex = activationBody.search(
+      /update\s+public\.health_score_professor_v3_config_versoes\s+set\s+status\s*=\s*'ativa'/i,
+    );
+
+    assert.ok(diagnosticsIndex >= 0, 'ativacao deve reexecutar o diagnostico canonico');
+    assert.ok(
+      lockIndex < simulationLookupIndex
+        && simulationLookupIndex < diagnosticsIndex
+        && diagnosticsIndex < activationUpdateIndex,
+      'rechecagem deve ocorrer sob lock e antes de ativar a revisao',
+    );
+    assert.match(
+      activationBody,
+      /d\.estado_base\s+in\s*\(\s*'regra_ausente'\s*,\s*'divergencia_nao_ofertada'\s*,\s*'segmentacao_incompleta'\s*\)/i,
+    );
+    assert.match(
+      activationBody,
+      /d\.atribuicao_pontuavel[\s\S]*d\.config_meta_segmento_id\s+is\s+null/i,
+    );
+    assert.match(
+      activationBody,
+      /d\.divergencias\s*->>\s*'nao_ofertada_com_dados'\s*=\s*'true'/i,
+    );
+    assert.doesNotMatch(
+      activationBody,
+      /public\.simular_health_score_professor_v3_config\s*\(/i,
+    );
+    assert.doesNotMatch(
+      activationBody,
+      /(?:insert\s+into|update|delete\s+from)\s+public\.health_score_professor_v3_snapshots/i,
     );
   },
 );
