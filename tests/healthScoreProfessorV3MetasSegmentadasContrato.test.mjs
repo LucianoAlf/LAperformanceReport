@@ -577,6 +577,19 @@ test(
       );
     }
 
+    for (const roleName of [
+      'fabio_agent',
+      'lia_acesso_restrito',
+      'mila_acesso_restrito',
+      'sol_acesso_restrito',
+    ]) {
+      assert.match(
+        sql,
+        new RegExp(`['\"]${roleName}['\"]`, 'i'),
+        `${roleName} deve ter os privilegios diretos removidos`,
+      );
+    }
+
     for (const columnName of ['unidade_id', 'curso_id']) {
       assertLeadingIndex({ sql, tableName: configTableName, columnName });
     }
