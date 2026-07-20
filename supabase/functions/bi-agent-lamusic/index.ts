@@ -140,6 +140,14 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // Desativado: o widget "Assistente IA" migrou para a Sol (VPS) — fila
+  // bi_messages_lamusic + Realtime (ver useAgentChat.ts). Este agente não é
+  // mais chamado pelo frontend; desligado aqui para não consumir a
+  // OpenAI API key compartilhada com o agente-webhook (Campanhas).
+  return new Response(JSON.stringify({
+    error: 'bi-agent-lamusic desativado — este assistente agora roda via Sol (VPS).',
+  }), { status: 410, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
   try {
     // 0. Supabase client + carregar API key do banco
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
