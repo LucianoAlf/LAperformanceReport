@@ -61,6 +61,17 @@ function assertRealColumn(tableName, columnName) {
   );
 }
 
+function assertColumns(tableName, columnNames) {
+  const body = extractTableBody(tableName);
+  for (const columnName of columnNames) {
+    assert.match(
+      body,
+      new RegExp('(?:^|\\n)\\s*' + columnName + '\\s+[a-z]', 'i'),
+      tableName + ' deve declarar a coluna ' + columnName,
+    );
+  }
+}
+
 function revokedTableRoles(tableName) {
   const pattern = new RegExp(
     'revoke\\s+all(?:\\s+privileges)?\\s+on\\s+table\\s+public\\.' +
@@ -146,6 +157,92 @@ test(
 
     assertRealColumn('emusys_disciplinas_catalogo', 'hash_payload');
     assertRealColumn('emusys_professor_disciplinas', 'hash_payload');
+
+    assertColumns('emusys_disciplinas_catalogo', [
+      'unidade_id',
+      'emusys_disciplina_id',
+      'nome_emusys',
+      'modalidade',
+      'ativo_origem',
+      'primeiro_visto_em',
+      'ultimo_visto_em',
+      'sincronizado_em',
+      'ultima_execucao_id',
+      'payload_snapshot',
+      'hash_payload',
+    ]);
+    assertColumns('emusys_professor_disciplinas', [
+      'unidade_id',
+      'emusys_professor_id',
+      'emusys_disciplina_id',
+      'ativo_origem',
+      'primeiro_visto_em',
+      'ultimo_visto_em',
+      'sincronizado_em',
+      'ultima_execucao_id',
+      'payload_snapshot',
+      'hash_payload',
+    ]);
+    assertColumns('emusys_professor_disciplinas_sync_execucoes', [
+      'id',
+      'unidade_id',
+      'origem',
+      'status',
+      'iniciado_em',
+      'finalizado_em',
+      'disciplinas_esperadas',
+      'disciplinas_processadas',
+      'requisicoes',
+      'falhas',
+      'estatisticas',
+      'solicitado_por',
+    ]);
+  },
+);
+
+test(
+  'schema restringe enums, payload, FKs e cria indices operacionais',
+  { skip: !migrationExists },
+  () => {
+    assert.match(
+      executableSchema,
+      /modalidade\s+text[\s\S]{0,300}check\s*\(\s*modalidade\s+in\s*\(\s*'individual'\s*,\s*'turma'\s*\)\s*\)/i,
+    );
+    assert.match(
+      executableSchema,
+      /origem\s+text[\s\S]{0,300}check\s*\(\s*origem\s+in\s*\(\s*'manual'\s*,\s*'cron'\s*\)\s*\)/i,
+    );
+    assert.match(
+      executableSchema,
+      /status\s+text[\s\S]{0,300}check\s*\(\s*status\s+in\s*\(\s*'em_andamento'\s*,\s*'completa'\s*,\s*'falhou'\s*\)\s*\)/i,
+    );
+
+    for (const tableName of [
+      'emusys_disciplinas_catalogo',
+      'emusys_professor_disciplinas',
+      'emusys_professor_disciplinas_sync_execucoes',
+    ]) {
+      const body = extractTableBody(tableName);
+      const references = body.match(/references\s+public\.[a-z_]+\s*\([^)]*\)[\s\S]{0,60}?on\s+delete\s+restrict/gi) || [];
+      assert.ok(references.length >= 1, tableName + ' deve usar FK ON DELETE RESTRICT');
+    }
+
+    assert.match(
+      executableSchema,
+      /create\s+index[\s\S]{0,180}emusys_disciplinas_catalogo\s*\(\s*unidade_id\s*,\s*ativo_origem\s*\)/i,
+    );
+    assert.match(
+      executableSchema,
+      /create\s+index[\s\S]{0,180}emusys_professor_disciplinas\s*\(\s*unidade_id\s*,\s*ativo_origem\s*\)/i,
+    );
+    assert.match(
+      executableSchema,
+      /create\s+index[\s\S]{0,180}(?:ultima_execucao_id|emusys_professor_disciplinas_sync_execucoes)/i,
+    );
+
+    assert.match(executableSchema, /payload_snapshot\s+jsonb[\s\S]{0,500}nome_aluno/i);
+    assert.match(executableSchema, /payload_snapshot\s+jsonb[\s\S]{0,500}telefone/i);
+    assert.match(executableSchema, /payload_snapshot\s+jsonb[\s\S]{0,500}email/i);
   },
 );
 
