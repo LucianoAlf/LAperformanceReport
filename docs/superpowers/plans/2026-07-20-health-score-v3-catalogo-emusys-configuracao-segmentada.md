@@ -419,17 +419,17 @@ git commit -m "feat: sincronizar disciplinas e professores do Emusys"
 
 ## Gate 1: Coleta diagnostica
 
-- [ ] Aplicar apenas `20260720120000_emusys_catalogo_professor_disciplinas.sql`.
-- [ ] Configurar o secret dedicado e implantar a Edge Function.
-- [ ] Executar `modo=diagnostico` primeiro em Barra, depois Recreio, depois Campo Grande.
-- [ ] Conferir por SELECT:
+- [x] Aplicar apenas `20260720120000_emusys_catalogo_professor_disciplinas.sql`.
+- [x] Configurar o secret dedicado e implantar a Edge Function.
+- [x] Executar `modo=diagnostico` primeiro em Barra, depois Recreio, depois Campo Grande.
+- [x] Conferir por SELECT:
   - IDs de disciplina nao se repetem entre modalidades na mesma unidade;
   - contagem do catalogo coincide com a resposta bruta da API;
   - atribuicoes formais possuem professor e disciplina de origem;
   - nenhuma linha existente em `professor_unidade_curso_modalidade` mudou;
   - nenhuma execucao parcial inativou registro;
   - nenhum dado pessoal desnecessario entrou nos snapshots.
-- [ ] Registrar as contagens e amostras anonimizadas no relatorio de rollout.
+- [x] Registrar as contagens e amostras anonimizadas no relatorio de rollout.
 
 Expected: catalogo bruto reproduzivel para as tres unidades, sem efeito no Health Score ou na fila V1.
 

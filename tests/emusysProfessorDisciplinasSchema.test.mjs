@@ -19,6 +19,11 @@ function readOptionalFile(filePath) {
 
 const migrationRelativePath =
   'supabase/migrations/20260720120000_emusys_catalogo_professor_disciplinas.sql';
+const finalizerGuardFixPath = resolve(
+  repositoryRoot,
+  'supabase/migrations/20260721110000_emusys_catalogo_finalizador_auth_role.sql',
+);
+const finalizerGuardFix = readOptionalFile(finalizerGuardFixPath);
 const {
   exists: migrationExists,
   filePath: migrationPath,
@@ -478,6 +483,45 @@ test(
     }
   },
 );
+
+test('finalizador usa auth.role no PostgREST atual sem reabrir o navegador', () => {
+  assert.notEqual(
+    finalizerGuardFix,
+    '',
+    finalizerGuardFixPath + ' deve corrigir o guard da RPC ja aplicada',
+  );
+  assert.match(
+    finalizerGuardFix,
+    /create\s+or\s+replace\s+function\s+public\.finalizar_sync_professor_disciplinas_emusys_v1\s*\(/i,
+  );
+  assert.match(
+    finalizerGuardFix,
+    /coalesce\s*\(\s*auth\.role\s*\(\s*\)\s*,\s*''\s*\)\s*(?:<>|!=)\s*'service_role'/i,
+    'guard corrigido deve reconhecer o service_role exposto pelo PostgREST',
+  );
+  assert.doesNotMatch(
+    finalizerGuardFix,
+    /request\.jwt\.claim\.role/i,
+    'migration corretiva nao deve repetir o claim legado',
+  );
+  assert.match(finalizerGuardFix, /security\s+definer/i);
+  assert.match(finalizerGuardFix, /set\s+search_path\s*=\s*public\s*,\s*pg_temp/i);
+  for (const role of ['public', 'anon', 'authenticated']) {
+    assert.match(
+      finalizerGuardFix,
+      new RegExp(
+        'revoke\\s+(?:all(?:\\s+privileges)?|execute)\\s+on\\s+function\\s+' +
+          'public\\.finalizar_sync_professor_disciplinas_emusys_v1\\s*\\(\\s*uuid\\s*\\)' +
+          '\\s+from\\s+(?:[^;]*,\\s*)?' + role + '(?:\\s*,|\\s*;)',
+        'i',
+      ),
+    );
+  }
+  assert.match(
+    finalizerGuardFix,
+    /grant\s+execute\s+on\s+function\s+public\.finalizar_sync_professor_disciplinas_emusys_v1\s*\(\s*uuid\s*\)\s+to\s+service_role/i,
+  );
+});
 
 test('Task 3 implementa sync retomavel com guard duplo e gateway explicito', () => {
   const edgeSource = readOptionalFile(edgeFunctionPath);
