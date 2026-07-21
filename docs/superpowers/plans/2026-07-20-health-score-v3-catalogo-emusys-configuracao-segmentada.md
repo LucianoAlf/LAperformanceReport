@@ -408,7 +408,7 @@ node --test tests/emusysProfessorDisciplinasSchema.test.mjs
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
 git add -- supabase/functions/_shared/emusys-professor-disciplinas.ts supabase/functions/_shared/emusys-professor-disciplinas.test.ts supabase/functions/sync-professor-disciplinas-emusys/index.ts supabase/config.toml tests/emusysProfessorDisciplinasSchema.test.mjs
@@ -593,7 +593,7 @@ Expected: V2 pronta e reproduzivel, sem cutover de frontend.
 - Modify: `tests/healthScoreProfessorV3ConfigSegmentada.test.mjs`
 - Modify: `tests/healthScoreProfessorV3MetasSegmentadasContrato.test.mjs`
 
-- [ ] **Step 1: Escrever os cenarios SQL que faltam**
+- [x] **Step 1: Escrever os cenarios SQL que faltam**
 
 Exigir:
 - `catalogo_segmentos` vem do catalogo Emusys resolvido, nao de agregados de aula;
@@ -605,7 +605,7 @@ Exigir:
 - configuracao ativa continua imutavel;
 - curso formal zero carteira continua no catalogo, sem valor observado inventado.
 
-- [ ] **Step 2: Confirmar RED**
+- [x] **Step 2: Confirmar RED**
 
 ```powershell
 node --test tests/healthScoreProfessorV3CatalogoConfig.test.mjs
@@ -614,7 +614,7 @@ node --test tests/healthScoreProfessorV3ConfigSegmentada.test.mjs
 
 Expected: FAIL porque `catalogo_segmentos` ainda nao existe no contrato da RPC.
 
-- [ ] **Step 3: Redefinir a leitura de configuracao de forma aditiva**
+- [x] **Step 3: Redefinir a leitura de configuracao de forma aditiva**
 
 `get_health_score_professor_v3_config_ui()` deve retornar:
 
@@ -635,7 +635,7 @@ Expected: FAIL porque `catalogo_segmentos` ainda nao existe no contrato da RPC.
 
 Cada item de `catalogo_segmentos` deve conter unidade, curso local, disciplina Emusys, modalidade, nome, origem, ultima sincronizacao e se esta formalmente ofertado.
 
-- [ ] **Step 4: Separar validacao de save e ativacao**
+- [x] **Step 4: Separar validacao de save e ativacao**
 
 Preservar `salvar_health_score_professor_v3_config_rascunho` como persistencia das linhas validas enviadas. Ausencias nao viram zeros nem estado persistido artificial.
 
@@ -648,11 +648,11 @@ deve possuir uma linha configurada ou nao_ofertada
 
 Retornar erro com lista de chaves faltantes, sem mensagem generica.
 
-- [ ] **Step 5: Fixar grants apos CREATE OR REPLACE**
+- [x] **Step 5: Fixar grants apos CREATE OR REPLACE**
 
 Revogar `public` e `anon`; conceder `authenticated` apenas nas RPCs com guard ja existente. Fixar `search_path` de todas as funcoes redefinidas.
 
-- [ ] **Step 6: Confirmar GREEN**
+- [x] **Step 6: Confirmar GREEN**
 
 ```powershell
 node --test tests/healthScoreProfessorV3CatalogoConfig.test.mjs
