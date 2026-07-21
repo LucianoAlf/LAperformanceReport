@@ -272,6 +272,10 @@ export function HealthScoreV3Config() {
     && hasRequiredTargets
     && segmentTargetsAreValid
     && justification.trim().length >= 8;
+  const unsavedSegmentCount = useMemo(
+    () => workingSegmentGoals.filter((goal) => goal.tocada).length,
+    [workingSegmentGoals],
+  );
   const canActivate = editable
     && draftIsValid
     && !draftIsDirty
@@ -331,7 +335,7 @@ export function HealthScoreV3Config() {
       setWorkingConfig(cloneConfig(saved));
       setDraftIsDirty(false);
       setSimulationIsCurrent(false);
-      toast.success('Rascunho salvo', 'Pesos e metas ficaram registrados nesta versão.');
+      toast.success('Alterações salvas', 'Pesos e metas ficaram registrados neste rascunho.');
     } catch {
       toast.error('Não foi possível salvar', 'Confira os pesos, metas e estados dos pilares.');
     }
@@ -392,7 +396,7 @@ export function HealthScoreV3Config() {
   return (
     <section
       ref={sectionRef}
-      className="overflow-hidden rounded-lg border border-cyan-500/20 bg-slate-950/30"
+      className="relative rounded-lg border border-cyan-500/20 bg-slate-950/30"
     >
       <header className="flex flex-col gap-3 border-b border-slate-800 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
@@ -451,6 +455,40 @@ export function HealthScoreV3Config() {
               />
             </label>
           </div>
+
+          {editable && (
+            <div className="sticky top-20 z-20 flex flex-col gap-3 rounded-md border border-slate-700 bg-slate-950/95 px-4 py-3 shadow-lg shadow-black/25 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${draftIsDirty ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                />
+                <div className="min-w-0">
+                  <p className={`text-sm font-semibold ${draftIsDirty ? 'text-amber-200' : 'text-emerald-300'}`}>
+                    {draftIsDirty
+                      ? unsavedSegmentCount > 0
+                        ? `${unsavedSegmentCount} ${unsavedSegmentCount === 1 ? 'alteração não salva' : 'alterações não salvas'}`
+                        : 'Alterações não salvas'
+                      : 'Rascunho salvo'}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {draftIsDirty
+                      ? 'Revise os estados das linhas e salve o conjunto quando terminar.'
+                      : 'A configuração exibida corresponde à última versão salva.'}
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                onClick={handleSave}
+                disabled={mutating || !draftIsDirty || !draftIsValid}
+                className="h-10 shrink-0"
+              >
+                {mutating ? <Loader2 className="animate-spin" /> : <Save />}
+                Salvar alterações
+              </Button>
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -654,7 +692,6 @@ export function HealthScoreV3Config() {
             <div className="space-y-4 border-t border-slate-800 pt-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-[11px] font-semibold uppercase text-slate-500">Simulação</p>
-                {draftIsDirty && <Badge variant="warning">Alterações não salvas</Badge>}
               </div>
               <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div className="w-full space-y-1 text-xs font-medium text-slate-300 md:max-w-[220px]">
@@ -670,10 +707,6 @@ export function HealthScoreV3Config() {
                   />
                 </div>
                 <div className="flex flex-wrap justify-end gap-2">
-                  <Button variant="outline" onClick={handleSave} disabled={mutating || !draftIsValid}>
-                    <Save />
-                    Salvar rascunho
-                  </Button>
                   <Button
                     variant="secondary"
                     onClick={handleSimulate}

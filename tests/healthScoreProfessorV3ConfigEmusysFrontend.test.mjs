@@ -74,6 +74,41 @@ test('frontend declara catalogo oficial e estado visual nao configurado', () => 
   assert.match(typesSource, /getHealthScoreV3ActivationBlockers/);
 });
 
+test('estado visual da meta distingue pendencia, edicao local e valor persistido', async () => {
+  const module = await loadHealthScoreModule();
+  const base = module.buildHealthScoreV3SegmentMatrix([], [catalog[0]])[0];
+
+  assert.equal(module.getHealthScoreV3SegmentGoalUiState(base), 'regra_ausente');
+
+  const editing = module.updateHealthScoreV3SegmentGoalValue(
+    base,
+    'capacidadeMaxima',
+    2,
+  );
+  assert.equal(editing.estado, 'configurada');
+  assert.equal(editing.tocada, true);
+  assert.equal(module.getHealthScoreV3SegmentGoalUiState(editing), 'revisar');
+
+  const ready = {
+    ...editing,
+    metaMediaTurma: 1.5,
+    metaCarteiraCurso: 20,
+  };
+  assert.equal(module.getHealthScoreV3SegmentGoalUiState(ready), 'pronta_para_salvar');
+
+  const saved = { ...ready, persistida: true, tocada: false };
+  assert.equal(module.getHealthScoreV3SegmentGoalUiState(saved), 'salva_no_rascunho');
+
+  const notOffered = {
+    ...saved,
+    estado: 'nao_ofertada',
+    capacidadeMaxima: null,
+    metaMediaTurma: null,
+    metaCarteiraCurso: null,
+  };
+  assert.equal(module.getHealthScoreV3SegmentGoalUiState(notOffered), 'nao_ofertada');
+});
+
 test('fluxo governado nao usa controles nativos nem confirmacao imperativa', () => {
   const configSource = read(configPath);
   const goalsSource = read(goalsPath);
@@ -85,6 +120,11 @@ test('fluxo governado nao usa controles nativos nem confirmacao imperativa', () 
   assert.doesNotMatch(combined, /<select(?:\s|>)/);
   assert.doesNotMatch(combined, /window\.confirm/i);
   assert.match(exceptionsSource, /Excecoes de vinculos Emusys/);
+  assert.match(exceptionsSource, /Confirmar v.nculo/);
+  assert.match(exceptionsSource, /Corrigir modalidade/);
+  assert.match(exceptionsSource, /Desativar v.nculo/);
+  assert.match(exceptionsSource, /Desfazer escolha/);
+  assert.doesNotMatch(exceptionsSource, /title="Limpar decis.o"/);
 });
 
 test('helper puro de load monta matriz limpa sem fabricar zero nem mutar entradas', async () => {

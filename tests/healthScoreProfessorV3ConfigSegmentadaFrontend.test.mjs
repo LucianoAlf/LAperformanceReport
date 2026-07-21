@@ -1008,9 +1008,12 @@ test('Task 8 separa pesos, metas globais e matriz segmentada no fluxo governado'
     'Capacidade máxima',
     'Meta média/turma',
     'Meta carteira',
-    'Estado',
-    'Fonte',
+    'Situação',
+    'Ação',
     'Regra ausente',
+    'Pronta para salvar',
+    'Salva no rascunho',
+    'Não ofertado nesta unidade',
     'Zero carteira',
     'Superlotação',
     'Divergência de modalidade',
@@ -1022,6 +1025,7 @@ test('Task 8 separa pesos, metas globais e matriz segmentada no fluxo governado'
   assert.match(matrixSource, /Todos os cursos/);
   assert.match(matrixSource, /Todas as modalidades/);
   assert.match(matrixSource, /Com pendência/);
+  assert.doesNotMatch(matrixSource, /SelectItem value="configurada"/);
   assert.doesNotMatch(matrixSource, /Ativar versão/);
 
   assert.match(configSource, /import \{ HealthScoreV3MetasSegmentadas/);
@@ -1334,7 +1338,7 @@ test('filtros e controles da matriz possuem nomes acessiveis', () => {
     'Filtrar por curso',
     'Filtrar por modalidade',
     'Filtrar por pendência',
-    'Estado da meta',
+    'Não ofertado nesta unidade',
   ]) {
     assert.match(
       matrixSource,

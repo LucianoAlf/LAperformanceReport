@@ -168,6 +168,11 @@ test('painel V3 mantem sliders de peso e inputs separados de meta', () => {
   assert.match(source, /Peso no score/i);
   assert.match(source, /Meta de desempenho/i);
   assert.match(source, /Criar rascunho/i);
+  assert.match(source, /Salvar altera[cç][oõ]es/i);
+  assert.match(source, /altera[cç][oõ]es n[aã]o salvas/i);
+  assert.match(source, /Rascunho salvo/i);
+  assert.match(source, /sticky top-20/i);
+  assert.match(source, /<section[\s\S]{0,180}className="relative rounded-lg/i);
   assert.match(source, /Simular impacto/i);
   assert.match(source, /Ativar vers[aã]o/i);
   assert.match(source, /totalWeight[^\n]*100/i);

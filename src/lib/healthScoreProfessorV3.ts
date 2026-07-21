@@ -104,6 +104,18 @@ export type HealthScoreV3SegmentDraftGoal = HealthScoreV3SegmentDraftGoalBase & 
     }
 );
 
+export type HealthScoreV3SegmentGoalUiState =
+  | 'regra_ausente'
+  | 'revisar'
+  | 'pronta_para_salvar'
+  | 'salva_no_rascunho'
+  | 'nao_ofertada';
+
+export type HealthScoreV3SegmentNumericField =
+  | 'capacidadeMaxima'
+  | 'metaMediaTurma'
+  | 'metaCarteiraCurso';
+
 export interface HealthScoreV3AssignmentSummary {
   atribuicaoId: string | null;
   professorId: number | null;
@@ -673,6 +685,41 @@ function isCompleteConfiguredGoal(goal: HealthScoreV3SegmentDraftGoal) {
     && isPositiveNumber(goal.metaMediaTurma)
     && isPositiveNumber(goal.metaCarteiraCurso)
     && goal.metaMediaTurma <= goal.capacidadeMaxima;
+}
+
+export function updateHealthScoreV3SegmentGoalValue(
+  goal: HealthScoreV3SegmentDraftGoal,
+  field: HealthScoreV3SegmentNumericField,
+  value: number | null,
+): HealthScoreV3SegmentDraftGoal {
+  const current = goal.estado === 'configurada'
+    ? goal
+    : {
+        capacidadeMaxima: null,
+        metaMediaTurma: null,
+        metaCarteiraCurso: null,
+      };
+
+  return {
+    ...goal,
+    estado: 'configurada',
+    capacidadeMaxima: field === 'capacidadeMaxima' ? value : current.capacidadeMaxima,
+    metaMediaTurma: field === 'metaMediaTurma' ? value : current.metaMediaTurma,
+    metaCarteiraCurso: field === 'metaCarteiraCurso' ? value : current.metaCarteiraCurso,
+    tocada: true,
+  };
+}
+
+export function getHealthScoreV3SegmentGoalUiState(
+  goal: HealthScoreV3SegmentDraftGoal,
+): HealthScoreV3SegmentGoalUiState {
+  if (goal.estado === 'nao_ofertada') {
+    return goal.tocada ? 'pronta_para_salvar' : 'nao_ofertada';
+  }
+  if (goal.estado === 'nao_configurada') return 'regra_ausente';
+  if (!isCompleteConfiguredGoal(goal)) return 'revisar';
+  if (goal.tocada) return 'pronta_para_salvar';
+  return goal.persistida ? 'salva_no_rascunho' : 'regra_ausente';
 }
 
 export function canSaveHealthScoreV3Draft(matrix: HealthScoreV3SegmentDraftGoal[]) {

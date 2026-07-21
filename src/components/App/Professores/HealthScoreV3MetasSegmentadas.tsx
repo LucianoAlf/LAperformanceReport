@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  CheckCircle2,
   ChevronDown,
   CircleHelp,
+  CircleOff,
   Filter,
   GraduationCap,
   LockKeyhole,
+  RotateCcw,
   UserRound,
   UsersRound,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Collapsible,
   CollapsibleContent,
@@ -25,14 +29,17 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip } from '@/components/ui/Tooltip';
-import type {
-  HealthScoreV3AssignmentSummary,
-  HealthScoreV3ConfigPendencias,
-  HealthScoreV3Modalidade,
-  HealthScoreV3SegmentDraftGoal,
-  HealthScoreV3SegmentGoal,
-  HealthScoreV3SegmentGoalState,
-  HealthScoreV3SimulationCapacityAlert,
+import {
+  getHealthScoreV3SegmentGoalUiState,
+  updateHealthScoreV3SegmentGoalValue,
+  type HealthScoreV3SegmentGoalUiState,
+  type HealthScoreV3AssignmentSummary,
+  type HealthScoreV3ConfigPendencias,
+  type HealthScoreV3Modalidade,
+  type HealthScoreV3SegmentDraftGoal,
+  type HealthScoreV3SegmentGoal,
+  type HealthScoreV3SegmentGoalState,
+  type HealthScoreV3SimulationCapacityAlert,
 } from '@/lib/healthScoreProfessorV3';
 
 const CANONICAL_UNIT_NAMES: Record<string, string> = {
@@ -360,11 +367,6 @@ function buildDraftMatrixRows(
   pendencias: HealthScoreV3ConfigPendencias,
   superlotacoes: HealthScoreV3SimulationCapacityAlert[],
 ): HealthScoreV3DraftMatrixRow[] {
-  const pendingRuleKeys = new Set(
-    [...pendencias.segmentosObservadosSemRegra, ...pendencias.atribuicoesSemRegra]
-      .filter(hasCompleteSegmentIdentity)
-      .map(healthScoreV3SegmentKey),
-  );
   const zeroPortfolioKeys = new Set(
     pendencias.atribuicoesZeroCarteira
       .filter(hasCompleteSegmentIdentity)
@@ -379,7 +381,7 @@ function buildDraftMatrixRows(
       key,
       synthetic: !goal.persistida,
       pending: {
-        regraAusente: goal.estado === 'nao_configurada' || pendingRuleKeys.has(key),
+        regraAusente: getHealthScoreV3SegmentGoalUiState(goal) === 'regra_ausente',
         zeroCarteira: zeroPortfolioKeys.has(key),
         superlotacao: capacityKeys.has(key),
       },
@@ -393,6 +395,15 @@ function buildDraftMatrixRows(
       ? 0
       : left.goal.modalidade === 'individual' ? -1 : 1;
   });
+}
+
+function isDraftRowPending(row: HealthScoreV3DraftMatrixRow) {
+  const uiState = getHealthScoreV3SegmentGoalUiState(row.goal);
+  return uiState === 'regra_ausente'
+    || uiState === 'revisar'
+    || uiState === 'pronta_para_salvar'
+    || row.pending.zeroCarteira
+    || row.pending.superlotacao;
 }
 
 function buildDraftUnitTabs(matrix: HealthScoreV3DraftMatrixRow[]) {
@@ -521,13 +532,7 @@ export function HealthScoreV3MetasSegmentadas({
     if (pendingFilter === 'regra_ausente' && !row.pending.regraAusente) return false;
     if (pendingFilter === 'zero_carteira' && !row.pending.zeroCarteira) return false;
     if (pendingFilter === 'superlotacao' && !row.pending.superlotacao) return false;
-    if (
-      pendingFilter === 'pendentes'
-      && !row.synthetic
-      && !row.pending.regraAusente
-      && !row.pending.zeroCarteira
-      && !row.pending.superlotacao
-    ) return false;
+    if (pendingFilter === 'pendentes' && !isDraftRowPending(row)) return false;
     return true;
   }), [activeUnitId, courseFilter, matrix, modalityFilter, pendingFilter]);
 
@@ -674,7 +679,7 @@ export function HealthScoreV3MetasSegmentadas({
       </div>
 
       <div className="overflow-x-auto border-b border-slate-800">
-        <table className="w-full min-w-[1120px] table-fixed text-left text-xs">
+        <table className="w-full min-w-[1240px] table-fixed text-left text-xs">
           <thead>
             <tr className="border-b border-slate-800 bg-slate-950/50 text-slate-400">
               <th className="w-[190px] px-3 py-2 font-medium">Curso</th>
@@ -682,8 +687,8 @@ export function HealthScoreV3MetasSegmentadas({
               <th className="w-[150px] px-3 py-2 font-medium">Capacidade máxima</th>
               <th className="w-[170px] px-3 py-2 font-medium">Meta média/turma</th>
               <th className="w-[155px] px-3 py-2 font-medium">Meta carteira</th>
-              <th className="w-[165px] px-3 py-2 font-medium">Estado</th>
-              <th className="w-[165px] px-3 py-2 font-medium">Fonte</th>
+              <th className="w-[190px] px-3 py-2 font-medium">Situação</th>
+              <th className="w-[210px] px-3 py-2 font-medium">Ação</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/80">
@@ -711,70 +716,68 @@ export function HealthScoreV3MetasSegmentadas({
                     label={`Capacidade máxima - ${row.goal.cursoNome || `Curso ${row.goal.cursoId}`}`}
                     value={row.goal.estado === 'configurada' ? row.goal.capacidadeMaxima : null}
                     error={errors.capacidadeMaxima}
-                    editable={editable && row.goal.estado === 'configurada'}
+                    editable={editable && row.goal.estado !== 'nao_ofertada'}
                     disabled={disabled}
                     step={0.1}
-                    onChange={(value) => {
-                      if (row.goal.estado !== 'configurada') return;
-                      updateGoal({ ...row.goal, capacidadeMaxima: value, tocada: true });
-                    }}
+                    onChange={(value) => updateGoal(
+                      updateHealthScoreV3SegmentGoalValue(row.goal, 'capacidadeMaxima', value),
+                    )}
                   />
                   <SegmentNumberInput
                     id={`${rowId}-media`}
                     label={`Meta média por turma - ${row.goal.cursoNome || `Curso ${row.goal.cursoId}`}`}
                     value={row.goal.estado === 'configurada' ? row.goal.metaMediaTurma : null}
                     error={errors.metaMediaTurma}
-                    editable={editable && row.goal.estado === 'configurada'}
+                    editable={editable && row.goal.estado !== 'nao_ofertada'}
                     disabled={disabled}
                     step={0.1}
-                    onChange={(value) => {
-                      if (row.goal.estado !== 'configurada') return;
-                      updateGoal({ ...row.goal, metaMediaTurma: value, tocada: true });
-                    }}
+                    onChange={(value) => updateGoal(
+                      updateHealthScoreV3SegmentGoalValue(row.goal, 'metaMediaTurma', value),
+                    )}
                   />
                   <SegmentNumberInput
                     id={`${rowId}-carteira`}
                     label={`Meta de carteira - ${row.goal.cursoNome || `Curso ${row.goal.cursoId}`}`}
                     value={row.goal.estado === 'configurada' ? row.goal.metaCarteiraCurso : null}
                     error={errors.metaCarteiraCurso}
-                    editable={editable && row.goal.estado === 'configurada'}
+                    editable={editable && row.goal.estado !== 'nao_ofertada'}
                     disabled={disabled}
                     step={1}
-                    onChange={(value) => {
-                      if (row.goal.estado !== 'configurada') return;
-                      updateGoal({ ...row.goal, metaCarteiraCurso: value, tocada: true });
-                    }}
+                    onChange={(value) => updateGoal(
+                      updateHealthScoreV3SegmentGoalValue(row.goal, 'metaCarteiraCurso', value),
+                    )}
                   />
                   <td className="px-3 py-3">
-                    <Select
-                      value={row.goal.estado}
-                      disabled={!editable || disabled}
-                      onValueChange={(value) => updateGoal(
-                        transitionDraftGoalState(
-                          row.goal,
-                          value as HealthScoreV3SegmentDraftGoal['estado'],
-                        ),
-                      )}
-                    >
-                      <SelectTrigger
-                        aria-label={`Estado da meta - ${row.goal.cursoNome || `Curso ${row.goal.cursoId}`} - ${row.goal.modalidade}`}
-                        aria-invalid={Boolean(errors.estado)}
-                        className="h-8 rounded-md border-slate-700 bg-slate-900 text-xs"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="nao_configurada">Não configurada</SelectItem>
-                        <SelectItem value="configurada">Configurada</SelectItem>
-                        <SelectItem value="nao_ofertada">Não ofertada</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="mt-1 min-h-[28px] text-[10px] leading-3 text-rose-300">
-                      {errors.estado || '\u00a0'}
-                    </p>
+                    <SegmentStatus row={row} />
                   </td>
                   <td className="px-3 py-3">
-                    <SourceStatus row={row} />
+                    {row.goal.estado === 'nao_ofertada' ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!editable || disabled}
+                        aria-label={`Voltar a configurar ${row.goal.cursoNome}`}
+                        onClick={() => updateGoal(transitionDraftGoalState(row.goal, 'configurada'))}
+                        className="h-auto min-h-8 w-full whitespace-normal"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Voltar a configurar
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={!editable || disabled}
+                        aria-label={`Não ofertado nesta unidade - ${row.goal.cursoNome}`}
+                        onClick={() => updateGoal(transitionDraftGoalState(row.goal, 'nao_ofertada'))}
+                        className="h-auto min-h-8 w-full whitespace-normal text-slate-400 hover:text-slate-100"
+                      >
+                        <CircleOff className="h-3.5 w-3.5" />
+                        Não ofertado nesta unidade
+                      </Button>
+                    )}
                   </td>
                 </tr>
               );
@@ -938,16 +941,15 @@ function SegmentNumberInput({
   );
 }
 
-function SourceStatus({ row }: { row: HealthScoreV3DraftMatrixRow }) {
-  const parameterSource = typeof row.goal.parametros.fonte === 'string'
-    ? row.goal.parametros.fonte.replaceAll('_', ' ')
-    : null;
+function SegmentStatus({ row }: { row: HealthScoreV3DraftMatrixRow }) {
+  const state = getHealthScoreV3SegmentGoalUiState(row.goal);
   const updatedAt = row.goal.atualizadoEm
     ? new Intl.DateTimeFormat('pt-BR').format(new Date(row.goal.atualizadoEm))
     : null;
   return (
     <div className="space-y-1.5">
-      {row.pending.regraAusente && <Badge variant="warning">Regra ausente</Badge>}
+      <SegmentStateBadge state={state} />
+      <p className="text-[10px] text-slate-500">Catálogo Emusys</p>
       {row.pending.zeroCarteira && (
         <div>
           <Badge variant="outline" className="border-cyan-500/30 text-cyan-300">Zero carteira</Badge>
@@ -960,12 +962,30 @@ function SourceStatus({ row }: { row: HealthScoreV3DraftMatrixRow }) {
           Superlotação
         </span>
       )}
-      {!row.pending.regraAusente && !row.pending.zeroCarteira && (
-        <p className="break-words capitalize text-[11px] text-slate-400">
-          {parameterSource || 'Configuração'}
-        </p>
-      )}
-      {updatedAt && <p className="text-[10px] text-slate-500">{updatedAt}</p>}
+      {updatedAt && <p className="text-[10px] text-slate-500">Salva em {updatedAt}</p>}
     </div>
   );
+}
+
+function SegmentStateBadge({ state }: { state: HealthScoreV3SegmentGoalUiState }) {
+  if (state === 'salva_no_rascunho') {
+    return (
+      <Badge variant="success" className="gap-1">
+        <CheckCircle2 className="h-3 w-3" />
+        Salva no rascunho
+      </Badge>
+    );
+  }
+  if (state === 'pronta_para_salvar') {
+    return (
+      <Badge variant="outline" className="border-cyan-500/40 text-cyan-300">
+        Pronta para salvar
+      </Badge>
+    );
+  }
+  if (state === 'revisar') return <Badge variant="error">Revisar valores</Badge>;
+  if (state === 'nao_ofertada') {
+    return <Badge variant="outline" className="border-slate-700 text-slate-300">Não ofertado</Badge>;
+  }
+  return <Badge variant="warning">Regra ausente</Badge>;
 }

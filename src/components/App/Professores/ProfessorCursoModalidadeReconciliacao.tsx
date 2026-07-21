@@ -3,11 +3,12 @@ import {
   AlertTriangle,
   Check,
   ChevronDown,
+  CircleOff,
   History,
   Loader2,
   RefreshCw,
   Save,
-  X,
+  Undo2,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -47,6 +48,12 @@ interface ProfessorCursoModalidadeReconciliacaoProps {
 }
 
 type PendingAction = 'manter' | 'encerrar' | 'revisar';
+
+const DECISION_LABEL: Record<PendingAction, string> = {
+  manter: 'Confirmar vínculo',
+  revisar: 'Corrigir modalidade',
+  encerrar: 'Desativar vínculo',
+};
 
 interface RowDecision {
   action: PendingAction;
@@ -426,7 +433,7 @@ export function ProfessorCursoModalidadeReconciliacao({
                         disabled={!canDecide}
                         onClick={() => updateDecision(row, { action: 'manter' })}
                       >
-                        <Check /> Manter
+                        <Check /> Confirmar vínculo
                       </Button>
                     )}
                     <Button
@@ -436,7 +443,7 @@ export function ProfessorCursoModalidadeReconciliacao({
                       disabled={!canDecide}
                       onClick={() => updateDecision(row, { action: 'revisar' })}
                     >
-                      <RefreshCw /> Revisar
+                      <RefreshCw /> Corrigir modalidade
                     </Button>
                     {row.atribuicaoId && row.estado !== 'historico' && (
                       <Button
@@ -446,22 +453,26 @@ export function ProfessorCursoModalidadeReconciliacao({
                         disabled={!canDecide}
                         onClick={() => updateDecision(row, { action: 'encerrar' })}
                       >
-                        <X /> Encerrar
+                        <CircleOff /> Desativar vínculo
                       </Button>
                     )}
                     {decision && (
                       <Button
                         type="button"
-                        size="icon"
+                        size="sm"
                         variant="ghost"
-                        title="Limpar decisão"
                         onClick={() => clearDecision(row)}
+                        className="text-slate-400 hover:text-slate-100"
                       >
-                        <X />
+                        <Undo2 /> Desfazer escolha
                       </Button>
                     )}
                   </div>
-                  {decision && <p className="text-[10px] text-cyan-300">Decisão preparada: {decision.action}</p>}
+                  {decision && (
+                    <p className="text-[10px] text-cyan-300">
+                      Ação preparada: {DECISION_LABEL[decision.action]}
+                    </p>
+                  )}
                 </div>
               </div>
             );
