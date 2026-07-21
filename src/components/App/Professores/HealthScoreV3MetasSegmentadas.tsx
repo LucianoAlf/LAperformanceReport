@@ -402,7 +402,6 @@ function isDraftRowPending(row: HealthScoreV3DraftMatrixRow) {
   return uiState === 'regra_ausente'
     || uiState === 'revisar'
     || uiState === 'pronta_para_salvar'
-    || row.pending.zeroCarteira
     || row.pending.superlotacao;
 }
 
@@ -481,7 +480,7 @@ export interface HealthScoreV3MetasSegmentadasProps {
   onMetasChange: (metas: HealthScoreV3SegmentDraftGoal[]) => void;
 }
 
-type PendingFilter = 'todas' | 'pendentes' | 'regra_ausente' | 'zero_carteira' | 'superlotacao';
+type PendingFilter = 'todas' | 'pendentes' | 'regra_ausente' | 'superlotacao';
 
 export function HealthScoreV3MetasSegmentadas({
   metas,
@@ -530,7 +529,6 @@ export function HealthScoreV3MetasSegmentadas({
     if (courseFilter !== 'todos' && String(row.goal.cursoId) !== courseFilter) return false;
     if (modalityFilter !== 'todas' && row.goal.modalidade !== modalityFilter) return false;
     if (pendingFilter === 'regra_ausente' && !row.pending.regraAusente) return false;
-    if (pendingFilter === 'zero_carteira' && !row.pending.zeroCarteira) return false;
     if (pendingFilter === 'superlotacao' && !row.pending.superlotacao) return false;
     if (pendingFilter === 'pendentes' && !isDraftRowPending(row)) return false;
     return true;
@@ -538,9 +536,9 @@ export function HealthScoreV3MetasSegmentadas({
 
   const counters = {
     regraAusente: matrix.filter((row) => row.pending.regraAusente).length,
-    zeroCarteira: countHealthScoreV3ZeroPortfolioProfessors(
-      pendencias.atribuicoesZeroCarteira,
-    ),
+    salvasRascunho: matrix.filter(
+      (row) => getHealthScoreV3SegmentGoalUiState(row.goal) === 'salva_no_rascunho',
+    ).length,
     superlotacao: matrix.filter((row) => row.pending.superlotacao).length,
     divergenciaModalidade: pendencias.divergenciasModalidade.length,
   };
@@ -573,38 +571,43 @@ export function HealthScoreV3MetasSegmentadas({
         <div className="flex min-w-0 items-center gap-2">
           <GraduationCap className="h-4 w-4 shrink-0 text-cyan-300" />
           <span className="text-xs font-medium text-slate-300">
-            {matrix.length} segmentos canônicos
+            {matrix.length} regras por unidade, curso e modalidade
           </span>
         </div>
-        {!editable && (
-          <Badge variant="outline" className="gap-1 border-slate-700 text-slate-300">
-            <LockKeyhole className="h-3 w-3" />
-            Somente leitura
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="border-cyan-500/30 text-cyan-200">
+            Fonte: catálogo Emusys
           </Badge>
-        )}
+          {!editable && (
+            <Badge variant="outline" className="gap-1 border-slate-700 text-slate-300">
+              <LockKeyhole className="h-3 w-3" />
+              Somente leitura
+            </Badge>
+          )}
+        </div>
       </div>
 
       <div className="grid border-y border-slate-800 bg-slate-950/30 sm:grid-cols-2 xl:grid-cols-4 xl:divide-x xl:divide-slate-800">
         <CounterItem
-          label="Regra ausente"
+          label="Meta não configurada"
           value={counters.regraAusente}
           tone="amber"
           tooltip="Segmentos observados ou atribuídos que ainda não possuem uma meta exata."
         />
         <CounterItem
-          label="Zero carteira"
-          value={counters.zeroCarteira}
+          label="Salvas no rascunho"
+          value={counters.salvasRascunho}
           tone="cyan"
-          tooltip="Atribuições formais sem alunos ativos. Permanecem visíveis e sem penalização."
+          tooltip="Metas já persistidas na versão de rascunho exibida."
         />
         <CounterItem
-          label="Superlotação"
+          label="Acima da capacidade"
           value={superlotacaoDisponivel ? counters.superlotacao : '—'}
           tone="rose"
           tooltip="Segmentos observados acima da capacidade na última simulação canônica salva."
         />
         <CounterItem
-          label="Divergência de modalidade"
+          label="Modalidade a revisar"
           value={counters.divergenciaModalidade}
           tone="violet"
           tooltip="Conflitos de modalidade aguardam revisão e nunca criam metas automaticamente."
@@ -672,14 +675,13 @@ export function HealthScoreV3MetasSegmentadas({
             <SelectItem value="todas">Todas as linhas</SelectItem>
             <SelectItem value="pendentes">Com pendência</SelectItem>
             <SelectItem value="regra_ausente">Regra ausente</SelectItem>
-            <SelectItem value="zero_carteira">Zero carteira</SelectItem>
-            <SelectItem value="superlotacao">Superlotação</SelectItem>
+            <SelectItem value="superlotacao">Acima da capacidade</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       <div className="overflow-x-auto border-b border-slate-800">
-        <table className="w-full min-w-[1240px] table-fixed text-left text-xs">
+        <table className="w-full min-w-[1380px] table-fixed text-left text-xs">
           <thead>
             <tr className="border-b border-slate-800 bg-slate-950/50 text-slate-400">
               <th className="w-[190px] px-3 py-2 font-medium">Curso</th>
@@ -687,7 +689,8 @@ export function HealthScoreV3MetasSegmentadas({
               <th className="w-[150px] px-3 py-2 font-medium">Capacidade máxima</th>
               <th className="w-[170px] px-3 py-2 font-medium">Meta média/turma</th>
               <th className="w-[155px] px-3 py-2 font-medium">Meta carteira</th>
-              <th className="w-[190px] px-3 py-2 font-medium">Situação</th>
+              <th className="w-[170px] px-3 py-2 font-medium">Configuração</th>
+              <th className="w-[205px] px-3 py-2 font-medium">Validação de capacidade</th>
               <th className="w-[210px] px-3 py-2 font-medium">Ação</th>
             </tr>
           </thead>
@@ -751,6 +754,12 @@ export function HealthScoreV3MetasSegmentadas({
                     <SegmentStatus row={row} />
                   </td>
                   <td className="px-3 py-3">
+                    <SegmentCapacityStatus
+                      row={row}
+                      available={superlotacaoDisponivel}
+                    />
+                  </td>
+                  <td className="px-3 py-3">
                     {row.goal.estado === 'nao_ofertada' ? (
                       <Button
                         type="button"
@@ -790,6 +799,16 @@ export function HealthScoreV3MetasSegmentadas({
           </div>
         )}
       </div>
+
+      {pendencias.atribuicoesZeroCarteira.length > 0 && (
+        <div className="flex items-start gap-2 rounded-md border border-slate-800 bg-slate-950/30 px-3 py-2 text-[11px] leading-4 text-slate-400">
+          <CircleHelp className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-400" />
+          <p>
+            Vínculos de professor sem aluno ativo continuam disponíveis para configuração,
+            mas ficam fora do cálculo até receberem um aluno.
+          </p>
+        </div>
+      )}
 
       <Collapsible asChild>
         <section className="border-t border-slate-800 pt-4">
@@ -949,21 +968,34 @@ function SegmentStatus({ row }: { row: HealthScoreV3DraftMatrixRow }) {
   return (
     <div className="space-y-1.5">
       <SegmentStateBadge state={state} />
-      <p className="text-[10px] text-slate-500">Catálogo Emusys</p>
-      {row.pending.zeroCarteira && (
-        <div>
-          <Badge variant="outline" className="border-cyan-500/30 text-cyan-300">Zero carteira</Badge>
-          <p className="mt-1 text-[10px] text-slate-500">Sem penalização</p>
-        </div>
-      )}
-      {row.pending.superlotacao && (
-        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-rose-300">
-          <AlertTriangle className="h-3 w-3" />
-          Superlotação
-        </span>
-      )}
       {updatedAt && <p className="text-[10px] text-slate-500">Salva em {updatedAt}</p>}
     </div>
+  );
+}
+
+function SegmentCapacityStatus({
+  row,
+  available,
+}: {
+  row: HealthScoreV3DraftMatrixRow;
+  available: boolean;
+}) {
+  if (!available) {
+    return <span className="text-[11px] text-slate-500">Aguardando simulação</span>;
+  }
+  if (row.pending.superlotacao) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-rose-300">
+        <AlertTriangle className="h-3 w-3" />
+        Acima da capacidade
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-300">
+      <CheckCircle2 className="h-3 w-3" />
+      Dentro da capacidade
+    </span>
   );
 }
 

@@ -1008,15 +1008,17 @@ test('Task 8 separa pesos, metas globais e matriz segmentada no fluxo governado'
     'Capacidade máxima',
     'Meta média/turma',
     'Meta carteira',
-    'Situação',
+    'Configuração',
+    'Validação de capacidade',
     'Ação',
     'Regra ausente',
     'Pronta para salvar',
     'Salva no rascunho',
     'Não ofertado nesta unidade',
-    'Zero carteira',
-    'Superlotação',
-    'Divergência de modalidade',
+    'Aguardando simulação',
+    'Dentro da capacidade',
+    'Acima da capacidade',
+    'Modalidade a revisar',
     'Pendências de atribuição',
     'Somente leitura',
   ]) {
@@ -1061,6 +1063,36 @@ test('Task 8 separa pesos, metas globais e matriz segmentada no fluxo governado'
     configSource.indexOf('const handleSimulate'),
   );
   assert.doesNotMatch(saveBlock, /activate\(/);
+});
+
+test('matriz separa configuracao de meta e validacao de capacidade', () => {
+  const matrixSource = read(segmentedGoalsComponentPath);
+  const statusBlock = matrixSource.slice(
+    matrixSource.indexOf('function SegmentStatus'),
+    matrixSource.indexOf('function SegmentStateBadge'),
+  );
+  const pendingBlock = matrixSource.slice(
+    matrixSource.indexOf('function isDraftRowPending'),
+    matrixSource.indexOf('function buildDraftUnitTabs'),
+  );
+
+  assert.match(matrixSource, /Fonte: catálogo Emusys/);
+  assert.match(matrixSource, /Configuração/);
+  assert.match(matrixSource, /Validação de capacidade/);
+  assert.match(matrixSource, /Aguardando simulação/);
+  assert.match(matrixSource, /Dentro da capacidade/);
+  assert.match(
+    matrixSource,
+    /Vínculos de professor sem aluno ativo continuam disponíveis para configuração,[\s\S]*?mas ficam fora do cálculo até receberem um aluno\./,
+  );
+  assert.match(matrixSource, /Acima da capacidade/);
+  assert.doesNotMatch(statusBlock, /Catálogo Emusys/);
+  assert.doesNotMatch(statusBlock, /Zero carteira/);
+  assert.doesNotMatch(statusBlock, /Sem penalização/);
+  assert.doesNotMatch(pendingBlock, /row\.pending\.zeroCarteira/);
+  assert.doesNotMatch(matrixSource, /SelectItem value="zero_carteira"/);
+  assert.doesNotMatch(matrixSource, /Professor sem aluno ativo/);
+  assert.doesNotMatch(matrixSource, /label="Zero carteira"/);
 });
 
 test('matriz visivel e a uniao deduplicada sem cartesiano ou identidades inventadas', async () => {
