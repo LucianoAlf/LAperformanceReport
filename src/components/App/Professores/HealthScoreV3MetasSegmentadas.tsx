@@ -469,6 +469,7 @@ export interface HealthScoreV3MetasSegmentadasProps {
   pendencias: HealthScoreV3ConfigPendencias;
   superlotacoes?: HealthScoreV3SimulationCapacityAlert[];
   superlotacaoDisponivel?: boolean;
+  versionState: 'draft' | 'active';
   editable: boolean;
   disabled?: boolean;
   onMetasChange: (metas: HealthScoreV3SegmentDraftGoal[]) => void;
@@ -481,6 +482,7 @@ export function HealthScoreV3MetasSegmentadas({
   pendencias,
   superlotacoes = [],
   superlotacaoDisponivel = false,
+  versionState,
   editable,
   disabled = false,
   onMetasChange,
@@ -578,10 +580,12 @@ export function HealthScoreV3MetasSegmentadas({
           tooltip="Segmentos observados ou atribuídos que ainda não possuem uma meta exata."
         />
         <CounterItem
-          label="Salvas no rascunho"
+          label={versionState === 'active' ? 'Metas ativas' : 'Salvas no rascunho'}
           value={counters.salvasRascunho}
           tone="cyan"
-          tooltip="Metas já persistidas na versão de rascunho exibida."
+          tooltip={versionState === 'active'
+            ? 'Metas vigentes na configuração ativa exibida.'
+            : 'Metas já persistidas na versão de rascunho exibida.'}
         />
         <CounterItem
           label="Acima da capacidade"
@@ -728,12 +732,13 @@ export function HealthScoreV3MetasSegmentadas({
                     )}
                   />
                   <td className="px-3 py-3">
-                    <SegmentStatus row={row} />
+                    <SegmentStatus row={row} versionState={versionState} />
                   </td>
                   <td className="px-3 py-3">
                     <SegmentCapacityStatus
                       row={row}
                       available={superlotacaoDisponivel}
+                      versionState={versionState}
                     />
                   </td>
                   <td className="px-3 py-3">
@@ -750,6 +755,16 @@ export function HealthScoreV3MetasSegmentadas({
                         <RotateCcw className="h-3.5 w-3.5" />
                         Voltar a configurar
                       </Button>
+                    ) : row.goal.ofertado ? (
+                      <Tooltip content="O catalogo oficial do Emusys possui professor atribuido a este curso. Corrija a atribuicao na origem antes de marcar a oferta como encerrada.">
+                        <span
+                          aria-label={`Oferta formal no Emusys - ${row.goal.cursoNome}`}
+                          className="inline-flex min-h-8 w-full items-center justify-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-center text-[11px] font-medium text-emerald-300"
+                        >
+                          <LockKeyhole className="h-3.5 w-3.5 shrink-0" />
+                          Oferta formal no Emusys
+                        </span>
+                      </Tooltip>
                     ) : (
                       <Button
                         type="button"
@@ -761,7 +776,7 @@ export function HealthScoreV3MetasSegmentadas({
                         className="h-auto min-h-8 w-full whitespace-normal text-slate-400 hover:text-slate-100"
                       >
                         <CircleOff className="h-3.5 w-3.5" />
-                        Não ofertado nesta unidade
+                        Marcar como não ofertado
                       </Button>
                     )}
                   </td>
@@ -877,14 +892,20 @@ function SegmentNumberInput({
   );
 }
 
-function SegmentStatus({ row }: { row: HealthScoreV3DraftMatrixRow }) {
+function SegmentStatus({
+  row,
+  versionState,
+}: {
+  row: HealthScoreV3DraftMatrixRow;
+  versionState: 'draft' | 'active';
+}) {
   const state = getHealthScoreV3SegmentGoalUiState(row.goal);
   const updatedAt = row.goal.atualizadoEm
     ? new Intl.DateTimeFormat('pt-BR').format(new Date(row.goal.atualizadoEm))
     : null;
   return (
     <div className="space-y-1.5">
-      <SegmentStateBadge state={state} />
+      <SegmentStateBadge state={state} versionState={versionState} />
       {updatedAt && <p className="text-[10px] text-slate-500">Salva em {updatedAt}</p>}
     </div>
   );
@@ -893,12 +914,18 @@ function SegmentStatus({ row }: { row: HealthScoreV3DraftMatrixRow }) {
 function SegmentCapacityStatus({
   row,
   available,
+  versionState,
 }: {
   row: HealthScoreV3DraftMatrixRow;
   available: boolean;
+  versionState: 'draft' | 'active';
 }) {
   if (!available) {
-    return <span className="text-[11px] text-slate-500">Aguardando simulação</span>;
+    return (
+      <span className="text-[11px] text-slate-500">
+        {versionState === 'active' ? 'Validada na ativação' : 'Aguardando simulação'}
+      </span>
+    );
   }
   if (row.pending.superlotacao) {
     return (
@@ -916,12 +943,18 @@ function SegmentCapacityStatus({
   );
 }
 
-function SegmentStateBadge({ state }: { state: HealthScoreV3SegmentGoalUiState }) {
+function SegmentStateBadge({
+  state,
+  versionState,
+}: {
+  state: HealthScoreV3SegmentGoalUiState;
+  versionState: 'draft' | 'active';
+}) {
   if (state === 'salva_no_rascunho') {
     return (
       <Badge variant="success" className="gap-1">
         <CheckCircle2 className="h-3 w-3" />
-        Salva no rascunho
+        {versionState === 'active' ? 'Configuração ativa' : 'Salva no rascunho'}
       </Badge>
     );
   }

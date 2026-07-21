@@ -406,7 +406,9 @@ export function HealthScoreV3Config() {
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-white">Health Score V3</h3>
-              <Badge variant="warning">Sombra</Badge>
+              <Badge variant={editable ? 'warning' : 'success'}>
+                {editable ? 'Rascunho' : 'Configuração ativa'}
+              </Badge>
             </div>
             <p className="mt-0.5 text-xs text-slate-400">Configuração versionada de pesos e metas</p>
           </div>
@@ -653,6 +655,7 @@ export function HealthScoreV3Config() {
                 && simulation
                 && simulation.configId === workingConfig.id
               )}
+              versionState={editable ? 'draft' : 'active'}
               editable={editable}
               disabled={mutating}
               onMetasChange={updateSegmentGoals}

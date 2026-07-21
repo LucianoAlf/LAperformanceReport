@@ -737,7 +737,8 @@ export function getHealthScoreV3ActivationBlockers(
   const matrixByKey = new Map(matrix.map((goal) => [segmentKey(goal), goal]));
   return catalogSegments.flatMap((segment): HealthScoreV3SegmentDraftGoal[] => {
     const goal = matrixByKey.get(segmentKey(segment));
-    if (goal && (goal.estado === 'nao_ofertada' || isCompleteConfiguredGoal(goal))) {
+    const isValidNonOffering = goal?.estado === 'nao_ofertada' && !segment.ofertado;
+    if (goal && (isValidNonOffering || isCompleteConfiguredGoal(goal))) {
       return [];
     }
     if (goal) return [goal];
