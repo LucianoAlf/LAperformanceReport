@@ -679,7 +679,7 @@ git commit -m "feat: orientar metas v3 pelo catalogo oficial"
 - Modify: `supabase/functions/sync-professor-disciplinas-emusys/index.ts`
 - Modify: `tests/emusysProfessorDisciplinasSchema.test.mjs`
 
-- [ ] **Step 1: Testar contrato de autenticacao e cron**
+- [x] **Step 1: Testar contrato de autenticacao e cron**
 
 Exigir:
 - gateway explicitamente `verify_jwt=false`;
@@ -690,7 +690,7 @@ Exigir:
 - tres jobs diarios escalonados;
 - body identifica unidade e `origem='cron'`.
 
-- [ ] **Step 2: Confirmar RED**
+- [x] **Step 2: Confirmar RED**
 
 ```powershell
 node --test tests/emusysProfessorDisciplinasSchema.test.mjs
@@ -698,7 +698,7 @@ node --test tests/emusysProfessorDisciplinasSchema.test.mjs
 
 Expected: FAIL nos jobs ainda ausentes.
 
-- [ ] **Step 3: Criar RPC de autorizacao para a Edge Function**
+- [x] **Step 3: Criar RPC de autorizacao para a Edge Function**
 
 Na migration, criar uma RPC minima:
 
@@ -710,11 +710,11 @@ public.pode_sincronizar_professor_disciplinas_emusys_v1(
 
 Ela deve ser `security definer`, ter `search_path` fixo, resolver o usuario atual ativo e chamar `usuario_tem_permissao(usuario_id, 'professores.editar', p_unidade_id)`.
 
-- [ ] **Step 4: Criar cron diario escalonado**
+- [x] **Step 4: Criar cron diario escalonado**
 
 Usar `vault.decrypted_secrets` com `sync_professor_disciplinas_token` e `net.http_post`. Agendar uma unidade por job em horarios diferentes, evitando concorrencia. Os nomes devem comecar com `sync-professor-disciplinas-emusys-` para aparecerem no monitor de crons.
 
-- [ ] **Step 5: Confirmar GREEN**
+- [x] **Step 5: Confirmar GREEN**
 
 ```powershell
 deno check supabase/functions/sync-professor-disciplinas-emusys/index.ts

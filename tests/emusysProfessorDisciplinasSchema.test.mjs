@@ -24,6 +24,11 @@ const finalizerGuardFixPath = resolve(
   'supabase/migrations/20260721110000_emusys_catalogo_finalizador_auth_role.sql',
 );
 const finalizerGuardFix = readOptionalFile(finalizerGuardFixPath);
+const cronMigrationPath = resolve(
+  repositoryRoot,
+  'supabase/migrations/20260720123000_cron_sync_professor_disciplinas_emusys.sql',
+);
+const cronMigration = readOptionalFile(cronMigrationPath);
 const {
   exists: migrationExists,
   filePath: migrationPath,
@@ -532,8 +537,10 @@ test('Task 3 implementa sync retomavel com guard duplo e gateway explicito', () 
   assert.match(edgeSource, /SYNC_PROFESSOR_DISCIPLINAS_TOKEN/);
   assert.match(edgeSource, /constantTime|timingSafe|secureCompare/i);
   assert.match(edgeSource, /auth\.getUser\s*\(/);
-  assert.match(edgeSource, /fn_usuario_atual_tem_permissao/);
-  assert.match(edgeSource, /professores\.editar/);
+  assert.match(
+    edgeSource,
+    /pode_sincronizar_professor_disciplinas_emusys_v1/,
+  );
 
   assert.match(edgeSource, /disciplinas\?tipo=turma/);
   assert.match(edgeSource, /disciplinas\?tipo=individual/);
@@ -552,4 +559,48 @@ test('Task 3 implementa sync retomavel com guard duplo e gateway explicito', () 
     configSource,
     /\[functions\.sync-professor-disciplinas-emusys\][\s\S]*?verify_jwt\s*=\s*false/i,
   );
+});
+
+test('Task 6 agenda sync diario seguro e escalonado por unidade', () => {
+  assert.notEqual(
+    cronMigration,
+    '',
+    cronMigrationPath + ' deve existir antes de validar o cron',
+  );
+  assert.match(
+    cronMigration,
+    /create\s+or\s+replace\s+function\s+public\.pode_sincronizar_professor_disciplinas_emusys_v1\s*\(\s*p_unidade_id\s+uuid\s*\)/i,
+  );
+  assert.match(cronMigration, /security\s+definer/i);
+  assert.match(cronMigration, /set\s+search_path\s*=\s*public\s*,\s*pg_temp/i);
+  assert.match(cronMigration, /fn_usuario_atual_tem_permissao\s*\(/i);
+  assert.match(cronMigration, /professores\.editar/i);
+
+  assert.match(cronMigration, /vault\.decrypted_secrets/i);
+  assert.match(cronMigration, /sync_professor_disciplinas_token/i);
+  assert.doesNotMatch(
+    cronMigration,
+    /x-sync-token['"]?\s*[,=:>]\s*['"][a-f0-9]{32,}/i,
+    'migration nunca pode conter token literal',
+  );
+  assert.match(cronMigration, /net\.http_post\s*\(/i);
+  assert.match(cronMigration, /sync-professor-disciplinas-emusys-barra/i);
+  assert.match(cronMigration, /sync-professor-disciplinas-emusys-recreio/i);
+  assert.match(cronMigration, /sync-professor-disciplinas-emusys-campo-grande/i);
+  assert.match(cronMigration, /"origem"\s*:\s*"cron"/i);
+  assert.match(cronMigration, /"modo"\s*:\s*"diagnostico"/i);
+
+  const schedules = [...cronMigration.matchAll(/cron\.schedule\s*\(/gi)];
+  assert.equal(schedules.length, 3, 'deve existir exatamente um job por unidade');
+  for (const role of ['public', 'anon']) {
+    assert.match(
+      cronMigration,
+      new RegExp(
+        'revoke\\s+(?:all(?:\\s+privileges)?|execute)\\s+on\\s+function\\s+' +
+          'public\\.pode_sincronizar_professor_disciplinas_emusys_v1\\s*\\(\\s*uuid\\s*\\)' +
+          '\\s+from\\s+(?:[^;]*,\\s*)?' + role + '(?:\\s*,|\\s*;)',
+        'i',
+      ),
+    );
+  }
 });

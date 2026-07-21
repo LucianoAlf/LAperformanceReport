@@ -167,9 +167,8 @@ async function authorize(
   }
 
   const { data: allowed, error: permissionError } = await userClient.rpc(
-    "fn_usuario_atual_tem_permissao",
+    "pode_sincronizar_professor_disciplinas_emusys_v1",
     {
-      p_codigo_permissao: "professores.editar",
       p_unidade_id: unidadeId,
     },
   );
