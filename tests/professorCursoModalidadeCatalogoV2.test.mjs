@@ -166,11 +166,126 @@ test(
 );
 
 test(
+  'evidencia V2 resolve catalogo, de-para, identidade formal e jornada por unidade',
+  { skip: !migrationExists },
+  () => {
+    const evidenceFunction = extractFunction(
+      'fn_professor_curso_modalidade_evidencias_v2',
+    );
+
+    for (const source of [
+      'public.emusys_disciplinas_catalogo',
+      'public.emusys_professor_disciplinas',
+      'public.curso_emusys_depara',
+      'public.professores_unidades',
+      'public.aluno_jornada_matricula_disciplina',
+      'public.aulas_emusys',
+    ]) {
+      assert.match(evidenceFunction, new RegExp(escapeRegExp(source), 'i'));
+    }
+
+    assert.match(evidenceFunction, /formal_sem_aluno/i);
+    assert.match(evidenceFunction, /jornada_sem_atribuicao_formal/i);
+    assert.match(evidenceFunction, /professor_sem_identidade_local/i);
+    assert.match(evidenceFunction, /disciplina_sem_depara/i);
+    assert.match(evidenceFunction, /jornada_disciplina_ausente_catalogo/i);
+    assert.doesNotMatch(evidenceFunction, /\bprofessores_cursos\b/i);
+  },
+);
+
+test(
+  'materializador exige execucao completa, e idempotente e preserva revisao humana',
+  { skip: !migrationExists },
+  () => {
+    const reconciliation = extractFunction(
+      'reconciliar_professor_curso_modalidade_v2',
+    );
+
+    assert.match(reconciliation, /status\s*(?:<>|!=)\s*'completa'/i);
+    assert.match(reconciliation, /pg_advisory_xact_lock/i);
+    assert.match(reconciliation, /fonte\s+in\s*\(\s*'jornada'\s*,\s*'aula'\s*,\s*'emusys'\s*\)/i);
+    assert.match(reconciliation, /fonte\s+not\s+in\s*\(\s*'manual'\s*,\s*'revisao'\s*\)/i);
+    assert.match(reconciliation, /least\s*\(/i);
+    assert.match(reconciliation, /on\s+conflict/i);
+    assert.match(reconciliation, /status\s*=\s*'encerrado'/i);
+    assert.doesNotMatch(reconciliation, /delete\s+from\s+public\.professor_unidade_curso_modalidade/i);
+  },
+);
+
+test(
+  'fila V2 lista apenas excecoes verdadeiras e permite auditoria separada',
+  { skip: !migrationExists },
+  () => {
+    const operationalQueue = extractFunction(
+      'get_professor_curso_modalidade_excecoes_v2',
+    );
+
+    for (const state of [
+      'professor_sem_identidade_local',
+      'disciplina_sem_depara',
+      'jornada_disciplina_ausente_catalogo',
+      'jornada_sem_atribuicao_formal',
+      'id_disciplina_multimodalidade',
+      'sobreposicao_temporal',
+    ]) {
+      assert.match(operationalQueue, new RegExp(state, 'i'));
+    }
+    assert.match(operationalQueue, /p_incluir_auditoria/i);
+    assert.match(operationalQueue, /usuario_tem_permissao/i);
+    assert.match(operationalQueue, /professores\.editar/i);
+    assert.doesNotMatch(operationalQueue, /\bprofessores_cursos\b/i);
+  },
+);
+
+test(
+  'finalizador conecta V2 somente depois de marcar a execucao completa',
+  { skip: !migrationExists },
+  () => {
+    const finalizer = extractFunction(
+      'finalizar_sync_professor_disciplinas_emusys_v1',
+    );
+    const completePosition = finalizer.search(/status\s*=\s*'completa'/i);
+    const reconcilePosition = finalizer.search(/reconciliar_professor_curso_modalidade_v2/i);
+
+    assert.notEqual(completePosition, -1);
+    assert.notEqual(reconcilePosition, -1);
+    assert.ok(
+      reconcilePosition > completePosition,
+      'materializacao V2 deve ocorrer depois da execucao completa',
+    );
+  },
+);
+
+test(
+  'migration amplia fonte para Emusys e mantem RPCs internas privadas',
+  { skip: !migrationExists },
+  () => {
+    assert.match(
+      executableSql,
+      /fonte\s+in\s*\(\s*'manual'\s*,\s*'jornada'\s*,\s*'aula'\s*,\s*'revisao'\s*,\s*'emusys'\s*\)/i,
+    );
+    assert.match(
+      executableSql,
+      /revoke\s+all\s+on\s+function\s+public\.reconciliar_professor_curso_modalidade_v2\s*\(\s*uuid\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated/i,
+    );
+    assert.match(
+      executableSql,
+      /grant\s+execute\s+on\s+function\s+public\.get_professor_curso_modalidade_excecoes_v2\s*\(\s*uuid\s*,\s*integer\s*,\s*boolean\s*\)\s+to\s+authenticated/i,
+    );
+  },
+);
+
+test(
   'migration preserva V1 e nao executa DROP destrutivo',
   { skip: !migrationExists },
   () => {
+    const sqlSemTabelasTemporarias = executableSql.replace(
+      /\bdrop\s+table\s+if\s+exists\s+pg_temp\.[a-z0-9_]+\s*;/gi,
+      '',
+    );
+
     assert.doesNotMatch(
-      executableSql,
+      sqlSemTabelasTemporarias,
       /\bdrop\s+(?:table|view|materialized\s+view|procedure|type)\b/i,
     );
 

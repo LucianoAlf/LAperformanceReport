@@ -443,7 +443,7 @@ Expected: catalogo bruto reproduzivel para as tres unidades, sem efeito no Healt
 - Modify: `tests/professorCursoModalidadeCanonico.test.mjs`
 - Modify: `tests/healthScoreProfessorV3MetasSegmentadasContrato.test.mjs`
 
-- [ ] **Step 1: Completar testes de precedencia e temporalidade**
+- [x] **Step 1: Completar testes de precedencia e temporalidade**
 
 Cobrir:
 1. catalogo turma + aula `tipo=individual` continua turma e nao abre excecao;
@@ -457,7 +457,7 @@ Cobrir:
 9. linha `revisao` ou `manual` nao e encerrada automaticamente;
 10. historico encerrado/revisado e preservado.
 
-- [ ] **Step 2: Confirmar RED**
+- [x] **Step 2: Confirmar RED**
 
 ```powershell
 node --test tests/professorCursoModalidadeCatalogoV2.test.mjs
@@ -466,7 +466,7 @@ node --test tests/professorCursoModalidadeCanonico.test.mjs
 
 Expected: FAIL nas funcoes V2.
 
-- [ ] **Step 3: Estender a origem temporal sem reescrever a migration antiga**
+- [x] **Step 3: Estender a origem temporal sem reescrever a migration antiga**
 
 Na migration nova, substituir o check de `fonte` para aceitar:
 
@@ -476,7 +476,7 @@ manual, jornada, aula, revisao, emusys
 
 Nao alterar linhas historicas e nao apagar `aula`/`jornada` existentes.
 
-- [ ] **Step 4: Implementar evidencia V2**
+- [x] **Step 4: Implementar evidencia V2**
 
 Criar:
 
@@ -496,7 +496,7 @@ Precedencia:
 5. `aluno_jornada_matricula_disciplina` para confirmacao ativa;
 6. `aulas_emusys` apenas como evidencia de execucao/substituicao, sem ler `tipo` para modalidade.
 
-- [ ] **Step 5: Implementar materializador V2**
+- [x] **Step 5: Implementar materializador V2**
 
 Criar:
 
@@ -519,7 +519,7 @@ Regras:
 
 Conectar a chamada ao final de `finalizar_sync_professor_disciplinas_emusys_v1` somente depois de a execucao estar marcada completa.
 
-- [ ] **Step 6: Implementar fila V2**
+- [x] **Step 6: Implementar fila V2**
 
 Criar:
 
@@ -541,7 +541,7 @@ Por padrao, retornar somente:
 
 Quando `p_incluir_auditoria=true`, acrescentar resolvidos/historicos em conjunto identificado como auditoria, sem misturar com o contador acionavel. Nunca incluir `professores_cursos`.
 
-- [ ] **Step 7: Fixar seguranca**
+- [x] **Step 7: Fixar seguranca**
 
 - view/funcoes internas service-only;
 - fila `security definer`, `search_path = public, pg_temp`;
@@ -549,7 +549,7 @@ Quando `p_incluir_auditoria=true`, acrescentar resolvidos/historicos em conjunto
 - `public`/`anon` revogados;
 - `authenticated` recebe apenas a fila guardada, nao o materializador.
 
-- [ ] **Step 8: Confirmar GREEN**
+- [x] **Step 8: Confirmar GREEN**
 
 ```powershell
 node --test tests/professorCursoModalidadeCatalogoV2.test.mjs
@@ -560,7 +560,7 @@ node --test tests/healthScoreProfessorV3MetasSegmentadasSecurity.test.mjs
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```powershell
 git add -- supabase/migrations/20260720121000_professor_curso_modalidade_catalogo_v2.sql tests/professorCursoModalidadeCatalogoV2.test.mjs tests/professorCursoModalidadeCanonico.test.mjs tests/healthScoreProfessorV3MetasSegmentadasContrato.test.mjs
@@ -571,15 +571,15 @@ git commit -m "feat: materializar vinculos Emusys com evidencia v2"
 
 ## Gate 2: Materializacao controlada
 
-- [ ] Aplicar `20260720121000_professor_curso_modalidade_catalogo_v2.sql`.
-- [ ] Rodar primeiro a funcao de evidencias V2 em SELECT e comparar com a V1.
-- [ ] Confirmar que os falsos conflitos por `aulas.tipo` sao zero na V2.
-- [ ] Confirmar que pistas de `professores_cursos` sao zero na fila operacional V2.
-- [ ] Rodar materializacao somente na Barra e conferir manualmente uma amostra com catalogo, jornada e vinculo temporal.
-- [ ] Repetir no Recreio e Campo Grande.
-- [ ] Confirmar que todas as pendencias de jornada alta resolviveis foram materializadas.
-- [ ] Confirmar que professor formal com zero alunos aparece como vinculo ativo, mas nao recebe nota ou penalizacao sem valor observado.
-- [ ] Confirmar que V1 e consumidores atuais continuam retornando o mesmo contrato.
+- [x] Aplicar `20260720121000_professor_curso_modalidade_catalogo_v2.sql`.
+- [x] Rodar primeiro a funcao de evidencias V2 em SELECT e comparar com a V1.
+- [x] Confirmar que os falsos conflitos por `aulas.tipo` sao zero na V2.
+- [x] Confirmar que pistas de `professores_cursos` sao zero na fila operacional V2.
+- [x] Rodar materializacao somente na Barra e conferir manualmente uma amostra com catalogo, jornada e vinculo temporal.
+- [x] Repetir no Recreio e Campo Grande.
+- [x] Confirmar que todas as pendencias de jornada alta resolviveis foram materializadas.
+- [x] Confirmar que professor formal com zero alunos aparece como vinculo ativo, mas nao recebe nota ou penalizacao sem valor observado.
+- [x] Confirmar que V1 e consumidores atuais continuam retornando o mesmo contrato.
 
 Expected: V2 pronta e reproduzivel, sem cutover de frontend.
 
