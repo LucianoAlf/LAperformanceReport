@@ -11,6 +11,28 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
   useProfessorCursoModalidadeReconciliacao,
@@ -79,6 +101,9 @@ export function ProfessorCursoModalidadeReconciliacao({
   const [decisions, setDecisions] = useState<Record<string, RowDecision>>({});
   const [justification, setJustification] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingActions, setPendingActions] = useState<ProfessorCursoModalidadeReconciliacaoAction[]>([]);
   const selectedProfessorId = professorFilter ? Number(professorFilter) : null;
 
   const units = useMemo(() => Array.from(new Map(
@@ -188,13 +213,19 @@ export function ProfessorCursoModalidadeReconciliacao({
       setLocalError('A justificativa deve explicar a decisão em pelo menos 10 caracteres.');
       return;
     }
-    if (!window.confirm(`Registrar ${actions.length} decisão(ões) para este professor?`)) return;
+    setPendingActions(actions);
+    setConfirmOpen(true);
+  };
 
+  const confirmSave = async () => {
+    if (selectedProfessorId === null || pendingActions.length === 0) return;
     try {
-      await save(selectedProfessorId, actions, justification);
+      await save(selectedProfessorId, pendingActions, justification);
       setDecisions({});
+      setPendingActions([]);
       setJustification('');
       setLocalError(null);
+      setConfirmOpen(false);
       await onSaved();
     } catch {
       // O hook preserva a mensagem canônica da RPC.
@@ -202,59 +233,73 @@ export function ProfessorCursoModalidadeReconciliacao({
   };
 
   return (
-    <section className="space-y-4 border-t border-slate-800 pt-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <Collapsible open={open} onOpenChange={setOpen}>
+    <section className="border-t border-slate-800 pt-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <History className="h-4 w-4 text-cyan-300" />
-            <h4 className="text-sm font-semibold text-slate-100">Conciliação de vínculos pedagógicos</h4>
+            <h4 className="text-sm font-semibold text-slate-100">Excecoes de vinculos Emusys</h4>
+            <Badge variant={visibleRows.length > 0 ? 'warning' : 'success'}>
+              {visibleRows.length}
+            </Badge>
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            Confirme unidade, curso e modalidade sem alterar o cadastro legado do professor.
+            Revise somente conflitos que o catálogo oficial não resolveu automaticamente.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          title="Atualizar fila de conciliação"
-          disabled={disabled || loading || saving}
-          onClick={() => void refresh().catch(() => undefined)}
-        >
-          {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-          Atualizar
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            title="Atualizar fila de exceções"
+            disabled={disabled || loading || saving}
+            onClick={() => void refresh().catch(() => undefined)}
+          >
+            {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+            Atualizar
+          </Button>
+          <CollapsibleTrigger asChild>
+            <Button type="button" variant="ghost" size="sm">
+              {open ? 'Recolher' : 'Revisar exceções'}
+              <ChevronDown className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+            </Button>
+          </CollapsibleTrigger>
+        </div>
       </div>
 
+      <CollapsibleContent className="space-y-4 pt-4">
+
       <div className="grid gap-3 sm:grid-cols-3">
-        <select
-          aria-label="Filtrar por unidade"
-          value={unitFilter}
-          onChange={(event) => setUnitFilter(event.target.value)}
-          className="h-10 rounded-md border border-slate-700 bg-slate-900 px-3 text-sm text-slate-200"
-        >
-          <option value="">Todas as unidades</option>
-          {units.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-        </select>
-        <select
-          aria-label="Filtrar por professor"
-          value={professorFilter}
-          onChange={(event) => setProfessorFilter(event.target.value)}
-          className="h-10 rounded-md border border-slate-700 bg-slate-900 px-3 text-sm text-slate-200"
-        >
-          <option value="">Selecione um professor</option>
-          {professors.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-        </select>
-        <select
-          aria-label="Filtrar por estado"
-          value={stateFilter}
-          onChange={(event) => setStateFilter(event.target.value)}
-          className="h-10 rounded-md border border-slate-700 bg-slate-900 px-3 text-sm text-slate-200"
-        >
-          <option value="pendentes">Somente pendências</option>
-          <option value="todos">Todos os estados</option>
-          {states.map((state) => <option key={state} value={state}>{state}</option>)}
-        </select>
+        <Select value={unitFilter || 'todas'} onValueChange={(value) => setUnitFilter(value === 'todas' ? '' : value)}>
+          <SelectTrigger aria-label="Filtrar por unidade" className="rounded-md border-slate-700 bg-slate-900">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Todas as unidades</SelectItem>
+            {units.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={professorFilter || 'nenhum'} onValueChange={(value) => setProfessorFilter(value === 'nenhum' ? '' : value)}>
+          <SelectTrigger aria-label="Filtrar por professor" className="rounded-md border-slate-700 bg-slate-900">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="nenhum">Selecione um professor</SelectItem>
+            {professors.map(([id, name]) => <SelectItem key={id} value={String(id)}>{name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={stateFilter} onValueChange={setStateFilter}>
+          <SelectTrigger aria-label="Filtrar por estado" className="rounded-md border-slate-700 bg-slate-900">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pendentes">Somente pendências</SelectItem>
+            <SelectItem value="todos">Todos os estados</SelectItem>
+            {states.map((state) => <SelectItem key={state} value={state}>{state}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       {!selectedProfessorId && (
@@ -317,34 +362,40 @@ export function ProfessorCursoModalidadeReconciliacao({
                   {row.unidadeId ? (
                     <p>{row.unidadeNome}</p>
                   ) : (
-                    <select
-                      aria-label={`Unidade de ${row.professorNome} - ${row.cursoNome}`}
-                      value={decision?.unidadeId || unitFilter}
+                    <Select
+                      value={decision?.unidadeId || unitFilter || 'nenhuma'}
                       disabled={!canDecide}
-                      onChange={(event) => updateDecision(row, {
+                      onValueChange={(value) => updateDecision(row, {
                         action: 'revisar',
-                        unidadeId: event.target.value,
+                        unidadeId: value === 'nenhuma' ? '' : value,
                       })}
-                      className="h-8 w-full rounded border border-slate-700 bg-slate-900 px-2"
                     >
-                      <option value="">Escolher unidade</option>
-                      {units.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-                    </select>
+                      <SelectTrigger aria-label={`Unidade de ${row.professorNome} - ${row.cursoNome}`} className="h-8 rounded-md border-slate-700 bg-slate-900 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="nenhuma">Escolher unidade</SelectItem>
+                        {units.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   )}
-                  <select
-                    aria-label={`Modalidade de ${row.professorNome} - ${row.cursoNome}`}
-                    value={decision?.modalidade || row.modalidade || ''}
+                  <Select
+                    value={decision?.modalidade || row.modalidade || 'nenhuma'}
                     disabled={!canDecide}
-                    onChange={(event) => updateDecision(row, {
+                    onValueChange={(value) => updateDecision(row, {
                       action: 'revisar',
-                      modalidade: event.target.value as ProfessorCursoModalidade,
+                      modalidade: value === 'nenhuma' ? '' : value as ProfessorCursoModalidade,
                     })}
-                    className="h-8 w-full rounded border border-slate-700 bg-slate-900 px-2"
                   >
-                    <option value="">Escolher modalidade</option>
-                    <option value="turma">Turma</option>
-                    <option value="individual">Individual</option>
-                  </select>
+                    <SelectTrigger aria-label={`Modalidade de ${row.professorNome} - ${row.cursoNome}`} className="h-8 rounded-md border-slate-700 bg-slate-900 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nenhuma">Escolher modalidade</SelectItem>
+                      <SelectItem value="turma">Turma</SelectItem>
+                      <SelectItem value="individual">Individual</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div>
@@ -440,6 +491,25 @@ export function ProfessorCursoModalidadeReconciliacao({
           Registrar decisões
         </Button>
       </div>
+      </CollapsibleContent>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent className="rounded-lg border-slate-700 bg-slate-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Registrar decisões?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingActions.length} decisão(ões) serão registradas para o professor selecionado, com trilha de auditoria.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmSave()}>
+              Confirmar registro
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
+    </Collapsible>
   );
 }

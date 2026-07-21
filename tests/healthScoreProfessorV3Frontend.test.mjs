@@ -162,7 +162,8 @@ test('hook de snapshot V3 preserva null sem fallback para V2 ou zero', () => {
 test('painel V3 mantem sliders de peso e inputs separados de meta', () => {
   const source = read(componentPath);
 
-  assert.match(source, /type="range"/i);
+  assert.match(source, /<Slider\b/);
+  assert.doesNotMatch(source, /type="range"/i);
   assert.match(source, /type="number"/i);
   assert.match(source, /Peso no score/i);
   assert.match(source, /Meta de desempenho/i);

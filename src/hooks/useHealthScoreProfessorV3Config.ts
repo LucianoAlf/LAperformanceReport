@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
+  buildHealthScoreV3DraftLoadState,
   parseHealthScoreV3Config,
   parseHealthScoreV3ConfigUi,
   parseHealthScoreV3Simulation,
@@ -26,7 +27,30 @@ interface UseHealthScoreProfessorV3ConfigReturn {
 }
 
 function messageFrom(error: unknown): string {
-  return error instanceof Error ? error.message : 'Nao foi possivel concluir a operacao.';
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) return message;
+  }
+  return 'Nao foi possivel concluir a operacao.';
+}
+
+function isStatementTimeout(error: unknown): boolean {
+  return Boolean(
+    error
+      && typeof error === 'object'
+      && 'code' in error
+      && (error as { code?: unknown }).code === '57014',
+  );
+}
+
+async function loadConfigUiWithRetry() {
+  let response = await supabase.rpc('get_health_score_professor_v3_config_ui');
+  if (!isStatementTimeout(response.error)) return response;
+
+  await new Promise((resolve) => window.setTimeout(resolve, 250));
+  response = await supabase.rpc('get_health_score_professor_v3_config_ui');
+  return response;
 }
 
 export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3ConfigReturn {
@@ -35,21 +59,40 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
   const [loading, setLoading] = useState(true);
   const [mutating, setMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const refreshInFlight = useRef<Promise<void> | null>(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error: rpcError } = await supabase.rpc('get_health_score_professor_v3_config_ui');
-      if (rpcError) throw rpcError;
-      setConfig(parseHealthScoreV3ConfigUi(data));
-    } catch (caught) {
-      const message = messageFrom(caught);
-      setError(message);
-      throw caught;
-    } finally {
-      setLoading(false);
-    }
+  const refresh = useCallback(() => {
+    if (refreshInFlight.current) return refreshInFlight.current;
+
+    const request = (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const { data, error: rpcError } = await loadConfigUiWithRetry();
+        if (rpcError) throw rpcError;
+        const parsed = parseHealthScoreV3ConfigUi(data);
+        const persistedGoals = parsed.rascunho?.metasSegmentadas
+          || parsed.ativa?.metasSegmentadas
+          || [];
+        const loadState = buildHealthScoreV3DraftLoadState(
+          persistedGoals,
+          parsed.catalogoSegmentos || [],
+        );
+        setConfig({ ...parsed, matrizSegmentada: loadState.matrix });
+      } catch (caught) {
+        const message = messageFrom(caught);
+        setError(message);
+        throw caught;
+      } finally {
+        setLoading(false);
+      }
+    })();
+
+    refreshInFlight.current = request;
+    void request.finally(() => {
+      if (refreshInFlight.current === request) refreshInFlight.current = null;
+    }).catch(() => undefined);
+    return request;
   }, []);
 
   useEffect(() => {

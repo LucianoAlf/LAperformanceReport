@@ -18,17 +18,42 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/useToast';
 import { useHealthScoreProfessorV3Config } from '@/hooks/useHealthScoreProfessorV3Config';
-import { HealthScoreV3MetasSegmentadas, areHealthScoreV3SegmentGoalsValid, ensureHealthScoreV3DraftSegmentGoals } from './HealthScoreV3MetasSegmentadas';
+import { HealthScoreV3MetasSegmentadas } from './HealthScoreV3MetasSegmentadas';
 import { ProfessorCursoModalidadeReconciliacao } from './ProfessorCursoModalidadeReconciliacao';
 import type {
   HealthMetricKeyV3,
   HealthScoreV3Config,
   HealthScoreV3MetaStatus,
   HealthScoreV3MetricConfig,
+  HealthScoreV3SegmentDraftGoal,
+  HealthScoreV3SegmentGoal,
+} from '@/lib/healthScoreProfessorV3';
+import {
+  canSaveHealthScoreV3Draft,
+  getHealthScoreV3ActivationBlockers,
 } from '@/lib/healthScoreProfessorV3';
 
 const METRIC_UI: Record<HealthMetricKeyV3, {
@@ -81,6 +106,56 @@ function currentMonthStart() {
   return format(startOfMonth(new Date()), 'yyyy-MM-dd');
 }
 
+function dateFromIso(value: string) {
+  const parsed = new Date(`${value}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
+function isoFromDate(value: Date | undefined) {
+  return value ? format(value, 'yyyy-MM-dd') : '';
+}
+
+function persistedSegmentGoals(
+  goals: HealthScoreV3SegmentDraftGoal[],
+): HealthScoreV3SegmentGoal[] {
+  return goals.flatMap((goal): HealthScoreV3SegmentGoal[] => {
+    if (goal.estado === 'nao_configurada') return [];
+    const base = {
+      id: goal.id,
+      configId: goal.configId,
+      unidadeId: goal.unidadeId,
+      unidadeNome: goal.unidadeNome,
+      cursoId: goal.cursoId,
+      cursoNome: goal.cursoNome,
+      modalidade: goal.modalidade,
+      parametros: { ...goal.parametros },
+      criadoEm: goal.criadoEm,
+      atualizadoEm: goal.atualizadoEm,
+    };
+    if (goal.estado === 'nao_ofertada') {
+      return [{
+        ...base,
+        estado: 'nao_ofertada',
+        capacidadeMaxima: null,
+        metaMediaTurma: null,
+        metaCarteiraCurso: null,
+      }];
+    }
+    if (
+      goal.capacidadeMaxima === null
+      || goal.metaMediaTurma === null
+      || goal.metaCarteiraCurso === null
+    ) return [];
+    return [{
+      ...base,
+      estado: 'configurada',
+      capacidadeMaxima: goal.capacidadeMaxima,
+      metaMediaTurma: goal.metaMediaTurma,
+      metaCarteiraCurso: goal.metaCarteiraCurso,
+    }];
+  });
+}
+
 function cloneConfig(config: HealthScoreV3Config | null): HealthScoreV3Config | null {
   if (!config) return null;
   return {
@@ -111,30 +186,28 @@ export function HealthScoreV3Config() {
     activate,
   } = useHealthScoreProfessorV3Config();
   const [workingConfig, setWorkingConfig] = useState<HealthScoreV3Config | null>(null);
+  const [workingSegmentGoals, setWorkingSegmentGoals] = useState<HealthScoreV3SegmentDraftGoal[]>([]);
   const [newValidity, setNewValidity] = useState(nextMonthStart);
   const [justification, setJustification] = useState('');
   const [simulationMonth, setSimulationMonth] = useState(currentMonthStart);
   const [simulationIsCurrent, setSimulationIsCurrent] = useState(false);
   const [draftIsDirty, setDraftIsDirty] = useState(false);
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const routeBlocker = useBlocker(draftIsDirty);
   const sectionRef = useRef<HTMLElement>(null);
+  const pendingNavigationRef = useRef<HTMLElement | null>(null);
+  const allowNavigationRef = useRef(false);
 
   useEffect(() => {
     const source = config?.rascunho || config?.ativa || null;
     const cloned = cloneConfig(source);
-    if (cloned && config?.rascunho && cloned.id === config.rascunho.id) {
-      const ensuredGoals = ensureHealthScoreV3DraftSegmentGoals(
-        cloned.metasSegmentadas,
-        config.pendencias,
-        cloned.id,
-      );
-      const insertedPendingGoals = ensuredGoals.length !== cloned.metasSegmentadas.length;
-      cloned.metasSegmentadas = ensuredGoals;
-      setDraftIsDirty(insertedPendingGoals);
-    } else {
-      setDraftIsDirty(false);
-    }
+    setDraftIsDirty(false);
     setWorkingConfig(cloned);
+    setWorkingSegmentGoals((config?.matrizSegmentada || []).map((goal) => ({
+      ...goal,
+      emusysDisciplinaIds: [...goal.emusysDisciplinaIds],
+      parametros: { ...goal.parametros },
+    })));
     if (config?.rascunho) {
       setJustification(config.rascunho.justificativa);
       setNewValidity(config.rascunho.vigenciaInicio);
@@ -144,13 +217,7 @@ export function HealthScoreV3Config() {
 
   useEffect(() => {
     if (routeBlocker.state !== 'blocked') return;
-
-    if (window.confirm('Há alterações não salvas. Deseja sair e descartá-las?')) {
-      routeBlocker.proceed();
-      return;
-    }
-
-    routeBlocker.reset();
+    setDiscardDialogOpen(true);
   }, [routeBlocker]);
 
   useEffect(() => {
@@ -161,14 +228,16 @@ export function HealthScoreV3Config() {
       event.returnValue = '';
     };
     const confirmNavigation = (event: MouseEvent) => {
+      if (allowNavigationRef.current) return;
       if (!(event.target instanceof Element)) return;
       const navigationControl = event.target.closest(
         '[data-tour="professores-abas"] button',
       );
       if (!navigationControl || sectionRef.current?.contains(navigationControl)) return;
-      if (window.confirm('Há alterações não salvas. Deseja sair e descartá-las?')) return;
       event.preventDefault();
       event.stopImmediatePropagation();
+      pendingNavigationRef.current = navigationControl as HTMLElement;
+      setDiscardDialogOpen(true);
     };
 
     window.addEventListener('beforeunload', warnBeforeUnload);
@@ -193,7 +262,11 @@ export function HealthScoreV3Config() {
       : metric.meta !== null && metric.metaStatus === 'aprovada';
   }));
   const segmentTargetsAreValid = Boolean(
-    workingConfig && areHealthScoreV3SegmentGoalsValid(workingConfig.metasSegmentadas),
+    workingConfig && canSaveHealthScoreV3Draft(workingSegmentGoals),
+  );
+  const activationBlockers = getHealthScoreV3ActivationBlockers(
+    workingSegmentGoals,
+    config?.catalogoSegmentos || [],
   );
   const draftIsValid = weightsAreValid
     && hasRequiredTargets
@@ -202,7 +275,8 @@ export function HealthScoreV3Config() {
   const canActivate = editable
     && draftIsValid
     && !draftIsDirty
-    && simulationIsCurrent;
+    && simulationIsCurrent
+    && activationBlockers.length === 0;
 
   const markDraftChanged = () => {
     setDraftIsDirty(true);
@@ -220,9 +294,9 @@ export function HealthScoreV3Config() {
     markDraftChanged();
   };
 
-  const updateSegmentGoals = (metasSegmentadas: HealthScoreV3Config['metasSegmentadas']) => {
+  const updateSegmentGoals = (metasSegmentadas: HealthScoreV3SegmentDraftGoal[]) => {
     if (!editable) return;
-    setWorkingConfig((current) => current ? { ...current, metasSegmentadas } : current);
+    setWorkingSegmentGoals(metasSegmentadas);
     markDraftChanged();
   };
 
@@ -245,6 +319,7 @@ export function HealthScoreV3Config() {
       ...workingConfig,
       vigenciaInicio: newValidity,
       justificativa: justification.trim(),
+      metasSegmentadas: persistedSegmentGoals(workingSegmentGoals),
     };
   };
 
@@ -291,6 +366,29 @@ export function HealthScoreV3Config() {
     await refresh();
   };
 
+  const keepEditing = () => {
+    if (routeBlocker.state === 'blocked') routeBlocker.reset();
+    pendingNavigationRef.current = null;
+    setDiscardDialogOpen(false);
+  };
+
+  const discardAndContinue = () => {
+    setDiscardDialogOpen(false);
+    setDraftIsDirty(false);
+    if (routeBlocker.state === 'blocked') {
+      routeBlocker.proceed();
+      return;
+    }
+    const target = pendingNavigationRef.current;
+    pendingNavigationRef.current = null;
+    if (!target) return;
+    allowNavigationRef.current = true;
+    target.click();
+    queueMicrotask(() => {
+      allowNavigationRef.current = false;
+    });
+  };
+
   return (
     <section
       ref={sectionRef}
@@ -327,19 +425,18 @@ export function HealthScoreV3Config() {
       ) : workingConfig ? (
         <div className="space-y-5 p-5">
           <div className="grid gap-3 border-b border-slate-800 pb-5 md:grid-cols-[180px_1fr]">
-            <label className="space-y-1 text-xs font-medium text-slate-300">
+            <div className="space-y-1 text-xs font-medium text-slate-300">
               Vigência da versão
-              <Input
-                type="date"
-                value={editable ? newValidity : workingConfig.vigenciaInicio}
-                onChange={(event) => {
-                  setNewValidity(event.target.value);
+              <DatePicker
+                date={dateFromIso(editable ? newValidity : workingConfig.vigenciaInicio)}
+                onDateChange={(date) => {
+                  setNewValidity(isoFromDate(date));
                   markDraftChanged();
                 }}
-                disabled={!editable || mutating}
-                className="mt-1 border-slate-700 bg-slate-900"
+                disabled={() => !editable || mutating}
+                className="mt-1 h-10 rounded-md border-slate-700 bg-slate-900"
               />
-            </label>
+            </div>
             <label className="space-y-1 text-xs font-medium text-slate-300">
               Justificativa da versão
               <Textarea
@@ -380,15 +477,14 @@ export function HealthScoreV3Config() {
                     </span>
                     <strong className="shrink-0 text-cyan-300">{metric.peso}%</strong>
                   </span>
-                  <input
-                    type="range"
+                  <Slider
                     aria-label={`Peso no score - ${visual.label}`}
                     min={1}
                     max={100}
-                    value={metric.peso}
+                    step={1}
+                    value={[metric.peso]}
                     disabled={!editable || mutating}
-                    onChange={(event) => updateMetric(metric.metrica, { peso: Number(event.target.value) })}
-                    className="h-2 w-full cursor-pointer accent-cyan-500 disabled:cursor-not-allowed"
+                    onValueChange={([value]) => updateMetric(metric.metrica, { peso: value })}
                   />
                 </label>
               );
@@ -448,22 +544,26 @@ export function HealthScoreV3Config() {
                     </div>
                   </label>
 
-                  <label className="space-y-1 text-xs font-medium text-slate-300">
+                  <div className="space-y-1 text-xs font-medium text-slate-300">
                     Estado da meta
-                    <select
+                    <Select
                       value={metric.metaStatus}
                       disabled={!editable || mutating || metric.meta !== null}
-                      onChange={(event) => updateMetric(metric.metrica, {
-                        metaStatus: event.target.value as HealthScoreV3MetaStatus,
+                      onValueChange={(value) => updateMetric(metric.metrica, {
+                        metaStatus: value as HealthScoreV3MetaStatus,
                       })}
-                      className="mt-1 h-10 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm text-slate-200 outline-none focus:border-cyan-500 disabled:opacity-60"
                     >
-                      {metric.meta !== null && <option value="aprovada">Aprovada</option>}
-                      {NULL_META_STATUSES.map((status) => (
-                        <option key={status} value={status}>{META_STATUS_LABELS[status]}</option>
-                      ))}
-                    </select>
-                  </label>
+                      <SelectTrigger className="mt-1 rounded-md border-slate-700 bg-slate-900">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {metric.meta !== null && <SelectItem value="aprovada">Aprovada</SelectItem>}
+                        {NULL_META_STATUSES.map((status) => (
+                          <SelectItem key={status} value={status}>{META_STATUS_LABELS[status]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               );
             })}
@@ -502,7 +602,7 @@ export function HealthScoreV3Config() {
               </Badge>
             </div>
             <HealthScoreV3MetasSegmentadas
-              metas={workingConfig.metasSegmentadas}
+              metas={workingSegmentGoals}
               pendencias={config?.pendencias || {
                 segmentosObservadosSemRegra: [],
                 atribuicoesSemRegra: [],
@@ -522,21 +622,20 @@ export function HealthScoreV3Config() {
           </section>
 
           <ProfessorCursoModalidadeReconciliacao
-            disabled={mutating || draftIsDirty}
+            disabled={mutating}
             onSaved={refreshAfterReconciliation}
           />
 
           {!editable ? (
             <div className="grid gap-3 border-t border-slate-800 pt-5 md:grid-cols-[180px_1fr_auto] md:items-end">
-              <label className="space-y-1 text-xs font-medium text-slate-300">
+              <div className="space-y-1 text-xs font-medium text-slate-300">
                 Nova vigência
-                <Input
-                  type="date"
-                  value={newValidity}
-                  onChange={(event) => setNewValidity(event.target.value)}
-                  className="mt-1 border-slate-700 bg-slate-900"
+                <DatePicker
+                  date={dateFromIso(newValidity)}
+                  onDateChange={(date) => setNewValidity(isoFromDate(date))}
+                  className="mt-1 h-10 rounded-md border-slate-700 bg-slate-900"
                 />
-              </label>
+              </div>
               <label className="space-y-1 text-xs font-medium text-slate-300">
                 Motivo da nova versão
                 <Input
@@ -558,19 +657,18 @@ export function HealthScoreV3Config() {
                 {draftIsDirty && <Badge variant="warning">Alterações não salvas</Badge>}
               </div>
               <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                <label className="w-full space-y-1 text-xs font-medium text-slate-300 md:max-w-[220px]">
+                <div className="w-full space-y-1 text-xs font-medium text-slate-300 md:max-w-[220px]">
                   Competência da simulação
-                  <Input
-                    type="date"
-                    value={simulationMonth}
-                    onChange={(event) => {
-                      setSimulationMonth(event.target.value);
+                  <DatePicker
+                    date={dateFromIso(simulationMonth)}
+                    onDateChange={(date) => {
+                      setSimulationMonth(isoFromDate(date));
                       setSimulationIsCurrent(false);
                     }}
-                    disabled={mutating}
-                    className="mt-1 border-slate-700 bg-slate-900"
+                    disabled={() => mutating}
+                    className="mt-1 h-10 rounded-md border-slate-700 bg-slate-900"
                   />
-                </label>
+                </div>
                 <div className="flex flex-wrap justify-end gap-2">
                   <Button variant="outline" onClick={handleSave} disabled={mutating || !draftIsValid}>
                     <Save />
@@ -614,6 +712,20 @@ export function HealthScoreV3Config() {
       ) : (
         <div className="p-5 text-sm text-slate-400">Nenhuma configuração V3 foi encontrada.</div>
       )}
+      <AlertDialog open={discardDialogOpen} onOpenChange={setDiscardDialogOpen}>
+        <AlertDialogContent className="rounded-lg border-slate-700 bg-slate-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Descartar alterações?</AlertDialogTitle>
+            <AlertDialogDescription>
+              As mudanças deste rascunho ainda não foram salvas. Você pode continuar editando ou sair sem gravá-las.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={keepEditing}>Continuar editando</AlertDialogCancel>
+            <AlertDialogAction onClick={discardAndContinue}>Descartar e sair</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

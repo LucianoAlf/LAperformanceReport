@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  ChevronDown,
   CircleHelp,
   Filter,
   GraduationCap,
@@ -9,6 +10,11 @@ import {
   UsersRound,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -23,6 +29,7 @@ import type {
   HealthScoreV3AssignmentSummary,
   HealthScoreV3ConfigPendencias,
   HealthScoreV3Modalidade,
+  HealthScoreV3SegmentDraftGoal,
   HealthScoreV3SegmentGoal,
   HealthScoreV3SegmentGoalState,
   HealthScoreV3SimulationCapacityAlert,
@@ -341,14 +348,126 @@ export function areHealthScoreV3SegmentGoalsValid(metas: HealthScoreV3SegmentGoa
   return metas.every((goal) => Object.keys(getHealthScoreV3SegmentGoalErrors(goal)).length === 0);
 }
 
+interface HealthScoreV3DraftMatrixRow {
+  goal: HealthScoreV3SegmentDraftGoal;
+  key: string;
+  synthetic: boolean;
+  pending: SegmentPendingState;
+}
+
+function buildDraftMatrixRows(
+  metas: HealthScoreV3SegmentDraftGoal[],
+  pendencias: HealthScoreV3ConfigPendencias,
+  superlotacoes: HealthScoreV3SimulationCapacityAlert[],
+): HealthScoreV3DraftMatrixRow[] {
+  const pendingRuleKeys = new Set(
+    [...pendencias.segmentosObservadosSemRegra, ...pendencias.atribuicoesSemRegra]
+      .filter(hasCompleteSegmentIdentity)
+      .map(healthScoreV3SegmentKey),
+  );
+  const zeroPortfolioKeys = new Set(
+    pendencias.atribuicoesZeroCarteira
+      .filter(hasCompleteSegmentIdentity)
+      .map(healthScoreV3SegmentKey),
+  );
+  const capacityKeys = new Set(superlotacoes.map(healthScoreV3SegmentKey));
+
+  return metas.map((goal) => {
+    const key = healthScoreV3SegmentKey(goal);
+    return {
+      goal,
+      key,
+      synthetic: !goal.persistida,
+      pending: {
+        regraAusente: goal.estado === 'nao_configurada' || pendingRuleKeys.has(key),
+        zeroCarteira: zeroPortfolioKeys.has(key),
+        superlotacao: capacityKeys.has(key),
+      },
+    };
+  }).sort((left, right) => {
+    const unitRank = unitSortRank(left.goal.unidadeNome) - unitSortRank(right.goal.unidadeNome);
+    if (unitRank !== 0) return unitRank;
+    const courseName = left.goal.cursoNome.localeCompare(right.goal.cursoNome, 'pt-BR');
+    if (courseName !== 0) return courseName;
+    return left.goal.modalidade === right.goal.modalidade
+      ? 0
+      : left.goal.modalidade === 'individual' ? -1 : 1;
+  });
+}
+
+function buildDraftUnitTabs(matrix: HealthScoreV3DraftMatrixRow[]) {
+  const unique = new Map(Object.entries(CANONICAL_UNIT_NAMES));
+  for (const { goal } of matrix) unique.set(goal.unidadeId, goal.unidadeNome);
+  return [...unique.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((left, right) => {
+      const rank = unitSortRank(left.name) - unitSortRank(right.name);
+      return rank !== 0 ? rank : left.name.localeCompare(right.name, 'pt-BR');
+    });
+}
+
+function transitionDraftGoalState(
+  goal: HealthScoreV3SegmentDraftGoal,
+  estado: HealthScoreV3SegmentDraftGoal['estado'],
+): HealthScoreV3SegmentDraftGoal {
+  const base = { ...goal, tocada: true };
+  if (estado === 'nao_configurada') {
+    return {
+      ...base,
+      estado,
+      capacidadeMaxima: null,
+      metaMediaTurma: null,
+      metaCarteiraCurso: null,
+    };
+  }
+  if (estado === 'nao_ofertada') {
+    return {
+      ...base,
+      estado,
+      capacidadeMaxima: null,
+      metaMediaTurma: null,
+      metaCarteiraCurso: null,
+    };
+  }
+  return {
+    ...base,
+    estado,
+    capacidadeMaxima: goal.estado === 'configurada' ? goal.capacidadeMaxima : null,
+    metaMediaTurma: goal.estado === 'configurada' ? goal.metaMediaTurma : null,
+    metaCarteiraCurso: goal.estado === 'configurada' ? goal.metaCarteiraCurso : null,
+  };
+}
+
+function getDraftGoalErrors(goal: HealthScoreV3SegmentDraftGoal): HealthScoreV3SegmentGoalErrors {
+  if (goal.estado !== 'configurada' || (!goal.tocada && !goal.persistida)) return {};
+  const errors: HealthScoreV3SegmentGoalErrors = {};
+  if (goal.capacidadeMaxima === null || goal.capacidadeMaxima <= 0) {
+    errors.capacidadeMaxima = 'Informe uma capacidade maior que zero.';
+  }
+  if (goal.metaMediaTurma === null || goal.metaMediaTurma <= 0) {
+    errors.metaMediaTurma = 'Informe uma meta média/turma maior que zero.';
+  }
+  if (goal.metaCarteiraCurso === null || goal.metaCarteiraCurso <= 0) {
+    errors.metaCarteiraCurso = 'Informe uma meta de carteira maior que zero.';
+  }
+  if (
+    goal.metaMediaTurma !== null
+    && goal.capacidadeMaxima !== null
+    && goal.metaMediaTurma > goal.capacidadeMaxima
+  ) {
+    errors.metaMediaTurma = 'A meta média/turma não pode superar a capacidade máxima.';
+  }
+  return errors;
+}
+
 export interface HealthScoreV3MetasSegmentadasProps {
-  metas: HealthScoreV3SegmentGoal[];
+  metas: HealthScoreV3SegmentDraftGoal[];
   pendencias: HealthScoreV3ConfigPendencias;
   superlotacoes?: HealthScoreV3SimulationCapacityAlert[];
   superlotacaoDisponivel?: boolean;
   editable: boolean;
   disabled?: boolean;
-  onMetasChange: (metas: HealthScoreV3SegmentGoal[]) => void;
+  onMetasChange: (metas: HealthScoreV3SegmentDraftGoal[]) => void;
 }
 
 type PendingFilter = 'todas' | 'pendentes' | 'regra_ausente' | 'zero_carteira' | 'superlotacao';
@@ -367,10 +486,10 @@ export function HealthScoreV3MetasSegmentadas({
   const [modalityFilter, setModalityFilter] = useState<'todas' | HealthScoreV3Modalidade>('todas');
   const [pendingFilter, setPendingFilter] = useState<PendingFilter>('todas');
   const matrix = useMemo(
-    () => buildHealthScoreV3SegmentMatrix(metas, pendencias, superlotacoes),
+    () => buildDraftMatrixRows(metas, pendencias, superlotacoes),
     [metas, pendencias, superlotacoes],
   );
-  const units = useMemo(() => buildHealthScoreV3UnitTabs(matrix), [matrix]);
+  const units = useMemo(() => buildDraftUnitTabs(matrix), [matrix]);
 
   useEffect(() => {
     if (units.some((unit) => unit.id === activeUnitId)) return;
@@ -431,7 +550,7 @@ export function HealthScoreV3MetasSegmentadas({
     })),
   ];
 
-  const updateGoal = (nextGoal: HealthScoreV3SegmentGoal) => {
+  const updateGoal = (nextGoal: HealthScoreV3SegmentDraftGoal) => {
     if (!editable || disabled) return;
     const key = healthScoreV3SegmentKey(nextGoal);
     let found = false;
@@ -569,7 +688,7 @@ export function HealthScoreV3MetasSegmentadas({
           </thead>
           <tbody className="divide-y divide-slate-800/80">
             {visibleRows.map((row) => {
-              const errors = getHealthScoreV3SegmentGoalErrors(row.goal);
+              const errors = getDraftGoalErrors(row.goal);
               const rowId = row.key.replace(/[^a-zA-Z0-9_-]/g, '-');
               return (
                 <tr key={row.key} className="min-h-[94px] align-top hover:bg-slate-900/40">
@@ -597,7 +716,7 @@ export function HealthScoreV3MetasSegmentadas({
                     step={0.1}
                     onChange={(value) => {
                       if (row.goal.estado !== 'configurada') return;
-                      updateGoal({ ...row.goal, capacidadeMaxima: value });
+                      updateGoal({ ...row.goal, capacidadeMaxima: value, tocada: true });
                     }}
                   />
                   <SegmentNumberInput
@@ -610,7 +729,7 @@ export function HealthScoreV3MetasSegmentadas({
                     step={0.1}
                     onChange={(value) => {
                       if (row.goal.estado !== 'configurada') return;
-                      updateGoal({ ...row.goal, metaMediaTurma: value });
+                      updateGoal({ ...row.goal, metaMediaTurma: value, tocada: true });
                     }}
                   />
                   <SegmentNumberInput
@@ -623,7 +742,7 @@ export function HealthScoreV3MetasSegmentadas({
                     step={1}
                     onChange={(value) => {
                       if (row.goal.estado !== 'configurada') return;
-                      updateGoal({ ...row.goal, metaCarteiraCurso: value });
+                      updateGoal({ ...row.goal, metaCarteiraCurso: value, tocada: true });
                     }}
                   />
                   <td className="px-3 py-3">
@@ -631,9 +750,9 @@ export function HealthScoreV3MetasSegmentadas({
                       value={row.goal.estado}
                       disabled={!editable || disabled}
                       onValueChange={(value) => updateGoal(
-                        transitionHealthScoreV3SegmentGoalState(
+                        transitionDraftGoalState(
                           row.goal,
-                          value as HealthScoreV3SegmentGoalState,
+                          value as HealthScoreV3SegmentDraftGoal['estado'],
                         ),
                       )}
                     >
@@ -645,6 +764,7 @@ export function HealthScoreV3MetasSegmentadas({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="nao_configurada">Não configurada</SelectItem>
                         <SelectItem value="configurada">Configurada</SelectItem>
                         <SelectItem value="nao_ofertada">Não ofertada</SelectItem>
                       </SelectContent>
@@ -668,54 +788,66 @@ export function HealthScoreV3MetasSegmentadas({
         )}
       </div>
 
-      <section className="border-t border-slate-800 pt-4">
-        <div className="flex items-center justify-between gap-3">
-          <h5 className="text-xs font-semibold text-slate-200">Pendências de atribuição</h5>
-          <Badge variant={reviewQueue.length > 0 ? 'warning' : 'success'}>
-            {reviewQueue.length}
-          </Badge>
-        </div>
-        {reviewQueue.length > 0 ? (
-          <div className="mt-2 max-h-[220px] overflow-y-auto border-y border-slate-800">
-            {reviewQueue.map(({ kind, summary }, index) => (
-              <div
-                key={[
-                  kind,
-                  summary.atribuicaoId,
-                  summary.professorId,
-                  summary.unidadeId,
-                  summary.cursoId,
-                  summary.modalidade,
-                  summary.estado,
-                  index,
-                ].filter((value) => value !== null && value !== undefined).join('-')}
-                className="grid gap-2 border-b border-slate-800/80 px-2 py-2 text-xs last:border-b-0 sm:grid-cols-[minmax(140px,1fr)_minmax(170px,1.4fr)_auto] sm:items-center"
-              >
-                <span className="truncate text-slate-200">
-                  {summary.professorNome || 'Professor não identificado'}
-                </span>
-                <span className="break-words text-slate-400">
-                  {[summary.unidadeNome, summary.cursoNome, summary.modalidade]
-                    .filter(Boolean)
-                    .join(' · ') || 'Unidade, curso ou modalidade não resolvidos'}
-                </span>
-                <Badge
-                  variant={kind === 'regra_ausente' ? 'warning' : 'error'}
-                  className="w-fit whitespace-nowrap"
-                >
-                  {kind === 'regra_ausente'
-                    ? 'Regra ausente'
-                    : kind === 'identidade_incompleta'
-                      ? 'Identidade incompleta'
-                      : 'Revisar modalidade'}
-                </Badge>
+      <Collapsible asChild>
+        <section className="border-t border-slate-800 pt-4">
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="group flex min-h-10 w-full items-center justify-between gap-3 rounded-md px-2 text-left transition-colors hover:bg-slate-900/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <ChevronDown className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-data-[state=open]:rotate-180" />
+                <span className="text-xs font-semibold text-slate-200">Pendências de atribuição</span>
+              </span>
+              <Badge variant={reviewQueue.length > 0 ? 'warning' : 'success'}>
+                {reviewQueue.length}
+              </Badge>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            {reviewQueue.length > 0 ? (
+              <div className="mt-2 max-h-[220px] overflow-y-auto border-y border-slate-800">
+                {reviewQueue.map(({ kind, summary }, index) => (
+                  <div
+                    key={[
+                      kind,
+                      summary.atribuicaoId,
+                      summary.professorId,
+                      summary.unidadeId,
+                      summary.cursoId,
+                      summary.modalidade,
+                      summary.estado,
+                      index,
+                    ].filter((value) => value !== null && value !== undefined).join('-')}
+                    className="grid gap-2 border-b border-slate-800/80 px-2 py-2 text-xs last:border-b-0 sm:grid-cols-[minmax(140px,1fr)_minmax(170px,1.4fr)_auto] sm:items-center"
+                  >
+                    <span className="truncate text-slate-200">
+                      {summary.professorNome || 'Professor não identificado'}
+                    </span>
+                    <span className="break-words text-slate-400">
+                      {[summary.unidadeNome, summary.cursoNome, summary.modalidade]
+                        .filter(Boolean)
+                        .join(' · ') || 'Unidade, curso ou modalidade não resolvidos'}
+                    </span>
+                    <Badge
+                      variant={kind === 'regra_ausente' ? 'warning' : 'error'}
+                      className="w-fit whitespace-nowrap"
+                    >
+                      {kind === 'regra_ausente'
+                        ? 'Regra ausente'
+                        : kind === 'identidade_incompleta'
+                          ? 'Identidade incompleta'
+                          : 'Revisar modalidade'}
+                    </Badge>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-2 text-xs text-slate-500">Nenhuma pendência de atribuição.</p>
-        )}
-      </section>
+            ) : (
+              <p className="mt-2 px-2 text-xs text-slate-500">Nenhuma pendência de atribuição.</p>
+            )}
+          </CollapsibleContent>
+        </section>
+      </Collapsible>
     </div>
   );
 }
@@ -773,7 +905,7 @@ function SegmentNumberInput({
   editable: boolean;
   disabled: boolean;
   step: number;
-  onChange: (value: number) => void;
+  onChange: (value: number | null) => void;
 }) {
   const errorId = `${id}-error`;
   return (
@@ -790,8 +922,12 @@ function SegmentNumberInput({
         aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}
         onChange={(event) => {
-          const nextValue = event.target.value === '' ? 0 : Number(event.target.value);
-          onChange(Number.isFinite(nextValue) ? nextValue : 0);
+          if (event.target.value === '') {
+            onChange(null);
+            return;
+          }
+          const nextValue = Number(event.target.value);
+          onChange(Number.isFinite(nextValue) ? nextValue : null);
         }}
         className="h-8 rounded-md border-slate-700 bg-slate-900 px-2 text-xs"
       />
@@ -802,7 +938,7 @@ function SegmentNumberInput({
   );
 }
 
-function SourceStatus({ row }: { row: HealthScoreV3SegmentMatrixRow }) {
+function SourceStatus({ row }: { row: HealthScoreV3DraftMatrixRow }) {
   const parameterSource = typeof row.goal.parametros.fonte === 'string'
     ? row.goal.parametros.fonte.replaceAll('_', ' ')
     : null;

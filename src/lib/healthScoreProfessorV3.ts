@@ -30,6 +30,20 @@ export type HealthScoreV3Modalidade = 'individual' | 'turma';
 
 export type HealthScoreV3SegmentGoalState = 'configurada' | 'nao_ofertada';
 
+export interface HealthScoreV3CatalogSegment {
+  unidadeId: string;
+  unidadeNome: string;
+  cursoId: number;
+  cursoNome: string;
+  emusysDisciplinaId: number;
+  emusysDisciplinaIds: number[];
+  modalidade: HealthScoreV3Modalidade;
+  ofertado: boolean;
+  professoresFormais: number;
+  fonte: 'emusys';
+  sincronizadoEm: string;
+}
+
 interface HealthScoreV3SegmentGoalBase {
   id: string | null;
   configId: string | null;
@@ -49,6 +63,38 @@ export type HealthScoreV3SegmentGoal = HealthScoreV3SegmentGoalBase & (
       capacidadeMaxima: number;
       metaMediaTurma: number;
       metaCarteiraCurso: number;
+    }
+  | {
+      estado: 'nao_ofertada';
+      capacidadeMaxima: null;
+      metaMediaTurma: null;
+      metaCarteiraCurso: null;
+    }
+);
+
+interface HealthScoreV3SegmentDraftGoalBase extends HealthScoreV3SegmentGoalBase {
+  emusysDisciplinaId: number;
+  emusysDisciplinaIds: number[];
+  ofertado: boolean;
+  professoresFormais: number;
+  fonte: 'emusys';
+  sincronizadoEm: string;
+  persistida: boolean;
+  tocada: boolean;
+}
+
+export type HealthScoreV3SegmentDraftGoal = HealthScoreV3SegmentDraftGoalBase & (
+  | {
+      estado: 'nao_configurada';
+      capacidadeMaxima: null;
+      metaMediaTurma: null;
+      metaCarteiraCurso: null;
+    }
+  | {
+      estado: 'configurada';
+      capacidadeMaxima: number | null;
+      metaMediaTurma: number | null;
+      metaCarteiraCurso: number | null;
     }
   | {
       estado: 'nao_ofertada';
@@ -100,6 +146,8 @@ export interface HealthScoreV3Config {
 export interface HealthScoreV3ConfigUi {
   ativa: HealthScoreV3Config | null;
   rascunho: HealthScoreV3Config | null;
+  catalogoSegmentos?: HealthScoreV3CatalogSegment[];
+  matrizSegmentada?: HealthScoreV3SegmentDraftGoal[];
   pendencias: HealthScoreV3ConfigPendencias;
   modo: 'homologacao';
   publicacaoProdutiva: false;
@@ -242,6 +290,56 @@ function parseAssignmentSummary(value: unknown): HealthScoreV3AssignmentSummary 
 
 function parseAssignmentSummaries(value: unknown): HealthScoreV3AssignmentSummary[] {
   return Array.isArray(value) ? value.map(parseAssignmentSummary) : [];
+}
+
+function parseCatalogSegments(value: unknown): HealthScoreV3CatalogSegment[] {
+  if (!Array.isArray(value)) return [];
+
+  const segments = new Map<string, HealthScoreV3CatalogSegment>();
+  for (const item of value) {
+    const row = asRecord(item);
+    const unidadeId = asNullableString(row.unidade_id);
+    const unidadeNome = asNullableString(row.unidade_nome);
+    const cursoId = asDefensiveNullableNumber(row.curso_id);
+    const cursoNome = asNullableString(row.curso_nome);
+    if (
+      unidadeId === null
+      || unidadeNome === null
+      || cursoId === null
+      || cursoNome === null
+      || !isModalidade(row.modalidade)
+    ) continue;
+
+    const ids = Array.isArray(row.emusys_disciplina_ids)
+      ? row.emusys_disciplina_ids
+        .map(asDefensiveNullableNumber)
+        .filter((id): id is number => id !== null)
+      : [];
+    const singularId = asDefensiveNullableNumber(row.emusys_disciplina_id);
+    if (singularId !== null && !ids.includes(singularId)) ids.unshift(singularId);
+    const emusysDisciplinaIds = [...new Set(ids)].sort((left, right) => left - right);
+    const emusysDisciplinaId = emusysDisciplinaIds[0] ?? 0;
+    const key = `${unidadeId}|${cursoId}|${row.modalidade}`;
+    if (segments.has(key)) continue;
+
+    segments.set(key, {
+      unidadeId,
+      unidadeNome,
+      cursoId,
+      cursoNome,
+      emusysDisciplinaId,
+      emusysDisciplinaIds,
+      modalidade: row.modalidade,
+      ofertado: Boolean(row.formalmente_ofertado ?? row.ofertado ?? true),
+      professoresFormais: asNumber(row.professores_formais),
+      fonte: 'emusys',
+      sincronizadoEm: asNullableString(row.ultima_sincronizacao)
+        || asNullableString(row.sincronizado_em)
+        || '',
+    });
+  }
+
+  return [...segments.values()];
 }
 
 function parseSimulationCapacityAlerts(
@@ -428,9 +526,16 @@ export function parseHealthScoreV3ConfigUi(value: unknown): HealthScoreV3ConfigU
   const ativa = parseConfig(row.ativa);
   const rascunho = parseConfig(row.rascunho);
   const pendencias = asRecord(row.pendencias);
+  const catalogoSegmentos = parseCatalogSegments(row.catalogo_segmentos);
+  const matrizSegmentada = buildHealthScoreV3SegmentMatrix(
+    rascunho.config?.metasSegmentadas || ativa.config?.metasSegmentadas || [],
+    catalogoSegmentos,
+  );
   return {
     ativa: ativa.config,
     rascunho: rascunho.config,
+    catalogoSegmentos,
+    matrizSegmentada,
     pendencias: {
       segmentosObservadosSemRegra: parseAssignmentSummaries(
         pendencias.segmentos_observados_sem_regra,
@@ -476,8 +581,127 @@ export function serializeHealthScoreV3Metrics(metricas: HealthScoreV3MetricConfi
   }));
 }
 
-export function serializeHealthScoreV3SegmentGoals(goals: HealthScoreV3SegmentGoal[]) {
-  return goals.map((goal) => ({
+function segmentKey(segment: {
+  unidadeId: string;
+  cursoId: number;
+  modalidade: HealthScoreV3Modalidade;
+}) {
+  return `${segment.unidadeId}|${segment.cursoId}|${segment.modalidade}`;
+}
+
+export function buildHealthScoreV3SegmentMatrix(
+  persistedGoals: HealthScoreV3SegmentGoal[],
+  catalogSegments: HealthScoreV3CatalogSegment[],
+): HealthScoreV3SegmentDraftGoal[] {
+  const persistedByKey = new Map(
+    persistedGoals.map((goal) => [segmentKey(goal), goal]),
+  );
+  const official = new Map<string, HealthScoreV3CatalogSegment>();
+  for (const segment of catalogSegments) {
+    const key = segmentKey(segment);
+    if (!official.has(key)) official.set(key, segment);
+  }
+
+  return [...official.values()].map((segment) => {
+    const persisted = persistedByKey.get(segmentKey(segment));
+    const base: HealthScoreV3SegmentDraftGoalBase = {
+      id: persisted?.id ?? null,
+      configId: persisted?.configId ?? null,
+      unidadeId: segment.unidadeId,
+      unidadeNome: segment.unidadeNome,
+      cursoId: segment.cursoId,
+      cursoNome: segment.cursoNome,
+      emusysDisciplinaId: segment.emusysDisciplinaId,
+      emusysDisciplinaIds: [...(segment.emusysDisciplinaIds || [])],
+      modalidade: segment.modalidade,
+      ofertado: segment.ofertado,
+      professoresFormais: segment.professoresFormais ?? 0,
+      fonte: 'emusys',
+      sincronizadoEm: segment.sincronizadoEm,
+      persistida: Boolean(persisted),
+      tocada: false,
+      parametros: { ...(persisted?.parametros || {}) },
+      criadoEm: persisted?.criadoEm ?? null,
+      atualizadoEm: persisted?.atualizadoEm ?? null,
+    };
+
+    if (!persisted) {
+      return {
+        ...base,
+        estado: 'nao_configurada',
+        capacidadeMaxima: null,
+        metaMediaTurma: null,
+        metaCarteiraCurso: null,
+      };
+    }
+    if (persisted.estado === 'nao_ofertada') {
+      return {
+        ...base,
+        estado: 'nao_ofertada',
+        capacidadeMaxima: null,
+        metaMediaTurma: null,
+        metaCarteiraCurso: null,
+      };
+    }
+    return {
+      ...base,
+      estado: 'configurada',
+      capacidadeMaxima: persisted.capacidadeMaxima,
+      metaMediaTurma: persisted.metaMediaTurma,
+      metaCarteiraCurso: persisted.metaCarteiraCurso,
+    };
+  });
+}
+
+export function buildHealthScoreV3DraftLoadState(
+  persistedGoals: HealthScoreV3SegmentGoal[],
+  catalogSegments: HealthScoreV3CatalogSegment[],
+) {
+  return {
+    matrix: buildHealthScoreV3SegmentMatrix(persistedGoals, catalogSegments),
+    dirty: false,
+  };
+}
+
+function isPositiveNumber(value: number | null): value is number {
+  return value !== null && Number.isFinite(value) && value > 0;
+}
+
+function isCompleteConfiguredGoal(goal: HealthScoreV3SegmentDraftGoal) {
+  return goal.estado === 'configurada'
+    && isPositiveNumber(goal.capacidadeMaxima)
+    && isPositiveNumber(goal.metaMediaTurma)
+    && isPositiveNumber(goal.metaCarteiraCurso)
+    && goal.metaMediaTurma <= goal.capacidadeMaxima;
+}
+
+export function canSaveHealthScoreV3Draft(matrix: HealthScoreV3SegmentDraftGoal[]) {
+  return matrix.every((goal) => (
+    goal.estado === 'nao_configurada'
+    || goal.estado === 'nao_ofertada'
+    || isCompleteConfiguredGoal(goal)
+  ));
+}
+
+export function getHealthScoreV3ActivationBlockers(
+  matrix: HealthScoreV3SegmentDraftGoal[],
+  catalogSegments: HealthScoreV3CatalogSegment[],
+) {
+  const matrixByKey = new Map(matrix.map((goal) => [segmentKey(goal), goal]));
+  return catalogSegments.flatMap((segment): HealthScoreV3SegmentDraftGoal[] => {
+    const goal = matrixByKey.get(segmentKey(segment));
+    if (goal && (goal.estado === 'nao_ofertada' || isCompleteConfiguredGoal(goal))) {
+      return [];
+    }
+    if (goal) return [goal];
+    return buildHealthScoreV3SegmentMatrix([], [segment]);
+  });
+}
+
+export function serializeHealthScoreV3SegmentGoals(
+  goals: Array<HealthScoreV3SegmentGoal | HealthScoreV3SegmentDraftGoal>,
+) {
+  return goals.filter((goal) => goal.estado !== 'nao_configurada').map((goal) => ({
     unidade_id: goal.unidadeId,
     curso_id: goal.cursoId,
     modalidade: goal.modalidade,

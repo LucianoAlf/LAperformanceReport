@@ -82,7 +82,7 @@ test('fluxo governado nao usa controles nativos nem confirmacao imperativa', () 
 
   assert.doesNotMatch(combined, /type=["']range["']/i);
   assert.doesNotMatch(combined, /type=["']date["']/i);
-  assert.doesNotMatch(combined, /<select\b/i);
+  assert.doesNotMatch(combined, /<select(?:\s|>)/);
   assert.doesNotMatch(combined, /window\.confirm/i);
   assert.match(exceptionsSource, /Excecoes de vinculos Emusys/);
 });

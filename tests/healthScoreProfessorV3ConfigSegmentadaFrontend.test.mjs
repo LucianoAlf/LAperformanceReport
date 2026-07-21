@@ -77,6 +77,7 @@ function createReactHarness() {
   return {
     useCallback: (callback) => callback,
     useEffect: () => undefined,
+    useRef: (initialValue) => ({ current: initialValue }),
     useState: (initialValue) => {
       let currentValue = typeof initialValue === 'function' ? initialValue() : initialValue;
       const setValue = (nextValue) => {
@@ -98,12 +99,13 @@ async function loadHealthScoreHook(supabase) {
     parseHealthScoreV3Config: healthScore.parseHealthScoreV3Config,
     parseHealthScoreV3ConfigUi: healthScore.parseHealthScoreV3ConfigUi,
     parseHealthScoreV3Simulation: healthScore.parseHealthScoreV3Simulation,
+    buildHealthScoreV3DraftLoadState: healthScore.buildHealthScoreV3DraftLoadState,
     serializeHealthScoreV3Metrics: healthScore.serializeHealthScoreV3Metrics,
     serializeHealthScoreV3SegmentGoals: healthScore.serializeHealthScoreV3SegmentGoals,
   };
 
   const source = read(hookPath).replace(/\r\n/g, '\n')
-    .replace("import { useCallback, useEffect, useState } from 'react';\n", '')
+    .replace("import { useCallback, useEffect, useRef, useState } from 'react';\n", '')
     .replace("import { supabase } from '@/lib/supabase';\n", '')
     .replace(
       /import \{[\s\S]*?\} from '@\/lib\/healthScoreProfessorV3';\n/,
@@ -115,11 +117,13 @@ async function loadHealthScoreHook(supabase) {
 const {
   useCallback,
   useEffect,
+  useRef,
   useState,
   supabase,
   parseHealthScoreV3Config,
   parseHealthScoreV3ConfigUi,
   parseHealthScoreV3Simulation,
+  buildHealthScoreV3DraftLoadState,
   serializeHealthScoreV3Metrics,
   serializeHealthScoreV3SegmentGoals,
 } = globalThis[${JSON.stringify(harnessKey)}];
@@ -857,6 +861,29 @@ test('hook expoe refresh com alias reload e salva os dois payloads somente por R
   assert.doesNotMatch(simulateBlock, /ativar_health_score_professor_v3_config/);
 });
 
+test('hook deduplica o carregamento concorrente da configuracao no StrictMode', () => {
+  const hookSource = read(hookPath);
+
+  assert.match(hookSource, /useRef<Promise<void> \| null>/);
+  assert.match(hookSource, /if \(refreshInFlight\.current\) return refreshInFlight\.current/);
+  assert.match(hookSource, /refreshInFlight\.current = request/);
+});
+
+test('hook tenta novamente uma vez quando a leitura sofre statement timeout', () => {
+  const hookSource = read(hookPath);
+
+  assert.match(hookSource, /code === '57014'/);
+  assert.match(hookSource, /loadConfigUiWithRetry/);
+  assert.match(
+    hookSource,
+    /if \(!isStatementTimeout\(response\.error\)\) return response/,
+  );
+  assert.equal(
+    hookSource.match(/supabase\.rpc\('get_health_score_professor_v3_config_ui'\)/g)?.length,
+    2,
+  );
+});
+
 function segmentedMatrixFixture() {
   const barraId = '368d47f5-2d88-4475-bc14-ba084a9a348e';
   const recreioId = '95553e96-971b-4590-a6eb-0201d013c14d';
@@ -1285,7 +1312,9 @@ test('rascunho sujo protege saida e simulacao obsoleta nao permanece visivel', (
   assert.match(configSource, /useBlocker\(\s*draftIsDirty\s*\)/);
   assert.match(configSource, /routeBlocker\.state\s*!==\s*'blocked'/);
   assert.match(configSource, /routeBlocker\.(?:proceed|reset)\s*\(/);
-  assert.match(configSource, /window\.confirm/);
+  assert.doesNotMatch(configSource, /window\.confirm/);
+  assert.match(configSource, /<AlertDialog[\s\S]*?discardDialogOpen/);
+  assert.match(configSource, /discardAndContinue/);
   assert.match(
     pageTabsSource,
     /Mobile Tabs[\s\S]{0,180}data-tour=\{dataTour\}/,
@@ -1319,6 +1348,15 @@ test('filtros e controles da matriz possuem nomes acessiveis', () => {
   }
 });
 
+test('pendencias de atribuicao ficam recolhidas por padrao', () => {
+  const matrixSource = read(segmentedGoalsComponentPath);
+
+  assert.match(matrixSource, /<Collapsible asChild>/);
+  assert.match(matrixSource, /<CollapsibleTrigger asChild>/);
+  assert.match(matrixSource, /<CollapsibleContent>/);
+  assert.doesNotMatch(matrixSource, /<Collapsible[^>]*defaultOpen/);
+});
+
 test('Gate 9 concilia atribuicoes somente por RPC sem tocar no cadastro legado', () => {
   assert.equal(fs.existsSync(reconciliationHookPath), true);
   assert.equal(fs.existsSync(reconciliationComponentPath), true);
@@ -1343,7 +1381,8 @@ test('Gate 9 concilia atribuicoes somente por RPC sem tocar no cadastro legado',
   assert.match(panelSource, /pista_professores_cursos_sem_escopo/);
   assert.match(panelSource, /zero alunos|carteira vazia/i);
   assert.match(panelSource, /justificativa/i);
-  assert.match(panelSource, /window\.confirm/);
+  assert.doesNotMatch(panelSource, /window\.confirm/);
+  assert.match(panelSource, /<AlertDialog[\s\S]*?confirmOpen/);
   assert.doesNotMatch(panelSource, /reativar|ativo\s*=|professor\.ativo/);
   assert.match(panelSource, /row\.estado\s*!==\s*'historico'/);
   assert.match(panelSource, /!row\.atribuicaoId\s*&&\s*row\.vigenciaInicio/);
