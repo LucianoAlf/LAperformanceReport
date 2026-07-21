@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronDown,
   CircleHelp,
   CircleOff,
   Filter,
@@ -14,11 +13,6 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -540,18 +534,7 @@ export function HealthScoreV3MetasSegmentadas({
       (row) => getHealthScoreV3SegmentGoalUiState(row.goal) === 'salva_no_rascunho',
     ).length,
     superlotacao: matrix.filter((row) => row.pending.superlotacao).length,
-    divergenciaModalidade: pendencias.divergenciasModalidade.length,
   };
-  const reviewQueue = [
-    ...pendencias.atribuicoesSemRegra.map((summary) => ({
-      kind: hasCompleteSegmentIdentity(summary) ? 'regra_ausente' as const : 'identidade_incompleta' as const,
-      summary,
-    })),
-    ...pendencias.divergenciasModalidade.map((summary) => ({
-      kind: 'divergencia_modalidade' as const,
-      summary,
-    })),
-  ];
 
   const updateGoal = (nextGoal: HealthScoreV3SegmentDraftGoal) => {
     if (!editable || disabled) return;
@@ -587,7 +570,7 @@ export function HealthScoreV3MetasSegmentadas({
         </div>
       </div>
 
-      <div className="grid border-y border-slate-800 bg-slate-950/30 sm:grid-cols-2 xl:grid-cols-4 xl:divide-x xl:divide-slate-800">
+      <div className="grid border-y border-slate-800 bg-slate-950/30 sm:grid-cols-3 sm:divide-x sm:divide-slate-800">
         <CounterItem
           label="Meta não configurada"
           value={counters.regraAusente}
@@ -605,12 +588,6 @@ export function HealthScoreV3MetasSegmentadas({
           value={superlotacaoDisponivel ? counters.superlotacao : '—'}
           tone="rose"
           tooltip="Segmentos observados acima da capacidade na última simulação canônica salva."
-        />
-        <CounterItem
-          label="Modalidade a revisar"
-          value={counters.divergenciaModalidade}
-          tone="violet"
-          tooltip="Conflitos de modalidade aguardam revisão e nunca criam metas automaticamente."
         />
       </div>
 
@@ -810,66 +787,6 @@ export function HealthScoreV3MetasSegmentadas({
         </div>
       )}
 
-      <Collapsible asChild>
-        <section className="border-t border-slate-800 pt-4">
-          <CollapsibleTrigger asChild>
-            <button
-              type="button"
-              className="group flex min-h-10 w-full items-center justify-between gap-3 rounded-md px-2 text-left transition-colors hover:bg-slate-900/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <ChevronDown className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-data-[state=open]:rotate-180" />
-                <span className="text-xs font-semibold text-slate-200">Pendências de atribuição</span>
-              </span>
-              <Badge variant={reviewQueue.length > 0 ? 'warning' : 'success'}>
-                {reviewQueue.length}
-              </Badge>
-            </button>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            {reviewQueue.length > 0 ? (
-              <div className="mt-2 max-h-[220px] overflow-y-auto border-y border-slate-800">
-                {reviewQueue.map(({ kind, summary }, index) => (
-                  <div
-                    key={[
-                      kind,
-                      summary.atribuicaoId,
-                      summary.professorId,
-                      summary.unidadeId,
-                      summary.cursoId,
-                      summary.modalidade,
-                      summary.estado,
-                      index,
-                    ].filter((value) => value !== null && value !== undefined).join('-')}
-                    className="grid gap-2 border-b border-slate-800/80 px-2 py-2 text-xs last:border-b-0 sm:grid-cols-[minmax(140px,1fr)_minmax(170px,1.4fr)_auto] sm:items-center"
-                  >
-                    <span className="truncate text-slate-200">
-                      {summary.professorNome || 'Professor não identificado'}
-                    </span>
-                    <span className="break-words text-slate-400">
-                      {[summary.unidadeNome, summary.cursoNome, summary.modalidade]
-                        .filter(Boolean)
-                        .join(' · ') || 'Unidade, curso ou modalidade não resolvidos'}
-                    </span>
-                    <Badge
-                      variant={kind === 'regra_ausente' ? 'warning' : 'error'}
-                      className="w-fit whitespace-nowrap"
-                    >
-                      {kind === 'regra_ausente'
-                        ? 'Regra ausente'
-                        : kind === 'identidade_incompleta'
-                          ? 'Identidade incompleta'
-                          : 'Revisar modalidade'}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-2 px-2 text-xs text-slate-500">Nenhuma pendência de atribuição.</p>
-            )}
-          </CollapsibleContent>
-        </section>
-      </Collapsible>
     </div>
   );
 }

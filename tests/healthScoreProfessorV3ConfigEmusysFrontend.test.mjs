@@ -120,11 +120,12 @@ test('fluxo governado nao usa controles nativos nem confirmacao imperativa', () 
   assert.doesNotMatch(combined, /<select(?:\s|>)/);
   assert.doesNotMatch(combined, /window\.confirm/i);
   assert.match(exceptionsSource, /Excecoes de vinculos Emusys/);
-  assert.match(exceptionsSource, /Confirmar v.nculo/);
-  assert.match(exceptionsSource, /Corrigir modalidade/);
-  assert.match(exceptionsSource, /Desativar v.nculo/);
-  assert.match(exceptionsSource, /Desfazer escolha/);
-  assert.doesNotMatch(exceptionsSource, /title="Limpar decis.o"/);
+  assert.match(exceptionsSource, /Nao e um recadastro de professores/);
+  assert.match(exceptionsSource, /Sincronizar com Emusys/);
+  assert.match(exceptionsSource, /Auditoria avancada/);
+  assert.doesNotMatch(exceptionsSource, /Confirmar v.nculo/);
+  assert.doesNotMatch(exceptionsSource, /Corrigir modalidade/);
+  assert.doesNotMatch(exceptionsSource, /Desativar v.nculo/);
 });
 
 test('helper puro de load monta matriz limpa sem fabricar zero nem mutar entradas', async () => {

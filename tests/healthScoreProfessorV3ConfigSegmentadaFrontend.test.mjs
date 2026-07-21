@@ -1018,12 +1018,13 @@ test('Task 8 separa pesos, metas globais e matriz segmentada no fluxo governado'
     'Aguardando simulação',
     'Dentro da capacidade',
     'Acima da capacidade',
-    'Modalidade a revisar',
-    'Pendências de atribuição',
     'Somente leitura',
   ]) {
     assert.match(matrixSource, new RegExp(label));
   }
+  assert.doesNotMatch(matrixSource, /Modalidade a revisar/);
+  assert.doesNotMatch(matrixSource, /Pendências de atribuição/);
+  assert.doesNotMatch(matrixSource, /pendencias\.divergenciasModalidade\.length/);
   assert.match(matrixSource, /Todos os cursos/);
   assert.match(matrixSource, /Todas as modalidades/);
   assert.match(matrixSource, /Com pendência/);
@@ -1384,16 +1385,15 @@ test('filtros e controles da matriz possuem nomes acessiveis', () => {
   }
 });
 
-test('pendencias de atribuicao ficam recolhidas por padrao', () => {
+test('fila legada de atribuicoes nao aparece na configuracao operacional', () => {
   const matrixSource = read(segmentedGoalsComponentPath);
 
-  assert.match(matrixSource, /<Collapsible asChild>/);
-  assert.match(matrixSource, /<CollapsibleTrigger asChild>/);
-  assert.match(matrixSource, /<CollapsibleContent>/);
-  assert.doesNotMatch(matrixSource, /<Collapsible[^>]*defaultOpen/);
+  assert.doesNotMatch(matrixSource, /Modalidade a revisar/);
+  assert.doesNotMatch(matrixSource, /Pend[eÃª]ncias de atribui[cÃ§][aÃ£]o/);
+  assert.doesNotMatch(matrixSource, /pendencias\.divergenciasModalidade\.length/);
 });
 
-test('Gate 9 concilia atribuicoes somente por RPC sem tocar no cadastro legado', () => {
+test('painel de excecoes usa somente a fila operacional V2 sem recadastrar professores', () => {
   assert.equal(fs.existsSync(reconciliationHookPath), true);
   assert.equal(fs.existsSync(reconciliationComponentPath), true);
 
@@ -1401,27 +1401,23 @@ test('Gate 9 concilia atribuicoes somente por RPC sem tocar no cadastro legado',
   const panelSource = read(reconciliationComponentPath);
   const configSource = read(configComponentPath);
 
-  assert.match(hookSource, /\.rpc\(\s*'get_professor_curso_modalidade_reconciliacao_v1'/);
-  assert.match(hookSource, /\.rpc\(\s*'salvar_professor_curso_modalidade_atribuicoes_v1'/);
+  assert.match(hookSource, /\.rpc\(\s*'get_professor_curso_modalidade_excecoes_v2'/);
+  assert.match(hookSource, /functions\.invoke\(\s*'sync-professor-disciplinas-emusys'/);
+  assert.doesNotMatch(hookSource, /get_professor_curso_modalidade_reconciliacao_v1/);
+  assert.doesNotMatch(hookSource, /salvar_professor_curso_modalidade_atribuicoes_v1/);
   assert.doesNotMatch(hookSource, /\.from\s*\(/);
   assert.doesNotMatch(hookSource, /professores_cursos|ModalProfessor|ProfessoresPage/);
 
   assert.match(panelSource, /aria-label=["']Filtrar por unidade["']/);
-  assert.match(panelSource, /aria-label=["']Filtrar por professor["']/);
-  assert.match(panelSource, /aria-label=["']Filtrar por estado["']/);
-  assert.match(panelSource, /Fonte|fonte/);
-  assert.match(panelSource, /Confian[cç]a|confianca/);
-  assert.match(panelSource, /manter/);
-  assert.match(panelSource, /encerrar/);
-  assert.match(panelSource, /revisar/);
-  assert.match(panelSource, /pista_professores_cursos_sem_escopo/);
-  assert.match(panelSource, /zero alunos|carteira vazia/i);
-  assert.match(panelSource, /justificativa/i);
+  assert.match(panelSource, /aria-label=["']Filtrar por tipo["']/);
+  assert.match(panelSource, /Auditoria avan[cç]ada|Auditoria avancada/);
+  assert.match(panelSource, /Nenhuma exce[cç][aã]o exige a[cç][aã]o/);
+  assert.match(panelSource, /Sincronizar com Emusys/);
+  assert.doesNotMatch(panelSource, /pista_professores_cursos_sem_escopo/);
+  assert.doesNotMatch(panelSource, /Confirmar v.nculo|Corrigir modalidade|Desativar v.nculo/);
+  assert.doesNotMatch(panelSource, /justificativa/i);
   assert.doesNotMatch(panelSource, /window\.confirm/);
-  assert.match(panelSource, /<AlertDialog[\s\S]*?confirmOpen/);
   assert.doesNotMatch(panelSource, /reativar|ativo\s*=|professor\.ativo/);
-  assert.match(panelSource, /row\.estado\s*!==\s*'historico'/);
-  assert.match(panelSource, /!row\.atribuicaoId\s*&&\s*row\.vigenciaInicio/);
 
   assert.match(configSource, /ProfessorCursoModalidadeReconciliacao/);
   assert.match(configSource, /onSaved=\{refreshAfterReconciliation\}/);
