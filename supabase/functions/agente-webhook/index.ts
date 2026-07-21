@@ -32,6 +32,59 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+// .eq('col', null) no Postgrest não vira IS NULL — nunca bate com nada. Agentes
+// sem unidade fixa (ex: Feirão, atende as 3 unidades pelo mesmo número) têm
+// unidade_id NULL, então toda query de conversas_campanha por unidade_id precisa
+// deste helper, senão o histórico da conversa nunca é encontrado.
+function eqOrNull(query: any, field: string, value: any) {
+  return value != null ? query.eq(field, value) : query.is(field, null)
+}
+
+// Auto-agenda o disparo da fila em background (sem depender do tick do cron
+// processar-mensagens-agendadas, que só varre a cada minuto). Espera a janela do
+// debounce fechar, tenta o MESMO atomic claim do cron escopado a esta fila e, se
+// vencer, re-invoca a própria função com debounce_trigger. Se uma mensagem nova
+// tiver empurrado processar_apos pra frente, o claim não pega (processar_apos
+// ainda futuro) e a tarefa agendada por essa mensagem nova é quem dispara — o que
+// preserva o debounce (N mensagens seguidas = 1 turno). O cron continua ativo só
+// como rede de segurança (worker despejado antes desta tarefa rodar).
+function agendarDisparoDebounce(
+  supabase: any,
+  ids: { agente_id: string; telefone: string; unidade_id: string },
+  debounceMs: number,
+) {
+  // @ts-ignore EdgeRuntime existe no runtime Supabase (Deno Deploy)
+  EdgeRuntime.waitUntil((async () => {
+    await sleep(debounceMs + 300)
+    const { data: claimed } = await supabase
+      .from('agente_fila_mensagens')
+      .update({ processando: true })
+      .eq('agente_id', ids.agente_id)
+      .eq('telefone', ids.telefone)
+      .eq('processando', false)
+      .lte('processar_apos', new Date().toISOString())
+      .select('id')
+      .maybeSingle()
+    if (!claimed) return
+    await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/agente-webhook`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+      },
+      body: JSON.stringify({
+        agente_id: ids.agente_id,
+        unidade_id: ids.unidade_id,
+        telefone: ids.telefone,
+        texto: '',
+        tipo_mensagem: 'debounce_trigger',
+      }),
+    }).catch(e => console.error('[agente-webhook] auto-disparo debounce falhou:', e))
+  })())
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -121,6 +174,7 @@ Deno.serve(async (req) => {
         await supabase.from('agente_fila_mensagens')
           .update({ mensagens_acumuladas: acumuladas, processar_apos: processarApos.toISOString() })
           .eq('id', filaExistente.id)
+        agendarDisparoDebounce(supabase, { agente_id, telefone, unidade_id }, debounceMs)
         return json({ status: 'debounced' })
       }
       await supabase.from('agente_fila_mensagens')
@@ -135,8 +189,10 @@ Deno.serve(async (req) => {
         processando: false,
       })
 
-      // Processamento será feito pelo cron processar-mensagens-agendadas (a cada minuto)
-      return json({ status: 'debounced', message: 'Primeira mensagem, aguardando cron para processar' })
+      // Auto-agenda o disparo (~debounce) sem esperar o cron. O cron segue como
+      // rede de segurança caso o worker seja despejado antes da tarefa rodar.
+      agendarDisparoDebounce(supabase, { agente_id, telefone, unidade_id }, debounceMs)
+      return json({ status: 'debounced', message: 'Primeira mensagem, disparo auto-agendado' })
     }
 
     // 3. Get ou criar agente_conversas
@@ -171,10 +227,10 @@ Deno.serve(async (req) => {
     const maxPerMinute = antiSpam?.max_messages_per_minute ?? DEFAULT_MAX_PER_MINUTE
     if (maxPerMinute > 0 && !novaConversa) {
       const umMinutoAtras = new Date(agora.getTime() - 60000).toISOString()
-      const { data: convPrincipal } = await supabase
-        .from('conversas_campanha').select('id')
-        .eq('telefone', telefone).eq('unidade_id', unidade_id)
-        .maybeSingle()
+      const { data: convPrincipal } = await eqOrNull(
+        supabase.from('conversas_campanha').select('id').eq('telefone', telefone),
+        'unidade_id', unidade_id,
+      ).maybeSingle()
 
       if (convPrincipal) {
         const { count } = await supabase
@@ -245,10 +301,10 @@ Deno.serve(async (req) => {
     }
 
     // 8. Montar contexto para IA — histórico de mensagens
-    const { data: convPrincipal } = await supabase
-      .from('conversas_campanha').select('id')
-      .eq('telefone', telefone).eq('unidade_id', unidade_id)
-      .order('ultima_mensagem_em', { ascending: false }).limit(1).maybeSingle()
+    const { data: convPrincipal } = await eqOrNull(
+      supabase.from('conversas_campanha').select('id').eq('telefone', telefone),
+      'unidade_id', unidade_id,
+    ).order('ultima_mensagem_em', { ascending: false }).limit(1).maybeSingle()
 
     const { data: historico } = await supabase
       .from('mensagens_campanha')
