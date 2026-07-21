@@ -1,6 +1,21 @@
 import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { readSqlContract } from './helpers/sqlContractHelpers.mjs';
+
+const testsDirectory = dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = resolve(testsDirectory, '..');
+const edgeFunctionPath = resolve(
+  repositoryRoot,
+  'supabase/functions/sync-professor-disciplinas-emusys/index.ts',
+);
+const configPath = resolve(repositoryRoot, 'supabase/config.toml');
+
+function readOptionalFile(filePath) {
+  return existsSync(filePath) ? readFileSync(filePath, 'utf8') : '';
+}
 
 const migrationRelativePath =
   'supabase/migrations/20260720120000_emusys_catalogo_professor_disciplinas.sql';
@@ -463,3 +478,34 @@ test(
     }
   },
 );
+
+test('Task 3 implementa sync retomavel com guard duplo e gateway explicito', () => {
+  const edgeSource = readOptionalFile(edgeFunctionPath);
+  const configSource = readOptionalFile(configPath);
+
+  assert.notEqual(edgeSource, '', edgeFunctionPath + ' deve existir');
+  assert.match(edgeSource, /x-sync-token/i);
+  assert.match(edgeSource, /SYNC_PROFESSOR_DISCIPLINAS_TOKEN/);
+  assert.match(edgeSource, /constantTime|timingSafe|secureCompare/i);
+  assert.match(edgeSource, /auth\.getUser\s*\(/);
+  assert.match(edgeSource, /fn_usuario_atual_tem_permissao/);
+  assert.match(edgeSource, /professores\.editar/);
+
+  assert.match(edgeSource, /disciplinas\?tipo=turma/);
+  assert.match(edgeSource, /disciplinas\?tipo=individual/);
+  assert.match(edgeSource, /professores\?curso_id=/);
+  assert.match(edgeSource, /emusys_disciplinas_catalogo/);
+  assert.match(edgeSource, /emusys_professor_disciplinas/);
+  assert.match(edgeSource, /finalizar_sync_professor_disciplinas_emusys_v1/);
+  assert.match(edgeSource, /status:\s*["']falhou["']/);
+  assert.doesNotMatch(
+    edgeSource,
+    /console\.(?:log|error|warn)\s*\([^\n]*(?:token|payload)/i,
+    'sync nao pode registrar token ou payload bruto em console',
+  );
+
+  assert.match(
+    configSource,
+    /\[functions\.sync-professor-disciplinas-emusys\][\s\S]*?verify_jwt\s*=\s*false/i,
+  );
+});
