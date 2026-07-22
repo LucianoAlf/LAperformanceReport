@@ -8,6 +8,11 @@
 import { createServiceClient } from '../_shared/supabase-client.ts'
 import { marcarComoLida, baixarEArmazenarMedia, enviarMensagemTexto } from '../_shared/whatsapp-meta-api.ts'
 
+// Mantém o isolate vivo até as promises em background terminarem (senão o
+// shutdown pós-response mata o processamento silenciosamente — msg salva mas
+// agente nunca invocado). Não re-executa nada, só impede o abort.
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void }
+
 Deno.serve(async (req) => {
   // GET: Verificação do webhook pela Meta
   if (req.method === 'GET') {
@@ -47,19 +52,23 @@ Deno.serve(async (req) => {
     const supabase = createServiceClient()
     const phoneNumberId = value.metadata?.phone_number_id
 
-    // Processar mensagens inbound (fire-and-forget)
+    // Processar mensagens inbound (fire-and-forget, protegido por waitUntil)
     if (value.messages?.length > 0) {
       for (const msg of value.messages) {
-        processarMensagem(supabase, phoneNumberId, msg, value.contacts)
-          .catch(err => console.error('Erro ao processar mensagem:', err))
+        EdgeRuntime.waitUntil(
+          processarMensagem(supabase, phoneNumberId, msg, value.contacts)
+            .catch(err => console.error('Erro ao processar mensagem:', err))
+        )
       }
     }
 
-    // Processar status updates (fire-and-forget)
+    // Processar status updates (fire-and-forget, protegido por waitUntil)
     if (value.statuses?.length > 0) {
       for (const status of value.statuses) {
-        processarStatus(supabase, status)
-          .catch(err => console.error('Erro ao processar status:', err))
+        EdgeRuntime.waitUntil(
+          processarStatus(supabase, status)
+            .catch(err => console.error('Erro ao processar status:', err))
+        )
       }
     }
 
@@ -345,19 +354,21 @@ async function processarMensagem(supabase: any, phoneNumberId: string, msg: any,
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-    fetch(`${supabaseUrl}/functions/v1/agente-webhook`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
-      body: JSON.stringify({
-        unidade_id: unidadeId,
-        agente_id: agenteParaInvocar,
-        telefone,
-        texto: parsed.conteudo,
-        tipo_mensagem: parsed.tipo,
-        media_url: mediaUrl,
-        meta_message_id: metaMessageId,
-      }),
-    }).catch(err => console.error('Erro ao invocar agente-webhook:', err))
+    EdgeRuntime.waitUntil(
+      fetch(`${supabaseUrl}/functions/v1/agente-webhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
+        body: JSON.stringify({
+          unidade_id: unidadeId,
+          agente_id: agenteParaInvocar,
+          telefone,
+          texto: parsed.conteudo,
+          tipo_mensagem: parsed.tipo,
+          media_url: mediaUrl,
+          meta_message_id: metaMessageId,
+        }),
+      }).catch(err => console.error('Erro ao invocar agente-webhook:', err))
+    )
   }
 }
 
