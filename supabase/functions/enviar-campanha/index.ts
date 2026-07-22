@@ -139,6 +139,16 @@ Deno.serve(async (req) => {
         })
 
         enviados++
+
+        // Atualização incremental do contador p/ realtime (a cada 5 envios) — sem isso
+        // o número só saltaria de 0 ao total no fim do lote. Valor absoluto
+        // (enviadosAntes + enviados) pra não conflitar com a atualização final.
+        if (enviados % 5 === 0) {
+          await supabase
+            .from('campanhas')
+            .update({ enviados: enviadosAntes + enviados, updated_at: new Date().toISOString() })
+            .eq('id', campanha_id)
+        }
       } catch (sendErr) {
         const errMsg = (sendErr as Error).message ?? ''
         const isOptOut = errMsg.includes('131050') || errMsg.toLowerCase().includes('opt') || errMsg.toLowerCase().includes('marketing') || errMsg.includes('re-engagement')
@@ -162,7 +172,9 @@ Deno.serve(async (req) => {
       .eq('id', campanha_id)
       .single()
 
-    const novoEnviadosTotal = (campanhaAtual?.enviados ?? enviadosAntes) + enviados
+    // Absoluto: enviadosAntes já é o total antes deste run; somar só o deste lote.
+    // (não re-ler+somar — a atualização incremental do loop já escreveu enviadosAntes+enviados)
+    const novoEnviadosTotal = enviadosAntes + enviados
     if (campanhaAtual) {
       await supabase
         .from('campanhas')

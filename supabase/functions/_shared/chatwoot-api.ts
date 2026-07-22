@@ -48,7 +48,10 @@ export async function criarContato(
     headers: { 'Content-Type': 'application/json', api_access_token: config.apiToken },
     body: JSON.stringify({ name: nome || telefone, phone_number: `+${telefone.replace(/\D/g, '')}` }),
   })
-  if (!res.ok) throw new Error(`Chatwoot criarContato failed: ${res.status}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Chatwoot criarContato failed: ${res.status} ${body}`)
+  }
   const data = await res.json()
   return data.payload?.contact ?? data.payload ?? data
 }
@@ -66,7 +69,19 @@ export async function criarConversa(
     headers: { 'Content-Type': 'application/json', api_access_token: config.apiToken },
     body: JSON.stringify({ contact_id: contatoId, inbox_id: parseInt(inboxId, 10), status: 'open' }),
   })
-  if (!res.ok) throw new Error(`Chatwoot criarConversa failed: ${res.status}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    // Chatwoot recusa uma 2ª conversa aberta/pendente pro mesmo contato (422),
+    // mas devolve o id da que já existe. Reaproveitar em vez de abortar — senão
+    // toda a etapa seguinte (nota de contexto + notificação do consultor) trava.
+    try {
+      const parsed = JSON.parse(body)
+      if (res.status === 422 && parsed?.conversation_id) {
+        return { id: parsed.conversation_id, inbox_id: parseInt(inboxId, 10), status: 'open' }
+      }
+    } catch { /* corpo não-JSON, cai no throw abaixo */ }
+    throw new Error(`Chatwoot criarConversa failed: ${res.status} ${body}`)
+  }
   return await res.json()
 }
 

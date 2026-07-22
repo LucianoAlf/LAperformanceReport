@@ -176,6 +176,34 @@ async function processarMensagem(supabase: any, phoneNumberId: string, msg: any,
     created_at: timestamp ? new Date(parseInt(timestamp) * 1000).toISOString() : new Date().toISOString(),
   })
 
+  // 5b. Contabilizar a 1ª resposta do lead na(s) campanha(s) a que ele pertence.
+  // Idempotente: campanha_contatos.respondeu (guard de corrida no .eq('respondeu', false))
+  // + incremento atômico em campanhas.respondidos via RPC. Só conta contatos que de fato
+  // receberam disparo (status enviado/entregue/lido) — ignora quem nunca foi mandado.
+  try {
+    const { data: contatosCamp } = await supabase
+      .from('campanha_contatos')
+      .select('id, campanha_id')
+      .eq('telefone', telefone)
+      .eq('respondeu', false)
+      .in('status', ['enviado', 'entregue', 'lido'])
+
+    for (const cc of contatosCamp ?? []) {
+      const { data: marcado } = await supabase
+        .from('campanha_contatos')
+        .update({ respondeu: true })
+        .eq('id', cc.id)
+        .eq('respondeu', false) // só um vencedor sob concorrência
+        .select('id')
+        .maybeSingle()
+      if (marcado) {
+        await supabase.rpc('incrementar_respondidos_campanha', { p_campanha_id: cc.campanha_id })
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao contabilizar resposta da campanha:', (err as Error).message)
+  }
+
   // 6. Marcar como lida
   try {
     await marcarComoLida({ phone_number_id: phoneNumberId, access_token: numero.access_token }, metaMessageId)
