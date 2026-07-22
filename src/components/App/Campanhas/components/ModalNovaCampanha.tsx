@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { useNumerosMeta, type NumeroMeta } from '../hooks/useNumerosMeta'
 import { useTemplatesMeta, type TemplateMeta } from '../hooks/useTemplatesMeta'
+import { useMetaPricingEstimate } from '../hooks/useMetaPricingEstimate'
 import { parseCSV, parseExcel, validarContatos, validarBulkPhones, type ParsedCSV, type ValidacaoContatos } from './WizardSteps/csvParser'
 import { extrairVariaveis, renderizarTemplate } from './WizardSteps/templateParser'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
@@ -952,11 +953,13 @@ function StepRevisao({ state, onMediaUrl, onLimiteDisparo }: { state: WizardStat
   const numero = numeros.find(n => n.id === state.numeroMetaId)
   const template = templates.find(t => t.id === state.templateId)
 
-  // Previsão de custo
-  const custoCategoria = numero?.custo_por_categoria ?? { marketing: 0.50, utility: 0.15, authentication: 0.25 }
-  const categoria = (template?.categoria?.toLowerCase() ?? 'marketing') as keyof typeof custoCategoria
-  const custoUnitario = custoCategoria[categoria] ?? 0.50
+  // Previsão de custo — tarifa real consultada ao vivo na Meta (últimos 90 dias)
+  const { categorias, moeda, loading: carregandoTarifa } = useMetaPricingEstimate(state.numeroMetaId || null)
+  const categoria = template?.categoria?.toLowerCase() ?? 'marketing'
+  const infoCategoria = categorias[categoria] ?? categorias.marketing
+  const custoUnitario = infoCategoria?.rate ?? 0.5
   const custoTotal = state.contatos.length * custoUnitario
+  const simboloMoeda = moeda === 'USD' ? 'US$' : 'R$'
 
   // Preview da mensagem com dados do primeiro contato
   let previewText = template?.body_text ?? ''
@@ -1016,10 +1019,15 @@ function StepRevisao({ state, onMediaUrl, onLimiteDisparo }: { state: WizardStat
           <div>
             <p className="text-xs text-gray-400">Custo estimado</p>
             <p className="text-xl font-bold text-white">
-              R$ {custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {simboloMoeda} {custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </p>
             <p className="text-xs text-gray-500 mt-0.5">
-              {state.contatos.length} contatos × R$ {custoUnitario.toFixed(2)} ({template?.categoria ?? 'marketing'})
+              {state.contatos.length} contatos × {simboloMoeda} {custoUnitario.toFixed(4)} ({template?.categoria ?? 'marketing'})
+              {carregandoTarifa
+                ? ' · consultando tarifa da Meta...'
+                : infoCategoria?.fonte === 'meta_live'
+                  ? ' · tarifa real (Meta, últimos 90 dias)'
+                  : ' · tarifa configurada (sem envios recentes nessa categoria)'}
             </p>
           </div>
           {orcamentoExcedido && (
@@ -1045,16 +1053,13 @@ function StepRevisao({ state, onMediaUrl, onLimiteDisparo }: { state: WizardStat
 }
 
 function BotaoConfirmar({ state, onCriada, onClose }: { state: WizardState; onCriada: (id: string) => void; onClose: () => void }) {
-  const { numeros } = useNumerosMeta()
   const { templates } = useTemplatesMeta(state.numeroMetaId || null)
   const [criando, setCriando] = useState(false)
 
-  const { useCampanhas: _ } = {} as any // avoid hook issue — use supabase directly
-  const numero = numeros.find(n => n.id === state.numeroMetaId)
   const template = templates.find(t => t.id === state.templateId)
-  const custoCategoria = numero?.custo_por_categoria ?? { marketing: 0.50, utility: 0.15, authentication: 0.25 }
-  const categoria = (template?.categoria?.toLowerCase() ?? 'marketing') as keyof typeof custoCategoria
-  const custoEstimado = state.contatos.length * (custoCategoria[categoria] ?? 0.50)
+  const { categorias, moeda } = useMetaPricingEstimate(state.numeroMetaId || null)
+  const categoria = template?.categoria?.toLowerCase() ?? 'marketing'
+  const custoEstimado = state.contatos.length * (categorias[categoria]?.rate ?? categorias.marketing?.rate ?? 0.5)
 
   async function handleConfirmar() {
     if (!state.unidadeId) {
@@ -1077,6 +1082,7 @@ function BotaoConfirmar({ state, onCriada, onClose }: { state: WizardState; onCr
           mapeamento_variaveis: state.mapeamento,
           media_url_custom: state.mediaUrlCustom || null,
           custo_estimado: custoEstimado,
+          custo_moeda: moeda,
           limite_disparo: state.limiteDisparo ? parseInt(state.limiteDisparo, 10) : null,
           status: 'rascunho',
         })

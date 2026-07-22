@@ -17,6 +17,9 @@ export interface Campanha {
   falhas: number
   custo_estimado: number
   custo_real: number
+  custo_moeda: string
+  limite_disparo: number | null
+  meta_disparo: number | null
   mapeamento_variaveis: Record<string, string> | null
   media_url_custom: string | null
   iniciada_em: string | null
@@ -187,6 +190,45 @@ export function useCampanhas(unidadeId?: string | null) {
     return { error: null }
   }
 
+  async function atualizarLimiteDisparo(campanhaId: string, limite: number | null): Promise<{ error: string | null }> {
+    const { error: err } = await supabase
+      .from('campanhas')
+      .update({ limite_disparo: limite, updated_at: new Date().toISOString() })
+      .eq('id', campanhaId)
+    if (err) return { error: err.message }
+    await fetchCampanhas()
+    return { error: null }
+  }
+
+  async function atualizarCustoReal(campanhaId: string): Promise<{ error: string | null; custo?: number; moeda?: string }> {
+    const { data: campanha, error: fetchErr } = await supabase
+      .from('campanhas')
+      .select('numero_meta_id, total_contatos, templates_meta(categoria)')
+      .eq('id', campanhaId)
+      .single()
+    if (fetchErr || !campanha) return { error: fetchErr?.message ?? 'Campanha não encontrada' }
+    if (!campanha.numero_meta_id) return { error: 'Campanha sem número Meta vinculado' }
+
+    const { data, error: fnErr } = await supabase.functions.invoke('meta-pricing-estimate', {
+      body: { numero_meta_id: campanha.numero_meta_id },
+    })
+    if (fnErr) return { error: fnErr.message }
+    if (data?.error) return { error: data.error }
+
+    const categoria = ((campanha as any).templates_meta?.categoria ?? 'MARKETING').toLowerCase()
+    const info = data.categorias[categoria] ?? data.categorias.marketing
+    const custo = campanha.total_contatos * info.rate
+
+    const { error: updErr } = await supabase
+      .from('campanhas')
+      .update({ custo_estimado: custo, custo_moeda: data.moeda, updated_at: new Date().toISOString() })
+      .eq('id', campanhaId)
+    if (updErr) return { error: updErr.message }
+
+    await fetchCampanhas()
+    return { error: null, custo, moeda: data.moeda }
+  }
+
   async function excluir(campanhaId: string): Promise<{ error: string | null }> {
     // Deletar registros filhos antes (FK sem CASCADE)
     await supabase.from('mensagens_campanha').delete().eq('campanha_id', campanhaId)
@@ -200,5 +242,5 @@ export function useCampanhas(unidadeId?: string | null) {
     return { error: null }
   }
 
-  return { campanhas, loading, error, refetch: fetchCampanhas, criar, controlar, excluir, reenviarFalhas }
+  return { campanhas, loading, error, refetch: fetchCampanhas, criar, controlar, excluir, reenviarFalhas, atualizarLimiteDisparo, atualizarCustoReal }
 }
