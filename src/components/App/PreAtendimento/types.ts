@@ -158,6 +158,9 @@ export interface LeadCRM {
 
   // Experimentais (nova tabela)
   lead_experimentais?: LeadExperimental[];
+
+  // Campanhas que trouxeram o lead (histórico — ver leads_campanhas)
+  leads_campanhas?: { campanha_nome: string; campanha_slug: string; created_at: string }[];
 }
 
 export interface LeadExperimental {

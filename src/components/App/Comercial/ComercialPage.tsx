@@ -628,7 +628,7 @@ export function ComercialPage() {
   })[]>([]);
   
   // Registros do mês por tipo (para tabelas de detalhamento)
-  const [leadsMes, setLeadsMes] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string })[]>([]);
+  const [leadsMes, setLeadsMes] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string; campanhas?: { campanha_nome: string; campanha_slug: string; created_at: string }[] })[]>([]);
   const [experimentaisMes, setExperimentaisMes] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string; professor_nome?: string })[]>([]);
   const [experimentaisDetalhadas, setExperimentaisDetalhadas] = useState<any[]>([]);
   const [visitasMes, setVisitasMes] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string })[]>([]);
@@ -947,7 +947,7 @@ export function ComercialPage() {
       // Query base - buscar também cursos, unidades e dados do aluno (para filtro comercial)
       let query = supabase
         .from('leads')
-        .select('*, canais_origem(nome), cursos(nome), unidades(codigo), alunos:aluno_id(is_segundo_curso, is_aluno_retorno, is_ex_aluno)')
+        .select('*, canais_origem(nome), cursos(nome), unidades(codigo), alunos:aluno_id(is_segundo_curso, is_aluno_retorno, is_ex_aluno), leads_campanhas(campanha_nome, campanha_slug, created_at)')
         .order('data_contato', { ascending: false })
         .limit(10000);
 
@@ -1203,6 +1203,7 @@ export function ComercialPage() {
           ...l,
           canal_nome: (l.canais_origem as any)?.nome || '',
           curso_nome: (l.cursos as any)?.nome || '',
+          campanhas: ((l as any).leads_campanhas as any[]) || [],
         }));
 
       // Experimentais do mês (com nomes dos relacionamentos)
@@ -4924,6 +4925,7 @@ export function ComercialPage() {
                     <SortableTh col="nome" label="Nome" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />
                     <SortableTh col="telefone" label="Telefone" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />
                     <SortableTh col="canal" label="Canal" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />
+                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Campanha</th>
                     <SortableTh col="curso" label="Curso" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />
                     <SortableTh col="etapa" label="Etapa" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />
                     {isAdmin && <SortableTh col="unidade" label="Unidade" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />}
@@ -4983,6 +4985,23 @@ export function ComercialPage() {
                           placeholder="-"
                           formatarExibicao={() => <CanalOrigemBadge canal={lead.canal_nome || '-'} />}
                         />
+                      </td>
+                      <td className="py-3 px-2 border-r border-slate-700/30">
+                        {((lead as any).campanhas?.length ?? 0) > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {(lead as any).campanhas.map((c: any) => (
+                              <span
+                                key={c.campanha_slug}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-500/15 text-amber-400 whitespace-nowrap"
+                                title={`Campanha de origem: ${c.campanha_nome}`}
+                              >
+                                📣 {c.campanha_nome}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-slate-600">-</span>
+                        )}
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline

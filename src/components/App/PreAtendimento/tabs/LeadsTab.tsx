@@ -79,6 +79,7 @@ export function LeadsTab({ unidadeId, ano, mes, onLeadClick, onNovoLead, onAgend
   const [filtroCanal, setFiltroCanal] = useState<string>('todos');
   const [filtroCurso, setFiltroCurso] = useState<string>('todos');
   const [filtroTemperatura, setFiltroTemperatura] = useState<string>('todos');
+  const [filtroCampanha, setFiltroCampanha] = useState<string>('todos');
   const [filtroKPI, setFiltroKPI] = useState<string>('todos');
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
 
@@ -132,6 +133,13 @@ export function LeadsTab({ unidadeId, ano, mes, onLeadClick, onNovoLead, onAgend
       resultado = resultado.filter(l => l.temperatura === filtroTemperatura);
     }
 
+    // Filtro por campanha de origem
+    if (filtroCampanha !== 'todos') {
+      resultado = resultado.filter(l =>
+        (l.leads_campanhas ?? []).some(c => c.campanha_slug === filtroCampanha)
+      );
+    }
+
     // Filtro por KPIs incompletos
     if (filtroKPI !== 'todos') {
       resultado = resultado.filter(l => {
@@ -163,7 +171,19 @@ export function LeadsTab({ unidadeId, ano, mes, onLeadClick, onNovoLead, onAgend
     });
 
     return resultado;
-  }, [leads, busca, filtroEtapa, filtroUnidade, filtroTemperatura, filtroKPI, ordenacao]);
+  }, [leads, busca, filtroEtapa, filtroUnidade, filtroTemperatura, filtroCampanha, filtroKPI, ordenacao]);
+
+  // Campanhas distintas presentes nos leads carregados (para o filtro)
+  const campanhasDisponiveis = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const l of leads) {
+      for (const c of l.leads_campanhas ?? []) {
+        if (!map.has(c.campanha_slug)) map.set(c.campanha_slug, c.campanha_nome);
+      }
+    }
+    return Array.from(map, ([slug, nome]) => ({ slug, nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [leads]);
 
   // Paginação
   const totalPaginas = Math.ceil(leadsFiltrados.length / ITENS_POR_PAGINA);
@@ -217,12 +237,13 @@ export function LeadsTab({ unidadeId, ano, mes, onLeadClick, onNovoLead, onAgend
     setFiltroCanal('todos');
     setFiltroCurso('todos');
     setFiltroTemperatura('todos');
+    setFiltroCampanha('todos');
     setFiltroKPI('todos');
     setPagina(1);
   };
 
   const temFiltrosAtivos = busca || filtroEtapa !== 'todos' || filtroUnidade !== 'todos' ||
-    filtroTemperatura !== 'todos' || filtroKPI !== 'todos';
+    filtroTemperatura !== 'todos' || filtroCampanha !== 'todos' || filtroKPI !== 'todos';
 
   // Salvar curso inline
   const salvarCursoInline = async (leadId: number, cursoId: string) => {
@@ -340,6 +361,20 @@ export function LeadsTab({ unidadeId, ano, mes, onLeadClick, onNovoLead, onAgend
             <SelectItem value="frio">❄️ Frio</SelectItem>
           </SelectContent>
         </Select>
+
+        {campanhasDisponiveis.length > 0 && (
+          <Select value={filtroCampanha} onValueChange={v => { setFiltroCampanha(v); setPagina(1); }}>
+            <SelectTrigger className="w-[180px] bg-slate-800/50 border-slate-700">
+              <SelectValue placeholder="Campanha" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todas as campanhas</SelectItem>
+              {campanhasDisponiveis.map(c => (
+                <SelectItem key={c.slug} value={c.slug}>📣 {c.nome}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         <Button
           variant="outline"

@@ -14,7 +14,7 @@ import type { AgentToolDefinition, ToolCall, ToolResult, AIResponse, TransferToo
 import {
   buscarContato, criarContato, criarConversa, enviarNotaPrivada, enviarMensagem,
   buscarLabelsContato, atualizarLabelsContato, buscarLabelsConversa,
-  atualizarLabelsConversa, toggleStatusConversa,
+  atualizarLabelsConversa, toggleStatusConversa, garantirLabelsExistem,
 } from '../_shared/chatwoot-api.ts'
 import type { ChatwootConfig } from '../_shared/chatwoot-api.ts'
 
@@ -569,6 +569,47 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
     },
   }).eq('id', ctx.conversa.id)
 
+  // 3b. Registrar/marcar o lead no funil comercial (LAReport).
+  // Isolado em try/catch: NUNCA bloqueia a transferência (o crítico é o Chatwoot/consultor abaixo).
+  // Reusa a RPC canônica upsert_lead (source_type='campanha') — dedup por telefone+unidade e
+  // convergência futura com o Emusys pelo mesmo registro. Histórico da campanha vai em leads_campanhas.
+  try {
+    // Resolver unidade_id real: unitNorm ('CG'/'Barra'/'Recreio') -> unidades.nome
+    const nomeUnidade = unitNorm === 'CG' ? 'Campo Grande' : unitNorm
+    const { data: uni } = await ctx.supabase
+      .from('unidades').select('id')
+      .eq('nome', nomeUnidade).eq('ativo', true).maybeSingle()
+
+    if (uni?.id) {
+      const { data: leadRes } = await ctx.supabase.rpc('upsert_lead', {
+        p_nome: leadName || null,
+        p_telefone: ctx.telefone,
+        p_email: null,
+        p_unidade_id: uni.id,
+        p_curso: null,
+        p_canal: null,
+        p_source_id: null,
+        p_source_type: 'campanha',
+        p_arquivar: false,
+        p_data_contato: null,
+      })
+      const leadId = leadRes?.lead_id
+      const campanhaSlug = (config.campanha_label as string) || null
+      if (leadId && campanhaSlug) {
+        await ctx.supabase.from('leads_campanhas').upsert({
+          lead_id: leadId,
+          agente_id: ctx.agente.id,
+          campanha_slug: campanhaSlug,
+          campanha_nome: ctx.agente.nome,
+        }, { onConflict: 'lead_id,campanha_slug', ignoreDuplicates: true })
+      }
+    } else {
+      console.error('upsert_lead campanha: unidade não resolvida para', unitNorm)
+    }
+  } catch (e) {
+    console.error('Erro ao registrar lead da campanha no LAReport:', e)
+  }
+
   // 4. Integração Chatwoot completa
   const hasCW = config.chatwoot_api_url && config.chatwoot_api_token && config.chatwoot_account_id
   if (hasCW && matchedUnit) {
@@ -597,6 +638,10 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
         newLabels.push(instrumentoTag)
       }
 
+      // Garante que as labels existam na conta antes de aplicar (Chatwoot não
+      // cria label de conta automaticamente ao etiquetar — sem isso, a etiqueta não "pega").
+      await garantirLabelsExistem(cwCfg, newLabels)
+
       const existingContactLabels = await buscarLabelsContato(cwCfg, contato.id)
       const allContactLabels = [...new Set([...existingContactLabels, ...newLabels])]
       await atualizarLabelsContato(cwCfg, contato.id, allContactLabels)
@@ -612,19 +657,23 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
       const allConvLabels = [...new Set([...existingConvLabels, ...newLabels])]
       await atualizarLabelsConversa(cwCfg, conversa.id, allConvLabels)
 
-      // 4f. Nota privada com resumo
+      // 4f. Nota privada com resumo — contexto pro consultor entender a ORIGEM do lead.
+      const perfilLabel = perfil.toLowerCase().includes('crian') ? 'Criança (LA Music Kids)'
+        : perfil.toLowerCase().includes('adult') ? 'Adulto' : null
       const nota = [
         `🤖 *Lead qualificado via Agente IA*`,
+        `📣 *Campanha:* ${ctx.agente.nome}`,
         '',
         leadName ? `*Lead:* ${leadName}` : null,
         `*Telefone:* ${ctx.telefone}`,
         `*Unidade:* ${unitNorm}`,
+        perfilLabel ? `*Perfil:* ${perfilLabel}` : null,
         instrumento ? `*Instrumento:* ${instrumento}` : null,
         classificacao ? `*Classificação:* ${classificacao}` : null,
-        summary ? `\n*Resumo:* ${summary}` : null,
+        summary ? `\n*Resumo da conversa:* ${summary}` : null,
         '',
         '---',
-        'O lead foi qualificado e está aguardando contato!',
+        `Esse lead veio da campanha *${ctx.agente.nome}* e já foi qualificado pelo agente. Está aguardando seu contato! ⚡`,
       ].filter(Boolean).join('\n')
       await enviarNotaPrivada(cwCfg, conversa.id, nota)
 
@@ -635,12 +684,13 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
         const msg = [
           `Olá ${matchedUnit.consultant_name || 'Consultor'}! 👋`,
           '',
-          'Você tem um novo lead qualificado! 🎓',
+          `Você tem um novo lead qualificado da campanha *${ctx.agente.nome}*! 🎓`,
           '',
           '📋 *Detalhes do Lead:*',
           leadName ? `• *Nome:* ${leadName}` : null,
           `• *Telefone:* ${ctx.telefone}`,
           `• *Unidade:* ${unitNorm}`,
+          perfilLabel ? `• *Perfil:* ${perfilLabel}` : null,
           instrumento ? `• *Instrumento:* ${instrumento}` : null,
           '',
           `🔗 *Link da Conversa:*`,
