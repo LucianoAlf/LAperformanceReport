@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import { 
@@ -646,10 +646,21 @@ export function ComercialPage() {
   const [filtroCanalFunil, setFiltroCanalFunil] = useState<string>('todos');
   const [filtroCursoFunil, setFiltroCursoFunil] = useState<string>('todos');
   const [filtroProfessorFunil, setFiltroProfessorFunil] = useState<string>('todos');
+  const [filtroCampanhaFunil, setFiltroCampanhaFunil] = useState<string>('todos');
   const [filtroTipoExp, setFiltroTipoExp] = useState<'leads_novos' | 'todos' | 'alunos' | 'agendadas_periodo'>('leads_novos');
   // Filtro de presença na aba Experimentais: compareceram (vieram) vs faltaram
   const [filtroPresencaExp, setFiltroPresencaExp] = useState<'todas' | 'compareceram' | 'faltaram'>('compareceram');
   const [filtroTipoMat, setFiltroTipoMat] = useState<'novos_alunos' | 'segundo_curso' | 'todos'>('novos_alunos');
+  // Campanhas distintas presentes nos leads carregados (pro filtro do Detalhamento do Funil)
+  const campanhasFunil = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const l of leadsMes) {
+      for (const c of ((l as any).campanhas ?? []) as { campanha_slug: string; campanha_nome: string }[]) {
+        if (c?.campanha_slug && !map.has(c.campanha_slug)) map.set(c.campanha_slug, c.campanha_nome);
+      }
+    }
+    return Array.from(map, ([slug, nome]) => ({ slug, nome }));
+  }, [leadsMes]);
   const [selecionadosFunil, setSelecionadosFunil] = useState<Set<number>>(new Set());
   const [excluindoEmLote, setExcluindoEmLote] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
@@ -4638,6 +4649,19 @@ export function ComercialPage() {
                 </SelectContent>
               </Select>
             )}
+            {abaDetalhamento === 'leads' && campanhasFunil.length > 0 && (
+              <Select value={filtroCampanhaFunil} onValueChange={v => setFiltroCampanhaFunil(v)}>
+                <SelectTrigger className="w-[180px] bg-slate-800/50 border-slate-700 h-9 text-xs">
+                  <SelectValue placeholder="Campanha" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas as campanhas</SelectItem>
+                  {campanhasFunil.map(c => (
+                    <SelectItem key={c.slug} value={c.slug}>{c.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {abaDetalhamento === 'experimental' && (
               <Select value={filtroTipoExp} onValueChange={v => setFiltroTipoExp(v as any)}>
                 <SelectTrigger className="w-[180px] bg-slate-800/50 border-slate-700 h-9 text-xs">
@@ -4701,9 +4725,9 @@ export function ComercialPage() {
                 </SelectContent>
               </Select>
             )}
-            {(filtroIncompletoFunil !== 'todos' || filtroCanalFunil !== 'todos' || filtroCursoFunil !== 'todos' || filtroProfessorFunil !== 'todos') && (
+            {(filtroIncompletoFunil !== 'todos' || filtroCanalFunil !== 'todos' || filtroCursoFunil !== 'todos' || filtroProfessorFunil !== 'todos' || filtroCampanhaFunil !== 'todos') && (
               <button
-                onClick={() => { setFiltroIncompletoFunil('todos'); setFiltroCanalFunil('todos'); setFiltroCursoFunil('todos'); setFiltroProfessorFunil('todos'); }}
+                onClick={() => { setFiltroIncompletoFunil('todos'); setFiltroCanalFunil('todos'); setFiltroCursoFunil('todos'); setFiltroProfessorFunil('todos'); setFiltroCampanhaFunil('todos'); }}
                 className="text-xs text-slate-500 hover:text-white flex items-center gap-1 transition-colors"
               >
                 <X className="w-3 h-3" /> Limpar filtros
@@ -4763,6 +4787,11 @@ export function ComercialPage() {
             // Filtro por professor (experimental)
             if (filtroProfessorFunil !== 'todos') {
               if (String(l.professor_experimental_id) !== filtroProfessorFunil) return false;
+            }
+            // Filtro por campanha (origem — leads_campanhas)
+            if (filtroCampanhaFunil !== 'todos') {
+              const camps = (l as any).campanhas as { campanha_slug: string }[] | undefined;
+              if (!(camps ?? []).some(c => c.campanha_slug === filtroCampanhaFunil)) return false;
             }
             return true;
           });
