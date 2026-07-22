@@ -51,6 +51,24 @@ Deno.serve(async (req) => {
       access_token: campanha.numero.access_token,
     }
 
+    // Drip: quanto ainda pode ser enviado neste run (meta_disparo = enviados + limite
+    // fixado no iniciar/retomar). NULL = sem limite (envia tudo).
+    const enviadosAntes = campanha.enviados ?? 0
+    const restanteRun = campanha.meta_disparo != null
+      ? Math.max(0, campanha.meta_disparo - enviadosAntes)
+      : null
+
+    // Já bateu a meta do run mas ainda há pendentes → pausar (não concluir).
+    if (restanteRun === 0) {
+      await supabase
+        .from('campanhas')
+        .update({ status: 'pausada', updated_at: new Date().toISOString() })
+        .eq('id', campanha_id)
+      return json({ success: true, message: 'Limite do disparo atingido, campanha pausada', enviados: 0, falhas: 0 })
+    }
+
+    const loteLimite = restanteRun != null ? Math.min(BATCH_SIZE, restanteRun) : BATCH_SIZE
+
     // 2. Buscar contatos pendentes (batch)
     const { data: contatos, error: contatosErr } = await supabase
       .from('campanha_contatos')
@@ -58,7 +76,7 @@ Deno.serve(async (req) => {
       .eq('campanha_id', campanha_id)
       .eq('status', 'pendente')
       .order('created_at', { ascending: true })
-      .limit(BATCH_SIZE)
+      .limit(loteLimite)
 
     if (contatosErr) throw new Error('Falha ao buscar contatos: ' + contatosErr.message)
 
@@ -144,11 +162,12 @@ Deno.serve(async (req) => {
       .eq('id', campanha_id)
       .single()
 
+    const novoEnviadosTotal = (campanhaAtual?.enviados ?? enviadosAntes) + enviados
     if (campanhaAtual) {
       await supabase
         .from('campanhas')
         .update({
-          enviados: (campanhaAtual.enviados ?? 0) + enviados,
+          enviados: novoEnviadosTotal,
           falhas: (campanhaAtual.falhas ?? 0) + falhas,
           updated_at: new Date().toISOString(),
         })
@@ -168,7 +187,20 @@ Deno.serve(async (req) => {
       .eq('id', campanha_id)
       .single()
 
-    if ((pendentes ?? 0) > 0 && statusFinal?.status === 'executando') {
+    // Drip: atingiu a meta deste disparo (ainda com pendentes) → pausa, não auto-invoca.
+    const atingiuMeta = campanha.meta_disparo != null && novoEnviadosTotal >= campanha.meta_disparo
+
+    if ((pendentes ?? 0) === 0) {
+      await supabase
+        .from('campanhas')
+        .update({ status: 'concluida', concluida_em: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('id', campanha_id)
+    } else if (atingiuMeta && statusFinal?.status === 'executando') {
+      await supabase
+        .from('campanhas')
+        .update({ status: 'pausada', updated_at: new Date().toISOString() })
+        .eq('id', campanha_id)
+    } else if (statusFinal?.status === 'executando') {
       // Auto-invocar para próximo batch
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!
       const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -177,14 +209,9 @@ Deno.serve(async (req) => {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
         body: JSON.stringify({ campanha_id }),
       }).catch(err => console.error('Erro ao agendar próximo lote:', err))
-    } else if ((pendentes ?? 0) === 0) {
-      await supabase
-        .from('campanhas')
-        .update({ status: 'concluida', concluida_em: new Date().toISOString(), updated_at: new Date().toISOString() })
-        .eq('id', campanha_id)
     }
 
-    return json({ success: true, batch: { enviados, falhas }, pendentes: pendentes ?? 0 })
+    return json({ success: true, batch: { enviados, falhas }, pendentes: pendentes ?? 0, meta_disparo: campanha.meta_disparo ?? null })
   } catch (err) {
     console.error('enviar-campanha error:', err)
     return jsonError((err as Error).message, 500)

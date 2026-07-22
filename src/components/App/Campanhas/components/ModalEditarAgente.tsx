@@ -21,6 +21,8 @@ const ABAS: { id: Aba; label: string; icon: React.ElementType }[] = [
 ]
 
 const MODELOS = [
+  { value: 'gpt-4.1-mini', label: 'GPT-4.1 Mini', provider: 'openai' },
+  { value: 'gpt-4.1', label: 'GPT-4.1', provider: 'openai' },
   { value: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'openai' },
   { value: 'gpt-4o', label: 'GPT-4o', provider: 'openai' },
   { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', provider: 'gemini' },
@@ -232,6 +234,10 @@ function AbaPrompt({ form, set, numeros }: { form: AgenteForm; set: <K extends k
       <div className="grid grid-cols-3 gap-3">
         <Campo label="Modelo">
           <select value={form.modelo} onChange={e => handleModelo(e.target.value)} className={inputCls}>
+            {/* Se o modelo salvo não estiver nos presets, mostra ele mesmo (nunca esconde o valor real) */}
+            {form.modelo && !MODELOS.some(m => m.value === form.modelo) && (
+              <option value={form.modelo}>{form.modelo} (atual)</option>
+            )}
             {MODELOS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
         </Campo>

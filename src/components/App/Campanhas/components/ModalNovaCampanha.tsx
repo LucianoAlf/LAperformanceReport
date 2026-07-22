@@ -28,6 +28,7 @@ interface WizardState {
   templateId: string
   mapeamento: Record<string, string>  // "1" → coluna CSV
   mediaUrlCustom: string
+  limiteDisparo: string  // quantos enviar por disparo (vazio = todos)
 }
 
 interface Props {
@@ -67,6 +68,7 @@ export function ModalNovaCampanha({ open, onOpenChange, onCriada, unidadeId }: P
     templateId: '',
     mapeamento: {},
     mediaUrlCustom: '',
+    limiteDisparo: '',
   })
 
   // Sincronizar unidadeId do header quando muda
@@ -128,7 +130,7 @@ export function ModalNovaCampanha({ open, onOpenChange, onCriada, unidadeId }: P
           {step === 1 && <StepNumero state={state} set={set} />}
           {step === 2 && <StepTemplate state={state} set={set} />}
           {step === 3 && <StepVariaveis state={state} set={set} />}
-          {step === 4 && <StepRevisao state={state} onMediaUrl={(url) => set('mediaUrlCustom', url)} />}
+          {step === 4 && <StepRevisao state={state} onMediaUrl={(url) => set('mediaUrlCustom', url)} onLimiteDisparo={(v) => set('limiteDisparo', v)} />}
         </div>
 
         {/* Footer com navegação */}
@@ -944,7 +946,7 @@ function MediaHeaderUpload({ mediaUrl, onMediaUrl }: { mediaUrl: string; onMedia
 
 // ─── Step 5: Revisão ──────────────────────────────────────────────────────────
 
-function StepRevisao({ state, onMediaUrl }: { state: WizardState; onMediaUrl: (url: string) => void }) {
+function StepRevisao({ state, onMediaUrl, onLimiteDisparo }: { state: WizardState; onMediaUrl: (url: string) => void; onLimiteDisparo: (v: string) => void }) {
   const { numeros } = useNumerosMeta()
   const { templates } = useTemplatesMeta(state.numeroMetaId || null)
   const numero = numeros.find(n => n.id === state.numeroMetaId)
@@ -980,6 +982,22 @@ function StepRevisao({ state, onMediaUrl }: { state: WizardState; onMediaUrl: (u
         <InfoItem label="Contatos" value={`${state.contatos.length}`} />
         <InfoItem label="Número" value={numero?.nome ?? '—'} />
         <InfoItem label="Template" value={template?.nome ?? '—'} />
+      </div>
+
+      {/* Porcionamento do disparo (drip) */}
+      <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+        <label className="text-xs font-medium text-gray-400">Enviar por disparo (opcional)</label>
+        <input
+          type="number"
+          min={1}
+          value={state.limiteDisparo}
+          onChange={e => onLimiteDisparo(e.target.value)}
+          placeholder={`Vazio = todos (${state.contatos.length})`}
+          className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-amber-500"
+        />
+        <p className="text-[11px] text-gray-500 mt-1">
+          Envia esse tanto por vez e pausa sozinha. Ex.: 100 → manda 100 e pausa; em "Retomar" manda +100. Deixe vazio pra enviar todos de uma vez.
+        </p>
       </div>
 
       {/* Mídia do header IMAGE/VIDEO/DOCUMENT */}
@@ -1059,6 +1077,7 @@ function BotaoConfirmar({ state, onCriada, onClose }: { state: WizardState; onCr
           mapeamento_variaveis: state.mapeamento,
           media_url_custom: state.mediaUrlCustom || null,
           custo_estimado: custoEstimado,
+          limite_disparo: state.limiteDisparo ? parseInt(state.limiteDisparo, 10) : null,
           status: 'rascunho',
         })
         .select('id')
