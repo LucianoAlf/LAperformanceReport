@@ -512,11 +512,13 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
   const summary = (tc.arguments?.summary as string) ?? ''
   const instrumento = (tc.arguments?.instrumento as string) ?? ''
   const classificacao = (tc.arguments?.classificacao as string) ?? ''
+  const perfil = (tc.arguments?.perfil as string) ?? ''
 
   // 0. Validar dados obrigatórios antes de transferir
   const dadosFaltando: string[] = []
   if (!leadName.trim()) dadosFaltando.push('nome do lead')
   if (!unitRaw.trim()) dadosFaltando.push('unidade desejada')
+  if (!perfil.trim()) dadosFaltando.push('perfil (criança ou adulto)')
 
   if (dadosFaltando.length > 0) {
     return {
@@ -564,7 +566,7 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
       ...(ctx.conversa.session_data ?? {}),
       transferred_at: ctx.agora.toISOString(),
       transfer_unit: unitNorm, lead_name: leadName,
-      summary, instrumento, classificacao,
+      summary, instrumento, classificacao, perfil,
     },
   }).eq('id', ctx.conversa.id)
 
@@ -586,6 +588,10 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
       const unitTag = unitNorm.toLowerCase() === 'campo grande' ? 'cg' : unitNorm.toLowerCase().replace(/\s+/g, '-')
       const campanhaLabel = (config.campanha_label as string) || 'campanha-meta'
       const newLabels = [campanhaLabel, unitTag]
+      // Perfil crianca/adulto define a marca (LA Music Kids vs Escola/adultos)
+      const perfilTag = perfil.toLowerCase().includes('crian') ? 'lamk'
+        : perfil.toLowerCase().includes('adult') ? 'emla' : null
+      if (perfilTag) newLabels.push(perfilTag)
       if (classificacao) newLabels.push(classificacao.toLowerCase())
       if (instrumento) {
         const instrumentoTag = instrumento.normalize('NFD').replace(/[\u0300-\u0326\u0328-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, '-')
