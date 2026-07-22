@@ -21,6 +21,9 @@ import type { ChatwootConfig } from '../_shared/chatwoot-api.ts'
 const DEFAULT_DEBOUNCE_MS = 3000
 const DEFAULT_MAX_PER_MINUTE = 20
 const MAX_TOOL_ITERATIONS = 5
+// Janela de reengajamento: após uma transferência, o bot só volta a triar o
+// mesmo lead depois deste prazo (evita reprocessar quem já está com consultor).
+const DIAS_REENGAJAMENTO = 4
 
 // Tools cuja execução JÁ é a resposta final ao lead (mandam mensagem direto pelo
 // WhatsApp) — depois delas não há nada a narrar, então o loop de tool-calling
@@ -542,12 +545,15 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
     u => u.name.toLowerCase() === unitNorm.toLowerCase()
   )
 
-  // 2. Check se já foi transferido
+  // 2. Check se já foi transferido DENTRO da janela de reengajamento.
+  // Transferências mais antigas que DIAS_REENGAJAMENTO não bloqueiam (lead volta a triar).
+  const cutoffReengajamento = new Date(ctx.agora.getTime() - DIAS_REENGAJAMENTO * 24 * 60 * 60 * 1000).toISOString()
   const { data: jaTransferido } = await ctx.supabase
     .from('agente_conversas')
     .select('id')
     .eq('telefone', ctx.telefone)
     .eq('status', 'transferred')
+    .gte('transferido_em', cutoffReengajamento)
     .limit(1)
     .maybeSingle()
 
@@ -561,6 +567,7 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
   // 3. Marcar conversa como transferida
   await ctx.supabase.from('agente_conversas').update({
     bot_ativo: false, status: 'transferred',
+    transferido_em: ctx.agora.toISOString(),
     session_data: {
       ...(ctx.conversa.session_data ?? {}),
       transferred_at: ctx.agora.toISOString(),

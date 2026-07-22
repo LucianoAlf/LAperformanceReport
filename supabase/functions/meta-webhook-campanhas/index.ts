@@ -224,9 +224,11 @@ async function processarMensagem(supabase: any, phoneNumberId: string, msg: any,
       await supabase.from('agente_conversas').update({ bot_ativo: false }).eq('id', agConvExistente.id)
     }
 
-    // 7c. Lead já transferido? (anti-spam)
+    // 7c. Lead já transferido DENTRO da janela de reengajamento? (anti-spam)
+    // Após 4 dias da transferência, o lead volta a ser triado (cai no 7d, que reseta a conversa).
+    const cutoffReengajamento = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString()
     let qTransf = supabase.from('agente_conversas').select('id, agente_id, session_data')
-      .eq('telefone', telefone).eq('status', 'transferred')
+      .eq('telefone', telefone).eq('status', 'transferred').gte('transferido_em', cutoffReengajamento)
     qTransf = eqOrNull(qTransf, 'unidade_id', unidadeId)
     const { data: convTransferida } = await qTransf.order('ultima_mensagem_em', { ascending: false }).limit(1).maybeSingle()
 
@@ -262,8 +264,15 @@ async function processarMensagem(supabase: any, phoneNumberId: string, msg: any,
         .select('id').eq('agente_id', agenteCaixa.id).eq('telefone', telefone).maybeSingle()
 
       if (convDoAgente) {
+        // Reabrir = triagem NOVA. Reseta o estado (inclusive uma transferência já
+        // vencida pela janela) pra o bot não puxar o histórico/dados antigos:
+        // status volta a 'active', zera session_data/contador e move o corte de
+        // histórico (created_at) pra agora.
+        const agoraIso = new Date().toISOString()
         await supabase.from('agente_conversas').update({
-          bot_ativo: true, unidade_id: unidadeId, ultima_mensagem_em: new Date().toISOString(),
+          bot_ativo: true, unidade_id: unidadeId, ultima_mensagem_em: agoraIso,
+          status: 'active', transferido_em: null,
+          session_data: {}, total_mensagens: 0, created_at: agoraIso,
         }).eq('id', convDoAgente.id)
       } else {
         await supabase.from('agente_conversas').insert({
