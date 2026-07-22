@@ -28,6 +28,8 @@ import {
 } from '@/lib/professoresKpisAgregados';
 import { useHealthScoreProfessorV3Performance } from '@/hooks/useHealthScoreProfessorV3Performance';
 import {
+  averageHealthScoreV3Coverage,
+  formatHealthScoreV3Coverage,
   isHealthScoreV3SnapshotRankable,
 } from '@/lib/healthScoreProfessorV3Performance';
 import {
@@ -241,10 +243,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
     ? visibleHealthSnapshots.reduce((total, snapshot) => total + Number(snapshot.score), 0)
       / visibleHealthSnapshots.length
     : null;
-  const averageCoverage = visibleHealthSnapshots.length > 0
-    ? visibleHealthSnapshots.reduce((total, snapshot) => total + Number(snapshot.cobertura || 0), 0)
-      / visibleHealthSnapshots.length
-    : null;
+  const averageCoverage = averageHealthScoreV3Coverage(visibleHealthSnapshots);
   const rankingHabilitado = healthSnapshotsEquipe.some(isHealthScoreV3SnapshotRankable);
   const professorNameById = new Map(dados.professores.map((professor) => [professor.id, professor.nome]));
   const rankingHealthScore = healthSnapshotsEquipe
@@ -254,7 +253,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
       id: snapshot.professorId,
       nome: professorNameById.get(snapshot.professorId) || `Professor ${snapshot.professorId}`,
       valor: Number(snapshot.score),
-      subvalor: `${Number(snapshot.cobertura || 0).toFixed(0)}% de cobertura`,
+      subvalor: `${formatHealthScoreV3Coverage(snapshot.cobertura)} de cobertura`,
     }));
 
   const rankingMatriculadores = [...dados.professores]

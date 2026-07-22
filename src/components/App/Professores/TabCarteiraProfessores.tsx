@@ -21,6 +21,7 @@ import {
   filtrarKpisPorVinculosAtivos,
 } from '@/lib/professoresKpisAgregados';
 import {
+  formatHealthScoreV3Coverage,
   normalizeHealthScoreV3PerformanceRows,
   resolveHealthScoreV3MetricDisplay,
 } from '@/lib/healthScoreProfessorV3Performance';
@@ -576,7 +577,7 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
 
                 {/* Badge Health Score */}
                 <Tooltip content={carteira.health_score_exibivel
-                  ? `Health Score V3 ${carteira.health_score_estado_publicacao}: ${carteira.health_score?.toFixed(1)} (${carteira.health_status === 'saudavel' ? 'Saudável' : carteira.health_status === 'atencao' ? 'Atenção' : 'Crítico'}). Cobertura: ${carteira.health_score_cobertura?.toFixed(0) ?? '-'}%.`
+                  ? `Health Score V3 ${carteira.health_score_estado_publicacao}: ${carteira.health_score?.toFixed(1)} (${carteira.health_status === 'saudavel' ? 'Saudável' : carteira.health_status === 'atencao' ? 'Atenção' : 'Crítico'}). Cobertura: ${formatHealthScoreV3Coverage(carteira.health_score_cobertura)}.`
                   : `Health Score V3 sem base. ${carteira.health_score_motivo || 'Snapshot canônico indisponível para o recorte.'}`}>
                   <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${
                     !carteira.health_score_exibivel

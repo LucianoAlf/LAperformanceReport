@@ -231,6 +231,7 @@ export function rankHealthScoreV3Metric(
   metricKey: HealthMetricKeyV3,
 ): Array<{ professorId: number; value: number }> {
   return snapshots
+    .filter(isHealthScoreV3SnapshotRankable)
     .flatMap((snapshot) => {
       const display = resolveHealthScoreV3MetricDisplay(snapshot, metricKey);
       return display.rankable && display.value !== null
@@ -238,6 +239,24 @@ export function rankHealthScoreV3Metric(
         : [];
     })
     .sort((a, b) => b.value - a.value || a.professorId - b.professorId);
+}
+
+export function formatHealthScoreV3Coverage(cobertura: number | null | undefined): string {
+  return cobertura === null || cobertura === undefined
+    ? 'Sem base'
+    : `${cobertura.toFixed(1)}%`;
+}
+
+export function averageHealthScoreV3Coverage(
+  snapshots: Array<{ cobertura: number | null | undefined }>,
+): number | null {
+  const coverages = snapshots
+    .map((snapshot) => snapshot.cobertura)
+    .filter((value): value is number => value !== null && value !== undefined);
+
+  return coverages.length > 0
+    ? coverages.reduce((total, value) => total + value, 0) / coverages.length
+    : null;
 }
 
 export function isHealthScoreV3SnapshotRankable(

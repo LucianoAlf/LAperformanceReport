@@ -336,7 +336,31 @@ function gerarRanking(params: GerarRelatorioParams): string {
     p.healthV3?.rankingHabilitado && p.healthV3.estadoPublicacao === 'oficial'
       && p.healthV3.score !== null
   );
-  const presencasPublicaveis = professores.filter((p) => p.presenca_publicavel && p.taxa_presenca !== null);
+  const professoresRankeaveis = healthPublicaveis;
+  const presencasPublicaveis = professoresRankeaveis.filter(
+    (p) => p.presenca_publicavel && p.taxa_presenca !== null,
+  );
+
+  if (healthPublicaveis.length === 0) {
+    const linhas = [
+      ...cabecalho('RELATORIO RANKING DE PROFESSORES', params),
+      '👨‍🏫 *RESUMO DA EQUIPE*',
+      '━━━━━━━━━━━━━━━━━━━━━━',
+      `• Professores: *${resumo.totalProfessores}*`,
+      `• Alunos em carteira: *${resumo.totalAlunos}*`,
+      `• Media alunos/turma: *${n(resumo.mediaAlunosTurma, 2)}*`,
+      `• Presenca media: *${resumo.mediaPresenca === null ? 'Em auditoria' : `${n(resumo.mediaPresenca, 1)}%`}*`,
+      `• Health Score parcial medio: *${resumo.mediaHealth === null ? 'Sem base' : n(resumo.mediaHealth, 1)}*`,
+      `• Scores parciais visiveis: *${resumo.totalHealthParciais}*`,
+      '',
+      '🏆 *RANKING INDISPONIVEL*',
+      'O Health Score V3 ainda esta parcial.',
+      'Rankings e premiacoes serao liberados somente apos o fechamento oficial do ciclo.',
+      ...rodape(params),
+    ];
+
+    return linhas.join('\n');
+  }
 
   const linhas = [
     ...cabecalho('RELATORIO RANKING DE PROFESSORES', params),
@@ -351,18 +375,18 @@ function gerarRanking(params: GerarRelatorioParams): string {
     '',
     '🏆 *TOP HEALTH SCORE*',
     ...(healthPublicaveis.length > 0
-      ? limitar([...healthPublicaveis].sort((a, b) => Number(b.health_score) - Number(a.health_score))).map((p, i) =>
+      ? limitar([...healthPublicaveis].sort((a, b) => Number(b.healthV3?.score) - Number(a.healthV3?.score))).map((p, i) =>
           linhaRanking(p, i, `${Math.round(Number(p.healthV3?.score))} pontos`)
         )
       : ['Ranking indisponivel: o Health Score parcial nao participa de ranking ou premiacao.']),
     '',
     '👥 *TOP CARTEIRA*',
-    ...limitar([...professores].sort((a, b) => b.total_alunos - a.total_alunos)).map((p, i) =>
+    ...limitar([...professoresRankeaveis].sort((a, b) => b.total_alunos - a.total_alunos)).map((p, i) =>
       linhaRanking(p, i, `${p.total_alunos} alunos`)
     ),
     '',
     '📊 *TOP MEDIA ALUNOS/TURMA*',
-    ...limitar([...professores].sort((a, b) => b.media_alunos_turma - a.media_alunos_turma)).map((p, i) =>
+    ...limitar([...professoresRankeaveis].sort((a, b) => b.media_alunos_turma - a.media_alunos_turma)).map((p, i) =>
       linhaRanking(p, i, `${n(p.media_alunos_turma, 2)} alunos/turma`)
     ),
     '',
@@ -374,7 +398,7 @@ function gerarRanking(params: GerarRelatorioParams): string {
       : ['Em auditoria: nenhuma taxa de presenca atingiu confianca alta neste recorte.']),
     '',
     '🎓 *TOP MATRICULADORES POS-EXPERIMENTAL*',
-    ...limitar([...professores].sort((a, b) => b.matriculas_pos_exp - a.matriculas_pos_exp)).map((p, i) =>
+    ...limitar([...professoresRankeaveis].sort((a, b) => b.matriculas_pos_exp - a.matriculas_pos_exp)).map((p, i) =>
       linhaRanking(p, i, `${p.matriculas_pos_exp} matriculas / ${p.experimentais} experimentais`)
     ),
     ...rodape(params),

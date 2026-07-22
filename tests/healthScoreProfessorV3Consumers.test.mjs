@@ -36,11 +36,32 @@ test('relatorio da coordenacao deriva totais das mesmas linhas canonicas dos pro
   const modal = read('src/components/App/Professores/ModalRelatorioCoordenacao.tsx');
 
   assert.match(modal, /const totaisCanonicos = calcularTotaisRelatorioCoordenacao\(kpisCanonicos\)/);
-  assert.match(modal, /totais:\s*\{[\s\S]*\.\.\.totaisCanonicos/);
+  assert.match(modal, /totais:\s*\{[\s\S]*\.\.\.dadosCanonicos\.totaisCanonicos/);
   assert.match(modal, /fonte_totais:\s*'kpis_professores_canonicos'/);
   assert.match(modal, /kpi\.presenca_publicavel[\s\S]*kpi\.presenca_eventos_confirmados\s*>\s*0/);
   assert.match(modal, /Number\(kpi\.media_presenca\)\s*\*\s*kpi\.presenca_eventos_confirmados/);
   assert.match(modal, /media_presenca:\s*totalEventosPresenca\s*>\s*0/);
+});
+
+test('relatorios instantaneos nao dependem da RPC legada do relatorio mensal', () => {
+  const modal = read('src/components/App/Professores/ModalRelatorioCoordenacao.tsx');
+  const instantaneo = modal.slice(
+    modal.indexOf('const gerarRelatorioInstantaneo'),
+    modal.indexOf('const regenerarRelatorio'),
+  );
+
+  assert.match(instantaneo, /buscarKpisHealthV3RelatorioCoordenacao/);
+  assert.doesNotMatch(instantaneo, /buscarDadosRelatorioCoordenacao/);
+  assert.doesNotMatch(instantaneo, /get_dados_relatorio_coordenacao/);
+});
+
+test('relatorios da coordenacao usam o mesmo recorte de vinculos ativos da Performance', () => {
+  const modal = read('src/components/App/Professores/ModalRelatorioCoordenacao.tsx');
+
+  assert.match(modal, /filtrarKpisPorVinculosAtivos/);
+  assert.match(modal, /from\('professores'\)[\s\S]*\.eq\('ativo',\s*true\)/);
+  assert.match(modal, /from\('professores_unidades'\)[\s\S]*\.eq\('emusys_ativo',\s*true\)/);
+  assert.match(modal, /\.neq\('validacao_status',\s*'ignorado'\)/);
 });
 
 test('relatorio IA usa presenca operacional canonica e pondera pelos eventos confirmados', () => {
@@ -140,6 +161,10 @@ test('Dashboard e Analytics usam snapshots V3 sem habilitar ranking parcial', ()
   assert.match(analytics, /useHealthScoreProfessorV3Performance/);
   assert.match(analytics, /rankingHabilitado/);
   assert.match(analytics, /Health Score parcial/i);
+  assert.match(analytics, /averageHealthScoreV3Coverage/);
+  assert.doesNotMatch(analytics, /snapshot\.cobertura\s*\|\|\s*0/);
+  assert.doesNotMatch(dashboard, /Pilar financeiro/i);
+  assert.match(dashboard, /Fonte canônica do período/i);
 });
 
 test('Dashboard e Analytics resumem somente snapshots da equipe ativa no recorte', () => {
@@ -193,6 +218,8 @@ test('Carteira usa o snapshot V3 e nao recalcula o Health Score legado', () => {
   assert.match(carteira, /estadoPublicacao/);
   assert.match(carteira, /health_score_estado_publicacao === 'parcial'/);
   assert.match(carteira, /Parcial/);
+  assert.match(carteira, /formatHealthScoreV3Coverage/);
+  assert.doesNotMatch(carteira, /health_score_cobertura\?\.toFixed\(0\)\s*\?\?\s*['"]-['"]/);
   assert.doesNotMatch(carteira, /calcularHealthScore\s*\(/);
 });
 

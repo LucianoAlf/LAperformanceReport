@@ -41,6 +41,7 @@ import { useHealthScoreProfessorV3Performance } from '@/hooks/useHealthScoreProf
 import {
   isHealthScoreV3SnapshotVisible,
   rankHealthScoreV3Metric,
+  formatHealthScoreV3Coverage,
   resolveHealthScoreV3MetricDisplay,
   serializeHealthScoreV3ForAi,
   type HealthScoreV3MetricDisplay,
@@ -1169,7 +1170,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                             <div className="min-w-[240px] text-xs">
                               <p className="mb-1.5 font-bold text-slate-200">Health Score V3</p>
                               <p className="text-slate-300">
-                                Cobertura: <strong>{professor.healthV3?.cobertura?.toFixed(1) ?? '0'}%</strong>
+                                Cobertura: <strong>{formatHealthScoreV3Coverage(professor.healthV3?.cobertura)}</strong>
                               </p>
                               <p className="text-slate-300">
                                 Revisão: <strong>{professor.healthV3?.revisao ?? '-'}</strong>

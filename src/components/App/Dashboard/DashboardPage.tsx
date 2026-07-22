@@ -928,10 +928,10 @@ export function DashboardPage() {
           <KPICard
             icon={Target}
             label="Média Alunos/Turma"
-            tooltip="Total de alunos ativos dividido pelo total de turmas ativas. Indicador de eficiência operacional."
+            tooltip="Ocupações canônicas em turmas regulares divididas pelas turmas regulares elegíveis. Projetos e bandas não entram."
             value={dadosProfessores?.media_alunos_turma ?? '--'}
             format="number"
-            subvalue={dadosProfessores?.media_alunos_turma ? 'Pilar financeiro' : 'Aguardando Emusys'}
+            subvalue={dadosProfessores ? 'Fonte canônica do período' : 'Aguardando Emusys'}
             variant="rose"
           />
           <KPICard

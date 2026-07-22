@@ -127,11 +127,15 @@ test('normalizador batch preserva null, valor observado e auditoria sem fallback
   assert.equal(alunos.rankable, false);
 });
 
-test('ranking V3 aceita somente metrica publicavel e nunca transforma sem base em zero', async () => {
+test('ranking V3 aceita somente snapshot oficial habilitado e nunca transforma sem base em zero', async () => {
   assert.equal(fs.existsSync(helperPath), true, 'helper V3 da Performance ainda nao existe');
-  const { rankHealthScoreV3Metric } = await import(`../${helperPath}`);
+  const {
+    averageHealthScoreV3Coverage,
+    formatHealthScoreV3Coverage,
+    rankHealthScoreV3Metric,
+  } = await import(`../${helperPath}`);
 
-  const base = (professorId, value, publicavel) => ({
+  const base = (professorId, value, publicavel, oficial = false) => ({
     professorId,
     unidadeId: 'barra',
     escopo: 'unidade',
@@ -139,12 +143,15 @@ test('ranking V3 aceita somente metrica publicavel e nunca transforma sem base e
     trimestreInicio: '2026-07-01',
     configVersao: 1,
     revisao: 3,
-    score: null,
+    score: oficial ? 80 : null,
     cobertura: 25,
-    classificacao: 'sem_base',
+    classificacao: oficial ? 'saudavel' : 'sem_base',
     estado: 'provisorio',
-    snapshotPublicavel: false,
-    publicado: false,
+    estadoPublicacao: oficial ? 'oficial' : 'parcial',
+    rankingHabilitado: oficial,
+    scoreExibivel: oficial,
+    snapshotPublicavel: oficial,
+    publicado: oficial,
     motivoBloqueio: 'snapshot provisorio',
     regraVersaoSnapshot: 'v3',
     metrics: new Map([['media_turma', {
@@ -172,10 +179,22 @@ test('ranking V3 aceita somente metrica publicavel e nunca transforma sem base e
     base(1, 1.5, true),
     base(2, 9.9, false),
     base(3, null, false),
+    base(4, 1.7, true, true),
   ], 'media_turma');
 
-  assert.deepEqual(ranking.map((item) => item.professorId), [1]);
-  assert.equal(ranking[0].value, 1.5);
+  assert.deepEqual(ranking.map((item) => item.professorId), [4]);
+  assert.equal(ranking[0].value, 1.7);
+  assert.equal(formatHealthScoreV3Coverage(null), 'Sem base');
+  assert.equal(formatHealthScoreV3Coverage(25), '25.0%');
+  assert.equal(averageHealthScoreV3Coverage([
+    { cobertura: null },
+    { cobertura: 25 },
+    { cobertura: 75 },
+  ]), 50);
+  assert.equal(averageHealthScoreV3Coverage([
+    { cobertura: null },
+    { cobertura: undefined },
+  ]), null);
 });
 
 test('hook faz uma unica leitura batch e a tabela mantem rollback V2 por feature flag', () => {

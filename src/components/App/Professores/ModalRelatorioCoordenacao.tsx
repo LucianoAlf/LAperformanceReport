@@ -41,6 +41,10 @@ import {
   type KPIProfessorCanonico,
 } from '@/lib/professoresKpisCanonicos';
 import {
+  chaveProfessorUnidade,
+  filtrarKpisPorVinculosAtivos,
+} from '@/lib/professoresKpisAgregados';
+import {
   normalizeHealthScoreV3PerformanceRows,
   serializeHealthScoreV3ForAi,
 } from '@/lib/healthScoreProfessorV3Performance';
@@ -218,15 +222,10 @@ export function ModalRelatorioCoordenacao({
     };
   };
 
-  const buscarDadosRelatorioCoordenacao = async () => {
+  const buscarKpisHealthV3RelatorioCoordenacao = async () => {
     const { anoRelatorio, mesRelatorio } = validarCompetenciaMensal();
 
-    const [dadosResult, kpisResult, healthV3Result] = await Promise.all([
-      supabase.rpc('get_dados_relatorio_coordenacao', {
-        p_unidade_id: unidadeId,
-        p_ano: anoRelatorio,
-        p_mes: mesRelatorio
-      }),
+    const [kpisResult, healthV3Result, professoresAtivosResult, vinculosAtivosResult] = await Promise.all([
       buscarKpisProfessoresCanonicos({
         ano: anoRelatorio,
         mes: mesRelatorio,
@@ -237,24 +236,47 @@ export function ModalRelatorioCoordenacao({
         p_unidade_id: unidadeId,
         p_periodicidade: 'mensal',
       }),
+      supabase
+        .from('professores')
+        .select('id')
+        .eq('ativo', true),
+      supabase
+        .from('professores_unidades')
+        .select('professor_id, unidade_id')
+        .eq('emusys_ativo', true)
+        .neq('validacao_status', 'ignorado'),
     ]);
-    const { data: dadosRelatorio, error: errorDados } = dadosResult;
-
-    if (errorDados) {
-      console.error('Erro ao buscar dados:', errorDados);
-      throw new Error('Erro ao buscar dados do relatório');
-    }
 
     if (healthV3Result.error) {
       console.error('Erro ao buscar Health Score V3:', healthV3Result.error);
       throw new Error('Erro ao buscar o snapshot canônico do Health Score V3');
+    }
+    if (professoresAtivosResult.error || vinculosAtivosResult.error) {
+      console.error(
+        'Erro ao buscar vínculos ativos dos professores:',
+        professoresAtivosResult.error || vinculosAtivosResult.error,
+      );
+      throw new Error('Erro ao buscar o recorte ativo dos professores');
     }
     const healthV3ByProfessor = new Map(
       normalizeHealthScoreV3PerformanceRows(healthV3Result.data || [])
         .map((snapshot) => [snapshot.professorId, snapshot]),
     );
 
-    const kpisCanonicos = consolidarKpisProfessoresCanonicos(kpisResult);
+    const professoresAtivos = new Set(
+      (professoresAtivosResult.data || []).map((professor) => Number(professor.id)),
+    );
+    const vinculosAtivos = new Set(
+      (vinculosAtivosResult.data || [])
+        .map((vinculo) => chaveProfessorUnidade(
+          Number(vinculo.professor_id),
+          vinculo.unidade_id ? String(vinculo.unidade_id) : null,
+        ))
+        .filter((chave): chave is string => chave !== null),
+    );
+    const kpisCanonicos = consolidarKpisProfessoresCanonicos(
+      filtrarKpisPorVinculosAtivos(kpisResult, professoresAtivos, vinculosAtivos),
+    );
     const totaisCanonicos = calcularTotaisRelatorioCoordenacao(kpisCanonicos);
     const kpisComHealthV3 = kpisCanonicos.map((kpi) => ({
       ...kpi,
@@ -267,10 +289,36 @@ export function ModalRelatorioCoordenacao({
     }));
 
     return {
+      anoRelatorio,
+      mesRelatorio,
+      totaisCanonicos,
+      kpisComHealthV3,
+    };
+  };
+
+  const buscarDadosRelatorioCoordenacao = async () => {
+    const { anoRelatorio, mesRelatorio } = validarCompetenciaMensal();
+    const [dadosResult, dadosCanonicos] = await Promise.all([
+      supabase.rpc('get_dados_relatorio_coordenacao', {
+        p_unidade_id: unidadeId,
+        p_ano: anoRelatorio,
+        p_mes: mesRelatorio
+      }),
+      buscarKpisHealthV3RelatorioCoordenacao(),
+    ]);
+    const { data: dadosRelatorio, error: errorDados } = dadosResult;
+    const { kpisComHealthV3 } = dadosCanonicos;
+
+    if (errorDados) {
+      console.error('Erro ao buscar dados:', errorDados);
+      throw new Error('Erro ao buscar dados do relatório');
+    }
+
+    return {
       ...((dadosRelatorio || {}) as Record<string, unknown>),
       totais: {
         ...(((dadosRelatorio as { totais?: Record<string, unknown> } | null)?.totais) || {}),
-        ...totaisCanonicos,
+        ...dadosCanonicos.totaisCanonicos,
       },
       kpis_professores: kpisComHealthV3,
       contrato_pedagogico: {
@@ -346,9 +394,9 @@ export function ModalRelatorioCoordenacao({
     setTextoRelatorio('');
 
     try {
-      const dadosRelatorio = await buscarDadosRelatorioCoordenacao();
+      const dadosRelatorio = await buscarKpisHealthV3RelatorioCoordenacao();
       const professoresDaCompetencia = normalizarKpisProfessoresCoordenacao(
-        (dadosRelatorio as { kpis_professores?: unknown } | null)?.kpis_professores
+        dadosRelatorio.kpisComHealthV3
       );
       const podeUsarFallbackTela = periodoSelecionado.ano === ano
         && periodoSelecionado.mes === mes
