@@ -34,14 +34,6 @@ const corsHeaders = {
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
-// .eq('col', null) no Postgrest não vira IS NULL — nunca bate com nada. Agentes
-// sem unidade fixa (ex: Feirão, atende as 3 unidades pelo mesmo número) têm
-// unidade_id NULL, então toda query de conversas_campanha por unidade_id precisa
-// deste helper, senão o histórico da conversa nunca é encontrado.
-function eqOrNull(query: any, field: string, value: any) {
-  return value != null ? query.eq(field, value) : query.is(field, null)
-}
-
 // Auto-agenda o disparo da fila em background (sem depender do tick do cron
 // processar-mensagens-agendadas, que só varre a cada minuto). Espera a janela do
 // debounce fechar, tenta o MESMO atomic claim do cron escopado a esta fila e, se
@@ -223,14 +215,27 @@ Deno.serve(async (req) => {
       conversa = novaConv
     }
 
-    // 3b. Rate limiting
+    // 4. Se bot desativado (human takeover), sair
+    if (!conversa.bot_ativo) {
+      await supabase.from('agente_fila_mensagens').delete().eq('agente_id', agente_id).eq('telefone', telefone)
+      return json({ status: 'skipped', message: 'Bot desativado (human takeover)' })
+    }
+
+    // 5. Buscar número Meta (a caixa). Feito ANTES do rate limiting e do histórico
+    // porque o numero_meta_id é o que identifica a conversa desta caixa — sem ele,
+    // a busca por telefone pega conversa de outra campanha/caixa do mesmo lead.
+    const metaConfig = await getNumeroMeta(supabase, agente)
+    if (!metaConfig) throw new Error('Número Meta não configurado para este agente')
+
+    // 3b. Rate limiting — conta inbounds recentes NESTA caixa (numero_meta_id),
+    // não em qualquer conversa do telefone.
     const maxPerMinute = antiSpam?.max_messages_per_minute ?? DEFAULT_MAX_PER_MINUTE
     if (maxPerMinute > 0 && !novaConversa) {
       const umMinutoAtras = new Date(agora.getTime() - 60000).toISOString()
-      const { data: convPrincipal } = await eqOrNull(
-        supabase.from('conversas_campanha').select('id').eq('telefone', telefone),
-        'unidade_id', unidade_id,
-      ).maybeSingle()
+      const { data: convPrincipal } = await supabase
+        .from('conversas_campanha').select('id')
+        .eq('telefone', telefone).eq('numero_meta_id', metaConfig.id)
+        .maybeSingle()
 
       if (convPrincipal) {
         const { count } = await supabase
@@ -246,16 +251,6 @@ Deno.serve(async (req) => {
         }
       }
     }
-
-    // 4. Se bot desativado (human takeover), sair
-    if (!conversa.bot_ativo) {
-      await supabase.from('agente_fila_mensagens').delete().eq('agente_id', agente_id).eq('telefone', telefone)
-      return json({ status: 'skipped', message: 'Bot desativado (human takeover)' })
-    }
-
-    // 5. Buscar número Meta
-    const metaConfig = await getNumeroMeta(supabase, agente)
-    if (!metaConfig) throw new Error('Número Meta não configurado para este agente')
 
     // 5b. Mensagem de boas-vindas para novas conversas
     if (novaConversa && agente.mensagem_boas_vindas) {
@@ -300,16 +295,20 @@ Deno.serve(async (req) => {
       return json({ status: 'skipped', message: 'Nenhum texto para processar' })
     }
 
-    // 8. Montar contexto para IA — histórico de mensagens
-    const { data: convPrincipal } = await eqOrNull(
-      supabase.from('conversas_campanha').select('id').eq('telefone', telefone),
-      'unidade_id', unidade_id,
-    ).order('ultima_mensagem_em', { ascending: false }).limit(1).maybeSingle()
+    // 8. Montar contexto para IA — histórico de mensagens DESTA caixa (numero_meta_id
+    // + telefone = conversa única), cortando o que é anterior ao início desta conversa
+    // do agente (conversa.created_at). Sem o corte, uma campanha nova que reusa o mesmo
+    // número puxaria as mensagens da campanha antiga (mesma linha de conversas_campanha).
+    const { data: convPrincipal } = await supabase
+      .from('conversas_campanha').select('id')
+      .eq('telefone', telefone).eq('numero_meta_id', metaConfig.id)
+      .maybeSingle()
 
     const { data: historico } = await supabase
       .from('mensagens_campanha')
       .select('direcao, texto, tipo, created_at, enviado_por_agente')
       .eq('conversa_id', convPrincipal?.id ?? '')
+      .gte('created_at', conversa.created_at)
       .order('created_at', { ascending: true })
       .limit(30)
 
@@ -451,11 +450,11 @@ Deno.serve(async (req) => {
 
 async function getNumeroMeta(supabase: any, agente: any) {
   if (agente.numero_meta_id) {
-    const { data } = await supabase.from('numeros_meta').select('phone_number_id, access_token').eq('id', agente.numero_meta_id).single()
-    return data ? { phone_number_id: data.phone_number_id, access_token: data.access_token } : null
+    const { data } = await supabase.from('numeros_meta').select('id, phone_number_id, access_token').eq('id', agente.numero_meta_id).single()
+    return data ? { id: data.id, phone_number_id: data.phone_number_id, access_token: data.access_token } : null
   }
-  const { data } = await supabase.from('numeros_meta').select('phone_number_id, access_token').eq('unidade_id', agente.unidade_id).eq('is_default', true).single()
-  return data ? { phone_number_id: data.phone_number_id, access_token: data.access_token } : null
+  const { data } = await supabase.from('numeros_meta').select('id, phone_number_id, access_token').eq('unidade_id', agente.unidade_id).eq('is_default', true).single()
+  return data ? { id: data.id, phone_number_id: data.phone_number_id, access_token: data.access_token } : null
 }
 
 async function salvarMensagemSaida(supabase: any, unidadeId: string, metaConfig: any, telefone: string, texto: string, agenteId: string, numeroMetaId?: string, waMessageId?: string) {
