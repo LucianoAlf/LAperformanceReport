@@ -3,8 +3,10 @@
 //
 // Chamada pelo cron da la-hq (followup-cron.sh) quando um lead chega ao estágio 5
 // e passa ~24h sem resposta. Recebe o transcript já pronto (o cron tem em mãos),
-// roda o LLM (Gemini) em DOIS passos — portão anti-contaminação + motivo — e grava
+// roda o LLM (OpenAI) em DOIS passos — portão anti-contaminação + motivo — e grava
 // o resultado no LA Report. NÃO acessa o Chatwoot (o transcript vem no corpo).
+// (Era Gemini até 2026-07-22; migrado p/ OpenAI após a chave Gemini ser bloqueada
+//  como vazada. Chave OpenAI = assistente_ia_config.openai_api_key, fallback env.)
 //
 // Modos:
 //   dry_run=true            -> classifica, tenta o match por telefone, devolve tudo, NÃO grava nada.
@@ -20,9 +22,8 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
-const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent";
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const OPENAI_MODEL = "gpt-4.1-mini";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -64,16 +65,18 @@ REGRAS:
 - Pode haver mais de um motivo em motivos[], mas escolha um motivo_principal.
 - resumo: uma frase curta em pt-BR explicando a decisão.`;
 
+// Structured Outputs (strict): todos os campos required; motivo_principal null quando não é lead_frio.
 const responseSchema = {
   type: "object",
   properties: {
     tipo_registro: { type: "string", enum: TIPOS_REGISTRO },
-    motivo_principal: { type: "string", enum: MOTIVOS },
+    motivo_principal: { anyOf: [{ type: "string", enum: MOTIVOS }, { type: "null" }] },
     motivos: { type: "array", items: { type: "string", enum: MOTIVOS } },
     confianca: { type: "number" },
     resumo: { type: "string" },
   },
-  required: ["tipo_registro", "motivos", "confianca", "resumo"],
+  required: ["tipo_registro", "motivo_principal", "motivos", "confianca", "resumo"],
+  additionalProperties: false,
 };
 
 function onlyDigits(s: string): string {
@@ -90,24 +93,37 @@ function phoneVariants(raw: string): string[] {
   return [...set];
 }
 
-async function classify(transcript: string) {
+// Mesma resolução de chave do agente-webhook: banco primeiro, env como fallback.
+async function getOpenAIKey(supabase: any): Promise<string> {
+  const { data } = await supabase
+    .from("assistente_ia_config")
+    .select("openai_api_key")
+    .limit(1)
+    .single();
+  return data?.openai_api_key ?? Deno.env.get("OPENAI_API_KEY") ?? "";
+}
+
+async function classify(transcript: string, apiKey: string) {
   const body = {
-    systemInstruction: { parts: [{ text: SYSTEM }] },
-    contents: [{ role: "user", parts: [{ text: "Conversa:\n" + transcript }] }],
-    generationConfig: {
-      temperature: 0,
-      responseMimeType: "application/json",
-      responseSchema,
+    model: OPENAI_MODEL,
+    temperature: 0,
+    messages: [
+      { role: "system", content: SYSTEM },
+      { role: "user", content: "Conversa:\n" + transcript },
+    ],
+    response_format: {
+      type: "json_schema",
+      json_schema: { name: "classificacao_desinteresse", strict: true, schema: responseSchema },
     },
   };
-  const res = await fetch(GEMINI_URL + "?key=" + GEMINI_API_KEY, {
+  const res = await fetch(OPENAI_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify(body),
   });
   const data = await res.json();
-  if (data.error) throw new Error("Gemini: " + JSON.stringify(data.error));
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+  if (data.error) throw new Error("OpenAI: " + JSON.stringify(data.error));
+  const text = data.choices?.[0]?.message?.content || "{}";
   return JSON.parse(text);
 }
 
@@ -138,8 +154,10 @@ Deno.serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
   // 1. classificar (gate + motivo)
+  const apiKey = await getOpenAIKey(supabase);
+  if (!apiKey) return json({ ok: false, error: "sem chave OpenAI (assistente_ia_config/env)" }, 500);
   let cls: any;
-  try { cls = await classify(String(transcript)); }
+  try { cls = await classify(String(transcript), apiKey); }
   catch (e) { return json({ ok: false, error: String(e) }, 502); }
 
   // 2. match do lead por telefone
@@ -193,7 +211,7 @@ Deno.serve(async (req) => {
         motivos: cls.motivos ?? [],
         confianca: cls.confianca ?? null,
         fonte: "ia",
-        modelo: "gemini-3-flash-preview",
+        modelo: OPENAI_MODEL,
         conversation_id: conversationId,
       },
     })

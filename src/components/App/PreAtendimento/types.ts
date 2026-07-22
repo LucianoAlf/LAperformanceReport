@@ -161,6 +161,9 @@ export interface LeadCRM {
 
   // Campanhas que trouxeram o lead (histórico — ver leads_campanhas)
   leads_campanhas?: { campanha_nome: string; campanha_slug: string; created_at: string }[];
+
+  // Classificação de desinteresse pela IA (crm_lead_historico, tipo='desinteresse_frio')
+  desinteresse?: { dados: { tipo_registro?: string; motivo_principal?: string | null } | null; created_at: string }[];
 }
 
 export interface LeadExperimental {

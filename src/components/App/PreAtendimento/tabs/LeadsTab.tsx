@@ -79,6 +79,7 @@ export function LeadsTab({ unidadeId, ano, mes, onLeadClick, onNovoLead, onAgend
   const [filtroCanal, setFiltroCanal] = useState<string>('todos');
   const [filtroCurso, setFiltroCurso] = useState<string>('todos');
   const [filtroTemperatura, setFiltroTemperatura] = useState<string>('todos');
+  const [filtroDesinteresse, setFiltroDesinteresse] = useState<string>('todos');
   const [filtroCampanha, setFiltroCampanha] = useState<string>('todos');
   const [filtroKPI, setFiltroKPI] = useState<string>('todos');
   const [mostrarFiltros, setMostrarFiltros] = useState(false);
@@ -133,6 +134,13 @@ export function LeadsTab({ unidadeId, ano, mes, onLeadClick, onNovoLead, onAgend
       resultado = resultado.filter(l => l.temperatura === filtroTemperatura);
     }
 
+    // Filtro por desinteresse classificado pela IA (só lead_frio genuíno tem motivo)
+    if (filtroDesinteresse === 'com') {
+      resultado = resultado.filter(l =>
+        (l.desinteresse ?? []).some(d => d.dados?.tipo_registro === 'lead_frio')
+      );
+    }
+
     // Filtro por campanha de origem
     if (filtroCampanha !== 'todos') {
       resultado = resultado.filter(l =>
@@ -171,7 +179,7 @@ export function LeadsTab({ unidadeId, ano, mes, onLeadClick, onNovoLead, onAgend
     });
 
     return resultado;
-  }, [leads, busca, filtroEtapa, filtroUnidade, filtroTemperatura, filtroCampanha, filtroKPI, ordenacao]);
+  }, [leads, busca, filtroEtapa, filtroUnidade, filtroTemperatura, filtroDesinteresse, filtroCampanha, filtroKPI, ordenacao]);
 
   // Campanhas distintas presentes nos leads carregados (para o filtro)
   const campanhasDisponiveis = useMemo(() => {
@@ -237,13 +245,14 @@ export function LeadsTab({ unidadeId, ano, mes, onLeadClick, onNovoLead, onAgend
     setFiltroCanal('todos');
     setFiltroCurso('todos');
     setFiltroTemperatura('todos');
+    setFiltroDesinteresse('todos');
     setFiltroCampanha('todos');
     setFiltroKPI('todos');
     setPagina(1);
   };
 
   const temFiltrosAtivos = busca || filtroEtapa !== 'todos' || filtroUnidade !== 'todos' ||
-    filtroTemperatura !== 'todos' || filtroCampanha !== 'todos' || filtroKPI !== 'todos';
+    filtroTemperatura !== 'todos' || filtroDesinteresse !== 'todos' || filtroCampanha !== 'todos' || filtroKPI !== 'todos';
 
   // Salvar curso inline
   const salvarCursoInline = async (leadId: number, cursoId: string) => {
@@ -359,6 +368,16 @@ export function LeadsTab({ unidadeId, ano, mes, onLeadClick, onNovoLead, onAgend
             <SelectItem value="quente">🔥 Quente</SelectItem>
             <SelectItem value="morno">🌡️ Morno</SelectItem>
             <SelectItem value="frio">❄️ Frio</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={filtroDesinteresse} onValueChange={v => { setFiltroDesinteresse(v); setPagina(1); }}>
+          <SelectTrigger className="w-[190px] bg-slate-800/50 border-slate-700">
+            <SelectValue placeholder="Desinteresse" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Desinteresse: todos</SelectItem>
+            <SelectItem value="com">🥶 Com motivo (IA)</SelectItem>
           </SelectContent>
         </Select>
 
