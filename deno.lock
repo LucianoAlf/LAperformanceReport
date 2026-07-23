@@ -82,7 +82,11 @@
         "npm:vite@^6.2.0",
         "npm:xlsx@~0.18.5",
         "npm:zod@^4.3.5"
-      ]
+      ],
+      "overrides": {
+        "react": "^19.2.3",
+        "react-dom": "^19.2.3"
+      }
     }
   }
 }
