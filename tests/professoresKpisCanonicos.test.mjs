@@ -9,6 +9,7 @@ const carteiraHistoricaMigrationPath = 'supabase/migrations/20260713232404_kpis_
 const carteiraSeguraMigrationPath = 'supabase/migrations/20260713233627_kpis_professores_carteira_rpc_segura.sql';
 const performanceCanonicaMigrationPath = 'supabase/migrations/20260714233000_professores_performance_junho_canonica.sql';
 const mediaTurmaRestauracaoMigrationPath = 'supabase/migrations/20260715151000_professores_media_turma_pessoas_unicas.sql';
+const carteiraSegmentosMigrationPath = 'supabase/migrations/20260719202000_professores_carteira_segmentos_canonicos.sql';
 const conversaoVinculoMigrationPath = 'supabase/migrations/20260714234500_professores_conversao_vinculo_direto.sql';
 const snapshotAutomaticoMigrationPath = 'supabase/migrations/20260714235500_professores_snapshot_fechamento_automatico.sql';
 const performancePath = 'src/components/App/Professores/TabPerformanceProfessores.tsx';
@@ -33,16 +34,22 @@ test('migration define uma unica fonte canonica por competencia', () => {
 
 test('media oficial usa pessoas unicas e nao infere ocupacoes de reagendamentos', () => {
   const baseMigration = readOptional(performanceCanonicaMigrationPath);
-  const migration = readOptional(mediaTurmaRestauracaoMigrationPath);
+  const restorationMigration = readOptional(mediaTurmaRestauracaoMigrationPath);
+  const migration = readOptional(carteiraSegmentosMigrationPath);
 
   assert.match(baseMigration, /pessoa_chave/i);
   assert.match(baseMigration, /turma_chave/i);
   assert.match(baseMigration, /curso_emusys_depara/i);
   assert.match(baseMigration, /d\.unidade_id\s*=\s*ae\.unidade_id/i);
   assert.match(baseMigration, /d\.emusys_disciplina_id\s*=\s*ae\.curso_emusys_id/i);
-  assert.match(migration, /count\s*\(\s*distinct\s+b\.pessoa_chave\s*\)/i);
-  assert.match(migration, /count\s*\(\s*distinct\s+\(\s*b\.pessoa_chave\s*,\s*b\.turma_chave\s*\)\s*\)/i);
-  assert.match(migration, /reagendad[oa]/i);
+  assert.match(restorationMigration, /reagendad[oa]/i);
+  assert.match(migration, /get_carteira_professor_periodo_detalhe_canonico_v1/i);
+  assert.match(migration, /count\s*\(\s*distinct\s+d\.pessoa_chave\s*\)/i);
+  assert.match(
+    migration,
+    /count\s*\(\s*distinct\s+jsonb_build_array\s*\(\s*d\.pessoa_chave\s*,\s*d\.ocupacao_chave\s*\)\s*\)/i,
+  );
+  assert.match(migration, /segmentacao_incompleta/i);
 });
 
 test('competencia fechada usa snapshot auditado sem reescrever historico', () => {
@@ -137,9 +144,10 @@ test('rpc publica encapsula a carteira sem expor tabelas canonicas ao navegador'
 test('relatorio com IA prioriza health score canonico', () => {
   const edge = readOptional(edgePath);
 
-  assert.match(edge, /health_score/);
-  assert.match(edge, /health_status/);
-  assert.match(edge, /Number\.isFinite/);
+  assert.match(edge, /parseHealthScoreV3Payload/);
+  assert.match(edge, /isHealthScoreV3Visible/);
+  assert.match(edge, /health_score_v3/);
+  assert.doesNotMatch(edge, /calcularHealthScore/);
 });
 
 test('totais do relatorio recomputam taxas pelos numeradores canonicos', () => {

@@ -4,6 +4,17 @@ export type TipoRelatorioCoordenacaoInstantaneo =
   | 'presenca'
   | 'retencao';
 
+export interface HealthV3RelatorioCoordenacao {
+  score: number | null;
+  cobertura: number | null;
+  classificacao: string | null;
+  estadoPublicacao: 'parcial' | 'oficial' | 'sem_base';
+  scoreExibivel: boolean;
+  rankingHabilitado: boolean;
+  periodicidade: 'mensal' | 'ciclo' | 'legado_calendario';
+  cicloCodigo: string;
+}
+
 export interface ProfessorRelatorioCoordenacao {
   id: number;
   nome: string;
@@ -34,6 +45,7 @@ export interface ProfessorRelatorioCoordenacao {
   health_status: 'critico' | 'atencao' | 'saudavel' | null;
   health_score_confiavel: boolean;
   fator_demanda_ponderado: number;
+  healthV3?: HealthV3RelatorioCoordenacao | null;
 }
 
 interface GerarRelatorioParams {
@@ -146,6 +158,22 @@ export function normalizarKpisProfessoresCoordenacao(
     const healthInformado = healthScoreConfiavel
       ? numeroOuNull(item.health_score ?? item.health)
       : null;
+    const healthV3Value = item.health_score_v3 ?? item.healthV3;
+    const healthV3Raw = healthV3Value && typeof healthV3Value === 'object'
+      ? healthV3Value as Record<string, unknown>
+      : null;
+    const healthV3: HealthV3RelatorioCoordenacao | null = healthV3Raw ? {
+      score: numeroOuNull(healthV3Raw.score),
+      cobertura: numeroOuNull(healthV3Raw.cobertura),
+      classificacao: healthV3Raw.classificacao ? String(healthV3Raw.classificacao) : null,
+      estadoPublicacao: String(
+        healthV3Raw.estado_publicacao ?? healthV3Raw.estadoPublicacao ?? 'sem_base',
+      ) as HealthV3RelatorioCoordenacao['estadoPublicacao'],
+      scoreExibivel: (healthV3Raw.score_exibivel ?? healthV3Raw.scoreExibivel) === true,
+      rankingHabilitado: (healthV3Raw.ranking_habilitado ?? healthV3Raw.rankingHabilitado) === true,
+      periodicidade: String(healthV3Raw.periodicidade || 'legado_calendario') as HealthV3RelatorioCoordenacao['periodicidade'],
+      cicloCodigo: String(healthV3Raw.ciclo_codigo ?? healthV3Raw.cicloCodigo ?? ''),
+    } : null;
 
     return {
       id: numeroSeguro(item.professor_id ?? item.id) || index + 1,
@@ -183,6 +211,7 @@ export function normalizarKpisProfessoresCoordenacao(
         : normalizarHealthStatus(item.health_status ?? item.status, healthInformado),
       health_score_confiavel: healthScoreConfiavel && healthInformado !== null,
       fator_demanda_ponderado: numeroSeguro(item.fator_demanda_ponderado) || 1,
+      healthV3,
     };
   });
 }
@@ -237,7 +266,9 @@ function rodape(params: GerarRelatorioParams): string[] {
   ];
 }
 
-function calcularResumo(professores: ProfessorRelatorioCoordenacao[]) {
+export function calcularResumoRelatorioCoordenacao(
+  professores: ProfessorRelatorioCoordenacao[],
+) {
   const totalProfessores = professores.length;
   const totalAlunos = professores.reduce((acc, p) => acc + Number(p.total_alunos || 0), 0);
   const totalTurmas = professores.reduce((acc, p) => acc + Number(p.total_turmas || 0), 0);
@@ -249,19 +280,30 @@ function calcularResumo(professores: ProfessorRelatorioCoordenacao[]) {
   const totalExperimentais = professores.reduce((acc, p) => acc + Number(p.experimentais || 0), 0);
   const totalMatriculasPosExp = professores.reduce((acc, p) => acc + Number(p.matriculas_pos_exp || 0), 0);
   const presencasPublicaveis = professores.filter((p) =>
-    p.presenca_publicavel && p.taxa_presenca !== null
+    p.presenca_publicavel
+      && p.taxa_presenca !== null
+      && p.presenca_eventos_confirmados > 0
   );
   const healthPublicaveis = professores.filter((p) =>
-    p.health_score_confiavel && p.health_score !== null
+    p.healthV3?.rankingHabilitado && p.healthV3.estadoPublicacao === 'oficial'
+      && p.healthV3.score !== null
   );
-  const mediaPresenca = presencasPublicaveis.length > 0
-    ? presencasPublicaveis.reduce((acc, p) => acc + Number(p.taxa_presenca), 0) / presencasPublicaveis.length
+  const healthVisiveis = professores.filter((p) => p.healthV3?.scoreExibivel && p.healthV3.score !== null);
+  const totalEventosPresenca = presencasPublicaveis.reduce(
+    (acc, p) => acc + p.presenca_eventos_confirmados,
+    0,
+  );
+  const mediaPresenca = totalEventosPresenca > 0
+    ? presencasPublicaveis.reduce(
+      (acc, p) => acc + Number(p.taxa_presenca) * p.presenca_eventos_confirmados,
+      0,
+    ) / totalEventosPresenca
     : null;
   const mediaRetencao = totalProfessores > 0
     ? professores.reduce((acc, p) => acc + Number(p.taxa_retencao || 0), 0) / totalProfessores
     : 0;
-  const mediaHealth = healthPublicaveis.length > 0
-    ? healthPublicaveis.reduce((acc, p) => acc + Number(p.health_score), 0) / healthPublicaveis.length
+  const mediaHealth = healthVisiveis.length > 0
+    ? healthVisiveis.reduce((acc, p) => acc + Number(p.healthV3?.score), 0) / healthVisiveis.length
     : null;
 
   return {
@@ -282,15 +324,43 @@ function calcularResumo(professores: ProfessorRelatorioCoordenacao[]) {
     mediaRetencao,
     mediaHealth,
     totalHealthPublicaveis: healthPublicaveis.length,
+    totalHealthParciais: healthVisiveis.filter((p) => p.healthV3?.estadoPublicacao === 'parcial').length,
     taxaConversao: totalExperimentais > 0 ? (totalMatriculasPosExp / totalExperimentais) * 100 : 0,
   };
 }
 
 function gerarRanking(params: GerarRelatorioParams): string {
   const professores = [...params.professores];
-  const resumo = calcularResumo(professores);
-  const healthPublicaveis = professores.filter((p) => p.health_score_confiavel && p.health_score !== null);
-  const presencasPublicaveis = professores.filter((p) => p.presenca_publicavel && p.taxa_presenca !== null);
+  const resumo = calcularResumoRelatorioCoordenacao(professores);
+  const healthPublicaveis = professores.filter((p) =>
+    p.healthV3?.rankingHabilitado && p.healthV3.estadoPublicacao === 'oficial'
+      && p.healthV3.score !== null
+  );
+  const professoresRankeaveis = healthPublicaveis;
+  const presencasPublicaveis = professoresRankeaveis.filter(
+    (p) => p.presenca_publicavel && p.taxa_presenca !== null,
+  );
+
+  if (healthPublicaveis.length === 0) {
+    const linhas = [
+      ...cabecalho('RELATORIO RANKING DE PROFESSORES', params),
+      '👨‍🏫 *RESUMO DA EQUIPE*',
+      '━━━━━━━━━━━━━━━━━━━━━━',
+      `• Professores: *${resumo.totalProfessores}*`,
+      `• Alunos em carteira: *${resumo.totalAlunos}*`,
+      `• Media alunos/turma: *${n(resumo.mediaAlunosTurma, 2)}*`,
+      `• Presenca media: *${resumo.mediaPresenca === null ? 'Em auditoria' : `${n(resumo.mediaPresenca, 1)}%`}*`,
+      `• Health Score parcial medio: *${resumo.mediaHealth === null ? 'Sem base' : n(resumo.mediaHealth, 1)}*`,
+      `• Scores parciais visiveis: *${resumo.totalHealthParciais}*`,
+      '',
+      '🏆 *RANKING INDISPONIVEL*',
+      'O Health Score V3 ainda esta parcial.',
+      'Rankings e premiacoes serao liberados somente apos o fechamento oficial do ciclo.',
+      ...rodape(params),
+    ];
+
+    return linhas.join('\n');
+  }
 
   const linhas = [
     ...cabecalho('RELATORIO RANKING DE PROFESSORES', params),
@@ -300,22 +370,23 @@ function gerarRanking(params: GerarRelatorioParams): string {
     `• Alunos em carteira: *${resumo.totalAlunos}*`,
     `• Media alunos/turma: *${n(resumo.mediaAlunosTurma, 2)}*`,
     `• Presenca media: *${resumo.mediaPresenca === null ? 'Em auditoria' : `${n(resumo.mediaPresenca, 1)}%`}*`,
-    `• Health medio: *${resumo.mediaHealth === null ? 'Em auditoria' : n(resumo.mediaHealth, 1)}*`,
+    `• Health Score parcial medio: *${resumo.mediaHealth === null ? 'Sem base' : n(resumo.mediaHealth, 1)}*`,
+    `• Scores parciais visiveis: *${resumo.totalHealthParciais}*`,
     '',
     '🏆 *TOP HEALTH SCORE*',
     ...(healthPublicaveis.length > 0
-      ? limitar([...healthPublicaveis].sort((a, b) => Number(b.health_score) - Number(a.health_score))).map((p, i) =>
-          linhaRanking(p, i, `${Math.round(Number(p.health_score))} pontos`)
+      ? limitar([...healthPublicaveis].sort((a, b) => Number(b.healthV3?.score) - Number(a.healthV3?.score))).map((p, i) =>
+          linhaRanking(p, i, `${Math.round(Number(p.healthV3?.score))} pontos`)
         )
-      : ['Em auditoria: nenhum Health Score atingiu confianca alta neste recorte.']),
+      : ['Ranking indisponivel: o Health Score parcial nao participa de ranking ou premiacao.']),
     '',
     '👥 *TOP CARTEIRA*',
-    ...limitar([...professores].sort((a, b) => b.total_alunos - a.total_alunos)).map((p, i) =>
+    ...limitar([...professoresRankeaveis].sort((a, b) => b.total_alunos - a.total_alunos)).map((p, i) =>
       linhaRanking(p, i, `${p.total_alunos} alunos`)
     ),
     '',
     '📊 *TOP MEDIA ALUNOS/TURMA*',
-    ...limitar([...professores].sort((a, b) => b.media_alunos_turma - a.media_alunos_turma)).map((p, i) =>
+    ...limitar([...professoresRankeaveis].sort((a, b) => b.media_alunos_turma - a.media_alunos_turma)).map((p, i) =>
       linhaRanking(p, i, `${n(p.media_alunos_turma, 2)} alunos/turma`)
     ),
     '',
@@ -327,7 +398,7 @@ function gerarRanking(params: GerarRelatorioParams): string {
       : ['Em auditoria: nenhuma taxa de presenca atingiu confianca alta neste recorte.']),
     '',
     '🎓 *TOP MATRICULADORES POS-EXPERIMENTAL*',
-    ...limitar([...professores].sort((a, b) => b.matriculas_pos_exp - a.matriculas_pos_exp)).map((p, i) =>
+    ...limitar([...professoresRankeaveis].sort((a, b) => b.matriculas_pos_exp - a.matriculas_pos_exp)).map((p, i) =>
       linhaRanking(p, i, `${p.matriculas_pos_exp} matriculas / ${p.experimentais} experimentais`)
     ),
     ...rodape(params),
@@ -338,7 +409,7 @@ function gerarRanking(params: GerarRelatorioParams): string {
 
 function gerarCarteira(params: GerarRelatorioParams): string {
   const professores = [...params.professores];
-  const resumo = calcularResumo(professores);
+  const resumo = calcularResumoRelatorioCoordenacao(professores);
   const baixaMedia = professores
     .filter((p) => p.total_turmas > 0 && p.media_alunos_turma < 1.5)
     .sort((a, b) => a.media_alunos_turma - b.media_alunos_turma);
@@ -400,7 +471,7 @@ function gerarPresenca(params: GerarRelatorioParams): string {
       ...rodape(params),
     ].join('\n');
   }
-  const resumo = calcularResumo(professores);
+  const resumo = calcularResumoRelatorioCoordenacao(professores);
   const criticos = professores
     .filter((p) => Number(p.taxa_presenca) < 70)
     .sort((a, b) => Number(a.taxa_presenca) - Number(b.taxa_presenca));
@@ -446,7 +517,7 @@ function gerarPresenca(params: GerarRelatorioParams): string {
 
 function gerarRetencao(params: GerarRelatorioParams): string {
   const professores = [...params.professores];
-  const resumo = calcularResumo(professores);
+  const resumo = calcularResumoRelatorioCoordenacao(professores);
   const comEvasao = professores
     .filter((p) => p.evasoes_mes > 0 || p.nao_renovacoes_mes > 0)
     .sort((a, b) => (b.evasoes_mes + b.nao_renovacoes_mes) - (a.evasoes_mes + a.nao_renovacoes_mes));

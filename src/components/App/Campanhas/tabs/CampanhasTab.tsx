@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Play, Pause, RotateCw, Trash2, RefreshCw, Megaphone, CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react'
+import { Plus, Play, Pause, RotateCw, Trash2, RefreshCw, Megaphone, CheckCircle, XCircle, Clock, AlertTriangle, Pencil, Check, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useCampanhas, type Campanha, type FiltroStatus } from '../hooks/useCampanhas'
@@ -20,7 +20,7 @@ const STATUS_CFG: Record<string, { label: string; icon: React.ElementType; cls: 
 // ─── CampanhasTab ─────────────────────────────────────────────────────────────
 
 export function CampanhasTab({ unidadeId }: { unidadeId: string | null }) {
-  const { campanhas, loading, refetch, controlar, excluir, reenviarFalhas } = useCampanhas(unidadeId ?? undefined)
+  const { campanhas, loading, refetch, controlar, excluir, reenviarFalhas, atualizarLimiteDisparo, atualizarCustoReal } = useCampanhas(unidadeId ?? undefined)
   const [filtro, setFiltro] = useState<FiltroStatus>('todos')
   const [modalAberta, setModalAberta] = useState(false)
   const [drawerCampanha, setDrawerCampanha] = useState<Campanha | null>(null)
@@ -53,6 +53,18 @@ export function CampanhasTab({ unidadeId }: { unidadeId: string | null }) {
     const { error } = await reenviarFalhas(campanha.id)
     if (error) toast.error(error)
     else toast.success(`Reenviando ${campanha.falhas} contatos com falha`)
+  }
+
+  async function handleLimiteDisparo(campanha: Campanha, limite: number | null) {
+    const { error } = await atualizarLimiteDisparo(campanha.id, limite)
+    if (error) toast.error(error)
+    else toast.success(limite ? `Limite por disparo: ${limite}` : 'Limite por disparo removido — próximo envio manda tudo')
+  }
+
+  async function handleAtualizarCusto(campanha: Campanha) {
+    const { error, custo, moeda } = await atualizarCustoReal(campanha.id)
+    if (error) toast.error(error)
+    else toast.success(`Custo atualizado via Meta: ${moeda === 'USD' ? 'US$' : 'R$'} ${custo?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`)
   }
 
   return (
@@ -102,6 +114,8 @@ export function CampanhasTab({ unidadeId }: { unidadeId: string | null }) {
               onAction={handleAction}
               onExcluir={handleExcluir}
               onRetry={handleRetry}
+              onLimiteDisparo={handleLimiteDisparo}
+              onAtualizarCusto={handleAtualizarCusto}
               onClick={() => setDrawerCampanha(c)}
             />
           ))}
@@ -122,17 +136,37 @@ export function CampanhasTab({ unidadeId }: { unidadeId: string | null }) {
 
 // ─── Card de Campanha ─────────────────────────────────────────────────────────
 
-function CampanhaCard({ campanha: c, onAction, onExcluir, onRetry, onClick }: {
+function CampanhaCard({ campanha: c, onAction, onExcluir, onRetry, onLimiteDisparo, onAtualizarCusto, onClick }: {
   campanha: Campanha
   onAction: (c: Campanha, a: 'iniciar' | 'pausar' | 'retomar') => void
   onExcluir: (c: Campanha) => void
   onRetry: (c: Campanha) => void
+  onLimiteDisparo: (c: Campanha, limite: number | null) => void
+  onAtualizarCusto: (c: Campanha) => void
   onClick: () => void
 }) {
   const cfg = STATUS_CFG[c.status] ?? STATUS_CFG.rascunho
   const Icon = cfg.icon
   const progresso = c.total_contatos > 0 ? Math.round(((c.enviados + c.falhas) / c.total_contatos) * 100) : 0
   const taxaEntrega = c.enviados > 0 && c.entregues > 0 ? Math.round((c.entregues / c.enviados) * 100) : null
+
+  const [atualizandoCusto, setAtualizandoCusto] = useState(false)
+  const simboloMoeda = c.custo_moeda === 'USD' ? 'US$' : 'R$'
+
+  async function handleAtualizarCustoClick() {
+    setAtualizandoCusto(true)
+    try { await onAtualizarCusto(c) } finally { setAtualizandoCusto(false) }
+  }
+
+  const [editandoLimite, setEditandoLimite] = useState(false)
+  const [limiteInput, setLimiteInput] = useState(c.limite_disparo != null ? String(c.limite_disparo) : '')
+  const podeEditarLimite = c.status === 'rascunho' || c.status === 'pausada'
+
+  function salvarLimite() {
+    const n = limiteInput.trim() === '' ? null : parseInt(limiteInput, 10)
+    onLimiteDisparo(c, n && n > 0 ? n : null)
+    setEditandoLimite(false)
+  }
 
   return (
     <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-5 space-y-3 cursor-pointer hover:border-slate-600/50 transition-colors" onClick={onClick}>
@@ -213,23 +247,72 @@ function CampanhaCard({ campanha: c, onAction, onExcluir, onRetry, onClick }: {
       )}
 
       {/* Custo */}
-      {(c.custo_estimado > 0 || c.custo_real > 0) && (
-        <div className="flex items-center gap-4 text-xs">
-          {c.custo_estimado > 0 && (
+      <div className="flex items-center gap-4 text-xs flex-wrap" onClick={e => e.stopPropagation()}>
+        {c.custo_estimado > 0 && (
+          <span className="text-gray-500">
+            Est: {simboloMoeda} {c.custo_estimado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </span>
+        )}
+        {c.custo_real > 0 && (
+          <span className="text-amber-400 font-medium">
+            Real: {simboloMoeda} {c.custo_real.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </span>
+        )}
+        {taxaEntrega !== null && (
+          <span className="text-gray-500">Entrega: {taxaEntrega}%</span>
+        )}
+        <button
+          onClick={handleAtualizarCustoClick}
+          disabled={atualizandoCusto}
+          className="flex items-center gap-1 text-gray-500 hover:text-amber-400 transition-colors disabled:opacity-50"
+          title="Atualizar custo com base na tarifa real da Meta (últimos 90 dias)"
+        >
+          <RefreshCw className={cn('w-3 h-3', atualizandoCusto && 'animate-spin')} />
+          Atualizar custo (Meta)
+        </button>
+      </div>
+
+      {/* Limite por disparo (porcionamento) */}
+      <div className="flex items-center gap-2 text-xs" onClick={e => e.stopPropagation()}>
+        {editandoLimite ? (
+          <>
+            <span className="text-gray-500">Limite por disparo:</span>
+            <input
+              type="number"
+              min={1}
+              autoFocus
+              value={limiteInput}
+              onChange={e => setLimiteInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') salvarLimite(); if (e.key === 'Escape') setEditandoLimite(false) }}
+              placeholder="sem limite"
+              className="w-24 bg-slate-900 border border-slate-600 rounded px-2 py-0.5 text-white focus:border-amber-500/50 focus:outline-none"
+            />
+            <button onClick={salvarLimite} className="p-1 text-emerald-400 hover:bg-emerald-500/20 rounded transition-colors" title="Salvar">
+              <Check className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => setEditandoLimite(false)} className="p-1 text-gray-400 hover:bg-slate-700 rounded transition-colors" title="Cancelar">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </>
+        ) : (
+          <>
             <span className="text-gray-500">
-              Est: R$ {c.custo_estimado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              Limite por disparo: {c.limite_disparo != null
+                ? `${c.limite_disparo} (${Math.ceil(c.total_contatos / c.limite_disparo)} disparos)`
+                : 'sem limite (envia tudo de uma vez)'}
             </span>
-          )}
-          {c.custo_real > 0 && (
-            <span className="text-amber-400 font-medium">
-              Real: R$ {c.custo_real.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </span>
-          )}
-          {taxaEntrega !== null && (
-            <span className="text-gray-500">Entrega: {taxaEntrega}%</span>
-          )}
-        </div>
-      )}
+            {podeEditarLimite && (
+              <button
+                onClick={() => { setLimiteInput(c.limite_disparo != null ? String(c.limite_disparo) : ''); setEditandoLimite(true) }}
+                className="p-1 text-gray-500 hover:text-amber-400 hover:bg-amber-500/10 rounded transition-colors"
+                title="Editar limite por disparo"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }

@@ -127,6 +127,18 @@ export function LeadDrawer({ lead, etapas, open, onClose, onAgendar, onMoverEtap
                   {unidadeCodigo}
                 </span>
                 <TemperaturaTag temperatura={lead.temperatura} />
+                {(lead.leads_campanhas ?? [])
+                  .slice()
+                  .sort((a, b) => a.created_at.localeCompare(b.created_at))
+                  .map((c) => (
+                    <span
+                      key={c.campanha_slug}
+                      className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400"
+                      title={`Campanha de origem: ${c.campanha_nome}`}
+                    >
+                      📣 {c.campanha_nome}
+                    </span>
+                  ))}
               </div>
             </div>
             <button

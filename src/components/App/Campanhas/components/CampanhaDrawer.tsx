@@ -178,15 +178,18 @@ export function CampanhaDrawer({ campanha: c, onClose, onReenviarFalhas }: Props
           {!expanded && (
             <>
               {/* Custo */}
-              {(c.custo_estimado > 0 || c.custo_real > 0) && (
-                <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
-                  <p className="text-xs text-gray-500 mb-1">Custo</p>
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-lg font-bold text-white">R$ {(c.custo_real || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                    {c.custo_estimado > 0 && <span className="text-xs text-gray-500">est. R$ {c.custo_estimado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>}
+              {(c.custo_estimado > 0 || c.custo_real > 0) && (() => {
+                const simbolo = c.custo_moeda === 'USD' ? 'US$' : 'R$'
+                return (
+                  <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+                    <p className="text-xs text-gray-500 mb-1">Custo</p>
+                    <div className="flex items-baseline gap-3">
+                      <span className="text-lg font-bold text-white">{simbolo} {(c.custo_real || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      {c.custo_estimado > 0 && <span className="text-xs text-gray-500">est. {simbolo} {c.custo_estimado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>}
+                    </div>
                   </div>
-                </div>
-              )}
+                )
+              })()}
 
               {/* Timeline */}
               <div>

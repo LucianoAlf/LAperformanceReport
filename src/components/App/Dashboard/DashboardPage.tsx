@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import { 
@@ -19,7 +19,8 @@ import {
   Phone,
   GraduationCap,
   RefreshCw,
-  Lock
+  Lock,
+  HeartPulse,
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { formatCurrency } from '@/lib/utils';
@@ -46,6 +47,12 @@ import {
   buscarKpisProfessoresCanonicos,
   calcularTotaisKpisProfessoresCanonicos,
 } from '@/lib/professoresKpisCanonicos';
+import {
+  chaveProfessorUnidade,
+  filtrarKpisPorVinculosAtivos,
+} from '@/lib/professoresKpisAgregados';
+import { useHealthScoreProfessorV3Performance } from '@/hooks/useHealthScoreProfessorV3Performance';
+import { getHealthScoreV3Period } from '@/lib/healthScoreProfessorV3Periodos';
 
 
 interface OutletContextType {
@@ -89,6 +96,7 @@ interface DadosProfessores {
   media_alunos_professor: number;
   taxa_renovacao: number;
   media_alunos_turma: number;
+  professores_ativos_ids: number[];
 }
 
 interface Alerta {
@@ -186,6 +194,43 @@ export function DashboardPage() {
     mesInicio,
     mesFim,
   });
+  const healthScoreV3Periodicidade = competencia?.filtro?.tipo === 'trimestral'
+    ? 'ciclo'
+    : 'mensal';
+  const healthScoreV3ReferenceMonth = healthScoreV3Periodicidade === 'ciclo'
+    ? Math.min(12, mesInicio + 1)
+    : mesInicio;
+  const healthScoreV3Enabled = competencia?.filtro?.tipo === 'mensal'
+    || competencia?.filtro?.tipo === 'trimestral';
+  const healthScoreV3Period = useMemo(
+    () => getHealthScoreV3Period(ano, healthScoreV3ReferenceMonth, healthScoreV3Periodicidade),
+    [ano, healthScoreV3Periodicidade, healthScoreV3ReferenceMonth],
+  );
+  const {
+    snapshots: healthScoreV3Snapshots,
+    loading: healthScoreV3Loading,
+  } = useHealthScoreProfessorV3Performance({
+    competencia: `${ano}-${String(healthScoreV3ReferenceMonth).padStart(2, '0')}`,
+    unidadeId: unidade === 'todos' ? null : unidade,
+    periodicidade: healthScoreV3Periodicidade,
+    enabled: healthScoreV3Enabled,
+  });
+  const healthScoreV3Summary = useMemo(() => {
+    const professoresAtivos = new Set(dadosProfessores?.professores_ativos_ids ?? []);
+    const snapshotsEquipe = healthScoreV3Snapshots.filter(
+      (snapshot) => professoresAtivos.has(snapshot.professorId),
+    );
+    const visible = snapshotsEquipe.filter(
+      (snapshot) => snapshot.scoreExibivel && snapshot.score !== null,
+    );
+    const score = visible.length > 0
+      ? visible.reduce((total, snapshot) => total + Number(snapshot.score), 0) / visible.length
+      : null;
+    const official = visible.length > 0 && visible.every(
+      (snapshot) => snapshot.estadoPublicacao === 'oficial',
+    );
+    return { score, visible: visible.length, total: snapshotsEquipe.length, official };
+  }, [dadosProfessores?.professores_ativos_ids, healthScoreV3Snapshots]);
 
   // Fetch matrículas do período para o modal
   const fetchMatriculas = async () => {
@@ -512,13 +557,27 @@ export function DashboardPage() {
         ]);
 
         const professoresAtivos = new Set((profsR.data || []).map((p: any) => Number(p.id)));
+        const vinculosAtivos = new Set(
+          (profUnidR.data || [])
+            .filter((pu: any) => unidade === 'todos' || pu.unidade_id === unidade)
+            .map((pu: any) => chaveProfessorUnidade(
+              Number(pu.professor_id),
+              pu.unidade_id ? String(pu.unidade_id) : null,
+            ))
+            .filter((chave): chave is string => chave !== null),
+        );
         const professoresRelacionados = new Set(
           (profUnidR.data || [])
             .filter((pu: any) => unidade === 'todos' || pu.unidade_id === unidade)
             .map((pu: any) => Number(pu.professor_id))
             .filter((id: number) => professoresAtivos.has(id))
         );
-        const totaisProfessores = calcularTotaisKpisProfessoresCanonicos(kpisProfessores);
+        const kpisProfessoresAtivos = filtrarKpisPorVinculosAtivos(
+          kpisProfessores,
+          professoresAtivos,
+          vinculosAtivos,
+        );
+        const totaisProfessores = calcularTotaisKpisProfessoresCanonicos(kpisProfessoresAtivos);
         const totalProfs = professoresRelacionados.size || totaisProfessores.totalProfessores;
 
         setDadosProfessores({
@@ -528,6 +587,7 @@ export function DashboardPage() {
             : 0,
           taxa_renovacao: totaisProfessores.taxaRenovacao,
           media_alunos_turma: Math.round(totaisProfessores.mediaAlunosTurma * 10) / 10,
+          professores_ativos_ids: Array.from(professoresRelacionados),
         });
 
         // ===== EVOLUÇÃO DE ALUNOS ATIVOS (12 meses) =====
@@ -712,7 +772,7 @@ export function DashboardPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <KPICard
             dataTour="card-alunos"
             icon={Users}
@@ -868,11 +928,25 @@ export function DashboardPage() {
           <KPICard
             icon={Target}
             label="Média Alunos/Turma"
-            tooltip="Total de alunos ativos dividido pelo total de turmas ativas. Indicador de eficiência operacional."
+            tooltip="Ocupações canônicas em turmas regulares divididas pelas turmas regulares elegíveis. Projetos e bandas não entram."
             value={dadosProfessores?.media_alunos_turma ?? '--'}
             format="number"
-            subvalue={dadosProfessores?.media_alunos_turma ? 'Pilar financeiro' : 'Aguardando Emusys'}
+            subvalue={dadosProfessores ? 'Fonte canônica do período' : 'Aguardando Emusys'}
             variant="rose"
+          />
+          <KPICard
+            icon={HeartPulse}
+            label={healthScoreV3Summary.official ? 'Health Score V3' : 'Health Score parcial'}
+            tooltip="Média dos snapshots V3 exibíveis dos professores no recorte. Rankings e premiações permanecem bloqueados até o fechamento oficial do ciclo."
+            value={healthScoreV3Loading
+              ? '--'
+              : healthScoreV3Summary.score === null
+                ? 'Sem base'
+                : healthScoreV3Summary.score.toFixed(1)}
+            subvalue={healthScoreV3Enabled
+              ? `${healthScoreV3Summary.visible}/${healthScoreV3Summary.total} professores | ${healthScoreV3Period.label}`
+              : 'Disponível nas visões Mês e Trim'}
+            variant="violet"
           />
         </div>
       </div>

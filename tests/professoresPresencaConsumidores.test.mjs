@@ -24,7 +24,8 @@ test('performance bloqueia presenca e health sem confianca alta', () => {
 test('plano de equipe transporta a qualidade da presenca sem converter null em zero', () => {
   assert.match(plano, /taxa_presenca:\s*number\s*\|\s*null/);
   assert.match(plano, /presenca_publicavel:\s*boolean/);
-  assert.match(plano, /health_score_confiavel:\s*boolean/);
+  assert.match(plano, /health_score_v3:\s*HealthScoreV3AiPayload\s*\|\s*null/);
+  assert.doesNotMatch(plano, /taxa_presenca\s*\|\|\s*0/);
 });
 
 test('relatorios instantaneos preservam null e bloqueiam ranking de presenca e health', () => {
@@ -35,10 +36,12 @@ test('relatorios instantaneos preservam null e bloqueiam ranking de presenca e h
   assert.doesNotMatch(relatorioInstantaneo, /taxa_presenca:\s*numeroSeguro\s*\(/);
 });
 
-test('modal da coordenacao sobrepoe os KPIs legados com a RPC canonica v2', () => {
+test('modal da coordenacao envia KPIs canonicos enriquecidos com o Health Score V3', () => {
   assert.match(modalCoordenacao, /buscarKpisProfessoresCanonicos/);
   assert.match(modalCoordenacao, /get_kpis_professor_periodo_canonico_v2|buscarKpisProfessoresCanonicos/);
-  assert.match(modalCoordenacao, /kpis_professores:\s*kpisCanonicos/);
+  assert.match(modalCoordenacao, /const\s+kpisComHealthV3\s*=\s*kpisCanonicos\.map/);
+  assert.match(modalCoordenacao, /health_score_v3:\s*serializeHealthScoreV3ForAi/);
+  assert.match(modalCoordenacao, /kpis_professores:\s*kpisComHealthV3/);
 });
 
 test('edges de professores respeitam o bloqueio de publicacao', () => {

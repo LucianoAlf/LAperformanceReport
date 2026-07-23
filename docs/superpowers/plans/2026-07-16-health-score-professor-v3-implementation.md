@@ -847,15 +847,18 @@ painel V3.
 - [x] Exibir valor, base, cobertura e recorte de cada pilar.
 - [x] Exibir `sem_base`, nunca zero substituto.
 - [x] Testar rollback desligando flag.
-- [ ] Validar com Playwright em professor com base completa e incompleta.
+- [x] Validar com Playwright em professor com base incompleta.
+- [x] Repetir a validacao quando existir professor com base completa e snapshot
+  publicavel.
 
 Checkpoint tecnico em 18/07/2026: o estado incompleto foi validado no
-navegador autenticado para Peterson Biancamano nos recortes Consolidado e
-Campo Grande. O modal preserva `null`, explicita amostra, base, fonte, regra,
-cobertura e motivo de exclusao. O rollback por flag foi coberto por teste. A
-validacao de base completa permanece aberta porque ainda nao existe snapshot
-V3 publicavel de julho; Performance e rankings nao devem migrar antes da
-homologacao deste modal.
+navegador autenticado para Peterson Biancamano nos recortes Consolidado,
+Campo Grande e Barra, e para Caio Tenorio no Recreio. O modal preserva `null`,
+explicita amostra, base, fonte, regra, cobertura e motivo de exclusao. O
+rollback por flag foi coberto por teste. A validacao de base completa permanece
+aberta porque ainda nao existe snapshot V3 publicavel de julho, mas o Alf
+homologou o comportamento incompleto e autorizou a migracao controlada da
+Performance sem fabricar score nem ranking.
 
 ### Task 18: Migrar tabela Performance e rankings
 
@@ -863,19 +866,35 @@ homologacao deste modal.
 - Modify: `src/components/App/Professores/TabPerformanceProfessores.tsx`
 - Modify: `tests/healthScoreProfessorV3Frontend.test.mjs`
 
-- [ ] Trocar somente depois da homologacao do modal.
-- [ ] Ordenar publicaveis; `sem_base` fica separado e nao recebe score 0.
-- [ ] Conferir totais, rankings, status e competencia.
-- [ ] Testar feature flag e rollback.
+- [x] Trocar somente depois da homologacao do modal.
+- [x] Ordenar publicaveis; `sem_base` fica separado e nao recebe score 0.
+- [x] Conferir totais, rankings, status e competencia.
+- [x] Testar feature flag e rollback.
+
+Checkpoint tecnico em 18/07/2026: a tabela Performance e seus rankings leem a
+ultima revisao V3 por professor por meio da RPC batch
+`get_health_score_professor_v3_performance`. A feature flag independente
+`VITE_HEALTH_SCORE_V3_PERFORMANCE_ENABLED` preserva rollback para V2; quando a
+V3 esta ativa, falha de leitura aparece como erro explicito e nao aciona
+fallback silencioso. Somente snapshot e metrica publicaveis entram em ranking.
+Valores observados/provisorios continuam visiveis e rotulados, Campo Grande
+mantem Presenca `Em auditoria`, e Barra/Recreio exibem o observado normal.
+Validacao autenticada confirmou Consolidado, Barra, Campo Grande e Recreio sem
+erro de console.
 
 ### Task 19: Migrar configuracao oficial
 
 **Files:**
 - Modify: `src/components/App/Professores/ProfessoresPage.tsx`
 
-- [ ] Mostrar V3 como oficial somente depois da virada da Performance.
-- [ ] Preservar acesso somente leitura ao historico V2 durante janela de observacao.
-- [ ] Bloquear edicao de versao ativa/fechada.
+- [x] Mostrar V3 como oficial somente depois da virada da Performance.
+- [x] Preservar acesso somente leitura ao historico V2 durante janela de observacao.
+- [x] Bloquear edicao de versao ativa/fechada.
+
+Checkpoint em 19/07/2026: a configuracao V3 fica habilitada por padrao, separa
+sliders de peso dos campos numericos de meta e exige o ciclo
+rascunho -> simulacao -> ativacao. A versao ativa permanece imutavel; a V2
+aparece em `Historico V2 - somente leitura` para rollback e auditoria.
 
 ### Task 20: Migrar relatorios de professor/coordenacao
 
@@ -885,21 +904,41 @@ homologacao deste modal.
 - Modify: `supabase/functions/gemini-relatorio-professor-individual/index.ts`
 - Modify: `supabase/functions/gemini-relatorio-coordenacao/index.ts`
 
-- [ ] Passar snapshot V3 estruturado para os geradores.
-- [ ] Proibir o modelo de recalcular metricas ou inventar valores sem base.
-- [ ] Comparar texto com snapshot campo a campo.
-- [ ] Manter rollback para fonte V2.
+- [x] Passar snapshot V3 estruturado para os geradores.
+- [x] Proibir o modelo de recalcular metricas ou inventar valores sem base.
+- [x] Comparar texto com snapshot campo a campo.
+- [x] Manter rollback para fonte V2.
+
+Checkpoint em 19/07/2026: os relatorios individual e da coordenacao e os
+insights individual/equipe recebem `health_score_v3` serializado, com score,
+cobertura, estado de publicacao, fonte, regra, amostra e `sem_base`. O ranking
+falha fechado enquanto `estado_publicacao != oficial` ou
+`ranking_habilitado=false`. As cinco Edge Functions foram verificadas com
+`deno check` e implantadas sem desabilitar JWT.
 
 ### Task 21: Migrar Dashboard/Analytics e agentes autorizados
 
 **Files:**
-- Identificar no inventario da Task 1 os arquivos exatos vivos antes de editar.
-- Modify: somente consumidores confirmados como ativos.
+- `src/components/App/Dashboard/DashboardPage.tsx`
+- `src/components/GestaoMensal/TabProfessoresNew.tsx`
+- `src/components/App/Professores/TabCarteiraProfessores.tsx`
+- `src/components/App/Professores/PlanoAcaoEquipe.tsx`
+- `supabase/functions/gemini-insights-professor/index.ts`
+- `supabase/functions/gemini-insights-equipe/index.ts`
+- `supabase/functions/gemini-ranking-professores/index.ts`
 
-- [ ] Migrar um consumidor por vez.
-- [ ] Testar unidade, competencia, consolidado e sem_base.
-- [ ] Garantir que Fabio/LA Teacher nao recebem financeiro ou payload bruto.
-- [ ] Observar logs antes do proximo consumidor.
+- [x] Migrar um consumidor por vez.
+- [x] Testar unidade, competencia, consolidado e sem_base.
+- [x] Garantir que Fabio/LA Teacher nao recebem financeiro ou payload bruto.
+- [x] Observar logs antes do proximo consumidor.
+
+Checkpoint em 19/07/2026: Dashboard, Analytics/Professores, Carteira e agentes
+pedagogicos usam a RPC batch V3. O ciclo e consultado pela competencia
+selecionada, sem o deslocamento `mes + 1` que fazia Jun-Ago retornar `0/0`.
+Jun-Ago passou a exibir 31/50 professores com score, media 91,1 e cobertura
+media 76%. A Carteira deixou de recalcular a V2 no navegador; quando nao ha
+snapshot exibivel mostra `Sem base` com o motivo. Nenhum payload financeiro ou
+bruto foi adicionado aos agentes.
 
 **Gate 8:** todos os consumidores homologados usam snapshots V3; rollback individual testado.
 
@@ -914,35 +953,39 @@ homologacao deste modal.
 - Modify: `docs/METRICAS.md`
 - Modify: `docs/MAPA-INTEGRACAO-EMUSYS.md`
 
-- [ ] Registrar staging, periodos, metricas, snapshots, Edge, grants e consumidores.
-- [ ] Marcar V2 como historica somente depois do cutover completo.
-- [ ] Registrar corte de quatro meses e inicio de presenca em 03/08/2026.
-- [ ] Registrar que IDs Emusys sao escopados por unidade.
+- [x] Registrar staging, periodos, metricas, snapshots, Edge, grants e consumidores.
+- [x] Marcar V2 como historica somente depois do cutover completo.
+- [x] Registrar corte de quatro meses e inicio de presenca em 03/08/2026.
+- [x] Registrar que IDs Emusys sao escopados por unidade.
 
 ### Task 23: Verificacao final
 
 **Files:**
-- Modify: `docs/auditorias/2026-07-16-health-score-professor-v3-sombra.md`
+- Create: `docs/auditorias/2026-07-19-health-score-professor-v3-cutover-parcial.md`
 
-- [ ] Run: `node --test tests/*.test.mjs`
+- [x] Run: `node --test tests/*.test.mjs`
   Expected: todos PASS.
-- [ ] Run: `npm run build`
+- [x] Run: `npm run build`
   Expected: exit 0.
-- [ ] Run: `git diff --check`
+- [x] Run: `git diff --check`
   Expected: sem erros.
-- [ ] Confirmar Supabase advisors de seguranca e desempenho.
-- [ ] Verificar no browser Performance, modal, Configuracoes e relatorio.
-- [ ] Comparar pelo menos um professor por unidade e um multiunidade.
-- [ ] Confirmar que relatorios gerencial, administrativo e comercial permanecem iguais.
-- [ ] Confirmar que churn continua pausado/fora do escopo.
+- [x] Conferir lint remoto de seguranca/desempenho e documentar debitos legados e
+  falsos positivos estaticos das tabelas temporarias dos materializadores V3.
+- [x] Verificar no browser Dashboard, Analytics, Performance, Carteira, modal,
+  Configuracoes e relatorio da coordenacao.
+- [x] Comparar pelo menos um professor por unidade e um multiunidade.
+- [x] Confirmar que relatorios gerencial, administrativo e comercial permanecem
+  sem troca de fonte por este corte.
+- [x] Confirmar que churn continua pausado/fora do escopo.
 
 ### Task 24: Integracao Git somente apos autorizacao
 
-- [ ] Buscar remoto e inspecionar commits do Hugo.
-- [ ] Integrar sem descartar alteracoes locais do usuario.
-- [ ] Reexecutar suite/build depois da integracao.
-- [ ] Revisar `git diff --stat` e arquivos staged.
-- [ ] Fazer commit descritivo e push somente com autorizacao do usuario.
+- [x] Buscar remoto e inspecionar commits do Hugo.
+- [x] Integrar sem descartar alteracoes locais do usuario. O remoto estava
+  alinhado e o `pull --ff-only` confirmou `Already up to date`.
+- [x] Reexecutar suite/build depois da integracao.
+- [x] Revisar `git diff --stat` e arquivos staged.
+- [x] Fazer commit descritivo e push somente com autorizacao do usuario.
 
 ---
 

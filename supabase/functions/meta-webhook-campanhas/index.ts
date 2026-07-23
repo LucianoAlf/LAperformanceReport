@@ -8,6 +8,11 @@
 import { createServiceClient } from '../_shared/supabase-client.ts'
 import { marcarComoLida, baixarEArmazenarMedia, enviarMensagemTexto } from '../_shared/whatsapp-meta-api.ts'
 
+// Mantém o isolate vivo até as promises em background terminarem (senão o
+// shutdown pós-response mata o processamento silenciosamente — msg salva mas
+// agente nunca invocado). Não re-executa nada, só impede o abort.
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void }
+
 Deno.serve(async (req) => {
   // GET: Verificação do webhook pela Meta
   if (req.method === 'GET') {
@@ -47,19 +52,23 @@ Deno.serve(async (req) => {
     const supabase = createServiceClient()
     const phoneNumberId = value.metadata?.phone_number_id
 
-    // Processar mensagens inbound (fire-and-forget)
+    // Processar mensagens inbound (fire-and-forget, protegido por waitUntil)
     if (value.messages?.length > 0) {
       for (const msg of value.messages) {
-        processarMensagem(supabase, phoneNumberId, msg, value.contacts)
-          .catch(err => console.error('Erro ao processar mensagem:', err))
+        EdgeRuntime.waitUntil(
+          processarMensagem(supabase, phoneNumberId, msg, value.contacts)
+            .catch(err => console.error('Erro ao processar mensagem:', err))
+        )
       }
     }
 
-    // Processar status updates (fire-and-forget)
+    // Processar status updates (fire-and-forget, protegido por waitUntil)
     if (value.statuses?.length > 0) {
       for (const status of value.statuses) {
-        processarStatus(supabase, status)
-          .catch(err => console.error('Erro ao processar status:', err))
+        EdgeRuntime.waitUntil(
+          processarStatus(supabase, status)
+            .catch(err => console.error('Erro ao processar status:', err))
+        )
       }
     }
 
@@ -176,6 +185,34 @@ async function processarMensagem(supabase: any, phoneNumberId: string, msg: any,
     created_at: timestamp ? new Date(parseInt(timestamp) * 1000).toISOString() : new Date().toISOString(),
   })
 
+  // 5b. Contabilizar a 1ª resposta do lead na(s) campanha(s) a que ele pertence.
+  // Idempotente: campanha_contatos.respondeu (guard de corrida no .eq('respondeu', false))
+  // + incremento atômico em campanhas.respondidos via RPC. Só conta contatos que de fato
+  // receberam disparo (status enviado/entregue/lido) — ignora quem nunca foi mandado.
+  try {
+    const { data: contatosCamp } = await supabase
+      .from('campanha_contatos')
+      .select('id, campanha_id')
+      .eq('telefone', telefone)
+      .eq('respondeu', false)
+      .in('status', ['enviado', 'entregue', 'lido'])
+
+    for (const cc of contatosCamp ?? []) {
+      const { data: marcado } = await supabase
+        .from('campanha_contatos')
+        .update({ respondeu: true })
+        .eq('id', cc.id)
+        .eq('respondeu', false) // só um vencedor sob concorrência
+        .select('id')
+        .maybeSingle()
+      if (marcado) {
+        await supabase.rpc('incrementar_respondidos_campanha', { p_campanha_id: cc.campanha_id })
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao contabilizar resposta da campanha:', (err as Error).message)
+  }
+
   // 6. Marcar como lida
   try {
     await marcarComoLida({ phone_number_id: phoneNumberId, access_token: numero.access_token }, metaMessageId)
@@ -191,26 +228,44 @@ async function processarMensagem(supabase: any, phoneNumberId: string, msg: any,
     return value != null ? query.eq(field, value) : query.is(field, null)
   }
 
-  // 7a. Conversa existente com agente ativo?
+  // 7a. Descobrir o agente ATUALMENTE ativo/atribuído a esta caixa (número específico, ou fallback da unidade)
+  // Isso é a fonte da verdade de roteamento — cada caixa tem no máximo 1 agente ativo respondendo.
+  let qAgNum = supabase.from('agentes').select('id, modo_teste, telefone_teste')
+    .eq('numero_meta_id', numeroMetaId).eq('is_active', true).eq('status', 'active')
+  qAgNum = eqOrNull(qAgNum, 'unidade_id', unidadeId)
+  const { data: agenteRoteado } = await qAgNum.limit(1).maybeSingle()
+
+  let agenteCaixa = agenteRoteado
+  if (!agenteCaixa) {
+    let qAgFallback = supabase.from('agentes').select('id, modo_teste, telefone_teste')
+      .eq('is_active', true).eq('status', 'active').is('numero_meta_id', null)
+    qAgFallback = eqOrNull(qAgFallback, 'unidade_id', unidadeId)
+    const { data } = await qAgFallback.limit(1).maybeSingle()
+    agenteCaixa = data
+  }
+
+  // 7b. Conversa em aberto (bot_ativo=true) com QUALQUER agente
   let qAgConv = supabase.from('agente_conversas').select('id, agente_id, bot_ativo')
     .eq('telefone', telefone).eq('bot_ativo', true)
   qAgConv = eqOrNull(qAgConv, 'unidade_id', unidadeId)
   const { data: agConvExistente } = await qAgConv.maybeSingle()
 
-  if (agConvExistente) {
-    const { data: ag } = await supabase.from('agentes')
-      .select('is_active, status, modo_teste, telefone_teste')
-      .eq('id', agConvExistente.agente_id).single()
-
-    if (ag?.is_active && ag.status === 'active') {
-      if (!ag.modo_teste || ag.telefone_teste === telefone) {
-        agenteParaInvocar = agConvExistente.agente_id
-      }
+  if (agConvExistente && agenteCaixa && agConvExistente.agente_id === agenteCaixa.id) {
+    // Continua a conversa em aberto — já é o agente ativo desta caixa
+    if (!agenteCaixa.modo_teste || agenteCaixa.telefone_teste === telefone) {
+      agenteParaInvocar = agenteCaixa.id
     }
   } else {
-    // 7a-bis: Lead já transferido? (anti-spam)
+    // Conversa presa em outro agente (desativado/trocado) — encerrar antes de rotear pro atual
+    if (agConvExistente) {
+      await supabase.from('agente_conversas').update({ bot_ativo: false }).eq('id', agConvExistente.id)
+    }
+
+    // 7c. Lead já transferido DENTRO da janela de reengajamento? (anti-spam)
+    // Após 4 dias da transferência, o lead volta a ser triado (cai no 7d, que reseta a conversa).
+    const cutoffReengajamento = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString()
     let qTransf = supabase.from('agente_conversas').select('id, agente_id, session_data')
-      .eq('telefone', telefone).eq('status', 'transferred')
+      .eq('telefone', telefone).eq('status', 'transferred').gte('transferido_em', cutoffReengajamento)
     qTransf = eqOrNull(qTransf, 'unidade_id', unidadeId)
     const { data: convTransferida } = await qTransf.order('ultima_mensagem_em', { ascending: false }).limit(1).maybeSingle()
 
@@ -235,37 +290,36 @@ async function processarMensagem(supabase: any, phoneNumberId: string, msg: any,
       return
     }
 
-    // 7b. Buscar agente mapeado para este número ou qualquer agente ativo da unidade
-    let qAgNum = supabase.from('agentes').select('id, modo_teste, telefone_teste')
-      .eq('numero_meta_id', numeroMetaId).eq('is_active', true).eq('status', 'active')
-    qAgNum = eqOrNull(qAgNum, 'unidade_id', unidadeId)
-    const { data: agenteRoteado } = await qAgNum.limit(1).maybeSingle()
+    // 7d. Rotear pro agente ativo da caixa atual
+    // Agente em modo_teste e número não é o de teste = agente indisponível pra
+    // esse lead (equivale a não ter agente na caixa) — cai no autoreply, se houver.
+    const agenteDisponivel = agenteCaixa && (!agenteCaixa.modo_teste || agenteCaixa.telefone_teste === telefone)
 
-    let agente = agenteRoteado
-    if (!agente) {
-      let qAgFallback = supabase.from('agentes').select('id, modo_teste, telefone_teste')
-        .eq('is_active', true).eq('status', 'active').is('numero_meta_id', null)
-      qAgFallback = eqOrNull(qAgFallback, 'unidade_id', unidadeId)
-      const { data } = await qAgFallback.limit(1).maybeSingle()
-      agente = data
-    }
+    if (agenteDisponivel) {
+      // Reabrir conversa já existente com esse agente, ou criar
+      const { data: convDoAgente } = await supabase.from('agente_conversas')
+        .select('id').eq('agente_id', agenteCaixa.id).eq('telefone', telefone).maybeSingle()
 
-    if (agente) {
-      if (agente.modo_teste && agente.telefone_teste !== telefone) {
-        // Modo teste ativo, número errado — pular
+      if (convDoAgente) {
+        // Reabrir = triagem NOVA. Reseta o estado (inclusive uma transferência já
+        // vencida pela janela) pra o bot não puxar o histórico/dados antigos:
+        // status volta a 'active', zera session_data/contador e move o corte de
+        // histórico (created_at) pra agora.
+        const agoraIso = new Date().toISOString()
+        await supabase.from('agente_conversas').update({
+          bot_ativo: true, unidade_id: unidadeId, ultima_mensagem_em: agoraIso,
+          status: 'active', transferido_em: null,
+          session_data: {}, total_mensagens: 0, created_at: agoraIso,
+        }).eq('id', convDoAgente.id)
       } else {
-        // Criar agente_conversas
-        const { data: novaAgConv } = await supabase
-          .from('agente_conversas')
-          .insert({
-            agente_id: agente.id, unidade_id: unidadeId, telefone,
-            bot_ativo: true, total_mensagens: 0,
-            ultima_mensagem_em: new Date().toISOString(),
-          })
-          .select('agente_id').single()
-
-        if (novaAgConv) agenteParaInvocar = novaAgConv.agente_id
+        await supabase.from('agente_conversas').insert({
+          agente_id: agenteCaixa.id, unidade_id: unidadeId, telefone,
+          bot_ativo: true, total_mensagens: 0,
+          ultima_mensagem_em: new Date().toISOString(),
+        })
       }
+
+      agenteParaInvocar = agenteCaixa.id
     } else if (numero.auto_reply_ativo && numero.auto_reply_message) {
       // Caixa de disparo sem agente — autoreply reorientando para os canais de atendimento.
       // Responde a QUALQUER um que escreve (sem trava de campanha).
@@ -295,24 +349,26 @@ async function processarMensagem(supabase: any, phoneNumberId: string, msg: any,
     }
   }
 
-  // 7c. Invocar agente-webhook
+  // 7e. Invocar agente-webhook
   if (agenteParaInvocar) {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-    fetch(`${supabaseUrl}/functions/v1/agente-webhook`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
-      body: JSON.stringify({
-        unidade_id: unidadeId,
-        agente_id: agenteParaInvocar,
-        telefone,
-        texto: parsed.conteudo,
-        tipo_mensagem: parsed.tipo,
-        media_url: mediaUrl,
-        meta_message_id: metaMessageId,
-      }),
-    }).catch(err => console.error('Erro ao invocar agente-webhook:', err))
+    EdgeRuntime.waitUntil(
+      fetch(`${supabaseUrl}/functions/v1/agente-webhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
+        body: JSON.stringify({
+          unidade_id: unidadeId,
+          agente_id: agenteParaInvocar,
+          telefone,
+          texto: parsed.conteudo,
+          tipo_mensagem: parsed.tipo,
+          media_url: mediaUrl,
+          meta_message_id: metaMessageId,
+        }),
+      }).catch(err => console.error('Erro ao invocar agente-webhook:', err))
+    )
   }
 }
 

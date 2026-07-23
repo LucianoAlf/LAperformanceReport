@@ -45,16 +45,17 @@
 
 ## Dashboard (`/app`)
 - **Componentes:** `Dashboard/DashboardPage.tsx`, `Dashboard/ModalDetalheKPI.tsx`
-- **Hooks:** `useMetasKPI`, `useComercialOperacionalResumoV2`
-- **RPCs:** nenhuma (queries diretas)
+- **Hooks:** `useMetasKPI`, `useComercialOperacionalResumoV2`, `useHealthScoreProfessorV3Performance`
+- **RPCs:** `get_health_score_professor_v3_performance` para o card de professores; os demais cards preservam suas fontes próprias.
 - **Edge functions:** nenhuma
-- **Tabelas/views:** `alunos`, `movimentacoes_admin`, `leads`, `vw_alertas_inteligentes`, `professores`, `vw_turmas_implicitas`, `professores_performance`, `dados_mensais`, `unidades`
+- **Tabelas/views:** `alunos`, `movimentacoes_admin`, `leads`, `vw_alertas_inteligentes`, `professores`, `vw_turmas_implicitas`, `professores_performance`, `dados_mensais`, `unidades`; o Health Score usa somente snapshots V3 por RPC.
+- **Health Score V3:** exibe média parcial no mês ou no ciclo fixo selecionado. Resultado parcial nunca gera ranking ou premiação; falha V3 é explícita e não retorna silenciosamente para a V2.
 
 ## Gestão Mensal (`/app/gestao-mensal`)
 Orquestrador `GestaoMensal/GestaoMensalPage.tsx`. Abas: **Gestão**, **Comercial**, **Professores**.
 - **Gestão (`TabGestao.tsx`):** hook `useMetasKPI`, `useCompetenciaMensalStatus`, `fetchKPIsAlunosCanonicos`. **RPC:** `recalcular_dados_mensais`. Tabelas: `alunos`, `movimentacoes_admin`, `dados_mensais`, `motivos_saida`.
 - **Comercial (`TabComercialNew.tsx`):** `fetchComercialOperacionalResumoV2`, `fetchExperimentaisDiagnosticoComercialV2`. RPCs: nenhuma direta. Tabelas: `leads`, `alunos`, `dados_mensais`.
-- **Professores (`TabProfessoresNew.tsx`):** **RPC** `get_experimentais_professor_canonicos_v1`. Views: `vw_kpis_professor_mensal` (mês vivo) / `vw_kpis_professor_historico` (passado), `professores_performance`, `vw_evasoes_professores`, `vw_turmas_implicitas`.
+- **Professores (`TabProfessoresNew.tsx`):** **RPCs** `get_experimentais_professor_canonicos_v1`, `get_health_score_professor_v3_performance`. O resumo V3 alterna entre mês e ciclos `Jun-Ago`, `Set-Nov`, `Dez-Fev`, `Mar-Mai`; rankings ficam reservados ao fechamento oficial. As views V2 permanecem somente para indicadores operacionais ainda não migrados e rollback controlado.
 - **Modal Permanência (`ModalPermanenciaDetalhe.tsx`):** **RPC** `get_historico_ltv`.
 
 ## Comercial (`/app/comercial`)
@@ -94,10 +95,16 @@ Disparo de templates Meta (WhatsApp Cloud API) + conversas + agentes IA. `Campan
 
 ## Professores (`/app/professores`)
 `Professores/ProfessoresPage.tsx`; abas Cadastro, Performance, Carteira, Agenda, 360°, Checklists, Configurações.
-- **Hooks:** `useCompetenciaFiltro`, `useHealthScore`/`useHealthScoreConfig`, `useProfessor360`/`useConfig360`/`useOcorrenciasComLog`, `useMotivosScoreProfessor`, `useProfessorDependencies`, `useProfessoresPerformance`
-- **RPCs:** `get_kpis_professor_periodo`, `get_carteira_professores`, `get_presenca_por_aluno_professor`, `get_dados_relatorio_coordenacao`, `reverter_ocorrencia`, `restaurar_ocorrencia`, `editar_ocorrencia`, `registrar_log_ocorrencia`
-- **Edge functions:** `gemini-relatorio-coordenacao`, `gemini-ranking-professores`, `gemini-relatorio-professor-individual`, `professor-360-whatsapp`, `relatorio-coordenacao-whatsapp`
-- **Views:** `vw_kpis_professor_completo`, `vw_evasoes_professores`, `professores_performance`
+- **Hooks:** `useCompetenciaFiltro`, `useHealthScoreProfessorV3`, `useHealthScoreProfessorV3Performance`, `useHealthScoreProfessorV3Config`, `useProfessor360`/`useConfig360`/`useOcorrenciasComLog`, `useProfessorDependencies`, `useProfessoresPerformance`.
+- **RPCs V3:** `get_health_score_professor_v3_snapshot_modal`, `get_health_score_professor_v3_performance`, `get_health_score_professor_v3_config_ui`, `criar_health_score_professor_v3_config_rascunho`, `salvar_health_score_professor_v3_config_rascunho`, `simular_health_score_professor_v3_config`, `ativar_health_score_professor_v3_config`, `get_health_score_professor_v3_metricas_segmentadas_v1`, `get_health_score_professor_v3_metricas_segmentadas_agregadas_v1`, `get_health_score_professor_v3_totais_carteira_canonica_v1` e `get_professor_curso_modalidade_excecoes_v2`. A fila V2 usa catálogo, de-para, identidade formal e jornada por unidade; a reconciliação V1 é apenas diagnóstico histórico e não alimenta a interface. Todas as leituras preservam `null/sem_base`, fonte, amostra, cobertura e versão da regra.
+- **RPCs operacionais/V2:** `get_kpis_professor_periodo`, `get_carteira_professores`, `get_presenca_por_aluno_professor`, `get_dados_relatorio_coordenacao`, `reverter_ocorrencia`, `restaurar_ocorrencia`, `editar_ocorrencia`, `registrar_log_ocorrencia`. A V2 fica visível somente no histórico de configuração/rollback durante a observação.
+- **Edge functions:** `gemini-insights-professor`, `gemini-insights-equipe`, `gemini-relatorio-coordenacao`, `gemini-ranking-professores`, `gemini-relatorio-professor-individual`, `professor-360-whatsapp`, `relatorio-coordenacao-whatsapp`. Os cinco consumidores Gemini de desempenho recebem snapshot V3 estruturado; não recalculam score nem fabricam base. Ranking falha fechado enquanto o ciclo não estiver oficial.
+- **Views/fontes V3:** identidade `vw_aluno_identidade_unidade_canonica`; jornada `aluno_jornada_matricula_disciplina`; períodos `vw_professor_periodos_efetivos_v3_sombra`; presença `vw_aluno_presenca_semantica_v1`; roster `aula_alunos_emusys`; experimentais `emusys_experimentais_raw`; saídas `movimentacoes_admin` + `motivos_saida`; atribuição formal `professor_unidade_curso_modalidade`; metas por segmento `health_score_professor_v3_config_metas_curso_modalidade`; evidência por snapshot `health_score_professor_v3_snapshot_metrica_segmentos`; snapshots e configurações `health_score_professor_v3_*`.
+- **Metas segmentadas:** Média/Turma e Número de alunos são resolvidos por `unidade + curso + modalidade`. A matriz não altera `cursos`, `professores` ou o cadastro legado. O catálogo Emusys materializa automaticamente os vínculos; a interface mostra somente exceções reais que permaneceram após o sync. Curso atribuído com carteira vazia permanece visível e não pontuável; regra ausente bloqueia o rascunho em vez de usar meta global silenciosa.
+- **Autoridade dos vínculos:** o catálogo formal governado no LA Report (`professor_unidade_curso_modalidade`) é a fonte de verdade para atribuição professor/curso/unidade. A grade atual do Emusys é usada para reconciliar a jornada operacional e produzir evidência; não recria o catálogo formal nem transforma divergência histórica em pendência atual.
+- **Resolução de curso da jornada:** `fn_resolver_jornada_curso_grade_atual_v1` resolve o curso atual por `unidade + emusys_matricula_disciplina_id` usando somente aulas normais recorrentes e não reagendadas; uma aula movida preserva sua evidência histórica, mas nunca redefine a disciplina atual. O trigger de `aluno_jornada_matricula_disciplina` impede que payload antigo de `/matriculas` sobrescreva a grade recorrente atual e resolve o curso de origem pelo de-para oficial escopado por unidade. O valor bruto fica nas colunas `*_origem`, e cada correção é auditada em `jornada_curso_resolucao_log`. O backfill é retomável por `backfill_jornada_curso_grade_atual_v1`.
+- **Configuração ativa:** a versão V3 número 3 foi ativada em 21/07/2026, com vigência a partir de 01/09/2026, 63 metas segmentadas configuradas e 7 combinações realmente não ofertadas. A versão 2 permanece vigente até 31/08/2026. Ativar a configuração não fecha snapshots, não reescreve julho e não libera ranking/premiação; cada consumidor ainda obedece ao estado de publicação do ciclo.
+- **Publicação:** o score parcial é visível quando cobertura e fidelização permitem, porém sem ranking/premiação. O oficial só nasce após fechamento do ciclo. Campo Grande mantém Presença em auditoria e fora do score; Barra/Recreio usam a política confiável versionada.
 
 ## Retenção (`/app/retencao`)
 Planilha operacional (`Retencao/PlanilhaRetencao.tsx`) + dashboard analítico (`components/Retencao/RetencaoDashboard.tsx` e seções).

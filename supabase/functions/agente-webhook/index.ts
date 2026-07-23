@@ -14,17 +14,70 @@ import type { AgentToolDefinition, ToolCall, ToolResult, AIResponse, TransferToo
 import {
   buscarContato, criarContato, criarConversa, enviarNotaPrivada, enviarMensagem,
   buscarLabelsContato, atualizarLabelsContato, buscarLabelsConversa,
-  atualizarLabelsConversa, toggleStatusConversa,
+  atualizarLabelsConversa, toggleStatusConversa, garantirLabelsExistem,
 } from '../_shared/chatwoot-api.ts'
 import type { ChatwootConfig } from '../_shared/chatwoot-api.ts'
 
 const DEFAULT_DEBOUNCE_MS = 3000
 const DEFAULT_MAX_PER_MINUTE = 20
 const MAX_TOOL_ITERATIONS = 5
+// Janela de reengajamento: após uma transferência, o bot só volta a triar o
+// mesmo lead depois deste prazo (evita reprocessar quem já está com consultor).
+const DIAS_REENGAJAMENTO = 4
+
+// Tools cuja execução JÁ é a resposta final ao lead (mandam mensagem direto pelo
+// WhatsApp) — depois delas não há nada a narrar, então o loop de tool-calling
+// deve parar em vez de perguntar de novo à IA (evita chamada e mensagem extras).
+const TOOLS_TERMINAIS = ['send_buttons', 'send_list']
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+// Auto-agenda o disparo da fila em background (sem depender do tick do cron
+// processar-mensagens-agendadas, que só varre a cada minuto). Espera a janela do
+// debounce fechar, tenta o MESMO atomic claim do cron escopado a esta fila e, se
+// vencer, re-invoca a própria função com debounce_trigger. Se uma mensagem nova
+// tiver empurrado processar_apos pra frente, o claim não pega (processar_apos
+// ainda futuro) e a tarefa agendada por essa mensagem nova é quem dispara — o que
+// preserva o debounce (N mensagens seguidas = 1 turno). O cron continua ativo só
+// como rede de segurança (worker despejado antes desta tarefa rodar).
+function agendarDisparoDebounce(
+  supabase: any,
+  ids: { agente_id: string; telefone: string; unidade_id: string },
+  debounceMs: number,
+) {
+  // @ts-ignore EdgeRuntime existe no runtime Supabase (Deno Deploy)
+  EdgeRuntime.waitUntil((async () => {
+    await sleep(debounceMs + 300)
+    const { data: claimed } = await supabase
+      .from('agente_fila_mensagens')
+      .update({ processando: true })
+      .eq('agente_id', ids.agente_id)
+      .eq('telefone', ids.telefone)
+      .eq('processando', false)
+      .lte('processar_apos', new Date().toISOString())
+      .select('id')
+      .maybeSingle()
+    if (!claimed) return
+    await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/agente-webhook`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+      },
+      body: JSON.stringify({
+        agente_id: ids.agente_id,
+        unidade_id: ids.unidade_id,
+        telefone: ids.telefone,
+        texto: '',
+        tipo_mensagem: 'debounce_trigger',
+      }),
+    }).catch(e => console.error('[agente-webhook] auto-disparo debounce falhou:', e))
+  })())
 }
 
 Deno.serve(async (req) => {
@@ -106,7 +159,9 @@ Deno.serve(async (req) => {
       // Não adicionar mensagens vazias (ex: debounce_trigger)
       if (novaMensagem.text || novaMensagem.media_url) acumuladas.push(novaMensagem)
 
-      if (filaExistente.processando) {
+      // debounce_trigger é a própria chamada autorizada pelo cron (que já marcou
+      // processando=true ao reivindicar a fila) — não é um concorrente, deve seguir.
+      if (filaExistente.processando && tipo_mensagem !== 'debounce_trigger') {
         await supabase.from('agente_fila_mensagens').update({ mensagens_acumuladas: acumuladas }).eq('id', filaExistente.id)
         return json({ status: 'queued' })
       }
@@ -114,6 +169,7 @@ Deno.serve(async (req) => {
         await supabase.from('agente_fila_mensagens')
           .update({ mensagens_acumuladas: acumuladas, processar_apos: processarApos.toISOString() })
           .eq('id', filaExistente.id)
+        agendarDisparoDebounce(supabase, { agente_id, telefone, unidade_id }, debounceMs)
         return json({ status: 'debounced' })
       }
       await supabase.from('agente_fila_mensagens')
@@ -128,8 +184,10 @@ Deno.serve(async (req) => {
         processando: false,
       })
 
-      // Processamento será feito pelo cron processar-mensagens-agendadas (a cada minuto)
-      return json({ status: 'debounced', message: 'Primeira mensagem, aguardando cron para processar' })
+      // Auto-agenda o disparo (~debounce) sem esperar o cron. O cron segue como
+      // rede de segurança caso o worker seja despejado antes da tarefa rodar.
+      agendarDisparoDebounce(supabase, { agente_id, telefone, unidade_id }, debounceMs)
+      return json({ status: 'debounced', message: 'Primeira mensagem, disparo auto-agendado' })
     }
 
     // 3. Get ou criar agente_conversas
@@ -160,13 +218,26 @@ Deno.serve(async (req) => {
       conversa = novaConv
     }
 
-    // 3b. Rate limiting
+    // 4. Se bot desativado (human takeover), sair
+    if (!conversa.bot_ativo) {
+      await supabase.from('agente_fila_mensagens').delete().eq('agente_id', agente_id).eq('telefone', telefone)
+      return json({ status: 'skipped', message: 'Bot desativado (human takeover)' })
+    }
+
+    // 5. Buscar número Meta (a caixa). Feito ANTES do rate limiting e do histórico
+    // porque o numero_meta_id é o que identifica a conversa desta caixa — sem ele,
+    // a busca por telefone pega conversa de outra campanha/caixa do mesmo lead.
+    const metaConfig = await getNumeroMeta(supabase, agente)
+    if (!metaConfig) throw new Error('Número Meta não configurado para este agente')
+
+    // 3b. Rate limiting — conta inbounds recentes NESTA caixa (numero_meta_id),
+    // não em qualquer conversa do telefone.
     const maxPerMinute = antiSpam?.max_messages_per_minute ?? DEFAULT_MAX_PER_MINUTE
     if (maxPerMinute > 0 && !novaConversa) {
       const umMinutoAtras = new Date(agora.getTime() - 60000).toISOString()
       const { data: convPrincipal } = await supabase
         .from('conversas_campanha').select('id')
-        .eq('telefone', telefone).eq('unidade_id', unidade_id)
+        .eq('telefone', telefone).eq('numero_meta_id', metaConfig.id)
         .maybeSingle()
 
       if (convPrincipal) {
@@ -183,16 +254,6 @@ Deno.serve(async (req) => {
         }
       }
     }
-
-    // 4. Se bot desativado (human takeover), sair
-    if (!conversa.bot_ativo) {
-      await supabase.from('agente_fila_mensagens').delete().eq('agente_id', agente_id).eq('telefone', telefone)
-      return json({ status: 'skipped', message: 'Bot desativado (human takeover)' })
-    }
-
-    // 5. Buscar número Meta
-    const metaConfig = await getNumeroMeta(supabase, agente)
-    if (!metaConfig) throw new Error('Número Meta não configurado para este agente')
 
     // 5b. Mensagem de boas-vindas para novas conversas
     if (novaConversa && agente.mensagem_boas_vindas) {
@@ -237,16 +298,20 @@ Deno.serve(async (req) => {
       return json({ status: 'skipped', message: 'Nenhum texto para processar' })
     }
 
-    // 8. Montar contexto para IA — histórico de mensagens
+    // 8. Montar contexto para IA — histórico de mensagens DESTA caixa (numero_meta_id
+    // + telefone = conversa única), cortando o que é anterior ao início desta conversa
+    // do agente (conversa.created_at). Sem o corte, uma campanha nova que reusa o mesmo
+    // número puxaria as mensagens da campanha antiga (mesma linha de conversas_campanha).
     const { data: convPrincipal } = await supabase
       .from('conversas_campanha').select('id')
-      .eq('telefone', telefone).eq('unidade_id', unidade_id)
-      .order('ultima_mensagem_em', { ascending: false }).limit(1).maybeSingle()
+      .eq('telefone', telefone).eq('numero_meta_id', metaConfig.id)
+      .maybeSingle()
 
     const { data: historico } = await supabase
       .from('mensagens_campanha')
       .select('direcao, texto, tipo, created_at, enviado_por_agente')
       .eq('conversa_id', convPrincipal?.id ?? '')
+      .gte('created_at', conversa.created_at)
       .order('created_at', { ascending: true })
       .limit(30)
 
@@ -337,6 +402,10 @@ Deno.serve(async (req) => {
           }
           toolMessages.push({ role: 'tool', tool_call_id: tc.id, content: resultado.content })
         }
+
+        // Alguma tool terminal rodou (ex: send_buttons) — a resposta já foi
+        // enviada, não há necessidade de perguntar à IA de novo.
+        if (lastResponse.tool_calls.some(tc => TOOLS_TERMINAIS.includes(tc.name))) break
       }
     }
 
@@ -384,11 +453,11 @@ Deno.serve(async (req) => {
 
 async function getNumeroMeta(supabase: any, agente: any) {
   if (agente.numero_meta_id) {
-    const { data } = await supabase.from('numeros_meta').select('phone_number_id, access_token').eq('id', agente.numero_meta_id).single()
-    return data ? { phone_number_id: data.phone_number_id, access_token: data.access_token } : null
+    const { data } = await supabase.from('numeros_meta').select('id, phone_number_id, access_token').eq('id', agente.numero_meta_id).single()
+    return data ? { id: data.id, phone_number_id: data.phone_number_id, access_token: data.access_token } : null
   }
-  const { data } = await supabase.from('numeros_meta').select('phone_number_id, access_token').eq('unidade_id', agente.unidade_id).eq('is_default', true).single()
-  return data ? { phone_number_id: data.phone_number_id, access_token: data.access_token } : null
+  const { data } = await supabase.from('numeros_meta').select('id, phone_number_id, access_token').eq('unidade_id', agente.unidade_id).eq('is_default', true).single()
+  return data ? { id: data.id, phone_number_id: data.phone_number_id, access_token: data.access_token } : null
 }
 
 async function salvarMensagemSaida(supabase: any, unidadeId: string, metaConfig: any, telefone: string, texto: string, agenteId: string, numeroMetaId?: string, waMessageId?: string) {
@@ -445,11 +514,13 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
   const summary = (tc.arguments?.summary as string) ?? ''
   const instrumento = (tc.arguments?.instrumento as string) ?? ''
   const classificacao = (tc.arguments?.classificacao as string) ?? ''
+  const perfil = (tc.arguments?.perfil as string) ?? ''
 
   // 0. Validar dados obrigatórios antes de transferir
   const dadosFaltando: string[] = []
   if (!leadName.trim()) dadosFaltando.push('nome do lead')
   if (!unitRaw.trim()) dadosFaltando.push('unidade desejada')
+  if (!perfil.trim()) dadosFaltando.push('perfil (criança ou adulto)')
 
   if (dadosFaltando.length > 0) {
     return {
@@ -474,12 +545,15 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
     u => u.name.toLowerCase() === unitNorm.toLowerCase()
   )
 
-  // 2. Check se já foi transferido
+  // 2. Check se já foi transferido DENTRO da janela de reengajamento.
+  // Transferências mais antigas que DIAS_REENGAJAMENTO não bloqueiam (lead volta a triar).
+  const cutoffReengajamento = new Date(ctx.agora.getTime() - DIAS_REENGAJAMENTO * 24 * 60 * 60 * 1000).toISOString()
   const { data: jaTransferido } = await ctx.supabase
     .from('agente_conversas')
     .select('id')
     .eq('telefone', ctx.telefone)
     .eq('status', 'transferred')
+    .gte('transferido_em', cutoffReengajamento)
     .limit(1)
     .maybeSingle()
 
@@ -493,13 +567,55 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
   // 3. Marcar conversa como transferida
   await ctx.supabase.from('agente_conversas').update({
     bot_ativo: false, status: 'transferred',
+    transferido_em: ctx.agora.toISOString(),
     session_data: {
       ...(ctx.conversa.session_data ?? {}),
       transferred_at: ctx.agora.toISOString(),
       transfer_unit: unitNorm, lead_name: leadName,
-      summary, instrumento, classificacao,
+      summary, instrumento, classificacao, perfil,
     },
   }).eq('id', ctx.conversa.id)
+
+  // 3b. Registrar/marcar o lead no funil comercial (LAReport).
+  // Isolado em try/catch: NUNCA bloqueia a transferência (o crítico é o Chatwoot/consultor abaixo).
+  // Reusa a RPC canônica upsert_lead (source_type='campanha') — dedup por telefone+unidade e
+  // convergência futura com o Emusys pelo mesmo registro. Histórico da campanha vai em leads_campanhas.
+  try {
+    // Resolver unidade_id real: unitNorm ('CG'/'Barra'/'Recreio') -> unidades.nome
+    const nomeUnidade = unitNorm === 'CG' ? 'Campo Grande' : unitNorm
+    const { data: uni } = await ctx.supabase
+      .from('unidades').select('id')
+      .eq('nome', nomeUnidade).eq('ativo', true).maybeSingle()
+
+    if (uni?.id) {
+      const { data: leadRes } = await ctx.supabase.rpc('upsert_lead', {
+        p_nome: leadName || null,
+        p_telefone: ctx.telefone,
+        p_email: null,
+        p_unidade_id: uni.id,
+        p_curso: null,
+        p_canal: null,
+        p_source_id: null,
+        p_source_type: 'campanha',
+        p_arquivar: false,
+        p_data_contato: null,
+      })
+      const leadId = leadRes?.lead_id
+      const campanhaSlug = (config.campanha_label as string) || null
+      if (leadId && campanhaSlug) {
+        await ctx.supabase.from('leads_campanhas').upsert({
+          lead_id: leadId,
+          agente_id: ctx.agente.id,
+          campanha_slug: campanhaSlug,
+          campanha_nome: ctx.agente.nome,
+        }, { onConflict: 'lead_id,campanha_slug', ignoreDuplicates: true })
+      }
+    } else {
+      console.error('upsert_lead campanha: unidade não resolvida para', unitNorm)
+    }
+  } catch (e) {
+    console.error('Erro ao registrar lead da campanha no LAReport:', e)
+  }
 
   // 4. Integração Chatwoot completa
   const hasCW = config.chatwoot_api_url && config.chatwoot_api_token && config.chatwoot_account_id
@@ -519,11 +635,19 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
       const unitTag = unitNorm.toLowerCase() === 'campo grande' ? 'cg' : unitNorm.toLowerCase().replace(/\s+/g, '-')
       const campanhaLabel = (config.campanha_label as string) || 'campanha-meta'
       const newLabels = [campanhaLabel, unitTag]
+      // Perfil crianca/adulto define a marca (LA Music Kids vs Escola/adultos)
+      const perfilTag = perfil.toLowerCase().includes('crian') ? 'lamk'
+        : perfil.toLowerCase().includes('adult') ? 'emla' : null
+      if (perfilTag) newLabels.push(perfilTag)
       if (classificacao) newLabels.push(classificacao.toLowerCase())
       if (instrumento) {
         const instrumentoTag = instrumento.normalize('NFD').replace(/[\u0300-\u0326\u0328-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, '-')
         newLabels.push(instrumentoTag)
       }
+
+      // Garante que as labels existam na conta antes de aplicar (Chatwoot não
+      // cria label de conta automaticamente ao etiquetar — sem isso, a etiqueta não "pega").
+      await garantirLabelsExistem(cwCfg, newLabels)
 
       const existingContactLabels = await buscarLabelsContato(cwCfg, contato.id)
       const allContactLabels = [...new Set([...existingContactLabels, ...newLabels])]
@@ -540,19 +664,23 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
       const allConvLabels = [...new Set([...existingConvLabels, ...newLabels])]
       await atualizarLabelsConversa(cwCfg, conversa.id, allConvLabels)
 
-      // 4f. Nota privada com resumo
+      // 4f. Nota privada com resumo — contexto pro consultor entender a ORIGEM do lead.
+      const perfilLabel = perfil.toLowerCase().includes('crian') ? 'Criança (LA Music Kids)'
+        : perfil.toLowerCase().includes('adult') ? 'Adulto' : null
       const nota = [
         `🤖 *Lead qualificado via Agente IA*`,
+        `📣 *Campanha:* ${ctx.agente.nome}`,
         '',
         leadName ? `*Lead:* ${leadName}` : null,
         `*Telefone:* ${ctx.telefone}`,
         `*Unidade:* ${unitNorm}`,
+        perfilLabel ? `*Perfil:* ${perfilLabel}` : null,
         instrumento ? `*Instrumento:* ${instrumento}` : null,
         classificacao ? `*Classificação:* ${classificacao}` : null,
-        summary ? `\n*Resumo:* ${summary}` : null,
+        summary ? `\n*Resumo da conversa:* ${summary}` : null,
         '',
         '---',
-        'O lead foi qualificado e está aguardando contato!',
+        `Esse lead veio da campanha *${ctx.agente.nome}* e já foi qualificado pelo agente. Está aguardando seu contato! ⚡`,
       ].filter(Boolean).join('\n')
       await enviarNotaPrivada(cwCfg, conversa.id, nota)
 
@@ -563,12 +691,13 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
         const msg = [
           `Olá ${matchedUnit.consultant_name || 'Consultor'}! 👋`,
           '',
-          'Você tem um novo lead qualificado! 🎓',
+          `Você tem um novo lead qualificado da campanha *${ctx.agente.nome}*! 🎓`,
           '',
           '📋 *Detalhes do Lead:*',
           leadName ? `• *Nome:* ${leadName}` : null,
           `• *Telefone:* ${ctx.telefone}`,
           `• *Unidade:* ${unitNorm}`,
+          perfilLabel ? `• *Perfil:* ${perfilLabel}` : null,
           instrumento ? `• *Instrumento:* ${instrumento}` : null,
           '',
           `🔗 *Link da Conversa:*`,

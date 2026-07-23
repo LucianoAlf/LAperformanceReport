@@ -1,5 +1,11 @@
+/// <reference lib="deno.ns" />
+
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  isHealthScoreV3OfficialRankable,
+  isHealthScoreV3Visible,
+  parseHealthScoreV3Payload,
+} from '../_shared/health-score-v3.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,104 +33,6 @@ interface RelatorioCoordenacaoRequest {
   dados: any;
   tipo: 'mensal' | 'ranking' | 'individual';
   professor_id?: number;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// CÁLCULO DO HEALTH SCORE - IDÊNTICO AO FRONTEND (useHealthScore.ts)
-// ═══════════════════════════════════════════════════════════════
-
-// Pesos padrão (fallback se não houver config no banco)
-const DEFAULT_HEALTH_WEIGHTS = {
-  taxaCrescimento: 0,
-  mediaTurma: 20,
-  retencao: 25,
-  conversao: 20,
-  presenca: 25,
-  evasoes: 10,
-};
-
-type HealthWeights = typeof DEFAULT_HEALTH_WEIGHTS;
-
-// Busca pesos configurados no banco para a unidade
-async function buscarPesos(unidadeId: string | null): Promise<HealthWeights> {
-  try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const client = createClient(supabaseUrl, supabaseKey);
-
-    let query = client.from('config_health_score_professor').select('*');
-    if (unidadeId) {
-      query = query.or(`unidade_id.eq.${unidadeId},unidade_id.is.null`);
-    } else {
-      query = query.is('unidade_id', null);
-    }
-
-    const { data } = await query
-      .order('unidade_id', { nullsFirst: false })
-      .limit(1);
-
-    if (data && data.length > 0) {
-      const row = data[0];
-      return {
-        taxaCrescimento: row.peso_taxa_crescimento,
-        mediaTurma: row.peso_media_turma,
-        retencao: row.peso_retencao,
-        conversao: row.peso_conversao,
-        presenca: row.peso_presenca,
-        evasoes: row.peso_evasoes,
-      };
-    }
-  } catch (e) {
-    console.error('[relatorio-coordenacao] Erro ao buscar pesos do banco:', e);
-  }
-  return DEFAULT_HEALTH_WEIGHTS;
-}
-
-// Cálculo idêntico ao useHealthScore.ts (V2)
-function calcularHealthScore(
-  kpis: { taxaCrescimento: number; mediaTurma: number; retencao: number; conversao: number; presenca: number; evasoes: number; carteira: number; },
-  weights: HealthWeights
-): { score: number; status: 'critico' | 'atencao' | 'saudavel' } {
-  // 1. Taxa de Crescimento: ((taxa + 10) / 30) * 100
-  const scoreCrescimento = Math.max(0, Math.min(100, ((kpis.taxaCrescimento + 10) / 30) * 100));
-  const contribTaxaCres = scoreCrescimento * (weights.taxaCrescimento / 100);
-
-  // 2. Média/Turma: (media / 2.0) * 100, max 100
-  const scoreMT = Math.min(100, (kpis.mediaTurma / 2.0) * 100);
-  const contribMT = scoreMT * (weights.mediaTurma / 100);
-
-  // 3. Retenção: valor direto (0-100)
-  const scoreRet = kpis.retencao;
-  const contribRet = scoreRet * (weights.retencao / 100);
-
-  // 4. Conversão: valor direto, max 100
-  const scoreConv = Math.min(100, kpis.conversao);
-  const contribConv = scoreConv * (weights.conversao / 100);
-
-  // 5. Presença: valor direto (0-100)
-  const scorePres = kpis.presenca;
-  const contribPres = scorePres * (weights.presenca / 100);
-
-  // 6. Evasões (inverso): taxa % = (evasoes / carteira) * 100, score = 100 - (taxa * 10)
-  const taxaEvasao = kpis.carteira > 0 ? (kpis.evasoes / kpis.carteira) * 100 : 0;
-  const scoreEvasoes = Math.max(0, 100 - (taxaEvasao * 10));
-  const contribEvasoes = scoreEvasoes * (weights.evasoes / 100);
-  
-  // Calcular score total
-  const score = contribTaxaCres + contribMT + contribRet + contribConv + contribPres + contribEvasoes;
-  
-  // Determinar status V2
-  let status: 'critico' | 'atencao' | 'saudavel' = 'saudavel';
-  if (score < 50) {
-    status = 'critico';
-  } else if (score < 70) {
-    status = 'atencao';
-  }
-  
-  return {
-    score: Math.round(score * 10) / 10,
-    status
-  };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -164,7 +72,6 @@ Deno.serve(async (req) => {
 
     const periodo = dados.periodo || {};
     const unidadeNome = periodo.unidade_nome || 'Consolidado';
-    const unidadeId: string | null = periodo.unidade_id || null;
     const ano = periodo.ano || new Date().getFullYear();
     const mesAtual = periodo.mes || new Date().getMonth() + 1;
     const coordenadores = periodo.coordenadores || ['Quintela', 'Juliana'];
@@ -189,54 +96,47 @@ Deno.serve(async (req) => {
     const totalMatriculas = totais.total_matriculas || 0;
     const mrrTotal = totais.mrr_total || 0;
 
-    // Buscar pesos configurados no banco para esta unidade
-    const weights = await buscarPesos(unidadeId);
-
-    // KPIs de professores - calcular Health Score com pesos do banco
+    // KPIs de professores: o snapshot V3 chega pronto e nunca é recalculado aqui.
     const kpisProfessoresRaw = dados.kpis_professores || [];
     const kpisProfessores = kpisProfessoresRaw.map((p: any) => {
-      const numeroOu = (valor: unknown, fallback = 0) => {
-        if (valor === null || valor === undefined || valor === '') return fallback;
-        const numero = Number(valor);
-        return Number.isFinite(numero) ? numero : fallback;
-      };
-      const presencaPublicavel = p.presenca_publicavel === true
-        && p.media_presenca !== null
-        && p.media_presenca !== undefined;
-      const healthResult = calcularHealthScore({
-        taxaCrescimento: numeroOu(p.taxa_crescimento),
-        mediaTurma: numeroOu(p.media_alunos_turma),
-        retencao: numeroOu(p.taxa_retencao, 100),
-        conversao: numeroOu(p.taxa_conversao),
-        presenca: presencaPublicavel ? numeroOu(p.media_presenca) : 75,
-        evasoes: numeroOu(p.evasoes),
-        carteira: numeroOu(p.carteira_alunos),
-      }, weights);
-      const healthScoreInformado = Number(p.health_score);
-      const healthStatusInformado = p.health_status;
-      const usaHealthCanonico = p.health_score_confiavel === true
-        && presencaPublicavel
-        && Number.isFinite(healthScoreInformado)
-        && ['critico', 'atencao', 'saudavel'].includes(healthStatusInformado);
+      const healthScoreV3 = parseHealthScoreV3Payload(p.health_score_v3);
+      const healthVisivel = isHealthScoreV3Visible(healthScoreV3);
+      const presencaOperacionalPublicavel = p.presenca_publicavel === true
+        && Number.isFinite(Number(p.media_presenca))
+        && Number(p.presenca_eventos_confirmados) > 0;
       return {
         ...p,
-        media_presenca: presencaPublicavel ? numeroOu(p.media_presenca) : null,
-        presenca_publicavel: presencaPublicavel,
-        health_score: usaHealthCanonico ? healthScoreInformado : null,
-        health_status: usaHealthCanonico ? healthStatusInformado : null,
-        health_score_confiavel: usaHealthCanonico,
-        health_score_diagnostico_interno: healthResult.score,
+        health_score_v3: healthScoreV3,
+        media_presenca: presencaOperacionalPublicavel ? Number(p.media_presenca) : null,
+        presenca_publicavel: presencaOperacionalPublicavel,
+        presenca_eventos_confirmados: presencaOperacionalPublicavel
+          ? Number(p.presenca_eventos_confirmados)
+          : 0,
+        health_score: healthVisivel ? healthScoreV3!.score : null,
+        health_status: healthVisivel ? healthScoreV3!.classificacao : null,
+        health_score_confiavel: healthVisivel,
+        ranking_habilitado: isHealthScoreV3OfficialRankable(healthScoreV3),
       };
     });
 
     // Calcular Health Score médio
     const kpisHealthPublicavel = kpisProfessores.filter((p: any) => p.health_score_confiavel);
+    const estadoPublicacaoEquipe = kpisHealthPublicavel.some((p: any) => p.health_score_v3?.estado_publicacao === 'oficial')
+      ? 'oficial'
+      : kpisHealthPublicavel.length > 0 ? 'parcial' : 'sem_base';
     const healthScoreMedio = kpisHealthPublicavel.length > 0
       ? Math.round(kpisHealthPublicavel.reduce((sum: number, p: any) => sum + p.health_score, 0) / kpisHealthPublicavel.length * 10) / 10
       : null;
     const kpisPresencaPublicavel = kpisProfessores.filter((p: any) => p.presenca_publicavel);
-    const mediaPresenca = kpisPresencaPublicavel.length > 0
-      ? kpisPresencaPublicavel.reduce((sum: number, p: any) => sum + p.media_presenca, 0) / kpisPresencaPublicavel.length
+    const totalEventosPresenca = kpisPresencaPublicavel.reduce(
+      (sum: number, p: any) => sum + p.presenca_eventos_confirmados,
+      0,
+    );
+    const mediaPresenca = totalEventosPresenca > 0
+      ? kpisPresencaPublicavel.reduce(
+        (sum: number, p: any) => sum + p.media_presenca * p.presenca_eventos_confirmados,
+        0,
+      ) / totalEventosPresenca
       : null;
 
     // Contar professores por status baseado no Health Score calculado
@@ -245,19 +145,21 @@ Deno.serve(async (req) => {
     const professorSaudaveisHS = kpisHealthPublicavel.filter((p: any) => p.health_status === 'saudavel');
 
     // Top Health Score
-    const topHealthScore = [...kpisHealthPublicavel]
+    const rankingOficialHabilitado = kpisProfessores.some((p: any) => p.ranking_habilitado);
+    const topHealthScore = kpisProfessores
+      .filter((p: any) => p.ranking_habilitado)
       .sort((a: any, b: any) => b.health_score - a.health_score)
       .slice(0, 3);
     
     // Rankings
-    const topCarteira = dados.top_carteira || [];
-    const topMediaTurma = dados.top_media_turma || [];
-    const topPresenca = [...kpisPresencaPublicavel]
+    const topCarteira = rankingOficialHabilitado ? (dados.top_carteira || []) : [];
+    const topMediaTurma = rankingOficialHabilitado ? (dados.top_media_turma || []) : [];
+    const topPresenca = rankingOficialHabilitado ? [...kpisPresencaPublicavel]
       .sort((a: any, b: any) => b.media_presenca - a.media_presenca)
       .slice(0, 3)
-      .map((p: any) => ({ professor: p.professor_nome, presenca: p.media_presenca }));
-    const topMatriculadores = dados.top_matriculadores || [];
-    const topRetencao = dados.top_retencao || [];
+      .map((p: any) => ({ professor: p.professor_nome, presenca: p.media_presenca })) : [];
+    const topMatriculadores = rankingOficialHabilitado ? (dados.top_matriculadores || []) : [];
+    const topRetencao = rankingOficialHabilitado ? (dados.top_retencao || []) : [];
 
     // Professores com presença baixa. Esta lista não é a mesma classificação do Health Score.
     const professoresAlerta = (dados.professores_alerta || [])
@@ -309,9 +211,9 @@ Deno.serve(async (req) => {
       relatorioTemplate += `• Professores Críticos: *${professorCriticosHS.length}* 🔴\n`;
       relatorioTemplate += `• Professores Atenção: *${professorAtencaoHS.length}* 🟡\n`;
       relatorioTemplate += `• Professores Saudáveis: *${professorSaudaveisHS.length}* 🟢\n`;
-      relatorioTemplate += `• Health Score Médio: *${healthScoreMedio}*\n\n`;
+      relatorioTemplate += `• Health Score V3 Médio (${estadoPublicacaoEquipe}): *${healthScoreMedio}*\n\n`;
     } else {
-      relatorioTemplate += `• Health Score: *Em auditoria* — presença sem cobertura suficiente para publicação.\n\n`;
+      relatorioTemplate += `• Health Score V3: *Sem base* para o recorte.\n\n`;
     }
 
     // KPIs CONSOLIDADOS
@@ -340,6 +242,9 @@ Deno.serve(async (req) => {
     relatorioTemplate += `───────────────────────\n`;
     relatorioTemplate += `🏆 *RANKINGS DE PROFESSORES*\n`;
     relatorioTemplate += `───────────────────────\n\n`;
+    if (!rankingOficialHabilitado) {
+      relatorioTemplate += `*Reservados ao fechamento oficial do ciclo.* O Health Score parcial não gera ranking nem premiação.\n\n`;
+    }
 
     // Top Health Score (calculado)
     if (topHealthScore.length > 0) {
@@ -550,9 +455,12 @@ REGRAS:
 - Mencione professores pelo nome quando relevante
 - Use emojis moderadamente
 - Cada item deve ter no máximo 1-2 linhas
-- Se presenca_publicavel=false ou a presença for nula, não avalie presença e não gere ranking, alerta ou recomendação baseada nela.
-- Se health_score_confiavel=false ou o Health Score for nulo, não classifique professores por Health Score.
-- Nunca converta presença ou Health Score nulos em zero.
+- Use somente health_score_v3 para Health Score, classificação e seus seis pilares.
+- Não recalcule score, nota, classificação, meta, peso ou cobertura.
+- Snapshot parcial pode orientar análise coletiva, mas nunca ranking ou premiação.
+- Ranking só existe quando ranking_habilitado=true e estado_publicacao='oficial'.
+- valor_bruto nulo ou estado_base='sem_base' significa Sem base, nunca zero.
+- Campo Grande com presença em auditoria não pode receber alerta ou penalidade de presença.
 
 Responda EXATAMENTE neste formato JSON:
 {
@@ -571,6 +479,8 @@ Responda EXATAMENTE neste formato JSON:
       mes: mesNome,
       ano: ano,
       total_professores: totalProfessores,
+      estado_publicacao: estadoPublicacaoEquipe,
+      ranking_habilitado: rankingOficialHabilitado,
       health_score_medio: healthScoreMedio,
       professores_criticos_count: professorCriticosHS.length,
       professores_atencao_count: professorAtencaoHS.length,
@@ -595,6 +505,10 @@ Responda EXATAMENTE neste formato JSON:
       })),
       top_retencao: topRetencao.slice(0, 3),
       top_presenca: topPresenca.slice(0, 3),
+      health_score_v3: kpisProfessores.map((p: any) => ({
+        professor_nome: p.professor_nome,
+        snapshot: p.health_score_v3,
+      })),
       agenda: {
         treinamentos: treinamentosAgendados,
         atrasados: atrasados

@@ -5,6 +5,7 @@ import {
   TrendingUp, Calendar, Award, BookOpen, MessageSquare, Brain
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import type { HealthScoreV3AiPayload } from '@/lib/healthScoreProfessorV3Performance';
 
 interface ProfessorMetricas {
   id: number;
@@ -23,8 +24,7 @@ interface ProfessorMetricas {
   presenca_eventos_incertos: number;
   evasoes_mes: number;
   status: 'critico' | 'atencao' | 'excelente';
-  health_score: number | null;
-  health_score_confiavel: boolean;
+  health_score_v3: HealthScoreV3AiPayload | null;
   unidades: string[];
 }
 

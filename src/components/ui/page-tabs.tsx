@@ -94,7 +94,10 @@ export function PageTabs<T extends string = string>({
 
       {/* Mobile Tabs */}
       <div className="lg:hidden">
-        <div className="relative flex bg-[#0f172a] p-1 rounded-xl border border-slate-800/50 shadow-inner overflow-x-auto scrollbar-hide">
+        <div
+          data-tour={dataTour}
+          className="relative flex bg-[#0f172a] p-1 rounded-xl border border-slate-800/50 shadow-inner overflow-x-auto scrollbar-hide"
+        >
           {tabs.filter(t => !t.disabled).map(tab => {
             const isActive = activeTab === tab.id;
 

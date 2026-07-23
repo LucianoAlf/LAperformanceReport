@@ -48,7 +48,10 @@ export async function criarContato(
     headers: { 'Content-Type': 'application/json', api_access_token: config.apiToken },
     body: JSON.stringify({ name: nome || telefone, phone_number: `+${telefone.replace(/\D/g, '')}` }),
   })
-  if (!res.ok) throw new Error(`Chatwoot criarContato failed: ${res.status}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Chatwoot criarContato failed: ${res.status} ${body}`)
+  }
   const data = await res.json()
   return data.payload?.contact ?? data.payload ?? data
 }
@@ -66,7 +69,19 @@ export async function criarConversa(
     headers: { 'Content-Type': 'application/json', api_access_token: config.apiToken },
     body: JSON.stringify({ contact_id: contatoId, inbox_id: parseInt(inboxId, 10), status: 'open' }),
   })
-  if (!res.ok) throw new Error(`Chatwoot criarConversa failed: ${res.status}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    // Chatwoot recusa uma 2ª conversa aberta/pendente pro mesmo contato (422),
+    // mas devolve o id da que já existe. Reaproveitar em vez de abortar — senão
+    // toda a etapa seguinte (nota de contexto + notificação do consultor) trava.
+    try {
+      const parsed = JSON.parse(body)
+      if (res.status === 422 && parsed?.conversation_id) {
+        return { id: parsed.conversation_id, inbox_id: parseInt(inboxId, 10), status: 'open' }
+      }
+    } catch { /* corpo não-JSON, cai no throw abaixo */ }
+    throw new Error(`Chatwoot criarConversa failed: ${res.status} ${body}`)
+  }
   return await res.json()
 }
 
@@ -101,6 +116,33 @@ export async function enviarMensagem(
 }
 
 // ─── Labels ──────────────────────────────────────────────────────────────────
+
+// Garante que cada título de label exista na conta antes de aplicá-lo. O Chatwoot
+// NÃO cria labels de conta automaticamente ao aplicar num contato/conversa — se o
+// título não existe na lista de Labels, a aplicação não "pega". Aqui buscamos as
+// labels da conta e criamos as que faltam (idempotente, case-insensitive).
+export async function garantirLabelsExistem(config: ChatwootConfig, titles: string[]): Promise<void> {
+  const alvo = titles.filter(t => t && t.trim())
+  if (!alvo.length) return
+  try {
+    const res = await fetch(`${config.apiUrl}/api/v1/accounts/${config.accountId}/labels`, {
+      headers: { api_access_token: config.apiToken },
+    })
+    if (!res.ok) return
+    const data = await res.json()
+    const existentes = new Set((data.payload ?? []).map((l: { title?: string }) => (l.title ?? '').toLowerCase()))
+    const faltantes = alvo.filter(t => !existentes.has(t.toLowerCase()))
+    for (const title of faltantes) {
+      await fetch(`${config.apiUrl}/api/v1/accounts/${config.accountId}/labels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', api_access_token: config.apiToken },
+        body: JSON.stringify({ title, color: '#6366f1', show_on_sidebar: true }),
+      }).catch(e => console.error('Chatwoot criarLabel error:', title, e))
+    }
+  } catch (e) {
+    console.error('garantirLabelsExistem error:', e)
+  }
+}
 
 export async function buscarLabelsContato(config: ChatwootConfig, contactId: number): Promise<string[]> {
   const url = `${config.apiUrl}/api/v1/accounts/${config.accountId}/contacts/${contactId}/labels`

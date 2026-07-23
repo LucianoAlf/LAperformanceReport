@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
   X, Users, Baby, School, Wallet, TrendingUp, Clock, Music,
@@ -9,6 +8,12 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
 } from '@/components/ui/dialog';
+import {
+  buscarCarteiraProfessorDetalheCanonica,
+  resumirClassificacaoCarteiraCanonica,
+  type AlunoCarteiraCanonico,
+  type DistribuicaoCursoCanonica,
+} from '@/lib/carteiraProfessorDetalheCanonica';
 
 // Interface para carteira do professor
 interface CarteiraProfessor {
@@ -27,12 +32,6 @@ interface CarteiraProfessor {
   unidades: string[];
 }
 
-interface DistribuicaoCurso {
-  curso: string;
-  quantidade: number;
-  percentual: number;
-}
-
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -41,72 +40,31 @@ interface Props {
 }
 
 export function ModalCarteiraProfessor({ open, onClose, professor, unidadeAtual }: Props) {
-  const [distribuicaoCursos, setDistribuicaoCursos] = useState<DistribuicaoCurso[]>([]);
-  const [alunosCompletos, setAlunosCompletos] = useState<any[]>([]);
+  const [distribuicaoCursos, setDistribuicaoCursos] = useState<DistribuicaoCursoCanonica[]>([]);
+  const [alunosCompletos, setAlunosCompletos] = useState<AlunoCarteiraCanonico[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (open && professor) {
       carregarDistribuicao();
     }
-  }, [open, professor]);
+  }, [open, professor, unidadeAtual]);
 
   const carregarDistribuicao = async () => {
     if (!professor) return;
     setLoading(true);
 
     try {
-      let query = supabase
-        .from('alunos')
-        .select(`
-          id, nome, classificacao, valor_parcela, tempo_permanencia_meses,
-          dia_aula, horario_aula, data_fim_contrato, data_matricula, telefone, email,
-          cursos(nome), unidades(nome)
-        `)
-        .eq('professor_atual_id', professor.id)
-        .eq('status', 'ativo')
-        .order('nome');
-
-      if (unidadeAtual !== 'todos') {
-        query = query.eq('unidade_id', unidadeAtual);
-      }
-
-      const { data } = await query;
-
-      // Calcular data_fim_contrato para alunos que não têm
-      const alunosComContrato = (data || []).map((aluno: any) => {
-        let fimContrato = aluno.data_fim_contrato;
-        if (!fimContrato && aluno.data_matricula) {
-          const dataMatricula = new Date(aluno.data_matricula);
-          const fimCalculado = new Date(dataMatricula);
-          fimCalculado.setFullYear(fimCalculado.getFullYear() + 1);
-          fimContrato = fimCalculado.toISOString().split('T')[0];
-        }
-        return { ...aluno, data_fim_contrato: fimContrato };
+      const detalhe = await buscarCarteiraProfessorDetalheCanonica({
+        professorId: professor.id,
+        unidadeId: unidadeAtual,
       });
-
-      // Salvar alunos completos para exportação
-      setAlunosCompletos(alunosComContrato);
-
-      // Agrupar por curso
-      const contagem = new Map<string, number>();
-      (data || []).forEach((a: any) => {
-        const curso = (a.cursos as any)?.nome || 'Não informado';
-        contagem.set(curso, (contagem.get(curso) || 0) + 1);
-      });
-
-      const total = data?.length || 0;
-      const distribuicao: DistribuicaoCurso[] = Array.from(contagem.entries())
-        .map(([curso, quantidade]) => ({
-          curso,
-          quantidade,
-          percentual: total > 0 ? (quantidade / total) * 100 : 0
-        }))
-        .sort((a, b) => b.quantidade - a.quantidade);
-
-      setDistribuicaoCursos(distribuicao);
+      setAlunosCompletos(detalhe.alunos);
+      setDistribuicaoCursos(detalhe.distribuicaoCursos);
     } catch (error) {
       console.error('Erro ao carregar distribuição:', error);
+      setAlunosCompletos([]);
+      setDistribuicaoCursos([]);
     } finally {
       setLoading(false);
     }
@@ -174,12 +132,9 @@ export function ModalCarteiraProfessor({ open, onClose, professor, unidadeAtual 
 
   if (!professor) return null;
 
-  const percentualLamk = professor.total_alunos > 0 
-    ? (professor.alunos_lamk / professor.total_alunos) * 100 
-    : 0;
-  const percentualEmla = professor.total_alunos > 0 
-    ? (professor.alunos_emla / professor.total_alunos) * 100 
-    : 0;
+  const resumoClassificacao = resumirClassificacaoCarteiraCanonica(alunosCompletos);
+  const percentualLamk = resumoClassificacao.percentualLamk;
+  const percentualEmla = resumoClassificacao.percentualEmla;
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -265,7 +220,7 @@ export function ModalCarteiraProfessor({ open, onClose, professor, unidadeAtual 
                 <Baby className="w-4 h-4 text-cyan-400" />
                 <span className="text-xs text-slate-400">LA Music Kids</span>
               </div>
-              <p className="text-xl font-bold text-cyan-400">{professor.alunos_lamk}</p>
+              <p className="text-xl font-bold text-cyan-400">{resumoClassificacao.lamk}</p>
               <p className="text-xs text-slate-500">{percentualLamk.toFixed(0)}% da carteira</p>
             </div>
 
@@ -275,7 +230,7 @@ export function ModalCarteiraProfessor({ open, onClose, professor, unidadeAtual 
                 <School className="w-4 h-4 text-violet-400" />
                 <span className="text-xs text-slate-400">LA Music School</span>
               </div>
-              <p className="text-xl font-bold text-violet-400">{professor.alunos_emla}</p>
+              <p className="text-xl font-bold text-violet-400">{resumoClassificacao.emla}</p>
               <p className="text-xs text-slate-500">{percentualEmla.toFixed(0)}% da carteira</p>
             </div>
 

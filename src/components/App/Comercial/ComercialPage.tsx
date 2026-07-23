@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import { 
@@ -628,7 +628,7 @@ export function ComercialPage() {
   })[]>([]);
   
   // Registros do mês por tipo (para tabelas de detalhamento)
-  const [leadsMes, setLeadsMes] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string })[]>([]);
+  const [leadsMes, setLeadsMes] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string; campanhas?: { campanha_nome: string; campanha_slug: string; created_at: string }[] })[]>([]);
   const [experimentaisMes, setExperimentaisMes] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string; professor_nome?: string })[]>([]);
   const [experimentaisDetalhadas, setExperimentaisDetalhadas] = useState<any[]>([]);
   const [visitasMes, setVisitasMes] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string })[]>([]);
@@ -646,10 +646,21 @@ export function ComercialPage() {
   const [filtroCanalFunil, setFiltroCanalFunil] = useState<string>('todos');
   const [filtroCursoFunil, setFiltroCursoFunil] = useState<string>('todos');
   const [filtroProfessorFunil, setFiltroProfessorFunil] = useState<string>('todos');
+  const [filtroCampanhaFunil, setFiltroCampanhaFunil] = useState<string>('todos');
   const [filtroTipoExp, setFiltroTipoExp] = useState<'leads_novos' | 'todos' | 'alunos' | 'agendadas_periodo'>('leads_novos');
   // Filtro de presença na aba Experimentais: compareceram (vieram) vs faltaram
   const [filtroPresencaExp, setFiltroPresencaExp] = useState<'todas' | 'compareceram' | 'faltaram'>('compareceram');
   const [filtroTipoMat, setFiltroTipoMat] = useState<'novos_alunos' | 'segundo_curso' | 'todos'>('novos_alunos');
+  // Campanhas distintas presentes nos leads carregados (pro filtro do Detalhamento do Funil)
+  const campanhasFunil = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const l of leadsMes) {
+      for (const c of ((l as any).campanhas ?? []) as { campanha_slug: string; campanha_nome: string }[]) {
+        if (c?.campanha_slug && !map.has(c.campanha_slug)) map.set(c.campanha_slug, c.campanha_nome);
+      }
+    }
+    return Array.from(map, ([slug, nome]) => ({ slug, nome }));
+  }, [leadsMes]);
   const [selecionadosFunil, setSelecionadosFunil] = useState<Set<number>>(new Set());
   const [excluindoEmLote, setExcluindoEmLote] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
@@ -947,7 +958,7 @@ export function ComercialPage() {
       // Query base - buscar também cursos, unidades e dados do aluno (para filtro comercial)
       let query = supabase
         .from('leads')
-        .select('*, canais_origem(nome), cursos(nome), unidades(codigo), alunos:aluno_id(is_segundo_curso, is_aluno_retorno, is_ex_aluno)')
+        .select('*, canais_origem(nome), cursos(nome), unidades(codigo), alunos:aluno_id(is_segundo_curso, is_aluno_retorno, is_ex_aluno), leads_campanhas(campanha_nome, campanha_slug, created_at)')
         .order('data_contato', { ascending: false })
         .limit(10000);
 
@@ -1203,6 +1214,7 @@ export function ComercialPage() {
           ...l,
           canal_nome: (l.canais_origem as any)?.nome || '',
           curso_nome: (l.cursos as any)?.nome || '',
+          campanhas: ((l as any).leads_campanhas as any[]) || [],
         }));
 
       // Experimentais do mês (com nomes dos relacionamentos)
@@ -4637,6 +4649,19 @@ export function ComercialPage() {
                 </SelectContent>
               </Select>
             )}
+            {abaDetalhamento === 'leads' && campanhasFunil.length > 0 && (
+              <Select value={filtroCampanhaFunil} onValueChange={v => setFiltroCampanhaFunil(v)}>
+                <SelectTrigger className="w-[180px] bg-slate-800/50 border-slate-700 h-9 text-xs">
+                  <SelectValue placeholder="Campanha" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas as campanhas</SelectItem>
+                  {campanhasFunil.map(c => (
+                    <SelectItem key={c.slug} value={c.slug}>{c.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {abaDetalhamento === 'experimental' && (
               <Select value={filtroTipoExp} onValueChange={v => setFiltroTipoExp(v as any)}>
                 <SelectTrigger className="w-[180px] bg-slate-800/50 border-slate-700 h-9 text-xs">
@@ -4700,9 +4725,9 @@ export function ComercialPage() {
                 </SelectContent>
               </Select>
             )}
-            {(filtroIncompletoFunil !== 'todos' || filtroCanalFunil !== 'todos' || filtroCursoFunil !== 'todos' || filtroProfessorFunil !== 'todos') && (
+            {(filtroIncompletoFunil !== 'todos' || filtroCanalFunil !== 'todos' || filtroCursoFunil !== 'todos' || filtroProfessorFunil !== 'todos' || filtroCampanhaFunil !== 'todos') && (
               <button
-                onClick={() => { setFiltroIncompletoFunil('todos'); setFiltroCanalFunil('todos'); setFiltroCursoFunil('todos'); setFiltroProfessorFunil('todos'); }}
+                onClick={() => { setFiltroIncompletoFunil('todos'); setFiltroCanalFunil('todos'); setFiltroCursoFunil('todos'); setFiltroProfessorFunil('todos'); setFiltroCampanhaFunil('todos'); }}
                 className="text-xs text-slate-500 hover:text-white flex items-center gap-1 transition-colors"
               >
                 <X className="w-3 h-3" /> Limpar filtros
@@ -4762,6 +4787,11 @@ export function ComercialPage() {
             // Filtro por professor (experimental)
             if (filtroProfessorFunil !== 'todos') {
               if (String(l.professor_experimental_id) !== filtroProfessorFunil) return false;
+            }
+            // Filtro por campanha (origem — leads_campanhas)
+            if (filtroCampanhaFunil !== 'todos') {
+              const camps = (l as any).campanhas as { campanha_slug: string }[] | undefined;
+              if (!(camps ?? []).some(c => c.campanha_slug === filtroCampanhaFunil)) return false;
             }
             return true;
           });
@@ -4924,6 +4954,7 @@ export function ComercialPage() {
                     <SortableTh col="nome" label="Nome" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />
                     <SortableTh col="telefone" label="Telefone" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />
                     <SortableTh col="canal" label="Canal" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />
+                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Campanha</th>
                     <SortableTh col="curso" label="Curso" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />
                     <SortableTh col="etapa" label="Etapa" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />
                     {isAdmin && <SortableTh col="unidade" label="Unidade" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />}
@@ -4983,6 +5014,23 @@ export function ComercialPage() {
                           placeholder="-"
                           formatarExibicao={() => <CanalOrigemBadge canal={lead.canal_nome || '-'} />}
                         />
+                      </td>
+                      <td className="py-3 px-2 border-r border-slate-700/30">
+                        {((lead as any).campanhas?.length ?? 0) > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {(lead as any).campanhas.map((c: any) => (
+                              <span
+                                key={c.campanha_slug}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-500/15 text-amber-400 whitespace-nowrap"
+                                title={`Campanha de origem: ${c.campanha_nome}`}
+                              >
+                                📣 {c.campanha_nome}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-slate-600">-</span>
+                        )}
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline

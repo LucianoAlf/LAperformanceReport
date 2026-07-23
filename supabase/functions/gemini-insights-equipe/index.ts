@@ -1,4 +1,12 @@
+/// <reference lib="deno.ns" />
+
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+
+import {
+  isHealthScoreV3OfficialRankable,
+  isHealthScoreV3Visible,
+  parseHealthScoreV3Payload,
+} from '../_shared/health-score-v3.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -43,6 +51,7 @@ interface ProfessorMetricas {
   health_score?: number | null;
   health_score_confiavel: boolean;
   health_status?: 'critico' | 'atencao' | 'saudavel';
+  health_score_v3?: unknown;
 }
 
 interface MetricasGerais {
@@ -80,59 +89,36 @@ Deno.serve(async (req) => {
     }
 
     const payload: InsightsEquipeRequest = await req.json();
-    const { professores, metricas_gerais, competencia, unidade_nome } = payload;
+    const { professores, competencia, unidade_nome } = payload;
+    const professoresV3 = professores.map((professor) => ({
+      id: professor.id,
+      nome: professor.nome,
+      unidades: professor.unidades,
+      health_score_v3: parseHealthScoreV3Payload(professor.health_score_v3),
+    }));
 
-    const professoresComHealth = professores.filter((p) =>
-      p.health_score_confiavel === true && Number.isFinite(Number(p.health_score))
+    const snapshotsVisiveis = professoresV3.filter((item) => isHealthScoreV3Visible(item.health_score_v3));
+    const snapshotsOficiaisRankeaveis = professoresV3.filter((item) =>
+      isHealthScoreV3OfficialRankable(item.health_score_v3)
     );
-    const criticos = professoresComHealth.filter(p => p.status === 'critico');
-    const atencao = professoresComHealth.filter(p => p.status === 'atencao');
-    const excelentes = professoresComHealth.filter(p => p.status === 'excelente');
-
-    // Identificar problemas mais comuns
-    const problemasMediaTurma = professores.filter(p => p.media_alunos_turma < 1.3);
-    const problemasRetencao = professores.filter(p => p.taxa_retencao < 70);
-    const problemasConversao = professores.filter(p => p.taxa_conversao < 70);
-    const problemasNPS = professores.filter(p => p.nps !== null && p.nps < 7);
-
-    // Identificar top performers
-    const topMediaTurma = [...professores].sort((a, b) => b.media_alunos_turma - a.media_alunos_turma)[0];
-    const topRetencao = [...professores].sort((a, b) => b.taxa_retencao - a.taxa_retencao)[0];
-    const topConversao = [...professores].sort((a, b) => b.taxa_conversao - a.taxa_conversao)[0];
-
-    const systemPrompt = `Você é um consultor especializado em gestão de escolas de música, com foco em desenvolvimento de equipes pedagógicas.
+    const systemPromptV3 = `Você é um consultor especializado em gestão de escolas de música, com foco em desenvolvimento de equipes pedagógicas.
 
 Sua tarefa é analisar os dados de performance de TODA A EQUIPE de professores e gerar um plano de ação estratégico para a coordenação pedagógica.
 
-IMPORTANTE:
-- Foque em ações COLETIVAS e ESTRATÉGICAS
-- Conversao Exp->Mat de professor/equipe e diagnostico legado. Nao trate como KPI oficial enquanto a regra canonica de presenca/vinculo estiver bloqueada.
-- Identifique padrões e tendências gerais
-- Destaque professores que precisam de atenção urgente
-- Sugira professores exemplares como mentores
-- Proponha treinamentos em grupo quando houver problemas comuns
-- Seja direto e prático nas sugestões
-- Use Health Score e presenca somente quando os respectivos campos de publicacao/confianca estiverem liberados.
-- Nunca converta metrica indisponivel em zero e nunca classifique professor por dado em auditoria.
-
-METAS DE REFERÊNCIA:
-- Média de alunos por turma: ≥ 1.5 (ideal), 1.3-1.5 (aceitável), < 1.3 (crítico)
-- Taxa de retenção: ≥ 95% (excelente), 70-95% (regular), < 70% (crítico)
-- Conversao Exp->Mat: BLOQUEADA como KPI oficial. Usar apenas como diagnostico legado ate regra canonica de presenca/vinculo.
-- NPS: ≥ 8.5 (excelente), 7-8.5 (regular), < 7 (ruim)
-
-HEALTH SCORE (Saúde do Professor):
-O Health Score é uma métrica composta de 0-100 que resume a saúde geral do professor.
-Pesos: Curso 10%, Média/Turma 20%, Retenção 20%, Conversao legado 15%, NPS 15%, Presença 10%, Evasões 10%
-- 🟢 Saudável: 80-100 pontos
-- 🟡 Atenção: 60-79 pontos
-- 🔴 Crítico: 0-59 pontos
-IMPORTANTE: O Health Score considera o tipo de curso (bateria tem limite menor que canto).
+CONTRATO CANÔNICO V3:
+- Use somente health_score_v3 para Health Score e seus seis pilares.
+- Não recalcule score, classificação, meta, peso, cobertura ou qualquer métrica.
+- estado_publicacao='parcial' permite diagnóstico coletivo sem ranking e sem premiação.
+- Ranking e destaque só são permitidos quando ranking_habilitado=true e estado_publicacao='oficial'.
+- valor_bruto nulo ou estado_base='sem_base' significa Sem base, nunca zero.
+- Não use NPS, fator de demanda, crescimento nem métricas V2 para substituir um pilar V3.
+- Campo Grande com presença em auditoria não pode ser penalizado por presença.
+- Seja direto, construtivo e identifique a fonte/estado ao mencionar uma métrica.
 
 Responda APENAS em JSON válido, sem markdown, no formato:
 {
   "resumo_executivo": "Análise geral da equipe em 2-3 frases",
-  "saude_equipe": "critica" | "atencao" | "saudavel" | "excelente",
+  "saude_equipe": "parcial" | "sem_base" | "critica" | "atencao" | "saudavel" | "excelente",
   "principais_desafios": [
     {
       "area": "string (ex: média de turma, retenção, etc)",
@@ -178,67 +164,21 @@ Responda APENAS em JSON válido, sem markdown, no formato:
   ],
   "mensagem_coordenacao": "Mensagem motivacional/estratégica para a coordenação (2-3 frases)"
 }`;
+    const userPromptV3 = `Analise a equipe ${unidade_nome ? `da unidade ${unidade_nome}` : 'consolidada'} em ${competencia}.
 
-    const healthDisponivel = professoresComHealth.length > 0;
-    const healthScoreMedio = healthDisponivel
-      ? professoresComHealth.reduce((acc, p) => acc + Number(p.health_score), 0) / professoresComHealth.length
-      : null;
-    const healthStatusEquipe = healthScoreMedio === null
-      ? 'EM AUDITORIA'
-      : healthScoreMedio >= 80 ? 'SAUDÁVEL' : healthScoreMedio >= 60 ? 'ATENÇÃO' : 'CRÍTICO';
-    const healthEmoji = healthScoreMedio === null
-      ? '⚪'
-      : healthScoreMedio >= 80 ? '🟢' : healthScoreMedio >= 60 ? '🟡' : '🔴';
+Snapshots V3 visíveis: ${snapshotsVisiveis.length}
+Snapshots V3 oficiais habilitados para ranking: ${snapshotsOficiaisRankeaveis.length}
 
-    // Professores por Health Score
-    const healthCriticos = professoresComHealth.filter(p => Number(p.health_score) < 60);
-    const healthAtencao = professoresComHealth.filter(p => Number(p.health_score) >= 60 && Number(p.health_score) < 80);
-    const healthSaudaveis = professoresComHealth.filter(p => Number(p.health_score) >= 80);
+Dados canônicos V3:
+${JSON.stringify(professoresV3, null, 2)}
 
-    const userPrompt = `Analise a equipe de professores ${unidade_nome ? `da unidade ${unidade_nome}` : ''} em ${competencia}:
+Regras desta execução:
+- Não produza ranking, premiação, "top", "melhor" ou "pior" se não houver snapshot oficial habilitado.
+- Pode apontar padrões coletivos em métricas V3 disponíveis, sempre identificando que o ciclo está parcial.
+- Ignore totalmente os agregados legados recebidos fora de health_score_v3.
+- Não invente valor para sem_base.
 
-💓 HEALTH SCORE DA EQUIPE:
-${healthEmoji} Score Médio: ${healthScoreMedio === null ? 'Em auditoria' : `${healthScoreMedio.toFixed(1)} pontos`} - ${healthStatusEquipe}
-- 🟢 Saudáveis (≥80): ${healthSaudaveis.length} professores
-- 🟡 Atenção (60-79): ${healthAtencao.length} professores
-- 🔴 Críticos (<60): ${healthCriticos.length} professores
-
-📊 MÉTRICAS GERAIS DA EQUIPE:
-- Total de professores: ${metricas_gerais.total_professores}
-- Total de alunos: ${metricas_gerais.total_alunos}
-- Média geral de alunos/turma: ${metricas_gerais.media_geral_turma.toFixed(2)}
-- Taxa de retenção média: ${metricas_gerais.taxa_retencao_media.toFixed(1)}%
-- Conversao Exp->Mat media (legado/bloqueada): ${metricas_gerais.taxa_conversao_media.toFixed(1)}%
-- NPS médio: ${metricas_gerais.nps_medio.toFixed(1)}
-- Total de evasões no mês: ${metricas_gerais.total_evasoes}
-
-📈 DISTRIBUIÇÃO POR STATUS:
-- 🔴 Críticos: ${metricas_gerais.professores_criticos} professores
-- 🟡 Atenção: ${metricas_gerais.professores_atencao} professores
-- 🟢 Excelentes: ${metricas_gerais.professores_excelentes} professores
-
-🔴 PROFESSORES COM HEALTH SCORE CRÍTICO (<60):
-${healthCriticos.map(p => `- ${p.nome}: Health ${Number(p.health_score).toFixed(0)}, Média ${p.media_alunos_turma.toFixed(1)}, Retenção ${p.taxa_retencao.toFixed(0)}%, ${p.evasoes_mes} evasões`).join('\n') || (healthDisponivel ? 'Nenhum' : 'Métrica em auditoria')}
-
-🟡 PROFESSORES COM HEALTH SCORE EM ATENÇÃO (60-79):
-${healthAtencao.map(p => `- ${p.nome}: Health ${Number(p.health_score).toFixed(0)}, Média ${p.media_alunos_turma.toFixed(1)}, Retenção ${p.taxa_retencao.toFixed(0)}%`).join('\n') || (healthDisponivel ? 'Nenhum' : 'Métrica em auditoria')}
-
-🟢 PROFESSORES COM HEALTH SCORE SAUDÁVEL (≥80):
-${healthSaudaveis.slice(0, 5).map(p => `- ${p.nome}: Health ${Number(p.health_score).toFixed(0)}, Média ${p.media_alunos_turma.toFixed(1)}, NPS ${p.nps?.toFixed(1) || '-'}`).join('\n') || (healthDisponivel ? 'Nenhum' : 'Métrica em auditoria')}
-
-🏆 TOP PERFORMERS:
-- Melhor média de turma: ${topMediaTurma?.nome} (${topMediaTurma?.media_alunos_turma.toFixed(1)})
-- Melhor retenção: ${topRetencao?.nome} (${topRetencao?.taxa_retencao.toFixed(0)}%)
-- Melhor conversao legada: ${topConversao?.nome} (${topConversao?.taxa_conversao.toFixed(0)}%) - nao usar como KPI oficial
-
-⚠️ PROBLEMAS IDENTIFICADOS:
-- Health Score crítico (<60): ${healthCriticos.length} professores
-- Média de turma baixa (<1.3): ${problemasMediaTurma.length} professores
-- Retenção crítica (<70%): ${problemasRetencao.length} professores
-- Conversao legada baixa (<70%): ${problemasConversao.length} professores - diagnostico, nao KPI oficial
-- NPS baixo (<7): ${problemasNPS.length} professores
-
-Gere um plano de ação estratégico usando apenas métricas publicáveis. Se o Health Score estiver em auditoria, não crie classificação, ranking ou prioridade com base nele.`;
+Responda apenas no JSON solicitado.`;
 
     // Chamar OpenAI API
     const response = await fetchOpenAIComRetry(
@@ -252,8 +192,8 @@ Gere um plano de ação estratégico usando apenas métricas publicáveis. Se o 
         body: JSON.stringify({
           model: 'gpt-5.4-mini-2026-03-17',
           messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
+            { role: 'system', content: systemPromptV3 },
+            { role: 'user', content: userPromptV3 },
           ],
           temperature: 0.7,
           max_completion_tokens: 4096,
@@ -289,51 +229,30 @@ Gere um plano de ação estratégico usando apenas métricas publicáveis. Se o 
       console.error('Erro ao parsear JSON:', parseError);
       console.error('Texto recebido:', cleanJson);
       
-      // Retornar resposta de fallback
+      const officialRankingAvailable = snapshotsOficiaisRankeaveis.length > 0;
       insights = {
-        resumo_executivo: `A equipe possui ${metricas_gerais.professores_criticos} professores em estado crítico que precisam de atenção imediata. A média geral de alunos por turma está em ${metricas_gerais.media_geral_turma.toFixed(2)}.`,
-        saude_equipe: metricas_gerais.professores_criticos > metricas_gerais.total_professores * 0.3 ? 'critica' : 
-                      metricas_gerais.professores_criticos > 0 ? 'atencao' : 'saudavel',
-        principais_desafios: [
-          {
-            area: "Média de turma",
-            descricao: `${problemasMediaTurma.length} professores com média abaixo de 1.3`,
-            impacto: problemasMediaTurma.length > 5 ? "alto" : "medio",
-            professores_afetados: problemasMediaTurma.slice(0, 5).map(p => p.nome)
-          }
-        ],
+        resumo_executivo: `${snapshotsVisiveis.length} de ${professoresV3.length} professores possuem Health Score V3 exibível neste recorte. A leitura permanece ${officialRankingAvailable ? 'oficial' : 'parcial e sem ranking'}.`,
+        saude_equipe: snapshotsVisiveis.length > 0 ? 'parcial' : 'sem_base',
+        principais_desafios: [],
         professores_destaque: {
-          criticos: criticos.slice(0, 3).map(p => ({
-            nome: p.nome,
-            problema_principal: p.media_alunos_turma < 1.3 ? "Média de turma baixa" : "Retenção crítica",
-            acao_urgente: "Agendar reunião de alinhamento"
-          })),
-          exemplares: excelentes.slice(0, 2).map(p => ({
-            nome: p.nome,
-            ponto_forte: p.media_alunos_turma >= 1.5 ? "Excelente média de turma" : "Alta retenção",
-            pode_mentorar: "Gestão de turmas"
-          }))
+          criticos: [],
+          exemplares: [],
         },
         plano_acao_coletivo: [
           {
             prioridade: 1,
-            tipo: "treinamento",
-            titulo: "Workshop de Gestão de Turmas",
-            descricao: "Treinamento focado em técnicas para aumentar a média de alunos por turma",
-            professores_alvo: problemasMediaTurma.slice(0, 5).map(p => p.nome),
-            prazo_sugerido: "Próximas 2 semanas",
-            resultado_esperado: "Aumentar média de turma em 0.2 pontos"
+            tipo: 'acompanhamento',
+            titulo: 'Revisar snapshots V3 disponíveis',
+            descricao: 'A resposta automática detalhada ficou indisponível; revise os pilares V3 com valor e base publicados.',
+            professores_alvo: 'todos',
+            prazo_sugerido: 'Nesta competência',
+            resultado_esperado: 'Manter decisões apoiadas apenas em dados canônicos disponíveis',
           }
         ],
-        metricas_foco: [
-          {
-            metrica: "Média de alunos/turma",
-            valor_atual: metricas_gerais.media_geral_turma.toFixed(2),
-            meta_sugerida: "1.5",
-            prazo: "3 meses"
-          }
-        ],
-        mensagem_coordenacao: "Foque nos professores críticos esta semana. Pequenas melhorias consistentes geram grandes resultados."
+        metricas_foco: [],
+        mensagem_coordenacao: officialRankingAvailable
+          ? 'O ciclo está oficial; use o relatório canônico para a leitura detalhada.'
+          : 'O ciclo está parcial. Use os valores disponíveis para acompanhamento, sem ranking ou premiação.',
       };
     }
 

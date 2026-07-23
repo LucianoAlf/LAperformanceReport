@@ -1,7 +1,14 @@
+/// <reference lib="deno.ns" />
+
 // Edge Function: gemini-insights-professor
 // Gera plano de ação inteligente para desenvolvimento de professores usando Gemini 3.0 Flash Preview
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import {
+  healthScoreV3PublicationLabel,
+  isHealthScoreV3Visible,
+  parseHealthScoreV3Payload,
+} from "../_shared/health-score-v3.ts";
 
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const OPENAI_MODEL = "gpt-5.4-mini-2026-03-17";
@@ -39,28 +46,18 @@ O modelo de negócio incentiva turmas maiores para otimização de salas e recei
 ## MÉTRICAS E METAS
 
 ### Média de Alunos por Turma
-- Meta ideal: ≥1.5 alunos/turma
-- Atenção: 1.3-1.5
-- Crítico: <1.3
+- A meta vigente vem exclusivamente do snapshot V3 recebido.
 - Contexto: Turmas maiores geram mais receita e melhor uso das salas
 
 ### Taxa de Retenção (Churn Invertido)
-- Meta ideal: ≥95%
-- Regular: 70-95%
-- Crítico: <70%
-- Cálculo: (Alunos que permaneceram / Total de alunos no início) × 100
+- A regra, a meta, o numerador e o denominador vêm exclusivamente do snapshot V3.
 
-### Conversao Experimental -> Matriculado (LEGADO / DIAGNOSTICO)
-- Nao tratar como KPI oficial.
-- A taxa oficial segue BLOQUEADA ate regra canonica de presenca/vinculo.
-- Se citar, sempre sinalizar como diagnostico legado, nao como meta limpa.
-- Nota: responsabilidade compartilhada entre professor e comercial.
+### Conversão Experimental -> Matrícula
+- Usar somente o valor canônico V3 e respeitar a base mínima registrada no snapshot.
 
 ### Taxa de Presença
-- Meta ideal: ≥80%
-- Atenção: 70-80%
-- Crítico: <70%
-- Registro: Feito pelo professor a cada aula
+- Usar somente o resultado semântico V3.
+- Campo Grande pode permanecer em auditoria e não deve ser inferido nem penalizado.
 
 ### Evasões
 - Meta: 0 evasões/mês
@@ -68,27 +65,14 @@ O modelo de negócio incentiva turmas maiores para otimização de salas e recei
 - Crítico: ≥3 evasões
 - Análise: Considerar motivos e padrões
 
-### Health Score V2 (Saúde do Professor)
-O Health Score é uma métrica composta que resume a saúde geral do professor em uma escala de 0-100.
-É calculado com base nos pesos configuráveis de cada KPI:
-- 📈 Taxa de Crescimento (15%): Crescimento da carteira ajustado pelo fator de demanda
-- 👥 Média/Turma (20%): Principal indicador de eficiência
-- 🔄 Retenção (25%): Manter alunos é crucial
-- Conversao legado (15%): diagnostico historico, nao KPI oficial
-- 📅 Presença (15%): Engajamento nas aulas
-- 🚪 Evasões (10%): Inverso (menos = melhor)
-
-**Classificação:**
-- 🟢 Saudável: ≥70 pontos - Professor com ótimo desempenho
-- 🟡 Atenção: 50-69 pontos - Precisa de acompanhamento
-- 🔴 Crítico: <50 pontos - Requer intervenção urgente
-
-**IMPORTANTE:** O Fator de Demanda pondera o crescimento considerando a dificuldade de cada curso (cursos menores como bateria têm fator maior).
+### Health Score V3
+O score chega pronto, versionado e auditado no objeto health_score_v3. Seus seis pilares são retenção atribuível, permanência com o professor, conversão, média/turma, número de alunos e presença. Não recalcule score, nota, classificação, peso, meta ou cobertura.
 
 ## DIRETRIZES OBRIGATÓRIAS
 
-- Se presenca_publicavel=false, não avalie presença, não calcule Health Score e não gere alerta, ranking ou recomendação a partir dela.
-- Nunca converta presença nula em 0%. Trate-a como dado em auditoria.
+- Snapshot parcial pode orientar leitura individual, mas nunca ranking ou premiação.
+- Métrica com valor_bruto nulo ou estado_base sem_base não pode orientar julgamento.
+- Nunca converta nulo em zero e nunca complete dado ausente por inferência.
 
 ### Tom e Estilo
 - Seja amigável e motivacional, nunca punitivo
@@ -219,20 +203,6 @@ interface AlunoSolo {
   nivel: string;
 }
 
-interface HealthScoreDetalhe {
-  kpi: string;
-  valor: number;
-  scoreNormalizado: number;
-  peso: number;
-  contribuicao: number;
-}
-
-interface HealthScoreData {
-  score: number;
-  status: 'critico' | 'atencao' | 'saudavel';
-  detalhes: HealthScoreDetalhe[];
-}
-
 interface ProfessorInsightsRequest {
   professor: {
     id: number;
@@ -243,8 +213,7 @@ interface ProfessorInsightsRequest {
     tipo_contrato: string;
   };
   metricas_atuais: MetricasAtuais;
-  health_score?: HealthScoreData | null;
-  health_score_confiavel?: boolean;
+  health_score_v3?: unknown;
   historico: HistoricoItem[];
   evasoes_recentes: EvasaoRecente[];
   metas_ativas: MetaAtiva[];
@@ -253,106 +222,41 @@ interface ProfessorInsightsRequest {
   competencia: string;
 }
 
-function calcularStatus(metricas: MetricasAtuais): string {
-  // Crítico se qualquer métrica estiver crítica
-  if (metricas.taxa_retencao < 70 || metricas.media_alunos_turma < 1.3 || 
-      metricas.evasoes_mes >= 3) {
-    return 'critico';
-  }
-  // Atenção se qualquer métrica estiver em atenção
-  if (metricas.taxa_retencao < 95 || metricas.media_alunos_turma < 1.5 ||
-      metricas.evasoes_mes >= 1 ||
-      (metricas.presenca_publicavel && metricas.taxa_presenca !== null && metricas.taxa_presenca < 80)) {
-    return 'atencao';
-  }
-  return 'excelente';
-}
+function montarPromptUsuarioV3(dados: ProfessorInsightsRequest): string {
+  const snapshot = parseHealthScoreV3Payload(dados.health_score_v3);
+  const scoreVisivel = isHealthScoreV3Visible(snapshot);
 
-function montarPromptUsuario(dados: ProfessorInsightsRequest): string {
-  const status = calcularStatus(dados.metricas_atuais);
-  const statusEmoji = status === 'critico' ? '🔴' : status === 'atencao' ? '🟡' : '🟢';
-  
-  // Health Score
-  const healthScore = dados.health_score_confiavel === true ? dados.health_score : null;
-  const healthEmoji = healthScore?.status === 'saudavel' ? '🟢' : healthScore?.status === 'atencao' ? '🟡' : '🔴';
-  const healthLabel = healthScore?.status === 'saudavel' ? 'SAUDÁVEL' : healthScore?.status === 'atencao' ? 'ATENÇÃO' : 'CRÍTICO';
-  
-  let prompt = `## DADOS DO PROFESSOR: ${dados.professor.nome}
-**Status Geral**: ${statusEmoji} ${status.toUpperCase()}
+  return `## DADOS DO PROFESSOR: ${dados.professor.nome}
 **Competência**: ${dados.competencia}
 **Especialidades**: ${dados.professor.especialidades.join(', ')}
 **Unidades**: ${dados.professor.unidades.join(', ')}
-**Tempo de Casa**: desde ${dados.professor.data_admissao}
 
-### 💓 HEALTH SCORE (Saúde do Professor)
-${healthScore ? `**Score**: ${healthEmoji} ${healthScore.score.toFixed(1)} pontos - ${healthLabel}
+### HEALTH SCORE V3
+Campo estado_publicacao: ${healthScoreV3PublicationLabel(snapshot)}
+Score exibível: ${scoreVisivel ? snapshot!.score : 'Sem base'}
+Cobertura: ${snapshot?.cobertura ?? 'Sem base'}
 
-**Detalhamento por KPI:**
-${healthScore.detalhes.map(d => `- ${d.kpi}: valor ${d.valor.toFixed(1)} → score ${d.scoreNormalizado.toFixed(0)} (peso ${(d.peso * 100).toFixed(0)}%) = contribuição ${d.contribuicao.toFixed(1)} pts`).join('\n')}
-` : 'Health Score em auditoria: a presença ainda não atingiu cobertura suficiente para publicação.'}
+Snapshot canônico estruturado:
+${JSON.stringify(snapshot, null, 2)}
 
-### MÉTRICAS ATUAIS
-- Total de Alunos: ${dados.metricas_atuais.total_alunos}
-- Total de Turmas: ${dados.metricas_atuais.total_turmas}
-- Média de Alunos por Turma: ${dados.metricas_atuais.media_alunos_turma.toFixed(2)} ${dados.metricas_atuais.media_alunos_turma < 1.3 ? '🔴' : dados.metricas_atuais.media_alunos_turma < 1.5 ? '🟡' : '🟢'}
-- Taxa de Retenção: ${dados.metricas_atuais.taxa_retencao}% ${dados.metricas_atuais.taxa_retencao < 70 ? '🔴' : dados.metricas_atuais.taxa_retencao < 95 ? '🟡' : '🟢'}
-- Conversao Exp->Mat (legado/bloqueada): ${dados.metricas_atuais.taxa_conversao}% - nao usar como KPI oficial
-- Fator de Demanda: ${(dados.metricas_atuais.fator_demanda_ponderado || 1.0).toFixed(1)} ${(dados.metricas_atuais.fator_demanda_ponderado || 1.0) <= 1.2 ? '🟢' : (dados.metricas_atuais.fator_demanda_ponderado || 1.0) <= 2.0 ? '🟡' : '🔴'}
-- Taxa de Presença: ${dados.metricas_atuais.presenca_publicavel && dados.metricas_atuais.taxa_presenca !== null
-  ? `${dados.metricas_atuais.taxa_presenca}% ${dados.metricas_atuais.taxa_presenca < 70 ? '🔴' : dados.metricas_atuais.taxa_presenca < 80 ? '🟡' : '🟢'}`
-  : `EM AUDITORIA (cobertura ${((dados.metricas_atuais.presenca_cobertura || 0) * 100).toFixed(0)}%; confirmados ${dados.metricas_atuais.presenca_eventos_confirmados || 0}; incertos ${dados.metricas_atuais.presenca_eventos_incertos || 0})`}
-- Evasões no Mês: ${dados.metricas_atuais.evasoes_mes} ${dados.metricas_atuais.evasoes_mes >= 3 ? '🔴' : dados.metricas_atuais.evasoes_mes >= 1 ? '🟡' : '🟢'}
-`;
+### CONTEXTO OPERACIONAL COMPLEMENTAR
+${JSON.stringify({
+    evasoes_recentes: dados.evasoes_recentes,
+    metas_ativas: dados.metas_ativas,
+    acoes_recentes: dados.acoes_recentes,
+    alunos_solo: dados.alunos_solo,
+  }, null, 2)}
 
-  if (dados.historico && dados.historico.length > 0) {
-    prompt += `\n### HISTÓRICO (últimos meses)\n`;
-    dados.historico.forEach(h => {
-      prompt += `- ${h.periodo}: Média ${h.media_alunos_turma.toFixed(2)}, Retenção ${h.taxa_retencao}%, Conversao legado ${h.taxa_conversao}%, Evasões ${h.evasoes}\n`;
-    });
-  }
+## REGRAS INEGOCIÁVEIS
+- Não recalcule score, nota, classificação, meta, peso ou cobertura.
+- Não use metricas_atuais legadas para substituir qualquer pilar V3.
+- Valor nulo significa Sem base, nunca zero.
+- Snapshot parcial pode orientar este plano individual, mas nunca ranking ou premiação.
+- Campo Grande com presença em auditoria não pode receber alerta ou penalidade de presença.
+- Use apenas pilares com valor_bruto não nulo para avaliar o professor.
 
-  if (dados.evasoes_recentes && dados.evasoes_recentes.length > 0) {
-    prompt += `\n### EVASÕES RECENTES\n`;
-    dados.evasoes_recentes.forEach(e => {
-      prompt += `- ${e.aluno_nome} (${e.curso}): ${e.data} - Motivo: ${e.motivo}\n`;
-    });
-  }
-
-  if (dados.metas_ativas && dados.metas_ativas.length > 0) {
-    prompt += `\n### METAS ATIVAS\n`;
-    dados.metas_ativas.forEach(m => {
-      const progresso = m.valor_meta > 0 ? ((m.valor_atual / m.valor_meta) * 100).toFixed(0) : 0;
-      prompt += `- [${m.id}] ${m.tipo}: ${m.valor_atual} → ${m.valor_meta} (${progresso}% concluído) - Prazo: ${m.prazo} - Status: ${m.status}\n`;
-    });
-  }
-
-  if (dados.acoes_recentes && dados.acoes_recentes.length > 0) {
-    prompt += `\n### AÇÕES RECENTES\n`;
-    dados.acoes_recentes.forEach(a => {
-      const emoji = a.status === 'concluida' ? '✅' : a.status === 'pendente' ? '⏳' : '❌';
-      prompt += `- ${emoji} ${a.data}: ${a.titulo} (${a.tipo})\n`;
-    });
-  }
-
-  if (dados.alunos_solo && dados.alunos_solo.length > 0) {
-    prompt += `\n### ALUNOS EM AULAS INDIVIDUAIS (potencial para turmas)\n`;
-    prompt += `Total: ${dados.alunos_solo.length} alunos sozinhos\n`;
-    dados.alunos_solo.slice(0, 10).forEach(a => {
-      prompt += `- ${a.nome}: ${a.curso}, ${a.dia_semana} ${a.horario}, Nível: ${a.nivel}\n`;
-    });
-    if (dados.alunos_solo.length > 10) {
-      prompt += `... e mais ${dados.alunos_solo.length - 10} alunos\n`;
-    }
-  }
-
-  prompt += `\n## TAREFA
-Analise os dados acima e gere um plano de ação personalizado para o desenvolvimento deste professor.
-Foque especialmente nos pontos de atenção identificados (métricas com 🔴 ou 🟡).
-Considere o histórico para identificar tendências e a lista de alunos solo para sugestões de remanejamento.
-Seja motivacional e construtivo, reconhecendo os pontos fortes antes de apontar melhorias.
-Responda APENAS com o JSON estruturado, sem texto adicional.`;
-
-  return prompt;
+## TAREFA
+Gere um plano individual construtivo usando somente evidências publicáveis do snapshot V3 e o contexto complementar. Responda apenas com o JSON estruturado solicitado.`;
 }
 
 serve(async (req) => {
@@ -368,7 +272,7 @@ serve(async (req) => {
 
     const dados: ProfessorInsightsRequest = await req.json();
 
-    const userPrompt = montarPromptUsuario(dados);
+    const userPrompt = montarPromptUsuarioV3(dados);
 
     // Chamar OpenAI API
     const aiResponse = await fetchOpenAIComRetry("https://api.openai.com/v1/chat/completions", {

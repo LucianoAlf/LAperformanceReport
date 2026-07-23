@@ -11,6 +11,13 @@ interface SnapshotRow {
   escopo: string;
   competencia: string;
   trimestre_inicio: string;
+  periodicidade: 'mensal' | 'ciclo' | 'legado_calendario';
+  periodo_inicio: string;
+  periodo_fim: string;
+  ciclo_codigo: string;
+  estado_publicacao: 'parcial' | 'oficial' | 'sem_base';
+  score_exibivel: boolean;
+  ranking_habilitado: boolean;
   config_versao: number;
   score: number | null;
   cobertura: number | null;
@@ -43,6 +50,7 @@ interface UseHealthScoreProfessorV3Options {
   competencia: string;
   unidadeId?: string | null;
   professorId?: number | null;
+  periodicidade?: 'mensal' | 'ciclo';
   enabled?: boolean;
 }
 
@@ -50,18 +58,28 @@ export function useHealthScoreProfessorV3({
   competencia,
   unidadeId = null,
   professorId = null,
+  periodicidade = 'mensal',
   enabled = true,
 }: UseHealthScoreProfessorV3Options) {
   const [metrics, setMetrics] = useState<HealthScoreV3SnapshotMetric[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadedRequestKey, setLoadedRequestKey] = useState<string | null>(null);
   const requestIdRef = useRef(0);
+  const requestKey = [
+    enabled ? 'enabled' : 'disabled',
+    competencia,
+    unidadeId ?? 'consolidado',
+    professorId ?? 'sem-professor',
+    periodicidade,
+  ].join(':');
 
   const load = useCallback(async () => {
     const requestId = ++requestIdRef.current;
 
     if (!enabled) {
       setMetrics([]);
+      setLoadedRequestKey(requestKey);
       setLoading(false);
       setError(null);
       return;
@@ -79,6 +97,7 @@ export function useHealthScoreProfessorV3({
           p_competencia: reference,
           p_unidade_id: unidadeId,
           p_professor_id: professorId,
+          p_periodicidade: periodicidade,
         },
       );
       if (rpcError) throw rpcError;
@@ -90,6 +109,13 @@ export function useHealthScoreProfessorV3({
         escopo: row.escopo,
         competencia: row.competencia,
         trimestreInicio: row.trimestre_inicio,
+        periodicidade: row.periodicidade,
+        periodoInicio: row.periodo_inicio,
+        periodoFim: row.periodo_fim,
+        cicloCodigo: row.ciclo_codigo,
+        estadoPublicacao: row.estado_publicacao,
+        scoreExibivel: Boolean(row.score_exibivel),
+        rankingHabilitado: Boolean(row.ranking_habilitado),
         configVersao: Number(row.config_versao),
         score: row.score ?? null,
         cobertura: row.cobertura ?? null,
@@ -117,14 +143,16 @@ export function useHealthScoreProfessorV3({
         motivoSemBase: row.motivo_sem_base ?? null,
         detalhes: row.detalhes ?? {},
       })));
+      setLoadedRequestKey(requestKey);
     } catch (caught) {
       if (requestId !== requestIdRef.current) return;
       setError(caught instanceof Error ? caught.message : 'Falha ao carregar o Health Score V3.');
       setMetrics([]);
+      setLoadedRequestKey(requestKey);
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [competencia, enabled, professorId, unidadeId]);
+  }, [competencia, enabled, periodicidade, professorId, requestKey, unidadeId]);
 
   useEffect(() => {
     void load();
@@ -133,5 +161,10 @@ export function useHealthScoreProfessorV3({
     };
   }, [load]);
 
-  return { metrics, loading, error, reload: load };
+  return {
+    metrics: loadedRequestKey === requestKey ? metrics : [],
+    loading: loading || (enabled && loadedRequestKey !== requestKey),
+    error: loadedRequestKey === requestKey ? error : null,
+    reload: load,
+  };
 }

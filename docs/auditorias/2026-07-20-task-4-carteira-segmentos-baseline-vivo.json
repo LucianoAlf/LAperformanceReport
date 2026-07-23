@@ -1,0 +1,3819 @@
+{
+  "task": "Task 4 - Extrair a base detalhada sem criar uma segunda verdade",
+  "units": [
+    {
+      "id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+      "nome": "Barra"
+    },
+    {
+      "id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+      "nome": "Campo Grande"
+    },
+    {
+      "id": "95553e96-971b-4590-a6eb-0201d013c14d",
+      "nome": "Recreio"
+    }
+  ],
+  "scopes": [
+    {
+      "ano": 2026,
+      "mes": 6,
+      "rows": [
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 1,
+          "total_turmas": 2,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 1,
+          "alunos_via_turmas": 2,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 2
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 2,
+          "total_turmas": 36,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 51,
+          "alunos_via_turmas": 56,
+          "media_alunos_turma": 1.56,
+          "turmas_elegiveis_media": 36
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 3,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 15,
+          "media_alunos_turma": 2.5,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 7,
+          "total_turmas": 19,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 28,
+          "alunos_via_turmas": 32,
+          "media_alunos_turma": 1.68,
+          "turmas_elegiveis_media": 19
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 8,
+          "total_turmas": 11,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 30,
+          "alunos_via_turmas": 30,
+          "media_alunos_turma": 2.73,
+          "turmas_elegiveis_media": 11
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 11,
+          "total_turmas": 12,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 13,
+          "media_alunos_turma": 1.08,
+          "turmas_elegiveis_media": 12
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 13,
+          "total_turmas": 15,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 21,
+          "alunos_via_turmas": 21,
+          "media_alunos_turma": 1.4,
+          "turmas_elegiveis_media": 15
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 14,
+          "total_turmas": 10,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 19,
+          "alunos_via_turmas": 20,
+          "media_alunos_turma": 2,
+          "turmas_elegiveis_media": 10
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 15,
+          "total_turmas": 26,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 45,
+          "alunos_via_turmas": 38,
+          "media_alunos_turma": 1.58,
+          "turmas_elegiveis_media": 24
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 18,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 19,
+          "total_turmas": 1,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 0,
+          "alunos_via_turmas": 1,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 1
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 20,
+          "total_turmas": 8,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 15,
+          "media_alunos_turma": 1.88,
+          "turmas_elegiveis_media": 8
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 23,
+          "total_turmas": 13,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 19,
+          "alunos_via_turmas": 11,
+          "media_alunos_turma": 1.1,
+          "turmas_elegiveis_media": 10
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 25,
+          "total_turmas": 9,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 15,
+          "alunos_via_turmas": 15,
+          "media_alunos_turma": 1.67,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 27,
+          "total_turmas": 7,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 12,
+          "media_alunos_turma": 1.71,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 28,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 30,
+          "total_turmas": 30,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 40,
+          "alunos_via_turmas": 43,
+          "media_alunos_turma": 1.43,
+          "turmas_elegiveis_media": 30
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 31,
+          "total_turmas": 17,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 28,
+          "alunos_via_turmas": 30,
+          "media_alunos_turma": 1.76,
+          "turmas_elegiveis_media": 17
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 33,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1.33,
+          "turmas_elegiveis_media": 3
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 34,
+          "total_turmas": 8,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 17,
+          "alunos_via_turmas": 13,
+          "media_alunos_turma": 1.86,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 35,
+          "total_turmas": 19,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 38,
+          "alunos_via_turmas": 26,
+          "media_alunos_turma": 1.63,
+          "turmas_elegiveis_media": 16
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 36,
+          "total_turmas": 25,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 28,
+          "alunos_via_turmas": 33,
+          "media_alunos_turma": 1.32,
+          "turmas_elegiveis_media": 25
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 40,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 8,
+          "alunos_via_turmas": 8,
+          "media_alunos_turma": 1.33,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 42,
+          "total_turmas": 13,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 17,
+          "alunos_via_turmas": 17,
+          "media_alunos_turma": 1.31,
+          "turmas_elegiveis_media": 13
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 43,
+          "total_turmas": 16,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 22,
+          "alunos_via_turmas": 24,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 16
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 49,
+          "total_turmas": 5,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 7,
+          "alunos_via_turmas": 7,
+          "media_alunos_turma": 1.4,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 50,
+          "total_turmas": 2,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 8,
+          "alunos_via_turmas": 0,
+          "media_alunos_turma": 0,
+          "turmas_elegiveis_media": 0
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 51,
+          "total_turmas": 2,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 3,
+          "alunos_via_turmas": 3,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 2
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 53,
+          "total_turmas": 2,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 3,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 2
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 55,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 14,
+          "media_alunos_turma": 2.33,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 56,
+          "total_turmas": 7,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1.29,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 3,
+          "total_turmas": 15,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 24,
+          "alunos_via_turmas": 23,
+          "media_alunos_turma": 1.64,
+          "turmas_elegiveis_media": 14
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 6,
+          "total_turmas": 42,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 46,
+          "alunos_via_turmas": 51,
+          "media_alunos_turma": 1.21,
+          "turmas_elegiveis_media": 42
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 8,
+          "total_turmas": 11,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 12,
+          "alunos_via_turmas": 13,
+          "media_alunos_turma": 1.18,
+          "turmas_elegiveis_media": 11
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 10,
+          "total_turmas": 28,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 28,
+          "alunos_via_turmas": 29,
+          "media_alunos_turma": 1.04,
+          "turmas_elegiveis_media": 28
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 13,
+          "total_turmas": 2,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 2,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 2
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 16,
+          "total_turmas": 15,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 15,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 15
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 19,
+          "total_turmas": 23,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 19,
+          "alunos_via_turmas": 23,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 23
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 20,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 11,
+          "alunos_via_turmas": 11,
+          "media_alunos_turma": 1.83,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 24,
+          "total_turmas": 5,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 26,
+          "total_turmas": 27,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 28,
+          "alunos_via_turmas": 26,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 26
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 30,
+          "total_turmas": 5,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 6,
+          "alunos_via_turmas": 6,
+          "media_alunos_turma": 1.2,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 31,
+          "total_turmas": 7,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 10,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1.43,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 40,
+          "total_turmas": 5,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 4,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 41,
+          "total_turmas": 20,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 27,
+          "alunos_via_turmas": 18,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 18
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 46,
+          "total_turmas": 10,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 10,
+          "alunos_via_turmas": 11,
+          "media_alunos_turma": 1.1,
+          "turmas_elegiveis_media": 10
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 48,
+          "total_turmas": 7,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 6,
+          "alunos_via_turmas": 7,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 49,
+          "total_turmas": 2,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 2,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 2
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 52,
+          "total_turmas": 11,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 7,
+          "alunos_via_turmas": 11,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 11
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 53,
+          "total_turmas": 1,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 2,
+          "media_alunos_turma": 2,
+          "turmas_elegiveis_media": 1
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 2,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 6,
+          "alunos_via_turmas": 6,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 10,
+          "total_turmas": 9,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 8,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 11,
+          "total_turmas": 15,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 15,
+          "alunos_via_turmas": 15,
+          "media_alunos_turma": 1.07,
+          "turmas_elegiveis_media": 14
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 13,
+          "total_turmas": 11,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 13,
+          "media_alunos_turma": 1.18,
+          "turmas_elegiveis_media": 11
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 15,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 6,
+          "alunos_via_turmas": 7,
+          "media_alunos_turma": 1.17,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 16,
+          "total_turmas": 27,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 30,
+          "alunos_via_turmas": 36,
+          "media_alunos_turma": 1.33,
+          "turmas_elegiveis_media": 27
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 18,
+          "total_turmas": 36,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 40,
+          "alunos_via_turmas": 49,
+          "media_alunos_turma": 1.36,
+          "turmas_elegiveis_media": 36
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 20,
+          "total_turmas": 18,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 25,
+          "alunos_via_turmas": 27,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 18
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 21,
+          "total_turmas": 29,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 44,
+          "alunos_via_turmas": 31,
+          "media_alunos_turma": 1.24,
+          "turmas_elegiveis_media": 25
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 25,
+          "total_turmas": 4,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 4,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 26,
+          "total_turmas": 3,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 3,
+          "alunos_via_turmas": 3,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 3
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 27,
+          "total_turmas": 9,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 12,
+          "alunos_via_turmas": 12,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 8
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 32,
+          "total_turmas": 50,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 57,
+          "alunos_via_turmas": 59,
+          "media_alunos_turma": 1.2,
+          "turmas_elegiveis_media": 49
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 33,
+          "total_turmas": 20,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 40,
+          "alunos_via_turmas": 14,
+          "media_alunos_turma": 1.08,
+          "turmas_elegiveis_media": 13
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 34,
+          "total_turmas": 10,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 11,
+          "media_alunos_turma": 1.38,
+          "turmas_elegiveis_media": 8
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 36,
+          "total_turmas": 9,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 37,
+          "total_turmas": 13,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 14,
+          "media_alunos_turma": 1.08,
+          "turmas_elegiveis_media": 13
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 40,
+          "total_turmas": 23,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 21,
+          "alunos_via_turmas": 25,
+          "media_alunos_turma": 1.09,
+          "turmas_elegiveis_media": 23
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 41,
+          "total_turmas": 15,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 17,
+          "alunos_via_turmas": 18,
+          "media_alunos_turma": 1.2,
+          "turmas_elegiveis_media": 15
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 43,
+          "total_turmas": 20,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 20,
+          "alunos_via_turmas": 23,
+          "media_alunos_turma": 1.15,
+          "turmas_elegiveis_media": 20
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 52,
+          "total_turmas": 22,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 19,
+          "alunos_via_turmas": 25,
+          "media_alunos_turma": 1.14,
+          "turmas_elegiveis_media": 22
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 53,
+          "total_turmas": 4,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 57,
+          "total_turmas": 3,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 1,
+          "alunos_via_turmas": 3,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 3
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 58,
+          "total_turmas": 4,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 4,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 60,
+          "total_turmas": 1,
+          "fonte_carteira": "evento",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 2,
+          "media_alunos_turma": 2,
+          "turmas_elegiveis_media": 1
+        }
+      ],
+      "escopo": "consolidado",
+      "row_count": 75,
+      "target_rows": [
+        {
+          "rotulo": "Daiana",
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 3,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Daiana Pacifico da Silva dos Anjos",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 15,
+          "media_alunos_turma": 2.5,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "rotulo": "Peterson",
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 31,
+          "total_turmas": 17,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Peterson Biancamano",
+          "carteira_alunos": 28,
+          "alunos_via_turmas": 30,
+          "media_alunos_turma": 1.76,
+          "turmas_elegiveis_media": 17
+        },
+        {
+          "rotulo": "Ramon",
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 33,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Ramon Pina Morais",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1.33,
+          "turmas_elegiveis_media": 3
+        },
+        {
+          "rotulo": "Ana Beatriz (multiunidade)",
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 53,
+          "total_turmas": 2,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Ana Beatriz Paz de Almeida",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 3,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 2
+        },
+        {
+          "rotulo": "Daiana",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 3,
+          "total_turmas": 15,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Daiana Pacifico da Silva dos Anjos",
+          "carteira_alunos": 24,
+          "alunos_via_turmas": 23,
+          "media_alunos_turma": 1.64,
+          "turmas_elegiveis_media": 14
+        },
+        {
+          "rotulo": "Gabriel Antony",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 6,
+          "total_turmas": 42,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Gabriel Antony Alves de Araújo",
+          "carteira_alunos": 46,
+          "alunos_via_turmas": 51,
+          "media_alunos_turma": 1.21,
+          "turmas_elegiveis_media": 42
+        },
+        {
+          "rotulo": "Isaque",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 10,
+          "total_turmas": 28,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Isaque Mendes da Silva",
+          "carteira_alunos": 28,
+          "alunos_via_turmas": 29,
+          "media_alunos_turma": 1.04,
+          "turmas_elegiveis_media": 28
+        },
+        {
+          "rotulo": "Peterson",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 31,
+          "total_turmas": 7,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Peterson Biancamano",
+          "carteira_alunos": 10,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1.43,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "rotulo": "Ana Beatriz (multiunidade)",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 53,
+          "total_turmas": 1,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Ana Beatriz Paz de Almeida",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 2,
+          "media_alunos_turma": 2,
+          "turmas_elegiveis_media": 1
+        },
+        {
+          "rotulo": "Isaque",
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 10,
+          "total_turmas": 9,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Isaque Mendes da Silva",
+          "carteira_alunos": 8,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "rotulo": "Ramon",
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 33,
+          "total_turmas": 20,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Ramon Pina Morais",
+          "carteira_alunos": 40,
+          "alunos_via_turmas": 14,
+          "media_alunos_turma": 1.08,
+          "turmas_elegiveis_media": 13
+        },
+        {
+          "rotulo": "Ana Beatriz (multiunidade)",
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 53,
+          "total_turmas": 4,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Ana Beatriz Paz de Almeida",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 4
+        }
+      ],
+      "unidade_filtro_id": null
+    },
+    {
+      "ano": 2026,
+      "mes": 6,
+      "rows": [
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 3,
+          "total_turmas": 15,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 24,
+          "alunos_via_turmas": 23,
+          "media_alunos_turma": 1.64,
+          "turmas_elegiveis_media": 14
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 6,
+          "total_turmas": 42,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 46,
+          "alunos_via_turmas": 51,
+          "media_alunos_turma": 1.21,
+          "turmas_elegiveis_media": 42
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 8,
+          "total_turmas": 11,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 12,
+          "alunos_via_turmas": 13,
+          "media_alunos_turma": 1.18,
+          "turmas_elegiveis_media": 11
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 10,
+          "total_turmas": 28,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 28,
+          "alunos_via_turmas": 29,
+          "media_alunos_turma": 1.04,
+          "turmas_elegiveis_media": 28
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 13,
+          "total_turmas": 2,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 2,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 2
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 16,
+          "total_turmas": 15,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 15,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 15
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 19,
+          "total_turmas": 23,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 19,
+          "alunos_via_turmas": 23,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 23
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 20,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 11,
+          "alunos_via_turmas": 11,
+          "media_alunos_turma": 1.83,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 24,
+          "total_turmas": 5,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 26,
+          "total_turmas": 27,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 28,
+          "alunos_via_turmas": 26,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 26
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 30,
+          "total_turmas": 5,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 6,
+          "alunos_via_turmas": 6,
+          "media_alunos_turma": 1.2,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 31,
+          "total_turmas": 7,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 10,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1.43,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 40,
+          "total_turmas": 5,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 4,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 41,
+          "total_turmas": 20,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 27,
+          "alunos_via_turmas": 18,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 18
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 46,
+          "total_turmas": 10,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 10,
+          "alunos_via_turmas": 11,
+          "media_alunos_turma": 1.1,
+          "turmas_elegiveis_media": 10
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 48,
+          "total_turmas": 7,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 6,
+          "alunos_via_turmas": 7,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 49,
+          "total_turmas": 2,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 2,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 2
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 52,
+          "total_turmas": 11,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 7,
+          "alunos_via_turmas": 11,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 11
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 53,
+          "total_turmas": 1,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 2,
+          "media_alunos_turma": 2,
+          "turmas_elegiveis_media": 1
+        }
+      ],
+      "escopo": "barra",
+      "row_count": 19,
+      "target_rows": [
+        {
+          "rotulo": "Daiana",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 3,
+          "total_turmas": 15,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Daiana Pacifico da Silva dos Anjos",
+          "carteira_alunos": 24,
+          "alunos_via_turmas": 23,
+          "media_alunos_turma": 1.64,
+          "turmas_elegiveis_media": 14
+        },
+        {
+          "rotulo": "Gabriel Antony",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 6,
+          "total_turmas": 42,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Gabriel Antony Alves de Araújo",
+          "carteira_alunos": 46,
+          "alunos_via_turmas": 51,
+          "media_alunos_turma": 1.21,
+          "turmas_elegiveis_media": 42
+        },
+        {
+          "rotulo": "Isaque",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 10,
+          "total_turmas": 28,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Isaque Mendes da Silva",
+          "carteira_alunos": 28,
+          "alunos_via_turmas": 29,
+          "media_alunos_turma": 1.04,
+          "turmas_elegiveis_media": 28
+        },
+        {
+          "rotulo": "Peterson",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 31,
+          "total_turmas": 7,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Peterson Biancamano",
+          "carteira_alunos": 10,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1.43,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "rotulo": "Ana Beatriz (multiunidade)",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 53,
+          "total_turmas": 1,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Ana Beatriz Paz de Almeida",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 2,
+          "media_alunos_turma": 2,
+          "turmas_elegiveis_media": 1
+        }
+      ],
+      "unidade_filtro_id": "368d47f5-2d88-4475-bc14-ba084a9a348e"
+    },
+    {
+      "ano": 2026,
+      "mes": 6,
+      "rows": [
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 2,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 6,
+          "alunos_via_turmas": 6,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 10,
+          "total_turmas": 9,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 8,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 11,
+          "total_turmas": 15,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 15,
+          "alunos_via_turmas": 15,
+          "media_alunos_turma": 1.07,
+          "turmas_elegiveis_media": 14
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 13,
+          "total_turmas": 11,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 13,
+          "media_alunos_turma": 1.18,
+          "turmas_elegiveis_media": 11
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 15,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 6,
+          "alunos_via_turmas": 7,
+          "media_alunos_turma": 1.17,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 16,
+          "total_turmas": 27,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 30,
+          "alunos_via_turmas": 36,
+          "media_alunos_turma": 1.33,
+          "turmas_elegiveis_media": 27
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 18,
+          "total_turmas": 36,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 40,
+          "alunos_via_turmas": 49,
+          "media_alunos_turma": 1.36,
+          "turmas_elegiveis_media": 36
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 20,
+          "total_turmas": 18,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 25,
+          "alunos_via_turmas": 27,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 18
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 21,
+          "total_turmas": 29,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 44,
+          "alunos_via_turmas": 31,
+          "media_alunos_turma": 1.24,
+          "turmas_elegiveis_media": 25
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 25,
+          "total_turmas": 4,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 4,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 26,
+          "total_turmas": 3,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 3,
+          "alunos_via_turmas": 3,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 3
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 27,
+          "total_turmas": 9,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 12,
+          "alunos_via_turmas": 12,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 8
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 32,
+          "total_turmas": 50,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 57,
+          "alunos_via_turmas": 59,
+          "media_alunos_turma": 1.2,
+          "turmas_elegiveis_media": 49
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 33,
+          "total_turmas": 20,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 40,
+          "alunos_via_turmas": 14,
+          "media_alunos_turma": 1.08,
+          "turmas_elegiveis_media": 13
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 34,
+          "total_turmas": 10,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 11,
+          "media_alunos_turma": 1.38,
+          "turmas_elegiveis_media": 8
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 36,
+          "total_turmas": 9,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 37,
+          "total_turmas": 13,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 14,
+          "media_alunos_turma": 1.08,
+          "turmas_elegiveis_media": 13
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 40,
+          "total_turmas": 23,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 21,
+          "alunos_via_turmas": 25,
+          "media_alunos_turma": 1.09,
+          "turmas_elegiveis_media": 23
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 41,
+          "total_turmas": 15,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 17,
+          "alunos_via_turmas": 18,
+          "media_alunos_turma": 1.2,
+          "turmas_elegiveis_media": 15
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 43,
+          "total_turmas": 20,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 20,
+          "alunos_via_turmas": 23,
+          "media_alunos_turma": 1.15,
+          "turmas_elegiveis_media": 20
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 52,
+          "total_turmas": 22,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 19,
+          "alunos_via_turmas": 25,
+          "media_alunos_turma": 1.14,
+          "turmas_elegiveis_media": 22
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 53,
+          "total_turmas": 4,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 57,
+          "total_turmas": 3,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 1,
+          "alunos_via_turmas": 3,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 3
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 58,
+          "total_turmas": 4,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 4,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 60,
+          "total_turmas": 1,
+          "fonte_carteira": "evento",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 2,
+          "media_alunos_turma": 2,
+          "turmas_elegiveis_media": 1
+        }
+      ],
+      "escopo": "recreio",
+      "row_count": 25,
+      "target_rows": [
+        {
+          "rotulo": "Isaque",
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 10,
+          "total_turmas": 9,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Isaque Mendes da Silva",
+          "carteira_alunos": 8,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "rotulo": "Ramon",
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 33,
+          "total_turmas": 20,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Ramon Pina Morais",
+          "carteira_alunos": 40,
+          "alunos_via_turmas": 14,
+          "media_alunos_turma": 1.08,
+          "turmas_elegiveis_media": 13
+        },
+        {
+          "rotulo": "Ana Beatriz (multiunidade)",
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 53,
+          "total_turmas": 4,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Ana Beatriz Paz de Almeida",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 4
+        }
+      ],
+      "unidade_filtro_id": "95553e96-971b-4590-a6eb-0201d013c14d"
+    },
+    {
+      "ano": 2026,
+      "mes": 6,
+      "rows": [
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 1,
+          "total_turmas": 2,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 1,
+          "alunos_via_turmas": 2,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 2
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 2,
+          "total_turmas": 36,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 51,
+          "alunos_via_turmas": 56,
+          "media_alunos_turma": 1.56,
+          "turmas_elegiveis_media": 36
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 3,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 15,
+          "media_alunos_turma": 2.5,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 7,
+          "total_turmas": 19,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 28,
+          "alunos_via_turmas": 32,
+          "media_alunos_turma": 1.68,
+          "turmas_elegiveis_media": 19
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 8,
+          "total_turmas": 11,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 30,
+          "alunos_via_turmas": 30,
+          "media_alunos_turma": 2.73,
+          "turmas_elegiveis_media": 11
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 11,
+          "total_turmas": 12,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 13,
+          "media_alunos_turma": 1.08,
+          "turmas_elegiveis_media": 12
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 13,
+          "total_turmas": 15,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 21,
+          "alunos_via_turmas": 21,
+          "media_alunos_turma": 1.4,
+          "turmas_elegiveis_media": 15
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 14,
+          "total_turmas": 10,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 19,
+          "alunos_via_turmas": 20,
+          "media_alunos_turma": 2,
+          "turmas_elegiveis_media": 10
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 15,
+          "total_turmas": 26,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 45,
+          "alunos_via_turmas": 38,
+          "media_alunos_turma": 1.58,
+          "turmas_elegiveis_media": 24
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 18,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 19,
+          "total_turmas": 1,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 0,
+          "alunos_via_turmas": 1,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 1
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 20,
+          "total_turmas": 8,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 15,
+          "media_alunos_turma": 1.88,
+          "turmas_elegiveis_media": 8
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 23,
+          "total_turmas": 13,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 19,
+          "alunos_via_turmas": 11,
+          "media_alunos_turma": 1.1,
+          "turmas_elegiveis_media": 10
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 25,
+          "total_turmas": 9,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 15,
+          "alunos_via_turmas": 15,
+          "media_alunos_turma": 1.67,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 27,
+          "total_turmas": 7,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 12,
+          "media_alunos_turma": 1.71,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 28,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 30,
+          "total_turmas": 30,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 40,
+          "alunos_via_turmas": 43,
+          "media_alunos_turma": 1.43,
+          "turmas_elegiveis_media": 30
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 31,
+          "total_turmas": 17,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 28,
+          "alunos_via_turmas": 30,
+          "media_alunos_turma": 1.76,
+          "turmas_elegiveis_media": 17
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 33,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1.33,
+          "turmas_elegiveis_media": 3
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 34,
+          "total_turmas": 8,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 17,
+          "alunos_via_turmas": 13,
+          "media_alunos_turma": 1.86,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 35,
+          "total_turmas": 19,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 38,
+          "alunos_via_turmas": 26,
+          "media_alunos_turma": 1.63,
+          "turmas_elegiveis_media": 16
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 36,
+          "total_turmas": 25,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 28,
+          "alunos_via_turmas": 33,
+          "media_alunos_turma": 1.32,
+          "turmas_elegiveis_media": 25
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 40,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 8,
+          "alunos_via_turmas": 8,
+          "media_alunos_turma": 1.33,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 42,
+          "total_turmas": 13,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 17,
+          "alunos_via_turmas": 17,
+          "media_alunos_turma": 1.31,
+          "turmas_elegiveis_media": 13
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 43,
+          "total_turmas": 16,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 22,
+          "alunos_via_turmas": 24,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 16
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 49,
+          "total_turmas": 5,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 7,
+          "alunos_via_turmas": 7,
+          "media_alunos_turma": 1.4,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 50,
+          "total_turmas": 2,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 8,
+          "alunos_via_turmas": 0,
+          "media_alunos_turma": 0,
+          "turmas_elegiveis_media": 0
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 51,
+          "total_turmas": 2,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 3,
+          "alunos_via_turmas": 3,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 2
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 53,
+          "total_turmas": 2,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 3,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 2
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 55,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 14,
+          "media_alunos_turma": 2.33,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 56,
+          "total_turmas": 7,
+          "fonte_carteira": "snapshot_auditado",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1.29,
+          "turmas_elegiveis_media": 7
+        }
+      ],
+      "escopo": "campo_grande",
+      "row_count": 31,
+      "target_rows": [
+        {
+          "rotulo": "Daiana",
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 3,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Daiana Pacifico da Silva dos Anjos",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 15,
+          "media_alunos_turma": 2.5,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "rotulo": "Peterson",
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 31,
+          "total_turmas": 17,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Peterson Biancamano",
+          "carteira_alunos": 28,
+          "alunos_via_turmas": 30,
+          "media_alunos_turma": 1.76,
+          "turmas_elegiveis_media": 17
+        },
+        {
+          "rotulo": "Ramon",
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 33,
+          "total_turmas": 6,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Ramon Pina Morais",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1.33,
+          "turmas_elegiveis_media": 3
+        },
+        {
+          "rotulo": "Ana Beatriz (multiunidade)",
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 53,
+          "total_turmas": 2,
+          "fonte_carteira": "snapshot_auditado",
+          "professor_nome": "Ana Beatriz Paz de Almeida",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 3,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 2
+        }
+      ],
+      "unidade_filtro_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92"
+    },
+    {
+      "ano": 2026,
+      "mes": 7,
+      "rows": [
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 1,
+          "total_turmas": 1,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 1,
+          "alunos_via_turmas": 1,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 1
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 2,
+          "total_turmas": 29,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 43,
+          "alunos_via_turmas": 43,
+          "media_alunos_turma": 1.48,
+          "turmas_elegiveis_media": 29
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 3,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 13,
+          "media_alunos_turma": 3.25,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 7,
+          "total_turmas": 17,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 24,
+          "alunos_via_turmas": 24,
+          "media_alunos_turma": 1.41,
+          "turmas_elegiveis_media": 17
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 8,
+          "total_turmas": 9,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 20,
+          "alunos_via_turmas": 20,
+          "media_alunos_turma": 2.22,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 11,
+          "total_turmas": 12,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 13,
+          "media_alunos_turma": 1.08,
+          "turmas_elegiveis_media": 12
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 13,
+          "total_turmas": 15,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 20,
+          "alunos_via_turmas": 20,
+          "media_alunos_turma": 1.33,
+          "turmas_elegiveis_media": 15
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 14,
+          "total_turmas": 9,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 18,
+          "alunos_via_turmas": 18,
+          "media_alunos_turma": 2,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 15,
+          "total_turmas": 29,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 43,
+          "alunos_via_turmas": 39,
+          "media_alunos_turma": 1.44,
+          "turmas_elegiveis_media": 27
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 18,
+          "total_turmas": 6,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 7,
+          "alunos_via_turmas": 7,
+          "media_alunos_turma": 1.17,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 19,
+          "total_turmas": 1,
+          "fonte_carteira": "evento",
+          "carteira_alunos": 1,
+          "alunos_via_turmas": 1,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 1
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 20,
+          "total_turmas": 8,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 12,
+          "alunos_via_turmas": 12,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 8
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 23,
+          "total_turmas": 13,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 17,
+          "alunos_via_turmas": 12,
+          "media_alunos_turma": 1.2,
+          "turmas_elegiveis_media": 10
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 25,
+          "total_turmas": 9,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 14,
+          "media_alunos_turma": 1.56,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 27,
+          "total_turmas": 7,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 12,
+          "alunos_via_turmas": 12,
+          "media_alunos_turma": 1.71,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 28,
+          "total_turmas": 6,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 30,
+          "total_turmas": 17,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 23,
+          "alunos_via_turmas": 23,
+          "media_alunos_turma": 1.35,
+          "turmas_elegiveis_media": 17
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 31,
+          "total_turmas": 19,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 27,
+          "alunos_via_turmas": 27,
+          "media_alunos_turma": 1.42,
+          "turmas_elegiveis_media": 19
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 33,
+          "total_turmas": 7,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 3,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 3
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 34,
+          "total_turmas": 8,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 16,
+          "alunos_via_turmas": 12,
+          "media_alunos_turma": 1.71,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 35,
+          "total_turmas": 18,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 31,
+          "alunos_via_turmas": 24,
+          "media_alunos_turma": 1.6,
+          "turmas_elegiveis_media": 15
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 36,
+          "total_turmas": 24,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 29,
+          "alunos_via_turmas": 29,
+          "media_alunos_turma": 1.21,
+          "turmas_elegiveis_media": 24
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 40,
+          "total_turmas": 7,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1.29,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 42,
+          "total_turmas": 13,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 15,
+          "alunos_via_turmas": 15,
+          "media_alunos_turma": 1.15,
+          "turmas_elegiveis_media": 13
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 43,
+          "total_turmas": 14,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 27,
+          "alunos_via_turmas": 27,
+          "media_alunos_turma": 1.93,
+          "turmas_elegiveis_media": 14
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 49,
+          "total_turmas": 5,
+          "fonte_carteira": "evento",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 50,
+          "total_turmas": 2,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 0,
+          "media_alunos_turma": 0,
+          "turmas_elegiveis_media": 0
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 51,
+          "total_turmas": 2,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 4,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 2,
+          "turmas_elegiveis_media": 2
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 53,
+          "total_turmas": 2,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 2,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 2
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 55,
+          "total_turmas": 6,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 12,
+          "alunos_via_turmas": 12,
+          "media_alunos_turma": 2,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 56,
+          "total_turmas": 6,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 8,
+          "alunos_via_turmas": 8,
+          "media_alunos_turma": 1.33,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 62,
+          "total_turmas": 5,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1.8,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 3,
+          "total_turmas": 9,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 19,
+          "alunos_via_turmas": 19,
+          "media_alunos_turma": 2.11,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 6,
+          "total_turmas": 36,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 43,
+          "alunos_via_turmas": 43,
+          "media_alunos_turma": 1.19,
+          "turmas_elegiveis_media": 36
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 8,
+          "total_turmas": 13,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 15,
+          "alunos_via_turmas": 15,
+          "media_alunos_turma": 1.15,
+          "turmas_elegiveis_media": 13
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 10,
+          "total_turmas": 26,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 25,
+          "alunos_via_turmas": 27,
+          "media_alunos_turma": 1.04,
+          "turmas_elegiveis_media": 26
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 13,
+          "total_turmas": 3,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 3,
+          "alunos_via_turmas": 3,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 3
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 16,
+          "total_turmas": 14,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 14,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 14
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 19,
+          "total_turmas": 21,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 21,
+          "alunos_via_turmas": 21,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 21
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 20,
+          "total_turmas": 6,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 10,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1.67,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 24,
+          "total_turmas": 5,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 26,
+          "total_turmas": 28,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 28,
+          "alunos_via_turmas": 27,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 27
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 30,
+          "total_turmas": 5,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 6,
+          "alunos_via_turmas": 6,
+          "media_alunos_turma": 1.2,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 31,
+          "total_turmas": 7,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 10,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1.43,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 40,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 4,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 41,
+          "total_turmas": 16,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 24,
+          "alunos_via_turmas": 14,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 14
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 46,
+          "total_turmas": 10,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 11,
+          "alunos_via_turmas": 11,
+          "media_alunos_turma": 1.1,
+          "turmas_elegiveis_media": 10
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 48,
+          "total_turmas": 6,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 6,
+          "alunos_via_turmas": 6,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 49,
+          "total_turmas": 5,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 52,
+          "total_turmas": 8,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 8,
+          "alunos_via_turmas": 8,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 8
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 53,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1.25,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 2,
+          "total_turmas": 5,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 10,
+          "total_turmas": 9,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 11,
+          "total_turmas": 12,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 11,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 11
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 13,
+          "total_turmas": 11,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 12,
+          "alunos_via_turmas": 12,
+          "media_alunos_turma": 1.09,
+          "turmas_elegiveis_media": 11
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 15,
+          "total_turmas": 5,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 6,
+          "alunos_via_turmas": 6,
+          "media_alunos_turma": 1.2,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 16,
+          "total_turmas": 24,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 30,
+          "alunos_via_turmas": 32,
+          "media_alunos_turma": 1.33,
+          "turmas_elegiveis_media": 24
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 18,
+          "total_turmas": 28,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 38,
+          "alunos_via_turmas": 40,
+          "media_alunos_turma": 1.43,
+          "turmas_elegiveis_media": 28
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 20,
+          "total_turmas": 19,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 26,
+          "alunos_via_turmas": 26,
+          "media_alunos_turma": 1.37,
+          "turmas_elegiveis_media": 19
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 21,
+          "total_turmas": 27,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 43,
+          "alunos_via_turmas": 29,
+          "media_alunos_turma": 1.26,
+          "turmas_elegiveis_media": 23
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 25,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1.25,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 26,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 4,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 27,
+          "total_turmas": 7,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 11,
+          "alunos_via_turmas": 8,
+          "media_alunos_turma": 1.33,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 32,
+          "total_turmas": 41,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 50,
+          "alunos_via_turmas": 47,
+          "media_alunos_turma": 1.18,
+          "turmas_elegiveis_media": 40
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 33,
+          "total_turmas": 17,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 34,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 10
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 34,
+          "total_turmas": 8,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1.67,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 36,
+          "total_turmas": 10,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 10,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 10
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 37,
+          "total_turmas": 13,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 14,
+          "media_alunos_turma": 1.08,
+          "turmas_elegiveis_media": 13
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 40,
+          "total_turmas": 20,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 22,
+          "alunos_via_turmas": 22,
+          "media_alunos_turma": 1.1,
+          "turmas_elegiveis_media": 20
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 41,
+          "total_turmas": 14,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 16,
+          "alunos_via_turmas": 16,
+          "media_alunos_turma": 1.14,
+          "turmas_elegiveis_media": 14
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 43,
+          "total_turmas": 17,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 19,
+          "alunos_via_turmas": 20,
+          "media_alunos_turma": 1.18,
+          "turmas_elegiveis_media": 17
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 52,
+          "total_turmas": 20,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 20,
+          "alunos_via_turmas": 21,
+          "media_alunos_turma": 1.05,
+          "turmas_elegiveis_media": 20
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 53,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 4,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 57,
+          "total_turmas": 1,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 1,
+          "alunos_via_turmas": 1,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 1
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 58,
+          "total_turmas": 5,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 5
+        }
+      ],
+      "escopo": "consolidado",
+      "row_count": 75,
+      "target_rows": [
+        {
+          "rotulo": "Daiana",
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 3,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Daiana Pacifico da Silva dos Anjos",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 13,
+          "media_alunos_turma": 3.25,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "rotulo": "Peterson",
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 31,
+          "total_turmas": 19,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Peterson Biancamano",
+          "carteira_alunos": 27,
+          "alunos_via_turmas": 27,
+          "media_alunos_turma": 1.42,
+          "turmas_elegiveis_media": 19
+        },
+        {
+          "rotulo": "Ramon",
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 33,
+          "total_turmas": 7,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Ramon Pina Morais",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 3,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 3
+        },
+        {
+          "rotulo": "Ana Beatriz (multiunidade)",
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 53,
+          "total_turmas": 2,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Ana Beatriz Paz de Almeida",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 2,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 2
+        },
+        {
+          "rotulo": "Daiana",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 3,
+          "total_turmas": 9,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Daiana Pacifico da Silva dos Anjos",
+          "carteira_alunos": 19,
+          "alunos_via_turmas": 19,
+          "media_alunos_turma": 2.11,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "rotulo": "Gabriel Antony",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 6,
+          "total_turmas": 36,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Gabriel Antony Alves de Araújo",
+          "carteira_alunos": 43,
+          "alunos_via_turmas": 43,
+          "media_alunos_turma": 1.19,
+          "turmas_elegiveis_media": 36
+        },
+        {
+          "rotulo": "Isaque",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 10,
+          "total_turmas": 26,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Isaque Mendes da Silva",
+          "carteira_alunos": 25,
+          "alunos_via_turmas": 27,
+          "media_alunos_turma": 1.04,
+          "turmas_elegiveis_media": 26
+        },
+        {
+          "rotulo": "Peterson",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 31,
+          "total_turmas": 7,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Peterson Biancamano",
+          "carteira_alunos": 10,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1.43,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "rotulo": "Ana Beatriz (multiunidade)",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 53,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Ana Beatriz Paz de Almeida",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1.25,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "rotulo": "Isaque",
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 10,
+          "total_turmas": 9,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Isaque Mendes da Silva",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "rotulo": "Ramon",
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 33,
+          "total_turmas": 17,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Ramon Pina Morais",
+          "carteira_alunos": 34,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 10
+        },
+        {
+          "rotulo": "Ana Beatriz (multiunidade)",
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 53,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Ana Beatriz Paz de Almeida",
+          "carteira_alunos": 4,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 4
+        }
+      ],
+      "unidade_filtro_id": null
+    },
+    {
+      "ano": 2026,
+      "mes": 7,
+      "rows": [
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 3,
+          "total_turmas": 9,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 19,
+          "alunos_via_turmas": 19,
+          "media_alunos_turma": 2.11,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 6,
+          "total_turmas": 36,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 43,
+          "alunos_via_turmas": 43,
+          "media_alunos_turma": 1.19,
+          "turmas_elegiveis_media": 36
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 8,
+          "total_turmas": 13,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 15,
+          "alunos_via_turmas": 15,
+          "media_alunos_turma": 1.15,
+          "turmas_elegiveis_media": 13
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 10,
+          "total_turmas": 26,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 25,
+          "alunos_via_turmas": 27,
+          "media_alunos_turma": 1.04,
+          "turmas_elegiveis_media": 26
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 13,
+          "total_turmas": 3,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 3,
+          "alunos_via_turmas": 3,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 3
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 16,
+          "total_turmas": 14,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 14,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 14
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 19,
+          "total_turmas": 21,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 21,
+          "alunos_via_turmas": 21,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 21
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 20,
+          "total_turmas": 6,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 10,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1.67,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 24,
+          "total_turmas": 5,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 26,
+          "total_turmas": 28,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 28,
+          "alunos_via_turmas": 27,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 27
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 30,
+          "total_turmas": 5,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 6,
+          "alunos_via_turmas": 6,
+          "media_alunos_turma": 1.2,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 31,
+          "total_turmas": 7,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 10,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1.43,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 40,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 4,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 41,
+          "total_turmas": 16,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 24,
+          "alunos_via_turmas": 14,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 14
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 46,
+          "total_turmas": 10,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 11,
+          "alunos_via_turmas": 11,
+          "media_alunos_turma": 1.1,
+          "turmas_elegiveis_media": 10
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 48,
+          "total_turmas": 6,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 6,
+          "alunos_via_turmas": 6,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 49,
+          "total_turmas": 5,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 52,
+          "total_turmas": 8,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 8,
+          "alunos_via_turmas": 8,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 8
+        },
+        {
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 53,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1.25,
+          "turmas_elegiveis_media": 4
+        }
+      ],
+      "escopo": "barra",
+      "row_count": 19,
+      "target_rows": [
+        {
+          "rotulo": "Daiana",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 3,
+          "total_turmas": 9,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Daiana Pacifico da Silva dos Anjos",
+          "carteira_alunos": 19,
+          "alunos_via_turmas": 19,
+          "media_alunos_turma": 2.11,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "rotulo": "Gabriel Antony",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 6,
+          "total_turmas": 36,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Gabriel Antony Alves de Araújo",
+          "carteira_alunos": 43,
+          "alunos_via_turmas": 43,
+          "media_alunos_turma": 1.19,
+          "turmas_elegiveis_media": 36
+        },
+        {
+          "rotulo": "Isaque",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 10,
+          "total_turmas": 26,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Isaque Mendes da Silva",
+          "carteira_alunos": 25,
+          "alunos_via_turmas": 27,
+          "media_alunos_turma": 1.04,
+          "turmas_elegiveis_media": 26
+        },
+        {
+          "rotulo": "Peterson",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 31,
+          "total_turmas": 7,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Peterson Biancamano",
+          "carteira_alunos": 10,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1.43,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "rotulo": "Ana Beatriz (multiunidade)",
+          "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+          "professor_id": 53,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Ana Beatriz Paz de Almeida",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1.25,
+          "turmas_elegiveis_media": 4
+        }
+      ],
+      "unidade_filtro_id": "368d47f5-2d88-4475-bc14-ba084a9a348e"
+    },
+    {
+      "ano": 2026,
+      "mes": 7,
+      "rows": [
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 2,
+          "total_turmas": 5,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 10,
+          "total_turmas": 9,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 11,
+          "total_turmas": 12,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 11,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 11
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 13,
+          "total_turmas": 11,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 12,
+          "alunos_via_turmas": 12,
+          "media_alunos_turma": 1.09,
+          "turmas_elegiveis_media": 11
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 15,
+          "total_turmas": 5,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 6,
+          "alunos_via_turmas": 6,
+          "media_alunos_turma": 1.2,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 16,
+          "total_turmas": 24,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 30,
+          "alunos_via_turmas": 32,
+          "media_alunos_turma": 1.33,
+          "turmas_elegiveis_media": 24
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 18,
+          "total_turmas": 28,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 38,
+          "alunos_via_turmas": 40,
+          "media_alunos_turma": 1.43,
+          "turmas_elegiveis_media": 28
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 20,
+          "total_turmas": 19,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 26,
+          "alunos_via_turmas": 26,
+          "media_alunos_turma": 1.37,
+          "turmas_elegiveis_media": 19
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 21,
+          "total_turmas": 27,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 43,
+          "alunos_via_turmas": 29,
+          "media_alunos_turma": 1.26,
+          "turmas_elegiveis_media": 23
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 25,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1.25,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 26,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 4,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 27,
+          "total_turmas": 7,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 11,
+          "alunos_via_turmas": 8,
+          "media_alunos_turma": 1.33,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 32,
+          "total_turmas": 41,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 50,
+          "alunos_via_turmas": 47,
+          "media_alunos_turma": 1.18,
+          "turmas_elegiveis_media": 40
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 33,
+          "total_turmas": 17,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 34,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 10
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 34,
+          "total_turmas": 8,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1.67,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 36,
+          "total_turmas": 10,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 10,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 10
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 37,
+          "total_turmas": 13,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 14,
+          "alunos_via_turmas": 14,
+          "media_alunos_turma": 1.08,
+          "turmas_elegiveis_media": 13
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 40,
+          "total_turmas": 20,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 22,
+          "alunos_via_turmas": 22,
+          "media_alunos_turma": 1.1,
+          "turmas_elegiveis_media": 20
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 41,
+          "total_turmas": 14,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 16,
+          "alunos_via_turmas": 16,
+          "media_alunos_turma": 1.14,
+          "turmas_elegiveis_media": 14
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 43,
+          "total_turmas": 17,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 19,
+          "alunos_via_turmas": 20,
+          "media_alunos_turma": 1.18,
+          "turmas_elegiveis_media": 17
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 52,
+          "total_turmas": 20,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 20,
+          "alunos_via_turmas": 21,
+          "media_alunos_turma": 1.05,
+          "turmas_elegiveis_media": 20
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 53,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 4,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 57,
+          "total_turmas": 1,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 1,
+          "alunos_via_turmas": 1,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 1
+        },
+        {
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 58,
+          "total_turmas": 5,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 5
+        }
+      ],
+      "escopo": "recreio",
+      "row_count": 24,
+      "target_rows": [
+        {
+          "rotulo": "Isaque",
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 10,
+          "total_turmas": 9,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Isaque Mendes da Silva",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "rotulo": "Ramon",
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 33,
+          "total_turmas": 17,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Ramon Pina Morais",
+          "carteira_alunos": 34,
+          "alunos_via_turmas": 10,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 10
+        },
+        {
+          "rotulo": "Ana Beatriz (multiunidade)",
+          "unidade_id": "95553e96-971b-4590-a6eb-0201d013c14d",
+          "professor_id": 53,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Ana Beatriz Paz de Almeida",
+          "carteira_alunos": 4,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 4
+        }
+      ],
+      "unidade_filtro_id": "95553e96-971b-4590-a6eb-0201d013c14d"
+    },
+    {
+      "ano": 2026,
+      "mes": 7,
+      "rows": [
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 1,
+          "total_turmas": 1,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 1,
+          "alunos_via_turmas": 1,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 1
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 2,
+          "total_turmas": 29,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 43,
+          "alunos_via_turmas": 43,
+          "media_alunos_turma": 1.48,
+          "turmas_elegiveis_media": 29
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 3,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 13,
+          "media_alunos_turma": 3.25,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 7,
+          "total_turmas": 17,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 24,
+          "alunos_via_turmas": 24,
+          "media_alunos_turma": 1.41,
+          "turmas_elegiveis_media": 17
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 8,
+          "total_turmas": 9,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 20,
+          "alunos_via_turmas": 20,
+          "media_alunos_turma": 2.22,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 11,
+          "total_turmas": 12,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 13,
+          "media_alunos_turma": 1.08,
+          "turmas_elegiveis_media": 12
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 13,
+          "total_turmas": 15,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 20,
+          "alunos_via_turmas": 20,
+          "media_alunos_turma": 1.33,
+          "turmas_elegiveis_media": 15
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 14,
+          "total_turmas": 9,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 18,
+          "alunos_via_turmas": 18,
+          "media_alunos_turma": 2,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 15,
+          "total_turmas": 29,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 43,
+          "alunos_via_turmas": 39,
+          "media_alunos_turma": 1.44,
+          "turmas_elegiveis_media": 27
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 18,
+          "total_turmas": 6,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 7,
+          "alunos_via_turmas": 7,
+          "media_alunos_turma": 1.17,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 19,
+          "total_turmas": 1,
+          "fonte_carteira": "evento",
+          "carteira_alunos": 1,
+          "alunos_via_turmas": 1,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 1
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 20,
+          "total_turmas": 8,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 12,
+          "alunos_via_turmas": 12,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 8
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 23,
+          "total_turmas": 13,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 17,
+          "alunos_via_turmas": 12,
+          "media_alunos_turma": 1.2,
+          "turmas_elegiveis_media": 10
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 25,
+          "total_turmas": 9,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 14,
+          "media_alunos_turma": 1.56,
+          "turmas_elegiveis_media": 9
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 27,
+          "total_turmas": 7,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 12,
+          "alunos_via_turmas": 12,
+          "media_alunos_turma": 1.71,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 28,
+          "total_turmas": 6,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1.5,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 30,
+          "total_turmas": 17,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 23,
+          "alunos_via_turmas": 23,
+          "media_alunos_turma": 1.35,
+          "turmas_elegiveis_media": 17
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 31,
+          "total_turmas": 19,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 27,
+          "alunos_via_turmas": 27,
+          "media_alunos_turma": 1.42,
+          "turmas_elegiveis_media": 19
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 33,
+          "total_turmas": 7,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 3,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 3
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 34,
+          "total_turmas": 8,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 16,
+          "alunos_via_turmas": 12,
+          "media_alunos_turma": 1.71,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 35,
+          "total_turmas": 18,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 31,
+          "alunos_via_turmas": 24,
+          "media_alunos_turma": 1.6,
+          "turmas_elegiveis_media": 15
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 36,
+          "total_turmas": 24,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 29,
+          "alunos_via_turmas": 29,
+          "media_alunos_turma": 1.21,
+          "turmas_elegiveis_media": 24
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 40,
+          "total_turmas": 7,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1.29,
+          "turmas_elegiveis_media": 7
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 42,
+          "total_turmas": 13,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 15,
+          "alunos_via_turmas": 15,
+          "media_alunos_turma": 1.15,
+          "turmas_elegiveis_media": 13
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 43,
+          "total_turmas": 14,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 27,
+          "alunos_via_turmas": 27,
+          "media_alunos_turma": 1.93,
+          "turmas_elegiveis_media": 14
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 49,
+          "total_turmas": 5,
+          "fonte_carteira": "evento",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 5,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 5
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 50,
+          "total_turmas": 2,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 5,
+          "alunos_via_turmas": 0,
+          "media_alunos_turma": 0,
+          "turmas_elegiveis_media": 0
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 51,
+          "total_turmas": 2,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 4,
+          "alunos_via_turmas": 4,
+          "media_alunos_turma": 2,
+          "turmas_elegiveis_media": 2
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 53,
+          "total_turmas": 2,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 2,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 2
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 55,
+          "total_turmas": 6,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 12,
+          "alunos_via_turmas": 12,
+          "media_alunos_turma": 2,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 56,
+          "total_turmas": 6,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 8,
+          "alunos_via_turmas": 8,
+          "media_alunos_turma": 1.33,
+          "turmas_elegiveis_media": 6
+        },
+        {
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 62,
+          "total_turmas": 5,
+          "fonte_carteira": "jornada",
+          "carteira_alunos": 9,
+          "alunos_via_turmas": 9,
+          "media_alunos_turma": 1.8,
+          "turmas_elegiveis_media": 5
+        }
+      ],
+      "escopo": "campo_grande",
+      "row_count": 32,
+      "target_rows": [
+        {
+          "rotulo": "Daiana",
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 3,
+          "total_turmas": 4,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Daiana Pacifico da Silva dos Anjos",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 13,
+          "media_alunos_turma": 3.25,
+          "turmas_elegiveis_media": 4
+        },
+        {
+          "rotulo": "Peterson",
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 31,
+          "total_turmas": 19,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Peterson Biancamano",
+          "carteira_alunos": 27,
+          "alunos_via_turmas": 27,
+          "media_alunos_turma": 1.42,
+          "turmas_elegiveis_media": 19
+        },
+        {
+          "rotulo": "Ramon",
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 33,
+          "total_turmas": 7,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Ramon Pina Morais",
+          "carteira_alunos": 13,
+          "alunos_via_turmas": 3,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 3
+        },
+        {
+          "rotulo": "Ana Beatriz (multiunidade)",
+          "unidade_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92",
+          "professor_id": 53,
+          "total_turmas": 2,
+          "fonte_carteira": "jornada",
+          "professor_nome": "Ana Beatriz Paz de Almeida",
+          "carteira_alunos": 2,
+          "alunos_via_turmas": 2,
+          "media_alunos_turma": 1,
+          "turmas_elegiveis_media": 2
+        }
+      ],
+      "unidade_filtro_id": "2ec861f6-023f-4d7b-9927-3960ad8c2a92"
+    }
+  ],
+  "project_ref": "ouqwbbermlzqqvtqwlul",
+  "target_professors": [
+    {
+      "nome": "Daiana Pacifico da Silva dos Anjos",
+      "rotulo": "Daiana",
+      "professor_id": 3
+    },
+    {
+      "nome": "Gabriel Antony Alves de Araújo",
+      "rotulo": "Gabriel Antony",
+      "professor_id": 6
+    },
+    {
+      "nome": "Isaque Mendes da Silva",
+      "rotulo": "Isaque",
+      "professor_id": 10
+    },
+    {
+      "nome": "Peterson Biancamano",
+      "rotulo": "Peterson",
+      "professor_id": 31
+    },
+    {
+      "nome": "Ramon Pina Morais",
+      "rotulo": "Ramon",
+      "professor_id": 33
+    },
+    {
+      "nome": "Ana Beatriz Paz de Almeida",
+      "rotulo": "Ana Beatriz (multiunidade)",
+      "professor_id": 53
+    }
+  ],
+  "function_signature": "public.get_carteira_professor_periodo_canonica(integer,integer,uuid,date,date)",
+  "function_definition": "CREATE OR REPLACE FUNCTION public.get_carteira_professor_periodo_canonica(p_ano integer, p_mes integer, p_unidade_id uuid DEFAULT NULL::uuid, p_data_inicio date DEFAULT NULL::date, p_data_fim date DEFAULT NULL::date)\n RETURNS TABLE(professor_id integer, unidade_id uuid, carteira_alunos integer, media_alunos_turma numeric, total_turmas integer, alunos_via_turmas integer, turmas_elegiveis_media integer, fonte_carteira text)\n LANGUAGE plpgsql\n STABLE\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_competencia date := make_date(p_ano, p_mes, 1);\n  v_inicio date := COALESCE(p_data_inicio, make_date(p_ano, p_mes, 1));\n  v_fim date;\n  v_periodo_mensal boolean;\nBEGIN\n  v_fim := COALESCE(p_data_fim, (v_inicio + interval '1 month - 1 day')::date);\n  v_periodo_mensal := v_inicio = v_competencia\n    AND v_fim = (v_competencia + interval '1 month - 1 day')::date;\n\n  RETURN QUERY\n  WITH roster_periodo AS (\n    SELECT DISTINCT\n      ae.professor_id AS prof_id,\n      ae.unidade_id AS uid,\n      COALESCE(\n        aa.aluno_emusys_id::text,\n        NULLIF(a.emusys_student_id, ''),\n        NULLIF(aa.aluno_chave, ''),\n        CASE WHEN aa.aluno_id IS NOT NULL THEN 'local:' || aa.aluno_id::text END\n      ) AS pessoa_chave,\n      CASE\n        WHEN NULLIF(btrim(ae.turma_nome), '') IS NOT NULL THEN\n          'turma:'\n          || COALESCE(ae.curso_emusys_id::text, lower(btrim(ae.curso_nome)), 'sem-curso')\n          || ':' || lower(btrim(ae.turma_nome))\n        ELSE\n          'individual:' || COALESCE(\n            ae.matricula_disciplina_id::text,\n            COALESCE(\n              aa.aluno_emusys_id::text,\n              NULLIF(a.emusys_student_id, ''),\n              NULLIF(aa.aluno_chave, ''),\n              CASE WHEN aa.aluno_id IS NOT NULL THEN 'local:' || aa.aluno_id::text END\n            )\n            || ':' || COALESCE(ae.curso_emusys_id::text, lower(btrim(ae.curso_nome)), 'sem-curso')\n            || ':' || extract(isodow FROM ae.data_aula)::text\n            || ':' || to_char(\n              ae.data_hora_inicio AT TIME ZONE 'America/Sao_Paulo',\n              'HH24:MI'\n            ),\n            'evento:' || ae.id::text\n          )\n      END AS turma_chave,\n      NOT COALESCE(c.is_projeto_banda, false) AS elegivel_media,\n      'evento'::text AS fonte\n    FROM public.aulas_emusys ae\n    JOIN public.aula_alunos_emusys aa ON aa.aula_emusys_id = ae.id\n    LEFT JOIN public.alunos a ON a.id = aa.aluno_id\n    LEFT JOIN public.curso_emusys_depara d\n      ON d.unidade_id = ae.unidade_id\n     AND d.emusys_disciplina_id = ae.curso_emusys_id\n    LEFT JOIN public.cursos c ON c.id = d.curso_id\n    WHERE ae.professor_id IS NOT NULL\n      AND ae.data_aula BETWEEN v_inicio AND v_fim\n      AND ae.cancelada = false\n      AND lower(COALESCE(ae.categoria, 'normal')) = 'normal'\n      AND (p_unidade_id IS NULL OR ae.unidade_id = p_unidade_id)\n  ),\n  presenca_periodo AS (\n    SELECT DISTINCT\n      ae.professor_id AS prof_id,\n      ae.unidade_id AS uid,\n      COALESCE(NULLIF(a.emusys_student_id, ''), 'local:' || a.id::text) AS pessoa_chave,\n      CASE\n        WHEN NULLIF(btrim(ae.turma_nome), '') IS NOT NULL THEN\n          'turma:'\n          || COALESCE(ae.curso_emusys_id::text, lower(btrim(ae.curso_nome)), 'sem-curso')\n          || ':' || lower(btrim(ae.turma_nome))\n        ELSE\n          'individual:' || COALESCE(\n            ae.matricula_disciplina_id::text,\n            COALESCE(NULLIF(a.emusys_student_id, ''), 'local:' || a.id::text)\n            || ':' || COALESCE(ae.curso_emusys_id::text, lower(btrim(ae.curso_nome)), 'sem-curso')\n            || ':' || extract(isodow FROM ae.data_aula)::text\n            || ':' || to_char(\n              ae.data_hora_inicio AT TIME ZONE 'America/Sao_Paulo',\n              'HH24:MI'\n            ),\n            'evento:' || ae.id::text\n          )\n      END AS turma_chave,\n      NOT COALESCE(c.is_projeto_banda, false) AS elegivel_media,\n      'evento'::text AS fonte\n    FROM public.aulas_emusys ae\n    JOIN public.aluno_presenca ap ON ap.aula_emusys_id = ae.id\n    JOIN public.alunos a ON a.id = ap.aluno_id\n    LEFT JOIN public.curso_emusys_depara d\n      ON d.unidade_id = ae.unidade_id\n     AND d.emusys_disciplina_id = ae.curso_emusys_id\n    LEFT JOIN public.cursos c ON c.id = d.curso_id\n    WHERE ae.professor_id IS NOT NULL\n      AND ae.data_aula BETWEEN v_inicio AND v_fim\n      AND ae.cancelada = false\n      AND lower(COALESCE(ae.categoria, 'normal')) = 'normal'\n      AND (p_unidade_id IS NULL OR ae.unidade_id = p_unidade_id)\n  ),\n  eventos_periodo AS (\n    SELECT DISTINCT\n      e.prof_id,\n      e.uid,\n      e.pessoa_chave,\n      e.turma_chave,\n      e.elegivel_media,\n      e.fonte\n    FROM (\n      SELECT * FROM roster_periodo\n      UNION ALL\n      SELECT * FROM presenca_periodo\n    ) e\n    WHERE e.pessoa_chave IS NOT NULL\n  ),\n  jornada_atual AS (\n    SELECT DISTINCT\n      j.professor_id AS prof_id,\n      j.unidade_id AS uid,\n      COALESCE(\n        j.emusys_aluno_id::text,\n        NULLIF(a.emusys_student_id, ''),\n        CASE WHEN j.aluno_id IS NOT NULL THEN 'local:' || j.aluno_id::text END\n      ) AS pessoa_chave,\n      CASE\n        WHEN NULLIF(btrim(j.payload_snapshot #>> '{disciplina,nome_turma}'), '') IS NOT NULL THEN\n          'turma:'\n          || COALESCE(j.curso_id::text, lower(btrim(j.curso_nome_emusys)), 'sem-curso')\n          || ':' || lower(btrim(j.payload_snapshot #>> '{disciplina,nome_turma}'))\n        WHEN lower(COALESCE(j.payload_snapshot #>> '{disciplina,tipo}', '')) = 'turma'\n          AND j.dia_semana IS NOT NULL\n          AND j.horario IS NOT NULL THEN\n          'turma:'\n          || COALESCE(j.curso_id::text, lower(btrim(j.curso_nome_emusys)), 'sem-curso')\n          || ':' || lower(j.dia_semana)\n          || ':' || j.horario\n        ELSE\n          'individual:' || COALESCE(\n            j.emusys_matricula_disciplina_id::text,\n            j.id::text\n          )\n      END AS turma_chave,\n      NOT COALESCE(c.is_projeto_banda, false) AS elegivel_media,\n      'jornada'::text AS fonte\n    FROM public.aluno_jornada_matricula_disciplina j\n    LEFT JOIN public.alunos a ON a.id = j.aluno_id\n    LEFT JOIN public.cursos c ON c.id = j.curso_id\n    WHERE current_date BETWEEN v_inicio AND v_fim\n      AND j.status_matricula = 'ativa'\n      AND j.professor_id IS NOT NULL\n      AND (p_unidade_id IS NULL OR j.unidade_id = p_unidade_id)\n  ),\n  legado_periodo AS (\n    SELECT DISTINCT\n      a.professor_atual_id AS prof_id,\n      a.unidade_id AS uid,\n      COALESCE(NULLIF(a.emusys_student_id, ''), 'local:' || a.id::text) AS pessoa_chave,\n      CASE\n        WHEN a.dia_aula IS NOT NULL AND a.horario_aula IS NOT NULL THEN\n          'legado:' || a.curso_id::text\n          || ':' || lower(a.dia_aula)\n          || ':' || a.horario_aula::text\n        ELSE 'legado-individual:' || a.id::text\n      END AS turma_chave,\n      NOT COALESCE(c.is_projeto_banda, false) AS elegivel_media,\n      'legado'::text AS fonte\n    FROM public.alunos a\n    JOIN public.cursos c ON c.id = a.curso_id\n    WHERE a.professor_atual_id IS NOT NULL\n      AND COALESCE(a.data_matricula, a.data_inicio_contrato, a.created_at::date) <= v_fim\n      AND (a.data_saida IS NULL OR a.data_saida > v_fim)\n      AND (\n        a.arquivado_em IS NULL\n        OR (a.arquivado_em AT TIME ZONE 'America/Sao_Paulo')::date > v_fim\n      )\n      AND (\n        lower(COALESCE(a.status, 'ativo')) IN ('ativo', 'ativa')\n        OR a.data_saida > v_fim\n      )\n      AND (p_unidade_id IS NULL OR a.unidade_id = p_unidade_id)\n  ),\n  fontes AS (\n    SELECT * FROM jornada_atual\n    UNION ALL\n    SELECT * FROM eventos_periodo\n    UNION ALL\n    SELECT * FROM legado_periodo\n  ),\n  fonte_preferida AS (\n    SELECT\n      f.prof_id,\n      f.uid,\n      CASE\n        WHEN bool_or(f.fonte = 'jornada') THEN 'jornada'\n        WHEN bool_or(f.fonte = 'evento') THEN 'evento'\n        ELSE 'legado'\n      END AS fonte\n    FROM fontes f\n    WHERE f.pessoa_chave IS NOT NULL\n    GROUP BY f.prof_id, f.uid\n  ),\n  base_carteira AS (\n    SELECT DISTINCT\n      f.prof_id,\n      f.uid,\n      f.pessoa_chave,\n      f.turma_chave,\n      f.elegivel_media,\n      f.fonte\n    FROM fontes f\n    JOIN fonte_preferida fp\n      ON fp.prof_id = f.prof_id\n     AND fp.uid = f.uid\n     AND fp.fonte = f.fonte\n    WHERE f.pessoa_chave IS NOT NULL\n  ),\n  carteira AS (\n    SELECT\n      b.prof_id,\n      b.uid,\n      COUNT(DISTINCT b.pessoa_chave)::integer AS carteira_alunos,\n      min(b.fonte)::text AS fonte_carteira\n    FROM base_carteira b\n    GROUP BY b.prof_id, b.uid\n  ),\n  turmas_calc AS (\n    SELECT\n      b.prof_id,\n      b.uid,\n      COUNT(DISTINCT b.turma_chave)::integer AS total_turmas,\n      COUNT(DISTINCT jsonb_build_array(\n        b.pessoa_chave,\n        CASE\n          WHEN b.fonte = 'jornada'\n            OR b.turma_chave LIKE 'turma:%'\n            OR b.turma_chave ~ '^individual:[0-9]+$'\n          THEN b.turma_chave\n          ELSE NULL\n        END\n      )) FILTER (\n        WHERE b.elegivel_media\n      )::integer AS alunos_via_turmas,\n      COUNT(DISTINCT b.turma_chave) FILTER (\n        WHERE b.elegivel_media\n      )::integer AS turmas_elegiveis_media,\n      CASE\n        WHEN COUNT(DISTINCT b.turma_chave) FILTER (WHERE b.elegivel_media) > 0 THEN ROUND(\n          COUNT(DISTINCT jsonb_build_array(\n        b.pessoa_chave,\n        CASE\n          WHEN b.fonte = 'jornada'\n            OR b.turma_chave LIKE 'turma:%'\n            OR b.turma_chave ~ '^individual:[0-9]+$'\n          THEN b.turma_chave\n          ELSE NULL\n        END\n      )) FILTER (\n            WHERE b.elegivel_media\n          )::numeric\n          / COUNT(DISTINCT b.turma_chave) FILTER (WHERE b.elegivel_media),\n          2\n        )\n        ELSE 0\n      END AS media_alunos_turma\n    FROM base_carteira b\n    GROUP BY b.prof_id, b.uid\n  ),\n  snapshot AS (\n    SELECT\n      s.professor_id AS prof_id,\n      s.unidade_id AS uid,\n      s.carteira_alunos\n    FROM public.professor_carteira_mensal_canonica s\n    WHERE v_periodo_mensal\n      AND s.competencia = v_competencia\n      AND (p_unidade_id IS NULL OR s.unidade_id = p_unidade_id)\n  )\n  SELECT\n    COALESCE(s.prof_id, c.prof_id),\n    COALESCE(s.uid, c.uid),\n    COALESCE(s.carteira_alunos, c.carteira_alunos, 0),\n    COALESCE(tc.media_alunos_turma, 0)::numeric(10,2),\n    COALESCE(tc.total_turmas, 0),\n    COALESCE(tc.alunos_via_turmas, 0),\n    COALESCE(tc.turmas_elegiveis_media, 0),\n    CASE\n      WHEN s.prof_id IS NOT NULL THEN 'snapshot_auditado'\n      ELSE COALESCE(c.fonte_carteira, 'sem_base')\n    END::text AS fonte_carteira\n  FROM carteira c\n  FULL JOIN snapshot s\n    ON s.prof_id = c.prof_id\n   AND s.uid = c.uid\n  LEFT JOIN turmas_calc tc\n    ON tc.prof_id = COALESCE(s.prof_id, c.prof_id)\n   AND tc.uid = COALESCE(s.uid, c.uid)\n  ORDER BY COALESCE(s.prof_id, c.prof_id), COALESCE(s.uid, c.uid);\nEND;\n$function$\n",
+  "captured_at_database": "2026-07-20T09:26:50.297966+00:00",
+  "multiunit_professor_id": 53,
+  "function_definition_md5": "3145ca7e057d1cebd9971d13f76d4171",
+  "performance_baseline": {
+    "captured_with": "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)",
+    "competencia": "2026-07",
+    "unit_scope": {
+      "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+      "query_plan": [
+        {
+          "Plan": {
+            "Node Type": "Function Scan",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Function Name": "get_carteira_professor_periodo_canonica",
+            "Alias": "get_carteira_professor_periodo_canonica",
+            "Startup Cost": 0.25,
+            "Total Cost": 10.25,
+            "Plan Rows": 1000,
+            "Plan Width": 100,
+            "Actual Startup Time": 64.158,
+            "Actual Total Time": 64.16,
+            "Actual Rows": 19,
+            "Actual Loops": 1,
+            "Shared Hit Blocks": 33247,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0
+          },
+          "Planning": {
+            "Shared Hit Blocks": 3,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0
+          },
+          "Planning Time": 0.128,
+          "Triggers": [],
+          "Execution Time": 64.223
+        }
+      ]
+    },
+    "consolidated_scope": {
+      "unidade_id": null,
+      "query_plan": [
+        {
+          "Plan": {
+            "Node Type": "Function Scan",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Function Name": "get_carteira_professor_periodo_canonica",
+            "Alias": "get_carteira_professor_periodo_canonica",
+            "Startup Cost": 0.25,
+            "Total Cost": 10.25,
+            "Plan Rows": 1000,
+            "Plan Width": 100,
+            "Actual Startup Time": 177.617,
+            "Actual Total Time": 177.624,
+            "Actual Rows": 75,
+            "Actual Loops": 1,
+            "Shared Hit Blocks": 89743,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0
+          },
+          "Planning": {
+            "Shared Hit Blocks": 3,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0
+          },
+          "Planning Time": 0.095,
+          "Triggers": [],
+          "Execution Time": 178.036
+        }
+      ]
+    }
+  }
+}

@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
+  buildHealthScoreV3DraftLoadState,
   parseHealthScoreV3Config,
   parseHealthScoreV3ConfigUi,
   parseHealthScoreV3Simulation,
   serializeHealthScoreV3Metrics,
+  serializeHealthScoreV3SegmentGoals,
   type HealthScoreV3Config,
   type HealthScoreV3ConfigUi,
   type HealthScoreV3Simulation,
@@ -16,6 +18,7 @@ interface UseHealthScoreProfessorV3ConfigReturn {
   loading: boolean;
   mutating: boolean;
   error: string | null;
+  refresh: () => Promise<void>;
   reload: () => Promise<void>;
   createDraft: (vigenciaInicio: string, justificativa: string) => Promise<HealthScoreV3Config>;
   saveDraft: (draft: HealthScoreV3Config) => Promise<HealthScoreV3Config>;
@@ -24,7 +27,30 @@ interface UseHealthScoreProfessorV3ConfigReturn {
 }
 
 function messageFrom(error: unknown): string {
-  return error instanceof Error ? error.message : 'Nao foi possivel concluir a operacao.';
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) return message;
+  }
+  return 'Nao foi possivel concluir a operacao.';
+}
+
+function isStatementTimeout(error: unknown): boolean {
+  return Boolean(
+    error
+      && typeof error === 'object'
+      && 'code' in error
+      && (error as { code?: unknown }).code === '57014',
+  );
+}
+
+async function loadConfigUiWithRetry() {
+  let response = await supabase.rpc('get_health_score_professor_v3_config_ui');
+  if (!isStatementTimeout(response.error)) return response;
+
+  await new Promise((resolve) => window.setTimeout(resolve, 250));
+  response = await supabase.rpc('get_health_score_professor_v3_config_ui');
+  return response;
 }
 
 export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3ConfigReturn {
@@ -33,26 +59,45 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
   const [loading, setLoading] = useState(true);
   const [mutating, setMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const refreshInFlight = useRef<Promise<void> | null>(null);
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error: rpcError } = await supabase.rpc('get_health_score_professor_v3_config_ui');
-      if (rpcError) throw rpcError;
-      setConfig(parseHealthScoreV3ConfigUi(data));
-    } catch (caught) {
-      const message = messageFrom(caught);
-      setError(message);
-      throw caught;
-    } finally {
-      setLoading(false);
-    }
+  const refresh = useCallback(() => {
+    if (refreshInFlight.current) return refreshInFlight.current;
+
+    const request = (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const { data, error: rpcError } = await loadConfigUiWithRetry();
+        if (rpcError) throw rpcError;
+        const parsed = parseHealthScoreV3ConfigUi(data);
+        const persistedGoals = parsed.rascunho?.metasSegmentadas
+          || parsed.ativa?.metasSegmentadas
+          || [];
+        const loadState = buildHealthScoreV3DraftLoadState(
+          persistedGoals,
+          parsed.catalogoSegmentos || [],
+        );
+        setConfig({ ...parsed, matrizSegmentada: loadState.matrix });
+      } catch (caught) {
+        const message = messageFrom(caught);
+        setError(message);
+        throw caught;
+      } finally {
+        setLoading(false);
+      }
+    })();
+
+    refreshInFlight.current = request;
+    void request.finally(() => {
+      if (refreshInFlight.current === request) refreshInFlight.current = null;
+    }).catch(() => undefined);
+    return request;
   }, []);
 
   useEffect(() => {
-    void reload().catch(() => undefined);
-  }, [reload]);
+    void refresh().catch(() => undefined);
+  }, [refresh]);
 
   const createDraft = useCallback(async (vigenciaInicio: string, justificativa: string) => {
     setMutating(true);
@@ -64,7 +109,7 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
       if (rpcError) throw rpcError;
       const draft = parseHealthScoreV3Config(data);
       if (!draft) throw new Error('A RPC nao retornou o rascunho criado.');
-      await reload();
+      await refresh();
       return draft;
     } catch (caught) {
       setError(messageFrom(caught));
@@ -72,7 +117,7 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
     } finally {
       setMutating(false);
     }
-  }, [reload]);
+  }, [refresh]);
 
   const saveDraft = useCallback(async (draft: HealthScoreV3Config) => {
     setMutating(true);
@@ -84,12 +129,13 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
           p_vigencia_inicio: draft.vigenciaInicio,
           p_justificativa: draft.justificativa,
           p_metricas: serializeHealthScoreV3Metrics(draft.metricas),
+          p_metas_segmentadas: serializeHealthScoreV3SegmentGoals(draft.metasSegmentadas),
         },
       );
       if (rpcError) throw rpcError;
       const saved = parseHealthScoreV3Config(data);
       if (!saved) throw new Error('A RPC nao retornou o rascunho salvo.');
-      setConfig((current) => current ? { ...current, rascunho: saved } : current);
+      await refresh();
       setSimulation(null);
       return saved;
     } catch (caught) {
@@ -98,7 +144,7 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
     } finally {
       setMutating(false);
     }
-  }, []);
+  }, [refresh]);
 
   const simulate = useCallback(async (configId: string, competencia: string) => {
     setMutating(true);
@@ -130,7 +176,7 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
       if (rpcError) throw rpcError;
       const active = parseHealthScoreV3Config(data);
       if (!active) throw new Error('A RPC nao retornou a versao ativada.');
-      await reload();
+      await refresh();
       setSimulation(null);
       return active;
     } catch (caught) {
@@ -139,7 +185,7 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
     } finally {
       setMutating(false);
     }
-  }, [reload]);
+  }, [refresh]);
 
   return {
     config,
@@ -147,7 +193,8 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
     loading,
     mutating,
     error,
-    reload,
+    refresh,
+    reload: refresh,
     createDraft,
     saveDraft,
     simulate,

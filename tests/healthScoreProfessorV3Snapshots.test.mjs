@@ -18,6 +18,10 @@ const shadowComparisonMigrationPath =
   'supabase/migrations/20260718190000_health_score_v3_comparacao_sombra.sql';
 const shadowRolesIsolationMigrationPath =
   'supabase/migrations/20260718191500_health_score_v3_gate6_isolamento_roles.sql';
+const segmentedGoalsSchemaMigrationPath =
+  'supabase/migrations/20260719200000_health_score_v3_metas_segmentadas_schema.sql';
+const segmentedConfigMigrationPath =
+  'supabase/migrations/20260719204000_health_score_v3_config_segmentada_rpc.sql';
 
 function migration() {
   return existsSync(migrationPath) ? readFileSync(migrationPath, 'utf8') : '';
@@ -62,6 +66,18 @@ function shadowComparisonMigration() {
 function shadowRolesIsolationMigration() {
   return existsSync(shadowRolesIsolationMigrationPath)
     ? readFileSync(shadowRolesIsolationMigrationPath, 'utf8')
+    : '';
+}
+
+function segmentedGoalsSchemaMigration() {
+  return existsSync(segmentedGoalsSchemaMigrationPath)
+    ? readFileSync(segmentedGoalsSchemaMigrationPath, 'utf8')
+    : '';
+}
+
+function segmentedConfigMigration() {
+  return existsSync(segmentedConfigMigrationPath)
+    ? readFileSync(segmentedConfigMigrationPath, 'utf8')
     : '';
 }
 
@@ -158,6 +174,127 @@ test('snapshot fechado e metricas filhas sao imutaveis fora de RPC controlada', 
   assert.match(sql, /on delete restrict/i);
   assert.doesNotMatch(sql, /grant\s+select\s*,\s*insert\s*,\s*update\s*,\s*delete[\s\S]*to service_role/i);
   assert.match(securityMigration(), /revoke insert, update, delete, truncate, references, trigger[\s\S]*from service_role/i);
+});
+
+test('Task 2 preserva a imutabilidade historica das metas e dos segmentos do snapshot', () => {
+  const sql = segmentedGoalsSchemaMigration();
+
+  assert.equal(
+    existsSync(segmentedGoalsSchemaMigrationPath),
+    true,
+    `${segmentedGoalsSchemaMigrationPath} deve existir`,
+  );
+  assert.match(
+    sql,
+    /create table if not exists public\.health_score_professor_v3_config_metas_curso_modalidade/i,
+  );
+  assert.match(
+    sql,
+    /create table if not exists public\.health_score_professor_v3_snapshot_metrica_segmentos/i,
+  );
+  assert.match(
+    sql,
+    /snapshot_metrica_id[\s\S]{0,180}references public\.health_score_professor_v3_snapshot_metricas\s*\(\s*id\s*\)\s*on delete restrict/i,
+  );
+  assert.match(
+    sql,
+    /unique\s*\(\s*id\s*,\s*unidade_id\s*,\s*curso_id\s*,\s*modalidade\s*\)/i,
+  );
+  assert.match(
+    sql,
+    /foreign\s+key\s*\(\s*config_meta_segmento_id\s*,\s*unidade_id\s*,\s*curso_id\s*,\s*modalidade\s*\)\s*references\s+public\.health_score_professor_v3_config_metas_curso_modalidade\s*\(\s*id\s*,\s*unidade_id\s*,\s*curso_id\s*,\s*modalidade\s*\)\s*on\s+delete\s+restrict/i,
+  );
+  assert.match(
+    sql,
+    /estado_base\s+text\s+not\s+null[\s\S]{0,260}'sem_base_zero_carteira'/i,
+  );
+
+  const configBlock = functionBlock(
+    sql,
+    'fn_health_score_professor_v3_bloquear_config_meta_segmentada',
+  );
+  assert.match(configBlock, /c\.status\s+is\s+distinct\s+from\s+'rascunho'/i);
+  assert.match(
+    configBlock,
+    /s\.estado\s+in\s*\(\s*'fechado'\s*,\s*'invalidado'\s*\)/i,
+  );
+  assert.match(configBlock, /array\s*\[\s*old\.config_id\s*,\s*new\.config_id\s*\]/i);
+  assert.match(
+    sql,
+    /before\s+insert\s+or\s+update\s+or\s+delete\s+on\s+public\.health_score_professor_v3_config_metas_curso_modalidade/i,
+  );
+
+  const segmentBlock = functionBlock(
+    sql,
+    'fn_health_score_professor_v3_bloquear_snapshot_segmento_fechado',
+  );
+  assert.match(
+    segmentBlock,
+    /health_score_professor_v3_snapshot_metricas[\s\S]*health_score_professor_v3_snapshots/i,
+  );
+  assert.match(
+    segmentBlock,
+    /s\.estado\s+in\s*\(\s*'fechado'\s*,\s*'invalidado'\s*\)/i,
+  );
+  assert.match(
+    segmentBlock,
+    /array\s*\[\s*old\.snapshot_metrica_id\s*,\s*new\.snapshot_metrica_id\s*\]/i,
+  );
+  assert.match(
+    sql,
+    /before\s+insert\s+or\s+update\s+or\s+delete\s+on\s+public\.health_score_professor_v3_snapshot_metrica_segmentos/i,
+  );
+  assert.match(configBlock, /security definer[\s\S]*set search_path = public, pg_temp/i);
+  assert.match(segmentBlock, /security definer[\s\S]*set search_path = public, pg_temp/i);
+
+  const configConsistencyBlock = functionBlock(
+    sql,
+    'fn_health_score_professor_v3_validar_snapshot_segmento_config',
+  );
+  assert.match(configConsistencyBlock, /new\.config_meta_segmento_id\s+is\s+null/i);
+  assert.match(
+    configConsistencyBlock,
+    /health_score_professor_v3_snapshot_metricas[\s\S]*health_score_professor_v3_snapshots[\s\S]*health_score_professor_v3_config_metas_curso_modalidade/i,
+  );
+  assert.match(
+    configConsistencyBlock,
+    /m\.config_id\s+is\s+distinct\s+from\s+s\.config_id/i,
+  );
+  assert.match(
+    sql,
+    /before\s+insert\s+or\s+update\s+on\s+public\.health_score_professor_v3_snapshot_metrica_segmentos[\s\S]{0,180}fn_health_score_professor_v3_validar_snapshot_segmento_config/i,
+  );
+  assert.match(
+    configConsistencyBlock,
+    /security definer[\s\S]*set search_path = public, pg_temp/i,
+  );
+});
+
+test('Task 6 simula e ativa sem recalcular snapshots fechados', () => {
+  const sql = segmentedConfigMigration();
+
+  assert.equal(
+    existsSync(segmentedConfigMigrationPath),
+    true,
+    `${segmentedConfigMigrationPath} deve existir`,
+  );
+  assert.match(
+    sql,
+    /insert\s+into\s+public\.health_score_professor_v3_config_simulacoes/i,
+  );
+  assert.doesNotMatch(
+    sql,
+    /(?:insert\s+into|update|delete\s+from)\s+public\.health_score_professor_v3_snapshots/i,
+  );
+  assert.doesNotMatch(
+    sql,
+    /(?:insert\s+into|update|delete\s+from)\s+public\.health_score_professor_v3_snapshot_metricas/i,
+  );
+  assert.doesNotMatch(
+    sql,
+    /(?:insert\s+into|update|delete\s+from)\s+public\.health_score_professor_v3_snapshot_metrica_segmentos/i,
+  );
+  assert.doesNotMatch(sql, /materializar_health_score_professor_v3/i);
 });
 
 test('retificacao exige justificativa, invalida sem apagar e cria revisao fechada', () => {

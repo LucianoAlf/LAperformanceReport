@@ -55,11 +55,18 @@ Deno.serve(async (req) => {
     const agora = new Date().toISOString()
     let updateData: Record<string, unknown> = {}
 
+    // Drip: se a campanha tem limite_disparo, cada iniciar/retomar manda no máximo
+    // esse tanto e pausa sozinha. meta_disparo = quanto já foi enviado + o limite.
+    const enviadosAtual = campanha.enviados ?? 0
+    const metaDisparo = campanha.limite_disparo != null
+      ? enviadosAtual + campanha.limite_disparo
+      : null
+
     if (action === 'iniciar') {
       if (campanha.status !== 'rascunho') {
         return jsonError('Apenas campanhas em rascunho podem ser iniciadas', 400)
       }
-      updateData = { status: 'executando', iniciada_em: agora, updated_at: agora }
+      updateData = { status: 'executando', iniciada_em: agora, updated_at: agora, meta_disparo: metaDisparo }
     } else if (action === 'pausar') {
       if (campanha.status !== 'executando') {
         return jsonError('Apenas campanhas em execução podem ser pausadas', 400)
@@ -69,7 +76,7 @@ Deno.serve(async (req) => {
       if (campanha.status !== 'pausada') {
         return jsonError('Apenas campanhas pausadas podem ser retomadas', 400)
       }
-      updateData = { status: 'executando', updated_at: agora }
+      updateData = { status: 'executando', updated_at: agora, meta_disparo: metaDisparo }
     }
 
     const { data: campanhaAtualizada, error: updateErr } = await supabase

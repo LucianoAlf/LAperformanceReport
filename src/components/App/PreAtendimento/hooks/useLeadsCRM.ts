@@ -58,8 +58,11 @@ export function useLeadsCRM({ unidadeId, ano, mes }: UseLeadsCRMProps): UseLeads
               crm_motivos_nao_comparecimento:motivo_nao_comparecimento_id(id, nome),
               atendido_por:atendido_por_id(nome, apelido),
               consultor:consultor_id(nome, apelido),
-              lead_experimentais(id, lead_id, nome_aluno, unidade_id, data_experimental, horario_experimental, professor_experimental_id, curso_interesse_id, status, etapa_pipeline_id, aluno_id, emusys_lead_id, created_at, updated_at, professores:professor_experimental_id(nome))
+              lead_experimentais(id, lead_id, nome_aluno, unidade_id, data_experimental, horario_experimental, professor_experimental_id, curso_interesse_id, status, etapa_pipeline_id, aluno_id, emusys_lead_id, created_at, updated_at, professores:professor_experimental_id(nome)),
+              leads_campanhas(campanha_nome, campanha_slug, created_at),
+              desinteresse:crm_lead_historico(dados, created_at)
             `)
+            .eq('desinteresse.tipo', 'desinteresse_frio')
             .gte('data_contato', startDate)
             .lte('data_contato', endDate)
             .order('created_at', { ascending: false });
@@ -146,8 +149,11 @@ export function useLeadsCRM({ unidadeId, ano, mes }: UseLeadsCRMProps): UseLeads
           crm_pipeline_etapas:etapa_pipeline_id(id, nome, slug, cor, icone, ordem),
           crm_motivos_nao_comparecimento:motivo_nao_comparecimento_id(id, nome),
           atendido_por:atendido_por_id(nome, apelido),
-          consultor:consultor_id(nome, apelido)
+          consultor:consultor_id(nome, apelido),
+          leads_campanhas(campanha_nome, campanha_slug, created_at),
+          desinteresse:crm_lead_historico(dados, created_at)
         `)
+        .eq('desinteresse.tipo', 'desinteresse_frio')
         .gte('data_contato', startDate)
         .lte('data_contato', endDate)
         .order('created_at', { ascending: false });

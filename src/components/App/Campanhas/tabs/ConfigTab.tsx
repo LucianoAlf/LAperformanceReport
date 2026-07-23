@@ -30,6 +30,7 @@ function ModalNumero({ open, onOpenChange, numero, onSalvar }: ModalNumeroProps)
     access_token: numero.access_token,
     app_secret: numero.app_secret ?? '',
     verify_token: numero.verify_token ?? '',
+    numero_telefone: numero.numero_telefone,
     limite_diario: numero.limite_diario,
     orcamento_mensal: numero.orcamento_mensal,
     is_default: numero.is_default,
@@ -43,6 +44,7 @@ function ModalNumero({ open, onOpenChange, numero, onSalvar }: ModalNumeroProps)
     access_token: '',
     app_secret: '',
     verify_token: '',
+    numero_telefone: null,
     limite_diario: 1000,
     orcamento_mensal: null,
     is_default: false,
@@ -60,9 +62,33 @@ function ModalNumero({ open, onOpenChange, numero, onSalvar }: ModalNumeroProps)
 
   const [mostrarToken, setMostrarToken] = useState(false)
   const [salvando, setSalvando] = useState(false)
+  const [buscandoNumero, setBuscandoNumero] = useState(false)
 
   function set(field: keyof NumeroMetaForm, value: any) {
     setForm(prev => ({ ...prev, [field]: value }))
+  }
+
+  async function buscarNumeroDaMeta() {
+    if (!form.phone_number_id.trim() || !form.access_token.trim()) {
+      toast.error('Preencha Phone Number ID e Access Token antes de buscar')
+      return
+    }
+    setBuscandoNumero(true)
+    try {
+      const resp = await fetch(
+        `https://graph.facebook.com/v21.0/${form.phone_number_id}?fields=display_phone_number,verified_name`,
+        { headers: { Authorization: `Bearer ${form.access_token}` } }
+      )
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error?.message ?? 'Falha ao consultar a Graph API')
+      set('numero_telefone', data.display_phone_number ?? null)
+      if (!form.nome.trim() && data.verified_name) set('nome', data.verified_name)
+      toast.success('Número encontrado')
+    } catch (err) {
+      toast.error(`Não foi possível buscar o número: ${(err as Error).message}`)
+    } finally {
+      setBuscandoNumero(false)
+    }
   }
 
   async function handleSubmit() {
@@ -116,6 +142,26 @@ function ModalNumero({ open, onOpenChange, numero, onSalvar }: ModalNumeroProps)
               />
             </Campo>
           </div>
+
+          <Campo label="Número de telefone">
+            <div className="flex gap-2">
+              <input
+                value={form.numero_telefone ?? ''}
+                readOnly
+                placeholder="Clique em buscar →"
+                className={cn(inputCls, 'bg-slate-800/50 text-gray-400 cursor-default')}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={buscarNumeroDaMeta}
+                disabled={buscandoNumero}
+                className="whitespace-nowrap border-slate-600 text-gray-300 hover:text-white"
+              >
+                {buscandoNumero ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Buscar da Meta'}
+              </Button>
+            </div>
+          </Campo>
 
           <Campo label="Access Token (Permanente)">
             <div className="relative">
@@ -380,6 +426,7 @@ export function ConfigTab({ unidadeId }: { unidadeId: string | null }) {
                     )}
                   </div>
                   <div className="text-xs text-gray-500 mt-0.5 truncate">
+                    {n.numero_telefone && <span className="text-gray-300">{n.numero_telefone} · </span>}
                     Phone ID: {n.phone_number_id} · WABA: {n.waba_id}
                   </div>
                   <div className="text-xs text-gray-600 mt-0.5">

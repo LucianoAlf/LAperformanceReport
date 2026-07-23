@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Award,
   BarChart3,
   Clock,
   DollarSign,
+  HeartPulse,
   Percent,
   Target,
   Trophy,
@@ -14,12 +15,27 @@ import {
 import { KPICard } from '@/components/ui/KPICard';
 import { RankingTableCollapsible } from '@/components/ui/RankingTableCollapsible';
 import { cn, formatCurrency } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
 import {
   buscarKpisProfessoresCanonicos,
   calcularTotaisKpisProfessoresCanonicos,
   consolidarKpisProfessoresCanonicos,
   type KPIProfessorCanonico,
 } from '@/lib/professoresKpisCanonicos';
+import {
+  chaveProfessorUnidade,
+  filtrarKpisPorVinculosAtivos,
+} from '@/lib/professoresKpisAgregados';
+import { useHealthScoreProfessorV3Performance } from '@/hooks/useHealthScoreProfessorV3Performance';
+import {
+  averageHealthScoreV3Coverage,
+  formatHealthScoreV3Coverage,
+  isHealthScoreV3SnapshotRankable,
+} from '@/lib/healthScoreProfessorV3Performance';
+import {
+  getHealthScoreV3Period,
+  type HealthScoreV3Periodicidade,
+} from '@/lib/healthScoreProfessorV3Periodos';
 
 interface TabProfessoresProps {
   ano: number;
@@ -52,7 +68,7 @@ interface ProfessorKPI {
   taxa_cancelamento: number;
   mrr_perdido: number;
   nps: number;
-  media_presenca: number;
+  media_presenca: number | null;
 }
 
 interface DadosProfessores {
@@ -69,7 +85,7 @@ interface DadosProfessores {
   evasoes_total: number;
   mrr_perdido_total: number;
   nps_medio: number;
-  presenca_media: number;
+  presenca_media: number | null;
   ticket_medio_geral: number;
   professores: ProfessorKPI[];
 }
@@ -78,7 +94,7 @@ function montarDados(linhas: KPIProfessorCanonico[]): DadosProfessores {
   const professores = consolidarKpisProfessoresCanonicos(linhas);
   const totais = calcularTotaisKpisProfessoresCanonicos(linhas);
   const carteiraTotal = professores.reduce((soma, p) => soma + p.carteira_alunos, 0);
-  const mediaPonderada = (campo: 'ticket_medio' | 'media_presenca' | 'nps_medio') =>
+  const mediaPonderada = (campo: 'ticket_medio' | 'nps_medio') =>
     carteiraTotal > 0
       ? professores.reduce((soma, p) => soma + p[campo] * p.carteira_alunos, 0) / carteiraTotal
       : 0;
@@ -97,7 +113,7 @@ function montarDados(linhas: KPIProfessorCanonico[]): DadosProfessores {
     evasoes_total: totais.evasoes,
     mrr_perdido_total: totais.mrrPerdido,
     nps_medio: mediaPonderada('nps_medio'),
-    presenca_media: mediaPonderada('media_presenca'),
+    presenca_media: totais.mediaPresenca,
     ticket_medio_geral: mediaPonderada('ticket_medio'),
     professores: professores.map((p) => ({
       id: p.professor_id,
@@ -126,9 +142,30 @@ function dataFinal(ano: number, mes: number) {
 
 export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTabId>('visao_geral');
+  const [healthPeriodicity, setHealthPeriodicity] = useState<HealthScoreV3Periodicidade>(
+    mesFim && mesFim !== mes ? 'ciclo' : 'mensal',
+  );
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState<DadosProfessores | null>(null);
   const mesFinal = mesFim || mes;
+  const healthReferenceMonth = mes;
+  const healthPeriod = useMemo(
+    () => getHealthScoreV3Period(ano, healthReferenceMonth, healthPeriodicity),
+    [ano, healthPeriodicity, healthReferenceMonth],
+  );
+  const {
+    snapshots: healthSnapshots,
+    loading: healthLoading,
+    error: healthError,
+  } = useHealthScoreProfessorV3Performance({
+    competencia: `${ano}-${String(healthReferenceMonth).padStart(2, '0')}`,
+    unidadeId: unidade === 'todos' ? null : unidade,
+    periodicidade: healthPeriodicity,
+  });
+
+  useEffect(() => {
+    setHealthPeriodicity(mesFim && mesFim !== mes ? 'ciclo' : 'mensal');
+  }, [mes, mesFim]);
 
   useEffect(() => {
     let ativo = true;
@@ -136,14 +173,45 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
     async function fetchDados() {
       setLoading(true);
       try {
-        const linhas = await buscarKpisProfessoresCanonicos({
-          ano,
-          mes,
-          unidadeId: unidade,
-          dataInicio: `${ano}-${String(mes).padStart(2, '0')}-01`,
-          dataFim: dataFinal(ano, mesFinal),
-        });
-        if (ativo) setDados(montarDados(linhas));
+        const [linhas, professoresResult, vinculosResult] = await Promise.all([
+          buscarKpisProfessoresCanonicos({
+            ano,
+            mes,
+            unidadeId: unidade,
+            dataInicio: `${ano}-${String(mes).padStart(2, '0')}-01`,
+            dataFim: dataFinal(ano, mesFinal),
+          }),
+          supabase
+            .from('professores')
+            .select('id')
+            .eq('ativo', true),
+          supabase
+            .from('professores_unidades')
+            .select('professor_id, unidade_id')
+            .eq('emusys_ativo', true)
+            .neq('validacao_status', 'ignorado'),
+        ]);
+        if (professoresResult.error) throw professoresResult.error;
+        if (vinculosResult.error) throw vinculosResult.error;
+
+        const professoresAtivos = new Set(
+          (professoresResult.data || []).map((professor) => Number(professor.id)),
+        );
+        const vinculosAtivos = new Set(
+          (vinculosResult.data || [])
+            .map((vinculo) => chaveProfessorUnidade(
+              Number(vinculo.professor_id),
+              vinculo.unidade_id ? String(vinculo.unidade_id) : null,
+            ))
+            .filter((chave): chave is string => chave !== null),
+        );
+        const linhasAtivas = filtrarKpisPorVinculosAtivos(
+          linhas,
+          professoresAtivos,
+          vinculosAtivos,
+        );
+
+        if (ativo) setDados(montarDados(linhasAtivas));
       } catch (error) {
         console.error('Erro ao carregar KPIs canônicos de professores:', error);
         if (ativo) setDados(null);
@@ -156,13 +224,37 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
     return () => { ativo = false; };
   }, [ano, mes, mesFinal, unidade]);
 
-  if (loading) {
+  if (loading || healthLoading) {
     return <div className="flex h-64 items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-b-2 border-violet-500" /></div>;
   }
 
   if (!dados) {
     return <div className="py-12 text-center text-slate-400">Não foi possível carregar os dados canônicos do período.</div>;
   }
+
+  const professoresNoRecorte = new Set(dados.professores.map((professor) => professor.id));
+  const healthSnapshotsEquipe = healthSnapshots.filter(
+    (snapshot) => professoresNoRecorte.has(snapshot.professorId),
+  );
+  const visibleHealthSnapshots = healthSnapshotsEquipe.filter(
+    (snapshot) => snapshot.scoreExibivel && snapshot.score !== null,
+  );
+  const averageHealthScore = visibleHealthSnapshots.length > 0
+    ? visibleHealthSnapshots.reduce((total, snapshot) => total + Number(snapshot.score), 0)
+      / visibleHealthSnapshots.length
+    : null;
+  const averageCoverage = averageHealthScoreV3Coverage(visibleHealthSnapshots);
+  const rankingHabilitado = healthSnapshotsEquipe.some(isHealthScoreV3SnapshotRankable);
+  const professorNameById = new Map(dados.professores.map((professor) => [professor.id, professor.nome]));
+  const rankingHealthScore = healthSnapshotsEquipe
+    .filter(isHealthScoreV3SnapshotRankable)
+    .sort((a, b) => Number(b.score) - Number(a.score))
+    .map((snapshot) => ({
+      id: snapshot.professorId,
+      nome: professorNameById.get(snapshot.professorId) || `Professor ${snapshot.professorId}`,
+      valor: Number(snapshot.score),
+      subvalor: `${formatHealthScoreV3Coverage(snapshot.cobertura)} de cobertura`,
+    }));
 
   const rankingMatriculadores = [...dados.professores]
     .filter((p) => p.matriculas > 0)
@@ -182,20 +274,71 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
 
   return (
     <div className="space-y-6">
-      <div className="inline-flex flex-wrap gap-1 rounded-lg bg-slate-800/50 p-1">
-        {subTabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveSubTab(tab.id)}
-            className={cn(
-              'flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-all',
-              activeSubTab === tab.id ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
-            )}
-          >
-            <tab.icon size={16} />{tab.label}
-          </button>
-        ))}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="inline-flex flex-wrap gap-1 rounded-lg bg-slate-800/50 p-1">
+          {subTabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveSubTab(tab.id)}
+              className={cn(
+                'flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-all',
+                activeSubTab === tab.id ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
+              )}
+            >
+              <tab.icon size={16} />{tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="inline-flex w-fit rounded-lg border border-slate-700 bg-slate-900 p-1" aria-label="Recorte do Health Score V3">
+          {(['mensal', 'ciclo'] as const).map((periodicity) => (
+            <button
+              key={periodicity}
+              type="button"
+              onClick={() => setHealthPeriodicity(periodicity)}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-xs font-semibold transition-colors',
+                healthPeriodicity === periodicity
+                  ? 'bg-violet-600 text-white'
+                  : 'text-slate-400 hover:text-white',
+              )}
+            >
+              {periodicity === 'mensal' ? 'Mensal' : 'Ciclo fixo'}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {healthError ? (
+        <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          Health Score V3 indisponível: {healthError}
+        </div>
+      ) : (
+        <div className="grid gap-4 rounded-lg border border-violet-500/25 bg-violet-500/5 p-4 md:grid-cols-[minmax(220px,1fr)_repeat(3,minmax(120px,180px))] md:items-center">
+          <div className="flex items-start gap-3">
+            <HeartPulse className="mt-0.5 h-5 w-5 text-violet-300" />
+            <div>
+              <p className="text-sm font-semibold text-white">
+                {rankingHabilitado ? 'Health Score V3 oficial' : 'Health Score parcial'}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                {healthPeriod.label}. Rankings e premiações só são liberados no fechamento oficial.
+              </p>
+            </div>
+          </div>
+          <div>
+            <p className="text-xl font-bold text-white">{averageHealthScore === null ? 'Sem base' : averageHealthScore.toFixed(1)}</p>
+            <p className="text-[11px] uppercase text-slate-500">Média exibível</p>
+          </div>
+          <div>
+            <p className="text-xl font-bold text-cyan-300">{visibleHealthSnapshots.length}/{healthSnapshotsEquipe.length}</p>
+            <p className="text-[11px] uppercase text-slate-500">Professores com score</p>
+          </div>
+          <div>
+            <p className="text-xl font-bold text-emerald-300">{averageCoverage === null ? 'Sem base' : `${averageCoverage.toFixed(0)}%`}</p>
+            <p className="text-[11px] uppercase text-slate-500">Cobertura média</p>
+          </div>
+        </div>
+      )}
 
       {activeSubTab === 'visao_geral' && (
         <div className="space-y-6">
@@ -215,22 +358,27 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               tooltip="Ocupações distintas em turmas regulares divididas pelas turmas regulares. Projetos e bandas não entram nesta média."
             />
             <KPICard icon={DollarSign} label="Ticket Médio" value={dados.ticket_medio_geral} format="currency" variant="amber" />
-            <KPICard icon={Clock} label="Presença Média" value={`${dados.presenca_media.toFixed(1)}%`} variant="emerald" />
-          </div>
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <RankingTableCollapsible
-              data={[...dados.professores].sort((a, b) => b.carteira_alunos - a.carteira_alunos).map((p) => ({ id: p.id, nome: p.nome, valor: p.carteira_alunos }))}
-              title="Ranking - Mais Alunos" valorLabel="Alunos" topCount={3}
-            />
-            <RankingTableCollapsible
-              data={[...dados.professores].sort((a, b) => b.ticket_medio - a.ticket_medio).map((p) => ({ id: p.id, nome: p.nome, valor: p.ticket_medio }))}
-              title="Ranking - Maior Ticket Médio" valorLabel="Ticket" topCount={3} valorFormatter={(v) => formatCurrency(Number(v))}
-            />
-            <RankingTableCollapsible
-              data={[...dados.professores].filter((p) => p.media_alunos_turma > 0).sort((a, b) => b.media_alunos_turma - a.media_alunos_turma).map((p) => ({ id: p.id, nome: p.nome, valor: p.media_alunos_turma }))}
-              title="Ranking - Média Alunos/Turma" valorLabel="Média" topCount={3} variant="cyan" valorFormatter={(v) => Number(v).toFixed(1)}
+            <KPICard
+              icon={Clock}
+              label="Presença Média"
+              value={dados.presenca_media === null ? 'Em auditoria' : `${dados.presenca_media.toFixed(1)}%`}
+              variant="emerald"
             />
           </div>
+          {rankingHabilitado ? (
+            <RankingTableCollapsible
+              data={rankingHealthScore}
+              title="Ranking Oficial - Health Score V3"
+              valorLabel="Score"
+              topCount={3}
+              variant="gold"
+              valorFormatter={(value) => Number(value).toFixed(1)}
+            />
+          ) : (
+            <div className="rounded-lg border border-slate-700 bg-slate-900/50 px-4 py-5 text-sm text-slate-400">
+              Rankings reservados para o fechamento oficial do ciclo {healthPeriod.label}.
+            </div>
+          )}
         </div>
       )}
 
@@ -240,12 +388,18 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             <KPICard icon={Trophy} label="Experimentais" value={dados.experimentais_total} variant="cyan" />
             <KPICard icon={UserCheck} label="Matrículas pós-exp" value={dados.matriculas_total} variant="emerald" />
             <KPICard icon={Percent} label="Taxa Exp → Mat" value={`${dados.taxa_conversao_geral.toFixed(1)}%`} variant="emerald" />
-            <KPICard icon={Award} label="Professor destaque" value={rankingMatriculadores[0]?.nome.split(' ')[0] || '-'} variant="amber" />
+            <KPICard icon={Award} label="Professor destaque" value={rankingHabilitado ? rankingMatriculadores[0]?.nome.split(' ')[0] || '-' : 'Reservado'} variant="amber" />
           </div>
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <RankingTableCollapsible data={rankingMatriculadores} title="Ranking Matriculadores" valorLabel="Matrículas" topCount={3} variant="emerald" />
-            <RankingTableCollapsible data={rankingConversao} title="Ranking Exp → Mat" valorLabel="Taxa" topCount={3} variant="gold" valorFormatter={(v) => `${Number(v).toFixed(1)}%`} />
-          </div>
+          {rankingHabilitado ? (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <RankingTableCollapsible data={rankingMatriculadores} title="Ranking Matriculadores" valorLabel="Matrículas" topCount={3} variant="emerald" />
+              <RankingTableCollapsible data={rankingConversao} title="Ranking Exp → Mat" valorLabel="Taxa" topCount={3} variant="gold" valorFormatter={(v) => `${Number(v).toFixed(1)}%`} />
+            </div>
+          ) : (
+            <div className="rounded-lg border border-slate-700 bg-slate-900/50 px-4 py-5 text-sm text-slate-400">
+              Comparações individuais ficam visíveis na Performance; ranking e premiação aguardam o ciclo oficial.
+            </div>
+          )}
         </div>
       )}
 
@@ -257,10 +411,16 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             <KPICard icon={UserMinus} label="Evasões" value={dados.evasoes_total} variant="rose" />
             <KPICard icon={DollarSign} label="MRR Perdido" value={formatCurrency(dados.mrr_perdido_total)} variant="rose" />
           </div>
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <RankingTableCollapsible data={rankingRenovadores} title="Ranking Renovadores" valorLabel="Renovações" topCount={3} variant="emerald" />
-            <RankingTableCollapsible data={rankingChurn} title="Menor Churn" valorLabel="Evasões" topCount={3} variant="cyan" />
-          </div>
+          {rankingHabilitado ? (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <RankingTableCollapsible data={rankingRenovadores} title="Ranking Renovadores" valorLabel="Renovações" topCount={3} variant="emerald" />
+              <RankingTableCollapsible data={rankingChurn} title="Menor Churn" valorLabel="Evasões" topCount={3} variant="cyan" />
+            </div>
+          ) : (
+            <div className="rounded-lg border border-slate-700 bg-slate-900/50 px-4 py-5 text-sm text-slate-400">
+              Rankings de retenção permanecem bloqueados enquanto o Health Score está parcial.
+            </div>
+          )}
         </div>
       )}
     </div>

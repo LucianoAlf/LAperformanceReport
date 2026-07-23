@@ -28,11 +28,11 @@ import {
   type HealthMetricKeyV3,
   type HealthScoreV3SnapshotMetric,
 } from '@/lib/healthScoreProfessorV3';
+import { serializeHealthScoreV3ForAi } from '@/lib/healthScoreProfessorV3Performance';
 
 const HEALTH_SCORE_V3_MODAL_FLAG = import.meta.env.VITE_HEALTH_SCORE_V3_MODAL_ENABLED;
 const HEALTH_SCORE_V3_MODAL_ENABLED =
-  HEALTH_SCORE_V3_MODAL_FLAG === 'true'
-  || (import.meta.env.DEV && HEALTH_SCORE_V3_MODAL_FLAG !== 'false');
+  HEALTH_SCORE_V3_MODAL_FLAG !== 'false';
 
 const HEALTH_SCORE_V3_LABELS: Record<HealthMetricKeyV3, string> = {
   retencao: 'Retenção atribuível',
@@ -74,6 +74,73 @@ function formatV3Base(metric: HealthScoreV3SnapshotMetric): string | null {
   return `${formatV3BaseNumber(metric.numerador)} / ${formatV3BaseNumber(metric.denominador)}`;
 }
 
+interface V3ObservedValue {
+  value: number | null;
+  displayLabel: string | null;
+  stateLabel: 'observado' | 'em auditoria';
+  evidenceLabel: string;
+  note: string;
+}
+
+function v3DetailNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getV3ObservedValue(metric: HealthScoreV3SnapshotMetric): V3ObservedValue | null {
+  if (metric.valorBruto !== null) return null;
+
+  if (metric.metrica === 'numero_alunos') {
+    const fechamentos = Array.isArray(metric.detalhes.fechamentos)
+      ? metric.detalhes.fechamentos
+      : [];
+    const ultimoFechamento = fechamentos[fechamentos.length - 1];
+    if (!ultimoFechamento || typeof ultimoFechamento !== 'object') return null;
+
+    const alunos = v3DetailNumber(
+      (ultimoFechamento as Record<string, unknown>).alunos_fechamento,
+    );
+    if (alunos === null) return null;
+
+    const meses = v3DetailNumber(metric.detalhes.meses_com_base) ?? fechamentos.length;
+    return {
+      value: alunos,
+      displayLabel: null,
+      stateLabel: 'observado',
+      evidenceLabel: `Fechamentos: ${formatV3BaseNumber(meses)}/3`,
+      note: `${meses}/3 fechamentos disponíveis; valor trimestral ainda fora do score.`,
+    };
+  }
+
+  if (metric.metrica === 'presenca') {
+    const valorObservado = v3DetailNumber(metric.detalhes.valor_observado);
+    if (valorObservado === null) return null;
+
+    const cobertura = v3DetailNumber(metric.detalhes.cobertura_observada);
+    const classificados = v3DetailNumber(metric.detalhes.eventos_classificados_observados);
+    const esperados = v3DetailNumber(metric.detalhes.eventos_esperados_observados);
+    const coberturaLabel = cobertura === null
+      ? 'cobertura em apuração'
+      : `cobertura ${cobertura.toFixed(1)}%`;
+    const evidenceLabel = classificados !== null && esperados !== null
+      ? `Eventos classificados: ${formatV3BaseNumber(classificados)}/${formatV3BaseNumber(esperados)}`
+      : 'Eventos classificados: em apuração';
+    const emAuditoria = metric.detalhes.observacao_publicacao === 'em_auditoria';
+
+    return {
+      value: emAuditoria ? null : valorObservado,
+      displayLabel: emAuditoria ? 'Em auditoria' : null,
+      stateLabel: emAuditoria ? 'em auditoria' : 'observado',
+      evidenceLabel,
+      note: emAuditoria
+        ? `${coberturaLabel}; valor observado preservado para auditoria e não publicado como indicador.`
+        : `${coberturaLabel}; pontuação começa em 03/08 e permanece fora do score.`,
+    };
+  }
+
+  return null;
+}
+
 function getV3Transparency(metric: HealthScoreV3SnapshotMetric): string | null {
   const explicit = metric.detalhes.transparencia_exclusao;
   if (typeof explicit === 'string' && explicit.trim()) return explicit;
@@ -103,7 +170,9 @@ function HealthScoreV3MetricsPanel({
 }: HealthScoreV3MetricsPanelProps) {
   const snapshot = metrics[0] ?? null;
   const [ano, mes] = competencia.split('-').map(Number);
-  const recorte = `${formatCompetencia(ano, mes)} | ${unidadeLabel}`;
+  const recorte = snapshot
+    ? `${snapshot.periodicidade === 'ciclo' ? snapshot.cicloCodigo : formatCompetencia(ano, mes)} | ${unidadeLabel}`
+    : `${formatCompetencia(ano, mes)} | ${unidadeLabel}`;
 
   if (loading) {
     return (
@@ -142,7 +211,9 @@ function HealthScoreV3MetricsPanel({
         <div>
           <div className="flex items-center gap-2">
             <Heart className="h-4 w-4 text-violet-400" />
-            <p className="text-sm font-semibold text-white">Health Score V3 em homologação</p>
+            <p className="text-sm font-semibold text-white">
+              {snapshot.estadoPublicacao === 'oficial' ? 'Health Score V3 oficial' : 'Health Score parcial'}
+            </p>
           </div>
           <p className="mt-1 text-xs text-slate-400">Recorte: {recorte} | Configuração V{snapshot.configVersao}</p>
           {snapshot.motivoBloqueio && (
@@ -178,6 +249,10 @@ function HealthScoreV3MetricsPanel({
 
           const transparency = getV3Transparency(metric);
           const base = formatV3Base(metric);
+          const observed = getV3ObservedValue(metric);
+          const displayValue = metric.valorBruto ?? observed?.value ?? null;
+          const displayLabel = observed?.displayLabel ?? formatV3Value(key, displayValue);
+          const observedInAudit = observed?.stateLabel === 'em auditoria';
           const pillarCoverage = metric.pesoDisponivel && metric.peso !== null
             ? `${formatV3BaseNumber(metric.peso)}% disponível`
             : 'fora do score';
@@ -187,18 +262,26 @@ function HealthScoreV3MetricsPanel({
               <div className="flex items-start justify-between gap-2">
                 <p className="text-xs font-semibold text-slate-300">{HEALTH_SCORE_V3_LABELS[key]}</p>
                 <span className="rounded bg-slate-900/80 px-1.5 py-0.5 text-[10px] text-slate-400">
-                  {formatV3State(metric.estadoBase)}
+                  {observed?.stateLabel ?? formatV3State(metric.estadoBase)}
                 </span>
               </div>
-              <p className={`mt-2 text-xl font-bold ${metric.valorBruto === null ? 'text-slate-500' : 'text-white'}`}>
-                {formatV3Value(key, metric.valorBruto)}
+              <p className={`mt-2 text-xl font-bold ${observedInAudit ? 'text-amber-300' : displayValue === null ? 'text-slate-500' : 'text-white'}`}>
+                {displayLabel}
               </p>
+              {observed && (
+                <p className={`text-[10px] font-medium uppercase ${observedInAudit ? 'text-amber-300' : 'text-cyan-300'}`}>
+                  {observedInAudit ? 'Valor não publicado' : 'Valor observado'}
+                </p>
+              )}
               <div className="mt-2 space-y-0.5 text-[11px] text-slate-500">
-                <p>Amostra: {metric.amostra ?? 'sem base'}{base ? ` | Base: ${base}` : ''}</p>
+                <p>{observed?.evidenceLabel ?? `Amostra: ${metric.amostra ?? 'sem base'}${base ? ` | Base: ${base}` : ''}`}</p>
                 <p>Cobertura do pilar: {pillarCoverage}</p>
                 <p>Recorte: {recorte}</p>
                 <p className="truncate" title={metric.fonte}>Fonte: {metric.fonte}</p>
               </div>
+              {observed && (
+                <p className="mt-2 text-[11px] leading-snug text-cyan-200/80">{observed.note}</p>
+              )}
               {transparency && (
                 <p className="mt-2 text-[11px] leading-snug text-amber-200/80">{transparency}</p>
               )}
@@ -298,9 +381,10 @@ interface Props {
   healthWeights?: typeof DEFAULT_HEALTH_WEIGHTS;
   unidadeId?: string | null; // null = consolidado (todas unidades)
   unidadeNome?: string;
+  periodicidade?: 'mensal' | 'ciclo';
 }
 
-export function ModalDetalhesProfessorPerformance({ open, onClose, professor, competencia: competenciaInicial, onNovaMeta, onNovaAcao, healthWeights, unidadeId, unidadeNome }: Props) {
+export function ModalDetalhesProfessorPerformance({ open, onClose, professor, competencia: competenciaInicial, onNovaMeta, onNovaAcao, healthWeights, unidadeId, unidadeNome, periodicidade = 'mensal' }: Props) {
   const [competencia, setCompetencia] = useState(competenciaInicial);
   const {
     metrics: healthScoreV3Metrics,
@@ -310,6 +394,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
     competencia,
     unidadeId: unidadeId ?? null,
     professorId: professor?.id ?? null,
+    periodicidade,
     enabled: HEALTH_SCORE_V3_MODAL_ENABLED && open && Boolean(professor),
   });
   const [metas, setMetas] = useState<Meta[]>([]);
@@ -605,17 +690,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
     setLoadingInsights(true);
     setInsights(null);
 
-    // Calcular Health Score V2 para enviar à IA
-    const healthScoreAtual = calcularHealthScore({
-      mediaTurma: mediaTurmaCompetencia,
-      retencao: taxaRetencaoCompetencia,
-      conversao: taxaConversaoCompetencia,
-      presenca: presencaNoMes.taxa ?? 75,
-      evasoes: saidasScoreCompetencia,
-      taxaCrescimentoAjustada: 0, // TODO: buscar da view quando disponível
-      taxaEvasao: totalAlunosCompetencia > 0 ? (saidasScoreCompetencia / totalAlunosCompetencia) * 100 : 0,
-      carteiraAlunos: totalAlunosCompetencia
-    }, healthWeights);
+    const healthScoreV3Payload = serializeHealthScoreV3ForAi(healthScoreV3Metrics);
 
     const payload = {
       professor: {
@@ -643,12 +718,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
         fator_demanda_ponderado: fatorDemandaPublicavel ? fatorDemandaCompetencia : null,
         fator_demanda_publicavel: fatorDemandaPublicavel,
       },
-      health_score: presencaNoMes.publicavel ? {
-        score: healthScoreAtual.score,
-        status: healthScoreAtual.status,
-        detalhes: healthScoreAtual.detalhes
-      } : null,
-      health_score_confiavel: presencaNoMes.publicavel,
+      health_score_v3: healthScoreV3Payload,
       historico: [],
       evasoes_recentes: evasoes.map(e => ({
         aluno_nome: e.aluno_nome,
@@ -719,16 +789,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
     setRelatorioTexto('');
 
     try {
-      const healthScoreAtual = calcularHealthScore({
-        mediaTurma: mediaTurmaCompetencia,
-        retencao: taxaRetencaoCompetencia,
-        conversao: taxaConversaoCompetencia,
-        presenca: presencaNoMes.taxa ?? 75,
-        evasoes: saidasScoreCompetencia,
-        taxaCrescimentoAjustada: 0,
-        taxaEvasao: totalAlunosCompetencia > 0 ? (saidasScoreCompetencia / totalAlunosCompetencia) * 100 : 0,
-        carteiraAlunos: totalAlunosCompetencia
-      }, healthWeights);
+      const healthScoreV3Payload = serializeHealthScoreV3ForAi(healthScoreV3Metrics);
 
       const { data: responseIA, error: errorIA } = await supabase.functions.invoke(
         'gemini-relatorio-professor-individual',
@@ -751,12 +812,10 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
               presenca_eventos_incertos: presencaNoMes.incertos,
               saidas_validas_total: saidasValidasCompetencia,
               saidas_score_professor: saidasScoreCompetencia,
-              health_score: presencaNoMes.publicavel ? healthScoreAtual.score : null,
-              health_status: presencaNoMes.publicavel ? healthScoreAtual.status : null,
-              health_score_confiavel: presencaNoMes.publicavel,
               fator_demanda_ponderado: fatorDemandaPublicavel ? fatorDemandaCompetencia : null,
               fator_demanda_publicavel: fatorDemandaPublicavel,
             },
+            health_score_v3: healthScoreV3Payload,
             metas: metas,
             acoes: acoes,
             evasoes_recentes: evasoes,
@@ -896,7 +955,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                 : 'text-slate-400 bg-slate-500/20'
             }`}>
               {HEALTH_SCORE_V3_MODAL_ENABLED
-                ? 'V3 em homologação'
+                ? (healthScoreV3Metrics[0]?.estadoPublicacao === 'oficial' ? 'V3 oficial' : 'V3 parcial')
                 : healthScorePublicavel
                 ? (professor.status === 'critico' ? 'Crítico' : professor.status === 'atencao' ? 'Atenção' : 'Excelente')
                 : 'Em auditoria'}

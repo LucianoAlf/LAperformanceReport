@@ -20,7 +20,7 @@
                 ┌───────────────────────────────────────────────┐
    SAÍDA        │  O NOSSO sistema chama a API do Emusys         │
    (pull)       └───────────────────────────────────────────────┘
-        GET /v1/aulas/       → sync-presenca-emusys    (cron diário)
+        GET /v1/aulas/       → sync-presenca-emusys    (presença diária + metadados a cada 15 min)
         GET /v1/professores  → sync-professores-emusys (cron semanal)
         GET /v1/faturas      → sync-faturas-emusys      (cron atual+anterior / refresh interno)
 
@@ -82,20 +82,23 @@ A edge faz `switch(evento)`:
 | `matricula_trancamento` | Trancamento + `movimentacoes_admin`. |
 | `matricula_finalizacao` | Evasão + `movimentacoes_admin`; se saiu de TODAS as matrículas, grava `alunos_historico` (LTV). |
 
-- Idempotência por evento; saúde via `_shared/invariantes.ts` (`automacao_log`/`automacao_invariantes`). `verify_jwt: false`.
+- Idempotência por evento; saúde via `_shared/invariantes.ts` (`automacao_log`/`automacao_invariantes`). `verify_jwt: false` é comportamento preexistente do webhook e a proteção por segredo/assinatura permanece pendência de segurança separada, atribuída ao responsável pela integração Emusys.
 
 ### 1.4 Webhook NÃO consumido
-`aula_cancelada` (aula regular) — sem receptor; a presença vem pelo sync diário de `/aulas/`.
+`aula_cancelada` (aula regular) — sem receptor dedicado; o estado da aula é reconciliado pelo sync de `/aulas/`.
 
 ---
 
-## 2. SAÍDA — Endpoints que o NOSSO sistema chama (só estes dois)
+## 2. SAÍDA — Endpoints que o NOSSO sistema chama
 
-### 2.1 `GET /v1/aulas/` → `sync-presenca-emusys` (cron diário) — duplo propósito
-- **Quando:** pg_cron diário (CG 01:00, Barra 01:20, Recreio 01:40 UTC ≈ 22h BRT).
-- **Para quê:** (1) presença de aulas regulares → `aulas_emusys` + `aluno_presenca`; (2) **confirmar experimentais** → marca `experimental_realizada`/`faltou_experimental` no lead (ver 1.2).
-- ⚠️ Casa aula→aluno por nome+curso (ignora `status`). Professor matched por nome (API não retorna `professor_id`).
-- **Uso pedagógico do campo `anotacoes`:** o texto que o professor escreve na aula (Objetivo/Metodologia/Repertório) fica em `aulas_emusys.anotacoes`. É a matéria-prima do **Relatório Pedagógico com IA** (aba Histórico Pedagógico da ficha do aluno): RPC `get_relatorio_pedagogico_aluno` consolida por período e a edge `gerar-relatorio-pedagogico` (Gemini) transforma em relatório para o responsável. Mesma fonte que o agente Fábio reusará (Fase 4) para enviar via WhatsApp.
+### 2.1 `GET /v1/aulas/` → `sync-presenca-emusys` — presença, roster e agenda
+- **Presença completa:** continua em horários fixos por unidade.
+- **Metadados operacionais:** cron a cada 15 minutos por unidade, em minutos intercalados, modo `metadados`, janela passada de 2 dias e futura de 35 dias. A agenda diária de sete dias continua pré-carregada em jobs espaçados.
+- **Para quê:** (1) aulas regulares → `aulas_emusys`, `aula_alunos_emusys` e `aluno_presenca`; (2) confirmar experimentais → `experimental_realizada`/`faltou_experimental`; (3) refletir reagendamento, justificativa e presença informada do professor.
+- **Professor:** a API fornece `professores[0].id`. O sync grava `emusys_professor_id` e resolve `professor_id` por `(unidade_id, emusys_id)` em `professores_unidades`; nome não é identidade. `prof_id = 0` vira `sem_acompanhamento=true` e `professor_id=null`.
+- **Campos de agenda:** `reagendada`, `data_hora_inicio_original`, `justificada`, `professor_presenca` e `matricula_disciplina_id`. Datas sem fuso são interpretadas como `America/Sao_Paulo` antes de persistir em `timestamptz`.
+- **Anotações:** `aulas_emusys.anotacoes` pertence ao Emusys. `aulas_emusys.anotacoes_fabio` pertence exclusivamente à RPC do Fábio e não aparece no payload do upsert do sync. A leitura pedagógica pode preferir Fábio e cair no Emusys, mas uma fonte nunca sobrescreve a outra.
+- **Limite semântico:** `professor_presenca='ausente'` não prova falta funcional do professor; pode representar aula sem ocorrência/chamada. Não usar isoladamente em Health Score ou RH.
 
 ### 2.2 `GET /v1/professores` → `sync-professores-emusys` (cron semanal)
 - **Quando:** pg_cron Domingo 04:00 BRT.
@@ -129,7 +132,7 @@ Quem é: os 3 agentes Mila SDR (CG `aHD4kJdzByLwFXA1`, Recreio `gSHJHYMOYDQZqleW
 | 3 | ⬅ entra | `lead_arquivado` | n8n EB0 → `UPDATE` | Arquiva lead |
 | 4 | ⬅ entra | `aula_experimental_criada/reagendada/cancelada` | n8n Fucq0 → `j41` | Agenda/reagenda/cancela experimental + notifica |
 | 5 | ⬅ entra | `matricula_nova/renovacao/trancamento/finalizacao` | n8n WF_Matricula → edge | Cria aluno / renovação / trancamento / evasão+LTV |
-| 6 | ➡ sai | `GET /v1/aulas/` | sync-presenca-emusys (diário) | Presença + confirma experimentais |
+| 6 | ➡ sai | `GET /v1/aulas/` | sync-presenca-emusys (presença fixa + metadados 15 min) | Aulas, roster, presença, agenda e confirmação de experimentais |
 | 7 | ➡ sai | `GET /v1/professores` | sync-professores-emusys (semanal) | Sync professores |
 | 8 | ➡ sai | `GET /v1/faturas` | sync-faturas-emusys (atual+anterior / sob demanda) | Espelho atual + snapshot financeiro auditável |
 | — | upstream | Mila → Emusys (cadastro/experimental) | fora do sistema | Origina os webhooks (ver seção 3) |
@@ -143,7 +146,7 @@ Quem é: os 3 agentes Mila SDR (CG `aHD4kJdzByLwFXA1`, Recreio `gSHJHYMOYDQZqleW
 2. Emusys dispara lead_criado → EB0 → upsert_lead (Supabase, "Novos Leads")
 3. [UPSTREAM] Mila agenda experimental no Emusys (POST /crm/aula_experimental)
 4. Emusys dispara aula_experimental_criada → Fucq0 → UPDATE leads (agendada) + avisa consultor/professor
-5. [APÓS A AULA] sync diário de /aulas/ confirma presença → experimental_realizada/faltou (etapa 7/9)
+5. [APÓS A AULA] sync de /aulas/ confirma presença → experimental_realizada/faltou (etapa 7/9)
 6. Se matricula → Emusys dispara matricula_nova → WF_Matricula → edge → cria aluno + converte lead
 ```
 
@@ -168,10 +171,11 @@ Lidos na fonte **todos os ~30 workflows n8n ativos** + edge functions. **Tocam E
 ---
 
 ## 8. Limitações conhecidas (lado Emusys)
-Detalhes em `pendencias-emusys.md`. Resumo:
-- `GET /aulas/` não retorna `professor_id` → matching por nome.
-- Aulas tipo **turma** vêm com `professores: []` → 0% cobertura de professor.
-- `emusys_id` de professor é por unidade, não global.
+Detalhes em `pendencias-emusys.md`. Resumo atualizado:
+- `emusys_id` de professor e demais identidades externas são escopados por unidade, não globais.
+- `horario_presenca` espelha o início da aula e não representa o instante real em que a chamada foi lançada.
+- O payload não permite distinguir retroativamente, com segurança técnica, toda chamada não feita de uma falta real; a camada semântica aplica política de negócio versionada por unidade.
+- `professor_presenca='ausente'` não pode ser interpretado sozinho como falta do professor.
 
 ---
 

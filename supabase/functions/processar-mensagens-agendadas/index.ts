@@ -298,12 +298,14 @@ async function processarFilaAgente(supabase: any): Promise<number> {
     .eq('processando', true)
     .lt('created_at', new Date(Date.now() - 5 * 60000).toISOString())
 
-  // Buscar pendentes com processar_apos no passado
+  // Buscar E travar (atômico) pendentes com processar_apos no passado — evita
+  // que dois ciclos concorrentes do cron peguem a mesma mensagem duas vezes.
   const { data: pendentes } = await supabase
     .from('agente_fila_mensagens')
-    .select('id, agente_id, unidade_id, telefone')
+    .update({ processando: true })
     .eq('processando', false)
     .lte('processar_apos', agora)
+    .select('id, agente_id, unidade_id, telefone')
     .limit(10)
 
   if (!pendentes?.length) return 0

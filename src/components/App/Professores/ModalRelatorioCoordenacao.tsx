@@ -38,7 +38,16 @@ import {
 import {
   buscarKpisProfessoresCanonicos,
   consolidarKpisProfessoresCanonicos,
+  type KPIProfessorCanonico,
 } from '@/lib/professoresKpisCanonicos';
+import {
+  chaveProfessorUnidade,
+  filtrarKpisPorVinculosAtivos,
+} from '@/lib/professoresKpisAgregados';
+import {
+  normalizeHealthScoreV3PerformanceRows,
+  serializeHealthScoreV3ForAi,
+} from '@/lib/healthScoreProfessorV3Performance';
 
 interface ModalRelatorioCoordenacaoProps {
   open: boolean;
@@ -74,6 +83,47 @@ function deveAbrirMesAnterior(anoTela: number, mesTela: number): boolean {
   const hoje = new Date();
   const telaEhMesAtual = anoTela === hoje.getFullYear() && mesTela === hoje.getMonth() + 1;
   return telaEhMesAtual && hoje.getDate() <= 10;
+}
+
+function calcularTotaisRelatorioCoordenacao(kpis: KPIProfessorCanonico[]) {
+  const totalProfessores = kpis.length;
+  const totalAlunos = kpis.reduce((total, kpi) => total + kpi.carteira_alunos, 0);
+  const totalOcupacoes = kpis.reduce((total, kpi) => total + kpi.alunos_via_turmas, 0);
+  const totalTurmasElegiveis = kpis.reduce((total, kpi) => total + kpi.turmas_elegiveis_media, 0);
+  const totalExperimentais = kpis.reduce((total, kpi) => total + kpi.experimentais, 0);
+  const totalMatriculas = kpis.reduce((total, kpi) => total + kpi.matriculas_pos_exp, 0);
+  const totalRenovacoes = kpis.reduce((total, kpi) => total + kpi.renovacoes, 0);
+  const totalNaoRenovacoes = kpis.reduce((total, kpi) => total + kpi.nao_renovacoes, 0);
+  const presencasPublicaveis = kpis.filter((kpi) =>
+    kpi.presenca_publicavel
+    && kpi.media_presenca !== null
+    && kpi.presenca_eventos_confirmados > 0
+  );
+  const totalEventosPresenca = presencasPublicaveis.reduce(
+    (total, kpi) => total + kpi.presenca_eventos_confirmados,
+    0,
+  );
+  const somaPresencaPonderada = presencasPublicaveis.reduce(
+    (total, kpi) => total + Number(kpi.media_presenca) * kpi.presenca_eventos_confirmados,
+    0,
+  );
+
+  return {
+    total_professores: totalProfessores,
+    total_alunos: totalAlunos,
+    media_alunos_professor: totalProfessores > 0 ? totalAlunos / totalProfessores : 0,
+    media_alunos_turma: totalTurmasElegiveis > 0 ? totalOcupacoes / totalTurmasElegiveis : 0,
+    taxa_conversao_media: totalExperimentais > 0 ? (totalMatriculas / totalExperimentais) * 100 : 0,
+    taxa_renovacao_media: totalRenovacoes + totalNaoRenovacoes > 0
+      ? (totalRenovacoes / (totalRenovacoes + totalNaoRenovacoes)) * 100
+      : 0,
+    total_evasoes: kpis.reduce((total, kpi) => total + kpi.evasoes_validas, 0),
+    total_matriculas: totalMatriculas,
+    mrr_total: kpis.reduce((total, kpi) => total + kpi.mrr_carteira, 0),
+    media_presenca: totalEventosPresenca > 0 ? somaPresencaPonderada / totalEventosPresenca : null,
+    presenca_eventos_confirmados: totalEventosPresenca,
+    presenca_professores_publicaveis: presencasPublicaveis.length,
+  };
 }
 
 export function ModalRelatorioCoordenacao({
@@ -172,42 +222,110 @@ export function ModalRelatorioCoordenacao({
     };
   };
 
-  const buscarDadosRelatorioCoordenacao = async () => {
+  const buscarKpisHealthV3RelatorioCoordenacao = async () => {
     const { anoRelatorio, mesRelatorio } = validarCompetenciaMensal();
 
-    const [dadosResult, kpisResult] = await Promise.all([
-      supabase.rpc('get_dados_relatorio_coordenacao', {
-        p_unidade_id: unidadeId,
-        p_ano: anoRelatorio,
-        p_mes: mesRelatorio
-      }),
+    const [kpisResult, healthV3Result, professoresAtivosResult, vinculosAtivosResult] = await Promise.all([
       buscarKpisProfessoresCanonicos({
         ano: anoRelatorio,
         mes: mesRelatorio,
         unidadeId,
       }),
+      supabase.rpc('get_health_score_professor_v3_performance', {
+        p_competencia: `${anoRelatorio}-${String(mesRelatorio).padStart(2, '0')}-01`,
+        p_unidade_id: unidadeId,
+        p_periodicidade: 'mensal',
+      }),
+      supabase
+        .from('professores')
+        .select('id')
+        .eq('ativo', true),
+      supabase
+        .from('professores_unidades')
+        .select('professor_id, unidade_id')
+        .eq('emusys_ativo', true)
+        .neq('validacao_status', 'ignorado'),
+    ]);
+
+    if (healthV3Result.error) {
+      console.error('Erro ao buscar Health Score V3:', healthV3Result.error);
+      throw new Error('Erro ao buscar o snapshot canônico do Health Score V3');
+    }
+    if (professoresAtivosResult.error || vinculosAtivosResult.error) {
+      console.error(
+        'Erro ao buscar vínculos ativos dos professores:',
+        professoresAtivosResult.error || vinculosAtivosResult.error,
+      );
+      throw new Error('Erro ao buscar o recorte ativo dos professores');
+    }
+    const healthV3ByProfessor = new Map(
+      normalizeHealthScoreV3PerformanceRows(healthV3Result.data || [])
+        .map((snapshot) => [snapshot.professorId, snapshot]),
+    );
+
+    const professoresAtivos = new Set(
+      (professoresAtivosResult.data || []).map((professor) => Number(professor.id)),
+    );
+    const vinculosAtivos = new Set(
+      (vinculosAtivosResult.data || [])
+        .map((vinculo) => chaveProfessorUnidade(
+          Number(vinculo.professor_id),
+          vinculo.unidade_id ? String(vinculo.unidade_id) : null,
+        ))
+        .filter((chave): chave is string => chave !== null),
+    );
+    const kpisCanonicos = consolidarKpisProfessoresCanonicos(
+      filtrarKpisPorVinculosAtivos(kpisResult, professoresAtivos, vinculosAtivos),
+    );
+    const totaisCanonicos = calcularTotaisRelatorioCoordenacao(kpisCanonicos);
+    const kpisComHealthV3 = kpisCanonicos.map((kpi) => ({
+      ...kpi,
+      health_score: null,
+      health_status: null,
+      health_score_confiavel: false,
+      health_score_v3: serializeHealthScoreV3ForAi(
+        healthV3ByProfessor.get(kpi.professor_id) || null,
+      ),
+    }));
+
+    return {
+      anoRelatorio,
+      mesRelatorio,
+      totaisCanonicos,
+      kpisComHealthV3,
+    };
+  };
+
+  const buscarDadosRelatorioCoordenacao = async () => {
+    const { anoRelatorio, mesRelatorio } = validarCompetenciaMensal();
+    const [dadosResult, dadosCanonicos] = await Promise.all([
+      supabase.rpc('get_dados_relatorio_coordenacao', {
+        p_unidade_id: unidadeId,
+        p_ano: anoRelatorio,
+        p_mes: mesRelatorio
+      }),
+      buscarKpisHealthV3RelatorioCoordenacao(),
     ]);
     const { data: dadosRelatorio, error: errorDados } = dadosResult;
+    const { kpisComHealthV3 } = dadosCanonicos;
 
     if (errorDados) {
       console.error('Erro ao buscar dados:', errorDados);
       throw new Error('Erro ao buscar dados do relatório');
     }
 
-    const kpisCanonicos = consolidarKpisProfessoresCanonicos(kpisResult).map((kpi) => ({
-      ...kpi,
-      health_score: null,
-      health_status: null,
-      health_score_confiavel: false,
-    }));
-
     return {
       ...((dadosRelatorio || {}) as Record<string, unknown>),
-      kpis_professores: kpisCanonicos,
+      totais: {
+        ...(((dadosRelatorio as { totais?: Record<string, unknown> } | null)?.totais) || {}),
+        ...dadosCanonicos.totaisCanonicos,
+      },
+      kpis_professores: kpisComHealthV3,
       contrato_pedagogico: {
-        presenca_regra: 'publicar_somente_confianca_alta',
-        health_score: 'em_auditoria',
+        presenca_regra: 'operacional_canonica_por_unidade',
+        health_score: 'parcial_sem_ranking_ate_fechamento_oficial',
         fonte_kpis: 'get_kpis_professor_periodo_canonico_v3',
+        fonte_totais: 'kpis_professores_canonicos',
       },
     };
   };
@@ -276,9 +394,9 @@ export function ModalRelatorioCoordenacao({
     setTextoRelatorio('');
 
     try {
-      const dadosRelatorio = await buscarDadosRelatorioCoordenacao();
+      const dadosRelatorio = await buscarKpisHealthV3RelatorioCoordenacao();
       const professoresDaCompetencia = normalizarKpisProfessoresCoordenacao(
-        (dadosRelatorio as { kpis_professores?: unknown } | null)?.kpis_professores
+        dadosRelatorio.kpisComHealthV3
       );
       const podeUsarFallbackTela = periodoSelecionado.ano === ano
         && periodoSelecionado.mes === mes
