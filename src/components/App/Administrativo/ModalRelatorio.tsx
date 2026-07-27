@@ -1668,38 +1668,38 @@ export function ModalRelatorio({
 
   async function enviarWhatsAppGrupo() {
     if (!textoRelatorio || enviandoWhatsApp) return;
-    
+
     setEnviandoWhatsApp(true);
     setErroWhatsApp(null);
     setEnviadoWhatsApp(false);
-    
+
     try {
-      const { data, error } = await supabase.functions.invoke('relatorio-admin-whatsapp', {
-        body: {
-          texto: textoRelatorio,
-          tipoRelatorio: tipoSelecionado,
-          unidade: unidade,
-          competencia: competencia,
-          ...(numeroTeste ? { numero_teste: numeroTeste } : {}),
-        },
+      const { data, error } = await supabase.rpc('sol_hermes_report_enqueue', {
+        p_texto: textoRelatorio,
+        p_tipo_relatorio: tipoSelecionado,
+        p_unidade: unidade,
+        p_competencia: competencia,
       });
-      
+
       if (error) {
-        console.error('[WhatsApp] Erro ao enviar:', error);
-        setErroWhatsApp('Erro ao enviar mensagem');
+        console.error('[WhatsApp ADM Hermes] Erro ao enfileirar:', error);
+        setErroWhatsApp('Erro ao enfileirar para Sol/Hermes');
         return;
       }
-      
-      if (data?.success || data?.partial) {
-        console.log('[WhatsApp] ✅ Mensagem enviada!', data.resultados);
+
+      if (data?.success) {
+        console.log('[WhatsApp ADM Hermes] ✅ Enfileirado para Sol/Hermes', data.resultados);
         setEnviadoWhatsApp(true);
+        toast.success('Relatório enfileirado para envio pela Sol/Hermes.');
         setTimeout(() => setEnviadoWhatsApp(false), 3000);
       } else {
         setErroWhatsApp(data?.error || 'Erro desconhecido');
+        toast.error(data?.error || 'Erro ao enfileirar');
       }
     } catch (err) {
-      console.error('[WhatsApp] Erro inesperado:', err);
+      console.error('[WhatsApp ADM Hermes] Erro inesperado:', err);
       setErroWhatsApp('Erro de conexão');
+      toast.error('Erro de conexão');
     } finally {
       setEnviandoWhatsApp(false);
     }
