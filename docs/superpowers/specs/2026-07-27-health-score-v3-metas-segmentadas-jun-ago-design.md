@@ -29,12 +29,14 @@ incompleta.
 2. Criar uma nova revisao em `rascunho`, clonando pesos, metas globais e a matriz
    segmentada aprovada.
 3. Fixar a vigencia da nova revisao em `2026-06-01` a `2026-08-31`.
-4. Simular a revisao contra o ciclo aberto.
-5. Validar que nao ha regra obrigatoria ausente, atribuicao pontuavel sem meta ou
-   combinacao observada marcada como nao ofertada.
-6. Ativar a nova revisao por uma operacao governada de substituicao do ciclo
+4. Inventariar e resolver toda atribuicao formal pontuavel sem meta, nas tres
+   unidades, depois de excluir os cursos nao pedagogicos.
+5. Simular a revisao contra o ciclo aberto.
+6. Validar que nao ha regra obrigatoria ausente, atribuicao pontuavel sem meta
+   ou combinacao observada marcada como nao ofertada.
+7. Ativar a nova revisao por uma operacao governada de substituicao do ciclo
    aberto.
-7. Somente depois recalcular as tres unidades.
+8. Somente depois recalcular as tres unidades.
 
 ## 4. Preservacao historica
 
@@ -74,6 +76,20 @@ A nova revisao deve clonar a matriz segmentada persistida e aprovada na
 configuracao de origem. IDs de configuracao nao devem ser codificados no SQL:
 a operacao recebe a origem explicitamente e valida que ela possui as seis
 metricas e a matriz segmentada completa.
+
+`Aula Experimental` (`curso_id = 45`) e um evento comercial, nao um curso da
+carteira pedagogica. Ela deve ser classificada dessa forma no catalogo canonico
+de cursos e ficar fora de:
+
+- carteira pedagogica do professor;
+- numero de alunos;
+- media de alunos por turma;
+- matriz de metas segmentadas da nova revisao.
+
+A linha existente na configuracao V3 historica deve permanecer intacta para
+auditoria, mas nao pode ser clonada para a revisao `Jun-Ago`. A exclusao nao
+pode depender apenas da clonagem: o catalogo, as atribuicoes pontuaveis e as
+RPCs de calculo devem consultar a mesma classificacao canonica.
 
 Para `media_turma` e `numero_alunos`:
 

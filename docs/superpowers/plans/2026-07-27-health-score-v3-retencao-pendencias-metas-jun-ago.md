@@ -17,6 +17,8 @@
 - Configuracoes anteriores permanecem consultaveis com pesos, metas e matriz.
 - `media_turma` e `numero_alunos` nunca usam fallback global quando o modo
   segmentado esta ativo.
+- `Aula Experimental` (`curso_id = 45`) e comercial e nao participa da
+  carteira pedagogica, da media por turma nem da matriz segmentada nova.
 - Retencao, conversao e presenca usam `nota = percentual real`.
 - Permanencia, media por turma e numero de alunos continuam normalizados por
   meta.
@@ -399,6 +401,111 @@ node --test tests/healthScoreProfessorV3ConfigCicloAberto.test.mjs tests/healthS
 
 Expected: PASS.
 
+### Task 6A: Excluir cursos comerciais e zerar segmentos pontuaveis sem meta
+
+**Files:**
+- Create: `supabase/migrations/20260727122500_health_score_v3_cursos_pedagogicos.sql`
+- Create: `tests/healthScoreProfessorV3CursoElegibilidade.test.mjs`
+- Create: `scripts/inventory-health-score-v3-segmentos-sem-meta.sql`
+- Create: `docs/auditorias/2026-07-27-health-score-v3-segmentos-pontuaveis-sem-meta.md`
+- Modify: `supabase/migrations/20260727123000_health_score_v3_config_ciclo_aberto.sql`
+- Modify: `tests/healthScoreProfessorV3ConfigCicloAberto.test.mjs`
+
+- [ ] **Step 1: Criar a classificacao canonica do curso**
+
+Adicionar a `public.cursos`:
+
+```sql
+natureza_operacional text not null default 'pedagogica'
+  check (natureza_operacional in ('pedagogica', 'comercial'))
+```
+
+Classificar `curso_id = 45` como `comercial`, com comentario de banco
+registrando que Aula Experimental e evento da conversao e nao carteira
+pedagogica.
+
+Esta e a abordagem recomendada. Remover a linha apenas durante a clonagem
+esconderia o problema em um ciclo, mas o curso continuaria voltando no catalogo
+formal, nos diagnosticos e em revisoes futuras.
+
+- [ ] **Step 2: Aplicar a classificacao em todas as fontes do segmento**
+
+Recriar, sem mudar assinaturas publicas:
+
+- `fn_health_score_professor_v3_catalogo_segmentos_v1`;
+- `fn_health_score_professor_v3_segmentos_faltantes_v1`;
+- `get_health_score_professor_v3_metricas_segmentadas_v1`;
+- a consulta de atribuicoes pontuaveis usada pela simulacao e ativacao.
+
+Todas devem exigir `cursos.natureza_operacional = 'pedagogica'` para
+`media_turma` e `numero_alunos`.
+
+A conversao continua lendo a experimental por sua fonte comercial propria.
+
+- [ ] **Step 3: Impedir clonagem da meta comercial**
+
+Na RPC de revisao do ciclo aberto, a clonagem de
+`health_score_professor_v3_config_metas_curso_modalidade` deve juntar
+`public.cursos` e copiar somente cursos `pedagogica`.
+
+A linha da V3 original:
+
+```text
+Barra | Aula Experimental | turma | capacidade 1 | media 1 | carteira 1
+```
+
+permanece intacta na configuracao historica, mas nao aparece na revisao
+`Jun-Ago`.
+
+- [ ] **Step 4: Inventariar antes da criacao do rascunho**
+
+Executar o script SELECT-only nas tres unidades. O inventario deve listar cada
+combinacao:
+
+```text
+unidade
+curso_id
+curso
+modalidade
+quantidade de professores
+nomes dos professores
+motivo da ausencia da meta
+```
+
+Filtros obrigatorios:
+
+```text
+atribuicao status = ativo
+vigencia_fim is null
+confianca in (alta, revisada)
+curso natureza_operacional = pedagogica
+meta segmentada configurada ausente
+```
+
+- [ ] **Step 5: Resolver o que sobrar**
+
+Para cada linha:
+
+- se o curso e pedagogico e ofertado, preencher capacidade, meta de media e
+  meta de carteira na configuracao de origem;
+- se nao e ofertado na unidade, registrar `nao_ofertada`;
+- se a atribuicao formal esta errada, corrigir a atribuicao pela trilha
+  governada antes de prosseguir;
+- nunca criar meta zero ou fallback global para apenas liberar a ativacao.
+
+Reexecutar o inventario ate retornar lista vazia.
+
+- [ ] **Step 6: Rodar testes**
+
+Run:
+
+```powershell
+node --test tests/healthScoreProfessorV3CursoElegibilidade.test.mjs tests/healthScoreProfessorV3ConfigCicloAberto.test.mjs tests/healthScoreProfessorV3CatalogoConfig.test.mjs
+```
+
+Expected: PASS, incluindo prova de que Aula Experimental nao entra em carteira
+ou media e que continua disponivel para conversao.
+
 ### Task 7: Aplicar migrations e ativar a revisao antes do recalculo
 
 **Files:**
@@ -408,7 +515,7 @@ Expected: PASS.
 - [ ] **Step 1: Verificar alvo e migrations remotas**
 
 Confirmar o projeto `ouqwbbermlzqqvtqwlul`, listar migrations aplicadas e
-comparar com os quatro novos arquivos. Nao executar `supabase db push`
+comparar com os cinco novos arquivos. Nao executar `supabase db push`
 indiscriminadamente.
 
 - [ ] **Step 2: Aplicar migrations na ordem**
@@ -419,6 +526,7 @@ Aplicar uma por vez:
 20260727120000_health_score_v3_retencao_universo_governado
 20260727121000_health_score_v3_promocao_periodos_ativos_exatos
 20260727122000_health_score_v3_percentuais_valor_real
+20260727122500_health_score_v3_cursos_pedagogicos
 20260727123000_health_score_v3_config_ciclo_aberto
 ```
 
@@ -433,7 +541,23 @@ Promover apenas os candidatos exatos. Confirmar:
 - zero caso humano promovido;
 - segunda execucao com zero novas revisoes.
 
-- [ ] **Step 4: Criar e salvar a nova revisao**
+- [ ] **Step 4: Executar o inventario bloqueante**
+
+Rodar `scripts/inventory-health-score-v3-segmentos-sem-meta.sql` depois da
+classificacao do catalogo e antes de criar o rascunho.
+
+Expected:
+
+```text
+Campo Grande: 0 segmentos pedagogicos pontuaveis sem meta
+Recreio:      0 segmentos pedagogicos pontuaveis sem meta
+Barra:        0 segmentos pedagogicos pontuaveis sem meta
+```
+
+Se houver qualquer linha, parar e resolver pelo Task 6A. Nao criar o rascunho
+enquanto o inventario nao estiver vazio.
+
+- [ ] **Step 5: Criar e salvar a nova revisao**
 
 Usar como origem a configuracao real que contem a matriz segmentada salva.
 Definir:
@@ -446,7 +570,7 @@ vigencia_fim    = 2026-08-31
 Salvar a normalizacao percentual aprovada e a matriz sem alterar as metas
 segmentadas preenchidas pela coordenacao.
 
-- [ ] **Step 5: Simular antes da ativacao**
+- [ ] **Step 6: Simular antes da ativacao**
 
 Executar `simular_health_score_professor_v3_config` para julho/2026. Exigir:
 
@@ -457,7 +581,7 @@ Executar `simular_health_score_professor_v3_config` para julho/2026. Exigir:
 - zero combinacao observada `nao_ofertada`;
 - nenhuma escrita em snapshot.
 
-- [ ] **Step 6: Ativar e conferir a trilha**
+- [ ] **Step 7: Ativar e conferir a trilha**
 
 Ativar pela RPC de ciclo aberto. Conferir:
 
@@ -532,7 +656,7 @@ ou relatorio nesta tarefa.
 Run:
 
 ```powershell
-node --test tests/healthScoreProfessorV3RetencaoGovernada.test.mjs tests/healthScoreProfessorV3ConfigCicloAberto.test.mjs tests/healthScoreProfessorV3RetencaoTransicao.test.mjs tests/healthScoreProfessorV3MetricasSegmentadas.test.mjs tests/healthScoreProfessorV3Snapshots.test.mjs tests/reconstrucaoPeriodosParticionada.test.mjs tests/healthScoreProfessorV3RevisoesEfetivas.test.mjs
+node --test tests/healthScoreProfessorV3RetencaoGovernada.test.mjs tests/healthScoreProfessorV3ConfigCicloAberto.test.mjs tests/healthScoreProfessorV3CursoElegibilidade.test.mjs tests/healthScoreProfessorV3RetencaoTransicao.test.mjs tests/healthScoreProfessorV3MetricasSegmentadas.test.mjs tests/healthScoreProfessorV3Snapshots.test.mjs tests/reconstrucaoPeriodosParticionada.test.mjs tests/healthScoreProfessorV3RevisoesEfetivas.test.mjs
 ```
 
 Expected: PASS.
