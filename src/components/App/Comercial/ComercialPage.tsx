@@ -477,6 +477,7 @@ export function ComercialPage() {
   const [erroWhatsApp, setErroWhatsApp] = useState<string | null>(null);
   const [numeroTeste, setNumeroTeste] = useState('');
   const [cronComercialAtivo, setCronComercialAtivo] = useState(false);
+  const [loadingCronComercial, setLoadingCronComercial] = useState(false);
   
   // Estado para período do relatório (simplificado)
   const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'mes_anterior' | 'personalizado'>('hoje');
@@ -515,15 +516,48 @@ export function ComercialPage() {
   const [registrosHoje, setRegistrosHoje] = useState<LeadDiario[]>([]);
 
   useEffect(() => {
-    // Comercial automático ainda não tem cron Hermes-native validado.
-    // O fluxo seguro por enquanto é manual: botão → RPC → fila sol_pendente → worker Sol/Hermes.
-    if (relatorioOpen) setCronComercialAtivo(false);
-  }, [relatorioOpen]);
+    const unidadeCron = unidadeParaSalvar;
+    if (!relatorioOpen || !unidadeCron || unidadeCron === 'todos') {
+      setCronComercialAtivo(false);
+      return;
+    }
+
+    supabase
+      .from('unidades')
+      .select('relatorio_comercial_diario_cron_ativo')
+      .eq('id', unidadeCron)
+      .single()
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn('[Comercial] Erro ao carregar cron comercial:', error);
+          setCronComercialAtivo(false);
+          return;
+        }
+        setCronComercialAtivo(Boolean(data?.relatorio_comercial_diario_cron_ativo));
+      });
+  }, [relatorioOpen, unidadeParaSalvar]);
 
   const toggleCronComercial = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    setCronComercialAtivo(false);
-    toast.info('Comercial automático ainda não está habilitado. Use o envio manual via Sol/Hermes.');
+    const unidadeCron = unidadeParaSalvar;
+    if (!unidadeCron || unidadeCron === 'todos') return;
+
+    const novoValor = !cronComercialAtivo;
+    setLoadingCronComercial(true);
+    const { error } = await supabase.rpc('toggle_relatorio_comercial_cron', {
+      p_unidade_id: unidadeCron,
+      p_ativo: novoValor,
+    });
+    setLoadingCronComercial(false);
+
+    if (error) {
+      console.error('[Comercial] Erro ao atualizar cron comercial:', error);
+      toast.error('Erro ao atualizar envio automático comercial');
+      return;
+    }
+
+    setCronComercialAtivo(novoValor);
+    toast.success(novoValor ? 'Relatório comercial automático ativado para 20h05' : 'Relatório comercial automático desativado');
   };
   
   const gerarRelatorioSelecionado = async (
@@ -7289,17 +7323,29 @@ export function ComercialPage() {
                 <button
                   type="button"
                   onClick={toggleCronComercial}
+                  disabled={loadingCronComercial || !unidadeParaSalvar || unidadeParaSalvar === 'todos'}
                   aria-pressed={cronComercialAtivo}
-                  aria-label="Comercial automático indisponível"
-                  disabled
-                  className="relative inline-flex h-5 w-9 items-center rounded-full bg-slate-700 opacity-50 cursor-not-allowed transition-colors"
-                  title="Comercial automático ainda não está habilitado. Use envio manual via Sol/Hermes."
+                  aria-label={cronComercialAtivo ? 'Desativar envio automático comercial' : 'Ativar envio automático comercial'}
+                  className={cn(
+                    "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+                    cronComercialAtivo ? "bg-emerald-600" : "bg-slate-600",
+                    (!unidadeParaSalvar || unidadeParaSalvar === 'todos') && "opacity-40 cursor-not-allowed"
+                  )}
+                  title={!unidadeParaSalvar || unidadeParaSalvar === 'todos'
+                    ? 'Selecione uma unidade'
+                    : cronComercialAtivo
+                      ? 'Desativar envio automático comercial'
+                      : 'Ativar envio automático comercial'
+                  }
                 >
-                  <span className="inline-block h-3.5 w-3.5 rounded-full bg-white translate-x-[3px] transition-transform" />
+                  <span className={cn(
+                    "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
+                    cronComercialAtivo ? "translate-x-[18px]" : "translate-x-[3px]"
+                  )} />
                 </button>
                 <span className="flex items-center gap-1 text-[10px] text-slate-500">
                   <Clock className="w-3 h-3" />
-                  Manual via Sol/Hermes
+                  {cronComercialAtivo ? 'Envio automático 20h05 ativo' : 'Envio automático 20h05'}
                 </span>
               </div>
             </div>
