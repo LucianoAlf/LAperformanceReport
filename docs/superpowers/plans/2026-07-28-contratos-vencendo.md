@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Uma tela em `/app/entrada/contratos` que lista as matrículas com contrato acabando nos próximos 30/60/90 dias, com aulas restantes e vencimento da última fatura — replicando a aba "Matrículas Vencendo" do Emusys sem sair do LA Report.
+**Goal:** Uma aba **Contratos** em `/app/administrativo` que lista as matrículas com contrato acabando nos próximos 30/60/90 dias, com aulas restantes e vencimento da última fatura — replicando a aba "Matrículas Vencendo" do Emusys sem sair do LA Report.
 
 **Architecture:** Quatro colunas de contrato novas na tabela da jornada (`aluno_jornada_matricula_disciplina`), preenchidas pelo `sync-matriculas-emusys` a partir do `contrato_atual` que ele **já** lê — zero chamada nova à API do Emusys. Uma view `vw_contratos_vencendo` junta jornada + `alunos` e deriva o vencimento da última fatura por fórmula. A página lê a view direto do Postgres.
 
@@ -263,22 +263,27 @@ git commit -m "feat(jornada): extrair campos de contrato financeiro do payload E
 
 ---
 
-### Task 3: Deploy do sync e verificação com dado real
+### Task 3: Deploy das duas edges e verificação com dado real
 
-O `sync-matriculas-emusys` importa o builder da Task 2, então não precisa de mudança de código — mas precisa ser **redeployado** para carregar o `_shared` novo, e é preciso confirmar que as colunas realmente populam.
+O `_shared/jornada-canonica.ts` é importado por **duas** edge functions, e as duas precisam ser redeployadas para carregar a versão nova:
+
+- `sync-matriculas-emusys` — o alvo da feature (cron noturno).
+- **`processar-matricula-emusys`** — o webhook que trata matrícula nova, renovação, trancamento e finalização **em tempo real**. Usa `buildJornadaInputFromWebhook`, alterado na Task 2.
+
+⚠️ Se só a primeira for redeployada, o webhook segue com o bundle antigo. Isso não quebra nada (ele simplesmente não grava as colunas novas — o sync noturno preenche depois), mas cria divergência de versão entre duas edges que compartilham o mesmo módulo. Redeployar as duas juntas evita esse rastro.
 
 **Files:**
-- Modify: nenhum (redeploy do bundle existente de `supabase/functions/sync-matriculas-emusys/`)
+- Modify: nenhum (redeploy dos bundles existentes de `sync-matriculas-emusys/` e `processar-matricula-emusys/`)
 
 **Interfaces:**
 - Consumes: builder da Task 2, colunas da Task 1.
 - Produces: `aluno_jornada_matricula_disciplina` com as 4 colunas populadas para as 3 unidades.
 
-- [ ] **Step 1: Comparar o deployado com o repositório ANTES de mexer**
+- [ ] **Step 1: Comparar o deployado com o repositório ANTES de mexer (nas DUAS edges)**
 
-Rodar `mcp__supabase__get_edge_function` com `function_slug: 'sync-matriculas-emusys'` e comparar com `supabase/functions/sync-matriculas-emusys/index.ts`.
+Rodar `mcp__supabase__get_edge_function` para `sync-matriculas-emusys` **e** para `processar-matricula-emusys`, comparando cada um com o respectivo `index.ts` do repositório.
 
-Se divergirem, **parar e reportar** — significa que produção tem código que não está no git, e deployar por cima o destruiria. Não seguir sem resolver.
+Se qualquer um divergir, **parar e reportar** — significa que produção tem código que não está no git, e deployar por cima o destruiria. Não seguir sem resolver.
 
 - [ ] **Step 2: Validar sintaxe antes do deploy**
 
@@ -288,9 +293,11 @@ node --check supabase/functions/_shared/jornada-canonica.ts 2>/dev/null || deno 
 
 Esperado: sem erro.
 
-- [ ] **Step 3: Deploy**
+- [ ] **Step 3: Deploy das duas edges**
 
 `mcp__supabase__deploy_edge_function` com slug `sync-matriculas-emusys`, incluindo `index.ts` e os arquivos de `_shared/` que ele importa.
+
+Depois o mesmo para `processar-matricula-emusys` (slug `processar-matricula-emusys`), também com os `_shared/` que ele importa.
 
 - [ ] **Step 4: Rodar o sync numa unidade e verificar população**
 
@@ -326,7 +333,7 @@ Esperado: distribuição com **vários dias** (5, 8, 20, 9, 15, 29, 30, 1, 6, 16
 Invocar `?u=cg` e `?u=recreio`, repetir a verificação do Step 4 para cada `unidade_id`.
 
 ```bash
-git commit --allow-empty -m "chore(sync-matriculas): redeploy com campos de contrato financeiro"
+git commit --allow-empty -m "chore(emusys): redeploy sync-matriculas e processar-matricula com campos de contrato"
 ```
 
 ---
@@ -345,7 +352,7 @@ git commit --allow-empty -m "chore(sync-matriculas): redeploy com campos de cont
 Criar `supabase/migrations/20260728190000_vw_contratos_vencendo.sql`:
 
 ```sql
--- Matriculas com contrato acabando: base da tela /app/entrada/contratos.
+-- Matriculas com contrato acabando: base da aba Contratos em /app/administrativo.
 --
 -- Fonte = jornada (espelho do Emusys), NAO alunos.data_fim_contrato, que diverge
 -- da origem em 17,8% dos casos porque o sync so propoe alteracao para aprovacao
@@ -590,26 +597,28 @@ git commit -m "feat(contratos): hook useContratosVencendo"
 
 ---
 
-### Task 6: Página `ContratosVencendo` + rota + card no menu
+### Task 6: Aba "Contratos" no Administrativo
+
+A tela vira uma **aba** em `/app/administrativo`, na segunda posição — logo após "Lançamentos", antes de "Programa Fideliza+ LA". É onde a operação de renovação já vive (Lançamentos concentra Renovações, Renovações pendentes, Não Renovação, Avisos Prévios), e é o grupo de abas que o Arthur apontou ao dizer "do lado de Entrada" — sendo "Entrada" a aba da Caixa de Entrada de WhatsApp.
+
+Sem rota nova, sem lazy import, sem mexer em `EntradaMenu` — a aba entra no `PageTabs` já existente.
 
 **Files:**
-- Create: `src/components/App/Entrada/ContratosVencendo.tsx`
-- Modify: `src/router.tsx`
-- Modify: `src/components/App/Entrada/EntradaMenu.tsx`
+- Create: `src/components/App/Administrativo/TabContratosVencendo.tsx`
+- Modify: `src/components/App/Administrativo/AdministrativoPage.tsx:253` (união de tipos do `mainTab`)
+- Modify: `src/components/App/Administrativo/AdministrativoPage.tsx:1312-1317` (array de abas)
+- Modify: `src/components/App/Administrativo/AdministrativoPage.tsx:1324+` (renderização condicional)
 
 **Interfaces:**
 - Consumes: `useContratosVencendo`, `ContratoVencendo`, `JanelaDias` da Task 5.
-- Produces: componente exportado `ContratosVencendo` e rota `/app/entrada/contratos`.
+- Produces: componente `TabContratosVencendo` com a prop `{ unidadeId: string }`.
 
-- [ ] **Step 1: Criar a página**
+- [ ] **Step 1: Criar o componente da aba**
 
-Criar `src/components/App/Entrada/ContratosVencendo.tsx`:
+Criar `src/components/App/Administrativo/TabContratosVencendo.tsx`:
 
 ```tsx
 import React, { useState } from 'react';
-import { CalendarClock } from 'lucide-react';
-import { useSetPageTitle } from '@/contexts/PageTitleContext';
-import { useAuth } from '@/contexts/AuthContext';
 import { useContratosVencendo, type JanelaDias } from '@/hooks/useContratosVencendo';
 
 const JANELAS: JanelaDias[] = [30, 60, 90];
@@ -625,19 +634,9 @@ function formatarMoeda(valor: number | null): string {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-export function ContratosVencendo() {
-  useSetPageTitle({
-    titulo: 'Contratos',
-    subtitulo: 'Matrículas com contrato acabando',
-    icone: CalendarClock,
-    iconeCor: 'text-amber-400',
-    iconeWrapperCor: 'bg-amber-500/10',
-  });
-
-  const { unidadeSelecionada, canViewConsolidated } = useAuth();
+export function TabContratosVencendo({ unidadeId }: { unidadeId: string }) {
   const [janelaDias, setJanelaDias] = useState<JanelaDias>(30);
   const [busca, setBusca] = useState('');
-  const unidadeId = canViewConsolidated?.() ? 'todos' : (unidadeSelecionada ?? 'todos');
 
   const { contratos, loading, erro, ultimoSync } = useContratosVencendo({ unidadeId, janelaDias });
 
@@ -750,41 +749,54 @@ export function ContratosVencendo() {
   );
 }
 
-export default ContratosVencendo;
+export default TabContratosVencendo;
 ```
 
-- [ ] **Step 2: Registrar a rota**
+- [ ] **Step 2: Importar o componente e o ícone**
 
-Em `src/router.tsx`, junto dos outros lazy imports de Entrada (perto da linha 83):
+Em `src/components/App/Administrativo/AdministrativoPage.tsx`, junto dos outros imports de aba (perto de `import { TabLojinha } from '../Lojinha';`):
 
 ```tsx
-const ContratosVencendo = lazy(() => import('./components/App/Entrada/ContratosVencendo').then(m => ({ default: m.ContratosVencendo })));
+import { TabContratosVencendo } from './TabContratosVencendo';
 ```
 
-E na lista de children de `/app`, junto das outras rotas `entrada/`:
+E adicionar `CalendarClock` à lista de ícones importados de `lucide-react` na linha 11 (junto de `Clock`, `ArrowRightLeft` etc.).
+
+- [ ] **Step 3: Adicionar `contratos` à união de tipos do `mainTab`**
+
+Em `AdministrativoPage.tsx:253`, trocar:
 
 ```tsx
-          {
-            path: 'entrada/contratos',
-            element: <Suspense fallback={<PageLoader />}><ContratosVencendo /></Suspense>,
-          },
+  const [mainTab, setMainTab] = useState<'lancamentos' | 'fideliza' | 'lojinha' | 'farmer' | 'caixa_financeiro' | 'caixa_entrada'>('lancamentos');
 ```
 
-- [ ] **Step 3: Adicionar o card no menu**
-
-Em `src/components/App/Entrada/EntradaMenu.tsx`, importar `CalendarClock` do `lucide-react` (junto dos outros ícones) e adicionar ao array `menuRetencao`, como **primeiro** item:
+por:
 
 ```tsx
-  {
-    path: '/app/entrada/contratos',
-    label: 'Contratos',
-    description: 'Contratos vencendo e aulas restantes',
-    icon: CalendarClock,
-    color: 'from-amber-500 to-orange-500'
-  },
+  const [mainTab, setMainTab] = useState<'lancamentos' | 'contratos' | 'fideliza' | 'lojinha' | 'farmer' | 'caixa_financeiro' | 'caixa_entrada'>('lancamentos');
 ```
 
-- [ ] **Step 4: Build limpo**
+- [ ] **Step 4: Adicionar a aba ao `PageTabs`**
+
+No array de `tabs` do `PageTabs` (por volta da linha 1312), inserir **entre** `lancamentos` e `fideliza`:
+
+```tsx
+          { id: 'contratos' as const, label: 'Contratos', shortLabel: 'Contratos', icon: CalendarClock, activeGradient: 'from-amber-500 to-orange-500', activeShadow: 'shadow-amber-500/20' },
+```
+
+- [ ] **Step 5: Renderizar o conteúdo da aba**
+
+Na cadeia de renderização condicional (por volta da linha 1324), adicionar um ramo antes do `mainTab === 'caixa_financeiro'`:
+
+```tsx
+      {mainTab === 'contratos' ? (
+        <TabContratosVencendo unidadeId={unidade} />
+      ) : mainTab === 'caixa_financeiro' ? (
+```
+
+⚠️ A cadeia é um ternário encadeado — o novo ramo precisa vir **antes** do `{mainTab === 'caixa_financeiro' ? (` que hoje abre a cadeia, e a chave `{` de abertura passa a ser a do ramo novo. Conferir que a estrutura de parênteses continua balanceada depois da edição.
+
+- [ ] **Step 6: Build limpo**
 
 ```bash
 npm run build
@@ -792,19 +804,24 @@ npm run build
 
 Esperado: build sem erro.
 
-- [ ] **Step 5: Conferir na tela**
+- [ ] **Step 7: Conferir na tela**
 
-Subir `npm run dev` (porta 5175), acessar `/app/entrada/contratos` e verificar: a janela de 30 dias na Barra mostra **16 linhas**, ordenadas por última aula crescente, com "Venc. últ. fatura" preenchido (e vazio no Rafael Mello dos Santos).
+Subir `npm run dev` (porta 5175), acessar `/app/administrativo`, clicar na aba **Contratos** e verificar:
 
-- [ ] **Step 6: Commit**
+- a aba aparece em segundo lugar, entre "Lançamentos" e "Programa Fideliza+ LA";
+- com a Barra selecionada e janela de 30 dias, a tabela mostra **16 linhas**;
+- ordenadas por última aula crescente;
+- "Venc. últ. fatura" preenchido, e **vazio** na linha do Rafael Mello dos Santos;
+- trocar a janela para 60 e 90 dias aumenta a lista.
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/components/App/Entrada/ContratosVencendo.tsx src/router.tsx src/components/App/Entrada/EntradaMenu.tsx
-git commit -m "feat(contratos): tela de contratos vencendo em Entrada"
+git add src/components/App/Administrativo/TabContratosVencendo.tsx src/components/App/Administrativo/AdministrativoPage.tsx
+git commit -m "feat(contratos): aba Contratos no Administrativo"
 ```
 
 ---
-
 ### Task 7: Documentação
 
 **Files:**
@@ -819,8 +836,8 @@ git commit -m "feat(contratos): tela de contratos vencendo em Entrada"
 
 Em `docs/MAPA-SISTEMA.md`, seguindo o formato já usado para as outras páginas, adicionar entrada para:
 
-- **Rota:** `/app/entrada/contratos`
-- **Componente:** `src/components/App/Entrada/ContratosVencendo.tsx`
+- **Rota:** `/app/administrativo` → aba **Contratos** (2ª posição)
+- **Componente:** `src/components/App/Administrativo/TabContratosVencendo.tsx`
 - **Hook:** `src/hooks/useContratosVencendo.ts`
 - **View:** `vw_contratos_vencendo`
 - **Edge/RPC:** nenhuma (leitura direta da view)
@@ -830,7 +847,7 @@ Em `docs/MAPA-SISTEMA.md`, seguindo o formato já usado para as outras páginas,
 Adicionar bullet na seção de módulos/integrações, no mesmo estilo dos existentes:
 
 ```markdown
-- **Contratos vencendo (Entrada → Contratos):** tela `/app/entrada/contratos` (`ContratosVencendo` + `useContratosVencendo`) replica a aba "Matrículas Vencendo" do Emusys. Lê a view `vw_contratos_vencendo` (jornada + `alunos`), sem chamada à API. ⚠️ Fonte da data de fim é `vw_jornada_aluno_atual.data_ultima_aula`, **não** `alunos.data_fim_contrato` — este último diverge do Emusys em 17,8% dos casos porque o sync só propõe a alteração para aprovação humana. "Venc. última fatura" é **derivado** (`data_primeira_fatura + (nr_faturas-1) meses`, dia = `dia_vencimento_emusys`), não consultado em `/faturas`. ⚠️ `alunos.dia_vencimento` é default de formulário (91,2% no dia 5), por isso a fórmula usa `dia_vencimento_emusys` da jornada. Spec: `docs/superpowers/specs/2026-07-28-contratos-vencendo-emusys-design.md`.
+- **Contratos vencendo (Administrativo → Contratos):** aba em `/app/administrativo` (`TabContratosVencendo` + `useContratosVencendo`) replica a aba "Matrículas Vencendo" do Emusys. Lê a view `vw_contratos_vencendo` (jornada + `alunos`), sem chamada à API. ⚠️ Fonte da data de fim é `vw_jornada_aluno_atual.data_ultima_aula`, **não** `alunos.data_fim_contrato` — este último diverge do Emusys em 17,8% dos casos porque o sync só propõe a alteração para aprovação humana. "Venc. última fatura" é **derivado** (`data_primeira_fatura + (nr_faturas-1) meses`, dia = `dia_vencimento_emusys`), não consultado em `/faturas`. ⚠️ `alunos.dia_vencimento` é default de formulário (91,2% no dia 5), por isso a fórmula usa `dia_vencimento_emusys` da jornada. Spec: `docs/superpowers/specs/2026-07-28-contratos-vencendo-emusys-design.md`.
 ```
 
 - [ ] **Step 3: Commit**
