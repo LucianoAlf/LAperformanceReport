@@ -1,0 +1,13 @@
+# Fontes que NÃO devem entrar no índice do graphify.
+# Motivo: SQL redefinido em vários arquivos faz o `explain` devolver uma
+# definição arbitrária — se um rascunho/rollback/arquivo morto estiver no
+# índice, ele pode ser servido como se fosse a definição vigente.
+
+# Rascunhos explicitamente não aplicados
+supabase/migration-drafts/
+
+# Rollbacks e artefatos de execução
+outputs/
+
+# SQL histórico (versões superadas de RPCs/views ainda vivas)
+docs/archive/

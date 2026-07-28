@@ -141,6 +141,18 @@ VITE_GEMINI_API_KEY=...  # opcional
 ## Subagents
 
 - **`fiscal-dados`** (em `.claude/agents/fiscal-dados.md`): auditor read-only de automações de dados (webhooks Emusys, syncs, Mila SDR, WhatsApp). Use proativamente quando o usuário pedir verificação de integridade, divergências entre sistemas, FK NULLs, duplicatas, falhas silenciosas. Lê `integracao-infra.md` + auto-discovery via `list_edge_functions` → reporta gaps de documentação. Tools restritas (sem Edit/Write).
+- **`fiscal-campanhas`** (em `.claude/agents/fiscal-campanhas.md`): auditor read-only do módulo de Campanhas (Meta WhatsApp Cloud API — bot SDR → transferência pra consultor). Use proativamente quando o usuário pedir auditoria de uma campanha/disparo. Cobre 5 checagens: (1) template Meta alinhado ao `system_prompt` do agente, (2) consultores notificados e a notificação entregue, (3) bot respondendo corretamente (sem ignorar pergunta/loop/travar), (4) lead caindo na unidade que escolheu, (5) tags/labels certas no Chatwoot. Depende do MCP do Chatwoot pras checagens 2 e 5 (descobre as tools via `ToolSearch("chatwoot")` no Step 0) — **nunca** extrai token de API do banco (`agentes.tools->chatwoot_api_token`) pra chamar REST direto. ⚠️ Achado de segurança (2026-07-23, não corrigido ainda): esse token do Chatwoot fica em **texto puro** dentro de `agentes.tools` (jsonb comum, não é Supabase secret) — qualquer SELECT na tabela `agentes` expõe a credencial.
+
+## graphify — índice AST local (desde 2026-07-27)
+
+Índice estrutural do repo em `graphify-out/` (gitignored, ~7.000 nós / ~15.000 arestas, cobre `src/`, as 86 edge functions e as migrations). **Local, zero LLM, zero token.** Regra geral de uso está no `~/.claude/CLAUDE.md`; aqui só o que é específico deste repo:
+
+- **Regerar:** `graphify extract . --code-only --force` (~50s). Sempre `--code-only` — sem esse flag ele manda `docs/`, `rules/` e memória pra um LLM externo, e esses diretórios têm credencial.
+- **`.graphifyignore`** exclui `supabase/migration-drafts/`, `outputs/` e `docs/archive/`. Não remover: sem isso, `*_NAO_APLICAR.sql` e rollbacks entram no índice e podem ser servidos como definição vigente.
+- **Usos que valem:** `graphify affected "<símbolo>"` antes de refatorar (bate 100% com grep e traz linha, separando `imports` de `calls`); achar código morto; ciclos de import; auditar se o `docs/MAPA-SISTEMA.md` ainda bate com o código.
+- **RPC:** o índice localiza a migration que define, mas 131 símbolos SQL têm definição duplicada (`get_dados_relatorio_gerencial` tem 17). Nunca usar `explain` p/ ler o corpo vigente — pegar a migration mais recente e **confirmar no banco via MCP**.
+- **Não usar** `graphify query` p/ pergunta de negócio (devolve `Button`/`Dialog*`); métrica canônica continua vindo de `docs/METRICAS.md` + `rules/`.
+- Achados da 1ª rodada: [useKPIsComercial.ts](src/hooks/useKPIsComercial.ts) é **código morto**; ciclo de import em `useKPIsAlunosCanonicos.ts → kpisAlunosVivosCanonicos.ts → retencaoOperacionalCanonica.ts`.
 
 ## Skills
 

@@ -69,3 +69,6 @@ outputs/la-report-p02q-rpc-experimentais-v2-2026-06-20/
 staff/
 .windsurf/
 .playwright-cli/
+
+# graphify — indice AST local (regerar com: graphify extract . --code-only)
+graphify-out/
