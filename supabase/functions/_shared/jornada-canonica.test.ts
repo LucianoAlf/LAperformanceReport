@@ -3,7 +3,9 @@
 import { assertEquals } from 'https://deno.land/std@0.177.0/testing/asserts.ts';
 import {
   buildJornadaInputFromMatriculaApi,
+  buildJornadaInputFromWebhook,
   buildJornadaRowsForUpsert,
+  upsertJornadaMatriculaDisciplina,
 } from './jornada-canonica.ts';
 
 const UNIDADE = '368d47f5-2d88-4475-bc14-ba084a9a348e';
@@ -111,4 +113,80 @@ Deno.test('data_primeira_fatura ausente ou vazia vira null', () => {
     UNIDADE,
   );
   assertEquals(inputVazia?.dataPrimeiraFatura, null);
+});
+
+// Payload real reduzido do webhook matricula_alterada (nao traz contrato_atual).
+function webhookPayloadFake() {
+  return {
+    evento: 'matricula_alterada',
+    matricula: {
+      id: 238,
+      aluno_id: 408,
+      status: 'ativa',
+      nome_aluno: 'Natan Pereira Calvo Demidoff',
+      qtd_contratos: 2,
+      disciplinas: [{
+        matricula_disciplina_id: 834,
+        disciplina_id: 7,
+        nome: 'Bateria T',
+        nr_aulas_contratadas: 40,
+        nr_aulas_passadas: 39,
+        nr_aulas_futuras: 1,
+        data_hora_ultima_aula: '2026-08-08 15:00:00',
+        agendamentos: [],
+      }],
+    },
+  };
+}
+
+// Stub minimo de SupabaseClientLike: as chamadas de resolve (aluno/curso/
+// professor) sempre devolvem `data: null` (nao afetam o teste); a chamada
+// real que interessa e o payload passado a `.upsert()`, capturado aqui.
+function fakeSupabaseCapturandoUpsert() {
+  const captured: { rows: any[] | null } = { rows: null };
+  const resolveChain: any = {
+    select: () => resolveChain,
+    eq: () => resolveChain,
+    maybeSingle: () => Promise.resolve({ data: null, error: null }),
+  };
+  const client = {
+    from: (table: string) => {
+      if (table === 'aluno_jornada_matricula_disciplina') {
+        return {
+          upsert: (rows: any[]) => {
+            captured.rows = rows;
+            return Promise.resolve({ error: null });
+          },
+        };
+      }
+      return resolveChain;
+    },
+  };
+  return { client, captured };
+}
+
+Deno.test('upsertJornadaMatriculaDisciplina: webhook sem contrato nao envia as 4 chaves (nao apaga o que o sync gravou)', async () => {
+  const input = buildJornadaInputFromWebhook(webhookPayloadFake(), UNIDADE)!;
+  const { client, captured } = fakeSupabaseCapturandoUpsert();
+
+  await upsertJornadaMatriculaDisciplina(client, input);
+
+  const row = captured.rows![0];
+  assertEquals('nr_faturas' in row, false);
+  assertEquals('data_primeira_fatura' in row, false);
+  assertEquals('dia_vencimento_emusys' in row, false);
+  assertEquals('inadimplente_emusys' in row, false);
+});
+
+Deno.test('upsertJornadaMatriculaDisciplina: input com contrato preenchido mantem as 4 chaves com os valores', async () => {
+  const input = buildJornadaInputFromMatriculaApi(matriculaFake(), UNIDADE)!;
+  const { client, captured } = fakeSupabaseCapturandoUpsert();
+
+  await upsertJornadaMatriculaDisciplina(client, input);
+
+  const row = captured.rows![0];
+  assertEquals(row.nr_faturas, 12);
+  assertEquals(row.data_primeira_fatura, '2025-06-05');
+  assertEquals(row.dia_vencimento_emusys, 5);
+  assertEquals(row.inadimplente_emusys, false);
 });

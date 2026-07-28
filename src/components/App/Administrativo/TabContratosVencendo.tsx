@@ -57,6 +57,9 @@ export function TabContratosVencendo({ unidadeId }: { unidadeId: string }) {
           placeholder="Buscar aluno…"
           className="rounded-xl border border-slate-700/50 bg-slate-800/50 px-3 py-2 text-sm text-gray-200 placeholder:text-gray-500"
         />
+        <span className="rounded-lg bg-slate-800/50 px-2.5 py-1 text-xs font-medium text-cyan-300">
+          {visiveis.length} {visiveis.length === 1 ? 'registro encontrado' : 'registros encontrados'}
+        </span>
         {ultimoSync && (
           <span className="ml-auto text-xs text-gray-400">
             Dados do Emusys sincronizados em {formatarData(ultimoSync)}

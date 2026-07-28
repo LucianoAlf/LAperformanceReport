@@ -152,6 +152,30 @@ function parseDateOnly(value: string | null): string | null {
   return date.toISOString().slice(0, 10);
 }
 
+// As 4 colunas de contrato financeiro (nr_faturas, data_primeira_fatura,
+// dia_vencimento_emusys, inadimplente_emusys) so vem preenchidas na varredura
+// da API (sync-matriculas-emusys); o payload do webhook em tempo real nao as
+// traz. Se essas chaves entrarem no objeto da linha com valor null, o
+// ON CONFLICT DO UPDATE do PostgREST as sobrescreve, apagando o que o sync
+// noturno gravou. Omitir as chaves quando as 4 vierem null preserva o valor
+// existente na linha (upsert so atualiza coluna presente no payload).
+function buildContratoFields(input: JornadaMatriculaInput): Record<string, unknown> {
+  if (
+    input.nrFaturas == null &&
+    input.dataPrimeiraFatura == null &&
+    input.diaVencimentoEmusys == null &&
+    input.inadimplenteEmusys == null
+  ) {
+    return {};
+  }
+  return {
+    nr_faturas: input.nrFaturas,
+    data_primeira_fatura: input.dataPrimeiraFatura,
+    dia_vencimento_emusys: input.diaVencimentoEmusys,
+    inadimplente_emusys: input.inadimplenteEmusys,
+  };
+}
+
 function calcularProximaAula(passadas: number | null, futuras: number | null): number | null {
   if (passadas == null) return null;
   if ((futuras ?? 0) <= 0) return null;
@@ -432,10 +456,7 @@ export async function upsertJornadaMatriculaDisciplina(
       professor_nome_emusys: disciplina.nomeProfessor,
       status_matricula: statusCanonico(input.statusMatricula),
       qtd_contratos: input.qtdContratos,
-      nr_faturas: input.nrFaturas,
-      data_primeira_fatura: input.dataPrimeiraFatura,
-      dia_vencimento_emusys: input.diaVencimentoEmusys,
-      inadimplente_emusys: input.inadimplenteEmusys,
+      ...buildContratoFields(input),
       nr_aulas_contratadas: disciplina.nrAulasContratadas,
       nr_aulas_passadas: disciplina.nrAulasPassadas,
       nr_aulas_futuras: disciplina.nrAulasFuturas,
