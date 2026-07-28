@@ -121,6 +121,45 @@ Qualquer um dos três resolve.
 
 ---
 
+## ⚠️ [API] "Nr. de Aulas Restantes" da tela do Emusys diverge da API (1 a 4 aulas)
+
+**Identificado em:** 2026-07-28
+
+**Descrição:** A tela **Escola → Renovação de Matrículas** ("Matrículas Vencendo") mostra uma coluna *Nr. de Aulas Restantes* que **não bate com nenhum valor obtenível pela API**. A API é internamente consistente — `/matriculas` e `/aulas` concordam entre si — mas a interface mostra sempre **mais** aulas restantes.
+
+**Evidência (Barra, 28/07/2026, janela de 30 dias):**
+
+| Aluno | `/matriculas` → `nr_aulas_futuras` | `/aulas` (contagem direta) | Tela do Emusys |
+|---|---|---|---|
+| Carlos Vitor Pinheiro da Silva | 1 | — | **2** |
+| Isabella Lopes Correa | 1 | — | **3** |
+| Natan Pereira Calvo Demidoff (Bateria) | 1 | **1** | **2** |
+| Gabriela da Costa | 2 | — | **3** |
+| Miguel Sperandio Kevorkian | 3 | — | **4** |
+| Caê Leal Santos | 2 | — | **3** |
+| Mariana Herd Giglio (Canto) | 2 | — | **6** |
+| Rafael Mello dos Santos | 2 | — | **3** |
+| Daniel Sampaio Senna Lattari | 1 | — | 1 ✅ |
+| Caique Feijó de Lima Vieira | 1 | — | 1 ✅ |
+
+Os dois casos que batem são justamente os sem divergência; nos demais a tela mostra de 1 a 4 aulas a mais.
+
+**Hipóteses testadas e DESCARTADAS** (aprofundado no caso Natan/Bateria, `pessoa_id=408`):
+
+- ❌ **Aulas canceladas contando como restantes:** o contrato tem **0 aulas canceladas** (`GET /aulas` no período do contrato).
+- ❌ **Reposição/extra fora da contagem:** as 42 aulas são **todas** `categoria=normal`.
+- ❌ **Defasagem do nosso sync:** o tempo só *reduz* aulas restantes; se fosse defasagem, o nosso número seria **maior**, não menor. Além disso a consulta à API foi feita ao vivo, no mesmo momento do print da tela.
+
+**Achado colateral:** os contadores do contrato não batem com a agenda real dentro do próprio Emusys — o contrato do Natan/Bateria declara `nr_aulas_contratadas = 40`, mas `GET /aulas` devolve **42 aulas** normais para o mesmo contrato (41 passadas + 1 futura, contra 40/39/1 declarados no contrato).
+
+**Impacto:** a coluna "Aulas restantes" do nosso módulo **Contratos** (Administrativo) reflete a API e, portanto, diverge da tela do Emusys. A coluna **Última aula** — que é o sinal principal para decidir urgência de renovação — bate 100%, então o recorte de quem está vencendo está correto; só a contagem de aulas difere.
+
+**Decisão (Hugo, 28/07/2026):** manter o valor da API, documentar a divergência, e perguntar ao Emusys. Não há fonte disponível que reproduza o número da tela.
+
+**Solicitação ideal (Emusys):** informar qual é a regra de cálculo de *Nr. de Aulas Restantes* na tela de Renovação de Matrículas e, se possível, expor o mesmo valor na API. Perguntar também por que `nr_aulas_contratadas` do contrato diverge da quantidade real de aulas em `/aulas`.
+
+---
+
 ## Resolvidos (histórico)
 
 - **✅ 2026-07-21** — Webhook fan-out (mesmo evento → 2+ URLs). Era de 2026-07-07: na época o observador (`debug-webhook-emusys-observador`, grava payload bruto em `automacao_log` `workflow_id='debug-webhook-emusys-observador'`) só recebia `aula_cancelada` — evento sem webhook n8n — porque o Emusys mandava cada evento para uma única URL. **O Emusys resolveu**: verificado ao vivo 21/07, o observador agora recebe `lead_criado`/`lead_editado`/`boleto_pix_pago` **em paralelo** ao n8n (69 eventos só no dia 21/07). Fan-out do mesmo evento p/ múltiplos destinos agora funciona → dá pra observar/testar um novo destino sem cutover.
