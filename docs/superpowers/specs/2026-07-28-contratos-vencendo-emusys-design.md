@@ -111,7 +111,7 @@ Ordenação padrão por `ultima_aula` crescente (quem vence primeiro no topo), q
 
 **Modo consolidado** (usuário com `canViewConsolidated()`): a edge responde por unidade, então o hook chama as três em sequência e funde no cliente — concatena `itens` (com uma coluna de unidade), soma `total_ativas_varridas`, faz OR de `faturas_truncadas`, concatena `avisos`, e usa o **menor** `gerado_em` das três para o "atualizado há X min" (é o dado mais velho da tela; mostrar o mais novo daria falsa sensação de frescor).
 
-**Renderização progressiva:** cada unidade aparece na tabela assim que a sua resposta chega, sem esperar as três. Com até ~81s por unidade no pior caso, prender a tela inteira até a última terminar seria ruim demais. Se uma unidade falhar, as outras seguem renderizadas e a que falhou entra em `avisos` (`tipo: "unidade_falhou"`) com banner e opção de tentar de novo só aquela — melhor que derrubar a tela inteira.
+**Renderização progressiva:** cada unidade aparece na tabela assim que a sua resposta chega, sem esperar as três. Com ~44s por unidade na janela padrão (e até ~100s no pior caso, quando o orçamento de tempo de faturas é consumido), prender a tela inteira até a última terminar seria ruim demais. Se uma unidade falhar, as outras seguem renderizadas e a que falhou entra em `avisos` (`tipo: "unidade_falhou"`) com banner e opção de tentar de novo só aquela — melhor que derrubar a tela inteira.
 
 ### 4. Card no `EntradaMenu`
 
@@ -121,21 +121,25 @@ Card novo "Contratos" em [EntradaMenu.tsx](../../../src/components/App/Entrada/E
 
 O rate limit do Emusys é de **60 req/min por IP**. A edge processa **uma unidade por invocação** (mesma decisão de `sync-matriculas-emusys` e `sync-inadimplencia-emusys`); o frontend chama as três em sequência quando o usuário está em modo consolidado.
 
-**Reaproveitar o `GlobalRateLimiter` de [`_shared/faturasSync.ts`](../../../supabase/functions/_shared/faturasSync.ts)** — já é `export`, intervalo de 1200ms, não precisa de alteração nenhuma no arquivo.
+**Reaproveitar o `GlobalRateLimiter` de [`_shared/faturasSync.ts`](../../../supabase/functions/_shared/faturasSync.ts)** — já é `export`, não precisa de alteração nenhuma no arquivo. Mas instanciar com **2000ms**, não com o `REQUEST_INTERVAL_MS` default de 1200ms: a 1200ms a edge sozinha consome ~50 req/min de um teto de 60, sem folga para os crons que rodam concorrentemente (ver "Riscos"). A 2000ms ela fica em ~30 req/min, deixando metade do orçamento livre.
+
+⚠️ O nome `GlobalRateLimiter` engana: o estado (`lastRequestAt`) é de instância, em memória do isolate. Ele serializa chamadas **dentro de uma invocação**, e não coordena nada entre invocações diferentes nem com os crons.
 
 O retry de 429 fica numa função **local da edge nova**, não extraída do compartilhado. O `fetchPage` de lá é privado, é caminho de produção do sync de faturas, tem a string `Emusys /faturas` fixa nas mensagens de erro, e faz `throw` em qualquer `!response.ok` — enquanto aqui é preciso o caso extra do 400 `"token invalido!"`. Exportar e alterar aquele `fetchPage` mudaria o comportamento de retry de uma sync em produção para atender uma tela nova; replicar ~15 linhas de retry sai mais barato que esse risco. O `coletarFaturasUnidade` também não serve: busca por competência (`data_vencimento_inicial/final` de um mês), e aqui a busca é por `contrato_id`.
 
 Contagem por unidade, com `incluir_faturas=true`:
 
-| Janela | Matrículas filtradas (Barra, 28/07) | Chamadas | Tempo a 1200ms |
+| Janela | Matrículas filtradas (Barra, 28/07) | Chamadas | Tempo a 2000ms |
 |---|---|---|---|
-| 30 dias | 16 | ~22 | ~27s |
-| 60 dias | ~32 | ~38 | ~46s |
-| 90 dias | ~48 | ~54 | ~65s |
+| 30 dias | 16 | ~22 | ~44s |
+| 60 dias | ~32 | ~38 | ~76s |
+| 90 dias | ~48 | ~54 | ~108s |
 
-Nenhuma invocação isolada chega perto do timeout de 150s do Supabase — o pior caso é 65s (90 dias, uma unidade) — e o próprio `GlobalRateLimiter` a 1200ms trava em ~50 req/min, abaixo do limite de 60, então invocações sequenciais não somam pressão de rate limit. **O problema é de espera do usuário:** em modo consolidado as três chamadas são sequenciais, e 90 dias com faturas deixaria a tela carregando por mais de 3 minutos. Isso não se resolve fatiando a edge; resolve-se não buscando fatura que ninguém pediu.
+A 108s o pior caso já encosta no timeout de 150s do Supabase, e em modo consolidado a espera do usuário passaria de 5 minutos. Duas travas, por isso:
 
-**Regra, por isso:** `incluir_faturas` tem default `true` só na janela de 30 dias, e `false` em 60/90 (ver contrato da edge acima). O usuário pode ligar as faturas manualmente numa janela grande (checkbox na tela, com aviso de demora), e nesse caso vale um **teto rígido de 60 requisições a `/faturas` por invocação** — contando requisições, não contratos, já que um contrato pode paginar. Atingido o teto, os itens restantes vêm com `venc_ultima_fatura: null`, a resposta marca `faturas_truncadas: true` e a tela mostra banner de amostra parcial, mesmo padrão de `chatwoot-atendimento-insights`. Truncar em silêncio seria pior: a coluna vazia leria como "não tem fatura" em vez de "não consultei".
+**1. Default condicional:** `incluir_faturas` é `true` só na janela de 30 dias, `false` em 60/90 (ver contrato da edge acima). O usuário pode ligar manualmente numa janela grande, com aviso de demora na tela.
+
+**2. Orçamento de tempo:** a busca de faturas para quando o tempo decorrido da invocação passa de **90 segundos**. Teto por tempo em vez de por número de requisições porque é o timeout que se quer proteger, e ele não depende de quantas chamadas foram feitas — se a API do Emusys ficar lenta, um teto por contagem não segura nada. Ao estourar, os itens restantes vêm com `venc_ultima_fatura: null`, a resposta marca `faturas_truncadas: true` e a tela mostra banner de amostra parcial, mesmo padrão de `chatwoot-atendimento-insights`. Truncar em silêncio seria pior: a coluna vazia leria como "não tem fatura" em vez de "não consultei". Como o passo 2 ordena por `ultima_aula` antes de buscar faturas, quem fica de fora é sempre quem vence mais tarde.
 
 ## Erros e casos de borda
 
@@ -169,6 +173,38 @@ Gates padrão do projeto antes de considerar pronto:
 **Integração com o fluxo de renovação existente**: esta tela não escreve em `movimentacoes_admin` nem alimenta `TabelaRenovacoes` / `ModalRenovacao`. É um painel de leitura e nada mais. Conectar as duas coisas é decisão separada, depois de a equipe usar a tela e dizer se compensa.
 
 **Persistência / histórico**: não guarda snapshot diário de quem estava vencendo. Se um dia a equipe quiser série histórica ("quantos venceram e não renovaram em agosto"), aí sim entra tabela e cron — mas isso é outra feature, e a fonte canônica de renovação continua sendo `movimentacoes_admin`.
+
+## Riscos
+
+Esta feature não escreve em lugar nenhum, mas "read-only" não significa "sem impacto". Dois riscos reais:
+
+### 1. Contenção de rate limit com os syncs de produção
+
+O limite do Emusys é de **60 req/min por IP**, e todas as edges do Supabase saem pelo mesmo egress. O projeto já tem cron batendo no Emusys **a cada 5 minutos**, o dia inteiro (verificado em `cron.job`, 28/07/2026):
+
+```
+sync-metadados-aulas-15m-u0    0,15,30,45 * * * *
+sync-metadados-aulas-15m-u1    5,20,35,50 * * * *
+sync-metadados-aulas-15m-u2   10,25,40,55 * * * *
+```
+
+Mais os de inadimplência às 11h/16h/21h UTC (**08h/13h/18h BRT — exatamente o horário de uso da tela**), os de matrícula às 02h UTC e os de presença/grade à noite.
+
+Ou seja: em qualquer momento do expediente há chance de a tela e um cron dividirem o mesmo teto de 60 req/min. Se somarem mais de 60, **um dos dois toma 429** — e o prejudicado pode ser o sync de produção, não a tela. Uma feature de leitura derrubando uma sync de dados seria o pior desfecho possível aqui.
+
+Mitigação: o `GlobalRateLimiter` da edge nova roda a **2000ms** (~30 req/min), deixando ~30 req/min de folga para os crons, e implementa retry de 429 com `Retry-After`. Não é coordenação de verdade — o limiter é por invocação, não distribuído — mas dimensiona o consumo para caber junto com um cron ativo.
+
+Se ainda assim aparecerem 429 nos logs das syncs depois do lançamento, o próximo passo é uma trava de concorrência de verdade (lock em tabela ou janela de bloqueio durante os crons), não baixar mais o intervalo.
+
+### 2. O deploy da edge vai para produção
+
+Branch isola o frontend, mas **não isola edge function**: `deploy_edge_function` publica no projeto real (`ouqwbbermlzqqvtqwlul`). Como a função é nova, o deploy é aditivo e seguro — o risco é operacional: se o slug colidir com uma função existente, o deploy **sobrescreve** aquela função.
+
+Mitigação: confirmar por `list_edge_functions` que o slug está livre antes do primeiro deploy. Verificado em 28/07/2026 — `contratos-vencendo` não existe entre as ~100 funções do projeto.
+
+### O que de fato não tem risco
+
+Sem migration, sem tabela, sem RLS, sem trigger, sem cron novo: não há schema a reverter nem dado a limpar. Na API do Emusys é só `GET` — nada é alterado do lado deles. O frontend fica invisível até o merge.
 
 ## Impacto em produção
 
