@@ -12,6 +12,10 @@ import { uploadImageToStorage } from '@/lib/uploadImage';
 import { useProfessorVideos } from '@/hooks/useProfessorVideos';
 import type { Professor, Unidade, Curso, ProfessorFormData, DisponibilidadeSemanal, ProfessorVideo } from './types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  normalizarDisponibilidadeSemanal,
+  normalizarDisponibilidadesPorUnidade,
+} from './disponibilidadeCanonica';
 
 interface ModalProfessorProps {
   open: boolean;
@@ -58,7 +62,9 @@ export function ModalProfessor({
       const dispPorUnidade: Record<string, DisponibilidadeSemanal> = {};
       professor.unidades?.forEach(u => {
         if (u.disponibilidade) {
-          dispPorUnidade[u.unidade_id] = u.disponibilidade;
+          dispPorUnidade[u.unidade_id] = normalizarDisponibilidadeSemanal(
+            u.disponibilidade,
+          );
         }
       });
 
@@ -131,7 +137,11 @@ export function ModalProfessor({
       // Salvar com a URL da foto do storage
       await onSave({
         ...formData,
-        foto_url: fotoUrl
+        foto_url: fotoUrl,
+        disponibilidade_por_unidade: normalizarDisponibilidadesPorUnidade(
+          formData.disponibilidade_por_unidade,
+          formData.unidades_ids,
+        ),
       });
       
       onClose();

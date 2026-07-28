@@ -33,6 +33,7 @@ import { HealthScoreConfig } from './HealthScoreConfig';
 import { HealthScoreV3Config } from './HealthScoreV3Config';
 import { MotivosScoreConfig } from './MotivosScoreConfig';
 import { FatorDemandaCursos } from './FatorDemandaCursos';
+import { normalizarDisponibilidadeSemanal } from './disponibilidadeCanonica';
 import { ChecklistsTab } from '../Administrativo/PainelFarmer/ChecklistsTab';
 import { useHealthScoreConfig } from '@/hooks/useHealthScoreConfig';
 import {
@@ -469,7 +470,12 @@ export function ProfessoresPage() {
           const unidadesInsert = data.unidades_ids.map(unidade_id => ({
             professor_id: novoProfessor.id,
             unidade_id,
-            disponibilidade: data.disponibilidade_por_unidade?.[unidade_id] || null
+            disponibilidade: (() => {
+              const normalizada = normalizarDisponibilidadeSemanal(
+                data.disponibilidade_por_unidade?.[unidade_id],
+              );
+              return Object.keys(normalizada).length > 0 ? normalizada : null;
+            })(),
           }));
           await supabase.from('professores_unidades').insert(unidadesInsert);
         }
@@ -502,7 +508,12 @@ export function ProfessoresPage() {
         );
 
         for (const unidadeId of data.unidades_ids) {
-          const disponibilidade = data.disponibilidade_por_unidade?.[unidadeId] || null;
+          const disponibilidadeNormalizada = normalizarDisponibilidadeSemanal(
+            data.disponibilidade_por_unidade?.[unidadeId],
+          );
+          const disponibilidade = Object.keys(disponibilidadeNormalizada).length > 0
+            ? disponibilidadeNormalizada
+            : null;
           const unidadeAtual = unidadesAtuaisPorId.get(unidadeId);
 
           if (unidadeAtual) {
