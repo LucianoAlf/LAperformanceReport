@@ -264,7 +264,6 @@ export function TabelaAlunos({
   }, [filtros.nome, alunos]);
 
   const [alertaInadimplenciaDismissed, setAlertaInadimplenciaDismissed] = useState(false);
-  const [atualizandoInadimplencia, setAtualizandoInadimplencia] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [governancaSemParcela, setGovernancaSemParcela] = useState<GovernancaSemParcelaState | null>(null);
   const [justificativaSemParcela, setJustificativaSemParcela] = useState('');
@@ -320,11 +319,14 @@ export function TabelaAlunos({
 
       if (principalInadimplente || outrosInadimplentes.length > 0) {
         total++;
+        // Soma valor_parcela (o LÍQUIDO que o aluno realmente deve). Até 2026-07-28 somava
+        // valor_mensalidade_emusys, o valor CHEIO da API -- inflava o total em todo aluno
+        // com desconto condicional.
         if (principalInadimplente) {
-          valor += a.valor_mensalidade_emusys ?? a.valor_parcela ?? 0;
+          valor += a.valor_parcela ?? 0;
         }
         outrosInadimplentes.forEach(oc => {
-          valor += oc.valor_mensalidade_emusys ?? oc.valor_parcela ?? 0;
+          valor += oc.valor_parcela ?? 0;
         });
       }
 
@@ -344,32 +346,6 @@ export function TabelaAlunos({
     if (horas < 1) return 'há menos de 1h';
     if (horas === 1) return 'há 1h';
     return `há ${horas}h`;
-  }
-
-  const UNIDADE_ID_PARA_CODIGO_SYNC: Record<string, 'cg' | 'recreio' | 'barra'> = {
-    '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'cg',
-    '95553e96-971b-4590-a6eb-0201d013c14d': 'recreio',
-    '368d47f5-2d88-4475-bc14-ba084a9a348e': 'barra',
-  };
-
-  async function atualizarInadimplenciaAgora() {
-    setAtualizandoInadimplencia(true);
-    try {
-      const codigos = unidadeAtual === 'todos'
-        ? Object.values(UNIDADE_ID_PARA_CODIGO_SYNC)
-        : [UNIDADE_ID_PARA_CODIGO_SYNC[unidadeAtual]].filter(Boolean);
-
-      await Promise.all(codigos.map(codigo =>
-        supabase.functions.invoke(`sync-inadimplencia-emusys?u=${codigo}`, { method: 'POST' })
-      ));
-
-      await onRecarregar();
-    } catch (error: any) {
-      console.error('Erro ao atualizar inadimplência:', error);
-      toast.addToast('Erro ao atualizar inadimplência', 'error', error.message || 'Não foi possível sincronizar com o Emusys agora.');
-    } finally {
-      setAtualizandoInadimplencia(false);
-    }
   }
 
   // Ícone da forma de pagamento
@@ -1997,13 +1973,10 @@ export function TabelaAlunos({
               Filtrar ativos inadimplentes
             </button>
           )}
-          <button
-            onClick={atualizarInadimplenciaAgora}
-            disabled={atualizandoInadimplencia}
-            className="px-3 py-1 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap bg-slate-700/40 hover:bg-slate-700/60 border-slate-600 text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {atualizandoInadimplencia ? 'Atualizando...' : 'Atualizar agora'}
-          </button>
+          {/* Botão "Atualizar agora" removido em 2026-07-28: chamava a edge
+              sync-inadimplencia-emusys, aposentada junto com seu cache. O dado agora vem da
+              jornada, revarrida pelo sync-matriculas-emusys das 02h BRT -- por isso o
+              carimbo "atualizado há Xh" ao lado. */}
           <button
             onClick={() => setAlertaInadimplenciaDismissed(true)}
             className="p-1 hover:bg-white/10 rounded transition-colors"
@@ -2351,18 +2324,12 @@ export function TabelaAlunos({
                           {vemDeOutroCurso && (
                             <span className="text-[10px] text-purple-400 ml-1" title="Valor do segundo curso">2º</span>
                           )}
-                          {aluno.valor_mensalidade_emusys != null && aluno.valor_parcela != null &&
-                            Math.abs(aluno.valor_mensalidade_emusys - aluno.valor_parcela) > 0.01 && (
-                            <Tooltip content={`Emusys cobra R$ ${aluno.valor_mensalidade_emusys.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} — aqui está R$ ${aluno.valor_parcela.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Clique para corrigir.`}>
-                              <button
-                                type="button"
-                                onClick={() => setAlunoFicha(aluno)}
-                                className="ml-1 text-amber-400 hover:text-amber-300"
-                              >
-                                ⚠️
-                              </button>
-                            </Tooltip>
-                          )}
+                          {/* Alerta de divergência de valor removido em 2026-07-28: comparava o
+                              valor CHEIO da API contra valor_parcela, que é o LÍQUIDO (cheio menos
+                              desconto condicional), acendendo em 747 de 1171 matrículas ativas --
+                              todo aluno com desconto. Divergência de valor já é tratada, com fila e
+                              aprovação humana, na aba Conciliação Emusys (matriculas_divergencias,
+                              tipo_divergencia='valor_divergente'). */}
                         </div>
                       </td>
                     );
@@ -2700,18 +2667,8 @@ export function TabelaAlunos({
                           placeholder="-"
                           className="min-w-[80px]"
                         />
-                        {outroCurso.valor_mensalidade_emusys != null && outroCurso.valor_parcela != null &&
-                          Math.abs(outroCurso.valor_mensalidade_emusys - outroCurso.valor_parcela) > 0.01 && (
-                          <Tooltip content={`Emusys cobra R$ ${outroCurso.valor_mensalidade_emusys.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} — aqui está R$ ${outroCurso.valor_parcela.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Clique para corrigir.`}>
-                            <button
-                              type="button"
-                              onClick={() => setAlunoFicha(outroCurso)}
-                              className="ml-1 text-amber-400 hover:text-amber-300"
-                            >
-                              ⚠️
-                            </button>
-                          </Tooltip>
-                        )}
+                        {/* Alerta de divergência de valor removido -- ver comentário na coluna de
+                            parcela do aluno principal. */}
                       </div>
                     </td>
                     )}
