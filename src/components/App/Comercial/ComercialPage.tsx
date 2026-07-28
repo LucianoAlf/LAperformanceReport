@@ -557,7 +557,7 @@ export function ComercialPage() {
     }
 
     setCronComercialAtivo(novoValor);
-    toast.success(novoValor ? 'Relatório comercial automático ativado' : 'Relatório comercial automático desativado');
+    toast.success(novoValor ? 'Relatório comercial automático ativado para 20h05' : 'Relatório comercial automático desativado');
   };
   
   const gerarRelatorioSelecionado = async (
@@ -3958,42 +3958,42 @@ export function ComercialPage() {
   // Enviar relatório via WhatsApp para o grupo
   const enviarWhatsAppGrupo = async () => {
     if (!relatorioTexto || enviandoWhatsApp) return;
-    
+
     setEnviandoWhatsApp(true);
     setErroWhatsApp(null);
     setEnviadoWhatsApp(false);
-    
+
     // Determinar a unidade para envio
     const unidadeEnvio = isAdmin ? (context?.unidadeSelecionada || 'todos') : (unidadeId || 'todos');
-    
+
     try {
-      const { data, error } = await supabase.functions.invoke('relatorio-admin-whatsapp', {
-        body: {
-          texto: relatorioTexto,
-          tipoRelatorio: tipoRelatorio ? `comercial_${tipoRelatorio}` : 'comercial',
-          unidade: unidadeEnvio,
-          competencia: `${competencia.filtro.ano}-${String(competencia.filtro.mes).padStart(2, '0')}`,
-          ...(numeroTeste ? { numero_teste: numeroTeste } : {}),
-        },
+      const { data, error } = await supabase.rpc('sol_hermes_report_enqueue', {
+        p_texto: relatorioTexto,
+        p_tipo_relatorio: tipoRelatorio?.startsWith('comercial_')
+          ? tipoRelatorio
+          : (tipoRelatorio ? `comercial_${tipoRelatorio}` : 'comercial'),
+        p_tipo_destino: 'relatorio_comercial',
+        p_unidade: unidadeEnvio,
+        p_competencia: `${competencia.filtro.ano}-${String(competencia.filtro.mes).padStart(2, '0')}`,
       });
-      
+
       if (error) {
-        console.error('[WhatsApp Comercial] Erro ao enviar:', error);
-        setErroWhatsApp('Erro ao enviar mensagem');
+        console.error('[WhatsApp Comercial Hermes] Erro ao enfileirar:', error);
+        setErroWhatsApp('Erro ao enfileirar para Sol/Hermes');
         return;
       }
-      
-      if (data?.success || data?.partial) {
-        console.log('[WhatsApp Comercial] ✅ Mensagem enviada!', data.resultados);
+
+      if (data?.success) {
+        console.log('[WhatsApp Comercial Hermes] ✅ Enfileirado para Sol/Hermes', data.resultados);
         setEnviadoWhatsApp(true);
-        toast.success('Relatório enviado para o grupo!');
+        toast.success('Relatório Comercial enfileirado para envio pela Sol/Hermes.');
         setTimeout(() => setEnviadoWhatsApp(false), 3000);
       } else {
         setErroWhatsApp(data?.error || 'Erro desconhecido');
-        toast.error(data?.error || 'Erro ao enviar');
+        toast.error(data?.error || 'Erro ao enfileirar');
       }
     } catch (err) {
-      console.error('[WhatsApp Comercial] Erro inesperado:', err);
+      console.error('[WhatsApp Comercial Hermes] Erro inesperado:', err);
       setErroWhatsApp('Erro de conexão');
       toast.error('Erro de conexão');
     } finally {
@@ -7345,7 +7345,7 @@ export function ComercialPage() {
                 </button>
                 <span className="flex items-center gap-1 text-[10px] text-slate-500">
                   <Clock className="w-3 h-3" />
-                  {cronComercialAtivo ? 'Envio automático 20h ativo' : 'Envio automático 20h'}
+                  {cronComercialAtivo ? 'Envio automático 20h05 ativo' : 'Envio automático 20h05'}
                 </span>
               </div>
             </div>

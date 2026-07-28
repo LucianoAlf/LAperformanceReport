@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
-import { invokeWithRetry } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { formatarDataCaixa, formatarMoedaCaixa, formatarRelatorioCaixaWhatsApp } from '@/lib/caixaFinanceiro';
 import type { CaixaDiario, CaixaMovimentacao } from '@/types/caixa';
 
@@ -56,19 +56,19 @@ export function CaixaWhatsAppPreview({
 
   async function enviarDryRun() {
     if (!caixa) return;
-    const { data, error } = await invokeWithRetry<{ ok: boolean; texto?: string; error?: string }>('caixa-financeiro-whatsapp', {
-      body: {
-        caixa_diario_id: caixa.id,
-        modo: 'dry_run',
-      },
+
+    const { data, error } = await supabase.rpc('sol_hermes_caixa_validate', {
+      p_caixa_diario_id: caixa.id,
     });
 
-    if (error || data?.error) {
-      onStatus(error?.message || data?.error || 'Falha ao validar envio.', 'error');
+    const result = data as { success?: boolean; error?: string; grupo?: string; destino?: string } | null;
+
+    if (error || result?.success === false) {
+      onStatus(error?.message || result?.error || 'Falha ao validar envio.', 'error');
       return;
     }
 
-    onStatus('Edge Function validada em dry-run. Nenhuma mensagem foi enviada.', 'success');
+    onStatus(`Rota Sol/Hermes validada para ${result?.grupo || 'grupo financeiro'}. Nenhuma mensagem foi enviada.`, 'success');
   }
 
   async function enviarWhatsAppConfirmado() {
@@ -78,21 +78,26 @@ export function CaixaWhatsAppPreview({
       return;
     }
 
-    const { data, error } = await invokeWithRetry<{ ok: boolean; error?: string }>('caixa-financeiro-whatsapp', {
-      body: {
-        caixa_diario_id: caixa.id,
-        modo: 'send',
-      },
+    const { data, error } = await supabase.rpc('sol_hermes_caixa_enqueue', {
+      p_caixa_diario_id: caixa.id,
+      p_texto: texto,
     });
 
     await onEnvioFinalizado?.();
 
-    if (error || data?.error) {
-      onStatus(error?.message || data?.error || 'Falha ao enviar WhatsApp.', 'error');
+    const result = data as { success?: boolean; error?: string; queued?: number; skipped?: string; grupo?: string } | null;
+
+    if (error || result?.success === false) {
+      onStatus(error?.message || result?.error || 'Falha ao enfileirar WhatsApp pela Sol.', 'error');
       return;
     }
 
-    onStatus('Relatorio enviado ao grupo financeiro.', 'success');
+    if (result?.queued === 0 || result?.skipped) {
+      onStatus('Este caixa ja estava enfileirado ou enviado hoje pela Sol/Hermes.', 'info');
+      return;
+    }
+
+    onStatus(`Relatorio enfileirado para a Sol enviar no grupo ${result?.grupo || 'financeiro'}.`, 'success');
   }
 
   return (
