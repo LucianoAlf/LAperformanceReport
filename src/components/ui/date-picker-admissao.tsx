@@ -255,61 +255,6 @@ export function DatePickerAdmissao({
               ))}
             </div>
 
-            {/* Atalhos rápidos para professores antigos */}
-            <div className="flex gap-2 mt-3 pt-3 border-t border-slate-700">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="flex-1 text-xs h-7"
-                onClick={() => {
-                  const d = new Date()
-                  d.setFullYear(d.getFullYear() - 5)
-                  setViewDate(d)
-                }}
-              >
-                5 anos
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="flex-1 text-xs h-7"
-                onClick={() => {
-                  const d = new Date()
-                  d.setFullYear(d.getFullYear() - 10)
-                  setViewDate(d)
-                }}
-              >
-                10 anos
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="flex-1 text-xs h-7"
-                onClick={() => {
-                  const d = new Date()
-                  d.setFullYear(d.getFullYear() - 20)
-                  setViewDate(d)
-                }}
-              >
-                20 anos
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="flex-1 text-xs h-7"
-                onClick={() => {
-                  const d = new Date()
-                  d.setFullYear(d.getFullYear() - 40)
-                  setViewDate(d)
-                }}
-              >
-                40 anos
-              </Button>
-            </div>
           </PopoverContent>
         </Popover>
       </div>
