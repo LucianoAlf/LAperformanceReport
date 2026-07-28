@@ -5,7 +5,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { DatePickerNascimento } from '@/components/ui/date-picker-nascimento';
+import { DatePickerAdmissao } from '@/components/ui/date-picker-admissao';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ImageCropUpload } from '@/components/ui/ImageCropUpload';
 import { uploadImageToStorage } from '@/lib/uploadImage';
@@ -317,7 +317,7 @@ export function ModalProfessor({
                   <Calendar className="w-4 h-4 text-slate-400" />
                   Data de Admissão
                 </Label>
-                <DatePickerNascimento
+                <DatePickerAdmissao
                   date={formData.data_admissao || undefined}
                   onDateChange={(date) => setFormData(prev => ({ ...prev, data_admissao: date || null }))}
                   placeholder="Selecione a data de início"
