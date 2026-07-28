@@ -299,6 +299,37 @@ export function TabelaAlunos({
     );
   }, []);
 
+  const [atualizandoInadimplencia, setAtualizandoInadimplencia] = useState(false);
+
+  const UNIDADE_ID_PARA_CODIGO_SYNC: Record<string, 'cg' | 'recreio' | 'barra'> = {
+    '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'cg',
+    '95553e96-971b-4590-a6eb-0201d013c14d': 'recreio',
+    '368d47f5-2d88-4475-bc14-ba084a9a348e': 'barra',
+  };
+
+  // Força o refresh sob demanda do inadimplente_emusys da jornada. Em 2026-07-28 o alvo
+  // mudou de sync-inadimplencia-emusys (aposentada, escrevia num cache proprio) para
+  // atualizar-inadimplencia-emusys, que escreve na propria jornada -- fonte unica.
+  async function atualizarInadimplenciaAgora() {
+    setAtualizandoInadimplencia(true);
+    try {
+      const codigos = unidadeAtual === 'todos'
+        ? Object.values(UNIDADE_ID_PARA_CODIGO_SYNC)
+        : [UNIDADE_ID_PARA_CODIGO_SYNC[unidadeAtual]].filter(Boolean);
+
+      await Promise.all(codigos.map(codigo =>
+        supabase.functions.invoke(`atualizar-inadimplencia-emusys?u=${codigo}`, { method: 'POST' })
+      ));
+
+      await onRecarregar();
+    } catch (error: any) {
+      console.error('Erro ao atualizar inadimplência:', error);
+      toast.addToast('Erro ao atualizar inadimplência', 'error', error.message || 'Não foi possível sincronizar com o Emusys agora.');
+    } finally {
+      setAtualizandoInadimplencia(false);
+    }
+  }
+
   // Contagem de inadimplentes via sync Emusys ao vivo (inadimplente_emusys). Fonte de dados
   // preparada nas Tasks 4-6; este memo é o consumo visível no banner. Substitui o memo
   // antigo baseado em status_pagamento manual (removido na Task 8 por virar código morto).
@@ -1973,10 +2004,13 @@ export function TabelaAlunos({
               Filtrar ativos inadimplentes
             </button>
           )}
-          {/* Botão "Atualizar agora" removido em 2026-07-28: chamava a edge
-              sync-inadimplencia-emusys, aposentada junto com seu cache. O dado agora vem da
-              jornada, revarrida pelo sync-matriculas-emusys das 02h BRT -- por isso o
-              carimbo "atualizado há Xh" ao lado. */}
+          <button
+            onClick={atualizarInadimplenciaAgora}
+            disabled={atualizandoInadimplencia}
+            className="px-3 py-1 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap bg-slate-700/40 hover:bg-slate-700/60 border-slate-600 text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {atualizandoInadimplencia ? 'Atualizando...' : 'Atualizar agora'}
+          </button>
           <button
             onClick={() => setAlertaInadimplenciaDismissed(true)}
             className="p-1 hover:bg-white/10 rounded transition-colors"
