@@ -1,5 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useContratosVencendo, type JanelaDias } from '@/hooks/useContratosVencendo';
+import {
+  SortableHeader,
+  alternarOrdenacao,
+  compararParaOrdenacao,
+  type SortConfig,
+} from '@/components/ui/SortableHeader';
 
 const JANELAS: JanelaDias[] = [30, 60, 90];
 
@@ -24,16 +30,45 @@ function formatarMoeda(valor: number | null): string {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+// Valor de cada coluna para efeito de ordenação. Datas usam a string ISO crua
+// (YYYY-MM-DD... ordena igual cronologicamente, sem custo de parse); números vêm
+// como número para não cair na comparação textual (onde "9" > "10").
+const VALOR_ORDENACAO: Record<string, (c: any) => string | number | null> = {
+  aluno: (c) => c.aluno_nome,
+  curso: (c) => c.curso_nome,
+  professor: (c) => c.professor_nome,
+  matricula: (c) => c.data_matricula,
+  ultima_aula: (c) => c.data_ultima_aula,
+  venc_fatura: (c) => c.venc_ultima_fatura,
+  aulas_restantes: (c) => c.nr_aulas_futuras,
+  valor: (c) => c.valor_parcela,
+  situacao: (c) => (c.inadimplente == null ? null : c.inadimplente ? 'Inadimplente' : 'Em dia'),
+};
+
 export function TabContratosVencendo({ unidadeId }: { unidadeId: string }) {
   const [janelaDias, setJanelaDias] = useState<JanelaDias>(30);
   const [busca, setBusca] = useState('');
+  const [sortConfig, setSortConfig] = useState<SortConfig>(null);
 
   const { contratos, loading, erro, ultimoSync } = useContratosVencendo({ unidadeId, janelaDias });
 
   const termo = busca.trim().toLowerCase();
-  const visiveis = termo
+  const filtrados = termo
     ? contratos.filter((c) => (c.aluno_nome ?? '').toLowerCase().includes(termo))
     : contratos;
+
+  // Sem ordenação escolhida, preserva a ordem do hook (vencimento mais próximo primeiro),
+  // que é a leitura natural da tela.
+  const visiveis = useMemo(() => {
+    if (!sortConfig) return filtrados;
+    const extrair = VALOR_ORDENACAO[sortConfig.key];
+    if (!extrair) return filtrados;
+    return [...filtrados].sort((a, b) =>
+      compararParaOrdenacao(extrair(a), extrair(b), sortConfig.direction),
+    );
+  }, [filtrados, sortConfig]);
+
+  const ordenarPor = (key: string) => setSortConfig((atual) => alternarOrdenacao(atual, key));
 
   return (
     <div className="space-y-6">
@@ -86,15 +121,15 @@ export function TabContratosVencendo({ unidadeId }: { unidadeId: string }) {
           <table className="w-full text-sm">
             <thead className="bg-slate-800/50 text-gray-300">
               <tr>
-                <th className="px-4 py-3 text-left">Aluno</th>
-                <th className="px-4 py-3 text-left">Curso</th>
-                <th className="px-4 py-3 text-left">Professor</th>
-                <th className="px-4 py-3 text-left">Matrícula</th>
-                <th className="px-4 py-3 text-left">Última aula</th>
-                <th className="px-4 py-3 text-left">Venc. últ. fatura</th>
-                <th className="px-4 py-3 text-right">Aulas restantes</th>
-                <th className="px-4 py-3 text-right">Valor</th>
-                <th className="px-4 py-3 text-left">Situação</th>
+                <SortableHeader label="Aluno" sortKey="aluno" sortConfig={sortConfig} onSort={ordenarPor} className="text-left" />
+                <SortableHeader label="Curso" sortKey="curso" sortConfig={sortConfig} onSort={ordenarPor} className="text-left" />
+                <SortableHeader label="Professor" sortKey="professor" sortConfig={sortConfig} onSort={ordenarPor} className="text-left" />
+                <SortableHeader label="Matrícula" sortKey="matricula" sortConfig={sortConfig} onSort={ordenarPor} className="text-left" />
+                <SortableHeader label="Última aula" sortKey="ultima_aula" sortConfig={sortConfig} onSort={ordenarPor} className="text-left" />
+                <SortableHeader label="Venc. últ. fatura" sortKey="venc_fatura" sortConfig={sortConfig} onSort={ordenarPor} className="text-left" />
+                <SortableHeader label="Aulas restantes" sortKey="aulas_restantes" sortConfig={sortConfig} onSort={ordenarPor} className="text-right" />
+                <SortableHeader label="Valor" sortKey="valor" sortConfig={sortConfig} onSort={ordenarPor} className="text-right" />
+                <SortableHeader label="Situação" sortKey="situacao" sortConfig={sortConfig} onSort={ordenarPor} className="text-left" />
               </tr>
             </thead>
             <tbody>

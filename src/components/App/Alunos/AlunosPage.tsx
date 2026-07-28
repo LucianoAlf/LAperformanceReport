@@ -102,9 +102,8 @@ export interface Aluno {
   photo_url?: string | null;
   instagram?: string | null;
   emusys_matricula_id?: string | null;
-  // Inadimplencia/valor ao vivo da API Emusys (nao confundir com status_pagamento/valor_parcela, que sao manuais)
+  // Inadimplencia vinda da API Emusys via jornada (nao confundir com status_pagamento, que e manual)
   inadimplente_emusys?: boolean;
-  valor_mensalidade_emusys?: number | null;
   _inadimplencia_atualizado_em?: string | null;
   anamnese_diagnosticos?: string[];
 }
@@ -733,52 +732,68 @@ export function AlunosPage() {
 
       alunosComSegundoCurso.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
-      // Merge com o cache de inadimplencia/valor ao vivo do Emusys (so leitura -- nao
-      // altera status_pagamento/valor_parcela). Match por (unidade_id, emusys_matricula_id)
+      // Merge da inadimplencia do Emusys, lida da JORNADA (so leitura -- nao altera
+      // status_pagamento nem valor_parcela). Match por (unidade_id, emusys_matricula_id)
       // -- IDs do Emusys sao por unidade, nunca globais.
+      //
+      // Fonte trocada de inadimplencia_emusys_cache para aluno_jornada_matricula_disciplina
+      // em 2026-07-28: os 9 crons daquele cache nunca funcionaram (mandavam so x-sync-token
+      // contra uma edge com verify_jwt=true -> 401 no gateway do Supabase, antes do codigo
+      // rodar), entao ele estava congelado em 15/07 e Campo Grande nunca teve uma linha
+      // sequer. As 682 linhas que existiam vieram de cliques manuais no botao "Atualizar
+      // agora", que mandava o JWT do usuario. A jornada carrega o MESMO campo da MESMA API
+      // (contrato_atual.inadimplente), gravado pelo sync-matriculas-emusys, cujo cron funciona.
+      //
+      // A jornada tem 1 linha por DISCIPLINA (matricula multi-instrumento gera varias com o
+      // mesmo emusys_matricula_id) e o campo de contrato se repete identico em todas --
+      // por isso a primeira linha de cada matricula basta.
       const unidadesEnvolvidas = [...new Set(alunosComSegundoCurso.map(a => a.unidade_id).filter(Boolean))];
-      const cacheMap = new Map<string, { inadimplente: boolean; valor_mensalidade_emusys: number | null; atualizado_em: string }>();
+      const inadimplenciaMap = new Map<string, { inadimplente: boolean; atualizado_em: string }>();
       if (unidadesEnvolvidas.length > 0) {
         // Paginado (mesmo padrão de fetchAllAlunos) -- teto de 1000 linhas por resposta
-        // do PostgREST truncaria silenciosamente com as 3 unidades juntas (~1162 linhas ativas).
-        const cacheRows: any[] = [];
-        let cacheOffset = 0;
-        let cacheHasMore = true;
-        while (cacheHasMore) {
-          const { data: cachePage } = await supabase
-            .from('inadimplencia_emusys_cache')
-            .select('unidade_id, emusys_matricula_id, inadimplente, valor_mensalidade_emusys, atualizado_em')
+        // do PostgREST truncaria silenciosamente com as 3 unidades juntas.
+        const linhas: any[] = [];
+        let offset = 0;
+        let temMais = true;
+        while (temMais) {
+          const { data: pagina } = await supabase
+            .from('aluno_jornada_matricula_disciplina')
+            .select('unidade_id, emusys_matricula_id, inadimplente_emusys, ultima_sincronizacao_emusys')
             .in('unidade_id', unidadesEnvolvidas)
-            .range(cacheOffset, cacheOffset + PAGE_SIZE - 1);
-          if (cachePage) cacheRows.push(...cachePage);
-          cacheHasMore = cachePage?.length === PAGE_SIZE;
-          cacheOffset += PAGE_SIZE;
+            .eq('status_matricula', 'ativa')
+            .not('inadimplente_emusys', 'is', null)
+            .range(offset, offset + PAGE_SIZE - 1);
+          if (pagina) linhas.push(...pagina);
+          temMais = pagina?.length === PAGE_SIZE;
+          offset += PAGE_SIZE;
         }
-        cacheRows.forEach((row: any) => {
-          cacheMap.set(`${row.unidade_id}|${row.emusys_matricula_id}`, row);
+        linhas.forEach((row: any) => {
+          const chave = `${row.unidade_id}|${row.emusys_matricula_id}`;
+          if (inadimplenciaMap.has(chave)) return;
+          inadimplenciaMap.set(chave, {
+            inadimplente: row.inadimplente_emusys === true,
+            atualizado_em: row.ultima_sincronizacao_emusys,
+          });
         });
       }
 
       const alunosComInadimplenciaEmusys = alunosComSegundoCurso.map(aluno => {
         const chavePrincipal = aluno.emusys_matricula_id ? `${aluno.unidade_id}|${aluno.emusys_matricula_id}` : null;
-        const cachePrincipal = chavePrincipal ? cacheMap.get(chavePrincipal) : undefined;
+        const principal = chavePrincipal ? inadimplenciaMap.get(chavePrincipal) : undefined;
 
-        const outrosCursosComCache = aluno.outros_cursos?.map(oc => {
+        const outrosCursosComInadimplencia = aluno.outros_cursos?.map(oc => {
           const chaveOc = oc.emusys_matricula_id ? `${oc.unidade_id}|${oc.emusys_matricula_id}` : null;
-          const cacheOc = chaveOc ? cacheMap.get(chaveOc) : undefined;
           return {
             ...oc,
-            inadimplente_emusys: cacheOc?.inadimplente,
-            valor_mensalidade_emusys: cacheOc?.valor_mensalidade_emusys ?? undefined,
+            inadimplente_emusys: (chaveOc ? inadimplenciaMap.get(chaveOc) : undefined)?.inadimplente,
           };
         });
 
         return {
           ...aluno,
-          inadimplente_emusys: cachePrincipal?.inadimplente,
-          valor_mensalidade_emusys: cachePrincipal?.valor_mensalidade_emusys ?? undefined,
-          _inadimplencia_atualizado_em: cachePrincipal?.atualizado_em ?? null,
-          outros_cursos: outrosCursosComCache,
+          inadimplente_emusys: principal?.inadimplente,
+          _inadimplencia_atualizado_em: principal?.atualizado_em ?? null,
+          outros_cursos: outrosCursosComInadimplencia,
         };
       });
 

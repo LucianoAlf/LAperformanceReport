@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown, Columns3, Phone, ArrowUp, ArrowDown, Brain } from 'lucide-react';
+import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown, Columns3, Phone, Brain } from 'lucide-react';
 import { CelulaEditavel } from '@/components/ui/CelulaEditavel';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -9,6 +9,7 @@ import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 import { useToast } from '@/hooks/useToast';
 import { ModalFichaAluno } from './ModalFichaAluno';
 import {
@@ -151,31 +152,6 @@ function calcularParcelaComercialCanonica(
   return Math.round((cheio - condicional) * 100) / 100;
 }
 
-function SortableHeader({ label, sortKey, sortConfig, onSort, className = '', px = 'px-4' }: {
-  label: string;
-  sortKey: string;
-  sortConfig: { key: string; direction: 'asc' | 'desc' } | null;
-  onSort: (key: string) => void;
-  className?: string;
-  px?: string;
-}) {
-  const active = sortConfig?.key === sortKey;
-  return (
-    <th
-      className={`${px} py-3 font-medium cursor-pointer select-none hover:text-white transition-colors ${className} ${active ? 'text-amber-400' : ''}`}
-      onClick={() => onSort(sortKey)}
-    >
-      <span className="inline-flex items-center gap-1">
-        {label}
-        {active && (sortConfig.direction === 'asc'
-          ? <ArrowUp className="w-3 h-3" />
-          : <ArrowDown className="w-3 h-3" />
-        )}
-      </span>
-    </th>
-  );
-}
-
 export function TabelaAlunos({
   alunos: alunosProp,
   todosAlunos,
@@ -264,7 +240,6 @@ export function TabelaAlunos({
   }, [filtros.nome, alunos]);
 
   const [alertaInadimplenciaDismissed, setAlertaInadimplenciaDismissed] = useState(false);
-  const [atualizandoInadimplencia, setAtualizandoInadimplencia] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [governancaSemParcela, setGovernancaSemParcela] = useState<GovernancaSemParcelaState | null>(null);
   const [justificativaSemParcela, setJustificativaSemParcela] = useState('');
@@ -300,6 +275,37 @@ export function TabelaAlunos({
     );
   }, []);
 
+  const [atualizandoInadimplencia, setAtualizandoInadimplencia] = useState(false);
+
+  const UNIDADE_ID_PARA_CODIGO_SYNC: Record<string, 'cg' | 'recreio' | 'barra'> = {
+    '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'cg',
+    '95553e96-971b-4590-a6eb-0201d013c14d': 'recreio',
+    '368d47f5-2d88-4475-bc14-ba084a9a348e': 'barra',
+  };
+
+  // Força o refresh sob demanda do inadimplente_emusys da jornada. Em 2026-07-28 o alvo
+  // mudou de sync-inadimplencia-emusys (aposentada, escrevia num cache proprio) para
+  // atualizar-inadimplencia-emusys, que escreve na propria jornada -- fonte unica.
+  async function atualizarInadimplenciaAgora() {
+    setAtualizandoInadimplencia(true);
+    try {
+      const codigos = unidadeAtual === 'todos'
+        ? Object.values(UNIDADE_ID_PARA_CODIGO_SYNC)
+        : [UNIDADE_ID_PARA_CODIGO_SYNC[unidadeAtual]].filter(Boolean);
+
+      await Promise.all(codigos.map(codigo =>
+        supabase.functions.invoke(`atualizar-inadimplencia-emusys?u=${codigo}`, { method: 'POST' })
+      ));
+
+      await onRecarregar();
+    } catch (error: any) {
+      console.error('Erro ao atualizar inadimplência:', error);
+      toast.addToast('Erro ao atualizar inadimplência', 'error', error.message || 'Não foi possível sincronizar com o Emusys agora.');
+    } finally {
+      setAtualizandoInadimplencia(false);
+    }
+  }
+
   // Contagem de inadimplentes via sync Emusys ao vivo (inadimplente_emusys). Fonte de dados
   // preparada nas Tasks 4-6; este memo é o consumo visível no banner. Substitui o memo
   // antigo baseado em status_pagamento manual (removido na Task 8 por virar código morto).
@@ -320,11 +326,14 @@ export function TabelaAlunos({
 
       if (principalInadimplente || outrosInadimplentes.length > 0) {
         total++;
+        // Soma valor_parcela (o LÍQUIDO que o aluno realmente deve). Até 2026-07-28 somava
+        // valor_mensalidade_emusys, o valor CHEIO da API -- inflava o total em todo aluno
+        // com desconto condicional.
         if (principalInadimplente) {
-          valor += a.valor_mensalidade_emusys ?? a.valor_parcela ?? 0;
+          valor += a.valor_parcela ?? 0;
         }
         outrosInadimplentes.forEach(oc => {
-          valor += oc.valor_mensalidade_emusys ?? oc.valor_parcela ?? 0;
+          valor += oc.valor_parcela ?? 0;
         });
       }
 
@@ -344,32 +353,6 @@ export function TabelaAlunos({
     if (horas < 1) return 'há menos de 1h';
     if (horas === 1) return 'há 1h';
     return `há ${horas}h`;
-  }
-
-  const UNIDADE_ID_PARA_CODIGO_SYNC: Record<string, 'cg' | 'recreio' | 'barra'> = {
-    '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'cg',
-    '95553e96-971b-4590-a6eb-0201d013c14d': 'recreio',
-    '368d47f5-2d88-4475-bc14-ba084a9a348e': 'barra',
-  };
-
-  async function atualizarInadimplenciaAgora() {
-    setAtualizandoInadimplencia(true);
-    try {
-      const codigos = unidadeAtual === 'todos'
-        ? Object.values(UNIDADE_ID_PARA_CODIGO_SYNC)
-        : [UNIDADE_ID_PARA_CODIGO_SYNC[unidadeAtual]].filter(Boolean);
-
-      await Promise.all(codigos.map(codigo =>
-        supabase.functions.invoke(`sync-inadimplencia-emusys?u=${codigo}`, { method: 'POST' })
-      ));
-
-      await onRecarregar();
-    } catch (error: any) {
-      console.error('Erro ao atualizar inadimplência:', error);
-      toast.addToast('Erro ao atualizar inadimplência', 'error', error.message || 'Não foi possível sincronizar com o Emusys agora.');
-    } finally {
-      setAtualizandoInadimplencia(false);
-    }
   }
 
   // Ícone da forma de pagamento
@@ -2351,18 +2334,12 @@ export function TabelaAlunos({
                           {vemDeOutroCurso && (
                             <span className="text-[10px] text-purple-400 ml-1" title="Valor do segundo curso">2º</span>
                           )}
-                          {aluno.valor_mensalidade_emusys != null && aluno.valor_parcela != null &&
-                            Math.abs(aluno.valor_mensalidade_emusys - aluno.valor_parcela) > 0.01 && (
-                            <Tooltip content={`Emusys cobra R$ ${aluno.valor_mensalidade_emusys.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} — aqui está R$ ${aluno.valor_parcela.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Clique para corrigir.`}>
-                              <button
-                                type="button"
-                                onClick={() => setAlunoFicha(aluno)}
-                                className="ml-1 text-amber-400 hover:text-amber-300"
-                              >
-                                ⚠️
-                              </button>
-                            </Tooltip>
-                          )}
+                          {/* Alerta de divergência de valor removido em 2026-07-28: comparava o
+                              valor CHEIO da API contra valor_parcela, que é o LÍQUIDO (cheio menos
+                              desconto condicional), acendendo em 747 de 1171 matrículas ativas --
+                              todo aluno com desconto. Divergência de valor já é tratada, com fila e
+                              aprovação humana, na aba Conciliação Emusys (matriculas_divergencias,
+                              tipo_divergencia='valor_divergente'). */}
                         </div>
                       </td>
                     );
@@ -2700,18 +2677,8 @@ export function TabelaAlunos({
                           placeholder="-"
                           className="min-w-[80px]"
                         />
-                        {outroCurso.valor_mensalidade_emusys != null && outroCurso.valor_parcela != null &&
-                          Math.abs(outroCurso.valor_mensalidade_emusys - outroCurso.valor_parcela) > 0.01 && (
-                          <Tooltip content={`Emusys cobra R$ ${outroCurso.valor_mensalidade_emusys.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} — aqui está R$ ${outroCurso.valor_parcela.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Clique para corrigir.`}>
-                            <button
-                              type="button"
-                              onClick={() => setAlunoFicha(outroCurso)}
-                              className="ml-1 text-amber-400 hover:text-amber-300"
-                            >
-                              ⚠️
-                            </button>
-                          </Tooltip>
-                        )}
+                        {/* Alerta de divergência de valor removido -- ver comentário na coluna de
+                            parcela do aluno principal. */}
                       </div>
                     </td>
                     )}
