@@ -5,8 +5,18 @@ const JANELAS: JanelaDias[] = [30, 60, 90];
 
 function formatarData(iso: string | null): string {
   if (!iso) return '—';
-  const [ano, mes, dia] = iso.slice(0, 10).split('-');
-  return `${dia}/${mes}/${ano}`;
+  // Data pura (date, ex: venc_ultima_fatura): "YYYY-MM-DD" sem hora, os 10
+  // primeiros chars já são o dia em BRT — não precisa (e não pode) converter
+  // fuso, senão vira Date UTC e desloca o dia.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [ano, mes, dia] = iso.split('-');
+    return `${dia}/${mes}/${ano}`;
+  }
+  // timestamptz (ex: data_ultima_aula, ultima_sincronizacao_emusys): o
+  // PostgREST serializa em UTC, então os 10 primeiros chars podem ser o dia
+  // seguinte em BRT (ex: cron às 02:00 UTC = 23h BRT do dia anterior).
+  // Converter pro fuso de negócio antes de extrair a data.
+  return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 }
 
 function formatarMoeda(valor: number | null): string {
