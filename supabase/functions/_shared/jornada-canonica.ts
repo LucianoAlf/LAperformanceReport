@@ -124,11 +124,32 @@ function statusCanonico(status: string | null): string {
   return 'desconhecido';
 }
 
+// Contratos reais na base começam em ~2018; qualquer ano anterior a isto é
+// lixo de payload da API do Emusys (ex.: "0000-12-18" observado em produção).
+// new Date("0000-12-18") não vira NaN em JS, por isso o ano precisa ser
+// validado à parte da checagem de NaN.
+const ANO_MINIMO_PLAUSIVEL = 2000;
+
+function anoPlausivel(date: Date): boolean {
+  return date.getUTCFullYear() >= ANO_MINIMO_PLAUSIVEL;
+}
+
 function parseDateTime(value: string | null): string | null {
   if (!value) return null;
   const iso = value.includes('T') ? value : value.replace(' ', 'T');
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  if (Number.isNaN(date.getTime()) || !anoPlausivel(date)) return null;
+  return date.toISOString();
+}
+
+// Irmã de parseDateTime para colunas `date` (sem hora), como
+// data_primeira_fatura. Reaproveita a mesma checagem de ano plausível.
+function parseDateOnly(value: string | null): string | null {
+  if (!value) return null;
+  const iso = value.includes('T') ? value : `${value}T00:00:00`;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime()) || !anoPlausivel(date)) return null;
+  return date.toISOString().slice(0, 10);
 }
 
 function calcularProximaAula(passadas: number | null, futuras: number | null): number | null {
@@ -218,7 +239,7 @@ export function buildJornadaInputFromMatriculaApi(
     dataNascimentoAluno: textOrNull(mat.aluno?.data_nascimento ?? mat.data_nascimento_aluno),
     qtdContratos: numberOrNull(mat.qtd_contratos),
     nrFaturas: numberOrNull(contrato.nr_faturas),
-    dataPrimeiraFatura: textOrNull(contrato.data_primeira_fatura),
+    dataPrimeiraFatura: parseDateOnly(contrato.data_primeira_fatura),
     diaVencimentoEmusys: numberOrNull(contrato.dia_vencimento),
     inadimplenteEmusys: typeof contrato.inadimplente === 'boolean' ? contrato.inadimplente : null,
     disciplinas: disciplinasRaw.map(extractDisciplina).filter((d) => d.matriculaDisciplinaId != null),

@@ -82,3 +82,33 @@ Deno.test('campos de contrato repetem em cada linha de disciplina', () => {
     assertEquals(row.inadimplente_emusys, false);
   }
 });
+
+Deno.test('data_primeira_fatura com ano zero da API vira null (regressao de producao)', () => {
+  const input = buildJornadaInputFromMatriculaApi(
+    matriculaFake({ data_primeira_fatura: '0000-12-18' }),
+    UNIDADE,
+  );
+  assertEquals(input?.dataPrimeiraFatura, null);
+});
+
+Deno.test('data_primeira_fatura valida e preservada', () => {
+  const input = buildJornadaInputFromMatriculaApi(
+    matriculaFake({ data_primeira_fatura: '2025-06-05' }),
+    UNIDADE,
+  );
+  assertEquals(input?.dataPrimeiraFatura, '2025-06-05');
+});
+
+Deno.test('data_primeira_fatura ausente ou vazia vira null', () => {
+  const inputNula = buildJornadaInputFromMatriculaApi(
+    matriculaFake({ data_primeira_fatura: null }),
+    UNIDADE,
+  );
+  assertEquals(inputNula?.dataPrimeiraFatura, null);
+
+  const inputVazia = buildJornadaInputFromMatriculaApi(
+    matriculaFake({ data_primeira_fatura: '' }),
+    UNIDADE,
+  );
+  assertEquals(inputVazia?.dataPrimeiraFatura, null);
+});
