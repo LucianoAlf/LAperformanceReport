@@ -139,12 +139,22 @@ O V3 é calculado e persistido no banco. Frontend, relatórios e agentes apenas 
 |---|---:|---:|---|
 | Retenção atribuível | 25% | 90% | período matrícula-disciplina-professor exposto; `movimentacoes_admin` + `motivos_saida` |
 | Permanência com o professor | 25% | 12 meses | vínculos encerrados de `vw_professor_periodos_efetivos_v3_sombra` |
-| Conversão Exp→Mat | 15% | 70% | experimental confirmada e matrícula canonicamente vinculada |
+| Conversão Exp→Mat | 15% | 70% | ciclo de 3 meses; experimental/evento no denominador e matrícula canônica em D+30 no numerador |
 | Média de alunos/turma | 15% | segmentada | ocupações únicas de pessoas por turma regular elegível |
 | Número de alunos | 10% | segmentada | pessoas canônicas únicas na carteira professor+unidade |
 | Presença dos alunos | 10% | 80% | roster + `vw_aluno_presenca_semantica_v1` |
 
-`nota = min(100, valor_real / meta_versionada * 100)`. Sliders alteram somente pesos; metas são campos separados. Uma configuração ativa é imutável: alterações criam rascunho, passam por simulação e são ativadas em ação separada. Snapshots fechados não são reescritos.
+Nos pilares percentuais, a nota é o percentual real. Nos pilares com meta de
+atingimento, a nota usa `min(100, valor_real / meta_versionada * 100)`.
+Sliders alteram somente pesos; metas são campos separados. Uma configuração
+ativa é imutável: alterações criam rascunho, passam por simulação e são
+ativadas em ação separada. Snapshots fechados não são reescritos.
+
+No ciclo Jun-Ago/2026, a Conversão Exp→Mat é exibida como
+`provisorio_ciclo`, mas fica fora do score. O denominador não exige pessoa
+canônica; identifica a experimental pelo evento ou lead. O numerador continua
+exigindo pessoa e matrícula canônicas em D+30. A ativação do peso depende da
+calibração conjunta das seis escalas no próximo ciclo.
 
 #### Metas segmentadas de carteira e turma
 
