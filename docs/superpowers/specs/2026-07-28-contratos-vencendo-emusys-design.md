@@ -1,217 +1,238 @@
-# Contratos vencendo (Renovação de Matrículas via API Emusys) — desenho aprovado
+# Contratos vencendo (Renovação de Matrículas) — desenho aprovado
+
+> **Nota:** este documento substitui integralmente a primeira versão deste spec (commits `3201ee0` e `595bff3`), que desenhava a feature em cima de chamada ao vivo à API do Emusys. A investigação no banco mostrou que quase todo o dado já está sincronizado localmente, e o desenho mudou para uma view SQL. O histórico da versão anterior fica no git.
 
 ## Objetivo
 
-O Emusys tem a tela **Escola → Renovação de Matrículas** (`Relatórios → Alunos com período de contratação terminando`), que lista as matrículas cujo contrato está acabando nos próximos N dias, com o número de aulas restantes de cada uma. O Arthur usa muito essa tela no dia a dia para saber quem abordar para renovação, e hoje precisa sair do report e entrar no Emusys para vê-la.
+O Emusys tem a tela **Escola → Renovação de Matrículas**, que lista as matrículas com contrato acabando nos próximos N dias e quantas aulas faltam para cada uma. O Arthur usa essa tela no dia a dia para saber quem abordar para renovação e hoje precisa sair do report para vê-la. O pedido é ter isso dentro do LA Report, num item ao lado de **Entrada** — "Contratos".
 
-O pedido é replicar essa lista dentro do LA Report, num item novo ao lado de **Entrada** — "Contratos" — para acompanhar contratos e aulas restantes sem trocar de sistema.
+## Descoberta que definiu o desenho
 
-Validado ao vivo em 28/07/2026: a lista da unidade Barra ("próximos 30 dias") foi reproduzida pela API com **16 de 16 registros idênticos** (mesmos alunos, mesmas datas de última aula e de matrícula) usando só `GET /matriculas`.
+O desenho inicial previa buscar tudo ao vivo na API do Emusys. Investigando o banco, ficou claro que **quase todo o dado já está sincronizado localmente**:
+
+Rodando o recorte "Barra, próximos 30 dias" direto em `vw_jornada_aluno_atual` (view já em produção, alimentada pelo cron `sync-matriculas-*` de 02h), o resultado foi **os mesmos 16 alunos, mesmas datas** que a chamada ao vivo à API e que o print da tela do Emusys. A view estava fresca no momento da checagem (sync mais recente no mesmo dia; 16 de 1224 linhas com mais de 48h).
+
+Logo: a feature é essencialmente **uma query SQL**, não uma integração nova. A única peça que de fato falta localmente é o vencimento da última fatura.
 
 ## Escopo
 
-Somente a aba **"Matrículas Vencendo"** da tela do Emusys, em modo leitura. As outras duas abas ficam de fora por limitação da API (ver "Fora de escopo").
+Só a aba **"Matrículas Vencendo"** da tela do Emusys, em modo leitura. As outras duas abas ficam fora por limitação da API (ver "Fora de escopo").
 
-Nada é persistido: sem tabela nova, sem migration, sem cron, sem escrita no Supabase. A tela consulta a API do Emusys na hora, através de uma edge function que serve de proxy.
+**Grão = matrícula, não pessoa** — regra já canônica no projeto. Um aluno com dois cursos aparece em duas linhas, com contratos independentes. Confirmado no dado real: Mariana Herd Giglio (Barra) tem Teclado terminando em 21/11/2026 e Canto em 15/08/2026; só a de Canto entra na janela de 30 dias.
 
-**Grão = matrícula, não pessoa.** Mesma regra já canônica no projeto (`alunos` = matrículas). Um aluno com dois cursos aparece em duas linhas, com contratos e datas independentes. Confirmado no dado real: Mariana Herd Giglio (`aluno_id=773`, Barra) tem Teclado (`matricula_id=475`, última aula 21/11/2026) e Canto (`matricula_id=641`, última aula 15/08/2026) — só a de Canto entra na janela de 30 dias.
+## Fonte de cada coluna
+
+| Coluna | Origem | Já existe? |
+|---|---|---|
+| Aluno | `vw_jornada_aluno_atual.aluno_nome` | ✅ |
+| Curso | `vw_jornada_aluno_atual.curso_nome` | ✅ |
+| Professor | `vw_jornada_aluno_atual.professor_nome` | ✅ |
+| Data da Matrícula | `alunos.data_matricula` | ✅ |
+| Última Aula | `vw_jornada_aluno_atual.data_ultima_aula` | ✅ |
+| Nr. de Aulas Restantes | `vw_jornada_aluno_atual.nr_aulas_futuras` | ✅ |
+| Valor | `alunos.valor_parcela` | ✅ |
+| Telefone / WhatsApp | `alunos.telefone` / `alunos.whatsapp` | ✅ |
+| **Venc. Última Fatura** | **derivada de campos do contrato (ver §2)** | ⚠️ 3 colunas novas |
+| **Inadimplente** | `alunos.inadimplente_emusys` (coluna nova, ver §3) | ⚠️ 1 coluna nova |
+
+### Por que `vw_jornada_aluno_atual` e não `alunos.data_fim_contrato`
+
+`alunos.data_fim_contrato` **não é confiável** para esse recorte. Medição em 28/07/2026, cruzando por `(unidade_id, emusys_matricula_id)` — 1171 matrículas ativas casadas:
+
+| Situação | Qtd |
+|---|---|
+| `data_fim_contrato` bate com o Emusys | 963 (82,2%) |
+| **Diverge** | **208 (17,8%)** |
+| — local atrasado (contrato já renovado no Emusys, não atualizado aqui) | 188 |
+| — local adiantado | 20 |
+
+E o efeito direto no recorte que interessa:
+
+- **14 matrículas** estão vencendo nos próximos 30 dias segundo o Emusys e **não apareceriam** filtrando por `data_fim_contrato`;
+- **14 matrículas** o campo local diz "vencido" quando o contrato segue ativo;
+- **zero falsos positivos** — quando o campo local aponta vencimento em 30 dias, ele está certo. O problema é só de omissão.
+
+A causa é conhecida: o `sync-matriculas-emusys` **nunca escreve `data_fim_contrato` sozinho** — ele chama `sugerirCampoRevisao('data_fim_contrato', …)`, ou seja, propõe para aprovação humana na Conciliação. Renovação que ninguém aprovou na fila fica com a data velha indefinidamente.
+
+Casos concretos verificados contra o print do Emusys: Caique Feijó de Lima Vieira (`alunos` diz 16/07/2026; Emusys e print dizem 04/08/2026) e Natan Pereira Calvo Demidoff (`alunos` diz 04/07/2026; Emusys e print dizem 08/08/2026 — e essa linha ainda está com `emusys_matricula_id` NULL, sem vínculo).
+
+Por isso a view nova lê a jornada, que é reconstruída do Emusys a cada sync.
+
+### Curso: divergência esperada com a tela do Emusys
+
+`vw_jornada_aluno_atual.curso_nome` traz a **disciplina atual**; `alunos.curso_id` traz o curso original, que congela quando o aluno troca de instrumento — comportamento já documentado no `CLAUDE.md`. Exemplo real: Carlos Vitor Pinheiro da Silva aparece como **Violão** na tela do Emusys e em `alunos`, e como **Guitarra** na jornada.
+
+Decisão: **exibir a disciplina atual** (jornada), porque é o que o aluno de fato estuda hoje e é a informação útil para quem vai ligar. Consequência a registrar: nesses casos a coluna Curso **não vai bater** com a tela do Emusys, e isso é esperado — não é bug.
 
 ## Arquitetura
 
-### 1. Edge function `contratos-vencendo`
+### 1. View `vw_contratos_vencendo`
 
-Proxy read-only. Não escreve em lugar nenhum — nem no Supabase, nem no Emusys (a API do Emusys não tem endpoint de escrita para isso de qualquer forma; ver "Fora de escopo").
+Uma view nova, sem materialização, juntando o que já existe:
 
-**Request:** `GET /contratos-vencendo?u=cg|barra|recreio&dias=30&incluir_faturas=true`
-
-- `u` (obrigatório): resolve o secret `EMUSYS_TOKEN_CG` / `EMUSYS_TOKEN_BARRA` / `EMUSYS_TOKEN_RECREIO`. Nome do parâmetro é `u`, igual a `sync-matriculas-emusys` e `sync-inadimplencia-emusys` — escolha deliberada por consistência, não por acaso.
-- `dias` (opcional, default `30`): tamanho da janela a partir de hoje (BRT). **Allowlist `30 | 60 | 90`** — qualquer outro valor é rejeitado com 400. Sem isso, um `dias=3650` faria a edge varrer a base inteira e buscar fatura de centenas de contratos.
-- `incluir_faturas` (opcional): quando `false`, pula a busca de faturas e devolve `venc_ultima_fatura: null` — resposta bem mais rápida. **Default `true` quando `dias === 30`, `false` quando `dias` for 60 ou 90** (ver "Custo e rate limit").
-
-**Fluxo:**
-
-1. Pagina `GET /matriculas?status=ativa&limite=50` com `cursor` até `paginacao.tem_mais === false`. Na Barra são 268 matrículas ativas = 6 páginas; as outras unidades têm ordem de grandeza parecida.
-2. Filtra em memória: mantém a matrícula quando `hoje <= contrato_atual.data_original_ultima_aula <= hoje + dias`, com `hoje` em BRT (UTC-3). **Ordena o resultado por `ultima_aula` crescente já aqui**, antes de buscar faturas — assim, se o teto de requisições for atingido, quem fica sem `venc_ultima_fatura` são os contratos que vencem mais tarde, não uma fatia arbitrária na ordem das páginas da API.
-   Não existe filtro nativo para isso na API — `data_inicial`/`data_final` de `/matriculas` filtram pela **data da matrícula**, não pela data de fim do contrato. O recorte é obrigatoriamente feito do nosso lado.
-3. Para cada matrícula filtrada (e só para essas), quando `incluir_faturas=true`, chama `GET /faturas?contrato_id=<contrato_atual.id>&limite=50` e pega o **maior** `data_vencimento` da lista, **paginando por cursor** enquanto `paginacao.tem_mais` (um contrato anual tem ~12 parcelas, bem abaixo do limite de 50 por página, mas contrato com parcelas avulsas/taxa de matrícula pode passar — sem paginar, o máximo sairia errado em silêncio).
-   O filtro `contrato_id` **não consta na referência pública** de `/faturas` (a doc lista `matricula_id`, `aluno_id`, `status` e as datas de vencimento), mas foi verificado ao vivo em 28/07/2026: `GET /faturas?contrato_id=834&limite=50` devolveu exatamente as 12 parcelas daquele contrato. Reconfirmar na implementação; se falhar, o fallback é `matricula_id` + filtrar `contrato_id` em memória.
-4. Devolve o JSON montado.
-
-**Response:**
-
-```jsonc
-{
-  "unidade": "barra",
-  "gerado_em": "2026-07-28T14:32:00-03:00",
-  "janela": { "inicio": "2026-07-28", "fim": "2026-08-27", "dias": 30 },
-  "total_ativas_varridas": 268,
-  "itens": [
-    {
-      "matricula_id": 238,
-      "aluno_id": 408,
-      "aluno_nome": "Natan Pereira Calvo Demidoff",
-      "curso": "Bateria T",
-      "data_matricula": "2023-05-22",
-      "ultima_aula": "2026-08-08",
-      "venc_ultima_fatura": "2026-05-05",
-      "aulas_restantes": 1,
-      "professor": "Peterson Biancamano",
-      "valor_mensalidade": 385,
-      "flag_nao_vai_renovar": false,
-      "inadimplente": false
-    }
-  ],
-  "avisos": [
-    { "tipo": "fatura_falhou", "matricula_id": 641, "detalhe": "HTTP 500 em /faturas" }
-  ],
-  "faturas_truncadas": false
-}
+```
+vw_jornada_aluno_atual  (base: aluno, curso, professor, última aula, aulas restantes)
+  └─ LEFT JOIN alunos  ON (unidade_id, emusys_matricula_id::text)
+       → data_matricula, valor_parcela, telefone, whatsapp
+       → nr_faturas, data_primeira_fatura, dia_vencimento_emusys  (§2)
+       → inadimplente_emusys                                      (§3)
+WHERE status_matricula = 'ativa'
 ```
 
-`avisos[]` é sempre uma lista de objetos `{ tipo, matricula_id?, detalhe }` — nunca string solta. `tipo` é um enum curto (`fatura_falhou`, `fatura_truncada`, `unidade_falhou`) para a tela poder agrupar; `detalhe` é texto livre para diagnóstico.
+Um único join. Com as colunas da §2/§3 vindo de `alunos`, o `inadimplencia_emusys_cache` **sai do desenho** — ver §3.
 
-**Mapeamento de cada campo para a API (todos verificados em chamada real, 28/07/2026):**
+⚠️ **A chave de join é `(unidade_id, emusys_matricula_id)`, nunca só `emusys_matricula_id`.** Duas armadilhas reais, ambas medidas:
 
-| Campo da tela | Origem |
-|---|---|
-| Aluno | `aluno.nome` |
-| Curso | `contrato_atual.disciplinas[].nome` (junta com `, ` quando houver mais de uma disciplina no mesmo contrato) |
-| Data da Matrícula | `data_matricula` |
-| Última Aula | `contrato_atual.data_original_ultima_aula` |
-| Venc. Última Fatura | `max(data_vencimento)` de `GET /faturas?contrato_id=X` |
-| Nr. de Aulas Restantes | `contrato_atual.nr_aulas_contratadas - contrato_atual.nr_aulas_passadas` |
-| Professor | `contrato_atual.disciplinas[].nome_professor`, mesma regra do curso: junta com `, ` e deduplica quando o contrato tem mais de uma disciplina |
-| Valor | `contrato_atual.valor_mensalidade` |
-| Não vai renovar | `contrato_atual.flag_nao_vai_renovar` |
-| Inadimplente | `contrato_atual.inadimplente` |
+1. **Tipo diverge:** `vw_jornada_aluno_atual.emusys_matricula_id` é `bigint`; em `alunos` é `text`. Precisa de cast explícito.
+2. **O ID do Emusys só é único dentro da unidade** — regra já canônica no projeto. Exemplos reais: o id `288` é Daniel Freire na Barra **e** Victor Alexandre no Recreio; o `475` é Mariana Herd na Barra **e** Guilherme Muniz no Recreio. Juntar só por `emusys_matricula_id` faz a view de 1224 linhas virar **1361** — mistura aluno de unidades diferentes silenciosamente, sem erro nenhum, só entregando dado errado.
 
-São **10 colunas** no total — as 6 que existem na tela do Emusys mais 4 que a API já entrega junto, sem chamada extra, e que ajudam na abordagem: professor, valor da mensalidade, marcação de "não vai renovar" e situação de inadimplência.
+Sem filtro de janela dentro da view: ela expõe `data_ultima_aula` e um `dias_ate_vencimento` calculado, e **quem filtra 30/60/90 dias é a query da tela**. Assim a mesma view serve todas as janelas e não precisa ser tocada se o time pedir uma janela nova.
 
-⚠️ **A coluna Valor é informativa, não canônica.** O `CLAUDE.md` do projeto já registra que a API às vezes embute o `desconto_fixo` dentro do `valor_mensalidade` (líquido negativo) e que o flag `bolsa` não é confiável — foi exatamente por isso que `valor_divergente` vai para fila humana na Conciliação Emusys, em vez de aplicar sozinho. Numa tela usada para abordar aluno sobre renovação, mostrar esse número cru pode exibir preço errado. Exibir com tooltip "valor como está na API do Emusys, pode estar bruto — confira na Conciliação", e nunca usar essa coluna como base de cálculo de nada.
+Segue o padrão de segurança das views do projeto (`security_invoker`, RLS herdada de `alunos`).
 
-Sobre aulas restantes: `disciplinas[].nr_aulas_futuras` devolve o mesmo número (conferido em 13 matrículas). Usar a subtração no nível do contrato porque é o total do contrato, e o `nr_aulas_futuras` é por disciplina — em contrato multi-disciplina somar as disciplinas daria o mesmo, mas a subtração é uma leitura só.
+**Grão:** a view herda o grão da jornada, que é matrícula/disciplina. Existem 15 pares `(unidade, matrícula)` com mais de uma linha (mesmo contrato, duas disciplinas) — nesses casos a mesma data de fatura se repete nas N linhas. É o comportamento pretendido (a fatura é do contrato, não da disciplina), e está registrado aqui para não ser confundido com duplicata na verificação.
 
-**Autenticação:** `verify_jwt: true`. Sem gate extra de e-mail — o dado é operacional interno, não tem a sensibilidade de custo de mídia que justificou o gate da `meta-ads-insights`. A restrição por unidade acontece no frontend (só oferece as unidades que o usuário pode ver). Fica registrado que um usuário autenticado consegue, chamando a edge direto, pedir uma unidade que não veria na tela — aceitável para o dado em questão; se virar problema, o gate de unidade entra na edge depois.
+**O join com `alunos` é LEFT, não INNER, e NÃO filtra `alunos.status`.** Sob `inner join`, matrícula sem vínculo local ou com status local divergente sumiria da tela — exatamente o defeito que esta tela existe para corrigir. Medido:
 
-### 2. Hook `useContratosVencendo`
-
-Segue a convenção do projeto: hook customizado com fetch direto, sem React Query.
-
-Cache em memória a nível de módulo (fora do componente), chaveado por `unidade + dias + incluir_faturas`, com **TTL de 5 minutos**. Sair da tela e voltar dentro do TTL serve do cache, sem nova chamada ao Emusys. F5 limpa o cache (é memória do módulo, não `localStorage` — proposital, para não servir dado velho depois de um reload).
-
-Expõe `refetch()` que ignora o cache, ligado a um botão "Atualizar" na tela.
-
-### 3. Página `/app/entrada/contratos`
-
-Tabela com as 10 colunas do mapeamento acima. As duas booleanas (`flag_nao_vai_renovar`, `inadimplente`) são exibidas como badge, não como texto. O `flag_nao_vai_renovar` é o mesmo marcador que a aba "Renovação em Lote" do Emusys usa — dá para **ler**, não para escrever.
-
-Controles: seletor de janela (30 / 60 / 90 dias), checkbox "buscar vencimento das faturas" (marcado por padrão em 30 dias, desmarcado acima disso, com aviso de demora — ver "Custo e rate limit"), filtro de unidade (respeitando `canViewConsolidated()` / permissões do `AuthContext`), botão "Atualizar", indicação de "atualizado há X min" a partir do `gerado_em`, e banner de amostra parcial quando `faturas_truncadas` vier `true`.
-
-Ordenação padrão por `ultima_aula` crescente (quem vence primeiro no topo), que é a ordem útil para a operação.
-
-**Modo consolidado** (usuário com `canViewConsolidated()`): a edge responde por unidade, então o hook chama as três em sequência e funde no cliente — concatena `itens` (com uma coluna de unidade), soma `total_ativas_varridas`, faz OR de `faturas_truncadas`, concatena `avisos`, e usa o **menor** `gerado_em` das três para o "atualizado há X min" (é o dado mais velho da tela; mostrar o mais novo daria falsa sensação de frescor).
-
-**Renderização progressiva:** cada unidade aparece na tabela assim que a sua resposta chega, sem esperar as três. Com ~44s por unidade na janela padrão (e até ~100s no pior caso, quando o orçamento de tempo de faturas é consumido), prender a tela inteira até a última terminar seria ruim demais. Se uma unidade falhar, as outras seguem renderizadas e a que falhou entra em `avisos` (`tipo: "unidade_falhou"`) com banner e opção de tentar de novo só aquela — melhor que derrubar a tela inteira.
-
-### 4. Card no `EntradaMenu`
-
-Card novo "Contratos" em [EntradaMenu.tsx](../../../src/components/App/Entrada/EntradaMenu.tsx), seção **Retenção** (ao lado de Renovação / Evasão / Aviso Prévio), ícone `CalendarClock`, descrição "Contratos vencendo e aulas restantes". Rota nova em [router.tsx](../../../src/router.tsx) com lazy loading, igual às outras rotas de `entrada/`.
-
-## Custo e rate limit
-
-O rate limit do Emusys é de **60 req/min por IP**. A edge processa **uma unidade por invocação** (mesma decisão de `sync-matriculas-emusys` e `sync-inadimplencia-emusys`); o frontend chama as três em sequência quando o usuário está em modo consolidado.
-
-**Reaproveitar o `GlobalRateLimiter` de [`_shared/faturasSync.ts`](../../../supabase/functions/_shared/faturasSync.ts)** — já é `export`, não precisa de alteração nenhuma no arquivo. Mas instanciar com **2000ms**, não com o `REQUEST_INTERVAL_MS` default de 1200ms: a 1200ms a edge sozinha consome ~50 req/min de um teto de 60, sem folga para os crons que rodam concorrentemente (ver "Riscos"). A 2000ms ela fica em ~30 req/min, deixando metade do orçamento livre.
-
-⚠️ O nome `GlobalRateLimiter` engana: o estado (`lastRequestAt`) é de instância, em memória do isolate. Ele serializa chamadas **dentro de uma invocação**, e não coordena nada entre invocações diferentes nem com os crons.
-
-O retry de 429 fica numa função **local da edge nova**, não extraída do compartilhado. O `fetchPage` de lá é privado, é caminho de produção do sync de faturas, tem a string `Emusys /faturas` fixa nas mensagens de erro, e faz `throw` em qualquer `!response.ok` — enquanto aqui é preciso o caso extra do 400 `"token invalido!"`. Exportar e alterar aquele `fetchPage` mudaria o comportamento de retry de uma sync em produção para atender uma tela nova; replicar ~15 linhas de retry sai mais barato que esse risco. O `coletarFaturasUnidade` também não serve: busca por competência (`data_vencimento_inicial/final` de um mês), e aqui a busca é por `contrato_id`.
-
-Contagem por unidade, com `incluir_faturas=true`:
-
-| Janela | Matrículas filtradas (Barra, 28/07) | Chamadas | Tempo a 2000ms |
+| Critério do join | Casam | Sumiriam em 30d | Sumiriam em 90d |
 |---|---|---|---|
-| 30 dias | 16 | ~22 | ~44s |
-| 60 dias | ~32 | ~38 | ~76s |
-| 90 dias | ~48 | ~54 | ~108s |
+| `inner join`, sem filtro de status | 1216/1224 | 1 | 3 |
+| `inner join` + `alunos.status='ativo'` | 1184/1224 | 3 | 6 |
+| **`left join`, sem filtro de status** | **1224/1224** | **0** | **0** |
 
-A 108s o pior caso já encosta no timeout de 150s do Supabase, e em modo consolidado a espera do usuário passaria de 5 minutos. Duas travas, por isso:
+Os casos perdidos são reais e relevantes: Natan Pereira Calvo Demidoff (`emusys_matricula_id` nulo em `alunos`) cairia fora do primeiro critério; Julia e Bento Cabral do Nascimento (Campo Grande, fim 20/08) cairiam fora do segundo, porque `alunos.status` diz `trancado` enquanto a jornada — fonte Emusys — diz `ativa`.
 
-**1. Default condicional:** `incluir_faturas` é `true` só na janela de 30 dias, `false` em 60/90 (ver contrato da edge acima). O usuário pode ligar manualmente numa janela grande, com aviso de demora na tela.
+**Quem manda no "está ativo" é `vw_jornada_aluno_atual.status_matricula`** (reconstruído do Emusys a cada sync), não `alunos.status`. O `WHERE status_matricula = 'ativa'` da view já resolve isso; repetir o filtro do lado de `alunos` só reintroduziria a defasagem local que a §"Por que não `data_fim_contrato`" documenta.
 
-**2. Orçamento de tempo:** a busca de faturas para quando o tempo decorrido da invocação passa de **90 segundos**. Teto por tempo em vez de por número de requisições porque é o timeout que se quer proteger, e ele não depende de quantas chamadas foram feitas — se a API do Emusys ficar lenta, um teto por contagem não segura nada. Ao estourar, os itens restantes vêm com `venc_ultima_fatura: null`, a resposta marca `faturas_truncadas: true` e a tela mostra banner de amostra parcial, mesmo padrão de `chatwoot-atendimento-insights`. Truncar em silêncio seria pior: a coluna vazia leria como "não tem fatura" em vez de "não consultei". Como o passo 2 ordena por `ultima_aula` antes de buscar faturas, quem fica de fora é sempre quem vence mais tarde.
+**A view aplica `distinct on (unidade_id, emusys_matricula_disciplina_id)`.** Existem 2 casos de duas linhas ativas em `alunos` com o mesmo `emusys_matricula_id` **e** o mesmo `curso_id` na mesma unidade — João Pedro Costa (Barra, matrícula 744) e Leonardo Imperial (Barra, matrícula 784). Pelo `CLAUDE.md` isso é duplicata de cadastro, não segundo curso, e sob `left join` viraria linha repetida na tela. A view não corrige a duplicata (isso é trabalho de Conciliação), só evita propagá-la para a interface.
 
-## Erros e casos de borda
+### 2. Venc. Última Fatura — derivada, sem sync novo
 
-- **Falha no meio da paginação de `/matriculas`**: aborta e retorna erro. Diferente das syncs, aqui não há estado parcial a preservar — devolver metade da lista como se fosse a lista inteira seria pior que falhar, porque o usuário decide contato com aluno em cima disso.
-- **Falha ao buscar faturas de um contrato**: não derruba a resposta. Aquele item vem com `venc_ultima_fatura: null` e a ocorrência entra em `avisos[]`; a tela mostra "—" na célula.
-- **Contrato sem nenhuma fatura**: `venc_ultima_fatura: null`, mesmo tratamento. Já visto na tela do Emusys (Rafael Mello dos Santos aparece com a coluna vazia no print de referência), então é estado normal, não erro.
-- **`data_vencimento` inválida** (`"0000-00-00"` em registros antigos): descartar ao calcular o máximo.
-- **Matrícula sem `contrato_atual`**: pular, não entra na lista.
-- **Rate limit**: o caminho documentado e o que o repo já trata é **`HTTP 429`**, com respeito ao header `Retry-After` e até 5 tentativas (`_shared/faturasSync.ts`). Esse é o tratamento principal.
-  Existe também um caso observado de `HTTP 400 {"status":"erro","msg":"token invalido!"}` em rajada de chamadas sem pausa — rate limit disfarçado de erro de token. **Não** transformar isso num retry genérico de todo 400: um token de fato inválido/expirado devolve o mesmo 400 e ficaria preso num loop de backoff em vez de falhar rápido. Retry só quando o 400 traz exatamente essa mensagem, com no máximo 2 tentativas; qualquer outro 400 falha na hora. A mensagem exibida na tela não deve dizer "token inválido" — confunde quem for diagnosticar.
-- **Encoding**: nomes vêm em Latin-1 em alguns campos (`"S�bado"`, `"B_S�_15"` apareceram na varredura). Normalizar na edge antes de devolver.
+A primeira versão deste desenho previa uma tabela nova, uma edge nova, um cron novo e ~218 chamadas diárias a `GET /faturas`. Nada disso é necessário: **o vencimento da última fatura é derivável de campos que o Emusys já entrega no `contrato_atual`**, que o `sync-matriculas-*` já busca hoje.
 
-## Verificação
+```
+venc_ultima_fatura = data_primeira_fatura + (nr_faturas - 1) meses,
+                     com o dia substituído por dia_vencimento
+                     (clampado ao último dia do mês quando necessário)
 
-O critério de aceite é comparar a tela contra o Emusys **no mesmo dia**: abrir Escola → Renovação de Matrículas no Emusys (modo "Usar Data da Última Aula", próximos 30 dias) e conferir contagem e linhas contra a nossa tela.
+nr_faturas = 0 ou NULL  →  resultado NULL (sem parcela a projetar)
+data_primeira_fatura NULL  →  resultado NULL
+dia_vencimento > último dia do mês  →  clampar ao último dia (ex.: dia 31 em fevereiro)
+```
 
-Comparar prints de dias diferentes não vale: `nr_aulas_passadas` sobe a cada aula realizada, então "aulas restantes" é um contador vivo. No print de referência do Arthur, Mariana Herd Giglio (Canto) tinha 6 aulas restantes; em 28/07/2026 a API devolvia 2 para a mesma matrícula. Não é divergência de campo — é o tempo passando.
+`nr_faturas` NULL e `0` são estados distintos e ambos alcançáveis (o parser do sync usa `numeroOuNull`), mas para esta fórmula os dois levam ao mesmo resultado: coluna vazia.
 
-Gates padrão do projeto antes de considerar pronto:
+**Validação contra o print real do Emusys (Barra, 28/07/2026): 11 de 11 corretos**, incluindo o caso do Rafael Mello dos Santos, que tem `nr_faturas = 0` e aparece com a coluna **vazia** na tela do Emusys — a fórmula devolve nulo, batendo também.
 
-- `node --check` no bundle da edge antes do deploy.
-- `get_edge_function` via MCP após o deploy, comparando o código deployado com o do repositório (git ≠ produção é premissa do projeto).
-- `npm run build` limpo.
+O detalhe que faz a fórmula funcionar é usar `dia_vencimento`, e não o dia de `data_primeira_fatura`: os dois divergem com frequência (Mariana Herd tem 1ª fatura em 02/08 mas vence dia 5; Caique e Gabriela têm 1ª fatura em 11/08 e vencem dia 5). Usando o dia da primeira fatura, 3 dos 11 saíam errados.
 
-## Fora de escopo
+**O que precisa mudar:** colunas novas em `alunos`, preenchidas pelo `sync-matriculas-*`, que **já lê `contrato_atual` e portanto não faz nenhuma chamada a mais à API**. Todas **novas** — nenhuma sobrescreve campo existente:
 
-**Aba "Matrículas Renovadas"** (projeção de valores): as colunas *Data Primeira Aula Pós Renovação*, *Faturas Antes*, *Faturas Pós Renovação* e *Variação* dependem da **Tabela de Valores** da escola (versões de preço, reajustes, planos de pagamento), que **não tem endpoint na API** — os lookups de configuração expostos são só `/disciplinas`, `/professores`, `/salas`, `/usuarios`, `/instrumentos` e `/crm/campos`, nenhum deles com preço. Além disso, o contrato "pós renovação" ainda não existe no sistema; é uma projeção que só a tela do Emusys calcula. Não é replicável com fidelidade.
+| Coluna nova | Origem no payload |
+|---|---|
+| `nr_faturas` (integer) | `contrato_atual.nr_faturas` |
+| `data_primeira_fatura` (date) | `contrato_atual.data_primeira_fatura` |
+| `dia_vencimento_emusys` (integer) | `contrato_atual.dia_vencimento` |
+| `inadimplente_emusys` (boolean) | `contrato_atual.inadimplente` (ver §3) |
 
-**Aba "Renovação em Lote"** (ação de marcar): mesma limitação de valores, mais a ausência de escrita — a API só expõe `GET /matriculas`, não há `PATCH`/`POST` de matrícula ou contrato. Dá para **ler** quem está marcado como "Não Será Renovada" (`flag_nao_vai_renovar`), mas marcar continua sendo manual no Emusys.
+⚠️ **Por que `dia_vencimento_emusys` e não o `dia_vencimento` que já existe.** O campo atual **não é dado do Emusys** — é default de formulário. Está preenchido em 1187 de 1187 ativos, o que parece cobertura perfeita, mas **91,2% estão no dia 5** porque `ModalNovoAluno` grava `5` fixo (com `|| 5` no save) e `FormMatricula` usa `10`; nenhuma edge escreve esse campo. Comparando com o `contrato_atual.dia_vencimento` da API na Barra: **16 de 256 divergem (6,3%), e em 100% desses o local é 5 e o Emusys tem outro valor** (20, 8, 29, 9, 15, 30, 1, 6, 16…).
 
-**Integração com o fluxo de renovação existente**: esta tela não escreve em `movimentacoes_admin` nem alimenta `TabelaRenovacoes` / `ModalRenovacao`. É um painel de leitura e nada mais. Conectar as duas coisas é decisão separada, depois de a equipe usar a tela e dizer se compensa.
+Isso invalida parcialmente a validação 11/11 acima: os 11 casos testados vencem todos no dia 5, então o teste não distinguia "valor real" de "default do formulário". A fórmula segue correta — errado era supor que o insumo já existia.
 
-**Persistência / histórico**: não guarda snapshot diário de quem estava vencendo. Se um dia a equipe quiser série histórica ("quantos venceram e não renovaram em agosto"), aí sim entra tabela e cron — mas isso é outra feature, e a fonte canônica de renovação continua sendo `movimentacoes_admin`.
+**Coluna nova em vez de sobrescrever**, por dois motivos: (1) `dia_vencimento` tem **vários escritores humanos** na UI (`TabelaAlunos` edição inline, `ModalFichaAluno`, `ComercialPage`, `ModalVincularAlunoTurma`), e um sync noturno passando por cima de edição manual — ou o contrário — é conflito sem precedência definida; (2) o princípio 1 do Contrato Canônico de Dados Pedagógicos é que dado bruto da origem não é reescrito por cima de dado local. Guardando lado a lado, a divergência fica **visível** e pode virar item de Conciliação depois, em vez de ser resolvida em silêncio a favor de um dos lados.
+
+Consequência: a fórmula usa `dia_vencimento_emusys`, com fallback para `dia_vencimento` quando o Emusys não trouxer valor. Corrigir o `dia_vencimento` legado dos 16 alunos da Barra fica **fora de escopo** — vira achado, não tarefa desta feature.
+
+**Por que não usar `emusys_faturas`.** Aquela tabela é peça de reconciliação financeira (Contas a Receber): tem trava no banco que rejeita qualquer fatura fora da competência do mês sincronizado (`FINANCEIRO_SYNC_PAYLOAD_INVALIDO`) e um detector de sumiço que **aborta a publicação** se o novo sync vier com mais de 20 (ou 5%) faturas a menos que o anterior. Serve para fechar o mês corrente, não para guardar parcela futura de contrato anual.
+
+**Limite conhecido da fórmula:** ela projeta o cronograma contratado, não o extrato real. Se uma parcela for renegociada, cancelada ou adiada individualmente no Emusys, a fórmula não enxerga — continua devolvendo o vencimento previsto pelo contrato. Para o uso desta tela (saber quando a cobrança do contrato termina, para conversar sobre renovação) isso é suficiente, e é exatamente o que a tela do Emusys mostra. Se algum dia for preciso o extrato real fatura a fatura, aí sim entra consulta a `/faturas` — outra feature.
+
+### 3. Inadimplente — fonte hoje quebrada
+
+`inadimplencia_emusys_cache` **não está sendo alimentada**. Medido em 28/07/2026:
+
+| Unidade | Linhas | Última escrita |
+|---|---|---|
+| Barra | 260 | 2026-07-15 |
+| Recreio | 422 | 2026-07-15 |
+| **Campo Grande** | **0** | **nunca** |
+
+São 13 dias sem escrita, e Campo Grande nunca teve uma linha sequer. Os 9 crons (`sync-inadimplencia-{cg,barra,recreio}-{manha,tarde,noite}`) disparam e constam como `succeeded` em `cron.job_run_details` — ou seja, a edge `sync-inadimplencia-emusys` **está falhando em silêncio**. Do recorte de 218 matrículas com contrato acabando em 90 dias, só 128 (59%) têm linha no cache.
+
+**Decisão: esta tela não usa o cache.** `contrato_atual.inadimplente` já é lido pelo `sync-matriculas-emusys` hoje (`index.ts:237`), no mesmo payload de onde vêm as três colunas da §2. Gravá-lo como `alunos.inadimplente_emusys` sai junto, elimina a dependência de um cache que não funciona e **resolve a lacuna de Campo Grande de imediato** — sem esperar o conserto.
+
+Quando o campo vier nulo (matrícula sem vínculo local), exibir "—", nunca "em dia": ausência de registro não é prova de adimplência.
+
+O `inadimplencia_emusys_cache` fica **fora do desenho** desta tela. Consertar a `sync-inadimplencia-emusys` continua necessário para quem já consome aquele cache, e vai para os achados abaixo — mas não bloqueia esta feature.
+
+O conserto da `sync-inadimplencia-emusys` vai para a lista de achados (ver "Achados em produção").
+
+### 4. Página `/app/entrada/contratos`
+
+Tabela com as colunas da tabela de fontes acima, ordenada por `data_ultima_aula` crescente (quem vence primeiro no topo). Controles: seletor de janela (30 / 60 / 90 dias), filtro de unidade respeitando `canViewConsolidated()` / permissões do `AuthContext`, e busca por nome.
+
+Como tudo vem do Postgres, o carregamento é instantâneo e não há limite de usuários simultâneos — não precisa de cache no cliente, de throttle, nem de tratamento de rate limit.
+
+Indicar a frescura do dado a partir de `vw_jornada_aluno_atual.ultima_sincronizacao_emusys`, para o usuário saber que está vendo a foto do último sync e não o instante atual. Como todas as colunas passam a vir do mesmo sync de matrículas, uma única data serve para a tela inteira.
+
+⚠️ **A coluna Valor é informativa.** O `CLAUDE.md` registra que a API às vezes embute o `desconto_fixo` no `valor_mensalidade` e que o flag `bolsa` não é confiável — é por isso que `valor_divergente` vai para fila humana na Conciliação. Exibir com tooltip e nunca usar como base de cálculo.
+
+### 5. Card no `EntradaMenu`
+
+Card "Contratos" em [EntradaMenu.tsx](../../../src/components/App/Entrada/EntradaMenu.tsx), seção **Retenção** (ao lado de Renovação / Evasão / Aviso Prévio), ícone `CalendarClock`. Rota nova em [router.tsx](../../../src/router.tsx) com lazy loading, igual às demais de `entrada/`.
+
+## Achados em produção (fora de escopo, mas precisam ser registrados)
+
+Dois problemas pré-existentes vieram à tona na investigação. Nenhum é causado por esta feature, nenhum é corrigido por ela, e os dois merecem decisão própria.
+
+### A. A régua de renovação de Sucesso do Aluno está perdendo alunos
+
+A view **`vw_renovacoes_proximas`** está **em uso em produção**: alimenta o `useMarcosJornada` ([useMarcosJornada.ts:61](../../../src/components/App/SucessoCliente/hooks/useMarcosJornada.ts)), que monta a régua de "prestes a renovar".
+
+Ela é construída sobre `alunos.data_fim_contrato` — o campo que diverge do Emusys em 17,8% dos casos. Consequência prática: a régua hoje **deixa de fora 14 alunos** com contrato de fato vencendo em 30 dias. Falso positivo não é problema (são zero); o defeito é puramente de omissão — o time não é avisado de quem precisa renovar.
+
+Duas saídas possíveis: (a) migrar a view para ler a jornada, corrigindo a régua de uma vez; ou (b) corrigir o preenchimento de `alunos.data_fim_contrato` na sync/webhook de renovação. A (a) é menor e mais direta, mas mexe em view com consumidor ativo — exige inventário de consumidores antes, conforme o princípio 9 do Contrato Canônico de Dados Pedagógicos.
+
+### B. `sync-inadimplencia-emusys` falha em silêncio
+
+Detalhado na §3: 13 dias sem escrita, Campo Grande com zero linhas desde sempre, e os 9 crons reportando `succeeded`. Uma edge que falha sem que nada acuse é o pior tipo de falha — vale investigar os logs dela e, de quebra, revisar se o alarme de saúde de crons (`useSaudeCrons`) cobre "cron rodou mas não gravou nada", que é o caso aqui.
 
 ## Riscos
 
-Esta feature não escreve em lugar nenhum, mas "read-only" não significa "sem impacto". Dois riscos reais:
+O risco caiu bastante em relação ao desenho anterior, e de novo com a derivação da §2:
 
-### 1. Contenção de rate limit com os syncs de produção
+- **Zero chamada nova ao Emusys.** A tela lê Postgres; as colunas novas vêm de um payload que o sync já busca. Não há rate limit, não há timeout, não há limite de usuários simultâneos, não há edge nova nem cron novo. Todo o problema de concorrência do desenho anterior desapareceu.
+- **A migration é 100% aditiva:** uma view nova e **quatro colunas novas** em `alunos` (`nr_faturas`, `data_primeira_fatura`, `dia_vencimento_emusys`, `inadimplente_emusys`). Nenhuma sobrescreve campo existente — em particular, o `dia_vencimento` legado e seus vários escritores na UI ficam intocados (§2). Reverter é dropar a view e as quatro colunas.
+- **O único ponto de atenção real é o `sync-matriculas-emusys`**, que precisa passar a gravar essas quatro colunas. É uma edge **em produção**, com cron ativo, e é o único lugar deste plano onde um erro atinge algo que já funciona. A alteração é aditiva (quatro campos a mais no upsert, todos já presentes no payload lido), mas exige o cuidado padrão do projeto: comparar o código deployado com o do repositório **antes** de editar, porque git ≠ produção.
+- **Dado é foto do último sync, não tempo real.** "Aulas restantes" cai a cada aula realizada, então pode estar até um dia atrás do Emusys. Aceitável para decidir quem abordar, desde que a tela mostre a data do sync.
+- **Uma coluna nasce com ressalva:** Valor pode vir bruto (§4), e precisa de tooltip e de nunca ser base de cálculo. Inadimplente deixou de ser ressalva ao sair do cache quebrado (§3).
 
-O limite do Emusys é de **60 req/min por IP**, e todas as edges do Supabase saem pelo mesmo egress. O projeto já tem cron batendo no Emusys **a cada 5 minutos**, o dia inteiro (verificado em `cron.job`, 28/07/2026):
+## Verificação
 
-```
-sync-metadados-aulas-15m-u0    0,15,30,45 * * * *
-sync-metadados-aulas-15m-u1    5,20,35,50 * * * *
-sync-metadados-aulas-15m-u2   10,25,40,55 * * * *
-```
+Critério de aceite: comparar a tela contra o Emusys **no mesmo dia** (Escola → Renovação de Matrículas, modo "Usar Data da Última Aula", próximos 30 dias), nas três unidades.
 
-Mais os de inadimplência às 11h/16h/21h UTC (**08h/13h/18h BRT — exatamente o horário de uso da tela**), os de matrícula às 02h UTC e os de presença/grade à noite.
+Divergências **esperadas**, que não invalidam:
 
-Ou seja: em qualquer momento do expediente há chance de a tela e um cron dividirem o mesmo teto de 60 req/min. Se somarem mais de 60, **um dos dois toma 429** — e o prejudicado pode ser o sync de produção, não a tela. Uma feature de leitura derrubando uma sync de dados seria o pior desfecho possível aqui.
+1. **Curso** pode diferir quando o aluno trocou de instrumento (jornada mostra a disciplina atual; o Emusys mostra a original) — ver §"Curso".
+2. **Aulas restantes** pode estar 1 menor/maior conforme aulas ocorridas entre o sync e a conferência.
+3. **Colunas de contrato vazias** ("—") em matrícula sem vínculo local — é o comportamento pretendido do LEFT join (§1), não falha.
 
-Mitigação: o `GlobalRateLimiter` da edge nova roda a **2000ms** (~30 req/min), deixando ~30 req/min de folga para os crons, e implementa retry de 429 com `Retry-After`. Não é coordenação de verdade — o limiter é por invocação, não distribuído — mas dimensiona o consumo para caber junto com um cron ativo.
+⚠️ **Testar obrigatoriamente pelo menos 3 alunos cujo `dia_vencimento` real ≠ 5.** A validação 11/11 da fórmula caiu inteira em alunos que vencem dia 5 e por isso não distinguia valor real de default de formulário — o erro só apareceu quando o campo foi comparado contra a API. Repetir a conferência só com alunos do dia 5 reproduziria exatamente o mesmo ponto cego. Na Barra há 16 alunos nessa condição (dias 20, 8, 29, 9, 15, 30, 1, 6, 16), listáveis comparando `alunos.dia_vencimento` com `alunos.dia_vencimento_emusys` depois do primeiro sync.
 
-Se ainda assim aparecerem 429 nos logs das syncs depois do lançamento, o próximo passo é uma trava de concorrência de verdade (lock em tabela ou janela de bloqueio durante os crons), não baixar mais o intervalo.
+Reproduzir a medição de divergência: agregar `vw_jornada_aluno_atual` (`status_matricula='ativa'`) por `(unidade_id, emusys_matricula_id)` com `max(data_ultima_aula)`, e juntar a `alunos` por **`(unidade_id, emusys_matricula_id::text)`** com `status='ativo'` — 1171 pares casados.
 
-### 2. O deploy da edge vai para produção
+⚠️ Duas armadilhas que alteram o resultado, ambas cometidas na primeira medição deste spec: juntar **sem `unidade_id`** infla para 1361 pares, dos quais 177 (13%) casam com aluno de outra unidade; e não agregar por matrícula infla de novo, porque contrato multi-disciplina rende mais de uma linha. Com o critério errado a divergência aparentava 28% e 30 perdidos; com o correto é 17,8% e 14 perdidos.
 
-Branch isola o frontend, mas **não isola edge function**: `deploy_edge_function` publica no projeto real (`ouqwbbermlzqqvtqwlul`). Como a função é nova, o deploy é aditivo e seguro — o risco é operacional: se o slug colidir com uma função existente, o deploy **sobrescreve** aquela função.
+Gates padrão do projeto: `node --check` no bundle da edge alterada antes do deploy, `get_edge_function` via MCP comparando o deployado com o repositório (antes e depois), e `npm run build` limpo.
 
-Mitigação: confirmar por `list_edge_functions` que o slug está livre antes do primeiro deploy. Verificado em 28/07/2026 — `contratos-vencendo` não existe entre as ~100 funções do projeto.
+## Fora de escopo
 
-### O que de fato não tem risco
+**Aba "Matrículas Renovadas"** (projeção de valores): as colunas *Data Primeira Aula Pós Renovação*, *Faturas Antes*, *Faturas Pós Renovação* e *Variação* dependem da **Tabela de Valores** da escola (versões de preço, reajustes, planos), que **não tem endpoint na API** — os lookups de configuração expostos (`/disciplinas`, `/professores`, `/salas`, `/usuarios`, `/instrumentos`, `/crm/campos`) não trazem preço. Além disso o contrato "pós renovação" ainda não existe no sistema: é uma projeção que só a tela do Emusys calcula.
 
-Sem migration, sem tabela, sem RLS, sem trigger, sem cron novo: não há schema a reverter nem dado a limpar. Na API do Emusys é só `GET` — nada é alterado do lado deles. O frontend fica invisível até o merge.
+**Aba "Renovação em Lote"** (ação de marcar): mesma limitação de valores, mais a ausência de escrita — a API só expõe `GET`. Dá para **ler** quem está marcado como "Não Será Renovada" (`contrato_atual.flag_nao_vai_renovar`, disponível via sync de matrículas), mas marcar continua manual no Emusys.
 
-## Impacto em produção
+**Correção da `vw_renovacoes_proximas`** — ver "Achado em produção". Tem consumidor ativo em produção e merece decisão própria.
 
-O frontend inteiro (página, hook, rota, card) fica numa branch e não afeta nada até o merge. A edge function `contratos-vencendo` é **nova e aditiva**: não tem cron apontando para ela e nada no sistema a chama até o frontend mergear — então pode ser deployada durante o desenvolvimento sem risco.
+**Integração com o fluxo de renovação existente**: esta tela não escreve em `movimentacoes_admin` nem alimenta `TabelaRenovacoes` / `ModalRenovacao`. É painel de leitura. Conectar as duas coisas é decisão separada, depois de a equipe usar a tela.
 
-**Nenhum arquivo compartilhado é alterado.** O `_shared/faturasSync.ts` é só **lido** (importa o `GlobalRateLimiter`, que já é `export`); o retry de 429 é local da edge nova, justamente para não mexer no caminho de produção do sync de faturas — ver "Custo e rate limit". Nenhuma edge existente muda de comportamento, nem no próximo deploy dela.
-
-Não há migration, então não há alteração de schema para reverter.
-
-Rollback: remover o card do menu esconde a funcionalidade; deletar a edge remove o resto. Nenhum dado a limpar.
+**Histórico**: não guarda snapshot diário de quem estava vencendo. A fonte canônica de renovação continua sendo `movimentacoes_admin`.
