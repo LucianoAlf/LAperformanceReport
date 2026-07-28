@@ -32,8 +32,8 @@ Só a aba **"Matrículas Vencendo"** da tela do Emusys, em modo leitura. As outr
 | Nr. de Aulas Restantes | `vw_jornada_aluno_atual.nr_aulas_futuras` | ✅ |
 | Valor | `alunos.valor_parcela` | ✅ |
 | Telefone / WhatsApp | `alunos.telefone` / `alunos.whatsapp` | ✅ |
-| **Venc. Última Fatura** | **derivada de campos do contrato (ver §2)** | ⚠️ 3 colunas novas |
-| **Inadimplente** | `alunos.inadimplente_emusys` (coluna nova, ver §3) | ⚠️ 1 coluna nova |
+| **Venc. Última Fatura** | **derivada de campos do contrato (ver §2)** | ⚠️ 3 colunas novas na jornada |
+| **Inadimplente** | `vw_jornada_aluno_atual.inadimplente_emusys` (coluna nova, ver §3) | ⚠️ 1 coluna nova na jornada |
 
 ### Por que `vw_jornada_aluno_atual` e não `alunos.data_fim_contrato`
 
@@ -74,12 +74,11 @@ Uma view nova, sem materialização, juntando o que já existe:
 vw_jornada_aluno_atual  (base: aluno, curso, professor, última aula, aulas restantes)
   └─ LEFT JOIN alunos  ON (unidade_id, emusys_matricula_id::text)
        → data_matricula, valor_parcela, telefone, whatsapp
-       → nr_faturas, data_primeira_fatura, dia_vencimento_emusys  (§2)
-       → inadimplente_emusys                                      (§3)
+       → (colunas de contrato §2/§3 vêm da propria jornada, nao daqui)
 WHERE status_matricula = 'ativa'
 ```
 
-Um único join. Com as colunas da §2/§3 vindo de `alunos`, o `inadimplencia_emusys_cache` **sai do desenho** — ver §3.
+Um único join. Como as colunas de contrato da §2/§3 passam a viver na própria jornada, o `inadimplencia_emusys_cache` **sai do desenho** — ver §3. De `alunos` só vêm os campos de cadastro que o Emusys não fornece nesse recorte.
 
 ⚠️ **A chave de join é `(unidade_id, emusys_matricula_id)`, nunca só `emusys_matricula_id`.** Duas armadilhas reais, ambas medidas:
 
@@ -126,7 +125,7 @@ dia_vencimento > último dia do mês  →  clampar ao último dia (ex.: dia 31 e
 
 O detalhe que faz a fórmula funcionar é usar `dia_vencimento`, e não o dia de `data_primeira_fatura`: os dois divergem com frequência (Mariana Herd tem 1ª fatura em 02/08 mas vence dia 5; Caique e Gabriela têm 1ª fatura em 11/08 e vencem dia 5). Usando o dia da primeira fatura, 3 dos 11 saíam errados.
 
-**O que precisa mudar:** colunas novas em `alunos`, preenchidas pelo `sync-matriculas-*`, que **já lê `contrato_atual` e portanto não faz nenhuma chamada a mais à API**. Todas **novas** — nenhuma sobrescreve campo existente:
+**O que precisa mudar:** quatro colunas novas em **`aluno_jornada_matricula_disciplina`** (a tabela por trás da `vw_jornada_aluno_atual`), preenchidas pelo `sync-matriculas-emusys`, que **já lê `contrato_atual` e portanto não faz nenhuma chamada a mais à API**:
 
 | Coluna nova | Origem no payload |
 |---|---|
@@ -134,6 +133,13 @@ O detalhe que faz a fórmula funcionar é usar `dia_vencimento`, e não o dia de
 | `data_primeira_fatura` (date) | `contrato_atual.data_primeira_fatura` |
 | `dia_vencimento_emusys` (integer) | `contrato_atual.dia_vencimento` |
 | `inadimplente_emusys` (boolean) | `contrato_atual.inadimplente` (ver §3) |
+
+⚠️ **Na jornada, não em `alunos` — e isso não é detalhe.** O `sync-matriculas-emusys` tem dois caminhos de escrita bem diferentes:
+
+- **`alunos`**: passa por `setCampo`/`sugerirCampoRevisao`, que **não escrevem nada** — enfileiram sugestão para aprovação humana na Conciliação (decisão registrada no `CLAUDE.md`: "nada é alterado sem aprovação humana"). É exatamente por isso que `data_fim_contrato` está velho em 17,8% dos casos: ninguém aprovou a fila. Colocar as quatro colunas aqui significaria **1224 aprovações manuais** antes de a tela funcionar.
+- **`aluno_jornada_matricula_disciplina`**: escrita **direta**, via `upsertJornadasEmLote` (`onConflict: unidade_id,emusys_matricula_disciplina_id`), sem fila. É o espelho bruto do Emusys, e já guarda campo de contrato (`qtd_contratos`) ao lado dos de disciplina.
+
+A jornada é o destino certo pelos dois motivos: escreve sozinha e é a camada de dado bruto da origem, como manda o princípio 1 do Contrato Canônico. As quatro colunas são de contrato, então repetem nas N linhas de uma matrícula multi-disciplina — mesmo padrão do `qtd_contratos` que já está lá.
 
 ⚠️ **Por que `dia_vencimento_emusys` e não o `dia_vencimento` que já existe.** O campo atual **não é dado do Emusys** — é default de formulário. Está preenchido em 1187 de 1187 ativos, o que parece cobertura perfeita, mas **91,2% estão no dia 5** porque `ModalNovoAluno` grava `5` fixo (com `|| 5` no save) e `FormMatricula` usa `10`; nenhuma edge escreve esse campo. Comparando com o `contrato_atual.dia_vencimento` da API na Barra: **16 de 256 divergem (6,3%), e em 100% desses o local é 5 e o Emusys tem outro valor** (20, 8, 29, 9, 15, 30, 1, 6, 16…).
 
@@ -159,7 +165,7 @@ Consequência: a fórmula usa `dia_vencimento_emusys`, com fallback para `dia_ve
 
 São 13 dias sem escrita, e Campo Grande nunca teve uma linha sequer. Os 9 crons (`sync-inadimplencia-{cg,barra,recreio}-{manha,tarde,noite}`) disparam e constam como `succeeded` em `cron.job_run_details` — ou seja, a edge `sync-inadimplencia-emusys` **está falhando em silêncio**. Do recorte de 218 matrículas com contrato acabando em 90 dias, só 128 (59%) têm linha no cache.
 
-**Decisão: esta tela não usa o cache.** `contrato_atual.inadimplente` já é lido pelo `sync-matriculas-emusys` hoje (`index.ts:237`), no mesmo payload de onde vêm as três colunas da §2. Gravá-lo como `alunos.inadimplente_emusys` sai junto, elimina a dependência de um cache que não funciona e **resolve a lacuna de Campo Grande de imediato** — sem esperar o conserto.
+**Decisão: esta tela não usa o cache.** `contrato_atual.inadimplente` já é lido pelo `sync-matriculas-emusys` hoje (`index.ts:237`), no mesmo payload de onde vêm as três colunas da §2. Gravá-lo como `inadimplente_emusys` na jornada sai junto, elimina a dependência de um cache que não funciona e **resolve a lacuna de Campo Grande de imediato** — sem esperar o conserto.
 
 Quando o campo vier nulo (matrícula sem vínculo local), exibir "—", nunca "em dia": ausência de registro não é prova de adimplência.
 
@@ -202,7 +208,7 @@ Detalhado na §3: 13 dias sem escrita, Campo Grande com zero linhas desde sempre
 O risco caiu bastante em relação ao desenho anterior, e de novo com a derivação da §2:
 
 - **Zero chamada nova ao Emusys.** A tela lê Postgres; as colunas novas vêm de um payload que o sync já busca. Não há rate limit, não há timeout, não há limite de usuários simultâneos, não há edge nova nem cron novo. Todo o problema de concorrência do desenho anterior desapareceu.
-- **A migration é 100% aditiva:** uma view nova e **quatro colunas novas** em `alunos` (`nr_faturas`, `data_primeira_fatura`, `dia_vencimento_emusys`, `inadimplente_emusys`). Nenhuma sobrescreve campo existente — em particular, o `dia_vencimento` legado e seus vários escritores na UI ficam intocados (§2). Reverter é dropar a view e as quatro colunas.
+- **A migration é 100% aditiva:** uma view nova e **quatro colunas novas** em `aluno_jornada_matricula_disciplina` (`nr_faturas`, `data_primeira_fatura`, `dia_vencimento_emusys`, `inadimplente_emusys`). Nenhuma sobrescreve campo existente — em particular, o `dia_vencimento` legado em `alunos` e seus vários escritores na UI ficam intocados (§2). Reverter é dropar a view e as quatro colunas.
 - **O único ponto de atenção real é o `sync-matriculas-emusys`**, que precisa passar a gravar essas quatro colunas. É uma edge **em produção**, com cron ativo, e é o único lugar deste plano onde um erro atinge algo que já funciona. A alteração é aditiva (quatro campos a mais no upsert, todos já presentes no payload lido), mas exige o cuidado padrão do projeto: comparar o código deployado com o do repositório **antes** de editar, porque git ≠ produção.
 - **Dado é foto do último sync, não tempo real.** "Aulas restantes" cai a cada aula realizada, então pode estar até um dia atrás do Emusys. Aceitável para decidir quem abordar, desde que a tela mostre a data do sync.
 - **Uma coluna nasce com ressalva:** Valor pode vir bruto (§4), e precisa de tooltip e de nunca ser base de cálculo. Inadimplente deixou de ser ressalva ao sair do cache quebrado (§3).
