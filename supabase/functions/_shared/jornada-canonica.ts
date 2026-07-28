@@ -27,6 +27,10 @@ export interface JornadaMatriculaInput {
   nomeAluno: string | null;
   dataNascimentoAluno: string | null;
   qtdContratos: number | null;
+  nrFaturas: number | null;
+  dataPrimeiraFatura: string | null;
+  diaVencimentoEmusys: number | null;
+  inadimplenteEmusys: boolean | null;
   disciplinas: JornadaDisciplinaInput[];
   raw: any;
 }
@@ -184,6 +188,12 @@ export function buildJornadaInputFromWebhook(
     nomeAluno: textOrNull(matricula.nome_aluno),
     dataNascimentoAluno: textOrNull(matricula.data_nascimento_aluno),
     qtdContratos: numberOrNull(matricula.qtd_contratos),
+    // Webhook de matricula nao traz os campos de contrato financeiro;
+    // o sync-matriculas-emusys preenche na varredura seguinte.
+    nrFaturas: null,
+    dataPrimeiraFatura: null,
+    diaVencimentoEmusys: null,
+    inadimplenteEmusys: null,
     disciplinas: disciplinasRaw.map(extractDisciplina).filter((d) => d.matriculaDisciplinaId != null),
     raw: body,
   };
@@ -207,6 +217,10 @@ export function buildJornadaInputFromMatriculaApi(
     nomeAluno: textOrNull(mat.aluno?.nome ?? mat.nome_aluno),
     dataNascimentoAluno: textOrNull(mat.aluno?.data_nascimento ?? mat.data_nascimento_aluno),
     qtdContratos: numberOrNull(mat.qtd_contratos),
+    nrFaturas: numberOrNull(contrato.nr_faturas),
+    dataPrimeiraFatura: textOrNull(contrato.data_primeira_fatura),
+    diaVencimentoEmusys: numberOrNull(contrato.dia_vencimento),
+    inadimplenteEmusys: typeof contrato.inadimplente === 'boolean' ? contrato.inadimplente : null,
     disciplinas: disciplinasRaw.map(extractDisciplina).filter((d) => d.matriculaDisciplinaId != null),
     raw: mat,
   };
@@ -331,6 +345,10 @@ export function buildJornadaRowsForUpsert(
       professor_nome_emusys: disciplina.nomeProfessor,
       status_matricula: statusCanonico(input.statusMatricula),
       qtd_contratos: input.qtdContratos,
+      nr_faturas: input.nrFaturas,
+      data_primeira_fatura: input.dataPrimeiraFatura,
+      dia_vencimento_emusys: input.diaVencimentoEmusys,
+      inadimplente_emusys: input.inadimplenteEmusys,
       nr_aulas_contratadas: disciplina.nrAulasContratadas,
       nr_aulas_passadas: disciplina.nrAulasPassadas,
       nr_aulas_futuras: disciplina.nrAulasFuturas,
@@ -393,6 +411,10 @@ export async function upsertJornadaMatriculaDisciplina(
       professor_nome_emusys: disciplina.nomeProfessor,
       status_matricula: statusCanonico(input.statusMatricula),
       qtd_contratos: input.qtdContratos,
+      nr_faturas: input.nrFaturas,
+      data_primeira_fatura: input.dataPrimeiraFatura,
+      dia_vencimento_emusys: input.diaVencimentoEmusys,
+      inadimplente_emusys: input.inadimplenteEmusys,
       nr_aulas_contratadas: disciplina.nrAulasContratadas,
       nr_aulas_passadas: disciplina.nrAulasPassadas,
       nr_aulas_futuras: disciplina.nrAulasFuturas,
