@@ -482,7 +482,7 @@ git commit -m "feat(contratos): view vw_contratos_vencendo"
   ```ts
   export type ContratoVencendo = {
     unidade_id: string; unidade_nome: string;
-    aluno_id: number | null; aluno_nome: string;
+    aluno_id: number | null; aluno_nome: string | null;
     emusys_matricula_id: number; emusys_matricula_disciplina_id: number;
     curso_nome: string | null; professor_nome: string | null;
     data_matricula: string | null; data_ultima_aula: string;
@@ -517,7 +517,9 @@ export type ContratoVencendo = {
   unidade_id: string;
   unidade_nome: string;
   aluno_id: number | null;
-  aluno_nome: string;
+  // Pode ser null: LEFT JOIN com alunos deixa sem nome a matricula
+  // sem vinculo local (medido: 2 linhas em producao).
+  aluno_nome: string | null;
   emusys_matricula_id: number;
   emusys_matricula_disciplina_id: number;
   curso_nome: string | null;
@@ -642,7 +644,7 @@ export function TabContratosVencendo({ unidadeId }: { unidadeId: string }) {
 
   const termo = busca.trim().toLowerCase();
   const visiveis = termo
-    ? contratos.filter((c) => c.aluno_nome.toLowerCase().includes(termo))
+    ? contratos.filter((c) => (c.aluno_nome ?? '').toLowerCase().includes(termo))
     : contratos;
 
   return (
@@ -711,7 +713,7 @@ export function TabContratosVencendo({ unidadeId }: { unidadeId: string }) {
                   className="border-t border-slate-700/40 text-gray-200"
                 >
                   <td className="px-4 py-3">
-                    {c.aluno_nome}
+                    {c.aluno_nome ?? <span className="text-gray-500">— (sem cadastro local)</span>}
                     {unidadeId === 'todos' && (
                       <span className="ml-2 text-xs text-gray-400">{c.unidade_nome}</span>
                     )}
