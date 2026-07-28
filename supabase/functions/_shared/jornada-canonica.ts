@@ -27,6 +27,10 @@ export interface JornadaMatriculaInput {
   nomeAluno: string | null;
   dataNascimentoAluno: string | null;
   qtdContratos: number | null;
+  nrFaturas: number | null;
+  dataPrimeiraFatura: string | null;
+  diaVencimentoEmusys: number | null;
+  inadimplenteEmusys: boolean | null;
   disciplinas: JornadaDisciplinaInput[];
   raw: any;
 }
@@ -120,11 +124,56 @@ function statusCanonico(status: string | null): string {
   return 'desconhecido';
 }
 
+// Contratos reais na base começam em ~2018; qualquer ano anterior a isto é
+// lixo de payload da API do Emusys (ex.: "0000-12-18" observado em produção).
+// new Date("0000-12-18") não vira NaN em JS, por isso o ano precisa ser
+// validado à parte da checagem de NaN.
+const ANO_MINIMO_PLAUSIVEL = 2000;
+
+function anoPlausivel(date: Date): boolean {
+  return date.getUTCFullYear() >= ANO_MINIMO_PLAUSIVEL;
+}
+
 function parseDateTime(value: string | null): string | null {
   if (!value) return null;
   const iso = value.includes('T') ? value : value.replace(' ', 'T');
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  if (Number.isNaN(date.getTime()) || !anoPlausivel(date)) return null;
+  return date.toISOString();
+}
+
+// Irmã de parseDateTime para colunas `date` (sem hora), como
+// data_primeira_fatura. Reaproveita a mesma checagem de ano plausível.
+function parseDateOnly(value: string | null): string | null {
+  if (!value) return null;
+  const iso = value.includes('T') ? value : `${value}T00:00:00`;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime()) || !anoPlausivel(date)) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+// As 4 colunas de contrato financeiro (nr_faturas, data_primeira_fatura,
+// dia_vencimento_emusys, inadimplente_emusys) so vem preenchidas na varredura
+// da API (sync-matriculas-emusys); o payload do webhook em tempo real nao as
+// traz. Se essas chaves entrarem no objeto da linha com valor null, o
+// ON CONFLICT DO UPDATE do PostgREST as sobrescreve, apagando o que o sync
+// noturno gravou. Omitir as chaves quando as 4 vierem null preserva o valor
+// existente na linha (upsert so atualiza coluna presente no payload).
+function buildContratoFields(input: JornadaMatriculaInput): Record<string, unknown> {
+  if (
+    input.nrFaturas == null &&
+    input.dataPrimeiraFatura == null &&
+    input.diaVencimentoEmusys == null &&
+    input.inadimplenteEmusys == null
+  ) {
+    return {};
+  }
+  return {
+    nr_faturas: input.nrFaturas,
+    data_primeira_fatura: input.dataPrimeiraFatura,
+    dia_vencimento_emusys: input.diaVencimentoEmusys,
+    inadimplente_emusys: input.inadimplenteEmusys,
+  };
 }
 
 function calcularProximaAula(passadas: number | null, futuras: number | null): number | null {
@@ -184,6 +233,12 @@ export function buildJornadaInputFromWebhook(
     nomeAluno: textOrNull(matricula.nome_aluno),
     dataNascimentoAluno: textOrNull(matricula.data_nascimento_aluno),
     qtdContratos: numberOrNull(matricula.qtd_contratos),
+    // Webhook de matricula nao traz os campos de contrato financeiro;
+    // o sync-matriculas-emusys preenche na varredura seguinte.
+    nrFaturas: null,
+    dataPrimeiraFatura: null,
+    diaVencimentoEmusys: null,
+    inadimplenteEmusys: null,
     disciplinas: disciplinasRaw.map(extractDisciplina).filter((d) => d.matriculaDisciplinaId != null),
     raw: body,
   };
@@ -207,6 +262,10 @@ export function buildJornadaInputFromMatriculaApi(
     nomeAluno: textOrNull(mat.aluno?.nome ?? mat.nome_aluno),
     dataNascimentoAluno: textOrNull(mat.aluno?.data_nascimento ?? mat.data_nascimento_aluno),
     qtdContratos: numberOrNull(mat.qtd_contratos),
+    nrFaturas: numberOrNull(contrato.nr_faturas),
+    dataPrimeiraFatura: parseDateOnly(contrato.data_primeira_fatura),
+    diaVencimentoEmusys: numberOrNull(contrato.dia_vencimento),
+    inadimplenteEmusys: typeof contrato.inadimplente === 'boolean' ? contrato.inadimplente : null,
     disciplinas: disciplinasRaw.map(extractDisciplina).filter((d) => d.matriculaDisciplinaId != null),
     raw: mat,
   };
@@ -331,6 +390,10 @@ export function buildJornadaRowsForUpsert(
       professor_nome_emusys: disciplina.nomeProfessor,
       status_matricula: statusCanonico(input.statusMatricula),
       qtd_contratos: input.qtdContratos,
+      nr_faturas: input.nrFaturas,
+      data_primeira_fatura: input.dataPrimeiraFatura,
+      dia_vencimento_emusys: input.diaVencimentoEmusys,
+      inadimplente_emusys: input.inadimplenteEmusys,
       nr_aulas_contratadas: disciplina.nrAulasContratadas,
       nr_aulas_passadas: disciplina.nrAulasPassadas,
       nr_aulas_futuras: disciplina.nrAulasFuturas,
@@ -393,6 +456,7 @@ export async function upsertJornadaMatriculaDisciplina(
       professor_nome_emusys: disciplina.nomeProfessor,
       status_matricula: statusCanonico(input.statusMatricula),
       qtd_contratos: input.qtdContratos,
+      ...buildContratoFields(input),
       nr_aulas_contratadas: disciplina.nrAulasContratadas,
       nr_aulas_passadas: disciplina.nrAulasPassadas,
       nr_aulas_futuras: disciplina.nrAulasFuturas,

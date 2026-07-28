@@ -8,7 +8,7 @@ import { useToast } from '@/hooks/useToast';
 import { 
   Users, DollarSign, BookOpen, GraduationCap, UserPlus,
   FileText, Calendar, Plus, Pause, RefreshCw, XCircle, AlertTriangle, LogOut,
-  Zap, BarChart3, CheckCircle, DoorOpen, PauseCircle, Search, Clock, ArrowRightLeft
+  Zap, BarChart3, CheckCircle, DoorOpen, PauseCircle, Search, Clock, ArrowRightLeft, CalendarClock
 } from 'lucide-react';
 
 import { supabase } from '@/lib/supabase';
@@ -40,6 +40,7 @@ import { AlertasRetencao } from './AlertasRetencao';
 import { PlanoAcaoRetencao } from './PlanoAcaoRetencao';
 import { TabProgramaFideliza } from './TabProgramaFideliza';
 import { TabLojinha } from '../Lojinha';
+import { TabContratosVencendo } from './TabContratosVencendo';
 import { PainelFarmer } from './PainelFarmer';
 import { Trophy, ShoppingBag, ClipboardList, MessageSquare, Wallet } from 'lucide-react';
 import { CaixaEntradaTab } from './CaixaEntrada';
@@ -250,7 +251,7 @@ export function AdministrativoPage() {
   // Estado
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('renovacoes');
-  const [mainTab, setMainTab] = useState<'lancamentos' | 'fideliza' | 'lojinha' | 'farmer' | 'caixa_financeiro' | 'caixa_entrada'>('lancamentos');
+  const [mainTab, setMainTab] = useState<'lancamentos' | 'contratos' | 'fideliza' | 'lojinha' | 'farmer' | 'caixa_financeiro' | 'caixa_entrada'>('lancamentos');
 
   // Sincronizar badge do header com o filtro local
   useEffect(() => {
@@ -1310,6 +1311,7 @@ export function AdministrativoPage() {
       <PageTabs
         tabs={[
           { id: 'lancamentos' as const, label: 'Lançamentos', shortLabel: 'Lanç.', icon: CheckCircle, activeGradient: 'from-purple-500 to-violet-500', activeShadow: 'shadow-purple-500/20' },
+          { id: 'contratos' as const, label: 'Contratos', shortLabel: 'Contratos', icon: CalendarClock, activeGradient: 'from-amber-500 to-orange-500', activeShadow: 'shadow-amber-500/20' },
           { id: 'fideliza' as const, label: 'Programa Fideliza+ LA', shortLabel: 'Fideliza+', icon: Trophy, activeGradient: 'from-yellow-500 to-orange-500', activeShadow: 'shadow-yellow-500/20' },
           { id: 'lojinha' as const, label: 'Lojinha', shortLabel: 'Lojinha', icon: ShoppingBag, activeGradient: 'from-sky-500 to-cyan-500', activeShadow: 'shadow-sky-500/20' },
           { id: 'farmer' as const, label: 'Painel Farmer', shortLabel: 'Farmer', icon: ClipboardList, activeGradient: 'from-violet-500 to-purple-500', activeShadow: 'shadow-violet-500/20' },
@@ -1321,7 +1323,9 @@ export function AdministrativoPage() {
       />
 
       {/* Conteúdo baseado na tab principal */}
-      {mainTab === 'caixa_financeiro' ? (
+      {mainTab === 'contratos' ? (
+        <TabContratosVencendo unidadeId={unidade} />
+      ) : mainTab === 'caixa_financeiro' ? (
         <CaixaFinanceiroTab
           unidadeId={unidade}
           unidadeNome={unidadeCaixaInfo.nome}
