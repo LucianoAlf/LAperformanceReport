@@ -25,6 +25,11 @@ function professorEmusysId(evento) {
   return asNumber(evento.emusys_professor_id);
 }
 
+function unidadeId(evento) {
+  const id = String(evento?.unidade_id ?? '').trim();
+  return id || null;
+}
+
 export function coletarIdsEmusysProfessores(aulas = [], contexto = {}) {
   const ids = new Set();
   const adicionar = (value) => {
@@ -704,6 +709,7 @@ function montarPeriodo({
   const professorResolvido = eventos.find((item) => item.professor_id !== null && item.professor_id !== undefined);
 
   return {
+    unidade_id: unidadeId(primeiroEvento),
     pessoa_chave: pessoaChave(primeiroEvento),
     aluno_id: asNumber(primeiroEvento.aluno_id),
     emusys_aluno_id: asNumber(primeiroEvento.emusys_aluno_id),
@@ -984,6 +990,76 @@ function fecharPeriodosHistoricosSemApoioAtual(periodos, contexto, diagnosticos)
       : 'jornada_atual_em_outro_vinculo';
     encerrar(periodo, criterio);
   }
+  return periodos;
+}
+
+function chaveJornadaAtualExata(item) {
+  const unidade = unidadeId(item);
+  const matriculaDisciplina = matriculaDisciplinaId(item);
+  return unidade && matriculaDisciplina !== null
+    ? `${unidade}|md:${matriculaDisciplina}`
+    : null;
+}
+
+export function promoverPeriodosAtivosComJornadaAtualExata(
+  periodos,
+  contexto,
+  diagnosticos = [],
+) {
+  const jornadasAtivasPorChave = new Map();
+  for (const jornada of jornadasDoContexto(contexto)) {
+    if (String(jornada.status_matricula ?? '').toLowerCase() !== 'ativa') continue;
+    const chave = chaveJornadaAtualExata(jornada);
+    if (!chave) continue;
+    const atuais = jornadasAtivasPorChave.get(chave) ?? [];
+    atuais.push(jornada);
+    jornadasAtivasPorChave.set(chave, atuais);
+  }
+
+  for (const periodo of Array.isArray(periodos) ? periodos : []) {
+    const conflitos = Array.isArray(periodo.conflitos) ? periodo.conflitos : [];
+    const chave = chaveJornadaAtualExata(periodo);
+    const professorPeriodo = asNumber(periodo.professor_id);
+    const estruturaCompleta =
+      periodo.status_periodo === 'ativo' &&
+      periodo.confianca === 'media' &&
+      chave !== null &&
+      professorPeriodo !== null &&
+      asNumber(periodo.emusys_disciplina_id) !== null &&
+      periodo.inicio_incompleto !== true &&
+      conflitos.length === 0;
+    if (!estruturaCompleta) continue;
+
+    const jornadasAtivas = jornadasAtivasPorChave.get(chave) ?? [];
+    if (jornadasAtivas.length !== 1) continue;
+    const jornada = jornadasAtivas[0];
+    if (
+      asNumber(jornada.professor_id) !== professorPeriodo ||
+      asNumber(jornada.emusys_disciplina_id) === null
+    ) continue;
+
+    periodo.confianca = 'alta';
+    periodo.publicavel_sugerido = true;
+    periodo.evidencias = {
+      ...periodo.evidencias,
+      promocao_confianca: {
+        regra: 'jornada_atual_exata',
+        confianca_anterior: 'media',
+        confianca_atual: 'alta',
+      },
+    };
+    pushDiagnostico(
+      diagnosticos,
+      'periodo_ativo_promovido_por_jornada_atual_exata',
+      periodo,
+      {
+        regra: 'jornada_atual_exata',
+        confianca_anterior: 'media',
+        confianca_atual: 'alta',
+      },
+    );
+  }
+
   return periodos;
 }
 
@@ -1293,6 +1369,7 @@ export function reconstruirPeriodos(eventosOriginais, contexto = {}) {
   }
 
   fecharPeriodosHistoricosSemApoioAtual(periodos, contexto, diagnosticos);
+  promoverPeriodosAtivosComJornadaAtualExata(periodos, contexto, diagnosticos);
   promoverPeriodosComEvidenciaTerminalEstruturada(periodos, diagnosticos);
   promoverPeriodosComFimHistoricoContextualizado(periodos, contexto, diagnosticos);
 

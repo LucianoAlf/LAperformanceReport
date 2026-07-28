@@ -20,6 +20,8 @@ const partialPresenceFallbackMigration =
   'supabase/migrations/20260719150000_health_score_v3_presenca_parcial_canonica.sql';
 const presencePublicationPolicyMigration =
   'supabase/migrations/20260719153000_presenca_publicavel_respeita_politica_unidade.sql';
+const percentageNormalizationMigration =
+  'supabase/migrations/20260727122000_health_score_v3_percentuais_valor_real.sql';
 const periodsHelper = 'src/lib/healthScoreProfessorV3Periodos.ts';
 const performanceHook = 'src/hooks/useHealthScoreProfessorV3Performance.ts';
 const modalHook = 'src/hooks/useHealthScoreProfessorV3.ts';
@@ -231,6 +233,62 @@ test('read model calcula parcial observado sem alterar o gate oficial', () => {
   assert.match(sql, /m\.meta_aplicada\s*>\s*0/i);
   assert.match(sql, /ranking_habilitado/i);
   assert.doesNotMatch(sql, /update\s+public\.health_score_professor_v3_snapshots/i);
+});
+
+test('Task 5 nao corta o cutover nem fabrica nota ou estado no read model existente', () => {
+  assert.equal(
+    fs.existsSync(percentageNormalizationMigration),
+    true,
+    'migration dos percentuais reais ainda nao existe',
+  );
+  const normalization = read(percentageNormalizationMigration);
+  const readModelSql = read(partialObservedReadModelMigration);
+  const viewStart = readModelSql.search(
+    /create\s+or\s+replace\s+view\s+public\.vw_health_score_professor_v3_parcial_observado/i,
+  );
+  const nextFunction = readModelSql.slice(viewStart + 1).search(
+    /\ncreate\s+or\s+replace\s+function\s+public\./i,
+  );
+
+  assert.ok(viewStart >= 0 && nextFunction >= 0, 'view parcial deve existir');
+  const partialView = readModelSql.slice(
+    viewStart,
+    viewStart + 1 + nextFunction,
+  );
+
+  assert.doesNotMatch(
+    normalization,
+    /\bvw_health_score_professor_v3_parcial_observado\b/i,
+  );
+  assert.doesNotMatch(
+    normalization,
+    /create\s+or\s+replace\s+function\s+public\.simular_health_score_professor_v3_config\s*\(/i,
+  );
+  assert.doesNotMatch(
+    normalization,
+    /create\s+or\s+replace\s+function\s+public\.get_health_score_professor_v3_(?:performance|snapshot_modal)\s*\(/i,
+  );
+  assert.match(
+    partialView,
+    /when\s+s\.estado_publicacao\s*=\s*'oficial'\s+then\s+m\.nota/i,
+  );
+  assert.match(
+    partialView,
+    /when\s+m\.valor_bruto\s+is\s+not\s+null[\s\S]*m\.meta_aplicada\s*>\s*0[\s\S]*m\.valor_bruto\s*\/\s*m\.meta_aplicada\s*\*\s*100[\s\S]*else\s+null::numeric[\s\S]*end\s+as\s+nota_parcial_observada/i,
+  );
+  assert.match(partialView, /\bm\.estado_base\b/i);
+  assert.doesNotMatch(
+    partialView,
+    /coalesce\s*\(\s*(?:m\.)?(?:nota|nota_oficial|nota_parcial_observada|valor_bruto|meta_aplicada)\s*,\s*0(?:\.0+)?\s*\)/i,
+  );
+  assert.doesNotMatch(
+    partialView,
+    /coalesce\s*\(\s*m\.estado_base\s*,\s*'(?:ok|sem_base)'\s*\)/i,
+  );
+  assert.doesNotMatch(
+    partialView,
+    /else\s+0(?:::\s*numeric)?\s+end\s+as\s+nota_parcial_observada/i,
+  );
 });
 
 test('presenca parcial reutiliza a camada semantica quando o roster historico nao existe', () => {

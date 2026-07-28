@@ -13,6 +13,16 @@ const baselineMetricsPath =
   'supabase/migrations/20260719123500_health_score_v3_metricas_periodo_otimizada.sql';
 const baselineClosePath =
   'supabase/migrations/20260719122000_health_score_v3_readmodels_cutover.sql';
+const governedRetentionMigrationPath =
+  'supabase/migrations/20260727120000_health_score_v3_retencao_universo_governado.sql';
+const percentageNormalizationMigrationPath =
+  'supabase/migrations/20260727122000_health_score_v3_percentuais_valor_real.sql';
+const segmentedConfigMigrationPath =
+  'supabase/migrations/20260719204000_health_score_v3_config_segmentada_rpc.sql';
+const catalogGuardMigrationPath =
+  'supabase/migrations/20260720122000_health_score_v3_catalogo_segmentos_config.sql';
+const simulationTimeoutMigrationPath =
+  'supabase/migrations/20260721153000_health_score_v3_simulacao_timeout.sql';
 
 function migration() {
   assert.equal(existsSync(migrationPath), true, `${migrationPath} deve existir`);
@@ -35,6 +45,15 @@ function canonicalTotalMigration() {
     `${canonicalTotalMigrationPath} deve existir`,
   );
   return readFileSync(canonicalTotalMigrationPath, 'utf8');
+}
+
+function percentageNormalizationMigration() {
+  assert.equal(
+    existsSync(percentageNormalizationMigrationPath),
+    true,
+    `${percentageNormalizationMigrationPath} ainda nao foi implementada`,
+  );
+  return readFileSync(percentageNormalizationMigrationPath, 'utf8');
 }
 
 test('Gate 10 preserva a carteira canonica completa sem pontuar projetos', () => {
@@ -79,6 +98,560 @@ function between(sql, startMarker, endMarker) {
   assert.notEqual(end, -1, `marcador ausente: ${endMarker}`);
   return sql.slice(start, end);
 }
+
+function sqlWithoutComments(sql) {
+  return sql
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/--[^\r\n]*/g, '');
+}
+
+function sqlKeywordTokens(sql) {
+  const keywords = new Set(['case', 'when', 'then', 'else', 'end']);
+  const tokens = [];
+
+  for (let index = 0; index < sql.length;) {
+    const char = sql[index];
+    if (char === "'" || char === '"') {
+      const quote = char;
+      index += 1;
+      while (index < sql.length) {
+        if (sql[index] === quote && sql[index + 1] === quote) {
+          index += 2;
+        } else if (sql[index] === quote) {
+          index += 1;
+          break;
+        } else {
+          index += 1;
+        }
+      }
+      continue;
+    }
+    if (/[a-z_]/i.test(char)) {
+      const start = index;
+      index += 1;
+      while (/[a-z0-9_]/i.test(sql[index] || '')) {
+        index += 1;
+      }
+      const word = sql.slice(start, index).toLowerCase();
+      if (keywords.has(word)) {
+        tokens.push({ word, start, end: index });
+      }
+      continue;
+    }
+    index += 1;
+  }
+
+  return tokens;
+}
+
+function aliasedCase(sql, alias) {
+  const source = sqlWithoutComments(sql);
+  const aliases = [
+    ...source.matchAll(new RegExp(`\\bend\\s+as\\s+${alias}\\b`, 'gi')),
+  ];
+  assert.equal(aliases.length, 1, `${alias} deve nomear um unico CASE`);
+  const aliasMatch = aliases[0];
+  const tokens = sqlKeywordTokens(
+    source.slice(0, aliasMatch.index + 'end'.length),
+  );
+  const stack = [];
+
+  for (const token of tokens) {
+    if (token.word === 'case') {
+      stack.push(token.start);
+    } else if (token.word === 'end') {
+      const caseStart = stack.pop();
+      if (token.start === aliasMatch.index) {
+        assert.notEqual(caseStart, undefined, `CASE de ${alias} deve abrir`);
+        return source.slice(caseStart, token.end);
+      }
+    }
+  }
+
+  assert.fail(`CASE de ${alias} deve existir`);
+}
+
+function caseBranches(caseSql) {
+  const tokens = sqlKeywordTokens(caseSql);
+  const branches = [];
+  let depth = 0;
+  let current = null;
+
+  for (const token of tokens) {
+    if (token.word === 'case') {
+      depth += 1;
+      continue;
+    }
+    if (token.word === 'end') {
+      if (depth === 1 && current?.expressionStart !== undefined) {
+        branches.push({
+          condition: caseSql
+            .slice(current.conditionStart, current.conditionEnd)
+            .trim(),
+          expression: caseSql
+            .slice(current.expressionStart, token.start)
+            .trim(),
+        });
+        current = null;
+      }
+      depth -= 1;
+      continue;
+    }
+    if (depth !== 1) {
+      continue;
+    }
+    if (token.word === 'when') {
+      if (current?.expressionStart !== undefined) {
+        branches.push({
+          condition: caseSql
+            .slice(current.conditionStart, current.conditionEnd)
+            .trim(),
+          expression: caseSql
+            .slice(current.expressionStart, token.start)
+            .trim(),
+        });
+      }
+      current = { conditionStart: token.end };
+    } else if (token.word === 'then' && current) {
+      current.conditionEnd = token.start;
+      current.expressionStart = token.end;
+    } else if (token.word === 'else' && current?.expressionStart !== undefined) {
+      branches.push({
+        condition: caseSql
+          .slice(current.conditionStart, current.conditionEnd)
+          .trim(),
+        expression: caseSql
+          .slice(current.expressionStart, token.start)
+          .trim(),
+      });
+      current = null;
+    }
+  }
+
+  return branches;
+}
+
+function metricFormulaBranch(formulaCase, metric) {
+  const branch = caseBranches(formulaCase).find(({ condition }) => (
+    new RegExp(`'${metric}'`, 'i').test(condition)
+  ));
+  assert.ok(branch, `${metric} deve ter ramo explicito na formula da nota`);
+  return branch;
+}
+
+function normalizedFormula(expression) {
+  return expression
+    .toLowerCase()
+    .replace(/::\s*(?:numeric|decimal|double\s+precision|real)\b/g, '')
+    .replace(/\b[a-z_][a-z0-9_]*\./g, '')
+    .replace(/\s+/g, '');
+}
+
+function assertRealValueFormula(expression, metric) {
+  const formula = normalizedFormula(expression);
+  const directFormulas = new Set([
+    'valor_bruto',
+    'round(valor_bruto,2)',
+    'greatest(0,least(100,valor_bruto))',
+    'least(100,greatest(0,valor_bruto))',
+    'greatest(least(valor_bruto,100),0)',
+    'least(greatest(valor_bruto,0),100)',
+    'round(greatest(0,least(100,valor_bruto)),2)',
+    'round(least(100,greatest(0,valor_bruto)),2)',
+    'round(greatest(least(valor_bruto,100),0),2)',
+    'round(least(greatest(valor_bruto,0),100),2)',
+  ]);
+
+  assert.ok(
+    directFormulas.has(formula),
+    `${metric} deve usar somente valor_bruto, com clamp/round opcionais`,
+  );
+}
+
+function assertGoalFormula(expression, metric) {
+  const formula = normalizedFormula(expression);
+  assert.match(
+    formula,
+    /(?:valor_bruto\/(?:meta|nullif\(meta,0\))\*100|100\*valor_bruto\/(?:meta|nullif\(meta,0\)))/,
+    `${metric} deve normalizar valor_bruto pela meta e multiplicar por 100`,
+  );
+}
+
+function assertSegmentedFormula(expression, metric) {
+  const formula = normalizedFormula(expression);
+  assert.ok(
+    formula === 'nota_segmentada_estruturada' || formula === 'nota',
+    `${metric} deve preservar a nota segmentada existente`,
+  );
+}
+
+function formulaCaseForFixture(formulaCase, engine) {
+  const replacements = engine === 'materializador'
+    ? [
+        [/\bcm\.metrica\b/gi, 'f.metrica'],
+        [/\br\.publicavel\b/gi, 'f.publicavel'],
+        [/\br\.valor_bruto\b/gi, 'f.valor_bruto'],
+        [/\bcm\.meta\b/gi, 'f.meta'],
+        [/\bsa\.nota_segmentada_estruturada\b/gi, 'f.nota_segmentada'],
+      ]
+    : [
+        [/\bcm\.metrica\b/gi, 'f.metrica'],
+        [/\bcm\.parametros\b/gi, 'f.parametros'],
+        [/\bsm\.publicavel\b/gi, 'f.publicavel'],
+        [/\bsm\.valor_bruto\b/gi, 'f.valor_bruto'],
+        [/\bsm\.estado_base\b/gi, 'f.estado_base'],
+        [/\bcm\.meta\b/gi, 'f.meta'],
+        [/\bse\.nota\b/gi, 'f.nota_segmentada'],
+      ];
+
+  return replacements.reduce(
+    (result, [pattern, replacement]) => result.replace(pattern, replacement),
+    formulaCase,
+  );
+}
+
+function normalizeDefinition(definition) {
+  return definition.replace(/\r\n/g, '\n').trim();
+}
+
+function effectiveSimulationDefinition() {
+  const baseline = normalizeDefinition(functionDefinition(
+    readFileSync(segmentedConfigMigrationPath, 'utf8'),
+    'simular_health_score_professor_v3_config',
+  ));
+
+  return baseline
+    .replace(
+      'simular_health_score_professor_v3_config(',
+      'simular_health_score_professor_v3_config_pre_catalogo_v1(',
+    )
+    .replace(
+      'set search_path = public, pg_temp\nas $$',
+      () => "set search_path = public, pg_temp\nset statement_timeout = '60s'\nas $$",
+    );
+}
+
+function maskIntentionalScoreCase(definition, engine) {
+  if (engine === 'materializador') {
+    const scoreCase = aliasedCase(definition, 'nota_calculada');
+    return definition.replace(scoreCase, '<CASE_NOTA_TASK_5>');
+  }
+
+  const metricsCte = between(
+    definition,
+    '), metricas as (',
+    '), scores as (',
+  );
+  const scoreCase = aliasedCase(metricsCte, 'nota');
+  return definition.replace(scoreCase, '<CASE_NOTA_TASK_5>');
+}
+
+function operationSurface(definition) {
+  const operations = [];
+  const operationPattern =
+    /\b(create\s+temporary\s+table(?:\s+if\s+not\s+exists)?|insert\s+into|update|delete\s+from|truncate(?:\s+table)?)\s+(?:public\.)?([a-z_][a-z0-9_]*)/gi;
+
+  for (const match of definition.matchAll(operationPattern)) {
+    operations.push(
+      `${match[1].toLowerCase().replace(/\s+/g, ' ')}:${match[2].toLowerCase()}`,
+    );
+  }
+
+  return operations.sort();
+}
+
+test(
+  'motor segmentado aceita ok com pendencias como peso disponivel da retencao',
+  { skip: !existsSync(governedRetentionMigrationPath) },
+  () => {
+    const sql = readFileSync(governedRetentionMigrationPath, 'utf8');
+    const engine = functionBlock(
+      sql,
+      'get_health_score_professor_v3_metricas_periodo',
+    );
+
+    assert.match(engine, /get_professor_retencao_v3_governada/i);
+    assert.match(
+      engine,
+      /estado_base\s+in\s*\(\s*'ok'\s*,\s*'ok_com_pendencias'\s*\)/i,
+    );
+  },
+);
+
+test('Task 5 disponibiliza a normalizacao percentual por valor real', () => {
+  percentageNormalizationMigration();
+});
+
+test(
+  'materializador e simulacao usam valor real com paridade e preservam notas segmentadas',
+  () => {
+    const sql = percentageNormalizationMigration();
+    const materializer = sqlWithoutComments(functionBlock(
+      sql,
+      'materializar_health_score_professor_v3_periodo_impl',
+    ));
+    const simulator = sqlWithoutComments(functionBlock(
+      sql,
+      'simular_health_score_professor_v3_config_pre_catalogo_v1',
+    ));
+    const simulatorMetrics = between(
+      simulator,
+      '), metricas as (',
+      '), scores as (',
+    );
+    const materializerFormula = aliasedCase(materializer, 'nota_calculada');
+    const simulatorFormula = aliasedCase(simulatorMetrics, 'nota');
+
+    for (const metric of ['retencao', 'conversao', 'presenca']) {
+      const materializerBranch = metricFormulaBranch(
+        materializerFormula,
+        metric,
+      );
+      const simulatorBranch = metricFormulaBranch(simulatorFormula, metric);
+      assertRealValueFormula(materializerBranch.expression, metric);
+      assertRealValueFormula(simulatorBranch.expression, metric);
+      assert.equal(
+        normalizedFormula(materializerBranch.expression),
+        normalizedFormula(simulatorBranch.expression),
+        `${metric} deve ter formula paritaria nos dois motores`,
+      );
+    }
+
+    const materializerPermanence = metricFormulaBranch(
+      materializerFormula,
+      'permanencia',
+    );
+    const simulatorPermanence = metricFormulaBranch(
+      simulatorFormula,
+      'permanencia',
+    );
+    assertGoalFormula(materializerPermanence.expression, 'permanencia');
+    assertGoalFormula(simulatorPermanence.expression, 'permanencia');
+
+    for (const metric of ['media_turma', 'numero_alunos']) {
+      assertSegmentedFormula(
+        metricFormulaBranch(materializerFormula, metric).expression,
+        metric,
+      );
+      assertSegmentedFormula(
+        metricFormulaBranch(simulatorFormula, metric).expression,
+        metric,
+      );
+    }
+
+    assert.match(materializer, /\br\.publicavel\b/i);
+    assert.match(simulatorMetrics, /\bsm\.publicavel\s+is\s+not\s+true\b/i);
+    assert.match(simulatorMetrics, /\bsm\.estado_base\b/i);
+  },
+);
+
+test(
+  'meta e metadados permanecem preservados sem limitar a nota percentual',
+  () => {
+    const sql = percentageNormalizationMigration();
+    const materializer = sqlWithoutComments(functionBlock(
+      sql,
+      'materializar_health_score_professor_v3_periodo_impl',
+    ));
+    const formulaCase = aliasedCase(materializer, 'nota_calculada');
+
+    assert.match(
+      materializer,
+      /'meta_versionada'\s*,\s*(?:[a-z_][a-z0-9_]*\.)?meta\b/i,
+    );
+    assert.match(materializer, /\bmeta_aplicada\b/i);
+    assert.match(materializer, /coalesce\s*\(\s*r\.detalhes\s*,/i);
+    assert.match(materializer, /coalesce\s*\(\s*r\.estado_base\s*,/i);
+    for (const metric of ['retencao', 'conversao', 'presenca']) {
+      const branch = metricFormulaBranch(formulaCase, metric);
+      assert.doesNotMatch(
+        normalizedFormula(branch.expression),
+        /\/(?:meta|nullif\(meta,0\))/,
+        `meta de ${metric} deve permanecer objetivo, sem limitar a nota`,
+      );
+    }
+  },
+);
+
+test('migration recria somente os motores internos e reaplica timeout', () => {
+  const sql = percentageNormalizationMigration();
+  const materializer = functionDefinition(
+    sql,
+    'materializar_health_score_professor_v3_periodo_impl',
+  );
+  const simulator = functionDefinition(
+    sql,
+    'simular_health_score_professor_v3_config_pre_catalogo_v1',
+  );
+
+  assert.match(
+    materializer,
+    /materializar_health_score_professor_v3_periodo_impl\s*\(\s*p_competencia\s+date[\s\S]*p_periodicidade\s+text[\s\S]*p_unidade_id\s+uuid[\s\S]*p_professor_id\s+integer/i,
+  );
+  assert.match(
+    simulator,
+    /set\s+statement_timeout\s*=\s*'60s'/i,
+  );
+  assert.doesNotMatch(
+    sql,
+    /create\s+or\s+replace\s+function\s+public\.simular_health_score_professor_v3_config\s*\(/i,
+    'wrapper publico de catalogo deve permanecer intacto',
+  );
+  assert.doesNotMatch(
+    sql,
+    /create\s+or\s+replace\s+(?:view|function)\s+public\.vw_health_score_professor_v3_parcial_observado/i,
+  );
+});
+
+test('corpos completos preservam as definicoes efetivas fora do CASE da Task 5', () => {
+  const sql = percentageNormalizationMigration();
+  const currentMaterializer = normalizeDefinition(functionDefinition(
+    sql,
+    'materializar_health_score_professor_v3_periodo_impl',
+  ));
+  const effectiveMaterializer = normalizeDefinition(functionDefinition(
+    hardeningMigration(),
+    'materializar_health_score_professor_v3_periodo_impl',
+  ));
+  const currentSimulation = normalizeDefinition(functionDefinition(
+    sql,
+    'simular_health_score_professor_v3_config_pre_catalogo_v1',
+  ));
+  const effectiveSimulation = effectiveSimulationDefinition();
+
+  assert.equal(
+    maskIntentionalScoreCase(currentMaterializer, 'materializador'),
+    maskIntentionalScoreCase(effectiveMaterializer, 'materializador'),
+    'materializador mudou fora do CASE autorizado',
+  );
+  assert.equal(
+    maskIntentionalScoreCase(currentSimulation, 'simulacao'),
+    maskIntentionalScoreCase(effectiveSimulation, 'simulacao'),
+    'simulacao mudou fora do CASE autorizado',
+  );
+
+  const mutatedMaterializer = currentMaterializer.replace(
+    'v_count integer := 0;',
+    'v_count integer := 1;',
+  );
+  const mutatedSimulation = currentSimulation.replace(
+    'v_ator integer;',
+    'v_ator bigint;',
+  );
+  assert.notEqual(mutatedMaterializer, currentMaterializer);
+  assert.notEqual(mutatedSimulation, currentSimulation);
+  assert.throws(() => assert.equal(
+    maskIntentionalScoreCase(mutatedMaterializer, 'materializador'),
+    maskIntentionalScoreCase(effectiveMaterializer, 'materializador'),
+  ));
+  assert.throws(() => assert.equal(
+    maskIntentionalScoreCase(mutatedSimulation, 'simulacao'),
+    maskIntentionalScoreCase(effectiveSimulation, 'simulacao'),
+  ));
+});
+
+test('motores preservam SECURITY DEFINER search_path timeout e ACL privada', () => {
+  const sql = percentageNormalizationMigration();
+  const materializer = functionDefinition(
+    sql,
+    'materializar_health_score_professor_v3_periodo_impl',
+  );
+  const simulator = functionDefinition(
+    sql,
+    'simular_health_score_professor_v3_config_pre_catalogo_v1',
+  );
+  const materializerAcl = migration();
+  const simulatorAcl = readFileSync(catalogGuardMigrationPath, 'utf8');
+  const simulatorTimeout = readFileSync(
+    simulationTimeoutMigrationPath,
+    'utf8',
+  );
+
+  for (const definition of [materializer, simulator]) {
+    assert.match(definition, /\blanguage\s+plpgsql\b/i);
+    assert.match(definition, /\bsecurity\s+definer\b/i);
+    assert.match(
+      definition,
+      /\bset\s+search_path\s*=\s*public\s*,\s*pg_temp\b/i,
+    );
+  }
+  assert.doesNotMatch(materializer, /\bstatement_timeout\b/i);
+  assert.match(
+    simulator,
+    /\bset\s+statement_timeout\s*=\s*'60s'/i,
+  );
+  assert.match(
+    materializerAcl,
+    /revoke\s+all\s+on\s+function\s+public\.materializar_health_score_professor_v3_periodo_impl\s*\(\s*date\s*,\s*text\s*,\s*uuid\s*,\s*integer\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated\s*,\s*service_role/i,
+  );
+  assert.match(
+    simulatorAcl,
+    /revoke\s+all\s+on\s+function\s+public\.simular_health_score_professor_v3_config_pre_catalogo_v1\s*\(\s*uuid\s*,\s*date\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated/i,
+  );
+  assert.match(
+    simulatorTimeout,
+    /alter\s+function\s+public\.simular_health_score_professor_v3_config_pre_catalogo_v1\s*\(\s*uuid\s*,\s*date\s*\)\s+set\s+statement_timeout\s*=\s*'60s'/i,
+  );
+  assert.doesNotMatch(sql, /\b(?:grant|revoke)\b/i);
+});
+
+test('migration limita a superficie aos dois motores e operacoes preexistentes', () => {
+  const sql = percentageNormalizationMigration().replace(/\r\n/g, '\n');
+  const materializer = normalizeDefinition(functionDefinition(
+    sql,
+    'materializar_health_score_professor_v3_periodo_impl',
+  ));
+  const simulator = normalizeDefinition(functionDefinition(
+    sql,
+    'simular_health_score_professor_v3_config_pre_catalogo_v1',
+  ));
+  const effectiveMaterializer = normalizeDefinition(functionDefinition(
+    hardeningMigration(),
+    'materializar_health_score_professor_v3_periodo_impl',
+  ));
+  const effectiveSimulator = effectiveSimulationDefinition();
+  const functionNames = [
+    ...sql.matchAll(/create\s+or\s+replace\s+function\s+public\.([a-z0-9_]+)\s*\(/gi),
+  ].map((match) => match[1]);
+
+  assert.deepEqual(functionNames, [
+    'materializar_health_score_professor_v3_periodo_impl',
+    'simular_health_score_professor_v3_config_pre_catalogo_v1',
+  ]);
+  assert.deepEqual(
+    operationSurface(materializer),
+    operationSurface(effectiveMaterializer),
+  );
+  assert.deepEqual(
+    operationSurface(simulator),
+    operationSurface(effectiveSimulator),
+  );
+
+  const topLevelRemainder = sql
+    .replace(functionDefinition(
+      sql,
+      'materializar_health_score_professor_v3_periodo_impl',
+    ), '')
+    .replace(functionDefinition(
+      sql,
+      'simular_health_score_professor_v3_config_pre_catalogo_v1',
+    ), '')
+    .replace(/--[^\r\n]*/g, '')
+    .trim();
+  assert.equal(
+    topLevelRemainder,
+    '',
+    'migration nao deve executar DDL ou DML fora das duas definicoes',
+  );
+  assert.doesNotMatch(
+    sql,
+    /create\s+or\s+replace\s+function\s+public\.simular_health_score_professor_v3_config\s*\(/i,
+  );
+  assert.doesNotMatch(
+    sql,
+    /\bvw_health_score_professor_v3_parcial_observado\b/i,
+  );
+});
 
 test('Task 5 cria RPC detalhada e agregadora no contrato segmentado auditavel', () => {
   const sql = migration();
@@ -684,6 +1257,28 @@ test(
       sql,
       'materializar_health_score_professor_v3_periodo_impl',
     );
+    const percentageSql = percentageNormalizationMigration();
+    const percentageMaterializer = sqlWithoutComments(functionDefinition(
+      percentageSql,
+      'materializar_health_score_professor_v3_periodo_impl',
+    ));
+    const percentageSimulator = sqlWithoutComments(functionDefinition(
+      percentageSql,
+      'simular_health_score_professor_v3_config_pre_catalogo_v1',
+    ));
+    const percentageSimulatorMetrics = between(
+      percentageSimulator,
+      '), metricas as (',
+      '), scores as (',
+    );
+    const materializerFormulaFixture = formulaCaseForFixture(
+      aliasedCase(percentageMaterializer, 'nota_calculada'),
+      'materializador',
+    );
+    const simulatorFormulaFixture = formulaCaseForFixture(
+      aliasedCase(percentageSimulatorMetrics, 'nota'),
+      'simulacao',
+    );
     const intermediateMigrationResult = spawnSync(
       'git',
       [
@@ -760,6 +1355,198 @@ test(
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
       }
       assert.equal(ready, true, 'PostgreSQL da fixture nao ficou pronto');
+
+      const formulaFixtureSql = String.raw`
+        \set ON_ERROR_STOP on
+
+        with fixtures (
+          caso,
+          metrica,
+          valor_bruto,
+          meta,
+          publicavel,
+          estado_base,
+          parametros,
+          nota_segmentada,
+          detalhes,
+          meta_aplicada,
+          nota_esperada
+        ) as (
+          values
+            (
+              'retencao_93_meta_90',
+              'retencao',
+              93.00::numeric,
+              90::numeric,
+              true,
+              'ok',
+              '{}'::jsonb,
+              null::numeric,
+              '{"origem":"retencao"}'::jsonb,
+              90::numeric,
+              93.00::numeric
+            ),
+            (
+              'conversao_70_meta_70',
+              'conversao',
+              70.00::numeric,
+              70::numeric,
+              true,
+              'ok',
+              '{}'::jsonb,
+              null::numeric,
+              '{"origem":"conversao"}'::jsonb,
+              70::numeric,
+              70.00::numeric
+            ),
+            (
+              'presenca_85_20_meta_80',
+              'presenca',
+              85.20::numeric,
+              80::numeric,
+              true,
+              'ok',
+              '{}'::jsonb,
+              null::numeric,
+              '{"origem":"presenca"}'::jsonb,
+              80::numeric,
+              85.20::numeric
+            ),
+            (
+              'permanencia_12_meta_12',
+              'permanencia',
+              12::numeric,
+              12::numeric,
+              true,
+              'ok',
+              '{}'::jsonb,
+              null::numeric,
+              '{"origem":"permanencia"}'::jsonb,
+              12::numeric,
+              100::numeric
+            ),
+            (
+              'media_turma_segmentada',
+              'media_turma',
+              4::numeric,
+              null::numeric,
+              true,
+              'ok',
+              '{"normalizacao":"segmentada_unidade_curso_modalidade"}'::jsonb,
+              88::numeric,
+              '{"origem":"segmentada"}'::jsonb,
+              null::numeric,
+              88::numeric
+            ),
+            (
+              'numero_alunos_segmentado',
+              'numero_alunos',
+              8::numeric,
+              null::numeric,
+              true,
+              'ok',
+              '{"normalizacao":"segmentada_unidade_curso_modalidade"}'::jsonb,
+              75::numeric,
+              '{"origem":"segmentada"}'::jsonb,
+              null::numeric,
+              75::numeric
+            ),
+            (
+              'retencao_sem_base_amostra',
+              'retencao',
+              93::numeric,
+              90::numeric,
+              false,
+              'sem_base_amostra',
+              '{}'::jsonb,
+              null::numeric,
+              '{"origem":"invalida"}'::jsonb,
+              90::numeric,
+              null::numeric
+            ),
+            (
+              'conversao_regra_ausente',
+              'conversao',
+              70::numeric,
+              70::numeric,
+              false,
+              'regra_ausente',
+              '{}'::jsonb,
+              null::numeric,
+              '{"origem":"invalida"}'::jsonb,
+              70::numeric,
+              null::numeric
+            )
+        ), calculadas as (
+          select
+            f.*,
+            ${materializerFormulaFixture} as nota_materializador,
+            ${simulatorFormulaFixture} as nota_simulacao
+          from fixtures f
+        )
+        select jsonb_agg(
+          jsonb_build_object(
+            'caso', c.caso,
+            'nota_esperada', c.nota_esperada,
+            'nota_materializador', c.nota_materializador,
+            'nota_simulacao', c.nota_simulacao,
+            'estado_base', c.estado_base,
+            'detalhes', c.detalhes,
+            'meta_aplicada', c.meta_aplicada
+          )
+          order by c.caso
+        )
+        from calculadas c;
+      `;
+      const formulaFixture = spawnSync(
+        'docker',
+        [
+          'exec',
+          '--interactive',
+          containerName,
+          'psql',
+          '--no-psqlrc',
+          '--tuples-only',
+          '--no-align',
+          '--set',
+          'ON_ERROR_STOP=1',
+          '--username',
+          'postgres',
+          '--dbname',
+          'postgres',
+        ],
+        {
+          encoding: 'utf8',
+          input: formulaFixtureSql,
+          maxBuffer: 4 * 1024 * 1024,
+        },
+      );
+      assert.equal(
+        formulaFixture.status,
+        0,
+        `fixture das formulas falhou:\nSTDOUT:\n${formulaFixture.stdout}\nSTDERR:\n${formulaFixture.stderr}`,
+      );
+      const formulaRows = JSON.parse(formulaFixture.stdout.trim());
+      for (const row of formulaRows) {
+        assert.equal(
+          row.nota_materializador,
+          row.nota_esperada,
+          `${row.caso}: materializador divergiu`,
+        );
+        assert.equal(
+          row.nota_simulacao,
+          row.nota_esperada,
+          `${row.caso}: simulacao divergiu`,
+        );
+        assert.deepEqual(
+          row.detalhes,
+          { origem: row.caso.includes('segmentad') ? 'segmentada'
+            : row.caso.includes('invalida') || row.caso.includes('sem_base')
+              || row.caso.includes('regra_ausente') ? 'invalida'
+                : row.caso.split('_')[0] },
+          `${row.caso}: detalhes da fixture foram alterados`,
+        );
+      }
 
       const fixtureSql = String.raw`
         \set ON_ERROR_STOP on
@@ -1167,6 +1954,8 @@ test(
           from alvos a
           join public.professores p on p.id = a.professor_id
         $$;
+
+        ${percentageSql}
 
         do $security_fixture$
         declare

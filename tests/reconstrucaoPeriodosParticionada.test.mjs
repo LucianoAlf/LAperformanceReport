@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
+import { pathToFileURL } from 'node:url';
 
 const migrationPath =
   'supabase/migrations/20260716184500_health_score_v3_reconstrucao_particionada.sql';
@@ -10,13 +11,53 @@ const manifestMigrationPath =
   'supabase/migrations/20260716190500_manifesto_reconstrucao_particionada.sql';
 const manifestAuditMigrationPath =
   'supabase/migrations/20260717225500_health_score_v3_manifesto_fonte_auditoria.sql';
+const exactPromotionMigrationPath =
+  'supabase/migrations/20260727121000_health_score_v3_promocao_periodos_ativos_exatos.sql';
 const edgePath = 'supabase/functions/reconstruir-periodos-professor/index.ts';
 const helperPath =
   'supabase/functions/_shared/reconstrucao-particionada-professor.mjs';
+const reconstructorPath =
+  'supabase/functions/_shared/reconstrucao-periodos-professor.mjs';
 const scriptPath = 'scripts/reconstruir-periodos-professor-particionado.mjs';
 
 function read(path) {
   return fs.readFileSync(path, 'utf8');
+}
+
+function periodoAtivoMedia(overrides = {}) {
+  return {
+    unidade_id: '368d47f5-2d88-4475-bc14-ba084a9a348e',
+    pessoa_chave: 'emusys:101',
+    aluno_id: 10,
+    emusys_aluno_id: 101,
+    emusys_matricula_id: 500,
+    emusys_matricula_disciplina_id: 700,
+    emusys_disciplina_id: 8,
+    curso_id: 1,
+    professor_id: 10,
+    emusys_professor_id: 100,
+    data_inicio: '2026-01-10T12:00:00.000Z',
+    data_fim: null,
+    status_periodo: 'ativo',
+    confianca: 'media',
+    inicio_incompleto: false,
+    conflitos: [],
+    publicavel_sugerido: false,
+    evidencias: {},
+    ...overrides,
+  };
+}
+
+function jornadaAtivaExata(overrides = {}) {
+  return {
+    unidade_id: '368d47f5-2d88-4475-bc14-ba084a9a348e',
+    emusys_matricula_disciplina_id: 700,
+    emusys_disciplina_id: 8,
+    professor_id: 10,
+    emusys_professor_id: 100,
+    status_matricula: 'ativa',
+    ...overrides,
+  };
 }
 
 test('helper valida limites e enumera particoes sem lacunas', async () => {
@@ -160,5 +201,208 @@ test('orquestrador prioriza .env.local sobre .env', () => {
   assert.ok(
     envLocalIndex < envIndex,
     '.env.local deve ser carregado primeiro quando o loader preserva valores existentes',
+  );
+});
+
+test('Task 3 disponibiliza a promocao append-only de periodos ativos exatos', () => {
+  assert.equal(
+    fs.existsSync(exactPromotionMigrationPath),
+    true,
+    `${exactPromotionMigrationPath} ainda nao foi implementada`,
+  );
+});
+
+test(
+  'promocao exige jornada ativa exata e nao usa nome como identidade',
+  { skip: !fs.existsSync(exactPromotionMigrationPath) },
+  () => {
+    const sql = read(exactPromotionMigrationPath);
+
+    assert.match(sql, /aluno_jornada_matricula_disciplina/i);
+    assert.match(sql, /unidade_id/i);
+    assert.match(sql, /emusys_matricula_disciplina_id/i);
+    assert.match(sql, /professor_id/i);
+    assert.match(sql, /status_matricula[\s\S]*ativa/i);
+    assert.match(sql, /vw_professor_periodos_baseline_v3_sombra/i);
+    assert.match(sql, /cardinalidade_jornada_ativa/i);
+    assert.match(sql, /cardinalidade_jornada_ativa\s*=\s*1/i);
+    assert.match(sql, /confianca[\s\S]*media[\s\S]*alta/i);
+    assert.match(sql, /publicavel/i);
+    assert.match(sql, /jornada_atual_exata/i);
+    assert.doesNotMatch(
+      sql,
+      /(?:professor_nome|nome_professor)\s*=/i,
+    );
+  },
+);
+
+test(
+  'promocao grava revisao idempotente sem atualizar o baseline',
+  { skip: !fs.existsSync(exactPromotionMigrationPath) },
+  () => {
+    const sql = read(exactPromotionMigrationPath);
+
+    assert.match(
+      sql,
+      /insert\s+into\s+public\.professor_periodos_revisoes_v1/i,
+    );
+    assert.match(sql, /promocao_confianca/i);
+    assert.match(sql, /confianca_anterior/i);
+    assert.match(sql, /confianca_atual/i);
+    assert.match(sql, /not\s+exists|on\s+conflict[\s\S]*do\s+nothing/i);
+    assert.doesNotMatch(
+      sql,
+      /update\s+public\.professor_matricula_disciplina_periodos_v1/i,
+    );
+    assert.doesNotMatch(
+      sql,
+      /delete\s+from\s+public\.professor_matricula_disciplina_periodos_v1/i,
+    );
+  },
+);
+
+test('reconstrutor preserva unidade_id no periodo materializavel', async () => {
+  const { reconstruirPeriodos } = await import(
+    `${pathToFileURL(reconstructorPath).href}?unidade=${Date.now()}`
+  );
+  const unidadeId = '368d47f5-2d88-4475-bc14-ba084a9a348e';
+  const resultado = reconstruirPeriodos([{
+    unidade_id: unidadeId,
+    emusys_aula_id: 1,
+    data_hora_inicio: '2026-01-10T12:00:00.000Z',
+    emusys_aluno_id: 101,
+    aluno_id: 10,
+    pessoa_chave: 'emusys:101',
+    emusys_matricula_id: 500,
+    emusys_matricula_disciplina_id: 700,
+    emusys_disciplina_id: 8,
+    curso_id: 1,
+    professor_id: 10,
+    emusys_professor_id: 100,
+    professor_resolvido_por_id: true,
+    cancelada: false,
+    sem_acompanhamento: false,
+  }], {
+    versao_reconstrucao: 'task-3-unidade',
+    data_inicio_recorte: '2026-01-01',
+    data_fim_recorte: '2026-07-27',
+    inicio_completo: true,
+    jornadas: [],
+    transicoes: [],
+  });
+
+  assert.equal(resultado.periodos.length, 1);
+  assert.equal(resultado.periodos[0].unidade_id, unidadeId);
+});
+
+test('regra pura promove ativo media com uma unica jornada atual exata', async () => {
+  const { promoverPeriodosAtivosComJornadaAtualExata } = await import(
+    `${pathToFileURL(reconstructorPath).href}?promocao=${Date.now()}`
+  );
+  const periodos = [periodoAtivoMedia()];
+  const diagnosticos = [];
+
+  promoverPeriodosAtivosComJornadaAtualExata(
+    periodos,
+    { jornadas: [jornadaAtivaExata()] },
+    diagnosticos,
+  );
+
+  assert.equal(periodos[0].confianca, 'alta');
+  assert.equal(periodos[0].publicavel_sugerido, true);
+  assert.equal(periodos[0].inicio_incompleto, false);
+  assert.deepEqual(periodos[0].evidencias.promocao_confianca, {
+    regra: 'jornada_atual_exata',
+    confianca_anterior: 'media',
+    confianca_atual: 'alta',
+  });
+  assert.ok(
+    diagnosticos.some((item) =>
+      item.tipo === 'periodo_ativo_promovido_por_jornada_atual_exata'
+    ),
+  );
+});
+
+test('promocao exata rejeita unidade, professor, status, conflito e cardinalidade divergentes', async () => {
+  const { promoverPeriodosAtivosComJornadaAtualExata } = await import(
+    `${pathToFileURL(reconstructorPath).href}?criterios=${Date.now()}`
+  );
+  const cenarios = [
+    {
+      nome: 'unidade divergente',
+      periodo: periodoAtivoMedia(),
+      jornadas: [jornadaAtivaExata({ unidade_id: 'outra-unidade' })],
+    },
+    {
+      nome: 'professor divergente',
+      periodo: periodoAtivoMedia(),
+      jornadas: [jornadaAtivaExata({ professor_id: 11 })],
+    },
+    {
+      nome: 'jornada finalizada',
+      periodo: periodoAtivoMedia(),
+      jornadas: [jornadaAtivaExata({ status_matricula: 'finalizada' })],
+    },
+    {
+      nome: 'periodo com conflito',
+      periodo: periodoAtivoMedia({ conflitos: ['jornada_atual_divergente'] }),
+      jornadas: [jornadaAtivaExata()],
+    },
+    {
+      nome: 'duas jornadas ativas na mesma chave',
+      periodo: periodoAtivoMedia(),
+      jornadas: [
+        jornadaAtivaExata(),
+        jornadaAtivaExata({ professor_id: 11, emusys_professor_id: 101 }),
+      ],
+    },
+    {
+      nome: 'periodo encerrado',
+      periodo: periodoAtivoMedia({
+        status_periodo: 'encerrado',
+        data_fim: '2026-07-01T12:00:00.000Z',
+      }),
+      jornadas: [jornadaAtivaExata()],
+    },
+    {
+      nome: 'disciplina nao resolvida',
+      periodo: periodoAtivoMedia({ emusys_disciplina_id: null }),
+      jornadas: [jornadaAtivaExata()],
+    },
+  ];
+
+  for (const cenario of cenarios) {
+    promoverPeriodosAtivosComJornadaAtualExata(
+      [cenario.periodo],
+      { jornadas: cenario.jornadas },
+      [],
+    );
+    assert.equal(cenario.periodo.confianca, 'media', cenario.nome);
+    assert.equal(cenario.periodo.publicavel_sugerido, false, cenario.nome);
+    assert.equal(
+      cenario.periodo.evidencias.promocao_confianca,
+      undefined,
+      cenario.nome,
+    );
+  }
+});
+
+test('promocao ativa roda depois do fechamento historico e antes das encerradas', () => {
+  const source = read(reconstructorPath);
+  const fechamento = source.lastIndexOf(
+    'fecharPeriodosHistoricosSemApoioAtual(periodos, contexto, diagnosticos)',
+  );
+  const promocaoAtiva = source.lastIndexOf(
+    'promoverPeriodosAtivosComJornadaAtualExata(periodos, contexto, diagnosticos)',
+  );
+  const promocaoEncerrada = source.lastIndexOf(
+    'promoverPeriodosComEvidenciaTerminalEstruturada(periodos, diagnosticos)',
+  );
+
+  assert.ok(fechamento >= 0, 'fechamento historico deve continuar no fluxo');
+  assert.ok(promocaoAtiva > fechamento, 'promocao ativa deve ocorrer depois do fechamento');
+  assert.ok(
+    promocaoEncerrada > promocaoAtiva,
+    'promocoes encerradas devem ocorrer depois da promocao ativa',
   );
 });

@@ -22,6 +22,8 @@ const segmentedGoalsSchemaMigrationPath =
   'supabase/migrations/20260719200000_health_score_v3_metas_segmentadas_schema.sql';
 const segmentedConfigMigrationPath =
   'supabase/migrations/20260719204000_health_score_v3_config_segmentada_rpc.sql';
+const percentageNormalizationMigrationPath =
+  'supabase/migrations/20260727122000_health_score_v3_percentuais_valor_real.sql';
 
 function migration() {
   return existsSync(migrationPath) ? readFileSync(migrationPath, 'utf8') : '';
@@ -79,6 +81,15 @@ function segmentedConfigMigration() {
   return existsSync(segmentedConfigMigrationPath)
     ? readFileSync(segmentedConfigMigrationPath, 'utf8')
     : '';
+}
+
+function percentageNormalizationMigration() {
+  assert.equal(
+    existsSync(percentageNormalizationMigrationPath),
+    true,
+    `${percentageNormalizationMigrationPath} deve existir`,
+  );
+  return readFileSync(percentageNormalizationMigrationPath, 'utf8');
 }
 
 function functionBlock(sql, name) {
@@ -295,6 +306,89 @@ test('Task 6 simula e ativa sem recalcular snapshots fechados', () => {
     /(?:insert\s+into|update|delete\s+from)\s+public\.health_score_professor_v3_snapshot_metrica_segmentos/i,
   );
   assert.doesNotMatch(sql, /materializar_health_score_professor_v3/i);
+});
+
+test('Task 5 persiste nota e estado do snapshot sem zero ou estado pontuavel fabricado', () => {
+  const materializer = functionBlock(
+    percentageNormalizationMigration(),
+    'materializar_health_score_professor_v3_periodo_impl',
+  );
+  const insertStart = materializer.search(
+    /insert\s+into\s+public\.health_score_professor_v3_snapshot_metricas\s*\(/i,
+  );
+  const insertEnd = materializer.slice(insertStart + 1).search(
+    /insert\s+into\s+public\.health_score_professor_v3_snapshot_metrica_segmentos\s*\(/i,
+  );
+
+  assert.ok(insertStart >= 0, 'insert das metricas do snapshot deve existir');
+  assert.ok(insertEnd >= 0, 'fim do insert das metricas deve existir');
+  const snapshotInsert = materializer.slice(
+    insertStart,
+    insertStart + 1 + insertEnd,
+  );
+
+  assert.match(
+    snapshotInsert,
+    /estado_base\s*,\s*publicavel[\s\S]*detalhes\s*,\s*nota\s*,\s*peso\s*,\s*peso_disponivel[\s\S]*meta_aplicada/i,
+  );
+  assert.match(
+    snapshotInsert,
+    /coalesce\s*\(\s*r\.estado_base\s*,\s*'sem_base'\s*\)/i,
+    'linha ausente deve continuar explicitamente sem base, nunca ok',
+  );
+  assert.doesNotMatch(
+    snapshotInsert,
+    /coalesce\s*\(\s*r\.estado_base\s*,\s*'ok'\s*\)/i,
+  );
+  assert.match(snapshotInsert, /\bcalc\.nota_calculada\s*,\s*cm\.peso\b/i);
+  assert.match(
+    snapshotInsert,
+    /\bcalc\.nota_calculada\s+is\s+not\s+null\b/i,
+  );
+  assert.match(snapshotInsert, /\bcalc\.meta_calculada\b/i);
+  assert.match(snapshotInsert, /coalesce\s*\(\s*r\.detalhes\s*,/i);
+  assert.doesNotMatch(
+    snapshotInsert,
+    /coalesce\s*\(\s*(?:calc\.nota_calculada|r\.valor_bruto|r\.nota)\s*,\s*0(?:\.0+)?\s*\)/i,
+  );
+  assert.doesNotMatch(
+    snapshotInsert,
+    /else\s+0(?:::\s*numeric)?\s+end\s+as\s+nota/i,
+  );
+});
+
+test('Task 5 avalia publicabilidade e estado antes da formula da simulacao', () => {
+  const simulation = functionBlock(
+    percentageNormalizationMigration(),
+    'simular_health_score_professor_v3_config_pre_catalogo_v1',
+  );
+  const metricsStart = simulation.search(/\),\s*metricas\s+as\s*\(/i);
+  const scoresStart = simulation.slice(metricsStart + 1).search(
+    /\),\s*scores\s+as\s*\(/i,
+  );
+
+  assert.ok(metricsStart >= 0 && scoresStart >= 0, 'CTE metricas deve existir');
+  const metrics = simulation.slice(
+    metricsStart,
+    metricsStart + 1 + scoresStart,
+  );
+  const invalidStateIndex = metrics.search(
+    /sm\.publicavel\s+is\s+not\s+true[\s\S]*sm\.estado_base\s+in\s*\(\s*'sem_base'\s*,\s*'em_maturacao'\s*,\s*'bloqueada'\s*\)[\s\S]*then\s+null::numeric/i,
+  );
+  const percentageFormulaIndex = metrics.search(
+    /when\s+cm\.metrica\s+in\s*\(\s*'retencao'\s*,\s*'conversao'\s*,\s*'presenca'\s*\)/i,
+  );
+
+  assert.ok(invalidStateIndex >= 0, 'estados nao pontuaveis devem retornar null');
+  assert.ok(
+    invalidStateIndex < percentageFormulaIndex,
+    'estado deve ser avaliado antes da formula percentual',
+  );
+  assert.doesNotMatch(
+    metrics,
+    /coalesce\s*\(\s*(?:sm\.valor_bruto|sm\.nota|sm\.publicavel)\s*,\s*0(?:\.0+)?\s*\)/i,
+  );
+  assert.doesNotMatch(metrics, /else\s+0(?:::\s*numeric)?\s+end\s+as\s+nota/i);
 });
 
 test('retificacao exige justificativa, invalida sem apagar e cria revisao fechada', () => {
