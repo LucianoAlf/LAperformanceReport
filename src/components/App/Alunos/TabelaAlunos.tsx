@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown, Columns3, Phone, ArrowUp, ArrowDown, Brain } from 'lucide-react';
+import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown, Columns3, Phone, Brain } from 'lucide-react';
 import { CelulaEditavel } from '@/components/ui/CelulaEditavel';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -9,6 +9,7 @@ import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { SortableHeader } from '@/components/ui/SortableHeader';
 import { useToast } from '@/hooks/useToast';
 import { ModalFichaAluno } from './ModalFichaAluno';
 import {
@@ -149,31 +150,6 @@ function calcularParcelaComercialCanonica(
   if (cheio === null) return null;
   const condicional = numeroOuNull(descontoCondicional) ?? 0;
   return Math.round((cheio - condicional) * 100) / 100;
-}
-
-function SortableHeader({ label, sortKey, sortConfig, onSort, className = '', px = 'px-4' }: {
-  label: string;
-  sortKey: string;
-  sortConfig: { key: string; direction: 'asc' | 'desc' } | null;
-  onSort: (key: string) => void;
-  className?: string;
-  px?: string;
-}) {
-  const active = sortConfig?.key === sortKey;
-  return (
-    <th
-      className={`${px} py-3 font-medium cursor-pointer select-none hover:text-white transition-colors ${className} ${active ? 'text-amber-400' : ''}`}
-      onClick={() => onSort(sortKey)}
-    >
-      <span className="inline-flex items-center gap-1">
-        {label}
-        {active && (sortConfig.direction === 'asc'
-          ? <ArrowUp className="w-3 h-3" />
-          : <ArrowDown className="w-3 h-3" />
-        )}
-      </span>
-    </th>
-  );
 }
 
 export function TabelaAlunos({
