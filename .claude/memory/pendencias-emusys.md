@@ -96,6 +96,31 @@ Problemas/limitações **do lado do Emusys** (API ou plataforma) que afetam noss
 
 ---
 
+## ⚠️ [API] `GET /professores` devolve só `id` e `nome` — sem identidade da pessoa
+
+**Identificado em:** 2026-07-27
+
+**Descrição:** O `/professores` retorna exatamente dois campos por professor (verificado ao
+vivo: 24/24 no Recreio, só `id` e `nome`). Como o `id` é **escopado por unidade**, não existe
+nenhum campo nesse endpoint capaz de dizer que dois cadastros são a mesma pessoa.
+
+**Por que importa:** a mesma pessoa tem nome diferente em cada unidade — Erick é
+"Erick Osmy" (Recreio `2109`) e "Erick Cosme da Silva" (Barra `1160`), **mesmo CPF
+`16559246728`**. Quem sincroniza professor por esse endpoint é obrigado a casar por nome,
+que erra nos dois sentidos (não une a mesma pessoa; une registros distintos de nome parecido).
+
+**Workaround em uso (nosso lado):** colher `telefone`/`email` do objeto `professores[]` do
+`GET /aulas`, ou o CPF via `GET /pessoas/buscar?email=`. Ambos funcionam, mas exigem varrer
+aulas para montar o cadastro — trabalho que o `/professores` deveria poupar.
+
+**Solicitação ideal (Emusys):** incluir `telefone`, `email` e/ou `cpf` no `/professores`.
+Qualquer um dos três resolve.
+
+**Impacto e plano do nosso lado:** ver `todos-pendentes.md` →
+"Identidade de professor resolvida por NOME".
+
+---
+
 ## Resolvidos (histórico)
 
 - **✅ 2026-07-21** — Webhook fan-out (mesmo evento → 2+ URLs). Era de 2026-07-07: na época o observador (`debug-webhook-emusys-observador`, grava payload bruto em `automacao_log` `workflow_id='debug-webhook-emusys-observador'`) só recebia `aula_cancelada` — evento sem webhook n8n — porque o Emusys mandava cada evento para uma única URL. **O Emusys resolveu**: verificado ao vivo 21/07, o observador agora recebe `lead_criado`/`lead_editado`/`boleto_pix_pago` **em paralelo** ao n8n (69 eventos só no dia 21/07). Fan-out do mesmo evento p/ múltiplos destinos agora funciona → dá pra observar/testar um novo destino sem cutover.
