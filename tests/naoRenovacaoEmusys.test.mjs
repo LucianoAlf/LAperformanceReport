@@ -35,6 +35,35 @@ test('regra automatica exige finalizada e renovacao pendente da mesma matricula'
   }), false);
 });
 
+test('regra v1.3.1 aceita inativa concluida e rejeita interrompida', async () => {
+  const { deveConverterFinalizadaEmNaoRenovacao } = await import(
+    new URL(`../${helperPath}`, import.meta.url).href
+  );
+
+  const pendente = {
+    id: 10,
+    tipo: 'renovacao',
+    renovacao_status: 'pendente_validacao',
+    emusys_matricula_id: 976,
+  };
+
+  assert.equal(deveConverterFinalizadaEmNaoRenovacao(
+    { status: 'inativa', motivo_inativa: 'concluida' },
+    976,
+    pendente,
+  ), true);
+  assert.equal(deveConverterFinalizadaEmNaoRenovacao(
+    { status: 'inativa', motivo_inativa: 'interrompida' },
+    976,
+    pendente,
+  ), false);
+  assert.equal(deveConverterFinalizadaEmNaoRenovacao(
+    { status: 'inativa' },
+    976,
+    pendente,
+  ), false);
+});
+
 test('migration concentra a conversao em RPC atomica e idempotente', () => {
   const migration = readOptional(migrationPath);
   assert.match(migration, /converter_renovacao_pendente_em_nao_renovacao/i);

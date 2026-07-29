@@ -1,3 +1,5 @@
+import { resolveEmusysMatriculaLifecycle } from './emusys-matricula-lifecycle.ts';
+
 export interface RenovacaoPendenteCanonica {
   id: number;
   tipo: string;
@@ -20,7 +22,14 @@ export function deveConverterFinalizadaEmNaoRenovacao(
   emusysMatriculaId: unknown,
   renovacao: RenovacaoPendenteCanonica | null | undefined,
 ): boolean {
-  if (String(statusEmusys ?? '').trim().toLowerCase() !== 'finalizada') return false;
+  const statusLegado = String(statusEmusys ?? '').trim().toLowerCase() === 'finalizada';
+  const input = statusEmusys && typeof statusEmusys === 'object'
+    ? statusEmusys as Record<string, unknown>
+    : { status: statusEmusys };
+  const lifecycle = resolveEmusysMatriculaLifecycle(input);
+  const conclusaoV131 = lifecycle.rawStatus === 'inativa' &&
+    lifecycle.rawReason === 'concluida';
+  if (!statusLegado && !conclusaoV131) return false;
   if (!renovacao || renovacao.tipo !== 'renovacao') return false;
   if (!STATUS_RENOVACAO_PENDENTE.has(String(renovacao.renovacao_status ?? ''))) return false;
 
