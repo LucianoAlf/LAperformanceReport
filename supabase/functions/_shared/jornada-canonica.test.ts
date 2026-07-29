@@ -190,3 +190,62 @@ Deno.test('upsertJornadaMatriculaDisciplina: input com contrato preenchido mante
   assertEquals(row.dia_vencimento_emusys, 5);
   assertEquals(row.inadimplente_emusys, false);
 });
+
+Deno.test('API preserva estado v1.3.1 e detalhes do trancamento na jornada', () => {
+  const input = buildJornadaInputFromMatriculaApi({
+    ...matriculaFake(),
+    status: 'trancada',
+    trancamento_ativo: {
+      id: 77,
+      motivo: 'Viagem',
+      data_inicial: '2026-07-10',
+      data_final: '2026-08-10',
+    },
+  }, UNIDADE)!;
+
+  const { rows } = buildJornadaRowsForUpsert(input);
+  const row = rows[0];
+
+  assertEquals(row.status_matricula, 'trancada');
+  assertEquals(row.status_emusys, 'trancada');
+  assertEquals(row.motivo_inativa, null);
+  assertEquals(row.trancamento_id, 77);
+  assertEquals(row.trancamento_motivo, 'Viagem');
+  assertEquals(row.trancamento_data_inicial, '2026-07-10');
+  assertEquals(row.trancamento_data_final, '2026-08-10');
+});
+
+Deno.test('webhook sem estado v1.3.1 nao envia colunas que apagariam o GET', async () => {
+  const payload = webhookPayloadFake();
+  delete payload.matricula.status;
+  const input = buildJornadaInputFromWebhook(payload, UNIDADE)!;
+  const { client, captured } = fakeSupabaseCapturandoUpsert();
+
+  await upsertJornadaMatriculaDisciplina(client, input);
+
+  const row = captured.rows![0];
+  for (const field of [
+    'status_matricula',
+    'status_emusys',
+    'motivo_inativa',
+    'trancamento_id',
+    'trancamento_motivo',
+    'trancamento_data_inicial',
+    'trancamento_data_final',
+  ]) {
+    assertEquals(field in row, false, `${field} nao deve ser enviado`);
+  }
+});
+
+Deno.test('inativa concluida preserva motivo e encerra a jornada sem evasao implicita', () => {
+  const input = buildJornadaInputFromMatriculaApi({
+    ...matriculaFake(),
+    status: 'inativa',
+    motivo_inativa: 'concluida',
+  }, UNIDADE)!;
+
+  const { rows } = buildJornadaRowsForUpsert(input);
+  assertEquals(rows[0].status_matricula, 'finalizada');
+  assertEquals(rows[0].status_emusys, 'inativa');
+  assertEquals(rows[0].motivo_inativa, 'concluida');
+});

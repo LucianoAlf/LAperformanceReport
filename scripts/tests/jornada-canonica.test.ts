@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
 
 import {
   buildJornadaInputFromMatriculaApi,
@@ -7,6 +8,29 @@ import {
   buildJornadaRowsForUpsert,
   upsertJornadaMatriculaDisciplina,
 } from '../../supabase/functions/_shared/jornada-canonica.ts';
+
+const lifecycleMigrationPath =
+  'supabase/migrations/20260729121000_jornada_status_emusys_v131.sql';
+
+test('migration acrescenta o ciclo v1.3.1 na jornada sem reescrever historico', () => {
+  assert.equal(
+    existsSync(lifecycleMigrationPath),
+    true,
+    `migration ausente: ${lifecycleMigrationPath}`,
+  );
+  const sql = readFileSync(lifecycleMigrationPath, 'utf8');
+  for (const column of [
+    'status_emusys',
+    'motivo_inativa',
+    'trancamento_id',
+    'trancamento_motivo',
+    'trancamento_data_inicial',
+    'trancamento_data_final',
+  ]) {
+    assert.match(sql, new RegExp(`add\\s+column\\s+if\\s+not\\s+exists\\s+${column}`, 'i'));
+  }
+  assert.doesNotMatch(sql, /update\s+public\.aluno_jornada_matricula_disciplina/i);
+});
 
 function createSupabaseMock() {
   const captured: Record<string, unknown[]> = {};
@@ -200,4 +224,53 @@ test('caps journey percentage when Emusys counters pass contracted classes', () 
   assert.equal(rows[0].nr_aulas_passadas, 41);
   assert.equal(rows[0].nr_aulas_contratadas, 40);
   assert.equal(rows[0].percentual_jornada, 100);
+});
+
+test('preserves lifecycle v1.3.1 fields from API rows', () => {
+  const input = buildJornadaInputFromMatriculaApi({
+    id: 9004,
+    status: 'inativa',
+    motivo_inativa: 'interrompida',
+    aluno: { id: 3004, nome: 'Aluno Interrompido' },
+    contrato_atual: {
+      disciplinas: [{
+        matricula_disciplina_id: 47,
+        disciplina_id: 15,
+        nome: 'Canto',
+      }],
+    },
+  }, 'unidade-barra')!;
+
+  const { rows } = buildJornadaRowsForUpsert(input);
+  assert.equal(rows[0].status_matricula, 'finalizada');
+  assert.equal(rows[0].status_emusys, 'inativa');
+  assert.equal(rows[0].motivo_inativa, 'interrompida');
+});
+
+test('sparse webhook rows omit lifecycle fields', () => {
+  const input = buildJornadaInputFromWebhook({
+    evento: 'matricula_alterada',
+    matricula: {
+      id: 9005,
+      aluno_id: 3005,
+      disciplinas: [{
+        matricula_disciplina_id: 48,
+        disciplina_id: 16,
+        nome: 'Bateria',
+      }],
+    },
+  }, 'unidade-barra')!;
+
+  const { rows } = buildJornadaRowsForUpsert(input);
+  for (const field of [
+    'status_matricula',
+    'status_emusys',
+    'motivo_inativa',
+    'trancamento_id',
+    'trancamento_motivo',
+    'trancamento_data_inicial',
+    'trancamento_data_final',
+  ]) {
+    assert.equal(field in rows[0], false, `${field} nao deve ser enviado`);
+  }
 });

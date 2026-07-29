@@ -1,3 +1,8 @@
+import {
+  resolveEmusysMatriculaLifecycle,
+  type EmusysMatriculaLifecycleResolution,
+} from './emusys-matricula-lifecycle.ts';
+
 type SupabaseClientLike = {
   from: (table: string) => any;
 };
@@ -22,6 +27,8 @@ export interface JornadaMatriculaInput {
   unidadeId: string;
   fonte: string;
   statusMatricula: string | null;
+  estadoEmusysPresente: boolean;
+  lifecycle: EmusysMatriculaLifecycleResolution | null;
   emusysAlunoId: number | null;
   emusysMatriculaId: number | null;
   nomeAluno: string | null;
@@ -98,30 +105,32 @@ function textOrNull(value: unknown): string | null {
   return text.length > 0 ? text : null;
 }
 
-function statusCanonico(status: string | null): string {
-  const normalized = String(status || '').trim().toLowerCase();
-  if ([
-    'ativa',
-    'ativo',
-    'matriculada',
-    'matriculado',
-    'em andamento',
-    'matricula_nova',
-    'matricula_renovacao',
-    'matricula_renovada',
-    'matricula_alterada',
-  ].includes(normalized)) return 'ativa';
-  if (['trancada', 'trancado', 'matricula_trancamento'].includes(normalized)) return 'trancada';
-  if ([
-    'finalizada',
-    'finalizado',
-    'evadida',
-    'evadido',
-    'inativa',
-    'inativo',
-    'matricula_finalizacao',
-  ].includes(normalized)) return 'finalizada';
-  return 'desconhecido';
+function hasOwn(value: unknown, key: string): boolean {
+  return value != null
+    && typeof value === 'object'
+    && Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function lifecycleFrom(source: any): {
+  presente: boolean;
+  resolution: EmusysMatriculaLifecycleResolution | null;
+} {
+  const presente = [
+    'status',
+    'motivo_inativa',
+    'trancamento_ativo',
+  ].some((key) => hasOwn(source, key));
+
+  if (!presente) return { presente: false, resolution: null };
+
+  return {
+    presente: true,
+    resolution: resolveEmusysMatriculaLifecycle({
+      status: source?.status,
+      motivo_inativa: source?.motivo_inativa,
+      trancamento_ativo: source?.trancamento_ativo,
+    }),
+  };
 }
 
 // Contratos reais na base começam em ~2018; qualquer ano anterior a isto é
@@ -176,6 +185,20 @@ function buildContratoFields(input: JornadaMatriculaInput): Record<string, unkno
   };
 }
 
+function buildLifecycleFields(input: JornadaMatriculaInput): Record<string, unknown> {
+  if (!input.estadoEmusysPresente || !input.lifecycle) return {};
+
+  return {
+    status_matricula: input.lifecycle.journeyStatus,
+    status_emusys: input.lifecycle.rawStatus,
+    motivo_inativa: input.lifecycle.rawReason,
+    trancamento_id: input.lifecycle.lock?.id ?? null,
+    trancamento_motivo: input.lifecycle.lock?.motivo ?? null,
+    trancamento_data_inicial: input.lifecycle.lock?.dataInicial ?? null,
+    trancamento_data_final: input.lifecycle.lock?.dataFinal ?? null,
+  };
+}
+
 function calcularProximaAula(passadas: number | null, futuras: number | null): number | null {
   if (passadas == null) return null;
   if ((futuras ?? 0) <= 0) return null;
@@ -222,12 +245,15 @@ export function buildJornadaInputFromWebhook(
 ): JornadaMatriculaInput | null {
   const matricula = body?.matricula;
   if (!matricula) return null;
+  const lifecycle = lifecycleFrom(matricula);
 
   const disciplinasRaw = Array.isArray(matricula.disciplinas) ? matricula.disciplinas : [];
   return {
     unidadeId,
     fonte,
     statusMatricula: textOrNull(matricula.status ?? body?.evento),
+    estadoEmusysPresente: lifecycle.presente,
+    lifecycle: lifecycle.resolution,
     emusysAlunoId: numberOrNull(matricula.aluno_id ?? matricula.id_aluno),
     emusysMatriculaId: numberOrNull(matricula.matricula_id ?? matricula.id),
     nomeAluno: textOrNull(matricula.nome_aluno),
@@ -250,6 +276,7 @@ export function buildJornadaInputFromMatriculaApi(
   fonte = 'sync-matriculas-emusys'
 ): JornadaMatriculaInput | null {
   if (!mat) return null;
+  const lifecycle = lifecycleFrom(mat);
 
   const contrato = mat.contrato_atual || {};
   const disciplinasRaw = Array.isArray(contrato.disciplinas) ? contrato.disciplinas : [];
@@ -257,6 +284,8 @@ export function buildJornadaInputFromMatriculaApi(
     unidadeId,
     fonte,
     statusMatricula: textOrNull(mat.status ?? contrato.status),
+    estadoEmusysPresente: lifecycle.presente,
+    lifecycle: lifecycle.resolution,
     emusysAlunoId: numberOrNull(mat.aluno?.id ?? mat.aluno_id ?? mat.id_aluno),
     emusysMatriculaId: numberOrNull(mat.id ?? mat.matricula_id),
     nomeAluno: textOrNull(mat.aluno?.nome ?? mat.nome_aluno),
@@ -388,7 +417,11 @@ export function buildJornadaRowsForUpsert(
       professor_id: professorId,
       emusys_professor_id: disciplina.professorEmusysId,
       professor_nome_emusys: disciplina.nomeProfessor,
-      status_matricula: statusCanonico(input.statusMatricula),
+      ...(
+        input.estadoEmusysPresente
+          ? buildLifecycleFields(input)
+          : {}
+      ),
       qtd_contratos: input.qtdContratos,
       nr_faturas: input.nrFaturas,
       data_primeira_fatura: input.dataPrimeiraFatura,
@@ -411,6 +444,7 @@ export function buildJornadaRowsForUpsert(
           aluno_id: input.emusysAlunoId,
           nome_aluno: input.nomeAluno,
           status: input.statusMatricula,
+          motivo_inativa: input.lifecycle?.rawReason ?? null,
           qtd_contratos: input.qtdContratos,
         },
         disciplina: disciplina.raw,
@@ -454,7 +488,11 @@ export async function upsertJornadaMatriculaDisciplina(
       professor_id: professorId,
       emusys_professor_id: disciplina.professorEmusysId,
       professor_nome_emusys: disciplina.nomeProfessor,
-      status_matricula: statusCanonico(input.statusMatricula),
+      ...(
+        input.estadoEmusysPresente
+          ? buildLifecycleFields(input)
+          : {}
+      ),
       qtd_contratos: input.qtdContratos,
       ...buildContratoFields(input),
       nr_aulas_contratadas: disciplina.nrAulasContratadas,
@@ -473,6 +511,7 @@ export async function upsertJornadaMatriculaDisciplina(
           id: input.emusysMatriculaId,
           aluno_id: input.emusysAlunoId,
           status: input.statusMatricula,
+          motivo_inativa: input.lifecycle?.rawReason ?? null,
           qtd_contratos: input.qtdContratos,
         },
         disciplina: disciplina.raw,
