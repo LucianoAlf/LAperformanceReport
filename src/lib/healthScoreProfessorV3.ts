@@ -155,9 +155,17 @@ export interface HealthScoreV3Config {
   metasSegmentadas: HealthScoreV3SegmentGoal[];
 }
 
+export interface HealthScoreV3ActiveVersion {
+  id: string;
+  versao: number;
+  vigenciaInicio: string;
+  vigenciaFim: string | null;
+}
+
 export interface HealthScoreV3ConfigUi {
   ativa: HealthScoreV3Config | null;
   rascunho: HealthScoreV3Config | null;
+  versoesAtivas: HealthScoreV3ActiveVersion[];
   catalogoSegmentos?: HealthScoreV3CatalogSegment[];
   matrizSegmentada?: HealthScoreV3SegmentDraftGoal[];
   pendencias: HealthScoreV3ConfigPendencias;
@@ -533,6 +541,20 @@ export function parseHealthScoreV3Config(value: unknown): HealthScoreV3Config | 
   return parseConfig(value).config;
 }
 
+function parseHealthScoreV3ActiveVersions(value: unknown): HealthScoreV3ActiveVersion[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): HealthScoreV3ActiveVersion[] => {
+    const row = asRecord(item);
+    if (typeof row.id !== 'string' || !row.vigencia_inicio) return [];
+    return [{
+      id: row.id,
+      versao: asNumber(row.versao),
+      vigenciaInicio: String(row.vigencia_inicio),
+      vigenciaFim: row.vigencia_fim ? String(row.vigencia_fim) : null,
+    }];
+  });
+}
+
 export function parseHealthScoreV3ConfigUi(value: unknown): HealthScoreV3ConfigUi {
   const row = asRecord(value);
   const ativa = parseConfig(row.ativa);
@@ -546,6 +568,7 @@ export function parseHealthScoreV3ConfigUi(value: unknown): HealthScoreV3ConfigU
   return {
     ativa: ativa.config,
     rascunho: rascunho.config,
+    versoesAtivas: parseHealthScoreV3ActiveVersions(row.versoes_ativas),
     catalogoSegmentos,
     matrizSegmentada,
     pendencias: {

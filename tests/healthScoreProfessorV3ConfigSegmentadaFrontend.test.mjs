@@ -611,6 +611,7 @@ const validConfig: HealthScoreV3Config = {
 const validUi: HealthScoreV3ConfigUi = {
   ativa: null,
   rascunho: validConfig,
+  versoesAtivas: [],
   pendencias: {
     segmentosObservadosSemRegra: [],
     atribuicoesSemRegra: [validAssignment],

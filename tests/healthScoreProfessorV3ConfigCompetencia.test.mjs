@@ -9,7 +9,12 @@ const migrationPath = path.join(
   repoRoot,
   'supabase/migrations/20260728226000_health_score_v3_config_competencia_jeyson.sql',
 );
+const draftValidityMigrationPath = path.join(
+  repoRoot,
+  'supabase/migrations/20260728227000_health_score_v3_rascunho_vigencia_colisao.sql',
+);
 const hookPath = path.join(repoRoot, 'src/hooks/useHealthScoreProfessorV3Config.ts');
+const parserPath = path.join(repoRoot, 'src/lib/healthScoreProfessorV3.ts');
 const configComponentPath = path.join(
   repoRoot,
   'src/components/App/Professores/HealthScoreV3Config.tsx',
@@ -95,20 +100,44 @@ test('configuracao vigente fica explicitamente somente leitura e destaca novo ra
   );
 });
 
-test('nova vigencia sugerida parte da competencia quando a versao nao tem fim', () => {
+test('nova vigencia sugerida herda o inicio da versao exibida', () => {
   const source = read(configComponentPath);
 
   assert.match(
     source,
-    /function nextValidityStart\(\s*config:\s*HealthScoreV3Config \| null,\s*competencia:\s*string/,
+    /function draftValidityStart\(\s*config:\s*HealthScoreV3Config \| null/,
   );
   assert.match(
     source,
-    /startOfMonth\(addMonths\(selectedCompetence,\s*1\)\)/,
+    /return config\?\.vigenciaInicio \|\| currentMonthStart\(\)/,
   );
   assert.match(
     source,
-    /nextValidityStart\(config\?\.ativa \|\| null,\s*competencia\)/,
+    /draftValidityStart\(config\?\.ativa \|\| null\)/,
+  );
+});
+
+test('backend e frontend avisam colisao com outra versao ativa', () => {
+  assert.equal(
+    fs.existsSync(draftValidityMigrationPath),
+    true,
+    'deve existir migration aditiva que exponha as vigencias ativas',
+  );
+  const sql = read(draftValidityMigrationPath);
+  const parser = read(parserPath);
+  const component = read(configComponentPath);
+
+  assert.match(sql, /'versoes_ativas'/i);
+  assert.match(sql, /where\s+c\.status\s*=\s*'ativa'/i);
+  assert.match(sql, /'vigencia_inicio'\s*,\s*c\.vigencia_inicio/i);
+  assert.match(sql, /'vigencia_fim'\s*,\s*c\.vigencia_fim/i);
+  assert.match(parser, /versoesAtivas:\s*parseHealthScoreV3ActiveVersions/);
+  assert.match(component, /const validityCollision = useMemo/);
+  assert.match(component, /version\.id !== config\?\.ativa\?\.id/);
+  assert.match(component, /A data escolhida pertence à versão V\{validityCollision\.versao\}/);
+  assert.match(
+    component,
+    /disabled=\{mutating \|\| !config\?\.ativa \|\| Boolean\(validityCollision\)\}/,
   );
 });
 

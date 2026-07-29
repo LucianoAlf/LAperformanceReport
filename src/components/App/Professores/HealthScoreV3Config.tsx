@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBlocker } from 'react-router-dom';
-import { addDays, addMonths, format, startOfMonth } from 'date-fns';
+import { format, startOfMonth } from 'date-fns';
 import {
   Activity,
   Beaker,
@@ -98,26 +98,14 @@ const SEGMENTED_TARGET_METRICS: HealthMetricKeyV3[] = [
   'numero_alunos',
 ];
 
-function nextMonthStart() {
-  return format(startOfMonth(addMonths(new Date(), 1)), 'yyyy-MM-dd');
-}
-
 function currentMonthStart() {
   return format(startOfMonth(new Date()), 'yyyy-MM-dd');
 }
 
-function nextValidityStart(
+function draftValidityStart(
   config: HealthScoreV3Config | null,
-  competencia: string,
 ) {
-  if (config?.vigenciaFim) {
-    const end = dateFromIso(config.vigenciaFim);
-    if (end) return format(addDays(end, 1), 'yyyy-MM-dd');
-  }
-  const selectedCompetence = dateFromIso(competencia);
-  return selectedCompetence
-    ? format(startOfMonth(addMonths(selectedCompetence, 1)), 'yyyy-MM-dd')
-    : nextMonthStart();
+  return config?.vigenciaInicio || currentMonthStart();
 }
 
 function competenceLabel(value: string) {
@@ -214,7 +202,7 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
   } = useHealthScoreProfessorV3Config(competencia);
   const [workingConfig, setWorkingConfig] = useState<HealthScoreV3Config | null>(null);
   const [workingSegmentGoals, setWorkingSegmentGoals] = useState<HealthScoreV3SegmentDraftGoal[]>([]);
-  const [newValidity, setNewValidity] = useState(nextMonthStart);
+  const [newValidity, setNewValidity] = useState(currentMonthStart);
   const [justification, setJustification] = useState('');
   const [simulationMonth, setSimulationMonth] = useState(currentMonthStart);
   const [simulationIsCurrent, setSimulationIsCurrent] = useState(false);
@@ -240,7 +228,7 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
       setNewValidity(config.rascunho.vigenciaInicio);
     } else {
       setJustification('');
-      setNewValidity(nextValidityStart(config?.ativa || null, competencia));
+      setNewValidity(draftValidityStart(config?.ativa || null));
     }
     setSimulationIsCurrent(false);
   }, [competencia, config]);
@@ -279,6 +267,14 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
   }, [draftIsDirty]);
 
   const editable = Boolean(config?.rascunho && workingConfig?.id === config.rascunho.id);
+  const validityCollision = useMemo(
+    () => config?.versoesAtivas.find((version) => (
+      version.id !== config?.ativa?.id
+      && newValidity >= version.vigenciaInicio
+      && (version.vigenciaFim === null || newValidity <= version.vigenciaFim)
+    )) || null,
+    [config?.ativa?.id, config?.versoesAtivas, newValidity],
+  );
   const totalWeight = useMemo(
     () => workingConfig?.metricas.reduce((total, metric) => total + metric.peso, 0) || 0,
     [workingConfig],
@@ -335,6 +331,13 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
   };
 
   const handleCreateDraft = async () => {
+    if (validityCollision) {
+      toast.error(
+        'Vigência em conflito',
+        `A data escolhida já pertence à versão V${validityCollision.versao}.`,
+      );
+      return;
+    }
     if (justification.trim().length < 8) {
       toast.error('Justificativa obrigatória', 'Descreva por que uma nova versão será criada.');
       return;
@@ -535,13 +538,25 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
                 </label>
                 <Button
                   onClick={handleCreateDraft}
-                  disabled={mutating || !config?.ativa}
+                  disabled={mutating || !config?.ativa || Boolean(validityCollision)}
                   className="h-10"
                 >
                   {mutating ? <Loader2 className="animate-spin" /> : <Plus />}
                   Criar rascunho
                 </Button>
               </div>
+              {validityCollision ? (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                  A data escolhida pertence à versão V{validityCollision.versao}, vigente de{' '}
+                  {validityCollision.vigenciaInicio} até {validityCollision.vigenciaFim || 'sem data final'}.
+                  Para alterar essa versão, selecione uma competência governada por ela.
+                </div>
+              ) : (
+                <p className="text-xs text-cyan-200/80">
+                  O rascunho substituirá a V{workingConfig.versao} a partir de{' '}
+                  {workingConfig.vigenciaInicio}; a versão atual permanece preservada no histórico.
+                </p>
+              )}
             </div>
           )}
 
