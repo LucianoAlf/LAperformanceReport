@@ -23,6 +23,7 @@ import {
   buildJornadaInputFromMatriculaApi,
   buildJornadaRowsForUpsert,
 } from '../_shared/jornada-canonica.ts';
+import { resolveEmusysMatriculaLifecycle } from '../_shared/emusys-matricula-lifecycle.ts';
 import { deveConverterFinalizadaEmNaoRenovacao } from '../_shared/nao-renovacao-canonica.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -89,8 +90,6 @@ async function validarAcessoSync(req: Request): Promise<Response | null> {
 function normalizarNome(s: string): string {
   return (s || '').normalize('NFKD').replace(/[^\x00-\x7f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
-
-const STATUS_API_PARA_NOSSO: Record<string, string> = { ativa: 'ativo', trancada: 'trancado', finalizada: 'evadido' };
 
 function normalizarDiaParaComparacao(v: any): string {
   const s = normalizarNome(String(v ?? ''));
@@ -702,6 +701,80 @@ async function upsertJornadasEmLote(supabase: any, rows: any[]) {
   return result;
 }
 
+function buildEstadoAtualRows(
+  matriculas: Iterable<any>,
+  alunoIdPorMatriculaEmusys: Map<number, number>,
+  alunoIdPorAlunoEmusys: Map<number, number>,
+) {
+  const rows: any[] = [];
+
+  for (const mat of matriculas) {
+    const emusysMatriculaId = numeroFinitoOuNull(mat?.id);
+    if (emusysMatriculaId == null) continue;
+
+    const emusysAlunoId = numeroFinitoOuNull(mat?.aluno?.id);
+    const alunoId = alunoIdPorMatriculaEmusys.get(emusysMatriculaId)
+      ?? (emusysAlunoId == null ? null : alunoIdPorAlunoEmusys.get(emusysAlunoId))
+      ?? null;
+    const lifecycle = resolveEmusysMatriculaLifecycle(mat);
+
+    rows.push({
+      emusys_matricula_id: emusysMatriculaId,
+      emusys_aluno_id: emusysAlunoId,
+      aluno_id: alunoId,
+      emusys_contrato_id: numeroFinitoOuNull(mat?.contrato_atual?.id),
+      status_emusys: lifecycle.rawStatus,
+      status_emusys_bruto: mat?.status == null ? null : String(mat.status),
+      motivo_inativa: lifecycle.rawReason,
+      motivo_inativa_bruto: mat?.motivo_inativa == null ? null : String(mat.motivo_inativa),
+      status_local_resolvido: lifecycle.localStatus,
+      status_jornada_resolvido: lifecycle.journeyStatus,
+      tipo_movimento_resolvido: lifecycle.movementKind,
+      transicao_automatica: lifecycle.automaticTransition,
+      motivo_auditoria: lifecycle.auditReason,
+      trancamento_id: lifecycle.lock?.id ?? null,
+      trancamento_motivo: lifecycle.lock?.motivo ?? null,
+      trancamento_data_inicial: lifecycle.lock?.dataInicial ?? null,
+      trancamento_data_final: lifecycle.lock?.dataFinal ?? null,
+      payload_snapshot: mat,
+    });
+  }
+
+  return rows;
+}
+
+async function upsertEstadosAtuaisEmLote(supabase: any, u: { id: string }, rows: any[]) {
+  const result = {
+    recebidas: rows.length,
+    gravadas: 0,
+    rejeitadas: 0,
+    erros: 0,
+    mensagens: [] as string[],
+  };
+
+  for (let i = 0; i < rows.length; i += 100) {
+    const chunk = rows.slice(i, i + 100);
+    const { data, error } = await supabase.rpc(
+      'upsert_emusys_matriculas_estado_atual',
+      {
+        p_unidade_id: u.id,
+        p_linhas: chunk,
+      },
+    );
+
+    if (error) {
+      result.erros += chunk.length;
+      result.mensagens.push(error.message);
+      continue;
+    }
+
+    result.gravadas += Number(data?.gravadas ?? 0);
+    result.rejeitadas += Number(data?.rejeitadas ?? 0);
+  }
+
+  return result;
+}
+
 function resolverCursoContrato(mat: any, depara: Map<number, number | null>, banda: Set<number>) {
   const cursos: number[] = [];
   const cursosBanda: number[] = [];
@@ -784,7 +857,13 @@ function temNaoRenovacaoCanonicaDaMesmaMatricula(
 ) {
   const matriculaId = numeroFinitoOuNull(matriculaEmusys?.id);
   if (matriculaId == null) return false;
-  if (String(matriculaEmusys?.status ?? '').toLowerCase() !== 'finalizada') return false;
+  const lifecycle = resolveEmusysMatriculaLifecycle(matriculaEmusys);
+  if (lifecycle.rawReason === 'interrompida') return false;
+  const ehConclusaoV131 = lifecycle.rawReason === 'concluida';
+  if (
+    !ehConclusaoV131
+    && lifecycle.rawStatus !== 'finalizada'
+  ) return false;
   if (String(aluno?.status ?? '').toLowerCase() !== 'inativo') return false;
 
   return naoRenovacoesCanonicas.some((mov: any) => (
@@ -811,6 +890,7 @@ serve(async (req) => {
     fila: {},
     atributos: {},
     jornadas: { atualizadas: 0, puladas: 0, erros: 0 },
+    estados_atual: { recebidas: 0, gravadas: 0, rejeitadas: 0, erros: 0 },
     nao_renovacoes_convertidas: 0,
     nao_renovacoes_erros: [],
     erros: 0,
@@ -904,6 +984,22 @@ serve(async (req) => {
       if (alunoEmusysId != null) alunoIdPorAlunoEmusys.set(alunoEmusysId, aluno.id);
     }
 
+    const linhasEstadoAtual = buildEstadoAtualRows(
+      porId.values(),
+      alunoIdPorMatriculaEmusys,
+      alunoIdPorAlunoEmusys,
+    );
+    resumo.estados_atual = await upsertEstadosAtuaisEmLote(
+      supabase,
+      u,
+      linhasEstadoAtual,
+    );
+    if (resumo.estados_atual.erros > 0) {
+      throw new Error(
+        `Falha ao materializar ${resumo.estados_atual.erros} estados atuais de matricula`,
+      );
+    }
+
     const linhasJornada: any[] = [];
     for (const mat of porId.values()) {
       const input = buildJornadaInputFromMatriculaApi(mat, u.id, 'sync-matriculas-emusys');
@@ -985,39 +1081,64 @@ serve(async (req) => {
         if (
           matAtributos
           && !r.detalhes?.sync_ignorado_por_decisao_canonica
-          && deveConverterFinalizadaEmNaoRenovacao(matAtributos.status, matAtributos.id, renovacaoPendente)
+          && deveConverterFinalizadaEmNaoRenovacao(matAtributos, matAtributos.id, renovacaoPendente)
         ) {
-          const dataFinalizacao = matAtributos.contrato_atual?.data_original_ultima_aula
+          const dataFinalizacaoReal = matAtributos.data_inativa
+            || matAtributos.data_finalizacao
+            || matAtributos.contrato_atual?.data_original_ultima_aula
             || matAtributos.contrato_atual?.data_ultima_aula
-            || new Date().toISOString().slice(0, 10);
-          const { error: conversaoError } = await supabase.rpc(
-            'converter_renovacao_pendente_em_nao_renovacao',
-            {
-              p_movimentacao_id: renovacaoPendente.id,
-              p_emusys_matricula_id: String(matAtributos.id),
-              p_data: String(dataFinalizacao).slice(0, 10),
-              p_origem: 'sync-matriculas-emusys',
-            },
-          );
+            || null;
 
-          movimentacoesNaoRenovacaoProcessadas.add(Number(renovacaoPendente.id));
-          if (conversaoError) {
-            console.error('[nao-renovacao] Falha ao converter renovacao pendente', {
-              movimentacao_id: renovacaoPendente.id,
-              aluno_id: a.id,
-              emusys_matricula_id: matAtributos.id,
-              erro: conversaoError.message,
+          if (dataFinalizacaoReal) {
+            const { error: conversaoError } = await supabase.rpc(
+              'converter_renovacao_pendente_em_nao_renovacao',
+              {
+                p_movimentacao_id: renovacaoPendente.id,
+                p_emusys_matricula_id: String(matAtributos.id),
+                p_data: String(dataFinalizacaoReal).slice(0, 10),
+                p_origem: 'sync-matriculas-emusys',
+              },
+            );
+
+            movimentacoesNaoRenovacaoProcessadas.add(Number(renovacaoPendente.id));
+            if (conversaoError) {
+              console.error('[nao-renovacao] Falha ao converter renovacao pendente', {
+                movimentacao_id: renovacaoPendente.id,
+                aluno_id: a.id,
+                emusys_matricula_id: matAtributos.id,
+                erro: conversaoError.message,
+              });
+              resumo.nao_renovacoes_erros.push({
+                movimentacao_id: renovacaoPendente.id,
+                aluno_id: a.id,
+                emusys_matricula_id: matAtributos.id,
+                erro: conversaoError.message,
+              });
+            } else {
+              resumo.nao_renovacoes_convertidas++;
+              r.divergencias = r.divergencias.filter((dv: any) => dv.tipo !== 'status_divergente');
+              alunosComStatusCanonico.add(Number(a.id));
+            }
+          } else {
+            const lifecycle = resolveEmusysMatriculaLifecycle(matAtributos);
+            r.divergencias.push({
+              tipo: 'status_divergente',
+              campo: 'status',
+              severidade: 'alta',
+              valorApi: {
+                motivo: 'data_finalizacao_emusys_ausente',
+                status_emusys: lifecycle.rawStatus,
+                motivo_inativa: lifecycle.rawReason,
+                emusys_matricula_id: matAtributos.id,
+              },
+              sugestao: null,
             });
             resumo.nao_renovacoes_erros.push({
               movimentacao_id: renovacaoPendente.id,
               aluno_id: a.id,
               emusys_matricula_id: matAtributos.id,
-              erro: conversaoError.message,
+              erro: 'data_finalizacao_emusys_ausente',
             });
-          } else {
-            resumo.nao_renovacoes_convertidas++;
-            r.divergencias = r.divergencias.filter((dv: any) => dv.tipo !== 'status_divergente');
-            alunosComStatusCanonico.add(Number(a.id));
           }
         }
 
@@ -1442,7 +1563,8 @@ function reconciliar(
     camposBloqueadosPorDecisaoCanonica(decisaoCanonica),
   );
 
-  const statusAlvo = STATUS_API_PARA_NOSSO[mat.status] || 'ativo';
+  const lifecycle = resolveEmusysMatriculaLifecycle(mat);
+  const statusAlvo = lifecycle.localStatus;
   const c = mat.contrato_atual || {};
   const financeiro = analisarFinanceiroContrato(mat);
   const cheio = financeiro.valorCheio;
@@ -1453,7 +1575,12 @@ function reconciliar(
   const parcelaComercial = financeiro.parcelaCanonica;
   const liquidoFinanceiro = financeiro.liquidoFinanceiro;
   const bolsa = financeiro.bolsa;
-  const dataFim = c.data_original_ultima_aula || null;
+  const dataFim = (
+    lifecycle.rawStatus === 'inativa'
+    || lifecycle.rawStatus === 'finalizada'
+  )
+    ? (c.data_original_ultima_aula || c.data_ultima_aula || null)
+    : null;
   const statusFinanceiroEmusys = financeiro.statusPagamentoCanonico ?? extrairStatusFinanceiroEmusys(mat);
   const fotoEmusys = extrairFotoAluno(mat);
 
@@ -1472,7 +1599,29 @@ function reconciliar(
     }
   };
 
-  if (statusAlvo !== a.status && !fixadosEfetivos.has('status')) {
+  if (
+    !lifecycle.automaticTransition
+    && !fixadosEfetivos.has('status')
+  ) {
+    divergencias.push({
+      tipo: 'status_divergente',
+      campo: 'status',
+      severidade: 'alta',
+      valorApi: {
+        motivo: 'status_emusys_ambiguo',
+        status_emusys: lifecycle.rawStatus,
+        motivo_inativa: lifecycle.rawReason,
+        motivo_auditoria: lifecycle.auditReason,
+        transicao_automatica: lifecycle.automaticTransition,
+        emusys_matricula_id: mat.id,
+      },
+      sugestao: null,
+    });
+  } else if (
+    statusAlvo != null
+    && statusAlvo !== a.status
+    && !fixadosEfetivos.has('status')
+  ) {
     divergencias.push({
       tipo: 'status_divergente',
       campo: 'status',
@@ -1486,7 +1635,9 @@ function reconciliar(
       sugestao: statusAlvo,
     });
   }
-  sugerirCampoRevisao('data_fim_contrato', dataFim, a.data_fim_contrato);
+  if (dataFim && statusAlvo && statusAlvo !== 'ativo' && statusAlvo !== 'trancado') {
+    sugerirCampoRevisao('data_fim_contrato', dataFim, a.data_fim_contrato);
+  }
   if (String(a.status || '').toLowerCase() === 'ativo') {
     sugerirCampoRevisao('status_pagamento', statusFinanceiroEmusys, a.status_pagamento);
   }
