@@ -245,7 +245,14 @@ export function buildJornadaInputFromWebhook(
 ): JornadaMatriculaInput | null {
   const matricula = body?.matricula;
   if (!matricula) return null;
-  const lifecycle = lifecycleFrom(matricula);
+  const lifecycleSource = body?.evento === 'matricula_trancamento'
+    && !['status', 'motivo_inativa', 'trancamento_ativo'].some((key) => hasOwn(matricula, key))
+    ? {
+      status: 'trancada',
+      trancamento_ativo: body?.trancamento ?? null,
+    }
+    : matricula;
+  const lifecycle = lifecycleFrom(lifecycleSource);
 
   const disciplinasRaw = Array.isArray(matricula.disciplinas) ? matricula.disciplinas : [];
   return {

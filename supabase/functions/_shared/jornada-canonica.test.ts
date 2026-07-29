@@ -237,6 +237,26 @@ Deno.test('webhook sem estado v1.3.1 nao envia colunas que apagariam o GET', asy
   }
 });
 
+Deno.test('webhook de trancamento preserva o estado e os detalhes do bloqueio', () => {
+  const payload: any = webhookPayloadFake();
+  delete payload.matricula.status;
+  payload.evento = 'matricula_trancamento';
+  payload.trancamento = {
+    id: 88,
+    motivo: 'Intercambio',
+    data_inicial: '2026-07-20',
+    data_final: '2026-08-20',
+  };
+
+  const input = buildJornadaInputFromWebhook(payload, UNIDADE)!;
+  const { rows } = buildJornadaRowsForUpsert(input);
+
+  assertEquals(rows[0].status_matricula, 'trancada');
+  assertEquals(rows[0].status_emusys, 'trancada');
+  assertEquals(rows[0].trancamento_id, 88);
+  assertEquals(rows[0].trancamento_motivo, 'Intercambio');
+});
+
 Deno.test('inativa concluida preserva motivo e encerra a jornada sem evasao implicita', () => {
   const input = buildJornadaInputFromMatriculaApi({
     ...matriculaFake(),

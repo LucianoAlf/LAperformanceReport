@@ -1,6 +1,8 @@
 /// <reference lib="deno.ns" />
 
-// Edge Function: processar-matricula-emusys v30
+// Edge Function: processar-matricula-emusys v31
+// v31 (2026-07-29): interpreta o ciclo de vida v1.3.1 pelo resolvedor canonico,
+// separa contrato concluido de interrupcao e preserva ambiguidades para auditoria.
 // Processa webhooks de matrícula do Emusys: nova, renovação, trancamento, evasão
 //
 // MUDANCAS v30 (2026-07-17):
@@ -112,17 +114,22 @@ import {
   type ResultadoMatricula,
 } from '../_shared/invariantes.ts';
 import {
+  buildJornadaInputFromMatriculaApi,
   buildTransicaoProfessorContextoSemPii,
   buildJornadaInputFromWebhook,
   upsertJornadaMatriculaDisciplina,
   type JornadaDisciplinaInput,
   type JornadaMatriculaInput,
 } from '../_shared/jornada-canonica.ts';
+import {
+  resolveEmusysMatriculaLifecycle,
+  type EmusysMatriculaLifecycleResolution,
+} from '../_shared/emusys-matricula-lifecycle.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const VERSAO = 'v30';
+const VERSAO = 'v31';
 const EVENTOS_JORNADA_CANONICA = new Set([
   'matricula_nova',
   'matricula_renovacao',
@@ -174,6 +181,34 @@ async function buscarMatriculaApiPorData(escolaId: number, matriculaId: number, 
     if (!json.paginacao?.tem_mais || !json.paginacao?.proximo_cursor) break;
     cursor = json.paginacao.proximo_cursor;
   }
+  return null;
+}
+
+async function buscarMatriculaApiPorId(
+  escolaId: number,
+  matriculaId: number,
+  alunoEmusysId: number | null,
+) {
+  const token = tokenApiEmusys(escolaId);
+  if (!token || !Number.isFinite(matriculaId) || matriculaId <= 0) return null;
+
+  let cursor = '';
+  for (let i = 0; i < 100; i++) {
+    const filtroAluno = Number.isFinite(alunoEmusysId) && Number(alunoEmusysId) > 0
+      ? `&aluno_id=${alunoEmusysId}`
+      : '';
+    const filtroCursor = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
+    const url = `${EMUSYS_API}/matriculas?status=todas&limite=50${filtroAluno}${filtroCursor}`;
+    const resp = await fetch(url, { headers: { token } });
+    if (!resp.ok) return null;
+
+    const json = await resp.json();
+    const hit = (json.items || []).find((m: any) => Number(m.id) === Number(matriculaId));
+    if (hit) return hit;
+    if (!json.paginacao?.tem_mais || !json.paginacao?.proximo_cursor) break;
+    cursor = json.paginacao.proximo_cursor;
+  }
+
   return null;
 }
 
@@ -343,6 +378,7 @@ function hojeISOBRT(): string {
 interface Payload {
   evento: string;
   matriculaIdEmusys: string | null;
+  alunoEmusysId: number | null;
   unidadeId: string;
   unidadeNome: string;
   escolaId: number;
@@ -365,11 +401,16 @@ interface Payload {
   idade: number | null;
   professorNome: string | null;
   professorEmusysId: number | null;
+  trancamentoId: number | null;
   trancamentoMotivo: string | null;
   trancamentoDataInicial: string | null;
   trancamentoDataFinal: string | null;
   finalizacaoMotivo: string | null;
   finalizacaoObservacoes: string | null;
+  statusEmusys: string | null;
+  motivoInativa: string | null;
+  dataEvento: string;
+  estadoAtualApi: any | null;
   emusysCursoId: number | null;
   fotoAlunoUrl: string | null;
   instagram: string | null;
@@ -389,10 +430,23 @@ function parsePayload(body: any): Payload | null {
   const agend = disc?.agendamentos?.[0];
   const tranc = body.trancamento;
   const finaliz = body.finalizacao;
+  const motivoInativaExplicito =
+    m.motivo_inativa
+    ?? body.motivo_inativa
+    ?? finaliz?.motivo_inativa
+    ?? null;
+  const motivoFinalizacaoCanonico = ['interrompida', 'concluida'].includes(
+    normalizar(motivoInativaExplicito ?? finaliz?.motivo),
+  )
+    ? (motivoInativaExplicito ?? finaliz?.motivo)
+    : null;
+  const alunoEmusysId = Number(m.aluno_id ?? m.id_aluno);
+  const trancamentoId = Number(tranc?.id);
 
   return {
     evento: body.evento,
     matriculaIdEmusys: m.matricula_id != null ? String(m.matricula_id) : null,
+    alunoEmusysId: Number.isFinite(alunoEmusysId) ? alunoEmusysId : null,
     unidadeId: escola.id,
     unidadeNome: escola.nome,
     escolaId: body.escola_id,
@@ -415,11 +469,21 @@ function parsePayload(body: any): Payload | null {
     idade: calcularIdade(m.data_nascimento_aluno),
     professorNome: disc?.nome_professor || null,
     professorEmusysId: disc?.id_professor || null,
+    trancamentoId: Number.isFinite(trancamentoId) ? trancamentoId : null,
     trancamentoMotivo: tranc?.motivo || null,
     trancamentoDataInicial: tranc?.data_inicial || null,
     trancamentoDataFinal: tranc?.data_final || null,
     finalizacaoMotivo: finaliz?.motivo || null,
     finalizacaoObservacoes: finaliz?.observacoes || null,
+    statusEmusys: m.status ?? body.status ?? null,
+    motivoInativa: motivoFinalizacaoCanonico,
+    dataEvento: dateOnlyISO(
+      finaliz?.data_finalizacao
+      ?? finaliz?.data
+      ?? body.data_hora_criacao
+      ?? body.data_hora_alteracao,
+    ) ?? hojeISOBRT(),
+    estadoAtualApi: null,
     // IDs do Emusys sao por unidade. Para curso no LA Report, o ID confiavel e o
     // da disciplina da matricula, resolvido via curso_emusys_depara(unidade, disciplina).
     // Em alguns payloads, disc.id e o vinculo matricula-disciplina; fica so como ultimo fallback.
@@ -430,6 +494,104 @@ function parsePayload(body: any): Payload | null {
     agenteNome: m.usuario_realizou_matricula?.nome || null,
     rawPayload: body,
   };
+}
+
+interface FinalizacaoCanonica {
+  lifecycle: EmusysMatriculaLifecycleResolution;
+  estadoAtualApi: any | null;
+  fonte: 'payload' | 'api' | 'auditoria';
+}
+
+async function resolverFinalizacaoCanonica(p: Payload): Promise<FinalizacaoCanonica> {
+  const statusPayload = p.statusEmusys ?? (p.motivoInativa ? 'inativa' : null);
+  const lifecyclePayload = resolveEmusysMatriculaLifecycle({
+    status: statusPayload,
+    motivo_inativa: p.motivoInativa,
+  });
+
+  if (
+    lifecyclePayload.automaticTransition
+    && (lifecyclePayload.movementKind === 'evasao'
+      || lifecyclePayload.movementKind === 'nao_renovacao')
+  ) {
+    p.statusEmusys = lifecyclePayload.rawStatus;
+    p.motivoInativa = lifecyclePayload.rawReason;
+    return { lifecycle: lifecyclePayload, estadoAtualApi: null, fonte: 'payload' };
+  }
+
+  const matriculaId = Number(p.matriculaIdEmusys);
+  const estadoAtualApi = Number.isFinite(matriculaId)
+    ? await buscarMatriculaApiPorId(p.escolaId, matriculaId, p.alunoEmusysId)
+    : null;
+
+  if (estadoAtualApi) {
+    const lifecycleApi = resolveEmusysMatriculaLifecycle({
+      status: estadoAtualApi.status,
+      motivo_inativa: estadoAtualApi.motivo_inativa,
+      trancamento_ativo: estadoAtualApi.trancamento_ativo,
+    });
+
+    p.estadoAtualApi = estadoAtualApi;
+    p.statusEmusys = estadoAtualApi.status ?? null;
+    p.motivoInativa = estadoAtualApi.motivo_inativa ?? null;
+
+    return {
+      lifecycle: lifecycleApi,
+      estadoAtualApi,
+      fonte: lifecycleApi.automaticTransition ? 'api' : 'auditoria',
+    };
+  }
+
+  return {
+    lifecycle: lifecyclePayload,
+    estadoAtualApi: null,
+    fonte: 'auditoria',
+  };
+}
+
+async function materializarEstadoAtualWebhook(
+  supabase: any,
+  p: Payload,
+  finalizacao: FinalizacaoCanonica,
+): Promise<void> {
+  if (!p.matriculaIdEmusys) return;
+
+  const api = finalizacao.estadoAtualApi;
+  const lifecycle = finalizacao.lifecycle;
+  const { data: alunoLocal, error: alunoError } = await supabase
+    .from('alunos')
+    .select('id')
+    .eq('unidade_id', p.unidadeId)
+    .eq('emusys_matricula_id', p.matriculaIdEmusys)
+    .maybeSingle();
+  if (alunoError) throw alunoError;
+
+  const linha = {
+    emusys_matricula_id: Number(p.matriculaIdEmusys),
+    emusys_aluno_id: api?.aluno?.id ?? p.alunoEmusysId,
+    aluno_id: alunoLocal?.id ?? null,
+    emusys_contrato_id: api?.contrato_atual?.id ?? null,
+    status_emusys: lifecycle.rawStatus,
+    status_emusys_bruto: api?.status ?? p.statusEmusys,
+    motivo_inativa: lifecycle.rawReason,
+    motivo_inativa_bruto: api?.motivo_inativa ?? p.motivoInativa,
+    status_local_resolvido: lifecycle.localStatus,
+    status_jornada_resolvido: lifecycle.journeyStatus,
+    tipo_movimento_resolvido: lifecycle.movementKind,
+    transicao_automatica: lifecycle.automaticTransition,
+    motivo_auditoria: lifecycle.auditReason,
+    trancamento_id: lifecycle.lock?.id ?? null,
+    trancamento_motivo: lifecycle.lock?.motivo ?? null,
+    trancamento_data_inicial: lifecycle.lock?.dataInicial ?? null,
+    trancamento_data_final: lifecycle.lock?.dataFinal ?? null,
+    payload_snapshot: api ?? p.rawPayload,
+  };
+
+  const { error } = await supabase.rpc('upsert_emusys_matriculas_estado_atual', {
+    p_unidade_id: p.unidadeId,
+    p_linhas: [linha],
+  });
+  if (error) throw error;
 }
 
 function dataTransicaoFromPayload(raw: any): string {
@@ -616,7 +778,23 @@ async function sincronizarJornadaCanonicaWebhook(supabase: any, p: Payload, auto
   }
 
   try {
-    const input = buildJornadaInputFromWebhook(p.rawPayload, p.unidadeId, `webhook:${p.evento}`);
+    const webhookCanonico = p.evento === 'matricula_finalizacao' && p.statusEmusys
+      ? {
+        ...p.rawPayload,
+        matricula: {
+          ...p.rawPayload.matricula,
+          status: p.statusEmusys,
+          motivo_inativa: p.motivoInativa,
+        },
+      }
+      : p.rawPayload;
+    const input = p.estadoAtualApi
+      ? buildJornadaInputFromMatriculaApi(
+        p.estadoAtualApi,
+        p.unidadeId,
+        `webhook:${p.evento}:get`,
+      )
+      : buildJornadaInputFromWebhook(webhookCanonico, p.unidadeId, `webhook:${p.evento}`);
     if (!input) return { updated: 0, skipped: 0, errors: ['payload_sem_matricula'] };
     const transicoesProfessor = await registrarTransicaoProfessorSeNecessario(supabase, input, p, automacaoLogId);
     const result = await upsertJornadaMatriculaDisciplina(supabase, input);
@@ -817,10 +995,11 @@ async function registrarMovimentacao(
     renovacaoStatus?: RenovacaoStatusOperacional;
     formaPagamentoId?: number | null;
     agenteComercial?: string | null;
+    dataMovimento?: string | null;
   } = {},
 ): Promise<boolean> {
-  const hoje = hojeISOBRT();
-  const inicioMes = inicioMesISO(hoje);
+  const dataMovimento = dateOnlyISO(valores.dataMovimento) ?? hojeISOBRT();
+  const inicioMes = inicioMesISO(dataMovimento);
   const competenciaReferencia = valores.competenciaReferencia ?? inicioMes;
 
   let existingQuery = supabase.from('movimentacoes_admin')
@@ -841,7 +1020,7 @@ async function registrarMovimentacao(
         .select('id')
         .eq('tipo', 'renovacao')
         .eq('emusys_matricula_id', p.matriculaIdEmusys)
-        .gte('data', addDiasISO(hoje, -60))
+        .gte('data', addDiasISO(dataMovimento, -60))
         .limit(1);
       if (jaExistePorMatricula?.length) return false;
     }
@@ -881,7 +1060,7 @@ async function registrarMovimentacao(
 
   const payload: any = {
     unidade_id: p.unidadeId,
-    data: hoje,
+    data: dataMovimento,
     tipo,
     aluno_nome: p.nomeAluno,
     aluno_id: alunoId,
@@ -1359,6 +1538,22 @@ async function handleTrancamento(supabase: any, p: Payload) {
   );
 
   try {
+    const lifecycle = resolveEmusysMatriculaLifecycle({
+      status: 'trancada',
+      trancamento_ativo: {
+        id: p.trancamentoId,
+        motivo: p.trancamentoMotivo,
+        data_inicial: p.trancamentoDataInicial,
+        data_final: p.trancamentoDataFinal,
+      },
+    });
+    p.statusEmusys = lifecycle.rawStatus;
+    await materializarEstadoAtualWebhook(supabase, p, {
+      lifecycle,
+      estadoAtualApi: null,
+      fonte: 'payload',
+    });
+
     const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId, p.unidadeId);
     const found = await buscarAluno(supabase, p, cursoId);
 
@@ -1478,9 +1673,10 @@ async function registrarPassagemFinalizada(
   supabase: any,
   alunoCorrente: { id: number; nome: string },
   p: Payload,
+  categoriaSaida: 'Evadido' | 'Não renovou',
 ): Promise<any> {
   const nomeNorm = normalizar(alunoCorrente.nome);
-  const hoje = new Date().toISOString().split('T')[0];
+  const hoje = p.dataEvento;
 
   // 1. Todas as matrículas dessa pessoa (nome+unidade)
   const { data: candidatos } = await supabase.from('alunos')
@@ -1526,9 +1722,6 @@ async function registrarPassagemFinalizada(
   }
 
   // 5. Categoria: Evadido se algum tem status evadido, senão Interrompido
-  const algumEvadido = matriculasPessoa.some((a: any) => a.status === 'evadido');
-  const categoria = algumEvadido ? 'Evadido' : 'Interrompido';
-
   // 6. mes_saida formato "Maio/2026"
   const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const dataSaidaObj = new Date(hoje + 'T12:00:00');
@@ -1543,7 +1736,7 @@ async function registrarPassagemFinalizada(
     data_entrada: dataEntrada,
     data_saida: hoje,
     tempo_permanencia_meses: tempoMeses,
-    categoria_saida: categoria,
+    categoria_saida: categoriaSaida,
     mes_saida: mesSaida,
     motivo_saida: p.finalizacaoMotivo || null,
   }).select('id').maybeSingle();
@@ -1562,13 +1755,24 @@ async function registrarPassagemFinalizada(
     data_saida: hoje,
     tempo_meses: tempoMeses,
     aluno_ids: validas.map((a: any) => a.id),
-    categoria_saida: categoria,
+    categoria_saida: categoriaSaida,
   };
 }
 
-async function handleEvasao(supabase: any, p: Payload) {
+interface SaidaFinalizadaConfig {
+  statusLocal: 'evadido' | 'inativo';
+  movimento: 'evasao' | 'nao_renovacao';
+  action: 'status_evadido' | 'status_inativo_contrato_concluido';
+  categoriaSaida: 'Evadido' | 'Não renovou';
+}
+
+async function handleSaidaFinalizada(
+  supabase: any,
+  p: Payload,
+  config: SaidaFinalizadaConfig,
+) {
   const idempotency_key = await computarHash(
-    `matricula_finalizacao:${p.matriculaIdEmusys ?? ''}:${p.unidadeId}:${new Date().toISOString().split('T')[0]}`
+    `matricula_finalizacao:${p.matriculaIdEmusys ?? ''}:${p.unidadeId}:${config.movimento}:${p.dataEvento}`
   );
 
   try {
@@ -1610,24 +1814,40 @@ async function handleEvasao(supabase: any, p: Payload) {
     const aluno = found.aluno;
     await backfillMatriculaId(supabase, aluno.id, p.matriculaIdEmusys, aluno.emusys_matricula_id);
 
-    const evasaoUpdate: any = {
-      status: 'evadido',
-      data_saida: new Date().toISOString().split('T')[0],
+    const saidaUpdate: any = {
+      status: config.statusLocal,
+      data_saida: p.dataEvento,
       updated_at: new Date().toISOString(),
     };
-    if (p.fotoAlunoUrl) evasaoUpdate.foto_url = p.fotoAlunoUrl;
-    if (p.instagram) evasaoUpdate.instagram = p.instagram;
+    if (p.fotoAlunoUrl) saidaUpdate.foto_url = p.fotoAlunoUrl;
+    if (p.instagram) saidaUpdate.instagram = p.instagram;
 
-    await supabase.from('alunos').update(evasaoUpdate).eq('id', aluno.id);
+    await supabase.from('alunos').update(saidaUpdate).eq('id', aluno.id);
 
-    const motivo = p.finalizacaoMotivo || 'Via Emusys (automação)';
-    const movRegistrada = await registrarMovimentacao(supabase, 'evasao', p, aluno.id, aluno.professor_atual_id, aluno.curso_id, motivo);
+    const motivo = p.finalizacaoMotivo
+      || (config.movimento === 'nao_renovacao'
+        ? 'Contrato concluído no Emusys (automação)'
+        : 'Via Emusys (automação)');
+    const movRegistrada = await registrarMovimentacao(
+      supabase,
+      config.movimento,
+      p,
+      aluno.id,
+      aluno.professor_atual_id,
+      aluno.curso_id,
+      motivo,
+      { dataMovimento: p.dataEvento },
+    );
 
-    // v12: gravar passagem em alunos_historico se aluno saiu de TODAS as matrículas
-    const passagem = await registrarPassagemFinalizada(supabase, { id: aluno.id, nome: aluno.nome }, p);
+    const passagem = await registrarPassagemFinalizada(
+      supabase,
+      { id: aluno.id, nome: aluno.nome },
+      p,
+      config.categoriaSaida,
+    );
 
     const result = {
-      action: 'status_evadido',
+      action: config.action,
       aluno_id: aluno.id,
       matched_via: found.fonte,
       motivo,
@@ -1677,14 +1897,94 @@ async function handleEvasao(supabase: any, p: Payload) {
       invariantes: [{
         regra: 'processamento_falhou_excecao',
         severidade: 'critico',
-        mensagem: `Exceção em handleEvasao: ${e?.message ?? e}`,
+        mensagem: `Exceção em handleSaidaFinalizada: ${e?.message ?? e}`,
       }],
-      detalhes: { version: VERSAO, erro: e?.message ?? String(e) },
+      detalhes: {
+        version: VERSAO,
+        erro: e?.message ?? String(e),
+        movimento: config.movimento,
+      },
       workflow_id: 'processar-matricula-emusys',
       execution_id: new Date().toISOString(),
     });
     throw e;
   }
+}
+
+async function handleNaoRenovacao(supabase: any, p: Payload) {
+  return handleSaidaFinalizada(supabase, p, {
+    statusLocal: 'inativo',
+    movimento: 'nao_renovacao',
+    action: 'status_inativo_contrato_concluido',
+    categoriaSaida: 'Não renovou',
+  });
+}
+
+async function handleEvasao(supabase: any, p: Payload) {
+  return handleSaidaFinalizada(supabase, p, {
+    statusLocal: 'evadido',
+    movimento: 'evasao',
+    action: 'status_evadido',
+    categoriaSaida: 'Evadido',
+  });
+}
+
+async function handleFinalizacaoAmbigua(
+  supabase: any,
+  p: Payload,
+  lifecycle: EmusysMatriculaLifecycleResolution,
+  fonte: FinalizacaoCanonica['fonte'],
+) {
+  const idempotency_key = await computarHash(
+    `matricula_finalizacao_auditoria:${p.matriculaIdEmusys ?? ''}:${p.unidadeId}:${p.dataEvento}`
+  );
+  const result = {
+    action: 'finalizacao_em_auditoria',
+    auditoria: true,
+    motivo_auditoria: lifecycle.auditReason ?? 'motivo_inativa_nao_confirmado',
+    status_emusys: lifecycle.rawStatus,
+    motivo_inativa: lifecycle.rawReason,
+    fonte_resolucao: fonte,
+    emusys_matricula_id: p.matriculaIdEmusys,
+  };
+
+  await gravarLog(supabase, {
+    evento: 'matricula_finalizacao',
+    acao: result.action,
+    aluno_nome: p.nomeAluno || '(desconhecido)',
+    unidade_nome: p.unidadeNome ?? undefined,
+    payload_bruto: p.rawPayload,
+    idempotency_key,
+    invariantes: [{
+      regra: 'finalizacao_sem_classificacao_canonica',
+      severidade: 'aviso',
+      mensagem: 'Finalização preservada para auditoria sem alterar o estado local.',
+    }],
+    detalhes: { ...result, version: VERSAO },
+    workflow_id: 'processar-matricula-emusys',
+    execution_id: new Date().toISOString(),
+  });
+
+  return result;
+}
+
+async function handleFinalizacaoCanonica(supabase: any, p: Payload) {
+  const finalizacao = await resolverFinalizacaoCanonica(p);
+  await materializarEstadoAtualWebhook(supabase, p, finalizacao);
+
+  if (finalizacao.lifecycle.movementKind === 'evasao') {
+    return handleEvasao(supabase, p);
+  }
+  if (finalizacao.lifecycle.movementKind === 'nao_renovacao') {
+    return handleNaoRenovacao(supabase, p);
+  }
+
+  return handleFinalizacaoAmbigua(
+    supabase,
+    p,
+    finalizacao.lifecycle,
+    finalizacao.fonte,
+  );
 }
 
 async function handleMatriculaAlterada(supabase: any, p: Payload) {
@@ -1759,7 +2059,7 @@ serve(async (req: Request) => {
         result = await handleTrancamento(supabase, p);
         break;
       case 'matricula_finalizacao':
-        result = await handleEvasao(supabase, p);
+        result = await handleFinalizacaoCanonica(supabase, p);
         break;
       case 'matricula_alterada':
         result = await handleMatriculaAlterada(supabase, p);
