@@ -765,7 +765,7 @@ test('saveDraft atualiza a UI canonica antes de simulate sem ativacao automatica
   try {
     const draft = healthScore.parseHealthScoreV3Config(rawConfig);
     assert.ok(draft, 'fixture deve produzir um rascunho valido');
-    const hook = hookModule.useHealthScoreProfessorV3Config();
+    const hook = hookModule.useHealthScoreProfessorV3Config('2026-08-01');
 
     const saved = await hook.saveDraft(draft);
     const simulation = await hook.simulate(draft.id, '2026-08-01');
@@ -806,7 +806,9 @@ test('saveDraft atualiza a UI canonica antes de simulate sem ativacao automatica
         parametros: { fonte: 'manual' },
       },
     ]);
-    assert.equal(calls[1].payload, undefined);
+    assert.deepEqual(calls[1].payload, {
+      p_competencia: '2026-08-01',
+    });
     assert.deepEqual(calls[2].payload, {
       p_config_id: 'config-rascunho',
       p_competencia: '2026-08-01',
@@ -879,7 +881,9 @@ test('hook tenta novamente uma vez quando a leitura sofre statement timeout', ()
     /if \(!isStatementTimeout\(response\.error\)\) return response/,
   );
   assert.equal(
-    hookSource.match(/supabase\.rpc\('get_health_score_professor_v3_config_ui'\)/g)?.length,
+    hookSource.match(
+      /supabase\.rpc\(\s*'get_health_score_professor_v3_config_ui'/g,
+    )?.length,
     2,
   );
 });

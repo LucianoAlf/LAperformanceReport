@@ -61,7 +61,7 @@ function evidenceSummary(row: ProfessorCursoModalidadeExcecaoRow): string[] {
   if (Number.isFinite(affected) && affected > 0) {
     values.push(`${affected} atribuicao(oes) formal(is) afetada(s)`);
   }
-  if (row.emusysProfessorId !== null) {
+  if (row.emusysProfessorId !== null && !row.professorNome) {
     values.push(`Professor Emusys #${row.emusysProfessorId}`);
   }
   if (row.emusysDisciplinaId !== null) {
@@ -256,7 +256,11 @@ export function ProfessorCursoModalidadeReconciliacao({
                             </span>
                           </div>
                           <p className="mt-2 text-sm font-medium text-slate-100">
-                            {row.professorNome || row.disciplinaNome || 'Item do catalogo Emusys'}
+                            {row.professorNome
+                              ? `${row.professorNome}${row.emusysProfessorId !== null
+                                ? ` · Professor Emusys #${row.emusysProfessorId}`
+                                : ''}`
+                              : row.disciplinaNome || 'Item do catalogo Emusys'}
                           </p>
                           <p className="mt-1 text-xs text-slate-400">
                             {[row.unidadeNome, row.cursoNome || row.disciplinaNome, modalityLabel(row)]

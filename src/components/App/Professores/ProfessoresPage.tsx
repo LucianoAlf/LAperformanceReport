@@ -69,7 +69,12 @@ export function ProfessoresPage() {
     iconeWrapperCor: 'bg-violet-500/20',
   });
 
-  const context = useOutletContext<{ filtroAtivo: boolean; unidadeSelecionada: UnidadeId; setPeriodoLabel?: (label: string | null) => void }>();
+  const context = useOutletContext<{
+    filtroAtivo: boolean;
+    unidadeSelecionada: UnidadeId;
+    competencia?: { range: { startDate: string } };
+    setPeriodoLabel?: (label: string | null) => void;
+  }>();
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
   const { hasPermission } = useAuth();
   const toast = useToast();
@@ -714,7 +719,9 @@ export function ProfessoresPage() {
           </div>
 
           {HEALTH_SCORE_V3_CONFIG_ENABLED && hasPermission('professores.editar') && (
-            <HealthScoreV3Config />
+            <HealthScoreV3Config
+              competencia={context?.competencia?.range.startDate || `${competenciaAtual}-01`}
+            />
           )}
 
           {HEALTH_SCORE_V3_CONFIG_ENABLED ? (

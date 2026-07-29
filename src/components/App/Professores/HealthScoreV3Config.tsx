@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBlocker } from 'react-router-dom';
-import { format, addMonths, startOfMonth } from 'date-fns';
+import { addDays, addMonths, format, startOfMonth } from 'date-fns';
 import {
   Activity,
   Beaker,
@@ -106,6 +106,29 @@ function currentMonthStart() {
   return format(startOfMonth(new Date()), 'yyyy-MM-dd');
 }
 
+function nextValidityStart(
+  config: HealthScoreV3Config | null,
+  competencia: string,
+) {
+  if (config?.vigenciaFim) {
+    const end = dateFromIso(config.vigenciaFim);
+    if (end) return format(addDays(end, 1), 'yyyy-MM-dd');
+  }
+  const selectedCompetence = dateFromIso(competencia);
+  return selectedCompetence
+    ? format(startOfMonth(addMonths(selectedCompetence, 1)), 'yyyy-MM-dd')
+    : nextMonthStart();
+}
+
+function competenceLabel(value: string) {
+  const date = dateFromIso(value);
+  if (!date) return value;
+  return new Intl.DateTimeFormat('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
+}
+
 function dateFromIso(value: string) {
   const parsed = new Date(`${value}T12:00:00`);
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
@@ -171,7 +194,11 @@ function cloneConfig(config: HealthScoreV3Config | null): HealthScoreV3Config | 
   };
 }
 
-export function HealthScoreV3Config() {
+interface HealthScoreV3ConfigProps {
+  competencia: string;
+}
+
+export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
   const toast = useToast();
   const {
     config,
@@ -184,7 +211,7 @@ export function HealthScoreV3Config() {
     saveDraft,
     simulate,
     activate,
-  } = useHealthScoreProfessorV3Config();
+  } = useHealthScoreProfessorV3Config(competencia);
   const [workingConfig, setWorkingConfig] = useState<HealthScoreV3Config | null>(null);
   const [workingSegmentGoals, setWorkingSegmentGoals] = useState<HealthScoreV3SegmentDraftGoal[]>([]);
   const [newValidity, setNewValidity] = useState(nextMonthStart);
@@ -211,9 +238,12 @@ export function HealthScoreV3Config() {
     if (config?.rascunho) {
       setJustification(config.rascunho.justificativa);
       setNewValidity(config.rascunho.vigenciaInicio);
+    } else {
+      setJustification('');
+      setNewValidity(nextValidityStart(config?.ativa || null, competencia));
     }
     setSimulationIsCurrent(false);
-  }, [config]);
+  }, [competencia, config]);
 
   useEffect(() => {
     if (routeBlocker.state !== 'blocked') return;
@@ -415,7 +445,9 @@ export function HealthScoreV3Config() {
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-400">
           <LockKeyhole className="h-4 w-4" />
-          {config?.ativa ? `Versão ativa ${config.ativa.versao}` : 'Sem versão ativa'}
+          {workingConfig
+            ? `${editable ? 'Rascunho' : 'Versão vigente'} ${workingConfig.versao}`
+            : 'Sem versão vigente'}
         </div>
       </header>
 
@@ -457,6 +489,61 @@ export function HealthScoreV3Config() {
               />
             </label>
           </div>
+
+          {!editable && (
+            <div className="space-y-4 rounded-md border border-cyan-500/25 bg-cyan-500/5 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-900 text-cyan-300">
+                    <LockKeyhole className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-100">
+                      Somente leitura
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">
+                      Competência selecionada: <strong className="font-semibold text-slate-200">
+                        {competenceLabel(competencia)}
+                      </strong>. A versão {workingConfig.versao} governa este recorte
+                      de {workingConfig.vigenciaInicio} até {workingConfig.vigenciaFim || 'sem data final'}.
+                      Para alterar pesos ou metas, crie uma nova versão auditável.
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="shrink-0 border-cyan-500/30 text-cyan-300">
+                  Origem V{workingConfig.versao}
+                </Badge>
+              </div>
+
+              <div className="grid gap-3 border-t border-cyan-500/15 pt-4 md:grid-cols-[180px_1fr_auto] md:items-end">
+                <div className="space-y-1 text-xs font-medium text-slate-300">
+                  Nova vigência
+                  <DatePicker
+                    date={dateFromIso(newValidity)}
+                    onDateChange={(date) => setNewValidity(isoFromDate(date))}
+                    className="mt-1 h-10 rounded-md border-slate-700 bg-slate-900"
+                  />
+                </div>
+                <label className="space-y-1 text-xs font-medium text-slate-300">
+                  Motivo da nova versão
+                  <Input
+                    value={justification}
+                    onChange={(event) => setJustification(event.target.value)}
+                    placeholder="Ex.: ajuste homologado para a próxima vigência"
+                    className="mt-1 border-slate-700 bg-slate-900"
+                  />
+                </label>
+                <Button
+                  onClick={handleCreateDraft}
+                  disabled={mutating || !config?.ativa}
+                  className="h-10"
+                >
+                  {mutating ? <Loader2 className="animate-spin" /> : <Plus />}
+                  Criar rascunho
+                </Button>
+              </div>
+            </div>
+          )}
 
           {editable && (
             <div className="sticky top-20 z-20 flex flex-col gap-3 rounded-md border border-slate-700 bg-slate-950/95 px-4 py-3 shadow-lg shadow-black/25 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
@@ -643,6 +730,8 @@ export function HealthScoreV3Config() {
             </div>
             <HealthScoreV3MetasSegmentadas
               metas={workingSegmentGoals}
+              metasVersionadas={workingConfig.metasSegmentadas}
+              versao={workingConfig.versao}
               pendencias={config?.pendencias || {
                 segmentosObservadosSemRegra: [],
                 atribuicoesSemRegra: [],
@@ -667,31 +756,7 @@ export function HealthScoreV3Config() {
             onSaved={refreshAfterReconciliation}
           />
 
-          {!editable ? (
-            <div className="grid gap-3 border-t border-slate-800 pt-5 md:grid-cols-[180px_1fr_auto] md:items-end">
-              <div className="space-y-1 text-xs font-medium text-slate-300">
-                Nova vigência
-                <DatePicker
-                  date={dateFromIso(newValidity)}
-                  onDateChange={(date) => setNewValidity(isoFromDate(date))}
-                  className="mt-1 h-10 rounded-md border-slate-700 bg-slate-900"
-                />
-              </div>
-              <label className="space-y-1 text-xs font-medium text-slate-300">
-                Motivo da nova versão
-                <Input
-                  value={justification}
-                  onChange={(event) => setJustification(event.target.value)}
-                  placeholder="Ex.: ajuste de metas homologado para o próximo ciclo"
-                  className="mt-1 border-slate-700 bg-slate-900"
-                />
-              </label>
-              <Button onClick={handleCreateDraft} disabled={mutating} className="h-10">
-                {mutating ? <Loader2 className="animate-spin" /> : <Plus />}
-                Criar rascunho
-              </Button>
-            </div>
-          ) : (
+          {editable && (
             <div className="space-y-4 border-t border-slate-800 pt-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-[11px] font-semibold uppercase text-slate-500">Simulação</p>

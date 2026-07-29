@@ -44,16 +44,24 @@ function isStatementTimeout(error: unknown): boolean {
   );
 }
 
-async function loadConfigUiWithRetry() {
-  let response = await supabase.rpc('get_health_score_professor_v3_config_ui');
+async function loadConfigUiWithRetry(competencia: string) {
+  let response = await supabase.rpc(
+    'get_health_score_professor_v3_config_ui',
+    { p_competencia: competencia },
+  );
   if (!isStatementTimeout(response.error)) return response;
 
   await new Promise((resolve) => window.setTimeout(resolve, 250));
-  response = await supabase.rpc('get_health_score_professor_v3_config_ui');
+  response = await supabase.rpc(
+    'get_health_score_professor_v3_config_ui',
+    { p_competencia: competencia },
+  );
   return response;
 }
 
-export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3ConfigReturn {
+export function useHealthScoreProfessorV3Config(
+  competencia: string,
+): UseHealthScoreProfessorV3ConfigReturn {
   const [config, setConfig] = useState<HealthScoreV3ConfigUi | null>(null);
   const [simulation, setSimulation] = useState<HealthScoreV3Simulation | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,7 +76,7 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
       setLoading(true);
       setError(null);
       try {
-        const { data, error: rpcError } = await loadConfigUiWithRetry();
+        const { data, error: rpcError } = await loadConfigUiWithRetry(competencia);
         if (rpcError) throw rpcError;
         const parsed = parseHealthScoreV3ConfigUi(data);
         const persistedGoals = parsed.rascunho?.metasSegmentadas
@@ -93,7 +101,7 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
       if (refreshInFlight.current === request) refreshInFlight.current = null;
     }).catch(() => undefined);
     return request;
-  }, []);
+  }, [competencia]);
 
   useEffect(() => {
     void refresh().catch(() => undefined);
@@ -103,8 +111,15 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
     setMutating(true);
     setError(null);
     try {
+      if (!config?.ativa?.id) {
+        throw new Error('Nao existe configuracao vigente para a competencia selecionada.');
+      }
       const { data, error: rpcError } = await supabase.rpc('criar_health_score_professor_v3_config_rascunho',
-        { p_vigencia_inicio: vigenciaInicio, p_justificativa: justificativa },
+        {
+          p_vigencia_inicio: vigenciaInicio,
+          p_justificativa: justificativa,
+          p_config_origem_id: config.ativa.id,
+        },
       );
       if (rpcError) throw rpcError;
       const draft = parseHealthScoreV3Config(data);
@@ -117,7 +132,7 @@ export function useHealthScoreProfessorV3Config(): UseHealthScoreProfessorV3Conf
     } finally {
       setMutating(false);
     }
-  }, [refresh]);
+  }, [config?.ativa?.id, refresh]);
 
   const saveDraft = useCallback(async (draft: HealthScoreV3Config) => {
     setMutating(true);

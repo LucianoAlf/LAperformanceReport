@@ -466,6 +466,8 @@ function getDraftGoalErrors(goal: HealthScoreV3SegmentDraftGoal): HealthScoreV3S
 
 export interface HealthScoreV3MetasSegmentadasProps {
   metas: HealthScoreV3SegmentDraftGoal[];
+  metasVersionadas: HealthScoreV3SegmentGoal[];
+  versao: number;
   pendencias: HealthScoreV3ConfigPendencias;
   superlotacoes?: HealthScoreV3SimulationCapacityAlert[];
   superlotacaoDisponivel?: boolean;
@@ -479,6 +481,8 @@ type PendingFilter = 'todas' | 'pendentes' | 'regra_ausente' | 'superlotacao';
 
 export function HealthScoreV3MetasSegmentadas({
   metas,
+  metasVersionadas,
+  versao,
   pendencias,
   superlotacoes = [],
   superlotacaoDisponivel = false,
@@ -537,6 +541,14 @@ export function HealthScoreV3MetasSegmentadas({
     ).length,
     superlotacao: matrix.filter((row) => row.pending.superlotacao).length,
   };
+  const versionedCounters = {
+    total: metasVersionadas.length,
+    configuradas: metasVersionadas.filter((goal) => goal.estado === 'configurada').length,
+  };
+  const applicableKeys = new Set(metas.map((goal) => healthScoreV3SegmentKey(goal)));
+  const versionedOutsideCatalog = metasVersionadas.filter(
+    (goal) => !applicableKeys.has(healthScoreV3SegmentKey(goal)),
+  ).length;
 
   const updateGoal = (nextGoal: HealthScoreV3SegmentDraftGoal) => {
     if (!editable || disabled) return;
@@ -556,7 +568,7 @@ export function HealthScoreV3MetasSegmentadas({
         <div className="flex min-w-0 items-center gap-2">
           <GraduationCap className="h-4 w-4 shrink-0 text-cyan-300" />
           <span className="text-xs font-medium text-slate-300">
-            {matrix.length} regras por unidade, curso e modalidade
+            Metas por unidade, curso e modalidade
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -571,6 +583,40 @@ export function HealthScoreV3MetasSegmentadas({
           )}
         </div>
       </div>
+
+      <div className="grid gap-px overflow-hidden rounded-md border border-slate-800 bg-slate-800 md:grid-cols-2">
+        <div className="bg-slate-950/70 px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase text-slate-500">
+            Metas registradas na versão V{versao}
+          </p>
+          <p className="mt-1 text-sm font-semibold text-slate-100">
+            {versionedCounters.total} metas
+            <span className="ml-2 font-normal text-slate-400">
+              {versionedCounters.configuradas} configuradas
+            </span>
+          </p>
+        </div>
+        <div className="bg-slate-950/70 px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase text-slate-500">
+            Regras aplicáveis do catálogo
+          </p>
+          <p className="mt-1 text-sm font-semibold text-slate-100">
+            {matrix.length} regras
+            <span className="ml-2 font-normal text-slate-400">
+              {counters.salvasRascunho} configuradas
+            </span>
+          </p>
+        </div>
+      </div>
+
+      {versionedOutsideCatalog > 0 && (
+        <div className="flex items-start gap-2 border-l-2 border-amber-500/70 bg-amber-500/5 px-3 py-2 text-xs leading-5 text-amber-100">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          <span>
+            {versionedOutsideCatalog} {versionedOutsideCatalog === 1 ? 'meta versionada não integra' : 'metas versionadas não integram'} o catálogo pedagógico aplicável desta competência.
+          </span>
+        </div>
+      )}
 
       <div className="grid border-y border-slate-800 bg-slate-950/30 sm:grid-cols-3 sm:divide-x sm:divide-slate-800">
         <CounterItem
