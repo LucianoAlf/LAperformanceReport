@@ -250,21 +250,32 @@ async function createExecution(params: {
   caller: AuthorizedCaller;
   mode: SyncMode;
 }): Promise<string> {
-  const { data, error } = await params.client
-    .from("emusys_professor_disciplinas_sync_execucoes")
-    .insert({
-      unidade_id: params.unidadeId,
-      origem: params.caller.origem,
-      status: "em_andamento",
-      solicitado_por: params.caller.usuarioId,
-      estatisticas: { modo: params.mode },
-    })
-    .select("id")
-    .single();
-  if (error || !data?.id) {
+  const { data, error } = await params.client.rpc(
+    "iniciar_sync_professor_disciplinas_emusys_v1",
+    {
+      p_unidade_id: params.unidadeId,
+      p_origem: params.caller.origem,
+      p_solicitado_por: params.caller.usuarioId,
+      p_modo: params.mode,
+    },
+  );
+  if (error) {
+    if (
+      error.code === "55000" ||
+      error.message?.toLowerCase().includes("sync_ja_em_andamento")
+    ) {
+      throw new SyncError(
+        "SYNC_JA_EM_ANDAMENTO",
+        409,
+        "concorrencia",
+      );
+    }
     throw new SyncError("FALHA_CRIAR_EXECUCAO", 500, "persistencia");
   }
-  return String(data.id);
+  if (typeof data !== "string" || !data) {
+    throw new SyncError("FALHA_CRIAR_EXECUCAO", 500, "persistencia");
+  }
+  return data;
 }
 
 async function updateExecution(

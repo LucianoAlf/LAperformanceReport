@@ -29,6 +29,11 @@ const cronMigrationPath = resolve(
   'supabase/migrations/20260720123000_cron_sync_professor_disciplinas_emusys.sql',
 );
 const cronMigration = readOptionalFile(cronMigrationPath);
+const concurrencyGuardMigrationPath = resolve(
+  repositoryRoot,
+  'supabase/migrations/20260729102000_sync_professor_disciplinas_concorrencia.sql',
+);
+const concurrencyGuardMigration = readOptionalFile(concurrencyGuardMigrationPath);
 const {
   exists: migrationExists,
   filePath: migrationPath,
@@ -603,4 +608,53 @@ test('Task 6 agenda sync diario seguro e escalonado por unidade', () => {
       ),
     );
   }
+});
+
+test('sync do catalogo reivindica uma unidade atomicamente antes de escrever', () => {
+  const edgeSource = readOptionalFile(edgeFunctionPath);
+
+  assert.notEqual(
+    concurrencyGuardMigration,
+    '',
+    concurrencyGuardMigrationPath + ' deve existir',
+  );
+  assert.match(
+    concurrencyGuardMigration,
+    /create\s+unique\s+index[\s\S]*?emusys_professor_disciplinas_sync_execucoes[\s\S]*?where\s+status\s*=\s*'em_andamento'/i,
+  );
+  assert.match(
+    concurrencyGuardMigration,
+    /create\s+or\s+replace\s+function\s+public\.iniciar_sync_professor_disciplinas_emusys_v1\s*\(/i,
+  );
+  assert.match(
+    concurrencyGuardMigration,
+    /pg_advisory_xact_lock\s*\([\s\S]*?sync_professor_disciplinas_emusys:/i,
+  );
+  assert.match(
+    concurrencyGuardMigration,
+    /status\s*=\s*'falhou'[\s\S]*?iniciado_em\s*<\s*now\(\)\s*-\s*interval\s*'15 minutes'/i,
+  );
+  assert.match(
+    concurrencyGuardMigration,
+    /sync_ja_em_andamento/i,
+  );
+  assert.match(
+    concurrencyGuardMigration,
+    /revoke\s+all\s+on\s+function\s+public\.iniciar_sync_professor_disciplinas_emusys_v1[\s\S]*?from\s+public\s*,\s*anon\s*,\s*authenticated/i,
+  );
+  assert.match(
+    concurrencyGuardMigration,
+    /grant\s+execute\s+on\s+function\s+public\.iniciar_sync_professor_disciplinas_emusys_v1[\s\S]*?to\s+service_role/i,
+  );
+
+  assert.match(
+    edgeSource,
+    /\.rpc\(\s*["']iniciar_sync_professor_disciplinas_emusys_v1["']/i,
+  );
+  assert.match(edgeSource, /SYNC_JA_EM_ANDAMENTO/);
+  assert.match(edgeSource, /\b409\b/);
+  assert.doesNotMatch(
+    edgeSource,
+    /\.from\(\s*["']emusys_professor_disciplinas_sync_execucoes["']\s*\)\s*\.insert\(/i,
+  );
 });
