@@ -7,6 +7,7 @@ import { TabComercialNew } from './TabComercialNew';
 import { TabProfessoresNew } from './TabProfessoresNew';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
+import { useAuth } from '@/contexts/AuthContext';
 
 
 type TabId = 'gestao' | 'comercial' | 'professores';
@@ -42,8 +43,13 @@ export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
   const filtroAtivo = context?.filtroAtivo ?? null;
   const competencia = context?.competencia;
   
-  // Se filtroAtivo é null = consolidado, senão é o ID da unidade
-  const unidadeFiltro = filtroAtivo || 'todos';
+  // `filtroAtivo` null significa duas coisas: admin em consolidado, ou auth ainda não
+  // resolvido. Só a primeira vira 'todos' — para perfil de unidade, pedir a rede inteira
+  // é recusado com 403 pelos guards das RPCs. Mesmo padrão de AdministrativoPage.tsx.
+  const { isAdmin, unidadeId } = useAuth();
+  const unidadeResolvida = isAdmin ? (filtroAtivo ?? 'todos') : unidadeId;
+  const unidadePronta = unidadeResolvida !== null;
+  const unidadeFiltro = unidadeResolvida ?? 'todos';
 
   // Extrair valores do hook de competência
   const competenciaFiltro = competencia?.filtro;
@@ -91,7 +97,9 @@ export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
 
       {/* Conteúdo da Aba Ativa */}
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-        {activeTab === 'gestao' && (
+        {/* Sem unidade resolvida não há o que buscar: as abas pediriam a rede inteira em
+            nome de um usuário de unidade e as RPCs recusariam com 403. */}
+        {unidadePronta && activeTab === 'gestao' && (
           <TabGestao 
             ano={competenciaRange?.ano || new Date().getFullYear()} 
             mes={competenciaRange?.mesInicio || new Date().getMonth() + 1} 
@@ -99,7 +107,7 @@ export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
             unidade={unidadeFiltro} 
           />
         )}
-        {activeTab === 'comercial' && (
+        {unidadePronta && activeTab === 'comercial' && (
           <TabComercialNew 
             ano={competenciaRange?.ano || new Date().getFullYear()} 
             mes={competenciaRange?.mesInicio || new Date().getMonth() + 1} 
@@ -107,7 +115,7 @@ export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
             unidade={unidadeFiltro} 
           />
         )}
-        {activeTab === 'professores' && (
+        {unidadePronta && activeTab === 'professores' && (
           <TabProfessoresNew 
             ano={competenciaRange?.ano || new Date().getFullYear()} 
             mes={competenciaRange?.mesInicio || new Date().getMonth() + 1} 
