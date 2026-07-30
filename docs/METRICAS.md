@@ -6,7 +6,7 @@
 >
 > ⚠️ **Antes de "corrigir" qualquer critério aqui:** mudança em métrica afeta dashboards e metas. Validar com SELECT-only e confirmar com o Hugo (regra de colaborador). Ver seção [Inconsistências percebidas](#inconsistências-percebidas-a-decidir) no fim.
 >
-> Última atualização: 2026-06-23.
+> Última atualização: 2026-07-30.
 
 ## Conceitos-base
 
@@ -34,14 +34,41 @@ valor_parcela = valor_cheio − desconto_condicional
 
 ## Alunos
 
+### Estado operacional da matrícula (Emusys v1.3.1)
+
+A fonte atual é `vw_alunos_estado_operacional_v131`, resolvida por
+`unidade_id + emusys_matricula_id`. O valor local de `alunos.status` é somente
+compatibilidade quando ainda não existe estado Emusys associado.
+
+| Estado Emusys | Estado operacional | Regra atual |
+|---|---|---|
+| `ativa` | `ativo` | entra na base viva |
+| `trancada` | `trancado` | aparece em **Trancados agora**, fora dos denominadores ativos |
+| `inativa` + `interrompida` | `evadido` | interrupção definitiva |
+| `inativa` + `concluida` | `inativo` | contrato concluído/não renovação, não evasão |
+| ausente ou ambíguo | `desconhecido` | auditoria; nunca presume ativo ou evasão |
+
+Somente matrícula com status Emusys resolvido como `ativa` entra em carteira,
+financeiro atual, presença, Health Score e churn atual. Trancamentos no período
+continuam vindo de `movimentacoes_admin` e não são o mesmo indicador que
+**Trancados agora**.
+
 ### Aluno pagante
-`conta_como_pagante = true` **E** `is_segundo_curso != true` **E** `status ∈ {ativo, trancado}`.
-- Implementação: `AlunosPage.tsx:623-627`. RPC canônica: `get_kpis_alunos_canonicos` / `fetchKPIsAlunosCanonicos`.
+`entra_financeiro_ativo = true` **E** `conta_como_pagante = true` **E**
+`is_segundo_curso != true`.
+- Fonte: `vw_alunos_estado_operacional_v131`. RPCs canônicas:
+  `get_kpis_alunos_admin_operacional`,
+  `get_kpis_alunos_financeiro_vivo_canonico` e
+  `get_kpis_alunos_canonicos`.
 - Bolsista integral **não** é pagante; bolsista parcial conta conforme `conta_como_pagante`.
 
 ### Aluno ativo / Carteira viva
-`status ∈ {ativo, trancado}`, deduplicado por pessoa (nome). `aviso_previo` **não** entra na carteira ativa (mas aparece em listas operacionais de contato).
-- `TabGestao.tsx:249/265`, `TabProfessoresNew.tsx:318` (tooltip: "alunos com status ativo ou trancado").
+`entra_base_ativa = true`, deduplicado pela identidade canônica de pessoa na
+unidade. `trancado`, `aviso_previo`, `evadido`, `inativo` e `desconhecido` não
+entram na carteira viva.
+- A carteira do professor exige também `entra_carteira_professor = true`.
+- Leitura atual: `get_alunos_ativos_atuais_canonicos` e
+  `get_kpis_alunos_vinculos_vivo_canonico`.
 
 ### Bolsista
 `tipo_matricula.codigo ∈ {BOLSISTA_INT (id 3), BOLSISTA_PARC (id 4)}`. Bolsista de **banda/projeto** é tratado à parte (não infla bolsistas regulares): bolsista real exige `is_projeto_banda != true` (`AlunosPage.tsx:630-633`).
@@ -53,8 +80,10 @@ valor_parcela = valor_cheio − desconto_condicional
 `cursos.is_projeto_banda = true`. **Exclui** o aluno de: médias de turma, carteira, score do professor, matrículas canônicas, LTV.
 
 ### Ticket médio (mensalidade)
-Média de `valor_parcela` dos alunos com `tipo_matricula.entra_ticket_medio = true` **E** `valor_parcela > 0`, deduplicado por pessoa (`nome+data_nascimento+unidade_id`).
-- `AlunosPage.tsx:639-653`.
+Média de `valor_parcela` dos alunos com `entra_financeiro_ativo = true` **E**
+`tipo_matricula.entra_ticket_medio = true` **E** `valor_parcela > 0`,
+deduplicado por pessoa canônica e unidade.
+- RPC: `get_kpis_alunos_financeiro_vivo_canonico`.
 
 ### Ticket médio (passaporte / matrícula)
 Média de `valor_passaporte > 0` das matrículas novas canônicas do período (exclui 2º curso, banda).
@@ -64,7 +93,11 @@ Média de `valor_passaporte > 0` das matrículas novas canônicas do período (e
 `status_pagamento ∈ {em_dia, inadimplente, parcial, sem_parcela}`. Aberto/indefinido = `null`/`'-'`. Governança de `sem_parcela` em `Alunos/statusPagamentoGovernanca.ts` (considera presença recente ≤30 dias).
 
 ### Inadimplência operacional (regra nova, jun/2026)
-Conta como inadimplente **somente** `status = 'ativo'` **E** `status_pagamento = 'inadimplente'` **E** `valor_parcela > 0`. **Trancado, evadido e inativo NÃO entram** no alerta/contagem de inadimplência operacional. Aplicada em `kpisAlunosVivosCanonicos.ts` (`isParcelaInadimplente`, :176), `TabelaAlunos.tsx`, `AlunosPage.tsx`, `gerar-relatorio-aluno`. O `sync-matriculas-emusys` não propõe `status_pagamento` para matrícula não-ativa.
+Conta como inadimplente **somente** `entra_financeiro_ativo = true` **E**
+`status_pagamento = 'inadimplente'` **E** `valor_parcela > 0`. **Trancado,
+evadido, inativo e desconhecido NÃO entram** no alerta/contagem de
+inadimplência operacional. O `sync-matriculas-emusys` não propõe
+`status_pagamento` para matrícula não ativa.
 - Motivo: inadimplentes haviam "saltado" de ~16 p/ ~40 por incluir trancado/evadido/histórico. Fonte: commit `restrict delinquency to active students`.
 - **BANDA e bolsista integral permanecem `sem_parcela`** mesmo quando o Emusys retorna `em_dia` (migration `p08k`).
 

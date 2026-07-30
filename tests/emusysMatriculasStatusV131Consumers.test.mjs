@@ -125,6 +125,41 @@ test('carteiras de Fabio e LA Teacher permanecem ancoradas na jornada ativa', ()
   assert.match(appMigration, /vw_fabio_carteira_professor/i);
 });
 
+test('carteira operacional de professores consulta o estado canonico atual', () => {
+  const carteiraMigrationPath =
+    'supabase/migrations/20260730132000_carteira_professores_estado_operacional_v131.sql';
+  const carteiraHardeningPath =
+    'supabase/migrations/20260730133000_hardening_carteira_professores_v131.sql';
+  assert.ok(
+    existsSync(carteiraMigrationPath),
+    'migration da carteira operacional de professores ainda nao existe',
+  );
+  assert.ok(
+    existsSync(carteiraHardeningPath),
+    'migration de search_path da carteira operacional ainda nao existe',
+  );
+
+  const carteiraMigration = readFileSync(carteiraMigrationPath, 'utf8');
+  const carteiraHardening = readFileSync(carteiraHardeningPath, 'utf8');
+  assert.match(
+    carteiraMigration,
+    /create or replace function public\.get_carteira_professores/i,
+  );
+  assert.match(carteiraMigration, /fn_aluno_entra_base_ativa_v131\s*\(/i);
+  assert.doesNotMatch(
+    carteiraMigration,
+    /a\.status\s*=\s*'ativo'/i,
+  );
+  assert.match(
+    carteiraMigration,
+    /grant execute on function public\.get_carteira_professores\(uuid\)[\s\S]*authenticated/i,
+  );
+  assert.match(
+    carteiraHardening,
+    /alter function public\.get_carteira_professores\(uuid\)[\s\S]*set search_path\s*=\s*public/i,
+  );
+});
+
 
 test('presenca e marcos carregam a populacao viva pela RPC canonica', () => {
   for (const path of ['supabase/functions/sync-presenca-emusys/index.ts', 'supabase/functions/marcos-jornada/index.ts']) {

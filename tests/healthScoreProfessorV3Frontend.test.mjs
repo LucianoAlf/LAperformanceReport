@@ -144,7 +144,7 @@ test('hook V3 usa RPC e nunca acessa as tabelas internas diretamente', () => {
     'salvar_health_score_professor_v3_config_rascunho',
     'simular_health_score_professor_v3_config',
   ]) {
-    assert.match(source, new RegExp(`rpc\\('${fn}'`));
+    assert.match(source, new RegExp(`rpc\\(\\s*['"]${fn}['"]`));
   }
 
   assert.doesNotMatch(source, /\.from\(['"]health_score_professor_v3_/i);

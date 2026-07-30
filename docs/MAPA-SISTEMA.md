@@ -46,7 +46,9 @@
 ## Dashboard (`/app`)
 - **Componentes:** `Dashboard/DashboardPage.tsx`, `Dashboard/ModalDetalheKPI.tsx`
 - **Hooks:** `useMetasKPI`, `useComercialOperacionalResumoV2`, `useHealthScoreProfessorV3Performance`
-- **RPCs:** `get_health_score_professor_v3_performance` para o card de professores; os demais cards preservam suas fontes próprias.
+- **RPCs:** `get_kpis_alunos_canonicos` para a base viva de alunos e
+  `get_health_score_professor_v3_performance` para o card de professores; os
+  demais cards preservam suas fontes próprias.
 - **Edge functions:** nenhuma
 - **Tabelas/views:** `alunos`, `movimentacoes_admin`, `leads`, `vw_alertas_inteligentes`, `professores`, `vw_turmas_implicitas`, `professores_performance`, `dados_mensais`, `unidades`; o Health Score usa somente snapshots V3 por RPC.
 - **Health Score V3:** exibe média parcial no mês ou no ciclo fixo selecionado. Resultado parcial nunca gera ranking ou premiação; falha V3 é explícita e não retorna silenciosamente para a V2.
@@ -80,7 +82,18 @@ Disparo de templates Meta (WhatsApp Cloud API) + conversas + agentes IA. `Campan
 - **Componentes:** `Alunos/AlunosPage.tsx` (+ `TabelaAlunos`, `GestaoTurmas`, `DistribuicaoAlunos`, `ConciliacaoMatriculas`, `ImportarAlunos`, `TabHistoricoLTV`, `Automacao/TabAutomacao`, sub-módulo `Auditoria/`). Modais: `ModalNovoAluno`, `ModalFichaAluno` (com abas Pesquisas, Aulas e **Histórico Pedagógico**), `ModalNovaTurma`, `ModalPassagensAluno`, etc.
 - **Aba Histórico Pedagógico (`ModalFichaAluno`):** mostra o conteúdo das aulas (`aulas_emusys.anotacoes`, via RPC `get_relatorio_pedagogico_aluno`) e o painel **Relatório Pedagógico com IA** (`RelatorioPedagogicoIA`): seletor de período (mensal/semestral/anual/personalizado) → edge `gerar-relatorio-pedagogico` (Gemini) gera um **rascunho editável** → coordenador ajusta → imprime (template com logo/equipe). Rascunhos salvos em `relatorios_pedagogicos` (histórico + reuso futuro pelo agente Fábio no WhatsApp).
 - **Hooks:** `useCompetenciaFiltro`, `useCompetenciaMensalStatus`, `fetchKPIsAlunosCanonicos`, `Auditoria/useAuditoriaEmusys`, `Auditoria/useAgentChat`
-- **RPCs:** `recalcular_dados_mensais`, `get_tempo_permanencia`, `buscar_anamnese_pendente`, `buscar_anamneses_pendentes`, `vincular_anamnese_aluno`, `get_conciliacao_matriculas`, `execute_bi_query_lamusic` (auditoria IA), `get_timeline_pesquisas_aluno`/`registrar_resposta_pesquisa_manual` (aba Pesquisas — ver Sucesso do Aluno), `get_historico_aulas_aluno` (aba Aulas), `get_relatorio_pedagogico_aluno(p_aluno_id, p_data_inicio, p_data_fim)` (Histórico Pedagógico; período opcional)
+- **RPCs:** `get_kpis_alunos_canonicos`,
+  `get_alunos_ativos_atuais_canonicos`, `recalcular_dados_mensais`,
+  `get_tempo_permanencia`, `buscar_anamnese_pendente`,
+  `buscar_anamneses_pendentes`, `vincular_anamnese_aluno`,
+  `get_conciliacao_matriculas`, `execute_bi_query_lamusic` (auditoria IA),
+  `get_timeline_pesquisas_aluno`/`registrar_resposta_pesquisa_manual` (aba
+  Pesquisas — ver Sucesso do Aluno), `get_historico_aulas_aluno` (aba Aulas),
+  `get_relatorio_pedagogico_aluno(p_aluno_id, p_data_inicio, p_data_fim)`
+  (Histórico Pedagógico; período opcional).
+- **Estado vivo:** `vw_alunos_estado_operacional_v131`. Somente `ativa` entra
+  em ativos, pagantes, carteira, presença, Health Score e churn atual.
+  `trancada` aparece separada em **Trancados agora**.
 - **Edge functions:** `gerar-relatorio-pedagogico` (Gemini 3 Flash; gera o relatório pedagógico a partir das anotações e persiste em `relatorios_pedagogicos`). Auditoria IA usa `execute_bi_query_lamusic` via RPC.
 - **Tabelas:** `relatorios_pedagogicos` (histórico de relatórios pedagógicos gerados por IA; RLS por unidade padrão `metas`).
 
@@ -116,6 +129,9 @@ Planilha operacional (`Retencao/PlanilhaRetencao.tsx`) + dashboard analítico (`
 `Administrativo/AdministrativoPage.tsx`; abas Lançamentos (renovações, não-renovação, avisos, cancelamentos, trancamentos, alunos novos), **Contratos** (2ª posição), Fideliza, Lojinha, Farmer, Caixa Financeiro, Caixa de Entrada.
 - **Contratos (`TabContratosVencendo.tsx`):** hook `useContratosVencendo`. Replica a aba "Matrículas Vencendo" do Emusys. **RPC:** nenhuma — leitura direta da view. **View:** `vw_contratos_vencendo` (join `vw_jornada_aluno_atual` + `alunos` por `unidade_id, emusys_matricula_id`).
 - **Hooks (demais abas):** `useCompetenciaFiltro`, `useFidelizaPrograma`, `fetchKPIsAlunosCanonicos`, PainelFarmer (`useRotinas`, `useChecklists`, `useChecklistDetail`, `useDashboardStats`, `useAlertas`, `useFeedbackPendente`, `useSucessoAlunoAlertas`), CaixaEntrada (`useAdminConversas`, `useAdminMensagens`)
+- **Ciclo atual:** `get_kpis_alunos_admin_operacional` separa **Ativos agora**
+  de **Trancados agora**. A aba de movimentações mantém **Trancamentos no
+  período** como evento histórico distinto.
 - **RPCs:** `get_resumo_renovacoes_proximas`, `toggle_relatorio_cron`, `get_dados_relatorio_gerencial`, `get_dados_retencao_ia`, `vincular_alunos_checklist`, `get_historico_rotinas`, `get_checklist_detail`, `marcar_checklist_item`, `get_checklists_farmer`, `criar_checklist_from_template`, `get_rotinas_do_dia`, `get_progresso_rotinas_hoje`, `marcar_rotina_concluida`
 - **Edge functions:** `gemini-relatorio-gerencial`, `relatorio-admin-whatsapp`, `gemini-insights-retencao`, `enviar-pesquisa-pos-primeira-aula`, `buscar-foto-perfil`, `deletar-mensagem-admin`, `editar-mensagem-admin`
 

@@ -80,7 +80,7 @@ A edge faz `switch(evento)`:
 | `matricula_nova` | Insere aluno em `alunos`, resolve professor/curso/pagamento, converte o lead (`leads.aluno_id` + `alunos.lead_origem_id`). |
 | `matricula_renovacao` | Atualiza contrato/valor + `movimentacoes_admin` (renovação). |
 | `matricula_trancamento` | Trancamento + `movimentacoes_admin`. |
-| `matricula_finalizacao` | Evasão + `movimentacoes_admin`; se saiu de TODAS as matrículas, grava `alunos_historico` (LTV). |
+| `matricula_finalizacao` | Resolve o motivo: `inativa` + `interrompida` gera evasão; `inativa` + `concluida` gera não renovação/contrato concluído. Valor ausente ou ambíguo vai para auditoria e não altera o estado local automaticamente. |
 
 - Idempotência por evento; saúde via `_shared/invariantes.ts` (`automacao_log`/`automacao_invariantes`). `verify_jwt: false` é comportamento preexistente do webhook e a proteção por segredo/assinatura permanece pendência de segurança separada, atribuída ao responsável pela integração Emusys.
 
@@ -104,6 +104,18 @@ A edge faz `switch(evento)`:
 - **Quando:** pg_cron Domingo 04:00 BRT.
 - **Para quê:** sincronizar professores — auto-cura `emusys_id` por nome, cria novos, vincula a `professores_unidades`.
 - ⚠️ `emusys_id` é por unidade.
+
+### 2.3 `GET /v1/matriculas` → `sync-matriculas-emusys`
+- **Identidade:** sempre `unidade_id + emusys_matricula_id`; ID Emusys isolado não é global.
+- **Materialização bruta:** todas as páginas e todos os estados entram em
+  `emusys_matriculas_estado_atual`, com o payload privado e o resultado do
+  resolvedor v1.3.1.
+- **Projeção viva:** `vw_alunos_estado_operacional_v131` publica `ativa`,
+  `trancada`, `inativa/interrompida`, `inativa/concluida` e ambiguidades sem
+  misturar os denominadores.
+- **Segurança temporal:** o GET reconcilia estado atual e jornada, mas não
+  inventa a data histórica de evasão, conclusão ou trancamento. Movimentos
+  históricos só nascem de evento com data real.
 
 ---
 
@@ -131,10 +143,11 @@ Quem é: os 3 agentes Mila SDR (CG `aHD4kJdzByLwFXA1`, Recreio `gSHJHYMOYDQZqleW
 | 2 | ⬅ entra | `lead_editado` | n8n EB0 → `upsert_lead` | Atualiza lead |
 | 3 | ⬅ entra | `lead_arquivado` | n8n EB0 → `UPDATE` | Arquiva lead |
 | 4 | ⬅ entra | `aula_experimental_criada/reagendada/cancelada` | n8n Fucq0 → `j41` | Agenda/reagenda/cancela experimental + notifica |
-| 5 | ⬅ entra | `matricula_nova/renovacao/trancamento/finalizacao` | n8n WF_Matricula → edge | Cria aluno / renovação / trancamento / evasão+LTV |
+| 5 | ⬅ entra | `matricula_nova/renovacao/trancamento/finalizacao` | n8n WF_Matricula → edge | Cria aluno / renovação / trancamento / interrupção ou conclusão conforme motivo |
 | 6 | ➡ sai | `GET /v1/aulas/` | sync-presenca-emusys (presença fixa + metadados 15 min) | Aulas, roster, presença, agenda e confirmação de experimentais |
 | 7 | ➡ sai | `GET /v1/professores` | sync-professores-emusys (semanal) | Sync professores |
-| 8 | ➡ sai | `GET /v1/faturas` | sync-faturas-emusys (atual+anterior / sob demanda) | Espelho atual + snapshot financeiro auditável |
+| 8 | ➡ sai | `GET /v1/matriculas` | sync-matriculas-emusys | Estado atual completo e jornada canônica |
+| 9 | ➡ sai | `GET /v1/faturas` | sync-faturas-emusys (atual+anterior / sob demanda) | Espelho atual + snapshot financeiro auditável |
 | — | upstream | Mila → Emusys (cadastro/experimental) | fora do sistema | Origina os webhooks (ver seção 3) |
 
 ---
