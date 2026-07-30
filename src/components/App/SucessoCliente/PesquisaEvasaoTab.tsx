@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect } from 'react';
+import { Fragment, useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -20,6 +20,11 @@ import {
 } from '@/components/ui/select';
 import { Check, X, FlaskConical } from 'lucide-react';
 import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
+import { ModalPreviewPesquisaEvasao } from './ModalPreviewPesquisaEvasao';
+import type {
+  PesquisaEvasaoConfirmacao,
+  PesquisaEvasaoPreview,
+} from './pesquisaEvasao.types';
 
 interface EvadidoPesquisa {
   evasao_id: number;
@@ -57,6 +62,53 @@ interface Props {
   unidadeAtual: UnidadeId;
 }
 
+interface StatusPesquisaInterpretado {
+  statusBase: string;
+  registroTeste: boolean;
+}
+
+function interpretarPesquisaStatus(status: string): StatusPesquisaInterpretado {
+  const prefixoTeste = 'TESTE:';
+  if (status.startsWith(prefixoTeste)) {
+    return {
+      statusBase: status.slice(prefixoTeste.length) || 'pendente',
+      registroTeste: true,
+    };
+  }
+
+  return { statusBase: status, registroTeste: false };
+}
+
+function ehRegistro(valor: unknown): valor is Record<string, unknown> {
+  return typeof valor === 'object' && valor !== null && !Array.isArray(valor);
+}
+
+async function extrairMensagemErro(
+  error: unknown,
+  fallback: string,
+): Promise<string> {
+  if (
+    ehRegistro(error) &&
+    error.context instanceof Response
+  ) {
+    const payload: unknown = await error.context.clone().json().catch(() => null);
+    if (ehRegistro(payload)) {
+      if (typeof payload.error === 'string' && payload.error.trim()) {
+        return payload.error;
+      }
+      if (typeof payload.message === 'string' && payload.message.trim()) {
+        return payload.message;
+      }
+    }
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
 export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
   const toast = useToast();
   const sentinelRef = useWidgetOverlapSentinel();
@@ -64,7 +116,11 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
   const [evadidos, setEvadidos] = useState<EvadidoPesquisa[]>([]);
   const [stats, setStats] = useState<StatsPesquisa | null>(null);
   const [loading, setLoading] = useState(true);
-  const [enviando, setEnviando] = useState<number | null>(null);
+  const [previsualizando, setPrevisualizando] = useState<number | null>(null);
+  const [preview, setPreview] = useState<PesquisaEvasaoPreview | null>(null);
+  const [modalPreviewAberto, setModalPreviewAberto] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
+  const confirmandoRef = useRef(false);
   const [editandoTelefone, setEditandoTelefone] = useState<number | null>(null);
   const [novoTelefone, setNovoTelefone] = useState('');
   const [modoTeste, setModoTeste] = useState(false);
@@ -92,8 +148,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
         },
         (payload) => {
           console.log('[Realtime] Mudança em pesquisa_evasao:', payload);
-          // Recarregar dados quando houver mudança
-          carregarDados();
+          if (!confirmandoRef.current) carregarDados();
         }
       )
       .subscribe();
@@ -144,36 +199,136 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
     }
   };
 
-  const enviarPesquisa = async (evasaoId: number, telefoneOverride?: string) => {
-    setEnviando(evasaoId);
+  const previsualizarPesquisa = async (evasaoId: number) => {
+    if (modoTeste && !telefoneTeste.trim()) {
+      toast.error('Informe o número para o teste');
+      return;
+    }
+
+    if (modoTeste) {
+      const telefoneNormalizado = telefoneTeste.replace(/\D/g, '');
+      if (!/^(?:55)?\d{10,11}$/.test(telefoneNormalizado)) {
+        toast.error('Informe um telefone de teste válido com DDD');
+        return;
+      }
+    }
+
+    setPrevisualizando(evasaoId);
     try {
       const { data, error } = await supabase.functions.invoke('enviar-pesquisa-evasao', {
-        body: { 
+        body: {
+          acao: 'previsualizar',
           evasao_id: evasaoId,
-          operador: 'sistema',
-          telefone_override: telefoneOverride // Para modo teste
+          modo_teste: modoTeste,
+          telefone_teste: modoTeste ? telefoneTeste : undefined,
         }
       });
 
       if (error) throw error;
 
-      if (data?.success) {
-        toast.success('Pesquisa enviada com sucesso!');
-        await carregarDados();
-      } else {
-        toast.error(data?.error || 'Erro ao enviar pesquisa');
+      const resposta = data as unknown;
+      if (
+        !ehRegistro(resposta) ||
+        typeof resposta.preview_id !== 'string' ||
+        typeof resposta.expira_em !== 'string'
+      ) {
+        throw new Error('A Edge retornou uma prévia inválida');
       }
-    } catch (error: any) {
-      console.error('Erro ao enviar pesquisa:', error);
-      let mensagem = error.message || 'Erro ao enviar pesquisa';
-      if (error?.context instanceof Response) {
-        const payload = await error.context.clone().json().catch(() => null);
-        mensagem = payload?.error || mensagem;
-      }
+
+      setPreview(resposta as unknown as PesquisaEvasaoPreview);
+      setModalPreviewAberto(true);
+    } catch (error: unknown) {
+      console.error('Erro ao gerar prévia da pesquisa:', error);
+      const mensagem = await extrairMensagemErro(
+        error,
+        'Erro ao gerar prévia da pesquisa',
+      );
       toast.error(mensagem);
     } finally {
-      setEnviando(null);
+      setPrevisualizando(null);
     }
+  };
+
+  const confirmarEnvio = async () => {
+    if (!preview || confirmando) return;
+
+    if (
+      !Number.isFinite(Date.parse(preview.expira_em)) ||
+      Date.parse(preview.expira_em) <= Date.now()
+    ) {
+      toast.error('A prévia expirou. Gere uma nova prévia antes de confirmar.');
+      return;
+    }
+
+    const preview_id = preview.preview_id;
+    confirmandoRef.current = true;
+    setConfirmando(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('enviar-pesquisa-evasao', {
+        body: {
+          acao: 'confirmar',
+          preview_id: preview_id,
+        },
+      });
+
+      if (error) throw error;
+
+      const resposta = data as unknown as PesquisaEvasaoConfirmacao | null;
+      if (resposta?.success === true && resposta.envio_status === 'enviado') {
+        toast.success(
+          resposta.modo_teste
+            ? 'Teste enviado com sucesso!'
+            : 'Pesquisa enviada com sucesso!',
+        );
+        if (resposta.captura_resposta_preparada === false) {
+          toast.warning(
+            'Mensagem enviada, mas a captura da resposta não foi preparada',
+            resposta.warning ||
+              'Não reenvie. A equipe deve verificar a conversa antes de qualquer ação.',
+          );
+        }
+        setModalPreviewAberto(false);
+        setPreview(null);
+        await carregarDados();
+        return;
+      }
+
+      const detalhe =
+        resposta?.error ||
+        resposta?.message ||
+        resposta?.mensagem;
+      if (
+        resposta?.envio_status === 'incerto' ||
+        resposta?.envio_status === 'bloqueado'
+      ) {
+        toast.warning(
+          'Envio sem confirmação segura',
+          detalhe ||
+            'Não tente novamente. A tentativa precisa ser reconciliada pela equipe.',
+        );
+        return;
+      }
+
+      toast.error(
+        detalhe ||
+          'O envio não foi concluído. Gere uma nova prévia somente após verificar o status.',
+      );
+    } catch (error: unknown) {
+      console.error('Erro ao confirmar pesquisa:', error);
+      const mensagem = await extrairMensagemErro(
+        error,
+        'Não foi possível confirmar o envio',
+      );
+      toast.error(mensagem);
+    } finally {
+      confirmandoRef.current = false;
+      setConfirmando(false);
+    }
+  };
+
+  const alterarModalPreview = (aberto: boolean) => {
+    setModalPreviewAberto(aberto);
+    if (!aberto) setPreview(null);
   };
 
   const getStatusColor = (status: string) => {
@@ -507,8 +662,12 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                   </td>
                 </tr>
               ) : (
-                evadidosFiltrados.map((evadido) => (
-                  <Fragment key={evadido.evasao_id}>
+                evadidosFiltrados.map((evadido) => {
+                  const { statusBase, registroTeste } =
+                    interpretarPesquisaStatus(evadido.pesquisa_status);
+
+                  return (
+                    <Fragment key={evadido.evasao_id}>
                     <tr 
                       className="hover:bg-slate-800/50 transition-colors"
                     >
@@ -580,43 +739,41 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                         {evadido.motivo_cadastrado || '—'}
                       </td>
                       <td className="text-center px-4 py-3">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusColor(evadido.pesquisa_status)}`}>
-                          {getStatusIcon(evadido.pesquisa_status)}
-                          {getStatusLabel(evadido.pesquisa_status)}
-                        </span>
+                        <div className="flex flex-wrap items-center justify-center gap-1.5">
+                          {registroTeste && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-yellow-400/35 bg-yellow-400/15 px-2 py-1 text-[10px] font-bold tracking-[0.12em] text-yellow-200">
+                              <FlaskConical className="h-3 w-3" />
+                              TESTE
+                            </span>
+                          )}
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusColor(statusBase)}`}>
+                            {getStatusIcon(statusBase)}
+                            {getStatusLabel(statusBase)}
+                          </span>
+                        </div>
                       </td>
                       <td className="text-center px-4 py-3">
-                        {['pendente', 'falha_envio', 'sem_whatsapp'].includes(evadido.pesquisa_status) ? (
+                        {!registroTeste && ['pendente', 'falha_envio', 'sem_whatsapp'].includes(statusBase) ? (
                           <Button
                             size="sm"
-                            onClick={() => {
-                              if (modoTeste && !telefoneTeste.trim()) {
-                                toast.error('Informe o número para o teste');
-                                return;
-                              }
-                              if (modoTeste && telefoneTeste) {
-                                enviarPesquisa(evadido.evasao_id, telefoneTeste);
-                              } else {
-                                enviarPesquisa(evadido.evasao_id);
-                              }
-                            }}
-                            disabled={enviando === evadido.evasao_id}
+                            onClick={() => previsualizarPesquisa(evadido.evasao_id)}
+                            disabled={previsualizando === evadido.evasao_id}
                             className={`${modoTeste ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-violet-500 hover:bg-violet-600'} text-white`}
                           >
-                            {enviando === evadido.evasao_id ? (
+                            {previsualizando === evadido.evasao_id ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                               <>
                                 <Send className="w-4 h-4 mr-1.5" />
                                 {modoTeste
                                   ? 'Testar'
-                                  : evadido.pesquisa_status === 'pendente'
+                                  : statusBase === 'pendente'
                                     ? 'Enviar'
                                     : 'Tentar novamente'}
                               </>
                             )}
                           </Button>
-                        ) : evadido.pesquisa_status === 'respondido' ? (
+                        ) : !registroTeste && statusBase === 'respondido' ? (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -642,7 +799,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                     </tr>
                     
                     {/* Expandir resposta */}
-                    {expandido === evadido.pesquisa_id && (evadido.resposta_texto || evadido.resposta_audio_url) && (
+                    {!registroTeste && expandido === evadido.pesquisa_id && (evadido.resposta_texto || evadido.resposta_audio_url) && (
                       <tr className="bg-slate-900/30">
                         <td colSpan={9} className="px-4 py-4">
                           <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
@@ -690,13 +847,21 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                         </td>
                       </tr>
                     )}
-                  </Fragment>
-                ))
+                    </Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
+      <ModalPreviewPesquisaEvasao
+        aberto={modalPreviewAberto}
+        preview={preview}
+        confirmando={confirmando}
+        onAbertoChange={alterarModalPreview}
+        onConfirmar={confirmarEnvio}
+      />
       <div ref={sentinelRef} aria-hidden="true" className="h-px" />
     </div>
   );

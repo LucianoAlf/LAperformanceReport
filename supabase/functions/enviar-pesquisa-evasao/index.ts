@@ -280,6 +280,29 @@ async function carregarNomeOpcional(
   return typeof data[0].nome === "string" ? data[0].nome : null;
 }
 
+async function carregarNomeUnidade(
+  supabase: SupabaseClient,
+  unidadeId: string,
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("unidades")
+    .select("nome")
+    .eq("id", unidadeId)
+    .limit(2);
+
+  if (error) throw error;
+  if (
+    !data ||
+    data.length !== 1 ||
+    typeof data[0].nome !== "string" ||
+    data[0].nome.trim().length === 0
+  ) {
+    throw new ErroHttp(422, "Unidade da movimentacao nao encontrada");
+  }
+
+  return data[0].nome.trim();
+}
+
 async function carregarPreviewPersistida(
   supabase: SupabaseClient,
   previewId: string,
@@ -574,7 +597,8 @@ async function previsualizar(
   };
   const payloadHash = await hashPreview(snapshot);
   const expiraEm = new Date(Date.now() + PREVIEW_TTL_MS).toISOString();
-  const [cursoNome, professorNome] = await Promise.all([
+  const [unidadeNome, cursoNome, professorNome] = await Promise.all([
+    carregarNomeUnidade(supabase, movimentacao.unidade_id),
     carregarNomeOpcional(supabase, "cursos", movimentacao.curso_id),
     carregarNomeOpcional(supabase, "professores", movimentacao.professor_id),
   ]);
@@ -619,6 +643,9 @@ async function previsualizar(
     destinatario,
     destinatario_tipo: snapshot.destinatarioTipo,
     telefone_mascarado: mascararTelefone(destino.telefone),
+    unidade: unidadeNome,
+    curso: cursoNome,
+    professor: professorNome,
     assinatura: assinatura.assinaturaNome,
     mensagem,
     modo_teste: request.modo_teste,
