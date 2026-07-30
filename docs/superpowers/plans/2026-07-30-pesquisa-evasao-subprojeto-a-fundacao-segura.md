@@ -90,8 +90,13 @@ test('remove policy ALL aberta de pesquisa_evasao', () => {
 
 test('RLS usa permissoes do dominio e unidade da linha', () => {
   assert.match(sql, /sucesso_aluno\.evasao\.ver/i);
-  assert.match(sql, /fn_usuario_atual_tem_permissao/i);
+  assert.match(sql, /fn_usuario_atual_tem_permissao_estrita/i);
   assert.match(sql, /unidade_id/i);
+});
+
+test('admin legado nao substitui permissao granular do dominio', () => {
+  assert.match(sql, /usuario_tem_permissao_estrita/i);
+  assert.doesNotMatch(sql, /perfil\s*=\s*['"]admin['"][\s\S]+sucesso_aluno\.evasao/i);
 });
 
 test('modo teste nao disputa unicidade nem sobrescreve producao', () => {
@@ -165,7 +170,7 @@ git commit -m "test: definir fundacao segura da pesquisa de evasao"
 - Create: `supabase/migrations/20260730170000_pesquisa_evasao_fundacao_segura.sql`
 - Test: `tests/pesquisaEvasaoFundacaoSegura.test.mjs`
 
-- [ ] **Step 1: Criar catálogo de permissões de forma idempotente**
+- [ ] **Step 1: Criar catálogo, perfil dedicado e helper estrito de forma idempotente**
 
 Inserir os seis códigos em `public.permissoes`, respeitando as colunas reais verificadas no banco. Antes de escrever a migração, rodar somente leitura:
 
@@ -177,7 +182,13 @@ where table_schema = 'public'
 order by table_name, ordinal_position;
 ```
 
-A migração não deve atribuir permissões por comparação frouxa de nome. Criar os códigos primeiro; a atribuição a Fabi/Jéssica deve usar IDs de `usuarios` e perfis confirmados no checklist de rollout.
+A migração não deve atribuir permissões por comparação frouxa de nome. Criar os códigos primeiro; a atribuição a Fabi/Jessica usa exclusivamente os IDs verificados `30` e `29` — ou os emails exatos associados — no checklist de rollout.
+
+- As duas titulares recebem `sucesso_aluno.evasao.ver`, `.enviar`, `.revisar`, `.gerir_acoes` e `.modo_teste`. Não atribuir `.relatorios` por implicação.
+- O escopo é explícito nas três unidades ativas — Barra, Campo Grande e Recreio — por linhas de `usuario_perfis` vinculadas à unidade concreta. Não usar `usuarios.perfil='admin'`, `usuarios.unidade_id=NULL` nem perfil global como prova ou atalho de autorização.
+- Criar o perfil dedicado `Sucesso do Aluno - Evasão`, nível operacional `30`, ligado somente às cinco permissões aprovadas. O código `.relatorios` existe no catálogo, mas não é ligado a esse perfil.
+- Criar `usuario_tem_permissao_estrita(usuario_id, codigo, unidade_id)` e `fn_usuario_atual_tem_permissao_estrita(codigo, unidade_id)`. Para códigos `sucesso_aluno.evasao.*`, elas exigem unidade não nula e uma linha ativa em `usuario_perfis` com a mesma unidade; não consultam nem aceitam o bypass legado `usuarios.perfil='admin'`.
+- RLS, RPCs e Edge deste domínio usam exclusivamente os helpers estritos. O bypass de `service_role` continua restrito ao backend depois da autenticação/autorização do usuário.
 
 - [ ] **Step 2: Criar tabelas de configuração e auditoria**
 
@@ -356,7 +367,7 @@ Matriz obrigatória:
 A policy de leitura do cabeçalho exige:
 
 ```sql
-public.fn_usuario_atual_tem_permissao(
+public.fn_usuario_atual_tem_permissao_estrita(
   'sucesso_aluno.evasao.ver'::varchar,
   unidade_id_da_pesquisa
 )
@@ -381,8 +392,8 @@ Regras:
 - o frontend atual chama a sobrecarga de seis argumentos, mas a de quatro também é endurecida para não permanecer como bypass de compatibilidade;
 - nesta etapa, preservar exatamente o `RETURNS TABLE` de cada overload; PostgreSQL não permite mudar retorno por `CREATE OR REPLACE`;
 - ambas as sobrecargas de `listar` e `stats` exigem `sucesso_aluno.evasao.ver` e filtram cada linha pela unidade real de `movimentacoes_admin`;
-- `p_unidade_id=NULL` significa “todas as unidades autorizadas”, nunca “todas as unidades”: perfil restrito à unidade A não pode obter B; perfil global/admin é avaliado contra a unidade concreta de cada linha;
-- nenhuma autorização do domínio chama `usuario_tem_permissao(..., NULL)`; a Edge e as RPCs sempre usam a unidade concreta da movimentação;
+- `p_unidade_id=NULL` significa “todas as unidades autorizadas”, nunca “todas as unidades”: a função avalia cada linha contra `usuario_perfis.unidade_id`; perfil global ou admin legado não amplia o escopo deste domínio;
+- nenhuma autorização do domínio chama `usuario_tem_permissao_estrita(..., NULL)`; a Edge e as RPCs sempre usam a unidade concreta da movimentação;
 - testes legados continuam visíveis e marcados na listagem operacional, mas `stats` e qualquer agregado excluem `modo_teste=true`;
 - revogar `EXECUTE` de `PUBLIC` e `anon` nas cinco assinaturas;
 - `criar_pesquisa_evasao` passa a `SECURITY DEFINER`, fixa `search_path = public, pg_temp`, valida `auth.role()='service_role'`, perde `EXECUTE` de `authenticated` e fica somente para `service_role`;
@@ -519,12 +530,12 @@ Usar `crypto.subtle.digest('SHA-256', ...)` para o hash do snapshot. A autoriza�
 
 1. validação criptográfica do token via `auth.getUser`;
 2. resolução de `usuarios.auth_user_id`;
-3. verificação explícita de `usuario_tem_permissao(usuario.id, codigo, unidade_id)`;
+3. verificação explícita de `usuario_tem_permissao_estrita(usuario.id, codigo, unidade_id)`;
 4. resolução de uma única assinatura ativa.
 
 `ContextoOperador` não carrega uma única “unidade do usuário”. O schema permite vários `usuario_perfis`; cada operação autoriza o operador contra a `unidade_id` concreta da movimentação. Nunca chamar o helper com unidade nula para decidir escopo.
 
-Não usar `fn_usuario_atual_tem_permissao` com o cliente service role, porque `auth.role()='service_role'` faria a checagem sempre passar.
+Não usar `fn_usuario_atual_tem_permissao_estrita` com o cliente service role para autorizar o operador, porque o bypass técnico do backend faria a checagem passar. A Edge chama `usuario_tem_permissao_estrita` com o `usuario.id` resolvido e a unidade concreta.
 
 - [ ] **Step 6: Executar testes**
 
@@ -926,25 +937,41 @@ Use transações e `set local role`; consulte também `pg_policies`, `has_table_
 
 - [ ] **Step 3: Documentar a atribuição de Fabi e Jéssica**
 
-O runbook deve exigir esta consulta somente leitura:
+O runbook deve exigir esta consulta somente leitura por identidade estável:
 
 ```sql
 select id, auth_user_id, nome, email, perfil, unidade_id, ativo
 from public.usuarios
-where lower(nome) like any (array['%fabi%', '%jéssica%', '%jessica%'])
-order by nome;
+where (id, email) in (
+  (29, 'jessyca@lamusic.com.br'),
+  (30, 'fabi@gmail.com')
+)
+order by id;
 ```
 
 Antes do go-live:
 
+- a consulta deve retornar exatamente Jessica `id=29`/`jessyca@lamusic.com.br` e Fabi `id=30`/`fabi@gmail.com`;
 - cada pessoa deve ter exatamente um `auth_user_id`;
 - cada pessoa deve ter exatamente uma assinatura ativa;
-- permissões `ver` e `enviar` devem estar efetivas;
-- `modo_teste` só para quem foi aprovado;
-- validar cada unidade necessária;
+- as cinco permissões aprovadas (`ver`, `enviar`, `revisar`, `gerir_acoes`, `modo_teste`) devem estar efetivas para cada titular;
+- cada uma deve possuir escopo explícito em Barra, Campo Grande e Recreio pelo mecanismo `usuario_perfis.unidade_id`;
+- validar que não houve concessão implícita de `.relatorios`;
 - não conceder `admin` apenas para fazer a tela funcionar.
 
-Estado verificado em 2026-07-30: Fabi foi localizada ativa e vinculada; Jéssica não foi resolvida de forma inequívoca. Isso não bloqueia implementação local, mas bloqueia homologação nominal, atribuição de assinatura e qualquer rollout. Não criar usuário nem vincular identidade por aproximação de nome.
+Escopo fixado no runbook:
+
+| Unidade | ID |
+|---|---|
+| Barra | `368d47f5-2d88-4475-bc14-ba084a9a348e` |
+| Campo Grande | `2ec861f6-023f-4d7b-9927-3960ad8c2a92` |
+| Recreio | `95553e96-971b-4590-a6eb-0201d013c14d` |
+
+O rollout cria de forma idempotente seis vínculos ativos em `usuario_perfis`: dois usuários × três unidades, todos usando o perfil exato `Sucesso do Aluno - Evasão`. A verificação deve falhar se houver vínculo global (`unidade_id is null`), unidade diferente, menos/mais de seis vínculos ou se o perfil contiver permissão fora das cinco aprovadas.
+
+Testar também que `usuario_tem_permissao_estrita` retorna `false` para Fabi/Jessica antes desses vínculos, apesar do `perfil='admin'`, e `true` nas três unidades depois da atribuição. Isso prova que o admin legado não está sendo usado como atalho.
+
+Estado verificado em 2026-07-30, somente leitura: Jessica (`usuarios.id=29`, email `jessyca@lamusic.com.br`) e Fabi (`usuarios.id=30`, email `fabi@gmail.com`) estão ativas, com `auth_user_id`, `perfil='admin'` e `unidade_id=NULL`. A homologação nominal está desbloqueada, mas o rollout continua condicionado à atribuição granular acima. A grafia de nome não participa de identificação, autorização ou seed.
 
 - [ ] **Step 4: Rodar verificação completa**
 
@@ -970,23 +997,27 @@ git commit -m "docs: fechar rollout e verificacao da fundacao de evasao"
 
 - Verify: `docs/runbooks/pesquisa-evasao-subprojeto-a-rollout.md`
 
-- [ ] **Step 1: Homologar com quatro identidades**
+- [ ] **Step 1: Homologar com cinco identidades**
 
 Executar:
 
 1. usuário anônimo;
 2. usuário autenticado sem permissão;
-3. Fabi;
-4. Jéssica.
+3. terceiro usuário de homologação com permissão em apenas uma unidade;
+4. Fabi (`usuarios.id=30`);
+5. Jessica (`usuarios.id=29`).
+
+O terceiro usuário é registrado no runbook por `usuarios.id` e email exato antes do teste, nunca por nome. Ele recebe o perfil dedicado em somente uma das três unidades e não pode ser `id=29` ou `id=30`.
 
 Comprovar:
 
 - anônimo recebe `401`;
 - sem permissão recebe `403`;
 - Fabi vê e envia assinatura Fabi;
-- Jéssica vê e envia assinatura Jéssica;
+- Jessica vê e envia assinatura Jessica;
 - nenhuma delas troca identidade pelo DevTools;
-- outra unidade é negada;
+- Fabi e Jessica operam Barra, Campo Grande e Recreio;
+- o terceiro usuário de homologação opera somente sua unidade e recebe negação ao tentar consultar ou enviar por outra;
 - modo teste não altera cadastro nem analytics.
 - envio de teste para uma evasão com cabeçalho produtivo não o sobrescreve nem o bloqueia;
 - timeout ambíguo fica `incerto` e uma repetição não chama o provedor novamente.
@@ -1053,6 +1084,7 @@ Anexar ao runbook:
 - [ ] `enviar-pesquisa-evasao` exige JWT e autorização por permissão/unidade.
 - [ ] Operador não vem do navegador.
 - [ ] Fabi e Jéssica usam automaticamente sua própria assinatura.
+- [ ] Fabi `30` e Jessica `29` possuem as cinco permissões aprovadas em Barra, Campo Grande e Recreio por vínculos explícitos de unidade; o admin legado não autoriza este domínio.
 - [ ] Toda produção exige prévia e confirmação.
 - [ ] A mensagem enviada é o snapshot aprovado.
 - [ ] Modo teste é separado e não contamina cadastro/analytics.
