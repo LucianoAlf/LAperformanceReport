@@ -39,15 +39,19 @@ test('pesquisa de evasao referencia a movimentacao administrativa canonica', () 
   assert.doesNotMatch(migration, /references\s+public\.evasoes_v2/i);
 });
 
-// Compatibilidade transitoria do fluxo interno legado. `telefone_override`
-// nao representa o request publico V2 e deve ser removido na Task 3.
-test('edge legado ainda aceita telefone_override interno e usa a caixa correta', () => {
+test('edge V2 separa destinos, valida a movimentacao e usa a caixa correta', () => {
   const edge = readOptional(edgePath);
 
-  assert.match(edge, /telefone_override\??:\s*string/i);
+  assert.doesNotMatch(edge, /telefone_override/i);
   assert.match(edge, /const\s+CAIXA_SUCESSO_ID\s*=\s*3/i);
-  assert.match(edge, /caixaId:\s*CAIXA_SUCESSO_ID/i);
-  assert.match(edge, /resolverTelefonePesquisa\s*\(/i);
+  assert.match(edge, /caixa_id:\s*CAIXA_SUCESSO_ID/i);
+  assert.match(edge, /caixaId:\s*claim\.caixa_id/i);
+  assert.match(edge, /is_movimentacao_admin_retencao_valida/i);
+  assert.match(edge, /resolverDestinoPesquisa\s*\(/i);
+  assert.match(
+    edge,
+    /telefoneSnapshot:\s*movimentacao\.telefone_snapshot/i,
+  );
 });
 
 test('tela nunca converte teste sem numero em envio real', () => {

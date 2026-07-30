@@ -3,6 +3,9 @@ project_id = "ouqwbbermlzqqvtqwlul"
 [functions.relatorio-admin-whatsapp]
 verify_jwt = false
 
+[functions.enviar-pesquisa-evasao]
+verify_jwt = true
+
 [functions.gerar-relatorio-pedagogico]
 verify_jwt = false
 
