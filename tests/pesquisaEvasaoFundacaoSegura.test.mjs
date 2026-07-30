@@ -333,7 +333,7 @@ function assertBlockingServiceRoleGate(body) {
     .replace(/^\(([\s\S]*)\)$/, '$1');
   assert.equal(
     condition,
-    "auth.role() is distinct from 'service_role'",
+    normalizeSql("auth.role() is distinct from 'service_role'"),
     'gate deve bloquear exatamente role distinta de service_role',
   );
   assertNoAuthorizationBypass(serviceGate[1], 'gate service_role');
