@@ -196,12 +196,14 @@ as $function$
 $function$;
 
 revoke all on function public.usuario_tem_permissao_estrita(integer, varchar, uuid)
-  from public, anon, authenticated, mila_acesso_restrito, sol_acesso_restrito;
+  from public, anon, authenticated, mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
 grant execute on function public.usuario_tem_permissao_estrita(integer, varchar, uuid)
   to service_role;
 
 revoke all on function public.fn_usuario_atual_tem_permissao_estrita(varchar, uuid)
-  from public, anon, authenticated, mila_acesso_restrito, sol_acesso_restrito;
+  from public, anon, authenticated, mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
 grant execute on function public.fn_usuario_atual_tem_permissao_estrita(varchar, uuid)
   to authenticated, service_role;
 
@@ -629,25 +631,32 @@ using (
 
 revoke all on table public.pesquisa_evasao
   from public, anon, authenticated, service_role,
-       mila_acesso_restrito, sol_acesso_restrito;
+       mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
 revoke all on table public.pesquisa_evasao_templates
   from public, anon, authenticated, service_role,
-       mila_acesso_restrito, sol_acesso_restrito;
+       mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
 revoke all on table public.pesquisa_evasao_assinaturas
   from public, anon, authenticated, service_role,
-       mila_acesso_restrito, sol_acesso_restrito;
+       mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
 revoke all on table public.pesquisa_evasao_previews
   from public, anon, authenticated, service_role,
-       mila_acesso_restrito, sol_acesso_restrito;
+       mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
 revoke all on table public.pesquisa_evasao_mensagens
   from public, anon, authenticated, service_role,
-       mila_acesso_restrito, sol_acesso_restrito;
+       mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
 revoke all on table public.pesquisa_evasao_transcricoes
   from public, anon, authenticated, service_role,
-       mila_acesso_restrito, sol_acesso_restrito;
+       mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
 revoke all on table public.pesquisa_evasao_analises
   from public, anon, authenticated, service_role,
-       mila_acesso_restrito, sol_acesso_restrito;
+       mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
 
 grant select on table public.pesquisa_evasao to authenticated;
 grant select on table public.pesquisa_evasao_mensagens to authenticated;
@@ -942,7 +951,11 @@ begin
       ) as pendentes,
       count(*) filter (
         where pe.envio_status in ('enviado', 'entregue', 'lido')
-          and pe.resposta_status = 'sem_resposta'
+          and pe.resposta_status not in (
+            'pronta_para_revisao',
+            'em_revisao',
+            'revisada'
+          )
       ) as enviados,
       count(*) filter (
         where pe.resposta_status in (
@@ -1144,7 +1157,8 @@ revoke all on function public.listar_evadidos_para_pesquisa(
   integer,
   integer,
   varchar
-) from public, anon, mila_acesso_restrito, sol_acesso_restrito;
+) from public, anon, mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
 grant execute on function public.listar_evadidos_para_pesquisa(
   uuid,
   integer,
@@ -1159,7 +1173,8 @@ revoke all on function public.listar_evadidos_para_pesquisa(
   varchar,
   integer,
   integer
-) from public, anon, mila_acesso_restrito, sol_acesso_restrito;
+) from public, anon, mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
 grant execute on function public.listar_evadidos_para_pesquisa(
   uuid,
   integer,
@@ -1170,16 +1185,19 @@ grant execute on function public.listar_evadidos_para_pesquisa(
 ) to authenticated, service_role;
 
 revoke all on function public.stats_pesquisa_evasao(uuid, integer, integer)
-  from public, anon, mila_acesso_restrito, sol_acesso_restrito;
+  from public, anon, mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
 grant execute on function public.stats_pesquisa_evasao(uuid, integer, integer)
   to authenticated, service_role;
 
 revoke all on function public.criar_pesquisa_evasao(integer, text)
-  from public, anon, authenticated, mila_acesso_restrito, sol_acesso_restrito;
+  from public, anon, authenticated, mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
 grant execute on function public.criar_pesquisa_evasao(integer, text)
   to service_role;
 
 revoke all on function public.pode_enviar_pesquisa_evasao(integer)
-  from public, anon, mila_acesso_restrito, sol_acesso_restrito;
+  from public, anon, mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
 grant execute on function public.pode_enviar_pesquisa_evasao(integer)
   to authenticated, service_role;

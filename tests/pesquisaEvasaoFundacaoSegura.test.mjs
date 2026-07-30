@@ -271,6 +271,8 @@ const forbiddenClientRoles = [
   'authenticated',
   'mila_acesso_restrito',
   'sol_acesso_restrito',
+  'fabio_agent',
+  'lia_acesso_restrito',
 ];
 
 function assertNoForbiddenSchemaWidePrivileges(source) {
@@ -806,12 +808,9 @@ contractTest('rollout nominal fica integralmente fora da migration', () => {
 contractTest('tabelas privadas terminam sem privilegio de roles proibidas', () => {
   for (const tableName of privateTables) {
     assertRlsEnabled(tableName);
-    for (const role of [
-      'public',
-      'anon',
-      'mila_acesso_restrito',
-      'sol_acesso_restrito',
-    ]) {
+    for (const role of forbiddenClientRoles.filter(
+      (candidate) => candidate !== 'authenticated',
+    )) {
       assertFinalPrivileges('table', tableName, role, []);
     }
   }
@@ -824,13 +823,7 @@ contractTest('estado final de grants e service-only e minimo', () => {
   }
 
   for (const tableName of serviceOnlyTables) {
-    for (const role of [
-      'public',
-      'anon',
-      'authenticated',
-      'mila_acesso_restrito',
-      'sol_acesso_restrito',
-    ]) {
+    for (const role of forbiddenClientRoles) {
       assertFinalPrivileges('table', tableName, role, []);
     }
     const authenticatedPolicies = statements(sql).filter(
@@ -869,13 +862,7 @@ contractTest('estado final de grants e service-only e minimo', () => {
     }
   }
   for (const sequenceName of sequenceNames) {
-    for (const role of [
-      'public',
-      'anon',
-      'authenticated',
-      'mila_acesso_restrito',
-      'sol_acesso_restrito',
-    ]) {
+    for (const role of forbiddenClientRoles) {
       assertFinalPrivileges('sequence', sequenceName, role, []);
     }
   }
@@ -885,13 +872,7 @@ contractTest('estado final de grants e service-only e minimo', () => {
   )) {
     assert.equal(
       event.roles.some((role) =>
-        [
-          'public',
-          'anon',
-          'authenticated',
-          'mila_acesso_restrito',
-          'sol_acesso_restrito',
-        ].includes(role)),
+        forbiddenClientRoles.includes(role)),
       false,
       'sequence privada recebeu regrant para role proibida',
     );
@@ -1361,7 +1342,7 @@ contractTest('stats so considera resposta pronta para revisao ou avancada', () =
   ];
   const responseStatusFilters = [
     ...definition.matchAll(
-      /\b(?:pe|pesquisa_evasao)\.resposta_status\s+in\s*\(([^)]*)\)/gi,
+      /(?<!not\s)\b(?:pe|pesquisa_evasao)\.resposta_status\s+in\s*\(([^)]*)\)/gi,
     ),
   ];
 
@@ -1376,10 +1357,20 @@ contractTest('stats so considera resposta pronta para revisao ou avancada', () =
     ].map((match) => match[1].toLowerCase());
     assert.deepEqual(statuses, validResponseStatuses);
   }
-  assert.doesNotMatch(
+});
+
+contractTest('stats mantem respostas nao validas no denominador de enviados', () => {
+  const definition = normalizeSql(
+    getFunctionDefinition(
+      'stats_pesquisa_evasao',
+      ['uuid', 'integer', 'integer'],
+    ),
+  );
+
+  assert.match(
     definition,
-    /['"]coletando['"]/i,
-    'coletando ainda nao e resposta valida para stats ou taxa',
+    /count\(\*\)filter\(where pe\.envio_status in\('enviado','entregue','lido'\)and pe\.resposta_status not in\('pronta_para_revisao','em_revisao','revisada'\)\)as enviados/,
+    'envio bem-sucedido sem resposta valida deve permanecer no denominador',
   );
 });
 
@@ -1419,6 +1410,27 @@ contractTest('EXECUTE publico e anon e revogado nas cinco assinaturas', () => {
   for (const [name, args] of signatures) {
     assertFinalPrivileges('function', name, 'public', [], args);
     assertFinalPrivileges('function', name, 'anon', [], args);
+  }
+});
+
+contractTest('agents restritos nao executam helpers nem RPCs do dominio', () => {
+  const signatures = [
+    ['usuario_tem_permissao_estrita', 'integer, varchar, uuid'],
+    ['fn_usuario_atual_tem_permissao_estrita', 'varchar, uuid'],
+    ['listar_evadidos_para_pesquisa', 'uuid, integer, integer, varchar'],
+    [
+      'listar_evadidos_para_pesquisa',
+      'uuid, integer, integer, varchar, integer, integer',
+    ],
+    ['stats_pesquisa_evasao', 'uuid, integer, integer'],
+    ['criar_pesquisa_evasao', 'integer, text'],
+    ['pode_enviar_pesquisa_evasao', 'integer'],
+  ];
+
+  for (const role of ['fabio_agent', 'lia_acesso_restrito']) {
+    for (const [name, args] of signatures) {
+      assertFinalPrivileges('function', name, role, [], args);
+    }
   }
 });
 
