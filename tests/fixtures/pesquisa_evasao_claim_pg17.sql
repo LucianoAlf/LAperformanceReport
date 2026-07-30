@@ -365,7 +365,7 @@ exception
 end
 $$;
 
-\echo CASE_consumida_orfa
+\echo CASE_consumida_orfa CASE_orfa_sqlstate_mensagem
 select public.criar_preview_fixture(
   '50000000-0000-0000-0000-000000000004',
   1004,
@@ -375,19 +375,34 @@ select public.criar_preview_fixture(
   now() + interval '10 minutes',
   true
 );
-do $$
+do $orfa_sqlstate_mensagem$
+declare
+  v_sqlstate text;
+  v_mensagem text;
 begin
-  perform *
-  from public.claim_pesquisa_evasao_preview(
-    '50000000-0000-0000-0000-000000000004',
-    '20000000-0000-0000-0000-000000000001'
+  begin
+    perform *
+    from public.claim_pesquisa_evasao_preview(
+      '50000000-0000-0000-0000-000000000004',
+      '20000000-0000-0000-0000-000000000001'
+    );
+  exception
+    when others then
+      get stacked diagnostics
+        v_sqlstate = returned_sqlstate,
+        v_mensagem = message_text;
+  end;
+
+  perform public.assert_true(
+    v_sqlstate = 'P0001',
+    'preview orfa deve falhar com SQLSTATE P0001'
   );
-  raise exception 'a preview órfã consumida foi aceita';
-exception
-  when raise_exception then
-    null;
+  perform public.assert_true(
+    v_mensagem = 'PESQUISA_EVASAO_PREVIEW_CONSUMIDA_SEM_PESQUISA',
+    'preview orfa deve falhar com mensagem canonica'
+  );
 end
-$$;
+$orfa_sqlstate_mensagem$;
 
 \echo CASE_producao_vs_teste
 select public.criar_preview_fixture(
@@ -455,6 +470,15 @@ select public.assert_true(
    where id = (select pesquisa_id from stale_primeira)) = 'incerto',
   'claim stale deve virar incerto'
 );
+select public.assert_true(
+  (select envio_status from stale_replay) = 'incerto'
+  and (
+    select envio_status_tentativa
+    from public.pesquisa_evasao_previews
+    where id = '50000000-0000-0000-0000-000000000007'
+  ) = 'incerto',
+  'stale deve atualizar cabecalho, retorno e preview da tentativa'
+);
 
 \echo CASE_reconciliacao
 select *
@@ -520,6 +544,158 @@ select public.assert_true(
   'replay antigo deve manter o vinculo historico ao cabecalho'
 );
 
+\echo CASE_slot_race_terminal CASE_historico_tentativa
+select public.criar_preview_fixture(
+  '50000000-0000-0000-0000-000000000012',
+  1009
+);
+select public.criar_preview_fixture(
+  '50000000-0000-0000-0000-000000000013',
+  1009
+);
+create temporary table slot_primeira as
+select *
+from public.claim_pesquisa_evasao_preview(
+  '50000000-0000-0000-0000-000000000012',
+  '20000000-0000-0000-0000-000000000001'
+);
+create temporary table slot_segunda as
+select *
+from public.claim_pesquisa_evasao_preview(
+  '50000000-0000-0000-0000-000000000013',
+  '20000000-0000-0000-0000-000000000001'
+);
+select public.assert_true(
+  (select deve_despachar from slot_primeira)
+  and not (select deve_despachar from slot_segunda),
+  'duas previews anteriores ao claim devem autorizar apenas a primeira'
+);
+select public.assert_true(
+  (select preview_id from slot_segunda) =
+    '50000000-0000-0000-0000-000000000013'::uuid,
+  'claim perdedora deve devolver sua propria tentativa'
+);
+select public.assert_true(
+  (
+    select consumido_em is not null
+      and envio_status_tentativa = 'bloqueado'
+      and envio_erro_sanitizado_tentativa is not null
+      and envio_finalizado_em is not null
+    from public.pesquisa_evasao_previews
+    where id = '50000000-0000-0000-0000-000000000013'
+  ),
+  'segunda preview deve ficar terminalmente consumida e bloqueada'
+);
+select *
+from public.registrar_resultado_pesquisa_evasao_envio(
+  (select pesquisa_id from slot_primeira),
+  '20000000-0000-0000-0000-000000000001',
+  'falhou',
+  null,
+  'falha conhecida da primeira tentativa'
+);
+select public.assert_true(
+  (
+    select envio_status_tentativa = 'falhou'
+      and provider_message_id_tentativa is null
+      and envio_erro_sanitizado_tentativa =
+        'falha conhecida da primeira tentativa'
+      and envio_iniciado_em is not null
+      and envio_finalizado_em is not null
+    from public.pesquisa_evasao_previews
+    where id = '50000000-0000-0000-0000-000000000012'
+  ),
+  'resultado falhou deve finalizar atomicamente o snapshot da tentativa 1'
+);
+create temporary table slot_segunda_replay as
+select *
+from public.claim_pesquisa_evasao_preview(
+  '50000000-0000-0000-0000-000000000013',
+  '20000000-0000-0000-0000-000000000001'
+);
+select public.assert_true(
+  not (select deve_despachar from slot_segunda_replay)
+  and (select envio_status from slot_segunda_replay) = 'bloqueado',
+  'preview bloqueada nao pode despachar depois da falha da vencedora'
+);
+select public.criar_preview_fixture(
+  '50000000-0000-0000-0000-000000000014',
+  1009
+);
+create temporary table slot_nova_tentativa as
+select *
+from public.claim_pesquisa_evasao_preview(
+  '50000000-0000-0000-0000-000000000014',
+  '20000000-0000-0000-0000-000000000001'
+);
+select public.assert_true(
+  (select deve_despachar from slot_nova_tentativa),
+  'somente uma nova preview deve liberar nova tentativa'
+);
+select *
+from public.registrar_resultado_pesquisa_evasao_envio(
+  (select pesquisa_id from slot_nova_tentativa),
+  '20000000-0000-0000-0000-000000000001',
+  'enviado',
+  'provider-segunda-tentativa',
+  null
+);
+select public.assert_true(
+  (
+    select envio_status_tentativa = 'enviado'
+      and provider_message_id_tentativa = 'provider-segunda-tentativa'
+      and envio_erro_sanitizado_tentativa is null
+      and envio_iniciado_em is not null
+      and envio_finalizado_em is not null
+    from public.pesquisa_evasao_previews
+    where id = '50000000-0000-0000-0000-000000000014'
+  ),
+  'resultado enviado deve finalizar atomicamente o snapshot da tentativa 2'
+);
+create temporary table slot_primeira_replay as
+select *
+from public.claim_pesquisa_evasao_preview(
+  '50000000-0000-0000-0000-000000000012',
+  '20000000-0000-0000-0000-000000000001'
+);
+create temporary table slot_nova_replay as
+select *
+from public.claim_pesquisa_evasao_preview(
+  '50000000-0000-0000-0000-000000000014',
+  '20000000-0000-0000-0000-000000000001'
+);
+select public.assert_true(
+  not (select deve_despachar from slot_primeira_replay)
+  and (select envio_status from slot_primeira_replay) = 'falhou'
+  and (select provider_message_id from slot_primeira_replay) is null
+  and (select idempotency_key from slot_primeira_replay) =
+    (select idempotency_key from slot_primeira),
+  'replay da tentativa 1 deve preservar falha, provider e chave antigos'
+);
+select public.assert_true(
+  not (select deve_despachar from slot_nova_replay)
+  and (select envio_status from slot_nova_replay) = 'enviado'
+  and (select provider_message_id from slot_nova_replay) =
+    'provider-segunda-tentativa'
+  and (select idempotency_key from slot_nova_replay) =
+    (select idempotency_key from slot_nova_tentativa),
+  'replay da tentativa 2 deve preservar sucesso, provider e chave novos'
+);
+select public.assert_true(
+  (select idempotency_key from slot_primeira_replay) <>
+    (select idempotency_key from slot_nova_replay),
+  'tentativas historicas devem manter chaves distintas'
+);
+select public.assert_true(
+  (
+    select count(*)
+    from public.pesquisa_evasao
+    where evasao_id = 1009
+      and modo_teste is false
+  ) = 1,
+  'historico de tentativas deve preservar cabecalho produtivo unico'
+);
+
 \echo CASE_concurrency
 select public.criar_preview_fixture(
   '50000000-0000-0000-0000-000000000008',
@@ -559,6 +735,27 @@ from dblink_get_result('claim_b') as t(resultado text);
 select public.assert_true(
   (select count(*) from concorrencia_resultado where deve_despachar) = 1,
   'concorrência deve autorizar exatamente um despacho'
+);
+select public.assert_true(
+  (
+    select count(*)
+    from public.pesquisa_evasao_previews
+    where id in (
+      '50000000-0000-0000-0000-000000000008',
+      '50000000-0000-0000-0000-000000000009'
+    )
+      and consumido_em is not null
+  ) = 2
+  and (
+    select count(*)
+    from public.pesquisa_evasao_previews
+    where id in (
+      '50000000-0000-0000-0000-000000000008',
+      '50000000-0000-0000-0000-000000000009'
+    )
+      and envio_status_tentativa = 'bloqueado'
+  ) = 1,
+  'corrida real deve consumir ambas e bloquear exatamente a perdedora'
 );
 select dblink_disconnect('claim_a');
 select dblink_disconnect('claim_b');
@@ -604,6 +801,71 @@ select public.assert_true(
     'EXECUTE'
   ),
   'claim deve ficar inacessível aos papéis de cliente e agentes'
+);
+
+\echo CASE_reaplicacao
+\ir /workspace/supabase/migrations/20260730173000_pesquisa_evasao_claim_seguro.sql
+select public.assert_true(
+  has_function_privilege(
+    'service_role',
+    'public.claim_pesquisa_evasao_preview(uuid,uuid)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.claim_pesquisa_evasao_preview(uuid,uuid)',
+    'EXECUTE'
+  ),
+  'reaplicacao deve preservar ACL service-only do claim'
+);
+select public.assert_true(
+  has_function_privilege(
+    'service_role',
+    'public.registrar_resultado_pesquisa_evasao_envio(uuid,uuid,text,text,text)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.registrar_resultado_pesquisa_evasao_envio(uuid,uuid,text,text,text)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.pesquisa_evasao_claim_snapshot(uuid,boolean,uuid)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.pesquisa_evasao_claim_snapshot(uuid,boolean,uuid)',
+    'EXECUTE'
+  ),
+  'reaplicacao deve preservar ACL service-only dos helpers'
+);
+select public.assert_true(
+  (
+    select count(*) = 5
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'pesquisa_evasao_previews'
+      and column_name in (
+        'envio_status_tentativa',
+        'provider_message_id_tentativa',
+        'envio_erro_sanitizado_tentativa',
+        'envio_iniciado_em',
+        'envio_finalizado_em'
+      )
+  ),
+  'reaplicacao deve preservar colunas historicas da tentativa'
+);
+select public.assert_true(
+  (
+    select convalidated
+    from pg_constraint
+    where conrelid = 'public.pesquisa_evasao_previews'::regclass
+      and conname =
+        'pesquisa_evasao_previews_envio_status_tentativa_check'
+  ),
+  'reaplicacao deve preservar constraint validada de status da tentativa'
 );
 
 \echo PESQUISA_EVASAO_CLAIM_PG17_OK

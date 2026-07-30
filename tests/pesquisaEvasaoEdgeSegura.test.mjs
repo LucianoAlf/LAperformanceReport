@@ -298,6 +298,12 @@ test('Edge nao muta fontes canonicas nem faz upsert direto do cabecalho', () => 
 
 test('preview usa configuracao fail-closed, snapshot canonico, hash e dez minutos', () => {
   const edge = codigoExecutavel(readOptional(edgePath));
+  const guardSlot = edge.match(
+    /async function exigirSlotDisponivelParaPreview[\s\S]*?async function previsualizar/,
+  )?.[0] ?? '';
+  const previsualizacao = edge.match(
+    /async function previsualizar[\s\S]*?async function confirmar/,
+  )?.[0] ?? '';
 
   assert.match(edge, /pesquisa_evasao_templates/);
   assert.match(edge, /templates \. length !== 1/);
@@ -308,6 +314,28 @@ test('preview usa configuracao fail-closed, snapshot canonico, hash e dez minuto
   assert.match(edge, /hashPreview \(/);
   assert.match(edge, /pesquisa_evasao_previews/);
   assert.match(edge, /10 \* 60 \* 1000/);
+  assert.match(guardSlot, /from \( "pesquisa_evasao" \)/);
+  assert.match(guardSlot, /eq \( "evasao_id" , evasaoId \)/);
+  assert.match(guardSlot, /eq \( "modo_teste" , modoTeste \)/);
+  assert.match(
+    guardSlot,
+    /in \( "envio_status" , \[ "enviando" , "incerto" \] \)/,
+  );
+  assert.match(
+    guardSlot,
+    /if \( modoTeste \)[\s\S]*eq \( "telefone_destino_snapshot" , telefoneDestino \)/,
+    'slot de teste deve incluir telefone; producao nao pode compartilhar esse filtro',
+  );
+  assert.match(
+    previsualizacao,
+    /exigirSlotDisponivelParaPreview \(/,
+    'preview normal deve bloquear slot logico ativo antes de persistir',
+  );
+  assert.ok(
+    previsualizacao.indexOf('exigirSlotDisponivelParaPreview') <
+      previsualizacao.indexOf('. insert ('),
+    'guard do slot precisa ocorrer antes do INSERT da preview',
+  );
   for (
     const campo of [
       'preview_id',
@@ -340,6 +368,7 @@ test('confirmacao usa ownership e escopo persistidos antes do claim', () => {
 
 test('provider nao promete idempotencia ausente e separa sucesso, falha e ambiguidade', () => {
   const provider = codigoExecutavel(readOptional(providerPath));
+  const edge = codigoExecutavel(readOptional(edgePath));
 
   assert.match(provider, /falha_conhecida/);
   assert.match(provider, /incerto/);
@@ -349,6 +378,13 @@ test('provider nao promete idempotencia ausente e separa sucesso, falha e ambigu
   assert.doesNotMatch(
     provider,
     /(?:uazapi|waha)[\s\S]{0,80}return true/i,
+  );
+  assert.match(provider, /AbortSignal \. timeout \(/);
+  assert.match(edge, /fetchProviderComTimeout \(/);
+  assert.doesNotMatch(
+    edge,
+    /response = await fetch \(/,
+    'dispatch nao pode ignorar o timeout explicito',
   );
 });
 
@@ -372,6 +408,16 @@ test('claim SQL e service-only, serializa slots e nunca reenvia estado ambiguo',
   assert.match(claim, /modo_teste\s*=\s*true/i);
   assert.match(claim, /envio_status\s+in\s*\(\s*'enviando'\s*,\s*'incerto'/i);
   assert.match(claim, /envio_status\s*=\s*'incerto'/i);
+  assert.match(
+    claim,
+    /envio_status_tentativa\s*=\s*'bloqueado'/i,
+    'preview perdedora precisa terminar bloqueada',
+  );
+  assert.match(
+    claim,
+    /pesquisa_evasao_claim_snapshot\s*\(\s*v_existente\.id\s*,\s*false\s*,\s*v_preview\.id/i,
+    'claim perdedora deve retornar o proprio snapshot historico',
+  );
 
   assert.match(
     sql,
@@ -398,6 +444,26 @@ test('migration governa template unico e transicoes reconciliaveis', () => {
   assert.match(sql, /p_resultado[\s\S]*'enviado'[\s\S]*'falhou'[\s\S]*'incerto'/i);
   assert.match(sql, /provider_message_id/i);
   assert.match(sql, /envio_erro_sanitizado/i);
+  for (
+    const campo of [
+      'envio_status_tentativa',
+      'provider_message_id_tentativa',
+      'envio_erro_sanitizado_tentativa',
+      'envio_iniciado_em',
+      'envio_finalizado_em',
+    ]
+  ) {
+    assert.match(
+      sql,
+      new RegExp(`add\\s+column\\s+if\\s+not\\s+exists\\s+${campo}\\b`, 'i'),
+      `${campo} precisa compor o snapshot historico da tentativa`,
+    );
+  }
+  assert.match(
+    sql,
+    /update\s+public\.pesquisa_evasao_previews[\s\S]*envio_status_tentativa/i,
+    'resultado precisa atualizar atomicamente a preview atual',
+  );
 });
 
 test('fixture PG17 cobre replay, ownership, expiracao, orfa, slots, stale e concorrencia', () => {
@@ -413,6 +479,10 @@ test('fixture PG17 cobre replay, ownership, expiracao, orfa, slots, stale e conc
       'stale',
       'reconciliacao',
       'failed_retry_replay',
+      'slot_race_terminal',
+      'historico_tentativa',
+      'orfa_sqlstate_mensagem',
+      'reaplicacao',
     ]
   ) {
     assert.match(fixture, new RegExp(evidencia, 'i'));

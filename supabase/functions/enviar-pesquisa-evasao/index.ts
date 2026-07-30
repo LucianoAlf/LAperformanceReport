@@ -76,7 +76,7 @@ interface ClaimEnvio {
   mensagem_renderizada: string;
   caixa_id: number;
   idempotency_key: string;
-  envio_status: EstadoEnvioPersistido | "enviando";
+  envio_status: EstadoEnvioPersistido | "enviando" | "bloqueado";
   provider_message_id: string | null;
   deve_despachar: boolean;
 }
@@ -443,6 +443,34 @@ async function enviarAoProvider(
   };
 }
 
+async function exigirSlotDisponivelParaPreview(
+  supabase: SupabaseClient,
+  evasaoId: number,
+  modoTeste: boolean,
+  telefoneDestino: string,
+): Promise<void> {
+  let query = supabase
+    .from("pesquisa_evasao")
+    .select("id")
+    .eq("evasao_id", evasaoId)
+    .eq("modo_teste", modoTeste)
+    .in("envio_status", ["enviando", "incerto"])
+    .limit(1);
+
+  if (modoTeste) {
+    query = query.eq("telefone_destino_snapshot", telefoneDestino);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  if ((data ?? []).length > 0) {
+    throw new ErroHttp(
+      409,
+      "Ja existe uma tentativa ativa para este destino",
+    );
+  }
+}
+
 async function previsualizar(
   supabase: SupabaseClient,
   adapters: AuthAdapters,
@@ -504,6 +532,12 @@ async function previsualizar(
     telefoneTeste: request.telefone_teste,
     telefoneSnapshot: movimentacao.telefone_snapshot,
   });
+  await exigirSlotDisponivelParaPreview(
+    supabase,
+    movimentacao.id,
+    request.modo_teste,
+    destino.telefone,
+  );
   const mensagem = renderizarMensagem({
     template: String(template.corpo),
     valores: {

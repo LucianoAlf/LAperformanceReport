@@ -13,7 +13,12 @@ alter table public.pesquisa_evasao_previews
   add column if not exists motivo_cadastrado_snapshot text,
   add column if not exists assinatura_nome_snapshot text,
   add column if not exists template_versao integer,
-  add column if not exists pesquisa_evasao_id uuid;
+  add column if not exists pesquisa_evasao_id uuid,
+  add column if not exists envio_status_tentativa text,
+  add column if not exists provider_message_id_tentativa text,
+  add column if not exists envio_erro_sanitizado_tentativa text,
+  add column if not exists envio_iniciado_em timestamptz,
+  add column if not exists envio_finalizado_em timestamptz;
 
 alter table public.pesquisa_evasao_previews
   drop constraint if exists pesquisa_evasao_previews_pesquisa_id_fkey,
@@ -27,6 +32,20 @@ alter table public.pesquisa_evasao_previews
     check (
       publico_template_snapshot is null
       or publico_template_snapshot in ('direto', 'responsavel')
+    );
+
+alter table public.pesquisa_evasao_previews
+  drop constraint if exists pesquisa_evasao_previews_envio_status_tentativa_check,
+  add constraint pesquisa_evasao_previews_envio_status_tentativa_check
+    check (
+      envio_status_tentativa is null
+      or envio_status_tentativa in (
+        'enviando',
+        'incerto',
+        'enviado',
+        'falhou',
+        'bloqueado'
+      )
     );
 
 alter table public.pesquisa_evasao
@@ -101,8 +120,8 @@ begin
     pp.mensagem_renderizada,
     pp.caixa_id,
     pp.idempotency_key,
-    pe.envio_status,
-    pe.provider_message_id,
+    pp.envio_status_tentativa,
+    pp.provider_message_id_tentativa,
     pp.usuario_id,
     pp.auth_user_id,
     pp.assinatura_id,
@@ -196,7 +215,9 @@ begin
         using errcode = 'P0001';
     end if;
 
-    if v_existente.envio_status = 'enviando'
+    if v_existente.preview_id = v_preview.id
+       and v_preview.envio_status_tentativa = 'enviando'
+       and v_existente.envio_status = 'enviando'
        and v_existente.envio_iniciado_em < v_stale_antes then
       update public.pesquisa_evasao pe
       set envio_status = 'incerto',
@@ -204,6 +225,15 @@ begin
             'Dispatch sem conclusao persistida dentro do TTL operacional',
           updated_at = clock_timestamp()
       where pe.id = v_existente.id;
+
+      update public.pesquisa_evasao_previews pp
+      set envio_status_tentativa = 'incerto',
+          provider_message_id_tentativa = null,
+          envio_erro_sanitizado_tentativa =
+            'Dispatch sem conclusao persistida dentro do TTL operacional',
+          envio_finalizado_em = clock_timestamp()
+      where pp.id = v_preview.id
+        and pp.pesquisa_evasao_id = v_existente.id;
     end if;
 
     return query
@@ -277,6 +307,31 @@ begin
               'Dispatch sem conclusao persistida dentro do TTL operacional',
             updated_at = clock_timestamp()
         where pe.id = v_existente.id;
+
+        update public.pesquisa_evasao_previews pp
+        set envio_status_tentativa = 'incerto',
+            provider_message_id_tentativa = null,
+            envio_erro_sanitizado_tentativa =
+              'Dispatch sem conclusao persistida dentro do TTL operacional',
+            envio_finalizado_em = clock_timestamp()
+        where pp.id = v_existente.preview_id
+          and pp.pesquisa_evasao_id = v_existente.id;
+      end if;
+
+      update public.pesquisa_evasao_previews pp
+      set consumido_em = clock_timestamp(),
+          pesquisa_evasao_id = v_existente.id,
+          envio_status_tentativa = 'bloqueado',
+          provider_message_id_tentativa = null,
+          envio_erro_sanitizado_tentativa =
+            'Slot logico ocupado por tentativa anterior',
+          envio_finalizado_em = clock_timestamp()
+      where pp.id = v_preview.id
+        and pp.consumido_em is null;
+
+      if not found then
+        raise exception 'PESQUISA_EVASAO_PREVIEW_CONSUMO_CONCORRENTE'
+          using errcode = '40001';
       end if;
 
       return query
@@ -284,7 +339,7 @@ begin
       from public.pesquisa_evasao_claim_snapshot(
         v_existente.id,
         false,
-        v_existente.preview_id
+        v_preview.id
       );
       return;
     end if;
@@ -312,6 +367,16 @@ begin
               'Dispatch sem conclusao persistida dentro do TTL operacional',
             updated_at = clock_timestamp()
         where pe.id = v_existente.id;
+
+        update public.pesquisa_evasao_previews pp
+        set envio_status_tentativa = 'incerto',
+            provider_message_id_tentativa = null,
+            envio_erro_sanitizado_tentativa =
+              'Dispatch sem conclusao persistida dentro do TTL operacional',
+            envio_finalizado_em = clock_timestamp()
+        where pp.id = v_existente.preview_id
+          and pp.pesquisa_evasao_id = v_existente.id;
+
         v_existente.envio_status := 'incerto';
       end if;
 
@@ -322,12 +387,28 @@ begin
         'entregue',
         'lido'
       ) then
+        update public.pesquisa_evasao_previews pp
+        set consumido_em = clock_timestamp(),
+            pesquisa_evasao_id = v_existente.id,
+            envio_status_tentativa = 'bloqueado',
+            provider_message_id_tentativa = null,
+            envio_erro_sanitizado_tentativa =
+              'Slot logico ocupado por tentativa anterior',
+            envio_finalizado_em = clock_timestamp()
+        where pp.id = v_preview.id
+          and pp.consumido_em is null;
+
+        if not found then
+          raise exception 'PESQUISA_EVASAO_PREVIEW_CONSUMO_CONCORRENTE'
+            using errcode = '40001';
+        end if;
+
         return query
         select *
         from public.pesquisa_evasao_claim_snapshot(
           v_existente.id,
           false,
-          v_existente.preview_id
+          v_preview.id
         );
         return;
       end if;
@@ -335,7 +416,12 @@ begin
   end if;
 
   update public.pesquisa_evasao_previews pp
-  set consumido_em = clock_timestamp()
+  set consumido_em = clock_timestamp(),
+      envio_status_tentativa = 'enviando',
+      provider_message_id_tentativa = null,
+      envio_erro_sanitizado_tentativa = null,
+      envio_iniciado_em = clock_timestamp(),
+      envio_finalizado_em = null
   where pp.id = v_preview.id
     and pp.consumido_em is null;
 
@@ -557,6 +643,7 @@ set search_path = public, pg_temp
 as $function$
 declare
   v_pesquisa public.pesquisa_evasao%rowtype;
+  v_preview public.pesquisa_evasao_previews%rowtype;
 begin
   if auth.role() is distinct from 'service_role' then
     raise exception 'PESQUISA_EVASAO_ACESSO_NEGADO'
@@ -584,6 +671,21 @@ begin
       using errcode = '42501';
   end if;
 
+  select pp.*
+  into v_preview
+  from public.pesquisa_evasao_previews pp
+  where pp.id = v_pesquisa.preview_id
+    and pp.pesquisa_evasao_id = v_pesquisa.id
+  for update;
+
+  if not found
+     or v_preview.auth_user_id is distinct from p_auth_user_id
+     or v_preview.envio_status_tentativa is distinct from
+       v_pesquisa.envio_status then
+    raise exception 'PESQUISA_EVASAO_TENTATIVA_ATUAL_INCONSISTENTE'
+      using errcode = 'P0001';
+  end if;
+
   if p_resultado = 'enviado' then
     if nullif(btrim(p_provider_message_id), '') is null then
       raise exception 'PESQUISA_EVASAO_PROVIDER_MESSAGE_ID_OBRIGATORIO'
@@ -604,6 +706,14 @@ begin
         envio_erro_sanitizado = null,
         updated_at = clock_timestamp()
     where pe.id = v_pesquisa.id;
+
+    update public.pesquisa_evasao_previews pp
+    set envio_status_tentativa = 'enviado',
+        provider_message_id_tentativa = p_provider_message_id,
+        envio_erro_sanitizado_tentativa = null,
+        envio_finalizado_em = clock_timestamp()
+    where pp.id = v_preview.id
+      and pp.pesquisa_evasao_id = v_pesquisa.id;
   elsif p_resultado = 'falhou' then
     if nullif(btrim(p_erro_sanitizado), '') is null then
       raise exception 'PESQUISA_EVASAO_ERRO_SANITIZADO_OBRIGATORIO'
@@ -624,6 +734,15 @@ begin
         envio_erro_sanitizado = left(btrim(p_erro_sanitizado), 200),
         updated_at = clock_timestamp()
     where pe.id = v_pesquisa.id;
+
+    update public.pesquisa_evasao_previews pp
+    set envio_status_tentativa = 'falhou',
+        provider_message_id_tentativa = null,
+        envio_erro_sanitizado_tentativa =
+          left(btrim(p_erro_sanitizado), 200),
+        envio_finalizado_em = clock_timestamp()
+    where pp.id = v_preview.id
+      and pp.pesquisa_evasao_id = v_pesquisa.id;
   else
     if v_pesquisa.envio_status not in ('enviando', 'incerto') then
       raise exception 'PESQUISA_EVASAO_TRANSICAO_INVALIDA'
@@ -640,6 +759,15 @@ begin
           'Resultado ambiguo; reconciliacao humana obrigatoria',
         updated_at = clock_timestamp()
     where pe.id = v_pesquisa.id;
+
+    update public.pesquisa_evasao_previews pp
+    set envio_status_tentativa = 'incerto',
+        provider_message_id_tentativa = null,
+        envio_erro_sanitizado_tentativa =
+          'Resultado ambiguo; reconciliacao humana obrigatoria',
+        envio_finalizado_em = clock_timestamp()
+    where pp.id = v_preview.id
+      and pp.pesquisa_evasao_id = v_pesquisa.id;
   end if;
 
   return query
@@ -699,4 +827,4 @@ comment on function public.registrar_resultado_pesquisa_evasao_envio(
   text,
   text
 ) is
-  'Finaliza envio ou reconcilia estado incerto sem alterar preview ou idempotency_key.';
+  'Finaliza ou reconcilia atomicamente o cabecalho e o snapshot da tentativa atual, sem alterar a idempotency_key.';
