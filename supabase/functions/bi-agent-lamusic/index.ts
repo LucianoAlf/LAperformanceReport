@@ -1,3 +1,4 @@
+/// <reference lib="deno.ns" />
 // Edge Function: bi-agent-lamusic
 // Agente BI com tool calling, Text-to-SQL, cache, auto-correção e isolamento por unidade
 // API key segura server-side, nunca exposta no frontend
@@ -44,10 +45,11 @@ Regras:
 4. Timezone: sempre BRT (UTC-3) para datas do negócio
 5. Ticket médio: considerar apenas tipos_matricula com entra_ticket_medio = true
 6. Alunos pagantes: considerar apenas tipos_matricula com conta_como_pagante = true
-7. Se o usuário perguntar sobre dados que NÃO estão no schema acima (ex: campanhas, conversas WhatsApp, CRM), use descobrir_schema para encontrar as tabelas e colunas relevantes, depois consultar_banco
+7. Para base viva de alunos, use vw_alunos_estado_operacional_v131: entra_base_ativa = true. Trancamento atual fica separado e nunca entra em carteira, financeiro, presença ou KPI ativo.
+8. Se o usuário perguntar sobre dados que NÃO estão no schema acima (ex: campanhas, conversas WhatsApp, CRM), use descobrir_schema para encontrar as tabelas e colunas relevantes, depois consultar_banco
 
 IMPORTANTE — Roteamento de perguntas comuns:
-- "alunos do professor X" → consultar_banco: SELECT a.nome, a.status, c.nome as curso FROM alunos a JOIN professores p ON p.id = a.professor_atual_id JOIN cursos c ON c.id = a.curso_id WHERE p.nome ILIKE '%X%' AND a.status = 'ativo'
+- "alunos do professor X" → consultar_banco: SELECT a.nome, eo.status_operacional, c.nome as curso FROM alunos a JOIN vw_alunos_estado_operacional_v131 eo ON eo.aluno_id = a.id JOIN professores p ON p.id = a.professor_atual_id JOIN cursos c ON c.id = a.curso_id WHERE p.nome ILIKE '%X%' AND eo.entra_carteira_professor = true
 - "evasões do professor X" → consultar_banco: SELECT m.aluno_nome, m.data, m.motivo FROM movimentacoes_admin m JOIN professores p ON p.id = m.professor_id WHERE p.nome ILIKE '%X%' AND m.tipo IN ('evasao','cancelamento')
 - "curva/evolução de alunos do professor X" → consultar_banco: SELECT date_trunc('month', a.data_matricula) as mes, COUNT(*) FROM alunos a JOIN professores p ON p.id = a.professor_atual_id WHERE p.nome ILIKE '%X%' GROUP BY mes ORDER BY mes
 - "buscar aluno por nome" → search_aluno (busca NOME DO ALUNO, não do professor)

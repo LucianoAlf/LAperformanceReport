@@ -128,7 +128,7 @@ function pessoaKey(row: AlunoRow): string | null {
 function isRowAtivoNaData(row: AlunoRow, dataCorte: string): boolean {
   if (row.data_matricula && row.data_matricula > dataCorte) return false;
   if (row.data_saida && row.data_saida <= dataCorte) return false;
-  return row.status === 'ativo' || row.status === 'trancado';
+  return row.status === 'ativo';
 }
 
 function cursoRow(row: AlunoRow) {
@@ -365,136 +365,47 @@ export async function fetchKPIsAlunosVivosCanonicos({
   mes,
 }: FetchKPIsAlunosVivosParams): Promise<KPIsAlunosVivosPorUnidade[]> {
   const unidadeFiltro = unidadeId && unidadeId !== 'todos' ? String(unidadeId) : null;
-  const dataCorte = dataCorteParaCompetenciaAtual(ano, mes);
-  const inicioMes = dataInicioMes(ano, mes);
-
-  let unidadesQuery = supabase
-    .from('unidades')
-    .select('id, nome')
-    .eq('ativo', true)
-    .order('nome');
-
-  if (unidadeFiltro) {
-    unidadesQuery = unidadesQuery.eq('id', unidadeFiltro);
-  }
-
-  const { data: unidadesData, error: unidadesError } = await unidadesQuery;
-  if (unidadesError) throw unidadesError;
-
-  const unidades = (unidadesData || []).map((unidade: any) => ({
-    id: String(unidade.id),
-    nome: String(unidade.nome || 'Unidade'),
-  }));
-
-  const selectAlunos = `
-    id, nome, idade_atual, status, data_matricula, data_saida, unidade_id,
-    valor_parcela, status_pagamento, is_segundo_curso, arquivado_em,
-    cursos:curso_id!left(nome, is_projeto_banda),
-    tipos_matricula:tipo_matricula_id!left(codigo, conta_como_pagante, entra_ticket_medio)
-  `;
-
-  const alunos = await fetchAllPages<AlunoRow>(() => {
-    let query = supabase
-      .from('alunos')
-      .select(selectAlunos)
-      .is('arquivado_em', null)
-      .in('status', ['ativo', 'trancado'])
-      .order('nome');
-
-    if (unidadeFiltro) {
-      query = query.eq('unidade_id', unidadeFiltro);
-    }
-
-    return query;
-  });
-
-  const movimentacoes = await fetchAllPages<MovimentoRow>(() => {
-    let query = supabase
-      .from('movimentacoes_admin')
-      .select(`
-        id, aluno_id, aluno_nome, unidade_id, tipo, data,
-        competencia_referencia, renovacao_primeira_aula_novo_ciclo,
-        renovacao_status, renovacao_antecipada,
-        curso_id, valor_parcela_anterior, valor_parcela_novo, forma_pagamento_id, agente_comercial
-      `)
-      .in('tipo', ['evasao', 'nao_renovacao', 'renovacao'])
-      .or(`and(data.gte.${inicioMes},data.lte.${dataCorte}),and(competencia_referencia.gte.${inicioMes},competencia_referencia.lte.${dataCorte})`)
-      .order('data', { ascending: false });
-
-    if (unidadeFiltro) {
-      query = query.eq('unidade_id', unidadeFiltro);
-    }
-
-    return query;
-  });
-
-  const movAlunoIds = [...new Set(
-    movimentacoes
-      .map(mov => mov.aluno_id)
-      .filter((id): id is number => id !== null && id !== undefined)
-  )];
-  const movCursoIds = [...new Set(
-    movimentacoes
-      .map(mov => mov.curso_id)
-      .filter((id): id is number | string => id !== null && id !== undefined)
-  )];
-
-  const alunosMovimentacoes = movAlunoIds.length > 0
-    ? await fetchAllPages<any>(() => supabase
-        .from('alunos')
-        .select(`
-          id, tipo_matricula_id, is_segundo_curso, classificacao, curso_id,
-          cursos:curso_id!left(nome, is_projeto_banda),
-          tipos_matricula:tipo_matricula_id!left(codigo)
-        `)
-        .in('id', movAlunoIds))
-    : [];
-
-  const cursosMovimentacoes = movCursoIds.length > 0
-    ? await fetchAllPages<any>(() => supabase
-        .from('cursos')
-        .select('id, nome, is_projeto_banda')
-        .in('id', movCursoIds))
-    : [];
-
-  const alunosMovimentacoesMap = new Map(alunosMovimentacoes.map(row => [String(row.id), row]));
-  const cursosMovimentacoesMap = new Map(cursosMovimentacoes.map(row => [String(row.id), row]));
-  const movimentacoesEnriquecidas = movimentacoes.map(mov => {
-    const aluno = mov.aluno_id !== null && mov.aluno_id !== undefined
-      ? alunosMovimentacoesMap.get(String(mov.aluno_id)) || null
-      : null;
-    const curso = mov.curso_id !== null && mov.curso_id !== undefined
-      ? cursosMovimentacoesMap.get(String(mov.curso_id)) || null
-      : null;
-
-    return {
-      ...mov,
-      alunos: aluno,
-      cursos: curso,
-      curso_nome: curso?.nome || null,
-    };
-  });
-
-  const temposPermanenciaPorUnidade = new Map<string, number>();
-  const { data: tempoData, error: tempoError } = await supabase.rpc('get_tempo_permanencia', {
+  const { data, error } = await supabase.rpc('get_kpis_alunos_canonicos', {
     p_unidade_id: unidadeFiltro,
     p_ano: ano,
     p_mes: mes,
   });
 
-  if (tempoError) {
-    console.warn('Falha ao carregar tempo de permanencia canonico', tempoError);
-  } else {
-    ((tempoData || []) as TempoPermanenciaRow[]).forEach(row => {
-      const unidadeId = String(row.unidade_id || '');
-      if (!unidadeId) return;
-      temposPermanenciaPorUnidade.set(unidadeId, n(row.tempo_permanencia_medio));
-    });
-  }
+  if (error) throw error;
 
-  return calcularKPIsAlunosVivosCanonicos(alunos, movimentacoesEnriquecidas, unidades, {
-    ano,
-    mes,
-    temposPermanenciaPorUnidade,
-  });
+  return (data?.por_unidade || []).map((row: any) => ({
+    unidade_id: String(row.unidade_id || ''),
+    unidade_nome: String(row.unidade_nome || 'Unidade'),
+    ano: n(row.ano ?? ano),
+    mes: n(row.mes ?? mes),
+    alunosAtivos: n(row.alunos_ativos),
+    alunosPagantes: n(row.alunos_pagantes),
+    ticketMedio: n(row.ticket_medio),
+    mrr: n(row.mrr),
+    arr: n(row.arr),
+    churnRate: n(row.churn_rate),
+    evasoes: n(row.evasoes),
+    inadimplencia: n(row.inadimplencia ?? row.inadimplencia_pct),
+    tempoPermanencia: n(row.tempo_permanencia ?? row.tempo_permanencia_medio),
+    ltv: n(row.ltv_medio),
+    matriculasAtivas: n(row.matriculas_ativas),
+    matriculasBaseAlunosAtivos: n(row.matriculas_base_alunos_ativos),
+    matriculasBanda: n(row.matriculas_banda),
+    matriculasSegundoCurso: n(row.matriculas_2_curso),
+    alunosComSegundoCurso: n(row.alunos_com_2_curso),
+    matriculasSegundoCursoExtras: n(row.matriculas_2_curso_extras),
+    matriculasCoral: n(row.matriculas_coral),
+    novasMatriculas: n(row.novas_matriculas),
+    bolsistasIntegrais: n(row.bolsistas_integrais),
+    bolsistasIntegraisRegulares: n(row.bolsistas_integrais_regulares),
+    bolsistasIntegraisSegundoCurso: n(row.bolsistas_integrais_segundo_curso),
+    bolsistasParciais: n(row.bolsistas_parciais),
+    kids: n(row.alunos_kids),
+    school: n(row.alunos_school),
+    semClassificacao: n(row.alunos_sem_classificacao),
+    faturamentoPrevisto: n(row.faturamento_previsto),
+    faturamentoRealizado: n(row.faturamento_realizado),
+    reajustePct: n(row.reajuste_pct ?? row.reajuste_medio),
+    reajustesValidos: n(row.reajustes_validos),
+  }));
 }

@@ -92,6 +92,7 @@ async function fetchKPIsAlunosAdminOperacionalRelatorio({
     total_bolsistas_integrais_regulares: Number(row.bolsistas_integrais_regulares) || 0,
     total_bolsistas_integrais_segundo_curso: Number(row.bolsistas_integrais_segundo_curso) || 0,
     total_bolsistas_parciais: Number(row.bolsistas_parciais) || 0,
+    _alunos_trancados: Number(row.alunos_trancados) || 0,
     ticket_medio: 0,
     faturamento_previsto: 0,
     faturamento_realizado: 0,
@@ -581,27 +582,6 @@ export function ModalRelatorio({
       matriculasBanda = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_banda || 0), 0);
       matriculas2Curso = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_2_curso || 0), 0);
       alunosCoral = kpisData.reduce((acc: number, k: any) => acc + (k._alunos_coral || 0), 0);
-    } else if (isPeriodoAtual) {
-      let matriculasQuery = supabase
-        .from('alunos')
-        .select('id, is_segundo_curso, curso_id, cursos:curso_id!left(nome, is_projeto_banda)')
-        .in('status', ['ativo', 'aviso_previo', 'trancado']);
-
-      if (unidade !== 'todos') {
-        matriculasQuery = matriculasQuery.eq('unidade_id', unidade);
-      }
-
-      const { data: matriculasData } = await matriculasQuery;
-      matriculasAtivas = matriculasData?.length || 0;
-      matriculasBanda = matriculasData?.filter((m: any) => m.cursos?.is_projeto_banda).length || 0;
-      matriculas2Curso = matriculasData?.filter((m: any) =>
-        m.is_segundo_curso
-        && !m.cursos?.is_projeto_banda
-        && !m.cursos?.nome?.toLowerCase()?.includes('coral')
-      ).length || 0;
-      alunosCoral = matriculasData?.filter((m: any) =>
-        m.cursos?.nome?.toLowerCase()?.includes('canto coral')
-      ).length || 0;
     }
 
     const kpis = kpisData.reduce((acc, k) => ({
@@ -612,6 +592,7 @@ export function ModalRelatorio({
       bolsistas_integrais_regulares: (acc.bolsistas_integrais_regulares || 0) + (k.total_bolsistas_integrais_regulares || 0),
       bolsistas_integrais_segundo_curso: (acc.bolsistas_integrais_segundo_curso || 0) + (k.total_bolsistas_integrais_segundo_curso || 0),
       bolsistas_parciais: (acc.bolsistas_parciais || 0) + (k.total_bolsistas_parciais || 0),
+      alunos_trancados: (acc.alunos_trancados || 0) + (k._alunos_trancados || 0),
       matriculas_banda: matriculasBanda,
       matriculas_base_alunos_ativos: (acc.matriculas_base_alunos_ativos || 0) + (k._matriculas_base_alunos_ativos || 0),
       matriculas_2_curso: matriculas2Curso,
@@ -795,7 +776,8 @@ export function ModalRelatorio({
       alunos_ativos: kpis.alunos_ativos || 0,
       alunos_pagantes: kpis.alunos_pagantes || 0,
       alunos_nao_pagantes: kpis.alunos_nao_pagantes || 0,
-      alunos_trancados: trancamentos.length,
+      alunos_trancados: isPeriodoAtual ? kpis.alunos_trancados || 0 : 0,
+      trancamentos_periodo: trancamentos.length,
       bolsistas_integrais: kpis.bolsistas_integrais || 0,
       bolsistas_integrais_regulares: kpis.bolsistas_integrais_regulares || 0,
       bolsistas_integrais_segundo_curso: kpis.bolsistas_integrais_segundo_curso || 0,
@@ -1016,7 +998,8 @@ export function ModalRelatorio({
     texto += `• Não Pagantes: *${resumo?.alunos_nao_pagantes || 0}* (${taxaInadimplencia.toFixed(1)}%)\n`;
     texto += `- Bolsistas Integrais: ${formatarBolsistasIntegrais()}\n`;
     texto += `• Bolsistas Parciais: *${resumo?.bolsistas_parciais || 0}*\n`;
-    texto += `• Trancados: *${resumo?.alunos_trancados || 0}*\n`;
+    texto += `• Trancados agora: *${resumo?.alunos_trancados || 0}*\n`;
+    texto += `• Trancamentos no período: *${resumo?.trancamentos_periodo || 0}*\n`;
     texto += `• Novos no mês: *${resumo?.alunos_novos || 0}*\n`;
     texto += `• Transferências recebidas no mês: *${totalTransferenciasMes}*\n`;
     texto += `• Entrada de novos alunos no mês: *${totalEntradasAdministrativas}* (${resumo?.alunos_novos || 0} novos + ${totalTransferenciasMes} transferência${totalTransferenciasMes !== 1 ? 's' : ''})\n\n`;
@@ -1286,7 +1269,10 @@ export function ModalRelatorio({
     texto += `• Pagantes: *${resumoRelatorio?.alunos_pagantes || 0}*\n`;
     texto += `• Não Pagantes: *${resumoRelatorio?.alunos_nao_pagantes || 0}*\n`;
     texto += `- Bolsistas: *${totalBolsistas}* (${formatarBolsistasIntegraisTexto(resumoRelatorio)} + ${resumoRelatorio?.bolsistas_parciais || 0} parciais)\n`;
-    texto += `• Trancados: *${resumoRelatorio?.alunos_trancados || 0}*\n`;
+    if (isMesAtual(anoRelatorio, mesRelatorio)) {
+      texto += `• Trancados agora: *${resumoRelatorio?.alunos_trancados || 0}*\n`;
+    }
+    texto += `• Trancamentos no período: *${resumoRelatorio?.trancamentos_periodo || 0}*\n`;
     texto += `• Novos no mês: *${resumoRelatorio?.alunos_novos || 0}*\n`;
     texto += `• Transferências recebidas no mês: *${transferenciasRelatorio.length || resumoRelatorio?.novas_transferencias || 0}*\n`;
     texto += `• Entrada de novos alunos no mês: *${(resumoRelatorio?.alunos_novos || 0) + (transferenciasRelatorio.length || resumoRelatorio?.novas_transferencias || 0)}*\n\n`;

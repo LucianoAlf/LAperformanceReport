@@ -73,10 +73,10 @@ PROFESSOR METAS E AÇÕES:
 === QUERIES DE EXEMPLO ===
 
 -- Alunos ativos por unidade
-SELECT u.codigo, COUNT(*) FROM alunos a JOIN unidades u ON u.id = a.unidade_id WHERE a.status = 'ativo' GROUP BY u.codigo;
+SELECT u.codigo, COUNT(DISTINCT eo.aluno_id) FROM vw_alunos_estado_operacional_v131 eo JOIN unidades u ON u.id = eo.unidade_id WHERE eo.entra_base_ativa = true GROUP BY u.codigo;
 
 -- Ticket médio real (só tipos que entram no ticket)
-SELECT u.codigo, ROUND(AVG(a.valor_parcela)::numeric, 2) as ticket_medio FROM alunos a JOIN unidades u ON u.id = a.unidade_id JOIN tipos_matricula tm ON tm.id = a.tipo_matricula_id WHERE a.status = 'ativo' AND tm.entra_ticket_medio = true AND a.valor_parcela > 0 GROUP BY u.codigo;
+SELECT u.codigo, ROUND(AVG(a.valor_parcela)::numeric, 2) as ticket_medio FROM alunos a JOIN vw_alunos_estado_operacional_v131 eo ON eo.aluno_id = a.id JOIN unidades u ON u.id = a.unidade_id JOIN tipos_matricula tm ON tm.id = a.tipo_matricula_id WHERE eo.entra_financeiro_ativo = true AND tm.entra_ticket_medio = true AND a.valor_parcela > 0 GROUP BY u.codigo;
 
 -- Evasões por professor nos últimos 3 meses
 SELECT p.nome, COUNT(*) as evasoes FROM movimentacoes_admin m JOIN professores p ON p.id = m.professor_id WHERE m.tipo IN ('evasao','cancelamento') AND m.data >= CURRENT_DATE - INTERVAL '3 months' GROUP BY p.nome ORDER BY evasoes DESC;
@@ -88,7 +88,7 @@ SELECT CASE l.etapa_pipeline_id WHEN 1 THEN 'Novo' WHEN 3 THEN 'Em contato' WHEN
 SELECT co.nome as canal, COUNT(*) as leads FROM leads l JOIN canais_origem co ON co.id = l.canal_origem_id WHERE l.data_contato >= :data_inicio::date AND l.data_contato <= :data_fim::date AND l.arquivado = false GROUP BY co.nome ORDER BY leads DESC;
 
 -- Alunos por curso
-SELECT c.nome as curso, COUNT(*) as alunos FROM alunos a JOIN cursos c ON c.id = a.curso_id WHERE a.status = 'ativo' GROUP BY c.nome ORDER BY alunos DESC;
+SELECT c.nome as curso, COUNT(*) as alunos FROM alunos a JOIN vw_alunos_estado_operacional_v131 eo ON eo.aluno_id = a.id JOIN cursos c ON c.id = a.curso_id WHERE eo.entra_base_ativa = true GROUP BY c.nome ORDER BY alunos DESC;
 
 -- Evolução mensal de alunos ativos (dados_mensais)
 SELECT ano, mes, alunos_ativos, alunos_pagantes, evasoes, ticket_medio FROM dados_mensais WHERE unidade_id IS NOT NULL ORDER BY ano, mes;

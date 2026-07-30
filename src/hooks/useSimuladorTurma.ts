@@ -1,6 +1,7 @@
 // Hook para o Simulador de Média de Alunos por Turma
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchAlunosAtivosAtuaisCanonicos } from '@/lib/estadoOperacionalAlunos';
 import {
   InputsSimuladorTurma,
   ResultadoSimuladorTurma,
@@ -76,92 +77,48 @@ export function useSimuladorTurma(
     setError(null);
     
     try {
-      // Query para dados consolidados da unidade
-      const { data: unidadeData, error: unidadeError } = await supabase.rpc(
-        'get_dados_turma_unidade',
-        { p_unidade_id: unidadeId }
-      ).single();
-      
-      if (unidadeError) {
-        // Se a função não existe, fazer query manual
-        const { data: alunosData, error: alunosError } = await supabase
-          .from('alunos')
-          .select(`
-            id,
-            professor_atual_id,
-            dia_aula,
-            horario_aula,
-            valor_parcela,
-            unidade_id,
-            unidades!inner(nome)
-          `)
-          .eq('unidade_id', unidadeId)
-          .eq('status', 'ativo')
-          .not('professor_atual_id', 'is', null)
-          .not('dia_aula', 'is', null)
-          .not('horario_aula', 'is', null);
-        
-        if (alunosError) throw alunosError;
-        
-        // Calcular turmas (agrupando por professor + dia + horário)
-        const turmasMap = new Map<string, number>();
-        let totalAlunos = 0;
-        let mrrTotal = 0;
-        
-        alunosData?.forEach(aluno => {
-          const chave = `${aluno.professor_atual_id}-${aluno.dia_aula}-${aluno.horario_aula}`;
-          turmasMap.set(chave, (turmasMap.get(chave) || 0) + 1);
-          totalAlunos++;
-          mrrTotal += Number(aluno.valor_parcela) || 0;
-        });
-        
-        const totalTurmas = turmasMap.size;
-        const mediaAtual = totalTurmas > 0 ? totalAlunos / totalTurmas : 1;
-        const ticketMedio = totalAlunos > 0 ? mrrTotal / totalAlunos : 0;
-        
-        // Buscar nome da unidade
-        const { data: unidadeInfo } = await supabase
-          .from('unidades')
-          .select('nome')
-          .eq('id', unidadeId)
-          .single();
-        
-        setDadosUnidade({
-          unidadeId,
-          unidadeNome: unidadeInfo?.nome || 'Unidade',
-          totalAlunos,
-          totalTurmas,
-          mediaAlunosTurmaAtual: mediaAtual,
-          ticketMedio,
-          mrrTotal,
-          folhaAtual: 0, // Será calculado
-          percentualFolhaAtual: 0,
-          margemAtual: 0,
-        });
-      } else {
-        setDadosUnidade(unidadeData);
-      }
-      
-      // Buscar dados por professor
-      const { data: profData, error: profError } = await supabase
-        .from('alunos')
-        .select(`
-          professor_atual_id,
-          dia_aula,
-          horario_aula,
-          valor_parcela,
-          unidade_id,
-          professores!alunos_professor_atual_id_fkey(id, nome),
-          unidades!inner(id, nome)
-        `)
-        .eq('unidade_id', unidadeId)
-        .eq('status', 'ativo')
-        .not('professor_atual_id', 'is', null)
-        .not('dia_aula', 'is', null)
-        .not('horario_aula', 'is', null);
-      
-      if (profError) throw profError;
-      
+      const alunosData = await fetchAlunosAtivosAtuaisCanonicos(unidadeId);
+
+      const turmasMap = new Map<string, number>();
+      let totalAlunos = 0;
+      let mrrTotal = 0;
+      alunosData.forEach((aluno) => {
+        if (!aluno.professor_atual_id || !aluno.dia_aula || !aluno.horario_aula) return;
+        const chave = `${aluno.professor_atual_id}-${aluno.dia_aula}-${aluno.horario_aula}`;
+        turmasMap.set(chave, (turmasMap.get(chave) || 0) + 1);
+        totalAlunos++;
+        mrrTotal += Number(aluno.valor_parcela) || 0;
+      });
+
+      const totalTurmas = turmasMap.size;
+      const mediaAtual = totalTurmas > 0 ? totalAlunos / totalTurmas : 0;
+      const ticketMedio = totalAlunos > 0 ? mrrTotal / totalAlunos : 0;
+      const unidadeNome = alunosData[0]?.unidade_nome || 'Unidade';
+
+      setDadosUnidade({
+        unidadeId,
+        unidadeNome,
+        totalAlunos,
+        totalTurmas,
+        mediaAlunosTurmaAtual: mediaAtual,
+        ticketMedio,
+        mrrTotal,
+        folhaAtual: 0,
+        percentualFolhaAtual: 0,
+        margemAtual: 0,
+      });
+
+      const profData = alunosData
+        .filter((aluno) => aluno.professor_atual_id && aluno.dia_aula && aluno.horario_aula)
+        .map((aluno) => ({
+          professor_atual_id: aluno.professor_atual_id,
+          dia_aula: aluno.dia_aula,
+          horario_aula: aluno.horario_aula,
+          valor_parcela: aluno.valor_parcela,
+          professores: { id: aluno.professor_atual_id, nome: aluno.professor_nome || 'Professor' },
+          unidades: { id: aluno.unidade_id, nome: aluno.unidade_nome },
+        }));
+
       // Agrupar por professor
       const profMap = new Map<number, {
         id: number;

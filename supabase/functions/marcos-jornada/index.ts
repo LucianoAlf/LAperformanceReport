@@ -1,3 +1,4 @@
+/// <reference lib="deno.ns" />
 // Edge Function: marcos-jornada
 // Retorna grupos de alunos em marcos da jornada (para envio de pesquisas), olhando
 // as aulas AGENDADAS no Emusys, na janela informada (futura por padrão, OU período customizado
@@ -149,21 +150,21 @@ serve(async (req: Request) => {
     const marco_aula: MarcoItem[] = [];
 
     for (const unidade of unidades) {
-      // Alunos ativos da unidade (paginado p/ superar limite de 1000 do PostgREST)
-      const alunosDB: any[] = [];
-      const PAGE = 1000;
-      let offset = 0, hasMore = true;
-      while (hasMore) {
-        const { data: page } = await supabase
-          .from('alunos')
-          .select('id, nome, data_nascimento, curso_id, data_matricula, numero_renovacoes, telefone, whatsapp, responsavel_telefone')
-          .eq('unidade_id', unidade.id)
-          .in('status', ['ativo', 'aviso_previo'])
-          .range(offset, offset + PAGE - 1);
-        alunosDB.push(...(page || []));
-        hasMore = (page?.length || 0) === PAGE;
-        offset += PAGE;
-      }
+      // Marcos atuais usam a mesma população operacional canônica dos demais consumidores.
+      const { data: alunosCanonicos, error: alunosCanonicosError } = await supabase
+        .rpc('get_alunos_ativos_atuais_canonicos', { p_unidade_id: unidade.id });
+      if (alunosCanonicosError) throw alunosCanonicosError;
+      const alunosDB = (Array.isArray(alunosCanonicos) ? alunosCanonicos : []).map((aluno: any) => ({
+        id: Number(aluno.id),
+        nome: String(aluno.nome || ''),
+        data_nascimento: aluno.data_nascimento ?? null,
+        curso_id: aluno.curso_id == null ? null : Number(aluno.curso_id),
+        data_matricula: aluno.data_matricula ?? null,
+        numero_renovacoes: 0,
+        telefone: aluno.telefone ?? null,
+        whatsapp: aluno.whatsapp ?? null,
+        responsavel_telefone: aluno.responsavel_telefone ?? null,
+      }));
 
       const alunoById = new Map<number, any>();
       const mapaComposto = new Map<string, number[]>();

@@ -38,6 +38,7 @@ import { ToastContainer } from '@/components/ui/toast';
 import { useToast } from '@/hooks/useToast';
 import { isMatriculaBandaAtivaOperacional } from '@/lib/alunosFiltrosCanonicos';
 import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
+import { fetchAlunosAtivosAtuaisCanonicos } from '@/lib/estadoOperacionalAlunos';
 // Interfaces
 export interface Aluno {
   id: number;
@@ -360,40 +361,32 @@ export function AlunosPage() {
   const fetchMatriculasAtivasDetalhe = async () => {
     setCarregandoModalMatriculas(true);
     try {
-      let query = supabase
-        .from('alunos')
-        .select(`
-          id, nome, unidade_id, status, curso_id, is_segundo_curso, tipo_matricula_id, data_matricula, valor_parcela,
-          unidades:unidade_id!inner(nome),
-          cursos:curso_id!left(nome, is_projeto_banda),
-          tipos_matricula(codigo)
-        `)
-        .is('arquivado_em', null)
-        .in('status', ['ativo', 'trancado'])
-        .order('nome');
-
-      if (unidadeAtual && unidadeAtual !== 'todos') {
-        query = query.eq('unidade_id', unidadeAtual);
-      }
-
-      const { data } = await query;
-
-      const hoje = new Date().toISOString().slice(0, 10);
-      const ultimoDiaMes = new Date(competenciaFiltro.ano, competenciaFiltro.mes, 0).toISOString().slice(0, 10);
-      const dataCorte = hoje < ultimoDiaMes ? hoje : ultimoDiaMes;
-
-      const classificados = (data || [])
-        .filter((a: any) => !a.data_matricula || a.data_matricula <= dataCorte)
-        .map((a: any) => {
-          const cursoNome = a.cursos?.nome || '';
-          const cursoBanda = a.cursos?.is_projeto_banda === true;
-          const tipoCodigo = codigoTipoMatriculaAdministrativo(a);
+      const data = await fetchAlunosAtivosAtuaisCanonicos(unidadeAtual);
+      const classificados = data.map((a) => {
+          const cursoNome = a.curso_nome || '';
+          const cursoBanda = a.curso_is_projeto_banda;
+          const tipoCodigo = a.tipo_matricula_codigo || '';
           const isBanda = cursoBanda || tipoCodigo === 'BANDA';
           const isCoral = cursoNome.toLowerCase().includes('coral');
           const isSegundoOperacional = a.is_segundo_curso === true && tipoCodigo !== 'REGULAR';
-          const entraCarteira = a.status === 'ativo' || (a.status === 'trancado' && !isBanda && !isCoral);
+          const entraCarteira = true;
           const pessoaKey = `${String(a.nome || '').trim().toLowerCase()}|${a.unidade_id}`;
-          return { ...a, cursoNome, isBanda, isCoral, isSegundoOperacional, entraCarteira, pessoaKey };
+          return {
+            ...a,
+            status: 'ativo',
+            unidades: { nome: a.unidade_nome },
+            cursos: {
+              nome: a.curso_nome,
+              is_projeto_banda: a.curso_is_projeto_banda,
+            },
+            tipos_matricula: { codigo: a.tipo_matricula_codigo },
+            cursoNome,
+            isBanda,
+            isCoral,
+            isSegundoOperacional,
+            entraCarteira,
+            pessoaKey,
+          };
         });
 
       // Bucket "Aluno": 1 linha por pessoa entre as que entram na carteira,
@@ -434,7 +427,7 @@ export function AlunosPage() {
         data_matricula: a.data_matricula ? new Date(a.data_matricula + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
         curso: a.cursoNome || '—',
         tipo: a._bucket,
-        status: a.status === 'ativo' ? 'Ativo' : 'Trancado',
+        status: 'Ativo',
         valor: a.valor_parcela ? `R$ ${Number(a.valor_parcela).toLocaleString('pt-BR')}` : '—',
         _valor_raw: a.valor_parcela ? Number(a.valor_parcela) : 0,
       })));
@@ -452,7 +445,7 @@ export function AlunosPage() {
     const alunosSemLancamento = alunos.filter(a => {
       const status = String(a.status || '').toLowerCase();
       const tipoMatriculaId = Number(a.tipo_matricula_id || 0);
-      return (status === 'ativo' || status === 'trancado') &&
+      return status === 'ativo' &&
         ![3, 4, 5].includes(tipoMatriculaId) &&
         (!a.status_pagamento || a.status_pagamento === '-' || a.status_pagamento === null);
     });
@@ -832,8 +825,7 @@ export function AlunosPage() {
         a.cursos?.is_projeto_banda !== true &&
         !cursosCoral.some(nome => a.cursos?.nome?.toLowerCase().includes(nome))
       ).length;
-      // Pagantes = conta_como_pagante AND NOT is_segundo_curso AND status ativo/trancado
-      // aviso_previo fica em ativosETrancados mas NÃO entra na base de pagantes (mesma régua da view)
+      // Pagantes = conta_como_pagante AND NOT is_segundo_curso AND status ativo.
       const pagantesRecords = ativosOperacionais.filter((a: any) =>
         a.tipos_matricula?.conta_como_pagante === true &&
         !a.is_segundo_curso
@@ -845,7 +837,7 @@ export function AlunosPage() {
         return (codigo === 'BOLSISTA_INT' || codigo === 'BOLSISTA_PARC') && a.cursos?.is_projeto_banda !== true;
       }).length;
 
-      // Ticket médio — TODOS os alunos pagantes (ativos + trancados)
+      // Ticket médio — alunos pagantes com vínculo ativo.
       // Regra: soma de todas as parcelas / total de alunos pagantes
       // Aluno pagante = tipo_matricula.entra_ticket_medio === true
       // Inclui inadimplentes, em_dia, em_aberto — todos que vão pagar

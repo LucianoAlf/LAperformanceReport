@@ -611,11 +611,12 @@ async function gerarRelatorioDiario(
   const bolsistasIntegrais = kpisAlunos.bolsistasIntegrais;
   const bolsistasIntegraisRegulares = kpisAlunos.bolsistasIntegraisRegulares;
   const bolsistasParciais = kpisAlunos.bolsistasParciais;
+  const trancadosAtuais = kpisAlunos.trancados;
 
   // Novos no mes: pessoas pagantes novas, sem 2o curso, banda/coral ou bolsista.
   const novosAlunos = kpisAlunos.novosAlunos;
 
-  // Matriculas: vinculos ativos/trancados, com banda/2o curso/coral separados.
+  // Matriculas: somente vinculos ativos, com banda/2o curso/coral separados.
   const matriculasAtivas = kpisAlunos.matriculasAtivas;
   const matriculasBaseAlunosAtivos = kpisAlunos.matriculasBaseAlunosAtivos;
   const matriculasBanda = kpisAlunos.matriculasBanda;
@@ -659,7 +660,7 @@ async function gerarRelatorioDiario(
   const naoRenovacoesMov = movimentacoes.filter((m: any) => m.tipo === 'nao_renovacao');
   const evasoesMov = movimentacoes.filter((m: any) => m.tipo === 'evasao');
   const trancamentosMov = movimentacoes.filter((m: any) => m.tipo === 'trancamento');
-  const trancados = trancamentosMov.length;
+  const trancamentosPeriodo = trancamentosMov.length;
 
   // Enriquecer com nomes de professores (mesma lógica do frontend)
   const profIds = [...new Set(movimentacoes.map((m: any) => m.professor_id).filter(Boolean))];
@@ -823,7 +824,8 @@ async function gerarRelatorioDiario(
   texto += `• Não Pagantes: *${alunosNaoPagantes}* (${taxaInadimplencia.toFixed(1)}%)\n`;
   texto += `- Bolsistas Integrais: ${bolsistasIntegraisTexto}\n`;
   texto += `• Bolsistas Parciais: *${bolsistasParciais}*\n`;
-  texto += `• Trancados: *${trancados || 0}*\n`;
+  texto += `• Trancados agora: *${trancadosAtuais || 0}*\n`;
+  texto += `• Trancamentos no período: *${trancamentosPeriodo || 0}*\n`;
   texto += `• Novos no mês: *${novosAlunos}*\n`;
   texto += `• Transferências recebidas no mês: *${transferenciasRecebidasDetalhadas.length}*\n`;
   texto += `• Entrada de novos alunos no mês: *${entradasAdministrativas}* (${novosAlunos} novos + ${transferenciasRecebidasDetalhadas.length} transferência${transferenciasRecebidasDetalhadas.length !== 1 ? 's' : ''})\n\n`;

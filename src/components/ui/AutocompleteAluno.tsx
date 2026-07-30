@@ -84,23 +84,35 @@ export function AutocompleteAluno({
     try {
       const termUpper = term.toUpperCase();
       
-      let query = supabase
-        .from('alunos')
-        .select('id, nome, nome_normalizado, unidade_id, classificacao, status, valor_parcela, data_matricula, curso_id, professor_atual_id, unidades(codigo)')
-        .ilike('nome_normalizado', `%${termUpper}%`)
-        .limit(50);
+      let data: any[] | null = null;
+      let error: any = null;
 
-      // Filtrar por unidade se especificado (não é "todos")
-      if (unidadeId && unidadeId !== 'todos') {
-        query = query.eq('unidade_id', unidadeId);
-      }
-
-      // Filtrar apenas alunos ativos
       if (apenasAtivos) {
-        query = query.eq('status', 'ativo');
-      }
+        const response = await supabase.rpc('buscar_alunos_ativos_atuais_canonicos', {
+          p_termo: term,
+          p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+          p_limite: 50,
+        });
+        data = (response.data || []).map((aluno: any) => ({
+          ...aluno,
+          unidades: aluno.unidade_codigo ? { codigo: aluno.unidade_codigo } : undefined,
+        }));
+        error = response.error;
+      } else {
+        let query = supabase
+          .from('alunos')
+          .select('id, nome, nome_normalizado, unidade_id, classificacao, status, valor_parcela, data_matricula, curso_id, professor_atual_id, unidades(codigo)')
+          .ilike('nome_normalizado', `%${termUpper}%`)
+          .limit(50);
 
-      const { data, error } = await query;
+        if (unidadeId && unidadeId !== 'todos') {
+          query = query.eq('unidade_id', unidadeId);
+        }
+
+        const response = await query;
+        data = response.data as any[] | null;
+        error = response.error;
+      }
 
       if (error) throw error;
       

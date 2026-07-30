@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchAlunosAtivosAtuaisCanonicos } from '@/lib/estadoOperacionalAlunos';
 import { format, parseISO, startOfWeek, addDays, addWeeks, subWeeks } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
@@ -118,28 +119,12 @@ export function PresencaTab({ unidadeAtual }: Props) {
   useEffect(() => {
     const fetchAlunos = async () => {
       setLoadingAlunos(true);
-      const todos: AlunoSimples[] = [];
-      const pageSize = 1000;
-      let offset = 0;
-      let hasMore = true;
-
-      while (hasMore) {
-        let query = supabase
-          .from('alunos')
-          .select('id, nome, unidade_id')
-          .in('status', ['ativo', 'aviso_previo'])
-          .order('nome')
-          .range(offset, offset + pageSize - 1);
-
-        if (unidadeAtual !== 'todos') {
-          query = query.eq('unidade_id', unidadeAtual);
-        }
-
-        const { data } = await query;
-        todos.push(...(data || []));
-        hasMore = (data?.length || 0) === pageSize;
-        offset += pageSize;
-      }
+      const ativos = await fetchAlunosAtivosAtuaisCanonicos(unidadeAtual);
+      const todos: AlunoSimples[] = ativos.map((aluno) => ({
+        id: aluno.id,
+        nome: aluno.nome,
+        unidade_id: aluno.unidade_id,
+      }));
 
       setAlunos(todos);
       setLoadingAlunos(false);

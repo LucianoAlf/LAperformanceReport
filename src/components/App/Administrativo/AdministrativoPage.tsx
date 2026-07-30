@@ -64,6 +64,7 @@ import {
   isRenovacaoAntecipada,
 } from '@/lib/renovacoesAntecipadas';
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
+import { fetchAlunosAtivosAtuaisCanonicos } from '@/lib/estadoOperacionalAlunos';
 import {
   codigoTipoMatriculaAdministrativo,
   direcaoTransferenciaNaUnidade,
@@ -165,6 +166,7 @@ export interface ResumoMes {
   alunos_pagantes: number;
   alunos_nao_pagantes: number;
   alunos_trancados: number;
+  trancamentos_periodo?: number;
   bolsistas_integrais: number;
   bolsistas_integrais_regulares: number;
   bolsistas_integrais_segundo_curso: number;
@@ -206,7 +208,7 @@ const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: 
   { id: 'nao_renovacoes', label: 'Não Renovação', icon: XCircle },
   { id: 'avisos', label: 'Avisos Prévios', icon: AlertTriangle },
   { id: 'cancelamentos', label: 'Cancelamentos', icon: DoorOpen },
-  { id: 'trancamentos', label: 'Trancamentos', icon: PauseCircle },
+  { id: 'trancamentos', label: 'Trancamentos no período', icon: PauseCircle },
   { id: 'transferencias', label: 'Transferencias', icon: ArrowRightLeft },
   { id: 'alunos_novos', label: 'Alunos Novos', icon: UserPlus },
 ];
@@ -341,37 +343,22 @@ export function AdministrativoPage() {
   const fetchMatriculasAtivas = async () => {
     setCarregandoModalMatriculas(true);
     try {
-      let query = supabase
-        .from('alunos')
-        .select(`
-          nome, data_matricula, valor_parcela, status, is_segundo_curso, tipo_matricula_id,
-          unidades:unidade_id!inner(nome),
-          cursos:curso_id!left(nome, is_projeto_banda),
-          tipos_matricula(codigo)
-        `)
-        .in('status', ['ativo', 'aviso_previo', 'trancado'])
-        .order('nome');
-
-      if (unidade && unidade !== 'todos') {
-        query = query.eq('unidade_id', unidade);
-      }
-
-      const { data } = await query;
-      setDadosModalMatriculasAtivas((data || []).map((a: any) => {
-        const cursoNome = a.cursos?.nome || '';
-        const isBanda = a.cursos?.is_projeto_banda || false;
+      const data = await fetchAlunosAtivosAtuaisCanonicos(unidade);
+      setDadosModalMatriculasAtivas(data.map((a) => {
+        const cursoNome = a.curso_nome || '';
+        const isBanda = a.curso_is_projeto_banda;
         const isCoral = cursoNome.toLowerCase().includes('canto coral');
-        const is2Curso = a.is_segundo_curso || false;
-        const isTransferencia = codigoTipoMatriculaAdministrativo(a) === 'TRANSFERENCIA';
+        const is2Curso = a.is_segundo_curso;
+        const isTransferencia = a.tipo_matricula_codigo === 'TRANSFERENCIA';
         const tipo = isTransferencia ? 'Transferência' : isBanda ? 'Banda' : isCoral ? 'Coral' : is2Curso ? '2º Curso' : '—';
 
         return {
           nome: a.nome,
-          unidade: a.unidades?.nome || '—',
+          unidade: a.unidade_nome || '—',
           data_matricula: a.data_matricula ? new Date(a.data_matricula + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
           curso: cursoNome || '—',
           tipo,
-          status: a.status === 'ativo' ? 'Ativo' : a.status === 'trancado' ? 'Trancado' : 'Aviso Prévio',
+          status: 'Ativo',
           valor: a.valor_parcela ? `R$ ${Number(a.valor_parcela).toLocaleString('pt-BR')}` : '—',
           _valor_raw: a.valor_parcela ? Number(a.valor_parcela) : 0,
         };
@@ -557,31 +544,6 @@ export function AdministrativoPage() {
         matriculasBanda = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_banda || 0), 0);
         matriculas2Curso = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_2_curso || 0), 0);
         alunosCoral = kpisData.reduce((acc: number, k: any) => acc + (k._alunos_coral || 0), 0);
-      } else if (isPeriodoAtual) {
-        // Query ao vivo (período atual ou sem snapshot)
-        let matriculasQuery = supabase
-          .from('alunos')
-          .select('id, is_segundo_curso, curso_id, cursos:curso_id!left(nome, is_projeto_banda)')
-          .in('status', ['ativo', 'aviso_previo', 'trancado']);
-
-        if (unidade !== 'todos') {
-          matriculasQuery = matriculasQuery.eq('unidade_id', unidade);
-        }
-
-        const { data: matriculasData } = await matriculasQuery;
-
-        matriculasAtivas = matriculasData?.length || 0;
-        matriculasBanda = matriculasData?.filter((m: any) =>
-          m.cursos?.is_projeto_banda
-        ).length || 0;
-        matriculas2Curso = matriculasData?.filter((m: any) =>
-          m.is_segundo_curso &&
-          !m.cursos?.is_projeto_banda &&
-          !m.cursos?.nome?.toLowerCase()?.includes('coral')
-        ).length || 0;
-        alunosCoral = matriculasData?.filter((m: any) =>
-          m.cursos?.nome?.toLowerCase()?.includes('canto coral')
-        ).length || 0;
       }
 
       // Consolidar KPIs
@@ -589,6 +551,7 @@ export function AdministrativoPage() {
         alunos_ativos: (acc.alunos_ativos || 0) + (k.total_alunos_ativos || 0),
         alunos_pagantes: (acc.alunos_pagantes || 0) + (k.total_alunos_pagantes || 0),
         alunos_nao_pagantes: (acc.alunos_nao_pagantes || 0) + ((k.total_alunos_ativos || 0) - (k.total_alunos_pagantes || 0)),
+        alunos_trancados: (acc.alunos_trancados || 0) + (k.total_alunos_trancados || 0),
         bolsistas_integrais: (acc.bolsistas_integrais || 0) + (k.total_bolsistas_integrais || 0),
         bolsistas_integrais_regulares: (acc.bolsistas_integrais_regulares || 0) + (k.total_bolsistas_integrais_regulares || 0),
         bolsistas_integrais_segundo_curso: (acc.bolsistas_integrais_segundo_curso || 0) + (k.total_bolsistas_integrais_segundo_curso || 0),
@@ -816,7 +779,8 @@ export function AdministrativoPage() {
 
       setResumo({
         ...kpis,
-        alunos_trancados: trancamentos.length,
+        alunos_trancados: kpis.alunos_trancados || 0,
+        trancamentos_periodo: trancamentos.length,
         alunos_novos: novosAlunos.length,
         novos_segundo_curso: novosSegundoCurso,
         novos_bolsistas: novosBolsistas,
@@ -1384,7 +1348,7 @@ export function AdministrativoPage() {
         <div data-tour="administrativo-kpis" className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
           <KPICard
             icon={Users}
-            label="Alunos Ativos"
+            label="Ativos agora"
             tooltip="Total de alunos unicos ativos (sem segundo curso). Representa pessoas fisicas frequentando."
             value={resumo?.alunos_ativos || 0}
             variant="cyan"
@@ -1424,7 +1388,7 @@ export function AdministrativoPage() {
           />
           <KPICard
             icon={Pause}
-            label="Trancados"
+            label="Trancados agora"
             tooltip="Alunos com matricula trancada temporariamente. Nao contam como ativos mas mantem o vinculo."
             value={resumo?.alunos_trancados || 0}
             variant="default"
@@ -2057,7 +2021,7 @@ export function AdministrativoPage() {
         open={modalMatriculasAtivas}
         onClose={() => setModalMatriculasAtivas(false)}
         titulo={`Matrículas Ativas (${competenciaFiltro.range.label})`}
-        descricao={`Alunos ativos, trancados e em aviso prévio — ${unidade === 'todos' ? 'Consolidado' : 'Unidade selecionada'}`}
+        descricao={`Somente matrículas operacionais ativas agora — ${unidade === 'todos' ? 'Consolidado' : 'Unidade selecionada'}`}
         dados={dadosModalMatriculasAtivas}
         colunas={[
           { key: 'nome', label: 'Aluno' },

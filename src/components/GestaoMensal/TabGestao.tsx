@@ -18,6 +18,7 @@ import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
 import { ModalPermanenciaDetalhe } from './ModalPermanenciaDetalhe';
 import { ModalDetalheKPI, BadgeUnidade, TextoCurso, ValorParcela, BadgeTipo } from '@/components/App/Dashboard/ModalDetalheKPI';
 import { isTipoMatriculaForaNovaComercial } from '@/lib/comercialMatriculasCanonicas';
+import { fetchAlunosAtivosAtuaisCanonicos } from '@/lib/estadoOperacionalAlunos';
 import {
   aplicarFallbacksRetencao,
   calcularRetencaoOperacionalCanonica,
@@ -283,34 +284,25 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           valor: a.valor_parcela ? `R$ ${Number(a.valor_parcela).toLocaleString('pt-BR')}` : '—',
         })));
       } else if (tipo === 'banda') {
-        let query = supabase
-          .from('alunos')
-          .select('nome, data_matricula, valor_parcela, dia_aula, horario_aula, unidades:unidade_id!inner(nome), cursos:curso_id!inner(nome, is_projeto_banda), professores:professor_atual_id!left(nome)')
-          .in('status', ['ativo', 'trancado'])
-          .eq('cursos.is_projeto_banda', true)
-          .order('nome');
-        if (unidade !== 'todos') query = query.eq('unidade_id', unidade);
-        const { data } = await query;
-        setDadosModal((data || []).map((a: any) => ({
-          nome: a.nome, unidade: a.unidades?.nome || '—',
-          curso: a.cursos?.nome || '—', professor: a.professores?.nome || '—',
+        const data = await fetchAlunosAtivosAtuaisCanonicos(unidade);
+        setDadosModal(data
+          .filter(a => a.curso_is_projeto_banda)
+          .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+          .map(a => ({
+          nome: a.nome, unidade: a.unidade_nome || '—',
+          curso: a.curso_nome || '—', professor: a.professor_nome || '—',
           dia: a.dia_aula || '—', horario: a.horario_aula || '—',
         })));
       } else {
         // bolsista_int ou bolsista_parc
         const codigoBolsista = tipo === 'bolsista_int' ? 'BOLSISTA_INT' : 'BOLSISTA_PARC';
-        let query = supabase
-          .from('alunos')
-          .select('nome, data_matricula, valor_parcela, unidades:unidade_id!inner(nome), cursos:curso_id!left(nome), tipos_matricula:tipo_matricula_id!inner(codigo), professores:professor_atual_id!left(nome)')
-          .in('status', ['ativo', 'trancado'])
-          .eq('tipos_matricula.codigo', codigoBolsista)
-          .or('is_segundo_curso.is.null,is_segundo_curso.eq.false')
-          .order('nome');
-        if (unidade !== 'todos') query = query.eq('unidade_id', unidade);
-        const { data } = await query;
-        setDadosModal((data || []).map((a: any) => ({
-          nome: a.nome, unidade: a.unidades?.nome || '—',
-          curso: a.cursos?.nome || '—', professor: a.professores?.nome || '—',
+        const data = await fetchAlunosAtivosAtuaisCanonicos(unidade);
+        setDadosModal(data
+          .filter(a => a.tipo_matricula_codigo === codigoBolsista && !a.is_segundo_curso)
+          .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+          .map(a => ({
+          nome: a.nome, unidade: a.unidade_nome || '—',
+          curso: a.curso_nome || '—', professor: a.professor_nome || '—',
           valor: a.valor_parcela ? `R$ ${Number(a.valor_parcela).toLocaleString('pt-BR')}` : 'R$ 0',
         })));
       }
@@ -828,19 +820,32 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             ? new Date().toISOString().split('T')[0]
             : endDate;
 
-          let alunosAtivosQuery = supabase
-            .from('alunos')
-            .select('nome, idade_atual, status, data_matricula, data_saida, is_segundo_curso, cursos:curso_id!left(is_projeto_banda), tipos_matricula:tipo_matricula_id!left(codigo)');
+          let alunosAtivosData: any[] = [];
 
-          if (!mesFechado) {
-            alunosAtivosQuery = alunosAtivosQuery.in('status', ['ativo', 'trancado']);
+          if (isPeriodoAtual && !mesFechado) {
+            const atuais = await fetchAlunosAtivosAtuaisCanonicos(unidade);
+            alunosAtivosData = atuais.map(a => ({
+              nome: a.nome,
+              idade_atual: a.idade_atual,
+              status: 'ativo',
+              data_matricula: a.data_matricula,
+              data_saida: a.data_saida,
+              is_segundo_curso: a.is_segundo_curso,
+              cursos: { is_projeto_banda: a.curso_is_projeto_banda },
+              tipos_matricula: { codigo: a.tipo_matricula_codigo },
+            }));
+          } else {
+            let alunosAtivosQuery = supabase
+              .from('alunos')
+              .select('nome, idade_atual, status, data_matricula, data_saida, is_segundo_curso, cursos:curso_id!left(is_projeto_banda), tipos_matricula:tipo_matricula_id!left(codigo)');
+
+            if (unidade !== 'todos') {
+              alunosAtivosQuery = alunosAtivosQuery.eq('unidade_id', unidade);
+            }
+
+            const { data } = await alunosAtivosQuery;
+            alunosAtivosData = data || [];
           }
-
-          if (unidade !== 'todos') {
-            alunosAtivosQuery = alunosAtivosQuery.eq('unidade_id', unidade);
-          }
-
-          const { data: alunosAtivosData } = await alunosAtivosQuery;
 
           // Agrupar matrículas por pessoa (nome)
           // Para cada pessoa, verificar se tem PELO MENOS UMA matrícula regular
@@ -860,12 +865,6 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             const isBanda = a.cursos?.is_projeto_banda === true;
             const isSegundoCurso = a.is_segundo_curso === true;
             const isRegular = !isBanda && !isSegundoCurso;
-            const statusAtivoNoCadastro = ['ativo', 'trancado'].includes(a.status);
-            const saidaDepoisDoMes = Boolean(a.data_saida && a.data_saida > dataCorte);
-            const tipoRegular = a.tipos_matricula?.codigo === 'REGULAR';
-
-            if (mesFechado && !statusAtivoNoCadastro && !(tipoRegular && saidaDepoisDoMes)) return;
-
             const pessoaKey = String(a.nome || '').trim().toLowerCase();
             if (!pessoaKey) return;
 

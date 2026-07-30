@@ -7,6 +7,8 @@ import { RankingTable } from '@/components/ui/RankingTable';
 import { formatCurrency, getMesNomeCurto } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
+import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
+import { fetchTotalAlunosAtivosCanonicos } from '@/lib/estadoOperacionalAlunos';
 
 interface TabRetencaoProps {
   ano: number;
@@ -159,11 +161,18 @@ export function TabRetencao({ ano, mes, unidade }: TabRetencaoProps) {
         const taxaRenovacao = totalRenovacoes > 0 ? (renovadas / totalRenovacoes) * 100 : 0;
         const taxaNaoRenovacao = totalRenovacoes > 0 ? (naoRenovadas / totalRenovacoes) * 100 : 0;
 
-        // Buscar total de alunos para calcular taxa de evasão (inclui trancados — consistente com aba Alunos e Dashboard)
-        const { count: totalAlunos } = await supabase
-          .from('alunos')
-          .select('*', { count: 'exact', head: true })
-          .in('status', ['ativo', 'trancado']);
+        // Base viva canônica: somente alunos ativos; trancados ficam separados.
+        const hoje = new Date();
+        const periodoAtual = ano === hoje.getFullYear() && mes === hoje.getMonth() + 1;
+        const totalAlunos = periodoAtual
+          ? await fetchTotalAlunosAtivosCanonicos(unidade)
+          : (
+              await fetchKPIsAlunosCanonicos({
+                unidadeId: unidade,
+                ano,
+                mes,
+              })
+            ).alunosAtivos;
         const taxaEvasao = totalAlunos && totalAlunos > 0 ? (totalEvasoes / totalAlunos) * 100 : 0;
 
         setTotais({

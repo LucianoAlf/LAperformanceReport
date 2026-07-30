@@ -941,33 +941,24 @@ serve(async (req: Request) => {
       );
     }
 
-    // Buscar todos os alunos ativos para matching (paginado para contornar limite de 1000 rows do PostgREST)
-    const alunosDB: {
-      id: number;
-      nome: string;
-      unidade_id: string;
-      data_nascimento: string | null;
-      curso_id: number | null;
-      emusys_student_id: string | null;
-    }[] = [];
-    const PAGE_SIZE = 1000;
-    let offset = 0;
-    let hasMore = true;
-    while (hasMore) {
-      const { data: page, error: pageError } = await supabase
-        .from('alunos')
-        .select('id, nome, unidade_id, data_nascimento, curso_id, emusys_student_id')
-        .in('status', ['ativo', 'aviso_previo'])
-        .range(offset, offset + PAGE_SIZE - 1);
-      if (pageError) throw new Error(`Erro ao buscar alunos: ${pageError.message}`);
-      alunosDB.push(...(page || []));
-      hasMore = (page?.length || 0) === PAGE_SIZE;
-      offset += PAGE_SIZE;
+    // População viva canônica: trancados e estados ambíguos não entram no denominador.
+    const { data: alunosCanonicos, error: alunosCanonicosError } = await supabase
+      .rpc('get_alunos_ativos_atuais_canonicos', { p_unidade_id: null });
+    if (alunosCanonicosError) {
+      throw new Error(`Erro ao buscar alunos ativos canônicos: ${alunosCanonicosError.message}`);
     }
-    console.log(`[sync-presenca] ${alunosDB.length} alunos ativos carregados`);
+    const alunosDB = (Array.isArray(alunosCanonicos) ? alunosCanonicos : []).map((aluno: any) => ({
+      id: Number(aluno.id),
+      nome: String(aluno.nome || ''),
+      unidade_id: String(aluno.unidade_id),
+      data_nascimento: aluno.data_nascimento ?? null,
+      curso_id: aluno.curso_id == null ? null : Number(aluno.curso_id),
+      emusys_student_id: aluno.emusys_student_id ?? null,
+    }));
+    console.log(`[sync-presenca] ${alunosDB.length} alunos ativos canônicos carregados`);
 
     if (alunosDB.length === 0) {
-      throw new Error('Nenhum aluno ativo encontrado');
+      throw new Error('Nenhum aluno ativo canônico encontrado');
     }
 
     const mapasProfessoresPorUnidade = new Map<string, Map<number, number>>();

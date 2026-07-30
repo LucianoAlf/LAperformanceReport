@@ -248,25 +248,47 @@ async function toolGetResumoUnidade(supabase: any, args: any, ctx: AgentContext)
   const uid = await resolverUnidadeEfetiva(supabase, ctx, args.unidade_nome);
   if (!uid) return JSON.stringify({ erro: `Unidade "${args.unidade_nome}" não encontrada.` });
 
-  const { data, error } = await supabase
-    .from('alunos').select('id, status, valor_parcela, is_segundo_curso').eq('unidade_id', uid);
-  if (error) return JSON.stringify({ erro: error.message });
-  if (!data?.length) return JSON.stringify({ mensagem: 'Nenhum aluno nesta unidade.' });
+  const [
+    { data: kpis, error: kpisError },
+    { data: financeiro, error: financeiroError },
+    { data: estados, error: estadosError },
+  ] = await Promise.all([
+    supabase.rpc('get_kpis_alunos_admin_operacional', { p_unidade_id: uid }),
+    supabase.rpc('get_kpis_alunos_financeiro_vivo_canonico', { p_unidade_id: uid }),
+    supabase
+      .from('vw_alunos_estado_operacional_v131')
+      .select('status_operacional')
+      .eq('unidade_id', uid),
+  ]);
 
   const porStatus: Record<string, number> = {};
-  let somaAtivos = 0, countAtivos = 0, countPrimeiro = 0, somaPrimeiro = 0;
-  for (const a of data) {
-    porStatus[a.status] = (porStatus[a.status] || 0) + 1;
-    if (a.status === 'ativo') {
-      somaAtivos += (a.valor_parcela || 0); countAtivos++;
-      if (!a.is_segundo_curso) { countPrimeiro++; somaPrimeiro += (a.valor_parcela || 0); }
-    }
+  for (const row of estados || []) {
+    const status = row.status_operacional || 'desconhecido';
+    porStatus[status] = (porStatus[status] || 0) + 1;
   }
+
+  if (kpisError || financeiroError || estadosError) {
+    return JSON.stringify({
+      erro: kpisError?.message || financeiroError?.message || estadosError?.message,
+    });
+  }
+
+  const totais = kpis?.totais || {};
+  const financeiroUnidade = financeiro?.[0] || {};
+  const alunosAtivos = Number(totais.alunos_ativos) || 0;
+  const alunosPagantes = Number(financeiroUnidade.alunos_pagantes) || 0;
+  const mrr = Number(financeiroUnidade.mrr) || 0;
+
   return JSON.stringify({
-    unidade: args.unidade_nome, total_registros: data.length, alunos_ativos: countAtivos,
-    alunos_primeiro_curso_ativos: countPrimeiro, distribuicao_status: porStatus,
-    faturamento_bruto: somaAtivos.toFixed(2),
-    ticket_medio_primeiro_curso: countPrimeiro > 0 ? (somaPrimeiro / countPrimeiro).toFixed(2) : '0',
+    unidade: args.unidade_nome,
+    fonte: 'estado_operacional_v131',
+    total_registros: estados?.length || 0,
+    alunos_ativos: alunosAtivos,
+    alunos_trancados: Number(totais.alunos_trancados) || 0,
+    alunos_pagantes: alunosPagantes,
+    distribuicao_status: porStatus,
+    faturamento_bruto: mrr.toFixed(2),
+    ticket_medio_primeiro_curso: alunosPagantes > 0 ? (mrr / alunosPagantes).toFixed(2) : '0',
   });
 }
 
