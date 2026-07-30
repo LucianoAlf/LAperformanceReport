@@ -634,6 +634,8 @@ select public.assert_true(
 select *
 from public.registrar_resultado_pesquisa_evasao_envio(
   (select pesquisa_id from stale_primeira),
+  (select preview_id from stale_primeira),
+  (select idempotency_key from stale_primeira),
   '20000000-0000-0000-0000-000000000001',
   'enviado',
   'provider-reconciliado',
@@ -659,6 +661,8 @@ from public.claim_pesquisa_evasao_preview(
 select *
 from public.registrar_resultado_pesquisa_evasao_envio(
   (select pesquisa_id from tentativa_falha),
+  (select preview_id from tentativa_falha),
+  (select idempotency_key from tentativa_falha),
   '20000000-0000-0000-0000-000000000001',
   'falhou',
   null,
@@ -739,6 +743,8 @@ select public.assert_true(
 select *
 from public.registrar_resultado_pesquisa_evasao_envio(
   (select pesquisa_id from slot_primeira),
+  (select preview_id from slot_primeira),
+  (select idempotency_key from slot_primeira),
   '20000000-0000-0000-0000-000000000001',
   'falhou',
   null,
@@ -785,6 +791,8 @@ select public.assert_true(
 select *
 from public.registrar_resultado_pesquisa_evasao_envio(
   (select pesquisa_id from slot_nova_tentativa),
+  (select preview_id from slot_nova_tentativa),
+  (select idempotency_key from slot_nova_tentativa),
   '20000000-0000-0000-0000-000000000001',
   'enviado',
   'provider-segunda-tentativa',
@@ -845,6 +853,169 @@ select public.assert_true(
   ) = 1,
   'historico de tentativas deve preservar cabecalho produtivo unico'
 );
+
+\echo CASE_resultado_stale
+select public.criar_preview_fixture(
+  '50000000-0000-0000-0000-000000000015',
+  1020
+);
+create temporary table resultado_stale_a as
+select *
+from public.claim_pesquisa_evasao_preview(
+  '50000000-0000-0000-0000-000000000015',
+  '20000000-0000-0000-0000-000000000001'
+);
+select *
+from public.registrar_resultado_pesquisa_evasao_envio(
+  (select pesquisa_id from resultado_stale_a),
+  (select preview_id from resultado_stale_a),
+  (select idempotency_key from resultado_stale_a),
+  '20000000-0000-0000-0000-000000000001',
+  'falhou',
+  null,
+  'falha conhecida antes da nova tentativa'
+);
+select public.criar_preview_fixture(
+  '50000000-0000-0000-0000-000000000016',
+  1020
+);
+create temporary table resultado_stale_b as
+select *
+from public.claim_pesquisa_evasao_preview(
+  '50000000-0000-0000-0000-000000000016',
+  '20000000-0000-0000-0000-000000000001'
+);
+do $resultado_stale$
+declare
+  v_mensagem text;
+begin
+  perform *
+  from public.registrar_resultado_pesquisa_evasao_envio(
+    (select pesquisa_id from resultado_stale_a),
+    (select preview_id from resultado_stale_a),
+    (select idempotency_key from resultado_stale_a),
+    '20000000-0000-0000-0000-000000000001',
+    'enviado',
+    'provider-stale-a',
+    null
+  );
+  raise exception 'ASSERTION FAILED: resultado da tentativa A deveria ser stale';
+exception
+  when sqlstate 'P0001' then
+    get stacked diagnostics v_mensagem = message_text;
+    if v_mensagem <> 'PESQUISA_EVASAO_TENTATIVA_STALE' then
+      raise exception
+        'ASSERTION FAILED: resultado stale retornou mensagem inesperada: %',
+        v_mensagem;
+    end if;
+end
+$resultado_stale$;
+select public.assert_true(
+  (
+    select preview_id = (select preview_id from resultado_stale_b)
+      and idempotency_key = (select idempotency_key from resultado_stale_b)
+      and envio_status = 'enviando'
+    from public.pesquisa_evasao
+    where id = (select pesquisa_id from resultado_stale_b)
+  )
+  and (
+    select envio_status_tentativa = 'falhou'
+      and provider_message_id_tentativa is null
+    from public.pesquisa_evasao_previews
+    where id = (select preview_id from resultado_stale_a)
+  )
+  and (
+    select envio_status_tentativa = 'enviando'
+      and provider_message_id_tentativa is null
+    from public.pesquisa_evasao_previews
+    where id = (select preview_id from resultado_stale_b)
+  ),
+  'resultado stale de A nao pode alterar cabecalho nem tentativa B'
+);
+select *
+from public.registrar_resultado_pesquisa_evasao_envio(
+  (select pesquisa_id from resultado_stale_b),
+  (select preview_id from resultado_stale_b),
+  (select idempotency_key from resultado_stale_b),
+  '20000000-0000-0000-0000-000000000001',
+  'enviado',
+  'provider-atual-b',
+  null
+);
+
+\echo CASE_replay_resultado_sem_deadlock
+select public.criar_preview_fixture(
+  '50000000-0000-0000-0000-000000000017',
+  1021
+);
+update public.pesquisa_evasao_previews
+set idempotency_key = '60000000-0000-0000-0000-000000000017'
+where id = '50000000-0000-0000-0000-000000000017';
+create temporary table replay_resultado_base as
+select *
+from public.claim_pesquisa_evasao_preview(
+  '50000000-0000-0000-0000-000000000017',
+  '20000000-0000-0000-0000-000000000001'
+);
+select dblink_connect('replay_resultado_a', 'dbname=' || current_database());
+select dblink_connect('replay_resultado_b', 'dbname=' || current_database());
+select dblink_exec(
+  'replay_resultado_a',
+  $$set request.jwt.claim.role = 'service_role'; set lock_timeout = '5s'$$
+);
+select dblink_exec(
+  'replay_resultado_b',
+  $$set request.jwt.claim.role = 'service_role'; set lock_timeout = '5s'$$
+);
+select dblink_send_query(
+  'replay_resultado_a',
+  $$select envio_status
+    from public.claim_pesquisa_evasao_preview(
+      '50000000-0000-0000-0000-000000000017',
+      '20000000-0000-0000-0000-000000000001'
+    )$$
+);
+select dblink_send_query(
+  'replay_resultado_b',
+  format(
+    $query$select envio_status
+      from public.registrar_resultado_pesquisa_evasao_envio(
+        %L::uuid,
+        '50000000-0000-0000-0000-000000000017'::uuid,
+        '60000000-0000-0000-0000-000000000017'::uuid,
+        '20000000-0000-0000-0000-000000000001'::uuid,
+        'enviado',
+        'provider-concorrente',
+        null
+      )$query$,
+    (select pesquisa_id from replay_resultado_base)
+  )
+);
+create temporary table replay_resultado_concorrente (envio_status text);
+insert into replay_resultado_concorrente
+select envio_status
+from dblink_get_result('replay_resultado_a') as t(envio_status text);
+insert into replay_resultado_concorrente
+select envio_status
+from dblink_get_result('replay_resultado_b') as t(envio_status text);
+select public.assert_true(
+  (select count(*) from replay_resultado_concorrente) = 2
+  and (
+    select envio_status = 'enviado'
+      and provider_message_id = 'provider-concorrente'
+    from public.pesquisa_evasao
+    where id = (select pesquisa_id from replay_resultado_base)
+  )
+  and (
+    select envio_status_tentativa = 'enviado'
+      and provider_message_id_tentativa = 'provider-concorrente'
+    from public.pesquisa_evasao_previews
+    where id = '50000000-0000-0000-0000-000000000017'
+  ),
+  'replay concorrente ao resultado deve terminar sem deadlock nem corrupcao'
+);
+select dblink_disconnect('replay_resultado_a');
+select dblink_disconnect('replay_resultado_b');
 
 \echo CASE_concurrency
 select public.criar_preview_fixture(
@@ -980,12 +1151,12 @@ select public.assert_true(
 select public.assert_true(
   has_function_privilege(
     'service_role',
-    'public.registrar_resultado_pesquisa_evasao_envio(uuid,uuid,text,text,text)',
+    'public.registrar_resultado_pesquisa_evasao_envio(uuid,uuid,uuid,uuid,text,text,text)',
     'EXECUTE'
   )
   and not has_function_privilege(
     'authenticated',
-    'public.registrar_resultado_pesquisa_evasao_envio(uuid,uuid,text,text,text)',
+    'public.registrar_resultado_pesquisa_evasao_envio(uuid,uuid,uuid,uuid,text,text,text)',
     'EXECUTE'
   )
   and has_function_privilege(
@@ -999,6 +1170,12 @@ select public.assert_true(
     'EXECUTE'
   ),
   'reaplicacao deve preservar ACL service-only dos helpers'
+);
+select public.assert_true(
+  to_regprocedure(
+    'public.registrar_resultado_pesquisa_evasao_envio(uuid,uuid,text,text,text)'
+  ) is null,
+  'reaplicacao deve remover a assinatura antiga do registrador'
 );
 select public.assert_true(
   (

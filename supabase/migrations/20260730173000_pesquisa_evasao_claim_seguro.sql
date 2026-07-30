@@ -630,12 +630,37 @@ begin
 end;
 $function$;
 
+do $legacy_registrar$
+begin
+  if to_regprocedure(
+    'public.registrar_resultado_pesquisa_evasao_envio(uuid,uuid,text,text,text)'
+  ) is not null then
+    execute
+      'revoke all on function ' ||
+      'public.registrar_resultado_pesquisa_evasao_envio(' ||
+      'uuid,uuid,text,text,text) from public, anon, authenticated, ' ||
+      'mila_acesso_restrito, sol_acesso_restrito, fabio_agent, ' ||
+      'lia_acesso_restrito, service_role';
+  end if;
+end;
+$legacy_registrar$;
+
+drop function if exists public.registrar_resultado_pesquisa_evasao_envio(
+  uuid,
+  uuid,
+  text,
+  text,
+  text
+);
+
 create or replace function public.registrar_resultado_pesquisa_evasao_envio(
   p_pesquisa_id uuid,
+  p_preview_id uuid,
+  p_idempotency_key uuid,
   p_auth_user_id uuid,
   p_resultado text,
-  p_provider_message_id text default null,
-  p_erro_sanitizado text default null
+  p_provider_message_id text,
+  p_erro_sanitizado text
 )
 returns table (
   pesquisa_id uuid,
@@ -661,40 +686,47 @@ begin
       using errcode = '22023';
   end if;
 
+  -- Mesma ordem do claim: a tentativa exata e travada antes do cabecalho.
+  select pp.*
+  into v_preview
+  from public.pesquisa_evasao_previews pp
+  where pp.id = p_preview_id
+    and pp.idempotency_key = p_idempotency_key
+    and pp.auth_user_id = p_auth_user_id
+  for update;
+
+  if not found then
+    raise exception 'PESQUISA_EVASAO_TENTATIVA_STALE'
+      using errcode = 'P0001';
+  end if;
+
   select pe.*
   into v_pesquisa
   from public.pesquisa_evasao pe
   where pe.id = p_pesquisa_id
-  for update;
-
-  if not found then
-    raise exception 'PESQUISA_EVASAO_NAO_ENCONTRADA'
-      using errcode = 'P0002';
-  end if;
-
-  if v_pesquisa.executado_por_auth_user_id is distinct from p_auth_user_id then
-    raise exception 'PESQUISA_EVASAO_AUTOR_INVALIDO'
-      using errcode = '42501';
-  end if;
-
-  select pp.*
-  into v_preview
-  from public.pesquisa_evasao_previews pp
-  where pp.id = v_pesquisa.preview_id
-    and pp.pesquisa_evasao_id = v_pesquisa.id
+    and pe.preview_id = p_preview_id
+    and pe.idempotency_key = p_idempotency_key
+    and pe.executado_por_auth_user_id = p_auth_user_id
   for update;
 
   if not found
-     or v_preview.auth_user_id is distinct from p_auth_user_id
+     or v_preview.pesquisa_evasao_id is distinct from p_pesquisa_id
      or v_preview.envio_status_tentativa is distinct from
        v_pesquisa.envio_status then
-    raise exception 'PESQUISA_EVASAO_TENTATIVA_ATUAL_INCONSISTENTE'
+    raise exception 'PESQUISA_EVASAO_TENTATIVA_STALE'
       using errcode = 'P0001';
   end if;
 
   if p_resultado = 'enviado' then
     if nullif(btrim(p_provider_message_id), '') is null then
       raise exception 'PESQUISA_EVASAO_PROVIDER_MESSAGE_ID_OBRIGATORIO'
+        using errcode = '22023';
+    end if;
+
+    if v_pesquisa.envio_status = 'enviado'
+       and v_pesquisa.provider_message_id is distinct from
+         p_provider_message_id then
+      raise exception 'PESQUISA_EVASAO_TRANSICAO_INVALIDA'
         using errcode = '22023';
     end if;
 
@@ -711,7 +743,9 @@ begin
         enviado_em = coalesce(pe.enviado_em, clock_timestamp()),
         envio_erro_sanitizado = null,
         updated_at = clock_timestamp()
-    where pe.id = v_pesquisa.id;
+    where pe.id = v_pesquisa.id
+      and pe.preview_id = v_preview.id
+      and pe.idempotency_key = v_preview.idempotency_key;
 
     update public.pesquisa_evasao_previews pp
     set envio_status_tentativa = 'enviado',
@@ -719,6 +753,7 @@ begin
         envio_erro_sanitizado_tentativa = null,
         envio_finalizado_em = clock_timestamp()
     where pp.id = v_preview.id
+      and pp.idempotency_key = v_preview.idempotency_key
       and pp.pesquisa_evasao_id = v_pesquisa.id;
   elsif p_resultado = 'falhou' then
     if nullif(btrim(p_erro_sanitizado), '') is null then
@@ -739,7 +774,9 @@ begin
         enviado_em = null,
         envio_erro_sanitizado = left(btrim(p_erro_sanitizado), 200),
         updated_at = clock_timestamp()
-    where pe.id = v_pesquisa.id;
+    where pe.id = v_pesquisa.id
+      and pe.preview_id = v_preview.id
+      and pe.idempotency_key = v_preview.idempotency_key;
 
     update public.pesquisa_evasao_previews pp
     set envio_status_tentativa = 'falhou',
@@ -748,6 +785,7 @@ begin
           left(btrim(p_erro_sanitizado), 200),
         envio_finalizado_em = clock_timestamp()
     where pp.id = v_preview.id
+      and pp.idempotency_key = v_preview.idempotency_key
       and pp.pesquisa_evasao_id = v_pesquisa.id;
   else
     if v_pesquisa.envio_status not in ('enviando', 'incerto') then
@@ -764,7 +802,9 @@ begin
         envio_erro_sanitizado =
           'Resultado ambiguo; reconciliacao humana obrigatoria',
         updated_at = clock_timestamp()
-    where pe.id = v_pesquisa.id;
+    where pe.id = v_pesquisa.id
+      and pe.preview_id = v_preview.id
+      and pe.idempotency_key = v_preview.idempotency_key;
 
     update public.pesquisa_evasao_previews pp
     set envio_status_tentativa = 'incerto',
@@ -773,6 +813,7 @@ begin
           'Resultado ambiguo; reconciliacao humana obrigatoria',
         envio_finalizado_em = clock_timestamp()
     where pp.id = v_preview.id
+      and pp.idempotency_key = v_preview.idempotency_key
       and pp.pesquisa_evasao_id = v_pesquisa.id;
   end if;
 
@@ -810,12 +851,16 @@ grant execute on function public.claim_pesquisa_evasao_preview(uuid, uuid)
 revoke all on function public.registrar_resultado_pesquisa_evasao_envio(
   uuid,
   uuid,
+  uuid,
+  uuid,
   text,
   text,
   text
 ) from public, anon, authenticated, mila_acesso_restrito, sol_acesso_restrito,
        fabio_agent, lia_acesso_restrito;
 grant execute on function public.registrar_resultado_pesquisa_evasao_envio(
+  uuid,
+  uuid,
   uuid,
   uuid,
   text,
@@ -827,6 +872,8 @@ comment on function public.claim_pesquisa_evasao_preview(uuid, uuid) is
   'Consome preview uma unica vez, serializa o slot logico e retorna snapshot imutavel. Estado enviando antigo vira incerto e nunca autoriza novo dispatch.';
 
 comment on function public.registrar_resultado_pesquisa_evasao_envio(
+  uuid,
+  uuid,
   uuid,
   uuid,
   text,

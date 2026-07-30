@@ -315,6 +315,8 @@ async function registrarResultado(
     "registrar_resultado_pesquisa_evasao_envio",
     {
       p_pesquisa_id: claim.pesquisa_id,
+      p_preview_id: claim.preview_id,
+      p_idempotency_key: claim.idempotency_key,
       p_auth_user_id: authUserId,
       p_resultado: resultado,
       p_provider_message_id: providerMessageId,
