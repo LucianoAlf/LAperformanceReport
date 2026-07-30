@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fazer o relatório comercial diário usar um snapshot completo e recém-atualizado do GET `/aulas` do Emusys, publicar a taxa Experimental → Matrícula mesmo com pendências auditáveis e eliminar a divergência entre tela, dry-run e cron.
+**Goal:** Unificar o relatório comercial diário rico e detalhado sobre um snapshot fresco do GET `/aulas`, publicar KPIs canônicos — incluindo os tickets médios de parcelas e passaportes — e eliminar a divergência entre tela, dry-run e cron.
 
-**Architecture:** `sync-presenca-emusys` continua sendo o único adaptador do Emusys. Ele busca todas as páginas antes de escrever, transforma as participações experimentais em linhas com identidade estável e entrega o lote inteiro a uma RPC transacional que ativa o snapshot novo e inativa o anterior. O gerador diário canônico em `relatorio-admin-whatsapp` solicita esse refresh antes das leituras; a tela passa a pedir o texto diário a esse mesmo gerador. O produtor legado só é desligado depois de paridade comprovada nas três unidades.
+**Architecture:** `sync-presenca-emusys` continua sendo o único adaptador do Emusys. Ele busca todas as páginas do início do mês até D+7 antes de escrever, transforma as participações experimentais em linhas com identidade estável e entrega o lote inteiro a uma RPC transacional que ativa o snapshot novo e inativa o anterior. Um módulo puro monta o payload e o texto unificado; `relatorio-admin-whatsapp` faz o refresh e reúne as fontes canônicas, enquanto tela, dry-run e cron consomem o mesmo resultado. O produtor legado só é desligado depois de paridade comprovada nas três unidades.
 
 **Tech Stack:** Deno/TypeScript, Supabase Edge Functions, PostgreSQL 17, React/Vite, Node test runner, Deno test runner, Docker para fixtures SQL, Supabase MCP para migration/deploy e consultas operacionais.
 
@@ -36,9 +36,14 @@ participante_chave:
 - A resposta incompleta do Emusys nunca pode inativar o snapshot anterior.
 - Um refresh bem-sucedido é aplicado em uma única transação PostgreSQL.
 - A leitura operacional e a conciliação usam apenas `snapshot_ativo = true`.
+- Aula futura com `presenca = 'ausente'` continua `agendada` até o horário de início; não gera falta antecipada.
+- O refresh do relatório cobre do primeiro dia do mês até D+7, inclusive na virada do mês.
 - Presença bruta ativa prevalece sobre heurística de reagendamento.
 - No relatório diário, pendência adiciona aviso; não substitui a taxa por `BLOQUEADA`.
 - Sem denominador, o relatório publica `SEM BASE`.
+- Ticket médio das parcelas e ticket médio dos passaportes são calculados separadamente sobre a mesma coorte comercial detalhada.
+- A meta `ticket_medio` é aplicada somente ao ticket das parcelas.
+- O relatório preserva resumo diário, mês/meta, funil, registros do dia, canais, cursos, agenda futura, alertas e lista detalhada.
 - `ComercialPage`, `dry_run_comercial` e cron recebem texto do mesmo gerador diário.
 
 ---
@@ -61,11 +66,14 @@ Criar testes Deno para:
 2. usar `id_aluno` quando não houver lead;
 3. manter a mesma chave após mudança de nome/telefone quando houver ID externo;
 4. distinguir duas pessoas na mesma aula;
-5. mapear `presente`, `matriculado`, `faltou`, `ausente` e aula cancelada;
-6. aceitar duas páginas com cursores diferentes;
-7. falhar quando `tem_mais=true` vier sem `proximo_cursor`;
-8. falhar quando o cursor repetir;
-9. não devolver lote parcial após erro HTTP ou JSON inválido.
+5. mapear aula passada com `presente`, `matriculado`, `faltou`, `ausente` e cancelamento;
+6. mapear participante futuro com `presenca='ausente'` para `agendada`;
+7. manter uma aula futura cancelada como `cancelada`;
+8. comparar data e horário no fuso `America/Sao_Paulo`;
+9. aceitar duas páginas com cursores diferentes;
+10. falhar quando `tem_mais=true` vier sem `proximo_cursor`;
+11. falhar quando o cursor repetir;
+12. não devolver lote parcial após erro HTTP ou JSON inválido.
 
 O contrato principal do teste deve chamar:
 
@@ -90,10 +98,21 @@ Expected: `Module not found` ou exports ausentes.
 O arquivo não deve importar Supabase nem secrets. Exportar tipos reduzidos de aula/aluno e:
 
 ```ts
+export type SituacaoExperimental =
+  | 'agendada'
+  | 'presente'
+  | 'faltou'
+  | 'cancelada'
+  | 'sem_status'
+
 export function participanteChave(aluno: ExperimentalAluno): string
 export function normalizarSituacaoExperimental(
-  presenca: string | null | undefined,
-  cancelada: boolean,
+  input: {
+    presenca: string | null | undefined
+    cancelada: boolean
+    dataHoraInicio: string
+    agora: Date
+  },
 ): SituacaoExperimental
 export function montarLinhasSnapshot(input: SnapshotInput): SnapshotRow[]
 export async function buscarTodasAulas(input: FetchTodasAulasInput): Promise<AulaEmusys[]>
@@ -114,6 +133,8 @@ export async function buscarTodasAulas(input: FetchTodasAulasInput): Promise<Aul
 ```
 
 A chave de negócio não depende de `raw_key`; ela fica nas colunas próprias.
+Cada linha preserva `data_aula`, `horario_aula`, cancelamento no payload bruto e
+`situacao_operacional='agendada'` quando o início ainda está no futuro.
 
 - [ ] **Step 4: Rodar o teste verde**
 
@@ -248,7 +269,7 @@ create unique index ... on public.emusys_experimentais_raw
 
 A RPC `aplicar_snapshot_experimentais_emusys_v1` deve:
 
-- validar unidade, intervalo máximo de 35 dias, execução e JSON array;
+- validar unidade, intervalo máximo de 45 dias, execução e JSON array;
 - materializar `jsonb_to_recordset` em tabela temporária;
 - rejeitar chave vazia, aula/unidade divergente e duplicidade no próprio lote;
 - fazer `INSERT ... ON CONFLICT (...) WHERE snapshot_ativo IS TRUE DO UPDATE`;
@@ -315,7 +336,7 @@ Exigir:
 
 - união do tipo de modo com `'experimentais'`;
 - entrada `unidade_id`, `data_inicio`, `data_fim`;
-- rejeição de unidade desconhecida e intervalo maior que 35 dias;
+- rejeição de unidade desconhecida e intervalo maior que 45 dias;
 - uma única unidade obrigatória nesse modo;
 - chamada de `buscarTodasAulas`;
 - aplicação por `aplicar_snapshot_experimentais_emusys_v1`;
@@ -514,54 +535,254 @@ git commit -m "fix: conciliar apenas experimentais vigentes"
 
 ---
 
-### Task 5: Tornar o backend o único gerador diário e remover o bloqueio visual
+### Task 5: Criar o payload e o formatador puro do relatório unificado
+
+**Files:**
+
+- Create: `supabase/functions/_shared/relatorio-comercial.ts`
+- Create: `supabase/functions/_shared/relatorio-comercial.test.ts`
+- Modify: `docs/MAPA-SISTEMA.md`
+- Modify: `docs/METRICAS.md`
+
+- [ ] **Step 1: Escrever os testes vermelhos das regras puras**
+
+Criar fixtures com a Barra em 30/07/2026 e testar:
+
+```ts
+const matriculas = [
+  { valorParcela: 497, valorPassaporte: 550 },
+  { valorParcela: 460, valorPassaporte: 450 },
+  { valorParcela: 467, valorPassaporte: 499 },
+  { valorParcela: 410, valorPassaporte: 399 },
+  { valorParcela: 410, valorPassaporte: 399 },
+  { valorParcela: 410, valorPassaporte: 399 },
+  { valorParcela: 410, valorPassaporte: 399 },
+  { valorParcela: 350, valorPassaporte: 400 },
+  { valorParcela: 440, valorPassaporte: 450 },
+  { valorParcela: 450, valorPassaporte: 399 },
+  { valorParcela: 450, valorPassaporte: 450 },
+  { valorParcela: 385, valorPassaporte: 450 },
+  { valorParcela: 460, valorPassaporte: 450 },
+  { valorParcela: 380, valorPassaporte: 499 },
+  { valorParcela: 380, valorPassaporte: 499 },
+  { valorParcela: 460, valorPassaporte: 450 },
+]
+
+calcularTicketsMatriculas(matriculas)
+```
+
+Expected:
+
+```ts
+{
+  parcelas: { soma: 6819, denominador: 16, media: 426.19 },
+  passaportes: { soma: 7142, denominador: 16, media: 446.38 },
+}
+```
+
+Testar separadamente:
+
+1. parcela ou passaporte zero não entra no respectivo denominador;
+2. lista vazia retorna soma, denominador e média zero;
+3. segundo curso já agrupado não cria um segundo denominador;
+4. `formatarTaxaExpMatDiaria` publica `*40,6%* (13/32) — ⚠️ 2 pendências em auditoria`;
+5. denominador zero publica `*SEM BASE*`;
+6. nenhum caminho gera `BLOQUEADA`, `NaN` ou `Infinity`;
+7. próximas experimentais excluem Bento e Olivia às 20h05;
+8. aula futura no mesmo dia permanece;
+9. cancelada, inativa e linha do mesmo dia sem horário ficam fora;
+10. virada do mês e ordenação por data/hora/nome funcionam;
+11. 11 itens retornam 10 linhas e `… e mais 1`.
+
+- [ ] **Step 2: Escrever o teste de ouro vermelho do texto inteiro**
+
+Montar um `RelatorioComercialDados` com:
+
+```ts
+{
+  referencia: { data: '2026-07-30', hora: '20:05', fuso: 'America/Sao_Paulo' },
+  unidade: { nome: 'Barra', hunter: 'Kailane' },
+  dia: {
+    leads: 9,
+    experimentaisPrevistas: 3,
+    experimentaisRealizadas: 2,
+    faltas: 0,
+    canceladas: 1,
+    visitas: 0,
+    matriculas: 0,
+    passaportes: 0,
+  },
+  mes: {
+    leads: 251,
+    experimentaisRealizadas: 32,
+    presencasVinculadas: 32,
+    faltas: 5,
+    matriculas: 16,
+  },
+  metas: { leads: 160, experimentais: 24, matriculas: 15, ticketParcelas: 444 },
+  tickets: {
+    parcelas: { soma: 6819, denominador: 16, media: 426.19 },
+    passaportes: { soma: 7142, denominador: 16, media: 446.38 },
+  },
+  conciliacao: { taxa: 40.6, conversoes: 13, denominador: 32, pendencias: 2 },
+  registrosHoje: { leads: 9, experimentais: 4, matriculas: 0 },
+  canais: [
+    { nome: 'Instagram', quantidade: 3 },
+    { nome: 'Sem canal', quantidade: 3 },
+    { nome: 'Ex-aluno', quantidade: 1 },
+    { nome: 'Indicação', quantidade: 1 },
+    { nome: 'Visita/Placa', quantidade: 1 },
+  ],
+  cursos: [
+    { nome: 'Sem curso', quantidade: 5 },
+    { nome: 'Musicalização Infantil', quantidade: 3 },
+    { nome: 'Canto', quantidade: 1 },
+  ],
+  proximas: [],
+  alertas: ['2 pendências em auditoria'],
+  matriculasDetalhadas: [],
+  snapshot: { atualizadoEm: '2026-07-30T22:50:07Z', status: 'completo' },
+}
+```
+
+O texto deve conter todos os blocos aprovados, `251`, `32`, `5`, `16`,
+`R$ 426,19`, `R$ 446,38`, meta `R$ 444,00` somente junto ao ticket das
+parcelas, taxa com ressalva, fonte composta e horário do snapshot. Não pode
+conter `214`, `Experimentais: *7*`, `BLOQUEADA` nem o rodapé genérico
+“campos seguem em validação canônica”.
+
+- [ ] **Step 3: Executar e confirmar vermelho**
+
+Run:
+
+```powershell
+deno test supabase/functions/_shared/relatorio-comercial.test.ts
+```
+
+Expected: módulo ausente.
+
+- [ ] **Step 4: Implementar os tipos e cálculos puros**
+
+Exportar:
+
+```ts
+export interface ProximaExperimental {
+  snapshotAtivo: boolean
+  cancelada: boolean
+  situacao: 'agendada' | 'presente' | 'faltou' | 'cancelada' | 'sem_status'
+  dataAula: string
+  horarioAula: string | null
+  alunoNome: string
+  cursoNome: string
+}
+
+export function parcelasDoGrupo(matricula: {
+  valor_parcela?: number | null
+  parcelas_relatorio?: number[] | null
+}): number
+
+export function passaporteDoGrupo(matricula: {
+  valor_passaporte?: number | null
+}): number
+
+export function calcularTicketsMatriculas(
+  matriculas: Array<{ valorParcela: number; valorPassaporte: number }>,
+): TicketsMatriculas
+
+export function selecionarProximasExperimentais(
+  linhas: ProximaExperimental[],
+  instanteGeracao: Date,
+  limite = 10,
+): { itens: ProximaExperimental[]; excedentes: number }
+
+export function formatarTaxaExpMatDiaria(input: TaxaExpMatInput): string
+
+export function formatarRelatorioComercialDiario(
+  dados: RelatorioComercialDados,
+): string
+```
+
+`calcularTicketsMatriculas` arredonda apenas o resultado final para duas casas.
+`selecionarProximasExperimentais` monta o instante BRT com data + horário,
+filtra `snapshotAtivo`, `!cancelada`, `situacao='agendada'`, início estritamente
+posterior e máximo inclusivo D+7.
+
+- [ ] **Step 5: Implementar o formatador unificado**
+
+Gerar as dez seções na ordem da especificação. Usar `Intl.NumberFormat('pt-BR',
+{ style: 'currency', currency: 'BRL' })` para dinheiro. Top canais/cursos devem
+usar os itens recebidos, sem campos de matrícula que hoje estão fixados em zero.
+Se não houver alertas, publicar `Nenhum gap operacional identificado`.
+
+- [ ] **Step 6: Rodar o teste verde**
+
+Run:
+
+```powershell
+deno test supabase/functions/_shared/relatorio-comercial.test.ts
+```
+
+Expected: todos os testes puros passam.
+
+- [ ] **Step 7: Atualizar mapas e commit**
+
+```powershell
+git add -- supabase/functions/_shared/relatorio-comercial.ts supabase/functions/_shared/relatorio-comercial.test.ts docs/MAPA-SISTEMA.md docs/METRICAS.md
+git commit -m "test: definir relatorio comercial unificado"
+```
+
+---
+
+### Task 6: Integrar o relatório unificado ao backend canônico
 
 **Files:**
 
 - Modify: `supabase/functions/relatorio-admin-whatsapp/index.ts`
-- Create: `supabase/functions/_shared/relatorio-comercial.ts`
-- Create: `supabase/functions/_shared/relatorio-comercial.test.ts`
+- Modify: `supabase/functions/_shared/relatorio-comercial.ts`
+- Modify: `supabase/functions/_shared/relatorio-comercial.test.ts`
 - Create: `tests/relatorioComercialExperimentaisFrescas.test.mjs`
 - Modify: `docs/MAPA-SISTEMA.md`
 - Modify: `docs/METRICAS.md`
 - Modify: `docs/MAPA-INTEGRACAO-EMUSYS.md`
 
-- [ ] **Step 1: Escrever testes vermelhos do texto**
+- [ ] **Step 1: Escrever o teste vermelho de orquestração**
 
-Extrair para módulo puro e testar:
+O teste estrutural deve exigir, dentro de
+`gerarRelatorioComercialDiario(supabase, unidadeId, dataReferencia?)`:
+
+1. cálculo BRT determinístico ou uso de `data_referencia`;
+2. `dataInicioSnapshot` no primeiro dia do mês;
+3. `dataFimSnapshot` em D+7, inclusive quando cair no mês seguinte;
+4. `await atualizarSnapshotExperimentais(...)` antes das leituras;
+5. validação de `snapshot_status === 'completo'`;
+6. carga das RPCs mensal/diária, conciliação, metas, registros criados,
+   próximas e matrículas detalhadas;
+7. chamada única a `formatarRelatorioComercialDiario`;
+8. `dry_run_comercial` e cron usando a mesma função;
+9. cron canônico inserindo em `fila_relatorios_whatsapp`, nunca em
+   `fila_relatorios_sol_hermes`;
+10. nenhuma chamada a `get_dados_comercial_ia`.
+
+- [ ] **Step 2: Escrever testes vermelhos dos agregados**
+
+Adicionar testes puros para:
 
 ```ts
-formatarTaxaExpMatDiaria({
-  taxa: 40.6,
-  denominador: 32,
-  conversoes: 13,
-  pendencias: 2,
-})
+parcelasDoGrupo({
+  valor_parcela: 395,
+  parcelas_relatorio: [395, 395],
+}) === 790
+
+passaporteDoGrupo({
+  valor_passaporte: 400,
+  parcelas_relatorio: [395, 395],
+}) === 400
 ```
 
-Expected:
-
-```text
-*40,6%* (13/32) — ⚠️ 2 pendências em auditoria
-```
-
-Também testar:
-
-- zero pendências retorna apenas taxa e fração;
-- denominador zero retorna `*SEM BASE*`;
-- o resultado nunca contém `BLOQUEADA`;
-- números inválidos são normalizados sem gerar `NaN` ou `Infinity`.
-
-- [ ] **Step 2: Escrever o teste vermelho de ordem**
-
-O teste de contrato da edge deve exigir, dentro de `gerarRelatorioComercialDiario`:
-
-1. cálculo da data BRT ou uso de `data_referencia`;
-2. `await atualizarSnapshotExperimentais(...)`;
-3. somente depois, `Promise.all` com as RPCs;
-4. validação de `snapshot_status === 'completo'`;
-5. erro do refresh interrompendo antes de `sol_hermes_report_enqueue`;
-6. `dry_run_comercial` e cron chamando a mesma função geradora.
+Isso garante que segundo curso pode elevar o ticket consolidado de parcelas da
+pessoa, sem virar uma segunda matrícula comercial nem duplicar o passaporte.
+Também exigir que a lista detalhada, o total mensal e os denominadores dos dois
+tickets recebam exatamente o mesmo array `matriculasNovas`.
 
 - [ ] **Step 3: Executar e confirmar vermelho**
 
@@ -572,23 +793,9 @@ deno test supabase/functions/_shared/relatorio-comercial.test.ts
 node --test tests/relatorioComercialExperimentaisFrescas.test.mjs
 ```
 
-Expected: módulo e preflight ausentes.
+Expected: preflight D+7, agregador rico e proibição do legado ausentes.
 
-- [ ] **Step 4: Implementar o formatador puro**
-
-Exportar `formatarTaxaExpMatDiaria`. O denominador e as conversões vêm da RPC de conciliação; `realizadas_emusys` continua sendo exibido separadamente como contagem operacional.
-
-- [ ] **Step 5: Implementar autorização explícita do preview comercial**
-
-Como `relatorio-admin-whatsapp` usa `verify_jwt=false` para aceitar o cron, o código deve:
-
-- reconhecer `service_role` para `modo=cron`;
-- para `dry_run_comercial`, validar o JWT com client de usuário;
-- chamar uma RPC booleana de escopo criada na migration da Task 2, `pode_gerar_relatorio_comercial_v1(p_unidade_id)`;
-- rejeitar 401 sem JWT, 403 fora da unidade e 400 para `todos`;
-- nunca confiar apenas no UUID enviado pelo navegador.
-
-- [ ] **Step 6: Atualizar snapshot antes das RPCs**
+- [ ] **Step 4: Implementar o refresh mês + D+7**
 
 Criar:
 
@@ -600,36 +807,118 @@ async function atualizarSnapshotExperimentais(
 ): Promise<SnapshotRefreshResponse>
 ```
 
-Ela chama `sync-presenca-emusys` servidor-servidor com service role e body:
+O body servidor-servidor será:
 
 ```json
 {
   "modo": "experimentais",
-  "unidade_id": "<uuid>",
-  "data_inicio": "YYYY-MM-01",
-  "data_fim": "YYYY-MM-DD"
+  "unidade_id": "368d47f5-2d88-4475-bc14-ba084a9a348e",
+  "data_inicio": "2026-07-01",
+  "data_fim": "2026-08-06"
 }
 ```
 
-Exigir HTTP OK, `success=true`, mesmo UUID/intervalo e `snapshot_execucao_id`. Não fazer fallback.
+Exigir HTTP OK, `success=true`, mesmo UUID/intervalo e
+`snapshot_execucao_id`. Não fazer fallback para snapshot antigo ou zero.
+O body acima é o exemplo de referência da Barra em
+`data_referencia=2026-07-30`; em produção UUID e datas são calculados, não
+fixados.
 
-Adicionar `data_referencia?: string` ao payload e alterar
-`gerarRelatorioComercialDiario` para receber `dataReferencia?: string`, executar
-o refresh e só então consultar RPCs. Depois das RPCs, exigir que o resumo
-operacional indique snapshot completo e a mesma execução recém-concluída ou uma
-execução completa mais nova.
+- [ ] **Step 5: Implementar autorização explícita do preview**
 
-- [ ] **Step 7: Trocar o texto da taxa no diário**
+Como a Edge usa `verify_jwt=false` para aceitar cron:
 
-Usar `formatarTaxaExpMatDiaria` no bloco:
+- reconhecer `service_role` para `modo=cron`;
+- para `dry_run_comercial`, validar o JWT com client de usuário;
+- chamar `pode_gerar_relatorio_comercial_v1(p_unidade_id)`;
+- rejeitar 401 sem JWT, 403 fora da unidade e 400 para `todos`;
+- nunca confiar apenas no UUID enviado pelo navegador.
 
-```text
-Experimental → Matrícula:
+- [ ] **Step 6: Carregar as fontes canônicas depois do refresh**
+
+Depois do preflight, carregar em paralelo:
+
+```ts
+get_kpis_comercial_canonicos_v2(mensal)
+get_kpis_comercial_canonicos_v2(diario)
+get_conciliacao_experimentais_v2(mensal)
+get_experimentais_emusys_operacional_v1(mensal)
+get_experimentais_emusys_operacional_v1(diario)
+metas_kpi(unidade, ano, mes, tipos aprovados)
+emusys_experimentais_raw(snapshot_ativo, data entre referência e D+7)
+leads(created_at no dia BRT)
+lead_experimentais(created_at no dia BRT)
+alunos(created_at no dia BRT)
 ```
 
-Não alterar, nesta tarefa, a governança interna `taxa_exp_mat_liberada`, a fila de conciliação, o BI gerencial nem snapshots fechados.
+As queries de `created_at` usam intervalo semiaberto
+`[00:00:00-03:00, dia seguinte 00:00:00-03:00)`. O snapshot futuro seleciona
+somente `emusys_aula_id`, IDs estáveis, data, horário, nome, curso, situação e
+cancelamento; nunca retorna telefone, nascimento ou payload ao navegador.
 
-- [ ] **Step 8: Rodar testes**
+- [ ] **Step 7: Enriquecer próximas experimentais sem join por nome**
+
+Resolver curso nesta ordem:
+
+1. curso específico do raw quando diferente de `Aula Experimental`;
+2. `lead_experimental_id -> lead_experimentais.curso_interesse_id -> cursos`;
+3. `lead_id -> leads.curso_interesse_id -> cursos`;
+4. `emusys_lead_id` junto com `unidade_id`;
+5. `N/A`.
+
+Nome serve apenas para exibição. Nenhum vínculo ou deduplicação usa nome
+isolado. A chave é `unidade_id + emusys_aula_id + participante_chave`.
+
+- [ ] **Step 8: Montar a mesma coorte para lista e tickets**
+
+Após `agruparMatriculasComerciais(...).filter(ehMatriculaComercialCanonicaEdge)`:
+
+```ts
+const tickets = calcularTicketsMatriculas(
+  matriculasNovas.map((mat) => ({
+    valorParcela: parcelasDoGrupo(mat),
+    valorPassaporte: passaporteDoGrupo(mat),
+  })),
+)
+```
+
+Passar `matriculasNovas` sem nova filtragem ao formatador detalhado. Conferir
+que `tickets.parcelas.denominador` e
+`tickets.passaportes.denominador` são auditáveis contra essa lista.
+
+- [ ] **Step 9: Montar e formatar o payload único**
+
+Mapear:
+
+```text
+dia.leads                         <- kpisDia.leads_entrantes
+dia.experimentaisPrevistas        <- resumoEmusysDia.linhas_raw
+dia.experimentaisRealizadas       <- resumoEmusysDia.realizadas_emusys
+dia.faltas                        <- resumoEmusysDia.faltas
+dia.canceladas                    <- resumoEmusysDia.canceladas
+dia.visitas                       <- kpisDia.visitas
+dia.matriculas                    <- kpisDia.matriculas_comerciais_principais
+dia.passaportes                   <- kpisDia.passaportes_total
+mes.leads                         <- kpisMes.leads_entrantes
+mes.experimentaisRealizadas       <- resumoEmusysMes.realizadas_emusys
+mes.presencasVinculadas           <- conciliacao.experimentais_realizadas_confirmadas
+mes.faltas                        <- resumoEmusysMes.faltas
+mes.matriculas                    <- matriculasNovas.length
+```
+
+Metas vêm diretamente de `metas_kpi`. Canais/cursos vêm apenas dos arrays
+diários da RPC v2. Alertas combinam gaps reais, frescor e pendências, sem texto
+genérico quando não houver ocorrência.
+
+- [ ] **Step 10: Preservar idempotência sem colisão manual × automático**
+
+O cron canônico continua na `fila_relatorios_whatsapp`, cuja chave diária
+deduplica repetição automática. O envio manual continua na
+`fila_relatorios_sol_hermes`. Remover qualquer consulta do produtor canônico à
+fila Sol/Hermes; assim um manual não suprime o automático. Não criar nova
+migration de fila sem necessidade.
+
+- [ ] **Step 11: Rodar testes verdes**
 
 Run:
 
@@ -638,18 +927,18 @@ deno test supabase/functions/_shared/relatorio-comercial.test.ts
 node --test tests/relatorioComercialExperimentaisFrescas.test.mjs tests/comercialExperimentaisSnapshotSchema.test.mjs
 ```
 
-Expected: todos passam.
+Expected: testes puros, contrato da Edge e coorte/tickets passam.
 
-- [ ] **Step 9: Atualizar mapas e commit**
+- [ ] **Step 12: Atualizar mapas e commit**
 
 ```powershell
 git add -- supabase/functions/relatorio-admin-whatsapp/index.ts supabase/functions/_shared/relatorio-comercial.ts supabase/functions/_shared/relatorio-comercial.test.ts tests/relatorioComercialExperimentaisFrescas.test.mjs docs/MAPA-SISTEMA.md docs/METRICAS.md docs/MAPA-INTEGRACAO-EMUSYS.md
-git commit -m "fix: gerar relatorio comercial com snapshot fresco"
+git commit -m "fix: gerar relatorio comercial canonico unificado"
 ```
 
 ---
 
-### Task 6: Fazer a tela diária consumir o gerador canônico
+### Task 7: Fazer a tela diária consumir o gerador canônico
 
 **Files:**
 
@@ -679,6 +968,8 @@ O teste deve confirmar:
 - unidade consolidada `todos` é rejeitada com mensagem clara;
 - erro da edge vira o estado `relatorioErro`;
 - o texto exibido é exatamente `data.texto`;
+- o texto inclui `Ticket médio das parcelas` e
+  `Ticket médio dos passaportes`;
 - copiar e enfileirar usam o mesmo `relatorioTexto`;
 - `gerarRelatorioDiario` não consulta diretamente as três RPCs comerciais;
 - semanal, mensal e comparativos continuam funcionando como antes.
@@ -734,7 +1025,7 @@ git commit -m "refactor: unificar relatorio diario comercial"
 
 ---
 
-### Task 7: Verificação local completa e revisão de segurança
+### Task 8: Verificação local completa e revisão de segurança
 
 **Files:**
 
@@ -785,7 +1076,7 @@ Expected: sem whitespace errors, sem arquivos inesperados e somente commits dest
 
 ---
 
-### Task 8: Implantação segura, paridade nas três unidades e corte do legado
+### Task 9: Implantação segura, paridade nas três unidades e corte do legado
 
 **Files:**
 
@@ -828,7 +1119,10 @@ Deploy de:
 sync-presenca-emusys
 ```
 
-Executar `modo=experimentais` para Barra, Campo Grande e Recreio, uma unidade por vez, do primeiro dia do mês até a data BRT atual. Em cada resposta exigir `success=true`, execução e contagens.
+Executar `modo=experimentais` para Barra, Campo Grande e Recreio, uma unidade
+por vez, do primeiro dia do mês até D+7 em BRT. Em cada resposta exigir
+`success=true`, execução, intervalo integral e contagens. Confirmar
+explicitamente a virada de mês quando D+7 cair na competência seguinte.
 
 Se os jobs de sync foram pausados no passo anterior, reativá-los com a
 configuração exatamente registrada e confirmar o próximo horário.
@@ -842,6 +1136,7 @@ presentes/matriculados
 faltas
 canceladas
 total de participantes experimentais
+participações futuras ativas e não canceladas
 ```
 
 Comparar com `get_experimentais_emusys_operacional_v1`. Diferença diferente de zero bloqueia a implantação do relatório.
@@ -873,8 +1168,16 @@ Não ativar cron novo nem desativar legado ainda.
 Chamar `dry_run_comercial` para Barra, Campo Grande e Recreio. Validar:
 
 - texto usa contagem do snapshot recém-atualizado;
+- texto preserva resumo diário, mês/meta, funil, registros, canais, cursos,
+  próximas, alertas e lista detalhada;
+- ticket de parcelas fecha com soma e denominador da lista;
+- ticket de passaportes fecha com soma e denominador da lista;
+- meta `ticket_medio` aparece apenas no ticket das parcelas;
 - nenhuma ocorrência de `BLOQUEADA`;
 - taxa aparece com aviso quando houver pendência;
+- nenhuma aula passada aparece em próximas;
+- aula futura no mesmo dia aparece e participante futuro com `ausente` não
+  vira falta antecipada;
 - `SEM BASE` apenas quando denominador for zero;
 - nenhuma linha foi enfileirada/enviada pelo dry-run.
 
@@ -907,7 +1210,9 @@ Depois de confirmar que o legado está desabilitado:
 2. confirmar um único job canônico chamando a edge;
 3. monitorar a primeira execução;
 4. verificar uma única linha por unidade/dia na fila;
-5. confirmar `origem`, `tipo_relatorio`, horário do snapshot e status de envio.
+5. confirmar horário do snapshot, texto unificado e status de envio;
+6. comprovar que uma linha manual existente em `fila_relatorios_sol_hermes`
+   não impede a linha automática em `fila_relatorios_whatsapp`.
 
 Se houver duplicidade, contagem divergente ou refresh falho, desativar o canônico antes de considerar reativar o legado.
 
@@ -938,11 +1243,20 @@ Rollback:
 
 - Barra, Campo Grande e Recreio usam o mesmo caminho.
 - O relatório diário espera um refresh completo do mês antes de ler KPIs.
+- O mesmo refresh cobre as próximas experimentais até D+7.
 - O número publicado é igual ao GET `/aulas` do mesmo intervalo.
 - Snapshot incompleto ou falho impede geração e envio.
 - Só uma linha vigente existe por unidade/aula/participante.
 - Histórico obsoleto permanece armazenado, mas não entra em contagem nem conciliação.
 - A taxa diária é publicada com fração e aviso de auditoria; `BLOQUEADA` não aparece.
+- O relatório exibe separadamente ticket médio das parcelas e ticket médio dos
+  passaportes, ambos conciliados com a lista detalhada.
+- A meta de ticket é aplicada somente às parcelas.
+- Próximas experimentais excluem passadas, canceladas e duplicatas; futuras
+  com `ausente` continuam agendadas.
+- Os blocos ricos do automático e a lista detalhada do manual aparecem no
+  mesmo texto.
 - Tela, dry-run e cron geram o mesmo texto.
+- Envio manual não suprime o cron canônico.
 - Há exatamente um produtor automático ativo.
 - Testes direcionados e build passam; a suíte completa não ganha regressões.
