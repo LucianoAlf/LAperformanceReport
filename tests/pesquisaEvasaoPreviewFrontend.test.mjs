@@ -381,6 +381,68 @@ test('fluxo trata erros HTTP e so recarrega apos enviado confirmado', () => {
   assert.match(confirmar, /toast \. warning \(/);
 });
 
+test('aviso de captura despreparada aparece somente em envio real', () => {
+  const tab = codigoExecutavel(readOptional(tabPath));
+  const confirmar = tab.match(
+    /const confirmarEnvio = async \( \) => \{[\s\S]*?(?=const alterarModalPreview)/,
+  )?.[0] ?? '';
+
+  assert.match(
+    confirmar,
+    /resposta \. modo_teste !== true && resposta \. captura_resposta_preparada === false/,
+    'teste nao prepara captura de resposta e nao deve produzir alerta operacional',
+  );
+});
+
+test('confirmacao bloqueia X Escape outside e preserva o preview', () => {
+  const tab = codigoExecutavel(readOptional(tabPath));
+  const modal = codigoExecutavel(readOptional(modalPath));
+  const alterarModal = tab.match(
+    /const alterarModalPreview = \( aberto : boolean \) => \{[\s\S]*?\} ;/,
+  )?.[0] ?? '';
+
+  assert.match(
+    alterarModal,
+    /if \( ! aberto && confirmandoRef \. current \) return/,
+    'onOpenChange nao pode fechar nem limpar o preview durante a confirmacao',
+  );
+  assert.match(
+    modal,
+    /if \( ! proximoAberto && confirmando \) return/,
+    'o modal deve rejeitar pedidos de fechamento, inclusive o X',
+  );
+  assert.match(modal, /onOpenChange = \{ alterarAberto \}/);
+  assert.match(
+    modal,
+    /onEscapeKeyDown = \{ \( event \) => \{ if \( confirmando \) event \. preventDefault \( \)/,
+  );
+  assert.match(
+    modal,
+    /onPointerDownOutside = \{ \( event \) => \{ if \( confirmando \) event \. preventDefault \( \)/,
+  );
+});
+
+test('previsualizacao usa trava sincrona e desabilita todos os envios', () => {
+  const tab = codigoExecutavel(readOptional(tabPath));
+  const previsualizar = tab.match(
+    /const previsualizarPesquisa = async \( evasaoId : number \) => \{[\s\S]*?(?=const confirmarEnvio)/,
+  )?.[0] ?? '';
+
+  assert.match(tab, /const previsualizandoRef = useRef \( false \)/);
+  assert.match(
+    previsualizar,
+    /if \( previsualizandoRef \. current \|\| confirmandoRef \. current \) return/,
+    'a trava deve impedir dois requests antes do proximo render',
+  );
+  assert.match(previsualizar, /previsualizandoRef \. current = true/);
+  assert.match(previsualizar, /previsualizandoRef \. current = false/);
+  assert.match(
+    tab,
+    /disabled = \{ previsualizando !== null \|\| confirmando \}/,
+    'todos os botoes devem ficar desabilitados enquanto qualquer preview estiver em curso',
+  );
+});
+
 test('Edge devolve unidade legivel e snapshots de curso/professor sem telefone aberto', () => {
   const edge = codigoExecutavel(readOptional(edgePath));
   const respostaPreview = edge.match(

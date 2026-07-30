@@ -120,6 +120,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
   const [preview, setPreview] = useState<PesquisaEvasaoPreview | null>(null);
   const [modalPreviewAberto, setModalPreviewAberto] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
+  const previsualizandoRef = useRef(false);
   const confirmandoRef = useRef(false);
   const [editandoTelefone, setEditandoTelefone] = useState<number | null>(null);
   const [novoTelefone, setNovoTelefone] = useState('');
@@ -200,6 +201,8 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
   };
 
   const previsualizarPesquisa = async (evasaoId: number) => {
+    if (previsualizandoRef.current || confirmandoRef.current) return;
+
     if (modoTeste && !telefoneTeste.trim()) {
       toast.error('Informe o número para o teste');
       return;
@@ -213,6 +216,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
       }
     }
 
+    previsualizandoRef.current = true;
     setPrevisualizando(evasaoId);
     try {
       const { data, error } = await supabase.functions.invoke('enviar-pesquisa-evasao', {
@@ -245,12 +249,13 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
       );
       toast.error(mensagem);
     } finally {
+      previsualizandoRef.current = false;
       setPrevisualizando(null);
     }
   };
 
   const confirmarEnvio = async () => {
-    if (!preview || confirmando) return;
+    if (!preview || confirmandoRef.current) return;
 
     if (
       !Number.isFinite(Date.parse(preview.expira_em)) ||
@@ -280,7 +285,10 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
             ? 'Teste enviado com sucesso!'
             : 'Pesquisa enviada com sucesso!',
         );
-        if (resposta.captura_resposta_preparada === false) {
+        if (
+          resposta.modo_teste !== true &&
+          resposta.captura_resposta_preparada === false
+        ) {
           toast.warning(
             'Mensagem enviada, mas a captura da resposta não foi preparada',
             resposta.warning ||
@@ -327,6 +335,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
   };
 
   const alterarModalPreview = (aberto: boolean) => {
+    if (!aberto && confirmandoRef.current) return;
     setModalPreviewAberto(aberto);
     if (!aberto) setPreview(null);
   };
@@ -757,7 +766,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                           <Button
                             size="sm"
                             onClick={() => previsualizarPesquisa(evadido.evasao_id)}
-                            disabled={previsualizando === evadido.evasao_id}
+                            disabled={previsualizando !== null || confirmando}
                             className={`${modoTeste ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-violet-500 hover:bg-violet-600'} text-white`}
                           >
                             {previsualizando === evadido.evasao_id ? (

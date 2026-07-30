@@ -97,6 +97,11 @@ export function ModalPreviewPesquisaEvasao({
     onConfirmar();
   };
 
+  const alterarAberto = (proximoAberto: boolean) => {
+    if (!proximoAberto && confirmando) return;
+    onAbertoChange(proximoAberto);
+  };
+
   const destinatarioTipo = preview.destinatario_tipo === 'responsavel'
     ? 'Responsável'
     : preview.destinatario_tipo === 'teste'
@@ -104,11 +109,17 @@ export function ModalPreviewPesquisaEvasao({
       : 'Aluno';
 
   return (
-    <Dialog open={aberto} onOpenChange={onAbertoChange}>
+    <Dialog open={aberto} onOpenChange={alterarAberto}>
       <DialogContent
         aria-labelledby="pesquisa-evasao-preview-titulo"
         aria-describedby="pesquisa-evasao-preview-descricao"
         className="max-h-[92vh] max-w-3xl overflow-y-auto border-slate-700 bg-slate-900 p-0 shadow-2xl shadow-black/50"
+        onEscapeKeyDown={(event) => {
+          if (confirmando) event.preventDefault();
+        }}
+        onPointerDownOutside={(event) => {
+          if (confirmando) event.preventDefault();
+        }}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           tituloRef.current?.focus();
