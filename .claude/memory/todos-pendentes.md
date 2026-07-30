@@ -201,7 +201,13 @@ a nota (denominador menor → menos evasão relativa). Recalcular após a unific
 - n8n `j41tPbyjGXUQUxrN` (não versionado — não está no repo `Fluxos_n8n`)
 - `supabase/functions/sync-professores-emusys/index.ts`
 - `supabase/functions/sync-presenca-emusys/index.ts`
-- `supabase/functions/debug-webhook-emusys-observador/index.ts` (v15 já resolve por telefone)
+- `supabase/functions/debug-webhook-emusys-observador/index.ts` (v16 resolve por telefone + `ativo`;
+  desde 29/07 ele chama as MESMAS RPCs do n8n — `upsert_lead` / `registrar_experimental` — em vez de
+  reimplementá-las, então só o resolvedor de professor difere. Segue em `DRY_RUN=true`.)
+- ⚠️ **Bug independente descoberto em 29/07:** a camada 1 do match de `registrar_experimental` busca
+  `WHERE emusys_lead_id = p_emusys_lead_id` **sem filtrar unidade**. Como o id é namespaced por escola,
+  uma experimental da Barra pode casar num lead do Recreio (caso real: Vanice/7090 × "Joaquim" 8248).
+  Afeta o n8n hoje, não só o observador. A `upsert_lead` já faz certo (filtra unidade).
 
 ---
 

@@ -5,26 +5,33 @@
 // [v1] Observador temporário: recebia webhooks do Emusys (matrícula, lead ou
 // experimental) em paralelo ao n8n e SÓ gravava o payload bruto em automacao_log.
 //
-// [v2 — 2026-07-28] Passa a também PROCESSAR os eventos de lead e de aula
-// experimental, que saem do n8n. A gravação do payload bruto continua IDÊNTICA
-// e acontece primeiro: se o processamento falhar, o payload já está salvo e pode
-// ser reprocessado. Matrícula NÃO é processada aqui — segue no n8n.
+// [v2 — 2026-07-28] Passou a também PROCESSAR os eventos de lead e de aula
+// experimental, reimplementando em TypeScript o que o n8n faz. Matrícula NÃO é
+// processada aqui — segue no n8n.
 //
-// Princípios (regra do dono: "pode adicionar, remover não"):
-//   1. UPSERT parcial — só escreve colunas que vieram no payload. Campo ausente
-//      nunca vira NULL numa linha existente (ver semNulos()).
-//   2. Colunas com DEFAULT no banco (status, temperatura, tipo_aluno, quantidade,
-//      contadores, booleanos, data_contato, data_primeiro_contato) NÃO são setadas
-//      no insert: o Postgres aplica os mesmos defaults que aplica hoje pro n8n.
-//   3. Chave de lead = (unidade_id, emusys_lead_id). NUNCA emusys_lead_id sozinho:
-//      é namespaced por unidade e colide (393 ids / 789 leads afetados).
-//   4. Professor resolvido por TELEFONE + ativo=true. Nome não serve: a mesma
-//      pessoa tem nomes diferentes por unidade (Erick Osmy / Erick Cosme da Silva,
-//      CPF idêntico) e há registros mesclados inativos com nome quase igual.
-//   5. Etapa do pipeline nunca regride (ORDEM_ETAPA).
+// [v3 — 2026-07-29] A reimplementação foi DESFEITA. Dois dias de sombra mostraram
+// que ela regredia em três frentes (50% das experimentais sem lead, curso NULL em
+// toda Campo Grande, chave de upsert errada). Lidos os workflows na fonte, o n8n
+// não tem lógica própria: ele chama duas RPCs canônicas. Agora o observador chama
+// AS MESMAS RPCs, com os mesmos argumentos — a única diferença é o resolvedor de
+// professor. Assim a paridade é por construção, não por transcrição.
 //
-// OBSERVADOR_DRY_RUN=true (default) => processa mas NÃO escreve; só registra em
+//   lead        -> upsert_lead(..., 'emusys', ...)      [workflow EB0LibpOJCLhKp7M]
+//   experimental-> registrar_experimental(...)          [workflow j41tPbyjGXUQUxrN]
+//
+// O que o observador ADICIONA sobre o n8n (regra do dono: "pode adicionar, remover não"):
+//   1. Professor por TELEFONE + ativo=true. O n8n usa
+//      `professores.nome ILIKE '%'||$1||'%'` sem filtrar ativo, e cai em cadastro
+//      mesclado/inativo (Erick 54 em vez de 52).
+//   2. Campos que o n8n descarta: agente_comercial (nome_atendente),
+//      motivo_arquivamento e etapa_pipeline_id derivada do estágio do funil.
+//      Aplicados DEPOIS da RPC, como delta, sem tocar no que ela gravou.
+//   3. Etapa do pipeline nunca regride (ORDEM_ETAPA): webhook atrasado não rebaixa lead.
+//
+// OBSERVADOR_DRY_RUN=true (default) => NÃO chama as RPCs. Roda um preview só de
+// leitura, que replica o matching das RPCs para o diff em sombra, e registra em
 // automacao_log o que faria. Trocar para 'false' liga a escrita, sem redeploy.
+// ⚠️ O preview é diagnóstico; quem escreve é a RPC. Se os dois divergirem, a RPC vale.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -67,12 +74,6 @@ const ORDEM_ETAPA: Record<number, number> = {
   1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10, 11: 0,
 };
 
-const CANAL_POR_COMO_CONHECEU: Record<string, number> = {
-  'INSTAGRAM': 1, 'FACEBOOK': 2, 'GOOGLE': 3, 'SITE DA ESCOLA': 4, 'INTERNET': 4,
-  'LIGACAO': 5, 'PLACA DA FACHADA': 6, 'VISITA': 6, 'AMIGO': 7, 'INDICACAO': 7,
-  'ALUNO DA ESCOLA': 7, 'EX ALUNO': 8, 'CONVENIOS': 9, 'PROFESSOR': 12, 'OUTROS': 12,
-};
-
 // ------------------------------------------------------------- utilitários ---
 
 /** "(21) 98872-3386" -> "5521988723386" — mesmo formato que o n8n grava hoje. */
@@ -85,14 +86,14 @@ function normalizarTelefone(bruto: unknown): string | null {
   return d;
 }
 
-function normalizarTexto(s: unknown): string {
+function semAcento(s: unknown): string {
   const base = String(s ?? '').normalize('NFD');
   let out = '';
   for (const ch of base) {
     // apos NFD os diacriticos ficam fora do ASCII; manter so o basico
     if (ch.charCodeAt(0) < 128) out += ch;
   }
-  return out.trim().toUpperCase();
+  return out;
 }
 
 /** "LA Music School Campo Grande" -> "Campo Grande" */
@@ -102,28 +103,31 @@ function nomeUnidade(escolaNome: unknown): string | null {
   return s.replace(/^LA Music School\s*/i, '').trim() || null;
 }
 
-/** Campo personalizado "Como conheceu a escola" — o valor vem como string
- *  ou como objeto {id, valor}; os dois formatos aparecem em produção. */
+/** Campo personalizado "Como conheceu a escola" — o valor vem como string ou como
+ *  objeto {id, valor}; os dois formatos aparecem em produção. Devolve o texto CRU:
+ *  o de-para de canal (com acento: 'LOJA DE MÚSICA', 'RÁDIO') é da upsert_lead. */
 function comoConheceu(lead: any): string | null {
   const campos = lead?.campos_personalizados;
   if (!Array.isArray(campos)) return null;
-  const c = campos.find((x: any) => normalizarTexto(x?.nome).indexOf('CONHECEU') >= 0);
+  const c = campos.find((x: any) => semAcento(x?.nome).toUpperCase().indexOf('CONHECEU') >= 0);
   if (!c) return null;
   const v = c.valor;
   const bruto = v && typeof v === 'object' ? v.valor : v;
-  const s = normalizarTexto(bruto);
+  const s = String(bruto ?? '').trim();
   return s || null;
 }
 
-/** Remove chaves nulas — é o que garante o "nunca apaga": campo ausente
- *  no payload não entra no UPDATE. */
-function semNulos(o: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const k of Object.keys(o)) {
-    const v = o[k];
-    if (v !== null && v !== undefined && v !== '') out[k] = v;
-  }
-  return out;
+function textoOuNulo(v: unknown): string | null {
+  const s = String(v ?? '').trim();
+  return s || null;
+}
+
+/** "2026-03-27 14:25:46" -> ISO em BRT. É o que o n8n faz com
+ *  ($8::timestamp AT TIME ZONE 'America/Sao_Paulo') ao passar p_created_at. */
+function dataHoraBRT(bruto: unknown): string | null {
+  const s = String(bruto ?? '').trim();
+  if (!s) return null;
+  return s.replace(' ', 'T') + '-03:00';
 }
 
 // --------------------------------------------------------------- resolvers ---
@@ -135,20 +139,10 @@ async function resolverUnidade(sb: any, body: any): Promise<string | null> {
   return data ? data.id : null;
 }
 
-async function resolverCurso(sb: any, nomeCurso: unknown): Promise<number | null> {
-  const alvo = normalizarTexto(nomeCurso);
-  if (!alvo) return null;
-  const { data } = await sb.from('cursos').select('id, nome');
-  if (!data) return null;
-  let achado = data.find((c: any) => normalizarTexto(c.nome) === alvo);
-  if (!achado) {
-    achado = data.find((c: any) => normalizarTexto(c.nome).replace(/ IND$/, '') === alvo);
-  }
-  return achado ? achado.id : null;
-}
-
-/** Professor por TELEFONE (identidade da pessoa) + ativo. Nunca por nome solto. */
-async function resolverProfessor(sb: any, aula: any): Promise<number | null> {
+/** Professor por TELEFONE (identidade da pessoa) + ativo. Nunca por nome solto:
+ *  a mesma pessoa tem nomes diferentes por unidade e há cadastros mesclados
+ *  inativos com nome quase igual (Erick Osmy 54 x Erick Cosme da Silva 52). */
+async function resolverProfessor(sb: any, aula: any, unidadeId: string) {
   const tel = normalizarTelefone(aula?.telefone_professor);
   if (tel) {
     const { data } = await sb
@@ -157,114 +151,207 @@ async function resolverProfessor(sb: any, aula: any): Promise<number | null> {
       .eq('telefone_whatsapp', tel)
       .eq('ativo', true)
       .limit(1);
-    if (data && data.length) return data[0].id;
+    if (data && data.length) return { id: data[0].id as number, via: 'telefone' };
   }
-  // fallback: nome como aparece NA UNIDADE, que distingue os homônimos por unidade
+  // fallback: nome como aparece NA UNIDADE — distingue os homônimos entre escolas
   const nome = String(aula?.nome_professor ?? '').trim();
-  if (!nome) return null;
+  if (!nome) return { id: null, via: 'nao_resolvido' };
   const { data } = await sb
     .from('professores_unidades')
-    .select('professor_id')
+    .select('professor_id, professores!inner(ativo)')
     .eq('emusys_nome', nome)
+    .eq('unidade_id', unidadeId)
+    .eq('professores.ativo', true)
     .limit(1);
-  return data && data.length ? data[0].professor_id : null;
+  if (data && data.length) return { id: data[0].professor_id as number, via: 'emusys_nome_da_unidade' };
+  return { id: null, via: 'nao_resolvido' };
+}
+
+// ------------------------------------------------- preview (só em DRY_RUN) ---
+
+/** Replica a normalização de curso da registrar_experimental para o preview.
+ *  Na escrita real quem resolve é a RPC — isto aqui é diagnóstico. */
+function normalizarCurso(nomeCurso: unknown): string {
+  return semAcento(nomeCurso)
+    .toLowerCase()
+    .replace(/\s+para\s+instrumento$/g, '')
+    .replace(/\s+(t|ind)$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function previewCurso(sb: any, nomeCurso: unknown): Promise<number | null> {
+  const alvo = normalizarCurso(nomeCurso);
+  if (!alvo) return null;
+  const { data } = await sb.from('cursos').select('id, nome').order('id');
+  if (!data) return null;
+  const candidatos = data.filter((c: any) => normalizarCurso(c.nome) === alvo);
+  if (!candidatos.length) return null;
+  // mesmo desempate da RPC: quem NÃO termina em ' IND' primeiro, depois menor id
+  candidatos.sort((a: any, b: any) => {
+    const ai = /\sIND$/i.test(a.nome) ? 1 : 0;
+    const bi = /\sIND$/i.test(b.nome) ? 1 : 0;
+    return ai - bi || a.id - b.id;
+  });
+  return candidatos[0].id;
+}
+
+/** Espelha o match de lead da upsert_lead (source_type 'emusys'). */
+async function previewLead(sb: any, unidadeId: string, emusysLeadId: number | null, telefone: string | null) {
+  if (emusysLeadId) {
+    const { data } = await sb
+      .from('leads').select('id')
+      .eq('emusys_lead_id', emusysLeadId).eq('unidade_id', unidadeId).limit(1);
+    if (data && data.length) return { lead_id: data[0].id as number, via: 'emusys_lead_id' };
+  }
+  if (telefone) {
+    const { data } = await sb
+      .from('leads').select('id')
+      .eq('telefone', telefone).eq('unidade_id', unidadeId).eq('arquivado', false).limit(1);
+    if (data && data.length) return { lead_id: data[0].id as number, via: 'telefone' };
+  }
+  return { lead_id: null, via: 'sera_criado' };
+}
+
+/** Espelha o match de lead da registrar_experimental: emusys_lead_id -> telefone -> nome.
+ *  ⚠️ A camada 1 da RPC NÃO filtra unidade (bug conhecido — emusys_lead_id colide entre
+ *  escolas). O preview reproduz isso de propósito e sinaliza quando acontece. */
+async function previewLeadExperimental(
+  sb: any, unidadeId: string, emusysLeadId: number | null, telefone: string | null, nomeAluno: string | null,
+) {
+  if (emusysLeadId) {
+    const { data } = await sb.from('leads').select('id, unidade_id').eq('emusys_lead_id', emusysLeadId).limit(1);
+    if (data && data.length) {
+      const fora = data[0].unidade_id !== unidadeId;
+      return {
+        lead_id: data[0].id as number,
+        via: 'emusys_lead_id',
+        ...(fora ? { alerta: 'emusys_lead_id casou em OUTRA unidade (colisão entre escolas)' } : {}),
+      };
+    }
+  }
+  if (telefone && telefone.replace(/\D/g, '').length >= 10) {
+    const { data } = await sb
+      .from('leads').select('id')
+      .eq('telefone', telefone).eq('unidade_id', unidadeId).eq('arquivado', false).limit(1);
+    if (data && data.length) return { lead_id: data[0].id as number, via: 'telefone' };
+  }
+  if (nomeAluno) {
+    const { data } = await sb
+      .from('leads').select('id')
+      .ilike('nome', nomeAluno).eq('unidade_id', unidadeId).eq('arquivado', false)
+      .order('created_at', { ascending: false }).limit(1);
+    if (data && data.length) return { lead_id: data[0].id as number, via: 'nome' };
+  }
+  return { lead_id: null, via: 'nao_encontrado' };
 }
 
 // ---------------------------------------------------------------- handlers ---
+
+/** Campos que a upsert_lead não conhece. Aplicados DEPOIS dela, só onde há valor,
+ *  e a etapa só quando avança. Nunca apaga: chave ausente não entra no UPDATE. */
+async function aplicarDeltaLead(sb: any, leadId: number, lead: any) {
+  const delta: Record<string, unknown> = {};
+  const agente = textoOuNulo(lead?.nome_atendente);
+  if (agente) delta.agente_comercial = agente;
+  const motivo = textoOuNulo(lead?.arquivamento?.motivo_nome);
+  if (motivo) delta.motivo_arquivamento = motivo;
+
+  const etapaAlvo = ETAPA_POR_ESTAGIO_EMUSYS[String(lead?.estagio_funil?.id ?? '')] ?? null;
+  if (etapaAlvo !== null) {
+    const { data: atual } = await sb.from('leads').select('etapa_pipeline_id').eq('id', leadId).maybeSingle();
+    const ordemAtual = atual?.etapa_pipeline_id ? ORDEM_ETAPA[atual.etapa_pipeline_id] ?? 0 : 0;
+    if ((ORDEM_ETAPA[etapaAlvo] ?? 0) > ordemAtual) delta.etapa_pipeline_id = etapaAlvo;
+  }
+
+  if (!Object.keys(delta).length) return null;
+  await sb.from('leads').update(delta).eq('id', leadId);
+  return delta;
+}
 
 async function processarLead(sb: any, body: any, unidadeId: string) {
   const lead = body?.lead ?? {};
   const emusysLeadId = lead?.id ? Number(lead.id) : null;
   if (!emusysLeadId) return { acao: 'ignorado', motivo: 'sem lead.id' };
 
-  const estagioId = String(lead?.estagio_funil?.id ?? '');
-  const etapaAlvo = ETAPA_POR_ESTAGIO_EMUSYS[estagioId] ?? null;
-  const cc = comoConheceu(lead);
+  const telefone = normalizarTelefone(lead?.telefone);
+  // paridade com o n8n: o nó "tem numero?2" descarta lead sem telefone antes do upsert.
+  if (!telefone) return { acao: 'ignorado', motivo: 'sem telefone (mesma regra do n8n)', emusys_lead_id: emusysLeadId };
 
-  const campos = semNulos({
-    nome: String(lead?.nome_aluno ?? '').trim(),
-    telefone: normalizarTelefone(lead?.telefone),
-    email: String(lead?.email ?? '').trim(),
-    curso_interesse_id: await resolverCurso(sb, lead?.instrumento),
-    canal_origem_id: cc ? CANAL_POR_COMO_CONHECEU[cc] ?? null : null,
-    motivo_arquivamento: String(lead?.arquivamento?.motivo_nome ?? '').trim(),
-    agente_comercial: String(lead?.nome_atendente ?? '').trim(),
-  });
-
-  const { data: existente } = await sb
-    .from('leads')
-    .select('id, etapa_pipeline_id')
-    .eq('unidade_id', unidadeId)
-    .eq('emusys_lead_id', emusysLeadId)
-    .maybeSingle();
-
-  if (etapaAlvo !== null) {
-    const atual = existente ? existente.etapa_pipeline_id : null;
-    const ordemAtual = atual ? ORDEM_ETAPA[atual] ?? 0 : 0;
-    if ((ORDEM_ETAPA[etapaAlvo] ?? 0) > ordemAtual) campos.etapa_pipeline_id = etapaAlvo;
-  }
+  const args = {
+    p_nome: textoOuNulo(lead?.nome_aluno),
+    p_telefone: telefone,
+    p_email: textoOuNulo(lead?.email),
+    p_unidade_id: unidadeId,
+    p_curso: textoOuNulo(lead?.instrumento),
+    p_canal: comoConheceu(lead),
+    p_source_id: emusysLeadId,
+    p_source_type: 'emusys',
+    p_arquivar: false,
+    p_data_contato: String(lead?.data_hora_criacao ?? '').trim().substring(0, 10) || null,
+  };
 
   if (DRY_RUN) {
-    return { acao: existente ? 'update(dry)' : 'insert(dry)', lead_id: existente ? existente.id : null, campos };
+    const achado = await previewLead(sb, unidadeId, emusysLeadId, telefone);
+    return { acao: `upsert_lead(dry) -> ${achado.lead_id ? 'update' : 'insert'}`, match: achado, args };
   }
 
-  if (existente) {
-    await sb.from('leads').update({ ...campos, updated_at: new Date().toISOString() }).eq('id', existente.id);
-    return { acao: 'update', lead_id: existente.id, campos };
-  }
+  const { data, error } = await sb.rpc('upsert_lead', args);
+  if (error) return { acao: 'erro_rpc', rpc: 'upsert_lead', erro: error.message, args };
 
-  const { data: novo } = await sb
-    .from('leads')
-    .insert({ ...campos, unidade_id: unidadeId, emusys_lead_id: emusysLeadId })
-    .select('id')
-    .maybeSingle();
-  return { acao: 'insert', lead_id: novo ? novo.id : null, campos };
+  const leadId = data?.lead_id ?? null;
+  const delta = leadId ? await aplicarDeltaLead(sb, leadId, lead) : null;
+  return { acao: 'upsert_lead', resultado: data, delta_observador: delta, args };
 }
 
 async function processarExperimental(sb: any, body: any, unidadeId: string, evento: string) {
   const aula = body?.aula ?? {};
+  const cancelamento = evento === 'aula_experimental_cancelada';
+  const telefone = normalizarTelefone(aula?.telefone);
+  const nomeAluno = textoOuNulo(aula?.nome_aluno);
   const emusysLeadId = aula?.lead_id ? Number(aula.lead_id) : null;
-  if (!emusysLeadId) return { acao: 'ignorado', motivo: 'sem aula.lead_id' };
 
-  const { data: lead } = await sb
-    .from('leads')
-    .select('id')
-    .eq('unidade_id', unidadeId)
-    .eq('emusys_lead_id', emusysLeadId)
-    .maybeSingle();
-  if (!lead) return { acao: 'ignorado', motivo: 'lead nao encontrado na unidade', emusys_lead_id: emusysLeadId };
-
-  const professorId = await resolverProfessor(sb, aula);
-  const status = evento === 'aula_experimental_cancelada' ? 'cancelada' : 'experimental_agendada';
-  const dataExp = String(aula?.data ?? '').trim();
-
-  const campos = semNulos({
-    lead_id: lead.id,
-    unidade_id: unidadeId,
-    nome_aluno: String(aula?.nome_aluno ?? '').trim(),
-    data_experimental: dataExp,
-    horario_experimental: String(aula?.horario ?? '').trim(),
-    professor_experimental_id: professorId,
-    curso_interesse_id: await resolverCurso(sb, aula?.curso),
-    status,
-  });
-
-  if (DRY_RUN) return { acao: 'upsert(dry)', campos };
-  if (!dataExp) return { acao: 'ignorado', motivo: 'sem data da aula' };
-
-  const { data: ja } = await sb
-    .from('lead_experimentais')
-    .select('id')
-    .eq('lead_id', lead.id)
-    .eq('data_experimental', dataExp)
-    .maybeSingle();
-
-  if (ja) {
-    await sb.from('lead_experimentais').update(campos).eq('id', ja.id);
-    return { acao: 'update', id: ja.id, campos };
+  if (!telefone && !emusysLeadId && !nomeAluno) {
+    return { acao: 'ignorado', motivo: 'sem telefone, lead_id e nome — nada para casar' };
   }
-  const { data: novo } = await sb.from('lead_experimentais').insert(campos).select('id').maybeSingle();
-  return { acao: 'insert', id: novo ? novo.id : null, campos };
+
+  const professor = cancelamento
+    ? { id: null, via: 'nao_se_aplica' }
+    : await resolverProfessor(sb, aula, unidadeId);
+
+  // Mesmos argumentos do nó "Agendar Experimental"/"Cancelar Experimental" do n8n.
+  const args: Record<string, unknown> = {
+    p_telefone: telefone,
+    p_nome_aluno: nomeAluno,
+    p_unidade_id: unidadeId,
+    p_status: cancelamento ? 'cancelada' : 'experimental_agendada',
+    p_etapa: cancelamento ? 1 : 5,
+    p_data_experimental: cancelamento ? null : textoOuNulo(aula?.data),
+    p_horario_experimental: cancelamento ? null : textoOuNulo(aula?.horario),
+    p_professor_id: professor.id,
+    p_emusys_lead_id: emusysLeadId,
+    p_curso: cancelamento ? null : textoOuNulo(aula?.curso),
+    p_emusys_aula_id: body?.id != null ? Number(body.id) : null,
+  };
+  const criadoEm = dataHoraBRT(body?.data_hora_criacao);
+  // omitir p_created_at deixa a RPC aplicar o default now(), como o n8n faz com ''
+  if (criadoEm) args.p_created_at = criadoEm;
+
+  if (DRY_RUN) {
+    const achado = await previewLeadExperimental(sb, unidadeId, emusysLeadId, telefone, nomeAluno);
+    const cursoId = cancelamento ? null : await previewCurso(sb, aula?.curso);
+    return {
+      acao: `registrar_experimental(dry) -> ${achado.lead_id ? 'registra' : 'lead_not_found'}`,
+      match: achado,
+      professor_via: professor.via,
+      curso_id_previsto: cursoId,
+      args,
+    };
+  }
+
+  const { data, error } = await sb.rpc('registrar_experimental', args);
+  if (error) return { acao: 'erro_rpc', rpc: 'registrar_experimental', erro: error.message, args };
+  return { acao: 'registrar_experimental', resultado: data, professor_via: professor.via, args };
 }
 
 // -------------------------------------------------------------------- main ---

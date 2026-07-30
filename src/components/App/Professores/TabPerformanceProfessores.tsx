@@ -168,7 +168,12 @@ function HealthScoreV3MetricCell({
           <div className="space-y-1 text-slate-300">
             <p>Estado: <strong>{stateLabel || 'publicavel'}</strong></p>
             {metric?.amostra !== null && metric?.amostra !== undefined && <p>Amostra: <strong>{metric.amostra}</strong></p>}
-            {metric?.numerador !== null && metric?.denominador !== null && (
+            {/* `metric` é null por desenho quando não há snapshot (ver o fallback com
+                metric: null acima). Checar só `metric?.numerador !== null` não basta: o
+                optional chaining devolve `undefined`, que passa no `!== null`, a guarda
+                aprova e o `metric.numerador` seguinte derruba a página inteira
+                ("Cannot read properties of null"). Testar `metric` primeiro resolve. */}
+            {metric && metric.numerador !== null && metric.denominador !== null && (
               <p>Base: <strong>{metric.numerador}/{metric.denominador}</strong></p>
             )}
             {metric?.fonte && <p className="break-all">Fonte: <strong>{metric.fonte}</strong></p>}

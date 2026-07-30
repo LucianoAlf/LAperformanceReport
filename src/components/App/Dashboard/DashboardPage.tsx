@@ -29,6 +29,7 @@ import { FunnelChart } from '@/components/ui/FunnelChart';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { TipoCompetencia, CompetenciaFiltro, CompetenciaRange } from '@/hooks/useCompetenciaFiltro';
 import { useMetasKPI } from '@/hooks/useMetasKPI';
+import { useAuth } from '@/contexts/AuthContext';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModalDetalheKPI, BadgeUnidade, BadgeTipo, ValorParcela, TextoCurso } from './ModalDetalheKPI';
 import { fetchKPIsAlunosCanonicos, type FonteKPIAlunos } from '@/hooks/useKPIsAlunosCanonicos';
@@ -160,6 +161,7 @@ export function DashboardPage() {
 
   // Pegar filtros do contexto
   const context = useOutletContext<OutletContextType>();
+  const { isAdmin, unidadeId } = useAuth();
   const filtroAtivo = context?.filtroAtivo ?? null;
   const competencia = context?.competencia;
   const ano = competencia?.filtro?.ano || new Date().getFullYear();
@@ -168,7 +170,16 @@ export function DashboardPage() {
   const mesInicio = competencia?.range?.mesInicio || competencia?.filtro?.mes || new Date().getMonth() + 1;
   const mesFim = competencia?.range?.mesFim || mesInicio;
   const mes = mesInicio; // Para compatibilidade com código existente
-  const unidade = filtroAtivo || 'todos';
+  // Usuário de unidade NUNCA cai em 'todos'. `filtroAtivo` é null em duas situações
+  // distintas — "admin escolheu consolidado" e "o auth ainda não carregou quem é o
+  // usuário" — e o `|| 'todos'` antigo tratava as duas como consolidado. Para um perfil
+  // de unidade isso pede a rede inteira em nome de quem só pode ver a própria unidade, e
+  // os guards das RPCs recusam com 403 "unidade fora do escopo do usuario" (atinge
+  // get_health_score_professor_v3_performance e get_conciliacao_experimentais_v2).
+  // Mesmo padrão já usado em AdministrativoPage.tsx.
+  const unidadeResolvida = isAdmin ? (filtroAtivo ?? 'todos') : unidadeId;
+  const unidadePronta = unidadeResolvida !== null;
+  const unidade = unidadeResolvida ?? 'todos';
   const labelPeriodo = { todos: 'Todos', diario: 'Dia', mensal: 'Mês', trimestral: 'Trim', semestral: 'Sem', anual: 'Ano', personalizado: 'Período' }[competencia?.filtro?.tipo || 'mensal'] || 'Mês';
   
   // Buscar metas do período
@@ -193,6 +204,7 @@ export function DashboardPage() {
     ano,
     mesInicio,
     mesFim,
+    enabled: unidadePronta,
   });
   const healthScoreV3Periodicidade = competencia?.filtro?.tipo === 'trimestral'
     ? 'ciclo'
@@ -200,8 +212,9 @@ export function DashboardPage() {
   const healthScoreV3ReferenceMonth = healthScoreV3Periodicidade === 'ciclo'
     ? Math.min(12, mesInicio + 1)
     : mesInicio;
-  const healthScoreV3Enabled = competencia?.filtro?.tipo === 'mensal'
-    || competencia?.filtro?.tipo === 'trimestral';
+  const healthScoreV3Enabled = unidadePronta
+    && (competencia?.filtro?.tipo === 'mensal'
+      || competencia?.filtro?.tipo === 'trimestral');
   const healthScoreV3Period = useMemo(
     () => getHealthScoreV3Period(ano, healthScoreV3ReferenceMonth, healthScoreV3Periodicidade),
     [ano, healthScoreV3Periodicidade, healthScoreV3ReferenceMonth],
@@ -397,6 +410,11 @@ export function DashboardPage() {
   };
 
   useEffect(() => {
+    // Sem unidade resolvida não há o que buscar: disparar aqui pediria a rede inteira em
+    // nome de um usuário de unidade e voltaria 403. O efeito roda de novo quando o auth
+    // resolve, porque `unidade` está nas dependências.
+    if (!unidadePronta) return;
+
     async function fetchDados() {
       try {
         const hoje = new Date();
@@ -712,7 +730,7 @@ export function DashboardPage() {
     }
 
     fetchDados();
-  }, [ano, mesInicio, mesFim, unidade]);
+  }, [ano, mesInicio, mesFim, unidade, unidadePronta]);
 
   if (loading) {
     return (
