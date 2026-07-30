@@ -43,33 +43,102 @@ const catalogPermissions = [
   'sucesso_aluno.evasao.relatorios',
 ];
 
-const rolloutIdentities = [
-  [29, 'jessyca@lamusic.com.br'],
-  [30, 'fabi@gmail.com'],
-];
-
-const rolloutUnitIds = [
-  '368d47f5-2d88-4475-bc14-ba084a9a348e',
-  '2ec861f6-023f-4d7b-9927-3960ad8c2a92',
-  '95553e96-971b-4590-a6eb-0201d013c14d',
+const approvedLegacyTestIds = [
+  '5edc499f-4a91-4ebb-a291-0f052bc16351',
+  '416624a9-2d74-4c26-a083-c6aadba21bf2',
+  '718fa72e-ca51-4995-960f-575bb00c2b0e',
+  '1b918f39-c528-431d-9d7d-3d9160982e6a',
+  '61ebbbd0-a8e8-4e77-99ee-d4ff9bcc6f03',
+  '147a6632-fccb-4089-9ae0-13db822d7bf9',
 ];
 
 const escapeRegex = (value) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const normalizeSql = (value) =>
+function maskSqlCommentsAndStrings(value) {
+  const chars = [...value];
+
+  for (let index = 0; index < chars.length;) {
+    if (chars[index] === '-' && chars[index + 1] === '-') {
+      chars[index++] = ' ';
+      chars[index++] = ' ';
+      while (index < chars.length && chars[index] !== '\n') {
+        chars[index++] = ' ';
+      }
+      continue;
+    }
+
+    if (chars[index] === '/' && chars[index + 1] === '*') {
+      chars[index++] = ' ';
+      chars[index++] = ' ';
+      while (
+        index < chars.length &&
+        !(chars[index] === '*' && chars[index + 1] === '/')
+      ) {
+        if (chars[index] !== '\n') chars[index] = ' ';
+        index += 1;
+      }
+      if (index < chars.length) {
+        chars[index++] = ' ';
+        chars[index++] = ' ';
+      }
+      continue;
+    }
+
+    if (chars[index] === "'") {
+      chars[index++] = ' ';
+      while (index < chars.length) {
+        if (chars[index] === "'" && chars[index + 1] === "'") {
+          chars[index++] = ' ';
+          chars[index++] = ' ';
+          continue;
+        }
+        if (chars[index] === "'") {
+          chars[index++] = ' ';
+          break;
+        }
+        if (chars[index] !== '\n') chars[index] = ' ';
+        index += 1;
+      }
+      continue;
+    }
+
+    index += 1;
+  }
+
+  return chars.join('');
+}
+
+const stripSqlComments = (value) =>
   value
     .replace(/--.*$/gm, ' ')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ');
+
+const normalizeSql = (value) =>
+  stripSqlComments(value)
     .replace(/\s+/g, ' ')
     .replace(/\s*([(),])\s*/g, '$1')
     .trim()
     .toLowerCase();
 
+const statementRecords = (value) => {
+  const result = [];
+  let start = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] !== ';') continue;
+    const text = value.slice(start, index).trim();
+    if (text) result.push({ text, start });
+    start = index + 1;
+  }
+
+  const tail = value.slice(start).trim();
+  if (tail) result.push({ text: tail, start });
+  return result;
+};
+
 const statements = (value) =>
-  value
-    .split(';')
-    .map((statement) => statement.trim())
-    .filter(Boolean);
+  statementRecords(value).map(({ text }) => text);
 
 const normalizedType = (value) =>
   value
@@ -80,13 +149,14 @@ const normalizedType = (value) =>
     .replace(/\s+/g, ' ')
     .toLowerCase();
 
-function getFunctionDefinition(name, expectedTypes) {
+function getFunctionParts(name, expectedTypes, source = sql) {
+  const maskedSql = maskSqlCommentsAndStrings(source);
   const matcher = new RegExp(
     `create\\s+or\\s+replace\\s+function\\s+public\\.${escapeRegex(name)}\\s*\\(([^)]*)\\)`,
     'gi',
   );
 
-  for (const match of sql.matchAll(matcher)) {
+  for (const match of maskedSql.matchAll(matcher)) {
     const actualTypes = match[1]
       .split(',')
       .map(normalizedType);
@@ -95,13 +165,36 @@ function getFunctionDefinition(name, expectedTypes) {
       actualTypes.length === expectedTypes.length &&
       actualTypes.every((type, index) => type === expectedTypes[index])
     ) {
-      const tail = sql.slice(match.index);
-      const nextDefinition = tail
-        .slice(match[0].length)
-        .search(/\bcreate\s+or\s+replace\s+function\s+public\./i);
-      return nextDefinition === -1
-        ? tail
-        : tail.slice(0, match[0].length + nextDefinition);
+      const headerTail = maskedSql.slice(match.index + match[0].length);
+      const opening = /\bas\s+(\$[a-z0-9_]*\$)/i.exec(headerTail);
+      assert.ok(opening, `delimitador AS ausente em ${name}`);
+
+      const openingTagOffset =
+        match.index +
+        match[0].length +
+        opening.index +
+        opening[0].lastIndexOf(opening[1]);
+      const tag = opening[1];
+      const bodyStart = openingTagOffset + tag.length;
+      const closingTagOffset = source.indexOf(tag, bodyStart);
+      assert.notEqual(
+        closingTagOffset,
+        -1,
+        `delimitador final ${tag} ausente em ${name}`,
+      );
+      const semicolonOffset =
+        source.indexOf(';', closingTagOffset + tag.length);
+      assert.notEqual(
+        semicolonOffset,
+        -1,
+        `terminador da funcao ${name} ausente`,
+      );
+
+      return {
+        header: source.slice(match.index, openingTagOffset),
+        body: source.slice(bodyStart, closingTagOffset),
+        definition: source.slice(match.index, semicolonOffset + 1),
+      };
     }
   }
 
@@ -109,6 +202,9 @@ function getFunctionDefinition(name, expectedTypes) {
     `funcao ${name}(${expectedTypes.join(', ')}) ausente na migration`,
   );
 }
+
+const getFunctionDefinition = (name, expectedTypes) =>
+  getFunctionParts(name, expectedTypes).definition;
 
 function getCreateTableDefinition(tableName) {
   const match = sql.match(
@@ -122,10 +218,135 @@ function getCreateTableDefinition(tableName) {
   return match[1];
 }
 
-function assertExactReturns(definition, expectedReturns) {
+function getReturnsClause(header) {
+  const maskedHeader = maskSqlCommentsAndStrings(header);
+  const match = maskedHeader.match(
+    /\breturns\s+(table\s*\([\s\S]*?\)|uuid|boolean)\s*(?=\blanguage\b|\bsecurity\b|\bset\b|$)/i,
+  );
+  assert.ok(match, 'clausula RETURNS real ausente no cabecalho da funcao');
+  return `returns ${match[1]}`;
+}
+
+function assertExactReturns(header, expectedReturns) {
+  assert.equal(
+    normalizeSql(getReturnsClause(header)),
+    normalizeSql(expectedReturns),
+    'RETURNS da assinatura foi alterado',
+  );
+}
+
+function assertNoAuthorizationBypass(value, context) {
+  const code = stripSqlComments(value);
+  assert.doesNotMatch(
+    code,
+    /\bor\s*\(*\s*(?:true\b|1\s*=\s*1\b)/i,
+    `${context} aceita OR TRUE/1=1`,
+  );
+  assert.doesNotMatch(
+    code,
+    /\b(?:[a-z_][a-z0-9_]*\.)?perfil\s*(?:=\s*['"]admin['"]|in\s*\([^)]*['"]admin['"]|=\s*any\s*\([^)]*['"]admin['"])/i,
+    `${context} aceita bypass admin por igualdade/IN/ANY`,
+  );
+  assert.doesNotMatch(
+    code,
+    /['"]admin['"]\s*=\s*any\s*\(/i,
+    `${context} aceita bypass admin por ANY invertido`,
+  );
+}
+
+const privilegeUniverse = {
+  table: ['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger'],
+  sequence: ['usage', 'select', 'update'],
+  function: ['execute'],
+};
+
+function parsePrivilegeStatement(statement) {
+  const match = statement.text.match(
+    /^\s*(grant|revoke)\s+([\s\S]+?)\s+on\s+(?:(table|sequence|function)\s+)?([\s\S]+?)\s+(to|from)\s+([\s\S]+)$/i,
+  );
+  if (!match) return null;
+
+  const kind = (match[3] ?? 'table').toLowerCase();
+  if (!(kind in privilegeUniverse)) return null;
+
+  return {
+    action: match[1].toLowerCase(),
+    privileges: match[2]
+      .split(',')
+      .map((privilege) => privilege.trim().toLowerCase())
+      .map((privilege) =>
+        privilege === 'all privileges' ? 'all' : privilege),
+    kind,
+    objects: match[4],
+    roles: match[6]
+      .replace(/\bwith\s+grant\s+option\b/gi, '')
+      .replace(/\b(?:cascade|restrict)\b/gi, '')
+      .split(',')
+      .map((role) => role.trim().replace(/^"|"$/g, '').toLowerCase()),
+    start: statement.start,
+    text: statement.text,
+  };
+}
+
+const privilegeEvents = statementRecords(sql)
+  .map(parsePrivilegeStatement)
+  .filter(Boolean);
+
+function eventTargets(event, kind, objectName, signature = '') {
+  if (event.kind !== kind) return false;
+  if (kind === 'function') {
+    return normalizeSql(event.objects).includes(
+      normalizeSql(`public.${objectName}(${signature})`),
+    );
+  }
+
+  return new RegExp(
+    `(?:^|,)\\s*(?:only\\s+)?public\\.${escapeRegex(objectName)}(?:\\s|,|$)`,
+    'i',
+  ).test(event.objects);
+}
+
+function finalPrivilegeState(kind, objectName, role, signature = '') {
+  const state = new Set();
+  const universe = privilegeUniverse[kind];
+  const events = privilegeEvents
+    .filter(
+      (event) =>
+        eventTargets(event, kind, objectName, signature) &&
+        event.roles.includes(role.toLowerCase()),
+    )
+    .sort((left, right) => left.start - right.start);
+
+  for (const event of events) {
+    const privileges = event.privileges.includes('all')
+      ? universe
+      : event.privileges;
+    for (const privilege of privileges) {
+      if (event.action === 'grant') state.add(privilege);
+      else state.delete(privilege);
+    }
+  }
+
+  return { state, events };
+}
+
+function assertFinalPrivileges(
+  kind,
+  objectName,
+  role,
+  expected,
+  signature = '',
+) {
+  const { state, events } =
+    finalPrivilegeState(kind, objectName, role, signature);
   assert.ok(
-    normalizeSql(definition).includes(normalizeSql(expectedReturns)),
-    `RETURNS foi alterado: esperado ${normalizeSql(expectedReturns)}`,
+    events.length > 0,
+    `nenhum GRANT/REVOKE de ${kind} ${objectName} para role ${role}`,
+  );
+  assert.deepEqual(
+    [...state].sort(),
+    [...expected].sort(),
+    `estado final incorreto em ${kind} ${objectName} para role ${role}`,
   );
 }
 
@@ -137,46 +358,6 @@ function assertRlsEnabled(tableName) {
       'i',
     ),
   );
-}
-
-function findPrivilegeStatements(tableName, roleName) {
-  const tablePattern = new RegExp(
-    `\\bpublic\\.${escapeRegex(tableName)}\\b`,
-    'i',
-  );
-  const rolePattern = new RegExp(`\\b${escapeRegex(roleName)}\\b`, 'i');
-
-  return statements(sql).filter(
-    (statement) =>
-      /\b(?:grant|revoke)\b/i.test(statement) &&
-      tablePattern.test(statement) &&
-      rolePattern.test(statement),
-  );
-}
-
-function assertAllRevoked(tableName) {
-  const revokes = statements(sql).filter(
-    (statement) =>
-      /\brevoke\s+all\b/i.test(statement) &&
-      new RegExp(`\\bpublic\\.${escapeRegex(tableName)}\\b`, 'i').test(statement),
-  );
-
-  assert.ok(revokes.length > 0, `REVOKE ALL ausente em ${tableName}`);
-  const revokeSql = revokes.join('\n');
-
-  for (const role of [
-    'public',
-    'anon',
-    'authenticated',
-    'mila_acesso_restrito',
-    'sol_acesso_restrito',
-  ]) {
-    assert.match(
-      revokeSql,
-      new RegExp(`\\b${escapeRegex(role)}\\b`, 'i'),
-      `${tableName} nao revoga ${role}`,
-    );
-  }
 }
 
 function assertUniqueHeaderColumn(columnName) {
@@ -213,6 +394,25 @@ test('migration da fundacao segura existe antes de validar seus contratos', () =
   );
 });
 
+test('parser de RETURNS ignora assinaturas em comentarios e strings', () => {
+  const source = `
+    -- create or replace function public.exemplo(p_id integer)
+    -- returns uuid language sql as $$ select null::uuid $$;
+    select 'create or replace function public.exemplo(p_id integer) returns uuid';
+    create or replace function public.exemplo(p_id integer)
+    returns boolean
+    language plpgsql
+    as $body$
+    begin
+      return false;
+    end;
+    $body$;
+  `;
+  const parts = getFunctionParts('exemplo', ['integer'], source);
+  assertExactReturns(parts.header, 'RETURNS boolean');
+  assert.match(parts.body, /\breturn\s+false\b/i);
+});
+
 const contractTest = (name, callback) =>
   test(name, { skip: !sql }, callback);
 
@@ -225,11 +425,15 @@ contractTest('remove policy ALL aberta de pesquisa_evasao', () => {
 });
 
 contractTest('RLS usa permissao estrita e unidade da propria linha', () => {
-  const headerPolicies = statements(sql).filter(
+  const privatePolicies = statements(sql).filter(
     (statement) =>
       /\bcreate\s+policy\b/i.test(statement) &&
-      /\bon\s+public\.pesquisa_evasao\b/i.test(statement),
+      privateTables.some((tableName) =>
+        new RegExp(`\\bon\\s+public\\.${escapeRegex(tableName)}\\b`, 'i')
+          .test(statement)),
   );
+  const headerPolicies = privatePolicies.filter((statement) =>
+    /\bon\s+public\.pesquisa_evasao\b/i.test(statement));
   const governedPolicy = headerPolicies.find(
     (statement) =>
       /sucesso_aluno\.evasao\.ver/i.test(statement) &&
@@ -241,10 +445,14 @@ contractTest('RLS usa permissao estrita e unidade da propria linha', () => {
     governedPolicy,
     'policy de pesquisa_evasao nao usa ver + helper estrito + unidade da linha',
   );
-  assert.doesNotMatch(
-    headerPolicies.join('\n'),
-    /\busing\s*\(\s*true\s*\)/i,
-  );
+  for (const policy of privatePolicies) {
+    assertNoAuthorizationBypass(policy, 'policy privada');
+    assert.doesNotMatch(policy, /\busing\s*\(\s*true\s*\)/i);
+    assert.doesNotMatch(
+      policy,
+      /(?<!estrita)\bfn_usuario_atual_tem_permissao\s*\(/i,
+    );
+  }
 });
 
 contractTest('helper estrito ignora admin legado e exige vinculo granular', () => {
@@ -266,13 +474,22 @@ contractTest('helper estrito ignora admin legado e exige vinculo granular', () =
     explicitHelper,
     /\b(?:up|usuario_perfis)\.unidade_id\s*=\s*p_unidade_id\b/i,
   );
+  assert.match(
+    explicitHelper,
+    /\b(?:up|usuario_perfis)\.ativo\s*=\s*true\b/i,
+    'helper estrito exige vinculo ativo na unidade exata',
+  );
   assert.match(currentUserHelper, /\bauth\.uid\s*\(\s*\)/i);
   assert.match(currentUserHelper, /\busuario_tem_permissao_estrita\s*\(/i);
-  assert.doesNotMatch(helpers, /\bperfil\s*=\s*['"]admin['"]/i);
   assert.doesNotMatch(helpers, /\busuarios?\.unidade_id\s+is\s+null\b/i);
   assert.doesNotMatch(
     helpers,
     /(?<!estrita)\bfn_usuario_atual_tem_permissao\s*\(/i,
+  );
+  assertNoAuthorizationBypass(explicitHelper, 'usuario_tem_permissao_estrita');
+  assertNoAuthorizationBypass(
+    currentUserHelper,
+    'fn_usuario_atual_tem_permissao_estrita',
   );
 });
 
@@ -308,58 +525,62 @@ contractTest('catalogo e perfil dedicado ligam somente cinco permissoes', () => 
   );
 });
 
-contractTest('rollout fica fora da migration e usa identidades estaveis exatas', () => {
-  assert.equal(
-    rolloutIdentities.map(([id, email]) => `${id}:${email}`).join('|'),
-    '29:jessyca@lamusic.com.br|30:fabi@gmail.com',
+contractTest('rollout nominal fica integralmente fora da migration', () => {
+  // A verificacao executavel do runbook, terceiro usuario e escopos e Task 7.
+  const rolloutDml = statements(sql).filter(
+    (statement) =>
+      /^\s*(?:insert|update|merge)\b/i.test(statement) &&
+      /\bpublic\.(?:usuarios|usuario_perfis)\b/i.test(statement),
   );
-  assert.equal(
-    rolloutUnitIds.join('|'),
-    [
-      '368d47f5-2d88-4475-bc14-ba084a9a348e',
-      '2ec861f6-023f-4d7b-9927-3960ad8c2a92',
-      '95553e96-971b-4590-a6eb-0201d013c14d',
-    ].join('|'),
-  );
+
   assert.doesNotMatch(
     sql,
-    /\binsert\s+into\s+public\.usuario_perfis\b/i,
-    'atribuicao nominal pertence ao runbook futuro, nao a migration',
+    /\b(?:insert\s+into|update|merge\s+into)\s+public\.usuario_perfis\b/i,
+    'vinculos nominais pertencem ao runbook da Task 7',
   );
   assert.doesNotMatch(sql, /\b(?:nome|email)\s+(?:i?like)\b/i);
   assert.doesNotMatch(sql, /\blower\s*\(\s*(?:[a-z_]+\.)?nome\s*\)/i);
   assert.doesNotMatch(sql, /jessyca@lamusic\.com\.br|fabi@gmail\.com/i);
+  assert.doesNotMatch(
+    sql,
+    /368d47f5-2d88-4475-bc14-ba084a9a348e|2ec861f6-023f-4d7b-9927-3960ad8c2a92|95553e96-971b-4590-a6eb-0201d013c14d/i,
+  );
+  assert.doesNotMatch(
+    rolloutDml.join('\n'),
+    /(?:\bid\s*(?:=|in\s*\()\s*(?:29|30)\b|\b(?:29|30)\b\s*,?\s*['"])/i,
+    'IDs 29/30 so podem aparecer no runbook da Task 7',
+  );
 });
 
-contractTest('tabelas privadas nascem com RLS e revogacao ampla', () => {
+contractTest('tabelas privadas terminam sem privilegio de roles proibidas', () => {
   for (const tableName of privateTables) {
     assertRlsEnabled(tableName);
-    assertAllRevoked(tableName);
+    for (const role of [
+      'public',
+      'anon',
+      'mila_acesso_restrito',
+      'sol_acesso_restrito',
+    ]) {
+      assertFinalPrivileges('table', tableName, role, []);
+    }
   }
 });
 
-contractTest('grants autenticados sao minimos nas tabelas privadas', () => {
+contractTest('estado final de grants e service-only e minimo', () => {
   for (const tableName of ['pesquisa_evasao', ...conversationTables]) {
-    const grants = findPrivilegeStatements(tableName, 'authenticated')
-      .filter((statement) => /\bgrant\b/i.test(statement));
-
-    assert.ok(grants.length > 0, `GRANT SELECT ausente em ${tableName}`);
-    for (const grant of grants) {
-      assert.match(grant, /\bgrant\s+select\b/i);
-      assert.doesNotMatch(grant, /\b(?:insert|update|delete|all)\b/i);
-    }
+    assertFinalPrivileges('table', tableName, 'authenticated', ['select']);
   }
 
   for (const tableName of serviceOnlyTables) {
-    const authenticatedGrants =
-      findPrivilegeStatements(tableName, 'authenticated')
-        .filter((statement) => /\bgrant\b/i.test(statement));
-    assert.equal(
-      authenticatedGrants.length,
-      0,
-      `${tableName} deve permanecer service-only`,
-    );
-
+    for (const role of [
+      'public',
+      'anon',
+      'authenticated',
+      'mila_acesso_restrito',
+      'sol_acesso_restrito',
+    ]) {
+      assertFinalPrivileges('table', tableName, role, []);
+    }
     const authenticatedPolicies = statements(sql).filter(
       (statement) =>
         /\bcreate\s+policy\b/i.test(statement) &&
@@ -373,6 +594,56 @@ contractTest('grants autenticados sao minimos nas tabelas privadas', () => {
       `${tableName} nao pode ter policy para authenticated`,
     );
   }
+
+  const sequenceNames = new Set([
+    ...[...sql.matchAll(/\bcreate\s+sequence\s+public\.([a-z0-9_]+)/gi)]
+      .map((match) => match[1]),
+    ...[...sql.matchAll(/\bnextval\s*\(\s*['"]public\.([a-z0-9_]+)['"]/gi)]
+      .map((match) => match[1]),
+  ]);
+  for (const tableName of privateTables) {
+    const definitionMatch = sql.match(
+      new RegExp(
+        `create\\s+table(?:\\s+if\\s+not\\s+exists)?\\s+public\\.${escapeRegex(tableName)}\\s*\\(([\\s\\S]*?)[\\r\\n]\\s*\\)\\s*;`,
+        'i',
+      ),
+    );
+    if (
+      definitionMatch &&
+      /\b(?:smallserial|serial|bigserial)\b|\bgenerated\b[\s\S]*\bas\s+identity\b/i
+        .test(definitionMatch[1])
+    ) {
+      sequenceNames.add(`${tableName}_id_seq`);
+    }
+  }
+  for (const sequenceName of sequenceNames) {
+    for (const role of [
+      'public',
+      'anon',
+      'authenticated',
+      'mila_acesso_restrito',
+      'sol_acesso_restrito',
+    ]) {
+      assertFinalPrivileges('sequence', sequenceName, role, []);
+    }
+  }
+  for (const event of privilegeEvents.filter(
+    (candidate) => candidate.kind === 'sequence' &&
+      candidate.action === 'grant',
+  )) {
+    assert.equal(
+      event.roles.some((role) =>
+        [
+          'public',
+          'anon',
+          'authenticated',
+          'mila_acesso_restrito',
+          'sol_acesso_restrito',
+        ].includes(role)),
+      false,
+      'sequence privada recebeu regrant para role proibida',
+    );
+  }
 });
 
 contractTest('assinatura ativa usa indice unico parcial', () => {
@@ -380,11 +651,24 @@ contractTest('assinatura ativa usa indice unico parcial', () => {
     getCreateTableDefinition('pesquisa_evasao_assinaturas');
   assert.doesNotMatch(
     signatureDefinition,
-    /\bunique\s*\(\s*usuario_id\s*,\s*ativo\s*\)/i,
+    /\bunique\s*\(\s*usuario_id(?:\s*,\s*ativo)?\s*\)|\busuario_id\b[^,\n]*\bunique\b/i,
+    'usuario_id nao pode ter UNIQUE global ou UNIQUE(usuario_id, ativo)',
+  );
+  const signatureIndexes = statements(sql).filter(
+    (statement) =>
+      /\bcreate\s+unique\s+index\b/i.test(statement) &&
+      /\bon\s+public\.pesquisa_evasao_assinaturas\s*\(\s*usuario_id\s*\)/i
+        .test(statement),
+  );
+  assert.equal(
+    signatureIndexes.length,
+    1,
+    'assinatura precisa de um unico indice em usuario_id',
   );
   assert.match(
-    sql,
-    /create\s+unique\s+index[\s\S]*?on\s+public\.pesquisa_evasao_assinaturas\s*\(\s*usuario_id\s*\)[\s\S]*?where\s+(?:\(\s*)?ativo(?:\s*=\s*true)?(?:\s*\))?\s*;/i,
+    signatureIndexes[0],
+    /\bwhere\s+(?:\(\s*)?ativo(?:\s*=\s*true)?(?:\s*\))?\s*$/i,
+    'indice de assinatura deve ser parcial apenas para ativo',
   );
 });
 
@@ -530,8 +814,11 @@ contractTest('allowlist legada tem seis UUIDs e backfill falha fechado', () => {
   const ids = [...allowlist[1].matchAll(uuidPattern)]
     .map((match) => match[1].toLowerCase());
 
-  assert.equal(ids.length, 6, 'allowlist deve conter exatamente seis UUIDs');
-  assert.equal(new Set(ids).size, 6, 'allowlist nao pode repetir UUID');
+  assert.deepEqual(
+    [...ids].sort(),
+    [...approvedLegacyTestIds].sort(),
+    'allowlist deve conter somente os seis UUIDs aprovados',
+  );
   assert.match(sql, /\bcardinality\s*\(\s*v_ids\s*\)\s*<>\s*6\b/i);
   assert.match(sql, /\bv_total\s*<>\s*6\b/i);
   assert.match(sql, /\bv_telefones\s*<>\s*1\b/i);
@@ -561,19 +848,7 @@ contractTest('allowlist legada tem seis UUIDs e backfill falha fechado', () => {
   );
 });
 
-contractTest('legados de teste ficam fora de analytics, acoes e professor', () => {
-  const modeComment = statements(sql).find(
-    (statement) =>
-      /\bcomment\s+on\s+column\s+public\.pesquisa_evasao\.modo_teste\b/i
-        .test(statement),
-  );
-  assert.ok(modeComment, 'comentario de governanca de modo_teste ausente');
-  assert.match(modeComment, /\b6\b[\s\S]*\btestes?\b/i);
-  assert.match(modeComment, /\banalytics\b/i);
-  assert.match(modeComment, /\ba[cç][oõ]es\b/i);
-  assert.match(modeComment, /\bindicadores?\b/i);
-  assert.match(modeComment, /\bprofessor(?:es)?\b/i);
-
+contractTest('testes nao alimentam stats nem escritas derivadas', () => {
   const stats = getFunctionDefinition(
     'stats_pesquisa_evasao',
     ['uuid', 'integer', 'integer'],
@@ -583,33 +858,91 @@ contractTest('legados de teste ficam fora de analytics, acoes e professor', () =
     /(?:pe|pesquisa_evasao)\.modo_teste\s*=\s*false\b/i,
     'stats precisa excluir modo_teste=true',
   );
+
+  // A homologacao comportamental de acoes e indicadores de professor e Task 7.
+  const derivedWrites = statements(sql).filter(
+    (statement) =>
+      /^\s*(?:insert\s+into|update|merge\s+into)\s+public\.[a-z0-9_]*(?:ac(?:ao|oes)|encaminh|indicador[a-z0-9_]*professor|professor[a-z0-9_]*indicador)/i
+        .test(statement) &&
+      /\bpesquisa_evasao\b/i.test(statement),
+  );
+  for (const write of derivedWrites) {
+    assert.match(
+      write,
+      /(?:pe|pesquisa_evasao)\.modo_teste\s*=\s*false\b/i,
+      'escrita derivada de pesquisa precisa excluir modo_teste=true',
+    );
+    assertNoAuthorizationBypass(write, 'escrita derivada');
+  }
 });
 
 contractTest('slots de teste e producao sao independentes', () => {
-  assert.match(
-    sql,
-    /create\s+unique\s+index[\s\S]*?on\s+public\.pesquisa_evasao\s*\(\s*evasao_id\s*\)[\s\S]*?where\s+(?:\(\s*)?modo_teste\s*=\s*false/i,
+  const headerUniqueIndexes = statements(sql).filter(
+    (statement) =>
+      /\bcreate\s+unique\s+index\b/i.test(statement) &&
+      /\bon\s+public\.pesquisa_evasao\s*\(/i.test(statement),
+  );
+  const productionIndex = headerUniqueIndexes.find(
+    (statement) =>
+      /\bon\s+public\.pesquisa_evasao\s*\(\s*evasao_id\s*\)/i
+        .test(statement) &&
+      /\bwhere\s+(?:\(\s*)?modo_teste\s*=\s*false\b/i.test(statement),
+  );
+  assert.ok(
+    productionIndex,
+    'producao exige indice unico parcial (evasao_id) WHERE modo_teste=false',
+  );
+
+  const globalEvasaoConstraints = statements(sql).filter(
+    (statement) =>
+      /\b(?:alter\s+table|create\s+table)\s+public\.pesquisa_evasao\b/i
+        .test(statement) &&
+      (
+        /\bunique\s*\(\s*evasao_id\s*\)/i.test(statement) ||
+        /\bevasao_id\b[^,\n]*\bunique\b/i.test(statement)
+      ),
+  );
+  assert.equal(
+    globalEvasaoConstraints.length,
+    0,
+    'evasao_id nao pode conservar UNIQUE global',
+  );
+  const globalEvasaoIndexes = headerUniqueIndexes.filter(
+    (statement) =>
+      /\bon\s+public\.pesquisa_evasao\s*\([^)]*\bevasao_id\b[^)]*\)/i
+        .test(statement) &&
+      !/\bwhere\b/i.test(statement),
+  );
+  assert.equal(
+    globalEvasaoIndexes.length,
+    0,
+    'indice UNIQUE com evasao_id precisa ser parcial',
   );
   assert.doesNotMatch(
-    sql,
-    /(?:constraint\s+[a-z0-9_]+\s+)?unique\s*\(\s*evasao_id\s*\)\s*[,;]/i,
-  );
-  assert.doesNotMatch(
-    sql,
+    stripSqlComments(sql),
     /on\s+conflict\s*\(\s*evasao_id\s*\)\s+do\s+update/i,
   );
 
-  const testSlotIndex = statements(sql).find(
+  const testSlotIndexes = headerUniqueIndexes.filter(
     (statement) =>
-      /\bcreate\s+unique\s+index\b/i.test(statement) &&
-      /\bon\s+public\.pesquisa_evasao\s*\(/i.test(statement) &&
       /\bmodo_teste\s*=\s*true\b/i.test(statement) &&
       /['"]enviando['"]/i.test(statement) &&
       /['"]incerto['"]/i.test(statement),
   );
-  assert.ok(
-    testSlotIndex,
-    'indice parcial do slot ativo de teste precisa cobrir enviando e incerto',
+  assert.equal(
+    testSlotIndexes.length,
+    1,
+    'deve existir um unico indice parcial do slot ativo de teste',
+  );
+  assert.match(
+    testSlotIndexes[0],
+    /\bon\s+public\.pesquisa_evasao\s*\(\s*evasao_id\s*,\s*telefone_destino_snapshot\s*\)/i,
+    'slot de teste deve ser por evasao_id e telefone de teste',
+  );
+  assert.match(
+    testSlotIndexes[0],
+    /\bwhere\b[\s\S]*\bmodo_teste\s*=\s*true\b[\s\S]*\benvio_status\s+in\s*\([^)]*['"]enviando['"][^)]*['"]incerto['"][^)]*\)\s*$/i,
+    'predicado deve ser modo_teste=true e envio_status enviando/incerto',
   );
 });
 
@@ -655,6 +988,15 @@ contractTest('overload de quatro argumentos preserva RETURNS e escopo por linha'
     definition,
     /\(\s*p_unidade_id\s+is\s+null\s+or\s+[a-z_][a-z0-9_]*\.unidade_id\s*=\s*p_unidade_id\s*\)/i,
   );
+  assert.doesNotMatch(
+    definition,
+    /fn_usuario_atual_tem_permissao_estrita\s*\([^)]*,\s*null\s*\)/i,
+  );
+  assert.doesNotMatch(
+    definition,
+    /(?<!estrita)\bfn_usuario_atual_tem_permissao\s*\(/i,
+  );
+  assertNoAuthorizationBypass(definition, 'listar overload 4');
 });
 
 contractTest('overload de seis argumentos preserva RETURNS e escopo por linha', () => {
@@ -694,6 +1036,15 @@ contractTest('overload de seis argumentos preserva RETURNS e escopo por linha', 
     definition,
     /\(\s*p_unidade_id\s+is\s+null\s+or\s+[a-z_][a-z0-9_]*\.unidade_id\s*=\s*p_unidade_id\s*\)/i,
   );
+  assert.doesNotMatch(
+    definition,
+    /fn_usuario_atual_tem_permissao_estrita\s*\([^)]*,\s*null\s*\)/i,
+  );
+  assert.doesNotMatch(
+    definition,
+    /(?<!estrita)\bfn_usuario_atual_tem_permissao\s*\(/i,
+  );
+  assertNoAuthorizationBypass(definition, 'listar overload 6');
 });
 
 contractTest('stats NULL agrega somente unidades autorizadas e exclui testes', () => {
@@ -732,6 +1083,11 @@ contractTest('stats NULL agrega somente unidades autorizadas e exclui testes', (
     definition,
     /fn_usuario_atual_tem_permissao_estrita\s*\([^)]*,\s*null\s*\)/i,
   );
+  assert.doesNotMatch(
+    definition,
+    /(?<!estrita)\bfn_usuario_atual_tem_permissao\s*\(/i,
+  );
+  assertNoAuthorizationBypass(definition, 'stats_pesquisa_evasao');
 });
 
 contractTest('EXECUTE publico e anon e revogado nas cinco assinaturas', () => {
@@ -747,70 +1103,94 @@ contractTest('EXECUTE publico e anon e revogado nas cinco assinaturas', () => {
   ];
 
   for (const [name, args] of signatures) {
-    const revoke = statements(sql).find(
-      (statement) =>
-        /\brevoke\s+all\s+on\s+function\b/i.test(statement) &&
-        new RegExp(
-          `public\\.${escapeRegex(name)}\\s*\\(\\s*${escapeRegex(args).replace(/,\\ /g, ',\\s*')}\\s*\\)`,
-          'i',
-        ).test(statement) &&
-        /\bpublic\b/i.test(statement) &&
-        /\banon\b/i.test(statement),
-    );
-
-    assert.ok(revoke, `REVOKE PUBLIC/anon ausente para ${name}(${args})`);
+    assertFinalPrivileges('function', name, 'public', [], args);
+    assertFinalPrivileges('function', name, 'anon', [], args);
   }
 });
 
 contractTest('criar pesquisa e service-only e nao antecipa sucesso do provedor', () => {
-  const definition = getFunctionDefinition(
+  const parts = getFunctionParts(
     'criar_pesquisa_evasao',
     ['integer', 'text'],
   );
-  const revoke = statements(sql).find(
-    (statement) =>
-      /\brevoke\s+all\s+on\s+function\s+public\.criar_pesquisa_evasao\s*\(\s*integer\s*,\s*text\s*\)/i
-        .test(statement),
+  const { header, body, definition } = parts;
+
+  assertExactReturns(header, 'RETURNS uuid');
+  assert.match(header, /\bsecurity\s+definer\b/i);
+  assert.match(header, /\bset\s+search_path\s*=\s*public\s*,\s*pg_temp\b/i);
+
+  const serviceGate = [...body.matchAll(
+    /\bif\s+([\s\S]*?)\s+then\b([\s\S]*?)\bend\s+if\b/gi,
+  )].find((match) =>
+    /\bauth\.role\s*\(\s*\)/i.test(match[1]) &&
+    /['"]service_role['"]/i.test(match[1]));
+  assert.ok(serviceGate, 'criar precisa de gate service_role executavel');
+  assert.match(
+    serviceGate[1],
+    /\bis\s+distinct\s+from\b|\bcoalesce\s*\(|\bis\s+null\b[\s\S]*(?:<>|!=)/i,
+    'gate service_role precisa bloquear role nula e diferente',
   );
-  const serviceGrant = statements(sql).find(
-    (statement) =>
-      /\bgrant\s+execute\s+on\s+function\s+public\.criar_pesquisa_evasao\s*\(\s*integer\s*,\s*text\s*\)\s+to\s+service_role\b/i
-        .test(statement),
+  assert.match(
+    serviceGate[2],
+    /\b(?:raise|return)\b/i,
+    'ramo nao-service precisa interromper a funcao com RAISE/RETURN',
   );
 
-  assert.match(definition, /\bsecurity\s+definer\b/i);
-  assert.match(definition, /\bset\s+search_path\s*=\s*public\s*,\s*pg_temp\b/i);
+  assertFinalPrivileges(
+    'function',
+    'criar_pesquisa_evasao',
+    'authenticated',
+    [],
+    'integer, text',
+  );
+  assertFinalPrivileges(
+    'function',
+    'criar_pesquisa_evasao',
+    'service_role',
+    ['execute'],
+    'integer, text',
+  );
+  assert.doesNotMatch(
+    stripSqlComments(body),
+    /\benviado_em\b|['"]enviado['"]/i,
+    'criar nao pode inserir/atualizar enviado ou enviado_em',
+  );
   assert.match(
-    definition,
-    /\bauth\.role\s*\(\s*\)\s*(?:<>|!=)\s*['"]service_role['"]/i,
+    body,
+    /['"]nao_enviado['"]/i,
+    'criar precisa inicializar envio_status em nao_enviado',
   );
-  assert.ok(revoke, 'REVOKE de criar_pesquisa_evasao ausente');
-  assert.match(revoke, /\bauthenticated\b/i);
-  assert.ok(serviceGrant, 'criar_pesquisa_evasao nao foi concedida a service_role');
-  assert.doesNotMatch(
-    definition,
-    /\b(?:status|envio_status)\s*=\s*['"]enviado['"]/i,
-  );
-  assert.doesNotMatch(
-    definition,
-    /['"]enviado['"]\s*,\s*(?:now|clock_timestamp)\s*\(\s*\)/i,
-  );
+  assertNoAuthorizationBypass(definition, 'criar_pesquisa_evasao');
 });
 
 contractTest('pode_enviar exige permissao concreta ou service role', () => {
-  const definition = getFunctionDefinition(
+  const parts = getFunctionParts(
     'pode_enviar_pesquisa_evasao',
     ['integer'],
   );
+  const { header, body, definition } = parts;
 
+  assertExactReturns(header, 'RETURNS boolean');
   assert.match(definition, /\bmovimentacoes_admin\b/i);
-  assert.match(
-    definition,
-    /fn_usuario_atual_tem_permissao_estrita\s*\(\s*['"]sucesso_aluno\.evasao\.enviar['"](?:\s*::\s*varchar)?\s*,\s*[a-z_]+\.unidade_id\s*\)/i,
+  const governedReturn = statements(body).find(
+    (statement) =>
+      /\breturn\b/i.test(statement) &&
+      /fn_usuario_atual_tem_permissao_estrita\s*\(\s*['"]sucesso_aluno\.evasao\.enviar['"](?:\s*::\s*varchar)?\s*,\s*(?:[a-z_][a-z0-9_]*\.)?[a-z_]*unidade_id\s*\)/i
+        .test(statement),
   );
-  assert.match(definition, /\bauth\.role\s*\(\s*\)\s*=\s*['"]service_role['"]/i);
+  assert.ok(
+    governedReturn,
+    'RETURN governado precisa chamar helper estrito com unidade concreta',
+  );
+  assert.match(governedReturn, /\bauth\.role\s*\(\s*\)\s*=\s*['"]service_role['"]/i);
+  assert.doesNotMatch(body, /\breturn\s+true\s*;/i);
   assert.doesNotMatch(
     definition,
     /fn_usuario_atual_tem_permissao_estrita\s*\([^)]*,\s*null\s*\)/i,
   );
+  assert.doesNotMatch(
+    definition,
+    /(?<!estrita)\bfn_usuario_atual_tem_permissao\s*\(/i,
+  );
+  assertNoAuthorizationBypass(definition, 'pode_enviar_pesquisa_evasao');
 });

@@ -25,7 +25,9 @@ test('pesquisa de evasao referencia a movimentacao administrativa canonica', () 
   assert.doesNotMatch(migration, /references\s+public\.evasoes_v2/i);
 });
 
-test('edge aceita telefone de teste e usa a caixa do Sucesso do Aluno', () => {
+// Compatibilidade transitoria do fluxo interno legado. `telefone_override`
+// nao representa o request publico V2 e deve ser removido na Task 3.
+test('edge legado ainda aceita telefone_override interno e usa a caixa correta', () => {
   const edge = readOptional(edgePath);
 
   assert.match(edge, /telefone_override\??:\s*string/i);
