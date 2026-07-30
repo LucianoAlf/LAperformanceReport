@@ -46,6 +46,7 @@ Esta proposta usa a auditoria somente leitura realizada no código e no banco re
 - O inbound `webhook-whatsapp-inbox` também roda sem JWT e, na versão auditada, não valida segredo antes de criar o cliente com service role.
 - O inbound grava o payload integral em `webhook_debug_log` e também escreve trechos extensos do payload em logs de execução, sem política de expurgo identificada.
 - A policy atual de `pesquisa_evasao` permite `ALL` a qualquer usuário `authenticated` e aos roles restritos de Mila e Sol; isso expõe respostas privadas e contradiz a separação de domínios definida nesta spec.
+- `whatsapp_caixas` permite leitura direta por usuários autenticados e contém tokens UAZAPI/WAHA; o novo segredo inbound não pode ser acrescentado a essa exposição, e o hardening deve substituir leituras do frontend por um contrato sem credenciais.
 - O fluxo pós-1ª aula depende do mesmo inbound: mensagens com `buttonOrListid` são encaminhadas a `processar-resposta-pesquisa` e essa integração é uma regressão crítica a preservar.
 
 ### 2.2 Cobertura e sinais
@@ -642,6 +643,7 @@ job -> agente -> regra -> consulta -> fonte canônica -> saída -> canal -> dono
 - `webhook-whatsapp-inbox` permanece sem JWT porque recebe chamadas do provedor, mas exige um segredo forte e diferente por caixa antes de instanciar ou usar o cliente com service role.
 - O segredo inbound usa preferencialmente o header `x-webhook-secret`; query param opaco é fallback somente quando o provedor não suportar header customizado.
 - O banco guarda apenas SHA-256 do segredo, com chave estrangeira para `whatsapp_caixas`; o valor recebido nunca é persistido nem escrito em log.
+- Tokens UAZAPI/WAHA deixam de ser retornados diretamente ao frontend; telas usam RPC/read model com campos públicos e operações sensíveis ficam no backend.
 - Ausência de `caixa_id`, caixa inativa, segredo ausente ou hash divergente retorna `401`/`403` antes de qualquer escrita ou roteamento.
 - O health check interno usa autenticação de serviço separada; ele não cria uma exceção pública capaz de contornar o segredo inbound.
 - `telefone_override` só existe em modo teste autorizado.
@@ -731,6 +733,7 @@ Logs técnicos usam IDs internos e correlation ID. Conteúdo sensível fica no b
 16. “Não quero responder” muda para `recusada_opt_out`, bloqueia reenvio/lembrete e não incrementa resposta válida.
 17. Usuário autenticado sem `sucesso_aluno.evasao.ver` não lê resposta privada.
 18. Sol e Mila não acessam diretamente resposta/transcrição privada.
+19. Usuário autenticado comum não lê token UAZAPI/WAHA de `whatsapp_caixas`.
 
 ### 19.3 Dados e sinais
 
@@ -812,6 +815,7 @@ O escopo não será implementado em um único plano.
 - ambiguidade e telefone compartilhado;
 - fila de revisão.
 - segredo inbound por caixa e rejeição anterior à service role;
+- remoção de tokens UAZAPI/WAHA dos contratos diretos do frontend;
 - preservação do encaminhamento pós-1ª aula para `processar-resposta-pesquisa`;
 - recusa/opt-out;
 - remoção de payload bruto dos logs, expurgo do legado e retenção do diagnóstico sanitizado.
