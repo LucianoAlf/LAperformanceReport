@@ -1,12 +1,26 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-const migrationPath =
-  'supabase/migrations/20260730134500_pesquisa_evasao_movimentacao_canonica.sql';
-const edgePath = 'supabase/functions/enviar-pesquisa-evasao/index.ts';
-const pagePath = 'src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx';
-const webhookPath = 'supabase/functions/webhook-whatsapp-inbox/index.ts';
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const migrationPath = resolve(
+  repoRoot,
+  'supabase/migrations/20260730134500_pesquisa_evasao_movimentacao_canonica.sql',
+);
+const edgePath = resolve(
+  repoRoot,
+  'supabase/functions/enviar-pesquisa-evasao/index.ts',
+);
+const pagePath = resolve(
+  repoRoot,
+  'src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx',
+);
+const webhookPath = resolve(
+  repoRoot,
+  'supabase/functions/webhook-whatsapp-inbox/index.ts',
+);
 
 const readOptional = (path) => existsSync(path) ? readFileSync(path, 'utf8') : '';
 

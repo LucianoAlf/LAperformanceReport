@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-const migrationPath =
-  'supabase/migrations/20260730170000_pesquisa_evasao_fundacao_segura.sql';
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const migrationPath = resolve(
+  repoRoot,
+  'supabase/migrations/20260730170000_pesquisa_evasao_fundacao_segura.sql',
+);
 const sql = existsSync(migrationPath)
   ? readFileSync(migrationPath, 'utf8')
   : '';
@@ -123,10 +128,11 @@ const normalizeSql = (value) =>
 
 const statementRecords = (value) => {
   const result = [];
+  const maskedValue = maskSqlCommentsAndStrings(value);
   let start = 0;
 
   for (let index = 0; index < value.length; index += 1) {
-    if (value[index] !== ';') continue;
+    if (maskedValue[index] !== ';') continue;
     const text = value.slice(start, index).trim();
     if (text) result.push({ text, start });
     start = index + 1;
@@ -269,14 +275,15 @@ const forbiddenClientRoles = [
 
 function assertNoForbiddenSchemaWidePrivileges(source) {
   for (const statement of statements(source)) {
+    const executableStatement = stripSqlComments(statement).trim();
     const incompatible =
       /^\s*grant\b[\s\S]*\bon\s+all\s+(?:tables|sequences|functions)\s+in\s+schema\s+public\b[\s\S]*\bto\b/i
-        .test(statement) ||
+        .test(executableStatement) ||
       /^\s*alter\s+default\s+privileges\b[\s\S]*\bgrant\b[\s\S]*\bon\s+(?:tables|sequences|functions)\b[\s\S]*\bto\b/i
-        .test(statement);
+        .test(executableStatement);
     if (!incompatible) continue;
 
-    const roles = statement
+    const roles = executableStatement
       .split(/\bto\b/i)
       .at(-1)
       .replace(/\bwith\s+grant\s+option\b/gi, '')
@@ -381,7 +388,8 @@ const privilegeUniverse = {
 };
 
 function parsePrivilegeStatement(statement) {
-  const match = statement.text.match(
+  const executableText = stripSqlComments(statement.text).trim();
+  const match = executableText.match(
     /^\s*(grant|revoke)\s+([\s\S]+?)\s+on\s+(?:(table|sequence|function)\s+)?([\s\S]+?)\s+(to|from)\s+([\s\S]+)$/i,
   );
   if (!match) return null;
@@ -409,7 +417,7 @@ function parsePrivilegeStatement(statement) {
           .replace(/^"|"$/g, '')
           .toLowerCase()),
     start: statement.start,
-    text: statement.text,
+    text: executableText,
   };
 }
 
@@ -512,6 +520,44 @@ function assertUniqueHeaderColumn(columnName) {
   );
 }
 
+function assertGovernedPrivatePolicy(statement) {
+  const policy = stripSqlComments(statement).trim();
+  const tableMatch = policy.match(
+    /\bon\s+public\.(pesquisa_evasao(?:_(?:templates|assinaturas|previews|mensagens|transcricoes|analises))?)\b/i,
+  );
+  assert.ok(tableMatch, 'policy nao pertence a tabela privada conhecida');
+  const tableName = tableMatch[1].toLowerCase();
+
+  assert.equal(
+    serviceOnlyTables.includes(tableName),
+    false,
+    `${tableName} e service-only e nao pode ter policy`,
+  );
+  assert.match(policy, /\bfor\s+select\b/i, 'policy privada deve ser SELECT');
+  assert.match(policy, /sucesso_aluno\.evasao\.ver/i);
+  assert.match(policy, /\bfn_usuario_atual_tem_permissao_estrita\s*\(/i);
+  assert.doesNotMatch(policy, /\bauth\.uid\s*\(\s*\)\s+is\s+not\s+null\b/i);
+  assertNoAuthorizationBypass(policy, `policy ${tableName}`);
+
+  if (tableName === 'pesquisa_evasao') {
+    assert.match(
+      policy,
+      /fn_usuario_atual_tem_permissao_estrita\s*\([^,]+,\s*(?:[a-z_][a-z0-9_]*\.)?unidade_id\s*\)/i,
+      'policy do cabecalho deve usar a unidade concreta da linha',
+    );
+    return;
+  }
+
+  assert.match(policy, /\bexists\s*\(\s*select\b/i);
+  assert.match(policy, /\bfrom\s+public\.pesquisa_evasao\b/i);
+  assert.match(policy, /\bpesquisa_id\b/i);
+  assert.match(
+    policy,
+    /fn_usuario_atual_tem_permissao_estrita\s*\([^,]+,\s*[a-z_][a-z0-9_]*\.unidade_id\s*\)/i,
+    'policy filha deve resolver a unidade no cabecalho',
+  );
+}
+
 test('migration da fundacao segura existe antes de validar seus contratos', () => {
   assert.ok(
     sql,
@@ -555,13 +601,26 @@ test('guards rejeitam formas adversariais sem depender da migration', () => {
     assertNoForbiddenSchemaWidePrivileges(
       'grant select on all tables in schema public to group anon;',
     ));
+  assert.doesNotThrow(() =>
+    assertNoForbiddenSchemaWidePrivileges(`
+      -- grant select on all tables in schema public to anon;
+      revoke all on table public.pesquisa_evasao from anon;
+    `));
   assert.deepEqual(
     parsePrivilegeStatement({
-      text: 'revoke all on table public.pesquisa_evasao from group anon',
+      text: `-- comentario
+        revoke all on table public.pesquisa_evasao from group anon`,
       start: 0,
     }).roles,
     ['anon'],
   );
+  assert.throws(() =>
+    assertGovernedPrivatePolicy(`
+      create policy pesquisa_evasao_bypass
+      on public.pesquisa_evasao
+      for select
+      using (auth.uid() is not null)
+    `));
   assert.throws(() =>
     assertNoForbiddenSchemaWidePrivileges(
       'alter default privileges in schema public grant execute on functions to public;',
@@ -619,22 +678,26 @@ contractTest('RLS usa permissao estrita e unidade da propria linha', () => {
         new RegExp(`\\bon\\s+public\\.${escapeRegex(tableName)}\\b`, 'i')
           .test(statement)),
   );
-  const headerPolicies = privatePolicies.filter((statement) =>
-    /\bon\s+public\.pesquisa_evasao\b/i.test(statement));
-  const governedPolicy = headerPolicies.find(
-    (statement) =>
-      /sucesso_aluno\.evasao\.ver/i.test(statement) &&
-      /fn_usuario_atual_tem_permissao_estrita/i.test(statement) &&
-      /\bunidade_id\b/i.test(statement),
-  );
 
-  assert.ok(
-    governedPolicy,
-    'policy de pesquisa_evasao nao usa ver + helper estrito + unidade da linha',
-  );
+  for (const tableName of ['pesquisa_evasao', ...conversationTables]) {
+    assert.ok(
+      privatePolicies.some((policy) =>
+        new RegExp(`\\bon\\s+public\\.${escapeRegex(tableName)}\\b`, 'i')
+          .test(policy)),
+      `policy SELECT governada ausente em ${tableName}`,
+    );
+  }
+  for (const tableName of serviceOnlyTables) {
+    assert.equal(
+      privatePolicies.some((policy) =>
+        new RegExp(`\\bon\\s+public\\.${escapeRegex(tableName)}\\b`, 'i')
+          .test(policy)),
+      false,
+      `${tableName} service-only nao pode ter policy`,
+    );
+  }
   for (const policy of privatePolicies) {
-    assertNoAuthorizationBypass(policy, 'policy privada');
-    assert.doesNotMatch(policy, /\busing\s*\(\s*true\s*\)/i);
+    assertGovernedPrivatePolicy(policy);
     assert.doesNotMatch(
       policy,
       /(?<!estrita)\bfn_usuario_atual_tem_permissao\s*\(/i,
