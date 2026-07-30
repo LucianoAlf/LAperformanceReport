@@ -2,7 +2,14 @@
 /// <reference lib="deno.ns" />
 
 import { assertEquals, assertMatch } from "jsr:@std/assert@1";
-import { type AuthAdapters, resolverContextoOperador } from "./auth.ts";
+import {
+  autenticarUsuarioAtivoUnico,
+  type AuthAdapters,
+  autorizarIdentidadeComPreviewPersistida,
+  type EscopoAutorizacaoDaPreviewPersistida,
+  resolverAssinaturaAtivaParaNovaPreview,
+  resolverContextoOperador,
+} from "./auth.ts";
 
 const unidadeBarra = "368d47f5-2d88-4475-bc14-ba084a9a348e";
 
@@ -405,4 +412,177 @@ Deno.test("campos forjados no request nao trocam a identidade autenticada", asyn
     assinaturaId: "assinatura-fabi",
     assinaturaNome: "Fabi",
   });
+});
+
+Deno.test("autenticacao resolve usuario ativo unico sem autorizar nem buscar assinatura", async () => {
+  let consultouPermissao = false;
+  let consultouAssinatura = false;
+  const identidade = await autenticarUsuarioAtivoUnico(
+    { authorization: "Bearer token-fabi" },
+    criarAdapters({
+      usuarioTemPermissaoEstrita: async () => {
+        consultouPermissao = true;
+        return true;
+      },
+      buscarAssinaturasAtivas: async () => {
+        consultouAssinatura = true;
+        return [];
+      },
+    }),
+  );
+
+  assertEquals(
+    {
+      usuarioId: identidade.usuarioId,
+      authUserId: identidade.authUserId,
+      nomeUsuario: identidade.nomeUsuario,
+    },
+    {
+      usuarioId: 30,
+      authUserId: "auth-fabi",
+      nomeUsuario: "Fabi",
+    },
+  );
+  assertEquals(consultouPermissao, false);
+  assertEquals(consultouAssinatura, false);
+});
+
+Deno.test("confirmacao autentica e autoriza pelo snapshot persistido sem resolver assinatura", async () => {
+  const chamadas: string[] = [];
+  const adapters = criarAdapters({
+    authGetUser: async (token) => {
+      chamadas.push(`auth:${token}`);
+      return { id: "auth-fabi" };
+    },
+    buscarUsuariosAtivosPorAuthUserId: async (authUserId) => {
+      chamadas.push(`usuario:${authUserId}`);
+      return [{ id: 30, authUserId, nome: "Fabi" }];
+    },
+    usuarioTemPermissaoEstrita: async (usuarioId, codigo, unidadeId) => {
+      chamadas.push(`permissao:${usuarioId}:${codigo}:${unidadeId}`);
+      return true;
+    },
+    buscarAssinaturasAtivas: async () => {
+      chamadas.push("assinatura");
+      return [{ id: "assinatura-fabi", nome: "Fabi" }];
+    },
+  });
+
+  const identidade = await autenticarUsuarioAtivoUnico(
+    { authorization: "Bearer token-fabi" },
+    adapters,
+  );
+  await autorizarIdentidadeComPreviewPersistida(
+    identidade,
+    {
+      unidadeIdDaPreviewPersistida: unidadeBarra,
+      modoTesteDaPreviewPersistida: false,
+    },
+    adapters,
+  );
+
+  assertEquals(chamadas, [
+    "auth:token-fabi",
+    "usuario:auth-fabi",
+    `permissao:30:sucesso_aluno.evasao.enviar:${unidadeBarra}`,
+  ]);
+});
+
+Deno.test("confirmacao usa modo teste persistido para exigir permissao dedicada", async () => {
+  const codigos: string[] = [];
+  const adapters = criarAdapters({
+    usuarioTemPermissaoEstrita: async (_usuarioId, codigo) => {
+      codigos.push(codigo);
+      return true;
+    },
+  });
+  const identidade = await autenticarUsuarioAtivoUnico(
+    { authorization: "Bearer token-fabi" },
+    adapters,
+  );
+
+  await autorizarIdentidadeComPreviewPersistida(
+    identidade,
+    {
+      unidadeIdDaPreviewPersistida: unidadeBarra,
+      modoTesteDaPreviewPersistida: true,
+    },
+    adapters,
+  );
+
+  assertEquals(codigos, [
+    "sucesso_aluno.evasao.enviar",
+    "sucesso_aluno.evasao.modo_teste",
+  ]);
+});
+
+Deno.test("modo persistido indefinido ou string falha fechado antes das permissoes", async () => {
+  const identidade = await autenticarUsuarioAtivoUnico(
+    { authorization: "Bearer token-fabi" },
+    criarAdapters(),
+  );
+
+  for (const modoTeste of [undefined, "false"]) {
+    let consultouPermissao = false;
+    await assertErroHttp(
+      () =>
+        autorizarIdentidadeComPreviewPersistida(
+          identidade,
+          {
+            unidadeIdDaPreviewPersistida: unidadeBarra,
+            modoTesteDaPreviewPersistida: modoTeste,
+          } as unknown as EscopoAutorizacaoDaPreviewPersistida,
+          criarAdapters({
+            usuarioTemPermissaoEstrita: async () => {
+              consultouPermissao = true;
+              return true;
+            },
+          }),
+        ),
+      403,
+      /modo_teste da preview persistida invalido/i,
+    );
+    assertEquals(consultouPermissao, false);
+  }
+});
+
+Deno.test("composicao de preview tambem rejeita modoTeste nao booleano", async () => {
+  for (const modoTeste of [undefined, "false"]) {
+    await assertErroHttp(
+      () =>
+        resolverContextoOperador(
+          {
+            authorization: "Bearer token-fabi",
+            unidadeId: unidadeBarra,
+            modoTeste,
+          } as unknown as Parameters<typeof resolverContextoOperador>[0],
+          criarAdapters(),
+        ),
+      403,
+      /modo_teste invalido/i,
+    );
+  }
+});
+
+Deno.test("assinatura ativa e resolvida separadamente apenas para nova preview", async () => {
+  let consultouPermissao = false;
+  const adapters = criarAdapters({
+    usuarioTemPermissaoEstrita: async () => {
+      consultouPermissao = true;
+      return true;
+    },
+  });
+  const identidade = await autenticarUsuarioAtivoUnico(
+    { authorization: "Bearer token-fabi" },
+    adapters,
+  );
+
+  assertEquals(
+    await resolverAssinaturaAtivaParaNovaPreview(identidade, adapters),
+    {
+      assinaturaId: "assinatura-fabi",
+      assinaturaNome: "Fabi",
+    },
+  );
+  assertEquals(consultouPermissao, false);
 });
