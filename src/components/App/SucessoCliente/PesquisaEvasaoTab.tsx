@@ -165,7 +165,12 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
       }
     } catch (error: any) {
       console.error('Erro ao enviar pesquisa:', error);
-      toast.error(error.message || 'Erro ao enviar pesquisa');
+      let mensagem = error.message || 'Erro ao enviar pesquisa';
+      if (error?.context instanceof Response) {
+        const payload = await error.context.clone().json().catch(() => null);
+        mensagem = payload?.error || mensagem;
+      }
+      toast.error(mensagem);
     } finally {
       setEnviando(null);
     }
@@ -581,10 +586,14 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                         </span>
                       </td>
                       <td className="text-center px-4 py-3">
-                        {evadido.pesquisa_status === 'pendente' ? (
+                        {['pendente', 'falha_envio', 'sem_whatsapp'].includes(evadido.pesquisa_status) ? (
                           <Button
                             size="sm"
                             onClick={() => {
+                              if (modoTeste && !telefoneTeste.trim()) {
+                                toast.error('Informe o número para o teste');
+                                return;
+                              }
                               if (modoTeste && telefoneTeste) {
                                 enviarPesquisa(evadido.evasao_id, telefoneTeste);
                               } else {
@@ -599,7 +608,11 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                             ) : (
                               <>
                                 <Send className="w-4 h-4 mr-1.5" />
-                                {modoTeste ? 'Testar' : 'Enviar'}
+                                {modoTeste
+                                  ? 'Testar'
+                                  : evadido.pesquisa_status === 'pendente'
+                                    ? 'Enviar'
+                                    : 'Tentar novamente'}
                               </>
                             )}
                           </Button>

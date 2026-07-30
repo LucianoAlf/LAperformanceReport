@@ -82,6 +82,8 @@ A edge faz `switch(evento)`:
 | `matricula_trancamento` | Trancamento + `movimentacoes_admin`. |
 | `matricula_finalizacao` | Resolve o motivo: `inativa` + `interrompida` gera evasão; `inativa` + `concluida` gera não renovação/contrato concluído. Valor ausente ou ambíguo vai para auditoria e não altera o estado local automaticamente. |
 
+- A pesquisa pós-saída consome o `movimentacoes_admin.id` criado nesse ciclo; não volta a depender de `evasoes_v2`.
+
 - Idempotência por evento; saúde via `_shared/invariantes.ts` (`automacao_log`/`automacao_invariantes`). `verify_jwt: false` é comportamento preexistente do webhook e a proteção por segredo/assinatura permanece pendência de segurança separada, atribuída ao responsável pela integração Emusys.
 
 ### 1.4 Webhook NÃO consumido

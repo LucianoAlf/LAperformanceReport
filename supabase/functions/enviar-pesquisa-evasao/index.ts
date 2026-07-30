@@ -2,13 +2,20 @@
 // Envia pesquisa de evasão via WhatsApp para aluno evadido
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getWhatsAppCredentials } from '../_shared/uazapi.ts';
+import {
+  resolverTelefonePesquisa,
+  telefonePesquisaValido,
+} from './contract.ts';
 
 interface EnviarPesquisaRequest {
   evasao_id: number;
   operador?: string;
+  telefone_override?: string;
 }
+
+const CAIXA_SUCESSO_ID = 3;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,10 +33,9 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
-    const creds = await getWhatsAppCredentials(supabase, { funcao: 'sistema' });
 
     const body: EnviarPesquisaRequest = await req.json();
-    const { evasao_id, operador = 'sistema' } = body;
+    const { evasao_id, operador = 'sistema', telefone_override } = body;
 
     if (!evasao_id) {
       return new Response(
@@ -87,7 +93,10 @@ serve(async (req) => {
       .eq('evasao_id', evasao_id)
       .single();
 
-    if (pesquisaExistente && pesquisaExistente.status !== 'pendente') {
+    if (
+      pesquisaExistente &&
+      !['pendente', 'falha_envio', 'sem_whatsapp'].includes(pesquisaExistente.status)
+    ) {
       return new Response(
         JSON.stringify({ error: 'Pesquisa já foi enviada para este aluno', pesquisa_id: pesquisaExistente.id }),
         { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -115,12 +124,19 @@ serve(async (req) => {
     // Buscar dados adicionais do aluno
     const { data: aluno } = await supabase
       .from('alunos')
-      .select('nome, tempo_permanencia_meses, professor_atual_id, curso_id, data_nascimento, responsavel_nome')
+      .select('nome, whatsapp, telefone, tempo_permanencia_meses, professor_atual_id, curso_id, data_nascimento, responsavel_nome')
       .eq('id', evasao.aluno_id)
       .single();
     
     // Nome do aluno: prioriza evasao.aluno_nome, fallback para aluno.nome
     const alunoNome = evasao.aluno_nome || aluno?.nome || 'Aluno';
+    const motivosSaida = evasao.motivos_saida as
+      | { nome?: string }
+      | Array<{ nome?: string }>
+      | null;
+    const motivoCadastrado = Array.isArray(motivosSaida)
+      ? motivosSaida[0]?.nome
+      : motivosSaida?.nome;
 
     const professorId = evasao.professor_id || aluno?.professor_atual_id;
     const cursoId = evasao.curso_id || aluno?.curso_id;
@@ -147,26 +163,16 @@ serve(async (req) => {
       cursoNome = curso?.nome;
     }
 
-    // Formatar número de telefone
-    let telefone = evasao.telefone_snapshot || '';
-    telefone = telefone.replace(/\D/g, '');
-    if (telefone.length === 11 && telefone.startsWith('9')) {
-      telefone = '55' + telefone;
-    }
+    const telefone = resolverTelefonePesquisa({
+      telefoneOverride: telefone_override,
+      telefoneSnapshot: evasao.telefone_snapshot,
+      whatsappAluno: aluno?.whatsapp,
+      telefoneAluno: aluno?.telefone,
+    });
 
-    if (telefone.length < 12) {
-      // Atualizar como sem WhatsApp
-      await supabase.rpc('criar_pesquisa_evasao', {
-        p_evasao_id: evasao_id,
-        p_criado_por: operador
-      });
-      await supabase
-        .from('pesquisa_evasao')
-        .update({ status: 'sem_whatsapp', updated_at: new Date().toISOString() })
-        .eq('evasao_id', evasao_id);
-
+    if (!telefonePesquisaValido(telefone)) {
       return new Response(
-        JSON.stringify({ error: 'Telefone inválido', telefone: evasao.telefone_snapshot }),
+        JSON.stringify({ error: 'Telefone inválido ou não cadastrado' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -186,9 +192,9 @@ serve(async (req) => {
         aluno_professor: professorNome,
         tempo_permanencia_meses: aluno?.tempo_permanencia_meses || 0,
         data_evasao: evasao.data_evasao,
-        motivo_cadastrado: evasao.motivos_saida?.nome || null,
-        status: 'enviado',
-        enviado_em: new Date().toISOString(),
+        motivo_cadastrado: motivoCadastrado || null,
+        status: 'pendente',
+        enviado_em: null,
         enviado_por: operador
       }, { onConflict: 'evasao_id' })
       .select()
@@ -200,16 +206,6 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    // Criar estado de conversa no WhatsApp
-    await supabase
-      .from('conversa_estado_whatsapp')
-      .upsert({
-        whatsapp_numero: telefone,
-        estado: 'aguardando_resposta_evasao',
-        contexto: { pesquisa_id: pesquisa.id, evasao_id: evasao_id },
-        expira_em: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 dias
-      }, { onConflict: 'whatsapp_numero' });
 
     // Verificar se é menor de idade (< 18 anos)
     const isMenor = aluno?.data_nascimento 
@@ -252,6 +248,10 @@ serve(async (req) => {
       ].join("\n");
     }
 
+    const creds = await getWhatsAppCredentials(supabase, {
+      caixaId: CAIXA_SUCESSO_ID,
+    });
+
     // Enviar mensagem via WhatsApp (UAZAPI ou WAHA)
     let waResponse: Response;
     if (creds.provedor === 'waha') {
@@ -269,8 +269,10 @@ serve(async (req) => {
       });
     }
 
-    if (!waResponse.ok) {
-      const waError = await waResponse.text();
+    const waData = await waResponse.json().catch(() => ({}));
+
+    if (!waResponse.ok || waData?.error) {
+      const waError = waData?.error || waData?.message || `HTTP ${waResponse.status}`;
 
       // Marcar como falha
       await supabase
@@ -284,31 +286,56 @@ serve(async (req) => {
       );
     }
 
-    const waData = await waResponse.json();
     const messageId = waData.id || waData.messageId || waData.key?.id || null;
 
-    // Atualizar com ID da mensagem
-    await supabase
+    const { error: statusError } = await supabase
       .from('pesquisa_evasao')
       .update({
+        status: 'enviado',
+        enviado_em: new Date().toISOString(),
         mensagem_uazapi_id: messageId,
         updated_at: new Date().toISOString()
       })
       .eq('id', pesquisa.id);
+
+    if (statusError) {
+      return new Response(
+        JSON.stringify({ error: 'Mensagem enviada, mas houve falha ao registrar o status' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { error: estadoError } = await supabase
+      .from('conversa_estado_whatsapp')
+      .upsert({
+        whatsapp_numero: telefone,
+        estado: 'aguardando_resposta_evasao',
+        contexto: { pesquisa_id: pesquisa.id, evasao_id },
+        expira_em: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      }, { onConflict: 'whatsapp_numero' });
+
+    if (estadoError) {
+      return new Response(
+        JSON.stringify({ error: 'Mensagem enviada, mas houve falha ao preparar a captura da resposta' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     return new Response(
       JSON.stringify({
         success: true,
         pesquisa_id: pesquisa.id,
         mensagem_enviada: true,
+        modo_teste: Boolean(telefone_override),
         uazapi_message_id: messageId
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
+    const mensagemErro = error instanceof Error ? error.message : String(error);
     return new Response(
-      JSON.stringify({ error: 'Erro interno', details: error.message }),
+      JSON.stringify({ error: 'Erro interno', details: mensagemErro }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
