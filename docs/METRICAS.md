@@ -175,6 +175,21 @@ Depende do contexto:
 - **Por professor (estrito):** apenas `status = 'experimental_realizada'` (`TabComercialNew.tsx:387`).
 - **Faltou:** `status = 'experimental_faltou'`.
 
+#### Snapshot operacional Emusys
+
+O adaptador puro `_shared/experimental-snapshot.ts` materializa uma linha por
+aula experimental + participante. A chave de negócio é escopada pela unidade e
+prefere os IDs externos `id_lead` e `id_aluno`; nome e telefone não criam
+vínculo canônico. O `raw_key` também inclui a execução para preservar cada
+fotografia recebida.
+
+Na normalização temporal, cancelamento sempre prevalece. Antes do início da
+aula em `America/Sao_Paulo`, inclusive quando o Emusys envia
+`presenca='ausente'`, a situação é `agendada`. Depois do início,
+`presente`/`matriculado` contam como presença, `faltou`/`ausente` como falta e
+qualquer outro valor fica `sem_status`. A paginação só libera o lote quando
+todas as páginas de `/aulas` terminam sem erro.
+
 ### Taxa de conversão Experimental → Matrícula
 - **No Dashboard/Comercial (frontend):** denominador `experimental_realizada = true`; numerador `status ∈ {matriculado, convertido}` (`DashboardPage.tsx:316-327`).
 - **Canônica (professor):** RPC `get_experimentais_professor_canonicos_v1` + fonte `lead_experimentais` (1 linha por aula, presença real) — substituiu a contagem por `leads` que inflava a taxa. Denominador = `status ∈ {experimental_realizada, convertido}`; numerador = realizadas cujo lead converteu. Ver CLAUDE.md (Módulo de Professores).

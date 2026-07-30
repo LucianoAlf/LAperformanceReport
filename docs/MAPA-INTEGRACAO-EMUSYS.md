@@ -94,9 +94,13 @@ A edge faz `switch(evento)`:
 ### 2.1 `GET /v1/aulas/` → `sync-presenca-emusys` — presença, roster e agenda
 - **Presença completa:** continua em horários fixos por unidade.
 - **Metadados operacionais:** cron a cada 15 minutos por unidade, em minutos intercalados, modo `metadados`, janela passada de 2 dias e futura de 35 dias. A agenda diária de sete dias continua pré-carregada em jobs espaçados.
+- **Paginação transacional:** o adaptador compartilhado `_shared/experimental-snapshot.ts` percorre `/aulas` com `limite=100` até `tem_mais=false`. Cursor ausente/repetido, HTTP não OK ou JSON inválido rejeitam o lote inteiro antes de qualquer aplicação.
+- **Snapshot de experimentais:** o modo `experimentais` usa esse adaptador para produzir uma linha por aula + participante. A identidade prefere `id_lead`, depois `id_aluno`, sempre escopada pela unidade; o fallback textual é apenas uma chave raw determinística e não autoriza conciliação canônica.
+- **Reuso da coleta:** no fluxo combinado, `metadados` reaproveita as aulas já obtidas pelo modo `experimentais`; não abre uma segunda paginação do mesmo intervalo.
 - **Para quê:** (1) aulas regulares → `aulas_emusys`, `aula_alunos_emusys` e `aluno_presenca`; (2) confirmar experimentais → `experimental_realizada`/`faltou_experimental`; (3) refletir reagendamento, justificativa e presença informada do professor.
 - **Professor:** a API fornece `professores[0].id`. O sync grava `emusys_professor_id` e resolve `professor_id` por `(unidade_id, emusys_id)` em `professores_unidades`; nome não é identidade. `prof_id = 0` vira `sem_acompanhamento=true` e `professor_id=null`.
 - **Campos de agenda:** `reagendada`, `data_hora_inicio_original`, `justificada`, `professor_presenca` e `matricula_disciplina_id`. Datas sem fuso são interpretadas como `America/Sao_Paulo` antes de persistir em `timestamptz`.
+- **Semântica temporal das experimentais:** `presenca='ausente'` em aula futura significa `agendada`, não falta. Cancelamento sempre prevalece; após o início, `presente`/`matriculado` viram presença, `faltou`/`ausente` viram falta e valores desconhecidos ficam `sem_status`.
 - **Anotações:** `aulas_emusys.anotacoes` pertence ao Emusys. `aulas_emusys.anotacoes_fabio` pertence exclusivamente à RPC do Fábio e não aparece no payload do upsert do sync. A leitura pedagógica pode preferir Fábio e cair no Emusys, mas uma fonte nunca sobrescreve a outra.
 - **Limite semântico:** `professor_presenca='ausente'` não prova falta funcional do professor; pode representar aula sem ocorrência/chamada. Não usar isoladamente em Health Score ou RH.
 

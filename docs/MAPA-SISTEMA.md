@@ -195,7 +195,7 @@ Formulários de lançamento manual (React Hook Form + Zod). Escrevem direto nas 
 - **WhatsApp UAZAPI:** `enviar-mensagem-lead`, `enviar-mensagem-admin`, `whatsapp-status`, `whatsapp-connect`, `listar-instancias-uazapi`, `configurar-webhook-caixa`, `buscar-foto-perfil`, `deletar-mensagem-admin`, `editar-mensagem-admin`, `relatorio-admin-whatsapp`, `professor-360-whatsapp`, `relatorio-coordenacao-whatsapp`, `projeto-alertas-whatsapp`
 - **WhatsApp Meta (Campanhas):** `enviar-campanha`, `controle-campanha`, `enviar-mensagem-meta`, `gerenciar-templates`, `sincronizar-templates`
 - **Pesquisas:** `enviar-pesquisa-pos-primeira-aula`, `enviar-pesquisa-evasao`, `processar-resposta-pesquisa`
-- **Emusys/dados:** `sync-presenca-emusys`, `marcos-jornada`, `auditor-divergencias-emusys`, `sync-feriados`
+- **Emusys/dados:** `sync-presenca-emusys`, `marcos-jornada`, `auditor-divergencias-emusys`, `sync-feriados`. O contrato puro `_shared/experimental-snapshot.ts` pagina `/aulas` até o fim e normaliza o snapshot de experimentais por `unidade + aula Emusys + participante externo + execução`, sem conciliar por nome/telefone.
 - **Admin/usuários:** `admin-create-user`, `admin-update-email`, `admin-update-password`, `validar-token-feedback`
 
 > Lista de edge functions **disparada pelo frontend**. Edges de webhook/cron (ex: `processar-matricula-emusys`, `sync-matriculas-emusys`, `enviar-boas-vindas-matricula`, `meta-webhook-campanhas`) não aparecem aqui — ver `.claude/memory/integracao-infra.md`.
