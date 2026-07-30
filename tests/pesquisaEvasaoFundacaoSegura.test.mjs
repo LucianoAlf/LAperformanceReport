@@ -239,19 +239,133 @@ function assertNoAuthorizationBypass(value, context) {
   const code = stripSqlComments(value);
   assert.doesNotMatch(
     code,
-    /\bor\s*\(*\s*(?:true\b|1\s*=\s*1\b)/i,
-    `${context} aceita OR TRUE/1=1`,
+    /(?:\btrue\b|\b1\s*=\s*1\b)\s*\)*\s*or\b|\bor\s*\(*\s*(?:true\b|1\s*=\s*1\b)/i,
+    `${context} aceita TRUE/1=1 em um lado de OR`,
   );
   assert.doesNotMatch(
     code,
-    /\b(?:[a-z_][a-z0-9_]*\.)?perfil\s*(?:=\s*['"]admin['"]|in\s*\([^)]*['"]admin['"]|=\s*any\s*\([^)]*['"]admin['"])/i,
-    `${context} aceita bypass admin por igualdade/IN/ANY`,
+    /\breturn\s+true\b/i,
+    `${context} aceita RETURN TRUE`,
   );
   assert.doesNotMatch(
     code,
-    /['"]admin['"]\s*=\s*any\s*\(/i,
-    `${context} aceita bypass admin por ANY invertido`,
+    /['"]admin['"]/i,
+    `${context} aceita bypass admin por COALESCE/igualdade/IN/ANY`,
   );
+  assert.doesNotMatch(
+    code,
+    /\b1\s*=\s*1\b|\btrue\s*=\s*true\b|\bfalse\s*=\s*false\b|\b([a-z_][a-z0-9_.]*)\s*=\s*\1\b/i,
+    `${context} aceita tautologia`,
+  );
+}
+
+const forbiddenClientRoles = [
+  'public',
+  'anon',
+  'authenticated',
+  'mila_acesso_restrito',
+  'sol_acesso_restrito',
+];
+
+function assertNoForbiddenSchemaWidePrivileges(source) {
+  for (const statement of statements(source)) {
+    const incompatible =
+      /^\s*grant\b[\s\S]*\bon\s+all\s+(?:tables|sequences|functions)\s+in\s+schema\s+public\b[\s\S]*\bto\b/i
+        .test(statement) ||
+      /^\s*alter\s+default\s+privileges\b[\s\S]*\bgrant\b[\s\S]*\bon\s+(?:tables|sequences|functions)\b[\s\S]*\bto\b/i
+        .test(statement);
+    if (!incompatible) continue;
+
+    const roles = statement
+      .split(/\bto\b/i)
+      .at(-1)
+      .replace(/\bwith\s+grant\s+option\b/gi, '')
+      .split(',')
+      .map((role) => role.trim().replace(/^"|"$/g, '').toLowerCase());
+    assert.equal(
+      roles.some((role) => forbiddenClientRoles.includes(role)),
+      false,
+      'GRANT global/default incompatível para role cliente',
+    );
+  }
+}
+
+function extractPartialIndexPredicate(statement) {
+  const code = stripSqlComments(statement).trim();
+  const match = code.match(
+    /^create\s+unique\s+index\b[\s\S]*?\bon\s+public\.[a-z0-9_]+\s*\([^)]*\)\s+where\s+([\s\S]+)$/i,
+  );
+  assert.ok(match, 'indice unico parcial sem predicado ancorado');
+  return match[1].trim();
+}
+
+function assertPartialIndexPredicate(statement, expected, context) {
+  const predicate = extractPartialIndexPredicate(statement);
+  assertNoAuthorizationBypass(predicate, context);
+  assert.match(
+    normalizeSql(predicate).replace(/\s*=\s*/g, '='),
+    expected,
+    `${context} invalido`,
+  );
+}
+
+function assertBlockingServiceRoleGate(body) {
+  const serviceGate = [...body.matchAll(
+    /\bif\s+([\s\S]*?)\s+then\b([\s\S]*?)\bend\s+if\b/gi,
+  )].find((match) =>
+    /\bauth\.role\s*\(\s*\)/i.test(match[1]) &&
+    /['"]service_role['"]/i.test(match[1]));
+  assert.ok(serviceGate, 'criar precisa de gate service_role executavel');
+
+  const condition = normalizeSql(serviceGate[1])
+    .replace(/^\(([\s\S]*)\)$/, '$1');
+  assert.equal(
+    condition,
+    "auth.role() is distinct from 'service_role'",
+    'gate deve bloquear exatamente role distinta de service_role',
+  );
+  assertNoAuthorizationBypass(serviceGate[1], 'gate service_role');
+  assert.doesNotMatch(serviceGate[1], /\band\s+false\b/i);
+  assert.match(
+    serviceGate[2],
+    /\b(?:raise|return)\b/i,
+    'ramo nao-service precisa interromper a funcao com RAISE/RETURN',
+  );
+}
+
+function assertGovernedReturn(statement) {
+  assert.match(
+    statement,
+    /fn_usuario_atual_tem_permissao_estrita\s*\(\s*['"]sucesso_aluno\.evasao\.enviar['"](?:\s*::\s*varchar)?\s*,\s*(?:[a-z_][a-z0-9_]*\.)?[a-z_]*unidade_id\s*\)/i,
+  );
+  assertNoAuthorizationBypass(statement, 'RETURN de pode_enviar');
+}
+
+function assertNoNominalSeedDml(source) {
+  const protectedTargets =
+    '(?:pesquisa_evasao_assinaturas|pesquisa_evasao_templates|pesquisa_evasao_previews|usuario_perfis)';
+  const rolloutTokens =
+    /public\.usuarios\b|\b(?:email|nome)\b|\b(?:29|30)\b|\blike\b|jessyca@lamusic\.com\.br|fabi@gmail\.com|368d47f5-2d88-4475-bc14-ba084a9a348e|2ec861f6-023f-4d7b-9927-3960ad8c2a92|95553e96-971b-4590-a6eb-0201d013c14d/i;
+
+  for (const statement of statements(source)) {
+    if (
+      !new RegExp(
+        `^\\s*(?:insert\\s+into|update|merge\\s+into)\\s+public\\.${protectedTargets}\\b`,
+        'i',
+      ).test(statement)
+    ) continue;
+
+    assert.doesNotMatch(
+      statement,
+      rolloutTokens,
+      'seed/DML nominal deve ficar no runbook da Task 7',
+    );
+    assert.doesNotMatch(
+      statement,
+      /^\s*(?:insert\s+into|update|merge\s+into)\s+public\.usuario_perfis\b/i,
+      'usuario_perfis nao pode ser populada nesta migration',
+    );
+  }
 }
 
 const privilegeUniverse = {
@@ -413,6 +527,49 @@ test('parser de RETURNS ignora assinaturas em comentarios e strings', () => {
   assert.match(parts.body, /\breturn\s+false\b/i);
 });
 
+test('guards rejeitam formas adversariais sem depender da migration', () => {
+  for (const bypass of [
+    "return true or fn_usuario_atual_tem_permissao_estrita('x', unidade_id);",
+    "return fn_usuario_atual_tem_permissao_estrita('x', unidade_id) or 1 = 1;",
+    "return coalesce(u.perfil, 'admin') in ('admin');",
+  ]) {
+    assert.throws(() => assertNoAuthorizationBypass(bypass, 'meta-test'));
+  }
+
+  assert.throws(() =>
+    assertNoForbiddenSchemaWidePrivileges(
+      'grant select on all tables in schema public to authenticated;',
+    ));
+  assert.throws(() =>
+    assertNoForbiddenSchemaWidePrivileges(
+      'alter default privileges in schema public grant execute on functions to public;',
+    ));
+  assert.throws(() =>
+    assertPartialIndexPredicate(
+      'create unique index x on public.pesquisa_evasao (evasao_id) where modo_teste = false or true',
+      /^\(?modo_teste=false\)?$/i,
+      'meta-index',
+    ));
+  assert.throws(() =>
+    assertBlockingServiceRoleGate(`
+      if auth.role() is distinct from 'service_role' and false then
+        raise exception 'negado';
+      end if;
+    `));
+  assert.throws(() =>
+    assertGovernedReturn(`
+      return true or public.fn_usuario_atual_tem_permissao_estrita(
+        'sucesso_aluno.evasao.enviar',
+        v_unidade_id
+      )
+    `));
+  assert.throws(() =>
+    assertNoNominalSeedDml(`
+      insert into public.pesquisa_evasao_assinaturas (usuario_id)
+      select id from public.usuarios where id = 30
+    `));
+});
+
 const contractTest = (name, callback) =>
   test(name, { skip: !sql }, callback);
 
@@ -527,6 +684,7 @@ contractTest('catalogo e perfil dedicado ligam somente cinco permissoes', () => 
 
 contractTest('rollout nominal fica integralmente fora da migration', () => {
   // A verificacao executavel do runbook, terceiro usuario e escopos e Task 7.
+  assertNoNominalSeedDml(sql);
   const rolloutDml = statements(sql).filter(
     (statement) =>
       /^\s*(?:insert|update|merge)\b/i.test(statement) &&
@@ -567,6 +725,7 @@ contractTest('tabelas privadas terminam sem privilegio de roles proibidas', () =
 });
 
 contractTest('estado final de grants e service-only e minimo', () => {
+  assertNoForbiddenSchemaWidePrivileges(sql);
   for (const tableName of ['pesquisa_evasao', ...conversationTables]) {
     assertFinalPrivileges('table', tableName, 'authenticated', ['select']);
   }
@@ -665,10 +824,10 @@ contractTest('assinatura ativa usa indice unico parcial', () => {
     1,
     'assinatura precisa de um unico indice em usuario_id',
   );
-  assert.match(
+  assertPartialIndexPredicate(
     signatureIndexes[0],
-    /\bwhere\s+(?:\(\s*)?ativo(?:\s*=\s*true)?(?:\s*\))?\s*$/i,
-    'indice de assinatura deve ser parcial apenas para ativo',
+    /^\(?ativo(?:=true)?\)?$/i,
+    'indice parcial de assinatura ativa',
   );
 });
 
@@ -892,6 +1051,11 @@ contractTest('slots de teste e producao sao independentes', () => {
     productionIndex,
     'producao exige indice unico parcial (evasao_id) WHERE modo_teste=false',
   );
+  assertPartialIndexPredicate(
+    productionIndex,
+    /^\(?modo_teste=false\)?$/i,
+    'indice parcial de producao',
+  );
 
   const globalEvasaoConstraints = statements(sql).filter(
     (statement) =>
@@ -939,10 +1103,10 @@ contractTest('slots de teste e producao sao independentes', () => {
     /\bon\s+public\.pesquisa_evasao\s*\(\s*evasao_id\s*,\s*telefone_destino_snapshot\s*\)/i,
     'slot de teste deve ser por evasao_id e telefone de teste',
   );
-  assert.match(
+  assertPartialIndexPredicate(
     testSlotIndexes[0],
-    /\bwhere\b[\s\S]*\bmodo_teste\s*=\s*true\b[\s\S]*\benvio_status\s+in\s*\([^)]*['"]enviando['"][^)]*['"]incerto['"][^)]*\)\s*$/i,
-    'predicado deve ser modo_teste=true e envio_status enviando/incerto',
+    /^\(?modo_teste=true and envio_status in\(['"]enviando['"],['"]incerto['"]\)\)?$/i,
+    'indice parcial do slot de teste',
   );
 });
 
@@ -1119,22 +1283,7 @@ contractTest('criar pesquisa e service-only e nao antecipa sucesso do provedor',
   assert.match(header, /\bsecurity\s+definer\b/i);
   assert.match(header, /\bset\s+search_path\s*=\s*public\s*,\s*pg_temp\b/i);
 
-  const serviceGate = [...body.matchAll(
-    /\bif\s+([\s\S]*?)\s+then\b([\s\S]*?)\bend\s+if\b/gi,
-  )].find((match) =>
-    /\bauth\.role\s*\(\s*\)/i.test(match[1]) &&
-    /['"]service_role['"]/i.test(match[1]));
-  assert.ok(serviceGate, 'criar precisa de gate service_role executavel');
-  assert.match(
-    serviceGate[1],
-    /\bis\s+distinct\s+from\b|\bcoalesce\s*\(|\bis\s+null\b[\s\S]*(?:<>|!=)/i,
-    'gate service_role precisa bloquear role nula e diferente',
-  );
-  assert.match(
-    serviceGate[2],
-    /\b(?:raise|return)\b/i,
-    'ramo nao-service precisa interromper a funcao com RAISE/RETURN',
-  );
+  assertBlockingServiceRoleGate(body);
 
   assertFinalPrivileges(
     'function',
@@ -1182,8 +1331,8 @@ contractTest('pode_enviar exige permissao concreta ou service role', () => {
     governedReturn,
     'RETURN governado precisa chamar helper estrito com unidade concreta',
   );
+  assertGovernedReturn(governedReturn);
   assert.match(governedReturn, /\bauth\.role\s*\(\s*\)\s*=\s*['"]service_role['"]/i);
-  assert.doesNotMatch(body, /\breturn\s+true\s*;/i);
   assert.doesNotMatch(
     definition,
     /fn_usuario_atual_tem_permissao_estrita\s*\([^)]*,\s*null\s*\)/i,
