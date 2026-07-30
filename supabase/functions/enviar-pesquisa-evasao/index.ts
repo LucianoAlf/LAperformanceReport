@@ -25,6 +25,7 @@ import {
   classificarRespostaProvider,
   deveAbrirConversaReal,
   type EstadoEnvioPersistido,
+  fetchProviderComTimeout,
   type ProvedorWhatsApp,
   sanitizarErroProvider,
 } from "./provider.ts";
@@ -394,29 +395,35 @@ async function enviarAoProvider(
     if (credenciais.wahaApiKey) {
       headers["X-Api-Key"] = credenciais.wahaApiKey;
     }
-    response = await fetch(`${credenciais.wahaUrl}/api/sendText`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        session: credenciais.wahaSession,
-        chatId: toWahaJid(claim.telefone_destino),
-        text: claim.mensagem_renderizada,
-      }),
-    });
-  } else {
-    response = await fetch(`${credenciais.baseUrl}/send/text`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        token: credenciais.token,
+    response = await fetchProviderComTimeout(
+      `${credenciais.wahaUrl}/api/sendText`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          session: credenciais.wahaSession,
+          chatId: toWahaJid(claim.telefone_destino),
+          text: claim.mensagem_renderizada,
+        }),
       },
-      body: JSON.stringify({
-        number: claim.telefone_destino,
-        text: claim.mensagem_renderizada,
-        delay: 2000,
-        readchat: true,
-      }),
-    });
+    );
+  } else {
+    response = await fetchProviderComTimeout(
+      `${credenciais.baseUrl}/send/text`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          token: credenciais.token,
+        },
+        body: JSON.stringify({
+          number: claim.telefone_destino,
+          text: claim.mensagem_renderizada,
+          delay: 2000,
+          readchat: true,
+        }),
+      },
+    );
   }
 
   const corpo = await response.text();
