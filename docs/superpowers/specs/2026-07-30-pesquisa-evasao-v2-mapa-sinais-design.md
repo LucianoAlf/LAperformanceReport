@@ -37,7 +37,8 @@ Esta proposta usa a auditoria somente leitura realizada no código e no banco re
 
 - `movimentacoes_admin` é a fonte canônica da evasão e da não renovação.
 - `pesquisa_evasao` já guarda snapshots, envio, texto, áudio e datas da resposta.
-- As seis pesquisas existentes estão como respondidas e com `enviado_por='sistema'`.
+- As seis pesquisas existentes estão como respondidas, com `enviado_por='sistema'`, e usam o mesmo telefone interno de teste.
+- Alf confirmou em 2026-07-30 que os seis registros existentes são testes realizados antes da entrada em produção. Eles não compõem baseline, taxa de resposta, distribuição de causas, ação operacional ou indicador de professor.
 - `categoria_resposta` e `sentimento` não estão populados.
 - Há resposta promocional irrelevante capturada como resposta válida.
 - Há áudios marcados como respondidos sem transcrição.
@@ -67,7 +68,18 @@ Em julho de 2026:
 - 35 com presença semântica disponível nos 90 dias anteriores;
 - 25 com pelo menos 25% de faltas nesse período.
 
-O caso de Ana Beatriz demonstra a utilidade do cruzamento: o texto legado registra “Troca de Unidade”, a interface exibe ausência de motivo por depender apenas do catálogo e a resposta privada relata atraso do professor, redução da duração da aula e desânimo.
+#### O achado que melhor demonstra o valor
+
+O caso exibido sob o nome de Ana Beatriz continua útil como ilustração do cruzamento que o produto precisa fazer: o texto legado registra “Troca de Unidade”, a interface exibe ausência de motivo por depender apenas do catálogo e a resposta de teste menciona atraso, redução da duração da aula e desânimo.
+
+Essa resposta, entretanto, veio do número interno de teste de Alf, não da família. Portanto:
+
+- não é evidência sobre a aluna, a família ou qualquer professor real;
+- não abre ação, apuração ou encaminhamento à coordenação;
+- não alimenta causa oficial, baseline ou indicador de professor;
+- serve apenas como exemplo de teste do tipo de divergência que o sistema poderá capturar em produção.
+
+Os outros cinco registros existentes recebem o mesmo tratamento de população de teste.
 
 ### 2.3 Relatórios e agentes
 
@@ -140,7 +152,7 @@ A fila Sol/Hermes registrava 20 entregas e 3 erros até a auditoria. Os relatór
 | Jornada | `aluno_jornada_matricula_disciplina` | unidade + matrícula-disciplina |
 | Presença | `vw_aluno_presenca_semantica_v1` | aluno + evento de aula |
 | Evasão/não renovação | `movimentacoes_admin` | movimentação |
-| Pesquisa de saída | `pesquisa_evasao` | uma pesquisa por movimentação |
+| Pesquisa de saída | `pesquisa_evasao` | no máximo um cabeçalho produtivo + N tentativas de teste por movimentação |
 | Mensagem da pesquisa | nova trilha de eventos | uma mensagem do provedor |
 | Análise da resposta | nova análise versionada | uma revisão da conversa |
 | Ação humana | `aluno_acoes` | uma intervenção |
@@ -164,6 +176,8 @@ A evolução é aditiva:
 - `aluno_acoes` recebe referências explícitas à pesquisa e à análise quando a ação nascer desse fluxo.
 
 `pesquisa_evasao.status` continua legível durante a migração, mas novos consumidores usam `envio_status` e `resposta_status`. Uma camada de compatibilidade deriva o status legado até todos os consumidores migrarem.
+
+A listagem operacional mantém uma linha por movimentação. Ela associa diretamente apenas o cabeçalho produtivo e apresenta testes como histórico separado, com quantidade, último teste e badge inequívoco. Uma tentativa de teste nunca determina o status produtivo nem duplica a movimentação na paginação.
 
 O motor de `agente_fila_mensagens` serve como referência para debounce e claim atômico. A pesquisa usa tabelas próprias porque sua retenção, auditoria, associação ao aluno e revisão são diferentes da conversa comercial.
 
@@ -219,6 +233,8 @@ O modo teste:
 
 - usa telefone de teste autorizado;
 - grava `modo_teste=true`;
+- cria uma tentativa própria e nunca atualiza, consome ou bloqueia o cabeçalho produtivo da mesma evasão;
+- convive com no máximo um cabeçalho produtivo por evasão, garantido por unicidade parcial de produção em vez de `unique (evasao_id)` global;
 - não entra em taxa de resposta, motivos ou indicadores;
 - não substitui o telefone cadastrado do aluno;
 - não altera `alunos` nem `movimentacoes_admin`;
@@ -254,6 +270,7 @@ Entrega e resposta não compartilham um único status.
 
 - `nao_enviado`;
 - `enviando`;
+- `incerto`, quando o pedido pode ter alcançado o provedor, mas não houve confirmação suficiente;
 - `enviado`;
 - `falhou`;
 - `entregue`, quando o provedor oferecer evidência;
@@ -386,6 +403,8 @@ A análise também guarda evidência textual mínima, confiança da sugestão, u
 ### 9.4 Proteção do professor
 
 Uma resposta individual pode abrir uma apuração, mas não cria automaticamente penalidade ou indicador negativo do professor.
+
+Registros com `modo_teste=true` nunca abrem apuração, ação ou encaminhamento e não entram em relatório ou indicador de professor, mesmo quando o texto menciona um professor nominalmente.
 
 Relatórios por professor exigem:
 
@@ -647,6 +666,7 @@ job -> agente -> regra -> consulta -> fonte canônica -> saída -> canal -> dono
 - Ausência de `caixa_id`, caixa inativa, segredo ausente ou hash divergente retorna `401`/`403` antes de qualquer escrita ou roteamento.
 - O health check interno usa autenticação de serviço separada; ele não cria uma exceção pública capaz de contornar o segredo inbound.
 - `telefone_override` só existe em modo teste autorizado.
+- Um envio de teste nunca faz `upsert` sobre a pesquisa produtiva da mesma evasão. A unicidade de `evasao_id` vale apenas para `modo_teste=false`.
 - `pesquisa_evasao`, mensagens, transcrições e análises usam RLS baseada em `sucesso_aluno.evasao.*`, respeitando unidade e ação (`ver`, `enviar`, `revisar`, `gerir_acoes`, `relatorios`, `modo_teste`).
 - Policies permissivas com `qual=true`, inclusive para `authenticated`, `mila_acesso_restrito` e `sol_acesso_restrito`, são removidas; acesso de agentes ocorre apenas por contrato/read model autorizado.
 - Mídia privada usa URL assinada.
@@ -670,7 +690,9 @@ Permissões mínimas:
 ## 17. Falhas e recuperação
 
 - Falha antes do provedor não marca envio como concluído.
-- Timeout com resultado incerto exige reconciliação pelo ID idempotente antes de reenviar.
+- O claim cria uma chave idempotente estável e só o primeiro chamador recebe autorização para despachar ao provedor.
+- Timeout, queda do processo ou resposta ambígua deixa o envio em `incerto`; nova confirmação ou nova prévia não redispara automaticamente.
+- A mesma chave é enviada ao provedor quando o contrato do canal suportar idempotência. Sem esse suporte, a reconciliação por caixa, telefone, horário e ID da mensagem é obrigatória antes de qualquer reenvio humano.
 - Webhook duplicado é ignorado pelo ID do provedor.
 - Áudio sem transcrição continua pendente e reproduzível por usuário autorizado.
 - Mensagem ambígua vai para triagem, não para o aluno errado.

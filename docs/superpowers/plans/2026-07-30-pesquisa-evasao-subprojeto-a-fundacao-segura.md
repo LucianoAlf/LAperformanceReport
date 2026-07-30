@@ -61,7 +61,7 @@ O request não aceita `operador`, `mensagem`, `assinatura_nome`, `telefone_overr
 
 ```text
 envio_status:
-nao_enviado | enviando | enviado | falhou | entregue | lido
+nao_enviado | enviando | incerto | enviado | falhou | entregue | lido
 
 resposta_status:
 sem_resposta | coletando | pronta_para_revisao | em_revisao |
@@ -92,6 +92,16 @@ test('RLS usa permissoes do dominio e unidade da linha', () => {
   assert.match(sql, /sucesso_aluno\.evasao\.ver/i);
   assert.match(sql, /fn_usuario_atual_tem_permissao/i);
   assert.match(sql, /unidade_id/i);
+});
+
+test('modo teste nao disputa unicidade nem sobrescreve producao', () => {
+  assert.match(sql, /unique[\s\S]+evasao_id[\s\S]+where[\s\S]+modo_teste\s*=\s*false/i);
+  assert.doesNotMatch(sql, /unique\s*\(\s*evasao_id\s*\)/i);
+});
+
+test('as duas overloads filtram cada linha pelas unidades autorizadas', () => {
+  assert.match(sql, /listar_evadidos_para_pesquisa\(uuid,\s*integer,\s*integer,\s*varchar\)/i);
+  assert.match(sql, /listar_evadidos_para_pesquisa\(uuid,\s*integer,\s*integer,\s*varchar,\s*integer,\s*integer\)/i);
 });
 
 test('roles de agentes nao recebem resposta privada', () => {
@@ -129,9 +139,15 @@ Exigir:
 
 - colunas novas de entrega/resposta;
 - `modo_teste`;
+- os seis registros legados confirmados por Alf como testes, sem participação em analytics ou ações;
 - telefone de destino em snapshot, sem alteração do cadastro do aluno;
 - preview com expiração, hash e uso único;
 - chave idempotente;
+- estados `enviando` e `incerto`, sem reenvio automático depois de resultado ambíguo;
+- modo teste em linha própria, sem sobrescrever ou bloquear produção;
+- escopo negativo: usuário da unidade A não lista A+B passando `p_unidade_id=NULL`, em nenhuma overload;
+- escopo negativo: `stats_pesquisa_evasao(NULL, ...)` de usuário da unidade A não agrega a unidade B;
+- vínculo único entre preview, chave idempotente e pesquisa;
 - vínculo de assinatura, usuário autenticado, template e caixa;
 - constraints que incluam `recusada_opt_out`.
 
@@ -198,6 +214,7 @@ create table public.pesquisa_evasao_templates (
 create table public.pesquisa_evasao_previews (
   id uuid primary key default gen_random_uuid(),
   evasao_id integer not null references public.movimentacoes_admin(id),
+  unidade_id uuid not null references public.unidades(id),
   usuario_id integer not null references public.usuarios(id),
   auth_user_id uuid not null,
   assinatura_id uuid not null references public.pesquisa_evasao_assinaturas(id),
@@ -208,6 +225,7 @@ create table public.pesquisa_evasao_previews (
   telefone_destino text not null,
   mensagem_renderizada text not null,
   payload_hash text not null,
+  idempotency_key uuid not null unique default gen_random_uuid(),
   expira_em timestamptz not null,
   consumido_em timestamptz,
   criado_em timestamptz not null default now()
@@ -231,7 +249,7 @@ pesquisa_evasao_mensagens:
 id, pesquisa_id nullable, caixa_id, direcao, provider_message_id,
 telefone_normalizado, tipo, texto, audio_storage_path,
 provider_created_at, recebido_em, resolution_status,
-substantividade, correlation_id, criado_em
+substantividade, correlation_id, idempotency_key, criado_em
 
 pesquisa_evasao_transcricoes:
 id, mensagem_id, versao, status, texto, erro_codigo,
@@ -261,7 +279,8 @@ executado_por_usuario_id, executado_por_auth_user_id,
 assinatura_id, assinatura_nome_snapshot,
 template_id, template_versao,
 mensagem_renderizada, provider_message_id,
-idempotency_key, primeira_interacao_em,
+preview_id, idempotency_key, envio_iniciado_em,
+primeira_interacao_em,
 ultima_interacao_em, pronta_para_revisao_em
 ```
 
@@ -270,17 +289,71 @@ Backfill:
 - `status='respondido'` → `envio_status='enviado'`, `resposta_status='pronta_para_revisao'`;
 - `status='enviado'` → `envio_status='enviado'`, `resposta_status='sem_resposta'`;
 - falhas/pendências mantêm equivalência documentada;
-- registros existentes ficam `modo_teste=false` somente porque não há evidência contrária; anotar a limitação em comentário SQL.
+- os seis registros existentes ficam `modo_teste=true`, porque Alf confirmou que todos foram disparados para o mesmo número interno de teste antes da produção;
+- antes da migração, registrar em evidência privada de rollout os seis UUIDs verificados em produção, sem telefone ou conteúdo de resposta;
+- o backfill usa uma allowlist explícita desses seis UUIDs e falha de forma segura se ela não resolver exatamente seis registros, um único telefone normalizado e nenhum telefone vazio;
+- somente os seis UUIDs aprovados são atualizados; linhas criadas depois da verificação não são classificadas por abrangência da tabela ou por semelhança de telefone;
+- um comentário SQL registra a origem da decisão, a data da confirmação e a regra de exclusão analítica;
+- qualquer registro futuro usa `modo_teste=false` por padrão e só vira teste pelo fluxo autorizado;
+- `stats_pesquisa_evasao`, read models, taxas de resposta, causas, baselines, ações e indicadores de professor filtram `modo_teste=false`;
+- a listagem operacional mantém os seis registros visíveis com badge inequívoco `TESTE`, sem oferecê-los como trabalho real para Fabi/Jéssica.
+- remover a unicidade global de `evasao_id` e criar índice único parcial apenas para produção: `unique (evasao_id) where modo_teste=false`;
+- `preview_id` referencia `pesquisa_evasao_previews(id)` e é único; `idempotency_key` também é único e é copiado da preview, nunca regenerado no claim;
+- um índice único parcial de slot ativo de teste impede duas tentativas simultâneas para a mesma evasão e telefone de teste enquanto o estado for `enviando` ou `incerto`, sem bloquear produção;
+- todo claim de teste insere linha própria; nunca usa `ON CONFLICT` contra o cabeçalho produtivo.
 
-- [ ] **Step 5: Reescrever grants e policies**
+Contrato do backfill, sem versionar o telefone interno:
 
-Para `pesquisa_evasao` e cada tabela privada:
+```sql
+do $$
+declare
+  v_ids uuid[] := array[
+    -- preencher na implementação com os seis UUIDs confirmados
+  ]::uuid[];
+  v_total integer;
+  v_telefones integer;
+  v_telefones_vazios integer;
+begin
+  select
+    count(*),
+    count(distinct nullif(regexp_replace(coalesce(aluno_telefone, ''), '\D', '', 'g'), '')),
+    count(*) filter (
+      where nullif(regexp_replace(coalesce(aluno_telefone, ''), '\D', '', 'g'), '') is null
+  )
+  into v_total, v_telefones, v_telefones_vazios
+  from public.pesquisa_evasao
+  where id = any(v_ids);
 
-1. `enable row level security`;
-2. remover `pesquisa_evasao_all` e qualquer policy `USING (true)`;
-3. revogar `ALL` de `anon`, `authenticated`, `mila_acesso_restrito`, `sol_acesso_restrito`;
-4. conceder apenas `SELECT` a `authenticated`;
-5. policy de leitura exige:
+  if cardinality(v_ids) <> 6
+     or v_total <> 6
+     or v_telefones <> 1
+     or v_telefones_vazios <> 0 then
+    raise exception
+      'Backfill legado de modo_teste abortado: esperados 6 registros, 1 telefone e nenhum telefone vazio';
+  end if;
+
+  update public.pesquisa_evasao pe
+  set modo_teste = true,
+      updated_at = now()
+  where pe.id = any(v_ids);
+end;
+$$;
+
+comment on column public.pesquisa_evasao.modo_teste is
+  'Os 6 registros anteriores a producao foram confirmados por Alf em 2026-07-30 como testes no numero interno; ficam fora de analytics, acoes e indicadores.';
+```
+
+- [ ] **Step 5: Reescrever grants e policies por classe de tabela**
+
+Matriz obrigatória:
+
+- `pesquisa_evasao`: `SELECT` de `authenticated` somente com `sucesso_aluno.evasao.ver` na `unidade_id` da própria linha;
+- `pesquisa_evasao_mensagens`, `pesquisa_evasao_transcricoes` e `pesquisa_evasao_analises`: `SELECT` de `authenticated` somente com `ver`, resolvendo a unidade pelo cabeçalho;
+- `pesquisa_evasao_previews`, `pesquisa_evasao_templates` e `pesquisa_evasao_assinaturas`: service-only, sem `SELECT` direto de `authenticated`; a Edge devolve apenas a projeção autorizada necessária à tela;
+- todas: RLS habilitada, sem policy `USING (true)`, e `ALL` revogado de `PUBLIC`, `anon`, `authenticated`, `mila_acesso_restrito` e `sol_acesso_restrito` antes dos grants mínimos explícitos;
+- sequences relacionadas também perdem grants de `PUBLIC`/`anon`/roles restritos.
+
+A policy de leitura do cabeçalho exige:
 
 ```sql
 public.fn_usuario_atual_tem_permissao(
@@ -289,7 +362,7 @@ public.fn_usuario_atual_tem_permissao(
 )
 ```
 
-Nas tabelas filhas, obter a unidade por `exists` no cabeçalho. Não duplicar `unidade_id` apenas para simplificar policy.
+Nas tabelas filhas de conversa, obter a unidade por `exists` no cabeçalho. A preview é service-only e guarda `unidade_id` como snapshot de autorização/auditoria porque existe antes do cabeçalho.
 
 Não criar policy de escrita direta para o navegador. Edge Functions usam service role depois de autenticar/autorização; revisão humana ganhará RPC governada no B/C.
 
@@ -297,6 +370,7 @@ Não criar policy de escrita direta para o navegador. Edge Functions usam servic
 
 Substituir as implementações de:
 
+- `listar_evadidos_para_pesquisa(uuid, integer, integer, varchar)`;
 - `listar_evadidos_para_pesquisa(uuid, integer, integer, varchar, integer, integer)`;
 - `stats_pesquisa_evasao(uuid, integer, integer)`;
 - `criar_pesquisa_evasao(integer, text)`;
@@ -304,12 +378,35 @@ Substituir as implementações de:
 
 Regras:
 
-- `listar` e `stats` exigem `sucesso_aluno.evasao.ver` e escopo de unidade;
-- `criar_pesquisa_evasao` deixa de ser executável por `authenticated` e fica somente `service_role`;
+- o frontend atual chama a sobrecarga de seis argumentos, mas a de quatro também é endurecida para não permanecer como bypass de compatibilidade;
+- nesta etapa, preservar exatamente o `RETURNS TABLE` de cada overload; PostgreSQL não permite mudar retorno por `CREATE OR REPLACE`;
+- ambas as sobrecargas de `listar` e `stats` exigem `sucesso_aluno.evasao.ver` e filtram cada linha pela unidade real de `movimentacoes_admin`;
+- `p_unidade_id=NULL` significa “todas as unidades autorizadas”, nunca “todas as unidades”: perfil restrito à unidade A não pode obter B; perfil global/admin é avaliado contra a unidade concreta de cada linha;
+- nenhuma autorização do domínio chama `usuario_tem_permissao(..., NULL)`; a Edge e as RPCs sempre usam a unidade concreta da movimentação;
+- testes legados continuam visíveis e marcados na listagem operacional, mas `stats` e qualquer agregado excluem `modo_teste=true`;
+- revogar `EXECUTE` de `PUBLIC` e `anon` nas cinco assinaturas;
+- `criar_pesquisa_evasao` passa a `SECURITY DEFINER`, fixa `search_path = public, pg_temp`, valida `auth.role()='service_role'`, perde `EXECUTE` de `authenticated` e fica somente para `service_role`;
+- o claim novo é o único caminho da nova Edge para criar/transicionar pesquisa; `criar_pesquisa_evasao` fica como compatibilidade service-only, não marca `enviado` antes do provedor e usa o conflito parcial de produção;
+- `pode_enviar_pesquisa_evasao` permanece disponível apenas a ator autenticado com `sucesso_aluno.evasao.enviar` ou a `service_role`;
 - nenhuma RPC retorna resposta bruta a quem possui apenas `relatorios`;
-- `anon` perde `EXECUTE`;
 - `search_path = public, pg_temp`;
 - funções `SECURITY DEFINER` validam permissão explicitamente.
+- além dos testes por texto, validar o estado real com `pg_policies`, `has_table_privilege` e `has_function_privilege` para todas as assinaturas e roles.
+
+Grants mínimos esperados:
+
+```sql
+revoke all on function public.listar_evadidos_para_pesquisa(uuid, integer, integer, varchar)
+  from public, anon;
+revoke all on function public.listar_evadidos_para_pesquisa(uuid, integer, integer, varchar, integer, integer)
+  from public, anon;
+revoke all on function public.stats_pesquisa_evasao(uuid, integer, integer)
+  from public, anon;
+revoke all on function public.criar_pesquisa_evasao(integer, text)
+  from public, anon, authenticated;
+revoke all on function public.pode_enviar_pesquisa_evasao(integer)
+  from public, anon;
+```
 
 - [ ] **Step 7: Executar testes estruturais**
 
@@ -392,7 +489,6 @@ export interface ContextoOperador {
   usuarioId: number;
   authUserId: string;
   nomeUsuario: string;
-  unidadeId: string | null;
   assinaturaId: string;
   assinaturaNome: string;
 }
@@ -425,6 +521,8 @@ Usar `crypto.subtle.digest('SHA-256', ...)` para o hash do snapshot. A autoriza�
 2. resolução de `usuarios.auth_user_id`;
 3. verificação explícita de `usuario_tem_permissao(usuario.id, codigo, unidade_id)`;
 4. resolução de uma única assinatura ativa.
+
+`ContextoOperador` não carrega uma única “unidade do usuário”. O schema permite vários `usuario_perfis`; cada operação autoriza o operador contra a `unidade_id` concreta da movimentação. Nunca chamar o helper com unidade nula para decidir escopo.
 
 Não usar `fn_usuario_atual_tem_permissao` com o cliente service role, porque `auth.role()='service_role'` faria a checagem sempre passar.
 
@@ -461,7 +559,11 @@ Exigir:
 - ausência de default `operador='sistema'`;
 - ações `previsualizar` e `confirmar`;
 - `preview_id` consumido atomicamente;
+- chave idempotente estável criada no claim e reutilizada em toda reconciliação;
+- estados `enviando` e `incerto`, sem segundo dispatch automático;
 - nenhuma atualização de `alunos`/`movimentacoes_admin` com telefone de teste;
+- envio de teste cria linha própria e não conflita com o cabeçalho produtivo;
+- a nova Edge usa somente `claim_pesquisa_evasao_preview`, sem upsert direto e sem chamar a compatibilidade `criar_pesquisa_evasao`;
 - envio grava `executado_por_*`, assinatura, template e mensagem renderizada.
 
 - [ ] **Step 2: Implementar `previsualizar`**
@@ -508,11 +610,19 @@ claim_pesquisa_evasao_preview(p_preview_id uuid, p_auth_user_id uuid)
 Ela deve:
 
 - fazer `FOR UPDATE`;
-- validar autor, expiração e `consumido_em is null`;
-- marcar `consumido_em`;
-- criar/atualizar cabeçalho com `envio_status='enviando'`;
-- devolver snapshot completo;
-- impedir clique duplo.
+- validar autor e, no primeiro consumo, expiração;
+- se `consumido_em is not null` e a preview já estiver vinculada por `preview_id`, devolver o estado existente com `deve_despachar=false`;
+- se estiver consumida sem pesquisa vinculada, falhar de forma segura como inconsistência interna;
+- no primeiro consumo válido, marcar `consumido_em`;
+- copiar para a pesquisa a `idempotency_key` criada na preview; nunca gerar uma segunda chave;
+- serializar claims concorrentes pelo slot lógico: `(evasao_id, produção)` para produção e `(evasao_id, telefone_teste, teste)` para teste;
+- em produção, criar/atualizar somente o cabeçalho `modo_teste=false` protegido pelo índice único parcial;
+- em teste, sempre inserir uma linha `modo_teste=true` própria, sem atualizar ou bloquear o cabeçalho produtivo;
+- marcar `envio_status='enviando'` e `envio_iniciado_em`;
+- devolver snapshot completo e `deve_despachar=true` apenas ao primeiro claim;
+- em repetição do mesmo `preview_id`, devolver o estado existente com `deve_despachar=false`;
+- impedir clique duplo e bloquear nova prévia/confirmação enquanto o mesmo slot lógico estiver `enviando` ou `incerto`;
+- um teste `enviando`/`incerto` bloqueia outro teste do mesmo slot, mas nunca bloqueia produção da mesma evasão.
 
 A Edge envia somente o `mensagem_renderizada` do snapshot. Em sucesso:
 
@@ -528,7 +638,16 @@ Em falha conhecida:
 - preview continua consumido;
 - nova tentativa exige nova prévia.
 
-Timeout incerto não deve disparar novamente sem reconciliação pelo `idempotency_key`.
+Em timeout, queda depois do início do request ou qualquer resultado ambíguo:
+
+- marcar `envio_status='incerto'`;
+- manter preview consumido e a mesma `idempotency_key`;
+- não reenviar automaticamente;
+- reconciliar por caixa, telefone, janela de horário e `provider_message_id`;
+- enviar a mesma chave ao provedor em campo idempotente, se o contrato real do canal suportar;
+- se o provedor não oferecer idempotência, só permitir reenvio após decisão humana auditada.
+
+O claim deve tratar `enviando` antigo acima do TTL operacional como `incerto`, nunca como autorização para novo dispatch. Testar crash/timeout, repetição durante `enviando`, repetição em `incerto`, reconciliação para `enviado` ou `falhou` e concorrência entre dois `preview_id` diferentes da mesma evasão produtiva — exatamente um pode receber `deve_despachar=true`.
 
 - [ ] **Step 4: Configurar JWT no repositório**
 
@@ -577,6 +696,8 @@ Exigir:
 - confirmação usa somente `preview_id`;
 - modal expira e força nova prévia;
 - modo teste é visualmente distinto;
+- registros legados de teste exibem badge `TESTE` mesmo fora do toggle de teste;
+- registros de teste não oferecem ação operacional, apuração ou encaminhamento;
 - erro HTTP usa o corpo JSON retornado pela Edge.
 
 - [ ] **Step 2: Criar tipos explícitos**
@@ -657,25 +778,78 @@ Cobrir:
 - saída sem telefone continua visível com `bloqueio_codigo`;
 - motivo legado aparece quando catálogo está ausente;
 - colaborador/professor é flag explícita, não inferência por nome;
+- múltiplos testes da mesma evasão não duplicam a linha principal;
+- histórico de teste retorna `modo_teste=true` e a UI exibe badge `TESTE`;
+- status/resposta produtivos nunca são preenchidos a partir de um teste;
 - nenhuma escrita direta em `movimentacoes_admin` ou `alunos` permanece no componente.
 
 - [ ] **Step 2: Evoluir a RPC de listagem**
 
-Retornar:
+Criar uma RPC versionada, por exemplo:
 
-```text
-total_count
-bloqueio_codigo:
-  null | sem_aluno | sem_telefone | telefone_invalido |
-  motivo_nao_catalogado | publico_interno | pesquisa_aberta_no_mesmo_numero
-motivo_catalogado
-motivo_legado
-publico_tipo
-elegivel_envio
-elegibilidade_regra
+```sql
+public.listar_evadidos_para_pesquisa_v2(
+  p_unidade_id uuid,
+  p_limite integer,
+  p_offset integer,
+  p_status varchar,
+  p_ano integer,
+  p_mes integer
+)
 ```
 
-Aplicar permissão e escopo antes da paginação. A contagem deve refletir os mesmos filtros.
+Não tentar mudar o `RETURNS TABLE` das overloads antigas com `CREATE OR REPLACE`. Mantê-las endurecidas e com retorno compatível durante a migração do frontend. A RPC v2 retorna:
+
+```sql
+returns table (
+  total_count bigint,
+  evasao_id integer,
+  aluno_id integer,
+  nome text,
+  telefone text,
+  curso text,
+  professor text,
+  tempo_meses integer,
+  data_evasao date,
+  motivo_catalogado text,
+  motivo_legado text,
+  pesquisa_producao_status text,
+  pesquisa_producao_id uuid,
+  resposta_producao_texto text,
+  resposta_producao_audio_url text,
+  resposta_producao_tipo text,
+  respondido_producao_em timestamptz,
+  is_menor boolean,
+  responsavel_nome text,
+  publico_tipo text,
+  bloqueio_codigo text,
+  elegivel_envio boolean,
+  elegibilidade_regra text,
+  possui_historico_teste boolean,
+  quantidade_testes bigint,
+  ultimo_teste_em timestamptz
+)
+```
+
+`bloqueio_codigo` aceita `null | sem_aluno | sem_telefone | telefone_invalido | motivo_nao_catalogado | publico_interno | pesquisa_aberta_no_mesmo_numero`.
+
+A v2 tem grão de uma linha por `movimentacoes_admin`: associa em `pesquisa_producao_*` apenas `pesquisa_evasao.modo_teste=false` e agrega testes em lateral/subconsulta, sem multiplicar a movimentação. Aplicar permissão por unidade de cada linha antes da paginação. `p_unidade_id=NULL` agrega somente unidades autorizadas. A contagem deve refletir os mesmos filtros.
+
+Criar também um contrato restrito para o histórico:
+
+```sql
+public.listar_pesquisas_evasao_teste_v1(p_evasao_id integer)
+returns table (
+  pesquisa_id uuid,
+  modo_teste boolean,
+  envio_status text,
+  resposta_status text,
+  enviado_em timestamptz,
+  respondido_em timestamptz
+)
+```
+
+Essa RPC exige `sucesso_aluno.evasao.ver` na unidade concreta, retorna somente `modo_teste=true` e alimenta a expansão “Histórico de testes”. Assim, os seis legados aparecem com badge `TESTE`, mas nunca substituem `pesquisa_producao_status`, contam como resposta produtiva ou duplicam a paginação principal.
 
 - [ ] **Step 3: Remover edição direta de telefone**
 
@@ -695,6 +869,8 @@ Usar páginas de 50 registros, resetar para a página 1 quando filtros mudarem e
 ```text
 Mostrando 1–50 de 283
 ```
+
+Migrar o frontend para `listar_evadidos_para_pesquisa_v2`. Só considerar remoção das overloads legadas depois de busca de consumidores, telemetria e janela de compatibilidade; até lá, ambas permanecem sem acesso `anon` e sem bypass de unidade.
 
 - [ ] **Step 5: Testar**
 
@@ -737,13 +913,16 @@ O script deve verificar:
 - ausência de policy `ALL ... true`;
 - ausência de grants de escrita para `anon` e `authenticated`;
 - ausência de acesso direto de `mila_acesso_restrito` e `sol_acesso_restrito`;
+- ausência de `EXECUTE` para `PUBLIC`/`anon` nas duas overloads legadas, `stats`, `criar`, `pode_enviar`, na v2 e no histórico de testes;
+- ausência de `SELECT` direto de `authenticated` em previews, templates e assinaturas;
 - usuário sem permissão não lê;
 - usuário com `ver` lê apenas sua unidade;
+- usuário da unidade A usando `p_unidade_id=NULL` não lê a unidade B em nenhuma overload, na v2 ou em `stats`;
 - usuário com `relatorios` sem `ver` não lê texto bruto;
 - service role continua operando;
 - todas as tabelas filhas têm RLS habilitada.
 
-Use transações e `set local role`; o script não deixa dados de teste após `rollback`.
+Use transações e `set local role`; consulte também `pg_policies`, `has_table_privilege` e `has_function_privilege` para as assinaturas exatas. O script não deixa dados de teste após `rollback`.
 
 - [ ] **Step 3: Documentar a atribuição de Fabi e Jéssica**
 
@@ -764,6 +943,8 @@ Antes do go-live:
 - `modo_teste` só para quem foi aprovado;
 - validar cada unidade necessária;
 - não conceder `admin` apenas para fazer a tela funcionar.
+
+Estado verificado em 2026-07-30: Fabi foi localizada ativa e vinculada; Jéssica não foi resolvida de forma inequívoca. Isso não bloqueia implementação local, mas bloqueia homologação nominal, atribuição de assinatura e qualquer rollout. Não criar usuário nem vincular identidade por aproximação de nome.
 
 - [ ] **Step 4: Rodar verificação completa**
 
@@ -807,6 +988,8 @@ Comprovar:
 - nenhuma delas troca identidade pelo DevTools;
 - outra unidade é negada;
 - modo teste não altera cadastro nem analytics.
+- envio de teste para uma evasão com cabeçalho produtivo não o sobrescreve nem o bloqueia;
+- timeout ambíguo fica `incerto` e uma repetição não chama o provedor novamente.
 
 - [ ] **Step 2: Conferir prévia versus mensagem real**
 
@@ -849,6 +1032,8 @@ Interromper rollout se:
 - usuário sem permissão ler resposta;
 - o modo teste tocar cadastro/analytics;
 - houver duplicidade de envio;
+- um teste conflitar com o cabeçalho de produção;
+- um envio `incerto` puder ser repetido sem reconciliação;
 - a listagem perder registros bloqueados.
 
 - [ ] **Step 5: Registrar evidência**
@@ -871,9 +1056,13 @@ Anexar ao runbook:
 - [ ] Toda produção exige prévia e confirmação.
 - [ ] A mensagem enviada é o snapshot aprovado.
 - [ ] Modo teste é separado e não contamina cadastro/analytics.
+- [ ] Modo teste não sobrescreve nem bloqueia a pesquisa produtiva da mesma evasão.
+- [ ] Os seis registros legados aparecem como `TESTE` e não alimentam ações, causas, baseline ou indicadores de professor.
 - [ ] `pesquisa_evasao` e tabelas novas não têm policy ampla.
 - [ ] Mila e Sol não leem respostas privadas.
 - [ ] Listagem é paginada e mantém bloqueios visíveis.
+- [ ] `p_unidade_id=NULL` retorna somente unidades autorizadas e não amplia escopo.
+- [ ] Timeout ambíguo entra em `incerto` e não redispara sem reconciliação.
 - [ ] Escrita direta de telefone sai do componente.
 - [ ] Testes Deno, Node, build e lint SQL passam.
 - [ ] Evidência de homologação e rollback está documentada.

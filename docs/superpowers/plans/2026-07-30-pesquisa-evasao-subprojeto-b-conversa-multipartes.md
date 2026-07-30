@@ -217,7 +217,8 @@ Cobrir:
 - RPC recebe hash, não segredo bruto;
 - expurgo integral do legado;
 - retenção automática de sete dias;
-- `webhook_debug_log` sem acesso direto de frontend/agentes.
+- preservação da barreira atual de leitura de `webhook_debug_log`: RLS habilitada e nenhuma policy para frontend/agentes;
+- descrição do risco como retenção indevida e volume de dados pessoais, não como leitura por usuário logado.
 
 - [ ] **Step 2: Executar e confirmar a falha**
 
@@ -279,11 +280,13 @@ A Edge calcula o SHA-256 antes da RPC. O valor bruto não entra no corpo enviado
 
 - [ ] **Step 5: Expurgar o legado e reduzir grants**
 
-O conteúdo atual de `webhook_debug_log` é debug, não fonte canônica. A migração deve:
+Na verificação de 2026-07-30, `webhook_debug_log` tinha RLS habilitada, zero policies e, portanto, já não era legível pelo frontend ou pelos agentes. O risco real é retenção indevida e volume: 2.154 payloads completos acumulados desde 2026-02-17.
+
+O conteúdo é debug, não fonte canônica. A migração deve:
 
 1. registrar em comentário/runbook a contagem prévia;
 2. `truncate table public.webhook_debug_log`;
-3. revogar acesso de `anon`, `authenticated`, Mila e Sol;
+3. preservar RLS sem policy de leitura e revogar grants de `anon`, `authenticated`, Mila e Sol como defesa em profundidade;
 4. manter apenas service role;
 5. garantir coluna `created_at`;
 6. agendar expurgo diário de linhas sanitizadas com mais de sete dias.
@@ -661,6 +664,8 @@ select count(*) from public.webhook_debug_log;
 ```
 
 Expected: `0`.
+
+O runbook descreve o incidente como retenção indevida de dados pessoais e crescimento sem expurgo. Não afirmar que os 2.154 payloads estavam expostos a qualquer usuário autenticado.
 
 - [ ] **Step 4: Configurar health token**
 
@@ -1274,7 +1279,7 @@ Expected: `0`.
 
 Confirmar também:
 
-- usuário authenticated comum não lê `webhook_debug_log`;
+- usuário authenticated comum continua sem ler `webhook_debug_log` — preservação de uma barreira já existente, não correção da causa principal;
 - Sol/Mila não leem conversa privada;
 - URLs de áudio exigem assinatura;
 - segredo bruto não existe no banco.
