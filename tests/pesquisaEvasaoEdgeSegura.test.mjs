@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -22,6 +21,10 @@ const claimMigrationPath = resolve(
 const fixturePath = resolve(
   repoRoot,
   'tests/fixtures/pesquisa_evasao_claim_pg17.sql',
+);
+const fixtureRunnerPath = resolve(
+  repoRoot,
+  'tests/helpers/runPesquisaEvasaoPg17Fixture.mjs',
 );
 
 const readOptional = (path) => existsSync(path) ? readFileSync(path, 'utf8') : '';
@@ -252,10 +255,22 @@ function removerComentariosSql(source) {
   return output;
 }
 
-test('artefatos da Edge segura e do claim existem', () => {
+test('artefatos da Edge segura, claim e runner destrutivo existem', () => {
   for (const path of [edgePath, providerPath, claimMigrationPath, fixturePath]) {
     assert.equal(existsSync(path), true, `arquivo ausente: ${path}`);
   }
+  assert.equal(
+    existsSync(fixtureRunnerPath),
+    true,
+    `runner seguro ausente: ${fixtureRunnerPath}`,
+  );
+  const runner = readOptional(fixtureRunnerPath);
+  assert.match(runner, /randomBytes/i);
+  assert.match(runner, /pesquisa_evasao_fixture_/i);
+  assert.match(runner, /postgres:17/i);
+  assert.match(runner, /server_version_num/i);
+  assert.match(runner, /dropdb[\s\S]*--force/i);
+  assert.match(runner, /um GUC isolado jamais pode autorizar/i);
 });
 
 test('config exige JWT no gateway para enviar-pesquisa-evasao', () => {
@@ -410,6 +425,18 @@ test('claim SQL e service-only, serializa slots e nunca reenvia estado ambiguo',
   assert.match(claim, /envio_status\s*=\s*'incerto'/i);
   assert.match(
     claim,
+    /envio_status\s+in\s*\(\s*'nao_enviado'\s*,\s*'falhou'\s*\)[\s\S]*resposta_status\s*=\s*'sem_resposta'[\s\S]*status\s+in\s*\(\s*'pendente'\s*,\s*'falha_envio'\s*,\s*'sem_whatsapp'\s*\)/i,
+    'reuso produtivo precisa de allowlist completa de estado reenviavel',
+  );
+  for (const campo of ['aluno_id', 'data_evasao_snapshot', 'caixa_id']) {
+    assert.match(
+      claim,
+      new RegExp(`v_preview\\.${campo}\\s+is\\s+null`, 'i'),
+      `claim deve validar ${campo} antes de consumir a preview`,
+    );
+  }
+  assert.match(
+    claim,
     /envio_status_tentativa\s*=\s*'bloqueado'/i,
     'preview perdedora precisa terminar bloqueada',
   );
@@ -432,6 +459,7 @@ test('claim SQL e service-only, serializa slots e nunca reenvia estado ambiguo',
 
 test('migration governa template unico e transicoes reconciliaveis', () => {
   const sql = removerComentariosSql(readOptional(claimMigrationPath));
+  const edgeSource = codigoExecutavel(readOptional(edgePath));
 
   assert.match(
     sql,
@@ -439,7 +467,31 @@ test('migration governa template unico e transicoes reconciliaveis', () => {
   );
   assert.match(
     sql,
-    /create\s+or\s+replace\s+function\s+public\.registrar_resultado_pesquisa_evasao_envio/i,
+    /drop\s+index\s+if\s+exists\s+public\.pesquisa_evasao_templates_publico_ativo_uidx/i,
+    'reaplicacao deve reparar indice homonimo antes de recria-lo',
+  );
+  assert.doesNotMatch(
+    sql,
+    /create\s+unique\s+index\s+if\s+not\s+exists\s+pesquisa_evasao_templates_publico_ativo_uidx/i,
+  );
+  assert.match(
+    sql,
+    /create\s+or\s+replace\s+function\s+public\.registrar_resultado_pesquisa_evasao_envio\s*\(\s*p_pesquisa_id\s+uuid\s*,\s*p_preview_id\s+uuid\s*,\s*p_idempotency_key\s+uuid\s*,\s*p_auth_user_id\s+uuid\s*,\s*p_resultado\s+text\s*,\s*p_provider_message_id\s+text\s*,\s*p_erro_sanitizado\s+text\s*\)/i,
+  );
+  assert.match(
+    sql,
+    /drop\s+function[\s\S]*registrar_resultado_pesquisa_evasao_envio\s*\(\s*uuid\s*,\s*uuid\s*,\s*text\s*,\s*text\s*,\s*text\s*\)/i,
+    'a assinatura antiga precisa ser removida explicitamente',
+  );
+  assert.match(
+    sql,
+    /from\s+public\.pesquisa_evasao_previews[\s\S]*pp\.id\s*=\s*p_preview_id[\s\S]*pp\.idempotency_key\s*=\s*p_idempotency_key[\s\S]*pp\.auth_user_id\s*=\s*p_auth_user_id[\s\S]*for\s+update[\s\S]*from\s+public\.pesquisa_evasao[\s\S]*pe\.id\s*=\s*p_pesquisa_id[\s\S]*pe\.preview_id\s*=\s*p_preview_id[\s\S]*pe\.idempotency_key\s*=\s*p_idempotency_key[\s\S]*for\s+update/i,
+    'resultado deve travar a tentativa exata antes do cabecalho exato',
+  );
+  assert.match(
+    edgeSource,
+    /p_preview_id\s*:\s*claim\s*\.\s*preview_id[\s\S]*p_idempotency_key\s*:\s*claim\s*\.\s*idempotency_key/i,
+    'Edge deve registrar o resultado com a identidade integral do claim',
   );
   assert.match(sql, /p_resultado[\s\S]*'enviado'[\s\S]*'falhou'[\s\S]*'incerto'/i);
   assert.match(sql, /provider_message_id/i);
@@ -483,43 +535,32 @@ test('fixture PG17 cobre replay, ownership, expiracao, orfa, slots, stale e conc
       'historico_tentativa',
       'orfa_sqlstate_mensagem',
       'reaplicacao',
+      'terminal_legado',
+      'snapshot_invariantes',
+      'resultado_stale',
+      'replay_resultado_sem_deadlock',
+      'indice_homonimo_corrompido',
     ]
   ) {
     assert.match(fixture, new RegExp(evidencia, 'i'));
   }
   assert.match(fixture, /dblink_send_query/i);
-  assert.match(fixture, /pesquisa_evasao\.fixture_guard/i);
+  assert.match(fixture, /pesquisa_evasao\.fixture_sentinel/i);
+  assert.match(fixture, /fixture_safety\.sentinel/i);
+  assert.match(fixture, /server_version_num/i);
+  assert.match(fixture, /current_database\s*\(\s*\)/i);
 });
 
 test(
   'fixture executavel passa em PostgreSQL 17 isolado',
   { skip: !process.env.PESQUISA_EVASAO_PG17_CONTAINER },
-  () => {
-    const result = spawnSync(
-      'docker',
-      [
-        'exec',
-        process.env.PESQUISA_EVASAO_PG17_CONTAINER,
-        'psql',
-        '-v',
-        'ON_ERROR_STOP=1',
-        '-U',
-        'postgres',
-        '-d',
-        'postgres',
-        '-c',
-        "set pesquisa_evasao.fixture_guard = 'isolated_pg17'",
-        '-f',
-        '/workspace/tests/fixtures/pesquisa_evasao_claim_pg17.sql',
-      ],
-      { encoding: 'utf8' },
+  async () => {
+    const { runPesquisaEvasaoPg17Fixture } = await import(
+      './helpers/runPesquisaEvasaoPg17Fixture.mjs'
     );
-
-    assert.equal(
-      result.status,
-      0,
-      `fixture PG17 falhou\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`,
-    );
+    const result = runPesquisaEvasaoPg17Fixture({
+      container: process.env.PESQUISA_EVASAO_PG17_CONTAINER,
+    });
     assert.match(result.stdout, /PESQUISA_EVASAO_CLAIM_PG17_OK/);
   },
 );

@@ -1,11 +1,35 @@
 \set ON_ERROR_STOP on
 
 do $fixture_guard$
+declare
+  v_sentinel text;
+  v_sentinel_valida boolean := false;
 begin
-  if current_setting('pesquisa_evasao.fixture_guard', true)
-     is distinct from 'isolated_pg17' then
+  if current_database() !~ '^pesquisa_evasao_fixture_[0-9a-f]{16}$'
+     or current_database() in ('postgres', 'template0', 'template1')
+     or current_setting('server_version_num')::integer < 170000
+     or current_setting('server_version_num')::integer >= 180000 then
     raise exception
-      'FIXTURE_GUARD_AUSENTE: execute somente em PostgreSQL 17 isolado';
+      'FIXTURE_GUARD_DATABASE: exige banco descartavel nomeado e PostgreSQL 17';
+  end if;
+
+  v_sentinel := current_setting('pesquisa_evasao.fixture_sentinel', true);
+  if nullif(v_sentinel, '') is null
+     or to_regclass('fixture_safety.sentinel') is null then
+    raise exception
+      'FIXTURE_GUARD_SENTINEL: sentinela descartavel ausente';
+  end if;
+
+  execute
+    'select exists (' ||
+    'select 1 from fixture_safety.sentinel ' ||
+    'where secret = $1 and database_name = current_database())'
+  into v_sentinel_valida
+  using v_sentinel;
+
+  if not v_sentinel_valida then
+    raise exception
+      'FIXTURE_GUARD_SENTINEL: segredo ou banco nao confere';
   end if;
 end
 $fixture_guard$;
