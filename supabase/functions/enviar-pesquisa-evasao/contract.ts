@@ -297,35 +297,47 @@ function uuidSnapshot(
   return uuidCanonico(valor) ?? snapshotInvalido(campo);
 }
 
+const CAMPOS_PREVIEW_SNAPSHOT = [
+  "evasaoId",
+  "unidadeId",
+  "usuarioId",
+  "authUserId",
+  "assinaturaId",
+  "templateId",
+  "templateVersao",
+  "caixaId",
+  "modoTeste",
+  "destinatarioTipo",
+  "telefoneDestino",
+  "mensagemRenderizada",
+] as const satisfies ReadonlyArray<keyof PreviewSnapshot>;
+
 function validarPreviewSnapshot(input: unknown): PreviewSnapshot {
   if (
     typeof input !== "object" ||
     input === null ||
     Array.isArray(input) ||
     (Object.getPrototypeOf(input) !== Object.prototype &&
-      Object.getPrototypeOf(input) !== null)
+      Object.getPrototypeOf(input) !== null) ||
+    Object.getOwnPropertySymbols(input).length > 0
   ) {
     return snapshotInvalido("objeto");
   }
 
   const snapshot = input as Record<string, unknown>;
-  const campos = new Set<keyof PreviewSnapshot>([
-    "evasaoId",
-    "unidadeId",
-    "usuarioId",
-    "authUserId",
-    "assinaturaId",
-    "templateId",
-    "templateVersao",
-    "caixaId",
-    "modoTeste",
-    "destinatarioTipo",
-    "telefoneDestino",
-    "mensagemRenderizada",
-  ]);
+  const campos = new Set<keyof PreviewSnapshot>(CAMPOS_PREVIEW_SNAPSHOT);
   for (const campo of Object.getOwnPropertyNames(snapshot)) {
     if (!campos.has(campo as keyof PreviewSnapshot)) {
       return snapshotInvalido("objeto");
+    }
+  }
+  for (const campo of CAMPOS_PREVIEW_SNAPSHOT) {
+    const descritor = Object.getOwnPropertyDescriptor(snapshot, campo);
+    if (
+      !descritor?.enumerable ||
+      !Object.hasOwn(descritor, "value")
+    ) {
+      return snapshotInvalido(campo);
     }
   }
 
@@ -340,6 +352,9 @@ function validarPreviewSnapshot(input: unknown): PreviewSnapshot {
     destinatarioTipo !== "responsavel" &&
     destinatarioTipo !== "teste"
   ) {
+    return snapshotInvalido("destinatarioTipo");
+  }
+  if ((destinatarioTipo === "teste") !== modoTeste) {
     return snapshotInvalido("destinatarioTipo");
   }
 

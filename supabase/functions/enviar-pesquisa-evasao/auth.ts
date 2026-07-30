@@ -106,7 +106,7 @@ async function exigirPermissao(
     unidadeId,
   );
 
-  if (!permitido) {
+  if (permitido !== true) {
     throw new ErroAutorizacao(403, `Permissao ${codigo} ausente`);
   }
 }

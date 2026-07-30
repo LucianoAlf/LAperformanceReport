@@ -223,6 +223,51 @@ Deno.test("falta de sucesso_aluno.evasao.enviar retorna 403", async () => {
   );
 });
 
+for (
+  const [rotulo, retorno] of [
+    ["false", false],
+    ["undefined", undefined],
+    ["null", null],
+    ["string false", "false"],
+    ["numero 1", 1],
+    ["objeto", {}],
+  ] as const
+) {
+  Deno.test(`permissao com retorno ${rotulo} falha fechado`, async () => {
+    await assertErroHttp(
+      () =>
+        resolverContextoOperador(
+          {
+            authorization: "Bearer token-fabi",
+            unidadeId: unidadeBarra,
+            modoTeste: false,
+          },
+          criarAdapters({
+            usuarioTemPermissaoEstrita: (async () =>
+              retorno) as unknown as AuthAdapters["usuarioTemPermissaoEstrita"],
+          }),
+        ),
+      403,
+      /permissao sucesso_aluno\.evasao\.enviar ausente/i,
+    );
+  });
+}
+
+Deno.test("somente permissao com retorno literal true autoriza", async () => {
+  const contexto = await resolverContextoOperador(
+    {
+      authorization: "Bearer token-fabi",
+      unidadeId: unidadeBarra,
+      modoTeste: false,
+    },
+    criarAdapters({
+      usuarioTemPermissaoEstrita: async () => true,
+    }),
+  );
+
+  assertEquals(contexto.usuarioId, 30);
+});
+
 Deno.test("modo teste sem permissao dedicada retorna 403", async () => {
   await assertErroHttp(
     () =>

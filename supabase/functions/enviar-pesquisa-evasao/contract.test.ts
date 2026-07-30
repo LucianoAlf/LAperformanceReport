@@ -492,24 +492,27 @@ Deno.test("hash do preview e deterministico e muda com o conteudo", async () => 
 Deno.test("cada campo relevante participa do hash do preview", async () => {
   const hashBase = await hashPreview(snapshotValido);
   const alteracoes: Array<
-    [keyof PreviewSnapshot, PreviewSnapshot[keyof PreviewSnapshot]]
+    [keyof PreviewSnapshot, Partial<PreviewSnapshot>]
   > = [
-    ["evasaoId", 124],
-    ["unidadeId", "95553e96-971b-4590-a6eb-0201d013c14d"],
-    ["usuarioId", 29],
-    ["authUserId", "88db996f-5b83-4fe6-8ca1-d120bb2c62a6"],
-    ["assinaturaId", "12ef9461-c8a3-42a1-8303-2755021400d2"],
-    ["templateId", "d2f6b33c-da27-4900-b566-f16deebcaeef"],
-    ["templateVersao", 2],
-    ["caixaId", 4],
-    ["modoTeste", true],
-    ["destinatarioTipo", "responsavel"],
-    ["telefoneDestino", "5521988887777"],
-    ["mensagemRenderizada", "Mensagem aprovada!"],
+    ["evasaoId", { evasaoId: 124 }],
+    ["unidadeId", { unidadeId: "95553e96-971b-4590-a6eb-0201d013c14d" }],
+    ["usuarioId", { usuarioId: 29 }],
+    ["authUserId", { authUserId: "88db996f-5b83-4fe6-8ca1-d120bb2c62a6" }],
+    [
+      "assinaturaId",
+      { assinaturaId: "12ef9461-c8a3-42a1-8303-2755021400d2" },
+    ],
+    ["templateId", { templateId: "d2f6b33c-da27-4900-b566-f16deebcaeef" }],
+    ["templateVersao", { templateVersao: 2 }],
+    ["caixaId", { caixaId: 4 }],
+    ["modoTeste", { modoTeste: true, destinatarioTipo: "teste" }],
+    ["destinatarioTipo", { destinatarioTipo: "responsavel" }],
+    ["telefoneDestino", { telefoneDestino: "5521988887777" }],
+    ["mensagemRenderizada", { mensagemRenderizada: "Mensagem aprovada!" }],
   ];
 
-  for (const [campo, valor] of alteracoes) {
-    const alterado = { ...snapshotValido, [campo]: valor } as PreviewSnapshot;
+  for (const [campo, alteracao] of alteracoes) {
+    const alterado = { ...snapshotValido, ...alteracao };
     assertNotEquals(
       await hashPreview(alterado),
       hashBase,
@@ -541,6 +544,139 @@ Deno.test("hashPreview rejeita snapshot invalido antes de serializar", async () 
           ...snapshotValido,
           [campo]: valor,
         } as PreviewSnapshot),
+      Error,
+      `Snapshot invalido: ${campo}`,
+    );
+  }
+});
+
+Deno.test("snapshot exige coerencia entre modo teste e tipo de destinatario", async () => {
+  for (
+    const inconsistente of [
+      {
+        ...snapshotValido,
+        modoTeste: true,
+        destinatarioTipo: "aluno",
+      },
+      {
+        ...snapshotValido,
+        modoTeste: true,
+        destinatarioTipo: "responsavel",
+      },
+      {
+        ...snapshotValido,
+        modoTeste: false,
+        destinatarioTipo: "teste",
+      },
+    ] as PreviewSnapshot[]
+  ) {
+    await assertRejects(
+      () => hashPreview(inconsistente),
+      Error,
+      "Snapshot invalido: destinatarioTipo",
+    );
+  }
+});
+
+Deno.test("todos os campos do snapshot devem ser propriedades proprias", async () => {
+  for (
+    const campo of Object.keys(snapshotValido) as Array<keyof PreviewSnapshot>
+  ) {
+    const herdado = { ...snapshotValido } as Record<string, unknown>;
+    delete herdado[campo];
+    Object.defineProperty(Object.prototype, campo, {
+      configurable: true,
+      enumerable: true,
+      value: snapshotValido[campo],
+    });
+
+    try {
+      await assertRejects(
+        () => hashPreview(herdado as unknown as PreviewSnapshot),
+        Error,
+        `Snapshot invalido: ${campo}`,
+      );
+    } finally {
+      delete (Object.prototype as Record<string, unknown>)[campo];
+    }
+  }
+});
+
+Deno.test("todos os campos do snapshot devem ser enumeraveis", async () => {
+  for (
+    const campo of Object.keys(snapshotValido) as Array<keyof PreviewSnapshot>
+  ) {
+    const naoEnumeravel = { ...snapshotValido };
+    Object.defineProperty(naoEnumeravel, campo, {
+      configurable: true,
+      enumerable: false,
+      value: snapshotValido[campo],
+      writable: true,
+    });
+
+    await assertRejects(
+      () => hashPreview(naoEnumeravel),
+      Error,
+      `Snapshot invalido: ${campo}`,
+    );
+  }
+});
+
+Deno.test("snapshot rejeita accessors sem executar o getter", async () => {
+  for (
+    const campo of Object.keys(snapshotValido) as Array<keyof PreviewSnapshot>
+  ) {
+    let getterExecutado = false;
+    const comAccessor = { ...snapshotValido };
+    Object.defineProperty(comAccessor, campo, {
+      configurable: true,
+      enumerable: true,
+      get() {
+        getterExecutado = true;
+        return snapshotValido[campo];
+      },
+    });
+
+    await assertRejects(
+      () => hashPreview(comAccessor),
+      Error,
+      `Snapshot invalido: ${campo}`,
+    );
+    assertEquals(getterExecutado, false);
+  }
+});
+
+Deno.test("snapshot rejeita simbolos e campos extras", async () => {
+  const comSimbolo = {
+    ...snapshotValido,
+    [Symbol("extra")]: true,
+  };
+  const comCampoExtra = {
+    ...snapshotValido,
+    extra: true,
+  };
+
+  await assertRejects(
+    () => hashPreview(comSimbolo),
+    Error,
+    "Snapshot invalido: objeto",
+  );
+  await assertRejects(
+    () => hashPreview(comCampoExtra as PreviewSnapshot),
+    Error,
+    "Snapshot invalido: objeto",
+  );
+});
+
+Deno.test("snapshot rejeita cada campo obrigatorio ausente", async () => {
+  for (
+    const campo of Object.keys(snapshotValido) as Array<keyof PreviewSnapshot>
+  ) {
+    const incompleto = { ...snapshotValido } as Record<string, unknown>;
+    delete incompleto[campo];
+
+    await assertRejects(
+      () => hashPreview(incompleto as unknown as PreviewSnapshot),
       Error,
       `Snapshot invalido: ${campo}`,
     );
