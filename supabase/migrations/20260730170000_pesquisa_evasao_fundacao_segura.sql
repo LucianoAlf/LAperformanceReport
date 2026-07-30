@@ -1201,3 +1201,324 @@ revoke all on function public.pode_enviar_pesquisa_evasao(integer)
        fabio_agent, lia_acesso_restrito;
 grant execute on function public.pode_enviar_pesquisa_evasao(integer)
   to authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
+-- 8. Listagem operacional v2: grao da movimentacao, producao e teste separados
+-- ---------------------------------------------------------------------------
+
+create or replace function public.listar_evadidos_para_pesquisa_v2(
+  p_unidade_id uuid,
+  p_limite integer,
+  p_offset integer,
+  p_status varchar,
+  p_ano integer,
+  p_mes integer
+)
+returns table (
+  total_count bigint,
+  evasao_id integer,
+  aluno_id integer,
+  nome text,
+  telefone text,
+  curso text,
+  professor text,
+  tempo_meses integer,
+  data_evasao date,
+  motivo_catalogado text,
+  motivo_legado text,
+  pesquisa_producao_status text,
+  pesquisa_producao_id uuid,
+  resposta_producao_texto text,
+  resposta_producao_audio_url text,
+  resposta_producao_tipo text,
+  respondido_producao_em timestamptz,
+  is_menor boolean,
+  responsavel_nome text,
+  publico_tipo text,
+  bloqueio_codigo text,
+  elegivel_envio boolean,
+  elegibilidade_regra text,
+  possui_historico_teste boolean,
+  quantidade_testes bigint,
+  ultimo_teste_em timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $function$
+with base_autorizada as (
+  select
+    m.id as evasao_id,
+    m.aluno_id,
+    a.id as aluno_registro_id,
+    coalesce(m.aluno_nome, a.nome)::text as nome,
+    coalesce(
+      nullif(btrim(m.telefone_snapshot), ''),
+      nullif(btrim(a.whatsapp), ''),
+      nullif(btrim(a.telefone), '')
+    )::text as telefone,
+    c.nome::text as curso,
+    pr.nome::text as professor,
+    greatest(
+      0,
+      coalesce(m.tempo_permanencia_meses, a.tempo_permanencia_meses, 0)
+    )::integer as tempo_meses,
+    m.data as data_evasao,
+    ms.nome::text as motivo_catalogado,
+    m.motivo::text as motivo_legado,
+    coalesce(producao.status, 'pendente')::text
+      as pesquisa_producao_status,
+    producao.id as pesquisa_producao_id,
+    producao.resposta_texto::text as resposta_producao_texto,
+    producao.resposta_audio_url::text as resposta_producao_audio_url,
+    producao.resposta_tipo::text as resposta_producao_tipo,
+    producao.respondido_em as respondido_producao_em,
+    (
+      a.data_nascimento is not null
+      and extract(year from age(current_date, a.data_nascimento))::integer < 18
+    ) as is_menor,
+    a.responsavel_nome::text as responsavel_nome,
+    case
+      when lower(btrim(coalesce(a.tipo_aluno::text, ''))) = 'colaborador'
+        then 'colaborador'
+      when lower(btrim(coalesce(a.tipo_aluno::text, ''))) = 'professor'
+        then 'professor'
+      when (
+        a.data_nascimento is not null
+        and extract(year from age(current_date, a.data_nascimento))::integer < 18
+      )
+        then 'responsavel'
+      else 'aluno'
+    end::text as publico_tipo,
+    coalesce(testes.quantidade_testes, 0)::bigint as quantidade_testes,
+    testes.ultimo_teste_em
+  from public.movimentacoes_admin m
+  left join public.alunos a
+    on a.id = m.aluno_id
+  left join public.cursos c
+    on c.id = coalesce(m.curso_id, a.curso_id)
+  left join public.professores pr
+    on pr.id = coalesce(m.professor_id, a.professor_atual_id)
+  left join public.motivos_saida ms
+    on ms.id = m.motivo_saida_id
+  left join lateral (
+    select pe0.*
+    from public.pesquisa_evasao pe0
+    where pe0.evasao_id = m.id
+      and pe0.modo_teste = false
+    order by pe0.created_at desc, pe0.id desc
+    limit 1
+  ) producao
+    on true
+  left join lateral (
+    select
+      count(*) filter (where pe_t.modo_teste = true)::bigint
+        as quantidade_testes,
+      max(coalesce(pe_t.enviado_em, pe_t.created_at))
+        filter (where pe_t.modo_teste = true) as ultimo_teste_em
+    from public.pesquisa_evasao pe_t
+    where pe_t.evasao_id = m.id
+  ) testes
+    on true
+  where m.tipo in ('evasao', 'nao_renovacao')
+    and public.is_movimentacao_admin_retencao_valida(m.id)
+    and (
+      p_unidade_id is null
+      or m.unidade_id = p_unidade_id
+    )
+    and (
+      auth.role() = 'service_role'
+      or public.fn_usuario_atual_tem_permissao_estrita(
+        'sucesso_aluno.evasao.ver'::varchar,
+        m.unidade_id
+      )
+    )
+    and (
+      p_status is null
+      or coalesce(producao.status, 'pendente') = p_status
+    )
+    and (
+      p_ano is null
+      or extract(year from m.data)::integer = p_ano
+    )
+    and (
+      p_mes is null
+      or extract(month from m.data)::integer = p_mes
+    )
+),
+classificada as (
+  select
+    base_autorizada.*,
+    nullif(regexp_replace(telefone, '[^0-9]', '', 'g'), '')
+      as telefone_normalizado
+  from base_autorizada
+),
+bloqueada as (
+  select
+    classificada.*,
+    case
+      when aluno_id is null or aluno_registro_id is null
+        then 'sem_aluno'
+      when telefone_normalizado is null
+        then 'sem_telefone'
+      when telefone_normalizado !~ '^(55)?[0-9]{10,11}$'
+        then 'telefone_invalido'
+      when motivo_catalogado is null
+        then 'motivo_nao_catalogado'
+      when publico_tipo in ('colaborador', 'professor')
+        then 'publico_interno'
+      when exists (
+        select 1
+        from public.pesquisa_evasao pe_aberta
+        where pe_aberta.modo_teste = false
+          and pe_aberta.evasao_id <> classificada.evasao_id
+          and nullif(
+            regexp_replace(pe_aberta.telefone_destino_snapshot, '[^0-9]', '', 'g'),
+            ''
+          ) = classificada.telefone_normalizado
+          and pe_aberta.envio_status in (
+            'enviando',
+            'incerto',
+            'enviado',
+            'entregue',
+            'lido'
+          )
+          and pe_aberta.resposta_status in ('sem_resposta', 'coletando')
+      )
+        then 'pesquisa_aberta_no_mesmo_numero'
+      else null
+    end::text as bloqueio_codigo
+  from classificada
+),
+elegibilidade as (
+  select
+    bloqueada.*,
+    (
+      bloqueio_codigo is null
+      and current_date - data_evasao >= 3
+      and pesquisa_producao_status in (
+        'pendente',
+        'falha_envio',
+        'sem_whatsapp'
+      )
+    ) as elegivel_envio,
+    case
+      when bloqueio_codigo is not null
+        then bloqueio_codigo
+      when current_date - data_evasao < 3
+        then 'aguardar_prazo_minimo'
+      when pesquisa_producao_status not in (
+        'pendente',
+        'falha_envio',
+        'sem_whatsapp'
+      )
+        then 'status_producao_nao_enviavel'
+      else 'elegivel'
+    end::text as elegibilidade_regra
+  from bloqueada
+)
+select
+  count(*) over () as total_count,
+  evasao_id,
+  aluno_id,
+  nome,
+  telefone,
+  curso,
+  professor,
+  tempo_meses,
+  data_evasao,
+  motivo_catalogado,
+  motivo_legado,
+  pesquisa_producao_status,
+  pesquisa_producao_id,
+  resposta_producao_texto,
+  resposta_producao_audio_url,
+  resposta_producao_tipo,
+  respondido_producao_em,
+  is_menor,
+  responsavel_nome,
+  publico_tipo,
+  bloqueio_codigo,
+  elegivel_envio,
+  elegibilidade_regra,
+  quantidade_testes > 0 as possui_historico_teste,
+  quantidade_testes,
+  ultimo_teste_em
+from elegibilidade
+order by
+  case pesquisa_producao_status
+    when 'pendente' then 1
+    when 'falha_envio' then 2
+    when 'sem_whatsapp' then 3
+    when 'enviado' then 4
+    when 'respondido' then 5
+    else 6
+  end,
+  data_evasao desc,
+  evasao_id desc
+limit least(greatest(coalesce(p_limite, 50), 1), 100)
+offset greatest(coalesce(p_offset, 0), 0);
+$function$;
+
+create or replace function public.listar_pesquisas_evasao_teste_v1(
+  p_evasao_id integer
+)
+returns table (
+  pesquisa_id uuid,
+  modo_teste boolean,
+  envio_status text,
+  resposta_status text,
+  enviado_em timestamptz,
+  respondido_em timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $function$
+select
+  pe.id as pesquisa_id,
+  pe.modo_teste,
+  pe.envio_status::text,
+  pe.resposta_status::text,
+  pe.enviado_em,
+  pe.respondido_em
+from public.movimentacoes_admin m
+join public.pesquisa_evasao pe
+  on pe.evasao_id = m.id
+where m.id = p_evasao_id
+  and pe.modo_teste = true
+  and (
+    auth.role() = 'service_role'
+    or public.fn_usuario_atual_tem_permissao_estrita(
+      'sucesso_aluno.evasao.ver'::varchar,
+      m.unidade_id
+    )
+  )
+order by coalesce(pe.enviado_em, pe.created_at) desc, pe.id desc;
+$function$;
+
+revoke all on function public.listar_evadidos_para_pesquisa_v2(
+  uuid,
+  integer,
+  integer,
+  varchar,
+  integer,
+  integer
+) from public, anon, mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
+grant execute on function public.listar_evadidos_para_pesquisa_v2(
+  uuid,
+  integer,
+  integer,
+  varchar,
+  integer,
+  integer
+) to authenticated, service_role;
+
+revoke all on function public.listar_pesquisas_evasao_teste_v1(integer)
+  from public, anon, mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
+grant execute on function public.listar_pesquisas_evasao_teste_v1(integer)
+  to authenticated, service_role;

@@ -6,7 +6,8 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
   Send, MessageSquare, CheckCircle, XCircle, Clock,
   Loader2, Phone, Search, ChevronDown, ChevronUp,
-  TrendingUp, Users, MessageCircle, BarChart3
+  TrendingUp, Users, MessageCircle, BarChart3,
+  ChevronLeft, ChevronRight, History, LockKeyhole,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,33 +19,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Check, X, FlaskConical } from 'lucide-react';
+import { FlaskConical } from 'lucide-react';
 import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 import { ModalPreviewPesquisaEvasao } from './ModalPreviewPesquisaEvasao';
 import type {
   PesquisaEvasaoConfirmacao,
+  PesquisaEvasaoListagemItem,
   PesquisaEvasaoPreview,
+  PesquisaEvasaoTeste,
 } from './pesquisaEvasao.types';
 
-interface EvadidoPesquisa {
-  evasao_id: number;
-  aluno_id: number | null;
-  nome: string;
-  telefone: string;
-  curso: string | null;
-  professor: string | null;
-  tempo_meses: number;
-  data_evasao: string;
-  motivo_cadastrado: string | null;
+type EvadidoPesquisa = PesquisaEvasaoListagemItem & {
+  // Alias temporario somente de leitura para manter a transicao dos consumidores.
   pesquisa_status: string;
   pesquisa_id: string | null;
   resposta_texto: string | null;
   resposta_audio_url: string | null;
   resposta_tipo: string | null;
   respondido_em: string | null;
-  is_menor: boolean;
-  responsavel_nome: string | null;
-}
+};
 
 interface StatsPesquisa {
   total_evadidos: number;
@@ -66,6 +59,8 @@ interface StatusPesquisaInterpretado {
   statusBase: string;
   registroTeste: boolean;
 }
+
+const TAMANHO_PAGINA = 50;
 
 function interpretarPesquisaStatus(status: string): StatusPesquisaInterpretado {
   const prefixoTeste = 'TESTE:';
@@ -122,8 +117,6 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
   const [confirmando, setConfirmando] = useState(false);
   const previsualizandoRef = useRef(false);
   const confirmandoRef = useRef(false);
-  const [editandoTelefone, setEditandoTelefone] = useState<number | null>(null);
-  const [novoTelefone, setNovoTelefone] = useState('');
   const [modoTeste, setModoTeste] = useState(false);
   const [telefoneTeste, setTelefoneTeste] = useState('');
   const [filtroBusca, setFiltroBusca] = useState('');
@@ -131,10 +124,30 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
   const [filtroAno, setFiltroAno] = useState<number>(new Date().getFullYear());
   const [filtroMes, setFiltroMes] = useState<number | null>(null);
   const [expandido, setExpandido] = useState<string | null>(null);
+  const [pagina, setPagina] = useState(1);
+  const [totalRegistros, setTotalRegistros] = useState(0);
+  const [historicoTesteExpandido, setHistoricoTesteExpandido] = useState<number | null>(null);
+  const [historicosTeste, setHistoricosTeste] = useState<Record<number, PesquisaEvasaoTeste[]>>({});
+  const [carregandoHistorico, setCarregandoHistorico] = useState<number | null>(null);
+  const filtroServidorChave = [
+    unidadeAtual,
+    filtroStatus,
+    filtroAno,
+    filtroMes ?? 'todos',
+  ].join(':');
+  const filtroServidorAnteriorRef = useRef(filtroServidorChave);
 
   useEffect(() => {
+    setPagina(1);
+  }, [unidadeAtual, filtroStatus, filtroAno, filtroMes, filtroBusca]);
+
+  useEffect(() => {
+    const filtrosMudaram =
+      filtroServidorAnteriorRef.current !== filtroServidorChave;
+    if (filtrosMudaram && pagina !== 1) return;
+    filtroServidorAnteriorRef.current = filtroServidorChave;
     carregarDados();
-  }, [unidadeAtual, filtroStatus, filtroAno, filtroMes]);
+  }, [filtroServidorChave, pagina]);
 
   // Realtime: atualizar automaticamente quando pesquisa_evasao mudar
   useEffect(() => {
@@ -157,18 +170,17 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [unidadeAtual, filtroStatus, filtroAno, filtroMes]);
+  }, [unidadeAtual, filtroStatus, filtroAno, filtroMes, pagina]);
 
   const carregarDados = async () => {
     setLoading(true);
     try {
-      // Buscar evadidos com pesquisa
       const { data: evadidosData, error: evadidosError } = await supabase.rpc(
-        'listar_evadidos_para_pesquisa',
+        'listar_evadidos_para_pesquisa_v2',
         { 
           p_unidade_id: unidadeAtual === 'todos' ? null : unidadeAtual,
-          p_limite: 100,
-          p_offset: 0,
+          p_limite: TAMANHO_PAGINA,
+          p_offset: (pagina - 1) * TAMANHO_PAGINA,
           p_status: filtroStatus === 'todos' ? null : filtroStatus,
           p_ano: filtroAno,
           p_mes: filtroMes
@@ -176,7 +188,17 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
       );
 
       if (evadidosError) throw evadidosError;
-      setEvadidos(evadidosData || []);
+      const linhas = (evadidosData || []) as PesquisaEvasaoListagemItem[];
+      setTotalRegistros(Number(linhas[0]?.total_count ?? 0));
+      setEvadidos(linhas.map((item) => ({
+        ...item,
+        pesquisa_status: item.pesquisa_producao_status,
+        pesquisa_id: item.pesquisa_producao_id,
+        resposta_texto: item.resposta_producao_texto,
+        resposta_audio_url: item.resposta_producao_audio_url,
+        resposta_tipo: item.resposta_producao_tipo,
+        respondido_em: item.respondido_producao_em,
+      })));
 
       // Buscar stats
       const { data: statsData, error: statsError } = await supabase.rpc(
@@ -393,43 +415,65 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
     }
   };
 
-  const salvarTelefone = async (movimentacaoId: number, telefone: string) => {
+  const carregarHistoricoTeste = async (evasaoId: number) => {
+    if (historicoTesteExpandido === evasaoId) {
+      setHistoricoTesteExpandido(null);
+      return;
+    }
+
+    setHistoricoTesteExpandido(evasaoId);
+    if (historicosTeste[evasaoId]) return;
+
+    setCarregandoHistorico(evasaoId);
     try {
-      // Buscar a movimentação para encontrar o aluno_id e data
-      const { data: mov } = await supabase
-        .from('movimentacoes_admin')
-        .select('aluno_id, unidade_id, data')
-        .eq('id', movimentacaoId)
-        .single();
+      const { data, error } = await supabase.rpc(
+        'listar_pesquisas_evasao_teste_v1',
+        { p_evasao_id: evasaoId },
+      );
+      if (error) throw error;
 
-      if (!mov) {
-        toast.error('Movimentação não encontrada');
-        return;
-      }
-
-      // Atualizar telefone_snapshot em movimentacoes_admin
-      const { error: evasaoError } = await supabase
-        .from('movimentacoes_admin')
-        .update({ telefone_snapshot: telefone, updated_at: new Date().toISOString() })
-        .eq('id', movimentacaoId);
-
-      // Também atualizar na tabela alunos (whatsapp)
-      if (mov.aluno_id) {
-        await supabase
-          .from('alunos')
-          .update({ whatsapp: telefone, updated_at: new Date().toISOString() })
-          .eq('id', mov.aluno_id);
-      }
-
-      if (evasaoError) throw evasaoError;
-
-      toast.success('Telefone atualizado com sucesso!');
-      await carregarDados();
+      const testes = ((data || []) as PesquisaEvasaoTeste[])
+        .filter((item) => item.modo_teste === true);
+      setHistoricosTeste((atual) => ({ ...atual, [evasaoId]: testes }));
     } catch (error) {
-      console.error('Erro ao salvar telefone:', error);
-      toast.error('Erro ao atualizar telefone');
+      console.error('Erro ao carregar histórico de testes:', error);
+      setHistoricoTesteExpandido(null);
+      toast.error('Erro ao carregar histórico de testes');
+    } finally {
+      setCarregandoHistorico(null);
     }
   };
+
+  const getBloqueioLabel = (codigo: PesquisaEvasaoListagemItem['bloqueio_codigo']) => {
+    switch (codigo) {
+      case 'sem_aluno':
+        return 'Aluno não localizado';
+      case 'sem_telefone':
+        return 'Sem telefone';
+      case 'telefone_invalido':
+        return 'Telefone inválido';
+      case 'motivo_nao_catalogado':
+        return 'Motivo não catalogado';
+      case 'publico_interno':
+        return 'Público interno';
+      case 'pesquisa_aberta_no_mesmo_numero':
+        return 'Pesquisa aberta no mesmo número';
+      default:
+        return null;
+    }
+  };
+
+  const getElegibilidadeLabel = (regra: string) => {
+    switch (regra) {
+      case 'aguardar_prazo_minimo':
+        return 'Aguardar 3 dias da evasão';
+      case 'status_producao_nao_enviavel':
+        return 'Envio produtivo já processado';
+      default:
+        return getBloqueioLabel(regra as PesquisaEvasaoListagemItem['bloqueio_codigo']);
+    }
+  };
+
   const evadidosFiltrados = evadidos.filter(e => {
     if (filtroBusca) {
       const busca = filtroBusca.toLowerCase();
@@ -437,11 +481,17 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
         e.nome?.toLowerCase().includes(busca) ||
         e.curso?.toLowerCase().includes(busca) ||
         e.professor?.toLowerCase().includes(busca) ||
-        e.motivo_cadastrado?.toLowerCase().includes(busca)
+        e.motivo_catalogado?.toLowerCase().includes(busca) ||
+        e.motivo_legado?.toLowerCase().includes(busca)
       );
     }
     return true;
   });
+  const totalPaginas = Math.max(1, Math.ceil(totalRegistros / TAMANHO_PAGINA));
+  const inicioPagina = totalRegistros === 0
+    ? 0
+    : (pagina - 1) * TAMANHO_PAGINA + 1;
+  const fimPagina = Math.min(pagina * TAMANHO_PAGINA, totalRegistros);
 
   return (
     <div className="space-y-6">
@@ -659,7 +709,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
             <tbody className="divide-y divide-slate-700/50">
               {evadidosFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-8 text-slate-500">
+                  <td colSpan={9} className="text-center py-8 text-slate-500">
                     {loading ? (
                       <div className="flex items-center justify-center gap-2">
                         <Loader2 className="w-5 h-5 animate-spin" />
@@ -699,43 +749,23 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                           <span className="text-slate-500">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 group">
-                        <div className="flex items-center gap-2">
-                          {editandoTelefone === evadido.evasao_id ? (
-                            <div className="flex items-center gap-1">
-                              <Input
-                                value={novoTelefone}
-                                onChange={(e) => setNovoTelefone(e.target.value)}
-                                className="w-36 h-7 text-xs bg-slate-900 border-slate-600 text-white"
-                                autoFocus
-                              />
-                              <button
-                                onClick={() => {
-                                  salvarTelefone(evadido.evasao_id, novoTelefone);
-                                  setEditandoTelefone(null);
-                                }}
-                                className="p-1 text-green-400 hover:text-green-300"
-                              >
-                                <Check className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => setEditandoTelefone(null)}
-                                className="p-1 text-red-400 hover:text-red-300"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditandoTelefone(evadido.evasao_id);
-                                setNovoTelefone(evadido.telefone || '');
-                              }}
-                              className="text-slate-300 text-sm font-mono hover:text-white hover:underline underline-offset-2"
+                      <td className="px-4 py-3">
+                        <div className="space-y-2">
+                          <p className="text-slate-300 text-sm font-mono">
+                            {evadido.telefone || 'Não informado'}
+                          </p>
+                          {['sem_aluno', 'sem_telefone', 'telefone_invalido']
+                            .includes(evadido.bloqueio_codigo || '') && (
+                            <Button
+                              disabled
+                              size="sm"
+                              variant="ghost"
+                              title="A ficha de aluno ainda não possui navegação contextual segura."
+                              className="h-auto p-0 text-[11px] text-amber-300/80 disabled:opacity-100"
                             >
-                              {evadido.telefone || '—'}
-                            </button>
+                              <LockKeyhole className="mr-1 h-3 w-3" />
+                              Corrigir no cadastro do aluno
+                            </Button>
                           )}
                         </div>
                       </td>
@@ -745,7 +775,12 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                         {evadido.tempo_meses}m
                       </td>
                       <td className="px-4 py-3 text-slate-300 text-sm">
-                        {evadido.motivo_cadastrado || '—'}
+                        {evadido.motivo_catalogado || evadido.motivo_legado || '—'}
+                        {!evadido.motivo_catalogado && evadido.motivo_legado && (
+                          <span className="mt-1 block text-[10px] uppercase tracking-wide text-amber-400">
+                            Motivo legado
+                          </span>
+                        )}
                       </td>
                       <td className="text-center px-4 py-3">
                         <div className="flex flex-wrap items-center justify-center gap-1.5">
@@ -759,51 +794,77 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                             {getStatusIcon(statusBase)}
                             {getStatusLabel(statusBase)}
                           </span>
+                          {evadido.bloqueio_codigo && (
+                            <span className="inline-flex rounded-full border border-red-400/30 bg-red-400/10 px-2 py-1 text-[10px] font-medium text-red-200">
+                              {getBloqueioLabel(evadido.bloqueio_codigo)}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="text-center px-4 py-3">
-                        {!registroTeste && ['pendente', 'falha_envio', 'sem_whatsapp'].includes(statusBase) ? (
-                          <Button
-                            size="sm"
-                            onClick={() => previsualizarPesquisa(evadido.evasao_id)}
-                            disabled={previsualizando !== null || confirmando}
-                            className={`${modoTeste ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-violet-500 hover:bg-violet-600'} text-white`}
-                          >
-                            {previsualizando === evadido.evasao_id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <>
-                                <Send className="w-4 h-4 mr-1.5" />
-                                {modoTeste
-                                  ? 'Testar'
-                                  : statusBase === 'pendente'
-                                    ? 'Enviar'
-                                    : 'Tentar novamente'}
-                              </>
-                            )}
-                          </Button>
-                        ) : !registroTeste && statusBase === 'respondido' ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setExpandido(expandido === evadido.pesquisa_id ? null : evadido.pesquisa_id)}
-                            className="text-green-400 hover:text-green-300"
-                          >
-                            {expandido === evadido.pesquisa_id ? (
-                              <>
-                                <ChevronUp className="w-4 h-4 mr-1" />
-                                Ocultar
-                              </>
-                            ) : (
-                              <>
-                                <ChevronDown className="w-4 h-4 mr-1" />
-                                Ver Resposta
-                              </>
-                            )}
-                          </Button>
-                        ) : (
-                          <span className="text-xs text-slate-500">—</span>
-                        )}
+                        <div className="flex min-w-40 flex-col items-center gap-1">
+                          {evadido.elegivel_envio && !registroTeste && ['pendente', 'falha_envio', 'sem_whatsapp'].includes(statusBase) ? (
+                            <Button
+                              size="sm"
+                              onClick={() => previsualizarPesquisa(evadido.evasao_id)}
+                              disabled={previsualizando !== null || confirmando}
+                              className={`${modoTeste ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-violet-500 hover:bg-violet-600'} text-white`}
+                            >
+                              {previsualizando === evadido.evasao_id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <Send className="w-4 h-4 mr-1.5" />
+                                  {modoTeste
+                                    ? 'Testar'
+                                    : statusBase === 'pendente'
+                                      ? 'Enviar'
+                                      : 'Tentar novamente'}
+                                </>
+                              )}
+                            </Button>
+                          ) : !registroTeste && statusBase === 'respondido' ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setExpandido(expandido === evadido.pesquisa_id ? null : evadido.pesquisa_id)}
+                              className="text-green-400 hover:text-green-300"
+                            >
+                              {expandido === evadido.pesquisa_id ? (
+                                <>
+                                  <ChevronUp className="w-4 h-4 mr-1" />
+                                  Ocultar
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="w-4 h-4 mr-1" />
+                                  Ver Resposta
+                                </>
+                              )}
+                            </Button>
+                          ) : (
+                            <span className="max-w-44 text-xs text-slate-500">
+                              {getElegibilidadeLabel(evadido.elegibilidade_regra) || '—'}
+                            </span>
+                          )}
+                          {evadido.possui_historico_teste && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => carregarHistoricoTeste(evadido.evasao_id)}
+                              disabled={carregandoHistorico === evadido.evasao_id}
+                              className="h-7 text-yellow-300 hover:text-yellow-200"
+                            >
+                              {carregandoHistorico === evadido.evasao_id ? (
+                                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <History className="mr-1 h-3.5 w-3.5" />
+                              )}
+                              Histórico de testes
+                              <span className="ml-1">TESTE</span>
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                     
@@ -815,12 +876,12 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                             <p className="text-sm font-medium text-slate-400 mb-2">
                               Resposta do {evadido.is_menor ? 'Responsável' : 'Aluno'}:
                             </p>
-                            {evadido.resposta_tipo === 'audio' ? (
+                            {evadido.resposta_producao_tipo === 'audio' ? (
                               <div className="space-y-3">
-                                {evadido.resposta_texto ? (
+                                {evadido.resposta_producao_texto ? (
                                   <>
                                     <p className="text-white text-base leading-relaxed">
-                                      "{evadido.resposta_texto}"
+                                      "{evadido.resposta_producao_texto}"
                                     </p>
                                     <div className="bg-green-500/20 text-green-400 px-3 py-2 rounded-lg inline-flex items-center gap-2">
                                       <MessageCircle className="w-4 h-4" />
@@ -833,9 +894,9 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                                       <MessageCircle className="w-4 h-4" />
                                       <span className="text-sm">Áudio recebido</span>
                                     </div>
-                                    {evadido.resposta_audio_url && (
+                                    {evadido.resposta_producao_audio_url && (
                                       <audio controls className="h-10">
-                                        <source src={evadido.resposta_audio_url} type="audio/ogg" />
+                                        <source src={evadido.resposta_producao_audio_url} type="audio/ogg" />
                                         Seu navegador não suporta áudio.
                                       </audio>
                                     )}
@@ -844,13 +905,51 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                               </div>
                             ) : (
                               <p className="text-white text-base leading-relaxed">
-                                "{evadido.resposta_texto}"
+                                "{evadido.resposta_producao_texto}"
                               </p>
                             )}
-                            {evadido.respondido_em && (
+                            {evadido.respondido_producao_em && (
                               <p className="text-xs text-slate-500 mt-2">
-                                Respondido em: {format(new Date(evadido.respondido_em), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                                Respondido em: {format(new Date(evadido.respondido_producao_em), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
                               </p>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {historicoTesteExpandido === evadido.evasao_id && (
+                      <tr className="bg-yellow-400/[0.04]">
+                        <td colSpan={9} className="px-4 py-4">
+                          <div className="rounded-xl border border-yellow-400/20 bg-slate-900/50 p-4">
+                            <div className="mb-3 flex items-center gap-2">
+                              <History className="h-4 w-4 text-yellow-300" />
+                              <p className="text-sm font-medium text-white">Histórico de testes</p>
+                              <span className="rounded-full border border-yellow-400/30 bg-yellow-400/10 px-2 py-0.5 text-[10px] font-bold tracking-wider text-yellow-200">TESTE</span>
+                            </div>
+                            {(historicosTeste[evadido.evasao_id] || []).length === 0 ? (
+                              <p className="text-sm text-slate-500">Nenhum teste disponível.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {historicosTeste[evadido.evasao_id]
+                                  .filter((teste) => teste.modo_teste)
+                                  .map((teste) => (
+                                    <div
+                                      key={teste.pesquisa_id}
+                                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-700/60 bg-slate-800/50 px-3 py-2"
+                                    >
+                                      <div className="flex items-center gap-2 text-xs">
+                                        <span className="rounded bg-yellow-400/10 px-1.5 py-0.5 font-bold text-yellow-200">TESTE</span>
+                                        <span className="text-slate-300">Envio: {teste.envio_status}</span>
+                                        <span className="text-slate-500">Resposta: {teste.resposta_status}</span>
+                                      </div>
+                                      <span className="text-xs text-slate-500">
+                                        {teste.enviado_em
+                                          ? format(new Date(teste.enviado_em), 'dd/MM/yyyy HH:mm', { locale: ptBR })
+                                          : 'Sem horário de envio'}
+                                      </span>
+                                    </div>
+                                  ))}
+                              </div>
                             )}
                           </div>
                         </td>
@@ -862,6 +961,38 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-700/60 bg-slate-900/40 px-4 py-3">
+          <p className="text-sm text-slate-400">
+            Mostrando {inicioPagina}–{fimPagina} de {totalRegistros}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label="Página anterior"
+              onClick={() => setPagina((atual) => Math.max(1, atual - 1))}
+              disabled={loading || pagina <= 1}
+              className="border-slate-700 bg-slate-800 text-slate-200"
+            >
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              Anterior
+            </Button>
+            <span className="min-w-24 text-center text-xs text-slate-500">
+              Página {pagina} de {totalPaginas}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label="Próxima página"
+              onClick={() => setPagina((atual) => Math.min(totalPaginas, atual + 1))}
+              disabled={loading || pagina >= totalPaginas}
+              className="border-slate-700 bg-slate-800 text-slate-200"
+            >
+              Próxima
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
       <ModalPreviewPesquisaEvasao
