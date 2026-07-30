@@ -70,5 +70,8 @@ staff/
 .windsurf/
 .playwright-cli/
 
+# Worktrees locais do Superpowers
+.worktrees/
+
 # graphify — indice AST local (regerar com: graphify extract . --code-only)
 graphify-out/
