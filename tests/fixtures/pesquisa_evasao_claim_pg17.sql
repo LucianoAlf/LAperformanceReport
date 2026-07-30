@@ -198,7 +198,7 @@ values
   ('40000000-0000-0000-0000-000000000002', 'evasao', 1, 'responsavel', 'Olá, {{responsavel}}');
 
 insert into public.movimentacoes_admin (id)
-select generate_series(1001, 1010);
+select generate_series(1001, 1030);
 
 \ir /workspace/supabase/migrations/20260730173000_pesquisa_evasao_claim_seguro.sql
 
@@ -440,6 +440,156 @@ select public.assert_true(
   (select count(*) from public.pesquisa_evasao where evasao_id = 1005) = 2,
   'produção e teste devem persistir linhas separadas'
 );
+
+\echo CASE_snapshot_invariantes
+alter table public.pesquisa_evasao_previews
+  alter column caixa_id drop not null;
+do $snapshot_invariantes$
+declare
+  v_caso record;
+  v_preview_id uuid;
+  v_sqlstate text;
+  v_mensagem text;
+begin
+  for v_caso in
+    select *
+    from (
+      values
+        (1017, 'aluno_id'),
+        (1018, 'data_evasao_snapshot'),
+        (1019, 'caixa_id')
+    ) as casos(evasao_id, campo)
+  loop
+    v_preview_id := gen_random_uuid();
+    perform public.criar_preview_fixture(v_preview_id, v_caso.evasao_id);
+    execute format(
+      'update public.pesquisa_evasao_previews set %I = null where id = $1',
+      v_caso.campo
+    ) using v_preview_id;
+
+    v_sqlstate := null;
+    v_mensagem := null;
+    begin
+      perform *
+      from public.claim_pesquisa_evasao_preview(
+        v_preview_id,
+        '20000000-0000-0000-0000-000000000001'
+      );
+    exception
+      when others then
+        get stacked diagnostics
+          v_sqlstate = returned_sqlstate,
+          v_mensagem = message_text;
+    end;
+
+    perform public.assert_true(
+      v_sqlstate = '22023'
+      and v_mensagem = 'PESQUISA_EVASAO_PREVIEW_SNAPSHOT_INCOMPLETO',
+      'campo obrigatorio ausente deve falhar com erro canonico: ' ||
+      v_caso.campo
+    );
+    delete from public.pesquisa_evasao_previews where id = v_preview_id;
+  end loop;
+end
+$snapshot_invariantes$;
+alter table public.pesquisa_evasao_previews
+  alter column caixa_id set not null;
+
+\echo CASE_terminal_legado
+do $terminal_legado$
+declare
+  v_caso record;
+  v_preview_inicial uuid;
+  v_preview_bloqueada uuid;
+  v_preview_nova uuid;
+  v_claim record;
+  v_pesquisa_id uuid;
+begin
+  for v_caso in
+    select *
+    from (
+      values
+        (1011, 'ignorado', 'sem_resposta'),
+        (1012, 'invalidada', 'invalidada'),
+        (1013, 'recusada_opt_out', 'recusada_opt_out'),
+        (1014, 'pendente', 'coletando'),
+        (1015, 'pendente', 'pronta_para_revisao'),
+        (1016, 'pendente', 'revisada')
+    ) as casos(evasao_id, status_legado, resposta_status)
+  loop
+    v_preview_inicial := gen_random_uuid();
+    v_preview_bloqueada := gen_random_uuid();
+    v_preview_nova := gen_random_uuid();
+
+    perform public.criar_preview_fixture(
+      v_preview_inicial,
+      v_caso.evasao_id
+    );
+    select *
+    into v_claim
+    from public.claim_pesquisa_evasao_preview(
+      v_preview_inicial,
+      '20000000-0000-0000-0000-000000000001'
+    );
+    perform public.assert_true(
+      v_claim.deve_despachar,
+      'precondicao terminal deve criar a tentativa inicial'
+    );
+    v_pesquisa_id := v_claim.pesquisa_id;
+
+    update public.pesquisa_evasao
+    set envio_status = 'falhou',
+        status = v_caso.status_legado,
+        resposta_status = v_caso.resposta_status
+    where id = v_pesquisa_id;
+    update public.pesquisa_evasao_previews
+    set envio_status_tentativa = 'falhou',
+        envio_erro_sanitizado_tentativa = 'terminal fixture',
+        envio_finalizado_em = clock_timestamp()
+    where id = v_preview_inicial;
+
+    perform public.criar_preview_fixture(
+      v_preview_bloqueada,
+      v_caso.evasao_id
+    );
+    select *
+    into v_claim
+    from public.claim_pesquisa_evasao_preview(
+      v_preview_bloqueada,
+      '20000000-0000-0000-0000-000000000001'
+    );
+    perform public.assert_true(
+      not v_claim.deve_despachar
+      and v_claim.preview_id = v_preview_bloqueada
+      and v_claim.envio_status = 'bloqueado',
+      'estado terminal deve consumir e bloquear a preview nova'
+    );
+    perform public.assert_true(
+      (
+        select pe.status = v_caso.status_legado
+          and pe.resposta_status = v_caso.resposta_status
+          and pe.envio_status = 'falhou'
+        from public.pesquisa_evasao pe
+        where pe.id = v_pesquisa_id
+      ),
+      'claim bloqueada nao pode apagar estado terminal do cabecalho'
+    );
+
+    perform public.criar_preview_fixture(v_preview_nova, v_caso.evasao_id);
+    select *
+    into v_claim
+    from public.claim_pesquisa_evasao_preview(
+      v_preview_nova,
+      '20000000-0000-0000-0000-000000000001'
+    );
+    perform public.assert_true(
+      not v_claim.deve_despachar
+      and v_claim.envio_status = 'bloqueado',
+      'nova tentativa sobre estado terminal nunca deve despachar'
+    );
+  end loop;
+end
+$terminal_legado$;
 
 \echo CASE_stale
 select public.criar_preview_fixture(
@@ -803,7 +953,16 @@ select public.assert_true(
   'claim deve ficar inacessível aos papéis de cliente e agentes'
 );
 
-\echo CASE_reaplicacao
+\echo CASE_indice_homonimo_corrompido CASE_reaplicacao
+drop index public.pesquisa_evasao_templates_publico_ativo_uidx;
+create index pesquisa_evasao_templates_publico_ativo_uidx
+  on public.pesquisa_evasao_templates (chave);
+alter table public.pesquisa_evasao_previews
+  drop constraint pesquisa_evasao_previews_pesquisa_id_fkey,
+  add constraint pesquisa_evasao_previews_pesquisa_id_fkey
+    foreign key (pesquisa_evasao_id)
+    references public.pesquisa_evasao(id)
+    on delete cascade;
 \ir /workspace/supabase/migrations/20260730173000_pesquisa_evasao_claim_seguro.sql
 select public.assert_true(
   has_function_privilege(
@@ -866,6 +1025,32 @@ select public.assert_true(
         'pesquisa_evasao_previews_envio_status_tentativa_check'
   ),
   'reaplicacao deve preservar constraint validada de status da tentativa'
+);
+select public.assert_true(
+  (
+    select i.indisunique
+      and i.indnatts = 1
+      and a.attname = 'publico'
+      and pg_get_expr(i.indpred, i.indrelid) = 'ativo'
+    from pg_index i
+    join pg_attribute a
+      on a.attrelid = i.indrelid
+     and a.attnum = i.indkey[0]
+    where i.indexrelid =
+      'public.pesquisa_evasao_templates_publico_ativo_uidx'::regclass
+  ),
+  'reaplicacao deve reparar indice ativo homonimo com definicao errada'
+);
+select public.assert_true(
+  (
+    select c.confrelid = 'public.pesquisa_evasao'::regclass
+      and c.confdeltype = 'a'
+      and c.convalidated
+    from pg_constraint c
+    where c.conrelid = 'public.pesquisa_evasao_previews'::regclass
+      and c.conname = 'pesquisa_evasao_previews_pesquisa_id_fkey'
+  ),
+  'reaplicacao deve reparar FK homonima e remover ON DELETE CASCADE'
 );
 
 \echo PESQUISA_EVASAO_CLAIM_PG17_OK

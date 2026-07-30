@@ -51,9 +51,10 @@ alter table public.pesquisa_evasao_previews
 alter table public.pesquisa_evasao
   add column if not exists envio_erro_sanitizado text;
 
--- O lookup da Edge usa limit(2) e falha se o resultado nao tiver exatamente uma
--- linha. O indice tambem impede duas configuracoes ativas para o mesmo publico.
-create unique index if not exists pesquisa_evasao_templates_publico_ativo_uidx
+-- Recriar pelo nome canonico tambem repara um indice homonimo com definicao
+-- incorreta. A criacao falha fechada se os dados violarem a unicidade esperada.
+drop index if exists public.pesquisa_evasao_templates_publico_ativo_uidx;
+create unique index pesquisa_evasao_templates_publico_ativo_uidx
   on public.pesquisa_evasao_templates (publico)
   where ativo;
 
@@ -252,6 +253,9 @@ begin
   end if;
 
   if v_preview.unidade_id is null
+     or v_preview.aluno_id is null
+     or v_preview.data_evasao_snapshot is null
+     or v_preview.caixa_id is null
      or nullif(btrim(v_preview.aluno_nome_snapshot), '') is null
      or nullif(btrim(v_preview.destinatario_nome_snapshot), '') is null
      or v_preview.publico_template_snapshot not in ('direto', 'responsavel')
@@ -380,12 +384,14 @@ begin
         v_existente.envio_status := 'incerto';
       end if;
 
-      if v_existente.envio_status in (
-        'enviando',
-        'incerto',
-        'enviado',
-        'entregue',
-        'lido'
+      if not (
+        v_existente.envio_status in ('nao_enviado', 'falhou')
+        and v_existente.resposta_status = 'sem_resposta'
+        and v_existente.status in (
+          'pendente',
+          'falha_envio',
+          'sem_whatsapp'
+        )
       ) then
         update public.pesquisa_evasao_previews pp
         set consumido_em = clock_timestamp(),
