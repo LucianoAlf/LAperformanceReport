@@ -13,6 +13,10 @@ const providerPath = resolve(
   repoRoot,
   'supabase/functions/enviar-pesquisa-evasao/provider.ts',
 );
+const flowPath = resolve(
+  repoRoot,
+  'supabase/functions/enviar-pesquisa-evasao/flow.ts',
+);
 const configPath = resolve(repoRoot, 'supabase/config.toml');
 const claimMigrationPath = resolve(
   repoRoot,
@@ -256,7 +260,15 @@ function removerComentariosSql(source) {
 }
 
 test('artefatos da Edge segura, claim e runner destrutivo existem', () => {
-  for (const path of [edgePath, providerPath, claimMigrationPath, fixturePath]) {
+  for (
+    const path of [
+      edgePath,
+      providerPath,
+      flowPath,
+      claimMigrationPath,
+      fixturePath,
+    ]
+  ) {
     assert.equal(existsSync(path), true, `arquivo ausente: ${path}`);
   }
   assert.equal(
@@ -370,7 +382,14 @@ test('preview usa configuracao fail-closed, snapshot canonico, hash e dez minuto
 });
 
 test('confirmacao usa ownership e escopo persistidos antes do claim', () => {
-  const edge = codigoExecutavel(readOptional(edgePath));
+  const edgeSource = readOptional(edgePath);
+  const edge = codigoExecutavel(edgeSource);
+  const inicioConfirmacao = edge.indexOf('async function confirmar (');
+  const confirmacao = edge.slice(
+    inicioConfirmacao,
+    edge.indexOf('serve (', inicioConfirmacao),
+  );
+  assert.ok(inicioConfirmacao >= 0, 'funcao confirmar ausente');
 
   assert.match(edge, /autenticarUsuarioAtivoUnico \(/);
   assert.match(edge, /auth_user_id/);
@@ -378,7 +397,16 @@ test('confirmacao usa ownership e escopo persistidos antes do claim', () => {
   assert.match(edge, /autorizarIdentidadeComPreviewPersistida \(/);
   assert.match(edge, /claim_pesquisa_evasao_preview/);
   assert.match(edge, /mensagem_renderizada/);
-  assert.doesNotMatch(edge, /confirmar[\s\S]*resolverAssinaturaAtivaParaNovaPreview/);
+  assert.doesNotMatch(confirmacao, /resolverAssinaturaAtivaParaNovaPreview/);
+  assert.match(edge, /confirmar_resultado_pesquisa_evasao_envio/);
+  assert.match(edge, /classificacao \. providerMessageId/);
+  assert.match(edge, /captura_resposta_preparada/);
+  assert.match(edge, /warning/);
+  assert.equal(
+    (edge.match(/enviarAoProvider \(/g) ?? []).length,
+    2,
+    'deve existir somente a definicao e uma unica chamada de dispatch',
+  );
 });
 
 test('provider nao promete idempotencia ausente e separa sucesso, falha e ambiguidade', () => {
@@ -530,6 +558,16 @@ test('migration governa template unico e transicoes reconciliaveis', () => {
     /update\s+public\.pesquisa_evasao_previews[\s\S]*envio_status_tentativa/i,
     'resultado precisa atualizar atomicamente a preview atual',
   );
+  assert.match(
+    sql,
+    /create\s+or\s+replace\s+function\s+public\.confirmar_resultado_pesquisa_evasao_envio[\s\S]*pp\.id\s*=\s*p_preview_id[\s\S]*pp\.idempotency_key\s*=\s*p_idempotency_key[\s\S]*pp\.auth_user_id\s*=\s*p_auth_user_id[\s\S]*pp\.envio_status_tentativa\s*=\s*'enviado'[\s\S]*pp\.provider_message_id_tentativa\s*=\s*p_provider_message_id[\s\S]*pe\.envio_status\s*=\s*'enviado'[\s\S]*pe\.provider_message_id\s*=\s*p_provider_message_id/i,
+    'releitura pos-timeout deve confirmar atomicamente a tentativa exata',
+  );
+  assert.match(
+    sql,
+    /revoke\s+all\s+on\s+function\s+public\.confirmar_resultado_pesquisa_evasao_envio[\s\S]*grant\s+execute[\s\S]*confirmar_resultado_pesquisa_evasao_envio[\s\S]*to\s+service_role/i,
+    'releitura pos-timeout deve permanecer service-only',
+  );
 });
 
 test('fixture PG17 cobre replay, ownership, expiracao, orfa, slots, stale e concorrencia', () => {
@@ -553,6 +591,7 @@ test('fixture PG17 cobre replay, ownership, expiracao, orfa, slots, stale e conc
       'snapshot_invariantes',
       'resultado_stale',
       'replay_resultado_sem_deadlock',
+      'confirmacao_pos_timeout',
       'indice_homonimo_corrompido',
     ]
   ) {

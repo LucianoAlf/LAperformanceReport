@@ -967,6 +967,28 @@ from public.registrar_resultado_pesquisa_evasao_envio(
   null
 );
 
+\echo CASE_confirmacao_pos_timeout
+select public.assert_true(
+  public.confirmar_resultado_pesquisa_evasao_envio(
+    (select pesquisa_id from resultado_stale_b),
+    (select preview_id from resultado_stale_b),
+    (select idempotency_key from resultado_stale_b),
+    '20000000-0000-0000-0000-000000000001',
+    'provider-atual-b'
+  ),
+  'confirmacao pos-timeout deve reconhecer o sucesso da propria tentativa'
+);
+select public.assert_true(
+  not public.confirmar_resultado_pesquisa_evasao_envio(
+    (select pesquisa_id from resultado_stale_b),
+    (select preview_id from resultado_stale_b),
+    (select idempotency_key from resultado_stale_b),
+    '20000000-0000-0000-0000-000000000001',
+    'provider-divergente'
+  ),
+  'confirmacao pos-timeout deve rejeitar provider id divergente'
+);
+
 \echo CASE_replay_resultado_sem_deadlock
 select public.criar_preview_fixture(
   '50000000-0000-0000-0000-000000000017',
@@ -1191,6 +1213,16 @@ select public.assert_true(
   and not has_function_privilege(
     'authenticated',
     'public.pesquisa_evasao_claim_snapshot(uuid,boolean,uuid)',
+    'EXECUTE'
+  )
+  and has_function_privilege(
+    'service_role',
+    'public.confirmar_resultado_pesquisa_evasao_envio(uuid,uuid,uuid,uuid,text)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.confirmar_resultado_pesquisa_evasao_envio(uuid,uuid,uuid,uuid,text)',
     'EXECUTE'
   ),
   'reaplicacao deve preservar ACL service-only dos helpers'

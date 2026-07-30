@@ -828,6 +828,49 @@ begin
 end;
 $function$;
 
+create or replace function public.confirmar_resultado_pesquisa_evasao_envio(
+  p_pesquisa_id uuid,
+  p_preview_id uuid,
+  p_idempotency_key uuid,
+  p_auth_user_id uuid,
+  p_provider_message_id text
+)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $function$
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'PESQUISA_EVASAO_ACESSO_NEGADO'
+      using errcode = '42501';
+  end if;
+
+  if nullif(btrim(p_provider_message_id), '') is null then
+    return false;
+  end if;
+
+  return exists (
+    select 1
+    from public.pesquisa_evasao_previews pp
+    join public.pesquisa_evasao pe
+      on pe.id = p_pesquisa_id
+     and pe.preview_id = pp.id
+     and pe.idempotency_key = pp.idempotency_key
+    where pp.id = p_preview_id
+      and pp.idempotency_key = p_idempotency_key
+      and pp.auth_user_id = p_auth_user_id
+      and pp.pesquisa_evasao_id = p_pesquisa_id
+      and pp.envio_status_tentativa = 'enviado'
+      and pp.provider_message_id_tentativa = p_provider_message_id
+      and pe.executado_por_auth_user_id = p_auth_user_id
+      and pe.envio_status = 'enviado'
+      and pe.provider_message_id = p_provider_message_id
+  );
+end;
+$function$;
+
 revoke all on function public.pesquisa_evasao_claim_snapshot(
   uuid,
   boolean,
@@ -868,6 +911,22 @@ grant execute on function public.registrar_resultado_pesquisa_evasao_envio(
   text
 ) to service_role;
 
+revoke all on function public.confirmar_resultado_pesquisa_evasao_envio(
+  uuid,
+  uuid,
+  uuid,
+  uuid,
+  text
+) from public, anon, authenticated, mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
+grant execute on function public.confirmar_resultado_pesquisa_evasao_envio(
+  uuid,
+  uuid,
+  uuid,
+  uuid,
+  text
+) to service_role;
+
 comment on function public.claim_pesquisa_evasao_preview(uuid, uuid) is
   'Consome preview uma unica vez, serializa o slot logico e retorna snapshot imutavel. Estado enviando antigo vira incerto e nunca autoriza novo dispatch.';
 
@@ -881,3 +940,12 @@ comment on function public.registrar_resultado_pesquisa_evasao_envio(
   text
 ) is
   'Finaliza ou reconcilia atomicamente o cabecalho e o snapshot da tentativa atual, sem alterar a idempotency_key.';
+
+comment on function public.confirmar_resultado_pesquisa_evasao_envio(
+  uuid,
+  uuid,
+  uuid,
+  uuid,
+  text
+) is
+  'Confirma atomicamente se a tentativa exata ficou enviada com o mesmo comprovante do provider.';

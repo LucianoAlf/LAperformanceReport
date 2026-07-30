@@ -21,6 +21,11 @@ import {
   validarRequest,
 } from "./contract.ts";
 import {
+  persistirOuConfirmarResultadoEnviado,
+  prepararCapturaRespostaBestEffort,
+  type ResultadoCapturaResposta,
+} from "./flow.ts";
+import {
   classificarRespostaProvider,
   deveAbrirConversaReal,
   enviarMensagemComCredenciaisExatas,
@@ -348,27 +353,56 @@ async function registrarIncertoAposDispatch(
 async function abrirConversaBestEffort(
   supabase: SupabaseClient,
   claim: ClaimEnvio,
-): Promise<void> {
-  const { error } = await supabase
-    .from("conversa_estado_whatsapp")
-    .upsert(
-      {
-        whatsapp_numero: claim.telefone_destino,
-        estado: "aguardando_resposta_evasao",
-        contexto: {
-          pesquisa_id: claim.pesquisa_id,
-          evasao_id: claim.evasao_id,
+): Promise<ResultadoCapturaResposta> {
+  const resultado = await prepararCapturaRespostaBestEffort(async () => {
+    const { error } = await supabase
+      .from("conversa_estado_whatsapp")
+      .upsert(
+        {
+          whatsapp_numero: claim.telefone_destino,
+          estado: "aguardando_resposta_evasao",
+          contexto: {
+            pesquisa_id: claim.pesquisa_id,
+            evasao_id: claim.evasao_id,
+          },
+          expira_em: new Date(Date.now() + CONVERSA_TTL_MS).toISOString(),
         },
-        expira_em: new Date(Date.now() + CONVERSA_TTL_MS).toISOString(),
-      },
-      { onConflict: "whatsapp_numero" },
-    );
+        { onConflict: "whatsapp_numero" },
+      );
+    return {
+      error: error ? { message: error.message } : null,
+    };
+  });
 
-  if (error) {
+  if (!resultado.capturaRespostaPreparada) {
     console.error(
       "[pesquisa-evasao] mensagem enviada; conversa nao preparada:",
-      error.message,
+      resultado.warning,
     );
+  }
+  return resultado;
+}
+
+async function confirmarResultadoPersistidoAposRespostaPerdida(
+  supabase: SupabaseClient,
+  claim: ClaimEnvio,
+  authUserId: string,
+  providerMessageId: string,
+): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.rpc(
+      "confirmar_resultado_pesquisa_evasao_envio",
+      {
+        p_pesquisa_id: claim.pesquisa_id,
+        p_preview_id: claim.preview_id,
+        p_idempotency_key: claim.idempotency_key,
+        p_auth_user_id: authUserId,
+        p_provider_message_id: providerMessageId,
+      },
+    );
+    return !error && data === true;
+  } catch {
+    return false;
   }
 }
 
@@ -732,15 +766,24 @@ async function confirmar(
     );
   }
 
-  try {
-    await registrarResultado(
-      supabase,
-      claim,
-      identidade.authUserId,
-      "enviado",
-      classificacao.providerMessageId,
-    );
-  } catch {
+  const sucessoPersistido = await persistirOuConfirmarResultadoEnviado({
+    registrar: () =>
+      registrarResultado(
+        supabase,
+        claim,
+        identidade.authUserId,
+        "enviado",
+        classificacao.providerMessageId,
+      ),
+    confirmarPersistido: () =>
+      confirmarResultadoPersistidoAposRespostaPerdida(
+        supabase,
+        claim,
+        identidade.authUserId,
+        classificacao.providerMessageId,
+      ),
+  });
+  if (!sucessoPersistido) {
     await registrarIncertoAposDispatch(
       supabase,
       claim,
@@ -760,11 +803,14 @@ async function confirmar(
     );
   }
 
+  let capturaResposta: ResultadoCapturaResposta = {
+    capturaRespostaPreparada: false,
+  };
   if (deveAbrirConversaReal(claim.modo_teste, "enviado")) {
-    await abrirConversaBestEffort(supabase, claim);
+    capturaResposta = await abrirConversaBestEffort(supabase, claim);
   }
 
-  return responderJson({
+  const payloadSucesso: JsonRecord = {
     success: true,
     pesquisa_id: claim.pesquisa_id,
     preview_id: claim.preview_id,
@@ -772,7 +818,12 @@ async function confirmar(
     provider_message_id: classificacao.providerMessageId,
     provedor: respostaProvider.provedor,
     modo_teste: claim.modo_teste,
-  });
+    captura_resposta_preparada: capturaResposta.capturaRespostaPreparada,
+  };
+  if (capturaResposta.warning) {
+    payloadSucesso.warning = capturaResposta.warning;
+  }
+  return responderJson(payloadSucesso);
 }
 
 serve(async (req) => {
