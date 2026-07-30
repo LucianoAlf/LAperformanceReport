@@ -1347,6 +1347,63 @@ contractTest('stats NULL agrega somente unidades autorizadas e exclui testes', (
   assertNoAuthorizationBypass(definition, 'stats_pesquisa_evasao');
 });
 
+contractTest('stats so considera resposta pronta para revisao ou avancada', () => {
+  const definition = stripSqlComments(
+    getFunctionDefinition(
+      'stats_pesquisa_evasao',
+      ['uuid', 'integer', 'integer'],
+    ),
+  );
+  const validResponseStatuses = [
+    'pronta_para_revisao',
+    'em_revisao',
+    'revisada',
+  ];
+  const responseStatusFilters = [
+    ...definition.matchAll(
+      /\b(?:pe|pesquisa_evasao)\.resposta_status\s+in\s*\(([^)]*)\)/gi,
+    ),
+  ];
+
+  assert.equal(
+    responseStatusFilters.length,
+    3,
+    'stats deve filtrar total, texto e audio pelo mesmo conjunto valido',
+  );
+  for (const [, rawStatuses] of responseStatusFilters) {
+    const statuses = [
+      ...rawStatuses.matchAll(/['"]([^'"]+)['"]/g),
+    ].map((match) => match[1].toLowerCase());
+    assert.deepEqual(statuses, validResponseStatuses);
+  }
+  assert.doesNotMatch(
+    definition,
+    /['"]coletando['"]/i,
+    'coletando ainda nao e resposta valida para stats ou taxa',
+  );
+});
+
+contractTest('backfill de compatibilidade preserva estados V2 avancados', () => {
+  const mappingUpdates = statements(sql).filter(
+    (statement) =>
+      /\bupdate\s+public\.pesquisa_evasao\b/i.test(statement) &&
+      /\bset\s+envio_status\s*=\s*case\s+status\b/i.test(statement) &&
+      /\bresposta_status\s*=\s*case\s+status\b/i.test(statement),
+  );
+
+  assert.equal(
+    mappingUpdates.length,
+    1,
+    'deve existir um unico UPDATE de compatibilidade dos status legados',
+  );
+  const normalizedUpdate = normalizeSql(mappingUpdates[0]);
+  assert.match(
+    normalizedUpdate,
+    /\bwhere envio_status\s*=\s*'nao_enviado' and resposta_status\s*=\s*'sem_resposta'$/,
+    'mapeamento legado so pode tocar o par de defaults de bootstrap',
+  );
+});
+
 contractTest('EXECUTE publico e anon e revogado nas cinco assinaturas', () => {
   const signatures = [
     ['listar_evadidos_para_pesquisa', 'uuid, integer, integer, varchar'],
@@ -1405,6 +1462,20 @@ contractTest('criar pesquisa e service-only e nao antecipa sucesso do provedor',
   assertNoAuthorizationBypass(definition, 'criar_pesquisa_evasao');
 });
 
+contractTest('criar pesquisa rejeita movimentacao que nao seja saida canonica', () => {
+  const body = stripSqlComments(
+    getFunctionParts(
+      'criar_pesquisa_evasao',
+      ['integer', 'text'],
+    ).body,
+  );
+
+  assert.match(
+    body,
+    /\bm\.tipo\s+in\s*\(\s*['"]evasao['"]\s*,\s*['"]nao_renovacao['"]\s*\)/i,
+  );
+});
+
 contractTest('pode_enviar exige permissao concreta ou service role', () => {
   const parts = getFunctionParts(
     'pode_enviar_pesquisa_evasao',
@@ -1435,4 +1506,18 @@ contractTest('pode_enviar exige permissao concreta ou service role', () => {
     /(?<!estrita)\bfn_usuario_atual_tem_permissao\s*\(/i,
   );
   assertNoAuthorizationBypass(definition, 'pode_enviar_pesquisa_evasao');
+});
+
+contractTest('pode_enviar rejeita movimentacao que nao seja saida canonica', () => {
+  const body = stripSqlComments(
+    getFunctionParts(
+      'pode_enviar_pesquisa_evasao',
+      ['integer'],
+    ).body,
+  );
+
+  assert.match(
+    body,
+    /\bm\.tipo\s+in\s*\(\s*['"]evasao['"]\s*,\s*['"]nao_renovacao['"]\s*\)/i,
+  );
 });

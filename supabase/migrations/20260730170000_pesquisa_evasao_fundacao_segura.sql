@@ -450,7 +450,9 @@ set envio_status = case status
     provider_message_id = coalesce(
       provider_message_id,
       mensagem_uazapi_id
-    );
+    )
+where envio_status = 'nao_enviado'
+  and resposta_status = 'sem_resposta';
 
 -- Governanca do backfill:
 -- Em 2026-07-30, Alf confirmou que exatamente os seis IDs abaixo eram envios
@@ -944,7 +946,6 @@ begin
       ) as enviados,
       count(*) filter (
         where pe.resposta_status in (
-          'coletando',
           'pronta_para_revisao',
           'em_revisao',
           'revisada'
@@ -955,7 +956,6 @@ begin
       ) as falhas,
       count(*) filter (
         where pe.resposta_status in (
-          'coletando',
           'pronta_para_revisao',
           'em_revisao',
           'revisada'
@@ -964,7 +964,6 @@ begin
       ) as resp_texto,
       count(*) filter (
         where pe.resposta_status in (
-          'coletando',
           'pronta_para_revisao',
           'em_revisao',
           'revisada'
@@ -1042,6 +1041,7 @@ begin
   left join public.motivos_saida ms
     on ms.id = m.motivo_saida_id
   where m.id = p_evasao_id
+    and m.tipo in ('evasao', 'nao_renovacao')
     and public.is_movimentacao_admin_retencao_valida(m.id);
 
   if v_evasao.id is null then
@@ -1119,6 +1119,7 @@ begin
   into v_data_evasao, v_unidade_id
   from public.movimentacoes_admin m
   where m.id = p_evasao_id
+    and m.tipo in ('evasao', 'nao_renovacao')
     and public.is_movimentacao_admin_retencao_valida(m.id);
 
   if v_data_evasao is null or v_unidade_id is null then
