@@ -2,7 +2,7 @@
 
 **Data:** 2026-07-30
 
-**Status:** Proposta pronta para revisão escrita
+**Status:** Aprovada como base dos planos dos Subprojetos A e B, com adendos de segurança incorporados
 
 **Autoridade de produto:** Alf
 
@@ -43,6 +43,10 @@ Esta proposta usa a auditoria somente leitura realizada no código e no banco re
 - Há áudios marcados como respondidos sem transcrição.
 - O modo teste não é distinguível de produção.
 - A função publicada de envio não exige JWT e aceita telefone e operador informados pelo cliente.
+- O inbound `webhook-whatsapp-inbox` também roda sem JWT e, na versão auditada, não valida segredo antes de criar o cliente com service role.
+- O inbound grava o payload integral em `webhook_debug_log` e também escreve trechos extensos do payload em logs de execução, sem política de expurgo identificada.
+- A policy atual de `pesquisa_evasao` permite `ALL` a qualquer usuário `authenticated` e aos roles restritos de Mila e Sol; isso expõe respostas privadas e contradiz a separação de domínios definida nesta spec.
+- O fluxo pós-1ª aula depende do mesmo inbound: mensagens com `buttonOrListid` são encaminhadas a `processar-resposta-pesquisa` e essa integração é uma regressão crítica a preservar.
 
 ### 2.2 Cobertura e sinais
 
@@ -102,6 +106,9 @@ A fila Sol/Hermes registrava 20 entregas e 3 erros até a auditoria. Os relatór
 - Capturar texto e áudio enviados em partes.
 - Não considerar “vou responder depois” uma resposta final.
 - Entregar uma conversa consolidada para revisão humana.
+- Autenticar todo webhook inbound por caixa antes de qualquer acesso com service role.
+- Restringir cabeçalho, mensagens, transcrições e análises por `sucesso_aluno.evasao.*`.
+- Interromper a persistência e o log de payloads integrais do webhook e expurgar o legado de debug.
 
 ### 3.2 Objetivos das entregas seguintes
 
@@ -121,6 +128,7 @@ A fila Sol/Hermes registrava 20 entregas e 3 erros até a auditoria. Os relatór
 - O primeiro plano não altera o LA Teacher.
 - O primeiro plano não redefine a fórmula de presença, risco ou Health Score.
 - O primeiro plano não cria uma identidade universal de pessoa.
+- O timing do disparo em relação à data da movimentação e a política de lembretes não serão definidos nos Subprojetos A ou B; são decisões abertas do Subprojeto C.
 - Esta iniciativa não muda a política de retenção de áudios já existente; privacidade e acesso serão restringidos, e uma política de expurgo será tratada em governança separada.
 
 ## 5. Fontes canônicas e granularidade
@@ -150,6 +158,7 @@ A evolução é aditiva:
 - `pesquisa_evasao_templates` versiona pergunta, assinatura e regras de renderização;
 - `pesquisa_evasao_mensagens` registra cada evento inbound ou outbound de forma append-only;
 - `pesquisa_evasao_analises` guarda consolidação, sugestão e revisão versionadas;
+- `whatsapp_caixa_webhook_secrets` guarda, em área acessível apenas ao backend, o hash do segredo inbound associado a cada `whatsapp_caixas.id`;
 - `sucesso_aluno_sinais` materializa ocorrências operacionais e aponta para evidências canônicas;
 - `aluno_acoes` recebe referências explícitas à pesquisa e à análise quando a ação nascer desse fluxo.
 
@@ -257,7 +266,8 @@ Entrega e resposta não compartilham um único status.
 - `em_revisao`;
 - `revisada`;
 - `expirada`;
-- `invalidada`.
+- `invalidada`;
+- `recusada_opt_out`.
 
 ### 8.3 Rajada curta e continuação tardia
 
@@ -293,6 +303,14 @@ Frases como:
 mantêm a sessão em `coletando`. Elas contam como interação, mas não como resposta válida para a taxa de pesquisa.
 
 Uma heurística pode sugerir `adiamento`, `abertura` ou `conteudo_substantivo`, mas a confirmação de resposta válida é humana.
+
+Recusa explícita e opt-out, como “não quero responder” ou “não me mande mais mensagens”, têm tratamento próprio:
+
+- registram o evento original;
+- mudam `resposta_status` para `recusada_opt_out`;
+- bloqueiam reenvio e qualquer lembrete desta pesquisa;
+- não contam como resposta válida nem entram na análise de motivos;
+- permanecem auditáveis para que a equipe respeite a preferência do contato.
 
 ### 8.5 Texto e áudio misturados
 
@@ -489,7 +507,7 @@ Responsável por:
 - saúde das rotinas e filas administrativas;
 - publicação de sinais administrativos para a Lia.
 
-Sol não recebe a propriedade da pesquisa de evasão e não interpreta conteúdo pedagógico bruto.
+Sol não recebe a propriedade da pesquisa de evasão, não interpreta conteúdo pedagógico bruto e não possui acesso direto a respostas, transcrições ou análises privadas. Quando necessário, consome apenas sinais administrativos ou agregados explicitamente autorizados.
 
 ### 13.3 Fábio — Professores e coordenação
 
@@ -607,6 +625,8 @@ A auditoria deve mapear:
 
 Nenhuma mudança, reinicialização, instalação ou rotação de segredo ocorre durante essa primeira auditoria.
 
+Esta auditoria é independente dos Subprojetos A, B e C. Ela pode ser executada em paralelo a A e B para antecipar as decisões dos Subprojetos D e E, sempre mantendo o escopo somente leitura.
+
 O resultado será um mapa:
 
 ```text
@@ -619,10 +639,18 @@ job -> agente -> regra -> consulta -> fonte canônica -> saída -> canal -> dono
 - A função resolve o usuário pelo token.
 - O servidor valida permissão, unidade, movimentação e público.
 - Service role não transforma endpoint público em autorização.
+- `webhook-whatsapp-inbox` permanece sem JWT porque recebe chamadas do provedor, mas exige um segredo forte e diferente por caixa antes de instanciar ou usar o cliente com service role.
+- O segredo inbound usa preferencialmente o header `x-webhook-secret`; query param opaco é fallback somente quando o provedor não suportar header customizado.
+- O banco guarda apenas SHA-256 do segredo, com chave estrangeira para `whatsapp_caixas`; o valor recebido nunca é persistido nem escrito em log.
+- Ausência de `caixa_id`, caixa inativa, segredo ausente ou hash divergente retorna `401`/`403` antes de qualquer escrita ou roteamento.
+- O health check interno usa autenticação de serviço separada; ele não cria uma exceção pública capaz de contornar o segredo inbound.
 - `telefone_override` só existe em modo teste autorizado.
-- Tabelas de resposta, transcrição e análise não têm leitura ampla.
+- `pesquisa_evasao`, mensagens, transcrições e análises usam RLS baseada em `sucesso_aluno.evasao.*`, respeitando unidade e ação (`ver`, `enviar`, `revisar`, `gerir_acoes`, `relatorios`, `modo_teste`).
+- Policies permissivas com `qual=true`, inclusive para `authenticated`, `mila_acesso_restrito` e `sol_acesso_restrito`, são removidas; acesso de agentes ocorre apenas por contrato/read model autorizado.
 - Mídia privada usa URL assinada.
-- Logs não registram texto integral, telefone, token ou payload completo.
+- `webhook_debug_log` deixa de receber payload bruto. Diagnóstico persistido, se necessário, contém apenas IDs internos/correlation ID, tipo de evento, rota, status e timestamps, sem texto, áudio, telefone, nome, URL de mídia ou segredo.
+- Os payloads integrais já retidos em `webhook_debug_log` são expurgados na implantação do Subprojeto B; o log sanitizado passa a ter retenção automática máxima de sete dias.
+- Logs de execução não registram texto integral, telefone, token, transcrição ou payload completo.
 - Relatórios de grupo minimizam dados pessoais.
 - Acesso à resposta bruta é separado do acesso ao indicador agregado.
 - Toda classificação oficial registra revisor humano.
@@ -644,6 +672,8 @@ Permissões mínimas:
 - Webhook duplicado é ignorado pelo ID do provedor.
 - Áudio sem transcrição continua pendente e reproduzível por usuário autorizado.
 - Mensagem ambígua vai para triagem, não para o aluno errado.
+- Webhook sem credencial válida é rejeitado antes de qualquer escrita, invocação ou alteração de estado.
+- Recusa/opt-out impede reenvio e lembrete sem marcar resposta válida.
 - Erro de classificação não perde os eventos originais.
 - Falha do canal WhatsApp interno não perde o relatório; a fila retenta conforme política.
 - Falha de Lia, Sol ou Fábio não bloqueia a fonte canônica nem altera fatos.
@@ -693,6 +723,14 @@ Logs técnicos usam IDs internos e correlation ID. Conteúdo sensível fica no b
 8. Transcrição falha não marca resposta como concluída.
 9. Dois irmãos no mesmo telefone não recebem associação silenciosa errada.
 10. Mensagem sem pesquisa resolvível vai para triagem.
+11. Webhook sem segredo é rejeitado antes de qualquer escrita.
+12. Webhook com segredo de outra caixa é rejeitado.
+13. Webhook com segredo válido da caixa é processado uma única vez.
+14. O segredo recebido não aparece no banco nem nos logs.
+15. `buttonOrListid` autenticado continua invocando `processar-resposta-pesquisa` e atualiza a pesquisa pós-1ª aula.
+16. “Não quero responder” muda para `recusada_opt_out`, bloqueia reenvio/lembrete e não incrementa resposta válida.
+17. Usuário autenticado sem `sucesso_aluno.evasao.ver` não lê resposta privada.
+18. Sol e Mila não acessam diretamente resposta/transcrição privada.
 
 ### 19.3 Dados e sinais
 
@@ -731,8 +769,11 @@ Logs técnicos usam IDs internos e correlation ID. Conteúdo sensível fica no b
 - Nenhum fragmento é perdido ou sobrescrito.
 - Texto e áudio podem compor a mesma resposta.
 - Interação não substantiva não infla taxa de resposta.
+- Recusa/opt-out é respeitada, bloqueia novos contatos da pesquisa e não infla taxa de resposta.
 - Conteúdo consolidado possui revisão humana.
 - Famílias com telefone compartilhado não são associadas silenciosamente ao aluno errado.
+- Webhooks falsos ou de caixa incorreta são rejeitados antes do uso da service role.
+- O fluxo de resposta da pesquisa pós-1ª aula continua funcionando pelo mesmo inbound autenticado.
 
 ### 20.3 Inteligência e operação
 
@@ -756,6 +797,9 @@ O escopo não será implementado em um único plano.
 - modo teste;
 - elegibilidade, paginação e bloqueios;
 - fechamento das escritas diretas de telefone.
+- reescrita das policies de `pesquisa_evasao` e das novas tabelas com `sucesso_aluno.evasao.*`;
+- remoção do acesso total de `authenticated`, Mila e Sol às respostas privadas;
+- contratos/read models mínimos para agentes, sem acesso bruto.
 
 ### Subprojeto B — Conversa multipartes
 
@@ -767,6 +811,10 @@ O escopo não será implementado em um único plano.
 - consolidação;
 - ambiguidade e telefone compartilhado;
 - fila de revisão.
+- segredo inbound por caixa e rejeição anterior à service role;
+- preservação do encaminhamento pós-1ª aula para `processar-resposta-pesquisa`;
+- recusa/opt-out;
+- remoção de payload bruto dos logs, expurgo do legado e retenção do diagnóstico sanitizado.
 
 ### Subprojeto C — Classificação, ação e analytics
 
@@ -776,6 +824,12 @@ O escopo não será implementado em um único plano.
 - `aluno_acoes`;
 - indicadores;
 - relatório de causas e efetividade.
+
+Decisões abertas exclusivas do Subprojeto C:
+
+- disparo imediato, D+X ou outra janela em relação à data da movimentação;
+- se haverá lembrete, em quais condições, quantidade, intervalo e canal;
+- como a política de lembrete respeitará `recusada_opt_out`, interação não substantiva e pesquisas em revisão.
 
 ### Subprojeto D — Mapa de sinais e Lia
 
@@ -797,12 +851,11 @@ Cada subprojeto terá spec complementar apenas se a auditoria revelar decisões 
 
 ## 22. Ordem de implementação
 
-1. Subprojeto A.
-2. Subprojeto B.
+1. Iniciar o Subprojeto A e a auditoria somente leitura da VPS em paralelo.
+2. Iniciar o Subprojeto B assim que os contratos de persistência e permissão de A estiverem definidos; a auditoria da VPS pode continuar em paralelo.
 3. Subprojeto C.
-4. Auditoria somente leitura da VPS.
-5. Subprojeto D.
-6. Subprojeto E.
+4. Subprojeto D, informado pelos resultados da auditoria.
+5. Subprojeto E.
 
 A pesquisa pode entrar em operação após A e B, com classificação manual inicial. Relatórios inteligentes e cruzamentos entram depois, sem bloquear o fluxo seguro de agosto.
 
