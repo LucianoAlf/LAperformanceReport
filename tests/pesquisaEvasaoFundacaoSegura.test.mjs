@@ -281,7 +281,12 @@ function assertNoForbiddenSchemaWidePrivileges(source) {
       .at(-1)
       .replace(/\bwith\s+grant\s+option\b/gi, '')
       .split(',')
-      .map((role) => role.trim().replace(/^"|"$/g, '').toLowerCase());
+      .map((role) =>
+        role
+          .trim()
+          .replace(/^group\s+/i, '')
+          .replace(/^"|"$/g, '')
+          .toLowerCase());
     assert.equal(
       roles.some((role) => forbiddenClientRoles.includes(role)),
       false,
@@ -348,11 +353,12 @@ function assertNoNominalSeedDml(source) {
     /public\.usuarios\b|\b(?:email|nome)\b|\b(?:29|30)\b|\blike\b|jessyca@lamusic\.com\.br|fabi@gmail\.com|368d47f5-2d88-4475-bc14-ba084a9a348e|2ec861f6-023f-4d7b-9927-3960ad8c2a92|95553e96-971b-4590-a6eb-0201d013c14d/i;
 
   for (const statement of statements(source)) {
+    const maskedStatement = maskSqlCommentsAndStrings(statement);
     if (
       !new RegExp(
-        `^\\s*(?:insert\\s+into|update|merge\\s+into)\\s+public\\.${protectedTargets}\\b`,
+        `\\b(?:insert\\s+into|update|merge\\s+into)\\s+public\\.${protectedTargets}\\b`,
         'i',
-      ).test(statement)
+      ).test(maskedStatement)
     ) continue;
 
     assert.doesNotMatch(
@@ -361,8 +367,8 @@ function assertNoNominalSeedDml(source) {
       'seed/DML nominal deve ficar no runbook da Task 7',
     );
     assert.doesNotMatch(
-      statement,
-      /^\s*(?:insert\s+into|update|merge\s+into)\s+public\.usuario_perfis\b/i,
+      maskedStatement,
+      /\b(?:insert\s+into|update|merge\s+into)\s+public\.usuario_perfis\b/i,
       'usuario_perfis nao pode ser populada nesta migration',
     );
   }
@@ -396,7 +402,12 @@ function parsePrivilegeStatement(statement) {
       .replace(/\bwith\s+grant\s+option\b/gi, '')
       .replace(/\b(?:cascade|restrict)\b/gi, '')
       .split(',')
-      .map((role) => role.trim().replace(/^"|"$/g, '').toLowerCase()),
+      .map((role) =>
+        role
+          .trim()
+          .replace(/^group\s+/i, '')
+          .replace(/^"|"$/g, '')
+          .toLowerCase()),
     start: statement.start,
     text: statement.text,
   };
@@ -542,6 +553,17 @@ test('guards rejeitam formas adversariais sem depender da migration', () => {
     ));
   assert.throws(() =>
     assertNoForbiddenSchemaWidePrivileges(
+      'grant select on all tables in schema public to group anon;',
+    ));
+  assert.deepEqual(
+    parsePrivilegeStatement({
+      text: 'revoke all on table public.pesquisa_evasao from group anon',
+      start: 0,
+    }).roles,
+    ['anon'],
+  );
+  assert.throws(() =>
+    assertNoForbiddenSchemaWidePrivileges(
       'alter default privileges in schema public grant execute on functions to public;',
     ));
   assert.throws(() =>
@@ -567,6 +589,14 @@ test('guards rejeitam formas adversariais sem depender da migration', () => {
     assertNoNominalSeedDml(`
       insert into public.pesquisa_evasao_assinaturas (usuario_id)
       select id from public.usuarios where id = 30
+    `));
+  assert.throws(() =>
+    assertNoNominalSeedDml(`
+      with titular as (
+        select id from public.usuarios where email = 'fabi@gmail.com'
+      )
+      insert into public.pesquisa_evasao_assinaturas (usuario_id)
+      select id from titular
     `));
 });
 
