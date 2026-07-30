@@ -395,7 +395,21 @@ test('provider nao promete idempotencia ausente e separa sucesso, falha e ambigu
     /(?:uazapi|waha)[\s\S]{0,80}return true/i,
   );
   assert.match(provider, /AbortSignal \. timeout \(/);
-  assert.match(edge, /fetchProviderComTimeout \(/);
+  assert.match(provider, /fetchProviderComTimeout \(/);
+  assert.match(edge, /enviarMensagemComCredenciaisExatas \(/);
+  assert.match(edge, /from \( "whatsapp_caixas" \)/);
+  assert.match(edge, /eq \( "id" , caixaId \)/);
+  assert.match(edge, /eq \( "ativo" , true \)/);
+  assert.match(edge, /ErroConfiguracaoProvider/);
+  assert.doesNotMatch(edge, /getWhatsAppCredentials/);
+  for (const campo of [
+    'uazapi_url',
+    'uazapi_token',
+    'waha_url',
+    'waha_session',
+  ]) {
+    assert.match(provider, new RegExp(campo));
+  }
   assert.doesNotMatch(
     edge,
     /response = await fetch \(/,

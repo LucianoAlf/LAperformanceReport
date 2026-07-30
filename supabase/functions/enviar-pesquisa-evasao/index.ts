@@ -6,7 +6,6 @@ import {
   createClient,
   type SupabaseClient,
 } from "https://esm.sh/@supabase/supabase-js@2";
-import { getWhatsAppCredentials, toWahaJid } from "../_shared/uazapi.ts";
 import {
   autenticarUsuarioAtivoUnico,
   type AuthAdapters,
@@ -24,9 +23,9 @@ import {
 import {
   classificarRespostaProvider,
   deveAbrirConversaReal,
+  enviarMensagemComCredenciaisExatas,
+  ErroConfiguracaoProvider,
   type EstadoEnvioPersistido,
-  fetchProviderComTimeout,
-  type ProvedorWhatsApp,
   sanitizarErroProvider,
 } from "./provider.ts";
 
@@ -376,73 +375,44 @@ async function abrirConversaBestEffort(
 async function enviarAoProvider(
   supabase: SupabaseClient,
   claim: ClaimEnvio,
-): Promise<{
-  provedor: ProvedorWhatsApp;
-  statusHttp: number;
-  payload: unknown;
-}> {
-  const credenciais = await getWhatsAppCredentials(supabase, {
-    caixaId: claim.caixa_id,
-  });
-
-  let response: Response;
-  if (credenciais.provedor === "waha") {
-    if (!credenciais.wahaUrl || !credenciais.wahaSession) {
-      throw new ErroHttp(502, "Configuracao WAHA incompleta");
-    }
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (credenciais.wahaApiKey) {
-      headers["X-Api-Key"] = credenciais.wahaApiKey;
-    }
-    response = await fetchProviderComTimeout(
-      `${credenciais.wahaUrl}/api/sendText`,
+): Promise<Awaited<ReturnType<typeof enviarMensagemComCredenciaisExatas>>> {
+  try {
+    return await enviarMensagemComCredenciaisExatas(
       {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          session: credenciais.wahaSession,
-          chatId: toWahaJid(claim.telefone_destino),
-          text: claim.mensagem_renderizada,
-        }),
+        caixaId: claim.caixa_id,
+        telefone: claim.telefone_destino,
+        mensagem: claim.mensagem_renderizada,
       },
-    );
-  } else {
-    response = await fetchProviderComTimeout(
-      `${credenciais.baseUrl}/send/text`,
       {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          token: credenciais.token,
+        buscarCaixaExata: async (caixaId) => {
+          try {
+            const { data, error } = await supabase
+              .from("whatsapp_caixas")
+              .select(
+                "id, provedor, uazapi_url, uazapi_token, waha_url, waha_session, waha_api_key",
+              )
+              .eq("id", caixaId)
+              .eq("ativo", true)
+              .limit(2);
+            return {
+              data: data ?? null,
+              error: error ? { message: error.message } : null,
+            };
+          } catch {
+            return {
+              data: null,
+              error: { message: "Falha ao consultar caixa exata" },
+            };
+          }
         },
-        body: JSON.stringify({
-          number: claim.telefone_destino,
-          text: claim.mensagem_renderizada,
-          delay: 2000,
-          readchat: true,
-        }),
       },
     );
-  }
-
-  const corpo = await response.text();
-  let payload: unknown = {};
-  if (corpo.trim().length > 0) {
-    try {
-      payload = JSON.parse(corpo);
-    } catch {
-      payload = null;
+  } catch (error) {
+    if (error instanceof ErroConfiguracaoProvider) {
+      throw new ErroHttp(502, "Configuracao do provedor indisponivel");
     }
+    throw error;
   }
-
-  return {
-    provedor: credenciais.provedor,
-    statusHttp: response.status,
-    payload,
-  };
 }
 
 async function exigirSlotDisponivelParaPreview(

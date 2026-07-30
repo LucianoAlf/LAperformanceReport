@@ -15,6 +15,45 @@ export interface FetchProviderOptions {
   fetchImpl?: typeof fetch;
 }
 
+export interface ConsultaCredenciaisProvider {
+  data: unknown[] | null;
+  error: { message: string } | null;
+}
+
+export interface EnvioProviderInput {
+  caixaId: number;
+  telefone: string;
+  mensagem: string;
+}
+
+export interface EnvioProviderAdapters extends FetchProviderOptions {
+  buscarCaixaExata: (
+    caixaId: number,
+  ) => Promise<ConsultaCredenciaisProvider>;
+}
+
+interface CredenciaisUazapi {
+  provedor: "uazapi";
+  baseUrl: string;
+  token: string;
+}
+
+interface CredenciaisWaha {
+  provedor: "waha";
+  wahaUrl: string;
+  wahaSession: string;
+  wahaApiKey: string | null;
+}
+
+type CredenciaisProvider = CredenciaisUazapi | CredenciaisWaha;
+
+export class ErroConfiguracaoProvider extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ErroConfiguracaoProvider";
+  }
+}
+
 const PROVIDER_TIMEOUT_MS = 15_000;
 
 function objetoJson(payload: unknown): Record<string, unknown> | null {
@@ -87,6 +126,153 @@ export function fetchProviderComTimeout(
     ...init,
     signal: AbortSignal.timeout(timeoutMs),
   });
+}
+
+function exigirTextoConfiguracao(
+  valor: unknown,
+  campo: string,
+): string {
+  const texto = textoNaoVazio(valor);
+  if (!texto) {
+    throw new ErroConfiguracaoProvider(
+      `Configuracao obrigatoria ausente: ${campo}`,
+    );
+  }
+  return texto;
+}
+
+function exigirUrlHttp(valor: unknown, campo: string): string {
+  const texto = exigirTextoConfiguracao(valor, campo);
+  let url: URL;
+  try {
+    url = new URL(texto);
+  } catch {
+    throw new ErroConfiguracaoProvider(`URL invalida: ${campo}`);
+  }
+  if (!["http:", "https:"].includes(url.protocol) || !url.hostname) {
+    throw new ErroConfiguracaoProvider(`URL invalida: ${campo}`);
+  }
+  return texto.replace(/\/+$/, "");
+}
+
+function validarCredenciaisExatas(
+  row: unknown,
+  caixaIdEsperada: number,
+): CredenciaisProvider {
+  const objeto = objetoJson(row);
+  if (!objeto || objeto.id !== caixaIdEsperada) {
+    throw new ErroConfiguracaoProvider(
+      "Caixa retornada diverge do claim",
+    );
+  }
+
+  if (objeto.provedor === "uazapi") {
+    return {
+      provedor: "uazapi",
+      baseUrl: exigirUrlHttp(objeto.uazapi_url, "uazapi_url"),
+      token: exigirTextoConfiguracao(objeto.uazapi_token, "uazapi_token"),
+    };
+  }
+
+  if (objeto.provedor === "waha") {
+    return {
+      provedor: "waha",
+      wahaUrl: exigirUrlHttp(objeto.waha_url, "waha_url"),
+      wahaSession: exigirTextoConfiguracao(
+        objeto.waha_session,
+        "waha_session",
+      ),
+      wahaApiKey: textoNaoVazio(objeto.waha_api_key),
+    };
+  }
+
+  throw new ErroConfiguracaoProvider("Provedor da caixa invalido");
+}
+
+function toWahaJid(numero: string): string {
+  return numero.includes("@") ? numero : `${numero}@c.us`;
+}
+
+export async function enviarMensagemComCredenciaisExatas(
+  input: EnvioProviderInput,
+  adapters: EnvioProviderAdapters,
+): Promise<{
+  provedor: ProvedorWhatsApp;
+  statusHttp: number;
+  payload: unknown;
+}> {
+  const consulta = await adapters.buscarCaixaExata(input.caixaId);
+  if (consulta.error) {
+    throw new ErroConfiguracaoProvider(
+      "Falha ao consultar a caixa exata do claim",
+    );
+  }
+  if (!Array.isArray(consulta.data) || consulta.data.length !== 1) {
+    throw new ErroConfiguracaoProvider(
+      "Caixa exata e ativa nao encontrada de forma unica",
+    );
+  }
+  const credenciais = validarCredenciaisExatas(
+    consulta.data[0],
+    input.caixaId,
+  );
+
+  let response: Response;
+  if (credenciais.provedor === "waha") {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (credenciais.wahaApiKey) {
+      headers["X-Api-Key"] = credenciais.wahaApiKey;
+    }
+    response = await fetchProviderComTimeout(
+      `${credenciais.wahaUrl}/api/sendText`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          session: credenciais.wahaSession,
+          chatId: toWahaJid(input.telefone),
+          text: input.mensagem,
+        }),
+      },
+      adapters,
+    );
+  } else {
+    response = await fetchProviderComTimeout(
+      `${credenciais.baseUrl}/send/text`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          token: credenciais.token,
+        },
+        body: JSON.stringify({
+          number: input.telefone,
+          text: input.mensagem,
+          delay: 2000,
+          readchat: true,
+        }),
+      },
+      adapters,
+    );
+  }
+
+  const corpo = await response.text();
+  let payload: unknown = {};
+  if (corpo.trim().length > 0) {
+    try {
+      payload = JSON.parse(corpo);
+    } catch {
+      payload = null;
+    }
+  }
+
+  return {
+    provedor: credenciais.provedor,
+    statusHttp: response.status,
+    payload,
+  };
 }
 
 export function estadoPersistidoParaResultado(
