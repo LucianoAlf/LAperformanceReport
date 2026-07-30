@@ -140,14 +140,36 @@ Deno.test("producao usa apenas o snapshot canonico e ignora telefone de teste", 
       modoTeste: false,
       telefoneTeste: "5521999990000",
       telefoneSnapshot: "(21) 98888-7777",
-      whatsappAluno: "(21) 97777-6666",
-      telefoneAluno: "(21) 96666-5555",
     }),
     {
       telefone: "5521988887777",
       origem: "telefone_snapshot",
       modoTeste: false,
     },
+  );
+});
+
+Deno.test("producao falha sem snapshot valido mesmo com telefones atuais validos", () => {
+  const telefonesAtuaisNaoCanonicos = {
+    modoTeste: false,
+    telefoneSnapshot: null,
+    whatsappAluno: "(21) 97777-6666",
+    telefoneAluno: "(21) 96666-5555",
+  };
+
+  assertThrows(
+    () => resolverDestinoPesquisa(telefonesAtuaisNaoCanonicos),
+    Error,
+    "Telefone snapshot invalido ou ausente",
+  );
+  assertThrows(
+    () =>
+      resolverDestinoPesquisa({
+        ...telefonesAtuaisNaoCanonicos,
+        telefoneSnapshot: "123",
+      }),
+    Error,
+    "Telefone snapshot invalido ou ausente",
   );
 });
 

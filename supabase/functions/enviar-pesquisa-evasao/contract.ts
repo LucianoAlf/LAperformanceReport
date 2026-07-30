@@ -41,17 +41,11 @@ export interface ResolverDestinoPesquisaInput {
   modoTeste: boolean;
   telefoneTeste?: string | null;
   telefoneSnapshot?: string | null;
-  whatsappAluno?: string | null;
-  telefoneAluno?: string | null;
 }
 
 export interface DestinoPesquisa {
   telefone: string;
-  origem:
-    | "telefone_teste"
-    | "telefone_snapshot"
-    | "whatsapp_aluno"
-    | "telefone_aluno";
+  origem: "telefone_teste" | "telefone_snapshot";
   modoTeste: boolean;
 }
 
@@ -191,23 +185,15 @@ export function resolverDestinoPesquisa(
     };
   }
 
-  const origensCanonicas = [
-    ["telefone_snapshot", input.telefoneSnapshot],
-    ["whatsapp_aluno", input.whatsappAluno],
-    ["telefone_aluno", input.telefoneAluno],
-  ] as const;
-  const origem = origensCanonicas.find(
-    ([, valor]) => typeof valor === "string" && valor.trim().length > 0,
-  );
-  const telefone = normalizarTelefone(origem?.[1]);
+  const telefone = normalizarTelefone(input.telefoneSnapshot);
 
-  if (!origem || !telefonePesquisaValido(telefone)) {
-    throw new Error("Telefone canonico invalido ou ausente");
+  if (!telefonePesquisaValido(telefone)) {
+    throw new Error("Telefone snapshot invalido ou ausente");
   }
 
   return {
     telefone,
-    origem: origem[0],
+    origem: "telefone_snapshot",
     modoTeste: false,
   };
 }
