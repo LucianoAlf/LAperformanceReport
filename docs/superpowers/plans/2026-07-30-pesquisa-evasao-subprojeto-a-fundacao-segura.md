@@ -1091,7 +1091,10 @@ Anexar ao runbook:
 - [ ] Modo teste não sobrescreve nem bloqueia a pesquisa produtiva da mesma evasão.
 - [ ] Os seis registros legados aparecem como `TESTE` e não alimentam ações, causas, baseline ou indicadores de professor.
 - [ ] `pesquisa_evasao` e tabelas novas não têm policy ampla.
-- [ ] Mila e Sol não leem respostas privadas.
+- [ ] Mila e Sol não leem respostas privadas em `pesquisa_evasao` e nas
+  tabelas filhas desse domínio. O acesso legado da Sol a
+  `movimentacoes_admin` é tratado no projeto de hardening separado e não faz
+  parte desta afirmação.
 - [ ] Listagem é paginada e mantém bloqueios visíveis.
 - [ ] `p_unidade_id=NULL` retorna somente unidades autorizadas e não amplia escopo.
 - [ ] Timeout ambíguo entra em `incerto` e não redispara sem reconciliação.

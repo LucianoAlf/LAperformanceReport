@@ -3,7 +3,8 @@ begin;
 set local statement_timeout = '60s';
 set local lock_timeout = '5s';
 
--- Execute somente depois das migrations 20260730170000 e 20260730173000 e
+-- Execute somente depois das migrations 20260730170000, 20260730173000 e
+-- 20260730180100 e
 -- depois da atribuicao nominal descrita no runbook. Todo dado de prova abaixo
 -- existe apenas nesta transacao e e removido pelo ROLLBACK final.
 
@@ -152,6 +153,44 @@ begin
     'EXECUTE'
   ) then
     raise exception 'RLS_VERIFY_TRIGGER_SNAPSHOT_EXPOSTO';
+  end if;
+
+  if to_regclass('public.whatsapp_caixas') is null then
+    raise exception 'RLS_VERIFY_WHATSAPP_CAIXAS_AUSENTE';
+  end if;
+
+  if has_column_privilege(
+    'authenticated',
+    'public.whatsapp_caixas',
+    'uazapi_token',
+    'SELECT'
+  ) then
+    raise exception 'RLS_VERIFY_AUTHENTICATED_LE_UAZAPI_TOKEN';
+  end if;
+
+  if has_column_privilege(
+    'authenticated',
+    'public.whatsapp_caixas',
+    'waha_api_key',
+    'SELECT'
+  ) then
+    raise exception 'RLS_VERIFY_AUTHENTICATED_LE_WAHA_API_KEY';
+  end if;
+
+  if not has_table_privilege(
+    'service_role',
+    'public.whatsapp_caixas',
+    'SELECT'
+  ) then
+    raise exception 'RLS_VERIFY_SERVICE_ROLE_SEM_WHATSAPP_CAIXAS';
+  end if;
+
+  if not has_function_privilege(
+    'authenticated',
+    'public.listar_whatsapp_caixas_seguras(uuid,boolean)',
+    'EXECUTE'
+  ) then
+    raise exception 'RLS_VERIFY_LISTAGEM_WHATSAPP_SEGURA_INDISPONIVEL';
   end if;
 end
 $estrutura$;

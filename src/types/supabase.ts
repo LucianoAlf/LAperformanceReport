@@ -41808,6 +41808,66 @@ export type Database = {
         Args: { p_codigo_permissao: string; p_unidade_id: string }
         Returns: boolean
       }
+      excluir_whatsapp_caixa_admin: {
+        Args: { p_caixa_id: number }
+        Returns: boolean
+      }
+      listar_whatsapp_caixas_administracao: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          ativo: boolean
+          created_at: string | null
+          departamento: string
+          funcao: string
+          id: number
+          nome: string
+          numero: string | null
+          provedor: string
+          uazapi_token_configurado: boolean
+          uazapi_url: string
+          unidade_id: string | null
+          updated_at: string | null
+          waha_api_key_configurada: boolean
+          waha_session: string | null
+          waha_url: string | null
+          webhook_url: string | null
+        }[]
+      }
+      listar_whatsapp_caixas_seguras: {
+        Args: {
+          p_incluir_globais?: boolean
+          p_unidade_id?: string | null
+        }
+        Returns: {
+          ativo: boolean
+          departamento: string
+          funcao: string
+          id: number
+          nome: string
+          numero_mascarado: string | null
+          provedor: string
+          unidade_id: string | null
+        }[]
+      }
+      salvar_whatsapp_caixa_admin: {
+        Args: {
+          p_ativo: boolean
+          p_departamento: string
+          p_funcao: string
+          p_id: number | null
+          p_nome: string
+          p_numero: string | null
+          p_provedor: string
+          p_uazapi_token: string | null
+          p_uazapi_url: string | null
+          p_unidade_id: string | null
+          p_waha_api_key: string | null
+          p_waha_session: string | null
+          p_waha_url: string | null
+          p_webhook_url: string | null
+        }
+        Returns: number
+      }
       listar_evadidos_para_pesquisa_v2: {
         Args: {
           p_ano: number

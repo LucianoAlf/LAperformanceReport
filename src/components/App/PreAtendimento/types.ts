@@ -341,17 +341,20 @@ export interface WhatsAppCaixa {
   id: number;
   nome: string;
   numero: string | null;
-  uazapi_url: string;
-  uazapi_token: string;
   unidade_id: string | null;
-  webhook_url: string | null;
   ativo: boolean;
   funcao: FuncaoCaixa;
   departamento: DepartamentoCaixa;
   provedor: ProvedorWhatsApp;
+}
+
+export interface WhatsAppCaixaAdmin extends WhatsAppCaixa {
+  uazapi_url: string;
+  webhook_url: string | null;
   waha_url: string | null;
   waha_session: string | null;
-  waha_api_key: string | null;
-  created_at: string;
-  updated_at: string;
+  created_at: string | null;
+  updated_at: string | null;
+  uazapi_token_configurado: boolean;
+  waha_api_key_configurada: boolean;
 }

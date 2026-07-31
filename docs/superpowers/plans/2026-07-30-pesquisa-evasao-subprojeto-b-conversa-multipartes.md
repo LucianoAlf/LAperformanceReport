@@ -318,6 +318,12 @@ git commit -m "feat: proteger segredo inbound e expurgar debug"
 
 ## Task 2A: Fechar a leitura direta de credenciais em `whatsapp_caixas`
 
+> **Antecipada em 31/07/2026:** esta tarefa foi separada como gate da
+> homologação do Plano A e implementada localmente na migration
+> `20260730180100_whatsapp_caixas_credenciais_privadas.sql`. Ao executar o
+> Subprojeto B, validar e preservar esse contrato; não recriar uma segunda
+> migration concorrente.
+
 **Files:**
 
 - Create: `supabase/migrations/20260730180100_whatsapp_caixas_credenciais_privadas.sql`

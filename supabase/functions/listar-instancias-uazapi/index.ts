@@ -1,3 +1,5 @@
+/// <reference lib="deno.ns" />
+
 // Edge Function: listar-instancias-uazapi v1
 // Chama GET /instance/all no servidor UAZAPI e retorna lista normalizada
 // para popular o seletor de instância no CaixasManager.
@@ -31,7 +33,6 @@ type InstanciaRaw = {
 
 type InstanciaNormalizada = {
   id: string;
-  token: string;
   status: string;
   nome: string;
   numero: string | null;
@@ -76,7 +77,6 @@ serve(async (req: Request) => {
     const raw = await resp.json() as InstanciaRaw[];
     const instancias: InstanciaNormalizada[] = (Array.isArray(raw) ? raw : []).map(inst => ({
       id: inst.id ?? '',
-      token: inst.token ?? '',
       status: inst.status ?? 'unknown',
       nome: inst.profileName || inst.name || '(sem nome)',
       numero: extrairNumero(inst),

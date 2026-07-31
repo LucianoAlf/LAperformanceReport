@@ -1,8 +1,9 @@
 # Pesquisa de evasão — runbook do Subprojeto A
 
-Data-base: 2026-07-30
+Data-base: 2026-07-31
 
-Estado: implementação local concluída; homologação e produção ainda não executadas
+Estado: Plano A e hardening local de `whatsapp_caixas` concluídos; homologação
+e produção ainda não executadas
 
 Projeto de produção confirmado somente para leitura: `ouqwbbermlzqqvtqwlul`
 
@@ -29,6 +30,8 @@ Nenhuma migração e nenhum deploy podem ocorrer sem essa autorização explíci
   `supabase/migrations/20260730170000_pesquisa_evasao_fundacao_segura.sql`
 - Migration de claim e resultado:
   `supabase/migrations/20260730173000_pesquisa_evasao_claim_seguro.sql`
+- Migration independente do cofre de WhatsApp:
+  `supabase/migrations/20260730180100_whatsapp_caixas_credenciais_privadas.sql`
 - Edge:
   `supabase/functions/enviar-pesquisa-evasao`
 - Verificação transacional:
@@ -37,7 +40,7 @@ Nenhuma migração e nenhum deploy podem ocorrer sem essa autorização explíci
   `src/types/supabase.ts`
 
 Os tipos foram gerados em modo somente leitura a partir do projeto confirmado
-`ouqwbbermlzqqvtqwlul` em 2026-07-30 e receberam o contrato local das duas
+`ouqwbbermlzqqvtqwlul` em 2026-07-30 e receberam o contrato local das três
 migrations ainda não implantadas. Depois de aplicar as migrations em
 homologação, regenerar os tipos contra a homologação e exigir diff sem
 divergência no domínio antes de aceitar o arquivo definitivo.
@@ -50,7 +53,7 @@ essa mesma versão para que `db push` não tente reaplicar o DDL canônico sob u
 timestamp diferente. No rollout, as migrations novas deste subprojeto são
 somente `20260730170000` e `20260730173000`.
 
-## Bloqueadores antes do rollout
+## Gates antes da homologação e do rollout
 
 ### 1. Cofre das caixas de WhatsApp
 
@@ -59,27 +62,65 @@ Verificação somente leitura em 2026-07-30 confirmou que
 `authenticated` possui `SELECT` e a policy `whatsapp_caixas_select` usa
 `qual = true`. Portanto, qualquer usuário autenticado pode obter os tokens.
 
-Isso é bloqueador do rollout. A correção precisa considerar os consumidores
-existentes do frontend: retirar o acesso sem substituir esses consumidores
-quebra fluxos fora da pesquisa de evasão. Tratar em diff separado, mover o
-segredo para acesso server-only e expor ao frontend apenas projeção sem token.
-Não liberar a pesquisa apenas porque a nova Edge lê a caixa pelo servidor.
+Isso bloqueia o início da homologação. O hardening local foi separado na
+migration `20260730180100_whatsapp_caixas_credenciais_privadas.sql`: tabela
+bruta apenas para `service_role`, projeção operacional sem credenciais,
+projeção administrativa sem valores secretos e rotação write-only. Antes de
+homologar, revisar o diff, aplicar no projeto de homologação e provar que um
+usuário `authenticated` não lê `uazapi_token` nem `waha_api_key`.
+
+#### Inventário de consumidores de `whatsapp_caixas`
+
+Busca estática concluída em 31/07/2026 antes do fechamento:
+
+| Consumidor no navegador | Operação anterior | Contrato depois do hardening |
+|---|---|---|
+| `src/components/App/PreAtendimento/hooks/useWhatsAppCaixas.ts` | listagem direta, inclusive token | `listar_whatsapp_caixas_seguras` |
+| `src/components/App/Administrativo/CaixaEntrada/NovaConversaModal.tsx` | seleção direta de caixa | `listar_whatsapp_caixas_seguras`, com precedência da caixa da unidade sobre a global |
+| `src/components/App/PreAtendimento/components/chat/CaixasManager.tsx` | leitura, escrita e exclusão diretas | RPCs administrativas sem leitura de segredo e mutação write-only |
+
+Depois da migração dos três consumidores, a busca em `src/**/*.ts(x)` retorna
+zero acesso direto a `.from('whatsapp_caixas')`.
+
+Há 16 consumidores diretos server-side em `supabase/functions`: `_shared/uazapi`,
+`buscar-foto-perfil`, `caixa-financeiro-whatsapp`, `configurar-webhook-caixa`,
+`disparar-pesquisa-1a-aula-auto`, `enviar-boas-vindas-equipe`,
+`enviar-boas-vindas-matricula`, `enviar-pesquisa-evasao`,
+`enviar-pesquisa-pos-primeira-aula`, `monitor-saude-webhook`,
+`notificar-primeira-aula-fabi`, `processar-mensagens-agendadas`,
+`processar-resposta-pesquisa`, `relatorio-admin-whatsapp`,
+`webhook-whatsapp-inbox` e `whatsapp-status`. Os pontos de entrada que criam o
+cliente foram conferidos com `SUPABASE_SERVICE_ROLE_KEY`; o helper compartilhado
+recebe esse cliente dos chamadores. Eles permanecem no contrato bruto
+server-only e devem entrar no smoke test de homologação.
 
 ### 2. Escopo de `movimentacoes_admin`
 
-Verificação somente leitura em 2026-07-30 confirmou que
+Verificação somente leitura em 2026-07-30 e reconfirmada em 2026-07-31 mostrou
+que
 `public.movimentacoes_admin` possui policy `ALL` com `qual = true` e
 `with_check = true` para `authenticated`. O papel autenticado também possui
 grants amplos de `SELECT`, `INSERT`, `UPDATE` e `DELETE`. Assim que o novo
 trigger começar a preencher `telefone_snapshot`, qualquer usuário autenticado
 do LA Report poderá ler os snapshots de todas as unidades pela tabela bruta.
 
-Isso também bloqueia o rollout. Há pelo menos 20 consumidores no frontend e 83
-referências em arquivos TypeScript/TSX, então uma revogação isolada pode quebrar
-fluxos administrativos, de retenção e dashboards. O hardening precisa migrar
-os consumidores para read models/RPCs com escopo explícito antes de revogar o
-acesso amplo. O trigger não deve entrar em produção enquanto a projeção bruta
-continuar global para qualquer login autenticado.
+Existe ainda a policy `lume_readonly_select`, com `SELECT USING (true)` para
+`sol_acesso_restrito`. Por isso, o DoD do Plano A afirma somente que Mila e Sol
+não leem respostas privadas de `pesquisa_evasao` e tabelas filhas; ele não
+afirma que a Sol deixou de ler os campos legados desta fonte canônica.
+
+Esse hardening virou projeto separado e **não bloqueia a homologação do Plano
+A**. Há pelo menos 20 consumidores no frontend e 83 referências em arquivos
+TypeScript/TSX, então uma revogação isolada pode quebrar fluxos administrativos,
+de retenção e dashboards. O projeto deve entrar depois da homologação do Plano
+A e antes do Subprojeto C.
+
+Risco residual de produção: a fotografia reconfirmada em 2026-07-31 encontrou
+somente 3 snapshots de telefone em 385 saídas dos últimos 180 dias. Portanto,
+o trigger do Plano A aumenta sistematicamente a densidade desse dado na tabela
+ampla. Isso não bloqueia homologação, mas o diff final de produção precisa
+registrar aceite explícito desse risco ou concluir o hardening separado antes
+de habilitar o trigger. Não descrever esse ponto como “o Plano A não piora”.
 
 ### 3. Snapshots históricos de telefone
 
@@ -234,22 +275,34 @@ precisa retornar `false`.
 ## Terceiro usuário de homologação
 
 Fabi e Jessica cobrem as três unidades, então o teste “usuário de outra unidade
-não envia” usa um terceiro usuário de homologação com permissão em apenas uma
-unidade.
+não envia” usa um terceiro usuário **dedicado** de homologação com permissão em
+apenas uma unidade. Não reutilizar conta de colaborador.
 
-Antes do teste, registrar neste runbook o `usuarios.id`, email exato,
+Antes do teste, reconfirmar o project ref da homologação e criar a identidade
+pela operação administrativa suportada do Supabase Auth nesse ambiente. Em
+seguida, vincular um registro ativo de `public.usuarios`, perfil `unidade` e uma
+única unidade. Registrar neste runbook o `usuarios.id`, email exato,
 `auth_user_id`, unidade única e perfil. Ele não pode ser 29 ou 30, não pode ter
 vínculo global e não pode ser identificado pelo nome.
 
 | Campo | Valor da homologação |
 |---|---|
+| Project ref da homologação | PENDENTE |
 | `usuarios.id` | PENDENTE |
 | Email exato | PENDENTE |
 | `auth_user_id` | PENDENTE |
 | Unidade única | PENDENTE |
+| Perfil | `unidade` |
 
 Enquanto esses campos estiverem pendentes, a homologação de isolamento não está
 concluída.
+
+O usuário dedicado deve ser desativado ao final da homologação em
+`public.usuarios`,
+revogar seus vínculos/permissões temporários e desativar a identidade no
+Supabase Auth de homologação. Registrar operador e horário. Não executar esse
+provisionamento no project ref de produção
+`ouqwbbermlzqqvtqwlul`.
 
 ## SQL de atribuição nominal — não executar sem o gate
 
@@ -445,20 +498,23 @@ argumentos, o histórico de testes e as RPCs de claim/resultado.
 
 ## Ordem de rollout
 
-1. resolver o cofre de `whatsapp_caixas` e o escopo de
-   `movimentacoes_admin`;
-2. revisar o diff completo e confirmar o project ref;
-3. obter backup lógico/DDL das tabelas afetadas;
-4. aplicar as duas migrations;
-5. validar RLS estrutural;
-6. atribuir os seis vínculos, as duas assinaturas e os dois templates;
-7. registrar o terceiro usuário e concluir a homologação;
-8. validar `scripts/verify-pesquisa-evasao-rls.sql`;
-9. fazer deploy da Edge com JWT;
-10. fazer deploy do frontend;
-11. smoke test em modo teste;
-12. um envio real autorizado;
-13. monitorar falhas, estados `incerto`, volume e taxa de resposta.
+1. fechar e validar o cofre de `whatsapp_caixas`;
+2. revisar o diff completo e confirmar primeiro o project ref da homologação;
+3. aplicar e validar em homologação a migration `20260730180100`;
+4. obter backup lógico/DDL das tabelas afetadas pelo Plano A;
+5. aplicar as duas migrations do Plano A;
+6. validar RLS estrutural;
+7. atribuir os seis vínculos, as duas assinaturas e os dois templates;
+8. registrar o terceiro usuário e concluir a homologação;
+9. validar `scripts/verify-pesquisa-evasao-rls.sql`;
+10. abrir/executar o hardening separado de `movimentacoes_admin` ou registrar o
+   aceite explícito do risco residual antes do rollout de produção;
+11. reconfirmar o project ref de produção `ouqwbbermlzqqvtqwlul`;
+12. fazer deploy da Edge com JWT;
+13. fazer deploy do frontend;
+14. smoke test em modo teste;
+15. um envio real autorizado;
+16. monitorar falhas, estados `incerto`, volume e taxa de resposta.
 
 Plano B só começa depois de os contratos de persistência e permissão deste
 subprojeto estarem fechados.
