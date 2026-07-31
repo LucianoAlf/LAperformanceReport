@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relativePath) => {
@@ -39,6 +39,17 @@ const rlsVerification = read('scripts/verify-pesquisa-evasao-rls.sql');
 const movimentacoesSpec = read(
   'docs/superpowers/specs/2026-07-31-movimentacoes-admin-hardening-design.md',
 );
+const seletorCaixaPath = resolve(
+  repoRoot,
+  'src/components/App/Administrativo/CaixaEntrada/selecionarCaixaAdministrativa.ts',
+);
+let seletorCaixaModule = null;
+let seletorCaixaImportError = null;
+try {
+  seletorCaixaModule = await import(pathToFileURL(seletorCaixaPath));
+} catch (error) {
+  seletorCaixaImportError = error;
+}
 
 function stripSqlComments(source) {
   return source
@@ -200,16 +211,33 @@ test('frontend usa somente RPCs e o tipo operacional nao contem segredo', () => 
 });
 
 test('nova conversa prioriza caixa da unidade antes da caixa global', () => {
-  const selections = [
-    ...modal.matchAll(
-      /const\s+caixa\s*=[\s\S]{0,700}?\.find\s*\([\s\S]{0,250}?item\.unidade_id\s*===\s*unidadeConversa[\s\S]{0,150}?\?\?[\s\S]{0,250}?\.find\s*\([\s\S]{0,150}?item\.unidade_id\s*===\s*null/g,
-    ),
-  ];
-  assert.equal(
-    selections.length,
-    2,
-    'os dois fluxos devem preferir caixa específica e usar global só como fallback',
+  assert.ok(
+    seletorCaixaModule,
+    `seletor executável ausente: ${seletorCaixaImportError?.message ?? 'erro desconhecido'}`,
   );
+  const { selecionarCaixaAdministrativa } = seletorCaixaModule;
+  const caixas = [
+    { id: 1, funcao: 'administrativo', departamento: 'administrativo', unidade_id: null },
+    { id: 2, funcao: 'administrativo', departamento: 'administrativo', unidade_id: 'unidade-a' },
+    { id: 3, funcao: 'administrativo', departamento: 'sucesso_aluno', unidade_id: 'unidade-a' },
+  ];
+
+  assert.equal(
+    selecionarCaixaAdministrativa(caixas, 'unidade-a', 'administrativo')?.id,
+    2,
+    'a caixa da unidade deve vencer mesmo quando a global aparece primeiro',
+  );
+  assert.equal(
+    selecionarCaixaAdministrativa(caixas, 'unidade-b', 'administrativo')?.id,
+    1,
+    'a caixa global deve ser usada apenas quando a unidade não tiver caixa própria',
+  );
+  assert.equal(
+    selecionarCaixaAdministrativa(caixas, null, 'administrativo')?.id,
+    1,
+    'conversa sem unidade só pode usar a caixa global',
+  );
+  assert.match(modal, /selecionarCaixaAdministrativa\s*\(/);
 });
 
 test('inventario de instancias nao devolve tokens ao navegador', () => {

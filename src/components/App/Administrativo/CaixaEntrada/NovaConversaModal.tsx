@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { AlunoInbox } from './types';
+import { selecionarCaixaAdministrativa } from './selecionarCaixaAdministrativa';
 
 // Tipo do contato selecionado (aluno cadastrado ou numero externo)
 export interface ContatoInbox {
@@ -281,18 +282,11 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
               p_incluir_globais: true,
             });
           if (caixasError) throw caixasError;
-          const caixasDoDepartamento = caixasSeguras?.filter(
-            (item) =>
-              item.funcao === 'administrativo' &&
-              item.departamento === departamento,
+          const caixa = selecionarCaixaAdministrativa(
+            caixasSeguras,
+            unidadeConversa,
+            departamento,
           );
-          const caixa =
-            caixasDoDepartamento?.find(
-              (item) => item.unidade_id === unidadeConversa,
-            ) ??
-            caixasDoDepartamento?.find(
-              (item) => item.unidade_id === null,
-            );
 
           if (solta) {
             await supabase
@@ -365,22 +359,11 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
             p_incluir_globais: true,
           });
         if (caixasError) throw caixasError;
-        const caixasDoDepartamento = caixasSeguras?.filter(
-          (item) =>
-            item.funcao === 'administrativo' &&
-            item.departamento === departamento,
+        const caixa = selecionarCaixaAdministrativa(
+          caixasSeguras,
+          unidadeConversa,
+          departamento,
         );
-        const caixa =
-          (
-            unidadeConversa
-              ? caixasDoDepartamento?.find(
-                  (item) => item.unidade_id === unidadeConversa,
-                )
-              : undefined
-          ) ??
-          caixasDoDepartamento?.find(
-            (item) => item.unidade_id === null,
-          );
 
         await supabase
           .from('admin_conversas')

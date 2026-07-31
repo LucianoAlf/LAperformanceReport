@@ -96,8 +96,10 @@ mesmas extensões nos mesmos schemas: `pg_cron` em `pg_catalog`, `pg_net`,
 
 Depois do restore, marcar o histórico como aplicado por `migration repair`,
 aplicar somente as três migrations novas, executar
-`scripts/verify-pesquisa-evasao-schema.sql` e regenerar os tipos para conferir
-o diff. O verificador `scripts/verify-pesquisa-evasao-rls.sql` fica preservado
+`scripts/verify-pesquisa-evasao-schema.sql` e gerar os tipos em arquivo
+temporário para comparar somente as tabelas e RPCs deste domínio. Essa etapa não
+regenera nem substitui `src/types/supabase.ts`. O verificador
+`scripts/verify-pesquisa-evasao-rls.sql` fica preservado
 para a homologação operacional posterior, pois depende de identidades e dados
 nominais.
 
@@ -304,8 +306,10 @@ Os tipos completos foram gerados em modo somente leitura a partir do projeto
 confirmado `ouqwbbermlzqqvtqwlul` e do projeto descartável já migrado. A
 comparação serviu para validar o schema, as FKs e assinaturas RPC, sem transformar
 este PR em uma atualização global de tipos. Depois de aplicar as migrations em
-homologação, repetir a geração em arquivo temporário e exigir diff sem
-divergência no domínio. Em outras palavras: tipos consultaram produção somente
+homologação, repetir a geração em arquivo temporário e comparar apenas as tabelas,
+relações e assinaturas RPC alteradas pelas três migrations. Não exigir diff global
+contra o contrato manual parcial e não substituir `src/types/supabase.ts`. Em
+outras palavras: tipos consultaram produção somente
 em leitura e o frontend permanece governado pelo contrato explícito revisável.
 
 Em 2026-07-30, `list_migrations` confirmou no projeto
@@ -791,6 +795,38 @@ npx supabase gen types typescript --local | Out-File -Encoding utf8 $env:TEMP\pe
 O artefato temporário precisa manter as duas overloads legadas, a v2 com sete
 argumentos, o histórico de testes e as RPCs de claim/resultado. Comparar apenas
 o domínio da entrega e não substituir `src/types/supabase.ts` neste PR.
+
+## Smoke manual dos consumidores de caixas
+
+O hardening de `whatsapp_caixas` altera três consumidores operacionais fora da
+tela de evasão: `useWhatsAppCaixas.ts`, `CaixasManager.tsx` e
+`NovaConversaModal.tsx`. Build e busca estática não encerram esse gate.
+
+Tentativa de 31/07/2026: o deployment preview do PR e o servidor local da branch
+foram abertos, mas ambos redirecionaram para login porque não havia sessão
+autenticada nesses domínios. Nenhuma senha, sessão ou token foi copiado entre
+origens. Portanto, o smoke visual continua **PENDENTE** e não pode ser descrito
+como aprovado.
+
+Executar depois que `20260730180100` existir no ambiente alvo e houver uma sessão
+autenticada autorizada:
+
+1. em **Configurações > WhatsApp**, confirmar que `CaixasManager` lista as caixas
+   e mostra apenas os indicadores de credencial configurada, nunca o token ou a
+   chave;
+2. no **Pré-Atendimento**, alternar entre uma unidade e o consolidado e confirmar
+   que a lista de caixas acompanha o escopo sem ficar vazia ou presa à seleção
+   anterior;
+3. na **Caixa de Entrada**, abrir **Nova Conversa**, confirmar que busca e modal
+   renderizam e fechar sem selecionar contato, criar conversa ou enviar mensagem;
+4. conferir os erros do navegador e as respostas das RPCs
+   `listar_whatsapp_caixas_seguras` e
+   `listar_whatsapp_caixas_administracao`;
+5. manter a prova de precedência unidade sobre global no teste executável de
+   `selecionarCaixaAdministrativa`; essa escolha acontece somente no comando
+   final de criação da conversa e não é exibida pelo modal. Qualquer teste manual
+   desse comando exige autorização de escrita, contato dedicado e conferência do
+   `caixa_id` persistido — não executar durante este smoke somente leitura.
 
 ## Ordem de rollout
 
