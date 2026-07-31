@@ -7,6 +7,8 @@ const migrationPath =
   'supabase/migrations/20260730204500_snapshot_experimentais_emusys.sql';
 const baseMigrationPath =
   'supabase/migrations/20260622213000_emusys_experimentais_raw.sql';
+const securityMigrationPath =
+  'supabase/migrations/20260731161000_snapshot_experimentais_minimiza_payload.sql';
 const requirePostgres = process.env.COMERCIAL_EXP_REQUIRE_POSTGRES === '1';
 
 function read(path) {
@@ -1532,6 +1534,181 @@ test(
         concurrentState.status,
         0,
         `estado concorrente divergiu:\n${concurrentState.stderr}`,
+      );
+
+      const piiFixture = psql(
+        containerName,
+        String.raw`
+          \set ON_ERROR_STOP on
+          update public.emusys_experimentais_raw
+          set payload = jsonb_build_object(
+            'data_aula', data_aula,
+            'horario_aula', horario_aula,
+            'cancelada', false,
+            'aula', jsonb_build_object(
+              'id', emusys_aula_id,
+              'professor_email', 'professor-sentinela@example.com'
+            ),
+            'participante', jsonb_build_object(
+              'id_lead', emusys_lead_id,
+              'id_aluno', emusys_aluno_id,
+              'email', 'aluno-sentinela@example.com',
+              'responsavel_telefone', '21999998888'
+            ),
+            'anotacoes', 'segredo-sentinela'
+          )
+          where id = (
+            select min(id)
+            from public.emusys_experimentais_raw
+          );
+        `,
+      );
+      assert.equal(
+        piiFixture.status,
+        0,
+        `nao preparou payload PII sintetico:\n${piiFixture.stderr}`,
+      );
+
+      const securityMigrationApplied = psql(
+        containerName,
+        read(securityMigrationPath),
+      );
+      assert.equal(
+        securityMigrationApplied.status,
+        0,
+        `hardening de payload/ACL falhou:\n${securityMigrationApplied.stderr}`,
+      );
+
+      const securityAssertions = psql(
+        containerName,
+        String.raw`
+          \set ON_ERROR_STOP on
+
+          do $payload$
+          begin
+            if exists (
+              select 1
+              from public.emusys_experimentais_raw r
+              where r.payload <> jsonb_build_object(
+                'schema_version', 1,
+                'data_aula', r.data_aula,
+                'horario_aula', r.horario_aula,
+                'cancelada', false,
+                'aula', jsonb_build_object('id', r.emusys_aula_id),
+                'participante', jsonb_build_object(
+                  'id_lead', r.emusys_lead_id,
+                  'id_aluno', r.emusys_aluno_id
+                )
+              )
+            ) then
+              raise exception 'payload historico nao foi minimizado exatamente';
+            end if;
+
+            if exists (
+              select 1
+              from public.emusys_experimentais_raw r
+              where r.payload::text like '%sentinela%'
+                 or r.payload::text like '%responsavel_telefone%'
+                 or r.payload::text like '%anotacoes%'
+            ) then
+              raise exception 'payload minimizado reteve PII sintetica';
+            end if;
+          end;
+          $payload$;
+
+          do $acl$
+          begin
+            if has_table_privilege(
+              'authenticated',
+              'public.emusys_experimentais_raw',
+              'select'
+            ) then
+              raise exception 'authenticated reteve SELECT amplo';
+            end if;
+            if not has_column_privilege(
+              'authenticated',
+              'public.emusys_experimentais_raw',
+              'id',
+              'select'
+            ) or not has_column_privilege(
+              'authenticated',
+              'public.emusys_experimentais_raw',
+              'aluno_nome',
+              'select'
+            ) or has_column_privilege(
+              'authenticated',
+              'public.emusys_experimentais_raw',
+              'payload',
+              'select'
+            ) or has_column_privilege(
+              'authenticated',
+              'public.emusys_experimentais_raw',
+              'responsavel_telefone',
+              'select'
+            ) or not has_table_privilege(
+              'service_role',
+              'public.emusys_experimentais_raw',
+              'select'
+            ) then
+              raise exception 'ACL por coluna divergiu';
+            end if;
+          end;
+          $acl$;
+
+          select set_config(
+            'fixture.expected_barra_active',
+            (
+              select count(id)::text
+              from public.emusys_experimentais_raw
+              where unidade_id =
+                '11111111-1111-1111-1111-111111111111'
+                and snapshot_ativo is true
+            ),
+            false
+          );
+          select set_config(
+            'request.jwt.claim.sub',
+            'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            false
+          );
+          select set_config('request.jwt.claim.role', 'authenticated', false);
+          set role authenticated;
+          do $auth$
+          begin
+            if (
+              select count(id)
+              from public.emusys_experimentais_raw
+            ) <> current_setting('fixture.expected_barra_active')::integer then
+              raise exception 'RLS deixou de isolar unidade/versao ativa';
+            end if;
+
+            perform
+              id,
+              aluno_nome,
+              data_aula,
+              horario_aula,
+              situacao_operacional
+            from public.emusys_experimentais_raw
+            limit 1;
+
+            begin
+              perform payload
+              from public.emusys_experimentais_raw
+              limit 1;
+              raise exception 'authenticated leu payload privado';
+            exception
+              when insufficient_privilege then
+                null;
+            end;
+          end;
+          $auth$;
+          reset role;
+        `,
+      );
+      assert.equal(
+        securityAssertions.status,
+        0,
+        `contrato PostgreSQL de minimizacao falhou:\n${securityAssertions.stderr}`,
       );
     } finally {
       spawnSync('docker', ['rm', '--force', containerName], {

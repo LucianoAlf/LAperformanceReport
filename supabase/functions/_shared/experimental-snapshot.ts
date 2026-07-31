@@ -51,11 +51,17 @@ export type SnapshotRow = {
   presenca_emusys: string | null;
   situacao_operacional: SituacaoExperimental;
   payload_bruto: {
+    schema_version: 1;
     data_aula: string;
     horario_aula: string;
     cancelada: boolean;
-    aula: AulaEmusys;
-    participante: ExperimentalAluno;
+    aula: {
+      id: number;
+    };
+    participante: {
+      id_lead: number | null;
+      id_aluno: number | null;
+    };
   };
 };
 
@@ -312,6 +318,8 @@ export function montarLinhasSnapshot(input: SnapshotInput): SnapshotRow[] {
       const presenca = typeof participante.presenca === "string"
         ? participante.presenca
         : null;
+      const emusysLeadId = externalId(participante.id_lead);
+      const emusysAlunoId = externalId(participante.id_aluno);
 
       rows.set(rawKey, {
         raw_key: rawKey,
@@ -319,8 +327,8 @@ export function montarLinhasSnapshot(input: SnapshotInput): SnapshotRow[] {
         execucao_id: input.execucaoId,
         emusys_aula_id: aula.id,
         participante_chave: participanteKey,
-        emusys_lead_id: externalId(participante.id_lead),
-        emusys_aluno_id: externalId(participante.id_aluno),
+        emusys_lead_id: emusysLeadId,
+        emusys_aluno_id: emusysAlunoId,
         aluno_nome: nome,
         data_aula: dataAula,
         horario_aula: horarioAula,
@@ -333,11 +341,17 @@ export function montarLinhasSnapshot(input: SnapshotInput): SnapshotRow[] {
           agora,
         }),
         payload_bruto: {
+          schema_version: 1,
           data_aula: dataAula,
           horario_aula: horarioAula,
           cancelada,
-          aula,
-          participante,
+          aula: {
+            id: aula.id,
+          },
+          participante: {
+            id_lead: emusysLeadId,
+            id_aluno: emusysAlunoId,
+          },
         },
       });
     }

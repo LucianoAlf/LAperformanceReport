@@ -223,15 +223,26 @@ Deno.test("rejeita timestamp com Z ou offset porque Emusys fornece horario local
   }
 });
 
-Deno.test("montarLinhasSnapshot filtra categoria, ignora aluno sem nome e preserva o bruto", () => {
+Deno.test("montarLinhasSnapshot filtra categoria e minimiza o payload bruto", () => {
   const rows = montarLinhasSnapshot({
     unidadeId: "barra",
     execucaoId: "exec-1",
     aulas: [
       aula({
         id: 51,
+        anotacoes: "nao deve persistir",
+        professor: {
+          nome: "Professor Sensivel",
+          email: "professor@example.com",
+        },
         alunos: [
-          aluno({ id_lead: 1, nome_aluno: "Pessoa Válida" }),
+          aluno({
+            id_lead: 1,
+            nome_aluno: "Pessoa Válida",
+            responsavel_nome: "Responsavel Sensivel",
+            responsavel_telefone: "21988887777",
+            observacao: "nao deve persistir",
+          }),
           aluno({ id_lead: 2, nome_aluno: "   " }),
         ],
       }),
@@ -248,9 +259,19 @@ Deno.test("montarLinhasSnapshot filtra categoria, ignora aluno sem nome e preser
   assertEquals(rows[0].horario_aula, "20:00:00");
   assertEquals(rows[0].cancelada, false);
   assertEquals(rows[0].situacao_operacional, "agendada");
-  assertEquals(rows[0].payload_bruto.data_aula, "2026-07-30");
-  assertEquals(rows[0].payload_bruto.horario_aula, "20:00:00");
-  assertEquals(rows[0].payload_bruto.cancelada, false);
+  assertEquals(rows[0].payload_bruto, {
+    schema_version: 1,
+    data_aula: "2026-07-30",
+    horario_aula: "20:00:00",
+    cancelada: false,
+    aula: {
+      id: 51,
+    },
+    participante: {
+      id_lead: 1,
+      id_aluno: null,
+    },
+  });
   assertMatch(rows[0].raw_key, /^barra:51:lead:1:exec-1$/);
 });
 
