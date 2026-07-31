@@ -582,6 +582,26 @@ test(
                     "aula":{"id":11},
                     "participante":{"id_aluno":"2147483648"}
                   }'::jsonb
+                ),
+                jsonb_build_object(
+                  'execucao_id',
+                  '00000000-0000-0000-0000-000000000010',
+                  'participante_chave',
+                  'lead:101',
+                  'emusys_lead_id',
+                  101,
+                  'payload_bruto',
+                  '{"aula":{"id":11},"participante":{}}'::jsonb
+                ),
+                jsonb_build_object(
+                  'execucao_id',
+                  '00000000-0000-0000-0000-000000000011',
+                  'participante_chave',
+                  'aluno:202',
+                  'emusys_aluno_id',
+                  202,
+                  'payload_bruto',
+                  '{"aula":{"id":11},"participante":{}}'::jsonb
                 )
               )
             )
@@ -608,6 +628,10 @@ test(
                     v_caso->>'execucao_id',
                     'emusys_aula_id',
                     11,
+                    'emusys_lead_id',
+                    v_caso->'emusys_lead_id',
+                    'emusys_aluno_id',
+                    v_caso->'emusys_aluno_id',
                     'participante_chave',
                     v_caso->>'participante_chave',
                     'aluno_nome',

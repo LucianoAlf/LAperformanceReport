@@ -85,6 +85,30 @@ test('RPC de aplicacao e privada, transacional e registra execucao completa', ()
   );
 });
 
+test('RPC exige identidade raw e normalizada de forma simetrica', () => {
+  const sql = migration();
+  const block = functionBlock(sql, 'aplicar_snapshot_experimentais_emusys_v1');
+
+  for (const identity of ['lead', 'aluno']) {
+    assert.match(
+      block,
+      new RegExp(
+        `case[\\s\\S]{0,160}payload_emusys_${identity}_id_texto[\\s\\S]{0,160}end\\s+is\\s+distinct\\s+from\\s+l\\.emusys_${identity}_id`,
+        'i',
+      ),
+      `identidade ${identity} deve comparar raw convertido inclusive quando um lado e nulo`,
+    );
+    assert.doesNotMatch(
+      block,
+      new RegExp(
+        `payload_emusys_${identity}_id_texto\\s+is\\s+not\\s+null\\s+and\\s+l\\.emusys_${identity}_id\\s+is\\s+distinct`,
+        'i',
+      ),
+      `identidade ${identity} nao pode omitir raw ausente da comparacao`,
+    );
+  }
+});
+
 test('guard comercial valida usuario, unidade e permissao sem expor RPC privada', () => {
   const sql = migration();
   const block = functionBlock(sql, 'pode_gerar_relatorio_comercial_v1');
