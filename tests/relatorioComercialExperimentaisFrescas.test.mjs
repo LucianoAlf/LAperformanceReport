@@ -163,8 +163,12 @@ test("gerador atualiza o snapshot de mes ate D+7 antes de qualquer leitura canon
   );
 
   assert.match(gerador, /dataReferencia\??\s*:/);
+  assert.match(gerador, /instanteGeracao:\s*Date\s*=\s*new Date\(\)/);
   assert.match(gerador, /America\/Sao_Paulo/);
-  assert.match(gerador, /resolverJanelaRelatorioComercialBrt\(/);
+  assert.match(
+    gerador,
+    /resolverJanelaRelatorioComercialBrt\(dataReferencia,\s*instanteGeracao\)/,
+  );
   assert.match(gerador, /dataInicioSnapshot/);
   assert.match(gerador, /dataFimSnapshot/);
   assert.match(
@@ -402,6 +406,7 @@ test("dry-run comercial valida e repassa a data de referencia capturada pela UI"
   );
 
   assert.match(payload, /data_referencia\?:\s*string/);
+  assert.doesNotMatch(payload, /instante_?geracao/i);
   assert.match(
     dryRunComercial,
     /parseDataReferenciaComercialBrt\(payload\.data_referencia\)/,
@@ -428,12 +433,18 @@ test("cron continua sem data externa e usa a referencia BRT do gerador", () => {
 
   assert.match(
     gerador,
-    /resolverJanelaRelatorioComercialBrt\(dataReferencia\s*\|\|\s*new Date\(\)\)/,
+    /resolverJanelaRelatorioComercialBrt\(dataReferencia,\s*instanteGeracao\)/,
   );
+  assert.match(gerador, /instanteGeracao:\s*Date\s*=\s*new Date\(\)/);
   assert.doesNotMatch(
     cron,
     /gerarRelatorioComercialDiario\([^)]*,[^)]*,[^)]*\)/,
   );
+});
+
+test("limites de created_at sao calculados pelo fuso IANA sem offset fixo", () => {
+  assert.match(formatador, /instanteLocalNoFuso\(/);
+  assert.doesNotMatch(formatador, /T00:00:00-03:00/);
 });
 
 test("dry-run e cron usam o gerador unico e cron grava somente na fila canonica", () => {
