@@ -12,6 +12,64 @@
 -- ao rollout governado. Esta migration nao cria vinculos em usuario_perfis.
 
 -- ---------------------------------------------------------------------------
+-- 0. Snapshot de contato somente no nascimento de novas saidas
+-- ---------------------------------------------------------------------------
+
+-- Registros historicos sem snapshot permanecem bloqueados: o telefone atual do
+-- aluno nao prova qual era o destino correto na data da saida. Para novos
+-- eventos, o snapshot e capturado no INSERT ou na primeira transicao de outro
+-- tipo para evasao/nao_renovacao. Atualizar uma saida ja existente nunca puxa
+-- silenciosamente o contato atual.
+create or replace function public.capturar_telefone_snapshot_movimentacao_retencao()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $function$
+begin
+  if new.tipo not in ('evasao', 'nao_renovacao')
+     or nullif(btrim(new.telefone_snapshot), '') is not null
+     or new.aluno_id is null then
+    return new;
+  end if;
+
+  if not (
+    tg_op = 'INSERT'
+    or (
+      tg_op = 'UPDATE'
+      and old.tipo not in ('evasao', 'nao_renovacao')
+    )
+  ) then
+    return new;
+  end if;
+
+  select coalesce(
+           nullif(btrim(a.whatsapp), ''),
+           nullif(btrim(a.telefone), '')
+         )
+    into new.telefone_snapshot
+  from public.alunos a
+  where a.id = new.aluno_id;
+
+  return new;
+end;
+$function$;
+
+revoke all on function public.capturar_telefone_snapshot_movimentacao_retencao()
+from public, anon, authenticated;
+grant execute on function public.capturar_telefone_snapshot_movimentacao_retencao()
+to postgres, service_role;
+
+drop trigger if exists trg_capturar_telefone_snapshot_movimentacao_retencao
+on public.movimentacoes_admin;
+
+create trigger trg_capturar_telefone_snapshot_movimentacao_retencao
+before insert or update of tipo, aluno_id
+on public.movimentacoes_admin
+for each row
+execute function public.capturar_telefone_snapshot_movimentacao_retencao();
+
+-- ---------------------------------------------------------------------------
 -- 1. Catalogo de permissoes e perfil dedicado
 -- ---------------------------------------------------------------------------
 

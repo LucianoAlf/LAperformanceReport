@@ -165,9 +165,9 @@ function getFunctionParts(name, expectedTypes, source = sql) {
   );
 
   for (const match of maskedSql.matchAll(matcher)) {
-    const actualTypes = match[1]
-      .split(',')
-      .map(normalizedType);
+    const actualTypes = match[1].trim()
+      ? match[1].split(',').map(normalizedType)
+      : [];
 
     if (
       actualTypes.length === expectedTypes.length &&
@@ -934,6 +934,47 @@ contractTest('publico interno possui fonte dedicada auditavel e sem seed inferid
     sql,
     /rollout[\s\S]{0,300}pesquisa_evasao_publicos_internos[\s\S]{0,300}IDs?\s+confirmados/i,
     'rollout precisa exigir IDs confirmados, sem inferencia por dados financeiros',
+  );
+});
+
+contractTest('novas saidas capturam telefone no momento do evento sem backfill historico', () => {
+  const { header, body } = getFunctionParts(
+    'capturar_telefone_snapshot_movimentacao_retencao',
+    [],
+  );
+  const executableBody = stripSqlComments(body);
+
+  assert.match(header, /\bsecurity\s+definer\b/i);
+  assert.match(header, /\bset\s+search_path\s*=\s*public\s*,\s*pg_temp\b/i);
+  assert.match(
+    executableBody,
+    /\bnew\.tipo\s+not\s+in\s*\(\s*'evasao'\s*,\s*'nao_renovacao'\s*\)/i,
+  );
+  assert.match(
+    executableBody,
+    /\bselect\s+coalesce\s*\(\s*nullif\s*\(\s*btrim\s*\(\s*a\.whatsapp\s*\)/i,
+    'snapshot deve priorizar WhatsApp e preservar o valor capturado',
+  );
+  assert.match(executableBody, /\binto\s+new\.telefone_snapshot\b/i);
+  assert.match(
+    executableBody,
+    /\bwhere\s+a\.id\s*=\s*new\.aluno_id\b/i,
+    'snapshot precisa usar o aluno_id estavel da movimentacao',
+  );
+  assert.match(
+    executableBody,
+    /\btg_op\s*=\s*'insert'[\s\S]*\bold\.tipo\s+not\s+in\s*\(\s*'evasao'\s*,\s*'nao_renovacao'\s*\)/i,
+    'somente INSERT ou transicao inicial para saida pode capturar o contato atual',
+  );
+  assert.doesNotMatch(
+    executableBody,
+    /\bupdate\s+public\.movimentacoes_admin\b/i,
+    'funcao nao pode fazer backfill em registros historicos',
+  );
+
+  assert.match(
+    sql,
+    /create\s+trigger\s+trg_capturar_telefone_snapshot_movimentacao_retencao[\s\S]*?before\s+insert\s+or\s+update\s+of\s+tipo\s*,\s*aluno_id[\s\S]*?on\s+public\.movimentacoes_admin[\s\S]*?execute\s+function\s+public\.capturar_telefone_snapshot_movimentacao_retencao\s*\(\s*\)/i,
   );
 });
 
