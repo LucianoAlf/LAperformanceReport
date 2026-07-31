@@ -164,9 +164,13 @@ test("gerador atualiza o snapshot de mes ate D+7 antes de qualquer leitura canon
 
   assert.match(gerador, /dataReferencia\??\s*:/);
   assert.match(gerador, /America\/Sao_Paulo/);
+  assert.match(gerador, /resolverJanelaRelatorioComercialBrt\(/);
   assert.match(gerador, /dataInicioSnapshot/);
   assert.match(gerador, /dataFimSnapshot/);
-  assert.match(gerador, /adicionarDiasIso\([^,]+,\s*7\)/);
+  assert.match(
+    gerador,
+    /const dataFimSnapshot\s*=\s*referencia\.dataFimSnapshot/,
+  );
 
   const preflight = gerador.indexOf("await atualizarSnapshotExperimentais(");
   const primeiraLeitura = Math.min(
@@ -379,6 +383,57 @@ test("dry-run exige JWT e RPC de escopo; cron exige service_role", () => {
   assert.match(handler, /status:\s*400/);
   assert.match(handler, /payload\.modo\s*===\s*['"]cron['"]/);
   assert.match(handler, /SUPABASE_SERVICE_ROLE_KEY/);
+});
+
+test("dry-run comercial valida e repassa a data de referencia capturada pela UI", () => {
+  const payload = blocoFonte(
+    edge,
+    "interface RelatorioPayload {",
+    "function n(",
+  );
+  const handler = bloco(
+    "serve(async (req) => {",
+    "// === MODO MANUAL (existente) ===",
+  );
+  const dryRunComercial = blocoFonte(
+    handler,
+    "if (payload.modo === 'dry_run_comercial') {",
+    "// === MODO CRON ===",
+  );
+
+  assert.match(payload, /data_referencia\?:\s*string/);
+  assert.match(
+    dryRunComercial,
+    /parseDataReferenciaComercialBrt\(payload\.data_referencia\)/,
+  );
+  assert.match(dryRunComercial, /DATA_REFERENCIA_COMERCIAL_INVALIDA/);
+  assert.match(dryRunComercial, /status:\s*400/);
+  assert.match(
+    dryRunComercial,
+    /gerarRelatorioComercialDiario\(\s*supabase,\s*payload\.unidade,\s*dataReferencia,?\s*\)/,
+  );
+  assert.ok(
+    dryRunComercial.indexOf("pode_gerar_relatorio_comercial_v1") <
+      dryRunComercial.indexOf("parseDataReferenciaComercialBrt"),
+    "a autorizacao deve continuar antes da validacao/geracao",
+  );
+});
+
+test("cron continua sem data externa e usa a referencia BRT do gerador", () => {
+  const cron = bloco("async function processarCron(", "serve(async (req) => {");
+  const gerador = bloco(
+    "async function gerarRelatorioComercialDiario(",
+    "async function processarCron(",
+  );
+
+  assert.match(
+    gerador,
+    /resolverJanelaRelatorioComercialBrt\(dataReferencia\s*\|\|\s*new Date\(\)\)/,
+  );
+  assert.doesNotMatch(
+    cron,
+    /gerarRelatorioComercialDiario\([^)]*,[^)]*,[^)]*\)/,
+  );
 });
 
 test("dry-run e cron usam o gerador unico e cron grava somente na fila canonica", () => {

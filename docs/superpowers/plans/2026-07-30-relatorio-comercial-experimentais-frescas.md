@@ -968,6 +968,10 @@ supabase.functions.invoke('relatorio-admin-whatsapp', {
 O teste deve confirmar:
 
 - unidade consolidada `todos` é rejeitada com mensagem clara;
+- `data_referencia` é repassada à edge, aceita somente calendário estrito
+  `YYYY-MM-DD` e governa tanto o dia publicado quanto a janela mês até D+7;
+- timestamp, offset, ausência e data impossível recebem `400`, enquanto o cron
+  sem data externa continua usando o instante atual em BRT;
 - erro da edge vira o estado `relatorioErro`;
 - o texto exibido é exatamente `data.texto`;
 - o texto inclui `Ticket médio das parcelas` e
