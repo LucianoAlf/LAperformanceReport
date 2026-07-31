@@ -272,7 +272,10 @@ monetário único aceita números e os formatos textuais reais do backend, como
 `460,00`, `1.234,56` e `R$ 450,00`. Zero, nulo e valor inválido ficam fora
 somente do denominador correspondente. Os valores e a soma bruta não são
 arredondados antes da divisão; soma e média publicadas recebem duas casas
-somente ao final. A meta `metas_kpi.tipo='ticket_medio'`
+somente ao final. Internamente, o parser representa cada valor por inteiro
+decimal (`BigInt + escala`), soma e divide de forma racional e aplica
+arredondamento decimal half-up nos centavos; não usa `Math.round` sobre ponto
+flutuante. A meta `metas_kpi.tipo='ticket_medio'`
 é exibida exclusivamente ao lado do ticket das parcelas; não há meta canônica
 de passaporte. Referência de aceite da Barra em julho/2026: parcelas
 `R$ 6.819,00 / 16 = R$ 426,19` e passaportes

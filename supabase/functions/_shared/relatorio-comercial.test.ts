@@ -99,6 +99,27 @@ Deno.test("calcularTicketsMatriculas usa valores brutos e arredonda somente as s
   assertEquals(passaporteDoGrupo({ valor_passaporte: 100.004 }), 100.004);
 });
 
+Deno.test("calcularTicketsMatriculas arredonda decimais monetarios sem erro binario", () => {
+  for (
+    const { valor, esperado } of [
+      { valor: 10.075, esperado: 10.08 },
+      { valor: 1.005, esperado: 1.01 },
+      { valor: 100.335, esperado: 100.34 },
+    ]
+  ) {
+    assertEquals(
+      calcularTicketsMatriculas([{
+        valorParcela: valor,
+        valorPassaporte: valor,
+      }]),
+      {
+        parcelas: { soma: esperado, denominador: 1, media: esperado },
+        passaportes: { soma: esperado, denominador: 1, media: esperado },
+      },
+    );
+  }
+});
+
 Deno.test("calculos monetarios aceitam os formatos reais do backend pelo mesmo parser", () => {
   const entradas = [
     { valorParcela: "460,00", valorPassaporte: "R$ 450,00" },

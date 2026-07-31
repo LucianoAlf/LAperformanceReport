@@ -92,13 +92,21 @@ export interface RelatorioComercialDados {
 
 const FUSO_BRT = "America/Sao_Paulo";
 const UM_DIA_MS = 24 * 60 * 60 * 1_000;
+const MAX_CASAS_DECIMAIS = 18;
+const MAX_DIGITOS_MONETARIOS = 40;
 
-function numeroMonetario(valor: ValorMonetario): number {
-  if (typeof valor === "number") return Number.isFinite(valor) ? valor : 0;
-  if (typeof valor !== "string") return 0;
+interface DecimalMonetario {
+  unidades: bigint;
+  escala: number;
+}
 
-  const limpo = valor.trim().replace(/[^\d,.-]/g, "");
-  if (!limpo) return 0;
+function potenciaDez(expoente: number): bigint {
+  return 10n ** BigInt(expoente);
+}
+
+function normalizarTextoMonetario(valor: string): string | null {
+  const limpo = valor.trim().replace(/[^\d,.\-+]/g, "");
+  if (!limpo) return null;
   const ultimaVirgula = limpo.lastIndexOf(",");
   const ultimoPonto = limpo.lastIndexOf(".");
   let normalizado = limpo;
@@ -114,9 +122,91 @@ function numeroMonetario(valor: ValorMonetario): number {
     const decimal = partes.pop();
     normalizado = `${partes.join("")}.${decimal}`;
   }
+  return normalizado;
+}
 
-  const numero = Number(normalizado);
+function criarDecimalMonetario(valor: ValorMonetario): DecimalMonetario | null {
+  if (typeof valor === "number" && !Number.isFinite(valor)) return null;
+  const canonico = typeof valor === "number"
+    ? String(valor)
+    : typeof valor === "string"
+    ? normalizarTextoMonetario(valor)
+    : null;
+  if (!canonico) return null;
+
+  const match = /^([+-]?)(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i.exec(canonico);
+  if (!match) return null;
+  const sinal = match[1] === "-" ? -1n : 1n;
+  const inteiros = match[2];
+  const fracao = match[3] ?? "";
+  const expoente = Number(match[4] ?? 0);
+  if (
+    !Number.isInteger(expoente) || Math.abs(expoente) > MAX_DIGITOS_MONETARIOS
+  ) {
+    return null;
+  }
+
+  let digitos = `${inteiros}${fracao}`.replace(/^0+(?=\d)/, "");
+  let escala = fracao.length - expoente;
+  if (escala < 0) {
+    digitos += "0".repeat(-escala);
+    escala = 0;
+  }
+  if (
+    escala > MAX_CASAS_DECIMAIS ||
+    digitos.length > MAX_DIGITOS_MONETARIOS
+  ) {
+    return null;
+  }
+
+  let unidades = BigInt(digitos || "0") * sinal;
+  while (escala > 0 && unidades % 10n === 0n) {
+    unidades /= 10n;
+    escala -= 1;
+  }
+  return { unidades, escala };
+}
+
+function somarDecimais(valores: DecimalMonetario[]): DecimalMonetario {
+  if (valores.length === 0) return { unidades: 0n, escala: 0 };
+  const escala = Math.max(...valores.map((valor) => valor.escala));
+  const unidades = valores.reduce(
+    (soma, valor) => soma + valor.unidades * potenciaDez(escala - valor.escala),
+    0n,
+  );
+  return { unidades, escala };
+}
+
+function decimalParaNumero(valor: DecimalMonetario): number {
+  const negativo = valor.unidades < 0n;
+  const absoluto = (negativo ? -valor.unidades : valor.unidades).toString()
+    .padStart(valor.escala + 1, "0");
+  const texto = valor.escala > 0
+    ? `${absoluto.slice(0, -valor.escala)}.${absoluto.slice(-valor.escala)}`
+    : absoluto;
+  const numero = Number(`${negativo ? "-" : ""}${texto}`);
   return Number.isFinite(numero) ? numero : 0;
+}
+
+function arredondarDecimalDuasCasas(
+  valor: DecimalMonetario,
+  divisor = 1n,
+): number {
+  if (divisor <= 0n) return 0;
+  const denominador = potenciaDez(valor.escala) * divisor;
+  const numerador = valor.unidades * 100n;
+  const negativo = numerador < 0n;
+  const absoluto = negativo ? -numerador : numerador;
+  let centavos = absoluto / denominador;
+  const resto = absoluto % denominador;
+  if (resto * 2n >= denominador) centavos += 1n;
+  const resultado = Number(negativo ? -centavos : centavos) / 100;
+  return Number.isFinite(resultado) ? resultado : 0;
+}
+
+function numeroMonetario(valor: ValorMonetario): number {
+  const decimal = criarDecimalMonetario(valor);
+  return decimal ? decimalParaNumero(decimal) : 0;
 }
 
 function numeroPositivo(valor: ValorMonetario): number {
@@ -129,22 +219,19 @@ function contagem(valor: unknown): number {
   return Number.isFinite(numero) ? Math.max(0, Math.trunc(numero)) : 0;
 }
 
-function arredondarDuasCasas(valor: number): number {
-  return Math.round((valor + Number.EPSILON) * 100) / 100;
-}
-
 export function parcelasDoGrupo(matricula: {
   valor_parcela?: ValorMonetario;
   parcelas_relatorio?: ValorMonetario[] | null;
 }): number {
   const parcelas = Array.isArray(matricula.parcelas_relatorio)
-    ? matricula.parcelas_relatorio.map(numeroPositivo).filter((valor) =>
-      valor > 0
+    ? matricula.parcelas_relatorio.map(criarDecimalMonetario).filter(
+      (valor): valor is DecimalMonetario =>
+        valor !== null && valor.unidades > 0n,
     )
     : [];
 
   return parcelas.length > 0
-    ? parcelas.reduce((soma, valor) => soma + valor, 0)
+    ? decimalParaNumero(somarDecimais(parcelas))
     : numeroPositivo(matricula.valor_parcela);
 }
 
@@ -155,14 +242,18 @@ export function passaporteDoGrupo(matricula: {
 }
 
 function calcularValorMedio(valores: ValorMonetario[]): ValorMedio {
-  const elegiveis = valores.map(numeroPositivo).filter((valor) => valor > 0);
-  const somaBruta = elegiveis.reduce((total, valor) => total + valor, 0);
+  const elegiveis = valores.map(criarDecimalMonetario).filter(
+    (valor): valor is DecimalMonetario => valor !== null && valor.unidades > 0n,
+  );
+  const somaBruta = somarDecimais(elegiveis);
   const denominador = elegiveis.length;
 
   return {
-    soma: arredondarDuasCasas(somaBruta),
+    soma: arredondarDecimalDuasCasas(somaBruta),
     denominador,
-    media: denominador > 0 ? arredondarDuasCasas(somaBruta / denominador) : 0,
+    media: denominador > 0
+      ? arredondarDecimalDuasCasas(somaBruta, BigInt(denominador))
+      : 0,
   };
 }
 
