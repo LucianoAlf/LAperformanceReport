@@ -40,6 +40,10 @@ interface CarteiraProfessor {
   alunos_emla: number;
   mrr_total: number;
   ticket_medio: number;
+  // Base do ticket (exclui banda e bolsistas via tipos_matricula.entra_ticket_medio).
+  // Necessaria para agregar: media de medias nao e media.
+  alunos_ticket: number;
+  mrr_ticket: number;
   tempo_medio_meses: number;
   total_turmas: number;
   media_alunos_turma: number;
@@ -238,8 +242,12 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
           alunos_lamk: Number(row?.alunos_lamk ?? 0),
           alunos_emla: Number(row?.alunos_emla ?? 0),
           mrr_total: mrrTotal,
-          // Mantem o MRR contratual legado, mas divide pela mesma pessoa canonica do card.
-          ticket_medio: totalAlunos > 0 ? mrrTotal / totalAlunos : 0,
+          // O ticket vem pronto da RPC, que aplica tipos_matricula.entra_ticket_medio.
+          // Nao recalcular aqui: dividir o MRR pelo headcount jogava banda e bolsistas
+          // no denominador sem estarem no numerador, diluindo o ticket de 24 professores.
+          ticket_medio: Number(row?.ticket_medio ?? 0),
+          alunos_ticket: Number(row?.alunos_ticket ?? 0),
+          mrr_ticket: Number(row?.mrr_ticket ?? 0),
           tempo_medio_meses: Number(permanenciaV3 ?? row?.tempo_medio_meses ?? 0),
           total_turmas: Number(kpis.total_turmas ?? row?.total_turmas ?? 0),
           media_alunos_turma: mediaAlunosTurma,
@@ -332,8 +340,12 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
     const totalProfs = dados.length;
     const totalAlunos = dados.reduce((acc, c) => acc + c.total_alunos, 0);
     const mrrTotal = dados.reduce((acc, c) => acc + c.mrr_total, 0);
-    // Ticket operacional da carteira = MRR / linhas da carteira.
-    const ticketMedio = totalAlunos > 0 ? mrrTotal / totalAlunos : 0;
+    // Ticket agregado soma numeradores e denominadores da base do ticket — nao da para
+    // dividir o MRR pelo headcount (banda e bolsistas nao entram no ticket) nem tirar
+    // media das medias por professor.
+    const mrrTicket = dados.reduce((acc, c) => acc + c.mrr_ticket, 0);
+    const baseTicket = dados.reduce((acc, c) => acc + c.alunos_ticket, 0);
+    const ticketMedio = baseTicket > 0 ? mrrTicket / baseTicket : 0;
     const mediaAlunos = totalProfs > 0 ? totalAlunos / totalProfs : 0;
 
     return { totalProfs, totalAlunos, mrrTotal, ticketMedio, mediaAlunos };

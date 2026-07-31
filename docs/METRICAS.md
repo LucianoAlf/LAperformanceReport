@@ -84,6 +84,48 @@ Média de `valor_parcela` dos alunos com `entra_financeiro_ativo = true` **E**
 `tipo_matricula.entra_ticket_medio = true` **E** `valor_parcela > 0`,
 deduplicado por pessoa canônica e unidade.
 - RPC: `get_kpis_alunos_financeiro_vivo_canonico`.
+- ⚠️ A dedup por pessoa **soma** os cursos da pessoa no numerador mas conta a pessoa
+  **uma vez** no denominador — então segundo curso **eleva** o ticket (é o que o
+  `tipos_matricula` descreve: "eleva ticket médio, conta como 1 aluno"). Isso
+  contradiz o texto de "Segundo curso" abaixo, que diz "excluído do ticket médio".
+  Constatado no código em 31/07/2026; qual dos dois é a intenção não foi confirmado.
+
+### MRR (mensalidade recorrente)
+**Mesma base e mesmo filtro do ticket médio** — MRR é o numerador do ticket:
+```
+MRR = Σ valor_parcela
+  WHERE tipos_matricula.entra_ticket_medio = true
+    AND valor_parcela > 0
+    AND arquivado_em IS NULL
+    AND vw_alunos_estado_operacional_v131.entra_base_ativa = true
+    AND (data_matricula IS NULL OR data_matricula <= data_corte)
+    AND (data_saida  IS NULL OR data_saida  >  data_corte)
+  agrupado por pessoa (nome + unidade)
+```
+com `valor_parcela = valor_cheio − desconto_condicional` (fórmula canônica acima).
+- RPC: `get_kpis_alunos_financeiro_vivo_canonico`.
+- **Banda, bolsista integral e bolsista parcial ficam de fora** — pelo flag, não por
+  pagarem zero. Bolsista parcial paga e ainda assim não entra.
+- ⚠️ `get_carteira_professores.mrr_total` ainda não segue esta regra (ver abaixo).
+
+### Ticket médio da carteira do professor (31/07/2026)
+Mesmo critério de `entra_ticket_medio`, **sem a dedup por pessoa**: na carteira por
+professor, aluno com 2 cursos é carteira dos 2 professores — deduplicar faria um deles
+perder o aluno. Segundo curso (`entra_ticket_medio = true`) entra nos **dois** lados.
+- RPC: `get_carteira_professores` → `ticket_medio`, com a base exposta em
+  `alunos_ticket` / `mrr_ticket` (o card agregado da aba soma numeradores e
+  denominadores; média de médias não é média).
+- ⚠️ **`mrr_total` NÃO segue a regra canônica de MRR — pendente.** Ele soma todo
+  pagante (`valor_parcela > 0`), enquanto `get_kpis_alunos_financeiro_vivo_canonico`
+  define MRR com o **mesmo `entra_ticket_medio`** do ticket. Diferença medida em
+  31/07/2026: R$ 415.941,12 na aba vs R$ 412.297,62 canônico — os R$ 2.433,50 a mais
+  são bolsistas parciais pagantes. Por isso `mrr_ticket` existe: ele é, na prática, o
+  MRR canônico. Ao alinhar `mrr_total`, `mrr_ticket` vira redundante e deve sumir.
+- ⚠️ `total_alunos` é o **headcount inteiro** (inclui banda e bolsista) — é quantos
+  alunos o professor atende. Nunca usar como denominador de ticket.
+- Histórico: até 31/07/2026 a RPC aproximava a regra por `valor_parcela > 0` e o front
+  ainda descartava esse valor, dividindo o MRR pelo headcount. Diluía o ticket de 24
+  professores (Ramon Pina aparecia com R$ 108,59 tendo R$ 434,36).
 
 ### Ticket médio (passaporte / matrícula)
 Média de `valor_passaporte > 0` das matrículas novas canônicas do período (exclui 2º curso, banda).
