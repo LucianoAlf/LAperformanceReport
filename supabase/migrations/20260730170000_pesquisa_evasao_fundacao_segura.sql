@@ -276,6 +276,32 @@ create table if not exists public.pesquisa_evasao_previews (
     check (nullif(btrim(payload_hash), '') is not null)
 );
 
+create table if not exists public.pesquisa_evasao_publicos_internos (
+  aluno_id integer primary key
+    references public.alunos(id) on delete restrict,
+  tipo text not null
+    check (tipo in ('professor', 'colaborador', 'outro')),
+  ativo boolean not null default true,
+  fonte text not null,
+  confirmado_por_usuario_id integer not null
+    references public.usuarios(id),
+  confirmado_em timestamptz not null,
+  audit_metadata jsonb not null default '{}'::jsonb,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  constraint pesquisa_evasao_publicos_internos_fonte_check
+    check (nullif(btrim(fonte), '') is not null),
+  constraint pesquisa_evasao_publicos_internos_audit_check
+    check (jsonb_typeof(audit_metadata) = 'object')
+);
+
+comment on table public.pesquisa_evasao_publicos_internos is
+  'Fonte service-only e auditavel de publico interno. tipo_aluno e financeiro e nunca classifica este vinculo.';
+
+-- Gate de rollout para pesquisa_evasao_publicos_internos: popular somente em
+-- runbook posterior, com IDs confirmados individualmente e evidencia em
+-- fonte/audit_metadata. Nunca inferir por nome, telefone ou tipo_aluno.
+
 -- ---------------------------------------------------------------------------
 -- 4. Persistencia privada antecipada para a conversa multipartes
 -- ---------------------------------------------------------------------------
@@ -553,6 +579,7 @@ alter table public.pesquisa_evasao enable row level security;
 alter table public.pesquisa_evasao_templates enable row level security;
 alter table public.pesquisa_evasao_assinaturas enable row level security;
 alter table public.pesquisa_evasao_previews enable row level security;
+alter table public.pesquisa_evasao_publicos_internos enable row level security;
 alter table public.pesquisa_evasao_mensagens enable row level security;
 alter table public.pesquisa_evasao_transcricoes enable row level security;
 alter table public.pesquisa_evasao_analises enable row level security;
@@ -645,6 +672,10 @@ revoke all on table public.pesquisa_evasao_previews
   from public, anon, authenticated, service_role,
        mila_acesso_restrito, sol_acesso_restrito,
        fabio_agent, lia_acesso_restrito;
+revoke all on table public.pesquisa_evasao_publicos_internos
+  from public, anon, authenticated, service_role,
+       mila_acesso_restrito, sol_acesso_restrito,
+       fabio_agent, lia_acesso_restrito;
 revoke all on table public.pesquisa_evasao_mensagens
   from public, anon, authenticated, service_role,
        mila_acesso_restrito, sol_acesso_restrito,
@@ -670,6 +701,8 @@ grant select on table public.pesquisa_evasao_templates
 grant select on table public.pesquisa_evasao_assinaturas
   to service_role;
 grant select, insert on table public.pesquisa_evasao_previews
+  to service_role;
+grant select, insert, update on table public.pesquisa_evasao_publicos_internos
   to service_role;
 grant select, insert on table public.pesquisa_evasao_mensagens
   to service_role;
@@ -721,7 +754,7 @@ begin
     m.id as evasao_id,
     m.aluno_id,
     coalesce(m.aluno_nome, a.nome)::text as nome,
-    coalesce(m.telefone_snapshot, a.whatsapp, a.telefone)::text as telefone,
+    nullif(btrim(m.telefone_snapshot), '')::text as telefone,
     c.nome::text as curso,
     pr.nome::text as professor,
     greatest(
@@ -765,7 +798,7 @@ begin
       'sucesso_aluno.evasao.ver'::varchar,
       m.unidade_id
     )
-    and coalesce(m.telefone_snapshot, a.whatsapp, a.telefone) is not null
+    and nullif(btrim(m.telefone_snapshot), '') is not null
     and (
       p_status is null
       or coalesce(pe.status, 'pendente') = p_status
@@ -821,7 +854,7 @@ begin
     m.id as evasao_id,
     m.aluno_id,
     coalesce(m.aluno_nome, a.nome)::text as nome,
-    coalesce(m.telefone_snapshot, a.whatsapp, a.telefone)::text as telefone,
+    nullif(btrim(m.telefone_snapshot), '')::text as telefone,
     c.nome::text as curso,
     pr.nome::text as professor,
     greatest(
@@ -872,7 +905,7 @@ begin
       'sucesso_aluno.evasao.ver'::varchar,
       m.unidade_id
     )
-    and coalesce(m.telefone_snapshot, a.whatsapp, a.telefone) is not null
+    and nullif(btrim(m.telefone_snapshot), '') is not null
     and (
       p_status is null
       or coalesce(pe.status, 'pendente') = p_status
@@ -924,7 +957,7 @@ begin
   with evadidos_mes as (
     select
       m.id,
-      coalesce(m.telefone_snapshot, a.whatsapp, a.telefone) as tel
+      nullif(btrim(m.telefone_snapshot), '') as tel
     from public.movimentacoes_admin m
     left join public.alunos a
       on a.id = m.aluno_id
@@ -1034,7 +1067,7 @@ begin
     m.aluno_id,
     m.unidade_id,
     m.aluno_nome,
-    coalesce(m.telefone_snapshot, a.whatsapp, a.telefone) as telefone_snapshot,
+    m.telefone_snapshot,
     m.data as data_evasao,
     coalesce(ms.nome, m.motivo) as motivo,
     c.nome as curso,
@@ -1249,11 +1282,7 @@ with base_autorizada as (
     m.aluno_id,
     a.id as aluno_registro_id,
     coalesce(m.aluno_nome, a.nome)::text as nome,
-    coalesce(
-      nullif(btrim(m.telefone_snapshot), ''),
-      nullif(btrim(a.whatsapp), ''),
-      nullif(btrim(a.telefone), '')
-    )::text as telefone,
+    nullif(btrim(m.telefone_snapshot), '')::text as telefone,
     c.nome::text as curso,
     pr.nome::text as professor,
     greatest(
@@ -1275,11 +1304,10 @@ with base_autorizada as (
       and extract(year from age(current_date, a.data_nascimento))::integer < 18
     ) as is_menor,
     a.responsavel_nome::text as responsavel_nome,
+    publico_interno.aluno_id as publico_interno_aluno_id,
     case
-      when lower(btrim(coalesce(a.tipo_aluno::text, ''))) = 'colaborador'
-        then 'colaborador'
-      when lower(btrim(coalesce(a.tipo_aluno::text, ''))) = 'professor'
-        then 'professor'
+      when publico_interno.aluno_id is not null
+        then publico_interno.tipo
       when (
         a.data_nascimento is not null
         and extract(year from age(current_date, a.data_nascimento))::integer < 18
@@ -1292,6 +1320,9 @@ with base_autorizada as (
   from public.movimentacoes_admin m
   left join public.alunos a
     on a.id = m.aluno_id
+  left join public.pesquisa_evasao_publicos_internos publico_interno
+    on publico_interno.aluno_id = m.aluno_id
+   and publico_interno.ativo = true
   left join public.cursos c
     on c.id = coalesce(m.curso_id, a.curso_id)
   left join public.professores pr
@@ -1352,7 +1383,7 @@ with base_autorizada as (
         ilike ('%' || btrim(p_busca) || '%')
       or coalesce(ms.nome, m.motivo, '')
         ilike ('%' || btrim(p_busca) || '%')
-      or coalesce(m.telefone_snapshot, a.whatsapp, a.telefone, '')
+      or coalesce(m.telefone_snapshot, '')
         ilike ('%' || btrim(p_busca) || '%')
     )
 ),
@@ -1387,7 +1418,7 @@ bloqueada as (
         then 'telefone_invalido'
       when motivo_catalogado is null
         then 'motivo_nao_catalogado'
-      when publico_tipo in ('colaborador', 'professor')
+      when publico_interno_aluno_id is not null
         then 'publico_interno'
       when exists (
         select 1

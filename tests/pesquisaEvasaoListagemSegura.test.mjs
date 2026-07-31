@@ -171,13 +171,33 @@ test('bloqueios preservam sem telefone, motivo legado e flag interna explicita',
     /(?:where|and)\s+coalesce\s*\(\s*m\.telefone_snapshot\s*,\s*a\.whatsapp\s*,\s*a\.telefone\s*\)\s+is\s+not\s+null/i,
     'linhas sem telefone nao podem sumir da listagem v2',
   );
-  assert.match(v2, /a\.tipo_aluno/i);
-  assert.match(v2, /['"]colaborador['"]/i);
-  assert.match(v2, /['"]professor['"]/i);
+  assert.match(v2, /public\.pesquisa_evasao_publicos_internos/i);
+  assert.match(v2, /publico_interno\.ativo\s*=\s*true/i);
+  assert.match(v2, /publico_interno\.tipo/i);
+  assert.doesNotMatch(v2, /a\.tipo_aluno/i);
   assert.doesNotMatch(
     v2,
     /(?:a|m)\.(?:nome|aluno_nome)\s+(?:ilike|similar\s+to|~)/i,
     'publico interno nao pode ser inferido por nome',
+  );
+});
+
+test('telefone produtivo usa somente o snapshot imutavel da movimentacao', () => {
+  const v2 = semComentarios(extrairFuncao('listar_evadidos_para_pesquisa_v2'));
+  const criar = semComentarios(extrairFuncao('criar_pesquisa_evasao'));
+
+  for (const source of [v2, criar]) {
+    assert.match(source, /m\.telefone_snapshot/i);
+    assert.doesNotMatch(
+      source,
+      /\ba\.(?:whatsapp|telefone)\b/i,
+      'cadastro atual nao pode autorizar nem fornecer destino produtivo',
+    );
+  }
+  assert.doesNotMatch(
+    sql,
+    /coalesce\s*\(\s*m\.telefone_snapshot\s*,\s*a\.whatsapp\s*,\s*a\.telefone\s*\)/i,
+    'nenhuma RPC desta migration pode reintroduzir o fallback divergente da Edge',
   );
 });
 
@@ -275,6 +295,35 @@ test('frontend usa pagina de 50, total, range e reset de filtros', () => {
   );
 });
 
+test('pagina vazia recua sem publicar total zero e refaz pela sequencia atual', () => {
+  const carregar = tab.match(
+    /const\s+carregarDados\s*=\s*async\s*\(\s*\)\s*=>\s*\{[\s\S]*?(?=\n\s*const\s+previsualizarPesquisa\s*=)/,
+  )?.[0] ?? '';
+  const guardaPagina = carregar.search(
+    /if\s*\(\s*linhas\.length\s*===\s*0\s*&&\s*consulta\.pagina\s*>\s*1\s*\)/,
+  );
+  const invalidaSequencia = carregar.indexOf(
+    'carregamentoDadosSequenciaRef.current',
+    guardaPagina,
+  );
+  const recuaPagina = carregar.indexOf('setPagina', guardaPagina);
+  const retorna = carregar.indexOf('return;', guardaPagina);
+  const publicaTotal = carregar.indexOf('setTotalRegistros');
+
+  assert.ok(guardaPagina >= 0, 'pagina vazia acima da primeira precisa recuar');
+  assert.ok(invalidaSequencia > guardaPagina && invalidaSequencia < retorna);
+  assert.ok(recuaPagina > guardaPagina && recuaPagina < retorna);
+  assert.ok(
+    publicaTotal > retorna,
+    'total da pagina anterior deve sobreviver ate a consulta de recuo terminar',
+  );
+  assert.match(
+    carregar,
+    /setPagina\s*\(\s*consulta\.pagina\s*-\s*1\s*\)/,
+    'mudanca de pagina deve acionar novamente o efeito de consulta',
+  );
+});
+
 test('Realtime acompanha a chave completa da consulta atual', () => {
   const efeitoRealtime = tab.match(
     /\/\/ Realtime:[\s\S]*?(?=\n\s*const\s+carregarDados\s*=)/,
@@ -353,7 +402,7 @@ test('modo teste ignora bloqueios produtivos e conserva os hard blocks de pessoa
   assert.match(ramoTeste, /['"]publico_interno['"]/);
   assert.match(
     ramoTeste,
-    /\[\s*['"]colaborador['"]\s*,\s*['"]professor['"]\s*\]\.includes\s*\(\s*evadido\.publico_tipo\s*\)/,
+    /\[\s*['"]colaborador['"]\s*,\s*['"]professor['"]\s*,\s*['"]outro['"]\s*\]\.includes\s*\(\s*evadido\.publico_tipo\s*\)/,
     'publico interno precisa continuar bloqueado mesmo se outro codigo tiver precedencia',
   );
   for (const bloqueioProdutivo of [
@@ -387,6 +436,27 @@ test('historico de testes fica separado e identificado na UI', () => {
   assert.match(tab, />\s*TESTE\s*</);
   assert.match(types, /interface\s+PesquisaEvasaoTeste/);
   assert.match(types, /modo_teste\s*:\s*boolean/);
+});
+
+test('historico de teste e invalidado no Realtime e apos confirmar teste', () => {
+  const efeitoRealtime = tab.match(
+    /\/\/ Realtime:[\s\S]*?(?=\n\s*const\s+carregarDados\s*=)/,
+  )?.[0] ?? '';
+  const confirmar = tab.match(
+    /const\s+confirmarEnvio\s*=\s*async\s*\(\s*\)\s*=>\s*\{[\s\S]*?(?=\n\s*const\s+alterarModalPreview\s*=)/,
+  )?.[0] ?? '';
+  const invalidar = tab.match(
+    /const\s+invalidarHistoricoTeste\s*=\s*\(\s*\)\s*=>\s*\{[\s\S]*?(?=\n\s*\};)/,
+  )?.[0] ?? '';
+
+  assert.match(invalidar, /setHistoricosTeste\s*\(\s*\{\s*\}\s*\)/);
+  assert.match(invalidar, /setHistoricoTesteExpandido\s*\(\s*null\s*\)/);
+  assert.match(efeitoRealtime, /invalidarHistoricoTeste\s*\(\s*\)/);
+  assert.match(
+    confirmar,
+    /resposta\.modo_teste\s*===\s*true[\s\S]{0,150}invalidarHistoricoTeste\s*\(\s*\)/,
+    'Realtime e suprimido durante confirmacao; sucesso de teste deve limpar o cache',
+  );
 });
 
 test('componente nao escreve diretamente em cadastro ou movimentacao', () => {

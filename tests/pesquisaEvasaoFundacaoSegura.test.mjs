@@ -18,6 +18,7 @@ const privateTables = [
   'pesquisa_evasao_templates',
   'pesquisa_evasao_assinaturas',
   'pesquisa_evasao_previews',
+  'pesquisa_evasao_publicos_internos',
   'pesquisa_evasao_mensagens',
   'pesquisa_evasao_transcricoes',
   'pesquisa_evasao_analises',
@@ -27,6 +28,7 @@ const serviceOnlyTables = [
   'pesquisa_evasao_templates',
   'pesquisa_evasao_assinaturas',
   'pesquisa_evasao_previews',
+  'pesquisa_evasao_publicos_internos',
 ];
 
 const conversationTables = [
@@ -902,6 +904,36 @@ contractTest('assinatura ativa usa indice unico parcial', () => {
     signatureIndexes[0],
     /^\(?ativo(?:=true)?\)?$/i,
     'indice parcial de assinatura ativa',
+  );
+});
+
+contractTest('publico interno possui fonte dedicada auditavel e sem seed inferido', () => {
+  const definition = getCreateTableDefinition(
+    'pesquisa_evasao_publicos_internos',
+  );
+
+  assert.match(definition, /\baluno_id\s+integer\s+primary\s+key\b/i);
+  assert.match(definition, /\breferences\s+public\.alunos\s*\(\s*id\s*\)/i);
+  assert.match(
+    definition,
+    /\btipo\s+text\s+not\s+null[\s\S]*check\s*\(\s*tipo\s+in\s*\(\s*'professor'\s*,\s*'colaborador'\s*,\s*'outro'\s*\)\s*\)/i,
+  );
+  assert.match(definition, /\bativo\s+boolean\s+not\s+null\b/i);
+  assert.match(definition, /\bfonte\s+text\s+not\s+null\b/i);
+  assert.match(definition, /\bconfirmado_por_usuario_id\s+integer\s+not\s+null\b/i);
+  assert.match(definition, /\bconfirmado_em\s+timestamptz\s+not\s+null\b/i);
+  assert.match(definition, /\baudit_metadata\s+jsonb\s+not\s+null\b/i);
+
+  const dml = statements(sql).filter(
+    (statement) =>
+      /^\s*(?:insert|update|delete|merge)\b/i.test(statement) &&
+      /\bpublic\.pesquisa_evasao_publicos_internos\b/i.test(statement),
+  );
+  assert.equal(dml.length, 0, 'migration estrutural nao pode semear IDs de producao');
+  assert.match(
+    sql,
+    /rollout[\s\S]{0,300}pesquisa_evasao_publicos_internos[\s\S]{0,300}IDs?\s+confirmados/i,
+    'rollout precisa exigir IDs confirmados, sem inferencia por dados financeiros',
   );
 });
 

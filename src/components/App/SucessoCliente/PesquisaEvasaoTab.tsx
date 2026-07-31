@@ -129,6 +129,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
   const [historicoTesteExpandido, setHistoricoTesteExpandido] = useState<number | null>(null);
   const [historicosTeste, setHistoricosTeste] = useState<Record<number, PesquisaEvasaoTeste[]>>({});
   const [carregandoHistorico, setCarregandoHistorico] = useState<number | null>(null);
+  const historicoTesteSequenciaRef = useRef(0);
   const filtroServidorChave = [
     unidadeAtual,
     filtroStatus,
@@ -157,6 +158,13 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
     filtroBusca: filtroBusca.trim(),
   };
 
+  const invalidarHistoricoTeste = () => {
+    historicoTesteSequenciaRef.current += 1;
+    setHistoricosTeste({});
+    setHistoricoTesteExpandido(null);
+    setCarregandoHistorico(null);
+  };
+
   useEffect(() => {
     setPagina(1);
   }, [unidadeAtual, filtroStatus, filtroAno, filtroMes, filtroBusca]);
@@ -182,6 +190,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
         },
         (payload) => {
           console.log('[Realtime] Mudança em pesquisa_evasao:', payload);
+          invalidarHistoricoTeste();
           if (!confirmandoRef.current) carregarDados();
         }
       )
@@ -218,6 +227,12 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
       if (!requisicaoAindaAtual()) return;
 
       const linhas = (evadidosData || []) as PesquisaEvasaoListagemItem[];
+      if (linhas.length === 0 && consulta.pagina > 1) {
+        carregamentoDadosSequenciaRef.current += 1;
+        setPagina(consulta.pagina - 1);
+        return;
+      }
+
       setTotalRegistros(Number(linhas[0]?.total_count ?? 0));
       setEvadidos(linhas.map((item) => ({
         ...item,
@@ -335,6 +350,9 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
 
       const resposta = data as unknown as PesquisaEvasaoConfirmacao | null;
       if (resposta?.success === true && resposta.envio_status === 'enviado') {
+        if (resposta.modo_teste === true) {
+          invalidarHistoricoTeste();
+        }
         toast.success(
           resposta.modo_teste
             ? 'Teste enviado com sucesso!'
@@ -450,6 +468,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
 
   const carregarHistoricoTeste = async (evasaoId: number) => {
     if (historicoTesteExpandido === evasaoId) {
+      historicoTesteSequenciaRef.current += 1;
       setHistoricoTesteExpandido(null);
       return;
     }
@@ -457,6 +476,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
     setHistoricoTesteExpandido(evasaoId);
     if (historicosTeste[evasaoId]) return;
 
+    const sequencia = ++historicoTesteSequenciaRef.current;
     setCarregandoHistorico(evasaoId);
     try {
       const { data, error } = await supabase.rpc(
@@ -464,16 +484,21 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
         { p_evasao_id: evasaoId },
       );
       if (error) throw error;
+      if (sequencia !== historicoTesteSequenciaRef.current) return;
 
       const testes = ((data || []) as PesquisaEvasaoTeste[])
         .filter((item) => item.modo_teste === true);
       setHistoricosTeste((atual) => ({ ...atual, [evasaoId]: testes }));
     } catch (error) {
+      if (sequencia !== historicoTesteSequenciaRef.current) return;
+
       console.error('Erro ao carregar histórico de testes:', error);
       setHistoricoTesteExpandido(null);
       toast.error('Erro ao carregar histórico de testes');
     } finally {
-      setCarregandoHistorico(null);
+      if (sequencia === historicoTesteSequenciaRef.current) {
+        setCarregandoHistorico(null);
+      }
     }
   };
 
@@ -746,7 +771,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                   const podeGerarPreview = modoTeste
                     ? !registroTeste &&
                       !['sem_aluno', 'publico_interno'].includes(evadido.bloqueio_codigo || '') &&
-                      !['colaborador', 'professor'].includes(evadido.publico_tipo)
+                      !['colaborador', 'professor', 'outro'].includes(evadido.publico_tipo)
                     : evadido.elegivel_envio && statusProducaoPermiteEnvio;
 
                   return (
