@@ -18,6 +18,9 @@ import {
   resolverJanelaRelatorioComercialBrt,
   validarExecucaoSnapshotProximas,
 } from '../_shared/relatorio-comercial.ts';
+import {
+  obterSnapshotComAdmissao,
+} from '../_shared/snapshot-refresh-admission.ts';
 
 const FIELDS = 'id,nome,provedor,uazapi_url,uazapi_token,waha_url,waha_session,waha_api_key';
 
@@ -1236,6 +1239,8 @@ interface SnapshotRefreshResponse {
   snapshot: { execucao_id: string; status: 'completo' };
 }
 
+type OrigemSnapshotRefresh = 'preview' | 'cron';
+
 interface ExperimentalFuturaRaw {
   unidade_id: string;
   emusys_aula_id: number;
@@ -1372,50 +1377,111 @@ function enriquecerProximasExperimentais(
 }
 
 async function atualizarSnapshotExperimentais(
+  supabase: SupabaseClient,
   unidadeId: string,
   dataInicio: string,
   dataFim: string,
+  origem: OrigemSnapshotRefresh,
 ): Promise<SnapshotRefreshResponse> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')?.replace(/\/+$/, '');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!supabaseUrl || !serviceRoleKey) throw new Error('SNAPSHOT_EXPERIMENTAIS_CONFIG_AUSENTE');
 
-  const response = await fetch(`${supabaseUrl}/functions/v1/sync-presenca-emusys`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      apikey: serviceRoleKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      modo: 'experimentais',
-      unidade_id: unidadeId,
-      data_inicio: dataInicio,
-      data_fim: dataFim,
-    }),
-    signal: AbortSignal.timeout(120_000),
-  });
-  if (!response.ok) {
-    throw new Error(`SNAPSHOT_EXPERIMENTAIS_HTTP_${response.status}`);
-  }
+  const resultado = await obterSnapshotComAdmissao<SnapshotRefreshResponse>({
+    deps: {
+      admitir: async () => {
+        const { data, error } = await supabase.rpc(
+          'admitir_refresh_snapshot_experimentais_v1',
+          {
+            p_unidade_id: unidadeId,
+            p_data_inicio: dataInicio,
+            p_data_fim: dataFim,
+            p_origem: origem,
+          },
+        );
+        if (error || !data) throw new Error('SNAPSHOT_ADMISSAO_FALHOU');
+        return data;
+      },
+      atualizar: async (execucaoId) => {
+        const response = await fetch(`${supabaseUrl}/functions/v1/sync-presenca-emusys`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${serviceRoleKey}`,
+            apikey: serviceRoleKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            modo: 'experimentais',
+            unidade_id: unidadeId,
+            data_inicio: dataInicio,
+            data_fim: dataFim,
+            execucao_id: execucaoId,
+          }),
+          signal: AbortSignal.timeout(120_000),
+        });
+        if (!response.ok) {
+          throw new Error(`SNAPSHOT_EXPERIMENTAIS_HTTP_${response.status}`);
+        }
 
-  let payload: Partial<SnapshotRefreshResponse>;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new Error('SNAPSHOT_EXPERIMENTAIS_RESPOSTA_INVALIDA');
+        let payload: Partial<SnapshotRefreshResponse>;
+        try {
+          payload = await response.json();
+        } catch {
+          throw new Error('SNAPSHOT_EXPERIMENTAIS_RESPOSTA_INVALIDA');
+        }
+        if (
+          payload.success !== true
+          || payload.unidade?.id !== unidadeId
+          || payload.intervalo?.data_inicio !== dataInicio
+          || payload.intervalo?.data_fim !== dataFim
+          || payload.snapshot?.status !== 'completo'
+          || payload.snapshot?.execucao_id !== execucaoId
+        ) {
+          throw new Error('SNAPSHOT_EXPERIMENTAIS_INCOMPLETO');
+        }
+        return payload as SnapshotRefreshResponse;
+      },
+      finalizar: async (input) => {
+        const { error } = await supabase.rpc(
+          'finalizar_refresh_snapshot_experimentais_v1',
+          {
+            p_admissao_id: input.admissaoId,
+            p_execucao_id: input.execucaoId,
+            p_sucesso: input.sucesso,
+            p_erro_codigo: input.erroCodigo,
+          },
+        );
+        if (error) throw new Error('SNAPSHOT_ADMISSAO_FINALIZACAO_FALHOU');
+      },
+      esperar: (ms) =>
+        new Promise((resolve) => {
+          setTimeout(resolve, ms);
+        }),
+      agoraMs: () => Date.now(),
+    },
+  });
+
+  if (resultado.origem === 'reutilizado') {
+    return {
+      success: true,
+      unidade: { id: unidadeId },
+      intervalo: {
+        data_inicio: dataInicio,
+        data_fim: dataFim,
+      },
+      snapshot: {
+        execucao_id: resultado.execucaoId,
+        status: 'completo',
+      },
+    };
   }
   if (
-    payload.success !== true
-    || payload.unidade?.id !== unidadeId
-    || payload.intervalo?.data_inicio !== dataInicio
-    || payload.intervalo?.data_fim !== dataFim
-    || payload.snapshot?.status !== 'completo'
-    || !payload.snapshot?.execucao_id
+    resultado.resposta.snapshot.execucao_id !== resultado.execucaoId
+    || resultado.resposta.snapshot.status !== 'completo'
   ) {
     throw new Error('SNAPSHOT_EXPERIMENTAIS_INCOMPLETO');
   }
-  return payload as SnapshotRefreshResponse;
+  return resultado.resposta;
 }
 
 function rankingCanonico(
@@ -1437,6 +1503,7 @@ async function gerarRelatorioComercialDiario(
   unidadeId: string,
   dataReferencia?: string,
   instanteGeracao: Date = new Date(),
+  origemSnapshot: OrigemSnapshotRefresh = 'preview',
 ): Promise<string> {
   const fuso = 'America/Sao_Paulo';
   const referencia = resolverJanelaRelatorioComercialBrt(dataReferencia, instanteGeracao);
@@ -1449,9 +1516,11 @@ async function gerarRelatorioComercialDiario(
   const fimDiaBRTExclusivo = referencia.fimDiaBRTExclusivo;
 
   const snapshot = await atualizarSnapshotExperimentais(
+    supabase,
     unidadeId,
     dataInicioSnapshot,
     dataFimSnapshot,
+    origemSnapshot,
   );
   if (snapshot.snapshot.status !== 'completo') throw new Error('SNAPSHOT_EXPERIMENTAIS_INCOMPLETO');
 
@@ -1805,7 +1874,13 @@ async function processarCron(
         continue;
       }
 
-      const texto = await gerarRelatorioComercialDiario(supabase, unidade.id);
+      const texto = await gerarRelatorioComercialDiario(
+        supabase,
+        unidade.id,
+        undefined,
+        agora,
+        'cron',
+      );
       const agendadaPara = new Date(agora.getTime() + offsetFilaMinutos * 60_000);
       offsetFilaMinutos += 1;
 
@@ -1937,6 +2012,8 @@ serve(async (req) => {
         supabase,
         payload.unidade,
         dataReferencia,
+        new Date(),
+        'preview',
       );
       return new Response(
         JSON.stringify({ success: true, dry_run: true, tipo: 'relatorio_comercial', unidade: payload.unidade, texto }),

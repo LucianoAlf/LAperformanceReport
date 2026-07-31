@@ -210,6 +210,40 @@ test("refresh servidor-servidor falha fechado em HTTP, payload, unidade, interva
   assert.match(refresh, /payload\.snapshot\?\.execucao_id/);
 });
 
+test("refresh usa admissao single-flight antes do provedor e finaliza a identidade", () => {
+  assert.match(
+    edge,
+    /import\s*\{\s*obterSnapshotComAdmissao\s*,?\s*\}\s*from\s*['"]\.\.\/_shared\/snapshot-refresh-admission\.ts['"]/,
+  );
+  const refresh = bloco(
+    "async function atualizarSnapshotExperimentais(",
+    "async function gerarRelatorioComercialDiario(",
+  );
+
+  assert.match(
+    refresh,
+    /\.rpc\(\s*['"]admitir_refresh_snapshot_experimentais_v1['"]/,
+  );
+  assert.match(
+    refresh,
+    /\.rpc\(\s*['"]finalizar_refresh_snapshot_experimentais_v1['"]/,
+  );
+  assert.match(
+    refresh,
+    /obterSnapshotComAdmissao(?:<[^>]+>)?\s*\(/,
+  );
+  assert.match(refresh, /execucao_id:\s*execucaoId/);
+  assert.match(refresh, /p_origem:\s*origem/);
+  assert.match(refresh, /p_admissao_id:\s*input\.admissaoId/);
+  assert.match(refresh, /p_execucao_id:\s*input\.execucaoId/);
+  assert.match(refresh, /p_sucesso:\s*input\.sucesso/);
+  assert.match(refresh, /resultado\.origem\s*===\s*['"]reutilizado['"]/);
+  assert.match(
+    refresh,
+    /resultado\.resposta\.snapshot\.execucao_id\s*!==\s*resultado\.execucaoId/,
+  );
+});
+
 test("fontes canonicas sao carregadas em paralelo somente depois do refresh", () => {
   const gerador = bloco(
     "async function gerarRelatorioComercialDiario(",
@@ -415,7 +449,7 @@ test("dry-run comercial valida e repassa a data de referencia capturada pela UI"
   assert.match(dryRunComercial, /status:\s*400/);
   assert.match(
     dryRunComercial,
-    /gerarRelatorioComercialDiario\(\s*supabase,\s*payload\.unidade,\s*dataReferencia,?\s*\)/,
+    /gerarRelatorioComercialDiario\(\s*supabase,\s*payload\.unidade,\s*dataReferencia,\s*new Date\(\),\s*['"]preview['"],?\s*\)/,
   );
   assert.ok(
     dryRunComercial.indexOf("pode_gerar_relatorio_comercial_v1") <
@@ -436,9 +470,9 @@ test("cron continua sem data externa e usa a referencia BRT do gerador", () => {
     /resolverJanelaRelatorioComercialBrt\(dataReferencia,\s*instanteGeracao\)/,
   );
   assert.match(gerador, /instanteGeracao:\s*Date\s*=\s*new Date\(\)/);
-  assert.doesNotMatch(
+  assert.match(
     cron,
-    /gerarRelatorioComercialDiario\([^)]*,[^)]*,[^)]*\)/,
+    /gerarRelatorioComercialDiario\(\s*supabase,\s*unidade\.id,\s*undefined,\s*agora,\s*['"]cron['"],?\s*\)/,
   );
 });
 
