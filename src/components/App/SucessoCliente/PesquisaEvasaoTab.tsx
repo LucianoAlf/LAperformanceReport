@@ -137,6 +137,25 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
     filtroBusca.trim(),
   ].join(':');
   const filtroServidorAnteriorRef = useRef(filtroServidorChave);
+  const carregamentoDadosSequenciaRef = useRef(0);
+  const consultaDadosAtualRef = useRef({
+    chave: `${filtroServidorChave}:${pagina}`,
+    unidadeAtual,
+    pagina,
+    filtroStatus,
+    filtroAno,
+    filtroMes,
+    filtroBusca: filtroBusca.trim(),
+  });
+  consultaDadosAtualRef.current = {
+    chave: `${filtroServidorChave}:${pagina}`,
+    unidadeAtual,
+    pagina,
+    filtroStatus,
+    filtroAno,
+    filtroMes,
+    filtroBusca: filtroBusca.trim(),
+  };
 
   useEffect(() => {
     setPagina(1);
@@ -171,25 +190,33 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [unidadeAtual, filtroStatus, filtroAno, filtroMes, pagina]);
+  }, [filtroServidorChave, pagina]);
 
   const carregarDados = async () => {
+    const sequencia = ++carregamentoDadosSequenciaRef.current;
+    const consulta = consultaDadosAtualRef.current;
+    const requisicaoAindaAtual = () =>
+      sequencia === carregamentoDadosSequenciaRef.current &&
+      consulta.chave === consultaDadosAtualRef.current.chave;
+
     setLoading(true);
     try {
       const { data: evadidosData, error: evadidosError } = await supabase.rpc(
         'listar_evadidos_para_pesquisa_v2',
         { 
-          p_unidade_id: unidadeAtual === 'todos' ? null : unidadeAtual,
+          p_unidade_id: consulta.unidadeAtual === 'todos' ? null : consulta.unidadeAtual,
           p_limite: TAMANHO_PAGINA,
-          p_offset: (pagina - 1) * TAMANHO_PAGINA,
-          p_status: filtroStatus === 'todos' ? null : filtroStatus,
-          p_ano: filtroAno,
-          p_mes: filtroMes,
-          p_busca: filtroBusca.trim() || null,
+          p_offset: (consulta.pagina - 1) * TAMANHO_PAGINA,
+          p_status: consulta.filtroStatus === 'todos' ? null : consulta.filtroStatus,
+          p_ano: consulta.filtroAno,
+          p_mes: consulta.filtroMes,
+          p_busca: consulta.filtroBusca || null,
         }
       );
 
       if (evadidosError) throw evadidosError;
+      if (!requisicaoAindaAtual()) return;
+
       const linhas = (evadidosData || []) as PesquisaEvasaoListagemItem[];
       setTotalRegistros(Number(linhas[0]?.total_count ?? 0));
       setEvadidos(linhas.map((item) => ({
@@ -206,21 +233,25 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
       const { data: statsData, error: statsError } = await supabase.rpc(
         'stats_pesquisa_evasao',
         { 
-          p_unidade_id: unidadeAtual === 'todos' ? null : unidadeAtual,
+          p_unidade_id: consulta.unidadeAtual === 'todos' ? null : consulta.unidadeAtual,
           p_ano: new Date().getFullYear(),
           p_mes: new Date().getMonth() + 1
         }
       );
 
       if (statsError) throw statsError;
+      if (!requisicaoAindaAtual()) return;
+
       if (statsData && statsData.length > 0) {
         setStats(statsData[0]);
       }
     } catch (error) {
+      if (!requisicaoAindaAtual()) return;
+
       console.error('Erro ao carregar dados:', error);
       toast.error('Erro ao carregar dados da pesquisa');
     } finally {
-      setLoading(false);
+      if (requisicaoAindaAtual()) setLoading(false);
     }
   };
 

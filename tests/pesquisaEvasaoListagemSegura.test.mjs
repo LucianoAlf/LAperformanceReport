@@ -114,7 +114,10 @@ test('busca ocorre no servidor antes do count e da paginacao', () => {
   assert.ok(contagem > busca, 'total_count precisa refletir p_busca');
   assert.ok(limite > contagem, 'busca e contagem devem preceder a paginacao');
   assert.match(v2, /\bilike\s*\(\s*['"]%['"]\s*\|\|\s*btrim\s*\(\s*p_busca\s*\)\s*\|\|\s*['"]%['"]\s*\)/i);
-  assert.match(tab, /p_busca:\s*filtroBusca\.trim\(\)\s*\|\|\s*null/);
+  assert.match(
+    tab,
+    /p_busca:\s*(?:filtroBusca\.trim\(\)|consulta\.filtroBusca)\s*\|\|\s*null/,
+  );
   assert.match(tab, /filtroServidorChave[\s\S]*filtroBusca\.trim\(\)/);
   assert.doesNotMatch(
     tab,
@@ -256,7 +259,10 @@ test('frontend usa pagina de 50, total, range e reset de filtros', () => {
   assert.match(tab, /const\s+TAMANHO_PAGINA\s*=\s*50/);
   assert.match(tab, /listar_evadidos_para_pesquisa_v2/);
   assert.match(tab, /p_limite:\s*TAMANHO_PAGINA/);
-  assert.match(tab, /p_offset:\s*\(pagina\s*-\s*1\)\s*\*\s*TAMANHO_PAGINA/);
+  assert.match(
+    tab,
+    /p_offset:\s*\((?:pagina|consulta\.pagina)\s*-\s*1\)\s*\*\s*TAMANHO_PAGINA/,
+  );
   assert.doesNotMatch(tab, /p_limite:\s*100/);
   assert.match(tab, /total_count/);
   assert.match(tab, /Mostrando\s*\{/);
@@ -267,6 +273,59 @@ test('frontend usa pagina de 50, total, range e reset de filtros', () => {
     /useEffect\s*\(\s*\(\s*\)\s*=>\s*\{\s*setPagina\s*\(\s*1\s*\)/,
     'troca de filtro deve voltar para a primeira pagina',
   );
+});
+
+test('Realtime acompanha a chave completa da consulta atual', () => {
+  const efeitoRealtime = tab.match(
+    /\/\/ Realtime:[\s\S]*?(?=\n\s*const\s+carregarDados\s*=)/,
+  )?.[0] ?? '';
+
+  assert.match(efeitoRealtime, /if\s*\(\s*!confirmandoRef\.current\s*\)\s*carregarDados\s*\(\s*\)/);
+  assert.match(
+    efeitoRealtime,
+    /\}\s*,\s*\[\s*filtroServidorChave\s*,\s*pagina\s*\]\s*\)/,
+    'a busca tambem precisa renovar o closure usado pelo callback Realtime',
+  );
+});
+
+test('somente a consulta mais recente pode atualizar dados e loading', () => {
+  const carregar = tab.match(
+    /const\s+carregarDados\s*=\s*async\s*\(\s*\)\s*=>\s*\{[\s\S]*?(?=\n\s*const\s+previsualizarPesquisa\s*=)/,
+  )?.[0] ?? '';
+
+  assert.match(tab, /const\s+carregamentoDadosSequenciaRef\s*=\s*useRef\s*\(\s*0\s*\)/);
+  assert.match(tab, /const\s+consultaDadosAtualRef\s*=\s*useRef\s*\(/);
+  assert.match(tab, /consultaDadosAtualRef\.current\s*=\s*\{[\s\S]*filtroBusca:\s*filtroBusca\.trim\(\)/);
+  assert.match(
+    carregar,
+    /const\s+sequencia\s*=\s*\+\+carregamentoDadosSequenciaRef\.current/,
+  );
+  assert.match(carregar, /const\s+consulta\s*=\s*consultaDadosAtualRef\.current/);
+  assert.match(
+    carregar,
+    /const\s+requisicaoAindaAtual\s*=\s*\(\s*\)\s*=>[\s\S]*sequencia\s*===\s*carregamentoDadosSequenciaRef\.current[\s\S]*consulta\.chave\s*===\s*consultaDadosAtualRef\.current\.chave/,
+    'alem da sequencia, uma mudanca de filtro ainda sem nova request deve invalidar a antiga',
+  );
+  const guardas = [
+    ...carregar.matchAll(/if\s*\(\s*!requisicaoAindaAtual\s*\(\s*\)\s*\)\s*return\s*;/g),
+  ].map((resultado) => resultado.index);
+  const rpcListagem = carregar.indexOf("'listar_evadidos_para_pesquisa_v2'");
+  const setTotal = carregar.indexOf('setTotalRegistros');
+  const setLista = carregar.indexOf('setEvadidos');
+  const rpcStats = carregar.indexOf("'stats_pesquisa_evasao'");
+  const setStats = carregar.indexOf('setStats');
+
+  assert.ok(guardas[0] > rpcListagem, 'falta guarda depois do await da listagem');
+  assert.ok(setTotal > guardas[0] && setTotal < rpcStats);
+  assert.ok(setLista > guardas[0] && setLista < rpcStats);
+  assert.ok(guardas[1] > rpcStats, 'falta guarda depois do await de stats');
+  assert.ok(setStats > guardas[1], 'stats antigas nao podem atualizar a tela');
+  assert.match(
+    carregar,
+    /finally\s*\{\s*if\s*\(\s*requisicaoAindaAtual\s*\(\s*\)\s*\)\s*setLoading\s*\(\s*false\s*\)/,
+    'uma resposta antiga nao pode desligar o loading da consulta atual',
+  );
+  assert.match(carregar, /p_busca:\s*consulta\.filtroBusca\s*\|\|\s*null/);
 });
 
 test('frontend exibe bloqueios, fallback de motivo e correcao governada', () => {
