@@ -12,6 +12,9 @@ const read = (relativePath) => {
 
 const types = read('src/types/supabase.ts');
 const verification = read('scripts/verify-pesquisa-evasao-rls.sql');
+const structuralVerification = read(
+  'scripts/verify-pesquisa-evasao-schema.sql',
+);
 const runbook = read(
   'docs/runbooks/pesquisa-evasao-subprojeto-a-rollout.md',
 );
@@ -66,6 +69,25 @@ test('tipos incluem o contrato local completo da fundacao de evasao', () => {
   assert.match(types, /confirmar_resultado_pesquisa_evasao_envio:/);
 });
 
+test('tipos gerados refletem auditoria, FKs e RPCs reais do schema validado', () => {
+  assert.match(
+    types,
+    /^\s{6}whatsapp_caixas_credenciais_auditoria:\s*\{/m,
+  );
+  for (const foreignKey of [
+    'pesquisa_evasao_assinatura_id_fkey',
+    'pesquisa_evasao_caixa_id_fkey',
+    'pesquisa_evasao_previews_assinatura_id_fkey',
+    'pesquisa_evasao_previews_caixa_id_fkey',
+  ]) {
+    assert.match(types, new RegExp(foreignKey));
+  }
+  assert.match(
+    types,
+    /listar_whatsapp_caixas_administracao:\s*\{\s*Args:\s*never/i,
+  );
+});
+
 test('verificacao SQL e transacional, cobre ACL, RLS e isolamento real', () => {
   assert.ok(verification, 'script de verificacao RLS ausente');
   assert.match(verification, /^\s*begin\s*;/i);
@@ -101,6 +123,49 @@ test('verificacao SQL e transacional, cobre ACL, RLS e isolamento real', () => {
   assert.match(verification, /relatorios[\s\S]*sem[\s_-]*ver/i);
   assert.match(verification, /p_unidade_id[\s\S]*null/i);
   assert.match(verification, /resposta_texto/i);
+});
+
+test('verificador estrutural e transacional e independe de dados nominais', () => {
+  assert.ok(structuralVerification, 'verificador estrutural ausente');
+  assert.match(structuralVerification, /^\s*begin\s*;/i);
+  assert.match(structuralVerification, /\brollback\s*;\s*$/i);
+  assert.doesNotMatch(structuralVerification, /\bcommit\s*;/i);
+
+  for (const token of [
+    'pg_policies',
+    'has_table_privilege',
+    'has_function_privilege',
+    'aclexplode',
+    'pesquisa_evasao_analises',
+    'listar_evadidos_para_pesquisa(uuid,integer,integer,character varying)',
+    'listar_evadidos_para_pesquisa(uuid,integer,integer,character varying,integer,integer)',
+    'uazapi_token',
+    'waha_api_key',
+    'listar_whatsapp_caixas_seguras(uuid,boolean)',
+  ]) {
+    assert.ok(
+      structuralVerification.toLowerCase().includes(token.toLowerCase()),
+      `evidencia estrutural ausente: ${token}`,
+    );
+  }
+
+  for (const nominalToken of [
+    'jessyca@lamusic.com.br',
+    'fabi@gmail.com',
+    'matriz_nominal',
+    'fixture_movimentacao',
+    'set local role authenticated',
+  ]) {
+    assert.doesNotMatch(
+      structuralVerification,
+      new RegExp(nominalToken, 'i'),
+      `verificador estrutural nao pode depender de ${nominalToken}`,
+    );
+  }
+
+  assert.match(verification, /\bmatriz_nominal\b/i);
+  assert.match(verification, /jessyca@lamusic\.com\.br/i);
+  assert.match(verification, /fabi@gmail\.com/i);
 });
 
 test('runbook fixa identidades, seis vinculos e cinco permissoes sem admin', () => {

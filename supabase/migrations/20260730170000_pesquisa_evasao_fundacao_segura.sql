@@ -556,10 +556,20 @@ declare
     '61ebbbd0-a8e8-4e77-99ee-d4ff9bcc6f03',
     '147a6632-fccb-4089-9ae0-13db822d7bf9'
   ]::uuid[];
+  v_tabela_total integer;
   v_total integer;
   v_telefones integer;
   v_telefones_vazios integer;
 begin
+  select count(*)
+  into v_tabela_total
+  from public.pesquisa_evasao;
+
+  if v_tabela_total = 0 then
+    raise notice 'backfill ignorado: pesquisa_evasao vazia';
+    return;
+  end if;
+
   select
     count(*),
     count(

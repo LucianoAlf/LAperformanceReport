@@ -1154,6 +1154,39 @@ contractTest('allowlist legada tem seis UUIDs e backfill falha fechado', () => {
   );
 });
 
+contractTest('backfill vazio pula com NOTICE e banco nao vazio segue fail-closed', () => {
+  const block = sql.match(
+    /do\s+\$backfill_modo_teste\$([\s\S]*?)\$backfill_modo_teste\$\s*;/i,
+  )?.[1] ?? '';
+  assert.ok(block, 'bloco governado do backfill ausente');
+
+  assert.match(block, /\bv_tabela_total\s+integer\b/i);
+  assert.match(
+    block,
+    /select\s+count\s*\(\s*\*\s*\)\s+into\s+v_tabela_total\s+from\s+public\.pesquisa_evasao\s*;/i,
+  );
+
+  const emptySkip = block.match(
+    /if\s+v_tabela_total\s*=\s*0\s+then([\s\S]*?)end\s+if\s*;/i,
+  )?.[1] ?? '';
+  assert.ok(emptySkip, 'skip exclusivo para tabela completamente vazia ausente');
+  assert.match(
+    emptySkip,
+    /raise\s+notice\s+['"]backfill ignorado: pesquisa_evasao vazia['"]/i,
+  );
+  assert.match(emptySkip, /\breturn\s*;/i);
+
+  const skipEnd = block.indexOf(emptySkip) + emptySkip.length;
+  const guardStart = block.search(/\bif\s+cardinality\s*\(\s*v_ids\s*\)\s*<>\s*6/i);
+  assert.ok(
+    guardStart > skipEnd,
+    'qualquer tabela nao vazia precisa chegar ao guard exato de seis registros',
+  );
+  assert.match(block.slice(guardStart), /\bv_total\s*<>\s*6\b/i);
+  assert.match(block.slice(guardStart), /\bv_telefones\s*<>\s*1\b/i);
+  assert.match(block.slice(guardStart), /\bv_telefones_vazios\s*<>\s*0\b/i);
+});
+
 contractTest('testes nao alimentam stats nem escritas derivadas', () => {
   const stats = getFunctionDefinition(
     'stats_pesquisa_evasao',

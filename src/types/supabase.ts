@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -6,10 +6,6 @@
   | { [key: string]: Json | undefined }
   | Json[]
 
-// Base generated read-only from project ouqwbbermlzqqvtqwlul on 2026-07-30.
-// The Pesquisa de Evasao entries include the validated local contracts from
-// migrations 20260730170000 and 20260730173000, which are not deployed yet.
-// Regenerate this file in homologation after applying both reviewed migrations.
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
@@ -23027,6 +23023,334 @@ export type Database = {
         }
         Relationships: []
       }
+      pesquisa_evasao: {
+        Row: {
+          aluno_curso: string | null
+          aluno_id: number | null
+          aluno_nome: string
+          aluno_professor: string | null
+          aluno_telefone: string
+          assinatura_id: string | null
+          assinatura_nome_snapshot: string | null
+          caixa_id: number | null
+          categoria_resposta: string | null
+          created_at: string | null
+          data_evasao: string | null
+          enviado_em: string | null
+          enviado_por: string | null
+          envio_erro_sanitizado: string | null
+          envio_iniciado_em: string | null
+          envio_status: string
+          evasao_id: number | null
+          executado_por_auth_user_id: string | null
+          executado_por_usuario_id: number | null
+          id: string
+          idempotency_key: string | null
+          mensagem_renderizada: string | null
+          mensagem_uazapi_id: string | null
+          modo_teste: boolean
+          motivo_cadastrado: string | null
+          preview_id: string | null
+          primeira_interacao_em: string | null
+          pronta_para_revisao_em: string | null
+          provider_message_id: string | null
+          respondido_em: string | null
+          resposta_audio_url: string | null
+          resposta_status: string
+          resposta_texto: string | null
+          resposta_tipo: string | null
+          sentimento: string | null
+          status: string | null
+          telefone_destino_snapshot: string | null
+          template_id: string | null
+          template_versao: number | null
+          tempo_permanencia_meses: number | null
+          ultima_interacao_em: string | null
+          unidade_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          aluno_curso?: string | null
+          aluno_id?: number | null
+          aluno_nome: string
+          aluno_professor?: string | null
+          aluno_telefone: string
+          assinatura_id?: string | null
+          assinatura_nome_snapshot?: string | null
+          caixa_id?: number | null
+          categoria_resposta?: string | null
+          created_at?: string | null
+          data_evasao?: string | null
+          enviado_em?: string | null
+          enviado_por?: string | null
+          envio_erro_sanitizado?: string | null
+          envio_iniciado_em?: string | null
+          envio_status?: string
+          evasao_id?: number | null
+          executado_por_auth_user_id?: string | null
+          executado_por_usuario_id?: number | null
+          id?: string
+          idempotency_key?: string | null
+          mensagem_renderizada?: string | null
+          mensagem_uazapi_id?: string | null
+          modo_teste?: boolean
+          motivo_cadastrado?: string | null
+          preview_id?: string | null
+          primeira_interacao_em?: string | null
+          pronta_para_revisao_em?: string | null
+          provider_message_id?: string | null
+          respondido_em?: string | null
+          resposta_audio_url?: string | null
+          resposta_status?: string
+          resposta_texto?: string | null
+          resposta_tipo?: string | null
+          sentimento?: string | null
+          status?: string | null
+          telefone_destino_snapshot?: string | null
+          template_id?: string | null
+          template_versao?: number | null
+          tempo_permanencia_meses?: number | null
+          ultima_interacao_em?: string | null
+          unidade_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          aluno_curso?: string | null
+          aluno_id?: number | null
+          aluno_nome?: string
+          aluno_professor?: string | null
+          aluno_telefone?: string
+          assinatura_id?: string | null
+          assinatura_nome_snapshot?: string | null
+          caixa_id?: number | null
+          categoria_resposta?: string | null
+          created_at?: string | null
+          data_evasao?: string | null
+          enviado_em?: string | null
+          enviado_por?: string | null
+          envio_erro_sanitizado?: string | null
+          envio_iniciado_em?: string | null
+          envio_status?: string
+          evasao_id?: number | null
+          executado_por_auth_user_id?: string | null
+          executado_por_usuario_id?: number | null
+          id?: string
+          idempotency_key?: string | null
+          mensagem_renderizada?: string | null
+          mensagem_uazapi_id?: string | null
+          modo_teste?: boolean
+          motivo_cadastrado?: string | null
+          preview_id?: string | null
+          primeira_interacao_em?: string | null
+          pronta_para_revisao_em?: string | null
+          provider_message_id?: string | null
+          respondido_em?: string | null
+          resposta_audio_url?: string | null
+          resposta_status?: string
+          resposta_texto?: string | null
+          resposta_tipo?: string | null
+          sentimento?: string | null
+          status?: string | null
+          telefone_destino_snapshot?: string | null
+          template_id?: string | null
+          template_versao?: number | null
+          tempo_permanencia_meses?: number | null
+          ultima_interacao_em?: string | null
+          unidade_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: false
+            referencedRelation: "alunos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: false
+            referencedRelation: "vw_aluno_frequencia_canonica_v1"
+            referencedColumns: ["aluno_id_canonico"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: false
+            referencedRelation: "vw_aluno_identidade_unidade_canonica"
+            referencedColumns: ["aluno_id_canonico"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: false
+            referencedRelation: "vw_aluno_sucesso_lista"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: false
+            referencedRelation: "vw_alunos_ativos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: false
+            referencedRelation: "vw_alunos_estado_operacional_v131"
+            referencedColumns: ["aluno_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: false
+            referencedRelation: "vw_fabio_carteira_professor"
+            referencedColumns: ["aluno_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: false
+            referencedRelation: "vw_farmer_aniversariantes_hoje"
+            referencedColumns: ["aluno_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: false
+            referencedRelation: "vw_farmer_inadimplentes"
+            referencedColumns: ["aluno_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: false
+            referencedRelation: "vw_farmer_novos_matriculados"
+            referencedColumns: ["aluno_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: false
+            referencedRelation: "vw_farmer_renovacoes_proximas"
+            referencedColumns: ["aluno_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: false
+            referencedRelation: "vw_renovacoes_proximas"
+            referencedColumns: ["aluno_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_assinatura_id_fkey"
+            columns: ["assinatura_id"]
+            isOneToOne: false
+            referencedRelation: "pesquisa_evasao_assinaturas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_caixa_id_fkey"
+            columns: ["caixa_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_caixas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_evasao_id_fkey"
+            columns: ["evasao_id"]
+            isOneToOne: false
+            referencedRelation: "movimentacoes_admin"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_executado_por_usuario_id_fkey"
+            columns: ["executado_por_usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_idempotency_key_fkey"
+            columns: ["idempotency_key"]
+            isOneToOne: false
+            referencedRelation: "pesquisa_evasao_previews"
+            referencedColumns: ["idempotency_key"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_preview_id_fkey"
+            columns: ["preview_id"]
+            isOneToOne: false
+            referencedRelation: "pesquisa_evasao_previews"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_preview_idempotency_fkey"
+            columns: ["preview_id", "idempotency_key"]
+            isOneToOne: false
+            referencedRelation: "pesquisa_evasao_previews"
+            referencedColumns: ["id", "idempotency_key"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "pesquisa_evasao_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "unidades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_unidade"
+            referencedColumns: ["unidade_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "vw_farmer_resumo_alertas"
+            referencedColumns: ["unidade_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "vw_kpis_comercial_historico"
+            referencedColumns: ["unidade_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "vw_kpis_comercial_mensal"
+            referencedColumns: ["unidade_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "vw_kpis_gestao_mensal"
+            referencedColumns: ["unidade_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "vw_kpis_retencao_mensal"
+            referencedColumns: ["unidade_id"]
+          },
+        ]
+      }
       pesquisa_evasao_analises: {
         Row: {
           criado_em: string
@@ -23297,43 +23621,142 @@ export type Database = {
           unidade_id?: string
           usuario_id?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pesquisa_evasao_previews_assinatura_id_fkey"
+            columns: ["assinatura_id"]
+            isOneToOne: false
+            referencedRelation: "pesquisa_evasao_assinaturas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_previews_caixa_id_fkey"
+            columns: ["caixa_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_caixas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_previews_evasao_id_fkey"
+            columns: ["evasao_id"]
+            isOneToOne: false
+            referencedRelation: "movimentacoes_admin"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_previews_pesquisa_id_fkey"
+            columns: ["pesquisa_evasao_id"]
+            isOneToOne: false
+            referencedRelation: "pesquisa_evasao"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_previews_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "pesquisa_evasao_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_previews_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "unidades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_previews_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "vw_dashboard_unidade"
+            referencedColumns: ["unidade_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_previews_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "vw_farmer_resumo_alertas"
+            referencedColumns: ["unidade_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_previews_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "vw_kpis_comercial_historico"
+            referencedColumns: ["unidade_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_previews_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "vw_kpis_comercial_mensal"
+            referencedColumns: ["unidade_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_previews_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "vw_kpis_gestao_mensal"
+            referencedColumns: ["unidade_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_previews_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "vw_kpis_retencao_mensal"
+            referencedColumns: ["unidade_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_previews_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pesquisa_evasao_publicos_internos: {
         Row: {
-          atualizado_em: string
+          aluno_id: number
           ativo: boolean
+          atualizado_em: string
           audit_metadata: Json
           confirmado_em: string
           confirmado_por_usuario_id: number
           criado_em: string
           fonte: string
-          aluno_id: number
           tipo: string
         }
         Insert: {
-          atualizado_em?: string
+          aluno_id: number
           ativo?: boolean
+          atualizado_em?: string
           audit_metadata?: Json
           confirmado_em: string
           confirmado_por_usuario_id: number
           criado_em?: string
           fonte: string
-          aluno_id: number
           tipo: string
         }
         Update: {
-          atualizado_em?: string
+          aluno_id?: number
           ativo?: boolean
+          atualizado_em?: string
           audit_metadata?: Json
           confirmado_em?: string
           confirmado_por_usuario_id?: number
           criado_em?: string
           fonte?: string
-          aluno_id?: number
           tipo?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "pesquisa_evasao_publicos_interno_confirmado_por_usuario_id_fkey"
+            columns: ["confirmado_por_usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "pesquisa_evasao_publicos_internos_aluno_id_fkey"
             columns: ["aluno_id"]
@@ -23342,11 +23765,81 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "pesquisa_evasao_publicos_internos_confirmado_por_usuario_id_fkey"
-            columns: ["confirmado_por_usuario_id"]
-            isOneToOne: false
-            referencedRelation: "usuarios"
+            foreignKeyName: "pesquisa_evasao_publicos_internos_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: true
+            referencedRelation: "vw_aluno_frequencia_canonica_v1"
+            referencedColumns: ["aluno_id_canonico"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_publicos_internos_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: true
+            referencedRelation: "vw_aluno_identidade_unidade_canonica"
+            referencedColumns: ["aluno_id_canonico"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_publicos_internos_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: true
+            referencedRelation: "vw_aluno_sucesso_lista"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_publicos_internos_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: true
+            referencedRelation: "vw_alunos_ativos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_publicos_internos_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: true
+            referencedRelation: "vw_alunos_estado_operacional_v131"
+            referencedColumns: ["aluno_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_publicos_internos_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: true
+            referencedRelation: "vw_fabio_carteira_professor"
+            referencedColumns: ["aluno_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_publicos_internos_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: true
+            referencedRelation: "vw_farmer_aniversariantes_hoje"
+            referencedColumns: ["aluno_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_publicos_internos_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: true
+            referencedRelation: "vw_farmer_inadimplentes"
+            referencedColumns: ["aluno_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_publicos_internos_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: true
+            referencedRelation: "vw_farmer_novos_matriculados"
+            referencedColumns: ["aluno_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_publicos_internos_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: true
+            referencedRelation: "vw_farmer_renovacoes_proximas"
+            referencedColumns: ["aluno_id"]
+          },
+          {
+            foreignKeyName: "pesquisa_evasao_publicos_internos_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: true
+            referencedRelation: "vw_renovacoes_proximas"
+            referencedColumns: ["aluno_id"]
           },
         ]
       }
@@ -23432,285 +23925,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "pesquisa_evasao_mensagens"
             referencedColumns: ["id"]
-          },
-        ]
-      }
-      pesquisa_evasao: {
-        Row: {
-          aluno_curso: string | null
-          aluno_id: number | null
-          aluno_nome: string
-          aluno_professor: string | null
-          aluno_telefone: string
-          assinatura_id: string | null
-          assinatura_nome_snapshot: string | null
-          caixa_id: number | null
-          categoria_resposta: string | null
-          created_at: string | null
-          data_evasao: string | null
-          enviado_em: string | null
-          enviado_por: string | null
-          envio_erro_sanitizado: string | null
-          envio_iniciado_em: string | null
-          envio_status: string
-          evasao_id: number | null
-          executado_por_auth_user_id: string | null
-          executado_por_usuario_id: number | null
-          id: string
-          idempotency_key: string | null
-          mensagem_renderizada: string | null
-          mensagem_uazapi_id: string | null
-          modo_teste: boolean
-          motivo_cadastrado: string | null
-          primeira_interacao_em: string | null
-          pronta_para_revisao_em: string | null
-          preview_id: string | null
-          provider_message_id: string | null
-          respondido_em: string | null
-          resposta_audio_url: string | null
-          resposta_status: string
-          resposta_texto: string | null
-          resposta_tipo: string | null
-          sentimento: string | null
-          status: string | null
-          telefone_destino_snapshot: string | null
-          template_id: string | null
-          template_versao: number | null
-          tempo_permanencia_meses: number | null
-          unidade_id: string
-          ultima_interacao_em: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          aluno_curso?: string | null
-          aluno_id?: number | null
-          aluno_nome: string
-          aluno_professor?: string | null
-          aluno_telefone: string
-          assinatura_id?: string | null
-          assinatura_nome_snapshot?: string | null
-          caixa_id?: number | null
-          categoria_resposta?: string | null
-          created_at?: string | null
-          data_evasao?: string | null
-          enviado_em?: string | null
-          enviado_por?: string | null
-          envio_erro_sanitizado?: string | null
-          envio_iniciado_em?: string | null
-          envio_status?: string
-          evasao_id?: number | null
-          executado_por_auth_user_id?: string | null
-          executado_por_usuario_id?: number | null
-          id?: string
-          idempotency_key?: string | null
-          mensagem_renderizada?: string | null
-          mensagem_uazapi_id?: string | null
-          modo_teste?: boolean
-          motivo_cadastrado?: string | null
-          primeira_interacao_em?: string | null
-          pronta_para_revisao_em?: string | null
-          preview_id?: string | null
-          provider_message_id?: string | null
-          respondido_em?: string | null
-          resposta_audio_url?: string | null
-          resposta_status?: string
-          resposta_texto?: string | null
-          resposta_tipo?: string | null
-          sentimento?: string | null
-          status?: string | null
-          telefone_destino_snapshot?: string | null
-          template_id?: string | null
-          template_versao?: number | null
-          tempo_permanencia_meses?: number | null
-          unidade_id: string
-          ultima_interacao_em?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          aluno_curso?: string | null
-          aluno_id?: number | null
-          aluno_nome?: string
-          aluno_professor?: string | null
-          aluno_telefone?: string
-          assinatura_id?: string | null
-          assinatura_nome_snapshot?: string | null
-          caixa_id?: number | null
-          categoria_resposta?: string | null
-          created_at?: string | null
-          data_evasao?: string | null
-          enviado_em?: string | null
-          enviado_por?: string | null
-          envio_erro_sanitizado?: string | null
-          envio_iniciado_em?: string | null
-          envio_status?: string
-          evasao_id?: number | null
-          executado_por_auth_user_id?: string | null
-          executado_por_usuario_id?: number | null
-          id?: string
-          idempotency_key?: string | null
-          mensagem_renderizada?: string | null
-          mensagem_uazapi_id?: string | null
-          modo_teste?: boolean
-          motivo_cadastrado?: string | null
-          primeira_interacao_em?: string | null
-          pronta_para_revisao_em?: string | null
-          preview_id?: string | null
-          provider_message_id?: string | null
-          respondido_em?: string | null
-          resposta_audio_url?: string | null
-          resposta_status?: string
-          resposta_texto?: string | null
-          resposta_tipo?: string | null
-          sentimento?: string | null
-          status?: string | null
-          telefone_destino_snapshot?: string | null
-          template_id?: string | null
-          template_versao?: number | null
-          tempo_permanencia_meses?: number | null
-          unidade_id?: string
-          ultima_interacao_em?: string | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
-            columns: ["aluno_id"]
-            isOneToOne: false
-            referencedRelation: "alunos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
-            columns: ["aluno_id"]
-            isOneToOne: false
-            referencedRelation: "vw_aluno_frequencia_canonica_v1"
-            referencedColumns: ["aluno_id_canonico"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
-            columns: ["aluno_id"]
-            isOneToOne: false
-            referencedRelation: "vw_aluno_identidade_unidade_canonica"
-            referencedColumns: ["aluno_id_canonico"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
-            columns: ["aluno_id"]
-            isOneToOne: false
-            referencedRelation: "vw_aluno_sucesso_lista"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
-            columns: ["aluno_id"]
-            isOneToOne: false
-            referencedRelation: "vw_alunos_ativos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
-            columns: ["aluno_id"]
-            isOneToOne: false
-            referencedRelation: "vw_alunos_estado_operacional_v131"
-            referencedColumns: ["aluno_id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
-            columns: ["aluno_id"]
-            isOneToOne: false
-            referencedRelation: "vw_fabio_carteira_professor"
-            referencedColumns: ["aluno_id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
-            columns: ["aluno_id"]
-            isOneToOne: false
-            referencedRelation: "vw_farmer_aniversariantes_hoje"
-            referencedColumns: ["aluno_id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
-            columns: ["aluno_id"]
-            isOneToOne: false
-            referencedRelation: "vw_farmer_inadimplentes"
-            referencedColumns: ["aluno_id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
-            columns: ["aluno_id"]
-            isOneToOne: false
-            referencedRelation: "vw_farmer_novos_matriculados"
-            referencedColumns: ["aluno_id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
-            columns: ["aluno_id"]
-            isOneToOne: false
-            referencedRelation: "vw_farmer_renovacoes_proximas"
-            referencedColumns: ["aluno_id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_aluno_id_fkey"
-            columns: ["aluno_id"]
-            isOneToOne: false
-            referencedRelation: "vw_renovacoes_proximas"
-            referencedColumns: ["aluno_id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_evasao_id_fkey"
-            columns: ["evasao_id"]
-            isOneToOne: true
-            referencedRelation: "movimentacoes_admin"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_unidade_id_fkey"
-            columns: ["unidade_id"]
-            isOneToOne: false
-            referencedRelation: "unidades"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_unidade_id_fkey"
-            columns: ["unidade_id"]
-            isOneToOne: false
-            referencedRelation: "vw_dashboard_unidade"
-            referencedColumns: ["unidade_id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_unidade_id_fkey"
-            columns: ["unidade_id"]
-            isOneToOne: false
-            referencedRelation: "vw_farmer_resumo_alertas"
-            referencedColumns: ["unidade_id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_unidade_id_fkey"
-            columns: ["unidade_id"]
-            isOneToOne: false
-            referencedRelation: "vw_kpis_comercial_historico"
-            referencedColumns: ["unidade_id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_unidade_id_fkey"
-            columns: ["unidade_id"]
-            isOneToOne: false
-            referencedRelation: "vw_kpis_comercial_mensal"
-            referencedColumns: ["unidade_id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_unidade_id_fkey"
-            columns: ["unidade_id"]
-            isOneToOne: false
-            referencedRelation: "vw_kpis_gestao_mensal"
-            referencedColumns: ["unidade_id"]
-          },
-          {
-            foreignKeyName: "pesquisa_evasao_unidade_id_fkey"
-            columns: ["unidade_id"]
-            isOneToOne: false
-            referencedRelation: "vw_kpis_retencao_mensal"
-            referencedColumns: ["unidade_id"]
           },
         ]
       }
@@ -33385,6 +33599,38 @@ export type Database = {
           },
         ]
       }
+      whatsapp_caixas_credenciais_auditoria: {
+        Row: {
+          auth_user_id: string
+          caixa_id: number
+          credencial: string
+          id: number
+          rotacionada_em: string
+        }
+        Insert: {
+          auth_user_id: string
+          caixa_id: number
+          credencial: string
+          id?: never
+          rotacionada_em?: string
+        }
+        Update: {
+          auth_user_id?: string
+          caixa_id?: number
+          credencial?: string
+          id?: never
+          rotacionada_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_caixas_credenciais_auditoria_caixa_id_fkey"
+            columns: ["caixa_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_caixas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_config: {
         Row: {
           ativo: boolean | null
@@ -41763,221 +42009,6 @@ export type Database = {
       }
     }
     Functions: {
-      claim_pesquisa_evasao_preview: {
-        Args: { p_auth_user_id: string; p_preview_id: string }
-        Returns: {
-          aluno_curso: string
-          aluno_id: number
-          aluno_nome: string
-          aluno_professor: string
-          assinatura_id: string
-          assinatura_nome: string
-          caixa_id: number
-          data_evasao: string
-          destinatario_tipo: string
-          deve_despachar: boolean
-          envio_status: string
-          evasao_id: number
-          executado_por_auth_user_id: string
-          executado_por_usuario_id: number
-          idempotency_key: string
-          mensagem_renderizada: string
-          modo_teste: boolean
-          motivo_cadastrado: string
-          pesquisa_id: string
-          preview_id: string
-          provider_message_id: string
-          telefone_destino: string
-          template_id: string
-          template_versao: number
-          tempo_permanencia_meses: number
-          unidade_id: string
-        }[]
-      }
-      confirmar_resultado_pesquisa_evasao_envio: {
-        Args: {
-          p_auth_user_id: string
-          p_idempotency_key: string
-          p_pesquisa_id: string
-          p_preview_id: string
-          p_provider_message_id: string
-        }
-        Returns: boolean
-      }
-      fn_usuario_atual_tem_permissao_estrita: {
-        Args: { p_codigo_permissao: string; p_unidade_id: string }
-        Returns: boolean
-      }
-      excluir_whatsapp_caixa_admin: {
-        Args: { p_caixa_id: number }
-        Returns: boolean
-      }
-      listar_whatsapp_caixas_administracao: {
-        Args: Record<PropertyKey, never>
-        Returns: {
-          ativo: boolean
-          created_at: string | null
-          departamento: string
-          funcao: string
-          id: number
-          nome: string
-          numero: string | null
-          provedor: string
-          uazapi_token_configurado: boolean
-          uazapi_url: string
-          unidade_id: string | null
-          updated_at: string | null
-          waha_api_key_configurada: boolean
-          waha_session: string | null
-          waha_url: string | null
-          webhook_url: string | null
-        }[]
-      }
-      listar_whatsapp_caixas_seguras: {
-        Args: {
-          p_incluir_globais?: boolean
-          p_unidade_id?: string | null
-        }
-        Returns: {
-          ativo: boolean
-          departamento: string
-          funcao: string
-          id: number
-          nome: string
-          numero_mascarado: string | null
-          provedor: string
-          unidade_id: string | null
-        }[]
-      }
-      salvar_whatsapp_caixa_admin: {
-        Args: {
-          p_ativo: boolean
-          p_departamento: string
-          p_funcao: string
-          p_id: number | null
-          p_nome: string
-          p_numero: string | null
-          p_provedor: string
-          p_uazapi_token: string | null
-          p_uazapi_url: string | null
-          p_unidade_id: string | null
-          p_waha_api_key: string | null
-          p_waha_session: string | null
-          p_waha_url: string | null
-          p_webhook_url: string | null
-        }
-        Returns: number
-      }
-      listar_evadidos_para_pesquisa_v2: {
-        Args: {
-          p_ano: number
-          p_busca: string
-          p_limite: number
-          p_mes: number
-          p_offset: number
-          p_status: string
-          p_unidade_id: string
-        }
-        Returns: {
-          aluno_id: number
-          bloqueio_codigo: string
-          curso: string
-          data_evasao: string
-          elegibilidade_regra: string
-          elegivel_envio: boolean
-          evasao_id: number
-          is_menor: boolean
-          motivo_catalogado: string
-          motivo_legado: string
-          nome: string
-          possui_historico_teste: boolean
-          professor: string
-          publico_tipo: string
-          quantidade_testes: number
-          pesquisa_producao_id: string
-          pesquisa_producao_status: string
-          respondido_producao_em: string
-          responsavel_nome: string
-          resposta_producao_audio_url: string
-          resposta_producao_texto: string
-          resposta_producao_tipo: string
-          telefone: string
-          tempo_meses: number
-          total_count: number
-          ultimo_teste_em: string
-        }[]
-      }
-      listar_pesquisas_evasao_teste_v1: {
-        Args: { p_evasao_id: number }
-        Returns: {
-          enviado_em: string
-          envio_status: string
-          modo_teste: boolean
-          pesquisa_id: string
-          respondido_em: string
-          resposta_status: string
-        }[]
-      }
-      pesquisa_evasao_claim_snapshot: {
-        Args: {
-          p_deve_despachar: boolean
-          p_pesquisa_id: string
-          p_preview_id: string
-        }
-        Returns: {
-          aluno_curso: string
-          aluno_id: number
-          aluno_nome: string
-          aluno_professor: string
-          assinatura_id: string
-          assinatura_nome: string
-          caixa_id: number
-          data_evasao: string
-          destinatario_tipo: string
-          deve_despachar: boolean
-          envio_status: string
-          evasao_id: number
-          executado_por_auth_user_id: string
-          executado_por_usuario_id: number
-          idempotency_key: string
-          mensagem_renderizada: string
-          modo_teste: boolean
-          motivo_cadastrado: string
-          pesquisa_id: string
-          preview_id: string
-          provider_message_id: string
-          telefone_destino: string
-          template_id: string
-          template_versao: number
-          tempo_permanencia_meses: number
-          unidade_id: string
-        }[]
-      }
-      registrar_resultado_pesquisa_evasao_envio: {
-        Args: {
-          p_auth_user_id: string
-          p_erro_sanitizado: string
-          p_idempotency_key: string
-          p_pesquisa_id: string
-          p_preview_id: string
-          p_provider_message_id: string
-          p_resultado: string
-        }
-        Returns: {
-          enviado_em: string
-          envio_status: string
-          pesquisa_id: string
-          provider_message_id: string
-        }[]
-      }
-      usuario_tem_permissao_estrita: {
-        Args: {
-          p_codigo_permissao: string
-          p_unidade_id: string
-          p_usuario_id: number
-        }
-        Returns: boolean
-      }
       _normalizar_forma_pagamento_conciliacao: {
         Args: { p_text: string }
         Returns: string
@@ -42519,7 +42550,48 @@ export type Database = {
         Args: { p_competencia: string; p_fonte?: string }
         Returns: Json
       }
+      claim_pesquisa_evasao_preview: {
+        Args: { p_auth_user_id: string; p_preview_id: string }
+        Returns: {
+          aluno_curso: string
+          aluno_id: number
+          aluno_nome: string
+          aluno_professor: string
+          assinatura_id: string
+          assinatura_nome: string
+          caixa_id: number
+          data_evasao: string
+          destinatario_tipo: string
+          deve_despachar: boolean
+          envio_status: string
+          evasao_id: number
+          executado_por_auth_user_id: string
+          executado_por_usuario_id: number
+          idempotency_key: string
+          mensagem_renderizada: string
+          modo_teste: boolean
+          motivo_cadastrado: string
+          pesquisa_id: string
+          preview_id: string
+          provider_message_id: string
+          telefone_destino: string
+          template_id: string
+          template_versao: number
+          tempo_permanencia_meses: number
+          unidade_id: string
+        }[]
+      }
       cleanup_bi_conversations: { Args: never; Returns: undefined }
+      confirmar_resultado_pesquisa_evasao_envio: {
+        Args: {
+          p_auth_user_id: string
+          p_idempotency_key: string
+          p_pesquisa_id: string
+          p_preview_id: string
+          p_provider_message_id: string
+        }
+        Returns: boolean
+      }
       consolidar_dados_comerciais_mes: {
         Args: { p_ano: number; p_mes: number }
         Returns: string
@@ -42628,6 +42700,10 @@ export type Database = {
       estornar_venda: {
         Args: { p_motivo: string; p_venda_id: number; p_via_audit: string }
         Returns: Json
+      }
+      excluir_whatsapp_caixa_admin: {
+        Args: { p_caixa_id: number }
+        Returns: boolean
       }
       exec_readonly_sql: { Args: { query: string }; Returns: Json }
       executar_query_auditoria: { Args: { p_sql: string }; Returns: Json[] }
@@ -43041,6 +43117,10 @@ export type Database = {
       }
       fn_usuario_atual_tem_permissao: {
         Args: { p_codigo_permissao: string; p_unidade_id?: string }
+        Returns: boolean
+      }
+      fn_usuario_atual_tem_permissao_estrita: {
+        Args: { p_codigo_permissao: string; p_unidade_id: string }
         Returns: boolean
       }
       get_alunos_ativos_atuais_canonicos: {
@@ -45404,6 +45484,45 @@ export type Database = {
               tempo_meses: number
             }[]
           }
+      listar_evadidos_para_pesquisa_v2: {
+        Args: {
+          p_ano: number
+          p_busca: string
+          p_limite: number
+          p_mes: number
+          p_offset: number
+          p_status: string
+          p_unidade_id: string
+        }
+        Returns: {
+          aluno_id: number
+          bloqueio_codigo: string
+          curso: string
+          data_evasao: string
+          elegibilidade_regra: string
+          elegivel_envio: boolean
+          evasao_id: number
+          is_menor: boolean
+          motivo_catalogado: string
+          motivo_legado: string
+          nome: string
+          pesquisa_producao_id: string
+          pesquisa_producao_status: string
+          possui_historico_teste: boolean
+          professor: string
+          publico_tipo: string
+          quantidade_testes: number
+          respondido_producao_em: string
+          responsavel_nome: string
+          resposta_producao_audio_url: string
+          resposta_producao_texto: string
+          resposta_producao_tipo: string
+          telefone: string
+          tempo_meses: number
+          total_count: number
+          ultimo_teste_em: string
+        }[]
+      }
       listar_eventos_staging_particao_professor_v1: {
         Args: {
           p_data_fim: string
@@ -45437,6 +45556,51 @@ export type Database = {
         Args: never
         Returns: {
           source_id: string
+        }[]
+      }
+      listar_pesquisas_evasao_teste_v1: {
+        Args: { p_evasao_id: number }
+        Returns: {
+          enviado_em: string
+          envio_status: string
+          modo_teste: boolean
+          pesquisa_id: string
+          respondido_em: string
+          resposta_status: string
+        }[]
+      }
+      listar_whatsapp_caixas_administracao: {
+        Args: never
+        Returns: {
+          ativo: boolean
+          created_at: string
+          departamento: string
+          funcao: string
+          id: number
+          nome: string
+          numero: string
+          provedor: string
+          uazapi_token_configurado: boolean
+          uazapi_url: string
+          unidade_id: string
+          updated_at: string
+          waha_api_key_configurada: boolean
+          waha_session: string
+          waha_url: string
+          webhook_url: string
+        }[]
+      }
+      listar_whatsapp_caixas_seguras: {
+        Args: { p_incluir_globais?: boolean; p_unidade_id?: string }
+        Returns: {
+          ativo: boolean
+          departamento: string
+          funcao: string
+          id: number
+          nome: string
+          numero_mascarado: string
+          provedor: string
+          unidade_id: string
         }[]
       }
       log_competencia_bloqueio: {
@@ -45720,6 +45884,41 @@ export type Database = {
         Args: { p_professor_id: number }
         Returns: boolean
       }
+      pesquisa_evasao_claim_snapshot: {
+        Args: {
+          p_deve_despachar: boolean
+          p_pesquisa_id: string
+          p_preview_id: string
+        }
+        Returns: {
+          aluno_curso: string
+          aluno_id: number
+          aluno_nome: string
+          aluno_professor: string
+          assinatura_id: string
+          assinatura_nome: string
+          caixa_id: number
+          data_evasao: string
+          destinatario_tipo: string
+          deve_despachar: boolean
+          envio_status: string
+          evasao_id: number
+          executado_por_auth_user_id: string
+          executado_por_usuario_id: number
+          idempotency_key: string
+          mensagem_renderizada: string
+          modo_teste: boolean
+          motivo_cadastrado: string
+          pesquisa_id: string
+          preview_id: string
+          provider_message_id: string
+          telefone_destino: string
+          template_id: string
+          template_versao: number
+          tempo_permanencia_meses: number
+          unidade_id: string
+        }[]
+      }
       pode_enviar_pesquisa_evasao: {
         Args: { p_evasao_id: number }
         Returns: boolean
@@ -45963,6 +46162,23 @@ export type Database = {
         }
         Returns: string
       }
+      registrar_resultado_pesquisa_evasao_envio: {
+        Args: {
+          p_auth_user_id: string
+          p_erro_sanitizado: string
+          p_idempotency_key: string
+          p_pesquisa_id: string
+          p_preview_id: string
+          p_provider_message_id: string
+          p_resultado: string
+        }
+        Returns: {
+          enviado_em: string
+          envio_status: string
+          pesquisa_id: string
+          provider_message_id: string
+        }[]
+      }
       registrar_transicao_professor_v3: {
         Args: { p_contexto: Json }
         Returns: Json
@@ -46114,6 +46330,25 @@ export type Database = {
           p_professor_id: number
         }
         Returns: Json
+      }
+      salvar_whatsapp_caixa_admin: {
+        Args: {
+          p_ativo: boolean
+          p_departamento: string
+          p_funcao: string
+          p_id: number
+          p_nome: string
+          p_numero: string
+          p_provedor: string
+          p_uazapi_token: string
+          p_uazapi_url: string
+          p_unidade_id: string
+          p_waha_api_key: string
+          p_waha_session: string
+          p_waha_url: string
+          p_webhook_url: string
+        }
+        Returns: number
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
@@ -46368,6 +46603,14 @@ export type Database = {
         Args: {
           p_codigo_permissao: string
           p_unidade_id?: string
+          p_usuario_id: number
+        }
+        Returns: boolean
+      }
+      usuario_tem_permissao_estrita: {
+        Args: {
+          p_codigo_permissao: string
+          p_unidade_id: string
           p_usuario_id: number
         }
         Returns: boolean

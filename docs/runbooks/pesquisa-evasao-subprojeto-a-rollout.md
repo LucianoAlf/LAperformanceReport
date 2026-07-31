@@ -2,8 +2,8 @@
 
 Data-base: 2026-07-31
 
-Estado: Plano A e hardening local de `whatsapp_caixas` concluídos; homologação
-bloqueada por drift estrutural da branch; produção não executada
+Estado: Plano A, hardening local de `whatsapp_caixas` e ensaio DDL descartável
+concluídos; homologação operacional pendente; produção não executada
 
 Projeto de produção confirmado somente para leitura: `ouqwbbermlzqqvtqwlul`
 
@@ -77,6 +77,81 @@ pedido e o método de bootstrap aprovado:
 Nenhuma branch ou projeto novo foi criado e nenhum custo novo foi iniciado.
 Antes de seguir, registrar uma destas autorizações: tentativa controlada de
 branch com o replay nativo, ou projeto separado com restauração `schema-only`.
+
+### Decisão superveniente — ensaio DDL em projeto descartável
+
+O ambiente permanente `homolog-limpo` foi cancelado. Foi autorizado um projeto Supabase descartável,
+separado e sem dados reais, com a finalidade exclusiva de
+provar que as migrations `20260730170000`, `20260730173000` e
+`20260730180100` aplicam limpo contra o schema real de produção.
+
+O ensaio deve usar `pg_dump --schema-only` de produção, que permanece somente
+leitura. Antes do restore, criar sem login e sem senha os roles estruturais
+`fabio_agent`, `lia_acesso_restrito`, `maria_lareport_rpc`,
+`mila_acesso_restrito`, `ml_jobs` e `sol_acesso_restrito`, e habilitar as
+mesmas extensões nos mesmos schemas: `pg_cron` em `pg_catalog`, `pg_net`,
+`pg_trgm` e `unaccent` em `public`, `pgcrypto`, `uuid-ossp` e
+`pg_stat_statements` em `extensions`, `supabase_vault` em `vault`, além de
+`plpgsql`.
+
+Depois do restore, marcar o histórico como aplicado por `migration repair`,
+aplicar somente as três migrations novas, executar
+`scripts/verify-pesquisa-evasao-schema.sql` e regenerar os tipos para conferir
+o diff. O verificador `scripts/verify-pesquisa-evasao-rls.sql` fica preservado
+para a homologação operacional posterior, pois depende de identidades e dados
+nominais.
+
+Não copiar dados de aluno, movimentações, caixas de WhatsApp ou Edge Functions;
+o projeto deve permanecer sem segredos. O dump deve ser inspecionado e saneado antes do restore. Registrar o
+project ref, os resultados e a evidência de destruição; o projeto precisa ser
+derrubado ao final mesmo se o ensaio falhar. A `p01c-staging` antiga permanece
+intocada.
+
+#### Resultado do ensaio descartável de 31/07/2026
+
+Ensaio concluído com sucesso no projeto `ddl-evasao-2396d7`, project ref
+`vnuzjephkwgcyvioiele`, região `sa-east-1`, tamanho `micro`. O projeto foi
+apagado ao final e a listagem posterior confirmou zero projetos remanescentes
+com nome `ddl-evasao-*`.
+
+Evidências do bootstrap:
+
+- dump `public` somente-schema extraído de `ouqwbbermlzqqvtqwlul`, sem qualquer
+  escrita em produção: 3.103.190 bytes, SHA-256
+  `72BDDB92E9768FD19AFFC4528BFFE0300D477D69E962B5F986BB05EB5FF99EEB`;
+- Gitleaks `8.30.1` examinou o dump original e o saneado e não encontrou segredo;
+- três URLs de saída embutidas foram substituídas por
+  `https://disabled.invalid/homolog-ddl`; o artefato saneado ficou sem project
+  ref de produção, sem URL externa ativa, sem `COPY` e sem `INSERT` fora de
+  corpos de função. SHA-256 saneado:
+  `35F9A6CB0BFCA019730F86936EE16743272E5B548640A602CE5E9BFC087A75FB`;
+- os seis roles estruturais foram criados sem login e sem senha;
+- as nove extensões ficaram nos mesmos schemas e versões de produção. Projetos
+  novos trazem `pg_net 0.20.4`; o ensaio precisou recriá-la explicitamente como
+  `0.19.5` antes do restore para reproduzir produção;
+- o restore terminou limpo e as contagens de `alunos`, `usuarios`,
+  `movimentacoes_admin`, `pesquisa_evasao` e `whatsapp_caixas` foram
+  `0 | 0 | 0 | 0 | 0`;
+- 1.132 versões remotas, de `20260106025222` a `20260730161312`, foram marcadas
+  como aplicadas por `migration repair`, usando placeholders vazios somente
+  para satisfazer o contrato do CLI; nenhuma migration histórica foi executada;
+- `20260730170000`, `20260730173000` e `20260730180100` aplicaram limpo;
+- o log de `20260730170000` contém o `NOTICE` exato
+  `backfill ignorado: pesquisa_evasao vazia`;
+- `scripts/verify-pesquisa-evasao-schema.sql` passou dentro de transação com
+  `ROLLBACK`;
+- os tipos gerados contêm todos os contratos do domínio. O arquivo bruto do
+  projeto descartável diferiu por 782 adições e 511 remoções, incluindo drift de
+  plataforma (`PostgREST 14.15` e `graphql_public`). Para não importar esse
+  drift, `src/types/supabase.ts` preserva a base `public` regenerada de produção
+  (`PostgREST 14.1`) e recebeu somente o schema `public` validado no ensaio. O
+  resultado inclui a tabela `whatsapp_caixas_credenciais_auditoria`, as FKs reais
+  e as assinaturas RPC geradas.
+
+Houve ciclos preparatórios abortados antes de completar o ensaio por tratamento
+de `stderr`, latência do pooler e pré-condições do CLI. Todos executaram cleanup;
+a conferência final encontrou zero projetos descartáveis remanescentes. A
+`p01c-staging` permaneceu no mesmo estado e não foi usada no ensaio.
 
 ### Inventário da `p01c-staging` antes de eventual remoção
 
@@ -597,6 +672,29 @@ Comprovar:
 - `service_role` continua operando;
 - `pesquisa_evasao_publicos_internos` bloqueia somente IDs confirmados;
 - os seis registros legados permanecem `modo_teste = true`.
+
+Após aplicar em produção, no rollout autorizado, conferir explicitamente que os
+seis registros legados foram encontrados e classificados como teste. Esse
+postflight amarra o `NOTICE` do caminho de tabela vazia à prova de que produção
+não pulou o backfill indevidamente:
+
+```sql
+select
+  count(*) as total_legado,
+  count(*) filter (where modo_teste = true) as total_modo_teste
+from public.pesquisa_evasao
+where id in (
+  '5edc499f-4a91-4ebb-a291-0f052bc16351',
+  '416624a9-2d74-4c26-a083-c6aadba21bf2',
+  '718fa72e-ca51-4995-960f-575bb00c2b0e',
+  '1b918f39-c528-431d-9d7d-3d9160982e6a',
+  '61ebbbd0-a8e8-4e77-99ee-d4ff9bcc6f03',
+  '147a6632-fccb-4089-9ae0-13db822d7bf9'
+);
+```
+
+Resultado obrigatório: `total_legado = 6` e `total_modo_teste = 6`. Qualquer
+outro resultado interrompe o rollout antes de indicadores ou uso operacional.
 
 Rodar a verificação dentro de uma sessão PostgreSQL de homologação:
 
