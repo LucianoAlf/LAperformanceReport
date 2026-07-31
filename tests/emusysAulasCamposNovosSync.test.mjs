@@ -61,14 +61,17 @@ test('parser de data preserva hora local BRT com offset explicito', () => {
 });
 
 test('sync de presenca oferece backfill de metadados em lote sem reconciliar alunos', () => {
-  assert.match(syncPresenca, /let modo:\s*'presenca'\s*\|\s*'agenda'\s*\|\s*'metadados'/);
-  assert.match(syncPresenca, /body\.modo === 'metadados'/);
+  assert.match(syncPresenca, /let modo:\s*ModoSyncPresenca\s*=\s*'presenca'/);
+  assert.match(syncPresenca, /resolverSolicitacaoSyncPresenca\(/);
   assert.match(syncPresenca, /sincronizarMetadadosAulas\(/);
   assert.match(syncPresenca, /if \(modo === 'metadados'\)[\s\S]*sincronizarMetadadosAulas/);
 });
 
 test('sync leve de metadados cobre ontem e os proximos 35 dias', () => {
-  assert.match(syncPresenca, /Math\.min\(Math\.max\(body\.dias_futuros \|\| 14, 1\), 35\)/);
+  assert.match(
+    syncPresenca,
+    /Math\.min\(\s*Math\.max\(bodyRecebido\.dias_futuros \|\| 14, 1\),\s*35,\s*\)/,
+  );
   assert.match(
     syncPresenca,
     /if \(modo === 'metadados'\)[\s\S]*for \(let d = dias - 1; d >= 0; d--\)[\s\S]*for \(let d = 1; d <= diasFuturos; d\+\+\)/,
