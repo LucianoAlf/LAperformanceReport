@@ -22,11 +22,15 @@ const UNIDADE = {
   nome: "Barra",
 };
 
+const ADMISSAO_ID = "44444444-4444-4444-8444-444444444444";
+const EXECUCAO_ADMITIDA_ID = "55555555-5555-4555-8555-555555555555";
 const BODY = {
   modo: "experimentais",
   unidade_id: UNIDADE.id,
   data_inicio: "2026-07-01",
   data_fim: "2026-07-31",
+  admissao_id: ADMISSAO_ID,
+  execucao_id: EXECUCAO_ADMITIDA_ID,
 };
 
 function aula(overrides = {}) {
@@ -181,13 +185,67 @@ test("execucao admitida usa UUID fornecido sem gerar outra versao", async () => 
   });
 
   const resposta = await executarModoExperimentais({
-    body: { ...BODY, execucao_id: execucaoId },
+    body: {
+      ...BODY,
+      admissao_id: ADMISSAO_ID,
+      execucao_id: execucaoId,
+    },
     unidades: [UNIDADE],
     deps: cenario.deps,
   });
 
   assert.equal(cenario.capturas.rpc[0].execucaoId, execucaoId);
+  assert.equal(cenario.capturas.rpc[0].admissaoId, ADMISSAO_ID);
   assert.equal(resposta.snapshot.execucao_id, execucaoId);
+});
+
+test("admissao e execucao devem ser fornecidas juntas", async () => {
+  const {
+    admissao_id: _admissaoId,
+    execucao_id: _execucaoId,
+    ...bodySemIdentidade
+  } = BODY;
+  for (const body of [
+    {
+      ...bodySemIdentidade,
+      execucao_id: "33333333-3333-4333-8333-333333333333",
+    },
+    { ...bodySemIdentidade, admissao_id: ADMISSAO_ID },
+  ]) {
+    const cenario = criarCenario();
+    await assert.rejects(
+      executarModoExperimentais({
+        body,
+        unidades: [UNIDADE],
+        deps: cenario.deps,
+      }),
+      (error) =>
+        error instanceof SnapshotRequestError &&
+        error.message === "SNAPSHOT_ADMISSAO_IDENTIDADE_INCOMPLETA",
+    );
+    assert.deepEqual(cenario.chamadas, []);
+  }
+});
+
+test("modo experimentais exige identidade admitida", async () => {
+  const {
+    admissao_id: _admissaoId,
+    execucao_id: _execucaoId,
+    ...bodySemIdentidade
+  } = BODY;
+  const cenario = criarCenario();
+
+  await assert.rejects(
+    executarModoExperimentais({
+      body: bodySemIdentidade,
+      unidades: [UNIDADE],
+      deps: cenario.deps,
+    }),
+    (error) =>
+      error instanceof SnapshotRequestError &&
+      error.message === "SNAPSHOT_ADMISSAO_OBRIGATORIA",
+  );
+  assert.deepEqual(cenario.chamadas, []);
 });
 
 test("execucao admitida invalida falha antes de buscar o Emusys", async () => {
@@ -720,6 +778,10 @@ test("edge usa o modulo puro e o horario de banco projetado", () => {
 
   assert.match(source, /from '\.\.\/_shared\/sync-experimentais-mode\.ts'/);
   assert.match(source, /await executarModoExperimentais\(/);
+  assert.match(
+    source,
+    /aplicar_snapshot_experimentais_emusys_admitido_v1/,
+  );
   assert.match(
     source,
     /\.eq\('horario_experimental',\s*exp\.horarioBanco\)/,

@@ -15,7 +15,10 @@ type Admissao = {
 
 export type SnapshotAdmissionDeps<TResposta> = {
   admitir: () => Promise<unknown>;
-  atualizar: (execucaoId: string) => Promise<TResposta>;
+  atualizar: (input: {
+    admissaoId: string;
+    execucaoId: string;
+  }) => Promise<TResposta>;
   finalizar: (input: {
     admissaoId: string;
     execucaoId: string;
@@ -101,7 +104,10 @@ export async function obterSnapshotComAdmissao<TResposta>(input: {
     if (admissao.acao === "atualizar") {
       let resposta: TResposta;
       try {
-        resposta = await input.deps.atualizar(admissao.execucaoId);
+        resposta = await input.deps.atualizar({
+          admissaoId: admissao.admissaoId,
+          execucaoId: admissao.execucaoId,
+        });
       } catch (error) {
         try {
           await input.deps.finalizar({

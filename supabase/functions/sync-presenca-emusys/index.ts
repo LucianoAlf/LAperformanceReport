@@ -399,14 +399,21 @@ function criarDependenciasSnapshot(
     criarExecucaoId: () => crypto.randomUUID(),
     agora: () => new Date(),
     aplicarSnapshotRpc: async (input) => {
+      const rpcNome = input.admissaoId
+        ? 'aplicar_snapshot_experimentais_emusys_admitido_v1'
+        : 'aplicar_snapshot_experimentais_emusys_v1';
+      const rpcParametros = {
+        ...(input.admissaoId
+          ? { p_admissao_id: input.admissaoId }
+          : {}),
+        p_execucao_id: input.execucaoId,
+        p_unidade_id: input.unidadeId,
+        p_data_inicio: input.dataInicio,
+        p_data_fim: input.dataFim,
+        p_itens: input.linhas,
+      };
       const { data, error } = await supabase
-        .rpc('aplicar_snapshot_experimentais_emusys_v1', {
-          p_execucao_id: input.execucaoId,
-          p_unidade_id: input.unidadeId,
-          p_data_inicio: input.dataInicio,
-          p_data_fim: input.dataFim,
-          p_itens: input.linhas,
-        });
+        .rpc(rpcNome, rpcParametros);
       if (error) throw new Error('FALHA_APLICAR_SNAPSHOT_EXPERIMENTAIS');
       if (!data || typeof data !== 'object' || Array.isArray(data)) {
         throw new Error('RESPOSTA_SNAPSHOT_EXPERIMENTAIS_INVALIDA');

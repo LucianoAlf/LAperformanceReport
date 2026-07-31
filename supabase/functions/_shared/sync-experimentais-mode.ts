@@ -64,6 +64,7 @@ export type SnapshotDeps = {
   criarExecucaoId: () => string;
   agora: () => Date;
   aplicarSnapshotRpc: (input: {
+    admissaoId?: string;
     execucaoId: string;
     unidadeId: string;
     dataInicio: string;
@@ -360,6 +361,7 @@ export async function executarSnapshotExperimentais(input: {
   dataInicio: string;
   dataFim: string;
   aulas: AulaEmusys[];
+  admissaoId?: string;
   execucaoId?: string;
   deps: SnapshotDeps;
 }): Promise<SnapshotResultado> {
@@ -375,6 +377,7 @@ export async function executarSnapshotExperimentais(input: {
   });
 
   const rpc = await input.deps.aplicarSnapshotRpc({
+    admissaoId: input.admissaoId,
     execucaoId,
     unidadeId: input.unidade.id,
     dataInicio: input.dataInicio,
@@ -441,7 +444,9 @@ export async function executarModoExperimentais(input: {
     input.unidades,
   );
   const execucaoIdRecebida = input.body.execucao_id;
+  const admissaoIdRecebida = input.body.admissao_id;
   let execucaoId: string | undefined;
+  let admissaoId: string | undefined;
   if (execucaoIdRecebida !== undefined) {
     if (
       typeof execucaoIdRecebida !== "string" ||
@@ -450,6 +455,21 @@ export async function executarModoExperimentais(input: {
       throw new SnapshotRequestError("EXECUCAO_ID_INVALIDA");
     }
     execucaoId = execucaoIdRecebida;
+  }
+  if (admissaoIdRecebida !== undefined) {
+    if (
+      typeof admissaoIdRecebida !== "string" ||
+      !UUID_PATTERN.test(admissaoIdRecebida)
+    ) {
+      throw new SnapshotRequestError("ADMISSAO_ID_INVALIDA");
+    }
+    admissaoId = admissaoIdRecebida;
+  }
+  if ((execucaoId === undefined) !== (admissaoId === undefined)) {
+    throw new SnapshotRequestError("SNAPSHOT_ADMISSAO_IDENTIDADE_INCOMPLETA");
+  }
+  if (execucaoId === undefined || admissaoId === undefined) {
+    throw new SnapshotRequestError("SNAPSHOT_ADMISSAO_OBRIGATORIA");
   }
 
   let aulas: AulaEmusys[];
@@ -469,6 +489,7 @@ export async function executarModoExperimentais(input: {
     dataInicio,
     dataFim,
     aulas,
+    admissaoId,
     execucaoId,
     deps: input.deps,
   });

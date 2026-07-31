@@ -233,6 +233,7 @@ test("refresh usa admissao single-flight antes do provedor e finaliza a identida
     /obterSnapshotComAdmissao(?:<[^>]+>)?\s*\(/,
   );
   assert.match(refresh, /execucao_id:\s*execucaoId/);
+  assert.match(refresh, /admissao_id:\s*admissaoId/);
   assert.match(refresh, /p_origem:\s*origem/);
   assert.match(refresh, /p_admissao_id:\s*input\.admissaoId/);
   assert.match(refresh, /p_execucao_id:\s*input\.execucaoId/);

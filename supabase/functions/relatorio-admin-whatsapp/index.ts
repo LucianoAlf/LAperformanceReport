@@ -1457,7 +1457,7 @@ async function atualizarSnapshotExperimentais(
         if (error || !data) throw new Error('SNAPSHOT_ADMISSAO_FALHOU');
         return data;
       },
-      atualizar: async (execucaoId) => {
+      atualizar: async ({ admissaoId, execucaoId }) => {
         const response = await fetch(`${supabaseUrl}/functions/v1/sync-presenca-emusys`, {
           method: 'POST',
           headers: {
@@ -1470,6 +1470,7 @@ async function atualizarSnapshotExperimentais(
             unidade_id: unidadeId,
             data_inicio: dataInicio,
             data_fim: dataFim,
+            admissao_id: admissaoId,
             execucao_id: execucaoId,
           }),
           signal: AbortSignal.timeout(120_000),

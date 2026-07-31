@@ -31,7 +31,7 @@ function cenario(overrides = {}) {
       chamadas.admitir += 1;
       return admissao('atualizar');
     },
-    atualizar: async (execucaoId) => {
+    atualizar: async ({ execucaoId }) => {
       chamadas.atualizar += 1;
       return { execucao_id: execucaoId, status: 'completo' };
     },
@@ -69,6 +69,23 @@ test('admissao atualizar executa uma vez e finaliza com a mesma identidade', asy
   ]);
 });
 
+test('atualizacao recebe admissao e execucao como identidade indivisivel', async () => {
+  let identidadeRecebida = null;
+  const { deps } = cenario({
+    atualizar: async (identidade) => {
+      identidadeRecebida = identidade;
+      return { execucao_id: identidade.execucaoId, status: 'completo' };
+    },
+  });
+
+  await obterSnapshotComAdmissao({ deps });
+
+  assert.deepEqual(identidadeRecebida, {
+    admissaoId: ADMISSAO_ID,
+    execucaoId: EXECUCAO_ID,
+  });
+});
+
 test('admissao reutilizar nao chama provedor, escrita nem finalizacao', async () => {
   const { chamadas, deps } = cenario({
     admitir: async () => {
@@ -93,7 +110,7 @@ test('duas chamadas sequenciais equivalentes produzem uma atualizacao', async ()
   const deps = {
     admitir: async () =>
       status === 'novo' ? admissao('atualizar') : admissao('reutilizar'),
-    atualizar: async (execucaoId) => {
+    atualizar: async ({ execucaoId }) => {
       chamadas.atualizar += 1;
       return { execucao_id: execucaoId, status: 'completo' };
     },
@@ -130,7 +147,7 @@ test('duas chamadas concorrentes equivalentes compartilham uma atualizacao', asy
       if (status === 'processando') return admissao('aguardar');
       return admissao('reutilizar');
     },
-    atualizar: async (execucaoId) => {
+    atualizar: async ({ execucaoId }) => {
       chamadas.atualizar += 1;
       await atualizacaoPendente;
       return { execucao_id: execucaoId, status: 'completo' };

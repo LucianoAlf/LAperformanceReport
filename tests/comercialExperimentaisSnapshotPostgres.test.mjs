@@ -15,6 +15,8 @@ const admissionMigrationPath =
   'supabase/migrations/20260731162000_snapshot_experimentais_admissao_refresh.sql';
 const durableMigrationPath =
   'supabase/migrations/20260731163000_snapshot_experimentais_acl_payload_duravel.sql';
+const fencingMigrationPath =
+  'supabase/migrations/20260731223000_snapshot_experimentais_fencing_lease.sql';
 const requirePostgres = process.env.COMERCIAL_EXP_REQUIRE_POSTGRES === '1';
 
 function read(path) {
@@ -1967,6 +1969,16 @@ test(
         `migration posterior de ACL/payload falhou:\n${durableMigrationApplied.stderr}`,
       );
 
+      const fencingMigrationApplied = psql(
+        containerName,
+        read(fencingMigrationPath),
+      );
+      assert.equal(
+        fencingMigrationApplied.status,
+        0,
+        `migration de fencing do lease falhou:\n${fencingMigrationApplied.stderr}`,
+      );
+
       const admissionCall = String.raw`
         \set ON_ERROR_STOP on
         \pset tuples_only on
@@ -2146,6 +2158,36 @@ test(
                 v_primeira,
                 v_recuperada;
             end if;
+
+            update public.emusys_experimentais_refresh_admissoes
+            set lease_ate = clock_timestamp() + interval '5 minutes'
+            where id = (v_recuperada->>'admissao_id')::uuid;
+
+            begin
+              perform public.aplicar_snapshot_experimentais_emusys_admitido_v1(
+                (v_recuperada->>'admissao_id')::uuid,
+                (v_primeira->>'snapshot_execucao_id')::uuid,
+                '11111111-1111-1111-1111-111111111111',
+                '2026-10-01',
+                '2026-10-31',
+                '[]'::jsonb
+              );
+              raise exception 'execucao expirada publicou o snapshot';
+            exception
+              when sqlstate '22023' then
+                if sqlerrm <> 'SNAPSHOT_ADMISSAO_FENCING_INVALIDO' then
+                  raise;
+                end if;
+            end;
+
+            perform public.aplicar_snapshot_experimentais_emusys_admitido_v1(
+              (v_recuperada->>'admissao_id')::uuid,
+              (v_recuperada->>'snapshot_execucao_id')::uuid,
+              '11111111-1111-1111-1111-111111111111',
+              '2026-10-01',
+              '2026-10-31',
+              '[]'::jsonb
+            );
 
             if (
               public.admitir_refresh_snapshot_experimentais_v1(
