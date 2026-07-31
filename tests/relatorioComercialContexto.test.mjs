@@ -100,3 +100,42 @@ test('resposta de envio anterior e ignorada depois de regenerar ou trocar contex
     origemAtual: origemB,
   }), false);
 });
+
+test('editar T1 para T2 invalida o envio pendente e limpa seu estado antes da resposta', () => {
+  assert.equal(typeof contrato.invalidarEnvioRelatorio, 'function');
+  assert.equal(typeof contrato.respostaEnvioAindaValida, 'function');
+
+  const origem = contrato.criarOrigemRelatorio({
+    tipo: 'diario',
+    unidade: 'unidade-a',
+    periodo: 'hoje',
+    dataInicio: '2026-07-30',
+    dataFim: '2026-07-30',
+  });
+  const envioT1 = {
+    respostaId: 7,
+    envioAtualId: 7,
+    origemEnvio: origem,
+    origemAtual: origem,
+  };
+
+  assert.equal(contrato.respostaEnvioAindaValida(envioT1), true);
+
+  const estadoAposEditarT2 = contrato.invalidarEnvioRelatorio({
+    envioAtualId: envioT1.envioAtualId,
+    enviando: true,
+    enviado: true,
+    erro: 'erro antigo',
+  });
+
+  assert.deepEqual(estadoAposEditarT2, {
+    envioAtualId: 8,
+    enviando: false,
+    enviado: false,
+    erro: null,
+  });
+  assert.equal(contrato.respostaEnvioAindaValida({
+    ...envioT1,
+    envioAtualId: estadoAposEditarT2.envioAtualId,
+  }), false);
+});

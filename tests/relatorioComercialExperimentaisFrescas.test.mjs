@@ -119,6 +119,23 @@ test("copia e envio exigem origem atual e envio usa unidade capturada com o text
   assert.doesNotMatch(envio, /unidadeId\s*\|\|\s*['"]todos['"]/);
 });
 
+test("editar o texto invalida envio pendente e limpa sucesso ou erro anterior", () => {
+  assert.match(comercialPage, /const editarTextoRelatorio\s*=\s*\(novoTexto:\s*string\)\s*=>\s*\{/);
+
+  const edicao = blocoFonte(
+    comercialPage,
+    "const editarTextoRelatorio = (novoTexto: string) => {",
+    "const executarGeracaoRelatorio = async (",
+  );
+  assert.match(edicao, /invalidarEstadoEnvioRelatorio\(\)/);
+  assert.match(edicao, /setRelatorioTexto\(novoTexto\)/);
+
+  assert.match(
+    comercialPage,
+    /<textarea[\s\S]*?onChange=\{\(e\)\s*=>\s*editarTextoRelatorio\(e\.target\.value\)\}/,
+  );
+});
+
 test("geradores semanal mensal e comparativos permanecem delegados como antes", () => {
   const seletor = blocoFonte(
     comercialPage,
