@@ -38,14 +38,22 @@ import {
   type SnapshotDeps,
   type SyncMode,
 } from '../_shared/sync-experimentais-mode.ts';
+import {
+  prepararExecucaoSyncPresenca,
+  resolverSolicitacaoSyncPresenca,
+  SolicitacaoSyncPresencaInvalida,
+  type CorpoSyncPresenca,
+  type ModoSyncPresenca,
+} from '../_shared/sync-presenca-authorization.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const EMUSYS_API = 'https://api.emusys.com.br/v1';
 const MATUREZA_FALTA_HORAS = 24;
 
-type SyncRequestBody = Record<string, unknown> & {
+type SyncRequestBody = CorpoSyncPresenca & {
   data?: string;
   dias?: number;
   dias_futuros?: number;
@@ -62,13 +70,43 @@ function requiredEnv(name: string): string {
   return value;
 }
 
-const UNIDADES = [
-  { nome: 'Campo Grande', id: '2ec861f6-023f-4d7b-9927-3960ad8c2a92', token: requiredEnv('EMUSYS_TOKEN_CG') },
-  { nome: 'Barra',        id: '368d47f5-2d88-4475-bc14-ba084a9a348e', token: requiredEnv('EMUSYS_TOKEN_BARRA') },
-  { nome: 'Recreio',      id: '95553e96-971b-4590-a6eb-0201d013c14d', token: requiredEnv('EMUSYS_TOKEN_RECREIO') },
-];
+const UNIDADES_CONFIGURADAS = [
+  {
+    nome: 'Campo Grande',
+    id: '2ec861f6-023f-4d7b-9927-3960ad8c2a92',
+    tokenEnv: 'EMUSYS_TOKEN_CG',
+  },
+  {
+    nome: 'Barra',
+    id: '368d47f5-2d88-4475-bc14-ba084a9a348e',
+    tokenEnv: 'EMUSYS_TOKEN_BARRA',
+  },
+  {
+    nome: 'Recreio',
+    id: '95553e96-971b-4590-a6eb-0201d013c14d',
+    tokenEnv: 'EMUSYS_TOKEN_RECREIO',
+  },
+] as const;
 
-type UnidadeEmusys = (typeof UNIDADES)[number];
+type UnidadeEmusys = {
+  nome: string;
+  id: string;
+  token: string;
+};
+
+function carregarUnidadesProvedor(unidadesIds: string[]): UnidadeEmusys[] {
+  return unidadesIds.map((unidadeId) => {
+    const unidade = UNIDADES_CONFIGURADAS.find((item) => item.id === unidadeId);
+    if (!unidade) {
+      throw new SolicitacaoSyncPresencaInvalida('UNIDADE_DESCONHECIDA');
+    }
+    return {
+      nome: unidade.nome,
+      id: unidade.id,
+      token: requiredEnv(unidade.tokenEnv),
+    };
+  });
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -237,7 +275,7 @@ function parseDataHoraEmusys(dataHora: string): string {
 
 async function sincronizarMetadadosAulas(
   supabase: any,
-  unidades: typeof UNIDADES,
+  unidades: readonly UnidadeEmusys[],
   dataInicio: string,
   dataFim: string
 ) {
@@ -499,7 +537,9 @@ async function reconciliarExperimentaisOrfas(
   const somenteIdentidadesEstaveis =
     options.somenteIdentidadesEstaveis === true;
   const logs: { lead_id: number | null; lead_nome: string; unidade: string; data: string; status: string; motivo: string }[] = [];
-  const unidadeNomes = new Map(UNIDADES.map(u => [u.id, u.nome]));
+  const unidadeNomes = new Map<string, string>(
+    UNIDADES_CONFIGURADAS.map((unidade) => [unidade.id, unidade.nome]),
+  );
 
   for (const exp of experimentais) {
     // Cancelada: marcar 'cancelada'. Casa pela AULA (emusys_aula_id) e, p/ legados sem id,
@@ -1043,7 +1083,8 @@ async function reconciliarExperimentaisOrfas(
 // Confirmar experimentais: cruzar aulas_emusys (categoria=experimental) com lead_experimentais agendadas
 async function confirmarExperimentais(
   supabase: any,
-  _datasProcessar: string[]
+  _datasProcessar: string[],
+  unidadesIds: string[],
 ) {
   const logs: { lead_id: number; lead_nome: string; unidade: string; data: string; professor: string; status: string; motivo: string }[] = [];
 
@@ -1062,6 +1103,7 @@ async function confirmarExperimentais(
     .from('lead_experimentais')
     .select('id, lead_id, nome_aluno, unidade_id, data_experimental')
     .eq('status', 'experimental_agendada')
+    .in('unidade_id', unidadesIds)
     .lt('data_experimental', dataAutoFaltou);
 
   let autoFaltouCount = 0;
@@ -1095,12 +1137,15 @@ async function confirmarExperimentais(
     .from('lead_experimentais')
     .select('id, lead_id, nome_aluno, data_experimental, horario_experimental, professor_experimental_id, unidade_id')
     .eq('status', 'experimental_agendada')
+    .in('unidade_id', unidadesIds)
     .gte('data_experimental', dataLimite)
     .lte('data_experimental', hojeBRT);
 
   if (!expPendentes?.length) return logs;
 
-  const unidadeNomes = new Map(UNIDADES.map(u => [u.id, u.nome]));
+  const unidadeNomes = new Map<string, string>(
+    UNIDADES_CONFIGURADAS.map((unidade) => [unidade.id, unidade.nome]),
+  );
 
   for (const exp of expPendentes) {
     if (!exp.professor_experimental_id) {
@@ -1248,48 +1293,76 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  let modo: 'presenca' | 'agenda' | 'metadados' | 'experimentais' =
-    'presenca';
+  let modo: ModoSyncPresenca = 'presenca';
   try {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-    // Parâmetros: data (YYYY-MM-DD, default hoje), dias (default 1), unidade_index (0-2, default todas)
-    let dataFim: string;
-    let dias = 1;
-    let diasFuturos = 14;
-    let unidadeIndex: number | null = null;
+    // Parâmetros: data, janela, modo e alvo por unidade_id/unidade_index.
     let bodyRecebido: SyncRequestBody = {};
     try {
-      const body = await req.json() as SyncRequestBody;
-      bodyRecebido = body;
-      dataFim = typeof body.data === 'string' ? body.data : '';
-      dias = Math.min(Math.max(body.dias || 1, 1), 30); // 1-30 dias
-      diasFuturos = Math.min(Math.max(body.dias_futuros || 14, 1), 35);
-      modo = body.modo === 'agenda'
-        ? 'agenda'
-        : body.modo === 'metadados'
-          ? 'metadados'
-          : body.modo === 'experimentais'
-            ? 'experimentais'
-            : 'presenca';
-      unidadeIndex = typeof body.unidade_index === 'number'
-        ? body.unidade_index
-        : null;
+      bodyRecebido = await req.json() as SyncRequestBody;
     } catch {
-      if (modo === 'experimentais') {
-        throw new SnapshotRequestError('BODY_EXPERIMENTAIS_INVALIDO');
-      }
-      dataFim = '';
+      bodyRecebido = {};
     }
+
+    const solicitacao = resolverSolicitacaoSyncPresenca(
+      bodyRecebido,
+      UNIDADES_CONFIGURADAS,
+    );
+    modo = solicitacao.modo;
+    const preparacao = await prepararExecucaoSyncPresenca(
+      {
+        authorization: req.headers.get('authorization'),
+        solicitacao,
+      },
+      {
+        chaveServiceRole: SUPABASE_SERVICE_ROLE_KEY,
+        criarClienteUsuario: (token) => createClient(
+          SUPABASE_URL,
+          SUPABASE_ANON_KEY,
+          {
+            auth: {
+              autoRefreshToken: false,
+              persistSession: false,
+              detectSessionInUrl: false,
+            },
+            global: {
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          },
+        ),
+        criarClienteAdministrativo: () =>
+          createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY),
+        carregarUnidadesProvedor,
+      },
+    );
+    if (preparacao.permitido === false) {
+      return new Response(
+        JSON.stringify({ error: preparacao.codigo }),
+        {
+          status: preparacao.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
+    }
+
+    const supabase = preparacao.clienteAdministrativo;
+    const unidadesProcessar = preparacao.unidadesProvedor;
+    let dataFim = typeof bodyRecebido.data === 'string'
+      ? bodyRecebido.data
+      : '';
+    const dias = Math.min(Math.max(bodyRecebido.dias || 1, 1), 30);
+    const diasFuturos = Math.min(
+      Math.max(bodyRecebido.dias_futuros || 14, 1),
+      35,
+    );
 
     if (modo === 'experimentais') {
       const resposta = await executarModoExperimentais({
         body: bodyRecebido,
-        unidades: UNIDADES,
+        unidades: unidadesProcessar,
         deps: {
           ...criarDependenciasSnapshot(supabase),
           buscarTodasAulas: ({ unidade, dataInicio, dataFim }) => {
-            const configuracao = UNIDADES.find((item) =>
+            const configuracao = unidadesProcessar.find((item) =>
               item.id === unidade.id
             );
             if (!configuracao) {
@@ -1343,12 +1416,7 @@ serve(async (req: Request) => {
       }
     }
 
-    if (unidadeIndex !== null && !UNIDADES[unidadeIndex]) {
-      throw new Error('unidade_index invalido');
-    }
-
-    const unidadesProcessar = unidadeIndex !== null ? [UNIDADES[unidadeIndex]] : UNIDADES;
-    console.log(`[sync-presenca] Modo ${modo}: ${datasProcessar[0]} a ${datasProcessar.at(-1)}, unidade: ${unidadeIndex !== null ? unidadesProcessar[0].nome : 'todas'}`);
+    console.log(`[sync-presenca] Modo ${modo}: ${datasProcessar[0]} a ${datasProcessar.at(-1)}, unidade: ${solicitacao.alvoExato ? unidadesProcessar[0].nome : 'todas'}`);
 
     if (modo === 'metadados') {
       const metadados = await sincronizarMetadadosAulas(
@@ -1382,7 +1450,11 @@ serve(async (req: Request) => {
 
     // População viva canônica: trancados e estados ambíguos não entram no denominador.
     const { data: alunosCanonicos, error: alunosCanonicosError } = await supabase
-      .rpc('get_alunos_ativos_atuais_canonicos', { p_unidade_id: null });
+      .rpc('get_alunos_ativos_atuais_canonicos', {
+        p_unidade_id: solicitacao.alvoExato
+          ? solicitacao.unidadesIds[0]
+          : null,
+      });
     if (alunosCanonicosError) {
       throw new Error(`Erro ao buscar alunos ativos canônicos: ${alunosCanonicosError.message}`);
     }
@@ -1776,8 +1848,8 @@ serve(async (req: Request) => {
       );
     }
 
-    // Recalcular percentual_presenca para todas as unidades (uma vez no final)
-    for (const unidade of UNIDADES) {
+    // Recalcular percentual_presenca somente nos alvos autorizados.
+    for (const unidade of unidadesProcessar) {
       await supabase.rpc('atualizar_percentual_presenca', { p_unidade_id: unidade.id });
     }
 
@@ -1786,7 +1858,11 @@ serve(async (req: Request) => {
     console.log(`[sync-presenca] Reconciliação experimentais: ${logsReconciliacao.length}`);
 
     // Confirmar experimentais com base nas aulas sincronizadas
-    const logsExperimentais = await confirmarExperimentais(supabase, datasProcessar);
+    const logsExperimentais = await confirmarExperimentais(
+      supabase,
+      datasProcessar,
+      solicitacao.unidadesIds,
+    );
     console.log(`[sync-presenca] Experimentais processadas: ${logsExperimentais.length}`);
 
     return new Response(
@@ -1795,16 +1871,19 @@ serve(async (req: Request) => {
     );
   } catch (error) {
     const classificacao = classificarErroSnapshot(error);
-    const mensagemPublica = modo === 'experimentais' || modo === 'metadados'
-      ? classificacao.mensagem
-      : error instanceof Error
-        ? error.message
-        : 'Erro interno';
+    const solicitacaoInvalida = error instanceof SolicitacaoSyncPresencaInvalida;
+    const mensagemPublica = solicitacaoInvalida
+      ? error.message
+      : modo === 'experimentais' || modo === 'metadados'
+        ? classificacao.mensagem
+        : error instanceof Error
+          ? error.message
+          : 'Erro interno';
     console.error(`[sync-presenca] Falha no modo ${modo}: ${mensagemPublica}`);
     return new Response(
       JSON.stringify({ error: mensagemPublica }),
       {
-        status: classificacao.status,
+        status: solicitacaoInvalida ? error.status : classificacao.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );

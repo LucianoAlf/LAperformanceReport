@@ -296,7 +296,11 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
     toast.info('Sincronizando presença dos últimos 7 dias...');
     try {
       const { data, error } = await supabase.functions.invoke('sync-presenca-emusys', {
-        body: { dias: 7 },
+        body: {
+          modo: 'presenca',
+          unidade_id: aluno.unidade_id,
+          dias: 7,
+        },
       });
 
       if (error) {
