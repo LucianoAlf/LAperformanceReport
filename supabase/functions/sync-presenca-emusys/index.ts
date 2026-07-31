@@ -12,7 +12,6 @@ import {
 import { buscarPaginaAulasEmusys } from '../_shared/emusys-aulas.ts';
 import {
   buscarTodasAulas,
-  montarLinhasSnapshot,
   normalizarSituacaoExperimental as normalizarSituacaoSnapshot,
   type AulaEmusys as AulaSnapshotEmusys,
   type ExperimentalAluno,
@@ -22,15 +21,26 @@ import {
   resolverProfessorDaAula,
   type EmusysProfessorRef,
 } from '../_shared/professor-emusys.ts';
+import {
+  SnapshotRequestError,
+  SnapshotUpstreamError,
+  aplicarSnapshotsMetadados,
+  classificarErroSnapshot,
+  executarModoExperimentais,
+  executarSnapshotExperimentais,
+  horarioExperimentalParaBanco,
+  normalizarHorarioExperimental,
+  type CursoDePara,
+  type ExperimentalParaReconciliar,
+  type SnapshotDeps,
+  type SyncMode,
+} from '../_shared/sync-experimentais-mode.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const EMUSYS_API = 'https://api.emusys.com.br/v1';
 const MATUREZA_FALTA_HORAS = 24;
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-type SyncMode = 'presenca' | 'agenda' | 'metadados' | 'experimentais';
 
 type SyncRequestBody = Record<string, unknown> & {
   data?: string;
@@ -42,33 +52,6 @@ type SyncRequestBody = Record<string, unknown> & {
   data_inicio?: string;
   data_fim?: string;
 };
-
-type SnapshotResultado = {
-  execucao_id: string;
-  status: string;
-  aulas_recebidas: number;
-  linhas_recebidas: number;
-  linhas_ativas: number;
-  linhas_inseridas: number;
-  linhas_atualizadas: number;
-  linhas_versionadas: number;
-  linhas_inativadas: number;
-  experimentais_reconciliadas: number;
-};
-
-class SnapshotRequestError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'SnapshotRequestError';
-  }
-}
-
-class SnapshotUpstreamError extends Error {
-  constructor() {
-    super('FALHA_UPSTREAM_EMUSYS');
-    this.name = 'SnapshotUpstreamError';
-  }
-}
 
 function requiredEnv(name: string): string {
   const value = Deno.env.get(name)?.trim();
@@ -150,64 +133,6 @@ interface AulaEmusys extends AulaSnapshotEmusys {
   professores: Array<EmusysProfessorRef & { nome: string; presenca: string }>;
   alunos: AlunoEmusys[];
   anotacoes: string | null;
-}
-
-function respostaSnapshotSemPii(resultado: SnapshotResultado) {
-  return {
-    execucao_id: resultado.execucao_id,
-    status: resultado.status,
-    aulas_recebidas: resultado.aulas_recebidas,
-    linhas_recebidas: resultado.linhas_recebidas,
-    linhas_ativas: resultado.linhas_ativas,
-    linhas_inseridas: resultado.linhas_inseridas,
-    linhas_atualizadas: resultado.linhas_atualizadas,
-    linhas_versionadas: resultado.linhas_versionadas,
-    linhas_inativadas: resultado.linhas_inativadas,
-    experimentais_reconciliadas: resultado.experimentais_reconciliadas,
-  };
-}
-
-function parseDataIsoEstrita(value: unknown, campo: string): string {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new SnapshotRequestError(`${campo.toUpperCase()}_INVALIDA`);
-  }
-
-  const data = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(data.getTime()) || data.toISOString().slice(0, 10) !== value) {
-    throw new SnapshotRequestError(`${campo.toUpperCase()}_INVALIDA`);
-  }
-  return value;
-}
-
-function diasEntreDatas(dataInicio: string, dataFim: string): number {
-  const inicio = Date.parse(`${dataInicio}T00:00:00.000Z`);
-  const fim = Date.parse(`${dataFim}T00:00:00.000Z`);
-  return Math.trunc((fim - inicio) / (24 * 60 * 60 * 1000));
-}
-
-function validarParametrosExperimentais(body: Record<string, unknown>): {
-  unidade: UnidadeEmusys;
-  dataInicio: string;
-  dataFim: string;
-} {
-  const unidadeId = typeof body.unidade_id === 'string'
-    ? body.unidade_id.trim()
-    : '';
-  if (!UUID_PATTERN.test(unidadeId)) {
-    throw new SnapshotRequestError('UNIDADE_ID_INVALIDA');
-  }
-
-  const dataInicio = parseDataIsoEstrita(body.data_inicio, 'data_inicio');
-  const dataFim = parseDataIsoEstrita(body.data_fim, 'data_fim');
-  const intervalo = diasEntreDatas(dataInicio, dataFim);
-  if (intervalo < 0 || intervalo > 45) {
-    throw new SnapshotRequestError('INTERVALO_INVALIDO_MAX_45_DIAS');
-  }
-
-  const unidade = UNIDADES.find((unidade) => unidade.id === unidadeId);
-  if (!unidade) throw new SnapshotRequestError('UNIDADE_DESCONHECIDA');
-
-  return { unidade, dataInicio, dataFim };
 }
 
 function podeMaterializarFalta(aula: AulaEmusys, agora = new Date()): boolean {
@@ -389,111 +314,82 @@ async function sincronizarMetadadosAulas(
 }
 
 // Dados coletados de aulas experimentais para reconciliação
-interface ExperimentalParaReconciliar {
-  emusysAulaId: number;
-  dataAula: string;
-  dataHoraInicio?: string;
-  horario: string;
-  professorId: number | null;
-  professorNome: string | null;
-  unidadeId: string;
-  cancelada: boolean;
-  cursoId: number | null;
-  cursoNome: string | null;
-  alunos: AlunoEmusys[];
+async function carregarCursoDeParaCanonico(
+  supabase: SupabaseClient,
+  unidadeId: string,
+): Promise<Map<number, CursoDePara>> {
+  const { data, error } = await supabase
+    .from('curso_emusys_depara')
+    .select('emusys_disciplina_id, curso_id, cursos:curso_id(nome)')
+    .eq('unidade_id', unidadeId);
+  if (error) throw new Error('FALHA_CARREGAR_CURSO_DEPARA_SNAPSHOT');
+
+  const mapa = new Map<number, CursoDePara>();
+  for (const linha of data ?? []) {
+    const disciplinaId = Number(linha.emusys_disciplina_id);
+    const cursoId = Number(linha.curso_id);
+    if (
+      !Number.isSafeInteger(disciplinaId) ||
+      disciplinaId <= 0 ||
+      !Number.isSafeInteger(cursoId) ||
+      cursoId <= 0
+    ) {
+      continue;
+    }
+
+    const relacaoCurso = Array.isArray(linha.cursos)
+      ? linha.cursos[0]
+      : linha.cursos;
+    mapa.set(disciplinaId, {
+      cursoId,
+      cursoNome: typeof relacaoCurso?.nome === 'string'
+        ? relacaoCurso.nome
+        : null,
+    });
+  }
+  return mapa;
 }
 
-async function aplicarSnapshotExperimentais(
+function criarDependenciasSnapshot(
   supabase: SupabaseClient,
-  unidade: UnidadeEmusys,
-  dataInicio: string,
-  dataFim: string,
-  aulas: AulaEmusys[],
-): Promise<SnapshotResultado> {
-  const execucaoId = crypto.randomUUID();
-  const agora = new Date();
-  const linhas = montarLinhasSnapshot({
-    unidadeId: unidade.id,
-    execucaoId,
-    aulas,
-    agora,
-  });
-
-  const { data, error } = await supabase
-    .rpc('aplicar_snapshot_experimentais_emusys_v1', {
-      p_execucao_id: execucaoId,
-      p_unidade_id: unidade.id,
-      p_data_inicio: dataInicio,
-      p_data_fim: dataFim,
-      p_itens: linhas,
-    });
-  if (error) throw new Error('FALHA_APLICAR_SNAPSHOT_EXPERIMENTAIS');
-
-  if (
-    !data ||
-    typeof data !== 'object' ||
-    Array.isArray(data) ||
-    data.status !== 'completo' ||
-    data.execucao_id !== execucaoId
-  ) {
-    throw new Error('RESPOSTA_SNAPSHOT_EXPERIMENTAIS_INVALIDA');
-  }
-  const rpc = data as Record<string, unknown>;
-  const numero = (campo: string) => {
-    const valor = Number(rpc[campo] ?? 0);
-    return Number.isFinite(valor) ? valor : 0;
-  };
-
-  const mapaProfessores = await carregarMapaProfessoresEmusys(
-    supabase,
-    unidade.id,
-  );
-  const experimentais: ExperimentalParaReconciliar[] = aulas
-    .filter((aula) => aula.categoria === 'experimental')
-    .map((aula) => {
-      const professor = resolverProfessorDaAula(
-        aula.professores,
-        mapaProfessores,
-      );
-      return {
-        emusysAulaId: aula.id,
-        dataAula: aula.data_hora_inicio.split(' ')[0],
-        dataHoraInicio: aula.data_hora_inicio,
-        horario: aula.data_hora_inicio.split(' ')[1] || '00:00',
-        professorId: professor.professorId,
-        professorNome: null,
-        unidadeId: unidade.id,
-        cancelada: aula.cancelada === true,
-        cursoId: null,
-        cursoNome: null,
-        alunos: (aula.alunos ?? []).map((aluno) => ({
-          nome_aluno: aluno.nome_aluno,
-          presenca: aluno.presenca,
-          horario_presenca: aluno.horario_presenca,
-          id_lead: aluno.id_lead,
-          id_aluno: aluno.id_aluno,
-        })),
-      };
-    });
-  const reconciliacao = await reconciliarExperimentaisOrfas(
-    supabase,
-    experimentais,
-    { somenteIdentidadesEstaveis: true },
-  );
-
+): SnapshotDeps {
   return {
-    execucao_id: execucaoId,
-    status: 'completo',
-    aulas_recebidas: aulas.length,
-    linhas_recebidas: numero('linhas_recebidas'),
-    linhas_ativas: numero('linhas_ativas'),
-    linhas_inseridas: numero('linhas_inseridas'),
-    linhas_atualizadas: numero('linhas_atualizadas'),
-    linhas_versionadas: numero('linhas_versionadas'),
-    linhas_inativadas: numero('linhas_inativadas'),
-    experimentais_reconciliadas: reconciliacao.filter((item) =>
-      item.status.startsWith('reconciliada_')
-    ).length,
+    criarExecucaoId: () => crypto.randomUUID(),
+    agora: () => new Date(),
+    aplicarSnapshotRpc: async (input) => {
+      const { data, error } = await supabase
+        .rpc('aplicar_snapshot_experimentais_emusys_v1', {
+          p_execucao_id: input.execucaoId,
+          p_unidade_id: input.unidadeId,
+          p_data_inicio: input.dataInicio,
+          p_data_fim: input.dataFim,
+          p_itens: input.linhas,
+        });
+      if (error) throw new Error('FALHA_APLICAR_SNAPSHOT_EXPERIMENTAIS');
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw new Error('RESPOSTA_SNAPSHOT_EXPERIMENTAIS_INVALIDA');
+      }
+      return data as Record<string, unknown>;
+    },
+    carregarCursoDePara: (unidadeId) =>
+      carregarCursoDeParaCanonico(supabase, unidadeId),
+    carregarResolverProfessor: async (unidadeId) => {
+      const mapaProfessores = await carregarMapaProfessoresEmusys(
+        supabase,
+        unidadeId,
+      );
+      return (aula) =>
+        resolverProfessorDaAula(
+          (aula as AulaEmusys).professores,
+          mapaProfessores,
+        ).professorId;
+    },
+    reconciliar: (experimentais) =>
+      reconciliarExperimentaisOrfas(
+        supabase,
+        experimentais,
+        { somenteIdentidadesEstaveis: true },
+      ),
   };
 }
 
@@ -739,7 +635,7 @@ async function reconciliarExperimentaisOrfas(
           .select('id, status, lead_id, curso_interesse_id, professor_experimental_id, emusys_aula_id, aluno_id')
           .eq('unidade_id', exp.unidadeId)
           .eq('data_experimental', exp.dataAula)
-          .eq('horario_experimental', exp.horario + ':00')
+          .eq('horario_experimental', exp.horarioBanco)
           .eq('curso_interesse_id', exp.cursoId)
           .eq('nome_aluno', nomeAluno)
           .neq('status', 'cancelada')
@@ -858,7 +754,7 @@ async function reconciliarExperimentaisOrfas(
           .select('id, status, lead_id, curso_interesse_id, professor_experimental_id, emusys_aula_id, aluno_id')
           .eq('lead_id', leadId)
           .eq('data_experimental', exp.dataAula)
-          .eq('horario_experimental', exp.horario + ':00')
+          .eq('horario_experimental', exp.horarioBanco)
           .neq('status', 'cancelada');
         qLead = exp.cursoId != null
           ? qLead.eq('curso_interesse_id', exp.cursoId)
@@ -918,7 +814,7 @@ async function reconciliarExperimentaisOrfas(
           nome_aluno: nomeAluno,
           unidade_id: exp.unidadeId,
           data_experimental: exp.dataAula,
-          horario_experimental: exp.horario + ':00',
+          horario_experimental: exp.horarioBanco,
           professor_experimental_id: exp.professorId,
           curso_interesse_id: exp.cursoId,
           emusys_aula_id: exp.emusysAulaId,
@@ -1199,11 +1095,10 @@ serve(async (req: Request) => {
     let dias = 1;
     let diasFuturos = 14;
     let unidadeIndex: number | null = null;
-    let parametrosExperimentais: ReturnType<
-      typeof validarParametrosExperimentais
-    > | null = null;
+    let bodyRecebido: SyncRequestBody = {};
     try {
       const body = await req.json() as SyncRequestBody;
+      bodyRecebido = body;
       dataFim = typeof body.data === 'string' ? body.data : '';
       dias = Math.min(Math.max(body.dias || 1, 1), 30); // 1-30 dias
       diasFuturos = Math.min(Math.max(body.dias_futuros || 14, 1), 35);
@@ -1217,11 +1112,7 @@ serve(async (req: Request) => {
       unidadeIndex = typeof body.unidade_index === 'number'
         ? body.unidade_index
         : null;
-      if (modo === 'experimentais') {
-        parametrosExperimentais = validarParametrosExperimentais(body);
-      }
-    } catch (error) {
-      if (error instanceof SnapshotRequestError) throw error;
+    } catch {
       if (modo === 'experimentais') {
         throw new SnapshotRequestError('BODY_EXPERIMENTAIS_INVALIDO');
       }
@@ -1229,32 +1120,29 @@ serve(async (req: Request) => {
     }
 
     if (modo === 'experimentais') {
-      if (!parametrosExperimentais) {
-        throw new SnapshotRequestError('BODY_EXPERIMENTAIS_INVALIDO');
-      }
-      const { unidade, dataInicio, dataFim: dataFimSnapshot } =
-        parametrosExperimentais;
-      const aulas = await fetchAulasRange(
-        unidade.token,
-        dataInicio,
-        dataFimSnapshot,
-      );
-      const snapshot = await aplicarSnapshotExperimentais(
-        supabase,
-        unidade,
-        dataInicio,
-        dataFimSnapshot,
-        aulas,
-      );
+      const resposta = await executarModoExperimentais({
+        body: bodyRecebido,
+        unidades: UNIDADES,
+        deps: {
+          ...criarDependenciasSnapshot(supabase),
+          buscarTodasAulas: ({ unidade, dataInicio, dataFim }) => {
+            const configuracao = UNIDADES.find((item) =>
+              item.id === unidade.id
+            );
+            if (!configuracao) {
+              throw new SnapshotRequestError('UNIDADE_DESCONHECIDA');
+            }
+            return fetchAulasRange(
+              configuracao.token,
+              dataInicio,
+              dataFim,
+            );
+          },
+        },
+      });
 
       return new Response(
-        JSON.stringify({
-          success: true,
-          modo,
-          unidade: { id: unidade.id, nome: unidade.nome },
-          intervalo: { data_inicio: dataInicio, data_fim: dataFimSnapshot },
-          snapshot: respostaSnapshotSemPii(snapshot),
-        }),
+        JSON.stringify(resposta),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -1306,24 +1194,15 @@ serve(async (req: Request) => {
         datasProcessar[0],
         datasProcessar.at(-1)!
       );
-      const snapshots: Array<Record<string, unknown>> = [];
-      for (const lote of metadados.aulasPorUnidade) {
-        const snapshot = await aplicarSnapshotExperimentais(
-          supabase,
-          lote.unidade,
-          lote.dataInicio,
-          lote.dataFim,
-          lote.aulas,
-        );
-        snapshots.push({
-          unidade: { id: lote.unidade.id, nome: lote.unidade.nome },
-          intervalo: {
-            data_inicio: lote.dataInicio,
-            data_fim: lote.dataFim,
-          },
-          snapshot: respostaSnapshotSemPii(snapshot),
-        });
-      }
+      const dependenciasSnapshot = criarDependenciasSnapshot(supabase);
+      const snapshots = await aplicarSnapshotsMetadados({
+        lotes: metadados.aulasPorUnidade,
+        aplicarSnapshot: (lote) =>
+          executarSnapshotExperimentais({
+            ...lote,
+            deps: dependenciasSnapshot,
+          }),
+      });
       return new Response(
         JSON.stringify({
           success: true,
@@ -1443,11 +1322,15 @@ serve(async (req: Request) => {
           // a reconciliação precisa da aula cancelada p/ marcar status 'cancelada'
           // (senão o auto-faltou a deixa como 'faltou'). Tambem carrega o curso da aula.
           if (aula.categoria === 'experimental') {
-            const horario = aula.data_hora_inicio?.split(' ')[1] || '00:00';
+            const horario = normalizarHorarioExperimental(
+              aula.data_hora_inicio,
+            );
             experimentaisColetadas.push({
               emusysAulaId: aula.id,
               dataAula: dataAlvo,
+              dataHoraInicio: aula.data_hora_inicio,
               horario,
+              horarioBanco: horarioExperimentalParaBanco(horario),
               professorId,
               professorNome: profNome,
               unidadeId: unidade.id,
@@ -1748,25 +1631,19 @@ serve(async (req: Request) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    const status = error instanceof SnapshotRequestError
-      ? 400
-      : error instanceof SnapshotUpstreamError
-        ? 502
-        : 500;
-    const mensagemSnapshot = error instanceof SnapshotRequestError
-      ? error.message
-      : error instanceof SnapshotUpstreamError
-        ? 'FALHA_UPSTREAM_EMUSYS'
-        : 'ERRO_INTERNO';
+    const classificacao = classificarErroSnapshot(error);
     const mensagemPublica = modo === 'experimentais' || modo === 'metadados'
-      ? mensagemSnapshot
+      ? classificacao.mensagem
       : error instanceof Error
         ? error.message
         : 'Erro interno';
     console.error(`[sync-presenca] Falha no modo ${modo}: ${mensagemPublica}`);
     return new Response(
       JSON.stringify({ error: mensagemPublica }),
-      { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      {
+        status: classificacao.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
     );
   }
 });
