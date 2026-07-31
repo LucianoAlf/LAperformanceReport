@@ -11,6 +11,9 @@ const read = (relativePath) => {
 };
 
 const types = read('src/types/supabase.ts');
+const explicitTypes = read(
+  'src/components/App/SucessoCliente/pesquisaEvasao.types.ts',
+);
 const verification = read('scripts/verify-pesquisa-evasao-rls.sql');
 const structuralVerification = read(
   'scripts/verify-pesquisa-evasao-schema.sql',
@@ -33,59 +36,29 @@ const permissions = [
   'sucesso_aluno.evasao.modo_teste',
 ];
 
-test('tipos incluem o contrato local completo da fundacao de evasao', () => {
-  assert.ok(types, 'src/types/supabase.ts ausente');
-
-  for (const table of [
-    'pesquisa_evasao_assinaturas',
-    'pesquisa_evasao_templates',
-    'pesquisa_evasao_previews',
-    'pesquisa_evasao_publicos_internos',
-    'pesquisa_evasao_mensagens',
-    'pesquisa_evasao_transcricoes',
-    'pesquisa_evasao_analises',
+test('contrato de UI da evasao permanece explicito e revisavel', () => {
+  assert.ok(explicitTypes, 'pesquisaEvasao.types.ts ausente');
+  for (const contractName of [
+    'PesquisaEvasaoPreview',
+    'PesquisaEvasaoConfirmacao',
+    'PesquisaEvasaoListagemItem',
+    'PesquisaEvasaoTeste',
   ]) {
-    assert.match(types, new RegExp(`^\\s{6}${table}: \\{`, 'm'));
+    assert.match(explicitTypes, new RegExp(`interface ${contractName}\\b`));
   }
-
-  for (const column of [
-    'envio_status',
-    'resposta_status',
-    'modo_teste',
-    'telefone_destino_snapshot',
-    'assinatura_nome_snapshot',
-    'envio_erro_sanitizado',
-  ]) {
-    assert.match(types, new RegExp(`^\\s+${column}:`, 'm'));
-  }
-
-  assert.match(
-    types,
-    /listar_evadidos_para_pesquisa_v2:\s*\{\s*Args:\s*\{[\s\S]*?p_busca:[\s\S]*?p_limite:[\s\S]*?p_mes:[\s\S]*?p_offset:[\s\S]*?p_status:[\s\S]*?p_unidade_id:[\s\S]*?p_ano:/,
-  );
-  assert.match(types, /listar_pesquisas_evasao_teste_v1:/);
-  assert.match(types, /claim_pesquisa_evasao_preview:/);
-  assert.match(types, /registrar_resultado_pesquisa_evasao_envio:/);
-  assert.match(types, /confirmar_resultado_pesquisa_evasao_envio:/);
+  assert.match(explicitTypes, /modo_teste:\s*boolean/);
+  assert.match(explicitTypes, /bloqueio_codigo:\s*PesquisaEvasaoBloqueioCodigo/);
 });
 
-test('tipos gerados refletem auditoria, FKs e RPCs reais do schema validado', () => {
+test('geracao completa fica como evidencia e nao infla o tipo parcial legado', () => {
+  assert.ok(types, 'src/types/supabase.ts ausente');
+  assert.match(types, /export interface Database/);
+  assert.doesNotMatch(types, /__InternalSupabase/);
   assert.match(
-    types,
-    /^\s{6}whatsapp_caixas_credenciais_auditoria:\s*\{/m,
+    runbook,
+    /src\/types\/supabase\.ts[\s\S]*532 linhas[\s\S]*manual e parcial[\s\S]*n[aã]o [ée] consumido/i,
   );
-  for (const foreignKey of [
-    'pesquisa_evasao_assinatura_id_fkey',
-    'pesquisa_evasao_caixa_id_fkey',
-    'pesquisa_evasao_previews_assinatura_id_fkey',
-    'pesquisa_evasao_previews_caixa_id_fkey',
-  ]) {
-    assert.match(types, new RegExp(foreignKey));
-  }
-  assert.match(
-    types,
-    /listar_whatsapp_caixas_administracao:\s*\{\s*Args:\s*never/i,
-  );
+  assert.match(runbook, /artefato[\s\S]*n[aã]o foi mantido no reposit[oó]rio/i);
 });
 
 test('verificacao SQL e transacional, cobre ACL, RLS e isolamento real', () => {

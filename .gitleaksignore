@@ -1,0 +1,8 @@
+# UUIDs sintéticos do contrato de enviar-pesquisa-evasao. Estes fingerprints
+# históricos foram confirmados em 31/07/2026 como ausentes de auth.users e
+# public.usuarios em produção. A exceção é deliberadamente específica por
+# commit, arquivo, regra e linha; não ampliar para authUserId ou UUIDs em geral.
+61b7a2a3fd54350b04bca2f35f3ccc7c9acfcd0a:supabase/functions/enviar-pesquisa-evasao/contract.test.ts:generic-api-key:27
+61b7a2a3fd54350b04bca2f35f3ccc7c9acfcd0a:supabase/functions/enviar-pesquisa-evasao/contract.test.ts:generic-api-key:500
+70a8fd85c1b68d982df7080aad8dc543657db323:supabase/functions/enviar-pesquisa-evasao/contract.test.ts:generic-api-key:500
+1052d24c32b2c9a1dc6f03e4f5415824f88ccf8b:supabase/functions/enviar-pesquisa-evasao/contract.test.ts:generic-api-key:262

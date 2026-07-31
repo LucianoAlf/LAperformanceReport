@@ -142,11 +142,10 @@ Evidências do bootstrap:
   `ROLLBACK`;
 - os tipos gerados contêm todos os contratos do domínio. O arquivo bruto do
   projeto descartável diferiu por 782 adições e 511 remoções, incluindo drift de
-  plataforma (`PostgREST 14.15` e `graphql_public`). Para não importar esse
-  drift, `src/types/supabase.ts` preserva a base `public` regenerada de produção
-  (`PostgREST 14.1`) e recebeu somente o schema `public` validado no ensaio. O
-  resultado inclui a tabela `whatsapp_caixas_credenciais_auditoria`, as FKs reais
-  e as assinaturas RPC geradas.
+  plataforma (`PostgREST 14.15` e `graphql_public`). A comparação semântica
+  confirmou a tabela `whatsapp_caixas_credenciais_auditoria`, as FKs reais e as
+  assinaturas RPC geradas. Esse artefato bruto foi usado como evidência do
+  ensaio e não foi mantido no repositório.
 
 Houve ciclos preparatórios abortados antes de completar o ensaio por tratamento
 de `stderr`, latência do pooler e pré-condições do CLI. Todos executaram cleanup;
@@ -182,6 +181,26 @@ com ele presente, aplicação e postflight das migrations, deploy/verificação 
 Edge Function e somente depois merge/deploy do frontend. Enquanto isso, o PR
 permanece aberto para revisão do Hugo, sem merge. O hardening separado de
 `movimentacoes_admin` e a homologação operacional continuam gates abertos.
+
+### Conclusão do Gitleaks no PR 16
+
+O check de `push` (job `91202081133`) passou, enquanto o check de
+`pull_request` (job `91202344040`) encontrou quatro ocorrências históricas ao
+varrer o intervalo da branch. A hipótese de tokens sintéticos no fixture de
+`whatsapp_caixas` não se confirmou: nenhum dos quatro alertas veio desse
+arquivo.
+
+Todos os achados usam a regra `generic-api-key` em
+`supabase/functions/enviar-pesquisa-evasao/contract.test.ts`, nas linhas
+históricas 27, 262 e 500 dos commits `61b7a2a`, `70a8fd8` e `1052d24`. São duas
+UUIDs sintéticas usadas como `authUserId` em objetos de teste. Uma consulta
+somente leitura em produção confirmou zero correspondências tanto em
+`auth.users.id` quanto em `public.usuarios.auth_user_id`.
+
+O arquivo `.gitleaksignore` permite somente os quatro fingerprints exatos,
+incluindo commit, caminho, regra e linha. Não existe allowlist genérica para
+UUID, `authUserId`, arquivo ou diretório. A reprodução local com Gitleaks
+`8.24.3` e o mesmo intervalo/log-options do job terminou com `no leaks found`.
 
 ### Inventário da `p01c-staging` antes de eventual remoção
 
@@ -271,15 +290,23 @@ falsificação do histórico para contornar drift.
   `supabase/functions/enviar-pesquisa-evasao`
 - Verificação transacional:
   `scripts/verify-pesquisa-evasao-rls.sql`
-- Tipos:
-  `src/types/supabase.ts`
+- Tipos explícitos consumidos pelo frontend:
+  `src/components/App/SucessoCliente/pesquisaEvasao.types.ts`
 
-Os tipos foram gerados em modo somente leitura a partir do projeto confirmado
-`ouqwbbermlzqqvtqwlul` em 2026-07-30 e receberam o contrato local das três
-migrations ainda não implantadas. Depois de aplicar as migrations em
-homologação, regenerar os tipos contra a homologação e exigir diff sem
-divergência no domínio antes de aceitar o arquivo definitivo.
-Em outras palavras: tipos consultaram produção somente em leitura.
+`src/types/supabase.ts` tinha 532 linhas antes deste trabalho: era um contrato
+manual e parcial, sem views nem funções, e não é consumido pelo código de
+produção. A geração completa do schema `public` elevava o arquivo para 46.762
+linhas e respondia por 71% do PR. Como a aplicação usa os tipos explícitos acima,
+o arquivo parcial foi restaurado à baseline da `main`; o artefato completo do
+ensaio não foi mantido no diff.
+
+Os tipos completos foram gerados em modo somente leitura a partir do projeto
+confirmado `ouqwbbermlzqqvtqwlul` e do projeto descartável já migrado. A
+comparação serviu para validar o schema, as FKs e assinaturas RPC, sem transformar
+este PR em uma atualização global de tipos. Depois de aplicar as migrations em
+homologação, repetir a geração em arquivo temporário e exigir diff sem
+divergência no domínio. Em outras palavras: tipos consultaram produção somente
+em leitura e o frontend permanece governado pelo contrato explícito revisável.
 
 Em 2026-07-30, `list_migrations` confirmou no projeto
 `ouqwbbermlzqqvtqwlul` a versão remota
@@ -440,6 +467,16 @@ decisões abertas do Subprojeto C. Não introduzir regra D+3 neste rollout.
 Autenticação do webhook inbound, conversa multipartes, opt-out e expurgo do
 `webhook_debug_log` pertencem ao Subprojeto B. O B deve preservar
 `processar-resposta-pesquisa`, inclusive a pesquisa pós-primeira aula.
+
+Exceção declarada neste PR: `webhook-whatsapp-inbox/index.ts` remove o fallback
+de depuração que, sem encontrar o telefone recebido, aceitava qualquer estado
+ativo de evasão e podia gravar a resposta na pesquisa de outra família. Essa
+correção preexistente está explicitamente listada entre os arquivos a preservar
+no Plano A e é coberta por `pesquisaEvasaoCanonica.test.mjs`. Ela precisa entrar
+agora para garantir a integridade das respostas criadas pela fundação do Plano
+A. O arquivo não recebe aqui autenticação inbound, agregação multipartes,
+opt-out nem política de logs; esses contratos continuam integralmente no
+Subprojeto B.
 
 ### 6. Baseline local do Supabase
 
@@ -748,11 +785,12 @@ npx supabase db lint --local
 Depois das migrations em homologação:
 
 ```powershell
-npx supabase gen types typescript --local | Out-File -Encoding utf8 src/types/supabase.ts
+npx supabase gen types typescript --local | Out-File -Encoding utf8 $env:TEMP\pesquisa-evasao-homolog.types.ts
 ```
 
-O diff regenerado precisa manter as duas overloads legadas, a v2 com sete
-argumentos, o histórico de testes e as RPCs de claim/resultado.
+O artefato temporário precisa manter as duas overloads legadas, a v2 com sete
+argumentos, o histórico de testes e as RPCs de claim/resultado. Comparar apenas
+o domínio da entrega e não substituir `src/types/supabase.ts` neste PR.
 
 ## Ordem de rollout
 
