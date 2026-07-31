@@ -167,6 +167,112 @@ export function horarioExperimentalParaBanco(horario: string): string {
   return `${match[1]}:${match[2]}:00`;
 }
 
+type IdentidadeCancelamentoEstavel = {
+  unidadeId: string;
+  dataAula: string;
+  horarioBanco: string;
+  cursoId: number | null;
+  emusysLeadId: number | null;
+  leadId: number | null;
+  alunoId: number | null;
+};
+
+type CandidatoCancelamentoEstavel = IdentidadeCancelamentoEstavel & {
+  id: number;
+  emusysAulaId: number | null;
+};
+
+function idPositivo(value: number | null): value is number {
+  return value !== null && Number.isSafeInteger(value) && value > 0;
+}
+
+export function selecionarIdsCancelamentoEstavel(input: {
+  identidade: IdentidadeCancelamentoEstavel;
+  candidatos: CandidatoCancelamentoEstavel[];
+}): number[] {
+  const identidade = input.identidade;
+  const temIdentidade = idPositivo(identidade.emusysLeadId) ||
+    idPositivo(identidade.leadId) || idPositivo(identidade.alunoId);
+  if (!temIdentidade) return [];
+
+  return input.candidatos
+    .filter((candidato) =>
+      candidato.unidadeId === identidade.unidadeId &&
+      candidato.dataAula === identidade.dataAula &&
+      candidato.horarioBanco === identidade.horarioBanco &&
+      candidato.cursoId === identidade.cursoId &&
+      (
+        (idPositivo(identidade.emusysLeadId) &&
+          candidato.emusysLeadId === identidade.emusysLeadId) ||
+        (idPositivo(identidade.leadId) &&
+          candidato.leadId === identidade.leadId) ||
+        (idPositivo(identidade.alunoId) &&
+          candidato.alunoId === identidade.alunoId)
+      )
+    )
+    .map((candidato) => candidato.id);
+}
+
+const STATUS_TERMINAIS_EXPERIMENTAL = new Set(["convertido", "matriculado"]);
+
+type EstadoExperimentalPersistido = {
+  status: string;
+  cursoId: number | null;
+  professorId: number | null;
+  emusysAulaId: number | null;
+  emusysLeadId: number | null;
+  alunoId: number | null;
+};
+
+export function montarPatchReconciliacaoExperimental(input: {
+  atual: EstadoExperimentalPersistido;
+  desejado: EstadoExperimentalPersistido & { etapaPipelineId: number };
+  atualizadoEm: string;
+}): { patch: Record<string, unknown>; statusMudou: boolean } {
+  const terminal = STATUS_TERMINAIS_EXPERIMENTAL.has(input.atual.status);
+  const statusMudou = !terminal && input.atual.status !== input.desejado.status;
+  const patch: Record<string, unknown> = { updated_at: input.atualizadoEm };
+
+  if (statusMudou) {
+    patch.status = input.desejado.status;
+    patch.etapa_pipeline_id = input.desejado.etapaPipelineId;
+  }
+  if (
+    input.desejado.cursoId !== null &&
+    input.atual.cursoId !== input.desejado.cursoId
+  ) {
+    patch.curso_interesse_id = input.desejado.cursoId;
+  }
+  if (
+    input.desejado.professorId !== null &&
+    input.atual.professorId !== input.desejado.professorId
+  ) {
+    patch.professor_experimental_id = input.desejado.professorId;
+  }
+  if (
+    input.atual.emusysAulaId === null && input.desejado.emusysAulaId !== null
+  ) {
+    patch.emusys_aula_id = input.desejado.emusysAulaId;
+  }
+  if (
+    input.atual.emusysLeadId === null && input.desejado.emusysLeadId !== null
+  ) {
+    patch.emusys_lead_id = input.desejado.emusysLeadId;
+  }
+  if (input.atual.alunoId === null && input.desejado.alunoId !== null) {
+    patch.aluno_id = input.desejado.alunoId;
+  }
+
+  return { patch, statusMudou };
+}
+
+export function chaveAulaPorUnidade(
+  unidadeId: string,
+  emusysAulaId: number,
+): string {
+  return `${unidadeId}:${emusysAulaId}`;
+}
+
 function numero(resultado: RpcResultado, campo: string): number {
   const valor = Number(resultado[campo] ?? 0);
   return Number.isFinite(valor) ? valor : 0;
