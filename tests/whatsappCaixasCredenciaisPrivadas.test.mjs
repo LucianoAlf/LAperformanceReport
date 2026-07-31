@@ -275,7 +275,7 @@ test('DoD e runbook refletem o escopo real e o usuario dedicado', () => {
   );
   assert.match(
     runbook,
-    /project ref[\s\S]*homologa[cç][aã]o[\s\S]*PENDENTE/i,
+    /project ref[\s\S]*homologa[cç][aã]o[\s\S]*nzwqjepncrtufpykjita/i,
   );
   assert.match(
     runbook,
@@ -284,6 +284,36 @@ test('DoD e runbook refletem o escopo real e o usuario dedicado', () => {
   assert.match(
     runbook,
     /16 consumidores diretos server-side[\s\S]*SUPABASE_SERVICE_ROLE_KEY/i,
+  );
+});
+
+test('runbook mantem staging incapaz de entregar WhatsApp', () => {
+  assert.match(runbook, /p01c-staging[\s\S]*nzwqjepncrtufpykjita/i);
+  assert.match(runbook, /20260614131323[\s\S]*20260730161312/i);
+  assert.match(runbook, /HOMOLOG-DESATIVADO-NAO-ENVIA/i);
+  assert.match(runbook, /n[aã]o restaurar[\s\S]*credenciais[\s\S]*produ[cç][aã]o/i);
+  assert.match(
+    runbook,
+    /credencial v[aá]lida[\s\S]*produ[cç][aã]o[\s\S]*(?:parar|interromper)[\s\S]*homologa[cç][aã]o/i,
+  );
+  assert.match(
+    runbook,
+    /falha[\s\S]*provedor[\s\S]*esperad[oa][\s\S]*autentica[cç][aã]o[\s\S]*permiss[aã]o[\s\S]*pr[eé]via[\s\S]*snapshot[\s\S]*idempot[eê]ncia/i,
+  );
+  assert.match(
+    runbook,
+    /byte a byte[\s\S]*produ[cç][aã]o[\s\S]*modo teste[\s\S]*n[uú]mero interno/i,
+  );
+});
+
+test('runbook registra drift do rebase e bloqueia provisionamento prematuro', () => {
+  assert.match(runbook, /MIGRATIONS_FAILED/i);
+  assert.match(runbook, /20260701000701_seguranca_rls_grupo_b_enable_policies/i);
+  assert.match(runbook, /20260702024506_fideliza_renovacoes_trim_movimentacoes_admin/i);
+  assert.match(runbook, /n[aã]o usar[\s\S]*migration repair/i);
+  assert.match(
+    runbook,
+    /terceiro usu[aá]rio[\s\S]*N[AÃ]O CRIADO[\s\S]*gate de schema/i,
   );
 });
 

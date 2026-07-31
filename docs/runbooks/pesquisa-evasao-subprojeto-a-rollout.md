@@ -3,9 +3,85 @@
 Data-base: 2026-07-31
 
 Estado: Plano A e hardening local de `whatsapp_caixas` concluídos; homologação
-e produção ainda não executadas
+bloqueada por drift estrutural da branch; produção não executada
 
 Projeto de produção confirmado somente para leitura: `ouqwbbermlzqqvtqwlul`
+
+Projeto de homologação confirmado: branch persistente `p01c-staging`, project
+ref `nzwqjepncrtufpykjita`, branch id
+`d18ef383-db7f-4598-9a0d-62bbb48eb308`, criada em 12/06/2026 com cópia de
+dados. Ela estava `ACTIVE_HEALTHY` antes da atualização e ficou
+`MIGRATIONS_FAILED` depois das tentativas de rebase descritas abaixo.
+
+## Ambiente de homologação e contenção de WhatsApp
+
+Antes do alinhamento, a última migration da staging era `20260614131323`; a
+produção terminava em `20260730161312`. A diferença apurada foi de 555
+migrations remotas. A staging precisa ser rebaseada sobre produção antes das
+migrations locais do Plano A, e o resultado deve terminar pelo menos em
+`20260730161312_pesquisa_evasao_movimentacao_canonica`.
+
+### Bloqueio encontrado no rebase de 31/07/2026
+
+O rebase oficial avançou a staging até `20260630203458` e parou. Duas
+tentativas foram encerradas com `MIGRATIONS_FAILED`; nenhuma migration do Plano
+A foi aplicada. O diagnóstico transacional, sempre com rollback, encontrou
+drift de schema já materializado na branch sem o histórico correspondente:
+
+1. `20260630204217_seguranca_c2_tokens_whatsapp_mila` encontrou sete policies
+   já existentes em `whatsapp_caixas` e `mila_config`;
+2. depois de simular a reconciliação dessas policies, a migration
+   `20260701000701_seguranca_rls_grupo_b_enable_policies` encontrou nove
+   policies já existentes, todas idênticas às canônicas de produção;
+3. depois de simular também a segunda reconciliação, a sequência falhou em
+   `20260702024506_fideliza_renovacoes_trim_movimentacoes_admin`: o patch exige
+   a CTE antiga `renovacoes_trim`, mas ela não existe no corpo encontrado na
+   staging.
+
+Isso demonstra drift estrutural, não um conflito isolado. Não usar
+`migration repair`, não marcar versões como aplicadas e não resetar/recriar a
+branch sem autorização explícita e um plano que mantenha o WhatsApp sem saída.
+As sete policies removidas durante a primeira investigação foram restauradas
+exatamente ao estado pré-rebase; as nove do segundo lote nunca foram removidas
+fora da transação de diagnóstico. A verificação final confirmou:
+
+- staging ainda em `20260630203458`;
+- sete policies restauradas;
+- três tokens UAZAPI e a única chave WAHA preenchida continuam exatamente com
+  `HOMOLOG-DESATIVADO-NAO-ENVIA`;
+- produção continua em `20260730161312` e não recebeu o marcador de
+  homologação.
+
+Até decidir a reconstrução segura do ambiente, não criar o terceiro usuário,
+não aplicar as migrations locais e não iniciar smoke test.
+
+A branch contém dados reais copiados de produção: a fotografia de 31/07/2026
+encontrou 1.355 registros em `movimentacoes_admin`. Portanto, homologação não
+pode depender apenas do botão “Modo teste” para impedir destinatário real.
+
+Em 31/07/2026, com autorização do Alf, as três caixas da staging tiveram
+`uazapi_token` e, quando existente, `waha_api_key` substituídos por
+`HOMOLOG-DESATIVADO-NAO-ENVIA`. A verificação independente confirmou três
+caixas neutralizadas e fingerprints diferentes das credenciais de produção.
+O host ainda é `lamusic.uazapi.com`, então a neutralização das credenciais é o
+controle efetivo de contenção.
+
+Regras obrigatórias:
+
+- não restaurar credenciais de produção na staging;
+- não copiar token, API key, secret ou variável de produção para a branch;
+- revalidar as três caixas antes e depois de rebase, migration ou smoke test;
+- se surgir credencial válida de produção, parar imediatamente a homologação;
+- a falha na chamada ao provedor é esperada e obrigatória na staging.
+
+Na staging, validar somente o caminho até a tentativa externa: autenticação,
+permissão, prévia, snapshot, hash, idempotência, claim e gravação de estado. A
+falha esperada do provedor não pode ser convertida em sucesso nem provocar
+retry automático.
+
+A comparação da prévia com a mensagem recebida byte a byte fica fora da
+homologação. Ela será executada apenas no smoke de produção, em modo teste e
+exclusivamente para o número interno autorizado.
 
 ## Regra de parada
 
@@ -21,6 +97,10 @@ pode ser aplicado em produção antes de:
 Até essa autorização, produção é somente leitura. Não executar parcialmente os
 blocos SQL de rollout e não usar o perfil `admin` como atalho.
 Nenhuma migração e nenhum deploy podem ocorrer sem essa autorização explícita.
+Na staging, interromper a homologação se qualquer caixa deixar de usar a
+credencial inválida ou voltar a coincidir com uma credencial de produção.
+Também interromper se o rebase retornar `MIGRATIONS_FAILED` ou se exigir
+falsificação do histórico para contornar drift.
 
 ## Artefatos
 
@@ -287,11 +367,11 @@ vínculo global e não pode ser identificado pelo nome.
 
 | Campo | Valor da homologação |
 |---|---|
-| Project ref da homologação | PENDENTE |
-| `usuarios.id` | PENDENTE |
-| Email exato | PENDENTE |
-| `auth_user_id` | PENDENTE |
-| Unidade única | PENDENTE |
+| Project ref da homologação | `nzwqjepncrtufpykjita` |
+| `usuarios.id` | PENDENTE — não criado; gate de schema bloqueado |
+| Email exato | PENDENTE — não criado; gate de schema bloqueado |
+| `auth_user_id` | PENDENTE — não criado; gate de schema bloqueado |
+| Unidade única | PENDENTE — não criado; gate de schema bloqueado |
 | Perfil | `unidade` |
 
 Enquanto esses campos estiverem pendentes, a homologação de isolamento não está
@@ -539,11 +619,11 @@ forçar retry.
 | Item | Evidência |
 |---|---|
 | Commit implantado | PENDENTE |
-| Project ref reconfirmado | PENDENTE |
+| Project ref reconfirmado | `nzwqjepncrtufpykjita` em 31/07/2026 |
 | Migration de fundação | PENDENTE |
 | Migration de claim | PENDENTE |
 | Versão da Edge | PENDENTE |
-| Terceiro usuário de homologação | PENDENTE |
+| Terceiro usuário de homologação | NÃO CRIADO — bloqueado pelo gate de schema |
 | Saída da verificação RLS | PENDENTE |
 | Smoke test em modo teste | PENDENTE |
 | Envio real autorizado | PENDENTE |
