@@ -31,6 +31,7 @@ import {
   horarioExperimentalParaBanco,
   montarPatchReconciliacaoExperimental,
   normalizarHorarioExperimental,
+  selecionarIdsCancelamentoPorAula,
   selecionarIdsCancelamentoEstavel,
   type CursoDePara,
   type ExperimentalParaReconciliar,
@@ -504,19 +505,42 @@ async function reconciliarExperimentaisOrfas(
     // Cancelada: marcar 'cancelada'. Casa pela AULA (emusys_aula_id) e, p/ legados sem id,
     // por nome+data (só linhas sem aula_id, p/ não cancelar o outro instrumento do dia).
     if (exp.cancelada) {
-      const { error: cancelamentoError } = await supabase
+      const { data: candidatosAula, error: candidatosAulaError } = await supabase
         .from('lead_experimentais')
-        .update({ status: 'cancelada', updated_at: new Date().toISOString() })
+        .select('id, status, unidade_id, emusys_aula_id')
         .eq('unidade_id', exp.unidadeId)
-        .eq('emusys_aula_id', exp.emusysAulaId)
-        .neq('status', 'cancelada');
-      if (somenteIdentidadesEstaveis && cancelamentoError) {
-        throw new Error('FALHA_RECONCILIAR_CANCELAMENTO_SNAPSHOT');
+        .eq('emusys_aula_id', exp.emusysAulaId);
+      if (somenteIdentidadesEstaveis && candidatosAulaError) {
+        throw new Error('FALHA_CONSULTAR_CANCELAMENTO_AULA_SNAPSHOT');
+      }
+
+      const idsCancelamentoAula = selecionarIdsCancelamentoPorAula({
+        unidadeId: exp.unidadeId,
+        emusysAulaId: exp.emusysAulaId,
+        candidatos: (candidatosAula || []).map((candidato: any) => ({
+          id: Number(candidato.id),
+          status: candidato.status,
+          unidadeId: String(candidato.unidade_id),
+          emusysAulaId: candidato.emusys_aula_id == null
+            ? null
+            : Number(candidato.emusys_aula_id),
+        })),
+      });
+      if (idsCancelamentoAula.length > 0) {
+        const { error: cancelamentoError } = await supabase
+          .from('lead_experimentais')
+          .update({ status: 'cancelada', updated_at: new Date().toISOString() })
+          .in('id', idsCancelamentoAula)
+          .neq('status', 'cancelada')
+          .not('status', 'in', '("convertido","matriculado")');
+        if (somenteIdentidadesEstaveis && cancelamentoError) {
+          throw new Error('FALHA_RECONCILIAR_CANCELAMENTO_SNAPSHOT');
+        }
       }
       if (somenteIdentidadesEstaveis) {
         let consultaCandidatos = supabase
           .from('lead_experimentais')
-          .select('id, unidade_id, emusys_aula_id, data_experimental, horario_experimental, curso_interesse_id, emusys_lead_id, lead_id, aluno_id')
+          .select('id, status, unidade_id, emusys_aula_id, data_experimental, horario_experimental, curso_interesse_id, emusys_lead_id, lead_id, aluno_id')
           .eq('unidade_id', exp.unidadeId)
           .eq('data_experimental', exp.dataAula)
           .eq('horario_experimental', exp.horarioBanco)
@@ -584,6 +608,7 @@ async function reconciliarExperimentaisOrfas(
             },
             candidatos: (candidatos || []).map((candidato: any) => ({
               id: Number(candidato.id),
+              status: candidato.status,
               unidadeId: String(candidato.unidade_id),
               emusysAulaId: candidato.emusys_aula_id == null
                 ? null
@@ -615,7 +640,8 @@ async function reconciliarExperimentaisOrfas(
               updated_at: new Date().toISOString(),
             })
             .in('id', [...idsCancelamento])
-            .neq('status', 'cancelada');
+            .neq('status', 'cancelada')
+            .not('status', 'in', '("convertido","matriculado")');
           if (identidadeError) {
             throw new Error('FALHA_ATUALIZAR_CANCELAMENTO_SNAPSHOT');
           }
@@ -632,7 +658,8 @@ async function reconciliarExperimentaisOrfas(
             .eq('nome_aluno', nomeAluno)
             .eq('data_experimental', exp.dataAula)
             .eq('unidade_id', exp.unidadeId)
-            .neq('status', 'cancelada');
+            .neq('status', 'cancelada')
+            .not('status', 'in', '("convertido","matriculado")');
         }
       }
       continue;
