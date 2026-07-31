@@ -1,1103 +1,217 @@
 # Pesquisa de Evasão — Subprojeto A: Fundação Segura Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status em 31/07/2026:** escopo corrigido e aprovado por Alf. Este plano não cria nem depende de RBAC do domínio.
 
-**Goal:** Colocar o envio da pesquisa de evasão em uma fundação segura: usuário autenticado, permissão por unidade, assinatura automática de Fabi/Jéssica, prévia idêntica ao envio, modo teste isolado, dados paginados e RLS sem leitura ampla de respostas privadas.
+**Objetivo:** impedir disparos externos, resolver a identidade de quem envia pelo login, exigir prévia, separar teste de produção e preservar uma trilha completa de auditoria, permitindo que qualquer usuário interno ativo veja e envie pesquisas em qualquer unidade.
 
-**Architecture:** O navegador deixa de controlar operador, mensagem e telefone final. A Edge Function valida o JWT, resolve o usuário interno e suas permissões, renderiza e persiste uma prévia imutável e, na confirmação, envia exatamente o snapshot aprovado. O banco concentra templates, assinaturas, status, auditoria e RLS. Escritas operacionais passam pela Edge/RPC governada; o frontend mantém apenas leitura autorizada e confirmação explícita.
+**Arquitetura:** o navegador envia somente a intenção (`previsualizar` ou `confirmar`). A Edge exige JWT, resolve um único `public.usuarios` ativo, carrega movimentação, telefone, template, caixa e assinatura no servidor e persiste o snapshot antes de qualquer envio. A confirmação consome a prévia pertencente ao mesmo `auth.uid()`. O banco mantém leitura interna ampla, escrita operacional via service role e acesso direto revogado para roles de agentes.
 
-**Tech Stack:** React 19, TypeScript, Supabase Auth/Postgres/RLS/Edge Functions, Deno tests, Node `node:test`, UAZAPI/WAHA.
+**Stack:** React, TypeScript, Supabase Edge Functions, PostgreSQL/RLS, Node test runner e Deno tests.
 
----
+## 1. Decisões vinculantes
 
-## Premissas e fronteiras
+1. Qualquer usuário interno ativo do LA Report pode ver e enviar pesquisas de qualquer unidade.
+2. Unidade continua sendo filtro de interface e dado de auditoria, não fronteira de autorização.
+3. O endpoint `enviar-pesquisa-evasao` exige `verify_jwt = true` e também valida o JWT dentro da função.
+4. O operador nunca vem do request. Ele é resolvido por `auth.getUser(token)` e por uma linha única e ativa em `public.usuarios`.
+5. A assinatura padrão é o primeiro nome de `usuarios.nome`.
+6. `pesquisa_evasao_assinaturas` é somente override opcional de exibição. Ausência de linha ativa não bloqueia envio.
+7. A prévia mostra texto e destinatário exatos e precisa pertencer ao mesmo `auth_user_id` que confirma.
+8. Modo teste usa telefone explícito, fica marcado e não entra em estatísticas ou baseline.
+9. Telefone produtivo vem apenas do snapshot da movimentação; não há fallback para cadastro atual.
+10. Idempotência, claim atômico e trava de interface impedem clique duplo e reenvio ambíguo.
+11. O controle operacional é confiança com rastro: usuário, auth UID, assinatura exibida, mensagem, template, caixa, destino, modo e horário ficam registrados.
+12. Mila, Sol, Fábio e Lia não recebem acesso direto às tabelas privadas por seus roles de agente.
+13. `20260730180100_whatsapp_caixas_credenciais_privadas.sql` permanece integralmente inalterada.
+14. Nenhuma migration, função ou frontend será aplicado em produção sem revisão do diff e autorização explícita de Alf com o project ref `ouqwbbermlzqqvtqwlul` reconfirmado.
 
-- Este plano parte da spec aprovada em `docs/superpowers/specs/2026-07-30-pesquisa-evasao-v2-mapa-sinais-design.md`.
-- Preservar as correções locais já existentes em:
-  - `src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx`;
-  - `supabase/functions/enviar-pesquisa-evasao/index.ts`;
-  - `supabase/functions/webhook-whatsapp-inbox/index.ts`;
-  - `supabase/functions/enviar-pesquisa-evasao/contract.ts`;
-  - `supabase/functions/enviar-pesquisa-evasao/contract.test.ts`;
-  - `supabase/migrations/20260730161312_pesquisa_evasao_movimentacao_canonica.sql`;
-  - `tests/pesquisaEvasaoCanonica.test.mjs`.
-- Não aplicar migração nem fazer deploy antes de revisar o diff local e confirmar o alvo Supabase `ouqwbbermlzqqvtqwlul`.
-- Não alterar timing de disparo nem política de lembrete; são decisões do Subprojeto C.
-- Não dar acesso bruto a respostas para Lia, Sol, Fábio, Mila ou roles restritos. Agentes consumirão contratos governados em subprojetos posteriores.
-- A implementação deve manter a pesquisa pós-1ª aula intacta; a regressão completa desse fluxo será coberta no Subprojeto B.
+## 2. Fora do escopo
 
-## Contratos decididos
+- catálogo de permissões do domínio;
+- perfil dedicado de sucesso do aluno;
+- vínculos nominais de Fabi ou Jessica;
+- autorização por unidade;
+- usuário dedicado para testar isolamento de unidade;
+- classificação, ações e analytics do Subprojeto C;
+- conversa inbound multipartes, opt-out e expurgo do debug log do Subprojeto B;
+- hardening de `movimentacoes_admin`, que continua como projeto independente e não bloqueia a homologação deste plano.
 
-### Permissões
+## 3. Contrato de segurança
 
-| Código | Uso |
-|---|---|
-| `sucesso_aluno.evasao.ver` | listar cabeçalhos e ler conversa privada da unidade autorizada |
-| `sucesso_aluno.evasao.enviar` | gerar prévia e confirmar envio |
-| `sucesso_aluno.evasao.revisar` | revisar/concluir resposta |
-| `sucesso_aluno.evasao.gerir_acoes` | criar e acompanhar ações |
-| `sucesso_aluno.evasao.relatorios` | consultar apenas read models agregados |
-| `sucesso_aluno.evasao.modo_teste` | informar telefone de teste autorizado |
+### Ameaça original
 
-### Ações da Edge Function
+Sem JWT, qualquer pessoa que descubra a URL da Edge consegue pedir um disparo de WhatsApp em nome da LA Music. Esse é o achado crítico e o motivo do Subprojeto A.
 
-```ts
-type EnviarPesquisaRequest =
-  | {
-      acao: 'previsualizar';
-      evasao_id: number;
-      modo_teste: boolean;
-      telefone_teste?: string;
-    }
-  | {
-      acao: 'confirmar';
-      preview_id: string;
-    };
-```
+### Invariantes
 
-O request não aceita `operador`, `mensagem`, `assinatura_nome`, `telefone_override` em produção nem qualquer campo equivalente. Campo desconhecido sensível deve ser rejeitado com `400`.
+- chamada sem JWT ou com JWT inválido falha antes de carregar destinatário ou provedor;
+- JWT válido sem usuário interno ativo e único falha com `403`;
+- request não aceita operador, nome de assinatura, telefone produtivo, caixa, template ou mensagem;
+- confirmação só consome prévia do mesmo `auth_user_id`;
+- override de assinatura não troca a identidade auditada;
+- credenciais UAZAPI/WAHA nunca são retornadas ao navegador;
+- roles de agentes continuam sem acesso direto às respostas privadas.
 
-### Status
+## 4. Task 1 — Fixar o novo contrato em testes
 
-```text
-envio_status:
-nao_enviado | enviando | incerto | enviado | falhou | entregue | lido
+**Arquivos:**
 
-resposta_status:
-sem_resposta | coletando | pronta_para_revisao | em_revisao |
-revisada | expirada | invalidada | recusada_opt_out
-```
+- `tests/pesquisaEvasaoAcessoInternoAuditavel.test.mjs`
+- `tests/pesquisaEvasaoFundacaoSegura.test.mjs`
+- `tests/pesquisaEvasaoListagemSegura.test.mjs`
+- `tests/pesquisaEvasaoEdgeSegura.test.mjs`
+- `tests/pesquisaEvasaoRolloutGovernado.test.mjs`
+- `supabase/functions/enviar-pesquisa-evasao/auth.test.ts`
+- `supabase/functions/enviar-pesquisa-evasao/contract.test.ts`
 
-`pesquisa_evasao.status` permanece como compatibilidade temporária e é derivado dos dois campos novos.
+### Passos
 
-## Task 1: Fixar o contrato de banco e segurança em testes
+1. Provar que migration, Edge, spec, plano e runbook não contêm os artefatos de autorização granular removidos.
+2. Provar `verify_jwt = true`, `auth.getUser(token)` e resolução de usuário interno ativo único.
+3. Provar leitura e execução das RPCs por qualquer usuário interno ativo, inclusive com filtro consolidado.
+4. Provar que ausência de override usa o primeiro nome do cadastro.
+5. Provar que override ativo muda apenas o nome exibido e que múltiplos overrides falham fechados.
+6. Provar que roles de agentes continuam revogados.
+7. Executar os testes antes da implementação e registrar a falha esperada do contrato antigo.
 
-**Files:**
+## 5. Task 2 — Reconciliar banco e RLS sem RBAC
 
-- Create: `tests/pesquisaEvasaoFundacaoSegura.test.mjs`
-- Modify: `tests/pesquisaEvasaoCanonica.test.mjs`
-- Target migration: `supabase/migrations/20260730170000_pesquisa_evasao_fundacao_segura.sql`
+**Arquivos:**
 
-- [ ] **Step 1: Escrever os testes que falham**
+- `supabase/migrations/20260730170000_pesquisa_evasao_fundacao_segura.sql`
+- `supabase/migrations/20260730173000_pesquisa_evasao_claim_seguro.sql`
+- `scripts/verify-pesquisa-evasao-schema.sql`
+- `scripts/verify-pesquisa-evasao-rls.sql`
 
-Cobrir por leitura estrutural da migração:
+### Passos
 
-```js
-test('remove policy ALL aberta de pesquisa_evasao', () => {
-  assert.match(sql, /drop policy if exists pesquisa_evasao_all/i);
-  assert.doesNotMatch(sql, /for all\s+to\s+authenticated\s+using\s*\(\s*true\s*\)/i);
-});
+1. Remover criação de catálogo, perfil e helpers de autorização granular.
+2. Manter RLS ativa e trocar as policies de leitura por `EXISTS` de uma linha única e ativa em `public.usuarios` vinculada a `auth.uid()`.
+3. Manter `SELECT` para `authenticated` apenas nas tabelas operacionais que a tela lê.
+4. Manter inserts e updates operacionais em service role/RPC; não reabrir escrita direta a pessoas.
+5. Manter `REVOKE` explícito de `anon`, Mila, Sol, Fábio e Lia nas tabelas e RPCs privadas.
+6. Nas RPCs de listagem e estatística, validar somente service role ou usuário interno ativo. `p_unidade_id` continua filtro opcional.
+7. Tornar `pesquisa_evasao_previews.assinatura_id` anulável para suportar fallback sem provisionamento.
+8. Preservar o backfill fail-closed dos seis registros legados; banco vazio emite `NOTICE`, banco não vazio exige exatamente os seis testes.
+9. Preservar snapshot de telefone, status, idempotência, claim e trilha de auditoria.
 
-test('RLS usa permissoes do dominio e unidade da linha', () => {
-  assert.match(sql, /sucesso_aluno\.evasao\.ver/i);
-  assert.match(sql, /fn_usuario_atual_tem_permissao_estrita/i);
-  assert.match(sql, /unidade_id/i);
-});
+### Aceite
 
-test('admin legado nao substitui permissao granular do dominio', () => {
-  assert.match(sql, /usuario_tem_permissao_estrita/i);
-  assert.doesNotMatch(sql, /perfil\s*=\s*['"]admin['"][\s\S]+sucesso_aluno\.evasao/i);
-});
+- usuário interno ativo lista consolidado e qualquer unidade;
+- usuário autenticado sem cadastro interno ativo não lê e não opera;
+- `anon` não executa RPCs;
+- agents não leem respostas diretamente;
+- nenhuma tabela de RBAC é alterada.
 
-test('modo teste nao disputa unicidade nem sobrescreve producao', () => {
-  assert.match(sql, /unique[\s\S]+evasao_id[\s\S]+where[\s\S]+modo_teste\s*=\s*false/i);
-  assert.doesNotMatch(sql, /unique\s*\(\s*evasao_id\s*\)/i);
-});
+## 6. Task 3 — Identidade e assinatura confiáveis na Edge
 
-test('as duas overloads filtram cada linha pelas unidades autorizadas', () => {
-  assert.match(sql, /listar_evadidos_para_pesquisa\(uuid,\s*integer,\s*integer,\s*varchar\)/i);
-  assert.match(sql, /listar_evadidos_para_pesquisa\(uuid,\s*integer,\s*integer,\s*varchar,\s*integer,\s*integer\)/i);
-});
+**Arquivos:**
 
-test('roles de agentes nao recebem resposta privada', () => {
-  assert.match(sql, /revoke[\s\S]+mila_acesso_restrito/i);
-  assert.match(sql, /revoke[\s\S]+sol_acesso_restrito/i);
-});
+- `supabase/config.toml`
+- `supabase/functions/enviar-pesquisa-evasao/auth.ts`
+- `supabase/functions/enviar-pesquisa-evasao/index.ts`
+- `supabase/functions/enviar-pesquisa-evasao/contract.ts`
 
-test('novas tabelas privadas nascem com RLS e grants minimos', () => {
-  for (const table of [
-    'pesquisa_evasao_templates',
-    'pesquisa_evasao_assinaturas',
-    'pesquisa_evasao_previews',
-    'pesquisa_evasao_mensagens',
-    'pesquisa_evasao_transcricoes',
-    'pesquisa_evasao_analises',
-  ]) {
-    assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security`, 'i'));
-  }
-});
-```
+### Passos
 
-- [ ] **Step 2: Executar e confirmar a falha**
+1. Manter o gateway com `verify_jwt = true`.
+2. Extrair somente bearer token válido e chamar `supabase.auth.getUser(token)`.
+3. Resolver exatamente um usuário interno ativo pelo `auth_user_id`.
+4. Derivar o primeiro nome de `usuarios.nome`.
+5. Consultar zero ou um override ativo em `pesquisa_evasao_assinaturas`.
+6. Se não houver override, usar o primeiro nome; se houver mais de um, falhar fechado.
+7. Remover qualquer chamada de permissão ou unidade da autenticação do operador.
+8. Manter a allowlist de campos do request, impedindo operador ou mensagem forjados.
+9. Persistir `usuario_id`, `auth_user_id`, `assinatura_id` anulável e `assinatura_nome_snapshot`.
 
-Run:
+## 7. Task 4 — Prévia, envio e auditoria
+
+**Arquivos:**
+
+- `supabase/functions/enviar-pesquisa-evasao/index.ts`
+- `supabase/functions/enviar-pesquisa-evasao/contract.ts`
+- `supabase/migrations/20260730173000_pesquisa_evasao_claim_seguro.sql`
+- `src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx`
+- `src/components/App/SucessoCliente/ModalPreviewPesquisaEvasao.tsx`
+
+### Passos
+
+1. `previsualizar` recebe apenas evasão, modo e telefone de teste opcional.
+2. O servidor resolve movimentação canônica, snapshot de telefone, público, template, assinatura e caixa.
+3. O preview persiste todos os snapshots, hash, ownership, TTL e idempotency key.
+4. O modal mostra destinatário mascarado, modo, unidade, aluno, curso, professor, assinatura e mensagem exata.
+5. `confirmar` recebe somente `preview_id`, verifica ownership e consome claim atômico.
+6. O provedor recebe exatamente o snapshot aprovado.
+7. Resultado enviado, falho ou incerto é persistido sem reenvio automático.
+8. A UI usa trava síncrona para impedir clique duplo.
+
+## 8. Task 5 — Modo teste e dados legados
+
+1. Os seis IDs confirmados por Alf recebem `modo_teste = true`.
+2. Eles aparecem com badge `TESTE` e histórico separado.
+3. Não contam em taxa de resposta, causas, baseline, ações ou indicador de professor.
+4. Modo teste exige telefone explícito e nunca altera aluno ou movimentação.
+5. Produção usa somente `movimentacoes_admin.telefone_snapshot`.
+6. O rollout confere explicitamente que os seis registros ficaram marcados.
+
+## 9. Task 6 — Hardening independente de `whatsapp_caixas`
+
+**Arquivo imutável nesta correção de rumo:**
+
+- `supabase/migrations/20260730180100_whatsapp_caixas_credenciais_privadas.sql`
+
+Manter integralmente:
+
+- revogação da leitura direta de credenciais pelo frontend;
+- RPCs/read models sem token;
+- consumidores migrados no Pré-Atendimento e Caixa de Entrada;
+- Edge Functions usando service role;
+- teste explícito de que `authenticated` não lê `uazapi_token` nem `waha_api_key`.
+
+Registrar e comparar o hash do arquivo antes e depois desta refatoração.
+
+## 10. Task 7 — Documentação e verificação
+
+**Arquivos:**
+
+- `docs/superpowers/specs/2026-07-30-pesquisa-evasao-v2-mapa-sinais-design.md`
+- este plano
+- `docs/runbooks/pesquisa-evasao-subprojeto-a-rollout.md`
+
+### Verificação mínima
 
 ```powershell
-node --test tests/pesquisaEvasaoFundacaoSegura.test.mjs
-```
-
-Expected: FAIL informando que a migração da fundação ainda não existe.
-
-- [ ] **Step 3: Acrescentar testes para status, preview e isolamento de teste**
-
-Exigir:
-
-- colunas novas de entrega/resposta;
-- `modo_teste`;
-- os seis registros legados confirmados por Alf como testes, sem participação em analytics ou ações;
-- telefone de destino em snapshot, sem alteração do cadastro do aluno;
-- preview com expiração, hash e uso único;
-- chave idempotente;
-- estados `enviando` e `incerto`, sem reenvio automático depois de resultado ambíguo;
-- modo teste em linha própria, sem sobrescrever ou bloquear produção;
-- escopo negativo: usuário da unidade A não lista A+B passando `p_unidade_id=NULL`, em nenhuma overload;
-- escopo negativo: `stats_pesquisa_evasao(NULL, ...)` de usuário da unidade A não agrega a unidade B;
-- vínculo único entre preview, chave idempotente e pesquisa;
-- vínculo de assinatura, usuário autenticado, template e caixa;
-- constraints que incluam `recusada_opt_out`.
-
-- [ ] **Step 4: Commit dos testes vermelhos**
-
-```powershell
-git add -- tests/pesquisaEvasaoFundacaoSegura.test.mjs tests/pesquisaEvasaoCanonica.test.mjs
-git commit -m "test: definir fundacao segura da pesquisa de evasao"
-```
-
-## Task 2: Criar schema, permissões e RLS da fundação
-
-**Files:**
-
-- Create: `supabase/migrations/20260730170000_pesquisa_evasao_fundacao_segura.sql`
-- Test: `tests/pesquisaEvasaoFundacaoSegura.test.mjs`
-
-- [ ] **Step 1: Criar catálogo, perfil dedicado e helper estrito de forma idempotente**
-
-Inserir os seis códigos em `public.permissoes`, respeitando as colunas reais verificadas no banco. Antes de escrever a migração, rodar somente leitura:
-
-```sql
-select column_name, data_type, is_nullable
-from information_schema.columns
-where table_schema = 'public'
-  and table_name in ('permissoes', 'perfis', 'perfil_permissoes', 'usuario_perfis')
-order by table_name, ordinal_position;
-```
-
-A migração não deve atribuir permissões por comparação frouxa de nome. Criar os códigos primeiro; a atribuição a Fabi/Jessica usa exclusivamente os IDs verificados `30` e `29` — ou os emails exatos associados — no checklist de rollout.
-
-- As duas titulares recebem `sucesso_aluno.evasao.ver`, `.enviar`, `.revisar`, `.gerir_acoes` e `.modo_teste`. Não atribuir `.relatorios` por implicação.
-- O escopo é explícito nas três unidades ativas — Barra, Campo Grande e Recreio — por linhas de `usuario_perfis` vinculadas à unidade concreta. Não usar `usuarios.perfil='admin'`, `usuarios.unidade_id=NULL` nem perfil global como prova ou atalho de autorização.
-- Criar o perfil dedicado `Sucesso do Aluno - Evasão`, nível operacional `30`, ligado somente às cinco permissões aprovadas. O código `.relatorios` existe no catálogo, mas não é ligado a esse perfil.
-- Criar `usuario_tem_permissao_estrita(usuario_id, codigo, unidade_id)` e `fn_usuario_atual_tem_permissao_estrita(codigo, unidade_id)`. Para códigos `sucesso_aluno.evasao.*`, elas exigem unidade não nula e uma linha ativa em `usuario_perfis` com a mesma unidade; não consultam nem aceitam o bypass legado `usuarios.perfil='admin'`.
-- RLS, RPCs e Edge deste domínio usam exclusivamente os helpers estritos. O bypass de `service_role` continua restrito ao backend depois da autenticação/autorização do usuário.
-
-- [ ] **Step 2: Criar tabelas de configuração e auditoria**
-
-Implementar:
-
-```sql
-create table public.pesquisa_evasao_assinaturas (
-  id uuid primary key default gen_random_uuid(),
-  usuario_id integer not null references public.usuarios(id),
-  nome_assinatura text not null,
-  cargo_assinatura text not null default 'Sucesso do Aluno',
-  ativo boolean not null default true,
-  valido_desde timestamptz not null default now(),
-  valido_ate timestamptz,
-  criado_em timestamptz not null default now()
-);
-
-create unique index pesquisa_evasao_assinaturas_usuario_ativa_uidx
-  on public.pesquisa_evasao_assinaturas (usuario_id)
-  where ativo;
-
-create table public.pesquisa_evasao_templates (
-  id uuid primary key default gen_random_uuid(),
-  chave text not null,
-  versao integer not null,
-  publico text not null check (publico in ('direto', 'responsavel')),
-  corpo text not null,
-  ativo boolean not null default false,
-  criado_por_usuario_id integer references public.usuarios(id),
-  criado_em timestamptz not null default now(),
-  unique (chave, versao, publico)
-);
-
-create table public.pesquisa_evasao_previews (
-  id uuid primary key default gen_random_uuid(),
-  evasao_id integer not null references public.movimentacoes_admin(id),
-  unidade_id uuid not null references public.unidades(id),
-  usuario_id integer not null references public.usuarios(id),
-  auth_user_id uuid not null,
-  assinatura_id uuid not null references public.pesquisa_evasao_assinaturas(id),
-  template_id uuid not null references public.pesquisa_evasao_templates(id),
-  caixa_id integer not null references public.whatsapp_caixas(id),
-  modo_teste boolean not null,
-  destinatario_tipo text not null check (destinatario_tipo in ('aluno', 'responsavel', 'teste')),
-  telefone_destino text not null,
-  mensagem_renderizada text not null,
-  payload_hash text not null,
-  idempotency_key uuid not null unique default gen_random_uuid(),
-  expira_em timestamptz not null,
-  consumido_em timestamptz,
-  criado_em timestamptz not null default now()
-);
-```
-
-Se `usuarios.id` não for `integer` na inspeção real, usar o tipo exato do FK; não fazer cast silencioso.
-
-- [ ] **Step 3: Criar antecipadamente as tabelas privadas usadas por B**
-
-Criar o schema mínimo, ainda sem ativar o novo roteamento:
-
-- `pesquisa_evasao_mensagens`;
-- `pesquisa_evasao_transcricoes`;
-- `pesquisa_evasao_analises`.
-
-Campos obrigatórios:
-
-```text
-pesquisa_evasao_mensagens:
-id, pesquisa_id nullable, caixa_id, direcao, provider_message_id,
-telefone_normalizado, tipo, texto, audio_storage_path,
-provider_created_at, recebido_em, resolution_status,
-substantividade, correlation_id, idempotency_key, criado_em
-
-pesquisa_evasao_transcricoes:
-id, mensagem_id, versao, status, texto, erro_codigo,
-modelo, criado_em, concluido_em
-
-pesquisa_evasao_analises:
-id, pesquisa_id, versao, texto_consolidado, status,
-revisor_usuario_id, revisado_em, criado_em
-```
-
-Restrições:
-
-- `unique (caixa_id, provider_message_id)` quando o ID não for nulo;
-- `unique (mensagem_id, versao)` para transcrição;
-- `unique (pesquisa_id, versao)` para análise;
-- nenhuma URL pública de mídia;
-- texto bruto só nas tabelas privadas.
-
-- [ ] **Step 4: Evoluir `pesquisa_evasao` de forma aditiva**
-
-Adicionar, sem remover as colunas legadas:
-
-```text
-envio_status, resposta_status, modo_teste,
-telefone_destino_snapshot, caixa_id,
-executado_por_usuario_id, executado_por_auth_user_id,
-assinatura_id, assinatura_nome_snapshot,
-template_id, template_versao,
-mensagem_renderizada, provider_message_id,
-preview_id, idempotency_key, envio_iniciado_em,
-primeira_interacao_em,
-ultima_interacao_em, pronta_para_revisao_em
-```
-
-Backfill:
-
-- `status='respondido'` → `envio_status='enviado'`, `resposta_status='pronta_para_revisao'`;
-- `status='enviado'` → `envio_status='enviado'`, `resposta_status='sem_resposta'`;
-- falhas/pendências mantêm equivalência documentada;
-- os seis registros existentes ficam `modo_teste=true`, porque Alf confirmou que todos foram disparados para o mesmo número interno de teste antes da produção;
-- antes da migração, registrar em evidência privada de rollout os seis UUIDs verificados em produção, sem telefone ou conteúdo de resposta;
-- o backfill usa uma allowlist explícita desses seis UUIDs e falha de forma segura se ela não resolver exatamente seis registros, um único telefone normalizado e nenhum telefone vazio;
-- somente os seis UUIDs aprovados são atualizados; linhas criadas depois da verificação não são classificadas por abrangência da tabela ou por semelhança de telefone;
-- um comentário SQL registra a origem da decisão, a data da confirmação e a regra de exclusão analítica;
-- qualquer registro futuro usa `modo_teste=false` por padrão e só vira teste pelo fluxo autorizado;
-- `stats_pesquisa_evasao`, read models, taxas de resposta, causas, baselines, ações e indicadores de professor filtram `modo_teste=false`;
-- a listagem operacional mantém os seis registros visíveis com badge inequívoco `TESTE`, sem oferecê-los como trabalho real para Fabi/Jéssica.
-- remover a unicidade global de `evasao_id` e criar índice único parcial apenas para produção: `unique (evasao_id) where modo_teste=false`;
-- `preview_id` referencia `pesquisa_evasao_previews(id)` e é único; `idempotency_key` também é único e é copiado da preview, nunca regenerado no claim;
-- um índice único parcial de slot ativo de teste impede duas tentativas simultâneas para a mesma evasão e telefone de teste enquanto o estado for `enviando` ou `incerto`, sem bloquear produção;
-- todo claim de teste insere linha própria; nunca usa `ON CONFLICT` contra o cabeçalho produtivo.
-
-Contrato do backfill, sem versionar o telefone interno:
-
-```sql
-do $$
-declare
-  v_ids uuid[] := array[
-    -- preencher na implementação com os seis UUIDs confirmados
-  ]::uuid[];
-  v_total integer;
-  v_telefones integer;
-  v_telefones_vazios integer;
-begin
-  select
-    count(*),
-    count(distinct nullif(regexp_replace(coalesce(aluno_telefone, ''), '\D', '', 'g'), '')),
-    count(*) filter (
-      where nullif(regexp_replace(coalesce(aluno_telefone, ''), '\D', '', 'g'), '') is null
-  )
-  into v_total, v_telefones, v_telefones_vazios
-  from public.pesquisa_evasao
-  where id = any(v_ids);
-
-  if cardinality(v_ids) <> 6
-     or v_total <> 6
-     or v_telefones <> 1
-     or v_telefones_vazios <> 0 then
-    raise exception
-      'Backfill legado de modo_teste abortado: esperados 6 registros, 1 telefone e nenhum telefone vazio';
-  end if;
-
-  update public.pesquisa_evasao pe
-  set modo_teste = true,
-      updated_at = now()
-  where pe.id = any(v_ids);
-end;
-$$;
-
-comment on column public.pesquisa_evasao.modo_teste is
-  'Os 6 registros anteriores a producao foram confirmados por Alf em 2026-07-30 como testes no numero interno; ficam fora de analytics, acoes e indicadores.';
-```
-
-- [ ] **Step 5: Reescrever grants e policies por classe de tabela**
-
-Matriz obrigatória:
-
-- `pesquisa_evasao`: `SELECT` de `authenticated` somente com `sucesso_aluno.evasao.ver` na `unidade_id` da própria linha;
-- `pesquisa_evasao_mensagens`, `pesquisa_evasao_transcricoes` e `pesquisa_evasao_analises`: `SELECT` de `authenticated` somente com `ver`, resolvendo a unidade pelo cabeçalho;
-- `pesquisa_evasao_previews`, `pesquisa_evasao_templates` e `pesquisa_evasao_assinaturas`: service-only, sem `SELECT` direto de `authenticated`; a Edge devolve apenas a projeção autorizada necessária à tela;
-- todas: RLS habilitada, sem policy `USING (true)`, e `ALL` revogado de `PUBLIC`, `anon`, `authenticated`, `mila_acesso_restrito` e `sol_acesso_restrito` antes dos grants mínimos explícitos;
-- sequences relacionadas também perdem grants de `PUBLIC`/`anon`/roles restritos.
-
-A policy de leitura do cabeçalho exige:
-
-```sql
-public.fn_usuario_atual_tem_permissao_estrita(
-  'sucesso_aluno.evasao.ver'::varchar,
-  unidade_id_da_pesquisa
-)
-```
-
-Nas tabelas filhas de conversa, obter a unidade por `exists` no cabeçalho. A preview é service-only e guarda `unidade_id` como snapshot de autorização/auditoria porque existe antes do cabeçalho.
-
-Não criar policy de escrita direta para o navegador. Edge Functions usam service role depois de autenticar/autorização; revisão humana ganhará RPC governada no B/C.
-
-- [ ] **Step 6: Proteger RPCs legadas**
-
-Substituir as implementações de:
-
-- `listar_evadidos_para_pesquisa(uuid, integer, integer, varchar)`;
-- `listar_evadidos_para_pesquisa(uuid, integer, integer, varchar, integer, integer)`;
-- `stats_pesquisa_evasao(uuid, integer, integer)`;
-- `criar_pesquisa_evasao(integer, text)`;
-- `pode_enviar_pesquisa_evasao(integer)`.
-
-Regras:
-
-- o frontend atual chama a sobrecarga de seis argumentos, mas a de quatro também é endurecida para não permanecer como bypass de compatibilidade;
-- nesta etapa, preservar exatamente o `RETURNS TABLE` de cada overload; PostgreSQL não permite mudar retorno por `CREATE OR REPLACE`;
-- ambas as sobrecargas de `listar` e `stats` exigem `sucesso_aluno.evasao.ver` e filtram cada linha pela unidade real de `movimentacoes_admin`;
-- `p_unidade_id=NULL` significa “todas as unidades autorizadas”, nunca “todas as unidades”: a função avalia cada linha contra `usuario_perfis.unidade_id`; perfil global ou admin legado não amplia o escopo deste domínio;
-- nenhuma autorização do domínio chama `usuario_tem_permissao_estrita(..., NULL)`; a Edge e as RPCs sempre usam a unidade concreta da movimentação;
-- testes legados continuam visíveis e marcados na listagem operacional, mas `stats` e qualquer agregado excluem `modo_teste=true`;
-- revogar `EXECUTE` de `PUBLIC` e `anon` nas cinco assinaturas;
-- `criar_pesquisa_evasao` passa a `SECURITY DEFINER`, fixa `search_path = public, pg_temp`, valida `auth.role()='service_role'`, perde `EXECUTE` de `authenticated` e fica somente para `service_role`;
-- o claim novo é o único caminho da nova Edge para criar/transicionar pesquisa; `criar_pesquisa_evasao` fica como compatibilidade service-only, não marca `enviado` antes do provedor e usa o conflito parcial de produção;
-- `pode_enviar_pesquisa_evasao` permanece disponível apenas a ator autenticado com `sucesso_aluno.evasao.enviar` ou a `service_role`;
-- nenhuma RPC retorna resposta bruta a quem possui apenas `relatorios`;
-- `search_path = public, pg_temp`;
-- funções `SECURITY DEFINER` validam permissão explicitamente.
-- além dos testes por texto, validar o estado real com `pg_policies`, `has_table_privilege` e `has_function_privilege` para todas as assinaturas e roles.
-
-Grants mínimos esperados:
-
-```sql
-revoke all on function public.listar_evadidos_para_pesquisa(uuid, integer, integer, varchar)
-  from public, anon;
-revoke all on function public.listar_evadidos_para_pesquisa(uuid, integer, integer, varchar, integer, integer)
-  from public, anon;
-revoke all on function public.stats_pesquisa_evasao(uuid, integer, integer)
-  from public, anon;
-revoke all on function public.criar_pesquisa_evasao(integer, text)
-  from public, anon, authenticated;
-revoke all on function public.pode_enviar_pesquisa_evasao(integer)
-  from public, anon;
-```
-
-- [ ] **Step 7: Executar testes estruturais**
-
-Run:
-
-```powershell
-node --test tests/pesquisaEvasaoFundacaoSegura.test.mjs tests/pesquisaEvasaoCanonica.test.mjs
-```
-
-Expected: PASS.
-
-- [ ] **Step 8: Validar a migração em PostgreSQL local**
-
-Run, com stack local ativa:
-
-```powershell
-npx supabase db reset
-npx supabase db lint --local
-```
-
-Expected: migração aplicada e lint sem erro novo relacionado ao domínio.
-
-Se o PostgreSQL local não estiver disponível, não aplicar em produção para “testar”. Registrar o bloqueio e usar CI/ambiente de homologação.
-
-- [ ] **Step 9: Commit**
-
-```powershell
-git add -- supabase/migrations/20260730170000_pesquisa_evasao_fundacao_segura.sql tests/pesquisaEvasaoFundacaoSegura.test.mjs tests/pesquisaEvasaoCanonica.test.mjs
-git commit -m "feat: criar fundacao e rls da pesquisa de evasao"
-```
-
-## Task 3: Criar contrato puro de autenticação, assinatura e renderização
-
-**Files:**
-
-- Modify: `supabase/functions/enviar-pesquisa-evasao/contract.ts`
-- Modify: `supabase/functions/enviar-pesquisa-evasao/contract.test.ts`
-- Create: `supabase/functions/enviar-pesquisa-evasao/auth.ts`
-- Create: `supabase/functions/enviar-pesquisa-evasao/auth.test.ts`
-
-- [ ] **Step 1: Escrever testes vermelhos do request**
-
-Cobrir:
-
-- rejeição de `operador`;
-- rejeição de `mensagem`;
-- rejeição de `telefone_override`;
-- `telefone_teste` aceito apenas quando `modo_teste=true`;
-- ação `confirmar` aceita somente `preview_id`;
-- telefone de produção sempre vem dos snapshots canônicos;
-- número de teste não é gravado em `alunos` nem `movimentacoes_admin`.
-
-- [ ] **Step 2: Escrever testes vermelhos de template**
-
-Criar funções puras:
-
-```ts
-export function validarRequest(input: unknown): EnviarPesquisaRequest;
-export function renderizarMensagem(input: RenderInput): string;
-export function hashPreview(input: PreviewSnapshot): Promise<string>;
-export function mascararTelefone(telefone: string): string;
-```
-
-Testar variantes:
-
-- aluno adulto;
-- responsável por menor;
-- assinatura Fabi;
-- assinatura Jéssica;
-- placeholders ausentes causam erro, não texto quebrado;
-- mesma entrada produz mesmo hash;
-- mudança de um caractere muda o hash.
-
-- [ ] **Step 3: Escrever testes vermelhos de identidade**
-
-`auth.ts` deve expor uma função testável que recebe adapters:
-
-```ts
-export interface ContextoOperador {
-  usuarioId: number;
-  authUserId: string;
-  nomeUsuario: string;
-  assinaturaId: string;
-  assinaturaNome: string;
-}
-```
-
-Casos:
-
-- token ausente → `401`;
-- token inválido → `401`;
-- usuário sem linha ativa em `usuarios` → `403`;
-- assinatura inativa/ausente → `403`;
-- sem `sucesso_aluno.evasao.enviar` → `403`;
-- teste sem `sucesso_aluno.evasao.modo_teste` → `403`;
-- Fabi/Jéssica recebem sua própria assinatura;
-- o request não consegue trocar a identidade.
-
-- [ ] **Step 4: Executar e confirmar a falha**
-
-```powershell
-deno test supabase/functions/enviar-pesquisa-evasao/contract.test.ts supabase/functions/enviar-pesquisa-evasao/auth.test.ts
-```
-
-Expected: FAIL nos contratos novos.
-
-- [ ] **Step 5: Implementar o mínimo para passar**
-
-Usar `crypto.subtle.digest('SHA-256', ...)` para o hash do snapshot. A autorização deve distinguir:
-
-1. validação criptográfica do token via `auth.getUser`;
-2. resolução de `usuarios.auth_user_id`;
-3. verificação explícita de `usuario_tem_permissao_estrita(usuario.id, codigo, unidade_id)`;
-4. resolução de uma única assinatura ativa.
-
-`ContextoOperador` não carrega uma única “unidade do usuário”. O schema permite vários `usuario_perfis`; cada operação autoriza o operador contra a `unidade_id` concreta da movimentação. Nunca chamar o helper com unidade nula para decidir escopo.
-
-Não usar `fn_usuario_atual_tem_permissao_estrita` com o cliente service role para autorizar o operador, porque o bypass técnico do backend faria a checagem passar. A Edge chama `usuario_tem_permissao_estrita` com o `usuario.id` resolvido e a unidade concreta.
-
-- [ ] **Step 6: Executar testes**
-
-```powershell
-deno test supabase/functions/enviar-pesquisa-evasao/contract.test.ts supabase/functions/enviar-pesquisa-evasao/auth.test.ts
-```
-
-Expected: PASS.
-
-- [ ] **Step 7: Commit**
-
-```powershell
-git add -- supabase/functions/enviar-pesquisa-evasao/contract.ts supabase/functions/enviar-pesquisa-evasao/contract.test.ts supabase/functions/enviar-pesquisa-evasao/auth.ts supabase/functions/enviar-pesquisa-evasao/auth.test.ts
-git commit -m "feat: validar identidade e preview da pesquisa"
-```
-
-## Task 4: Implementar a Edge em duas fases
-
-**Files:**
-
-- Modify: `supabase/functions/enviar-pesquisa-evasao/index.ts`
-- Modify: `supabase/config.toml`
-- Create: `tests/pesquisaEvasaoEdgeSegura.test.mjs`
-
-- [ ] **Step 1: Escrever teste estrutural vermelho**
-
-Exigir:
-
-- `[functions.enviar-pesquisa-evasao] verify_jwt = true`;
-- leitura do `Authorization`;
-- `auth.getUser`;
-- ausência de default `operador='sistema'`;
-- ações `previsualizar` e `confirmar`;
-- `preview_id` consumido atomicamente;
-- chave idempotente estável criada no claim e reutilizada em toda reconciliação;
-- estados `enviando` e `incerto`, sem segundo dispatch automático;
-- nenhuma atualização de `alunos`/`movimentacoes_admin` com telefone de teste;
-- envio de teste cria linha própria e não conflita com o cabeçalho produtivo;
-- a nova Edge usa somente `claim_pesquisa_evasao_preview`, sem upsert direto e sem chamar a compatibilidade `criar_pesquisa_evasao`;
-- envio grava `executado_por_*`, assinatura, template e mensagem renderizada.
-
-- [ ] **Step 2: Implementar `previsualizar`**
-
-Ordem obrigatória:
-
-1. validar método e JWT;
-2. validar request;
-3. carregar movimentação canônica com `is_movimentacao_admin_retencao_valida`;
-4. validar unidade e `sucesso_aluno.evasao.enviar`;
-5. se teste, validar `modo_teste` e permissão própria;
-6. resolver assinatura ativa do usuário;
-7. resolver template ativo por público;
-8. resolver destinatário e telefone;
-9. renderizar no servidor;
-10. persistir `pesquisa_evasao_previews` com hash e expiração de 10 minutos;
-11. retornar dados de exibição, telefone mascarado e `preview_id`.
-
-Resposta esperada:
-
-```json
-{
-  "preview_id": "uuid",
-  "expira_em": "ISO-8601",
-  "aluno": "...",
-  "destinatario": "...",
-  "destinatario_tipo": "aluno|responsavel|teste",
-  "telefone_mascarado": "55••••••1234",
-  "assinatura": "Fabi",
-  "mensagem": "...",
-  "modo_teste": false,
-  "alertas": []
-}
-```
-
-- [ ] **Step 3: Implementar confirmação atômica**
-
-Criar RPC service-only na migração ou uma segunda migração pequena, caso necessário:
-
-```sql
-claim_pesquisa_evasao_preview(p_preview_id uuid, p_auth_user_id uuid)
-```
-
-Ela deve:
-
-- fazer `FOR UPDATE`;
-- validar autor e, no primeiro consumo, expiração;
-- se `consumido_em is not null` e a preview já estiver vinculada por `preview_id`, devolver o estado existente com `deve_despachar=false`;
-- se estiver consumida sem pesquisa vinculada, falhar de forma segura como inconsistência interna;
-- no primeiro consumo válido, marcar `consumido_em`;
-- copiar para a pesquisa a `idempotency_key` criada na preview; nunca gerar uma segunda chave;
-- serializar claims concorrentes pelo slot lógico: `(evasao_id, produção)` para produção e `(evasao_id, telefone_teste, teste)` para teste;
-- em produção, criar/atualizar somente o cabeçalho `modo_teste=false` protegido pelo índice único parcial;
-- em teste, sempre inserir uma linha `modo_teste=true` própria, sem atualizar ou bloquear o cabeçalho produtivo;
-- marcar `envio_status='enviando'` e `envio_iniciado_em`;
-- devolver snapshot completo e `deve_despachar=true` apenas ao primeiro claim;
-- em repetição do mesmo `preview_id`, devolver o estado existente com `deve_despachar=false`;
-- impedir clique duplo e bloquear nova prévia/confirmação enquanto o mesmo slot lógico estiver `enviando` ou `incerto`;
-- um teste `enviando`/`incerto` bloqueia outro teste do mesmo slot, mas nunca bloqueia produção da mesma evasão.
-
-A Edge envia somente o `mensagem_renderizada` do snapshot. Em sucesso:
-
-- `envio_status='enviado'`;
-- `status='enviado'` para compatibilidade;
-- `provider_message_id`;
-- `enviado_em`.
-
-Em falha conhecida:
-
-- `envio_status='falhou'`;
-- erro técnico sanitizado;
-- preview continua consumido;
-- nova tentativa exige nova prévia.
-
-Em timeout, queda depois do início do request ou qualquer resultado ambíguo:
-
-- marcar `envio_status='incerto'`;
-- manter preview consumido e a mesma `idempotency_key`;
-- não reenviar automaticamente;
-- reconciliar por caixa, telefone, janela de horário e `provider_message_id`;
-- enviar a mesma chave ao provedor em campo idempotente, se o contrato real do canal suportar;
-- se o provedor não oferecer idempotência, só permitir reenvio após decisão humana auditada.
-
-O claim deve tratar `enviando` antigo acima do TTL operacional como `incerto`, nunca como autorização para novo dispatch. Testar crash/timeout, repetição durante `enviando`, repetição em `incerto`, reconciliação para `enviado` ou `falhou` e concorrência entre dois `preview_id` diferentes da mesma evasão produtiva — exatamente um pode receber `deve_despachar=true`.
-
-- [ ] **Step 4: Configurar JWT no repositório**
-
-Acrescentar:
-
-```toml
-[functions.enviar-pesquisa-evasao]
-verify_jwt = true
-```
-
-O deploy não deve usar `--no-verify-jwt`.
-
-- [ ] **Step 5: Rodar testes**
-
-```powershell
-deno test supabase/functions/enviar-pesquisa-evasao/contract.test.ts supabase/functions/enviar-pesquisa-evasao/auth.test.ts
-node --test tests/pesquisaEvasaoEdgeSegura.test.mjs
-```
-
-Expected: PASS.
-
-- [ ] **Step 6: Commit**
-
-```powershell
-git add -- supabase/functions/enviar-pesquisa-evasao/index.ts supabase/config.toml tests/pesquisaEvasaoEdgeSegura.test.mjs
-git commit -m "feat: exigir preview autenticado no envio de evasao"
-```
-
-## Task 5: Substituir o clique direto pela prévia obrigatória
-
-**Files:**
-
-- Modify: `src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx`
-- Create: `src/components/App/SucessoCliente/ModalPreviewPesquisaEvasao.tsx`
-- Create: `src/components/App/SucessoCliente/pesquisaEvasao.types.ts`
-- Create: `tests/pesquisaEvasaoPreviewFrontend.test.mjs`
-
-- [ ] **Step 1: Escrever testes vermelhos do frontend**
-
-Exigir:
-
-- botão chama `acao:'previsualizar'`;
-- request não contém `operador`;
-- modal mostra aluno, destinatário, telefone mascarado, unidade, curso, professor, assinatura, mensagem, ambiente e alertas;
-- apenas “Confirmar envio” chama `acao:'confirmar'`;
-- confirmação usa somente `preview_id`;
-- modal expira e força nova prévia;
-- modo teste é visualmente distinto;
-- registros legados de teste exibem badge `TESTE` mesmo fora do toggle de teste;
-- registros de teste não oferecem ação operacional, apuração ou encaminhamento;
-- erro HTTP usa o corpo JSON retornado pela Edge.
-
-- [ ] **Step 2: Criar tipos explícitos**
-
-```ts
-export interface PesquisaEvasaoPreview {
-  preview_id: string;
-  expira_em: string;
-  aluno: string;
-  destinatario: string;
-  destinatario_tipo: 'aluno' | 'responsavel' | 'teste';
-  telefone_mascarado: string;
-  unidade: string;
-  curso: string | null;
-  professor: string | null;
-  assinatura: string;
-  mensagem: string;
-  modo_teste: boolean;
-  alertas: string[];
-}
-```
-
-- [ ] **Step 3: Implementar o modal**
-
-Regras de UX:
-
-- foco inicial no título;
-- `aria-labelledby` e descrição do efeito irreversível;
-- botão de confirmar mostra o nome de quem assina;
-- botão bloqueado durante confirmação;
-- fechar não envia;
-- não mostrar telefone completo;
-- alertas de cadastro aparecem acima da confirmação;
-- em teste, cabeçalho amarelo “TESTE — não será enviado ao aluno”.
-
-- [ ] **Step 4: Remover identidade e mensagem do cliente**
-
-Em `PesquisaEvasaoTab.tsx`:
-
-- remover `operador: 'sistema'`;
-- renomear `telefoneOverride` para `telefone_teste` apenas no request de prévia;
-- manter a validação local de teste como conveniência, mas confiar na validação do servidor;
-- não montar a mensagem no React;
-- recarregar a listagem somente após confirmação bem-sucedida.
-
-- [ ] **Step 5: Executar testes e build**
-
-```powershell
-node --test tests/pesquisaEvasaoPreviewFrontend.test.mjs
+node --test tests/pesquisaEvasaoAcessoInternoAuditavel.test.mjs tests/pesquisaEvasaoFundacaoSegura.test.mjs tests/pesquisaEvasaoListagemSegura.test.mjs tests/pesquisaEvasaoEdgeSegura.test.mjs tests/pesquisaEvasaoPreviewFrontend.test.mjs tests/pesquisaEvasaoRolloutGovernado.test.mjs tests/whatsappCaixasCredenciaisPrivadas.test.mjs
+deno test supabase/functions/enviar-pesquisa-evasao/*.test.ts
 npm run build
+git diff --check
 ```
 
-Expected: PASS e build sem erro TypeScript/Vite.
-
-- [ ] **Step 6: Commit**
-
-```powershell
-git add -- src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx src/components/App/SucessoCliente/ModalPreviewPesquisaEvasao.tsx src/components/App/SucessoCliente/pesquisaEvasao.types.ts tests/pesquisaEvasaoPreviewFrontend.test.mjs
-git commit -m "feat: adicionar preview obrigatorio da pesquisa"
-```
-
-## Task 6: Paginação, bloqueios e correção governada de cadastro
-
-**Files:**
-
-- Modify: `supabase/migrations/20260730170000_pesquisa_evasao_fundacao_segura.sql`
-- Modify: `src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx`
-- Modify: `src/components/App/SucessoCliente/pesquisaEvasao.types.ts`
-- Create: `tests/pesquisaEvasaoListagemSegura.test.mjs`
-
-- [ ] **Step 1: Escrever testes vermelhos**
-
-Cobrir:
-
-- listagem retorna `total_count`;
-- UI não fixa silenciosamente `p_limite:100`;
-- existem controles de próxima/anterior ou carregamento incremental;
-- saída sem telefone continua visível com `bloqueio_codigo`;
-- motivo legado aparece quando catálogo está ausente;
-- colaborador/professor é flag explícita, não inferência por nome;
-- múltiplos testes da mesma evasão não duplicam a linha principal;
-- histórico de teste retorna `modo_teste=true` e a UI exibe badge `TESTE`;
-- status/resposta produtivos nunca são preenchidos a partir de um teste;
-- nenhuma escrita direta em `movimentacoes_admin` ou `alunos` permanece no componente.
-
-- [ ] **Step 2: Evoluir a RPC de listagem**
-
-Criar uma RPC versionada, por exemplo:
-
-```sql
-public.listar_evadidos_para_pesquisa_v2(
-  p_unidade_id uuid,
-  p_limite integer,
-  p_offset integer,
-  p_status varchar,
-  p_ano integer,
-  p_mes integer
-)
-```
-
-Não tentar mudar o `RETURNS TABLE` das overloads antigas com `CREATE OR REPLACE`. Mantê-las endurecidas e com retorno compatível durante a migração do frontend. A RPC v2 retorna:
-
-```sql
-returns table (
-  total_count bigint,
-  evasao_id integer,
-  aluno_id integer,
-  nome text,
-  telefone text,
-  curso text,
-  professor text,
-  tempo_meses integer,
-  data_evasao date,
-  motivo_catalogado text,
-  motivo_legado text,
-  pesquisa_producao_status text,
-  pesquisa_producao_id uuid,
-  resposta_producao_texto text,
-  resposta_producao_audio_url text,
-  resposta_producao_tipo text,
-  respondido_producao_em timestamptz,
-  is_menor boolean,
-  responsavel_nome text,
-  publico_tipo text,
-  bloqueio_codigo text,
-  elegivel_envio boolean,
-  elegibilidade_regra text,
-  possui_historico_teste boolean,
-  quantidade_testes bigint,
-  ultimo_teste_em timestamptz
-)
-```
-
-`bloqueio_codigo` aceita `null | sem_aluno | sem_telefone | telefone_invalido | motivo_nao_catalogado | publico_interno | pesquisa_aberta_no_mesmo_numero`.
-
-A v2 tem grão de uma linha por `movimentacoes_admin`: associa em `pesquisa_producao_*` apenas `pesquisa_evasao.modo_teste=false` e agrega testes em lateral/subconsulta, sem multiplicar a movimentação. Aplicar permissão por unidade de cada linha antes da paginação. `p_unidade_id=NULL` agrega somente unidades autorizadas. A contagem deve refletir os mesmos filtros.
-
-Criar também um contrato restrito para o histórico:
-
-```sql
-public.listar_pesquisas_evasao_teste_v1(p_evasao_id integer)
-returns table (
-  pesquisa_id uuid,
-  modo_teste boolean,
-  envio_status text,
-  resposta_status text,
-  enviado_em timestamptz,
-  respondido_em timestamptz
-)
-```
-
-Essa RPC exige `sucesso_aluno.evasao.ver` na unidade concreta, retorna somente `modo_teste=true` e alimenta a expansão “Histórico de testes”. Assim, os seis legados aparecem com badge `TESTE`, mas nunca substituem `pesquisa_producao_status`, contam como resposta produtiva ou duplicam a paginação principal.
-
-- [ ] **Step 3: Remover edição direta de telefone**
-
-Remover `salvarTelefone` e qualquer:
-
-```ts
-supabase.from('movimentacoes_admin').update(...)
-supabase.from('alunos').update(...)
-```
-
-Na primeira entrega, exibir “Corrigir no cadastro do aluno” e abrir a ficha canônica existente. Se a navegação contextual ainda não existir, deixar o item bloqueado e emitir uma ação interna; não criar um segundo cadastro de contato dentro da pesquisa.
-
-- [ ] **Step 4: Implementar paginação**
-
-Usar páginas de 50 registros, resetar para a página 1 quando filtros mudarem e exibir:
-
-```text
-Mostrando 1–50 de 283
-```
-
-Migrar o frontend para `listar_evadidos_para_pesquisa_v2`. Só considerar remoção das overloads legadas depois de busca de consumidores, telemetria e janela de compatibilidade; até lá, ambas permanecem sem acesso `anon` e sem bypass de unidade.
-
-- [ ] **Step 5: Testar**
-
-```powershell
-node --test tests/pesquisaEvasaoListagemSegura.test.mjs
-npm run build
-```
-
-Expected: PASS.
-
-- [ ] **Step 6: Commit**
-
-```powershell
-git add -- supabase/migrations/20260730170000_pesquisa_evasao_fundacao_segura.sql src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx src/components/App/SucessoCliente/pesquisaEvasao.types.ts tests/pesquisaEvasaoListagemSegura.test.mjs
-git commit -m "feat: paginar e sinalizar bloqueios da evasao"
-```
-
-## Task 7: Tipos gerados, RLS real e matriz de acesso
-
-**Files:**
-
-- Modify: `src/types/supabase.ts`
-- Create: `scripts/verify-pesquisa-evasao-rls.sql`
-- Create: `docs/runbooks/pesquisa-evasao-subprojeto-a-rollout.md`
-
-- [ ] **Step 1: Regenerar tipos contra o schema validado**
-
-Após migração em ambiente local/homologação:
-
-```powershell
-npx supabase gen types typescript --local | Out-File -Encoding utf8 src/types/supabase.ts
-```
-
-Se a geração for contra projeto remoto, confirmar explicitamente o project ref antes e não aplicar nenhuma escrita.
-
-- [ ] **Step 2: Criar verificação SQL de RLS**
-
-O script deve verificar:
-
-- ausência de policy `ALL ... true`;
-- ausência de grants de escrita para `anon` e `authenticated`;
-- ausência de acesso direto de `mila_acesso_restrito` e `sol_acesso_restrito`;
-- ausência de `EXECUTE` para `PUBLIC`/`anon` nas duas overloads legadas, `stats`, `criar`, `pode_enviar`, na v2 e no histórico de testes;
-- ausência de `SELECT` direto de `authenticated` em previews, templates e assinaturas;
-- usuário sem permissão não lê;
-- usuário com `ver` lê apenas sua unidade;
-- usuário da unidade A usando `p_unidade_id=NULL` não lê a unidade B em nenhuma overload, na v2 ou em `stats`;
-- usuário com `relatorios` sem `ver` não lê texto bruto;
-- service role continua operando;
-- todas as tabelas filhas têm RLS habilitada.
-
-Use transações e `set local role`; consulte também `pg_policies`, `has_table_privilege` e `has_function_privilege` para as assinaturas exatas. O script não deixa dados de teste após `rollback`.
-
-- [ ] **Step 3: Documentar a atribuição de Fabi e Jéssica**
-
-O runbook deve exigir esta consulta somente leitura por identidade estável:
-
-```sql
-select id, auth_user_id, nome, email, perfil, unidade_id, ativo
-from public.usuarios
-where (id, email) in (
-  (29, 'jessyca@lamusic.com.br'),
-  (30, 'fabi@gmail.com')
-)
-order by id;
-```
-
-Antes do go-live:
-
-- a consulta deve retornar exatamente Jessica `id=29`/`jessyca@lamusic.com.br` e Fabi `id=30`/`fabi@gmail.com`;
-- cada pessoa deve ter exatamente um `auth_user_id`;
-- cada pessoa deve ter exatamente uma assinatura ativa;
-- as cinco permissões aprovadas (`ver`, `enviar`, `revisar`, `gerir_acoes`, `modo_teste`) devem estar efetivas para cada titular;
-- cada uma deve possuir escopo explícito em Barra, Campo Grande e Recreio pelo mecanismo `usuario_perfis.unidade_id`;
-- validar que não houve concessão implícita de `.relatorios`;
-- não conceder `admin` apenas para fazer a tela funcionar.
-
-Escopo fixado no runbook:
-
-| Unidade | ID |
-|---|---|
-| Barra | `368d47f5-2d88-4475-bc14-ba084a9a348e` |
-| Campo Grande | `2ec861f6-023f-4d7b-9927-3960ad8c2a92` |
-| Recreio | `95553e96-971b-4590-a6eb-0201d013c14d` |
-
-O rollout cria de forma idempotente seis vínculos ativos em `usuario_perfis`: dois usuários × três unidades, todos usando o perfil exato `Sucesso do Aluno - Evasão`. A verificação deve falhar se houver vínculo global (`unidade_id is null`), unidade diferente, menos/mais de seis vínculos ou se o perfil contiver permissão fora das cinco aprovadas.
-
-Testar também que `usuario_tem_permissao_estrita` retorna `false` para Fabi/Jessica antes desses vínculos, apesar do `perfil='admin'`, e `true` nas três unidades depois da atribuição. Isso prova que o admin legado não está sendo usado como atalho.
-
-Estado verificado em 2026-07-30, somente leitura: Jessica (`usuarios.id=29`, email `jessyca@lamusic.com.br`) e Fabi (`usuarios.id=30`, email `fabi@gmail.com`) estão ativas, com `auth_user_id`, `perfil='admin'` e `unidade_id=NULL`. A homologação nominal está desbloqueada, mas o rollout continua condicionado à atribuição granular acima. A grafia de nome não participa de identificação, autorização ou seed.
-
-- [ ] **Step 4: Rodar verificação completa**
-
-```powershell
-deno test supabase/functions/enviar-pesquisa-evasao/contract.test.ts supabase/functions/enviar-pesquisa-evasao/auth.test.ts
-node --test tests/pesquisaEvasaoCanonica.test.mjs tests/pesquisaEvasaoFundacaoSegura.test.mjs tests/pesquisaEvasaoEdgeSegura.test.mjs tests/pesquisaEvasaoPreviewFrontend.test.mjs tests/pesquisaEvasaoListagemSegura.test.mjs
-npm run build
-npx supabase db lint --local
-```
-
-Expected: tudo PASS.
-
-- [ ] **Step 5: Commit**
-
-```powershell
-git add -- src/types/supabase.ts scripts/verify-pesquisa-evasao-rls.sql docs/runbooks/pesquisa-evasao-subprojeto-a-rollout.md
-git commit -m "docs: fechar rollout e verificacao da fundacao de evasao"
-```
-
-## Task 8: Homologação e rollout controlado
-
-**Files:**
-
-- Verify: `docs/runbooks/pesquisa-evasao-subprojeto-a-rollout.md`
-
-- [ ] **Step 1: Homologar com cinco identidades**
-
-Executar:
-
-1. usuário anônimo;
-2. usuário autenticado sem permissão;
-3. terceiro usuário de homologação com permissão em apenas uma unidade;
-4. Fabi (`usuarios.id=30`);
-5. Jessica (`usuarios.id=29`).
-
-O terceiro usuário é registrado no runbook por `usuarios.id` e email exato antes do teste, nunca por nome. Ele recebe o perfil dedicado em somente uma das três unidades e não pode ser `id=29` ou `id=30`.
-
-Comprovar:
-
-- anônimo recebe `401`;
-- sem permissão recebe `403`;
-- Fabi vê e envia assinatura Fabi;
-- Jessica vê e envia assinatura Jessica;
-- nenhuma delas troca identidade pelo DevTools;
-- Fabi e Jessica operam Barra, Campo Grande e Recreio;
-- o terceiro usuário de homologação opera somente sua unidade e recebe negação ao tentar consultar ou enviar por outra;
-- modo teste não altera cadastro nem analytics.
-- envio de teste para uma evasão com cabeçalho produtivo não o sobrescreve nem o bloqueia;
-- timeout ambíguo fica `incerto` e uma repetição não chama o provedor novamente.
-
-- [ ] **Step 2: Conferir prévia versus mensagem real**
-
-Para um número interno autorizado:
-
-- salvar screenshot da prévia;
-- confirmar;
-- comparar texto recebido byte a byte com `mensagem_renderizada`;
-- validar `preview_id` consumido;
-- repetir clique e confirmar `409`, sem segundo envio.
-
-- [ ] **Step 3: Fazer rollout**
-
-Ordem:
-
-1. backup lógico/DDL das tabelas afetadas;
-2. aplicar migração;
-3. atribuir permissões e assinaturas confirmadas;
-4. validar `scripts/verify-pesquisa-evasao-rls.sql`;
-5. deploy de `enviar-pesquisa-evasao` com JWT;
-6. deploy do frontend;
-7. smoke test em modo teste;
-8. um envio real autorizado;
-9. monitorar erros, duplicidades e status por 30 minutos.
-
-Comando de deploy:
-
-```powershell
-npx supabase functions deploy enviar-pesquisa-evasao --project-ref ouqwbbermlzqqvtqwlul
-```
-
-Não usar `--no-verify-jwt`.
-
-- [ ] **Step 4: Critério de parada**
-
-Interromper rollout se:
-
-- Fabi/Jéssica não forem resolvidas de forma inequívoca;
-- a prévia diferir do recebido;
-- usuário sem permissão ler resposta;
-- o modo teste tocar cadastro/analytics;
-- houver duplicidade de envio;
-- um teste conflitar com o cabeçalho de produção;
-- um envio `incerto` puder ser repetido sem reconciliação;
-- a listagem perder registros bloqueados.
-
-- [ ] **Step 5: Registrar evidência**
-
-Anexar ao runbook:
-
-- commit implantado;
-- versão da função;
-- migration version;
-- IDs internos dos testes, sem telefone ou texto privado;
-- resultado da matriz RLS;
-- horário do smoke test;
-- responsável pela validação.
-
-## Definition of Done
-
-- [ ] `enviar-pesquisa-evasao` exige JWT e autorização por permissão/unidade.
-- [ ] Operador não vem do navegador.
-- [ ] Fabi e Jéssica usam automaticamente sua própria assinatura.
-- [ ] Fabi `30` e Jessica `29` possuem as cinco permissões aprovadas em Barra, Campo Grande e Recreio por vínculos explícitos de unidade; o admin legado não autoriza este domínio.
-- [ ] Toda produção exige prévia e confirmação.
-- [ ] A mensagem enviada é o snapshot aprovado.
-- [ ] Modo teste é separado e não contamina cadastro/analytics.
-- [ ] Modo teste não sobrescreve nem bloqueia a pesquisa produtiva da mesma evasão.
-- [ ] Os seis registros legados aparecem como `TESTE` e não alimentam ações, causas, baseline ou indicadores de professor.
-- [ ] `pesquisa_evasao` e tabelas novas não têm policy ampla.
-- [ ] Mila e Sol não leem respostas privadas em `pesquisa_evasao` e nas
-  tabelas filhas desse domínio. O acesso legado da Sol a
-  `movimentacoes_admin` é tratado no projeto de hardening separado e não faz
-  parte desta afirmação.
-- [ ] Listagem é paginada e mantém bloqueios visíveis.
-- [ ] `p_unidade_id=NULL` retorna somente unidades autorizadas e não amplia escopo.
-- [ ] Timeout ambíguo entra em `incerto` e não redispara sem reconciliação.
-- [ ] Escrita direta de telefone sai do componente.
-- [ ] Testes Deno, Node, build e lint SQL passam.
-- [ ] Evidência de homologação e rollback está documentada.
+Também executar o verificador estrutural no ambiente descartável/isolado quando um novo ensaio for autorizado. O verificador operacional com dados reais pertence ao rollout assistido em produção e deve terminar em rollback.
+
+## 11. Ordem obrigatória de rollout
+
+1. Hugo revisa o PR draft.
+2. Alf autoriza o rollout e confirma o project ref de produção.
+3. Revisar o diff SQL final e o hash da migration de caixas.
+4. Aplicar migrations antes do frontend, porque a main publica automaticamente na Vercel.
+5. Rodar verificações de schema, ACL, RLS, RPCs e backfill.
+6. Fazer smoke em produção somente em modo teste e no número interno de Alf.
+7. Só depois liberar o merge/deploy do frontend.
+8. Observar logs e auditoria; qualquer divergência aciona o rollback operacional do runbook.
+
+## 12. Definition of Done
+
+- chamadas externas sem JWT não alcançam o fluxo de envio;
+- qualquer usuário interno ativo pode ver e enviar em qualquer unidade;
+- o nome exibido vem do login, com fallback automático e override opcional;
+- o navegador não escolhe operador, texto, caixa ou telefone produtivo;
+- prévia e envio usam o mesmo snapshot;
+- teste e produção permanecem isolados;
+- clique duplo e resultado ambíguo não duplicam disparo;
+- cada envio registra pessoa, auth UID, assinatura, mensagem, template, caixa, destino, modo e horário;
+- os seis registros legados estão marcados como teste;
+- Mila, Sol, Fábio e Lia não leem diretamente as tabelas privadas por seus roles de agente;
+- credenciais de WhatsApp não chegam ao navegador;
+- nenhum artefato de RBAC granular do domínio existe neste plano;
+- PR permanece draft e sem merge até rollout autorizado.

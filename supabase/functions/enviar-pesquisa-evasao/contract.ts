@@ -20,7 +20,7 @@ export interface PreviewSnapshot {
   unidadeId: string;
   usuarioId: number;
   authUserId: string;
-  assinaturaId: string;
+  assinaturaId: string | null;
   templateId: string;
   templateVersao: number;
   caixaId: number;
@@ -361,7 +361,9 @@ function validarPreviewSnapshot(input: unknown): PreviewSnapshot {
     unidadeId: uuidSnapshot(snapshot.unidadeId, "unidadeId"),
     usuarioId: inteiroPositivoSeguro(snapshot.usuarioId, "usuarioId"),
     authUserId: uuidSnapshot(snapshot.authUserId, "authUserId"),
-    assinaturaId: uuidSnapshot(snapshot.assinaturaId, "assinaturaId"),
+    assinaturaId: snapshot.assinaturaId === null
+      ? null
+      : uuidSnapshot(snapshot.assinaturaId, "assinaturaId"),
     templateId: uuidSnapshot(snapshot.templateId, "templateId"),
     templateVersao: inteiroPositivoSeguro(
       snapshot.templateVersao,

@@ -2,7 +2,7 @@ export interface ContextoOperador {
   usuarioId: number;
   authUserId: string;
   nomeUsuario: string;
-  assinaturaId: string;
+  assinaturaId: string | null;
   assinaturaNome: string;
 }
 
@@ -24,29 +24,12 @@ export interface AdaptersAutenticacaoOperador {
   ): Promise<UsuarioInterno[]>;
 }
 
-export interface AdapterAutorizacaoOperador {
-  usuarioTemPermissaoEstrita(
-    usuarioId: number,
-    codigo: string,
-    unidadeId: string,
-  ): Promise<boolean>;
-}
-
 export interface AdapterAssinaturaOperador {
   buscarAssinaturasAtivas(usuarioId: number): Promise<AssinaturaAtiva[]>;
 }
 
 export interface AuthAdapters
-  extends
-    AdaptersAutenticacaoOperador,
-    AdapterAutorizacaoOperador,
-    AdapterAssinaturaOperador {}
-
-export interface ResolverContextoInput {
-  authorization: string | null;
-  unidadeId: string;
-  modoTeste: boolean;
-}
+  extends AdaptersAutenticacaoOperador, AdapterAssinaturaOperador {}
 
 declare const IDENTIDADE_AUTENTICADA: unique symbol;
 
@@ -57,17 +40,8 @@ export interface IdentidadeOperadorAutenticada {
   readonly [IDENTIDADE_AUTENTICADA]: true;
 }
 
-/**
- * Na confirmacao, estes valores devem vir do snapshot persistido em
- * pesquisa_evasao_previews, nunca do request do cliente.
- */
-export interface EscopoAutorizacaoDaPreviewPersistida {
-  unidadeIdDaPreviewPersistida: string;
-  modoTesteDaPreviewPersistida: boolean;
-}
-
 export interface AssinaturaOperadorParaNovaPreview {
-  assinaturaId: string;
+  assinaturaId: string | null;
   assinaturaNome: string;
 }
 
@@ -94,21 +68,12 @@ function extrairToken(authorization: string | null): string {
   return resultado[1];
 }
 
-async function exigirPermissao(
-  adapters: AdapterAutorizacaoOperador,
-  usuarioId: number,
-  codigo: string,
-  unidadeId: string,
-): Promise<void> {
-  const permitido = await adapters.usuarioTemPermissaoEstrita(
-    usuarioId,
-    codigo,
-    unidadeId,
-  );
-
-  if (permitido !== true) {
-    throw new ErroAutorizacao(403, `Permissao ${codigo} ausente`);
+export function primeiroNomeDoUsuario(nomeUsuario: string): string {
+  const primeiroNome = nomeUsuario.trim().split(/\s+/)[0];
+  if (!primeiroNome) {
+    throw new ErroAutorizacao(403, "Usuario ativo sem nome valido");
   }
+  return primeiroNome;
 }
 
 export async function autenticarUsuarioAtivoUnico(
@@ -142,59 +107,12 @@ export async function autenticarUsuarioAtivoUnico(
   }
 
   const usuario = usuarios[0];
+  primeiroNomeDoUsuario(usuario.nome);
   return {
     usuarioId: usuario.id,
     authUserId: usuarioAuth.id,
     nomeUsuario: usuario.nome,
   } as IdentidadeOperadorAutenticada;
-}
-
-async function autorizarIdentidadeNaUnidadeConcreta(
-  identidade: IdentidadeOperadorAutenticada,
-  unidadeId: string,
-  modoTeste: boolean,
-  adapters: AdapterAutorizacaoOperador,
-): Promise<void> {
-  if (typeof unidadeId !== "string" || unidadeId.trim().length === 0) {
-    throw new ErroAutorizacao(403, "Unidade concreta obrigatoria");
-  }
-
-  await exigirPermissao(
-    adapters,
-    identidade.usuarioId,
-    "sucesso_aluno.evasao.enviar",
-    unidadeId,
-  );
-  if (modoTeste) {
-    await exigirPermissao(
-      adapters,
-      identidade.usuarioId,
-      "sucesso_aluno.evasao.modo_teste",
-      unidadeId,
-    );
-  }
-}
-
-export async function autorizarIdentidadeComPreviewPersistida(
-  identidade: IdentidadeOperadorAutenticada,
-  previewPersistida: EscopoAutorizacaoDaPreviewPersistida,
-  adapters: AdapterAutorizacaoOperador,
-): Promise<void> {
-  if (
-    typeof previewPersistida.modoTesteDaPreviewPersistida !== "boolean"
-  ) {
-    throw new ErroAutorizacao(
-      403,
-      "modo_teste da preview persistida invalido",
-    );
-  }
-
-  await autorizarIdentidadeNaUnidadeConcreta(
-    identidade,
-    previewPersistida.unidadeIdDaPreviewPersistida,
-    previewPersistida.modoTesteDaPreviewPersistida,
-    adapters,
-  );
 }
 
 export async function resolverAssinaturaAtivaParaNovaPreview(
@@ -204,41 +122,36 @@ export async function resolverAssinaturaAtivaParaNovaPreview(
   const assinaturas = await adapters.buscarAssinaturasAtivas(
     identidade.usuarioId,
   );
-  if (assinaturas.length === 0) {
-    throw new ErroAutorizacao(403, "Assinatura ativa nao encontrada");
-  }
-  if (assinaturas.length !== 1) {
+  if (assinaturas.length > 1) {
     throw new ErroAutorizacao(
       403,
       "Assinatura ativa nao encontrada de forma unica",
     );
   }
 
+  if (assinaturas.length === 0) {
+    return {
+      assinaturaId: null,
+      assinaturaNome: primeiroNomeDoUsuario(identidade.nomeUsuario),
+    };
+  }
+
   const assinatura = assinaturas[0];
+  const nomeOverride = assinatura.nome.trim();
+  if (!nomeOverride) {
+    throw new ErroAutorizacao(403, "Assinatura ativa sem nome valido");
+  }
   return {
     assinaturaId: assinatura.id,
-    assinaturaNome: assinatura.nome,
+    assinaturaNome: nomeOverride,
   };
 }
 
 export async function resolverContextoOperador(
-  input: ResolverContextoInput,
+  input: { authorization: string | null },
   adapters: AuthAdapters,
 ): Promise<ContextoOperador> {
-  const identidade = await autenticarUsuarioAtivoUnico(
-    { authorization: input.authorization },
-    adapters,
-  );
-  if (typeof input.modoTeste !== "boolean") {
-    throw new ErroAutorizacao(403, "modo_teste invalido");
-  }
-
-  await autorizarIdentidadeNaUnidadeConcreta(
-    identidade,
-    input.unidadeId,
-    input.modoTeste,
-    adapters,
-  );
+  const identidade = await autenticarUsuarioAtivoUnico(input, adapters);
   const assinatura = await resolverAssinaturaAtivaParaNovaPreview(
     identidade,
     adapters,

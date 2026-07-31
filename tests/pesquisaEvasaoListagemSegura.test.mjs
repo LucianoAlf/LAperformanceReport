@@ -86,18 +86,18 @@ test('RPC v2 possui assinatura versionada e retorno paginado completo', () => {
   }
 });
 
-test('v2 autoriza e filtra antes de contar e paginar', () => {
+test('v2 valida usuario interno e filtra antes de contar e paginar', () => {
   const v2 = extrairFuncao('listar_evadidos_para_pesquisa_v2');
   const baseInicio = v2.search(/base_autorizada\s+as\s*\(/i);
-  const permissao = v2.search(
-    /fn_usuario_atual_tem_permissao_estrita\s*\(\s*'sucesso_aluno\.evasao\.ver'/i,
+  const identidadeInterna = v2.search(
+    /fn_pesquisa_evasao_usuario_interno_ativo\s*\(\s*\)/i,
   );
   const contagem = v2.search(/count\s*\(\s*\*\s*\)\s+over\s*\(\s*\)/i);
   const limite = v2.search(/\blimit\s+least\s*\(/i);
 
   assert.ok(baseInicio >= 0, 'falta CTE de linhas autorizadas');
-  assert.ok(permissao > baseInicio, 'permissao deve ser aplicada dentro da base');
-  assert.ok(contagem > permissao, 'count deve refletir os mesmos filtros autorizados');
+  assert.ok(identidadeInterna > baseInicio, 'usuario interno deve ser validado dentro da base');
+  assert.ok(contagem > identidadeInterna, 'count deve refletir os mesmos filtros internos');
   assert.ok(limite > contagem, 'paginacao deve ocorrer depois da contagem');
   assert.match(v2, /p_unidade_id\s+is\s+null\s+or\s+m\.unidade_id\s*=\s*p_unidade_id/i);
   assert.match(v2, /p_ano\s+is\s+null[\s\S]*extract\s*\(\s*year\s+from\s+m\.data/i);
@@ -268,7 +268,7 @@ test('Subprojeto A nao decide timing D mais 3', () => {
   );
 });
 
-test('historico restrito retorna somente testes e exige unidade concreta', () => {
+test('historico retorna somente testes para usuario interno ativo', () => {
   const historico = extrairFuncao('listar_pesquisas_evasao_teste_v1');
 
   assert.match(
@@ -289,8 +289,9 @@ test('historico restrito retorna somente testes e exige unidade concreta', () =>
   assert.match(historico, /m\.id\s*=\s*p_evasao_id/i);
   assert.match(
     historico,
-    /fn_usuario_atual_tem_permissao_estrita\s*\(\s*'sucesso_aluno\.evasao\.ver'[\s\S]*m\.unidade_id/i,
+    /fn_pesquisa_evasao_usuario_interno_ativo\s*\(\s*\)/i,
   );
+  assert.doesNotMatch(historico, /sucesso_aluno\.evasao|usuario_perfis/i);
   assert.match(
     sql,
     /revoke\s+all\s+on\s+function\s+public\.listar_pesquisas_evasao_teste_v1\s*\(\s*integer\s*\)[\s\S]*from\s+public\s*,\s*anon/i,

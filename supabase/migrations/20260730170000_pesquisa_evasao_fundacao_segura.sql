@@ -1,15 +1,14 @@
 -- Pesquisa de evasao - fundacao segura.
 --
 -- Escopo desta migration:
---   * catalogo e perfil operacional do dominio;
---   * autorizacao estrita por usuario + unidade concreta;
+--   * acesso de leitura e operacao para qualquer usuario interno ativo;
 --   * snapshots de configuracao, preview e auditoria;
 --   * persistencia privada preparada para a conversa multipartes;
 --   * evolucao aditiva do cabecalho legado;
 --   * RLS, privileges e RPCs legadas endurecidas.
 --
--- A atribuicao nominal de Fabi/Jessica, assinaturas e templates ativos pertence
--- ao rollout governado. Esta migration nao cria vinculos em usuario_perfis.
+-- Nao cria permissoes, perfis nem vinculos de RBAC. O controle operacional e
+-- autenticacao de pessoa interna ativa, ownership da preview e trilha de auditoria.
 
 -- ---------------------------------------------------------------------------
 -- 0. Snapshot de contato somente no nascimento de novas saidas
@@ -70,138 +69,10 @@ for each row
 execute function public.capturar_telefone_snapshot_movimentacao_retencao();
 
 -- ---------------------------------------------------------------------------
--- 1. Catalogo de permissoes e perfil dedicado
+-- 1. Identidade interna ativa, sem perfil, permissao ou escopo de unidade
 -- ---------------------------------------------------------------------------
 
-insert into public.permissoes (
-  codigo,
-  modulo,
-  acao,
-  descricao,
-  categoria,
-  ordem,
-  ativo
-)
-values
-  (
-    'sucesso_aluno.evasao.ver',
-    'sucesso_aluno',
-    'evasao.ver',
-    'Consultar pesquisas e conversas de evasao nas unidades autorizadas',
-    'OPERACIONAL',
-    410,
-    true
-  ),
-  (
-    'sucesso_aluno.evasao.enviar',
-    'sucesso_aluno',
-    'evasao.enviar',
-    'Gerar preview e confirmar pesquisa de evasao nas unidades autorizadas',
-    'OPERACIONAL',
-    420,
-    true
-  ),
-  (
-    'sucesso_aluno.evasao.revisar',
-    'sucesso_aluno',
-    'evasao.revisar',
-    'Revisar respostas de pesquisa de evasao nas unidades autorizadas',
-    'OPERACIONAL',
-    430,
-    true
-  ),
-  (
-    'sucesso_aluno.evasao.gerir_acoes',
-    'sucesso_aluno',
-    'evasao.gerir_acoes',
-    'Gerir acoes decorrentes de pesquisas de evasao nas unidades autorizadas',
-    'OPERACIONAL',
-    440,
-    true
-  ),
-  (
-    'sucesso_aluno.evasao.relatorios',
-    'sucesso_aluno',
-    'evasao.relatorios',
-    'Consultar read models agregados de pesquisa de evasao',
-    'RELATORIO',
-    450,
-    true
-  ),
-  (
-    'sucesso_aluno.evasao.modo_teste',
-    'sucesso_aluno',
-    'evasao.modo_teste',
-    'Executar pesquisa de evasao em telefone de teste autorizado',
-    'OPERACIONAL',
-    460,
-    true
-  )
-on conflict (codigo) do update
-set modulo = excluded.modulo,
-    acao = excluded.acao,
-    descricao = excluded.descricao,
-    categoria = excluded.categoria,
-    ordem = excluded.ordem,
-    ativo = excluded.ativo;
-
-insert into public.perfis (
-  nome,
-  descricao,
-  nivel,
-  icone,
-  cor,
-  sistema,
-  ativo
-)
-values (
-  'Sucesso do Aluno - Evasao',
-  'Operacao da pesquisa de evasao com escopo explicito por unidade',
-  30,
-  'shield',
-  '#7c3aed',
-  true,
-  true
-)
-on conflict (nome) do update
-set descricao = excluded.descricao,
-    nivel = excluded.nivel,
-    icone = excluded.icone,
-    cor = excluded.cor,
-    sistema = excluded.sistema,
-    ativo = excluded.ativo,
-    updated_at = now();
-
--- O perfil e dedicado: uma reaplicacao tambem remove concessoes que tenham sido
--- acrescentadas fora deste contrato, antes de repor somente as cinco operacionais.
-delete from public.perfil_permissoes pp
-using public.perfis pf
-where pp.perfil_id = pf.id
-  and pf.nome = 'Sucesso do Aluno - Evasao';
-
-insert into public.perfil_permissoes (perfil_id, permissao_id)
-select pf.id, p.id
-from public.perfis pf
-join public.permissoes p
-  on p.codigo in (
-    'sucesso_aluno.evasao.ver',
-    'sucesso_aluno.evasao.enviar',
-    'sucesso_aluno.evasao.revisar',
-    'sucesso_aluno.evasao.gerir_acoes',
-    'sucesso_aluno.evasao.modo_teste'
-  )
-where pf.nome = 'Sucesso do Aluno - Evasao'
-on conflict (perfil_id, permissao_id) do nothing;
-
--- ---------------------------------------------------------------------------
--- 2. Helpers estritos: sem admin legado, perfil global ou unidade nula
--- ---------------------------------------------------------------------------
-
-create or replace function public.usuario_tem_permissao_estrita(
-  p_usuario_id integer,
-  p_codigo_permissao varchar,
-  p_unidade_id uuid
-)
+create or replace function public.fn_pesquisa_evasao_usuario_interno_ativo()
 returns boolean
 language sql
 stable
@@ -209,70 +80,26 @@ security definer
 set search_path = public, pg_temp
 as $function$
   select
-    p_unidade_id is not null
-    and exists (
-      select 1
-      from public.usuario_perfis up
-      join public.perfis pf
-        on pf.id = up.perfil_id
-       and pf.ativo = true
-      join public.perfil_permissoes pp
-        on pp.perfil_id = pf.id
-      join public.permissoes p
-        on p.id = pp.permissao_id
-       and p.ativo = true
-      where up.usuario_id = p_usuario_id
-        and up.ativo = true
-        and up.unidade_id = p_unidade_id
-        and p.codigo = p_codigo_permissao
-    );
-$function$;
-
-create or replace function public.fn_usuario_atual_tem_permissao_estrita(
-  p_codigo_permissao varchar,
-  p_unidade_id uuid
-)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public, pg_temp
-as $function$
-  select
-    p_unidade_id is not null
-    and exists (
+    auth.role() = 'service_role'
+    or exists (
       select 1
       from public.usuarios u
       where u.auth_user_id = auth.uid()
         and u.ativo = true
-        and public.usuario_tem_permissao_estrita(
-          u.id,
-          p_codigo_permissao,
-          p_unidade_id
-        )
     );
 $function$;
 
-revoke all on function public.usuario_tem_permissao_estrita(integer, varchar, uuid)
+revoke all on function public.fn_pesquisa_evasao_usuario_interno_ativo()
   from public, anon, authenticated, mila_acesso_restrito, sol_acesso_restrito,
        fabio_agent, lia_acesso_restrito;
-grant execute on function public.usuario_tem_permissao_estrita(integer, varchar, uuid)
-  to service_role;
-
-revoke all on function public.fn_usuario_atual_tem_permissao_estrita(varchar, uuid)
-  from public, anon, authenticated, mila_acesso_restrito, sol_acesso_restrito,
-       fabio_agent, lia_acesso_restrito;
-grant execute on function public.fn_usuario_atual_tem_permissao_estrita(varchar, uuid)
+grant execute on function public.fn_pesquisa_evasao_usuario_interno_ativo()
   to authenticated, service_role;
 
-comment on function public.usuario_tem_permissao_estrita(integer, varchar, uuid) is
-  'Autoriza somente perfil e permissao ativos em usuario_perfis ativo da unidade concreta; nao aceita admin legado, perfil global ou unidade nula.';
-
-comment on function public.fn_usuario_atual_tem_permissao_estrita(varchar, uuid) is
-  'Resolve o usuario autenticado ativo e delega ao helper estrito por unidade concreta.';
+comment on function public.fn_pesquisa_evasao_usuario_interno_ativo() is
+  'Valida somente que o JWT pertence a um usuario interno ativo; nao consulta perfil, permissao ou unidade.';
 
 -- ---------------------------------------------------------------------------
--- 3. Configuracao, preview e auditoria service-only
+-- 2. Configuracao, preview e auditoria service-only
 -- ---------------------------------------------------------------------------
 
 create table if not exists public.pesquisa_evasao_assinaturas (
@@ -310,7 +137,7 @@ create table if not exists public.pesquisa_evasao_previews (
   unidade_id uuid not null references public.unidades(id),
   usuario_id integer not null references public.usuarios(id),
   auth_user_id uuid not null,
-  assinatura_id uuid not null
+  assinatura_id uuid
     references public.pesquisa_evasao_assinaturas(id),
   template_id uuid not null
     references public.pesquisa_evasao_templates(id),
@@ -656,72 +483,51 @@ drop policy if exists pesquisa_evasao_all
   on public.pesquisa_evasao;
 drop policy if exists pesquisa_evasao_leitura_estrita
   on public.pesquisa_evasao;
+drop policy if exists pesquisa_evasao_leitura_interna
+  on public.pesquisa_evasao;
 drop policy if exists pesquisa_evasao_mensagens_leitura_estrita
+  on public.pesquisa_evasao_mensagens;
+drop policy if exists pesquisa_evasao_mensagens_leitura_interna
   on public.pesquisa_evasao_mensagens;
 drop policy if exists pesquisa_evasao_transcricoes_leitura_estrita
   on public.pesquisa_evasao_transcricoes;
+drop policy if exists pesquisa_evasao_transcricoes_leitura_interna
+  on public.pesquisa_evasao_transcricoes;
 drop policy if exists pesquisa_evasao_analises_leitura_estrita
   on public.pesquisa_evasao_analises;
+drop policy if exists pesquisa_evasao_analises_leitura_interna
+  on public.pesquisa_evasao_analises;
 
-create policy pesquisa_evasao_leitura_estrita
+create policy pesquisa_evasao_leitura_interna
 on public.pesquisa_evasao
 for select
 to authenticated
 using (
-  public.fn_usuario_atual_tem_permissao_estrita(
-    'sucesso_aluno.evasao.ver'::varchar,
-    pesquisa_evasao.unidade_id
-  )
+  public.fn_pesquisa_evasao_usuario_interno_ativo()
 );
 
-create policy pesquisa_evasao_mensagens_leitura_estrita
+create policy pesquisa_evasao_mensagens_leitura_interna
 on public.pesquisa_evasao_mensagens
 for select
 to authenticated
 using (
-  exists (
-    select 1
-    from public.pesquisa_evasao pe
-    where pe.id = pesquisa_evasao_mensagens.pesquisa_id
-      and public.fn_usuario_atual_tem_permissao_estrita(
-        'sucesso_aluno.evasao.ver'::varchar,
-        pe.unidade_id
-      )
-  )
+  public.fn_pesquisa_evasao_usuario_interno_ativo()
 );
 
-create policy pesquisa_evasao_transcricoes_leitura_estrita
+create policy pesquisa_evasao_transcricoes_leitura_interna
 on public.pesquisa_evasao_transcricoes
 for select
 to authenticated
 using (
-  exists (
-    select 1
-    from public.pesquisa_evasao pe
-    join public.pesquisa_evasao_mensagens pem
-      on pem.pesquisa_id = pe.id
-    where pem.id = pesquisa_evasao_transcricoes.mensagem_id
-      and public.fn_usuario_atual_tem_permissao_estrita(
-        'sucesso_aluno.evasao.ver'::varchar,
-        pe.unidade_id
-      )
-  )
+  public.fn_pesquisa_evasao_usuario_interno_ativo()
 );
 
-create policy pesquisa_evasao_analises_leitura_estrita
+create policy pesquisa_evasao_analises_leitura_interna
 on public.pesquisa_evasao_analises
 for select
 to authenticated
 using (
-  exists (
-    select 1
-    from public.pesquisa_evasao pe
-    where pe.id = pesquisa_evasao_analises.pesquisa_id
-      and public.fn_usuario_atual_tem_permissao_estrita(
-        'sucesso_aluno.evasao.ver'::varchar,
-        pe.unidade_id
-      )
-  )
+  public.fn_pesquisa_evasao_usuario_interno_ativo()
 );
 
 revoke all on table public.pesquisa_evasao
@@ -862,9 +668,9 @@ begin
       p_unidade_id is null
       or m.unidade_id = p_unidade_id
     )
-    and public.fn_usuario_atual_tem_permissao_estrita(
-      'sucesso_aluno.evasao.ver'::varchar,
-      m.unidade_id
+    and (
+      auth.role() = 'service_role'
+      or public.fn_pesquisa_evasao_usuario_interno_ativo()
     )
     and nullif(btrim(m.telefone_snapshot), '') is not null
     and (
@@ -969,9 +775,9 @@ begin
       p_unidade_id is null
       or m.unidade_id = p_unidade_id
     )
-    and public.fn_usuario_atual_tem_permissao_estrita(
-      'sucesso_aluno.evasao.ver'::varchar,
-      m.unidade_id
+    and (
+      auth.role() = 'service_role'
+      or public.fn_pesquisa_evasao_usuario_interno_ativo()
     )
     and nullif(btrim(m.telefone_snapshot), '') is not null
     and (
@@ -1037,9 +843,9 @@ begin
         p_unidade_id is null
         or m.unidade_id = p_unidade_id
       )
-      and public.fn_usuario_atual_tem_permissao_estrita(
-        'sucesso_aluno.evasao.ver'::varchar,
-        m.unidade_id
+      and (
+        auth.role() = 'service_role'
+        or public.fn_pesquisa_evasao_usuario_interno_ativo()
       )
   ),
   stats as (
@@ -1238,13 +1044,8 @@ begin
     return false;
   end if;
 
-  return (
-    auth.role() = 'service_role'
-    or public.fn_usuario_atual_tem_permissao_estrita(
-      'sucesso_aluno.evasao.enviar'::varchar,
-      v_unidade_id
-    )
-  );
+  return auth.role() = 'service_role'
+    or public.fn_pesquisa_evasao_usuario_interno_ativo();
 end;
 $function$;
 
@@ -1424,10 +1225,7 @@ with base_autorizada as (
     )
     and (
       auth.role() = 'service_role'
-      or public.fn_usuario_atual_tem_permissao_estrita(
-        'sucesso_aluno.evasao.ver'::varchar,
-        m.unidade_id
-      )
+      or public.fn_pesquisa_evasao_usuario_interno_ativo()
     )
     and (
       p_status is null
@@ -1626,10 +1424,7 @@ where m.id = p_evasao_id
   and pe.modo_teste = true
   and (
     auth.role() = 'service_role'
-    or public.fn_usuario_atual_tem_permissao_estrita(
-      'sucesso_aluno.evasao.ver'::varchar,
-      m.unidade_id
-    )
+    or public.fn_pesquisa_evasao_usuario_interno_ativo()
   )
 order by coalesce(pe.enviado_em, pe.created_at) desc, pe.id desc;
 $function$;

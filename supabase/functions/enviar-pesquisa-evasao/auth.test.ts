@@ -5,13 +5,10 @@ import { assertEquals, assertMatch } from "jsr:@std/assert@1";
 import {
   autenticarUsuarioAtivoUnico,
   type AuthAdapters,
-  autorizarIdentidadeComPreviewPersistida,
-  type EscopoAutorizacaoDaPreviewPersistida,
+  primeiroNomeDoUsuario,
   resolverAssinaturaAtivaParaNovaPreview,
   resolverContextoOperador,
 } from "./auth.ts";
-
-const unidadeBarra = "368d47f5-2d88-4475-bc14-ba084a9a348e";
 
 function criarAdapters(
   overrides: Partial<AuthAdapters> = {},
@@ -20,10 +17,10 @@ function criarAdapters(
     authGetUser: async (token) =>
       token === "token-fabi" ? { id: "auth-fabi" } : null,
     buscarUsuariosAtivosPorAuthUserId: async (authUserId) =>
-      authUserId === "auth-fabi" ? [{ id: 30, authUserId, nome: "Fabi" }] : [],
-    usuarioTemPermissaoEstrita: async () => true,
-    buscarAssinaturasAtivas: async (usuarioId) =>
-      usuarioId === 30 ? [{ id: "assinatura-fabi", nome: "Fabi" }] : [],
+      authUserId === "auth-fabi"
+        ? [{ id: 30, authUserId, nome: "Fabi Oliveira" }]
+        : [],
+    buscarAssinaturasAtivas: async () => [],
     ...overrides,
   };
 }
@@ -35,86 +32,45 @@ async function assertErroHttp(
 ): Promise<void> {
   try {
     await executar();
-    throw new Error("Era esperado um erro HTTP");
+    throw new Error("esperava falha");
   } catch (error) {
-    if (
-      error instanceof Error && error.message === "Era esperado um erro HTTP"
-    ) {
+    if (!(error instanceof Error) || error.message === "esperava falha") {
       throw error;
     }
-
-    const erro = error as { status?: number; message?: string };
-    assertEquals(erro.status, status);
-    assertMatch(String(erro.message), mensagem);
+    assertEquals((error as { status?: number }).status, status);
+    assertMatch(error.message, mensagem);
   }
 }
 
-Deno.test("token ausente retorna 401 sem consultar identidade interna", async () => {
-  let consultouAuth = false;
-  const adapters = criarAdapters({
-    authGetUser: async () => {
-      consultouAuth = true;
-      return null;
-    },
-  });
-
-  await assertErroHttp(
-    () =>
-      resolverContextoOperador(
-        {
-          authorization: null,
-          unidadeId: unidadeBarra,
-          modoTeste: false,
-        },
-        adapters,
-      ),
-    401,
-    /token ausente/i,
-  );
-  assertEquals(consultouAuth, false);
+Deno.test("authorization ausente ou malformada retorna 401", async () => {
+  for (const authorization of [null, "", "token-fabi", "Basic token-fabi"]) {
+    await assertErroHttp(
+      () =>
+        autenticarUsuarioAtivoUnico(
+          { authorization },
+          criarAdapters(),
+        ),
+      401,
+      /token/i,
+    );
+  }
 });
 
-Deno.test("token invalido retorna 401", async () => {
+Deno.test("JWT invalido e erro do provedor de auth retornam 401", async () => {
   await assertErroHttp(
     () =>
-      resolverContextoOperador(
-        {
-          authorization: "Bearer token-invalido",
-          unidadeId: unidadeBarra,
-          modoTeste: false,
-        },
+      autenticarUsuarioAtivoUnico(
+        { authorization: "Bearer token-invalido" },
         criarAdapters(),
       ),
     401,
     /token invalido/i,
   );
-});
 
-Deno.test("token invalido e rejeitado antes de autorizar a unidade", async () => {
   await assertErroHttp(
     () =>
-      resolverContextoOperador(
-        {
-          authorization: "Bearer token-invalido",
-          unidadeId: "",
-          modoTeste: false,
-        },
-        criarAdapters(),
-      ),
-    401,
-    /token invalido/i,
-  );
-});
-
-Deno.test("erro de auth.getUser e tratado como token invalido", async () => {
-  await assertErroHttp(
-    () =>
-      resolverContextoOperador(
-        {
-          authorization: "Bearer token-expirado",
-          unidadeId: unidadeBarra,
-          modoTeste: false,
-        },
+      autenticarUsuarioAtivoUnico(
+        { authorization: "Bearer token-fabi" },
         criarAdapters({
           authGetUser: async () => {
             throw new Error("JWT expired");
@@ -126,508 +82,125 @@ Deno.test("erro de auth.getUser e tratado como token invalido", async () => {
   );
 });
 
-Deno.test("usuario interno inativo ou ausente retorna 403", async () => {
+Deno.test("usuario interno ausente, inativo ou ambiguo retorna 403", async () => {
   await assertErroHttp(
     () =>
-      resolverContextoOperador(
-        {
-          authorization: "Bearer token-fabi",
-          unidadeId: unidadeBarra,
-          modoTeste: false,
-        },
-        criarAdapters({
-          buscarUsuariosAtivosPorAuthUserId: async () => [],
-        }),
+      autenticarUsuarioAtivoUnico(
+        { authorization: "Bearer token-fabi" },
+        criarAdapters({ buscarUsuariosAtivosPorAuthUserId: async () => [] }),
       ),
     403,
     /usuario ativo nao encontrado/i,
   );
-});
 
-Deno.test("identidade interna ambigua retorna 403", async () => {
   await assertErroHttp(
     () =>
-      resolverContextoOperador(
-        {
-          authorization: "Bearer token-fabi",
-          unidadeId: unidadeBarra,
-          modoTeste: false,
-        },
+      autenticarUsuarioAtivoUnico(
+        { authorization: "Bearer token-fabi" },
         criarAdapters({
-          buscarUsuariosAtivosPorAuthUserId: async (authUserId) => [
-            { id: 30, authUserId, nome: "Fabi" },
-            { id: 130, authUserId, nome: "Duplicada" },
+          buscarUsuariosAtivosPorAuthUserId: async () => [
+            { id: 30, authUserId: "auth-fabi", nome: "Fabi" },
+            { id: 31, authUserId: "auth-fabi", nome: "Duplicada" },
           ],
         }),
       ),
     403,
-    /usuario ativo nao encontrado de forma unica/i,
+    /forma unica/i,
   );
 });
 
-Deno.test("assinatura ativa ausente ou inativa retorna 403", async () => {
+Deno.test("identidade vem do JWT e do cadastro interno ativo", async () => {
+  const identidade = await autenticarUsuarioAtivoUnico(
+    { authorization: "Bearer token-fabi" },
+    criarAdapters(),
+  );
+
+  assertEquals(identidade.usuarioId, 30);
+  assertEquals(identidade.authUserId, "auth-fabi");
+  assertEquals(identidade.nomeUsuario, "Fabi Oliveira");
+});
+
+Deno.test("primeiro nome normaliza espacos e rejeita nome vazio", async () => {
+  assertEquals(primeiroNomeDoUsuario("  Jéssica   Souza "), "Jéssica");
   await assertErroHttp(
-    () =>
-      resolverContextoOperador(
-        {
-          authorization: "Bearer token-fabi",
-          unidadeId: unidadeBarra,
-          modoTeste: false,
-        },
-        criarAdapters({
-          buscarAssinaturasAtivas: async () => [],
-        }),
-      ),
+    async () => primeiroNomeDoUsuario("   "),
     403,
-    /assinatura ativa nao encontrada/i,
+    /sem nome valido/i,
   );
 });
 
-Deno.test("mais de uma assinatura ativa retorna 403", async () => {
+Deno.test("sem override a assinatura usa primeiro nome do usuario", async () => {
+  const contexto = await resolverContextoOperador(
+    { authorization: "Bearer token-fabi" },
+    criarAdapters(),
+  );
+
+  assertEquals(contexto.assinaturaId, null);
+  assertEquals(contexto.assinaturaNome, "Fabi");
+});
+
+Deno.test("override ativo substitui somente o nome de exibicao", async () => {
+  const contexto = await resolverContextoOperador(
+    { authorization: "Bearer token-fabi" },
+    criarAdapters({
+      buscarAssinaturasAtivas: async () => [{
+        id: "6a77c6d4-6090-43ad-bfe9-da4bf5f468a8",
+        nome: "Fabíola Sucesso",
+      }],
+    }),
+  );
+
+  assertEquals(
+    contexto.assinaturaId,
+    "6a77c6d4-6090-43ad-bfe9-da4bf5f468a8",
+  );
+  assertEquals(contexto.assinaturaNome, "Fabíola Sucesso");
+  assertEquals(contexto.usuarioId, 30);
+  assertEquals(contexto.authUserId, "auth-fabi");
+});
+
+Deno.test("mais de um override ativo falha fechado", async () => {
+  const identidade = await autenticarUsuarioAtivoUnico(
+    { authorization: "Bearer token-fabi" },
+    criarAdapters(),
+  );
+
   await assertErroHttp(
     () =>
-      resolverContextoOperador(
+      resolverAssinaturaAtivaParaNovaPreview(
+        identidade,
         {
-          authorization: "Bearer token-fabi",
-          unidadeId: unidadeBarra,
-          modoTeste: false,
-        },
-        criarAdapters({
           buscarAssinaturasAtivas: async () => [
             { id: "assinatura-1", nome: "Fabi" },
             { id: "assinatura-2", nome: "Outra" },
           ],
-        }),
-      ),
-    403,
-    /assinatura ativa nao encontrada de forma unica/i,
-  );
-});
-
-Deno.test("falta de sucesso_aluno.evasao.enviar retorna 403", async () => {
-  await assertErroHttp(
-    () =>
-      resolverContextoOperador(
-        {
-          authorization: "Bearer token-fabi",
-          unidadeId: unidadeBarra,
-          modoTeste: false,
         },
-        criarAdapters({
-          usuarioTemPermissaoEstrita: async (_usuarioId, codigo) =>
-            codigo !== "sucesso_aluno.evasao.enviar",
-        }),
       ),
     403,
-    /permissao sucesso_aluno\.evasao\.enviar/i,
+    /forma unica/i,
   );
 });
 
-for (
-  const [rotulo, retorno] of [
-    ["false", false],
-    ["undefined", undefined],
-    ["null", null],
-    ["string false", "false"],
-    ["numero 1", 1],
-    ["objeto", {}],
-  ] as const
-) {
-  Deno.test(`permissao com retorno ${rotulo} falha fechado`, async () => {
-    await assertErroHttp(
-      () =>
-        resolverContextoOperador(
-          {
-            authorization: "Bearer token-fabi",
-            unidadeId: unidadeBarra,
-            modoTeste: false,
-          },
-          criarAdapters({
-            usuarioTemPermissaoEstrita: (async () =>
-              retorno) as unknown as AuthAdapters["usuarioTemPermissaoEstrita"],
-          }),
-        ),
-      403,
-      /permissao sucesso_aluno\.evasao\.enviar ausente/i,
-    );
-  });
-}
-
-Deno.test("somente permissao com retorno literal true autoriza", async () => {
-  const contexto = await resolverContextoOperador(
-    {
-      authorization: "Bearer token-fabi",
-      unidadeId: unidadeBarra,
-      modoTeste: false,
-    },
-    criarAdapters({
-      usuarioTemPermissaoEstrita: async () => true,
-    }),
-  );
-
-  assertEquals(contexto.usuarioId, 30);
-});
-
-Deno.test("modo teste sem permissao dedicada retorna 403", async () => {
-  await assertErroHttp(
-    () =>
-      resolverContextoOperador(
-        {
-          authorization: "Bearer token-fabi",
-          unidadeId: unidadeBarra,
-          modoTeste: true,
-        },
-        criarAdapters({
-          usuarioTemPermissaoEstrita: async (_usuarioId, codigo) =>
-            codigo !== "sucesso_aluno.evasao.modo_teste",
-        }),
-      ),
-    403,
-    /permissao sucesso_aluno\.evasao\.modo_teste/i,
-  );
-});
-
-Deno.test("permissoes usam usuario interno, codigo exato e unidade concreta", async () => {
-  const chamadas: Array<[number, string, string]> = [];
-
-  await resolverContextoOperador(
-    {
-      authorization: "Bearer token-fabi",
-      unidadeId: unidadeBarra,
-      modoTeste: true,
-    },
-    criarAdapters({
-      usuarioTemPermissaoEstrita: async (usuarioId, codigo, unidadeId) => {
-        chamadas.push([usuarioId, codigo, unidadeId]);
-        return true;
-      },
-    }),
-  );
-
-  assertEquals(chamadas, [
-    [30, "sucesso_aluno.evasao.enviar", unidadeBarra],
-    [30, "sucesso_aluno.evasao.modo_teste", unidadeBarra],
-  ]);
-});
-
-Deno.test("identidade e assinatura derivam de auth.getUser e usuario interno", async () => {
+Deno.test("nao existe chamada de permissao ou unidade para resolver operador", async () => {
   const chamadas: string[] = [];
-  const adapters = criarAdapters({
-    authGetUser: async (token) => {
-      chamadas.push(`auth:${token}`);
-      return { id: "auth-fabi" };
-    },
-    buscarUsuariosAtivosPorAuthUserId: async (authUserId) => {
-      chamadas.push(`usuario:${authUserId}`);
-      return [{ id: 30, authUserId, nome: "Fabi" }];
-    },
-    buscarAssinaturasAtivas: async (usuarioId) => {
-      chamadas.push(`assinatura:${usuarioId}`);
-      return [{ id: "assinatura-fabi", nome: "Fabi" }];
-    },
-  });
-
   const contexto = await resolverContextoOperador(
-    {
-      authorization: "Bearer token-fabi",
-      unidadeId: unidadeBarra,
-      modoTeste: false,
-    },
-    adapters,
-  );
-
-  assertEquals(contexto, {
-    usuarioId: 30,
-    authUserId: "auth-fabi",
-    nomeUsuario: "Fabi",
-    assinaturaId: "assinatura-fabi",
-    assinaturaNome: "Fabi",
-  });
-  assertEquals(chamadas, [
-    "auth:token-fabi",
-    "usuario:auth-fabi",
-    "assinatura:30",
-  ]);
-});
-
-Deno.test("Fabi e Jessica recebem cada uma sua propria assinatura", async () => {
-  const identidades = {
-    "token-fabi": {
-      authUserId: "auth-fabi",
-      usuarioId: 30,
-      email: "fabi@gmail.com",
-      nome: "Fabi",
-      assinaturaId: "assinatura-fabi",
-      assinaturaNome: "Fabi",
-    },
-    "token-jessica": {
-      authUserId: "auth-jessica",
-      usuarioId: 29,
-      email: "jessyca@lamusic.com.br",
-      nome: "Jessica",
-      assinaturaId: "assinatura-jessica",
-      assinaturaNome: "Jessica",
-    },
-  } as const;
-  const adapters = criarAdapters({
-    authGetUser: async (token) => {
-      const identidade = identidades[token as keyof typeof identidades];
-      return identidade ? { id: identidade.authUserId } : null;
-    },
-    buscarUsuariosAtivosPorAuthUserId: async (authUserId) => {
-      const identidade = Object.values(identidades).find(
-        (item) => item.authUserId === authUserId,
-      );
-      return identidade
-        ? [{
-          id: identidade.usuarioId,
-          authUserId,
-          nome: identidade.nome,
-        }]
-        : [];
-    },
-    buscarAssinaturasAtivas: async (usuarioId) => {
-      const identidade = Object.values(identidades).find(
-        (item) => item.usuarioId === usuarioId,
-      );
-      return identidade
-        ? [{
-          id: identidade.assinaturaId,
-          nome: identidade.assinaturaNome,
-        }]
-        : [];
-    },
-  });
-
-  const fabi = await resolverContextoOperador(
-    {
-      authorization: "Bearer token-fabi",
-      unidadeId: unidadeBarra,
-      modoTeste: false,
-    },
-    adapters,
-  );
-  const jessica = await resolverContextoOperador(
-    {
-      authorization: "Bearer token-jessica",
-      unidadeId: unidadeBarra,
-      modoTeste: false,
-    },
-    adapters,
-  );
-
-  assertEquals(
-    [
-      fabi.usuarioId,
-      identidades["token-fabi"].email,
-      fabi.assinaturaNome,
-    ],
-    [30, "fabi@gmail.com", "Fabi"],
-  );
-  assertEquals(
-    [
-      jessica.usuarioId,
-      identidades["token-jessica"].email,
-      jessica.assinaturaNome,
-    ],
-    [29, "jessyca@lamusic.com.br", "Jessica"],
-  );
-});
-
-Deno.test("campos forjados no request nao trocam a identidade autenticada", async () => {
-  const inputForjado = {
-    authorization: "Bearer token-fabi",
-    unidadeId: unidadeBarra,
-    modoTeste: false,
-    usuarioId: 29,
-    authUserId: "auth-jessica",
-    assinaturaId: "assinatura-jessica",
-    assinaturaNome: "Jessica",
-  };
-
-  const contexto = await resolverContextoOperador(
-    inputForjado,
-    criarAdapters(),
-  );
-
-  assertEquals(contexto, {
-    usuarioId: 30,
-    authUserId: "auth-fabi",
-    nomeUsuario: "Fabi",
-    assinaturaId: "assinatura-fabi",
-    assinaturaNome: "Fabi",
-  });
-});
-
-Deno.test("autenticacao resolve usuario ativo unico sem autorizar nem buscar assinatura", async () => {
-  let consultouPermissao = false;
-  let consultouAssinatura = false;
-  const identidade = await autenticarUsuarioAtivoUnico(
     { authorization: "Bearer token-fabi" },
     criarAdapters({
-      usuarioTemPermissaoEstrita: async () => {
-        consultouPermissao = true;
-        return true;
+      authGetUser: async () => {
+        chamadas.push("jwt");
+        return { id: "auth-fabi" };
+      },
+      buscarUsuariosAtivosPorAuthUserId: async () => {
+        chamadas.push("usuario");
+        return [{ id: 30, authUserId: "auth-fabi", nome: "Fabi Oliveira" }];
       },
       buscarAssinaturasAtivas: async () => {
-        consultouAssinatura = true;
+        chamadas.push("override-opcional");
         return [];
       },
     }),
   );
 
-  assertEquals(
-    {
-      usuarioId: identidade.usuarioId,
-      authUserId: identidade.authUserId,
-      nomeUsuario: identidade.nomeUsuario,
-    },
-    {
-      usuarioId: 30,
-      authUserId: "auth-fabi",
-      nomeUsuario: "Fabi",
-    },
-  );
-  assertEquals(consultouPermissao, false);
-  assertEquals(consultouAssinatura, false);
-});
-
-Deno.test("confirmacao autentica e autoriza pelo snapshot persistido sem resolver assinatura", async () => {
-  const chamadas: string[] = [];
-  const adapters = criarAdapters({
-    authGetUser: async (token) => {
-      chamadas.push(`auth:${token}`);
-      return { id: "auth-fabi" };
-    },
-    buscarUsuariosAtivosPorAuthUserId: async (authUserId) => {
-      chamadas.push(`usuario:${authUserId}`);
-      return [{ id: 30, authUserId, nome: "Fabi" }];
-    },
-    usuarioTemPermissaoEstrita: async (usuarioId, codigo, unidadeId) => {
-      chamadas.push(`permissao:${usuarioId}:${codigo}:${unidadeId}`);
-      return true;
-    },
-    buscarAssinaturasAtivas: async () => {
-      chamadas.push("assinatura");
-      return [{ id: "assinatura-fabi", nome: "Fabi" }];
-    },
-  });
-
-  const identidade = await autenticarUsuarioAtivoUnico(
-    { authorization: "Bearer token-fabi" },
-    adapters,
-  );
-  await autorizarIdentidadeComPreviewPersistida(
-    identidade,
-    {
-      unidadeIdDaPreviewPersistida: unidadeBarra,
-      modoTesteDaPreviewPersistida: false,
-    },
-    adapters,
-  );
-
-  assertEquals(chamadas, [
-    "auth:token-fabi",
-    "usuario:auth-fabi",
-    `permissao:30:sucesso_aluno.evasao.enviar:${unidadeBarra}`,
-  ]);
-});
-
-Deno.test("confirmacao usa modo teste persistido para exigir permissao dedicada", async () => {
-  const codigos: string[] = [];
-  const adapters = criarAdapters({
-    usuarioTemPermissaoEstrita: async (_usuarioId, codigo) => {
-      codigos.push(codigo);
-      return true;
-    },
-  });
-  const identidade = await autenticarUsuarioAtivoUnico(
-    { authorization: "Bearer token-fabi" },
-    adapters,
-  );
-
-  await autorizarIdentidadeComPreviewPersistida(
-    identidade,
-    {
-      unidadeIdDaPreviewPersistida: unidadeBarra,
-      modoTesteDaPreviewPersistida: true,
-    },
-    adapters,
-  );
-
-  assertEquals(codigos, [
-    "sucesso_aluno.evasao.enviar",
-    "sucesso_aluno.evasao.modo_teste",
-  ]);
-});
-
-Deno.test("modo persistido indefinido ou string falha fechado antes das permissoes", async () => {
-  const identidade = await autenticarUsuarioAtivoUnico(
-    { authorization: "Bearer token-fabi" },
-    criarAdapters(),
-  );
-
-  for (const modoTeste of [undefined, "false"]) {
-    let consultouPermissao = false;
-    await assertErroHttp(
-      () =>
-        autorizarIdentidadeComPreviewPersistida(
-          identidade,
-          {
-            unidadeIdDaPreviewPersistida: unidadeBarra,
-            modoTesteDaPreviewPersistida: modoTeste,
-          } as unknown as EscopoAutorizacaoDaPreviewPersistida,
-          criarAdapters({
-            usuarioTemPermissaoEstrita: async () => {
-              consultouPermissao = true;
-              return true;
-            },
-          }),
-        ),
-      403,
-      /modo_teste da preview persistida invalido/i,
-    );
-    assertEquals(consultouPermissao, false);
-  }
-});
-
-Deno.test("composicao de preview tambem rejeita modoTeste nao booleano", async () => {
-  for (const modoTeste of [undefined, "false"]) {
-    await assertErroHttp(
-      () =>
-        resolverContextoOperador(
-          {
-            authorization: "Bearer token-fabi",
-            unidadeId: unidadeBarra,
-            modoTeste,
-          } as unknown as Parameters<typeof resolverContextoOperador>[0],
-          criarAdapters(),
-        ),
-      403,
-      /modo_teste invalido/i,
-    );
-  }
-});
-
-Deno.test("assinatura ativa e resolvida separadamente apenas para nova preview", async () => {
-  let consultouPermissao = false;
-  const adapters = criarAdapters({
-    usuarioTemPermissaoEstrita: async () => {
-      consultouPermissao = true;
-      return true;
-    },
-  });
-  const identidade = await autenticarUsuarioAtivoUnico(
-    { authorization: "Bearer token-fabi" },
-    adapters,
-  );
-
-  assertEquals(
-    await resolverAssinaturaAtivaParaNovaPreview(identidade, adapters),
-    {
-      assinaturaId: "assinatura-fabi",
-      assinaturaNome: "Fabi",
-    },
-  );
-  assertEquals(consultouPermissao, false);
+  assertEquals(chamadas, ["jwt", "usuario", "override-opcional"]);
+  assertEquals(contexto.assinaturaNome, "Fabi");
 });

@@ -674,7 +674,7 @@ contractTest('remove policy ALL aberta de pesquisa_evasao', () => {
   );
 });
 
-contractTest('RLS usa permissao estrita e unidade da propria linha', () => {
+contractTest('RLS libera leitura somente para usuario interno ativo', () => {
   const privatePolicies = statements(sql).filter(
     (statement) =>
       /\bcreate\s+policy\b/i.test(statement) &&
@@ -701,86 +701,33 @@ contractTest('RLS usa permissao estrita e unidade da propria linha', () => {
     );
   }
   for (const policy of privatePolicies) {
-    assertGovernedPrivatePolicy(policy);
-    assert.doesNotMatch(
-      policy,
-      /(?<!estrita)\bfn_usuario_atual_tem_permissao\s*\(/i,
-    );
+    assert.match(policy, /\bfor\s+select\b/i);
+    assert.match(policy, /\bto\s+authenticated\b/i);
+    assert.match(policy, /fn_pesquisa_evasao_usuario_interno_ativo\s*\(\s*\)/i);
+    assert.doesNotMatch(policy, /unidade_id|sucesso_aluno\.evasao/i);
   }
 });
 
-contractTest('helper estrito ignora admin legado e exige vinculo granular', () => {
-  const explicitHelper = getFunctionDefinition(
-    'usuario_tem_permissao_estrita',
-    ['integer', 'varchar', 'uuid'],
+contractTest('helper valida apenas JWT ligado a usuario interno ativo', () => {
+  const helper = getFunctionDefinition(
+    'fn_pesquisa_evasao_usuario_interno_ativo',
+    [],
   );
-  const currentUserHelper = getFunctionDefinition(
-    'fn_usuario_atual_tem_permissao_estrita',
-    ['varchar', 'uuid'],
-  );
-  const helpers = `${explicitHelper}\n${currentUserHelper}`;
 
-  assert.match(explicitHelper, /\bpublic\.usuario_perfis\b/i);
-  assert.match(explicitHelper, /\bpublic\.perfil_permissoes\b/i);
-  assert.match(explicitHelper, /\bpublic\.permissoes\b/i);
-  assert.match(explicitHelper, /\bp_unidade_id\s+is\s+not\s+null\b/i);
-  assert.match(
-    explicitHelper,
-    /\b(?:up|usuario_perfis)\.unidade_id\s*=\s*p_unidade_id\b/i,
-  );
-  assert.match(
-    explicitHelper,
-    /\b(?:up|usuario_perfis)\.ativo\s*=\s*true\b/i,
-    'helper estrito exige vinculo ativo na unidade exata',
-  );
-  assert.match(currentUserHelper, /\bauth\.uid\s*\(\s*\)/i);
-  assert.match(currentUserHelper, /\busuario_tem_permissao_estrita\s*\(/i);
-  assert.doesNotMatch(helpers, /\busuarios?\.unidade_id\s+is\s+null\b/i);
-  assert.doesNotMatch(
-    helpers,
-    /(?<!estrita)\bfn_usuario_atual_tem_permissao\s*\(/i,
-  );
-  assertNoAuthorizationBypass(explicitHelper, 'usuario_tem_permissao_estrita');
-  assertNoAuthorizationBypass(
-    currentUserHelper,
-    'fn_usuario_atual_tem_permissao_estrita',
-  );
+  assert.match(helper, /\bpublic\.usuarios\b/i);
+  assert.match(helper, /\bu\.auth_user_id\s*=\s*auth\.uid\s*\(\s*\)/i);
+  assert.match(helper, /\bu\.ativo\s*=\s*true\b/i);
+  assert.doesNotMatch(helper, /unidade_id|perfil|permiss/i);
 });
 
-contractTest('catalogo e perfil dedicado ligam somente cinco permissoes', () => {
-  for (const permission of catalogPermissions) {
-    assert.match(sql, new RegExp(escapeRegex(permission), 'i'));
-  }
-
-  const profileStatements = statements(sql).filter(
-    (statement) =>
-      /\bpublic\.perfis\b/i.test(statement) &&
-      /Sucesso do Aluno - Evas[aã]o/i.test(statement),
-  );
-  assert.ok(profileStatements.length > 0, 'perfil dedicado ausente');
-  assert.match(
-    profileStatements.join('\n'),
-    /Sucesso do Aluno - Evas[aã]o[\s\S]*\b30\b|\b30\b[\s\S]*Sucesso do Aluno - Evas[aã]o/i,
-  );
-
-  const linkStatements = statements(sql).filter((statement) =>
-    /\binsert\s+into\s+public\.perfil_permissoes\b/i.test(statement),
-  );
-  assert.ok(linkStatements.length > 0, 'vinculo perfil_permissoes ausente');
-  const links = linkStatements.join('\n');
-
-  for (const permission of approvedOperationalPermissions) {
-    assert.match(links, new RegExp(escapeRegex(permission), 'i'));
-  }
-  assert.doesNotMatch(
-    links,
-    /sucesso_aluno\.evasao\.relatorios/i,
-    '.relatorios nao pertence ao perfil operacional dedicado',
-  );
+contractTest('migration nao cria catalogo, perfil ou vinculo granular', () => {
+  assert.doesNotMatch(sql, /sucesso_aluno\.evasao/i);
+  assert.doesNotMatch(sql, /Sucesso do Aluno - Evas[aã]o/i);
+  assert.doesNotMatch(sql, /public\.perfil_permissoes|public\.usuario_perfis/i);
+  assert.doesNotMatch(sql, /usuario_tem_permissao_estrita/i);
 });
 
 contractTest('rollout nominal fica integralmente fora da migration', () => {
-  // A verificacao executavel do runbook, terceiro usuario e escopos e Task 7.
   assertNoNominalSeedDml(sql);
   const rolloutDml = statements(sql).filter(
     (statement) =>
@@ -1299,7 +1246,7 @@ contractTest('estado incerto nao possui retry automatico', () => {
   assert.doesNotMatch(sql, /\bauto(?:matico|maticamente)?[_\s-]*retry\b/i);
 });
 
-contractTest('overload de quatro argumentos preserva RETURNS e escopo por linha', () => {
+contractTest('overload de quatro argumentos preserva RETURNS e acesso interno', () => {
   const definition = getFunctionDefinition(
     'listar_evadidos_para_pesquisa',
     ['uuid', 'integer', 'integer', 'varchar'],
@@ -1326,24 +1273,16 @@ contractTest('overload de quatro argumentos preserva RETURNS e escopo por linha'
   assert.match(definition, /\bmovimentacoes_admin\b/i);
   assert.match(
     definition,
-    /fn_usuario_atual_tem_permissao_estrita\s*\(\s*['"]sucesso_aluno\.evasao\.ver['"](?:\s*::\s*varchar)?\s*,\s*[a-z_][a-z0-9_]*\.unidade_id\s*\)/i,
+    /fn_pesquisa_evasao_usuario_interno_ativo\s*\(\s*\)/i,
   );
   assert.match(
     definition,
     /\(\s*p_unidade_id\s+is\s+null\s+or\s+[a-z_][a-z0-9_]*\.unidade_id\s*=\s*p_unidade_id\s*\)/i,
   );
-  assert.doesNotMatch(
-    definition,
-    /fn_usuario_atual_tem_permissao_estrita\s*\([^)]*,\s*null\s*\)/i,
-  );
-  assert.doesNotMatch(
-    definition,
-    /(?<!estrita)\bfn_usuario_atual_tem_permissao\s*\(/i,
-  );
-  assertNoAuthorizationBypass(definition, 'listar overload 4');
+  assert.doesNotMatch(definition, /sucesso_aluno\.evasao|usuario_perfis/i);
 });
 
-contractTest('overload de seis argumentos preserva RETURNS e escopo por linha', () => {
+contractTest('overload de seis argumentos preserva RETURNS e acesso interno', () => {
   const definition = getFunctionDefinition(
     'listar_evadidos_para_pesquisa',
     ['uuid', 'integer', 'integer', 'varchar', 'integer', 'integer'],
@@ -1374,24 +1313,16 @@ contractTest('overload de seis argumentos preserva RETURNS e escopo por linha', 
   assert.match(definition, /\bmovimentacoes_admin\b/i);
   assert.match(
     definition,
-    /fn_usuario_atual_tem_permissao_estrita\s*\(\s*['"]sucesso_aluno\.evasao\.ver['"](?:\s*::\s*varchar)?\s*,\s*[a-z_][a-z0-9_]*\.unidade_id\s*\)/i,
+    /fn_pesquisa_evasao_usuario_interno_ativo\s*\(\s*\)/i,
   );
   assert.match(
     definition,
     /\(\s*p_unidade_id\s+is\s+null\s+or\s+[a-z_][a-z0-9_]*\.unidade_id\s*=\s*p_unidade_id\s*\)/i,
   );
-  assert.doesNotMatch(
-    definition,
-    /fn_usuario_atual_tem_permissao_estrita\s*\([^)]*,\s*null\s*\)/i,
-  );
-  assert.doesNotMatch(
-    definition,
-    /(?<!estrita)\bfn_usuario_atual_tem_permissao\s*\(/i,
-  );
-  assertNoAuthorizationBypass(definition, 'listar overload 6');
+  assert.doesNotMatch(definition, /sucesso_aluno\.evasao|usuario_perfis/i);
 });
 
-contractTest('stats NULL agrega somente unidades autorizadas e exclui testes', () => {
+contractTest('stats NULL agrega todas as unidades internas e exclui testes', () => {
   const definition = getFunctionDefinition(
     'stats_pesquisa_evasao',
     ['uuid', 'integer', 'integer'],
@@ -1413,7 +1344,7 @@ contractTest('stats NULL agrega somente unidades autorizadas e exclui testes', (
   );
   assert.match(
     definition,
-    /fn_usuario_atual_tem_permissao_estrita\s*\(\s*['"]sucesso_aluno\.evasao\.ver['"](?:\s*::\s*varchar)?\s*,\s*[a-z_][a-z0-9_]*\.unidade_id\s*\)/i,
+    /fn_pesquisa_evasao_usuario_interno_ativo\s*\(\s*\)/i,
   );
   assert.match(
     definition,
@@ -1423,15 +1354,7 @@ contractTest('stats NULL agrega somente unidades autorizadas e exclui testes', (
     definition,
     /(?:pe|pesquisa_evasao)\.modo_teste\s*=\s*false\b/i,
   );
-  assert.doesNotMatch(
-    definition,
-    /fn_usuario_atual_tem_permissao_estrita\s*\([^)]*,\s*null\s*\)/i,
-  );
-  assert.doesNotMatch(
-    definition,
-    /(?<!estrita)\bfn_usuario_atual_tem_permissao\s*\(/i,
-  );
-  assertNoAuthorizationBypass(definition, 'stats_pesquisa_evasao');
+  assert.doesNotMatch(definition, /sucesso_aluno\.evasao|usuario_perfis/i);
 });
 
 contractTest('stats so considera resposta pronta para revisao ou avancada', () => {
@@ -1519,10 +1442,9 @@ contractTest('EXECUTE publico e anon e revogado nas cinco assinaturas', () => {
   }
 });
 
-contractTest('agents restritos nao executam helpers nem RPCs do dominio', () => {
+contractTest('agents restritos nao executam helper interno nem RPCs do dominio', () => {
   const signatures = [
-    ['usuario_tem_permissao_estrita', 'integer, varchar, uuid'],
-    ['fn_usuario_atual_tem_permissao_estrita', 'varchar, uuid'],
+    ['fn_pesquisa_evasao_usuario_interno_ativo', ''],
     ['listar_evadidos_para_pesquisa', 'uuid, integer, integer, varchar'],
     [
       'listar_evadidos_para_pesquisa',
@@ -1594,7 +1516,7 @@ contractTest('criar pesquisa rejeita movimentacao que nao seja saida canonica', 
   );
 });
 
-contractTest('pode_enviar exige permissao concreta ou service role', () => {
+contractTest('pode_enviar exige usuario interno ativo ou service role', () => {
   const parts = getFunctionParts(
     'pode_enviar_pesquisa_evasao',
     ['integer'],
@@ -1606,24 +1528,15 @@ contractTest('pode_enviar exige permissao concreta ou service role', () => {
   const governedReturn = statements(body).find(
     (statement) =>
       /\breturn\b/i.test(statement) &&
-      /fn_usuario_atual_tem_permissao_estrita\s*\(\s*['"]sucesso_aluno\.evasao\.enviar['"](?:\s*::\s*varchar)?\s*,\s*(?:[a-z_][a-z0-9_]*\.)?[a-z_]*unidade_id\s*\)/i
+      /fn_pesquisa_evasao_usuario_interno_ativo\s*\(\s*\)/i
         .test(statement),
   );
   assert.ok(
     governedReturn,
-    'RETURN governado precisa chamar helper estrito com unidade concreta',
+    'RETURN governado precisa validar usuario interno ativo',
   );
-  assertGovernedReturn(governedReturn);
   assert.match(governedReturn, /\bauth\.role\s*\(\s*\)\s*=\s*['"]service_role['"]/i);
-  assert.doesNotMatch(
-    definition,
-    /fn_usuario_atual_tem_permissao_estrita\s*\([^)]*,\s*null\s*\)/i,
-  );
-  assert.doesNotMatch(
-    definition,
-    /(?<!estrita)\bfn_usuario_atual_tem_permissao\s*\(/i,
-  );
-  assertNoAuthorizationBypass(definition, 'pode_enviar_pesquisa_evasao');
+  assert.doesNotMatch(definition, /sucesso_aluno\.evasao|usuario_perfis/i);
 });
 
 contractTest('pode_enviar rejeita movimentacao que nao seja saida canonica', () => {

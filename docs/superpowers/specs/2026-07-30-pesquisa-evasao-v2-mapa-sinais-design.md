@@ -46,7 +46,7 @@ Esta proposta usa a auditoria somente leitura realizada no código e no banco re
 - A função publicada de envio não exige JWT e aceita telefone e operador informados pelo cliente.
 - O inbound `webhook-whatsapp-inbox` também roda sem JWT e, na versão auditada, não valida segredo antes de criar o cliente com service role.
 - O inbound grava o payload integral em `webhook_debug_log` e também escreve trechos extensos do payload em logs de execução, sem política de expurgo identificada.
-- A policy atual de `pesquisa_evasao` permite `ALL` a qualquer usuário `authenticated` e aos roles restritos de Mila e Sol; isso expõe respostas privadas e contradiz a separação de domínios definida nesta spec.
+- A policy atual de `pesquisa_evasao` permite `ALL` a qualquer usuário `authenticated` e aos roles restritos de Mila e Sol. A decisão de produto mantém leitura para qualquer pessoa interna ativa, mas fecha escrita direta e revoga o acesso bruto dos roles de agentes.
 - `whatsapp_caixas` permite leitura direta por usuários autenticados e contém tokens UAZAPI/WAHA; o novo segredo inbound não pode ser acrescentado a essa exposição, e o hardening deve substituir leituras do frontend por um contrato sem credenciais.
 - O fluxo pós-1ª aula depende do mesmo inbound: mensagens com `buttonOrListid` são encaminhadas a `processar-resposta-pesquisa` e essa integração é uma regressão crítica a preservar.
 
@@ -110,8 +110,8 @@ A fila Sol/Hermes registrava 20 entregas e 3 erros até a auditoria. Os relatór
 
 ### 3.1 Objetivos da primeira entrega
 
-- Fechar o endpoint de envio para usuários autenticados e autorizados.
-- Assinar automaticamente com Fabi ou Jéssica conforme o usuário autenticado.
+- Fechar o endpoint de envio para qualquer chamada sem JWT válido e sem usuário interno ativo.
+- Assinar automaticamente com o primeiro nome de qualquer usuário interno ativo, com override opcional no servidor.
 - Exibir uma prévia obrigatória.
 - Isolar teste de produção.
 - Manter alunos bloqueados por cadastro visíveis.
@@ -120,7 +120,7 @@ A fila Sol/Hermes registrava 20 entregas e 3 erros até a auditoria. Os relatór
 - Não considerar “vou responder depois” uma resposta final.
 - Entregar uma conversa consolidada para revisão humana.
 - Autenticar todo webhook inbound por caixa antes de qualquer acesso com service role.
-- Restringir cabeçalho, mensagens, transcrições e análises por `sucesso_aluno.evasao.*`.
+- Permitir leitura de cabeçalho, mensagens, transcrições e análises a qualquer usuário interno ativo, mantendo as escritas no backend auditado.
 - Interromper a persistência e o log de payloads integrais do webhook e expurgar o legado de debug.
 
 ### 3.2 Objetivos das entregas seguintes
@@ -185,10 +185,11 @@ O motor de `agente_fila_mensagens` serve como referência para debounce e claim 
 
 ### 6.1 Regra de produto
 
-A assinatura vem automaticamente do usuário autenticado:
+A assinatura vem automaticamente do usuário autenticado. O padrão é o primeiro nome de `usuarios.nome`; uma linha ativa em `pesquisa_evasao_assinaturas` pode sobrescrever apenas o nome de exibição.
 
-- login da Fabi: assinatura configurada da Fabi;
-- login da Jéssica: assinatura configurada da Jéssica.
+- login da Fabi: “Aqui é a Fabi” por fallback automático ou override;
+- login da Jessica: “Aqui é a Jessica” por fallback automático ou override;
+- qualquer outro usuário interno ativo: primeiro nome do próprio cadastro.
 
 Não haverá escolha livre de identidade na primeira entrega. Isso evita que uma pessoa assine pela outra e elimina texto de operador controlado pelo navegador.
 
@@ -199,14 +200,14 @@ O envio preserva separadamente:
 - `executado_por_usuario_id`: usuário que clicou;
 - `executado_por_auth_user_id`: identidade de autenticação;
 - `assinatura_nome_snapshot`: nome exibido ao destinatário;
-- `assinatura_perfil_id`: configuração autorizada da assinatura;
+- `assinatura_id`: override opcional de exibição, nulo quando usado o fallback;
 - `mensagem_renderizada`: conteúdo exato;
 - `template_versao`;
 - `caixa_id`;
 - `provider_message_id`;
 - data e modo de envio.
 
-O nome mostrado usa uma assinatura configurada no servidor. O cliente não envia texto livre como operador.
+O nome mostrado é resolvido no servidor a partir do usuário autenticado. O cliente não envia texto livre como operador e ninguém precisa ser provisionado em uma tabela de assinatura para conseguir enviar.
 
 Uma eventual função de “enviar em nome de” será uma capacidade administrativa posterior, com permissão e auditoria próprias.
 
@@ -657,7 +658,7 @@ job -> agente -> regra -> consulta -> fonte canônica -> saída -> canal -> dono
 
 - `enviar-pesquisa-evasao` exige JWT.
 - A função resolve o usuário pelo token.
-- O servidor valida permissão, unidade, movimentação e público.
+- O servidor valida usuário interno ativo, movimentação, destino e público; unidade permanece dado e filtro, não autorização.
 - Service role não transforma endpoint público em autorização.
 - `webhook-whatsapp-inbox` permanece sem JWT porque recebe chamadas do provedor, mas exige um segredo forte e diferente por caixa antes de instanciar ou usar o cliente com service role.
 - O segredo inbound usa preferencialmente o header `x-webhook-secret`; query param opaco é fallback somente quando o provedor não suportar header customizado.
@@ -665,10 +666,11 @@ job -> agente -> regra -> consulta -> fonte canônica -> saída -> canal -> dono
 - Tokens UAZAPI/WAHA deixam de ser retornados diretamente ao frontend; telas usam RPC/read model com campos públicos e operações sensíveis ficam no backend.
 - Ausência de `caixa_id`, caixa inativa, segredo ausente ou hash divergente retorna `401`/`403` antes de qualquer escrita ou roteamento.
 - O health check interno usa autenticação de serviço separada; ele não cria uma exceção pública capaz de contornar o segredo inbound.
-- `telefone_override` só existe em modo teste autorizado.
+- `telefone_override` só existe em modo teste explícito.
 - Um envio de teste nunca faz `upsert` sobre a pesquisa produtiva da mesma evasão. A unicidade de `evasao_id` vale apenas para `modo_teste=false`.
-- `pesquisa_evasao`, mensagens, transcrições e análises usam RLS baseada em `sucesso_aluno.evasao.*`, respeitando unidade e ação (`ver`, `enviar`, `revisar`, `gerir_acoes`, `relatorios`, `modo_teste`).
-- Policies permissivas com `qual=true`, inclusive para `authenticated`, `mila_acesso_restrito` e `sol_acesso_restrito`, são removidas; acesso de agentes ocorre apenas por contrato/read model autorizado.
+- `pesquisa_evasao`, mensagens, transcrições e análises permitem `SELECT` a qualquer usuário interno ativo, sem gate por unidade ou permissão granular.
+- Escritas diretas permanecem revogadas para pessoas; envio e persistência passam pela Edge/RPC auditada.
+- Os roles `mila_acesso_restrito`, `sol_acesso_restrito`, `fabio_agent` e `lia_acesso_restrito` não recebem acesso bruto às respostas. Acesso de agentes ocorre apenas por contrato/read model governado.
 - Mídia privada usa URL assinada.
 - `webhook_debug_log` deixa de receber payload bruto. Diagnóstico persistido, se necessário, contém apenas IDs internos/correlation ID, tipo de evento, rota, status e timestamps, sem texto, áudio, telefone, nome, URL de mídia ou segredo.
 - Os payloads integrais já retidos em `webhook_debug_log` são expurgados na implantação do Subprojeto B; o log sanitizado passa a ter retenção automática máxima de sete dias.
@@ -678,14 +680,7 @@ job -> agente -> regra -> consulta -> fonte canônica -> saída -> canal -> dono
 - Toda classificação oficial registra revisor humano.
 - Teste e produção são populações distintas.
 
-Permissões mínimas:
-
-- `sucesso_aluno.evasao.ver`;
-- `sucesso_aluno.evasao.enviar`;
-- `sucesso_aluno.evasao.revisar`;
-- `sucesso_aluno.evasao.gerir_acoes`;
-- `sucesso_aluno.evasao.relatorios`;
-- `sucesso_aluno.evasao.modo_teste`.
+Não há catálogo, perfil, vínculo nominal nem permissão granular do domínio no Subprojeto A. O controle é confiança interna com rastro: JWT, usuário interno ativo, ownership da prévia e auditoria completa do envio.
 
 ## 17. Falhas e recuperação
 
@@ -725,15 +720,16 @@ Logs técnicos usam IDs internos e correlation ID. Conteúdo sensível fica no b
 ### 19.1 Envio
 
 1. Usuário anônimo não envia.
-2. Usuário sem permissão não envia.
-3. Usuário de outra unidade não envia.
-4. Fabi assina como Fabi.
-5. Jéssica assina como Jéssica.
-6. O cliente não falsifica a assinatura.
-7. Prévia e mensagem enviada são idênticas.
-8. Modo teste não altera telefone de aluno ou movimentação.
-9. Modo teste não entra em analytics.
-10. Movimentação inválida não recebe pesquisa.
+2. Usuário autenticado sem cadastro interno ativo não envia.
+3. Qualquer usuário interno ativo pode operar qualquer unidade.
+4. Fabi assina como Fabi pelo primeiro nome ou override.
+5. Jessica assina como Jessica pelo primeiro nome ou override.
+6. Usuário sem override também envia pelo fallback automático.
+7. O cliente não falsifica a assinatura.
+8. Prévia e mensagem enviada são idênticas.
+9. Modo teste não altera telefone de aluno ou movimentação.
+10. Modo teste não entra em analytics.
+11. Movimentação inválida não recebe pesquisa.
 
 ### 19.2 Resposta multipartes
 
@@ -753,8 +749,8 @@ Logs técnicos usam IDs internos e correlation ID. Conteúdo sensível fica no b
 14. O segredo recebido não aparece no banco nem nos logs.
 15. `buttonOrListid` autenticado continua invocando `processar-resposta-pesquisa` e atualiza a pesquisa pós-1ª aula.
 16. “Não quero responder” muda para `recusada_opt_out`, bloqueia reenvio/lembrete e não incrementa resposta válida.
-17. Usuário autenticado sem `sucesso_aluno.evasao.ver` não lê resposta privada.
-18. Sol e Mila não acessam diretamente resposta/transcrição privada.
+17. Usuário interno ativo lê respostas de qualquer unidade.
+18. Sol, Mila, Fábio e Lia não acessam diretamente resposta/transcrição privada por seus roles de agente.
 19. Usuário autenticado comum não lê token UAZAPI/WAHA de `whatsapp_caixas`.
 
 ### 19.3 Dados e sinais
@@ -783,7 +779,7 @@ Logs técnicos usam IDs internos e correlation ID. Conteúdo sensível fica no b
 ### 20.1 Fundação de produção
 
 - Não existe envio anônimo.
-- Fabi e Jéssica são identificadas pelo login.
+- Qualquer usuário interno ativo é identificado pelo login e assina com o próprio primeiro nome ou override opcional.
 - Toda mensagem tem prévia.
 - Teste não contamina produção.
 - Alunos bloqueados por cadastro permanecem visíveis.
@@ -815,15 +811,15 @@ O escopo não será implementado em um único plano.
 
 ### Subprojeto A — Fundação segura da pesquisa
 
-- autenticação e permissões;
-- identidade de Fabi/Jéssica;
+- autenticação externa e identidade interna ativa, sem RBAC do domínio;
+- assinatura automática de qualquer usuário logado;
 - template versionado;
 - prévia;
 - modo teste;
 - elegibilidade, paginação e bloqueios;
 - fechamento das escritas diretas de telefone.
-- reescrita das policies de `pesquisa_evasao` e das novas tabelas com `sucesso_aluno.evasao.*`;
-- remoção do acesso total de `authenticated`, Mila e Sol às respostas privadas;
+- reescrita das policies de `pesquisa_evasao` e tabelas filhas para leitura por qualquer usuário interno ativo;
+- remoção da escrita direta de `authenticated` e do acesso bruto de Mila, Sol, Fábio e Lia;
 - contratos/read models mínimos para agentes, sem acesso bruto.
 
 ### Subprojeto B — Conversa multipartes

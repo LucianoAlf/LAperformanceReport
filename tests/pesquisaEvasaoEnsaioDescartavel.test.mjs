@@ -22,26 +22,26 @@ const legacyTestIds = [
 test('runbook exige postflight dos seis legados como modo teste em producao', () => {
   assert.match(
     runbook,
-    /ap[oó]s\s+aplicar[\s\S]*produ[cç][aã]o[\s\S]*seis\s+registros\s+legados/i,
+    /ordem de rollout em produ[cç][aã]o[\s\S]*conferir o backfill dos seis testes/i,
   );
   for (const id of legacyTestIds) {
     assert.match(runbook, new RegExp(id, 'i'));
   }
   assert.match(
     runbook,
-    /count\s*\(\s*\*\s*\)\s+filter\s*\(\s*where\s+modo_teste\s*=\s*true\s*\)/i,
+    /os seis legados est[aã]o com `modo_teste = true`/i,
   );
   assert.match(
     runbook,
-    /total_legado[\s\S]*total_modo_teste[\s\S]*6[\s\S]*6/i,
+    /Se a contagem n[aã]o for seis, parar/i,
   );
 });
 
 test('runbook define o ensaio descartavel sem dados nem segredos', () => {
-  assert.match(runbook, /projeto Supabase descart[aá]vel/i);
-  assert.match(runbook, /pg_dump[\s\S]*schema-only/i);
+  assert.match(runbook, /ambiente[\s\S]*descart[aá]vel/i);
+  assert.match(runbook, /schema-only/i);
   assert.match(runbook, /verify-pesquisa-evasao-schema\.sql/i);
-  assert.match(runbook, /sem dados reais/i);
-  assert.match(runbook, /sem segredos/i);
-  assert.match(runbook, /derrubad[oa][\s\S]*ao final/i);
+  assert.match(runbook, /sem dados/i);
+  assert.match(runbook, /sem (?:dados ou )?segredos/i);
+  assert.match(runbook, /destru[ií]do[\s\S]*ao final|destru[ií]do ao final/i);
 });

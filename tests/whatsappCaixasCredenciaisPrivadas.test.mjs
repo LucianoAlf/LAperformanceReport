@@ -36,6 +36,7 @@ const runbook = read(
   'docs/runbooks/pesquisa-evasao-subprojeto-a-rollout.md',
 );
 const rlsVerification = read('scripts/verify-pesquisa-evasao-rls.sql');
+const schemaVerification = read('scripts/verify-pesquisa-evasao-schema.sql');
 const movimentacoesSpec = read(
   'docs/superpowers/specs/2026-07-31-movimentacoes-admin-hardening-design.md',
 );
@@ -272,94 +273,67 @@ test('fixture PG17 cobre ACL, escopo, mascara, preservacao e rotacao', () => {
 });
 
 test('verificacao de rollout bloqueia leitura das duas credenciais', () => {
-  assert.ok(rlsVerification, 'verificação RLS de rollout ausente');
+  assert.ok(schemaVerification, 'verificação estrutural de rollout ausente');
   assert.match(
-    rlsVerification,
+    schemaVerification,
     /has_column_privilege\s*\([\s\S]*'authenticated'[\s\S]*'public\.whatsapp_caixas'[\s\S]*'uazapi_token'[\s\S]*'select'/i,
   );
   assert.match(
-    rlsVerification,
+    schemaVerification,
     /has_column_privilege\s*\([\s\S]*'authenticated'[\s\S]*'public\.whatsapp_caixas'[\s\S]*'waha_api_key'[\s\S]*'select'/i,
   );
   assert.match(
-    rlsVerification,
-    /service_role[\s\S]*whatsapp_caixas[\s\S]*select/i,
+    migration,
+    /grant\s+(?:all|select)\s+on\s+table\s+public\.whatsapp_caixas\s+to\s+service_role/i,
   );
 });
 
-test('DoD e runbook refletem o escopo real e o usuario dedicado', () => {
+test('DoD e runbook refletem acesso humano amplo e agentes sem acesso bruto', () => {
   assert.match(
     planA,
-    /Mila e Sol n[aã]o leem respostas privadas[\s\S]*pesquisa_evasao[\s\S]*tabelas filhas/i,
-  );
-  assert.match(runbook, /lume_readonly_select/i);
-  assert.match(
-    runbook,
-    /homologa[cç][aã]o[\s\S]*n[aã]o bloqueia|n[aã]o bloqueia[\s\S]*homologa[cç][aã]o/i,
+    /Mila, Sol, F[aá]bio e Lia n[aã]o leem diretamente as tabelas privadas/i,
   );
   assert.match(
     runbook,
-    /usu[aá]rio dedicado[\s\S]*desativad[oa][\s\S]*ao final/i,
+    /qualquer usu[aá]rio interno ativo[\s\S]*qualquer unidade/i,
   );
   assert.match(
     runbook,
-    /project ref[\s\S]*homologa[cç][aã]o[\s\S]*nzwqjepncrtufpykjita/i,
+    /Pré-Atendimento, CaixasManager e NovaConversaModal/i,
   );
   assert.match(
     runbook,
-    /invent[aá]rio de consumidores[\s\S]*useWhatsAppCaixas[\s\S]*NovaConversaModal[\s\S]*CaixasManager/i,
+    /smoke manual[\s\S]*sele[cç][aã]o correta de caixa/i,
   );
-  assert.match(
-    runbook,
-    /16 consumidores diretos server-side[\s\S]*SUPABASE_SERVICE_ROLE_KEY/i,
-  );
+  assert.doesNotMatch(runbook, /usu[aá]rio dedicado[\s\S]*desativad[oa]/i);
 });
 
 test('runbook mantem staging incapaz de entregar WhatsApp', () => {
   assert.match(runbook, /p01c-staging[\s\S]*nzwqjepncrtufpykjita/i);
-  assert.match(runbook, /20260614131323[\s\S]*20260730161312/i);
-  assert.match(runbook, /HOMOLOG-DESATIVADO-NAO-ENVIA/i);
-  assert.match(runbook, /n[aã]o restaurar[\s\S]*credenciais[\s\S]*produ[cç][aã]o/i);
+  assert.match(runbook, /tokens de WhatsApp[\s\S]*neutralizados/i);
+  assert.match(runbook, /n[aã]o podem ser restaurados/i);
   assert.match(
     runbook,
-    /credencial v[aá]lida[\s\S]*produ[cç][aã]o[\s\S]*(?:parar|interromper)[\s\S]*homologa[cç][aã]o/i,
+    /n[aã]o usar para homologar o Plano A/i,
   );
   assert.match(
     runbook,
-    /falha[\s\S]*provedor[\s\S]*esperad[oa][\s\S]*autentica[cç][aã]o[\s\S]*permiss[aã]o[\s\S]*pr[eé]via[\s\S]*snapshot[\s\S]*idempot[eê]ncia/i,
-  );
-  assert.match(
-    runbook,
-    /byte a byte[\s\S]*produ[cç][aã]o[\s\S]*modo teste[\s\S]*n[uú]mero interno/i,
+    /smoke real futuro[\s\S]*modo teste[\s\S]*n[uú]mero interno/i,
   );
 });
 
-test('runbook registra drift do rebase e bloqueia provisionamento prematuro', () => {
-  assert.match(runbook, /MIGRATIONS_FAILED/i);
-  assert.match(runbook, /20260701000701_seguranca_rls_grupo_b_enable_policies/i);
-  assert.match(runbook, /20260702024506_fideliza_renovacoes_trim_movimentacoes_admin/i);
-  assert.match(runbook, /n[aã]o usar[\s\S]*migration repair/i);
-  assert.match(
-    runbook,
-    /terceiro usu[aá]rio[\s\S]*N[AÃ]O CRIADO[\s\S]*gate de schema/i,
-  );
+test('runbook invalida o ensaio anterior para o diff novo', () => {
+  assert.match(runbook, /vnuzjephkwgcyvioiele/i);
+  assert.match(runbook, /vers[aã]o anterior das migrations/i);
+  assert.match(runbook, /n[aã]o substitui um novo ensaio DDL do diff final/i);
+  assert.match(runbook, /novo ensaio DDL[\s\S]*PENDENTE/i);
 });
 
-test('runbook impede bootstrap contraditorio e inventaria a staging antiga', () => {
+test('runbook preserva a staging antiga ate inventario e decisao explicita', () => {
+  assert.match(runbook, /invent[aá]rio independente[\s\S]*fingerprint/i);
   assert.match(
     runbook,
-    /branch Supabase[\s\S]*reaplica[cç][aã]o sequencial das migrations/i,
-  );
-  assert.match(runbook, /20260109125533[\s\S]*20260109125543/i);
-  assert.match(
-    runbook,
-    /nenhuma branch ou projeto novo foi criado[\s\S]*nenhum custo novo/i,
-  );
-  assert.match(runbook, /67 Edge Functions ativas/i);
-  assert.match(runbook, /GEMINI_API_KEY[\s\S]*mesma fingerprint de produ[cç][aã]o/i);
-  assert.match(
-    runbook,
-    /n[aã]o apagar[\s\S]*staging antiga[\s\S]*decis[aã]o do Alf/i,
+    /n[aã]o excluir[\s\S]*invent[aá]rio/i,
   );
 });
 

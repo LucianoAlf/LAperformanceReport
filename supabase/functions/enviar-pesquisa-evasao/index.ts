@@ -9,7 +9,6 @@ import {
 import {
   autenticarUsuarioAtivoUnico,
   type AuthAdapters,
-  autorizarIdentidadeComPreviewPersistida,
   ErroAutorizacao,
   resolverAssinaturaAtivaParaNovaPreview,
 } from "./auth.ts";
@@ -137,23 +136,6 @@ function criarAuthAdapters(supabase: SupabaseClient): AuthAdapters {
         authUserId: String(usuario.auth_user_id),
         nome: String(usuario.nome),
       }));
-    },
-    usuarioTemPermissaoEstrita: async (
-      usuarioId,
-      codigo,
-      unidadeId,
-    ) => {
-      const { data, error } = await supabase.rpc(
-        "usuario_tem_permissao_estrita",
-        {
-          p_usuario_id: usuarioId,
-          p_codigo_permissao: codigo,
-          p_unidade_id: unidadeId,
-        },
-      );
-
-      if (error) throw error;
-      return data === true;
     },
     buscarAssinaturasAtivas: async (usuarioId) => {
       const agora = new Date().toISOString();
@@ -513,14 +495,6 @@ async function previsualizar(
     request.evasao_id,
   );
 
-  await autorizarIdentidadeComPreviewPersistida(
-    identidade,
-    {
-      unidadeIdDaPreviewPersistida: movimentacao.unidade_id,
-      modoTesteDaPreviewPersistida: request.modo_teste,
-    },
-    adapters,
-  );
   const assinatura = await resolverAssinaturaAtivaParaNovaPreview(
     identidade,
     adapters,
@@ -657,7 +631,6 @@ async function previsualizar(
 
 async function confirmar(
   supabase: SupabaseClient,
-  adapters: AuthAdapters,
   identidade: Awaited<ReturnType<typeof autenticarUsuarioAtivoUnico>>,
   request: Extract<ReturnType<typeof validarRequest>, {
     acao: "confirmar";
@@ -671,15 +644,7 @@ async function confirmar(
     throw new ErroAutorizacao(403, "Preview pertence a outro usuario");
   }
 
-  const { auth_user_id, unidade_id, modo_teste } = previewPersistida;
-  await autorizarIdentidadeComPreviewPersistida(
-    identidade,
-    {
-      unidadeIdDaPreviewPersistida: unidade_id,
-      modoTesteDaPreviewPersistida: modo_teste,
-    },
-    adapters,
-  );
+  const { auth_user_id } = previewPersistida;
 
   const { data: claimsData, error: claimError } = await supabase.rpc(
     "claim_pesquisa_evasao_preview",
@@ -898,7 +863,6 @@ serve(async (req) => {
     if (request.acao === "confirmar") {
       return await confirmar(
         supabase,
-        adapters,
         identidade,
         request,
       );

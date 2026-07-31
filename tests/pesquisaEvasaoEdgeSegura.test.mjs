@@ -319,7 +319,7 @@ test('Edge nao muta fontes canonicas nem faz upsert direto do cabecalho', () => 
   assert.ok(rpcs.includes('claim_pesquisa_evasao_preview'));
   assert.ok(rpcs.includes('registrar_resultado_pesquisa_evasao_envio'));
   assert.ok(rpcs.includes('is_movimentacao_admin_retencao_valida'));
-  assert.ok(rpcs.includes('usuario_tem_permissao_estrita'));
+  assert.ok(!rpcs.some((rpc) => /permissao_estrita/i.test(rpc)));
   assert.ok(!rpcs.includes('criar_pesquisa_evasao'));
 });
 
@@ -381,7 +381,7 @@ test('preview usa configuracao fail-closed, snapshot canonico, hash e dez minuto
   }
 });
 
-test('confirmacao usa ownership e escopo persistidos antes do claim', () => {
+test('confirmacao usa ownership persistido antes do claim sem RBAC por unidade', () => {
   const edgeSource = readOptional(edgePath);
   const edge = codigoExecutavel(edgeSource);
   const inicioConfirmacao = edge.indexOf('async function confirmar (');
@@ -393,10 +393,10 @@ test('confirmacao usa ownership e escopo persistidos antes do claim', () => {
 
   assert.match(edge, /autenticarUsuarioAtivoUnico \(/);
   assert.match(edge, /auth_user_id/);
-  assert.match(edge, /unidade_id , modo_teste/);
-  assert.match(edge, /autorizarIdentidadeComPreviewPersistida \(/);
+  assert.match(confirmacao, /previewPersistida \. auth_user_id !== identidade \. authUserId/);
   assert.match(edge, /claim_pesquisa_evasao_preview/);
   assert.match(edge, /mensagem_renderizada/);
+  assert.doesNotMatch(edge, /autorizarIdentidadeComPreviewPersistida|permissao_estrita/i);
   assert.doesNotMatch(confirmacao, /resolverAssinaturaAtivaParaNovaPreview/);
   assert.match(edge, /confirmar_resultado_pesquisa_evasao_envio/);
   assert.match(edge, /classificacao \. providerMessageId/);

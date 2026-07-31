@@ -455,6 +455,17 @@ Deno.test("hash do preview e deterministico e muda com o conteudo", async () => 
   assertNotEquals(primeiro, alterado);
 });
 
+Deno.test("hash aceita assinaturaId nula quando usa fallback do login", async () => {
+  const comFallback = await hashPreview({
+    ...snapshotValido,
+    assinaturaId: null,
+  });
+  const comOverride = await hashPreview(snapshotValido);
+
+  assertEquals(comFallback.length, 64);
+  assertNotEquals(comFallback, comOverride);
+});
+
 Deno.test("cada campo relevante participa do hash do preview", async () => {
   const hashBase = await hashPreview(snapshotValido);
   const alteracoes: Array<
