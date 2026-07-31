@@ -160,28 +160,31 @@ eventos as (
   left join lateral (
     select
       bool_or(
-        lower(coalesce(r.presenca_emusys, '')) = 'presente'
-        or r.situacao_operacional in ('presente', 'matriculado')
+        r.situacao_operacional in ('presente', 'matriculado')
+        or (
+          r.situacao_operacional in ('sem_status', 'desconhecida')
+          and lower(coalesce(r.presenca_emusys, '')) = 'presente'
+        )
       ) as presenca_raw_confirmada,
       bool_or(
-        lower(coalesce(r.presenca_emusys, '')) in ('ausente', 'faltou')
-        or r.situacao_operacional = 'faltou'
+        r.situacao_operacional = 'faltou'
+        or (
+          r.situacao_operacional in ('sem_status', 'desconhecida')
+          and lower(coalesce(r.presenca_emusys, '')) in ('ausente', 'faltou')
+        )
       ) as falta_raw_confirmada,
       array_agg(r.id order by r.id) as emusys_raw_ids,
       bool_or(
-        nullif(r.payload #>> '{aluno,id_lead}', '') = '0'
-        and (
-          case
-            when nullif(r.payload #>> '{aluno,id_aluno}', '') ~ '^[0-9]+$'
-            then (r.payload #>> '{aluno,id_aluno}')::bigint
-            else 0
-          end
-        ) > 0
+        r.emusys_lead_id is null
+        and r.emusys_aluno_id is not null
         -- P10C: so e interno se a pessoa NAO converteu no mes (sem matricula nova E sem passaporte)
         and not exists (
           select 1 from public.alunos a_conv
-          where a_conv.id = r.aluno_id
-            and a_conv.unidade_id = r.unidade_id
+          where a_conv.unidade_id = r.unidade_id
+            and (
+              (r.aluno_id is not null and a_conv.id = r.aluno_id)
+              or a_conv.emusys_student_id = r.emusys_aluno_id::text
+            )
             and (
               (a_conv.data_matricula >= (select inicio::date from periodo)
                and a_conv.data_matricula < (select fim_exclusivo::date from periodo))
@@ -194,32 +197,45 @@ eventos as (
       and r.unidade_id = le.unidade_id
       and r.data_aula = le.data_experimental
       and (
-        r.lead_experimental_id = le.id
+        (
+          r.emusys_lead_id is not null
+          and (
+            r.emusys_lead_id = le.emusys_lead_id
+            or r.emusys_lead_id = l.emusys_lead_id
+          )
+        )
+        or (
+          r.emusys_aluno_id is not null
+          and exists (
+            select 1
+            from public.alunos a_identidade
+            where a_identidade.unidade_id = r.unidade_id
+              and a_identidade.emusys_student_id = r.emusys_aluno_id::text
+              and a_identidade.id = coalesce(
+                dh.aluno_id_decidido,
+                le.aluno_id,
+                l.aluno_id,
+                al_origem.id
+              )
+          )
+        )
+        -- Compatibilidade somente por chaves relacionais legadas materializadas.
+        or r.lead_experimental_id = le.id
         or (le.lead_id is not null and r.lead_id = le.lead_id)
         or (
-          le.emusys_lead_id is not null
-          and (
-            case
-              when nullif(r.payload #>> '{aluno,id_lead}', '') ~ '^[0-9]+$'
-              then (r.payload #>> '{aluno,id_lead}')::bigint
-              else null
-            end
-          ) = le.emusys_lead_id
-          and (
-            r.horario_aula = le.horario_experimental
-            or r.horario_aula is null
-            or le.horario_experimental is null
+          r.aluno_id is not null
+          and r.aluno_id = coalesce(
+            dh.aluno_id_decidido,
+            le.aluno_id,
+            l.aluno_id,
+            al_origem.id
           )
         )
-        or (
-          nullif(r.payload #>> '{aluno,id_lead}', '') = '0'
-          and lower(trim(coalesce(r.aluno_nome, ''))) = lower(trim(coalesce(le.nome_aluno, '')))
-          and (
-            r.horario_aula = le.horario_experimental
-            or r.horario_aula is null
-            or le.horario_experimental is null
-          )
-        )
+      )
+      and (
+        r.horario_aula = le.horario_experimental
+        or r.horario_aula is null
+        or le.horario_experimental is null
       )
   ) raw_emusys on true
   left join public.professores p on p.id = le.professor_experimental_id
@@ -350,19 +366,16 @@ raw_por_unidade as (
    and r.data_aula < (select fim_exclusivo::date from periodo)
   left join lateral (
     select (
-      nullif(r.payload #>> '{aluno,id_lead}', '') = '0'
-      and (
-        case
-          when nullif(r.payload #>> '{aluno,id_aluno}', '') ~ '^[0-9]+$'
-          then (r.payload #>> '{aluno,id_aluno}')::bigint
-          else 0
-        end
-      ) > 0
+      r.emusys_lead_id is null
+      and r.emusys_aluno_id is not null
       -- P10C: so e interno se a pessoa NAO converteu no mes (sem matricula nova E sem passaporte)
       and not exists (
         select 1 from public.alunos a_conv
-        where a_conv.id = r.aluno_id
-          and a_conv.unidade_id = r.unidade_id
+        where a_conv.unidade_id = r.unidade_id
+          and (
+            (r.aluno_id is not null and a_conv.id = r.aluno_id)
+            or a_conv.emusys_student_id = r.emusys_aluno_id::text
+          )
           and (
             (a_conv.data_matricula >= (select inicio::date from periodo)
              and a_conv.data_matricula < (select fim_exclusivo::date from periodo))
@@ -375,51 +388,68 @@ raw_por_unidade as (
     select
       coalesce(dh.incluir_denominador_exp_mat = false, false) as excluir_denominador_decisao
     from public.lead_experimentais le_raw
+    left join public.leads l_raw on l_raw.id = le_raw.lead_id
     left join public.lead_experimentais_decisoes_humanas dh
       on dh.lead_experimental_id = le_raw.id
     where le_raw.unidade_id = r.unidade_id
       and le_raw.data_experimental = r.data_aula
       and (
-        r.lead_experimental_id = le_raw.id
+        (
+          r.emusys_lead_id is not null
+          and (
+            r.emusys_lead_id = le_raw.emusys_lead_id
+            or r.emusys_lead_id = l_raw.emusys_lead_id
+          )
+        )
+        or (
+          r.emusys_aluno_id is not null
+          and exists (
+            select 1
+            from public.alunos a_identidade
+            where a_identidade.unidade_id = r.unidade_id
+              and a_identidade.emusys_student_id = r.emusys_aluno_id::text
+              and (
+                a_identidade.id = le_raw.aluno_id
+                or a_identidade.id = l_raw.aluno_id
+                or a_identidade.lead_origem_id = le_raw.lead_id
+              )
+          )
+        )
+        -- Compatibilidade somente por chaves relacionais legadas materializadas.
+        or r.lead_experimental_id = le_raw.id
         or (le_raw.lead_id is not null and r.lead_id = le_raw.lead_id)
-        or (
-          le_raw.emusys_lead_id is not null
-          and (
-            case
-              when nullif(r.payload #>> '{aluno,id_lead}', '') ~ '^[0-9]+$'
-              then (r.payload #>> '{aluno,id_lead}')::bigint
-              else null
-            end
-          ) = le_raw.emusys_lead_id
-          and (
-            r.horario_aula = le_raw.horario_experimental
-            or r.horario_aula is null
-            or le_raw.horario_experimental is null
-          )
-        )
-        or (
-          nullif(r.payload #>> '{aluno,id_lead}', '') = '0'
-          and lower(trim(coalesce(r.aluno_nome, ''))) = lower(trim(coalesce(le_raw.nome_aluno, '')))
-          and (
-            r.horario_aula = le_raw.horario_experimental
-            or r.horario_aula is null
-            or le_raw.horario_experimental is null
-          )
-        )
+        or (le_raw.aluno_id is not null and r.aluno_id = le_raw.aluno_id)
+      )
+      and (
+        r.horario_aula = le_raw.horario_experimental
+        or r.horario_aula is null
+        or le_raw.horario_experimental is null
       )
     order by
       case
-        when r.lead_experimental_id = le_raw.id then 1
-        when le_raw.emusys_lead_id is not null then 2
-        when le_raw.lead_id is not null then 3
-        else 4
+        when r.emusys_lead_id is not null then 1
+        when r.emusys_aluno_id is not null then 2
+        when r.lead_experimental_id = le_raw.id then 3
+        when le_raw.lead_id is not null and r.lead_id = le_raw.lead_id then 4
+        else 5
       end,
       le_raw.id desc
     limit 1
   ) raw_decisao on true
-  left join public.alunos a
-    on a.id = r.aluno_id
-   and a.unidade_id = r.unidade_id
+  left join lateral (
+    select a_match.*
+    from public.alunos a_match
+    where a_match.unidade_id = r.unidade_id
+      and (
+        (r.aluno_id is not null and a_match.id = r.aluno_id)
+        or (
+          r.emusys_aluno_id is not null
+          and a_match.emusys_student_id = r.emusys_aluno_id::text
+        )
+      )
+    order by (a_match.id = r.aluno_id) desc nulls last, a_match.id
+    limit 1
+  ) a on true
   left join public.tipos_matricula tm_raw on tm_raw.id = a.tipo_matricula_id
   left join public.cursos c_raw on c_raw.id = a.curso_id
   group by ua.unidade_id

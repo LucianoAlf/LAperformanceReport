@@ -74,6 +74,51 @@ test('reagendamento compara timestamp logico e aceita todos os estados conhecido
   );
 });
 
+test('nucleo usa identidade canonica do snapshot sem payload ou nome', () => {
+  const core = functionBlock(
+    migration(),
+    'get_conciliacao_experimentais_snapshot_v1',
+  );
+
+  assert.match(core, /r\.emusys_lead_id\s*=\s*le\.emusys_lead_id/i);
+  assert.match(
+    core,
+    /a_identidade\.emusys_student_id\s*=\s*r\.emusys_aluno_id::text/i,
+  );
+  assert.match(
+    core,
+    /r\.emusys_lead_id\s+is\s+null\s+and\s+r\.emusys_aluno_id\s+is\s+not\s+null/i,
+    'aluno interno deve ser reconhecido pelas colunas canonicas',
+  );
+  assert.doesNotMatch(
+    core,
+    /r\.payload\s*#>>/i,
+    'payload nao deve ser usado como identidade depois da materializacao canonica',
+  );
+  assert.doesNotMatch(
+    core,
+    /lower\s*\(\s*trim\s*\(\s*coalesce\s*\(\s*r\.aluno_nome/i,
+    'nome nunca pode criar vinculo de conciliacao',
+  );
+});
+
+test('ausente so e falta no estado normalizado faltou ou em legado sem status', () => {
+  const core = functionBlock(
+    migration(),
+    'get_conciliacao_experimentais_snapshot_v1',
+  );
+
+  assert.match(
+    core,
+    /r\.situacao_operacional\s*=\s*'faltou'\s+or\s*\(\s*r\.situacao_operacional\s+in\s*\(\s*'sem_status'\s*,\s*'desconhecida'\s*\)[\s\S]{0,180}lower\s*\(\s*coalesce\s*\(\s*r\.presenca_emusys/i,
+  );
+  assert.doesNotMatch(
+    core,
+    /lower\s*\(\s*coalesce\s*\(\s*r\.presenca_emusys[\s\S]{0,100}in\s*\(\s*'ausente'\s*,\s*'faltou'\s*\)\s*\n\s*or\s+r\.situacao_operacional\s*=\s*'faltou'/i,
+    'ausente nao pode sobrepor agendada ou cancelada',
+  );
+});
+
 test('fachada preserva assinatura publica, P21, P22 e validacao P23', () => {
   const sql = migration();
   const facade = functionBlock(sql, 'get_conciliacao_experimentais_v2');
