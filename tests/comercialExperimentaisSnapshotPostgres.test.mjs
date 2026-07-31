@@ -334,6 +334,7 @@ test(
           v_result jsonb;
           v_operacional jsonb;
           v_before jsonb;
+          v_caso jsonb;
         begin
           if (
             select count(*)
@@ -543,6 +544,109 @@ test(
             raise exception 'lote invalido nao fez rollback total';
           end if;
 
+          for v_caso in
+            select value
+            from jsonb_array_elements(
+              jsonb_build_array(
+                jsonb_build_object(
+                  'execucao_id',
+                  '00000000-0000-0000-0000-000000000005',
+                  'participante_chave',
+                  'fallback:lead-ausente',
+                  'payload_bruto',
+                  '{"aula":{"id":11},"participante":{"id_lead":101}}'::jsonb
+                ),
+                jsonb_build_object(
+                  'execucao_id',
+                  '00000000-0000-0000-0000-000000000006',
+                  'participante_chave',
+                  'fallback:aluno-ausente',
+                  'payload_bruto',
+                  '{"aula":{"id":11},"participante":{"id_aluno":202}}'::jsonb
+                ),
+                jsonb_build_object(
+                  'execucao_id',
+                  '00000000-0000-0000-0000-000000000007',
+                  'participante_chave',
+                  'fallback:lead-invalido',
+                  'payload_bruto',
+                  '{"aula":{"id":11},"participante":{"id_lead":"abc"}}'::jsonb
+                ),
+                jsonb_build_object(
+                  'execucao_id',
+                  '00000000-0000-0000-0000-000000000008',
+                  'participante_chave',
+                  'fallback:aluno-overflow',
+                  'payload_bruto',
+                  '{
+                    "aula":{"id":11},
+                    "participante":{"id_aluno":"2147483648"}
+                  }'::jsonb
+                )
+              )
+            )
+          loop
+            begin
+              perform public.aplicar_snapshot_experimentais_emusys_v1(
+                (v_caso->>'execucao_id')::uuid,
+                '11111111-1111-1111-1111-111111111111',
+                '2026-07-01',
+                '2026-07-31',
+                jsonb_build_array(
+                  jsonb_build_object(
+                    'raw_key',
+                    concat_ws(
+                      ':',
+                      '11111111-1111-1111-1111-111111111111',
+                      '11',
+                      v_caso->>'participante_chave',
+                      v_caso->>'execucao_id'
+                    ),
+                    'unidade_id',
+                    '11111111-1111-1111-1111-111111111111',
+                    'execucao_id',
+                    v_caso->>'execucao_id',
+                    'emusys_aula_id',
+                    11,
+                    'participante_chave',
+                    v_caso->>'participante_chave',
+                    'aluno_nome',
+                    'Identidade Invalida',
+                    'data_aula',
+                    '2026-07-12',
+                    'situacao_operacional',
+                    'presente',
+                    'payload_bruto',
+                    v_caso->'payload_bruto'
+                  )
+                )
+              );
+              raise exception 'fixture_identidade_invalida_aceita';
+            exception
+              when others then
+                if sqlerrm = 'fixture_identidade_invalida_aceita' then
+                  raise;
+                end if;
+                if sqlerrm not like '%SNAPSHOT_EXPERIMENTAIS_IDENTIDADE_%' then
+                  raise exception 'erro de identidade nao controlado: %', sqlerrm;
+                end if;
+            end;
+          end loop;
+
+          if v_before is distinct from (
+            select jsonb_build_object(
+              'raw', count(*),
+              'ativas', count(*) filter (where snapshot_ativo),
+              'execucoes', (
+                select count(*)
+                from public.emusys_experimentais_snapshot_execucoes
+              )
+            )
+            from public.emusys_experimentais_raw
+          ) then
+            raise exception 'identidade invalida nao fez rollback total';
+          end if;
+
           v_result := public.aplicar_snapshot_experimentais_emusys_v1(
             '00000000-0000-0000-0000-000000000004',
             '11111111-1111-1111-1111-111111111111',
@@ -569,13 +673,33 @@ test(
             2026,
             7,
             'mensal',
-            '2026-07-10'
+            '2026-07-30'
           );
           if (v_operacional #>> '{resumo,linhas_raw}')::integer <> 0
-             or v_operacional #>> '{resumo,snapshot_execucao_id}'
-               <> '00000000-0000-0000-0000-000000000004'
+             or v_operacional #>> '{resumo,snapshot_status}' is not null then
+            raise exception 'snapshot ate 31/07 cobriu indevidamente D+7: %',
+              v_operacional;
+          end if;
+
+          perform public.aplicar_snapshot_experimentais_emusys_v1(
+            '00000000-0000-0000-0000-000000000009',
+            '11111111-1111-1111-1111-111111111111',
+            '2026-07-01',
+            '2026-08-06',
+            '[]'::jsonb
+          );
+
+          v_operacional := public.get_experimentais_emusys_operacional_v1(
+            '11111111-1111-1111-1111-111111111111',
+            2026,
+            7,
+            'mensal',
+            '2026-07-30'
+          );
+          if v_operacional #>> '{resumo,snapshot_execucao_id}'
+               <> '00000000-0000-0000-0000-000000000009'
              or v_operacional #>> '{resumo,snapshot_status}' <> 'completo' then
-            raise exception 'RPC operacional nao filtrou ativas ou frescor divergiu: %',
+            raise exception 'snapshot ate 06/08 nao cobriu D+7: %',
               v_operacional;
           end if;
         end;

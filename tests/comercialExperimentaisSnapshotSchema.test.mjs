@@ -116,6 +116,15 @@ test('leitura operacional usa somente vigentes e publica frescor do snapshot', (
   assert.match(block, /security\s+definer/i);
   assert.match(block, /set\s+search_path\s*=\s*public\s*,\s*pg_temp/i);
   assert.match(block, /snapshot_ativo\s+is\s+true/i);
+  assert.doesNotMatch(
+    block,
+    /least\s*\(/i,
+    'D+7 mensal deve atravessar o fim do mes',
+  );
+  assert.match(
+    block,
+    /coalesce\s*\(\s*p_data\s*,\s*current_date\s*\)[\s\S]{0,80}\+\s*7/i,
+  );
   for (const key of [
     'snapshot_atualizado_em',
     'snapshot_execucao_id',
