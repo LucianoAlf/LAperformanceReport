@@ -90,6 +90,11 @@ import { PlanoAcaoComercial } from './PlanoAcaoComercial';
 import { TabProgramaMatriculador } from './TabProgramaMatriculador';
 import { ComercialConciliacaoExperimentais } from './ComercialConciliacaoExperimentais';
 import { ComercialConciliacaoLeads } from './ComercialConciliacaoLeads';
+import {
+  criarOrigemRelatorio,
+  podeUsarRelatorio,
+  respostaEnvioAindaValida,
+} from './relatorioComercialContexto.js';
 import { ModalMatricular } from '../PreAtendimento/components/ModalMatricular';
 import { ModalArquivar } from '../PreAtendimento/components/ModalArquivar';
 import { ModalEditarLead } from '../PreAtendimento/components/ModalEditarLead';
@@ -472,6 +477,7 @@ export function ComercialPage() {
   const [relatorioGerando, setRelatorioGerando] = useState(false);
   const [relatorioErro, setRelatorioErro] = useState<string | null>(null);
   const relatorioGeracaoIdRef = useRef(0);
+  const relatorioEnvioIdRef = useRef(0);
   const [enviandoWhatsApp, setEnviandoWhatsApp] = useState(false);
   const [enviadoWhatsApp, setEnviadoWhatsApp] = useState(false);
   const [erroWhatsApp, setErroWhatsApp] = useState<string | null>(null);
@@ -483,6 +489,32 @@ export function ComercialPage() {
   const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'mes_anterior' | 'personalizado'>('hoje');
   const [relatorioDataInicio, setRelatorioDataInicio] = useState<Date>(new Date());
   const [relatorioDataFim, setRelatorioDataFim] = useState<Date>(new Date());
+  const criarOrigemRelatorioAtual = (
+    tipo: Exclude<typeof tipoRelatorio, null>,
+  ) => {
+    const { dataInicio, dataFim } = calcularRangeDatas();
+    return criarOrigemRelatorio({
+      tipo,
+      unidade: isAdmin
+        ? context?.unidadeSelecionada
+        : usuario?.unidade_id,
+      periodo: relatorioPeriodo,
+      dataInicio,
+      dataFim,
+      competencia: `${competencia.filtro.ano}-${String(competencia.filtro.mes).padStart(2, '0')}`,
+    });
+  };
+  const [relatorioOrigem, setRelatorioOrigem] = useState<ReturnType<typeof criarOrigemRelatorio> | null>(null);
+  const relatorioOrigemAtual = tipoRelatorio
+    ? criarOrigemRelatorioAtual(tipoRelatorio)
+    : null;
+  const relatorioOrigemAtualRef = useRef(relatorioOrigemAtual);
+  relatorioOrigemAtualRef.current = relatorioOrigemAtual;
+  const relatorioPodeSerUsado = podeUsarRelatorio(
+    relatorioTexto,
+    relatorioOrigem,
+    relatorioOrigemAtual,
+  );
   const [canais, setCanais] = useState<Option[]>([]);
   const [cursos, setCursos] = useState<Option[]>([]);
   const [professores, setProfessores] = useState<Option[]>([]);
@@ -579,19 +611,30 @@ export function ComercialPage() {
     }
   };
 
+  const invalidarEstadoEnvioRelatorio = () => {
+    relatorioEnvioIdRef.current += 1;
+    setEnviandoWhatsApp(false);
+    setEnviadoWhatsApp(false);
+    setErroWhatsApp(null);
+  };
+
   const executarGeracaoRelatorio = async (
     tipo: Exclude<typeof tipoRelatorio, null>,
   ) => {
+    const origemGeracao = criarOrigemRelatorioAtual(tipo);
     const geracaoId = relatorioGeracaoIdRef.current + 1;
     relatorioGeracaoIdRef.current = geracaoId;
+    invalidarEstadoEnvioRelatorio();
     setRelatorioGerando(true);
     setRelatorioErro(null);
     setRelatorioTexto('');
+    setRelatorioOrigem(null);
 
     try {
       const texto = await gerarRelatorioSelecionado(tipo);
       if (relatorioGeracaoIdRef.current === geracaoId) {
         setRelatorioTexto(texto);
+        setRelatorioOrigem(origemGeracao);
       }
     } catch (err) {
       console.error('[Comercial] Erro ao gerar relatório:', err);
@@ -613,12 +656,16 @@ export function ComercialPage() {
   useEffect(() => {
     if (tipoRelatorio) {
       void executarGeracaoRelatorio(tipoRelatorio);
+    } else {
+      invalidarEstadoEnvioRelatorio();
+      setRelatorioOrigem(null);
     }
 
     return () => {
       relatorioGeracaoIdRef.current += 1;
+      relatorioEnvioIdRef.current += 1;
     };
-  }, [tipoRelatorio, relatorioPeriodo, relatorioDataInicio, relatorioDataFim, filtroAtivo, context?.unidadeSelecionada, usuario?.unidade_id, isAdmin]);
+  }, [tipoRelatorio, relatorioPeriodo, relatorioDataInicio, relatorioDataFim, filtroAtivo, context?.unidadeSelecionada, usuario?.unidade_id, isAdmin, competencia.filtro.ano, competencia.filtro.mes]);
   
   // Matrículas do mês (para tabela)
   const [matriculasMes, setMatriculasMes] = useState<(LeadDiario & { 
@@ -2585,7 +2632,7 @@ export function ComercialPage() {
   };
 
   // Função auxiliar para calcular range de datas baseado no período
-  const calcularRangeDatas = () => {
+  function calcularRangeDatas() {
     const hoje = new Date();
     let dataInicio: Date;
     let dataFim: Date;
@@ -2620,7 +2667,7 @@ export function ComercialPage() {
       dataInicioObj: dataInicio,
       dataFimObj: dataFim
     };
-  };
+  }
 
   // Gerar relatório diário
   // Helper: matrículas reais do período (fonte = alunos por data_matricula).
@@ -3747,8 +3794,12 @@ export function ComercialPage() {
   };
 
   const copiarRelatorio = async () => {
-    if (!relatorioTexto) {
-      toast.error('Aguarde o relatório ser gerado');
+    if (!podeUsarRelatorio(
+      relatorioTexto,
+      relatorioOrigem,
+      relatorioOrigemAtualRef.current,
+    )) {
+      toast.error('Gere novamente o relatório para a unidade e o período atuais');
       return;
     }
 
@@ -3766,26 +3817,44 @@ export function ComercialPage() {
 
   // Enviar relatório via WhatsApp para o grupo
   const enviarWhatsAppGrupo = async () => {
-    if (!relatorioTexto || enviandoWhatsApp) return;
+    const origemEnvio = relatorioOrigem;
+    if (
+      !origemEnvio ||
+      enviandoWhatsApp ||
+      !podeUsarRelatorio(
+        relatorioTexto,
+        origemEnvio,
+        relatorioOrigemAtualRef.current,
+      )
+    ) return;
+
+    const textoEnvio = relatorioTexto;
+    const unidadeEnvio = origemEnvio.unidade;
+    const envioId = relatorioEnvioIdRef.current + 1;
+    relatorioEnvioIdRef.current = envioId;
+    const respostaContinuaValida = () => respostaEnvioAindaValida({
+      respostaId: envioId,
+      envioAtualId: relatorioEnvioIdRef.current,
+      origemEnvio,
+      origemAtual: relatorioOrigemAtualRef.current,
+    });
 
     setEnviandoWhatsApp(true);
     setErroWhatsApp(null);
     setEnviadoWhatsApp(false);
 
-    // Determinar a unidade para envio
-    const unidadeEnvio = isAdmin ? (context?.unidadeSelecionada || 'todos') : (unidadeId || 'todos');
-
     try {
       const { data, error } = await supabase.rpc('sol_hermes_report_enqueue', {
-        p_texto: relatorioTexto,
-        p_tipo_relatorio: tipoRelatorio?.startsWith('comercial_')
-          ? tipoRelatorio
-          : (tipoRelatorio ? `comercial_${tipoRelatorio}` : 'comercial'),
+        p_texto: textoEnvio,
+        p_tipo_relatorio: origemEnvio.tipo.startsWith('comercial_')
+          ? origemEnvio.tipo
+          : `comercial_${origemEnvio.tipo}`,
         p_tipo_destino: 'relatorio_comercial',
         p_unidade: unidadeEnvio,
-        p_competencia: `${competencia.filtro.ano}-${String(competencia.filtro.mes).padStart(2, '0')}`,
+        p_competencia: origemEnvio.competencia,
       });
 
+      if (!respostaContinuaValida()) return;
       if (error) {
         console.error('[WhatsApp Comercial Hermes] Erro ao enfileirar:', error);
         setErroWhatsApp('Erro ao enfileirar para Sol/Hermes');
@@ -3796,17 +3865,20 @@ export function ComercialPage() {
         console.log('[WhatsApp Comercial Hermes] ✅ Enfileirado para Sol/Hermes', data.resultados);
         setEnviadoWhatsApp(true);
         toast.success('Relatório Comercial enfileirado para envio pela Sol/Hermes.');
-        setTimeout(() => setEnviadoWhatsApp(false), 3000);
+        setTimeout(() => {
+          if (respostaContinuaValida()) setEnviadoWhatsApp(false);
+        }, 3000);
       } else {
         setErroWhatsApp(data?.error || 'Erro desconhecido');
         toast.error(data?.error || 'Erro ao enfileirar');
       }
     } catch (err) {
+      if (!respostaContinuaValida()) return;
       console.error('[WhatsApp Comercial Hermes] Erro inesperado:', err);
       setErroWhatsApp('Erro de conexão');
       toast.error('Erro de conexão');
     } finally {
-      setEnviandoWhatsApp(false);
+      if (respostaContinuaValida()) setEnviandoWhatsApp(false);
     }
   };
 
@@ -7264,9 +7336,11 @@ export function ComercialPage() {
           } 
           onClose={() => {
             relatorioGeracaoIdRef.current += 1;
+            invalidarEstadoEnvioRelatorio();
             setRelatorioOpen(false);
             setTipoRelatorio(null);
             setRelatorioTexto('');
+            setRelatorioOrigem(null);
             setRelatorioErro(null);
             setRelatorioGerando(false);
           }}
@@ -7275,8 +7349,10 @@ export function ComercialPage() {
             <button
               onClick={() => {
                 relatorioGeracaoIdRef.current += 1;
+                invalidarEstadoEnvioRelatorio();
                 setTipoRelatorio(null);
                 setRelatorioTexto('');
+                setRelatorioOrigem(null);
                 setRelatorioErro(null);
                 setRelatorioGerando(false);
               }}
@@ -7319,7 +7395,7 @@ export function ComercialPage() {
             <div className="flex gap-3">
               <Button
                 onClick={() => void copiarRelatorio()}
-                disabled={!relatorioTexto || relatorioGerando}
+                disabled={!relatorioPodeSerUsado || relatorioGerando}
                 className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-500"
               >
                 <Copy className="w-5 h-5 mr-2" />
@@ -7336,7 +7412,7 @@ export function ComercialPage() {
               )}
               <Button
                 onClick={enviarWhatsAppGrupo}
-                disabled={!relatorioTexto || relatorioGerando || enviandoWhatsApp}
+                disabled={!relatorioPodeSerUsado || relatorioGerando || enviandoWhatsApp}
                 className={cn(
                   'flex-1 transition-all',
                   enviadoWhatsApp 

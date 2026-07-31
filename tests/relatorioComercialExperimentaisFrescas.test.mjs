@@ -92,8 +92,31 @@ test("texto canonico inclui os dois tickets e e a unica fonte para exibir copiar
     "const enviarWhatsAppGrupo = async () => {",
     "// Obter contagem do dia para cada tipo",
   );
-  assert.match(envio, /if\s*\(\s*!relatorioTexto\s*\|\|\s*enviandoWhatsApp\s*\)\s*return/);
-  assert.match(envio, /p_texto:\s*relatorioTexto/);
+  assert.match(envio, /podeUsarRelatorio\([\s\S]*relatorioTexto[\s\S]*relatorioOrigemAtualRef\.current/);
+  assert.match(envio, /const textoEnvio\s*=\s*relatorioTexto/);
+  assert.match(envio, /p_texto:\s*textoEnvio/);
+});
+
+test("copia e envio exigem origem atual e envio usa unidade capturada com o texto", () => {
+  assert.match(comercialPage, /relatorioOrigem/);
+  assert.match(comercialPage, /relatorioOrigemAtualRef/);
+  assert.match(comercialPage, /relatorioEnvioIdRef/);
+  assert.match(comercialPage, /podeUsarRelatorio\(/);
+
+  const envio = blocoFonte(
+    comercialPage,
+    "const enviarWhatsAppGrupo = async () => {",
+    "// Obter contagem do dia para cada tipo",
+  );
+  assert.match(envio, /const origemEnvio\s*=\s*relatorioOrigem/);
+  assert.match(envio, /const textoEnvio\s*=\s*relatorioTexto/);
+  assert.match(envio, /const unidadeEnvio\s*=\s*origemEnvio\.unidade/);
+  assert.match(envio, /p_texto:\s*textoEnvio/);
+  assert.match(envio, /p_unidade:\s*unidadeEnvio/);
+  assert.match(envio, /p_competencia:\s*origemEnvio\.competencia/);
+  assert.match(envio, /respostaEnvioAindaValida\(/);
+  assert.doesNotMatch(envio, /context\?\.unidadeSelecionada/);
+  assert.doesNotMatch(envio, /unidadeId\s*\|\|\s*['"]todos['"]/);
 });
 
 test("geradores semanal mensal e comparativos permanecem delegados como antes", () => {
