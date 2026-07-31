@@ -186,6 +186,16 @@ contagens, sem PII ou payload bruto. O curso reconciliado depende do de-para
 `HH:mm:ss`, derivados de uma normalização única que aceita o timestamp Emusys
 com ou sem segundos.
 
+A conciliação comercial P24 usa exclusivamente as linhas raw vigentes tanto na
+evidência lateral de cada evento quanto nos totais por unidade. Um evento é
+substituído por reagendamento quando existe, para o mesmo lead, um timestamp
+posterior (`data_experimental + horario_experimental`) em estado conhecido:
+agendada, realizada, convertida/matriculada, falta ou cancelamento. Presença ou
+falta raw ativa na linha anterior prevalece sobre essa heurística, preservando
+duas experimentais legítimas. A fachada mantém o cap de matrículas comerciais
+P21, a deduplicação pequena P22 e a validação de usuário/unidade P23; o payload
+identifica a evidência como `snapshot_ativo_p24`.
+
 ### Taxa de conversão Experimental → Matrícula
 - **No Dashboard/Comercial (frontend):** denominador `experimental_realizada = true`; numerador `status ∈ {matriculado, convertido}` (`DashboardPage.tsx:316-327`).
 - **Canônica (professor):** RPC `get_experimentais_professor_canonicos_v1` + fonte `lead_experimentais` (1 linha por aula, presença real) — substituiu a contagem por `leads` que inflava a taxa. Denominador = `status ∈ {experimental_realizada, convertido}`; numerador = realizadas cujo lead converteu. Ver CLAUDE.md (Módulo de Professores).
