@@ -1,0 +1,209 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+
+const edge = readFileSync(
+  new URL(
+    "../supabase/functions/relatorio-admin-whatsapp/index.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
+
+function bloco(inicio, fim) {
+  const posInicio = edge.indexOf(inicio);
+  assert.notEqual(posInicio, -1, `inicio ausente: ${inicio}`);
+  const posFim = edge.indexOf(fim, posInicio + inicio.length);
+  assert.notEqual(posFim, -1, `fim ausente depois de ${inicio}: ${fim}`);
+  return edge.slice(posInicio, posFim);
+}
+
+test("gerador atualiza o snapshot de mes ate D+7 antes de qualquer leitura canonica", () => {
+  const gerador = bloco(
+    "async function gerarRelatorioComercialDiario(",
+    "async function processarCron(",
+  );
+
+  assert.match(gerador, /dataReferencia\??\s*:/);
+  assert.match(gerador, /America\/Sao_Paulo/);
+  assert.match(gerador, /dataInicioSnapshot/);
+  assert.match(gerador, /dataFimSnapshot/);
+  assert.match(gerador, /adicionarDiasIso\([^,]+,\s*7\)/);
+
+  const preflight = gerador.indexOf("await atualizarSnapshotExperimentais(");
+  const primeiraLeitura = Math.min(
+    ...[".rpc(", ".from('"].map((marcador) => {
+      const indice = gerador.indexOf(marcador);
+      return indice === -1 ? Number.POSITIVE_INFINITY : indice;
+    }),
+  );
+  assert.ok(preflight >= 0, "preflight de snapshot ausente");
+  assert.ok(
+    preflight < primeiraLeitura,
+    "snapshot precisa terminar antes da primeira leitura",
+  );
+  assert.match(gerador, /snapshot\.snapshot\.status\s*!==\s*['"]completo['"]/);
+});
+
+test("refresh servidor-servidor falha fechado em HTTP, payload, unidade, intervalo e execucao", () => {
+  const refresh = bloco(
+    "async function atualizarSnapshotExperimentais(",
+    "async function gerarRelatorioComercialDiario(",
+  );
+
+  assert.match(refresh, /modo:\s*['"]experimentais['"]/);
+  assert.match(refresh, /unidade_id:\s*unidadeId/);
+  assert.match(refresh, /data_inicio:\s*dataInicio/);
+  assert.match(refresh, /data_fim:\s*dataFim/);
+  assert.match(refresh, /if\s*\(\s*!response\.ok\s*\)/);
+  assert.match(refresh, /payload\.success\s*!==\s*true/);
+  assert.match(refresh, /payload\.unidade\?\.id\s*!==\s*unidadeId/);
+  assert.match(refresh, /payload\.intervalo\?\.data_inicio\s*!==\s*dataInicio/);
+  assert.match(refresh, /payload\.intervalo\?\.data_fim\s*!==\s*dataFim/);
+  assert.match(refresh, /payload\.snapshot\?\.status\s*!==\s*['"]completo['"]/);
+  assert.match(refresh, /payload\.snapshot\?\.execucao_id/);
+});
+
+test("fontes canonicas sao carregadas em paralelo somente depois do refresh", () => {
+  const gerador = bloco(
+    "async function gerarRelatorioComercialDiario(",
+    "async function processarCron(",
+  );
+  const depoisRefresh = gerador.slice(
+    gerador.indexOf("await atualizarSnapshotExperimentais("),
+  );
+
+  assert.match(depoisRefresh, /Promise\.all\s*\(/);
+  for (
+    const fonte of [
+      "get_kpis_comercial_canonicos_v2",
+      "get_conciliacao_experimentais_v2",
+      "get_experimentais_emusys_operacional_v1",
+      "metas_kpi",
+      "emusys_experimentais_raw",
+      "leads",
+      "lead_experimentais",
+      "alunos",
+    ]
+  ) {
+    assert.match(depoisRefresh, new RegExp(fonte));
+  }
+  assert.doesNotMatch(edge, /get_dados_comercial_ia/);
+  assert.match(depoisRefresh, /\.gte\(['"]created_at['"],\s*inicioDiaBRT\)/);
+  assert.match(
+    depoisRefresh,
+    /\.lt\(['"]created_at['"],\s*fimDiaBRTExclusivo\)/,
+  );
+  assert.match(
+    depoisRefresh,
+    /resumoEmusysDia\.snapshot_status\s*!==\s*['"]completo['"]/,
+  );
+});
+
+test("coorte detalhada falha fechado se consultas de enriquecimento falharem", () => {
+  const busca = bloco(
+    "async function buscarMatriculasComerciaisAlunos(",
+    "async function buscarVinculosCursoProximas(",
+  );
+  assert.match(
+    busca,
+    /leadResults[\s\S]*?resultado\.error[\s\S]*?throw\s+resultado\.error/,
+  );
+  assert.match(busca, /experimentaisPorAlunoResponse/);
+  assert.match(busca, /experimentaisPorEmusysResponse/);
+  assert.match(busca, /experimentaisPorLeadResponse/);
+  assert.match(busca, /professoresError[\s\S]*?throw\s+professoresError/);
+});
+
+test("proximas experimentais usam apenas snapshot ativo e identidades estaveis", () => {
+  const gerador = bloco(
+    "async function gerarRelatorioComercialDiario(",
+    "async function processarCron(",
+  );
+  assert.match(gerador, /snapshot_ativo/);
+  assert.match(gerador, /emusys_aula_id/);
+  assert.match(gerador, /participante_chave/);
+  assert.match(gerador, /lead_experimental_id/);
+  assert.match(gerador, /emusys_lead_id/);
+  assert.match(gerador, /emusys_aluno_id/);
+  assert.doesNotMatch(
+    gerador,
+    /aluno_nome_normalizado|aluno_telefone|responsavel_telefone|payload\b/,
+  );
+
+  const enriquecimento = bloco(
+    "function enriquecerProximasExperimentais(",
+    "async function atualizarSnapshotExperimentais(",
+  );
+  assert.match(enriquecimento, /leadExperimentalId/);
+  assert.match(enriquecimento, /leadId/);
+  assert.match(enriquecimento, /emusysLeadId/);
+  assert.doesNotMatch(
+    enriquecimento,
+    /normalizarTexto|alunoNome.*(?:===|==)|nome.*(?:===|==).*aluno/i,
+  );
+});
+
+test("uma unica coorte alimenta total, tickets e lista detalhada sem nova filtragem", () => {
+  const gerador = bloco(
+    "async function gerarRelatorioComercialDiario(",
+    "async function processarCron(",
+  );
+  assert.match(
+    gerador,
+    /const matriculasNovas\s*=\s*agruparMatriculasComerciais\([\s\S]*?\.filter\(ehMatriculaComercialCanonicaEdge\)/,
+  );
+  assert.match(
+    gerador,
+    /calcularTicketsMatriculas\(\s*matriculasNovas\.map\(\(mat\)\s*=>\s*\(\{[\s\S]*?parcelasDoGrupo\(mat\)[\s\S]*?passaporteDoGrupo\(mat\)/,
+  );
+  assert.match(
+    gerador,
+    /mes:\s*\{[\s\S]*?matriculas:\s*matriculasNovas\.length/,
+  );
+  assert.match(gerador, /matriculasDetalhadas:\s*matriculasNovas\.map\(/);
+  assert.doesNotMatch(
+    gerador,
+    /matriculasDetalhadas:\s*matriculasNovas\.(?:filter|slice)\(/,
+  );
+  assert.equal(
+    [...gerador.matchAll(/formatarRelatorioComercialDiario\s*\(/g)].length,
+    1,
+    "o gerador deve delegar ao formatador puro exatamente uma vez",
+  );
+});
+
+test("dry-run exige JWT e RPC de escopo; cron exige service_role", () => {
+  const handler = bloco(
+    "serve(async (req) => {",
+    "// === MODO MANUAL (existente) ===",
+  );
+  assert.match(handler, /payload\.modo\s*===\s*['"]dry_run_comercial['"]/);
+  assert.match(handler, /Authorization/);
+  assert.match(handler, /auth\.getUser\s*\(/);
+  assert.match(handler, /pode_gerar_relatorio_comercial_v1/);
+  assert.match(handler, /status:\s*401/);
+  assert.match(handler, /status:\s*403/);
+  assert.match(handler, /payload\.unidade\s*===\s*['"]todos['"]/);
+  assert.match(handler, /status:\s*400/);
+  assert.match(handler, /payload\.modo\s*===\s*['"]cron['"]/);
+  assert.match(handler, /SUPABASE_SERVICE_ROLE_KEY/);
+});
+
+test("dry-run e cron usam o gerador unico e cron grava somente na fila canonica", () => {
+  const cron = bloco("async function processarCron(", "serve(async (req) => {");
+  const handler = bloco(
+    "serve(async (req) => {",
+    "// === MODO MANUAL (existente) ===",
+  );
+
+  assert.match(cron, /gerarRelatorioComercialDiario\s*\(/);
+  assert.match(handler, /gerarRelatorioComercialDiario\s*\(/);
+  assert.match(cron, /\.from\(['"]fila_relatorios_whatsapp['"]\)/);
+  assert.doesNotMatch(cron, /fila_relatorios_sol_hermes/);
+});
+
+test("texto antigo bloqueado nao permanece no produtor canonico", () => {
+  assert.doesNotMatch(edge, /BLOQUEADA/);
+  assert.match(edge, /formatarRelatorioComercialDiario/);
+});

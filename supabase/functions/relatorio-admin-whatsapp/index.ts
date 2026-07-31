@@ -6,7 +6,15 @@
 // Suporta UAZAPI e WAHA (detectado via campo provedor em whatsapp_caixas)
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  calcularTicketsMatriculas,
+  formatarRelatorioComercialDiario,
+  parcelasDoGrupo,
+  passaporteDoGrupo,
+  type ProximaExperimental,
+  type RelatorioComercialDados,
+} from '../_shared/relatorio-comercial.ts';
 
 const FIELDS = 'id,nome,provedor,uazapi_url,uazapi_token,waha_url,waha_session,waha_api_key';
 
@@ -210,26 +218,6 @@ function formatarParcelaEvasaoDiaria(valor: number): string {
   return `R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function formatarMoedaComercial(valor: number): string {
-  return (valor || 0).toLocaleString('pt-BR', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function formatarDataCurtaComercial(valor?: string | null): string {
-  if (!valor) return '-';
-  const texto = String(valor).trim();
-  if (!texto) return '-';
-  const iso = texto.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[3]}/${iso[2]}`;
-  const br = texto.match(/^(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})?$/);
-  if (br) return `${br[1].padStart(2, '0')}/${br[2].padStart(2, '0')}`;
-  const data = new Date(texto);
-  if (Number.isNaN(data.getTime())) return '-';
-  return data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-}
-
 function normalizarTelefoneComercial(valor?: string | null): string {
   return String(valor || '').replace(/\D/g, '');
 }
@@ -323,16 +311,6 @@ function chaveGrupoMatriculaComercial(mat: any): string {
   const telefone = normalizarTelefoneComercial(mat?.telefone || mat?.responsavel_telefone);
   const nome = normalizarTexto(mat?.nome);
   return `${mat?.unidade_id || 'sem_unidade'}|${mat?.data_matricula || ''}|${nome}|${telefone}`;
-}
-
-function formatarParcelasMatriculaComercial(mat: any): string {
-  const parcelas = Array.isArray(mat?.parcelas_relatorio)
-    ? mat.parcelas_relatorio.filter((valor: number) => Number(valor) > 0)
-    : [];
-  if (parcelas.length > 1) {
-    return parcelas.map((valor: number) => `R$ ${formatarMoedaComercial(Number(valor) || 0)}`).join(' + ');
-  }
-  return `R$ ${formatarMoedaComercial(Number(mat?.valor_parcela) || 0)}`;
 }
 
 function agruparMatriculasComerciais(matriculas: any[]): any[] {
@@ -1024,6 +1002,9 @@ async function buscarMatriculasComerciaisAlunos(
   }
 
   const leadResults = await Promise.all(leadQueries);
+  for (const resultado of leadResults) {
+    if (resultado.error) throw resultado.error;
+  }
   const leadsCanonicos = Array.from(
     new Map(
       leadResults
@@ -1042,9 +1023,9 @@ async function buscarMatriculasComerciaisAlunos(
   ]));
 
   const [
-    { data: experimentaisPorAluno },
-    { data: experimentaisPorEmusys },
-    { data: experimentaisPorLead },
+    experimentaisPorAlunoResponse,
+    experimentaisPorEmusysResponse,
+    experimentaisPorLeadResponse,
   ] = await Promise.all([
     alunoIds.length
       ? supabase
@@ -1065,6 +1046,16 @@ async function buscarMatriculasComerciaisAlunos(
           .in('lead_id', leadIds)
       : Promise.resolve({ data: [] }),
   ]);
+  for (const resultado of [
+    experimentaisPorAlunoResponse,
+    experimentaisPorEmusysResponse,
+    experimentaisPorLeadResponse,
+  ]) {
+    if (resultado.error) throw resultado.error;
+  }
+  const experimentaisPorAluno = experimentaisPorAlunoResponse.data;
+  const experimentaisPorEmusys = experimentaisPorEmusysResponse.data;
+  const experimentaisPorLead = experimentaisPorLeadResponse.data;
 
   const experimentaisCanonicas = Array.from(
     new Map(
@@ -1231,53 +1222,284 @@ async function buscarMatriculasComerciaisAlunos(
   });
 }
 
-function textoTaxaExpMatComercial(resumo: Record<string, unknown>, realizadasConfirmadas: number): string {
-  const liberada = resumo.taxa_exp_mat_liberada === true;
-  const taxa = n(resumo.taxa_exp_mat_canonica);
-  const denominador = n(resumo.denominador_taxa_exp_mat);
-  const conversoes = n(resumo.conversoes_exp_mat_canonicas);
-  const pendencias = n(resumo.pendencias_taxa_exp_mat);
+interface SnapshotRefreshResponse {
+  success: true;
+  unidade: { id: string; nome?: string };
+  intervalo: { data_inicio: string; data_fim: string };
+  snapshot: { execucao_id: string; status: 'completo' };
+}
 
-  if (liberada) return `*${taxa.toFixed(1)}%* (${conversoes}/${denominador})`;
-  if (denominador === 0 && pendencias === 0 && realizadasConfirmadas === 0) {
-    return '*SEM BASE* (0 pendencia(s); aguardando experimentais confirmadas)';
+interface ExperimentalFuturaRaw {
+  unidade_id: string;
+  emusys_aula_id: number;
+  emusys_lead_id: number | null;
+  emusys_aluno_id: number | null;
+  participante_chave: string;
+  data_aula: string;
+  horario_aula: string | null;
+  aluno_nome: string;
+  curso_nome: string | null;
+  situacao_operacional: string;
+  lead_id: number | null;
+  aluno_id: number | null;
+  lead_experimental_id: number | null;
+  snapshot_ativo: boolean;
+}
+
+interface KpisComercialPayload {
+  kpis?: Record<string, unknown>;
+  gaps?: { experimental_status_realizada_sem_presenca?: unknown };
+  origem_canal?: unknown;
+  cursos_mais_procurados?: unknown;
+}
+
+interface MetaKpiRow {
+  tipo?: unknown;
+  valor?: unknown;
+}
+
+interface VinculoCursoExperimental {
+  id: number;
+  lead_id?: number | null;
+  emusys_lead_id?: number | null;
+  cursos?: { nome?: string | null } | Array<{ nome?: string | null }> | null;
+}
+
+function partesReferenciaBrt(dataReferencia: Date) {
+  if (!Number.isFinite(dataReferencia.getTime())) {
+    throw new Error('DATA_REFERENCIA_COMERCIAL_INVALIDA');
   }
-  return `*BLOQUEADA* (${pendencias} pendencia(s) de conciliacao)`;
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(dataReferencia);
+  const valor = (tipo: Intl.DateTimeFormatPartTypes) =>
+    partes.find((parte) => parte.type === tipo)?.value || '';
+  const ano = Number(valor('year'));
+  const mes = Number(valor('month'));
+  const dia = Number(valor('day'));
+  const hora = Number(valor('hour'));
+  const minuto = Number(valor('minute'));
+  if (![ano, mes, dia, hora, minuto].every(Number.isFinite)) {
+    throw new Error('DATA_REFERENCIA_COMERCIAL_INVALIDA');
+  }
+  return {
+    ano,
+    mes,
+    dia,
+    data: `${String(ano).padStart(4, '0')}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`,
+    hora: `${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}`,
+  };
+}
+
+function adicionarDiasIso(data: string, dias: number): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(data);
+  if (!match) throw new Error('DATA_ISO_INVALIDA');
+  const valor = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + dias));
+  return valor.toISOString().slice(0, 10);
+}
+
+function cursoDoVinculo(vinculo: VinculoCursoExperimental | undefined): string | null {
+  const relacao = firstRelation(vinculo?.cursos);
+  const nome = String(relacao?.nome || '').trim();
+  return nome || null;
+}
+
+function cursoRawEspecifico(curso: string | null | undefined): string | null {
+  const nome = String(curso || '').trim();
+  if (!nome || normalizarTexto(nome) === 'aula experimental') return null;
+  return nome;
+}
+
+async function buscarVinculosCursoProximas(
+  supabase: SupabaseClient,
+  unidadeId: string,
+  linhas: ExperimentalFuturaRaw[],
+): Promise<{ experimentais: VinculoCursoExperimental[]; leads: VinculoCursoExperimental[] }> {
+  const leadExperimentalIds = Array.from(new Set(linhas.map((linha) => linha.lead_experimental_id).filter((id): id is number => Number(id) > 0)));
+  const leadIds = Array.from(new Set(linhas.map((linha) => linha.lead_id).filter((id): id is number => Number(id) > 0)));
+  const emusysLeadIds = Array.from(new Set(linhas.map((linha) => linha.emusys_lead_id).filter((id): id is number => Number(id) > 0)));
+  const selectExperimental = 'id, lead_id, emusys_lead_id, cursos:curso_interesse_id(nome)';
+  const selectLead = 'id, emusys_lead_id, cursos:curso_interesse_id(nome)';
+
+  const [experimentaisDiretas, experimentaisEmusys, leadsDiretos, leadsEmusys] = await Promise.all([
+    leadExperimentalIds.length
+      ? supabase.from('lead_experimentais').select(selectExperimental).eq('unidade_id', unidadeId).in('id', leadExperimentalIds)
+      : Promise.resolve({ data: [], error: null }),
+    emusysLeadIds.length
+      ? supabase.from('lead_experimentais').select(selectExperimental).eq('unidade_id', unidadeId).in('emusys_lead_id', emusysLeadIds)
+      : Promise.resolve({ data: [], error: null }),
+    leadIds.length
+      ? supabase.from('leads').select(selectLead).eq('unidade_id', unidadeId).in('id', leadIds)
+      : Promise.resolve({ data: [], error: null }),
+    emusysLeadIds.length
+      ? supabase.from('leads').select(selectLead).eq('unidade_id', unidadeId).in('emusys_lead_id', emusysLeadIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  for (const resposta of [experimentaisDiretas, experimentaisEmusys, leadsDiretos, leadsEmusys]) {
+    if (resposta.error) throw resposta.error;
+  }
+  const unicos = (itens: VinculoCursoExperimental[]) =>
+    Array.from(new Map(itens.map((item) => [item.id, item])).values());
+  return {
+    experimentais: unicos([...(experimentaisDiretas.data || []), ...(experimentaisEmusys.data || [])]),
+    leads: unicos([...(leadsDiretos.data || []), ...(leadsEmusys.data || [])]),
+  };
+}
+
+function enriquecerProximasExperimentais(
+  linhas: ExperimentalFuturaRaw[],
+  vinculos: { experimentais: VinculoCursoExperimental[]; leads: VinculoCursoExperimental[] },
+): ProximaExperimental[] {
+  const experimentalPorId = new Map(vinculos.experimentais.map((item) => [item.id, item]));
+  const experimentalPorEmusysLeadId = new Map(
+    vinculos.experimentais
+      .filter((item) => Number(item.emusys_lead_id) > 0)
+      .map((item) => [Number(item.emusys_lead_id), item]),
+  );
+  const leadPorId = new Map(vinculos.leads.map((item) => [item.id, item]));
+  const leadPorEmusysLeadId = new Map(
+    vinculos.leads
+      .filter((item) => Number(item.emusys_lead_id) > 0)
+      .map((item) => [Number(item.emusys_lead_id), item]),
+  );
+
+  return linhas.map((linha) => {
+    const leadExperimentalId = Number(linha.lead_experimental_id);
+    const leadId = Number(linha.lead_id);
+    const emusysLeadId = Number(linha.emusys_lead_id);
+    const emusysAlunoId = Number(linha.emusys_aluno_id);
+    const cursoNome = cursoRawEspecifico(linha.curso_nome)
+      || cursoDoVinculo(experimentalPorId.get(leadExperimentalId))
+      || cursoDoVinculo(leadPorId.get(leadId))
+      || cursoDoVinculo(experimentalPorEmusysLeadId.get(emusysLeadId))
+      || cursoDoVinculo(leadPorEmusysLeadId.get(emusysLeadId))
+      || 'N/A';
+    const situacao = ['agendada', 'presente', 'faltou', 'cancelada', 'sem_status']
+        .includes(linha.situacao_operacional)
+      ? linha.situacao_operacional as ProximaExperimental['situacao']
+      : linha.situacao_operacional === 'matriculado'
+      ? 'presente'
+      : 'sem_status';
+
+    return {
+      snapshotAtivo: linha.snapshot_ativo,
+      cancelada: situacao === 'cancelada',
+      situacao,
+      dataAula: linha.data_aula,
+      horarioAula: linha.horario_aula,
+      alunoNome: linha.aluno_nome,
+      cursoNome,
+      emusysAulaId: linha.emusys_aula_id,
+      participanteChave: linha.participante_chave || (emusysAlunoId > 0 ? `aluno:${emusysAlunoId}` : null),
+    };
+  });
+}
+
+async function atualizarSnapshotExperimentais(
+  unidadeId: string,
+  dataInicio: string,
+  dataFim: string,
+): Promise<SnapshotRefreshResponse> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')?.replace(/\/+$/, '');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !serviceRoleKey) throw new Error('SNAPSHOT_EXPERIMENTAIS_CONFIG_AUSENTE');
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/sync-presenca-emusys`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      modo: 'experimentais',
+      unidade_id: unidadeId,
+      data_inicio: dataInicio,
+      data_fim: dataFim,
+    }),
+    signal: AbortSignal.timeout(120_000),
+  });
+  if (!response.ok) {
+    throw new Error(`SNAPSHOT_EXPERIMENTAIS_HTTP_${response.status}`);
+  }
+
+  let payload: Partial<SnapshotRefreshResponse>;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error('SNAPSHOT_EXPERIMENTAIS_RESPOSTA_INVALIDA');
+  }
+  if (
+    payload.success !== true
+    || payload.unidade?.id !== unidadeId
+    || payload.intervalo?.data_inicio !== dataInicio
+    || payload.intervalo?.data_fim !== dataFim
+    || payload.snapshot?.status !== 'completo'
+    || !payload.snapshot?.execucao_id
+  ) {
+    throw new Error('SNAPSHOT_EXPERIMENTAIS_INCOMPLETO');
+  }
+  return payload as SnapshotRefreshResponse;
+}
+
+function rankingCanonico(
+  itens: unknown,
+  campoNome: 'canal' | 'curso',
+): Array<{ nome: string; quantidade: number }> {
+  if (!Array.isArray(itens)) return [];
+  return itens
+    .map((item) => ({
+      nome: String(item?.[campoNome] || (campoNome === 'canal' ? 'Sem canal' : 'Sem curso')),
+      quantidade: n(item?.leads),
+    }))
+    .filter((item) => item.quantidade > 0)
+    .sort((a, b) => b.quantidade - a.quantidade || a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 async function gerarRelatorioComercialDiario(
-  supabase: any,
-  unidadeId: string
+  supabase: SupabaseClient,
+  unidadeId: string,
+  dataReferencia?: Date,
 ): Promise<string> {
-  const now = new Date();
-  const brt = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-  const dataFim = brt.toISOString().split('T')[0];
-  const ano = brt.getFullYear();
-  const mes = brt.getMonth() + 1;
-  const dia = String(brt.getDate()).padStart(2, '0');
-  const mesNome = brt.toLocaleString('pt-BR', { month: 'long' });
-  const horaStr = `${String(brt.getHours()).padStart(2, '0')}:${String(brt.getMinutes()).padStart(2, '0')}`;
-  const dataInicioMes = `${ano}-${String(mes).padStart(2, '0')}-01`;
+  const fuso = 'America/Sao_Paulo';
+  const referencia = partesReferenciaBrt(dataReferencia || new Date());
+  const ano = referencia.ano;
+  const mes = referencia.mes;
+  const dataRelatorio = referencia.data;
+  const dataInicioSnapshot = `${ano}-${String(mes).padStart(2, '0')}-01`;
+  const dataFimSnapshot = adicionarDiasIso(dataRelatorio, 7);
+  const inicioDiaBRT = `${dataRelatorio}T00:00:00-03:00`;
+  const fimDiaBRTExclusivo = `${adicionarDiasIso(dataRelatorio, 1)}T00:00:00-03:00`;
 
-  const { data: unidadeData, error: unidadeError } = await supabase
-    .from('unidades')
-    .select('id, nome, hunter_nome')
-    .eq('id', unidadeId)
-    .single();
-
-  if (unidadeError) throw unidadeError;
-
-  const inicioDiaBRT = `${dataFim}T00:00:00-03:00`;
-  const fimDiaBRT = `${dataFim}T23:59:59.999-03:00`;
+  const snapshot = await atualizarSnapshotExperimentais(
+    unidadeId,
+    dataInicioSnapshot,
+    dataFimSnapshot,
+  );
+  if (snapshot.snapshot.status !== 'completo') throw new Error('SNAPSHOT_EXPERIMENTAIS_INCOMPLETO');
 
   const [
+    unidadeResponse,
     kpisMesResponse,
     kpisDiaResponse,
     conciliacaoMesResponse,
     emusysMesResponse,
     emusysDiaResponse,
-    experimentaisAgendadasDiaResponse,
+    metasResponse,
+    proximasResponse,
+    leadsHojeResponse,
+    experimentaisHojeResponse,
+    matriculasHojeResponse,
+    matriculasMes,
   ] = await Promise.all([
+    supabase.from('unidades').select('id, nome, hunter_nome').eq('id', unidadeId).single(),
     supabase.rpc('get_kpis_comercial_canonicos_v2', {
       p_unidade_id: unidadeId,
       p_ano: ano,
@@ -1290,7 +1512,7 @@ async function gerarRelatorioComercialDiario(
       p_ano: ano,
       p_mes: mes,
       p_periodo: 'diario',
-      p_data: dataFim,
+      p_data: dataRelatorio,
     }),
     supabase.rpc('get_conciliacao_experimentais_v2', {
       p_unidade_id: unidadeId,
@@ -1304,107 +1526,165 @@ async function gerarRelatorioComercialDiario(
       p_ano: ano,
       p_mes: mes,
       p_periodo: 'mensal',
-      p_data: null,
+      p_data: dataRelatorio,
     }),
     supabase.rpc('get_experimentais_emusys_operacional_v1', {
       p_unidade_id: unidadeId,
       p_ano: ano,
       p_mes: mes,
       p_periodo: 'diario',
-      p_data: dataFim,
+      p_data: dataRelatorio,
     }),
     supabase
-      .from('lead_experimentais')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'experimental_agendada')
+      .from('metas_kpi')
+      .select('tipo, valor')
       .eq('unidade_id', unidadeId)
-      .gte('created_at', inicioDiaBRT)
-      .lte('created_at', fimDiaBRT),
+      .eq('ano', ano)
+      .eq('mes', mes)
+      .in('tipo', ['leads', 'experimentais', 'matriculas', 'ticket_medio']),
+    supabase
+      .from('emusys_experimentais_raw')
+      .select('unidade_id, emusys_aula_id, emusys_lead_id, emusys_aluno_id, participante_chave, data_aula, horario_aula, aluno_nome, curso_nome, situacao_operacional, lead_id, aluno_id, lead_experimental_id, snapshot_ativo')
+      .eq('unidade_id', unidadeId)
+      .eq('snapshot_ativo', true)
+      .gte('data_aula', dataRelatorio)
+      .lte('data_aula', dataFimSnapshot),
+    supabase.from('leads').select('id', { count: 'exact', head: true }).eq('unidade_id', unidadeId).gte('created_at', inicioDiaBRT).lt('created_at', fimDiaBRTExclusivo),
+    supabase.from('lead_experimentais').select('id', { count: 'exact', head: true }).eq('unidade_id', unidadeId).gte('created_at', inicioDiaBRT).lt('created_at', fimDiaBRTExclusivo),
+    supabase.from('alunos').select('id', { count: 'exact', head: true }).eq('unidade_id', unidadeId).gte('created_at', inicioDiaBRT).lt('created_at', fimDiaBRTExclusivo),
+    buscarMatriculasComerciaisAlunos(supabase, unidadeId, dataInicioSnapshot, dataRelatorio),
   ]);
 
-  if (kpisMesResponse.error) throw kpisMesResponse.error;
-  if (kpisDiaResponse.error) throw kpisDiaResponse.error;
-  if (conciliacaoMesResponse.error) throw conciliacaoMesResponse.error;
-  if (emusysMesResponse.error) throw emusysMesResponse.error;
-  if (emusysDiaResponse.error) throw emusysDiaResponse.error;
-  if (experimentaisAgendadasDiaResponse.error) throw experimentaisAgendadasDiaResponse.error;
-
-  const kpisMes = (kpisMesResponse.data?.kpis || {}) as Record<string, unknown>;
-  const kpisDia = (kpisDiaResponse.data?.kpis || {}) as Record<string, unknown>;
-  const resumoConciliacaoMes = (conciliacaoMesResponse.data?.resumo || {}) as Record<string, unknown>;
-  const resumoEmusysMes = (emusysMesResponse.data?.resumo || {}) as Record<string, unknown>;
-  const resumoEmusysDia = (emusysDiaResponse.data?.resumo || {}) as Record<string, unknown>;
-
-  const leadsPeriodo = n(kpisMes.leads_entrantes);
-  const experimentaisRealizadasMes = n(resumoConciliacaoMes.experimentais_realizadas_confirmadas);
-  const experimentaisEmusysMes = n(resumoEmusysMes.realizadas_emusys);
-  const experimentaisFaltasMes = n(resumoEmusysMes.faltas);
-  const totalExpAgendadasDia = n(resumoEmusysDia.linhas_raw);
-  const experimentaisAgendadasDia = experimentaisAgendadasDiaResponse.count || 0;
-  const visitasDiaTotal = n(kpisDia.visitas);
-
-  const matriculasNovas = agruparMatriculasComerciais(
-    await buscarMatriculasComerciaisAlunos(supabase, unidadeId, dataInicioMes, dataFim)
-  )
-    .filter(ehMatriculaComercialCanonicaEdge)
-    .sort((a: any, b: any) => String(a.data_matricula || '').localeCompare(String(b.data_matricula || '')));
-
-  const conversaoLeadExp = leadsPeriodo > 0 ? (experimentaisRealizadasMes / leadsPeriodo) * 100 : 0;
-  const conversaoLeadMat = leadsPeriodo > 0 ? (matriculasNovas.length / leadsPeriodo) * 100 : 0;
-  const taxaExpMatTexto = textoTaxaExpMatComercial(resumoConciliacaoMes, experimentaisRealizadasMes);
-
-  let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  texto += `📅 *RELATÓRIO DIÁRIO*\n`;
-  texto += `🏢 *${String(unidadeData?.nome || 'Unidade').toUpperCase()}*\n`;
-  texto += `📆 ${dia}/${mesNome}/${ano}\n`;
-  texto += `👤 ${unidadeData?.hunter_nome || 'Comercial'}\n`;
-  texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-  texto += `🎯 Leads no mês: *${leadsPeriodo}*\n`;
-  texto += `🎸 Experimentais realizadas no mês (Emusys): *${experimentaisEmusysMes}*\n`;
-  texto += `✅ Presença + vínculo confirmados: *${experimentaisRealizadasMes}*\n`;
-  texto += `❌ Faltas em experimentais no mês (Emusys): *${experimentaisFaltasMes}*\n`;
-  texto += `📆 Experimentais no dia (Emusys): *${totalExpAgendadasDia}*\n`;
-  texto += `🗓️ Experimentais agendadas no dia: *${experimentaisAgendadasDia}*\n`;
-  texto += `🏫 Visitas: *${visitasDiaTotal}*\n\n`;
-  texto += `✅ Matrículas no período: *${matriculasNovas.length}*\n\n`;
-  texto += `📊 *FUNIL DO MÊS*\n`;
-  texto += `Lead → Experimental: *${conversaoLeadExp.toFixed(1)}%* (${experimentaisRealizadasMes}/${leadsPeriodo})\n`;
-  texto += `Experimental → Matrícula: ${taxaExpMatTexto}\n`;
-  texto += `Lead → Matrícula: *${conversaoLeadMat.toFixed(1)}%* (${matriculasNovas.length}/${leadsPeriodo})\n\n`;
-
-  if (matriculasNovas.length > 0) {
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `📝 *LISTA DETALHADA*\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-
-    matriculasNovas.forEach((mat: any, i: number) => {
-      const dataFormatada = formatarDataCurtaComercial(mat.data_matricula || mat.data_contato);
-      texto += `MAT. ${(i + 1).toString().padStart(2, '0')}\n`;
-      texto += `📅 Data: ${dataFormatada}\n`;
-      texto += `👤 Aluno: ${mat.nome || 'Não informado'}`;
-      if (mat.idade) texto += ` (${mat.idade} anos)`;
-      texto += `\n`;
-      texto += `🎵 Curso: ${mat.cursos_relatorio || mat.curso_nome || 'Não informado'}\n`;
-      texto += `👨‍🏫 Professor: ${mat.professores_relatorio || mat.professor_fixo_nome || 'Não informado'}\n`;
-      texto += `🎸 Prof. Experimental: ${mat.professores_exp_relatorio || mat.professor_exp_nome || 'Não teve'}\n`;
-      texto += `📱 Canal: ${mat.canal_nome || 'Não informado'}\n`;
-      texto += `👤 Hunter: ${mat.hunter_nome || unidadeData?.hunter_nome || 'Comercial'}\n`;
-      texto += `💵 Pass: R$ ${formatarMoedaComercial(Number(mat.valor_passaporte) || 0)}`;
-      if (mat.forma_pagamento_passaporte_nome) texto += ` (${mat.forma_pagamento_passaporte_nome})`;
-      texto += `\n`;
-      texto += `💵 Parc: ${formatarParcelasMatriculaComercial(mat)}`;
-      if (mat.formas_pagamento_relatorio || mat.forma_pagamento_nome) {
-        texto += ` (${mat.formas_pagamento_relatorio || mat.forma_pagamento_nome})`;
-      }
-      texto += `\n\n`;
-    });
+  for (const resposta of [
+    unidadeResponse,
+    kpisMesResponse,
+    kpisDiaResponse,
+    conciliacaoMesResponse,
+    emusysMesResponse,
+    emusysDiaResponse,
+    metasResponse,
+    proximasResponse,
+    leadsHojeResponse,
+    experimentaisHojeResponse,
+    matriculasHojeResponse,
+  ]) {
+    if (resposta.error) throw resposta.error;
   }
 
-  texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  texto += `📅 Gerado em: ${dia}/${String(mes).padStart(2, '0')}/${ano} às ${horaStr}\n`;
-  texto += `━━━━━━━━━━━━━━━━━━━━━━`;
+  const resumoEmusysMes = (emusysMesResponse.data?.resumo || {}) as Record<string, unknown>;
+  const resumoEmusysDia = (emusysDiaResponse.data?.resumo || {}) as Record<string, unknown>;
+  if (
+    resumoEmusysMes.snapshot_status !== 'completo'
+    || resumoEmusysDia.snapshot_status !== 'completo'
+  ) {
+    throw new Error('SNAPSHOT_EXPERIMENTAIS_LEITURA_INCOMPLETA');
+  }
+  if (
+    String(resumoEmusysMes.snapshot_execucao_id || '') !== snapshot.snapshot.execucao_id
+    || String(resumoEmusysDia.snapshot_execucao_id || '') !== snapshot.snapshot.execucao_id
+    || !resumoEmusysMes.snapshot_atualizado_em
+    || !resumoEmusysDia.snapshot_atualizado_em
+  ) {
+    throw new Error('SNAPSHOT_EXPERIMENTAIS_LEITURA_DIVERGENTE');
+  }
 
-  return texto;
+  const linhasFuturas = (proximasResponse.data || []) as ExperimentalFuturaRaw[];
+  const vinculosCurso = await buscarVinculosCursoProximas(supabase, unidadeId, linhasFuturas);
+  const proximas = enriquecerProximasExperimentais(linhasFuturas, vinculosCurso);
+  const matriculasNovas = agruparMatriculasComerciais(matriculasMes)
+    .filter(ehMatriculaComercialCanonicaEdge)
+    .sort((a, b) => String(a.data_matricula || '').localeCompare(String(b.data_matricula || '')));
+  const tickets = calcularTicketsMatriculas(
+    matriculasNovas.map((mat) => ({
+      valorParcela: parcelasDoGrupo(mat),
+      valorPassaporte: passaporteDoGrupo(mat),
+    })),
+  );
+
+  const dadosKpisMes = (kpisMesResponse.data || {}) as KpisComercialPayload;
+  const dadosKpisDia = (kpisDiaResponse.data || {}) as KpisComercialPayload;
+  const kpisMes = (dadosKpisMes.kpis || {}) as Record<string, unknown>;
+  const kpisDia = (dadosKpisDia.kpis || {}) as Record<string, unknown>;
+  const resumoConciliacaoMes = (conciliacaoMesResponse.data?.resumo || {}) as Record<string, unknown>;
+  const metas = new Map<string, number>(
+    ((metasResponse.data || []) as MetaKpiRow[]).map((meta): [string, number] => [String(meta.tipo), n(meta.valor)]),
+  );
+  const pendencias = n(resumoConciliacaoMes.pendencias_taxa_exp_mat);
+  const gapsSemPresenca = n(dadosKpisDia.gaps?.experimental_status_realizada_sem_presenca);
+  const alertas: string[] = [];
+  if (gapsSemPresenca > 0) {
+    alertas.push(`${gapsSemPresenca} experimental(is) com status de realizada sem presença individual confirmada`);
+  }
+  if (pendencias > 0) alertas.push(`${pendencias} pendência(s) de conciliação em auditoria`);
+
+  const dados: RelatorioComercialDados = {
+    referencia: { data: dataRelatorio, hora: referencia.hora, fuso },
+    unidade: {
+      nome: String(unidadeResponse.data?.nome || 'Unidade'),
+      hunter: String(unidadeResponse.data?.hunter_nome || 'Comercial'),
+    },
+    dia: {
+      leads: n(kpisDia.leads_entrantes),
+      experimentaisPrevistas: n(resumoEmusysDia.linhas_raw),
+      experimentaisRealizadas: n(resumoEmusysDia.realizadas_emusys),
+      faltas: n(resumoEmusysDia.faltas),
+      canceladas: n(resumoEmusysDia.canceladas),
+      visitas: n(kpisDia.visitas),
+      matriculas: n(kpisDia.matriculas_comerciais_principais),
+      passaportes: n(kpisDia.passaportes_total),
+    },
+    mes: {
+      leads: n(kpisMes.leads_entrantes),
+      experimentaisRealizadas: n(resumoEmusysMes.realizadas_emusys),
+      presencasVinculadas: n(resumoConciliacaoMes.experimentais_realizadas_confirmadas),
+      faltas: n(resumoEmusysMes.faltas),
+      matriculas: matriculasNovas.length,
+    },
+    metas: {
+      leads: metas.get('leads') || 0,
+      experimentais: metas.get('experimentais') || 0,
+      matriculas: metas.get('matriculas') || 0,
+      ticketParcelas: metas.get('ticket_medio') || 0,
+    },
+    tickets,
+    conciliacao: {
+      taxa: n(resumoConciliacaoMes.taxa_exp_mat_canonica),
+      conversoes: n(resumoConciliacaoMes.conversoes_exp_mat_canonicas),
+      denominador: n(resumoConciliacaoMes.denominador_taxa_exp_mat),
+      pendencias,
+    },
+    registrosHoje: {
+      leads: leadsHojeResponse.count || 0,
+      experimentais: experimentaisHojeResponse.count || 0,
+      matriculas: matriculasHojeResponse.count || 0,
+    },
+    canais: rankingCanonico(dadosKpisDia.origem_canal, 'canal'),
+    cursos: rankingCanonico(dadosKpisDia.cursos_mais_procurados, 'curso'),
+    proximas,
+    alertas,
+    matriculasDetalhadas: matriculasNovas.map((mat) => ({
+      data: String(mat.data_matricula || mat.data_contato || ''),
+      aluno: String(mat.nome || ''),
+      idade: mat.idade ?? null,
+      curso: String(mat.cursos_relatorio || mat.curso_nome || ''),
+      professor: String(mat.professores_relatorio || mat.professor_fixo_nome || ''),
+      professorExperimental: String(mat.professores_exp_relatorio || mat.professor_exp_nome || ''),
+      canal: String(mat.canal_nome || ''),
+      hunter: mat.hunter_nome || unidadeResponse.data?.hunter_nome || null,
+      valorPassaporte: passaporteDoGrupo(mat),
+      formaPagamentoPassaporte: mat.forma_pagamento_passaporte_nome || null,
+      parcelas: Array.isArray(mat.parcelas_relatorio) && mat.parcelas_relatorio.length > 0
+        ? mat.parcelas_relatorio
+        : [mat.valor_parcela],
+      formaPagamentoParcelas: mat.formas_pagamento_relatorio || mat.forma_pagamento_nome || null,
+    })),
+    snapshot: {
+      atualizadoEm: String(resumoEmusysMes.snapshot_atualizado_em),
+      status: String(resumoEmusysMes.snapshot_status),
+    },
+  };
+
+  return formatarRelatorioComercialDiario(dados);
 }
 
 /**
@@ -1576,9 +1856,11 @@ serve(async (req) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      supabaseUrl,
+      serviceRoleKey
     );
 
     const payload: RelatorioPayload = await req.json();
@@ -1607,6 +1889,37 @@ serve(async (req) => {
         );
       }
 
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Autenticação obrigatória para dry_run_comercial' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+      if (!anonKey) throw new Error('SUPABASE_ANON_KEY_AUSENTE');
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+      const { data: authData, error: authError } = await userClient.auth.getUser();
+      if (authError || !authData.user) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Token inválido para dry_run_comercial' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const { data: autorizado, error: autorizacaoError } = await userClient.rpc(
+        'pode_gerar_relatorio_comercial_v1',
+        { p_unidade_id: payload.unidade },
+      );
+      if (autorizacaoError || autorizado !== true) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Unidade não autorizada para dry_run_comercial' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       const texto = await gerarRelatorioComercialDiario(supabase, payload.unidade);
       return new Response(
         JSON.stringify({ success: true, dry_run: true, tipo: 'relatorio_comercial', unidade: payload.unidade, texto }),
@@ -1616,6 +1929,13 @@ serve(async (req) => {
 
     // === MODO CRON ===
     if (payload.modo === 'cron') {
+      const bearerToken = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+      if (!serviceRoleKey || bearerToken !== serviceRoleKey) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'service_role obrigatória para cron' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       const resultado = await processarCron(supabase);
       return new Response(
         JSON.stringify({ success: true, ...resultado }),

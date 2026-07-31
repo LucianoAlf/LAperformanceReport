@@ -253,6 +253,32 @@ cria falta quando `situacao_operacional` é `agendada` ou `cancelada`.
 - **Canônica (professor):** RPC `get_experimentais_professor_canonicos_v1` + fonte `lead_experimentais` (1 linha por aula, presença real) — substituiu a contagem por `leads` que inflava a taxa. Denominador = `status ∈ {experimental_realizada, convertido}`; numerador = realizadas cujo lead converteu. Ver CLAUDE.md (Módulo de Professores).
 - ⚠️ `taxa_exp_mat` e `taxa_conversao_exp` continuam indisponíveis para configuração de meta (`MetasPageNew.tsx:65/75`), mas isso não bloqueia o KPI diário. Havendo denominador, o relatório publica sempre a taxa e a fração da conciliação vigente; pendências aparecem como aviso `N pendências em auditoria`. Sem denominador, publica `SEM BASE`. O texto diário nunca usa `BLOQUEADA`.
 
+### Orquestração e fontes do relatório comercial diário
+
+Para cada unidade, `relatorio-admin-whatsapp` determina a data de referência em
+`America/Sao_Paulo`, atualiza o snapshot Emusys do primeiro dia do mês até D+7
+e aguarda sua conclusão antes de qualquer leitura. A geração é interrompida se
+a resposta do sync for inválida ou se os agregados mensal e diário não
+confirmarem `snapshot_status='completo'`, timestamp de atualização e o mesmo ID
+de execução recém-aplicado. Não existe fallback para snapshot anterior, zero ou
+base transacional parcial.
+
+Depois do preflight, as leituras canônicas são paralelas: KPIs mensais e diários
+vêm de `get_kpis_comercial_canonicos_v2`; conversão e pendências, de
+`get_conciliacao_experimentais_v2`; realizadas, faltas, agenda e frescor, de
+`get_experimentais_emusys_operacional_v1`; metas, de `metas_kpi`; registros do
+dia, de `leads`, `lead_experimentais` e `alunos`, usando intervalo semiaberto
+BRT `[00:00, 00:00 do dia seguinte)`; e a lista detalhada, da coorte canônica de
+novas matrículas. A mesma coleção agrupada `matriculasNovas` alimenta o total de
+matrículas, todos os itens detalhados e os tickets de parcelas e passaportes.
+
+Na agenda futura, o curso é resolvido apenas por IDs estáveis e escopados pela
+unidade: disciplina específica do snapshot, vínculo direto da experimental,
+vínculo do lead Emusys na experimental e, por último, curso do lead. Nome e
+telefone são somente exibição e nunca fazem join. A correção não inclui backfill
+nem ajuste manual de dados de produção; em runtime, a escrita anterior à leitura
+é exclusivamente a aplicação atômica do snapshot vigente.
+
 ### Tickets do relatório comercial diário
 
 O relatório diário calcula duas métricas separadas sobre a mesma coorte de
