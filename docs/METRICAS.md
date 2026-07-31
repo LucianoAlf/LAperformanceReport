@@ -144,16 +144,27 @@ qualquer outro valor fica `sem_status`. A paginação só libera o lote quando
 todas as páginas de `/aulas` terminam sem erro.
 
 O denominador operacional do Emusys considera exclusivamente linhas com
-`snapshot_ativo=true`. Uma nova execução completa atualiza a linha vigente da
-mesma chave de negócio, inativa o que desapareceu dentro do intervalo coletado
-e preserva versões anteriores para auditoria; linha histórica inativa nunca
+`snapshot_ativo=true`. Uma nova execução completa é serializada por unidade,
+inativa a fotografia vigente de cada chave recebida e insere uma nova versão,
+sem sobrescrever `raw_key`, payload ou execução anteriores. Enriquecimentos
+locais conhecidos são herdados pela nova versão; `linhas_inativadas` conta
+somente chaves ausentes do lote, enquanto `linhas_versionadas` informa as
+chaves recebidas que ganharam nova fotografia. Linha histórica inativa nunca
 volta a contar. A RPC operacional publica no `resumo`
 `snapshot_atualizado_em`, `snapshot_execucao_id`, `snapshot_linhas_inativas` e
 `snapshot_status`, permitindo que o consumidor diferencie zero real de
 snapshot ausente ou sem cobertura completa do período.
 Na leitura mensal, cobertura completa significa do primeiro dia do mês até
-`data do relatório + 7 dias`, inclusive quando D+7 cai no mês seguinte. Assim,
-um relatório de 30/07 só considera fresco um snapshot que alcance 06/08.
+a data de referência limitada ao último dia da competência, mais sete dias.
+Assim, um relatório de 30/07 exige cobertura até 06/08; uma consulta posterior
+à competência limita a referência a 31/07 e exige, no máximo, 07/08.
+
+A leitura authenticated exige unidade explícita e o guard
+`comercial.ver`; a policy raw mostra somente versões ativas da unidade
+autorizada. Durante o rollout, o writer legado ainda pode gravar sem
+`participante_chave`, mas essas linhas nascem inativas e não aparecem aos
+leitores authenticated. O contrato futuro do writer canônico exige identidade
+e usa exclusivamente a RPC de aplicação.
 
 ### Taxa de conversão Experimental → Matrícula
 - **No Dashboard/Comercial (frontend):** denominador `experimental_realizada = true`; numerador `status ∈ {matriculado, convertido}` (`DashboardPage.tsx:316-327`).
