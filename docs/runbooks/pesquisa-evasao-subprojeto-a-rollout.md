@@ -1,7 +1,9 @@
 # Pesquisa de evasão — runbook do Subprojeto A
 
-Data-base: 2026-07-30  
-Estado: implementação local concluída; homologação e produção ainda não executadas  
+Data-base: 2026-07-30
+
+Estado: implementação local concluída; homologação e produção ainda não executadas
+
 Projeto de produção confirmado somente para leitura: `ouqwbbermlzqqvtqwlul`
 
 ## Regra de parada
