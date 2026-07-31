@@ -1435,10 +1435,11 @@ function rankingCanonico(
 async function gerarRelatorioComercialDiario(
   supabase: SupabaseClient,
   unidadeId: string,
-  dataReferencia?: Date,
+  dataReferencia?: string,
+  instanteGeracao: Date = new Date(),
 ): Promise<string> {
   const fuso = 'America/Sao_Paulo';
-  const referencia = resolverJanelaRelatorioComercialBrt(dataReferencia || new Date());
+  const referencia = resolverJanelaRelatorioComercialBrt(dataReferencia, instanteGeracao);
   const ano = referencia.ano;
   const mes = referencia.mes;
   const dataRelatorio = referencia.data;
@@ -1611,7 +1612,13 @@ async function gerarRelatorioComercialDiario(
   if (pendencias > 0) alertas.push(`${pendencias} pendência(s) de conciliação em auditoria`);
 
   const dados: RelatorioComercialDados = {
-    referencia: { data: dataRelatorio, hora: referencia.hora, fuso },
+    referencia: {
+      data: dataRelatorio,
+      dataGeracao: referencia.dataGeracao,
+      hora: referencia.hora,
+      instanteGeracao: referencia.instanteGeracao,
+      fuso,
+    },
     unidade: {
       nome: String(unidadeResponse.data?.nome || 'Unidade'),
       hunter: String(unidadeResponse.data?.hunter_nome || 'Comercial'),
@@ -1915,7 +1922,7 @@ serve(async (req) => {
         );
       }
 
-      let dataReferencia: Date;
+      let dataReferencia: string;
       try {
         dataReferencia = parseDataReferenciaComercialBrt(payload.data_referencia);
       } catch (error) {

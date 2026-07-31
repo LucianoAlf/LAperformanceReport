@@ -41,21 +41,37 @@ const matriculasBarra = [
   { valorParcela: 460, valorPassaporte: 450 },
 ];
 
-Deno.test("data_referencia da UI preserva o dia BRT e calcula mes ate D+7", () => {
+Deno.test("data_referencia governa calendario e instante real governa geracao", () => {
   const referencia = parseDataReferenciaComercialBrt("2026-07-30");
+  const instanteGeracao = new Date("2026-07-30T23:05:00Z");
 
-  assertEquals(referencia.toISOString(), "2026-07-30T15:00:00.000Z");
-  assertEquals(resolverJanelaRelatorioComercialBrt(referencia), {
-    ano: 2026,
-    mes: 7,
-    dia: 30,
-    data: "2026-07-30",
-    hora: "12:00",
-    dataInicioSnapshot: "2026-07-01",
-    dataFimSnapshot: "2026-08-06",
-    inicioDiaBRT: "2026-07-30T00:00:00-03:00",
-    fimDiaBRTExclusivo: "2026-07-31T00:00:00-03:00",
-  });
+  assertEquals(referencia, "2026-07-30");
+  assertEquals(
+    resolverJanelaRelatorioComercialBrt(referencia, instanteGeracao),
+    {
+      ano: 2026,
+      mes: 7,
+      dia: 30,
+      data: "2026-07-30",
+      dataGeracao: "2026-07-30",
+      hora: "20:05",
+      instanteGeracao: "2026-07-30T23:05:00.000Z",
+      dataInicioSnapshot: "2026-07-01",
+      dataFimSnapshot: "2026-08-06",
+      inicioDiaBRT: "2026-07-30T03:00:00.000Z",
+      fimDiaBRTExclusivo: "2026-07-31T03:00:00.000Z",
+    },
+  );
+});
+
+Deno.test("limites diarios usam America/Sao_Paulo inclusive no horario de verao historico", () => {
+  const janela = resolverJanelaRelatorioComercialBrt(
+    "2018-01-15",
+    new Date("2018-01-15T12:00:00Z"),
+  );
+
+  assertEquals(janela.inicioDiaBRT, "2018-01-15T02:00:00.000Z");
+  assertEquals(janela.fimDiaBRTExclusivo, "2018-01-16T02:00:00.000Z");
 });
 
 Deno.test("data_referencia rejeita calendario invalido, timestamp e offset", () => {
@@ -440,7 +456,9 @@ function dadosBarra(): RelatorioComercialDados {
   return {
     referencia: {
       data: "2026-07-30",
+      dataGeracao: "2026-07-30",
       hora: "20:05",
+      instanteGeracao: "2026-07-30T23:05:00.000Z",
       fuso: "America/Sao_Paulo",
     },
     unidade: { nome: "Barra", hunter: "Kailane" },
@@ -508,6 +526,50 @@ function dadosBarra(): RelatorioComercialDados {
     },
   };
 }
+
+Deno.test("relatorio historico usa hora real para filtrar proximas sem alterar a janela", () => {
+  const contexto = resolverJanelaRelatorioComercialBrt(
+    parseDataReferenciaComercialBrt("2026-07-30"),
+    new Date("2026-07-30T23:05:00Z"),
+  );
+  const dados = dadosBarra();
+  dados.referencia = {
+    data: contexto.data,
+    dataGeracao: contexto.dataGeracao,
+    hora: contexto.hora,
+    instanteGeracao: contexto.instanteGeracao,
+    fuso: "America/Sao_Paulo",
+  };
+  dados.proximas = [
+    proxima({
+      dataAula: "2026-07-30",
+      horarioAula: "18:00",
+      alunoNome: "Bento Brasil",
+    }),
+    proxima({
+      dataAula: "2026-07-30",
+      horarioAula: "20:05",
+      alunoNome: "Olivia Delduque",
+    }),
+    proxima({
+      dataAula: "2026-07-31",
+      horarioAula: "10:00",
+      alunoNome: "Pedro e Miguel",
+    }),
+  ];
+
+  const texto = formatarRelatorioComercialDiario(dados);
+
+  assertEquals(contexto.dataInicioSnapshot, "2026-07-01");
+  assertEquals(contexto.dataFimSnapshot, "2026-08-06");
+  assertFalse(texto.includes("Bento Brasil"));
+  assertFalse(texto.includes("Olivia Delduque"));
+  assertStringIncludes(texto, "Pedro e Miguel");
+  assertStringIncludes(
+    texto,
+    "Gerado em: 30/07/2026 às 20:05 (America/Sao_Paulo)",
+  );
+});
 
 Deno.test("formatarRelatorioComercialDiario gera as dez secoes na ordem aprovada", () => {
   const texto = formatarRelatorioComercialDiario(dadosBarra());

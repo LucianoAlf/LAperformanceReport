@@ -33,7 +33,9 @@ export interface JanelaRelatorioComercialBrt {
   mes: number;
   dia: number;
   data: string;
+  dataGeracao: string;
   hora: string;
+  instanteGeracao: string;
   dataInicioSnapshot: string;
   dataFimSnapshot: string;
   inicioDiaBRT: string;
@@ -87,7 +89,7 @@ function partesReferenciaBrt(dataReferencia: Date) {
   };
 }
 
-export function parseDataReferenciaComercialBrt(valor: unknown): Date {
+export function parseDataReferenciaComercialBrt(valor: unknown): string {
   if (typeof valor !== "string") {
     throw new Error("DATA_REFERENCIA_COMERCIAL_INVALIDA");
   }
@@ -107,27 +109,37 @@ export function parseDataReferenciaComercialBrt(valor: unknown): Date {
     throw new Error("DATA_REFERENCIA_COMERCIAL_INVALIDA");
   }
 
-  const referencia = new Date(`${valor}T12:00:00-03:00`);
-  if (!Number.isFinite(referencia.getTime())) {
-    throw new Error("DATA_REFERENCIA_COMERCIAL_INVALIDA");
-  }
-  return referencia;
+  return valor;
 }
 
 export function resolverJanelaRelatorioComercialBrt(
-  dataReferencia: Date,
+  dataReferencia?: string,
+  instanteGeracao: Date = new Date(),
 ): JanelaRelatorioComercialBrt {
-  const referencia = partesReferenciaBrt(dataReferencia);
+  const geracao = partesReferenciaBrt(instanteGeracao);
+  const data = dataReferencia === undefined
+    ? geracao.data
+    : parseDataReferenciaComercialBrt(dataReferencia);
+  const [ano, mes, dia] = data.split("-").map(Number);
+  const inicioDia = inicioDiaNoFuso(data, "America/Sao_Paulo");
+  const fimDia = inicioDiaNoFuso(
+    adicionarDiasIso(data, 1),
+    "America/Sao_Paulo",
+  );
   return {
-    ...referencia,
-    dataInicioSnapshot: `${String(referencia.ano).padStart(4, "0")}-${
-      String(referencia.mes).padStart(2, "0")
+    ano,
+    mes,
+    dia,
+    data,
+    dataGeracao: geracao.data,
+    hora: geracao.hora,
+    instanteGeracao: instanteGeracao.toISOString(),
+    dataInicioSnapshot: `${String(ano).padStart(4, "0")}-${
+      String(mes).padStart(2, "0")
     }-01`,
-    dataFimSnapshot: adicionarDiasIso(referencia.data, 7),
-    inicioDiaBRT: `${referencia.data}T00:00:00-03:00`,
-    fimDiaBRTExclusivo: `${
-      adicionarDiasIso(referencia.data, 1)
-    }T00:00:00-03:00`,
+    dataFimSnapshot: adicionarDiasIso(data, 7),
+    inicioDiaBRT: inicioDia.toISOString(),
+    fimDiaBRTExclusivo: fimDia.toISOString(),
   };
 }
 
@@ -165,7 +177,9 @@ export interface MatriculaDetalhadaRelatorio {
 export interface RelatorioComercialDados {
   referencia: {
     data: string;
+    dataGeracao: string;
     hora: string;
+    instanteGeracao: string;
     fuso: "America/Sao_Paulo" | string;
   };
   unidade: { nome: string; hunter: string };
@@ -500,6 +514,18 @@ function instanteLocalNoFuso(
   return candidatos[0] ?? null;
 }
 
+function inicioDiaNoFuso(data: string, fuso: string): Date {
+  for (let hora = 0; hora <= 5; hora += 1) {
+    const instante = instanteLocalNoFuso(
+      data,
+      String(hora).padStart(2, "0") + ":00:00",
+      fuso,
+    );
+    if (instante) return instante;
+  }
+  throw new Error("DATA_REFERENCIA_COMERCIAL_INVALIDA");
+}
+
 function instanteExperimental(
   linha: ProximaExperimental,
   dataGeracaoLocal: string,
@@ -664,16 +690,25 @@ function instanteReferencia(dados: RelatorioComercialDados): Date {
   }
   if (
     !dataValida(dados.referencia.data) ||
+    !dataValida(dados.referencia.dataGeracao) ||
     !horarioNormalizado(dados.referencia.hora)
   ) {
     throw new Error("Referência temporal inválida");
   }
-  const instante = instanteLocalNoFuso(
-    dados.referencia.data,
-    dados.referencia.hora,
-    dados.referencia.fuso,
-  );
-  if (!instante) throw new Error("Referência temporal inválida");
+  const instante = new Date(dados.referencia.instanteGeracao);
+  const partes = partesNoFuso(instante, dados.referencia.fuso);
+  const horaLocal = partes
+    ? String(partes.hora).padStart(2, "0") + ":" +
+      String(partes.minuto).padStart(2, "0")
+    : "";
+  if (
+    !Number.isFinite(instante.getTime()) || !partes ||
+    dataNoFuso(instante, dados.referencia.fuso) !==
+      dados.referencia.dataGeracao ||
+    horaLocal !== dados.referencia.hora
+  ) {
+    throw new Error("Referência temporal inválida");
+  }
   return instante;
 }
 
@@ -881,7 +916,7 @@ export function formatarRelatorioComercialDiario(
       snapshotEmBrt(dados.snapshot.atualizadoEm, dados.referencia.fuso)
     }`,
     `• Gerado em: ${
-      dataCurta(dados.referencia.data)
+      dataCurta(dados.referencia.dataGeracao)
     } às ${dados.referencia.hora} (${dados.referencia.fuso})`,
     separador,
   ].join("\n");

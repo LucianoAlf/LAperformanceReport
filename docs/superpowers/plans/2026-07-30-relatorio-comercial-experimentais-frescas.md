@@ -748,9 +748,10 @@ git commit -m "test: definir relatorio comercial unificado"
 - [ ] **Step 1: Escrever o teste vermelho de orquestração**
 
 O teste estrutural deve exigir, dentro de
-`gerarRelatorioComercialDiario(supabase, unidadeId, dataReferencia?)`:
+`gerarRelatorioComercialDiario(supabase, unidadeId, dataReferencia?, instanteGeracao = new Date())`:
 
-1. cálculo BRT determinístico ou uso de `data_referencia`;
+1. `data_referencia` como data civil da competência e `instanteGeracao` interno
+   como relógio real BRT, sem aceitar relógio no payload;
 2. `dataInicioSnapshot` no primeiro dia do mês;
 3. `dataFimSnapshot` em D+7, inclusive quando cair no mês seguinte;
 4. `await atualizarSnapshotExperimentais(...)` antes das leituras;
@@ -969,9 +970,12 @@ O teste deve confirmar:
 
 - unidade consolidada `todos` é rejeitada com mensagem clara;
 - `data_referencia` é repassada à edge, aceita somente calendário estrito
-  `YYYY-MM-DD` e governa tanto o dia publicado quanto a janela mês até D+7;
+  `YYYY-MM-DD` e governa tanto o dia publicado quanto a janela mês até D+7, sem
+  substituir o instante real que governa hora, rodapé e corte futuro;
 - timestamp, offset, ausência e data impossível recebem `400`, enquanto o cron
   sem data externa continua usando o instante atual em BRT;
+- o payload não aceita relógio arbitrário e os limites diários de `created_at`
+  são derivados de `America/Sao_Paulo`, não de offset `-03` fixo;
 - erro da edge vira o estado `relatorioErro`;
 - o texto exibido é exatamente `data.texto`;
 - o texto inclui `Ticket médio das parcelas` e
