@@ -143,6 +143,18 @@ aula em `America/Sao_Paulo`, inclusive quando o Emusys envia
 qualquer outro valor fica `sem_status`. A paginação só libera o lote quando
 todas as páginas de `/aulas` terminam sem erro.
 
+O denominador operacional do Emusys considera exclusivamente linhas com
+`snapshot_ativo=true`. Uma nova execução completa atualiza a linha vigente da
+mesma chave de negócio, inativa o que desapareceu dentro do intervalo coletado
+e preserva versões anteriores para auditoria; linha histórica inativa nunca
+volta a contar. A RPC operacional publica no `resumo`
+`snapshot_atualizado_em`, `snapshot_execucao_id`, `snapshot_linhas_inativas` e
+`snapshot_status`, permitindo que o consumidor diferencie zero real de
+snapshot ausente ou sem cobertura completa do período.
+Na leitura mensal corrente, cobertura completa significa do primeiro dia do
+mês até `data do relatório + 7 dias` (limitado ao fim do mês); competências
+históricas exigem cobertura até o último dia do mês.
+
 ### Taxa de conversão Experimental → Matrícula
 - **No Dashboard/Comercial (frontend):** denominador `experimental_realizada = true`; numerador `status ∈ {matriculado, convertido}` (`DashboardPage.tsx:316-327`).
 - **Canônica (professor):** RPC `get_experimentais_professor_canonicos_v1` + fonte `lead_experimentais` (1 linha por aula, presença real) — substituiu a contagem por `leads` que inflava a taxa. Denominador = `status ∈ {experimental_realizada, convertido}`; numerador = realizadas cujo lead converteu. Ver CLAUDE.md (Módulo de Professores).
