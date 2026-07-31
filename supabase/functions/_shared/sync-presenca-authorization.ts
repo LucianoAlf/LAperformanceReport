@@ -169,6 +169,7 @@ export async function tokensIguaisEmTempoConstante(
 
 type DependenciasPreparacao<TClienteAdmin, TUnidadeProvedor> = {
   chaveServiceRole: string;
+  validarTokenInterno: (token: string) => PromiseLike<boolean>;
   criarClienteUsuario: (token: string) => ClienteUsuarioSync;
   criarClienteAdministrativo: () => TClienteAdmin;
   carregarUnidadesProvedor: (unidadesIds: string[]) => TUnidadeProvedor[];
@@ -198,6 +199,7 @@ export async function prepararExecucaoSyncPresenca<
 >(
   input: {
     authorization: string | null;
+    xSyncToken?: string | null;
     solicitacao: SolicitacaoSyncPresenca;
   },
   deps: DependenciasPreparacao<TClienteAdmin, TUnidadeProvedor>,
@@ -205,7 +207,20 @@ export async function prepararExecucaoSyncPresenca<
   PreparacaoNegada | PreparacaoPermitida<TClienteAdmin, TUnidadeProvedor>
 > {
   const token = extrairBearer(input.authorization);
-  if (!token) {
+  const tokenInternoDedicado = input.xSyncToken?.trim() || null;
+  let interno = token
+    ? await tokensIguaisEmTempoConstante(token, deps.chaveServiceRole)
+    : false;
+
+  if (!interno && tokenInternoDedicado) {
+    try {
+      interno = await deps.validarTokenInterno(tokenInternoDedicado);
+    } catch {
+      interno = false;
+    }
+  }
+
+  if (!interno && !token) {
     return {
       permitido: false,
       status: 401,
@@ -213,12 +228,14 @@ export async function prepararExecucaoSyncPresenca<
     };
   }
 
-  const interno = await tokensIguaisEmTempoConstante(
-    token,
-    deps.chaveServiceRole,
-  );
-
   if (!interno) {
+    if (!token) {
+      return {
+        permitido: false,
+        status: 401,
+        codigo: 'NAO_AUTENTICADO',
+      };
+    }
     const clienteUsuario = deps.criarClienteUsuario(token);
     let identidadeValida = false;
     try {

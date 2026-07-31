@@ -5,6 +5,8 @@ import test from 'node:test';
 const helperPath = 'supabase/functions/_shared/sync-presenca-authorization.ts';
 const migrationPath =
   'supabase/migrations/20260731160000_sync_presenca_authorization.sql';
+const cronAuthMigrationPath =
+  'supabase/migrations/20260731164500_sync_presenca_cron_token_interno.sql';
 const unidadeBarra = {
   id: '368d47f5-2d88-4475-bc14-ba084a9a348e',
   nome: 'Barra',
@@ -41,6 +43,10 @@ function criarDependencias(overrides = {}) {
 
   const deps = {
     chaveServiceRole,
+    validarTokenInterno: async (token) => {
+      chamadas.push(['validarTokenInterno', token]);
+      return token === 'token-interno-dedicado';
+    },
     criarClienteUsuario: (token) => {
       chamadas.push(['criarClienteUsuario', token]);
       return clienteUsuario;
@@ -325,6 +331,67 @@ test('bearer interno preserva alvos por indice de agenda e metadados dos crons',
   }
 });
 
+test('token interno dedicado preserva crons sem depender do JWT anonimo', async () => {
+  const { prepararExecucaoSyncPresenca, resolverSolicitacaoSyncPresenca } =
+    await carregarHelper();
+  const cenario = criarDependencias();
+  const solicitacao = resolverSolicitacaoSyncPresenca(
+    { modo: 'metadados', unidade_index: 1 },
+    [unidadeRecreio, unidadeBarra],
+  );
+
+  const resultado = await prepararExecucaoSyncPresenca(
+    {
+      authorization: null,
+      xSyncToken: 'token-interno-dedicado',
+      solicitacao,
+    },
+    cenario.deps,
+  );
+
+  assert.equal(resultado.permitido, true);
+  assert.equal(resultado.interno, true);
+  assert.deepEqual(resultado.unidadesProvedor.map(({ id }) => id), [
+    unidadeBarra.id,
+  ]);
+  assert.deepEqual(
+    cenario.chamadas.map(([nome]) => nome),
+    [
+      'validarTokenInterno',
+      'carregarUnidadesProvedor',
+      'criarClienteAdministrativo',
+    ],
+  );
+});
+
+test('token interno dedicado invalido falha fechado antes dos sinks', async () => {
+  const { prepararExecucaoSyncPresenca, resolverSolicitacaoSyncPresenca } =
+    await carregarHelper();
+  const cenario = criarDependencias();
+  const solicitacao = resolverSolicitacaoSyncPresenca(
+    { modo: 'agenda', unidade_index: 0 },
+    [unidadeBarra, unidadeRecreio],
+  );
+
+  const resultado = await prepararExecucaoSyncPresenca(
+    {
+      authorization: null,
+      xSyncToken: 'token-interno-invalido',
+      solicitacao,
+    },
+    cenario.deps,
+  );
+
+  assert.deepEqual(resultado, {
+    permitido: false,
+    status: 401,
+    codigo: 'NAO_AUTENTICADO',
+  });
+  assert.deepEqual(cenario.chamadas, [
+    ['validarTokenInterno', 'token-interno-invalido'],
+  ]);
+});
+
 test('contrato estatico ordena resolucao/autorizacao antes dos privilegios e fecha o caller web', () => {
   const edge = readFileSync(
     'supabase/functions/sync-presenca-emusys/index.ts',
@@ -341,6 +408,8 @@ test('contrato estatico ordena resolucao/autorizacao antes dos privilegios e fec
   assert.doesNotMatch(serve, /catch\s*\{\s*bodyRecebido\s*=\s*\{\}/);
   assert.match(edge, /resolverSolicitacaoSyncPresenca/);
   assert.match(edge, /prepararExecucaoSyncPresenca/);
+  assert.match(edge, /req\.headers\.get\('x-sync-token'\)/);
+  assert.match(edge, /validar_token_sync_presenca_interno_v1/);
   assert.match(edge, /criarClienteAdministrativo/);
   assert.match(edge, /carregarUnidadesProvedor/);
   assert.ok(
@@ -354,6 +423,33 @@ test('contrato estatico ordena resolucao/autorizacao antes dos privilegios e fec
   assert.match(
     ui,
     /sync-presenca-emusys[\s\S]{0,180}modo:\s*'presenca'[\s\S]{0,100}unidade_id:\s*aluno\.unidade_id/,
+  );
+});
+
+test('cron usa segredo dedicado rotacionado e gateway delega auth ao codigo', () => {
+  assert.ok(
+    existsSync(cronAuthMigrationPath),
+    `migration ausente: ${cronAuthMigrationPath}`,
+  );
+  const migration = readFileSync(cronAuthMigrationPath, 'utf8');
+  const config = readFileSync('supabase/config.toml', 'utf8');
+
+  assert.match(
+    config,
+    /\[functions\.sync-presenca-emusys\][\s\S]{0,240}verify_jwt\s*=\s*false/,
+  );
+  assert.match(migration, /validar_token_sync_presenca_interno_v1/);
+  assert.match(migration, /vault\.update_secret/);
+  assert.match(migration, /extensions\.gen_random_bytes\(32\)/);
+  assert.match(migration, /'x-sync-token'/);
+  assert.match(migration, /cron\.alter_job/);
+  assert.match(
+    migration,
+    /grant execute on function public\.validar_token_sync_presenca_interno_v1\(text\)\s+to service_role/i,
+  );
+  assert.doesNotMatch(
+    migration,
+    /grant execute on function public\.validar_token_sync_presenca_interno_v1\(text\) to (anon|authenticated)/i,
   );
 });
 
