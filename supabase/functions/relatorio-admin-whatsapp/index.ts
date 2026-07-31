@@ -14,6 +14,7 @@ import {
   passaporteDoGrupo,
   type ProximaExperimental,
   type RelatorioComercialDados,
+  validarExecucaoSnapshotProximas,
 } from '../_shared/relatorio-comercial.ts';
 
 const FIELDS = 'id,nome,provedor,uazapi_url,uazapi_token,waha_url,waha_session,waha_api_key';
@@ -977,7 +978,7 @@ async function buscarMatriculasComerciaisAlunos(
   const leadSelect = 'id, nome, telefone, aluno_id, unidade_id, emusys_lead_id, status, data_contato, data_experimental, canal_origem_id, professor_experimental_id, canais_origem:canal_origem_id(nome)';
   const leadQueries: Promise<any>[] = [
     alunoIds.length
-      ? supabase.from('leads').select(leadSelect).in('aluno_id', alunoIds)
+      ? supabase.from('leads').select(leadSelect).eq('unidade_id', unidadeId).in('aluno_id', alunoIds)
       : Promise.resolve({ data: [] }),
   ];
 
@@ -1031,18 +1032,21 @@ async function buscarMatriculasComerciaisAlunos(
       ? supabase
           .from('lead_experimentais')
           .select('id, lead_id, aluno_id, emusys_lead_id, nome_aluno, status, data_experimental, professor_experimental_id')
+          .eq('unidade_id', unidadeId)
           .in('aluno_id', alunoIds)
       : Promise.resolve({ data: [] }),
     emusysLeadIdsComLeads.length
       ? supabase
           .from('lead_experimentais')
           .select('id, lead_id, aluno_id, emusys_lead_id, nome_aluno, status, data_experimental, professor_experimental_id')
+          .eq('unidade_id', unidadeId)
           .in('emusys_lead_id', emusysLeadIdsComLeads)
       : Promise.resolve({ data: [] }),
     leadIds.length
       ? supabase
           .from('lead_experimentais')
           .select('id, lead_id, aluno_id, emusys_lead_id, nome_aluno, status, data_experimental, professor_experimental_id')
+          .eq('unidade_id', unidadeId)
           .in('lead_id', leadIds)
       : Promise.resolve({ data: [] }),
   ]);
@@ -1244,6 +1248,7 @@ interface ExperimentalFuturaRaw {
   aluno_id: number | null;
   lead_experimental_id: number | null;
   snapshot_ativo: boolean;
+  snapshot_execucao_id: string;
 }
 
 interface KpisComercialPayload {
@@ -1544,9 +1549,10 @@ async function gerarRelatorioComercialDiario(
       .in('tipo', ['leads', 'experimentais', 'matriculas', 'ticket_medio']),
     supabase
       .from('emusys_experimentais_raw')
-      .select('unidade_id, emusys_aula_id, emusys_lead_id, emusys_aluno_id, participante_chave, data_aula, horario_aula, aluno_nome, curso_nome, situacao_operacional, lead_id, aluno_id, lead_experimental_id, snapshot_ativo')
+      .select('unidade_id, emusys_aula_id, emusys_lead_id, emusys_aluno_id, participante_chave, data_aula, horario_aula, aluno_nome, curso_nome, situacao_operacional, lead_id, aluno_id, lead_experimental_id, snapshot_ativo, snapshot_execucao_id')
       .eq('unidade_id', unidadeId)
       .eq('snapshot_ativo', true)
+      .eq('snapshot_execucao_id', snapshot.snapshot.execucao_id)
       .gte('data_aula', dataRelatorio)
       .lte('data_aula', dataFimSnapshot),
     supabase.from('leads').select('id', { count: 'exact', head: true }).eq('unidade_id', unidadeId).gte('created_at', inicioDiaBRT).lt('created_at', fimDiaBRTExclusivo),
@@ -1589,6 +1595,29 @@ async function gerarRelatorioComercialDiario(
   }
 
   const linhasFuturas = (proximasResponse.data || []) as ExperimentalFuturaRaw[];
+  validarExecucaoSnapshotProximas(
+    linhasFuturas,
+    snapshot.snapshot.execucao_id,
+  );
+  const confirmacaoSnapshotResponse = await supabase.rpc(
+    'get_experimentais_emusys_operacional_v1',
+    {
+      p_unidade_id: unidadeId,
+      p_ano: ano,
+      p_mes: mes,
+      p_periodo: 'mensal',
+      p_data: dataRelatorio,
+    },
+  );
+  if (confirmacaoSnapshotResponse.error) throw confirmacaoSnapshotResponse.error;
+  const resumoConfirmacaoSnapshot = (confirmacaoSnapshotResponse.data?.resumo || {}) as Record<string, unknown>;
+  if (
+    resumoConfirmacaoSnapshot.snapshot_status !== 'completo'
+    || String(resumoConfirmacaoSnapshot.snapshot_execucao_id || '') !== snapshot.snapshot.execucao_id
+    || !resumoConfirmacaoSnapshot.snapshot_atualizado_em
+  ) {
+    throw new Error('SNAPSHOT_EXPERIMENTAIS_CONCORRENTE');
+  }
   const vinculosCurso = await buscarVinculosCursoProximas(supabase, unidadeId, linhasFuturas);
   const proximas = enriquecerProximasExperimentais(linhasFuturas, vinculosCurso);
   const matriculasNovas = agruparMatriculasComerciais(matriculasMes)
@@ -1749,6 +1778,7 @@ async function processarCron(
         const { error } = await supabase
           .from('fila_relatorios_whatsapp')
           .insert({
+            tipo_relatorio: 'relatorio_admin',
             unidade_id: unidade.id,
             unidade_nome: unidade.nome,
             jid: dest.jid,
@@ -1812,6 +1842,7 @@ async function processarCron(
         const { error } = await supabase
           .from('fila_relatorios_whatsapp')
           .insert({
+            tipo_relatorio: 'relatorio_comercial',
             unidade_id: unidade.id,
             unidade_nome: unidade.nome,
             jid: dest.jid,

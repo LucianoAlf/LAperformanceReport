@@ -17,6 +17,7 @@ import {
   type ProximaExperimental,
   type RelatorioComercialDados,
   selecionarProximasExperimentais,
+  validarExecucaoSnapshotProximas,
 } from "./relatorio-comercial.ts";
 
 const matriculasBarra = [
@@ -37,6 +38,30 @@ const matriculasBarra = [
   { valorParcela: 380, valorPassaporte: 499 },
   { valorParcela: 460, valorPassaporte: 450 },
 ];
+
+Deno.test("validarExecucaoSnapshotProximas rejeita linha de outra execucao", () => {
+  assertEquals(
+    validarExecucaoSnapshotProximas(
+      [{ snapshot_execucao_id: "exec-a" }],
+      "exec-a",
+    ),
+    undefined,
+  );
+  assertThrows(
+    () =>
+      validarExecucaoSnapshotProximas(
+        [{ snapshot_execucao_id: "exec-b" }],
+        "exec-a",
+      ),
+    Error,
+    "SNAPSHOT_EXPERIMENTAIS_RAW_DIVERGENTE",
+  );
+  assertThrows(
+    () => validarExecucaoSnapshotProximas([], ""),
+    Error,
+    "SNAPSHOT_EXPERIMENTAIS_RAW_DIVERGENTE",
+  );
+});
 
 function proxima(
   overrides: Partial<ProximaExperimental> = {},

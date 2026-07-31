@@ -28,6 +28,20 @@ export interface ProximaExperimental {
   participanteChave?: string | null;
 }
 
+export function validarExecucaoSnapshotProximas(
+  linhas: ReadonlyArray<{ snapshot_execucao_id?: unknown }>,
+  execucaoEsperada: string,
+): void {
+  if (
+    !execucaoEsperada ||
+    linhas.some((linha) =>
+      String(linha.snapshot_execucao_id || "") !== execucaoEsperada
+    )
+  ) {
+    throw new Error("SNAPSHOT_EXPERIMENTAIS_RAW_DIVERGENTE");
+  }
+}
+
 export type ValorMonetario = number | string | null | undefined;
 
 export interface MatriculaDetalhadaRelatorio {
