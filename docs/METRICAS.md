@@ -224,6 +224,11 @@ dia, de `leads`, `lead_experimentais` e `alunos`, usando intervalo semiaberto
 BRT `[00:00, 00:00 do dia seguinte)`; e a lista detalhada, da coorte canônica de
 novas matrículas. A mesma coleção agrupada `matriculasNovas` alimenta o total de
 matrículas, todos os itens detalhados e os tickets de parcelas e passaportes.
+Qualquer lookup por ID externo inclui primeiro `unidade_id`, inclusive quando o
+gerador usa `service_role`, que ignora RLS. A agenda raw lê somente a execução
+exata devolvida pelo preflight e valida o ID presente em cada linha. Uma segunda
+leitura operacional após a consulta confirma que a execução não foi substituída
+concorrentemente; divergência interrompe a geração em vez de misturar snapshots.
 
 Na agenda futura, o curso é resolvido apenas por IDs estáveis e escopados pela
 unidade: disciplina específica do snapshot, vínculo direto da experimental,
@@ -231,6 +236,13 @@ vínculo do lead Emusys na experimental e, por último, curso do lead. Nome e
 telefone são somente exibição e nunca fazem join. A correção não inclui backfill
 nem ajuste manual de dados de produção; em runtime, a escrita anterior à leitura
 é exclusivamente a aplicação atômica do snapshot vigente.
+
+No cron, `fila_relatorios_whatsapp.tipo_relatorio` diferencia
+`relatorio_admin` de `relatorio_comercial`. A chave diária é
+`tipo_relatorio + unidade_id + jid + data_dia`: os dois relatórios podem coexistir
+no mesmo destino e cada tipo continua idempotente. Os modos `dry_run`,
+`dry_run_comercial`, manual e cron mantêm seus contratos anteriores. A
+autenticação passiva dos caminhos legados não foi redesenhada nesta correção.
 
 ### Tickets do relatório comercial diário
 

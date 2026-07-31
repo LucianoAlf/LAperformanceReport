@@ -115,6 +115,31 @@ test("coorte detalhada falha fechado se consultas de enriquecimento falharem", (
   assert.match(busca, /professoresError[\s\S]*?throw\s+professoresError/);
 });
 
+test("enriquecimentos de lead ficam escopados pela unidade antes dos filtros por ID", () => {
+  const busca = bloco(
+    "async function buscarMatriculasComerciaisAlunos(",
+    "async function buscarVinculosCursoProximas(",
+  );
+  assert.match(
+    busca,
+    /\.from\(['"]leads['"]\)[\s\S]*?\.eq\(['"]unidade_id['"],\s*unidadeId\)[\s\S]*?\.in\(['"]aluno_id['"],\s*alunoIds\)/,
+  );
+
+  const consultasExperimentais = [
+    ...busca.matchAll(
+      /\.from\(['"]lead_experimentais['"]\)([\s\S]*?)\.in\(['"](?:aluno_id|emusys_lead_id|lead_id)['"],[^)]+\)/g,
+    ),
+  ];
+  assert.equal(consultasExperimentais.length, 3);
+  for (const consulta of consultasExperimentais) {
+    assert.match(
+      consulta[1],
+      /\.eq\(['"]unidade_id['"],\s*unidadeId\)/,
+      "cada busca por IDs deve aplicar unidade antes do .in",
+    );
+  }
+});
+
 test("proximas experimentais usam apenas snapshot ativo e identidades estaveis", () => {
   const gerador = bloco(
     "async function gerarRelatorioComercialDiario(",
@@ -141,6 +166,34 @@ test("proximas experimentais usam apenas snapshot ativo e identidades estaveis",
   assert.doesNotMatch(
     enriquecimento,
     /normalizarTexto|alunoNome.*(?:===|==)|nome.*(?:===|==).*aluno/i,
+  );
+});
+
+test("agenda raw fica presa a execucao confirmada e falha fechado em concorrencia", () => {
+  const gerador = bloco(
+    "async function gerarRelatorioComercialDiario(",
+    "async function processarCron(",
+  );
+  assert.match(
+    gerador,
+    /\.select\(['"][^'"]*snapshot_execucao_id[^'"]*['"]\)/,
+  );
+  assert.match(
+    gerador,
+    /\.eq\(['"]snapshot_execucao_id['"],\s*snapshot\.snapshot\.execucao_id\)/,
+  );
+  assert.match(
+    gerador,
+    /validarExecucaoSnapshotProximas\(\s*linhasFuturas,\s*snapshot\.snapshot\.execucao_id,?\s*\)/,
+  );
+  assert.match(gerador, /confirmacaoSnapshotResponse/);
+  assert.match(
+    gerador,
+    /resumoConfirmacaoSnapshot\.snapshot_execucao_id[\s\S]*?snapshot\.snapshot\.execucao_id/,
+  );
+  assert.match(
+    gerador,
+    /SNAPSHOT_EXPERIMENTAIS_CONCORRENTE/,
   );
 });
 

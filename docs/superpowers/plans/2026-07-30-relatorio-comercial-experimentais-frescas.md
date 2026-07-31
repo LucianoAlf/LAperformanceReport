@@ -912,11 +912,13 @@ genérico quando não houver ocorrência.
 
 - [ ] **Step 10: Preservar idempotência sem colisão manual × automático**
 
-O cron canônico continua na `fila_relatorios_whatsapp`, cuja chave diária
-deduplica repetição automática. O envio manual continua na
-`fila_relatorios_sol_hermes`. Remover qualquer consulta do produtor canônico à
-fila Sol/Hermes; assim um manual não suprime o automático. Não criar nova
-migration de fila sem necessidade.
+O cron canônico continua na `fila_relatorios_whatsapp`. A coluna
+`tipo_relatorio` e a chave `tipo + unidade + JID + dia` permitem que os
+documentos administrativo e comercial coexistam no mesmo destino, mantendo a
+deduplicação individual. O envio manual continua na `fila_relatorios_sol_hermes`.
+Remover qualquer consulta do produtor canônico à fila Sol/Hermes; assim um
+manual não suprime o automático. A migration forward-only preserva as linhas
+anteriores como `relatorio_admin` antes de substituir a chave única antiga.
 
 - [ ] **Step 11: Rodar testes verdes**
 
