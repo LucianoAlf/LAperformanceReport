@@ -43,6 +43,15 @@ test('migration adiciona identidade externa e vigencia do snapshot raw', () => {
     sql,
     /unique[\s\S]{0,120}\(\s*unidade_id\s*,\s*emusys_aula_id\s*,\s*participante_chave\s*\)[\s\S]{0,120}where\s+snapshot_ativo\s+is\s+true/i,
   );
+  assert.doesNotMatch(
+    sql,
+    /alter\s+column\s+participante_chave\s+set\s+not\s+null/i,
+    'rollout deve continuar aceitando o writer legado inativo',
+  );
+  assert.match(
+    sql,
+    /create\s+policy\s+emusys_experimentais_raw_select_authenticated[\s\S]{0,300}snapshot_ativo\s+is\s+true[\s\S]{0,300}pode_gerar_relatorio_comercial_v1\s*\(\s*unidade_id\s*\)/i,
+  );
 });
 
 test('backfill escolhe uma linha vigente por business key antes do indice parcial', () => {
@@ -137,17 +146,22 @@ test('leitura operacional usa somente vigentes e publica frescor do snapshot', (
   const sql = migration();
   const block = functionBlock(sql, 'get_experimentais_emusys_operacional_v1');
 
+  assert.match(block, /language\s+plpgsql/i);
   assert.match(block, /security\s+definer/i);
   assert.match(block, /set\s+search_path\s*=\s*public\s*,\s*pg_temp/i);
-  assert.match(block, /snapshot_ativo\s+is\s+true/i);
-  assert.doesNotMatch(
+  assert.match(
     block,
-    /least\s*\(/i,
-    'D+7 mensal deve atravessar o fim do mes',
+    /p_unidade_id\s+is\s+null[\s\S]{0,200}raise\s+exception\s+'SNAPSHOT_EXPERIMENTAIS_UNIDADE_OBRIGATORIA'/i,
   );
   assert.match(
     block,
-    /coalesce\s*\(\s*p_data\s*,\s*current_date\s*\)[\s\S]{0,80}\+\s*7/i,
+    /auth\.role\s*\(\s*\)\s+is\s+distinct\s+from\s+'service_role'[\s\S]{0,200}pode_gerar_relatorio_comercial_v1\s*\(\s*p_unidade_id\s*\)/i,
+  );
+  assert.match(block, /snapshot_ativo\s+is\s+true/i);
+  assert.match(
+    block,
+    /least\s*\([\s\S]{0,160}greatest\s*\([\s\S]{0,160}coalesce\s*\(\s*p_data\s*,\s*current_date\s*\)[\s\S]{0,240}interval\s+'1 month'[\s\S]{0,120}\+\s*7/i,
+    'frescor mensal deve limitar a referencia ao ultimo dia da competencia antes de D+7',
   );
   for (const key of [
     'snapshot_atualizado_em',
