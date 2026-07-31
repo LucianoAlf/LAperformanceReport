@@ -92,6 +92,7 @@ import { ComercialConciliacaoExperimentais } from './ComercialConciliacaoExperim
 import { ComercialConciliacaoLeads } from './ComercialConciliacaoLeads';
 import {
   criarOrigemRelatorio,
+  invalidarEnvioRelatorio,
   podeUsarRelatorio,
   respostaEnvioAindaValida,
 } from './relatorioComercialContexto.js';
@@ -612,10 +613,18 @@ export function ComercialPage() {
   };
 
   const invalidarEstadoEnvioRelatorio = () => {
-    relatorioEnvioIdRef.current += 1;
-    setEnviandoWhatsApp(false);
-    setEnviadoWhatsApp(false);
-    setErroWhatsApp(null);
+    const proximoEstado = invalidarEnvioRelatorio({
+      envioAtualId: relatorioEnvioIdRef.current,
+    });
+    relatorioEnvioIdRef.current = proximoEstado.envioAtualId;
+    setEnviandoWhatsApp(proximoEstado.enviando);
+    setEnviadoWhatsApp(proximoEstado.enviado);
+    setErroWhatsApp(proximoEstado.erro);
+  };
+
+  const editarTextoRelatorio = (novoTexto: string) => {
+    invalidarEstadoEnvioRelatorio();
+    setRelatorioTexto(novoTexto);
   };
 
   const executarGeracaoRelatorio = async (
@@ -7383,7 +7392,7 @@ export function ComercialPage() {
               )}
               <textarea
                 value={relatorioTexto}
-                onChange={(e) => setRelatorioTexto(e.target.value)}
+                onChange={(e) => editarTextoRelatorio(e.target.value)}
                 className="w-full h-96 p-4 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-300 font-mono resize-none focus:border-cyan-500 focus:outline-none scrollbar-thin scrollbar-thumb-slate-700 hover:scrollbar-thumb-slate-600"
                 placeholder={relatorioGerando ? 'Gerando relatório...' : 'O relatório aparecerá aqui...'}
               />

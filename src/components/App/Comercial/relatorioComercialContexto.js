@@ -57,3 +57,12 @@ export function respostaEnvioAindaValida({
   return respostaId === envioAtualId &&
     mesmaOrigemRelatorio(origemEnvio, origemAtual);
 }
+
+export function invalidarEnvioRelatorio({ envioAtualId }) {
+  return {
+    envioAtualId: envioAtualId + 1,
+    enviando: false,
+    enviado: false,
+    erro: null,
+  };
+}
