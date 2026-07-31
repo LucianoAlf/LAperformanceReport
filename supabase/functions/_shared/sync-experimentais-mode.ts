@@ -360,9 +360,13 @@ export async function executarSnapshotExperimentais(input: {
   dataInicio: string;
   dataFim: string;
   aulas: AulaEmusys[];
+  execucaoId?: string;
   deps: SnapshotDeps;
 }): Promise<SnapshotResultado> {
-  const execucaoId = input.deps.criarExecucaoId();
+  const execucaoId = input.execucaoId ?? input.deps.criarExecucaoId();
+  if (!UUID_PATTERN.test(execucaoId)) {
+    throw new SnapshotRequestError("EXECUCAO_ID_INVALIDA");
+  }
   const linhas = montarLinhasSnapshot({
     unidadeId: input.unidade.id,
     execucaoId,
@@ -436,6 +440,17 @@ export async function executarModoExperimentais(input: {
     input.body,
     input.unidades,
   );
+  const execucaoIdRecebida = input.body.execucao_id;
+  let execucaoId: string | undefined;
+  if (execucaoIdRecebida !== undefined) {
+    if (
+      typeof execucaoIdRecebida !== "string" ||
+      !UUID_PATTERN.test(execucaoIdRecebida)
+    ) {
+      throw new SnapshotRequestError("EXECUCAO_ID_INVALIDA");
+    }
+    execucaoId = execucaoIdRecebida;
+  }
 
   let aulas: AulaEmusys[];
   try {
@@ -454,6 +469,7 @@ export async function executarModoExperimentais(input: {
     dataInicio,
     dataFim,
     aulas,
+    execucaoId,
     deps: input.deps,
   });
 

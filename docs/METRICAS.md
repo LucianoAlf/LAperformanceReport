@@ -193,7 +193,7 @@ todas as páginas de `/aulas` terminam sem erro.
 O denominador operacional do Emusys considera exclusivamente linhas com
 `snapshot_ativo=true`. Uma nova execução completa é serializada por unidade,
 inativa a fotografia vigente de cada chave recebida e insere uma nova versão,
-sem sobrescrever `raw_key`, payload ou execução anteriores. Enriquecimentos
+sem sobrescrever `raw_key` ou execução anteriores. Enriquecimentos
 locais conhecidos são herdados pela nova versão; `linhas_inativadas` conta
 somente chaves ausentes do lote, enquanto `linhas_versionadas` informa as
 chaves recebidas que ganharam nova fotografia. Linha histórica inativa nunca
@@ -212,14 +212,24 @@ individualmente pelo mesmo guard; `service_role` pode agregar todas. O frescor
 agregado é `completo` apenas quando cada unidade incluída possui execução com
 cobertura: o ID da execução fica nulo quando há mais de uma, o timestamp é o
 mais antigo entre as coberturas escolhidas e as linhas inativadas são somadas.
-A policy raw mostra somente versões ativas de unidades autorizadas. Durante o
-rollout, o writer legado ainda pode gravar sem `participante_chave`, mas essas
-linhas nascem inativas e não aparecem aos leitores authenticated. O contrato
-futuro do writer canônico exige identidade e usa exclusivamente a RPC de
-aplicação.
+A policy raw mostra somente versões ativas de unidades autorizadas. Mesmo
+nessas linhas, `authenticated` recebe apenas `id`, `aluno_nome`, `data_aula`,
+`horario_aula` e `situacao_operacional`; contatos, responsável, professor,
+payload e colunas de vínculo ficam privados ao `service_role`. O payload
+histórico foi saneado e novas versões persistem uma allowlist técnica:
+`schema_version`, data, horário, cancelamento, ID da aula e `id_lead/id_aluno`.
+Campos extensíveis do Emusys, anotações, e-mails e telefones não entram no
+JSON. Durante o rollout, o writer legado ainda pode gravar sem
+`participante_chave`, mas essas linhas nascem inativas e não aparecem aos
+leitores authenticated. O writer canônico exige identidade e usa
+exclusivamente a RPC de aplicação.
 
-O writer canônico é o modo `experimentais` de `sync-presenca-emusys`. O
-chamador informa uma única unidade por UUID e um intervalo explícito de até
+O writer canônico é o modo `experimentais` de `sync-presenca-emusys`, acessível
+somente ao bearer interno. Usuário autenticado comum pode solicitar apenas
+`presenca` para uma unidade exata autorizada por
+`pode_sincronizar_presenca_emusys_v1`; modos internos e alvo múltiplo falham
+antes do cliente administrativo e dos tokens do provedor. O chamador interno
+informa uma única unidade por UUID e um intervalo explícito de até
 45 dias; para o relatório mensal, a janela esperada é o início da competência
 até D+7. Todas as páginas precisam terminar antes da chamada única a
 `aplicar_snapshot_experimentais_emusys_v1`. A reconciliação posterior usa
@@ -256,12 +266,20 @@ cria falta quando `situacao_operacional` é `agendada` ou `cancelada`.
 ### Orquestração e fontes do relatório comercial diário
 
 Para cada unidade, `relatorio-admin-whatsapp` determina a data de referência em
-`America/Sao_Paulo`, atualiza o snapshot Emusys do primeiro dia do mês até D+7
-e aguarda sua conclusão antes de qualquer leitura. A geração é interrompida se
-a resposta do sync for inválida ou se os agregados mensal e diário não
+`America/Sao_Paulo` e passa pelo gate
+`emusys_experimentais_refresh_admissoes`. A chave é
+`unidade + intervalo + origem + bucket de cinco minutos`; prévia e cron são
+origens independentes. Uma chamada atualiza, equivalentes aguardam ou reutilizam
+a mesma execução completa, e nenhuma delas abre segundo GET ou segunda versão.
+Falha registrada bloqueia outro acesso ao provedor até o lease vencer. Lease
+expirado permite recuperação; se a aplicação terminou antes de uma
+interrupção na finalização, a própria admissão detecta a execução completa e a
+reutiliza. Depois o fluxo atualiza o snapshot Emusys do primeiro dia do mês até
+D+7 e aguarda sua conclusão antes de qualquer leitura. A geração é interrompida
+se a resposta do sync for inválida ou se os agregados mensal e diário não
 confirmarem `snapshot_status='completo'`, timestamp de atualização e o mesmo ID
-de execução recém-aplicado. Não existe fallback para snapshot anterior, zero ou
-base transacional parcial.
+de execução admitido. Não existe fallback para zero ou base transacional
+parcial.
 
 Depois do preflight, as leituras canônicas são paralelas: KPIs mensais e diários
 vêm de `get_kpis_comercial_canonicos_v2`; conversão e pendências, de
@@ -288,8 +306,7 @@ No cron, `fila_relatorios_whatsapp.tipo_relatorio` diferencia
 `relatorio_admin` de `relatorio_comercial`. A chave diária é
 `tipo_relatorio + unidade_id + jid + data_dia`: os dois relatórios podem coexistir
 no mesmo destino e cada tipo continua idempotente. Os modos `dry_run`,
-`dry_run_comercial`, manual e cron mantêm seus contratos anteriores. A
-autenticação passiva dos caminhos legados não foi redesenhada nesta correção.
+`dry_run_comercial`, manual e cron mantêm seus contratos anteriores.
 
 Na interface comercial, o relatório diário não recalcula métricas. Para uma
 unidade específica, `ComercialPage.tsx` envia `modo='dry_run_comercial'`, a

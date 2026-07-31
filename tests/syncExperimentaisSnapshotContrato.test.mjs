@@ -172,6 +172,40 @@ test("executa busca completa, uma RPC e somente depois reconcilia", async () => 
   assert.equal(resposta.snapshot.experimentais_reconciliadas, 1);
 });
 
+test("execucao admitida usa UUID fornecido sem gerar outra versao", async () => {
+  const execucaoId = "33333333-3333-4333-8333-333333333333";
+  const cenario = criarCenario({
+    criarExecucaoId: () => {
+      throw new Error("nao deve gerar UUID");
+    },
+  });
+
+  const resposta = await executarModoExperimentais({
+    body: { ...BODY, execucao_id: execucaoId },
+    unidades: [UNIDADE],
+    deps: cenario.deps,
+  });
+
+  assert.equal(cenario.capturas.rpc[0].execucaoId, execucaoId);
+  assert.equal(resposta.snapshot.execucao_id, execucaoId);
+});
+
+test("execucao admitida invalida falha antes de buscar o Emusys", async () => {
+  const cenario = criarCenario();
+
+  await assert.rejects(
+    executarModoExperimentais({
+      body: { ...BODY, execucao_id: "nao-e-uuid" },
+      unidades: [UNIDADE],
+      deps: cenario.deps,
+    }),
+    (error) =>
+      error instanceof SnapshotRequestError &&
+      error.message === "EXECUCAO_ID_INVALIDA",
+  );
+  assert.deepEqual(cenario.chamadas, []);
+});
+
 test("falha da RPC impede carregar contexto e reconciliar", async () => {
   const cenario = criarCenario({
     aplicarSnapshotRpc: () => {

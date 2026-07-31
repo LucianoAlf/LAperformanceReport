@@ -9,6 +9,8 @@ const baseMigrationPath =
   'supabase/migrations/20260622213000_emusys_experimentais_raw.sql';
 const securityMigrationPath =
   'supabase/migrations/20260731161000_snapshot_experimentais_minimiza_payload.sql';
+const admissionMigrationPath =
+  'supabase/migrations/20260731162000_snapshot_experimentais_admissao_refresh.sql';
 const requirePostgres = process.env.COMERCIAL_EXP_REQUIRE_POSTGRES === '1';
 
 function read(path) {
@@ -71,6 +73,15 @@ function psqlAsync(containerName, input) {
   });
   child.stdin.end(input);
   return { completion };
+}
+
+function parseJsonPsql(stdout) {
+  const line = stdout
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .findLast((item) => item.startsWith('{'));
+  assert.ok(line, `psql nao retornou JSON:\n${stdout}`);
+  return JSON.parse(line);
 }
 
 async function settledWithin(promise, timeoutMs) {
@@ -1709,6 +1720,336 @@ test(
         securityAssertions.status,
         0,
         `contrato PostgreSQL de minimizacao falhou:\n${securityAssertions.stderr}`,
+      );
+
+      const admissionMigrationApplied = psql(
+        containerName,
+        read(admissionMigrationPath),
+      );
+      assert.equal(
+        admissionMigrationApplied.status,
+        0,
+        `migration de admissao falhou:\n${admissionMigrationApplied.stderr}`,
+      );
+
+      const admissionCall = String.raw`
+        \set ON_ERROR_STOP on
+        \pset tuples_only on
+        \pset format unaligned
+        select public.admitir_refresh_snapshot_experimentais_v1(
+          '11111111-1111-1111-1111-111111111111',
+          '2026-10-01',
+          '2026-10-31',
+          'preview',
+          '2026-07-31 13:02:00+00'
+        )::text;
+      `;
+      const [admissionA, admissionB] = await Promise.all([
+        psqlAsync(containerName, admissionCall).completion,
+        psqlAsync(containerName, admissionCall).completion,
+      ]);
+      for (const [label, result] of [
+        ['A', admissionA],
+        ['B', admissionB],
+      ]) {
+        assert.equal(
+          result.status,
+          0,
+          `admissao concorrente ${label} falhou:\n${result.stderr}`,
+        );
+      }
+      const admissionPayloads = [admissionA, admissionB].map((result) =>
+        parseJsonPsql(result.stdout)
+      );
+      assert.deepEqual(
+        admissionPayloads.map((item) => item.acao).sort(),
+        ['aguardar', 'atualizar'],
+      );
+      assert.equal(
+        new Set(admissionPayloads.map((item) => item.admissao_id)).size,
+        1,
+        'concorrencia criou mais de uma admissao',
+      );
+      assert.equal(
+        new Set(admissionPayloads.map((item) => item.snapshot_execucao_id))
+          .size,
+        1,
+        'concorrencia criou mais de uma execucao',
+      );
+
+      const atualizarAdmission = admissionPayloads.find(
+        (item) => item.acao === 'atualizar',
+      );
+      const admissionFinalized = psql(
+        containerName,
+        String.raw`
+          \set ON_ERROR_STOP on
+          insert into public.emusys_experimentais_snapshot_execucoes (
+            id,
+            unidade_id,
+            data_inicio,
+            data_fim,
+            status,
+            linhas_recebidas,
+            linhas_ativas,
+            linhas_inativadas,
+            iniciado_em,
+            concluido_em
+          )
+          values (
+            '${atualizarAdmission.snapshot_execucao_id}',
+            '11111111-1111-1111-1111-111111111111',
+            '2026-10-01',
+            '2026-10-31',
+            'completo',
+            0,
+            0,
+            0,
+            clock_timestamp(),
+            clock_timestamp()
+          );
+
+          select public.finalizar_refresh_snapshot_experimentais_v1(
+            '${atualizarAdmission.admissao_id}',
+            '${atualizarAdmission.snapshot_execucao_id}',
+            true,
+            null
+          );
+
+          do $acl$
+          begin
+            if has_function_privilege(
+              'authenticated',
+              'public.admitir_refresh_snapshot_experimentais_v1(uuid,date,date,text,timestamptz)',
+              'execute'
+            ) or has_function_privilege(
+              'authenticated',
+              'public.finalizar_refresh_snapshot_experimentais_v1(uuid,uuid,boolean,text)',
+              'execute'
+            ) or not has_function_privilege(
+              'service_role',
+              'public.admitir_refresh_snapshot_experimentais_v1(uuid,date,date,text,timestamptz)',
+              'execute'
+            ) or has_table_privilege(
+              'authenticated',
+              'public.emusys_experimentais_refresh_admissoes',
+              'select'
+            ) or not has_table_privilege(
+              'service_role',
+              'public.emusys_experimentais_refresh_admissoes',
+              'select'
+            ) then
+              raise exception 'ACL da admissao divergiu';
+            end if;
+          end;
+          $acl$;
+        `,
+      );
+      assert.equal(
+        admissionFinalized.status,
+        0,
+        `finalizacao/ACL da admissao falhou:\n${admissionFinalized.stderr}`,
+      );
+
+      const reused = psql(containerName, admissionCall);
+      assert.equal(
+        reused.status,
+        0,
+        `reuso da admissao falhou:\n${reused.stderr}`,
+      );
+      const reusedPayload = parseJsonPsql(reused.stdout);
+      assert.equal(reusedPayload.acao, 'reutilizar');
+      assert.equal(
+        reusedPayload.snapshot_execucao_id,
+        atualizarAdmission.snapshot_execucao_id,
+      );
+
+      const recovery = psql(
+        containerName,
+        String.raw`
+          \set ON_ERROR_STOP on
+          do $lease$
+          declare
+            v_primeira jsonb;
+            v_recuperada jsonb;
+            v_aplicada_sem_finalizacao jsonb;
+            v_reusada_apos_crash jsonb;
+            v_falha jsonb;
+            v_bloqueada jsonb;
+            v_retry_apos_lease jsonb;
+          begin
+            v_primeira :=
+              public.admitir_refresh_snapshot_experimentais_v1(
+                '11111111-1111-1111-1111-111111111111',
+                '2026-10-01',
+                '2026-10-31',
+                'cron',
+                '2026-07-31 13:02:00+00'
+              );
+            update public.emusys_experimentais_refresh_admissoes
+            set lease_ate = '2026-07-31 13:01:59+00'
+            where id = (v_primeira->>'admissao_id')::uuid;
+            v_recuperada :=
+              public.admitir_refresh_snapshot_experimentais_v1(
+                '11111111-1111-1111-1111-111111111111',
+                '2026-10-01',
+                '2026-10-31',
+                'cron',
+                '2026-07-31 13:02:00+00'
+              );
+
+            if v_primeira->>'acao' <> 'atualizar'
+               or v_recuperada->>'acao' <> 'atualizar'
+               or v_primeira->>'snapshot_execucao_id' =
+                 v_recuperada->>'snapshot_execucao_id'
+               or (
+                 select tentativas
+                 from public.emusys_experimentais_refresh_admissoes
+                 where id = (v_recuperada->>'admissao_id')::uuid
+               ) <> 2 then
+              raise exception 'lease expirado nao foi recuperado: % / %',
+                v_primeira,
+                v_recuperada;
+            end if;
+
+            if (
+              public.admitir_refresh_snapshot_experimentais_v1(
+                '22222222-2222-2222-2222-222222222222',
+                '2026-10-01',
+                '2026-10-31',
+                'preview',
+                '2026-07-31 13:02:00+00'
+              )->>'acao'
+            ) <> 'atualizar'
+               or (
+                 public.admitir_refresh_snapshot_experimentais_v1(
+                   '11111111-1111-1111-1111-111111111111',
+                   '2026-11-01',
+                   '2026-11-30',
+                   'preview',
+                   '2026-07-31 13:02:00+00'
+                 )->>'acao'
+               ) <> 'atualizar' then
+              raise exception 'unidade/intervalo independentes foram colididos';
+            end if;
+
+            v_aplicada_sem_finalizacao :=
+              public.admitir_refresh_snapshot_experimentais_v1(
+                '22222222-2222-2222-2222-222222222222',
+                '2026-12-01',
+                '2026-12-31',
+                'cron',
+                '2026-07-31 13:00:01+00'
+              );
+            insert into public.emusys_experimentais_snapshot_execucoes (
+              id,
+              unidade_id,
+              data_inicio,
+              data_fim,
+              status,
+              linhas_recebidas,
+              linhas_ativas,
+              linhas_inativadas,
+              iniciado_em,
+              concluido_em
+            )
+            values (
+              (v_aplicada_sem_finalizacao->>'snapshot_execucao_id')::uuid,
+              '22222222-2222-2222-2222-222222222222',
+              '2026-12-01',
+              '2026-12-31',
+              'completo',
+              0,
+              0,
+              0,
+              '2026-07-31 13:00:02+00',
+              '2026-07-31 13:00:03+00'
+            );
+            v_reusada_apos_crash :=
+              public.admitir_refresh_snapshot_experimentais_v1(
+                '22222222-2222-2222-2222-222222222222',
+                '2026-12-01',
+                '2026-12-31',
+                'cron',
+                '2026-07-31 13:03:00+00'
+              );
+            if v_reusada_apos_crash->>'acao' <> 'reutilizar'
+               or v_reusada_apos_crash->>'snapshot_execucao_id'
+                 <> v_aplicada_sem_finalizacao->>'snapshot_execucao_id'
+               or (
+                 select tentativas
+                 from public.emusys_experimentais_refresh_admissoes
+                 where id = (
+                   v_reusada_apos_crash->>'admissao_id'
+                 )::uuid
+               ) <> 1 then
+              raise exception 'snapshot aplicado antes do crash foi duplicado';
+            end if;
+
+            v_falha :=
+              public.admitir_refresh_snapshot_experimentais_v1(
+                '11111111-1111-1111-1111-111111111111',
+                '2027-01-01',
+                '2027-01-31',
+                'preview',
+                '2026-07-31 13:00:01+00'
+              );
+            perform public.finalizar_refresh_snapshot_experimentais_v1(
+              (v_falha->>'admissao_id')::uuid,
+              (v_falha->>'snapshot_execucao_id')::uuid,
+              false,
+              'FALHA_UPSTREAM'
+            );
+            v_bloqueada :=
+              public.admitir_refresh_snapshot_experimentais_v1(
+                '11111111-1111-1111-1111-111111111111',
+                '2027-01-01',
+                '2027-01-31',
+                'preview',
+                '2026-07-31 13:00:02+00'
+              );
+            if v_bloqueada->>'acao' <> 'bloqueado'
+               or v_bloqueada->>'snapshot_execucao_id'
+                 <> v_falha->>'snapshot_execucao_id'
+               or (
+                 select tentativas
+                 from public.emusys_experimentais_refresh_admissoes
+                 where id = (v_bloqueada->>'admissao_id')::uuid
+               ) <> 1 then
+              raise exception 'falha no bucket abriu retry imediato';
+            end if;
+
+            update public.emusys_experimentais_refresh_admissoes
+            set lease_ate = '2026-07-31 13:00:00+00'
+            where id = (v_falha->>'admissao_id')::uuid;
+            v_retry_apos_lease :=
+              public.admitir_refresh_snapshot_experimentais_v1(
+                '11111111-1111-1111-1111-111111111111',
+                '2027-01-01',
+                '2027-01-31',
+                'preview',
+                '2026-07-31 13:00:02+00'
+              );
+            if v_retry_apos_lease->>'acao' <> 'atualizar'
+               or v_retry_apos_lease->>'snapshot_execucao_id'
+                 = v_falha->>'snapshot_execucao_id'
+               or (
+                 select tentativas
+                 from public.emusys_experimentais_refresh_admissoes
+                 where id = (
+                   v_retry_apos_lease->>'admissao_id'
+                 )::uuid
+               ) <> 2 then
+              raise exception 'falha nao recuperou depois do lease';
+            end if;
+          end;
+          $lease$;
+        `,
+      );
+      assert.equal(
+        recovery.status,
+        0,
+        `recuperacao/particionamento da admissao falhou:\n${recovery.stderr}`,
       );
     } finally {
       spawnSync('docker', ['rm', '--force', containerName], {
