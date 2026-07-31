@@ -3,6 +3,11 @@ project_id = "ouqwbbermlzqqvtqwlul"
 [functions.relatorio-admin-whatsapp]
 verify_jwt = false
 
+[functions.sync-presenca-emusys]
+# O gateway fica aberto apenas para permitir o segredo dedicado dos crons.
+# A funcao valida service_role, x-sync-token ou JWT+permissao antes dos sinks.
+verify_jwt = false
+
 [functions.gerar-relatorio-pedagogico]
 verify_jwt = false
 
