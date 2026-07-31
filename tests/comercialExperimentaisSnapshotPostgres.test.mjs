@@ -192,6 +192,11 @@ test(
           id uuid primary key,
           nome text not null
         );
+        create table public.fixture_unidade_fk_probe (
+          id bigserial primary key,
+          unidade_id uuid not null references public.unidades(id),
+          marcador text not null
+        );
         create table public.aulas_emusys (id integer primary key);
         create table public.professores (id integer primary key);
         create table public.cursos (id integer primary key);
@@ -1431,22 +1436,44 @@ test(
           );
         `,
       );
+      const sessionForeignKeyWrite = psqlAsync(
+        containerName,
+        String.raw`
+          \set ON_ERROR_STOP on
+          set application_name = 'snapshot-concurrency-fk-probe';
+          insert into public.fixture_unidade_fk_probe (
+            unidade_id,
+            marcador
+          ) values (
+            '11111111-1111-1111-1111-111111111111',
+            'durante-snapshot-a'
+          );
+        `,
+      );
 
-      const [sameUnitCompletedEarly, otherUnitCompletedEarly] =
+      const [
+        sameUnitCompletedEarly,
+        otherUnitCompletedEarly,
+        foreignKeyWriteCompletedEarly,
+      ] =
         await Promise.all([
           settledWithin(sessionB.completion, 750),
           settledWithin(sessionOtherUnit.completion, 1_500),
+          settledWithin(sessionForeignKeyWrite.completion, 1_500),
         ]);
-      const [resultA, resultB, resultOtherUnit] = await Promise.all([
-        sessionA.completion,
-        sessionB.completion,
-        sessionOtherUnit.completion,
-      ]);
+      const [resultA, resultB, resultOtherUnit, resultForeignKeyWrite] =
+        await Promise.all([
+          sessionA.completion,
+          sessionB.completion,
+          sessionOtherUnit.completion,
+          sessionForeignKeyWrite.completion,
+        ]);
 
       for (const [label, result] of [
         ['A', resultA],
         ['B', resultB],
         ['Recreio', resultOtherUnit],
+        ['FK probe', resultForeignKeyWrite],
       ]) {
         assert.equal(
           result.status,
@@ -1463,6 +1490,11 @@ test(
         otherUnitCompletedEarly,
         true,
         'aplicacao de outra unidade foi bloqueada indevidamente',
+      );
+      assert.equal(
+        foreignKeyWriteCompletedEarly,
+        true,
+        'snapshot bloqueou escrita alheia com FK para a mesma unidade',
       );
 
       const concurrentState = psql(

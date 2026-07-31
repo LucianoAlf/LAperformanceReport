@@ -211,17 +211,12 @@ begin
       using errcode = '22023';
   end if;
 
-  if p_unidade_id is null then
-    raise exception 'SNAPSHOT_EXPERIMENTAIS_UNIDADE_INVALIDA'
-      using errcode = '22023';
-  end if;
-
-  perform 1
-  from public.unidades u
-  where u.id = p_unidade_id
-  for update;
-
-  if not found then
+  if p_unidade_id is null
+     or not exists (
+       select 1
+       from public.unidades u
+       where u.id = p_unidade_id
+     ) then
     raise exception 'SNAPSHOT_EXPERIMENTAIS_UNIDADE_INVALIDA'
       using errcode = '22023';
   end if;
@@ -233,6 +228,14 @@ begin
     raise exception 'SNAPSHOT_EXPERIMENTAIS_INTERVALO_INVALIDO_MAX_45_DIAS'
       using errcode = '22023';
   end if;
+
+  perform pg_advisory_xact_lock(
+    hashtextextended(
+      'la_report:aplicar_snapshot_experimentais_emusys_v1:unidade:'
+        || p_unidade_id::text,
+      0
+    )
+  );
 
   if exists (
     select 1
