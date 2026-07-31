@@ -397,14 +397,16 @@ begin
          p_execucao_id::text
        )
        or (
-         l.payload_emusys_lead_id_texto is not null
-         and l.emusys_lead_id is distinct from
-           ltrim(l.payload_emusys_lead_id_texto, '0')::integer
+         case
+           when l.payload_emusys_lead_id_texto is null then null
+           else ltrim(l.payload_emusys_lead_id_texto, '0')::integer
+         end is distinct from l.emusys_lead_id
        )
        or (
-         l.payload_emusys_aluno_id_texto is not null
-         and l.emusys_aluno_id is distinct from
-           ltrim(l.payload_emusys_aluno_id_texto, '0')::integer
+         case
+           when l.payload_emusys_aluno_id_texto is null then null
+           else ltrim(l.payload_emusys_aluno_id_texto, '0')::integer
+         end is distinct from l.emusys_aluno_id
        )
        or (
          l.payload_bruto #>> '{aula,id}' is not null
