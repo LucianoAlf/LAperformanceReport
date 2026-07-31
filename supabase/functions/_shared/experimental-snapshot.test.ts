@@ -220,11 +220,11 @@ Deno.test("buscarTodasAulas percorre duas paginas com cursores diferentes", asyn
   const chamadas: FetchAulasPageParams[] = [];
   const paginas = [
     Response.json({
-      items: [aula({ id: 1 })],
+      items: [aula({ id: 1, curso_id: 71, curso_nome: "Piano" })],
       paginacao: { tem_mais: true, proximo_cursor: "cursor-1" },
     }),
     Response.json({
-      items: [aula({ id: 2 })],
+      items: [aula({ id: 2, curso_id: 82, curso_nome: "Bateria" })],
       paginacao: { tem_mais: false, proximo_cursor: null },
     }),
   ];
@@ -239,6 +239,16 @@ Deno.test("buscarTodasAulas percorre duas paginas com cursores diferentes", asyn
   });
 
   assertEquals(result.map((item) => item.id), [1, 2]);
+  assertEquals(
+    result.map((item) => ({
+      curso_id: item.curso_id,
+      curso_nome: item.curso_nome,
+    })),
+    [
+      { curso_id: 71, curso_nome: "Piano" },
+      { curso_id: 82, curso_nome: "Bateria" },
+    ],
+  );
   assertEquals(chamadas, [
     {
       dataInicio: "2026-07-01",
