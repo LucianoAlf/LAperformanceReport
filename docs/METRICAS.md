@@ -171,6 +171,17 @@ linhas nascem inativas e não aparecem aos leitores authenticated. O contrato
 futuro do writer canônico exige identidade e usa exclusivamente a RPC de
 aplicação.
 
+O writer canônico é o modo `experimentais` de `sync-presenca-emusys`. O
+chamador informa uma única unidade por UUID e um intervalo explícito de até
+45 dias; para o relatório mensal, a janela esperada é o início da competência
+até D+7. Todas as páginas precisam terminar antes da chamada única a
+`aplicar_snapshot_experimentais_emusys_v1`. A reconciliação posterior usa
+somente `unidade + id_lead/id_aluno/aula` e nunca cria vínculo por nome ou
+telefone. O modo `metadados` reaproveita exatamente as aulas que acabou de
+gravar em `aulas_emusys`, sem segundo GET; falha do snapshot torna a chamada
+inteira malsucedida. Respostas operacionais publicam apenas execução e
+contagens, sem PII ou payload bruto.
+
 ### Taxa de conversão Experimental → Matrícula
 - **No Dashboard/Comercial (frontend):** denominador `experimental_realizada = true`; numerador `status ∈ {matriculado, convertido}` (`DashboardPage.tsx:316-327`).
 - **Canônica (professor):** RPC `get_experimentais_professor_canonicos_v1` + fonte `lead_experimentais` (1 linha por aula, presença real) — substituiu a contagem por `leads` que inflava a taxa. Denominador = `status ∈ {experimental_realizada, convertido}`; numerador = realizadas cujo lead converteu. Ver CLAUDE.md (Módulo de Professores).

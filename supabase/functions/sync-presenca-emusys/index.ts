@@ -5,7 +5,18 @@
 // Presenca completa em horarios fixos e metadados de agenda a cada 15 minutos.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  createClient,
+  type SupabaseClient,
+} from 'https://esm.sh/@supabase/supabase-js@2';
+import { buscarPaginaAulasEmusys } from '../_shared/emusys-aulas.ts';
+import {
+  buscarTodasAulas,
+  montarLinhasSnapshot,
+  normalizarSituacaoExperimental as normalizarSituacaoSnapshot,
+  type AulaEmusys as AulaSnapshotEmusys,
+  type ExperimentalAluno,
+} from '../_shared/experimental-snapshot.ts';
 import {
   carregarMapaProfessoresEmusys,
   resolverProfessorDaAula,
@@ -17,6 +28,47 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const EMUSYS_API = 'https://api.emusys.com.br/v1';
 const MATUREZA_FALTA_HORAS = 24;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type SyncMode = 'presenca' | 'agenda' | 'metadados' | 'experimentais';
+
+type SyncRequestBody = Record<string, unknown> & {
+  data?: string;
+  dias?: number;
+  dias_futuros?: number;
+  modo?: SyncMode;
+  unidade_index?: number;
+  unidade_id?: string;
+  data_inicio?: string;
+  data_fim?: string;
+};
+
+type SnapshotResultado = {
+  execucao_id: string;
+  status: string;
+  aulas_recebidas: number;
+  linhas_recebidas: number;
+  linhas_ativas: number;
+  linhas_inseridas: number;
+  linhas_atualizadas: number;
+  linhas_versionadas: number;
+  linhas_inativadas: number;
+  experimentais_reconciliadas: number;
+};
+
+class SnapshotRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SnapshotRequestError';
+  }
+}
+
+class SnapshotUpstreamError extends Error {
+  constructor() {
+    super('FALHA_UPSTREAM_EMUSYS');
+    this.name = 'SnapshotUpstreamError';
+  }
+}
 
 function requiredEnv(name: string): string {
   const value = Deno.env.get(name)?.trim();
@@ -29,6 +81,8 @@ const UNIDADES = [
   { nome: 'Barra',        id: '368d47f5-2d88-4475-bc14-ba084a9a348e', token: requiredEnv('EMUSYS_TOKEN_BARRA') },
   { nome: 'Recreio',      id: '95553e96-971b-4590-a6eb-0201d013c14d', token: requiredEnv('EMUSYS_TOKEN_RECREIO') },
 ];
+
+type UnidadeEmusys = (typeof UNIDADES)[number];
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -59,7 +113,7 @@ function normalizarCurso(nome: string): string {
     .trim();
 }
 
-interface AlunoEmusys {
+interface AlunoEmusys extends ExperimentalAluno {
   nome_aluno: string;
   presenca: string;
   horario_presenca: string | null;
@@ -74,7 +128,7 @@ interface AlunoEmusys {
   id_aluno?: number | null;
 }
 
-interface AulaEmusys {
+interface AulaEmusys extends AulaSnapshotEmusys {
   id: number;
   nr_da_aula: number | null;
   qtd_aulas_contrato: number | null;
@@ -96,6 +150,64 @@ interface AulaEmusys {
   professores: Array<EmusysProfessorRef & { nome: string; presenca: string }>;
   alunos: AlunoEmusys[];
   anotacoes: string | null;
+}
+
+function respostaSnapshotSemPii(resultado: SnapshotResultado) {
+  return {
+    execucao_id: resultado.execucao_id,
+    status: resultado.status,
+    aulas_recebidas: resultado.aulas_recebidas,
+    linhas_recebidas: resultado.linhas_recebidas,
+    linhas_ativas: resultado.linhas_ativas,
+    linhas_inseridas: resultado.linhas_inseridas,
+    linhas_atualizadas: resultado.linhas_atualizadas,
+    linhas_versionadas: resultado.linhas_versionadas,
+    linhas_inativadas: resultado.linhas_inativadas,
+    experimentais_reconciliadas: resultado.experimentais_reconciliadas,
+  };
+}
+
+function parseDataIsoEstrita(value: unknown, campo: string): string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new SnapshotRequestError(`${campo.toUpperCase()}_INVALIDA`);
+  }
+
+  const data = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(data.getTime()) || data.toISOString().slice(0, 10) !== value) {
+    throw new SnapshotRequestError(`${campo.toUpperCase()}_INVALIDA`);
+  }
+  return value;
+}
+
+function diasEntreDatas(dataInicio: string, dataFim: string): number {
+  const inicio = Date.parse(`${dataInicio}T00:00:00.000Z`);
+  const fim = Date.parse(`${dataFim}T00:00:00.000Z`);
+  return Math.trunc((fim - inicio) / (24 * 60 * 60 * 1000));
+}
+
+function validarParametrosExperimentais(body: Record<string, unknown>): {
+  unidade: UnidadeEmusys;
+  dataInicio: string;
+  dataFim: string;
+} {
+  const unidadeId = typeof body.unidade_id === 'string'
+    ? body.unidade_id.trim()
+    : '';
+  if (!UUID_PATTERN.test(unidadeId)) {
+    throw new SnapshotRequestError('UNIDADE_ID_INVALIDA');
+  }
+
+  const dataInicio = parseDataIsoEstrita(body.data_inicio, 'data_inicio');
+  const dataFim = parseDataIsoEstrita(body.data_fim, 'data_fim');
+  const intervalo = diasEntreDatas(dataInicio, dataFim);
+  if (intervalo < 0 || intervalo > 45) {
+    throw new SnapshotRequestError('INTERVALO_INVALIDO_MAX_45_DIAS');
+  }
+
+  const unidade = UNIDADES.find((unidade) => unidade.id === unidadeId);
+  if (!unidade) throw new SnapshotRequestError('UNIDADE_DESCONHECIDA');
+
+  return { unidade, dataInicio, dataFim };
 }
 
 function podeMaterializarFalta(aula: AulaEmusys, agora = new Date()): boolean {
@@ -170,26 +282,23 @@ async function fetchAulasRange(
   dataInicio: string,
   dataFim: string
 ): Promise<AulaEmusys[]> {
-  const todas: AulaEmusys[] = [];
-  let cursor: string | null = null;
-  let temMais = true;
-
-  while (temMais) {
-    let url = `${EMUSYS_API}/aulas/?data_hora_inicial=${dataInicio}T00:00:00&data_hora_final=${dataFim}T23:59:59&limite=100`;
-    if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
-
-    const response = await fetch(url, { headers: { token } });
-    if (!response.ok) {
-      throw new Error(`Emusys API ${response.status} no intervalo ${dataInicio}..${dataFim}`);
-    }
-
-    const json = await response.json();
-    todas.push(...(json.items || []));
-    temMais = json.paginacao?.tem_mais === true;
-    cursor = json.paginacao?.proximo_cursor || null;
+  try {
+    const aulas = await buscarTodasAulas({
+      dataInicio,
+      dataFim,
+      fetchPage: ({ cursor, limite }) =>
+        buscarPaginaAulasEmusys<AulaEmusys>({
+          token,
+          dataInicio,
+          dataFim,
+          cursor,
+          limite,
+        }),
+    });
+    return aulas as AulaEmusys[];
+  } catch {
+    throw new SnapshotUpstreamError();
   }
-
-  return todas;
 }
 
 // Converter data_hora_inicio do Emusys ("2026-03-04 14:00") para ISO com timezone BRT
@@ -205,6 +314,12 @@ async function sincronizarMetadadosAulas(
   dataFim: string
 ) {
   const resultados: Array<Record<string, unknown>> = [];
+  const aulasPorUnidade: Array<{
+    unidade: UnidadeEmusys;
+    dataInicio: string;
+    dataFim: string;
+    aulas: AulaEmusys[];
+  }> = [];
   const chunkSize = 500;
 
   for (const unidade of unidades) {
@@ -267,15 +382,17 @@ async function sincronizarMetadadosAulas(
       aulas_recebidas: aulas.length,
       aulas_gravadas: gravadas,
     });
+    aulasPorUnidade.push({ unidade, dataInicio, dataFim, aulas });
   }
 
-  return resultados;
+  return { resultados, aulasPorUnidade };
 }
 
 // Dados coletados de aulas experimentais para reconciliação
 interface ExperimentalParaReconciliar {
   emusysAulaId: number;
   dataAula: string;
+  dataHoraInicio?: string;
   horario: string;
   professorId: number | null;
   professorNome: string | null;
@@ -284,6 +401,100 @@ interface ExperimentalParaReconciliar {
   cursoId: number | null;
   cursoNome: string | null;
   alunos: AlunoEmusys[];
+}
+
+async function aplicarSnapshotExperimentais(
+  supabase: SupabaseClient,
+  unidade: UnidadeEmusys,
+  dataInicio: string,
+  dataFim: string,
+  aulas: AulaEmusys[],
+): Promise<SnapshotResultado> {
+  const execucaoId = crypto.randomUUID();
+  const agora = new Date();
+  const linhas = montarLinhasSnapshot({
+    unidadeId: unidade.id,
+    execucaoId,
+    aulas,
+    agora,
+  });
+
+  const { data, error } = await supabase
+    .rpc('aplicar_snapshot_experimentais_emusys_v1', {
+      p_execucao_id: execucaoId,
+      p_unidade_id: unidade.id,
+      p_data_inicio: dataInicio,
+      p_data_fim: dataFim,
+      p_itens: linhas,
+    });
+  if (error) throw new Error('FALHA_APLICAR_SNAPSHOT_EXPERIMENTAIS');
+
+  if (
+    !data ||
+    typeof data !== 'object' ||
+    Array.isArray(data) ||
+    data.status !== 'completo' ||
+    data.execucao_id !== execucaoId
+  ) {
+    throw new Error('RESPOSTA_SNAPSHOT_EXPERIMENTAIS_INVALIDA');
+  }
+  const rpc = data as Record<string, unknown>;
+  const numero = (campo: string) => {
+    const valor = Number(rpc[campo] ?? 0);
+    return Number.isFinite(valor) ? valor : 0;
+  };
+
+  const mapaProfessores = await carregarMapaProfessoresEmusys(
+    supabase,
+    unidade.id,
+  );
+  const experimentais: ExperimentalParaReconciliar[] = aulas
+    .filter((aula) => aula.categoria === 'experimental')
+    .map((aula) => {
+      const professor = resolverProfessorDaAula(
+        aula.professores,
+        mapaProfessores,
+      );
+      return {
+        emusysAulaId: aula.id,
+        dataAula: aula.data_hora_inicio.split(' ')[0],
+        dataHoraInicio: aula.data_hora_inicio,
+        horario: aula.data_hora_inicio.split(' ')[1] || '00:00',
+        professorId: professor.professorId,
+        professorNome: null,
+        unidadeId: unidade.id,
+        cancelada: aula.cancelada === true,
+        cursoId: null,
+        cursoNome: null,
+        alunos: (aula.alunos ?? []).map((aluno) => ({
+          nome_aluno: aluno.nome_aluno,
+          presenca: aluno.presenca,
+          horario_presenca: aluno.horario_presenca,
+          id_lead: aluno.id_lead,
+          id_aluno: aluno.id_aluno,
+        })),
+      };
+    });
+  const reconciliacao = await reconciliarExperimentaisOrfas(
+    supabase,
+    experimentais,
+    { somenteIdentidadesEstaveis: true },
+  );
+
+  return {
+    execucao_id: execucaoId,
+    status: 'completo',
+    aulas_recebidas: aulas.length,
+    linhas_recebidas: numero('linhas_recebidas'),
+    linhas_ativas: numero('linhas_ativas'),
+    linhas_inseridas: numero('linhas_inseridas'),
+    linhas_atualizadas: numero('linhas_atualizadas'),
+    linhas_versionadas: numero('linhas_versionadas'),
+    linhas_inativadas: numero('linhas_inativadas'),
+    experimentais_reconciliadas: reconciliacao.filter((item) =>
+      item.status.startsWith('reconciliada_')
+    ).length,
+  };
 }
 
 // Normalizar telefone para formato do banco (55XXXXXXXXXXX)
@@ -383,8 +594,11 @@ async function upsertExperimentalRaw(
 
 async function reconciliarExperimentaisOrfas(
   supabase: any,
-  experimentais: ExperimentalParaReconciliar[]
+  experimentais: ExperimentalParaReconciliar[],
+  options: { somenteIdentidadesEstaveis?: boolean } = {},
 ) {
+  const somenteIdentidadesEstaveis =
+    options.somenteIdentidadesEstaveis === true;
   const logs: { lead_id: number | null; lead_nome: string; unidade: string; data: string; status: string; motivo: string }[] = [];
   const unidadeNomes = new Map(UNIDADES.map(u => [u.id, u.nome]));
 
@@ -392,22 +606,28 @@ async function reconciliarExperimentaisOrfas(
     // Cancelada: marcar 'cancelada'. Casa pela AULA (emusys_aula_id) e, p/ legados sem id,
     // por nome+data (só linhas sem aula_id, p/ não cancelar o outro instrumento do dia).
     if (exp.cancelada) {
-      await supabase
+      const { error: cancelamentoError } = await supabase
         .from('lead_experimentais')
         .update({ status: 'cancelada', updated_at: new Date().toISOString() })
+        .eq('unidade_id', exp.unidadeId)
         .eq('emusys_aula_id', exp.emusysAulaId)
         .neq('status', 'cancelada');
-      for (const aluno of exp.alunos) {
-        const nomeAluno = aluno.nome_aluno?.trim();
-        if (!nomeAluno) continue;
-        await supabase
-          .from('lead_experimentais')
-          .update({ status: 'cancelada', updated_at: new Date().toISOString() })
-          .is('emusys_aula_id', null)
-          .eq('nome_aluno', nomeAluno)
-          .eq('data_experimental', exp.dataAula)
-          .eq('unidade_id', exp.unidadeId)
-          .neq('status', 'cancelada');
+      if (somenteIdentidadesEstaveis && cancelamentoError) {
+        throw new Error('FALHA_RECONCILIAR_CANCELAMENTO_SNAPSHOT');
+      }
+      if (!somenteIdentidadesEstaveis) {
+        for (const aluno of exp.alunos) {
+          const nomeAluno = aluno.nome_aluno?.trim();
+          if (!nomeAluno) continue;
+          await supabase
+            .from('lead_experimentais')
+            .update({ status: 'cancelada', updated_at: new Date().toISOString() })
+            .is('emusys_aula_id', null)
+            .eq('nome_aluno', nomeAluno)
+            .eq('data_experimental', exp.dataAula)
+            .eq('unidade_id', exp.unidadeId)
+            .neq('status', 'cancelada');
+        }
       }
       continue;
     }
@@ -419,22 +639,78 @@ async function reconciliarExperimentaisOrfas(
       const unidadeNome = unidadeNomes.get(exp.unidadeId) || exp.unidadeId;
       const telNorm = normalizarTelefone(aluno.telefone_aluno) || normalizarTelefone(aluno.telefone_responsavel);
       const idLead = Number(aluno.id_lead ?? 0);
-      const idAluno = aluno.id_aluno != null ? Number(aluno.id_aluno) : null;
+      const idAlunoEmusys = aluno.id_aluno != null
+        ? Number(aluno.id_aluno)
+        : null;
+      let idAluno = somenteIdentidadesEstaveis ? null : idAlunoEmusys;
 
-      const presente = aluno.presenca === 'presente';
+      if (
+        somenteIdentidadesEstaveis &&
+        idAlunoEmusys != null &&
+        Number.isSafeInteger(idAlunoEmusys) &&
+        idAlunoEmusys > 0
+      ) {
+        const { data: candidatosAluno, error: candidatosAlunoError } =
+          await supabase
+            .from('alunos')
+            .select('id')
+            .eq('unidade_id', exp.unidadeId)
+            .eq('emusys_student_id', String(idAlunoEmusys))
+            .limit(2);
+        if (candidatosAlunoError) {
+          throw new Error('FALHA_RESOLVER_ALUNO_SNAPSHOT');
+        }
+        if (candidatosAluno?.length === 1) {
+          idAluno = Number(candidatosAluno[0].id);
+        }
+      }
+
+      const situacaoSnapshot = somenteIdentidadesEstaveis &&
+          exp.dataHoraInicio
+        ? normalizarSituacaoSnapshot({
+          presenca: aluno.presenca,
+          cancelada: exp.cancelada,
+          dataHoraInicio: exp.dataHoraInicio,
+          agora: new Date(),
+        })
+        : null;
+      if (
+        somenteIdentidadesEstaveis &&
+        situacaoSnapshot !== 'presente' &&
+        situacaoSnapshot !== 'faltou'
+      ) {
+        continue;
+      }
+
+      const presente = somenteIdentidadesEstaveis
+        ? situacaoSnapshot === 'presente'
+        : aluno.presenca === 'presente';
       const novoStatus = presente ? 'experimental_realizada' : 'experimental_faltou';
 
       // 1. Match primário pela AULA real (emusys_aula_id) — não colapsa multi-instrumento.
-      let { data: expExistente } = await supabase
+      let consultaExistente = supabase
         .from('lead_experimentais')
         .select('id, status, lead_id, curso_interesse_id, professor_experimental_id, emusys_aula_id, aluno_id')
+        .eq('unidade_id', exp.unidadeId)
         .eq('emusys_aula_id', exp.emusysAulaId)
-        .neq('status', 'cancelada')
+        .neq('status', 'cancelada');
+      if (somenteIdentidadesEstaveis && idLead > 0) {
+        consultaExistente = consultaExistente.eq('emusys_lead_id', idLead);
+      } else if (somenteIdentidadesEstaveis && idAluno != null) {
+        consultaExistente = consultaExistente.eq('aluno_id', idAluno);
+      } else if (somenteIdentidadesEstaveis) {
+        continue;
+      }
+      let { data: expExistente, error: expExistenteError } =
+        await consultaExistente
         .limit(1)
         .maybeSingle();
+      if (somenteIdentidadesEstaveis && expExistenteError) {
+        throw new Error('FALHA_CONSULTAR_EXPERIMENTAL_SNAPSHOT');
+      }
 
       // 2. Fallback legado: linha sem aula_id (criada antes), casa por nome+data+unidade.
-      if (!expExistente) {
+      if (!expExistente && !somenteIdentidadesEstaveis) {
         const { data: legado } = await supabase
           .from('lead_experimentais')
           .select('id, status, lead_id, curso_interesse_id, professor_experimental_id, emusys_aula_id, aluno_id')
@@ -453,7 +729,11 @@ async function reconciliarExperimentaisOrfas(
       //     O Emusys reenvia o webhook de experimental com um id de evento diferente a
       //     cada disparo; a identidade real da aula é unidade+data+horário+curso+aluno.
       //     Sem este match, a sync INSERE uma 2ª linha e duplica as realizadas.
-      if (!expExistente && exp.cursoId != null) {
+      if (
+        !expExistente &&
+        !somenteIdentidadesEstaveis &&
+        exp.cursoId != null
+      ) {
         const { data: porNegocio } = await supabase
           .from('lead_experimentais')
           .select('id, status, lead_id, curso_interesse_id, professor_experimental_id, emusys_aula_id, aluno_id')
@@ -483,10 +763,16 @@ async function reconciliarExperimentaisOrfas(
         if (idAluno != null && expExistente.aluno_id == null) patch.aluno_id = idAluno;
 
         if (Object.keys(patch).length > 1) {
-          await supabase.from('lead_experimentais').update(patch).eq('id', expExistente.id);
+          const { error: atualizacaoExperimentalError } = await supabase
+            .from('lead_experimentais')
+            .update(patch)
+            .eq('id', expExistente.id);
+          if (somenteIdentidadesEstaveis && atualizacaoExperimentalError) {
+            throw new Error('FALHA_ATUALIZAR_EXPERIMENTAL_SNAPSHOT');
+          }
           // Propagar status para leads só quando o status mudou (não sobrescrever convertidos/matriculados)
           if (statusMudou && expExistente.lead_id) {
-            await supabase.from('leads').update({
+            const { error: atualizacaoLeadError } = await supabase.from('leads').update({
               experimental_realizada: presente,
               faltou_experimental: !presente,
               status: novoStatus,
@@ -494,7 +780,22 @@ async function reconciliarExperimentaisOrfas(
               updated_at: new Date().toISOString()
             }).eq('id', expExistente.lead_id)
               .not('status', 'in', '("convertido","matriculado")');
+            if (somenteIdentidadesEstaveis && atualizacaoLeadError) {
+              throw new Error('FALHA_ATUALIZAR_LEAD_SNAPSHOT');
+            }
           }
+        }
+        if (somenteIdentidadesEstaveis) {
+          logs.push({
+            lead_id: expExistente.lead_id,
+            lead_nome: '',
+            unidade: unidadeNome,
+            data: exp.dataAula,
+            status: presente
+              ? 'reconciliada_presente'
+              : 'reconciliada_faltou',
+            motivo: 'reconciliacao_por_identidade_estavel',
+          });
         }
         continue;
       }
@@ -505,12 +806,21 @@ async function reconciliarExperimentaisOrfas(
 
       // 3a. Lead pelo id_lead da API (emusys_lead_id)
       if (idLead > 0) {
-        const { data: leadPorEmusys } = await supabase
-          .from('leads').select('id').eq('emusys_lead_id', idLead).limit(1).maybeSingle();
+        const { data: leadPorEmusys, error: leadPorEmusysError } =
+          await supabase
+          .from('leads')
+          .select('id')
+          .eq('unidade_id', exp.unidadeId)
+          .eq('emusys_lead_id', idLead)
+          .limit(1)
+          .maybeSingle();
+        if (somenteIdentidadesEstaveis && leadPorEmusysError) {
+          throw new Error('FALHA_RESOLVER_LEAD_SNAPSHOT');
+        }
         if (leadPorEmusys) leadId = leadPorEmusys.id;
       }
       // 3b. Lead por telefone
-      if (!leadId && telNorm) {
+      if (!somenteIdentidadesEstaveis && !leadId && telNorm) {
         const { data: leadPorTel } = await supabase
           .from('leads').select('id')
           .eq('telefone', telNorm).eq('unidade_id', exp.unidadeId).eq('arquivado', false)
@@ -518,7 +828,7 @@ async function reconciliarExperimentaisOrfas(
         if (leadPorTel) leadId = leadPorTel.id;
       }
       // 3c. Fallback por nome — só quando NÃO é aluno existente (sem id_aluno)
-      if (!leadId && idAluno == null) {
+      if (!somenteIdentidadesEstaveis && !leadId && idAluno == null) {
         const nomeNorm = normalizarNome(nomeAluno);
         const { data: leads } = await supabase
           .from('leads').select('id, nome, data_experimental')
@@ -553,7 +863,11 @@ async function reconciliarExperimentaisOrfas(
         qLead = exp.cursoId != null
           ? qLead.eq('curso_interesse_id', exp.cursoId)
           : qLead.is('curso_interesse_id', null);
-        const { data: porLead } = await qLead.limit(1).maybeSingle();
+        const { data: porLead, error: porLeadError } =
+          await qLead.limit(1).maybeSingle();
+        if (somenteIdentidadesEstaveis && porLeadError) {
+          throw new Error('FALHA_CONSULTAR_LEAD_EXPERIMENTAL_SNAPSHOT');
+        }
         if (porLead) {
           const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
           const statusMudou = porLead.status !== novoStatus;
@@ -563,20 +877,29 @@ async function reconciliarExperimentaisOrfas(
           if (porLead.emusys_aula_id == null) patch.emusys_aula_id = exp.emusysAulaId;
           if (idAluno != null && porLead.aluno_id == null) patch.aluno_id = idAluno;
           if (Object.keys(patch).length > 1) {
-            await supabase.from('lead_experimentais').update(patch).eq('id', porLead.id);
+            const { error: atualizarPorLeadError } = await supabase
+              .from('lead_experimentais')
+              .update(patch)
+              .eq('id', porLead.id);
+            if (somenteIdentidadesEstaveis && atualizarPorLeadError) {
+              throw new Error('FALHA_ATUALIZAR_EXPERIMENTAL_SNAPSHOT');
+            }
             if (statusMudou && porLead.lead_id) {
-              await supabase.from('leads').update({
+              const { error: atualizarLeadError } = await supabase.from('leads').update({
                 experimental_realizada: presente,
                 faltou_experimental: !presente,
                 status: novoStatus,
                 etapa_pipeline_id: presente ? 7 : 9,
                 updated_at: new Date().toISOString()
               }).eq('id', porLead.lead_id).not('status', 'in', '("convertido","matriculado")');
+              if (somenteIdentidadesEstaveis && atualizarLeadError) {
+                throw new Error('FALHA_ATUALIZAR_LEAD_SNAPSHOT');
+              }
             }
           }
           logs.push({
             lead_id: porLead.lead_id,
-            lead_nome: nomeAluno,
+            lead_nome: somenteIdentidadesEstaveis ? '' : nomeAluno,
             unidade: unidadeNome,
             data: exp.dataAula,
             status: presente ? 'reconciliada_presente' : 'reconciliada_faltou',
@@ -604,9 +927,12 @@ async function reconciliarExperimentaisOrfas(
           etapa_pipeline_id: presente ? 7 : 9,
         });
 
+      if (somenteIdentidadesEstaveis && error) {
+        throw new Error('FALHA_INSERIR_EXPERIMENTAL_SNAPSHOT');
+      }
       if (!error && leadId) {
         // Propagar para leads (não sobrescrever leads já convertidos/matriculados)
-        await supabase.from('leads').update({
+        const { error: atualizarLeadError } = await supabase.from('leads').update({
           experimental_realizada: presente,
           faltou_experimental: !presente,
           status: novoStatus,
@@ -614,16 +940,19 @@ async function reconciliarExperimentaisOrfas(
           updated_at: new Date().toISOString()
         }).eq('id', leadId)
           .not('status', 'in', '("convertido","matriculado")');
+        if (somenteIdentidadesEstaveis && atualizarLeadError) {
+          throw new Error('FALHA_ATUALIZAR_LEAD_SNAPSHOT');
+        }
       }
 
       logs.push({
         lead_id: leadId,
-        lead_nome: nomeAluno,
+        lead_nome: somenteIdentidadesEstaveis ? '' : nomeAluno,
         unidade: unidadeNome,
         data: exp.dataAula,
         status: error ? 'erro' : (presente ? 'reconciliada_presente' : 'reconciliada_faltou'),
         motivo: error
-          ? error.message
+          ? (somenteIdentidadesEstaveis ? 'falha_reconciliacao' : error.message)
           : `Experimental ${presente ? 'realizada' : 'faltou'} via reconciliação (aulaId=${exp.emusysAulaId}, matchadoPorNome=${matchadoPorNome}, alunoExistente=${idAluno != null})`
       });
     }
@@ -631,7 +960,7 @@ async function reconciliarExperimentaisOrfas(
 
   // Gravar logs
   for (const log of logs) {
-    await supabase.from('leads_automacao_log').insert({
+    const { error: logError } = await supabase.from('leads_automacao_log').insert({
       lead_id: log.lead_id,
       lead_nome: log.lead_nome,
       unidade_nome: log.unidade,
@@ -641,6 +970,9 @@ async function reconciliarExperimentaisOrfas(
       workflow_id: 'sync-presenca-emusys',
       execution_id: new Date().toISOString()
     });
+    if (somenteIdentidadesEstaveis && logError) {
+      throw new Error('FALHA_REGISTRAR_RECONCILIACAO_SNAPSHOT');
+    }
   }
 
   const reconciliadas = logs.filter(l => l.status.startsWith('reconciliada_'));
@@ -857,6 +1189,8 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  let modo: 'presenca' | 'agenda' | 'metadados' | 'experimentais' =
+    'presenca';
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -864,21 +1198,65 @@ serve(async (req: Request) => {
     let dataFim: string;
     let dias = 1;
     let diasFuturos = 14;
-    let modo: 'presenca' | 'agenda' | 'metadados' = 'presenca';
     let unidadeIndex: number | null = null;
+    let parametrosExperimentais: ReturnType<
+      typeof validarParametrosExperimentais
+    > | null = null;
     try {
-      const body = await req.json();
-      dataFim = body.data || '';
+      const body = await req.json() as SyncRequestBody;
+      dataFim = typeof body.data === 'string' ? body.data : '';
       dias = Math.min(Math.max(body.dias || 1, 1), 30); // 1-30 dias
       diasFuturos = Math.min(Math.max(body.dias_futuros || 14, 1), 35);
       modo = body.modo === 'agenda'
         ? 'agenda'
         : body.modo === 'metadados'
           ? 'metadados'
-          : 'presenca';
-      unidadeIndex = body.unidade_index ?? null;
-    } catch {
+          : body.modo === 'experimentais'
+            ? 'experimentais'
+            : 'presenca';
+      unidadeIndex = typeof body.unidade_index === 'number'
+        ? body.unidade_index
+        : null;
+      if (modo === 'experimentais') {
+        parametrosExperimentais = validarParametrosExperimentais(body);
+      }
+    } catch (error) {
+      if (error instanceof SnapshotRequestError) throw error;
+      if (modo === 'experimentais') {
+        throw new SnapshotRequestError('BODY_EXPERIMENTAIS_INVALIDO');
+      }
       dataFim = '';
+    }
+
+    if (modo === 'experimentais') {
+      if (!parametrosExperimentais) {
+        throw new SnapshotRequestError('BODY_EXPERIMENTAIS_INVALIDO');
+      }
+      const { unidade, dataInicio, dataFim: dataFimSnapshot } =
+        parametrosExperimentais;
+      const aulas = await fetchAulasRange(
+        unidade.token,
+        dataInicio,
+        dataFimSnapshot,
+      );
+      const snapshot = await aplicarSnapshotExperimentais(
+        supabase,
+        unidade,
+        dataInicio,
+        dataFimSnapshot,
+        aulas,
+      );
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          modo,
+          unidade: { id: unidade.id, nome: unidade.nome },
+          intervalo: { data_inicio: dataInicio, data_fim: dataFimSnapshot },
+          snapshot: respostaSnapshotSemPii(snapshot),
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     }
 
     if (!dataFim) {
@@ -922,12 +1300,30 @@ serve(async (req: Request) => {
     console.log(`[sync-presenca] Modo ${modo}: ${datasProcessar[0]} a ${datasProcessar.at(-1)}, unidade: ${unidadeIndex !== null ? unidadesProcessar[0].nome : 'todas'}`);
 
     if (modo === 'metadados') {
-      const resultados = await sincronizarMetadadosAulas(
+      const metadados = await sincronizarMetadadosAulas(
         supabase,
         unidadesProcessar,
         datasProcessar[0],
         datasProcessar.at(-1)!
       );
+      const snapshots: Array<Record<string, unknown>> = [];
+      for (const lote of metadados.aulasPorUnidade) {
+        const snapshot = await aplicarSnapshotExperimentais(
+          supabase,
+          lote.unidade,
+          lote.dataInicio,
+          lote.dataFim,
+          lote.aulas,
+        );
+        snapshots.push({
+          unidade: { id: lote.unidade.id, nome: lote.unidade.nome },
+          intervalo: {
+            data_inicio: lote.dataInicio,
+            data_fim: lote.dataFim,
+          },
+          snapshot: respostaSnapshotSemPii(snapshot),
+        });
+      }
       return new Response(
         JSON.stringify({
           success: true,
@@ -935,7 +1331,8 @@ serve(async (req: Request) => {
           dias,
           data_inicio: datasProcessar[0],
           data_fim: datasProcessar.at(-1),
-          resultados,
+          resultados: metadados.resultados,
+          snapshots,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -1351,10 +1748,25 @@ serve(async (req: Request) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('[sync-presenca] Erro geral:', error);
+    const status = error instanceof SnapshotRequestError
+      ? 400
+      : error instanceof SnapshotUpstreamError
+        ? 502
+        : 500;
+    const mensagemSnapshot = error instanceof SnapshotRequestError
+      ? error.message
+      : error instanceof SnapshotUpstreamError
+        ? 'FALHA_UPSTREAM_EMUSYS'
+        : 'ERRO_INTERNO';
+    const mensagemPublica = modo === 'experimentais' || modo === 'metadados'
+      ? mensagemSnapshot
+      : error instanceof Error
+        ? error.message
+        : 'Erro interno';
+    console.error(`[sync-presenca] Falha no modo ${modo}: ${mensagemPublica}`);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Erro interno' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: mensagemPublica }),
+      { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
