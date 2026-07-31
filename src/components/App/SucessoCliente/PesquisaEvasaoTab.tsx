@@ -134,6 +134,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
     filtroStatus,
     filtroAno,
     filtroMes ?? 'todos',
+    filtroBusca.trim(),
   ].join(':');
   const filtroServidorAnteriorRef = useRef(filtroServidorChave);
 
@@ -183,7 +184,8 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
           p_offset: (pagina - 1) * TAMANHO_PAGINA,
           p_status: filtroStatus === 'todos' ? null : filtroStatus,
           p_ano: filtroAno,
-          p_mes: filtroMes
+          p_mes: filtroMes,
+          p_busca: filtroBusca.trim() || null,
         }
       );
 
@@ -465,28 +467,12 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
 
   const getElegibilidadeLabel = (regra: string) => {
     switch (regra) {
-      case 'aguardar_prazo_minimo':
-        return 'Aguardar 3 dias da evasão';
       case 'status_producao_nao_enviavel':
         return 'Envio produtivo já processado';
       default:
         return getBloqueioLabel(regra as PesquisaEvasaoListagemItem['bloqueio_codigo']);
     }
   };
-
-  const evadidosFiltrados = evadidos.filter(e => {
-    if (filtroBusca) {
-      const busca = filtroBusca.toLowerCase();
-      return (
-        e.nome?.toLowerCase().includes(busca) ||
-        e.curso?.toLowerCase().includes(busca) ||
-        e.professor?.toLowerCase().includes(busca) ||
-        e.motivo_catalogado?.toLowerCase().includes(busca) ||
-        e.motivo_legado?.toLowerCase().includes(busca)
-      );
-    }
-    return true;
-  });
   const totalPaginas = Math.max(1, Math.ceil(totalRegistros / TAMANHO_PAGINA));
   const inicioPagina = totalRegistros === 0
     ? 0
@@ -707,7 +693,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700/50">
-              {evadidosFiltrados.length === 0 ? (
+              {evadidos.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="text-center py-8 text-slate-500">
                     {loading ? (
@@ -721,9 +707,16 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                   </td>
                 </tr>
               ) : (
-                evadidosFiltrados.map((evadido) => {
+                evadidos.map((evadido) => {
                   const { statusBase, registroTeste } =
                     interpretarPesquisaStatus(evadido.pesquisa_status);
+                  const statusProducaoPermiteEnvio =
+                    !registroTeste && ['pendente', 'falha_envio', 'sem_whatsapp'].includes(statusBase);
+                  const podeGerarPreview = modoTeste
+                    ? !registroTeste &&
+                      !['sem_aluno', 'publico_interno'].includes(evadido.bloqueio_codigo || '') &&
+                      !['colaborador', 'professor'].includes(evadido.publico_tipo)
+                    : evadido.elegivel_envio && statusProducaoPermiteEnvio;
 
                   return (
                     <Fragment key={evadido.evasao_id}>
@@ -803,7 +796,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                       </td>
                       <td className="text-center px-4 py-3">
                         <div className="flex min-w-40 flex-col items-center gap-1">
-                          {evadido.elegivel_envio && !registroTeste && ['pendente', 'falha_envio', 'sem_whatsapp'].includes(statusBase) ? (
+                          {podeGerarPreview ? (
                             <Button
                               size="sm"
                               onClick={() => previsualizarPesquisa(evadido.evasao_id)}

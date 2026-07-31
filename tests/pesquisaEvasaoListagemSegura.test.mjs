@@ -47,7 +47,7 @@ test('RPC v2 possui assinatura versionada e retorno paginado completo', () => {
 
   assert.match(
     v2,
-    /listar_evadidos_para_pesquisa_v2\s*\(\s*p_unidade_id\s+uuid\s*,\s*p_limite\s+integer\s*,\s*p_offset\s+integer\s*,\s*p_status\s+varchar\s*,\s*p_ano\s+integer\s*,\s*p_mes\s+integer\s*\)/i,
+    /listar_evadidos_para_pesquisa_v2\s*\(\s*p_unidade_id\s+uuid\s*,\s*p_limite\s+integer\s*,\s*p_offset\s+integer\s*,\s*p_status\s+varchar\s*,\s*p_ano\s+integer\s*,\s*p_mes\s+integer\s*,\s*p_busca\s+text\s*\)/i,
   );
 
   for (const campo of [
@@ -104,6 +104,29 @@ test('v2 autoriza e filtra antes de contar e paginar', () => {
   assert.match(v2, /p_mes\s+is\s+null[\s\S]*extract\s*\(\s*month\s+from\s+m\.data/i);
 });
 
+test('busca ocorre no servidor antes do count e da paginacao', () => {
+  const v2 = extrairFuncao('listar_evadidos_para_pesquisa_v2');
+  const busca = v2.search(/nullif\s*\(\s*btrim\s*\(\s*p_busca\s*\)\s*,\s*''\s*\)\s+is\s+null/i);
+  const contagem = v2.search(/count\s*\(\s*\*\s*\)\s+over\s*\(\s*\)/i);
+  const limite = v2.search(/\blimit\s+least\s*\(/i);
+
+  assert.ok(busca >= 0, 'p_busca precisa filtrar dentro da RPC');
+  assert.ok(contagem > busca, 'total_count precisa refletir p_busca');
+  assert.ok(limite > contagem, 'busca e contagem devem preceder a paginacao');
+  assert.match(v2, /\bilike\s*\(\s*['"]%['"]\s*\|\|\s*btrim\s*\(\s*p_busca\s*\)\s*\|\|\s*['"]%['"]\s*\)/i);
+  assert.match(tab, /p_busca:\s*filtroBusca\.trim\(\)\s*\|\|\s*null/);
+  assert.match(tab, /filtroServidorChave[\s\S]*filtroBusca\.trim\(\)/);
+  assert.doesNotMatch(
+    tab,
+    /evadidos\.filter\s*\(/,
+    'busca client-side quebra total e range da paginacao',
+  );
+  assert.match(
+    sql,
+    /revoke\s+all\s+on\s+function\s+public\.listar_evadidos_para_pesquisa_v2\s*\(\s*uuid\s*,\s*integer\s*,\s*integer\s*,\s*varchar\s*,\s*integer\s*,\s*integer\s*,\s*text\s*\)/i,
+  );
+});
+
 test('producao e testes sao separados sem multiplicar a movimentacao', () => {
   const v2 = semComentarios(extrairFuncao('listar_evadidos_para_pesquisa_v2'));
 
@@ -152,6 +175,51 @@ test('bloqueios preservam sem telefone, motivo legado e flag interna explicita',
     v2,
     /(?:a|m)\.(?:nome|aluno_nome)\s+(?:ilike|similar\s+to|~)/i,
     'publico interno nao pode ser inferido por nome',
+  );
+});
+
+test('telefones local e E164 usam a mesma chave canonica nos dois lados', () => {
+  const v2 = semComentarios(extrairFuncao('listar_evadidos_para_pesquisa_v2'));
+
+  assert.match(
+    v2,
+    /when\s+telefone_digitos\s*~\s*['"]\^\[0-9\]\{10,11\}\$['"]\s+then\s+['"]55['"]\s*\|\|\s*telefone_digitos/i,
+    'telefone da linha precisa ganhar 55 quando vier local',
+  );
+  assert.match(
+    v2,
+    /regexp_replace\s*\(\s*pe_aberta\.telefone_destino_snapshot[\s\S]*as\s+telefone_aberta_digitos/i,
+    'telefone da pesquisa aberta precisa ser normalizado separadamente',
+  );
+  assert.match(
+    v2,
+    /when\s+telefone_aberta_digitos\s*~\s*['"]\^\[0-9\]\{10,11\}\$['"]\s+then\s+['"]55['"]\s*\|\|\s*telefone_aberta_digitos/i,
+    'telefone aberto local precisa ganhar 55',
+  );
+  assert.match(
+    v2,
+    /telefone_aberta_normalizado\s*=\s*classificada\.telefone_normalizado/i,
+    'comparacao precisa usar as duas chaves canonicas',
+  );
+});
+
+test('Subprojeto A nao decide timing D mais 3', () => {
+  const v2 = semComentarios(extrairFuncao('listar_evadidos_para_pesquisa_v2'));
+  const podeEnviar = semComentarios(extrairFuncao('pode_enviar_pesquisa_evasao'));
+
+  for (const source of [v2, podeEnviar, tab]) {
+    assert.doesNotMatch(source, /aguardar_prazo_minimo/i);
+    assert.doesNotMatch(source, /v_dias_desde_evasao/i);
+  }
+  assert.doesNotMatch(v2, /current_date\s*-\s*data_evasao\s*(?:>=|<)\s*3/i);
+  assert.doesNotMatch(
+    podeEnviar,
+    /current_date\s*-\s*v_data_evasao|v_dias_desde_evasao\s*>=\s*3/i,
+  );
+  assert.match(
+    v2,
+    /bloqueio_codigo\s+is\s+null[\s\S]*pesquisa_producao_status\s+in\s*\(/i,
+    'producao continua exigindo ausencia de hard block e status enviavel',
   );
 });
 
@@ -213,6 +281,43 @@ test('frontend exibe bloqueios, fallback de motivo e correcao governada', () => 
     tab,
     /Corrigir no cadastro do aluno[\s\S]{0,300}disabled|disabled[\s\S]{0,300}Corrigir no cadastro do aluno/,
     'sem deep-link canonico a acao precisa permanecer bloqueada',
+  );
+});
+
+test('modo teste ignora bloqueios produtivos e conserva os hard blocks de pessoa', () => {
+  const ramoTeste = tab.match(
+    /const\s+podeGerarPreview\s*=\s*modoTeste[\s\S]*?(?=;\s*\n)/,
+  )?.[0] ?? '';
+
+  assert.match(ramoTeste, /!\s*registroTeste/);
+  assert.match(ramoTeste, /['"]sem_aluno['"]/);
+  assert.match(ramoTeste, /['"]publico_interno['"]/);
+  assert.match(
+    ramoTeste,
+    /\[\s*['"]colaborador['"]\s*,\s*['"]professor['"]\s*\]\.includes\s*\(\s*evadido\.publico_tipo\s*\)/,
+    'publico interno precisa continuar bloqueado mesmo se outro codigo tiver precedencia',
+  );
+  for (const bloqueioProdutivo of [
+    'sem_telefone',
+    'telefone_invalido',
+    'motivo_nao_catalogado',
+    'pesquisa_aberta_no_mesmo_numero',
+  ]) {
+    assert.doesNotMatch(
+      ramoTeste,
+      new RegExp(`['"]${bloqueioProdutivo}['"]`),
+      `${bloqueioProdutivo} nao pode impedir preview de teste`,
+    );
+  }
+  assert.match(
+    ramoTeste,
+    /evadido\.elegivel_envio\s*&&\s*statusProducaoPermiteEnvio/,
+    'producao continua governada pela elegibilidade da RPC',
+  );
+  assert.doesNotMatch(
+    ramoTeste,
+    /statusBase\s*===\s*['"](?:enviado|respondido)['"]/,
+    'status produtivo enviado/respondido nao limita o slot de teste',
   );
 });
 

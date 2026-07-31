@@ -1124,22 +1124,18 @@ security definer
 set search_path = public, pg_temp
 as $function$
 declare
-  v_data_evasao date;
   v_unidade_id uuid;
-  v_dias_desde_evasao integer;
 begin
-  select m.data, m.unidade_id
-  into v_data_evasao, v_unidade_id
+  select m.unidade_id
+  into v_unidade_id
   from public.movimentacoes_admin m
   where m.id = p_evasao_id
     and m.tipo in ('evasao', 'nao_renovacao')
     and public.is_movimentacao_admin_retencao_valida(m.id);
 
-  if v_data_evasao is null or v_unidade_id is null then
+  if v_unidade_id is null then
     return false;
   end if;
-
-  v_dias_desde_evasao := current_date - v_data_evasao;
 
   return (
     auth.role() = 'service_role'
@@ -1147,8 +1143,7 @@ begin
       'sucesso_aluno.evasao.enviar'::varchar,
       v_unidade_id
     )
-  )
-  and v_dias_desde_evasao >= 3;
+  );
 end;
 $function$;
 
@@ -1212,7 +1207,8 @@ create or replace function public.listar_evadidos_para_pesquisa_v2(
   p_offset integer,
   p_status varchar,
   p_ano integer,
-  p_mes integer
+  p_mes integer,
+  p_busca text
 )
 returns table (
   total_count bigint,
@@ -1346,13 +1342,38 @@ with base_autorizada as (
       p_mes is null
       or extract(month from m.data)::integer = p_mes
     )
+    and (
+      nullif(btrim(p_busca), '') is null
+      or coalesce(m.aluno_nome, a.nome, '')
+        ilike ('%' || btrim(p_busca) || '%')
+      or coalesce(c.nome, '')
+        ilike ('%' || btrim(p_busca) || '%')
+      or coalesce(pr.nome, '')
+        ilike ('%' || btrim(p_busca) || '%')
+      or coalesce(ms.nome, m.motivo, '')
+        ilike ('%' || btrim(p_busca) || '%')
+      or coalesce(m.telefone_snapshot, a.whatsapp, a.telefone, '')
+        ilike ('%' || btrim(p_busca) || '%')
+    )
 ),
-classificada as (
+telefone_extraida as (
   select
     base_autorizada.*,
     nullif(regexp_replace(telefone, '[^0-9]', '', 'g'), '')
-      as telefone_normalizado
+      as telefone_digitos
   from base_autorizada
+),
+classificada as (
+  select
+    telefone_extraida.*,
+    case
+      when telefone_digitos ~ '^[0-9]{10,11}$'
+        then '55' || telefone_digitos
+      when telefone_digitos ~ '^55[0-9]{10,11}$'
+        then telefone_digitos
+      else telefone_digitos
+    end as telefone_normalizado
+  from telefone_extraida
 ),
 bloqueada as (
   select
@@ -1362,7 +1383,7 @@ bloqueada as (
         then 'sem_aluno'
       when telefone_normalizado is null
         then 'sem_telefone'
-      when telefone_normalizado !~ '^(55)?[0-9]{10,11}$'
+      when telefone_normalizado !~ '^55[0-9]{10,11}$'
         then 'telefone_invalido'
       when motivo_catalogado is null
         then 'motivo_nao_catalogado'
@@ -1371,12 +1392,30 @@ bloqueada as (
       when exists (
         select 1
         from public.pesquisa_evasao pe_aberta
+        cross join lateral (
+          select nullif(
+            regexp_replace(
+              pe_aberta.telefone_destino_snapshot,
+              '[^0-9]',
+              '',
+              'g'
+            ),
+            ''
+          ) as telefone_aberta_digitos
+        ) telefone_aberta
+        cross join lateral (
+          select case
+            when telefone_aberta_digitos ~ '^[0-9]{10,11}$'
+              then '55' || telefone_aberta_digitos
+            when telefone_aberta_digitos ~ '^55[0-9]{10,11}$'
+              then telefone_aberta_digitos
+            else telefone_aberta_digitos
+          end as telefone_aberta_normalizado
+        ) telefone_aberta_canonica
         where pe_aberta.modo_teste = false
           and pe_aberta.evasao_id <> classificada.evasao_id
-          and nullif(
-            regexp_replace(pe_aberta.telefone_destino_snapshot, '[^0-9]', '', 'g'),
-            ''
-          ) = classificada.telefone_normalizado
+          and telefone_aberta_normalizado =
+            classificada.telefone_normalizado
           and pe_aberta.envio_status in (
             'enviando',
             'incerto',
@@ -1396,7 +1435,6 @@ elegibilidade as (
     bloqueada.*,
     (
       bloqueio_codigo is null
-      and current_date - data_evasao >= 3
       and pesquisa_producao_status in (
         'pendente',
         'falha_envio',
@@ -1406,8 +1444,6 @@ elegibilidade as (
     case
       when bloqueio_codigo is not null
         then bloqueio_codigo
-      when current_date - data_evasao < 3
-        then 'aguardar_prazo_minimo'
       when pesquisa_producao_status not in (
         'pendente',
         'falha_envio',
@@ -1505,7 +1541,8 @@ revoke all on function public.listar_evadidos_para_pesquisa_v2(
   integer,
   varchar,
   integer,
-  integer
+  integer,
+  text
 ) from public, anon, mila_acesso_restrito, sol_acesso_restrito,
        fabio_agent, lia_acesso_restrito;
 grant execute on function public.listar_evadidos_para_pesquisa_v2(
@@ -1514,7 +1551,8 @@ grant execute on function public.listar_evadidos_para_pesquisa_v2(
   integer,
   varchar,
   integer,
-  integer
+  integer,
+  text
 ) to authenticated, service_role;
 
 revoke all on function public.listar_pesquisas_evasao_teste_v1(integer)
