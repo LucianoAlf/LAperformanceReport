@@ -1874,11 +1874,12 @@ async function processarCron(
         continue;
       }
 
+      const instanteGeracaoComercial = new Date();
       const texto = await gerarRelatorioComercialDiario(
         supabase,
         unidade.id,
         undefined,
-        agora,
+        instanteGeracaoComercial,
         'cron',
       );
       const agendadaPara = new Date(agora.getTime() + offsetFilaMinutos * 60_000);

@@ -472,7 +472,11 @@ test("cron continua sem data externa e usa a referencia BRT do gerador", () => {
   assert.match(gerador, /instanteGeracao:\s*Date\s*=\s*new Date\(\)/);
   assert.match(
     cron,
-    /gerarRelatorioComercialDiario\(\s*supabase,\s*unidade\.id,\s*undefined,\s*agora,\s*['"]cron['"],?\s*\)/,
+    /const instanteGeracaoComercial\s*=\s*new Date\(\);\s*const texto\s*=\s*await gerarRelatorioComercialDiario\(\s*supabase,\s*unidade\.id,\s*undefined,\s*instanteGeracaoComercial,\s*['"]cron['"],?\s*\)/,
+  );
+  assert.doesNotMatch(
+    cron,
+    /gerarRelatorioComercialDiario\(\s*supabase,\s*unidade\.id,\s*undefined,\s*agora,/,
   );
 });
 

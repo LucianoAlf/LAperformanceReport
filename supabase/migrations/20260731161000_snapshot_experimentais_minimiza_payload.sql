@@ -21,8 +21,9 @@ set payload = jsonb_build_object(
   )
 );
 
--- A interface autenticada usa somente estes cinco campos. Dados de contato,
--- responsavel, professor e payload permanecem privados ao service_role.
+-- A interface autenticada usa somente estes sete campos. Dados de contato,
+-- nome do professor e payload permanecem privados ao service_role. Os IDs
+-- tecnicos abaixo sao necessarios para os filtros do detalhe por unidade.
 revoke select on table public.emusys_experimentais_raw
   from authenticated;
 
@@ -31,7 +32,9 @@ grant select (
   aluno_nome,
   data_aula,
   horario_aula,
-  situacao_operacional
+  situacao_operacional,
+  professor_id,
+  unidade_id
 ) on table public.emusys_experimentais_raw
   to authenticated;
 

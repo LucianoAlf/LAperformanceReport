@@ -9,6 +9,8 @@ const baseMigrationPath =
   'supabase/migrations/20260622213000_emusys_experimentais_raw.sql';
 const securityMigrationPath =
   'supabase/migrations/20260731161000_snapshot_experimentais_minimiza_payload.sql';
+const consumersMigrationPath =
+  'supabase/migrations/20260731160500_snapshot_experimentais_consumidores_ids_materializados.sql';
 const admissionMigrationPath =
   'supabase/migrations/20260731162000_snapshot_experimentais_admissao_refresh.sql';
 const requirePostgres = process.env.COMERCIAL_EXP_REQUIRE_POSTGRES === '1';
@@ -1580,6 +1582,120 @@ test(
         `nao preparou payload PII sintetico:\n${piiFixture.stderr}`,
       );
 
+      const legacyConsumerFixture = psql(
+        containerName,
+        String.raw`
+          \set ON_ERROR_STOP on
+
+          create or replace function public.fixture_consumidor_payload_legado()
+          returns jsonb
+          language sql
+          stable
+          as $fixture$
+            select jsonb_build_object(
+              'leads',
+              count(*) filter (
+                where coalesce(
+                  r.payload #>> '{aluno,id_lead}',
+                  r.emusys_lead_id::text
+                ) is not null
+              ),
+              'alunos',
+              count(*) filter (
+                where coalesce(
+                  r.payload #>> '{aluno,id_aluno}',
+                  r.emusys_aluno_id::text
+                ) is not null
+              )
+            )
+            from public.emusys_experimentais_raw r
+          $fixture$;
+
+          create table public.fixture_consumidor_payload_resultado (
+            momento text primary key,
+            resultado jsonb not null
+          );
+
+          insert into public.fixture_consumidor_payload_resultado (
+            momento,
+            resultado
+          )
+          values (
+            'antes',
+            public.fixture_consumidor_payload_legado()
+          );
+        `,
+      );
+      assert.equal(
+        legacyConsumerFixture.status,
+        0,
+        `nao preparou consumidor legado:\n${legacyConsumerFixture.stderr}`,
+      );
+
+      const consumersMigrationApplied = psql(
+        containerName,
+        read(consumersMigrationPath),
+      );
+      assert.equal(
+        consumersMigrationApplied.status,
+        0,
+        `migracao dos consumidores legados falhou:\n${consumersMigrationApplied.stderr}`,
+      );
+
+      const consumersAssertions = psql(
+        containerName,
+        String.raw`
+          \set ON_ERROR_STOP on
+
+          insert into public.fixture_consumidor_payload_resultado (
+            momento,
+            resultado
+          )
+          values (
+            'depois_migracao',
+            public.fixture_consumidor_payload_legado()
+          );
+
+          do $consumers$
+          declare
+            v_definicao text;
+          begin
+            select pg_get_functiondef(p.oid)
+            into v_definicao
+            from pg_proc p
+            join pg_namespace n
+              on n.oid = p.pronamespace
+            where n.nspname = 'public'
+              and p.proname = 'fixture_consumidor_payload_legado';
+
+            if v_definicao like '%r.payload #>> ''{aluno,id_lead}''%'
+               or v_definicao like '%r.payload #>> ''{aluno,id_aluno}''%'
+            then
+              raise exception 'consumidor de fixture manteve payload legado';
+            end if;
+
+            if v_definicao not like '%r.emusys_lead_id::text%'
+               or v_definicao not like '%r.emusys_aluno_id::text%'
+            then
+              raise exception 'consumidor nao usa IDs materializados';
+            end if;
+
+            if (
+              select count(distinct resultado)
+              from public.fixture_consumidor_payload_resultado
+            ) <> 1 then
+              raise exception 'resultado mudou ao migrar consumidor legado';
+            end if;
+          end;
+          $consumers$;
+        `,
+      );
+      assert.equal(
+        consumersAssertions.status,
+        0,
+        `contrato dos consumidores materializados falhou:\n${consumersAssertions.stderr}`,
+      );
+
       const securityMigrationApplied = psql(
         containerName,
         read(securityMigrationPath),
@@ -1646,6 +1762,16 @@ test(
               'public.emusys_experimentais_raw',
               'aluno_nome',
               'select'
+            ) or not has_column_privilege(
+              'authenticated',
+              'public.emusys_experimentais_raw',
+              'professor_id',
+              'select'
+            ) or not has_column_privilege(
+              'authenticated',
+              'public.emusys_experimentais_raw',
+              'unidade_id',
+              'select'
             ) or has_column_privilege(
               'authenticated',
               'public.emusys_experimentais_raw',
@@ -1698,8 +1824,13 @@ test(
               aluno_nome,
               data_aula,
               horario_aula,
-              situacao_operacional
+              situacao_operacional,
+              professor_id,
+              unidade_id
             from public.emusys_experimentais_raw
+            where professor_id = 1
+              and unidade_id =
+                '11111111-1111-1111-1111-111111111111'
             limit 1;
 
             begin
@@ -1714,6 +1845,27 @@ test(
           end;
           $auth$;
           reset role;
+
+          insert into public.fixture_consumidor_payload_resultado (
+            momento,
+            resultado
+          )
+          values (
+            'depois_saneamento',
+            public.fixture_consumidor_payload_legado()
+          );
+
+          do $consumer_result$
+          begin
+            if (
+              select count(distinct resultado)
+              from public.fixture_consumidor_payload_resultado
+            ) <> 1 then
+              raise exception
+                'resultado do consumidor mudou apos saneamento do payload';
+            end if;
+          end;
+          $consumer_result$;
         `,
       );
       assert.equal(
