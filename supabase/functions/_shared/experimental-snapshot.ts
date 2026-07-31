@@ -1,3 +1,5 @@
+import type { EmusysPaginaAulas } from "./emusys-aulas.ts";
+
 export type SituacaoExperimental =
   | "agendada"
   | "presente"
@@ -67,10 +69,10 @@ export type FetchAulasPageParams = {
 export type FetchTodasAulasInput = {
   dataInicio: string;
   dataFim: string;
-  fetchPage: (params: FetchAulasPageParams) => Promise<Response>;
+  fetchPage: (
+    params: FetchAulasPageParams,
+  ) => Promise<EmusysPaginaAulas<AulaEmusys>>;
 };
-
-type JsonRecord = Record<string, unknown>;
 
 const TIME_ZONE = "America/Sao_Paulo";
 const SAO_PAULO_FORMATTER = new Intl.DateTimeFormat("en-CA", {
@@ -83,10 +85,6 @@ const SAO_PAULO_FORMATTER = new Intl.DateTimeFormat("en-CA", {
   second: "2-digit",
   hourCycle: "h23",
 });
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function externalId(value: unknown): number | null {
   const parsed = typeof value === "number"
@@ -190,46 +188,82 @@ function localSaoPauloToEpoch(parts: {
   return candidate;
 }
 
-function dataHoraEpoch(dataHoraInicio: string): number {
-  const value = dataHoraInicio.trim();
-  const normalized = value.replace(" ", "T");
-  const hasExplicitOffset = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+function diasNoMes(year: number, month: number): number {
+  if (month === 2) {
+    const bissexto = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    return bissexto ? 29 : 28;
+  }
+  return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
 
-  if (hasExplicitOffset) {
-    const epoch = Date.parse(normalized);
-    if (!Number.isNaN(epoch)) return epoch;
+function parseDataHoraLocalEmusys(dataHoraInicio: string): {
+  dataAula: string;
+  horarioAula: string;
+  epochMs: number;
+} {
+  const match = dataHoraInicio.trim().match(
+    /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})(?::(\d{2}))?$/,
+  );
+  if (!match) throw new Error("DATA_HORA_EXPERIMENTAL_INVALIDA");
+
+  const [
+    ,
+    yearText,
+    monthText,
+    dayText,
+    hourText,
+    minuteText,
+    secondText = "00",
+  ] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+
+  if (
+    year < 1 ||
+    month < 1 || month > 12 ||
+    day < 1 || day > diasNoMes(year, month) ||
+    hour < 0 || hour > 23 ||
+    minute < 0 || minute > 59 ||
+    second < 0 || second > 59
+  ) {
     throw new Error("DATA_HORA_EXPERIMENTAL_INVALIDA");
   }
 
-  const match = normalized.match(
-    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/,
-  );
-  if (!match) throw new Error("DATA_HORA_EXPERIMENTAL_INVALIDA");
-
-  const [, year, month, day, hour, minute, second = "00"] = match;
-  return localSaoPauloToEpoch({
-    year: Number(year),
-    month: Number(month),
-    day: Number(day),
-    hour: Number(hour),
-    minute: Number(minute),
-    second: Number(second),
-  });
+  const dataAula = `${yearText}-${monthText}-${dayText}`;
+  const horarioAula = `${hourText}:${minuteText}:${secondText}`;
+  return {
+    dataAula,
+    horarioAula,
+    epochMs: localSaoPauloToEpoch({
+      year,
+      month,
+      day,
+      hour,
+      minute,
+      second,
+    }),
+  };
 }
 
-function dataHorario(dataHoraInicio: string): {
-  dataAula: string;
-  horarioAula: string;
-} {
-  const match = dataHoraInicio.trim().match(
-    /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::(\d{2}))?/,
-  );
-  if (!match) throw new Error("DATA_HORA_EXPERIMENTAL_INVALIDA");
+function normalizarSituacaoComEpoch(input: {
+  presenca: string | null | undefined;
+  cancelada: boolean;
+  inicioEpochMs: number;
+  agora: Date;
+}): SituacaoExperimental {
+  if (input.cancelada) return "cancelada";
+  if (input.inicioEpochMs > input.agora.getTime()) return "agendada";
 
-  return {
-    dataAula: match[1],
-    horarioAula: `${match[2]}:${match[3] ?? "00"}`,
-  };
+  const presenca = normalizarTexto(input.presenca);
+  if (presenca === "presente" || presenca === "matriculado") {
+    return "presente";
+  }
+  if (presenca === "faltou" || presenca === "ausente") return "faltou";
+  return "sem_status";
 }
 
 export function normalizarSituacaoExperimental(input: {
@@ -238,17 +272,13 @@ export function normalizarSituacaoExperimental(input: {
   dataHoraInicio: string;
   agora: Date;
 }): SituacaoExperimental {
-  if (input.cancelada) return "cancelada";
-  if (dataHoraEpoch(input.dataHoraInicio) > input.agora.getTime()) {
-    return "agendada";
-  }
-
-  const presenca = normalizarTexto(input.presenca);
-  if (presenca === "presente" || presenca === "matriculado") {
-    return "presente";
-  }
-  if (presenca === "faltou" || presenca === "ausente") return "faltou";
-  return "sem_status";
+  const { epochMs } = parseDataHoraLocalEmusys(input.dataHoraInicio);
+  return normalizarSituacaoComEpoch({
+    presenca: input.presenca,
+    cancelada: input.cancelada,
+    inicioEpochMs: epochMs,
+    agora: input.agora,
+  });
 }
 
 export function montarLinhasSnapshot(input: SnapshotInput): SnapshotRow[] {
@@ -261,7 +291,9 @@ export function montarLinhasSnapshot(input: SnapshotInput): SnapshotRow[] {
       throw new Error("EMUSYS_AULA_ID_INVALIDO");
     }
 
-    const { dataAula, horarioAula } = dataHorario(aula.data_hora_inicio);
+    const { dataAula, horarioAula, epochMs } = parseDataHoraLocalEmusys(
+      aula.data_hora_inicio,
+    );
     const cancelada = aula.cancelada === true;
 
     for (const participante of aula.alunos ?? []) {
@@ -294,10 +326,10 @@ export function montarLinhasSnapshot(input: SnapshotInput): SnapshotRow[] {
         horario_aula: horarioAula,
         cancelada,
         presenca_emusys: presenca,
-        situacao_operacional: normalizarSituacaoExperimental({
+        situacao_operacional: normalizarSituacaoComEpoch({
           presenca,
           cancelada,
-          dataHoraInicio: aula.data_hora_inicio,
+          inicioEpochMs: epochMs,
           agora,
         }),
         payload_bruto: {
@@ -314,31 +346,6 @@ export function montarLinhasSnapshot(input: SnapshotInput): SnapshotRow[] {
   return [...rows.values()];
 }
 
-function validarPagina(payload: unknown): {
-  items: AulaEmusys[];
-  temMais: boolean;
-  proximoCursor: unknown;
-} {
-  if (!isRecord(payload) || !Array.isArray(payload.items)) {
-    throw new Error("EMUSYS_AULAS_PAYLOAD_INVALIDO");
-  }
-  if (!isRecord(payload.paginacao)) {
-    throw new Error("EMUSYS_AULAS_PAYLOAD_INVALIDO");
-  }
-  if (typeof payload.paginacao.tem_mais !== "boolean") {
-    throw new Error("EMUSYS_AULAS_PAYLOAD_INVALIDO");
-  }
-  if (!payload.items.every(isRecord)) {
-    throw new Error("EMUSYS_AULAS_PAYLOAD_INVALIDO");
-  }
-
-  return {
-    items: payload.items as AulaEmusys[],
-    temMais: payload.paginacao.tem_mais,
-    proximoCursor: payload.paginacao.proximo_cursor,
-  };
-}
-
 export async function buscarTodasAulas(
   input: FetchTodasAulasInput,
 ): Promise<AulaEmusys[]> {
@@ -347,30 +354,18 @@ export async function buscarTodasAulas(
   let cursor: string | null = null;
 
   while (true) {
-    const response = await input.fetchPage({
+    const pagina = await input.fetchPage({
       dataInicio: input.dataInicio,
       dataFim: input.dataFim,
       cursor,
       limite: 100,
     });
 
-    if (!response.ok) {
-      throw new Error(`EMUSYS_AULAS_HTTP:${response.status}`);
-    }
-
-    let payload: unknown;
-    try {
-      payload = await response.json();
-    } catch {
-      throw new Error("EMUSYS_AULAS_JSON_INVALIDO");
-    }
-
-    const pagina = validarPagina(payload);
     acumuladas.push(...pagina.items);
-    if (!pagina.temMais) return acumuladas;
+    if (!pagina.paginacao.tem_mais) return acumuladas;
 
-    const proximoCursor = typeof pagina.proximoCursor === "string"
-      ? pagina.proximoCursor.trim()
+    const proximoCursor = typeof pagina.paginacao.proximo_cursor === "string"
+      ? pagina.paginacao.proximo_cursor.trim()
       : "";
     if (!proximoCursor) {
       throw new Error("EMUSYS_AULAS_CURSOR_AUSENTE");
