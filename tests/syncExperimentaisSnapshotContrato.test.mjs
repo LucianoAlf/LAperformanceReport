@@ -4,10 +4,13 @@ import test from "node:test";
 
 import {
   aplicarSnapshotsMetadados,
+  chaveAulaPorUnidade,
   classificarErroSnapshot,
   executarModoExperimentais,
   horarioExperimentalParaBanco,
+  montarPatchReconciliacaoExperimental,
   normalizarHorarioExperimental,
+  selecionarIdsCancelamentoEstavel,
   SnapshotRequestError,
   SnapshotUpstreamError,
   validarParametrosExperimentais,
@@ -423,6 +426,182 @@ test("curso fica null sem de-para e nunca usa nome textual como vinculo", async 
   assert.equal(item.cursoNome, null);
 });
 
+test("cancelamento encontra webhook com id de evento divergente por identidade estavel", () => {
+  const ids = selecionarIdsCancelamentoEstavel({
+    identidade: {
+      unidadeId: UNIDADE.id,
+      dataAula: "2026-07-30",
+      horarioBanco: "20:00:00",
+      cursoId: 9,
+      emusysLeadId: 501,
+      leadId: 41,
+      alunoId: null,
+    },
+    candidatos: [
+      {
+        id: 10,
+        unidadeId: UNIDADE.id,
+        emusysAulaId: 7001,
+        dataAula: "2026-07-30",
+        horarioBanco: "20:00:00",
+        cursoId: 9,
+        emusysLeadId: 501,
+        leadId: 41,
+        alunoId: null,
+        nomeAluno: "Nome alterado no webhook",
+        telefone: "00000000000",
+      },
+      {
+        id: 11,
+        unidadeId: UNIDADE.id,
+        emusysAulaId: 8001,
+        dataAula: "2026-07-30",
+        horarioBanco: "20:00:00",
+        cursoId: 9,
+        emusysLeadId: 999,
+        leadId: 99,
+        alunoId: null,
+        nomeAluno: "Alice Exemplo",
+        telefone: "21999999999",
+      },
+      {
+        id: 12,
+        unidadeId: "95553e96-971b-4590-a6eb-0201d013c14d",
+        emusysAulaId: 7001,
+        dataAula: "2026-07-30",
+        horarioBanco: "20:00:00",
+        cursoId: 9,
+        emusysLeadId: 501,
+        leadId: 41,
+        alunoId: null,
+      },
+    ],
+  });
+
+  assert.deepEqual(ids, [10]);
+  assert.notEqual(7001, 9001, "webhook e /aulas podem ter IDs diferentes");
+});
+
+test("cancelamento nao usa nome ou telefone quando IDs estaveis nao batem", () => {
+  const ids = selecionarIdsCancelamentoEstavel({
+    identidade: {
+      unidadeId: UNIDADE.id,
+      dataAula: "2026-07-30",
+      horarioBanco: "20:00:00",
+      cursoId: 9,
+      emusysLeadId: 501,
+      leadId: 41,
+      alunoId: null,
+    },
+    candidatos: [{
+      id: 20,
+      unidadeId: UNIDADE.id,
+      emusysAulaId: 7001,
+      dataAula: "2026-07-30",
+      horarioBanco: "20:00:00",
+      cursoId: 9,
+      emusysLeadId: 999,
+      leadId: 99,
+      alunoId: null,
+      nomeAluno: "Alice Exemplo",
+      telefone: "21999999999",
+    }],
+  });
+
+  assert.deepEqual(ids, []);
+});
+
+test("cancelamento encontra participante por id de aluno local resolvido", () => {
+  const ids = selecionarIdsCancelamentoEstavel({
+    identidade: {
+      unidadeId: UNIDADE.id,
+      dataAula: "2026-07-30",
+      horarioBanco: "20:00:00",
+      cursoId: 9,
+      emusysLeadId: null,
+      leadId: null,
+      alunoId: 77,
+    },
+    candidatos: [{
+      id: 21,
+      unidadeId: UNIDADE.id,
+      emusysAulaId: 7001,
+      dataAula: "2026-07-30",
+      horarioBanco: "20:00:00",
+      cursoId: 9,
+      emusysLeadId: null,
+      leadId: null,
+      alunoId: 77,
+    }],
+  });
+
+  assert.deepEqual(ids, [21]);
+});
+
+for (const statusTerminal of ["convertido", "matriculado"]) {
+  test(`preserva status terminal ${statusTerminal} e atualiza demais vinculos`, () => {
+    const resultado = montarPatchReconciliacaoExperimental({
+      atual: {
+        status: statusTerminal,
+        cursoId: null,
+        professorId: null,
+        emusysAulaId: null,
+        emusysLeadId: null,
+        alunoId: null,
+      },
+      desejado: {
+        status: "experimental_faltou",
+        etapaPipelineId: 9,
+        cursoId: 9,
+        professorId: 12,
+        emusysAulaId: 9001,
+        emusysLeadId: 501,
+        alunoId: 77,
+      },
+      atualizadoEm: "2026-07-31T12:00:00.000Z",
+    });
+
+    assert.equal(resultado.statusMudou, false);
+    assert.equal("status" in resultado.patch, false);
+    assert.equal("etapa_pipeline_id" in resultado.patch, false);
+    assert.deepEqual(resultado.patch, {
+      updated_at: "2026-07-31T12:00:00.000Z",
+      curso_interesse_id: 9,
+      professor_experimental_id: 12,
+      emusys_aula_id: 9001,
+      emusys_lead_id: 501,
+      aluno_id: 77,
+    });
+  });
+}
+
+test("mesmo ID de aula pertence a chaves distintas em unidades diferentes", () => {
+  assert.notEqual(
+    chaveAulaPorUnidade(UNIDADE.id, 9001),
+    chaveAulaPorUnidade(
+      "95553e96-971b-4590-a6eb-0201d013c14d",
+      9001,
+    ),
+  );
+
+  const migration = readFileSync(
+    new URL(
+      "../supabase/migrations/20260731133000_lead_experimentais_aula_unica_por_unidade.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(migration, /drop index if exists public\.uq_lead_exp_aula/i);
+  assert.match(
+    migration,
+    /create unique index uq_lead_exp_aula[\s\S]*\(unidade_id, emusys_aula_id\)/i,
+  );
+  assert.doesNotMatch(
+    migration,
+    /create unique index uq_lead_exp_aula\s+on[^;]+\(emusys_aula_id\)/i,
+  );
+});
+
 test("edge usa o modulo puro e o horario de banco projetado", () => {
   const source = readFileSync(
     new URL(
@@ -439,6 +618,8 @@ test("edge usa o modulo puro e o horario de banco projetado", () => {
     /\.eq\('horario_experimental',\s*exp\.horarioBanco\)/,
   );
   assert.match(source, /horario_experimental:\s*exp\.horarioBanco/);
+  assert.match(source, /selecionarIdsCancelamentoEstavel\(/);
+  assert.match(source, /montarPatchReconciliacaoExperimental\(/);
   assert.match(
     source,
     /\.from\('curso_emusys_depara'\)[\s\S]{0,200}\.eq\('unidade_id', unidadeId\)/,
