@@ -2048,32 +2048,28 @@ serve(async (req) => {
           { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }
-      const bearerToken = authHeader.replace(/^Bearer\s+/i, '').trim();
-      const chamadaInterna = Boolean(serviceRoleKey && bearerToken === serviceRoleKey);
-      if (!chamadaInterna) {
-        const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-        if (!anonKey) throw new Error('SUPABASE_ANON_KEY_AUSENTE');
-        const userClient = createClient(supabaseUrl, anonKey, {
-          global: { headers: { Authorization: authHeader } },
-          auth: { autoRefreshToken: false, persistSession: false },
-        });
-        const { data: authData, error: authError } = await userClient.auth.getUser();
-        if (authError || !authData.user) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'Token inválido para dry_run' }),
-            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-          );
-        }
-        const { data: autorizado, error: autorizacaoError } = await userClient.rpc(
-          'pode_gerar_relatorio_admin_v1',
-          { p_unidade_id: payload.unidade },
+      const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+      if (!anonKey) throw new Error('SUPABASE_ANON_KEY_AUSENTE');
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+      const { data: authData, error: authError } = await userClient.auth.getUser();
+      const { data: autorizado, error: autorizacaoError } = await userClient.rpc(
+        'pode_gerar_relatorio_admin_v1',
+        { p_unidade_id: payload.unidade },
+      );
+      if (autorizacaoError || autorizado !== true) {
+        const status = authError || !authData.user ? 401 : 403;
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: status === 401
+              ? 'Token inválido para dry_run'
+              : 'Unidade não autorizada para dry_run',
+          }),
+          { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
-        if (autorizacaoError || autorizado !== true) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'Unidade não autorizada para dry_run' }),
-            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-          );
-        }
       }
 
       let dataReferencia: string;
