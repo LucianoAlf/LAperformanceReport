@@ -78,17 +78,30 @@ test('RPC de aplicacao e privada, transacional e registra execucao completa', ()
   assert.match(block, /security\s+definer/i);
   assert.match(block, /set\s+search_path\s*=\s*public\s*,\s*pg_temp/i);
   assert.match(block, /jsonb_to_recordset/i);
+  const unitValidation = block.search(
+    /not\s+exists\s*\([\s\S]{0,180}from\s+public\.unidades[\s\S]{0,140}p_unidade_id/i,
+  );
   const unitLock = block.search(
-    /from\s+public\.unidades[\s\S]{0,180}where[\s\S]{0,100}p_unidade_id[\s\S]{0,100}for\s+update/i,
+    /pg_advisory_xact_lock\s*\(\s*hashtextextended\s*\([\s\S]{0,220}aplicar_snapshot_experimentais_emusys_v1[\s\S]{0,160}p_unidade_id::text/i,
   );
   const executionLookup = block.search(
     /from\s+public\.emusys_experimentais_snapshot_execucoes/i,
   );
-  assert.notEqual(unitLock, -1, 'aplicacao deve bloquear a linha da unidade');
+  assert.notEqual(unitValidation, -1, 'unidade deve ser validada antes do lock');
+  assert.notEqual(
+    unitLock,
+    -1,
+    'aplicacao deve usar advisory xact lock namespaced por unidade',
+  );
   assert.notEqual(executionLookup, -1);
   assert.ok(
-    unitLock < executionLookup,
-    'lock da unidade deve anteceder consulta da execucao e escritas',
+    unitValidation < unitLock && unitLock < executionLookup,
+    'lock deve vir depois da validacao da unidade e antes do snapshot',
+  );
+  assert.doesNotMatch(
+    block,
+    /for\s+update/i,
+    'serializacao nao pode bloquear a linha real da unidade',
   );
   assert.match(
     block,
