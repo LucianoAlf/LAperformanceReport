@@ -184,13 +184,26 @@ test('leitura operacional usa somente vigentes e publica frescor do snapshot', (
   assert.match(block, /language\s+plpgsql/i);
   assert.match(block, /security\s+definer/i);
   assert.match(block, /set\s+search_path\s*=\s*public\s*,\s*pg_temp/i);
-  assert.match(
+  assert.doesNotMatch(
     block,
-    /p_unidade_id\s+is\s+null[\s\S]{0,200}raise\s+exception\s+'SNAPSHOT_EXPERIMENTAIS_UNIDADE_OBRIGATORIA'/i,
+    /p_unidade_id\s+is\s+null[\s\S]{0,200}raise\s+exception/i,
+    'modo agregado nulo deve ser autorizado por unidade dentro da RPC',
   );
   assert.match(
     block,
-    /auth\.role\s*\(\s*\)\s+is\s+distinct\s+from\s+'service_role'[\s\S]{0,200}pode_gerar_relatorio_comercial_v1\s*\(\s*p_unidade_id\s*\)/i,
+    /p_unidade_id\s+is\s+not\s+null[\s\S]{0,220}auth\.role\s*\(\s*\)\s+is\s+distinct\s+from\s+'service_role'[\s\S]{0,220}pode_gerar_relatorio_comercial_v1\s*\(\s*p_unidade_id\s*\)/i,
+  );
+  assert.match(
+    block,
+    /unidades_autorizadas\s+as\s*\([\s\S]{0,500}from\s+public\.unidades[\s\S]{0,500}auth\.role\s*\(\s*\)\s*=\s*'service_role'[\s\S]{0,500}pode_gerar_relatorio_comercial_v1\s*\(\s*u\.id\s*\)/i,
+  );
+  assert.match(
+    block,
+    /execucoes_cobertura\s+as\s*\([\s\S]{0,700}left\s+join\s+lateral[\s\S]{0,700}data_fim\s*>=\s*p\.data_cobertura_fim/i,
+  );
+  assert.match(
+    block,
+    /count\s*\(\s*e\.id\s*\)\s*=\s*count\s*\(\s*\*\s*\)[\s\S]{0,140}'completo'/i,
   );
   assert.match(block, /snapshot_ativo\s+is\s+true/i);
   assert.match(
