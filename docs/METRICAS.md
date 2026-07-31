@@ -267,9 +267,12 @@ Ticket médio dos passaportes = soma dos passaportes positivos
 ```
 
 O agrupamento ocorre antes do cálculo: um segundo curso pode acrescentar uma
-parcela ao valor consolidado, mas não cria outro denominador. Zero, nulo e
-valor inválido ficam fora somente do denominador correspondente. A média é
-arredondada a duas casas apenas ao final. A meta `metas_kpi.tipo='ticket_medio'`
+parcela ao valor consolidado, mas não cria outro denominador. Um parser
+monetário único aceita números e os formatos textuais reais do backend, como
+`460,00`, `1.234,56` e `R$ 450,00`. Zero, nulo e valor inválido ficam fora
+somente do denominador correspondente. Os valores e a soma bruta não são
+arredondados antes da divisão; soma e média publicadas recebem duas casas
+somente ao final. A meta `metas_kpi.tipo='ticket_medio'`
 é exibida exclusivamente ao lado do ticket das parcelas; não há meta canônica
 de passaporte. Referência de aceite da Barra em julho/2026: parcelas
 `R$ 6.819,00 / 16 = R$ 426,19` e passaportes
@@ -284,10 +287,13 @@ ativa descrita nas inconsistências deste documento.
 A agenda vem somente do snapshot Emusys vigente. Uma participação entra quando
 `snapshot_ativo=true`, `situacao='agendada'`, não está cancelada e seu início em
 `America/Sao_Paulo` é estritamente posterior ao instante de geração e menor ou
-igual a D+7. Evento do mesmo dia sem horário fica fora; em data posterior ele
-pode entrar. A lista remove duplicatas por data, horário, aluno e curso, ordena
-por data/horário/nome, mostra no máximo dez participações e informa o total
-excedente.
+igual a D+7. A conversão de data/hora usa as regras IANA de
+`America/Sao_Paulo`, inclusive transições históricas, e uma referência temporal
+inválida interrompe a geração. Evento do mesmo dia sem horário fica fora; em
+data posterior ele pode entrar. A lista só remove duplicatas quando ambas as
+linhas possuem e repetem `emusysAulaId + participanteChave`; homônimos e linhas
+sem identidade estável são preservados. A ordenação é por data/horário/nome, o
+limite é dez participações e o total excedente é informado.
 
 ### Taxa Lead → Experimental
 Leads que agendaram/realizaram experimental ÷ total de leads do período.
