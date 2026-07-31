@@ -106,21 +106,26 @@ com `valor_parcela = valor_cheio − desconto_condicional` (fórmula canônica a
 - RPC: `get_kpis_alunos_financeiro_vivo_canonico`.
 - **Banda, bolsista integral e bolsista parcial ficam de fora** — pelo flag, não por
   pagarem zero. Bolsista parcial paga e ainda assim não entra.
-- ⚠️ `get_carteira_professores.mrr_total` ainda não segue esta regra (ver abaixo).
+- `get_carteira_professores.mrr_total` segue esta regra desde 31/07/2026, sem a dedup por pessoa (ver abaixo).
 
 ### Ticket médio da carteira do professor (31/07/2026)
 Mesmo critério de `entra_ticket_medio`, **sem a dedup por pessoa**: na carteira por
 professor, aluno com 2 cursos é carteira dos 2 professores — deduplicar faria um deles
 perder o aluno. Segundo curso (`entra_ticket_medio = true`) entra nos **dois** lados.
-- RPC: `get_carteira_professores` → `ticket_medio`, com a base exposta em
-  `alunos_ticket` / `mrr_ticket` (o card agregado da aba soma numeradores e
-  denominadores; média de médias não é média).
-- ⚠️ **`mrr_total` NÃO segue a regra canônica de MRR — pendente.** Ele soma todo
-  pagante (`valor_parcela > 0`), enquanto `get_kpis_alunos_financeiro_vivo_canonico`
-  define MRR com o **mesmo `entra_ticket_medio`** do ticket. Diferença medida em
-  31/07/2026: R$ 415.941,12 na aba vs R$ 412.297,62 canônico — os R$ 2.433,50 a mais
-  são bolsistas parciais pagantes. Por isso `mrr_ticket` existe: ele é, na prática, o
-  MRR canônico. Ao alinhar `mrr_total`, `mrr_ticket` vira redundante e deve sumir.
+- RPC: `get_carteira_professores` → `ticket_medio`, com o denominador exposto em
+  `alunos_ticket` (o card agregado divide `mrr_total` pela soma de `alunos_ticket`;
+  média de médias não é média, e o headcount inclui quem não entra no ticket).
+- **`mrr_total` segue a regra canônica desde 31/07/2026** (decisão do Luciano:
+  "bolsista parcial não conta como aluno pagante"). É o numerador do ticket — mesmo
+  filtro. Antes somava todo pagante e inflava R$ 2.433,50. A coluna `mrr_ticket`,
+  criada horas antes no mesmo dia, virou redundante e foi removida.
+- **Arquivado (`arquivado_em`) fora da base.** `fn_aluno_entra_base_ativa_v131` não
+  filtra a lixeira; havia 5 matrículas arquivadas contando como carteira e somando
+  R$ 1.210,00 de MRR. A RPC filtra explicitamente.
+- **Trancado e inativo nunca estiveram aqui.** `vw_alunos_estado_operacional_v131` já
+  os marca `entra_base_ativa = false`. ⚠️ Não confundir com `alunos.status`, que é só
+  fallback e fica defasado: em 31/07/2026 havia 6 matrículas com status local
+  `trancado`/`inativo` que o Emusys reportava como `ativa`.
 - ⚠️ `total_alunos` é o **headcount inteiro** (inclui banda e bolsista) — é quantos
   alunos o professor atende. Nunca usar como denominador de ticket.
 - Histórico: até 31/07/2026 a RPC aproximava a regra por `valor_parcela > 0` e o front
