@@ -21,6 +21,29 @@ const plan = read(
   'docs/superpowers/plans/2026-07-30-pesquisa-evasao-subprojeto-a-fundacao-segura.md',
 );
 const runbook = read('docs/runbooks/pesquisa-evasao-subprojeto-a-rollout.md');
+const structuralVerification = read(
+  'scripts/verify-pesquisa-evasao-schema.sql',
+);
+
+const templateDireto = `Oi, {{aluno_primeiro_nome}}! Aqui é a {{assinatura_nome}}, do Sucesso do Aluno da LA Music. 🎵
+
+Queria agradecer pelo tempo que você passou com a gente. As portas estarão sempre abertas para você!
+
+Posso te fazer uma única pergunta?
+
+Se você pudesse mudar alguma coisa na sua experiência na LA Music, o que mudaria?
+
+Pode responder com texto ou áudio, fique à vontade. 🙏`;
+
+const templateResponsavel = `Oi, {{responsavel_primeiro_nome}}! Aqui é a {{assinatura_nome}}, do Sucesso do Aluno da LA Music. 🎵
+
+Queria agradecer pelo tempo que {{aluno_primeiro_nome}} passou com a gente. As portas estarão sempre abertas!
+
+Posso te fazer uma única pergunta?
+
+Se você pudesse mudar alguma coisa na experiência de {{aluno_primeiro_nome}} na LA Music, o que mudaria?
+
+Pode responder com texto ou áudio, fique à vontade. 🙏`;
 
 const rbacPlanA =
   /sucesso_aluno\.evasao|usuario_tem_permissao_estrita|fn_usuario_atual_tem_permissao_estrita|Sucesso do Aluno - Evasao|usuario_perfis/i;
@@ -110,4 +133,60 @@ test('documentacao remove terceiro usuario e matriz de autorizacao por unidade',
     assert.match(artefato, /qualquer usu.rio interno ativo/i, nome);
     assert.match(artefato, /auditoria|rastro/i, nome);
   }
+});
+
+test('migration semeia os dois templates aprovados de forma idempotente', () => {
+  assert.ok(migration.includes(templateDireto), 'template direto aprovado ausente');
+  assert.ok(
+    migration.includes(templateResponsavel),
+    'template de responsavel aprovado ausente',
+  );
+  assert.match(
+    migration,
+    /insert\s+into\s+public\.pesquisa_evasao_templates[\s\S]*on\s+conflict\s*\(chave,\s*versao,\s*publico\)[\s\S]*do\s+update/i,
+  );
+  assert.match(migration, /'direto'[\s\S]*'responsavel'/i);
+  assert.doesNotMatch(
+    migration,
+    /pesquisa_evasao_templates[\s\S]{0,2000}criado_por_usuario_id[\s\S]{0,2000}\b(?:29|30)\b/i,
+    'seed de template nao pode voltar a depender de usuario nominal',
+  );
+});
+
+test('templates e assinaturas permanecem configuracao SQL governada', () => {
+  for (const table of [
+    'pesquisa_evasao_templates',
+    'pesquisa_evasao_assinaturas',
+  ]) {
+    assert.match(
+      migration,
+      new RegExp(`grant\\s+select\\s+on\\s+table\\s+public\\.${table}\\s+to\\s+service_role`, 'i'),
+    );
+    assert.doesNotMatch(
+      migration,
+      new RegExp(`grant\\s+(?:insert|update|delete|all)[\\s\\S]{0,160}public\\.${table}[\\s\\S]{0,80}service_role`, 'i'),
+    );
+  }
+
+  assert.match(
+    runbook,
+    /troca de texto[\s\S]*override de assinatura[\s\S]*(?:migration|SQL)[\s\S]*versionad/i,
+  );
+  assert.match(runbook, /n[aã]o existe caminho de escrita pela aplica[cç][aã]o/i);
+});
+
+test('verificador e rollout bloqueiam preview sem templates validos', () => {
+  assert.match(
+    structuralVerification,
+    /exatamente um template ativo[\s\S]*direto[\s\S]*responsavel/i,
+  );
+  assert.match(structuralVerification, /placeholder[\s\S]*n[aã]o permitido/i);
+  assert.match(
+    runbook,
+    /antes do smoke[\s\S]*exatamente um template ativo[\s\S]*direto[\s\S]*responsavel/i,
+  );
+  assert.match(
+    runbook,
+    /pr[eé]via[\s\S]*sem sobrar[\s\S]*\{\{[\s\S]*\}\}/i,
+  );
 });

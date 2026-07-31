@@ -92,8 +92,10 @@ Sem JWT, qualquer pessoa que descubra a URL da Edge consegue pedir um disparo de
 5. Manter `REVOKE` explícito de `anon`, Mila, Sol, Fábio e Lia nas tabelas e RPCs privadas.
 6. Nas RPCs de listagem e estatística, validar somente service role ou usuário interno ativo. `p_unidade_id` continua filtro opcional.
 7. Tornar `pesquisa_evasao_previews.assinatura_id` anulável para suportar fallback sem provisionamento.
-8. Preservar o backfill fail-closed dos seis registros legados; banco vazio emite `NOTICE`, banco não vazio exige exatamente os seis testes.
-9. Preservar snapshot de telefone, status, idempotência, claim e trilha de auditoria.
+8. Semear de forma idempotente as duas cópias aprovadas, com exatamente um template ativo para `direto` e um para `responsavel`, sem usuário nominal.
+9. Manter `service_role` somente com leitura em templates e assinaturas; mudanças de configuração exigem migration ou SQL versionado até existir RPC administrativa auditada.
+10. Preservar o backfill fail-closed dos seis registros legados; banco vazio emite `NOTICE`, banco não vazio exige exatamente os seis testes.
+11. Preservar snapshot de telefone, status, idempotência, claim e trilha de auditoria.
 
 ### Aceite
 
@@ -205,6 +207,8 @@ Também executar o verificador estrutural no ambiente descartável/isolado quand
 - chamadas externas sem JWT não alcançam o fluxo de envio;
 - qualquer usuário interno ativo pode ver e enviar em qualquer unidade;
 - o nome exibido vem do login, com fallback automático e override opcional;
+- existem exatamente dois templates operacionais ativos, um por público, com as cópias aprovadas;
+- a primeira prévia renderiza todos os placeholders sem deixar `{{` ou `}}`;
 - o navegador não escolhe operador, texto, caixa ou telefone produtivo;
 - prévia e envio usam o mesmo snapshot;
 - teste e produção permanecem isolados;

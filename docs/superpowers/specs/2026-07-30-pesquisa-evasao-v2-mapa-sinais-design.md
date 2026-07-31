@@ -175,6 +175,8 @@ A evolução é aditiva:
 - `sucesso_aluno_sinais` materializa ocorrências operacionais e aponta para evidências canônicas;
 - `aluno_acoes` recebe referências explícitas à pesquisa e à análise quando a ação nascer desse fluxo.
 
+A fundação semeia as cópias aprovadas para os públicos `direto` e `responsavel` e exige exatamente um template ativo para cada um. A aplicação possui somente leitura dessa configuração. Troca de texto e override de assinatura permanecem mudanças governadas por migration ou SQL versionado até existir um fluxo administrativo próprio e auditado.
+
 `pesquisa_evasao.status` continua legível durante a migração, mas novos consumidores usam `envio_status` e `resposta_status`. Uma camada de compatibilidade deriva o status legado até todos os consumidores migrarem.
 
 A listagem operacional mantém uma linha por movimentação. Ela associa diretamente apenas o cabeçalho produtivo e apresenta testes como histórico separado, com quantidade, último teste e badge inequívoco. Uma tentativa de teste nunca determina o status produtivo nem duplica a movimentação na paginação.

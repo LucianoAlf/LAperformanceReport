@@ -131,6 +131,69 @@ create table if not exists public.pesquisa_evasao_templates (
   unique (chave, versao, publico)
 );
 
+-- Templates operacionais aprovados por Alf. Este seed e configuracao do
+-- produto, nao provisionamento nominal: nao depende de usuario, perfil ou
+-- unidade. Primeiro deixa as copias alvo inativas para permanecer seguro caso
+-- o indice unico parcial ja exista; depois desativa versoes concorrentes e
+-- ativa exatamente a versao aprovada de cada publico.
+insert into public.pesquisa_evasao_templates (
+  chave,
+  versao,
+  publico,
+  corpo,
+  ativo,
+  criado_por_usuario_id
+)
+values
+  (
+    'evasao_aberta',
+    1,
+    'direto',
+    $template_direto$Oi, {{aluno_primeiro_nome}}! Aqui é a {{assinatura_nome}}, do Sucesso do Aluno da LA Music. 🎵
+
+Queria agradecer pelo tempo que você passou com a gente. As portas estarão sempre abertas para você!
+
+Posso te fazer uma única pergunta?
+
+Se você pudesse mudar alguma coisa na sua experiência na LA Music, o que mudaria?
+
+Pode responder com texto ou áudio, fique à vontade. 🙏$template_direto$,
+    false,
+    null
+  ),
+  (
+    'evasao_aberta',
+    1,
+    'responsavel',
+    $template_responsavel$Oi, {{responsavel_primeiro_nome}}! Aqui é a {{assinatura_nome}}, do Sucesso do Aluno da LA Music. 🎵
+
+Queria agradecer pelo tempo que {{aluno_primeiro_nome}} passou com a gente. As portas estarão sempre abertas!
+
+Posso te fazer uma única pergunta?
+
+Se você pudesse mudar alguma coisa na experiência de {{aluno_primeiro_nome}} na LA Music, o que mudaria?
+
+Pode responder com texto ou áudio, fique à vontade. 🙏$template_responsavel$,
+    false,
+    null
+  )
+on conflict (chave, versao, publico)
+do update set
+  corpo = excluded.corpo,
+  ativo = false,
+  criado_por_usuario_id = null;
+
+update public.pesquisa_evasao_templates
+set ativo = false
+where publico in ('direto', 'responsavel')
+  and ativo = true;
+
+update public.pesquisa_evasao_templates
+set ativo = true
+where chave = 'evasao_aberta'
+  and versao = 1
+  and publico in ('direto', 'responsavel');
+
 create table if not exists public.pesquisa_evasao_previews (
   id uuid primary key default gen_random_uuid(),
   evasao_id integer not null references public.movimentacoes_admin(id),

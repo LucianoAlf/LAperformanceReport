@@ -8,7 +8,11 @@ do $verify_schema$
 declare
   v_tabela text;
   v_role text;
+  v_publico text;
   v_policy_count integer;
+  v_template_count integer;
+  v_template_corpo text;
+  v_template_renderizado text;
 begin
   if to_regprocedure('public.fn_pesquisa_evasao_usuario_interno_ativo()') is null then
     raise exception 'helper de usuario interno ativo ausente';
@@ -32,6 +36,95 @@ begin
       and c.is_nullable <> 'YES'
   ) then
     raise exception 'assinatura_id da preview precisa aceitar fallback sem override';
+  end if;
+
+  -- Deve existir exatamente um template ativo para direto e responsavel.
+  foreach v_publico in array array['direto', 'responsavel'] loop
+    select count(*)
+      into v_template_count
+    from public.pesquisa_evasao_templates t
+    where t.publico = v_publico
+      and t.ativo = true;
+
+    if v_template_count <> 1 then
+      raise exception
+        'deve existir exatamente um template ativo para publico %, encontrados %',
+        v_publico,
+        v_template_count;
+    end if;
+
+    select t.corpo
+      into strict v_template_corpo
+    from public.pesquisa_evasao_templates t
+    where t.publico = v_publico
+      and t.ativo = true;
+
+    if exists (
+      select 1
+      from regexp_matches(
+        v_template_corpo,
+        '\{\{([^{}]+)\}\}',
+        'g'
+      ) as placeholder(capturas)
+      where (placeholder.capturas)[1] not in (
+        'aluno_primeiro_nome',
+        'responsavel_primeiro_nome',
+        'assinatura_nome'
+      )
+    ) then
+      raise exception 'template % contem placeholder nao permitido', v_publico;
+    end if;
+
+    if position('{{assinatura_nome}}' in v_template_corpo) = 0
+       or position('{{aluno_primeiro_nome}}' in v_template_corpo) = 0
+       or (
+         v_publico = 'responsavel'
+         and position('{{responsavel_primeiro_nome}}' in v_template_corpo) = 0
+       ) then
+      raise exception 'template % nao contem os placeholders obrigatorios', v_publico;
+    end if;
+
+    v_template_renderizado := replace(
+      replace(
+        replace(
+          v_template_corpo,
+          '{{aluno_primeiro_nome}}',
+          'Aluno'
+        ),
+        '{{responsavel_primeiro_nome}}',
+        'Responsavel'
+      ),
+      '{{assinatura_nome}}',
+      'Operador'
+    );
+
+    if position('{{' in v_template_renderizado) > 0
+       or position('}}' in v_template_renderizado) > 0 then
+      raise exception 'template % deixa placeholder sem renderizar', v_publico;
+    end if;
+  end loop;
+
+  if not has_table_privilege(
+       'service_role',
+       'public.pesquisa_evasao_templates',
+       'SELECT'
+     )
+     or has_table_privilege(
+       'service_role',
+       'public.pesquisa_evasao_templates',
+       'INSERT,UPDATE,DELETE'
+     )
+     or not has_table_privilege(
+       'service_role',
+       'public.pesquisa_evasao_assinaturas',
+       'SELECT'
+     )
+     or has_table_privilege(
+       'service_role',
+       'public.pesquisa_evasao_assinaturas',
+       'INSERT,UPDATE,DELETE'
+     ) then
+    raise exception 'ACL de configuracao de templates ou assinaturas incorreta';
   end if;
 
   foreach v_tabela in array array[

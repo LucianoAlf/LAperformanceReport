@@ -123,6 +123,15 @@ Os roles `mila_acesso_restrito`, `sol_acesso_restrito`, `fabio_agent` e `lia_ace
 - a confirmação pertence ao mesmo `auth_user_id` que criou a prévia;
 - o banco registra `executado_por_usuario_id`, `executado_por_auth_user_id`, `assinatura_id` opcional e `assinatura_nome_snapshot`.
 
+### Templates e governança de configuração
+
+- a migration semeia as duas cópias aprovadas, sem depender de Fabi, Jessica, perfil ou unidade;
+- deve existir exatamente um template ativo para `direto` e um para `responsavel`;
+- `service_role` possui somente `SELECT` em `pesquisa_evasao_templates` e `pesquisa_evasao_assinaturas`;
+- não existe caminho de escrita pela aplicação para essas duas tabelas;
+- qualquer troca de texto ou override de assinatura exige migration ou SQL versionado, revisado e aplicado no rollout autorizado;
+- abrir escrita para a aplicação só pode ocorrer em projeto futuro com RPC administrativa, autorização própria e auditoria.
+
 ## 6. Verificação local antes de qualquer rollout
 
 Executar na worktree do PR:
@@ -176,7 +185,8 @@ Com Alf presente:
 5. confirmar que não haverá merge antes das migrations;
 6. verificar o hash da migration de caixas;
 7. consultar, sem escrever, a contagem dos seis IDs legados;
-8. confirmar que a Edge ainda publicada está protegida ou suspender o disparo até o novo deploy.
+8. conferir os templates ativos com a consulta abaixo;
+9. confirmar que a Edge ainda publicada está protegida ou suspender o disparo até o novo deploy.
 
 Consulta prévia dos legados:
 
@@ -196,6 +206,22 @@ order by id;
 
 Se a contagem não for seis, parar. A migration falha fechada em banco não vazio.
 
+Consulta obrigatória dos templates:
+
+```sql
+select
+  publico,
+  count(*) as ativos,
+  min(chave) as chave,
+  min(versao) as versao
+from public.pesquisa_evasao_templates
+where ativo = true
+group by publico
+order by publico;
+```
+
+O resultado precisa ter somente `direto = 1` e `responsavel = 1`, ambos na chave `evasao_aberta`, versão 1. Qualquer ausência, duplicidade ou público adicional interrompe o rollout.
+
 ## 9. Ordem de rollout em produção
 
 Somente após autorização explícita:
@@ -205,15 +231,17 @@ Somente após autorização explícita:
 3. aplicar `20260730180100`;
 4. rodar o verificador estrutural e o operacional em transação;
 5. conferir o backfill dos seis testes;
-6. publicar `enviar-pesquisa-evasao` com `verify_jwt = true`;
-7. confirmar que chamada anônima e JWT inválido recebem rejeição;
-8. fazer prévia em modo teste com uma pessoa interna ativa;
-9. confirmar o envio somente para `5521981278047`;
-10. comparar a mensagem aprovada com a recebida;
-11. validar que o registro contém usuário, auth UID, assinatura, texto, template, caixa, destino, modo e horários;
-12. realizar smoke dos três consumidores de caixas;
-13. somente então liberar merge/deploy do frontend;
-14. observar logs, estados incertos e duplicidade durante a janela combinada.
+6. antes do smoke, confirmar exatamente um template ativo para `direto` e um para `responsavel`;
+7. publicar `enviar-pesquisa-evasao` com `verify_jwt = true`;
+8. confirmar que chamada anônima e JWT inválido recebem rejeição;
+9. fazer prévia em modo teste com uma pessoa interna ativa;
+10. confirmar que a prévia renderiza os placeholders sem sobrar `{{` ou `}}` no texto final;
+11. confirmar o envio somente para `5521981278047`;
+12. comparar a mensagem aprovada com a recebida;
+13. validar que o registro contém usuário, auth UID, assinatura, texto, template, caixa, destino, modo e horários;
+14. realizar smoke dos três consumidores de caixas;
+15. somente então liberar merge/deploy do frontend;
+16. observar logs, estados incertos e duplicidade durante a janela combinada.
 
 ## 10. Checklist operacional
 
@@ -231,6 +259,15 @@ Somente após autorização explícita:
 - [ ] pessoa com override recebe o nome configurado;
 - [ ] a identidade auditada não muda com o override;
 - [ ] campos forjados pelo navegador são rejeitados.
+
+### Templates
+
+- [ ] existe exatamente um template ativo para `direto`;
+- [ ] existe exatamente um template ativo para `responsavel`;
+- [ ] ambos usam a chave `evasao_aberta`, versão 1, e as cópias aprovadas;
+- [ ] a prévia renderiza aluno, responsável quando aplicável e assinatura;
+- [ ] não sobra `{{` nem `}}` no texto final;
+- [ ] `service_role` continua sem `INSERT`, `UPDATE` ou `DELETE` nas tabelas de configuração.
 
 ### Prévia e envio
 
@@ -287,6 +324,8 @@ Se o frontend for publicado fora de ordem:
 | Project ref reconfirmado | PENDENTE |
 | Novo ensaio DDL do diff final | PENDENTE |
 | Hash de `20260730180100` | PENDENTE |
+| 1 template ativo por público | PENDENTE |
+| Prévia sem placeholders residuais | PENDENTE |
 | Migrations aplicadas | PENDENTE |
 | Verificadores em rollback | PENDENTE |
 | 6/6 legados como teste | PENDENTE |
