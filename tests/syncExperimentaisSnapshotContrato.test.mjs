@@ -11,6 +11,7 @@ import {
   montarPatchReconciliacaoExperimental,
   normalizarHorarioExperimental,
   selecionarIdsCancelamentoEstavel,
+  selecionarIdsCancelamentoPorAula,
   SnapshotRequestError,
   SnapshotUpstreamError,
   validarParametrosExperimentais,
@@ -440,6 +441,7 @@ test("cancelamento encontra webhook com id de evento divergente por identidade e
     candidatos: [
       {
         id: 10,
+        status: "experimental_agendada",
         unidadeId: UNIDADE.id,
         emusysAulaId: 7001,
         dataAula: "2026-07-30",
@@ -453,6 +455,7 @@ test("cancelamento encontra webhook com id de evento divergente por identidade e
       },
       {
         id: 11,
+        status: "experimental_agendada",
         unidadeId: UNIDADE.id,
         emusysAulaId: 8001,
         dataAula: "2026-07-30",
@@ -466,6 +469,7 @@ test("cancelamento encontra webhook com id de evento divergente por identidade e
       },
       {
         id: 12,
+        status: "experimental_agendada",
         unidadeId: "95553e96-971b-4590-a6eb-0201d013c14d",
         emusysAulaId: 7001,
         dataAula: "2026-07-30",
@@ -495,6 +499,7 @@ test("cancelamento nao usa nome ou telefone quando IDs estaveis nao batem", () =
     },
     candidatos: [{
       id: 20,
+      status: "experimental_agendada",
       unidadeId: UNIDADE.id,
       emusysAulaId: 7001,
       dataAula: "2026-07-30",
@@ -524,6 +529,7 @@ test("cancelamento encontra participante por id de aluno local resolvido", () =>
     },
     candidatos: [{
       id: 21,
+      status: "experimental_agendada",
       unidadeId: UNIDADE.id,
       emusysAulaId: 7001,
       dataAula: "2026-07-30",
@@ -537,6 +543,73 @@ test("cancelamento encontra participante por id de aluno local resolvido", () =>
 
   assert.deepEqual(ids, [21]);
 });
+
+for (const statusTerminal of ["convertido", "matriculado"]) {
+  test(`cancelamento por unidade e aula preserva ${statusTerminal}`, () => {
+    const ids = selecionarIdsCancelamentoPorAula({
+      unidadeId: UNIDADE.id,
+      emusysAulaId: 9001,
+      candidatos: [
+        {
+          id: 30,
+          status: statusTerminal,
+          unidadeId: UNIDADE.id,
+          emusysAulaId: 9001,
+        },
+        {
+          id: 31,
+          status: "experimental_agendada",
+          unidadeId: UNIDADE.id,
+          emusysAulaId: 9001,
+        },
+      ],
+    });
+
+    assert.deepEqual(ids, [31]);
+  });
+
+  test(`cancelamento por identidade estavel preserva ${statusTerminal}`, () => {
+    const ids = selecionarIdsCancelamentoEstavel({
+      identidade: {
+        unidadeId: UNIDADE.id,
+        dataAula: "2026-07-30",
+        horarioBanco: "20:00:00",
+        cursoId: 9,
+        emusysLeadId: 501,
+        leadId: 41,
+        alunoId: null,
+      },
+      candidatos: [
+        {
+          id: 40,
+          status: statusTerminal,
+          unidadeId: UNIDADE.id,
+          emusysAulaId: 7001,
+          dataAula: "2026-07-30",
+          horarioBanco: "20:00:00",
+          cursoId: 9,
+          emusysLeadId: 501,
+          leadId: 41,
+          alunoId: null,
+        },
+        {
+          id: 41,
+          status: "experimental_agendada",
+          unidadeId: UNIDADE.id,
+          emusysAulaId: 7002,
+          dataAula: "2026-07-30",
+          horarioBanco: "20:00:00",
+          cursoId: 9,
+          emusysLeadId: 501,
+          leadId: 41,
+          alunoId: null,
+        },
+      ],
+    });
+
+    assert.deepEqual(ids, [41]);
+  });
+}
 
 for (const statusTerminal of ["convertido", "matriculado"]) {
   test(`preserva status terminal ${statusTerminal} e atualiza demais vinculos`, () => {
@@ -619,6 +692,7 @@ test("edge usa o modulo puro e o horario de banco projetado", () => {
   );
   assert.match(source, /horario_experimental:\s*exp\.horarioBanco/);
   assert.match(source, /selecionarIdsCancelamentoEstavel\(/);
+  assert.match(source, /selecionarIdsCancelamentoPorAula\(/);
   assert.match(source, /montarPatchReconciliacaoExperimental\(/);
   assert.match(
     source,

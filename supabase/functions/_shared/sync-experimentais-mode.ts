@@ -177,13 +177,43 @@ type IdentidadeCancelamentoEstavel = {
   alunoId: number | null;
 };
 
+const STATUS_TERMINAIS_EXPERIMENTAL = new Set(["convertido", "matriculado"]);
+
+function statusExperimentalPodeSerCancelado(status: unknown): status is string {
+  return typeof status === "string" &&
+    status !== "cancelada" &&
+    !STATUS_TERMINAIS_EXPERIMENTAL.has(status);
+}
+
 type CandidatoCancelamentoEstavel = IdentidadeCancelamentoEstavel & {
   id: number;
+  status: string;
+  emusysAulaId: number | null;
+};
+
+type CandidatoCancelamentoPorAula = {
+  id: number;
+  status: string;
+  unidadeId: string;
   emusysAulaId: number | null;
 };
 
 function idPositivo(value: number | null): value is number {
   return value !== null && Number.isSafeInteger(value) && value > 0;
+}
+
+export function selecionarIdsCancelamentoPorAula(input: {
+  unidadeId: string;
+  emusysAulaId: number;
+  candidatos: CandidatoCancelamentoPorAula[];
+}): number[] {
+  return input.candidatos
+    .filter((candidato) =>
+      statusExperimentalPodeSerCancelado(candidato.status) &&
+      candidato.unidadeId === input.unidadeId &&
+      candidato.emusysAulaId === input.emusysAulaId
+    )
+    .map((candidato) => candidato.id);
 }
 
 export function selecionarIdsCancelamentoEstavel(input: {
@@ -197,6 +227,7 @@ export function selecionarIdsCancelamentoEstavel(input: {
 
   return input.candidatos
     .filter((candidato) =>
+      statusExperimentalPodeSerCancelado(candidato.status) &&
       candidato.unidadeId === identidade.unidadeId &&
       candidato.dataAula === identidade.dataAula &&
       candidato.horarioBanco === identidade.horarioBanco &&
@@ -212,8 +243,6 @@ export function selecionarIdsCancelamentoEstavel(input: {
     )
     .map((candidato) => candidato.id);
 }
-
-const STATUS_TERMINAIS_EXPERIMENTAL = new Set(["convertido", "matriculado"]);
 
 type EstadoExperimentalPersistido = {
   status: string;
