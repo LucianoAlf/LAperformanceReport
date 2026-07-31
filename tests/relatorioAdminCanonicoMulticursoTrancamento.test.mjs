@@ -115,6 +115,23 @@ test('preview do botao e cron usam o mesmo produtor administrativo autenticado',
   assert.doesNotMatch(diario, /movimentacoes_admin|get_kpis_alunos_admin_operacional/);
 });
 
+test('dry-run administrativo aceita service_role interno sem afrouxar o JWT do usuario', () => {
+  const dryRun = section(
+    edge,
+    "if (payload.modo === 'dry_run') {",
+    "if (payload.modo === 'dry_run_comercial') {",
+  );
+
+  assert.match(dryRun, /bearerToken/);
+  assert.match(
+    dryRun,
+    /serviceRoleKey\s*&&\s*bearerToken\s*===\s*serviceRoleKey/,
+  );
+  assert.match(dryRun, /if\s*\(\s*!chamadaInterna\s*\)\s*\{/);
+  assert.match(dryRun, /auth\.getUser\(\)/i);
+  assert.match(dryRun, /pode_gerar_relatorio_admin_v1/i);
+});
+
 test('webhook materializa identidade Emusys e tipo adicional sem ID fixo', () => {
   const nova = section(webhook, 'async function handleMatriculaNova', 'async function handleRenovacao');
   assert.match(nova, /emusys_student_id:\s*p\.alunoEmusysId\s*!=\s*null\s*\?\s*String\(p\.alunoEmusysId\)/i);
