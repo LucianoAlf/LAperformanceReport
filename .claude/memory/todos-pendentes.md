@@ -287,6 +287,27 @@ Resultado: leads como o "Carlos Yan" (ex: matriculou 15/04, experimental marcada
 
 ---
 
+## 👀 [OBSERVAR] Observador emusys — decisão de virar `DRY_RUN=false` pendente
+
+**Identificado em:** 2026-07-29, atualizado em 2026-07-31
+
+**Descrição:** edge `debug-webhook-emusys-observador` roda em paralelo ao n8n, capturando os mesmos webhooks do Emusys, em modo sombra (`OBSERVADOR_DRY_RUN=true`, default — nunca escreve). Objetivo final: substituir o n8n como quem grava `lead_criado`/`lead_editado`/experimentais/`lead_arquivado`.
+
+**Status validado (30-31/07):**
+- `lead_criado`, `lead_editado`, `aula_experimental_*`: cobertura 100% com o n8n, 0 erro, canal/curso/professor mapeando igual (canal cru resolvido pela RPC, curso e match batendo linha a linha). Pronto tecnicamente para virar a chave.
+- `lead_arquivado`: código adicionado em 30/07 (mesmo padrão dry-run, UPDATE via client parametrizado em vez do SQL cru com risco de injection que o n8n usa). **Nunca recebeu um webhook sequer** desde que o observador existe — sem dado real pra validar.
+
+**Achado novo (31/07):** `lead_arquivado` não é caso isolado. Dos 17 eventos configurados no webhook Emusys ("LAReport Sync" → `debug-webhook-emusys-observador`), **6 nunca chegaram nem uma vez**: `lead_arquivado`, `matricula_finalizacao`, `matricula_renovacao`, `boleto_pix_em_atraso`, `cobranca_cheque_vence_amanha`, `cobranca_recorrente_vence_amanha`. Os outros 11 chegam normalmente (`lead_editado` 814x, `lead_criado` 410x, etc. — ver `.claude/memory/integracao-infra.md`). ⚠️ `matricula_renovacao` chama atenção — renovação é processo central do negócio (fonte de verdade `movimentacoes_admin`), não deveria estar zerado. Investigar se é a Emusys que não dispara apesar de configurado, ou se o mecanismo real de renovação não gera esse evento.
+
+**Próximos passos:**
+1. Investigar por que os 6 eventos nunca chegam (começar por `matricula_renovacao`).
+2. Só depois decidir sobre `DRY_RUN=false` — e ao decidir, desligar SÓ os branches de `lead_criado`/`lead_editado`/experimental do n8n (mesmo workflow `EB0LibpOJCLhKp7M`/`j41tPbyjGXUQUxrN`); `lead_arquivado` sem dado real ainda não deveria entrar na primeira leva.
+3. Bug conhecido que **não** é corrigido ao virar a chave (fica pra depois, ver TODO de identidade de professor acima): camada 1 do `registrar_experimental` busca `emusys_lead_id` sem filtrar unidade.
+
+**Arquivos:** `supabase/functions/debug-webhook-emusys-observador/index.ts` (v17). Detalhes técnicos completos em `.claude/memory/integracao-infra.md` (seção "Observador emusys").
+
+---
+
 ## Resolvidos (histórico)
 
 - **2026-05-02 — Edge functions Gemini com placeholder "deploy":** 10 funções redeployadas com código correto. Adicionado retry com backoff exponencial para erros 503/429.
