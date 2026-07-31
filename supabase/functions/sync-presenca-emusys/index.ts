@@ -464,6 +464,19 @@ function criarRawKey(unidadeId: string, aulaId: number, aluno: AlunoEmusys): str
   return `${unidadeId}:${aulaId}:${nome}:${telefone || nascimento}`;
 }
 
+function normalizarIdExterno(
+  valor: number | string | null | undefined,
+  aceitarZero = false,
+): number | null {
+  const id = typeof valor === 'number'
+    ? valor
+    : typeof valor === 'string' && valor.trim() !== ''
+    ? Number(valor)
+    : Number.NaN;
+  const minimo = aceitarZero ? 0 : 1;
+  return Number.isSafeInteger(id) && id >= minimo ? id : null;
+}
+
 async function upsertExperimentalRaw(
   supabase: any,
   params: {
@@ -485,6 +498,12 @@ async function upsertExperimentalRaw(
   const horario = params.aluno.horario_presenca
     || params.aula.data_hora_inicio?.split(' ')[1]
     || null;
+  const emusysLeadIdPayload = normalizarIdExterno(
+    params.aluno.id_lead,
+    true,
+  );
+  const emusysLeadId = normalizarIdExterno(params.aluno.id_lead);
+  const emusysAlunoId = normalizarIdExterno(params.aluno.id_aluno);
 
   const { error } = await supabase
     .from('emusys_experimentais_raw')
@@ -508,17 +527,24 @@ async function upsertExperimentalRaw(
         presenca_emusys: params.aluno.presenca || null,
         situacao_operacional: normalizarSituacaoExperimental(params.aluno.presenca, params.aula.cancelada),
         aluno_id: params.alunoId || null,
+        emusys_lead_id: emusysLeadId,
+        emusys_aluno_id: emusysAlunoId,
+        participante_chave: emusysLeadId !== null
+          ? `lead:${emusysLeadId}`
+          : emusysAlunoId !== null
+          ? `aluno:${emusysAlunoId}`
+          : null,
         payload: {
-          aluno: params.aluno,
+          schema_version: 1,
+          data_aula: params.dataAula,
+          horario_aula: horario,
+          cancelada: params.aula.cancelada === true,
           aula: {
             id: params.aula.id,
-            categoria: params.aula.categoria,
-            tipo: params.aula.tipo,
-            turma_nome: params.aula.turma_nome,
-            curso_nome: params.aula.curso_nome,
-            sala_nome: params.aula.sala_nome,
-            data_hora_inicio: params.aula.data_hora_inicio,
-            data_hora_fim: params.aula.data_hora_fim,
+          },
+          participante: {
+            id_lead: emusysLeadIdPayload,
+            id_aluno: emusysAlunoId,
           },
         },
       },

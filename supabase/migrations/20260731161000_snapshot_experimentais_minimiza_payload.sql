@@ -16,7 +16,10 @@ set payload = jsonb_build_object(
     'id', emusys_aula_id
   ),
   'participante', jsonb_build_object(
-    'id_lead', emusys_lead_id,
+    'id_lead', case
+      when emusys_lead_id_zero then 0
+      else emusys_lead_id
+    end,
     'id_aluno', emusys_aluno_id
   )
 );

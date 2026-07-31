@@ -68,6 +68,29 @@ Deno.test("participanteChave usa id_aluno quando nao ha lead", () => {
   );
 });
 
+Deno.test("snapshot preserva marcador id_lead zero sem usa-lo como identidade", () => {
+  const [row] = montarLinhasSnapshot({
+    unidadeId: "barra",
+    execucaoId: "exec-zero",
+    aulas: [
+      aula({
+        alunos: [
+          aluno({
+            id_lead: 0,
+            id_aluno: 456,
+          }),
+        ],
+      }),
+    ],
+    agora: new Date("2026-07-30T18:00:00Z"),
+  });
+
+  assertEquals(row.participante_chave, "aluno:456");
+  assertEquals(row.emusys_lead_id, null);
+  assertEquals(row.emusys_aluno_id, 456);
+  assertEquals(row.payload_bruto.participante.id_lead, 0);
+});
+
 Deno.test("participanteChave permanece estavel apos mudar nome e telefone com ID externo", () => {
   const antes = participanteChave(aluno({
     id_lead: 789,

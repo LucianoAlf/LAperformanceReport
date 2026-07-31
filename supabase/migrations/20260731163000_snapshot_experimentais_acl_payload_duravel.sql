@@ -1,12 +1,11 @@
 begin;
 
+-- Esta migration e deliberadamente autocontida. Ela tambem corrige bancos que
+-- tenham registrado as versoes anteriores de 160500/161000.
 alter table public.emusys_experimentais_raw
   add column if not exists emusys_lead_id_zero
     boolean not null default false;
 
--- O Emusys usa id_lead=0 para indicar que o participante ja e aluno. Esse
--- marcador nao pode virar identidade, mas precisa permanecer materializado
--- porque a conciliacao P21 usa a combinacao zero + id_aluno positivo.
 create or replace function public.normalizar_payload_emusys_experimental_minimo()
 returns trigger
 language plpgsql
@@ -49,6 +48,8 @@ begin
     new.emusys_aluno_id := v_aluno_texto::integer;
   end if;
 
+  -- Versoes antigas do scrub gravaram id_lead JSON null. Quando ha id_aluno
+  -- positivo e nenhum lead positivo, recuperamos o marcador sem criar identidade.
   new.emusys_lead_id_zero :=
     coalesce(v_lead_texto ~ '^0+$', false)
     or (
@@ -101,20 +102,19 @@ on public.emusys_experimentais_raw
 for each row
 execute function public.normalizar_payload_emusys_experimental_minimo();
 
--- Captura o marcador legado e elimina PII ja nesta migracao. Assim, ambientes
--- que tenham registrado uma versao anterior do saneamento tambem ficam seguros.
+-- A atualizacao aciona o trigger e recupera o zero das linhas que ja foram
+-- saneadas por 161000, alem de remover qualquer PII reintroduzida.
 update public.emusys_experimentais_raw
 set payload = coalesce(payload, '{}'::jsonb);
 
--- Consumidores historicos liam os IDs tecnicos dentro do payload bruto. Trocar
--- essas referencias antes do saneamento preserva os KPIs sem manter JSON
--- extensivel e potencialmente sensivel.
+-- Corrige tanto consumidores ainda legados quanto os que uma versao anterior
+-- de 160500 ja havia trocado diretamente por r.emusys_lead_id::text.
 do $migration$
 declare
   v_consumidor record;
   v_definicao text;
   v_nova_definicao text;
-  v_legados_restantes text;
+  v_incorretos_restantes text;
 begin
   for v_consumidor in
     select
@@ -127,11 +127,18 @@ begin
       on n.oid = p.pronamespace
     where n.nspname = 'public'
       and p.prokind = 'f'
+      and pg_get_functiondef(p.oid)
+        ilike '%emusys_experimentais_raw%'
       and (
         pg_get_functiondef(p.oid)
           like '%r.payload #>> ''{aluno,id_lead}''%'
         or pg_get_functiondef(p.oid)
           like '%r.payload #>> ''{aluno,id_aluno}''%'
+        or (
+          pg_get_functiondef(p.oid) like '%r.emusys_lead_id::text%'
+          and pg_get_functiondef(p.oid)
+            not like '%r.emusys_lead_id_zero%'
+        )
       )
   loop
     v_definicao := v_consumidor.function_definition;
@@ -156,14 +163,18 @@ begin
       'r.emusys_aluno_id::text'
     );
 
-    if v_nova_definicao = v_definicao then
-      raise exception
-        'consumidor %.% manteve referencia ao payload legado',
-        v_consumidor.schema_name,
-        v_consumidor.function_name;
+    if v_nova_definicao not like '%r.emusys_lead_id_zero%'
+       and v_nova_definicao like '%r.emusys_lead_id::text%' then
+      v_nova_definicao := replace(
+        v_nova_definicao,
+        'r.emusys_lead_id::text',
+        '(case when r.emusys_lead_id_zero then ''0'' else r.emusys_lead_id::text end)'
+      );
     end if;
 
-    execute v_nova_definicao;
+    if v_nova_definicao is distinct from v_definicao then
+      execute v_nova_definicao;
+    end if;
   end loop;
 
   select string_agg(
@@ -176,34 +187,52 @@ begin
     ', '
     order by n.nspname, p.proname, p.oid
   )
-  into v_legados_restantes
+  into v_incorretos_restantes
   from pg_proc p
   join pg_namespace n
     on n.oid = p.pronamespace
   where n.nspname = 'public'
     and p.prokind = 'f'
+    and pg_get_functiondef(p.oid)
+      ilike '%emusys_experimentais_raw%'
     and (
       pg_get_functiondef(p.oid)
         like '%r.payload #>> ''{aluno,id_lead}''%'
       or pg_get_functiondef(p.oid)
         like '%r.payload #>> ''{aluno,id_aluno}''%'
+      or (
+        pg_get_functiondef(p.oid) like '%r.emusys_lead_id::text%'
+        and pg_get_functiondef(p.oid)
+          not like '%r.emusys_lead_id_zero%'
+      )
     );
 
-  if v_legados_restantes is not null then
+  if v_incorretos_restantes is not null then
     raise exception
-      'consumidor ainda usa payload legado: %',
-      v_legados_restantes;
+      'consumidor permaneceu sem semantica materializada de id_lead zero: %',
+      v_incorretos_restantes;
   end if;
 end;
 $migration$;
 
-comment on column public.emusys_experimentais_raw.emusys_lead_id is
-  'Identificador tecnico do lead Emusys, materializado antes do saneamento do payload.';
+revoke select on table public.emusys_experimentais_raw
+  from authenticated;
+
+grant select (
+  id,
+  aluno_nome,
+  data_aula,
+  horario_aula,
+  situacao_operacional,
+  professor_id,
+  unidade_id
+) on table public.emusys_experimentais_raw
+  to authenticated;
+
+grant select on table public.emusys_experimentais_raw
+  to service_role;
 
 comment on column public.emusys_experimentais_raw.emusys_lead_id_zero is
-  'Marcador tecnico do legado Emusys: id_lead=0 indica participante ja vinculado como aluno.';
-
-comment on column public.emusys_experimentais_raw.emusys_aluno_id is
-  'Identificador tecnico do aluno Emusys, materializado antes do saneamento do payload.';
+  'Marcador tecnico recuperavel: id_lead=0 indica participante ja vinculado como aluno.';
 
 commit;

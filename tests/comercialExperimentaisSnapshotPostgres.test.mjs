@@ -13,6 +13,8 @@ const consumersMigrationPath =
   'supabase/migrations/20260731160500_snapshot_experimentais_consumidores_ids_materializados.sql';
 const admissionMigrationPath =
   'supabase/migrations/20260731162000_snapshot_experimentais_admissao_refresh.sql';
+const durableMigrationPath =
+  'supabase/migrations/20260731163000_snapshot_experimentais_acl_payload_duravel.sql';
 const requirePostgres = process.env.COMERCIAL_EXP_REQUIRE_POSTGRES === '1';
 
 function read(path) {
@@ -373,7 +375,7 @@ test(
             2,
             2,
             2,
-            '{"aluno":{"id_aluno":202},"aula":{"id":10}}',
+            '{"aluno":{"id_lead":0,"id_aluno":202},"aula":{"id":10}}',
             '2026-07-10 13:00:00+00'
           );
       `;
@@ -1606,9 +1608,24 @@ test(
                   r.payload #>> '{aluno,id_aluno}',
                   r.emusys_aluno_id::text
                 ) is not null
+              ),
+              'lead_zero_com_aluno',
+              count(*) filter (
+                where nullif(r.payload #>> '{aluno,id_lead}', '') = '0'
+                  and (
+                    case
+                      when nullif(
+                        r.payload #>> '{aluno,id_aluno}',
+                        ''
+                      ) ~ '^[0-9]+$'
+                        then (r.payload #>> '{aluno,id_aluno}')::bigint
+                      else 0
+                    end
+                  ) > 0
               )
             )
             from public.emusys_experimentais_raw r
+            where r.raw_key like 'legacy-%'
           $fixture$;
 
           create table public.fixture_consumidor_payload_resultado (
@@ -1684,7 +1701,25 @@ test(
               select count(distinct resultado)
               from public.fixture_consumidor_payload_resultado
             ) <> 1 then
-              raise exception 'resultado mudou ao migrar consumidor legado';
+              raise exception
+                'resultado mudou ao migrar consumidor legado: %',
+                (
+                  select jsonb_object_agg(momento, resultado)
+                  from public.fixture_consumidor_payload_resultado
+                );
+            end if;
+
+            if not exists (
+              select 1
+              from public.emusys_experimentais_raw
+              where raw_key = 'legacy-segunda-pessoa'
+                and emusys_lead_id is null
+                and emusys_lead_id_zero is true
+                and emusys_aluno_id = 202
+                and payload #>> '{participante,id_lead}' = '0'
+                and payload #>> '{participante,id_aluno}' = '202'
+            ) then
+              raise exception 'marcador id_lead zero nao foi materializado';
             end if;
           end;
           $consumers$;
@@ -1723,7 +1758,10 @@ test(
                 'cancelada', false,
                 'aula', jsonb_build_object('id', r.emusys_aula_id),
                 'participante', jsonb_build_object(
-                  'id_lead', r.emusys_lead_id,
+                  'id_lead', case
+                    when r.emusys_lead_id_zero then 0
+                    else r.emusys_lead_id
+                  end,
                   'id_aluno', r.emusys_aluno_id
                 )
               )
@@ -1742,6 +1780,41 @@ test(
             end if;
           end;
           $payload$;
+
+          update public.emusys_experimentais_raw
+          set payload = jsonb_build_object(
+            'aluno',
+            jsonb_build_object(
+              'id_lead', 0,
+              'id_aluno', 202,
+              'telefone_aluno', '21999997777',
+              'nome_responsavel', 'Responsavel Sentinela'
+            ),
+            'aula',
+            jsonb_build_object(
+              'id', emusys_aula_id,
+              'professor_email', 'professor-retorno@example.com'
+            )
+          )
+          where raw_key = 'legacy-segunda-pessoa';
+
+          do $durable_payload$
+          begin
+            if not exists (
+              select 1
+              from public.emusys_experimentais_raw
+              where raw_key = 'legacy-segunda-pessoa'
+                and emusys_lead_id_zero is true
+                and payload #>> '{participante,id_lead}' = '0'
+                and payload #>> '{participante,id_aluno}' = '202'
+                and payload::text not like '%telefone_aluno%'
+                and payload::text not like '%Responsavel Sentinela%'
+                and payload::text not like '%professor_email%'
+            ) then
+              raise exception 'writer posterior reintroduziu PII no payload';
+            end if;
+          end;
+          $durable_payload$;
 
           do $acl$
           begin
@@ -1882,6 +1955,16 @@ test(
         admissionMigrationApplied.status,
         0,
         `migration de admissao falhou:\n${admissionMigrationApplied.stderr}`,
+      );
+
+      const durableMigrationApplied = psql(
+        containerName,
+        read(durableMigrationPath),
+      );
+      assert.equal(
+        durableMigrationApplied.status,
+        0,
+        `migration posterior de ACL/payload falhou:\n${durableMigrationApplied.stderr}`,
       );
 
       const admissionCall = String.raw`
