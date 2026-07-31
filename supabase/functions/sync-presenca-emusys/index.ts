@@ -63,7 +63,11 @@ type SyncRequestBody = CorpoSyncPresenca & {
   unidade_id?: string;
   data_inicio?: string;
   data_fim?: string;
+  deadline_epoch_ms?: number;
 };
+
+const SNAPSHOT_DEADLINE_TOTAL_MS = 160_000;
+const SNAPSHOT_EMUSYS_TIMEOUT_MS = 60_000;
 
 function requiredEnv(name: string): string {
   const value = Deno.env.get(name)?.trim();
@@ -247,7 +251,8 @@ async function fetchAulasDia(token: string, data: string): Promise<AulaEmusys[]>
 async function fetchAulasRange(
   token: string,
   dataInicio: string,
-  dataFim: string
+  dataFim: string,
+  signal?: AbortSignal,
 ): Promise<AulaEmusys[]> {
   try {
     const aulas = await buscarTodasAulas({
@@ -260,6 +265,7 @@ async function fetchAulasRange(
           dataFim,
           cursor,
           limite,
+          signal,
         }),
     });
     return aulas as AulaEmusys[];
@@ -394,14 +400,21 @@ async function carregarCursoDeParaCanonico(
 
 function criarDependenciasSnapshot(
   supabase: SupabaseClient,
+  publicacao: 'admitida' | 'metadados',
 ): SnapshotDeps {
   return {
     criarExecucaoId: () => crypto.randomUUID(),
     agora: () => new Date(),
     aplicarSnapshotRpc: async (input) => {
-      const rpcNome = input.admissaoId
-        ? 'aplicar_snapshot_experimentais_emusys_admitido_v1'
-        : 'aplicar_snapshot_experimentais_emusys_v1';
+      let rpcNome: string | null = null;
+      if (input.admissaoId) {
+        rpcNome = 'aplicar_snapshot_experimentais_emusys_admitido_v1';
+      } else if (publicacao === 'metadados') {
+        rpcNome = 'aplicar_snapshot_experimentais_emusys_metadados_v1';
+      }
+      if (!rpcNome) {
+        throw new Error('SNAPSHOT_ADMISSAO_OBRIGATORIA');
+      }
       const rpcParametros = {
         ...(input.admissaoId
           ? { p_admissao_id: input.admissaoId }
@@ -1397,12 +1410,46 @@ serve(async (req: Request) => {
     );
 
     if (modo === 'experimentais') {
+      const agoraMs = Date.now();
+      const deadlineRecebido = bodyRecebido.deadline_epoch_ms;
+      if (
+        deadlineRecebido !== undefined &&
+        (!Number.isSafeInteger(deadlineRecebido) || deadlineRecebido <= agoraMs)
+      ) {
+        throw new SnapshotRequestError('DEADLINE_EXPERIMENTAIS_INVALIDO');
+      }
+      const deadlineEpochMs = Math.min(
+        deadlineRecebido ?? agoraMs + SNAPSHOT_DEADLINE_TOTAL_MS,
+        agoraMs + SNAPSHOT_DEADLINE_TOTAL_MS,
+      );
+      const signalTotal = AbortSignal.timeout(deadlineEpochMs - agoraMs);
+      const signalEmusys = AbortSignal.any([
+        signalTotal,
+        AbortSignal.timeout(SNAPSHOT_EMUSYS_TIMEOUT_MS),
+      ]);
+      const supabaseSnapshot = createClient(
+        SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY,
+        {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+            detectSessionInUrl: false,
+          },
+          global: {
+            fetch: (input, init) =>
+              fetch(input, { ...init, signal: signalTotal }),
+          },
+        },
+      );
       const resposta = await executarModoExperimentais({
         body: bodyRecebido,
         unidades: unidadesProcessar,
+        deadlineMs: deadlineEpochMs,
+        signal: signalEmusys,
         deps: {
-          ...criarDependenciasSnapshot(supabase),
-          buscarTodasAulas: ({ unidade, dataInicio, dataFim }) => {
+          ...criarDependenciasSnapshot(supabaseSnapshot, 'admitida'),
+          buscarTodasAulas: ({ unidade, dataInicio, dataFim, signal }) => {
             const configuracao = unidadesProcessar.find((item) =>
               item.id === unidade.id
             );
@@ -1413,6 +1460,7 @@ serve(async (req: Request) => {
               configuracao.token,
               dataInicio,
               dataFim,
+              signal,
             );
           },
         },
@@ -1466,12 +1514,16 @@ serve(async (req: Request) => {
         datasProcessar[0],
         datasProcessar.at(-1)!
       );
-      const dependenciasSnapshot = criarDependenciasSnapshot(supabase);
+      const dependenciasSnapshot = criarDependenciasSnapshot(
+        supabase,
+        'metadados',
+      );
       const snapshots = await aplicarSnapshotsMetadados({
         lotes: metadados.aulasPorUnidade,
         aplicarSnapshot: (lote) =>
           executarSnapshotExperimentais({
             ...lote,
+            permitirPublicacaoAdiada: true,
             deps: dependenciasSnapshot,
           }),
       });

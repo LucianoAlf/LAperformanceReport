@@ -22,6 +22,7 @@ function cenario(overrides = {}) {
   let agora = 0;
   const chamadas = {
     admitir: 0,
+    protegerLeitura: [],
     atualizar: 0,
     finalizar: [],
     esperar: 0,
@@ -30,6 +31,10 @@ function cenario(overrides = {}) {
     admitir: async () => {
       chamadas.admitir += 1;
       return admissao('atualizar');
+    },
+    protegerLeitura: async (input) => {
+      chamadas.protegerLeitura.push(input);
+      return admissao('reutilizar');
     },
     atualizar: async ({ execucaoId }) => {
       chamadas.atualizar += 1;
@@ -55,6 +60,7 @@ test('admissao atualizar executa uma vez e finaliza com a mesma identidade', asy
 
   assert.deepEqual(resultado, {
     origem: 'atualizado',
+    admissaoId: ADMISSAO_ID,
     execucaoId: EXECUCAO_ID,
     resposta: { execucao_id: EXECUCAO_ID, status: 'completo' },
   });
@@ -67,6 +73,10 @@ test('admissao atualizar executa uma vez e finaliza com a mesma identidade', asy
       erroCodigo: null,
     },
   ]);
+  assert.deepEqual(chamadas.protegerLeitura, [{
+    admissaoId: ADMISSAO_ID,
+    execucaoId: EXECUCAO_ID,
+  }]);
 });
 
 test('atualizacao recebe admissao e execucao como identidade indivisivel', async () => {
@@ -86,7 +96,7 @@ test('atualizacao recebe admissao e execucao como identidade indivisivel', async
   });
 });
 
-test('admissao reutilizar nao chama provedor, escrita nem finalizacao', async () => {
+test('admissao reutilizar protege a leitura e nao chama provedor, escrita nem finalizacao', async () => {
   const { chamadas, deps } = cenario({
     admitir: async () => {
       chamadas.admitir += 1;
@@ -98,10 +108,70 @@ test('admissao reutilizar nao chama provedor, escrita nem finalizacao', async ()
 
   assert.deepEqual(resultado, {
     origem: 'reutilizado',
+    admissaoId: ADMISSAO_ID,
     execucaoId: EXECUCAO_ID,
   });
   assert.equal(chamadas.atualizar, 0);
   assert.deepEqual(chamadas.finalizar, []);
+  assert.deepEqual(chamadas.protegerLeitura, [{
+    admissaoId: ADMISSAO_ID,
+    execucaoId: EXECUCAO_ID,
+  }]);
+});
+
+test('reuso obsoleto promovido pela protecao executa novo snapshot', async () => {
+  const novaExecucaoId = '33333333-3333-4333-8333-333333333333';
+  const chamadas = { atualizar: [], finalizar: [], proteger: 0 };
+  const deps = {
+    admitir: async () => admissao('reutilizar'),
+    protegerLeitura: async ({ admissaoId, execucaoId }) => {
+      chamadas.proteger += 1;
+      if (chamadas.proteger === 1) {
+        assert.equal(admissaoId, ADMISSAO_ID);
+        assert.equal(execucaoId, EXECUCAO_ID);
+        return admissao('atualizar', {
+          snapshot_execucao_id: novaExecucaoId,
+        });
+      }
+      return admissao('reutilizar', {
+        snapshot_execucao_id: novaExecucaoId,
+      });
+    },
+    atualizar: async (identidade) => {
+      chamadas.atualizar.push(identidade);
+      return { execucao_id: identidade.execucaoId, status: 'completo' };
+    },
+    finalizar: async (identidade) => {
+      chamadas.finalizar.push(identidade);
+    },
+    esperar: async () => {},
+    agoraMs: () => 0,
+  };
+
+  const resultado = await obterSnapshotComAdmissao({ deps });
+
+  assert.equal(resultado.origem, 'atualizado');
+  assert.equal(resultado.execucaoId, novaExecucaoId);
+  assert.deepEqual(chamadas.atualizar, [{
+    admissaoId: ADMISSAO_ID,
+    execucaoId: novaExecucaoId,
+  }]);
+  assert.equal(chamadas.finalizar.length, 1);
+  assert.equal(chamadas.proteger, 2);
+});
+
+test('falha ao proteger snapshot reutilizado impede a leitura', async () => {
+  const { deps } = cenario({
+    admitir: async () => admissao('reutilizar'),
+    protegerLeitura: async () => {
+      throw new Error('PROTECAO_FALHOU');
+    },
+  });
+
+  await assert.rejects(
+    obterSnapshotComAdmissao({ deps }),
+    /PROTECAO_FALHOU/,
+  );
 });
 
 test('duas chamadas sequenciais equivalentes produzem uma atualizacao', async () => {
@@ -110,6 +180,7 @@ test('duas chamadas sequenciais equivalentes produzem uma atualizacao', async ()
   const deps = {
     admitir: async () =>
       status === 'novo' ? admissao('atualizar') : admissao('reutilizar'),
+    protegerLeitura: async () => admissao('reutilizar'),
     atualizar: async ({ execucaoId }) => {
       chamadas.atualizar += 1;
       return { execucao_id: execucaoId, status: 'completo' };
@@ -147,6 +218,7 @@ test('duas chamadas concorrentes equivalentes compartilham uma atualizacao', asy
       if (status === 'processando') return admissao('aguardar');
       return admissao('reutilizar');
     },
+    protegerLeitura: async () => admissao('reutilizar'),
     atualizar: async ({ execucaoId }) => {
       chamadas.atualizar += 1;
       await atualizacaoPendente;

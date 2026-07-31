@@ -6,6 +6,7 @@ import {
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const RESERVA_RECONCILIACAO_MS = 30_000;
 
 export type SyncMode = "presenca" | "agenda" | "metadados" | "experimentais";
 
@@ -44,7 +45,7 @@ export type ExperimentalParaReconciliar = {
 
 export type SnapshotResultado = {
   execucao_id: string;
-  status: "completo";
+  status: "completo" | "adiado_admissao";
   aulas_recebidas: number;
   linhas_recebidas: number;
   linhas_ativas: number;
@@ -63,6 +64,8 @@ type RpcResultado = Record<string, unknown> & {
 export type SnapshotDeps = {
   criarExecucaoId: () => string;
   agora: () => Date;
+  agoraMs?: () => number;
+  esperar?: (ms: number) => Promise<void>;
   aplicarSnapshotRpc: (input: {
     admissaoId?: string;
     execucaoId: string;
@@ -87,6 +90,7 @@ export type ModoExperimentaisDeps = SnapshotDeps & {
     unidade: UnidadeExperimental;
     dataInicio: string;
     dataFim: string;
+    signal?: AbortSignal;
   }) => Promise<AulaEmusys[]>;
   onFluxoPresenca?: () => unknown;
   onAtualizarPercentual?: () => unknown;
@@ -363,6 +367,8 @@ export async function executarSnapshotExperimentais(input: {
   aulas: AulaEmusys[];
   admissaoId?: string;
   execucaoId?: string;
+  permitirPublicacaoAdiada?: boolean;
+  deadlineMs?: number;
   deps: SnapshotDeps;
 }): Promise<SnapshotResultado> {
   const execucaoId = input.execucaoId ?? input.deps.criarExecucaoId();
@@ -376,14 +382,54 @@ export async function executarSnapshotExperimentais(input: {
     agora: input.deps.agora(),
   });
 
-  const rpc = await input.deps.aplicarSnapshotRpc({
-    admissaoId: input.admissaoId,
-    execucaoId,
-    unidadeId: input.unidade.id,
-    dataInicio: input.dataInicio,
-    dataFim: input.dataFim,
-    linhas,
-  });
+  const agoraMs = input.deps.agoraMs ?? (() => Date.now());
+  const esperar = input.deps.esperar ?? ((ms: number) =>
+    new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const limiteTotal = input.deadlineMs ?? Number.POSITIVE_INFINITY;
+  const limiteEsperaLeitura = Math.min(
+    agoraMs() + 70_000,
+    limiteTotal - RESERVA_RECONCILIACAO_MS,
+  );
+  let rpc: RpcResultado;
+  while (true) {
+    rpc = await input.deps.aplicarSnapshotRpc({
+      admissaoId: input.admissaoId,
+      execucaoId,
+      unidadeId: input.unidade.id,
+      dataInicio: input.dataInicio,
+      dataFim: input.dataFim,
+      linhas,
+    });
+    if (rpc.status !== "adiado_leitura") break;
+    if (
+      !input.admissaoId ||
+      rpc.execucao_id !== execucaoId
+    ) {
+      throw new Error("RESPOSTA_SNAPSHOT_EXPERIMENTAIS_INVALIDA");
+    }
+    if (agoraMs() + 250 > limiteEsperaLeitura) {
+      throw new Error("SNAPSHOT_LEITURA_PROTEGIDA_TIMEOUT");
+    }
+    await esperar(250);
+  }
+  if (
+    input.permitirPublicacaoAdiada === true &&
+    rpc.status === "adiado_admissao" &&
+    rpc.execucao_id === execucaoId
+  ) {
+    return {
+      execucao_id: execucaoId,
+      status: "adiado_admissao",
+      aulas_recebidas: input.aulas.length,
+      linhas_recebidas: 0,
+      linhas_ativas: 0,
+      linhas_inseridas: 0,
+      linhas_atualizadas: 0,
+      linhas_versionadas: 0,
+      linhas_inativadas: 0,
+      experimentais_reconciliadas: 0,
+    };
+  }
   if (
     rpc.status !== "completo" ||
     rpc.execucao_id !== execucaoId
@@ -438,6 +484,8 @@ export async function executarModoExperimentais(input: {
   body: Record<string, unknown>;
   unidades: UnidadeExperimental[];
   deps: ModoExperimentaisDeps;
+  deadlineMs?: number;
+  signal?: AbortSignal;
 }) {
   const { unidade, dataInicio, dataFim } = validarParametrosExperimentais(
     input.body,
@@ -478,6 +526,7 @@ export async function executarModoExperimentais(input: {
       unidade,
       dataInicio,
       dataFim,
+      signal: input.signal,
     });
   } catch (error) {
     if (error instanceof SnapshotUpstreamError) throw error;
@@ -491,6 +540,7 @@ export async function executarModoExperimentais(input: {
     aulas,
     admissaoId,
     execucaoId,
+    deadlineMs: input.deadlineMs,
     deps: input.deps,
   });
 

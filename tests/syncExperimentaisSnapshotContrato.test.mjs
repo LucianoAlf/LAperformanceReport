@@ -199,6 +199,95 @@ test("execucao admitida usa UUID fornecido sem gerar outra versao", async () => 
   assert.equal(resposta.snapshot.execucao_id, execucaoId);
 });
 
+test("writer admitido aguarda leitura protegida sem refazer GET nem reconciliar parcial", async () => {
+  let agora = 0;
+  let tentativas = 0;
+  const cenario = criarCenario({
+    agoraMs: () => agora,
+    esperar: async (ms) => {
+      cenario.chamadas.push("esperar");
+      agora += ms;
+    },
+    aplicarSnapshotRpc: async (input) => {
+      cenario.chamadas.push("rpc");
+      cenario.capturas.rpc.push(input);
+      tentativas += 1;
+      if (tentativas < 3) {
+        return {
+          execucao_id: input.execucaoId,
+          status: "adiado_leitura",
+        };
+      }
+      return {
+        execucao_id: input.execucaoId,
+        status: "completo",
+        linhas_recebidas: input.linhas.length,
+        linhas_ativas: input.linhas.length,
+        linhas_inseridas: input.linhas.length,
+        linhas_atualizadas: 0,
+        linhas_versionadas: 0,
+        linhas_inativadas: 0,
+      };
+    },
+  });
+
+  const resposta = await executarModoExperimentais({
+    body: BODY,
+    unidades: [UNIDADE],
+    deps: cenario.deps,
+  });
+
+  assert.equal(cenario.chamadas.filter((item) => item === "buscar").length, 1);
+  assert.equal(cenario.chamadas.filter((item) => item === "rpc").length, 3);
+  assert.equal(cenario.chamadas.filter((item) => item === "esperar").length, 2);
+  assert.equal(cenario.chamadas.filter((item) => item === "reconciliar").length, 1);
+  assert.equal(resposta.snapshot.status, "completo");
+  assert.ok(cenario.capturas.rpc.every((item) => item.linhas.length === 1));
+});
+
+test("deadline unico alcanca a busca e reserva tempo para reconciliacao", async () => {
+  let agora = 0;
+  let sinalBusca;
+  const sinal = new AbortController().signal;
+  const cenario = criarCenario({
+    agoraMs: () => agora,
+    esperar: async (ms) => {
+      cenario.chamadas.push("esperar");
+      agora += ms;
+    },
+    buscarTodasAulas: (input) => {
+      cenario.chamadas.push("buscar");
+      sinalBusca = input.signal;
+      return Promise.resolve([aula()]);
+    },
+    aplicarSnapshotRpc: async (input) => {
+      cenario.chamadas.push("rpc");
+      cenario.capturas.rpc.push(input);
+      return {
+        execucao_id: input.execucaoId,
+        status: "adiado_leitura",
+      };
+    },
+  });
+
+  await assert.rejects(
+    executarModoExperimentais({
+      body: BODY,
+      unidades: [UNIDADE],
+      deps: cenario.deps,
+      deadlineMs: 31_000,
+      signal: sinal,
+    }),
+    /SNAPSHOT_LEITURA_PROTEGIDA_TIMEOUT/,
+  );
+
+  assert.equal(sinalBusca, sinal);
+  assert.equal(cenario.chamadas.filter((item) => item === "buscar").length, 1);
+  assert.equal(cenario.chamadas.filter((item) => item === "rpc").length, 5);
+  assert.equal(cenario.chamadas.filter((item) => item === "esperar").length, 4);
+  assert.equal(cenario.chamadas.includes("reconciliar"), false);
+});
+
 test("admissao e execucao devem ser fornecidas juntas", async () => {
   const {
     admissao_id: _admissaoId,
@@ -784,6 +873,14 @@ test("edge usa o modulo puro e o horario de banco projetado", () => {
   );
   assert.match(
     source,
+    /aplicar_snapshot_experimentais_emusys_metadados_v1/,
+  );
+  assert.doesNotMatch(
+    source,
+    /\.rpc\(['"]aplicar_snapshot_experimentais_emusys_v1['"]/,
+  );
+  assert.match(
+    source,
     /\.eq\('horario_experimental',\s*exp\.horarioBanco\)/,
   );
   assert.match(source, /horario_experimental:\s*exp\.horarioBanco/);
@@ -793,5 +890,25 @@ test("edge usa o modulo puro e o horario de banco projetado", () => {
   assert.match(
     source,
     /\.from\('curso_emusys_depara'\)[\s\S]{0,200}\.eq\('unidade_id', unidadeId\)/,
+  );
+});
+
+test("snapshot adiado por leitura admitida nao reconcilia dados parciais", () => {
+  const source = readFileSync(
+    new URL(
+      "../supabase/functions/_shared/sync-experimentais-mode.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const inicio = source.indexOf("export async function executarSnapshotExperimentais");
+  const fim = source.indexOf("function respostaSnapshotSemPii", inicio);
+  const bloco = source.slice(inicio, fim);
+
+  assert.match(bloco, /rpc\.status\s*===\s*["']adiado_admissao["']/);
+  assert.match(bloco, /permitirPublicacaoAdiada/);
+  assert.ok(
+    bloco.indexOf("adiado_admissao") < bloco.indexOf("input.deps.reconciliar"),
+    "o retorno adiado deve ocorrer antes de qualquer reconciliacao",
   );
 });

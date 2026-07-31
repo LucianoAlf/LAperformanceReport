@@ -232,11 +232,13 @@ antes do cliente administrativo e dos tokens do provedor. O chamador interno
 informa uma única unidade por UUID e um intervalo explícito de até
 45 dias; para o relatório mensal, a janela esperada é o início da competência
 até D+7. Todas as páginas precisam terminar antes da chamada única a
-`aplicar_snapshot_experimentais_emusys_v1`. A reconciliação posterior usa
+`aplicar_snapshot_experimentais_emusys_admitido_v1`. A reconciliação posterior usa
 somente `unidade + id_lead/id_aluno/aula` e nunca cria vínculo por nome ou
 telefone. O modo `metadados` reaproveita exatamente as aulas que acabou de
-gravar em `aulas_emusys`, sem segundo GET; falha do snapshot torna a chamada
-inteira malsucedida. Respostas operacionais publicam apenas execução e
+gravar em `aulas_emusys`, sem segundo GET. Sua RPC de publicação adia o raw e
+não reconcilia o lote quando existe uma leitura admitida sobreposta; fora
+dessa janela, continua publicando normalmente. Falha real do snapshot torna a
+chamada inteira malsucedida. Respostas operacionais publicam apenas execução e
 contagens, sem PII ou payload bruto. O curso reconciliado depende do de-para
 `curso_emusys_depara` escopado pela unidade; ausência de de-para resulta em
 `curso_id = null`, sem fallback textual. Horários são comparados em
@@ -280,6 +282,23 @@ se a resposta do sync for inválida ou se os agregados mensal e diário não
 confirmarem `snapshot_status='completo'`, timestamp de atualização e o mesmo ID
 de execução admitido. Não existe fallback para zero ou base transacional
 parcial.
+
+Atualização e reuso passam por `proteger_leitura_snapshot_experimentais_v1`
+imediatamente antes das leituras. Sob o mesmo advisory lock do writer, a RPC
+confirma em `emusys_experimentais_snapshot_publicacoes_vigentes` que execução e
+cobertura continuam vigentes. Se o cron publicou primeiro, a admissão é
+promovida atomicamente para uma execução nova; caso contrário, recebe lease de
+sessenta segundos. Writers admitidos sobrepostos respeitam o mesmo lease e
+aguardam com o lote já coletado, sem repetir o GET. As leituras paralelas têm
+timeout de 45 segundos e a confirmação final, dez segundos, mantendo o limite
+total abaixo desse lease.
+
+O refresh servidor-servidor propaga um deadline absoluto de 160 segundos. A
+paginação completa do Emusys tem teto de 60 segundos, a repetição do writer
+protegido usa no máximo 70 segundos e preserva 30 segundos para carregar os
+de-paras e reconciliar. As chamadas Supabase desse worker compartilham o mesmo
+sinal de cancelamento. O chamador usa 180 segundos, deixando margem para a edge
+encerrar e responder sem continuar órfã após o timeout externo.
 
 Depois do preflight, as leituras canônicas são paralelas: KPIs mensais e diários
 vêm de `get_kpis_comercial_canonicos_v2`; conversão e pendências, de

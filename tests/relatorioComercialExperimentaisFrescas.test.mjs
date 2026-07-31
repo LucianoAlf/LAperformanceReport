@@ -23,6 +23,13 @@ const formatador = readFileSync(
   ),
   "utf8",
 );
+const syncEdge = readFileSync(
+  new URL(
+    "../supabase/functions/sync-presenca-emusys/index.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 function bloco(inicio, fim) {
   const posInicio = edge.indexOf(inicio);
@@ -238,11 +245,25 @@ test("refresh usa admissao single-flight antes do provedor e finaliza a identida
   assert.match(refresh, /p_admissao_id:\s*input\.admissaoId/);
   assert.match(refresh, /p_execucao_id:\s*input\.execucaoId/);
   assert.match(refresh, /p_sucesso:\s*input\.sucesso/);
+  assert.match(refresh, /proteger_leitura_snapshot_experimentais_v1/);
+  assert.match(refresh, /p_admissao_id:\s*input\.admissaoId/);
+  assert.match(refresh, /p_execucao_id:\s*input\.execucaoId/);
   assert.match(refresh, /resultado\.origem\s*===\s*['"]reutilizado['"]/);
+  assert.match(refresh, /if\s*\(\s*error\s*\|\|\s*!data\s*\)/);
   assert.match(
     refresh,
     /resultado\.resposta\.snapshot\.execucao_id\s*!==\s*resultado\.execucaoId/,
   );
+  assert.match(refresh, /deadline_epoch_ms:\s*deadlineEpochMs/);
+  assert.match(refresh, /Date\.now\(\)\s*\+\s*160_000/);
+  assert.match(refresh, /AbortSignal\.timeout\(180_000\)/);
+  assert.match(syncEdge, /SNAPSHOT_EMUSYS_TIMEOUT_MS\s*=\s*60_000/);
+  assert.match(
+    syncEdge,
+    /AbortSignal\.timeout\(SNAPSHOT_EMUSYS_TIMEOUT_MS\)/,
+  );
+  assert.match(syncEdge, /deadlineMs:\s*deadlineEpochMs/);
+  assert.match(syncEdge, /global:\s*\{[\s\S]*fetch:[\s\S]*signal:\s*signalTotal/);
 });
 
 test("fontes canonicas sao carregadas em paralelo somente depois do refresh", () => {
@@ -255,6 +276,9 @@ test("fontes canonicas sao carregadas em paralelo somente depois do refresh", ()
   );
 
   assert.match(depoisRefresh, /Promise\.all\s*\(/);
+  assert.match(edge, /LEITURA_SNAPSHOT_EXPERIMENTAIS_TIMEOUT/);
+  assert.match(depoisRefresh, /45_000/);
+  assert.match(depoisRefresh, /10_000/);
   for (
     const fonte of [
       "get_kpis_comercial_canonicos_v2",

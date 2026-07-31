@@ -1457,7 +1457,19 @@ async function atualizarSnapshotExperimentais(
         if (error || !data) throw new Error('SNAPSHOT_ADMISSAO_FALHOU');
         return data;
       },
+      protegerLeitura: async (input) => {
+        const { data, error } = await supabase.rpc(
+          'proteger_leitura_snapshot_experimentais_v1',
+          {
+            p_admissao_id: input.admissaoId,
+            p_execucao_id: input.execucaoId,
+          },
+        );
+        if (error || !data) throw new Error('SNAPSHOT_ADMISSAO_PROTECAO_FALHOU');
+        return data;
+      },
       atualizar: async ({ admissaoId, execucaoId }) => {
+        const deadlineEpochMs = Date.now() + 160_000;
         const response = await fetch(`${supabaseUrl}/functions/v1/sync-presenca-emusys`, {
           method: 'POST',
           headers: {
@@ -1472,8 +1484,9 @@ async function atualizarSnapshotExperimentais(
             data_fim: dataFim,
             admissao_id: admissaoId,
             execucao_id: execucaoId,
+            deadline_epoch_ms: deadlineEpochMs,
           }),
-          signal: AbortSignal.timeout(120_000),
+          signal: AbortSignal.timeout(180_000),
         });
         if (!response.ok) {
           throw new Error(`SNAPSHOT_EXPERIMENTAIS_HTTP_${response.status}`);
@@ -1554,6 +1567,23 @@ function rankingCanonico(
     .sort((a, b) => b.quantidade - a.quantidade || a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
+async function aguardarLeituraSnapshotComTimeout<T>(
+  operacao: PromiseLike<T>,
+  timeoutMs: number,
+): Promise<T> {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error('LEITURA_SNAPSHOT_EXPERIMENTAIS_TIMEOUT'));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([Promise.resolve(operacao), timeout]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
 async function gerarRelatorioComercialDiario(
   supabase: SupabaseClient,
   unidadeId: string,
@@ -1593,7 +1623,7 @@ async function gerarRelatorioComercialDiario(
     experimentaisHojeResponse,
     matriculasHojeResponse,
     matriculasMes,
-  ] = await Promise.all([
+  ] = await aguardarLeituraSnapshotComTimeout(Promise.all([
     supabase.from('unidades').select('id, nome, hunter_nome').eq('id', unidadeId).single(),
     supabase.rpc('get_kpis_comercial_canonicos_v2', {
       p_unidade_id: unidadeId,
@@ -1649,7 +1679,7 @@ async function gerarRelatorioComercialDiario(
     supabase.from('lead_experimentais').select('id', { count: 'exact', head: true }).eq('unidade_id', unidadeId).gte('created_at', inicioDiaBRT).lt('created_at', fimDiaBRTExclusivo),
     supabase.from('alunos').select('id', { count: 'exact', head: true }).eq('unidade_id', unidadeId).gte('created_at', inicioDiaBRT).lt('created_at', fimDiaBRTExclusivo),
     buscarMatriculasComerciaisAlunos(supabase, unidadeId, dataInicioSnapshot, dataRelatorio),
-  ]);
+  ]), 45_000);
 
   for (const resposta of [
     unidadeResponse,
@@ -1689,15 +1719,18 @@ async function gerarRelatorioComercialDiario(
     linhasFuturas,
     snapshot.snapshot.execucao_id,
   );
-  const confirmacaoSnapshotResponse = await supabase.rpc(
-    'get_experimentais_emusys_operacional_v1',
-    {
-      p_unidade_id: unidadeId,
-      p_ano: ano,
-      p_mes: mes,
-      p_periodo: 'mensal',
-      p_data: dataRelatorio,
-    },
+  const confirmacaoSnapshotResponse = await aguardarLeituraSnapshotComTimeout(
+    supabase.rpc(
+      'get_experimentais_emusys_operacional_v1',
+      {
+        p_unidade_id: unidadeId,
+        p_ano: ano,
+        p_mes: mes,
+        p_periodo: 'mensal',
+        p_data: dataRelatorio,
+      },
+    ),
+    10_000,
   );
   if (confirmacaoSnapshotResponse.error) throw confirmacaoSnapshotResponse.error;
   const resumoConfirmacaoSnapshot = (confirmacaoSnapshotResponse.data?.resumo || {}) as Record<string, unknown>;

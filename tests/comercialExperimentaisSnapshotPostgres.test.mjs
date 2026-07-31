@@ -17,6 +17,8 @@ const durableMigrationPath =
   'supabase/migrations/20260731163000_snapshot_experimentais_acl_payload_duravel.sql';
 const fencingMigrationPath =
   'supabase/migrations/20260731223000_snapshot_experimentais_fencing_lease.sql';
+const metadataCoordinationMigrationPath =
+  'supabase/migrations/20260731224500_snapshot_experimentais_metadados_coordenados.sql';
 const requirePostgres = process.env.COMERCIAL_EXP_REQUIRE_POSTGRES === '1';
 
 function read(path) {
@@ -1285,7 +1287,7 @@ test(
           begin
             if new.snapshot_execucao_id =
               '00000000-0000-0000-0000-000000000020'::uuid then
-              perform pg_sleep(5);
+              perform pg_sleep(10);
             end if;
             return new;
           end;
@@ -1295,7 +1297,7 @@ test(
           language plpgsql
           as $$
           begin
-            for tentativa in 1..100 loop
+            for tentativa in 1..160 loop
               if exists (
                 select 1
                 from pg_stat_activity
@@ -1979,6 +1981,16 @@ test(
         `migration de fencing do lease falhou:\n${fencingMigrationApplied.stderr}`,
       );
 
+      const metadataCoordinationMigrationApplied = psql(
+        containerName,
+        read(metadataCoordinationMigrationPath),
+      );
+      assert.equal(
+        metadataCoordinationMigrationApplied.status,
+        0,
+        `migration de coordenacao dos metadados falhou:\n${metadataCoordinationMigrationApplied.stderr}`,
+      );
+
       const admissionCall = String.raw`
         \set ON_ERROR_STOP on
         \pset tuples_only on
@@ -2327,6 +2339,254 @@ test(
         recovery.status,
         0,
         `recuperacao/particionamento da admissao falhou:\n${recovery.stderr}`,
+      );
+
+      const metadataCoordination = psql(
+        containerName,
+        String.raw`
+          \set ON_ERROR_STOP on
+          do $metadata_guard$
+          declare
+            v_admissao jsonb;
+            v_admissao_concorrente jsonb;
+            v_protecao jsonb;
+            v_resultado jsonb;
+          begin
+            v_admissao := public.admitir_refresh_snapshot_experimentais_v1(
+              '11111111-1111-1111-1111-111111111111',
+              '2027-03-01',
+              '2027-03-31',
+              'preview',
+              clock_timestamp()
+            );
+
+            v_resultado := public.aplicar_snapshot_experimentais_emusys_metadados_v1(
+              'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              '11111111-1111-1111-1111-111111111111',
+              '2027-03-01',
+              '2027-03-31',
+              '[]'::jsonb
+            );
+            if v_resultado->>'status' <> 'adiado_admissao'
+               or exists (
+                 select 1
+                 from public.emusys_experimentais_snapshot_execucoes
+                 where id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+               ) then
+              raise exception 'metadados publicou durante admissao em andamento';
+            end if;
+
+            perform public.aplicar_snapshot_experimentais_emusys_admitido_v1(
+              (v_admissao->>'admissao_id')::uuid,
+              (v_admissao->>'snapshot_execucao_id')::uuid,
+              '11111111-1111-1111-1111-111111111111',
+              '2027-03-01',
+              '2027-03-31',
+              '[]'::jsonb
+            );
+            perform public.finalizar_refresh_snapshot_experimentais_v1(
+              (v_admissao->>'admissao_id')::uuid,
+              (v_admissao->>'snapshot_execucao_id')::uuid,
+              true,
+              null
+            );
+
+            update public.emusys_experimentais_refresh_admissoes
+            set
+              lease_ate = clock_timestamp() - interval '1 minute',
+              bucket_inicio = clock_timestamp() - interval '10 minutes',
+              concluido_em = clock_timestamp() - interval '2 minutes'
+            where id = (v_admissao->>'admissao_id')::uuid;
+            v_protecao := public.proteger_leitura_snapshot_experimentais_v1(
+              (v_admissao->>'admissao_id')::uuid,
+              (v_admissao->>'snapshot_execucao_id')::uuid
+            );
+            if v_protecao->>'acao' <> 'reutilizar'
+               or (
+              select lease_ate <= clock_timestamp()
+              from public.emusys_experimentais_refresh_admissoes
+              where id = (v_admissao->>'admissao_id')::uuid
+            ) then
+              raise exception 'reuso nao renovou a janela de leitura';
+            end if;
+
+            v_resultado := public.aplicar_snapshot_experimentais_emusys_metadados_v1(
+              'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+              '11111111-1111-1111-1111-111111111111',
+              '2027-03-01',
+              '2027-03-31',
+              '[]'::jsonb
+            );
+            if v_resultado->>'status' <> 'adiado_admissao' then
+              raise exception 'metadados ignorou janela de leitura concluida';
+            end if;
+
+            update public.emusys_experimentais_refresh_admissoes
+            set
+              lease_ate = clock_timestamp() - interval '1 minute',
+              bucket_inicio = clock_timestamp() - interval '10 minutes',
+              concluido_em = clock_timestamp() - interval '2 minutes'
+            where id = (v_admissao->>'admissao_id')::uuid;
+
+            v_resultado := public.aplicar_snapshot_experimentais_emusys_metadados_v1(
+              'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+              '11111111-1111-1111-1111-111111111111',
+              '2027-03-01',
+              '2027-03-31',
+              '[]'::jsonb
+            );
+            if v_resultado->>'status' <> 'completo'
+               or not exists (
+                 select 1
+                 from public.emusys_experimentais_snapshot_execucoes
+                 where id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+                   and status = 'completo'
+               ) then
+              raise exception 'metadados nao retomou apos janela protegida';
+            end if;
+
+            v_protecao := public.proteger_leitura_snapshot_experimentais_v1(
+              (v_admissao->>'admissao_id')::uuid,
+              (v_admissao->>'snapshot_execucao_id')::uuid
+            );
+            if v_protecao->>'acao' <> 'atualizar'
+               or v_protecao->>'snapshot_execucao_id'
+                 = v_admissao->>'snapshot_execucao_id'
+               or (
+                 select status
+                 from public.emusys_experimentais_refresh_admissoes
+                 where id = (v_admissao->>'admissao_id')::uuid
+               ) <> 'em_andamento' then
+              raise exception 'publicacao vencida foi reutilizada';
+            end if;
+
+            v_resultado := public.aplicar_snapshot_experimentais_emusys_metadados_v1(
+              'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+              '11111111-1111-1111-1111-111111111111',
+              '2027-03-01',
+              '2027-03-31',
+              '[]'::jsonb
+            );
+            if v_resultado->>'status' <> 'adiado_admissao' then
+              raise exception 'promocao de refresh nao protegeu nova execucao';
+            end if;
+
+            v_admissao := public.admitir_refresh_snapshot_experimentais_v1(
+              '11111111-1111-1111-1111-111111111111',
+              '2027-04-01',
+              '2027-04-30',
+              'preview',
+              clock_timestamp()
+            );
+            perform public.aplicar_snapshot_experimentais_emusys_admitido_v1(
+              (v_admissao->>'admissao_id')::uuid,
+              (v_admissao->>'snapshot_execucao_id')::uuid,
+              '11111111-1111-1111-1111-111111111111',
+              '2027-04-01',
+              '2027-04-30',
+              '[]'::jsonb
+            );
+            perform public.finalizar_refresh_snapshot_experimentais_v1(
+              (v_admissao->>'admissao_id')::uuid,
+              (v_admissao->>'snapshot_execucao_id')::uuid,
+              true,
+              null
+            );
+            perform public.proteger_leitura_snapshot_experimentais_v1(
+              (v_admissao->>'admissao_id')::uuid,
+              (v_admissao->>'snapshot_execucao_id')::uuid
+            );
+
+            v_admissao_concorrente :=
+              public.admitir_refresh_snapshot_experimentais_v1(
+                '11111111-1111-1111-1111-111111111111',
+                '2027-04-01',
+                '2027-04-30',
+                'cron',
+                clock_timestamp()
+              );
+            v_resultado := public.aplicar_snapshot_experimentais_emusys_admitido_v1(
+              (v_admissao_concorrente->>'admissao_id')::uuid,
+              (v_admissao_concorrente->>'snapshot_execucao_id')::uuid,
+              '11111111-1111-1111-1111-111111111111',
+              '2027-04-01',
+              '2027-04-30',
+              '[]'::jsonb
+            );
+            if v_resultado->>'status' <> 'adiado_leitura'
+               or (
+                 select execucao_id
+                 from public.emusys_experimentais_snapshot_publicacoes_vigentes
+                 where unidade_id = '11111111-1111-1111-1111-111111111111'
+               ) <> (v_admissao->>'snapshot_execucao_id')::uuid then
+              raise exception 'cron admitido substituiu preview protegido';
+            end if;
+
+            if (
+              select lease_ate - clock_timestamp()
+              from public.emusys_experimentais_refresh_admissoes
+              where id = (v_admissao->>'admissao_id')::uuid
+            ) not between interval '58 seconds' and interval '60 seconds' then
+              raise exception 'protecao nao reduziu lease para a janela de 60s';
+            end if;
+
+            perform pg_sleep(60.1);
+            v_resultado := public.aplicar_snapshot_experimentais_emusys_admitido_v1(
+              (v_admissao_concorrente->>'admissao_id')::uuid,
+              (v_admissao_concorrente->>'snapshot_execucao_id')::uuid,
+              '11111111-1111-1111-1111-111111111111',
+              '2027-04-01',
+              '2027-04-30',
+              '[]'::jsonb
+            );
+            if v_resultado->>'status' <> 'completo'
+               or (
+                 select execucao_id
+                 from public.emusys_experimentais_snapshot_publicacoes_vigentes
+                 where unidade_id = '11111111-1111-1111-1111-111111111111'
+               ) <> (v_admissao_concorrente->>'snapshot_execucao_id')::uuid then
+              raise exception 'cron admitido nao retomou apos protecao';
+            end if;
+
+            if has_function_privilege(
+              'authenticated',
+              'public.aplicar_snapshot_experimentais_emusys_metadados_v1(uuid,uuid,date,date,jsonb)',
+              'execute'
+            ) or has_function_privilege(
+              'authenticated',
+              'public.proteger_leitura_snapshot_experimentais_v1(uuid,uuid)',
+              'execute'
+            ) or not has_function_privilege(
+              'service_role',
+              'public.aplicar_snapshot_experimentais_emusys_metadados_v1(uuid,uuid,date,date,jsonb)',
+              'execute'
+            ) or not has_function_privilege(
+              'service_role',
+              'public.proteger_leitura_snapshot_experimentais_v1(uuid,uuid)',
+              'execute'
+            ) then
+              raise exception 'ACL da publicacao de metadados divergiu';
+            end if;
+
+            if has_table_privilege(
+              'authenticated',
+              'public.emusys_experimentais_snapshot_publicacoes_vigentes',
+              'select'
+            ) or not has_table_privilege(
+              'service_role',
+              'public.emusys_experimentais_snapshot_publicacoes_vigentes',
+              'select'
+            ) then
+              raise exception 'ACL do ponteiro de publicacao divergiu';
+            end if;
+          end;
+          $metadata_guard$;
+        `,
+      );
+      assert.equal(
+        metadataCoordination.status,
+        0,
+        `coordenacao real metadados/admissao falhou:\n${metadataCoordination.stderr}`,
       );
     } finally {
       spawnSync('docker', ['rm', '--force', containerName], {

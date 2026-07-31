@@ -15,6 +15,10 @@ type Admissao = {
 
 export type SnapshotAdmissionDeps<TResposta> = {
   admitir: () => Promise<unknown>;
+  protegerLeitura: (input: {
+    admissaoId: string;
+    execucaoId: string;
+  }) => Promise<unknown>;
   atualizar: (input: {
     admissaoId: string;
     execucaoId: string;
@@ -70,8 +74,13 @@ export async function obterSnapshotComAdmissao<TResposta>(input: {
   esperaMs?: number;
   timeoutMs?: number;
 }): Promise<
-  | { origem: "atualizado"; execucaoId: string; resposta: TResposta }
-  | { origem: "reutilizado"; execucaoId: string }
+  | {
+    origem: "atualizado";
+    admissaoId: string;
+    execucaoId: string;
+    resposta: TResposta;
+  }
+  | { origem: "reutilizado"; admissaoId: string; execucaoId: string }
 > {
   const esperaMs = input.esperaMs ?? 250;
   const timeoutMs = input.timeoutMs ?? 120_000;
@@ -85,12 +94,40 @@ export async function obterSnapshotComAdmissao<TResposta>(input: {
   }
   const limite = input.deps.agoraMs() + timeoutMs;
 
+  let admissaoPendente: Admissao | null = null;
+
   while (true) {
-    const admissao = parseAdmissao(await input.deps.admitir());
+    const admissao = admissaoPendente ??
+      parseAdmissao(await input.deps.admitir());
+    admissaoPendente = null;
 
     if (admissao.acao === "reutilizar") {
+      const protegida = parseAdmissao(
+        await input.deps.protegerLeitura({
+          admissaoId: admissao.admissaoId,
+          execucaoId: admissao.execucaoId,
+        }),
+      );
+      if (protegida.admissaoId !== admissao.admissaoId) {
+        throw new SnapshotAdmissionError(
+          "SNAPSHOT_ADMISSAO_PROTECAO_IDENTIDADE_INVALIDA",
+        );
+      }
+      if (protegida.acao === "atualizar") {
+        admissaoPendente = protegida;
+        continue;
+      }
+      if (
+        protegida.acao !== "reutilizar" ||
+        protegida.execucaoId !== admissao.execucaoId
+      ) {
+        throw new SnapshotAdmissionError(
+          "SNAPSHOT_ADMISSAO_PROTECAO_RESPOSTA_INVALIDA",
+        );
+      }
       return {
         origem: "reutilizado",
+        admissaoId: admissao.admissaoId,
         execucaoId: admissao.execucaoId,
       };
     }
@@ -128,8 +165,32 @@ export async function obterSnapshotComAdmissao<TResposta>(input: {
         sucesso: true,
         erroCodigo: null,
       });
+      const protegida = parseAdmissao(
+        await input.deps.protegerLeitura({
+          admissaoId: admissao.admissaoId,
+          execucaoId: admissao.execucaoId,
+        }),
+      );
+      if (protegida.admissaoId !== admissao.admissaoId) {
+        throw new SnapshotAdmissionError(
+          "SNAPSHOT_ADMISSAO_PROTECAO_IDENTIDADE_INVALIDA",
+        );
+      }
+      if (protegida.acao === "atualizar") {
+        admissaoPendente = protegida;
+        continue;
+      }
+      if (
+        protegida.acao !== "reutilizar" ||
+        protegida.execucaoId !== admissao.execucaoId
+      ) {
+        throw new SnapshotAdmissionError(
+          "SNAPSHOT_ADMISSAO_PROTECAO_RESPOSTA_INVALIDA",
+        );
+      }
       return {
         origem: "atualizado",
+        admissaoId: admissao.admissaoId,
         execucaoId: admissao.execucaoId,
         resposta,
       };
