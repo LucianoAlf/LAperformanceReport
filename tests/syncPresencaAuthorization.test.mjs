@@ -6,7 +6,7 @@ const helperPath = 'supabase/functions/_shared/sync-presenca-authorization.ts';
 const migrationPath =
   'supabase/migrations/20260731160000_sync_presenca_authorization.sql';
 const cronAuthMigrationPath =
-  'supabase/migrations/20260731164500_sync_presenca_cron_token_interno.sql';
+  'supabase/migrations/20260731165000_sync_presenca_cron_token_interno.sql';
 const unidadeBarra = {
   id: '368d47f5-2d88-4475-bc14-ba084a9a348e',
   nome: 'Barra',
