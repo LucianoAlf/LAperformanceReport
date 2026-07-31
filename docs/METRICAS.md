@@ -251,7 +251,43 @@ cria falta quando `situacao_operacional` é `agendada` ou `cancelada`.
 ### Taxa de conversão Experimental → Matrícula
 - **No Dashboard/Comercial (frontend):** denominador `experimental_realizada = true`; numerador `status ∈ {matriculado, convertido}` (`DashboardPage.tsx:316-327`).
 - **Canônica (professor):** RPC `get_experimentais_professor_canonicos_v1` + fonte `lead_experimentais` (1 linha por aula, presença real) — substituiu a contagem por `leads` que inflava a taxa. Denominador = `status ∈ {experimental_realizada, convertido}`; numerador = realizadas cujo lead converteu. Ver CLAUDE.md (Módulo de Professores).
-- ⚠️ `taxa_exp_mat` e `taxa_conversao_exp` estão **bloqueadas** em Metas até unificar a regra canônica (`MetasPageNew.tsx:65/75`).
+- ⚠️ `taxa_exp_mat` e `taxa_conversao_exp` continuam indisponíveis para configuração de meta (`MetasPageNew.tsx:65/75`), mas isso não bloqueia o KPI diário. Havendo denominador, o relatório publica sempre a taxa e a fração da conciliação vigente; pendências aparecem como aviso `N pendências em auditoria`. Sem denominador, publica `SEM BASE`. O texto diário nunca usa `BLOQUEADA`.
+
+### Tickets do relatório comercial diário
+
+O relatório diário calcula duas métricas separadas sobre a mesma coorte de
+matrículas comerciais agrupada que alimenta a lista detalhada:
+
+```text
+Ticket médio das parcelas = soma das parcelas consolidadas positivas
+                            / grupos com parcela positiva
+
+Ticket médio dos passaportes = soma dos passaportes positivos
+                               / grupos com passaporte positivo
+```
+
+O agrupamento ocorre antes do cálculo: um segundo curso pode acrescentar uma
+parcela ao valor consolidado, mas não cria outro denominador. Zero, nulo e
+valor inválido ficam fora somente do denominador correspondente. A média é
+arredondada a duas casas apenas ao final. A meta `metas_kpi.tipo='ticket_medio'`
+é exibida exclusivamente ao lado do ticket das parcelas; não há meta canônica
+de passaporte. Referência de aceite da Barra em julho/2026: parcelas
+`R$ 6.819,00 / 16 = R$ 426,19` e passaportes
+`R$ 7.142,00 / 16 = R$ 446,38`.
+
+Essa regra é específica da coorte de novas matrículas do relatório comercial e
+não substitui a regra financeira por fatura/competência do ticket geral da base
+ativa descrita nas inconsistências deste documento.
+
+### Próximas experimentais do relatório diário
+
+A agenda vem somente do snapshot Emusys vigente. Uma participação entra quando
+`snapshot_ativo=true`, `situacao='agendada'`, não está cancelada e seu início em
+`America/Sao_Paulo` é estritamente posterior ao instante de geração e menor ou
+igual a D+7. Evento do mesmo dia sem horário fica fora; em data posterior ele
+pode entrar. A lista remove duplicatas por data, horário, aluno e curso, ordena
+por data/horário/nome, mostra no máximo dez participações e informa o total
+excedente.
 
 ### Taxa Lead → Experimental
 Leads que agendaram/realizaram experimental ÷ total de leads do período.
