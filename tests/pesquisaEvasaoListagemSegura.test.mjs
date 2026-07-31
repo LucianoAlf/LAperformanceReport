@@ -397,6 +397,16 @@ test('somente a consulta mais recente pode atualizar dados e loading', () => {
     'uma resposta antiga nao pode desligar o loading da consulta atual',
   );
   assert.match(carregar, /p_busca:\s*consulta\.filtroBusca\s*\|\|\s*null/);
+  assert.match(
+    carregar,
+    /['"]stats_pesquisa_evasao['"][\s\S]*?p_ano:\s*consulta\.filtroAno[\s\S]*?p_mes:\s*consulta\.filtroMes/,
+    'os cards devem usar o mesmo ano e mes selecionados na listagem',
+  );
+  assert.doesNotMatch(
+    carregar,
+    /['"]stats_pesquisa_evasao['"][\s\S]{0,300}?new Date\s*\(/,
+    'stats nao podem ignorar os filtros visiveis e voltar ao mes atual',
+  );
 });
 
 test('frontend exibe bloqueios, fallback de motivo e correcao governada', () => {

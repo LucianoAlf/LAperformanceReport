@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const migrationPath = resolve(
   repoRoot,
-  'supabase/migrations/20260730134500_pesquisa_evasao_movimentacao_canonica.sql',
+  'supabase/migrations/20260730161312_pesquisa_evasao_movimentacao_canonica.sql',
 );
 const edgePath = resolve(
   repoRoot,

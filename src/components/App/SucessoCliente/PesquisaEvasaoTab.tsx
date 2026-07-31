@@ -249,8 +249,8 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
         'stats_pesquisa_evasao',
         { 
           p_unidade_id: consulta.unidadeAtual === 'todos' ? null : consulta.unidadeAtual,
-          p_ano: new Date().getFullYear(),
-          p_mes: new Date().getMonth() + 1
+          p_ano: consulta.filtroAno,
+          p_mes: consulta.filtroMes,
         }
       );
 

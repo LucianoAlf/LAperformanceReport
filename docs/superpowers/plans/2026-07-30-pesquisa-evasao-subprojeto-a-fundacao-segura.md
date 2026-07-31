@@ -19,7 +19,7 @@
   - `supabase/functions/webhook-whatsapp-inbox/index.ts`;
   - `supabase/functions/enviar-pesquisa-evasao/contract.ts`;
   - `supabase/functions/enviar-pesquisa-evasao/contract.test.ts`;
-  - `supabase/migrations/20260730134500_pesquisa_evasao_movimentacao_canonica.sql`;
+  - `supabase/migrations/20260730161312_pesquisa_evasao_movimentacao_canonica.sql`;
   - `tests/pesquisaEvasaoCanonica.test.mjs`.
 - Não aplicar migração nem fazer deploy antes de revisar o diff local e confirmar o alvo Supabase `ouqwbbermlzqqvtqwlul`.
 - Não alterar timing de disparo nem política de lembrete; são decisões do Subprojeto C.

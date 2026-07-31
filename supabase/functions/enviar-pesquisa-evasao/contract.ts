@@ -1,10 +1,3 @@
-export interface TelefonePesquisaInput {
-  telefoneOverride?: string | null;
-  telefoneSnapshot?: string | null;
-  whatsappAluno?: string | null;
-  telefoneAluno?: string | null;
-}
-
 export type EnviarPesquisaRequest =
   | {
     acao: "previsualizar";
@@ -57,17 +50,6 @@ function normalizarTelefone(valor: string | null | undefined): string {
   }
 
   return digitos;
-}
-
-export function resolverTelefonePesquisa(input: TelefonePesquisaInput): string {
-  const origem = [
-    input.telefoneOverride,
-    input.telefoneSnapshot,
-    input.whatsappAluno,
-    input.telefoneAluno,
-  ].find((valor) => typeof valor === "string" && valor.trim().length > 0);
-
-  return normalizarTelefone(origem);
 }
 
 export function telefonePesquisaValido(telefone: string): boolean {

@@ -23,6 +23,8 @@ Nenhuma migração e nenhum deploy podem ocorrer sem essa autorização explíci
 
 ## Artefatos
 
+- Migration canônica já registrada em produção como versão `20260730161312`:
+  `supabase/migrations/20260730161312_pesquisa_evasao_movimentacao_canonica.sql`
 - Migration de fundação e RLS:
   `supabase/migrations/20260730170000_pesquisa_evasao_fundacao_segura.sql`
 - Migration de claim e resultado:
@@ -41,6 +43,13 @@ homologação, regenerar os tipos contra a homologação e exigir diff sem
 divergência no domínio antes de aceitar o arquivo definitivo.
 Em outras palavras: tipos consultaram produção somente em leitura.
 
+Em 2026-07-30, `list_migrations` confirmou no projeto
+`ouqwbbermlzqqvtqwlul` a versão remota
+`20260730161312_pesquisa_evasao_movimentacao_canonica`. O arquivo local usa
+essa mesma versão para que `db push` não tente reaplicar o DDL canônico sob um
+timestamp diferente. No rollout, as migrations novas deste subprojeto são
+somente `20260730170000` e `20260730173000`.
+
 ## Bloqueadores antes do rollout
 
 ### 1. Cofre das caixas de WhatsApp
@@ -56,7 +65,23 @@ quebra fluxos fora da pesquisa de evasão. Tratar em diff separado, mover o
 segredo para acesso server-only e expor ao frontend apenas projeção sem token.
 Não liberar a pesquisa apenas porque a nova Edge lê a caixa pelo servidor.
 
-### 2. Snapshots históricos de telefone
+### 2. Escopo de `movimentacoes_admin`
+
+Verificação somente leitura em 2026-07-30 confirmou que
+`public.movimentacoes_admin` possui policy `ALL` com `qual = true` e
+`with_check = true` para `authenticated`. O papel autenticado também possui
+grants amplos de `SELECT`, `INSERT`, `UPDATE` e `DELETE`. Assim que o novo
+trigger começar a preencher `telefone_snapshot`, qualquer usuário autenticado
+do LA Report poderá ler os snapshots de todas as unidades pela tabela bruta.
+
+Isso também bloqueia o rollout. Há pelo menos 20 consumidores no frontend e 83
+referências em arquivos TypeScript/TSX, então uma revogação isolada pode quebrar
+fluxos administrativos, de retenção e dashboards. O hardening precisa migrar
+os consumidores para read models/RPCs com escopo explícito antes de revogar o
+acesso amplo. O trigger não deve entrar em produção enquanto a projeção bruta
+continuar global para qualquer login autenticado.
+
+### 3. Snapshots históricos de telefone
 
 A auditoria inicial registrou 144 saídas válidas com contato atual e snapshot
 ausente. Uma nova consulta canônica, executada em 2026-07-30 com janela de 180
@@ -120,7 +145,7 @@ select
 from saidas;
 ```
 
-### 3. Público interno
+### 4. Público interno
 
 `pesquisa_evasao_publicos_internos` é a fonte service-only para professor,
 colaborador e outros públicos que não devem receber a pesquisa.
@@ -131,7 +156,7 @@ email, `tipo_aluno` ou categoria financeira. Os seis testes históricos e o
 exemplo de Ana Beatriz não podem alimentar esse cadastro, indicadores de
 professor ou encaminhamento à coordenação.
 
-### 4. Decisões que continuam fora do Subprojeto A
+### 5. Decisões que continuam fora do Subprojeto A
 
 O momento do disparo (`imediato` versus `D+X`) e a política de lembrete são
 decisões abertas do Subprojeto C. Não introduzir regra D+3 neste rollout.
@@ -140,7 +165,7 @@ Autenticação do webhook inbound, conversa multipartes, opt-out e expurgo do
 `webhook_debug_log` pertencem ao Subprojeto B. O B deve preservar
 `processar-resposta-pesquisa`, inclusive a pesquisa pós-primeira aula.
 
-### 5. Baseline local do Supabase
+### 6. Baseline local do Supabase
 
 Em 2026-07-30, `supabase start` falhou antes de chegar às migrations deste
 subprojeto: `20260109_fase1_seed_dados.sql` é ordenada antes da migration que
@@ -420,7 +445,8 @@ argumentos, o histórico de testes e as RPCs de claim/resultado.
 
 ## Ordem de rollout
 
-1. resolver o cofre de `whatsapp_caixas`;
+1. resolver o cofre de `whatsapp_caixas` e o escopo de
+   `movimentacoes_admin`;
 2. revisar o diff completo e confirmar o project ref;
 3. obter backup lógico/DDL das tabelas afetadas;
 4. aplicar as duas migrations;

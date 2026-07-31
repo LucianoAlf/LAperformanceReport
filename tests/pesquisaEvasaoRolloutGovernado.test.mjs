@@ -137,7 +137,19 @@ test('runbook mantem gates de dados e seguranca descobertos na auditoria', () =>
   );
   assert.match(runbook, /n[aã]o inferir[\s\S]*(?:nome|telefone)/i);
   assert.match(runbook, /whatsapp_caixas[\s\S]*token/i);
+  assert.match(
+    runbook,
+    /movimentacoes_admin[\s\S]*(?:ALL|acesso total)[\s\S]*authenticated/i,
+  );
+  assert.match(
+    runbook,
+    /telefone_snapshot[\s\S]*(?:qualquer|todos?)[\s\S]*(?:usu[aÃ¡]rio|login)[\s\S]*autenticad/i,
+  );
   assert.match(runbook, /bloqueador[\s\S]*rollout/i);
+  assert.match(
+    runbook,
+    /20260730161312[\s\S]*pesquisa_evasao_movimentacao_canonica/i,
+  );
   assert.match(runbook, /D\+X[\s\S]*Subprojeto C/i);
   assert.match(
     runbook,
