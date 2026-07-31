@@ -237,6 +237,7 @@ export function parcelasDoGrupo(matricula: {
 
 export function passaporteDoGrupo(matricula: {
   valor_passaporte?: ValorMonetario;
+  parcelas_relatorio?: ValorMonetario[] | null;
 }): number {
   return numeroPositivo(matricula.valor_passaporte);
 }

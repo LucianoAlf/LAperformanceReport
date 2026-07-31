@@ -148,11 +148,22 @@ Deno.test("parcelasDoGrupo consolida segundo curso em um unico valor", () => {
     parcelasDoGrupo({ valor_parcela: 400, parcelas_relatorio: [400, 300] }),
     700,
   );
+  assertEquals(
+    parcelasDoGrupo({ valor_parcela: 395, parcelas_relatorio: [395, 395] }),
+    790,
+  );
   assertEquals(parcelasDoGrupo({ valor_parcela: 400 }), 400);
 });
 
 Deno.test("passaporteDoGrupo devolve somente o passaporte consolidado", () => {
   assertEquals(passaporteDoGrupo({ valor_passaporte: 450 }), 450);
+  assertEquals(
+    passaporteDoGrupo({
+      valor_passaporte: 400,
+      parcelas_relatorio: [395, 395],
+    }),
+    400,
+  );
   assertEquals(passaporteDoGrupo({ valor_passaporte: null }), 0);
 });
 
