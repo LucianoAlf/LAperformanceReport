@@ -155,9 +155,6 @@ from ranqueadas q
 where q.id = r.id;
 
 alter table public.emusys_experimentais_raw
-  alter column participante_chave set not null;
-
-alter table public.emusys_experimentais_raw
   add constraint emusys_experimentais_raw_snapshot_execucao_fk
   foreign key (snapshot_execucao_id)
   references public.emusys_experimentais_snapshot_execucoes(id)
@@ -178,6 +175,12 @@ create index emusys_experimentais_raw_snapshot_periodo_idx
     data_aula,
     snapshot_ativo
   );
+
+drop policy if exists emusys_experimentais_raw_select_authenticated
+  on public.emusys_experimentais_raw;
+
+grant select on table public.emusys_experimentais_raw
+  to authenticated, service_role;
 
 revoke all on table public.emusys_experimentais_snapshot_execucoes
   from public, anon, authenticated;
@@ -699,6 +702,15 @@ grant execute on function public.pode_gerar_relatorio_comercial_v1(uuid)
 comment on function public.pode_gerar_relatorio_comercial_v1(uuid) is
   'Guard booleano do relatorio comercial: perfil unidade somente na propria unidade; demais perfis exigem comercial.ver.';
 
+create policy emusys_experimentais_raw_select_authenticated
+  on public.emusys_experimentais_raw
+  for select
+  to authenticated
+  using (
+    snapshot_ativo is true
+    and public.pode_gerar_relatorio_comercial_v1(unidade_id)
+  );
+
 create or replace function public.get_experimentais_emusys_operacional_v1(
   p_unidade_id uuid,
   p_ano integer,
@@ -707,11 +719,25 @@ create or replace function public.get_experimentais_emusys_operacional_v1(
   p_data date default null
 )
 returns jsonb
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public, pg_temp
 as $function$
+declare
+  v_resultado jsonb;
+begin
+  if p_unidade_id is null then
+    raise exception 'SNAPSHOT_EXPERIMENTAIS_UNIDADE_OBRIGATORIA'
+      using errcode = '22023';
+  end if;
+
+  if auth.role() is distinct from 'service_role'
+     and not public.pode_gerar_relatorio_comercial_v1(p_unidade_id) then
+    raise exception 'SNAPSHOT_EXPERIMENTAIS_ACESSO_NEGADO'
+      using errcode = '42501';
+  end if;
+
   with periodo as (
     select
       case
@@ -727,9 +753,12 @@ as $function$
       case
         when lower(coalesce(p_periodo, 'mensal')) = 'diario'
           then coalesce(p_data, make_date(p_ano, p_mes, 1))
-        else greatest(
-          make_date(p_ano, p_mes, 1),
-          coalesce(p_data, current_date)
+        else least(
+          greatest(
+            make_date(p_ano, p_mes, 1),
+            coalesce(p_data, current_date)
+          ),
+          (make_date(p_ano, p_mes, 1) + interval '1 month')::date - 1
         ) + 7
       end::date as data_cobertura_fim
   ),
@@ -740,7 +769,7 @@ as $function$
     where r.data_aula >= p.data_inicio
       and r.data_aula < p.data_fim_exclusivo
       and r.snapshot_ativo is true
-      and (p_unidade_id is null or r.unidade_id = p_unidade_id)
+      and r.unidade_id = p_unidade_id
   ),
   por_unidade as (
     select
@@ -766,7 +795,7 @@ as $function$
       count(b.*) filter (where b.lead_id is null)::integer as sem_lead_id
     from public.unidades u
     left join base b on b.unidade_id = u.id
-    where p_unidade_id is null or u.id = p_unidade_id
+    where u.id = p_unidade_id
     group by u.id, u.nome
   ),
   total as (
@@ -796,7 +825,7 @@ as $function$
     from public.emusys_experimentais_snapshot_execucoes e
     cross join periodo p
     where e.status = 'completo'
-      and (p_unidade_id is null or e.unidade_id = p_unidade_id)
+      and e.unidade_id = p_unidade_id
       and e.data_inicio <= p.data_inicio
       and e.data_fim >= p.data_cobertura_fim
     order by e.concluido_em desc, e.id desc
@@ -845,8 +874,12 @@ as $function$
       '[]'::jsonb
     )
   )
+    into v_resultado
   from total
   left join ultima_execucao e on true;
+
+  return v_resultado;
+end;
 $function$;
 
 revoke all on function public.get_experimentais_emusys_operacional_v1(

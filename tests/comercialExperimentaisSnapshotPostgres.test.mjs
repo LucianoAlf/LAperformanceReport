@@ -329,6 +329,45 @@ test(
 
       const assertionsSql = String.raw`
         \set ON_ERROR_STOP on
+
+        select set_config('request.jwt.claim.role', 'service_role', false);
+
+        insert into public.emusys_experimentais_raw (
+          raw_key,
+          emusys_aula_id,
+          unidade_id,
+          data_aula,
+          aluno_nome,
+          aluno_nome_normalizado,
+          situacao_operacional,
+          payload
+        ) values (
+          'legacy-rollout-sem-identidade',
+          12,
+          '11111111-1111-1111-1111-111111111111',
+          '2026-07-18',
+          'Writer Legado',
+          'writer legado',
+          'agendada',
+          '{"aula":{"id":12}}'::jsonb
+        )
+        on conflict (raw_key) do update
+        set aluno_nome = excluded.aluno_nome;
+
+        do $rollout$
+        begin
+          if not exists (
+            select 1
+            from public.emusys_experimentais_raw
+            where raw_key = 'legacy-rollout-sem-identidade'
+              and participante_chave is null
+              and snapshot_ativo is false
+          ) then
+            raise exception 'writer legado nao permaneceu compativel e inativo';
+          end if;
+        end;
+        $rollout$;
+
         do $fixture$
         declare
           v_result jsonb;
@@ -729,6 +768,96 @@ test(
             raise exception 'snapshot ate 06/08 nao cobriu D+7: %',
               v_operacional;
           end if;
+
+          perform public.aplicar_snapshot_experimentais_emusys_v1(
+            '00000000-0000-0000-0000-000000000012',
+            '11111111-1111-1111-1111-111111111111',
+            '2026-07-01',
+            '2026-08-07',
+            jsonb_build_array(
+              jsonb_build_object(
+                'raw_key',
+                '11111111-1111-1111-1111-111111111111:12:lead:303:00000000-0000-0000-0000-000000000012',
+                'unidade_id',
+                '11111111-1111-1111-1111-111111111111',
+                'execucao_id',
+                '00000000-0000-0000-0000-000000000012',
+                'emusys_aula_id',
+                12,
+                'participante_chave',
+                'lead:303',
+                'emusys_lead_id',
+                303,
+                'aluno_nome',
+                'Ativa Barra',
+                'data_aula',
+                '2026-07-18',
+                'situacao_operacional',
+                'presente',
+                'payload_bruto',
+                '{"aula":{"id":12},"participante":{"id_lead":303}}'::jsonb
+              )
+            )
+          );
+
+          v_operacional := public.get_experimentais_emusys_operacional_v1(
+            '11111111-1111-1111-1111-111111111111',
+            2026,
+            7,
+            'mensal',
+            '2026-09-15'
+          );
+          if v_operacional #>> '{resumo,snapshot_execucao_id}'
+               <> '00000000-0000-0000-0000-000000000012'
+             or v_operacional #>> '{resumo,snapshot_status}' <> 'completo' then
+            raise exception 'consulta historica extrapolou D+7 da competencia: %',
+              v_operacional;
+          end if;
+
+          perform public.aplicar_snapshot_experimentais_emusys_v1(
+            '00000000-0000-0000-0000-000000000013',
+            '22222222-2222-2222-2222-222222222222',
+            '2026-07-01',
+            '2026-08-07',
+            jsonb_build_array(
+              jsonb_build_object(
+                'raw_key',
+                '22222222-2222-2222-2222-222222222222:12:lead:404:00000000-0000-0000-0000-000000000013',
+                'unidade_id',
+                '22222222-2222-2222-2222-222222222222',
+                'execucao_id',
+                '00000000-0000-0000-0000-000000000013',
+                'emusys_aula_id',
+                12,
+                'participante_chave',
+                'lead:404',
+                'emusys_lead_id',
+                404,
+                'aluno_nome',
+                'Ativa Recreio',
+                'data_aula',
+                '2026-07-18',
+                'situacao_operacional',
+                'presente',
+                'payload_bruto',
+                '{"aula":{"id":12},"participante":{"id_lead":404}}'::jsonb
+              )
+            )
+          );
+
+          begin
+            perform public.get_experimentais_emusys_operacional_v1(
+              null,
+              2026,
+              7,
+              'mensal',
+              '2026-07-30'
+            );
+            raise exception 'service_role acessou agregado sem unidade';
+          exception
+            when invalid_parameter_value then
+              null;
+          end;
         end;
         $fixture$;
 
@@ -790,6 +919,44 @@ test(
             'mensal',
             '2026-07-10'
           );
+          if (
+            select count(*)
+            from public.emusys_experimentais_raw
+          ) <> 1
+             or exists (
+               select 1
+               from public.emusys_experimentais_raw
+               where unidade_id <> '11111111-1111-1111-1111-111111111111'
+                  or snapshot_ativo is not true
+             ) then
+            raise exception 'RLS raw expos outra unidade ou versao inativa';
+          end if;
+          begin
+            perform public.get_experimentais_emusys_operacional_v1(
+              '22222222-2222-2222-2222-222222222222',
+              2026,
+              7,
+              'mensal',
+              '2026-07-10'
+            );
+            raise exception 'RPC permitiu Barra consultar Recreio';
+          exception
+            when insufficient_privilege then
+              null;
+          end;
+          begin
+            perform public.get_experimentais_emusys_operacional_v1(
+              null,
+              2026,
+              7,
+              'mensal',
+              '2026-07-10'
+            );
+            raise exception 'RPC permitiu unidade nula';
+          exception
+            when invalid_parameter_value then
+              null;
+          end;
         end;
         $auth$;
         reset role;
@@ -817,6 +984,13 @@ test(
           ) then
             raise exception 'usuario acessou unidade inexistente';
           end if;
+          perform public.get_experimentais_emusys_operacional_v1(
+            '22222222-2222-2222-2222-222222222222',
+            2026,
+            7,
+            'mensal',
+            '2026-07-10'
+          );
         end;
         $auth$;
         reset role;
