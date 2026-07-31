@@ -59,6 +59,43 @@ function criarDependencias(overrides = {}) {
   return { chamadas, clienteUsuario, deps };
 }
 
+test('body malformado retorna 400 antes de qualquer sink privilegiado', async () => {
+  const helper = await carregarHelper();
+  assert.equal(
+    typeof helper.lerCorpoSyncPresenca,
+    'function',
+    'parser fail-closed ausente',
+  );
+  const cenario = criarDependencias();
+
+  for (const requisicao of [
+    { json: () => Promise.reject(new SyntaxError('JSON invalido')) },
+    { json: () => Promise.resolve(null) },
+    { json: () => Promise.resolve([]) },
+  ]) {
+    await assert.rejects(
+      async () => {
+        const body = await helper.lerCorpoSyncPresenca(requisicao);
+        const solicitacao = helper.resolverSolicitacaoSyncPresenca(
+          body,
+          [unidadeBarra, unidadeRecreio],
+        );
+        await helper.prepararExecucaoSyncPresenca(
+          { authorization: `Bearer ${chaveServiceRole}`, solicitacao },
+          cenario.deps,
+        );
+      },
+      (error) => {
+        assert.equal(error.name, 'SolicitacaoSyncPresencaInvalida');
+        assert.equal(error.status, 400);
+        assert.equal(error.message, 'BODY_INVALIDO');
+        return true;
+      },
+    );
+  }
+  assert.deepEqual(cenario.chamadas, []);
+});
+
 test('identidade ausente retorna 401 sem cliente administrativo, token Emusys ou RPC', async () => {
   const { prepararExecucaoSyncPresenca, resolverSolicitacaoSyncPresenca } =
     await carregarHelper();
@@ -300,6 +337,8 @@ test('contrato estatico ordena resolucao/autorizacao antes dos privilegios e fec
   const helper = readFileSync(helperPath, 'utf8');
   const serve = edge.slice(edge.indexOf('serve(async'));
 
+  assert.match(serve, /await lerCorpoSyncPresenca\(req\)/);
+  assert.doesNotMatch(serve, /catch\s*\{\s*bodyRecebido\s*=\s*\{\}/);
   assert.match(edge, /resolverSolicitacaoSyncPresenca/);
   assert.match(edge, /prepararExecucaoSyncPresenca/);
   assert.match(edge, /criarClienteAdministrativo/);

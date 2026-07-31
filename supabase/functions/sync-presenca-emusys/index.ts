@@ -39,6 +39,7 @@ import {
   type SyncMode,
 } from '../_shared/sync-experimentais-mode.ts';
 import {
+  lerCorpoSyncPresenca,
   prepararExecucaoSyncPresenca,
   resolverSolicitacaoSyncPresenca,
   SolicitacaoSyncPresencaInvalida,
@@ -1296,12 +1297,7 @@ serve(async (req: Request) => {
   let modo: ModoSyncPresenca = 'presenca';
   try {
     // Parâmetros: data, janela, modo e alvo por unidade_id/unidade_index.
-    let bodyRecebido: SyncRequestBody = {};
-    try {
-      bodyRecebido = await req.json() as SyncRequestBody;
-    } catch {
-      bodyRecebido = {};
-    }
+    const bodyRecebido = await lerCorpoSyncPresenca(req) as SyncRequestBody;
 
     const solicitacao = resolverSolicitacaoSyncPresenca(
       bodyRecebido,
