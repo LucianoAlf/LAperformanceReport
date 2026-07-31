@@ -9,6 +9,20 @@ const edge = readFileSync(
   ),
   "utf8",
 );
+const comercialPage = readFileSync(
+  new URL(
+    "../src/components/App/Comercial/ComercialPage.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const formatador = readFileSync(
+  new URL(
+    "../supabase/functions/_shared/relatorio-comercial.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 function bloco(inicio, fim) {
   const posInicio = edge.indexOf(inicio);
@@ -17,6 +31,90 @@ function bloco(inicio, fim) {
   assert.notEqual(posFim, -1, `fim ausente depois de ${inicio}: ${fim}`);
   return edge.slice(posInicio, posFim);
 }
+
+function blocoFonte(fonte, inicio, fim) {
+  const posInicio = fonte.indexOf(inicio);
+  assert.notEqual(posInicio, -1, `inicio ausente: ${inicio}`);
+  const posFim = fonte.indexOf(fim, posInicio + inicio.length);
+  assert.notEqual(posFim, -1, `fim ausente depois de ${inicio}: ${fim}`);
+  return fonte.slice(posInicio, posFim);
+}
+
+test("tela diaria consome somente o texto canonico da edge para uma unidade especifica", () => {
+  const diario = blocoFonte(
+    comercialPage,
+    "const gerarRelatorioDiario = async () => {",
+    "const gerarRelatorioSemanal = async () => {",
+  );
+
+  assert.match(diario, /const\s*\{\s*dataFim\s*\}\s*=\s*calcularRangeDatas\(\)/);
+  assert.match(
+    diario,
+    /const unidadeRelatorioId\s*=\s*isAdmin\s*\?\s*context\?\.unidadeSelecionada\s*:\s*usuario\?\.unidade_id/,
+  );
+  assert.match(diario, /!unidadeRelatorioId\s*\|\|\s*unidadeRelatorioId\s*===\s*['"]todos['"]/);
+  assert.match(diario, /Selecione uma unidade/i);
+  assert.match(
+    diario,
+    /supabase\.functions\.invoke\(['"]relatorio-admin-whatsapp['"],\s*\{\s*body:\s*\{\s*modo:\s*['"]dry_run_comercial['"],\s*unidade:\s*unidadeRelatorioId,\s*data_referencia:\s*dataFim,?\s*\},?\s*\}\)/s,
+  );
+  assert.match(diario, /if\s*\(error\)\s*throw\s+error/);
+  assert.match(diario, /data\?\.success\s*!==\s*true/);
+  assert.match(diario, /typeof\s+data\?\.texto\s*!==\s*['"]string['"]/);
+  assert.match(diario, /return\s+data\.texto/);
+  assert.doesNotMatch(diario, /\.rpc\s*\(/);
+  assert.doesNotMatch(diario, /sync-presenca-emusys/);
+  assert.doesNotMatch(diario, /get_kpis_comercial_canonicos_v2|get_conciliacao_experimentais_v2|get_experimentais_emusys_operacional_v1/);
+});
+
+test("texto canonico inclui os dois tickets e e a unica fonte para exibir copiar e enfileirar", () => {
+  assert.match(formatador, /Ticket médio das parcelas/);
+  assert.match(formatador, /Ticket médio dos passaportes/);
+
+  const execucao = blocoFonte(
+    comercialPage,
+    "const executarGeracaoRelatorio = async (",
+    "// Gerar relatório automaticamente",
+  );
+  assert.match(execucao, /const texto\s*=\s*await gerarRelatorioSelecionado\(tipo\)/);
+  assert.match(execucao, /setRelatorioTexto\(texto\)/);
+
+  const copiar = blocoFonte(
+    comercialPage,
+    "const copiarRelatorio = async () => {",
+    "// Enviar relatório via WhatsApp para o grupo",
+  );
+  assert.match(copiar, /copyTextToClipboard\(relatorioTexto\)/);
+  assert.doesNotMatch(copiar, /gerarRelatorio(?:Diario|Semanal|Mensal|Matriculas|Comparativo)/);
+
+  const envio = blocoFonte(
+    comercialPage,
+    "const enviarWhatsAppGrupo = async () => {",
+    "// Obter contagem do dia para cada tipo",
+  );
+  assert.match(envio, /if\s*\(\s*!relatorioTexto\s*\|\|\s*enviandoWhatsApp\s*\)\s*return/);
+  assert.match(envio, /p_texto:\s*relatorioTexto/);
+});
+
+test("geradores semanal mensal e comparativos permanecem delegados como antes", () => {
+  const seletor = blocoFonte(
+    comercialPage,
+    "const gerarRelatorioSelecionado = async (",
+    "const executarGeracaoRelatorio = async (",
+  );
+  for (const [tipo, gerador] of [
+    ["semanal", "gerarRelatorioSemanal"],
+    ["mensal", "gerarRelatorioMensal"],
+    ["matriculas", "gerarRelatorioMatriculas"],
+    ["comparativo_mensal", "gerarRelatorioComparativoMensal"],
+    ["comparativo_anual", "gerarRelatorioComparativoAnual"],
+  ]) {
+    assert.match(
+      seletor,
+      new RegExp(`case ['"]${tipo}['"]:[\\s\\S]*return ${gerador}\\(\\)`),
+    );
+  }
+});
 
 test("gerador atualiza o snapshot de mes ate D+7 antes de qualquer leitura canonica", () => {
   const gerador = bloco(

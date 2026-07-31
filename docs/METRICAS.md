@@ -244,6 +244,14 @@ no mesmo destino e cada tipo continua idempotente. Os modos `dry_run`,
 `dry_run_comercial`, manual e cron mantêm seus contratos anteriores. A
 autenticação passiva dos caminhos legados não foi redesenhada nesta correção.
 
+Na interface comercial, o relatório diário não recalcula métricas. Para uma
+unidade específica, `ComercialPage.tsx` envia `modo='dry_run_comercial'`, a
+unidade e `data_referencia` à edge e publica exatamente o `texto` de uma resposta
+com `success=true`. Falha da edge, resposta sem sucesso ou texto ausente limpam a
+prévia e mantêm copiar/enviar desabilitados; uma troca de unidade invalida a
+resposta pendente. O texto exibido é também o único texto usado pela cópia e pelo
+enfileiramento manual.
+
 ### Tickets do relatório comercial diário
 
 O relatório diário calcula duas métricas separadas sobre a mesma coorte de

@@ -11,6 +11,14 @@ const comercialPagePath = 'src/components/App/Comercial/ComercialPage.tsx';
 
 const readOptional = (path) => existsSync(path) ? readFileSync(path, 'utf8') : '';
 
+function blocoFonte(fonte, inicio, fim) {
+  const posInicio = fonte.indexOf(inicio);
+  assert.notEqual(posInicio, -1, `inicio ausente: ${inicio}`);
+  const posFim = fonte.indexOf(fim, posInicio + inicio.length);
+  assert.notEqual(posFim, -1, `fim ausente depois de ${inicio}: ${fim}`);
+  return fonte.slice(posInicio, posFim);
+}
+
 test('conciliacao comercial executa como definer depois de validar usuario e unidade', () => {
   const migration = readOptional(migrationPath);
 
@@ -80,6 +88,33 @@ test('relatorio comercial mostra carregamento e erro em vez de permanecer vazio'
   assert.match(page, /gerarRelatorioSelecionado/);
   assert.match(page, /catch\s*\(err\)[\s\S]*setRelatorioErro/i);
   assert.match(page, /N[aã]o foi poss[ií]vel gerar o relat[oó]rio/i);
+});
+
+test('geracao comercial limpa estado anterior e ignora resposta atrasada apos troca de unidade', () => {
+  const page = readOptional(comercialPagePath);
+  const execucao = blocoFonte(
+    page,
+    'const executarGeracaoRelatorio = async (',
+    '// Gerar relatório automaticamente',
+  );
+  assert.match(execucao, /setRelatorioGerando\(true\)/);
+  assert.match(execucao, /setRelatorioErro\(null\)/);
+  assert.match(execucao, /setRelatorioTexto\(['"]['"]\)/);
+  assert.match(execucao, /relatorioGeracaoIdRef\.current\s*===\s*geracaoId[\s\S]*setRelatorioTexto\(texto\)/);
+  assert.match(execucao, /catch\s*\(err\)[\s\S]*err\s+instanceof\s+Error[\s\S]*err\.message/);
+  assert.match(execucao, /relatorioGeracaoIdRef\.current\s*===\s*geracaoId[\s\S]*setRelatorioErro\(mensagem\)/);
+  assert.match(execucao, /finally[\s\S]*relatorioGeracaoIdRef\.current\s*===\s*geracaoId[\s\S]*setRelatorioGerando\(false\)/);
+
+  const efeito = blocoFonte(
+    page,
+    '// Gerar relatório automaticamente',
+    '// Matrículas do mês',
+  );
+  assert.match(efeito, /context\?\.unidadeSelecionada/);
+  assert.match(efeito, /usuario\?\.unidade_id/);
+  assert.match(efeito, /return\s*\(\)\s*=>\s*\{\s*relatorioGeracaoIdRef\.current\s*\+=\s*1/);
+
+  assert.match(page, /disabled=\{!relatorioTexto\s*\|\|\s*relatorioGerando\s*\|\|\s*enviandoWhatsApp\}/);
 });
 
 test('seletor do relatorio diario nao aninha o controle do cron em outro botao', () => {
