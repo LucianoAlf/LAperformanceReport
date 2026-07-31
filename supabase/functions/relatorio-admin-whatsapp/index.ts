@@ -21,6 +21,12 @@ import {
 import {
   obterSnapshotComAdmissao,
 } from '../_shared/snapshot-refresh-admission.ts';
+import {
+  formatarResumoMatriculasAdmin,
+  formatarTrancamentosAdmin,
+  parseDataReferenciaAdminBrt,
+  type FaixaPoliticaTrancamento,
+} from '../_shared/relatorio-admin-canonico.ts';
 
 const FIELDS = 'id,nome,provedor,uazapi_url,uazapi_token,waha_url,waha_session,waha_api_key';
 
@@ -446,6 +452,10 @@ async function fetchKPIsAlunosRelatorioAdmin(
     matriculas2Curso,
     alunosCom2Curso: n(totalCampo('alunos_com_2_curso')),
     matriculas2CursoExtras: n(totalCampo('matriculas_2_curso_extras')),
+    alunosComExatamente2Cursos: n(totalCampo('alunos_com_exatamente_2_cursos')),
+    alunosComExatamente3Cursos: n(totalCampo('alunos_com_exatamente_3_cursos')),
+    alunosCom4OuMaisCursos: n(totalCampo('alunos_com_4_ou_mais_cursos')),
+    matriculasTrancadas: n(totalCampo('matriculas_trancadas')),
     alunosCoral,
     evasoes: n(totalCampo('evasoes', 'total_evasoes')),
   };
@@ -556,18 +566,19 @@ async function enviarRelatorioParaDestino(
 
 async function gerarRelatorioDiario(
   supabase: any,
-  unidadeId: string
+  unidadeId: string,
+  dataReferencia?: string,
+  instanteGeracao = new Date(),
 ): Promise<string> {
-  // Calcular datas em BRT (UTC-3)
-  const now = new Date();
-  const brt = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-  const hoje = brt.toISOString().split('T')[0];
-  const ano = brt.getFullYear();
-  const mes = brt.getMonth() + 1;
-  const dia = brt.getDate();
+  // A referencia governa os dados; o instante real governa somente a hora de geracao.
+  const brt = new Date(instanteGeracao.getTime() - 3 * 60 * 60 * 1000);
+  const hoje = dataReferencia
+    ? parseDataReferenciaAdminBrt(dataReferencia)
+    : brt.toISOString().split('T')[0];
+  const [ano, mes, dia] = hoje.split('-').map(Number);
   const primeiroDiaMes = `${ano}-${String(mes).padStart(2, '0')}-01`;
   const ultimoDiaMes = `${ano}-${String(mes).padStart(2, '0')}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}`;
-  const mesNome = brt.toLocaleString('pt-BR', { month: 'long' });
+  const mesNome = new Date(Date.UTC(ano, mes - 1, 15)).toLocaleString('pt-BR', { month: 'long', timeZone: 'UTC' });
   const horaStr = `${String(brt.getHours()).padStart(2, '0')}:${String(brt.getMinutes()).padStart(2, '0')}`;
 
   // Próximo mês (para avisos prévios)
@@ -597,6 +608,12 @@ async function gerarRelatorioDiario(
   const bolsistasIntegraisRegulares = kpisAlunos.bolsistasIntegraisRegulares;
   const bolsistasParciais = kpisAlunos.bolsistasParciais;
   const trancadosAtuais = kpisAlunos.trancados;
+  const matriculasTrancadas = kpisAlunos.matriculasTrancadas;
+  const trancamentosAtuais = await fetchTrancamentosRelatorioAdmin(
+    supabase,
+    unidadeId,
+    hoje,
+  );
 
   // Novos no mes: pessoas pagantes novas, sem 2o curso, banda/coral ou bolsista.
   const novosAlunos = kpisAlunos.novosAlunos;
@@ -606,8 +623,9 @@ async function gerarRelatorioDiario(
   const matriculasBaseAlunosAtivos = kpisAlunos.matriculasBaseAlunosAtivos;
   const matriculasBanda = kpisAlunos.matriculasBanda;
   const matriculas2Curso = kpisAlunos.matriculas2Curso;
-  const alunosCom2Curso = kpisAlunos.alunosCom2Curso;
-  const matriculas2CursoExtras = kpisAlunos.matriculas2CursoExtras;
+  const alunosComExatamente2Cursos = kpisAlunos.alunosComExatamente2Cursos;
+  const alunosComExatamente3Cursos = kpisAlunos.alunosComExatamente3Cursos;
+  const alunosCom4OuMaisCursos = kpisAlunos.alunosCom4OuMaisCursos;
   const alunosCoral = kpisAlunos.alunosCoral;
 
   // Movimentacoes do mes para retencao operacional viva.
@@ -778,12 +796,21 @@ async function gerarRelatorioDiario(
   // === 2. MONTAR TEXTO (idêntico ao frontend) ===
   const taxaInadimplencia = alunosAtivos > 0 ? (alunosNaoPagantes / alunosAtivos * 100) : 0;
   const bolsistasIntegraisTexto = `*${bolsistasIntegraisRegulares || bolsistasIntegrais}*`;
-  const matriculas2CursoTexto = alunosCom2Curso || matriculas2CursoExtras
-    ? `*${matriculas2Curso}* (${alunosCom2Curso} alunos${matriculas2CursoExtras ? ` + ${matriculas2CursoExtras} extras` : ''})`
-    : `*${matriculas2Curso}*`;
-  const matriculasAtivasTexto = matriculasBaseAlunosAtivos || matriculasBanda || matriculas2Curso
-    ? `*${matriculasAtivas}* (${matriculasBaseAlunosAtivos} base alunos + ${matriculasBanda} banda + ${matriculas2Curso} 2o curso)`
-    : `*${matriculasAtivas}*`;
+  const resumoMatriculasTexto = formatarResumoMatriculasAdmin({
+    matriculasAtivas,
+    matriculasBase: matriculasBaseAlunosAtivos,
+    matriculasBanda,
+    matriculasAdicionais: matriculas2Curso,
+    matriculasCoral: alunosCoral,
+    alunosComExatamente2Cursos,
+    alunosComExatamente3Cursos,
+    alunosCom4OuMaisCursos,
+  });
+  const trancamentosAtuaisTexto = formatarTrancamentosAdmin({
+    totalAlunos: trancamentosAtuais.totalAlunos || trancadosAtuais,
+    totalMatriculas: trancamentosAtuais.totalMatriculas || matriculasTrancadas,
+    itens: trancamentosAtuais.itens,
+  });
   const entradasAdministrativas = novosAlunos + transferenciasRecebidasDetalhadas.length;
   const formatarUnidadeTransferencia = (nome?: string | null, codigo?: string | null, fallback = 'N/I') =>
     nome || codigo || fallback;
@@ -809,7 +836,8 @@ async function gerarRelatorioDiario(
   texto += `• Não Pagantes: *${alunosNaoPagantes}* (${taxaInadimplencia.toFixed(1)}%)\n`;
   texto += `- Bolsistas Integrais: ${bolsistasIntegraisTexto}\n`;
   texto += `• Bolsistas Parciais: *${bolsistasParciais}*\n`;
-  texto += `• Trancados agora: *${trancadosAtuais || 0}*\n`;
+  texto += `• Trancados agora: *${trancadosAtuais || 0}* (alunos)\n`;
+  texto += `• Matrículas trancadas agora: *${matriculasTrancadas || 0}*\n`;
   texto += `• Trancamentos no período: *${trancamentosPeriodo || 0}*\n`;
   texto += `• Novos no mês: *${novosAlunos}*\n`;
   texto += `• Transferências recebidas no mês: *${transferenciasRecebidasDetalhadas.length}*\n`;
@@ -817,10 +845,9 @@ async function gerarRelatorioDiario(
 
   texto += `📚 *MATRÍCULAS*\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  texto += `• Matrículas Ativas: ${matriculasAtivasTexto}\n`;
-  texto += `• Matrículas em Banda: *${matriculasBanda}*\n`;
-  texto += `- Matriculas de 2o Curso: ${matriculas2CursoTexto}\n`;
-  texto += `• Alunos no Coral: *${alunosCoral}*\n\n`;
+  texto += `${resumoMatriculasTexto}\n\n`;
+
+  texto += `${trancamentosAtuaisTexto}\n\n`;
 
   texto += `🔄 *RENOVAÇÕES DO MÊS*\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -948,7 +975,7 @@ async function gerarRelatorioDiario(
   }
 
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  texto += `📅 Gerado em: ${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano} às ${horaStr} (automático)\n`;
+  texto += `📅 Gerado em: ${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano} às ${horaStr} (fonte canônica)\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━`;
 
   return texto;
@@ -1324,6 +1351,34 @@ async function buscarVinculosCursoProximas(
   return {
     experimentais: unicos([...(experimentaisDiretas.data || []), ...(experimentaisEmusys.data || [])]),
     leads: unicos([...(leadsDiretos.data || []), ...(leadsEmusys.data || [])]),
+  };
+}
+
+async function fetchTrancamentosRelatorioAdmin(
+  supabase: any,
+  unidadeId: string,
+  dataReferencia: string,
+) {
+  const { data, error } = await supabase.rpc('get_trancamentos_admin_operacionais_v1', {
+    p_unidade_id: unidadeId,
+    p_data_referencia: dataReferencia,
+  });
+  if (error) throw error;
+
+  return {
+    totalAlunos: n(data?.total_alunos),
+    totalMatriculas: n(data?.total_matriculas),
+    itens: (data?.itens || []).map((item: any) => ({
+      alunoNome: String(item.aluno_nome || 'Aluno não informado'),
+      cursoNome: item.curso_nome ? String(item.curso_nome) : null,
+      dataInicio: item.data_inicio ? String(item.data_inicio) : null,
+      dataFinal: item.data_final ? String(item.data_final) : null,
+      diasTrancado: item.dias_trancado === null || item.dias_trancado === undefined
+        ? null
+        : n(item.dias_trancado),
+      faixaPolitica: String(item.faixa_politica || 'data_ausente') as FaixaPoliticaTrancamento,
+      motivo: item.motivo ? String(item.motivo) : null,
+    })),
   };
 }
 
@@ -1952,7 +2007,57 @@ serve(async (req) => {
         );
       }
 
-      const texto = await gerarRelatorioDiario(supabase, payload.unidade);
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Autenticação obrigatória para dry_run' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+      if (!anonKey) throw new Error('SUPABASE_ANON_KEY_AUSENTE');
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+      const { data: authData, error: authError } = await userClient.auth.getUser();
+      if (authError || !authData.user) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Token inválido para dry_run' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      const { data: autorizado, error: autorizacaoError } = await userClient.rpc(
+        'pode_gerar_relatorio_admin_v1',
+        { p_unidade_id: payload.unidade },
+      );
+      if (autorizacaoError || autorizado !== true) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Unidade não autorizada para dry_run' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      let dataReferencia: string;
+      try {
+        const agoraBrt = new Date(Date.now() - 3 * 60 * 60 * 1000);
+        dataReferencia = payload.data_referencia
+          ? parseDataReferenciaAdminBrt(payload.data_referencia)
+          : agoraBrt.toISOString().split('T')[0];
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== 'DATA_REFERENCIA_ADMIN_INVALIDA') throw error;
+        return new Response(
+          JSON.stringify({ success: false, error: 'data_referencia inválida: use YYYY-MM-DD' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const texto = await gerarRelatorioDiario(
+        supabase,
+        payload.unidade,
+        dataReferencia,
+        new Date(),
+      );
       return new Response(
         JSON.stringify({ success: true, dry_run: true, unidade: payload.unidade, texto }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

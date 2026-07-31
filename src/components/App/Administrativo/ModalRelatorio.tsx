@@ -897,265 +897,29 @@ export function ModalRelatorio({
   }
 
   async function gerarRelatorioDiario(): Promise<string> {
-    // Usar a data selecionada pelo usuário (não hardcoded como hoje)
-    const dataSelecionada = relatorioDataInicio;
-    const dia = dataSelecionada.getDate().toString().padStart(2, '0');
-    const mesNome = dataSelecionada.toLocaleString('pt-BR', { month: 'long' });
-    const ano = dataSelecionada.getFullYear();
-    
-    // Para range de datas (personalizado com início e fim diferentes)
-    const dataInicio = relatorioDataInicio;
-    const dataFim = relatorioDataFim;
-    const isRange = dataInicio.toDateString() !== dataFim.toDateString();
-    
-    // Buscar nome da unidade e farmers
-    let unidadeNome = 'Unidade';
-    let farmersNomes = 'Equipe Administrativa';
-    
-    if (unidade && unidade !== 'todos') {
-      const { data: unidadeData } = await supabase
-        .from('unidades')
-        .select('nome, farmers_nomes')
-        .eq('id', unidade)
-        .single();
-      
-      if (unidadeData) {
-        unidadeNome = unidadeData.nome;
-        farmersNomes = unidadeData.farmers_nomes?.join(' e ') || 'Equipe Administrativa';
-      }
-    } else {
-      unidadeNome = 'CONSOLIDADO';
-      farmersNomes = 'Todas as Unidades';
+    if (!unidade || unidade === 'todos') {
+      throw new Error('Selecione uma unidade para gerar o relatório diário administrativo.');
     }
 
-    // Compara datas como string YYYY-MM-DD (sem fuso, sem armadilha UTC).
-    // O bug anterior usava new Date(dataStr) que parseia como UTC midnight —
-    // em BRT (UTC-3) isso vira 21h do dia ANTERIOR, perdendo registros do dia atual.
-    const dentroDoRange = (dataStr: string) => {
-      if (!dataStr) return false;
-      const apenasData = dataStr.split('T')[0];
-      if (isRange) {
-        return apenasData >= format(dataInicio, 'yyyy-MM-dd')
-            && apenasData <= format(dataFim, 'yyyy-MM-dd');
-      }
-      return apenasData === format(dataSelecionada, 'yyyy-MM-dd');
-    };
-
-    const dataTransferencia = (item: TransferenciaRelatorio) =>
-      item.transferencia?.data_transferencia || item.data_matricula || '';
-
-    const transferenciasNoPeriodo = transferencias.filter(t => dentroDoRange(dataTransferencia(t)));
-    const totalTransferenciasMes = transferencias.length || resumo?.novas_transferencias || 0;
-    const totalEntradasAdministrativas = (resumo?.alunos_novos || 0) + totalTransferenciasMes;
-
-    const labelUnidadeTransferencia = (
-      nome?: string | null,
-      codigo?: string | null,
-      fallback = 'N/I'
-    ) => nome || codigo || fallback;
-
-    const formatarParcelaTransferencia = (valor?: number | string | null) => {
-      const numero = Number(valor || 0);
-      return numero > 0
-        ? `R$ ${numero.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-        : 'N/I';
-    };
-
-    // Filtrar renovações do período selecionado
-    const renovacoesHoje = renovacoes.filter(r => dentroDoRange(r.data));
-
-    // Filtrar avisos prévios do período selecionado
-    const avisosPreviosHoje = avisosPrevios.filter(a => dentroDoRange(a.data));
-
-    // Filtrar evasões do período selecionado
-    const evasoesHoje = evasoes.filter(e => dentroDoRange(e.data));
-
-    // Calcular KPIs
-    const totalBolsistas = (resumo?.bolsistas_integrais || 0) + (resumo?.bolsistas_parciais || 0);
-    const taxaInadimplencia = resumo?.alunos_ativos 
-      ? ((resumo?.alunos_nao_pagantes || 0) / resumo.alunos_ativos * 100)
-      : 0;
-    const taxaRenovacao = resumo?.renovacoes_previstas
-      ? ((resumo?.renovacoes_realizadas || 0) / resumo.renovacoes_previstas * 100)
-      : 0;
-
-    // Formatar período para exibição
-    const periodoTexto = isRange 
-      ? `${dataInicio.toLocaleDateString('pt-BR')} a ${dataFim.toLocaleDateString('pt-BR')}`
-      : `${dia}/${mesNome}/${ano}`;
-
-    let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `📋 *RELATÓRIO DIÁRIO ADMINISTRATIVO*\n`;
-    texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
-    texto += `📆 ${periodoTexto}\n`;
-    texto += `👥 ${farmersNomes}\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-
-    texto += `👥 *ALUNOS*\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `• Ativos: *${resumo?.alunos_ativos || 0}*\n`;
-    texto += `• Pagantes: *${resumo?.alunos_pagantes || 0}*\n`;
-    texto += `• Não Pagantes: *${resumo?.alunos_nao_pagantes || 0}* (${taxaInadimplencia.toFixed(1)}%)\n`;
-    texto += `- Bolsistas Integrais: ${formatarBolsistasIntegrais()}\n`;
-    texto += `• Bolsistas Parciais: *${resumo?.bolsistas_parciais || 0}*\n`;
-    texto += `• Trancados agora: *${resumo?.alunos_trancados || 0}*\n`;
-    texto += `• Trancamentos no período: *${resumo?.trancamentos_periodo || 0}*\n`;
-    texto += `• Novos no mês: *${resumo?.alunos_novos || 0}*\n`;
-    texto += `• Transferências recebidas no mês: *${totalTransferenciasMes}*\n`;
-    texto += `• Entrada de novos alunos no mês: *${totalEntradasAdministrativas}* (${resumo?.alunos_novos || 0} novos + ${totalTransferenciasMes} transferência${totalTransferenciasMes !== 1 ? 's' : ''})\n\n`;
-
-    texto += `📚 *MATRÍCULAS*\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `• Matrículas Ativas: ${formatarMatriculasAtivas()}\n`;
-    texto += `• Matrículas em Banda: *${resumo?.matriculas_banda || 0}*\n`;
-    texto += `- Matriculas de 2o Curso: ${formatarMatriculasSegundoCurso()}\n`;
-    texto += `• Alunos no Coral: *${resumo?.alunos_coral || 0}*\n\n`;
-
-    texto += `🔄 *RENOVAÇÕES DO MÊS*\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `• Total previsto: *${resumo?.renovacoes_previstas || 0}*\n`;
-    texto += `• Realizadas: *${resumo?.renovacoes_realizadas || 0}*\n`;
-    texto += `• Pendentes: *${resumo?.renovacoes_pendentes || 0}*\n`;
-    texto += `• Não Renovações: *${resumo?.nao_renovacoes || 0}*\n`;
-    texto += `• Taxa de Renovação: *${taxaRenovacao.toFixed(1)}%*\n\n`;
-
-    // Renovações do dia
-    if (renovacoesHoje.length > 0) {
-      texto += `✅ *RENOVAÇÕES DO DIA (${renovacoesHoje.length})*\n`;
-      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-      renovacoesHoje.forEach((r, i) => {
-        const reajuste = r.valor_parcela_anterior && r.valor_parcela_novo
-          ? ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100
-          : 0;
-        texto += `${i + 1}) Nome: *${r.aluno_nome}*\n`;
-        texto += `   De: R$ ${(r.valor_parcela_anterior || 0).toFixed(2)} para R$ ${(r.valor_parcela_novo || 0).toFixed(2)} (*+${reajuste.toFixed(1)}%*)\n`;
-        texto += `   Agente: ${r.agente_comercial || 'N/A'}\n\n`;
-      });
-    } else {
-      texto += `✅ *RENOVAÇÕES DO DIA: 0*\n\n`;
+    if (relatorioDataInicio.toDateString() !== relatorioDataFim.toDateString()) {
+      throw new Error('O relatório diário aceita uma única data. Selecione o mesmo dia no início e no fim.');
     }
 
-    // Não Renovações do dia
-    const naoRenovacoesHoje = naoRenovacoes.filter(r => dentroDoRange(r.data));
-    if (naoRenovacoesHoje.length > 0) {
-      texto += `❌ *NÃO RENOVAÇÕES DO DIA (${naoRenovacoesHoje.length})*\n`;
-      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-      naoRenovacoesHoje.forEach((r, i) => {
-        const reajuste = r.valor_parcela_anterior && r.valor_parcela_novo
-          ? ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100
-          : 0;
-        texto += `${i + 1}) Nome: *${r.aluno_nome}*\n`;
-        texto += `   De: R$ ${(r.valor_parcela_anterior || 0).toFixed(2)} para R$ ${(r.valor_parcela_novo || 0).toFixed(2)} (${reajuste.toFixed(1)}%)\n`;
-        texto += `   Professor(a): ${r.professor_nome || 'N/A'}\n`;
-        texto += `   Motivo: ${r.motivo || 'Não informado'}\n\n`;
-      });
-    } else {
-      texto += `❌ *NÃO RENOVAÇÕES DO DIA: 0*\n\n`;
+    const dataReferencia = format(relatorioDataFim, 'yyyy-MM-dd');
+    const { data, error } = await supabase.functions.invoke('relatorio-admin-whatsapp', {
+      body: {
+        modo: 'dry_run',
+        unidade,
+        data_referencia: dataReferencia,
+      },
+    });
+
+    if (error) throw error;
+    if (data?.success !== true || typeof data?.texto !== 'string') {
+      throw new Error(data?.error || 'Resposta inválida do relatório administrativo canônico.');
     }
 
-    texto += `🔁 *TRANSFERÊNCIAS RECEBIDAS NO PERÍODO (${transferenciasNoPeriodo.length})*\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    if (transferenciasNoPeriodo.length === 0) {
-      texto += `Nenhuma transferência recebida neste período.\n\n`;
-    } else {
-      transferenciasNoPeriodo.forEach((t, i) => {
-        const origem = labelUnidadeTransferencia(
-          t.transferencia?.unidade_origem_nome,
-          t.transferencia?.unidade_origem_codigo,
-          'Origem não informada'
-        );
-        const destino = labelUnidadeTransferencia(
-          t.transferencia?.unidade_destino_nome,
-          t.transferencia?.unidade_destino_codigo || t.unidades?.codigo,
-          'Destino não informado'
-        );
-        texto += `${i + 1}) Nome: *${t.nome}*\n`;
-        texto += `   Movimento: ${origem} → ${destino}\n`;
-        texto += `   Curso: ${t.cursos?.nome || 'N/I'} | Prof: ${t.professores?.nome || 'N/I'}\n`;
-        texto += `   Parcela: ${formatarParcelaTransferencia(t.valor_parcela)}\n\n`;
-      });
-    }
-
-    // Avisos Prévios — buscar por mes_saida do mês seguinte
-    const proximoMesDate = new Date(ano, dataSelecionada.getMonth() + 1, 1);
-    const proximoMesNome = proximoMesDate.toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
-    const ultimoDiaProximoMes = new Date(proximoMesDate.getFullYear(), proximoMesDate.getMonth() + 1, 0).getDate();
-    const mesSaidaStart = `${proximoMesDate.getFullYear()}-${String(proximoMesDate.getMonth() + 1).padStart(2, '0')}-01`;
-    const mesSaidaEnd = `${proximoMesDate.getFullYear()}-${String(proximoMesDate.getMonth() + 1).padStart(2, '0')}-${String(ultimoDiaProximoMes).padStart(2, '0')}`;
-
-    let queryAvisosRelatorio = supabase
-      .from('movimentacoes_admin')
-      .select('*')
-      .eq('tipo', 'aviso_previo')
-      .gte('mes_saida', mesSaidaStart)
-      .lte('mes_saida', mesSaidaEnd)
-      .order('data', { ascending: false });
-
-    if (unidade && unidade !== 'todos') {
-      queryAvisosRelatorio = queryAvisosRelatorio.eq('unidade_id', unidade);
-    }
-
-    const { data: avisosProximoMes } = await queryAvisosRelatorio;
-
-    // Enriquecer com nome do professor (sem FK, buscar separadamente)
-    const profIds = [...new Set((avisosProximoMes || []).map((a: any) => a.professor_id).filter(Boolean))];
-    let profMapAvisos = new Map<number, string>();
-    if (profIds.length > 0) {
-      const { data: profs } = await supabase.from('professores').select('id, nome').in('id', profIds);
-      (profs || []).forEach((p: any) => profMapAvisos.set(p.id, p.nome));
-    }
-
-    const avisosFiltrados = (avisosProximoMes || []).map((a: any) => ({
-      ...a,
-      professor_nome: a.professor_id ? profMapAvisos.get(a.professor_id) || null : null,
-    }));
-
-    texto += `⚠️ *AVISOS PRÉVIOS PARA SAIR EM ${proximoMesNome}*\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    if (avisosFiltrados.length === 0) {
-      texto += `Nenhum aviso prévio registrado 🎉\n\n`;
-    } else {
-      avisosFiltrados.forEach((a: any, i: number) => {
-        texto += `${i + 1}) Nome: *${a.aluno_nome}*\n`;
-        texto += `   Motivo: ${a.motivo || 'Não informado'}\n`;
-        texto += `   Parcela: R$ ${(a.valor_parcela_novo || 0).toFixed(2)}\n`;
-        texto += `   Professor(a): ${a.professor_nome || 'N/A'}\n\n`;
-      });
-      texto += `● Total no mês: *${avisosFiltrados.length}*\n\n`;
-    }
-
-    // Evasões
-    texto += `🚪 *EVASÕES (Saíram esse mês)*\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    const getTipoEvasao = classificarTipoEvasaoMovimentacao;
-    texto += `• Total de evasões: *${evasoes.length + naoRenovacoes.length}*\n`;
-    texto += `• Interrompido: *${evasoes.filter(e => getTipoEvasao(e) === 'interrompido').length}*\n`;
-    texto += `• Interrompido 2º Curso: *${evasoes.filter(e => getTipoEvasao(e) === 'interrompido_2_curso').length}*\n`;
-    texto += `• Interrompido Bolsista: *${evasoes.filter(e => getTipoEvasao(e) === 'interrompido_bolsista').length}*\n`;
-    texto += `• Interrompido Banda: *${evasoes.filter(e => getTipoEvasao(e) === 'interrompido_banda').length}*\n`;
-    texto += `• Não Renovou: *${naoRenovacoes.length}*\n`;
-    texto += `• Transferência: *${evasoes.filter(e => getTipoEvasao(e) === 'transferencia').length}*\n\n`;
-
-    if (evasoesHoje.length > 0) {
-      texto += `Evasões do dia: *${evasoesHoje.length}*\n\n`;
-      evasoesHoje.forEach((e, i) => {
-        const tipo = getTipoEvasao(e);
-        const parcela = valorPerdidoMovimentacao(e);
-        texto += `${i + 1}) *${e.aluno_nome}*\n`;
-        texto += `   Tipo: ${labelTipoEvasao(tipo)}\n`;
-        texto += `   Parcela: ${formatarParcelaEvasaoDiaria(parcela)}\n`;
-        texto += `   Motivo: ${e.motivo || 'Não informado'}\n\n`;
-      });
-    } else {
-      texto += `Evasões do dia: *0*\n\n`;
-    }
-
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    const agora = new Date();
-    texto += `📅 Gerado em: ${agora.getDate().toString().padStart(2, '0')}/${(agora.getMonth() + 1).toString().padStart(2, '0')}/${agora.getFullYear()} às ${agora.getHours()}:${agora.getMinutes().toString().padStart(2, '0')}\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━`;
-
-    return texto;
+    return data.texto;
   }
 
   async function gerarRelatorioMensal(): Promise<string> {
@@ -1600,34 +1364,42 @@ export function ModalRelatorio({
 
   async function handleSelecionarTipo(tipo: TipoRelatorio) {
     setTipoSelecionado(tipo);
-    
-    // Se for relatório gerencial IA, gera automaticamente
-    if (tipo === 'gerencial_ia') {
-      setTextoRelatorio('Gerando relatório com IA... ⏳');
-      const texto = await gerarRelatorioGerencialIA();
+    try {
+      // Se for relatório gerencial IA, gera automaticamente
+      if (tipo === 'gerencial_ia') {
+        setTextoRelatorio('Gerando relatório com IA... ⏳');
+        const texto = await gerarRelatorioGerencialIA();
+        setTextoRelatorio(texto);
+        return;
+      }
+
+      let texto = '';
+      switch (tipo) {
+        case 'diario':
+          texto = await gerarRelatorioDiario();
+          break;
+        case 'mensal':
+          texto = await gerarRelatorioMensal();
+          break;
+        case 'renovacoes':
+          texto = await gerarRelatorioRenovacoes();
+          break;
+        case 'avisos':
+          texto = await gerarRelatorioAvisos();
+          break;
+        case 'evasoes':
+          texto = await gerarRelatorioEvasoes();
+          break;
+      }
       setTextoRelatorio(texto);
-      return;
+    } catch (error) {
+      console.error('Erro ao gerar relatorio administrativo:', error);
+      setTextoRelatorio('');
+      toast.error(
+        'Erro ao gerar relatorio',
+        error instanceof Error ? error.message : 'Tente novamente em instantes.',
+      );
     }
-    
-    let texto = '';
-    switch (tipo) {
-      case 'diario':
-        texto = await gerarRelatorioDiario();
-        break;
-      case 'mensal':
-        texto = await gerarRelatorioMensal();
-        break;
-      case 'renovacoes':
-        texto = await gerarRelatorioRenovacoes();
-        break;
-      case 'avisos':
-        texto = await gerarRelatorioAvisos();
-        break;
-      case 'evasoes':
-        texto = await gerarRelatorioEvasoes();
-        break;
-    }
-    setTextoRelatorio(texto);
   }
 
   async function copiarRelatorio() {
