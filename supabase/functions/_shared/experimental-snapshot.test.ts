@@ -6,6 +6,7 @@ import {
   assertMatch,
   assertNotEquals,
   assertRejects,
+  assertThrows,
 } from "jsr:@std/assert@1";
 import {
   type AulaEmusys,
@@ -16,6 +17,7 @@ import {
   normalizarSituacaoExperimental,
   participanteChave,
 } from "./experimental-snapshot.ts";
+import { EmusysApiError } from "./emusys-aulas.ts";
 
 function aluno(
   overrides: Partial<ExperimentalAluno> = {},
@@ -185,6 +187,42 @@ Deno.test("compara horario sem offset em America/Sao_Paulo", () => {
   );
 });
 
+Deno.test("rejeita data e horario locais impossiveis", () => {
+  assertThrows(
+    () =>
+      normalizarSituacaoExperimental({
+        presenca: "ausente",
+        cancelada: false,
+        dataHoraInicio: "2026-13-40 25:61:00",
+        agora: new Date("2026-07-30T22:30:00Z"),
+      }),
+    Error,
+    "DATA_HORA_EXPERIMENTAL_INVALIDA",
+  );
+});
+
+Deno.test("rejeita timestamp com Z ou offset porque Emusys fornece horario local", () => {
+  for (
+    const dataHoraInicio of [
+      "2026-07-30 23:00:00Z",
+      "2026-07-30 20:00:00-03:00",
+      "2026-07-30 20:00:00+00:00",
+    ]
+  ) {
+    assertThrows(
+      () =>
+        normalizarSituacaoExperimental({
+          presenca: "ausente",
+          cancelada: false,
+          dataHoraInicio,
+          agora: new Date("2026-07-30T22:30:00Z"),
+        }),
+      Error,
+      "DATA_HORA_EXPERIMENTAL_INVALIDA",
+    );
+  }
+});
+
 Deno.test("montarLinhasSnapshot filtra categoria, ignora aluno sem nome e preserva o bruto", () => {
   const rows = montarLinhasSnapshot({
     unidadeId: "barra",
@@ -219,14 +257,14 @@ Deno.test("montarLinhasSnapshot filtra categoria, ignora aluno sem nome e preser
 Deno.test("buscarTodasAulas percorre duas paginas com cursores diferentes", async () => {
   const chamadas: FetchAulasPageParams[] = [];
   const paginas = [
-    Response.json({
+    {
       items: [aula({ id: 1, curso_id: 71, curso_nome: "Piano" })],
       paginacao: { tem_mais: true, proximo_cursor: "cursor-1" },
-    }),
-    Response.json({
+    },
+    {
       items: [aula({ id: 2, curso_id: 82, curso_nome: "Bateria" })],
       paginacao: { tem_mais: false, proximo_cursor: null },
-    }),
+    },
   ];
 
   const result = await buscarTodasAulas({
@@ -272,10 +310,10 @@ Deno.test("buscarTodasAulas falha se tem_mais vier sem proximo_cursor", async ()
         dataInicio: "2026-07-01",
         dataFim: "2026-08-06",
         fetchPage: () =>
-          Promise.resolve(Response.json({
+          Promise.resolve({
             items: [aula()],
             paginacao: { tem_mais: true, proximo_cursor: "  " },
-          })),
+          }),
       }),
     Error,
     "EMUSYS_AULAS_CURSOR_AUSENTE",
@@ -292,13 +330,13 @@ Deno.test("buscarTodasAulas falha se cursor se repetir", async () => {
         dataFim: "2026-08-06",
         fetchPage: () => {
           chamada += 1;
-          return Promise.resolve(Response.json({
+          return Promise.resolve({
             items: [aula({ id: chamada })],
             paginacao: {
               tem_mais: true,
               proximo_cursor: "cursor-repetido",
             },
-          }));
+          });
         },
       }),
     Error,
@@ -318,16 +356,16 @@ Deno.test("buscarTodasAulas rejeita o lote inteiro apos erro HTTP", async () => 
         fetchPage: () => {
           chamada += 1;
           if (chamada === 1) {
-            return Promise.resolve(Response.json({
+            return Promise.resolve({
               items: [aula({ id: 1 })],
               paginacao: { tem_mais: true, proximo_cursor: "cursor-1" },
-            }));
+            });
           }
-          return Promise.resolve(new Response("indisponivel", { status: 503 }));
+          throw new EmusysApiError(503, "30");
         },
       }),
-    Error,
-    "EMUSYS_AULAS_HTTP:503",
+    EmusysApiError,
+    "503",
   );
 });
 
@@ -342,17 +380,12 @@ Deno.test("buscarTodasAulas rejeita o lote inteiro apos JSON invalido", async ()
         fetchPage: () => {
           chamada += 1;
           if (chamada === 1) {
-            return Promise.resolve(Response.json({
+            return Promise.resolve({
               items: [aula({ id: 1 })],
               paginacao: { tem_mais: true, proximo_cursor: "cursor-1" },
-            }));
+            });
           }
-          return Promise.resolve(
-            new Response("{", {
-              status: 200,
-              headers: { "content-type": "application/json" },
-            }),
-          );
+          throw new Error("EMUSYS_AULAS_JSON_INVALIDO");
         },
       }),
     Error,
