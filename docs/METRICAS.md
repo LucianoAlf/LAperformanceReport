@@ -294,7 +294,12 @@ autenticação passiva dos caminhos legados não foi redesenhada nesta correçã
 Na interface comercial, o relatório diário não recalcula métricas. Para uma
 unidade específica, `ComercialPage.tsx` envia `modo='dry_run_comercial'`, a
 unidade e `data_referencia` à edge e publica exatamente o `texto` de uma resposta
-com `success=true`. Falha da edge, resposta sem sucesso ou texto ausente limpam a
+com `success=true`. A referência é obrigatória no `dry_run_comercial`: somente
+`YYYY-MM-DD` com calendário real é aceito, ancorado no meio-dia BRT para não
+sofrer deslocamento UTC. Ausência, timestamp, offset ou data impossível retornam
+`400`. Para `2026-07-30`, o documento usa o dia 30/07 e o snapshot cobre
+`2026-07-01` a `2026-08-06`; o cron sem campo usa o instante atual em
+`America/Sao_Paulo`. Falha da edge, resposta sem sucesso ou texto ausente limpam a
 prévia e mantêm copiar/enviar desabilitados; uma troca de unidade invalida a
 resposta pendente. O texto exibido é também o único texto usado pela cópia e pelo
 enfileiramento manual. Cada texto guarda sua origem (`tipo + unidade + período +

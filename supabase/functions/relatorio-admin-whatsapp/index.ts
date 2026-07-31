@@ -10,10 +10,12 @@ import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supa
 import {
   calcularTicketsMatriculas,
   formatarRelatorioComercialDiario,
+  parseDataReferenciaComercialBrt,
   parcelasDoGrupo,
   passaporteDoGrupo,
   type ProximaExperimental,
   type RelatorioComercialDados,
+  resolverJanelaRelatorioComercialBrt,
   validarExecucaoSnapshotProximas,
 } from '../_shared/relatorio-comercial.ts';
 
@@ -121,6 +123,7 @@ interface RelatorioPayload {
   unidade?: string;
   competencia?: string;
   numero_teste?: string;
+  data_referencia?: string;
   modo?: 'cron' | 'dry_run' | 'dry_run_comercial'; // dry_run gera o texto real sem enfileirar/enviar
 }
 
@@ -1270,45 +1273,6 @@ interface VinculoCursoExperimental {
   cursos?: { nome?: string | null } | Array<{ nome?: string | null }> | null;
 }
 
-function partesReferenciaBrt(dataReferencia: Date) {
-  if (!Number.isFinite(dataReferencia.getTime())) {
-    throw new Error('DATA_REFERENCIA_COMERCIAL_INVALIDA');
-  }
-  const partes = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(dataReferencia);
-  const valor = (tipo: Intl.DateTimeFormatPartTypes) =>
-    partes.find((parte) => parte.type === tipo)?.value || '';
-  const ano = Number(valor('year'));
-  const mes = Number(valor('month'));
-  const dia = Number(valor('day'));
-  const hora = Number(valor('hour'));
-  const minuto = Number(valor('minute'));
-  if (![ano, mes, dia, hora, minuto].every(Number.isFinite)) {
-    throw new Error('DATA_REFERENCIA_COMERCIAL_INVALIDA');
-  }
-  return {
-    ano,
-    mes,
-    dia,
-    data: `${String(ano).padStart(4, '0')}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`,
-    hora: `${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}`,
-  };
-}
-
-function adicionarDiasIso(data: string, dias: number): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(data);
-  if (!match) throw new Error('DATA_ISO_INVALIDA');
-  const valor = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + dias));
-  return valor.toISOString().slice(0, 10);
-}
-
 function cursoDoVinculo(vinculo: VinculoCursoExperimental | undefined): string | null {
   const relacao = firstRelation(vinculo?.cursos);
   const nome = String(relacao?.nome || '').trim();
@@ -1474,14 +1438,14 @@ async function gerarRelatorioComercialDiario(
   dataReferencia?: Date,
 ): Promise<string> {
   const fuso = 'America/Sao_Paulo';
-  const referencia = partesReferenciaBrt(dataReferencia || new Date());
+  const referencia = resolverJanelaRelatorioComercialBrt(dataReferencia || new Date());
   const ano = referencia.ano;
   const mes = referencia.mes;
   const dataRelatorio = referencia.data;
-  const dataInicioSnapshot = `${ano}-${String(mes).padStart(2, '0')}-01`;
-  const dataFimSnapshot = adicionarDiasIso(dataRelatorio, 7);
-  const inicioDiaBRT = `${dataRelatorio}T00:00:00-03:00`;
-  const fimDiaBRTExclusivo = `${adicionarDiasIso(dataRelatorio, 1)}T00:00:00-03:00`;
+  const dataInicioSnapshot = referencia.dataInicioSnapshot;
+  const dataFimSnapshot = referencia.dataFimSnapshot;
+  const inicioDiaBRT = referencia.inicioDiaBRT;
+  const fimDiaBRTExclusivo = referencia.fimDiaBRTExclusivo;
 
   const snapshot = await atualizarSnapshotExperimentais(
     unidadeId,
@@ -1951,7 +1915,22 @@ serve(async (req) => {
         );
       }
 
-      const texto = await gerarRelatorioComercialDiario(supabase, payload.unidade);
+      let dataReferencia: Date;
+      try {
+        dataReferencia = parseDataReferenciaComercialBrt(payload.data_referencia);
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== 'DATA_REFERENCIA_COMERCIAL_INVALIDA') throw error;
+        return new Response(
+          JSON.stringify({ success: false, error: 'data_referencia invÃ¡lida: use YYYY-MM-DD' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const texto = await gerarRelatorioComercialDiario(
+        supabase,
+        payload.unidade,
+        dataReferencia,
+      );
       return new Response(
         JSON.stringify({ success: true, dry_run: true, tipo: 'relatorio_comercial', unidade: payload.unidade, texto }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

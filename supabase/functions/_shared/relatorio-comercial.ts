@@ -28,6 +28,109 @@ export interface ProximaExperimental {
   participanteChave?: string | null;
 }
 
+export interface JanelaRelatorioComercialBrt {
+  ano: number;
+  mes: number;
+  dia: number;
+  data: string;
+  hora: string;
+  dataInicioSnapshot: string;
+  dataFimSnapshot: string;
+  inicioDiaBRT: string;
+  fimDiaBRTExclusivo: string;
+}
+
+function adicionarDiasIso(data: string, dias: number): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(data);
+  if (!match) throw new Error("DATA_REFERENCIA_COMERCIAL_INVALIDA");
+  const valor = new Date(0);
+  valor.setUTCHours(12, 0, 0, 0);
+  valor.setUTCFullYear(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]) + dias,
+  );
+  return valor.toISOString().slice(0, 10);
+}
+
+function partesReferenciaBrt(dataReferencia: Date) {
+  if (!Number.isFinite(dataReferencia.getTime())) {
+    throw new Error("DATA_REFERENCIA_COMERCIAL_INVALIDA");
+  }
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(dataReferencia);
+  const valor = (tipo: Intl.DateTimeFormatPartTypes) =>
+    partes.find((parte) => parte.type === tipo)?.value || "";
+  const ano = Number(valor("year"));
+  const mes = Number(valor("month"));
+  const dia = Number(valor("day"));
+  const hora = Number(valor("hour"));
+  const minuto = Number(valor("minute"));
+  if (![ano, mes, dia, hora, minuto].every(Number.isFinite)) {
+    throw new Error("DATA_REFERENCIA_COMERCIAL_INVALIDA");
+  }
+  return {
+    ano,
+    mes,
+    dia,
+    data: `${String(ano).padStart(4, "0")}-${String(mes).padStart(2, "0")}-${
+      String(dia).padStart(2, "0")
+    }`,
+    hora: `${String(hora).padStart(2, "0")}:${String(minuto).padStart(2, "0")}`,
+  };
+}
+
+export function parseDataReferenciaComercialBrt(valor: unknown): Date {
+  if (typeof valor !== "string") {
+    throw new Error("DATA_REFERENCIA_COMERCIAL_INVALIDA");
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor);
+  if (!match) throw new Error("DATA_REFERENCIA_COMERCIAL_INVALIDA");
+
+  const ano = Number(match[1]);
+  const mes = Number(match[2]);
+  const dia = Number(match[3]);
+  const calendario = new Date(0);
+  calendario.setUTCHours(12, 0, 0, 0);
+  calendario.setUTCFullYear(ano, mes - 1, dia);
+  if (
+    ano < 1 || calendario.getUTCFullYear() !== ano ||
+    calendario.getUTCMonth() !== mes - 1 || calendario.getUTCDate() !== dia
+  ) {
+    throw new Error("DATA_REFERENCIA_COMERCIAL_INVALIDA");
+  }
+
+  const referencia = new Date(`${valor}T12:00:00-03:00`);
+  if (!Number.isFinite(referencia.getTime())) {
+    throw new Error("DATA_REFERENCIA_COMERCIAL_INVALIDA");
+  }
+  return referencia;
+}
+
+export function resolverJanelaRelatorioComercialBrt(
+  dataReferencia: Date,
+): JanelaRelatorioComercialBrt {
+  const referencia = partesReferenciaBrt(dataReferencia);
+  return {
+    ...referencia,
+    dataInicioSnapshot: `${String(referencia.ano).padStart(4, "0")}-${
+      String(referencia.mes).padStart(2, "0")
+    }-01`,
+    dataFimSnapshot: adicionarDiasIso(referencia.data, 7),
+    inicioDiaBRT: `${referencia.data}T00:00:00-03:00`,
+    fimDiaBRTExclusivo: `${
+      adicionarDiasIso(referencia.data, 1)
+    }T00:00:00-03:00`,
+  };
+}
+
 export function validarExecucaoSnapshotProximas(
   linhas: ReadonlyArray<{ snapshot_execucao_id?: unknown }>,
   execucaoEsperada: string,

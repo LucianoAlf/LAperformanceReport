@@ -13,9 +13,11 @@ import {
   formatarRelatorioComercialDiario,
   formatarTaxaExpMatDiaria,
   parcelasDoGrupo,
+  parseDataReferenciaComercialBrt,
   passaporteDoGrupo,
   type ProximaExperimental,
   type RelatorioComercialDados,
+  resolverJanelaRelatorioComercialBrt,
   selecionarProximasExperimentais,
   validarExecucaoSnapshotProximas,
 } from "./relatorio-comercial.ts";
@@ -38,6 +40,43 @@ const matriculasBarra = [
   { valorParcela: 380, valorPassaporte: 499 },
   { valorParcela: 460, valorPassaporte: 450 },
 ];
+
+Deno.test("data_referencia da UI preserva o dia BRT e calcula mes ate D+7", () => {
+  const referencia = parseDataReferenciaComercialBrt("2026-07-30");
+
+  assertEquals(referencia.toISOString(), "2026-07-30T15:00:00.000Z");
+  assertEquals(resolverJanelaRelatorioComercialBrt(referencia), {
+    ano: 2026,
+    mes: 7,
+    dia: 30,
+    data: "2026-07-30",
+    hora: "12:00",
+    dataInicioSnapshot: "2026-07-01",
+    dataFimSnapshot: "2026-08-06",
+    inicioDiaBRT: "2026-07-30T00:00:00-03:00",
+    fimDiaBRTExclusivo: "2026-07-31T00:00:00-03:00",
+  });
+});
+
+Deno.test("data_referencia rejeita calendario invalido, timestamp e offset", () => {
+  for (
+    const valor of [
+      undefined,
+      "",
+      "2026-02-30",
+      "2026-7-30",
+      "2026-07-30T00:00:00Z",
+      "2026-07-30T00:00:00-03:00",
+      "2026-07-30-03:00",
+    ]
+  ) {
+    assertThrows(
+      () => parseDataReferenciaComercialBrt(valor),
+      Error,
+      "DATA_REFERENCIA_COMERCIAL_INVALIDA",
+    );
+  }
+});
 
 Deno.test("validarExecucaoSnapshotProximas rejeita linha de outra execucao", () => {
   assertEquals(
