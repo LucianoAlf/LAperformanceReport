@@ -464,7 +464,21 @@ begin
 
   v_inseridas := v_recebidas - v_atualizadas;
 
-  insert into public.emusys_experimentais_raw as r (
+  update public.emusys_experimentais_raw r
+  set
+    snapshot_ativo = false,
+    snapshot_inativado_em = v_agora,
+    updated_at = v_agora
+  where r.snapshot_ativo is true
+    and exists (
+      select 1
+      from pg_temp.snapshot_experimentais_lote l
+      where l.unidade_id = r.unidade_id
+        and l.emusys_aula_id = r.emusys_aula_id
+        and l.participante_chave = r.participante_chave
+    );
+
+  insert into public.emusys_experimentais_raw (
     raw_key,
     emusys_aula_id,
     aula_emusys_id,
@@ -474,7 +488,11 @@ begin
     aluno_nome,
     aluno_nome_normalizado,
     aluno_telefone,
+    responsavel_nome,
+    responsavel_telefone,
+    professor_nome,
     professor_id,
+    curso_nome,
     curso_id,
     presenca_emusys,
     situacao_operacional,
@@ -499,8 +517,12 @@ begin
     l.horario_aula,
     btrim(l.aluno_nome),
     lower(regexp_replace(btrim(l.aluno_nome), '\s+', ' ', 'g')),
-    coalesce(l.aluno_telefone, ''),
+    coalesce(nullif(l.aluno_telefone, ''), h.aluno_telefone, ''),
+    h.responsavel_nome,
+    h.responsavel_telefone,
+    h.professor_nome,
     h.professor_id,
+    h.curso_nome,
     h.curso_id,
     l.presenca_emusys,
     l.situacao_operacional,
@@ -519,7 +541,12 @@ begin
   left join lateral (
     select
       antigo.aula_emusys_id,
+      nullif(btrim(antigo.aluno_telefone), '') as aluno_telefone,
+      antigo.responsavel_nome,
+      antigo.responsavel_telefone,
+      antigo.professor_nome,
       antigo.professor_id,
+      antigo.curso_nome,
       antigo.curso_id,
       antigo.lead_id,
       antigo.aluno_id,
@@ -530,49 +557,7 @@ begin
       and antigo.participante_chave = l.participante_chave
     order by antigo.snapshot_ativo desc, antigo.updated_at desc, antigo.id desc
     limit 1
-  ) h on true
-  on conflict (unidade_id, emusys_aula_id, participante_chave)
-    where snapshot_ativo is true
-  do update
-  set
-    raw_key = excluded.raw_key,
-    aula_emusys_id = coalesce(excluded.aula_emusys_id, r.aula_emusys_id),
-    data_aula = excluded.data_aula,
-    horario_aula = excluded.horario_aula,
-    aluno_nome = excluded.aluno_nome,
-    aluno_nome_normalizado = excluded.aluno_nome_normalizado,
-    aluno_telefone = coalesce(
-      nullif(excluded.aluno_telefone, ''),
-      r.aluno_telefone
-    ),
-    responsavel_nome = coalesce(
-      excluded.responsavel_nome,
-      r.responsavel_nome
-    ),
-    responsavel_telefone = coalesce(
-      excluded.responsavel_telefone,
-      r.responsavel_telefone
-    ),
-    professor_nome = coalesce(excluded.professor_nome, r.professor_nome),
-    professor_id = coalesce(excluded.professor_id, r.professor_id),
-    curso_nome = coalesce(excluded.curso_nome, r.curso_nome),
-    curso_id = coalesce(excluded.curso_id, r.curso_id),
-    presenca_emusys = excluded.presenca_emusys,
-    situacao_operacional = excluded.situacao_operacional,
-    lead_id = coalesce(excluded.lead_id, r.lead_id),
-    aluno_id = coalesce(excluded.aluno_id, r.aluno_id),
-    lead_experimental_id = coalesce(
-      excluded.lead_experimental_id,
-      r.lead_experimental_id
-    ),
-    payload = excluded.payload,
-    emusys_lead_id = excluded.emusys_lead_id,
-    emusys_aluno_id = excluded.emusys_aluno_id,
-    snapshot_ativo = true,
-    snapshot_execucao_id = p_execucao_id,
-    snapshot_visto_em = v_agora,
-    snapshot_inativado_em = null,
-    updated_at = v_agora;
+  ) h on true;
 
   update public.emusys_experimentais_raw r
   set
@@ -623,6 +608,7 @@ begin
     'linhas_ativas', v_recebidas,
     'linhas_inseridas', v_inseridas,
     'linhas_atualizadas', v_atualizadas,
+    'linhas_versionadas', v_atualizadas,
     'linhas_inativadas', v_inativadas
   );
 end;

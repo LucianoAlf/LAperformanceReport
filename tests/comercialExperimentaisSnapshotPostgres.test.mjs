@@ -438,6 +438,38 @@ test(
             raise exception 'duas pessoas na mesma aula nao permaneceram ativas';
           end if;
 
+          update public.emusys_experimentais_raw
+          set
+            aula_emusys_id = 10,
+            aluno_telefone = '21987654321',
+            responsavel_nome = 'Responsavel Lead',
+            responsavel_telefone = '21911112222',
+            professor_nome = 'Professor Lead',
+            professor_id = 1,
+            curso_nome = 'Curso Lead',
+            curso_id = 1,
+            lead_id = 1,
+            aluno_id = 1,
+            lead_experimental_id = 1
+          where participante_chave = 'lead:101'
+            and snapshot_ativo is true;
+
+          update public.emusys_experimentais_raw
+          set
+            aula_emusys_id = 10,
+            aluno_telefone = '21976543210',
+            responsavel_nome = 'Responsavel Aluno',
+            responsavel_telefone = '21933334444',
+            professor_nome = 'Professor Aluno',
+            professor_id = 1,
+            curso_nome = 'Curso Aluno',
+            curso_id = 1,
+            lead_id = 2,
+            aluno_id = 2,
+            lead_experimental_id = 2
+          where participante_chave = 'aluno:202'
+            and snapshot_ativo is true;
+
           v_result := public.aplicar_snapshot_experimentais_emusys_v1(
             '00000000-0000-0000-0000-000000000001',
             '11111111-1111-1111-1111-111111111111',
@@ -472,28 +504,73 @@ test(
                 'payload_bruto',
                 '{
                   "aula":{"id":10},
-                  "participante":{
-                    "id_lead":101,
-                    "telefone_aluno":"(21) 93333-3333"
-                  }
+                  "participante":{"id_lead":101}
                 }'::jsonb
               )
             )
           );
 
+          if (v_result->>'linhas_atualizadas')::integer <> 1
+             or (v_result->>'linhas_versionadas')::integer <> 1
+             or (v_result->>'linhas_inativadas')::integer <> 1 then
+            raise exception 'contadores de versao/ausencia divergiram: %',
+              v_result;
+          end if;
+
           if (
-            select row(aluno_nome, aluno_telefone, lead_id, aluno_id)
+            select count(*)
+            from public.emusys_experimentais_raw
+            where participante_chave = 'lead:101'
+          ) <> 3
+             or not exists (
+               select 1
+               from public.emusys_experimentais_raw
+               where raw_key = 'legacy-novo'
+                 and payload = '{
+                   "participante":{"id_lead":"101"},
+                   "aula":{"id":10}
+                 }'::jsonb
+                 and snapshot_execucao_id is null
+                 and snapshot_ativo is false
+                 and snapshot_inativado_em is not null
+             ) then
+            raise exception 'versao anterior de lead foi sobrescrita';
+          end if;
+
+          if (
+            select row(
+              aluno_nome,
+              aluno_telefone,
+              responsavel_nome,
+              responsavel_telefone,
+              professor_nome,
+              professor_id,
+              curso_nome,
+              curso_id,
+              aula_emusys_id,
+              lead_id,
+              aluno_id,
+              lead_experimental_id
+            )
             from public.emusys_experimentais_raw
             where emusys_aula_id = 10
               and participante_chave = 'lead:101'
               and snapshot_ativo
           ) is distinct from row(
             'Nome Corrigido'::text,
-            '(21) 93333-3333'::text,
+            '21987654321'::text,
+            'Responsavel Lead'::text,
+            '21911112222'::text,
+            'Professor Lead'::text,
+            1::integer,
+            'Curso Lead'::text,
+            1::integer,
+            10::integer,
+            1::integer,
             1::integer,
             1::integer
           ) then
-            raise exception 'mudanca de nome ou preservacao de vinculo local falhou';
+            raise exception 'nova versao descartou enriquecimento local do lead';
           end if;
 
           if exists (
@@ -560,11 +637,35 @@ test(
           end if;
 
           if (
-            select row(lead_id, aluno_id, lead_experimental_id)
+            select row(
+              aluno_telefone,
+              responsavel_nome,
+              responsavel_telefone,
+              professor_nome,
+              professor_id,
+              curso_nome,
+              curso_id,
+              aula_emusys_id,
+              lead_id,
+              aluno_id,
+              lead_experimental_id
+            )
             from public.emusys_experimentais_raw
             where participante_chave = 'aluno:202'
               and snapshot_ativo
-          ) is distinct from row(2::integer, 2::integer, 2::integer) then
+          ) is distinct from row(
+            '21976543210'::text,
+            'Responsavel Aluno'::text,
+            '21933334444'::text,
+            'Professor Aluno'::text,
+            1::integer,
+            'Curso Aluno'::text,
+            1::integer,
+            10::integer,
+            2::integer,
+            2::integer,
+            2::integer
+          ) then
             raise exception 'reentrada descartou vinculos locais conhecidos';
           end if;
 

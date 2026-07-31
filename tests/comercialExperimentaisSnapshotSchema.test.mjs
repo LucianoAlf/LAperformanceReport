@@ -78,7 +78,6 @@ test('RPC de aplicacao e privada, transacional e registra execucao completa', ()
   assert.match(block, /security\s+definer/i);
   assert.match(block, /set\s+search_path\s*=\s*public\s*,\s*pg_temp/i);
   assert.match(block, /jsonb_to_recordset/i);
-  assert.match(block, /on\s+conflict[\s\S]*where\s+snapshot_ativo\s+is\s+true[\s\S]*do\s+update/i);
   const unitLock = block.search(
     /from\s+public\.unidades[\s\S]{0,180}where[\s\S]{0,100}p_unidade_id[\s\S]{0,100}for\s+update/i,
   );
@@ -104,6 +103,30 @@ test('RPC de aplicacao e privada, transacional e registra execucao completa', ()
     sql,
     /grant\s+execute\s+on\s+function\s+public\.aplicar_snapshot_experimentais_emusys_v1\([^;]+to\s+service_role/i,
   );
+});
+
+test('RPC versiona a linha vigente antes de inserir a nova fotografia', () => {
+  const sql = migration();
+  const block = functionBlock(sql, 'aplicar_snapshot_experimentais_emusys_v1');
+  const versioningUpdate = block.search(
+    /update\s+public\.emusys_experimentais_raw[\s\S]{0,220}snapshot_ativo\s*=\s*false/i,
+  );
+  const snapshotInsert = block.search(
+    /insert\s+into\s+public\.emusys_experimentais_raw/i,
+  );
+
+  assert.notEqual(versioningUpdate, -1);
+  assert.notEqual(snapshotInsert, -1);
+  assert.ok(
+    versioningUpdate < snapshotInsert,
+    'linha vigente recebida deve ser inativada antes da nova insercao',
+  );
+  assert.doesNotMatch(
+    block,
+    /on\s+conflict[\s\S]{0,180}snapshot_ativo\s+is\s+true[\s\S]{0,120}do\s+update/i,
+    'caminho normal nao pode sobrescrever a fotografia vigente',
+  );
+  assert.match(block, /'linhas_versionadas'\s*,\s*v_atualizadas/i);
 });
 
 test('RPC exige identidade raw e normalizada de forma simetrica', () => {
