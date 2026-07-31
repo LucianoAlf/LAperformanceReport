@@ -70,7 +70,7 @@ test('helper Emusys preserva timezone local e paginacao opaca', () => {
 
   assert.match(
     helper,
-    /export function parseDataHoraEmusys\s*\(dataHora:\s*string\):\s*string\s*{[\s\S]*return dataHora\.replace\(' ', 'T'\) \+ ':00-03:00';/,
+    /export function parseDataHoraEmusys\s*\(dataHora:\s*string\):\s*string\s*{[\s\S]*return dataHora\.replace\(["'] ["'], ["']T["']\) \+ ["']:00-03:00["'];/,
   );
   assert.match(helper, /data_hora_inicial/);
   assert.match(helper, /data_hora_final/);
