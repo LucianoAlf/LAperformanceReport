@@ -297,7 +297,11 @@ unidade e `data_referencia` à edge e publica exatamente o `texto` de uma respos
 com `success=true`. Falha da edge, resposta sem sucesso ou texto ausente limpam a
 prévia e mantêm copiar/enviar desabilitados; uma troca de unidade invalida a
 resposta pendente. O texto exibido é também o único texto usado pela cópia e pelo
-enfileiramento manual.
+enfileiramento manual. Cada texto guarda sua origem (`tipo + unidade + período +
+datas + competência`): uma mudança A→B ou A→todos bloqueia o uso imediatamente,
+e o envio usa a unidade dessa origem, nunca a seleção corrente. Geração e envio
+possuem IDs distintos para que respostas antigas não restaurem sucesso, erro ou
+spinner depois de uma troca ou regeneração.
 
 ### Tickets do relatório comercial diário
 

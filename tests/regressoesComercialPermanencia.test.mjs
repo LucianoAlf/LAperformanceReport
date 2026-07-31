@@ -114,7 +114,7 @@ test('geracao comercial limpa estado anterior e ignora resposta atrasada apos tr
   assert.match(efeito, /usuario\?\.unidade_id/);
   assert.match(efeito, /return\s*\(\)\s*=>\s*\{\s*relatorioGeracaoIdRef\.current\s*\+=\s*1/);
 
-  assert.match(page, /disabled=\{!relatorioTexto\s*\|\|\s*relatorioGerando\s*\|\|\s*enviandoWhatsApp\}/);
+  assert.match(page, /disabled=\{!relatorioPodeSerUsado\s*\|\|\s*relatorioGerando\s*\|\|\s*enviandoWhatsApp\}/);
 });
 
 test('seletor do relatorio diario nao aninha o controle do cron em outro botao', () => {
