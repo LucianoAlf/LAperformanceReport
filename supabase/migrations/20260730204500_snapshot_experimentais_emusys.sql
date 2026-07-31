@@ -718,12 +718,8 @@ as $function$
 declare
   v_resultado jsonb;
 begin
-  if p_unidade_id is null then
-    raise exception 'SNAPSHOT_EXPERIMENTAIS_UNIDADE_OBRIGATORIA'
-      using errcode = '22023';
-  end if;
-
-  if auth.role() is distinct from 'service_role'
+  if p_unidade_id is not null
+     and auth.role() is distinct from 'service_role'
      and not public.pode_gerar_relatorio_comercial_v1(p_unidade_id) then
     raise exception 'SNAPSHOT_EXPERIMENTAIS_ACESSO_NEGADO'
       using errcode = '42501';
@@ -753,14 +749,23 @@ begin
         ) + 7
       end::date as data_cobertura_fim
   ),
+  unidades_autorizadas as (
+    select u.id, u.nome
+    from public.unidades u
+    where (p_unidade_id is null or u.id = p_unidade_id)
+      and (
+        auth.role() = 'service_role'
+        or public.pode_gerar_relatorio_comercial_v1(u.id)
+      )
+  ),
   base as (
     select r.*
     from public.emusys_experimentais_raw r
+    join unidades_autorizadas u on u.id = r.unidade_id
     cross join periodo p
     where r.data_aula >= p.data_inicio
       and r.data_aula < p.data_fim_exclusivo
       and r.snapshot_ativo is true
-      and r.unidade_id = p_unidade_id
   ),
   por_unidade as (
     select
@@ -784,9 +789,8 @@ begin
       )::integer as canceladas,
       count(b.*) filter (where b.aluno_id is null)::integer as sem_aluno_id,
       count(b.*) filter (where b.lead_id is null)::integer as sem_lead_id
-    from public.unidades u
+    from unidades_autorizadas u
     left join base b on b.unidade_id = u.id
-    where u.id = p_unidade_id
     group by u.id, u.nome
   ),
   total as (
@@ -811,16 +815,43 @@ begin
       count(*) filter (where lead_id is null)::integer as sem_lead_id
     from base
   ),
-  ultima_execucao as (
-    select e.*
-    from public.emusys_experimentais_snapshot_execucoes e
+  execucoes_cobertura as (
+    select
+      u.id as unidade_id,
+      e.id,
+      e.concluido_em,
+      e.linhas_inativadas
+    from unidades_autorizadas u
     cross join periodo p
-    where e.status = 'completo'
-      and e.unidade_id = p_unidade_id
-      and e.data_inicio <= p.data_inicio
-      and e.data_fim >= p.data_cobertura_fim
-    order by e.concluido_em desc, e.id desc
-    limit 1
+    left join lateral (
+      select e.*
+      from public.emusys_experimentais_snapshot_execucoes e
+      where e.status = 'completo'
+        and e.unidade_id = u.id
+        and e.data_inicio <= p.data_inicio
+        and e.data_fim >= p.data_cobertura_fim
+      order by e.concluido_em desc, e.id desc
+      limit 1
+    ) e on true
+  ),
+  frescor as (
+    select
+      case
+        when count(*) > 0 and count(e.id) = count(*) then 'completo'
+        else null
+      end as status,
+      case
+        when count(*) = 1 and count(e.id) = 1
+          then min(e.id::text)::uuid
+        else null
+      end as execucao_id,
+      min(e.concluido_em) filter (
+        where e.id is not null
+      ) as atualizado_em,
+      (
+        sum(e.linhas_inativadas) filter (where e.id is not null)
+      )::integer as linhas_inativadas
+    from execucoes_cobertura e
   )
   select jsonb_build_object(
     'periodo', jsonb_build_object(
@@ -838,10 +869,10 @@ begin
       'canceladas', total.canceladas,
       'sem_aluno_id', total.sem_aluno_id,
       'sem_lead_id', total.sem_lead_id,
-      'snapshot_atualizado_em', e.concluido_em,
-      'snapshot_execucao_id', e.id,
-      'snapshot_linhas_inativas', e.linhas_inativadas,
-      'snapshot_status', e.status
+      'snapshot_atualizado_em', f.atualizado_em,
+      'snapshot_execucao_id', f.execucao_id,
+      'snapshot_linhas_inativas', f.linhas_inativadas,
+      'snapshot_status', f.status
     ),
     'por_unidade', coalesce(
       (
@@ -867,7 +898,7 @@ begin
   )
     into v_resultado
   from total
-  left join ultima_execucao e on true;
+  cross join frescor f;
 
   return v_resultado;
 end;
@@ -895,4 +926,4 @@ comment on function public.get_experimentais_emusys_operacional_v1(
   text,
   date
 ) is
-  'Resumo operacional SELECT-only do snapshot vigente de experimentais do Emusys, incluindo frescor da execucao completa.';
+  'Resumo operacional do snapshot vigente por unidade explicita ou agregado apenas das unidades autorizadas, com frescor composto por unidade.';

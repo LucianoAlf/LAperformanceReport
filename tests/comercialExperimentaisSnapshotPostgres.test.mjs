@@ -959,6 +959,35 @@ test(
               v_operacional;
           end if;
 
+          v_operacional := public.get_experimentais_emusys_operacional_v1(
+            null,
+            2026,
+            7,
+            'mensal',
+            '2026-09-15'
+          );
+          if jsonb_array_length(v_operacional->'por_unidade') <> 2
+             or (v_operacional #>> '{resumo,realizadas_emusys}')::integer <> 1
+             or v_operacional #>> '{resumo,snapshot_status}' is not null
+             or v_operacional #>> '{resumo,snapshot_execucao_id}' is not null
+             or (
+               v_operacional #>> '{resumo,snapshot_atualizado_em}'
+             )::timestamptz is distinct from (
+               select concluido_em
+               from public.emusys_experimentais_snapshot_execucoes
+               where id = '00000000-0000-0000-0000-000000000012'
+             )
+             or (
+               v_operacional #>> '{resumo,snapshot_linhas_inativas}'
+             )::integer is distinct from (
+               select linhas_inativadas
+               from public.emusys_experimentais_snapshot_execucoes
+               where id = '00000000-0000-0000-0000-000000000012'
+             ) then
+            raise exception 'agregado ficou fresco sem cobertura do Recreio: %',
+              v_operacional;
+          end if;
+
           perform public.aplicar_snapshot_experimentais_emusys_v1(
             '00000000-0000-0000-0000-000000000013',
             '22222222-2222-2222-2222-222222222222',
@@ -990,19 +1019,40 @@ test(
             )
           );
 
-          begin
-            perform public.get_experimentais_emusys_operacional_v1(
-              null,
-              2026,
-              7,
-              'mensal',
-              '2026-07-30'
-            );
-            raise exception 'service_role acessou agregado sem unidade';
-          exception
-            when invalid_parameter_value then
-              null;
-          end;
+          v_operacional := public.get_experimentais_emusys_operacional_v1(
+            null,
+            2026,
+            7,
+            'mensal',
+            '2026-09-15'
+          );
+          if jsonb_array_length(v_operacional->'por_unidade') <> 2
+             or (v_operacional #>> '{resumo,realizadas_emusys}')::integer <> 2
+             or v_operacional #>> '{resumo,snapshot_status}' <> 'completo'
+             or v_operacional #>> '{resumo,snapshot_execucao_id}' is not null
+             or (
+               v_operacional #>> '{resumo,snapshot_atualizado_em}'
+             )::timestamptz is distinct from (
+               select min(concluido_em)
+               from public.emusys_experimentais_snapshot_execucoes
+               where id in (
+                 '00000000-0000-0000-0000-000000000012',
+                 '00000000-0000-0000-0000-000000000013'
+               )
+             )
+             or (
+               v_operacional #>> '{resumo,snapshot_linhas_inativas}'
+             )::integer is distinct from (
+               select sum(linhas_inativadas)::integer
+               from public.emusys_experimentais_snapshot_execucoes
+               where id in (
+                 '00000000-0000-0000-0000-000000000012',
+                 '00000000-0000-0000-0000-000000000013'
+               )
+             ) then
+            raise exception 'agregado completo publicou frescor incorreto: %',
+              v_operacional;
+          end if;
         end;
         $fixture$;
 
@@ -1046,6 +1096,8 @@ test(
         select set_config('request.jwt.claim.role', 'authenticated', false);
         set role authenticated;
         do $auth$
+        declare
+          v_operacional jsonb;
         begin
           if not public.pode_gerar_relatorio_comercial_v1(
             '11111111-1111-1111-1111-111111111111'
@@ -1064,6 +1116,21 @@ test(
             'mensal',
             '2026-07-10'
           );
+          v_operacional := public.get_experimentais_emusys_operacional_v1(
+            null,
+            2026,
+            7,
+            'mensal',
+            '2026-09-15'
+          );
+          if jsonb_array_length(v_operacional->'por_unidade') <> 1
+             or v_operacional #>> '{por_unidade,0,unidade_id}'
+               <> '11111111-1111-1111-1111-111111111111'
+             or (v_operacional #>> '{resumo,realizadas_emusys}')::integer <> 1
+          then
+            raise exception 'perfil unidade agregou fora da Barra: %',
+              v_operacional;
+          end if;
           if (
             select count(*)
             from public.emusys_experimentais_raw
@@ -1089,19 +1156,6 @@ test(
             when insufficient_privilege then
               null;
           end;
-          begin
-            perform public.get_experimentais_emusys_operacional_v1(
-              null,
-              2026,
-              7,
-              'mensal',
-              '2026-07-10'
-            );
-            raise exception 'RPC permitiu unidade nula';
-          exception
-            when invalid_parameter_value then
-              null;
-          end;
         end;
         $auth$;
         reset role;
@@ -1113,6 +1167,8 @@ test(
         );
         set role authenticated;
         do $auth$
+        declare
+          v_operacional jsonb;
         begin
           if not public.pode_gerar_relatorio_comercial_v1(
             '22222222-2222-2222-2222-222222222222'
@@ -1136,6 +1192,21 @@ test(
             'mensal',
             '2026-07-10'
           );
+          v_operacional := public.get_experimentais_emusys_operacional_v1(
+            null,
+            2026,
+            7,
+            'mensal',
+            '2026-09-15'
+          );
+          if jsonb_array_length(v_operacional->'por_unidade') <> 1
+             or v_operacional #>> '{por_unidade,0,unidade_id}'
+               <> '22222222-2222-2222-2222-222222222222'
+             or (v_operacional #>> '{resumo,realizadas_emusys}')::integer <> 1
+          then
+            raise exception 'admin agregou unidade sem permissao: %',
+              v_operacional;
+          end if;
         end;
         $auth$;
         reset role;
@@ -1147,11 +1218,26 @@ test(
         );
         set role authenticated;
         do $auth$
+        declare
+          v_operacional jsonb;
         begin
           if public.pode_gerar_relatorio_comercial_v1(
             '11111111-1111-1111-1111-111111111111'
           ) then
             raise exception 'usuario sem permissao foi aceito';
+          end if;
+          v_operacional := public.get_experimentais_emusys_operacional_v1(
+            null,
+            2026,
+            7,
+            'mensal',
+            '2026-09-15'
+          );
+          if jsonb_array_length(v_operacional->'por_unidade') <> 0
+             or (v_operacional #>> '{resumo,realizadas_emusys}')::integer <> 0
+             or v_operacional #>> '{resumo,snapshot_status}' is not null then
+            raise exception 'usuario sem permissao recebeu agregado: %',
+              v_operacional;
           end if;
         end;
         $auth$;

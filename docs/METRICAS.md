@@ -159,12 +159,17 @@ a data de referência limitada ao último dia da competência, mais sete dias.
 Assim, um relatório de 30/07 exige cobertura até 06/08; uma consulta posterior
 à competência limita a referência a 31/07 e exige, no máximo, 07/08.
 
-A leitura authenticated exige unidade explícita e o guard
-`comercial.ver`; a policy raw mostra somente versões ativas da unidade
-autorizada. Durante o rollout, o writer legado ainda pode gravar sem
-`participante_chave`, mas essas linhas nascem inativas e não aparecem aos
-leitores authenticated. O contrato futuro do writer canônico exige identidade
-e usa exclusivamente a RPC de aplicação.
+A leitura authenticated com unidade explícita exige o guard `comercial.ver`.
+Quando a unidade é nula, a RPC agrega somente as unidades aprovadas
+individualmente pelo mesmo guard; `service_role` pode agregar todas. O frescor
+agregado é `completo` apenas quando cada unidade incluída possui execução com
+cobertura: o ID da execução fica nulo quando há mais de uma, o timestamp é o
+mais antigo entre as coberturas escolhidas e as linhas inativadas são somadas.
+A policy raw mostra somente versões ativas de unidades autorizadas. Durante o
+rollout, o writer legado ainda pode gravar sem `participante_chave`, mas essas
+linhas nascem inativas e não aparecem aos leitores authenticated. O contrato
+futuro do writer canônico exige identidade e usa exclusivamente a RPC de
+aplicação.
 
 ### Taxa de conversão Experimental → Matrícula
 - **No Dashboard/Comercial (frontend):** denominador `experimental_realizada = true`; numerador `status ∈ {matriculado, convertido}` (`DashboardPage.tsx:316-327`).
