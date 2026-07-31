@@ -80,4 +80,3 @@
 3. Rodar `npm run build`, `deno check` e `git diff --check`.
 4. Revisar o diff contra as regras aprovadas, especialmente homonimos e ativo + trancado.
 5. Registrar resultados e qualquer risco residual; nao fazer push, deploy ou reescrita de dados sem autorizacao especifica.
-

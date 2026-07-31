@@ -98,4 +98,3 @@ Nao havera backfill nem reescrita remota de linhas historicas nesta mudanca. A l
 - Teste que prova que o botao chama o mesmo Edge produtor do cron.
 - Verificacao de tipos, build, suites existentes e `git diff --check`.
 - Consulta somente leitura apos aplicacao para conferir os invariantes por unidade.
-
