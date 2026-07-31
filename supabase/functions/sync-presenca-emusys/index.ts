@@ -111,7 +111,7 @@ function carregarUnidadesProvedor(unidadesIds: string[]): UnidadeEmusys[] {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-sync-token',
 };
 
 // Normalizar nome para matching (mesmo padrão do parseEmusysFile.ts)
@@ -1333,10 +1333,22 @@ serve(async (req: Request) => {
     const preparacao = await prepararExecucaoSyncPresenca(
       {
         authorization: req.headers.get('authorization'),
+        xSyncToken: req.headers.get('x-sync-token'),
         solicitacao,
       },
       {
         chaveServiceRole: SUPABASE_SERVICE_ROLE_KEY,
+        validarTokenInterno: async (token) => {
+          const clienteValidador = createClient(
+            SUPABASE_URL,
+            SUPABASE_SERVICE_ROLE_KEY,
+          );
+          const { data, error } = await clienteValidador.rpc(
+            'validar_token_sync_presenca_interno_v1',
+            { p_token: token },
+          );
+          return !error && data === true;
+        },
         criarClienteUsuario: (token) => createClient(
           SUPABASE_URL,
           SUPABASE_ANON_KEY,
