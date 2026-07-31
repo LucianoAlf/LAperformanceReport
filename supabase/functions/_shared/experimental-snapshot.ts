@@ -102,6 +102,16 @@ function externalId(value: unknown): number | null {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function externalIdComMarcadorZero(value: unknown): number | null {
+  const parsed = typeof value === "number"
+    ? value
+    : typeof value === "string" && value.trim() !== ""
+    ? Number(value)
+    : Number.NaN;
+
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
 function normalizarTexto(value: unknown): string {
   if (typeof value !== "string") return "";
   return value
@@ -320,6 +330,9 @@ export function montarLinhasSnapshot(input: SnapshotInput): SnapshotRow[] {
         : null;
       const emusysLeadId = externalId(participante.id_lead);
       const emusysAlunoId = externalId(participante.id_aluno);
+      const emusysLeadIdPayload = externalIdComMarcadorZero(
+        participante.id_lead,
+      );
 
       rows.set(rawKey, {
         raw_key: rawKey,
@@ -349,7 +362,7 @@ export function montarLinhasSnapshot(input: SnapshotInput): SnapshotRow[] {
             id: aula.id,
           },
           participante: {
-            id_lead: emusysLeadId,
+            id_lead: emusysLeadIdPayload,
             id_aluno: emusysAlunoId,
           },
         },
