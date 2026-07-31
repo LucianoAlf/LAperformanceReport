@@ -291,8 +291,14 @@ begin
     x.participante_chave,
     x.emusys_lead_id,
     x.emusys_aluno_id,
-    btrim(x.payload_bruto #>> '{participante,id_lead}'),
-    btrim(x.payload_bruto #>> '{participante,id_aluno}'),
+    nullif(
+      ltrim(btrim(x.payload_bruto #>> '{participante,id_lead}'), '0'),
+      ''
+    ),
+    nullif(
+      ltrim(btrim(x.payload_bruto #>> '{participante,id_aluno}'), '0'),
+      ''
+    ),
     x.aluno_nome,
     coalesce(
       nullif(btrim(x.aluno_telefone), ''),

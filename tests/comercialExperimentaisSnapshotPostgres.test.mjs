@@ -454,7 +454,10 @@ test(
                 'situacao_operacional',
                 'presente',
                 'payload_bruto',
-                '{"aula":{"id":10},"participante":{"id_aluno":202}}'::jsonb
+                '{
+                  "aula":{"id":10},
+                  "participante":{"id_lead":0,"id_aluno":202}
+                }'::jsonb
               )
             )
           );
