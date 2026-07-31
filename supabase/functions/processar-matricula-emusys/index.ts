@@ -213,7 +213,12 @@ async function buscarMatriculaApiPorId(
 }
 
 async function complementarDescontoMatricula(
-  supabase: any, escolaId: number, alunoId: number, matriculaId: number, dataMatricula: string,
+  supabase: any,
+  escolaId: number,
+  alunoId: number,
+  matriculaId: number,
+  dataMatricula: string,
+  isSegundoCurso = false,
 ): Promise<number | null> {
   try {
     if (!alunoId || !matriculaId || !dataMatricula) return null;
@@ -246,7 +251,7 @@ async function complementarDescontoMatricula(
       const bolsa = c.bolsa === true;
       const tipoCode = bolsa
         ? (parcelaComercial <= 0 ? 'BOLSISTA_INT' : 'BOLSISTA_PARC')
-        : 'REGULAR';
+        : (isSegundoCurso ? 'SEGUNDO_CURSO' : 'REGULAR');
       const { data: tipoRow } = await supabase
         .from('tipos_matricula').select('id').eq('codigo', tipoCode).single();
       if (tipoRow?.id) upd.tipo_matricula_id = tipoRow.id;
@@ -1112,12 +1117,23 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
 
     if (found?.aluno) {
       if (found.fonte === 'nome_unico' || found.fonte === 'nome_priorizado') {
+        const { data: tipoSegundoCurso, error: tipoSegundoCursoError } = await supabase
+          .from('tipos_matricula')
+          .select('id')
+          .eq('codigo', 'SEGUNDO_CURSO')
+          .single();
+        if (tipoSegundoCursoError || !tipoSegundoCurso?.id) {
+          throw new Error('TIPO_MATRICULA_SEGUNDO_CURSO_AUSENTE');
+        }
+
         // Aluno existe em outro curso → criar registro de segundo curso
         const { data: novoSegundo } = await supabase.from('alunos').insert({
           nome: p.nomeAluno,
           unidade_id: p.unidadeId,
           status: 'ativo',
           is_segundo_curso: true,
+          tipo_matricula_id: tipoSegundoCurso.id,
+          emusys_student_id: p.alunoEmusysId != null ? String(p.alunoEmusysId) : null,
           telefone: p.telefoneAluno || p.telefoneResponsavel,
           email: p.emailAluno,
           data_matricula: p.dataMatricula,
@@ -1168,6 +1184,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
           foto_url: p.fotoAlunoUrl || undefined,
           instagram: p.instagram || undefined,
           forma_pagamento_id: mapTipoPagamentoToFormaId(p.tipoPagamento) || undefined,
+          emusys_student_id: p.alunoEmusysId != null ? String(p.alunoEmusysId) : undefined,
           emusys_matricula_id: p.matriculaIdEmusys || undefined,
           emusys_lead_id: p.emusysLeadId != null ? String(p.emusysLeadId) : undefined,
           responsavel_nome: p.nomeResponsavel || undefined,
@@ -1184,6 +1201,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
         unidade_id: p.unidadeId,
         status: 'ativo',
         is_segundo_curso: false,
+        emusys_student_id: p.alunoEmusysId != null ? String(p.alunoEmusysId) : null,
         telefone: p.telefoneAluno || p.telefoneResponsavel,
         email: p.emailAluno,
         data_matricula: p.dataMatricula,
@@ -1220,6 +1238,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
     if (alunoId) {
       await complementarDescontoMatricula(
         supabase, p.escolaId, alunoId, Number(p.matriculaIdEmusys), p.dataMatricula ?? '',
+        action === 'inserido_segundo_curso' || found?.aluno?.is_segundo_curso === true,
       );
     }
 
@@ -1427,6 +1446,7 @@ async function handleRenovacao(supabase: any, p: Payload) {
     // cheio do webhook (comportamento anterior).
     const parcelaComercial = await complementarDescontoMatricula(
       supabase, p.escolaId, aluno.id, Number(p.matriculaIdEmusys), p.dataMatricula ?? '',
+      aluno.is_segundo_curso === true,
     );
     const valorParcelaNovoFinal = parcelaComercial ?? p.valorMensalidade ?? null;
 

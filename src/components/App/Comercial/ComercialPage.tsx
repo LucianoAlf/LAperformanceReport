@@ -90,6 +90,12 @@ import { PlanoAcaoComercial } from './PlanoAcaoComercial';
 import { TabProgramaMatriculador } from './TabProgramaMatriculador';
 import { ComercialConciliacaoExperimentais } from './ComercialConciliacaoExperimentais';
 import { ComercialConciliacaoLeads } from './ComercialConciliacaoLeads';
+import {
+  criarOrigemRelatorio,
+  invalidarEnvioRelatorio,
+  podeUsarRelatorio,
+  respostaEnvioAindaValida,
+} from './relatorioComercialContexto.js';
 import { ModalMatricular } from '../PreAtendimento/components/ModalMatricular';
 import { ModalArquivar } from '../PreAtendimento/components/ModalArquivar';
 import { ModalEditarLead } from '../PreAtendimento/components/ModalEditarLead';
@@ -472,6 +478,7 @@ export function ComercialPage() {
   const [relatorioGerando, setRelatorioGerando] = useState(false);
   const [relatorioErro, setRelatorioErro] = useState<string | null>(null);
   const relatorioGeracaoIdRef = useRef(0);
+  const relatorioEnvioIdRef = useRef(0);
   const [enviandoWhatsApp, setEnviandoWhatsApp] = useState(false);
   const [enviadoWhatsApp, setEnviadoWhatsApp] = useState(false);
   const [erroWhatsApp, setErroWhatsApp] = useState<string | null>(null);
@@ -483,6 +490,32 @@ export function ComercialPage() {
   const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'mes_anterior' | 'personalizado'>('hoje');
   const [relatorioDataInicio, setRelatorioDataInicio] = useState<Date>(new Date());
   const [relatorioDataFim, setRelatorioDataFim] = useState<Date>(new Date());
+  const criarOrigemRelatorioAtual = (
+    tipo: Exclude<typeof tipoRelatorio, null>,
+  ) => {
+    const { dataInicio, dataFim } = calcularRangeDatas();
+    return criarOrigemRelatorio({
+      tipo,
+      unidade: isAdmin
+        ? context?.unidadeSelecionada
+        : usuario?.unidade_id,
+      periodo: relatorioPeriodo,
+      dataInicio,
+      dataFim,
+      competencia: `${competencia.filtro.ano}-${String(competencia.filtro.mes).padStart(2, '0')}`,
+    });
+  };
+  const [relatorioOrigem, setRelatorioOrigem] = useState<ReturnType<typeof criarOrigemRelatorio> | null>(null);
+  const relatorioOrigemAtual = tipoRelatorio
+    ? criarOrigemRelatorioAtual(tipoRelatorio)
+    : null;
+  const relatorioOrigemAtualRef = useRef(relatorioOrigemAtual);
+  relatorioOrigemAtualRef.current = relatorioOrigemAtual;
+  const relatorioPodeSerUsado = podeUsarRelatorio(
+    relatorioTexto,
+    relatorioOrigem,
+    relatorioOrigemAtual,
+  );
   const [canais, setCanais] = useState<Option[]>([]);
   const [cursos, setCursos] = useState<Option[]>([]);
   const [professores, setProfessores] = useState<Option[]>([]);
@@ -579,25 +612,47 @@ export function ComercialPage() {
     }
   };
 
+  const invalidarEstadoEnvioRelatorio = () => {
+    const proximoEstado = invalidarEnvioRelatorio({
+      envioAtualId: relatorioEnvioIdRef.current,
+    });
+    relatorioEnvioIdRef.current = proximoEstado.envioAtualId;
+    setEnviandoWhatsApp(proximoEstado.enviando);
+    setEnviadoWhatsApp(proximoEstado.enviado);
+    setErroWhatsApp(proximoEstado.erro);
+  };
+
+  const editarTextoRelatorio = (novoTexto: string) => {
+    invalidarEstadoEnvioRelatorio();
+    setRelatorioTexto(novoTexto);
+  };
+
   const executarGeracaoRelatorio = async (
     tipo: Exclude<typeof tipoRelatorio, null>,
   ) => {
+    const origemGeracao = criarOrigemRelatorioAtual(tipo);
     const geracaoId = relatorioGeracaoIdRef.current + 1;
     relatorioGeracaoIdRef.current = geracaoId;
+    invalidarEstadoEnvioRelatorio();
     setRelatorioGerando(true);
     setRelatorioErro(null);
     setRelatorioTexto('');
+    setRelatorioOrigem(null);
 
     try {
       const texto = await gerarRelatorioSelecionado(tipo);
       if (relatorioGeracaoIdRef.current === geracaoId) {
         setRelatorioTexto(texto);
+        setRelatorioOrigem(origemGeracao);
       }
     } catch (err) {
       console.error('[Comercial] Erro ao gerar relatório:', err);
+      const mensagem = err instanceof Error && err.message
+        ? err.message
+        : 'Não foi possível gerar o relatório. Tente novamente.';
       if (relatorioGeracaoIdRef.current === geracaoId) {
-        setRelatorioErro('Não foi possível gerar o relatório. Tente novamente.');
-        toast.error('Não foi possível gerar o relatório comercial');
+        setRelatorioErro(mensagem);
+        toast.error(mensagem);
       }
     } finally {
       if (relatorioGeracaoIdRef.current === geracaoId) {
@@ -610,12 +665,16 @@ export function ComercialPage() {
   useEffect(() => {
     if (tipoRelatorio) {
       void executarGeracaoRelatorio(tipoRelatorio);
+    } else {
+      invalidarEstadoEnvioRelatorio();
+      setRelatorioOrigem(null);
     }
 
     return () => {
       relatorioGeracaoIdRef.current += 1;
+      relatorioEnvioIdRef.current += 1;
     };
-  }, [tipoRelatorio, relatorioPeriodo, relatorioDataInicio, relatorioDataFim, filtroAtivo, context?.unidadeSelecionada, usuario?.unidade_id, isAdmin]);
+  }, [tipoRelatorio, relatorioPeriodo, relatorioDataInicio, relatorioDataFim, filtroAtivo, context?.unidadeSelecionada, usuario?.unidade_id, isAdmin, competencia.filtro.ano, competencia.filtro.mes]);
   
   // Matrículas do mês (para tabela)
   const [matriculasMes, setMatriculasMes] = useState<(LeadDiario & { 
@@ -2582,7 +2641,7 @@ export function ComercialPage() {
   };
 
   // Função auxiliar para calcular range de datas baseado no período
-  const calcularRangeDatas = () => {
+  function calcularRangeDatas() {
     const hoje = new Date();
     let dataInicio: Date;
     let dataFim: Date;
@@ -2617,7 +2676,7 @@ export function ComercialPage() {
       dataInicioObj: dataInicio,
       dataFimObj: dataFim
     };
-  };
+  }
 
   // Gerar relatório diário
   // Helper: matrículas reais do período (fonte = alunos por data_matricula).
@@ -2960,210 +3019,36 @@ export function ComercialPage() {
   };
 
   const gerarRelatorioDiario = async () => {
-    const { dataFim, dataFimObj } = calcularRangeDatas();
-    const hoje = dataFimObj;
-    const dia = hoje.getDate().toString().padStart(2, '0');
-    const mesNome = hoje.toLocaleString('pt-BR', { month: 'long' });
-    const ano = hoje.getFullYear();
+    const { dataFim } = calcularRangeDatas();
+    const unidadeRelatorioId = isAdmin
+      ? context?.unidadeSelecionada
+      : usuario?.unidade_id;
 
-    // Setor comercial pensa em acumulado: quando o filtro é "hoje", reportar
-    // desde o 1º dia do mês até hoje (leads/experimentais/matrículas).
-    // Buscar informações da unidade incluindo o Hunter
-    const unidadeId = isAdmin ? context?.unidadeSelecionada : usuario?.unidade_id;
-    const unidadeRelatorioId = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
-    let unidadeNome = unidadeRelatorioId ? 'Unidade' : 'Consolidado';
-    let hunterNome = unidadeRelatorioId ? (usuario?.nome || 'Usuário') : 'Todos';
-
-    if (unidadeRelatorioId) {
-      const { data: unidadeData } = await supabase
-        .from('unidades')
-        .select('nome, hunter_nome')
-        .eq('id', unidadeRelatorioId)
-        .single();
-      
-      if (unidadeData) {
-        unidadeNome = unidadeData.nome;
-        hunterNome = unidadeData.hunter_nome || usuario?.nome || 'Usuário';
-      }
+    if (!unidadeRelatorioId || unidadeRelatorioId === 'todos') {
+      throw new Error('Selecione uma unidade específica para gerar o relatório diário.');
     }
 
-    const inicioDiaBRT = `${dataFim}T00:00:00-03:00`;
-    const fimDiaBRT = `${dataFim}T23:59:59.999-03:00`;
-    let experimentaisAgendadasDiaQuery = supabase
-      .from('lead_experimentais')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'experimental_agendada')
-      .gte('created_at', inicioDiaBRT)
-      .lte('created_at', fimDiaBRT);
+    const { data, error } = await supabase.functions.invoke('relatorio-admin-whatsapp', {
+      body: {
+        modo: 'dry_run_comercial',
+        unidade: unidadeRelatorioId,
+        data_referencia: dataFim,
+      },
+    });
 
-    if (unidadeRelatorioId) {
-      experimentaisAgendadasDiaQuery = experimentaisAgendadasDiaQuery.eq('unidade_id', unidadeRelatorioId);
-    }
-
-    const [
-      kpisMesResponse,
-      kpisDiaResponse,
-      conciliacaoMesResponse,
-      conciliacaoDiaResponse,
-      emusysMesResponse,
-      emusysDiaResponse,
-      experimentaisAgendadasDiaResponse,
-    ] = await Promise.all([
-      supabase.rpc('get_kpis_comercial_canonicos_v2', {
-        p_unidade_id: unidadeRelatorioId,
-        p_ano: ano,
-        p_mes: hoje.getMonth() + 1,
-        p_periodo: 'mensal',
-        p_data: null,
-      }),
-      supabase.rpc('get_kpis_comercial_canonicos_v2', {
-        p_unidade_id: unidadeRelatorioId,
-        p_ano: ano,
-        p_mes: hoje.getMonth() + 1,
-        p_periodo: 'diario',
-        p_data: dataFim,
-      }),
-      supabase.rpc('get_conciliacao_experimentais_v2', {
-        p_unidade_id: unidadeRelatorioId,
-        p_ano: ano,
-        p_mes: hoje.getMonth() + 1,
-        p_periodo: 'mensal',
-        p_data: null,
-      }),
-      supabase.rpc('get_conciliacao_experimentais_v2', {
-        p_unidade_id: unidadeRelatorioId,
-        p_ano: ano,
-        p_mes: hoje.getMonth() + 1,
-        p_periodo: 'diario',
-        p_data: dataFim,
-      }),
-      supabase.rpc('get_experimentais_emusys_operacional_v1', {
-        p_unidade_id: unidadeRelatorioId,
-        p_ano: ano,
-        p_mes: hoje.getMonth() + 1,
-        p_periodo: 'mensal',
-        p_data: null,
-      }),
-      supabase.rpc('get_experimentais_emusys_operacional_v1', {
-        p_unidade_id: unidadeRelatorioId,
-        p_ano: ano,
-        p_mes: hoje.getMonth() + 1,
-        p_periodo: 'diario',
-        p_data: dataFim,
-      }),
-      experimentaisAgendadasDiaQuery,
-    ]);
-
-    if (kpisMesResponse.error) throw kpisMesResponse.error;
-    if (kpisDiaResponse.error) throw kpisDiaResponse.error;
-    if (conciliacaoMesResponse.error) throw conciliacaoMesResponse.error;
-    if (conciliacaoDiaResponse.error) throw conciliacaoDiaResponse.error;
-    if (emusysMesResponse.error) throw emusysMesResponse.error;
-    if (emusysDiaResponse.error) throw emusysDiaResponse.error;
-    if (experimentaisAgendadasDiaResponse.error) throw experimentaisAgendadasDiaResponse.error;
-
-    const kpisMes = ((kpisMesResponse.data as any)?.kpis || {}) as Record<string, unknown>;
-    const kpisDia = ((kpisDiaResponse.data as any)?.kpis || {}) as Record<string, unknown>;
-    const resumoConciliacaoMes = ((conciliacaoMesResponse.data as any)?.resumo || {}) as Record<string, unknown>;
-    const resumoEmusysMes = ((emusysMesResponse.data as any)?.resumo || {}) as Record<string, unknown>;
-    const resumoEmusysDia = ((emusysDiaResponse.data as any)?.resumo || {}) as Record<string, unknown>;
-
-    const leadsPeriodo = numeroResumo(kpisMes.leads_entrantes);
-    const experimentaisRealizadasMes = numeroResumo(resumoConciliacaoMes.experimentais_realizadas_confirmadas);
-    const experimentaisEmusysMes = numeroResumo(resumoEmusysMes.realizadas_emusys);
-    const experimentaisAgendadasMes = experimentaisEmusysMes;
-    const experimentaisFaltasMes = numeroResumo(resumoEmusysMes.faltas);
-    const totalExpAgendadasV2 = numeroResumo(resumoEmusysDia.linhas_raw);
-    const experimentaisAgendadasDia = experimentaisAgendadasDiaResponse.count || 0;
-    const visitasDiaTotalV2 = numeroResumo(kpisDia.visitas);
-
-    const visitasDiaTotal = visitasDiaTotalV2;
-
-    // Nao reaproveitar o state da tela, que pode estar consolidado ou defasado entre filtros.
-    const dataInicioMes = `${ano}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
-    const matriculasNovas = agruparMatriculasParaRelatorio(await buscarMatriculasAlunos(unidadeRelatorioId, dataInicioMes, dataFim))
-      .filter(ehMatriculaNova)
-      .sort((a: any, b: any) => (a.data_matricula || '').localeCompare(b.data_matricula || ''));
-
-    const taxaExpMatMes: TaxaExpMatCanonica = {
-      liberada: resumoConciliacaoMes.taxa_exp_mat_liberada === true,
-      taxa: numeroResumo(resumoConciliacaoMes.taxa_exp_mat_canonica),
-      denominador: numeroResumo(resumoConciliacaoMes.denominador_taxa_exp_mat),
-      conversoes: numeroResumo(resumoConciliacaoMes.conversoes_exp_mat_canonicas),
-      pendencias: numeroResumo(resumoConciliacaoMes.pendencias_taxa_exp_mat),
-      realizadasConfirmadas: experimentaisRealizadasMes,
-    };
-    const conversaoLeadExp = leadsPeriodo > 0 ? (experimentaisRealizadasMes / leadsPeriodo) * 100 : 0;
-    const conversaoLeadMat = leadsPeriodo > 0 ? (matriculasNovas.length / leadsPeriodo) * 100 : 0;
-
-    const totalExpAgendadas = totalExpAgendadasV2;
-
-    let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `📅 *RELATÓRIO DIÁRIO*\n`;
-    texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
-    texto += `📆 ${dia}/${mesNome}/${ano}\n`;
-    texto += `👤 ${hunterNome}\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-    texto += `🎯 Leads no mês: *${leadsPeriodo}*\n`;
-    texto += `🎸 Experimentais agendadas no mês: *${experimentaisAgendadasMes}*\n`;
-    texto += `✅ Experimentais realizadas confirmadas: *${experimentaisRealizadasMes}*\n`;
-    texto += `❌ Faltas em experimentais no mês: *${experimentaisFaltasMes}*\n`;
-    texto += `📆 Experimentais no dia (Emusys): *${totalExpAgendadas}*\n`;
-    texto += `🗓️ Experimentais agendadas no dia: *${experimentaisAgendadasDia}*\n`;
-    texto += `🏫 Visitas: *${visitasDiaTotal}*\n\n`;
-
-    texto += `✅ Matrículas no período: *${matriculasNovas.length}*\n\n`;
-    texto += `📊 *FUNIL DO MÊS*\n`;
-    texto += `Lead → Experimental: *${conversaoLeadExp.toFixed(1)}%* (${experimentaisRealizadasMes}/${leadsPeriodo})\n`;
-    texto += `Experimental → Matrícula: ${textoTaxaExpMat(taxaExpMatMes)}\n`;
-    texto += `Lead → Matrícula: *${conversaoLeadMat.toFixed(1)}%* (${matriculasNovas.length}/${leadsPeriodo})\n\n`;
-
-    texto = texto
-      .replace(
-        new RegExp(`^.*Experimentais agendadas no m.*\\*${experimentaisAgendadasMes}\\*\\n`, 'm'),
-        `\u{1F3B8} Experimentais realizadas no m\u00eas (Emusys): *${experimentaisEmusysMes}*\n`,
-      )
-      .replace(
-        new RegExp(`^.*Experimentais realizadas confirmadas: \\*${experimentaisRealizadasMes}\\*\\n`, 'm'),
-        `\u2705 Presen\u00e7a + v\u00ednculo confirmados: *${experimentaisRealizadasMes}*\n`,
-      )
-      .replace(
-        new RegExp(`^.*Faltas em experimentais no m.*\\*${experimentaisFaltasMes}\\*\\n`, 'm'),
-        `\u274C Faltas em experimentais no m\u00eas (Emusys): *${experimentaisFaltasMes}*\n`,
+    if (error) throw error;
+    if (data?.success !== true) {
+      throw new Error(
+        typeof data?.error === 'string' && data.error.trim()
+          ? data.error
+          : 'A geração canônica do relatório diário falhou.',
       );
-
-    if (matriculasNovas.length > 0) {
-      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-      texto += `📝 *LISTA DETALHADA*\n`;
-      texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-      matriculasNovas.forEach((mat: any, i: number) => {
-        const dataMat = mat.data_matricula || mat.data_contato;
-        const dataFormatada = formatarDataCurtaRelatorio(dataMat);
-        texto += `MAT. ${(i + 1).toString().padStart(2, '0')}\n`;
-        texto += `📅 Data: ${dataFormatada}\n`;
-        texto += `👤 Aluno: ${mat.nome || 'Não informado'}`;
-        if (mat.idade) texto += ` (${mat.idade} anos)`;
-        texto += `\n`;
-        texto += `🎵 Curso: ${mat.cursos_relatorio || mat.curso_nome || 'Não informado'}\n`;
-        texto += `👨‍🏫 Professor: ${mat.professores_relatorio || mat.professor_fixo_nome || 'Não informado'}\n`;
-        texto += `🎸 Prof. Experimental: ${mat.professores_exp_relatorio || mat.professor_exp_nome || 'Não teve'}\n`;
-        texto += `📱 Canal: ${mat.canal_nome || 'Não informado'}\n`;
-        texto += `👤 Hunter: ${mat.hunter_nome || hunterNome}\n`;
-        texto += `💵 Pass: R$ ${fmtBRL(Number(mat.valor_passaporte) || 0)}`;
-        if (mat.forma_pagamento_passaporte_nome) texto += ` (${mat.forma_pagamento_passaporte_nome})`;
-        texto += `\n`;
-        texto += `💵 Parc: ${formatarParcelasMatriculaRelatorio(mat)}`;
-        if (mat.formas_pagamento_relatorio || mat.forma_pagamento_nome) texto += ` (${mat.formas_pagamento_relatorio || mat.forma_pagamento_nome})`;
-        texto += `\n\n`;
-      });
+    }
+    if (typeof data?.texto !== 'string' || !data.texto.trim()) {
+      throw new Error('A geração canônica não retornou o texto do relatório diário.');
     }
 
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    const agora = new Date();
-    texto += `📅 Gerado em: ${dia}/${(agora.getMonth() + 1).toString().padStart(2, '0')}/${ano} às ${agora.getHours()}:${agora.getMinutes().toString().padStart(2, '0')}\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━`;
-
-    return texto;
+    return data.texto;
   };
 
   // Gerar relatório semanal
@@ -3918,33 +3803,17 @@ export function ComercialPage() {
   };
 
   const copiarRelatorio = async () => {
-    let texto = '';
-    
-    switch (tipoRelatorio) {
-      case 'diario':
-        texto = await gerarRelatorioDiario();
-        break;
-      case 'semanal':
-        texto = await gerarRelatorioSemanal();
-        break;
-      case 'mensal':
-        texto = await gerarRelatorioMensal();
-        break;
-      case 'matriculas':
-        texto = await gerarRelatorioMatriculas();
-        break;
-      case 'comparativo_mensal':
-        texto = await gerarRelatorioComparativoMensal();
-        break;
-      case 'comparativo_anual':
-        texto = await gerarRelatorioComparativoAnual();
-        break;
-      default:
-        texto = await gerarRelatorioMensal();
+    if (!podeUsarRelatorio(
+      relatorioTexto,
+      relatorioOrigem,
+      relatorioOrigemAtualRef.current,
+    )) {
+      toast.error('Gere novamente o relatório para a unidade e o período atuais');
+      return;
     }
-    
+
     // Clipboard API primeiro (confiável em HTTPS / dentro de modais)
-    const copyResult = await copyTextToClipboard(texto);
+    const copyResult = await copyTextToClipboard(relatorioTexto);
 
     if (copyResult.ok) {
       toast.success('Relatório copiado!');
@@ -3957,26 +3826,44 @@ export function ComercialPage() {
 
   // Enviar relatório via WhatsApp para o grupo
   const enviarWhatsAppGrupo = async () => {
-    if (!relatorioTexto || enviandoWhatsApp) return;
+    const origemEnvio = relatorioOrigem;
+    if (
+      !origemEnvio ||
+      enviandoWhatsApp ||
+      !podeUsarRelatorio(
+        relatorioTexto,
+        origemEnvio,
+        relatorioOrigemAtualRef.current,
+      )
+    ) return;
+
+    const textoEnvio = relatorioTexto;
+    const unidadeEnvio = origemEnvio.unidade;
+    const envioId = relatorioEnvioIdRef.current + 1;
+    relatorioEnvioIdRef.current = envioId;
+    const respostaContinuaValida = () => respostaEnvioAindaValida({
+      respostaId: envioId,
+      envioAtualId: relatorioEnvioIdRef.current,
+      origemEnvio,
+      origemAtual: relatorioOrigemAtualRef.current,
+    });
 
     setEnviandoWhatsApp(true);
     setErroWhatsApp(null);
     setEnviadoWhatsApp(false);
 
-    // Determinar a unidade para envio
-    const unidadeEnvio = isAdmin ? (context?.unidadeSelecionada || 'todos') : (unidadeId || 'todos');
-
     try {
       const { data, error } = await supabase.rpc('sol_hermes_report_enqueue', {
-        p_texto: relatorioTexto,
-        p_tipo_relatorio: tipoRelatorio?.startsWith('comercial_')
-          ? tipoRelatorio
-          : (tipoRelatorio ? `comercial_${tipoRelatorio}` : 'comercial'),
+        p_texto: textoEnvio,
+        p_tipo_relatorio: origemEnvio.tipo.startsWith('comercial_')
+          ? origemEnvio.tipo
+          : `comercial_${origemEnvio.tipo}`,
         p_tipo_destino: 'relatorio_comercial',
         p_unidade: unidadeEnvio,
-        p_competencia: `${competencia.filtro.ano}-${String(competencia.filtro.mes).padStart(2, '0')}`,
+        p_competencia: origemEnvio.competencia,
       });
 
+      if (!respostaContinuaValida()) return;
       if (error) {
         console.error('[WhatsApp Comercial Hermes] Erro ao enfileirar:', error);
         setErroWhatsApp('Erro ao enfileirar para Sol/Hermes');
@@ -3987,17 +3874,20 @@ export function ComercialPage() {
         console.log('[WhatsApp Comercial Hermes] ✅ Enfileirado para Sol/Hermes', data.resultados);
         setEnviadoWhatsApp(true);
         toast.success('Relatório Comercial enfileirado para envio pela Sol/Hermes.');
-        setTimeout(() => setEnviadoWhatsApp(false), 3000);
+        setTimeout(() => {
+          if (respostaContinuaValida()) setEnviadoWhatsApp(false);
+        }, 3000);
       } else {
         setErroWhatsApp(data?.error || 'Erro desconhecido');
         toast.error(data?.error || 'Erro ao enfileirar');
       }
     } catch (err) {
+      if (!respostaContinuaValida()) return;
       console.error('[WhatsApp Comercial Hermes] Erro inesperado:', err);
       setErroWhatsApp('Erro de conexão');
       toast.error('Erro de conexão');
     } finally {
-      setEnviandoWhatsApp(false);
+      if (respostaContinuaValida()) setEnviandoWhatsApp(false);
     }
   };
 
@@ -7455,9 +7345,11 @@ export function ComercialPage() {
           } 
           onClose={() => {
             relatorioGeracaoIdRef.current += 1;
+            invalidarEstadoEnvioRelatorio();
             setRelatorioOpen(false);
             setTipoRelatorio(null);
             setRelatorioTexto('');
+            setRelatorioOrigem(null);
             setRelatorioErro(null);
             setRelatorioGerando(false);
           }}
@@ -7466,8 +7358,10 @@ export function ComercialPage() {
             <button
               onClick={() => {
                 relatorioGeracaoIdRef.current += 1;
+                invalidarEstadoEnvioRelatorio();
                 setTipoRelatorio(null);
                 setRelatorioTexto('');
+                setRelatorioOrigem(null);
                 setRelatorioErro(null);
                 setRelatorioGerando(false);
               }}
@@ -7498,7 +7392,7 @@ export function ComercialPage() {
               )}
               <textarea
                 value={relatorioTexto}
-                onChange={(e) => setRelatorioTexto(e.target.value)}
+                onChange={(e) => editarTextoRelatorio(e.target.value)}
                 className="w-full h-96 p-4 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-300 font-mono resize-none focus:border-cyan-500 focus:outline-none scrollbar-thin scrollbar-thumb-slate-700 hover:scrollbar-thumb-slate-600"
                 placeholder={relatorioGerando ? 'Gerando relatório...' : 'O relatório aparecerá aqui...'}
               />
@@ -7509,22 +7403,8 @@ export function ComercialPage() {
             
             <div className="flex gap-3">
               <Button
-                onClick={async () => {
-                  if (relatorioTexto) {
-                    const copyResult = await copyTextToClipboard(relatorioTexto);
-
-                    if (copyResult.ok) {
-                      toast.success('Relatório copiado!');
-                      return;
-                    }
-
-                    console.error('Erro ao copiar relatório comercial:', copyResult.error);
-                    toast.error(`Erro ao copiar. Selecione o texto e pressione ${getManualCopyShortcut()}.`);
-                  } else {
-                    toast.error('Aguarde o relatório ser gerado');
-                  }
-                }}
-                disabled={!relatorioTexto || relatorioGerando}
+                onClick={() => void copiarRelatorio()}
+                disabled={!relatorioPodeSerUsado || relatorioGerando}
                 className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-500"
               >
                 <Copy className="w-5 h-5 mr-2" />
@@ -7541,7 +7421,7 @@ export function ComercialPage() {
               )}
               <Button
                 onClick={enviarWhatsAppGrupo}
-                disabled={!relatorioTexto || relatorioGerando || enviandoWhatsApp}
+                disabled={!relatorioPodeSerUsado || relatorioGerando || enviandoWhatsApp}
                 className={cn(
                   'flex-1 transition-all',
                   enviadoWhatsApp 

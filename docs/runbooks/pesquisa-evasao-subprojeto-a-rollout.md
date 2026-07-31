@@ -243,6 +243,30 @@ Um ciclo preparatório anterior, `ddl-evasao-final-1f7a5b` ref
 três migrations foi aplicada nesse ciclo, o projeto foi destruído e ele não
 conta como evidência de aprovação.
 
+### Avanço da `main` depois do ensaio
+
+Antes do rollout, a `origin/main` foi integrada à branch do PR. A `main`
+avançou 55 commits desde a base original
+`4e2584a775b59c5e5a4ee5c6d99233af3d1dd93a`. O único conflito de conteúdo,
+em `supabase/config.toml`, foi resolvido preservando simultaneamente:
+
+- `enviar-pesquisa-evasao` com `verify_jwt = true`;
+- `sync-presenca-emusys` com `verify_jwt = false` e autenticação interna no
+  código da função.
+
+A `main` trouxe 22 migrations: 19 já constavam em produção antes da extração
+do schema ensaiado e 3 ainda não constam em produção. Uma nova leitura somente
+leitura confirmou o mesmo histórico usado pelo ensaio: 1.151 versões de 14
+dígitos, terminando em `20260731200406`. Assim, o projeto
+`didpawhgvkarzntvktzu` não ficou defasado e o ensaio DDL não precisa ser
+repetido. A lista completa de commits, migrations e arquivos sobrepostos está
+em
+[`2026-07-31-drift-main-plano-a.md`](../auditorias/2026-07-31-drift-main-plano-a.md).
+
+As duas conversas antigas de Campo Grande sem `caixa_id` continuam como item
+independente, sem correção neste rollout, conforme
+[`2026-07-31-pre-atendimento-caixa-undefined.md`](../auditorias/2026-07-31-pre-atendimento-caixa-undefined.md).
+
 ## 8. Pré-flight de produção
 
 Com Alf presente:

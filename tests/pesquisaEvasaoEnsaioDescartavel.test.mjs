@@ -9,6 +9,14 @@ const runbook = readFileSync(
   resolve(repoRoot, 'docs/runbooks/pesquisa-evasao-subprojeto-a-rollout.md'),
   'utf8',
 );
+const driftAudit = readFileSync(
+  resolve(repoRoot, 'docs/auditorias/2026-07-31-drift-main-plano-a.md'),
+  'utf8',
+);
+const supabaseConfig = readFileSync(
+  resolve(repoRoot, 'supabase/config.toml'),
+  'utf8',
+);
 
 const legacyTestIds = [
   '5edc499f-4a91-4ebb-a291-0f052bc16351',
@@ -59,4 +67,31 @@ test('runbook registra a prova final e a destruicao do descartavel', () => {
   assert.match(runbook, /verify-pesquisa-evasao-schema\.sql[\s\S]*rollback/i);
   assert.match(runbook, /zero projetos[\s\S]*ddl-evasao-final/i);
   assert.match(runbook, /tihdmpdlimgmozsfjmwu[\s\S]*destru[ií]do/i);
+});
+
+test('auditoria da main preserva os dois gateways e prova que o ensaio nao ficou defasado', () => {
+  assert.match(
+    supabaseConfig,
+    /\[functions\.enviar-pesquisa-evasao\]\s*verify_jwt\s*=\s*true/i,
+  );
+  assert.match(
+    supabaseConfig,
+    /\[functions\.sync-presenca-emusys\][\s\S]{0,240}verify_jwt\s*=\s*false/i,
+  );
+  assert.match(driftAudit, /4e2584a775b59c5e5a4ee5c6d99233af3d1dd93a/i);
+  assert.match(driftAudit, /55 commits/i);
+  assert.match(driftAudit, /19 migrations[\s\S]*j[aá]\s+estavam em produ[cç][aã]o/i);
+  assert.match(driftAudit, /3 migrations[\s\S]*n[aã]o est[aã]o em produ[cç][aã]o/i);
+  assert.match(driftAudit, /1\.151[\s\S]*20260731200406/i);
+  assert.match(driftAudit, /didpawhgvkarzntvktzu[\s\S]*n[aã]o[\s\S]*defasad/i);
+  assert.match(driftAudit, /7 falhas[\s\S]*origin\/main[\s\S]*n[aã]o s[aã]o regress[aã]o/i);
+  for (const path of [
+    '.claude/memory/integracao-infra.md',
+    'docs/MAPA-INTEGRACAO-EMUSYS.md',
+    'docs/MAPA-SISTEMA.md',
+    'docs/METRICAS.md',
+    'supabase/config.toml',
+  ]) {
+    assert.ok(driftAudit.includes(path), `sobreposicao ausente: ${path}`);
+  }
 });

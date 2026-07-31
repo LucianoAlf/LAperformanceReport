@@ -28,6 +28,14 @@
 //      Aplicados DEPOIS da RPC, como delta, sem tocar no que ela gravou.
 //   3. Etapa do pipeline nunca regride (ORDEM_ETAPA): webhook atrasado não rebaixa lead.
 //
+// [v4 — 2026-07-30] Adicionado lead_arquivado (workflow EB0LibpOJCLhKp7M, nó "Arquivar
+// Lead no Supabase"). Esse nó não chama nenhuma RPC — é um UPDATE direto (arquivado=true,
+// status='arquivado', etapa=11, motivo, data), casando por unidade + status NOT IN
+// (convertido, matriculado) + (emusys_lead_id OU telefone). Mesmo critério aqui, via
+// client parametrizado do Supabase (o nó do n8n monta o SQL por interpolação de string —
+// risco de injection que não é replicado). Objetivo: fechar a paridade dos 3 eventos de
+// lead pra eventualmente tirar todos do n8n juntos, não só lead_criado/lead_editado.
+//
 // OBSERVADOR_DRY_RUN=true (default) => NÃO chama as RPCs. Roda um preview só de
 // leitura, que replica o matching das RPCs para o diff em sombra, e registra em
 // automacao_log o que faria. Trocar para 'false' liga a escrita, sem redeploy.
@@ -354,10 +362,67 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
   return { acao: 'registrar_experimental', resultado: data, professor_via: professor.via, args };
 }
 
+/** Espelha o nó "Arquivar Lead no Supabase" do n8n: UPDATE direto (sem RPC), casando
+ *  por unidade + status ainda não terminal + (emusys_lead_id OU telefone). */
+async function processarArquivamento(sb: any, body: any, unidadeId: string) {
+  const lead = body?.lead ?? {};
+  const emusysLeadId = lead?.id ? Number(lead.id) : null;
+  const telefone = normalizarTelefone(lead?.telefone);
+
+  if (!emusysLeadId && !telefone) {
+    return { acao: 'ignorado', motivo: 'sem lead.id e sem telefone — nada para casar' };
+  }
+
+  const motivo = textoOuNulo(lead?.arquivamento?.motivo_nome) ?? 'Arquivado via Emusys';
+  const dataArquivamento =
+    String(lead?.arquivamento?.data_hora ?? '').trim().substring(0, 10) ||
+    new Date().toISOString().substring(0, 10);
+
+  const ors: string[] = [];
+  if (emusysLeadId) ors.push(`emusys_lead_id.eq.${emusysLeadId}`);
+  if (telefone) ors.push(`telefone.eq.${telefone}`);
+  const args = { emusys_lead_id: emusysLeadId, telefone, motivo, data_arquivamento: dataArquivamento };
+
+  if (DRY_RUN) {
+    const { data } = await sb
+      .from('leads')
+      .select('id, nome, status')
+      .eq('unidade_id', unidadeId)
+      .not('status', 'in', '(convertido,matriculado)')
+      .or(ors.join(','))
+      .limit(1);
+    const achado = data && data.length ? data[0] : null;
+    return {
+      acao: `arquivar_lead(dry) -> ${achado ? 'arquiva' : 'lead_not_found'}`,
+      match: achado ? { lead_id: achado.id, nome: achado.nome, status_atual: achado.status } : null,
+      args,
+    };
+  }
+
+  const { data, error } = await sb
+    .from('leads')
+    .update({
+      arquivado: true,
+      status: 'arquivado',
+      etapa_pipeline_id: 11,
+      motivo_arquivamento: motivo,
+      data_arquivamento: dataArquivamento,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('unidade_id', unidadeId)
+    .not('status', 'in', '(convertido,matriculado)')
+    .or(ors.join(','))
+    .select('id, nome, status');
+
+  if (error) return { acao: 'erro_update', erro: error.message, args };
+  return { acao: 'arquivar_lead', resultado: data, args };
+}
+
 // -------------------------------------------------------------------- main ---
 
 const EVENTOS_LEAD = ['lead_criado', 'lead_editado'];
 const EVENTOS_EXP = ['aula_experimental_criada', 'aula_experimental_reagendada', 'aula_experimental_cancelada'];
+const EVENTOS_ARQUIVAMENTO = ['lead_arquivado'];
 
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -388,12 +453,13 @@ serve(async (req: Request) => {
     console.error('[debug-webhook-emusys-observador] falha ao gravar log:', e?.message ?? e);
   }
 
-  // (2) PROCESSAMENTO — só lead e experimental. Matrícula segue no n8n.
+  // (2) PROCESSAMENTO — lead, experimental e arquivamento. Matrícula segue no n8n.
   const evento: string = body?.evento ?? 'observador_desconhecido';
   const ehLead = EVENTOS_LEAD.indexOf(evento) >= 0;
   const ehExp = EVENTOS_EXP.indexOf(evento) >= 0;
+  const ehArquivamento = EVENTOS_ARQUIVAMENTO.indexOf(evento) >= 0;
 
-  if (ehLead || ehExp) {
+  if (ehLead || ehExp || ehArquivamento) {
     let resultado: unknown = null;
     let acao = DRY_RUN ? 'processado_sombra' : 'processado';
     try {
@@ -402,8 +468,10 @@ serve(async (req: Request) => {
         resultado = { acao: 'ignorado', motivo: 'unidade nao resolvida', escola: body?.escola_nome ?? null };
       } else if (ehLead) {
         resultado = await processarLead(supabase, body, unidadeId);
-      } else {
+      } else if (ehExp) {
         resultado = await processarExperimental(supabase, body, unidadeId, evento);
+      } else {
+        resultado = await processarArquivamento(supabase, body, unidadeId);
       }
     } catch (e: any) {
       acao = 'erro_processamento';

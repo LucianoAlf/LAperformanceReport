@@ -84,6 +84,53 @@ Média de `valor_parcela` dos alunos com `entra_financeiro_ativo = true` **E**
 `tipo_matricula.entra_ticket_medio = true` **E** `valor_parcela > 0`,
 deduplicado por pessoa canônica e unidade.
 - RPC: `get_kpis_alunos_financeiro_vivo_canonico`.
+- ⚠️ A dedup por pessoa **soma** os cursos da pessoa no numerador mas conta a pessoa
+  **uma vez** no denominador — então segundo curso **eleva** o ticket (é o que o
+  `tipos_matricula` descreve: "eleva ticket médio, conta como 1 aluno"). Isso
+  contradiz o texto de "Segundo curso" abaixo, que diz "excluído do ticket médio".
+  Constatado no código em 31/07/2026; qual dos dois é a intenção não foi confirmado.
+
+### MRR (mensalidade recorrente)
+**Mesma base e mesmo filtro do ticket médio** — MRR é o numerador do ticket:
+```
+MRR = Σ valor_parcela
+  WHERE tipos_matricula.entra_ticket_medio = true
+    AND valor_parcela > 0
+    AND arquivado_em IS NULL
+    AND vw_alunos_estado_operacional_v131.entra_base_ativa = true
+    AND (data_matricula IS NULL OR data_matricula <= data_corte)
+    AND (data_saida  IS NULL OR data_saida  >  data_corte)
+  agrupado por pessoa (nome + unidade)
+```
+com `valor_parcela = valor_cheio − desconto_condicional` (fórmula canônica acima).
+- RPC: `get_kpis_alunos_financeiro_vivo_canonico`.
+- **Banda, bolsista integral e bolsista parcial ficam de fora** — pelo flag, não por
+  pagarem zero. Bolsista parcial paga e ainda assim não entra.
+- `get_carteira_professores.mrr_total` segue esta regra desde 31/07/2026, sem a dedup por pessoa (ver abaixo).
+
+### Ticket médio da carteira do professor (31/07/2026)
+Mesmo critério de `entra_ticket_medio`, **sem a dedup por pessoa**: na carteira por
+professor, aluno com 2 cursos é carteira dos 2 professores — deduplicar faria um deles
+perder o aluno. Segundo curso (`entra_ticket_medio = true`) entra nos **dois** lados.
+- RPC: `get_carteira_professores` → `ticket_medio`, com o denominador exposto em
+  `alunos_ticket` (o card agregado divide `mrr_total` pela soma de `alunos_ticket`;
+  média de médias não é média, e o headcount inclui quem não entra no ticket).
+- **`mrr_total` segue a regra canônica desde 31/07/2026** (decisão do Luciano:
+  "bolsista parcial não conta como aluno pagante"). É o numerador do ticket — mesmo
+  filtro. Antes somava todo pagante e inflava R$ 2.433,50. A coluna `mrr_ticket`,
+  criada horas antes no mesmo dia, virou redundante e foi removida.
+- **Arquivado (`arquivado_em`) fora da base.** `fn_aluno_entra_base_ativa_v131` não
+  filtra a lixeira; havia 5 matrículas arquivadas contando como carteira e somando
+  R$ 1.210,00 de MRR. A RPC filtra explicitamente.
+- **Trancado e inativo nunca estiveram aqui.** `vw_alunos_estado_operacional_v131` já
+  os marca `entra_base_ativa = false`. ⚠️ Não confundir com `alunos.status`, que é só
+  fallback e fica defasado: em 31/07/2026 havia 6 matrículas com status local
+  `trancado`/`inativo` que o Emusys reportava como `ativa`.
+- ⚠️ `total_alunos` é o **headcount inteiro** (inclui banda e bolsista) — é quantos
+  alunos o professor atende. Nunca usar como denominador de ticket.
+- Histórico: até 31/07/2026 a RPC aproximava a regra por `valor_parcela > 0` e o front
+  ainda descartava esse valor, dividindo o MRR pelo headcount. Diluía o ticket de 24
+  professores (Ramon Pina aparecia com R$ 108,59 tendo R$ 434,36).
 
 ### Ticket médio (passaporte / matrícula)
 Média de `valor_passaporte > 0` das matrículas novas canônicas do período (exclui 2º curso, banda).
@@ -128,10 +175,224 @@ Depende do contexto:
 - **Por professor (estrito):** apenas `status = 'experimental_realizada'` (`TabComercialNew.tsx:387`).
 - **Faltou:** `status = 'experimental_faltou'`.
 
+#### Snapshot operacional Emusys
+
+O adaptador puro `_shared/experimental-snapshot.ts` materializa uma linha por
+aula experimental + participante. A chave de negócio é escopada pela unidade e
+prefere os IDs externos `id_lead` e `id_aluno`; nome e telefone não criam
+vínculo canônico. O `raw_key` também inclui a execução para preservar cada
+fotografia recebida.
+
+Na normalização temporal, cancelamento sempre prevalece. Antes do início da
+aula em `America/Sao_Paulo`, inclusive quando o Emusys envia
+`presenca='ausente'`, a situação é `agendada`. Depois do início,
+`presente`/`matriculado` contam como presença, `faltou`/`ausente` como falta e
+qualquer outro valor fica `sem_status`. A paginação só libera o lote quando
+todas as páginas de `/aulas` terminam sem erro.
+
+O denominador operacional do Emusys considera exclusivamente linhas com
+`snapshot_ativo=true`. Uma nova execução completa é serializada por unidade,
+inativa a fotografia vigente de cada chave recebida e insere uma nova versão,
+sem sobrescrever `raw_key` ou execução anteriores. Enriquecimentos
+locais conhecidos são herdados pela nova versão; `linhas_inativadas` conta
+somente chaves ausentes do lote, enquanto `linhas_versionadas` informa as
+chaves recebidas que ganharam nova fotografia. Linha histórica inativa nunca
+volta a contar. A RPC operacional publica no `resumo`
+`snapshot_atualizado_em`, `snapshot_execucao_id`, `snapshot_linhas_inativas` e
+`snapshot_status`, permitindo que o consumidor diferencie zero real de
+snapshot ausente ou sem cobertura completa do período.
+Na leitura mensal, cobertura completa significa do primeiro dia do mês até
+a data de referência limitada ao último dia da competência, mais sete dias.
+Assim, um relatório de 30/07 exige cobertura até 06/08; uma consulta posterior
+à competência limita a referência a 31/07 e exige, no máximo, 07/08.
+
+A leitura authenticated com unidade explícita exige o guard `comercial.ver`.
+Quando a unidade é nula, a RPC agrega somente as unidades aprovadas
+individualmente pelo mesmo guard; `service_role` pode agregar todas. O frescor
+agregado é `completo` apenas quando cada unidade incluída possui execução com
+cobertura: o ID da execução fica nulo quando há mais de uma, o timestamp é o
+mais antigo entre as coberturas escolhidas e as linhas inativadas são somadas.
+A policy raw mostra somente versões ativas de unidades autorizadas. Mesmo
+nessas linhas, `authenticated` recebe apenas `id`, `aluno_nome`, `data_aula`,
+`horario_aula` e `situacao_operacional`; contatos, responsável, professor,
+payload e colunas de vínculo ficam privados ao `service_role`. O payload
+histórico foi saneado e novas versões persistem uma allowlist técnica:
+`schema_version`, data, horário, cancelamento, ID da aula e `id_lead/id_aluno`.
+Campos extensíveis do Emusys, anotações, e-mails e telefones não entram no
+JSON. Durante o rollout, o writer legado ainda pode gravar sem
+`participante_chave`, mas essas linhas nascem inativas e não aparecem aos
+leitores authenticated. O writer canônico exige identidade e usa
+exclusivamente a RPC de aplicação.
+
+O writer canônico é o modo `experimentais` de `sync-presenca-emusys`, acessível
+somente ao bearer interno. Usuário autenticado comum pode solicitar apenas
+`presenca` para uma unidade exata autorizada por
+`pode_sincronizar_presenca_emusys_v1`; modos internos e alvo múltiplo falham
+antes do cliente administrativo e dos tokens do provedor. O chamador interno
+informa uma única unidade por UUID e um intervalo explícito de até
+45 dias; para o relatório mensal, a janela esperada é o início da competência
+até D+7. Todas as páginas precisam terminar antes da chamada única a
+`aplicar_snapshot_experimentais_emusys_admitido_v1`. A reconciliação posterior usa
+somente `unidade + id_lead/id_aluno/aula` e nunca cria vínculo por nome ou
+telefone. O modo `metadados` reaproveita exatamente as aulas que acabou de
+gravar em `aulas_emusys`, sem segundo GET. Sua RPC de publicação adia o raw e
+não reconcilia o lote quando existe uma leitura admitida sobreposta; fora
+dessa janela, continua publicando normalmente. Falha real do snapshot torna a
+chamada inteira malsucedida. Respostas operacionais publicam apenas execução e
+contagens, sem PII ou payload bruto. O curso reconciliado depende do de-para
+`curso_emusys_depara` escopado pela unidade; ausência de de-para resulta em
+`curso_id = null`, sem fallback textual. Horários são comparados em
+`HH:mm:ss`, derivados de uma normalização única que aceita o timestamp Emusys
+com ou sem segundos.
+
+A conciliação comercial P24 usa exclusivamente as linhas raw vigentes tanto na
+evidência lateral de cada evento quanto nos totais por unidade. O vínculo usa
+as colunas materializadas `emusys_lead_id` e `emusys_aluno_id`; payload, nome e
+telefone não participam da identidade. Aluno Emusys já cadastrado é resolvido
+por `alunos.emusys_student_id` e fica fora do denominador comercial quando não
+houve conversão na competência. Um evento é
+substituído por reagendamento quando existe, para o mesmo lead, um timestamp
+posterior (`data_experimental + horario_experimental`) em estado conhecido:
+agendada, realizada, convertida/matriculada, falta ou cancelamento. Presença ou
+falta raw ativa na linha anterior prevalece sobre essa heurística, preservando
+duas experimentais legítimas. A fachada mantém o cap de matrículas comerciais
+P21, a deduplicação pequena P22 e a validação de usuário/unidade P23; o payload
+identifica a evidência como `snapshot_ativo_p24`. O valor bruto `ausente` não
+cria falta quando `situacao_operacional` é `agendada` ou `cancelada`.
+
 ### Taxa de conversão Experimental → Matrícula
 - **No Dashboard/Comercial (frontend):** denominador `experimental_realizada = true`; numerador `status ∈ {matriculado, convertido}` (`DashboardPage.tsx:316-327`).
 - **Canônica (professor):** RPC `get_experimentais_professor_canonicos_v1` + fonte `lead_experimentais` (1 linha por aula, presença real) — substituiu a contagem por `leads` que inflava a taxa. Denominador = `status ∈ {experimental_realizada, convertido}`; numerador = realizadas cujo lead converteu. Ver CLAUDE.md (Módulo de Professores).
-- ⚠️ `taxa_exp_mat` e `taxa_conversao_exp` estão **bloqueadas** em Metas até unificar a regra canônica (`MetasPageNew.tsx:65/75`).
+- ⚠️ `taxa_exp_mat` e `taxa_conversao_exp` continuam indisponíveis para configuração de meta (`MetasPageNew.tsx:65/75`), mas isso não bloqueia o KPI diário. Havendo denominador, o relatório publica sempre a taxa e a fração da conciliação vigente; pendências aparecem como aviso `N pendências em auditoria`. Sem denominador, publica `SEM BASE`. O texto diário nunca usa `BLOQUEADA`.
+
+### Orquestração e fontes do relatório comercial diário
+
+Para cada unidade, `relatorio-admin-whatsapp` determina a data de referência em
+`America/Sao_Paulo` e passa pelo gate
+`emusys_experimentais_refresh_admissoes`. A chave é
+`unidade + intervalo + origem + bucket de cinco minutos`; prévia e cron são
+origens independentes. Uma chamada atualiza, equivalentes aguardam ou reutilizam
+a mesma execução completa, e nenhuma delas abre segundo GET ou segunda versão.
+Falha registrada bloqueia outro acesso ao provedor até o lease vencer. Lease
+expirado permite recuperação; se a aplicação terminou antes de uma
+interrupção na finalização, a própria admissão detecta a execução completa e a
+reutiliza. Depois o fluxo atualiza o snapshot Emusys do primeiro dia do mês até
+D+7 e aguarda sua conclusão antes de qualquer leitura. A geração é interrompida
+se a resposta do sync for inválida ou se os agregados mensal e diário não
+confirmarem `snapshot_status='completo'`, timestamp de atualização e o mesmo ID
+de execução admitido. Não existe fallback para zero ou base transacional
+parcial.
+
+Atualização e reuso passam por `proteger_leitura_snapshot_experimentais_v1`
+imediatamente antes das leituras. Sob o mesmo advisory lock do writer, a RPC
+confirma em `emusys_experimentais_snapshot_publicacoes_vigentes` que execução e
+cobertura continuam vigentes. Se o cron publicou primeiro, a admissão é
+promovida atomicamente para uma execução nova; caso contrário, recebe lease de
+sessenta segundos. Writers admitidos sobrepostos respeitam o mesmo lease e
+aguardam com o lote já coletado, sem repetir o GET. As leituras paralelas têm
+timeout de 45 segundos e a confirmação final, dez segundos, mantendo o limite
+total abaixo desse lease.
+
+O refresh servidor-servidor propaga um deadline absoluto de 160 segundos. A
+paginação completa do Emusys tem teto de 60 segundos, a repetição do writer
+protegido usa no máximo 70 segundos e preserva 30 segundos para carregar os
+de-paras e reconciliar. As chamadas Supabase desse worker compartilham o mesmo
+sinal de cancelamento. O chamador usa 180 segundos, deixando margem para a edge
+encerrar e responder sem continuar órfã após o timeout externo.
+
+Depois do preflight, as leituras canônicas são paralelas: KPIs mensais e diários
+vêm de `get_kpis_comercial_canonicos_v2`; conversão e pendências, de
+`get_conciliacao_experimentais_v2`; realizadas, faltas, agenda e frescor, de
+`get_experimentais_emusys_operacional_v1`; metas, de `metas_kpi`; registros do
+dia, de `leads`, `lead_experimentais` e `alunos`, usando intervalo semiaberto
+BRT `[00:00, 00:00 do dia seguinte)`; e a lista detalhada, da coorte canônica de
+novas matrículas. A mesma coleção agrupada `matriculasNovas` alimenta o total de
+matrículas, todos os itens detalhados e os tickets de parcelas e passaportes.
+Qualquer lookup por ID externo inclui primeiro `unidade_id`, inclusive quando o
+gerador usa `service_role`, que ignora RLS. A agenda raw lê somente a execução
+exata devolvida pelo preflight e valida o ID presente em cada linha. Uma segunda
+leitura operacional após a consulta confirma que a execução não foi substituída
+concorrentemente; divergência interrompe a geração em vez de misturar snapshots.
+
+Na agenda futura, o curso é resolvido apenas por IDs estáveis e escopados pela
+unidade: disciplina específica do snapshot, vínculo direto da experimental,
+vínculo do lead Emusys na experimental e, por último, curso do lead. Nome e
+telefone são somente exibição e nunca fazem join. A correção não inclui backfill
+nem ajuste manual de dados de produção; em runtime, a escrita anterior à leitura
+é exclusivamente a aplicação atômica do snapshot vigente.
+
+No cron, `fila_relatorios_whatsapp.tipo_relatorio` diferencia
+`relatorio_admin` de `relatorio_comercial`. A chave diária é
+`tipo_relatorio + unidade_id + jid + data_dia`: os dois relatórios podem coexistir
+no mesmo destino e cada tipo continua idempotente. Os modos `dry_run`,
+`dry_run_comercial`, manual e cron mantêm seus contratos anteriores.
+
+Na interface comercial, o relatório diário não recalcula métricas. Para uma
+unidade específica, `ComercialPage.tsx` envia `modo='dry_run_comercial'`, a
+unidade e `data_referencia` à edge e publica exatamente o `texto` de uma resposta
+com `success=true`. A referência é obrigatória no `dry_run_comercial`: somente
+`YYYY-MM-DD` com calendário real é aceito como data civil, sem convertê-la em um
+instante artificial. Ausência, timestamp, offset ou data impossível retornam
+`400`. Para `2026-07-30`, o documento usa o dia 30/07 e o snapshot cobre
+`2026-07-01` a `2026-08-06`. O instante real de geração em
+`America/Sao_Paulo` define a hora, o rodapé e o corte das próximas experimentais;
+ele pode ser injetado somente no gerador interno para teste, nunca pelo payload.
+O cron sem campo deriva data e hora desse instante. As consultas diárias por
+`created_at` usam limites UTC derivados do início civil no fuso IANA, inclusive
+em datas históricas com horário de verão. Falha da edge, resposta sem sucesso ou
+texto ausente limpam a
+prévia e mantêm copiar/enviar desabilitados; uma troca de unidade invalida a
+resposta pendente. O texto exibido é também o único texto usado pela cópia e pelo
+enfileiramento manual. Cada texto guarda sua origem (`tipo + unidade + período +
+datas + competência`): uma mudança A→B ou A→todos bloqueia o uso imediatamente,
+e o envio usa a unidade dessa origem, nunca a seleção corrente. Geração e envio
+possuem IDs distintos para que respostas antigas não restaurem sucesso, erro ou
+spinner depois de uma troca ou regeneração.
+
+### Tickets do relatório comercial diário
+
+O relatório diário calcula duas métricas separadas sobre a mesma coorte de
+matrículas comerciais agrupada que alimenta a lista detalhada:
+
+```text
+Ticket médio das parcelas = soma das parcelas consolidadas positivas
+                            / grupos com parcela positiva
+
+Ticket médio dos passaportes = soma dos passaportes positivos
+                               / grupos com passaporte positivo
+```
+
+O agrupamento ocorre antes do cálculo: um segundo curso pode acrescentar uma
+parcela ao valor consolidado, mas não cria outro denominador. Um parser
+monetário único aceita números e os formatos textuais reais do backend, como
+`460,00`, `1.234,56` e `R$ 450,00`. Zero, nulo e valor inválido ficam fora
+somente do denominador correspondente. Os valores e a soma bruta não são
+arredondados antes da divisão; soma e média publicadas recebem duas casas
+somente ao final. Internamente, o parser representa cada valor por inteiro
+decimal (`BigInt + escala`), soma e divide de forma racional e aplica
+arredondamento decimal half-up nos centavos; não usa `Math.round` sobre ponto
+flutuante. A meta `metas_kpi.tipo='ticket_medio'`
+é exibida exclusivamente ao lado do ticket das parcelas; não há meta canônica
+de passaporte. Referência de aceite da Barra em julho/2026: parcelas
+`R$ 6.819,00 / 16 = R$ 426,19` e passaportes
+`R$ 7.142,00 / 16 = R$ 446,38`.
+
+Essa regra é específica da coorte de novas matrículas do relatório comercial e
+não substitui a regra financeira por fatura/competência do ticket geral da base
+ativa descrita nas inconsistências deste documento.
+
+### Próximas experimentais do relatório diário
+
+A agenda vem somente do snapshot Emusys vigente. Uma participação entra quando
+`snapshot_ativo=true`, `situacao='agendada'`, não está cancelada e seu início em
+`America/Sao_Paulo` é estritamente posterior ao instante de geração e menor ou
+igual a D+7. A conversão de data/hora usa as regras IANA de
+`America/Sao_Paulo`, inclusive transições históricas, e uma referência temporal
+inválida interrompe a geração. Evento do mesmo dia sem horário fica fora; em
+data posterior ele pode entrar. A lista só remove duplicatas quando ambas as
+linhas possuem e repetem `emusysAulaId + participanteChave`; homônimos e linhas
+sem identidade estável são preservados. A ordenação é por data/horário/nome, o
+limite é dez participações e o total excedente é informado.
 
 ### Taxa Lead → Experimental
 Leads que agendaram/realizaram experimental ÷ total de leads do período.
