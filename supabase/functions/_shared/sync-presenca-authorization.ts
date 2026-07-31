@@ -51,6 +51,21 @@ export class SolicitacaoSyncPresencaInvalida extends Error {
   }
 }
 
+export async function lerCorpoSyncPresenca(
+  requisicao: { json: () => Promise<unknown> },
+): Promise<CorpoSyncPresenca> {
+  let body: unknown;
+  try {
+    body = await requisicao.json();
+  } catch {
+    throw new SolicitacaoSyncPresencaInvalida('BODY_INVALIDO');
+  }
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    throw new SolicitacaoSyncPresencaInvalida('BODY_INVALIDO');
+  }
+  return body as CorpoSyncPresenca;
+}
+
 const MODOS_SUPORTADOS = new Set<ModoSyncPresenca>([
   'presenca',
   'agenda',
