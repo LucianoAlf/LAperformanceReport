@@ -153,6 +153,36 @@ de `stderr`, latência do pooler e pré-condições do CLI. Todos executaram cle
 a conferência final encontrou zero projetos descartáveis remanescentes. A
 `p01c-staging` permaneceu no mesmo estado e não foi usada no ensaio.
 
+### Automação de deploy e bloqueio de merge
+
+Verificação realizada em 31/07/2026 antes da abertura do PR:
+
+- **a `main` tem deploy automático de frontend para produção pela Vercel.** O
+  GitHub registra deployments sucessivos do ambiente `Production` criados por
+  `vercel[bot]`. O deployment mais recente observado, id `5675574365`, aponta
+  para o SHA atual da `main`,
+  `4e2584a775b59c5e5a4ee5c6d99233af3d1dd93a`, e terminou com sucesso. O mesmo
+  commit possui o status externo `Vercel`. O único workflow versionado em
+  `.github/workflows` é o Gitleaks; portanto, a publicação vem da integração
+  externa da Vercel, não de GitHub Actions;
+- **não existe integração Supabase–GitHub ativa neste projeto.** Em
+  `ouqwbbermlzqqvtqwlul`, a tela `Settings > Integrations` exibe a ação
+  `Connect GitHub`, isto é, nenhum repositório está conectado. O repositório
+  também não possui workflow, webhook visível, secret ou variable de Actions
+  para aplicar migrations. Assim, no estado conferido, merge na `main` não
+  aplica migrations do Supabase automaticamente em produção nem em outro
+  ambiente;
+- a existência manual das branches Supabase `main` e `p01c-staging` não muda
+  essa conclusão: a `p01c-staging` continua `MIGRATIONS_FAILED` e não está
+  vinculada ao fluxo deste PR.
+
+Consequência operacional: **este PR não pode ser mergeado antes do rollout das
+migrations em produção**. A ordem obrigatória é: autorização explícita do Alf
+com ele presente, aplicação e postflight das migrations, deploy/verificação da
+Edge Function e somente depois merge/deploy do frontend. Enquanto isso, o PR
+permanece aberto para revisão do Hugo, sem merge. O hardening separado de
+`movimentacoes_admin` e a homologação operacional continuam gates abertos.
+
 ### Inventário da `p01c-staging` antes de eventual remoção
 
 Levantamento somente leitura em 31/07/2026 para o ref
