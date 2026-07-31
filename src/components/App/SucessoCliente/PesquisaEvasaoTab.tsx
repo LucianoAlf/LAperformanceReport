@@ -470,6 +470,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
     if (historicoTesteExpandido === evasaoId) {
       historicoTesteSequenciaRef.current += 1;
       setHistoricoTesteExpandido(null);
+      setCarregandoHistorico(null);
       return;
     }
 

@@ -1412,14 +1412,14 @@ bloqueada as (
     case
       when aluno_id is null or aluno_registro_id is null
         then 'sem_aluno'
+      when publico_interno_aluno_id is not null
+        then 'publico_interno'
       when telefone_normalizado is null
         then 'sem_telefone'
       when telefone_normalizado !~ '^55[0-9]{10,11}$'
         then 'telefone_invalido'
       when motivo_catalogado is null
         then 'motivo_nao_catalogado'
-      when publico_interno_aluno_id is not null
-        then 'publico_interno'
       when exists (
         select 1
         from public.pesquisa_evasao pe_aberta

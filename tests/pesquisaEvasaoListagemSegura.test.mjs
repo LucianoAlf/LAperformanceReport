@@ -182,6 +182,28 @@ test('bloqueios preservam sem telefone, motivo legado e flag interna explicita',
   );
 });
 
+test('publico interno ativo tem precedencia sobre bloqueios cadastrais depois de sem aluno', () => {
+  const v2 = semComentarios(extrairFuncao('listar_evadidos_para_pesquisa_v2'));
+  const bloqueios = v2.match(
+    /case\s+when\s+aluno_id\s+is\s+null[\s\S]*?end::text\s+as\s+bloqueio_codigo/i,
+  )?.[0] ?? '';
+
+  const semAluno = bloqueios.indexOf("'sem_aluno'");
+  const publicoInterno = bloqueios.indexOf("'publico_interno'");
+  const semTelefone = bloqueios.indexOf("'sem_telefone'");
+  const telefoneInvalido = bloqueios.indexOf("'telefone_invalido'");
+  const motivoNaoCatalogado = bloqueios.indexOf("'motivo_nao_catalogado'");
+
+  assert.ok(semAluno >= 0, 'falta hard block sem_aluno');
+  assert.ok(
+    semAluno < publicoInterno
+      && publicoInterno < semTelefone
+      && semTelefone < telefoneInvalido
+      && telefoneInvalido < motivoNaoCatalogado,
+    'pessoa interna identificada nao deve receber orientacao de correcao cadastral',
+  );
+});
+
 test('telefone produtivo usa somente o snapshot imutavel da movimentacao', () => {
   const v2 = semComentarios(extrairFuncao('listar_evadidos_para_pesquisa_v2'));
   const criar = semComentarios(extrairFuncao('criar_pesquisa_evasao'));
@@ -392,6 +414,14 @@ test('frontend exibe bloqueios, fallback de motivo e correcao governada', () => 
   );
 });
 
+test('tipo de publico do frontend permanece em paridade com o valor outro da RPC', () => {
+  const publicoTipo = types.match(/publico_tipo\s*:[^;]+;/)?.[0] ?? '';
+
+  for (const tipo of ['aluno', 'responsavel', 'colaborador', 'professor', 'outro']) {
+    assert.match(publicoTipo, new RegExp(`['"]${tipo}['"]`));
+  }
+});
+
 test('modo teste ignora bloqueios produtivos e conserva os hard blocks de pessoa', () => {
   const ramoTeste = tab.match(
     /const\s+podeGerarPreview\s*=\s*modoTeste[\s\S]*?(?=;\s*\n)/,
@@ -457,6 +487,19 @@ test('historico de teste e invalidado no Realtime e apos confirmar teste', () =>
     /resposta\.modo_teste\s*===\s*true[\s\S]{0,150}invalidarHistoricoTeste\s*\(\s*\)/,
     'Realtime e suprimido durante confirmacao; sucesso de teste deve limpar o cache',
   );
+});
+
+test('fechar historico em voo libera imediatamente o botao para reabrir', () => {
+  const carregarHistorico = tab.match(
+    /const\s+carregarHistoricoTeste\s*=\s*async[\s\S]*?(?=\n\s*const\s+getBloqueioLabel\s*=)/,
+  )?.[0] ?? '';
+  const fecharEmVoo = carregarHistorico.match(
+    /if\s*\(\s*historicoTesteExpandido\s*===\s*evasaoId\s*\)\s*\{[\s\S]*?\}/,
+  )?.[0] ?? '';
+
+  assert.match(fecharEmVoo, /historicoTesteSequenciaRef\.current\s*\+=\s*1/);
+  assert.match(fecharEmVoo, /setHistoricoTesteExpandido\s*\(\s*null\s*\)/);
+  assert.match(fecharEmVoo, /setCarregandoHistorico\s*\(\s*null\s*\)/);
 });
 
 test('componente nao escreve diretamente em cadastro ou movimentacao', () => {

@@ -56,7 +56,7 @@ export interface PesquisaEvasaoListagemItem {
   respondido_producao_em: string | null;
   is_menor: boolean;
   responsavel_nome: string | null;
-  publico_tipo: 'aluno' | 'responsavel' | 'colaborador' | 'professor';
+  publico_tipo: 'aluno' | 'responsavel' | 'colaborador' | 'professor' | 'outro';
   bloqueio_codigo: PesquisaEvasaoBloqueioCodigo;
   elegivel_envio: boolean;
   elegibilidade_regra: string;
