@@ -187,14 +187,19 @@ contagens, sem PII ou payload bruto. O curso reconciliado depende do de-para
 com ou sem segundos.
 
 A conciliação comercial P24 usa exclusivamente as linhas raw vigentes tanto na
-evidência lateral de cada evento quanto nos totais por unidade. Um evento é
+evidência lateral de cada evento quanto nos totais por unidade. O vínculo usa
+as colunas materializadas `emusys_lead_id` e `emusys_aluno_id`; payload, nome e
+telefone não participam da identidade. Aluno Emusys já cadastrado é resolvido
+por `alunos.emusys_student_id` e fica fora do denominador comercial quando não
+houve conversão na competência. Um evento é
 substituído por reagendamento quando existe, para o mesmo lead, um timestamp
 posterior (`data_experimental + horario_experimental`) em estado conhecido:
 agendada, realizada, convertida/matriculada, falta ou cancelamento. Presença ou
 falta raw ativa na linha anterior prevalece sobre essa heurística, preservando
 duas experimentais legítimas. A fachada mantém o cap de matrículas comerciais
 P21, a deduplicação pequena P22 e a validação de usuário/unidade P23; o payload
-identifica a evidência como `snapshot_ativo_p24`.
+identifica a evidência como `snapshot_ativo_p24`. O valor bruto `ausente` não
+cria falta quando `situacao_operacional` é `agendada` ou `cancelada`.
 
 ### Taxa de conversão Experimental → Matrícula
 - **No Dashboard/Comercial (frontend):** denominador `experimental_realizada = true`; numerador `status ∈ {matriculado, convertido}` (`DashboardPage.tsx:316-327`).
