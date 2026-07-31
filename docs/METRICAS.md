@@ -227,7 +227,11 @@ somente `unidade + id_lead/id_aluno/aula` e nunca cria vínculo por nome ou
 telefone. O modo `metadados` reaproveita exatamente as aulas que acabou de
 gravar em `aulas_emusys`, sem segundo GET; falha do snapshot torna a chamada
 inteira malsucedida. Respostas operacionais publicam apenas execução e
-contagens, sem PII ou payload bruto.
+contagens, sem PII ou payload bruto. O curso reconciliado depende do de-para
+`curso_emusys_depara` escopado pela unidade; ausência de de-para resulta em
+`curso_id = null`, sem fallback textual. Horários são comparados em
+`HH:mm:ss`, derivados de uma normalização única que aceita o timestamp Emusys
+com ou sem segundos.
 
 ### Taxa de conversão Experimental → Matrícula
 - **No Dashboard/Comercial (frontend):** denominador `experimental_realizada = true`; numerador `status ∈ {matriculado, convertido}` (`DashboardPage.tsx:316-327`).

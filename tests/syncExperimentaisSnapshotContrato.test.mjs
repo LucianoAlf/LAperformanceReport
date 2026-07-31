@@ -2,141 +2,445 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const source = readFileSync(
-  new URL(
-    "../supabase/functions/sync-presenca-emusys/index.ts",
-    import.meta.url,
-  ),
-  "utf8",
-);
+import {
+  aplicarSnapshotsMetadados,
+  classificarErroSnapshot,
+  executarModoExperimentais,
+  horarioExperimentalParaBanco,
+  normalizarHorarioExperimental,
+  SnapshotRequestError,
+  SnapshotUpstreamError,
+  validarParametrosExperimentais,
+} from "../supabase/functions/_shared/sync-experimentais-mode.ts";
 
-function blocoEntre(inicio, fim) {
-  const start = source.indexOf(inicio);
-  assert.notEqual(start, -1, `inicio nao encontrado: ${inicio}`);
-  const end = source.indexOf(fim, start);
-  assert.notEqual(end, -1, `fim nao encontrado: ${fim}`);
-  return source.slice(start, end);
+const UNIDADE = {
+  id: "368d47f5-2d88-4475-bc14-ba084a9a348e",
+  nome: "Barra",
+};
+
+const BODY = {
+  modo: "experimentais",
+  unidade_id: UNIDADE.id,
+  data_inicio: "2026-07-01",
+  data_fim: "2026-07-31",
+};
+
+function aula(overrides = {}) {
+  return {
+    id: 9001,
+    categoria: "experimental",
+    cancelada: false,
+    data_hora_inicio: "2026-07-30 20:00:00",
+    data_hora_fim: "2026-07-30 20:50:00",
+    curso_id: 77,
+    curso_nome: "Nome textual nao canonico",
+    professores: [{ id: 88, nome: "Professor Emusys" }],
+    alunos: [
+      {
+        id_lead: 501,
+        id_aluno: null,
+        nome_aluno: "Alice Exemplo",
+        telefone_aluno: "21999999999",
+        presenca: "presente",
+      },
+    ],
+    ...overrides,
+  };
 }
 
-test("declara o modo experimentais e le seu contrato explicito do body", () => {
-  assert.match(
-    source,
-    /type SyncMode\s*=\s*'presenca'\s*\|\s*'agenda'\s*\|\s*'metadados'\s*\|\s*'experimentais'/,
+function criarCenario(overrides = {}) {
+  const chamadas = [];
+  const capturas = {
+    rpc: [],
+    reconciliacao: [],
+  };
+
+  const deps = {
+    criarExecucaoId: () => "11111111-1111-4111-8111-111111111111",
+    agora: () => new Date("2026-07-31T12:00:00.000Z"),
+    buscarTodasAulas: ({ unidade, dataInicio, dataFim }) => {
+      chamadas.push("buscar");
+      assert.equal(unidade.id, UNIDADE.id);
+      assert.equal(dataInicio, BODY.data_inicio);
+      assert.equal(dataFim, BODY.data_fim);
+      return Promise.resolve([aula()]);
+    },
+    aplicarSnapshotRpc: (input) => {
+      chamadas.push("rpc");
+      capturas.rpc.push(input);
+      return Promise.resolve({
+        execucao_id: input.execucaoId,
+        status: "completo",
+        linhas_recebidas: input.linhas.length,
+        linhas_ativas: input.linhas.length,
+        linhas_inseridas: input.linhas.length,
+        linhas_atualizadas: 0,
+        linhas_versionadas: 0,
+        linhas_inativadas: 0,
+      });
+    },
+    carregarCursoDePara: (unidadeId) => {
+      chamadas.push("curso");
+      assert.equal(unidadeId, UNIDADE.id);
+      return Promise.resolve(
+        new Map([
+          [77, { cursoId: 9, cursoNome: "Canto canonico" }],
+        ]),
+      );
+    },
+    carregarResolverProfessor: (unidadeId) => {
+      chamadas.push("professor");
+      assert.equal(unidadeId, UNIDADE.id);
+      return Promise.resolve(() => 12);
+    },
+    reconciliar: (experimentais) => {
+      chamadas.push("reconciliar");
+      capturas.reconciliacao.push(experimentais);
+      return Promise.resolve([{ status: "reconciliada_presente" }]);
+    },
+    onFluxoPresenca: () => {
+      chamadas.push("presenca");
+    },
+    onAtualizarPercentual: () => {
+      chamadas.push("percentual");
+    },
+    ...overrides,
+  };
+
+  return { chamadas, capturas, deps };
+}
+
+test("valida UUID, unidade conhecida e intervalo inclusivo de no maximo 45 dias", () => {
+  const unidades = [UNIDADE];
+  assert.deepEqual(
+    validarParametrosExperimentais(BODY, unidades),
+    {
+      unidade: UNIDADE,
+      dataInicio: "2026-07-01",
+      dataFim: "2026-07-31",
+    },
   );
-  assert.match(source, /body\.modo\s*===\s*'experimentais'/);
-  assert.match(source, /body\.unidade_id/);
-  assert.match(source, /body\.data_inicio/);
-  assert.match(source, /body\.data_fim/);
+
+  for (
+    const body of [
+      { ...BODY, unidade_id: "barra" },
+      {
+        ...BODY,
+        unidade_id: "95553e96-971b-4590-a6eb-0201d013c14d",
+      },
+      { ...BODY, data_inicio: "2026-07-32" },
+      {
+        ...BODY,
+        data_inicio: "2026-01-01",
+        data_fim: "2026-03-01",
+      },
+      {
+        ...BODY,
+        data_inicio: "2026-08-01",
+        data_fim: "2026-07-31",
+      },
+    ]
+  ) {
+    assert.throws(
+      () => validarParametrosExperimentais(body, unidades),
+      SnapshotRequestError,
+    );
+  }
 });
 
-test("modo experimentais aceita uma unica unidade por UUID e intervalo de ate 45 dias", () => {
-  const validacao = blocoEntre(
-    "function validarParametrosExperimentais",
-    "async function fetchAulasDia",
-  );
+test("executa busca completa, uma RPC e somente depois reconcilia", async () => {
+  const cenario = criarCenario();
 
-  assert.match(validacao, /UUID_PATTERN/);
-  assert.match(validacao, /unidadeId/);
-  assert.match(validacao, /dataInicio/);
-  assert.match(validacao, /dataFim/);
-  assert.match(validacao, /diasEntreDatas/);
-  assert.match(validacao, />\s*45/);
-  assert.match(
-    validacao,
-    /UNIDADES\.find\(\(unidade\)\s*=>\s*unidade\.id\s*===\s*unidadeId\)/,
+  const resposta = await executarModoExperimentais({
+    body: BODY,
+    unidades: [UNIDADE],
+    deps: cenario.deps,
+  });
+
+  assert.deepEqual(
+    cenario.chamadas.filter((item) =>
+      ["buscar", "rpc", "reconciliar"].includes(item)
+    ),
+    ["buscar", "rpc", "reconciliar"],
   );
-  assert.match(validacao, /UNIDADE_DESCONHECIDA/);
-  assert.doesNotMatch(validacao, /unidade_index/);
+  assert.equal(cenario.capturas.rpc.length, 1);
+  assert.equal(cenario.capturas.rpc[0].linhas.length, 1);
+  assert.equal(resposta.snapshot.experimentais_reconciliadas, 1);
 });
 
-test("range usa paginacao compartilhada e nunca o fetch tolerante por dia", () => {
-  const range = blocoEntre(
-    "async function fetchAulasRange",
-    "// Converter data_hora_inicio",
-  );
+test("falha da RPC impede carregar contexto e reconciliar", async () => {
+  const cenario = criarCenario({
+    aplicarSnapshotRpc: () => {
+      cenario.chamadas.push("rpc");
+      return Promise.reject(new Error("falha banco"));
+    },
+  });
 
-  assert.match(range, /buscarTodasAulas\(/);
-  assert.match(range, /buscarPaginaAulasEmusys<AulaEmusys>/);
-  assert.doesNotMatch(range, /fetchAulasDia/);
-  assert.doesNotMatch(range, /\bfetch\(/);
-  assert.doesNotMatch(range, /EMUSYS_API/);
+  await assert.rejects(
+    executarModoExperimentais({
+      body: BODY,
+      unidades: [UNIDADE],
+      deps: cenario.deps,
+    }),
+    /falha banco/,
+  );
+  assert.deepEqual(cenario.chamadas, ["buscar", "rpc"]);
 });
 
-test("snapshot usa uma unica RPC atomica e so reconcilia depois do sucesso", () => {
-  const aplicacao = blocoEntre(
-    "async function aplicarSnapshotExperimentais",
-    "async function reconciliarExperimentaisOrfas",
-  );
-  const rpc = aplicacao.indexOf(
-    ".rpc('aplicar_snapshot_experimentais_emusys_v1'",
-  );
-  const reconciliacao = aplicacao.indexOf("reconciliarExperimentaisOrfas(");
+test("falha da reconciliacao rejeita e e classificada como 500", async () => {
+  const falha = new Error("falha reconciliacao");
+  const cenario = criarCenario({
+    reconciliar: () => {
+      cenario.chamadas.push("reconciliar");
+      return Promise.reject(falha);
+    },
+  });
 
-  assert.notEqual(rpc, -1);
-  assert.equal(
-    source.match(/\.rpc\('aplicar_snapshot_experimentais_emusys_v1'/g)?.length,
-    1,
+  await assert.rejects(
+    executarModoExperimentais({
+      body: BODY,
+      unidades: [UNIDADE],
+      deps: cenario.deps,
+    }),
+    falha,
   );
-  assert.match(aplicacao, /crypto\.randomUUID\(\)/);
-  assert.match(aplicacao, /montarLinhasSnapshot\(/);
-  assert.match(aplicacao, /if \(error\)\s*throw/);
-  assert.ok(reconciliacao > rpc, "reconciliacao deve acontecer depois da RPC");
+  assert.deepEqual(classificarErroSnapshot(falha), {
+    status: 500,
+    mensagem: "ERRO_INTERNO",
+  });
 });
 
-test("resposta do modo experimentais contem apenas unidade, intervalo e agregados", () => {
-  const resposta = blocoEntre(
-    "function respostaSnapshotSemPii",
-    "function validarParametrosExperimentais",
-  );
-  const branch = blocoEntre(
-    "if (modo === 'experimentais')",
-    "if (modo === 'metadados')",
-  );
+test("classifica request como 400 e falha upstream da busca como 502", async () => {
+  let requestError;
+  try {
+    validarParametrosExperimentais(
+      { ...BODY, unidade_id: "invalida" },
+      [UNIDADE],
+    );
+  } catch (error) {
+    requestError = error;
+  }
+  assert.ok(requestError instanceof SnapshotRequestError);
+  assert.deepEqual(classificarErroSnapshot(requestError), {
+    status: 400,
+    mensagem: "UNIDADE_ID_INVALIDA",
+  });
 
-  assert.match(resposta, /execucao_id/);
-  assert.match(resposta, /linhas_recebidas/);
-  assert.match(branch, /respostaSnapshotSemPii/);
+  const cenario = criarCenario({
+    buscarTodasAulas: () =>
+      Promise.reject(new Error("HTTP 503 com detalhes privados")),
+  });
+  let upstream;
+  try {
+    await executarModoExperimentais({
+      body: BODY,
+      unidades: [UNIDADE],
+      deps: cenario.deps,
+    });
+  } catch (error) {
+    upstream = error;
+  }
+  assert.ok(upstream instanceof SnapshotUpstreamError);
+  assert.deepEqual(classificarErroSnapshot(upstream), {
+    status: 502,
+    mensagem: "FALHA_UPSTREAM_EMUSYS",
+  });
+});
+
+test("resposta publica somente unidade, intervalo e agregados sem PII", async () => {
+  const cenario = criarCenario();
+  const resposta = await executarModoExperimentais({
+    body: BODY,
+    unidades: [UNIDADE],
+    deps: cenario.deps,
+  });
+  const serializada = JSON.stringify(resposta);
+
+  assert.deepEqual(Object.keys(resposta), [
+    "success",
+    "modo",
+    "unidade",
+    "intervalo",
+    "snapshot",
+  ]);
   for (
     const pii of [
+      "Alice",
+      "21999999999",
       "aluno_nome",
       "telefone",
-      "data_nascimento",
       "payload",
       "raw_key",
     ]
   ) {
-    assert.doesNotMatch(resposta, new RegExp(pii));
-    assert.doesNotMatch(branch, new RegExp(pii));
+    assert.doesNotMatch(serializada, new RegExp(pii, "i"));
   }
 });
 
-test("metadados reutiliza exatamente as aulas carregadas e falha fechado", () => {
-  const metadados = blocoEntre(
-    "async function sincronizarMetadadosAulas",
-    "// Dados coletados de aulas experimentais",
-  );
-  const branch = blocoEntre(
-    "if (modo === 'metadados')",
-    "const { data: alunosCanonicos",
-  );
+test("modo experimentais retorna sem callbacks de presenca ou percentual", async () => {
+  const cenario = criarCenario();
+  await executarModoExperimentais({
+    body: BODY,
+    unidades: [UNIDADE],
+    deps: cenario.deps,
+  });
 
-  assert.match(metadados, /aulasPorUnidade/);
-  assert.match(branch, /metadados\.aulasPorUnidade/);
-  assert.match(branch, /await aplicarSnapshotExperimentais\(/);
-  assert.doesNotMatch(branch, /fetchAulasRange/);
-  assert.doesNotMatch(branch, /Promise\.allSettled/);
-  assert.doesNotMatch(branch, /catch\s*\(/);
-  assert.match(branch, /snapshots\.push\(/);
+  assert.equal(cenario.chamadas.includes("presenca"), false);
+  assert.equal(cenario.chamadas.includes("percentual"), false);
 });
 
-test("modo experimentais separa erros upstream 502 de falhas internas 500", () => {
-  assert.match(source, /class SnapshotUpstreamError extends Error/);
+test("metadados aplica os mesmos arrays coletados sem contrato de segundo fetch", async () => {
+  const aulasBarra = [aula()];
+  const aulasRecreio = [aula({ id: 9002 })];
+  const lotes = [
+    {
+      unidade: UNIDADE,
+      dataInicio: BODY.data_inicio,
+      dataFim: BODY.data_fim,
+      aulas: aulasBarra,
+    },
+    {
+      unidade: {
+        id: "95553e96-971b-4590-a6eb-0201d013c14d",
+        nome: "Recreio",
+      },
+      dataInicio: BODY.data_inicio,
+      dataFim: BODY.data_fim,
+      aulas: aulasRecreio,
+    },
+  ];
+  const recebidos = [];
+
+  const respostas = await aplicarSnapshotsMetadados({
+    lotes,
+    aplicarSnapshot: (lote) => {
+      recebidos.push(lote.aulas);
+      return Promise.resolve({ execucao_id: `exec-${recebidos.length}` });
+    },
+  });
+
+  assert.equal(recebidos[0], aulasBarra);
+  assert.equal(recebidos[1], aulasRecreio);
+  assert.equal(respostas.length, 2);
+});
+
+test("metadados rejeita o lote inteiro quando uma aplicacao falha", async () => {
+  const lotes = [
+    {
+      unidade: UNIDADE,
+      dataInicio: BODY.data_inicio,
+      dataFim: BODY.data_fim,
+      aulas: [aula()],
+    },
+    {
+      unidade: {
+        id: "95553e96-971b-4590-a6eb-0201d013c14d",
+        nome: "Recreio",
+      },
+      dataInicio: BODY.data_inicio,
+      dataFim: BODY.data_fim,
+      aulas: [aula({ id: 9002 })],
+    },
+  ];
+  let chamadas = 0;
+
+  await assert.rejects(
+    aplicarSnapshotsMetadados({
+      lotes,
+      aplicarSnapshot: () => {
+        chamadas += 1;
+        if (chamadas === 2) {
+          return Promise.reject(new Error("falha segundo lote"));
+        }
+        return Promise.resolve({ execucao_id: "exec-1" });
+      },
+    }),
+    /falha segundo lote/,
+  );
+  assert.equal(chamadas, 2);
+});
+
+test("normaliza horario com segundos sem duplicar o sufixo do banco", async () => {
+  assert.equal(
+    normalizarHorarioExperimental("2026-07-30 20:00:00"),
+    "20:00",
+  );
+  assert.equal(horarioExperimentalParaBanco("20:00"), "20:00:00");
+  assert.equal(horarioExperimentalParaBanco("20:00:00"), "20:00:00");
+
+  const cenario = criarCenario();
+  await executarModoExperimentais({
+    body: BODY,
+    unidades: [UNIDADE],
+    deps: cenario.deps,
+  });
+  const item = cenario.capturas.reconciliacao[0][0];
+  assert.equal(item.horario, "20:00");
+  assert.equal(item.horarioBanco, "20:00:00");
+});
+
+test("de-para canonico projeta curso e evita inserir duplicata por curso null", async () => {
+  const cenario = criarCenario();
+  let insercoes = 0;
+  cenario.deps.reconciliar = (experimentais) => {
+    cenario.capturas.reconciliacao.push(experimentais);
+    const item = experimentais[0];
+    const encontrouExistente = item.alunos[0].id_lead === 501 &&
+      item.dataAula === "2026-07-30" &&
+      item.horarioBanco === "20:00:00" &&
+      item.cursoId === 9;
+    if (!encontrouExistente) insercoes += 1;
+    return Promise.resolve(
+      encontrouExistente ? [{ status: "reconciliada_presente" }] : [],
+    );
+  };
+
+  await executarModoExperimentais({
+    body: BODY,
+    unidades: [UNIDADE],
+    deps: cenario.deps,
+  });
+  const item = cenario.capturas.reconciliacao[0][0];
+
+  assert.equal(item.cursoId, 9);
+  assert.equal(item.cursoNome, "Canto canonico");
+  assert.notEqual(item.cursoNome, "Nome textual nao canonico");
+  assert.equal(insercoes, 0);
+});
+
+test("curso fica null sem de-para e nunca usa nome textual como vinculo", async () => {
+  const cenario = criarCenario({
+    carregarCursoDePara: () => Promise.resolve(new Map()),
+  });
+  await executarModoExperimentais({
+    body: BODY,
+    unidades: [UNIDADE],
+    deps: cenario.deps,
+  });
+  const item = cenario.capturas.reconciliacao[0][0];
+
+  assert.equal(item.cursoId, null);
+  assert.equal(item.cursoNome, null);
+});
+
+test("edge usa o modulo puro e o horario de banco projetado", () => {
+  const source = readFileSync(
+    new URL(
+      "../supabase/functions/sync-presenca-emusys/index.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(source, /from '\.\.\/_shared\/sync-experimentais-mode\.ts'/);
+  assert.match(source, /await executarModoExperimentais\(/);
   assert.match(
     source,
-    /error instanceof SnapshotUpstreamError[\s\S]{0,40}\?\s*502[\s\S]{0,40}:\s*500/,
+    /\.eq\('horario_experimental',\s*exp\.horarioBanco\)/,
   );
-  assert.doesNotMatch(
+  assert.match(source, /horario_experimental:\s*exp\.horarioBanco/);
+  assert.match(
     source,
-    /console\.(?:log|error)\([^)]*(?:token|telefone|aluno_nome|payload)/,
+    /\.from\('curso_emusys_depara'\)[\s\S]{0,200}\.eq\('unidade_id', unidadeId\)/,
   );
 });
