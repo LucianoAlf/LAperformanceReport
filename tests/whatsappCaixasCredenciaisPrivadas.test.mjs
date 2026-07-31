@@ -317,6 +317,24 @@ test('runbook registra drift do rebase e bloqueia provisionamento prematuro', ()
   );
 });
 
+test('runbook impede bootstrap contraditorio e inventaria a staging antiga', () => {
+  assert.match(
+    runbook,
+    /branch Supabase[\s\S]*reaplica[cç][aã]o sequencial das migrations/i,
+  );
+  assert.match(runbook, /20260109125533[\s\S]*20260109125543/i);
+  assert.match(
+    runbook,
+    /nenhuma branch ou projeto novo foi criado[\s\S]*nenhum custo novo/i,
+  );
+  assert.match(runbook, /67 Edge Functions ativas/i);
+  assert.match(runbook, /GEMINI_API_KEY[\s\S]*mesma fingerprint de produ[cç][aã]o/i);
+  assert.match(
+    runbook,
+    /n[aã]o apagar[\s\S]*staging antiga[\s\S]*decis[aã]o do Alf/i,
+  );
+});
+
 test('spec separada cobre consumidores, RLS, Sol e regressao da evasao', () => {
   assert.ok(movimentacoesSpec, 'spec de movimentacoes_admin ausente');
   for (const requirement of [

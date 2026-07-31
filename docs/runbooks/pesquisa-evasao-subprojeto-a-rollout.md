@@ -55,6 +55,56 @@ fora da transação de diagnóstico. A verificação final confirmou:
 Até decidir a reconstrução segura do ambiente, não criar o terceiro usuário,
 não aplicar as migrations locais e não iniciar smoke test.
 
+### Substituição por ambiente limpo — decisão técnica pendente
+
+Em 31/07/2026 foi autorizada a criação de um ambiente permanente chamado
+`homolog-limpo`, sem dados reais e sem credenciais de WhatsApp. A criação ainda
+não foi executada porque existe uma incompatibilidade entre o tipo de ambiente
+pedido e o método de bootstrap aprovado:
+
+- uma branch Supabase é criada pela reaplicação sequencial das migrations do
+  projeto principal; a operação não oferece um estado vazio para depois receber
+  apenas um `pg_dump --schema-only`;
+- o defeito do `supabase start` local não prova sozinho que essa criação remota
+  falhará: no Git, `20260109_fase1_seed_dados.sql` ordena antes de
+  `20260109_fase1_tabelas_mestras.sql`, mas o histórico remoto registra a criação
+  das tabelas como `20260109125533` e o seed de professores como
+  `20260109125543`, na ordem correta;
+- portanto, criar a branch exige retirar explicitamente a proibição de replay;
+  manter a proibição exige um projeto Supabase vazio separado, que não é uma
+  branch e possui contrato operacional e custo diferentes.
+
+Nenhuma branch ou projeto novo foi criado e nenhum custo novo foi iniciado.
+Antes de seguir, registrar uma destas autorizações: tentativa controlada de
+branch com o replay nativo, ou projeto separado com restauração `schema-only`.
+
+### Inventário da `p01c-staging` antes de eventual remoção
+
+Levantamento somente leitura em 31/07/2026 para o ref
+`nzwqjepncrtufpykjita`:
+
+- nenhuma variável do processo local e nenhum arquivo `.env*` do projeto aponta
+  para o ref;
+- nenhum workflow, variable ou secret visível do repositório GitHub aponta para
+  o ref; os quatro environments do GitHub também não possuem variable visível
+  com esse valor;
+- no banco da staging, não há referência ao próprio ref em configurações de
+  agentes, caixas, funções SQL, views, `cron.job` ou Vault;
+- as ocorrências versionadas fora deste runbook são dois relatórios históricos
+  de 13/06/2026; não são configuração executável;
+- a branch continua persistente, com dados copiados e status
+  `MIGRATIONS_FAILED`;
+- existem 67 Edge Functions ativas na branch, incluindo
+  `webhook-whatsapp-inbox`, `enviar-pesquisa-evasao`, `agente-webhook`,
+  `mila-processar-mensagem` e `bi-agent-lamusic`;
+- a branch possui `GEMINI_API_KEY` com a mesma fingerprint de produção. Nenhum
+  valor de secret foi lido ou registrado.
+
+O inventário local não consegue provar se UAZAPI, Vercel, VPS ou outro serviço
+externo ainda chama as URLs dessas Edge Functions. Conferir esses quatro pontos
+com os respectivos responsáveis antes de excluir a branch. Não apagar, rotacionar
+ou desativar a staging antiga sem decisão do Alf.
+
 A branch contém dados reais copiados de produção: a fotografia de 31/07/2026
 encontrou 1.355 registros em `movimentacoes_admin`. Portanto, homologação não
 pode depender apenas do botão “Modo teste” para impedir destinatário real.
