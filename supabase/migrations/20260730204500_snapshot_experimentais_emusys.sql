@@ -211,12 +211,17 @@ begin
       using errcode = '22023';
   end if;
 
-  if p_unidade_id is null
-     or not exists (
-       select 1
-       from public.unidades u
-       where u.id = p_unidade_id
-     ) then
+  if p_unidade_id is null then
+    raise exception 'SNAPSHOT_EXPERIMENTAIS_UNIDADE_INVALIDA'
+      using errcode = '22023';
+  end if;
+
+  perform 1
+  from public.unidades u
+  where u.id = p_unidade_id
+  for update;
+
+  if not found then
     raise exception 'SNAPSHOT_EXPERIMENTAIS_UNIDADE_INVALIDA'
       using errcode = '22023';
   end if;

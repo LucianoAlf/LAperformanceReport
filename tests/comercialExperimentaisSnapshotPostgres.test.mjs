@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
@@ -34,6 +34,50 @@ function psql(containerName, input) {
   );
 }
 
+function psqlAsync(containerName, input) {
+  const child = spawn(
+    'docker',
+    [
+      'exec',
+      '--interactive',
+      containerName,
+      'psql',
+      '--no-psqlrc',
+      '--set',
+      'ON_ERROR_STOP=1',
+      '--username',
+      'postgres',
+      '--dbname',
+      'postgres',
+    ],
+    { stdio: ['pipe', 'pipe', 'pipe'] },
+  );
+  let stdout = '';
+  let stderr = '';
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk;
+  });
+  const completion = new Promise((resolve) => {
+    child.on('close', (status) => {
+      resolve({ status, stdout, stderr });
+    });
+  });
+  child.stdin.end(input);
+  return { completion };
+}
+
+async function settledWithin(promise, timeoutMs) {
+  return Promise.race([
+    promise.then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+  ]);
+}
+
 test('migration PostgreSQL do snapshot existe', () => {
   read(migrationPath);
 });
@@ -41,7 +85,7 @@ test('migration PostgreSQL do snapshot existe', () => {
 test(
   'snapshot vigente preserva historico, atomicidade e autorizacao por unidade',
   { skip: !requirePostgres, timeout: 60_000 },
-  () => {
+  async () => {
     const dockerVersion = spawnSync(
       'docker',
       ['version', '--format', '{{.Server.Version}}'],
@@ -1017,6 +1061,258 @@ test(
         asserted.status,
         0,
         `contrato PostgreSQL do snapshot falhou:\n${asserted.stderr}`,
+      );
+
+      const pauseTrigger = psql(
+        containerName,
+        String.raw`
+          \set ON_ERROR_STOP on
+          create or replace function public.fixture_pause_snapshot_a()
+          returns trigger
+          language plpgsql
+          as $$
+          begin
+            if new.snapshot_execucao_id =
+              '00000000-0000-0000-0000-000000000020'::uuid then
+              perform pg_sleep(5);
+            end if;
+            return new;
+          end;
+          $$;
+          create or replace function public.fixture_wait_snapshot_a()
+          returns boolean
+          language plpgsql
+          as $$
+          begin
+            for tentativa in 1..100 loop
+              if exists (
+                select 1
+                from pg_stat_activity
+                where application_name = 'snapshot-concurrency-a'
+                  and wait_event = 'PgSleep'
+              ) then
+                return true;
+              end if;
+              perform pg_sleep(0.05);
+            end loop;
+            return false;
+          end;
+          $$;
+          create trigger fixture_pause_snapshot_a
+            before insert on public.emusys_experimentais_raw
+            for each row
+            execute function public.fixture_pause_snapshot_a();
+        `,
+      );
+      assert.equal(
+        pauseTrigger.status,
+        0,
+        `nao instalou coordenacao concorrente:\n${pauseTrigger.stderr}`,
+      );
+
+      const sessionA = psqlAsync(
+        containerName,
+        String.raw`
+          \set ON_ERROR_STOP on
+          set application_name = 'snapshot-concurrency-a';
+          select set_config('request.jwt.claim.role', 'service_role', false);
+          select public.aplicar_snapshot_experimentais_emusys_v1(
+            '00000000-0000-0000-0000-000000000020',
+            '11111111-1111-1111-1111-111111111111',
+            '2026-09-01',
+            '2026-09-30',
+            jsonb_build_array(
+              jsonb_build_object(
+                'raw_key',
+                '11111111-1111-1111-1111-111111111111:10:lead:601:00000000-0000-0000-0000-000000000020',
+                'unidade_id',
+                '11111111-1111-1111-1111-111111111111',
+                'execucao_id',
+                '00000000-0000-0000-0000-000000000020',
+                'emusys_aula_id',
+                10,
+                'participante_chave',
+                'lead:601',
+                'emusys_lead_id',
+                601,
+                'aluno_nome',
+                'Snapshot A',
+                'data_aula',
+                '2026-09-10',
+                'situacao_operacional',
+                'presente',
+                'payload_bruto',
+                '{"aula":{"id":10},"participante":{"id_lead":601}}'::jsonb
+              )
+            )
+          );
+        `,
+      );
+
+      const activity = psql(
+        containerName,
+        String.raw`
+          \pset tuples_only on
+          \pset format unaligned
+          select public.fixture_wait_snapshot_a();
+        `,
+      );
+      assert.equal(
+        activity.status,
+        0,
+        `coordenacao da sessao A falhou:\n${activity.stderr}`,
+      );
+      assert.match(
+        activity.stdout.trim(),
+        /(?:^|\n)t$/,
+        'sessao A nao entrou na pausa concorrente',
+      );
+
+      const sessionB = psqlAsync(
+        containerName,
+        String.raw`
+          \set ON_ERROR_STOP on
+          set application_name = 'snapshot-concurrency-b';
+          select set_config('request.jwt.claim.role', 'service_role', false);
+          select public.aplicar_snapshot_experimentais_emusys_v1(
+            '00000000-0000-0000-0000-000000000021',
+            '11111111-1111-1111-1111-111111111111',
+            '2026-09-01',
+            '2026-09-30',
+            jsonb_build_array(
+              jsonb_build_object(
+                'raw_key',
+                '11111111-1111-1111-1111-111111111111:11:lead:602:00000000-0000-0000-0000-000000000021',
+                'unidade_id',
+                '11111111-1111-1111-1111-111111111111',
+                'execucao_id',
+                '00000000-0000-0000-0000-000000000021',
+                'emusys_aula_id',
+                11,
+                'participante_chave',
+                'lead:602',
+                'emusys_lead_id',
+                602,
+                'aluno_nome',
+                'Snapshot B',
+                'data_aula',
+                '2026-09-11',
+                'situacao_operacional',
+                'presente',
+                'payload_bruto',
+                '{"aula":{"id":11},"participante":{"id_lead":602}}'::jsonb
+              )
+            )
+          );
+        `,
+      );
+      const sessionOtherUnit = psqlAsync(
+        containerName,
+        String.raw`
+          \set ON_ERROR_STOP on
+          set application_name = 'snapshot-concurrency-recreio';
+          select set_config('request.jwt.claim.role', 'service_role', false);
+          select public.aplicar_snapshot_experimentais_emusys_v1(
+            '00000000-0000-0000-0000-000000000022',
+            '22222222-2222-2222-2222-222222222222',
+            '2026-09-01',
+            '2026-09-30',
+            jsonb_build_array(
+              jsonb_build_object(
+                'raw_key',
+                '22222222-2222-2222-2222-222222222222:10:lead:701:00000000-0000-0000-0000-000000000022',
+                'unidade_id',
+                '22222222-2222-2222-2222-222222222222',
+                'execucao_id',
+                '00000000-0000-0000-0000-000000000022',
+                'emusys_aula_id',
+                10,
+                'participante_chave',
+                'lead:701',
+                'emusys_lead_id',
+                701,
+                'aluno_nome',
+                'Snapshot Recreio',
+                'data_aula',
+                '2026-09-10',
+                'situacao_operacional',
+                'presente',
+                'payload_bruto',
+                '{"aula":{"id":10},"participante":{"id_lead":701}}'::jsonb
+              )
+            )
+          );
+        `,
+      );
+
+      const [sameUnitCompletedEarly, otherUnitCompletedEarly] =
+        await Promise.all([
+          settledWithin(sessionB.completion, 750),
+          settledWithin(sessionOtherUnit.completion, 1_500),
+        ]);
+      const [resultA, resultB, resultOtherUnit] = await Promise.all([
+        sessionA.completion,
+        sessionB.completion,
+        sessionOtherUnit.completion,
+      ]);
+
+      for (const [label, result] of [
+        ['A', resultA],
+        ['B', resultB],
+        ['Recreio', resultOtherUnit],
+      ]) {
+        assert.equal(
+          result.status,
+          0,
+          `sessao concorrente ${label} falhou:\n${result.stderr}`,
+        );
+      }
+      assert.equal(
+        sameUnitCompletedEarly,
+        false,
+        'segunda aplicacao da mesma unidade nao aguardou a primeira',
+      );
+      assert.equal(
+        otherUnitCompletedEarly,
+        true,
+        'aplicacao de outra unidade foi bloqueada indevidamente',
+      );
+
+      const concurrentState = psql(
+        containerName,
+        String.raw`
+          \set ON_ERROR_STOP on
+          do $concurrency$
+          begin
+            if (
+              select array_agg(participante_chave order by participante_chave)
+              from public.emusys_experimentais_raw
+              where unidade_id =
+                '11111111-1111-1111-1111-111111111111'
+                and data_aula between '2026-09-01' and '2026-09-30'
+                and snapshot_ativo is true
+            ) is distinct from array['lead:602']::text[] then
+              raise exception
+                'estado Barra nao corresponde ao ultimo snapshot serializado';
+            end if;
+            if (
+              select array_agg(participante_chave order by participante_chave)
+              from public.emusys_experimentais_raw
+              where unidade_id =
+                '22222222-2222-2222-2222-222222222222'
+                and data_aula between '2026-09-01' and '2026-09-30'
+                and snapshot_ativo is true
+            ) is distinct from array['lead:701']::text[] then
+              raise exception 'estado Recreio foi afetado pela disputa da Barra';
+            end if;
+          end;
+          $concurrency$;
+        `,
+      );
+      assert.equal(
+        concurrentState.status,
+        0,
+        `estado concorrente divergiu:\n${concurrentState.stderr}`,
       );
     } finally {
       spawnSync('docker', ['rm', '--force', containerName], {

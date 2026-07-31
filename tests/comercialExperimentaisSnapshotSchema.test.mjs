@@ -79,6 +79,18 @@ test('RPC de aplicacao e privada, transacional e registra execucao completa', ()
   assert.match(block, /set\s+search_path\s*=\s*public\s*,\s*pg_temp/i);
   assert.match(block, /jsonb_to_recordset/i);
   assert.match(block, /on\s+conflict[\s\S]*where\s+snapshot_ativo\s+is\s+true[\s\S]*do\s+update/i);
+  const unitLock = block.search(
+    /from\s+public\.unidades[\s\S]{0,180}where[\s\S]{0,100}p_unidade_id[\s\S]{0,100}for\s+update/i,
+  );
+  const executionLookup = block.search(
+    /from\s+public\.emusys_experimentais_snapshot_execucoes/i,
+  );
+  assert.notEqual(unitLock, -1, 'aplicacao deve bloquear a linha da unidade');
+  assert.notEqual(executionLookup, -1);
+  assert.ok(
+    unitLock < executionLookup,
+    'lock da unidade deve anteceder consulta da execucao e escritas',
+  );
   assert.match(
     block,
     /(?:p_)?data_fim\s*-\s*(?:p_)?data_inicio[\s\S]{0,100}45/i,
