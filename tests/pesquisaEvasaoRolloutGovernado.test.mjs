@@ -109,7 +109,10 @@ test('runbook preserva gates de seguranca independentes do RBAC', () => {
   assert.match(runbook, /migration[\s\S]*antes do frontend/i);
   assert.match(runbook, /Vercel/i);
   assert.match(runbook, /F863A22C9F1D8534EAF31F0A7FEDC183DDABF3902E975B620B1F5064F9C381C4/i);
-  assert.match(runbook, /novo ensaio DDL[\s\S]*PENDENTE/i);
+  assert.match(
+    runbook,
+    /novo ensaio DDL[\s\S]*APROVADO[\s\S]*didpawhgvkarzntvktzu/i,
+  );
   assert.match(runbook, /nenhum passo[\s\S]*autoriza escrita em produ[cç][aã]o/i);
 });
 
@@ -118,4 +121,28 @@ test('runbook mantem PR draft e gate humano antes de producao', () => {
   assert.match(runbook, /n[aã]o aplicar[\s\S]*n[aã]o fazer merge[\s\S]*Alf/i);
   assert.match(runbook, /project ref[\s\S]*reconfirm/i);
   assert.match(runbook, /merge\/deploy do frontend[\s\S]*BLOQUEADO/i);
+});
+
+test('runbook preserva o baseline de atendimento e posiciona o smoke na janela segura', () => {
+  assert.match(
+    runbook,
+    /WhatsApp desconectado — Lia - Sucesso do Aluno • Caixa undefined não encontrada/,
+  );
+  assert.match(runbook, /bug preexistente/i);
+  assert.match(runbook, /117 conversas/i);
+  assert.match(
+    runbook,
+    /ap[oó]s as migrations[\s\S]*antes (?:da libera[cç][aã]o )?do merge/i,
+  );
+  assert.match(
+    runbook,
+    /erro diferente[\s\S]*regress[aã]o[\s\S]*parar/i,
+  );
+  assert.match(
+    runbook,
+    /Caixa de Entrada do Sucesso do Aluno[\s\S]*qualquer falha[\s\S]*regress[aã]o/i,
+  );
+  assert.match(runbook, /CaixasManager/);
+  assert.match(runbook, /NovaConversaModal/);
+  assert.match(runbook, /nenhum campo de token[\s\S]*preenchido/i);
 });

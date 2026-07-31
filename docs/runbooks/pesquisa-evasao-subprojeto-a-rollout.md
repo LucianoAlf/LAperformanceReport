@@ -72,7 +72,21 @@ Nenhum passo deste documento autoriza escrita em produção por si só.
 - git blob de referência: `814f0345604c024a04ef6d62508e46a9e7689992`;
 - esta migration deve permanecer integralmente inalterada;
 - Pré-Atendimento, CaixasManager e NovaConversaModal usam contratos sem credencial;
-- o smoke manual dessas telas continua necessário antes do rollout porque build e busca estática não provam a seleção correta de caixa.
+- o smoke manual dessas telas continua necessário porque build e busca estática não provam a seleção correta de caixa;
+- esse smoke ocorre dentro da janela de rollout, após as migrations e antes da liberação do merge do frontend, pois os contratos seguros ainda não existem em produção.
+
+### Baseline visual anterior ao rollout
+
+Baseline registrada na `main`, ainda com o código atualmente publicado:
+
+- Pré-Atendimento → Conversas já exibe `WhatsApp desconectado — Lia - Sucesso do Aluno • Caixa undefined não encontrada`; este é um bug preexistente e não uma regressão do PR #16;
+- a Caixa de Entrada do Sucesso do Aluno carregou normalmente com 117 conversas, boas-vindas enviadas e resposta recebida, sem erro de caixa.
+
+Critério comparativo durante o rollout:
+
+- o Pré-Atendimento pode continuar mostrando exatamente o erro preexistente acima; erro diferente, ou o mesmo erro aparecendo onde antes não aparecia, é regressão e exige parar;
+- qualquer falha na Caixa de Entrada do Sucesso do Aluno é regressão e exige parar;
+- abrir também CaixasManager em Pré-Atendimento → Configurações e NovaConversaModal em nova conversa, confirmando a seleção de caixa e que nenhum campo de token aparece preenchido.
 
 ## 4. Artefatos do rollout
 
@@ -168,11 +182,66 @@ Campos a preencher:
 
 | Evidência | Resultado |
 |---|---|
-| Project ref descartável | PENDENTE — novo ensaio necessário após correção de rumo |
-| Schema carregado sem dados | PENDENTE |
-| Migrations aplicadas limpo | PENDENTE |
-| Verificador estrutural | PENDENTE |
-| Ambiente destruído | PENDENTE |
+| Project ref descartável | `didpawhgvkarzntvktzu` (`ddl-evasao-final-a78ea2`) |
+| Schema carregado sem dados | APROVADO — `alunos`, `usuarios`, `movimentacoes_admin`, `pesquisa_evasao` e `whatsapp_caixas` com zero linhas |
+| Migrations aplicadas limpo | APROVADO — `20260730170000`, `20260730173000` e `20260730180100` |
+| Seed dos templates | APROVADO — reaplicado duas vezes, fingerprint estável, duas linhas e exatamente uma ativa por público |
+| Verificador estrutural | APROVADO — executado em transação e finalizado com `ROLLBACK` |
+| Ambiente destruído | APROVADO — exclusão confirmada e zero projetos `ddl-evasao-final-*` remanescentes |
+
+### Resultado do ensaio DDL do diff final em 31/07/2026
+
+O ensaio aprovado usou o schema atual de produção, que permaneceu somente
+leitura. O histórico remoto lido no início tinha 1.151 versões, de
+`20260106025222` a `20260731200406`; nenhuma das três migrations deste rollout
+constava como aplicada.
+
+Evidências de origem e saneamento:
+
+- dump `public` somente-schema: 3.198.746 bytes, SHA-256
+  `8005F4F4A72920B68E209005FFC5A31EE7EDF50451F528FFA1E8E9C71B0E5977`;
+- o dump não continha `COPY` nem `INSERT` de dados no nível superior;
+- Gitleaks `8.30.1` examinou o dump original e não encontrou segredo;
+- as três URLs estruturais embutidas foram substituídas por
+  `https://disabled.invalid/homolog-ddl`; o artefato saneado ficou sem o
+  project ref de produção, com 3.198.699 bytes e SHA-256
+  `47D76CEBE250A3E2E228FF3DEE86882781A2188A45EAB2DC86FCC61644C529D9`;
+- Gitleaks examinou novamente o artefato saneado e não encontrou segredo.
+
+Evidências do banco descartável aprovado:
+
+- projeto `ddl-evasao-final-a78ea2`, ref `didpawhgvkarzntvktzu`, região
+  `sa-east-1`, tamanho `micro`;
+- os roles `fabio_agent`, `lia_acesso_restrito`, `maria_lareport_rpc`,
+  `mila_acesso_restrito`, `ml_jobs` e `sol_acesso_restrito` foram criados sem
+  login;
+- `pg_cron 1.6.4` em `pg_catalog`, `pg_net 0.19.5`, `pg_trgm 1.6` e
+  `unaccent 1.1` em `public`, `pgcrypto 1.3`, `uuid-ossp 1.1` e
+  `pg_stat_statements 1.11` em `extensions`, `supabase_vault 0.3.1` em `vault`
+  e `plpgsql 1.0` em `pg_catalog` foram conferidas antes do restore;
+- o restore terminou com contagem `0|0|0|0|0` para `alunos`, `usuarios`,
+  `movimentacoes_admin`, `pesquisa_evasao` e `whatsapp_caixas`;
+- as 1.151 versões existentes foram marcadas como aplicadas por
+  `migration repair`, sem replay do histórico;
+- as três migrations finais aplicaram e a primeira emitiu exatamente
+  `backfill ignorado: pesquisa_evasao vazia`;
+- o seed exato foi extraído da migration e executado mais duas vezes: o
+  fingerprint permaneceu igual e o estado final foi `2|1|1|2` — duas linhas,
+  uma ativa para `direto`, uma ativa para `responsavel` e ambas com os
+  placeholders esperados;
+- `scripts/verify-pesquisa-evasao-schema.sql` passou e terminou com rollback;
+- os tipos `public` foram gerados apenas como artefato temporário
+  (1.631.565 bytes) e continham os contratos de templates, previews, listagem
+  segura de caixas e listagem v2 da evasão; `src/types/supabase.ts` não foi
+  alterado;
+- o projeto foi destruído, e a listagem posterior confirmou zero projetos com
+  prefixo `ddl-evasao-final-*`.
+
+Um ciclo preparatório anterior, `ddl-evasao-final-1f7a5b` ref
+`tihdmpdlimgmozsfjmwu`, restaurou o schema vazio mas abortou antes do
+`migration repair` porque a pasta local de migrations não existia. Nenhuma das
+três migrations foi aplicada nesse ciclo, o projeto foi destruído e ele não
+conta como evidência de aprovação.
 
 ## 8. Pré-flight de produção
 
@@ -239,7 +308,7 @@ Somente após autorização explícita:
 11. confirmar o envio somente para `5521981278047`;
 12. comparar a mensagem aprovada com a recebida;
 13. validar que o registro contém usuário, auth UID, assinatura, texto, template, caixa, destino, modo e horários;
-14. realizar smoke dos três consumidores de caixas;
+14. ainda na janela, realizar o smoke comparativo dos consumidores de caixas descrito no baseline: Pré-Atendimento, Caixa de Entrada do Sucesso do Aluno, CaixasManager e NovaConversaModal;
 15. somente então liberar merge/deploy do frontend;
 16. observar logs, estados incertos e duplicidade durante a janela combinada.
 
@@ -291,7 +360,10 @@ Somente após autorização explícita:
 - [ ] Pré-Atendimento lista caixas;
 - [ ] CaixasManager lista e seleciona a caixa correta;
 - [ ] NovaConversaModal abre conversa nova;
+- [ ] nenhum campo de token aparece preenchido em CaixasManager ou NovaConversaModal;
 - [ ] caixa da unidade tem precedência sobre a global;
+- [ ] Pré-Atendimento não apresenta erro diferente do baseline preexistente;
+- [ ] Caixa de Entrada do Sucesso do Aluno continua sem erro de caixa;
 - [ ] Edge Functions por service role continuam funcionando.
 
 ## 11. Rollback operacional
@@ -322,8 +394,8 @@ Se o frontend for publicado fora de ordem:
 |---|---|
 | Commit aprovado | PENDENTE |
 | Project ref reconfirmado | PENDENTE |
-| Novo ensaio DDL do diff final | PENDENTE |
-| Hash de `20260730180100` | PENDENTE |
+| Novo ensaio DDL do diff final | APROVADO em `didpawhgvkarzntvktzu`, depois destruído |
+| Hash de `20260730180100` | APROVADO — `F863A22C9F1D8534EAF31F0A7FEDC183DDABF3902E975B620B1F5064F9C381C4` |
 | 1 template ativo por público | PENDENTE |
 | Prévia sem placeholders residuais | PENDENTE |
 | Migrations aplicadas | PENDENTE |

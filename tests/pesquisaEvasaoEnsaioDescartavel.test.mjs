@@ -45,3 +45,18 @@ test('runbook define o ensaio descartavel sem dados nem segredos', () => {
   assert.match(runbook, /sem (?:dados ou )?segredos/i);
   assert.match(runbook, /destru[ií]do[\s\S]*ao final|destru[ií]do ao final/i);
 });
+
+test('runbook registra a prova final e a destruicao do descartavel', () => {
+  assert.match(runbook, /didpawhgvkarzntvktzu/i);
+  assert.match(runbook, /ddl-evasao-final-a78ea2/i);
+  assert.match(runbook, /1\.151 vers[oõ]es/i);
+  assert.match(
+    runbook,
+    /20260730170000[\s\S]*20260730173000[\s\S]*20260730180100/i,
+  );
+  assert.match(runbook, /backfill ignorado: pesquisa_evasao vazia/i);
+  assert.match(runbook, /seed[\s\S]*duas vezes[\s\S]*fingerprint/i);
+  assert.match(runbook, /verify-pesquisa-evasao-schema\.sql[\s\S]*rollback/i);
+  assert.match(runbook, /zero projetos[\s\S]*ddl-evasao-final/i);
+  assert.match(runbook, /tihdmpdlimgmozsfjmwu[\s\S]*destru[ií]do/i);
+});

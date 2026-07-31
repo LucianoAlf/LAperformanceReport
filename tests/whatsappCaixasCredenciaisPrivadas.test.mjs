@@ -326,7 +326,10 @@ test('runbook invalida o ensaio anterior para o diff novo', () => {
   assert.match(runbook, /vnuzjephkwgcyvioiele/i);
   assert.match(runbook, /vers[aã]o anterior das migrations/i);
   assert.match(runbook, /n[aã]o substitui um novo ensaio DDL do diff final/i);
-  assert.match(runbook, /novo ensaio DDL[\s\S]*PENDENTE/i);
+  assert.match(
+    runbook,
+    /novo ensaio DDL[\s\S]*APROVADO[\s\S]*didpawhgvkarzntvktzu/i,
+  );
 });
 
 test('runbook preserva a staging antiga ate inventario e decisao explicita', () => {
