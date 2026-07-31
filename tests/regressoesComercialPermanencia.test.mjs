@@ -4,6 +4,8 @@ import { test } from 'node:test';
 
 const migrationPath =
   'supabase/migrations/20260715233500_otimiza_conciliacao_experimentais_segura.sql';
+const snapshotConciliacaoPath =
+  'supabase/migrations/20260730205500_conciliacao_experimentais_snapshot_ativo.sql';
 const alunosPagePath = 'src/components/App/Alunos/AlunosPage.tsx';
 const comercialPagePath = 'src/components/App/Comercial/ComercialPage.tsx';
 
@@ -36,6 +38,29 @@ test('implementacoes legadas deixam de ser chamaveis diretamente pelo frontend',
   assert.match(
     migration,
     /grant\s+execute\s+on\s+function\s+public\.get_conciliacao_experimentais_v2\([\s\S]*to\s+authenticated,\s*service_role/i,
+  );
+});
+
+test('P24 substitui apenas a fachada e preserva os contratos P21 P22 P23', () => {
+  const migration = readOptional(snapshotConciliacaoPath);
+
+  assert.ok(migration, 'migration P24 de conciliacao vigente ainda nao existe');
+  assert.match(migration, /get_conciliacao_experimentais_snapshot_v1/i);
+  assert.match(migration, /security\s+definer/i);
+  assert.match(migration, /usuario_tem_permissao\s*\([\s\S]*'comercial\.ver'/i);
+  assert.match(
+    migration,
+    /least\s*\(\s*v_conversoes_atual\s*,\s*v_matriculas_comerciais\s*\)/i,
+  );
+  assert.match(
+    migration,
+    /v_duplicidades_estimadas\s+between\s+1\s+and\s+5/i,
+  );
+  assert.match(migration, /snapshot_ativo_p24/i);
+  assert.doesNotMatch(
+    migration,
+    /create\s+or\s+replace\s+function\s+public\.get_conciliacao_experimentais_v2_legacy_p2[12]_20260707/i,
+    'P24 nao pode reescrever as funcoes legadas aplicadas',
   );
 });
 
