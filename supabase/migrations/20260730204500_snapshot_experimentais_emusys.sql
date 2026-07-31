@@ -249,6 +249,8 @@ begin
       participante_chave text,
       emusys_lead_id integer,
       emusys_aluno_id integer,
+      payload_emusys_lead_id_texto text,
+      payload_emusys_aluno_id_texto text,
       aluno_nome text,
       aluno_telefone text,
       data_aula date,
@@ -270,6 +272,8 @@ begin
     participante_chave,
     emusys_lead_id,
     emusys_aluno_id,
+    payload_emusys_lead_id_texto,
+    payload_emusys_aluno_id_texto,
     aluno_nome,
     aluno_telefone,
     data_aula,
@@ -287,6 +291,8 @@ begin
     x.participante_chave,
     x.emusys_lead_id,
     x.emusys_aluno_id,
+    btrim(x.payload_bruto #>> '{participante,id_lead}'),
+    btrim(x.payload_bruto #>> '{participante,id_aluno}'),
     x.aluno_nome,
     coalesce(
       nullif(btrim(x.aluno_telefone), ''),
@@ -320,6 +326,32 @@ begin
   );
 
   get diagnostics v_recebidas = row_count;
+
+  if exists (
+    select 1
+    from pg_temp.snapshot_experimentais_lote l
+    where case
+      when l.payload_emusys_lead_id_texto is null then false
+      when l.payload_emusys_lead_id_texto !~ '^[0-9]+$' then true
+      when l.payload_emusys_lead_id_texto ~ '^0+$' then true
+      when length(ltrim(l.payload_emusys_lead_id_texto, '0')) > 10 then true
+      when length(ltrim(l.payload_emusys_lead_id_texto, '0')) = 10
+        then ltrim(l.payload_emusys_lead_id_texto, '0') > '2147483647'
+      else false
+    end
+    or case
+      when l.payload_emusys_aluno_id_texto is null then false
+      when l.payload_emusys_aluno_id_texto !~ '^[0-9]+$' then true
+      when l.payload_emusys_aluno_id_texto ~ '^0+$' then true
+      when length(ltrim(l.payload_emusys_aluno_id_texto, '0')) > 10 then true
+      when length(ltrim(l.payload_emusys_aluno_id_texto, '0')) = 10
+        then ltrim(l.payload_emusys_aluno_id_texto, '0') > '2147483647'
+      else false
+    end
+  ) then
+    raise exception 'SNAPSHOT_EXPERIMENTAIS_IDENTIDADE_PAYLOAD_INVALIDA'
+      using errcode = '22023';
+  end if;
 
   if exists (
     select 1
@@ -363,6 +395,16 @@ begin
          l.emusys_aula_id::text,
          l.participante_chave,
          p_execucao_id::text
+       )
+       or (
+         l.payload_emusys_lead_id_texto is not null
+         and l.emusys_lead_id is distinct from
+           ltrim(l.payload_emusys_lead_id_texto, '0')::integer
+       )
+       or (
+         l.payload_emusys_aluno_id_texto is not null
+         and l.emusys_aluno_id is distinct from
+           ltrim(l.payload_emusys_aluno_id_texto, '0')::integer
        )
        or (
          l.payload_bruto #>> '{aula,id}' is not null
@@ -677,13 +719,10 @@ as $function$
       case
         when lower(coalesce(p_periodo, 'mensal')) = 'diario'
           then coalesce(p_data, make_date(p_ano, p_mes, 1))
-        else least(
-          (make_date(p_ano, p_mes, 1) + interval '1 month - 1 day')::date,
-          greatest(
-            make_date(p_ano, p_mes, 1),
-            coalesce(p_data, current_date)
-          ) + 7
-        )
+        else greatest(
+          make_date(p_ano, p_mes, 1),
+          coalesce(p_data, current_date)
+        ) + 7
       end::date as data_cobertura_fim
   ),
   base as (

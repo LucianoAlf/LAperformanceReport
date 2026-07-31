@@ -151,9 +151,9 @@ volta a contar. A RPC operacional publica no `resumo`
 `snapshot_atualizado_em`, `snapshot_execucao_id`, `snapshot_linhas_inativas` e
 `snapshot_status`, permitindo que o consumidor diferencie zero real de
 snapshot ausente ou sem cobertura completa do período.
-Na leitura mensal corrente, cobertura completa significa do primeiro dia do
-mês até `data do relatório + 7 dias` (limitado ao fim do mês); competências
-históricas exigem cobertura até o último dia do mês.
+Na leitura mensal, cobertura completa significa do primeiro dia do mês até
+`data do relatório + 7 dias`, inclusive quando D+7 cai no mês seguinte. Assim,
+um relatório de 30/07 só considera fresco um snapshot que alcance 06/08.
 
 ### Taxa de conversão Experimental → Matrícula
 - **No Dashboard/Comercial (frontend):** denominador `experimental_realizada = true`; numerador `status ∈ {matriculado, convertido}` (`DashboardPage.tsx:316-327`).
