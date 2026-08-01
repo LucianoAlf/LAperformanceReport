@@ -32,40 +32,57 @@ security invoker
 set search_path = public
 as $$
 with base as (
-  select ae.*, u.nome as unidade_nome
+  -- chave calculada por linha crua (nao apos agregar), para poder ser
+  -- propagada ao CTE vinculos e alinhar a deduplicacao de aluno ao mesmo
+  -- grupo que vira 1 card. O Emusys duplica o mesmo slot como
+  -- tipo=turma (matricula_disciplina_id=0) + tipo=individual (>0) por aluno.
+  select ae.*, u.nome as unidade_nome,
+    md5(
+      ae.unidade_id::text || '|' || coalesce(ae.professor_nome, '') || '|' ||
+      coalesce(ae.sala_nome, '') || '|' || ae.data_hora_inicio::text || '|' ||
+      coalesce(ae.duracao_minutos, 0)::text || '|' || coalesce(ae.curso_nome, '') || '|' ||
+      coalesce(ae.turma_nome, '') || '|' || ae.cancelada::text
+    ) as chave
   from aulas_emusys ae
   join unidades u on u.id = ae.unidade_id
   where ae.data_aula = p_data
     and (p_unidade_id is null or ae.unidade_id = p_unidade_id)
 ),
--- Alunos da aula: presenca batida (passado) tem prioridade sobre o vinculo
--- da grade (futuro), para nao perder o status_presenca.
+-- Alunos do CARD (nao da linha crua): dedup por (chave, aluno), nao por
+-- aula_emusys_id, senao o mesmo aluno duplicado pelo par turma+individual
+-- sobrevive ao jsonb_agg(distinct) porque os JSONs diferem em status_presenca.
+-- Prioridade 1: presenca batida (aluno_presenca) vence vinculo de grade (aula_alunos).
+-- Dentro da mesma prioridade, a linha com matricula_disciplina_id > 0 (a linha
+-- do contrato do aluno) vence a linha tipo=turma (matricula_disciplina_id=0),
+-- que e so o "container" do slot.
 vinculos as (
-  select distinct on (x.aula_emusys_id, coalesce(x.aluno_id::text, x.nome))
-    x.aula_emusys_id, x.aluno_id, x.nome, x.status_presenca
+  select distinct on (x.chave, coalesce(x.aluno_id::text, x.nome))
+    x.chave, x.aluno_id, x.nome, x.status_presenca
   from (
-    select ap.aula_emusys_id,
+    select b.chave,
            ap.aluno_id,
            coalesce(al.nome, '(aluno removido)') as nome,
            ap.status_presenca::text as status_presenca,
-           1 as prioridade
+           1 as prioridade,
+           case when b.matricula_disciplina_id > 0 then 0 else 1 end as prioridade_contrato
     from aluno_presenca ap
     join base b on b.id = ap.aula_emusys_id
     left join alunos al on al.id = ap.aluno_id
     union all
-    select aa.aula_emusys_id,
+    select b.chave,
            aa.aluno_id,
            aa.nome,
            null::text,
-           2
+           2,
+           case when b.matricula_disciplina_id > 0 then 0 else 1 end
     from aula_alunos aa
     join base b on b.id = aa.aula_emusys_id
   ) x
-  order by x.aula_emusys_id, coalesce(x.aluno_id::text, x.nome), x.prioridade
+  order by x.chave, coalesce(x.aluno_id::text, x.nome), x.prioridade, x.prioridade_contrato
 ),
 enriquecidos as (
   select
-    v.aula_emusys_id,
+    v.chave,
     jsonb_build_object(
       'aluno_id', v.aluno_id,
       'nome', v.nome,
@@ -87,7 +104,18 @@ enriquecidos as (
   from vinculos v
   left join alunos al on al.id = v.aluno_id
   left join vw_risco_evasao_atual r on r.aluno_id = v.aluno_id
-  left join vw_jornada_aluno_atual jor on jor.aluno_id = v.aluno_id
+  -- vw_jornada_aluno_atual tem 1 linha por (aluno, disciplina/matricula) -
+  -- pode ter mais de 1 linha por aluno (2o curso, matricula renovada). Join
+  -- direto faz fan-out e gera 2 aluno_json diferentes so por causa do
+  -- data_ultima_aula -> nome duplicado no array. Lateral + limit 1 (mais
+  -- recente) mantem 1 linha por aluno.
+  left join lateral (
+    select j.data_ultima_aula
+    from vw_jornada_aluno_atual j
+    where j.aluno_id = v.aluno_id
+    order by j.data_ultima_aula desc nulls last
+    limit 1
+  ) jor on true
   left join lateral (
     select true as tem
     from aluno_jornada_matricula_disciplina j
@@ -107,12 +135,7 @@ enriquecidos as (
 ),
 agrupado as (
   select
-    md5(
-      b.unidade_id::text || '|' || coalesce(b.professor_nome, '') || '|' ||
-      coalesce(b.sala_nome, '') || '|' || b.data_hora_inicio::text || '|' ||
-      coalesce(b.duracao_minutos, 0)::text || '|' || coalesce(b.curso_nome, '') || '|' ||
-      coalesce(b.turma_nome, '') || '|' || b.cancelada::text
-    ) as chave,
+    b.chave,
     b.unidade_id,
     b.unidade_nome,
     b.professor_nome,
@@ -124,13 +147,28 @@ agrupado as (
     b.cancelada,
     min(b.professor_id)     as professor_id,
     min(b.categoria)        as categoria,
-    min(b.tipo)             as tipo,
+    -- tipo: min(b.tipo) alfabetico colocava quase tudo como 'individual'
+    -- ('individual' < 'turma'). O sinal real de turma e o numero de
+    -- contratos distintos (matricula_disciplina_id > 0) no slot: cada aluno
+    -- real gera 1 linha individual com seu proprio matricula_disciplina_id;
+    -- a linha tipo=turma (matricula_disciplina_id=0) e so o container.
+    case
+      when count(distinct b.matricula_disciplina_id) filter (where b.matricula_disciplina_id > 0) >= 2 then 'turma'
+      when count(distinct b.matricula_disciplina_id) filter (where b.matricula_disciplina_id > 0) = 1 then 'individual'
+      else min(b.tipo)
+    end as tipo,
     bool_or(b.justificada)  as justificada,
     bool_or(b.reagendada)   as reagendada,
     min(b.data_hora_inicio_original) as data_hora_inicio_original,
-    -- nr_da_aula so faz sentido quando o card representa um aluno so;
-    -- numa turma cada aluno esta num numero diferente do proprio contrato.
-    case when count(distinct b.id) = 1 then min(b.nr_da_aula) else null end as nr_da_aula,
+    -- nr_da_aula so faz sentido quando o card representa 1 aluno real (por
+    -- contrato distinto); nesse caso pega o nr da linha do contrato dele
+    -- (matricula_disciplina_id > 0), nunca o da linha tipo=turma (container,
+    -- matricula_disciplina_id=0), que traz um nr de aula diferente e errado.
+    case
+      when count(distinct b.matricula_disciplina_id) filter (where b.matricula_disciplina_id > 0) = 1
+        then max(b.nr_da_aula) filter (where b.matricula_disciplina_id > 0)
+      else null
+    end as nr_da_aula,
     greatest(
       coalesce(max(b.qtd_alunos), 0),
       count(distinct e.aluno_json) filter (where e.aluno_json is not null)::int
@@ -142,9 +180,9 @@ agrupado as (
       '[]'::jsonb
     ) as alunos
   from base b
-  left join enriquecidos e on e.aula_emusys_id = b.id
+  left join enriquecidos e on e.chave = b.chave
   group by
-    b.unidade_id, b.unidade_nome, b.professor_nome, b.sala_nome,
+    b.chave, b.unidade_id, b.unidade_nome, b.professor_nome, b.sala_nome,
     b.curso_nome, b.turma_nome, b.data_hora_inicio, b.duracao_minutos, b.cancelada
 )
 select
@@ -184,7 +222,12 @@ $$;
 
 comment on function public.get_agenda_dia(date, uuid) is
   'Agenda de um dia ja agrupada por (professor, sala, horario, curso, turma, cancelada). '
-  'Necessario porque aulas_emusys guarda uma linha por aluno em aulas de turma. '
+  'Necessario porque aulas_emusys guarda uma linha por aluno em aulas de turma, e o '
+  'Emusys ainda duplica cada slot como tipo=turma (matricula_disciplina_id=0, container) '
+  '+ tipo=individual (matricula_disciplina_id>0, 1 por contrato de aluno). O tipo, o '
+  'nr_da_aula e a lista de alunos do card usam matricula_disciplina_id para nao herdar '
+  'essa duplicacao; vw_jornada_aluno_atual e lida via lateral+limit 1 porque pode ter '
+  'mais de 1 linha por aluno (2o curso/matricula renovada). '
   'p_unidade_id null = todas as unidades visiveis pelo RLS.';
 
 grant execute on function public.get_agenda_dia(date, uuid) to authenticated;
