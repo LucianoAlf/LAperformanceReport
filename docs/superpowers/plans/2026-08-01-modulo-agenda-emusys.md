@@ -32,7 +32,9 @@
 | `scripts/tests/agendaTimeline.test.ts` (criar) | Testes de posicionamento, régua, frescor e janela incompleta. |
 | `supabase/migrations/*_aula_alunos.sql` (criar) | Tabela `aula_alunos` + índices + RLS. |
 | `supabase/migrations/*_get_agenda_dia.sql` (criar) | RPC `get_agenda_dia`. |
-| `supabase/functions/sync-grade-futura-emusys/index.ts` (modificar) | Passa a gravar `aula_alunos`. |
+| `supabase/functions/_shared/emusys-aulas.ts` (modificar) | Helper único que monta e grava os vínculos aula↔aluno, usado pelas duas edges. Mora aqui porque é o arquivo que já concentra os helpers de aulas do Emusys e já tem teste ao lado. |
+| `supabase/functions/_shared/emusys-aulas.test.ts` (modificar) | Testes do helper. |
+| `supabase/functions/sync-grade-futura-emusys/index.ts` (modificar) | Chama o helper após o upsert das aulas. |
 | `supabase/functions/sync-presenca-emusys/index.ts` (modificar) | Idem, no modo metadados. |
 | `src/hooks/useAgendaDia.ts` (criar) | Chama a RPC, calcula frescor, expõe `{ aulas, carregando, erro, frescorMin, recarregar }`. |
 | `src/components/App/Agenda/AgendaCard.tsx` (criar) | Um bloco de aula: cor, badge e rótulo por estado. |
@@ -688,7 +690,7 @@ from get_agenda_dia('2026-08-04', '95553e96-971b-4590-a6eb-0201d013c14d')
 where professor_nome = 'Lohana Leopoldo de Araújo' and hora_inicio = '18:00';
 ```
 
-Expected: **exatamente 1 linha** (turma `C_Ter_18`, sala Palavra Cantada). Antes da Task 5 rodar, `alunos_vinculados` será `0` — é o esperado, o vínculo ainda não foi populado.
+Expected: **exatamente 1 linha** (turma `C_Ter_18`, sala Palavra Cantada). Antes da Task 6 rodar, `alunos_vinculados` será `0` — é o esperado, o vínculo ainda não foi populado.
 
 Conferir também que o total de cards caiu em relação às linhas cruas:
 
@@ -754,7 +756,193 @@ git commit -m "feat(agenda): RPC get_agenda_dia agrupando linha-por-aluno em car
 
 ---
 
-### Task 5: `sync-grade-futura-emusys` grava `aula_alunos`
+### Task 5: Helper compartilhado dos vínculos aula↔aluno
+
+As duas edges (`sync-grade-futura-emusys` e `sync-presenca-emusys`) precisam da mesma lógica: transformar o `alunos[]` da resposta do Emusys em linhas de `aula_alunos` e gravá-las em lotes. O repo já concentra helpers de aulas do Emusys em `supabase/functions/_shared/emusys-aulas.ts`, com teste ao lado — é ali que isso mora, não duplicado nas duas edges.
+
+**Files:**
+- Modify: `supabase/functions/_shared/emusys-aulas.ts`
+- Test: `supabase/functions/_shared/emusys-aulas.test.ts`
+
+**Interfaces:**
+- Consumes: nada (função pura + uma função de gravação que recebe o client Supabase por parâmetro).
+- Produces:
+  - `export interface AlunoNaAulaEmusys { id_aluno: number | null; id_lead: number | null; nome_aluno: string; telefone_aluno: string | null }`
+  - `export interface VinculoAulaAluno { aula_emusys_id: number; unidade_id: string; emusys_aluno_id: number | null; lead_id: number | null; nome: string; telefone: string | null }`
+  - `export function montarVinculosAulaAlunos(aulas, idPorEmusysId, unidadeId): VinculoAulaAluno[]` — pura, testável.
+  - `export async function gravarVinculosAulaAlunos(supabase, vinculos, tamanhoLote?): Promise<{ gravados: number; erros: string[] }>`
+
+- [ ] **Step 1: Escrever o teste que falha**
+
+Acrescentar ao final de `supabase/functions/_shared/emusys-aulas.test.ts` (seguir o estilo de asserção já usado no arquivo; se ele usa `node:assert/strict`, manter):
+
+```ts
+import { montarVinculosAulaAlunos } from './emusys-aulas.ts';
+
+const UNIDADE = '95553e96-971b-4590-a6eb-0201d013c14d';
+const mapa = new Map<number, number>([[900, 1], [901, 2]]);
+
+// Aula individual com 1 aluno.
+const individual = montarVinculosAulaAlunos(
+  [{ id: 900, alunos: [{ id_aluno: 55, id_lead: 0, nome_aluno: 'Hugo Penedo Amorim', telefone_aluno: '(21) 99914-3430' }] }],
+  mapa,
+  UNIDADE,
+);
+assert.equal(individual.length, 1, 'aula individual gera 1 vinculo');
+assert.equal(individual[0].aula_emusys_id, 1, 'usa o id interno, nao o emusys_id');
+assert.equal(individual[0].emusys_aluno_id, 55);
+assert.equal(individual[0].lead_id, null, 'id_lead 0 vira null');
+
+// Aula de turma: 1 vinculo por aluno.
+const turma = montarVinculosAulaAlunos(
+  [{ id: 901, alunos: [
+    { id_aluno: 1, id_lead: 0, nome_aluno: 'Daniel Cardoso', telefone_aluno: null },
+    { id_aluno: 2, id_lead: 0, nome_aluno: 'Guilherme Varjao', telefone_aluno: null },
+  ] }],
+  mapa,
+  UNIDADE,
+);
+assert.equal(turma.length, 2, 'turma com 2 alunos gera 2 vinculos');
+
+// Experimental: aluno ainda e lead, id_aluno null.
+const experimental = montarVinculosAulaAlunos(
+  [{ id: 900, alunos: [{ id_aluno: null, id_lead: 987, nome_aluno: 'Lead Novo', telefone_aluno: '(21) 97777-6666' }] }],
+  mapa,
+  UNIDADE,
+);
+assert.equal(experimental[0].emusys_aluno_id, null, 'experimental nao tem emusys_aluno_id');
+assert.equal(experimental[0].lead_id, 987, 'experimental carrega o lead_id');
+
+// Aula que nao esta no mapa (nao foi gravada) e ignorada, sem quebrar.
+const foraDoMapa = montarVinculosAulaAlunos(
+  [{ id: 999, alunos: [{ id_aluno: 1, id_lead: 0, nome_aluno: 'Fantasma', telefone_aluno: null }] }],
+  mapa,
+  UNIDADE,
+);
+assert.deepEqual(foraDoMapa, [], 'aula fora do mapa nao gera vinculo');
+
+// Aluno sem nome e descartado: nome e a chave do upsert.
+const semNome = montarVinculosAulaAlunos(
+  [{ id: 900, alunos: [{ id_aluno: 1, id_lead: 0, nome_aluno: '', telefone_aluno: null }] }],
+  mapa,
+  UNIDADE,
+);
+assert.deepEqual(semNome, [], 'aluno sem nome nao gera vinculo');
+
+// Aula sem a chave alunos nao quebra.
+assert.deepEqual(
+  montarVinculosAulaAlunos([{ id: 900 }], mapa, UNIDADE),
+  [],
+  'aula sem alunos[] nao quebra',
+);
+
+console.log('vinculos aula-aluno: OK');
+```
+
+- [ ] **Step 2: Rodar o teste e confirmar que falha**
+
+Run: `npx tsx supabase/functions/_shared/emusys-aulas.test.ts`
+Expected: FAIL — `montarVinculosAulaAlunos is not a function` (ou export não encontrado).
+
+Se o arquivo de teste usar o runner do Deno em vez de `tsx`, usar o comando que o arquivo já pressupõe — conferir o topo do arquivo antes.
+
+- [ ] **Step 3: Implementar**
+
+Acrescentar ao final de `supabase/functions/_shared/emusys-aulas.ts`:
+
+```ts
+export interface AlunoNaAulaEmusys {
+  id_aluno: number | null;
+  id_lead: number | null;
+  nome_aluno: string;
+  telefone_aluno: string | null;
+}
+
+export interface VinculoAulaAluno {
+  aula_emusys_id: number;
+  unidade_id: string;
+  emusys_aluno_id: number | null;
+  lead_id: number | null;
+  nome: string;
+  telefone: string | null;
+}
+
+/**
+ * Transforma o alunos[] que o GET /aulas ja devolve em linhas de aula_alunos.
+ * Sem isso a grade futura sabe curso/turma/sala mas nao sabe de quem e a aula.
+ * `idPorEmusysId` mapeia o id do Emusys para o id interno de aulas_emusys.
+ */
+export function montarVinculosAulaAlunos(
+  aulas: Array<{ id: number; alunos?: AlunoNaAulaEmusys[] }>,
+  idPorEmusysId: Map<number, number>,
+  unidadeId: string,
+): VinculoAulaAluno[] {
+  const vinculos: VinculoAulaAluno[] = [];
+
+  for (const aula of aulas) {
+    const aulaId = idPorEmusysId.get(aula.id);
+    if (!aulaId) continue;
+
+    for (const aluno of aula.alunos || []) {
+      // nome e a chave do upsert (aula_emusys_id, nome): sem nome, sem linha.
+      if (!aluno.nome_aluno) continue;
+      vinculos.push({
+        aula_emusys_id: aulaId,
+        unidade_id: unidadeId,
+        emusys_aluno_id: aluno.id_aluno || null,
+        lead_id: aluno.id_lead || null,
+        nome: aluno.nome_aluno,
+        telefone: aluno.telefone_aluno || null,
+      });
+    }
+  }
+
+  return vinculos;
+}
+
+/** Grava os vinculos em lotes. Idempotente pelo unique (aula_emusys_id, nome). */
+export async function gravarVinculosAulaAlunos(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  vinculos: VinculoAulaAluno[],
+  tamanhoLote = 500,
+): Promise<{ gravados: number; erros: string[] }> {
+  const erros: string[] = [];
+  let gravados = 0;
+  const agora = new Date().toISOString();
+
+  for (let offset = 0; offset < vinculos.length; offset += tamanhoLote) {
+    const lote = vinculos
+      .slice(offset, offset + tamanhoLote)
+      .map((v) => ({ ...v, updated_at: agora }));
+
+    const { error } = await supabase
+      .from('aula_alunos')
+      .upsert(lote, { onConflict: 'aula_emusys_id,nome', ignoreDuplicates: false });
+
+    if (error) erros.push(error.message);
+    else gravados += lote.length;
+  }
+
+  return { gravados, erros };
+}
+```
+
+- [ ] **Step 4: Rodar o teste e confirmar que passa**
+
+Run: `npx tsx supabase/functions/_shared/emusys-aulas.test.ts`
+Expected: PASS — imprime `vinculos aula-aluno: OK`, exit 0. Os testes que já existiam no arquivo continuam passando.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add supabase/functions/_shared/emusys-aulas.ts supabase/functions/_shared/emusys-aulas.test.ts
+git commit -m "feat(agenda): helper compartilhado dos vinculos aula-aluno"
+```
+
+---
+
+### Task 6: `sync-grade-futura-emusys` grava `aula_alunos`
 
 A resposta do `GET /aulas` já traz `alunos[]`; hoje o sync só conta em `qtd_alunos` e descarta o resto.
 
@@ -762,7 +950,7 @@ A resposta do `GET /aulas` já traz `alunos[]`; hoje o sync só conta em `qtd_al
 - Modify: `supabase/functions/sync-grade-futura-emusys/index.ts`
 
 **Interfaces:**
-- Consumes: tabela `aula_alunos` (Task 3).
+- Consumes: tabela `aula_alunos` (Task 3); `montarVinculosAulaAlunos`, `gravarVinculosAulaAlunos`, `AlunoNaAulaEmusys` de `../_shared/emusys-aulas.ts` (Task 5).
 - Produces: linhas em `aula_alunos` para as aulas da janela sincronizada.
 
 - [ ] **Step 1: Ler o código realmente deployado**
@@ -771,15 +959,20 @@ Via MCP `get_edge_function`, slug `sync-grade-futura-emusys`. Comparar com `supa
 
 - [ ] **Step 2: Ampliar a interface do aluno na resposta**
 
-Em `supabase/functions/sync-grade-futura-emusys/index.ts`, na interface `AulaEmusys`, trocar o campo `alunos`:
+Em `supabase/functions/sync-grade-futura-emusys/index.ts`, acrescentar o import do helper junto aos outros de `../_shared/`:
 
 ```ts
-  alunos: Array<{
-    id_aluno: number | null;
-    id_lead: number | null;
-    nome_aluno: string;
-    telefone_aluno: string | null;
-  }>;
+import {
+  montarVinculosAulaAlunos,
+  gravarVinculosAulaAlunos,
+  type AlunoNaAulaEmusys,
+} from '../_shared/emusys-aulas.ts';
+```
+
+E na interface `AulaEmusys`, trocar o campo `alunos` para reusar o tipo do helper:
+
+```ts
+  alunos: AlunoNaAulaEmusys[];
 ```
 
 - [ ] **Step 3: Gravar os vínculos após o upsert das aulas**
@@ -801,40 +994,17 @@ Depois do laço que faz `upsert` em `aulas_emusys` (o bloco que incrementa `grav
         idPorEmusysId.set(linha.emusys_id as number, linha.id as number);
       }
 
-      const vinculos: Array<Record<string, unknown>> = [];
-      for (const aula of aulas) {
-        const aulaId = idPorEmusysId.get(aula.id);
-        if (!aulaId) continue;
-        for (const aluno of aula.alunos || []) {
-          if (!aluno.nome_aluno) continue;
-          vinculos.push({
-            aula_emusys_id: aulaId,
-            unidade_id: unidade.id,
-            emusys_aluno_id: aluno.id_aluno || null,
-            lead_id: aluno.id_lead || null,
-            nome: aluno.nome_aluno,
-            telefone: aluno.telefone_aluno || null,
-            updated_at: new Date().toISOString(),
-          });
-        }
+      const vinculos = montarVinculosAulaAlunos(aulas, idPorEmusysId, unidade.id);
+      const resultado = await gravarVinculosAulaAlunos(supabase, vinculos, chunkSize);
+      for (const erro of resultado.erros) {
+        console.error(`[sync-grade-futura] upsert aula_alunos (${unidade.nome}): ${erro}`);
       }
-
-      let vinculosGravados = 0;
-      for (let offset = 0; offset < vinculos.length; offset += chunkSize) {
-        const lote = vinculos.slice(offset, offset + chunkSize);
-        const { error } = await supabase
-          .from('aula_alunos')
-          .upsert(lote, { onConflict: 'aula_emusys_id,nome', ignoreDuplicates: false });
-        if (error) {
-          console.error(`[sync-grade-futura] upsert aula_alunos (${unidade.nome}): ${error.message}`);
-          continue;
-        }
-        vinculosGravados += lote.length;
-      }
-      console.log(`[sync-grade-futura] ${unidade.nome}: ${vinculosGravados} vinculos aluno-aula`);
+      console.log(
+        `[sync-grade-futura] ${unidade.nome}: ${resultado.gravados} vinculos aluno-aula`,
+      );
 ```
 
-Nota: `aluno_id` não é preenchido aqui. O casamento `emusys_aluno_id` → `alunos.id` é feito na Task 6, num passo único que serve aos dois syncs.
+Nota: `aluno_id` não é preenchido aqui. O casamento `emusys_aluno_id` → `alunos.id` é feito na Task 7, num passo único que serve aos dois syncs.
 
 - [ ] **Step 4: Validar sintaxe e deployar**
 
@@ -854,7 +1024,7 @@ from aula_alunos
 where unidade_id = '95553e96-971b-4590-a6eb-0201d013c14d';
 ```
 
-Expected: `vinculos > 0`, `aulas_cobertas > 0`, `com_aluno_id = 0` (o casamento vem na Task 6).
+Expected: `vinculos > 0`, `aulas_cobertas > 0`, `com_aluno_id = 0` (o casamento vem na Task 7).
 
 - [ ] **Step 6: Commit**
 
@@ -865,7 +1035,7 @@ git commit -m "feat(agenda): grade futura passa a gravar o vinculo aluno-aula"
 
 ---
 
-### Task 6: Casar `emusys_aluno_id` com `alunos.id` e cobrir o sync de 15 min
+### Task 7: Casar `emusys_aluno_id` com `alunos.id` e cobrir o sync de 15 min
 
 Sem o `aluno_id`, o enriquecimento (risco, inadimplência, pesquisa) não acha o aluno.
 
@@ -923,7 +1093,7 @@ create trigger trg_aula_alunos_casar_aluno
   before insert or update on public.aula_alunos
   for each row execute function public.fn_aula_alunos_casar_aluno();
 
--- Backfill do que a Task 5 ja gravou sem aluno_id: um update vazio
+-- Backfill do que a Task 6 ja gravou sem aluno_id: um update vazio
 -- dispara o trigger e aplica o mesmo criterio de desempate.
 update public.aula_alunos
 set updated_at = now()
@@ -961,7 +1131,7 @@ Expected: `curso_da_aula` e `curso_da_matricula` coincidem na maioria das linhas
 
 - [ ] **Step 3: Replicar a gravação no sync de 15 min**
 
-Em `supabase/functions/sync-presenca-emusys/index.ts`, na função `sincronizarMetadadosAulas`, após o upsert das aulas, gravar `aula_alunos` com **o mesmo bloco de código da Task 5 Step 3**, ajustando apenas o filtro de datas para o range que a função já recebe (`dataInicio`/`dataFim`) e o prefixo do log para `[sync-presenca]`:
+Em `supabase/functions/sync-presenca-emusys/index.ts`, na função `sincronizarMetadadosAulas`, após o upsert das aulas, gravar `aula_alunos` usando **o mesmo helper da Task 5** — nada de duplicar a lógica. O arquivo já importa de `../_shared/emusys-aulas.ts`; acrescentar `montarVinculosAulaAlunos` e `gravarVinculosAulaAlunos` a esse import existente.
 
 ```ts
       const { data: aulasGravadas } = await supabase
@@ -976,36 +1146,14 @@ Em `supabase/functions/sync-presenca-emusys/index.ts`, na função `sincronizarM
         idPorEmusysId.set(linha.emusys_id as number, linha.id as number);
       }
 
-      const vinculos: Array<Record<string, unknown>> = [];
-      for (const aula of aulas) {
-        const aulaId = idPorEmusysId.get(aula.id);
-        if (!aulaId) continue;
-        for (const aluno of aula.alunos || []) {
-          if (!aluno.nome_aluno) continue;
-          vinculos.push({
-            aula_emusys_id: aulaId,
-            unidade_id: unidade.id,
-            emusys_aluno_id: aluno.id_aluno || null,
-            lead_id: aluno.id_lead || null,
-            nome: aluno.nome_aluno,
-            telefone: aluno.telefone_aluno || null,
-            updated_at: new Date().toISOString(),
-          });
-        }
-      }
-
-      for (let offset = 0; offset < vinculos.length; offset += 500) {
-        const lote = vinculos.slice(offset, offset + 500);
-        const { error } = await supabase
-          .from('aula_alunos')
-          .upsert(lote, { onConflict: 'aula_emusys_id,nome', ignoreDuplicates: false });
-        if (error) {
-          console.error(`[sync-presenca] upsert aula_alunos (${unidade.nome}): ${error.message}`);
-        }
+      const vinculos = montarVinculosAulaAlunos(aulas, idPorEmusysId, unidade.id);
+      const resultado = await gravarVinculosAulaAlunos(supabase, vinculos);
+      for (const erro of resultado.erros) {
+        console.error(`[sync-presenca] upsert aula_alunos (${unidade.nome}): ${erro}`);
       }
 ```
 
-Antes de editar, ler o deployado via MCP `get_edge_function` (slug `sync-presenca-emusys`) e conferir o nome real do tipo de aluno na interface local — se o tipo não tiver `id_aluno`/`telefone_aluno`, ampliá-lo como na Task 5 Step 2.
+Antes de editar, ler o deployado via MCP `get_edge_function` (slug `sync-presenca-emusys`) e conferir o nome real do tipo de aluno na interface local — se o tipo não tiver `id_aluno`/`telefone_aluno`, ampliá-lo como na Task 6 Step 2.
 
 - [ ] **Step 4: Deployar e confirmar idempotência**
 
@@ -1030,7 +1178,7 @@ git commit -m "feat(agenda): casa vinculo com aluno_id e cobre o sync de 15 min"
 
 ---
 
-### Task 7: Hook `useAgendaDia`
+### Task 8: Hook `useAgendaDia`
 
 **Files:**
 - Create: `src/hooks/useAgendaDia.ts`
@@ -1148,7 +1296,7 @@ git commit -m "feat(agenda): hook useAgendaDia"
 
 ---
 
-### Task 8: `AgendaCard` e `AgendaTimeline`
+### Task 9: `AgendaCard` e `AgendaTimeline`
 
 **Files:**
 - Create: `src/components/App/Agenda/AgendaCard.tsx`
@@ -1393,7 +1541,7 @@ git commit -m "feat(agenda): timeline por professor ou sala com regua do horario
 
 ---
 
-### Task 9: `AgendaDrawer`
+### Task 10: `AgendaDrawer`
 
 **Files:**
 - Create: `src/components/App/Agenda/AgendaDrawer.tsx`
@@ -1565,7 +1713,7 @@ git commit -m "feat(agenda): painel de detalhe com enriquecimento do LA Report"
 
 ---
 
-### Task 10: `AgendaPage`, rota e menu
+### Task 11: `AgendaPage`, rota e menu
 
 **Files:**
 - Create: `src/components/App/Agenda/AgendaPage.tsx`
@@ -1798,7 +1946,7 @@ git commit -m "feat(agenda): pagina, rota /app/agenda e item no menu"
 
 ---
 
-### Task 11: Documentação
+### Task 12: Documentação
 
 O CLAUDE.md do projeto exige manter `docs/MAPA-SISTEMA.md` atualizado no mesmo ciclo.
 
