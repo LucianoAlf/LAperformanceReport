@@ -370,19 +370,29 @@ comment on function public.aplicar_retificacao_relatorio_comercial_matricula_tar
   uuid, integer, integer, text, bigint, text, date, text, jsonb
 ) is 'Acrescenta uma matricula tardia comprovada ao documento mensal efetivo por retificacao append-only, sem alterar o snapshot fechado.';
 
--- Responsabilidade vigente e configuracao operacional, nao dado historico do
--- fechamento. O produtor gerencial le este valor atual antes do nome congelado.
-update public.unidades
-set gerente_nome = 'Clayton'
-where id = '95553e96-971b-4590-a6eb-0201d013c14d'
-  and gerente_nome = 'Fabiola/Clayton';
-
 do $validar_gerente_recreio$
+declare
+  v_unidade_id uuid;
 begin
+  -- Responsabilidade vigente e configuracao operacional, nao dado historico
+  -- do fechamento. A chave da unidade e resolvida por atributos estaveis.
+  select u.id
+  into strict v_unidade_id
+  from public.unidades u
+  where upper(btrim(u.codigo)) = 'REC'
+    and upper(btrim(u.nome)) = 'RECREIO'
+    and u.ativo is true;
+
+  update public.unidades u
+  set gerente_nome = 'Clayton'
+  where u.id = v_unidade_id
+    and u.gerente_nome = 'Fabiola/Clayton';
+
   if not exists (
-    select 1 from public.unidades
-    where id = '95553e96-971b-4590-a6eb-0201d013c14d'
-      and gerente_nome = 'Clayton'
+    select 1
+    from public.unidades u
+    where u.id = v_unidade_id
+      and u.gerente_nome = 'Clayton'
   ) then
     raise exception 'GERENTE_RECREIO_DIVERGENTE';
   end if;
@@ -391,11 +401,28 @@ $validar_gerente_recreio$;
 
 do $retificar_barra_julho$
 declare
+  v_unidade_id uuid;
+  v_aluno_id bigint;
   v_documento jsonb;
 begin
+  select u.id
+  into strict v_unidade_id
+  from public.unidades u
+  where upper(btrim(u.codigo)) = 'BARRA'
+    and upper(btrim(u.nome)) = 'BARRA'
+    and u.ativo is true;
+
+  select a.id
+  into strict v_aluno_id
+  from public.alunos a
+  where a.unidade_id = v_unidade_id
+    and a.emusys_matricula_id = '840'
+    and a.data_matricula = date '2026-07-31'
+    and lower(btrim(a.nome)) = lower('Luíza P Caruso');
+
   v_documento := public.get_relatorio_mensal_canonico_v1(
     'comercial',
-    '368d47f5-2d88-4475-bc14-ba084a9a348e',
+    v_unidade_id,
     2026,
     7
   );
@@ -403,7 +430,7 @@ begin
   if exists (
     select 1
     from jsonb_array_elements(coalesce(v_documento#>'{payload,matriculas}', '[]'::jsonb)) item
-    where item->>'id' = '1893'
+    where item->>'id' = v_aluno_id::text
   ) then
     return;
   end if;
@@ -416,11 +443,11 @@ begin
   end if;
 
   perform public.aplicar_retificacao_relatorio_comercial_matricula_tardia_v1(
-    '368d47f5-2d88-4475-bc14-ba084a9a348e',
+    v_unidade_id,
     2026,
     7,
     v_documento->>'payload_hash',
-    1893,
+    v_aluno_id,
     '840',
     date '2026-07-31',
     'Inclusao auditada de Luiza P Caruso, lancada depois do corte com data de matricula pertencente a julho; snapshot original preservado.',
