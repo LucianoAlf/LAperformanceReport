@@ -1195,7 +1195,8 @@ import { supabase } from '@/lib/supabase';
 import { formatarFrescor } from '@/lib/agenda';
 
 export interface AlunoAgenda {
-  aluno_id: string | null;
+  // integer no banco (alunos.id), nao uuid. Null quando o participante e lead.
+  aluno_id: number | null;
   nome: string;
   idade: number | null;
   responsavel_nome: string | null;
