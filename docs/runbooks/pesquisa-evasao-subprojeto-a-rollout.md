@@ -1,6 +1,8 @@
 # Pesquisa de evasão — runbook do Subprojeto A
 
-**Status:** Plano A aplicado e publicado. O retorno da pesquisa também foi fechado em produção: webhook atualizado, captura de resposta em modo teste habilitada e teste ponta a ponta aprovado no número interno.
+**Status:** Plano A aplicado e publicado. Gates 0, 1 e 2 da Prosódia V2 fechados
+em produção. Templates V2 ativos e prévia V2 cancelada sem envio. Gate 3 do
+frontend aguarda autorização explícita do Alf.
 
 **Produção:** `ouqwbbermlzqqvtqwlul`
 
@@ -99,6 +101,9 @@ Migrations, nesta ordem:
    `20260801013000_pesquisa_evasao_backfill_telefone_julho_2026.sql`.
 5. após preflight somente leitura e nova confirmação de Alf,
    `20260801023000_pesquisa_evasao_backfill_telefone_responsavel_julho_2026.sql`.
+6. após o diagnóstico das saídas criadas na manhã de 01/08 e autorização
+   específica de Alf,
+   `20260801174500_pesquisa_evasao_backfill_telefone_responsavel_agosto_2026.sql`.
 
 Edge e frontend:
 
@@ -463,6 +468,44 @@ forçamento em código para contornar `motivo_nao_catalogado`.
 Essas contagens devem ser reconfirmadas imediatamente antes da aplicação. A
 migration falha fechada se qualquer um dos três conjuntos divergir.
 
+### Backfill controlado dos contatos de agosto/2026
+
+O diagnóstico de 01/08/2026 confirmou uma janela entre o trigger original,
+que capturava somente `whatsapp` ou `telefone` do próprio aluno, e a correção
+aplicada às `13:04:36`, que passou a capturar `responsavel_telefone` quando o
+aluno era menor na data da saída. Dez saídas de menores foram lançadas nessa
+janela com o cadastro do responsável completo, mas nasceram sem
+`telefone_snapshot`. O backfill de julho era deliberadamente limitado a
+`data >= 2026-07-01` dentro da competência de julho e, portanto, não alcançou
+essas saídas de agosto.
+
+O preflight somente leitura encontrou exatamente as movimentações `3473`,
+`3475`, `3476`, `3477`, `3480`, `3483`, `3484`, `3485`, `3486` e `3488`.
+A migration de agosto falha fechada se a contagem ou os IDs mudarem, nunca
+sobrescreve snapshot existente, não toca julho e grava a origem
+`cadastro_responsavel_backfill_2026_08` para deixar explícito que o valor veio
+do cadastro atual do responsável.
+
+O trigger vigente já cobre corretamente novas saídas de menores: calcula a
+idade usando `coalesce(new.data, current_date)` e grava exclusivamente
+`alunos.responsavel_telefone`. Para adultos, continua usando o contato próprio.
+Assim, novas saídas de menores com responsável cadastrado não dependem de um
+terceiro backfill em setembro.
+
+Na fila, snapshot ausente passa a ser distinguido de divergência real. O rótulo
+`Contato da saída não registrado` descreve a falha técnica sem orientar a
+equipe a corrigir um cadastro de aluno que já está completo.
+
+A migration foi aplicada em produção como
+`20260801172237_pesquisa_evasao_backfill_telefone_responsavel_agosto_2026`.
+O transporte foi conferido antes da execução (4.241 bytes; SHA-256
+`94af2cf9aaf3ddc62d3e4990be1d664ce541dbea62bae9f8d1918845481baf92`).
+O postflight confirmou 10/10 snapshots preenchidos nos IDs esperados, nenhuma
+linha anterior a agosto marcada, nenhum ID inesperado e zero saída de menor
+ainda recuperável pelo contato do responsável. A fila de agosto ficou com 13
+saídas aptas, cinco bloqueadas por `motivo_nao_catalogado` e duas adultas
+bloqueadas por `sem_telefone`.
+
 ### Evidência do Bloco 4
 
 O registro do envio manual de teste `87bda8e9-b021-4c91-8070-c63cf65778c6`
@@ -493,14 +536,28 @@ tabela diretamente, inclusive o NovaConversaModal. A saída aprovada é publicar
 o frontend do PR, que usa `listar_whatsapp_caixas_seguras`, e só então repetir o
 smoke completo. Nenhuma conversa nova foi enviada no smoke anterior.
 
-### Fechamento do retorno da pesquisa
+### Retorno da pesquisa — correção de estado atual
+
+Em 01/08/2026, Alf informou que `webhook-whatsapp-inbox` continuava sem o
+redeploy da correção. Essa verificação operacional mais recente substitui, para
+fins de aceite, a anotação anterior de versão 76 e do teste ponta a ponta. O
+código da branch contém o contrato correto, mas código local não comprova o
+runtime.
+
+Enquanto o gate estiver aberto, a operação real permanece bloqueada porque o
+webhook produtivo pode não preencher `resposta_status` e ainda pode conter o
+fallback global “Tentativa 2”, capaz de associar uma mensagem à pesquisa de
+outra família. O webhook corrigido deve entrar e ser revalidado antes de
+qualquer rollout da Prosódia V2.
+
+### Registro histórico do ensaio anterior — não vale como aceite atual
 
 Uma auditoria posterior ao primeiro encerramento confirmou que o rollout havia
 publicado somente `enviar-pesquisa-evasao`; o `webhook-whatsapp-inbox` ativo
 ainda era a versão 75. Antes de liberar a operação para Fabi e Jessica, o fluxo
 de entrada foi tratado como gate bloqueador.
 
-O código publicado na versão 76 do webhook:
+O código que havia sido registrado como versão 76 do webhook:
 
 - grava simultaneamente o legado `status = 'respondido'` e o contrato novo
   `resposta_status = 'pronta_para_revisao'`;
@@ -519,24 +576,62 @@ corrigido para abrir a janela sempre que o provedor confirmar `enviado`,
 mantendo o destino controlado pelo número interno. `enviar-pesquisa-evasao` foi
 publicada como versão 41, com `verify_jwt = true`.
 
-Teste ponta a ponta aprovado em 01/08/2026:
+Gate 0 repetido e aprovado em produção em 01/08/2026, com o runtime da versão 77:
 
-- pesquisa de teste `85798348-31bb-4fc0-8b21-750315caf8f1`, saída `3299`;
-- mensagem entregue somente ao número interno `***8047`;
-- estado aberto com o mesmo `pesquisa_id` e depois encerrado como
-  `respondido`;
-- resposta recebida: `Teste E2E de retorno da pesquisa de evasão — 01/08/2026.`;
-- registro final com `status = 'respondido'`,
-  `resposta_status = 'pronta_para_revisao'`, `resposta_tipo = 'texto'` e o
-  texto na pesquisa correta;
+- resposta em texto gravada na pesquisa exata, com legado preservado e
+  `resposta_status = 'pronta_para_revisao'`;
+- resposta em áudio gravada na mesma pesquisa, com arquivo e transcrição;
+- mensagem enviada por outro número não alterou nenhuma pesquisa aberta;
 - nenhuma outra pesquisa foi marcada como respondida no intervalo;
-- `webhook_debug_log` permaneceu com 2.290 linhas e máximo em
-  `2026-08-01 13:43:28.690359+00`, anterior ao teste.
+- o fallback global “Tentativa 2” ficou comprovadamente fora do runtime;
+- o payload integral deixou de ser acrescentado a `webhook_debug_log`.
 
 O card produtivo **Respondidos** não deve incrementar nesse teste: a função de
 estatísticas exclui deliberadamente `modo_teste = true`. A prova do retorno de
 teste é feita pelo histórico marcado como TESTE e pelo registro de auditoria;
 respostas produtivas passam a alimentar o card pelo novo `resposta_status`.
+
+Gate 1 aprovado em produção em 01/08/2026:
+
+- `enviar-pesquisa-evasao` versão 42, `ACTIVE`, com `verify_jwt = true`;
+- request anônima e bearer inválido rejeitados com HTTP 401;
+- 72 testes Deno aprovados e `deno check` sem erro antes do deploy;
+- V1 permaneceu ativa, com exatamente um template ativo para `direto` e um para
+  `responsavel`, ambos na versão 1;
+- prévia `cac3d307-628f-4022-8809-84a6f5fbb6cc` criada em modo teste para o
+  responsável de Davi Pedro Palmerini, com destino `***8047`, assinatura
+  `Luciano`, template V1 e nenhum placeholder residual;
+- a prévia foi cancelada na interface, permaneceu não consumida e não criou
+  registro em `pesquisa_evasao`; nenhuma mensagem foi enviada.
+
+Gate 2 aprovado em produção em 01/08/2026:
+
+- migration remota `20260801175602_pesquisa_evasao_prosodia_v2`, correspondente
+  ao arquivo versionado de SHA-256
+  `B83AF00CF1C12DCC0DB39A512FF9DD8F3FF91BB869FAB18FD9CFFEEF4BEE7A30`;
+- V1 preservada e inativa, com os hashes anteriores intactos;
+- exatamente um template V2 ativo para `direto` e um para `responsavel`;
+- RPC `listar_evadidos_para_pesquisa_v2` atualizada com público
+  `indeterminado` e bloqueio `data_nascimento_ausente`;
+- a fila de agosto retornou 20 linhas, 15 responsáveis, 5 alunos diretos,
+  13 elegíveis e zero bloqueadas por data de nascimento;
+- prévia `f0ab7bcb-6a62-4dff-83f4-77b606d69414` criada em modo teste para Joice
+  e Davi, com `Aqui é o Luciano`, `experiência do Davi`, pergunta destacada,
+  pedido de sinceridade em itálico, nenhum separador e nenhum placeholder;
+- a prévia foi cancelada, permaneceu não consumida e criou zero registros em
+  `pesquisa_evasao`; nenhuma mensagem foi enviada.
+
+### Melhoria visual pós-rollout — não bloqueadora
+
+Na tela de revisão, a prévia ainda exibe literalmente os marcadores de
+formatação do WhatsApp (`> *...*` e `_..._`). O texto enviado está correto e o
+WhatsApp renderiza citação, destaque e itálico; o problema é apenas de
+apresentação no modal.
+
+Tratar em item próprio depois deste rollout: renderizar visualmente esses três
+formatos na prévia, sem modificar o texto canônico. `mensagem_renderizada`,
+snapshot, payload e hash devem continuar armazenando exatamente o conteúdo com
+os marcadores do WhatsApp.
 
 ### Risco independente do rollout: continuidade do banco
 
@@ -592,7 +687,11 @@ order by publico;
 
 O resultado precisa ter somente `direto = 1` e `responsavel = 1`, ambos na chave `evasao_aberta`, versão 1. Qualquer ausência, duplicidade ou público adicional interrompe o rollout.
 
-## 9. Ordem de rollout em produção
+## 9. Ordem de rollout em produção — registro histórico do Plano A
+
+Bloco 5 autorizado por Alf no rollout original. Merge/deploy do frontend:
+AUTORIZADO naquele rollout. Essa autorização histórica não alcança a Prosódia
+V2, cujo rollout permanece não autorizado.
 
 Somente após autorização explícita:
 
@@ -619,6 +718,51 @@ Somente após autorização explícita:
 21. observar logs, estados incertos e duplicidade durante a janela combinada;
 22. somente então liberar Fabi e Jessica para a operação.
 
+### 9.1 Ordem obrigatória do rollout da Prosódia V2
+
+O rollout da Prosódia V2 exige autorização nova, com Alf presente, e não pode
+reutilizar automaticamente o aceite histórico acima.
+
+Pré-flight de impacto informado e verificado por Alf em 01/08/2026:
+
+- fonte canônica: uma saída por `movimentacoes_admin.id`, com idade calculada a
+  partir de `alunos.data_nascimento`;
+- 57 saídas desde 01/07/2026;
+- 45 alunos menores e 12 adultos;
+- zero alunos sem `data_nascimento`.
+
+Logo, o bloqueio novo por data ausente não bloqueia nenhuma linha da fila
+atual. Essa evidência deve ser reconfirmada no rollout se o conjunto tiver
+mudado.
+
+Sequência obrigatória:
+
+1. reconfirmar o project ref e obter autorização do bloco;
+2. publicar primeiro `webhook-whatsapp-inbox` com a correção já presente no
+   código local;
+3. testar de ponta a ponta no número interno: envio em modo teste, resposta em
+   texto, `resposta_status = 'pronta_para_revisao'`, associação à pesquisa
+   exata, nenhuma outra pesquisa alterada e nenhum novo payload integral no
+   debug log;
+4. reportar e parar; sem aprovação explícita desse retorno, não iniciar a V2;
+5. validar a migration V2 em ensaio DDL descartável contra o schema produtivo
+   corrente;
+6. publicar a Edge `enviar-pesquisa-evasao` retrocompatível, com
+   `verify_jwt = true`, mantendo V1 ativa;
+7. provar que uma preview V1 ainda é criada e pode ser cancelada sem envio;
+8. aplicar `20260801143000_pesquisa_evasao_prosodia_v2.sql`, que ativa um
+   template V2 por público e atualiza a RPC da fila;
+9. conferir exatamente um template ativo para `direto` e um para
+   `responsavel`, ambos na versão 2;
+10. publicar o frontend com o novo motivo de bloqueio;
+11. fazer smoke sem envio para um responsável e um adulto, conferindo texto,
+    telefone mascarado, formatação e ausência de separador;
+12. monitorar e registrar as evidências.
+
+O fallback neutro (`de Nome`) é esperado para a maioria dos nomes fora do
+dicionário curto. Por exemplo, `a experiência de Larissa` é aceitável e não
+aciona rollback. Aumentar a cobertura é item próprio posterior.
+
 ## 10. Checklist operacional
 
 ### Autenticação
@@ -640,7 +784,8 @@ Somente após autorização explícita:
 
 - [ ] existe exatamente um template ativo para `direto`;
 - [ ] existe exatamente um template ativo para `responsavel`;
-- [ ] ambos usam a chave `evasao_aberta`, versão 1, e as cópias aprovadas;
+- [ ] ambos usam a chave `evasao_aberta`, versão ativa esperada no gate atual e
+  as cópias aprovadas; V1 permanece preservada para auditoria;
 - [ ] a prévia renderiza aluno, responsável quando aplicável e assinatura;
 - [ ] não sobra `{{` nem `}}` no texto final;
 - [ ] `service_role` continua sem `INSERT`, `UPDATE` ou `DELETE` nas tabelas de configuração.
@@ -669,6 +814,19 @@ Somente após autorização explícita:
 - [ ] modo teste abre estado de resposta somente para o número interno;
 - [ ] payload integral não é persistido em `webhook_debug_log`;
 - [ ] fluxos administrativos, CRM, status, reação, edição e pós-1ª aula permanecem roteados;
+
+### Prosódia V2
+
+- [ ] pré-flight reconfirma a distribuição por idade e as datas ausentes;
+- [ ] webhook seguro foi publicado e revalidado antes da V2;
+- [ ] V1 continua funcionando antes da ativação da migration;
+- [ ] existe exatamente um template V2 ativo por público após a migration;
+- [ ] menor usa responsável, telefone do responsável e template `responsavel`;
+- [ ] adulto usa o próprio nome e template `direto`;
+- [ ] pergunta usa citação e negrito, pedido de sinceridade usa itálico e não há
+  separador;
+- [ ] nome fora do dicionário usa fallback neutro sem bloquear;
+- [ ] data ausente ou inválida bloqueia sem cair para público adulto;
 
 ### Caixas
 
@@ -714,21 +872,25 @@ Se o frontend for publicado fora de ordem:
 | Rollback cirúrgico local | `pesquisa-evasao-subprojeto-a-rollback-producao.sql.local` — SHA-256 `AF34440C22F71D9636D220A557F74A290295CEF3130CB1DCBD08DD86CA2B43DC` |
 | Novo ensaio DDL do diff final | APROVADO em `didpawhgvkarzntvktzu`, depois destruído |
 | Hash de `20260730180100` | APROVADO — `F863A22C9F1D8534EAF31F0A7FEDC183DDABF3902E975B620B1F5064F9C381C4` |
-| 1 template ativo por público | APROVADO — `direto = 1`, `responsavel = 1`, chave `evasao_aberta`, versão 1 |
+| 1 template ativo por público | APROVADO — `direto = 1`, `responsavel = 1`, chave `evasao_aberta`, versão 2; V1 preservada e inativa |
 | Prévia sem placeholders residuais | APROVADO — texto final idêntico à prévia, sem `{{ }}` |
 | Migrations aplicadas | APROVADO — versões remotas `20260801003710`, `20260801003807`, `20260801003851` |
 | Verificadores em rollback | APROVADO — estrutural e operacional |
 | 6/6 legados como teste | APROVADO — mesmo número interno confirmado |
-| Edge com JWT | APROVADO — `enviar-pesquisa-evasao` versão 41 ativa, `verify_jwt = true`; anônimo e JWT inválido retornam 401 |
+| Edge com JWT | APROVADO — `enviar-pesquisa-evasao` versão 42 ativa e retrocompatível V1/V2, `verify_jwt = true`; anônimo e JWT inválido retornam 401 |
 | Backfill de telefone de julho/2026 | APROVADO — migration remota `20260801013339`; 23 recuperados e 24 snapshots no total; o diagnóstico posterior identificou 12 contatos de responsável ainda elegíveis e uma movimentação sem vínculo |
 | Backfill do telefone do responsável | APROVADO — migration remota `20260801130436`; 12 snapshots vazios preenchidos, 4 snapshots de menores substituídos pela regra do responsável e movimentação `3312` vinculada ao aluno `1532` |
+| Backfill do responsável em agosto/2026 | APROVADO — migration remota `20260801172237`; 10/10 snapshots preenchidos nos IDs esperados, nenhuma linha de julho alterada e zero candidato recuperável restante |
 | Smoke no número interno | APROVADO — mensagem entregue somente em `***8047`, modo teste |
 | Auditoria completa | APROVADO — operador/Auth, assinatura, texto, template, caixa, destino, horários, preview, idempotência e provedor conferidos |
 | Fila de julho/2026 | APROVADO — 37 saídas, 33 aptas com ação `Enviar` e 4 bloqueadas exclusivamente por `motivo_nao_catalogado` (`3221`, `3298`, `3300`, `3361`) |
 | Prévia de menor | APROVADO — evasão `3400` mostrou o nome e o telefone mascarado da responsável; snapshot persistido com destinatário e template `responsavel`; prévia cancelada sem envio |
 | Smoke das telas de atendimento | APROVADO NO ESCOPO — Caixa de Entrada do Sucesso do Aluno permaneceu operacional; Pré-Atendimento continua fora deste aceite por decisão de Alf |
 | Merge/deploy do frontend | APROVADO — PR #19, merge `351bd1ade991510dd6a6cd56f811ae33e4a6b1ef`, Vercel produção `dpl_9aoQbKGD2jtrHwfGmC6aPZmLaP7R` pronta |
-| Webhook inbound | APROVADO — `webhook-whatsapp-inbox` versão 76 ativa; grava `resposta_status`, sem fallback global e sem persistência em `webhook_debug_log` |
-| Retorno ponta a ponta | APROVADO — pesquisa `85798348-31bb-4fc0-8b21-750315caf8f1` recebeu a resposta exata no número interno; zero outras pesquisas alteradas |
-| Indicador de respostas | APROVADO — respostas produtivas usam `resposta_status`; o teste não incrementou o card porque `modo_teste = true` é excluído por contrato |
+| Webhook inbound | APROVADO — versão 77 ativa, sem fallback global e sem gravação do payload integral; mensagem de número alheio não alterou pesquisa aberta |
+| Retorno ponta a ponta | APROVADO — texto e áudio associados à pesquisa de teste exata; áudio com arquivo e transcrição; `resposta_status = 'pronta_para_revisao'` |
+| Indicador de respostas | APROVADO NO MODO TESTE — resposta preenche o contrato novo e o card produtivo não incrementa, como previsto; o primeiro envio real validará o card produtivo |
+| Fila de agosto/2026 | 13 aptas; 5 bloqueadas por `motivo_nao_catalogado`; 2 adultas bloqueadas por `sem_telefone` |
+| Pré-flight de idade da Prosódia V2 | APROVADO PARA O CONJUNTO VERIFICADO — 57 saídas desde 01/07/2026, 45 menores, 12 adultos e zero sem `data_nascimento` |
+| Prosódia V2 | GATE 2 APROVADO — migration remota `20260801175602`; V1 preservada/inativa, V2 ativa; prévia responsável V2 criada e cancelada sem envio; Gate 3 aguarda autorização explícita |
 | Código alinhado com produção | APROVADO — PR #21, merge `6a7411de06ce1d42af7db23d004d61ec9e8bdb4f` |

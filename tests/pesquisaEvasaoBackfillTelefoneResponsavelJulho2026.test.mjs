@@ -91,7 +91,7 @@ test('novas saidas de menores capturam somente o telefone do responsavel', () =>
 });
 
 test('preview de menor usa nome, telefone e template do responsavel', () => {
-  assert.match(edge, /const\s+publico\s*=\s*alunoEhMenor\s*\(\s*aluno\.data_nascimento\s*\)[\s\S]*?\?\s*['"]responsavel['"]/i);
+  assert.match(edge, /publico\s*=\s*resolverPublicoPesquisa\s*\(\s*aluno\.data_nascimento\s*\)/i);
   assert.match(edge, /publico\s*===\s*['"]responsavel['"][\s\S]*?aluno\.responsavel_nome\?\.trim\s*\(\s*\)/i);
   assert.match(edge, /\.eq\s*\(\s*['"]publico['"]\s*,\s*publico\s*\)/i);
   assert.match(edge, /responsavel_telefone/i);

@@ -29,11 +29,13 @@ export interface PesquisaEvasaoConfirmacao {
 
 export type PesquisaEvasaoBloqueioCodigo =
   | 'sem_aluno'
+  | 'data_nascimento_ausente'
   | 'sem_telefone'
   | 'telefone_invalido'
   | 'responsavel_sem_nome'
   | 'responsavel_sem_telefone'
   | 'responsavel_telefone_invalido'
+  | 'telefone_snapshot_ausente'
   | 'telefone_responsavel_divergente'
   | 'motivo_nao_catalogado'
   | 'publico_interno'
@@ -60,7 +62,7 @@ export interface PesquisaEvasaoListagemItem {
   respondido_producao_em: string | null;
   is_menor: boolean;
   responsavel_nome: string | null;
-  publico_tipo: 'aluno' | 'responsavel' | 'colaborador' | 'professor' | 'outro';
+  publico_tipo: 'aluno' | 'responsavel' | 'indeterminado' | 'colaborador' | 'professor' | 'outro';
   bloqueio_codigo: PesquisaEvasaoBloqueioCodigo;
   elegivel_envio: boolean;
   elegibilidade_regra: string;

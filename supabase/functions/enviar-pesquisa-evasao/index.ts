@@ -33,6 +33,11 @@ import {
   type EstadoEnvioPersistido,
   sanitizarErroProvider,
 } from "./provider.ts";
+import { resolverPublicoPesquisa } from "./publico.ts";
+import {
+  alunoComPreposicao,
+  assinaturaComArtigo,
+} from "./tratamentoGramatical.ts";
 
 const CAIXA_SUCESSO_ID = 3;
 const PREVIEW_TTL_MS = 10 * 60 * 1000;
@@ -165,26 +170,6 @@ function primeiroNome(nome: string): string {
     throw new ErroHttp(422, "Nome de destinatario invalido");
   }
   return primeiro;
-}
-
-function alunoEhMenor(dataNascimento: string | null): boolean {
-  if (!dataNascimento) return false;
-
-  const nascimento = new Date(`${dataNascimento}T00:00:00Z`);
-  if (Number.isNaN(nascimento.getTime())) {
-    throw new ErroHttp(422, "Data de nascimento invalida");
-  }
-
-  const hoje = new Date();
-  let idade = hoje.getUTCFullYear() - nascimento.getUTCFullYear();
-  const aindaNaoFezAniversario = hoje.getUTCMonth() <
-      nascimento.getUTCMonth() ||
-    (
-      hoje.getUTCMonth() === nascimento.getUTCMonth() &&
-      hoje.getUTCDate() < nascimento.getUTCDate()
-    );
-  if (aindaNaoFezAniversario) idade -= 1;
-  return idade < 18;
 }
 
 async function carregarMovimentacaoCanonica(
@@ -506,9 +491,19 @@ async function previsualizar(
     supabase,
     movimentacao.aluno_id,
   );
-  const publico = alunoEhMenor(aluno.data_nascimento)
-    ? "responsavel"
-    : "direto";
+  let publico: "direto" | "responsavel";
+  try {
+    publico = resolverPublicoPesquisa(aluno.data_nascimento);
+  } catch (error) {
+    const codigo = error instanceof Error ? error.message : "";
+    if (codigo === "DATA_NASCIMENTO_AUSENTE") {
+      throw new ErroHttp(422, "Data de nascimento nao cadastrada");
+    }
+    if (codigo === "DATA_NASCIMENTO_INVALIDA") {
+      throw new ErroHttp(422, "Data de nascimento invalida");
+    }
+    throw error;
+  }
   const destinatario = publico === "responsavel"
     ? aluno.responsavel_nome?.trim()
     : movimentacao.aluno_nome.trim();
@@ -569,6 +564,10 @@ async function previsualizar(
       aluno_primeiro_nome: primeiroNome(movimentacao.aluno_nome),
       responsavel_primeiro_nome: primeiroNome(destinatario),
       assinatura_nome: assinatura.assinaturaNome,
+      assinatura_com_artigo: assinaturaComArtigo(assinatura.assinaturaNome),
+      aluno_com_preposicao: alunoComPreposicao(
+        primeiroNome(movimentacao.aluno_nome),
+      ),
     },
   });
 
