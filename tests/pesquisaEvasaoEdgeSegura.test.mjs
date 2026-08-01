@@ -33,6 +33,21 @@ const fixtureRunnerPath = resolve(
 
 const readOptional = (path) => existsSync(path) ? readFileSync(path, 'utf8') : '';
 
+test('edge bloqueia publico quando a data de nascimento nao e segura', () => {
+  const edge = readOptional(edgePath);
+
+  assert.match(edge, /resolverPublicoPesquisa\(aluno\.data_nascimento\)/);
+  assert.doesNotMatch(edge, /function\s+alunoEhMenor\s*\(/);
+  assert.match(
+    edge,
+    /DATA_NASCIMENTO_AUSENTE[\s\S]*ErroHttp\(422,[\s\S]*Data de nascimento nao cadastrada/,
+  );
+  assert.match(
+    edge,
+    /DATA_NASCIMENTO_INVALIDA[\s\S]*ErroHttp\(422,[\s\S]*Data de nascimento invalida/,
+  );
+});
+
 function tokenizarTypeScript(source) {
   const tokens = [];
   let i = 0;
