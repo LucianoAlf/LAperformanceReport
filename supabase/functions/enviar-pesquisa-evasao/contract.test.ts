@@ -459,6 +459,84 @@ Deno.test("renderiza mensagem para responsavel de menor", () => {
   );
 });
 
+Deno.test("renderiza V2 para responsavel com formatacao exata e sem separador", () => {
+  const template = `{{responsavel_primeiro_nome}}! Aqui é {{assinatura_com_artigo}}, do Sucesso do Aluno da LA Music. 🎵
+
+Queria agradecer pelo tempo que {{aluno_primeiro_nome}} passou com a gente. As portas estarão sempre abertas!
+
+Posso lhe fazer uma única pergunta?
+
+> *Se você pudesse mudar alguma coisa aqui na LA para que a experiência {{aluno_com_preposicao}} fosse melhor, o que você mudaria?*
+
+_Pedimos a gentileza de responder com sinceridade. Sua opinião vai nos ajudar a oferecer uma experiência cada vez melhor aos nossos alunos._
+
+Pode responder com texto ou áudio. Fique à vontade. 🙏`;
+
+  const mensagem = renderizarMensagem({
+    template,
+    valores: {
+      responsavel_primeiro_nome: "Joice",
+      assinatura_com_artigo: "o Luciano",
+      aluno_primeiro_nome: "Davi",
+      aluno_com_preposicao: "do Davi",
+    },
+  });
+
+  assertEquals(
+    mensagem,
+    `Joice! Aqui é o Luciano, do Sucesso do Aluno da LA Music. 🎵
+
+Queria agradecer pelo tempo que Davi passou com a gente. As portas estarão sempre abertas!
+
+Posso lhe fazer uma única pergunta?
+
+> *Se você pudesse mudar alguma coisa aqui na LA para que a experiência do Davi fosse melhor, o que você mudaria?*
+
+_Pedimos a gentileza de responder com sinceridade. Sua opinião vai nos ajudar a oferecer uma experiência cada vez melhor aos nossos alunos._
+
+Pode responder com texto ou áudio. Fique à vontade. 🙏`,
+  );
+  assertEquals(mensagem.includes("---"), false);
+  assertEquals(mensagem.includes("{{"), false);
+});
+
+Deno.test("renderiza V2 direto falando com o proprio aluno", () => {
+  const mensagem = renderizarMensagem({
+    template: `{{aluno_primeiro_nome}}! Aqui é {{assinatura_com_artigo}}, do Sucesso do Aluno da LA Music. 🎵
+
+Queria agradecer pelo tempo que você passou com a gente. As portas estarão sempre abertas para você!
+
+Posso te fazer uma única pergunta?
+
+> *Se você pudesse mudar alguma coisa aqui na LA para que a sua experiência fosse melhor, o que você mudaria?*
+
+_Pedimos a gentileza de responder com sinceridade. Sua opinião vai nos ajudar a oferecer uma experiência cada vez melhor aos nossos alunos._
+
+Pode responder com texto ou áudio. Fique à vontade. 🙏`,
+    valores: {
+      aluno_primeiro_nome: "Maria",
+      assinatura_com_artigo: "a Fabi",
+    },
+  });
+
+  assertEquals(
+    mensagem,
+    `Maria! Aqui é a Fabi, do Sucesso do Aluno da LA Music. 🎵
+
+Queria agradecer pelo tempo que você passou com a gente. As portas estarão sempre abertas para você!
+
+Posso te fazer uma única pergunta?
+
+> *Se você pudesse mudar alguma coisa aqui na LA para que a sua experiência fosse melhor, o que você mudaria?*
+
+_Pedimos a gentileza de responder com sinceridade. Sua opinião vai nos ajudar a oferecer uma experiência cada vez melhor aos nossos alunos._
+
+Pode responder com texto ou áudio. Fique à vontade. 🙏`,
+  );
+  assertEquals(mensagem.includes("---"), false);
+  assertEquals(mensagem.includes("responsavel"), false);
+});
+
 Deno.test("Fabi e Jessica produzem suas proprias assinaturas", () => {
   const template = "Aqui e a {{assinatura_nome}}.";
 

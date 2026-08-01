@@ -34,6 +34,10 @@ import {
   sanitizarErroProvider,
 } from "./provider.ts";
 import { resolverPublicoPesquisa } from "./publico.ts";
+import {
+  alunoComPreposicao,
+  assinaturaComArtigo,
+} from "./tratamentoGramatical.ts";
 
 const CAIXA_SUCESSO_ID = 3;
 const PREVIEW_TTL_MS = 10 * 60 * 1000;
@@ -560,6 +564,10 @@ async function previsualizar(
       aluno_primeiro_nome: primeiroNome(movimentacao.aluno_nome),
       responsavel_primeiro_nome: primeiroNome(destinatario),
       assinatura_nome: assinatura.assinaturaNome,
+      assinatura_com_artigo: assinaturaComArtigo(assinatura.assinaturaNome),
+      aluno_com_preposicao: alunoComPreposicao(
+        primeiroNome(movimentacao.aluno_nome),
+      ),
     },
   });
 

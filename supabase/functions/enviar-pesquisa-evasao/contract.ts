@@ -254,6 +254,8 @@ const PLACEHOLDERS_PERMITIDOS = new Set([
   "aluno_primeiro_nome",
   "responsavel_primeiro_nome",
   "assinatura_nome",
+  "assinatura_com_artigo",
+  "aluno_com_preposicao",
 ]);
 
 export function renderizarMensagem(input: RenderInput): string {

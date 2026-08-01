@@ -48,6 +48,23 @@ test('edge bloqueia publico quando a data de nascimento nao e segura', () => {
   );
 });
 
+test('edge resolve artigo e preposicao no servidor', () => {
+  const edge = readOptional(edgePath);
+
+  assert.match(
+    edge,
+    /import\s*\{[\s\S]*alunoComPreposicao[\s\S]*assinaturaComArtigo[\s\S]*\}\s*from\s*["']\.\/tratamentoGramatical\.ts["']/,
+  );
+  assert.match(
+    edge,
+    /assinatura_com_artigo:\s*assinaturaComArtigo\(assinatura\.assinaturaNome\)/,
+  );
+  assert.match(
+    edge,
+    /aluno_com_preposicao:\s*alunoComPreposicao\(\s*primeiroNome\(movimentacao\.aluno_nome\)/,
+  );
+});
+
 function tokenizarTypeScript(source) {
   const tokens = [];
   let i = 0;
