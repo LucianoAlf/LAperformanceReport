@@ -228,31 +228,74 @@ serve(async (req: Request) => {
         `[sync-grade-futura] ${unidade.nome}: ${resultado.gravados} vinculos aluno-aula`,
       );
 
-      const { data: existentesFuturas } = await supabase
-        .from('aulas_emusys')
-        .select('emusys_id')
-        .eq('unidade_id', unidade.id)
-        .gt('data_aula', hoje)
-        .lte('data_aula', dataFim)
-        .eq('cancelada', false);
+      // Trava de seguranca do soft-cancel. Ele marca aula como cancelada, entao
+      // so pode rodar sobre uma foto COMPLETA da API. fetchAulasRange lanca em
+      // resposta nao-OK, mas uma janela que voltou vazia (ou quase) indica
+      // problema na origem, e cancelar em massa sobre isso destruiria a grade.
+      const podeCancelarFantasmas = vivosEmusysId.size > 0;
+      if (!podeCancelarFantasmas) {
+        console.error(
+          `[sync-grade-futura] ${unidade.nome}: API nao devolveu aulas na janela; soft-cancel ABORTADO para nao cancelar grade real`,
+        );
+      }
 
-      const fantasmas = (existentesFuturas || [])
-        .map((row) => row.emusys_id as number)
-        .filter((id) => !vivosEmusysId.has(id));
-
+      const existentesFuturas: Array<{ emusys_id: number }> = [];
       let canceladas = 0;
-      for (let offset = 0; offset < fantasmas.length; offset += chunkSize) {
-        const bloco = fantasmas.slice(offset, offset + chunkSize);
-        const { error } = await supabase
-          .from('aulas_emusys')
-          .update({ cancelada: true })
-          .eq('unidade_id', unidade.id)
-          .gt('data_aula', hoje)
-          .in('emusys_id', bloco);
-        if (error) {
-          console.error(`[sync-grade-futura] soft-cancel (${unidade.nome}): ${error.message}`);
+
+      if (podeCancelarFantasmas) {
+        // Leitura paginada: sem isso o PostgREST corta em ~1000 linhas e a aula
+        // fantasma que cai fora do corte nunca e cancelada. O order('emusys_id')
+        // e obrigatorio — sem ordenacao estavel o range() repete ou pula linhas.
+        const tamanhoPagina = 1000;
+        let leituraFalhou = false;
+        for (let pagina = 0; ; pagina++) {
+          const { data: bloco, error } = await supabase
+            .from('aulas_emusys')
+            .select('emusys_id')
+            .eq('unidade_id', unidade.id)
+            .gt('data_aula', hoje)
+            .lte('data_aula', dataFim)
+            .eq('cancelada', false)
+            .order('emusys_id', { ascending: true })
+            .range(pagina * tamanhoPagina, (pagina + 1) * tamanhoPagina - 1);
+
+          if (error) {
+            console.error(
+              `[sync-grade-futura] ${unidade.nome}: falha ao ler aulas futuras p/ soft-cancel: ${error.message}`,
+            );
+            leituraFalhou = true;
+            break;
+          }
+          if (!bloco || bloco.length === 0) break;
+          existentesFuturas.push(...(bloco as Array<{ emusys_id: number }>));
+          if (bloco.length < tamanhoPagina) break;
+        }
+
+        // Lista parcial e exatamente o bug que esta task corrige: se a leitura
+        // falhou no meio, pula o soft-cancel desta unidade nesta execucao.
+        if (leituraFalhou) {
+          console.error(
+            `[sync-grade-futura] ${unidade.nome}: soft-cancel PULADO (leitura parcial das aulas futuras)`,
+          );
         } else {
-          canceladas += bloco.length;
+          const fantasmas = existentesFuturas
+            .map((row) => row.emusys_id as number)
+            .filter((id) => !vivosEmusysId.has(id));
+
+          for (let offset = 0; offset < fantasmas.length; offset += chunkSize) {
+            const bloco = fantasmas.slice(offset, offset + chunkSize);
+            const { error } = await supabase
+              .from('aulas_emusys')
+              .update({ cancelada: true })
+              .eq('unidade_id', unidade.id)
+              .gt('data_aula', hoje)
+              .in('emusys_id', bloco);
+            if (error) {
+              console.error(`[sync-grade-futura] soft-cancel (${unidade.nome}): ${error.message}`);
+            } else {
+              canceladas += bloco.length;
+            }
+          }
         }
       }
 
@@ -262,6 +305,7 @@ serve(async (req: Request) => {
         janela: { inicio: hoje, fim: dataFim, dias: janelaDias },
         aulas_recebidas: aulas.length,
         aulas_gravadas: gravadas,
+        fantasmas_avaliadas: existentesFuturas.length,
         fantasmas_canceladas: canceladas,
         vinculos_gravados: resultado.gravados,
         vinculos_erros: resultado.erros,
