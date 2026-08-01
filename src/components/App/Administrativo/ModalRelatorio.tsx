@@ -38,13 +38,6 @@ import {
 } from '@/lib/administrativoTransferencias';
 import { isCompetenciaNoPeriodo } from '@/lib/renovacoesAntecipadas';
 
-// Mapeamento de UUIDs para nomes de unidade
-const UUID_NOME_MAP: Record<string, string> = {
-  '368d47f5-2d88-4475-bc14-ba084a9a348e': 'Barra',
-  '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'Campo Grande',
-  '95553e96-971b-4590-a6eb-0201d013c14d': 'Recreio',
-};
-
 const tipoEvasaoLabels: Record<string, string> = {
   interrompido: 'Interrompido',
   interrompido_2_curso: 'Interrompido 2º Curso',
@@ -275,6 +268,7 @@ export function ModalRelatorio({
   const [tipoSelecionado, setTipoSelecionado] = useState<TipoRelatorio | null>(null);
   const [textoRelatorio, setTextoRelatorio] = useState('');
   const [copiado, setCopiado] = useState(false);
+  const textoRelatorioRef = React.useRef<HTMLTextAreaElement>(null);
   const [loadingIA, setLoadingIA] = useState(false);
   const [erroIA, setErroIA] = useState<string | null>(null);
   const [enviandoWhatsApp, setEnviandoWhatsApp] = useState(false);
@@ -825,72 +819,39 @@ export function ModalRelatorio({
   async function gerarRelatorioGerencialIA(): Promise<string> {
     setLoadingIA(true);
     setErroIA(null);
-    
+
     try {
       const { anoRelatorio, mesRelatorio } = obterCompetenciaGerencial();
-
-      // Converter unidade para UUID se necessário
-      let unidadeUUID: string | null = null;
-      if (unidade && unidade !== 'todos') {
-        // Se já é UUID, usa direto; senão, tenta mapear
-        unidadeUUID = unidade.includes('-') ? unidade : null;
+      if (!unidade || unidade === 'todos') {
+        throw new Error('Selecione uma unidade para gerar o relatório gerencial.');
       }
 
-      console.log('[ModalRelatorio] Gerando relatório gerencial IA');
-      console.log('[ModalRelatorio] unidade recebida:', unidade);
-      console.log('[ModalRelatorio] unidadeUUID:', unidadeUUID);
-      console.log('[ModalRelatorio] ano:', anoRelatorio, 'mes:', mesRelatorio);
-
-      // Buscar dados via função SQL
-      const { data: dadosRelatorio, error: errorDados } = await supabase
-        .rpc('get_dados_relatorio_gerencial', {
-          p_unidade_id: unidadeUUID,
-          p_ano: anoRelatorio,
-          p_mes: mesRelatorio
-        });
-
-      if (errorDados) {
-        console.error('Erro ao buscar dados:', errorDados);
-        throw new Error('Erro ao buscar dados para o relatório');
-      }
-
-      console.log('[ModalRelatorio] Dados retornados:', dadosRelatorio);
-
-      // Determinar nome da unidade
-      const nomeUnidade = unidadeUUID 
-        ? (UUID_NOME_MAP[unidadeUUID] || dadosRelatorio?.periodo?.unidade_nome || 'Unidade')
-        : 'Consolidado';
-      const isConsolidado = !unidadeUUID;
-
-      console.log('[ModalRelatorio] nomeUnidade:', nomeUnidade);
-      console.log('[ModalRelatorio] isConsolidado:', isConsolidado);
-
-      // Chamar Edge Function
+      const unidadeUUID = unidade;
       const { data: responseData, error: errorEdge } = await supabase.functions.invoke(
         'gemini-relatorio-gerencial',
         {
           body: {
-            dados: dadosRelatorio,
-            unidade_nome: nomeUnidade,
-            is_consolidado: isConsolidado
-          }
+            unidade: unidadeUUID,
+            ano: anoRelatorio,
+            mes: mesRelatorio,
+          },
         }
       );
 
       if (errorEdge) {
         console.error('Erro na Edge Function:', errorEdge);
-        throw new Error('Erro ao gerar relatório com IA');
+        throw new Error('Erro ao gerar relatório gerencial');
       }
 
       if (responseData?.success && responseData?.relatorio) {
         return responseData.relatorio;
       } else {
-        throw new Error(responseData?.error || 'Resposta inválida da IA');
+        throw new Error(responseData?.error || 'Resposta inválida do relatório gerencial');
       }
     } catch (error) {
       const mensagem = error instanceof Error ? error.message : 'Erro desconhecido';
       setErroIA(mensagem);
-      return `❌ Erro ao gerar relatório: ${mensagem}\n\nTente novamente em alguns instantes.`;
+      throw error instanceof Error ? error : new Error(mensagem);
     } finally {
       setLoadingIA(false);
     }
@@ -1158,12 +1119,17 @@ export function ModalRelatorio({
 
     if (result.ok) {
       setCopiado(true);
+      toast.success('Relatório copiado!');
       setTimeout(() => setCopiado(false), 2000);
       return;
     }
 
     console.error('Erro ao copiar relatório administrativo:', result.error);
-    toast.error('Erro ao copiar', `Selecione o texto manualmente e pressione ${getManualCopyShortcut()}`);
+    textoRelatorioRef.current?.focus();
+    textoRelatorioRef.current?.select();
+    toast.error('Cópia automática indisponível', {
+      description: `O texto foi selecionado. Pressione ${getManualCopyShortcut()} para copiar.`,
+    });
   }
 
   function voltar() {
@@ -1465,6 +1431,7 @@ export function ModalRelatorio({
                   💡 Você pode editar o texto antes de copiar
                 </p>
                 <Textarea
+                  ref={textoRelatorioRef}
                   value={textoRelatorio}
                   onChange={(e) => setTextoRelatorio(e.target.value)}
                   className="flex-1 bg-slate-800 border-slate-700 font-mono text-sm min-h-[300px] resize-none"

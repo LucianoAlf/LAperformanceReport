@@ -74,6 +74,13 @@ ano e mês para `relatorio-admin-whatsapp`. A edge valida o usuário, lê o docu
 `fechado` por `get_relatorio_mensal_canonico_v1` e devolve o texto pronto. Não existe
 fallback vivo no caminho executado do botão.
 
+O botão Gerencial também envia somente unidade, ano e mês, agora diretamente
+para `gemini-relatorio-gerencial`. A edge busca
+`get_relatorio_gerencial_canonico_v1`, que exige os fechamentos mensais
+Administrativo e Comercial da mesma competência, agrega metas e rankings V3 e
+mantém os metadados de auditoria fora do texto público. A IA participa apenas
+dos cinco blocos qualitativos; não recebe autoridade para alterar KPIs.
+
 Cobertura histórica: snapshot completo só existe de **junho/2026 em diante**. Antes disso
 há apenas `dados_mensais` (~12 campos).
 
@@ -199,7 +206,7 @@ Planilha operacional (`Retencao/PlanilhaRetencao.tsx`) + dashboard analítico (`
 - **Ciclo atual:** `get_kpis_alunos_admin_operacional` separa **Ativos agora**
   de **Trancados agora**. A aba de movimentações mantém **Trancamentos no
   período** como evento histórico distinto.
-- **RPCs:** `get_resumo_renovacoes_proximas`, `toggle_relatorio_cron`, `get_dados_relatorio_gerencial`, `get_dados_retencao_ia`, `vincular_alunos_checklist`, `get_historico_rotinas`, `get_checklist_detail`, `marcar_checklist_item`, `get_checklists_farmer`, `criar_checklist_from_template`, `get_rotinas_do_dia`, `get_progresso_rotinas_hoje`, `marcar_rotina_concluida`
+- **RPCs:** `get_resumo_renovacoes_proximas`, `toggle_relatorio_cron`, `get_relatorio_gerencial_canonico_v1`, `get_dados_retencao_ia`, `vincular_alunos_checklist`, `get_historico_rotinas`, `get_checklist_detail`, `marcar_checklist_item`, `get_checklists_farmer`, `criar_checklist_from_template`, `get_rotinas_do_dia`, `get_progresso_rotinas_hoje`, `marcar_rotina_concluida`
 - **Edge functions:** `gemini-relatorio-gerencial`, `relatorio-admin-whatsapp`, `gemini-insights-retencao`, `enviar-pesquisa-pos-primeira-aula`, `buscar-foto-perfil`, `deletar-mensagem-admin`, `editar-mensagem-admin`
 
 ## Metas (`/app/metas`)
