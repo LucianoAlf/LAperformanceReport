@@ -29,6 +29,12 @@ verify_jwt = false
 # Cron usa segredo dedicado; navegador valida JWT e permissao dentro da funcao.
 verify_jwt = false
 
+[functions.varrer-atribuicao-meta-ads]
+# Cron manda x-sync-token; navegador manda JWT. Os dois sao validados DENTRO da funcao.
+# Sem esta linha o gateway devolve 401 antes do codigo rodar e o pg_cron ainda assim
+# marca "succeeded" -- falha silenciosa. Ver comentario no topo do index.ts.
+verify_jwt = false
+
 [functions.atualizar-inadimplencia-emusys]
 # Cron/servidor usa x-sync-token; navegador manda JWT. Os dois sao validados DENTRO da
 # funcao. Esta linha e obrigatoria: sem ela o gateway exige Authorization e devolve 401
