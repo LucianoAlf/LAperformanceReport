@@ -1,6 +1,6 @@
 # Pesquisa de evasão — runbook do Subprojeto A
 
-**Status:** Plano A aplicado e publicado, com o Bloco 5 autorizado por Alf e concluído. Correção complementar menor → responsável preparada localmente; a segunda migration e a atualização da Edge/frontend ainda não foram aplicadas em produção.
+**Status:** Plano A aplicado e publicado. O retorno da pesquisa também foi fechado em produção: webhook atualizado, captura de resposta em modo teste habilitada e teste ponta a ponta aprovado no número interno.
 
 **Produção:** `ouqwbbermlzqqvtqwlul`
 
@@ -103,6 +103,7 @@ Migrations, nesta ordem:
 Edge e frontend:
 
 - `supabase/functions/enviar-pesquisa-evasao/`;
+- `supabase/functions/webhook-whatsapp-inbox/`;
 - `src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx`;
 - `src/components/App/SucessoCliente/ModalPreviewPesquisaEvasao.tsx`;
 - consumidores de caixas listados no item 3.
@@ -492,6 +493,51 @@ tabela diretamente, inclusive o NovaConversaModal. A saída aprovada é publicar
 o frontend do PR, que usa `listar_whatsapp_caixas_seguras`, e só então repetir o
 smoke completo. Nenhuma conversa nova foi enviada no smoke anterior.
 
+### Fechamento do retorno da pesquisa
+
+Uma auditoria posterior ao primeiro encerramento confirmou que o rollout havia
+publicado somente `enviar-pesquisa-evasao`; o `webhook-whatsapp-inbox` ativo
+ainda era a versão 75. Antes de liberar a operação para Fabi e Jessica, o fluxo
+de entrada foi tratado como gate bloqueador.
+
+O código publicado na versão 76 do webhook:
+
+- grava simultaneamente o legado `status = 'respondido'` e o contrato novo
+  `resposta_status = 'pronta_para_revisao'`;
+- associa a resposta exclusivamente pelo telefone e pela caixa da conversa
+  ativa; o fallback temporário que escolhia qualquer conversa aguardando
+  resposta foi removido;
+- remove a consulta global de estado usada somente para debug;
+- deixa de persistir o payload integral em `webhook_debug_log`;
+- preserva os fluxos de inbox administrativa, CRM/Mila, status, reação, edição
+  e o encaminhamento de `buttonOrListid` para `processar-resposta-pesquisa`.
+
+O primeiro ensaio real revelou um segundo bloqueio: o modo teste entregava a
+mensagem ao número interno, mas não criava `conversa_estado_whatsapp`, pois a
+abertura da janela estava condicionada a `modo_teste = false`. O contrato foi
+corrigido para abrir a janela sempre que o provedor confirmar `enviado`,
+mantendo o destino controlado pelo número interno. `enviar-pesquisa-evasao` foi
+publicada como versão 41, com `verify_jwt = true`.
+
+Teste ponta a ponta aprovado em 01/08/2026:
+
+- pesquisa de teste `85798348-31bb-4fc0-8b21-750315caf8f1`, saída `3299`;
+- mensagem entregue somente ao número interno `***8047`;
+- estado aberto com o mesmo `pesquisa_evasao_id` e depois encerrado como
+  `respondido`;
+- resposta recebida: `Teste E2E de retorno da pesquisa de evasão — 01/08/2026.`;
+- registro final com `status = 'respondido'`,
+  `resposta_status = 'pronta_para_revisao'`, `resposta_tipo = 'texto'` e o
+  texto na pesquisa correta;
+- nenhuma outra pesquisa foi marcada como respondida no intervalo;
+- `webhook_debug_log` permaneceu com 2.290 linhas e máximo em
+  `2026-08-01 13:43:28.690359+00`, anterior ao teste.
+
+O card produtivo **Respondidos** não deve incrementar nesse teste: a função de
+estatísticas exclui deliberadamente `modo_teste = true`. A prova do retorno de
+teste é feita pelo histórico marcado como TESTE e pelo registro de auditoria;
+respostas produtivas passam a alimentar o card pelo novo `resposta_status`.
+
 ### Risco independente do rollout: continuidade do banco
 
 PITR está desativado em `ouqwbbermlzqqvtqwlul` e, no pré-flight, o backup
@@ -566,7 +612,12 @@ Somente após autorização explícita:
 14. liberar merge do PR #16 e aguardar a Vercel concluir o deploy do frontend;
 15. somente depois do deploy, realizar o smoke comparativo dos consumidores de caixas descrito no baseline: Pré-Atendimento, Caixa de Entrada do Sucesso do Aluno, CaixasManager e NovaConversaModal;
 16. confirmar nome e seleção da caixa, precedência da caixa da unidade sobre a global e ausência de campos de token preenchidos;
-17. observar logs, estados incertos e duplicidade durante a janela combinada.
+17. publicar `webhook-whatsapp-inbox` com a versão revisada;
+18. confirmar que o webhook grava `resposta_status`, não usa fallback global e não persiste payload em `webhook_debug_log`;
+19. executar o retorno ponta a ponta no número interno: envio em modo teste, resposta em texto e associação à pesquisa exata;
+20. confirmar que nenhuma outra pesquisa foi alterada e que o debug log não cresceu;
+21. observar logs, estados incertos e duplicidade durante a janela combinada;
+22. somente então liberar Fabi e Jessica para a operação.
 
 ## 10. Checklist operacional
 
@@ -609,6 +660,15 @@ Somente após autorização explícita:
 - [ ] aparecem marcados como `TESTE`;
 - [ ] não entram em estatísticas;
 - [ ] auditoria contém usuário, mensagem renderizada, template, caixa e horário.
+
+### Retorno
+
+- [ ] resposta atualiza `status = 'respondido'` e `resposta_status = 'pronta_para_revisao'`;
+- [ ] resposta é vinculada somente à conversa ativa da mesma caixa e telefone;
+- [ ] não existe fallback para outra pesquisa aberta;
+- [ ] modo teste abre estado de resposta somente para o número interno;
+- [ ] payload integral não é persistido em `webhook_debug_log`;
+- [ ] fluxos administrativos, CRM, status, reação, edição e pós-1ª aula permanecem roteados;
 
 ### Caixas
 
@@ -659,7 +719,7 @@ Se o frontend for publicado fora de ordem:
 | Migrations aplicadas | APROVADO — versões remotas `20260801003710`, `20260801003807`, `20260801003851` |
 | Verificadores em rollback | APROVADO — estrutural e operacional |
 | 6/6 legados como teste | APROVADO — mesmo número interno confirmado |
-| Edge com JWT | APROVADO — versão 40 ativa; anônimo e JWT inválido retornam 401 |
+| Edge com JWT | APROVADO — `enviar-pesquisa-evasao` versão 41 ativa, `verify_jwt = true`; anônimo e JWT inválido retornam 401 |
 | Backfill de telefone de julho/2026 | APROVADO — migration remota `20260801013339`; 23 recuperados e 24 snapshots no total; o diagnóstico posterior identificou 12 contatos de responsável ainda elegíveis e uma movimentação sem vínculo |
 | Backfill do telefone do responsável | APROVADO — migration remota `20260801130436`; 12 snapshots vazios preenchidos, 4 snapshots de menores substituídos pela regra do responsável e movimentação `3312` vinculada ao aluno `1532` |
 | Smoke no número interno | APROVADO — mensagem entregue somente em `***8047`, modo teste |
@@ -668,3 +728,6 @@ Se o frontend for publicado fora de ordem:
 | Prévia de menor | APROVADO — evasão `3400` mostrou o nome e o telefone mascarado da responsável; snapshot persistido com destinatário e template `responsavel`; prévia cancelada sem envio |
 | Smoke das telas de atendimento | APROVADO NO ESCOPO — Caixa de Entrada do Sucesso do Aluno permaneceu operacional; Pré-Atendimento continua fora deste aceite por decisão de Alf |
 | Merge/deploy do frontend | APROVADO — PR #19, merge `351bd1ade991510dd6a6cd56f811ae33e4a6b1ef`, Vercel produção `dpl_9aoQbKGD2jtrHwfGmC6aPZmLaP7R` pronta |
+| Webhook inbound | APROVADO — `webhook-whatsapp-inbox` versão 76 ativa; grava `resposta_status`, sem fallback global e sem persistência em `webhook_debug_log` |
+| Retorno ponta a ponta | APROVADO — pesquisa `85798348-31bb-4fc0-8b21-750315caf8f1` recebeu a resposta exata no número interno; zero outras pesquisas alteradas |
+| Indicador de respostas | APROVADO — respostas produtivas usam `resposta_status`; o teste não incrementou o card porque `modo_teste = true` é excluído por contrato |
