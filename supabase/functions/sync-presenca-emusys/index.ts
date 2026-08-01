@@ -9,7 +9,11 @@ import {
   createClient,
   type SupabaseClient,
 } from 'https://esm.sh/@supabase/supabase-js@2';
-import { buscarPaginaAulasEmusys } from '../_shared/emusys-aulas.ts';
+import {
+  buscarPaginaAulasEmusys,
+  montarVinculosAulaAlunos,
+  gravarVinculosAulaAlunos,
+} from '../_shared/emusys-aulas.ts';
 import {
   buscarTodasAulas,
   normalizarSituacaoExperimental as normalizarSituacaoSnapshot,
@@ -350,10 +354,32 @@ async function sincronizarMetadadosAulas(
       gravadas += lote.length;
     }
 
+    // Casa os vinculos aluno-aula tambem no sync de 15 min: sem isso, um
+    // reagendamento ou aluno incluido depois do ultimo sync-grade-futura
+    // (roda 1x/dia) so apareceria no dia seguinte.
+    const { data: aulasGravadas } = await supabase
+      .from('aulas_emusys')
+      .select('id, emusys_id')
+      .eq('unidade_id', unidade.id)
+      .gte('data_aula', dataInicio)
+      .lte('data_aula', dataFim);
+
+    const idPorEmusysId = new Map<number, number>();
+    for (const linha of aulasGravadas || []) {
+      idPorEmusysId.set(linha.emusys_id as number, linha.id as number);
+    }
+
+    const vinculos = montarVinculosAulaAlunos(aulas, idPorEmusysId, unidade.id);
+    const resultadoVinculos = await gravarVinculosAulaAlunos(supabase, vinculos);
+    for (const erro of resultadoVinculos.erros) {
+      console.error(`[sync-presenca] upsert aula_alunos (${unidade.nome}): ${erro}`);
+    }
+
     resultados.push({
       unidade: unidade.nome,
       aulas_recebidas: aulas.length,
       aulas_gravadas: gravadas,
+      vinculos_gravados: resultadoVinculos.gravados,
     });
     aulasPorUnidade.push({ unidade, dataInicio, dataFim, aulas });
   }
