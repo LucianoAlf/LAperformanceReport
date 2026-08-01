@@ -841,7 +841,7 @@ console.log('vinculos aula-aluno: OK');
 
 - [ ] **Step 2: Rodar o teste e confirmar que falha**
 
-Run: `npx tsx supabase/functions/_shared/emusys-aulas.test.ts`
+Run: `deno test --allow-net supabase/functions/_shared/emusys-aulas.test.ts` (os testes de `_shared/` rodam com Deno, NAO com tsx — os imports `jsr:` quebram no tsx)
 Expected: FAIL — `montarVinculosAulaAlunos is not a function` (ou export não encontrado).
 
 Se o arquivo de teste usar o runner do Deno em vez de `tsx`, usar o comando que o arquivo já pressupõe — conferir o topo do arquivo antes.
@@ -930,7 +930,7 @@ export async function gravarVinculosAulaAlunos(
 
 - [ ] **Step 4: Rodar o teste e confirmar que passa**
 
-Run: `npx tsx supabase/functions/_shared/emusys-aulas.test.ts`
+Run: `deno test --allow-net supabase/functions/_shared/emusys-aulas.test.ts` (os testes de `_shared/` rodam com Deno, NAO com tsx — os imports `jsr:` quebram no tsx)
 Expected: PASS — imprime `vinculos aula-aluno: OK`, exit 0. Os testes que já existiam no arquivo continuam passando.
 
 - [ ] **Step 5: Commit**
