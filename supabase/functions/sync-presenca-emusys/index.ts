@@ -11,6 +11,7 @@ import {
 } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
   buscarPaginaAulasEmusys,
+  criarAlunoChave,
   montarVinculosAulaAlunos,
   gravarVinculosAulaAlunos,
 } from '../_shared/emusys-aulas.ts';
@@ -196,11 +197,9 @@ function podeMaterializarFalta(aula: AulaEmusys, agora = new Date()): boolean {
   return fimAula <= limite;
 }
 
-function criarAlunoChave(aluno: AlunoEmusys, alunoId: number | undefined): string {
-  if (aluno.id_aluno != null && aluno.id_aluno > 0) return `emusys:${aluno.id_aluno}`;
-  if (alunoId != null) return `local:${alunoId}`;
-  return `nome:${normalizarNome(aluno.nome_aluno || '')}:${aluno.data_nascimento_aluno || ''}`;
-}
+// criarAlunoChave vive em _shared/emusys-aulas.ts: as duas edges que gravam em
+// aula_alunos_emusys precisam produzir EXATAMENTE a mesma chave, senao o mesmo
+// aluno na mesma aula vira duas linhas.
 
 function resolverAlunoLocal(
   aluno: AlunoEmusys,
@@ -369,10 +368,10 @@ async function sincronizarMetadadosAulas(
       idPorEmusysId.set(linha.emusys_id as number, linha.id as number);
     }
 
-    const vinculos = montarVinculosAulaAlunos(aulas, idPorEmusysId, unidade.id);
+    const vinculos = montarVinculosAulaAlunos(aulas, idPorEmusysId, unidade.id, normalizarNome);
     const resultadoVinculos = await gravarVinculosAulaAlunos(supabase, vinculos);
     for (const erro of resultadoVinculos.erros) {
-      console.error(`[sync-presenca] upsert aula_alunos (${unidade.nome}): ${erro}`);
+      console.error(`[sync-presenca] upsert aula_alunos_emusys (${unidade.nome}): ${erro}`);
     }
 
     resultados.push({
@@ -1766,7 +1765,7 @@ serve(async (req: Request) => {
                 {
                   aula_emusys_id: aulaLocalId,
                   unidade_id: unidade.id,
-                  aluno_chave: criarAlunoChave(aluno, alunoId),
+                  aluno_chave: criarAlunoChave(aluno, alunoId, normalizarNome),
                   aluno_emusys_id: aluno.id_aluno ?? null,
                   aluno_id: alunoId ?? null,
                   aluno_nome: nome,

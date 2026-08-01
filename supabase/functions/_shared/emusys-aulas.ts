@@ -120,30 +120,60 @@ export async function buscarPaginaAulasEmusys<
 }
 
 export interface AlunoNaAulaEmusys {
-  id_aluno: number | null;
-  id_lead: number | null;
+  id_aluno?: number | null;
+  id_lead?: number | null;
   nome_aluno: string;
-  telefone_aluno: string | null;
+  telefone_aluno?: string | null;
+  data_nascimento_aluno?: string | null;
+}
+
+/**
+ * Chave estavel do aluno na aula. Mesma regra usada pelo sync de presenca —
+ * vive aqui para que as duas edges gravem EXATAMENTE a mesma chave em
+ * aula_alunos_emusys. Duplicar essa regra volta a criar linha dobrada.
+ */
+export function criarAlunoChave(
+  aluno: {
+    id_aluno?: number | null;
+    nome_aluno?: string | null;
+    data_nascimento_aluno?: string | null;
+  },
+  alunoIdLocal: number | null | undefined,
+  normalizar: (nome: string) => string,
+): string {
+  if (aluno.id_aluno != null && aluno.id_aluno > 0) return `emusys:${aluno.id_aluno}`;
+  if (alunoIdLocal != null) return `local:${alunoIdLocal}`;
+  return `nome:${normalizar(aluno.nome_aluno || "")}:${aluno.data_nascimento_aluno || ""}`;
 }
 
 export interface VinculoAulaAluno {
   aula_emusys_id: number;
   unidade_id: string;
-  emusys_aluno_id: number | null;
-  lead_id: number | null;
-  nome: string;
-  telefone: string | null;
+  aluno_chave: string;
+  aluno_emusys_id: number | null;
+  aluno_nome: string;
+  aluno_nome_normalizado: string;
+  sincronizado_em: string;
+  updated_at: string;
 }
 
 /**
- * Transforma o alunos[] que o GET /aulas ja devolve em linhas de aula_alunos.
+ * Transforma o alunos[] que o GET /aulas ja devolve em linhas de
+ * aula_alunos_emusys (a tabela canonica do vinculo aula-aluno).
  * Sem isso a grade futura sabe curso/turma/sala mas nao sabe de quem e a aula.
  * `idPorEmusysId` mapeia o id do Emusys para o id interno de aulas_emusys.
+ *
+ * NAO devolve `aluno_id` de proposito: quem resolve o aluno local aqui e o
+ * trigger trg_aula_alunos_emusys_casar_aluno (before insert), e o upsert com
+ * ignoreDuplicates:false so atualiza colunas presentes no payload — incluir
+ * aluno_id aqui apagaria com null o que o sync de presenca ja resolveu.
  */
 export function montarVinculosAulaAlunos(
   aulas: Array<{ id: number; alunos?: AlunoNaAulaEmusys[] }>,
   idPorEmusysId: Map<number, number>,
   unidadeId: string,
+  normalizarNome: (nome: string) => string,
+  sincronizadoEm = new Date().toISOString(),
 ): VinculoAulaAluno[] {
   const vinculos: VinculoAulaAluno[] = [];
 
@@ -152,15 +182,20 @@ export function montarVinculosAulaAlunos(
     if (!aulaId) continue;
 
     for (const aluno of aula.alunos || []) {
-      // nome e a chave do upsert (aula_emusys_id, nome): sem nome, sem linha.
-      if (!aluno.nome_aluno) continue;
+      const nome = aluno.nome_aluno?.trim();
+      // aluno_nome e NOT NULL na tabela: sem nome, sem linha.
+      if (!nome) continue;
       vinculos.push({
         aula_emusys_id: aulaId,
         unidade_id: unidadeId,
-        emusys_aluno_id: aluno.id_aluno || null,
-        lead_id: aluno.id_lead || null,
-        nome: aluno.nome_aluno,
-        telefone: aluno.telefone_aluno || null,
+        // a grade futura nao monta os mapas de aluno local, entao alunoIdLocal
+        // e sempre undefined aqui: a chave sai como `emusys:` ou `nome:`.
+        aluno_chave: criarAlunoChave(aluno, undefined, normalizarNome),
+        aluno_emusys_id: aluno.id_aluno ?? null,
+        aluno_nome: nome,
+        aluno_nome_normalizado: normalizarNome(nome),
+        sincronizado_em: sincronizadoEm,
+        updated_at: sincronizadoEm,
       });
     }
   }
@@ -168,7 +203,10 @@ export function montarVinculosAulaAlunos(
   return vinculos;
 }
 
-/** Grava os vinculos em lotes. Idempotente pelo unique (aula_emusys_id, nome). */
+/**
+ * Grava os vinculos em lotes na tabela canonica aula_alunos_emusys.
+ * Idempotente pelo unique (aula_emusys_id, aluno_chave).
+ */
 export async function gravarVinculosAulaAlunos(
   // deno-lint-ignore no-explicit-any
   supabase: any,
@@ -177,16 +215,16 @@ export async function gravarVinculosAulaAlunos(
 ): Promise<{ gravados: number; erros: string[] }> {
   const erros: string[] = [];
   let gravados = 0;
-  const agora = new Date().toISOString();
 
   for (let offset = 0; offset < vinculos.length; offset += tamanhoLote) {
-    const lote = vinculos
-      .slice(offset, offset + tamanhoLote)
-      .map((v) => ({ ...v, updated_at: agora }));
+    const lote = vinculos.slice(offset, offset + tamanhoLote);
 
     const { error } = await supabase
-      .from("aula_alunos")
-      .upsert(lote, { onConflict: "aula_emusys_id,nome", ignoreDuplicates: false });
+      .from("aula_alunos_emusys")
+      .upsert(lote, {
+        onConflict: "aula_emusys_id,aluno_chave",
+        ignoreDuplicates: false,
+      });
 
     if (error) erros.push(error.message);
     else gravados += lote.length;

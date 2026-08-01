@@ -4,9 +4,21 @@
 import { assertEquals, assertRejects } from "jsr:@std/assert@1";
 import {
   buscarPaginaAulasEmusys,
+  criarAlunoChave,
   EmusysApiError,
   montarVinculosAulaAlunos,
 } from "./emusys-aulas.ts";
+
+/** Mesma normalizacao usada pelas duas edges. */
+function normalizarNome(nome: string): string {
+  return nome
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\(.*?\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 async function comFetchMock<T>(
   response: () => Response | Promise<Response>,
@@ -120,9 +132,37 @@ Deno.test("buscarPaginaAulasEmusys rejeita payload estruturalmente invalido", as
   }
 });
 
+Deno.test("criarAlunoChave segue a precedencia emusys > local > nome", () => {
+  assertEquals(
+    criarAlunoChave({ id_aluno: 55, nome_aluno: "Hugo" }, 7, normalizarNome),
+    "emusys:55",
+    "id_aluno valido sempre vence",
+  );
+  assertEquals(
+    criarAlunoChave({ id_aluno: 0, nome_aluno: "Hugo" }, 7, normalizarNome),
+    "local:7",
+    "id_aluno 0 nao e id valido: cai para o aluno local",
+  );
+  assertEquals(
+    criarAlunoChave(
+      { id_aluno: null, nome_aluno: "  Joao   DA Silva (kids) ", data_nascimento_aluno: "2010-05-02" },
+      undefined,
+      normalizarNome,
+    ),
+    "nome:joao da silva:2010-05-02",
+    "sem id, a chave e nome normalizado + nascimento",
+  );
+  assertEquals(
+    criarAlunoChave({ nome_aluno: "Sem Nada" }, null, normalizarNome),
+    "nome:sem nada:",
+    "sem nascimento a chave termina em ':'",
+  );
+});
+
 Deno.test("montarVinculosAulaAlunos monta os vinculos aula-aluno", () => {
   const UNIDADE = "95553e96-971b-4590-a6eb-0201d013c14d";
   const mapa = new Map<number, number>([[900, 1], [901, 2]]);
+  const AGORA = "2026-08-01T12:00:00.000Z";
 
   // Aula individual com 1 aluno.
   const individual = montarVinculosAulaAlunos(
@@ -131,17 +171,33 @@ Deno.test("montarVinculosAulaAlunos monta os vinculos aula-aluno", () => {
       alunos: [{
         id_aluno: 55,
         id_lead: 0,
-        nome_aluno: "Hugo Penedo Amorim",
+        nome_aluno: " Hugo Penedo Amorim ",
         telefone_aluno: "(21) 99914-3430",
       }],
     }],
     mapa,
     UNIDADE,
+    normalizarNome,
+    AGORA,
   );
   assertEquals(individual.length, 1, "aula individual gera 1 vinculo");
   assertEquals(individual[0].aula_emusys_id, 1, "usa o id interno, nao o emusys_id");
-  assertEquals(individual[0].emusys_aluno_id, 55);
-  assertEquals(individual[0].lead_id, null, "id_lead 0 vira null");
+  assertEquals(individual[0].unidade_id, UNIDADE);
+  assertEquals(individual[0].aluno_emusys_id, 55);
+  assertEquals(individual[0].aluno_chave, "emusys:55");
+  assertEquals(individual[0].aluno_nome, "Hugo Penedo Amorim", "nome vai trimado");
+  assertEquals(individual[0].aluno_nome_normalizado, "hugo penedo amorim");
+  assertEquals(individual[0].sincronizado_em, AGORA);
+  assertEquals(individual[0].updated_at, AGORA);
+
+  // O payload NAO pode carregar aluno_id: o upsert com ignoreDuplicates:false
+  // atualiza as colunas presentes, e um aluno_id null aqui apagaria o que o
+  // sync de presenca ja resolveu. Quem preenche e o trigger before insert.
+  assertEquals(
+    Object.keys(individual[0]).includes("aluno_id"),
+    false,
+    "aluno_id nunca entra no payload",
+  );
 
   // Aula de turma: 1 vinculo por aluno.
   const turma = montarVinculosAulaAlunos(
@@ -154,10 +210,35 @@ Deno.test("montarVinculosAulaAlunos monta os vinculos aula-aluno", () => {
     }],
     mapa,
     UNIDADE,
+    normalizarNome,
+    AGORA,
   );
   assertEquals(turma.length, 2, "turma com 2 alunos gera 2 vinculos");
 
-  // Experimental: aluno ainda e lead, id_aluno null.
+  // Homonimos com id_aluno diferente: a chave antiga (nome) colapsava os dois
+  // em 1 linha; (aula_emusys_id, aluno_chave) mantem os dois.
+  const homonimos = montarVinculosAulaAlunos(
+    [{
+      id: 900,
+      alunos: [
+        { id_aluno: 10, id_lead: 0, nome_aluno: "Maria Silva", telefone_aluno: null },
+        { id_aluno: 11, id_lead: 0, nome_aluno: "Maria Silva", telefone_aluno: null },
+      ],
+    }],
+    mapa,
+    UNIDADE,
+    normalizarNome,
+    AGORA,
+  );
+  assertEquals(homonimos.length, 2, "dois homonimos geram duas linhas");
+  assertEquals(
+    new Set(homonimos.map((v) => v.aluno_chave)).size,
+    2,
+    "as chaves dos homonimos sao distintas",
+  );
+  assertEquals(homonimos.map((v) => v.aluno_chave), ["emusys:10", "emusys:11"]);
+
+  // Experimental: aluno ainda e lead, id_aluno null -> chave por nome.
   const experimental = montarVinculosAulaAlunos(
     [{
       id: 900,
@@ -165,14 +246,17 @@ Deno.test("montarVinculosAulaAlunos monta os vinculos aula-aluno", () => {
         id_aluno: null,
         id_lead: 987,
         nome_aluno: "Lead Novo",
+        data_nascimento_aluno: "2001-03-04",
         telefone_aluno: "(21) 97777-6666",
       }],
     }],
     mapa,
     UNIDADE,
+    normalizarNome,
+    AGORA,
   );
-  assertEquals(experimental[0].emusys_aluno_id, null, "experimental nao tem emusys_aluno_id");
-  assertEquals(experimental[0].lead_id, 987, "experimental carrega o lead_id");
+  assertEquals(experimental[0].aluno_emusys_id, null, "experimental nao tem aluno_emusys_id");
+  assertEquals(experimental[0].aluno_chave, "nome:lead novo:2001-03-04");
 
   // Aula que nao esta no mapa (nao foi gravada) e ignorada, sem quebrar.
   const foraDoMapa = montarVinculosAulaAlunos(
@@ -182,23 +266,27 @@ Deno.test("montarVinculosAulaAlunos monta os vinculos aula-aluno", () => {
     }],
     mapa,
     UNIDADE,
+    normalizarNome,
+    AGORA,
   );
   assertEquals(foraDoMapa, [], "aula fora do mapa nao gera vinculo");
 
-  // Aluno sem nome e descartado: nome e a chave do upsert.
+  // Aluno sem nome e descartado: aluno_nome e NOT NULL na tabela.
   const semNome = montarVinculosAulaAlunos(
     [{
       id: 900,
-      alunos: [{ id_aluno: 1, id_lead: 0, nome_aluno: "", telefone_aluno: null }],
+      alunos: [{ id_aluno: 1, id_lead: 0, nome_aluno: "   ", telefone_aluno: null }],
     }],
     mapa,
     UNIDADE,
+    normalizarNome,
+    AGORA,
   );
   assertEquals(semNome, [], "aluno sem nome nao gera vinculo");
 
   // Aula sem a chave alunos nao quebra.
   assertEquals(
-    montarVinculosAulaAlunos([{ id: 900 }], mapa, UNIDADE),
+    montarVinculosAulaAlunos([{ id: 900 }], mapa, UNIDADE, normalizarNome, AGORA),
     [],
     "aula sem alunos[] nao quebra",
   );

@@ -219,10 +219,10 @@ serve(async (req: Request) => {
       // Persiste o alunos[] que a resposta ja traz. Sem isso a grade futura
       // sabe curso/turma/sala mas nao sabe de quem e a aula.
 
-      const vinculos = montarVinculosAulaAlunos(aulas, idPorEmusysId, unidade.id);
+      const vinculos = montarVinculosAulaAlunos(aulas, idPorEmusysId, unidade.id, normalizarNome);
       const resultado = await gravarVinculosAulaAlunos(supabase, vinculos, chunkSize);
       for (const erro of resultado.erros) {
-        console.error(`[sync-grade-futura] upsert aula_alunos (${unidade.nome}): ${erro}`);
+        console.error(`[sync-grade-futura] upsert aula_alunos_emusys (${unidade.nome}): ${erro}`);
       }
       console.log(
         `[sync-grade-futura] ${unidade.nome}: ${resultado.gravados} vinculos aluno-aula`,
