@@ -10,6 +10,13 @@ const migration = fs.readFileSync(
   path.join(root, 'supabase/migrations/20260801103000_relatorio_admin_mensal_rico_canonico.sql'),
   'utf8',
 );
+const retificacaoPath = path.join(
+  root,
+  'supabase/migrations/20260801170000_relatorio_admin_mensal_retificar_trancamento_fantasma.sql',
+);
+const retificacao = fs.existsSync(retificacaoPath)
+  ? fs.readFileSync(retificacaoPath, 'utf8')
+  : '';
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -43,6 +50,12 @@ async function aguardarPostgres(container) {
 }
 
 test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { timeout: 90_000 }, async (t) => {
+  assert.notEqual(
+    retificacao,
+    '',
+    'migration de retificacao auditada de trancamento mensal ainda nao existe',
+  );
+
   const versao = docker(['version', '--format', '{{.Server.Version}}']);
   if (versao.status !== 0) {
     t.skip('Docker indisponivel');
@@ -97,6 +110,10 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
 
       create table public.alunos (
         id bigint primary key,
+        nome text,
+        unidade_id uuid,
+        status text,
+        emusys_matricula_id text,
         tipo_matricula_id integer,
         is_segundo_curso boolean
       );
@@ -135,6 +152,13 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
     const aplicada = psql(container, migration);
     assert.equal(aplicada.status, 0, aplicada.stderr || aplicada.stdout);
 
+    const retificacaoAplicada = psql(container, retificacao);
+    assert.equal(
+      retificacaoAplicada.status,
+      0,
+      retificacaoAplicada.stderr || retificacaoAplicada.stdout,
+    );
+
     const unidade = '11111111-1111-1111-1111-111111111111';
     const admin = '22222222-2222-2222-2222-222222222222';
     const gerencial = '33333333-3333-3333-3333-333333333333';
@@ -168,9 +192,39 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
             'alunos_ativos', 344,
             'alunos_pagantes', 336,
             'matriculas_ativas', 430,
+            'alunos_trancados', 3,
+            'matriculas_trancadas', 3,
             'nao_renovacoes', 2,
             'evasoes', 7,
             'renovacoes_realizadas', 23
+          ),
+          'trancamentos_detalhados', jsonb_build_object(
+            'total_alunos', 3,
+            'total_matriculas', 3,
+            'itens', jsonb_build_array(
+              jsonb_build_object(
+                'aluno_nome', 'Davi Lima Queiroz',
+                'curso_nome', null,
+                'data_inicio', null,
+                'data_final', null,
+                'dias_trancado', null,
+                'faixa_politica', 'data_ausente',
+                'motivo', null,
+                'emusys_matricula_id', null
+              ),
+              jsonb_build_object(
+                'aluno_nome', 'Layara Sales Magalhaes',
+                'curso_nome', 'Guitarra',
+                'data_inicio', '2026-06-06',
+                'emusys_matricula_id', '1428'
+              ),
+              jsonb_build_object(
+                'aluno_nome', 'Sergio Roberto Rodriguez',
+                'curso_nome', 'Bateria',
+                'data_inicio', '2026-07-01',
+                'emusys_matricula_id', '1465'
+              )
+            )
           ),
           'evasoes', jsonb_build_array(
             jsonb_build_object('id', 3361, 'aluno_nome', 'Aluna Bolsista', 'tipo_evasao', null)
@@ -199,8 +253,34 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
         ('${unidade}', 'trancamento', '2026-07-10', '2026-07-10', '2026-07-10T10:00:00Z'),
         ('${unidade}', 'trancamento', '2026-07-20', '2026-07-20', '2026-07-20T10:00:00Z');
 
-      insert into public.alunos (id, tipo_matricula_id, is_segundo_curso)
-      values (1498, 3, false);
+      insert into public.alunos
+        (id, nome, unidade_id, status, emusys_matricula_id, tipo_matricula_id, is_segundo_curso)
+      values
+        (1498, 'Aluna Bolsista', '${unidade}', 'inativo', '999', 3, false),
+        (1504, 'Davi Lima Queiroz', '${unidade}', 'ativo', null, 3, false);
+
+      insert into public.audit_log
+        (tabela, registro_id_text, created_at, acao, dados_antigos, dados_novos)
+      values (
+        'alunos',
+        '1504',
+        '2026-08-01T14:53:17Z',
+        'UPDATE',
+        jsonb_build_object(
+          'id', 1504,
+          'nome', 'Davi Lima Queiroz',
+          'unidade_id', '${unidade}',
+          'status', 'trancado',
+          'emusys_matricula_id', null
+        ),
+        jsonb_build_object(
+          'id', 1504,
+          'nome', 'Davi Lima Queiroz',
+          'unidade_id', '${unidade}',
+          'status', 'ativo',
+          'emusys_matricula_id', null
+        )
+      );
 
       insert into public.movimentacoes_admin
         (id, aluno_id, unidade_id, tipo, tipo_evasao, competencia_referencia, data, created_at)
@@ -216,6 +296,10 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
         'churn_rate', resultado#>>'{payload,indicadores_retencao,churn_rate}',
         'inadimplencia', resultado#>>'{payload,indicadores_retencao,inadimplencia}',
         'tipo_evasao', resultado#>>'{payload,evasoes,0,tipo_evasao}',
+        'trancados_fechamento', resultado#>>'{payload,resumo,alunos_trancados}',
+        'matriculas_trancadas', resultado#>>'{payload,resumo,matriculas_trancadas}',
+        'trancamentos_detalhados', resultado#>>'{payload,trancamentos_detalhados,total_matriculas}',
+        'davi_presente', (resultado#>'{payload,trancamentos_detalhados,itens}') @> '[{"aluno_nome":"Davi Lima Queiroz"}]'::jsonb,
         'snapshots', (select count(*) from public.fechamento_mensal_snapshots),
         'wrapper_futuro', public.montar_relatorio_admin_mensal_payload_v1('${unidade}', 2026, 7)#>>'{resumo,trancamentos_periodo}',
         'wrapper_tipo_evasao', public.montar_relatorio_admin_mensal_payload_v1('${unidade}', 2026, 7)#>>'{evasoes,0,tipo_evasao}'
@@ -230,6 +314,10 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
       churn_rate: '1.79',
       inadimplencia: '1.19',
       tipo_evasao: 'interrompido_bolsista',
+      trancados_fechamento: '2',
+      matriculas_trancadas: '2',
+      trancamentos_detalhados: '2',
+      davi_presente: false,
       snapshots: 3,
       wrapper_futuro: '3',
       wrapper_tipo_evasao: 'interrompido_bolsista',

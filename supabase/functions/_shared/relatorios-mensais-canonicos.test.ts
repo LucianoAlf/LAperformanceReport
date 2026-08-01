@@ -45,9 +45,9 @@ const adminRico = {
     novos_alunos: 17,
     transferencias_recebidas: 0,
     renovacoes_realizadas: 1,
-    nao_renovacoes: 1,
+    nao_renovacoes: 2,
     avisos_previos: 1,
-    evasoes: 2,
+    evasoes: 7,
   },
   indicadores_financeiros: {
     ticket_medio: 449.15,
@@ -63,8 +63,8 @@ const adminRico = {
     inadimplentes: 4,
     inadimplencia: 1.19,
     mrr_perdido: 2412.85,
-    total_evasoes: 2,
-    nao_renovacoes: 1,
+    total_evasoes: 7,
+    nao_renovacoes: 2,
     renovacoes_previstas: 2,
     renovacoes_realizadas: 1,
   },
@@ -87,6 +87,12 @@ const adminRico = {
     valor_parcela_novo: 0,
     professor: "Não informado",
     motivo: "Dificuldade financeira",
+  }, {
+    aluno_nome: "Davi dos Santos Amaral",
+    valor_parcela_anterior: 397.85,
+    valor_parcela_novo: 0,
+    professor: "Joel de Salles Gouveia Filho",
+    motivo: "Dificuldade financeira",
   }],
   avisos_previos: [{
     aluno_nome: "Lis Diolinda da Cruz",
@@ -94,9 +100,33 @@ const adminRico = {
     professor: "Leticia de Almeida Palmeira",
   }],
   evasoes: [{
+    aluno_nome: "Daniel Monteiro de Castro Landim",
+    tipo_evasao: "interrompido",
+    valor_perdido: 390,
+    motivo: "Dificuldade financeira",
+    professor: "Isaque Mendes da Silva",
+  }, {
+    aluno_nome: "Samuel Silveira Noronha",
+    tipo_evasao: "interrompido",
+    valor_perdido: 395,
+    motivo: "Desistência",
+    professor: "Willian De Andrade Da Silva",
+  }, {
+    aluno_nome: "Miguel Rodrigues Furtado",
+    tipo_evasao: "interrompido",
+    valor_perdido: 415,
+    motivo: "Mudança de endereço",
+    professor: "Leticia de Almeida Palmeira",
+  }, {
+    aluno_nome: "Bernardo Pereira Magalhães",
+    tipo_evasao: "interrompido",
+    valor_perdido: 395,
+    motivo: "Dificuldade financeira",
+    professor: "Larissa Bheattriz Barbosa Santos",
+  }, {
     aluno_nome: "Ana Beatriz Paz de Almeida",
     tipo_evasao: "interrompido_bolsista",
-    valor_perdido: 390,
+    valor_perdido: 0,
     motivo: "Troca de Unidade",
     professor: "Lohana Leopoldo de Araújo",
   }],
@@ -145,14 +175,16 @@ Deno.test("mensal administrativo preserva modelo rico, multicurso e trancamentos
   assertStringIncludes(texto, "• Faturamento Previsto: *R$ 142.925,20*");
   assertStringIncludes(texto, "• LTV (Tempo × Ticket): *R$ 6.692,34*");
   assertStringIncludes(texto, "📈 *KPIs DE RETENÇÃO*");
+  assertStringIncludes(texto, "• Churn de alunos pagantes: *1,8%* — 6 saídas em 336 pagantes");
+  assertStringIncludes(texto, "• Saídas totais: *7* (6 pagantes + 1 bolsista)");
   assertStringIncludes(texto, "• Inadimplência: *1,2%*");
   assertStringIncludes(texto, "🎯 *METAS FIDELIZA+ LA*");
   assertStringIncludes(texto, "Forma de PG: C.R");
   assertStringIncludes(texto, "⚠️ *AVISOS PRÉVIOS para sair em AGOSTO*");
-  assertStringIncludes(texto, "• Total no mês: *2*");
-  assertStringIncludes(texto, "• Interrompido: *0*");
+  assertStringIncludes(texto, "• Total no mês: *7*");
+  assertStringIncludes(texto, "• Interrompido: *4*");
   assertStringIncludes(texto, "• Interrompido Bolsista: *1*");
-  assertStringIncludes(texto, "• Não renovou: *1*");
+  assertStringIncludes(texto, "• Não renovou: *2*");
   assertStringIncludes(texto, "📅 Gerado em: 01/08/2026 às 10:30");
 
   const secoes = [
@@ -185,6 +217,20 @@ Deno.test("mensal administrativo bloqueia detalhe divergente do total oficial", 
     }),
     Error,
     "RELATORIO_ADMIN_MENSAL_DIVERGENTE:renovacoes",
+  );
+});
+
+Deno.test("mensal administrativo bloqueia churn que mistura não pagantes", () => {
+  assertThrows(
+    () => formatarRelatorioAdminMensalCanonico({
+      ...adminRico,
+      indicadores_retencao: {
+        ...adminRico.indicadores_retencao,
+        churn_rate: 2.08,
+      },
+    }),
+    Error,
+    "RELATORIO_ADMIN_MENSAL_DIVERGENTE:churn_pagantes",
   );
 });
 

@@ -244,6 +244,37 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
     acc[tipo] = (acc[tipo] ?? 0) + 1;
     return acc;
   }, {});
+  const saidasBolsistas = quebraEvasoes.interrompido_bolsista ?? 0;
+  const saidasSegundoCurso = quebraEvasoes.interrompido_2_curso ?? 0;
+  const saidasBanda = quebraEvasoes.interrompido_banda ?? 0;
+  const saidasTransferencia = quebraEvasoes.transferencia ?? 0;
+  const saidasForaDoChurn = saidasBolsistas + saidasSegundoCurso + saidasBanda + saidasTransferencia;
+  const saidasChurnPagantes = evasoesCompletas.length - saidasForaDoChurn;
+  const baseChurnPagantes = inteiro(r.alunos_pagantes);
+  const churnCalculado = baseChurnPagantes > 0
+    ? saidasChurnPagantes / baseChurnPagantes * 100
+    : 0;
+
+  if (Math.abs(numero(retencao.churn_rate) - churnCalculado) > 0.01) {
+    throw new Error("RELATORIO_ADMIN_MENSAL_DIVERGENTE:churn_pagantes");
+  }
+  if (inteiro(retencao.total_evasoes) !== evasoesCompletas.length) {
+    throw new Error("RELATORIO_ADMIN_MENSAL_DIVERGENTE:saidas_totais");
+  }
+
+  const composicaoSaidas = [`${saidasChurnPagantes} pagantes`];
+  if (saidasBolsistas > 0) {
+    composicaoSaidas.push(`${saidasBolsistas} ${saidasBolsistas === 1 ? "bolsista" : "bolsistas"}`);
+  }
+  if (saidasSegundoCurso > 0) {
+    composicaoSaidas.push(`${saidasSegundoCurso} de curso adicional`);
+  }
+  if (saidasBanda > 0) {
+    composicaoSaidas.push(`${saidasBanda} de banda`);
+  }
+  if (saidasTransferencia > 0) {
+    composicaoSaidas.push(`${saidasTransferencia} ${saidasTransferencia === 1 ? "transferência" : "transferências"}`);
+  }
 
   const linhas = [
     LINHA,
@@ -309,12 +340,12 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
     "",
     "📈 *KPIs DE RETENÇÃO*",
     LINHA,
-    `• Churn Rate: *${percentual(retencao.churn_rate)}*`,
+    `• Churn de alunos pagantes: *${percentual(retencao.churn_rate)}* — ${saidasChurnPagantes} saídas em ${baseChurnPagantes} pagantes`,
     `• Taxa de Renovação: *${percentual(retencao.taxa_renovacao)}*`,
     `• Reajuste Médio: *${percentual(retencao.reajuste_medio)}*`,
     `• Inadimplência: *${percentual(retencao.inadimplencia)}*`,
     `• MRR Perdido: *${moeda(retencao.mrr_perdido)}*`,
-    `• Total Evasões: *${inteiro(retencao.total_evasoes)}*`,
+    `• Saídas totais: *${inteiro(retencao.total_evasoes)}* (${composicaoSaidas.join(" + ")})`,
     `• Não Renovações: *${inteiro(retencao.nao_renovacoes)}*`,
     "",
     "🎯 *METAS FIDELIZA+ LA*",
