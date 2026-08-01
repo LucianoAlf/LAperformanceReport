@@ -22,7 +22,7 @@ const base = {
 const adminRico = {
   ...base,
   tipo: "administrativo",
-  unidade: { ...base.unidade, gerente: "Fernanda", farmers: ["Daiana", "fernanda"] },
+  unidade: { ...base.unidade, gerente: "Fabiola/Clayton", farmers: ["Fernanda", "Daiana", "fernanda"] },
   gerado_em: "2026-08-01T13:30:00Z",
   trancamentos_periodo: 3,
   resumo: {

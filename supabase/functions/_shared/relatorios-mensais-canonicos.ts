@@ -110,7 +110,8 @@ function dataHoraBrasil(value: unknown): string {
 
 function equipeAdministrativa(item: JsonObject): string {
   const farmers = Array.isArray(item.farmers) ? item.farmers : [];
-  const nomes = [item.gerente, ...farmers]
+  const candidatos = farmers.length > 0 ? farmers : [item.gerente];
+  const nomes = candidatos
     .map((value) => String(value ?? "").trim())
     .filter(Boolean)
     .filter((value, index, all) =>
