@@ -151,9 +151,9 @@ Deno.test("WAHA e UAZAPI nao prometem idempotencia de transporte", () => {
   assertEquals(providerSuportaChaveIdempotente("waha"), false);
 });
 
-Deno.test("conversa real abre apenas depois de sucesso produtivo", () => {
+Deno.test("captura de resposta abre depois de sucesso real ou de teste", () => {
   assertEquals(deveAbrirConversaReal(false, "enviado"), true);
-  assertEquals(deveAbrirConversaReal(true, "enviado"), false);
+  assertEquals(deveAbrirConversaReal(true, "enviado"), true);
   assertEquals(deveAbrirConversaReal(false, "incerto"), false);
   assertEquals(deveAbrirConversaReal(false, "falhou"), false);
 });
