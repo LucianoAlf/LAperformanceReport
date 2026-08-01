@@ -115,6 +115,31 @@ captura. A reconstrução só é aceita quando a auditoria comprova que nenhum c
 relevante dessas movimentações mudou depois do fechamento; caso contrário, a
 leitura falha em vez de publicar um número possivelmente vivo.
 
+O relatório Gerencial mensal usa `get_relatorio_gerencial_canonico_v1` como
+produtor único no servidor. Ele não consulta `get_dados_relatorio_gerencial` e
+não aceita KPIs montados no navegador. O produtor compõe os documentos
+Administrativo e Comercial fechados da mesma unidade/competência, preserva suas
+retificações, acrescenta metas configuradas e somente rankings V3 publicáveis.
+A IA redige exclusivamente os cinco blocos qualitativos; todos os números e
+frações são formatados deterministicamente pela edge.
+
+Matrícula lançada depois do corte só entra em competência fechada por
+retificação append-only, com aluno, matrícula Emusys, data de negócio e hash
+esperado explicitamente validados. O snapshot permanece intacto. Já o nome do
+gerente é responsabilidade operacional vigente e vem do cadastro atual da
+unidade, sem reescrever o fechamento histórico.
+
+No Gerencial, os três tickets permanecem separados: ticket da base ativa
+(Administrativo), ticket das novas parcelas e ticket dos passaportes
+(Comercial). O interesse por curso vem dos leads, não da carteira ativa.
+Comparativos ficam indisponíveis enquanto não houver competências fechadas com
+as mesmas definições. Ausência de venda da lojinha nunca é publicada como zero.
+Rankings usam exclusivamente snapshots V3 com publicação oficial, ranking
+habilitado e evidência publicável; ciclos parciais não expõem nomes nem posição.
+Metas de experimentais agendadas não são comparadas com experimentais
+realizadas. A meta `ticket_parcela` acompanha somente o ticket das novas
+parcelas comerciais, nunca o ticket financeiro da base ativa.
+
 ### Ticket médio (mensalidade)
 Média de `valor_parcela` dos alunos com `entra_financeiro_ativo = true` **E**
 `tipo_matricula.entra_ticket_medio = true` **E** `valor_parcela > 0`,

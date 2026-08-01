@@ -1,181 +1,105 @@
-# Relatório Gerencial com IA - LA Music
+# Relatório Gerencial Mensal — LA Music
 
-## Visão Geral
+## Objetivo
 
-O Relatório Gerencial é um documento mensal completo que combina **dados estruturados do banco** com **insights gerados por IA** (Gemini). Utiliza uma abordagem **híbrida** onde:
+O relatório gerencial reúne, em uma leitura executiva por unidade, o fechamento
+mensal Administrativo, o fechamento mensal Comercial, metas e rankings
+pedagógicos publicáveis. Ele é gerado manualmente pelo botão **Relatório
+Gerencial com IA**.
 
-- **Template Fixo**: Todos os KPIs, rankings, metas e comparativos são gerados a partir de dados reais do banco
-- **IA (Gemini)**: Gera apenas os insights: resumo executivo, conquistas, pontos de atenção, plano de ação e mensagem final
+O relatório de uma competência encerrada nunca é recalculado com o estado vivo
+do banco. Os números vêm dos documentos mensais fechados da mesma unidade e
+competência.
 
-## Estrutura do Relatório
+## Contrato de geração
 
-### Cabeçalho
-- Nome da unidade
-- Mês/Ano
-- Nome do Gerente
+1. O navegador envia somente `unidade`, `ano` e `mes` para
+   `gemini-relatorio-gerencial`.
+2. A edge valida a sessão e chama `get_relatorio_gerencial_canonico_v1`.
+3. O produtor exige os dois documentos mensais com status `fechado`:
+   - `get_relatorio_admin_mensal_rico_v1`;
+   - `get_relatorio_mensal_canonico_v1('comercial', ...)`.
+4. O produtor valida unidade e competência, acrescenta metas configuradas e
+   rankings V3 somente de snapshots oficiais, habilitados e publicáveis, e
+   devolve um contrato versionado.
+5. A edge monta todos os indicadores e seções numéricas de forma determinística.
+6. A IA redige somente resumo, conquistas, pontos de atenção, plano de ação e
+   mensagem final. Ela não calcula, corrige nem substitui indicadores.
 
-### Seções de Dados (Template Fixo)
+Não há fallback vivo. Se um dos fechamentos não estiver disponível ou divergir
+da unidade/competência pedida, a geração falha sem publicar números parciais.
+Retificações mensais auditadas são respeitadas sem alterar o snapshot original.
+O responsável exibido no cabeçalho é o gerente vigente no cadastro da unidade.
 
-| Seção | Dados Incluídos |
-|-------|-----------------|
-| **💰 Financeiro** | MRR, Ticket Médio, Inadimplência |
-| **👥 Base de Alunos** | Ativos, Pagantes, Bolsistas, Novos, Permanência, LTV |
-| **📚 Matrículas** | Ativas, Em Banda, 2º Curso |
-| **📈 Funil Comercial** | Leads, Experimentais, Matrículas, Taxas de Conversão |
-| **🎯 Metas Comerciais** | Barras de progresso (Leads, Experimentais, Matrículas) |
-| **📉 Retenção** | Churn, Evasões, Não Renovações, MRR Perdido, Taxa Renovação, Reajuste |
-| **🔴 Motivos de Evasão** | Top 5 motivos com quantidade e percentual |
-| **🏆 Rankings** | Top 3 Professores Retenção, Matriculadores, Presença |
-| **🎸 Cursos** | Top 5 cursos mais procurados |
-| **📱 Canais** | Top 3 canais com maior conversão |
-| **⚖️ Comparativos** | vs Mês Anterior, vs Mesmo Mês Ano Passado |
-| **📈 Sazonalidade** | Análise histórica do mês (churn médio histórico) |
-| **🎯 Metas do Mês** | Barras de progresso (Alunos, Ticket, Renovação, Churn) |
-| **🏆 Fideliza+ LA** | Churn Premiado, Inadimplência Zero, Max Renovação, Reajuste Campeão |
-| **🎯 Matriculador+ LA** | Matrícula Plus, Max Indicação, LA Music Family |
+## Conteúdo público
 
-### Seções de IA (Geradas pelo Gemini)
+O texto entregue ao gerente contém:
 
-| Seção | Descrição |
-|-------|-----------|
-| **Resumo Executivo** | 2-3 linhas resumindo o mês |
-| **✅ Conquistas do Mês** | 3 pontos positivos identificados |
-| **⚠️ Pontos de Atenção** | 3 alertas importantes |
-| **🎯 Plano de Ação** | 3 ações recomendadas |
-| **💬 Mensagem Final** | Mensagem motivacional |
+- financeiro: MRR, faturamento previsto, ticket da base ativa, total e ticket
+  das novas parcelas, total e ticket dos passaportes, inadimplência e MRR perdido;
+- base de alunos e composição das matrículas, incluindo multicurso;
+- trancamentos no fechamento, faixas da política e somente os nomes dos casos
+  que exigem acompanhamento;
+- funil comercial com volumes, frações e taxas;
+- interesses dos leads, canais das matrículas e alertas de qualidade cadastral;
+- retenção, renovações, avisos prévios e principais motivos de saída;
+- rankings oficiais e publicáveis de permanência, matrículas, presença e média
+  de alunos por turma;
+- metas mensais, Fideliza+ LA e Matriculador+ LA;
+- análise qualitativa e plano de ação.
 
-## Gerentes por Unidade
+O texto público não inclui nomes de funções, fontes internas, versões, hashes,
+payloads ou linguagem de implementação. Metadados de auditoria permanecem
+somente no contrato interno do produtor.
 
-| Unidade | Gerente | Hunter | Farmers |
-|---------|---------|--------|---------|
-| Campo Grande | Jerêh | Vitória | Gabriela, Jhonatan |
-| Recreio | Fabiola/Clayton | Clayton | Fernanda, Daiana |
-| Barra | Krissya | Kailane | Eduarda, Arthur |
+## Distinções obrigatórias
 
-## Metas do Programa Matriculador+ LA
+- **Ticket da base ativa:** indicador financeiro do fechamento Administrativo.
+- **Ticket das novas parcelas:** média das parcelas das matrículas comerciais do mês.
+- **Ticket dos passaportes:** média dos passaportes das matrículas comerciais do mês.
+- **Cursos/interesses mais procurados:** distribuição do curso de interesse dos
+  leads; não é a distribuição da base ativa de alunos.
+- **Experimental para matrícula:** usa a conversão atribuída do fechamento
+  Comercial e sempre exibe taxa e fração.
+- **Saídas:** total inclui interrupções, bolsistas e não renovações; a composição
+  aparece separada.
+- **Trancamentos:** alunos e matrículas trancadas não entram como base ativa; os
+  casos fora do período contratual ficam visíveis para ação gerencial.
 
-| Unidade | Matrícula Plus | Max Indicação | LA Music Family |
-|---------|----------------|---------------|-----------------|
-| Campo Grande | 21 | 5 | 3 |
-| Recreio | 17 | 4 | 3 |
-| Barra | 14 | 3 | 3 |
+## Ausência de dados
 
-## Metas do Programa Fideliza+ LA
+- Comparativos só podem ser exibidos quando as competências usam as mesmas
+  definições e estão fechadas. Até existir essa equivalência, o relatório informa
+  que a comparação não está disponível.
+- Valor de lojinha não é convertido em zero quando não existe uma fonte fechada.
+  A linha é omitida.
+- Ranking sem evidência publicável informa ausência de dados suficientes.
 
-| Meta | Critério |
-|------|----------|
-| Churn Premiado | < 3% |
-| Inadimplência Zero | 0% |
-| Max Renovação | 100% |
-| Reajuste Campeão | > 8,5% |
+## IA e proteção contra alucinação
 
-## Arquitetura Técnica
+A IA recebe um resumo estruturado, mas sua resposta é aceita apenas nos cinco
+campos qualitativos. Respostas com números, percentuais, valores monetários ou
+termos técnicos — inclusive números e percentuais escritos por extenso — são
+descartadas campo a campo e substituídas por texto
+determinístico seguro.
 
-### Função SQL: `get_dados_relatorio_gerencial`
+## Ordem segura de publicação
 
-```sql
-get_dados_relatorio_gerencial(
-  p_unidade_id uuid,  -- NULL para consolidado
-  p_ano integer,      -- Ano do relatório
-  p_mes integer       -- Mês do relatório
-) RETURNS jsonb
-```
+O contrato novo do botão e o contrato antigo da edge não são compatíveis. A
+publicação deve respeitar esta ordem:
 
-**Dados retornados:**
-- `periodo`: ano, mês, unidade
-- `gerente_nome`, `hunter_nome`, `farmers_nomes`
-- `kpis_gestao`: MRR, ticket, inadimplência, permanência, LTV
-- `kpis_retencao`: evasões, renovações, reajuste
-- `kpis_comercial`: leads, experimentais, matrículas, taxas
-- `metas`: metas cadastradas para o mês
-- `matriculas_ativas`, `matriculas_banda`, `matriculas_2_curso`, `total_bolsistas`
-- `mes_anterior`: dados do mês anterior para comparativo
-- `mesmo_mes_ano_passado`: dados do mesmo mês do ano anterior
-- `sazonalidade`: histórico do mesmo mês nos últimos 3 anos
-- `motivos_evasao`: top 5 motivos
-- `top_professores_retencao`: top 3 por tempo de permanência
-- `top_professores_matriculadores`: top 3 por matrículas
-- `top_professores_presenca`: top 3 por presença média
-- `cursos_mais_procurados`: top 5 cursos
-- `canais_maior_conversao`: top 3 canais
-- `total_indicacoes`, `total_family_pacotes`
-- `permanencia_por_faixa`: distribuição por tempo
+1. aplicar a migração do produtor;
+2. publicar `gemini-relatorio-gerencial`;
+3. publicar o frontend.
 
-### Edge Function: `gemini-relatorio-gerencial`
+Durante a janela entre os passos dois e três, o botão antigo falha sem publicar
+um relatório. O frontend novo nunca deve ser publicado antes da edge.
 
-1. Recebe os dados da função SQL
-2. Monta o template fixo com todos os KPIs
-3. Chama a API Gemini apenas para gerar insights
-4. Substitui os placeholders no template
-5. Retorna o relatório completo formatado para WhatsApp
+## Componentes
 
-**Modelo utilizado:** `gemini-2.5-flash-preview-05-20`
-
-## Exemplo de Saída
-
-```
-━━━━━━━━━━━━━━━━━━━━━━
-📊 *RELATÓRIO GERENCIAL - LA MUSIC*
-🏢 *BARRA*
-📅 *JANEIRO/2026*
-👤 Gerente: Krissya
-━━━━━━━━━━━━━━━━━━━━━━
-
-> Janeiro foi um mês de transição com desafios no churn, mas a equipe manteve foco na retenção e qualidade do atendimento.
-
-───────────────────────
-💰 *FINANCEIRO*
-───────────────────────
-• MRR Atual: *R$ 97.293,04*
-• Ticket Médio: *R$ 440,24*
-• Inadimplência: *0,5%*
-
-[... continua com todas as seções ...]
-
-───────────────────────
-✅ *CONQUISTAS DO MÊS*
-───────────────────────
-• Inadimplência próxima de zero - excelente controle financeiro
-• Top 3 professores com permanência média acima de 22 meses
-• Bateria e Canto continuam liderando a demanda
-
-───────────────────────
-⚠️ *PONTOS DE ATENÇÃO*
-───────────────────────
-• Churn acima da meta do Fideliza+ (7,2% vs 3%)
-• Matrículas abaixo do esperado para o mês
-• Horário é o principal motivo de evasão - revisar grades
-
-───────────────────────
-🎯 *PLANO DE AÇÃO*
-───────────────────────
-• Intensificar ações de captação nas últimas semanas
-• Revisar horários disponíveis para reduzir evasões
-• Acompanhar renovações pendentes de perto
-
-───────────────────────
-💬 *MENSAGEM FINAL*
-───────────────────────
-> Janeiro é historicamente desafiador, mas a equipe está no caminho certo. Vamos juntos transformar fevereiro em um mês de conquistas! 🚀🎶
-
-━━━━━━━━━━━━━━━━━━━━━━
-📅 Gerado em: 26/01/2026 às 11:30
-━━━━━━━━━━━━━━━━━━━━━━
-```
-
-## Vantagens da Abordagem Híbrida
-
-| Aspecto | Benefício |
-|---------|-----------|
-| **Consistência** | Estrutura sempre igual, fácil de comparar |
-| **Precisão** | Dados vêm direto do banco, sem erros de interpretação |
-| **Insights** | IA analisa contexto e gera recomendações relevantes |
-| **Velocidade** | Prompt menor = resposta mais rápida |
-| **Custo** | Menos tokens = menor custo de API |
-| **Sazonalidade** | Comparativos históricos para contexto |
-
-## Arquivos Relacionados
-
-- `supabase/functions/gemini-relatorio-gerencial/index.ts` - Edge Function
-- `supabase/migrations/20260126_update_get_dados_relatorio_gerencial_v2.sql` - Migração SQL
-- `src/components/App/Administrativo/ModalRelatorio.tsx` - Frontend que chama a função
+- Produtor: `get_relatorio_gerencial_canonico_v1`
+- Migração: `20260801193000_relatorio_gerencial_canonico.sql`
+- Edge: `supabase/functions/gemini-relatorio-gerencial/index.ts`
+- Botão: `src/components/App/Administrativo/ModalRelatorio.tsx`
+- Testes: `tests/relatorioGerencialCanonico.test.mjs` e
+  `tests/relatorioGerencialCanonicoPostgres.test.mjs`
