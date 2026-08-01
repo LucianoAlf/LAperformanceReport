@@ -82,7 +82,7 @@ entram na carteira viva.
 ### Fonte histórica de uma competência encerrada (31/07/2026)
 
 Ao ler mês passado, **a fonte canônica é `fechamento_mensal_snapshots`** (status
-`aprovado`), não o cálculo vivo. As RPCs leem o estado **atual** do banco — recalcular
+`fechado`), não o cálculo vivo. As RPCs operacionais leem o estado **atual** do banco — recalcular
 uma competência encerrada devolve o número de hoje, não o do fechamento.
 
 Divergência medida em 31/07/2026 para junho, Campo Grande:
@@ -97,8 +97,23 @@ Os 40 de diferença são regra nova (v1.3.1 do Emusys, 29/07: trancamento vigent
 "ativa" — CG tem 18) somada a evasão real de julho. ⚠️ **Junho e julho não são
 comparáveis** em alunos ativos sem essa nota.
 
-⛔ Hoje **nenhuma tela lê o snapshot** — as que acertam acertam via `dados_mensais`. Ver
-`docs/MAPA-SISTEMA.md` → "Fechamento mensal".
+Os botões mensais Administrativo e Comercial são manuais e passam por
+`relatorio-admin-whatsapp`; a tela não recompõe KPIs, tickets nem coortes. O
+Comercial lê `get_relatorio_mensal_canonico_v1`. O Administrativo lê
+`get_relatorio_admin_mensal_rico_v1`, que parte do documento mensal fechado e
+usa exclusivamente as duas referências congeladas nele: `alunos_admin` e
+`relatorio_gerencial`. A leitura valida unidade, competência, status e hash de
+cada referência antes de montar o texto público.
+
+O relatório Administrativo mensal preserva o desenho rico: alunos, composição
+de matrículas e multicurso, trancamentos atuais e do período, financeiro,
+retenção, metas, renovações, não renovações, avisos prévios e evasões. Ele não
+altera nem substitui o fechamento. Para documentos de julho/2026 criados antes
+de `trancamentos_periodo` ser persistido no resumo, a RPC pode reconstruir esse
+único detalhe a partir das movimentações canônicas existentes até o instante da
+captura. A reconstrução só é aceita quando a auditoria comprova que nenhum campo
+relevante dessas movimentações mudou depois do fechamento; caso contrário, a
+leitura falha em vez de publicar um número possivelmente vivo.
 
 ### Ticket médio (mensalidade)
 Média de `valor_parcela` dos alunos com `entra_financeiro_ativo = true` **E**

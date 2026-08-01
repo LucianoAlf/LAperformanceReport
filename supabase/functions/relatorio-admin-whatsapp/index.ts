@@ -30,6 +30,10 @@ import {
 import {
   validarTextoPublicoRelatorio,
 } from '../_shared/relatorio-publico.ts';
+import {
+  formatarRelatorioAdminMensalCanonico,
+  formatarRelatorioComercialMensalCanonico,
+} from '../_shared/relatorios-mensais-canonicos.ts';
 
 const FIELDS = 'id,nome,provedor,uazapi_url,uazapi_token,waha_url,waha_session,waha_api_key';
 
@@ -136,7 +140,9 @@ interface RelatorioPayload {
   competencia?: string;
   numero_teste?: string;
   data_referencia?: string;
-  modo?: 'cron' | 'dry_run' | 'dry_run_comercial'; // dry_run gera o texto real sem enfileirar/enviar
+  ano?: number;
+  mes?: number;
+  modo?: 'cron' | 'dry_run' | 'dry_run_comercial' | 'dry_run_mensal_admin' | 'dry_run_mensal_comercial';
 }
 
 function n(value: unknown): number {
@@ -2034,6 +2040,103 @@ serve(async (req) => {
     );
 
     const payload: RelatorioPayload = await req.json();
+
+    if (
+      payload.modo === 'dry_run_mensal_admin'
+      || payload.modo === 'dry_run_mensal_comercial'
+    ) {
+      if (!payload.unidade || payload.unidade === 'todos') {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Selecione uma unidade para gerar o relatório mensal.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      if (!Number.isInteger(payload.ano) || !Number.isInteger(payload.mes) || payload.mes! < 1 || payload.mes! > 12) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Competência mensal inválida.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Autenticação obrigatória para o relatório mensal.' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+      if (!anonKey) throw new Error('SUPABASE_ANON_KEY_AUSENTE');
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+      const { data: authData, error: authError } = await userClient.auth.getUser();
+      if (authError || !authData.user) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Token inválido para o relatório mensal.' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const tipo = payload.modo === 'dry_run_mensal_admin' ? 'administrativo' : 'comercial';
+      const rpcMensal = tipo === 'administrativo'
+        ? 'get_relatorio_admin_mensal_rico_v1'
+        : 'get_relatorio_mensal_canonico_v1';
+      const parametrosMensais = tipo === 'administrativo'
+        ? {
+          p_unidade_id: payload.unidade,
+          p_ano: payload.ano,
+          p_mes: payload.mes,
+        }
+        : {
+          p_tipo: tipo,
+          p_unidade_id: payload.unidade,
+          p_ano: payload.ano,
+          p_mes: payload.mes,
+        };
+      const { data: snapshot, error: snapshotError } = await userClient.rpc(
+        rpcMensal,
+        parametrosMensais,
+      );
+      if (snapshotError) {
+        const acessoNegado = snapshotError.message?.includes('ACESSO_NEGADO');
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: acessoNegado
+              ? 'Você não tem acesso a esta unidade.'
+              : 'O fechamento oficial deste mês ainda não está disponível.',
+          }),
+          { status: acessoNegado ? 403 : 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const dadosBase = snapshot?.payload as Record<string, unknown> | undefined;
+      const dados = dadosBase
+        ? { ...dadosBase, gerado_em: new Date().toISOString() }
+        : undefined;
+      if (!dados) throw new Error('RELATORIO_MENSAL_PAYLOAD_AUSENTE');
+      let responsavelComercialVigente: string | undefined;
+      if (tipo === 'comercial') {
+        const { data: unidadeVigente, error: unidadeVigenteError } = await supabase
+          .from('unidades')
+          .select('hunter_nome')
+          .eq('id', payload.unidade)
+          .single();
+        if (unidadeVigenteError) throw unidadeVigenteError;
+        responsavelComercialVigente = String(unidadeVigente?.hunter_nome || '').trim() || undefined;
+      }
+      const texto = validarTextoPublicoRelatorio(
+        tipo === 'administrativo'
+          ? formatarRelatorioAdminMensalCanonico(dados)
+          : formatarRelatorioComercialMensalCanonico(dados, responsavelComercialVigente),
+      );
+      return new Response(
+        JSON.stringify({ success: true, dry_run: true, tipo, unidade: payload.unidade, texto }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
 
     // === MODO DRY RUN ===
     if (payload.modo === 'dry_run') {
