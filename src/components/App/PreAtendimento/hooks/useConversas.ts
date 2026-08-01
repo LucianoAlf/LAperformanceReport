@@ -37,7 +37,7 @@ export function useConversas({ unidadeId, filtro = 'todas', busca }: UseConversa
             unidades:unidade_id(nome, codigo),
             crm_pipeline_etapas:etapa_pipeline_id(id, nome, slug, cor, icone, ordem)
           ),
-          caixa:caixa_id(id, nome, numero)
+          caixa:caixa_id(id, nome, numero, funcao)
         `)
         .order('ultima_mensagem_at', { ascending: false, nullsFirst: false });
 
@@ -59,7 +59,14 @@ export function useConversas({ unidadeId, filtro = 'todas', busca }: UseConversa
 
       if (fetchError) throw fetchError;
 
-      let resultado = (data || []) as ConversaCRM[];
+      // Conversas cuja caixa vinculada não é do Pré-Atendimento (ex: Lia/Sucesso do Aluno)
+      // não devem aparecer aqui — cada caixa só deve ser vista no módulo dela.
+      // Conversa sem caixa nenhuma (caixa_id null) continua visível normalmente.
+      const doModulo = ((data || []) as ConversaCRM[]).filter(
+        c => !c.caixa || c.caixa.funcao === 'agente' || c.caixa.funcao === 'ambos'
+      );
+
+      let resultado = doModulo;
 
       // Filtro de busca local (nome ou telefone do lead)
       if (busca && busca.trim()) {
@@ -75,8 +82,8 @@ export function useConversas({ unidadeId, filtro = 'todas', busca }: UseConversa
 
       setConversas(resultado);
 
-      // Calcular total de não lidas (sem filtro)
-      const total = (data || []).reduce((acc: number, c: any) => acc + (c.nao_lidas || 0), 0);
+      // Calcular total de não lidas (sem filtro de busca, mas já sem conversas de outros módulos)
+      const total = doModulo.reduce((acc, c) => acc + (c.nao_lidas || 0), 0);
       setTotalNaoLidas(total);
     } catch (err) {
       console.error('[useConversas] Erro:', err);
