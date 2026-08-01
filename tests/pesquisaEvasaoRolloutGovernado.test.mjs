@@ -116,14 +116,13 @@ test('runbook preserva gates de seguranca independentes do RBAC', () => {
   assert.match(runbook, /nenhum passo[\s\S]*autoriza escrita em produ[cç][aã]o/i);
 });
 
-test('runbook mantem PR draft e gate humano antes de producao', () => {
-  assert.match(runbook, /PR #16 em draft/i);
-  assert.match(runbook, /n[aã]o aplicar[\s\S]*n[aã]o fazer merge[\s\S]*Alf/i);
+test('runbook registra autorizacao humana do Bloco 5 sem perder os gates de producao', () => {
+  assert.match(runbook, /Bloco 5 autorizado por Alf/i);
   assert.match(runbook, /project ref[\s\S]*reconfirm/i);
-  assert.match(runbook, /merge\/deploy do frontend[\s\S]*BLOQUEADO/i);
+  assert.match(runbook, /merge\/deploy do frontend[\s\S]*AUTORIZADO/i);
 });
 
-test('runbook preserva o baseline de atendimento e posiciona o smoke na janela segura', () => {
+test('runbook preserva o baseline e posiciona o smoke depois do deploy seguro', () => {
   assert.match(
     runbook,
     /WhatsApp desconectado — Lia - Sucesso do Aluno • Caixa undefined não encontrada/,
@@ -132,7 +131,15 @@ test('runbook preserva o baseline de atendimento e posiciona o smoke na janela s
   assert.match(runbook, /117 conversas/i);
   assert.match(
     runbook,
-    /ap[oó]s as migrations[\s\S]*antes (?:da libera[cç][aã]o )?do merge/i,
+    /ap[oó]s as migrations[\s\S]*depois do deploy do frontend/i,
+  );
+  assert.match(
+    runbook,
+    /liberar merge do PR #16[\s\S]*Vercel[\s\S]*somente depois do deploy[\s\S]*smoke comparativo/i,
+  );
+  assert.match(
+    runbook,
+    /efeito esperado[\s\S]*n[aã]o como regress[aã]o do PR/i,
   );
   assert.match(
     runbook,

@@ -1,6 +1,6 @@
 # Pesquisa de evasão — runbook do Subprojeto A
 
-**Status:** PR #16 em draft. Não aplicar, não fazer merge e não publicar sem Alf presente e autorização explícita.
+**Status:** migrations, Edge e backfill aplicados; Bloco 5 autorizado por Alf. Publicar o frontend e executar o smoke dos consumidores de caixas somente depois do deploy.
 
 **Produção:** `ouqwbbermlzqqvtqwlul`
 
@@ -55,7 +55,7 @@ Nenhum passo deste documento autoriza escrita em produção por si só.
 - a main possui publicação automática na Vercel;
 - não foi encontrada automação do repositório que aplique migrations Supabase ao merge;
 - consequência: migrations e Edge precisam entrar antes do frontend que chama os contratos novos;
-- o PR permanece draft e não pode ser mergeado antecipadamente.
+- depois das migrations, o merge/deploy do frontend precisa ocorrer antes do smoke dos consumidores de caixas, pois o frontend antigo não consegue ler a tabela endurecida.
 
 ### Gitleaks
 
@@ -73,7 +73,7 @@ Nenhum passo deste documento autoriza escrita em produção por si só.
 - esta migration deve permanecer integralmente inalterada;
 - Pré-Atendimento, CaixasManager e NovaConversaModal usam contratos sem credencial;
 - o smoke manual dessas telas continua necessário porque build e busca estática não provam a seleção correta de caixa;
-- esse smoke ocorre dentro da janela de rollout, após as migrations e antes da liberação do merge do frontend, pois os contratos seguros ainda não existem em produção.
+- esse smoke ocorre dentro da janela de rollout, após as migrations **e depois do deploy do frontend**, pois somente o código novo consome os contratos seguros. Testar antes do deploy reproduz necessariamente a incompatibilidade entre a RLS nova e a leitura direta legada.
 
 ### Baseline visual anterior ao rollout
 
@@ -95,6 +95,8 @@ Migrations, nesta ordem:
 1. `20260730170000_pesquisa_evasao_fundacao_segura.sql`;
 2. `20260730173000_pesquisa_evasao_claim_seguro.sql`;
 3. `20260730180100_whatsapp_caixas_credenciais_privadas.sql`.
+4. após o smoke manual do Bloco 3 e com autorização específica de Alf,
+   `20260801013000_pesquisa_evasao_backfill_telefone_julho_2026.sql`.
 
 Edge e frontend:
 
@@ -329,6 +331,134 @@ independente, sem correção neste rollout, conforme
 
 ## 8. Pré-flight de produção
 
+### Evidência registrada em 31/07/2026
+
+- produção reconfirmada por duas fontes independentes como
+  `ouqwbbermlzqqvtqwlul` (`LA Performance Report`, `ACTIVE_HEALTHY`);
+- antes da segunda tentativa do Bloco 2, o SQL persistido em
+  `supabase_migrations.schema_migrations.statements` foi auditado para
+  `20260731235710`, `20260801002522`, `20260801002807` e `20260801003051`;
+  nenhuma das quatro migrations menciona `pesquisa_evasao`,
+  `whatsapp_caixas`, `movimentacoes_admin` nem as funções recriadas pelo Plano
+  A. O avanço concorrente de histórico não colide com este rollout;
+- backups físicos estão habilitados, porém o último snapshot retornado foi
+  `2026-07-30 06:15:52 UTC` (`03:15:52 BRT`) e `pitr_enabled = false`;
+- Alf autorizou seguir sem PITR porque uma restauração integral descartaria
+  operação real e não é o rollback indicado para migrations aditivas;
+- o rollback desta janela passa a ser cirúrgico, objeto a objeto, pelo artefato
+  local e ignorado pelo Git
+  `D:\\2026\\LA-performance-report\\.worktrees\\pesquisa-evasao-fundacao-segura\\docs\\runbooks\\pesquisa-evasao-subprojeto-a-rollback-producao.sql.local`;
+- SHA-256 do artefato de rollback:
+  `AF34440C22F71D9636D220A557F74A290295CEF3130CB1DCBD08DD86CA2B43DC`;
+- a captura somente leitura contém as cinco funções preexistentes via
+  `pg_get_functiondef`, policies com `USING`/`WITH CHECK`, grants, as 23 colunas
+  preexistentes das seis linhas legadas e os três triggers preexistentes de
+  `movimentacoes_admin`;
+- o artefato contém dados privados dos testes e não pode ser commitado ou
+  compartilhado. Antes de qualquer uso, reconfirmar o project ref e revisar o
+  SQL completo com Alf presente.
+- a primeira tentativa de `20260730170000` recebeu SQL truncado pelo transporte
+  e falhou dentro da transação; a checagem imediata confirmou zero objetos,
+  colunas ou histórico persistidos. A nova tentativa remontou cada arquivo por
+  blocos de bytes e validou tamanho e SHA-256 antes de executar;
+- Bloco 2 aplicado isoladamente e conferido após cada migration:
+  `20260801003710` (`20260730170000_pesquisa_evasao_fundacao_segura`),
+  `20260801003807` (`20260730173000_pesquisa_evasao_claim_seguro`) e
+  `20260801003851` (`20260730180100_whatsapp_caixas_credenciais_privadas`);
+- hashes executados: `20260730170000` =
+  `53993ECA9CD45BC5F8DEBF5E9DAB180E8FC8BAE83D21F1E8D2EE90D6BCC26B7B`,
+  `20260730173000` =
+  `00C6204BC18E295FDE30E2E1373155EECE3154E6C0F895ECC3795F83F23C036C`
+  e `20260730180100` =
+  `F863A22C9F1D8534EAF31F0A7FEDC183DDABF3902E975B620B1F5064F9C381C4`;
+- os verificadores estrutural e operacional executaram em transação e
+  terminaram em `ROLLBACK`; o postflight confirmou 6/6 legados com
+  `modo_teste = true`, no único número interno aprovado, e exatamente um
+  template ativo `evasao_aberta` versão 1 para cada público.
+- Bloco 3 publicou `enviar-pesquisa-evasao` como versão 39, estado `ACTIVE`,
+  `verify_jwt = true`, bundle SHA-256
+  `9f626bffce1e72b1fe01ec6f562915afed364dae7e0d6fd65e582cb26b894609`;
+- POST sem `Authorization` retornou HTTP 401 com
+  `UNAUTHORIZED_NO_AUTH_HEADER`; bearer inválido retornou HTTP 401 com
+  `UNAUTHORIZED_INVALID_JWT_FORMAT`. O pós-check permaneceu com zero previews,
+  zero envios `enviando/incerto`, seis pesquisas no total e 6/6 legados como
+  teste. Nenhuma mensagem foi disparada nesses testes negativos.
+
+### Backfill controlado dos contatos de julho/2026
+
+O teste manual do Bloco 3 foi aprovado por Alf: a prévia exibiu destinatário
+mascarado e a mensagem exata, a assinatura veio do login (`Luciano`), o envio
+chegou somente ao número interno e o registro ficou marcado como teste.
+
+A regra original de não fazer backfill do telefone produtivo foi flexibilizada
+somente para as saídas de julho/2026 por decisão explícita de Alf. A
+justificativa é o contato recente, haver baixa probabilidade de troca em 30
+dias e existir necessidade operacional de entregar uma fila utilizável à
+equipe em agosto. O histórico anterior a `2026-07-01` permanece intocado e
+bloqueado quando não possui snapshot.
+
+O preflight somente leitura encontrou 37 saídas canônicas em julho: uma já
+possuía snapshot, 23 estavam elegíveis ao backfill e 13 não tinham contato
+atual. A migration versionada congela os 23 IDs aprovados, repete todos os
+filtros de negócio e falha fechada se a contagem ou o conjunto divergirem. Ela
+nunca sobrescreve `telefone_snapshot` existente e marca os valores recuperados
+em `telefone_snapshot_origem` como
+`cadastro_atual_backfill_2026_07`.
+
+Observação de qualidade de cadastro: 13 saídas de julho não possuem nenhum
+contato no cadastro do aluno, nem `whatsapp` nem `telefone`. Elas ficam fora do
+backfill e continuam bloqueadas para envio; o saneamento será tratado pela
+equipe administrativa, fora deste rollout.
+
+O fechamento de julho está completo e conferido: 217 movimentações, 32
+cancelamentos e 5 não renovações, totalizando as 37 saídas observadas no banco.
+A concentração das datas na primeira semana é efeito do ciclo de renovação.
+
+A migration foi aplicada em produção como
+`20260801013339_pesquisa_evasao_backfill_telefone_julho_2026`. O postflight
+confirmou 23 linhas com origem `cadastro_atual_backfill_2026_07`, 24 saídas de
+julho com snapshot no total (as 23 recuperadas mais a original), zero elegíveis
+restantes com contato atual, 13 sem contato e zero linhas anteriores a
+`2026-07-01` marcadas pelo backfill.
+
+### Evidência do Bloco 4
+
+O registro do envio manual de teste `87bda8e9-b021-4c91-8070-c63cf65778c6`
+foi auditado somente por leitura. O operador é `Luciano Alf` (`usuarios.id = 2`)
+e o `auth_user_id` gravado confere com o cadastro ativo. A assinatura `Luciano`
+veio do fallback do primeiro nome do login, sem override. O registro está em
+modo teste, status `enviado`, caixa 3 (`Lia - Sucesso do Aluno`), destino
+mascarado `***8047`, template `evasao_aberta`/`responsavel` versão 1 e sem erro
+sanitizado. O texto final tem 346 caracteres, hash SHA-256
+`90e549a0c8b79b69392c1923eaa3ce462dc1260c5b41da7bc7788e4043e8e7bf`, não
+contém placeholders e é idêntico ao texto da prévia consumida. Preview,
+template, caixa, operador, destino, idempotency key e provider message ID
+conferem; há exatamente uma pesquisa para a idempotency key.
+
+O primeiro smoke das telas de atendimento foi interrompido no primeiro
+consumidor pelo critério de parada então vigente. No baseline da `main`, o
+Pré-Atendimento → Conversas exibia
+`WhatsApp desconectado — Lia - Sucesso do Aluno • Caixa undefined não
+encontrada`. Na prévia do PR, a mesma tela exibiu `WhatsApp desconectado • Caixa
+undefined não encontrada`, sem o nome da caixa.
+
+Após revisão do plano, esse resultado foi reclassificado como efeito esperado
+da ordem antiga, não como regressão do PR: `20260730180100` já havia bloqueado a
+leitura direta de `whatsapp_caixas`, enquanto o frontend publicado continuava
+sendo o da `main`. A consulta legada recebeu zero linhas; por isso o nome sumiu.
+Essa janela degrada também qualquer outro consumidor ainda publicado que leia a
+tabela diretamente, inclusive o NovaConversaModal. A saída aprovada é publicar
+o frontend do PR, que usa `listar_whatsapp_caixas_seguras`, e só então repetir o
+smoke completo. Nenhuma conversa nova foi enviada no smoke anterior.
+
+### Risco independente do rollout: continuidade do banco
+
+PITR está desativado em `ouqwbbermlzqqvtqwlul` e, no pré-flight, o backup
+físico mais recente tinha aproximadamente 42 horas. Esse é um risco permanente
+do negócio, fora do escopo do PR #16 e deste rollout. Abrir tratamento próprio
+de continuidade/recuperação depois da janela; não considerar o backup antigo
+como reversão operacional destas migrations.
+
 Com Alf presente:
 
 1. reconfirmar `ouqwbbermlzqqvtqwlul` por duas fontes independentes;
@@ -392,9 +522,10 @@ Somente após autorização explícita:
 11. confirmar o envio somente para `5521981278047`;
 12. comparar a mensagem aprovada com a recebida;
 13. validar que o registro contém usuário, auth UID, assinatura, texto, template, caixa, destino, modo e horários;
-14. ainda na janela, realizar o smoke comparativo dos consumidores de caixas descrito no baseline: Pré-Atendimento, Caixa de Entrada do Sucesso do Aluno, CaixasManager e NovaConversaModal;
-15. somente então liberar merge/deploy do frontend;
-16. observar logs, estados incertos e duplicidade durante a janela combinada.
+14. liberar merge do PR #16 e aguardar a Vercel concluir o deploy do frontend;
+15. somente depois do deploy, realizar o smoke comparativo dos consumidores de caixas descrito no baseline: Pré-Atendimento, Caixa de Entrada do Sucesso do Aluno, CaixasManager e NovaConversaModal;
+16. confirmar nome e seleção da caixa, precedência da caixa da unidade sobre a global e ausência de campos de token preenchidos;
+17. observar logs, estados incertos e duplicidade durante a janela combinada.
 
 ## 10. Checklist operacional
 
@@ -476,17 +607,20 @@ Se o frontend for publicado fora de ordem:
 
 | Evidência | Resultado |
 |---|---|
-| Commit aprovado | PENDENTE |
-| Project ref reconfirmado | PENDENTE |
+| Commit aprovado | `da27571e7c5c72de088e059eb5e5022e49c1554f` |
+| Project ref reconfirmado | APROVADO — `ouqwbbermlzqqvtqwlul`, duas fontes independentes |
+| Backup/PITR | Backup físico concluído em 30/07 03:15 BRT; PITR desativado; risco aceito por Alf |
+| Rollback cirúrgico local | `pesquisa-evasao-subprojeto-a-rollback-producao.sql.local` — SHA-256 `AF34440C22F71D9636D220A557F74A290295CEF3130CB1DCBD08DD86CA2B43DC` |
 | Novo ensaio DDL do diff final | APROVADO em `didpawhgvkarzntvktzu`, depois destruído |
 | Hash de `20260730180100` | APROVADO — `F863A22C9F1D8534EAF31F0A7FEDC183DDABF3902E975B620B1F5064F9C381C4` |
-| 1 template ativo por público | PENDENTE |
-| Prévia sem placeholders residuais | PENDENTE |
-| Migrations aplicadas | PENDENTE |
-| Verificadores em rollback | PENDENTE |
-| 6/6 legados como teste | PENDENTE |
-| Edge com JWT | PENDENTE |
-| Smoke no número interno | PENDENTE |
-| Auditoria completa | PENDENTE |
-| Smoke das telas de atendimento | PENDENTE |
-| Merge/deploy do frontend | BLOQUEADO até os itens anteriores |
+| 1 template ativo por público | APROVADO — `direto = 1`, `responsavel = 1`, chave `evasao_aberta`, versão 1 |
+| Prévia sem placeholders residuais | APROVADO — texto final idêntico à prévia, sem `{{ }}` |
+| Migrations aplicadas | APROVADO — versões remotas `20260801003710`, `20260801003807`, `20260801003851` |
+| Verificadores em rollback | APROVADO — estrutural e operacional |
+| 6/6 legados como teste | APROVADO — mesmo número interno confirmado |
+| Edge com JWT | APROVADO — versão 39 ativa; anônimo e JWT inválido retornam 401 |
+| Backfill de telefone de julho/2026 | APROVADO — migration remota `20260801013339`; 23 recuperados, 24 snapshots no total, 13 sem contato bloqueados, zero linhas anteriores a julho |
+| Smoke no número interno | APROVADO — mensagem entregue somente em `***8047`, modo teste |
+| Auditoria completa | APROVADO — operador/Auth, assinatura, texto, template, caixa, destino, horários, preview, idempotência e provedor conferidos |
+| Smoke das telas de atendimento | AGUARDANDO PÓS-DEPLOY — tentativa anterior reproduziu a incompatibilidade esperada entre frontend legado e RLS nova |
+| Merge/deploy do frontend | AUTORIZADO — deve preceder o smoke dos consumidores de caixas |
