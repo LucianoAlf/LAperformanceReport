@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 import argparse
 import json
-import os
-import subprocess
 import sys
-import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib import error, parse, request
 from zoneinfo import ZoneInfo
+
+from lareport_whatsapp_single import send_single_report
 
 ENV_CANDIDATES = [
     Path('/opt/LA-Organizer/.env'),
@@ -19,8 +18,6 @@ EDGE_FUNCTION = 'relatorio-admin-whatsapp'
 QUEUE_TABLE = 'fila_relatorios_whatsapp'
 COMERCIAL_TIPO = 'relatorio_comercial'
 SUPABASE_FALLBACK_URL = 'https://ouqwbbermlzqqvtqwlul.supabase.co'
-HERMES = '/home/sol/.hermes/hermes-agent/venv/bin/python'
-HERMES_MODULE = ['-m', 'hermes_cli.main', 'send', '--json']
 AUDIT_DIR = Path('/home/sol/.openclaw/workspace/outputs/lareport-comercial-hermes')
 FUSO_BRT = ZoneInfo('America/Sao_Paulo')
 
@@ -129,48 +126,11 @@ def already_sent_today(base, key, unidade_id, jid, today):
     return rows[0] if rows else None
 
 
-def send_hermes(target, text):
-    AUDIT_DIR.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        'w',
-        encoding='utf-8',
-        delete=False,
-        dir=str(AUDIT_DIR),
-        prefix='msg-',
-        suffix='.md',
-    ) as handle:
-        handle.write(text)
-        temp_path = handle.name
+def send_report(target, text):
     try:
-        command = [
-            HERMES,
-            *HERMES_MODULE,
-            '--to',
-            f'whatsapp:{target}',
-            '--file',
-            temp_path,
-        ]
-        proc = subprocess.run(
-            command,
-            cwd='/home/sol/.hermes/profiles/sol',
-            text=True,
-            capture_output=True,
-            timeout=180,
-        )
-        if proc.returncode != 0:
-            return {
-                'success': False,
-                'error': (proc.stderr or proc.stdout or '').strip()[:1000],
-            }
-        try:
-            return json.loads(proc.stdout)
-        except Exception:
-            return {'success': True, 'raw': proc.stdout.strip()}
-    finally:
-        try:
-            os.unlink(temp_path)
-        except FileNotFoundError:
-            pass
+        return {'success': True, **send_single_report(target, text)}
+    except Exception as exc:
+        return {'success': False, 'error': str(exc)[:1000]}
 
 
 def main():
@@ -293,7 +253,7 @@ def main():
                 summary['results'].append(result)
                 continue
 
-            send_result = send_hermes(destination['jid'], texto)
+            send_result = send_report(destination['jid'], texto)
             send_ok = bool(send_result.get('success'))
             final_status = 'enviada' if send_ok else 'erro'
             final_error = None if send_ok else (

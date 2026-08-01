@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 import argparse
 import json
-import os
-import subprocess
 import sys
-import tempfile
 import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib import request, parse, error
+
+from lareport_whatsapp_single import send_single_report
 
 ENV_CANDIDATES = [
     Path('/opt/LA-Organizer/.env'),
@@ -16,8 +15,6 @@ ENV_CANDIDATES = [
 ]
 EDGE_FUNCTION = 'relatorio-admin-whatsapp'
 SUPABASE_FALLBACK_URL = 'https://ouqwbbermlzqqvtqwlul.supabase.co'
-HERMES = '/home/sol/.hermes/hermes-agent/venv/bin/python'
-HERMES_MODULE = ['-m', 'hermes_cli.main', 'send', '--json']
 AUDIT_DIR = Path('/home/sol/.openclaw/workspace/outputs/lareport-adm-hermes')
 
 
@@ -109,26 +106,11 @@ def already_sent_today(base, key, unidade_id, jid, today):
     return bool(rows)
 
 
-def send_hermes(target, text):
-    AUDIT_DIR.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile('w', encoding='utf-8', delete=False, dir=str(AUDIT_DIR), prefix='msg-', suffix='.md') as f:
-        f.write(text)
-        tmp = f.name
+def send_report(target, text):
     try:
-        cmd = [HERMES, *HERMES_MODULE, '--to', f'whatsapp:{target}', '--file', tmp]
-        proc = subprocess.run(cmd, cwd='/home/sol/.hermes/profiles/sol', text=True, capture_output=True, timeout=180)
-        if proc.returncode != 0:
-            return {'success': False, 'error': (proc.stderr or proc.stdout or '').strip()[:1000]}
-        try:
-            data = json.loads(proc.stdout)
-        except Exception:
-            data = {'success': True, 'raw': proc.stdout.strip()}
-        return data
-    finally:
-        try:
-            os.unlink(tmp)
-        except FileNotFoundError:
-            pass
+        return {'success': True, **send_single_report(target, text)}
+    except Exception as exc:
+        return {'success': False, 'error': str(exc)[:1000]}
 
 
 def main():
@@ -186,7 +168,7 @@ def main():
                     result.update({'status': 'skip_already_sent_today'})
                     summary['results'].append(result)
                     continue
-                send_result = send_hermes(d['jid'], texto)
+                send_result = send_report(d['jid'], texto)
                 ok = bool(send_result.get('success'))
                 row = {
                     'unidade_id': unidade_id,

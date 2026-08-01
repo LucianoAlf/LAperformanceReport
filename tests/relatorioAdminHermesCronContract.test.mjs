@@ -8,6 +8,10 @@ const scriptPath = new URL(
 );
 
 const script = await readFile(scriptPath, 'utf8');
+const edge = await readFile(
+  new URL('../supabase/functions/relatorio-admin-whatsapp/index.ts', import.meta.url),
+  'utf8',
+);
 
 test('cron administrativo usa a chave canônica por tipo na fila', () => {
   assert.match(
@@ -29,4 +33,13 @@ test('todas as gravações na fila identificam o tipo administrativo', () => {
     /def upsert_fila[\s\S]*?payload\s*=\s*\{['"]tipo_relatorio['"]\s*:\s*['"]relatorio_admin['"],\s*\*\*row\}/,
   );
   assert.match(script, /http_json\([\s\S]*?['"]POST['"], url, key, payload,/);
+});
+
+test('texto administrativo e comercial passam pelo contrato publico', () => {
+  assert.doesNotMatch(edge, /\(fonte canônica\)/i);
+  assert.match(edge, /validarTextoPublicoRelatorio\(texto\)/);
+  assert.match(
+    edge,
+    /validarTextoPublicoRelatorio\(formatarRelatorioComercialDiario\(dados\)\)/,
+  );
 });

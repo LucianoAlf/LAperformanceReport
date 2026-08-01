@@ -80,7 +80,11 @@ test('cron comercial registra e deduplica o automático na fila canônica', () =
     /['"]tipo_relatorio['"]\s*:\s*['"]eq\.relatorio_comercial['"]/,
   );
   assert.match(cron, /['"]status['"]\s*:\s*['"]enviando['"]/);
-  assert.match(cron, /send_result\s*=\s*send_hermes/);
+  assert.match(cron, /send_result\s*=\s*send_report/);
+  assert.match(
+    cron,
+    /from lareport_whatsapp_single import send_single_report/,
+  );
   assert.match(cron, /final_status\s*=\s*['"]enviada['"]\s*if\s*send_ok\s*else\s*['"]erro['"]/);
   assert.match(cron, /['"]status['"]\s*:\s*final_status/);
 });

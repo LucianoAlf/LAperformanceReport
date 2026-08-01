@@ -27,6 +27,9 @@ import {
   parseDataReferenciaAdminBrt,
   type FaixaPoliticaTrancamento,
 } from '../_shared/relatorio-admin-canonico.ts';
+import {
+  validarTextoPublicoRelatorio,
+} from '../_shared/relatorio-publico.ts';
 
 const FIELDS = 'id,nome,provedor,uazapi_url,uazapi_token,waha_url,waha_session,waha_api_key';
 
@@ -975,10 +978,10 @@ async function gerarRelatorioDiario(
   }
 
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  texto += `📅 Gerado em: ${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano} às ${horaStr} (fonte canônica)\n`;
+  texto += `📅 Relatório gerado em: ${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano} às ${horaStr}\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━`;
 
-  return texto;
+  return validarTextoPublicoRelatorio(texto);
 }
 
 async function buscarMatriculasComerciaisAlunos(
@@ -1842,7 +1845,7 @@ async function gerarRelatorioComercialDiario(
     },
   };
 
-  return formatarRelatorioComercialDiario(dados);
+  return validarTextoPublicoRelatorio(formatarRelatorioComercialDiario(dados));
 }
 
 /**
