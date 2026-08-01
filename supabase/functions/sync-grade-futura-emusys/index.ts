@@ -178,33 +178,33 @@ serve(async (req: Request) => {
         });
       }
 
+      // idPorEmusysId e construido a partir do retorno do proprio upsert
+      // (.select() no upsert), nao de um SELECT separado: um SELECT sem
+      // paginacao na tabela inteira da janela (3000+ linhas) estoura o teto
+      // padrao de 1000 linhas do PostgREST e trunca o mapa silenciosamente
+      // (aula fora do mapa = vinculo descartado sem erro, sem log). Usar o
+      // retorno do upsert elimina essa classe de bug e evita a ida extra ao banco.
       let gravadas = 0;
       const chunkSize = 500;
+      const idPorEmusysId = new Map<number, number>();
       for (let offset = 0; offset < linhas.length; offset += chunkSize) {
         const lote = linhas.slice(offset, offset + chunkSize);
-        const { error } = await supabase
+        const { data: loteGravado, error } = await supabase
           .from('aulas_emusys')
-          .upsert(lote, { onConflict: 'emusys_id,unidade_id', ignoreDuplicates: false });
+          .upsert(lote, { onConflict: 'emusys_id,unidade_id', ignoreDuplicates: false })
+          .select('id, emusys_id');
         if (error) {
           console.error(`[sync-grade-futura] upsert lote (${unidade.nome}) offset ${offset}: ${error.message}`);
           continue;
         }
         gravadas += lote.length;
+        for (const linhaGravada of loteGravado || []) {
+          idPorEmusysId.set(linhaGravada.emusys_id as number, linhaGravada.id as number);
+        }
       }
 
       // Persiste o alunos[] que a resposta ja traz. Sem isso a grade futura
       // sabe curso/turma/sala mas nao sabe de quem e a aula.
-      const { data: aulasGravadas } = await supabase
-        .from('aulas_emusys')
-        .select('id, emusys_id')
-        .eq('unidade_id', unidade.id)
-        .gte('data_aula', hoje)
-        .lte('data_aula', dataFim);
-
-      const idPorEmusysId = new Map<number, number>();
-      for (const linha of aulasGravadas || []) {
-        idPorEmusysId.set(linha.emusys_id as number, linha.id as number);
-      }
 
       const vinculos = montarVinculosAulaAlunos(aulas, idPorEmusysId, unidade.id);
       const resultado = await gravarVinculosAulaAlunos(supabase, vinculos, chunkSize);
