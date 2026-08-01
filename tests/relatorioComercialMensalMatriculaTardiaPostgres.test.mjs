@@ -162,7 +162,15 @@ test('matricula tardia entra em julho por retificacao e nao altera o snapshot', 
         mes integer,
         escopo text,
         unidade_id uuid,
-        acao text,
+        acao text check (acao = any (array[
+          'preview_gerado'::text,
+          'snapshot_gravado'::text,
+          'snapshot_aprovado'::text,
+          'snapshot_fechado'::text,
+          'compatibilidade_dados_mensais_atualizada'::text,
+          'writer_legado_bloqueado'::text,
+          'retificacao_solicitada'::text
+        ])),
         detalhes jsonb,
         actor_id uuid,
         created_at timestamptz default now()

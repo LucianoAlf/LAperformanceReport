@@ -33,6 +33,10 @@ test('retificacao tardia e allowlist auditada e nao reabre julho', () => {
   assert.match(sql, /get_conciliacao_experimentais_v2/i);
   assert.match(sql, /fechamento_mensal_retificacoes/i);
   assert.match(sql, /fechamento_mensal_auditoria/i);
+  assert.match(
+    sql,
+    /fechamento_mensal_auditoria_acao_check[\s\S]*retificacao_matricula_tardia/i,
+  );
   assert.doesNotMatch(sql, /update\s+public\.fechamento_mensal_snapshots/i);
 
   assert.doesNotMatch(sql, /368d47f5-2d88-4475-bc14-ba084a9a348e/i);
