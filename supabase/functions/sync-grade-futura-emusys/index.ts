@@ -11,6 +11,11 @@ import {
   resolverProfessorDaAula,
   type EmusysProfessorRef,
 } from '../_shared/professor-emusys.ts';
+import {
+  montarVinculosAulaAlunos,
+  gravarVinculosAulaAlunos,
+  type AlunoNaAulaEmusys,
+} from '../_shared/emusys-aulas.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -60,7 +65,7 @@ interface AulaEmusys {
   duracao_minutos: number | null;
   sala_nome: string | null;
   professores: Array<EmusysProfessorRef & { nome: string; presenca?: string | null }>;
-  alunos: { nome_aluno: string }[];
+  alunos: AlunoNaAulaEmusys[];
   anotacoes: string | null;
 }
 
@@ -186,6 +191,29 @@ serve(async (req: Request) => {
         }
         gravadas += lote.length;
       }
+
+      // Persiste o alunos[] que a resposta ja traz. Sem isso a grade futura
+      // sabe curso/turma/sala mas nao sabe de quem e a aula.
+      const { data: aulasGravadas } = await supabase
+        .from('aulas_emusys')
+        .select('id, emusys_id')
+        .eq('unidade_id', unidade.id)
+        .gte('data_aula', hoje)
+        .lte('data_aula', dataFim);
+
+      const idPorEmusysId = new Map<number, number>();
+      for (const linha of aulasGravadas || []) {
+        idPorEmusysId.set(linha.emusys_id as number, linha.id as number);
+      }
+
+      const vinculos = montarVinculosAulaAlunos(aulas, idPorEmusysId, unidade.id);
+      const resultado = await gravarVinculosAulaAlunos(supabase, vinculos, chunkSize);
+      for (const erro of resultado.erros) {
+        console.error(`[sync-grade-futura] upsert aula_alunos (${unidade.nome}): ${erro}`);
+      }
+      console.log(
+        `[sync-grade-futura] ${unidade.nome}: ${resultado.gravados} vinculos aluno-aula`,
+      );
 
       const { data: existentesFuturas } = await supabase
         .from('aulas_emusys')
