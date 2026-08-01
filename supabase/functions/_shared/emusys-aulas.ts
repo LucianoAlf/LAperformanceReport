@@ -118,3 +118,79 @@ export async function buscarPaginaAulasEmusys<
 
   return parsePaginaAulas<T>(json);
 }
+
+export interface AlunoNaAulaEmusys {
+  id_aluno: number | null;
+  id_lead: number | null;
+  nome_aluno: string;
+  telefone_aluno: string | null;
+}
+
+export interface VinculoAulaAluno {
+  aula_emusys_id: number;
+  unidade_id: string;
+  emusys_aluno_id: number | null;
+  lead_id: number | null;
+  nome: string;
+  telefone: string | null;
+}
+
+/**
+ * Transforma o alunos[] que o GET /aulas ja devolve em linhas de aula_alunos.
+ * Sem isso a grade futura sabe curso/turma/sala mas nao sabe de quem e a aula.
+ * `idPorEmusysId` mapeia o id do Emusys para o id interno de aulas_emusys.
+ */
+export function montarVinculosAulaAlunos(
+  aulas: Array<{ id: number; alunos?: AlunoNaAulaEmusys[] }>,
+  idPorEmusysId: Map<number, number>,
+  unidadeId: string,
+): VinculoAulaAluno[] {
+  const vinculos: VinculoAulaAluno[] = [];
+
+  for (const aula of aulas) {
+    const aulaId = idPorEmusysId.get(aula.id);
+    if (!aulaId) continue;
+
+    for (const aluno of aula.alunos || []) {
+      // nome e a chave do upsert (aula_emusys_id, nome): sem nome, sem linha.
+      if (!aluno.nome_aluno) continue;
+      vinculos.push({
+        aula_emusys_id: aulaId,
+        unidade_id: unidadeId,
+        emusys_aluno_id: aluno.id_aluno || null,
+        lead_id: aluno.id_lead || null,
+        nome: aluno.nome_aluno,
+        telefone: aluno.telefone_aluno || null,
+      });
+    }
+  }
+
+  return vinculos;
+}
+
+/** Grava os vinculos em lotes. Idempotente pelo unique (aula_emusys_id, nome). */
+export async function gravarVinculosAulaAlunos(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  vinculos: VinculoAulaAluno[],
+  tamanhoLote = 500,
+): Promise<{ gravados: number; erros: string[] }> {
+  const erros: string[] = [];
+  let gravados = 0;
+  const agora = new Date().toISOString();
+
+  for (let offset = 0; offset < vinculos.length; offset += tamanhoLote) {
+    const lote = vinculos
+      .slice(offset, offset + tamanhoLote)
+      .map((v) => ({ ...v, updated_at: agora }));
+
+    const { error } = await supabase
+      .from("aula_alunos")
+      .upsert(lote, { onConflict: "aula_emusys_id,nome", ignoreDuplicates: false });
+
+    if (error) erros.push(error.message);
+    else gravados += lote.length;
+  }
+
+  return { gravados, erros };
+}
