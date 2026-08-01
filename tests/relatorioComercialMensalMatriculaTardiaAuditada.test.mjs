@@ -35,14 +35,19 @@ test('retificacao tardia e allowlist auditada e nao reabre julho', () => {
   assert.match(sql, /fechamento_mensal_auditoria/i);
   assert.doesNotMatch(sql, /update\s+public\.fechamento_mensal_snapshots/i);
 
-  assert.match(sql, /368d47f5-2d88-4475-bc14-ba084a9a348e/i);
-  assert.match(sql, /\b1893\b/);
+  assert.doesNotMatch(sql, /368d47f5-2d88-4475-bc14-ba084a9a348e/i);
+  assert.doesNotMatch(sql, /95553e96-971b-4590-a6eb-0201d013c14d/i);
+  assert.doesNotMatch(sql, /\b1893\b/);
+  assert.match(sql, /upper\(btrim\(u\.codigo\)\)\s*=\s*'BARRA'/i);
+  assert.match(sql, /upper\(btrim\(u\.nome\)\)\s*=\s*'BARRA'/i);
+  assert.match(sql, /a\.emusys_matricula_id\s*=\s*'840'/i);
+  assert.match(sql, /lower\(btrim\(a\.nome\)\)\s*=\s*lower\('Luíza P Caruso'\)/i);
   assert.match(sql, /'840'/);
   assert.match(sql, /date\s+'2026-07-31'/i);
   assert.match(sql, /136c1626f4c512e82b82138c395f585a5c3de7e10ad1269862176d7acd8d0458/i);
 
   assert.match(
     sql,
-    /update\s+public\.unidades[\s\S]*gerente_nome\s*=\s*'Clayton'[\s\S]*gerente_nome\s*=\s*'Fabiola\/Clayton'/i,
+    /upper\(btrim\(u\.codigo\)\)\s*=\s*'REC'[\s\S]*upper\(btrim\(u\.nome\)\)\s*=\s*'RECREIO'[\s\S]*gerente_nome\s*=\s*'Clayton'[\s\S]*gerente_nome\s*=\s*'Fabiola\/Clayton'/i,
   );
 });
