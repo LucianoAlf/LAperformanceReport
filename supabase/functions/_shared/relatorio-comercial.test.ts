@@ -567,11 +567,11 @@ Deno.test("relatorio historico usa hora real para filtrar proximas sem alterar a
   assertStringIncludes(texto, "Pedro e Miguel");
   assertStringIncludes(
     texto,
-    "Gerado em: 30/07/2026 às 20:05 (America/Sao_Paulo)",
+    "Relatório gerado em: 30/07/2026 às 20:05",
   );
 });
 
-Deno.test("formatarRelatorioComercialDiario gera as dez secoes na ordem aprovada", () => {
+Deno.test("formatarRelatorioComercialDiario gera as nove secoes na ordem aprovada", () => {
   const texto = formatarRelatorioComercialDiario(dadosBarra());
   const secoes = [
     "*RELATÓRIO DIÁRIO COMERCIAL*",
@@ -583,7 +583,6 @@ Deno.test("formatarRelatorioComercialDiario gera as dez secoes na ordem aprovada
     "*PRÓXIMAS EXPERIMENTAIS*",
     "*ALERTAS E CONCILIAÇÃO*",
     "*LISTA DETALHADA*",
-    "*FONTES E SNAPSHOT*",
   ];
   const posicoes = secoes.map((secao) => texto.indexOf(secao));
 
@@ -647,7 +646,7 @@ const textoOuroBarra = [
   "",
   "🗓️ *PRÓXIMAS EXPERIMENTAIS*",
   "━━━━━━━━━━━━━━━━━━━━━━",
-  "• 2026-07-31 14:00: Luíza — Canto",
+  "• 31/07/2026 às 14:00: Luíza — Canto",
   "",
   "⚠️ *ALERTAS E CONCILIAÇÃO*",
   "━━━━━━━━━━━━━━━━━━━━━━",
@@ -666,12 +665,8 @@ const textoOuroBarra = [
   "💵 Pass: R$ 450,00",
   "💵 Parc: R$ 460,00 (Crédito Recorrente)",
   "",
-  "🔎 *FONTES E SNAPSHOT*",
-  "━━━━━━━━━━━━━━━━━━━━━━",
-  "• Fontes: get_kpis_comercial_canonicos_v2 + snapshot vigente GET /aulas + coorte detalhada de matrículas",
-  "• Snapshot Emusys: completo",
-  "• Atualizado em: 30/07/2026 às 19:50:07",
-  "• Gerado em: 30/07/2026 às 20:05 (America/Sao_Paulo)",
+  "📅 Informações atualizadas em: 30/07/2026 às 19:50:07",
+  "📅 Relatório gerado em: 30/07/2026 às 20:05",
   "━━━━━━━━━━━━━━━━━━━━━━",
 ].join("\n");
 
@@ -696,9 +691,9 @@ Deno.test("formatarRelatorioComercialDiario preserva numeros canonicos, riqueza 
       "Marina Bessa",
       "Prof. Experimental: Leonardo Castro",
       "Parc: R$ 460,00 (Crédito Recorrente)",
-      "Snapshot Emusys: completo",
+      "Informações atualizadas em: 30/07/2026 às 19:50:07",
+      "Relatório gerado em: 30/07/2026 às 20:05",
       "30/07/2026 às 19:50:07",
-      "get_kpis_comercial_canonicos_v2 + snapshot vigente GET /aulas + coorte detalhada de matrículas",
     ]
   ) {
     assertStringIncludes(texto, trecho);
@@ -722,6 +717,12 @@ Deno.test("formatarRelatorioComercialDiario nao reintroduz numeros nem mensagens
       "NaN",
       "Infinity",
       "campos seguem em validação canônica",
+      "FONTES E SNAPSHOT",
+      "get_kpis_comercial_canonicos_v2",
+      "GET /aulas",
+      "coorte detalhada",
+      "Snapshot Emusys",
+      "America/Sao_Paulo",
     ]
   ) {
     assertFalse(texto.includes(proibido), proibido);

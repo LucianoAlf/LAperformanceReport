@@ -15,6 +15,9 @@ const migrationAcl = read(
 const migrationLocks = read(
   'supabase/migrations/20260731220000_relatorio_admin_trancamentos_detalhados.sql',
 );
+const migrationServiceRole = read(
+  'supabase/migrations/20260731233000_relatorio_admin_service_role_preview.sql',
+);
 const edge = read('supabase/functions/relatorio-admin-whatsapp/index.ts');
 const modal = read('src/components/App/Administrativo/ModalRelatorio.tsx');
 const webhook = read('supabase/functions/processar-matricula-emusys/index.ts');
@@ -113,6 +116,33 @@ test('preview do botao e cron usam o mesmo produtor administrativo autenticado',
   assert.match(diario, /return\s+data\.texto/);
   assert.doesNotMatch(diario, /\.rpc\s*\(/);
   assert.doesNotMatch(diario, /movimentacoes_admin|get_kpis_alunos_admin_operacional/);
+});
+
+test('dry-run administrativo aceita service_role interno sem afrouxar o JWT do usuario', () => {
+  const dryRun = section(
+    edge,
+    "if (payload.modo === 'dry_run') {",
+    "if (payload.modo === 'dry_run_comercial') {",
+  );
+
+  assert.match(dryRun, /auth\.getUser\(\)/i);
+  assert.match(dryRun, /pode_gerar_relatorio_admin_v1/i);
+  assert.match(dryRun, /autorizacaoError\s*\|\|\s*autorizado\s*!==\s*true/);
+  assert.match(dryRun, /authError\s*\|\|\s*!authData\.user\s*\?\s*401\s*:\s*403/);
+  assert.doesNotMatch(dryRun, /bearerToken\s*===\s*serviceRoleKey/);
+
+  assert.match(
+    migrationServiceRole,
+    /create or replace function public\.pode_gerar_relatorio_admin_v1\s*\(/i,
+  );
+  assert.match(
+    migrationServiceRole,
+    /auth\.role\(\)\s*=\s*['"]service_role['"]/i,
+  );
+  assert.match(
+    migrationServiceRole,
+    /grant execute on function public\.pode_gerar_relatorio_admin_v1\(uuid\)\s*to authenticated, service_role/i,
+  );
 });
 
 test('webhook materializa identidade Emusys e tipo adicional sem ID fixo', () => {

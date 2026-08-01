@@ -234,7 +234,7 @@ export interface ConversaCRM {
   updated_at: string;
   // Joins
   lead?: LeadCRM | null;
-  caixa?: { id: number; nome: string; numero: string | null } | null;
+  caixa?: { id: number; nome: string; numero: string | null; funcao: FuncaoCaixa } | null;
 }
 
 // Mensagem WhatsApp

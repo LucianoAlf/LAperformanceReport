@@ -17,6 +17,65 @@
 >
 > Última atualização: 2026-07-30.
 
+## Fechamento mensal (histórico canônico)
+
+Camada que congela o retrato de cada competência para que o passado não mude quando as
+RPCs evoluem. Nasceu porque recalcular um mês encerrado devolve números diferentes: as
+RPCs leem o estado **atual** do banco, não o de então.
+
+- **Tabela:** `fechamento_mensal_snapshots` — 1 linha por `ano+mês+escopo+unidade+domínio`,
+  com `payload` jsonb, `payload_hash`, `versao` e `status`
+  (`preview` → `aprovado` → `fechado` → `retificado`). Auditoria em
+  `fechamento_mensal_auditoria`.
+- **Domínios gravados (7):** `alunos_admin`, `alunos_executivo`, `comercial`,
+  `relatorio_gerencial`, `relatorio_coordenacao`, `programa_matriculador`,
+  `programa_fideliza`. Por unidade + escopo consolidado. `relatorio_coordenacao` guarda
+  **cada professor** com 19 métricas (carteira, renovações, evasões, presença, conversão).
+- **RPCs:** `preview_fechamento_mensal` (read-only, valida) →
+  `gravar_snapshot_fechamento_mensal` (grava) →
+  `atualizar_dados_mensais_por_snapshot` (alimenta `dados_mensais` a partir do snapshot).
+- **Automação (31/07/2026):** `fechar_competencia_mensal_automatico()` + cron
+  `fechamento-mensal-automatico`. Até então era 100% manual — junho foi gravado à mão em
+  30/06 23:05 e julho em 31/07 21:12.
+
+### ⚠️ Armadilhas confirmadas em produção
+
+1. **O cron é `0 1 1 * *` e isso está CERTO.** O pg_cron roda em UTC; dia 1 às 01:00 UTC
+   = **último dia do mês às 22:00 BRT**, para meses de 31, 30, 28 ou 29 dias. Validado em
+   14 meses seguidos + fev/2028 e fev/2032. Não "corrigir" para `L * *` nem para `0 22`.
+   A função revalida o dia em BRT e aborta se não for o último.
+2. **Exige `auth.role() = 'service_role'`.** `get_dados_relatorio_gerencial` alcança
+   `get_kpis_professor_periodo_canonico_v2`, que **não** aceita `session_user = 'postgres'`
+   como escape — só `service_role`. Rodar via MCP/psql sem
+   `set_config('request.jwt.claims','{"role":"service_role"}',true)` falha com
+   *"Acesso negado: usuario sem cadastro ativo"*. Aconteceu na 1ª tentativa de julho.
+3. **Não dá para regravar.** Havendo snapshot `aprovado`/`fechado`, a RPC lança exceção e
+   manda usar "fluxo de retificação" — que **não existe como função**. A v2 do
+   `relatorio_gerencial` de junho foi feita por UPDATE manual. Ou seja: gravar cedo demais
+   é irreversível; o movimento do resto do dia se perde.
+4. **`status='fechado'` nunca é atingido.** Nenhuma função promove `aprovado` → `fechado`.
+   Na prática `aprovado` é o estado final: é ele que trava regravação e que
+   `atualizar_dados_mensais_por_snapshot` lê.
+5. **Preview "aprovável" ≠ números auditados.** Os bloqueios cobrem disponibilidade das
+   fontes, batimento `admin × canônico` (alunos ativos, matrículas ativas e de banda) e
+   LTV/permanência não-zerados. **Não** há cross-check de ticket, evasão, inadimplência
+   ou comercial. Payload com `{"erro": ...}` vira alerta, não bloqueio — contar chaves do
+   JSON não prova que a fonte respondeu.
+
+### ⛔ Nenhuma tela lê o snapshot (pendente)
+
+`grep` em `src/` por `fechamento_mensal_snapshots` não retorna nada; os arquivos previstos
+no plano (`src/lib/fechamentoMensal.ts`, `src/hooks/useFechamentoMensal.ts`) nunca foram
+criados. A camada de **gravação** existe; a de **leitura** não.
+
+Consequência medida em 31/07/2026: junho fechou com 462 ativos em Campo Grande
+(`dados_mensais` e snapshot concordam), mas o relatório gerencial, que recalcula ao vivo,
+devolve **422** para o mesmo mês — porque a regra de trancamento mudou em 29/07 (v1.3.1
+do Emusys). Quem abre junho vê 462 ou 422 dependendo da página.
+
+Cobertura histórica: snapshot completo só existe de **junho/2026 em diante**. Antes disso
+há apenas `dados_mensais` (~12 campos).
+
 ## Índice de rotas
 
 | Rota | Página | Seção |

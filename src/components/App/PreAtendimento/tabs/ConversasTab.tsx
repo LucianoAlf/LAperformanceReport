@@ -96,7 +96,12 @@ export function ConversasTab({ unidadeId, onAgendar, onMoverEtapa, onMatricular,
   return (
     <div className="flex flex-col -mx-6 -mt-6" style={{ height: 'calc(100vh - 180px)' }}>
       {/* Banner de status WhatsApp */}
-      <WhatsAppBanner status={whatsappStatus} caixaNome={conversaSelecionada?.caixa?.nome} />
+      <WhatsAppBanner
+        status={whatsappStatus}
+        caixaNome={conversaSelecionada?.caixa?.nome}
+        caixaFuncao={conversaSelecionada?.caixa?.funcao}
+        temConversaSemCaixa={!!conversaSelecionada && !conversaSelecionada.caixa}
+      />
 
       {/* Split Panel: Inbox + Chat + Ficha */}
       <div className="flex flex-1 overflow-hidden">

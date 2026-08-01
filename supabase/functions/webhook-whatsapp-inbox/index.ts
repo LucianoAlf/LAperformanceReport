@@ -1089,10 +1089,10 @@ serve(async (req: Request) => {
             processadas++;
             console.log(`[webhook-inbox] Mensagem roteada para admin inbox`);
           } else {
-            console.log(`[webhook-inbox] Admin handler não processou, caindo para CRM`);
+            console.error(`[webhook-inbox] Admin handler falhou para caixa administrativa ${caixaIdFromUrl}, mensagem descartada (nao roteia para CRM)`);
           }
-          // Mesmo se não processou como admin, continuar para o próximo msg (não cair no CRM)
-          if (adminHandled) continue;
+          // Caixa administrativa nunca alimenta o fluxo de CRM/Mila, com erro ou sem.
+          continue;
         }
 
         // ========== FLUXO CRM (leads) ==========

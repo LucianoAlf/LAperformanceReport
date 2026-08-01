@@ -79,6 +79,27 @@ entram na carteira viva.
 ### Banda / Projeto
 `cursos.is_projeto_banda = true`. **Exclui** o aluno de: médias de turma, carteira, score do professor, matrículas canônicas, LTV.
 
+### Fonte histórica de uma competência encerrada (31/07/2026)
+
+Ao ler mês passado, **a fonte canônica é `fechamento_mensal_snapshots`** (status
+`aprovado`), não o cálculo vivo. As RPCs leem o estado **atual** do banco — recalcular
+uma competência encerrada devolve o número de hoje, não o do fechamento.
+
+Divergência medida em 31/07/2026 para junho, Campo Grande:
+
+| Fonte | Alunos ativos |
+|---|---|
+| Snapshot (30/06) | **462** |
+| `dados_mensais` | 462 |
+| Recalculado ao vivo hoje | **422** |
+
+Os 40 de diferença são regra nova (v1.3.1 do Emusys, 29/07: trancamento vigente saiu de
+"ativa" — CG tem 18) somada a evasão real de julho. ⚠️ **Junho e julho não são
+comparáveis** em alunos ativos sem essa nota.
+
+⛔ Hoje **nenhuma tela lê o snapshot** — as que acertam acertam via `dados_mensais`. Ver
+`docs/MAPA-SISTEMA.md` → "Fechamento mensal".
+
 ### Ticket médio (mensalidade)
 Média de `valor_parcela` dos alunos com `entra_financeiro_ativo = true` **E**
 `tipo_matricula.entra_ticket_medio = true` **E** `valor_parcela > 0`,

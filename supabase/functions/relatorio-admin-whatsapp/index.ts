@@ -27,6 +27,9 @@ import {
   parseDataReferenciaAdminBrt,
   type FaixaPoliticaTrancamento,
 } from '../_shared/relatorio-admin-canonico.ts';
+import {
+  validarTextoPublicoRelatorio,
+} from '../_shared/relatorio-publico.ts';
 
 const FIELDS = 'id,nome,provedor,uazapi_url,uazapi_token,waha_url,waha_session,waha_api_key';
 
@@ -975,10 +978,10 @@ async function gerarRelatorioDiario(
   }
 
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  texto += `📅 Gerado em: ${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano} às ${horaStr} (fonte canônica)\n`;
+  texto += `📅 Relatório gerado em: ${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano} às ${horaStr}\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━`;
 
-  return texto;
+  return validarTextoPublicoRelatorio(texto);
 }
 
 async function buscarMatriculasComerciaisAlunos(
@@ -1842,7 +1845,7 @@ async function gerarRelatorioComercialDiario(
     },
   };
 
-  return formatarRelatorioComercialDiario(dados);
+  return validarTextoPublicoRelatorio(formatarRelatorioComercialDiario(dados));
 }
 
 /**
@@ -2055,20 +2058,20 @@ serve(async (req) => {
         auth: { autoRefreshToken: false, persistSession: false },
       });
       const { data: authData, error: authError } = await userClient.auth.getUser();
-      if (authError || !authData.user) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Token inválido para dry_run' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-        );
-      }
       const { data: autorizado, error: autorizacaoError } = await userClient.rpc(
         'pode_gerar_relatorio_admin_v1',
         { p_unidade_id: payload.unidade },
       );
       if (autorizacaoError || autorizado !== true) {
+        const status = authError || !authData.user ? 401 : 403;
         return new Response(
-          JSON.stringify({ success: false, error: 'Unidade não autorizada para dry_run' }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          JSON.stringify({
+            success: false,
+            error: status === 401
+              ? 'Token inválido para dry_run'
+              : 'Unidade não autorizada para dry_run',
+          }),
+          { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }
 
@@ -2120,20 +2123,20 @@ serve(async (req) => {
         auth: { autoRefreshToken: false, persistSession: false },
       });
       const { data: authData, error: authError } = await userClient.auth.getUser();
-      if (authError || !authData.user) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Token inválido para dry_run_comercial' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
       const { data: autorizado, error: autorizacaoError } = await userClient.rpc(
         'pode_gerar_relatorio_comercial_v1',
         { p_unidade_id: payload.unidade },
       );
       if (autorizacaoError || autorizado !== true) {
+        const status = authError || !authData.user ? 401 : 403;
         return new Response(
-          JSON.stringify({ success: false, error: 'Unidade não autorizada para dry_run_comercial' }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({
+            success: false,
+            error: status === 401
+              ? 'Token inválido para dry_run_comercial'
+              : 'Unidade não autorizada para dry_run_comercial',
+          }),
+          { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
