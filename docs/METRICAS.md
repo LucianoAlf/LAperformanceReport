@@ -82,7 +82,7 @@ entram na carteira viva.
 ### Fonte histórica de uma competência encerrada (31/07/2026)
 
 Ao ler mês passado, **a fonte canônica é `fechamento_mensal_snapshots`** (status
-`aprovado`), não o cálculo vivo. As RPCs leem o estado **atual** do banco — recalcular
+`fechado`), não o cálculo vivo. As RPCs operacionais leem o estado **atual** do banco — recalcular
 uma competência encerrada devolve o número de hoje, não o do fechamento.
 
 Divergência medida em 31/07/2026 para junho, Campo Grande:
@@ -97,8 +97,10 @@ Os 40 de diferença são regra nova (v1.3.1 do Emusys, 29/07: trancamento vigent
 "ativa" — CG tem 18) somada a evasão real de julho. ⚠️ **Junho e julho não são
 comparáveis** em alunos ativos sem essa nota.
 
-⛔ Hoje **nenhuma tela lê o snapshot** — as que acertam acertam via `dados_mensais`. Ver
-`docs/MAPA-SISTEMA.md` → "Fechamento mensal".
+Os botões mensais Administrativo e Comercial leem somente
+`get_relatorio_mensal_canonico_v1`, por meio de `relatorio-admin-whatsapp`. O texto é
+renderizado no servidor a partir dos domínios `relatorio_admin_mensal` e
+`relatorio_comercial_mensal`; a tela não recompõe KPIs, tickets nem coortes.
 
 ### Ticket médio (mensalidade)
 Média de `valor_parcela` dos alunos com `entra_financeiro_ativo = true` **E**

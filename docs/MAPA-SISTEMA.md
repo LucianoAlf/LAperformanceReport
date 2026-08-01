@@ -27,13 +27,19 @@ RPCs leem o estado **atual** do banco, não o de então.
   com `payload` jsonb, `payload_hash`, `versao` e `status`
   (`preview` → `aprovado` → `fechado` → `retificado`). Auditoria em
   `fechamento_mensal_auditoria`.
-- **Domínios gravados (7):** `alunos_admin`, `alunos_executivo`, `comercial`,
+- **Domínios-base gravados (7):** `alunos_admin`, `alunos_executivo`, `comercial`,
   `relatorio_gerencial`, `relatorio_coordenacao`, `programa_matriculador`,
   `programa_fideliza`. Por unidade + escopo consolidado. `relatorio_coordenacao` guarda
   **cada professor** com 19 métricas (carteira, renovações, evasões, presença, conversão).
+- **Documentos mensais fechados (2 por unidade):** `relatorio_admin_mensal` e
+  `relatorio_comercial_mensal`. Eles congelam também as listas e os dois tickets do
+  Comercial, além de multicurso e trancamentos detalhados do Administrativo.
 - **RPCs:** `preview_fechamento_mensal` (read-only, valida) →
   `gravar_snapshot_fechamento_mensal` (grava) →
-  `atualizar_dados_mensais_por_snapshot` (alimenta `dados_mensais` a partir do snapshot).
+  `atualizar_dados_mensais_por_snapshot` (alimenta `dados_mensais` por compatibilidade) →
+  `capturar_relatorios_mensais_canonicos_v1` (materializa os dois documentos) →
+  `fechar_competencia_mensal_canonica_v1` (fecha competência e snapshots).
+  A leitura de tela usa exclusivamente `get_relatorio_mensal_canonico_v1`.
 - **Automação (31/07/2026):** `fechar_competencia_mensal_automatico()` + cron
   `fechamento-mensal-automatico`. Até então era 100% manual — junho foi gravado à mão em
   30/06 23:05 e julho em 31/07 21:12.
@@ -49,29 +55,24 @@ RPCs leem o estado **atual** do banco, não o de então.
    como escape — só `service_role`. Rodar via MCP/psql sem
    `set_config('request.jwt.claims','{"role":"service_role"}',true)` falha com
    *"Acesso negado: usuario sem cadastro ativo"*. Aconteceu na 1ª tentativa de julho.
-3. **Não dá para regravar.** Havendo snapshot `aprovado`/`fechado`, a RPC lança exceção e
-   manda usar "fluxo de retificação" — que **não existe como função**. A v2 do
-   `relatorio_gerencial` de junho foi feita por UPDATE manual. Ou seja: gravar cedo demais
-   é irreversível; o movimento do resto do dia se perde.
-4. **`status='fechado'` nunca é atingido.** Nenhuma função promove `aprovado` → `fechado`.
-   Na prática `aprovado` é o estado final: é ele que trava regravação e que
-   `atualizar_dados_mensais_por_snapshot` lê.
+3. **Não dá para regravar silenciosamente.** Snapshot `aprovado` só aceita a transição
+   controlada para `fechado`; snapshot `fechado` rejeita UPDATE e DELETE. Correção exige
+   nova versão pelo fluxo formal de retificação.
+4. **O fechamento é explícito.** `fechar_competencia_mensal_canonica_v1` exige os seis
+   domínios mínimos de cada unidade, fecha as três competências no mesmo lote e promove
+   todos os snapshots aprovados para `fechado`.
 5. **Preview "aprovável" ≠ números auditados.** Os bloqueios cobrem disponibilidade das
    fontes, batimento `admin × canônico` (alunos ativos, matrículas ativas e de banda) e
    LTV/permanência não-zerados. **Não** há cross-check de ticket, evasão, inadimplência
    ou comercial. Payload com `{"erro": ...}` vira alerta, não bloqueio — contar chaves do
    JSON não prova que a fonte respondeu.
 
-### ⛔ Nenhuma tela lê o snapshot (pendente)
+### Leitura dos relatórios mensais
 
-`grep` em `src/` por `fechamento_mensal_snapshots` não retorna nada; os arquivos previstos
-no plano (`src/lib/fechamentoMensal.ts`, `src/hooks/useFechamentoMensal.ts`) nunca foram
-criados. A camada de **gravação** existe; a de **leitura** não.
-
-Consequência medida em 31/07/2026: junho fechou com 462 ativos em Campo Grande
-(`dados_mensais` e snapshot concordam), mas o relatório gerencial, que recalcula ao vivo,
-devolve **422** para o mesmo mês — porque a regra de trancamento mudou em 29/07 (v1.3.1
-do Emusys). Quem abre junho vê 462 ou 422 dependendo da página.
+Os geradores mensais de `ModalRelatorio.tsx` e `ComercialPage.tsx` enviam apenas unidade,
+ano e mês para `relatorio-admin-whatsapp`. A edge valida o usuário, lê o documento
+`fechado` por `get_relatorio_mensal_canonico_v1` e devolve o texto pronto. Não existe
+fallback vivo no caminho executado do botão.
 
 Cobertura histórica: snapshot completo só existe de **junho/2026 em diante**. Antes disso
 há apenas `dados_mensais` (~12 campos).
@@ -128,7 +129,7 @@ Orquestrador `GestaoMensal/GestaoMensalPage.tsx`. Abas: **Gestão**, **Comercial
 - **Atualização sob demanda:** `sync-presenca-emusys` aceita o modo leve `experimentais` com `unidade_id`, `data_inicio` e `data_fim` explícitos (UUID conhecido e no máximo 45 dias). Somente o bearer interno pode executar `experimentais`, `agenda` ou `metadados`; usuários comuns ficam limitados a `presenca`, uma unidade exata e à RPC `pode_sincronizar_presenca_emusys_v1` (`alunos.ver` fora do perfil da própria unidade). Corpo, modo e alvo são validados antes de criar cliente administrativo ou carregar token Emusys. O modo experimental pagina o intervalo inteiro, aplica uma única fotografia pela RPC privada e somente depois reconcilia por IDs Emusys escopados pela unidade. Quando o relatório fornece a execução já admitida, o sync usa exatamente esse UUID e não cria uma segunda versão. O modo `metadados` continua atualizando `aulas_emusys`; sua publicação raw é adiada, sem reconciliação parcial, quando coincide com a janela de leitura de um relatório, e volta a ocorrer normalmente depois dela. Curso vem do de-para canônico da própria unidade e o horário é normalizado antes das chaves de negócio. A orquestração pura e injetável fica em `_shared/sync-experimentais-mode.ts`; a edge mantém apenas os adapters Emusys/Supabase. A resposta expõe apenas unidade, intervalo, execução e contagens; não inclui nomes, telefones, nascimento ou payload bruto.
 - **Documento comercial unificado:** `_shared/relatorio-comercial.ts` é o contrato puro do texto diário consumido pelo gerador. Ele reúne as dez seções aprovadas — cabeçalho, resumo diário, mês/metas, funil, registros do dia, canais/cursos, agenda futura, alertas, lista detalhada e fontes/snapshot — sem consultar banco nem Emusys. Os dois tickets são calculados sobre a mesma coorte agrupada da lista detalhada, com parser monetário único, valores brutos até a média final e denominadores positivos independentes; a meta `ticket_medio` pertence somente às parcelas. A agenda converte data/hora pelo fuso IANA `America/Sao_Paulo`, considera apenas snapshot ativo, situação `agendada`, início estritamente futuro e até D+7, limita a dez itens e nunca admite evento do mesmo dia sem horário. Duplicata só é removida quando `emusysAulaId + participanteChave` coincidem; nome e curso não são identidade. Textos dinâmicos são normalizados antes de entrar na marcação WhatsApp e números não finitos viram zero. Pendências de conciliação acrescentam aviso à taxa e não bloqueiam sua publicação.
 - **Orquestração do relatório diário:** `relatorio-admin-whatsapp` admite primeiro o refresh por `unidade + intervalo + origem + bucket de cinco minutos`. A primeira chamada recebe `atualizar`; chamadas equivalentes aguardam ou reutilizam a mesma execução completa, sem novo GET nem nova versão. Antes de qualquer leitura, atualização e reuso passam pelo mesmo lock do writer: a execução ainda vigente recebe lease de sessenta segundos; uma execução já substituída é promovida para novo refresh. Writers admitidos sobrepostos são ordenados no mesmo lock, de modo que prévia e cron não substituem uma leitura em curso; o lote em espera é reaplicado sem novo GET. Uma falha bloqueia novo acesso ao provedor até o lease vencer. Lease expirado é recuperável; se o snapshot já foi aplicado antes de uma interrupção do chamador, a admissão se autocorrige para `completo` e reutiliza o UUID. Prévia e cron usam origens separadas para que um preview recente não substitua a coleta programada. Depois desse gate, o relatório atualiza o snapshot Emusys da unidade, do primeiro dia da competência até D+7, e falha fechado se HTTP, JSON, status, unidade, intervalo ou execução não forem confirmados. Só então lê, em paralelo e com timeout inferior ao lease, KPIs, conciliação, operação Emusys, metas, agenda futura, lançamentos do dia e matrículas detalhadas nas fontes canônicas; joins por IDs externos permanecem escopados por `unidade_id`, inclusive sob `service_role`, e não há uso de `get_dados_comercial_ia`. Os limites diários de `created_at` são instantes UTC calculados a partir do início de cada data civil em `America/Sao_Paulo`, sem offset `-03` fixo e com suporte ao horário de verão histórico. A agenda raw seleciona exclusivamente o `snapshot_execucao_id` confirmado pelo preflight e repete a confirmação operacional após a leitura para detectar substituição concorrente. Prévia e cron chamam o mesmo gerador: a prévia exige JWT válido e `pode_gerar_relatorio_comercial_v1` para uma única unidade, enquanto o cron exige `service_role` e grava somente em `fila_relatorios_whatsapp`. A fila identifica `relatorio_admin` e `relatorio_comercial` em `tipo_relatorio`; sua unicidade por `tipo + unidade + JID + dia` permite os dois documentos no mesmo destino e deduplica cada tipo separadamente. A fila manual `fila_relatorios_sol_hermes` não participa desse fluxo.
-- **Consumo na tela:** o gerador diário de `ComercialPage.tsx` exige uma unidade específica e chama somente `relatorio-admin-whatsapp` em `dry_run_comercial`, com `unidade` e `data_referencia`. A edge exige uma data de calendário estrita em `YYYY-MM-DD` e devolve `400` para ausência, timestamp, offset ou data impossível. Essa data civil governa o cabeçalho, o dia consultado e a janela do primeiro dia do mês até D+7; ela não injeta nem substitui o relógio. O instante real de geração do servidor, resolvido em `America/Sao_Paulo`, governa `referencia.hora`, o rodapé `Gerado em` e o corte estritamente futuro da agenda. A injeção de instante existe apenas na assinatura interna para testes determinísticos e não é aceita no payload. O cron não recebe data externa e deriva também a data civil do instante atual. A tela não chama o sync nem as três RPCs comerciais para montar esse documento; exibe exatamente o `texto` devolvido pela edge e o associa a uma origem imutável com tipo, unidade, período, datas e competência. Copiar e enfileirar só ficam disponíveis enquanto essa origem coincide com o contexto atual, e o enqueue usa a unidade armazenada com o texto. IDs independentes de geração e envio invalidam respostas atrasadas, inclusive após regeneração na mesma origem; sucesso/erro de envio são limpos em nova geração, troca de contexto, retorno ou fechamento. Os geradores semanal, mensal, de matrículas e comparativos permanecem locais e inalterados.
+- **Consumo na tela:** o gerador diário de `ComercialPage.tsx` exige uma unidade específica e chama somente `relatorio-admin-whatsapp` em `dry_run_comercial`, com `unidade` e `data_referencia`. A edge exige uma data de calendário estrita em `YYYY-MM-DD` e devolve `400` para ausência, timestamp, offset ou data impossível. Essa data civil governa o cabeçalho, o dia consultado e a janela do primeiro dia do mês até D+7; ela não injeta nem substitui o relógio. O instante real de geração do servidor, resolvido em `America/Sao_Paulo`, governa `referencia.hora`, o rodapé `Gerado em` e o corte estritamente futuro da agenda. A injeção de instante existe apenas na assinatura interna para testes determinísticos e não é aceita no payload. O cron não recebe data externa e deriva também a data civil do instante atual. A tela não chama o sync nem as três RPCs comerciais para montar esse documento; exibe exatamente o `texto` devolvido pela edge e o associa a uma origem imutável com tipo, unidade, período, datas e competência. Copiar e enfileirar só ficam disponíveis enquanto essa origem coincide com o contexto atual, e o enqueue usa a unidade armazenada com o texto. IDs independentes de geração e envio invalidam respostas atrasadas, inclusive após regeneração na mesma origem; sucesso/erro de envio são limpos em nova geração, troca de contexto, retorno ou fechamento. O gerador mensal também é servidor: usa `dry_run_mensal_comercial` e o snapshot fechado. Apenas semanal, matrículas e comparativos permanecem locais.
 - **Edge functions:** `gemini-insights-comercial` (plano de ação IA), `relatorio-admin-whatsapp`
 
 ## Pré-Atendimento (`/app/pre-atendimento`)
