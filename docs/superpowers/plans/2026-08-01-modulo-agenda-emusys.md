@@ -1983,3 +1983,118 @@ git commit -m "docs(agenda): registra o modulo no mapa do sistema e no daily-not
 - **Visão Semana** (fase 2).
 - **Backfill da janela 19/07–01/08/2026.** Reprocessável quando quiser: `sync-presenca-emusys` aceita `data` e `dias` no corpo. Respeitar o rate limit de 60 req/min.
 - **Causa raiz do apagão de 19–26/07.** Não está no código dos syncs — nenhum deles deleta passado, e não há cron nem trigger de limpeza em `aulas_emusys`. Investigação à parte.
+
+---
+
+### Task 13: Paginar o soft-cancel de aulas fantasma
+
+**Bug pré-existente de produção**, descoberto na revisão da Task 6 e cuja correção o dono do repo autorizou trazer para dentro deste plano (decisão de 2026-08-01). Não foi introduzido pela Agenda — mas a Agenda o torna visível ao usuário final, então precisa sair antes da tela ir ao ar.
+
+**O problema:** o bloco `existentesFuturas` em `sync-grade-futura-emusys` faz `select('emusys_id')` sem paginação. O PostgREST corta em ~1.000 linhas, e não há `ORDER BY`, então a ordem é física e arbitrária. Aula que sumiu da API do Emusys e cai fora dessas mil **nunca** recebe `cancelada = true` — fica eternamente na grade futura. Medido: Campo Grande avalia ~1.000 de 4.133 aulas futuras (24%), Recreio ~1.000 de 3.691 (27%), Barra ~1.000 de 2.578 (39%). O contador `fantasmas_canceladas` do retorno também é calculado sobre base truncada.
+
+**⚠️ Este é o único ponto do plano que executa uma escrita destrutiva.** Hoje o truncamento erra para o lado seguro (cancela de menos). Corrigi-lo faz o soft-cancel passar a avaliar 3-4× mais aulas de uma vez, e um `vivosEmusysId` incompleto marcaria aulas **reais** como canceladas em massa. Por isso a task exige trava e dry-run antes de qualquer escrita.
+
+**Files:**
+- Modify: `supabase/functions/sync-grade-futura-emusys/index.ts`
+
+**Interfaces:**
+- Consumes: `vivosEmusysId` (Set já montado no fluxo), `chunkSize`, `hoje`, `dataFim`.
+- Produces: nenhuma interface nova; o campo `fantasmas_canceladas` do retorno passa a ser confiável, e ganha companhia de `fantasmas_avaliadas`.
+
+- [ ] **Step 1: Confirmar que `vivosEmusysId` só existe completo**
+
+Ler `fetchAulasRange` e confirmar que ela lança exceção em resposta não-OK (`if (!response.ok) throw`), e que o laço de paginação por cursor só termina com `tem_mais !== true`. Registrar a conclusão no relatório.
+
+Se essa garantia NÃO existir, **pare e relate BLOCKED**: sem ela, paginar o soft-cancel é perigoso, porque uma resposta parcial da API viraria cancelamento em massa de aulas reais.
+
+- [ ] **Step 2: Adicionar a trava de segurança antes do soft-cancel**
+
+Imediatamente antes do bloco `existentesFuturas`, inserir:
+
+```ts
+      // Trava de seguranca do soft-cancel. Ele marca aula como cancelada, entao
+      // so pode rodar sobre uma foto COMPLETA da API. fetchAulasRange lanca em
+      // resposta nao-OK, mas uma janela que voltou vazia (ou quase) indica
+      // problema na origem, e cancelar em massa sobre isso destruiria a grade.
+      const podeCancelarFantasmas = vivosEmusysId.size > 0;
+      if (!podeCancelarFantasmas) {
+        console.error(
+          `[sync-grade-futura] ${unidade.nome}: API nao devolveu aulas na janela; soft-cancel ABORTADO para nao cancelar grade real`,
+        );
+      }
+```
+
+E envolver todo o bloco de soft-cancel (a busca de `existentesFuturas`, o cálculo de `fantasmas` e o laço de `update`) em `if (podeCancelarFantasmas) { ... }`.
+
+- [ ] **Step 3: Paginar a busca de `existentesFuturas`**
+
+Trocar o `select` único por leitura paginada, no mesmo espírito da correção da Task 6:
+
+```ts
+        const existentesFuturas: Array<{ emusys_id: number }> = [];
+        const tamanhoPagina = 1000;
+        for (let pagina = 0; ; pagina++) {
+          const { data: bloco, error } = await supabase
+            .from('aulas_emusys')
+            .select('emusys_id')
+            .eq('unidade_id', unidade.id)
+            .gt('data_aula', hoje)
+            .lte('data_aula', dataFim)
+            .eq('cancelada', false)
+            .order('emusys_id', { ascending: true })
+            .range(pagina * tamanhoPagina, (pagina + 1) * tamanhoPagina - 1);
+
+          if (error) {
+            console.error(
+              `[sync-grade-futura] ${unidade.nome}: falha ao ler aulas futuras p/ soft-cancel: ${error.message}`,
+            );
+            break;
+          }
+          if (!bloco || bloco.length === 0) break;
+          existentesFuturas.push(...(bloco as Array<{ emusys_id: number }>));
+          if (bloco.length < tamanhoPagina) break;
+        }
+```
+
+O `order('emusys_id')` é obrigatório: sem ordenação estável, `range()` pode repetir ou pular linhas entre páginas.
+
+⚠️ Se o `error` acima acontecer no meio da paginação, a lista fica parcial — e cancelar sobre lista parcial é justamente o bug. Portanto, em caso de `error`, **não cancele nada**: marque a leitura como falha e pule o soft-cancel desta unidade nesta execução.
+
+- [ ] **Step 4: Expor os contadores no retorno**
+
+No objeto que vai em `resultados.push`, acrescentar `fantasmas_avaliadas: existentesFuturas.length` ao lado do `fantasmas_canceladas` já existente, para que dê para conferir a base sem ler log. Não remover nem renomear campos existentes.
+
+- [ ] **Step 5: DRY-RUN obrigatório antes de qualquer escrita**
+
+Antes de deployar a versão que escreve, medir quantas aulas seriam canceladas. Via MCP `execute_sql`, contar a base atual por unidade:
+
+```sql
+select u.nome, count(*) as futuras_nao_canceladas
+from aulas_emusys ae join unidades u on u.id = ae.unidade_id
+where ae.data_aula > current_date and ae.cancelada = false
+group by 1 order by 1;
+```
+
+Depois, deployar a versão corrigida e invocá-la para **uma unidade só** (Recreio, `95553e96-971b-4590-a6eb-0201d013c14d`), e ler `fantasmas_avaliadas` e `fantasmas_canceladas` do retorno.
+
+**Critério de parada:** se `fantasmas_canceladas` for maior que **10%** de `fantasmas_avaliadas`, **PARE, não rode nas outras unidades e relate BLOCKED** com os números. Um salto desse tamanho não é "fantasma acumulado", é sinal de que a comparação com `vivosEmusysId` está errada — e cada linha marcada é uma aula sumindo da agenda de um aluno real.
+
+- [ ] **Step 6: Conferir o efeito real**
+
+```sql
+select u.nome,
+       count(*) filter (where ae.cancelada) as canceladas,
+       count(*) filter (where not ae.cancelada) as vivas
+from aulas_emusys ae join unidades u on u.id = ae.unidade_id
+where ae.data_aula > current_date
+group by 1 order by 1;
+```
+
+Comparar com os números do Step 5 e explicar a diferença no relatório. Amostrar 5 aulas que foram canceladas e confirmar, consultando a API do Emusys naquele dia/professor, que elas de fato não existem mais.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add supabase/functions/sync-grade-futura-emusys/index.ts
+git commit -m "fix(sync): pagina o soft-cancel de aulas fantasma e adiciona trava de seguranca"
+```
