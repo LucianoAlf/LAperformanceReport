@@ -286,3 +286,24 @@ Deno.test("mensal comercial exibe valores, dois tickets e taxa com alerta", () =
   assertFalse(texto.includes("snapshot"));
   assertEquals((texto.match(/RELATÓRIO MENSAL COMERCIAL/g) || []).length, 1);
 });
+
+Deno.test("mensal comercial usa responsavel vigente apenas no cabecalho", () => {
+  const payload = {
+    ...base,
+    tipo: "comercial",
+    unidade: { ...base.unidade, hunter: "Clayton" },
+    resumo: {},
+    leads_por_canal: [],
+    leads_por_curso: [],
+    matriculas_por_canal: [],
+    matriculas_por_curso: [],
+    matriculas: [],
+    alertas: [],
+  };
+
+  const texto = formatarRelatorioComercialMensalCanonico(payload, "Daiana");
+
+  assertStringIncludes(texto, "👤 Daiana");
+  assertFalse(texto.includes("Clayton"));
+  assertEquals(payload.unidade.hunter, "Clayton");
+});

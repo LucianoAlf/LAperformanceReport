@@ -20,6 +20,15 @@ test('edge gera cada mensal a partir do produtor canonico correspondente', () =>
   assert.match(edge, /gerado_em:\s*new Date\(\)\.toISOString\(\)/);
 });
 
+test('mensal comercial atualiza somente o responsavel de apresentacao', () => {
+  assert.match(edge, /responsavelComercialVigente/);
+  assert.match(edge, /from\('unidades'\)[\s\S]*select\('hunter_nome'\)/);
+  assert.match(
+    edge,
+    /formatarRelatorioComercialMensalCanonico\(dados,\s*responsavelComercialVigente\)/,
+  );
+});
+
 test('botao administrativo usa exclusivamente o produtor mensal canonico', () => {
   const body = admin.slice(
     admin.indexOf('async function gerarRelatorioMensal()'),

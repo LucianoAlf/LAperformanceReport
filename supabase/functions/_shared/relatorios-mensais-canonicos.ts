@@ -460,16 +460,20 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
   return linhas.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-export function formatarRelatorioComercialMensalCanonico(payload: JsonObject): string {
+export function formatarRelatorioComercialMensalCanonico(
+  payload: JsonObject,
+  responsavelComercialVigente?: unknown,
+): string {
   const u = unidade(payload);
   const r = resumo(payload);
   const matriculas = lista(payload.matriculas);
+  const responsavelComercial = texto(responsavelComercialVigente).trim() || texto(u.hunter).trim();
   const linhas = [
     LINHA,
     "📊 *RELATÓRIO MENSAL COMERCIAL*",
     `🏢 *${texto(u.nome).toUpperCase()}*`,
     `📆 *${competencia(payload)}*`,
-    u.hunter ? `👤 ${texto(u.hunter)}` : "",
+    responsavelComercial ? `👤 ${responsavelComercial}` : "",
     LINHA,
     "",
     "⚡ *RESULTADO DO MÊS*",
