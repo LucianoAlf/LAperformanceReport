@@ -2117,10 +2117,20 @@ serve(async (req) => {
         ? { ...dadosBase, gerado_em: new Date().toISOString() }
         : undefined;
       if (!dados) throw new Error('RELATORIO_MENSAL_PAYLOAD_AUSENTE');
+      let responsavelComercialVigente: string | undefined;
+      if (tipo === 'comercial') {
+        const { data: unidadeVigente, error: unidadeVigenteError } = await supabase
+          .from('unidades')
+          .select('hunter_nome')
+          .eq('id', payload.unidade)
+          .single();
+        if (unidadeVigenteError) throw unidadeVigenteError;
+        responsavelComercialVigente = String(unidadeVigente?.hunter_nome || '').trim() || undefined;
+      }
       const texto = validarTextoPublicoRelatorio(
         tipo === 'administrativo'
           ? formatarRelatorioAdminMensalCanonico(dados)
-          : formatarRelatorioComercialMensalCanonico(dados),
+          : formatarRelatorioComercialMensalCanonico(dados, responsavelComercialVigente),
       );
       return new Response(
         JSON.stringify({ success: true, dry_run: true, tipo, unidade: payload.unidade, texto }),
