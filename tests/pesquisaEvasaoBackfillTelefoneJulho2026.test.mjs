@@ -55,14 +55,16 @@ test('migration nunca sobrescreve snapshot e marca a origem recuperada', () => {
   assert.match(migration, /raise\s+exception[\s\S]*23/i);
 });
 
-test('runbook registra decisao, justificativa e pendencia cadastral sem questionar o fechamento do mes', () => {
+test('runbook registra decisao, justificativa e corrige o diagnostico cadastral', () => {
   assert.match(runbook, /backfill controlado[\s\S]*julho\/?2026/i);
   assert.match(runbook, /contato recente/i);
   assert.match(runbook, /baixa probabilidade de troca[\s\S]*30\s+dias/i);
   assert.match(runbook, /necessidade operacional[\s\S]*fila[\s\S]*agosto/i);
   assert.match(runbook, /23[\s\S]*cadastro_atual_backfill_2026_07/i);
-  assert.match(runbook, /13 sa[ií]das[\s\S]*nem `?whatsapp`?[\s\S]*nem `?telefone`?/i);
-  assert.match(runbook, /equipe administrativa/i);
+  assert.match(runbook, /12[\s\S]*responsavel_telefone/i);
+  assert.match(runbook, /3312[\s\S]*aluno_id[\s\S]*nulo[\s\S]*1532/i);
+  assert.match(runbook, /diferen[cç]a[\s\S]*caixa[\s\S]*Oliveira/i);
+  assert.doesNotMatch(runbook, /13 sa[ií]das[\s\S]*n[aã]o possuem nenhum contato/i);
   assert.match(runbook, /217 movimentações[\s\S]*32\s+cancelamentos[\s\S]*5\s+não renovações/i);
   assert.match(runbook, /concentra[cç][aã]o[\s\S]*primeira semana[\s\S]*ciclo de renova[cç][aã]o/i);
   assert.doesNotMatch(runbook, /lan[cç]amento[s]? de movimenta[cç][oõ]es? incomplet/i);

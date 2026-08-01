@@ -13,10 +13,11 @@ import {
   resolverAssinaturaAtivaParaNovaPreview,
 } from "./auth.ts";
 import {
+  type DestinoPesquisa,
   hashPreview,
   mascararTelefone,
   renderizarMensagem,
-  resolverDestinoPesquisa,
+  resolverDestinoPesquisaPorPublico,
   validarRequest,
 } from "./contract.ts";
 import {
@@ -62,6 +63,7 @@ interface MovimentacaoCanonica {
 interface AlunoDestinatario {
   data_nascimento: string | null;
   responsavel_nome: string | null;
+  responsavel_telefone: string | null;
 }
 
 interface PreviewPersistida {
@@ -232,7 +234,7 @@ async function carregarAlunoDestinatario(
 ): Promise<AlunoDestinatario> {
   const { data, error } = await supabase
     .from("alunos")
-    .select("data_nascimento, responsavel_nome")
+    .select("data_nascimento, responsavel_nome, responsavel_telefone")
     .eq("id", alunoId)
     .limit(2);
 
@@ -530,11 +532,31 @@ async function previsualizar(
   }
   const template = templates[0];
 
-  const destino = resolverDestinoPesquisa({
-    modoTeste: request.modo_teste,
-    telefoneTeste: request.telefone_teste,
-    telefoneSnapshot: movimentacao.telefone_snapshot,
-  });
+  let destino: DestinoPesquisa;
+  try {
+    destino = resolverDestinoPesquisaPorPublico({
+      modoTeste: request.modo_teste,
+      publico,
+      telefoneTeste: request.telefone_teste,
+      telefoneSnapshot: movimentacao.telefone_snapshot,
+      telefoneResponsavel: aluno.responsavel_telefone,
+    });
+  } catch (error) {
+    const codigo = error instanceof Error ? error.message : "";
+    if (codigo === "RESPONSAVEL_SEM_TELEFONE") {
+      throw new ErroHttp(422, "Responsavel sem telefone cadastrado");
+    }
+    if (codigo === "RESPONSAVEL_TELEFONE_INVALIDO") {
+      throw new ErroHttp(422, "Telefone do responsavel invalido");
+    }
+    if (codigo === "TELEFONE_RESPONSAVEL_DIVERGENTE") {
+      throw new ErroHttp(
+        409,
+        "Telefone salvo na saida diverge do telefone atual do responsavel",
+      );
+    }
+    throw error;
+  }
   await exigirSlotDisponivelParaPreview(
     supabase,
     movimentacao.id,

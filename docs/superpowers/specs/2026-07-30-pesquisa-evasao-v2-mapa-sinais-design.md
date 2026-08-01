@@ -163,7 +163,13 @@ A fila Sol/Hermes registrava 20 entregas e 3 erros até a auditoria. Os relatór
 
 O telefone identifica o canal de conversa, não a identidade do aluno. Responsáveis podem compartilhar o mesmo número entre irmãos.
 
-### 5.1 Componentes de persistência
+### 5.1 Regra permanente de destinatário para menores
+
+Por decisão permanente de Alf em 01/08/2026, quando o aluno é menor de 18 anos o destinatário da pesquisa é sempre o responsável: nome do responsável, `responsavel_telefone` e template `responsavel`. O sistema nunca usa o telefone próprio do menor como fallback.
+
+Se o responsável não tiver nome ou telefone válido, a movimentação permanece visível e bloqueada com motivo explícito. Se um snapshot real capturado no momento da saída divergir do telefone atual do responsável, ele não é sobrescrito silenciosamente: o envio fica bloqueado para revisão. Somente snapshots sabidamente recuperados do cadastro atual pelo backfill controlado de julho podem ser substituídos pelo contato do responsável, preservando a origem do dado.
+
+### 5.2 Componentes de persistência
 
 A evolução é aditiva:
 
@@ -229,6 +235,8 @@ A prévia mostra:
 - modo produção ou teste;
 - alertas de cadastro;
 - regra que tornou o aluno elegível.
+
+Para menores, a prévia só pode usar o nome e o telefone do responsável. A Edge repete essa validação no servidor e rejeita o envio produtivo se o snapshot da movimentação não corresponder ao `responsavel_telefone` atual. O modo teste continua isolado no número interno autorizado e não cria fallback para o telefone do menor.
 
 O envio só ocorre após confirmação explícita. A mensagem é renderizada no servidor para impedir diferença entre a prévia e o conteúdo efetivamente enviado.
 

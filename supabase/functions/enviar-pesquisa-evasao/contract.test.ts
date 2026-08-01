@@ -13,6 +13,7 @@ import {
   type PreviewSnapshot,
   renderizarMensagem,
   resolverDestinoPesquisa,
+  resolverDestinoPesquisaPorPublico,
   telefonePesquisaValido,
   validarRequest,
 } from "./contract.ts";
@@ -354,6 +355,78 @@ Deno.test("resolverDestinoPesquisa normaliza celular e fixo locais com DDD 55", 
       telefoneSnapshot: "+55 (55) 3333-4444",
     }).telefone,
     "555533334444",
+  );
+});
+
+Deno.test("menor em producao usa somente o telefone atual do responsavel confirmado pelo snapshot", () => {
+  assertEquals(
+    resolverDestinoPesquisaPorPublico({
+      modoTeste: false,
+      publico: "responsavel",
+      telefoneSnapshot: "(21) 92008-7707",
+      telefoneResponsavel: "5521920087707",
+    }),
+    {
+      telefone: "5521920087707",
+      origem: "telefone_snapshot",
+      modoTeste: false,
+    },
+  );
+});
+
+Deno.test("menor em producao bloqueia sem telefone valido do responsavel", () => {
+  assertThrows(
+    () =>
+      resolverDestinoPesquisaPorPublico({
+        modoTeste: false,
+        publico: "responsavel",
+        telefoneSnapshot: null,
+        telefoneResponsavel: null,
+      }),
+    Error,
+    "RESPONSAVEL_SEM_TELEFONE",
+  );
+  assertThrows(
+    () =>
+      resolverDestinoPesquisaPorPublico({
+        modoTeste: false,
+        publico: "responsavel",
+        telefoneSnapshot: "5521999990000",
+        telefoneResponsavel: "123",
+      }),
+    Error,
+    "RESPONSAVEL_TELEFONE_INVALIDO",
+  );
+});
+
+Deno.test("menor em producao bloqueia snapshot divergente do responsavel", () => {
+  assertThrows(
+    () =>
+      resolverDestinoPesquisaPorPublico({
+        modoTeste: false,
+        publico: "responsavel",
+        telefoneSnapshot: "5521999990000",
+        telefoneResponsavel: "5521988887777",
+      }),
+    Error,
+    "TELEFONE_RESPONSAVEL_DIVERGENTE",
+  );
+});
+
+Deno.test("modo teste de menor continua isolado no numero interno", () => {
+  assertEquals(
+    resolverDestinoPesquisaPorPublico({
+      modoTeste: true,
+      publico: "responsavel",
+      telefoneTeste: "(21) 98127-8047",
+      telefoneSnapshot: "5521999990000",
+      telefoneResponsavel: null,
+    }),
+    {
+      telefone: "5521981278047",
+      origem: "telefone_teste",
+      modoTeste: true,
+    },
   );
 });
 
