@@ -523,7 +523,7 @@ Teste ponta a ponta aprovado em 01/08/2026:
 
 - pesquisa de teste `85798348-31bb-4fc0-8b21-750315caf8f1`, saída `3299`;
 - mensagem entregue somente ao número interno `***8047`;
-- estado aberto com o mesmo `pesquisa_evasao_id` e depois encerrado como
+- estado aberto com o mesmo `pesquisa_id` e depois encerrado como
   `respondido`;
 - resposta recebida: `Teste E2E de retorno da pesquisa de evasão — 01/08/2026.`;
 - registro final com `status = 'respondido'`,
@@ -731,3 +731,4 @@ Se o frontend for publicado fora de ordem:
 | Webhook inbound | APROVADO — `webhook-whatsapp-inbox` versão 76 ativa; grava `resposta_status`, sem fallback global e sem persistência em `webhook_debug_log` |
 | Retorno ponta a ponta | APROVADO — pesquisa `85798348-31bb-4fc0-8b21-750315caf8f1` recebeu a resposta exata no número interno; zero outras pesquisas alteradas |
 | Indicador de respostas | APROVADO — respostas produtivas usam `resposta_status`; o teste não incrementou o card porque `modo_teste = true` é excluído por contrato |
+| Código alinhado com produção | APROVADO — PR #21, merge `6a7411de06ce1d42af7db23d004d61ec9e8bdb4f` |
