@@ -95,7 +95,7 @@ const adminRico = {
   }],
   evasoes: [{
     aluno_nome: "Ana Beatriz Paz de Almeida",
-    tipo_evasao: "interrompido",
+    tipo_evasao: "interrompido_bolsista",
     valor_perdido: 390,
     motivo: "Troca de Unidade",
     professor: "Lohana Leopoldo de Araújo",
@@ -150,6 +150,8 @@ Deno.test("mensal administrativo preserva modelo rico, multicurso e trancamentos
   assertStringIncludes(texto, "Forma de PG: C.R");
   assertStringIncludes(texto, "⚠️ *AVISOS PRÉVIOS para sair em AGOSTO*");
   assertStringIncludes(texto, "• Total no mês: *2*");
+  assertStringIncludes(texto, "• Interrompido: *0*");
+  assertStringIncludes(texto, "• Interrompido Bolsista: *1*");
   assertStringIncludes(texto, "• Não renovou: *1*");
   assertStringIncludes(texto, "📅 Gerado em: 01/08/2026 às 10:30");
 

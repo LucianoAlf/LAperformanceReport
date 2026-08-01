@@ -25,6 +25,9 @@ declare
   v_fim_exclusivo date := (make_date(p_ano, p_mes, 1) + interval '1 month')::date;
   v_capturado_em timestamptz;
   v_trancamentos_periodo integer := 0;
+  v_evasoes jsonb := '[]'::jsonb;
+  v_evasoes_esperadas integer := 0;
+  v_evasoes_reconstruidas integer := 0;
 begin
   v_payload := public.montar_relatorio_admin_mensal_payload_base_v3(
     p_unidade_id,
@@ -45,6 +48,46 @@ begin
     and coalesce(m.competencia_referencia, m.data) >= v_inicio
     and coalesce(m.competencia_referencia, m.data) < v_fim_exclusivo
     and m.created_at <= v_capturado_em;
+
+  select coalesce(
+           jsonb_agg(
+             case
+               when nullif(trim(coalesce(e.item->>'tipo_evasao', '')), '') is not null then e.item
+               when m.id is null then e.item
+               else e.item || jsonb_build_object(
+                 'tipo_evasao', case
+                   when nullif(trim(coalesce(m.tipo_evasao, '')), '') is not null then trim(m.tipo_evasao)
+                   when coalesce(a.tipo_matricula_id, 0) = 5 then 'interrompido_banda'
+                   when coalesce(a.is_segundo_curso, false)
+                     or coalesce(a.tipo_matricula_id, 0) = 2 then 'interrompido_2_curso'
+                   when coalesce(a.tipo_matricula_id, 0) in (3, 4) then 'interrompido_bolsista'
+                   else 'interrompido'
+                 end
+               )
+             end
+             order by e.ord
+           ),
+           '[]'::jsonb
+         ),
+         count(*) filter (
+           where nullif(trim(coalesce(e.item->>'tipo_evasao', '')), '') is null
+         )::integer,
+         count(*) filter (
+           where nullif(trim(coalesce(e.item->>'tipo_evasao', '')), '') is null
+             and m.id is not null
+         )::integer
+  into v_evasoes, v_evasoes_esperadas, v_evasoes_reconstruidas
+  from jsonb_array_elements(coalesce(v_payload->'evasoes', '[]'::jsonb))
+    with ordinality e(item, ord)
+  left join public.movimentacoes_admin m
+    on m.id = nullif(e.item->>'id', '')::bigint
+  left join public.alunos a on a.id = m.aluno_id;
+
+  if v_evasoes_reconstruidas <> v_evasoes_esperadas then
+    raise exception 'EVASOES_MENSAL_DIVERGENTE';
+  end if;
+
+  v_payload := jsonb_set(v_payload, '{evasoes}', v_evasoes, true);
 
   v_resumo := coalesce(v_payload->'resumo', '{}'::jsonb)
     || jsonb_build_object('trancamentos_periodo', v_trancamentos_periodo);
@@ -88,6 +131,10 @@ declare
   v_resumo jsonb := '{}'::jsonb;
   v_trancamentos_periodo integer := 0;
   v_alteracoes_trancamentos integer := 0;
+  v_evasoes jsonb := '[]'::jsonb;
+  v_evasoes_esperadas integer := 0;
+  v_evasoes_reconstruidas integer := 0;
+  v_alteracoes_evasoes integer := 0;
   v_alunos_pagantes integer := 0;
   v_nao_renovacoes integer := 0;
   v_total_evasoes integer := 0;
@@ -236,6 +283,82 @@ begin
       and m.created_at <= v_mensal.capturado_em;
   end if;
 
+  select count(*)::integer
+  into v_alteracoes_evasoes
+  from public.audit_log a
+  where a.created_at > v_mensal.capturado_em
+    and a.acao in ('INSERT', 'UPDATE', 'DELETE')
+    and (
+      (
+        a.tabela = 'movimentacoes_admin'
+        and coalesce(a.registro_id_text, a.registro_id::text) in (
+          select e.item->>'id'
+          from jsonb_array_elements(coalesce(v_mensal.payload->'evasoes', '[]'::jsonb)) e(item)
+          where nullif(trim(coalesce(e.item->>'tipo_evasao', '')), '') is null
+        )
+        and (
+          a.dados_antigos->'tipo_evasao' is distinct from a.dados_novos->'tipo_evasao'
+          or a.dados_antigos->'aluno_id' is distinct from a.dados_novos->'aluno_id'
+        )
+      )
+      or (
+        a.tabela = 'alunos'
+        and coalesce(a.registro_id_text, a.registro_id::text) in (
+          select m.aluno_id::text
+          from jsonb_array_elements(coalesce(v_mensal.payload->'evasoes', '[]'::jsonb)) e(item)
+          join public.movimentacoes_admin m
+            on m.id = nullif(e.item->>'id', '')::bigint
+          where nullif(trim(coalesce(e.item->>'tipo_evasao', '')), '') is null
+        )
+        and (
+          a.dados_antigos->'tipo_matricula_id' is distinct from a.dados_novos->'tipo_matricula_id'
+          or a.dados_antigos->'is_segundo_curso' is distinct from a.dados_novos->'is_segundo_curso'
+        )
+      )
+    );
+
+  if v_alteracoes_evasoes > 0 then
+    raise exception 'EVASOES_MENSAL_DIVERGENTE';
+  end if;
+
+  select coalesce(
+           jsonb_agg(
+             case
+               when nullif(trim(coalesce(e.item->>'tipo_evasao', '')), '') is not null then e.item
+               when m.id is null then e.item
+               else e.item || jsonb_build_object(
+                 'tipo_evasao', case
+                   when nullif(trim(coalesce(m.tipo_evasao, '')), '') is not null then trim(m.tipo_evasao)
+                   when coalesce(a.tipo_matricula_id, 0) = 5 then 'interrompido_banda'
+                   when coalesce(a.is_segundo_curso, false)
+                     or coalesce(a.tipo_matricula_id, 0) = 2 then 'interrompido_2_curso'
+                   when coalesce(a.tipo_matricula_id, 0) in (3, 4) then 'interrompido_bolsista'
+                   else 'interrompido'
+                 end
+               )
+             end
+             order by e.ord
+           ),
+           '[]'::jsonb
+         ),
+         count(*) filter (
+           where nullif(trim(coalesce(e.item->>'tipo_evasao', '')), '') is null
+         )::integer,
+         count(*) filter (
+           where nullif(trim(coalesce(e.item->>'tipo_evasao', '')), '') is null
+             and m.id is not null
+         )::integer
+  into v_evasoes, v_evasoes_esperadas, v_evasoes_reconstruidas
+  from jsonb_array_elements(coalesce(v_mensal.payload->'evasoes', '[]'::jsonb))
+    with ordinality e(item, ord)
+  left join public.movimentacoes_admin m
+    on m.id = nullif(e.item->>'id', '')::bigint
+  left join public.alunos a on a.id = m.aluno_id;
+
+  if v_evasoes_reconstruidas <> v_evasoes_esperadas then
+    raise exception 'EVASOES_MENSAL_DIVERGENTE';
+  end if;
+
   v_financeiro := coalesce(
     v_gerencial.payload#>'{financeiro_faturas_emusys,totais}',
     v_gerencial.payload#>'{kpis_gestao,0,financeiro_faturas_emusys}',
@@ -315,6 +438,7 @@ begin
   end if;
 
   v_payload_rico := v_mensal.payload || jsonb_build_object(
+    'evasoes', v_evasoes,
     'trancamentos_periodo', v_trancamentos_periodo,
     'indicadores_financeiros', jsonb_build_object(
       'ticket_medio', v_ticket_medio,

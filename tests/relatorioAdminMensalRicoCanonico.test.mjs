@@ -58,6 +58,17 @@ test('reconstrucao historica usa corte e auditoria e futuras capturas persistem 
   );
 });
 
+test('evasoes sem tipo congelado recuperam a classificacao canonica com guarda de auditoria', () => {
+  assert.match(migration.source, /jsonb_array_elements[\s\S]*evasoes/i);
+  assert.match(migration.source, /tipo_matricula_id/i);
+  assert.match(migration.source, /is_segundo_curso/i);
+  assert.match(migration.source, /interrompido_bolsista/i);
+  assert.match(migration.source, /interrompido_2_curso/i);
+  assert.match(migration.source, /interrompido_banda/i);
+  assert.match(migration.source, /EVASOES_MENSAL_DIVERGENTE/i);
+  assert.match(migration.source, /tabela\s*=\s*'alunos'/i);
+});
+
 test('ACL da leitura rica permanece escopada ao administrativo', () => {
   const sql = maskSqlStringLiterals(migration.executable);
   assert.match(

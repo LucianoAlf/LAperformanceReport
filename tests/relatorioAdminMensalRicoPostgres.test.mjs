@@ -30,7 +30,13 @@ function psql(container, sql) {
 async function aguardarPostgres(container) {
   for (let tentativa = 0; tentativa < 60; tentativa += 1) {
     const pronto = docker(['exec', container, 'pg_isready', '-U', 'postgres']);
-    if (pronto.status === 0) return;
+    if (pronto.status === 0) {
+      const consulta = docker([
+        'exec', container, 'psql', '--no-psqlrc',
+        '-U', 'postgres', '-d', 'postgres', '-Atc', 'select 1',
+      ]);
+      if (consulta.status === 0 && consulta.stdout.trim() === '1') return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error('PostgreSQL de teste nao iniciou a tempo');
@@ -79,15 +85,26 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
       );
 
       create table public.movimentacoes_admin (
+        id bigserial primary key,
+        aluno_id bigint,
         unidade_id uuid not null,
         tipo text not null,
+        tipo_evasao text,
         competencia_referencia date,
         data date not null,
         created_at timestamptz not null
       );
 
+      create table public.alunos (
+        id bigint primary key,
+        tipo_matricula_id integer,
+        is_segundo_curso boolean
+      );
+
       create table public.audit_log (
         tabela text not null,
+        registro_id uuid,
+        registro_id_text text,
         created_at timestamptz not null,
         acao text not null,
         dados_antigos jsonb,
@@ -108,7 +125,8 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
       ) returns jsonb language sql stable as $$
         select jsonb_build_object(
           'capturado_em', '2026-08-01T00:00:00Z',
-          'resumo', '{}'::jsonb
+          'resumo', '{}'::jsonb,
+          'evasoes', jsonb_build_array(jsonb_build_object('id', 3361, 'tipo_evasao', null))
         )
       $$;
     `);
@@ -154,6 +172,9 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
             'evasoes', 7,
             'renovacoes_realizadas', 23
           ),
+          'evasoes', jsonb_build_array(
+            jsonb_build_object('id', 3361, 'aluno_nome', 'Aluna Bolsista', 'tipo_evasao', null)
+          ),
           'fontes', jsonb_build_object(
             'alunos_admin', jsonb_build_object(
               'snapshot_id', '${admin}',
@@ -177,6 +198,14 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
         ('${unidade}', 'trancamento', '2026-07-01', '2026-07-01', '2026-07-01T10:00:00Z'),
         ('${unidade}', 'trancamento', '2026-07-10', '2026-07-10', '2026-07-10T10:00:00Z'),
         ('${unidade}', 'trancamento', '2026-07-20', '2026-07-20', '2026-07-20T10:00:00Z');
+
+      insert into public.alunos (id, tipo_matricula_id, is_segundo_curso)
+      values (1498, 3, false);
+
+      insert into public.movimentacoes_admin
+        (id, aluno_id, unidade_id, tipo, tipo_evasao, competencia_referencia, data, created_at)
+      values
+        (3361, 1498, '${unidade}', 'evasao', null, '2026-07-07', '2026-07-07', '2026-07-07T10:00:00Z');
     `);
     assert.equal(fixture.status, 0, fixture.stderr || fixture.stdout);
 
@@ -186,8 +215,10 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
         'trancamentos_periodo', resultado#>>'{payload,trancamentos_periodo}',
         'churn_rate', resultado#>>'{payload,indicadores_retencao,churn_rate}',
         'inadimplencia', resultado#>>'{payload,indicadores_retencao,inadimplencia}',
+        'tipo_evasao', resultado#>>'{payload,evasoes,0,tipo_evasao}',
         'snapshots', (select count(*) from public.fechamento_mensal_snapshots),
-        'wrapper_futuro', public.montar_relatorio_admin_mensal_payload_v1('${unidade}', 2026, 7)#>>'{resumo,trancamentos_periodo}'
+        'wrapper_futuro', public.montar_relatorio_admin_mensal_payload_v1('${unidade}', 2026, 7)#>>'{resumo,trancamentos_periodo}',
+        'wrapper_tipo_evasao', public.montar_relatorio_admin_mensal_payload_v1('${unidade}', 2026, 7)#>>'{evasoes,0,tipo_evasao}'
       )
       from (select public.get_relatorio_admin_mensal_rico_v1('${unidade}', 2026, 7) resultado) q;
     `);
@@ -198,8 +229,10 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
       trancamentos_periodo: '3',
       churn_rate: '1.79',
       inadimplencia: '1.19',
+      tipo_evasao: 'interrompido_bolsista',
       snapshots: 3,
       wrapper_futuro: '3',
+      wrapper_tipo_evasao: 'interrompido_bolsista',
     });
   } finally {
     docker(['rm', '--force', container]);
