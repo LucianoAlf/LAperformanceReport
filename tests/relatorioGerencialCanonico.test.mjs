@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const semAcentos = (value) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-const migrationPath = 'supabase/migrations/20260801193000_relatorio_gerencial_canonico.sql';
+const migrationPath = 'supabase/migrations/20260801222500_corrigir_relatorio_gerencial_metas_matriculador.sql';
 
 test('produtor gerencial compoe somente fechamentos mensais e rankings canonicos', () => {
   assert.equal(fs.existsSync(path.join(root, migrationPath)), true, 'migration canonica ainda nao existe');
@@ -22,12 +22,16 @@ test('produtor gerencial compoe somente fechamentos mensais e rankings canonicos
   assert.match(migration, /h\.ranking_habilitado/);
   assert.match(migration, /h\.snapshot_publicavel/);
   assert.match(migration, /h\.score is not null/);
-  assert.match(migration, /c\.taxa_showup_experimental/);
-  assert.match(migration, /c\.taxa_experimental_matricula/);
-  assert.match(migration, /c\.taxa_lead_matricula/);
-  assert.match(migration, /c\.metas_volume->>p_unidade_id::text/);
-  assert.match(migration, /c\.metas_ticket->>p_unidade_id::text/);
-  assert.doesNotMatch(migration, /c\.meta_(?:taxa|volume|ticket)_/);
+  assert.match(migration, /c\.meta_taxa_showup_experimental/);
+  assert.match(migration, /c\.meta_taxa_experimental_matricula/);
+  assert.match(migration, /c\.meta_taxa_lead_matricula/);
+  assert.match(migration, /c\.meta_volume_campo_grande/);
+  assert.match(migration, /c\.meta_volume_recreio/);
+  assert.match(migration, /c\.meta_volume_barra/);
+  assert.match(migration, /c\.meta_ticket_campo_grande/);
+  assert.match(migration, /c\.meta_ticket_recreio/);
+  assert.match(migration, /c\.meta_ticket_barra/);
+  assert.doesNotMatch(migration, /c\.metas_(?:volume|ticket)/);
   assert.match(migration, /get_health_score_professor_v3_performance/);
   assert.match(migration, /programa_matriculador_config/);
   assert.match(migration, /programa_fideliza_config/);

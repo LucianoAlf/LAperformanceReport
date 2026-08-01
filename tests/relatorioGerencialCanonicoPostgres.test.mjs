@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const migrationPath = path.join(
   root,
-  'supabase/migrations/20260801193000_relatorio_gerencial_canonico.sql',
+  'supabase/migrations/20260801222500_corrigir_relatorio_gerencial_metas_matriculador.sql',
 );
 
 function docker(args, input) {
@@ -83,11 +83,15 @@ test('produtor gerencial compila e preserva os numeros dos documentos fechados',
       create table public.programa_matriculador_config (
         id serial primary key,
         ano integer not null unique,
-        taxa_showup_experimental numeric not null,
-        taxa_experimental_matricula numeric not null,
-        taxa_lead_matricula numeric not null,
-        metas_volume jsonb not null,
-        metas_ticket jsonb not null,
+        meta_taxa_showup_experimental numeric not null,
+        meta_taxa_experimental_matricula numeric not null,
+        meta_taxa_lead_matricula numeric not null,
+        meta_volume_campo_grande integer not null,
+        meta_volume_recreio integer not null,
+        meta_volume_barra integer not null,
+        meta_ticket_campo_grande numeric not null,
+        meta_ticket_recreio numeric not null,
+        meta_ticket_barra numeric not null,
         mes_inicio integer not null,
         mes_fim integer not null
       );
@@ -295,11 +299,15 @@ test('produtor gerencial compila e preserva os numeros dos documentos fechados',
       insert into public.professores values (2, 'Professor Provisorio');
       insert into public.programa_matriculador_config (
         ano,
-        taxa_showup_experimental,
-        taxa_experimental_matricula,
-        taxa_lead_matricula,
-        metas_volume,
-        metas_ticket,
+        meta_taxa_showup_experimental,
+        meta_taxa_experimental_matricula,
+        meta_taxa_lead_matricula,
+        meta_volume_campo_grande,
+        meta_volume_recreio,
+        meta_volume_barra,
+        meta_ticket_campo_grande,
+        meta_ticket_recreio,
+        meta_ticket_barra,
         mes_inicio,
         mes_fim
       ) values (
@@ -307,8 +315,12 @@ test('produtor gerencial compila e preserva os numeros dos documentos fechados',
         18,
         75,
         13.5,
-        '{"2ec861f6-023f-4d7b-9927-3960ad8c2a92":25,"95553e96-971b-4590-a6eb-0201d013c14d":20,"368d47f5-2d88-4475-bc14-ba084a9a348e":15}'::jsonb,
-        '{"2ec861f6-023f-4d7b-9927-3960ad8c2a92":387,"95553e96-971b-4590-a6eb-0201d013c14d":435,"368d47f5-2d88-4475-bc14-ba084a9a348e":450}'::jsonb,
+        25,
+        20,
+        15,
+        387,
+        435,
+        450,
         1,
         11
       );
