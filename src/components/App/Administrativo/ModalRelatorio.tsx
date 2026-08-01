@@ -922,7 +922,7 @@ export function ModalRelatorio({
     return data.texto;
   }
 
-  async function gerarRelatorioMensal(): Promise<string> {
+  async function gerarRelatorioMensalLegado(): Promise<string> {
     const { anoRelatorio, mesRelatorio, precisaBuscar } = obterCompetenciaMensalAdministrativa();
     const dadosMensais = precisaBuscar
       ? await buscarDadosMensaisAdministrativos(anoRelatorio, mesRelatorio)
@@ -1194,6 +1194,29 @@ export function ModalRelatorio({
     texto += `━━━━━━━━━━━━━━━━━━━━━━`;
 
     return texto;
+  }
+
+  async function gerarRelatorioMensal(): Promise<string> {
+    const { anoRelatorio, mesRelatorio } = obterCompetenciaMensalAdministrativa();
+    if (!unidade || unidade === 'todos') {
+      throw new Error('Selecione uma unidade para gerar o relatório mensal administrativo.');
+    }
+
+    const { data, error } = await supabase.functions.invoke('relatorio-admin-whatsapp', {
+      body: {
+        modo: 'dry_run_mensal_admin',
+        unidade,
+        ano: anoRelatorio,
+        mes: mesRelatorio,
+      },
+    });
+
+    if (error) throw error;
+    if (data?.success !== true || typeof data?.texto !== 'string' || !data.texto.trim()) {
+      throw new Error(data?.error || 'O fechamento oficial deste mês ainda não está disponível.');
+    }
+
+    return data.texto;
   }
 
   async function obterDadosRelatorioAvulsoAdministrativo(): Promise<DadosRelatorioMensalAdministrativo> {
