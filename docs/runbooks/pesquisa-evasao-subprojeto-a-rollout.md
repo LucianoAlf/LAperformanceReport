@@ -263,6 +263,66 @@ repetido. A lista completa de commits, migrations e arquivos sobrepostos está
 em
 [`2026-07-31-drift-main-plano-a.md`](../auditorias/2026-07-31-drift-main-plano-a.md).
 
+### Compatibilidade com o RBAC plural do Hugo
+
+Uma verificação final somente leitura foi executada em 31/07/2026 contra
+`ouqwbbermlzqqvtqwlul`, depois de a `main` receber as migrations
+`perfil_sucesso_do_aluno_departamento`,
+`get_user_unidade_ids_plural_com_piloto` e
+`policies_unidade_plural_in_get_user_unidade_ids`. O banco possuía 34 vínculos
+ativos de usuários a perfis, cobrindo 28 pessoas, e exatamente uma linha em
+`perfis` chamada `Sucesso do Aluno`.
+
+Conclusão por migration:
+
+- `perfil_sucesso_do_aluno_departamento` altera somente `perfis` e
+  `perfil_permissoes`; não cria nem altera policy ou função usada pelo Plano A;
+- `get_user_unidade_ids_plural_com_piloto` cria
+  `rbac_piloto_usuarios` e `get_user_unidade_ids()`. Nenhuma função do Plano A
+  chama esse helper, `get_user_unidade_id()` ou a tabela de vínculos de
+  usuários a perfis;
+- `policies_unidade_plural_in_get_user_unidade_ids` apenas altera policies cujo
+  texto continha `= get_user_unidade_id()`. Entre `pesquisa_evasao`,
+  `movimentacoes_admin`, `alunos`, `cursos`, `professores` e `motivos_saida`, a
+  leitura remota encontrou somente quatro policies alteradas, todas em
+  `alunos`: SELECT, INSERT, UPDATE e DELETE. Nenhuma policy das outras cinco
+  tabelas usa o helper plural.
+
+Isso não muda o resultado das RPCs de listagem após o rollout. As duas
+sobrecargas de `listar_evadidos_para_pesquisa`,
+`listar_evadidos_para_pesquisa_v2`, `stats_pesquisa_evasao` e
+`pode_enviar_pesquisa_evasao` são recriadas pelo Plano A como
+`SECURITY DEFINER`, com owner `postgres` e `search_path` fixo. As seis tabelas
+inspecionadas possuem RLS sem `FORCE ROW LEVEL SECURITY`; portanto, as leituras
+dessas RPCs não são filtradas pelas policies pluralizadas de `alunos`. O
+recorte continua sendo o parâmetro `p_unidade_id`, e a autorização continua
+sendo apenas `fn_pesquisa_evasao_usuario_interno_ativo()` — sem perfil,
+permissão ou unidade.
+
+Também não existe colisão de policy em `pesquisa_evasao`. Antes do rollout, a
+única policy da tabela é `pesquisa_evasao_all`; o trabalho do Hugo não criou
+policy nessa tabela e sua migration dinâmica não a altera. Durante o rollout,
+`20260730170000` remove com `IF EXISTS` `pesquisa_evasao_all`,
+`pesquisa_evasao_leitura_estrita` e `pesquisa_evasao_leitura_interna`, e então
+cria uma única `pesquisa_evasao_leitura_interna` para `authenticated`, com
+`USING (fn_pesquisa_evasao_usuario_interno_ativo())`. O mesmo padrão nominal é
+aplicado às tabelas filhas, que também não foram tocadas pelas três migrations
+do Hugo.
+
+Há ainda prova dinâmica dessa ordem: o schema-only usado em
+`didpawhgvkarzntvktzu` já continha as três migrations do Hugo no histórico
+remoto, e `20260730170000`, `20260730173000` e `20260730180100` aplicaram sobre
+esse schema sem colisão. A verificação atual confirmou que o histórico de
+produção não avançou depois daquele dump.
+
+Estado final esperado e verificado no SQL versionado: qualquer sessão
+`authenticated` cujo `auth.uid()` corresponda a uma linha ativa em
+`public.usuarios` lê a pesquisa, independentemente de vínculo de perfil ou
+unidade. Usuário sem vínculo interno ativo não lê; roles de agentes
+continuam revogados. O acesso amplo preexistente de `movimentacoes_admin`
+permanece risco separado do projeto de hardening e não altera o resultado das
+RPCs do Plano A. Nenhuma escrita foi feita em produção nesta verificação.
+
 As duas conversas antigas de Campo Grande sem `caixa_id` continuam como item
 independente, sem correção neste rollout, conforme
 [`2026-07-31-pre-atendimento-caixa-undefined.md`](../auditorias/2026-07-31-pre-atendimento-caixa-undefined.md).
