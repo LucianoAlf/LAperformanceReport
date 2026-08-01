@@ -621,6 +621,18 @@ Gate 2 aprovado em produção em 01/08/2026:
 - a prévia foi cancelada, permaneceu não consumida e criou zero registros em
   `pesquisa_evasao`; nenhuma mensagem foi enviada.
 
+### Melhoria visual pós-rollout — não bloqueadora
+
+Na tela de revisão, a prévia ainda exibe literalmente os marcadores de
+formatação do WhatsApp (`> *...*` e `_..._`). O texto enviado está correto e o
+WhatsApp renderiza citação, destaque e itálico; o problema é apenas de
+apresentação no modal.
+
+Tratar em item próprio depois deste rollout: renderizar visualmente esses três
+formatos na prévia, sem modificar o texto canônico. `mensagem_renderizada`,
+snapshot, payload e hash devem continuar armazenando exatamente o conteúdo com
+os marcadores do WhatsApp.
+
 ### Risco independente do rollout: continuidade do banco
 
 PITR está desativado em `ouqwbbermlzqqvtqwlul` e, no pré-flight, o backup
