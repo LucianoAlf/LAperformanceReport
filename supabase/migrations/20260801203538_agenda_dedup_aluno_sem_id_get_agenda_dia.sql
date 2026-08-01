@@ -223,7 +223,7 @@ select
   a.reagendada,
   case
     when a.reagendada and a.data_hora_inicio_original is not null
-      then to_char(a.data_hora_inicio_original at time zone 'America/Sao_Paulo', 'DD/MM/YY \"as\" HH24:MI')
+      then to_char(a.data_hora_inicio_original at time zone 'America/Sao_Paulo', 'DD/MM/YY "as" HH24:MI')
     else null
   end as hora_original,
   a.nr_da_aula,
