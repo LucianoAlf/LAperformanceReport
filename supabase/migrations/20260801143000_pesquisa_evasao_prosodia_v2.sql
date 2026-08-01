@@ -407,4 +407,3 @@ grant execute on function public.listar_evadidos_para_pesquisa_v2(
 ) to authenticated, service_role;
 
 commit;
-

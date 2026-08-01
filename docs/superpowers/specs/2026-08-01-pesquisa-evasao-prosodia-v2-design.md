@@ -1,7 +1,7 @@
 # Pesquisa de evasão — prosódia e tratamento gramatical V2
 
 **Data:** 01/08/2026  
-**Status:** desenho aprovado por Alf; implementação pendente
+**Status:** desenho aprovado; implementação local concluída; rollout pendente
 **Escopo:** somente prévia e mensagem de saída da pesquisa de evasão
 
 ## 1. Objetivo
@@ -76,6 +76,18 @@ A inferência deve:
   vigente; nomes fora do dicionário usam a forma neutra;
 - nunca receber artigo ou tratamento livre enviado pelo frontend.
 
+### 4.1 Cobertura e fallback esperado
+
+O dicionário cobre deliberadamente poucas dezenas de nomes, enquanto a base tem
+mais de mil alunos. Portanto, o fallback neutro é o comportamento esperado para
+a maioria dos nomes que não estiver explicitamente catalogada. Uma construção
+como `a experiência de Larissa`, em vez de `da Larissa`, é aceitável e não
+constitui defeito.
+
+Ampliar a cobertura do dicionário deve ser tratado como item próprio, com nova
+revisão da lista. A Prosódia V2 não deve crescer a lista por inferência, consulta
+externa ou heurística de sufixo.
+
 ## 5. Cópias aprovadas
 
 ### 5.1 Responsável
@@ -123,6 +135,8 @@ Não existe linha, pontilhado ou separador antes da última frase.
 - A Edge deve aceitar os placeholders antigos e novos durante a transição.
 - A ativação da versão 2 só ocorre depois de a Edge compatível estar publicada.
 - Previews já criadas continuam usando o texto congelado e não são reescritas.
+- A implementação local está em `tratamentoGramatical.ts`, `publico.ts` e na
+  migration `20260801143000_pesquisa_evasao_prosodia_v2.sql`.
 
 ## 7. Formatação do WhatsApp
 
@@ -142,6 +156,15 @@ Não existe linha, pontilhado ou separador antes da última frase.
 - Placeholder desconhecido ou residual: falhar fechado.
 - Identidade, artigo, template e mensagem continuam resolvidos no servidor.
 - O hash e o snapshot da prévia continuam cobrindo a mensagem final.
+
+### 8.1 Pré-requisito do retorno
+
+A Prosódia V2 não altera o webhook inbound, mas seu rollout é proibido enquanto
+`webhook-whatsapp-inbox` não estiver publicado e revalidado em produção com o
+contrato já presente no código local: preencher `resposta_status`, remover o
+fallback global que podia escolher outra família e não persistir payload
+integral em `webhook_debug_log`. Melhorar a pergunta sem garantir a associação
+segura da resposta não conclui o fluxo.
 
 ## 9. Validação
 
@@ -164,6 +187,7 @@ Cobertura mínima:
 
 - cadastrar gênero como atributo do aluno ou do usuário;
 - inferir gênero para relatórios ou indicadores;
-- alterar respostas, webhook inbound ou classificação das respostas;
+- alterar respostas, webhook inbound ou classificação das respostas dentro da
+  Prosódia V2; o redeploy seguro do webhook é gate externo obrigatório;
 - mudar destinatário de pesquisas já enviadas;
 - modificar mensagens de outros fluxos do WhatsApp.

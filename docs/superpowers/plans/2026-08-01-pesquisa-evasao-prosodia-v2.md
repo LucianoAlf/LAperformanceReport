@@ -23,6 +23,34 @@
 9. Preview antiga preserva o texto congelado.
 10. Pergunta usa `> *...*`; sinceridade usa `_..._`; não existe separador.
 11. Produção exige nova autorização e reconfirmação do project ref.
+12. Antes de qualquer rollout da V2, o webhook inbound corrigido deve estar
+    publicado e revalidado ponta a ponta; código local não prova runtime.
+13. O fallback neutro é esperado para a maioria dos nomes e não é defeito. A
+    ampliação do dicionário fica fora deste plano.
+
+## Task 0 — Gate local do retorno da pesquisa
+
+**Files:**
+
+- Verify: `supabase/functions/webhook-whatsapp-inbox/index.ts`
+- Verify: `tests/pesquisaEvasaoCanonica.test.mjs`
+
+### Step 1: verificar o contrato no código local
+
+- [x] Confirmar que o webhook grava
+  `resposta_status = 'pronta_para_revisao'` junto ao legado.
+- [x] Confirmar que não existe fallback global para qualquer pesquisa aberta.
+- [x] Confirmar que o payload integral não é inserido em
+  `webhook_debug_log`.
+- [x] Confirmar que inbox administrativa, CRM, status, reação, edição e
+  `buttonOrListid -> processar-resposta-pesquisa` permanecem roteados.
+
+### Step 2: separar fonte de runtime
+
+- [x] Registrar que a correção já existe no código local.
+- [x] Registrar que produção continua pendente de redeploy e teste ponta a
+  ponta, conforme auditoria operacional de Alf.
+- [x] Não fazer deploy nesta execução local.
 
 ## Task 1 — Tratamento gramatical puro
 
@@ -514,19 +542,25 @@ git diff --check
 - [ ] Status: `desenho aprovado; implementação local concluída; rollout pendente`.
 - [ ] Registrar módulos, migration e fallback neutro.
 - [ ] Não chamar o tratamento de gênero persistido.
+- [ ] Registrar que o fallback neutro será frequente, é aceitável e não deve
+  motivar expansão do dicionário neste plano.
+- [ ] Registrar o pré-flight informado por Alf: 57 saídas desde 01/07/2026,
+  45 menores, 12 adultos e zero sem `data_nascimento`.
 
 ### Step 2: ordem de rollout no runbook
 
 - [ ] Documentar:
-  1. reconfirmar project ref/schema;
-  2. validar DDL descartável;
-  3. publicar Edge V1/V2 com `verify_jwt=true`;
-  4. provar preview com V1 ativo;
-  5. aplicar migration e ativar V2;
-  6. conferir template/RPC;
-  7. publicar frontend;
-  8. smoke responsável e direto;
-  9. monitorar.
+  1. publicar e revalidar primeiro o webhook inbound corrigido;
+  2. reconfirmar project ref/schema;
+  3. validar DDL descartável;
+  4. publicar Edge V1/V2 com `verify_jwt=true`;
+  5. provar preview com V1 ativo;
+  6. aplicar migration e ativar V2;
+  7. conferir template/RPC;
+  8. publicar frontend;
+  9. smoke responsável e direto;
+  10. monitorar.
+- [ ] Sem webhook seguro e validado, parar antes da Prosódia V2.
 - [ ] Sem Edge compatível, parar antes da migration.
 - [ ] Smoke padrão cria/cancela preview; não envia WhatsApp.
 
@@ -577,7 +611,8 @@ Expected: tudo verde; só arquivos intencionais.
 ### Step 2: revisão de segurança/escopo
 
 - [ ] Confirmar que request não ganhou artigo, preposição, público, telefone, template ou mensagem.
-- [ ] Confirmar que webhook inbound e outros fluxos não mudaram.
+- [ ] Confirmar que a Prosódia não alterou o webhook e que a correção local do
+  inbound continua presente; o runtime produtivo permanece gate separado.
 - [ ] Confirmar que migrations aplicadas não foram editadas.
 - [ ] Revisar:
 
@@ -591,6 +626,15 @@ git diff origin/main...HEAD -- supabase/functions/enviar-pesquisa-evasao supabas
 - [ ] Não fazer push, merge ou rollout sem autorização específica.
 
 ## Task 8 — Rollout assistido, somente com nova autorização
+
+### Gate 0: retorno seguro obrigatório
+
+- [ ] Reconfirmar que `webhook-whatsapp-inbox` produtivo contém a correção.
+- [ ] Fazer envio em modo teste, responder no número interno e provar associação
+  à pesquisa exata e preenchimento de `resposta_status`.
+- [ ] Confirmar que nenhuma outra pesquisa mudou e que `webhook_debug_log` não
+  recebeu o payload integral.
+- [ ] Reportar e parar; sem esse gate verde, não iniciar a Prosódia V2.
 
 ### Gate 1: pré-flight
 

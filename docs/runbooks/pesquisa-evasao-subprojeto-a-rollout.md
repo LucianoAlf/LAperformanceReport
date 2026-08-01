@@ -1,6 +1,9 @@
 # Pesquisa de evasão — runbook do Subprojeto A
 
-**Status:** Plano A aplicado e publicado. O retorno da pesquisa também foi fechado em produção: webhook atualizado, captura de resposta em modo teste habilitada e teste ponta a ponta aprovado no número interno.
+**Status:** Plano A aplicado e publicado. Retorno da pesquisa reaberto como gate
+bloqueador: o código local do webhook está corrigido, mas o runtime produtivo
+continua pendente de redeploy e revalidação. Prosódia V2 implementada somente
+em ambiente local; rollout não autorizado.
 
 **Produção:** `ouqwbbermlzqqvtqwlul`
 
@@ -493,14 +496,28 @@ tabela diretamente, inclusive o NovaConversaModal. A saída aprovada é publicar
 o frontend do PR, que usa `listar_whatsapp_caixas_seguras`, e só então repetir o
 smoke completo. Nenhuma conversa nova foi enviada no smoke anterior.
 
-### Fechamento do retorno da pesquisa
+### Retorno da pesquisa — correção de estado atual
+
+Em 01/08/2026, Alf informou que `webhook-whatsapp-inbox` continuava sem o
+redeploy da correção. Essa verificação operacional mais recente substitui, para
+fins de aceite, a anotação anterior de versão 76 e do teste ponta a ponta. O
+código da branch contém o contrato correto, mas código local não comprova o
+runtime.
+
+Enquanto o gate estiver aberto, a operação real permanece bloqueada porque o
+webhook produtivo pode não preencher `resposta_status` e ainda pode conter o
+fallback global “Tentativa 2”, capaz de associar uma mensagem à pesquisa de
+outra família. O webhook corrigido deve entrar e ser revalidado antes de
+qualquer rollout da Prosódia V2.
+
+### Registro histórico do ensaio anterior — não vale como aceite atual
 
 Uma auditoria posterior ao primeiro encerramento confirmou que o rollout havia
 publicado somente `enviar-pesquisa-evasao`; o `webhook-whatsapp-inbox` ativo
 ainda era a versão 75. Antes de liberar a operação para Fabi e Jessica, o fluxo
 de entrada foi tratado como gate bloqueador.
 
-O código publicado na versão 76 do webhook:
+O código que havia sido registrado como versão 76 do webhook:
 
 - grava simultaneamente o legado `status = 'respondido'` e o contrato novo
   `resposta_status = 'pronta_para_revisao'`;
@@ -519,7 +536,8 @@ corrigido para abrir a janela sempre que o provedor confirmar `enviado`,
 mantendo o destino controlado pelo número interno. `enviar-pesquisa-evasao` foi
 publicada como versão 41, com `verify_jwt = true`.
 
-Teste ponta a ponta aprovado em 01/08/2026:
+Teste ponta a ponta registrado em 01/08/2026, agora pendente de repetição após
+confirmar o runtime correto:
 
 - pesquisa de teste `85798348-31bb-4fc0-8b21-750315caf8f1`, saída `3299`;
 - mensagem entregue somente ao número interno `***8047`;
@@ -592,7 +610,11 @@ order by publico;
 
 O resultado precisa ter somente `direto = 1` e `responsavel = 1`, ambos na chave `evasao_aberta`, versão 1. Qualquer ausência, duplicidade ou público adicional interrompe o rollout.
 
-## 9. Ordem de rollout em produção
+## 9. Ordem de rollout em produção — registro histórico do Plano A
+
+Bloco 5 autorizado por Alf no rollout original. Merge/deploy do frontend:
+AUTORIZADO naquele rollout. Essa autorização histórica não alcança a Prosódia
+V2, cujo rollout permanece não autorizado.
 
 Somente após autorização explícita:
 
@@ -618,6 +640,51 @@ Somente após autorização explícita:
 20. confirmar que nenhuma outra pesquisa foi alterada e que o debug log não cresceu;
 21. observar logs, estados incertos e duplicidade durante a janela combinada;
 22. somente então liberar Fabi e Jessica para a operação.
+
+### 9.1 Ordem obrigatória do rollout da Prosódia V2
+
+O rollout da Prosódia V2 exige autorização nova, com Alf presente, e não pode
+reutilizar automaticamente o aceite histórico acima.
+
+Pré-flight de impacto informado e verificado por Alf em 01/08/2026:
+
+- fonte canônica: uma saída por `movimentacoes_admin.id`, com idade calculada a
+  partir de `alunos.data_nascimento`;
+- 57 saídas desde 01/07/2026;
+- 45 alunos menores e 12 adultos;
+- zero alunos sem `data_nascimento`.
+
+Logo, o bloqueio novo por data ausente não bloqueia nenhuma linha da fila
+atual. Essa evidência deve ser reconfirmada no rollout se o conjunto tiver
+mudado.
+
+Sequência obrigatória:
+
+1. reconfirmar o project ref e obter autorização do bloco;
+2. publicar primeiro `webhook-whatsapp-inbox` com a correção já presente no
+   código local;
+3. testar de ponta a ponta no número interno: envio em modo teste, resposta em
+   texto, `resposta_status = 'pronta_para_revisao'`, associação à pesquisa
+   exata, nenhuma outra pesquisa alterada e nenhum novo payload integral no
+   debug log;
+4. reportar e parar; sem aprovação explícita desse retorno, não iniciar a V2;
+5. validar a migration V2 em ensaio DDL descartável contra o schema produtivo
+   corrente;
+6. publicar a Edge `enviar-pesquisa-evasao` retrocompatível, com
+   `verify_jwt = true`, mantendo V1 ativa;
+7. provar que uma preview V1 ainda é criada e pode ser cancelada sem envio;
+8. aplicar `20260801143000_pesquisa_evasao_prosodia_v2.sql`, que ativa um
+   template V2 por público e atualiza a RPC da fila;
+9. conferir exatamente um template ativo para `direto` e um para
+   `responsavel`, ambos na versão 2;
+10. publicar o frontend com o novo motivo de bloqueio;
+11. fazer smoke sem envio para um responsável e um adulto, conferindo texto,
+    telefone mascarado, formatação e ausência de separador;
+12. monitorar e registrar as evidências.
+
+O fallback neutro (`de Nome`) é esperado para a maioria dos nomes fora do
+dicionário curto. Por exemplo, `a experiência de Larissa` é aceitável e não
+aciona rollback. Aumentar a cobertura é item próprio posterior.
 
 ## 10. Checklist operacional
 
@@ -669,6 +736,19 @@ Somente após autorização explícita:
 - [ ] modo teste abre estado de resposta somente para o número interno;
 - [ ] payload integral não é persistido em `webhook_debug_log`;
 - [ ] fluxos administrativos, CRM, status, reação, edição e pós-1ª aula permanecem roteados;
+
+### Prosódia V2
+
+- [ ] pré-flight reconfirma a distribuição por idade e as datas ausentes;
+- [ ] webhook seguro foi publicado e revalidado antes da V2;
+- [ ] V1 continua funcionando antes da ativação da migration;
+- [ ] existe exatamente um template V2 ativo por público após a migration;
+- [ ] menor usa responsável, telefone do responsável e template `responsavel`;
+- [ ] adulto usa o próprio nome e template `direto`;
+- [ ] pergunta usa citação e negrito, pedido de sinceridade usa itálico e não há
+  separador;
+- [ ] nome fora do dicionário usa fallback neutro sem bloquear;
+- [ ] data ausente ou inválida bloqueia sem cair para público adulto;
 
 ### Caixas
 
@@ -728,7 +808,9 @@ Se o frontend for publicado fora de ordem:
 | Prévia de menor | APROVADO — evasão `3400` mostrou o nome e o telefone mascarado da responsável; snapshot persistido com destinatário e template `responsavel`; prévia cancelada sem envio |
 | Smoke das telas de atendimento | APROVADO NO ESCOPO — Caixa de Entrada do Sucesso do Aluno permaneceu operacional; Pré-Atendimento continua fora deste aceite por decisão de Alf |
 | Merge/deploy do frontend | APROVADO — PR #19, merge `351bd1ade991510dd6a6cd56f811ae33e4a6b1ef`, Vercel produção `dpl_9aoQbKGD2jtrHwfGmC6aPZmLaP7R` pronta |
-| Webhook inbound | APROVADO — `webhook-whatsapp-inbox` versão 76 ativa; grava `resposta_status`, sem fallback global e sem persistência em `webhook_debug_log` |
-| Retorno ponta a ponta | APROVADO — pesquisa `85798348-31bb-4fc0-8b21-750315caf8f1` recebeu a resposta exata no número interno; zero outras pesquisas alteradas |
-| Indicador de respostas | APROVADO — respostas produtivas usam `resposta_status`; o teste não incrementou o card porque `modo_teste = true` é excluído por contrato |
+| Webhook inbound | BLOQUEADOR PENDENTE — código local corrigido, mas runtime produtivo informado por Alf continua sem redeploy; não aceitar a anotação histórica de versão 76 sem nova prova |
+| Retorno ponta a ponta | PENDENTE DE REPETIÇÃO — repetir após redeploy no número interno e provar associação exclusiva à pesquisa exata |
+| Indicador de respostas | PENDENTE DE REVALIDAÇÃO — o teste em modo teste não incrementa o card por contrato, mas deve preencher `resposta_status`; resposta produtiva deve alimentar o indicador |
+| Pré-flight de idade da Prosódia V2 | APROVADO PARA O CONJUNTO VERIFICADO — 57 saídas desde 01/07/2026, 45 menores, 12 adultos e zero sem `data_nascimento` |
+| Prosódia V2 | LOCAL CONCLUÍDA; ROLLOUT NÃO AUTORIZADO — exige webhook verde antes de Edge, migration e frontend V2 |
 | Código alinhado com produção | APROVADO — PR #21, merge `6a7411de06ce1d42af7db23d004d61ec9e8bdb4f` |
