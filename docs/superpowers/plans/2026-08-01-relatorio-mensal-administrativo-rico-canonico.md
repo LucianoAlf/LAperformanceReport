@@ -14,7 +14,7 @@
 
 **Files:**
 - Create: `tests/relatorioAdminMensalRicoCanonico.test.mjs`
-- Create: `supabase/migrations/20260801103000_relatorio_admin_mensal_rico_canonico.sql`
+- Create: `supabase/migrations/20260801140115_relatorio_admin_mensal_rico_canonico.sql`
 
 - [ ] **Step 1: Escrever o teste RED do contrato SQL**
 
@@ -27,7 +27,7 @@ import { maskSqlStringLiterals, readSqlContract } from './helpers/sqlContractHel
 
 const migration = readSqlContract(
   import.meta.url,
-  'supabase/migrations/20260801103000_relatorio_admin_mensal_rico_canonico.sql',
+  'supabase/migrations/20260801140115_relatorio_admin_mensal_rico_canonico.sql',
 );
 
 test('leitura mensal administrativa compoe somente snapshots fechados referenciados', () => {
@@ -195,7 +195,7 @@ Expected: todos os testes aprovados.
 - [ ] **Step 5: Commit da leitura rica**
 
 ```powershell
-git add tests/relatorioAdminMensalRicoCanonico.test.mjs supabase/migrations/20260801103000_relatorio_admin_mensal_rico_canonico.sql
+git add tests/relatorioAdminMensalRicoCanonico.test.mjs supabase/migrations/20260801140115_relatorio_admin_mensal_rico_canonico.sql
 git commit -m "feat: compor leitura rica do mensal administrativo"
 ```
 
@@ -462,7 +462,7 @@ Apresentar o texto integral do Recreio e um quadro curto de comparacao com o dia
 Run:
 
 ```powershell
-rg -n "\b(insert|update|delete)\b" supabase/migrations/20260801103000_relatorio_admin_mensal_rico_canonico.sql
+rg -n "\b(insert|update|delete)\b" supabase/migrations/20260801140115_relatorio_admin_mensal_rico_canonico.sql
 git diff --check
 ```
 
@@ -470,7 +470,7 @@ Expected: nenhuma escrita em `fechamento_mensal_snapshots`; apenas `create funct
 
 - [ ] **Step 2: Aplicar a migration aditiva e validar a RPC**
 
-Aplicar `20260801103000_relatorio_admin_mensal_rico_canonico.sql` no projeto confirmado. Depois chamar a RPC como `service_role` para Recreio/julho e confirmar `status = fechado`, os mesmos IDs/hashes e o payload rico, sem qualquer nova linha de snapshot.
+Aplicar `20260801140115_relatorio_admin_mensal_rico_canonico.sql` no projeto confirmado. Depois chamar a RPC como `service_role` para Recreio/julho e confirmar `status = fechado`, os mesmos IDs/hashes e o payload rico, sem qualquer nova linha de snapshot.
 
 - [ ] **Step 3: Publicar somente a Edge administrativa compartilhada**
 

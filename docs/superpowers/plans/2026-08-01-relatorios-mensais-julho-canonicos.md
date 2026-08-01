@@ -14,7 +14,7 @@
 
 **Files:**
 - Create: `tests/relatoriosMensaisFechamentoCanonico.test.mjs`
-- Create: `supabase/migrations/20260801090000_relatorios_mensais_fechamento_canonico.sql`
+- Create: `supabase/migrations/20260801115829_relatorios_mensais_fechamento_canonico.sql`
 
 - [ ] **Step 1: Escrever o teste RED do contrato SQL**
 
@@ -79,7 +79,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add tests/relatoriosMensaisFechamentoCanonico.test.mjs supabase/migrations/20260801090000_relatorios_mensais_fechamento_canonico.sql
+git add tests/relatoriosMensaisFechamentoCanonico.test.mjs supabase/migrations/20260801115829_relatorios_mensais_fechamento_canonico.sql
 git commit -m "feat: governar fechamento dos relatorios mensais"
 ```
 
@@ -87,7 +87,7 @@ git commit -m "feat: governar fechamento dos relatorios mensais"
 
 **Files:**
 - Modify: `tests/relatoriosMensaisFechamentoCanonico.test.mjs`
-- Modify: `supabase/migrations/20260801090000_relatorios_mensais_fechamento_canonico.sql`
+- Modify: `supabase/migrations/20260801115829_relatorios_mensais_fechamento_canonico.sql`
 
 - [ ] **Step 1: Escrever o teste RED do payload administrativo**
 
@@ -132,7 +132,7 @@ Expected: PASS.
 
 **Files:**
 - Modify: `tests/relatoriosMensaisFechamentoCanonico.test.mjs`
-- Modify: `supabase/migrations/20260801090000_relatorios_mensais_fechamento_canonico.sql`
+- Modify: `supabase/migrations/20260801115829_relatorios_mensais_fechamento_canonico.sql`
 
 - [ ] **Step 1: Escrever o teste RED do payload comercial**
 
@@ -175,7 +175,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit dos produtores**
 
 ```powershell
-git add tests/relatoriosMensaisFechamentoCanonico.test.mjs supabase/migrations/20260801090000_relatorios_mensais_fechamento_canonico.sql
+git add tests/relatoriosMensaisFechamentoCanonico.test.mjs supabase/migrations/20260801115829_relatorios_mensais_fechamento_canonico.sql
 git commit -m "feat: produzir snapshots mensais completos"
 ```
 

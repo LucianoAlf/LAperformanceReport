@@ -4,7 +4,7 @@ import { readSqlContract } from './helpers/sqlContractHelpers.mjs';
 
 const migration = readSqlContract(
   import.meta.url,
-  'supabase/migrations/20260801093000_relatorio_admin_mensal_financeiro_retencao.sql',
+  'supabase/migrations/20260801120008_relatorio_admin_mensal_financeiro_retencao.sql',
 );
 
 test('correcao administrativa le financeiro e retencao dentro dos snapshots fechados', () => {

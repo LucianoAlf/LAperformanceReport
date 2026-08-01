@@ -7,7 +7,7 @@ import {
 
 const migration = readSqlContract(
   import.meta.url,
-  'supabase/migrations/20260801090000_relatorios_mensais_fechamento_canonico.sql',
+  'supabase/migrations/20260801115829_relatorios_mensais_fechamento_canonico.sql',
 );
 
 test('migration governa snapshots mensais e fechamento imutavel', () => {

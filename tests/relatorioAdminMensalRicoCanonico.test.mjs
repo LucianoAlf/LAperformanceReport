@@ -7,7 +7,7 @@ import {
 
 const migration = readSqlContract(
   import.meta.url,
-  'supabase/migrations/20260801103000_relatorio_admin_mensal_rico_canonico.sql',
+  'supabase/migrations/20260801140115_relatorio_admin_mensal_rico_canonico.sql',
 );
 
 test('leitura mensal administrativa compoe somente snapshots fechados referenciados', () => {

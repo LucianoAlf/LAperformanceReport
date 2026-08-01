@@ -4,7 +4,7 @@ import { readSqlContract } from './helpers/sqlContractHelpers.mjs';
 
 const migration = readSqlContract(
   import.meta.url,
-  'supabase/migrations/20260801094500_relatorio_admin_mensal_evasao_segundo_curso.sql',
+  'supabase/migrations/20260801120110_relatorio_admin_mensal_evasao_segundo_curso.sql',
 );
 
 test('evasao mensal inclui segundo curso sem misturar nao renovacao', () => {

@@ -7,12 +7,12 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const migration = fs.readFileSync(
-  path.join(root, 'supabase/migrations/20260801103000_relatorio_admin_mensal_rico_canonico.sql'),
+  path.join(root, 'supabase/migrations/20260801140115_relatorio_admin_mensal_rico_canonico.sql'),
   'utf8',
 );
 const retificacaoPath = path.join(
   root,
-  'supabase/migrations/20260801170000_relatorio_admin_mensal_retificar_trancamento_fantasma.sql',
+  'supabase/migrations/20260801162345_relatorio_admin_mensal_retificar_trancamento_fantasma.sql',
 );
 const retificacao = fs.existsSync(retificacaoPath)
   ? fs.readFileSync(retificacaoPath, 'utf8')
