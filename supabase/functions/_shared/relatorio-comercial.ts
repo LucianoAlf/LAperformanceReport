@@ -1,3 +1,8 @@
+import {
+  formatarDataHoraPublica,
+  validarTextoPublicoRelatorio,
+} from "./relatorio-publico.ts";
+
 export interface ValorMedio {
   soma: number;
   denominador: number;
@@ -807,7 +812,8 @@ export function formatarRelatorioComercialDiario(
   const linhasFuturas = futuras.itens.length > 0
     ? futuras.itens.map((item) => {
       const horario = horarioNormalizado(item.horarioAula)?.slice(0, 5);
-      return `• ${item.dataAula}${horario ? ` ${horario}` : ""}: ${
+      const quando = formatarDataHoraPublica(item.dataAula, horario);
+      return `• ${quando}: ${
         textoSeguro(item.alunoNome, "Não informado")
       } — ${textoSeguro(item.cursoNome, "Não informado")}`;
     })
@@ -825,7 +831,7 @@ export function formatarRelatorioComercialDiario(
     .toLocaleUpperCase("pt-BR");
   const hunter = textoSeguro(dados.unidade.hunter, "Comercial");
 
-  return [
+  const texto = [
     separador,
     "📊 *RELATÓRIO DIÁRIO COMERCIAL*",
     `🏢 *${unidadeNome}*`,
@@ -908,16 +914,14 @@ export function formatarRelatorioComercialDiario(
     "📝 *LISTA DETALHADA*",
     separador,
     ...formatarDetalhes(dados.matriculasDetalhadas, hunter),
-    "🔎 *FONTES E SNAPSHOT*",
-    separador,
-    "• Fontes: get_kpis_comercial_canonicos_v2 + snapshot vigente GET /aulas + coorte detalhada de matrículas",
-    `• Snapshot Emusys: ${textoSeguro(dados.snapshot.status, "desconhecido")}`,
-    `• Atualizado em: ${
+    `📅 Informações atualizadas em: ${
       snapshotEmBrt(dados.snapshot.atualizadoEm, dados.referencia.fuso)
     }`,
-    `• Gerado em: ${
+    `📅 Relatório gerado em: ${
       dataCurta(dados.referencia.dataGeracao)
-    } às ${dados.referencia.hora} (${dados.referencia.fuso})`,
+    } às ${dados.referencia.hora}`,
     separador,
   ].join("\n");
+
+  return validarTextoPublicoRelatorio(texto);
 }

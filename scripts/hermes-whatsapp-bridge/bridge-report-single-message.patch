@@ -1,0 +1,20 @@
+diff --git a/scripts/whatsapp-bridge/bridge.js b/scripts/whatsapp-bridge/bridge.js
+--- a/scripts/whatsapp-bridge/bridge.js
++++ b/scripts/whatsapp-bridge/bridge.js
+@@ -32,1 +32,2 @@
+ import { matchesAllowedUser, parseAllowedUsers } from './allowlist.js';
++import { registerReportSingleMessageRoute } from './report-single-message.js';
+@@ -815,3 +816,12 @@
+ });
+-
++registerReportSingleMessageRoute({
++  app,
++  getSocket: () => sock,
++  getConnectionState: () => connectionState,
++  formatOutgoingMessage,
++  sendWithTimeout,
++  trackSentMessageId,
++  isAllowedGroupChatId,
++});
++
+ // Edit a previously sent message
