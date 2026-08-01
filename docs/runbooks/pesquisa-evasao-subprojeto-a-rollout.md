@@ -497,6 +497,16 @@ Na fila, snapshot ausente passa a ser distinguido de divergência real. O rótul
 `Contato da saída não registrado` descreve a falha técnica sem orientar a
 equipe a corrigir um cadastro de aluno que já está completo.
 
+A migration foi aplicada em produção como
+`20260801172237_pesquisa_evasao_backfill_telefone_responsavel_agosto_2026`.
+O transporte foi conferido antes da execução (4.241 bytes; SHA-256
+`94af2cf9aaf3ddc62d3e4990be1d664ce541dbea62bae9f8d1918845481baf92`).
+O postflight confirmou 10/10 snapshots preenchidos nos IDs esperados, nenhuma
+linha anterior a agosto marcada, nenhum ID inesperado e zero saída de menor
+ainda recuperável pelo contato do responsável. A fila de agosto ficou com 13
+saídas aptas, cinco bloqueadas por `motivo_nao_catalogado` e duas adultas
+bloqueadas por `sem_telefone`.
+
 ### Evidência do Bloco 4
 
 O registro do envio manual de teste `87bda8e9-b021-4c91-8070-c63cf65778c6`
@@ -833,15 +843,17 @@ Se o frontend for publicado fora de ordem:
 | Edge com JWT | APROVADO — `enviar-pesquisa-evasao` versão 41 ativa, `verify_jwt = true`; anônimo e JWT inválido retornam 401 |
 | Backfill de telefone de julho/2026 | APROVADO — migration remota `20260801013339`; 23 recuperados e 24 snapshots no total; o diagnóstico posterior identificou 12 contatos de responsável ainda elegíveis e uma movimentação sem vínculo |
 | Backfill do telefone do responsável | APROVADO — migration remota `20260801130436`; 12 snapshots vazios preenchidos, 4 snapshots de menores substituídos pela regra do responsável e movimentação `3312` vinculada ao aluno `1532` |
+| Backfill do responsável em agosto/2026 | APROVADO — migration remota `20260801172237`; 10/10 snapshots preenchidos nos IDs esperados, nenhuma linha de julho alterada e zero candidato recuperável restante |
 | Smoke no número interno | APROVADO — mensagem entregue somente em `***8047`, modo teste |
 | Auditoria completa | APROVADO — operador/Auth, assinatura, texto, template, caixa, destino, horários, preview, idempotência e provedor conferidos |
 | Fila de julho/2026 | APROVADO — 37 saídas, 33 aptas com ação `Enviar` e 4 bloqueadas exclusivamente por `motivo_nao_catalogado` (`3221`, `3298`, `3300`, `3361`) |
 | Prévia de menor | APROVADO — evasão `3400` mostrou o nome e o telefone mascarado da responsável; snapshot persistido com destinatário e template `responsavel`; prévia cancelada sem envio |
 | Smoke das telas de atendimento | APROVADO NO ESCOPO — Caixa de Entrada do Sucesso do Aluno permaneceu operacional; Pré-Atendimento continua fora deste aceite por decisão de Alf |
 | Merge/deploy do frontend | APROVADO — PR #19, merge `351bd1ade991510dd6a6cd56f811ae33e4a6b1ef`, Vercel produção `dpl_9aoQbKGD2jtrHwfGmC6aPZmLaP7R` pronta |
-| Webhook inbound | BLOQUEADOR PENDENTE — código local corrigido, mas runtime produtivo informado por Alf continua sem redeploy; não aceitar a anotação histórica de versão 76 sem nova prova |
+| Webhook inbound | DEPLOY APROVADO; E2E PENDENTE — versão 77 ativa, sem fallback global e sem gravação do payload integral; falta a prova manual do número correto e do número alheio |
 | Retorno ponta a ponta | PENDENTE DE REPETIÇÃO — repetir após redeploy no número interno e provar associação exclusiva à pesquisa exata |
 | Indicador de respostas | PENDENTE DE REVALIDAÇÃO — o teste em modo teste não incrementa o card por contrato, mas deve preencher `resposta_status`; resposta produtiva deve alimentar o indicador |
+| Fila de agosto/2026 | 13 aptas; 5 bloqueadas por `motivo_nao_catalogado`; 2 adultas bloqueadas por `sem_telefone` |
 | Pré-flight de idade da Prosódia V2 | APROVADO PARA O CONJUNTO VERIFICADO — 57 saídas desde 01/07/2026, 45 menores, 12 adultos e zero sem `data_nascimento` |
 | Prosódia V2 | LOCAL CONCLUÍDA; ROLLOUT NÃO AUTORIZADO — exige webhook verde antes de Edge, migration e frontend V2 |
 | Código alinhado com produção | APROVADO — PR #21, merge `6a7411de06ce1d42af7db23d004d61ec9e8bdb4f` |
