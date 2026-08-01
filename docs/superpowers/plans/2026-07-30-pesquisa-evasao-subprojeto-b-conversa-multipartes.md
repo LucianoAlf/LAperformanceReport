@@ -292,11 +292,12 @@ Este commit pode ser implantado antes do restante de B, pois reduz exposição s
 
 **Files:**
 
-- Create: `supabase/migrations/20260801183000_webhook_inbound_secrets_debug_retention.sql`
+- Create: `supabase/migrations/20260801220000_webhook_inbound_secrets_debug_retention.sql`
 - Create: `tests/webhookInboundSecurityMigration.test.mjs`
+- Create: `tests/fixtures/webhook_inbound_security_pg17.sql`
 - Create: `scripts/verify-webhook-inbound-security.sql`
 
-- [ ] **Step 1: Escrever testes estruturais vermelhos**
+- [x] **Step 1: Escrever testes estruturais vermelhos**
 
 Cobrir:
 
@@ -313,7 +314,7 @@ Cobrir:
 - código novo não volta a escrever em `webhook_debug_log`;
 - descrição do risco como retenção indevida e volume de dados pessoais, não como leitura por usuário logado.
 
-- [ ] **Step 2: Executar e confirmar a falha**
+- [x] **Step 2: Executar e confirmar a falha**
 
 ```powershell
 node --test tests/webhookInboundSecurityMigration.test.mjs
@@ -321,7 +322,7 @@ node --test tests/webhookInboundSecurityMigration.test.mjs
 
 Expected: FAIL por migração ausente.
 
-- [ ] **Step 3: Criar tabela de hashes**
+- [x] **Step 3: Criar tabela de hashes**
 
 Contrato:
 
@@ -349,7 +350,7 @@ grant select, insert, update, delete
 
 Não criar policy para `authenticated`.
 
-- [ ] **Step 4: Criar validador restrito**
+- [x] **Step 4: Criar validador restrito**
 
 ```sql
 public.validar_webhook_caixa_hash(
@@ -371,20 +372,26 @@ Requisitos:
 
 A Edge calcula o SHA-256 antes da RPC. O valor bruto não entra no corpo enviado ao banco.
 
-- [ ] **Step 5: Expurgar o legado e reduzir grants**
+- [x] **Step 5: Expurgar o legado e reduzir grants**
 
 Na reconciliação somente leitura de 2026-08-01, `webhook_debug_log` tinha RLS habilitada, zero policies e, portanto, já não era legível pelo frontend ou pelos agentes. O risco real é retenção indevida e volume: `2.290` payloads completos. O menor `created_at` correspondia a 2026-02-16 22:59:32 BRT e o maior a 2026-08-01 13:43:28 UTC (10:43:28 BRT). Não há cron de retenção.
 
 O conteúdo é debug, não fonte canônica. A migração deve:
 
 1. executar preflight com contagem e datas, sem selecionar `payload`;
-2. falhar fechado se o banco de produção não tiver exatamente `2.290` linhas; em banco de teste vazio, emitir `NOTICE` explícito e seguir;
-3. `truncate table public.webhook_debug_log` sem copiar os payloads para backup ou outra tabela;
-4. preservar RLS sem policy e revogar grants de `public`, `anon`, `authenticated`, Mila, Sol, Fabio, Lia, Maria e jobs como defesa em profundidade;
-5. manter a tabela legada bloqueada e sem novos escritores;
-6. criar `webhook_diagnosticos_sanitizados` com apenas as colunas tipadas do contrato da Task 1, sem `jsonb` livre;
-7. habilitar RLS sem policy nessa tabela, com escrita/leitura somente por service role;
-8. agendar expurgo diário dos diagnósticos sanitizados com mais de sete dias.
+2. travar a tabela durante o preflight, registrar a contagem encontrada no
+   momento da aplicação e emitir `NOTICE` explícito antes do expurgo; qualquer
+   volume positivo é válido e deve ser integralmente removido, sem comparar com
+   a fotografia histórica de `2.290` linhas;
+3. falhar fechado se a tabela não existir ou se houver escritor persistente
+   conhecido; em banco de ensaio vazio, emitir `NOTICE` explícito e seguir sem
+   tratar a ausência de linhas como erro;
+4. `truncate table public.webhook_debug_log` sem copiar os payloads para backup ou outra tabela;
+5. preservar RLS sem policy e revogar grants de `public`, `anon`, `authenticated`, Mila, Sol, Fabio, Lia, Maria, jobs e `service_role` como defesa em profundidade;
+6. manter a tabela legada bloqueada e sem novos escritores;
+7. criar `webhook_diagnosticos_sanitizados` com apenas as colunas tipadas do contrato da Task 1, sem `jsonb` livre;
+8. habilitar RLS sem policy nessa tabela, com escrita/leitura somente por service role;
+9. agendar expurgo diário dos diagnósticos sanitizados com mais de sete dias.
 
 Função de retenção:
 
@@ -394,7 +401,7 @@ public.expurgar_webhook_diagnosticos_sanitizados()
 
 Somente service role/cron executa.
 
-- [ ] **Step 6: Validar em banco local**
+- [x] **Step 6: Validar em banco local**
 
 ```powershell
 node --test tests/webhookInboundSecurityMigration.test.mjs
@@ -402,12 +409,17 @@ npx supabase db reset
 npx supabase db lint --local
 ```
 
-Expected: PASS.
+Expected: PASS. Se o stack Supabase completo não estiver iniciado, executar a
+fixture `tests/fixtures/webhook_inbound_security_pg17.sql` em PostgreSQL 17
+descartável. Ela precisa provar tanto `N > 0 → NOTICE → 0` quanto
+`0 → NOTICE expurgo ignorado`, além de ACL, RLS, validador, cron e retenção.
+O `db reset`/`db lint` do histórico completo continua obrigatório na Task 12
+quando o stack local estiver disponível.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
-git add -- supabase/migrations/20260801183000_webhook_inbound_secrets_debug_retention.sql tests/webhookInboundSecurityMigration.test.mjs scripts/verify-webhook-inbound-security.sql
+git add -- supabase/migrations/20260801220000_webhook_inbound_secrets_debug_retention.sql tests/webhookInboundSecurityMigration.test.mjs tests/fixtures/webhook_inbound_security_pg17.sql scripts/verify-webhook-inbound-security.sql
 git commit -m "feat: proteger segredo inbound e expurgar debug"
 ```
 
@@ -1330,7 +1342,7 @@ select count(*) from public.webhook_debug_log;
 
 select count(*)
 from public.webhook_diagnosticos_sanitizados
-where created_at < now() - interval '7 days';
+where occurred_at < now() - interval '7 days';
 ```
 
 Expected: `0` nas duas consultas. A tabela sanitizada não possui coluna de
@@ -1348,7 +1360,11 @@ Confirmar também:
 Ordem final por janelas:
 
 1. **B0a:** redução de logs de execução; smoke dos fluxos atuais; parar e reportar;
-2. **B0b:** migração de segredo/expurgo/retention; verificar `2.290 → 0`; parar e reportar;
+2. **B0b:** antes da escrita, contar `webhook_debug_log` sem ler `payload` e
+   exigir contagem maior que zero em produção; aplicar a migração, conferir no
+   `NOTICE` a mesma contagem dinâmica `N` e verificar `N → 0`; contagem zero é
+   aceita apenas em banco descartável/de ensaio e deve aparecer explicitamente
+   como `expurgo ignorado`; parar e reportar;
 3. **B1a:** health/configurador e provisionamento de todas as caixas sem enforcement;
 4. **B1b:** enforcement inbound e matriz HTTP; parar e reportar;
 5. **B2a:** corrigir ordem do pós-1ª aula e publicar Edge compatível V1/V2;
