@@ -61,3 +61,67 @@ export function contarFaixas(itens: Array<{ faixa: number }>): number {
   if (itens.length === 0) return 0;
   return Math.max(...itens.map((i) => i.faixa)) + 1;
 }
+
+/** Distancia em px do inicio do trilho (08:00) ate o horario dado. */
+export function posicaoPx(hhmm: string): number {
+  const minutos = minutosDeHHMM(hhmm);
+  return ((minutos - AGENDA_HORA_INICIO * 60) / 60) * AGENDA_LARGURA_HORA_PX;
+}
+
+export function larguraPx(duracaoMinutos: number): number {
+  return (duracaoMinutos / 60) * AGENDA_LARGURA_HORA_PX;
+}
+
+/** Minutos desde a meia-noite no relogio local. O app roda em BRT. */
+export function minutosAgora(agora: Date): number {
+  return agora.getHours() * 60 + agora.getMinutes();
+}
+
+export function dentroDoExpediente(minutos: number): boolean {
+  return minutos >= AGENDA_HORA_INICIO * 60 && minutos <= AGENDA_HORA_FIM * 60;
+}
+
+/** Aulas vivas neste minuto e quantas salas elas ocupam. Cancelada nao conta. */
+export function contarEmAulaAgora(
+  aulas: Array<{
+    hora_inicio: string;
+    duracao_minutos: number;
+    cancelada: boolean;
+    sala_nome: string | null;
+  }>,
+  minutos: number,
+): { aulas: number; salas: number } {
+  const salas = new Set<string>();
+  let total = 0;
+
+  for (const aula of aulas) {
+    if (aula.cancelada) continue;
+    const inicio = minutosDeHHMM(aula.hora_inicio);
+    if (minutos < inicio || minutos >= inicio + aula.duracao_minutos) continue;
+    total++;
+    if (aula.sala_nome) salas.add(aula.sala_nome);
+  }
+
+  return { aulas: total, salas: salas.size };
+}
+
+export function formatarFrescor(ultimaSync: string | null, agora: Date): string {
+  if (!ultimaSync) return 'sem dado de sincronizacao';
+
+  const minutos = Math.floor((agora.getTime() - new Date(ultimaSync).getTime()) / 60000);
+  if (minutos < 1) return 'agora mesmo';
+  if (minutos < 60) return `ha ${minutos} min`;
+
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24) return `ha ${horas} h`;
+  return `ha ${Math.floor(horas / 24)} d`;
+}
+
+// Janela em que aulas foram apagadas por um evento pontual (ver spec).
+// Nao ha backfill: a tela avisa em vez de mostrar um dia vazio como verdade.
+export const DIA_INCOMPLETO_INICIO = '2026-07-19';
+export const DIA_INCOMPLETO_FIM = '2026-08-01';
+
+export function diaIncompleto(data: string): boolean {
+  return data >= DIA_INCOMPLETO_INICIO && data <= DIA_INCOMPLETO_FIM;
+}
