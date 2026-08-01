@@ -7,6 +7,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getUazapiCredentials } from '../_shared/uazapi.ts';
+import { registrarDiagnosticoWebhook } from './diagnostics.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -16,6 +17,28 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+function diagnosticarWebhook(
+  correlationId: string,
+  caixaId: number | null,
+  eventType: 'messages' | 'messages_update' | 'unknown',
+  route: 'admin' | 'crm' | 'evasao' | 'pesquisa_primeira_aula' | 'ignored',
+  result: 'accepted' | 'duplicate' | 'rejected' | 'error',
+  extras: {
+    httpStatus?: number;
+    errorCode?: 'invalid_payload' | 'provider_error' | 'database_error' | 'internal_error';
+    durationMs?: number;
+  } = {},
+): void {
+  registrarDiagnosticoWebhook({
+    correlationId,
+    caixaId: caixaId ?? 0,
+    eventType,
+    route,
+    result,
+    ...extras,
+  });
+}
 
 // Baixar mídia via UAZAPI /message/download (retorna URL pública permanente)
 async function downloadMedia(
@@ -164,7 +187,6 @@ async function handleEdicaoMensagem(msg: any, editedId: string, supabase: any): 
     await supabase.from('admin_conversas')
       .update({ ultima_mensagem_preview: preview, updated_at: new Date().toISOString() })
       .eq('id', adminRows[0].conversa_id);
-    console.log(`[webhook-inbox] Edição aplicada em admin_mensagens (original ${editedId})`);
     return true;
   }
 
@@ -172,11 +194,9 @@ async function handleEdicaoMensagem(msg: any, editedId: string, supabase: any): 
   const { data: crmRows } = await supabase
     .from('crm_mensagens').update(patch).or(filtro).select('id');
   if (crmRows && crmRows.length) {
-    console.log(`[webhook-inbox] Edição aplicada em crm_mensagens (original ${editedId})`);
     return true;
   }
 
-  console.log(`[webhook-inbox] Edição recebida mas original ${editedId} não encontrada — segue fluxo normal`);
   return false;
 }
 
@@ -306,16 +326,13 @@ async function handleRespostaEvasao(
   try {
     // Ignorar mensagens enviadas por nós (fromMe = true)
     if (msg.key?.fromMe === true) {
-      console.log(`[webhook-evasao] Ignorando mensagem fromMe=true`);
       return { handled: false };
     }
-    
-    console.log(`[webhook-evasao] Verificando estado para telefone: ${phone}`);
     
     // Buscar somente o estado deste telefone.
     const phoneSuffix = phone.slice(-11); // Últimos 11 dígitos (DDD + número)
 
-    const { data: estado, error: estadoError } = await supabase
+    const { data: estado } = await supabase
       .from('conversa_estado_whatsapp')
       .select('*')
       .or(`whatsapp_numero.eq.${phone},whatsapp_numero.like.%${phoneSuffix}`)
@@ -323,18 +340,9 @@ async function handleRespostaEvasao(
       .gt('expira_em', new Date().toISOString())
       .maybeSingle();
 
-    console.log(`[webhook-evasao] Match do telefone: ${estado ? 'encontrado' : 'não encontrado'}`);
-
-    if (estadoError) {
-      console.error('[webhook-evasao] Erro ao buscar estado:', estadoError);
-    }
-
     if (!estado) {
-      console.log(`[webhook-evasao] Nenhum estado encontrado para ${phone}`);
       return { handled: false };
     }
-    
-    console.log(`[webhook-evasao] Estado encontrado: ${JSON.stringify(estado)}`)
 
     const contexto = estado.contexto || {};
     const pesquisaId = contexto.pesquisa_id;
@@ -369,7 +377,6 @@ async function handleRespostaEvasao(
       // Transcrever áudio via UAZAPI - UMA chamada só
       // O messageid vem do payload original (antes da normalização)
       const messageId = msg.key?.id;
-      console.log(`[webhook-evasao] Tentando transcrever áudio com messageid: ${messageId}`);
       
       if (messageId) {
         try {
@@ -396,26 +403,18 @@ async function handleRespostaEvasao(
             }
           );
           
-          console.log(`[webhook-evasao] Resposta UAZAPI: status=${transcribeResponse.status}`);
-          
           if (transcribeResponse.ok) {
             const transcribeData = await transcribeResponse.json();
-            console.log(`[webhook-evasao] Dados transcrição: ${JSON.stringify(transcribeData).substring(0, 200)}`);
-            
             if (transcribeData.transcription) {
               respostaTexto = transcribeData.transcription;
-              console.log(`[webhook-evasao] 🎤 Áudio transcrito: "${respostaTexto.substring(0, 100)}..."`);
             }
             if (transcribeData.fileURL) {
               respostaAudioUrl = transcribeData.fileURL;
             }
           } else {
-            const errText = await transcribeResponse.text();
-            console.error(`[webhook-evasao] Erro UAZAPI: ${transcribeResponse.status} - ${errText}`);
+            await transcribeResponse.text();
           }
-        } catch (transcribeErr) {
-          console.error('[webhook-evasao] Erro ao transcrever áudio:', transcribeErr);
-        }
+        } catch { /* transcrição é best effort; resposta original permanece */ }
       }
     } else if (isText) {
       respostaTexto = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
@@ -448,11 +447,8 @@ async function handleRespostaEvasao(
       })
       .eq('whatsapp_numero', phone);
 
-    console.log(`[webhook-evasao] ✅ Resposta registrada: pesquisa ${pesquisaId} (${respostaTipo})`);
-
     return { handled: true, pesquisa_id: pesquisaId };
-  } catch (err) {
-    console.error('[webhook-evasao] Erro:', err);
+  } catch {
     return { handled: false };
   }
 }
@@ -485,13 +481,11 @@ async function handleStatusUpdate(payload: any, supabase: any): Promise<{ atuali
       const status = update.status || update.update?.status || update.ack;
 
       if (!messageId || status === undefined) {
-        console.log('[webhook-status] Dados incompletos, ignorando');
         continue;
       }
 
       const novoStatus = mapStatus(status);
       if (!novoStatus) {
-        console.log('[webhook-status] Status desconhecido:', status);
         continue;
       }
 
@@ -503,13 +497,8 @@ async function handleStatusUpdate(payload: any, supabase: any): Promise<{ atuali
         .select('id, conversa_id')
         .maybeSingle();
 
-      if (error) {
-        console.error('[webhook-status] Erro ao atualizar crm:', error);
-      }
-
       if (data) {
         atualizadas++;
-        console.log(`[webhook-status] CRM Mensagem ${messageId} -> ${novoStatus}`);
         continue;
       }
 
@@ -522,17 +511,13 @@ async function handleStatusUpdate(payload: any, supabase: any): Promise<{ atuali
         .maybeSingle();
 
       if (adminError) {
-        console.error('[webhook-status] Erro ao atualizar admin:', adminError);
         continue;
       }
 
       if (adminData) {
         atualizadas++;
-        console.log(`[webhook-status] Admin Mensagem ${messageId} -> ${novoStatus}`);
       }
-    } catch (updateErr) {
-      console.error('[webhook-status] Erro individual:', updateErr);
-    }
+    } catch { /* atualização individual é best effort */ }
   }
 
   return { atualizadas };
@@ -560,7 +545,6 @@ async function handleAdminInboxMessage(
         .maybeSingle();
 
       if (existente) {
-        console.log('[webhook-admin] Mensagem duplicada, ignorando:', whatsappMessageId);
         return true;
       }
     }
@@ -619,7 +603,6 @@ async function handleAdminInboxMessage(
       if (!alunoGlobal) {
         // Nao é aluno cadastrado — criar conversa como contato externo.
         // Em caixa "todas", unidadeId é null: conversa fica sem unidade (visível só p/ admin).
-        console.log(`[webhook-admin] Aluno não encontrado para ${phone}, criando contato externo (unidade=${unidadeId || 'nenhuma'})`);
         return await processExternalAdminMessage(msg, phone, whatsappMessageId, caixaId, unidadeId, departamento, supabase, uazapiCreds);
       }
 
@@ -628,8 +611,7 @@ async function handleAdminInboxMessage(
     }
 
     return await processAdminMessage(msg, phone, whatsappMessageId, caixaId, aluno, departamento, supabase, uazapiCreds);
-  } catch (err) {
-    console.error('[webhook-admin] Erro:', err);
+  } catch {
     return false;
   }
 }
@@ -699,11 +681,9 @@ async function processAdminMessage(
       .single();
 
     if (criarErr) {
-      console.error('[webhook-admin] Erro ao criar conversa:', criarErr);
       return false;
     }
     conversa = novaConversa;
-    console.log(`[webhook-admin] Conversa admin criada: ${conversa.id} para aluno ${aluno.nome}`);
   }
 
   // Detectar tipo de mensagem
@@ -715,7 +695,6 @@ async function processAdminMessage(
     const persistentUrl = await downloadMedia(whatsappMessageId, uazapiCreds);
     if (persistentUrl) {
       midiaUrlFinal = persistentUrl;
-      console.log(`[webhook-admin] Mídia (${tipo}) baixada: ${persistentUrl.substring(0, 80)}...`);
     }
   }
 
@@ -740,7 +719,6 @@ async function processAdminMessage(
     });
 
   if (insertErr) {
-    console.error('[webhook-admin] Erro ao inserir mensagem:', insertErr);
     return false;
   }
 
@@ -752,7 +730,6 @@ async function processAdminMessage(
     p_whatsapp_jid: phone,
   });
 
-  console.log(`[webhook-admin] ✅ Mensagem de ${aluno.nome} salva (tipo: ${tipo})`);
   return true;
 }
 
@@ -797,11 +774,9 @@ async function processExternalAdminMessage(
       .single();
 
     if (criarErr) {
-      console.error('[webhook-admin] Erro ao criar conversa externa:', criarErr);
       return false;
     }
     conversa = novaConversa;
-    console.log(`[webhook-admin] Conversa externa criada: ${conversa.id} para telefone ${phone}`);
   } else {
     // Mantem o nome do contato sempre igual ao configurado no WhatsApp (pushName).
     // Atualiza sempre que vier, refletindo trocas de nome — sem criar nova conversa.
@@ -822,7 +797,6 @@ async function processExternalAdminMessage(
     const persistentUrl = await downloadMedia(whatsappMessageId, uazapiCreds);
     if (persistentUrl) {
       midiaUrlFinal = persistentUrl;
-      console.log(`[webhook-admin] Mídia externa (${tipo}) baixada: ${persistentUrl.substring(0, 80)}...`);
     }
   }
 
@@ -847,7 +821,6 @@ async function processExternalAdminMessage(
     });
 
   if (insertErr) {
-    console.error('[webhook-admin] Erro ao inserir mensagem externa:', insertErr);
     return false;
   }
 
@@ -859,7 +832,6 @@ async function processExternalAdminMessage(
     p_whatsapp_jid: phone,
   });
 
-  console.log(`[webhook-admin] ✅ Mensagem externa de ${msg.pushName || phone} salva (tipo: ${tipo})`);
   return true;
 }
 
@@ -879,11 +851,17 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  const correlationId = crypto.randomUUID();
+  const startedAt = performance.now();
+  let caixaIdForDiagnostics: number | null = null;
+  let eventTypeForDiagnostics: 'messages' | 'messages_update' | 'unknown' = 'unknown';
+
   try {
     // Capturar caixa_id do query param (?caixa_id=1)
     const url = new URL(req.url);
     const caixaIdParam = url.searchParams.get('caixa_id');
     const caixaIdFromUrl = caixaIdParam ? parseInt(caixaIdParam) : null;
+    caixaIdForDiagnostics = caixaIdFromUrl;
 
     // Health check — monitor de saúde chama ?_health=1 sem auth para testar se verify_jwt está correto
     if (url.searchParams.get('_health') === '1') {
@@ -893,24 +871,30 @@ serve(async (req: Request) => {
     }
 
     const payload = await req.json();
-    console.log(`[webhook] Payload recebido (caixa_id=${caixaIdFromUrl}):`, JSON.stringify(payload).substring(0, 800));
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
     // Rotear: messages_update vai para handler de status
     const isStatus = isStatusUpdate(payload);
-    console.log(`[webhook] isStatusUpdate=${isStatus}`);
-    
+
     if (isStatus) {
-      console.log('[webhook] Detectado: messages_update (status)');
+      eventTypeForDiagnostics = 'messages_update';
       const result = await handleStatusUpdate(payload, supabase);
+      diagnosticarWebhook(
+        correlationId,
+        caixaIdFromUrl,
+        eventTypeForDiagnostics,
+        'ignored',
+        'accepted',
+        { durationMs: performance.now() - startedAt },
+      );
       return new Response(
         JSON.stringify({ success: true, tipo: 'status_update', ...result }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('[webhook] Detectado: messages (nova mensagem)');
+    eventTypeForDiagnostics = 'messages';
 
     // Verificar se a caixa é administrativa (rotear para admin inbox)
     let isAdminCaixa = false;
@@ -927,7 +911,6 @@ serve(async (req: Request) => {
         // unidade_id null = caixa "Todas as unidades": roteia para a unidade real do aluno.
         adminCaixaUnidadeId = caixaInfo.unidade_id;
         adminCaixaDepartamento = caixaInfo.departamento || 'administrativo';
-        console.log(`[webhook] Caixa ${caixaIdFromUrl} é ADMINISTRATIVA (unidade: ${adminCaixaUnidadeId || 'TODAS'}, depto: ${adminCaixaDepartamento})`);
       }
     }
 
@@ -936,34 +919,42 @@ serve(async (req: Request) => {
     if (caixaIdFromUrl) {
       try {
         uazapiCreds = await getUazapiCredentials(supabase, { caixaId: caixaIdFromUrl });
-      } catch (e) {
-        console.log(`[webhook] Não foi possível resolver creds UAZAPI: ${e.message}`);
-      }
+      } catch { /* mídia segue sem download persistente */ }
     }
 
     // UAZAPI envia objeto único com estrutura própria
     // Normalizar para formato interno
     const normalizedMsg = normalizeUazapiPayload(payload);
     const messages = normalizedMsg ? [normalizedMsg] : (Array.isArray(payload) ? payload : payload.data ? [payload.data] : [payload]);
-    console.log(`[webhook] Total de mensagens no payload: ${messages.length}, normalizado: ${!!normalizedMsg}`);
 
     let processadas = 0;
 
     for (const msg of messages) {
       try {
-        console.log(`[webhook-inbox] Payload COMPLETO: ${JSON.stringify(msg).substring(0, 800)}`);
-        
         // Ignorar mensagens de grupo
         const remoteJid = msg.key?.remoteJid || msg.remoteJid || msg.from;
         if (!remoteJid || remoteJid.includes('@g.us')) {
-          console.log('[webhook-inbox] Ignorando mensagem de grupo:', remoteJid);
+          diagnosticarWebhook(
+            correlationId,
+            caixaIdFromUrl,
+            eventTypeForDiagnostics,
+            'ignored',
+            'rejected',
+            { errorCode: 'invalid_payload' },
+          );
           continue;
         }
 
         const phone = extractPhone(remoteJid);
-        console.log(`[webhook-inbox] Telefone extraído: ${phone} de ${remoteJid}, fromMe: ${msg.key?.fromMe}`);
         if (!phone) {
-          console.log('[webhook-inbox] Telefone vazio, ignorando');
+          diagnosticarWebhook(
+            correlationId,
+            caixaIdFromUrl,
+            eventTypeForDiagnostics,
+            'ignored',
+            'rejected',
+            { errorCode: 'invalid_payload' },
+          );
           continue;
         }
 
@@ -973,7 +964,13 @@ serve(async (req: Request) => {
         // (porque o usuário pode responder do mesmo dispositivo)
         const evasaoResult = await handleRespostaEvasao(msg, phone, supabase, caixaIdFromUrl);
         if (evasaoResult.handled) {
-          console.log(`[webhook-inbox] Resposta de evasão processada: ${evasaoResult.pesquisa_id}`);
+          diagnosticarWebhook(
+            correlationId,
+            caixaIdFromUrl,
+            eventTypeForDiagnostics,
+            'evasao',
+            'accepted',
+          );
           processadas++;
           continue;
         }
@@ -986,9 +983,22 @@ serve(async (req: Request) => {
         if (msg.buttonOrListid) {
           try {
             await supabase.functions.invoke('processar-resposta-pesquisa', { body: payload });
-            console.log(`[webhook-inbox] buttonOrListid '${msg.buttonOrListid}' repassado para processar-resposta-pesquisa`);
-          } catch (e) {
-            console.error('[webhook-inbox] erro ao repassar para processar-resposta-pesquisa:', e);
+            diagnosticarWebhook(
+              correlationId,
+              caixaIdFromUrl,
+              eventTypeForDiagnostics,
+              'pesquisa_primeira_aula',
+              'accepted',
+            );
+          } catch {
+            diagnosticarWebhook(
+              correlationId,
+              caixaIdFromUrl,
+              eventTypeForDiagnostics,
+              'pesquisa_primeira_aula',
+              'error',
+              { errorCode: 'internal_error' },
+            );
           }
         }
 
@@ -998,14 +1008,30 @@ serve(async (req: Request) => {
         // fromMe, pois edições fromMe também chegam aqui.
         if (msg.editedId) {
           const editou = await handleEdicaoMensagem(msg, msg.editedId, supabase);
-          if (editou) { processadas++; continue; }
+          if (editou) {
+            diagnosticarWebhook(
+              correlationId,
+              caixaIdFromUrl,
+              eventTypeForDiagnostics,
+              isAdminCaixa ? 'admin' : 'crm',
+              'accepted',
+            );
+            processadas++;
+            continue;
+          }
         }
 
         // Ignorar mensagens enviadas por nos (fromMe = true) — EXCETO em caixas admin,
         // onde toda mensagem enviada da caixa deve aparecer na conversa.
         // O check de duplicata (whatsapp_message_id) evita duplicar o que enviar-mensagem-admin já salvou.
         if (msg.key?.fromMe === true && !isAdminCaixa) {
-          console.log('[webhook-inbox] Ignorando mensagem fromMe (caixa CRM)');
+          diagnosticarWebhook(
+            correlationId,
+            caixaIdFromUrl,
+            eventTypeForDiagnostics,
+            'ignored',
+            'rejected',
+          );
           continue;
         }
 
@@ -1016,8 +1042,6 @@ serve(async (req: Request) => {
           const emoji = reaction.text || '';
 
           if (reactedMsgId) {
-            console.log(`[webhook-inbox] Reação recebida: "${emoji}" na msg ${reactedMsgId}`);
-
             // Buscar em crm_mensagens primeiro (sufixo para msgs de saída com prefixo phone:id)
             const { data: msgReagida } = await supabase
               .from('crm_mensagens')
@@ -1052,11 +1076,15 @@ serve(async (req: Request) => {
                 novasReacoes = [...semReacao, { emoji, de, timestamp: Date.now() }];
               }
               await supabase.from(tabelaReacao).update({ reacoes: novasReacoes }).eq('id', msgReagidaData.id);
-              console.log(`[webhook-inbox] ✅ Reação salva em ${tabelaReacao}: ${emoji || '(removida)'}`);
-            } else {
-              console.log(`[webhook-inbox] Mensagem reagida não encontrada: ${reactedMsgId}`);
             }
           }
+          diagnosticarWebhook(
+            correlationId,
+            caixaIdFromUrl,
+            eventTypeForDiagnostics,
+            isAdminCaixa ? 'admin' : 'crm',
+            'accepted',
+          );
           processadas++;
           continue;
         }
@@ -1070,9 +1098,22 @@ serve(async (req: Request) => {
           );
           if (adminHandled) {
             processadas++;
-            console.log(`[webhook-inbox] Mensagem roteada para admin inbox`);
+            diagnosticarWebhook(
+              correlationId,
+              caixaIdFromUrl,
+              eventTypeForDiagnostics,
+              'admin',
+              'accepted',
+            );
           } else {
-            console.error(`[webhook-inbox] Admin handler falhou para caixa administrativa ${caixaIdFromUrl}, mensagem descartada (nao roteia para CRM)`);
+            diagnosticarWebhook(
+              correlationId,
+              caixaIdFromUrl,
+              eventTypeForDiagnostics,
+              'admin',
+              'error',
+              { errorCode: 'database_error' },
+            );
           }
           // Caixa administrativa nunca alimenta o fluxo de CRM/Mila, com erro ou sem.
           continue;
@@ -1088,7 +1129,13 @@ serve(async (req: Request) => {
             .maybeSingle();
 
           if (existente) {
-            console.log('[webhook-inbox] Mensagem duplicada, ignorando:', whatsappMessageId);
+            diagnosticarWebhook(
+              correlationId,
+              caixaIdFromUrl,
+              eventTypeForDiagnostics,
+              'crm',
+              'duplicate',
+            );
             continue;
           }
         }
@@ -1102,12 +1149,16 @@ serve(async (req: Request) => {
           .maybeSingle();
 
         if (!lead) {
-          console.log('[webhook-inbox] Lead nao encontrado para telefone:', phone);
+          diagnosticarWebhook(
+            correlationId,
+            caixaIdFromUrl,
+            eventTypeForDiagnostics,
+            'crm',
+            'rejected',
+          );
           // Poderiamos criar um lead automaticamente aqui no futuro
           continue;
         }
-
-        console.log(`[webhook-inbox] Lead encontrado: ${lead.nome} (ID: ${lead.id})`);
 
         // Buscar ou criar conversa
         let { data: conversa } = await supabase
@@ -1131,11 +1182,17 @@ serve(async (req: Request) => {
             .single();
 
           if (criarErr) {
-            console.error('[webhook-inbox] Erro ao criar conversa:', criarErr);
+            diagnosticarWebhook(
+              correlationId,
+              caixaIdFromUrl,
+              eventTypeForDiagnostics,
+              'crm',
+              'error',
+              { errorCode: 'database_error' },
+            );
             continue;
           }
           conversa = novaConversa;
-          console.log(`[webhook-inbox] Conversa criada: ${conversa.id}`);
         } else {
           // Atualizar caixa_id (para a caixa que recebeu) e whatsapp_jid
           const updateData: Record<string, any> = { whatsapp_jid: phone };
@@ -1157,7 +1214,6 @@ serve(async (req: Request) => {
           const persistentUrl = await downloadMedia(whatsappMessageId, uazapiCreds);
           if (persistentUrl) {
             midiaUrlFinal = persistentUrl;
-            console.log(`[webhook-inbox] Mídia CRM (${tipo}) baixada: ${persistentUrl.substring(0, 80)}...`);
           }
         }
 
@@ -1181,7 +1237,14 @@ serve(async (req: Request) => {
           });
 
         if (insertErr) {
-          console.error('[webhook-inbox] Erro ao inserir mensagem:', insertErr);
+          diagnosticarWebhook(
+            correlationId,
+            caixaIdFromUrl,
+            eventTypeForDiagnostics,
+            'crm',
+            'error',
+            { errorCode: 'database_error' },
+          );
           continue;
         }
 
@@ -1195,7 +1258,13 @@ serve(async (req: Request) => {
           .eq('id', conversa.id);
 
         processadas++;
-        console.log(`[webhook-inbox] ✅ Mensagem de ${lead.nome} salva (tipo: ${tipo})`);
+        diagnosticarWebhook(
+          correlationId,
+          caixaIdFromUrl,
+          eventTypeForDiagnostics,
+          'crm',
+          'accepted',
+        );
 
         // Invocar Mila para processar a mensagem (async, não bloqueia)
         try {
@@ -1217,18 +1286,45 @@ serve(async (req: Request) => {
                   mensagem_tipo: tipo,
                 },
               }).then(() => {
-                console.log(`[webhook-inbox] 🤖 Mila invocada para conversa ${conversa.id}`);
-              }).catch((milaErr: any) => {
-                console.error('[webhook-inbox] Erro ao invocar Mila:', milaErr);
+                diagnosticarWebhook(
+                  correlationId,
+                  caixaIdFromUrl,
+                  eventTypeForDiagnostics,
+                  'crm',
+                  'accepted',
+                );
+              }).catch(() => {
+                diagnosticarWebhook(
+                  correlationId,
+                  caixaIdFromUrl,
+                  eventTypeForDiagnostics,
+                  'crm',
+                  'error',
+                  { errorCode: 'internal_error' },
+                );
               });
             }
           }
-        } catch (milaInvokeErr) {
-          console.error('[webhook-inbox] Erro ao verificar/invocar Mila:', milaInvokeErr);
+        } catch {
+          diagnosticarWebhook(
+            correlationId,
+            caixaIdFromUrl,
+            eventTypeForDiagnostics,
+            'crm',
+            'error',
+            { errorCode: 'database_error' },
+          );
         }
 
-      } catch (msgErr) {
-        console.error('[webhook-inbox] Erro ao processar mensagem individual:', msgErr);
+      } catch {
+        diagnosticarWebhook(
+          correlationId,
+          caixaIdFromUrl,
+          eventTypeForDiagnostics,
+          'ignored',
+          'error',
+          { errorCode: 'internal_error' },
+        );
       }
     }
 
@@ -1237,7 +1333,18 @@ serve(async (req: Request) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('[webhook] Erro geral:', error);
+    diagnosticarWebhook(
+      correlationId,
+      caixaIdForDiagnostics,
+      eventTypeForDiagnostics,
+      'ignored',
+      'error',
+      {
+        httpStatus: 500,
+        errorCode: 'internal_error',
+        durationMs: performance.now() - startedAt,
+      },
+    );
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Erro interno' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

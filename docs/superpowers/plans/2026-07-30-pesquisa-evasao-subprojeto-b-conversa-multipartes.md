@@ -4,16 +4,70 @@
 
 **Goal:** Transformar cada resposta de evasão em uma conversa segura, idempotente e multipartes, preservando textos e áudios, tratando adiamento e opt-out, protegendo o webhook inbound por caixa e eliminando payloads privados dos logs.
 
-**Architecture:** O webhook público continua com `verify_jwt=false`, porque é chamado pela UAZAPI, mas autentica a caixa por segredo forte antes de qualquer uso da service role. O segredo bruto nunca é persistido; a Edge calcula SHA-256 e uma RPC anônima de resposta booleana compara o hash em tabela backend-only ligada a `whatsapp_caixas`. Após autenticar, o roteador preserva todos os fluxos atuais, registra eventos de evasão de forma append-only e agenda consolidação/transcrição. O cabeçalho mantém estado; eventos e versões continuam imutáveis. Debug persistido é sanitizado e expira em sete dias.
+**Architecture:** O webhook público continua com `verify_jwt=false`, porque é chamado pela UAZAPI, mas autentica a caixa por segredo forte antes de qualquer uso da service role. O segredo bruto nunca é persistido; a Edge calcula SHA-256 e uma RPC anônima de resposta booleana compara o hash em tabela backend-only ligada a `whatsapp_caixas`. Após autenticar, o roteador preserva todos os fluxos atuais, registra eventos de evasão de forma append-only e agenda consolidação/transcrição. O cabeçalho mantém estado; eventos e versões continuam imutáveis. Conversas abertas antes do corte permanecem no motor legado; o multipartes é ativado primeiro em modo teste e, depois, somente para novas pesquisas. Debug persistido é sanitizado e expira em sete dias.
 
 **Tech Stack:** Supabase Edge Functions/Postgres/RLS/pg_cron, Deno/TypeScript, React 19, UAZAPI, Storage privado, Node `node:test`.
 
 ---
 
+## Estado reconciliado com produção em 01/08/2026
+
+Verificação somente leitura no projeto `ouqwbbermlzqqvtqwlul`:
+
+### Já concluído — preservar, não refazer
+
+- [x] Credenciais UAZAPI/WAHA retiradas do frontend pela migration `20260730180100_whatsapp_caixas_credenciais_privadas.sql`.
+- [x] Os três consumidores do frontend usam os contratos seguros de caixas.
+- [x] O fallback “Tentativa 2”, que podia associar uma resposta à família errada, foi removido e validado em produção com mensagem vinda de outro número.
+- [x] A Edge deixou de inserir payload bruto em `webhook_debug_log`; a última linha persistida é anterior ao redeploy corretivo.
+- [x] `pesquisa_evasao_mensagens`, `pesquisa_evasao_transcricoes` e `pesquisa_evasao_analises` já existem pela fundação do Subprojeto A.
+- [x] O índice único `pesquisa_evasao_mensagens_provider_uidx` sobre `(caixa_id, provider_message_id)` já existe; B deve verificá-lo, não recriá-lo.
+
+### Ainda pendente
+
+- [ ] Remover PII dos logs de execução da Edge. O código ainda registra telefone, estado serializado, trecho de payload, corpo da transcrição e trecho do texto transcrito.
+- [ ] Expurgar as `2.290` linhas legadas de `webhook_debug_log` e criar retenção de no máximo sete dias para diagnóstico tipado e sanitizado.
+- [ ] Criar `whatsapp_caixa_webhook_secrets`, provisionar um segredo por caixa e rejeitar o inbound antes da service role.
+- [ ] Ativar ingestão append-only: as três tabelas multipartes estão vazias em produção e a resposta ainda é consolidada diretamente nos campos legados.
+- [ ] Corrigir a ordem de roteamento: `buttonOrListid` da pesquisa pós-1ª aula precisa ser encaminhado antes de qualquer `continue` específico da evasão.
+- [ ] Implementar transcrição, consolidação, opt-out e revisão sobre os eventos imutáveis.
+
+### Decisão de acesso vigente
+
+- Qualquer usuário interno ativo pode ler e revisar a pesquisa, em qualquer unidade.
+- Não existe gate `sucesso_aluno.evasao.*` no Subprojeto B.
+- Roles de agentes Mila, Sol, Fabio e Lia continuam sem leitura direta das respostas privadas.
+- Toda escrita humana ocorre por RPC auditada, com usuário e horário; unidade é filtro operacional, não autorização.
+
+## Ordem revisada por janelas curtas
+
+Cada janela tem deploy, smoke e ponto de parada próprios. Não trocar o motor de recepção enquanto houver uma conversa familiar aberta no motor atual.
+
+1. **Janela B0 — privacidade sem mudança de roteamento**
+   - Task 1: sanitizar logs de execução e publicar a Edge sem mudar a persistência de respostas;
+   - Task 2: expurgar o legado, reduzir grants e instalar diagnóstico sanitizado com retenção de sete dias.
+2. **Janela B1 — autenticação inbound por caixa**
+   - criar tabela/hash e validador booleano;
+   - proteger health/configurador;
+   - provisionar todas as caixas enquanto o webhook ainda aceita o contrato atual;
+   - somente depois ativar enforcement e validar a matriz `400/401/403/200`.
+3. **Janela B2 — motor multipartes em modo teste**
+   - preservar primeiro o roteamento pós-1ª aula;
+   - fortalecer o schema já existente e adicionar `resposta_ingestao_versao`;
+   - manter todas as pesquisas existentes em `legado_v1`;
+   - ativar `multipartes_v2` apenas numa pesquisa de teste controlada;
+   - validar texto, áudio, duplicata, ambiguidade, adiamento e opt-out.
+4. **Janela B3 — novas conversas e revisão**
+   - alterar, por migration versionada, apenas o default de novas pesquisas para `multipartes_v2`;
+   - manter pesquisas já abertas em `legado_v1` até encerrarem ou expirarem;
+   - publicar fila/timeline de revisão e monitorar por pelo menos uma hora.
+
+O início de cada janela exige confirmação explícita. Falha em qualquer smoke interrompe a janela; não corrigir em produção no improviso.
+
 ## Dependências e fronteiras
 
-- Implementar sobre a fundação do Subprojeto A e seus contratos de RLS.
-- Não iniciar a lógica multipartes antes de o schema de A existir em homologação.
+- Implementar sobre a fundação do Subprojeto A e seu contrato de usuário interno ativo.
+- O schema multipartes de A já existe em produção, mas está vazio; fortalecer de forma aditiva.
 - A auditoria somente leitura da VPS pode ocorrer em paralelo; não bloqueia B.
 - Preservar no `webhook-whatsapp-inbox`:
   - inbox administrativa;
@@ -25,8 +79,8 @@
   - deduplicação atual.
 - Não decidir timing do primeiro disparo nem lembretes; Subprojeto C.
 - `recusada_opt_out` bloqueia reenvio/lembrete da pesquisa, mas não vira causa de evasão nem resposta válida.
-- Não guardar segredo inbound em texto puro em `whatsapp_caixas`: a tabela é legível por usuários autenticados na configuração auditada e contém credenciais legadas.
-- Antes do go-live de B, retirar também `uazapi_token`/`waha_api_key` dos contratos diretos do frontend; proteger somente o segredo novo deixaria credenciais equivalentes expostas.
+- Não guardar segredo inbound em texto puro em `whatsapp_caixas`; persistir somente o hash em tabela backend-only.
+- A retirada de `uazapi_token`/`waha_api_key` dos contratos do frontend já foi concluída no Subprojeto A e é pré-condição a preservar.
 
 ## Contrato de autenticação inbound
 
@@ -96,7 +150,12 @@ resposta_status = pronta_para_revisao
 janela total, salvo encerramento humano ou opt-out
 ```
 
-## Task 1: Remover imediatamente payload bruto e criar teste de não regressão
+## Task 1: Sanitizar logs de execução sem alterar o motor de respostas — PRIMEIRA TAREFA
+
+> **Estado:** a gravação de payload bruto em tabela já parou. Esta tarefa trata o
+> restante: PII e conteúdo ainda emitidos nos logs de execução da Edge. É o
+> primeiro passo recomendado porque reduz exposição sem alterar autenticação,
+> roteamento ou persistência da resposta.
 
 **Files:**
 
@@ -104,8 +163,10 @@ janela total, salvo encerramento humano ou opt-out
 - Create: `supabase/functions/webhook-whatsapp-inbox/diagnostics.test.ts`
 - Modify: `supabase/functions/webhook-whatsapp-inbox/index.ts`
 - Create: `tests/webhookWhatsAppPrivacidade.test.mjs`
+- Modify: `docs/MAPA-SISTEMA.md`
+- Modify: `.claude/memory/integracao-infra.md`
 
-- [ ] **Step 1: Escrever testes vermelhos**
+- [x] **Step 1: Escrever testes vermelhos**
 
 Exigir ausência de:
 
@@ -117,7 +178,32 @@ Payload COMPLETO
 JSON.stringify(estado)
 ```
 
+Cobrir também os padrões encontrados no código atual:
+
+```text
+telefone normalizado ou original
+corpo bruto da resposta UAZAPI
+URL de mídia ou storage
+trecho da transcrição
+texto livre de erro retornado pelo provedor
+```
+
 Exigir que o diagnóstico sanitizado só aceite:
+
+```text
+correlation_id
+caixa_id
+event_type
+route
+result
+http_status
+error_code de enum fechado
+duration_ms
+```
+
+O logger recebe um objeto tipado. Não recebe `payload`, mensagem, telefone,
+nome, URL, transcrição, token ou corpo de erro externo, nem mesmo para aplicar
+redação depois.
 
 ```ts
 interface WebhookDiagnostic {
@@ -126,6 +212,9 @@ interface WebhookDiagnostic {
   event_type: 'messages' | 'messages_update' | 'unknown';
   route: 'admin' | 'crm' | 'evasao' | 'pesquisa_primeira_aula' | 'ignored';
   result: 'accepted' | 'duplicate' | 'rejected' | 'error';
+  http_status?: number;
+  error_code?: 'invalid_payload' | 'provider_error' | 'database_error' | 'internal_error';
+  duration_ms?: number;
   provider_message_id_hash?: string;
   occurred_at: string;
 }
@@ -144,25 +233,25 @@ O helper deve remover/rejeitar:
 - transcrição;
 - mídia.
 
-- [ ] **Step 2: Executar e confirmar a falha**
+- [x] **Step 2: Executar e confirmar a falha**
 
 ```powershell
 deno test supabase/functions/webhook-whatsapp-inbox/diagnostics.test.ts
-node --test tests/webhookWhatsAppPrivacidade.test.mjs
+node --test tests/webhookWhatsAppPrivacidade.test.mjs tests/pesquisaEvasaoCanonica.test.mjs
 ```
 
 Expected: FAIL enquanto o webhook ainda grava/loga payload.
 
-- [ ] **Step 3: Implementar o helper sanitizado**
+- [x] **Step 3: Implementar o helper sanitizado**
 
 Usar correlation ID aleatório e, se necessário, SHA-256 do provider message ID. Nunca hashear telefone como substituto de anonimização; telefones têm espaço pequeno e são reversíveis por dicionário.
 
-- [ ] **Step 4: Limpar logs de execução**
+- [x] **Step 4: Limpar logs de execução**
 
 Trocar logs sensíveis por:
 
 ```ts
-console.log('[webhook]', {
+registrarDiagnosticoWebhook({
   correlationId,
   caixaId,
   eventType,
@@ -179,16 +268,18 @@ Erros externos devem registrar apenas:
 
 Não registrar response body da UAZAPI quando puder conter mídia, telefone ou mensagem.
 
-- [ ] **Step 5: Executar testes**
+- [x] **Step 5: Executar testes**
 
 ```powershell
 deno test supabase/functions/webhook-whatsapp-inbox/diagnostics.test.ts
 node --test tests/webhookWhatsAppPrivacidade.test.mjs
 ```
 
-Expected: PASS.
+Expected: PASS. O diff de `index.ts` deve conter somente substituição de logs;
+nenhuma condição, `continue`, chamada RPC ou escrita em tabela pode mudar nesta
+tarefa.
 
-- [ ] **Step 6: Commit independente**
+- [x] **Step 6: Commit independente**
 
 ```powershell
 git add -- supabase/functions/webhook-whatsapp-inbox/diagnostics.ts supabase/functions/webhook-whatsapp-inbox/diagnostics.test.ts supabase/functions/webhook-whatsapp-inbox/index.ts tests/webhookWhatsAppPrivacidade.test.mjs
@@ -197,11 +288,11 @@ git commit -m "fix: remover payload privado dos logs do webhook"
 
 Este commit pode ser implantado antes do restante de B, pois reduz exposição sem mudar autenticação nem roteamento.
 
-## Task 2: Criar segredo backend-only, validador booleano e expurgo
+## Task 2: Criar segredo backend-only, validador booleano e expurgar o legado
 
 **Files:**
 
-- Create: `supabase/migrations/20260730180000_webhook_inbound_secrets_debug_retention.sql`
+- Create: `supabase/migrations/20260801183000_webhook_inbound_secrets_debug_retention.sql`
 - Create: `tests/webhookInboundSecurityMigration.test.mjs`
 - Create: `scripts/verify-webhook-inbound-security.sql`
 
@@ -218,6 +309,8 @@ Cobrir:
 - expurgo integral do legado;
 - retenção automática de sete dias;
 - preservação da barreira atual de leitura de `webhook_debug_log`: RLS habilitada e nenhuma policy para frontend/agentes;
+- tabela nova `webhook_diagnosticos_sanitizados` sem coluna livre `payload/json/body/message`;
+- código novo não volta a escrever em `webhook_debug_log`;
 - descrição do risco como retenção indevida e volume de dados pessoais, não como leitura por usuário logado.
 
 - [ ] **Step 2: Executar e confirmar a falha**
@@ -280,21 +373,23 @@ A Edge calcula o SHA-256 antes da RPC. O valor bruto não entra no corpo enviado
 
 - [ ] **Step 5: Expurgar o legado e reduzir grants**
 
-Na verificação de 2026-07-30, `webhook_debug_log` tinha RLS habilitada, zero policies e, portanto, já não era legível pelo frontend ou pelos agentes. O risco real é retenção indevida e volume: 2.154 payloads completos acumulados desde 2026-02-17.
+Na reconciliação somente leitura de 2026-08-01, `webhook_debug_log` tinha RLS habilitada, zero policies e, portanto, já não era legível pelo frontend ou pelos agentes. O risco real é retenção indevida e volume: `2.290` payloads completos. O menor `created_at` correspondia a 2026-02-16 22:59:32 BRT e o maior a 2026-08-01 13:43:28 UTC (10:43:28 BRT). Não há cron de retenção.
 
 O conteúdo é debug, não fonte canônica. A migração deve:
 
-1. registrar em comentário/runbook a contagem prévia;
-2. `truncate table public.webhook_debug_log`;
-3. preservar RLS sem policy de leitura e revogar grants de `anon`, `authenticated`, Mila e Sol como defesa em profundidade;
-4. manter apenas service role;
-5. garantir coluna `created_at`;
-6. agendar expurgo diário de linhas sanitizadas com mais de sete dias.
+1. executar preflight com contagem e datas, sem selecionar `payload`;
+2. falhar fechado se o banco de produção não tiver exatamente `2.290` linhas; em banco de teste vazio, emitir `NOTICE` explícito e seguir;
+3. `truncate table public.webhook_debug_log` sem copiar os payloads para backup ou outra tabela;
+4. preservar RLS sem policy e revogar grants de `public`, `anon`, `authenticated`, Mila, Sol, Fabio, Lia, Maria e jobs como defesa em profundidade;
+5. manter a tabela legada bloqueada e sem novos escritores;
+6. criar `webhook_diagnosticos_sanitizados` com apenas as colunas tipadas do contrato da Task 1, sem `jsonb` livre;
+7. habilitar RLS sem policy nessa tabela, com escrita/leitura somente por service role;
+8. agendar expurgo diário dos diagnósticos sanitizados com mais de sete dias.
 
 Função de retenção:
 
 ```sql
-public.expurgar_webhook_debug_log_sanitizado()
+public.expurgar_webhook_diagnosticos_sanitizados()
 ```
 
 Somente service role/cron executa.
@@ -312,98 +407,25 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```powershell
-git add -- supabase/migrations/20260730180000_webhook_inbound_secrets_debug_retention.sql tests/webhookInboundSecurityMigration.test.mjs scripts/verify-webhook-inbound-security.sql
+git add -- supabase/migrations/20260801183000_webhook_inbound_secrets_debug_retention.sql tests/webhookInboundSecurityMigration.test.mjs scripts/verify-webhook-inbound-security.sql
 git commit -m "feat: proteger segredo inbound e expurgar debug"
 ```
 
-## Task 2A: Fechar a leitura direta de credenciais em `whatsapp_caixas`
+## Task 2A: Fechar a leitura direta de credenciais em `whatsapp_caixas` — CONCLUÍDA
 
-> **Antecipada em 31/07/2026:** esta tarefa foi separada como gate da
-> homologação do Plano A e implementada localmente na migration
-> `20260730180100_whatsapp_caixas_credenciais_privadas.sql`. Ao executar o
-> Subprojeto B, validar e preservar esse contrato; não recriar uma segunda
-> migration concorrente.
+> **Concluída em produção no rollout do Subprojeto A.** A migration
+> `20260730180100_whatsapp_caixas_credenciais_privadas.sql` está aplicada; os
+> três consumidores foram migrados; `authenticated` não obtém linhas da tabela
+> sensível e as RPCs seguras não retornam `uazapi_token` nem `waha_api_key`.
 
-**Files:**
+- [x] Read models seguros criados.
+- [x] Leitura direta do frontend removida.
+- [x] `useWhatsAppCaixas.ts`, `CaixasManager.tsx` e `NovaConversaModal.tsx` migrados.
+- [x] Caixa de Entrada do Sucesso do Aluno validada após o deploy.
 
-- Create: `supabase/migrations/20260730180100_whatsapp_caixas_credenciais_privadas.sql`
-- Modify: `src/components/App/PreAtendimento/hooks/useWhatsAppCaixas.ts`
-- Modify: `src/components/App/PreAtendimento/components/chat/CaixasManager.tsx`
-- Modify: `src/components/App/Administrativo/CaixaEntrada/NovaConversaModal.tsx`
-- Create: `tests/whatsappCaixasCredenciaisPrivadas.test.mjs`
-
-- [ ] **Step 1: Escrever testes vermelhos**
-
-Cobrir:
-
-- `authenticated` perde `SELECT` direto em `whatsapp_caixas`;
-- RPC de listagem não retorna `uazapi_token`, `waha_api_key` nem segredo inbound;
-- operação administrativa exige JWT e permissão própria;
-- tokens são write-only: podem ser substituídos por administrador, nunca relidos no navegador;
-- hooks/componentes deixam de fazer `.from('whatsapp_caixas')`;
-- Edge Functions com service role continuam resolvendo credenciais.
-
-- [ ] **Step 2: Criar read model seguro**
-
-Criar RPC `listar_whatsapp_caixas_seguras(p_contexto text)` que retorna somente:
-
-```text
-id, nome, numero_mascarado, provedor, ativo, conectado,
-unidade_id, funcao, departamento, cor, permite_envio
-```
-
-Regras:
-
-- `SECURITY DEFINER`;
-- permissão adequada ao contexto;
-- escopo por unidade;
-- `search_path` fixo;
-- nenhum `select *`;
-- sem URL contendo credencial;
-- sem token, API key ou hash.
-
-- [ ] **Step 3: Criar operação administrativa write-only**
-
-Configuração sensível deve passar por Edge/RPC administrativa que:
-
-- exige usuário autenticado e permissão de gestão;
-- aceita novo token sem devolver o anterior;
-- registra apenas “credencial rotacionada”, usuário e timestamp;
-- mascara erro externo;
-- nunca grava token em log de auditoria.
-
-O `configurar-webhook-caixa` da Task 4 pode usar service role para ler o token depois de autorizado.
-
-- [ ] **Step 4: Revogar acesso direto**
-
-Na migração:
-
-```sql
-revoke all on public.whatsapp_caixas from anon, authenticated;
-```
-
-Recriar somente os grants indispensáveis aos roles backend. Revisar policies antigas `USING (true)` e removê-las; RLS não substitui revogação de coluna sensível quando o cliente não precisa da tabela.
-
-- [ ] **Step 5: Migrar consumidores do frontend**
-
-Substituir leituras/escritas diretas nos três arquivos listados pela RPC segura e operação administrativa. O tipo do frontend não deve conter campos de segredo.
-
-- [ ] **Step 6: Testar**
-
-```powershell
-node --test tests/whatsappCaixasCredenciaisPrivadas.test.mjs
-npm run build
-npx supabase db lint --local
-```
-
-Expected: PASS.
-
-- [ ] **Step 7: Commit**
-
-```powershell
-git add -- supabase/migrations/20260730180100_whatsapp_caixas_credenciais_privadas.sql src/components/App/PreAtendimento/hooks/useWhatsAppCaixas.ts src/components/App/PreAtendimento/components/chat/CaixasManager.tsx src/components/App/Administrativo/CaixaEntrada/NovaConversaModal.tsx tests/whatsappCaixasCredenciaisPrivadas.test.mjs
-git commit -m "fix: retirar credenciais whatsapp do frontend"
-```
+**Regra para B:** não criar migration concorrente, não devolver tokens aos
+tipos do frontend e manter `tests/whatsappCaixasCredenciaisPrivadas.test.mjs`
+na suíte de regressão.
 
 ## Task 3: Implementar autenticação antes da service role
 
@@ -671,7 +693,7 @@ select count(*) from public.webhook_debug_log;
 
 Expected: `0`.
 
-O runbook descreve o incidente como retenção indevida de dados pessoais e crescimento sem expurgo. Não afirmar que os 2.154 payloads estavam expostos a qualquer usuário autenticado.
+O runbook descreve o incidente como retenção indevida de dados pessoais e crescimento sem expurgo. Não afirmar que os `2.290` payloads estavam expostos a qualquer usuário autenticado.
 
 - [ ] **Step 4: Configurar health token**
 
@@ -737,12 +759,18 @@ git commit -m "docs: registrar rollout seguro do webhook inbound"
 
 ## Task 6: Refatorar ingestão de evasão para eventos append-only
 
+> **Pré-requisito de execução:** concluir primeiro a Task 7 (roteamento da
+> pesquisa pós-1ª aula), ainda que ela apareça abaixo por continuidade histórica
+> do documento. A mudança entra com compatibilidade por pesquisa; nenhuma
+> conversa aberta troca de motor.
+
 **Files:**
 
 - Create: `supabase/functions/webhook-whatsapp-inbox/evasao.ts`
 - Create: `supabase/functions/webhook-whatsapp-inbox/evasao.test.ts`
 - Modify: `supabase/functions/webhook-whatsapp-inbox/index.ts`
-- Create: `supabase/migrations/20260730180500_pesquisa_evasao_multipartes_constraints.sql`
+- Create: `supabase/migrations/20260801190000_pesquisa_evasao_multipartes_constraints.sql`
+- Create: `supabase/migrations/20260801190500_pesquisa_evasao_multipartes_ativacao_novas.sql`
 - Create: `tests/pesquisaEvasaoMultipartesSchema.test.mjs`
 
 - [ ] **Step 1: Escrever testes vermelhos de resolução**
@@ -762,13 +790,15 @@ Casos:
 
 Casos:
 
-- primeiro texto cria evento e muda para `coletando`;
+- em pesquisa `multipartes_v2`, primeiro texto cria evento e muda para `coletando`;
 - segundo texto cria segunda linha, sem sobrescrever a primeira;
 - texto + áudio + texto preserva timestamps e ordem;
 - parte não substantiva continua `coletando`;
 - conteúdo substantivo atualiza `ultima_interacao_em`;
 - mensagem após revisão cria nova versão de análise;
 - janela expirada não é associada silenciosamente.
+- pesquisa `legado_v1` continua no caminho atual, sem escrever nas tabelas multipartes;
+- uma pesquisa aberta antes do corte nunca muda automaticamente de versão.
 
 - [ ] **Step 3: Implementar tipos e adapters**
 
@@ -796,7 +826,9 @@ export async function ingerirEvento(
 Em uma nova migração aditiva, sem reescrever a migração já implantada por A:
 
 - unique parcial para pesquisa aberta por `(caixa_id, telefone_destino_snapshot)` em produção;
-- unique `(caixa_id, provider_message_id)` nas mensagens;
+- verificar e preservar o unique já existente `(caixa_id, provider_message_id)` nas mensagens;
+- adicionar em `pesquisa_evasao` a coluna `resposta_ingestao_versao text not null default 'legado_v1'` com check em `('legado_v1','multipartes_v2')`;
+- manter todas as linhas existentes em `legado_v1`;
 - trigger impede `UPDATE/DELETE` de conteúdo original;
 - campos de processamento não sobrescrevem texto/áudio;
 - `resolution_status in ('resolvida','sem_pesquisa','ambigua')`;
@@ -806,13 +838,14 @@ Em uma nova migração aditiva, sem reescrever a migração já implantada por A
 
 Para cada evento válido:
 
-1. tentar insert idempotente;
-2. se duplicado, retornar `duplicate`;
-3. resolver pesquisa;
-4. vincular quando inequívoco;
-5. atualizar somente timestamps/status do cabeçalho;
-6. manter `pesquisa_evasao.resposta_texto/audio_url` como compatibilidade derivada, sem ser fonte canônica;
-7. nunca marcar `respondido` no primeiro fragmento.
+1. resolver a pesquisa sem fallback global;
+2. se `resposta_ingestao_versao='legado_v1'`, executar exatamente o caminho atual e não tocar nas tabelas multipartes;
+3. se `multipartes_v2`, tentar insert idempotente;
+4. se duplicado, retornar `duplicate`;
+5. vincular quando inequívoco;
+6. atualizar somente timestamps/status do cabeçalho;
+7. manter `pesquisa_evasao.resposta_texto/audio_url` como compatibilidade derivada, sem ser fonte canônica;
+8. nunca marcar `respondido` no primeiro fragmento.
 
 - [ ] **Step 6: Executar testes**
 
@@ -826,9 +859,24 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```powershell
-git add -- supabase/functions/webhook-whatsapp-inbox/evasao.ts supabase/functions/webhook-whatsapp-inbox/evasao.test.ts supabase/functions/webhook-whatsapp-inbox/index.ts supabase/migrations/20260730180500_pesquisa_evasao_multipartes_constraints.sql tests/pesquisaEvasaoMultipartesSchema.test.mjs
+git add -- supabase/functions/webhook-whatsapp-inbox/evasao.ts supabase/functions/webhook-whatsapp-inbox/evasao.test.ts supabase/functions/webhook-whatsapp-inbox/index.ts supabase/migrations/20260801190000_pesquisa_evasao_multipartes_constraints.sql tests/pesquisaEvasaoMultipartesSchema.test.mjs
 git commit -m "feat: registrar conversa de evasao em eventos"
 ```
+
+- [ ] **Step 8: Ativar primeiro somente uma pesquisa de teste**
+
+Sem alterar o default, selecionar uma pesquisa `modo_teste=true`, sem resposta
+anterior e no número interno autorizado. Marcar somente essa linha como
+`multipartes_v2`, executar o roteiro multipartes completo e conferir que
+nenhuma pesquisa `legado_v1` recebeu evento.
+
+- [ ] **Step 9: Ativar V2 apenas para novas pesquisas**
+
+Depois do aceite do modo teste e em janela separada, aplicar
+`20260801190500_pesquisa_evasao_multipartes_ativacao_novas.sql`, que altera
+somente o default de `resposta_ingestao_versao` para `multipartes_v2`. Não
+atualizar linhas existentes. O verificador deve provar que pesquisas abertas
+antes da migration permanecem `legado_v1`.
 
 ## Task 7: Preservar explicitamente a pesquisa pós-1ª aula
 
@@ -962,7 +1010,7 @@ git commit -m "feat: transcrever audio de evasao de forma assincrona"
 
 **Files:**
 
-- Create: `supabase/migrations/20260730181000_pesquisa_evasao_consolidacao_worker.sql`
+- Create: `supabase/migrations/20260801191500_pesquisa_evasao_consolidacao_worker.sql`
 - Create: `supabase/functions/processar-conversa-evasao/index.ts`
 - Create: `supabase/functions/processar-conversa-evasao/contract.ts`
 - Create: `supabase/functions/processar-conversa-evasao/contract.test.ts`
@@ -1046,7 +1094,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```powershell
-git add -- supabase/migrations/20260730181000_pesquisa_evasao_consolidacao_worker.sql supabase/functions/processar-conversa-evasao/index.ts supabase/functions/processar-conversa-evasao/contract.ts supabase/functions/processar-conversa-evasao/contract.test.ts supabase/config.toml tests/pesquisaEvasaoConsolidacao.test.mjs
+git add -- supabase/migrations/20260801191500_pesquisa_evasao_consolidacao_worker.sql supabase/functions/processar-conversa-evasao/index.ts supabase/functions/processar-conversa-evasao/contract.ts supabase/functions/processar-conversa-evasao/contract.test.ts supabase/config.toml tests/pesquisaEvasaoConsolidacao.test.mjs
 git commit -m "feat: consolidar respostas multipartes de evasao"
 ```
 
@@ -1129,7 +1177,7 @@ git commit -m "feat: respeitar opt-out da pesquisa de evasao"
 - Create: `src/components/App/SucessoCliente/FilaRevisaoEvasao.tsx`
 - Modify: `src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx`
 - Modify: `src/components/App/SucessoCliente/pesquisaEvasao.types.ts`
-- Create: `supabase/migrations/20260730182000_pesquisa_evasao_revisao_rpcs.sql`
+- Create: `supabase/migrations/20260801193000_pesquisa_evasao_revisao_rpcs.sql`
 - Create: `tests/pesquisaEvasaoConversaFrontend.test.mjs`
 
 - [ ] **Step 1: Escrever testes vermelhos**
@@ -1143,8 +1191,9 @@ Exigir:
 - opt-out aparece como recusa e sem botão reenviar;
 - ambiguidade aparece em triagem;
 - consolidação é separada dos eventos;
-- revisão exige `sucesso_aluno.evasao.revisar`;
-- usuário sem `ver` não recebe dados via RPC.
+- usuário interno ativo pode revisar em qualquer unidade;
+- usuário autenticado sem vínculo interno ativo não recebe dados via RPC;
+- roles de agente não recebem acesso direto às tabelas privadas.
 
 - [ ] **Step 2: Criar RPCs governadas**
 
@@ -1158,9 +1207,9 @@ resolver_mensagem_evasao_ambigua(p_mensagem_id uuid, p_pesquisa_id uuid)
 
 Regras:
 
-- `get/listar` exigem `ver`;
-- iniciar/concluir/triagem exigem `revisar`;
-- unidade sempre validada;
+- `get/listar` exigem `fn_pesquisa_evasao_usuario_interno_ativo()`;
+- iniciar/concluir/triagem exigem usuário interno ativo e registram o operador;
+- unidade é filtro de consulta, não gate de autorização;
 - `search_path` fixo;
 - grants só a `authenticated` e `service_role`;
 - sem acesso de `anon`;
@@ -1199,7 +1248,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add -- src/components/App/SucessoCliente/ConversaPesquisaEvasao.tsx src/components/App/SucessoCliente/FilaRevisaoEvasao.tsx src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx src/components/App/SucessoCliente/pesquisaEvasao.types.ts supabase/migrations/20260730182000_pesquisa_evasao_revisao_rpcs.sql tests/pesquisaEvasaoConversaFrontend.test.mjs
+git add -- src/components/App/SucessoCliente/ConversaPesquisaEvasao.tsx src/components/App/SucessoCliente/FilaRevisaoEvasao.tsx src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx src/components/App/SucessoCliente/pesquisaEvasao.types.ts supabase/migrations/20260801193000_pesquisa_evasao_revisao_rpcs.sql tests/pesquisaEvasaoConversaFrontend.test.mjs
 git commit -m "feat: adicionar fila de revisao da evasao"
 ```
 
@@ -1223,7 +1272,7 @@ Expected: tudo PASS.
 
 - [ ] **Step 2: Testar conversa real controlada**
 
-Em número interno autorizado:
+Em número interno autorizado e sem conversa familiar em andamento na mesma caixa:
 
 1. enviar pesquisa em modo teste;
 2. responder “eu te respondo amanhã”;
@@ -1277,34 +1326,40 @@ Smoke:
 Verificar:
 
 ```sql
-select count(*) from public.webhook_debug_log
-where payload::text ~* '(remotejid|pushname|conversation|audiomessage|webhook_secret|token)';
+select count(*) from public.webhook_debug_log;
+
+select count(*)
+from public.webhook_diagnosticos_sanitizados
+where created_at < now() - interval '7 days';
 ```
 
-Expected: `0`.
+Expected: `0` nas duas consultas. A tabela sanitizada não possui coluna de
+payload ou texto livre a ser pesquisada.
 
 Confirmar também:
 
-- usuário authenticated comum continua sem ler `webhook_debug_log` — preservação de uma barreira já existente, não correção da causa principal;
-- Sol/Mila não leem conversa privada;
+- usuário authenticated comum continua sem ler `webhook_debug_log` nem `webhook_diagnosticos_sanitizados` — preservação de uma barreira já existente, não correção da causa principal;
+- Sol, Mila, Fabio e Lia não leem conversa privada diretamente;
 - URLs de áudio exigem assinatura;
 - segredo bruto não existe no banco.
 
 - [ ] **Step 7: Rollout**
 
-Ordem final:
+Ordem final por janelas:
 
-1. redução de logs;
-2. migração de segredo/expurgo;
-3. retirada das credenciais de `whatsapp_caixas` do frontend;
-4. health/configurador;
-5. provisionamento de todas as caixas;
-6. enforcement inbound;
-7. schema/worker multipartes;
-8. transcrição;
-9. UI;
-10. smoke tests;
-11. monitoramento por pelo menos uma hora.
+1. **B0a:** redução de logs de execução; smoke dos fluxos atuais; parar e reportar;
+2. **B0b:** migração de segredo/expurgo/retention; verificar `2.290 → 0`; parar e reportar;
+3. **B1a:** health/configurador e provisionamento de todas as caixas sem enforcement;
+4. **B1b:** enforcement inbound e matriz HTTP; parar e reportar;
+5. **B2a:** corrigir ordem do pós-1ª aula e publicar Edge compatível V1/V2;
+6. **B2b:** schema multipartes com existentes em `legado_v1`; testar uma única pesquisa `modo_teste` em `multipartes_v2`; parar e reportar;
+7. **B2c:** transcrição, consolidação e opt-out em modo teste; parar e reportar;
+8. **B3a:** alterar somente o default de novas pesquisas para `multipartes_v2`;
+9. **B3b:** publicar UI de revisão, executar smoke sem envio adicional e monitorar por pelo menos uma hora.
+
+A retirada das credenciais de `whatsapp_caixas` do frontend não aparece como
+passo porque já foi concluída. Em B2/B3, nenhuma linha `legado_v1` pode ser
+migrada em massa.
 
 - [ ] **Step 8: Critério de parada**
 
@@ -1316,7 +1371,7 @@ Parar se:
 - duplicata criar dois eventos;
 - opt-out contar como resposta;
 - áudio falho marcar revisão pronta;
-- usuário sem permissão ler conteúdo;
+- usuário autenticado sem vínculo interno ativo ler conteúdo;
 - payload bruto reaparecer em log.
 
 - [ ] **Step 9: Registrar evidência**
@@ -1358,5 +1413,6 @@ git commit -m "docs: fechar rollout da conversa multipartes"
 - [ ] Ambiguidade vai para triagem.
 - [ ] Pesquisa pós-1ª aula continua atualizando a nota.
 - [ ] Inbox administrativa, CRM, status, reação, edição e mídia passam nos smokes.
-- [ ] RLS e RPCs respeitam `sucesso_aluno.evasao.*`.
+- [ ] RLS e RPCs permitem leitura/revisão a usuário interno ativo, sem gate por unidade, e bloqueiam acesso direto dos roles de agente.
+- [ ] Pesquisas abertas antes do corte permanecem `legado_v1`; somente novas pesquisas após a ativação usam `multipartes_v2`.
 - [ ] Testes, build e lint passam com evidência registrada.
