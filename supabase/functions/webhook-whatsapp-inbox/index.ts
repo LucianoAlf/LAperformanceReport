@@ -430,6 +430,7 @@ async function handleRespostaEvasao(
       .from('pesquisa_evasao')
       .update({
         status: 'respondido',
+        resposta_status: 'pronta_para_revisao',
         resposta_texto: respostaTexto,
         resposta_audio_url: respostaAudioUrl,
         resposta_tipo: respostaTipo,
@@ -896,9 +897,6 @@ serve(async (req: Request) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
-    // DEBUG: Salvar payload no banco para análise
-    await supabase.from('webhook_debug_log').insert({ payload });
-
     // Rotear: messages_update vai para handler de status
     const isStatus = isStatusUpdate(payload);
     console.log(`[webhook] isStatusUpdate=${isStatus}`);
@@ -948,21 +946,6 @@ serve(async (req: Request) => {
     const normalizedMsg = normalizeUazapiPayload(payload);
     const messages = normalizedMsg ? [normalizedMsg] : (Array.isArray(payload) ? payload : payload.data ? [payload.data] : [payload]);
     console.log(`[webhook] Total de mensagens no payload: ${messages.length}, normalizado: ${!!normalizedMsg}`);
-
-    // FORÇAR: Verificar se há estado de evasão ativo e processar qualquer mensagem
-    const { data: estadoAtivo } = await supabase
-      .from('conversa_estado_whatsapp')
-      .select('*')
-      .eq('estado', 'aguardando_resposta_evasao')
-      .gt('expira_em', new Date().toISOString())
-      .limit(1)
-      .maybeSingle();
-    
-    if (estadoAtivo) {
-      console.log(`[webhook] ESTADO ATIVO ENCONTRADO: ${estadoAtivo.whatsapp_numero}, pesquisa_id: ${estadoAtivo.contexto?.pesquisa_id}`);
-    } else {
-      console.log('[webhook] Nenhum estado de evasão ativo encontrado');
-    }
 
     let processadas = 0;
 

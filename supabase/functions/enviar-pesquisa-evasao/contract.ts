@@ -36,6 +36,12 @@ export interface ResolverDestinoPesquisaInput {
   telefoneSnapshot?: string | null;
 }
 
+export interface ResolverDestinoPesquisaPorPublicoInput
+  extends ResolverDestinoPesquisaInput {
+  publico: "direto" | "responsavel";
+  telefoneResponsavel?: string | null;
+}
+
 export interface DestinoPesquisa {
   telefone: string;
   origem: "telefone_teste" | "telefone_snapshot";
@@ -217,6 +223,31 @@ export function resolverDestinoPesquisa(
     origem: "telefone_snapshot",
     modoTeste: false,
   };
+}
+
+export function resolverDestinoPesquisaPorPublico(
+  input: ResolverDestinoPesquisaPorPublicoInput,
+): DestinoPesquisa {
+  if (input.modoTeste || input.publico === "direto") {
+    return resolverDestinoPesquisa(input);
+  }
+
+  if (String(input.telefoneResponsavel ?? "").trim().length === 0) {
+    throw new Error("RESPONSAVEL_SEM_TELEFONE");
+  }
+
+  const telefoneResponsavel = normalizarTelefone(input.telefoneResponsavel);
+  if (!telefonePesquisaValido(telefoneResponsavel)) {
+    throw new Error("RESPONSAVEL_TELEFONE_INVALIDO");
+  }
+
+  const destino = resolverDestinoPesquisa(input);
+
+  if (destino.telefone !== telefoneResponsavel) {
+    throw new Error("TELEFONE_RESPONSAVEL_DIVERGENTE");
+  }
+
+  return destino;
 }
 
 const PLACEHOLDERS_PERMITIDOS = new Set([

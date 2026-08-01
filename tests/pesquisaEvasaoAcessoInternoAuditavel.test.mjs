@@ -9,7 +9,7 @@ const read = (path) => readFileSync(resolve(repoRoot, path), 'utf8');
 
 const migration = read(
   'supabase/migrations/20260730170000_pesquisa_evasao_fundacao_segura.sql',
-);
+).replace(/\r\n/g, '\n');
 const auth = read('supabase/functions/enviar-pesquisa-evasao/auth.ts');
 const edge = read('supabase/functions/enviar-pesquisa-evasao/index.ts');
 const contract = read('supabase/functions/enviar-pesquisa-evasao/contract.ts');

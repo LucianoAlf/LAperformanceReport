@@ -298,8 +298,8 @@ export function providerSuportaChaveIdempotente(
 }
 
 export function deveAbrirConversaReal(
-  modoTeste: boolean,
+  _modoTeste: boolean,
   estado: EstadoEnvioPersistido,
 ): boolean {
-  return modoTeste === false && estado === "enviado";
+  return estado === "enviado";
 }
