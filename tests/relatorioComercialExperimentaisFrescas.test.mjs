@@ -441,7 +441,8 @@ test("dry-run exige JWT e RPC de escopo; cron exige service_role", () => {
   assert.match(handler, /auth\.getUser\s*\(/);
   assert.match(handler, /pode_gerar_relatorio_comercial_v1/);
   assert.match(handler, /status:\s*401/);
-  assert.match(handler, /status:\s*403/);
+  assert.match(handler, /const status\s*=\s*authError\s*\|\|\s*!authData\.user\s*\?\s*401\s*:\s*403/);
+  assert.match(handler, /\{ status, headers:/);
   assert.match(handler, /payload\.unidade\s*===\s*['"]todos['"]/);
   assert.match(handler, /status:\s*400/);
   assert.match(handler, /payload\.modo\s*===\s*['"]cron['"]/);

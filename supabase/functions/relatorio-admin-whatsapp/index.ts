@@ -2120,20 +2120,20 @@ serve(async (req) => {
         auth: { autoRefreshToken: false, persistSession: false },
       });
       const { data: authData, error: authError } = await userClient.auth.getUser();
-      if (authError || !authData.user) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Token inválido para dry_run_comercial' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
       const { data: autorizado, error: autorizacaoError } = await userClient.rpc(
         'pode_gerar_relatorio_comercial_v1',
         { p_unidade_id: payload.unidade },
       );
       if (autorizacaoError || autorizado !== true) {
+        const status = authError || !authData.user ? 401 : 403;
         return new Response(
-          JSON.stringify({ success: false, error: 'Unidade não autorizada para dry_run_comercial' }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({
+            success: false,
+            error: status === 401
+              ? 'Token inválido para dry_run_comercial'
+              : 'Unidade não autorizada para dry_run_comercial',
+          }),
+          { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
