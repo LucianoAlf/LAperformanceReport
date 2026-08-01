@@ -185,6 +185,10 @@ serve(async (req: Request) => {
       // (aula fora do mapa = vinculo descartado sem erro, sem log). Usar o
       // retorno do upsert elimina essa classe de bug e evita a ida extra ao banco.
       let gravadas = 0;
+      // IMPORTANTE: chunkSize precisa ficar < 1000. O retorno de cada upsert
+      // (.select() abaixo) alimenta idPorEmusysId; se o lote crescer para
+      // 1000+ o PostgREST corta a resposta e reintroduz o truncamento
+      // silencioso que ja causou vinculos descartados sem erro/log uma vez.
       const chunkSize = 500;
       const idPorEmusysId = new Map<number, number>();
       for (let offset = 0; offset < linhas.length; offset += chunkSize) {
@@ -201,6 +205,15 @@ serve(async (req: Request) => {
         for (const linhaGravada of loteGravado || []) {
           idPorEmusysId.set(linhaGravada.emusys_id as number, linhaGravada.id as number);
         }
+      }
+
+      // Se algum lote de upsert falhar, o continue acima pula o preenchimento
+      // do mapa para aquele lote inteiro. Loga a divergencia para o caso
+      // ficar visivel sem precisar cruzar contadores manualmente.
+      if (idPorEmusysId.size < aulas.length) {
+        console.log(
+          `[sync-grade-futura] ${unidade.nome}: aulas=${aulas.length} mapeadas=${idPorEmusysId.size} (diferenca pode indicar lote de upsert com erro)`,
+        );
       }
 
       // Persiste o alunos[] que a resposta ja traz. Sem isso a grade futura
@@ -250,6 +263,8 @@ serve(async (req: Request) => {
         aulas_recebidas: aulas.length,
         aulas_gravadas: gravadas,
         fantasmas_canceladas: canceladas,
+        vinculos_gravados: resultado.gravados,
+        vinculos_erros: resultado.erros,
       });
     }
 
