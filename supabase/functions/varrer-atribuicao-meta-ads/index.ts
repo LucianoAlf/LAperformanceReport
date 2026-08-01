@@ -18,9 +18,15 @@
 // então cobre os três casos acima sem depender de mensagem nenhuma.
 //
 // ESCOPO DE ESCRITA (deliberadamente estreito)
-// Só toca `leads.meta_ad_source_id` e `leads.meta_ctwa_clid`, e só quando estão VAZIOS.
-// Não escreve `canal_origem_id` (o `upsert_lead` faz COALESCE e o Emusys pode sobrescrever, então
-// esse campo não é confiável como destino) e não empurra nada para o Emusys.
+// Toca `leads.meta_ad_source_id`, `leads.meta_ctwa_clid` e `leads.canal_origem_id` — cada um
+// só quando está VAZIO. Não empurra nada para o Emusys.
+//
+// Sobre `canal_origem_id`: o `upsert_lead` faz `COALESCE(v_canal_id, canal_origem_id)`, ou seja,
+// só sobrescreve quando o Emusys MANDA um canal; se vier vazio, o valor daqui é preservado.
+// Preencher aqui vale a pena: sem isso o lead recuperado pela varredura fica com o anúncio
+// identificado mas aparece como "sem origem" no funil — medido em 01/08, 6 dos 11 leads da
+// primeira execução ficaram nesse estado, contra 0/dia historicamente (o fluxo n8n em tempo real
+// grava os dois). O canal vem do `source_app` da conversa; se não soubermos mapear, não escreve.
 //
 // FIRST-TOUCH: a trava `meta_ad_source_id IS NULL` no UPDATE garante que, se o mesmo lead clicar
 // em dois anúncios ao longo do tempo, fica registrado o PRIMEIRO. A trava é aplicada na cláusula
@@ -42,6 +48,13 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const SYNC_ADMIN_TOKEN = Deno.env.get('SYNC_MATRICULAS_ADMIN_TOKEN')?.trim() || '';
+
+// `additional_attributes.source_app` -> canais_origem.id. Fora deste mapa não escrevemos canal:
+// preferimos deixar vazio a chutar a origem.
+const CANAL_POR_SOURCE_APP: Record<string, number> = {
+  instagram: 1,
+  facebook: 2,
+};
 
 const DIAS_PADRAO = 3;   // sobreposição generosa: um órfão é re-tentado por 3 dias antes de desistir
 const DIAS_MAX = 60;     // teto para chamadas manuais de backfill
@@ -100,6 +113,7 @@ type LeadRow = {
   unidade_id: string | null;
   telefone: string | null;
   meta_ad_source_id: string | null;
+  canal_origem_id: number | null;
 };
 
 const dataUTC = (epochSeg: number) => new Date(epochSeg * 1000).toISOString().slice(0, 10);
@@ -198,7 +212,8 @@ Deno.serve(async (req: Request) => {
         ok: true, dry_run: dryRun,
         janela: { desde: new Date(desdeSeg * 1000).toISOString(), ate: new Date(ateSeg * 1000).toISOString(), dias },
         conversas_lidas: conversas.length, conversas_anuncio: 0,
-        vinculados: 0, ja_atribuidos: 0, ambiguos: 0, nao_encontrados: 0, sem_telefone: semTelefone,
+        vinculados: 0, canais_preenchidos: 0, ja_completos: 0, ambiguos: 0,
+        nao_encontrados: 0, sem_telefone: semTelefone,
         truncado,
       });
     }
@@ -211,7 +226,7 @@ Deno.serve(async (req: Request) => {
       const fatia = todosCandidatos.slice(i, i + 300);
       const { data, error } = await supabase
         .from('leads')
-        .select('id, nome, unidade_id, telefone, meta_ad_source_id')
+        .select('id, nome, unidade_id, telefone, meta_ad_source_id, canal_origem_id')
         .in('telefone', fatia)
         .eq('arquivado', false);
       if (error) throw error;
@@ -238,14 +253,22 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── 5. Decide e aplica ─────────────────────────────────────────────────────
-    let vinculados = 0, jaAtribuidos = 0, ambiguos = 0, naoEncontrados = 0;
+    let vinculados = 0, canaisPreenchidos = 0, jaCompletos = 0, ambiguos = 0, naoEncontrados = 0;
     const pendentesRevisao: { conversa_id: number; telefone: string; lead_ids: number[] }[] = [];
     const logs: Record<string, unknown>[] = [];
 
     for (const a of alvos) {
       const encontrados = a.candidatos.flatMap(c => porTelefone.get(c) ?? []);
       const unicos = [...new Map(encontrados.map(l => [l.id, l])).values()];
-      const semAtribuicao = unicos.filter(l => !l.meta_ad_source_id);
+      const canalId = a.sourceApp ? CANAL_POR_SOURCE_APP[a.sourceApp.toLowerCase()] ?? null : null;
+
+      // "Incompleto" = falta a atribuição OU falta o canal de origem (quando sabemos mapeá-lo).
+      // O critério é esse, e não só a atribuição, porque um lead já atribuído pelo fluxo n8n
+      // pode ter ficado sem canal — e vice-versa. Se olhássemos só a atribuição, esses leads
+      // cairiam no ramo "já completo" e o canal nunca seria preenchido.
+      const incompletos = unicos.filter(
+        l => !l.meta_ad_source_id || (canalId !== null && l.canal_origem_id === null)
+      );
 
       const detalhesBase = {
         origem: 'varredura',
@@ -255,6 +278,7 @@ Deno.serve(async (req: Request) => {
         source_id: a.sourceId,
         ctwa_clid: a.ctwaClid,
         source_app: a.sourceApp,
+        canal_origem_id: canalId,
         conversa_criada_em: new Date(a.criadaEm * 1000).toISOString(),
         matches: unicos.length,
       };
@@ -272,44 +296,74 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
-      // (b) todos os leads desse telefone já têm atribuição — nada a fazer, e nada a logar
-      if (semAtribuicao.length === 0) { jaAtribuidos++; continue; }
+      // (b) nada faltando em nenhum lead do telefone — sem trabalho, e nada a logar
+      if (incompletos.length === 0) { jaCompletos++; continue; }
 
-      // (c) 2+ leads sem atribuição dividindo o telefone — a varredura NÃO escolhe
-      if (semAtribuicao.length > 1) {
+      // (c) 2+ leads incompletos dividindo o telefone — a varredura NÃO escolhe
+      if (incompletos.length > 1) {
         ambiguos++;
-        pendentesRevisao.push({ conversa_id: a.conversaId, telefone: a.telefone, lead_ids: semAtribuicao.map(l => l.id) });
+        pendentesRevisao.push({ conversa_id: a.conversaId, telefone: a.telefone, lead_ids: incompletos.map(l => l.id) });
         if (!jaLogado.has(`${a.conversaId}:ambiguo_pendente`)) {
           logs.push({
-            lead_nome: semAtribuicao.map(l => l.nome ?? '(sem nome)').join(' | '),
+            lead_nome: incompletos.map(l => l.nome ?? '(sem nome)').join(' | '),
             lead_id: null, unidade_nome: null,
             evento: 'meta_ads', acao: 'ambiguo_pendente',
-            detalhes: { ...detalhesBase, acao_varredura: 'ambiguo_pendente', lead_ids: semAtribuicao.map(l => l.id) },
+            detalhes: { ...detalhesBase, acao_varredura: 'ambiguo_pendente', lead_ids: incompletos.map(l => l.id) },
           });
         }
         continue;
       }
 
-      // (d) exatamente 1 lead sem atribuição — grava
-      const alvo = semAtribuicao[0];
-      if (dryRun) { vinculados++; continue; }
+      // (d) exatamente 1 lead incompleto — preenche o que falta nele
+      const alvo = incompletos[0];
+      const gravaAtribuicao = !alvo.meta_ad_source_id;
+      const gravaCanal = canalId !== null && alvo.canal_origem_id === null;
 
-      const { data: atualizados, error: upErr } = await supabase
-        .from('leads')
-        .update({ meta_ad_source_id: a.sourceId, meta_ctwa_clid: a.ctwaClid })
-        .eq('id', alvo.id)
-        .is('meta_ad_source_id', null) // trava first-touch, avaliada no WHERE do UPDATE
-        .select('id');
-      if (upErr) throw upErr;
+      if (dryRun) {
+        if (gravaAtribuicao) vinculados++;
+        if (gravaCanal) canaisPreenchidos++;
+        continue;
+      }
 
-      // 0 linhas = outra execução preencheu no meio do caminho. Não é erro, não conta.
-      if (!atualizados || atualizados.length === 0) { jaAtribuidos++; continue; }
+      let mexeu = false;
 
-      vinculados++;
+      // Atribuição do anúncio. A trava IS NULL fica no WHERE do UPDATE (first-touch, segura
+      // mesmo com duas execuções cruzadas). 0 linhas = outra execução chegou antes.
+      if (gravaAtribuicao) {
+        const { data: upd, error: upErr } = await supabase
+          .from('leads')
+          .update({ meta_ad_source_id: a.sourceId, meta_ctwa_clid: a.ctwaClid })
+          .eq('id', alvo.id)
+          .is('meta_ad_source_id', null)
+          .select('id');
+        if (upErr) throw upErr;
+        if (upd && upd.length > 0) { vinculados++; mexeu = true; }
+      }
+
+      // Canal de origem, em UPDATE separado: as duas travas IS NULL são independentes, e num
+      // update só a que já estivesse preenchida bloquearia a gravação da outra.
+      if (gravaCanal) {
+        const { data: upd, error: canalErr } = await supabase
+          .from('leads')
+          .update({ canal_origem_id: canalId })
+          .eq('id', alvo.id)
+          .is('canal_origem_id', null)
+          .select('id');
+        if (canalErr) throw canalErr;
+        if (upd && upd.length > 0) { canaisPreenchidos++; mexeu = true; }
+      }
+
+      if (!mexeu) { jaCompletos++; continue; }
+
       logs.push({
         lead_nome: alvo.nome ?? '(sem nome)', lead_id: alvo.id, unidade_nome: alvo.unidade_id,
-        evento: 'meta_ads', acao: 'vinculado',
-        detalhes: { ...detalhesBase, acao_varredura: 'vinculado' },
+        evento: 'meta_ads', acao: gravaAtribuicao ? 'vinculado' : 'canal_preenchido',
+        detalhes: {
+          ...detalhesBase,
+          acao_varredura: gravaAtribuicao ? 'vinculado' : 'canal_preenchido',
+          gravou_atribuicao: gravaAtribuicao,
+          gravou_canal: gravaCanal,
+        },
       });
     }
 
@@ -325,7 +379,8 @@ Deno.serve(async (req: Request) => {
       conversas_lidas: conversas.length,
       conversas_anuncio: alvos.length,
       vinculados,
-      ja_atribuidos: jaAtribuidos,
+      canais_preenchidos: canaisPreenchidos,
+      ja_completos: jaCompletos,
       ambiguos,
       nao_encontrados: naoEncontrados,
       sem_telefone: semTelefone,
