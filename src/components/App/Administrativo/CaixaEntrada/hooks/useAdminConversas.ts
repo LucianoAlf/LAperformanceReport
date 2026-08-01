@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useCaixasWhatsAppLookup } from '@/hooks/useCaixasWhatsAppLookup';
 import type { AdminConversa, FiltroAdminInbox } from '../types';
 
 interface UseAdminConversasParams {
@@ -18,6 +19,10 @@ export function useAdminConversas({ unidadeId, departamento = 'administrativo', 
   // mesmo número, ex.: mesmo responsável). Permite sinalizar no card da lista, sem esperar
   // o atendente abrir a conversa.
   const [irmaosPorNumero, setIrmaosPorNumero] = useState<Record<string, { id: number; nome: string }[]>>({});
+  // Nome da caixa vem do lookup por RPC — o navegador não lê mais `whatsapp_caixas` direto
+  // (ver useCaixasWhatsAppLookup). Aqui é só rótulo: NENHUMA conversa é filtrada por caixa,
+  // o recorte deste módulo é `admin_conversas.departamento`.
+  const { caixasPorId } = useCaixasWhatsAppLookup();
 
   const fetchConversas = useCallback(async () => {
     // null = sem seleção ainda. 'todos' = inbox unificada (todas as unidades; RLS restringe a admin).
@@ -44,8 +49,7 @@ export function useAdminConversas({ unidadeId, departamento = 'administrativo', 
             professores:professor_atual_id(nome),
             unidades:unidade_id(nome, codigo)
           ),
-          unidade:unidade_id(nome, codigo),
-          caixa:caixa_id(id, nome, numero)
+          unidade:unidade_id(nome, codigo)
         `)
         .eq('status', 'aberta')
         .eq('departamento', departamento)
@@ -64,7 +68,14 @@ export function useAdminConversas({ unidadeId, departamento = 'administrativo', 
 
       if (fetchError) throw fetchError;
 
-      let resultado = (data || []) as AdminConversa[];
+      // Anexa o rótulo da caixa. Caixa desconhecida vira null (só perde o nome na tela) —
+      // a conversa continua na lista de qualquer jeito.
+      let resultado = ((data || []) as AdminConversa[]).map(c => {
+        const caixa = c.caixa_id != null ? caixasPorId.get(c.caixa_id) : undefined;
+        return caixa
+          ? { ...c, caixa: { id: caixa.id, nome: caixa.nome, numero: caixa.numero } }
+          : { ...c, caixa: null };
+      });
 
       // Conjunto de alunos do escopo (mesma unidade, ou unidades das conversas visíveis no
       // modo consolidado) — usado tanto para achar irmãos por nome/telefone na busca quanto
@@ -156,7 +167,7 @@ export function useAdminConversas({ unidadeId, departamento = 'administrativo', 
     } finally {
       setLoading(false);
     }
-  }, [unidadeId, departamento, filtro, busca]);
+  }, [unidadeId, departamento, filtro, busca, caixasPorId]);
 
   useEffect(() => {
     fetchConversas();

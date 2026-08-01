@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { ConversaCRM, FiltroInbox } from '../types';
+import { useCaixasWhatsAppLookup } from '@/hooks/useCaixasWhatsAppLookup';
+import type { ConversaCRM, FiltroInbox, FuncaoCaixa } from '../types';
 
 interface UseConversasParams {
   unidadeId?: string;
@@ -8,13 +9,21 @@ interface UseConversasParams {
   busca?: string;
 }
 
+// Caixas que moram no Pré-Atendimento. 'sistema' (relatórios) e 'administrativo'
+// (Lia/Sucesso do Aluno) pertencem a outros módulos.
+const FUNCOES_PRE_ATENDIMENTO: FuncaoCaixa[] = ['agente', 'ambos'];
+
 export function useConversas({ unidadeId, filtro = 'todas', busca }: UseConversasParams = {}) {
   const [conversas, setConversas] = useState<ConversaCRM[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalNaoLidas, setTotalNaoLidas] = useState(0);
+  const { caixasPorId, carregado: caixasCarregadas } = useCaixasWhatsAppLookup();
 
   const fetchConversas = useCallback(async () => {
+    // Sem o mapa de caixas não dá para saber a que módulo cada conversa pertence, e mostrar
+    // tudo deixaria a Lia vazar para cá. Espera o lookup resolver antes de listar.
+    if (!caixasCarregadas) return;
     try {
       setError(null);
 
@@ -36,8 +45,7 @@ export function useConversas({ unidadeId, filtro = 'todas', busca }: UseConversa
             cursos:curso_interesse_id(nome),
             unidades:unidade_id(nome, codigo),
             crm_pipeline_etapas:etapa_pipeline_id(id, nome, slug, cor, icone, ordem)
-          ),
-          caixa:caixa_id(id, nome, numero, funcao)
+          )
         `)
         .order('ultima_mensagem_at', { ascending: false, nullsFirst: false });
 
@@ -59,12 +67,25 @@ export function useConversas({ unidadeId, filtro = 'todas', busca }: UseConversa
 
       if (fetchError) throw fetchError;
 
-      // Conversas cuja caixa vinculada não é do Pré-Atendimento (ex: Lia/Sucesso do Aluno)
-      // não devem aparecer aqui — cada caixa só deve ser vista no módulo dela.
-      // Conversa sem caixa nenhuma (caixa_id null) continua visível normalmente.
-      const doModulo = ((data || []) as ConversaCRM[]).filter(
-        c => !c.caixa || c.caixa.funcao === 'agente' || c.caixa.funcao === 'ambos'
-      );
+      // Anexa a caixa a partir do lookup (a RPC substituiu o embed — ver
+      // useCaixasWhatsAppLookup) e descarta o que não é do Pré-Atendimento: cada caixa só
+      // deve ser vista no módulo dela.
+      //
+      // - caixa_id null  -> visível (conversa sem número vinculado; o WhatsAppBanner avisa)
+      // - caixa conhecida -> visível só se funcao for 'agente' ou 'ambos'
+      // - caixa desconhecida (fora do escopo do usuário, inativa, ou lookup falhou) -> escondida.
+      //   Preferimos sumir com a conversa a arriscar exibir a de outro módulo.
+      const doModulo = ((data || []) as ConversaCRM[])
+        .map(c => {
+          const caixa = c.caixa_id != null ? caixasPorId.get(c.caixa_id) : undefined;
+          return caixa
+            ? { ...c, caixa: { id: caixa.id, nome: caixa.nome, numero: caixa.numero, funcao: caixa.funcao as FuncaoCaixa } }
+            : { ...c, caixa: null };
+        })
+        .filter(c => {
+          if (c.caixa_id == null) return true;
+          return !!c.caixa && FUNCOES_PRE_ATENDIMENTO.includes(c.caixa.funcao);
+        });
 
       let resultado = doModulo;
 
@@ -91,7 +112,7 @@ export function useConversas({ unidadeId, filtro = 'todas', busca }: UseConversa
     } finally {
       setLoading(false);
     }
-  }, [unidadeId, filtro, busca]);
+  }, [unidadeId, filtro, busca, caixasPorId, caixasCarregadas]);
 
   // Fetch inicial
   useEffect(() => {
