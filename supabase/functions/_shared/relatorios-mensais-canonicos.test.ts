@@ -4,6 +4,7 @@ import {
   assertEquals,
   assertFalse,
   assertStringIncludes,
+  assertThrows,
 } from "jsr:@std/assert@1";
 import {
   formatarRelatorioAdminMensalCanonico,
@@ -18,99 +19,171 @@ const base = {
   fuso: "America/Sao_Paulo",
 };
 
-Deno.test("mensal administrativo explica multicurso e politica de trancamento", () => {
-  const texto = formatarRelatorioAdminMensalCanonico({
-    ...base,
-    tipo: "administrativo",
-    unidade: { ...base.unidade, gerente: "Fernanda", farmers: ["Daiana"] },
-    resumo: {
-      alunos_ativos: 345,
-      alunos_pagantes: 337,
-      alunos_nao_pagantes: 8,
-      alunos_trancados: 3,
-      matriculas_trancadas: 3,
-      bolsistas_integrais: 6,
-      bolsistas_parciais: 2,
-      matriculas_ativas: 429,
-      matriculas_base: 343,
-      matriculas_banda: 59,
-      matriculas_adicionais: 27,
-      matriculas_adicionais_extras: 2,
-      matriculas_coral: 0,
-      alunos_com_exatamente_2_cursos: 25,
-      alunos_com_exatamente_3_cursos: 1,
-      alunos_com_4_ou_mais_cursos: 0,
-      novos_alunos: 17,
-      transferencias_recebidas: 0,
-      renovacoes_realizadas: 23,
-      nao_renovacoes: 2,
-      avisos_previos: 10,
-      evasoes: 7,
-      mrr: 140000,
-      ticket_medio: 415.5,
-    },
-    renovacoes: [],
-    nao_renovacoes: [],
-    avisos_previos: [],
-    evasoes: [],
-    novos_alunos: [],
-    transferencias: [],
-    trancamentos_detalhados: {
-      data_referencia: "2026-07-31",
-      total_alunos: 1,
-      total_matriculas: 1,
-      politica: { prazo_contratual_meses: 1, extensao_gerencial_meses: 1, limite_total_meses: 2 },
-      itens: [{
-        aluno_nome: "Aluno Exemplo",
-        curso_nome: "Piano",
-        data_inicio: "2026-04-01",
-        data_final: null,
-        dias_trancado: 121,
-        faixa_politica: "fora_da_politica",
-        motivo: "Viagem",
-      }],
-    },
-  });
+const adminRico = {
+  ...base,
+  tipo: "administrativo",
+  unidade: { ...base.unidade, gerente: "Fernanda", farmers: ["Daiana", "fernanda"] },
+  gerado_em: "2026-08-01T13:30:00Z",
+  trancamentos_periodo: 3,
+  resumo: {
+    alunos_ativos: 344,
+    alunos_pagantes: 336,
+    alunos_nao_pagantes: 8,
+    alunos_trancados: 2,
+    matriculas_trancadas: 2,
+    bolsistas_integrais: 6,
+    bolsistas_parciais: 2,
+    matriculas_ativas: 430,
+    matriculas_base: 344,
+    matriculas_banda: 59,
+    matriculas_adicionais: 27,
+    matriculas_adicionais_extras: 1,
+    matriculas_coral: 0,
+    alunos_com_exatamente_2_cursos: 25,
+    alunos_com_exatamente_3_cursos: 1,
+    alunos_com_4_ou_mais_cursos: 0,
+    novos_alunos: 17,
+    transferencias_recebidas: 0,
+    renovacoes_realizadas: 1,
+    nao_renovacoes: 1,
+    avisos_previos: 1,
+    evasoes: 2,
+  },
+  indicadores_financeiros: {
+    ticket_medio: 449.15,
+    faturamento_previsto: 142925.2,
+    mrr_atual: 141032.2,
+    ltv_medio: 6692.34,
+    tempo_permanencia: 14.9,
+  },
+  indicadores_retencao: {
+    churn_rate: 1.79,
+    taxa_renovacao: 50,
+    reajuste_medio: 8.13,
+    inadimplentes: 4,
+    inadimplencia: 1.19,
+    mrr_perdido: 2412.85,
+    total_evasoes: 2,
+    nao_renovacoes: 1,
+    renovacoes_previstas: 2,
+    renovacoes_realizadas: 1,
+  },
+  metas_fideliza: {
+    churn_rate: 4,
+    inadimplencia: 1.5,
+    taxa_renovacao: 90,
+    reajuste_medio: 10,
+  },
+  renovacoes: [{
+    aluno_nome: "Lohan Marques Boente",
+    valor_parcela_anterior: 453.6,
+    valor_parcela_novo: 498.96,
+    forma_pagamento: "C.R",
+    agente_comercial: "Fernanda e Daiana",
+  }],
+  nao_renovacoes: [{
+    aluno_nome: "Joachim Krull Carrez",
+    valor_parcela_anterior: 420,
+    valor_parcela_novo: 0,
+    professor: "Não informado",
+    motivo: "Dificuldade financeira",
+  }],
+  avisos_previos: [{
+    aluno_nome: "Lis Diolinda da Cruz",
+    motivo: "Incompatibilidade de horário",
+    professor: "Leticia de Almeida Palmeira",
+  }],
+  evasoes: [{
+    aluno_nome: "Ana Beatriz Paz de Almeida",
+    tipo_evasao: "interrompido",
+    valor_perdido: 390,
+    motivo: "Troca de Unidade",
+    professor: "Lohana Leopoldo de Araújo",
+  }],
+  novos_alunos: [],
+  transferencias: [],
+  trancamentos_detalhados: {
+    data_referencia: "2026-07-31",
+    total_alunos: 2,
+    total_matriculas: 2,
+    politica: { prazo_contratual_meses: 1, extensao_gerencial_meses: 1, limite_total_meses: 2 },
+    itens: [{
+      aluno_nome: "Davi Lima Queiroz",
+      curso_nome: null,
+      data_inicio: null,
+      data_final: null,
+      dias_trancado: null,
+      faixa_politica: "data_ausente",
+      motivo: null,
+    }, {
+      aluno_nome: "Layara Sales Magalhães",
+      curso_nome: "Guitarra",
+      data_inicio: "2026-06-06",
+      data_final: "2026-07-31",
+      dias_trancado: 55,
+      faixa_politica: "extensao_gerencial",
+      motivo: "Aluna não está vindo",
+    }],
+  },
+};
 
-  assertStringIncludes(texto, "RELATÓRIO MENSAL ADMINISTRATIVO");
-  assertStringIncludes(texto, "JULHO/2026");
-  assertStringIncludes(texto, "Matrículas adicionais: *27*");
-  assertStringIncludes(texto, "Alunos com 3 cursos: *1*");
-  assertStringIncludes(texto, "Aluno Exemplo — Piano");
-  assertStringIncludes(texto, "FORA DA POLÍTICA");
-  assertStringIncludes(texto, "limite total de 2 meses");
-  assertFalse(texto.includes("snapshot"));
-  assertFalse(texto.includes("get_kpis"));
+Deno.test("mensal administrativo preserva modelo rico, multicurso e trancamentos", () => {
+  const texto = formatarRelatorioAdminMensalCanonico(adminRico);
+
+  assertStringIncludes(texto, "📊 *RELATÓRIO MENSAL ADMINISTRATIVO*");
+  assertStringIncludes(texto, "📅 *JULHO/2026*");
+  assertStringIncludes(texto, "👥 Por Fernanda e Daiana");
+  assertStringIncludes(texto, "• Matrículas Ativas: *430* (344 base alunos + 59 banda + 27 adicionais)");
+  assertStringIncludes(texto, "- Alunos com 3 cursos: *1*");
+  assertStringIncludes(texto, "• Trancamentos no período: *3*");
+  assertStringIncludes(texto, "⏸️ *TRANCAMENTOS ATUAIS (2 alunos / 2 matrículas)*");
+  assertStringIncludes(texto, "Nome: *Davi Lima Queiroz*");
+  assertStringIncludes(texto, "Tempo trancado: Não calculável");
+  assertStringIncludes(texto, "Retorno previsto: 31/07/2026");
+  assertStringIncludes(texto, "Situação: *EXTENSÃO GERENCIAL*");
+  assertStringIncludes(texto, "💰 *KPIs FINANCEIROS*");
+  assertStringIncludes(texto, "• Faturamento Previsto: *R$ 142.925,20*");
+  assertStringIncludes(texto, "• LTV (Tempo × Ticket): *R$ 6.692,34*");
+  assertStringIncludes(texto, "📈 *KPIs DE RETENÇÃO*");
+  assertStringIncludes(texto, "• Inadimplência: *1,2%*");
+  assertStringIncludes(texto, "🎯 *METAS FIDELIZA+ LA*");
+  assertStringIncludes(texto, "Forma de PG: C.R");
+  assertStringIncludes(texto, "⚠️ *AVISOS PRÉVIOS para sair em AGOSTO*");
+  assertStringIncludes(texto, "• Total no mês: *2*");
+  assertStringIncludes(texto, "• Não renovou: *1*");
+  assertStringIncludes(texto, "📅 Gerado em: 01/08/2026 às 10:30");
+
+  const secoes = [
+    "👥 *ALUNOS*",
+    "📚 *MATRÍCULAS*",
+    "⏸️ *TRANCAMENTOS ATUAIS",
+    "💰 *KPIs FINANCEIROS*",
+    "📈 *KPIs DE RETENÇÃO*",
+    "🎯 *METAS FIDELIZA+ LA*",
+    "🔄 *RENOVAÇÕES DO MÊS*",
+    "❌ *NÃO RENOVAÇÕES DO MÊS*",
+    "⚠️ *AVISOS PRÉVIOS",
+    "🚪 *EVASÕES (Saíram no mês)*",
+  ];
+  const posicoes = secoes.map((secao) => texto.indexOf(secao));
+  assertFalse(posicoes.includes(-1));
+  assertEquals([...posicoes].sort((a, b) => a - b), posicoes);
+
+  for (const proibido of ["snapshot", "payload", "get_", "rpc", "endpoint", "hash"]) {
+    assertFalse(texto.toLowerCase().includes(proibido));
+  }
+  assertFalse(/\(\d+\/\d+\)/.test(texto));
 });
 
-Deno.test("mensal administrativo nao publica detalhe divergente do total oficial", () => {
-  const texto = formatarRelatorioAdminMensalCanonico({
-    ...base,
-    tipo: "administrativo",
-    resumo: {
-      renovacoes_realizadas: 27,
-      nao_renovacoes: 0,
-      avisos_previos: 0,
-      evasoes: 11,
-    },
-    renovacoes: Array.from({ length: 29 }, (_, index) => ({
-      aluno_nome: `Aluno ${index + 1}`,
-      data: "2026-07-01",
-    })),
-    nao_renovacoes: [],
-    avisos_previos: [],
-    evasoes: Array.from({ length: 9 }, (_, index) => ({
-      aluno_nome: `Evasao ${index + 1}`,
-      data: "2026-07-01",
-    })),
-    trancamentos_detalhados: { total_alunos: 0, total_matriculas: 0, itens: [] },
-  });
-
-  assertStringIncludes(texto, "Renova\u00e7\u00f5es realizadas: *27*");
-  assertStringIncludes(texto, "Evas\u00f5es: *11*");
-  assertEquals((texto.match(/Detalhamento individual indispon\u00edvel para este fechamento\./g) || []).length, 2);
-  assertFalse(texto.includes("Aluno 29"));
-  assertFalse(texto.includes("Evasao 9"));
+Deno.test("mensal administrativo bloqueia detalhe divergente do total oficial", () => {
+  assertThrows(
+    () => formatarRelatorioAdminMensalCanonico({
+      ...adminRico,
+      resumo: { ...adminRico.resumo, renovacoes_realizadas: 2 },
+    }),
+    Error,
+    "RELATORIO_ADMIN_MENSAL_DIVERGENTE:renovacoes",
+  );
 });
 
 Deno.test("mensal comercial exibe valores, dois tickets e taxa com alerta", () => {
