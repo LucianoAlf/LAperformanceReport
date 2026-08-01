@@ -1,13 +1,36 @@
-import { Wifi, WifiOff } from 'lucide-react';
-import type { WhatsAppConnectionStatus } from '../../types';
+import { Wifi, WifiOff, AlertTriangle } from 'lucide-react';
+import type { FuncaoCaixa, WhatsAppConnectionStatus } from '../../types';
 
 interface WhatsAppBannerProps {
   status: WhatsAppConnectionStatus;
   caixaNome?: string;
+  /** Função da caixa vinculada à conversa selecionada (quando houver). */
+  caixaFuncao?: FuncaoCaixa | null;
+  /** Existe uma conversa selecionada, mas sem caixa nenhuma vinculada (caixa_id null). */
+  temConversaSemCaixa?: boolean;
 }
 
-export function WhatsAppBanner({ status, caixaNome }: WhatsAppBannerProps) {
+const FUNCOES_PRE_ATENDIMENTO: FuncaoCaixa[] = ['agente', 'ambos'];
+
+export function WhatsAppBanner({ status, caixaNome, caixaFuncao, temConversaSemCaixa }: WhatsAppBannerProps) {
   const nomeCaixa = caixaNome || status.caixaNome;
+
+  // Conversa vinculada a uma caixa que não é do Pré-Atendimento (ex: Lia/Sucesso do Aluno)
+  // ou sem nenhuma caixa vinculada — não faz sentido herdar o status global de conexão.
+  const caixaForaDoModulo = !!caixaFuncao && !FUNCOES_PRE_ATENDIMENTO.includes(caixaFuncao);
+  if (caixaForaDoModulo || temConversaSemCaixa) {
+    return (
+      <div className="bg-amber-900/40 border-b border-amber-800/50 px-4 py-1.5 flex items-center gap-2 flex-shrink-0">
+        <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+        <span className="text-xs text-amber-300 font-medium">
+          Nenhum número do Pré-Atendimento vinculado a esta conversa
+        </span>
+        {caixaForaDoModulo && nomeCaixa && (
+          <span className="text-xs text-amber-500">— caixa atual: {nomeCaixa}</span>
+        )}
+      </div>
+    );
+  }
 
   if (status.connected) {
     return (

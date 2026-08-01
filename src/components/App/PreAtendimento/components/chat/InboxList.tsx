@@ -77,7 +77,10 @@ function InboxItem({ conversa, ativa, onClick }: { conversa: ConversaCRM; ativa:
   const temp = getTemperaturaTag(lead?.temperatura || null);
   const curso = lead?.cursos?.nome || '';
   const unidade = lead?.unidades?.codigo || lead?.unidades?.nome || '';
-  const caixaNome = conversa.caixa?.nome || null;
+  // Só exibe o badge quando a caixa vinculada pertence ao Pré-Atendimento (agente/ambos);
+  // caixas de outros módulos (ex: Lia/Sucesso do Aluno) não devem parecer normais aqui.
+  const caixaDoModulo = conversa.caixa?.funcao === 'agente' || conversa.caixa?.funcao === 'ambos';
+  const caixaNome = caixaDoModulo ? conversa.caixa?.nome || null : null;
   const isMila = conversa.atribuido_a === 'mila';
   const isAndreza = conversa.atribuido_a === 'andreza';
   const semConversa = !conversa.ultima_mensagem_at;
