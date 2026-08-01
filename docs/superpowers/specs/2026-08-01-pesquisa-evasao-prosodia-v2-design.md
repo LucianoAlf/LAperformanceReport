@@ -1,7 +1,7 @@
 # Pesquisa de evasão — prosódia e tratamento gramatical V2
 
 **Data:** 01/08/2026  
-**Status:** desenho aprovado por Alf, aguardando revisão do documento  
+**Status:** desenho aprovado por Alf; implementação pendente
 **Escopo:** somente prévia e mensagem de saída da pesquisa de evasão
 
 ## 1. Objetivo
