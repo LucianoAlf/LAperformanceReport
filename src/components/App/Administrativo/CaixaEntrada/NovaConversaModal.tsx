@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { AlunoInbox } from './types';
+import { selecionarCaixaAdministrativa } from './selecionarCaixaAdministrativa';
 
 // Tipo do contato selecionado (aluno cadastrado ou numero externo)
 export interface ContatoInbox {
@@ -275,14 +276,17 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
             .or(`whatsapp_jid.eq.${jid},telefone_externo.eq.${jid}`)
             .maybeSingle();
 
-          const { data: caixa } = await supabase
-            .from('whatsapp_caixas')
-            .select('id')
-            .eq('funcao', 'administrativo')
-            .eq('departamento', departamento)
-            .eq('ativo', true)
-            .or(`unidade_id.eq.${unidadeConversa},unidade_id.is.null`)
-            .maybeSingle();
+          const { data: caixasSeguras, error: caixasError } =
+            await supabase.rpc('listar_whatsapp_caixas_seguras', {
+              p_unidade_id: unidadeConversa,
+              p_incluir_globais: true,
+            });
+          if (caixasError) throw caixasError;
+          const caixa = selecionarCaixaAdministrativa(
+            caixasSeguras,
+            unidadeConversa,
+            departamento,
+          );
 
           if (solta) {
             await supabase
@@ -349,16 +353,17 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
           .update({ status: 'aberta', nome_externo: nomeExterno || null })
           .eq('id', existente.id);
       } else {
-        let caixaQuery = supabase
-          .from('whatsapp_caixas')
-          .select('id')
-          .eq('funcao', 'administrativo')
-          .eq('departamento', departamento)
-          .eq('ativo', true);
-        caixaQuery = unidadeConversa
-          ? caixaQuery.or(`unidade_id.eq.${unidadeConversa},unidade_id.is.null`)
-          : caixaQuery.is('unidade_id', null);
-        const { data: caixa } = await caixaQuery.maybeSingle();
+        const { data: caixasSeguras, error: caixasError } =
+          await supabase.rpc('listar_whatsapp_caixas_seguras', {
+            p_unidade_id: unidadeConversa,
+            p_incluir_globais: true,
+          });
+        if (caixasError) throw caixasError;
+        const caixa = selecionarCaixaAdministrativa(
+          caixasSeguras,
+          unidadeConversa,
+          departamento,
+        );
 
         await supabase
           .from('admin_conversas')
