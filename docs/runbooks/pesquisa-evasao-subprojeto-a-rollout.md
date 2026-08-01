@@ -659,10 +659,12 @@ Se o frontend for publicado fora de ordem:
 | Migrations aplicadas | APROVADO — versões remotas `20260801003710`, `20260801003807`, `20260801003851` |
 | Verificadores em rollback | APROVADO — estrutural e operacional |
 | 6/6 legados como teste | APROVADO — mesmo número interno confirmado |
-| Edge com JWT | APROVADO — versão 39 ativa; anônimo e JWT inválido retornam 401 |
+| Edge com JWT | APROVADO — versão 40 ativa; anônimo e JWT inválido retornam 401 |
 | Backfill de telefone de julho/2026 | APROVADO — migration remota `20260801013339`; 23 recuperados e 24 snapshots no total; o diagnóstico posterior identificou 12 contatos de responsável ainda elegíveis e uma movimentação sem vínculo |
-| Backfill do telefone do responsável | PENDENTE DE APLICAÇÃO — preflight somente leitura confirmou 12 candidatas; migration local `20260801023000` preparada |
+| Backfill do telefone do responsável | APROVADO — migration remota `20260801130436`; 12 snapshots vazios preenchidos, 4 snapshots de menores substituídos pela regra do responsável e movimentação `3312` vinculada ao aluno `1532` |
 | Smoke no número interno | APROVADO — mensagem entregue somente em `***8047`, modo teste |
 | Auditoria completa | APROVADO — operador/Auth, assinatura, texto, template, caixa, destino, horários, preview, idempotência e provedor conferidos |
-| Smoke das telas de atendimento | AGUARDANDO PÓS-DEPLOY — tentativa anterior reproduziu a incompatibilidade esperada entre frontend legado e RLS nova |
-| Merge/deploy do frontend | AUTORIZADO — deve preceder o smoke dos consumidores de caixas |
+| Fila de julho/2026 | APROVADO — 37 saídas, 33 aptas com ação `Enviar` e 4 bloqueadas exclusivamente por `motivo_nao_catalogado` (`3221`, `3298`, `3300`, `3361`) |
+| Prévia de menor | APROVADO — evasão `3400` mostrou o nome e o telefone mascarado da responsável; snapshot persistido com destinatário e template `responsavel`; prévia cancelada sem envio |
+| Smoke das telas de atendimento | APROVADO NO ESCOPO — Caixa de Entrada do Sucesso do Aluno permaneceu operacional; Pré-Atendimento continua fora deste aceite por decisão de Alf |
+| Merge/deploy do frontend | APROVADO — PR #19, merge `351bd1ade991510dd6a6cd56f811ae33e4a6b1ef`, Vercel produção `dpl_9aoQbKGD2jtrHwfGmC6aPZmLaP7R` pronta |
