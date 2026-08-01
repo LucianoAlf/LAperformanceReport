@@ -1,8 +1,8 @@
 # Pesquisa de evasão — runbook do Subprojeto A
 
-**Status:** Plano A aplicado e publicado. Gate 0 do retorno fechado em produção.
-Gate 1 da Prosódia V2 fechado com Edge retrocompatível e prévia V1 cancelada sem
-envio. Gate 2 aguarda autorização explícita do Alf.
+**Status:** Plano A aplicado e publicado. Gates 0, 1 e 2 da Prosódia V2 fechados
+em produção. Templates V2 ativos e prévia V2 cancelada sem envio. Gate 3 do
+frontend aguarda autorização explícita do Alf.
 
 **Produção:** `ouqwbbermlzqqvtqwlul`
 
@@ -604,6 +604,23 @@ Gate 1 aprovado em produção em 01/08/2026:
 - a prévia foi cancelada na interface, permaneceu não consumida e não criou
   registro em `pesquisa_evasao`; nenhuma mensagem foi enviada.
 
+Gate 2 aprovado em produção em 01/08/2026:
+
+- migration remota `20260801175602_pesquisa_evasao_prosodia_v2`, correspondente
+  ao arquivo versionado de SHA-256
+  `B83AF00CF1C12DCC0DB39A512FF9DD8F3FF91BB869FAB18FD9CFFEEF4BEE7A30`;
+- V1 preservada e inativa, com os hashes anteriores intactos;
+- exatamente um template V2 ativo para `direto` e um para `responsavel`;
+- RPC `listar_evadidos_para_pesquisa_v2` atualizada com público
+  `indeterminado` e bloqueio `data_nascimento_ausente`;
+- a fila de agosto retornou 20 linhas, 15 responsáveis, 5 alunos diretos,
+  13 elegíveis e zero bloqueadas por data de nascimento;
+- prévia `f0ab7bcb-6a62-4dff-83f4-77b606d69414` criada em modo teste para Joice
+  e Davi, com `Aqui é o Luciano`, `experiência do Davi`, pergunta destacada,
+  pedido de sinceridade em itálico, nenhum separador e nenhum placeholder;
+- a prévia foi cancelada, permaneceu não consumida e criou zero registros em
+  `pesquisa_evasao`; nenhuma mensagem foi enviada.
+
 ### Risco independente do rollout: continuidade do banco
 
 PITR está desativado em `ouqwbbermlzqqvtqwlul` e, no pré-flight, o backup
@@ -755,7 +772,8 @@ aciona rollback. Aumentar a cobertura é item próprio posterior.
 
 - [ ] existe exatamente um template ativo para `direto`;
 - [ ] existe exatamente um template ativo para `responsavel`;
-- [ ] ambos usam a chave `evasao_aberta`, versão 1, e as cópias aprovadas;
+- [ ] ambos usam a chave `evasao_aberta`, versão ativa esperada no gate atual e
+  as cópias aprovadas; V1 permanece preservada para auditoria;
 - [ ] a prévia renderiza aluno, responsável quando aplicável e assinatura;
 - [ ] não sobra `{{` nem `}}` no texto final;
 - [ ] `service_role` continua sem `INSERT`, `UPDATE` ou `DELETE` nas tabelas de configuração.
@@ -842,7 +860,7 @@ Se o frontend for publicado fora de ordem:
 | Rollback cirúrgico local | `pesquisa-evasao-subprojeto-a-rollback-producao.sql.local` — SHA-256 `AF34440C22F71D9636D220A557F74A290295CEF3130CB1DCBD08DD86CA2B43DC` |
 | Novo ensaio DDL do diff final | APROVADO em `didpawhgvkarzntvktzu`, depois destruído |
 | Hash de `20260730180100` | APROVADO — `F863A22C9F1D8534EAF31F0A7FEDC183DDABF3902E975B620B1F5064F9C381C4` |
-| 1 template ativo por público | APROVADO — `direto = 1`, `responsavel = 1`, chave `evasao_aberta`, versão 1 |
+| 1 template ativo por público | APROVADO — `direto = 1`, `responsavel = 1`, chave `evasao_aberta`, versão 2; V1 preservada e inativa |
 | Prévia sem placeholders residuais | APROVADO — texto final idêntico à prévia, sem `{{ }}` |
 | Migrations aplicadas | APROVADO — versões remotas `20260801003710`, `20260801003807`, `20260801003851` |
 | Verificadores em rollback | APROVADO — estrutural e operacional |
@@ -862,5 +880,5 @@ Se o frontend for publicado fora de ordem:
 | Indicador de respostas | APROVADO NO MODO TESTE — resposta preenche o contrato novo e o card produtivo não incrementa, como previsto; o primeiro envio real validará o card produtivo |
 | Fila de agosto/2026 | 13 aptas; 5 bloqueadas por `motivo_nao_catalogado`; 2 adultas bloqueadas por `sem_telefone` |
 | Pré-flight de idade da Prosódia V2 | APROVADO PARA O CONJUNTO VERIFICADO — 57 saídas desde 01/07/2026, 45 menores, 12 adultos e zero sem `data_nascimento` |
-| Prosódia V2 | GATE 1 APROVADO — Edge versão 42 publicada; prévia V1 criada e cancelada sem envio; Gate 2 aguarda autorização explícita |
+| Prosódia V2 | GATE 2 APROVADO — migration remota `20260801175602`; V1 preservada/inativa, V2 ativa; prévia responsável V2 criada e cancelada sem envio; Gate 3 aguarda autorização explícita |
 | Código alinhado com produção | APROVADO — PR #21, merge `6a7411de06ce1d42af7db23d004d61ec9e8bdb4f` |
