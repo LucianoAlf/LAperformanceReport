@@ -1,9 +1,8 @@
 # Pesquisa de evasão — runbook do Subprojeto A
 
-**Status:** Plano A aplicado e publicado. Retorno da pesquisa reaberto como gate
-bloqueador: o código local do webhook está corrigido, mas o runtime produtivo
-continua pendente de redeploy e revalidação. Prosódia V2 implementada somente
-em ambiente local; rollout não autorizado.
+**Status:** Plano A aplicado e publicado. Gate 0 do retorno fechado em produção.
+Gate 1 da Prosódia V2 fechado com Edge retrocompatível e prévia V1 cancelada sem
+envio. Gate 2 aguarda autorização explícita do Alf.
 
 **Produção:** `ouqwbbermlzqqvtqwlul`
 
@@ -577,25 +576,33 @@ corrigido para abrir a janela sempre que o provedor confirmar `enviado`,
 mantendo o destino controlado pelo número interno. `enviar-pesquisa-evasao` foi
 publicada como versão 41, com `verify_jwt = true`.
 
-Teste ponta a ponta registrado em 01/08/2026, agora pendente de repetição após
-confirmar o runtime correto:
+Gate 0 repetido e aprovado em produção em 01/08/2026, com o runtime da versão 77:
 
-- pesquisa de teste `85798348-31bb-4fc0-8b21-750315caf8f1`, saída `3299`;
-- mensagem entregue somente ao número interno `***8047`;
-- estado aberto com o mesmo `pesquisa_id` e depois encerrado como
-  `respondido`;
-- resposta recebida: `Teste E2E de retorno da pesquisa de evasão — 01/08/2026.`;
-- registro final com `status = 'respondido'`,
-  `resposta_status = 'pronta_para_revisao'`, `resposta_tipo = 'texto'` e o
-  texto na pesquisa correta;
+- resposta em texto gravada na pesquisa exata, com legado preservado e
+  `resposta_status = 'pronta_para_revisao'`;
+- resposta em áudio gravada na mesma pesquisa, com arquivo e transcrição;
+- mensagem enviada por outro número não alterou nenhuma pesquisa aberta;
 - nenhuma outra pesquisa foi marcada como respondida no intervalo;
-- `webhook_debug_log` permaneceu com 2.290 linhas e máximo em
-  `2026-08-01 13:43:28.690359+00`, anterior ao teste.
+- o fallback global “Tentativa 2” ficou comprovadamente fora do runtime;
+- o payload integral deixou de ser acrescentado a `webhook_debug_log`.
 
 O card produtivo **Respondidos** não deve incrementar nesse teste: a função de
 estatísticas exclui deliberadamente `modo_teste = true`. A prova do retorno de
 teste é feita pelo histórico marcado como TESTE e pelo registro de auditoria;
 respostas produtivas passam a alimentar o card pelo novo `resposta_status`.
+
+Gate 1 aprovado em produção em 01/08/2026:
+
+- `enviar-pesquisa-evasao` versão 42, `ACTIVE`, com `verify_jwt = true`;
+- request anônima e bearer inválido rejeitados com HTTP 401;
+- 72 testes Deno aprovados e `deno check` sem erro antes do deploy;
+- V1 permaneceu ativa, com exatamente um template ativo para `direto` e um para
+  `responsavel`, ambos na versão 1;
+- prévia `cac3d307-628f-4022-8809-84a6f5fbb6cc` criada em modo teste para o
+  responsável de Davi Pedro Palmerini, com destino `***8047`, assinatura
+  `Luciano`, template V1 e nenhum placeholder residual;
+- a prévia foi cancelada na interface, permaneceu não consumida e não criou
+  registro em `pesquisa_evasao`; nenhuma mensagem foi enviada.
 
 ### Risco independente do rollout: continuidade do banco
 
@@ -840,7 +847,7 @@ Se o frontend for publicado fora de ordem:
 | Migrations aplicadas | APROVADO — versões remotas `20260801003710`, `20260801003807`, `20260801003851` |
 | Verificadores em rollback | APROVADO — estrutural e operacional |
 | 6/6 legados como teste | APROVADO — mesmo número interno confirmado |
-| Edge com JWT | APROVADO — `enviar-pesquisa-evasao` versão 41 ativa, `verify_jwt = true`; anônimo e JWT inválido retornam 401 |
+| Edge com JWT | APROVADO — `enviar-pesquisa-evasao` versão 42 ativa e retrocompatível V1/V2, `verify_jwt = true`; anônimo e JWT inválido retornam 401 |
 | Backfill de telefone de julho/2026 | APROVADO — migration remota `20260801013339`; 23 recuperados e 24 snapshots no total; o diagnóstico posterior identificou 12 contatos de responsável ainda elegíveis e uma movimentação sem vínculo |
 | Backfill do telefone do responsável | APROVADO — migration remota `20260801130436`; 12 snapshots vazios preenchidos, 4 snapshots de menores substituídos pela regra do responsável e movimentação `3312` vinculada ao aluno `1532` |
 | Backfill do responsável em agosto/2026 | APROVADO — migration remota `20260801172237`; 10/10 snapshots preenchidos nos IDs esperados, nenhuma linha de julho alterada e zero candidato recuperável restante |
@@ -850,10 +857,10 @@ Se o frontend for publicado fora de ordem:
 | Prévia de menor | APROVADO — evasão `3400` mostrou o nome e o telefone mascarado da responsável; snapshot persistido com destinatário e template `responsavel`; prévia cancelada sem envio |
 | Smoke das telas de atendimento | APROVADO NO ESCOPO — Caixa de Entrada do Sucesso do Aluno permaneceu operacional; Pré-Atendimento continua fora deste aceite por decisão de Alf |
 | Merge/deploy do frontend | APROVADO — PR #19, merge `351bd1ade991510dd6a6cd56f811ae33e4a6b1ef`, Vercel produção `dpl_9aoQbKGD2jtrHwfGmC6aPZmLaP7R` pronta |
-| Webhook inbound | DEPLOY APROVADO; E2E PENDENTE — versão 77 ativa, sem fallback global e sem gravação do payload integral; falta a prova manual do número correto e do número alheio |
-| Retorno ponta a ponta | PENDENTE DE REPETIÇÃO — repetir após redeploy no número interno e provar associação exclusiva à pesquisa exata |
-| Indicador de respostas | PENDENTE DE REVALIDAÇÃO — o teste em modo teste não incrementa o card por contrato, mas deve preencher `resposta_status`; resposta produtiva deve alimentar o indicador |
+| Webhook inbound | APROVADO — versão 77 ativa, sem fallback global e sem gravação do payload integral; mensagem de número alheio não alterou pesquisa aberta |
+| Retorno ponta a ponta | APROVADO — texto e áudio associados à pesquisa de teste exata; áudio com arquivo e transcrição; `resposta_status = 'pronta_para_revisao'` |
+| Indicador de respostas | APROVADO NO MODO TESTE — resposta preenche o contrato novo e o card produtivo não incrementa, como previsto; o primeiro envio real validará o card produtivo |
 | Fila de agosto/2026 | 13 aptas; 5 bloqueadas por `motivo_nao_catalogado`; 2 adultas bloqueadas por `sem_telefone` |
 | Pré-flight de idade da Prosódia V2 | APROVADO PARA O CONJUNTO VERIFICADO — 57 saídas desde 01/07/2026, 45 menores, 12 adultos e zero sem `data_nascimento` |
-| Prosódia V2 | LOCAL CONCLUÍDA; ROLLOUT NÃO AUTORIZADO — exige webhook verde antes de Edge, migration e frontend V2 |
+| Prosódia V2 | GATE 1 APROVADO — Edge versão 42 publicada; prévia V1 criada e cancelada sem envio; Gate 2 aguarda autorização explícita |
 | Código alinhado com produção | APROVADO — PR #21, merge `6a7411de06ce1d42af7db23d004d61ec9e8bdb4f` |
