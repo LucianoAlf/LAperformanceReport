@@ -312,44 +312,18 @@ async function handleRespostaEvasao(
     
     console.log(`[webhook-evasao] Verificando estado para telefone: ${phone}`);
     
-    // Buscar estado de conversa de evasão
-    // Tenta match exato primeiro, depois tenta com sufixo (últimos 11 dígitos)
+    // Buscar somente o estado deste telefone.
     const phoneSuffix = phone.slice(-11); // Últimos 11 dígitos (DDD + número)
-    
-    // Buscar por telefone exato, sufixo, ou qualquer estado ativo (fallback para teste)
-    let estado = null;
-    let estadoError = null;
-    
-    // Tentativa 1: match exato ou sufixo
-    const result1 = await supabase
+
+    const { data: estado, error: estadoError } = await supabase
       .from('conversa_estado_whatsapp')
       .select('*')
       .or(`whatsapp_numero.eq.${phone},whatsapp_numero.like.%${phoneSuffix}`)
       .eq('estado', 'aguardando_resposta_evasao')
       .gt('expira_em', new Date().toISOString())
       .maybeSingle();
-    
-    estado = result1.data;
-    estadoError = result1.error;
-    
-    console.log(`[webhook-evasao] Tentativa 1 (phone=${phone}, sufixo=${phoneSuffix}): ${estado ? 'encontrado' : 'não encontrado'}`);
-    
-    // Tentativa 2: se não encontrou, busca qualquer estado ativo (para debug)
-    if (!estado) {
-      const result2 = await supabase
-        .from('conversa_estado_whatsapp')
-        .select('*')
-        .eq('estado', 'aguardando_resposta_evasao')
-        .gt('expira_em', new Date().toISOString())
-        .limit(1)
-        .maybeSingle();
-      
-      if (result2.data) {
-        console.log(`[webhook-evasao] Tentativa 2 - Estado ativo encontrado para outro telefone: ${result2.data.whatsapp_numero}`);
-        // Usar este estado como fallback (temporário para debug)
-        estado = result2.data;
-      }
-    }
+
+    console.log(`[webhook-evasao] Match do telefone: ${estado ? 'encontrado' : 'não encontrado'}`);
 
     if (estadoError) {
       console.error('[webhook-evasao] Erro ao buscar estado:', estadoError);
@@ -456,6 +430,7 @@ async function handleRespostaEvasao(
       .from('pesquisa_evasao')
       .update({
         status: 'respondido',
+        resposta_status: 'pronta_para_revisao',
         resposta_texto: respostaTexto,
         resposta_audio_url: respostaAudioUrl,
         resposta_tipo: respostaTipo,
@@ -922,9 +897,6 @@ serve(async (req: Request) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
-    // DEBUG: Salvar payload no banco para análise
-    await supabase.from('webhook_debug_log').insert({ payload });
-
     // Rotear: messages_update vai para handler de status
     const isStatus = isStatusUpdate(payload);
     console.log(`[webhook] isStatusUpdate=${isStatus}`);
@@ -974,21 +946,6 @@ serve(async (req: Request) => {
     const normalizedMsg = normalizeUazapiPayload(payload);
     const messages = normalizedMsg ? [normalizedMsg] : (Array.isArray(payload) ? payload : payload.data ? [payload.data] : [payload]);
     console.log(`[webhook] Total de mensagens no payload: ${messages.length}, normalizado: ${!!normalizedMsg}`);
-
-    // FORÇAR: Verificar se há estado de evasão ativo e processar qualquer mensagem
-    const { data: estadoAtivo } = await supabase
-      .from('conversa_estado_whatsapp')
-      .select('*')
-      .eq('estado', 'aguardando_resposta_evasao')
-      .gt('expira_em', new Date().toISOString())
-      .limit(1)
-      .maybeSingle();
-    
-    if (estadoAtivo) {
-      console.log(`[webhook] ESTADO ATIVO ENCONTRADO: ${estadoAtivo.whatsapp_numero}, pesquisa_id: ${estadoAtivo.contexto?.pesquisa_id}`);
-    } else {
-      console.log('[webhook] Nenhum estado de evasão ativo encontrado');
-    }
 
     let processadas = 0;
 

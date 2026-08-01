@@ -35,7 +35,12 @@ function iniciaisDe(nome: string): string {
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import type { WhatsAppCaixa, FuncaoCaixa, ProvedorWhatsApp, DepartamentoCaixa } from '../../types';
+import type {
+  WhatsAppCaixaAdmin,
+  FuncaoCaixa,
+  ProvedorWhatsApp,
+  DepartamentoCaixa,
+} from '../../types';
 import { ModalReconectarWhatsApp } from './ModalReconectarWhatsApp';
 
 interface UnidadeOption {
@@ -59,6 +64,8 @@ interface CaixaForm {
   waha_url: string;
   waha_session: string;
   waha_api_key: string;
+  uazapi_token_configurado: boolean;
+  waha_api_key_configurada: boolean;
 }
 
 interface TestResult {
@@ -70,7 +77,6 @@ interface TestResult {
 
 interface InstanciaUazapi {
   id: string;
-  token: string;
   status: string;
   nome: string;
   numero: string | null;
@@ -92,10 +98,12 @@ const emptyCaixa: CaixaForm = {
   waha_url: '',
   waha_session: '',
   waha_api_key: '',
+  uazapi_token_configurado: false,
+  waha_api_key_configurada: false,
 };
 
 export function CaixasManager() {
-  const [caixas, setCaixas] = useState<WhatsAppCaixa[]>([]);
+  const [caixas, setCaixas] = useState<WhatsAppCaixaAdmin[]>([]);
   const [unidades, setUnidades] = useState<UnidadeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -104,7 +112,8 @@ export function CaixasManager() {
   const [newTestResult, setNewTestResult] = useState<TestResult>({ status: 'idle' });
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
-  const [caixaReconectar, setCaixaReconectar] = useState<WhatsAppCaixa | null>(null);
+  const [caixaReconectar, setCaixaReconectar] =
+    useState<WhatsAppCaixaAdmin | null>(null);
   const [instancias, setInstancias] = useState<InstanciaUazapi[]>([]);
   const [loadingInstancias, setLoadingInstancias] = useState(false);
   const [instanciaSelecionada, setInstanciaSelecionada] = useState<string>('');
@@ -113,11 +122,10 @@ export function CaixasManager() {
 
   const fetchCaixas = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('whatsapp_caixas')
-      .select('*')
-      .order('id');
-    if (!error && data) setCaixas(data);
+    const { data, error } = await supabase.rpc(
+      'listar_whatsapp_caixas_administracao',
+    );
+    if (!error && data) setCaixas(data as WhatsAppCaixaAdmin[]);
     setLoading(false);
   }, []);
 
@@ -177,7 +185,6 @@ export function CaixasManager() {
     if (!inst) return;
     setEditando({
       ...editando,
-      uazapi_token: inst.token,
       uazapi_url: editando.uazapi_url || UAZAPI_URL_PADRAO,
       numero: inst.numero || editando.numero,
       nome: editando.nome || inst.nome,
@@ -198,12 +205,12 @@ export function CaixasManager() {
 
     // Validação por provedor
     if (provedor === 'waha') {
-      if (!wahaUrl || !wahaSession) {
+      if (!caixaId && (!wahaUrl || !wahaSession)) {
         setResult({ status: 'error', message: 'WAHA URL e Session são obrigatórios' });
         return;
       }
     } else {
-      if (!url || !token) {
+      if (!caixaId && (!url || !token)) {
         setResult({ status: 'error', message: 'URL e Token são obrigatórios' });
         return;
       }
@@ -289,7 +296,9 @@ export function CaixasManager() {
     if (!editando) return;
     const camposVazios = editando.provedor === 'waha'
       ? !editando.nome || !editando.waha_url || !editando.waha_session
-      : !editando.nome || !editando.uazapi_url || !editando.uazapi_token;
+      : !editando.nome ||
+        !editando.uazapi_url ||
+        (!editando.uazapi_token && !editando.uazapi_token_configurado);
     if (camposVazios) {
       setErro(editando.provedor === 'waha'
         ? 'Nome, WAHA URL e Session são obrigatórios'
@@ -306,42 +315,37 @@ export function CaixasManager() {
     setErro(null);
 
     try {
-      const payload = {
-        nome: editando.nome,
-        numero: editando.numero,
-        uazapi_url: editando.uazapi_url,
-        uazapi_token: editando.uazapi_token,
-        // 'todas' (caixa admin sem unidade fixa) → null no banco
-        unidade_id: editando.unidade_id === 'todas' ? null : (editando.unidade_id || null),
-        webhook_url: editando.webhook_url,
-        ativo: editando.ativo,
-        funcao: editando.funcao,
-        // Departamento só faz sentido em caixa administrativa; demais resetam para o default
-        departamento: editando.funcao === 'administrativo' ? editando.departamento : 'administrativo',
-        provedor: editando.provedor,
-        waha_url: editando.waha_url || null,
-        waha_session: editando.waha_session || null,
-        waha_api_key: editando.waha_api_key || null,
-      };
-
-      let caixaIdSalva = editando.id;
-      if (editando.id) {
-        const { error } = await supabase
-          .from('whatsapp_caixas')
-          .update(payload)
-          .eq('id', editando.id);
-        if (error) throw error;
-        setSucesso('Caixa atualizada com sucesso!');
-      } else {
-        const { data, error } = await supabase
-          .from('whatsapp_caixas')
-          .insert(payload)
-          .select('id')
-          .single();
-        if (error) throw error;
-        caixaIdSalva = data.id;
-        setSucesso('Caixa criada com sucesso!');
-      }
+      const { data: caixaIdSalva, error: salvarError } = await supabase.rpc(
+        'salvar_whatsapp_caixa_admin',
+        {
+          p_id: editando.id ?? null,
+          p_nome: editando.nome,
+          p_numero: editando.numero || null,
+          p_uazapi_url: editando.uazapi_url || null,
+          p_uazapi_token: editando.uazapi_token || null,
+          p_unidade_id:
+            editando.unidade_id === 'todas'
+              ? null
+              : editando.unidade_id || null,
+          p_webhook_url: editando.webhook_url || null,
+          p_ativo: editando.ativo,
+          p_funcao: editando.funcao,
+          p_departamento:
+            editando.funcao === 'administrativo'
+              ? editando.departamento
+              : 'administrativo',
+          p_provedor: editando.provedor,
+          p_waha_url: editando.waha_url || null,
+          p_waha_session: editando.waha_session || null,
+          p_waha_api_key: editando.waha_api_key || null,
+        },
+      );
+      if (salvarError) throw salvarError;
+      setSucesso(
+        editando.id
+          ? 'Caixa atualizada com sucesso!'
+          : 'Caixa criada com sucesso!',
+      );
 
       // Conecta o webhook de recebimento automaticamente (UAZAPI ativa) — sem configuração manual
       if (caixaIdSalva && editando.provedor === 'uazapi' && editando.ativo) {
@@ -375,7 +379,9 @@ export function CaixasManager() {
   const handleExcluir = async (id: number) => {
     const caixa = caixas.find(c => c.id === id);
     if (!confirm(`Tem certeza que deseja excluir a caixa "${caixa?.nome || id}"? Conversas existentes não serão apagadas.`)) return;
-    const { error } = await supabase.from('whatsapp_caixas').delete().eq('id', id);
+    const { error } = await supabase.rpc('excluir_whatsapp_caixa_admin', {
+      p_caixa_id: id,
+    });
     if (error) {
       setErro('Erro ao excluir caixa. Tente novamente.');
       console.error('[CaixasManager] Erro ao excluir:', error);
@@ -509,7 +515,7 @@ export function CaixasManager() {
             ))}
           </div>
 
-          {/* Seletor de instância UAZAPI: puxa lista do servidor e preenche token + número */}
+          {/* O inventário preenche metadados; credenciais continuam write-only. */}
           {editando.provedor === 'uazapi' && (
           <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-4 space-y-3">
             <div className="flex items-start justify-between gap-3">
@@ -518,7 +524,9 @@ export function CaixasManager() {
                 <div>
                   <p className="text-xs font-semibold text-cyan-200">Vincular a um número conectado na UAZAPI</p>
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    Lista as instâncias do servidor e preenche token e número automaticamente.
+                    Preenche nome e número. Por segurança, o token nunca é
+                    devolvido pelo servidor; informe um novo token no campo
+                    abaixo somente ao criar ou rotacionar a credencial.
                   </p>
                 </div>
               </div>
@@ -689,10 +697,14 @@ export function CaixasManager() {
                 <Key className="w-3 h-3" /> UAZAPI Token *
               </label>
               <input
-                type="text"
+                type="password"
                 value={editando.uazapi_token}
                 onChange={e => setEditando({ ...editando, uazapi_token: e.target.value })}
-                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                placeholder={
+                  editando.uazapi_token_configurado
+                    ? 'Deixe em branco para manter a credencial atual'
+                    : 'Informe o token da nova caixa'
+                }
                 className="w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-white placeholder-slate-500 focus:border-violet-500/50 focus:outline-none font-mono text-xs"
               />
             </div>
@@ -732,7 +744,11 @@ export function CaixasManager() {
                 type="password"
                 value={editando.waha_api_key}
                 onChange={e => setEditando({ ...editando, waha_api_key: e.target.value })}
-                placeholder="Chave de autenticação do servidor WAHA"
+                placeholder={
+                  editando.waha_api_key_configurada
+                    ? 'Deixe em branco para manter a credencial atual'
+                    : 'Chave de autenticação do servidor WAHA'
+                }
                 className="w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-white placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none font-mono text-xs"
               />
             </div>
@@ -883,7 +899,17 @@ export function CaixasManager() {
           <div className="flex items-center gap-3 pt-2 border-t border-slate-700/50">
             <button
               onClick={() => handleTestarConexao(editando.id, editando.uazapi_url, editando.uazapi_token, editando.provedor, editando.waha_url, editando.waha_session)}
-              disabled={formTestResult.status === 'testing' || (editando.provedor === 'waha' ? !editando.waha_url || !editando.waha_session : !editando.uazapi_url || !editando.uazapi_token)}
+              disabled={
+                formTestResult.status === 'testing' ||
+                (
+                  !editando.id &&
+                  (
+                    editando.provedor === 'waha'
+                      ? !editando.waha_url || !editando.waha_session
+                      : !editando.uazapi_url || !editando.uazapi_token
+                  )
+                )
+              }
               className="flex items-center gap-2 px-4 py-2 bg-cyan-600/20 border border-cyan-500/30 hover:bg-cyan-600/30 text-cyan-300 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
             >
               {formTestResult.status === 'testing' ? (
@@ -1005,14 +1031,17 @@ export function CaixasManager() {
                         <Globe className="w-3 h-3" /> {caixa.uazapi_url}
                       </span>
                       <span className="text-[10px] text-slate-500 flex items-center gap-1 font-mono">
-                        <Key className="w-3 h-3" /> {caixa.uazapi_token.substring(0, 8)}...
+                        <Key className="w-3 h-3" />
+                        {caixa.uazapi_token_configurado
+                          ? 'Credencial configurada'
+                          : 'Credencial ausente'}
                       </span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => handleTestarConexao(caixa.id, caixa.uazapi_url, caixa.uazapi_token, caixa.provedor || 'uazapi', caixa.waha_url || '', caixa.waha_session || '')}
+                      onClick={() => handleTestarConexao(caixa.id, caixa.uazapi_url, undefined, caixa.provedor || 'uazapi', caixa.waha_url || '', caixa.waha_session || '')}
                       disabled={test.status === 'testing'}
                       className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
                       title="Testar conexão"
@@ -1058,7 +1087,7 @@ export function CaixasManager() {
                           nome: caixa.nome,
                           numero: caixa.numero || '',
                           uazapi_url: caixa.uazapi_url,
-                          uazapi_token: caixa.uazapi_token,
+                          uazapi_token: '',
                           // Caixa admin sem unidade = "Todas as unidades" (sentinel 'todas' no select)
                           unidade_id: caixa.unidade_id || (caixa.funcao === 'administrativo' ? 'todas' : ''),
                           webhook_url: caixa.webhook_url || '',
@@ -1068,7 +1097,11 @@ export function CaixasManager() {
                           provedor: caixa.provedor || 'uazapi',
                           waha_url: caixa.waha_url || '',
                           waha_session: caixa.waha_session || '',
-                          waha_api_key: (caixa as any).waha_api_key || '',
+                          waha_api_key: '',
+                          uazapi_token_configurado:
+                            caixa.uazapi_token_configurado,
+                          waha_api_key_configurada:
+                            caixa.waha_api_key_configurada,
                         });
                         setNewTestResult({ status: 'idle' });
                         resetSeletorInstancias();
@@ -1099,7 +1132,7 @@ export function CaixasManager() {
         caixa={caixaReconectar}
         onReconectado={() => {
           if (caixaReconectar) {
-            handleTestarConexao(caixaReconectar.id, caixaReconectar.uazapi_url, caixaReconectar.uazapi_token, caixaReconectar.provedor || 'uazapi', caixaReconectar.waha_url || '', caixaReconectar.waha_session || '');
+            handleTestarConexao(caixaReconectar.id, caixaReconectar.uazapi_url, undefined, caixaReconectar.provedor || 'uazapi', caixaReconectar.waha_url || '', caixaReconectar.waha_session || '');
           }
         }}
       />

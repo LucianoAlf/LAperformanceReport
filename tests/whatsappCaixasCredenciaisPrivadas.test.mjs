@@ -1,0 +1,356 @@
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import test from 'node:test';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const read = (relativePath) => {
+  const path = resolve(repoRoot, relativePath);
+  return existsSync(path) ? readFileSync(path, 'utf8') : '';
+};
+
+const migration = read(
+  'supabase/migrations/20260730180100_whatsapp_caixas_credenciais_privadas.sql',
+);
+const hook = read(
+  'src/components/App/PreAtendimento/hooks/useWhatsAppCaixas.ts',
+);
+const manager = read(
+  'src/components/App/PreAtendimento/components/chat/CaixasManager.tsx',
+);
+const modal = read(
+  'src/components/App/Administrativo/CaixaEntrada/NovaConversaModal.tsx',
+);
+const types = read('src/components/App/PreAtendimento/types.ts');
+const instanceEdge = read(
+  'supabase/functions/listar-instancias-uazapi/index.ts',
+);
+const pg17Fixture = read(
+  'tests/fixtures/whatsapp_caixas_credenciais_privadas_pg17.sql',
+);
+const planA = read(
+  'docs/superpowers/plans/2026-07-30-pesquisa-evasao-subprojeto-a-fundacao-segura.md',
+);
+const runbook = read(
+  'docs/runbooks/pesquisa-evasao-subprojeto-a-rollout.md',
+);
+const rlsVerification = read('scripts/verify-pesquisa-evasao-rls.sql');
+const schemaVerification = read('scripts/verify-pesquisa-evasao-schema.sql');
+const movimentacoesSpec = read(
+  'docs/superpowers/specs/2026-07-31-movimentacoes-admin-hardening-design.md',
+);
+const seletorCaixaPath = resolve(
+  repoRoot,
+  'src/components/App/Administrativo/CaixaEntrada/selecionarCaixaAdministrativa.ts',
+);
+let seletorCaixaModule = null;
+let seletorCaixaImportError = null;
+try {
+  seletorCaixaModule = await import(pathToFileURL(seletorCaixaPath));
+} catch (error) {
+  seletorCaixaImportError = error;
+}
+
+function stripSqlComments(source) {
+  return source
+    .replace(/--.*$/gm, ' ')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ');
+}
+
+function getFunctionDefinition(name) {
+  const source = stripSqlComments(migration);
+  const match = source.match(
+    new RegExp(
+      `create\\s+or\\s+replace\\s+function\\s+public\\.${name}\\b[\\s\\S]*?\\$function\\$\\s*;`,
+      'i',
+    ),
+  );
+  assert.ok(match, `funcao ${name} ausente`);
+  return match[0];
+}
+
+test('migration fecha a tabela bruta para todos os roles cliente', () => {
+  assert.ok(migration, 'migration de hardening ausente');
+  assert.match(
+    migration,
+    /alter\s+table\s+public\.whatsapp_caixas\s+enable\s+row\s+level\s+security/i,
+  );
+
+  for (const role of [
+    'public',
+    'anon',
+    'authenticated',
+    'mila_acesso_restrito',
+    'sol_acesso_restrito',
+    'fabio_agent',
+    'lia_acesso_restrito',
+  ]) {
+    assert.match(
+      migration,
+      new RegExp(
+        `revoke\\s+all[\\s\\S]*on\\s+(?:table\\s+)?public\\.whatsapp_caixas[\\s\\S]*from[\\s\\S]*\\b${role}\\b`,
+        'i',
+      ),
+      `faltou revogar whatsapp_caixas de ${role}`,
+    );
+  }
+
+  assert.match(
+    migration,
+    /grant\s+(?:all|select[\s\S]*insert[\s\S]*update[\s\S]*delete)[\s\S]*on\s+(?:table\s+)?public\.whatsapp_caixas[\s\S]*to\s+service_role/i,
+  );
+  assert.doesNotMatch(
+    migration,
+    /create\s+policy[\s\S]*on\s+public\.whatsapp_caixas[\s\S]*to\s+authenticated[\s\S]*using\s*\(\s*true\s*\)/i,
+  );
+});
+
+test('read models autenticado e administrativo nunca retornam credenciais', () => {
+  for (const name of [
+    'listar_whatsapp_caixas_seguras',
+    'listar_whatsapp_caixas_administracao',
+  ]) {
+    const definition = getFunctionDefinition(name);
+    const returns = definition.match(
+      /\breturns\s+table\s*\(([\s\S]*?)\)\s*language\b/i,
+    )?.[1] ?? '';
+    assert.ok(returns, `RETURNS TABLE ausente em ${name}`);
+    assert.doesNotMatch(
+      returns,
+      /\buazapi_token\b|\bwaha_api_key\b/i,
+      `${name} expoe credencial no contrato`,
+    );
+    assert.match(definition, /\bsecurity\s+definer\b/i);
+    assert.match(definition, /\bset\s+search_path\s*=\s*''/i);
+  }
+
+  const safe = getFunctionDefinition('listar_whatsapp_caixas_seguras');
+  assert.match(safe, /\bauth\.uid\s*\(\s*\)/i);
+  assert.match(safe, /\bnumero_mascarado\b/i);
+
+  const admin = getFunctionDefinition(
+    'listar_whatsapp_caixas_administracao',
+  );
+  assert.match(admin, /\bperfil\s*=\s*'admin'/i);
+  assert.match(admin, /\buazapi_token_configurado\b/i);
+  assert.match(admin, /\bwaha_api_key_configurada\b/i);
+});
+
+test('mutacoes administrativas sao write-only, auditadas e preservam segredo omitido', () => {
+  const save = getFunctionDefinition('salvar_whatsapp_caixa_admin');
+  const remove = getFunctionDefinition('excluir_whatsapp_caixa_admin');
+
+  for (const definition of [save, remove]) {
+    assert.match(definition, /\bsecurity\s+definer\b/i);
+    assert.match(definition, /\bset\s+search_path\s*=\s*''/i);
+    assert.match(definition, /\bperfil\s*=\s*'admin'/i);
+  }
+
+  assert.match(
+    save,
+    /coalesce\s*\(\s*nullif\s*\(\s*btrim\s*\(\s*p_uazapi_token\s*\)/i,
+    'token UAZAPI omitido deve preservar o valor atual',
+  );
+  assert.match(
+    save,
+    /coalesce\s*\(\s*nullif\s*\(\s*btrim\s*\(\s*p_waha_api_key\s*\)/i,
+    'API key WAHA omitida deve preservar o valor atual',
+  );
+  assert.match(
+    save,
+    /insert\s+into\s+public\.whatsapp_caixas_credenciais_auditoria/i,
+  );
+  assert.doesNotMatch(
+    save,
+    /return(?:ing)?[\s\S]{0,120}\buazapi_token\b|return(?:ing)?[\s\S]{0,120}\bwaha_api_key\b/i,
+  );
+
+  assert.match(
+    migration,
+    /revoke\s+all\s+on\s+function\s+public\.salvar_whatsapp_caixa_admin/i,
+  );
+  assert.match(
+    migration,
+    /grant\s+execute\s+on\s+function\s+public\.salvar_whatsapp_caixa_admin[\s\S]*to\s+authenticated/i,
+  );
+});
+
+test('frontend usa somente RPCs e o tipo operacional nao contem segredo', () => {
+  for (const [name, source] of [
+    ['useWhatsAppCaixas', hook],
+    ['CaixasManager', manager],
+    ['NovaConversaModal', modal],
+  ]) {
+    assert.ok(source, `${name} ausente`);
+    assert.doesNotMatch(
+      source,
+      /\.from\s*\(\s*['"]whatsapp_caixas['"]\s*\)/i,
+      `${name} ainda acessa whatsapp_caixas diretamente`,
+    );
+  }
+
+  assert.match(hook, /\.rpc\s*\(\s*['"]listar_whatsapp_caixas_seguras['"]/i);
+  assert.match(
+    manager,
+    /\.rpc\s*\(\s*['"]listar_whatsapp_caixas_administracao['"]/i,
+  );
+  assert.match(
+    manager,
+    /\.rpc\s*\(\s*['"]salvar_whatsapp_caixa_admin['"]/i,
+  );
+  assert.match(
+    manager,
+    /\.rpc\s*\(\s*['"]excluir_whatsapp_caixa_admin['"]/i,
+  );
+
+  const operationalType = types.match(
+    /export\s+interface\s+WhatsAppCaixa\s*\{([\s\S]*?)\n\}/,
+  )?.[1] ?? '';
+  assert.ok(operationalType, 'interface WhatsAppCaixa ausente');
+  assert.doesNotMatch(operationalType, /uazapi_token|waha_api_key/i);
+});
+
+test('nova conversa prioriza caixa da unidade antes da caixa global', () => {
+  assert.ok(
+    seletorCaixaModule,
+    `seletor executável ausente: ${seletorCaixaImportError?.message ?? 'erro desconhecido'}`,
+  );
+  const { selecionarCaixaAdministrativa } = seletorCaixaModule;
+  const caixas = [
+    { id: 1, funcao: 'administrativo', departamento: 'administrativo', unidade_id: null },
+    { id: 2, funcao: 'administrativo', departamento: 'administrativo', unidade_id: 'unidade-a' },
+    { id: 3, funcao: 'administrativo', departamento: 'sucesso_aluno', unidade_id: 'unidade-a' },
+  ];
+
+  assert.equal(
+    selecionarCaixaAdministrativa(caixas, 'unidade-a', 'administrativo')?.id,
+    2,
+    'a caixa da unidade deve vencer mesmo quando a global aparece primeiro',
+  );
+  assert.equal(
+    selecionarCaixaAdministrativa(caixas, 'unidade-b', 'administrativo')?.id,
+    1,
+    'a caixa global deve ser usada apenas quando a unidade não tiver caixa própria',
+  );
+  assert.equal(
+    selecionarCaixaAdministrativa(caixas, null, 'administrativo')?.id,
+    1,
+    'conversa sem unidade só pode usar a caixa global',
+  );
+  assert.match(modal, /selecionarCaixaAdministrativa\s*\(/);
+});
+
+test('inventario de instancias nao devolve tokens ao navegador', () => {
+  assert.ok(instanceEdge, 'Edge listar-instancias-uazapi ausente');
+  const normalizedType = instanceEdge.match(
+    /type\s+InstanciaNormalizada\s*=\s*\{([\s\S]*?)\};/,
+  )?.[1] ?? '';
+  const normalizedMap = instanceEdge.match(
+    /const\s+instancias:\s*InstanciaNormalizada\[\][\s\S]*?\.map\([\s\S]*?\}\)\);/,
+  )?.[0] ?? '';
+
+  assert.ok(normalizedType, 'tipo normalizado ausente');
+  assert.ok(normalizedMap, 'mapeamento normalizado ausente');
+  assert.doesNotMatch(normalizedType, /\btoken\b/i);
+  assert.doesNotMatch(normalizedMap, /\btoken\s*:/i);
+});
+
+test('fixture PG17 cobre ACL, escopo, mascara, preservacao e rotacao', () => {
+  assert.ok(pg17Fixture, 'fixture PostgreSQL 17 ausente');
+  for (const evidence of [
+    /has_table_privilege[\s\S]*authenticated/i,
+    /has_table_privilege[\s\S]*service_role/i,
+    /usu[aá]rio ampliou escopo/i,
+    /telefone operacional n[aã]o foi mascarado/i,
+    /token omitido n[aã]o foi preservado/i,
+    /rota[cç][aã]o write-only n[aã]o persistiu/i,
+    /whatsapp_caixas_credenciais_auditoria/i,
+    /WHATSAPP_CAIXAS_CREDENCIAIS_PRIVADAS_PG17_OK/,
+  ]) {
+    assert.match(pg17Fixture, evidence);
+  }
+});
+
+test('verificacao de rollout bloqueia leitura das duas credenciais', () => {
+  assert.ok(schemaVerification, 'verificação estrutural de rollout ausente');
+  assert.match(
+    schemaVerification,
+    /has_column_privilege\s*\([\s\S]*'authenticated'[\s\S]*'public\.whatsapp_caixas'[\s\S]*'uazapi_token'[\s\S]*'select'/i,
+  );
+  assert.match(
+    schemaVerification,
+    /has_column_privilege\s*\([\s\S]*'authenticated'[\s\S]*'public\.whatsapp_caixas'[\s\S]*'waha_api_key'[\s\S]*'select'/i,
+  );
+  assert.match(
+    migration,
+    /grant\s+(?:all|select)\s+on\s+table\s+public\.whatsapp_caixas\s+to\s+service_role/i,
+  );
+});
+
+test('DoD e runbook refletem acesso humano amplo e agentes sem acesso bruto', () => {
+  assert.match(
+    planA,
+    /Mila, Sol, F[aá]bio e Lia n[aã]o leem diretamente as tabelas privadas/i,
+  );
+  assert.match(
+    runbook,
+    /qualquer usu[aá]rio interno ativo[\s\S]*qualquer unidade/i,
+  );
+  assert.match(
+    runbook,
+    /Pré-Atendimento, CaixasManager e NovaConversaModal/i,
+  );
+  assert.match(
+    runbook,
+    /smoke manual[\s\S]*sele[cç][aã]o correta de caixa/i,
+  );
+  assert.doesNotMatch(runbook, /usu[aá]rio dedicado[\s\S]*desativad[oa]/i);
+});
+
+test('runbook mantem staging incapaz de entregar WhatsApp', () => {
+  assert.match(runbook, /p01c-staging[\s\S]*nzwqjepncrtufpykjita/i);
+  assert.match(runbook, /tokens de WhatsApp[\s\S]*neutralizados/i);
+  assert.match(runbook, /n[aã]o podem ser restaurados/i);
+  assert.match(
+    runbook,
+    /n[aã]o usar para homologar o Plano A/i,
+  );
+  assert.match(
+    runbook,
+    /smoke real futuro[\s\S]*modo teste[\s\S]*n[uú]mero interno/i,
+  );
+});
+
+test('runbook invalida o ensaio anterior para o diff novo', () => {
+  assert.match(runbook, /vnuzjephkwgcyvioiele/i);
+  assert.match(runbook, /vers[aã]o anterior das migrations/i);
+  assert.match(runbook, /n[aã]o substitui um novo ensaio DDL do diff final/i);
+  assert.match(
+    runbook,
+    /novo ensaio DDL[\s\S]*APROVADO[\s\S]*didpawhgvkarzntvktzu/i,
+  );
+});
+
+test('runbook preserva a staging antiga ate inventario e decisao explicita', () => {
+  assert.match(runbook, /invent[aá]rio independente[\s\S]*fingerprint/i);
+  assert.match(
+    runbook,
+    /n[aã]o excluir[\s\S]*invent[aá]rio/i,
+  );
+});
+
+test('spec separada cobre consumidores, RLS, Sol e regressao da evasao', () => {
+  assert.ok(movimentacoesSpec, 'spec de movimentacoes_admin ausente');
+  for (const requirement of [
+    /20\+\s+consumidores/i,
+    /RLS[\s\S]*unidade/i,
+    /lume_readonly_select/i,
+    /Sol[\s\S]*§13\.2/i,
+    /pesquisa[\s\S]*evas[aã]o[\s\S]*(?:regress[aã]o|continua funcionando)/i,
+    /depois[\s\S]*homologa[cç][aã]o[\s\S]*Plano A/i,
+    /antes[\s\S]*Subprojeto C/i,
+  ]) {
+    assert.match(movimentacoesSpec, requirement);
+  }
+});

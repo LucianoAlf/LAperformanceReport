@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 .superpowers/
+__pycache__/
+*.pyc
 
 # Editor directories and files
 .vscode/*
@@ -69,6 +71,9 @@ outputs/la-report-p02q-rpc-experimentais-v2-2026-06-20/
 staff/
 .windsurf/
 .playwright-cli/
+
+# Worktrees locais do Superpowers
+.worktrees/
 
 # graphify — indice AST local (regerar com: graphify extract . --code-only)
 graphify-out/

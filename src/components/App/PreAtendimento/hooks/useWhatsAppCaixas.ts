@@ -13,22 +13,27 @@ export function useWhatsAppCaixas({ unidadeId }: UseWhatsAppCaixasParams = {}) {
 
   const fetchCaixas = useCallback(async () => {
     try {
-      let query = supabase
-        .from('whatsapp_caixas')
-        .select('id, nome, numero, unidade_id, uazapi_url, uazapi_token, ativo, webhook_url, funcao, created_at')
-        .eq('ativo', true)
-        .order('nome');
-
-      // Filtrar por unidade (se não for admin/todos)
-      if (unidadeId && unidadeId !== 'todos') {
-        query = query.eq('unidade_id', unidadeId);
-      }
-
-      const { data, error } = await query;
+      const { data, error } = await supabase.rpc(
+        'listar_whatsapp_caixas_seguras',
+        {
+          p_unidade_id:
+            unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+          p_incluir_globais: false,
+        },
+      );
 
       if (error) throw error;
 
-      const lista = (data || []) as WhatsAppCaixa[];
+      const lista = (data || []).map((caixa) => ({
+        id: caixa.id,
+        nome: caixa.nome,
+        numero: caixa.numero_mascarado,
+        unidade_id: caixa.unidade_id,
+        ativo: caixa.ativo,
+        funcao: caixa.funcao,
+        departamento: caixa.departamento,
+        provedor: caixa.provedor,
+      })) as WhatsAppCaixa[];
       setCaixas(lista);
 
       // Auto-selecionar a primeira caixa se nenhuma selecionada
