@@ -78,3 +78,39 @@ test('webhook nao associa resposta a pesquisa de outro telefone', () => {
     /\.eq\('estado',\s*'aguardando_resposta_evasao'\)[\s\S]*\.limit\(1\)[\s\S]*\.maybeSingle\(\)/i,
   );
 });
+
+test('webhook registra a resposta no contrato novo de revisao', () => {
+  const webhook = readOptional(webhookPath);
+  const start = webhook.indexOf('async function handleRespostaEvasao');
+  const end = webhook.indexOf('// Mapear status UAZAPI', start);
+  const handler = webhook.slice(start, end === -1 ? webhook.length : end);
+
+  assert.notEqual(start, -1, 'handler de resposta de evasao ausente');
+  assert.match(
+    handler,
+    /resposta_status:\s*'pronta_para_revisao'/i,
+  );
+  assert.match(handler, /status:\s*'respondido'/i);
+});
+
+test('webhook nao persiste payload integral nem procura estado global para debug', () => {
+  const webhook = readOptional(webhookPath);
+
+  assert.doesNotMatch(webhook, /from\('webhook_debug_log'\)/i);
+  assert.doesNotMatch(
+    webhook,
+    /FOR[CÇ]AR:[\s\S]*?\.eq\('estado',\s*'aguardando_resposta_evasao'\)[\s\S]*?\.limit\(1\)/i,
+  );
+});
+
+test('webhook preserva os roteamentos administrativos, CRM e pos-primeira-aula', () => {
+  const webhook = readOptional(webhookPath);
+
+  assert.match(webhook, /handleStatusUpdate\(payload,\s*supabase\)/i);
+  assert.match(webhook, /handleEdicaoMensagem\(/i);
+  assert.match(webhook, /reactionMessage/i);
+  assert.match(webhook, /handleAdminInboxMessage\(/i);
+  assert.match(webhook, /mila-processar-mensagem/i);
+  assert.match(webhook, /processar-resposta-pesquisa/i);
+  assert.match(webhook, /buttonOrListid/i);
+});
