@@ -10,12 +10,14 @@ const edge = read('supabase/functions/relatorio-admin-whatsapp/index.ts');
 const admin = read('src/components/App/Administrativo/ModalRelatorio.tsx');
 const comercial = read('src/components/App/Comercial/ComercialPage.tsx');
 
-test('edge gera os dois mensais a partir do snapshot fechado', () => {
+test('edge gera cada mensal a partir do produtor canonico correspondente', () => {
   assert.match(edge, /dry_run_mensal_admin/);
   assert.match(edge, /dry_run_mensal_comercial/);
+  assert.match(edge, /get_relatorio_admin_mensal_rico_v1/);
   assert.match(edge, /get_relatorio_mensal_canonico_v1/);
   assert.match(edge, /formatarRelatorioAdminMensalCanonico/);
   assert.match(edge, /formatarRelatorioComercialMensalCanonico/);
+  assert.match(edge, /gerado_em:\s*new Date\(\)\.toISOString\(\)/);
 });
 
 test('botao administrativo usa exclusivamente o produtor mensal canonico', () => {

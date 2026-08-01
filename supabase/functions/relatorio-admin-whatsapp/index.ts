@@ -2080,14 +2080,24 @@ serve(async (req) => {
       }
 
       const tipo = payload.modo === 'dry_run_mensal_admin' ? 'administrativo' : 'comercial';
-      const { data: snapshot, error: snapshotError } = await userClient.rpc(
-        'get_relatorio_mensal_canonico_v1',
-        {
+      const rpcMensal = tipo === 'administrativo'
+        ? 'get_relatorio_admin_mensal_rico_v1'
+        : 'get_relatorio_mensal_canonico_v1';
+      const parametrosMensais = tipo === 'administrativo'
+        ? {
+          p_unidade_id: payload.unidade,
+          p_ano: payload.ano,
+          p_mes: payload.mes,
+        }
+        : {
           p_tipo: tipo,
           p_unidade_id: payload.unidade,
           p_ano: payload.ano,
           p_mes: payload.mes,
-        },
+        };
+      const { data: snapshot, error: snapshotError } = await userClient.rpc(
+        rpcMensal,
+        parametrosMensais,
       );
       if (snapshotError) {
         const acessoNegado = snapshotError.message?.includes('ACESSO_NEGADO');
@@ -2102,7 +2112,10 @@ serve(async (req) => {
         );
       }
 
-      const dados = snapshot?.payload as Record<string, unknown> | undefined;
+      const dadosBase = snapshot?.payload as Record<string, unknown> | undefined;
+      const dados = dadosBase
+        ? { ...dadosBase, gerado_em: new Date().toISOString() }
+        : undefined;
       if (!dados) throw new Error('RELATORIO_MENSAL_PAYLOAD_AUSENTE');
       const texto = validarTextoPublicoRelatorio(
         tipo === 'administrativo'
