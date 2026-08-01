@@ -519,8 +519,10 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
         return 'Responsável sem telefone';
       case 'responsavel_telefone_invalido':
         return 'Telefone do responsável inválido';
+      case 'telefone_snapshot_ausente':
+        return 'Contato da saída não registrado';
       case 'telefone_responsavel_divergente':
-        return 'Telefone diverge do responsável';
+        return 'Contato da saída difere do responsável';
       case 'motivo_nao_catalogado':
         return 'Motivo não catalogado';
       case 'publico_interno':
@@ -829,7 +831,6 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                             'responsavel_sem_nome',
                             'responsavel_sem_telefone',
                             'responsavel_telefone_invalido',
-                            'telefone_responsavel_divergente',
                           ]
                             .includes(evadido.bloqueio_codigo || '') && (
                             <Button

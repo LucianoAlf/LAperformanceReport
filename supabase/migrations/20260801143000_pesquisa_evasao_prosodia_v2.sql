@@ -303,6 +303,8 @@ bloqueada as (
       when is_menor
        and responsavel_telefone_normalizado !~ '^55[0-9]{10,11}$'
         then 'responsavel_telefone_invalido'
+      when is_menor and telefone_normalizado is null
+        then 'telefone_snapshot_ausente'
       when is_menor
        and telefone_normalizado is distinct from responsavel_telefone_normalizado
         then 'telefone_responsavel_divergente'

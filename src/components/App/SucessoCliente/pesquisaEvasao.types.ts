@@ -35,6 +35,7 @@ export type PesquisaEvasaoBloqueioCodigo =
   | 'responsavel_sem_nome'
   | 'responsavel_sem_telefone'
   | 'responsavel_telefone_invalido'
+  | 'telefone_snapshot_ausente'
   | 'telefone_responsavel_divergente'
   | 'motivo_nao_catalogado'
   | 'publico_interno'

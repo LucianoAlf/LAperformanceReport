@@ -102,6 +102,9 @@ Migrations, nesta ordem:
    `20260801013000_pesquisa_evasao_backfill_telefone_julho_2026.sql`.
 5. após preflight somente leitura e nova confirmação de Alf,
    `20260801023000_pesquisa_evasao_backfill_telefone_responsavel_julho_2026.sql`.
+6. após o diagnóstico das saídas criadas na manhã de 01/08 e autorização
+   específica de Alf,
+   `20260801174500_pesquisa_evasao_backfill_telefone_responsavel_agosto_2026.sql`.
 
 Edge e frontend:
 
@@ -465,6 +468,34 @@ forçamento em código para contornar `motivo_nao_catalogado`.
 
 Essas contagens devem ser reconfirmadas imediatamente antes da aplicação. A
 migration falha fechada se qualquer um dos três conjuntos divergir.
+
+### Backfill controlado dos contatos de agosto/2026
+
+O diagnóstico de 01/08/2026 confirmou uma janela entre o trigger original,
+que capturava somente `whatsapp` ou `telefone` do próprio aluno, e a correção
+aplicada às `13:04:36`, que passou a capturar `responsavel_telefone` quando o
+aluno era menor na data da saída. Dez saídas de menores foram lançadas nessa
+janela com o cadastro do responsável completo, mas nasceram sem
+`telefone_snapshot`. O backfill de julho era deliberadamente limitado a
+`data >= 2026-07-01` dentro da competência de julho e, portanto, não alcançou
+essas saídas de agosto.
+
+O preflight somente leitura encontrou exatamente as movimentações `3473`,
+`3475`, `3476`, `3477`, `3480`, `3483`, `3484`, `3485`, `3486` e `3488`.
+A migration de agosto falha fechada se a contagem ou os IDs mudarem, nunca
+sobrescreve snapshot existente, não toca julho e grava a origem
+`cadastro_responsavel_backfill_2026_08` para deixar explícito que o valor veio
+do cadastro atual do responsável.
+
+O trigger vigente já cobre corretamente novas saídas de menores: calcula a
+idade usando `coalesce(new.data, current_date)` e grava exclusivamente
+`alunos.responsavel_telefone`. Para adultos, continua usando o contato próprio.
+Assim, novas saídas de menores com responsável cadastrado não dependem de um
+terceiro backfill em setembro.
+
+Na fila, snapshot ausente passa a ser distinguido de divergência real. O rótulo
+`Contato da saída não registrado` descreve a falha técnica sem orientar a
+equipe a corrigir um cadastro de aluno que já está completo.
 
 ### Evidência do Bloco 4
 
