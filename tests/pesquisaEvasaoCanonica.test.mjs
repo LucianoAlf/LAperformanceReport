@@ -47,11 +47,12 @@ test('edge V2 separa destinos, valida a movimentacao e usa a caixa correta', () 
   assert.match(edge, /caixa_id:\s*CAIXA_SUCESSO_ID/i);
   assert.match(edge, /caixaId:\s*claim\.caixa_id/i);
   assert.match(edge, /is_movimentacao_admin_retencao_valida/i);
-  assert.match(edge, /resolverDestinoPesquisa\s*\(/i);
+  assert.match(edge, /resolverDestinoPesquisaPorPublico\s*\(/i);
   assert.match(
     edge,
     /telefoneSnapshot:\s*movimentacao\.telefone_snapshot/i,
   );
+  assert.match(edge, /telefoneResponsavel:\s*aluno\.responsavel_telefone/i);
 });
 
 test('tela nunca converte teste sem numero em envio real', () => {

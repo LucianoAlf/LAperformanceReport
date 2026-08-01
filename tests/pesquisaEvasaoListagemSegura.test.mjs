@@ -441,6 +441,7 @@ test('modo teste ignora bloqueios produtivos e conserva os hard blocks de pessoa
   assert.match(ramoTeste, /!\s*registroTeste/);
   assert.match(ramoTeste, /['"]sem_aluno['"]/);
   assert.match(ramoTeste, /['"]publico_interno['"]/);
+  assert.match(ramoTeste, /['"]responsavel_sem_nome['"]/);
   assert.match(
     ramoTeste,
     /\[\s*['"]colaborador['"]\s*,\s*['"]professor['"]\s*,\s*['"]outro['"]\s*\]\.includes\s*\(\s*evadido\.publico_tipo\s*\)/,

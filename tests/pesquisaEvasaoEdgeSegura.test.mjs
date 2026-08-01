@@ -335,8 +335,9 @@ test('preview usa configuracao fail-closed, snapshot canonico, hash e dez minuto
   assert.match(edge, /pesquisa_evasao_templates/);
   assert.match(edge, /templates \. length !== 1/);
   assert.match(edge, /pesquisa_evasao_assinaturas/);
-  assert.match(edge, /resolverDestinoPesquisa \(/);
+  assert.match(edge, /resolverDestinoPesquisaPorPublico \(/);
   assert.match(edge, /telefoneSnapshot : movimentacao \. telefone_snapshot/);
+  assert.match(edge, /telefoneResponsavel : aluno \. responsavel_telefone/);
   assert.match(edge, /renderizarMensagem \(/);
   assert.match(edge, /hashPreview \(/);
   assert.match(edge, /pesquisa_evasao_previews/);

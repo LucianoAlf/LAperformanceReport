@@ -1,6 +1,6 @@
 # Pesquisa de evasão — runbook do Subprojeto A
 
-**Status:** migrations, Edge e backfill aplicados; Bloco 5 autorizado por Alf. Publicar o frontend e executar o smoke dos consumidores de caixas somente depois do deploy.
+**Status:** Plano A aplicado e publicado, com o Bloco 5 autorizado por Alf e concluído. Correção complementar menor → responsável preparada localmente; a segunda migration e a atualização da Edge/frontend ainda não foram aplicadas em produção.
 
 **Produção:** `ouqwbbermlzqqvtqwlul`
 
@@ -97,6 +97,8 @@ Migrations, nesta ordem:
 3. `20260730180100_whatsapp_caixas_credenciais_privadas.sql`.
 4. após o smoke manual do Bloco 3 e com autorização específica de Alf,
    `20260801013000_pesquisa_evasao_backfill_telefone_julho_2026.sql`.
+5. após preflight somente leitura e nova confirmação de Alf,
+   `20260801023000_pesquisa_evasao_backfill_telefone_responsavel_julho_2026.sql`.
 
 Edge e frontend:
 
@@ -397,18 +399,40 @@ dias e existir necessidade operacional de entregar uma fila utilizável à
 equipe em agosto. O histórico anterior a `2026-07-01` permanece intocado e
 bloqueado quando não possui snapshot.
 
-O preflight somente leitura encontrou 37 saídas canônicas em julho: uma já
-possuía snapshot, 23 estavam elegíveis ao backfill e 13 não tinham contato
-atual. A migration versionada congela os 23 IDs aprovados, repete todos os
-filtros de negócio e falha fechada se a contagem ou o conjunto divergirem. Ela
-nunca sobrescreve `telefone_snapshot` existente e marca os valores recuperados
-em `telefone_snapshot_origem` como
-`cadastro_atual_backfill_2026_07`.
+O primeiro preflight somente leitura encontrou 37 saídas canônicas em julho:
+uma já possuía snapshot e 23 tinham `whatsapp` ou `telefone` no cadastro do
+aluno. A primeira migration versionada congelou os 23 IDs aprovados, repetiu
+todos os filtros de negócio e marcou os valores recuperados em
+`telefone_snapshot_origem` como `cadastro_atual_backfill_2026_07`.
 
-Observação de qualidade de cadastro: 13 saídas de julho não possuem nenhum
-contato no cadastro do aluno, nem `whatsapp` nem `telefone`. Elas ficam fora do
-backfill e continuam bloqueadas para envio; o saneamento será tratado pela
-equipe administrativa, fora deste rollout.
+A conclusão anterior de que as outras 13 saídas não possuíam contato estava
+errada: 12 são alunos menores e possuem contato em
+`alunos.responsavel_telefone`. O segundo preflight somente leitura confirmou
+exatamente 12 snapshots vazios recuperáveis, todos com nome de responsável,
+data de nascimento e idade inferior a 18 anos na data da saída.
+
+Decisão permanente de Alf: para aluno menor de idade, o destinatário é sempre o
+responsável. A prévia e o envio usam `responsavel_nome`,
+`responsavel_telefone` e o template `responsavel`; nunca há fallback para o
+telefone próprio do menor. Se nome ou telefone do responsável estiver ausente
+ou inválido, o envio fica bloqueado com motivo explícito. Se um snapshot real
+divergir do contato atual, ele é sinalizado e preservado; somente snapshots de
+origem `cadastro_atual_backfill_2026_07` podem ser substituídos pelo responsável.
+
+O preflight canônico também identificou quatro snapshots do primeiro backfill
+que pertenciam ao próprio menor e diferiam do responsável: movimentações
+`3305`, `3311`, `3334` e `3367`. A migration complementar substitui somente
+essas quatro linhas e registra `cadastro_responsavel_backfill_2026_07`, além de
+preencher as 12 linhas vazias com a mesma origem.
+
+A movimentação `3312`, Pedro Gabriel Michel Oliveira, de 02/07/2026, estava com
+`aluno_id` nulo e foi
+confirmada por Alf como o aluno `1532`, Pedro Gabriel Michel oliveira,
+`emusys_student_id = 3460`, Campo Grande. A diferença era apenas a caixa do
+"o" em Oliveira. O preflight confirmou que o aluno 1532 não está ligado a outra
+saída válida de julho. A mesma migration vincula `3312 → 1532`, usa o telefone
+do responsável Matheus e registra a origem própria
+`cadastro_responsavel_vinculo_manual_alf_2026_08`.
 
 O fechamento de julho está completo e conferido: 217 movimentações, 32
 cancelamentos e 5 não renovações, totalizando as 37 saídas observadas no banco.
@@ -419,7 +443,24 @@ A migration foi aplicada em produção como
 confirmou 23 linhas com origem `cadastro_atual_backfill_2026_07`, 24 saídas de
 julho com snapshot no total (as 23 recuperadas mais a original), zero elegíveis
 restantes com contato atual, 13 sem contato e zero linhas anteriores a
-`2026-07-01` marcadas pelo backfill.
+`2026-07-01` marcadas pelo backfill. A observação antiga de "13 sem contato"
+não representa falta de cadastro: 12 têm telefone do responsável e uma era a
+movimentação 3312 sem vínculo, agora identificada de forma determinística.
+
+Preflight final antes da migration complementar, somente leitura:
+
+- 12 snapshots vazios a preencher com telefone do responsável;
+- 4 snapshots do primeiro backfill a substituir pela regra menor → responsável;
+- 1 vínculo manual confirmado (`3312 → 1532`) com telefone do responsável;
+- após simulação puramente relacional: 33 saídas de julho aptas e 4 bloqueadas,
+  todas por `motivo_nao_catalogado` (`3221`, `3298`, `3300`, `3361`).
+
+O desbloqueio dessas quatro saídas é exclusivamente administrativo: a equipe
+deve catalogar o motivo da saída no cadastro. Não existe fallback nem
+forçamento em código para contornar `motivo_nao_catalogado`.
+
+Essas contagens devem ser reconfirmadas imediatamente antes da aplicação. A
+migration falha fechada se qualquer um dos três conjuntos divergir.
 
 ### Evidência do Bloco 4
 
@@ -619,7 +660,8 @@ Se o frontend for publicado fora de ordem:
 | Verificadores em rollback | APROVADO — estrutural e operacional |
 | 6/6 legados como teste | APROVADO — mesmo número interno confirmado |
 | Edge com JWT | APROVADO — versão 39 ativa; anônimo e JWT inválido retornam 401 |
-| Backfill de telefone de julho/2026 | APROVADO — migration remota `20260801013339`; 23 recuperados, 24 snapshots no total, 13 sem contato bloqueados, zero linhas anteriores a julho |
+| Backfill de telefone de julho/2026 | APROVADO — migration remota `20260801013339`; 23 recuperados e 24 snapshots no total; o diagnóstico posterior identificou 12 contatos de responsável ainda elegíveis e uma movimentação sem vínculo |
+| Backfill do telefone do responsável | PENDENTE DE APLICAÇÃO — preflight somente leitura confirmou 12 candidatas; migration local `20260801023000` preparada |
 | Smoke no número interno | APROVADO — mensagem entregue somente em `***8047`, modo teste |
 | Auditoria completa | APROVADO — operador/Auth, assinatura, texto, template, caixa, destino, horários, preview, idempotência e provedor conferidos |
 | Smoke das telas de atendimento | AGUARDANDO PÓS-DEPLOY — tentativa anterior reproduziu a incompatibilidade esperada entre frontend legado e RLS nova |

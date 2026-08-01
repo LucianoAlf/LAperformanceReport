@@ -511,6 +511,14 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
         return 'Sem telefone';
       case 'telefone_invalido':
         return 'Telefone inválido';
+      case 'responsavel_sem_nome':
+        return 'Responsável sem nome';
+      case 'responsavel_sem_telefone':
+        return 'Responsável sem telefone';
+      case 'responsavel_telefone_invalido':
+        return 'Telefone do responsável inválido';
+      case 'telefone_responsavel_divergente':
+        return 'Telefone diverge do responsável';
       case 'motivo_nao_catalogado':
         return 'Motivo não catalogado';
       case 'publico_interno':
@@ -771,7 +779,9 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                     !registroTeste && ['pendente', 'falha_envio', 'sem_whatsapp'].includes(statusBase);
                   const podeGerarPreview = modoTeste
                     ? !registroTeste &&
-                      !['sem_aluno', 'publico_interno'].includes(evadido.bloqueio_codigo || '') &&
+                      !['sem_aluno', 'publico_interno', 'responsavel_sem_nome'].includes(
+                        evadido.bloqueio_codigo || '',
+                      ) &&
                       !['colaborador', 'professor', 'outro'].includes(evadido.publico_tipo)
                     : evadido.elegivel_envio && statusProducaoPermiteEnvio;
 
@@ -804,7 +814,15 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                           <p className="text-slate-300 text-sm font-mono">
                             {evadido.telefone || 'Não informado'}
                           </p>
-                          {['sem_aluno', 'sem_telefone', 'telefone_invalido']
+                          {[
+                            'sem_aluno',
+                            'sem_telefone',
+                            'telefone_invalido',
+                            'responsavel_sem_nome',
+                            'responsavel_sem_telefone',
+                            'responsavel_telefone_invalido',
+                            'telefone_responsavel_divergente',
+                          ]
                             .includes(evadido.bloqueio_codigo || '') && (
                             <Button
                               disabled
