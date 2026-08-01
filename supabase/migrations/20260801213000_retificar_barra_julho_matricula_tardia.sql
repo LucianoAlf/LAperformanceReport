@@ -2,6 +2,23 @@
 -- corte do fechamento, mas cuja competencia de negocio pertence ao mes fechado.
 -- O snapshot original e seu hash permanecem imutaveis.
 
+alter table public.fechamento_mensal_auditoria
+  drop constraint if exists fechamento_mensal_auditoria_acao_check;
+
+alter table public.fechamento_mensal_auditoria
+  add constraint fechamento_mensal_auditoria_acao_check check (
+    acao = any (array[
+      'preview_gerado'::text,
+      'snapshot_gravado'::text,
+      'snapshot_aprovado'::text,
+      'snapshot_fechado'::text,
+      'compatibilidade_dados_mensais_atualizada'::text,
+      'writer_legado_bloqueado'::text,
+      'retificacao_solicitada'::text,
+      'retificacao_matricula_tardia'::text
+    ])
+  );
+
 create or replace function public.aplicar_retificacao_relatorio_comercial_matricula_tardia_v1(
   p_unidade_id uuid,
   p_ano integer,
