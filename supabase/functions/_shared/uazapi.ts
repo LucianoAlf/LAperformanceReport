@@ -131,7 +131,7 @@ export interface WhatsAppCreds {
   wahaApiKey?: string;
 }
 
-const WA_FIELDS = 'id,nome,provedor,uazapi_url,uazapi_token,waha_url,waha_session,waha_api_key';
+const WA_FIELDS = 'id,nome,provedor,uazapi_url,uazapi_token,waha_url,waha_session,waha_api_key,funcao';
 
 function toWhatsAppCreds(row: any): WhatsAppCreds {
   let baseUrl = row.uazapi_url || '';
@@ -154,9 +154,13 @@ export async function getWhatsAppCredentials(
 ): Promise<WhatsAppCreds> {
   const { funcao, caixaId, unidadeId } = opts;
 
+  // Só confia no caixaId explícito se a caixa realmente pertencer à função pedida
+  // (agente/ambos). Sem essa checagem, uma conversa contaminada com caixa_id de
+  // outro módulo (ex: caixa administrativa da Lia) faria o envio sair pelo número errado.
   if (caixaId) {
     const { data } = await supabase.from('whatsapp_caixas').select(WA_FIELDS).eq('id', caixaId).eq('ativo', true).maybeSingle();
-    if (data) return toWhatsAppCreds(data);
+    if (data && (!funcao || data.funcao === funcao || data.funcao === 'ambos')) return toWhatsAppCreds(data);
+    if (data) console.warn(`[uazapi-shared] caixaId ${caixaId} ignorado: funcao "${data.funcao}" nao compativel com "${funcao}"`);
   }
   if (funcao && unidadeId) {
     const { data } = await supabase.from('whatsapp_caixas').select(WA_FIELDS).eq('ativo', true).eq('unidade_id', unidadeId).in('funcao', [funcao, 'ambos']).limit(1).maybeSingle();
