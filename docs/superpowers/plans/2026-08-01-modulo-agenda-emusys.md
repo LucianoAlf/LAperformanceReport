@@ -2098,3 +2098,197 @@ Comparar com os números do Step 5 e explicar a diferença no relatório. Amostr
 git add supabase/functions/sync-grade-futura-emusys/index.ts
 git commit -m "fix(sync): pagina o soft-cancel de aulas fantasma e adiciona trava de seguranca"
 ```
+
+---
+
+### Task 14: Consolidar em `aula_alunos_emusys` e descartar `aula_alunos`
+
+**Correção de rota — erro do plano, decidido com o dono do repo em 2026-08-01.** As Tasks 3–7 criaram a tabela `aula_alunos` sem antes verificar se já existia algo equivalente. Existia: **`aula_alunos_emusys`**, criada em julho, com 8.488 linhas, 3 unidades e **18 RPCs consumindo** (`app_minha_agenda_sessao`, `app_aluno_ficha`, `app_historico_turma`, `fn_registrar_presencas_core`, health score, carteira do professor…). Isso viola a regra "DRY antes de criar" do CLAUDE.md do projeto.
+
+A tabela antiga é **melhor** que a nova em dois pontos: a chave `(aula_emusys_id, aluno_chave)` distingue homônimos (a minha usava `nome`, e já sabemos que existem 31 homônimos reais), e ela já cobre as 3 unidades. A única vantagem da nova era a **janela**: 05/09 contra 12/08.
+
+**Decisão:** descartar `aula_alunos`, fazer a Agenda gravar e ler de `aula_alunos_emusys`, ampliando a janela futura dela.
+
+**⚠️ Tabela com 18 consumidores em produção.** A regra desta task é: **só INSERT de linhas futuras; nada de UPDATE ou DELETE no que já existe.** O baseline em `.superpowers/sdd/2026-08-01-modulo-agenda-emusys/baseline-aula-alunos-emusys.md` é o critério de aceite.
+
+**Files:**
+- Modify: `supabase/functions/_shared/emusys-aulas.ts`
+- Modify: `supabase/functions/_shared/emusys-aulas.test.ts`
+- Modify: `supabase/functions/sync-grade-futura-emusys/index.ts`
+- Modify: `supabase/functions/sync-presenca-emusys/index.ts`
+- Create: migration `agenda_consolidar_aula_alunos_emusys`
+
+**Interfaces:**
+- Consumes: `aula_alunos_emusys` e sua chave `(aula_emusys_id, aluno_chave)`.
+- Produces: `criarAlunoChave` exportada do helper; `montarVinculosAulaAlunos` devolvendo `VinculoAulaAluno` no formato da tabela antiga; `gravarVinculosAulaAlunos` gravando em `aula_alunos_emusys`.
+
+- [ ] **Step 1: Reproduzir o baseline e confirmar que bate**
+
+Leia `.superpowers/sdd/2026-08-01-modulo-agenda-emusys/baseline-aula-alunos-emusys.md` e rode:
+
+```sql
+select case when a.data_aula < current_date then 'passado' else 'hoje_ou_futuro' end as janela,
+       count(*) linhas, count(distinct ae.aula_emusys_id) aulas, count(ae.aluno_id) com_aluno_id
+from aula_alunos_emusys ae join aulas_emusys a on a.id=ae.aula_emusys_id
+group by 1 order by 1;
+```
+
+Se os números do passado não baterem com o baseline (6553 / 5677 / 6250), **PARE e relate BLOCKED** — algo mudou entre a foto e agora, e a comparação final perde o valor.
+
+- [ ] **Step 2: Adaptar o helper para a chave da tabela antiga**
+
+Em `supabase/functions/_shared/emusys-aulas.ts`, reescrever o par de funções para o formato de `aula_alunos_emusys`. A função `criarAlunoChave` já existe em `sync-presenca-emusys/index.ts` (por volta da linha 199) — **mova-a para o helper** e importe de volta lá, para as duas edges usarem a MESMA função. Não duplique a regra da chave: é o motivo pelo qual o helper existe.
+
+```ts
+/** Chave estavel do aluno na aula. Mesma regra usada pelo sync de presenca. */
+export function criarAlunoChave(
+  aluno: { id_aluno?: number | null; nome_aluno?: string | null; data_nascimento_aluno?: string | null },
+  alunoIdLocal: number | null | undefined,
+  normalizar: (nome: string) => string,
+): string {
+  if (aluno.id_aluno != null && aluno.id_aluno > 0) return `emusys:${aluno.id_aluno}`;
+  if (alunoIdLocal != null) return `local:${alunoIdLocal}`;
+  return `nome:${normalizar(aluno.nome_aluno || '')}:${aluno.data_nascimento_aluno || ''}`;
+}
+
+export interface VinculoAulaAluno {
+  aula_emusys_id: number;
+  unidade_id: string;
+  aluno_chave: string;
+  aluno_emusys_id: number | null;
+  aluno_nome: string;
+  aluno_nome_normalizado: string;
+  sincronizado_em: string;
+  updated_at: string;
+}
+```
+
+`montarVinculosAulaAlunos` passa a produzir esse formato.
+
+⚠️ **Não inclua `aluno_id` no payload.** Quem resolve o aluno local é o trigger do Step 3 — a grade futura não tem os mapas que o sync de presença monta.
+
+`gravarVinculosAulaAlunos` passa a usar:
+
+```ts
+      .from('aula_alunos_emusys')
+      .upsert(lote, { onConflict: 'aula_emusys_id,aluno_chave', ignoreDuplicates: false });
+```
+
+⚠️ **`ignoreDuplicates: false` faz UPDATE em linha existente.** Para a janela futura isso é desejado (refresh do roster). Mas se `aluno_id` entrasse no payload, o update sobrescreveria com null o `aluno_id` que o sync de presença já resolveu — que é justamente o dado bom. Confirme lendo o objeto montado que `aluno_id` não está lá.
+
+- [ ] **Step 3: Migrar o trigger de casamento para a tabela antiga**
+
+Aplicar via MCP (`apply_migration`, nome `agenda_consolidar_aula_alunos_emusys`, project `ouqwbbermlzqqvtqwlul`):
+
+```sql
+-- O trigger da Agenda passa a viver na tabela canonica. Ele SO preenche
+-- aluno_id quando esta NULL: nunca sobrescreve o que o sync de presenca
+-- resolveu, e por isso e no-op para as linhas que aquele fluxo grava.
+create or replace function public.fn_aula_alunos_emusys_casar_aluno()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_curso_emusys_id integer;
+begin
+  if new.aluno_id is not null or new.aluno_emusys_id is null then
+    return new;
+  end if;
+
+  select ae.curso_emusys_id into v_curso_emusys_id
+  from aulas_emusys ae
+  where ae.id = new.aula_emusys_id;
+
+  -- alunos sao MATRICULAS, nao pessoas: a mesma pessoa com 2 cursos tem 2
+  -- linhas com o mesmo emusys_student_id. Desempata pelo curso desta aula.
+  select a.id into new.aluno_id
+  from alunos a
+  left join cursos c on c.id = a.curso_id
+  where a.emusys_student_id = new.aluno_emusys_id::text
+    and a.unidade_id = new.unidade_id
+  order by
+    (v_curso_emusys_id is not null and c.emusys_ids @> array[v_curso_emusys_id]) desc,
+    (a.status = 'ativo') desc,
+    coalesce(a.is_segundo_curso, false) asc,
+    a.id
+  limit 1;
+
+  return new;
+end;
+$$;
+
+create trigger trg_aula_alunos_emusys_casar_aluno
+  before insert on public.aula_alunos_emusys
+  for each row execute function public.fn_aula_alunos_emusys_casar_aluno();
+```
+
+⚠️ **`before insert` apenas, NÃO `before update`.** O trigger da `aula_alunos` era insert+update; um trigger de update aqui rodaria em toda gravação do sync de presença, que é caminho quente de produção. Insert-only cobre o caso da Agenda sem tocar no fluxo existente.
+
+⚠️ `alunos.emusys_student_id` é **text** e `aula_alunos_emusys.aluno_emusys_id` é **bigint** — o cast `::text` é obrigatório.
+
+- [ ] **Step 4: Repontar a RPC `get_agenda_dia`**
+
+Recriar `get_agenda_dia` trocando, no CTE `vinculos`, a leitura de `aula_alunos` por `aula_alunos_emusys`:
+
+```sql
+    select aa.aula_emusys_id,
+           aa.aluno_id,
+           aa.aluno_nome as nome,
+           null::text,
+           2
+    from aula_alunos_emusys aa
+    join base b on b.id = aa.aula_emusys_id
+```
+
+Todo o resto da função permanece **idêntico** — o agrupamento, o desempate por `matricula_disciplina_id > 0`, o enriquecimento. Não aproveite para mexer em mais nada: as correções da Task 4 custaram uma rodada inteira e estão verificadas.
+
+- [ ] **Step 5: Atualizar as duas edges e redeployar**
+
+As duas continuam chamando `montarVinculosAulaAlunos`/`gravarVinculosAulaAlunos` — só o formato mudou dentro do helper. Ajuste as chamadas ao `criarAlunoChave` que agora vem do helper e remova a cópia local dela em `sync-presenca-emusys`.
+
+Antes de editar cada uma, rode `get_edge_function` e compare com o git (git ≠ produção). Deploy via MCP.
+
+- [ ] **Step 6: Verificar contra o baseline — o passo que protege produção**
+
+```sql
+select case when a.data_aula < current_date then 'passado' else 'hoje_ou_futuro' end as janela,
+       count(*) linhas, count(distinct ae.aula_emusys_id) aulas, count(ae.aluno_id) com_aluno_id,
+       max(a.data_aula) ate
+from aula_alunos_emusys ae join aulas_emusys a on a.id=ae.aula_emusys_id
+group by 1 order by 1;
+```
+
+**Critérios, todos obrigatórios:**
+- `passado` deve continuar em **exatamente 6553 / 5677 / 6250**. Se mudou, **rollback imediato** e relate BLOCKED.
+- `hoje_ou_futuro` deve **crescer**, e `ate` deve avançar de 12/08 para cerca de 05/09.
+- Nenhuma linha passada pode ter perdido `aluno_id`: compare `select count(*) from aula_alunos_emusys ae join aulas_emusys a on a.id=ae.aula_emusys_id where ae.aluno_id is null and a.data_aula < current_date` antes e depois. O número não pode subir.
+
+- [ ] **Step 7: Conferir que os consumidores não mudaram de resultado**
+
+Escolher 3 RPCs sensíveis a contagem de roster e comparar antes/depois com os mesmos parâmetros, para um período **passado**: `get_carteira_professor_periodo_detalhe_canonico_v1`, `get_professor_media_turma_v3_sombra` e `app_historico_turma`. Se alguma mudar de valor, é regressão — relate BLOCKED com o diff.
+
+- [ ] **Step 8: Derrubar a tabela duplicada**
+
+Só depois de tudo acima verde:
+
+```sql
+drop trigger if exists trg_aula_alunos_casar_aluno on public.aula_alunos;
+drop function if exists public.fn_aula_alunos_casar_aluno();
+drop table if exists public.aula_alunos;
+```
+
+E remover `supabase/migrations/20260801120000_criar_aula_alunos.sql` do repo, já que a tabela deixou de existir — a migration nova (`agenda_consolidar_aula_alunos_emusys`) fica como registro do que aconteceu.
+
+- [ ] **Step 9: Atualizar os testes do helper e commitar**
+
+Os testes da Task 5 precisam ser reescritos para o novo formato (`aluno_chave` em vez de `nome`), incluindo um caso NOVO que a chave antiga não cobria: dois alunos homônimos com `id_aluno` diferentes devem gerar **duas** linhas distintas.
+
+Run: `deno test --allow-net supabase/functions/_shared/emusys-aulas.test.ts`
+
+```bash
+git rm supabase/migrations/20260801120000_criar_aula_alunos.sql
+git add supabase/functions/_shared/emusys-aulas.ts supabase/functions/_shared/emusys-aulas.test.ts supabase/functions/sync-grade-futura-emusys/index.ts supabase/functions/sync-presenca-emusys/index.ts supabase/migrations/
+git commit -m "refactor(agenda): consolida vinculo aula-aluno em aula_alunos_emusys"
+```
