@@ -1,36 +1,26 @@
-create or replace function public.get_agenda_dia(
-  p_data date,
-  p_unidade_id uuid default null
-)
-returns table (
-  chave              text,
-  unidade_id         uuid,
-  unidade_nome       text,
-  professor_nome     text,
-  professor_id       integer,
-  sala_nome          text,
-  curso_nome         text,
-  turma_nome         text,
-  hora_inicio        text,
-  hora_fim           text,
-  duracao_minutos    integer,
-  categoria          text,
-  tipo               text,
-  cancelada          boolean,
-  justificada        boolean,
-  reagendada         boolean,
-  hora_original      text,
-  nr_da_aula         integer,
-  qtd_alunos         integer,
-  anotacoes          text,
-  professor_presenca text,
-  alunos             jsonb
-)
-language sql
-stable
-security invoker
-set search_path = public
-as $$
+-- Fix: get_agenda_dia mostrava a MESMA pessoa duas vezes e inflava qtd_alunos.
+--
+-- Causa: quando o aluno tem id_aluno nulo no Emusys, existem 2 linhas em
+-- aula_alunos_emusys para a mesma aula — `local:<aluno_id>` (roster nativo do
+-- sync de presenca, COM aluno_id) e `nome:<normalizado>:<nascimento>` (helper
+-- da grade futura, SEM aluno_id, porque ele nao monta os mapas de aluno local).
+-- O dedup do CTE `vinculos` usava coalesce(aluno_id::text, nome), que nao
+-- colapsa linha-com-id contra linha-sem-id. O trigger tambem nao resolve: ele
+-- sai cedo em `aluno_emusys_id is null`, que e exatamente esse caso.
+--
+-- Correcao do lado da LEITURA (nao da escrita): a Agenda e a unica consumidora
+-- de get_agenda_dia, entao o raio de impacto e o menor possivel. Corrigir na
+-- escrita (ensinar o trigger a casar por nome) daria aluno_id a linha fantasma
+-- e ela passaria a ser contada pelos outros 17 consumidores de
+-- aula_alunos_emusys, que hoje a ignoram por join em aluno_id — inflaria
+-- roster/carteira/media de turma. Alem disso exigiria UPDATE retroativo nas
+-- linhas ja gravadas, o que a Task 14 proibe.
+create or replace function public.get_agenda_dia(p_data date, p_unidade_id uuid default null::uuid)
+ returns table(chave text, unidade_id uuid, unidade_nome text, professor_nome text, professor_id integer, sala_nome text, curso_nome text, turma_nome text, hora_inicio text, hora_fim text, duracao_minutos integer, categoria text, tipo text, cancelada boolean, justificada boolean, reagendada boolean, hora_original text, nr_da_aula integer, qtd_alunos integer, anotacoes text, professor_presenca text, alunos jsonb)
+ language sql
+ stable
+ set search_path to 'public'
+as $function$
 with base as (
   -- chave calculada por linha crua (nao apos agregar), para poder ser
   -- propagada ao CTE vinculos e alinhar a deduplicacao de aluno ao mesmo
@@ -51,34 +41,59 @@ with base as (
 -- Alunos do CARD (nao da linha crua): dedup por (chave, aluno), nao por
 -- aula_emusys_id, senao o mesmo aluno duplicado pelo par turma+individual
 -- sobrevive ao jsonb_agg(distinct) porque os JSONs diferem em status_presenca.
--- Prioridade 1: presenca batida (aluno_presenca) vence vinculo de grade (aula_alunos).
--- Dentro da mesma prioridade, a linha com matricula_disciplina_id > 0 (a linha
--- do contrato do aluno) vence a linha tipo=turma (matricula_disciplina_id=0),
--- que e so o "container" do slot.
+-- Prioridade 1: presenca batida (aluno_presenca) vence vinculo de grade
+-- (aula_alunos_emusys). Dentro da mesma prioridade, a linha com
+-- matricula_disciplina_id > 0 (a linha do contrato do aluno) vence a linha
+-- tipo=turma (matricula_disciplina_id=0), que e so o "container" do slot.
+vinculos_cru as (
+  select b.chave,
+         ap.aluno_id,
+         coalesce(al.nome, '(aluno removido)') as nome,
+         -- mesma normalizacao do aluno_nome_normalizado gravado pelas edges:
+         -- minuscula, sem acento, sem "(...)", espacos colapsados.
+         btrim(regexp_replace(
+           regexp_replace(lower(unaccent(coalesce(al.nome, '(aluno removido)'))), '\(.*?\)', '', 'g'),
+           '\s+', ' ', 'g')) as nome_norm,
+         ap.status_presenca::text as status_presenca,
+         1 as prioridade,
+         case when b.matricula_disciplina_id > 0 then 0 else 1 end as prioridade_contrato
+  from aluno_presenca ap
+  join base b on b.id = ap.aula_emusys_id
+  left join alunos al on al.id = ap.aluno_id
+  union all
+  select b.chave,
+         aa.aluno_id,
+         aa.aluno_nome as nome,
+         aa.aluno_nome_normalizado,
+         null::text,
+         2,
+         case when b.matricula_disciplina_id > 0 then 0 else 1 end
+  from aula_alunos_emusys aa
+  join base b on b.id = aa.aula_emusys_id
+),
+-- Resgate de identidade: uma linha SEM aluno_id que divide o mesmo card e o
+-- mesmo nome normalizado com uma linha QUE TEM aluno_id e a mesma pessoa.
+-- min() so preenche o nulo — nunca funde dois aluno_id distintos, entao
+-- homonimos reais (que a chave (aula, aluno_chave) ja distingue na tabela)
+-- continuam sendo duas pessoas.
+vinculos_ident as (
+  select x.*,
+         coalesce(
+           x.aluno_id,
+           min(x.aluno_id) over (partition by x.chave, x.nome_norm)
+         ) as identidade
+  from vinculos_cru x
+),
 vinculos as (
-  select distinct on (x.chave, coalesce(x.aluno_id::text, x.nome))
-    x.chave, x.aluno_id, x.nome, x.status_presenca
-  from (
-    select b.chave,
-           ap.aluno_id,
-           coalesce(al.nome, '(aluno removido)') as nome,
-           ap.status_presenca::text as status_presenca,
-           1 as prioridade,
-           case when b.matricula_disciplina_id > 0 then 0 else 1 end as prioridade_contrato
-    from aluno_presenca ap
-    join base b on b.id = ap.aula_emusys_id
-    left join alunos al on al.id = ap.aluno_id
-    union all
-    select b.chave,
-           aa.aluno_id,
-           aa.nome,
-           null::text,
-           2,
-           case when b.matricula_disciplina_id > 0 then 0 else 1 end
-    from aula_alunos aa
-    join base b on b.id = aa.aula_emusys_id
-  ) x
-  order by x.chave, coalesce(x.aluno_id::text, x.nome), x.prioridade, x.prioridade_contrato
+  select distinct on (v.chave, coalesce(v.identidade::text, v.nome_norm))
+    v.chave, v.aluno_id, v.nome, v.status_presenca
+  from vinculos_ident v
+  -- (aluno_id is null) primeiro: entre as linhas da MESMA pessoa, a que tem
+  -- aluno_id vence, pois so ela enriquece idade/responsavel/risco. Como
+  -- aluno_presenca.aluno_id e NOT NULL, isso nunca faz uma linha de roster
+  -- ganhar de uma de presenca — o desempate cai em prioridade, como antes.
+  order by v.chave, coalesce(v.identidade::text, v.nome_norm),
+           (v.aluno_id is null), v.prioridade, v.prioridade_contrato
 ),
 enriquecidos as (
   select
@@ -208,7 +223,7 @@ select
   a.reagendada,
   case
     when a.reagendada and a.data_hora_inicio_original is not null
-      then to_char(a.data_hora_inicio_original at time zone 'America/Sao_Paulo', 'DD/MM/YY "as" HH24:MI')
+      then to_char(a.data_hora_inicio_original at time zone 'America/Sao_Paulo', 'DD/MM/YY \"as\" HH24:MI')
     else null
   end as hora_original,
   a.nr_da_aula,
@@ -218,8 +233,11 @@ select
   a.alunos
 from agrupado a
 order by a.professor_nome nulls last, a.data_hora_inicio, a.sala_nome;
-$$;
+$function$;
 
+-- Comentario e grant vinham da migration 20260801121000_criar_get_agenda_dia.sql,
+-- removida do repo por referenciar a tabela dropada aula_alunos. Repetidos aqui
+-- para que um `db reset` do zero chegue ao mesmo estado final.
 comment on function public.get_agenda_dia(date, uuid) is
   'Agenda de um dia ja agrupada por (professor, sala, horario, curso, turma, cancelada). '
   'Necessario porque aulas_emusys guarda uma linha por aluno em aulas de turma, e o '
@@ -228,6 +246,9 @@ comment on function public.get_agenda_dia(date, uuid) is
   'nr_da_aula e a lista de alunos do card usam matricula_disciplina_id para nao herdar '
   'essa duplicacao; vw_jornada_aluno_atual e lida via lateral+limit 1 porque pode ter '
   'mais de 1 linha por aluno (2o curso/matricula renovada). '
+  'O roster vem de aula_alunos_emusys; linha sem aluno_id e colapsada na linha com '
+  'aluno_id da mesma pessoa no mesmo card (aluno com id_aluno nulo no Emusys gera '
+  'chave local: e chave nome:). '
   'p_unidade_id null = todas as unidades visiveis pelo RLS.';
 
 grant execute on function public.get_agenda_dia(date, uuid) to authenticated;
