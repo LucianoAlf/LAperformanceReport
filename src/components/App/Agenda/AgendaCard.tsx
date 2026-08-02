@@ -6,6 +6,9 @@ interface Props {
   selecionada: boolean;
   estilo: React.CSSProperties;
   onSelecionar: (aula: AulaAgenda) => void;
+  // Trilho esticado (dia com poucas aulas): ha espaco para nome completo e uma
+  // terceira linha, em vez do resumo espremido do dia cheio.
+  amplo?: boolean;
 }
 
 function primeiroENome(nome: string): string {
@@ -13,20 +16,32 @@ function primeiroENome(nome: string): string {
   return partes.length > 1 ? `${partes[0]} ${partes[1]}` : partes[0];
 }
 
-export function AgendaCard({ aula, selecionada, estilo, onSelecionar }: Props) {
+export function AgendaCard({ aula, selecionada, estilo, onSelecionar, amplo = false }: Props) {
   const experimental = aula.categoria === 'experimental';
   const semAluno = aula.alunos.length === 0 && !aula.cancelada;
+  const nomeDoAluno = (nome: string) => (amplo ? nome : primeiroENome(nome));
 
   let titulo: string;
-  if (experimental) titulo = 'Experimental';
-  else if (aula.alunos.length === 1) titulo = primeiroENome(aula.alunos[0].nome);
+  if (experimental) {
+    titulo = aula.alunos.length === 1 ? nomeDoAluno(aula.alunos[0].nome) : 'Experimental';
+  } else if (aula.alunos.length === 1) titulo = nomeDoAluno(aula.alunos[0].nome);
   else if (aula.alunos.length > 1) {
-    titulo = `${primeiroENome(aula.alunos[0].nome)} +${aula.alunos.length - 1}`;
+    titulo = `${nomeDoAluno(aula.alunos[0].nome)} +${aula.alunos.length - 1}`;
   } else titulo = aula.turma_nome || aula.curso_nome || 'Aula';
 
   const subtitulo = aula.nr_da_aula
     ? `${aula.sala_nome ?? 'sem sala'} · aula ${aula.nr_da_aula}`
     : `${aula.sala_nome ?? 'sem sala'}${aula.qtd_alunos ? ` · ${aula.qtd_alunos} alunos` : ''}`;
+
+  // Terceira linha so no modo amplo: curso e o dado mais util que nao cabe no
+  // card compacto, e o horario evita ter que conferir contra a regua do topo.
+  const detalhe = [
+    `${aula.hora_inicio}–${aula.hora_fim}`,
+    experimental ? 'experimental' : aula.curso_nome,
+    aula.turma_nome,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   const risco = Math.max(0, ...aula.alunos.map((a) => a.risco_pct ?? 0));
 
@@ -53,7 +68,8 @@ export function AgendaCard({ aula, selecionada, estilo, onSelecionar }: Props) {
       <span className="min-w-0 flex-1 leading-tight">
         <span
           className={cn(
-            'block truncate text-xs font-semibold',
+            'block truncate font-semibold',
+            amplo ? 'text-[13px]' : 'text-xs',
             aula.cancelada && 'line-through',
             semAluno && !experimental && 'italic font-medium text-slate-300',
           )}
@@ -61,14 +77,21 @@ export function AgendaCard({ aula, selecionada, estilo, onSelecionar }: Props) {
           {titulo}
         </span>
         <span className="block truncate text-[10.5px] text-slate-400">{subtitulo}</span>
+        {amplo && <span className="block truncate text-[10.5px] text-slate-500">{detalhe}</span>}
       </span>
+
+      {amplo && risco >= 40 && !aula.cancelada && !experimental && (
+        <span className="shrink-0 rounded bg-rose-500/20 px-1 text-[10px] font-bold tabular-nums text-rose-300">
+          {Math.round(risco)}%
+        </span>
+      )}
 
       {experimental && <Marca cor="bg-violet-400 text-violet-950" texto="E" />}
       {!experimental && aula.cancelada && <Marca cor="bg-rose-400 text-rose-950" texto="✕" />}
       {!experimental && !aula.cancelada && aula.reagendada && (
         <Marca cor="bg-amber-400 text-amber-950" texto="R" />
       )}
-      {!experimental && !aula.cancelada && !aula.reagendada && risco >= 40 && (
+      {!experimental && !aula.cancelada && !aula.reagendada && risco >= 40 && !amplo && (
         <Marca cor="bg-rose-400 text-rose-950" texto="!" />
       )}
     </button>

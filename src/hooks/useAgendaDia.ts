@@ -36,8 +36,17 @@ export interface AulaAgenda {
   reagendada: boolean;
   hora_original: string | null;
   nr_da_aula: number | null;
+  // Total de aulas do contrato. Como `nr_da_aula`, so vem preenchido quando a
+  // aula tem exatamente 1 contrato — em turma seria o contrato de um aluno
+  // arbitrario. Juntos rendem "aula 5 de 48".
+  qtd_aulas_contrato: number | null;
   qtd_alunos: number;
   anotacoes: string | null;
+  // Registro do professor pelo LA Teacher. Hoje quase sempre nulo (a base tem
+  // ~17 aulas com esse campo), mas e barato trazer junto.
+  anotacoes_fabio: string | null;
+  // ⚠️ 'ausente' e o DEFAULT do Emusys, nao um fato: 100% das aulas FUTURAS
+  // vem como 'ausente'. So tem significado depois que a aula ocorreu.
   professor_presenca: string | null;
   alunos: AlunoAgenda[];
 }
@@ -47,9 +56,23 @@ interface Params {
   unidadeId: string | null;
 }
 
+/**
+ * Cache dos dias ja carregados, vivo enquanto a pagina estiver montada. Navegar
+ * pela agenda e ir e voltar o tempo todo: sem isto, cada seta refaz a RPC e o
+ * usuario espera de novo por um dia que ele acabou de ver. A chave inclui a
+ * unidade porque o mesmo dia rende conjuntos diferentes por escola.
+ */
+function chaveDoCache(data: string, unidadeId: string | null): string {
+  return `${unidadeId ?? 'todas'}|${data}`;
+}
+
 export function useAgendaDia({ data, unidadeId }: Params) {
-  const [aulas, setAulas] = useState<AulaAgenda[]>([]);
-  const [carregando, setCarregando] = useState(true);
+  const cacheRef = useRef(new Map<string, AulaAgenda[]>());
+  const chave = chaveDoCache(data, unidadeId);
+  const emCache = cacheRef.current.get(chave);
+
+  const [aulas, setAulas] = useState<AulaAgenda[]>(emCache ?? []);
+  const [carregando, setCarregando] = useState(emCache === undefined);
   const [erro, setErro] = useState<string | null>(null);
   const [frescor, setFrescor] = useState('sem dado de sincronizacao');
 
@@ -65,10 +88,15 @@ export function useAgendaDia({ data, unidadeId }: Params) {
   const buscar = useCallback(async () => {
     const dataDaBusca = data;
     const unidadeIdDaBusca = unidadeId;
+    const chaveDaBusca = chaveDoCache(dataDaBusca, unidadeIdDaBusca);
     const minhaRequisicaoId = ++idRequisicaoRef.current;
     const aindaValida = () => idRequisicaoRef.current === minhaRequisicaoId;
 
-    setCarregando(true);
+    // Ja visto: mostra na hora e revalida em silencio (sem estado de carga, pra
+    // nao piscar). Inedito: mantem o que estava na tela e sinaliza carregando.
+    const doCache = cacheRef.current.get(chaveDaBusca);
+    if (doCache) setAulas(doCache);
+    setCarregando(doCache === undefined);
     setErro(null);
 
     const { data: linhas, error } = await supabase.rpc('get_agenda_dia', {
@@ -85,7 +113,9 @@ export function useAgendaDia({ data, unidadeId }: Params) {
       return;
     }
 
-    setAulas((linhas || []) as unknown as AulaAgenda[]);
+    const resultado = (linhas || []) as unknown as AulaAgenda[];
+    cacheRef.current.set(chaveDaBusca, resultado);
+    setAulas(resultado);
 
     // Frescor: ultima linha inserida em aulas_emusys para o escopo atual.
     let q = supabase
@@ -115,5 +145,28 @@ export function useAgendaDia({ data, unidadeId }: Params) {
     buscar();
   }, [buscar]);
 
-  return { aulas, carregando, erro, frescor, recarregar: buscar };
+  /**
+   * Carrega um dia para o cache sem mexer no estado da tela. Serve para os dias
+   * vizinhos: a navegacao e quase sempre sequencial (seta pra frente, seta pra
+   * tras), entao adiantar o proximo transforma a troca seguinte em instantanea.
+   * Nao refaz o que ja esta em cache e engole erro de proposito — e trabalho
+   * especulativo, nao pode acender aviso de falha para o usuario.
+   */
+  const prefetch = useCallback(
+    async (dataAlvo: string) => {
+      const chaveAlvo = chaveDoCache(dataAlvo, unidadeId);
+      if (cacheRef.current.has(chaveAlvo)) return;
+
+      const { data: linhas, error } = await supabase.rpc('get_agenda_dia', {
+        p_data: dataAlvo,
+        p_unidade_id: unidadeId,
+      });
+      if (error) return;
+
+      cacheRef.current.set(chaveAlvo, (linhas || []) as unknown as AulaAgenda[]);
+    },
+    [unidadeId],
+  );
+
+  return { aulas, carregando, erro, frescor, recarregar: buscar, prefetch };
 }

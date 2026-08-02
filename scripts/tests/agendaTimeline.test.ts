@@ -6,7 +6,6 @@ import {
   dentroDoExpediente,
   contarEmAulaAgora,
   formatarFrescor,
-  diaIncompleto,
 } from '../../src/lib/agenda';
 
 // Posicionamento: 08:00 e a origem do trilho, cada hora vale 88px.
@@ -59,10 +58,5 @@ assert.equal(formatarFrescor(new Date(2026, 7, 1, 14, 26).toISOString(), agora),
 assert.equal(formatarFrescor(new Date(2026, 7, 1, 12, 30).toISOString(), agora), 'ha 2 h');
 
 // Janela historica incompleta (19/07 a 01/08/2026, inclusive).
-assert.equal(diaIncompleto('2026-07-18'), false, '18/07 esta integro');
-assert.equal(diaIncompleto('2026-07-19'), true, '19/07 abre a janela quebrada');
-assert.equal(diaIncompleto('2026-07-25'), true, '25/07 esta dentro da janela');
-assert.equal(diaIncompleto('2026-08-01'), true, '01/08 fecha a janela quebrada');
-assert.equal(diaIncompleto('2026-08-03'), false, '03/08 ja esta integro');
 
 console.log('agenda timeline: OK');

@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import type { AlunoAgenda, AulaAgenda } from '@/hooks/useAgendaDia';
-import { formatarDataCalculo, riscoDesatualizado } from '@/lib/agenda';
+import { aulaJaOcorreu, formatarDataCalculo, riscoDesatualizado } from '@/lib/agenda';
 
 function corRisco(v: number): string {
   if (v >= 60) return 'text-rose-400';
@@ -17,9 +17,13 @@ function notaClampada(nota: number): number {
 
 export function AgendaDrawer({
   aula,
+  data,
   mostrarUnidade = false,
 }: {
   aula: AulaAgenda | null;
+  // Dia exibido ('yyyy-MM-dd'), para saber se a aula ja aconteceu — o que
+  // decide se `professor_presenca` pode ser mostrado (ver aulaJaOcorreu).
+  data: string;
   // Na agenda consolidada o painel tambem precisa dizer de qual escola e a
   // aula: o rotulo do trilho pode ter ficado fora da viewport apos rolagem
   // horizontal. Com unidade selecionada, repetir seria ruido.
@@ -40,6 +44,11 @@ export function AgendaDrawer({
   // enriquecimento individual so aparece quando a aula tem exatamente 1 aluno.
   const aluno: AlunoAgenda | null = aula.alunos.length === 1 ? aula.alunos[0] : null;
   const riscoVelho = aluno ? riscoDesatualizado(aluno.risco_calculado_em, new Date()) : false;
+  const jaOcorreu = aulaJaOcorreu(data, aula.hora_fim, new Date());
+  const progresso =
+    aula.nr_da_aula && aula.qtd_aulas_contrato
+      ? Math.min(100, Math.round((aula.nr_da_aula / aula.qtd_aulas_contrato) * 100))
+      : null;
 
   return (
     <aside className="flex w-[296px] shrink-0 flex-col gap-3.5 border-l border-slate-700 bg-slate-800/50 p-4">
@@ -64,7 +73,7 @@ export function AgendaDrawer({
         {aula.reagendada && <Etiqueta tom="ambar">Reagendada</Etiqueta>}
         {aula.justificada && <Etiqueta tom="neutro">Justificada</Etiqueta>}
         {aula.turma_nome && <Etiqueta tom="neutro">{aula.turma_nome}</Etiqueta>}
-        {aula.nr_da_aula && <Etiqueta tom="neutro">Aula {aula.nr_da_aula}</Etiqueta>}
+        {aula.tipo && <Etiqueta tom="neutro">{aula.tipo === 'turma' ? 'Turma' : 'Individual'}</Etiqueta>}
         {aula.alunos.length === 0 && !aula.cancelada && (
           <Etiqueta tom="neutro">Sem aluno vinculado</Etiqueta>
         )}
@@ -72,6 +81,38 @@ export function AgendaDrawer({
 
       {aula.reagendada && aula.hora_original && (
         <p className="text-xs text-slate-400">Agendamento original: {aula.hora_original}</p>
+      )}
+
+      {aula.nr_da_aula && (
+        <div className="flex flex-col gap-1">
+          <div className="flex items-baseline justify-between text-[12.5px]">
+            <span className="text-slate-300">Progresso no contrato</span>
+            <span className="font-semibold tabular-nums">
+              {aula.qtd_aulas_contrato
+                ? `aula ${aula.nr_da_aula} de ${aula.qtd_aulas_contrato}`
+                : `aula ${aula.nr_da_aula}`}
+            </span>
+          </div>
+          {progresso !== null && (
+            <div className="h-1 overflow-hidden rounded-full bg-slate-700">
+              <div className="h-full rounded-full bg-cyan-500" style={{ width: `${progresso}%` }} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* So depois da aula: antes disso o Emusys manda 'ausente' por default. */}
+      {jaOcorreu && aula.professor_presenca && (
+        <div className="flex items-center justify-between text-[12.5px]">
+          <span className="text-slate-300">Professor</span>
+          <span
+            className={
+              aula.professor_presenca === 'presente' ? 'text-emerald-400' : 'text-rose-400'
+            }
+          >
+            {aula.professor_presenca === 'presente' ? 'Presente' : 'Ausente'}
+          </span>
+        </div>
       )}
 
       {aluno && (
@@ -138,7 +179,15 @@ export function AgendaDrawer({
                 key={a.aluno_id ?? `${a.nome}-${indice}`}
                 className="flex items-center justify-between gap-2"
               >
-                <span className="truncate text-slate-300">{a.nome}</span>
+                <span className="min-w-0 flex-1 truncate text-slate-300">
+                  {a.nome}
+                  {a.inadimplente && <span className="ml-1 text-rose-400" title="Inadimplente">$</span>}
+                </span>
+                {a.status_presenca && (
+                  <span className="shrink-0 text-[10.5px] uppercase text-slate-500">
+                    {a.status_presenca}
+                  </span>
+                )}
                 {a.risco_pct !== null && (
                   <span className={cn('shrink-0 font-semibold tabular-nums', corRisco(a.risco_pct))}>
                     {a.risco_pct}%
@@ -152,8 +201,19 @@ export function AgendaDrawer({
 
       {aula.anotacoes && (
         <>
-          <p className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">Anotações</p>
-          <p className="text-[12.5px] text-slate-300">{aula.anotacoes}</p>
+          <p className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">
+            Anotações do professor
+          </p>
+          <p className="whitespace-pre-wrap text-[12.5px] text-slate-300">{aula.anotacoes}</p>
+        </>
+      )}
+
+      {aula.anotacoes_fabio && (
+        <>
+          <p className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">
+            Registro no LA Teacher
+          </p>
+          <p className="whitespace-pre-wrap text-[12.5px] text-slate-300">{aula.anotacoes_fabio}</p>
         </>
       )}
     </aside>

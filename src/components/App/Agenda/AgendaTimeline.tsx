@@ -1,16 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
+  AGENDA_ALTURA_FAIXA_AMPLA_PX,
   AGENDA_ALTURA_FAIXA_PX,
   AGENDA_GAP_FAIXA_PX,
-  AGENDA_HORA_FIM,
-  AGENDA_HORA_INICIO,
-  AGENDA_LARGURA_HORA_PX,
+  AGENDA_LARGURA_HORA_AMPLA_PX,
   alocarFaixas,
   contarFaixas,
-  dentroDoExpediente,
+  formatarRelogio,
+  janelaDeHoras,
+  larguraDaHora,
   larguraPx,
-  minutosAgora,
   posicaoPx,
+  segundosAgora,
 } from '@/lib/agenda';
 import type { AulaAgenda } from '@/hooks/useAgendaDia';
 import { AgendaCard } from './AgendaCard';
@@ -29,11 +30,10 @@ interface Props {
   // vira um trilho so e as aulas se sobrepoem como se fosse a mesma sala.
   // Com unidade selecionada fica desligado: repetir o nome dela seria ruido.
   mostrarUnidade?: boolean;
-  // Opcional: quando a pagina que envolve a timeline ja tem seu proprio
-  // relogio (ex.: pra sincronizar com um KPI "em aula agora"), ela passa os
-  // minutos aqui e os dois ficam no mesmo tique. Sem a prop, a timeline
-  // mantem seu proprio intervalo — continua utilizavel isolada/em teste.
-  minutos?: number;
+  // Dia exibido ('yyyy-MM-dd'). A regua de "agora" so faz sentido no dia de
+  // hoje: desenhada num dia passado ou futuro ela marcaria um instante que nao
+  // tem relacao nenhuma com as aulas ali.
+  ehHoje?: boolean;
 }
 
 export function AgendaTimeline({
@@ -41,23 +41,47 @@ export function AgendaTimeline({
   agruparPor,
   selecionada,
   onSelecionar,
-  minutos: minutosProp,
   mostrarUnidade = false,
+  ehHoje = false,
 }: Props) {
-  const [minutosProprio, setMinutosProprio] = useState(() => minutosAgora(new Date()));
-
+  // Relogio proprio, de segundo em segundo, isolado neste componente: a regua
+  // e a unica coisa que precisa dessa resolucao, e re-renderizar a pagina
+  // inteira (com todos os cards) uma vez por segundo seria desperdicio.
+  const [segundos, setSegundos] = useState(() => segundosAgora(new Date()));
   useEffect(() => {
-    if (minutosProp !== undefined) return;
-    const id = setInterval(() => setMinutosProprio(minutosAgora(new Date())), 30000);
+    if (!ehHoje) return;
+    const id = setInterval(() => setSegundos(segundosAgora(new Date())), 1000);
     return () => clearInterval(id);
-  }, [minutosProp]);
+  }, [ehHoje]);
 
-  const minutos = minutosProp ?? minutosProprio;
+  // Largura util para decidir a escala. Medida em vez de fixa porque o mesmo
+  // trilho aparece em telas bem diferentes e com o drawer aberto ou fechado.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [largura, setLargura] = useState(0);
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entrada]) => {
+      setLargura(entrada.contentRect.width);
+    });
+    observer.observe(el);
+    setLargura(el.clientWidth);
+    return () => observer.disconnect();
+  }, []);
 
-  const horas = Array.from(
-    { length: AGENDA_HORA_FIM - AGENDA_HORA_INICIO },
-    (_, i) => AGENDA_HORA_INICIO + i,
+  const janela = useMemo(
+    () => janelaDeHoras(aulas, ehHoje ? segundos : null),
+    // `segundos` anda a cada tique, mas a janela so pode mudar quando muda de
+    // HORA — depender do segundo cru recalcularia (e reposicionaria os cards)
+    // 60 vezes por minuto sem necessidade.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [aulas, ehHoje, Math.floor(segundos / 3600)],
   );
+
+  const horas = Array.from({ length: janela.fim - janela.inicio }, (_, i) => janela.inicio + i);
+  const larguraHora = larguraDaHora(largura - LARGURA_ROTULO, horas.length);
+  const amplo = larguraHora >= AGENDA_LARGURA_HORA_AMPLA_PX;
+  const alturaFaixa = amplo ? AGENDA_ALTURA_FAIXA_AMPLA_PX : AGENDA_ALTURA_FAIXA_PX;
 
   const grupos = new Map<string, { rotulo: string; unidade: string | null; aulas: AulaAgenda[] }>();
   for (const aula of aulas) {
@@ -70,16 +94,19 @@ export function AgendaTimeline({
     else grupos.set(chave, { rotulo, unidade, aulas: [aula] });
   }
 
-  const reguaVisivel = dentroDoExpediente(minutos);
-  const horaAgora = `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`;
+  const relogio = formatarRelogio(segundos);
+  const horaDaRegua = segundos / 3600;
+  const reguaVisivel = ehHoje && horaDaRegua >= janela.inicio && horaDaRegua <= janela.fim;
+  // A regua anda por segundo: posiciona pela fracao de hora, nao por 'HH:MM'.
+  const posicaoRegua = (horaDaRegua - janela.inicio) * larguraHora;
 
   return (
-    <div className="relative overflow-x-auto">
-      <div style={{ minWidth: LARGURA_ROTULO + horas.length * AGENDA_LARGURA_HORA_PX }} className="relative">
+    <div ref={containerRef} className="relative overflow-x-auto">
+      <div style={{ minWidth: LARGURA_ROTULO + horas.length * larguraHora }} className="relative">
         <div
           className="sticky top-0 z-10 grid border-b border-slate-700 bg-slate-800/95"
           style={{
-            gridTemplateColumns: `${LARGURA_ROTULO}px repeat(${horas.length}, ${AGENDA_LARGURA_HORA_PX}px)`,
+            gridTemplateColumns: `${LARGURA_ROTULO}px repeat(${horas.length}, ${larguraHora}px)`,
           }}
         >
           <div className="border-r border-slate-700 px-3.5 py-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">
@@ -95,8 +122,7 @@ export function AgendaTimeline({
         {[...grupos.entries()].map(([chave, { rotulo, unidade, aulas: doGrupo }]) => {
           const comFaixa = alocarFaixas(doGrupo);
           const nFaixas = contarFaixas(comFaixa);
-          const altura =
-            PADDING_TRILHO * 2 + nFaixas * AGENDA_ALTURA_FAIXA_PX + (nFaixas - 1) * AGENDA_GAP_FAIXA_PX;
+          const altura = PADDING_TRILHO * 2 + nFaixas * alturaFaixa + (nFaixas - 1) * AGENDA_GAP_FAIXA_PX;
 
           return (
             <div
@@ -118,11 +144,12 @@ export function AgendaTimeline({
                     aula={aula}
                     selecionada={selecionada?.chave === aula.chave}
                     onSelecionar={onSelecionar}
+                    amplo={amplo}
                     estilo={{
-                      left: posicaoPx(aula.hora_inicio),
-                      width: Math.max(46, larguraPx(aula.duracao_minutos) - 4),
-                      top: PADDING_TRILHO + aula.faixa * (AGENDA_ALTURA_FAIXA_PX + AGENDA_GAP_FAIXA_PX),
-                      height: AGENDA_ALTURA_FAIXA_PX,
+                      left: posicaoPx(aula.hora_inicio, larguraHora, janela.inicio),
+                      width: Math.max(46, larguraPx(aula.duracao_minutos, larguraHora) - 4),
+                      top: PADDING_TRILHO + aula.faixa * (alturaFaixa + AGENDA_GAP_FAIXA_PX),
+                      height: alturaFaixa,
                     }}
                   />
                 ))}
@@ -134,10 +161,10 @@ export function AgendaTimeline({
         {reguaVisivel && (
           <div
             className="pointer-events-none absolute bottom-0 top-0 z-20 w-0.5 bg-red-500"
-            style={{ left: LARGURA_ROTULO + posicaoPx(horaAgora) }}
+            style={{ left: LARGURA_ROTULO + posicaoRegua }}
           >
             <span className="absolute left-1/2 top-0 -translate-x-1/2 rounded-b bg-red-500 px-1.5 text-[10.5px] font-bold tabular-nums text-white">
-              {horaAgora}
+              {relogio}
             </span>
           </div>
         )}
