@@ -8,6 +8,7 @@ export const HEALTH_SCORE_V3_METRICS = [
 ] as const;
 
 export type HealthMetricKeyV3 = (typeof HEALTH_SCORE_V3_METRICS)[number];
+export type HealthScoreV3MetricRole = 'nota' | 'diagnostico';
 
 export type HealthScoreV3MetaStatus =
   | 'aprovada'
@@ -234,6 +235,7 @@ export interface HealthScoreV3SnapshotMetric {
   nota: number | null;
   peso: number;
   pesoDisponivel: boolean;
+  pesoEfetivo: number | null;
   contribuicao: number | null;
   meta: number | null;
   amostra: number | null;
@@ -243,6 +245,8 @@ export interface HealthScoreV3SnapshotMetric {
   fonte: string;
   regraVersaoMetrica: string;
   motivoSemBase: string | null;
+  codigoEvidencia: string | null;
+  papel: HealthScoreV3MetricRole | null;
   detalhes: Record<string, unknown>;
 }
 

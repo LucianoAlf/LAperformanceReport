@@ -1,5 +1,6 @@
 import type {
   HealthMetricKeyV3,
+  HealthScoreV3MetricRole,
   HealthScoreV3SnapshotMetric,
 } from './healthScoreProfessorV3';
 
@@ -11,6 +12,7 @@ export interface HealthScoreV3PerformanceMetric {
   nota: number | null;
   peso: number;
   pesoDisponivel: boolean;
+  pesoEfetivo: number | null;
   contribuicao: number | null;
   meta: number | null;
   amostra: number | null;
@@ -20,6 +22,8 @@ export interface HealthScoreV3PerformanceMetric {
   fonte: string;
   regraVersaoMetrica: string;
   motivoSemBase: string | null;
+  codigoEvidencia: string | null;
+  papel: HealthScoreV3MetricRole | null;
   detalhes: Record<string, unknown>;
 }
 
@@ -96,6 +100,10 @@ function asMetric(value: unknown): HealthMetricKeyV3 | null {
     : null;
 }
 
+function asMetricRole(value: unknown): HealthScoreV3MetricRole | null {
+  return value === 'nota' || value === 'diagnostico' ? value : null;
+}
+
 export function normalizeHealthScoreV3PerformanceRows(
   rows: unknown[],
 ): HealthScoreV3ProfessorPerformance[] {
@@ -137,6 +145,7 @@ export function normalizeHealthScoreV3PerformanceRows(
       snapshots.set(professorId, snapshot);
     }
 
+    const detalhes = asRecord(row.detalhes);
     snapshot.metrics.set(metrica, {
       metrica,
       valorBruto: asNullableNumber(row.valor_bruto),
@@ -145,6 +154,7 @@ export function normalizeHealthScoreV3PerformanceRows(
       nota: asNullableNumber(row.nota),
       peso: asNumber(row.peso),
       pesoDisponivel: row.peso_disponivel === true,
+      pesoEfetivo: asNullableNumber(row.peso_efetivo ?? detalhes.peso_efetivo),
       contribuicao: asNullableNumber(row.contribuicao),
       meta: asNullableNumber(row.meta),
       amostra: asNullableNumber(row.amostra),
@@ -154,7 +164,13 @@ export function normalizeHealthScoreV3PerformanceRows(
       fonte: String(row.fonte || ''),
       regraVersaoMetrica: String(row.regra_versao_metrica || ''),
       motivoSemBase: row.motivo_sem_base ? String(row.motivo_sem_base) : null,
-      detalhes: asRecord(row.detalhes),
+      codigoEvidencia: row.codigo_evidencia
+        ? String(row.codigo_evidencia)
+        : detalhes.codigo_evidencia
+          ? String(detalhes.codigo_evidencia)
+          : null,
+      papel: asMetricRole(row.papel ?? detalhes.papel),
+      detalhes,
     });
   }
 
@@ -299,6 +315,7 @@ export interface HealthScoreV3AiPayload {
     nota: number | null;
     peso: number;
     peso_disponivel: boolean;
+    peso_efetivo: number | null;
     contribuicao: number | null;
     meta: number | null;
     amostra: number | null;
@@ -308,6 +325,8 @@ export interface HealthScoreV3AiPayload {
     fonte: string;
     regra_versao_metrica: string;
     motivo_sem_base: string | null;
+    codigo_evidencia: string | null;
+    papel: HealthScoreV3MetricRole | null;
     detalhes: Record<string, unknown>;
   }>;
 }
@@ -327,6 +346,7 @@ function serializeMetricForAi(metric: HealthScoreV3PerformanceMetric) {
     nota: metric.nota,
     peso: metric.peso,
     peso_disponivel: metric.pesoDisponivel,
+    peso_efetivo: metric.pesoEfetivo,
     contribuicao: metric.contribuicao,
     meta: metric.meta,
     amostra: metric.amostra,
@@ -336,6 +356,8 @@ function serializeMetricForAi(metric: HealthScoreV3PerformanceMetric) {
     fonte: metric.fonte,
     regra_versao_metrica: metric.regraVersaoMetrica,
     motivo_sem_base: metric.motivoSemBase,
+    codigo_evidencia: metric.codigoEvidencia,
+    papel: metric.papel,
     detalhes: metric.detalhes,
   };
 }
@@ -377,6 +399,7 @@ function performanceFromMetricRows(
       nota: row.nota,
       peso: row.peso,
       pesoDisponivel: row.pesoDisponivel,
+      pesoEfetivo: row.pesoEfetivo,
       contribuicao: row.contribuicao,
       meta: row.meta,
       amostra: row.amostra,
@@ -386,6 +409,8 @@ function performanceFromMetricRows(
       fonte: row.fonte,
       regraVersaoMetrica: row.regraVersaoMetrica,
       motivoSemBase: row.motivoSemBase,
+      codigoEvidencia: row.codigoEvidencia,
+      papel: row.papel,
       detalhes: row.detalhes,
     }])),
   };
