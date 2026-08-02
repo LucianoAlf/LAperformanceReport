@@ -296,6 +296,9 @@ async function sincronizarMetadadosAulas(
     dataFim: string;
     aulas: AulaEmusys[];
   }> = [];
+  // IMPORTANTE: chunkSize precisa ficar < 1000. O retorno de cada upsert
+  // (.select() abaixo) alimenta idPorEmusysId; se o lote crescer para 1000+
+  // o PostgREST corta a resposta e reintroduz o truncamento silencioso.
   const chunkSize = 500;
 
   for (const unidade of unidades) {
@@ -339,35 +342,41 @@ async function sincronizarMetadadosAulas(
       };
     });
 
+    // idPorEmusysId e construido a partir do retorno do proprio upsert
+    // (.select()), nao de um SELECT separado depois: um SELECT sem paginacao
+    // sobre a janela inteira (dias + dias_futuros = 37 dias => 2.590-4.203
+    // aulas por unidade) estoura o teto padrao de 1000 linhas do PostgREST e
+    // trunca o mapa silenciosamente — aula fora do mapa = vinculo descartado
+    // sem erro e sem log. Foi o bug corrigido na sync-grade-futura-emusys e
+    // reintroduzido aqui; a partir de ~D+9 nenhum vinculo era tocado.
     let gravadas = 0;
+    const idPorEmusysId = new Map<number, number>();
     for (let offset = 0; offset < linhas.length; offset += chunkSize) {
       const lote = linhas.slice(offset, offset + chunkSize);
-      const { error } = await supabase
+      const { data: loteGravado, error } = await supabase
         .from('aulas_emusys')
-        .upsert(lote, { onConflict: 'emusys_id,unidade_id', ignoreDuplicates: false });
+        .upsert(lote, { onConflict: 'emusys_id,unidade_id', ignoreDuplicates: false })
+        .select('id, emusys_id');
       if (error) {
         throw new Error(
           `Erro no lote ${offset} de ${unidade.nome}: ${error.message}`
         );
       }
       gravadas += lote.length;
+      for (const linhaGravada of loteGravado || []) {
+        idPorEmusysId.set(linhaGravada.emusys_id as number, linhaGravada.id as number);
+      }
+    }
+
+    if (idPorEmusysId.size < aulas.length) {
+      console.log(
+        `[sync-presenca] ${unidade.nome}: aulas=${aulas.length} mapeadas=${idPorEmusysId.size} (diferenca indica retorno de upsert incompleto)`,
+      );
     }
 
     // Casa os vinculos aluno-aula tambem no sync de 15 min: sem isso, um
     // reagendamento ou aluno incluido depois do ultimo sync-grade-futura
     // (roda 1x/dia) so apareceria no dia seguinte.
-    const { data: aulasGravadas } = await supabase
-      .from('aulas_emusys')
-      .select('id, emusys_id')
-      .eq('unidade_id', unidade.id)
-      .gte('data_aula', dataInicio)
-      .lte('data_aula', dataFim);
-
-    const idPorEmusysId = new Map<number, number>();
-    for (const linha of aulasGravadas || []) {
-      idPorEmusysId.set(linha.emusys_id as number, linha.id as number);
-    }
-
     const vinculos = montarVinculosAulaAlunos(aulas, idPorEmusysId, unidade.id, normalizarNome);
     const resultadoVinculos = await gravarVinculosAulaAlunos(supabase, vinculos);
     for (const erro of resultadoVinculos.erros) {
