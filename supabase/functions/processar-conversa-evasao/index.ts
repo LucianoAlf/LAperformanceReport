@@ -11,7 +11,10 @@ import {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const WORKER_TOKEN = Deno.env.get("SYNC_PRESENCA_EDGE_TOKEN")!;
+const WORKER_TOKEN =
+  Deno.env.get("SYNC_PRESENCA_EDGE_TOKEN")?.trim() ||
+  Deno.env.get("SYNC_MATRICULAS_ADMIN_TOKEN")?.trim() ||
+  "";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
