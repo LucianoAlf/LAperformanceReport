@@ -56,3 +56,28 @@ test('tabela nao repete estado tecnico embaixo de cada metrica', () => {
   assert.doesNotMatch(tab, /\{stateLabel\s*&&[\s\S]{0,220}<span[^>]*>\{stateLabel\}<\/span>/i);
   assert.match(tab, /Estado:\s*<strong>\{stateLabel/i, 'estado continua disponivel no tooltip');
 });
+
+test('cor da metrica representa resultado e nao o estado provisorio', async () => {
+  const { resolveHealthScoreV3MetricTone } = await import(`../${helperPath}`);
+
+  assert.equal(resolveHealthScoreV3MetricTone('retencao', 100, {
+    nota: null,
+    meta: 90,
+    papel: 'nota',
+  }), 'positive');
+  assert.equal(resolveHealthScoreV3MetricTone('presenca', 77.8, {
+    nota: null,
+    meta: 80,
+    papel: 'nota',
+  }), 'attention');
+  assert.equal(resolveHealthScoreV3MetricTone('conversao', 33.3, {
+    nota: null,
+    meta: 70,
+    papel: 'nota',
+  }), 'critical');
+  assert.equal(resolveHealthScoreV3MetricTone('numero_alunos', 38, {
+    nota: null,
+    meta: null,
+    papel: 'diagnostico',
+  }), 'neutral');
+});

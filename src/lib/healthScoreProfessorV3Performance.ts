@@ -267,6 +267,34 @@ export interface HealthScoreV3MetricDisplay {
   referenceCompetence: string | null;
 }
 
+export type HealthScoreV3MetricTone = 'positive' | 'attention' | 'critical' | 'neutral' | 'missing';
+
+export function resolveHealthScoreV3MetricTone(
+  metricKey: HealthMetricKeyV3,
+  value: number | null,
+  metric: Pick<HealthScoreV3PerformanceMetric, 'nota' | 'meta' | 'papel'> | null,
+): HealthScoreV3MetricTone {
+  if (value === null || !Number.isFinite(value)) return 'missing';
+  if (metricKey === 'numero_alunos' || metric?.papel === 'diagnostico') return 'neutral';
+
+  const score = metric?.nota;
+  if (score !== null && score !== undefined && Number.isFinite(score)) {
+    if (score >= 80) return 'positive';
+    if (score >= 60) return 'attention';
+    return 'critical';
+  }
+
+  const target = metric?.meta;
+  if (target !== null && target !== undefined && Number.isFinite(target) && target > 0) {
+    const attainment = value / target;
+    if (attainment >= 1) return 'positive';
+    if (attainment >= 0.8) return 'attention';
+    return 'critical';
+  }
+
+  return 'neutral';
+}
+
 type UnknownRecord = Record<string, unknown>;
 
 function asRecord(value: unknown): UnknownRecord {
