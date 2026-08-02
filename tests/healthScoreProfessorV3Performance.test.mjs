@@ -299,7 +299,7 @@ test('score parcial preserva a classificacao visual e bases opcionais nao quebra
   assert.equal(formatHealthScoreV3BaseNumber(Number.NaN), null);
 });
 
-test('tabela V3 oferece filtros por saúde e competência em andamento sem habilitar ranking', () => {
+test('tabela V3 oferece filtros por saúde e ordena a leitura operacional sem habilitar ranking oficial', () => {
   const tab = read(tabPath);
 
   assert.match(tab, /mergeHealthScoreV3ActiveRoster/);
@@ -307,7 +307,8 @@ test('tabela V3 oferece filtros por saúde e competência em andamento sem habil
   assert.match(tab, /value="em_andamento"/);
   assert.match(tab, /value="evidencia_pendente"/);
   assert.match(tab, /Evidência pendente/);
-  assert.match(tab, /isHealthScoreV3SnapshotRankable/);
+  assert.match(tab, /compareHealthScoreV3OperationalRows/);
+  assert.doesNotMatch(tab, /isHealthScoreV3SnapshotRankable/);
 });
 
 test('Task 5 mantem leitura parcial sem recalcular pilares segmentados por meta global', () => {

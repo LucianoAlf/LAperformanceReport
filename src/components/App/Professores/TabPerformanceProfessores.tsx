@@ -39,7 +39,7 @@ import {
 } from '@/lib/professoresKpisAgregados';
 import { useHealthScoreProfessorV3Performance } from '@/hooks/useHealthScoreProfessorV3Performance';
 import {
-  isHealthScoreV3SnapshotRankable,
+  compareHealthScoreV3OperationalRows,
   isHealthScoreV3SnapshotVisible,
   mergeHealthScoreV3ActiveRoster,
   rankHealthScoreV3Metric,
@@ -228,9 +228,6 @@ function HealthScoreV3MetricCell({
         }}
       >
         <span>{renderedValue}</span>
-        {stateLabel && display.state !== 'auditoria' && display.state !== 'sem_base' && (
-          <span className="text-[9px] font-normal uppercase text-slate-500">{stateLabel}</span>
-        )}
       </button>
     </Tooltip>
   );
@@ -680,21 +677,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
     resultado.sort((a, b) => {
       if (HEALTH_SCORE_V3_PERFORMANCE_ENABLED) {
-        const aRankable = Boolean(a.healthV3 && isHealthScoreV3SnapshotRankable(a.healthV3));
-        const bRankable = Boolean(b.healthV3 && isHealthScoreV3SnapshotRankable(b.healthV3));
-        if (aRankable !== bRankable) return aRankable ? -1 : 1;
-        if (aRankable && bRankable) return Number(b.healthV3?.score) - Number(a.healthV3?.score);
-        const aStatus = resolveHealthScoreV3Status(a.healthV3);
-        const bStatus = resolveHealthScoreV3Status(b.healthV3);
-        const order: Record<HealthScoreV3UiStatus, number> = {
-          saudavel: 0,
-          atencao: 0,
-          critico: 0,
-          parcial: 0,
-          evidencia_pendente: 2,
-        };
-        if (order[aStatus] !== order[bStatus]) return order[aStatus] - order[bStatus];
-        return a.nome.localeCompare(b.nome, 'pt-BR');
+        return compareHealthScoreV3OperationalRows(a, b);
       }
 
       if (a.health_score_confiavel !== b.health_score_confiavel) return a.health_score_confiavel ? -1 : 1;
