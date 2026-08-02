@@ -957,10 +957,11 @@ antes da migration permanecem `legado_v1`.
 **Files:**
 
 - Modify: `supabase/functions/webhook-whatsapp-inbox/index.ts`
+- Create: `supabase/functions/webhook-whatsapp-inbox/routing.ts`
 - Create: `supabase/functions/webhook-whatsapp-inbox/routing.test.ts`
 - Create: `tests/webhookPesquisaPrimeiraAulaRegression.test.mjs`
 
-- [ ] **Step 1: Escrever teste vermelho de roteamento**
+- [x] **Step 1: Escrever teste vermelho de roteamento**
 
 Com payload autenticado contendo `buttonOrListid`:
 
@@ -971,7 +972,7 @@ Com payload autenticado contendo `buttonOrListid`:
 - botão desconhecido continua na inbox e é ignorado pelo processador de nota;
 - falha no processador de nota não impede a inbox, mas gera diagnóstico sanitizado.
 
-- [ ] **Step 2: Reordenar o roteamento**
+- [x] **Step 2: Reordenar o roteamento**
 
 O encaminhamento pós-1ª aula deve ocorrer para todo `buttonOrListid` autenticado antes de qualquer `continue` específico da evasão:
 
@@ -987,11 +988,11 @@ const evasao = await ingerirRespostaEvasao(...);
 
 Não expor `buttonOrListid` em log de texto.
 
-- [ ] **Step 3: Validar a Edge interna**
+- [x] **Step 3: Validar a Edge interna**
 
 Manter `processar-resposta-pesquisa` com `verify_jwt=true`. A invocação interna pelo cliente service role continua autorizada; não abrir a função diretamente ao provedor.
 
-- [ ] **Step 4: Executar testes**
+- [x] **Step 4: Executar testes**
 
 ```powershell
 deno test supabase/functions/webhook-whatsapp-inbox/routing.test.ts

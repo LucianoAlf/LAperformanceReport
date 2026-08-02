@@ -9,10 +9,15 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getUazapiCredentials } from '../_shared/uazapi.ts';
 import { autenticarWebhookInbound } from './auth.ts';
 import { registrarDiagnosticoWebhook } from './diagnostics.ts';
+import {
+  deveProcessarRespostaEvasao,
+  encaminharPesquisaPrimeiraAula,
+} from './routing.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const WEBHOOK_HEALTH_TOKEN = Deno.env.get('WEBHOOK_HEALTH_TOKEN')?.trim() ?? '';
+const PROCESSADOR_PESQUISA_PRIMEIRA_AULA = 'processar-resposta-pesquisa';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -326,6 +331,12 @@ async function handleRespostaEvasao(
   caixaIdFromUrl: number | null
 ): Promise<{ handled: boolean; pesquisa_id?: string }> {
   try {
+    // Botões/listas pertencem à pesquisa pós-1ª aula e nunca podem ser
+    // consumidos como texto por uma pesquisa de evasão do mesmo telefone.
+    if (!deveProcessarRespostaEvasao(msg)) {
+      return { handled: false };
+    }
+
     // Ignorar mensagens enviadas por nós (fromMe = true)
     if (msg.key?.fromMe === true) {
       return { handled: false };
@@ -982,9 +993,32 @@ serve(async (req: Request) => {
 
         const whatsappMessageId = msg.key?.id || msg.id || msg.messageId;
 
-        // Verificar se é resposta de pesquisa de evasão ANTES de filtrar fromMe
-        // (porque o usuário pode responder do mesmo dispositivo)
-        const evasaoResult = await handleRespostaEvasao(msg, phone, supabase, caixaIdFromUrl);
+        // ========== RESPOSTA DA PESQUISA PÓS-1ª AULA (botão/lista) ==========
+        // Encaminhar antes da evasão. Uma falha do processador é diagnosticada,
+        // mas nunca interrompe o registro normal da mensagem na Caixa.
+        await encaminharPesquisaPrimeiraAula({
+          payload,
+          mensagem: msg,
+          invocar: async (_nome, body) => await supabase.functions.invoke(
+            PROCESSADOR_PESQUISA_PRIMEIRA_AULA,
+            { body },
+          ),
+          diagnosticar: (resultado) => diagnosticarWebhook(
+            correlationId,
+            caixaIdFromUrl,
+            eventTypeForDiagnostics,
+            'pesquisa_primeira_aula',
+            resultado,
+            resultado === 'error' ? { errorCode: 'internal_error' } : {},
+          ),
+        });
+
+        // Verificar se é resposta de pesquisa de evasão antes de filtrar fromMe
+        // (porque o usuário pode responder do mesmo dispositivo). Botões/listas
+        // são excluídos explicitamente pelo roteador acima.
+        const evasaoResult = deveProcessarRespostaEvasao(msg)
+          ? await handleRespostaEvasao(msg, phone, supabase, caixaIdFromUrl)
+          : { handled: false };
         if (evasaoResult.handled) {
           diagnosticarWebhook(
             correlationId,
@@ -995,33 +1029,6 @@ serve(async (req: Request) => {
           );
           processadas++;
           continue;
-        }
-
-        // ========== RESPOSTA DA PESQUISA PÓS-1ª AULA (botão/lista) ==========
-        // Repassa o payload cru para a edge que grava a nota em pesquisas_whatsapp
-        // e avisa o gerente. Idempotente: a edge só grava se houver pesquisa pendente
-        // para o remote_jid. NÃO interrompe o fluxo — a resposta também é registrada
-        // na caixa normalmente (mensagem "↩️ ..." visível na conversa).
-        if (msg.buttonOrListid) {
-          try {
-            await supabase.functions.invoke('processar-resposta-pesquisa', { body: payload });
-            diagnosticarWebhook(
-              correlationId,
-              caixaIdFromUrl,
-              eventTypeForDiagnostics,
-              'pesquisa_primeira_aula',
-              'accepted',
-            );
-          } catch {
-            diagnosticarWebhook(
-              correlationId,
-              caixaIdFromUrl,
-              eventTypeForDiagnostics,
-              'pesquisa_primeira_aula',
-              'error',
-              { errorCode: 'internal_error' },
-            );
-          }
         }
 
         // ========== EDIÇÃO DE MENSAGEM ==========
