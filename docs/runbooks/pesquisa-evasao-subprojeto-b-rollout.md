@@ -81,3 +81,14 @@ Se a migration falhar, ela é transacional. Depois de aplicada, não remover col
 - O default de `resposta_ingestao_versao` permanece `legado_v1`; a ativação B3a não fez parte deste rollout.
 - Smoke visual em produção: a tela de Evasão carregou, o histórico da pesquisa piloto de Davi Pedro Palmerini abriu e exibiu `Rodada 1`, os nove eventos em ordem, as transcrições dos áudios e a consolidação da rodada.
 - Nenhuma mensagem de WhatsApp foi disparada durante a publicação ou o smoke.
+
+### Correção da revisão auditável e da fila — 02/08/2026
+
+- Migration `pesquisa_evasao_revisao_auditavel_fila` aplicada em produção pelo arquivo `20260802223000_pesquisa_evasao_revisao_auditavel_fila.sql`; artefato conferido antes da aplicação com 15.115 bytes e SHA-256 `7f0873d0535125e4e6394be615dab05a965d60964cf9be80bb80167812207da9`.
+- A revisão antiga que estava `em_revisao` sem autoria foi devolvida para `pronta_para_revisao`, sem atribuir operador retroativamente.
+- Postflight do piloto `3407a1c4-e8aa-4dd6-b7b3-46bfd4cc4e17`: cabeçalho em `pronta_para_revisao`, `pronta_para_revisao_em` preservado, `conteudo_novo_desde_revisao=true` e correspondência confirmada na fila.
+- Conteúdo preservado: 13 mensagens, quatro transcrições e três análises; Rodadas 1 e 2 em `pronta_para_revisao` e Rodada 3 em coleta no banco antes da renderização da fila.
+- Estado do rollout gradual preservado: uma pesquisa em `multipartes_v2`, nove em `legado_v1`; B3a segue sem ativação.
+- Commit `ad9d195` publicado na `main`; deploy da Vercel concluído com sucesso.
+- Smoke visual em produção: a fila exibiu Davi Pedro Palmerini com selo **Novo conteúdo**; o histórico mostrou as Rodadas 1, 2 e 3 separadas, cada uma com sua consolidação e ação de revisão. Nenhuma revisão foi iniciada/concluída durante o smoke.
+- Nenhuma Edge Function foi republicada e nenhuma mensagem de WhatsApp foi disparada nesta correção.
