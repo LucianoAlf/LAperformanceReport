@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { formatarFrescor } from '@/lib/agenda';
 
@@ -52,13 +52,20 @@ export function useAgendaDia({ data, unidadeId }: Params) {
   const [erro, setErro] = useState<string | null>(null);
   const [frescor, setFrescor] = useState('sem dado de sincronizacao');
 
+  // Contador de requisicao: cada chamada de `buscar` pega o proximo id.
+  // Um `useCallback` com deps [data, unidadeId] cria uma NOVA closure a cada
+  // troca de data/unidade — comparar contra `data`/`unidadeId` capturados no
+  // topo da funcao e um no-op, porque dentro daquela closure eles nunca mudam
+  // (o closure inteiro e descartado e substituido por outro). O contador foge
+  // desse problema por viver fora de qualquer closure, num ref mutavel: so a
+  // busca cujo id bate com o `current` mais recente pode gravar no estado.
+  const idRequisicaoRef = useRef(0);
+
   const buscar = useCallback(async () => {
-    // Capturados no inicio: se `data`/`unidadeId` mudarem antes desta busca
-    // resolver (navegacao rapida dia a dia), a resposta ficou obsoleta e e
-    // descartada em vez de sobrescrever o estado com dados da data errada.
     const dataDaBusca = data;
     const unidadeIdDaBusca = unidadeId;
-    const aindaValida = () => dataDaBusca === data && unidadeIdDaBusca === unidadeId;
+    const minhaRequisicaoId = ++idRequisicaoRef.current;
+    const aindaValida = () => idRequisicaoRef.current === minhaRequisicaoId;
 
     setCarregando(true);
     setErro(null);
