@@ -23,6 +23,12 @@ interface Props {
   agruparPor: 'professor' | 'sala';
   selecionada: AulaAgenda | null;
   onSelecionar: (aula: AulaAgenda) => void;
+  // Agenda consolidada (sem unidade selecionada no header): o trilho passa a
+  // dizer de qual escola e cada professor/sala. Alem de rotular, isso muda a
+  // CHAVE do agrupamento — sem unidade na chave, "Sala 1" das tres unidades
+  // vira um trilho so e as aulas se sobrepoem como se fosse a mesma sala.
+  // Com unidade selecionada fica desligado: repetir o nome dela seria ruido.
+  mostrarUnidade?: boolean;
   // Opcional: quando a pagina que envolve a timeline ja tem seu proprio
   // relogio (ex.: pra sincronizar com um KPI "em aula agora"), ela passa os
   // minutos aqui e os dois ficam no mesmo tique. Sem a prop, a timeline
@@ -30,7 +36,14 @@ interface Props {
   minutos?: number;
 }
 
-export function AgendaTimeline({ aulas, agruparPor, selecionada, onSelecionar, minutos: minutosProp }: Props) {
+export function AgendaTimeline({
+  aulas,
+  agruparPor,
+  selecionada,
+  onSelecionar,
+  minutos: minutosProp,
+  mostrarUnidade = false,
+}: Props) {
   const [minutosProprio, setMinutosProprio] = useState(() => minutosAgora(new Date()));
 
   useEffect(() => {
@@ -46,13 +59,15 @@ export function AgendaTimeline({ aulas, agruparPor, selecionada, onSelecionar, m
     (_, i) => AGENDA_HORA_INICIO + i,
   );
 
-  const grupos = new Map<string, AulaAgenda[]>();
+  const grupos = new Map<string, { rotulo: string; unidade: string | null; aulas: AulaAgenda[] }>();
   for (const aula of aulas) {
-    const chave =
+    const rotulo =
       (agruparPor === 'professor' ? aula.professor_nome : aula.sala_nome) ?? 'Sem alocação';
-    const lista = grupos.get(chave);
-    if (lista) lista.push(aula);
-    else grupos.set(chave, [aula]);
+    const unidade = mostrarUnidade ? aula.unidade_nome : null;
+    const chave = unidade ? `${aula.unidade_id}|${rotulo}` : rotulo;
+    const grupo = grupos.get(chave);
+    if (grupo) grupo.aulas.push(aula);
+    else grupos.set(chave, { rotulo, unidade, aulas: [aula] });
   }
 
   const reguaVisivel = dentroDoExpediente(minutos);
@@ -77,7 +92,7 @@ export function AgendaTimeline({ aulas, agruparPor, selecionada, onSelecionar, m
           ))}
         </div>
 
-        {[...grupos.entries()].map(([nome, doGrupo]) => {
+        {[...grupos.entries()].map(([chave, { rotulo, unidade, aulas: doGrupo }]) => {
           const comFaixa = alocarFaixas(doGrupo);
           const nFaixas = contarFaixas(comFaixa);
           const altura =
@@ -85,13 +100,14 @@ export function AgendaTimeline({ aulas, agruparPor, selecionada, onSelecionar, m
 
           return (
             <div
-              key={nome}
+              key={chave}
               className="grid border-b border-slate-800"
               style={{ gridTemplateColumns: `${LARGURA_ROTULO}px 1fr` }}
             >
               <div className="flex flex-col justify-center border-r border-slate-700 px-3.5 py-2.5">
-                <span className="truncate text-[13px] font-semibold">{nome}</span>
-                <span className="text-[11px] text-slate-400">
+                <span className="truncate text-[13px] font-semibold">{rotulo}</span>
+                <span className="truncate text-[11px] text-slate-400">
+                  {unidade && <span className="text-cyan-400">{unidade} · </span>}
                   {doGrupo.filter((a) => !a.cancelada).length} aulas
                 </span>
               </div>

@@ -63,6 +63,13 @@ export default function AgendaPage() {
     return idsEmRisco.size;
   }, [aulas]);
 
+  // Trocar de unidade no header troca o conjunto de aulas: a selecao antiga
+  // sumiu da timeline, mas o drawer continuaria mostrando ela. Mesmo motivo
+  // pelo qual `mover()` limpa a selecao ao trocar de dia.
+  useEffect(() => {
+    setSelecionada(null);
+  }, [unidadeId]);
+
   function mover(dias: number) {
     setData(format(addDays(parseISO(data), dias), 'yyyy-MM-dd'));
     setSelecionada(null);
@@ -140,9 +147,10 @@ export default function AgendaPage() {
               selecionada={selecionada}
               onSelecionar={setSelecionada}
               minutos={minutos}
+              mostrarUnidade={unidadeId === null}
             />
           </div>
-          <AgendaDrawer aula={selecionada} />
+          <AgendaDrawer aula={selecionada} mostrarUnidade={unidadeId === null} />
         </div>
       )}
     </div>

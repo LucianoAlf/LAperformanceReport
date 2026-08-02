@@ -14,7 +14,16 @@ function notaClampada(nota: number): number {
   return Math.min(5, Math.max(0, Math.round(nota)));
 }
 
-export function AgendaDrawer({ aula }: { aula: AulaAgenda | null }) {
+export function AgendaDrawer({
+  aula,
+  mostrarUnidade = false,
+}: {
+  aula: AulaAgenda | null;
+  // Na agenda consolidada o painel tambem precisa dizer de qual escola e a
+  // aula: o rotulo do trilho pode ter ficado fora da viewport apos rolagem
+  // horizontal. Com unidade selecionada, repetir seria ruido.
+  mostrarUnidade?: boolean;
+}) {
   if (!aula) {
     return (
       <aside className="w-[296px] shrink-0 border-l border-slate-700 bg-slate-800/50 p-4 text-sm text-slate-400">
@@ -23,7 +32,12 @@ export function AgendaDrawer({ aula }: { aula: AulaAgenda | null }) {
     );
   }
 
-  const aluno: AlunoAgenda | null = aula.alunos[0] ?? null;
+  // A ordem de `alunos` vem de jsonb_agg(distinct ...), que e arbitraria —
+  // com 2+ alunos, alunos[0] e um aluno QUALQUER da turma. Tratar esse como
+  // "o" aluno poria o nome dele no titulo e so os dados dele no bloco
+  // individual, contradizendo a lista da turma logo abaixo. Por isso o
+  // enriquecimento individual so aparece quando a aula tem exatamente 1 aluno.
+  const aluno: AlunoAgenda | null = aula.alunos.length === 1 ? aula.alunos[0] : null;
 
   return (
     <aside className="flex w-[296px] shrink-0 flex-col gap-3.5 border-l border-slate-700 bg-slate-800/50 p-4">
@@ -37,6 +51,9 @@ export function AgendaDrawer({ aula }: { aula: AulaAgenda | null }) {
         <p className="text-xs text-slate-400">
           {[aula.curso_nome, aula.sala_nome, aula.professor_nome].filter(Boolean).join(' · ')}
         </p>
+        {mostrarUnidade && aula.unidade_nome && (
+          <p className="text-xs font-semibold text-cyan-400">{aula.unidade_nome}</p>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-1.5">
