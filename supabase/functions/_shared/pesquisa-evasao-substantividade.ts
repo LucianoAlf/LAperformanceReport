@@ -39,7 +39,7 @@ export function classificarSubstantividade(
   if (
     /^(oi|ola|bom dia|boa tarde|boa noite|tudo bem|entao|pois e)$/i
       .test(normalizado) ||
-    /^(?:(?:oi|ola|olha) )?deixa eu te (?:falar|contar)(?: uma coisa)?$/i
+    /^(?:(?:oi|ola|olha) )?deixa eu te (?:falar|contar)(?: uma (?:coisa|coisinha))?$/i
       .test(normalizado)
   ) {
     return "abertura";
