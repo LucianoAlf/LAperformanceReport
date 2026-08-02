@@ -29,6 +29,7 @@ import {
   type HealthScoreV3SnapshotMetric,
 } from '@/lib/healthScoreProfessorV3';
 import {
+  formatHealthScoreV3BaseNumber,
   resolveHealthScoreV3EvidenceMessage,
   serializeHealthScoreV3ForAi,
 } from '@/lib/healthScoreProfessorV3Performance';
@@ -59,22 +60,18 @@ function formatV3State(value: string | null | undefined): string {
   return value.replace(/_/g, ' ');
 }
 
-function formatV3BaseNumber(value: number): string {
-  return Number.isInteger(value) ? value.toString() : value.toFixed(1);
-}
-
 function formatV3Base(metric: HealthScoreV3SnapshotMetric): string | null {
-  if (metric.denominador === null) return null;
+  const denominator = formatHealthScoreV3BaseNumber(metric.denominador);
+  if (denominator === null) return null;
 
   if (metric.metrica === 'permanencia') {
-    return `${formatV3BaseNumber(metric.denominador)} vínculos encerrados elegíveis`;
+    return `${denominator} vínculos encerrados elegíveis`;
   }
 
-  if (metric.numerador === null) {
-    return formatV3BaseNumber(metric.denominador);
-  }
+  const numerator = formatHealthScoreV3BaseNumber(metric.numerador);
+  if (numerator === null) return denominator;
 
-  return `${formatV3BaseNumber(metric.numerador)} / ${formatV3BaseNumber(metric.denominador)}`;
+  return `${numerator} / ${denominator}`;
 }
 
 interface V3ObservedValue {
@@ -110,7 +107,7 @@ function getV3ObservedValue(metric: HealthScoreV3SnapshotMetric): V3ObservedValu
       value: alunos,
       displayLabel: null,
       stateLabel: 'observado',
-      evidenceLabel: `Fechamentos: ${formatV3BaseNumber(meses)}/3`,
+      evidenceLabel: `Fechamentos: ${formatHealthScoreV3BaseNumber(meses) ?? '0'}/3`,
       note: `${meses}/3 fechamentos disponíveis; valor trimestral ainda fora do score.`,
     };
   }
@@ -126,7 +123,7 @@ function getV3ObservedValue(metric: HealthScoreV3SnapshotMetric): V3ObservedValu
       ? 'cobertura em apuração'
       : `cobertura ${cobertura.toFixed(1)}%`;
     const evidenceLabel = classificados !== null && esperados !== null
-      ? `Eventos classificados: ${formatV3BaseNumber(classificados)}/${formatV3BaseNumber(esperados)}`
+      ? `Eventos classificados: ${formatHealthScoreV3BaseNumber(classificados) ?? '0'}/${formatHealthScoreV3BaseNumber(esperados) ?? '0'}`
       : 'Eventos classificados: em apuração';
     const emAuditoria = metric.detalhes.observacao_publicacao === 'em_auditoria';
 
@@ -260,10 +257,10 @@ function HealthScoreV3MetricsPanel({
           const displayValue = metric.valorBruto ?? observed?.value ?? null;
           const displayLabel = observed?.displayLabel ?? formatV3Value(key, displayValue);
           const observedInAudit = observed?.stateLabel === 'em auditoria';
-          const originalWeight = `${formatV3BaseNumber(metric.peso)}%`;
+          const originalWeight = `${formatHealthScoreV3BaseNumber(metric.peso) ?? '0'}%`;
           const effectiveWeight = metric.pesoEfetivo === null
             ? 'não aplicável neste recorte'
-            : `${formatV3BaseNumber(metric.pesoEfetivo)}%`;
+            : `${formatHealthScoreV3BaseNumber(metric.pesoEfetivo) ?? '0'}%`;
 
           return (
             <div key={key} className="min-h-[168px] rounded-lg border border-slate-700 bg-slate-800/40 p-4">

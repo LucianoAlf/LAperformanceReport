@@ -213,6 +213,29 @@ export function resolveHealthScoreV3UiStatus(snapshot: Pick<
   return 'evidencia_pendente';
 }
 
+export function resolveHealthScoreV3ScoreStatus(snapshot: Pick<
+  HealthScoreV3ProfessorPerformance,
+  'score' | 'classificacao' | 'estadoPublicacao' | 'scoreExibivel'
+> | null | undefined): Exclude<HealthScoreV3UiStatus, 'parcial'> {
+  if (!snapshot || snapshot.score === null || !snapshot.scoreExibivel) {
+    return 'evidencia_pendente';
+  }
+  if (snapshot.classificacao === 'critico') return 'critico';
+  if (snapshot.classificacao === 'atencao') return 'atencao';
+  if (snapshot.classificacao === 'saudavel') return 'saudavel';
+  return 'evidencia_pendente';
+}
+
+export function formatHealthScoreV3BaseNumber(
+  value: number | null | undefined,
+): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 1,
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
 export type HealthScoreV3MetricDisplayState =
   | 'normal'
   | 'observado'

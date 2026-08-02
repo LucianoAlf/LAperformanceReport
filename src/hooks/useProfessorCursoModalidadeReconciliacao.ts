@@ -114,7 +114,7 @@ export function useProfessorCursoModalidadeReconciliacao({
     setError(null);
     try {
       const { data, error: rpcError } = await supabase.rpc(
-        'get_professor_curso_modalidade_excecoes_v2',
+        'get_professor_curso_modalidade_excecoes_v3',
         {
           p_unidade_id: unidadeId || null,
           p_professor_id: professorId || null,

@@ -8,13 +8,13 @@ const hookPath = 'src/hooks/useHealthScoreProfessorV3Config.ts';
 const libPath = 'src/lib/healthScoreProfessorV3.ts';
 const read = (filePath) => fs.readFileSync(filePath, 'utf8');
 
-test('laboratorio esconde a burocracia de rascunho e oferece fluxo direto', () => {
+test('configuracao esconde a burocracia interna e oferece fluxo direto', () => {
   const source = read(componentPath);
 
   assert.doesNotMatch(source, />\s*Criar rascunho\s*</i);
   assert.doesNotMatch(source, />\s*Somente leitura\s*</i);
+  assert.doesNotMatch(source, /Editar configuração/i);
   for (const label of [
-    'Editar configuração',
     'Desfazer',
     'Restaurar vigente',
     'Simular',
@@ -22,6 +22,7 @@ test('laboratorio esconde a burocracia de rascunho e oferece fluxo direto', () =
   ]) {
     assert.match(source, new RegExp(label, 'i'));
   }
+  assert.match(source, /ensureEditableConfig/i);
   assert.match(source, /Simulação parcial - não oficial/i);
 });
 

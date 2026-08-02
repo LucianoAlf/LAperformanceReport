@@ -1064,8 +1064,13 @@ test('Task 8 separa pesos, metas globais e matriz segmentada no fluxo governado'
   );
   assert.match(
     simulateBlock,
-    /draftIsDirty\s*\?\s*await saveDraft\(draft\)\s*:\s*draft/,
-    'laboratorio deve persistir o ajuste interno antes de simular',
+    /ensureEditableConfig\(candidate\)/,
+    'ajuste direto deve garantir uma versao interna antes de simular',
+  );
+  assert.match(
+    simulateBlock,
+    /draftIsDirty\s*\|\|\s*!config\?\.rascunho\s*\?\s*await saveDraft\(draft\)\s*:\s*draft/,
+    'ajuste direto deve persistir a versao interna antes de simular',
   );
   assert.doesNotMatch(simulateBlock, /activate\(/);
   const saveBlock = configSource.slice(
@@ -1402,7 +1407,7 @@ test('fila legada de atribuicoes nao aparece na configuracao operacional', () =>
   assert.doesNotMatch(matrixSource, /pendencias\.divergenciasModalidade\.length/);
 });
 
-test('painel de excecoes usa somente a fila operacional V2 sem recadastrar professores', () => {
+test('painel de excecoes usa somente a fila operacional V3 sem recadastrar professores', () => {
   assert.equal(fs.existsSync(reconciliationHookPath), true);
   assert.equal(fs.existsSync(reconciliationComponentPath), true);
 
@@ -1410,7 +1415,7 @@ test('painel de excecoes usa somente a fila operacional V2 sem recadastrar profe
   const panelSource = read(reconciliationComponentPath);
   const configSource = read(configComponentPath);
 
-  assert.match(hookSource, /\.rpc\(\s*'get_professor_curso_modalidade_excecoes_v2'/);
+  assert.match(hookSource, /\.rpc\(\s*'get_professor_curso_modalidade_excecoes_v3'/);
   assert.match(hookSource, /functions\.invoke\(\s*'sync-professor-disciplinas-emusys'/);
   assert.doesNotMatch(hookSource, /get_professor_curso_modalidade_reconciliacao_v1/);
   assert.doesNotMatch(hookSource, /salvar_professor_curso_modalidade_atribuicoes_v1/);

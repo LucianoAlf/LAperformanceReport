@@ -46,6 +46,7 @@ import {
   formatHealthScoreV3Coverage,
   resolveHealthScoreV3EvidenceMessage,
   resolveHealthScoreV3MetricDisplay,
+  resolveHealthScoreV3ScoreStatus,
   resolveHealthScoreV3UiStatus,
   serializeHealthScoreV3ForAi,
   type HealthScoreV3MetricDisplay,
@@ -1201,7 +1202,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                     key={professor.id}
                     className={`hover:bg-slate-700/30 transition-colors cursor-pointer ${
                       (HEALTH_SCORE_V3_PERFORMANCE_ENABLED
-                        ? resolveHealthScoreV3Status(professor.healthV3) === 'critico'
+                        ? resolveHealthScoreV3ScoreStatus(professor.healthV3) === 'critico'
                         : professor.health_score_confiavel && professor.status === 'critico')
                         ? 'bg-red-500/5'
                         : ''
@@ -1212,7 +1213,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getGradientByStatus(
                           HEALTH_SCORE_V3_PERFORMANCE_ENABLED
-                            ? resolveHealthScoreV3Status(professor.healthV3) || 'em_auditoria'
+                            ? resolveHealthScoreV3ScoreStatus(professor.healthV3) || 'em_auditoria'
                             : professor.health_score_confiavel ? professor.status : 'em_auditoria'
                         )} flex items-center justify-center text-white font-bold text-sm`}>
                           {professor.foto_url ? (
@@ -1250,16 +1251,13 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                           }
                         >
                           <div className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 ${
-                            getStatusColor(resolveHealthScoreV3Status(professor.healthV3))
+                            getStatusColor(resolveHealthScoreV3ScoreStatus(professor.healthV3))
                           }`}>
                             <span className="text-sm font-black">
                               {professor.healthV3 && isHealthScoreV3SnapshotVisible(professor.healthV3)
                                 ? Math.round(Number(professor.healthV3.score))
                                 : 'Evidência pendente'}
                             </span>
-                            {professor.healthV3?.estadoPublicacao === 'parcial' && (
-                              <span className="text-[9px] font-semibold uppercase tracking-wide">parcial</span>
-                            )}
                           </div>
                         </Tooltip>
                       ) : (
@@ -1633,13 +1631,13 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                     <td className="text-center px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium border ${
                         HEALTH_SCORE_V3_PERFORMANCE_ENABLED
-                          ? getStatusColor(resolveHealthScoreV3Status(professor.healthV3) || 'sem_base')
+                          ? getStatusColor(resolveHealthScoreV3ScoreStatus(professor.healthV3) || 'sem_base')
                           : professor.health_score_confiavel
                             ? getStatusColor(professor.status)
                             : 'text-slate-400 bg-slate-500/10 border-slate-600'
                       }`}>
                         {HEALTH_SCORE_V3_PERFORMANCE_ENABLED
-                          ? formatHealthScoreV3Status(resolveHealthScoreV3Status(professor.healthV3))
+                          ? formatHealthScoreV3Status(resolveHealthScoreV3ScoreStatus(professor.healthV3))
                           : professor.health_score_confiavel
                             ? (professor.status === 'critico' ? 'Crítico' : professor.status === 'atencao' ? 'Atenção' : 'Excelente')
                             : 'Em auditoria'}
