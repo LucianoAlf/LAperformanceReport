@@ -1311,6 +1311,8 @@ git commit -m "feat(agenda): hook useAgendaDia"
 
 Estados visuais, nesta ordem de precedência: experimental → cancelada → reagendada → sem aluno vinculado → normal.
 
+⚠️ **Armadilha do `cn()`, encontrada na revisão desta task.** `cn()` usa `twMerge`, cuja regra é **a última classe conflitante vence** — o oposto de "a primeira do array vence". Listar as classes na ordem de precedência **não** implementa a precedência. As condições precisam ser **mutuamente exclusivas** (`cancelada && !experimental`, `reagendada && !cancelada && !experimental`), senão uma experimental cancelada sai com a cor de cancelada e o badge de experimental, se contradizendo na tela. Medido no banco em 60 dias: 33 experimentais canceladas + 27 reagendadas de 292 — 1 em cada 5 renderizava errado. O código abaixo já está corrigido.
+
 ```tsx
 import { cn } from '@/lib/utils';
 import type { AulaAgenda } from '@/hooks/useAgendaDia';
