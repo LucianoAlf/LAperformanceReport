@@ -14,6 +14,11 @@ verify_jwt = true
 # Worker interno: o gateway valida JWT e o código aceita somente service_role.
 verify_jwt = true
 
+[functions.processar-conversa-evasao]
+# pg_cron não possui JWT de service_role neste projeto; autenticação interna
+# ocorre no código por x-sync-token antes de ler body ou criar o cliente.
+verify_jwt = false
+
 [functions.webhook-whatsapp-inbox]
 # Gateway sem JWT: autenticação do provedor ocorre no código por segredo por caixa.
 verify_jwt = false
