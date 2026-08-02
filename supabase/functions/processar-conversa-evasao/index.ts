@@ -6,6 +6,7 @@ import {
   autenticarWorkerInterno,
   type ConversaParaConsolidar,
   decidirConsolidacao,
+  listarMensagensComTranscricaoPendente,
   type MensagemDaConversa,
 } from "./contract.ts";
 
@@ -123,6 +124,20 @@ serve(async (req: Request) => {
         ultimaAnalise: analiseResult.data,
         mensagens: mensagensContrato,
       };
+      for (
+        const mensagemId of listarMensagensComTranscricaoPendente(
+          mensagensContrato,
+        )
+      ) {
+        const { error } = await supabase.functions.invoke(
+          "transcrever-mensagem-evasao",
+          {
+            body: { mensagem_id: mensagemId },
+            headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
+          },
+        );
+        if (error) throw new Error("transcricao_disparo_falhou");
+      }
       const decisao = decidirConsolidacao(conversa, new Date());
 
       if (decisao.acao === "ignorar") {

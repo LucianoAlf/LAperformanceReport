@@ -39,10 +39,15 @@ test('áudio fica em storage privado e logs não contêm URL nem transcrição',
   assert.doesNotMatch(edge, /console\.(log|error)\([^\n]*(transcri|fileURL|url|token)/i);
 });
 
-test('gateway da transcrição exige JWT', () => {
+test('worker interno usa auth service-role no código sem depender do gateway JWT', () => {
   const config = read(configPath);
+  const bloco = config
+    .split('[functions.transcrever-mensagem-evasao]')[1]
+    ?.split(/\r?\n\[/)[0] ?? '';
+  assert.match(bloco, /verify_jwt\s*=\s*false/);
+  const edge = read(edgePath);
   assert.match(
-    config,
-    /\[functions\.transcrever-mensagem-evasao\][\s\S]*?verify_jwt\s*=\s*true/,
+    edge,
+    /autenticarServiceRole\(req\.headers\.get\(["']authorization["']\), SERVICE_ROLE_KEY\)/,
   );
 });

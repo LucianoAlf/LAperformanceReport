@@ -1056,14 +1056,20 @@ falhou -> nova versao pendente
 
 Não atualizar texto da versão concluída.
 
-- [x] **Step 4: Configurar JWT**
+- [x] **Step 4: Configurar autenticação interna**
 
 ```toml
 [functions.transcrever-mensagem-evasao]
-verify_jwt = true
+verify_jwt = false
 ```
 
-Não permitir chamada anônima.
+Não permitir chamada anônima: o gateway fica sem validação JWT porque a chave
+interna usada entre Edge Functions é opaca e foi rejeitada com `401` antes de o
+worker executar no teste controlado de 02/08/2026. A própria função compara em
+tempo constante o bearer recebido com `SUPABASE_SERVICE_ROLE_KEY`; qualquer
+outro valor recebe `401`. O worker de consolidação também retenta versões
+`pendente`, evitando que uma falha transitória de entrega deixe o áudio preso
+indefinidamente.
 
 - [x] **Step 5: Executar testes**
 

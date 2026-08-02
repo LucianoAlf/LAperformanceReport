@@ -95,6 +95,17 @@ function temTranscricaoPendente(mensagem: MensagemDaConversa): boolean {
     );
 }
 
+export function listarMensagensComTranscricaoPendente(
+  mensagens: MensagemDaConversa[],
+): string[] {
+  return mensagens.flatMap((mensagem) =>
+    mensagem.tipo === "audio" &&
+      mensagem.transcricoes.some((item) => item.status === "pendente")
+      ? [mensagem.id]
+      : []
+  );
+}
+
 function conteudoOficial(mensagem: MensagemDaConversa): string | null {
   if (mensagem.substantividade !== "conteudo_substantivo") return null;
   if (mensagem.tipo === "texto") return mensagem.texto?.trim() || null;

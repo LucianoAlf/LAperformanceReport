@@ -6,6 +6,7 @@ import {
   autenticarWorkerInterno,
   type ConversaParaConsolidar,
   decidirConsolidacao,
+  listarMensagensComTranscricaoPendente,
 } from "./contract.ts";
 
 const MINUTO = 60_000;
@@ -105,6 +106,28 @@ Deno.test("áudio usa última transcrição concluída e pendência impede pront
     assertEquals(concluida.textoConsolidado.includes("áudio pendente"), false);
     assertEquals(concluida.respostaTipo, "audio");
   }
+});
+
+Deno.test("worker identifica somente áudios pendentes para retentar", () => {
+  const base = conversa().mensagens[0];
+  assertEquals(
+    listarMensagensComTranscricaoPendente([
+      {
+        ...base,
+        id: "audio-pendente",
+        tipo: "audio",
+        transcricoes: [{ versao: 1, status: "pendente", texto: null }],
+      },
+      {
+        ...base,
+        id: "audio-processando",
+        tipo: "audio",
+        transcricoes: [{ versao: 1, status: "processando", texto: null }],
+      },
+      base,
+    ]),
+    ["audio-pendente"],
+  );
 });
 
 Deno.test("ordem é determinística por horário, criação e id", () => {

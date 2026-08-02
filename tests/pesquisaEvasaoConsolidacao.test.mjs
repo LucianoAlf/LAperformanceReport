@@ -58,3 +58,15 @@ test('worker persiste apenas consolidação derivada e não registra conteúdo e
   assert.doesNotMatch(edge, /console\.(log|error)\([^\n]*(texto|mensagem|transcri)/i);
   assert.doesNotMatch(edge, /\[áudio pendente\]/i);
 });
+
+test('worker retenta transcrições pendentes antes de reagendar a conversa', () => {
+  const edge = read(edgePath);
+  assert.match(edge, /listarMensagensComTranscricaoPendente/);
+  const disparo = edge.match(
+    /functions\.invoke\(\s*["']transcrever-mensagem-evasao["']/,
+  );
+  assert.ok(disparo);
+  assert.ok(
+    disparo.index < edge.indexOf('decidirConsolidacao(conversa'),
+  );
+});

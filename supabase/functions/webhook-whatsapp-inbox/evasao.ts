@@ -210,7 +210,7 @@ export function classificarSubstantividade(
   }
 
   if (
-    /^(oi|ola|bom dia|boa tarde|boa noite|tudo bem|entao|pois e|deixa eu te falar)$/i
+    /^(oi|ola|bom dia|boa tarde|boa noite|tudo bem|entao|pois e|deixa eu te falar|olha deixa eu te falar uma coisa)$/i
       .test(
         normalizado,
       )
