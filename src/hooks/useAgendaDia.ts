@@ -53,13 +53,22 @@ export function useAgendaDia({ data, unidadeId }: Params) {
   const [frescor, setFrescor] = useState('sem dado de sincronizacao');
 
   const buscar = useCallback(async () => {
+    // Capturados no inicio: se `data`/`unidadeId` mudarem antes desta busca
+    // resolver (navegacao rapida dia a dia), a resposta ficou obsoleta e e
+    // descartada em vez de sobrescrever o estado com dados da data errada.
+    const dataDaBusca = data;
+    const unidadeIdDaBusca = unidadeId;
+    const aindaValida = () => dataDaBusca === data && unidadeIdDaBusca === unidadeId;
+
     setCarregando(true);
     setErro(null);
 
     const { data: linhas, error } = await supabase.rpc('get_agenda_dia', {
-      p_data: data,
-      p_unidade_id: unidadeId,
+      p_data: dataDaBusca,
+      p_unidade_id: unidadeIdDaBusca,
     });
+
+    if (!aindaValida()) return;
 
     if (error) {
       setErro(error.message);
@@ -76,8 +85,19 @@ export function useAgendaDia({ data, unidadeId }: Params) {
       .select('created_at')
       .order('created_at', { ascending: false })
       .limit(1);
-    if (unidadeId) q = q.eq('unidade_id', unidadeId);
-    const { data: ultima } = await q;
+    if (unidadeIdDaBusca) q = q.eq('unidade_id', unidadeIdDaBusca);
+    const { data: ultima, error: erroFrescor } = await q;
+
+    if (!aindaValida()) return;
+
+    if (erroFrescor) {
+      // Frescor e informacao acessoria: falha aqui nao deve derrubar a tela
+      // nem se misturar com `erro` (que e da RPC principal). So loga p/ diagnostico.
+      console.error('[useAgendaDia] falha ao consultar frescor (aulas_emusys):', {
+        unidadeId: unidadeIdDaBusca,
+        error: erroFrescor,
+      });
+    }
 
     setFrescor(formatarFrescor(ultima?.[0]?.created_at ?? null, new Date()));
     setCarregando(false);
