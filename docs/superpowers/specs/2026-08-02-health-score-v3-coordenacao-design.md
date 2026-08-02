@@ -2,7 +2,7 @@
 
 **Data:** 02/08/2026
 
-**Status:** desenho aprovado; implementação local concluída em 02/08/2026, com rollout e validação final de produção pendentes
+**Status:** desenho aprovado; banco e Edge implantados, auditoria real aprovada em 02/08/2026; frontend em fechamento por PR
 
 **Escopo:** motor V3, configuracao, diagnosticos pedagogicos, mapa de sinais e relatorio mensal da Coordenacao
 

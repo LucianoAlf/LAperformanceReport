@@ -8,7 +8,7 @@
 
 **Tech Stack:** PostgreSQL 17/Supabase RPC, Supabase Edge Functions/Deno/TypeScript, React 19/TypeScript, Node test runner, Vite, Playwright/browser smoke.
 
-**Estado da execução em 02/08/2026:** Tasks 1 a 8 implementadas e verificadas localmente. Task 9 em fechamento documental e de gates. Task 10 pendente de rebase, implantação, PR, merge e smoke no domínio estável. A auditoria real pré-rollout confirmou que Matheus Lana e Valdo Delfino possuem base; os antigos estados genéricos decorriam dos cortes rígidos e da carteira na nota, corrigidos por esta entrega.
+**Estado da execução em 02/08/2026:** Tasks 1 a 9 implementadas. Banco e Edge implantados; auditoria real de junho/julho aprovada. Task 10 está na etapa final de PR, merge e smoke no domínio estável. Matheus Lana e Valdo Delfino possuem base; os antigos estados genéricos decorriam dos cortes rígidos e da carteira na nota, corrigidos por esta entrega.
 
 ---
 
@@ -26,6 +26,7 @@
 - Create `supabase/migrations/20260802190000_health_score_v3_nota_diagnostica.sql`: contrato de pilares, peso efetivo, nota parcial, motivos de evidencia e read models.
 - Create `supabase/migrations/20260802191000_health_score_v3_sinais_capacidade.sql`: capacidade por sala/turma, carteira diagnostica e mapa de sinais.
 - Create `supabase/migrations/20260802192000_relatorio_coordenacao_canonico.sql`: produtor mensal server-side, autorizacao, periodo e contrato JSON.
+- Create `supabase/migrations/20260802192500_health_score_v3_materializacao_controlada.sql`: compatibilidade do materializador append-only com o guard de imutabilidade, abrindo e restaurando a mutação controlada somente durante o fluxo interno.
 - Modify `supabase/functions/_shared/health-score-v3.ts`: tipos de peso efetivo, evidencia, diagnosticos e sinais.
 - Modify `supabase/functions/gemini-relatorio-coordenacao/index.ts`: busca server-side, narrativa controlada e renderizacao publica.
 - Modify `src/lib/healthScoreProfessorV3.ts`: separar metrica pontuavel de diagnostico e ampliar contratos.

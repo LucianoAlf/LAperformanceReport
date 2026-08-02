@@ -110,7 +110,16 @@ function audit(rows) {
 
   for (const [key, metrics] of groups) {
     const wallet = metrics.find((metric) => metric.metrica === 'numero_alunos');
-    if (!wallet || wallet.papel !== 'diagnostico' || wallet.peso_efetivo !== null || wallet.contribuicao !== null) {
+    const walletEffectiveWeight = wallet?.peso_efetivo === null
+      ? 0
+      : Number(wallet?.peso_efetivo ?? Number.NaN);
+    if (
+      !wallet
+      || wallet.papel !== 'diagnostico'
+      || !Number.isFinite(walletEffectiveWeight)
+      || Math.abs(walletEffectiveWeight) > 0.0001
+      || wallet.contribuicao !== null
+    ) {
       failures.push(`${key}: carteira ainda interfere na nota.`);
     }
 
