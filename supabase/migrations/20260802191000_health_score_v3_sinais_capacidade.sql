@@ -93,7 +93,7 @@ security definer
 set search_path = public, pg_temp
 as $function$
 begin
-  perform public.fn_health_score_professor_v3_ator_gerenciador();
+  perform public.fn_health_score_professor_v3_ator_leitura(p_unidade_id);
 
   if p_competencia is null or p_unidade_id is null then
     raise exception 'HEALTH_SCORE_V3_CAPACIDADE_INVALIDA: competencia e unidade obrigatorias'
@@ -228,7 +228,7 @@ security definer
 set search_path = public, pg_temp
 as $function$
 begin
-  perform public.fn_health_score_professor_v3_ator_gerenciador();
+  perform public.fn_health_score_professor_v3_ator_leitura(p_unidade_id);
 
   if p_competencia is null then
     raise exception 'HEALTH_SCORE_V3_SINAIS_INVALIDO: competencia obrigatoria'
