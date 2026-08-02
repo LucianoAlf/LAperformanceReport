@@ -9,8 +9,6 @@ import {
   Clock3,
   Gauge,
   Loader2,
-  LockKeyhole,
-  Pencil,
   RotateCcw,
   Save,
   Settings2,
@@ -110,15 +108,6 @@ function draftValidityStart(
   config: HealthScoreV3Config | null,
 ) {
   return config?.vigenciaInicio || currentMonthStart();
-}
-
-function competenceLabel(value: string) {
-  const date = dateFromIso(value);
-  if (!date) return value;
-  return new Intl.DateTimeFormat('pt-BR', {
-    month: 'long',
-    year: 'numeric',
-  }).format(date);
 }
 
 function dateFromIso(value: string) {
@@ -240,7 +229,6 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
     createDraft,
     saveDraft,
     simulate,
-    startEditing,
     restore,
     apply,
   } = useHealthScoreProfessorV3Config(competencia);
@@ -271,7 +259,9 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
       setJustification(config.rascunho.justificativa);
       setNewValidity(config.rascunho.vigenciaInicio);
     } else {
-      setJustification('');
+      setJustification(
+        config?.ativa?.justificativa?.trim() || 'Ajuste do Health Score V3',
+      );
       setNewValidity(draftValidityStart(config?.ativa || null));
     }
     setSimulationIsCurrent(false);
@@ -310,7 +300,7 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
     };
   }, [draftIsDirty]);
 
-  const editable = Boolean(config?.rascunho && workingConfig?.id === config.rascunho.id);
+  const editable = Boolean(workingConfig);
   const totalWeight = useMemo(
     () => workingConfig?.metricas.reduce((total, metric) => (
       HEALTH_SCORE_V3_SCORING_METRICS.includes(
@@ -346,7 +336,7 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
     () => workingSegmentGoals.filter((goal) => goal.tocada).length,
     [workingSegmentGoals],
   );
-  const canActivate = editable
+  const canActivate = Boolean(config?.rascunho)
     && draftIsValid
     && !draftIsDirty
     && simulationIsCurrent
@@ -376,15 +366,6 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
     markDraftChanged();
   };
 
-  const handleStartEditing = async () => {
-    try {
-      await startEditing();
-      toast.success('Modo de ajuste liberado', 'Você pode editar, simular e aplicar quando estiver satisfeito.');
-    } catch {
-      toast.error('Não foi possível editar', 'Atualize a tela e tente novamente.');
-    }
-  };
-
   const handleUndo = async () => {
     try {
       await restore();
@@ -395,10 +376,10 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
   };
 
   const handleRestoreActive = () => {
-    if (!config?.ativa || !config.rascunho) return;
+    if (!config?.ativa) return;
     const active = cloneConfig(config.ativa);
     if (!active) return;
-    setWorkingConfig({
+    setWorkingConfig(config.rascunho ? {
       ...active,
       id: config.rascunho.id,
       versao: config.rascunho.versao,
@@ -406,19 +387,21 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
       vigenciaInicio: config.rascunho.vigenciaInicio,
       vigenciaFim: config.rascunho.vigenciaFim,
       justificativa: config.rascunho.justificativa,
-    });
+    } : active);
     setWorkingSegmentGoals(buildHealthScoreV3DraftLoadState(
       config.ativa.metasSegmentadas,
       config.catalogoSegmentos || [],
     ).matrix);
-    setNewValidity(config.rascunho.vigenciaInicio);
-    setJustification(config.rascunho.justificativa);
+    setNewValidity(config.rascunho?.vigenciaInicio || active.vigenciaInicio);
+    setJustification(
+      config.rascunho?.justificativa || active.justificativa || 'Ajuste do Health Score V3',
+    );
     markDraftChanged();
     toast.success('Configuração vigente restaurada', 'Revise e simule antes de aplicar.');
   };
 
   const buildDraft = (): HealthScoreV3Config | null => {
-    if (!workingConfig || !editable) return null;
+    if (!workingConfig) return null;
     return {
       ...workingConfig,
       vigenciaInicio: newValidity,
@@ -427,10 +410,28 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
     };
   };
 
+  const ensureEditableConfig = async (
+    candidate: HealthScoreV3Config,
+  ): Promise<HealthScoreV3Config> => {
+    if (config?.rascunho) return candidate;
+    const created = await createDraft(
+      candidate.vigenciaInicio,
+      candidate.justificativa,
+    );
+    return {
+      ...created,
+      vigenciaInicio: candidate.vigenciaInicio,
+      justificativa: candidate.justificativa,
+      metricas: candidate.metricas,
+      metasSegmentadas: candidate.metasSegmentadas,
+    };
+  };
+
   const handleSave = async () => {
-    const draft = buildDraft();
-    if (!draft || !draftIsValid) return;
+    const candidate = buildDraft();
+    if (!candidate || !draftIsValid) return;
     try {
+      const draft = await ensureEditableConfig(candidate);
       const saved = await saveDraft(draft);
       setWorkingConfig(cloneConfig(saved));
       setDraftIsDirty(false);
@@ -442,10 +443,11 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
   };
 
   const handleSimulate = async () => {
-    const draft = buildDraft();
-    if (!draft || !draftIsValid) return;
+    const candidate = buildDraft();
+    if (!candidate || !draftIsValid) return;
     try {
-      const saved = draftIsDirty ? await saveDraft(draft) : draft;
+      const draft = await ensureEditableConfig(candidate);
+      const saved = draftIsDirty || !config?.rascunho ? await saveDraft(draft) : draft;
       setWorkingConfig(cloneConfig(saved));
       setDraftIsDirty(false);
       await simulate(saved.id, simulationMonth);
@@ -509,18 +511,15 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-white">Health Score V3</h3>
-              <Badge variant={editable ? 'warning' : 'success'}>
-                {editable ? 'Modo de ajuste' : 'Configuração vigente'}
+              <Badge variant={draftIsDirty ? 'warning' : 'success'}>
+                {draftIsDirty ? 'Ajustes não salvos' : 'Configuração vigente'}
               </Badge>
             </div>
             <p className="mt-0.5 text-xs text-slate-400">Configuração versionada de pesos e metas</p>
           </div>
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-400">
-          <LockKeyhole className="h-4 w-4" />
-          {workingConfig
-            ? `${editable ? 'Ajuste' : 'Versão vigente'} V${workingConfig.versao}`
-            : 'Sem versão vigente'}
+          {workingConfig ? `Versão V${workingConfig.versao}` : 'Sem versão vigente'}
         </div>
       </header>
 
@@ -539,71 +538,29 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
             <div className="space-y-1 text-xs font-medium text-slate-300">
               Vigência da versão
               <DatePicker
-                date={dateFromIso(editable ? newValidity : workingConfig.vigenciaInicio)}
+                date={dateFromIso(newValidity)}
                 onDateChange={(date) => {
                   setNewValidity(isoFromDate(date));
                   markDraftChanged();
                 }}
-                disabled={() => !editable || mutating}
+                disabled={() => mutating}
                 className="mt-1 h-10 rounded-md border-slate-700 bg-slate-900"
               />
             </div>
             <label className="space-y-1 text-xs font-medium text-slate-300">
               Justificativa da versão
               <Textarea
-                value={editable ? justification : workingConfig.justificativa}
+                value={justification}
                 onChange={(event) => {
                   setJustification(event.target.value);
                   markDraftChanged();
                 }}
-                disabled={!editable || mutating}
+                disabled={mutating}
                 rows={2}
                 className="mt-1 min-h-[40px] resize-none border-slate-700 bg-slate-900"
               />
             </label>
           </div>
-
-          {!editable && (
-            <div className="space-y-4 rounded-md border border-cyan-500/25 bg-cyan-500/5 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex min-w-0 items-start gap-3">
-                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-900 text-cyan-300">
-                    <LockKeyhole className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-100">
-                      Configuração vigente protegida
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-slate-400">
-                      Competência selecionada: <strong className="font-semibold text-slate-200">
-                        {competenceLabel(competencia)}
-                      </strong>. A versão {workingConfig.versao} governa este recorte
-                      de {workingConfig.vigenciaInicio} até {workingConfig.vigenciaFim || 'sem data final'}.
-                      Entre no modo de ajuste para testar pesos e metas sem alterar fechamentos anteriores.
-                    </p>
-                  </div>
-                </div>
-                <Badge variant="outline" className="shrink-0 border-cyan-500/30 text-cyan-300">
-                  Origem V{workingConfig.versao}
-                </Badge>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-cyan-500/15 pt-4">
-                <p className="max-w-2xl text-xs leading-5 text-cyan-100/80">
-                  A edição acontece em um laboratório seguro. Você decide quando simular e quando aplicar;
-                  o histórico continua preservado automaticamente.
-                </p>
-                <Button
-                  onClick={handleStartEditing}
-                  disabled={mutating || !config?.ativa}
-                  className="h-10"
-                >
-                  {mutating ? <Loader2 className="animate-spin" /> : <Pencil />}
-                  Editar configuração
-                </Button>
-              </div>
-            </div>
-          )}
 
           {editable && (
             <div className="sticky top-20 z-20 flex flex-col gap-3 rounded-md border border-slate-700 bg-slate-950/95 px-4 py-3 shadow-lg shadow-black/25 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
@@ -694,7 +651,7 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
                     max={100}
                     step={1}
                     value={[metric.peso]}
-                    disabled={!editable || mutating}
+                    disabled={mutating}
                     onValueChange={([value]) => updateMetric(metric.metrica, { peso: value })}
                   />
                 </label>
@@ -756,7 +713,7 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
                         max={visual.max}
                         step={visual.step}
                         value={metric.meta ?? ''}
-                        disabled={!editable || mutating}
+                        disabled={mutating}
                         onChange={(event) => {
                           const value = event.target.value === '' ? null : Number(event.target.value);
                           updateMetric(metric.metrica, {
@@ -776,7 +733,7 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
                     Estado da meta
                     <Select
                       value={metric.metaStatus}
-                      disabled={!editable || mutating || metric.meta !== null}
+                      disabled={mutating || metric.meta !== null}
                       onValueChange={(value) => updateMetric(metric.metrica, {
                         metaStatus: value as HealthScoreV3MetaStatus,
                       })}
@@ -845,7 +802,7 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
                 && simulation
                 && simulation.configId === workingConfig.id
               )}
-              versionState={editable ? 'draft' : 'active'}
+              versionState={config?.rascunho ? 'draft' : 'active'}
               editable={editable}
               disabled={mutating}
               onMetasChange={updateSegmentGoals}

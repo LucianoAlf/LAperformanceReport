@@ -267,6 +267,38 @@ test('status V3 separa parcial de ranking oficial', async () => {
   }), 'saudavel');
 });
 
+test('score parcial preserva a classificacao visual e bases opcionais nao quebram o modal', async () => {
+  const {
+    formatHealthScoreV3BaseNumber,
+    resolveHealthScoreV3ScoreStatus,
+  } = await import(`../${helperPath}`);
+
+  assert.equal(resolveHealthScoreV3ScoreStatus({
+    score: 83,
+    classificacao: 'saudavel',
+    scoreExibivel: true,
+    estadoPublicacao: 'parcial',
+  }), 'saudavel');
+  assert.equal(resolveHealthScoreV3ScoreStatus({
+    score: 68,
+    classificacao: 'atencao',
+    scoreExibivel: true,
+    estadoPublicacao: 'parcial',
+  }), 'atencao');
+  assert.equal(resolveHealthScoreV3ScoreStatus({
+    score: null,
+    classificacao: null,
+    scoreExibivel: false,
+    estadoPublicacao: 'sem_base',
+  }), 'evidencia_pendente');
+
+  assert.equal(formatHealthScoreV3BaseNumber(12), '12');
+  assert.equal(formatHealthScoreV3BaseNumber(12.5), '12,5');
+  assert.equal(formatHealthScoreV3BaseNumber(undefined), null);
+  assert.equal(formatHealthScoreV3BaseNumber(null), null);
+  assert.equal(formatHealthScoreV3BaseNumber(Number.NaN), null);
+});
+
 test('tabela V3 oferece filtros parcial e evidencia pendente sem ranquear parcial', () => {
   const tab = read(tabPath);
 

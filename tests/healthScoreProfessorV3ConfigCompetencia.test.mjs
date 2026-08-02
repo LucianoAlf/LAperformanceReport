@@ -86,19 +86,16 @@ test('frontend envia competencia e origem sem misturar versoes', () => {
   assert.match(page, /<HealthScoreV3Config\s+competencia=\{[\s\S]{0,100}startDate/);
 });
 
-test('configuracao vigente fica protegida e libera o laboratorio em uma acao', () => {
+test('configuracao vigente permite ajuste direto sem etapa de desbloqueio', () => {
   const source = read(configComponentPath);
-  const editPosition = source.indexOf('Editar configuração');
   const weightsPosition = source.indexOf('Pesos dos pilares');
 
-  assert.match(source, /Configuração vigente protegida/i);
-  assert.match(source, /Compet.ncia selecionada/i);
+  assert.doesNotMatch(source, /Configuração vigente protegida/i);
+  assert.doesNotMatch(source, /Editar configuração/i);
   assert.doesNotMatch(source, />\s*Criar rascunho\s*</i);
-  assert.ok(editPosition >= 0, 'deve existir acao Editar configuração');
-  assert.ok(
-    editPosition < weightsPosition,
-    'acao Editar configuração deve aparecer antes da grade extensa de pesos e metas',
-  );
+  assert.match(source, /const editable = Boolean\(workingConfig\)/);
+  assert.match(source, /ensureEditableConfig/);
+  assert.ok(weightsPosition >= 0, 'grade de pesos deve continuar visivel');
 });
 
 test('nova vigencia sugerida herda o inicio da versao exibida', () => {
@@ -136,7 +133,8 @@ test('backend preserva a guarda de vigencia sem expor burocracia no laboratorio'
   assert.match(parser, /versoesAtivas:\s*parseHealthScoreV3ActiveVersions/);
   assert.match(hook, /startEditing\s*=\s*useCallback/);
   assert.match(hook, /createDraft\(/);
-  assert.match(component, /Editar configuração/);
+  assert.match(component, /ensureEditableConfig/);
+  assert.doesNotMatch(component, /Editar configuração/);
   assert.doesNotMatch(component, /const validityCollision = useMemo/);
   assert.doesNotMatch(component, /A data escolhida pertence à versão/);
 });
