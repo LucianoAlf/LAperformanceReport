@@ -96,6 +96,7 @@ há apenas `dados_mensais` (~12 campos).
 | `/app/alunos` | Alunos | [#alunos](#alunos-appalunos) |
 | `/app/sucesso-aluno` | Sucesso do Aluno | [#sucesso-do-aluno](#sucesso-do-aluno-appsucesso-aluno) |
 | `/app/professores` | Professores | [#professores](#professores-appprofessores) |
+| `/app/agenda` | Agenda (grade do dia) | [#agenda](#agenda-appagenda) |
 | `/app/retencao` | Retenção | [#retenção](#retenção-appretencao) |
 | `/app/administrativo` | Administrativo | [#administrativo](#administrativo-appadministrativo) |
 | `/app/metas` | Metas (simuladores) | [#metas](#metas-appmetas) |
@@ -192,6 +193,15 @@ Disparo de templates Meta (WhatsApp Cloud API) + conversas + agentes IA. `Campan
 - **Resolução de curso da jornada:** `fn_resolver_jornada_curso_grade_atual_v1` resolve o curso atual por `unidade + emusys_matricula_disciplina_id` usando somente aulas normais recorrentes e não reagendadas; uma aula movida preserva sua evidência histórica, mas nunca redefine a disciplina atual. O trigger de `aluno_jornada_matricula_disciplina` impede que payload antigo de `/matriculas` sobrescreva a grade recorrente atual e resolve o curso de origem pelo de-para oficial escopado por unidade. O valor bruto fica nas colunas `*_origem`, e cada correção é auditada em `jornada_curso_resolucao_log`. O backfill é retomável por `backfill_jornada_curso_grade_atual_v1`.
 - **Configuração ativa:** a versão V3 número 3 foi ativada em 21/07/2026, com vigência a partir de 01/09/2026, 63 metas segmentadas configuradas e 7 combinações realmente não ofertadas. A versão 2 permanece vigente até 31/08/2026. Ativar a configuração não fecha snapshots, não reescreve julho e não libera ranking/premiação; cada consumidor ainda obedece ao estado de publicação do ciclo.
 - **Publicação:** o score parcial é visível quando cobertura e fidelização permitem, porém sem ranking/premiação. O oficial só nasce após fechamento do ciclo. Campo Grande mantém Presença em auditoria e fora do score; Barra/Recreio usam a política confiável versionada.
+
+## Agenda (`/app/agenda`)
+Grade do dia por unidade, calendário de aulas do Emusys. `Agenda/AgendaPage.tsx` (+ `AgendaTimeline`, `AgendaCard`, `AgendaDrawer`).
+- **Hook:** `useAgendaDia`
+- **RPC:** `get_agenda_dia` — **agrupa** porque `aula_alunos_emusys` guarda uma linha por aluno em turmas e o Emusys duplica cada slot em `tipo=turma` + `tipo=individual`; a RPC funde os dois num único card por aula/horário.
+- **Tabelas:** `aulas_emusys` (grade), `aula_alunos_emusys` (vínculo aula↔aluno, tabela canônica — 18 RPCs consumem, ver "Módulo de Agenda" no `CLAUDE.md`), `aluno_presenca` (presença já registrada).
+- **Edge functions:** nenhuma direta na tela; alimentada por `sync-grade-futura-emusys` (grade futura) e `sync-presenca-emusys` (presença + reconciliação de vínculos), ambas via cron já existente (`sync-metadados-aulas-15m-u0/u1/u2`, 15 min).
+- **⚠️ Janela 19/07–01/08/2026 incompleta** (evento de deleção não identificado, fora do código dos syncs) — a tela avisa quando exibe esse intervalo.
+- **Fase 2 (pendente):** cancelar/reagendar aula (API já suporta `POST /aulas/cancelar` e `PATCH /aulas/reagendar`) e visão Semana.
 
 ## Retenção (`/app/retencao`)
 Planilha operacional (`Retencao/PlanilhaRetencao.tsx`) + dashboard analítico (`components/Retencao/RetencaoDashboard.tsx` e seções).
