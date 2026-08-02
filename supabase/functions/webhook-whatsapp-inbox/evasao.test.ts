@@ -54,6 +54,8 @@ class FakeRepository implements PesquisaRepository {
   cabecalhos: AtualizacaoCabecalho[] = [];
   novasAnalises: string[] = [];
   providerIds = new Set<string>();
+  transcricoesPendentes: string[] = [];
+  transcricoesDisparadas: string[] = [];
 
   buscarPorMensagemCitada(): Promise<PesquisaCandidata | null> {
     return Promise.resolve(this.citada);
@@ -90,6 +92,15 @@ class FakeRepository implements PesquisaRepository {
   criarNovaVersaoAnalise(pesquisaId: string): Promise<number> {
     this.novasAnalises.push(pesquisaId);
     return Promise.resolve(this.novasAnalises.length + 1);
+  }
+
+  criarTranscricaoPendente(mensagemId: string): Promise<void> {
+    this.transcricoesPendentes.push(mensagemId);
+    return Promise.resolve();
+  }
+
+  dispararTranscricao(mensagemId: string): void {
+    this.transcricoesDisparadas.push(mensagemId);
   }
 }
 
@@ -266,6 +277,8 @@ Deno.test("texto, áudio e texto preservam tipo, timestamp e ordem de chegada", 
     "2026-08-02T15:00:02Z",
     "2026-08-02T15:00:03Z",
   ]);
+  assertEquals(repo.transcricoesPendentes.length, 1);
+  assertEquals(repo.transcricoesDisparadas, repo.transcricoesPendentes);
 });
 
 Deno.test("duplicata pelo provider id é sucesso idempotente sem segundo evento", async () => {

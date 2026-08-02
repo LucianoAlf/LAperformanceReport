@@ -10,6 +10,10 @@ verify_jwt = true
 # Edge interna: chamada pelo webhook autenticado usando o cliente service role.
 verify_jwt = true
 
+[functions.transcrever-mensagem-evasao]
+# Worker interno: o gateway valida JWT e o código aceita somente service_role.
+verify_jwt = true
+
 [functions.webhook-whatsapp-inbox]
 # Gateway sem JWT: autenticação do provedor ocorre no código por segredo por caixa.
 verify_jwt = false

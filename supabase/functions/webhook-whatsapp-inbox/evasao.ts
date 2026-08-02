@@ -81,6 +81,8 @@ export interface PesquisaRepository {
   inserirMensagem(mensagem: NovaMensagem): Promise<MensagemPersistida>;
   atualizarCabecalho(atualizacao: AtualizacaoCabecalho): Promise<void>;
   criarNovaVersaoAnalise(pesquisaId: string): Promise<number>;
+  criarTranscricaoPendente(mensagemId: string): Promise<void>;
+  dispararTranscricao(mensagemId: string): void;
 }
 
 export type IngestResult =
@@ -311,6 +313,11 @@ export async function ingerirEvento(
     };
   }
 
+  if (evento.tipo === "audio" && persistida.id) {
+    await repository.criarTranscricaoPendente(persistida.id);
+    repository.dispararTranscricao(persistida.id);
+  }
+
   if (!pesquisa) {
     return { status: "triagem", handled: false, mensagemId: persistida.id };
   }
@@ -443,6 +450,25 @@ export function criarRepositorioPesquisaEvasao(
       );
       if (error) throw new Error("falha_preparar_nova_analise_evasao");
       return Number(data);
+    },
+
+    async criarTranscricaoPendente(mensagemId) {
+      const { error } = await supabase
+        .from("pesquisa_evasao_transcricoes")
+        .insert({ mensagem_id: mensagemId, versao: 1, status: "pendente" });
+      if (error) throw new Error("falha_enfileirar_transcricao_evasao");
+    },
+
+    dispararTranscricao(mensagemId) {
+      const tarefa = supabase.functions.invoke("transcrever-mensagem-evasao", {
+        body: { mensagem_id: mensagemId },
+      });
+      const runtime = (globalThis as Record<string, any>).EdgeRuntime;
+      if (runtime?.waitUntil) {
+        runtime.waitUntil(Promise.resolve(tarefa).catch(() => undefined));
+      } else {
+        void Promise.resolve(tarefa).catch(() => undefined);
+      }
     },
   };
 }
