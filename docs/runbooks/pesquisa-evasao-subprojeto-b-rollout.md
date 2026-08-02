@@ -92,3 +92,37 @@ Se a migration falhar, ela é transacional. Depois de aplicada, não remover col
 - Commit `ad9d195` publicado na `main`; deploy da Vercel concluído com sucesso.
 - Smoke visual em produção: a fila exibiu Davi Pedro Palmerini com selo **Novo conteúdo**; o histórico mostrou as Rodadas 1, 2 e 3 separadas, cada uma com sua consolidação e ação de revisão. Nenhuma revisão foi iniciada/concluída durante o smoke.
 - Nenhuma Edge Function foi republicada e nenhuma mensagem de WhatsApp foi disparada nesta correção.
+
+## Fechamento do Subprojeto B — 02/08/2026
+
+### Aceite ponta a ponta
+
+- O piloto controlado recebeu respostas multipartes em rodadas separadas, preservando cada evento em ordem e sem sobrescrita: texto, áudio e novo texto.
+- O áudio foi salvo automaticamente em storage privado, transcrito pelo worker e incluído na consolidação na posição correta.
+- Intervalos inferiores a 15 minutos permaneceram na mesma rodada; mensagem posterior ao fechamento abriu nova versão sem alterar as anteriores.
+- Conteúdo novo depois de revisão devolveu a pesquisa à fila, com `pronta_para_revisao_em` preenchido e sinalização de conteúdo novo.
+- A revisão real da Rodada 3 ficou auditável: início por `usuario_id=2` em `2026-08-02 21:46:15.633502+00` e conclusão pelo mesmo operador em `2026-08-02 21:46:56.323466+00`.
+- A Rodada 3 permaneceu `revisada`; as Rodadas 1 e 2 permaneceram `pronta_para_revisao`, sem autoria retroativa inventada.
+
+### Ativação B3a
+
+- Migration `pesquisa_evasao_multipartes_ativacao_novas` aplicada em produção pelo arquivo `20260801190500_pesquisa_evasao_multipartes_ativacao_novas.sql`.
+- Artefato conferido antes da aplicação: 815 bytes e SHA-256 `0c5729f2c12925a557deac99394efd9a5d414ea2e5402caf27b2d1ee2b788abb`.
+- O default de `pesquisa_evasao.resposta_ingestao_versao` passou para `multipartes_v2`.
+- As dez pesquisas existentes não foram atualizadas em massa: nove continuam em `legado_v1` e o piloto `3407a1c4-e8aa-4dd6-b7b3-46bfd4cc4e17` continua em `multipartes_v2`.
+- Uma inserção de prova dentro de transação nasceu com `multipartes_v2`; o `ROLLBACK` removeu integralmente a linha de teste e a contagem final permaneceu 9/1/10.
+- A migration altera somente o default das novas pesquisas. Nenhum conteúdo histórico, estado de revisão ou mensagem foi reescrito.
+
+### Verificação final
+
+- Suíte específica do Subprojeto B em Deno: **55 aprovados, zero falhas**.
+- Suíte específica do Subprojeto B em Node: **64 aprovados, zero falhas**.
+- Build de produção: `npm run build` aprovado.
+- Depois de sincronizar a `main` com o commit `353ccc4`, a suíte ampla do repositório executou 1.029 testes: 1.020 aprovados, 5 ignorados e 4 falhas fora do domínio do Subprojeto B. As falhas estão em `emusysMatriculasStatusV131Frontend.test.mjs`, `healthScoreProfessorV3Consumers.test.mjs`, `healthScoreProfessorV3Cutover.test.mjs` e `processarMatriculaLifecycleV131.test.mjs`. Nenhuma delas toca pesquisa de evasão, webhook multipartes, transcrição, consolidação, opt-out ou revisão.
+- Nenhuma Edge Function foi republicada, nenhuma mensagem de WhatsApp foi enviada e nenhuma outra migration foi aplicada durante este fechamento.
+
+### Itens posteriores — não implementados neste fechamento
+
+1. **Subprojeto C — alerta no WhatsApp:** avisar a pessoa do Sucesso do Aluno registrada em `executado_por_usuario_id` quando chegar a primeira resposta ou uma nova rodada depois da revisão. O aviso deve conter somente nome do aluno, unidade e existência de conteúdo novo, sem incluir o texto da resposta.
+2. **Interface da revisão:** a lista de mensagens e o bloco **Consolidação desta rodada** repetem o mesmo conteúdo. Avaliar deixar a consolidação recolhida por padrão ou apresentá-la como texto corrido pronto para copiar, mantendo a timeline completa.
+3. **Segredo inbound:** as Tasks 3 a 5 estão implementadas e testadas, mas o enforcement continua deliberadamente não implantado. O rollout depende de provisionar o segredo da caixa 3 e atualizar a URL no provedor antes de habilitar a rejeição de chamadas sem segredo.
