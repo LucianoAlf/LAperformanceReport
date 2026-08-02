@@ -91,6 +91,7 @@ const ComercialPage = lazy(() => import('./components/App/Comercial').then(m => 
 const PlanilhaRetencao = lazy(() => import('./components/App/Retencao').then(m => ({ default: m.PlanilhaRetencao })));
 const ProfessoresPage = lazy(() => import('./components/App/Professores').then(m => ({ default: m.ProfessoresPage })));
 const AdministrativoPage = lazy(() => import('./components/App/Administrativo').then(m => ({ default: m.AdministrativoPage })));
+const AgendaPage = lazy(() => import('@/components/App/Agenda'));
 // Saúde das Automações (admin)
 const AutomacoesPage = lazy(() => import('./components/App/Automacoes').then(m => ({ default: m.AutomacoesPage })));
 const AlunosPage = lazy(() => import('./components/App/Alunos').then(m => ({ default: m.AlunosPage })));
@@ -251,6 +252,10 @@ export const router = createBrowserRouter([
           {
             path: 'trafego-pago',
             element: <TrafegoPagoGuard><Suspense fallback={<PageLoader />}><TrafegoPagoPage /></Suspense></TrafegoPagoGuard>,
+          },
+          {
+            path: 'agenda',
+            element: <Suspense fallback={<PageLoader />}><AgendaPage /></Suspense>,
           },
           {
             path: 'administrativo',

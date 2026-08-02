@@ -26,7 +26,8 @@ import {
   Megaphone,
   Activity,
   Heart,
-  MousePointerClick
+  MousePointerClick,
+  CalendarClock
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -51,6 +52,7 @@ const prefetchMap: Record<string, () => Promise<any>> = {
   '/app/pre-atendimento': () => import('@/components/App/PreAtendimento'),
   '/app/campanhas': () => import('@/components/App/Campanhas'),
   '/app/trafego-pago': () => import('@/components/App/TrafegoPago'),
+  '/app/agenda': () => import('@/components/App/Agenda'),
   '/app/administrativo': () => import('@/components/App/Administrativo'),
   '/app/alunos': () => import('@/components/App/Alunos'),
   '/app/sucesso-aluno': () => import('@/components/App/SucessoCliente'),
@@ -77,6 +79,7 @@ const operacional = [
   { path: '/app/campanhas', label: 'Campanhas', icon: Megaphone },
   { path: '/app/trafego-pago', label: 'Tráfego Pago', icon: MousePointerClick },
   { path: '/app/comercial', label: 'Comercial', icon: Briefcase },
+  { path: '/app/agenda', label: 'Agenda', icon: CalendarClock },
   { path: '/app/administrativo', label: 'Administrativo', icon: ClipboardList },
   { path: '/app/alunos', label: 'Alunos', icon: Users },
   { path: '/app/sucesso-aluno', label: 'Sucesso do Aluno', icon: Heart },
