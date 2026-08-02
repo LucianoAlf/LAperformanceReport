@@ -441,6 +441,12 @@ na suíte de regressão.
 
 ## Task 3: Implementar autenticação antes da service role
 
+> **BLOQUEIO DE ROLLOUT: não implantar a Task 3 antes de todas as caixas ativas
+> terem hash provisionado e a URL correspondente atualizada no provedor.** Se o
+> enforcement entrar antes desse corte coordenado, todo o inbound para: inbox
+> administrativa, CRM, pesquisa de evasão e pesquisa pós-1ª aula. O código desta
+> task permanece apenas local até as Tasks 4 e 5 fecharem essas pré-condições.
+
 **Files:**
 
 - Create: `supabase/functions/webhook-whatsapp-inbox/auth.ts`
@@ -449,7 +455,7 @@ na suíte de regressão.
 - Modify: `supabase/config.toml`
 - Create: `tests/webhookInboundAuthWiring.test.mjs`
 
-- [ ] **Step 1: Escrever testes vermelhos do helper**
+- [x] **Step 1: Escrever testes vermelhos do helper**
 
 Casos:
 
@@ -464,7 +470,7 @@ Casos:
 - token de caixa não autentica health;
 - health token não autentica mensagem do provedor.
 
-- [ ] **Step 2: Escrever teste estrutural da ordem**
+- [x] **Step 2: Escrever teste estrutural da ordem**
 
 `tests/webhookInboundAuthWiring.test.mjs` deve localizar no fonte:
 
@@ -475,7 +481,7 @@ createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 e afirmar que a autenticação ocorre primeiro. Também deve afirmar que `req.json()` acontece somente depois da autenticação, para não processar payload atacante.
 
-- [ ] **Step 3: Executar e confirmar a falha**
+- [x] **Step 3: Executar e confirmar a falha**
 
 ```powershell
 deno test supabase/functions/webhook-whatsapp-inbox/auth.test.ts
@@ -484,7 +490,7 @@ node --test tests/webhookInboundAuthWiring.test.mjs
 
 Expected: FAIL.
 
-- [ ] **Step 4: Implementar autenticação com cliente anon**
+- [x] **Step 4: Implementar autenticação com cliente anon**
 
 Fluxo:
 
@@ -514,7 +520,7 @@ const payload = await req.json();
 
 Nunca passar o `rawSecret` a outro helper depois do hash.
 
-- [ ] **Step 5: Configurar função**
+- [x] **Step 5: Configurar função**
 
 Adicionar ao `supabase/config.toml`:
 
@@ -525,7 +531,7 @@ verify_jwt = false
 
 Isso é intencional e deve ter comentário: autenticação de provedor ocorre no código por segredo por caixa.
 
-- [ ] **Step 6: Executar testes**
+- [x] **Step 6: Executar testes**
 
 ```powershell
 deno test supabase/functions/webhook-whatsapp-inbox/auth.test.ts
@@ -534,11 +540,11 @@ node --test tests/webhookInboundAuthWiring.test.mjs tests/webhookWhatsAppPrivaci
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit local, sem push ou deploy**
 
 ```powershell
-git add -- supabase/functions/webhook-whatsapp-inbox/auth.ts supabase/functions/webhook-whatsapp-inbox/auth.test.ts supabase/functions/webhook-whatsapp-inbox/index.ts supabase/config.toml tests/webhookInboundAuthWiring.test.mjs
-git commit -m "feat: autenticar webhook por caixa"
+git add -- supabase/functions/webhook-whatsapp-inbox/auth.ts supabase/functions/webhook-whatsapp-inbox/auth.test.ts supabase/functions/webhook-whatsapp-inbox/index.ts supabase/config.toml tests/webhookInboundAuthWiring.test.mjs docs/runbooks/webhook-inbound-secret-rollout.md docs/superpowers/plans/2026-07-30-pesquisa-evasao-subprojeto-b-conversa-multipartes.md
+git commit -m "feat: autenticar webhook por caixa" -m "BLOQUEIO DE ROLLOUT: NAO IMPLANTAR antes de todas as caixas ativas terem hash provisionado e URL atualizada no provedor."
 ```
 
 Não implantar este commit em produção antes de provisionar os hashes e atualizar as URLs do provedor na Task 5.

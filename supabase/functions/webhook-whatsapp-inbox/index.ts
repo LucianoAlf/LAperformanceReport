@@ -7,14 +7,16 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getUazapiCredentials } from '../_shared/uazapi.ts';
+import { autenticarWebhookInbound } from './auth.ts';
 import { registrarDiagnosticoWebhook } from './diagnostics.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+const WEBHOOK_HEALTH_TOKEN = Deno.env.get('WEBHOOK_HEALTH_TOKEN')?.trim() ?? '';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-secret, x-health-secret',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -857,21 +859,41 @@ serve(async (req: Request) => {
   let eventTypeForDiagnostics: 'messages' | 'messages_update' | 'unknown' = 'unknown';
 
   try {
-    // Capturar caixa_id do query param (?caixa_id=1)
     const url = new URL(req.url);
-    const caixaIdParam = url.searchParams.get('caixa_id');
-    const caixaIdFromUrl = caixaIdParam ? parseInt(caixaIdParam) : null;
-    caixaIdForDiagnostics = caixaIdFromUrl;
+    const authResult = await autenticarWebhookInbound(req, url, {
+      healthSecret: WEBHOOK_HEALTH_TOKEN,
+      validarHash: async (caixaId, secretHashSha256) => {
+        const anon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const { data, error } = await anon.rpc('validar_webhook_caixa_hash', {
+          p_caixa_id: caixaId,
+          p_secret_hash_sha256: secretHashSha256,
+        });
+        if (error) throw error;
+        return data === true;
+      },
+    });
 
-    // Health check — monitor de saúde chama ?_health=1 sem auth para testar se verify_jwt está correto
-    if (url.searchParams.get('_health') === '1') {
-      return new Response(JSON.stringify({ ok: true, caixa_id: caixaIdFromUrl }), {
+    if (!authResult.ok) {
+      return new Response(
+        JSON.stringify({ error: 'Webhook não autorizado', code: authResult.code }),
+        {
+          status: authResult.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
+    }
+
+    if (authResult.kind === 'health') {
+      return new Response(JSON.stringify({ ok: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
+    const caixaIdFromUrl = authResult.caixaId;
+    caixaIdForDiagnostics = caixaIdFromUrl;
     const payload = await req.json();
 
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
     // Rotear: messages_update vai para handler de status
