@@ -90,4 +90,3 @@ test('botão mensal envia somente filtros e mantém cópia robusta', () => {
   assert.match(source, /copyTextToClipboard\(textoRelatorio\)/);
   assert.match(source, /getManualCopyShortcut/);
 });
-
