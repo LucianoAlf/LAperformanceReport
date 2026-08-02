@@ -1,5 +1,6 @@
 import type {
   HealthMetricKeyV3,
+  HealthScoreV3MetricRole,
   HealthScoreV3SnapshotMetric,
 } from './healthScoreProfessorV3';
 
@@ -11,6 +12,7 @@ export interface HealthScoreV3PerformanceMetric {
   nota: number | null;
   peso: number;
   pesoDisponivel: boolean;
+  pesoEfetivo: number | null;
   contribuicao: number | null;
   meta: number | null;
   amostra: number | null;
@@ -20,6 +22,8 @@ export interface HealthScoreV3PerformanceMetric {
   fonte: string;
   regraVersaoMetrica: string;
   motivoSemBase: string | null;
+  codigoEvidencia: string | null;
+  papel: HealthScoreV3MetricRole | null;
   detalhes: Record<string, unknown>;
 }
 
@@ -47,6 +51,166 @@ export interface HealthScoreV3ProfessorPerformance {
   motivoBloqueio: string | null;
   regraVersaoSnapshot: string;
   metrics: Map<HealthMetricKeyV3, HealthScoreV3PerformanceMetric>;
+}
+
+export type HealthScoreV3UiStatus =
+  | 'saudavel'
+  | 'atencao'
+  | 'critico'
+  | 'parcial'
+  | 'evidencia_pendente';
+
+const HEALTH_SCORE_V3_METRIC_KEYS: HealthMetricKeyV3[] = [
+  'retencao',
+  'permanencia',
+  'conversao',
+  'media_turma',
+  'numero_alunos',
+  'presenca',
+];
+
+const HEALTH_SCORE_V3_EVIDENCE_MESSAGES: Record<string, string> = {
+  professor_em_maturacao: 'Professor em período de maturação',
+  amostra_insuficiente: 'Amostra insuficiente no período',
+  sem_experimental_periodo: 'Não realizou aula experimental no período',
+  cobertura_presenca_insuficiente: 'Cobertura de presença insuficiente',
+  calendario_sem_aulas_elegiveis: 'Calendário sem aulas elegíveis no período',
+  segmentacao_incompleta: 'Vínculo de curso ou modalidade precisa de revisão',
+  fonte_canonica_indisponivel: 'Dados oficiais do período ainda não disponíveis',
+  metrica_nao_aplicavel: 'Indicador não aplicável a este professor',
+};
+
+export function resolveHealthScoreV3EvidenceMessage(
+  codigo: string | null | undefined,
+  metrica?: HealthMetricKeyV3,
+  fallback?: string | null,
+): string {
+  if (codigo && HEALTH_SCORE_V3_EVIDENCE_MESSAGES[codigo]) {
+    return HEALTH_SCORE_V3_EVIDENCE_MESSAGES[codigo];
+  }
+  if (metrica === 'conversao' && codigo === 'sem_base') {
+    return HEALTH_SCORE_V3_EVIDENCE_MESSAGES.sem_experimental_periodo;
+  }
+  return fallback?.trim()
+    || HEALTH_SCORE_V3_EVIDENCE_MESSAGES.fonte_canonica_indisponivel;
+}
+
+function monthEnd(reference: string): string {
+  const [year, month] = reference.slice(0, 7).split('-').map(Number);
+  if (!year || !month) return reference;
+  return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+}
+
+function buildMissingMetric(metrica: HealthMetricKeyV3): HealthScoreV3PerformanceMetric {
+  return {
+    metrica,
+    valorBruto: null,
+    numerador: null,
+    denominador: null,
+    nota: null,
+    peso: 0,
+    pesoDisponivel: false,
+    pesoEfetivo: null,
+    contribuicao: null,
+    meta: null,
+    amostra: null,
+    estadoBase: 'sem_base',
+    metricaPublicavel: false,
+    confianca: 'sem_base',
+    fonte: 'dados_oficiais_periodo',
+    regraVersaoMetrica: 'health_score_v3_evidencia_v1',
+    motivoSemBase: resolveHealthScoreV3EvidenceMessage(
+      'fonte_canonica_indisponivel',
+      metrica,
+    ),
+    codigoEvidencia: 'fonte_canonica_indisponivel',
+    papel: metrica === 'numero_alunos' ? 'diagnostico' : 'nota',
+    detalhes: {
+      codigo_evidencia: 'fonte_canonica_indisponivel',
+      papel: metrica === 'numero_alunos' ? 'diagnostico' : 'nota',
+    },
+  };
+}
+
+export function buildHealthScoreV3MissingPerformance({
+  professorId,
+  competencia,
+  unidadeId,
+  periodicidade,
+}: {
+  professorId: number;
+  competencia: string;
+  unidadeId: string | null;
+  periodicidade: 'mensal' | 'ciclo';
+}): HealthScoreV3ProfessorPerformance {
+  const reference = /^\d{4}-\d{2}$/.test(competencia)
+    ? `${competencia}-01`
+    : competencia;
+  return {
+    professorId,
+    unidadeId,
+    escopo: unidadeId ? 'unidade' : 'consolidado',
+    competencia: reference,
+    trimestreInicio: reference,
+    periodicidade,
+    periodoInicio: reference,
+    periodoFim: monthEnd(reference),
+    cicloCodigo: periodicidade === 'ciclo' ? 'ciclo_sem_evidencia' : 'mensal',
+    estadoPublicacao: 'sem_base',
+    scoreExibivel: false,
+    rankingHabilitado: false,
+    configVersao: 0,
+    revisao: 0,
+    score: null,
+    cobertura: null,
+    classificacao: null,
+    estado: 'sem_base',
+    snapshotPublicavel: false,
+    publicado: false,
+    motivoBloqueio: 'fonte_canonica_indisponivel',
+    regraVersaoSnapshot: 'health_score_v3_evidencia_v1',
+    metrics: new Map(
+      HEALTH_SCORE_V3_METRIC_KEYS.map((metrica) => [metrica, buildMissingMetric(metrica)]),
+    ),
+  };
+}
+
+export function mergeHealthScoreV3ActiveRoster({
+  snapshots,
+  professorIds,
+  competencia,
+  unidadeId,
+  periodicidade,
+}: {
+  snapshots: HealthScoreV3ProfessorPerformance[];
+  professorIds: number[];
+  competencia: string;
+  unidadeId: string | null;
+  periodicidade: 'mensal' | 'ciclo';
+}): HealthScoreV3ProfessorPerformance[] {
+  const byProfessor = new Map(snapshots.map((snapshot) => [snapshot.professorId, snapshot]));
+  return Array.from(new Set(professorIds))
+    .sort((left, right) => left - right)
+    .map((professorId) => byProfessor.get(professorId) || buildHealthScoreV3MissingPerformance({
+      professorId,
+      competencia,
+      unidadeId,
+      periodicidade,
+    }));
+}
+
+export function resolveHealthScoreV3UiStatus(snapshot: Pick<
+  HealthScoreV3ProfessorPerformance,
+  'score' | 'classificacao' | 'estadoPublicacao' | 'scoreExibivel'
+> | null | undefined): HealthScoreV3UiStatus {
+  if (!snapshot || snapshot.score === null || !snapshot.scoreExibivel) {
+    return 'evidencia_pendente';
+  }
+  if (snapshot.estadoPublicacao !== 'oficial') return 'parcial';
+  if (snapshot.classificacao === 'critico') return 'critico';
+  if (snapshot.classificacao === 'atencao') return 'atencao';
+  if (snapshot.classificacao === 'saudavel') return 'saudavel';
+  return 'evidencia_pendente';
 }
 
 export type HealthScoreV3MetricDisplayState =
@@ -96,6 +260,10 @@ function asMetric(value: unknown): HealthMetricKeyV3 | null {
     : null;
 }
 
+function asMetricRole(value: unknown): HealthScoreV3MetricRole | null {
+  return value === 'nota' || value === 'diagnostico' ? value : null;
+}
+
 export function normalizeHealthScoreV3PerformanceRows(
   rows: unknown[],
 ): HealthScoreV3ProfessorPerformance[] {
@@ -137,6 +305,7 @@ export function normalizeHealthScoreV3PerformanceRows(
       snapshots.set(professorId, snapshot);
     }
 
+    const detalhes = asRecord(row.detalhes);
     snapshot.metrics.set(metrica, {
       metrica,
       valorBruto: asNullableNumber(row.valor_bruto),
@@ -145,6 +314,7 @@ export function normalizeHealthScoreV3PerformanceRows(
       nota: asNullableNumber(row.nota),
       peso: asNumber(row.peso),
       pesoDisponivel: row.peso_disponivel === true,
+      pesoEfetivo: asNullableNumber(row.peso_efetivo ?? detalhes.peso_efetivo),
       contribuicao: asNullableNumber(row.contribuicao),
       meta: asNullableNumber(row.meta),
       amostra: asNullableNumber(row.amostra),
@@ -154,7 +324,13 @@ export function normalizeHealthScoreV3PerformanceRows(
       fonte: String(row.fonte || ''),
       regraVersaoMetrica: String(row.regra_versao_metrica || ''),
       motivoSemBase: row.motivo_sem_base ? String(row.motivo_sem_base) : null,
-      detalhes: asRecord(row.detalhes),
+      codigoEvidencia: row.codigo_evidencia
+        ? String(row.codigo_evidencia)
+        : detalhes.codigo_evidencia
+          ? String(detalhes.codigo_evidencia)
+          : null,
+      papel: asMetricRole(row.papel ?? detalhes.papel),
+      detalhes,
     });
   }
 
@@ -299,6 +475,7 @@ export interface HealthScoreV3AiPayload {
     nota: number | null;
     peso: number;
     peso_disponivel: boolean;
+    peso_efetivo: number | null;
     contribuicao: number | null;
     meta: number | null;
     amostra: number | null;
@@ -308,6 +485,8 @@ export interface HealthScoreV3AiPayload {
     fonte: string;
     regra_versao_metrica: string;
     motivo_sem_base: string | null;
+    codigo_evidencia: string | null;
+    papel: HealthScoreV3MetricRole | null;
     detalhes: Record<string, unknown>;
   }>;
 }
@@ -327,6 +506,7 @@ function serializeMetricForAi(metric: HealthScoreV3PerformanceMetric) {
     nota: metric.nota,
     peso: metric.peso,
     peso_disponivel: metric.pesoDisponivel,
+    peso_efetivo: metric.pesoEfetivo,
     contribuicao: metric.contribuicao,
     meta: metric.meta,
     amostra: metric.amostra,
@@ -336,6 +516,8 @@ function serializeMetricForAi(metric: HealthScoreV3PerformanceMetric) {
     fonte: metric.fonte,
     regra_versao_metrica: metric.regraVersaoMetrica,
     motivo_sem_base: metric.motivoSemBase,
+    codigo_evidencia: metric.codigoEvidencia,
+    papel: metric.papel,
     detalhes: metric.detalhes,
   };
 }
@@ -377,6 +559,7 @@ function performanceFromMetricRows(
       nota: row.nota,
       peso: row.peso,
       pesoDisponivel: row.pesoDisponivel,
+      pesoEfetivo: row.pesoEfetivo,
       contribuicao: row.contribuicao,
       meta: row.meta,
       amostra: row.amostra,
@@ -386,6 +569,8 @@ function performanceFromMetricRows(
       fonte: row.fonte,
       regraVersaoMetrica: row.regraVersaoMetrica,
       motivoSemBase: row.motivoSemBase,
+      codigoEvidencia: row.codigoEvidencia,
+      papel: row.papel,
       detalhes: row.detalhes,
     }])),
   };

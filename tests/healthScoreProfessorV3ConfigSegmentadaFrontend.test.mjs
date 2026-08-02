@@ -1010,20 +1010,20 @@ test('Task 8 separa pesos, metas globais e matriz segmentada no fluxo governado'
     'Campo Grande',
     'Curso',
     'Modalidade',
-    'Capacidade máxima',
-    'Meta média/turma',
-    'Meta carteira',
+    'Capacidade estimada \\(fallback\\)',
+    'Meta média/turma \\(nota\\)',
+    'Referência de carteira \\(diagnóstico\\)',
     'Configuração',
     'Validação de capacidade',
     'Ação',
     'Regra ausente',
     'Pronta para salvar',
-    'Salva no rascunho',
+    'Ajuste salvo',
     'Não ofertado nesta unidade',
     'Aguardando simulação',
     'Dentro da capacidade',
     'Acima da capacidade',
-    'Somente leitura',
+    'Visualização vigente',
   ]) {
     assert.match(matrixSource, new RegExp(label));
   }
@@ -1062,7 +1062,11 @@ test('Task 8 separa pesos, metas globais e matriz segmentada no fluxo governado'
     configSource.indexOf('const handleSimulate'),
     configSource.indexOf('const handleActivate'),
   );
-  assert.doesNotMatch(simulateBlock, /saveDraft\(/);
+  assert.match(
+    simulateBlock,
+    /draftIsDirty\s*\?\s*await saveDraft\(draft\)\s*:\s*draft/,
+    'laboratorio deve persistir o ajuste interno antes de simular',
+  );
   assert.doesNotMatch(simulateBlock, /activate\(/);
   const saveBlock = configSource.slice(
     configSource.indexOf('const handleSave'),

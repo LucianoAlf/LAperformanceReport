@@ -8,7 +8,7 @@ test('consumidores migrados apontam para o contrato V3 sem acesso direto às tab
   const consumidores = [
     ['src/lib/relatorioCoordenacaoInstantaneo.ts', /healthV3/],
     ['src/components/App/Professores/ProfessoresPage.tsx', /HEALTH_SCORE_V3_CONFIG_ENABLED/],
-    ['src/components/App/Professores/ModalRelatorioCoordenacao.tsx', /health_score_v3/],
+    ['src/components/App/Professores/ModalRelatorioCoordenacao.tsx', /gemini-relatorio-coordenacao/],
     ['src/components/App/Dashboard/DashboardPage.tsx', /useHealthScoreProfessorV3Performance/],
     ['src/components/App/Professores/TabCarteiraProfessores.tsx', /get_health_score_professor_v3_performance/],
   ];

@@ -159,7 +159,7 @@ test('hook de snapshot V3 preserva null sem fallback para V2 ou zero', () => {
   assert.doesNotMatch(source, /get_kpis_professor_periodo|DEFAULT_HEALTH_WEIGHTS/i);
 });
 
-test('painel V3 mantem sliders de peso e inputs separados de meta', () => {
+test('painel V3 separa nota, metas e diagnosticos no laboratorio', () => {
   const source = read(componentPath);
 
   assert.match(source, /<Slider\b/);
@@ -167,15 +167,16 @@ test('painel V3 mantem sliders de peso e inputs separados de meta', () => {
   assert.match(source, /type="number"/i);
   assert.match(source, /Peso no score/i);
   assert.match(source, /Meta de desempenho/i);
-  assert.match(source, /Criar rascunho/i);
-  assert.match(source, /Salvar altera[cç][oõ]es/i);
+  assert.match(source, /Editar configura[cç][aã]o/i);
+  assert.match(source, /Salvar ajuste/i);
   assert.match(source, /altera[cç][oõ]es n[aã]o salvas/i);
-  assert.match(source, /Rascunho salvo/i);
+  assert.match(source, /Ajuste salvo/i);
   assert.match(source, /sticky top-20/i);
   assert.match(source, /<section[\s\S]{0,180}className="relative rounded-lg/i);
-  assert.match(source, /Simular impacto/i);
-  assert.match(source, /Ativar vers[aã]o/i);
-  assert.match(source, /totalWeight[^\n]*100/i);
+  assert.match(source, />\s*Simular\s*</i);
+  assert.match(source, /Aplicar configura[cç][aã]o/i);
+  assert.match(source, /HEALTH_SCORE_V3_SCORING_METRICS/);
+  assert.match(source, /N[aã]o altera a nota/i);
 });
 
 test('pagina protege V3 por feature flag e permissao sem remover V2', () => {

@@ -14,6 +14,7 @@ export interface HealthScoreV3MetricPayload {
   nota: number | null;
   peso: number;
   peso_disponivel: boolean;
+  peso_efetivo: number | null;
   contribuicao: number | null;
   meta: number | null;
   amostra: number | null;
@@ -23,6 +24,8 @@ export interface HealthScoreV3MetricPayload {
   fonte: string;
   regra_versao_metrica: string;
   motivo_sem_base: string | null;
+  codigo_evidencia: string | null;
+  papel: 'nota' | 'diagnostico' | null;
   detalhes: Record<string, unknown>;
 }
 

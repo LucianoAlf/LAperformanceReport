@@ -86,17 +86,18 @@ test('frontend envia competencia e origem sem misturar versoes', () => {
   assert.match(page, /<HealthScoreV3Config\s+competencia=\{[\s\S]{0,100}startDate/);
 });
 
-test('configuracao vigente fica explicitamente somente leitura e destaca novo rascunho', () => {
+test('configuracao vigente fica protegida e libera o laboratorio em uma acao', () => {
   const source = read(configComponentPath);
-  const createDraftPosition = source.indexOf('Criar rascunho');
+  const editPosition = source.indexOf('Editar configuração');
   const weightsPosition = source.indexOf('Pesos dos pilares');
 
-  assert.match(source, /Somente leitura/i);
+  assert.match(source, /Configuração vigente protegida/i);
   assert.match(source, /Compet.ncia selecionada/i);
-  assert.ok(createDraftPosition >= 0, 'deve existir acao Criar rascunho');
+  assert.doesNotMatch(source, />\s*Criar rascunho\s*</i);
+  assert.ok(editPosition >= 0, 'deve existir acao Editar configuração');
   assert.ok(
-    createDraftPosition < weightsPosition,
-    'acao Criar rascunho deve aparecer antes da grade extensa de pesos e metas',
+    editPosition < weightsPosition,
+    'acao Editar configuração deve aparecer antes da grade extensa de pesos e metas',
   );
 });
 
@@ -117,7 +118,7 @@ test('nova vigencia sugerida herda o inicio da versao exibida', () => {
   );
 });
 
-test('backend e frontend avisam colisao com outra versao ativa', () => {
+test('backend preserva a guarda de vigencia sem expor burocracia no laboratorio', () => {
   assert.equal(
     fs.existsSync(draftValidityMigrationPath),
     true,
@@ -125,6 +126,7 @@ test('backend e frontend avisam colisao com outra versao ativa', () => {
   );
   const sql = read(draftValidityMigrationPath);
   const parser = read(parserPath);
+  const hook = read(hookPath);
   const component = read(configComponentPath);
 
   assert.match(sql, /'versoes_ativas'/i);
@@ -132,13 +134,11 @@ test('backend e frontend avisam colisao com outra versao ativa', () => {
   assert.match(sql, /'vigencia_inicio'\s*,\s*c\.vigencia_inicio/i);
   assert.match(sql, /'vigencia_fim'\s*,\s*c\.vigencia_fim/i);
   assert.match(parser, /versoesAtivas:\s*parseHealthScoreV3ActiveVersions/);
-  assert.match(component, /const validityCollision = useMemo/);
-  assert.match(component, /version\.id !== config\?\.ativa\?\.id/);
-  assert.match(component, /A data escolhida pertence à versão V\{validityCollision\.versao\}/);
-  assert.match(
-    component,
-    /disabled=\{mutating \|\| !config\?\.ativa \|\| Boolean\(validityCollision\)\}/,
-  );
+  assert.match(hook, /startEditing\s*=\s*useCallback/);
+  assert.match(hook, /createDraft\(/);
+  assert.match(component, /Editar configuração/);
+  assert.doesNotMatch(component, /const validityCollision = useMemo/);
+  assert.doesNotMatch(component, /A data escolhida pertence à versão/);
 });
 
 test('fila de excecoes mostra nome do payload Emusys junto do ID', () => {

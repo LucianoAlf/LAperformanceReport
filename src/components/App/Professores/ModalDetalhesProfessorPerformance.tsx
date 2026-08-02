@@ -28,7 +28,10 @@ import {
   type HealthMetricKeyV3,
   type HealthScoreV3SnapshotMetric,
 } from '@/lib/healthScoreProfessorV3';
-import { serializeHealthScoreV3ForAi } from '@/lib/healthScoreProfessorV3Performance';
+import {
+  resolveHealthScoreV3EvidenceMessage,
+  serializeHealthScoreV3ForAi,
+} from '@/lib/healthScoreProfessorV3Performance';
 
 const HEALTH_SCORE_V3_MODAL_FLAG = import.meta.env.VITE_HEALTH_SCORE_V3_MODAL_ENABLED;
 const HEALTH_SCORE_V3_MODAL_ENABLED =
@@ -44,7 +47,7 @@ const HEALTH_SCORE_V3_LABELS: Record<HealthMetricKeyV3, string> = {
 };
 
 function formatV3Value(metric: HealthMetricKeyV3, value: number | null): string {
-  if (value === null) return 'Sem base';
+  if (value === null) return 'Evidência pendente';
   if (['retencao', 'conversao', 'presenca'].includes(metric)) return `${value.toFixed(1)}%`;
   if (metric === 'permanencia') return `${value.toFixed(1)} meses`;
   if (metric === 'media_turma') return value.toFixed(2);
@@ -52,7 +55,7 @@ function formatV3Value(metric: HealthMetricKeyV3, value: number | null): string 
 }
 
 function formatV3State(value: string | null | undefined): string {
-  if (!value) return 'Sem base';
+  if (!value) return 'Evidência pendente';
   return value.replace(/_/g, ' ');
 }
 
@@ -150,7 +153,9 @@ function getV3Transparency(metric: HealthScoreV3SnapshotMetric): string | null {
     return `${excluded} vinculos abaixo de 4 meses preservados no historico e fora da media.`;
   }
 
-  return metric.motivoSemBase;
+  return metric.motivoSemBase
+    ? resolveHealthScoreV3EvidenceMessage(metric.codigoEvidencia, metric.metrica, metric.motivoSemBase)
+    : null;
 }
 
 interface HealthScoreV3MetricsPanelProps {
@@ -195,15 +200,15 @@ function HealthScoreV3MetricsPanel({
   if (!snapshot) {
     return (
       <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-4">
-        <p className="text-sm font-medium text-slate-200">Sem snapshot V3 para este recorte</p>
-        <p className="mt-1 text-xs text-slate-400">Recorte: {recorte}. A V2 continua disponível ao desligar a feature flag.</p>
+        <p className="text-sm font-medium text-slate-200">Evidência pendente para este recorte</p>
+        <p className="mt-1 text-xs text-slate-400">Recorte: {recorte}. Dados oficiais do período ainda não disponíveis.</p>
       </div>
     );
   }
 
   const scoreAvailable = snapshot.score !== null;
-  const scoreLabel = scoreAvailable ? Math.round(snapshot.score as number).toString() : 'Sem base';
-  const coverageLabel = snapshot.cobertura === null ? 'Sem base' : `${snapshot.cobertura.toFixed(0)}%`;
+  const scoreLabel = scoreAvailable ? Math.round(snapshot.score as number).toString() : 'Evidência pendente';
+  const coverageLabel = snapshot.cobertura === null ? 'Evidência pendente' : `${snapshot.cobertura.toFixed(0)}%`;
 
   return (
     <div className="space-y-4">
@@ -217,7 +222,9 @@ function HealthScoreV3MetricsPanel({
           </div>
           <p className="mt-1 text-xs text-slate-400">Recorte: {recorte} | Configuração V{snapshot.configVersao}</p>
           {snapshot.motivoBloqueio && (
-            <p className="mt-1 text-xs text-amber-300">{snapshot.motivoBloqueio}</p>
+            <p className="mt-1 text-xs text-amber-300">
+              {resolveHealthScoreV3EvidenceMessage(snapshot.motivoBloqueio)}
+            </p>
           )}
         </div>
         <div className="grid grid-cols-2 gap-2 text-center">
@@ -239,8 +246,8 @@ function HealthScoreV3MetricsPanel({
             return (
               <div key={key} className="min-h-[168px] rounded-lg border border-slate-700 bg-slate-800/40 p-4">
                 <p className="text-xs font-semibold text-slate-300">{HEALTH_SCORE_V3_LABELS[key]}</p>
-                <p className="mt-3 text-lg font-bold text-slate-500">Sem base</p>
-                <p className="mt-2 text-xs text-slate-500">Amostra: sem base</p>
+                <p className="mt-3 text-lg font-bold text-slate-500">Evidência pendente</p>
+                <p className="mt-2 text-xs text-slate-500">Amostra: ainda não disponível</p>
                 <p className="text-xs text-slate-500">Cobertura do pilar: fora do score</p>
                 <p className="text-xs text-slate-500">Recorte: {recorte}</p>
               </div>
@@ -253,9 +260,10 @@ function HealthScoreV3MetricsPanel({
           const displayValue = metric.valorBruto ?? observed?.value ?? null;
           const displayLabel = observed?.displayLabel ?? formatV3Value(key, displayValue);
           const observedInAudit = observed?.stateLabel === 'em auditoria';
-          const pillarCoverage = metric.pesoDisponivel && metric.peso !== null
-            ? `${formatV3BaseNumber(metric.peso)}% disponível`
-            : 'fora do score';
+          const originalWeight = `${formatV3BaseNumber(metric.peso)}%`;
+          const effectiveWeight = metric.pesoEfetivo === null
+            ? 'não aplicável neste recorte'
+            : `${formatV3BaseNumber(metric.pesoEfetivo)}%`;
 
           return (
             <div key={key} className="min-h-[168px] rounded-lg border border-slate-700 bg-slate-800/40 p-4">
@@ -275,9 +283,10 @@ function HealthScoreV3MetricsPanel({
               )}
               <div className="mt-2 space-y-0.5 text-[11px] text-slate-500">
                 <p>{observed?.evidenceLabel ?? `Amostra: ${metric.amostra ?? 'sem base'}${base ? ` | Base: ${base}` : ''}`}</p>
-                <p>Cobertura do pilar: {pillarCoverage}</p>
+                <p>Peso original: {originalWeight}</p>
+                <p>Peso efetivo: {effectiveWeight}</p>
                 <p>Recorte: {recorte}</p>
-                <p className="truncate" title={metric.fonte}>Fonte: {metric.fonte}</p>
+                <p>Fonte: dados oficiais do período</p>
               </div>
               {observed && (
                 <p className="mt-2 text-[11px] leading-snug text-cyan-200/80">{observed.note}</p>
