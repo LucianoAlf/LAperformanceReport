@@ -46,6 +46,7 @@ import {
   formatHealthScoreV3Coverage,
   resolveHealthScoreV3EvidenceMessage,
   resolveHealthScoreV3MetricDisplay,
+  resolveHealthScoreV3MetricTone,
   resolveHealthScoreV3PublicationLabel,
   resolveHealthScoreV3ScoreStatus,
   resolveHealthScoreV3UiStatus,
@@ -174,15 +175,16 @@ function HealthScoreV3MetricCell({
         : display.state === 'sem_base'
           ? 'evidência pendente'
           : null;
-  const stateClass = display.state === 'normal'
+  const metricTone = resolveHealthScoreV3MetricTone(metricKey, display.value, metric);
+  const valueClass = metricTone === 'positive'
     ? 'text-emerald-300'
-    : display.state === 'observado'
-      ? 'text-cyan-300'
-      : ['amostra_em_formacao', 'ciclo_em_acompanhamento', 'em_apuracao'].includes(display.state)
-        ? 'text-amber-300'
-        : display.state === 'referencia_anterior'
-          ? 'text-sky-300'
-        : 'text-slate-400';
+    : metricTone === 'attention'
+      ? 'text-amber-300'
+      : metricTone === 'critical'
+        ? 'text-rose-300'
+        : metricTone === 'neutral'
+          ? 'text-cyan-300'
+          : 'text-slate-400';
 
   return (
     <Tooltip
@@ -221,7 +223,7 @@ function HealthScoreV3MetricCell({
     >
       <button
         type="button"
-        className={cn('inline-flex flex-col items-center font-medium hover:underline', stateClass)}
+        className={cn('inline-flex flex-col items-center font-medium hover:underline', valueClass)}
         onClick={(event) => {
           event.stopPropagation();
           onOpen();
