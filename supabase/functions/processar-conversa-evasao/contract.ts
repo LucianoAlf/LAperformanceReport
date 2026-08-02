@@ -1,3 +1,5 @@
+import { classificarSubstantividade } from "../_shared/pesquisa-evasao-substantividade.ts";
+
 export type StatusRespostaConversa =
   | "sem_resposta"
   | "coletando"
@@ -95,6 +97,14 @@ function temTranscricaoPendente(mensagem: MensagemDaConversa): boolean {
     );
 }
 
+function substantividadeEfetiva(mensagem: MensagemDaConversa): string {
+  if (mensagem.tipo === "texto") return mensagem.substantividade;
+  const transcricao = ultimaTranscricaoConcluida(mensagem);
+  return transcricao
+    ? classificarSubstantividade(transcricao.texto)
+    : mensagem.substantividade;
+}
+
 export function listarMensagensComTranscricaoPendente(
   mensagens: MensagemDaConversa[],
 ): string[] {
@@ -107,7 +117,7 @@ export function listarMensagensComTranscricaoPendente(
 }
 
 function conteudoOficial(mensagem: MensagemDaConversa): string | null {
-  if (mensagem.substantividade !== "conteudo_substantivo") return null;
+  if (substantividadeEfetiva(mensagem) !== "conteudo_substantivo") return null;
   if (mensagem.tipo === "texto") return mensagem.texto?.trim() || null;
   return ultimaTranscricaoConcluida(mensagem)?.texto?.trim() || null;
 }
@@ -134,7 +144,7 @@ export function decidirConsolidacao(
 ): DecisaoConsolidacao {
   if (
     conversa.respostaStatus === "recusada_opt_out" ||
-    conversa.mensagens.some((item) => item.substantividade === "opt_out")
+    conversa.mensagens.some((item) => substantividadeEfetiva(item) === "opt_out")
   ) {
     return { acao: "ignorar" };
   }
@@ -180,8 +190,7 @@ export function decidirConsolidacao(
   const pronta = silencioMs >= JANELA_REVISAO;
   const respostaTipo =
     mensagens.some((mensagem) =>
-        mensagem.substantividade === "conteudo_substantivo" &&
-        mensagem.tipo === "audio" && ultimaTranscricaoConcluida(mensagem)
+        mensagem.tipo === "audio" && Boolean(conteudoOficial(mensagem))
       )
       ? "audio"
       : "texto";

@@ -88,6 +88,7 @@ Deno.test("áudio usa última transcrição concluída e pendência impede pront
       ...audio,
       tipo: "audio",
       texto: null,
+      substantividade: "indeterminado",
       providerCreatedAt: new Date(agora.getTime() - 20 * MINUTO).toISOString(),
       transcricoes: [{ versao: 1, status: "pendente", texto: null }],
     }],
@@ -96,13 +97,13 @@ Deno.test("áudio usa última transcrição concluída e pendência impede pront
   assertEquals(pendente.acao, "aguardar");
 
   comAudio.mensagens[0].transcricoes = [
-    { versao: 1, status: "concluida", texto: "primeira versão" },
-    { versao: 2, status: "concluida", texto: "versão corrigida" },
+    { versao: 1, status: "concluida", texto: "O valor pesou bastante" },
+    { versao: 2, status: "concluida", texto: "O horário também ficou ruim" },
   ];
   const concluida = decidirConsolidacao(comAudio, agora);
   assertEquals(concluida.acao, "salvar_rascunho");
   if (concluida.acao === "salvar_rascunho") {
-    assertStringIncludes(concluida.textoConsolidado, "versão corrigida");
+    assertStringIncludes(concluida.textoConsolidado, "horário também ficou ruim");
     assertEquals(concluida.textoConsolidado.includes("áudio pendente"), false);
     assertEquals(concluida.respostaTipo, "audio");
   }
