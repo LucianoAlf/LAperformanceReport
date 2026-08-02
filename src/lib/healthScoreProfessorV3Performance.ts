@@ -522,6 +522,29 @@ export function isHealthScoreV3SnapshotRankable(
     && snapshot.score !== null;
 }
 
+interface HealthScoreV3OperationalRow {
+  nome: string;
+  healthV3: Pick<HealthScoreV3ProfessorPerformance, 'score' | 'scoreExibivel'> | null;
+}
+
+export function compareHealthScoreV3OperationalRows<TRow extends HealthScoreV3OperationalRow>(
+  left: TRow,
+  right: TRow,
+): number {
+  const leftScore = left.healthV3?.scoreExibivel && Number.isFinite(left.healthV3.score)
+    ? Number(left.healthV3.score)
+    : null;
+  const rightScore = right.healthV3?.scoreExibivel && Number.isFinite(right.healthV3.score)
+    ? Number(right.healthV3.score)
+    : null;
+
+  if (leftScore !== null && rightScore !== null && leftScore !== rightScore) {
+    return rightScore - leftScore;
+  }
+  if ((leftScore !== null) !== (rightScore !== null)) return leftScore !== null ? -1 : 1;
+  return left.nome.localeCompare(right.nome, 'pt-BR');
+}
+
 export interface HealthScoreV3AiPayload {
   versao_contrato: 'health_score_professor_v3';
   professor_id: number;
