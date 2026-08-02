@@ -230,6 +230,12 @@ export function ConversaPesquisaEvasao({ pesquisaId, onAlteracao }: Props) {
 
             {(rodada.status === 'em_revisao' || editando === rodada.id) && (
               <div className="mt-4 space-y-3">
+                {rodada.revisao_iniciada_em && (
+                  <p className="text-xs text-violet-300">
+                    Revisão iniciada por {rodada.revisao_iniciada_por_nome ?? 'usuário interno'} em{' '}
+                    {formatarData(rodada.revisao_iniciada_em)}
+                  </p>
+                )}
                 <Textarea
                   value={editando === rodada.id ? textoRevisao : rodada.texto_consolidado ?? ''}
                   onChange={(event) => {
@@ -258,7 +264,8 @@ export function ConversaPesquisaEvasao({ pesquisaId, onAlteracao }: Props) {
             {rodada.status === 'revisada' && (
               <p className="mt-4 flex items-center gap-2 text-xs text-green-400">
                 <CheckCircle2 className="h-4 w-4" />
-                Revisada em {formatarData(rodada.revisado_em)} — versão preservada
+                Revisada por {rodada.revisor_nome ?? 'usuário interno'} em{' '}
+                {formatarData(rodada.revisado_em)} — versão preservada
               </p>
             )}
           </section>

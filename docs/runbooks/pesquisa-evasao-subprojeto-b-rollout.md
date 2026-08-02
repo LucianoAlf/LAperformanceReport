@@ -16,9 +16,24 @@
 - Cada mensagem V2 recebe `analise_versao` imutável.
 - Cada análise guarda primeira/última mensagem e horários de início, última mensagem e encerramento.
 - Uma análise `revisada` não pode ser atualizada nem removida.
-- Mensagem posterior a uma revisão cria nova versão, muda a pesquisa para `coletando` e liga `conteudo_novo_desde_revisao`.
+- Mensagem posterior a uma rodada pronta/em revisão/revisada cria nova versão, mantém o cabeçalho em `pronta_para_revisao` e liga `conteudo_novo_desde_revisao`, mesmo enquanto a rodada nova ainda está sendo coletada.
 - A fila e a timeline mostram todas as rodadas; o selo **Novo conteúdo** destaca a reabertura.
 - Pesquisas `legado_v1` não recebem versão de rodada.
+- O início da revisão grava operador e horário em campos próprios; a conclusão grava outro operador e horário, sem sobrescrever a autoria do início.
+
+## Correção após o aceite manual
+
+O teste de 02/08/2026 confirmou as Rodadas 2 e 3, a separação dos eventos, a
+transcrição automática e a imutabilidade das rodadas anteriores. Também revelou
+dois defeitos no primeiro rollout:
+
+1. `iniciar_revisao_pesquisa_evasao` alterava somente o status, sem autoria nem horário;
+2. uma mensagem posterior a uma rodada `em_revisao` mudava o cabeçalho para `coletando`, limpava `pronta_para_revisao_em` e ocultava o caso da fila.
+
+A migration `20260802223000_pesquisa_evasao_revisao_auditavel_fila.sql` corrige
+os dois contratos. A única revisão antiga sem autor volta para
+`pronta_para_revisao`, porque não existe evidência para atribuir autoria
+retroativamente. Nenhuma mensagem, transcrição ou consolidação é reescrita.
 
 ## Ordem de publicação
 

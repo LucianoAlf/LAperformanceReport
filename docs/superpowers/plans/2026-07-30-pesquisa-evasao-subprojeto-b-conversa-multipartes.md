@@ -1571,3 +1571,14 @@ git commit -m "docs: fechar rollout da conversa multipartes"
 - [ ] RLS e RPCs permitem leitura/revisão a usuário interno ativo, sem gate por unidade, e bloqueiam acesso direto dos roles de agente.
 - [ ] Pesquisas abertas antes do corte permanecem `legado_v1`; somente novas pesquisas após a ativação usam `multipartes_v2`.
 - [ ] Testes, build e lint passam com evidência registrada.
+
+## Decisão encaminhada ao Subprojeto C — não implementar no B
+
+Quando houver resposta nova, o Subprojeto C deverá avisar pelo WhatsApp a
+pessoa do Sucesso do Aluno registrada em `executado_por_usuario_id`. O contrato
+cobre tanto a primeira resposta de uma pesquisa aguardando retorno quanto uma
+rodada nova após revisão concluída, sendo o segundo cenário o mais crítico.
+
+O aviso conterá somente nome do aluno, unidade e o fato de existir resposta
+nova. O conteúdo da resposta não será enviado na notificação. Esta decisão não
+autoriza implementação, migration, Edge Function ou disparo no Subprojeto B.

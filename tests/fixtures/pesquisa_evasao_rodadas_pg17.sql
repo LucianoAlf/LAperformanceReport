@@ -11,11 +11,14 @@ $$;
 create table public.usuarios (
   id integer primary key,
   auth_user_id uuid not null unique,
+  nome text not null,
   ativo boolean not null default true
 );
 
-insert into public.usuarios (id, auth_user_id)
-values (99, '99000000-0000-4000-8000-000000000099');
+insert into public.usuarios (id, auth_user_id, nome)
+values
+  (99, '99000000-0000-4000-8000-000000000099', 'Operador Inicio'),
+  (100, '99000000-0000-4000-8000-000000000100', 'Operador Conclusao');
 
 create or replace function public.fn_pesquisa_evasao_usuario_interno_ativo()
 returns boolean language sql stable security definer
@@ -129,6 +132,65 @@ select public.iniciar_revisao_pesquisa_evasao(
   (select id from public.pesquisa_evasao_analises
    where pesquisa_id = '20000000-0000-4000-8000-000000000001' and versao = 1)
 );
+
+do $$
+begin
+  if not exists (
+    select 1
+    from public.pesquisa_evasao_analises
+    where pesquisa_id = '20000000-0000-4000-8000-000000000001'
+      and versao = 1
+      and status = 'em_revisao'
+      and revisor_usuario_id is null
+      and revisado_em is null
+  ) then
+    raise exception 'fixture nao reproduziu a revisao legada sem autoria';
+  end if;
+end;
+$$;
+
+\ir ../../supabase/migrations/20260802223000_pesquisa_evasao_revisao_auditavel_fila.sql
+
+do $$
+begin
+  if not exists (
+    select 1
+    from public.pesquisa_evasao_analises
+    where pesquisa_id = '20000000-0000-4000-8000-000000000001'
+      and versao = 1
+      and status = 'pronta_para_revisao'
+      and revisao_iniciada_por_usuario_id is null
+      and revisao_iniciada_em is null
+  ) then
+    raise exception 'revisao legada sem autoria nao voltou para pronta';
+  end if;
+end;
+$$;
+
+select public.iniciar_revisao_pesquisa_evasao(
+  (select id from public.pesquisa_evasao_analises
+   where pesquisa_id = '20000000-0000-4000-8000-000000000001' and versao = 1)
+);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from public.pesquisa_evasao_analises
+    where pesquisa_id = '20000000-0000-4000-8000-000000000001'
+      and versao = 1
+      and status = 'em_revisao'
+      and revisao_iniciada_por_usuario_id = 99
+      and revisao_iniciada_em is not null
+      and revisor_usuario_id is null
+      and revisado_em is null
+  ) then
+    raise exception 'inicio da revisao nao guardou operador e horario';
+  end if;
+end;
+$$;
+
+set request.jwt.claim.sub = '99000000-0000-4000-8000-000000000100';
 select public.concluir_revisao_pesquisa_evasao(
   (select id from public.pesquisa_evasao_analises
    where pesquisa_id = '20000000-0000-4000-8000-000000000001' and versao = 1),
@@ -165,7 +227,9 @@ begin
       and versao = 1
       and status = 'revisada'
       and texto_consolidado = 'revisao humana imutavel'
-      and revisor_usuario_id = 99
+      and revisao_iniciada_por_usuario_id = 99
+      and revisao_iniciada_em is not null
+      and revisor_usuario_id = 100
       and revisado_em is not null
   ) then
     raise exception 'revisao anterior foi alterada';
@@ -185,7 +249,8 @@ begin
     select 1
     from public.pesquisa_evasao
     where id = '20000000-0000-4000-8000-000000000001'
-      and resposta_status = 'coletando'
+      and resposta_status = 'pronta_para_revisao'
+      and pronta_para_revisao_em is not null
       and conteudo_novo_desde_revisao = true
   ) then
     raise exception 'pesquisa revisada nao voltou para a fila com sinal novo';
@@ -265,6 +330,67 @@ begin
       and analise_versao is not null
   ) then
     raise exception 'fluxo legado recebeu rodada indevidamente';
+  end if;
+end;
+$$;
+
+update public.pesquisa_evasao_analises
+set status = 'pronta_para_revisao'
+where pesquisa_id = '20000000-0000-4000-8000-000000000002'
+  and versao = 1;
+
+set request.jwt.claim.role = 'authenticated';
+set request.jwt.claim.sub = '99000000-0000-4000-8000-000000000099';
+select public.iniciar_revisao_pesquisa_evasao(
+  (select id from public.pesquisa_evasao_analises
+   where pesquisa_id = '20000000-0000-4000-8000-000000000002' and versao = 1)
+);
+reset request.jwt.claim.role;
+reset request.jwt.claim.sub;
+
+insert into public.pesquisa_evasao_mensagens (
+  pesquisa_id,
+  caixa_id,
+  direcao,
+  provider_message_id,
+  telefone_normalizado,
+  tipo,
+  texto,
+  provider_created_at,
+  recebido_em,
+  resolution_status,
+  substantividade
+) values (
+  '20000000-0000-4000-8000-000000000002', 3, 'entrada',
+  'silencio-3-depois-de-iniciar', '5521999991002', 'texto',
+  'conteudo depois de iniciar revisao',
+  '2026-08-02 12:32:00+00', '2026-08-02 12:32:00+00',
+  'resolvida', 'conteudo_substantivo'
+);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from public.pesquisa_evasao
+    where id = '20000000-0000-4000-8000-000000000002'
+      and resposta_status = 'pronta_para_revisao'
+      and pronta_para_revisao_em is not null
+      and conteudo_novo_desde_revisao = true
+  ) then
+    raise exception 'conteudo depois de iniciar revisao saiu da fila';
+  end if;
+
+  if not exists (
+    select 1
+    from public.pesquisa_evasao_analises
+    where pesquisa_id = '20000000-0000-4000-8000-000000000002'
+      and versao = 1
+      and status = 'em_revisao'
+      and revisao_iniciada_por_usuario_id = 99
+      and revisao_iniciada_em is not null
+  ) then
+    raise exception 'rodada em revisao perdeu auditoria com conteudo novo';
   end if;
 end;
 $$;

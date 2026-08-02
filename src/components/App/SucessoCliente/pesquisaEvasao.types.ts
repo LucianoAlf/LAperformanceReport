@@ -99,8 +99,12 @@ export interface PesquisaEvasaoRodada {
   iniciada_em: string | null;
   ultima_mensagem_em: string | null;
   encerrada_em: string | null;
+  revisao_iniciada_em: string | null;
+  revisao_iniciada_por_usuario_id: number | null;
+  revisao_iniciada_por_nome: string | null;
   revisado_em: string | null;
   revisor_usuario_id: number | null;
+  revisor_nome: string | null;
   mensagens: PesquisaEvasaoMensagemRodada[];
 }
 

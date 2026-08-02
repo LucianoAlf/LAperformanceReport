@@ -9,6 +9,10 @@ const migrationPath = resolve(
   root,
   'supabase/migrations/20260802213000_pesquisa_evasao_rodadas_revisao.sql',
 );
+const correctionMigrationPath = resolve(
+  root,
+  'supabase/migrations/20260802223000_pesquisa_evasao_revisao_auditavel_fila.sql',
+);
 const workerPath = resolve(
   root,
   'supabase/functions/processar-conversa-evasao/index.ts',
@@ -40,9 +44,9 @@ test('analise guarda limites e versao revisada e imutavel', () => {
 });
 
 test('nova rodada apos revisao religa sinal e fila sem apagar a anterior', () => {
-  const sql = read(migrationPath);
+  const sql = read(correctionMigrationPath);
   assert.match(sql, /conteudo_novo_desde_revisao/i);
-  assert.match(sql, /resposta_status\s*=\s*'coletando'/i);
+  assert.match(sql, /resposta_status\s*=\s*case[\s\S]*'pronta_para_revisao'/i);
   assert.match(sql, /concluir_revisao_pesquisa_evasao/i);
   assert.match(sql, /resposta_status\s*=\s*'revisada'/i);
 });

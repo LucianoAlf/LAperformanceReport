@@ -880,6 +880,14 @@ Decisões abertas exclusivas do Subprojeto C:
 - se haverá lembrete, em quais condições, quantidade, intervalo e canal;
 - como a política de lembrete respeitará `recusada_opt_out`, interação não substantiva e pesquisas em revisão.
 
+Decisão já aprovada para o Subprojeto C em 02/08/2026:
+
+- quando chegar uma resposta nova em pesquisa aguardando resposta, avisar pelo WhatsApp a pessoa do Sucesso do Aluno que realizou o envio, resolvida por `executado_por_usuario_id`;
+- emitir o mesmo aviso, com prioridade operacional maior, quando uma rodada nova chegar após revisão concluída;
+- a notificação contém somente nome do aluno, unidade e o fato de haver resposta nova, sem o conteúdo da resposta;
+- o aviso é sinal operacional: a conversa, a revisão e a fonte canônica continuam no LA Report;
+- canal, opt-out do operador, retentativa, idempotência e horário de silêncio serão definidos no plano do Subprojeto C, sem implementação no Subprojeto B.
+
 ### Subprojeto D — Mapa de sinais e Lia
 
 - contrato neutro de sinais;

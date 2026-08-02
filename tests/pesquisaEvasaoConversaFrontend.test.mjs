@@ -45,6 +45,8 @@ test('revisao usa RPC e nunca atualiza tabela privada direto', () => {
   const conversa = read(conversaPath);
   assert.match(conversa, /iniciar_revisao_pesquisa_evasao/);
   assert.match(conversa, /concluir_revisao_pesquisa_evasao/);
+  assert.match(conversa, /revisao_iniciada_por_nome/);
+  assert.match(conversa, /revisor_nome/);
   assert.doesNotMatch(conversa, /\.from\(["']pesquisa_evasao_analises["']\)\s*\.update/);
 });
 
