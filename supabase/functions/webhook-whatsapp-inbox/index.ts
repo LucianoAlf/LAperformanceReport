@@ -23,6 +23,10 @@ import {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const WEBHOOK_HEALTH_TOKEN = Deno.env.get('WEBHOOK_HEALTH_TOKEN')?.trim() ?? '';
+const WEBHOOK_INBOUND_SECRET_ENFORCEMENT = Deno.env
+  .get('WEBHOOK_INBOUND_SECRET_ENFORCEMENT')
+  ?.trim()
+  .toLowerCase() === 'true';
 const PROCESSADOR_PESQUISA_PRIMEIRA_AULA = 'processar-resposta-pesquisa';
 
 const corsHeaders = {
@@ -946,6 +950,7 @@ serve(async (req: Request) => {
     const url = new URL(req.url);
     const authResult = await autenticarWebhookInbound(req, url, {
       healthSecret: WEBHOOK_HEALTH_TOKEN,
+      enforceProviderSecret: WEBHOOK_INBOUND_SECRET_ENFORCEMENT,
       validarHash: async (caixaId, secretHashSha256) => {
         const anon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         const { data, error } = await anon.rpc('validar_webhook_caixa_hash', {

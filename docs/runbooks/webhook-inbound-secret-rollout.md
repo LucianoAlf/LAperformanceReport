@@ -8,6 +8,12 @@
 > significa somente a caixa 3. Antecipar o enforcement interrompe a inbox
 > administrativa, o CRM, a pesquisa de evasão e a pesquisa pós-1ª aula.
 
+> Estado de compatibilidade em 02/08/2026: o webhook pode receber a variavel
+> `WEBHOOK_INBOUND_SECRET_ENFORCEMENT`, mas seu padrao e desligado. O rollout
+> multipartes pode publicar o webhook assim sem exigir segredo da caixa 3.
+> Ativar a variavel continua bloqueado ate provisionar o hash e atualizar o
+> webhook do provedor.
+
 ## Estado atual
 
 - Task 1: implementação local de diagnóstico sanitizado concluída; deploy fora

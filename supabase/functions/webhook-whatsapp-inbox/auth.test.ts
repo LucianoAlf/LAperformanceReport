@@ -20,9 +20,38 @@ function request(
 function dependencies(
   validarHash: (caixaId: number, hash: string) => Promise<boolean> = () => Promise.resolve(true),
   healthSecret = "health-exclusivo",
+  enforceProviderSecret = true,
 ) {
-  return { validarHash, healthSecret };
+  return { validarHash, healthSecret, enforceProviderSecret };
 }
+
+Deno.test("modo compativel preserva inbound sem segredo ate provisionar a caixa", async () => {
+  let validacoes = 0;
+  const req = request("?caixa_id=3");
+
+  assertEquals(
+    await autenticarWebhookInbound(
+      req,
+      new URL(req.url),
+      dependencies(() => {
+        validacoes += 1;
+        return Promise.resolve(false);
+      }, "", false),
+    ),
+    { ok: true, kind: "provider", caixaId: 3 },
+  );
+  assertEquals(validacoes, 0);
+
+  const health = request("?_health=1");
+  assertEquals(
+    await autenticarWebhookInbound(
+      health,
+      new URL(health.url),
+      dependencies(undefined, "", false),
+    ),
+    { ok: true, kind: "health" },
+  );
+});
 
 Deno.test("rejeita caixa_id ausente ou invalido com 400", async () => {
   for (const query of [

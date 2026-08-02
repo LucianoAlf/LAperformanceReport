@@ -20,6 +20,8 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.webhook-whatsapp-inbox]
+# Compatibility mode is the default until caixa 3 is provisioned.
+# Enable later only with WEBHOOK_INBOUND_SECRET_ENFORCEMENT=true.
 # Gateway sem JWT: autenticação do provedor ocorre no código por segredo por caixa.
 verify_jwt = false
 

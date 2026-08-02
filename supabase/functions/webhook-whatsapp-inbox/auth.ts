@@ -17,6 +17,7 @@ export type WebhookInboundAuthResult =
 export interface WebhookInboundAuthDependencies {
   validarHash: (caixaId: number, secretHashSha256: string) => Promise<boolean>;
   healthSecret: string;
+  enforceProviderSecret?: boolean;
 }
 
 async function sha256(value: string): Promise<string> {
@@ -74,6 +75,19 @@ export async function autenticarWebhookInbound(
   url: URL,
   dependencies: WebhookInboundAuthDependencies,
 ): Promise<WebhookInboundAuthResult> {
+  if (dependencies.enforceProviderSecret === false) {
+    if (url.searchParams.get("_health") === "1") {
+      return { ok: true, kind: "health" };
+    }
+
+    const caixaId = parseCaixaId(url);
+    if (caixaId === null) {
+      return { ok: false, status: 400, code: "invalid_caixa_id" };
+    }
+
+    return { ok: true, kind: "provider", caixaId };
+  }
+
   if (url.searchParams.get("_health") === "1") {
     return autenticarHealth(req, dependencies.healthSecret);
   }

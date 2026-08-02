@@ -42,6 +42,17 @@ test('autenticacao acontece antes do body e da criacao da service role', () => {
   );
 });
 
+test('enforcement inbound fica desligado por padrao ate a caixa 3 ser provisionada', () => {
+  assert.match(
+    webhook,
+    /WEBHOOK_INBOUND_SECRET_ENFORCEMENT\s*=\s*Deno\.env[\s\S]*?\.get\(['"]WEBHOOK_INBOUND_SECRET_ENFORCEMENT['"]\)[\s\S]*?\.toLowerCase\(\)\s*===\s*['"]true['"]/,
+  );
+  assert.match(
+    webhook,
+    /enforceProviderSecret:\s*WEBHOOK_INBOUND_SECRET_ENFORCEMENT/,
+  );
+});
+
 test('health e provedor usam credenciais separadas e falham fechado', () => {
   assert.match(auth, /x-health-secret/i);
   assert.match(auth, /x-webhook-secret/i);
