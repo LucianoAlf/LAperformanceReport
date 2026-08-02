@@ -24,6 +24,11 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+function menorDataIso(atual: string | null, candidata: string): string {
+  if (!atual) return candidata;
+  return Date.parse(candidata) < Date.parse(atual) ? candidata : atual;
+}
+
 serve(async (req: Request) => {
   if (req.method !== "POST") {
     return json({ error: "metodo_nao_permitido" }, 405);
@@ -56,105 +61,168 @@ serve(async (req: Request) => {
   for (const claim of claims ?? []) {
     const pesquisaId = claim.pesquisa_id;
     try {
-      const { data: pesquisa, error: pesquisaError } = await supabase
-        .from("pesquisa_evasao")
-        .select("id,enviado_em,resposta_status")
-        .eq("id", pesquisaId)
-        .eq("resposta_ingestao_versao", "multipartes_v2")
-        .maybeSingle();
-      if (pesquisaError) throw new Error("pesquisa_indisponivel");
+      const [{ data: pesquisa, error: pesquisaError }, analisesResult] =
+        await Promise.all([
+          supabase.from("pesquisa_evasao")
+            .select("id,enviado_em,resposta_status")
+            .eq("id", pesquisaId)
+            .eq("resposta_ingestao_versao", "multipartes_v2")
+            .maybeSingle(),
+          supabase.from("pesquisa_evasao_analises")
+            .select("id,versao,status,encerrada_em")
+            .eq("pesquisa_id", pesquisaId)
+            .order("versao", { ascending: true }),
+        ]);
+
+      if (pesquisaError || analisesResult.error) {
+        throw new Error("conversa_indisponivel");
+      }
       if (!pesquisa) {
         await supabase.from("pesquisa_evasao_processamento")
           .delete().eq("pesquisa_id", pesquisaId).eq("locked_by", workerId);
         continue;
       }
 
-      const [{ data: mensagens, error: mensagensError }, analiseResult] =
-        await Promise.all([
-          supabase.from("pesquisa_evasao_mensagens")
-            .select(
-              "id,tipo,texto,substantividade,provider_created_at,recebido_em,criado_em",
-            )
-            .eq("pesquisa_id", pesquisaId)
-            .eq("direcao", "entrada")
-            .eq("resolution_status", "resolvida"),
-          supabase.from("pesquisa_evasao_analises")
-            .select("versao,status")
-            .eq("pesquisa_id", pesquisaId)
-            .order("versao", { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-        ]);
-      if (mensagensError || analiseResult.error) {
-        throw new Error("conversa_indisponivel");
-      }
+      const analises = analisesResult.data ?? [];
+      const rascunhos = analises.filter((item) => item.status === "rascunho");
+      const ultimaVersao = analises.at(-1)?.versao ?? 0;
+      const existeRevisada = analises.some((item) => item.status === "revisada");
+      let proximaExecucaoEm: string | null = null;
 
-      const ids = (mensagens ?? []).map((item) => item.id);
-      const transcricoesResult = ids.length > 0
-        ? await supabase.from("pesquisa_evasao_transcricoes")
-          .select("mensagem_id,versao,status,texto")
-          .in("mensagem_id", ids)
-        : { data: [], error: null };
-      if (transcricoesResult.error) {
-        throw new Error("transcricoes_indisponiveis");
-      }
+      for (const analise of rascunhos) {
+        const { data: mensagens, error: mensagensError } = await supabase
+          .from("pesquisa_evasao_mensagens")
+          .select(
+            "id,tipo,texto,substantividade,provider_created_at,recebido_em,criado_em",
+          )
+          .eq("pesquisa_id", pesquisaId)
+          .eq("analise_versao", analise.versao)
+          .eq("direcao", "entrada")
+          .eq("resolution_status", "resolvida");
+        if (mensagensError) throw new Error("mensagens_indisponiveis");
 
-      const transcricoesPorMensagem = new Map<string, unknown[]>();
-      for (const item of transcricoesResult.data ?? []) {
-        const lista = transcricoesPorMensagem.get(item.mensagem_id) ?? [];
-        lista.push(item);
-        transcricoesPorMensagem.set(item.mensagem_id, lista);
-      }
-      const mensagensContrato: MensagemDaConversa[] = (mensagens ?? []).map(
-        (item) => ({
-          id: item.id,
-          tipo: item.tipo,
-          texto: item.texto,
-          substantividade: item.substantividade,
-          providerCreatedAt: item.provider_created_at,
-          recebidoEm: item.recebido_em,
-          criadoEm: item.criado_em,
-          transcricoes: transcricoesPorMensagem.get(item.id) ?? [],
-        }),
-      );
-      const conversa: ConversaParaConsolidar = {
-        pesquisaId,
-        enviadoEm: pesquisa.enviado_em,
-        respostaStatus: pesquisa.resposta_status,
-        ultimaAnalise: analiseResult.data,
-        mensagens: mensagensContrato,
-      };
-      for (
-        const mensagemId of listarMensagensComTranscricaoPendente(
-          mensagensContrato,
-        )
-      ) {
-        const { error } = await supabase.functions.invoke(
-          "transcrever-mensagem-evasao",
-          {
-            body: { mensagem_id: mensagemId },
-            headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
-          },
+        const ids = (mensagens ?? []).map((item) => item.id);
+        const transcricoesResult = ids.length > 0
+          ? await supabase.from("pesquisa_evasao_transcricoes")
+            .select("mensagem_id,versao,status,texto")
+            .in("mensagem_id", ids)
+          : { data: [], error: null };
+        if (transcricoesResult.error) {
+          throw new Error("transcricoes_indisponiveis");
+        }
+
+        const transcricoesPorMensagem = new Map<string, unknown[]>();
+        for (const item of transcricoesResult.data ?? []) {
+          const lista = transcricoesPorMensagem.get(item.mensagem_id) ?? [];
+          lista.push(item);
+          transcricoesPorMensagem.set(item.mensagem_id, lista);
+        }
+        const mensagensContrato: MensagemDaConversa[] = (mensagens ?? []).map(
+          (item) => ({
+            id: item.id,
+            tipo: item.tipo,
+            texto: item.texto,
+            substantividade: item.substantividade,
+            providerCreatedAt: item.provider_created_at,
+            recebidoEm: item.recebido_em,
+            criadoEm: item.criado_em,
+            transcricoes: transcricoesPorMensagem.get(item.id) ?? [],
+          }),
         );
-        if (error) throw new Error("transcricao_disparo_falhou");
-      }
-      const decisao = decidirConsolidacao(conversa, new Date());
+        const conversa: ConversaParaConsolidar = {
+          pesquisaId,
+          enviadoEm: pesquisa.enviado_em,
+          respostaStatus: pesquisa.resposta_status,
+          ultimaAnalise: { versao: analise.versao, status: analise.status },
+          mensagens: mensagensContrato,
+        };
 
-      if (decisao.acao === "ignorar") {
-        await supabase.from("pesquisa_evasao_processamento")
-          .delete().eq("pesquisa_id", pesquisaId).eq("locked_by", workerId);
-      } else if (decisao.acao === "expirar") {
-        const { error } = await supabase.from("pesquisa_evasao")
-          .update({ resposta_status: "expirada" }).eq("id", pesquisaId)
-          .eq("resposta_ingestao_versao", "multipartes_v2");
-        if (error) throw new Error("expiracao_falhou");
-        await supabase.from("pesquisa_evasao_processamento")
-          .delete().eq("pesquisa_id", pesquisaId).eq("locked_by", workerId);
-      } else if (decisao.acao === "aguardar") {
+        for (
+          const mensagemId of listarMensagensComTranscricaoPendente(
+            mensagensContrato,
+          )
+        ) {
+          const { error } = await supabase.functions.invoke(
+            "transcrever-mensagem-evasao",
+            {
+              body: { mensagem_id: mensagemId },
+              headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
+            },
+          );
+          if (error) throw new Error("transcricao_disparo_falhou");
+        }
+
+        const decisao = decidirConsolidacao(conversa, new Date());
+        if (decisao.acao === "aguardar") {
+          proximaExecucaoEm = menorDataIso(
+            proximaExecucaoEm,
+            decisao.proximaExecucaoEm,
+          );
+          continue;
+        }
+        if (decisao.acao === "ignorar") continue;
+
+        if (decisao.acao === "expirar") {
+          if (analise.versao === ultimaVersao) {
+            const { error } = await supabase.from("pesquisa_evasao")
+              .update({ resposta_status: "expirada" })
+              .eq("id", pesquisaId)
+              .eq("resposta_ingestao_versao", "multipartes_v2");
+            if (error) throw new Error("expiracao_falhou");
+          }
+          continue;
+        }
+
+        const pronta = decisao.respostaStatus === "pronta_para_revisao";
+        const { data: analiseAtualizada, error: analiseError } = await supabase
+          .from("pesquisa_evasao_analises")
+          .update({
+            texto_consolidado: decisao.textoConsolidado,
+            status: pronta ? "pronta_para_revisao" : "rascunho",
+            encerrada_em: decisao.encerradaEm,
+          })
+          .eq("id", analise.id)
+          .eq("status", "rascunho")
+          .select("id")
+          .maybeSingle();
+        if (analiseError || !analiseAtualizada) {
+          throw new Error("analise_falhou");
+        }
+
+        if (analise.versao === ultimaVersao) {
+          const agoraIso = new Date().toISOString();
+          const patch: Record<string, unknown> = {
+            status: pronta || existeRevisada ? "respondido" : "enviado",
+            resposta_status: decisao.respostaStatus,
+            resposta_valida: pronta,
+            resposta_texto: decisao.textoConsolidado,
+            resposta_tipo: decisao.respostaTipo,
+          };
+          if (pronta) {
+            patch.respondido_em = agoraIso;
+            patch.pronta_para_revisao_em = agoraIso;
+          }
+          const { error: cabecalhoError } = await supabase
+            .from("pesquisa_evasao")
+            .update(patch)
+            .eq("id", pesquisaId)
+            .eq("resposta_ingestao_versao", "multipartes_v2");
+          if (cabecalhoError) throw new Error("cabecalho_falhou");
+        }
+
+        if (decisao.proximaExecucaoEm) {
+          proximaExecucaoEm = menorDataIso(
+            proximaExecucaoEm,
+            decisao.proximaExecucaoEm,
+          );
+        }
+      }
+
+      if (proximaExecucaoEm) {
         const { error } = await supabase.from("pesquisa_evasao_processamento")
           .update({
-            executar_apos: decisao.proximaExecucaoEm,
-            motivo: "aguardando_janela",
+            executar_apos: proximaExecucaoEm,
+            motivo: "aguardando_rodada",
             locked_at: null,
             locked_by: null,
             ultimo_erro: null,
@@ -162,50 +230,8 @@ serve(async (req: Request) => {
           }).eq("pesquisa_id", pesquisaId).eq("locked_by", workerId);
         if (error) throw new Error("reagendamento_falhou");
       } else {
-        const { data: versao, error: versaoError } = await supabase.rpc(
-          "preparar_nova_analise_pesquisa_evasao",
-          { p_pesquisa_id: pesquisaId },
-        );
-        if (versaoError) throw new Error("versao_analise_falhou");
-        const { error: analiseError } = await supabase
-          .from("pesquisa_evasao_analises")
-          .upsert({
-            pesquisa_id: pesquisaId,
-            versao: Number(versao),
-            texto_consolidado: decisao.textoConsolidado,
-            status: "rascunho",
-          }, { onConflict: "pesquisa_id,versao" });
-        if (analiseError) throw new Error("analise_falhou");
-
-        const pronta = decisao.respostaStatus === "pronta_para_revisao";
-        const { error: cabecalhoError } = await supabase
-          .from("pesquisa_evasao")
-          .update({
-            status: pronta ? "respondido" : "enviado",
-            resposta_status: decisao.respostaStatus,
-            resposta_valida: pronta,
-            resposta_texto: decisao.textoConsolidado,
-            resposta_tipo: decisao.respostaTipo,
-            respondido_em: pronta ? new Date().toISOString() : null,
-            pronta_para_revisao_em: pronta ? new Date().toISOString() : null,
-          })
-          .eq("id", pesquisaId)
-          .eq("resposta_ingestao_versao", "multipartes_v2");
-        if (cabecalhoError) throw new Error("cabecalho_falhou");
-
-        if (pronta) {
-          await supabase.from("pesquisa_evasao_processamento")
-            .delete().eq("pesquisa_id", pesquisaId).eq("locked_by", workerId);
-        } else {
-          await supabase.from("pesquisa_evasao_processamento").update({
-            executar_apos: decisao.proximaExecucaoEm,
-            motivo: "aguardando_revisao",
-            locked_at: null,
-            locked_by: null,
-            ultimo_erro: null,
-            updated_at: new Date().toISOString(),
-          }).eq("pesquisa_id", pesquisaId).eq("locked_by", workerId);
-        }
+        await supabase.from("pesquisa_evasao_processamento")
+          .delete().eq("pesquisa_id", pesquisaId).eq("locked_by", workerId);
       }
       processadas += 1;
     } catch {

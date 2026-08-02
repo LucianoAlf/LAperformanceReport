@@ -46,6 +46,7 @@ export type DecisaoConsolidacao =
     respostaTipo: "texto" | "audio";
     respostaStatus: "coletando" | "pronta_para_revisao";
     proximaExecucaoEm: string | null;
+    encerradaEm: string | null;
   };
 
 const SEGUNDO = 1_000;
@@ -133,15 +134,20 @@ function consolidar(mensagens: MensagemDaConversa[]): string {
 
 function proximaVersao(conversa: ConversaParaConsolidar): number {
   if (!conversa.ultimaAnalise) return 1;
-  return conversa.ultimaAnalise.status === "revisada"
-    ? conversa.ultimaAnalise.versao + 1
-    : conversa.ultimaAnalise.versao;
+  return conversa.ultimaAnalise.versao;
 }
 
 export function decidirConsolidacao(
   conversa: ConversaParaConsolidar,
   agora: Date,
 ): DecisaoConsolidacao {
+  if (
+    conversa.ultimaAnalise &&
+    conversa.ultimaAnalise.status !== "rascunho"
+  ) {
+    return { acao: "ignorar" };
+  }
+
   if (
     conversa.respostaStatus === "recusada_opt_out" ||
     conversa.mensagens.some((item) => substantividadeEfetiva(item) === "opt_out")
@@ -203,5 +209,8 @@ export function decidirConsolidacao(
     proximaExecucaoEm: pronta
       ? null
       : new Date(ultimaMensagemEm + JANELA_REVISAO).toISOString(),
+    encerradaEm: pronta
+      ? new Date(ultimaMensagemEm + JANELA_REVISAO).toISOString()
+      : null,
   };
 }

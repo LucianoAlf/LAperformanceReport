@@ -314,9 +314,26 @@ A primeira implementação usa:
 Uma nova mensagem dentro dos sete dias:
 
 - é anexada à mesma conversa;
-- atualiza a consolidação;
-- retorna a análise ainda não concluída para `pronta_para_revisao`;
-- cria uma nova versão se uma revisão anterior já tiver sido concluída.
+- entra na rodada aberta somente enquanto ainda não houver 15 minutos de
+  silêncio;
+- abre uma nova rodada quando a anterior já estiver encerrada ou quando o
+  intervalo desde a última mensagem atingir 15 minutos;
+- cada rodada corresponde a uma versão de `pesquisa_evasao_analises` e guarda
+  seus limites de mensagens e de tempo;
+- uma versão `revisada` é imutável e nunca é recalculada com mensagens
+  posteriores;
+- a janela de sete dias decide apenas se a mensagem ainda pode ser associada à
+  pesquisa; ela não autoriza misturar rodadas separadas no mesmo texto.
+
+Quando uma nova rodada começa depois de existir versão revisada:
+
+- o cabeçalho da pesquisa volta para `coletando` e, após o silêncio, para
+  `pronta_para_revisao`;
+- `conteudo_novo_desde_revisao` fica verdadeiro para produzir um sinal visível
+  na fila;
+- a revisão anterior, seu texto e seus limites permanecem intactos;
+- a timeline exibe todas as rodadas em ordem, com eventos, transcrições e
+  estados separados.
 
 A equipe encerra a revisão; o aluno não precisa escrever uma palavra de comando.
 

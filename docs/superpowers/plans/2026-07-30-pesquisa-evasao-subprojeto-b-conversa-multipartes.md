@@ -1262,6 +1262,57 @@ git add -- supabase/functions/webhook-whatsapp-inbox/evasao.ts supabase/function
 git commit -m "feat: respeitar opt-out da pesquisa de evasao"
 ```
 
+## Task 10.5: Delimitar rodadas e reabrir revisão sem reescrever histórico
+
+**Files:**
+
+- Create: `supabase/migrations/20260802213000_pesquisa_evasao_rodadas_revisao.sql`
+- Modify: `supabase/functions/processar-conversa-evasao/contract.ts`
+- Modify: `supabase/functions/processar-conversa-evasao/contract.test.ts`
+- Modify: `supabase/functions/processar-conversa-evasao/index.ts`
+- Create: `tests/pesquisaEvasaoRodadasSchema.test.mjs`
+
+- [x] **Step 1: provar em teste que o gap de 15 minutos cria outra versão**
+
+Cobrir rodada aberta, rodada encerrada, continuação após revisão e
+preservação da versão revisada. O worker recebe somente as mensagens da
+versão correspondente e nunca volta a consolidar todas as mensagens da
+pesquisa.
+
+- [x] **Step 2: persistir limites e associação imutável**
+
+Adicionar `analise_versao` à mensagem; adicionar primeira/última mensagem,
+início, última mensagem e encerramento à análise. Triggers transacionais
+atribuem a versão antes do insert e atualizam os limites depois do insert. Uma
+análise revisada não aceita update nem delete.
+
+- [x] **Step 3: sinalizar conteúdo posterior à revisão**
+
+Adicionar `conteudo_novo_desde_revisao` ao cabeçalho. A primeira mensagem de
+uma nova rodada depois de versão revisada retorna a pesquisa a `coletando` e
+liga o sinal. A conclusão auditada da nova revisão desliga o sinal sem apagar a
+versão anterior.
+
+- [x] **Step 4: consolidar por rodada**
+
+Processar cada análise `rascunho` da pesquisa com as mensagens que tenham a
+mesma `analise_versao`. Aos 15 minutos, salvar o texto daquela rodada e mudar a
+análise para `pronta_para_revisao`; manter o cabeçalho refletindo a rodada mais
+recente.
+
+- [x] **Step 5: ensaiar migration e executar os testes**
+
+```powershell
+deno test supabase/functions/processar-conversa-evasao/contract.test.ts
+node --test tests/pesquisaEvasaoRodadasSchema.test.mjs
+```
+
+Expected: PASS.
+
+Evidência adicional: `tests/fixtures/pesquisa_evasao_rodadas_pg17.sql` executa
+a migration completa em PostgreSQL 17 e prova a reabertura após revisão sem
+alterar a versão revisada.
+
 ## Task 11: Exibir conversa, estados e fila de revisão
 
 **Files:**
@@ -1270,8 +1321,13 @@ git commit -m "feat: respeitar opt-out da pesquisa de evasao"
 - Create: `src/components/App/SucessoCliente/FilaRevisaoEvasao.tsx`
 - Modify: `src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx`
 - Modify: `src/components/App/SucessoCliente/pesquisaEvasao.types.ts`
-- Create: `supabase/migrations/20260801193000_pesquisa_evasao_revisao_rpcs.sql`
+- Modify: `supabase/migrations/20260802213000_pesquisa_evasao_rodadas_revisao.sql`
 - Create: `tests/pesquisaEvasaoConversaFrontend.test.mjs`
+
+Nesta entrega, a Task 11 publica somente a fatia necessária às rodadas: fila
+governada, timeline separada, revisão e selo de conteúdo novo. Player com URL
+assinada, triagem de ambiguidade, filtros avançados e paginação permanecem na
+Task 11 e não são requisito para ativar a delimitação.
 
 - [ ] **Step 1: Escrever testes vermelhos**
 
@@ -1314,10 +1370,12 @@ Regras:
 `ConversaPesquisaEvasao.tsx`:
 
 - eventos cronológicos;
+- rodadas separadas por versão, cada uma com seus próprios limites;
 - player por URL assinada obtida sob demanda;
 - transcrição com status;
 - consolidação versionada;
 - badge `coletando`, `pronta`, `em revisão`, `revisada`, `opt-out`;
+- selo `Novo conteúdo` quando uma rodada posterior reabrir caso revisado;
 - sem telefone integral.
 
 `FilaRevisaoEvasao.tsx`:

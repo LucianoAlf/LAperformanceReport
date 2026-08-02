@@ -54,7 +54,8 @@ test('worker persiste apenas consolidação derivada e não registra conteúdo e
   const edge = read(edgePath);
   assert.match(edge, /pesquisa_evasao_analises/);
   assert.match(edge, /pesquisa_evasao_processamento/);
-  assert.match(edge, /preparar_nova_analise_pesquisa_evasao/);
+  assert.match(edge, /\.eq\(["']analise_versao["'],\s*analise\.versao\)/);
+  assert.doesNotMatch(edge, /preparar_nova_analise_pesquisa_evasao/);
   assert.doesNotMatch(edge, /console\.(log|error)\([^\n]*(texto|mensagem|transcri)/i);
   assert.doesNotMatch(edge, /\[áudio pendente\]/i);
 });

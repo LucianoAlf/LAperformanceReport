@@ -190,7 +190,7 @@ Deno.test("sete dias sem conteúdo válido expira", () => {
   assertEquals(decisao.acao, "expirar");
 });
 
-Deno.test("continuação reaproveita rascunho e abre versão após revisão", () => {
+Deno.test("worker reaproveita somente rascunho e nunca reabre versão revisada", () => {
   const rascunho = decidirConsolidacao(
     conversa({
       ultimaAnalise: { versao: 2, status: "rascunho" },
@@ -204,5 +204,16 @@ Deno.test("continuação reaproveita rascunho e abre versão após revisão", ()
     agora,
   );
   if (rascunho.acao === "salvar_rascunho") assertEquals(rascunho.versao, 2);
-  if (revisada.acao === "salvar_rascunho") assertEquals(revisada.versao, 3);
+  assertEquals(revisada.acao, "ignorar");
+});
+
+Deno.test("rodada pronta para revisao e imutavel para o worker", () => {
+  const pronta = decidirConsolidacao(
+    conversa({
+      ultimaAnalise: { versao: 4, status: "pronta_para_revisao" },
+    }),
+    agora,
+  );
+
+  assertEquals(pronta.acao, "ignorar");
 });
