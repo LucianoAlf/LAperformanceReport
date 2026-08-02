@@ -179,6 +179,9 @@ const fullMigrationFixture = `
   create function public.fn_health_score_professor_v3_ator_gerenciador()
   returns integer language sql stable as $$ select null::integer $$;
 
+  create function public.fn_health_score_professor_v3_ator_leitura(uuid)
+  returns integer language sql stable as $$ select null::integer $$;
+
   insert into public.health_score_professor_v3_snapshots (
     id, professor_id, escopo, unidade_id, competencia, trimestre_inicio, revisao,
     estado, config_id, config_versao, score, cobertura, classificacao,

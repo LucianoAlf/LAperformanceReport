@@ -2,7 +2,7 @@
 
 **Data:** 02/08/2026
 
-**Status:** desenho aprovado pelo usuario em 02/08/2026; pronto para implementacao
+**Status:** desenho aprovado; implementação local concluída em 02/08/2026, com rollout e validação final de produção pendentes
 
 **Escopo:** motor V3, configuracao, diagnosticos pedagogicos, mapa de sinais e relatorio mensal da Coordenacao
 

@@ -552,6 +552,19 @@ Crítico < 70% · Atenção 70–79% · OK ≥ 80% (`ModalDetalhesPresenca.tsx`)
 
 ---
 
+### Contrato vigente da nota e dos diagnósticos (02/08/2026)
+
+- `numero_alunos` e carteira são diagnósticos de carga: permanecem visíveis, mas não pontuam e têm peso efetivo zero.
+- Capacidade física por sala/turma/unidade é alerta operacional; excedê-la não reduz a nota do professor.
+- Conversão experimental só pontua com a amostra mínima configurada, inicialmente 3 experimentais. Sem amostra, o pilar sai do denominador.
+- Todo pilar válido participa da nota com peso efetivo normalizado; a soma dos pesos efetivos do professor é 100%.
+- Um pilar não aplicável ou sem evidência nunca equivale a zero. A leitura preserva código, texto, amostra, cobertura, peso original e peso efetivo.
+- Um ou mais pilares válidos permitem score parcial. Ranking e premiação exigem ciclo oficial fechado, cobertura mínima e pilar de fidelização válido.
+- Todos os professores ativos aparecem no read model; ausência de score recebe motivo explícito, não o rótulo genérico `sem base`.
+- Metas por unidade, curso e modalidade permanecem para refletir estruturas diferentes, sem reintroduzir carteira ou capacidade na nota.
+
+O detalhamento completo e as fronteiras do relatório da Coordenação estão em `docs/HEALTH_SCORE_PROFESSOR_V3.md`.
+
 ## Salas
 
 - **Ocupação (%):** soma da `capacidade_maxima` das turmas ativas na sala ÷ `capacidade_maxima` da sala × 100.

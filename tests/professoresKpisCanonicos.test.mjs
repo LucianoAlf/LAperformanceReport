@@ -141,12 +141,12 @@ test('rpc publica encapsula a carteira sem expor tabelas canonicas ao navegador'
   assert.doesNotMatch(migration, /grant\s+select\s+on\s+(table\s+)?public\.aula_alunos_emusys/i);
 });
 
-test('relatorio com IA prioriza health score canonico', () => {
+test('relatorio com IA consome o contrato pedagogico canonico sem recalcular score', () => {
   const edge = readOptional(edgePath);
 
-  assert.match(edge, /parseHealthScoreV3Payload/);
-  assert.match(edge, /isHealthScoreV3Visible/);
-  assert.match(edge, /health_score_v3/);
+  assert.match(edge, /get_relatorio_coordenacao_canonico_v1/);
+  assert.match(edge, /estado_publicacao/);
+  assert.match(edge, /estado_evidencia/);
   assert.doesNotMatch(edge, /calcularHealthScore/);
 });
 

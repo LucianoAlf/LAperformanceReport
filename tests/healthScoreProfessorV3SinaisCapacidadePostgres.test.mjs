@@ -96,6 +96,9 @@ const fixture = `
   create function public.fn_health_score_professor_v3_ator_gerenciador()
   returns integer language sql stable as $$ select null::integer $$;
 
+  create function public.fn_health_score_professor_v3_ator_leitura(uuid)
+  returns integer language sql stable as $$ select null::integer $$;
+
   create function public.get_carteira_professor_periodo_detalhe_canonico_v1(
     p_ano integer, p_mes integer, p_unidade_id uuid,
     p_data_inicio date, p_data_fim date

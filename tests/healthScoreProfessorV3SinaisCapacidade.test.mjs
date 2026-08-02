@@ -62,7 +62,8 @@ test('RPCs diagnosticas preservam autorizacao e isolamento', () => {
 
   assert.match(sql, /security\s+definer/i);
   assert.match(sql, /set\s+search_path\s*=\s*public\s*,\s*pg_temp/i);
-  assert.match(sql, /fn_health_score_professor_v3_ator_gerenciador/i);
+  assert.match(sql, /fn_health_score_professor_v3_ator_leitura/i);
+  assert.doesNotMatch(sql, /fn_health_score_professor_v3_ator_gerenciador/i);
   assert.match(sql, /revoke\s+all[\s\S]*from\s+public\s*,\s*anon/i);
   assert.match(sql, /grant\s+execute[\s\S]*to\s+authenticated\s*,\s*service_role/i);
 });

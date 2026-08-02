@@ -189,7 +189,7 @@ test('gauge e alertas usam score parcial visivel sem liberar ranking oficial', (
     tab.indexOf('const getStatusColor'),
   );
 
-  assert.match(alertasBlock, /filter\(isHealthScoreV3SnapshotVisible\)/);
+  assert.match(alertasBlock, /healthV3SnapshotsAtivos\.map/);
   assert.doesNotMatch(alertasBlock, /filter\(isHealthScoreV3SnapshotRankable\)/);
   assert.match(equipeBlock, /filter\(isHealthScoreV3SnapshotVisible\)/);
   assert.doesNotMatch(equipeBlock, /filter\(isHealthScoreV3SnapshotRankable\)/);
@@ -199,10 +199,9 @@ test('gauge e alertas usam score parcial visivel sem liberar ranking oficial', (
 test('resumo V3 exclui snapshots historicos da equipe ativa', () => {
   const tab = read(performanceTab);
 
-  assert.match(tab, /return p\.unidades\.length > 0/);
   assert.match(tab, /const healthV3SnapshotsAtivos = useMemo/i);
-  assert.match(tab, /new Set\(professores\.map\(\(professor\) => professor\.id\)\)/i);
-  assert.match(tab, /healthV3Snapshots\.filter\(\(snapshot\) => professoresAtivos\.has\(snapshot\.professorId\)\)/i);
+  assert.match(tab, /mergeHealthScoreV3ActiveRoster\(\{/i);
+  assert.match(tab, /professorIds:\s*professores\.map\(\(professor\) => professor\.id\)/i);
 
   const alertasBlock = tab.slice(
     tab.indexOf('const alertas = useMemo'),

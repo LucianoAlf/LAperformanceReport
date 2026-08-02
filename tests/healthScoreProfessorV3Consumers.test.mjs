@@ -32,15 +32,17 @@ test('relatorio e insights individuais recebem V3 sem recalcular a V2', () => {
   assert.doesNotMatch(reportBlock, /calcularHealthScore\s*\(/);
 });
 
-test('relatorio da coordenacao deriva totais das mesmas linhas canonicas dos professores', () => {
+test('relatorio mensal da coordenacao envia filtros e usa o produtor canonico do servidor', () => {
   const modal = read('src/components/App/Professores/ModalRelatorioCoordenacao.tsx');
+  const edge = read('supabase/functions/gemini-relatorio-coordenacao/index.ts');
+  const migration = read('supabase/migrations/20260802192000_relatorio_coordenacao_canonico.sql');
 
-  assert.match(modal, /const totaisCanonicos = calcularTotaisRelatorioCoordenacao\(kpisCanonicos\)/);
-  assert.match(modal, /totais:\s*\{[\s\S]*\.\.\.dadosCanonicos\.totaisCanonicos/);
-  assert.match(modal, /fonte_totais:\s*'kpis_professores_canonicos'/);
-  assert.match(modal, /kpi\.presenca_publicavel[\s\S]*kpi\.presenca_eventos_confirmados\s*>\s*0/);
-  assert.match(modal, /Number\(kpi\.media_presenca\)\s*\*\s*kpi\.presenca_eventos_confirmados/);
-  assert.match(modal, /media_presenca:\s*totalEventosPresenca\s*>\s*0/);
+  assert.match(modal, /gemini-relatorio-coordenacao/);
+  assert.match(modal, /body:\s*\{\s*unidade:\s*unidadeId,\s*ano:\s*anoRelatorio,\s*mes:\s*mesRelatorio\s*\}/);
+  assert.doesNotMatch(modal, /get_dados_relatorio_coordenacao|get_kpis_professor_periodo_canonico/);
+  assert.match(edge, /get_relatorio_coordenacao_canonico_v1/);
+  assert.match(migration, /sum\(\(p #>> '\{metricas,presenca,numerador\}'\)::numeric\)/);
+  assert.match(migration, /sum\(\(p #>> '\{metricas,presenca,denominador\}'\)::numeric\)/);
 });
 
 test('relatorios instantaneos nao dependem da RPC legada do relatorio mensal', () => {
@@ -50,27 +52,29 @@ test('relatorios instantaneos nao dependem da RPC legada do relatorio mensal', (
     modal.indexOf('const regenerarRelatorio'),
   );
 
-  assert.match(instantaneo, /buscarKpisHealthV3RelatorioCoordenacao/);
+  assert.match(instantaneo, /gerarRelatorioCoordenacaoInstantaneo/);
+  assert.match(instantaneo, /professores,/);
   assert.doesNotMatch(instantaneo, /buscarDadosRelatorioCoordenacao/);
   assert.doesNotMatch(instantaneo, /get_dados_relatorio_coordenacao/);
+  assert.doesNotMatch(instantaneo, /supabase\.rpc/);
 });
 
-test('relatorios da coordenacao usam o mesmo recorte de vinculos ativos da Performance', () => {
-  const modal = read('src/components/App/Professores/ModalRelatorioCoordenacao.tsx');
+test('produtor mensal da coordenacao usa o roster ativo da Performance', () => {
+  const migration = read('supabase/migrations/20260802192000_relatorio_coordenacao_canonico.sql');
 
-  assert.match(modal, /filtrarKpisPorVinculosAtivos/);
-  assert.match(modal, /from\('professores'\)[\s\S]*\.eq\('ativo',\s*true\)/);
-  assert.match(modal, /from\('professores_unidades'\)[\s\S]*\.eq\('emusys_ativo',\s*true\)/);
-  assert.match(modal, /\.neq\('validacao_status',\s*'ignorado'\)/);
+  assert.match(migration, /from\s+public\.professores\s+p[\s\S]*p\.ativo\s*=\s*true/i);
+  assert.match(migration, /from\s+public\.professores_unidades\s+pu/i);
+  assert.match(migration, /pu\.emusys_ativo\s*=\s*true/i);
+  assert.match(migration, /validacao_status[\s\S]*<>\s*'ignorado'/i);
 });
 
-test('relatorio IA usa presenca operacional canonica e pondera pelos eventos confirmados', () => {
+test('relatorio mensal usa presenca ponderada calculada pelo produtor canonico', () => {
+  const migration = read('supabase/migrations/20260802192000_relatorio_coordenacao_canonico.sql');
   const edge = read('supabase/functions/gemini-relatorio-coordenacao/index.ts');
 
-  assert.match(edge, /p\.presenca_publicavel\s*===\s*true/);
-  assert.match(edge, /p\.presenca_eventos_confirmados/);
-  assert.match(edge, /p\.media_presenca\s*\*\s*p\.presenca_eventos_confirmados/);
-  assert.doesNotMatch(edge, /presenca\?\.metrica_publicavel\s*\?\s*presenca\.valor_bruto/);
+  assert.match(migration, /'presenca_media'[\s\S]*100\s*\*\s*sum\(\(p #>> '\{metricas,presenca,numerador\}'\)::numeric\)[\s\S]*sum\(\(p #>> '\{metricas,presenca,denominador\}'\)::numeric\)/i);
+  assert.match(edge, /dados\.presenca\.presenca_media/);
+  assert.doesNotMatch(edge, /media_presenca\s*\*\s*presenca_eventos_confirmados/);
 });
 
 test('relatorio instantaneo calcula presenca da equipe pelo total de eventos', async () => {
@@ -123,7 +127,6 @@ test('Analytics exclui vinculo historico e pondera presenca por eventos confirma
 test('geradores pedagogicos consomem V3 e nao recalculam Health Score legado', () => {
   const paths = [
     'supabase/functions/gemini-relatorio-professor-individual/index.ts',
-    'supabase/functions/gemini-relatorio-coordenacao/index.ts',
     'supabase/functions/gemini-insights-professor/index.ts',
     'supabase/functions/gemini-insights-equipe/index.ts',
   ];
@@ -135,6 +138,12 @@ test('geradores pedagogicos consomem V3 e nao recalculam Health Score legado', (
     assert.match(source, /sem_base/i, path);
     assert.doesNotMatch(source, /function calcularHealthScore\s*\(/i, path);
   }
+
+  const coordenacao = read('supabase/functions/gemini-relatorio-coordenacao/index.ts');
+  assert.match(coordenacao, /get_relatorio_coordenacao_canonico_v1/);
+  assert.match(coordenacao, /estado_publicacao/i);
+  assert.match(coordenacao, /estado_evidencia/i);
+  assert.doesNotMatch(coordenacao, /function calcularHealthScore\s*\(/i);
 });
 
 test('ranking V3 falha fechado enquanto o ciclo nao for oficial', () => {

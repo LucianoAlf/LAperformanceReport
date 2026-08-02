@@ -8,6 +8,8 @@
 
 **Tech Stack:** PostgreSQL 17/Supabase RPC, Supabase Edge Functions/Deno/TypeScript, React 19/TypeScript, Node test runner, Vite, Playwright/browser smoke.
 
+**Estado da execução em 02/08/2026:** Tasks 1 a 8 implementadas e verificadas localmente. Task 9 em fechamento documental e de gates. Task 10 pendente de rebase, implantação, PR, merge e smoke no domínio estável. A auditoria real pré-rollout confirmou que Matheus Lana e Valdo Delfino possuem base; os antigos estados genéricos decorriam dos cortes rígidos e da carteira na nota, corrigidos por esta entrega.
+
 ---
 
 ## Entrega e limites
