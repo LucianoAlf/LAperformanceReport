@@ -4,7 +4,13 @@ import { addDays, format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, AlertTriangle, CalendarClock } from 'lucide-react';
 import { useAgendaDia, type AulaAgenda } from '@/hooks/useAgendaDia';
-import { contarEmAulaAgora, diaIncompleto, minutosAgora } from '@/lib/agenda';
+import {
+  contarEmAulaAgora,
+  diaIncompleto,
+  formatarDataCalculo,
+  minutosAgora,
+  riscoDesatualizado,
+} from '@/lib/agenda';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { AgendaTimeline } from './AgendaTimeline';
 import { AgendaDrawer } from './AgendaDrawer';
@@ -62,6 +68,23 @@ export default function AgendaPage() {
     }
     return idsEmRisco.size;
   }, [aulas]);
+
+  // O KPI conta risco calculado pelo modelo (cron calcular-risco-evasao-3d),
+  // que pode estar pausado ha dias — nesse caso o numero acima nao e "agora".
+  // Usa a data de calculo mais recente entre os alunos do dia como referencia
+  // (todos sao pontuados no mesmo lote, entao normalmente coincidem).
+  const dataCalculoRisco = useMemo(() => {
+    let maisRecente: string | null = null;
+    for (const aula of aulas) {
+      for (const aluno of aula.alunos) {
+        if (aluno.risco_calculado_em && (!maisRecente || aluno.risco_calculado_em > maisRecente)) {
+          maisRecente = aluno.risco_calculado_em;
+        }
+      }
+    }
+    return maisRecente;
+  }, [aulas]);
+  const riscoGeralDesatualizado = riscoDesatualizado(dataCalculoRisco, new Date());
 
   // Trocar de unidade no header troca o conjunto de aulas: a selecao antiga
   // sumiu da timeline, mas o drawer continuaria mostrando ela. Mesmo motivo
@@ -123,7 +146,16 @@ export default function AgendaPage() {
         <Kpi rotulo="Em aula agora" valor={String(agora.aulas)} nota={`${agora.salas} salas`} destaque="text-emerald-400" />
         <Kpi rotulo="Canceladas" valor={String(canceladas)} destaque="text-rose-400" />
         <Kpi rotulo="Experimentais" valor={String(experimentais)} />
-        <Kpi rotulo="Alunos em risco" valor={String(emRisco)} destaque="text-amber-400" />
+        <Kpi
+          rotulo="Alunos em risco"
+          valor={String(emRisco)}
+          destaque="text-amber-400"
+          rodape={
+            riscoGeralDesatualizado
+              ? `modelo pausado desde ${formatarDataCalculo(dataCalculoRisco)}`
+              : undefined
+          }
+        />
       </div>
 
       {erro ? (
@@ -157,8 +189,8 @@ export default function AgendaPage() {
   );
 }
 
-function Kpi({ rotulo, valor, nota, destaque }: {
-  rotulo: string; valor: string; nota?: string; destaque?: string;
+function Kpi({ rotulo, valor, nota, destaque, rodape }: {
+  rotulo: string; valor: string; nota?: string; destaque?: string; rodape?: string;
 }) {
   return (
     <div className="bg-slate-900 px-4 py-2.5">
@@ -166,6 +198,7 @@ function Kpi({ rotulo, valor, nota, destaque }: {
       <p className={cn('text-xl font-semibold tabular-nums', destaque)}>
         {valor} {nota && <span className="text-[11.5px] font-normal text-slate-400">{nota}</span>}
       </p>
+      {rodape && <p className="text-[10.5px] text-slate-500">{rodape}</p>}
     </div>
   );
 }

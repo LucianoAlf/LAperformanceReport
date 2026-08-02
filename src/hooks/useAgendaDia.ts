@@ -14,6 +14,7 @@ export interface AlunoAgenda {
   inadimplente: boolean;
   nota_pesquisa: number | null;
   data_ultima_aula: string | null;
+  risco_calculado_em: string | null;
 }
 
 export interface AulaAgenda {

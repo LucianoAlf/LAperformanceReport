@@ -125,3 +125,38 @@ export const DIA_INCOMPLETO_FIM = '2026-08-01';
 export function diaIncompleto(data: string): boolean {
   return data >= DIA_INCOMPLETO_INICIO && data <= DIA_INCOMPLETO_FIM;
 }
+
+// Janela de frescor aceitavel para o risco de evasao (vw_risco_evasao_atual).
+// O cron calcular-risco-evasao-3d roda a cada 3 dias quando ligado; 7 dias da
+// folga para 1-2 execucoes perdidas sem acusar "desatualizado" a toa.
+const RISCO_JANELA_FRESCA_DIAS = 7;
+
+/**
+ * True quando o risco de evasao nao pode ser tratado como calculo recente:
+ * sem data (aluno nunca pontuado) ou calculado ha mais de 7 dias. Compara por
+ * dias corridos (nao por relogio) porque `risco_calculado_em` e uma data, sem
+ * horario.
+ */
+export function riscoDesatualizado(calculadoEm: string | null, agora: Date): boolean {
+  if (!calculadoEm) return true;
+
+  const data = new Date(calculadoEm);
+  if (Number.isNaN(data.getTime())) return true;
+
+  const diasDeDiferenca = Math.floor(
+    (agora.getTime() - data.getTime()) / (1000 * 60 * 60 * 24),
+  );
+  return diasDeDiferenca > RISCO_JANELA_FRESCA_DIAS;
+}
+
+/** 'YYYY-MM-DD' (ou timestamp) -> 'dd/mm'. String vazia quando nao ha data. */
+export function formatarDataCalculo(calculadoEm: string | null): string {
+  if (!calculadoEm) return '';
+
+  const data = new Date(calculadoEm);
+  if (Number.isNaN(data.getTime())) return '';
+
+  const dia = String(data.getUTCDate()).padStart(2, '0');
+  const mes = String(data.getUTCMonth() + 1).padStart(2, '0');
+  return `${dia}/${mes}`;
+}

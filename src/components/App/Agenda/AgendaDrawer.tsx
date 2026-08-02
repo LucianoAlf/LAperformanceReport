@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import type { AlunoAgenda, AulaAgenda } from '@/hooks/useAgendaDia';
+import { formatarDataCalculo, riscoDesatualizado } from '@/lib/agenda';
 
 function corRisco(v: number): string {
   if (v >= 60) return 'text-rose-400';
@@ -38,6 +39,7 @@ export function AgendaDrawer({
   // individual, contradizendo a lista da turma logo abaixo. Por isso o
   // enriquecimento individual so aparece quando a aula tem exatamente 1 aluno.
   const aluno: AlunoAgenda | null = aula.alunos.length === 1 ? aula.alunos[0] : null;
+  const riscoVelho = aluno ? riscoDesatualizado(aluno.risco_calculado_em, new Date()) : false;
 
   return (
     <aside className="flex w-[296px] shrink-0 flex-col gap-3.5 border-l border-slate-700 bg-slate-800/50 p-4">
@@ -86,11 +88,24 @@ export function AgendaDrawer({
           </p>
           <div className="flex flex-col gap-1.5 text-[12.5px]">
             {aluno.risco_pct !== null && (
-              <div className="flex items-center justify-between">
-                <span className="text-slate-300">Risco de evasão</span>
-                <span className={cn('font-semibold tabular-nums', corRisco(aluno.risco_pct))}>
-                  {aluno.risco_pct}%
-                </span>
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-300">Risco de evasão</span>
+                  <span className={cn('font-semibold tabular-nums', corRisco(aluno.risco_pct))}>
+                    {aluno.risco_pct}%
+                    {riscoVelho && (
+                      <span className="ml-1 font-normal text-slate-400">
+                        · {formatarDataCalculo(aluno.risco_calculado_em)}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {riscoVelho && (
+                  <p className="text-right text-[10.5px] text-slate-400">
+                    Modelo pausado desde {formatarDataCalculo(aluno.risco_calculado_em)}
+                    {' '}— número pode não refletir a situação atual
+                  </p>
+                )}
               </div>
             )}
             <div className="flex items-center justify-between">
