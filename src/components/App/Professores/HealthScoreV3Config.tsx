@@ -10,10 +10,12 @@ import {
   Gauge,
   Loader2,
   LockKeyhole,
-  Plus,
+  Pencil,
+  RotateCcw,
   Save,
   Settings2,
   Target,
+  Undo2,
   Users,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -52,8 +54,10 @@ import type {
   HealthScoreV3SegmentGoal,
 } from '@/lib/healthScoreProfessorV3';
 import {
+  buildHealthScoreV3DraftLoadState,
   canSaveHealthScoreV3Draft,
   getHealthScoreV3ActivationBlockers,
+  HEALTH_SCORE_V3_SCORING_METRICS,
 } from '@/lib/healthScoreProfessorV3';
 
 const METRIC_UI: Record<HealthMetricKeyV3, {
@@ -73,7 +77,7 @@ const METRIC_UI: Record<HealthMetricKeyV3, {
 
 const META_STATUS_LABELS: Record<HealthScoreV3MetaStatus, string> = {
   aprovada: 'Aprovada',
-  rascunho: 'Rascunho',
+  rascunho: 'Em definição',
   em_calibracao: 'Em calibração',
   aguardando_dados_reais: 'Aguardando dados',
   bloqueada_ate_inicio: 'Bloqueada até o início',
@@ -182,6 +186,44 @@ function cloneConfig(config: HealthScoreV3Config | null): HealthScoreV3Config | 
   };
 }
 
+function rebalanceScoringWeights(
+  metrics: HealthScoreV3MetricConfig[],
+  changedKey: HealthMetricKeyV3,
+  nextWeight: number,
+) {
+  const current = metrics.find((metric) => metric.metrica === changedKey);
+  if (!current || current.peso === nextWeight) return metrics;
+
+  let remaining = nextWeight - current.peso;
+  const next = metrics.map((metric) => ({ ...metric }));
+  const peers = next
+    .filter((metric) => (
+      metric.metrica !== changedKey
+      && HEALTH_SCORE_V3_SCORING_METRICS.includes(
+        metric.metrica as (typeof HEALTH_SCORE_V3_SCORING_METRICS)[number],
+      )
+    ))
+    .sort((left, right) => right.peso - left.peso);
+
+  for (const peer of peers) {
+    if (remaining === 0) break;
+    if (remaining > 0) {
+      const transferable = Math.min(remaining, Math.max(0, peer.peso - 1));
+      peer.peso -= transferable;
+      remaining -= transferable;
+    } else {
+      const transferable = Math.min(-remaining, Math.max(0, 100 - peer.peso));
+      peer.peso += transferable;
+      remaining += transferable;
+    }
+  }
+
+  if (remaining !== 0) return metrics;
+  const changed = next.find((metric) => metric.metrica === changedKey);
+  if (changed) changed.peso = nextWeight;
+  return next;
+}
+
 interface HealthScoreV3ConfigProps {
   competencia: string;
 }
@@ -198,7 +240,9 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
     createDraft,
     saveDraft,
     simulate,
-    activate,
+    startEditing,
+    restore,
+    apply,
   } = useHealthScoreProfessorV3Config(competencia);
   const [workingConfig, setWorkingConfig] = useState<HealthScoreV3Config | null>(null);
   const [workingSegmentGoals, setWorkingSegmentGoals] = useState<HealthScoreV3SegmentDraftGoal[]>([]);
@@ -267,19 +311,19 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
   }, [draftIsDirty]);
 
   const editable = Boolean(config?.rascunho && workingConfig?.id === config.rascunho.id);
-  const validityCollision = useMemo(
-    () => config?.versoesAtivas.find((version) => (
-      version.id !== config?.ativa?.id
-      && newValidity >= version.vigenciaInicio
-      && (version.vigenciaFim === null || newValidity <= version.vigenciaFim)
-    )) || null,
-    [config?.ativa?.id, config?.versoesAtivas, newValidity],
-  );
   const totalWeight = useMemo(
+    () => workingConfig?.metricas.reduce((total, metric) => (
+      HEALTH_SCORE_V3_SCORING_METRICS.includes(
+        metric.metrica as (typeof HEALTH_SCORE_V3_SCORING_METRICS)[number],
+      ) ? total + metric.peso : total
+    ), 0) || 0,
+    [workingConfig],
+  );
+  const persistedWeight = useMemo(
     () => workingConfig?.metricas.reduce((total, metric) => total + metric.peso, 0) || 0,
     [workingConfig],
   );
-  const weightsAreValid = totalWeight === 100;
+  const weightsAreValid = persistedWeight === 100;
   const hasRequiredTargets = Boolean(workingConfig && GLOBAL_TARGET_METRICS.every((key) => {
     const metric = workingConfig.metricas.find((candidate) => candidate.metrica === key);
     if (!metric) return false;
@@ -317,9 +361,11 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
     if (!editable) return;
     setWorkingConfig((current) => current ? {
       ...current,
-      metricas: current.metricas.map((metric) => (
-        metric.metrica === key ? { ...metric, ...change } : metric
-      )),
+      metricas: typeof change.peso === 'number'
+        ? rebalanceScoringWeights(current.metricas, key, change.peso)
+        : current.metricas.map((metric) => (
+            metric.metrica === key ? { ...metric, ...change } : metric
+          )),
     } : current);
     markDraftChanged();
   };
@@ -330,24 +376,45 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
     markDraftChanged();
   };
 
-  const handleCreateDraft = async () => {
-    if (validityCollision) {
-      toast.error(
-        'Vigência em conflito',
-        `A data escolhida já pertence à versão V${validityCollision.versao}.`,
-      );
-      return;
-    }
-    if (justification.trim().length < 8) {
-      toast.error('Justificativa obrigatória', 'Descreva por que uma nova versão será criada.');
-      return;
-    }
+  const handleStartEditing = async () => {
     try {
-      await createDraft(newValidity, justification.trim());
-      toast.success('Rascunho criado', 'A versão ativa foi clonada sem alterar competências fechadas.');
+      await startEditing();
+      toast.success('Modo de ajuste liberado', 'Você pode editar, simular e aplicar quando estiver satisfeito.');
     } catch {
-      toast.error('Não foi possível criar', 'Revise a vigência e tente novamente.');
+      toast.error('Não foi possível editar', 'Atualize a tela e tente novamente.');
     }
+  };
+
+  const handleUndo = async () => {
+    try {
+      await restore();
+      toast.success('Alterações desfeitas', 'Voltamos ao último ajuste salvo.');
+    } catch {
+      toast.error('Não foi possível desfazer', 'Atualize a tela e tente novamente.');
+    }
+  };
+
+  const handleRestoreActive = () => {
+    if (!config?.ativa || !config.rascunho) return;
+    const active = cloneConfig(config.ativa);
+    if (!active) return;
+    setWorkingConfig({
+      ...active,
+      id: config.rascunho.id,
+      versao: config.rascunho.versao,
+      status: config.rascunho.status,
+      vigenciaInicio: config.rascunho.vigenciaInicio,
+      vigenciaFim: config.rascunho.vigenciaFim,
+      justificativa: config.rascunho.justificativa,
+    });
+    setWorkingSegmentGoals(buildHealthScoreV3DraftLoadState(
+      config.ativa.metasSegmentadas,
+      config.catalogoSegmentos || [],
+    ).matrix);
+    setNewValidity(config.rascunho.vigenciaInicio);
+    setJustification(config.rascunho.justificativa);
+    markDraftChanged();
+    toast.success('Configuração vigente restaurada', 'Revise e simule antes de aplicar.');
   };
 
   const buildDraft = (): HealthScoreV3Config | null => {
@@ -368,7 +435,7 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
       setWorkingConfig(cloneConfig(saved));
       setDraftIsDirty(false);
       setSimulationIsCurrent(false);
-      toast.success('Alterações salvas', 'Pesos e metas ficaram registrados neste rascunho.');
+      toast.success('Ajustes salvos', 'Pesos e metas ficaram prontos para simulação.');
     } catch {
       toast.error('Não foi possível salvar', 'Confira os pesos, metas e estados dos pilares.');
     }
@@ -376,9 +443,12 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
 
   const handleSimulate = async () => {
     const draft = buildDraft();
-    if (!draft || !draftIsValid || draftIsDirty) return;
+    if (!draft || !draftIsValid) return;
     try {
-      await simulate(draft.id, simulationMonth);
+      const saved = draftIsDirty ? await saveDraft(draft) : draft;
+      setWorkingConfig(cloneConfig(saved));
+      setDraftIsDirty(false);
+      await simulate(saved.id, simulationMonth);
       setSimulationIsCurrent(true);
       toast.success('Simulação concluída', 'Nenhum snapshot ou consumidor produtivo foi alterado.');
     } catch {
@@ -390,11 +460,11 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
     const draft = buildDraft();
     if (!draft || !canActivate) return;
     try {
-      await activate(draft.id, justification.trim());
-      toast.success('Versão ativada', `A nova regra passa a valer em ${newValidity}.`);
+      await apply(draft.id, justification.trim());
+      toast.success('Configuração aplicada', `A nova regra passa a valer em ${newValidity}.`);
       setJustification('');
     } catch {
-      toast.error('Ativação bloqueada', 'A versão precisa estar válida e simulada antes da ativação.');
+      toast.error('Aplicação bloqueada', 'A configuração precisa estar válida e simulada antes de aplicar.');
     }
   };
 
@@ -440,7 +510,7 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-white">Health Score V3</h3>
               <Badge variant={editable ? 'warning' : 'success'}>
-                {editable ? 'Rascunho' : 'Configuração ativa'}
+                {editable ? 'Modo de ajuste' : 'Configuração vigente'}
               </Badge>
             </div>
             <p className="mt-0.5 text-xs text-slate-400">Configuração versionada de pesos e metas</p>
@@ -449,7 +519,7 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
         <div className="flex items-center gap-2 text-xs text-slate-400">
           <LockKeyhole className="h-4 w-4" />
           {workingConfig
-            ? `${editable ? 'Rascunho' : 'Versão vigente'} ${workingConfig.versao}`
+            ? `${editable ? 'Ajuste' : 'Versão vigente'} V${workingConfig.versao}`
             : 'Sem versão vigente'}
         </div>
       </header>
@@ -502,14 +572,14 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-slate-100">
-                      Somente leitura
+                      Configuração vigente protegida
                     </p>
                     <p className="mt-1 text-xs leading-5 text-slate-400">
                       Competência selecionada: <strong className="font-semibold text-slate-200">
                         {competenceLabel(competencia)}
                       </strong>. A versão {workingConfig.versao} governa este recorte
                       de {workingConfig.vigenciaInicio} até {workingConfig.vigenciaFim || 'sem data final'}.
-                      Para alterar pesos ou metas, crie uma nova versão auditável.
+                      Entre no modo de ajuste para testar pesos e metas sem alterar fechamentos anteriores.
                     </p>
                   </div>
                 </div>
@@ -518,45 +588,20 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
                 </Badge>
               </div>
 
-              <div className="grid gap-3 border-t border-cyan-500/15 pt-4 md:grid-cols-[180px_1fr_auto] md:items-end">
-                <div className="space-y-1 text-xs font-medium text-slate-300">
-                  Nova vigência
-                  <DatePicker
-                    date={dateFromIso(newValidity)}
-                    onDateChange={(date) => setNewValidity(isoFromDate(date))}
-                    className="mt-1 h-10 rounded-md border-slate-700 bg-slate-900"
-                  />
-                </div>
-                <label className="space-y-1 text-xs font-medium text-slate-300">
-                  Motivo da nova versão
-                  <Input
-                    value={justification}
-                    onChange={(event) => setJustification(event.target.value)}
-                    placeholder="Ex.: ajuste homologado para a próxima vigência"
-                    className="mt-1 border-slate-700 bg-slate-900"
-                  />
-                </label>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-cyan-500/15 pt-4">
+                <p className="max-w-2xl text-xs leading-5 text-cyan-100/80">
+                  A edição acontece em um laboratório seguro. Você decide quando simular e quando aplicar;
+                  o histórico continua preservado automaticamente.
+                </p>
                 <Button
-                  onClick={handleCreateDraft}
-                  disabled={mutating || !config?.ativa || Boolean(validityCollision)}
+                  onClick={handleStartEditing}
+                  disabled={mutating || !config?.ativa}
                   className="h-10"
                 >
-                  {mutating ? <Loader2 className="animate-spin" /> : <Plus />}
-                  Criar rascunho
+                  {mutating ? <Loader2 className="animate-spin" /> : <Pencil />}
+                  Editar configuração
                 </Button>
               </div>
-              {validityCollision ? (
-                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                  A data escolhida pertence à versão V{validityCollision.versao}, vigente de{' '}
-                  {validityCollision.vigenciaInicio} até {validityCollision.vigenciaFim || 'sem data final'}.
-                  Para alterar essa versão, selecione uma competência governada por ela.
-                </div>
-              ) : (
-                <p className="text-xs text-cyan-200/80">
-                  O rascunho substituirá a V{workingConfig.versao} a partir de{' '}
-                  {workingConfig.vigenciaInicio}; a versão atual permanece preservada no histórico.
-                </p>
-              )}
             </div>
           )}
 
@@ -573,7 +618,7 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
                       ? unsavedSegmentCount > 0
                         ? `${unsavedSegmentCount} ${unsavedSegmentCount === 1 ? 'alteração não salva' : 'alterações não salvas'}`
                         : 'Alterações não salvas'
-                      : 'Rascunho salvo'}
+                      : 'Ajuste salvo'}
                   </p>
                   <p className="text-xs text-slate-400">
                     {draftIsDirty
@@ -582,15 +627,35 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
                   </p>
                 </div>
               </div>
-              <Button
-                type="button"
-                onClick={handleSave}
-                disabled={mutating || !draftIsDirty || !draftIsValid}
-                className="h-10 shrink-0"
-              >
-                {mutating ? <Loader2 className="animate-spin" /> : <Save />}
-                Salvar alterações
-              </Button>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleUndo}
+                  disabled={mutating || !draftIsDirty}
+                >
+                  <Undo2 />
+                  Desfazer
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleRestoreActive}
+                  disabled={mutating || !config?.ativa}
+                >
+                  <RotateCcw />
+                  Restaurar vigente
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={mutating || !draftIsDirty || !draftIsValid}
+                  className="h-10 shrink-0"
+                >
+                  {mutating ? <Loader2 className="animate-spin" /> : <Save />}
+                  Salvar ajuste
+                </Button>
+              </div>
             </div>
           )}
 
@@ -599,12 +664,16 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
               <p className="text-[11px] font-semibold uppercase text-slate-500">Pesos dos pilares</p>
             </div>
             <Badge variant={weightsAreValid ? 'success' : 'error'}>
-              Total {totalWeight}% {weightsAreValid ? 'válido' : 'precisa fechar em 100%'}
+              {totalWeight} pontos {weightsAreValid ? '• normalizados para 100% na nota' : '• revisar distribuição'}
             </Badge>
           </div>
 
           <div className="grid border-y border-slate-800 md:grid-cols-2 xl:grid-cols-3">
-            {workingConfig.metricas.map((metric) => {
+            {workingConfig.metricas.filter((metric) => (
+              HEALTH_SCORE_V3_SCORING_METRICS.includes(
+                metric.metrica as (typeof HEALTH_SCORE_V3_SCORING_METRICS)[number],
+              )
+            )).map((metric) => {
               const visual = METRIC_UI[metric.metrica];
               const Icon = visual.icon;
               return (
@@ -631,6 +700,23 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
                 </label>
               );
             })}
+          </div>
+
+          <div className="space-y-3 rounded-md border border-violet-500/20 bg-violet-500/5 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-violet-300" />
+                <p className="text-sm font-semibold text-slate-100">Diagnósticos</p>
+              </div>
+              <Badge variant="outline" className="border-violet-500/30 text-violet-200">
+                Não altera a nota
+              </Badge>
+            </div>
+            <p className="text-xs leading-5 text-slate-400">
+              A carteira do professor continua visível para diagnosticar carga, maturação,
+              concentração e oportunidade de distribuição. A referência permanece segmentada
+              por unidade, curso e modalidade, mas fica fora dos sliders de peso.
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
@@ -793,33 +879,38 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
                   <Button
                     variant="secondary"
                     onClick={handleSimulate}
-                    disabled={mutating || !draftIsValid || draftIsDirty}
+                    disabled={mutating || !draftIsValid}
                   >
                     <Beaker />
-                    Simular impacto
+                    Simular
                   </Button>
                   <Button onClick={handleActivate} disabled={mutating || !canActivate}>
                     <CheckCircle2 />
-                    Ativar versão
+                    Aplicar configuração
                   </Button>
                 </div>
               </div>
 
               {simulationIsCurrent && simulation && (
-                <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-slate-800 bg-slate-800 sm:grid-cols-6">
-                  {[
-                    ['Professores', simulation.total],
-                    ['Saudáveis', simulation.saudaveis],
-                    ['Atenção', simulation.atencao],
-                    ['Críticos', simulation.criticos],
-                    ['Sem base', simulation.semBase],
-                    ['Média', simulation.scoreMedio ?? '—'],
-                  ].map(([label, value]) => (
-                    <div key={label} className="bg-slate-950 px-3 py-3 text-center">
-                      <p className="text-lg font-semibold text-white">{value}</p>
-                      <p className="text-[11px] text-slate-500">{label}</p>
-                    </div>
-                  ))}
+                <div className="space-y-3">
+                  <div className="rounded-md border border-violet-500/25 bg-violet-500/10 px-3 py-2 text-xs font-medium text-violet-100">
+                    Simulação parcial - não oficial. Nenhum fechamento ou ranking foi alterado.
+                  </div>
+                  <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-slate-800 bg-slate-800 sm:grid-cols-6">
+                    {[
+                      ['Professores', simulation.total],
+                      ['Saudáveis', simulation.saudaveis],
+                      ['Atenção', simulation.atencao],
+                      ['Críticos', simulation.criticos],
+                      ['Sem base', simulation.semBase],
+                      ['Média', simulation.scoreMedio ?? '—'],
+                    ].map(([label, value]) => (
+                      <div key={label} className="bg-slate-950 px-3 py-3 text-center">
+                        <p className="text-lg font-semibold text-white">{value}</p>
+                        <p className="text-[11px] text-slate-500">{label}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -831,9 +922,9 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
       <AlertDialog open={discardDialogOpen} onOpenChange={setDiscardDialogOpen}>
         <AlertDialogContent className="rounded-lg border-slate-700 bg-slate-900">
           <AlertDialogHeader>
-            <AlertDialogTitle>Descartar alterações?</AlertDialogTitle>
+            <AlertDialogTitle>Descartar alterações locais?</AlertDialogTitle>
             <AlertDialogDescription>
-              As mudanças deste rascunho ainda não foram salvas. Você pode continuar editando ou sair sem gravá-las.
+              As mudanças deste ajuste ainda não foram salvas. Você pode continuar editando ou sair sem gravá-las.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

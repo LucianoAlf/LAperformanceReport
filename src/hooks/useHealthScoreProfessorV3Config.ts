@@ -24,6 +24,9 @@ interface UseHealthScoreProfessorV3ConfigReturn {
   saveDraft: (draft: HealthScoreV3Config) => Promise<HealthScoreV3Config>;
   simulate: (configId: string, competencia: string) => Promise<HealthScoreV3Simulation>;
   activate: (configId: string, justificativa: string) => Promise<HealthScoreV3Config>;
+  startEditing: () => Promise<void>;
+  restore: () => Promise<void>;
+  apply: (configId: string, justificativa: string) => Promise<HealthScoreV3Config>;
 }
 
 function messageFrom(error: unknown): string {
@@ -134,6 +137,17 @@ export function useHealthScoreProfessorV3Config(
     }
   }, [config?.ativa?.id, refresh]);
 
+  const startEditing = useCallback(async (): Promise<void> => {
+    if (config?.rascunho) return;
+    if (!config?.ativa) {
+      throw new Error('Nao existe configuracao vigente para iniciar o ajuste.');
+    }
+    await createDraft(
+      config.ativa.vigenciaInicio,
+      'Ajuste no laboratorio do Health Score V3',
+    );
+  }, [config?.ativa, config?.rascunho, createDraft]);
+
   const saveDraft = useCallback(async (draft: HealthScoreV3Config) => {
     setMutating(true);
     setError(null);
@@ -202,6 +216,16 @@ export function useHealthScoreProfessorV3Config(
     }
   }, [refresh]);
 
+  const restore = useCallback(async (): Promise<void> => {
+    setSimulation(null);
+    await refresh();
+  }, [refresh]);
+
+  const apply = useCallback(
+    (configId: string, justificativa: string) => activate(configId, justificativa),
+    [activate],
+  );
+
   return {
     config,
     simulation,
@@ -214,5 +238,8 @@ export function useHealthScoreProfessorV3Config(
     saveDraft,
     simulate,
     activate,
+    startEditing,
+    restore,
+    apply,
   };
 }

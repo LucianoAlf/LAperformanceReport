@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   CircleHelp,
   CircleOff,
+  Copy,
   Filter,
   GraduationCap,
   LockKeyhole,
@@ -495,6 +496,7 @@ export function HealthScoreV3MetasSegmentadas({
   const [courseFilter, setCourseFilter] = useState('todos');
   const [modalityFilter, setModalityFilter] = useState<'todas' | HealthScoreV3Modalidade>('todas');
   const [pendingFilter, setPendingFilter] = useState<PendingFilter>('todas');
+  const [copyTargetUnitId, setCopyTargetUnitId] = useState('');
   const matrix = useMemo(
     () => buildDraftMatrixRows(metas, pendencias, superlotacoes),
     [metas, pendencias, superlotacoes],
@@ -562,6 +564,31 @@ export function HealthScoreV3MetasSegmentadas({
     onMetasChange(found ? nextMetas : [...nextMetas, nextGoal]);
   };
 
+  const copyToAnotherUnit = () => {
+    if (!editable || disabled || !copyTargetUnitId || copyTargetUnitId === activeUnitId) return;
+    const sourceGoals = new Map(
+      metas
+        .filter((goal) => goal.unidadeId === activeUnitId && goal.estado === 'configurada')
+        .map((goal) => [`${goal.cursoId}|${goal.modalidade}`, goal]),
+    );
+    if (sourceGoals.size === 0) return;
+
+    onMetasChange(metas.map((goal) => {
+      if (goal.unidadeId !== copyTargetUnitId) return goal;
+      const source = sourceGoals.get(`${goal.cursoId}|${goal.modalidade}`);
+      if (!source || source.estado !== 'configurada') return goal;
+      return {
+        ...goal,
+        estado: 'configurada',
+        capacidadeMaxima: source.capacidadeMaxima,
+        metaMediaTurma: source.metaMediaTurma,
+        metaCarteiraCurso: source.metaCarteiraCurso,
+        tocada: true,
+      };
+    }));
+    setCopyTargetUnitId('');
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -578,7 +605,7 @@ export function HealthScoreV3MetasSegmentadas({
           {!editable && (
             <Badge variant="outline" className="gap-1 border-slate-700 text-slate-300">
               <LockKeyhole className="h-3 w-3" />
-              Somente leitura
+              Visualização vigente
             </Badge>
           )}
         </div>
@@ -626,12 +653,12 @@ export function HealthScoreV3MetasSegmentadas({
           tooltip="Segmentos observados ou atribuídos que ainda não possuem uma meta exata."
         />
         <CounterItem
-          label={versionState === 'active' ? 'Metas ativas' : 'Salvas no rascunho'}
+          label={versionState === 'active' ? 'Metas ativas' : 'Ajustes salvos'}
           value={counters.salvasRascunho}
           tone="cyan"
           tooltip={versionState === 'active'
             ? 'Metas vigentes na configuração ativa exibida.'
-            : 'Metas já persistidas na versão de rascunho exibida.'}
+            : 'Metas já persistidas no ajuste em edição.'}
         />
         <CounterItem
           label="Acima da capacidade"
@@ -705,6 +732,33 @@ export function HealthScoreV3MetasSegmentadas({
             <SelectItem value="superlotacao">Acima da capacidade</SelectItem>
           </SelectContent>
         </Select>
+        {editable && (
+          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+            <Select value={copyTargetUnitId} onValueChange={setCopyTargetUnitId}>
+              <SelectTrigger
+                aria-label="Unidade de destino da cópia"
+                className="h-9 w-full rounded-md border-slate-700 bg-slate-900 sm:w-[190px]"
+              >
+                <SelectValue placeholder="Unidade de destino" />
+              </SelectTrigger>
+              <SelectContent>
+                {units.filter((unit) => unit.id !== activeUnitId).map((unit) => (
+                  <SelectItem key={unit.id} value={unit.id}>{unit.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!copyTargetUnitId || disabled}
+              onClick={copyToAnotherUnit}
+            >
+              <Copy className="h-3.5 w-3.5" />
+              Copiar para outra unidade
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="overflow-x-auto border-b border-slate-800">
@@ -713,9 +767,9 @@ export function HealthScoreV3MetasSegmentadas({
             <tr className="border-b border-slate-800 bg-slate-950/50 text-slate-400">
               <th className="w-[190px] px-3 py-2 font-medium">Curso</th>
               <th className="w-[125px] px-3 py-2 font-medium">Modalidade</th>
-              <th className="w-[150px] px-3 py-2 font-medium">Capacidade máxima</th>
-              <th className="w-[170px] px-3 py-2 font-medium">Meta média/turma</th>
-              <th className="w-[155px] px-3 py-2 font-medium">Meta carteira</th>
+              <th className="w-[180px] px-3 py-2 font-medium">Capacidade estimada (fallback)</th>
+              <th className="w-[190px] px-3 py-2 font-medium">Meta média/turma (nota)</th>
+              <th className="w-[205px] px-3 py-2 font-medium">Referência de carteira (diagnóstico)</th>
               <th className="w-[170px] px-3 py-2 font-medium">Configuração</th>
               <th className="w-[205px] px-3 py-2 font-medium">Validação de capacidade</th>
               <th className="w-[210px] px-3 py-2 font-medium">Ação</th>
@@ -1000,7 +1054,7 @@ function SegmentStateBadge({
     return (
       <Badge variant="success" className="gap-1">
         <CheckCircle2 className="h-3 w-3" />
-        {versionState === 'active' ? 'Configuração ativa' : 'Salva no rascunho'}
+        {versionState === 'active' ? 'Configuração ativa' : 'Ajuste salvo'}
       </Badge>
     );
   }

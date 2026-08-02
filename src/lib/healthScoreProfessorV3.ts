@@ -7,6 +7,18 @@ export const HEALTH_SCORE_V3_METRICS = [
   'presenca',
 ] as const;
 
+export const HEALTH_SCORE_V3_SCORING_METRICS = [
+  'retencao',
+  'permanencia',
+  'conversao',
+  'media_turma',
+  'presenca',
+] as const;
+
+export const HEALTH_SCORE_V3_DIAGNOSTICS = [
+  'numero_alunos',
+] as const;
+
 export type HealthMetricKeyV3 = (typeof HEALTH_SCORE_V3_METRICS)[number];
 export type HealthScoreV3MetricRole = 'nota' | 'diagnostico';
 
