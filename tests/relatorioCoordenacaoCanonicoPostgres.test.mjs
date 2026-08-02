@@ -162,4 +162,3 @@ test('produtor inclui toda a equipe e não expõe finanças', { timeout: 90_000 
     assert.equal(serialized.includes(forbidden), false, `payload não pode conter ${forbidden}`);
   }
 });
-

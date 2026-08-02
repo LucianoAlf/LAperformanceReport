@@ -40,7 +40,6 @@ test('produtor mensal da Coordenacao nasce no servidor e devolve contrato versio
   assert.match(sql, /ranking_habilitado/i);
   assert.match(sql, /estado_publicacao\s*=\s*'oficial'/i);
 });
-
 test('Edge busca o contrato com o JWT e limita a IA a narrativa', () => {
   const source = fs.readFileSync(edgePath, 'utf8');
 

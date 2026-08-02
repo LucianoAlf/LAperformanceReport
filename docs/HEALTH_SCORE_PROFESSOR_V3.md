@@ -58,4 +58,3 @@ A IA pode apenas redigir resumo, conquistas, pontos de atenção e plano de aç�
 ## Limites desta entrega
 
 Fábio e LA Teacher não recebem score bruto, ranking, comparação pública ou dados financeiros. Integrações proativas, relatórios semanais e relatórios diários pedagógicos ficam para uma etapa posterior, sempre consumindo o mesmo contrato canônico e respeitando o escopo do professor autenticado.
-
