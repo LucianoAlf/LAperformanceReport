@@ -37,7 +37,7 @@ export interface HealthScoreV3ProfessorPerformance {
   periodoInicio: string;
   periodoFim: string;
   cicloCodigo: string;
-  estadoPublicacao: 'parcial' | 'oficial' | 'sem_base';
+  estadoPublicacao: 'em_andamento' | 'parcial' | 'oficial' | 'sem_base';
   scoreExibivel: boolean;
   rankingHabilitado: boolean;
   configVersao: number;
@@ -78,6 +78,8 @@ const HEALTH_SCORE_V3_EVIDENCE_MESSAGES: Record<string, string> = {
   segmentacao_incompleta: 'Vínculo de curso ou modalidade precisa de revisão',
   fonte_canonica_indisponivel: 'Dados oficiais do período ainda não disponíveis',
   metrica_nao_aplicavel: 'Indicador não aplicável a este professor',
+  referencia_periodo_anterior: 'Referência temporária do período anterior',
+  competencia_em_andamento: 'Competência em andamento',
 };
 
 export function resolveHealthScoreV3EvidenceMessage(
@@ -206,11 +208,20 @@ export function resolveHealthScoreV3UiStatus(snapshot: Pick<
   if (!snapshot || snapshot.score === null || !snapshot.scoreExibivel) {
     return 'evidencia_pendente';
   }
-  if (snapshot.estadoPublicacao !== 'oficial') return 'parcial';
   if (snapshot.classificacao === 'critico') return 'critico';
   if (snapshot.classificacao === 'atencao') return 'atencao';
   if (snapshot.classificacao === 'saudavel') return 'saudavel';
   return 'evidencia_pendente';
+}
+
+export function resolveHealthScoreV3PublicationLabel(snapshot: Pick<
+  HealthScoreV3ProfessorPerformance,
+  'estadoPublicacao'
+> | null | undefined): string {
+  if (snapshot?.estadoPublicacao === 'em_andamento') return 'Em andamento';
+  if (snapshot?.estadoPublicacao === 'oficial') return 'Oficial';
+  if (snapshot?.estadoPublicacao === 'parcial') return 'Parcial';
+  return 'Sem evidência';
 }
 
 export function resolveHealthScoreV3ScoreStatus(snapshot: Pick<
@@ -239,7 +250,11 @@ export function formatHealthScoreV3BaseNumber(
 export type HealthScoreV3MetricDisplayState =
   | 'normal'
   | 'observado'
-  | 'provisorio'
+  | 'diagnostico'
+  | 'amostra_em_formacao'
+  | 'ciclo_em_acompanhamento'
+  | 'em_apuracao'
+  | 'referencia_anterior'
   | 'auditoria'
   | 'sem_base';
 
@@ -249,6 +264,7 @@ export interface HealthScoreV3MetricDisplay {
   state: HealthScoreV3MetricDisplayState;
   rankable: boolean;
   metric: HealthScoreV3PerformanceMetric | null;
+  referenceCompetence: string | null;
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -377,28 +393,51 @@ export function resolveHealthScoreV3MetricDisplay(
 ): HealthScoreV3MetricDisplay {
   const metric = snapshot.metrics.get(metricKey) || null;
   if (!metric) {
-    return { value: null, observedValue: null, state: 'sem_base', rankable: false, metric };
+    return {
+      value: null,
+      observedValue: null,
+      state: 'sem_base',
+      rankable: false,
+      metric,
+      referenceCompetence: null,
+    };
+  }
+
+  const isPriorReference = metric.detalhes.referencia_temporaria === true;
+  const referenceCompetence = typeof metric.detalhes.competencia_referencia === 'string'
+    ? metric.detalhes.competencia_referencia
+    : null;
+  if (isPriorReference) {
+    return {
+      value: metric.valorBruto,
+      observedValue: null,
+      state: 'referencia_anterior',
+      rankable: false,
+      metric,
+      referenceCompetence,
+    };
   }
 
   if (metricKey === 'presenca') {
     const observedValue = asNullableNumber(metric.detalhes.valor_observado);
     const publication = String(metric.detalhes.observacao_publicacao || '');
     if (publication === 'em_auditoria') {
-      return { value: null, observedValue, state: 'auditoria', rankable: false, metric };
+      return { value: null, observedValue, state: 'auditoria', rankable: false, metric, referenceCompetence: null };
     }
     if (metric.valorBruto !== null) {
       return {
         value: metric.valorBruto,
         observedValue,
-        state: metric.metricaPublicavel ? 'normal' : 'provisorio',
+        state: metric.metricaPublicavel ? 'normal' : 'em_apuracao',
         rankable: metric.metricaPublicavel,
         metric,
+        referenceCompetence: null,
       };
     }
     if (publication === 'normal' && observedValue !== null) {
-      return { value: observedValue, observedValue, state: 'observado', rankable: false, metric };
+      return { value: observedValue, observedValue, state: 'observado', rankable: false, metric, referenceCompetence: null };
     }
-    return { value: null, observedValue, state: 'sem_base', rankable: false, metric };
+    return { value: null, observedValue, state: 'sem_base', rankable: false, metric, referenceCompetence: null };
   }
 
   const value = metricKey === 'numero_alunos' && metric.valorBruto === null
@@ -406,11 +445,26 @@ export function resolveHealthScoreV3MetricDisplay(
     : metric.valorBruto;
 
   if (value === null) {
-    return { value: null, observedValue: null, state: 'sem_base', rankable: false, metric };
+    return { value: null, observedValue: null, state: 'sem_base', rankable: false, metric, referenceCompetence: null };
   }
 
   if (metric.metricaPublicavel) {
-    return { value, observedValue: null, state: 'normal', rankable: true, metric };
+    return { value, observedValue: null, state: 'normal', rankable: true, metric, referenceCompetence: null };
+  }
+
+  if (metric.papel === 'diagnostico' || metricKey === 'numero_alunos') {
+    return { value, observedValue: null, state: 'diagnostico', rankable: false, metric, referenceCompetence: null };
+  }
+
+  if (
+    metricKey === 'conversao'
+    && (metric.detalhes.fora_do_score === true || metric.detalhes.provisorio_ciclo === true)
+  ) {
+    return { value, observedValue: null, state: 'ciclo_em_acompanhamento', rankable: false, metric, referenceCompetence: null };
+  }
+
+  if (metric.codigoEvidencia === 'amostra_insuficiente') {
+    return { value, observedValue: null, state: 'amostra_em_formacao', rankable: false, metric, referenceCompetence: null };
   }
 
   const auditState = metric.estadoBase === 'revisar'
@@ -419,9 +473,10 @@ export function resolveHealthScoreV3MetricDisplay(
   return {
     value,
     observedValue: null,
-    state: auditState ? 'auditoria' : 'provisorio',
+    state: auditState ? 'auditoria' : 'em_apuracao',
     rankable: false,
     metric,
+    referenceCompetence: null,
   };
 }
 

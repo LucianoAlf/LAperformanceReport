@@ -31,6 +31,7 @@ import {
 import {
   formatHealthScoreV3BaseNumber,
   resolveHealthScoreV3EvidenceMessage,
+  resolveHealthScoreV3PublicationLabel,
   serializeHealthScoreV3ForAi,
 } from '@/lib/healthScoreProfessorV3Performance';
 
@@ -58,6 +59,28 @@ function formatV3Value(metric: HealthMetricKeyV3, value: number | null): string 
 function formatV3State(value: string | null | undefined): string {
   if (!value) return 'Evidência pendente';
   return value.replace(/_/g, ' ');
+}
+
+function formatV3ReferenceMonth(value: unknown): string {
+  if (typeof value !== 'string' || !value) return 'mês anterior';
+  const parsed = new Date(`${value.slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return 'mês anterior';
+  const formatted = parsed.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1).replace('.', '');
+}
+
+function getV3MetricStateLabel(metric: HealthScoreV3SnapshotMetric): string {
+  if (metric.detalhes.referencia_temporaria === true) {
+    return `Base de ${formatV3ReferenceMonth(metric.detalhes.competencia_referencia)}`;
+  }
+  if (metric.papel === 'diagnostico' || metric.metrica === 'numero_alunos') return 'Diagnóstico';
+  if (metric.codigoEvidencia === 'amostra_insuficiente') return 'Amostra em formação';
+  if (
+    metric.metrica === 'conversao'
+    && (metric.detalhes.fora_do_score === true || metric.detalhes.provisorio_ciclo === true)
+  ) return 'Ciclo em acompanhamento';
+  if (!metric.metricaPublicavel && metric.valorBruto !== null) return 'Em apuração';
+  return formatV3State(metric.estadoBase);
 }
 
 function formatV3Base(metric: HealthScoreV3SnapshotMetric): string | null {
@@ -134,7 +157,7 @@ function getV3ObservedValue(metric: HealthScoreV3SnapshotMetric): V3ObservedValu
       evidenceLabel,
       note: emAuditoria
         ? `${coberturaLabel}; valor observado preservado para auditoria e não publicado como indicador.`
-        : `${coberturaLabel}; pontuação começa em 03/08 e permanece fora do score.`,
+        : `${coberturaLabel}; valor acompanha os eventos do mês e permanece fora do score até cumprir a política de publicação.`,
     };
   }
 
@@ -142,6 +165,9 @@ function getV3ObservedValue(metric: HealthScoreV3SnapshotMetric): V3ObservedValu
 }
 
 function getV3Transparency(metric: HealthScoreV3SnapshotMetric): string | null {
+  if (metric.detalhes.referencia_temporaria === true) {
+    return `Base de ${formatV3ReferenceMonth(metric.detalhes.competencia_referencia)} — Aguardando eventos da competência atual. Esta referência não compõe a nota atual.`;
+  }
   const explicit = metric.detalhes.transparencia_exclusao;
   if (typeof explicit === 'string' && explicit.trim()) return explicit;
 
@@ -214,7 +240,7 @@ function HealthScoreV3MetricsPanel({
           <div className="flex items-center gap-2">
             <Heart className="h-4 w-4 text-violet-400" />
             <p className="text-sm font-semibold text-white">
-              {snapshot.estadoPublicacao === 'oficial' ? 'Health Score V3 oficial' : 'Health Score parcial'}
+              Health Score V3 — {resolveHealthScoreV3PublicationLabel(snapshot)}
             </p>
           </div>
           <p className="mt-1 text-xs text-slate-400">Recorte: {recorte} | Configuração V{snapshot.configVersao}</p>
@@ -267,7 +293,7 @@ function HealthScoreV3MetricsPanel({
               <div className="flex items-start justify-between gap-2">
                 <p className="text-xs font-semibold text-slate-300">{HEALTH_SCORE_V3_LABELS[key]}</p>
                 <span className="rounded bg-slate-900/80 px-1.5 py-0.5 text-[10px] text-slate-400">
-                  {observed?.stateLabel ?? formatV3State(metric.estadoBase)}
+                  {observed?.stateLabel ?? getV3MetricStateLabel(metric)}
                 </span>
               </div>
               <p className={`mt-2 text-xl font-bold ${observedInAudit ? 'text-amber-300' : displayValue === null ? 'text-slate-500' : 'text-white'}`}>
@@ -961,7 +987,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                 : 'text-slate-400 bg-slate-500/20'
             }`}>
               {HEALTH_SCORE_V3_MODAL_ENABLED
-                ? (healthScoreV3Metrics[0]?.estadoPublicacao === 'oficial' ? 'V3 oficial' : 'V3 parcial')
+                ? `V3 ${resolveHealthScoreV3PublicationLabel(healthScoreV3Metrics[0] ?? null).toLowerCase()}`
                 : healthScorePublicavel
                 ? (professor.status === 'critico' ? 'Crítico' : professor.status === 'atencao' ? 'Atenção' : 'Excelente')
                 : 'Em auditoria'}

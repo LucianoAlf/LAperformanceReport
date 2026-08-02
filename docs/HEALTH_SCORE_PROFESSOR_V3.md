@@ -58,3 +58,15 @@ A IA pode apenas redigir resumo, conquistas, pontos de atenção e plano de aç�
 ## Limites desta entrega
 
 Fábio e LA Teacher não recebem score bruto, ranking, comparação pública ou dados financeiros. Integrações proativas, relatórios semanais e relatórios diários pedagógicos ficam para uma etapa posterior, sempre consumindo o mesmo contrato canônico e respeitando o escopo do professor autenticado.
+
+## Competência mensal em andamento
+
+O mês corrente é uma projeção canônica somente leitura. Carteira, média por turma, retenção e permanência usam os dados atuais disponíveis. Presença e conversão também avançam com os eventos do mês; enquanto ainda não houver evento atual, a interface pode exibir a última competência disponível como referência, identificada por `referencia_periodo_anterior`. Essa referência nunca compõe a nota atual.
+
+O estado da competência é separado da classificação pedagógica:
+
+- `Em andamento`: projeção viva do mês aberto, sem ranking;
+- `Parcial`: snapshot diagnóstico ainda não fechado;
+- `Oficial`: ciclo fechado e elegível às regras de publicação.
+
+A nota de média por turma reutiliza a normalização segmentada por unidade, curso e modalidade. Retenção, presença e conversão preservam o percentual real; permanência é normalizada pela meta versionada. O cálculo ao vivo e a materialização oficial usam os mesmos pesos efetivos e o mesmo motor de score. Snapshots fechados e históricos permanecem imutáveis.

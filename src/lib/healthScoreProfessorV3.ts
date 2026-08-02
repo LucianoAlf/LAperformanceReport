@@ -228,7 +228,7 @@ export interface HealthScoreV3SnapshotMetric {
   periodoInicio: string;
   periodoFim: string;
   cicloCodigo: string;
-  estadoPublicacao: 'parcial' | 'oficial' | 'sem_base';
+  estadoPublicacao: 'em_andamento' | 'parcial' | 'oficial' | 'sem_base';
   scoreExibivel: boolean;
   rankingHabilitado: boolean;
   configVersao: number;

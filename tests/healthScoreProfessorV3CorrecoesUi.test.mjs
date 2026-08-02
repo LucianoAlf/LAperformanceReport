@@ -27,10 +27,11 @@ test('modal usa formatador seguro compartilhado para dados incompletos', () => {
   assert.doesNotMatch(source, /function formatV3BaseNumber/);
 });
 
-test('badge principal preserva o componente visual original e informa parcialidade fora dele', () => {
+test('badge principal preserva o score compacto e informa o estado da competência fora dele', () => {
   const source = read(performancePath);
 
-  assert.match(source, /Health Score parcial visível no período selecionado/);
+  assert.match(source, /Health Score em andamento usa os dados já disponíveis da competência/);
+  assert.match(source, /resolveHealthScoreV3PublicationLabel/);
   assert.doesNotMatch(
     source,
     /professor\.healthV3\?\.estadoPublicacao === 'parcial'[\s\S]{0,250}>parcial<\/span>/,

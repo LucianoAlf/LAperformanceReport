@@ -565,6 +565,15 @@ Crítico < 70% · Atenção 70–79% · OK ≥ 80% (`ModalDetalhesPresenca.tsx`)
 
 O detalhamento completo e as fronteiras do relatório da Coordenação estão em `docs/HEALTH_SCORE_PROFESSOR_V3.md`.
 
+### Leitura da competência atual do Health Score V3 (02/08/2026)
+
+- O mês aberto usa projeção server-side somente leitura; não cria nem altera snapshot.
+- Média por turma usa a nota segmentada canônica de unidade, curso e modalidade.
+- Retenção, presença e conversão preservam o percentual real entre 0% e 100%; permanência é normalizada pela meta vigente.
+- Conversão só entra na nota com a amostra mínima configurada. Carteira continua diagnóstico e nunca pontua.
+- Valor herdado do mês anterior é mostrado como referência explícita e tem `peso_disponivel=false`.
+- `Em andamento`, `Parcial` e `Oficial` descrevem a publicação; `Saudável`, `Atenção` e `Crítico` descrevem a saúde. Um estado não substitui o outro.
+
 ## Salas
 
 - **Ocupação (%):** soma da `capacidade_maxima` das turmas ativas na sala ÷ `capacidade_maxima` da sala × 100.
