@@ -43,9 +43,10 @@ export function AgendaCard({ aula, selecionada, estilo, onSelecionar }: Props) {
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500',
         !experimental && !aula.cancelada && !aula.reagendada && !semAluno && 'border-l-emerald-500',
         experimental && 'border-l-violet-400 bg-violet-500/15',
-        aula.cancelada && 'border-l-rose-400 bg-rose-500/10 opacity-70',
-        aula.reagendada && !aula.cancelada && 'border-l-amber-400 bg-amber-500/15',
+        aula.cancelada && !experimental && 'border-l-rose-400 bg-rose-500/10',
+        aula.reagendada && !aula.cancelada && !experimental && 'border-l-amber-400 bg-amber-500/15',
         semAluno && !experimental && !aula.reagendada && 'border-l-slate-500',
+        aula.cancelada && 'opacity-70',
         selecionada && 'ring-1 ring-emerald-500',
       )}
     >
