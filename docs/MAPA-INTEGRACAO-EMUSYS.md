@@ -237,3 +237,7 @@ O plano de contas e a auditoria da classificação continuam no projeto Super Fo
 | Export financeiro por run | `supabase/functions/export-contas-receber/index.ts` |
 | Marcação compareceu/faltou (manual) | `src/components/App/PreAtendimento/tabs/AgendaTab.tsx` |
 | Mila SDR (upstream) | `aHD4kJdzByLwFXA1` / `gSHJHYMOYDQZqleW` / `yko5HstPTze0gsIM` |
+
+### Health Score Professor V3 na competência aberta
+
+Presença, carteira e vínculos usados no mês vivo continuam vindo das fontes canônicas já sincronizadas do Emusys. A leitura não chama a API Emusys diretamente e não cria snapshot. Quando presença ou conversão ainda não têm evento na competência atual, a última competência disponível pode aparecer somente como referência identificada; ela nunca recebe peso na nota atual. Assim que o evento canônico chega ao banco, a próxima leitura passa a usar o valor do mês corrente.

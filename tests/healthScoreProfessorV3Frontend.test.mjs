@@ -159,7 +159,7 @@ test('hook de snapshot V3 preserva null sem fallback para V2 ou zero', () => {
   assert.doesNotMatch(source, /get_kpis_professor_periodo|DEFAULT_HEALTH_WEIGHTS/i);
 });
 
-test('painel V3 separa nota, metas e diagnosticos no laboratorio', () => {
+test('painel V3 separa nota, metas e diagnosticos com edicao direta auditavel', () => {
   const source = read(componentPath);
 
   assert.match(source, /<Slider\b/);
@@ -167,7 +167,7 @@ test('painel V3 separa nota, metas e diagnosticos no laboratorio', () => {
   assert.match(source, /type="number"/i);
   assert.match(source, /Peso no score/i);
   assert.match(source, /Meta de desempenho/i);
-  assert.match(source, /Editar configura[cç][aã]o/i);
+  assert.match(source, /const editable = Boolean\(workingConfig\)/i);
   assert.match(source, /Salvar ajuste/i);
   assert.match(source, /altera[cç][oõ]es n[aã]o salvas/i);
   assert.match(source, /Ajuste salvo/i);
@@ -287,7 +287,8 @@ test('modal individual alterna V3 por flag e exibe base cobertura e recorte', ()
   assert.match(source, /VITE_HEALTH_SCORE_V3_MODAL_ENABLED/i);
   assert.match(source, /VITE_HEALTH_SCORE_V3_MODAL_ENABLED[\s\S]*!==\s*['"]false['"]/i);
   assert.match(source, /useHealthScoreProfessorV3/i);
-  assert.match(source, /Health Score parcial/i);
+  assert.match(source, /Health Score V3 —/i);
+  assert.match(source, /resolveHealthScoreV3PublicationLabel/i);
   assert.match(source, /Sem base/i);
   assert.match(source, /Amostra/i);
   assert.match(source, /Cobertura/i);
@@ -303,9 +304,9 @@ test('modal distingue valor observado de valor pontuavel nos pilares incompletos
   assert.match(source, /alunos_fechamento/i);
   assert.match(source, /valor_observado/i);
   assert.match(source, /Valor observado/i);
-  assert.match(source, /Fechamentos:\s*\$\{formatV3BaseNumber\(meses\)\}\/3/i);
-  assert.match(source, /Eventos classificados:\s*\$\{formatV3BaseNumber\(classificados\)\}\/\$\{formatV3BaseNumber\(esperados\)\}/i);
+  assert.match(source, /Fechamentos:\s*\$\{formatHealthScoreV3BaseNumber\(meses\)/i);
+  assert.match(source, /Eventos classificados:\s*\$\{formatHealthScoreV3BaseNumber\(classificados\)/i);
   assert.match(source, /observed\?\.evidenceLabel\s*\?\?/i);
   assert.match(source, /fora do score/i);
-  assert.match(source, /pontua[cç][aã]o.*03\/08/i);
+  assert.match(source, /aguardando eventos/i);
 });

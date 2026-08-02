@@ -278,6 +278,12 @@ Formulários de lançamento manual (React Hook Form + Zod). Escrevem direto nas 
 - **RPCs:** nenhuma · **Edge functions:** `validar-token-feedback`
 - **Tabelas:** `aluno_feedback_sessoes`, `aluno_feedback_professor` (upsert por `aluno_id+professor_id+competencia`). Escala verde/amarelo/vermelho.
 
+## Health Score Professor V3 — mês vivo
+
+Na aba Performance de `/app/professores`, a competência mensal atual consome `get_health_score_professor_v3_performance`. A RPC escolhe snapshot oficial quando existir; caso contrário, entrega uma projeção viva calculada no servidor. O modal individual consome o mesmo contrato por `get_health_score_professor_v3_snapshot_modal`.
+
+A projeção reutiliza `get_health_score_professor_v3_metricas_periodo`, a agregação segmentada canônica e o motor de nota diagnóstica. Referências anteriores são apenas visuais, não pontuam e carregam a competência de origem. Falha na consulta auxiliar de cursos não derruba a lista principal de professores. Histórico e snapshots fechados continuam append-only e não são recalculados pela leitura.
+
 ---
 
 ## Apêndice — Edge functions por categoria (uso no frontend)

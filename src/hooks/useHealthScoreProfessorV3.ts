@@ -15,7 +15,7 @@ interface SnapshotRow {
   periodo_inicio: string;
   periodo_fim: string;
   ciclo_codigo: string;
-  estado_publicacao: 'parcial' | 'oficial' | 'sem_base';
+  estado_publicacao: 'em_andamento' | 'parcial' | 'oficial' | 'sem_base';
   score_exibivel: boolean;
   ranking_habilitado: boolean;
   config_versao: number;
@@ -34,6 +34,7 @@ interface SnapshotRow {
   nota: number | null;
   peso: number;
   peso_disponivel: boolean;
+  peso_efetivo: number | null;
   contribuicao: number | null;
   meta: number | null;
   amostra: number | null;
@@ -43,6 +44,8 @@ interface SnapshotRow {
   fonte: string;
   regra_versao_metrica: string;
   motivo_sem_base: string | null;
+  codigo_evidencia: string | null;
+  papel: 'nota' | 'diagnostico' | null;
   detalhes: Record<string, unknown> | null;
 }
 
@@ -132,6 +135,7 @@ export function useHealthScoreProfessorV3({
         nota: row.nota ?? null,
         peso: Number(row.peso),
         pesoDisponivel: Boolean(row.peso_disponivel),
+        pesoEfetivo: row.peso_efetivo ?? null,
         contribuicao: row.contribuicao ?? null,
         meta: row.meta ?? null,
         amostra: row.amostra ?? null,
@@ -141,6 +145,8 @@ export function useHealthScoreProfessorV3({
         fonte: row.fonte,
         regraVersaoMetrica: row.regra_versao_metrica,
         motivoSemBase: row.motivo_sem_base ?? null,
+        codigoEvidencia: row.codigo_evidencia ?? null,
+        papel: row.papel ?? null,
         detalhes: row.detalhes ?? {},
       })));
       setLoadedRequestKey(requestKey);

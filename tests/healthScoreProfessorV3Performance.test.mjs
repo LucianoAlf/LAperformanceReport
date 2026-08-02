@@ -123,7 +123,7 @@ test('normalizador batch preserva null, valor observado e auditoria sem fallback
 
   const alunos = resolveHealthScoreV3MetricDisplay(snapshots[0], 'numero_alunos');
   assert.equal(alunos.value, 26);
-  assert.equal(alunos.state, 'provisorio');
+  assert.equal(alunos.state, 'diagnostico');
   assert.equal(alunos.rankable, false);
 });
 
@@ -245,7 +245,7 @@ test('equipe V3 parte do roster ativo e explica professor sem snapshot', async (
   );
 });
 
-test('status V3 separa parcial de ranking oficial', async () => {
+test('status V3 separa classificação de saúde do estado da publicação', async () => {
   const { resolveHealthScoreV3UiStatus } = await import(`../${helperPath}`);
   const base = {
     score: 82,
@@ -258,7 +258,7 @@ test('status V3 separa parcial de ranking oficial', async () => {
   assert.equal(resolveHealthScoreV3UiStatus({
     ...base,
     estadoPublicacao: 'parcial',
-  }), 'parcial');
+  }), 'saudavel');
   assert.equal(resolveHealthScoreV3UiStatus({
     ...base,
     estadoPublicacao: 'oficial',
@@ -299,12 +299,12 @@ test('score parcial preserva a classificacao visual e bases opcionais nao quebra
   assert.equal(formatHealthScoreV3BaseNumber(Number.NaN), null);
 });
 
-test('tabela V3 oferece filtros parcial e evidencia pendente sem ranquear parcial', () => {
+test('tabela V3 oferece filtros por saúde e competência em andamento sem habilitar ranking', () => {
   const tab = read(tabPath);
 
   assert.match(tab, /mergeHealthScoreV3ActiveRoster/);
   assert.match(tab, /resolveHealthScoreV3UiStatus/);
-  assert.match(tab, /value="parcial"/);
+  assert.match(tab, /value="em_andamento"/);
   assert.match(tab, /value="evidencia_pendente"/);
   assert.match(tab, /Evidência pendente/);
   assert.match(tab, /isHealthScoreV3SnapshotRankable/);
