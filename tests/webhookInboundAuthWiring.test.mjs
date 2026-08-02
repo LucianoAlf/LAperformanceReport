@@ -62,15 +62,15 @@ test('config deixa JWT do gateway aberto somente para autenticacao customizada',
 test('bloqueio de rollout fica explicito no plano e no topo do runbook', () => {
   assert.match(
     plan,
-    /BLOQUEIO DE ROLLOUT:[\s\S]*n[aã]o implantar[\s\S]*todas as caixas ativas[\s\S]*hash[\s\S]*URL[^\n]*provedor/i,
+    /BLOQUEIO DE ROLLOUT:[\s\S]*n[aã]o implantar[\s\S]*efetivamente chama o webhook[\s\S]*hash[\s\S]*URL[^\n]*provedor/i,
   );
   assert.ok(runbook, 'runbook de rollout do segredo inbound ainda nao existe');
   const topo = runbook.split(/\r?\n/).slice(0, 24).join('\n');
   assert.match(topo, /BLOQUEIO DE ROLLOUT/i);
-  assert.match(topo, /todas as caixas ativas/i);
+  assert.match(topo, /toda caixa que efetivamente chama o[\s*>]+webhook/i);
   assert.match(topo, /hash/i);
   assert.match(topo, /URL[\s\S]*?provedor/i);
-  assert.match(topo, /inbox administrativa/i);
+  assert.match(topo, /inbox[\s>]+administrativa/i);
   assert.match(topo, /CRM/i);
   assert.match(topo, /pesquisa de evas[aã]o/i);
 });

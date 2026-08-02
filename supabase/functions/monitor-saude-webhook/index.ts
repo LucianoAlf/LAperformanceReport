@@ -4,6 +4,12 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  avaliarCoberturaWebhook,
+  type CaixaWebhookMonitorada,
+  inspecionarWebhookProvider,
+  temWebhookEfetivoEsperado,
+} from "./contract.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -27,14 +33,51 @@ serve(async (req: Request) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   const { data: caixas, error: caixasError } = await supabase
     .from("whatsapp_caixas")
-    .select("id, nome")
-    .eq("ativo", true)
-    .not("webhook_url", "is", null)
+    .select(
+      "id, nome, provedor, ativo, uazapi_url, uazapi_token, waha_url, waha_session, waha_api_key",
+    )
     .order("id");
   if (caixasError) return json({ ok: false, code: "boxes_unavailable" }, 503);
 
+  const { data: hashes, error: hashesError } = await supabase
+    .from("whatsapp_caixa_webhook_secrets")
+    .select("caixa_id")
+    .eq("ativo", true);
+  if (hashesError) return json({ ok: false, code: "hashes_unavailable" }, 503);
+
+  const caixasComHash = new Set(
+    (hashes ?? []).map((row: { caixa_id: number }) => row.caixa_id),
+  );
+  const inboundEndpoint = `${SUPABASE_URL}/functions/v1/webhook-whatsapp-inbox`;
+
   const problemas: string[] = [];
-  for (const caixa of caixas ?? []) {
+  let webhooksEfetivos = 0;
+  for (const row of caixas ?? []) {
+    const caixa = row as CaixaWebhookMonitorada;
+    const inspecao = await inspecionarWebhookProvider(
+      caixa,
+      inboundEndpoint,
+    );
+    const cobertura = avaliarCoberturaWebhook(
+      caixa,
+      inspecao,
+      caixasComHash.has(caixa.id),
+      inboundEndpoint,
+    );
+    for (const problema of cobertura) {
+      problemas.push(
+        `*${problema.caixaNome}* (caixa_id=${problema.caixaId}): ${problema.code}`,
+      );
+    }
+
+    if (
+      !temWebhookEfetivoEsperado(caixa, inspecao, inboundEndpoint) ||
+      !caixasComHash.has(caixa.id)
+    ) {
+      continue;
+    }
+    webhooksEfetivos += 1;
+
     const healthUrl =
       `${SUPABASE_URL}/functions/v1/webhook-whatsapp-inbox?caixa_id=${caixa.id}&_health=1`;
     let status = 0;
@@ -61,10 +104,10 @@ serve(async (req: Request) => {
 
   if (problemas.length > 0) {
     const mensagem =
-      `Alerta: health autenticado do webhook de recebimento falhou.\n\n` +
+      `Alerta: cobertura ou health do webhook de recebimento falhou.\n\n` +
       problemas.join("\n") +
-      `\n\nMensagens podem nao estar chegando. Verifique WEBHOOK_HEALTH_TOKEN, ` +
-      `segredos por caixa e o roteamento/deploy do inbound.`;
+      `\n\nMensagens podem nao estar chegando. Verifique a configuracao efetiva ` +
+      `do provedor, o hash da caixa, WEBHOOK_HEALTH_TOKEN e o deploy do inbound.`;
 
     const { data: caixaAlerta } = await supabase
       .from("whatsapp_caixas")
@@ -100,5 +143,6 @@ serve(async (req: Request) => {
     ok: problemas.length === 0,
     problemas,
     checadas: caixas?.length ?? 0,
+    webhooks_efetivos: webhooksEfetivos,
   });
 });

@@ -27,7 +27,7 @@ Verificação somente leitura no projeto `ouqwbbermlzqqvtqwlul`:
 
 - [ ] Remover PII dos logs de execução da Edge. O código ainda registra telefone, estado serializado, trecho de payload, corpo da transcrição e trecho do texto transcrito.
 - [ ] Expurgar as `2.290` linhas legadas de `webhook_debug_log` e criar retenção de no máximo sete dias para diagnóstico tipado e sanitizado.
-- [ ] Criar `whatsapp_caixa_webhook_secrets`, provisionar um segredo por caixa e rejeitar o inbound antes da service role.
+- [ ] Criar `whatsapp_caixa_webhook_secrets`, provisionar um segredo por caixa que efetivamente chama o inbound e rejeitar o webhook antes da service role.
 - [ ] Ativar ingestão append-only: as três tabelas multipartes estão vazias em produção e a resposta ainda é consolidada diretamente nos campos legados.
 - [ ] Corrigir a ordem de roteamento: `buttonOrListid` da pesquisa pós-1ª aula precisa ser encaminhado antes de qualquer `continue` específico da evasão.
 - [ ] Implementar transcrição, consolidação, opt-out e revisão sobre os eventos imutáveis.
@@ -49,7 +49,7 @@ Cada janela tem deploy, smoke e ponto de parada próprios. Não trocar o motor d
 2. **Janela B1 — autenticação inbound por caixa**
    - criar tabela/hash e validador booleano;
    - proteger health/configurador;
-   - provisionar todas as caixas enquanto o webhook ainda aceita o contrato atual;
+   - provisionar as caixas que efetivamente chamam o webhook enquanto o inbound ainda aceita o contrato atual;
    - somente depois ativar enforcement e validar a matriz `400/401/403/200`.
 3. **Janela B2 — motor multipartes em modo teste**
    - preservar primeiro o roteamento pós-1ª aula;
@@ -441,8 +441,9 @@ na suíte de regressão.
 
 ## Task 3: Implementar autenticação antes da service role
 
-> **BLOQUEIO DE ROLLOUT: não implantar a Task 3 antes de todas as caixas ativas
-> terem hash provisionado e a URL correspondente atualizada no provedor.** Se o
+> **BLOQUEIO DE ROLLOUT: não implantar a Task 3 antes de toda caixa que
+> efetivamente chama o webhook ter hash provisionado e a URL correspondente
+> atualizada no provedor.** Se o
 > enforcement entrar antes desse corte coordenado, todo o inbound para: inbox
 > administrativa, CRM, pesquisa de evasão e pesquisa pós-1ª aula. O código desta
 > task permanece apenas local até as Tasks 4 e 5 fecharem essas pré-condições.
@@ -544,7 +545,7 @@ Expected: PASS.
 
 ```powershell
 git add -- supabase/functions/webhook-whatsapp-inbox/auth.ts supabase/functions/webhook-whatsapp-inbox/auth.test.ts supabase/functions/webhook-whatsapp-inbox/index.ts supabase/config.toml tests/webhookInboundAuthWiring.test.mjs docs/runbooks/webhook-inbound-secret-rollout.md docs/superpowers/plans/2026-07-30-pesquisa-evasao-subprojeto-b-conversa-multipartes.md
-git commit -m "feat: autenticar webhook por caixa" -m "BLOQUEIO DE ROLLOUT: NAO IMPLANTAR antes de todas as caixas ativas terem hash provisionado e URL atualizada no provedor."
+git commit -m "feat: autenticar webhook por caixa" -m "BLOQUEIO DE ROLLOUT: NAO IMPLANTAR antes de todo webhook efetivo ter hash provisionado e URL atualizada no provedor."
 ```
 
 Não implantar este commit em produção antes de provisionar os hashes e atualizar as URLs do provedor na Task 5.
@@ -607,7 +608,10 @@ headers: {
 }
 ```
 
-Carregar caixas ativas com webhook configurado de `whatsapp_caixas`. Não inserir token UAZAPI em log/alerta.
+Carregar as caixas cadastradas e inspecionar o estado efetivo no provedor. A
+flag `ativo` e o `webhook_url` do banco não provam tráfego. Alertar sempre que
+um webhook efetivo do inbound não tiver hash ativo, sem inserir token UAZAPI,
+chave WAHA ou URL secreta em log/alerta.
 
 - [x] **Step 4: Autenticar configurador**
 
@@ -676,17 +680,20 @@ git commit -m "feat: rotacionar webhook e autenticar health"
 
 **Files:**
 
-- Create: `docs/runbooks/webhook-inbound-secret-rollout.md`
+- Modify: `docs/runbooks/webhook-inbound-secret-rollout.md`
+- Create: `supabase/functions/monitor-saude-webhook/contract.ts`
+- Create: `supabase/functions/monitor-saude-webhook/contract.test.ts`
+- Modify: `supabase/functions/monitor-saude-webhook/index.ts`
+- Modify: `tests/webhookProvisioningSecurity.test.mjs`
 - Verify: `scripts/verify-webhook-inbound-security.sql`
 
-- [ ] **Step 1: Documentar pré-check somente leitura**
+- [x] **Step 1: Documentar pré-check somente leitura**
 
-Listar:
+Listar as caixas cadastradas, sem usar `ativo` como gate:
 
 ```sql
 select id, nome, provedor, ativo, funcao, departamento
 from public.whatsapp_caixas
-where ativo
 order by id;
 ```
 
@@ -698,7 +705,36 @@ E, via API do provedor, registrar apenas:
 - host/path redigidos;
 - quantidade de webhooks por caixa.
 
-Não copiar tokens nem query secrets para o documento.
+Cruzar essa fotografia com contagem de tráfego em `admin_conversas`,
+`crm_conversas` e pesquisas, e com a configuração efetiva do provedor. Não
+copiar tokens nem query secrets para o documento.
+
+Estado reconciliado em 02/08/2026:
+
+- caixas 1 (`Mila teste`) e 2 (`Sol`) são cadastros futuros, sem instância/sessão
+  operacional, sem webhook efetivo comprovado e com zero tráfego; mantê-las
+  `ativo=true`, sem provisionar nesta janela;
+- caixa 3 (`Lia - Sucesso do Aluno`) é a única em uso, com 124 conversas e um
+  único webhook UAZAPI de produção; é a única a provisionar neste corte;
+- auditoria de 104 Edge Functions, crons, funções PostgreSQL e configurações de
+  agentes não encontrou fluxo dependente de `caixa_id` 1 ou 2.
+
+- [x] **Step 1A: Proteger a ativação futura no monitor — somente local**
+
+O monitor consulta a configuração efetiva no provedor e cruza webhook
+habilitado com hash ativo. HTTP 401/404 de caixa ainda desconectada não gera
+falso alerta. Webhook efetivo sem hash, sem query secret, duplicado ou apontando
+para outro destino gera alerta por código seguro, sem token nem URL completa.
+Health só é executado para webhook efetivo coberto por hash.
+
+Cobertura local obrigatória:
+
+```powershell
+deno test supabase/functions/monitor-saude-webhook/contract.test.ts
+node --test tests/webhookProvisioningSecurity.test.mjs tests/webhookInboundAuthWiring.test.mjs
+```
+
+Esta etapa não autoriza deploy, provisionamento nem escrita em produção.
 
 - [ ] **Step 2: Implantar primeiro a redução de logs**
 
@@ -738,9 +774,9 @@ Implantar:
 
 Validar health autenticado e confirmar que chamada sem token retorna `401`.
 
-- [ ] **Step 6: Provisionar cada caixa ativa**
+- [ ] **Step 6: Provisionar cada caixa que efetivamente chama o webhook**
 
-Para cada `caixa_id`:
+Nesta janela, somente para `caixa_id=3`:
 
 1. chamar o configurador autenticado;
 2. confirmar que há um hash ativo;
@@ -748,7 +784,15 @@ Para cada `caixa_id`:
 4. enviar um payload real de teste pelo WhatsApp;
 5. confirmar roteamento atual.
 
-Só avançar quando todas as caixas ativas estiverem provisionadas.
+Não desativar nem provisionar as caixas 1 e 2. Só avançar quando todo webhook
+efetivo observado no provedor estiver coberto por hash ativo. O monitor deve
+alertar se qualquer caixa ganhar webhook efetivo sem hash, independentemente da
+flag `ativo`.
+
+Antes da ativação futura das caixas 1 ou 2, repetir auditoria do provedor,
+provisionar o segredo, atualizar a URL e validar o monitor. Webhook global WAHA
+não aparece no `GET /api/sessions/`; essa configuração exige conferência manual
+adicional antes de ativar a caixa 2.
 
 - [ ] **Step 7: Implantar enforcement**
 
@@ -1383,7 +1427,7 @@ Ordem final por janelas:
    `NOTICE` a mesma contagem dinâmica `N` e verificar `N → 0`; contagem zero é
    aceita apenas em banco descartável/de ensaio e deve aparecer explicitamente
    como `expurgo ignorado`; parar e reportar;
-3. **B1a:** health/configurador e provisionamento de todas as caixas sem enforcement;
+3. **B1a:** health/configurador e provisionamento das caixas com webhook efetivo sem enforcement;
 4. **B1b:** enforcement inbound e matriz HTTP; parar e reportar;
 5. **B2a:** corrigir ordem do pós-1ª aula e publicar Edge compatível V1/V2;
 6. **B2b:** schema multipartes com existentes em `legado_v1`; testar uma única pesquisa `modo_teste` em `multipartes_v2`; parar e reportar;
@@ -1399,7 +1443,7 @@ migrada em massa.
 
 Parar se:
 
-- qualquer caixa ativa não tiver hash;
+- qualquer webhook efetivo no provedor não tiver hash ativo correspondente;
 - pós-1ª aula não atualizar nota;
 - inbox admin/CRM perder mensagem;
 - duplicata criar dois eventos;
@@ -1432,7 +1476,7 @@ git commit -m "docs: fechar rollout da conversa multipartes"
 ## Definition of Done
 
 - [ ] Webhook sem segredo válido é rejeitado antes da service role.
-- [ ] Cada caixa ativa possui segredo próprio e apenas hash no banco.
+- [ ] Cada caixa que efetivamente chama o inbound possui segredo próprio e apenas hash no banco.
 - [ ] Health check exige segredo interno separado.
 - [ ] Configurador de webhook exige usuário administrativo autorizado.
 - [ ] Tokens UAZAPI/WAHA não são mais legíveis diretamente pelo frontend.

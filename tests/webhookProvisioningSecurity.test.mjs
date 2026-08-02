@@ -18,14 +18,23 @@ const monitor = read("supabase/functions/monitor-saude-webhook/index.ts");
 const config = read("supabase/config.toml");
 const runbook = read("docs/runbooks/webhook-inbound-secret-rollout.md");
 
-test("monitor autentica health, falha fechado e descobre caixas ativas no banco", () => {
+test("monitor autentica health e usa configuracao efetiva do provedor como gate", () => {
   assert.match(monitor, /Deno\.env\.get\(['"]WEBHOOK_HEALTH_TOKEN['"]\)/);
   assert.match(monitor, /['"]x-health-secret['"]\s*:\s*healthToken/i);
-  assert.match(
-    monitor,
+  assert.match(monitor, /inspecionarWebhookProvider/);
+  assert.match(monitor, /whatsapp_caixa_webhook_secrets/);
+  const caixasQuery = monitor.slice(
+    monitor.indexOf('.from("whatsapp_caixas")'),
+    monitor.indexOf("if (caixasError)"),
+  );
+  assert.doesNotMatch(
+    caixasQuery,
     /\.from\(['"]whatsapp_caixas['"]\)[\s\S]*?\.eq\(['"]ativo['"],\s*true\)/i,
   );
-  assert.match(monitor, /\.not\(['"]webhook_url['"],\s*['"]is['"],\s*null\)/i);
+  assert.doesNotMatch(
+    caixasQuery,
+    /\.not\(['"]webhook_url['"],\s*['"]is['"],\s*null\)/i,
+  );
   assert.doesNotMatch(monitor, /CAIXAS_MONITORADAS|\[\s*3\s*,/);
   assert.doesNotMatch(monitor, /--no-verify-jwt/i);
   assert.doesNotMatch(
@@ -99,13 +108,12 @@ test("gateway exige JWT explicitamente e runbook bloqueia provisionamento insegu
   );
   const topo = runbook.split(/\r?\n/).slice(0, 30).join("\n");
   assert.match(topo, /N[AÃ]O IMPLANTAR/i);
-  assert.match(topo, /todas as caixas ativas/i);
+  assert.match(topo, /toda caixa que efetivamente chama o[\s*>]+webhook/i);
   assert.match(runbook, /caixa 1[\s\S]*401/i);
-  assert.match(
-    runbook,
-    /caixa 2[\s\S]*sess[aÃ]o[\s\S]*(?:ausente|inexistente|n[aÃ]o (?:foi )?encontrada)/i,
-  );
+  assert.match(runbook, /caixa 2[\s\S]*sess[aã]o[\s\S]*HTTP 404/i);
   assert.match(runbook, /caixa 3[\s\S]*exatamente um webhook/i);
+  assert.match(runbook, /provisionar(?: o)? segredo apenas para a caixa 3/i);
+  assert.match(runbook, /n[aã]o desativar as caixas 1 e[\s\S]*2/i);
   assert.match(runbook, /p01c-staging|nzwqjepncrtufpykjita/i);
   assert.doesNotMatch(runbook, /webhook_secret=(?!\[REDACTED\])/i);
 });
