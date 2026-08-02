@@ -1,18 +1,34 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { addDays, format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, AlertTriangle, CalendarClock } from 'lucide-react';
 import { useAgendaDia, type AulaAgenda } from '@/hooks/useAgendaDia';
 import { contarEmAulaAgora, diaIncompleto, minutosAgora } from '@/lib/agenda';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { AgendaTimeline } from './AgendaTimeline';
 import { AgendaDrawer } from './AgendaDrawer';
 import { cn } from '@/lib/utils';
 
+interface OutletContext {
+  unidadeSelecionada: string | null;
+}
+
 export default function AgendaPage() {
+  useSetPageTitle({
+    titulo: 'Agenda',
+    subtitulo: 'Aulas do dia por professor ou sala, ao vivo',
+    icone: CalendarClock,
+    iconeCor: 'text-white',
+    iconeWrapperCor: 'bg-gradient-to-br from-cyan-500 to-blue-500',
+  });
+
+  // Mesmo seletor de unidade do header (admin) que as paginas irmas consomem —
+  // null = consolidado ("todas"); usuario de unidade ja vem travado na sua.
+  const context = useOutletContext<OutletContext | undefined>();
+  const unidadeId = context?.unidadeSelecionada ?? null;
+
   const [data, setData] = useState(() => format(new Date(), 'yyyy-MM-dd'));
-  // Unidade fica travada em "todas" nesta entrega — o UnidadeFilter do app
-  // entra no passo seguinte, plugando aqui.
-  const [unidadeId] = useState<string | null>(null);
   const [agruparPor, setAgruparPor] = useState<'professor' | 'sala'>('professor');
   const [selecionada, setSelecionada] = useState<AulaAgenda | null>(null);
 
@@ -20,6 +36,8 @@ export default function AgendaPage() {
 
   // O KPI "em aula agora" precisa andar junto com a regua, nao so quando a
   // lista de aulas muda — senao congela no minuto em que a pagina abriu.
+  // O mesmo estado tambem alimenta a regua da AgendaTimeline (prop `minutos`),
+  // pra existir um unico relogio em vez de dois setInterval desalinhados.
   const [minutos, setMinutos] = useState(() => minutosAgora(new Date()));
   useEffect(() => {
     const id = setInterval(() => setMinutos(minutosAgora(new Date())), 30000);
@@ -29,7 +47,21 @@ export default function AgendaPage() {
   const agora = useMemo(() => contarEmAulaAgora(aulas, minutos), [aulas, minutos]);
   const canceladas = aulas.filter((a) => a.cancelada).length;
   const experimentais = aulas.filter((a) => a.categoria === 'experimental').length;
-  const emRisco = aulas.filter((a) => a.alunos.some((al) => (al.risco_pct ?? 0) >= 40)).length;
+
+  // Alunos DISTINTOS em risco (>=40%), nao aulas: um aluno em 2 aulas no dia
+  // ou uma turma com varios alunos em risco nao pode inflar a contagem.
+  // aluno_id nulo (participante e lead, sem cadastro) nunca conta aqui.
+  const emRisco = useMemo(() => {
+    const idsEmRisco = new Set<number>();
+    for (const aula of aulas) {
+      for (const aluno of aula.alunos) {
+        if (aluno.aluno_id != null && (aluno.risco_pct ?? 0) >= 40) {
+          idsEmRisco.add(aluno.aluno_id);
+        }
+      }
+    }
+    return idsEmRisco.size;
+  }, [aulas]);
 
   function mover(dias: number) {
     setData(format(addDays(parseISO(data), dias), 'yyyy-MM-dd'));
@@ -37,9 +69,8 @@ export default function AgendaPage() {
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-4 p-6">
+    <div className="flex min-w-0 flex-col gap-4">
       <header className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold">Agenda</h1>
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => mover(-1)} aria-label="Dia anterior"
             className="h-7 w-7 rounded-md border border-slate-700 text-slate-300 hover:text-white">
@@ -88,13 +119,11 @@ export default function AgendaPage() {
         <Kpi rotulo="Alunos em risco" valor={String(emRisco)} destaque="text-amber-400" />
       </div>
 
-      {erro && (
+      {erro ? (
         <p className="rounded-md border border-rose-500/40 bg-rose-500/10 p-3 text-[13px] text-rose-200">
           Não foi possível carregar a agenda: {erro}
         </p>
-      )}
-
-      {carregando ? (
+      ) : carregando ? (
         <p className="p-8 text-center text-sm text-slate-400">Carregando agenda…</p>
       ) : aulas.length === 0 && !diaIncompleto(data) ? (
         <p className="p-8 text-center text-sm text-slate-400">Nenhuma aula neste dia.</p>
@@ -110,6 +139,7 @@ export default function AgendaPage() {
               agruparPor={agruparPor}
               selecionada={selecionada}
               onSelecionar={setSelecionada}
+              minutos={minutos}
             />
           </div>
           <AgendaDrawer aula={selecionada} />

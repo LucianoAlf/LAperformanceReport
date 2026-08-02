@@ -23,15 +23,23 @@ interface Props {
   agruparPor: 'professor' | 'sala';
   selecionada: AulaAgenda | null;
   onSelecionar: (aula: AulaAgenda) => void;
+  // Opcional: quando a pagina que envolve a timeline ja tem seu proprio
+  // relogio (ex.: pra sincronizar com um KPI "em aula agora"), ela passa os
+  // minutos aqui e os dois ficam no mesmo tique. Sem a prop, a timeline
+  // mantem seu proprio intervalo — continua utilizavel isolada/em teste.
+  minutos?: number;
 }
 
-export function AgendaTimeline({ aulas, agruparPor, selecionada, onSelecionar }: Props) {
-  const [minutos, setMinutos] = useState(() => minutosAgora(new Date()));
+export function AgendaTimeline({ aulas, agruparPor, selecionada, onSelecionar, minutos: minutosProp }: Props) {
+  const [minutosProprio, setMinutosProprio] = useState(() => minutosAgora(new Date()));
 
   useEffect(() => {
-    const id = setInterval(() => setMinutos(minutosAgora(new Date())), 30000);
+    if (minutosProp !== undefined) return;
+    const id = setInterval(() => setMinutosProprio(minutosAgora(new Date())), 30000);
     return () => clearInterval(id);
-  }, []);
+  }, [minutosProp]);
+
+  const minutos = minutosProp ?? minutosProprio;
 
   const horas = Array.from(
     { length: AGENDA_HORA_FIM - AGENDA_HORA_INICIO },
