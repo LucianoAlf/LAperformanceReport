@@ -847,7 +847,7 @@ git commit -m "docs: registrar rollout seguro do webhook inbound"
 - Create: `supabase/migrations/20260801190500_pesquisa_evasao_multipartes_ativacao_novas.sql`
 - Create: `tests/pesquisaEvasaoMultipartesSchema.test.mjs`
 
-- [ ] **Step 1: Escrever testes vermelhos de resolução**
+- [x] **Step 1: Escrever testes vermelhos de resolução**
 
 Casos:
 
@@ -860,7 +860,7 @@ Casos:
 - mensagem duplicada não cria evento;
 - `fromMe` não vira resposta do aluno.
 
-- [ ] **Step 2: Escrever testes vermelhos de estado**
+- [x] **Step 2: Escrever testes vermelhos de estado**
 
 Casos:
 
@@ -874,7 +874,7 @@ Casos:
 - pesquisa `legado_v1` continua no caminho atual, sem escrever nas tabelas multipartes;
 - uma pesquisa aberta antes do corte nunca muda automaticamente de versão.
 
-- [ ] **Step 3: Implementar tipos e adapters**
+- [x] **Step 3: Implementar tipos e adapters**
 
 Separar funções puras:
 
@@ -895,7 +895,7 @@ export async function ingerirEvento(
 
 `index.ts` fica como roteador; a regra de evasão vai para `evasao.ts`.
 
-- [ ] **Step 4: Fortalecer constraints**
+- [x] **Step 4: Fortalecer constraints**
 
 Em uma nova migração aditiva, sem reescrever a migração já implantada por A:
 
@@ -908,7 +908,7 @@ Em uma nova migração aditiva, sem reescrever a migração já implantada por A
 - `resolution_status in ('resolvida','sem_pesquisa','ambigua')`;
 - `substantividade` inclui `opt_out`.
 
-- [ ] **Step 5: Implementar persistência**
+- [x] **Step 5: Implementar persistência**
 
 Para cada evento válido:
 
@@ -921,7 +921,7 @@ Para cada evento válido:
 7. manter `pesquisa_evasao.resposta_texto/audio_url` como compatibilidade derivada, sem ser fonte canônica;
 8. nunca marcar `respondido` no primeiro fragmento.
 
-- [ ] **Step 6: Executar testes**
+- [x] **Step 6: Executar testes**
 
 ```powershell
 deno test supabase/functions/webhook-whatsapp-inbox/evasao.test.ts
@@ -930,10 +930,10 @@ node --test tests/pesquisaEvasaoMultipartesSchema.test.mjs tests/pesquisaEvasaoC
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
-git add -- supabase/functions/webhook-whatsapp-inbox/evasao.ts supabase/functions/webhook-whatsapp-inbox/evasao.test.ts supabase/functions/webhook-whatsapp-inbox/index.ts supabase/migrations/20260801190000_pesquisa_evasao_multipartes_constraints.sql tests/pesquisaEvasaoMultipartesSchema.test.mjs
+git add -- supabase/functions/webhook-whatsapp-inbox/evasao.ts supabase/functions/webhook-whatsapp-inbox/evasao.test.ts supabase/functions/webhook-whatsapp-inbox/index.ts supabase/migrations/20260801190000_pesquisa_evasao_multipartes_constraints.sql supabase/migrations/20260801190500_pesquisa_evasao_multipartes_ativacao_novas.sql tests/pesquisaEvasaoMultipartesSchema.test.mjs
 git commit -m "feat: registrar conversa de evasao em eventos"
 ```
 
@@ -1001,7 +1001,7 @@ node --test tests/webhookPesquisaPrimeiraAulaRegression.test.mjs
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add -- supabase/functions/webhook-whatsapp-inbox/index.ts supabase/functions/webhook-whatsapp-inbox/routing.test.ts tests/webhookPesquisaPrimeiraAulaRegression.test.mjs

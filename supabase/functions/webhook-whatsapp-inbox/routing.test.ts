@@ -15,9 +15,9 @@ Deno.test("encaminha buttonOrListid exatamente uma vez antes dos demais fluxos",
   const resultado = await encaminharPesquisaPrimeiraAula({
     payload,
     mensagem: { buttonOrListid: "amei" },
-    invocar: async (nome, body) => {
+    invocar: (nome, body) => {
       invocacoes.push({ nome, body });
-      return { error: null };
+      return Promise.resolve({ error: null });
     },
     diagnosticar: (resultado) => diagnosticos.push(resultado),
   });
@@ -36,7 +36,7 @@ Deno.test("falha do processador gera diagnostico e nao interrompe a inbox", asyn
   const resultado = await encaminharPesquisaPrimeiraAula({
     payload: { message: { buttonOrListid: "amei" } },
     mensagem: { buttonOrListid: "amei" },
-    invocar: async () => ({ error: new Error("falha interna") }),
+    invocar: () => Promise.resolve({ error: new Error("falha interna") }),
     diagnosticar: (estado) => diagnosticos.push(estado),
   });
 
@@ -50,9 +50,9 @@ Deno.test("mensagem sem buttonOrListid nao chama processador", async () => {
   const resultado = await encaminharPesquisaPrimeiraAula({
     payload: { message: { text: "oi" } },
     mensagem: {},
-    invocar: async () => {
+    invocar: () => {
       invocacoes += 1;
-      return { error: null };
+      return Promise.resolve({ error: null });
     },
     diagnosticar: () => undefined,
   });

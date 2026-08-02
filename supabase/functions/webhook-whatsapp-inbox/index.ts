@@ -10,6 +10,12 @@ import { getUazapiCredentials } from '../_shared/uazapi.ts';
 import { autenticarWebhookInbound } from './auth.ts';
 import { registrarDiagnosticoWebhook } from './diagnostics.ts';
 import {
+  criarRepositorioPesquisaEvasao,
+  ingerirEvento,
+  normalizarEventoUazapi,
+  resolverPesquisa,
+} from './evasao.ts';
+import {
   deveProcessarRespostaEvasao,
   encaminharPesquisaPrimeiraAula,
 } from './routing.ts';
@@ -167,6 +173,9 @@ function normalizeUazapiPayload(payload: any): { key: any; message: any; message
       pushName: msg.senderName || payload.chat?.name || payload.chat?.wa_name || null,
       // Resposta de botão ou item de lista — ID selecionado pelo usuário
       buttonOrListid: msg.buttonOrListid || null,
+      // ID da mensagem citada. Permite resolver a pesquisa sem depender apenas
+      // do telefone quando a família responde diretamente ao outbound.
+      quotedProviderMessageId: msg.quoted || null,
       // Edição de mensagem: UAZAPI envia msg.edited = whatsapp_message_id da mensagem ORIGINAL.
       editedId: msg.edited || null,
     };
@@ -324,7 +333,7 @@ function detectMessageType(message: any): { tipo: string; conteudo: string | nul
 
 // ========== HANDLER RESPOSTA EVASÃO ==========
 // Verifica se é resposta de pesquisa de evasão e processa
-async function handleRespostaEvasao(
+async function handleRespostaEvasaoLegado(
   msg: any,
   phone: string,
   supabase: any,
@@ -462,6 +471,70 @@ async function handleRespostaEvasao(
 
     return { handled: true, pesquisa_id: pesquisaId };
   } catch {
+    return { handled: false };
+  }
+}
+
+async function handleRespostaEvasao(
+  msg: any,
+  phone: string,
+  supabase: any,
+  caixaIdFromUrl: number | null,
+  correlationId: string,
+): Promise<{ handled: boolean; pesquisa_id?: string }> {
+  try {
+    if (!deveProcessarRespostaEvasao(msg)) {
+      return { handled: false };
+    }
+
+    const evento = normalizarEventoUazapi(msg, {
+      caixaId: caixaIdFromUrl,
+      telefoneNormalizado: phone,
+      correlationId,
+    });
+    if (!evento) {
+      return { handled: false };
+    }
+
+    const repository = criarRepositorioPesquisaEvasao(supabase);
+    const resolucao = await resolverPesquisa(evento, repository);
+
+    // Compatibilidade por pesquisa: uma conversa que nasceu no motor antigo
+    // nunca passa automaticamente a escrever nas tabelas multipartes.
+    if (
+      resolucao.status === 'resolvida' &&
+      resolucao.pesquisa.respostaIngestaoVersao === 'legado_v1'
+    ) {
+      return await handleRespostaEvasaoLegado(
+        msg,
+        phone,
+        supabase,
+        caixaIdFromUrl,
+      );
+    }
+
+    // Uma linha legada muito antiga pode ainda depender apenas do estado de
+    // conversa. Tentamos exatamente o caminho anterior antes de registrar um
+    // evento sem pesquisa; nunca procuramos um estado global de outro telefone.
+    if (resolucao.status === 'sem_pesquisa') {
+      const legado = await handleRespostaEvasaoLegado(
+        msg,
+        phone,
+        supabase,
+        caixaIdFromUrl,
+      );
+      if (legado.handled) return legado;
+    }
+
+    const resultado = await ingerirEvento(evento, resolucao, repository);
+    return {
+      handled: resultado.handled,
+      ...('pesquisaId' in resultado && resultado.pesquisaId
+        ? { pesquisa_id: resultado.pesquisaId }
+        : {}),
+    };
+  } catch {
+    // Falha fechada para o motor da pesquisa sem impedir a inbox normal.
     return { handled: false };
   }
 }
@@ -1017,7 +1090,13 @@ serve(async (req: Request) => {
         // (porque o usuário pode responder do mesmo dispositivo). Botões/listas
         // são excluídos explicitamente pelo roteador acima.
         const evasaoResult = deveProcessarRespostaEvasao(msg)
-          ? await handleRespostaEvasao(msg, phone, supabase, caixaIdFromUrl)
+          ? await handleRespostaEvasao(
+            msg,
+            phone,
+            supabase,
+            caixaIdFromUrl,
+            correlationId,
+          )
           : { handled: false };
         if (evasaoResult.handled) {
           diagnosticarWebhook(
