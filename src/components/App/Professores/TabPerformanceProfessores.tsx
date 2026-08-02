@@ -39,13 +39,18 @@ import {
 } from '@/lib/professoresKpisAgregados';
 import { useHealthScoreProfessorV3Performance } from '@/hooks/useHealthScoreProfessorV3Performance';
 import {
+  isHealthScoreV3SnapshotRankable,
   isHealthScoreV3SnapshotVisible,
+  mergeHealthScoreV3ActiveRoster,
   rankHealthScoreV3Metric,
   formatHealthScoreV3Coverage,
+  resolveHealthScoreV3EvidenceMessage,
   resolveHealthScoreV3MetricDisplay,
+  resolveHealthScoreV3UiStatus,
   serializeHealthScoreV3ForAi,
   type HealthScoreV3MetricDisplay,
   type HealthScoreV3ProfessorPerformance,
+  type HealthScoreV3UiStatus,
 } from '@/lib/healthScoreProfessorV3Performance';
 import type { HealthMetricKeyV3 } from '@/lib/healthScoreProfessorV3';
 import { getHealthScoreV3Period } from '@/lib/healthScoreProfessorV3Periodos';
@@ -134,8 +139,13 @@ function HealthScoreV3MetricCell({
     ? resolveHealthScoreV3MetricDisplay(snapshot, metricKey)
     : ({ value: null, observedValue: null, state: 'sem_base', rankable: false, metric: null } satisfies HealthScoreV3MetricDisplay);
   const metric = display.metric;
+  const evidenceMessage = resolveHealthScoreV3EvidenceMessage(
+    metric?.codigoEvidencia,
+    metricKey,
+    metric?.motivoSemBase,
+  );
   const renderedValue = display.value === null
-    ? display.state === 'auditoria' ? 'Em auditoria' : 'Sem base'
+    ? display.state === 'auditoria' ? 'Em auditoria' : 'Evidência pendente'
     : formatHealthScoreV3MetricValue(metricKey, display.value);
   const stateLabel = display.state === 'observado'
     ? 'observado'
@@ -144,7 +154,7 @@ function HealthScoreV3MetricCell({
       : display.state === 'auditoria'
         ? 'auditoria'
         : display.state === 'sem_base'
-          ? 'sem base'
+          ? 'evidência pendente'
           : null;
   const stateClass = display.state === 'normal'
     ? 'text-emerald-300'
@@ -178,7 +188,9 @@ function HealthScoreV3MetricCell({
             )}
             {metric?.fonte && <p className="break-all">Fonte: <strong>{metric.fonte}</strong></p>}
           </div>
-          {metric?.motivoSemBase && <p className="mt-1.5 text-amber-300">{metric.motivoSemBase}</p>}
+          {display.state === 'sem_base' && (
+            <p className="mt-1.5 text-amber-300">{evidenceMessage}</p>
+          )}
         </div>
       }
     >
@@ -199,16 +211,22 @@ function HealthScoreV3MetricCell({
   );
 }
 
-function resolveHealthScoreV3Status(snapshot: HealthScoreV3ProfessorPerformance | null): ProfessorPerformance['status'] | null {
-  if (!snapshot || !isHealthScoreV3SnapshotVisible(snapshot)) return null;
-  if (snapshot.classificacao === 'critico') return 'critico';
-  if (snapshot.classificacao === 'atencao') return 'atencao';
-  if (snapshot.classificacao === 'saudavel') return 'excelente';
-  return null;
+function resolveHealthScoreV3Status(
+  snapshot: HealthScoreV3ProfessorPerformance | null,
+): HealthScoreV3UiStatus {
+  return resolveHealthScoreV3UiStatus(snapshot);
+}
+
+function formatHealthScoreV3Status(status: HealthScoreV3UiStatus): string {
+  if (status === 'critico') return 'Crítico';
+  if (status === 'atencao') return 'Atenção';
+  if (status === 'saudavel') return 'Saudável';
+  if (status === 'parcial') return 'Parcial';
+  return 'Evidência pendente';
 }
 
 interface AlertaPerformance {
-  tipo: 'critico' | 'atencao' | 'excelente';
+  tipo: 'critico' | 'atencao' | 'saudavel' | 'excelente' | 'parcial' | 'evidencia_pendente';
   quantidade: number;
   descricao: string;
 }
@@ -590,9 +608,17 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     }
   };
 
+  const healthV3SnapshotsAtivos = useMemo(() => mergeHealthScoreV3ActiveRoster({
+    snapshots: healthV3Snapshots,
+    professorIds: professores.map((professor) => professor.id),
+    competencia,
+    unidadeId: healthV3UnitId,
+    periodicidade: modoVisualizacao === 'trimestre' ? 'ciclo' : 'mensal',
+  }), [competencia, healthV3Snapshots, healthV3UnitId, modoVisualizacao, professores]);
+
   const healthV3ByProfessor = useMemo(
-    () => new Map(healthV3Snapshots.map((snapshot) => [snapshot.professorId, snapshot])),
-    [healthV3Snapshots],
+    () => new Map(healthV3SnapshotsAtivos.map((snapshot) => [snapshot.professorId, snapshot])),
+    [healthV3SnapshotsAtivos],
   );
 
   const professoresTabela = useMemo<ProfessorPerformanceRow[]>(
@@ -602,11 +628,6 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     })),
     [healthV3ByProfessor, professores],
   );
-
-  const healthV3SnapshotsAtivos = useMemo(() => {
-    const professoresAtivos = new Set(professores.map((professor) => professor.id));
-    return healthV3Snapshots.filter((snapshot) => professoresAtivos.has(snapshot.professorId));
-  }, [healthV3Snapshots, professores]);
 
   // Sob a flag V3, a tabela nunca recorre silenciosamente ao score V2.
   const professoresFiltrados = useMemo(() => {
@@ -625,10 +646,20 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
     resultado.sort((a, b) => {
       if (HEALTH_SCORE_V3_PERFORMANCE_ENABLED) {
-        const aVisible = Boolean(a.healthV3 && isHealthScoreV3SnapshotVisible(a.healthV3));
-        const bVisible = Boolean(b.healthV3 && isHealthScoreV3SnapshotVisible(b.healthV3));
-        if (aVisible !== bVisible) return aVisible ? -1 : 1;
-        if (aVisible && bVisible) return Number(b.healthV3?.score) - Number(a.healthV3?.score);
+        const aRankable = Boolean(a.healthV3 && isHealthScoreV3SnapshotRankable(a.healthV3));
+        const bRankable = Boolean(b.healthV3 && isHealthScoreV3SnapshotRankable(b.healthV3));
+        if (aRankable !== bRankable) return aRankable ? -1 : 1;
+        if (aRankable && bRankable) return Number(b.healthV3?.score) - Number(a.healthV3?.score);
+        const aStatus = resolveHealthScoreV3Status(a.healthV3);
+        const bStatus = resolveHealthScoreV3Status(b.healthV3);
+        const order: Record<HealthScoreV3UiStatus, number> = {
+          saudavel: 0,
+          atencao: 0,
+          critico: 0,
+          parcial: 1,
+          evidencia_pendente: 2,
+        };
+        if (order[aStatus] !== order[bStatus]) return order[aStatus] - order[bStatus];
         return a.nome.localeCompare(b.nome, 'pt-BR');
       }
 
@@ -642,13 +673,13 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
   const alertas = useMemo<AlertaPerformance[]>(() => {
     if (HEALTH_SCORE_V3_PERFORMANCE_ENABLED) {
-      const status = healthV3SnapshotsAtivos
-        .filter(isHealthScoreV3SnapshotVisible)
-        .map((snapshot) => resolveHealthScoreV3Status(snapshot));
+      const status = healthV3SnapshotsAtivos.map((snapshot) => resolveHealthScoreV3Status(snapshot));
       return [
         { tipo: 'critico', quantidade: status.filter((item) => item === 'critico').length, descricao: 'Health Score V3 critico' },
         { tipo: 'atencao', quantidade: status.filter((item) => item === 'atencao').length, descricao: 'Health Score V3 em atencao' },
-        { tipo: 'excelente', quantidade: status.filter((item) => item === 'excelente').length, descricao: 'Health Score V3 saudavel' },
+        { tipo: 'saudavel', quantidade: status.filter((item) => item === 'saudavel').length, descricao: 'Health Score V3 saudavel' },
+        { tipo: 'parcial', quantidade: status.filter((item) => item === 'parcial').length, descricao: 'Nota parcial, fora do ranking oficial' },
+        { tipo: 'evidencia_pendente', quantidade: status.filter((item) => item === 'evidencia_pendente').length, descricao: 'Evidencia oficial ainda pendente' },
       ];
     }
 
@@ -761,7 +792,10 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     switch (status) {
       case 'critico': return 'text-red-400 bg-red-500/20 border-red-500/30';
       case 'atencao': return 'text-yellow-400 bg-yellow-500/20 border-yellow-500/30';
-      case 'excelente': return 'text-green-400 bg-green-500/20 border-green-500/30';
+      case 'excelente':
+      case 'saudavel': return 'text-green-400 bg-green-500/20 border-green-500/30';
+      case 'parcial': return 'text-violet-300 bg-violet-500/20 border-violet-500/30';
+      case 'evidencia_pendente': return 'text-slate-300 bg-slate-500/20 border-slate-500/30';
       default: return 'text-slate-400 bg-slate-500/20 border-slate-500/30';
     }
   };
@@ -785,7 +819,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     switch (status) {
       case 'critico': return 'from-red-400 to-red-600';
       case 'atencao': return 'from-yellow-400 to-orange-500';
-      case 'excelente': return 'from-green-400 to-emerald-600';
+      case 'excelente':
+      case 'saudavel': return 'from-green-400 to-emerald-600';
+      case 'parcial': return 'from-violet-400 to-indigo-600';
       default: return 'from-slate-400 to-slate-600';
     }
   };
@@ -814,7 +850,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             Atualizado {format(new Date(), "HH:mm", { locale: ptBR })}
           </span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-3">
           {alertas.map((alerta) => (
             <div
               key={alerta.tipo}
@@ -822,11 +858,28 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
               onClick={() => setFiltroStatus(alerta.tipo)}
             >
               <span className="text-2xl">
-                {alerta.tipo === 'critico' ? '🔴' : alerta.tipo === 'atencao' ? '🟡' : '🟢'}
+                {alerta.tipo === 'critico'
+                  ? '🔴'
+                  : alerta.tipo === 'atencao'
+                    ? '🟡'
+                    : alerta.tipo === 'parcial'
+                      ? '🟣'
+                      : alerta.tipo === 'evidencia_pendente'
+                        ? '⚪'
+                        : '🟢'}
               </span>
               <div>
                 <p className="font-medium text-sm">
-                  {alerta.quantidade} professor{alerta.quantidade !== 1 ? 'es' : ''} {alerta.tipo === 'critico' ? 'crítico' : alerta.tipo === 'atencao' ? 'atenção' : 'excelente'}{alerta.quantidade !== 1 ? 's' : ''}
+                  {alerta.quantidade} professor{alerta.quantidade !== 1 ? 'es' : ''}{' '}
+                  {alerta.tipo === 'critico'
+                    ? 'crítico'
+                    : alerta.tipo === 'atencao'
+                      ? 'em atenção'
+                      : alerta.tipo === 'parcial'
+                        ? 'com nota parcial'
+                        : alerta.tipo === 'evidencia_pendente'
+                          ? 'com evidência pendente'
+                          : 'saudável'}{alerta.quantidade !== 1 && !['atencao', 'parcial', 'evidencia_pendente'].includes(alerta.tipo) ? 's' : ''}
                 </p>
                 <p className="text-xs opacity-70">{alerta.descricao}</p>
               </div>
@@ -988,7 +1041,15 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                 <SelectItem value="todos">Todos os status</SelectItem>
                 <SelectItem value="critico">🔴 Crítico</SelectItem>
                 <SelectItem value="atencao">🟡 Atenção</SelectItem>
-                <SelectItem value="excelente">🟢 Excelente</SelectItem>
+                {HEALTH_SCORE_V3_PERFORMANCE_ENABLED ? (
+                  <>
+                    <SelectItem value="saudavel">🟢 Saudável</SelectItem>
+                    <SelectItem value="parcial">🟣 Parcial</SelectItem>
+                    <SelectItem value="evidencia_pendente">⚪ Evidência pendente</SelectItem>
+                  </>
+                ) : (
+                  <SelectItem value="excelente">🟢 Excelente</SelectItem>
+                )}
               </SelectContent>
             </Select>
             <div className="relative">
@@ -1181,25 +1242,24 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                                 Revisão: <strong>{professor.healthV3?.revisao ?? '-'}</strong>
                               </p>
                               {professor.healthV3?.motivoBloqueio && (
-                                <p className="mt-1.5 text-amber-300">{professor.healthV3.motivoBloqueio}</p>
+                                <p className="mt-1.5 text-amber-300">
+                                  {resolveHealthScoreV3EvidenceMessage(professor.healthV3.motivoBloqueio)}
+                                </p>
                               )}
                             </div>
                           }
                         >
                           <div className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 ${
-                            professor.healthV3 && isHealthScoreV3SnapshotVisible(professor.healthV3)
-                              ? resolveHealthScoreV3Status(professor.healthV3) === 'critico'
-                                ? 'border-rose-700 bg-rose-900/30 text-rose-400'
-                                : resolveHealthScoreV3Status(professor.healthV3) === 'atencao'
-                                  ? 'border-amber-700 bg-amber-900/30 text-amber-400'
-                                  : 'border-emerald-700 bg-emerald-900/30 text-emerald-400'
-                              : 'border-slate-600 bg-slate-800 text-slate-400'
+                            getStatusColor(resolveHealthScoreV3Status(professor.healthV3))
                           }`}>
                             <span className="text-sm font-black">
                               {professor.healthV3 && isHealthScoreV3SnapshotVisible(professor.healthV3)
                                 ? Math.round(Number(professor.healthV3.score))
-                                : 'Sem base'}
+                                : 'Evidência pendente'}
                             </span>
+                            {professor.healthV3?.estadoPublicacao === 'parcial' && (
+                              <span className="text-[9px] font-semibold uppercase tracking-wide">parcial</span>
+                            )}
                           </div>
                         </Tooltip>
                       ) : (
@@ -1579,13 +1639,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                             : 'text-slate-400 bg-slate-500/10 border-slate-600'
                       }`}>
                         {HEALTH_SCORE_V3_PERFORMANCE_ENABLED
-                          ? resolveHealthScoreV3Status(professor.healthV3) === 'critico'
-                            ? 'Crítico'
-                            : resolveHealthScoreV3Status(professor.healthV3) === 'atencao'
-                              ? 'Atenção'
-                              : resolveHealthScoreV3Status(professor.healthV3) === 'excelente'
-                                ? 'Excelente'
-                                : 'Sem base'
+                          ? formatHealthScoreV3Status(resolveHealthScoreV3Status(professor.healthV3))
                           : professor.health_score_confiavel
                             ? (professor.status === 'critico' ? 'Crítico' : professor.status === 'atencao' ? 'Atenção' : 'Excelente')
                             : 'Em auditoria'}

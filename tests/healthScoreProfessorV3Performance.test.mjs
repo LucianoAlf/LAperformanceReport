@@ -214,6 +214,70 @@ test('hook faz uma unica leitura batch e a tabela mantem rollback V2 por feature
   assert.match(tab, /Sem base/i);
 });
 
+test('equipe V3 parte do roster ativo e explica professor sem snapshot', async () => {
+  const {
+    mergeHealthScoreV3ActiveRoster,
+    resolveHealthScoreV3EvidenceMessage,
+    resolveHealthScoreV3UiStatus,
+  } = await import(`../${helperPath}`);
+
+  const equipe = mergeHealthScoreV3ActiveRoster({
+    snapshots: [],
+    professorIds: [11, 22],
+    competencia: '2026-07-01',
+    unidadeId: 'recreio',
+    periodicidade: 'mensal',
+  });
+
+  assert.deepEqual(equipe.map((item) => item.professorId), [11, 22]);
+  assert.equal(equipe[0].estadoPublicacao, 'sem_base');
+  assert.equal(equipe[0].score, null);
+  assert.equal(equipe[0].motivoBloqueio, 'fonte_canonica_indisponivel');
+  assert.equal(equipe[0].metrics.get('conversao')?.codigoEvidencia, 'fonte_canonica_indisponivel');
+  assert.equal(resolveHealthScoreV3UiStatus(equipe[0]), 'evidencia_pendente');
+  assert.equal(
+    resolveHealthScoreV3EvidenceMessage('sem_experimental_periodo', 'conversao'),
+    'Não realizou aula experimental no período',
+  );
+  assert.equal(
+    resolveHealthScoreV3EvidenceMessage('fonte_canonica_indisponivel', 'presenca'),
+    'Dados oficiais do período ainda não disponíveis',
+  );
+});
+
+test('status V3 separa parcial de ranking oficial', async () => {
+  const { resolveHealthScoreV3UiStatus } = await import(`../${helperPath}`);
+  const base = {
+    score: 82,
+    classificacao: 'saudavel',
+    scoreExibivel: true,
+    rankingHabilitado: false,
+    snapshotPublicavel: false,
+  };
+
+  assert.equal(resolveHealthScoreV3UiStatus({
+    ...base,
+    estadoPublicacao: 'parcial',
+  }), 'parcial');
+  assert.equal(resolveHealthScoreV3UiStatus({
+    ...base,
+    estadoPublicacao: 'oficial',
+    rankingHabilitado: true,
+    snapshotPublicavel: true,
+  }), 'saudavel');
+});
+
+test('tabela V3 oferece filtros parcial e evidencia pendente sem ranquear parcial', () => {
+  const tab = read(tabPath);
+
+  assert.match(tab, /mergeHealthScoreV3ActiveRoster/);
+  assert.match(tab, /resolveHealthScoreV3UiStatus/);
+  assert.match(tab, /value="parcial"/);
+  assert.match(tab, /value="evidencia_pendente"/);
+  assert.match(tab, /Evidência pendente/);
+  assert.match(tab, /isHealthScoreV3SnapshotRankable/);
+});
+
 test('Task 5 mantem leitura parcial sem recalcular pilares segmentados por meta global', () => {
   assert.equal(
     fs.existsSync(segmentedMetricsMigrationPath),
