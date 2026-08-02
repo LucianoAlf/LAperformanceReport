@@ -75,6 +75,7 @@ interface PreviewPersistida {
   auth_user_id: string;
   unidade_id: string;
   modo_teste: boolean;
+  evasao_id: number;
 }
 
 interface ClaimEnvio {
@@ -278,7 +279,7 @@ async function carregarPreviewPersistida(
 ): Promise<PreviewPersistida> {
   const { data, error } = await supabase
     .from("pesquisa_evasao_previews")
-    .select("auth_user_id, unidade_id, modo_teste")
+    .select("auth_user_id, unidade_id, modo_teste, evasao_id")
     .eq("id", previewId)
     .limit(2);
 
@@ -287,16 +288,47 @@ async function carregarPreviewPersistida(
     throw new ErroHttp(404, "Preview nao encontrada");
   }
 
-  const { auth_user_id, unidade_id, modo_teste } = data[0];
+  const { auth_user_id, unidade_id, modo_teste, evasao_id } = data[0];
   if (
     typeof auth_user_id !== "string" ||
     typeof unidade_id !== "string" ||
-    typeof modo_teste !== "boolean"
+    typeof modo_teste !== "boolean" ||
+    !Number.isSafeInteger(Number(evasao_id))
   ) {
     throw new ErroHttp(500, "Preview persistida inconsistente");
   }
 
-  return { auth_user_id, unidade_id, modo_teste };
+  return {
+    auth_user_id,
+    unidade_id,
+    modo_teste,
+    evasao_id: Number(evasao_id),
+  };
+}
+
+async function exigirPesquisaSemOptOut(
+  supabase: SupabaseClient,
+  filtro: { pesquisaId?: string; evasaoId?: number; modoTeste?: boolean },
+): Promise<void> {
+  let query = supabase.from("pesquisa_evasao").select("id")
+    .eq("resposta_status", "recusada_opt_out").limit(1);
+  if (filtro.pesquisaId) {
+    query = query.eq("id", filtro.pesquisaId);
+  } else if (Number.isSafeInteger(filtro.evasaoId)) {
+    query = query.eq("evasao_id", filtro.evasaoId)
+      .eq("modo_teste", filtro.modoTeste === true);
+  } else {
+    throw new Error("Filtro de opt-out ausente");
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  if ((data ?? []).length > 0) {
+    throw new ErroHttp(
+      409,
+      "O contato recusou novas mensagens nesta pesquisa",
+    );
+  }
 }
 
 async function registrarResultado(
@@ -481,6 +513,10 @@ async function previsualizar(
     supabase,
     request.evasao_id,
   );
+  await exigirPesquisaSemOptOut(supabase, {
+    evasaoId: movimentacao.id,
+    modoTeste: request.modo_teste,
+  });
 
   const assinatura = await resolverAssinaturaAtivaParaNovaPreview(
     identidade,
@@ -664,6 +700,10 @@ async function confirmar(
   if (previewPersistida.auth_user_id !== identidade.authUserId) {
     throw new ErroAutorizacao(403, "Preview pertence a outro usuario");
   }
+  await exigirPesquisaSemOptOut(supabase, {
+    evasaoId: previewPersistida.evasao_id,
+    modoTeste: previewPersistida.modo_teste,
+  });
 
   const { auth_user_id } = previewPersistida;
 
@@ -681,6 +721,7 @@ async function confirmar(
     throw new ErroHttp(500, "Claim nao retornou snapshot unico");
   }
   const claim = claims[0] as ClaimEnvio;
+  await exigirPesquisaSemOptOut(supabase, { pesquisaId: claim.pesquisa_id });
 
   if (claim.deve_despachar !== true) {
     return responderJson({

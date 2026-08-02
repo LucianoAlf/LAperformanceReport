@@ -1019,7 +1019,7 @@ git commit -m "fix: preservar resposta da pesquisa de primeira aula"
 - Modify: `supabase/config.toml`
 - Create: `tests/pesquisaEvasaoAudioLifecycle.test.mjs`
 
-- [ ] **Step 1: Escrever testes vermelhos**
+- [x] **Step 1: Escrever testes vermelhos**
 
 Cobrir:
 
@@ -1033,7 +1033,7 @@ Cobrir:
 - logs não contêm URL nem transcrição;
 - somente service role pode invocar worker.
 
-- [ ] **Step 2: Persistir primeiro, processar depois**
+- [x] **Step 2: Persistir primeiro, processar depois**
 
 O inbound:
 
@@ -1044,7 +1044,7 @@ O inbound:
 
 O worker carrega credenciais e mídia pelo ID interno. Não recebe URL de mídia arbitrária do request.
 
-- [ ] **Step 3: Implementar versionamento**
+- [x] **Step 3: Implementar versionamento**
 
 Transições permitidas:
 
@@ -1056,7 +1056,7 @@ falhou -> nova versao pendente
 
 Não atualizar texto da versão concluída.
 
-- [ ] **Step 4: Configurar JWT**
+- [x] **Step 4: Configurar JWT**
 
 ```toml
 [functions.transcrever-mensagem-evasao]
@@ -1065,7 +1065,7 @@ verify_jwt = true
 
 Não permitir chamada anônima.
 
-- [ ] **Step 5: Executar testes**
+- [x] **Step 5: Executar testes**
 
 ```powershell
 deno test supabase/functions/transcrever-mensagem-evasao/contract.test.ts
@@ -1074,7 +1074,7 @@ node --test tests/pesquisaEvasaoAudioLifecycle.test.mjs
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add -- supabase/functions/transcrever-mensagem-evasao/index.ts supabase/functions/transcrever-mensagem-evasao/contract.ts supabase/functions/transcrever-mensagem-evasao/contract.test.ts supabase/functions/webhook-whatsapp-inbox/evasao.ts supabase/config.toml tests/pesquisaEvasaoAudioLifecycle.test.mjs
@@ -1092,7 +1092,7 @@ git commit -m "feat: transcrever audio de evasao de forma assincrona"
 - Modify: `supabase/config.toml`
 - Create: `tests/pesquisaEvasaoConsolidacao.test.mjs`
 
-- [ ] **Step 1: Escrever testes vermelhos das janelas**
+- [x] **Step 1: Escrever testes vermelhos das janelas**
 
 Casos com relógio injetado:
 
@@ -1107,7 +1107,7 @@ Casos com relógio injetado:
 - sete dias sem conteúdo válido: `expirada`;
 - opt-out: não entra no worker de conteúdo.
 
-- [ ] **Step 2: Criar claim atômico**
+- [x] **Step 2: Criar claim atômico**
 
 Tabela/função de fila:
 
@@ -1128,7 +1128,7 @@ claim_pesquisas_evasao_processamento(
 
 Usar `FOR UPDATE SKIP LOCKED`. Um evento novo faz upsert de `executar_apos = now() + interval '60 seconds'`.
 
-- [ ] **Step 3: Implementar consolidação determinística**
+- [x] **Step 3: Implementar consolidação determinística**
 
 Ordenar por:
 
@@ -1145,18 +1145,20 @@ Usar:
 
 Persistir em `pesquisa_evasao_analises` uma versão com `status='rascunho'`.
 
-- [ ] **Step 4: Agendar worker**
+- [x] **Step 4: Agendar worker**
 
 Executar a cada minuto via `pg_cron`/`pg_net`, com segredo interno já usado no projeto. Registrar job name e impedir duplicação de cron na migração.
 
-Edge:
+Edge: como o banco não dispõe de JWT de `service_role` para o `pg_cron`, usa o
+mesmo segredo interno já provisionado para crons. A validação de
+`x-sync-token` acontece antes da leitura do body e da criação do cliente.
 
 ```toml
 [functions.processar-conversa-evasao]
-verify_jwt = true
+verify_jwt = false
 ```
 
-- [ ] **Step 5: Executar testes**
+- [x] **Step 5: Executar testes**
 
 ```powershell
 deno test supabase/functions/processar-conversa-evasao/contract.test.ts
@@ -1166,7 +1168,14 @@ npx supabase db lint --local
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+Executado em 02/08/2026: contratos Deno e testes estáticos passaram. O lint
+local não conectou porque o Postgres do Supabase local não estava ativo em
+`127.0.0.1:54322`; em substituição, as migrations `190000`, `191500` e
+`192000` foram aplicadas juntas num PostgreSQL 17 descartável, com prova de
+claim, reagendamento, preservação de `legado_v1` e opt-out. O container foi
+removido após o ensaio.
+
+- [x] **Step 6: Commit**
 
 ```powershell
 git add -- supabase/migrations/20260801191500_pesquisa_evasao_consolidacao_worker.sql supabase/functions/processar-conversa-evasao/index.ts supabase/functions/processar-conversa-evasao/contract.ts supabase/functions/processar-conversa-evasao/contract.test.ts supabase/config.toml tests/pesquisaEvasaoConsolidacao.test.mjs
@@ -1180,9 +1189,12 @@ git commit -m "feat: consolidar respostas multipartes de evasao"
 - Modify: `supabase/functions/webhook-whatsapp-inbox/evasao.ts`
 - Modify: `supabase/functions/webhook-whatsapp-inbox/evasao.test.ts`
 - Modify: `supabase/functions/enviar-pesquisa-evasao/index.ts`
+- Modify: `supabase/functions/processar-conversa-evasao/index.ts`
+- Create: `supabase/migrations/20260801192000_pesquisa_evasao_opt_out.sql`
 - Create: `tests/pesquisaEvasaoOptOut.test.mjs`
+- Create: `tests/fixtures/pesquisa_evasao_multipartes_worker_pg17.sql`
 
-- [ ] **Step 1: Escrever testes vermelhos**
+- [x] **Step 1: Escrever testes vermelhos**
 
 Frases explícitas iniciais:
 
@@ -1205,7 +1217,7 @@ Casos:
 - worker não cria análise de motivos;
 - opt-out não altera consentimentos de outros domínios sem decisão jurídica/produto específica.
 
-- [ ] **Step 2: Implementar regra conservadora**
+- [x] **Step 2: Implementar regra conservadora**
 
 Somente padrões explícitos e de alta precisão produzem opt-out automático. Casos incertos ficam `coletando` e recebem flag de revisão.
 
@@ -1219,7 +1231,7 @@ opt_out_provider_message_id = ...
 
 Não responder automaticamente ao contato nesta fase.
 
-- [ ] **Step 3: Bloquear reenvio**
+- [x] **Step 3: Bloquear reenvio**
 
 Na Edge de envio, antes de gerar/confirmar preview:
 
@@ -1228,7 +1240,7 @@ Na Edge de envio, antes de gerar/confirmar preview:
 - não criar lembrete;
 - não transformar em `respondido`.
 
-- [ ] **Step 4: Testar**
+- [x] **Step 4: Testar**
 
 ```powershell
 deno test supabase/functions/webhook-whatsapp-inbox/evasao.test.ts
@@ -1237,10 +1249,10 @@ node --test tests/pesquisaEvasaoOptOut.test.mjs
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
-git add -- supabase/functions/webhook-whatsapp-inbox/evasao.ts supabase/functions/webhook-whatsapp-inbox/evasao.test.ts supabase/functions/enviar-pesquisa-evasao/index.ts tests/pesquisaEvasaoOptOut.test.mjs
+git add -- supabase/functions/webhook-whatsapp-inbox/evasao.ts supabase/functions/webhook-whatsapp-inbox/evasao.test.ts supabase/functions/enviar-pesquisa-evasao/index.ts supabase/functions/processar-conversa-evasao/index.ts supabase/migrations/20260801192000_pesquisa_evasao_opt_out.sql tests/pesquisaEvasaoOptOut.test.mjs tests/fixtures/pesquisa_evasao_multipartes_worker_pg17.sql docs/superpowers/plans/2026-07-30-pesquisa-evasao-subprojeto-b-conversa-multipartes.md
 git commit -m "feat: respeitar opt-out da pesquisa de evasao"
 ```
 

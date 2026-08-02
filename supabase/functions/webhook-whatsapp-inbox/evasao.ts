@@ -91,6 +91,12 @@ export type IngestResult =
   | { status: "duplicate"; handled: boolean; pesquisaId: string | null }
   | { status: "triagem"; handled: false; mensagemId: string | null }
   | {
+    status: "opt_out";
+    handled: true;
+    pesquisaId: string;
+    mensagemId: string | null;
+  }
+  | {
     status: "registrada";
     handled: true;
     pesquisaId: string;
@@ -188,21 +194,19 @@ export function classificarSubstantividade(
   const normalizado = normalizarParaClassificacao(texto);
 
   if (
-    /\b(nao quero responder|nao me mande mais mensagens|pare de mandar mensagem|remova meu numero)\b/
-      .test(
-        normalizado,
-      )
-  ) {
-    return "opt_out";
-  }
-
-  if (
     /\b(respondo|responder|falo|falamos)\b.*\b(amanha|depois|mais tarde|daqui a pouco)\b/
       .test(
         normalizado,
       ) || /\b(agora nao|depois eu respondo)\b/.test(normalizado)
   ) {
     return "adiamento";
+  }
+
+  if (
+    /\b(nao quero responder|nao me mande mais mensagens|pare de mandar mensagens?|remova (o )?meu numero)\b/
+      .test(normalizado)
+  ) {
+    return "opt_out";
   }
 
   if (
@@ -320,6 +324,17 @@ export async function ingerirEvento(
 
   if (!pesquisa) {
     return { status: "triagem", handled: false, mensagemId: persistida.id };
+  }
+
+  // O trigger transacional grava a recusa e remove a fila. Não sobrescrever
+  // esse estado com o cabeçalho de compatibilidade logo após o INSERT.
+  if (substantividade === "opt_out") {
+    return {
+      status: "opt_out",
+      handled: true,
+      pesquisaId: pesquisa.id,
+      mensagemId: persistida.id,
+    };
   }
 
   if (pesquisa.respostaStatus === "revisada") {

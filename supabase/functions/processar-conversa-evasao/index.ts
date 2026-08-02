@@ -165,6 +165,7 @@ serve(async (req: Request) => {
           .update({
             status: pronta ? "respondido" : "enviado",
             resposta_status: decisao.respostaStatus,
+            resposta_valida: pronta,
             resposta_texto: decisao.textoConsolidado,
             resposta_tipo: decisao.respostaTipo,
             respondido_em: pronta ? new Date().toISOString() : null,

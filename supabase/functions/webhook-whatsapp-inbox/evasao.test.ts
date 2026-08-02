@@ -378,3 +378,44 @@ Deno.test("continuação após revisão abre nova versão de análise", async ()
   assertEquals(repo.novasAnalises, [alvo.id]);
   assertEquals(repo.cabecalhos[0].respostaStatus, "coletando");
 });
+
+Deno.test("opt-out explícito é conservador e adiamento tem precedência", async () => {
+  for (
+    const frase of [
+      "não quero responder",
+      "Nao quero responder",
+      "não me mande mais mensagens",
+      "pare de mandar mensagens",
+      "remova o meu número",
+    ]
+  ) {
+    assertEquals(classificarSubstantividade(frase), "opt_out");
+  }
+  assertEquals(
+    classificarSubstantividade("não quero responder agora, amanhã falo"),
+    "adiamento",
+  );
+  assertEquals(classificarSubstantividade(null), "indeterminado");
+
+  const repo = new FakeRepository();
+  const alvo = pesquisa();
+  const resultado = await ingerirEvento(
+    evento({ texto: "não me mande mais mensagens" }),
+    {
+      status: "resolvida",
+      criterio: "telefone_caixa",
+      pesquisa: alvo,
+    },
+    repo,
+  );
+
+  assertEquals(repo.mensagens[0].substantividade, "opt_out");
+  assertEquals(repo.cabecalhos.length, 0);
+  assertEquals(repo.novasAnalises.length, 0);
+  assertEquals(resultado, {
+    status: "opt_out",
+    handled: true,
+    pesquisaId: alvo.id,
+    mensagemId: "30000000-0000-4000-8000-000000000001",
+  });
+});
