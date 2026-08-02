@@ -1,3 +1,8 @@
+import {
+  classificarSubstantividade,
+  type Substantividade,
+} from "../_shared/pesquisa-evasao-substantividade.ts";
+
 export type StatusTranscricao =
   | "pendente"
   | "processando"
@@ -31,6 +36,10 @@ export interface RepositorioTranscricao {
   concluir(transcricaoId: string, texto: string): Promise<void>;
   falhar(transcricaoId: string, codigo: string): Promise<void>;
   atualizarStoragePath(mensagemId: string, path: string): Promise<void>;
+  atualizarSubstantividade(
+    mensagemId: string,
+    valor: Substantividade,
+  ): Promise<void>;
 }
 
 export interface MidiaProcessada {
@@ -155,6 +164,10 @@ export async function processarTranscricao(
     if (!contexto.audioStoragePath) {
       await repositorio.atualizarStoragePath(mensagemId, storagePath);
     }
+    await repositorio.atualizarSubstantividade(
+      mensagemId,
+      classificarSubstantividade(texto),
+    );
     await repositorio.concluir(transcricao.id, texto);
     return { status: "concluida", versao: transcricao.versao };
   } catch (error) {

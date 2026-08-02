@@ -32,6 +32,7 @@ class FakeRepositorio implements RepositorioTranscricao {
   concluidas: Array<{ id: string; texto: string }> = [];
   falhas: Array<{ id: string; codigo: string }> = [];
   paths: string[] = [];
+  substantividades: Array<{ mensagemId: string; valor: string }> = [];
   claimed = true;
 
   carregarMensagem(): Promise<ContextoMensagemAudio | null> {
@@ -66,6 +67,10 @@ class FakeRepositorio implements RepositorioTranscricao {
   }
   atualizarStoragePath(_mensagemId: string, path: string): Promise<void> {
     this.paths.push(path);
+    return Promise.resolve();
+  }
+  atualizarSubstantividade(mensagemId: string, valor: string): Promise<void> {
+    this.substantividades.push({ mensagemId, valor });
     return Promise.resolve();
   }
 }
@@ -129,7 +134,32 @@ Deno.test("processa pendente, salva mídia privada e conclui a mesma versão", a
     id: repo.ultima!.id,
     texto: "A professora atrasava bastante.",
   }]);
+  assertEquals(repo.substantividades, [{
+    mensagemId: repo.contexto.mensagemId,
+    valor: "conteudo_substantivo",
+  }]);
   assertEquals(repo.falhas, []);
+});
+
+Deno.test("classifica a substantividade do áudio a partir da transcrição", async () => {
+  const repo = new FakeRepositorio();
+  await processarTranscricao(
+    repo.contexto.mensagemId,
+    repo,
+    processador({
+      obterDoProvedor: () =>
+        Promise.resolve({
+          texto: "Oi, deixa eu te contar uma coisa",
+          arquivo: new Uint8Array([1, 2, 3]),
+          contentType: "audio/mpeg",
+        }),
+    }),
+  );
+
+  assertEquals(repo.substantividades, [{
+    mensagemId: repo.contexto.mensagemId,
+    valor: "abertura",
+  }]);
 });
 
 Deno.test("versão concluída torna reexecução idempotente", async () => {

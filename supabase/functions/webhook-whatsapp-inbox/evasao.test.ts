@@ -349,6 +349,10 @@ Deno.test("adiamento e abertura não atualizam última interação substantiva",
     "abertura",
   );
   assertEquals(
+    classificarSubstantividade("Oi, deixa eu te contar uma coisa"),
+    "abertura",
+  );
+  assertEquals(
     classificarSubstantividade(
       "O professor sempre começava vinte minutos atrasado",
     ),

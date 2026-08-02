@@ -23,7 +23,8 @@ export function classificarSubstantividade(
 
   if (
     /\b(respondo|responder|falo|falamos)\b.*\b(amanha|depois|mais tarde|daqui a pouco)\b/
-      .test(normalizado) || /\b(agora nao|depois eu respondo)\b/.test(normalizado)
+      .test(normalizado) ||
+    /\b(agora nao|depois eu respondo)\b/.test(normalizado)
   ) {
     return "adiamento";
   }
@@ -36,7 +37,9 @@ export function classificarSubstantividade(
   }
 
   if (
-    /^(oi|ola|bom dia|boa tarde|boa noite|tudo bem|entao|pois e|deixa eu te falar|olha deixa eu te falar uma coisa)$/i
+    /^(oi|ola|bom dia|boa tarde|boa noite|tudo bem|entao|pois e)$/i
+      .test(normalizado) ||
+    /^(?:(?:oi|ola|olha) )?deixa eu te (?:falar|contar)(?: uma coisa)?$/i
       .test(normalizado)
   ) {
     return "abertura";

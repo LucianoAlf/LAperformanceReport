@@ -131,6 +131,14 @@ serve(async (req: Request) => {
         .is("audio_storage_path", null);
       if (error) throw error;
     },
+    async atualizarSubstantividade(id: string, valor: string) {
+      const { error } = await supabase
+        .from("pesquisa_evasao_mensagens")
+        .update({ substantividade: valor })
+        .eq("id", id)
+        .eq("tipo", "audio");
+      if (error) throw error;
+    },
   };
 
   try {
