@@ -255,6 +255,23 @@ export async function resolverPesquisa(
     ...new Map(candidatas.map((item) => [item.id, item])).values(),
   ];
 
+  const multipartes = unicas.filter(
+    (item) => item.respostaIngestaoVersao === "multipartes_v2",
+  );
+  if (multipartes.length === 1) {
+    return {
+      status: "resolvida",
+      criterio: "telefone_caixa",
+      pesquisa: multipartes[0],
+    };
+  }
+  if (multipartes.length > 1) {
+    return {
+      status: "ambigua",
+      candidatos: multipartes.map((item) => item.id),
+    };
+  }
+
   if (unicas.length === 1) {
     return {
       status: "resolvida",

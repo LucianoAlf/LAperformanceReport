@@ -177,6 +177,23 @@ Deno.test("zero candidato vira sem_pesquisa e dois viram ambigua", async () => {
   assertEquals((await resolverPesquisa(evento(), duplo)).status, "ambigua");
 });
 
+Deno.test("unica V2 prevalece sobre pesquisas legadas abertas no mesmo telefone", async () => {
+  const repo = new FakeRepository();
+  repo.abertas = [
+    pesquisa({ id: "legado-a", respostaIngestaoVersao: "legado_v1" }),
+    pesquisa({ id: "v2", respostaIngestaoVersao: "multipartes_v2" }),
+    pesquisa({ id: "legado-b", respostaIngestaoVersao: "legado_v1" }),
+  ];
+
+  const resolucao = await resolverPesquisa(evento(), repo);
+
+  assertEquals(resolucao.status, "resolvida");
+  if (resolucao.status === "resolvida") {
+    assertEquals(resolucao.pesquisa.id, "v2");
+    assertEquals(resolucao.criterio, "telefone_caixa");
+  }
+});
+
 Deno.test("pesquisa expirada não é associada silenciosamente", async () => {
   const repo = new FakeRepository();
   repo.abertas = [pesquisa({ enviadoEm: "2026-07-01T00:00:00.000Z" })];
