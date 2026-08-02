@@ -44,7 +44,10 @@ test('preview e confirmação recusam reenvio com HTTP 409', () => {
 test('worker não cria análise para opt-out e consentimentos externos não são tocados', () => {
   const contract = read(consolidationPath);
   const sql = read(migrationPath);
-  assert.match(contract, /substantividade\s*===\s*["']opt_out["']/);
+  assert.match(
+    contract,
+    /substantividadeEfetiva\(item\)\s*===\s*["']opt_out["']/,
+  );
   assert.doesNotMatch(
     sql,
     /(?:update|insert\s+into|alter\s+table|delete\s+from)[^;]*(?:consent|lgpd|marketing|opt_out_whatsapp)/i,
