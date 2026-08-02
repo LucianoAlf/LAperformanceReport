@@ -1,0 +1,660 @@
+# Lia — acompanhamento ativo da pesquisa de evasão
+
+**Data:** 02/08/2026
+
+**Status:** proposta para revisão do Alf; nenhuma implementação autorizada
+
+**Autoridade de produto:** Alf
+
+**Posição no roadmap:** novo bloco **B.5**, depois do Subprojeto B e antes do Subprojeto C
+
+**Escopo:** alertas privados, follow-up de três dias, histórico de resposta, KPI agregado e estados operacionais na tela
+
+## 1. Decisão
+
+A Lia passa a acompanhar ativamente a operação da pesquisa de evasão. A equipe
+não deve depender de lembrar de abrir o LA Report para descobrir que uma família
+respondeu ou que uma pesquisa precisa de follow-up.
+
+O LA Report continua sendo a fonte canônica. A Lia:
+
+1. detecta eventos e prazos a partir dos dados canônicos;
+2. avisa individualmente quem enviou a pesquisa;
+3. publica somente indicadores agregados no grupo;
+4. leva a pessoa de volta à fila correta do sistema;
+5. nunca transforma WhatsApp, Telegram ou texto gerado por IA na fonte do caso.
+
+## 2. Objetivos
+
+- Avisar a pessoa que enviou a pesquisa quando chegar uma resposta válida.
+- Avisar com prioridade maior quando chegar uma rodada nova depois de uma
+  revisão concluída.
+- Aos três dias sem resposta válida, enviar à pessoa que fez o disparo um
+  resumo privado das pesquisas que precisam de follow-up.
+- Exibir no LA Report os estados `Enviado`, `Aguardando resposta` e
+  `Follow-up pendente`.
+- Registrar historicamente taxa e tempo de resposta sem misturar teste com
+  produção.
+- Preparar, mas não ativar sem nova decisão do Alf, um único follow-up
+  automático para a família.
+
+## 3. Não objetivos
+
+- Classificar causas, sentimento, match ou divergência; isso permanece no
+  Subprojeto C.
+- Criar ação de retenção, encaminhamento pedagógico ou indicador de professor.
+- Reestruturar todos os agentes da VPS.
+- Migrar Sol e Fábio para o mesmo motor.
+- Substituir a fila e a timeline do LA Report por conversas no WhatsApp.
+- Enviar resposta, transcrição, áudio, telefone ou detalhe financeiro em alerta
+  interno.
+- Ativar o follow-up automático ao aluno nesta entrega sem aprovação adicional.
+
+## 4. Evidência atual
+
+A auditoria de 02/08/2026 foi somente leitura e confirmou o projeto de produção
+`ouqwbbermlzqqvtqwlul`.
+
+### 4.1 Pesquisa
+
+- `pesquisa_evasao` já registra `executado_por_usuario_id`,
+  `executado_por_auth_user_id`, `enviado_em`, `caixa_id`, modo de teste,
+  opt-out, estados de resposta e conteúdo novo depois de revisão.
+- As mensagens multipartes, transcrições e rodadas ficam nas tabelas do
+  Subprojeto B.
+- O default de novas pesquisas é `multipartes_v2`.
+- Existem dez pesquisas enviadas, todas de teste; ainda não existe envio
+  produtivo. Oito testes possuem resposta válida.
+- Portanto, o histórico produtivo começa no rollout deste bloco. Nenhum teste
+  anterior pode ser usado como baseline.
+
+### 4.2 Destino privado do operador
+
+- Fabi (`usuarios.id=30`) possui telefone no cadastro atual.
+- Jessica (`usuarios.id=29`) possui autenticação ativa, mas não possui telefone
+  em `usuarios`.
+- O rollout privado exige cadastro e validação de um canal para ambas. Ausência
+  de canal nunca autoriza fallback para grupo.
+
+### 4.3 Motores existentes
+
+- `bi_messages_lamusic` possui quatro mensagens concluídas. Seu contrato é de
+  conversa do agente BI: `conversation_id`, papel, conteúdo, SQL, resultado e
+  estados `pending/processing/done/error`. Não possui destino WhatsApp,
+  política de canal, referência de pesquisa ou idempotência por evento.
+- A Edge `bi-agent-lamusic` está desativada e o próprio código informa que o
+  processamento migrou para a Sol na VPS por `bi_messages_lamusic`.
+- `fila_relatorios_whatsapp` tem transporte, tentativas e evidência, mas é uma
+  fila de relatório agregado. O schema aceita somente `relatorio_admin` e
+  `relatorio_comercial` e deduplica por tipo, unidade, JID e dia.
+- `fila_relatorios_sol_hermes` tem 29 entregas e 3 erros, aceita referência e
+  metadata e possui watchdog. Entretanto, seu contrato ainda usa nomes e
+  unicidade de relatório/grupo, inadequados para vários alertas individuais no
+  mesmo dia.
+- As tabelas genéricas `notificacao_*` estão acopladas a projetos, guardam a
+  mensagem integral e permitem gerenciamento amplo a qualquer usuário
+  autenticado. Não são adequadas para respostas privadas de evasão.
+- `whatsapp_destinatarios_relatorio` já governa destinos de relatórios em
+  grupo, mas não possui destino privado do Sucesso do Aluno.
+
+## 5. Alternativas consideradas
+
+### 5.1 Usar `bi_messages_lamusic` para tudo
+
+É a opção mais curta, mas mistura conversa de BI, eventos de negócio e
+transporte. Não há destinatário, fila por canal, deduplicação por rodada nem
+evidência de entrega. Uma mudança no agente poderia atrasar ou duplicar alertas.
+
+**Decisão:** não usar.
+
+### 5.2 Escrever diretamente nas filas de relatório atuais
+
+Reaproveita workers existentes, mas força alertas privados em tabelas
+desenhadas para um relatório por grupo/dia. A unicidade atual pode engolir a
+segunda resposta recebida pelo mesmo operador no mesmo dia.
+
+**Decisão:** não usar como fonte de evento. O transporte existente pode ser
+reaproveitado somente por adaptador explícito.
+
+### 5.3 Outbox canônico no LA Report e adaptadores de transporte
+
+O domínio grava uma vez o evento e suas entregas. Um adaptador da VPS usa o
+transporte Hermes para os avisos privados; outro publica o relatório agregado
+na fila de grupo. Falha do canal não apaga nem recria o evento.
+
+**Decisão recomendada:** esta opção. Ela reutiliza o que já funciona sem
+transformar uma fila de BI ou relatório em fonte canônica da pesquisa.
+
+## 6. Fontes e granularidade
+
+### 6.1 Fonte canônica
+
+- Pesquisa, envio, opt-out e operador: `pesquisa_evasao`.
+- Evento recebido: `pesquisa_evasao_mensagens`.
+- Rodada e revisão: `pesquisa_evasao_analises`.
+- Transcrição: `pesquisa_evasao_transcricoes`.
+- Aluno e unidade: snapshots da pesquisa; o alerta não refaz join por nome.
+- Pessoa interna: `usuarios.id`, resolvida por
+  `executado_por_usuario_id`; `executado_por_auth_user_id` serve como evidência
+  adicional, não como substituto silencioso.
+
+O grão operacional é **uma pesquisa**. O grão de resposta é **uma rodada da
+pesquisa**. O grão de entrega é **um evento para um destinatário e canal**.
+
+### 6.2 Novos contratos conceituais
+
+A implementação deverá separar três conceitos:
+
+1. **Evento operacional:** fato imutável, por exemplo
+   `resposta_nova`, `rodada_nova_pos_revisao` ou `followup_3d_vencido`.
+2. **Entrega interna:** tentativa de avisar uma pessoa ou um grupo, com destino
+   validado, status, tentativas, template e evidência do provedor.
+3. **Snapshot de KPI:** agregado histórico por coorte e horário de corte.
+
+Os nomes físicos das tabelas serão definidos no plano, mas o contrato não pode
+reusar `bi_messages_lamusic` nem `notificacao_log` como fonte desses fatos.
+
+### 6.3 Destinos
+
+- Destino privado: cadastro governado por `usuarios.id`, com JID/telefone
+  validado, ativo, data de verificação e horário de silêncio.
+- Destino de grupo: configuração explícita de relatório do Sucesso do Aluno.
+- `usuarios.telefone` pode ajudar no provisionamento inicial, mas não deve ser
+  fallback silencioso em tempo de execução.
+- O destino efetivamente usado fica congelado na entrega, sem ser exibido em
+  lista geral.
+
+## 7. Regra de canal
+
+### 7.1 WhatsApp privado
+
+Vão para o WhatsApp privado da pessoa que enviou:
+
+- primeira resposta válida da família;
+- opt-out da família;
+- rodada nova depois de revisão concluída;
+- resumo das pesquisas sem resposta após três dias;
+- erro operacional que exige ação daquela pessoa.
+
+Esses avisos não são encaminhados ao grupo quando o destino privado está
+ausente ou falha. A falha fica visível em uma fila administrativa de entrega.
+
+### 7.2 Grupo
+
+Vão para o grupo:
+
+- KPI agregado do período;
+- taxa de resposta;
+- quantidade sem resposta após três dias;
+- tempo de resposta;
+- tendência em relação ao período anterior.
+
+O grupo nunca recebe nome do aluno ou responsável, telefone, texto, áudio,
+transcrição, motivo individual ou link para uma resposta específica.
+
+### 7.3 Telegram
+
+Telegram não é fonte nem destino definitivo deste bloco. Durante uma transição
+controlada, o relatório antigo pode permanecer sem duplicar os novos avisos. A
+desativação ou manutenção do Telegram pertence ao Subprojeto E.
+
+## 8. Gatilhos
+
+### 8.1 Primeira resposta de uma rodada
+
+O alerta nasce uma única vez por `pesquisa + versão da rodada` quando surge o
+primeiro conteúdo substantivo resolvido ou um opt-out.
+
+- Vários textos e áudios da mesma rodada geram um único alerta.
+- Se a rodada sucede uma versão já revisada, o gatilho prioritário da seção
+  8.2 substitui este alerta geral; os dois nunca são enviados para a mesma
+  rodada.
+- Abertura de conversa e adiamento não contam como resposta válida.
+- Áudio só aciona resposta válida depois de persistido e classificado; falha de
+  transcrição não apaga o evento.
+- `modo_teste=true` não gera alerta produtivo. Testes usam destino e métricas
+  isolados.
+
+Chave idempotente recomendada:
+`resposta_nova:{pesquisa_id}:{analise_versao}`.
+
+### 8.2 Rodada nova depois de revisão
+
+Quando uma versão anterior já está `revisada` e uma nova rodada recebe conteúdo
+substantivo ou opt-out:
+
+- a pesquisa volta à fila de revisão pelo contrato do Subprojeto B;
+- nasce um alerta privado de prioridade alta;
+- a versão revisada permanece imutável;
+- apenas um alerta é emitido para a nova versão.
+
+Chave idempotente recomendada:
+`rodada_pos_revisao:{pesquisa_id}:{analise_versao}`.
+
+### 8.3 Follow-up de três dias para a equipe
+
+Uma pesquisa entra na fila de follow-up ao completar 72 horas desde
+`enviado_em` quando:
+
+- o envio foi confirmado;
+- não é teste;
+- não existe resposta válida;
+- não existe opt-out;
+- nenhum follow-up foi concluído ou dispensado.
+
+O aviso é um resumo privado por operador, não uma mensagem por aluno. O ciclo
+agrupa no máximo dez nomes e informa quantos casos adicionais existem, sempre
+com link para a fila filtrada.
+
+Uma interação não substantiva mantém o caso na fila, mas ganha o rótulo
+`Interagiu sem resposta válida`. Para o eventual follow-up automático à
+família, qualquer interação recebida bloqueia o disparo até decisão humana.
+
+Chave idempotente recomendada:
+`followup_3d_operador:{usuario_id}:{data_corte_brt}`.
+
+### 8.4 KPI histórico
+
+Um snapshot diário fecha as métricas com horário de corte e versão da regra. O
+grupo recebe um resumo semanal por padrão; a cadência final depende da decisão
+do Alf.
+
+## 9. Conteúdo das mensagens internas
+
+### 9.1 Resposta nova — privado
+
+```text
+🔔 *Resposta recebida — Pesquisa de evasão*
+
+Aluno: {{aluno_nome}}
+Unidade: {{unidade_nome}}
+
+A família respondeu à pesquisa que você enviou. O conteúdo permanece protegido no LA Report.
+
+👉 {{link_caso}}
+```
+
+### 9.2 Rodada nova depois de revisão — privado
+
+```text
+🔔 *Nova rodada após revisão*
+
+Aluno: {{aluno_nome}}
+Unidade: {{unidade_nome}}
+
+A família enviou novo conteúdo depois da revisão. O caso voltou para a fila e precisa de uma nova leitura.
+
+👉 {{link_caso}}
+```
+
+### 9.3 Follow-up de três dias — privado
+
+```text
+⏰ *Pesquisas aguardando follow-up — 3 dias*
+
+Você tem {{total}} pesquisa(s) enviada(s) sem resposta válida:
+
+{{lista_aluno_unidade_data_envio}}
+
+{{quantidade_restante}}
+👉 {{link_fila_followup}}
+```
+
+A lista contém somente aluno, unidade e data de envio. Não contém telefone,
+motivo da saída nem resposta.
+
+### 9.4 KPI — grupo
+
+```text
+📊 *Pesquisa de evasão — {{periodo}}*
+
+Enviadas: {{enviadas}}
+Respostas válidas: {{respondidas}} ({{taxa_resposta}})
+Sem resposta após 3 dias: {{sem_resposta_d3}}
+Tempo mediano até a resposta: {{tempo_mediano}}
+Opt-outs: {{opt_outs}}
+
+Comparação com o período anterior: {{tendencia}}
+Metodologia: {{versao_regra}}
+```
+
+O relatório não lista casos individuais.
+
+## 10. Estados visíveis na interface
+
+O estado exibido é derivado do envio, da resposta e do follow-up; não substitui
+os estados técnicos do Subprojeto B.
+
+| Estado visível | Regra |
+|---|---|
+| Enviado | Provedor confirmou o envio; exibir também data, hora e operador |
+| Aguardando resposta | Enviado, sem resposta válida, opt-out ou prazo D+3 vencido |
+| Follow-up pendente | Prazo D+3 vencido e caso ainda elegível |
+| Follow-up avisado | Alerta privado entregue ao operador |
+| Follow-up realizado | Ação manual registrada ou follow-up automático confirmado |
+| Interagiu sem resposta válida | Houve abertura/adiamento, sem conteúdo analisável |
+| Respondendo | Rodada multipartes em coleta |
+| Pronta para revisão | Rodada fechada e disponível na fila |
+| Nova rodada | Conteúdo novo depois de revisão anterior |
+| Revisada | Última rodada concluída e sem conteúdo novo |
+| Opt-out | Família recusou contato; nenhum follow-up permitido |
+
+A linha mantém um selo de auditoria `Enviado em ... por ...` mesmo quando o
+estado principal já mudou para `Aguardando resposta` ou `Follow-up pendente`.
+
+A tela deve oferecer filtro e contador para `Follow-up pendente`. A resolução
+manual registra operador, horário, canal e resultado, sem apagar o vencimento.
+
+## 11. Histórico e indicadores
+
+### 11.1 Denominador
+
+Entram no denominador apenas pesquisas produtivas com envio confirmado.
+
+Ficam fora:
+
+- `modo_teste=true`;
+- envio falho, incerto ou não enviado;
+- duplicata impedida por idempotência;
+- pesquisa cancelada antes do envio.
+
+### 11.2 Resposta
+
+Resposta válida é a primeira interação substantiva da família. Opt-out e
+abertura/adiamento são registrados separadamente e não inflam a taxa.
+
+Métricas mínimas:
+
+- total enviado;
+- total com resposta válida;
+- taxa de resposta por coorte de envio;
+- resposta em até 24 horas e em até 72 horas;
+- sem resposta em D+3;
+- tempo mediano e percentil 75 até a primeira resposta válida;
+- opt-out;
+- follow-up devido, realizado e convertido em resposta;
+- respostas tardias e rodadas novas depois de revisão.
+
+“Ignorou” não é armazenado como julgamento permanente. O dado oficial é
+`sem_resposta_d3` ou `sem_resposta_d7`, sempre com janela explícita.
+
+### 11.3 Coorte e snapshot
+
+- A coorte é definida por `enviado_em`, em `America/Sao_Paulo`.
+- Coortes ainda dentro da janela aparecem como parciais.
+- Cada snapshot guarda início, fim, corte, versão da regra, total elegível e
+  contagens.
+- Métricas agregadas podem ser preservadas historicamente; eventos privados
+  seguem a política de retenção da pesquisa.
+- Mudança de regra cria nova versão e nunca reescreve snapshot fechado.
+
+## 12. Follow-up automático à família — desenho proposto, não autorizado
+
+### 12.1 Regra recomendada
+
+Se o Alf ativar a automação, a Lia poderá realizar uma única tentativa ao
+completar três dias, desde que:
+
+- o envio original esteja confirmado;
+- a pesquisa não seja teste;
+- não exista resposta válida, opt-out ou qualquer interação posterior ao
+  envio;
+- não exista follow-up anterior manual ou automático;
+- o destinatário e o `caixa_id` sejam os snapshots da pesquisa original;
+- o horário esteja dentro da janela autorizada;
+- exista template ativo, versionado e aprovado para o público correto;
+- a tentativa use chave idempotente única por pesquisa;
+- o registro identifique `origem=lia_automatica`, sem atribuir a ação a Fabi,
+  Jessica ou outra pessoa.
+
+O motor não troca telefone, responsável ou caixa com dados atuais. Divergência
+de snapshot bloqueia e encaminha para a equipe.
+
+### 12.2 Cópia candidata — adulto
+
+```text
+{{aluno_primeiro_nome}}, esta é uma mensagem automática de acompanhamento da LA Music. 🎵
+
+Passando apenas para lembrar da pergunta que enviamos sobre a sua experiência com a gente. Sua resposta é muito importante para melhorarmos.
+
+Se quiser responder, pode mandar texto ou áudio. Se preferir não responder, tudo bem — não enviaremos outro lembrete.
+```
+
+### 12.3 Cópia candidata — responsável
+
+```text
+{{responsavel_primeiro_nome}}, esta é uma mensagem automática de acompanhamento da LA Music. 🎵
+
+Passando apenas para lembrar da pergunta que enviamos sobre a experiência de {{aluno_primeiro_nome}} com a gente. Sua resposta é muito importante para melhorarmos.
+
+Se quiser responder, pode mandar texto ou áudio. Se preferir não responder, tudo bem — não enviaremos outro lembrete.
+```
+
+As cópias acima são proposta de produto, não texto aprovado para produção.
+
+### 12.4 Entrega e falha
+
+- Existe uma única tentativa de negócio.
+- Retry técnico só é permitido quando o provedor prova que não aceitou a
+  mensagem e a mesma chave idempotente é preservada.
+- Timeout ou resultado ambíguo não é reenviado automaticamente; o caso vai para
+  conferência humana.
+- Resposta que chega entre o claim e o envio cancela a tentativa.
+- O evento guarda template, versão, destino snapshot, caixa, horário,
+  `provider_message_id`, resultado e erro sanitizado.
+
+## 13. Arquitetura recomendada
+
+### 13.1 Plano de domínio — Supabase
+
+Responsável por:
+
+- detectar e registrar eventos idempotentes;
+- resolver o operador original;
+- manter estado do follow-up;
+- fornecer read models da fila e dos KPIs;
+- registrar snapshots históricos;
+- produzir entregas estruturadas, sem dar ao agente acesso bruto às respostas.
+
+### 13.2 Plano de transporte — VPS/Hermes
+
+Responsável por:
+
+- reclamar uma entrega pronta de forma atômica;
+- renderizar somente template aprovado com dados mínimos;
+- enviar ao JID já resolvido;
+- registrar sucesso ou erro sanitizado;
+- aplicar retry técnico, teto e watchdog;
+- nunca decidir se o evento existe ou quem deve recebê-lo.
+
+O código de envio do Hermes pode ser reaproveitado, mas a fila precisa de
+contrato neutro de mensagem interna. Não escrever o evento diretamente em
+`fila_relatorios_sol_hermes` com a unicidade atual.
+
+### 13.3 Relatório de grupo
+
+O KPI agregado pode aproveitar `fila_relatorios_whatsapp` e
+`whatsapp_destinatarios_relatorio` depois de incluir um tipo versionado próprio
+e destino autorizado do Sucesso do Aluno. A geração do KPI fica fora da função
+de transporte.
+
+### 13.4 Papel da Lia
+
+A Lia consome um read model governado de eventos e agregados. Ela não recebe
+texto bruto, áudio ou transcrição para decidir canal ou destinatário. A cópia
+operacional vem de template determinístico; IA pode explicar tendências em
+relatório posterior, nunca criar o fato nem autorizar o envio.
+
+## 14. Segurança, privacidade e observabilidade
+
+- Somente serviço autorizado cria e reclama entregas.
+- Usuário interno não lê a tabela de destinos privados nem a fila bruta.
+- Alertas privados contêm apenas aluno, unidade, natureza do evento e link.
+- Grupo contém somente agregado.
+- Links exigem login normal no LA Report e não carregam token público.
+- Logs técnicos usam IDs internos, tipo, status, tentativa e correlation ID;
+  não incluem resposta, transcrição, áudio, telefone, JID ou segredo.
+- Conteúdo renderizado da notificação tem retenção curta e acesso restrito; o
+  histórico agregado não contém PII.
+- Cada entrega registra evento, destinatário, canal, template, versão, status,
+  tentativas, horário e ID do provedor.
+- Destino ausente, inativo ou não verificado é falha visível; não há fallback
+  para grupo ou para outro número.
+- Notificação falha não altera o estado canônico da pesquisa.
+
+## 15. Fronteira com o Subprojeto E
+
+Este bloco absorve somente a menor fatia necessária do E:
+
+- inventário do processo da VPS que entregará mensagens da Lia;
+- adaptador de transporte Hermes;
+- configuração de destinos privados e do grupo do Sucesso do Aluno;
+- health, retry, idempotência e evidência desse caminho.
+
+Permanecem no Subprojeto E:
+
+- inventário completo de Lia, Sol, Fábio e Hermes;
+- decisão global Telegram versus WhatsApp;
+- unificação de filas entre agentes;
+- governança de prompts, processos e secrets da VPS;
+- canais e relatórios que não pertencem à pesquisa de evasão.
+
+Assim, o B.5 não espera o E inteiro, mas também não transforma uma correção de
+pesquisa em reescrita geral dos agentes.
+
+## 16. Decisões exigidas do Alf antes de implementar o follow-up automático
+
+1. Ativar ou não o envio automático. A primeira entrega recomendada é somente
+   alerta privado e fila visível.
+2. Aprovar as duas cópias, adulto e responsável.
+3. Confirmar 72 horas corridas ou três dias úteis.
+4. Definir janela de envio e horário de silêncio.
+5. Confirmar que qualquer interação não substantiva bloqueia a automação e
+   encaminha o caso para decisão humana — recomendação desta spec.
+6. Confirmar uso da mesma caixa e destino snapshot da pesquisa original —
+   recomendação desta spec.
+7. Definir o comportamento de resultado ambíguo do provedor — recomendação:
+   não reenviar automaticamente.
+8. Aprovar piloto, duração e limite diário antes da abertura geral.
+
+Decisões operacionais também necessárias antes do rollout dos avisos:
+
+- cadastrar e verificar o WhatsApp privado de Jessica;
+- validar o WhatsApp privado de Fabi;
+- escolher o grupo oficial do Sucesso do Aluno;
+- definir cadência e horário do KPI de grupo;
+- aprovar a retenção do texto das notificações internas;
+- definir substituto quando quem enviou estiver inativo. A recomendação é uma
+  fila administrativa, nunca o grupo como fallback automático.
+
+## 17. Ordem de implementação sugerida
+
+### Fase 0 — pré-flight e decisões
+
+- auditar o processo real da Lia/Hermes na VPS em modo somente leitura;
+- provisionar destinos privados verificados;
+- configurar o grupo;
+- aprovar horários, templates internos e retenção;
+- manter follow-up ao aluno desligado.
+
+### Fase 1 — eventos, histórico e interface
+
+- outbox idempotente;
+- snapshots de KPI;
+- estados e filtro de follow-up na tela;
+- registro manual de follow-up;
+- nenhuma mensagem externa nesta fase.
+
+### Fase 2 — avisos privados
+
+- resposta nova;
+- rodada nova depois de revisão;
+- opt-out;
+- fila de falhas e observabilidade;
+- piloto somente com pesquisas de teste.
+
+### Fase 3 — follow-up de três dias para a equipe
+
+- resumo privado por operador;
+- cancelamento por resposta concorrente;
+- prova de idempotência e horário de silêncio.
+
+### Fase 4 — KPI agregado no grupo
+
+- snapshot histórico;
+- relatório agregado, versionado e sem PII;
+- comparação com período anterior.
+
+### Fase 5 — follow-up automático opcional
+
+Somente depois das decisões da seção 16, com dry-run, número interno, piloto
+limitado e autorização explícita de rollout.
+
+Depois dessas fases, o Subprojeto C pode classificar causas e transformar
+respostas revisadas em ações sem precisar resolver novamente alerta, prazo ou
+canal.
+
+## 18. Testes obrigatórios
+
+1. Três fragmentos da mesma rodada geram um alerta privado, não três.
+2. Rodada nova depois de revisão gera novo alerta e preserva o anterior.
+3. Teste não gera alerta ou KPI produtivo.
+4. Opt-out gera aviso privado e bloqueia todo follow-up.
+5. Abertura ou adiamento não infla taxa de resposta.
+6. D+3 usa `enviado_em` e timezone BRT.
+7. Resposta concorrente remove o caso da fila antes do envio de follow-up.
+8. Operador sem destino verificado produz falha visível e não usa o grupo.
+9. Duas respostas no mesmo dia para o mesmo operador não colidem.
+10. Retry não duplica mensagem aceita pelo provedor.
+11. Resultado ambíguo do follow-up automático não é reenviado.
+12. KPI não contém nomes, telefones, motivos ou conteúdo.
+13. Coorte parcial é identificada como parcial.
+14. Mudança de regra cria nova versão sem reescrever snapshot fechado.
+15. `bi_messages_lamusic` não participa do transporte.
+16. Queda da VPS não perde evento; recuperação respeita idempotência.
+17. Alerta contém link autenticado para o caso correto.
+18. Pessoa inativa não recebe mensagem e o caso entra na fila administrativa.
+
+## 19. Critérios de aceite
+
+- Fabi e Jessica recebem individualmente os alertas de pesquisas que enviaram.
+- O grupo recebe somente KPI agregado.
+- Nova rodada pós-revisão é avisada uma única vez e volta à fila.
+- Toda pesquisa produtiva enviada aparece como aguardando ou follow-up devido.
+- D+3 é auditável e não depende de alguém abrir a plataforma.
+- Taxa e tempo de resposta ficam preservados por coorte e versão.
+- Modo teste permanece isolado.
+- Nenhuma resposta privada sai do LA Report na notificação.
+- Follow-up automático permanece desligado até aprovação própria do Alf.
+- Falha de WhatsApp não altera nem perde o fato canônico.
+
+## 20. Riscos residuais
+
+- Jessica ainda não possui destino privado cadastrado no contrato atual.
+- O serviço real da Lia na VPS não está versionado integralmente neste
+  repositório; seu inventário é gate da implementação.
+- O transporte Sol/Hermes funciona, mas ainda carrega semântica de relatório e
+  grupo; reutilização direta criaria colisões.
+- `fila_relatorios_whatsapp` apresentou histórico relevante de erros e precisa
+  de health e prova de entrega antes de receber o KPI do Sucesso do Aluno.
+- “Sem resposta” é uma observação temporal, não causa de evasão nem julgamento
+  sobre a família.
+
+## 21. Arquivos e contratos relacionados
+
+- `docs/superpowers/specs/2026-07-30-pesquisa-evasao-v2-mapa-sinais-design.md`
+- `docs/superpowers/plans/2026-07-30-pesquisa-evasao-subprojeto-b-conversa-multipartes.md`
+- `docs/runbooks/pesquisa-evasao-subprojeto-b-rollout.md`
+- `supabase/functions/webhook-whatsapp-inbox/`
+- `supabase/functions/processar-conversa-evasao/`
+- `supabase/functions/processar-mensagens-agendadas/`
+- `supabase/functions/bi-agent-lamusic/`
+- `scripts/process-sol-report-queue.py`
+- `pesquisa_evasao`
+- `pesquisa_evasao_mensagens`
+- `pesquisa_evasao_analises`
+- `pesquisa_evasao_transcricoes`
+- `bi_messages_lamusic`
+- `fila_relatorios_whatsapp`
+- `fila_relatorios_sol_hermes`
+- `whatsapp_destinatarios_relatorio`
