@@ -578,7 +578,7 @@ O detalhamento completo e as fronteiras do relatório da Coordenação estão em
 - **Health score do aluno / fase da jornada:** view `vw_aluno_sucesso_lista` (`health_score_numerico`, `health_status`, `fase_jornada`, `percentual_presenca`, `status_pagamento`). Recalculado por `calcular_health_score_alunos_batch`.
 - **Faltas:** RPC `get_faltas_periodo` deduplica aulas Emusys (individual+turma) por `(aluno, dia, curso)`, priorizando a visão individual.
 - **Pesquisa pós-1ª aula:** `pesquisas_whatsapp` `tipo='pos_primeira_aula'`; status `respondida/nao_respondida/pendente`. Régua da timeline: 1ª aula → 3 meses → evasão.
-- **Pesquisa de evasão:** `pesquisa_evasao.evasao_id` referencia a saída canônica em `movimentacoes_admin.id`; envio e resposta são estados da pesquisa, não uma nova contagem de evasão.
+- **Pesquisa de evasão:** `pesquisa_evasao.evasao_id` referencia a saída canônica em `movimentacoes_admin.id`; envio e resposta são estados da pesquisa, não uma nova contagem de evasão. No motor multipartes, rodadas e versões de análise não multiplicam a taxa de resposta: o denominador e o respondente continuam sendo a pesquisa. Nova rodada após revisão apenas devolve o caso à fila com conteúdo novo, mantendo a versão revisada anterior imutável.
 
 ---
 

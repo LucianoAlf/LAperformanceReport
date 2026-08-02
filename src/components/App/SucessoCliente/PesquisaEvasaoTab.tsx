@@ -22,6 +22,8 @@ import {
 import { FlaskConical } from 'lucide-react';
 import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 import { ModalPreviewPesquisaEvasao } from './ModalPreviewPesquisaEvasao';
+import { ConversaPesquisaEvasao } from './ConversaPesquisaEvasao';
+import { FilaRevisaoEvasao } from './FilaRevisaoEvasao';
 import type {
   PesquisaEvasaoConfirmacao,
   PesquisaEvasaoListagemItem,
@@ -127,6 +129,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
   const [pagina, setPagina] = useState(1);
   const [totalRegistros, setTotalRegistros] = useState(0);
   const [historicoTesteExpandido, setHistoricoTesteExpandido] = useState<number | null>(null);
+  const [conversaTesteExpandida, setConversaTesteExpandida] = useState<string | null>(null);
   const [historicosTeste, setHistoricosTeste] = useState<Record<number, PesquisaEvasaoTeste[]>>({});
   const [carregandoHistorico, setCarregandoHistorico] = useState<number | null>(null);
   const historicoTesteSequenciaRef = useRef(0);
@@ -162,6 +165,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
     historicoTesteSequenciaRef.current += 1;
     setHistoricosTeste({});
     setHistoricoTesteExpandido(null);
+    setConversaTesteExpandida(null);
     setCarregandoHistorico(null);
   };
 
@@ -649,6 +653,11 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
         </div>
       )}
 
+      <FilaRevisaoEvasao
+        unidadeAtual={unidadeAtual}
+        onAlteracao={carregarDados}
+      />
+
       {/* Filtros */}
       <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
         <div className="flex flex-wrap items-center gap-4">
@@ -946,51 +955,13 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                     </tr>
                     
                     {/* Expandir resposta */}
-                    {!registroTeste && expandido === evadido.pesquisa_id && (evadido.resposta_texto || evadido.resposta_audio_url) && (
+                    {!registroTeste && expandido === evadido.pesquisa_id && evadido.pesquisa_id && (
                       <tr className="bg-slate-900/30">
                         <td colSpan={9} className="px-4 py-4">
-                          <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-                            <p className="text-sm font-medium text-slate-400 mb-2">
-                              Resposta do {evadido.is_menor ? 'Responsável' : 'Aluno'}:
-                            </p>
-                            {evadido.resposta_producao_tipo === 'audio' ? (
-                              <div className="space-y-3">
-                                {evadido.resposta_producao_texto ? (
-                                  <>
-                                    <p className="text-white text-base leading-relaxed">
-                                      "{evadido.resposta_producao_texto}"
-                                    </p>
-                                    <div className="bg-green-500/20 text-green-400 px-3 py-2 rounded-lg inline-flex items-center gap-2">
-                                      <MessageCircle className="w-4 h-4" />
-                                      <span className="text-sm">Transcrição do áudio</span>
-                                    </div>
-                                  </>
-                                ) : (
-                                  <div className="flex items-center gap-3">
-                                    <div className="bg-green-500/20 text-green-400 px-3 py-2 rounded-lg flex items-center gap-2">
-                                      <MessageCircle className="w-4 h-4" />
-                                      <span className="text-sm">Áudio recebido</span>
-                                    </div>
-                                    {evadido.resposta_producao_audio_url && (
-                                      <audio controls className="h-10">
-                                        <source src={evadido.resposta_producao_audio_url} type="audio/ogg" />
-                                        Seu navegador não suporta áudio.
-                                      </audio>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <p className="text-white text-base leading-relaxed">
-                                "{evadido.resposta_producao_texto}"
-                              </p>
-                            )}
-                            {evadido.respondido_producao_em && (
-                              <p className="text-xs text-slate-500 mt-2">
-                                Respondido em: {format(new Date(evadido.respondido_producao_em), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
-                              </p>
-                            )}
-                          </div>
+                          <ConversaPesquisaEvasao
+                            pesquisaId={evadido.pesquisa_id}
+                            onAlteracao={carregarDados}
+                          />
                         </td>
                       </tr>
                     )}
@@ -1012,18 +983,45 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                                   .map((teste) => (
                                     <div
                                       key={teste.pesquisa_id}
-                                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-700/60 bg-slate-800/50 px-3 py-2"
+                                      className="rounded-lg border border-slate-700/60 bg-slate-800/50 px-3 py-2"
                                     >
-                                      <div className="flex items-center gap-2 text-xs">
-                                        <span className="rounded bg-yellow-400/10 px-1.5 py-0.5 font-bold text-yellow-200">TESTE</span>
-                                        <span className="text-slate-300">Envio: {teste.envio_status}</span>
-                                        <span className="text-slate-500">Resposta: {teste.resposta_status}</span>
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2 text-xs">
+                                          <span className="rounded bg-yellow-400/10 px-1.5 py-0.5 font-bold text-yellow-200">TESTE</span>
+                                          <span className="text-slate-300">Envio: {teste.envio_status}</span>
+                                          <span className="text-slate-500">Resposta: {teste.resposta_status}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-xs text-slate-500">
+                                            {teste.enviado_em
+                                              ? format(new Date(teste.enviado_em), 'dd/MM/yyyy HH:mm', { locale: ptBR })
+                                              : 'Sem horário de envio'}
+                                          </span>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 text-yellow-300 hover:text-yellow-200"
+                                            onClick={() => setConversaTesteExpandida(
+                                              conversaTesteExpandida === teste.pesquisa_id
+                                                ? null
+                                                : teste.pesquisa_id,
+                                            )}
+                                          >
+                                            {conversaTesteExpandida === teste.pesquisa_id ? 'Ocultar' : 'Ver conversa'}
+                                          </Button>
+                                        </div>
                                       </div>
-                                      <span className="text-xs text-slate-500">
-                                        {teste.enviado_em
-                                          ? format(new Date(teste.enviado_em), 'dd/MM/yyyy HH:mm', { locale: ptBR })
-                                          : 'Sem horário de envio'}
-                                      </span>
+                                      {conversaTesteExpandida === teste.pesquisa_id && (
+                                        <div className="mt-3 border-t border-slate-700/60 pt-3">
+                                          <ConversaPesquisaEvasao
+                                            pesquisaId={teste.pesquisa_id}
+                                            onAlteracao={() => {
+                                              carregarDados();
+                                              invalidarHistoricoTeste();
+                                            }}
+                                          />
+                                        </div>
+                                      )}
                                     </div>
                                   ))}
                               </div>

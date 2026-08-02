@@ -79,3 +79,52 @@ export interface PesquisaEvasaoTeste {
   enviado_em: string | null;
   respondido_em: string | null;
 }
+
+export interface PesquisaEvasaoMensagemRodada {
+  id: string;
+  tipo: 'texto' | 'audio';
+  texto: string | null;
+  substantividade: 'adiamento' | 'abertura' | 'conteudo_substantivo' | 'opt_out' | 'indeterminado';
+  recebido_em: string;
+  audio_disponivel: boolean;
+  transcricao_status: 'pendente' | 'processando' | 'concluida' | 'falhou' | null;
+  transcricao_texto: string | null;
+}
+
+export interface PesquisaEvasaoRodada {
+  id: string;
+  versao: number;
+  status: 'rascunho' | 'pronta_para_revisao' | 'em_revisao' | 'revisada';
+  texto_consolidado: string | null;
+  iniciada_em: string | null;
+  ultima_mensagem_em: string | null;
+  encerrada_em: string | null;
+  revisado_em: string | null;
+  revisor_usuario_id: number | null;
+  mensagens: PesquisaEvasaoMensagemRodada[];
+}
+
+export interface PesquisaEvasaoConversa {
+  pesquisa_id: string;
+  aluno_nome: string;
+  modo_teste: boolean;
+  resposta_status: string;
+  conteudo_novo_desde_revisao: boolean;
+  resposta_texto_legado: string | null;
+  respondido_em: string | null;
+  rodadas: PesquisaEvasaoRodada[];
+}
+
+export interface PesquisaEvasaoFilaRevisaoItem {
+  pesquisa_id: string;
+  evasao_id: number;
+  unidade_id: string;
+  aluno_nome: string;
+  modo_teste: boolean;
+  resposta_status: string;
+  conteudo_novo_desde_revisao: boolean;
+  ultima_versao: number;
+  ultima_rodada_status: string;
+  ultima_mensagem_em: string | null;
+  total_count: number;
+}
