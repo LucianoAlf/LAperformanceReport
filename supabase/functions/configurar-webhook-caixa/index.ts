@@ -1,80 +1,170 @@
 // Edge Function: configurar-webhook-caixa
-// Configura automaticamente o webhook de recebimento na instância UAZAPI da caixa,
-// apontando para webhook-whatsapp-inbox?caixa_id=<id> (eventos messages + messages_update).
-// Evita a configuração manual e o erro de webhook ausente/desabilitado.
+// Rota administrativa autenticada para rotacionar o segredo inbound de uma caixa UAZAPI.
+// O segredo bruto existe somente em memoria durante a chamada; banco e resposta recebem hash/redacao.
 // @ts-nocheck
 
-import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { provisionarWebhookUazapi } from "./contract.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function bearerToken(header: string | null): string | null {
+  const match = header?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
+}
+
+function caixaIdValido(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) > 0;
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+  if (req.method !== "POST") {
+    return json({ error: "Metodo nao permitido" }, 405);
+  }
+
+  const token = bearerToken(req.headers.get("Authorization"));
+  if (!token) return json({ error: "Nao autenticado" }, 401);
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return json({ error: "Configuracao de autenticacao indisponivel" }, 503);
+  }
+
+  const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: authData, error: authError } = await userClient.auth.getUser();
+  if (authError || !authData.user) {
+    return json({ error: "Nao autenticado" }, 401);
+  }
+
+  const { data: usuario, error: usuarioError } = await userClient
+    .from("usuarios")
+    .select("id, perfil, ativo")
+    .eq("auth_user_id", authData.user.id)
+    .maybeSingle();
+  if (
+    usuarioError || !usuario || usuario.ativo !== true ||
+    usuario.perfil !== "admin"
+  ) {
+    return json({ error: "Operacao restrita a administrador ativo" }, 403);
+  }
+
+  let body: unknown;
   try {
-    const { caixa_id } = await req.json();
-    if (!caixa_id) return json({ error: 'caixa_id é obrigatório' }, 400);
+    body = await req.json();
+  } catch {
+    return json({ error: "JSON invalido" }, 400);
+  }
+  const caixaId = (body as { caixa_id?: unknown })?.caixa_id;
+  if (!caixaIdValido(caixaId)) return json({ error: "caixa_id invalido" }, 400);
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { data: caixa, error } = await supabase
-      .from('whatsapp_caixas')
-      .select('id, nome, provedor, uazapi_url, uazapi_token')
-      .eq('id', caixa_id)
-      .maybeSingle();
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceRoleKey) {
+    return json({ error: "Configuracao backend indisponivel" }, 503);
+  }
 
-    if (error || !caixa) return json({ error: 'Caixa não encontrada' }, 404);
+  const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: caixa, error: caixaError } = await adminClient
+    .from("whatsapp_caixas")
+    .select("id, nome, provedor, ativo, uazapi_url, uazapi_token")
+    .eq("id", caixaId)
+    .maybeSingle();
+  if (caixaError || !caixa) return json({ error: "Caixa nao encontrada" }, 404);
+  if (caixa.ativo !== true) return json({ error: "Caixa inativa" }, 409);
+  if ((caixa.provedor || "uazapi") !== "uazapi") {
+    return json({
+      error: "Provisionamento automatico indisponivel para este provedor",
+    }, 409);
+  }
+  if (!caixa.uazapi_url || !caixa.uazapi_token) {
+    return json({ error: "Credencial UAZAPI ausente" }, 409);
+  }
 
-    // URL que a instância deve chamar quando chegar mensagem (com o caixa_id desta caixa)
-    const webhookUrl = `${SUPABASE_URL}/functions/v1/webhook-whatsapp-inbox?caixa_id=${caixa.id}`;
-    const provedor = caixa.provedor || 'uazapi';
+  const { data: secretState, error: secretStateError } = await adminClient
+    .from("whatsapp_caixa_webhook_secrets")
+    .select("versao")
+    .eq("caixa_id", caixaId)
+    .maybeSingle();
+  if (secretStateError) {
+    return json({ error: "Estado do segredo indisponivel" }, 503);
+  }
 
-    if (provedor !== 'uazapi') {
-      // WAHA configura webhook por sessão (estrutura diferente) — não suportado automaticamente ainda.
-      return json({ success: false, provedor, webhook_url: webhookUrl, message: 'Configuração automática só disponível para UAZAPI. Para WAHA, configure manualmente.' });
-    }
+  try {
+    const result = await provisionarWebhookUazapi(
+      {
+        caixaId,
+        providerBaseUrl: caixa.uazapi_url,
+        providerToken: caixa.uazapi_token,
+        inboundEndpoint: `${supabaseUrl}/functions/v1/webhook-whatsapp-inbox`,
+      },
+      {
+        persistHash: async (secretHashSha256) => {
+          const { error } = await adminClient
+            .from("whatsapp_caixa_webhook_secrets")
+            .upsert({
+              caixa_id: caixaId,
+              secret_hash_sha256: secretHashSha256,
+              ativo: true,
+              versao: Number(secretState?.versao ?? 0) + 1,
+              rotacionado_em: new Date().toISOString(),
+            }, { onConflict: "caixa_id" });
+          if (error) throw new Error("hash_persistence_failed");
+        },
+      },
+    );
 
-    let base = caixa.uazapi_url || '';
-    if (!base.startsWith('http://') && !base.startsWith('https://')) base = 'https://' + base;
-    base = base.replace(/\/+$/, '');
-
-    if (!base || !caixa.uazapi_token) {
-      return json({ error: 'Caixa sem URL ou token UAZAPI configurados' }, 400);
-    }
-
-    // POST /webhook (modo simples): cria ou atualiza o único webhook da instância
-    const resp = await fetch(`${base}/webhook`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', token: caixa.uazapi_token },
-      body: JSON.stringify({
-        enabled: true,
-        url: webhookUrl,
-        events: ['messages', 'messages_update'],
-        excludeMessages: ['wasSentByApi'],
-      }),
+    return json({
+      success: true,
+      provedor: "uazapi",
+      enabled: result.enabled,
+      provider_webhook_id: result.providerWebhookId,
+      webhook_url_redigida: result.webhookUrlRedigida,
     });
-
-    const data = await resp.json().catch(() => null);
-    if (!resp.ok) {
-      console.error('[configurar-webhook-caixa] UAZAPI erro:', resp.status, data);
-      return json({ error: `UAZAPI retornou ${resp.status}`, detalhe: data }, 502);
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "provisioning_failed";
+    if (code === "provider_webhooks_ambiguous") {
+      return json({
+        error:
+          "Instancia possui webhooks ambiguos; auditoria manual obrigatoria",
+      }, 409);
     }
-
-    const config = Array.isArray(data) ? data[0] : data;
-    console.log(`[configurar-webhook-caixa] Webhook configurado para caixa ${caixa.id} (${caixa.nome}) → ${webhookUrl}`);
-    return json({ success: true, provedor, webhook_url: webhookUrl, enabled: config?.enabled ?? true });
-  } catch (err) {
-    console.error('[configurar-webhook-caixa] Erro:', err);
-    return json({ error: err instanceof Error ? err.message : 'Erro interno' }, 500);
+    if (code === "provider_webhook_unexpected_target") {
+      return json({
+        error:
+          "Webhook aponta para destino inesperado; auditoria manual obrigatoria",
+      }, 409);
+    }
+    if (code === "hash_persistence_failed_manual_intervention") {
+      return json({
+        error: "Falha critica de persistencia; intervencao manual obrigatoria",
+      }, 500);
+    }
+    if (code === "hash_persistence_failed_compensated") {
+      return json({
+        error: "Persistencia falhou e configuracao anterior foi restaurada",
+      }, 503);
+    }
+    return json({ error: "Falha ao provisionar webhook" }, 502);
   }
 });

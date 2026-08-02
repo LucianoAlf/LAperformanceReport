@@ -1,94 +1,104 @@
 // monitor-saude-webhook
-// Chamado pelo pg_cron a cada 10 minutos.
-// Pinga webhook-whatsapp-inbox?_health=1 SEM autenticação.
-// Se receber != 200 (ex: 401 por verify_jwt errado), envia alerta WhatsApp.
+// Chamado pelo pg_cron e autenticado no health do inbound por segredo dedicado.
 // @ts-nocheck
 
-import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const NUMERO_ALERTA = "5521966583325";
 
-// Caixas a monitorar: [caixa_id, nome]
-const CAIXAS_MONITORADAS = [
-  [3, 'Sol - Sucesso do Aluno'],
-];
-
-// Número que recebe o alerta (Luciano)
-const NUMERO_ALERTA = '5521966583325';
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok');
+  if (req.method === "OPTIONS") return new Response("ok");
+
+  const healthToken = Deno.env.get("WEBHOOK_HEALTH_TOKEN")?.trim() ?? "";
+  if (!healthToken) {
+    return json({ ok: false, code: "health_auth_unavailable" }, 503);
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const { data: caixas, error: caixasError } = await supabase
+    .from("whatsapp_caixas")
+    .select("id, nome")
+    .eq("ativo", true)
+    .not("webhook_url", "is", null)
+    .order("id");
+  if (caixasError) return json({ ok: false, code: "boxes_unavailable" }, 503);
+
   const problemas: string[] = [];
-
-  for (const [caixaId, nome] of CAIXAS_MONITORADAS) {
-    const healthUrl = `${SUPABASE_URL}/functions/v1/webhook-whatsapp-inbox?caixa_id=${caixaId}&_health=1`;
-
+  for (const caixa of caixas ?? []) {
+    const healthUrl =
+      `${SUPABASE_URL}/functions/v1/webhook-whatsapp-inbox?caixa_id=${caixa.id}&_health=1`;
     let status = 0;
-    let erro = '';
     try {
-      // Chamada SEM Authorization header — simula exatamente o que UAZAPI faz
-      const resp = await fetch(healthUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}',
+      const response = await fetch(healthUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-health-secret": healthToken,
+        },
+        body: "{}",
       });
-      status = resp.status;
-    } catch (e) {
-      erro = e.message;
+      status = response.status;
+    } catch {
       status = 0;
     }
 
-    console.log(`[monitor] caixa_id=${caixaId} (${nome}) → status=${status} erro=${erro}`);
-
     if (status !== 200) {
-      problemas.push(`*${nome}* (caixa_id=${caixaId}): HTTP ${status || 'timeout'} ${erro}`);
+      problemas.push(
+        `*${caixa.nome}* (caixa_id=${caixa.id}): HTTP ${status || "timeout"}`,
+      );
     }
   }
 
   if (problemas.length > 0) {
     const mensagem =
-      `🚨 *Alerta: Webhook de recebimento de mensagens com problema*\n\n` +
-      problemas.join('\n') +
-      `\n\n⚠️ Mensagens do WhatsApp podem NÃO estar chegando na caixa de entrada.\n` +
-      `Causa mais comum: deploy sem \`--no-verify-jwt\`.\n` +
-      `Fix: \`npx supabase functions deploy webhook-whatsapp-inbox --project-ref ouqwbbermlzqqvtqwlul --no-verify-jwt\``;
+      `Alerta: health autenticado do webhook de recebimento falhou.\n\n` +
+      problemas.join("\n") +
+      `\n\nMensagens podem nao estar chegando. Verifique WEBHOOK_HEALTH_TOKEN, ` +
+      `segredos por caixa e o roteamento/deploy do inbound.`;
 
-    // Buscar caixa de envio (qualquer admin com verify_jwt false — enviar-mensagem-admin)
-    const { data: caixas } = await supabase
-      .from('whatsapp_caixas')
-      .select('id, numero, uazapi_url, uazapi_token')
-      .eq('funcao', 'administrativo')
-      .eq('ativo', true)
+    const { data: caixaAlerta } = await supabase
+      .from("whatsapp_caixas")
+      .select("uazapi_url, uazapi_token")
+      .eq("funcao", "administrativo")
+      .eq("provedor", "uazapi")
+      .eq("ativo", true)
+      .not("uazapi_url", "is", null)
+      .not("uazapi_token", "is", null)
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (caixas?.uazapi_url && caixas?.uazapi_token) {
-      await fetch(`${caixas.uazapi_url}/send/text`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', token: caixas.uazapi_token },
-        body: JSON.stringify({
-          phone: NUMERO_ALERTA,
-          message: mensagem,
-        }),
-      });
-      console.log(`[monitor] Alerta enviado para ${NUMERO_ALERTA}`);
-    } else {
-      console.error('[monitor] Não foi possível obter credenciais UAZAPI para enviar alerta');
+    if (caixaAlerta?.uazapi_url && caixaAlerta?.uazapi_token) {
+      try {
+        await fetch(
+          `${String(caixaAlerta.uazapi_url).replace(/\/+$/, "")}/send/text`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              token: caixaAlerta.uazapi_token,
+            },
+            body: JSON.stringify({ phone: NUMERO_ALERTA, message: mensagem }),
+          },
+        );
+      } catch {
+        // O retorno do monitor continua indicando a falha; nenhum segredo vai para log.
+      }
     }
   }
 
-  return new Response(
-    JSON.stringify({
-      ok: problemas.length === 0,
-      problemas,
-      checadas: CAIXAS_MONITORADAS.length,
-    }),
-    { headers: { 'Content-Type': 'application/json' } }
-  );
+  return json({
+    ok: problemas.length === 0,
+    problemas,
+    checadas: caixas?.length ?? 0,
+  });
 });

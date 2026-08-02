@@ -555,11 +555,13 @@ Não implantar este commit em produção antes de provisionar os hashes e atuali
 
 - Modify: `supabase/functions/monitor-saude-webhook/index.ts`
 - Modify: `supabase/functions/configurar-webhook-caixa/index.ts`
+- Modify: `supabase/config.toml`
+- Modify: `docs/runbooks/webhook-inbound-secret-rollout.md`
 - Create: `supabase/functions/configurar-webhook-caixa/contract.ts`
 - Create: `supabase/functions/configurar-webhook-caixa/contract.test.ts`
 - Create: `tests/webhookProvisioningSecurity.test.mjs`
 
-- [ ] **Step 1: Escrever testes vermelhos**
+- [x] **Step 1: Escrever testes vermelhos**
 
 Monitor:
 
@@ -579,7 +581,7 @@ Configurador:
 - mantém `excludeMessages: []` para preservar eco de saídas administrativas;
 - atualiza provider antes de ativar enforcement global.
 
-- [ ] **Step 2: Executar e confirmar a falha**
+- [x] **Step 2: Executar e confirmar a falha**
 
 ```powershell
 deno test supabase/functions/configurar-webhook-caixa/contract.test.ts
@@ -588,7 +590,7 @@ node --test tests/webhookProvisioningSecurity.test.mjs
 
 Expected: FAIL.
 
-- [ ] **Step 3: Atualizar health**
+- [x] **Step 3: Atualizar health**
 
 Em `monitor-saude-webhook`:
 
@@ -607,7 +609,7 @@ headers: {
 
 Carregar caixas ativas com webhook configurado de `whatsapp_caixas`. Não inserir token UAZAPI em log/alerta.
 
-- [ ] **Step 4: Autenticar configurador**
+- [x] **Step 4: Autenticar configurador**
 
 Antes de service role:
 
@@ -619,7 +621,12 @@ Antes de service role:
 
 Não deixar `configurar-webhook-caixa` como endpoint anônimo privilegiado.
 
-- [ ] **Step 5: Gerar e provisionar segredo**
+O projeto não possui a permissão granular `admin.whatsapp_caixas`. Para não
+criar um RBAC paralelo nesta janela, o configurador usa a capacidade
+administrativa canônica já aplicada pelas RPCs de caixas: usuário autenticado,
+ativo e com `usuarios.perfil = 'admin'`.
+
+- [x] **Step 5: Gerar e provisionar segredo**
 
 ```ts
 const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -644,7 +651,12 @@ Ordem transacional compensável:
 
 Como o webhook antigo ignora `webhook_secret`, essa atualização pode ser feita antes da versão que exige autenticação.
 
-- [ ] **Step 6: Testar**
+O configurador falha fechado se encontrar mais de um webhook na instância ou se
+o único webhook existente apontar para outro host/path ou outro `caixa_id`.
+Duplicidade e destino inesperado exigem auditoria manual antes de qualquer
+rotação.
+
+- [x] **Step 6: Testar**
 
 ```powershell
 deno test supabase/functions/configurar-webhook-caixa/contract.test.ts
@@ -653,10 +665,10 @@ node --test tests/webhookProvisioningSecurity.test.mjs
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit local, sem push ou deploy**
 
 ```powershell
-git add -- supabase/functions/monitor-saude-webhook/index.ts supabase/functions/configurar-webhook-caixa/index.ts supabase/functions/configurar-webhook-caixa/contract.ts supabase/functions/configurar-webhook-caixa/contract.test.ts tests/webhookProvisioningSecurity.test.mjs
+git add -- docs/runbooks/webhook-inbound-secret-rollout.md docs/superpowers/plans/2026-07-30-pesquisa-evasao-subprojeto-b-conversa-multipartes.md supabase/config.toml supabase/functions/monitor-saude-webhook/index.ts supabase/functions/configurar-webhook-caixa/index.ts supabase/functions/configurar-webhook-caixa/contract.ts supabase/functions/configurar-webhook-caixa/contract.test.ts tests/webhookProvisioningSecurity.test.mjs
 git commit -m "feat: rotacionar webhook e autenticar health"
 ```
 

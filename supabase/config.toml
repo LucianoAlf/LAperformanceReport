@@ -10,6 +10,10 @@ verify_jwt = true
 # Gateway sem JWT: autenticação do provedor ocorre no código por segredo por caixa.
 verify_jwt = false
 
+[functions.configurar-webhook-caixa]
+# Operacao privilegiada: o gateway e o codigo exigem JWT; o codigo tambem exige admin ativo.
+verify_jwt = true
+
 [functions.sync-presenca-emusys]
 # O gateway fica aberto apenas para permitir o segredo dedicado dos crons.
 # A funcao valida service_role, x-sync-token ou JWT+permissao antes dos sinks.
