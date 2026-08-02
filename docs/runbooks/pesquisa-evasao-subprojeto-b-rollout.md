@@ -59,4 +59,10 @@ Se a migration falhar, ela é transacional. Depois de aplicada, não remover col
 
 ## Evidências da publicação
 
-A preencher no rollout: migration remota, versão da Edge, commits, verificação do default legado, contagem de pesquisas V2 e resultado do smoke da UI.
+- Migration `pesquisa_evasao_rodadas_revisao` aplicada em produção em 02/08/2026 pelo arquivo `20260802213000_pesquisa_evasao_rodadas_revisao.sql`.
+- Edge Function `processar-conversa-evasao` publicada como versão 6, ativa e com `verify_jwt=false`; a autenticação interna por `x-sync-token` foi preservada.
+- Backend publicado no commit `b1458da`; frontend publicado no commit `a1dafb9`, com deploy Vercel concluído.
+- Postflight: uma pesquisa piloto em `multipartes_v2`, nove em `legado_v1`, nove de nove mensagens do piloto vinculadas à versão 1 e nenhuma mensagem V2 sem rodada.
+- O default de `resposta_ingestao_versao` permanece `legado_v1`; a ativação B3a não fez parte deste rollout.
+- Smoke visual em produção: a tela de Evasão carregou, o histórico da pesquisa piloto de Davi Pedro Palmerini abriu e exibiu `Rodada 1`, os nove eventos em ordem, as transcrições dos áudios e a consolidação da rodada.
+- Nenhuma mensagem de WhatsApp foi disparada durante a publicação ou o smoke.
