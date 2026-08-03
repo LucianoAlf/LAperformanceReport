@@ -6,6 +6,10 @@ export function useConfirmacaoCompetencia() {
   const resolverRef = useRef<((aceitou: boolean) => void) | null>(null);
 
   const pedirConfirmacao = useCallback((fallback: FallbackCompetencia): Promise<boolean> => {
+    // Duas chamadas concorrentes (ex.: duplo clique) não podem deixar a
+    // primeira promise pendurada para sempre — resolve-a com `false` antes
+    // de sobrescrever a referência.
+    resolverRef.current?.(false);
     setConfirmacaoPendente(fallback);
     return new Promise<boolean>((resolve) => {
       resolverRef.current = resolve;
