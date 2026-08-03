@@ -20,6 +20,10 @@ verify_jwt = false
 # ocorre no código por x-sync-token antes de ler body ou criar o cliente.
 verify_jwt = false
 
+[functions.processar-alertas-lia]
+# Dispatcher backend-only. O gateway e o código exigem service_role.
+verify_jwt = true
+
 [functions.webhook-whatsapp-inbox]
 # Compatibility mode is the default until caixa 3 is provisioned.
 # Enable later only with WEBHOOK_INBOUND_SECRET_ENFORCEMENT=true.

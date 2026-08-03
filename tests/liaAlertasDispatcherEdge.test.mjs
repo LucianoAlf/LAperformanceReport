@@ -34,6 +34,21 @@ test('dispatcher usa caixa 3 sem bridge ou fallback', () => {
   );
 });
 
+test('endpoint autentica service role antes do acesso privilegiado', () => {
+  const source = read(index);
+  assert.match(source, /autorizarServiceRole/);
+  assert.match(source, /validarPedidoDispatcher/);
+  assert.match(source, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(source, /claim_lia_alerta_privado/);
+  assert.match(source, /\.eq\(["']id["'],\s*CAIXA_LIA_ID\)/);
+  assert.ok(
+    source.indexOf('if (!autorizarServiceRole') <
+      source.indexOf('const supabase = createClient'),
+    'autorização precisa ocorrer antes de criar o cliente service role',
+  );
+  assert.doesNotMatch(source, /webhook-whatsapp-inbox/);
+});
+
 test('migration audita a caixa e usa erros de provider', () => {
   const sql = read(migration);
   assert.match(sql, /add column caixa_id integer/i);
