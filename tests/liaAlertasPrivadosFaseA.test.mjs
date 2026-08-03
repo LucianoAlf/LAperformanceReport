@@ -13,19 +13,9 @@ const fixturePath = resolve(
   root,
   'tests/fixtures/lia_alertas_privados_fase_a_pg17.sql',
 );
-const servicePath = resolve(
-  root,
-  'scripts/systemd/lia-alertas-privados.service',
-);
-const timerPath = resolve(
-  root,
-  'scripts/systemd/lia-alertas-privados.timer',
-);
 const read = (path) => existsSync(path) ? readFileSync(path, 'utf8') : '';
 const sql = read(migrationPath);
 const fixture = read(fixturePath);
-const service = read(servicePath);
-const timer = read(timerPath);
 
 test('fase A nasce bloqueada e usa destinos governados', () => {
   assert.ok(sql, `migration ausente: ${migrationPath}`);
@@ -136,22 +126,22 @@ test('piloto e fila administrativa preservam o isolamento', () => {
   );
 });
 
-test('units usam o checkout vivo, ambiente minimo e execucao somente once', () => {
-  assert.ok(service, `service ausente: ${servicePath}`);
-  assert.ok(timer, `timer ausente: ${timerPath}`);
-  assert.match(service, /^Type=oneshot$/m);
-  assert.match(service, /^User=sol$/m);
-  assert.match(service, /^WorkingDirectory=\/opt\/LA-Organizer$/m);
-  assert.match(
-    service,
-    /^EnvironmentFile=\/home\/sol\/.config\/la-report\/lia-alertas-privados\.env$/m,
-  );
-  assert.match(
-    service,
-    /^ExecStart=\/usr\/bin\/python3 scripts\/process_lia_alert_queue\.py --once$/m,
-  );
-  assert.doesNotMatch(service, /gateway\.systemd\.env/);
-  assert.match(timer, /^Persistent=true$/m);
+test('transporte paralelo rejeitado não permanece no pacote', () => {
+  for (const rejected of [
+    'scripts/process_lia_alert_queue.py',
+    'tests/test_process_lia_alert_queue.py',
+    'scripts/systemd/lia-alertas-privados.service',
+    'scripts/systemd/lia-alertas-privados.timer',
+    'scripts/lia-whatsapp-bridge/alert-single-message.js',
+    'scripts/lia-whatsapp-bridge/bridge-alert-single-message.patch',
+    'tests/liaWhatsappAlertSingleMessage.test.mjs',
+  ]) {
+    assert.equal(
+      existsSync(resolve(root, rejected)),
+      false,
+      `${rejected} deve sair`,
+    );
+  }
 });
 
 test('fixture PG17 contém provas executáveis de isolamento e idempotência', () => {
