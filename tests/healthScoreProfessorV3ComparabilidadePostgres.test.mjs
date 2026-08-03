@@ -10,6 +10,10 @@ const migrationPath = path.join(
   root,
   'supabase/migrations/20260803123000_health_score_v3_comparabilidade.sql',
 );
+const effectiveSourceMigrationPath = path.join(
+  root,
+  'supabase/migrations/20260803162000_health_score_v3_fonte_pilar_efetivo.sql',
+);
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -250,7 +254,11 @@ test('RPC completa publica comparabilidade e referencia historica em campos sepa
         case when m.metrica = any(p.pilares) then 'ok' else 'sem_base' end,
         m.metrica = any(p.pilares), 'alta'::text, 'fixture_canonica'::text,
         'fixture'::text, null::text,
-        case when m.metrica = any(p.pilares) then 'evidencia_valida' else 'nao_aplicavel' end,
+        case
+          when m.metrica = any(p.pilares) then 'evidencia_valida'
+          when p.id = 2 and m.metrica = 'presenca' then 'presenca_em_auditoria'
+          else 'nao_aplicavel'
+        end,
         'nota'::text, '{}'::jsonb
       from professores p cross join metricas m
     $$;
@@ -272,7 +280,8 @@ test('RPC completa publica comparabilidade e referencia historica em campos sepa
     assert.equal(setup.status, 0, setup.stderr || setup.stdout);
 
     const migration = fs.readFileSync(migrationPath, 'utf8');
-    const applied = psql(container, migration);
+    const effectiveSourceMigration = fs.readFileSync(effectiveSourceMigrationPath, 'utf8');
+    const applied = psql(container, `${migration}\n${effectiveSourceMigration}`);
     assert.equal(applied.status, 0, applied.stderr || applied.stdout);
 
     const result = psql(container, `
