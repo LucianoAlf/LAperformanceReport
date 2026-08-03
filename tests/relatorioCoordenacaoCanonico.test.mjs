@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 const migrationPath = 'supabase/migrations/20260802192000_relatorio_coordenacao_canonico.sql';
+const correctionPath = 'supabase/migrations/20260803013000_relatorio_coordenacao_amostra_capacidade_honesta.sql';
 const edgePath = 'supabase/functions/gemini-relatorio-coordenacao/index.ts';
 const modalPath = 'src/components/App/Professores/ModalRelatorioCoordenacao.tsx';
 
@@ -40,6 +41,16 @@ test('produtor mensal da Coordenacao nasce no servidor e devolve contrato versio
   assert.match(sql, /ranking_habilitado/i);
   assert.match(sql, /estado_publicacao\s*=\s*'oficial'/i);
 });
+test('correcao separa amostra observada de conversao pontuada no fechamento', () => {
+  assert.equal(fs.existsSync(correctionPath), true, 'migration corretiva deve existir');
+  const sql = fs.readFileSync(correctionPath, 'utf8');
+
+  assert.match(sql, /professores_com_amostra_minima/i);
+  assert.match(sql, /professores_com_conversao_pontuando/i);
+  assert.match(sql, /amostra_minima/i);
+  assert.match(sql, /peso_efetivo/i);
+});
+
 test('Edge busca o contrato com o JWT e limita a IA a narrativa', () => {
   const source = fs.readFileSync(edgePath, 'utf8');
 
@@ -98,4 +109,16 @@ test('botão mensal envia somente filtros e mantém cópia robusta', () => {
   assert.doesNotMatch(monthly, /buscarDadosRelatorioCoordenacao|buscarKpisHealthV3RelatorioCoordenacao/i);
   assert.match(source, /copyTextToClipboard\(textoRelatorio\)/);
   assert.match(source, /getManualCopyShortcut/);
+});
+
+test('relatorio explica amostra e capacidade estimada sem prescrever sobrecarga', () => {
+  const source = fs.readFileSync(edgePath, 'utf8');
+
+  assert.match(source, /const\s+alertas\s*=\s*filtrarSinaisParaNarrativa\(dados\.mapa_sinais\)/i);
+  assert.match(source, /mapa_sinais:\s*filtrarSinaisParaNarrativa\(dados\.mapa_sinais\)/i);
+
+  assert.match(source, /Professores com amostra m[ií]nima observada/i);
+  assert.match(source, /Convers[aã]o compondo a nota hist[oó]rica/i);
+  assert.match(source, /Capacidade estimada . conferir cadastro/i);
+  assert.match(source, /capacidade estimada[\s\S]{0,300}n[aã]o[\s\S]{0,160}(sobrecarga|treinamento)/i);
 });

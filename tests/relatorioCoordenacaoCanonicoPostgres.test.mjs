@@ -6,9 +6,13 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const migrationPath = path.join(
+const baseMigrationPath = path.join(
   root,
   'supabase/migrations/20260802192000_relatorio_coordenacao_canonico.sql',
+);
+const migrationPath = path.join(
+  root,
+  'supabase/migrations/20260803013000_relatorio_coordenacao_amostra_capacidade_honesta.sql',
 );
 
 function docker(args, input) {
@@ -29,7 +33,13 @@ function psql(container, sql) {
 
 async function waitForPostgres(container) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const ready = psql(container, 'select 1;');
+    const mainProcess = docker([
+      'exec', container,
+      'sh', '-c', 'test "$(cat /proc/1/comm)" = postgres',
+    ]);
+    const ready = mainProcess.status === 0
+      ? psql(container, 'select 1;')
+      : { status: 1 };
     if (ready.status === 0) return;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
@@ -48,7 +58,8 @@ const fixture = String.raw`
     professor_id integer not null,
     unidade_id uuid not null,
     emusys_ativo boolean not null,
-    validacao_status text
+    validacao_status text,
+    disponibilidade jsonb
   );
   create table public.professor_acoes (
     id uuid,
@@ -66,6 +77,13 @@ const fixture = String.raw`
     foco text,
     ativo boolean
   );
+  create table public.health_score_professor_v3_config_versoes (
+    id uuid primary key, versao integer, status text, vigencia_inicio date,
+    vigencia_fim date
+  );
+  create table public.health_score_professor_v3_config_metricas (
+    config_id uuid, metrica text, amostra_minima integer
+  );
 
   insert into public.unidades values ('10000000-0000-0000-0000-000000000001', 'Recreio');
   insert into public.professores values
@@ -76,13 +94,30 @@ const fixture = String.raw`
     (5, 'Professor sem Fonte', true),
     (6, 'Professor Inativo', false);
   insert into public.professores_unidades
-  select id, '10000000-0000-0000-0000-000000000001', true, 'validado'
+  select id, '10000000-0000-0000-0000-000000000001', true, 'validado', '{}'::jsonb
   from public.professores;
   insert into public.catalogo_treinamentos values
     ('20000000-0000-0000-0000-000000000001', 'Engajamento em Aula', 'Apoio pedagogico', 'presenca', true);
+  insert into public.health_score_professor_v3_config_versoes values
+    ('30000000-0000-0000-0000-000000000001', 4, 'ativa', '2026-06-01', null);
+  insert into public.health_score_professor_v3_config_metricas values
+    ('30000000-0000-0000-0000-000000000001', 'conversao', 3);
 
   create function public.fn_health_score_professor_v3_ator_leitura(uuid)
   returns integer language sql stable as $$ select 1 $$;
+
+  create function public.get_health_score_professor_v3_capacidade_diagnostico(date, uuid)
+  returns table (
+    professor_id integer, unidade_id uuid, curso_id integer, modalidade text,
+    turma_chave text, turma_explicita_id integer, sala_id integer,
+    ocupacoes_unicas integer, capacidade numeric, fonte_capacidade text,
+    capacidade_fisica boolean, capacidade_excedida boolean, evidencias jsonb
+  ) language sql stable as $$
+    select null::integer, $2, null::integer, null::text, null::text,
+           null::integer, null::integer, null::integer, null::numeric,
+           null::text, false, false, '{}'::jsonb
+    where false
+  $$;
 
   create function public.get_health_score_professor_v3_performance(date, uuid, text)
   returns table (
@@ -103,6 +138,7 @@ const fixture = String.raw`
       (1, $2, 'unidade', date '2026-07-01', date '2026-07-01', 'mensal', date '2026-07-01', date '2026-07-31', '2026-Q3', 'oficial', true, true, 4, 2, 92::numeric, 100::numeric, 'saudavel', 'fechado', true, true, null, 'fixture', 'retencao', 95::numeric, 19::numeric, 20::numeric, 95::numeric, 25::numeric, true, 25::numeric, 23.75::numeric, 90::numeric, 20, 'valida', true, 'alta', 'fixture', 'fixture', null, 'evidencia_valida', 'nota', '{}'::jsonb),
       (1, $2, 'unidade', date '2026-07-01', date '2026-07-01', 'mensal', date '2026-07-01', date '2026-07-31', '2026-Q3', 'oficial', true, true, 4, 2, 92::numeric, 100::numeric, 'saudavel', 'fechado', true, true, null, 'fixture', 'numero_alunos', 30::numeric, 30::numeric, 30::numeric, null, 10::numeric, false, 0::numeric, null, 25::numeric, 30, 'valida', true, 'alta', 'fixture', 'fixture', null, 'evidencia_valida', 'diagnostico', '{}'::jsonb),
       (2, $2, 'unidade', date '2026-07-01', date '2026-07-01', 'mensal', date '2026-07-01', date '2026-07-31', '2026-Q3', 'parcial', true, false, 4, 2, 78::numeric, 65::numeric, 'atencao', 'provisorio', true, false, null, 'fixture', 'presenca', 78::numeric, 78::numeric, 100::numeric, 78::numeric, 10::numeric, true, 100::numeric, 78::numeric, 80::numeric, 100, 'valida', true, 'media', 'fixture', 'fixture', null, 'evidencia_valida', 'nota', '{}'::jsonb),
+      (2, $2, 'unidade', date '2026-07-01', date '2026-07-01', 'mensal', date '2026-07-01', date '2026-07-31', '2026-Q3', 'parcial', true, false, 4, 2, 78::numeric, 65::numeric, 'atencao', 'provisorio', true, false, null, 'fixture', 'conversao', 33.3::numeric, 1::numeric, 3::numeric, 33.3::numeric, 15::numeric, false, 0::numeric, null::numeric, 70::numeric, 3, 'valida', true, 'media', 'fixture', 'fixture', null, 'evidencia_valida', 'nota', '{}'::jsonb),
       (3, $2, 'unidade', date '2026-07-01', date '2026-07-01', 'mensal', date '2026-07-01', date '2026-07-31', '2026-Q3', 'parcial', true, false, 4, 2, 80::numeric, 25::numeric, 'atencao', 'em_maturacao', true, false, null, 'fixture', 'permanencia', 3::numeric, 3::numeric, 1::numeric, 80::numeric, 25::numeric, true, 100::numeric, 80::numeric, 12::numeric, 1, 'provisorio', true, 'media', 'fixture', 'fixture', 'professor em maturacao', 'professor_em_maturacao', 'nota', '{}'::jsonb),
       (4, $2, 'unidade', date '2026-07-01', date '2026-07-01', 'mensal', date '2026-07-01', date '2026-07-31', '2026-Q3', 'parcial', false, false, 4, 2, null::numeric, 0::numeric, 'sem_base', 'provisorio', false, false, 'sem experimental', 'fixture', 'conversao', null::numeric, 0::numeric, 0::numeric, null::numeric, 15::numeric, false, 0::numeric, null::numeric, 70::numeric, 0, 'sem_base', false, 'baixa', 'fixture', 'fixture', 'sem experimental no periodo', 'sem_experimental_periodo', 'nota', '{}'::jsonb)
     ) v;
@@ -116,7 +152,9 @@ const fixture = String.raw`
 `;
 
 test('produtor inclui toda a equipe e não expõe finanças', { timeout: 90_000 }, async (t) => {
-  assert.equal(fs.existsSync(migrationPath), true, 'migration canônica deve existir');
+  assert.equal(fs.existsSync(baseMigrationPath), true, 'migration canônica base deve existir');
+  assert.equal(fs.existsSync(migrationPath), true, 'migration corretiva deve existir');
+  const baseMigration = fs.readFileSync(baseMigrationPath, 'utf8');
   const migration = fs.readFileSync(migrationPath, 'utf8');
 
   const version = docker(['version', '--format', '{{.Server.Version}}']);
@@ -131,7 +169,7 @@ test('produtor inclui toda a equipe e não expõe finanças', { timeout: 90_000 
   t.after(() => docker(['rm', '-f', container]));
   await waitForPostgres(container);
 
-  const apply = psql(container, `${fixture}\n${migration}`);
+  const apply = psql(container, `${fixture}\n${baseMigration}\n${migration}`);
   assert.equal(apply.status, 0, apply.stderr);
 
   const query = psql(container, String.raw`
@@ -156,6 +194,9 @@ test('produtor inclui toda a equipe e não expõe finanças', { timeout: 90_000 
   assert.equal(payload.ranking_oficial.length, 1);
   assert.equal(payload.ranking_oficial[0].nome, 'Professor Oficial');
   assert.equal(payload.periodo.contexto_operacional, 'recesso_parcial');
+  assert.equal(payload.experimentais.amostra_minima_configurada, 3);
+  assert.equal(payload.experimentais.professores_com_amostra_minima, 1);
+  assert.equal(payload.experimentais.professores_com_conversao_pontuando, 0);
 
   const serialized = JSON.stringify(payload).toLowerCase();
   for (const forbidden of ['mrr', 'ticket', 'faturamento', 'parcela', 'financeiro']) {

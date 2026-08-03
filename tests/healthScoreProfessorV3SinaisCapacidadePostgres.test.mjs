@@ -6,9 +6,13 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const migrationPath = path.join(
+const baseMigrationPath = path.join(
   root,
   'supabase/migrations/20260802191000_health_score_v3_sinais_capacidade.sql',
+);
+const migrationPath = path.join(
+  root,
+  'supabase/migrations/20260803013000_relatorio_coordenacao_amostra_capacidade_honesta.sql',
 );
 
 function docker(args, input) {
@@ -77,7 +81,7 @@ const fixture = `
   );
 
   insert into public.unidades values ('10000000-0000-0000-0000-000000000001');
-  insert into public.professores values (1), (2);
+  insert into public.professores values (1), (2), (3);
   insert into public.cursos values (10, 'Bateria');
   insert into public.salas values
     (100, '10000000-0000-0000-0000-000000000001', 'Sala grande', 4, true);
@@ -86,7 +90,8 @@ const fixture = `
      '10000000-0000-0000-0000-000000000001', 2, true);
   insert into public.professores_unidades values
     (1, '10000000-0000-0000-0000-000000000001', '{"sabado":true}'),
-    (2, '10000000-0000-0000-0000-000000000001', '{}');
+    (2, '10000000-0000-0000-0000-000000000001', '{}'),
+    (3, '10000000-0000-0000-0000-000000000001', '{}');
   insert into public.health_score_professor_v3_config_versoes values
     ('30000000-0000-0000-0000-000000000001', 1, 'ativa', '2026-06-01', null);
   insert into public.health_score_professor_v3_config_metas_curso_modalidade values
@@ -98,6 +103,9 @@ const fixture = `
 
   create function public.fn_health_score_professor_v3_ator_leitura(uuid)
   returns integer language sql stable as $$ select null::integer $$;
+
+  create function public.get_relatorio_coordenacao_canonico_v1(uuid, integer, integer)
+  returns jsonb language sql stable as $$ select '{}'::jsonb $$;
 
   create function public.get_carteira_professor_periodo_detalhe_canonico_v1(
     p_ano integer, p_mes integer, p_unidade_id uuid,
@@ -111,7 +119,11 @@ const fixture = `
     select * from (values
       (2, p_unidade_id, 'aluno-1', 10, 'turma', 'turma:10:bateria sabado', true, true, true),
       (2, p_unidade_id, 'aluno-2', 10, 'turma', 'turma:10:bateria sabado', true, true, true),
-      (2, p_unidade_id, 'aluno-3', 10, 'turma', 'turma:10:bateria sabado', true, true, true)
+      (2, p_unidade_id, 'aluno-3', 10, 'turma', 'turma:10:bateria sabado', true, true, true),
+      (3, p_unidade_id, 'aluno-4', 10, 'turma', 'turma:10:sem cadastro', true, true, true),
+      (3, p_unidade_id, 'aluno-5', 10, 'turma', 'turma:10:sem cadastro', true, true, true),
+      (3, p_unidade_id, 'aluno-6', 10, 'turma', 'turma:10:sem cadastro', true, true, true),
+      (3, p_unidade_id, 'aluno-7', 10, 'turma', 'turma:10:sem cadastro', true, true, true)
     ) v(professor_id, unidade_id, pessoa_chave, curso_id, modalidade,
         turma_chave, elegivel_media, curso_resolvido, modalidade_resolvida)
   $$;
@@ -128,13 +140,18 @@ const fixture = `
       (1, p_unidade_id, 'provisorio', 90::numeric, 'presenca', 90::numeric, 80::numeric, 'evidencia_valida'),
       (2, p_unidade_id, 'provisorio', 70::numeric, 'numero_alunos', 40::numeric, null::numeric, 'diagnostico_carteira'),
       (2, p_unidade_id, 'provisorio', 70::numeric, 'retencao', 80::numeric, 90::numeric, 'evidencia_valida'),
-      (2, p_unidade_id, 'provisorio', 70::numeric, 'presenca', 70::numeric, 80::numeric, 'evidencia_valida')
+      (2, p_unidade_id, 'provisorio', 70::numeric, 'presenca', 70::numeric, 80::numeric, 'evidencia_valida'),
+      (3, p_unidade_id, 'provisorio', 95::numeric, 'numero_alunos', 50::numeric, null::numeric, 'diagnostico_carteira'),
+      (3, p_unidade_id, 'provisorio', 95::numeric, 'retencao', 95::numeric, 90::numeric, 'evidencia_valida'),
+      (3, p_unidade_id, 'provisorio', 95::numeric, 'presenca', 90::numeric, 80::numeric, 'evidencia_valida')
     ) v(professor_id, unidade_id, estado, score, metrica, valor_bruto, meta, codigo_evidencia)
   $$;
 `;
 
 test('PostgreSQL resolve capacidade fisica e produz sinais sem pontuar carteira', { timeout: 90_000 }, async (t) => {
-  assert.equal(fs.existsSync(migrationPath), true, 'migration de sinais deve existir');
+  assert.equal(fs.existsSync(baseMigrationPath), true, 'migration base de sinais deve existir');
+  assert.equal(fs.existsSync(migrationPath), true, 'migration corretiva de sinais deve existir');
+  const baseMigration = fs.readFileSync(baseMigrationPath, 'utf8');
   const migration = fs.readFileSync(migrationPath, 'utf8');
   const version = docker(['version', '--format', '{{.Server.Version}}']);
   if (version.status !== 0) {
@@ -154,7 +171,7 @@ test('PostgreSQL resolve capacidade fisica e produz sinais sem pontuar carteira'
     await waitForPostgres(container);
     const prepared = psql(container, fixture);
     assert.equal(prepared.status, 0, prepared.stderr || prepared.stdout);
-    const applied = psql(container, migration);
+    const applied = psql(container, `${baseMigration}\n${migration}`);
     assert.equal(applied.status, 0, applied.stderr || applied.stdout);
 
     const resolved = psql(container, `
@@ -190,15 +207,17 @@ test('PostgreSQL resolve capacidade fisica e produz sinais sem pontuar carteira'
     assert.match(diagnostic.stdout, /^3\|2\|turma\|t\|t/m);
 
     const signals = psql(container, `
-      select professor_id, sinal
+      select professor_id, sinal, severidade
       from public.get_health_score_professor_v3_sinais(
         '2026-07-01', '10000000-0000-0000-0000-000000000001'
       ) order by professor_id, sinal;
     `);
     assert.equal(signals.status, 0, signals.stderr || signals.stdout);
-    assert.match(signals.stdout, /1\|oportunidade_distribuicao/);
-    assert.match(signals.stdout, /2\|possivel_sobrecarga/);
-    assert.match(signals.stdout, /2\|concentracao_operacional/);
+    assert.match(signals.stdout, /1\|oportunidade_distribuicao\|baixo/);
+    assert.match(signals.stdout, /2\|concentracao_operacional\|alto/);
+    assert.match(signals.stdout, /3\|capacidade_estimada_conferir\|medio/);
+    assert.doesNotMatch(signals.stdout, /3\|possivel_sobrecarga/);
+    assert.doesNotMatch(signals.stdout, /3\|concentracao_operacional/);
   } finally {
     docker(['stop', container]);
   }
