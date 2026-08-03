@@ -615,7 +615,8 @@ ou criar a migration de ativação.
 ## Próximas fases e entregas — não fazem parte da Fase A
 
 1. **Fase B:** follow-up após 72 horas, resumo privado por operador e estados
-   visíveis na tela.
+   visíveis na tela. O contrato, os testes e o rollout próprio ficam em
+   `docs/runbooks/lia-acompanhamento-ativo-fase-b-rollout.md`.
 2. **Fase C:** histórico, coortes e KPI agregado no grupo oficial do Sucesso do
    Aluno.
 3. **Fase D:** follow-up automático à família; permanece desligado e exige nova

@@ -322,16 +322,22 @@ Uma pesquisa entra na fila de follow-up ao completar 72 horas desde
 - não existe opt-out;
 - nenhum follow-up foi concluído ou dispensado.
 
-O aviso é um resumo privado por operador, não uma mensagem por aluno. O ciclo
-agrupa no máximo dez nomes e informa quantos casos adicionais existem, sempre
-com link para a fila filtrada.
+O aviso é um resumo privado por operador, não uma mensagem por aluno. Ele é
+produzido uma vez por dia, às 09:00 BRT, e agrupa tudo que venceu desde o
+resumo anterior. O ciclo lista no máximo dez nomes e informa quantos casos
+adicionais existem, sempre com link para a fila filtrada.
+
+O estado da tela muda exatamente em `enviado_em + 72 horas`, sem esperar o
+resumo. Portanto, um caso que vence às 11h de terça fica visível imediatamente
+e só é avisado no WhatsApp na manhã de quarta. Essa latência do aviso é
+intencional e foi aceita pelo Alf para evitar várias mensagens no mesmo dia.
 
 Uma interação não substantiva mantém o caso na fila, mas ganha o rótulo
 `Interagiu sem resposta válida`. Para o eventual follow-up automático à
 família, qualquer interação recebida bloqueia o disparo até decisão humana.
 
-Chave idempotente recomendada:
-`followup_3d_operador:{usuario_id}:{data_corte_brt}`.
+Chave idempotente:
+`followup_3d_operador:{usuario_id}:{YYYYMMDD}`.
 
 ### 8.4 KPI histórico
 
@@ -776,27 +782,35 @@ rapidamente — sem exigir deploy de quatro componentes de frontend.
 - A migration estrutural foi aplicada em produção sob a versão remota
   `20260803124754`; ela criou outbox, destinos governados, produtor por rodada,
   claim atômico, desfechos terminais, fila administrativa e piloto restrito.
-- A produção permanece bloqueada por `alertas_producao_liberados=false` e não
-  existe migration de ativação. Eventos reais criados antes dela ficam em
-  `aguardando_liberacao`, fora do claim do dispatcher.
+- A ativação foi aceita em 03/08/2026 às 13:39 BRT. A produção está liberada,
+  o dispatcher `processar-alertas-lia` e o cron por minuto estão ativos, usando
+  exclusivamente a caixa 3 e os destinos privados governados.
+- O primeiro alerta produtivo foi entregue à Jéssica para a resposta de Miguel
+  Santos Borges, com uma tentativa e `provider_message_id`, sem conteúdo da
+  resposta ou telefone da família.
+- O filtro exato por `caixa_id=3`, `fromMe` e `provider_message_id` registrado na
+  outbox impede que alertas internos retornem à Caixa de Entrada. Mensagens
+  legítimas de famílias continuam no fluxo inbound.
+- O monitoramento de dezoito execuções consecutivas do cron terminou sem erro,
+  duplicidade ou fila administrativa.
 - O worker Python, as units e o rascunho de `POST /send-alert` foram removidos;
   nenhum deles foi instalado na VPS.
-- A adaptação `20260803210000_lia_alertas_dispatcher_edge.sql` e o dispatcher
-  `processar-alertas-lia` existem e estão testados localmente, mas não foram
-  aplicados ou publicados. O cron de consumo continua inexistente.
-- A fixture PostgreSQL 17 e os testes de contrato da fundação cobrem
-  idempotência, isolamento de destinatário, ausência de fallback, janela BRT e
-  não reenvio ambíguo. Os testes do dispatcher cobrem uma única chamada ao
-  provedor, `message_id` obrigatório, caixa 3 exclusiva e logs sanitizados.
-- A Fase A não altera `webhook-whatsapp-inbox`; enquanto a produção estiver
-  bloqueada, a equipe acompanha respostas reais diretamente na tela.
 - O nome de `usuarios.id=29` foi corrigido para `Jéssica` sem reescrever os
   snapshots dos dois envios já realizados.
 - O rollout é governado por
-  `docs/runbooks/lia-acompanhamento-ativo-fase-a-rollout.md` e para antes do
-  primeiro piloto.
+  `docs/runbooks/lia-acompanhamento-ativo-fase-a-rollout.md`.
 - Deep link exato e ajuste visual da consolidação duplicada permanecem fora da
   Fase A.
+
+### 20.2 Cadência aprovada da Fase B
+
+- a fila muda de estado exatamente em `enviado_em + 72 horas`;
+- o resumo privado é diário, por operador, às 09:00 BRT;
+- a chave de idempotência é
+  `followup_3d_operador:{usuario_id}:{YYYYMMDD}`;
+- casos vencidos depois das 09:00 aparecem imediatamente na tela e entram no
+  resumo da manhã seguinte;
+- o follow-up automático à família permanece desligado e fora desta fase.
 
 ## 21. Arquivos e contratos relacionados
 
