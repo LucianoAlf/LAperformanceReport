@@ -196,3 +196,14 @@ test('relatorio administrativo oferece a competencia disponivel', () => {
   assert.match(modalAdmin, /useConfirmacaoCompetencia/);
   assert.match(modalAdmin, /ModalConfirmacao/);
 });
+
+const paginaComercial = await readFile(
+  new URL('../src/components/App/Comercial/ComercialPage.tsx', import.meta.url),
+  'utf8',
+);
+
+test('relatorio comercial oferece a competencia disponivel', () => {
+  assert.match(paginaComercial, /solicitarRelatorioMensalComFallback/);
+  assert.match(paginaComercial, /useConfirmacaoCompetencia/);
+  assert.match(paginaComercial, /ModalConfirmacao/);
+});

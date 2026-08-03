@@ -53,6 +53,12 @@ import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
 import { ehMatriculaComercialCanonica } from '@/lib/comercialMatriculasCanonicas';
 import { resolverProfessorExperimentalCanonico } from '@/lib/comercialProfessorExperimental.js';
 import { calcularRangeRelatorioMensalComercial } from '@/lib/relatorioComercialMensal';
+import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
+import {
+  CancelamentoCompetenciaError,
+  solicitarRelatorioMensalComFallback,
+} from '@/lib/fallbackCompetenciaRelatorio';
+import { useConfirmacaoCompetencia } from '@/hooks/useConfirmacaoCompetencia';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { format } from 'date-fns';
@@ -464,9 +470,15 @@ export function ComercialPage() {
   
   // Para usuário de unidade: sempre usa sua unidade (unidadeId do auth)
   // Para admin: usa a unidade selecionada no dropdown do header (unidadeSelecionada do context)
-  const unidadeParaSalvar = isAdmin 
-    ? context?.unidadeSelecionada 
+  const unidadeParaSalvar = isAdmin
+    ? context?.unidadeSelecionada
     : unidadeId;
+  const {
+    pedirConfirmacao,
+    confirmacaoPendente,
+    confirmar: confirmarCompetencia,
+    cancelar: cancelarCompetencia,
+  } = useConfirmacaoCompetencia();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [confirmouDuplicataLote, setConfirmouDuplicataLote] = useState(false);
@@ -646,6 +658,13 @@ export function ComercialPage() {
         setRelatorioOrigem(origemGeracao);
       }
     } catch (err) {
+      if (err instanceof CancelamentoCompetenciaError) {
+        if (relatorioGeracaoIdRef.current === geracaoId) {
+          setRelatorioTexto('');
+          setRelatorioOrigem(null);
+        }
+        return;
+      }
       console.error('[Comercial] Erro ao gerar relatório:', err);
       const mensagem = err instanceof Error && err.message
         ? err.message
@@ -3178,21 +3197,13 @@ export function ComercialPage() {
       throw new Error('Selecione uma unidade para gerar o relatório mensal comercial.');
     }
 
-    const { data, error } = await supabase.functions.invoke('relatorio-admin-whatsapp', {
-      body: {
-        modo: 'dry_run_mensal_comercial',
-        unidade: unidadeId,
-        ano,
-        mes,
-      },
+    return solicitarRelatorioMensalComFallback({
+      modo: 'dry_run_mensal_comercial',
+      unidade: unidadeId,
+      ano,
+      mes,
+      pedirConfirmacao,
     });
-
-    if (error) throw error;
-    if (data?.success !== true || typeof data?.texto !== 'string' || !data.texto.trim()) {
-      throw new Error(data?.error || 'O fechamento oficial deste mês ainda não está disponível.');
-    }
-
-    return data.texto;
   };
 
   // Gerar relatório de matrículas detalhado
@@ -7348,6 +7359,20 @@ export function ComercialPage() {
         experimentalId={leadParaEditar?.experimentalId}
       />
 
+      <ModalConfirmacao
+        aberto={confirmacaoPendente !== null}
+        onClose={cancelarCompetencia}
+        onConfirmar={confirmarCompetencia}
+        tipo="warning"
+        titulo="Competência ainda não fechada"
+        mensagem={
+          confirmacaoPendente
+            ? `O mês selecionado ainda não teve fechamento. Gerar o relatório de ${confirmacaoPendente.rotulo}?`
+            : ''
+        }
+        textoConfirmar={confirmacaoPendente ? `Gerar ${confirmacaoPendente.rotulo}` : 'Confirmar'}
+        textoCancelar="Cancelar"
+      />
 
     </div>
   );
