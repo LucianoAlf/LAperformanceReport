@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo, Fragment } from 'react';
 import {
   AlertTriangle, RefreshCw, Check, X, Loader2, Link2, UserX, Copy, HelpCircle,
   Search, MoreVertical, DollarSign, GraduationCap, ChevronLeft, ChevronRight, Zap, Link as LinkIcon,
-  FileText, Phone, CreditCard, Image as ImageIcon, AtSign, ShieldAlert,
+  FileText, Phone, CreditCard, Image as ImageIcon, AtSign, ShieldAlert, Cake,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -148,6 +148,7 @@ const ATRIBUTO_TIPO_META: Record<string, { label: string; grupo: string; cor: st
   aguardando_renovacao_divergente: { label: 'Aguardando renovacao', grupo: 'financeiro', cor: 'orange', icon: CreditCard },
   anamnese_pendente: { label: 'Anamnese pendente', grupo: 'contrato', cor: 'amber', icon: FileText },
   contrato_assinatura_pendente: { label: 'Contrato sem assinatura', grupo: 'contrato', cor: 'amber', icon: FileText },
+  data_nascimento_divergente: { label: 'Nascimento diverge', grupo: 'cadastro', cor: 'red', icon: Cake },
 };
 
 // rótulos legíveis dos campos que o sync aplica sozinho (chaves do upd da edge)
@@ -161,6 +162,7 @@ const ATRIBUTO_CAMPOS_APLICAVEIS = new Set([
   'status_pagamento',
   'forma_pagamento_id',
   'aguardando_renovacao',
+  'data_nascimento',
 ]);
 
 const CAMPO_LABEL: Record<string, string> = {
@@ -381,6 +383,15 @@ function descricaoAtributo(item: AtributoDivergencia): { nosso: string; emusys: 
       nosso: label(item.valor_nosso?.status_pagamento),
       emusys: label(item.valor_emusys?.status_pagamento),
       sugestao: item.sugestao?.status_pagamento ? `Definir como ${label(item.sugestao.status_pagamento)}` : '—',
+    };
+  }
+  if (item.tipo_divergencia === 'data_nascimento_divergente') {
+    return {
+      nosso: fmtDataCurta(item.valor_nosso?.data_nascimento),
+      emusys: fmtDataCurta(item.valor_emusys?.data_nascimento),
+      sugestao: item.sugestao?.data_nascimento
+        ? `Definir como ${fmtDataCurta(item.sugestao.data_nascimento)} (confirmar com a escola antes)`
+        : '—',
     };
   }
   return {

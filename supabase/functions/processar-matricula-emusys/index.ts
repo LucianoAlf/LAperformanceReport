@@ -1,6 +1,11 @@
 /// <reference lib="deno.ns" />
 
-// Edge Function: processar-matricula-emusys v31
+// Edge Function: processar-matricula-emusys v32
+// v32 (2026-08-03): trata os webhooks matricula_aviso_previo_adicionado/editado/removido
+// (Emusys v1.4.0). Espelha o fluxo manual (ModalAvisoPrevio): grava/atualiza/remove 1 linha
+// em movimentacoes_admin (tipo='aviso_previo', mes_saida = mes do cancelamento previsto),
+// com dedup por emusys_aviso_previo_id (id estavel do aviso no Emusys). NAO toca em
+// alunos.status (no fluxo manual o status 'aviso_previo' e decidido pela escola).
 // v31 (2026-07-29): interpreta o ciclo de vida v1.3.1 pelo resolvedor canonico,
 // separa contrato concluido de interrupcao e preserva ambiguidades para auditoria.
 // Processa webhooks de matrícula do Emusys: nova, renovação, trancamento, evasão
@@ -129,7 +134,7 @@ import {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const VERSAO = 'v31';
+const VERSAO = 'v32';
 const EVENTOS_JORNADA_CANONICA = new Set([
   'matricula_nova',
   'matricula_renovacao',
@@ -410,6 +415,12 @@ interface Payload {
   trancamentoMotivo: string | null;
   trancamentoDataInicial: string | null;
   trancamentoDataFinal: string | null;
+  avisoPrevioId: number | null;
+  avisoPrevioDataAviso: string | null;
+  avisoPrevioDataPrevistaCancelamento: string | null;
+  avisoPrevioMotivo: string | null;
+  avisoPrevioObservacoes: string | null;
+  avisoPrevioAutorNome: string | null;
   finalizacaoMotivo: string | null;
   finalizacaoObservacoes: string | null;
   statusEmusys: string | null;
@@ -434,6 +445,7 @@ function parsePayload(body: any): Payload | null {
   const disc = m.disciplinas?.[0];
   const agend = disc?.agendamentos?.[0];
   const tranc = body.trancamento;
+  const aviso = body.aviso_previo;
   const finaliz = body.finalizacao;
   const motivoInativaExplicito =
     m.motivo_inativa
@@ -447,6 +459,7 @@ function parsePayload(body: any): Payload | null {
     : null;
   const alunoEmusysId = Number(m.aluno_id ?? m.id_aluno);
   const trancamentoId = Number(tranc?.id);
+  const avisoPrevioId = Number(aviso?.id);
 
   return {
     evento: body.evento,
@@ -478,6 +491,12 @@ function parsePayload(body: any): Payload | null {
     trancamentoMotivo: tranc?.motivo || null,
     trancamentoDataInicial: tranc?.data_inicial || null,
     trancamentoDataFinal: tranc?.data_final || null,
+    avisoPrevioId: Number.isFinite(avisoPrevioId) ? avisoPrevioId : null,
+    avisoPrevioDataAviso: dateOnlyISO(aviso?.data_aviso) ?? null,
+    avisoPrevioDataPrevistaCancelamento: dateOnlyISO(aviso?.data_prevista_cancelamento) ?? null,
+    avisoPrevioMotivo: aviso?.motivo || null,
+    avisoPrevioObservacoes: aviso?.observacoes || null,
+    avisoPrevioAutorNome: aviso?.autor?.nome || null,
     finalizacaoMotivo: finaliz?.motivo || null,
     finalizacaoObservacoes: finaliz?.observacoes || null,
     statusEmusys: m.status ?? body.status ?? null,
@@ -1685,6 +1704,160 @@ async function handleTrancamento(supabase: any, p: Payload) {
   }
 }
 
+// Webhooks matricula_aviso_previo_* (Emusys v1.4.0, 03/08/2026): o aluno comunicou intenção
+// de encerrar a matrícula. Espelha o fluxo manual (ModalAvisoPrevio): grava/atualiza/remove
+// 1 linha em movimentacoes_admin (tipo='aviso_previo', mes_saida = mes do cancelamento previsto).
+// NAO toca em alunos.status (no fluxo manual o status 'aviso_previo' e decidido pela escola).
+// Dedup/idempotencia por emusys_aviso_previo_id (o id do aviso no Emusys e estavel entre
+// adicionado/editado/removido; aluno+mes_saida muda a cada edicao e nao serve de chave).
+async function handleAvisoPrevio(supabase: any, p: Payload) {
+  const idempotency_key = await computarHash(
+    `${p.evento}:${p.avisoPrevioId ?? ''}:${p.unidadeId}`
+  );
+
+  const logBase = {
+    evento: p.evento,
+    aluno_nome: p.nomeAluno || '(desconhecido)',
+    unidade_nome: p.unidadeNome ?? undefined,
+    payload_bruto: p.rawPayload,
+    idempotency_key,
+    workflow_id: 'processar-matricula-emusys',
+    execution_id: new Date().toISOString(),
+  };
+
+  try {
+    if (!p.avisoPrevioId) {
+      const result = { action: 'aviso_previo_sem_id', motivo: 'Payload sem aviso_previo.id — impossível deduplicar' };
+      await gravarLog(supabase, { ...logBase, acao: result.action, invariantes: [], detalhes: { ...result, version: VERSAO } });
+      return result;
+    }
+
+    const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId, p.unidadeId);
+    const found = await buscarAluno(supabase, p, cursoId);
+
+    if (!found?.aluno) {
+      const result = { action: 'erro_aluno_nao_encontrado', motivo: `Aluno "${p.nomeAluno}" não encontrado na unidade ${p.unidadeNome}` };
+      await gravarLog(supabase, { ...logBase, acao: result.action, invariantes: [], detalhes: { ...result, version: VERSAO, emusys_matricula_id: p.matriculaIdEmusys } });
+      return result;
+    }
+
+    const aluno = found.aluno;
+    await backfillMatriculaId(supabase, aluno.id, p.matriculaIdEmusys, aluno.emusys_matricula_id);
+
+    const { data: existente } = await supabase.from('movimentacoes_admin')
+      .select('id')
+      .eq('emusys_aviso_previo_id', p.avisoPrevioId)
+      .eq('unidade_id', p.unidadeId)
+      .limit(1)
+      .maybeSingle();
+
+    if (p.evento === 'matricula_aviso_previo_removido') {
+      if (!existente?.id) {
+        const result = { action: 'aviso_previo_remocao_sem_registro', aluno_id: aluno.id };
+        await gravarLog(supabase, { ...logBase, acao: result.action, aluno_id: aluno.id, invariantes: [], detalhes: { ...result, version: VERSAO } });
+        return result;
+      }
+      // O aviso deixou de existir na fonte (tipicamente o aluno desistiu de sair) — remove
+      // a linha para nao inflar os KPIs de aviso previo. O DELETE fica auditado pelo trg_audit.
+      await supabase.from('movimentacoes_admin').delete().eq('id', existente.id);
+      const result = { action: 'aviso_previo_removido', aluno_id: aluno.id, movimentacao_id: existente.id };
+      await gravarLog(supabase, { ...logBase, acao: result.action, aluno_id: aluno.id, invariantes: [], detalhes: { ...result, version: VERSAO } });
+      return result;
+    }
+
+    const dataAviso = p.avisoPrevioDataAviso ?? p.dataEvento;
+    const mesSaida = p.avisoPrevioDataPrevistaCancelamento ? inicioMesISO(p.avisoPrevioDataPrevistaCancelamento) : null;
+    const motivo = p.avisoPrevioMotivo || 'Via Emusys (automação)';
+    const observacoes = [p.avisoPrevioObservacoes, p.avisoPrevioAutorNome ? `Registrado por: ${p.avisoPrevioAutorNome} (Emusys)` : null]
+      .filter(Boolean).join(' | ') || null;
+
+    let motivoSaidaId: number | null = null;
+    if (p.avisoPrevioMotivo) {
+      const { data: motivoMatch } = await supabase
+        .from('motivos_saida')
+        .select('id')
+        .ilike('nome', p.avisoPrevioMotivo)
+        .eq('ativo', true)
+        .limit(1)
+        .maybeSingle();
+      motivoSaidaId = motivoMatch?.id || null;
+    }
+
+    const camposAviso: any = {
+      data: dataAviso,
+      mes_saida: mesSaida,
+      data_prevista_saida: p.avisoPrevioDataPrevistaCancelamento,
+      motivo,
+      motivo_saida_id: motivoSaidaId,
+      observacoes,
+      competencia_referencia: inicioMesISO(dataAviso),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (existente?.id) {
+      await supabase.from('movimentacoes_admin').update(camposAviso).eq('id', existente.id);
+      const result = { action: 'aviso_previo_atualizado', aluno_id: aluno.id, movimentacao_id: existente.id, matched_via: found.fonte, mes_saida: mesSaida };
+      await gravarLog(supabase, { ...logBase, acao: result.action, aluno_id: aluno.id, invariantes: [], detalhes: { ...result, version: VERSAO, emusys_matricula_id: p.matriculaIdEmusys } });
+      return result;
+    }
+
+    // Adocao: se a escola registrou o mesmo aviso manualmente (mesmo aluno+mes_saida, sem id
+    // Emusys), adota a linha em vez de criar duplicata.
+    let adotavel: any = null;
+    if (mesSaida) {
+      const { data: manual } = await supabase.from('movimentacoes_admin')
+        .select('id')
+        .eq('tipo', 'aviso_previo')
+        .eq('aluno_id', aluno.id)
+        .eq('mes_saida', mesSaida)
+        .is('emusys_aviso_previo_id', null)
+        .limit(1)
+        .maybeSingle();
+      adotavel = manual;
+    }
+
+    if (adotavel?.id) {
+      await supabase.from('movimentacoes_admin')
+        .update({ ...camposAviso, emusys_aviso_previo_id: p.avisoPrevioId })
+        .eq('id', adotavel.id);
+      const result = { action: 'aviso_previo_adotado', aluno_id: aluno.id, movimentacao_id: adotavel.id, matched_via: found.fonte, mes_saida: mesSaida };
+      await gravarLog(supabase, { ...logBase, acao: result.action, aluno_id: aluno.id, invariantes: [], detalhes: { ...result, version: VERSAO, emusys_matricula_id: p.matriculaIdEmusys } });
+      return result;
+    }
+
+    const insertPayload: any = {
+      unidade_id: p.unidadeId,
+      tipo: 'aviso_previo',
+      aluno_nome: p.nomeAluno,
+      aluno_id: aluno.id,
+      professor_id: aluno.professor_atual_id ?? null,
+      curso_id: aluno.curso_id ?? cursoId ?? null,
+      valor_parcela_novo: aluno.valor_parcela ?? null,
+      emusys_matricula_id: p.matriculaIdEmusys ?? null,
+      emusys_aviso_previo_id: p.avisoPrevioId,
+      created_at: new Date().toISOString(),
+      ...camposAviso,
+    };
+    await supabase.from('movimentacoes_admin').insert(insertPayload);
+
+    const result = { action: 'aviso_previo_registrado', aluno_id: aluno.id, matched_via: found.fonte, mes_saida: mesSaida, motivo };
+    await gravarLog(supabase, { ...logBase, acao: result.action, aluno_id: aluno.id, invariantes: [], detalhes: { ...result, version: VERSAO, emusys_matricula_id: p.matriculaIdEmusys } });
+    return result;
+  } catch (e: any) {
+    await gravarLog(supabase, {
+      ...logBase,
+      acao: 'erro',
+      invariantes: [{
+        regra: 'processamento_falhou_excecao',
+        severidade: 'critico',
+        mensagem: `Exceção em handleAvisoPrevio: ${e?.message ?? e}`,
+      }],
+      detalhes: { version: VERSAO, erro: e?.message ?? String(e) },
+    });
+    throw e;
+  }
+}
+
 // v12: ao finalizar uma matrícula, verifica se o aluno saiu de TODAS as matrículas dele
 // (mesmo nome+unidade) e, se sim, grava 1 linha em alunos_historico representando a passagem
 // completa: data_entrada=MIN(data_matricula), data_saida=hoje, aluno_ids=array.
@@ -2083,6 +2256,11 @@ serve(async (req: Request) => {
         break;
       case 'matricula_alterada':
         result = await handleMatriculaAlterada(supabase, p);
+        break;
+      case 'matricula_aviso_previo_adicionado':
+      case 'matricula_aviso_previo_editado':
+      case 'matricula_aviso_previo_removido':
+        result = await handleAvisoPrevio(supabase, p);
         break;
       default:
         result = { action: 'evento_ignorado', motivo: `Evento não tratado: ${p.evento}` };

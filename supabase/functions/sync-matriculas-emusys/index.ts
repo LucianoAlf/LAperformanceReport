@@ -527,6 +527,19 @@ function detectarDivergenciasAtributosAluno(
     ));
   }
 
+  // data_nascimento: comparacao direta YYYY-MM-DD. Nunca auto-aplica — vai pra fila
+  // com severidade alta (bug historico do webhook mandava a data do responsavel).
+  const dnEmusys = mat?.aluno?.data_nascimento;
+  if (!fixados.has('data_nascimento') && temValor(dnEmusys) && String(dnEmusys) !== String(a.data_nascimento ?? '')) {
+    rows.push(criarDivergenciaAtributo(
+      a, mat, 'data_nascimento_divergente', 'data_nascimento',
+      { data_nascimento: a.data_nascimento ?? null },
+      { data_nascimento: dnEmusys },
+      { data_nascimento: dnEmusys },
+      'alta',
+    ));
+  }
+
   return rows;
 }
 
@@ -538,6 +551,7 @@ const TIPOS_ATRIBUTO_POR_ALUNO = new Set([
   'responsavel_divergente',
   'anamnese_pendente',
   'contrato_assinatura_pendente',
+  'data_nascimento_divergente',
 ]);
 
 function chaveAtributo(row: any): string {
