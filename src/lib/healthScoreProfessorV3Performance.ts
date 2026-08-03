@@ -37,7 +37,7 @@ export interface HealthScoreV3ProfessorPerformance {
   periodoInicio: string;
   periodoFim: string;
   cicloCodigo: string;
-  estadoPublicacao: 'em_andamento' | 'parcial' | 'oficial' | 'sem_base';
+  estadoPublicacao: 'em_andamento' | 'ciclo_em_acompanhamento' | 'parcial' | 'oficial' | 'sem_base';
   scoreExibivel: boolean;
   rankingHabilitado: boolean;
   configVersao: number;
@@ -52,6 +52,14 @@ export interface HealthScoreV3ProfessorPerformance {
   pilaresEsperados: number;
   comparabilidadeEstado: HealthScoreV3ComparabilityState;
   comparabilidadeMotivo: string | null;
+  comparabilidadeMotivos: string[];
+  dataCorte: string | null;
+  configId: string | null;
+  regraFingerprint: string | null;
+  pesoPontuavelTotal: number | null;
+  pesoDisponivelTotal: number | null;
+  coberturaNormalizada: number | null;
+  coberturaMinimaAplicada: number | null;
   competenciaReferencia: string | null;
   scoreReferencia: number | null;
   classificacaoReferencia: string | null;
@@ -206,6 +214,14 @@ export function buildHealthScoreV3MissingPerformance({
     pilaresEsperados: 5,
     comparabilidadeEstado: 'sem_base_operacional',
     comparabilidadeMotivo: 'fonte_canonica_indisponivel',
+    comparabilidadeMotivos: ['fonte_canonica_indisponivel'],
+    dataCorte: null,
+    configId: null,
+    regraFingerprint: null,
+    pesoPontuavelTotal: null,
+    pesoDisponivelTotal: null,
+    coberturaNormalizada: null,
+    coberturaMinimaAplicada: null,
     competenciaReferencia: null,
     scoreReferencia: null,
     classificacaoReferencia: null,
@@ -264,6 +280,7 @@ export function resolveHealthScoreV3PublicationLabel(snapshot: Pick<
   'estadoPublicacao'
 > | null | undefined): string {
   if (snapshot?.estadoPublicacao === 'em_andamento') return 'Em andamento';
+  if (snapshot?.estadoPublicacao === 'ciclo_em_acompanhamento') return 'Ciclo em acompanhamento';
   if (snapshot?.estadoPublicacao === 'oficial') return 'Oficial';
   if (snapshot?.estadoPublicacao === 'parcial') return 'Parcial';
   return 'Sem evidência';
@@ -401,6 +418,12 @@ function asComparabilityState(value: unknown): HealthScoreV3ComparabilityState {
   return 'sem_base_operacional';
 }
 
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => String(item)).filter(Boolean)
+    : [];
+}
+
 export function normalizeHealthScoreV3PerformanceRows(
   rows: unknown[],
 ): HealthScoreV3ProfessorPerformance[] {
@@ -437,6 +460,14 @@ export function normalizeHealthScoreV3PerformanceRows(
         pilaresEsperados: asNumber(row.pilares_esperados, 5),
         comparabilidadeEstado: asComparabilityState(row.comparabilidade_estado),
         comparabilidadeMotivo: row.comparabilidade_motivo ? String(row.comparabilidade_motivo) : null,
+        comparabilidadeMotivos: asStringArray(row.comparabilidade_motivos),
+        dataCorte: row.data_corte ? String(row.data_corte) : null,
+        configId: row.config_id ? String(row.config_id) : null,
+        regraFingerprint: row.regra_fingerprint ? String(row.regra_fingerprint) : null,
+        pesoPontuavelTotal: asNullableNumber(row.peso_pontuavel_total),
+        pesoDisponivelTotal: asNullableNumber(row.peso_disponivel_total),
+        coberturaNormalizada: asNullableNumber(row.cobertura_normalizada),
+        coberturaMinimaAplicada: asNullableNumber(row.cobertura_minima_aplicada),
         competenciaReferencia: row.competencia_referencia ? String(row.competencia_referencia) : null,
         scoreReferencia: asNullableNumber(row.score_referencia),
         classificacaoReferencia: row.classificacao_referencia ? String(row.classificacao_referencia) : null,
@@ -691,6 +722,14 @@ export interface HealthScoreV3AiPayload {
   pilares_esperados: number;
   comparabilidade_estado: HealthScoreV3ComparabilityState;
   comparabilidade_motivo: string | null;
+  comparabilidade_motivos: string[];
+  data_corte: string | null;
+  config_id: string | null;
+  regra_fingerprint: string | null;
+  peso_pontuavel_total: number | null;
+  peso_disponivel_total: number | null;
+  cobertura_normalizada: number | null;
+  cobertura_minima_aplicada: number | null;
   competencia_referencia: string | null;
   score_referencia: number | null;
   classificacao_referencia: string | null;
@@ -785,6 +824,14 @@ function performanceFromMetricRows(
     pilaresEsperados: 5,
     comparabilidadeEstado: 'sem_base_operacional',
     comparabilidadeMotivo: 'contrato_modal_legado',
+    comparabilidadeMotivos: ['contrato_modal_legado'],
+    dataCorte: null,
+    configId: null,
+    regraFingerprint: null,
+    pesoPontuavelTotal: null,
+    pesoDisponivelTotal: null,
+    coberturaNormalizada: first.cobertura,
+    coberturaMinimaAplicada: null,
     competenciaReferencia: null,
     scoreReferencia: null,
     classificacaoReferencia: null,
@@ -848,6 +895,14 @@ export function serializeHealthScoreV3ForAi(
     pilares_esperados: snapshot.pilaresEsperados,
     comparabilidade_estado: snapshot.comparabilidadeEstado,
     comparabilidade_motivo: snapshot.comparabilidadeMotivo,
+    comparabilidade_motivos: snapshot.comparabilidadeMotivos,
+    data_corte: snapshot.dataCorte,
+    config_id: snapshot.configId,
+    regra_fingerprint: snapshot.regraFingerprint,
+    peso_pontuavel_total: snapshot.pesoPontuavelTotal,
+    peso_disponivel_total: snapshot.pesoDisponivelTotal,
+    cobertura_normalizada: snapshot.coberturaNormalizada,
+    cobertura_minima_aplicada: snapshot.coberturaMinimaAplicada,
     competencia_referencia: snapshot.competenciaReferencia,
     score_referencia: snapshot.scoreReferencia,
     classificacao_referencia: snapshot.classificacaoReferencia,

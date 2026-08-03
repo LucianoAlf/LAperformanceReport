@@ -105,6 +105,10 @@ function sqlWithoutComments(sql) {
     .replace(/--[^\r\n]*/g, '');
 }
 
+function normalizeNewlines(value) {
+  return value.replace(/\r+\n/g, '\n').replace(/\r/g, '\n');
+}
+
 function sqlKeywordTokens(sql) {
   const keywords = new Set(['case', 'when', 'then', 'else', 'end']);
   const tokens = [];
@@ -892,13 +896,13 @@ test('fechamento usa a chave advisory comum antes de calcular revisao', () => {
     /select\s+distinct[\s\S]*?date_trunc\s*\(\s*'month'\s*,\s*s\.competencia\s*\)[\s\S]*?s\.ciclo_codigo\s*=\s*p_ciclo_codigo[\s\S]*?order\s+by\s+competencia/i,
   );
   assert.equal(
-    close
+    normalizeNewlines(close)
       .replace(/\n  v_lock record;/, '')
       .replace(
         /\n\n  for v_lock in[\s\S]*?\n  end loop;(?=\n\n  for v_origem in)/,
         '',
       ),
-    baselineClose,
+    normalizeNewlines(baselineClose),
     'fora o lock comum, o fechamento deve permanecer byte a byte',
   );
   assert.match(close, /security\s+definer/i);
@@ -1089,8 +1093,8 @@ test('RPCs internas ficam privadas e somente service_role recebe execute', () =>
 });
 
 test('conversao, retencao, permanencia e presenca permanecem byte a byte', () => {
-  const baseline = readFileSync(baselineMetricsPath, 'utf8');
-  const current = migration();
+  const baseline = normalizeNewlines(readFileSync(baselineMetricsPath, 'utf8'));
+  const current = normalizeNewlines(migration());
 
   assert.equal(
     between(

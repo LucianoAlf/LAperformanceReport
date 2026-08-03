@@ -8,6 +8,8 @@ const simulationGuardMigrationPath =
   'supabase/migrations/20260718211500_health_score_v3_config_simulation_guard_gate7.sql';
 const segmentedConfigMigrationPath =
   'supabase/migrations/20260719204000_health_score_v3_config_segmentada_rpc.sql';
+const comparabilityConfigMigrationPath =
+  'supabase/migrations/20260803215000_health_score_v3_config_comparabilidade.sql';
 const modalMigrationPath =
   'supabase/migrations/20260718223000_health_score_v3_modal_gate8.sql';
 const modalObservationMigrationPath =
@@ -28,12 +30,12 @@ const modalPath =
 const read = (path) => fs.readFileSync(path, 'utf8');
 
 test('Gate 7 expoe configuracao V3 somente por RPCs guardadas', () => {
-  const sql = read(migrationPath);
+  const sql = `${read(migrationPath)}\n${read(comparabilityConfigMigrationPath)}`;
 
   for (const fn of [
     'get_health_score_professor_v3_config_ui',
-    'criar_health_score_professor_v3_config_rascunho',
-    'salvar_health_score_professor_v3_config_rascunho',
+    'criar_health_score_professor_v3_config_rascunho_v2',
+    'salvar_health_score_professor_v3_config_rascunho_v2',
     'simular_health_score_professor_v3_config',
   ]) {
     assert.match(sql, new RegExp(`create or replace function public\\.${fn}`, 'i'));
@@ -140,8 +142,8 @@ test('hook V3 usa RPC e nunca acessa as tabelas internas diretamente', () => {
 
   for (const fn of [
     'get_health_score_professor_v3_config_ui',
-    'criar_health_score_professor_v3_config_rascunho',
-    'salvar_health_score_professor_v3_config_rascunho',
+    'criar_health_score_professor_v3_config_rascunho_v2',
+    'salvar_health_score_professor_v3_config_rascunho_v2',
     'simular_health_score_professor_v3_config',
   ]) {
     assert.match(source, new RegExp(`rpc\\(\\s*['"]${fn}['"]`));
@@ -288,7 +290,7 @@ test('modal individual alterna V3 por flag e exibe base cobertura e recorte', ()
   assert.match(source, /VITE_HEALTH_SCORE_V3_MODAL_ENABLED[\s\S]*!==\s*['"]false['"]/i);
   assert.match(source, /useHealthScoreProfessorV3/i);
   assert.match(source, /Health Score V3/i);
-  assert.match(source, /Desempenho observado/i);
+  assert.match(source, /Nota em forma[cç][aã]o/i);
   assert.match(source, /comparabilidadeEstado/i);
   assert.match(source, /resolveHealthScoreV3PublicationLabel/i);
   assert.match(source, /Sem base/i);

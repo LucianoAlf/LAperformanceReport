@@ -132,7 +132,7 @@ export function useHealthScoreProfessorV3Config(
         && vigenciaInicio === OPEN_CYCLE_REVISION_START;
       const { data, error: rpcError } = revisingOpenCycle
         ? await supabase.rpc(
-            'criar_health_score_professor_v3_config_revisao_ciclo_aberto',
+            'criar_health_score_professor_v3_config_revisao_ciclo_aberto_v2',
             {
               p_config_origem_id: activeConfig.id,
               p_vigencia_inicio: OPEN_CYCLE_REVISION_START,
@@ -141,7 +141,7 @@ export function useHealthScoreProfessorV3Config(
             },
           )
         : await supabase.rpc(
-            'criar_health_score_professor_v3_config_rascunho',
+            'criar_health_score_professor_v3_config_rascunho_v2',
             {
               p_vigencia_inicio: vigenciaInicio,
               p_justificativa: justificativa,
@@ -176,13 +176,16 @@ export function useHealthScoreProfessorV3Config(
     setMutating(true);
     setError(null);
     try {
-      const { data, error: rpcError } = await supabase.rpc('salvar_health_score_professor_v3_config_rascunho',
+      const { data, error: rpcError } = await supabase.rpc('salvar_health_score_professor_v3_config_rascunho_v2',
         {
           p_config_id: draft.id,
           p_vigencia_inicio: draft.vigenciaInicio,
           p_justificativa: draft.justificativa,
           p_metricas: serializeHealthScoreV3Metrics(draft.metricas),
           p_metas_segmentadas: serializeHealthScoreV3SegmentGoals(draft.metasSegmentadas),
+          p_cobertura_minima: draft.coberturaMinima,
+          p_pilares_minimos: draft.pilaresMinimos,
+          p_exige_pilar_fidelizacao: draft.exigePilarFidelizacao,
         },
       );
       if (rpcError) throw rpcError;

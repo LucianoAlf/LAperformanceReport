@@ -38,6 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/useToast';
 import { useHealthScoreProfessorV3Config } from '@/hooks/useHealthScoreProfessorV3Config';
@@ -324,6 +325,13 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
   const segmentTargetsAreValid = Boolean(
     workingConfig && canSaveHealthScoreV3Draft(workingSegmentGoals),
   );
+  const comparisonCriteriaAreValid = Boolean(
+    workingConfig
+      && workingConfig.coberturaMinima >= 0
+      && workingConfig.coberturaMinima <= 100
+      && workingConfig.pilaresMinimos >= 1
+      && workingConfig.pilaresMinimos <= HEALTH_SCORE_V3_SCORING_METRICS.length,
+  );
   const activationBlockers = getHealthScoreV3ActivationBlockers(
     workingSegmentGoals,
     config?.catalogoSegmentos || [],
@@ -331,6 +339,7 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
   const draftIsValid = weightsAreValid
     && hasRequiredTargets
     && segmentTargetsAreValid
+    && comparisonCriteriaAreValid
     && justification.trim().length >= 8;
   const unsavedSegmentCount = useMemo(
     () => workingSegmentGoals.filter((goal) => goal.tocada).length,
@@ -422,6 +431,9 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
       ...created,
       vigenciaInicio: candidate.vigenciaInicio,
       justificativa: candidate.justificativa,
+      coberturaMinima: candidate.coberturaMinima,
+      pilaresMinimos: candidate.pilaresMinimos,
+      exigePilarFidelizacao: candidate.exigePilarFidelizacao,
       metricas: candidate.metricas,
       metasSegmentadas: candidate.metasSegmentadas,
     };
@@ -674,6 +686,89 @@ export function HealthScoreV3Config({ competencia }: HealthScoreV3ConfigProps) {
               concentração e oportunidade de distribuição. A referência permanece segmentada
               por unidade, curso e modalidade, mas fica fora dos sliders de peso.
             </p>
+          </div>
+
+          <div className="space-y-4 rounded-md border border-cyan-500/20 bg-cyan-500/5 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-100">Critérios para comparação</p>
+                <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">
+                  Estes critérios definem quando o desempenho observado tem base suficiente para
+                  comparação. Eles não mudam a nota calculada e não alteram ciclos já fechados.
+                </p>
+              </div>
+              <Badge variant={comparisonCriteriaAreValid ? 'success' : 'error'}>
+                {comparisonCriteriaAreValid ? 'Critérios válidos' : 'Revisar critérios'}
+              </Badge>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <label className="space-y-1 text-xs font-medium text-slate-300">
+                Cobertura mínima
+                <div className="relative mt-1">
+                  <Input
+                    aria-label="Cobertura mínima para comparação"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={workingConfig.coberturaMinima}
+                    disabled={mutating}
+                    onChange={(event) => {
+                      setWorkingConfig((current) => current ? {
+                        ...current,
+                        coberturaMinima: Number(event.target.value),
+                      } : current);
+                      markDraftChanged();
+                    }}
+                    className="border-slate-700 bg-slate-900 pr-10"
+                  />
+                  <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-slate-500">%</span>
+                </div>
+              </label>
+
+              <label className="space-y-1 text-xs font-medium text-slate-300">
+                Pilares mínimos
+                <Input
+                  aria-label="Pilares mínimos para comparação"
+                  type="number"
+                  min={1}
+                  max={HEALTH_SCORE_V3_SCORING_METRICS.length}
+                  step={1}
+                  value={workingConfig.pilaresMinimos}
+                  disabled={mutating}
+                  onChange={(event) => {
+                    setWorkingConfig((current) => current ? {
+                      ...current,
+                      pilaresMinimos: Number(event.target.value),
+                    } : current);
+                    markDraftChanged();
+                  }}
+                  className="mt-1 border-slate-700 bg-slate-900"
+                />
+              </label>
+
+              <div className="flex min-h-16 items-center justify-between gap-4 rounded-md border border-slate-800 bg-slate-950/50 px-3 py-2">
+                <div>
+                  <p className="text-xs font-medium text-slate-200">Retenção ou permanência obrigatória</p>
+                  <p className="mt-1 text-[11px] leading-4 text-slate-500">
+                    Evita comparação sem evidência de fidelização.
+                  </p>
+                </div>
+                <Switch
+                  aria-label="Exigir retenção ou permanência"
+                  checked={workingConfig.exigePilarFidelizacao}
+                  disabled={mutating}
+                  onCheckedChange={(checked) => {
+                    setWorkingConfig((current) => current ? {
+                      ...current,
+                      exigePilarFidelizacao: checked,
+                    } : current);
+                    markDraftChanged();
+                  }}
+                />
+              </div>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 pt-1">

@@ -4,6 +4,8 @@ import test from 'node:test';
 
 const migrationPath =
   'supabase/migrations/20260803123000_health_score_v3_comparabilidade.sql';
+const cicloMensalMigrationPath =
+  'supabase/migrations/20260803220000_health_score_v3_ciclo_mensal_canonico.sql';
 
 const read = (path) => fs.readFileSync(path, 'utf8');
 
@@ -24,10 +26,19 @@ test('contrato canonico separa score observado de score comparavel', () => {
 });
 
 test('gate exige tres pilares, cobertura configurada e fidelizacao', () => {
-  const sql = read(migrationPath);
+  assert.equal(
+    fs.existsSync(cicloMensalMigrationPath),
+    true,
+    'migration com cobertura normalizada ainda nao existe',
+  );
+  const sql = `${read(migrationPath)}\n${read(cicloMensalMigrationPath)}`;
 
   assert.match(sql, /p_pilares_validos\s*<\s*3/i);
   assert.match(sql, /coalesce\(p_cobertura,\s*0\)\s*<\s*coalesce\(p_cobertura_minima/i);
+  assert.match(sql, /calcular_health_score_professor_v3_cobertura_normalizada/i);
+  assert.match(sql, /peso_pontuavel_total/i);
+  assert.match(sql, /peso_disponivel_total/i);
+  assert.match(sql, /cobertura_normalizada/i);
   assert.match(sql, /not\s+coalesce\(p_tem_fidelizacao/i);
   assert.match(sql, /'em_maturacao'/i);
   assert.match(sql, /'sem_base_operacional'/i);

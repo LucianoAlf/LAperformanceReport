@@ -144,7 +144,8 @@ test('rpc publica encapsula a carteira sem expor tabelas canonicas ao navegador'
 test('relatorio com IA consome o contrato pedagogico canonico sem recalcular score', () => {
   const edge = readOptional(edgePath);
 
-  assert.match(edge, /get_relatorio_coordenacao_canonico_v2/);
+  assert.match(edge, /get_relatorio_coordenacao_canonico_v3/);
+  assert.match(edge, /p_periodicidade:\s*filtros\.periodicidade/);
   assert.match(edge, /estado_publicacao/);
   assert.match(edge, /estado_evidencia/);
   assert.doesNotMatch(edge, /calcularHealthScore/);

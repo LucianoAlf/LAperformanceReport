@@ -496,7 +496,7 @@ O V3 é calculado e persistido no banco. Frontend, relatórios e agentes apenas 
 | Permanência com o professor | 25% | 12 meses | vínculos encerrados de `vw_professor_periodos_efetivos_v3_sombra` |
 | Conversão Exp→Mat | 15% | 70% | ciclo de 3 meses; experimental/evento no denominador e matrícula canônica em D+30 no numerador |
 | Média de alunos/turma | 15% | segmentada | ocupações únicas de pessoas por turma regular elegível |
-| Número de alunos | 10% | segmentada | pessoas canônicas únicas na carteira professor+unidade |
+| Número de alunos | 0% (diagnóstico) | segmentada | pessoas canônicas únicas na carteira professor+unidade |
 | Presença dos alunos | 10% | 80% | roster + `vw_aluno_presenca_semantica_v1` |
 
 Nos pilares percentuais, a nota é o percentual real. Nos pilares com meta de
@@ -505,11 +505,13 @@ Sliders alteram somente pesos; metas são campos separados. Uma configuração
 ativa é imutável: alterações criam rascunho, passam por simulação e são
 ativadas em ação separada. Snapshots fechados não são reescritos.
 
-No ciclo Jun-Ago/2026, a Conversão Exp→Mat é exibida como
-`provisorio_ciclo`, mas fica fora do score. O denominador não exige pessoa
-canônica; identifica a experimental pelo evento ou lead. O numerador continua
-exigindo pessoa e matrícula canônicas em D+30. A ativação do peso depende da
-calibração conjunta das seis escalas no próximo ciclo.
+A Conversão Exp→Mat compõe a nota somente quando alcança a amostra mínima
+versionada e a fonte canônica está válida. No recorte mensal, numerador e
+denominador pertencem exclusivamente à competência selecionada. No ciclo, os
+numeradores e denominadores brutos dos meses elegíveis são somados antes da
+divisão; nunca se calcula a taxa pela média dos percentuais mensais. Ausência de
+experimental recebe `sem_experimental_periodo`, e amostra menor que o corte
+recebe `amostra_insuficiente`; ambos saem do denominador da nota.
 
 #### Metas segmentadas de carteira e turma
 
@@ -529,19 +531,23 @@ A configuração segmentada segue o mesmo ciclo governado: rascunho, validação
 
 - Classificação inicial: **Saudável ≥ 70** · **Atenção 50–69** · **Crítico < 50**.
 - Métrica sem base possui valor pontuável e nota `null`; seu peso sai temporariamente do denominador.
-- Score exibível exige cobertura mínima de 60% e Retenção ou Permanência disponível.
-- Parcial é visível, mas nunca rankeável ou premiável. Ranking existe somente em ciclo oficial fechado.
+- Score observado é exibível quando existe pelo menos um pilar pontuável válido; não atender ao corte de comparabilidade não apaga a nota.
+- Score comparável exige, por padrão, pelo menos 3 pilares pontuáveis, cobertura normalizada mínima de 60% e Retenção ou Permanência válida. Quantidade mínima, cobertura e fidelização exigida são critérios versionados da configuração.
+- Cobertura normalizada = pesos originais válidos ÷ pesos originais ativos e pontuáveis. `Número de alunos` e carteira não entram no denominador.
+- Score não comparável continua visível como diagnóstico, mas nunca é rankeável ou premiável. Ranking existe somente em ciclo oficial fechado, habilitado e composto por professores comparáveis.
 - Crescimento, fator de demanda e evasão duplicada pertencem à V2 histórica e não compõem o V3.
 
 ### Recortes mensal e por ciclo
 
-Os ciclos fixos aprovados são **Jun-Ago**, **Set-Nov**, **Dez-Fev** e **Mar-Mai**. A RPC recebe a competência de referência selecionada e resolve o ciclo correspondente sem deslocar o mês.
+Os ciclos fixos aprovados são **Mar-Abr-Mai**, **Jun-Jul-Ago**, **Set-Out-Nov** e **Dez-Jan-Fev**. A RPC recebe a competência de referência selecionada e resolve o ciclo correspondente sem deslocar o mês. O ciclo Dez-Jan-Fev atravessa o ano civil: Dez/2026, por exemplo, resolve 01/12/2026 a 28/02/2027.
 
-- Número de alunos: mês = fechamento atual; ciclo = média dos fechamentos disponíveis e oficial somente com três meses.
+- Número de alunos: diagnóstico do fechamento mensal; no ciclo contextualiza a carteira, mas não pontua nem altera a comparabilidade.
 - Média/turma: mês = ocupações/turmas elegíveis no mês; ciclo = soma das ocupações ÷ soma das turmas, nunca média simples das médias.
-- Retenção e conversão: janela/ciclo definido no snapshot, com numerador e denominador preservados.
+- Retenção e conversão: mês usa somente fatos mensais; ciclo soma numeradores e denominadores brutos dos meses elegíveis. É proibido obter taxa do ciclo pela média de percentuais mensais.
 - Permanência: histórico acumulado de vínculos encerrados, não apenas os três meses do ciclo. Vínculos com menos de quatro meses ficam no histórico, mas não entram na média/nota.
 - Presença: observado de junho/julho fica auditável; a pontuação contratual começa em 03/08/2026. Barra e Recreio podem contribuir conforme política versionada e cobertura mínima; Campo Grande permanece visível em auditoria e fora do score até nivelamento operacional.
+- Score do ciclo: é recalculado a partir das métricas agregadas do ciclo; nunca é média dos scores mensais.
+- Ciclo aberto: publica `Ciclo em acompanhamento` e não libera ranking. Ciclo oficial fechado materializa snapshot imutável.
 
 ### Health Score V2 (histórico/rollback)
 
@@ -552,26 +558,26 @@ Crítico < 70% · Atenção 70–79% · OK ≥ 80% (`ModalDetalhesPresenca.tsx`)
 
 ---
 
-### Contrato vigente da nota e dos diagnósticos (02/08/2026)
+### Contrato vigente da nota e dos diagnósticos (03/08/2026)
 
 - `numero_alunos` e carteira são diagnósticos de carga: permanecem visíveis, mas não pontuam e têm peso efetivo zero.
 - Capacidade física por sala/turma/unidade é alerta operacional; excedê-la não reduz a nota do professor.
 - Conversão experimental só pontua com a amostra mínima configurada, inicialmente 3 experimentais. Sem amostra, o pilar sai do denominador.
 - Todo pilar válido participa da nota com peso efetivo normalizado; a soma dos pesos efetivos do professor é 100%.
 - Um pilar não aplicável ou sem evidência nunca equivale a zero. A leitura preserva código, texto, amostra, cobertura, peso original e peso efetivo.
-- Um ou mais pilares válidos permitem score parcial. Ranking e premiação exigem ciclo oficial fechado, cobertura mínima e pilar de fidelização válido.
+- Um ou mais pilares válidos permitem score observado. Comparação exige o corte versionado; ranking e premiação exigem ciclo oficial fechado, ranking habilitado e professor comparável.
 - Todos os professores ativos aparecem no read model; ausência de score recebe motivo explícito, não o rótulo genérico `sem base`.
 - Metas por unidade, curso e modalidade permanecem para refletir estruturas diferentes, sem reintroduzir carteira ou capacidade na nota.
 
 O detalhamento completo e as fronteiras do relatório da Coordenação estão em `docs/HEALTH_SCORE_PROFESSOR_V3.md`.
 
-### Leitura da competência atual do Health Score V3 (02/08/2026)
+### Leitura da competência atual do Health Score V3 (03/08/2026)
 
-- O mês aberto usa projeção server-side somente leitura; não cria nem altera snapshot.
+- O mês aberto usa projeção server-side somente leitura e exclusivamente os fatos da competência selecionada; não cria nem altera snapshot.
 - Média por turma usa a nota segmentada canônica de unidade, curso e modalidade.
 - Retenção, presença e conversão preservam o percentual real entre 0% e 100%; permanência é normalizada pela meta vigente.
 - Conversão só entra na nota com a amostra mínima configurada. Carteira continua diagnóstico e nunca pontua.
-- Valor herdado do mês anterior é mostrado como referência explícita e tem `peso_disponivel=false`.
+- Valor de período anterior pode ser mostrado apenas como referência explícita e tem `peso_disponivel=false`.
 - `Em andamento`, `Parcial` e `Oficial` descrevem a publicação; `Saudável`, `Atenção` e `Crítico` descrevem a saúde. Um estado não substitui o outro.
 
 ## Salas
@@ -613,7 +619,7 @@ Para impedir que a virada de mês recalcule/altere competências já fechadas, o
 > Itens que notei ao mapear. **Não alterei nada** — são decisões de negócio. Sinalizando para você decidir se ajustamos.
 
 1. **Snapshot Kids/School hardcoded** — `SEGMENTACAO_KIDS_SCHOOL_CG_MAIO_2026 = {kids:202, school:294}` fixo em `TabGestao.tsx:43-50`. É um valor reconstituído manualmente; se a fonte viva divergir, o histórico de CG/maio-2026 mostra número fixo. Candidato a remover quando a segmentação por idade estiver confiável no histórico.
-2. **Valores placeholder na Retenção** — `useEvasoesData.ts` usa **churn médio fixo `4.86`** (`:88`) e **taxa de renovação fixa `80%`** (`:91`). Não são calculados; o dado real vem de `useProfessoresPerformance`. O dashboard de Retenção pode exibir números que não batem com Administrativo/Professores.
+2. **Valores fixos na Retenção** — `useEvasoesData.ts` usa **churn médio fixo `4.86`** (`:88`) e **taxa de renovação fixa `80%`** (`:91`). Não são calculados; o dado real vem de `useProfessoresPerformance`. O dashboard de Retenção pode exibir números que não batem com Administrativo/Professores.
 3. **Duas fontes de evasão/renovação** — Retenção (`useEvasoesData`) lê a tabela **legada `evasoes`**, enquanto Administrativo/Professores usam **`movimentacoes_admin`** (canônico). Risco de números divergentes entre as páginas.
 4. **Conversão experimental calculada de 2 jeitos** — Dashboard/Comercial usam `leads.experimental_realizada`; o canônico do professor usa `lead_experimentais`. CLAUDE.md já registra que a fonte canônica virou `lead_experimentais` — o Dashboard pode estar com a taxa antiga (inflada). Vale alinhar.
 5. **Métricas bloqueadas em Metas** — `taxa_exp_mat` e `taxa_conversao_exp` estão desativadas (`MetasPageNew.tsx`) aguardando regra canônica. Enquanto isso, não dá pra metar conversão de experimental.

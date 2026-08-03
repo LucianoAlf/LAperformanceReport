@@ -32,20 +32,20 @@ test('relatorio e insights individuais recebem V3 sem recalcular a V2', () => {
   assert.doesNotMatch(reportBlock, /calcularHealthScore\s*\(/);
 });
 
-test('relatorio mensal da coordenacao envia filtros e usa o produtor canonico do servidor', () => {
+test('relatorio da coordenacao envia periodicidade e usa o produtor canonico V3 do servidor', () => {
   const modal = read('src/components/App/Professores/ModalRelatorioCoordenacao.tsx');
   const edge = read('supabase/functions/gemini-relatorio-coordenacao/index.ts');
-  const migration = read('supabase/migrations/20260802192000_relatorio_coordenacao_canonico.sql');
+  const migration = read('supabase/migrations/20260803223000_relatorios_coordenacao_periodicidade_canonica.sql');
 
   assert.match(modal, /gemini-relatorio-coordenacao/);
-  assert.match(modal, /body:\s*\{\s*unidade:\s*unidadeId,\s*ano:\s*anoRelatorio,\s*mes:\s*mesRelatorio\s*\}/);
+  assert.match(modal, /body:\s*\{[\s\S]*?unidade:\s*unidadeId,[\s\S]*?ano:\s*anoRelatorio,[\s\S]*?mes:\s*mesRelatorio,[\s\S]*?periodicidade/);
   assert.doesNotMatch(modal, /get_dados_relatorio_coordenacao|get_kpis_professor_periodo_canonico/);
-  assert.match(edge, /get_relatorio_coordenacao_canonico_v2/);
-  assert.match(migration, /sum\(\(p #>> '\{metricas,presenca,numerador\}'\)::numeric\)/);
-  assert.match(migration, /sum\(\(p #>> '\{metricas,presenca,denominador\}'\)::numeric\)/);
+  assert.match(edge, /get_relatorio_coordenacao_canonico_v3/);
+  assert.match(migration, /get_health_score_professor_v3_performance/);
+  assert.match(migration, /p_periodicidade/);
 });
 
-test('relatorios instantaneos usam o mesmo contrato canonico V2 do mensal', () => {
+test('relatorios instantaneos usam o mesmo contrato canonico V3 do mensal e ciclo', () => {
   const modal = read('src/components/App/Professores/ModalRelatorioCoordenacao.tsx');
   const instantaneo = modal.slice(
     modal.indexOf('const gerarRelatorioInstantaneo'),
@@ -53,7 +53,7 @@ test('relatorios instantaneos usam o mesmo contrato canonico V2 do mensal', () =
   );
 
   assert.match(instantaneo, /gerarRelatorioCoordenacaoCanonico/);
-  assert.match(instantaneo, /get_relatorio_coordenacao_canonico_v2/);
+  assert.match(instantaneo, /get_relatorio_coordenacao_canonico_v3/);
   assert.doesNotMatch(instantaneo, /buscarDadosRelatorioCoordenacao/);
   assert.doesNotMatch(instantaneo, /get_dados_relatorio_coordenacao/);
   assert.match(instantaneo, /supabase\.rpc/);
@@ -140,7 +140,7 @@ test('geradores pedagogicos consomem V3 e nao recalculam Health Score legado', (
   }
 
   const coordenacao = read('supabase/functions/gemini-relatorio-coordenacao/index.ts');
-  assert.match(coordenacao, /get_relatorio_coordenacao_canonico_v2/);
+  assert.match(coordenacao, /get_relatorio_coordenacao_canonico_v3/);
   assert.match(coordenacao, /estado_publicacao/i);
   assert.match(coordenacao, /estado_evidencia/i);
   assert.doesNotMatch(coordenacao, /function calcularHealthScore\s*\(/i);
@@ -196,6 +196,17 @@ test('Dashboard e Performance agregam somente KPIs de vinculos ativos', () => {
   assert.match(dashboard, /const kpisProfessoresAtivos = filtrarKpisPorVinculosAtivos/);
   assert.match(performance, /filtrarKpisPorVinculosAtivos/);
   assert.match(performance, /const kpisAtivos = filtrarKpisPorVinculosAtivos/);
+});
+
+test('Performance V3 nao bloqueia a tela consultando o KPI legado e hidrata auxiliares pelo snapshot V3', () => {
+  const performance = read('src/components/App/Professores/TabPerformanceProfessores.tsx');
+
+  assert.match(
+    performance,
+    /const\s+kpisAtuaisPromise\s*=\s*HEALTH_SCORE_V3_PERFORMANCE_ENABLED[\s\S]*?Promise\.resolve\(\[\]\)[\s\S]*?:\s*buscarKpisProfessoresCanonicos/,
+  );
+  assert.match(performance, /hydrateProfessorPerformanceFromV3/);
+  assert.match(performance, /const\s+professoresTabela[\s\S]*?hydrateProfessorPerformanceFromV3/);
 });
 
 test('Analytics consulta vinculos ativos e preserva ausencia de base da presenca', () => {

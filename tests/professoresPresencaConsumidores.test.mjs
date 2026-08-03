@@ -38,7 +38,7 @@ test('relatorios instantaneos preservam null e bloqueiam ranking de presenca e h
 
 test('modal da coordenacao envia somente filtros ao produtor canonico', () => {
   assert.match(modalCoordenacao, /gemini-relatorio-coordenacao/);
-  assert.match(modalCoordenacao, /body:\s*\{\s*unidade:\s*unidadeId,\s*ano:\s*anoRelatorio,\s*mes:\s*mesRelatorio\s*\}/);
+  assert.match(modalCoordenacao, /body:\s*\{[\s\S]*unidade:\s*unidadeId,[\s\S]*ano:\s*anoRelatorio,[\s\S]*mes:\s*mesRelatorio,[\s\S]*periodicidade,[\s\S]*\}/);
   assert.doesNotMatch(modalCoordenacao, /buscarKpisProfessoresCanonicos|get_kpis_professor_periodo_canonico_v2/);
   assert.doesNotMatch(modalCoordenacao, /health_score_v3:\s*serializeHealthScoreV3ForAi/);
 });
@@ -47,7 +47,8 @@ test('edges de professores respeitam o bloqueio de publicacao', () => {
   for (const source of [edgeEquipe, edgeProfessor, edgeIndividual, edgeRanking]) {
     assert.match(source, /presenca_publicavel/);
   }
-  assert.match(edgeCoordenacao, /get_relatorio_coordenacao_canonico_v2/);
+  assert.match(edgeCoordenacao, /get_relatorio_coordenacao_canonico_v3/);
+  assert.match(edgeCoordenacao, /p_periodicidade:\s*filtros\.periodicidade/);
   assert.match(edgeCoordenacao, /estado_evidencia/);
   assert.doesNotMatch(edgeCoordenacao, /presenca_publicavel/);
   assert.doesNotMatch(edgeEquipe, /taxa_presenca:\s*number;/);
