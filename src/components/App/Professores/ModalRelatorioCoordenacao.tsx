@@ -30,10 +30,10 @@ import { useToast } from '@/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
 import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
 import {
-  gerarRelatorioCoordenacaoInstantaneo,
-  type ProfessorRelatorioCoordenacao,
-  type TipoRelatorioCoordenacaoInstantaneo,
-} from '@/lib/relatorioCoordenacaoInstantaneo';
+  gerarRelatorioCoordenacaoCanonico,
+  type RelatorioCoordenacaoCanonicoV2,
+  type TipoRelatorioCoordenacaoCanonico,
+} from '@/lib/relatorioCoordenacaoCanonico';
 
 interface ModalRelatorioCoordenacaoProps {
   open: boolean;
@@ -42,10 +42,9 @@ interface ModalRelatorioCoordenacaoProps {
   unidadeNome: string;
   ano: number;
   mes: number;
-  professores?: ProfessorRelatorioCoordenacao[];
 }
 
-type TipoRelatorio = 'mensal' | TipoRelatorioCoordenacaoInstantaneo;
+type TipoRelatorio = 'mensal' | TipoRelatorioCoordenacaoCanonico;
 type ModoPeriodo = 'mes_anterior' | 'competencia_tela' | 'personalizado';
 
 function inicioMes(ano: number, mes: number): Date {
@@ -78,7 +77,6 @@ export function ModalRelatorioCoordenacao({
   unidadeNome,
   ano,
   mes,
-  professores = [],
 }: ModalRelatorioCoordenacaoProps) {
   const toast = useToast();
   const [tipoRelatorio, setTipoRelatorio] = useState<TipoRelatorio | null>(null);
@@ -222,26 +220,29 @@ export function ModalRelatorioCoordenacao({
     }
   };
 
-  const gerarRelatorioInstantaneo = async (tipo: TipoRelatorioCoordenacaoInstantaneo) => {
+  const gerarRelatorioInstantaneo = async (tipo: TipoRelatorioCoordenacaoCanonico) => {
     setTipoRelatorio(tipo);
     setLoadingIA(true);
     setTextoRelatorio('');
 
     try {
-      const podeUsarFallbackTela = periodoSelecionado.ano === ano
-        && periodoSelecionado.mes === mes
-        && professores.length > 0;
-      if (!podeUsarFallbackTela) {
-        throw new Error('Os relatórios rápidos usam a competência exibida na tela. Selecione o mês desejado na Gestão de Professores.');
+      const { anoRelatorio, mesRelatorio } = validarCompetenciaMensal();
+      const { data, error } = await supabase.rpc('get_relatorio_coordenacao_canonico_v2', {
+        p_unidade_id: unidadeId,
+        p_ano: anoRelatorio,
+        p_mes: mesRelatorio,
+      });
+      if (error) {
+        console.error('Erro ao consultar os dados oficiais da Coordenação:', error);
+        throw new Error('Não foi possível reunir os dados da Coordenação desta competência.');
       }
-      setTextoRelatorio(gerarRelatorioCoordenacaoInstantaneo({
+
+      const contrato = data as unknown as RelatorioCoordenacaoCanonicoV2;
+      setTextoRelatorio(gerarRelatorioCoordenacaoCanonico({
         tipo,
-        professores,
-        unidadeNome,
-        periodoLabel: periodoSelecionado.label,
-        intervaloLabel: periodoSelecionado.intervalo,
+        contrato,
       }));
-      toast.success('Relatório gerado!', 'Relatório instantâneo gerado com a competência selecionada');
+      toast.success('Relatório gerado!', 'Relatório gerado com os dados oficiais da competência');
     } catch (error) {
       toast.error('Erro', error instanceof Error ? error.message : 'Erro ao gerar relatório');
     } finally {

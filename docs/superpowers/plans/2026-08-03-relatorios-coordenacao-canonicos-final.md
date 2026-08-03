@@ -61,4 +61,3 @@
 - [ ] Revisar checks, integrar na `main` e implantar migration/Edge/frontend.
 - [ ] Capturar o snapshot V2 de julho para as tres unidades.
 - [ ] Gerar os cinco relatorios em producao e conferir igualdade de competencia, revisao e totais.
-

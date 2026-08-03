@@ -9,6 +9,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const jsonUtf8Headers = {
+  ...corsHeaders,
+  "Content-Type": "application/json; charset=utf-8",
+};
+
 const TERMOS_PUBLICOS_BLOQUEADOS = [
   "RPC",
   "snapshot",
@@ -82,6 +87,12 @@ interface RelatorioCoordenacaoCanonico {
   presenca: JsonRecord;
   experimentais: JsonRecord;
   carteira_carga: JsonRecord;
+  saidas_retencao: JsonRecord & {
+    evasoes_validas?: number;
+    nao_renovacoes_validas?: number;
+    saidas_validas_total?: number;
+    saidas_atribuiveis_professor?: number;
+  };
   agenda_treinamentos: JsonRecord & { catalogo?: Array<{ nome: string; descricao?: string; foco?: string }> };
   qualidade_dados: JsonRecord;
   ranking_oficial: Array<{ nome: string; score: number; cobertura?: number; classificacao?: string }> | null;
@@ -342,7 +353,7 @@ function renderizarRelatorio(
     (professor) => professor.estado_publicacao === "em_andamento",
   );
   const contexto = periodo.contexto_operacional === "recesso_parcial"
-    ? "Julho teve recesso parcial. A leitura é uma simulação V3 parcial e não oficial; ausência de aulas elegíveis não penaliza o professor."
+    ? "Julho teve recesso parcial. Os dados operacionais estão fechados; as notas servem ao acompanhamento pedagógico, enquanto ranking e premiação aguardam o fechamento oficial do ciclo. A ausência de aulas elegíveis não penaliza o professor."
     : competenciaEmAndamento
       ? "Leitura do mês em andamento. As notas acompanham as evidências já registradas e evoluem com a operação."
       : "O período segue calendário regular e cada indicador respeita sua evidência disponível.";
@@ -428,6 +439,10 @@ function renderizarRelatorio(
     `• Retenção média observada: *${percentual(dados.retencao_permanencia.retencao_media)}*`,
     `• Professores com permanência observável: *${inteiro(dados.retencao_permanencia.professores_com_permanencia)}*`,
     `• Permanência média: *${numero(dados.retencao_permanencia.permanencia_media_meses, 1)} meses*`,
+    `• Evasões válidas na unidade: *${inteiro(dados.saidas_retencao.evasoes_validas)}*`,
+    `• Não renovações válidas na unidade: *${inteiro(dados.saidas_retencao.nao_renovacoes_validas)}*`,
+    `• Saídas válidas totais: *${inteiro(dados.saidas_retencao.saidas_validas_total)}*`,
+    `• Saídas atribuíveis ao professor: *${inteiro(dados.saidas_retencao.saidas_atribuiveis_professor)}*`,
     "",
     "📅 *PRESENÇA E COBERTURA*",
     "───────────────────────",
@@ -514,7 +529,7 @@ Deno.serve(async (req) => {
     if (!authorization) {
       return new Response(JSON.stringify({ success: false, error: "Sessão inválida." }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: jsonUtf8Headers,
       });
     }
 
@@ -528,7 +543,7 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: authorization } },
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const { data, error } = await supabase.rpc("get_relatorio_coordenacao_canonico_v1", {
+    const { data, error } = await supabase.rpc("get_relatorio_coordenacao_canonico_v2", {
       p_unidade_id: filtros.unidade,
       p_ano: filtros.ano,
       p_mes: filtros.mes,
@@ -538,7 +553,7 @@ Deno.serve(async (req) => {
       throw new Error("Não foi possível reunir os dados pedagógicos desta competência.");
     }
     const contrato = data as RelatorioCoordenacaoCanonico;
-    if (!contrato || contrato.schema_version !== 1 || !Array.isArray(contrato.professores)) {
+    if (!contrato || contrato.schema_version !== 2 || !Array.isArray(contrato.professores)) {
       throw new Error("Os dados pedagógicos retornaram incompletos.");
     }
 
@@ -546,14 +561,14 @@ Deno.serve(async (req) => {
     const relatorio = renderizarRelatorio(contrato, narrativa);
     return new Response(JSON.stringify({ success: true, relatorio }), {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: jsonUtf8Headers,
     });
   } catch (error) {
     const mensagem = error instanceof Error ? error.message : "Erro inesperado ao gerar o relatório.";
     console.error("Erro no relatório da Coordenação:", mensagem);
     return new Response(JSON.stringify({ success: false, error: mensagem }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: jsonUtf8Headers,
     });
   }
 });

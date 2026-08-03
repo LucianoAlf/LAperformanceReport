@@ -77,7 +77,6 @@ Separa volume total e atribuivel. Se publicar MRR total, lista todas as saidas q
 
 - Testes unitarios de todos os renderizadores.
 - Teste PostgreSQL real para snapshot, hash, imutabilidade e separacao de movimentos.
-- Reproducao de Recreio julho/2026: 24 professores, carteira 417, presenca 65,9%, 5 evasoes, 1 nao renovacao, 1 saida atribuivel, MRR total R$ 1.992,85 e MRR atribuivel R$ 395,00.
+- Reproducao de Recreio julho/2026: 24 professores, carteira 417, presenca 65,9%, 5 evasoes, 2 nao renovacoes, 1 saida atribuivel, MRR total R$ 2.412,85 e MRR atribuivel R$ 395,00.
 - Build e Deno check da Edge.
 - Smoke de producao nos cinco botoes.
-
