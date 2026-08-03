@@ -598,6 +598,7 @@ const validConfig: HealthScoreV3Config = {
   vigenciaInicio: '2026-08-01',
   vigenciaFim: null,
   coberturaMinima: 0.6,
+  pilaresMinimos: 3,
   faixaAtencaoMin: 60,
   faixaSaudavelMin: 80,
   exigePilarFidelizacao: true,
@@ -745,7 +746,7 @@ test('saveDraft atualiza a UI canonica antes de simulate sem ativacao automatica
   const supabase = {
     rpc: async (name, payload) => {
       calls.push({ name, payload });
-      if (name === 'salvar_health_score_professor_v3_config_rascunho') {
+      if (name === 'salvar_health_score_professor_v3_config_rascunho_v2') {
         return { data: rawConfig, error: null };
       }
       if (name === 'get_health_score_professor_v3_config_ui') {
@@ -774,17 +775,20 @@ test('saveDraft atualiza a UI canonica antes de simulate sem ativacao automatica
     assert.equal(saved.id, draft.id);
     assert.equal(simulation.scoreMedio, 78.5);
     assert.deepEqual(calls.map(({ name }) => name), [
-      'salvar_health_score_professor_v3_config_rascunho',
+      'salvar_health_score_professor_v3_config_rascunho_v2',
       'get_health_score_professor_v3_config_ui',
       'simular_health_score_professor_v3_config',
     ]);
 
     const savePayload = calls[0].payload;
     assert.deepEqual(Object.keys(savePayload).sort(), [
+      'p_cobertura_minima',
       'p_config_id',
+      'p_exige_pilar_fidelizacao',
       'p_justificativa',
       'p_metas_segmentadas',
       'p_metricas',
+      'p_pilares_minimos',
       'p_vigencia_inicio',
     ]);
     assert.deepEqual(savePayload.p_metricas, [
@@ -841,13 +845,14 @@ test('hook expoe refresh com alias reload e salva os dois payloads somente por R
 
   for (const rpc of [
     'get_health_score_professor_v3_config_ui',
-    'criar_health_score_professor_v3_config_rascunho',
-    'salvar_health_score_professor_v3_config_rascunho',
+    'criar_health_score_professor_v3_config_rascunho_v2',
+    'salvar_health_score_professor_v3_config_rascunho_v2',
     'simular_health_score_professor_v3_config',
-    'ativar_health_score_professor_v3_config',
   ]) {
     assert.match(source, new RegExp(`rpc\\(\\s*['"]${rpc}['"]`));
   }
+  assert.match(source, /['"]ativar_health_score_professor_v3_config['"]/);
+  assert.match(source, /supabase\.rpc\(\s*activationRpc/);
 
   assert.doesNotMatch(source, /\.from\(['"]health_score_professor_v3_/i);
   assert.doesNotMatch(source, /\.from\(['"]professor_unidade_curso_modalidade['"]\)/i);
