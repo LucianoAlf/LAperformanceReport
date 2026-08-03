@@ -118,7 +118,7 @@ Deno.test("validarRequest normaliza celular e fixo locais com DDD 55", () => {
   }
 });
 
-Deno.test("confirmacao aceita somente preview_id", () => {
+Deno.test("confirmacao aceita contrato antigo e texto final opcional", () => {
   assertEquals(
     validarRequest({
       acao: "confirmar",
@@ -130,6 +130,20 @@ Deno.test("confirmacao aceita somente preview_id", () => {
     },
   );
 
+  const mensagem = "> *Pergunta aprovada*\n\n_Pedido sincero_ 🙏";
+  assertEquals(
+    validarRequest({
+      acao: "confirmar",
+      preview_id: previewIdCanonico,
+      mensagem_final: mensagem,
+    }),
+    {
+      acao: "confirmar",
+      preview_id: previewIdCanonico,
+      mensagem_final: mensagem,
+    },
+  );
+
   for (
     const campo of [
       "evasao_id",
@@ -138,6 +152,11 @@ Deno.test("confirmacao aceita somente preview_id", () => {
       "operador",
       "mensagem",
       "telefone_override",
+      "telefone",
+      "caixa_id",
+      "assinatura",
+      "template_id",
+      "payload_hash",
     ]
   ) {
     assertThrows(
@@ -151,6 +170,36 @@ Deno.test("confirmacao aceita somente preview_id", () => {
       `Campo nao permitido: ${campo}`,
     );
   }
+});
+
+Deno.test("confirmacao rejeita texto vazio ou acima de 2000 caracteres", () => {
+  for (const mensagem_final of ["", " \n\t ", "a".repeat(2001)]) {
+    assertThrows(
+      () =>
+        validarRequest({
+          acao: "confirmar",
+          preview_id: previewIdCanonico,
+          mensagem_final,
+        }),
+      Error,
+    );
+  }
+});
+
+Deno.test("confirmacao conta caracteres Unicode e preserva o texto exato", () => {
+  const mensagem_final = "🎵".repeat(2000);
+  assertEquals(
+    validarRequest({
+      acao: "confirmar",
+      preview_id: previewIdCanonico,
+      mensagem_final,
+    }),
+    {
+      acao: "confirmar",
+      preview_id: previewIdCanonico,
+      mensagem_final,
+    },
+  );
 });
 
 Deno.test("validarRequest aceita somente objeto JSON simples com campos proprios", () => {

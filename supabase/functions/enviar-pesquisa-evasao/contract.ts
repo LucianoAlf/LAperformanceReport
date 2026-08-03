@@ -8,7 +8,23 @@ export type EnviarPesquisaRequest =
   | {
     acao: "confirmar";
     preview_id: string;
+    mensagem_final?: string;
   };
+
+export const LIMITE_MENSAGEM_PESQUISA = 2_000;
+
+export function validarMensagemFinal(valor: unknown): string {
+  if (typeof valor !== "string") {
+    throw new Error("mensagem_final deve ser texto");
+  }
+  if (valor.trim().length === 0) {
+    throw new Error("mensagem_final nao pode ser vazia");
+  }
+  if (Array.from(valor).length > LIMITE_MENSAGEM_PESQUISA) {
+    throw new Error("mensagem_final excede 2000 caracteres");
+  }
+  return valor;
+}
 
 export interface RenderInput {
   template: string;
@@ -178,7 +194,10 @@ export function validarRequest(input: unknown): EnviarPesquisaRequest {
   }
 
   if (acao === "confirmar") {
-    rejeitarCamposDesconhecidos(request, new Set(["acao", "preview_id"]));
+    rejeitarCamposDesconhecidos(
+      request,
+      new Set(["acao", "preview_id", "mensagem_final"]),
+    );
     const previewId = uuidCanonico(
       exigirCampoProprio(request, "preview_id"),
     );
@@ -187,10 +206,15 @@ export function validarRequest(input: unknown): EnviarPesquisaRequest {
       throw new Error("preview_id invalido");
     }
 
-    return {
+    const confirmacao: Extract<EnviarPesquisaRequest, { acao: "confirmar" }> = {
       acao: "confirmar",
       preview_id: previewId,
     };
+    if (Object.hasOwn(request, "mensagem_final")) {
+      confirmacao.mensagem_final = validarMensagemFinal(request.mensagem_final);
+    }
+
+    return confirmacao;
   }
 
   throw new Error("acao invalida");
