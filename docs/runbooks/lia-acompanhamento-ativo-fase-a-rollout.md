@@ -163,6 +163,35 @@ Com o Alf presente e após autorização específica:
 7. confirmar zero entrega para os IDs 29 e 30;
 8. parar e aguardar aceite explícito.
 
+## Execução assistida dos Gates 1 e 2 em 03/08/2026
+
+O Gate 1 foi aplicado em `ouqwbbermlzqqvtqwlul` e registrado remotamente como
+`20260803151525_lia_alertas_dispatcher_edge`:
+
+- `lia_alertas_privados.caixa_id` ficou `integer NOT NULL DEFAULT 3`, com FK;
+- a entrega de Miguel Santos Borges continuou em `aguardando_liberacao`, caixa
+  3, destinada somente à operadora 29 e sem `provider_message_id`;
+- `alertas_producao_liberados=false`, zero cron e zero entrega produtiva
+  liberada ou enviada;
+- o contrato de falha contém somente códigos `provider_*`.
+
+A Edge `processar-alertas-lia` versão 1 foi publicada com `verify_jwt=true` e
+sem cron. Os bloqueios externos funcionaram: chamada anônima e JWT malformado
+receberam 401; JWT legado válido de papel não privilegiado recebeu 403. O teste
+backend revelou um bloqueio antes do piloto: o JWT legado atual de
+`service_role` atravessa o gateway, mas recebe `service_role_required` no
+handler. A auditoria comparou somente fingerprints e claims sanitizados e
+confirmou que o digest de `SUPABASE_SERVICE_ROLE_KEY` injetado no runtime não
+coincide com o digest da chave legada atual retornada pela API de gestão.
+
+Nenhuma entrega foi reclamada ou enviada. Antes do piloto, corrigir o contrato
+para continuar com `verify_jwt=true`, confiar somente no JWT cuja assinatura já
+foi validada pelo gateway e exigir também `role=service_role` e o project ref
+exato no handler. O mesmo bearer validado deve criar o cliente administrativo,
+eliminando a dependência da variável global divergente. Essa correção exige
+teste e novo deploy autorizado; não alterar nem rotacionar o segredo global,
+pois outras Edge Functions dependem dele.
+
 ## Gate 4 — ativação humana e cron, artefato ainda inexistente
 
 Somente depois do aceite do piloto:
