@@ -297,5 +297,201 @@ select public.fixture_assert(
   'operador ausente ou inativo precisa ir para fila administrativa'
 );
 
+-- RPCs de transporte: ACL, janela, claim atomico e desfechos terminais.
+select public.fixture_assert(
+  not has_function_privilege(
+    'authenticated',
+    'public.claim_lia_alerta_privado(uuid,uuid)',
+    'execute'
+  ),
+  'authenticated nao pode executar claim'
+);
+select public.fixture_assert(
+  has_function_privilege(
+    'service_role',
+    'public.claim_lia_alerta_privado(uuid,uuid)',
+    'execute'
+  ),
+  'service_role precisa executar claim'
+);
+select public.fixture_assert(
+  public.fn_lia_janela_envio_permitida('2026-08-03 10:00:00-03'),
+  '10h BRT precisa estar na janela'
+);
+select public.fixture_assert(
+  not public.fn_lia_janela_envio_permitida('2026-08-03 20:00:00-03'),
+  '20h BRT precisa estar fora da janela'
+);
+
+select set_config('request.jwt.claim.role', 'service_role', false);
+
+update public.lia_alertas_privados alerta
+set status = 'pendente'
+from public.lia_pesquisa_eventos evento
+where evento.id = alerta.evento_id
+  and evento.pesquisa_id = '10000000-0000-4000-8000-000000000001';
+
+create temp table fixture_claim_um as
+select *
+from public.fn_lia_claim_alerta_privado_em(
+  '50000000-0000-4000-8000-000000000001',
+  (
+    select alerta.id
+    from public.lia_alertas_privados alerta
+    join public.lia_pesquisa_eventos evento on evento.id = alerta.evento_id
+    where evento.pesquisa_id = '10000000-0000-4000-8000-000000000001'
+  ),
+  '2026-08-03 10:00:00-03'
+);
+
+create temp table fixture_claim_dois as
+select *
+from public.fn_lia_claim_alerta_privado_em(
+  '50000000-0000-4000-8000-000000000002',
+  (select alerta_id from fixture_claim_um),
+  '2026-08-03 10:00:01-03'
+);
+
+select public.fixture_assert(
+  (select count(*) from fixture_claim_um) = 1
+  and (select count(*) from fixture_claim_dois) = 0,
+  'dois workers nao podem reclamar a mesma entrega'
+);
+
+select public.fixture_assert(
+  public.concluir_lia_alerta_privado(
+    (select alerta_id from fixture_claim_um),
+    (select claim_token from fixture_claim_um),
+    'FIXTURE-MSG-1'
+  ),
+  'conclusao precisa reconhecer o claim'
+);
+select public.fixture_assert(
+  (select status = 'enviado'
+   from public.lia_alertas_privados
+   where id = (select alerta_id from fixture_claim_um)),
+  'conclusao precisa marcar enviado'
+);
+
+-- Um processamento abandonado nunca e reaberto automaticamente.
+update public.lia_alertas_privados alerta
+set status = 'processando',
+    claimed_em = '2026-08-03 09:00:00-03',
+    worker_id = '50000000-0000-4000-8000-000000000003',
+    claim_token = '50000000-0000-4000-8000-000000000004'
+from public.lia_pesquisa_eventos evento
+where evento.id = alerta.evento_id
+  and evento.pesquisa_id = '10000000-0000-4000-8000-000000000002';
+
+update public.lia_alertas_privados alerta
+set status = 'pendente'
+from public.lia_pesquisa_eventos evento
+where evento.id = alerta.evento_id
+  and evento.pesquisa_id = '10000000-0000-4000-8000-000000000003';
+
+create temp table fixture_claim_ambiguo as
+select *
+from public.fn_lia_claim_alerta_privado_em(
+  '50000000-0000-4000-8000-000000000005',
+  (
+    select alerta.id
+    from public.lia_alertas_privados alerta
+    join public.lia_pesquisa_eventos evento on evento.id = alerta.evento_id
+    where evento.pesquisa_id = '10000000-0000-4000-8000-000000000003'
+  ),
+  '2026-08-03 10:00:00-03'
+);
+
+select public.fixture_assert(
+  (select alerta.status = 'fila_administrativa'
+          and alerta.motivo_pendencia = 'processamento_abandonado'
+   from public.lia_alertas_privados alerta
+   join public.lia_pesquisa_eventos evento on evento.id = alerta.evento_id
+   where evento.pesquisa_id = '10000000-0000-4000-8000-000000000002'),
+  'processando abandonado precisa ir para fila administrativa'
+);
+
+select public.fixture_assert(
+  public.falhar_lia_alerta_privado(
+    (select alerta_id from fixture_claim_ambiguo),
+    (select claim_token from fixture_claim_ambiguo),
+    'bridge_timeout',
+    true
+  ),
+  'falha ambigua precisa reconhecer o claim'
+);
+select public.fixture_assert(
+  (select status = 'resultado_ambiguo'
+   from public.lia_alertas_privados
+   where id = (select alerta_id from fixture_claim_ambiguo))
+  and not exists (
+    select 1 from public.lia_alertas_privados
+    where id = (select alerta_id from fixture_claim_ambiguo)
+      and status = 'pendente'
+  ),
+  'resultado ambiguo nao pode voltar a pendente'
+);
+
+-- Destino alterado entre enqueue e claim falha fechado.
+update public.lia_alertas_privados alerta
+set status = 'pendente'
+from public.lia_pesquisa_eventos evento
+where evento.id = alerta.evento_id
+  and evento.pesquisa_id = '10000000-0000-4000-8000-000000000004';
+update public.lia_destinos_privados set ativo = false where usuario_id = 29;
+select *
+from public.fn_lia_claim_alerta_privado_em(
+  '50000000-0000-4000-8000-000000000006',
+  (
+    select alerta.id
+    from public.lia_alertas_privados alerta
+    join public.lia_pesquisa_eventos evento on evento.id = alerta.evento_id
+    where evento.pesquisa_id = '10000000-0000-4000-8000-000000000004'
+  ),
+  '2026-08-03 10:00:00-03'
+);
+select public.fixture_assert(
+  (select alerta.status = 'fila_administrativa'
+   from public.lia_alertas_privados alerta
+   join public.lia_pesquisa_eventos evento on evento.id = alerta.evento_id
+   where evento.pesquisa_id = '10000000-0000-4000-8000-000000000004'),
+  'destino inativo precisa falhar fechado antes do claim'
+);
+update public.lia_destinos_privados set ativo = true where usuario_id = 29;
+
+-- Piloto usa somente pesquisa de teste, destino governado do Alf e nao libera producao.
+create temp table fixture_piloto as
+select public.enfileirar_lia_alerta_piloto(
+  '10000000-0000-4000-8000-000000000006',
+  'resposta_nova'
+) as alerta_id;
+select public.fixture_assert(
+  (select alerta.destinatario_usuario_id = 2
+          and alerta.destino_snapshot = '5521981278047'
+          and evento.ambiente = 'teste'
+   from public.lia_alertas_privados alerta
+   join public.lia_pesquisa_eventos evento on evento.id = alerta.evento_id
+   where alerta.id = (select alerta_id from fixture_piloto)),
+  'piloto deve forcar o destino governado do Alf'
+);
+select public.fixture_assert(
+  (select alertas_producao_liberados = false
+   from public.lia_alertas_configuracao where id = 1),
+  'piloto nao pode liberar alertas produtivos'
+);
+
+-- A fila administrativa e visivel a interno ativo sem expor snapshots privados.
+select set_config('request.jwt.claim.role', 'authenticated', false);
+select set_config(
+  'request.jwt.claim.sub',
+  '00000000-0000-4000-8000-000000000002',
+  false
+);
+select public.fixture_assert(
+  (select count(*)
+   from public.listar_lia_alertas_pendencias_administrativas(50)) >= 1,
+  'usuario interno ativo precisa ver a fila administrativa sanitizada'
+);
+
 select 'PESQUISA_EVASAO_CLAIM_PG17_OK';
 select 'LIA_ALERTAS_PRIVADOS_FASE_A_PG17_OK';

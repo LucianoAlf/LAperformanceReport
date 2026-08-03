@@ -97,6 +97,35 @@ test('expurgo remove somente snapshots terminais depois de 30 dias', () => {
   assert.match(sql, /lia-alertas-privados-expurgo-diario/i);
 });
 
+test('claim e desfechos sao atomicos, fechados e exclusivos do service role', () => {
+  assert.match(sql, /create or replace function public\.claim_lia_alerta_privado\s*\(/i);
+  assert.match(sql, /auth\.role\(\)\s+is distinct from\s+'service_role'/i);
+  assert.match(sql, /for update(?:\s+of\s+\w+)?\s+skip locked/i);
+  assert.match(sql, /America\/Sao_Paulo/i);
+  assert.match(sql, /interval '15 minutes'/i);
+  assert.match(sql, /processamento_abandonado/i);
+  assert.match(sql, /create or replace function public\.concluir_lia_alerta_privado\s*\(/i);
+  assert.match(sql, /create or replace function public\.falhar_lia_alerta_privado\s*\(/i);
+  assert.match(sql, /resultado_ambiguo/i);
+  assert.doesNotMatch(sql, /set\s+status\s*=\s*'pendente'[\s\S]*resultado_ambiguo/i);
+});
+
+test('piloto e fila administrativa preservam o isolamento', () => {
+  assert.match(sql, /create or replace function public\.enfileirar_lia_alerta_piloto\s*\(/i);
+  assert.match(sql, /pesquisa\.modo_teste\s*=\s*true/i);
+  assert.match(sql, /fn_lia_criar_evento_alerta\([\s\S]*'teste'[\s\S]*\b2\b/i);
+  assert.match(sql, /create or replace function public\.listar_lia_alertas_pendencias_administrativas\s*\(/i);
+  const inicioFila = sql.search(
+    /create or replace function public\.listar_lia_alertas_pendencias_administrativas\s*\(/i,
+  );
+  const fimFila = sql.indexOf('$function$;', inicioFila) + '$function$;'.length;
+  const funcaoFila = sql.slice(inicioFila, fimFila);
+  assert.doesNotMatch(
+    funcaoFila,
+    /destino_snapshot|mensagem_renderizada|resposta_texto|transcricao/i,
+  );
+});
+
 test('fixture PG17 contém provas executáveis de isolamento e idempotência', () => {
   assert.ok(fixture, `fixture ausente: ${fixturePath}`);
   for (const evidence of [
@@ -105,6 +134,9 @@ test('fixture PG17 contém provas executáveis de isolamento e idempotência', (
     /uma rodada nao pode gerar dois alertas/i,
     /nao pode haver notificacao cruzada/i,
     /teste comum nao pode entrar na outbox produtiva/i,
+    /dois workers nao podem reclamar a mesma entrega/i,
+    /resultado ambiguo nao pode voltar a pendente/i,
+    /piloto deve forcar o destino governado do Alf/i,
     /LIA_ALERTAS_PRIVADOS_FASE_A_PG17_OK/,
   ]) {
     assert.match(fixture, evidence);

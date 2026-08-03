@@ -506,6 +506,389 @@ grant execute on function public.fn_lia_criar_evento_alerta(
   text, text, uuid, integer, integer, text, uuid, text, timestamptz, text
 ) to service_role;
 
+create or replace function public.fn_lia_janela_envio_permitida(
+  p_agora timestamptz
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $function$
+  select (p_agora at time zone 'America/Sao_Paulo')::time >= time '08:00'
+     and (p_agora at time zone 'America/Sao_Paulo')::time < time '20:00';
+$function$;
+
+create or replace function public.fn_lia_claim_alerta_privado_em(
+  p_worker_id uuid,
+  p_alerta_id uuid,
+  p_agora timestamptz
+)
+returns table (
+  alerta_id uuid,
+  claim_token uuid,
+  destino text,
+  mensagem text,
+  evento_tipo text,
+  ambiente text
+)
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $function$
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'service_role_required';
+  end if;
+
+  if not public.fn_lia_janela_envio_permitida(p_agora) then
+    return;
+  end if;
+
+  -- Processamento sem confirmacao e um caso ambiguo: nunca e reenfileirado.
+  update public.lia_alertas_privados alerta
+  set status = 'fila_administrativa',
+      motivo_pendencia = 'processamento_abandonado',
+      destino_id = null,
+      destino_snapshot = null,
+      mensagem_renderizada = null,
+      worker_id = null,
+      claim_token = null,
+      atualizado_em = p_agora
+  where alerta.status = 'processando'
+    and alerta.claimed_em < p_agora - interval '15 minutes';
+
+  -- Revalida o destinatario governado imediatamente antes do claim.
+  update public.lia_alertas_privados alerta
+  set status = 'fila_administrativa',
+      motivo_pendencia = case
+        when usuario.ativo is distinct from true then 'operador_inativo_ou_ausente'
+        else 'destino_ausente_ou_alterado'
+      end,
+      destino_id = null,
+      destino_snapshot = null,
+      mensagem_renderizada = null,
+      atualizado_em = p_agora
+  from public.lia_pesquisa_eventos evento
+  left join public.usuarios usuario
+    on usuario.id = evento.operador_usuario_id
+  where alerta.evento_id = evento.id
+    and alerta.status = 'pendente'
+    and (p_alerta_id is null or alerta.id = p_alerta_id)
+    and not exists (
+      select 1
+      from public.lia_destinos_privados destino
+      where usuario.ativo = true
+        and destino.id = alerta.destino_id
+        and destino.usuario_id = alerta.destinatario_usuario_id
+        and destino.canal = 'whatsapp'
+        and destino.ativo
+        and destino.destino_normalizado = alerta.destino_snapshot
+    );
+
+  return query
+  with candidato as (
+    select alerta.id
+    from public.lia_alertas_privados alerta
+    join public.lia_pesquisa_eventos evento
+      on evento.id = alerta.evento_id
+    join public.usuarios usuario
+      on usuario.id = alerta.destinatario_usuario_id
+     and usuario.ativo = true
+    join public.lia_destinos_privados destino
+      on destino.id = alerta.destino_id
+     and destino.usuario_id = alerta.destinatario_usuario_id
+     and destino.canal = 'whatsapp'
+     and destino.ativo
+     and destino.destino_normalizado = alerta.destino_snapshot
+    where alerta.status = 'pendente'
+      and (p_alerta_id is null or alerta.id = p_alerta_id)
+    order by alerta.criado_em, alerta.id
+    for update of alerta skip locked
+    limit 1
+  ), atualizado as (
+    update public.lia_alertas_privados alerta
+    set status = 'processando',
+        tentativas = alerta.tentativas + 1,
+        worker_id = p_worker_id,
+        claim_token = gen_random_uuid(),
+        claimed_em = p_agora,
+        atualizado_em = p_agora
+    from candidato
+    where alerta.id = candidato.id
+    returning alerta.*
+  )
+  select
+    atualizado.id,
+    atualizado.claim_token,
+    atualizado.destino_snapshot,
+    atualizado.mensagem_renderizada,
+    evento.tipo,
+    evento.ambiente
+  from atualizado
+  join public.lia_pesquisa_eventos evento
+    on evento.id = atualizado.evento_id;
+end;
+$function$;
+
+create or replace function public.claim_lia_alerta_privado(
+  p_worker_id uuid,
+  p_alerta_id uuid default null
+)
+returns table (
+  alerta_id uuid,
+  claim_token uuid,
+  destino text,
+  mensagem text,
+  evento_tipo text,
+  ambiente text
+)
+language sql
+security definer
+set search_path = public, pg_temp
+as $function$
+  select *
+  from public.fn_lia_claim_alerta_privado_em(
+    p_worker_id,
+    p_alerta_id,
+    clock_timestamp()
+  );
+$function$;
+
+create or replace function public.concluir_lia_alerta_privado(
+  p_alerta_id uuid,
+  p_claim_token uuid,
+  p_provider_message_id text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $function$
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'service_role_required';
+  end if;
+
+  if nullif(btrim(p_provider_message_id), '') is null then
+    raise exception 'provider_message_id_required';
+  end if;
+
+  update public.lia_alertas_privados
+  set status = 'enviado',
+      provider_message_id = p_provider_message_id,
+      enviado_em = now(),
+      worker_id = null,
+      claim_token = null,
+      erro_codigo = null,
+      atualizado_em = now()
+  where id = p_alerta_id
+    and status = 'processando'
+    and claim_token = p_claim_token;
+
+  return found;
+end;
+$function$;
+
+create or replace function public.falhar_lia_alerta_privado(
+  p_alerta_id uuid,
+  p_claim_token uuid,
+  p_erro_codigo text,
+  p_resultado_ambiguo boolean
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $function$
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'service_role_required';
+  end if;
+
+  if p_erro_codigo not in (
+    'bridge_timeout',
+    'bridge_conexao_encerrada',
+    'bridge_json_invalido',
+    'bridge_confirmacao_ambigua',
+    'bridge_rejeitado',
+    'bridge_http',
+    'bridge_interno'
+  ) then
+    raise exception 'erro_codigo_invalido';
+  end if;
+
+  update public.lia_alertas_privados
+  set status = case
+        when p_resultado_ambiguo then 'resultado_ambiguo'
+        else 'falha'
+      end,
+      erro_codigo = p_erro_codigo,
+      worker_id = null,
+      claim_token = null,
+      atualizado_em = now()
+  where id = p_alerta_id
+    and status = 'processando'
+    and claim_token = p_claim_token;
+
+  return found;
+end;
+$function$;
+
+create or replace function public.enfileirar_lia_alerta_piloto(
+  p_pesquisa_id uuid,
+  p_tipo text default 'resposta_nova'
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $function$
+declare
+  v_alerta_id uuid;
+  v_analise_versao integer;
+  v_aluno_nome text;
+  v_unidade_id uuid;
+  v_unidade_nome text;
+  v_idempotency_key text;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'service_role_required';
+  end if;
+
+  if p_tipo not in ('resposta_nova', 'rodada_nova_pos_revisao', 'opt_out') then
+    raise exception 'tipo_alerta_lia_invalido';
+  end if;
+
+  select
+    analise.versao,
+    pesquisa.aluno_nome,
+    pesquisa.unidade_id,
+    unidade.nome
+  into
+    v_analise_versao,
+    v_aluno_nome,
+    v_unidade_id,
+    v_unidade_nome
+  from public.pesquisa_evasao pesquisa
+  join public.unidades unidade on unidade.id = pesquisa.unidade_id
+  join lateral (
+    select max(a.versao) as versao
+    from public.pesquisa_evasao_analises a
+    where a.pesquisa_id = pesquisa.id
+  ) analise on analise.versao is not null
+  where pesquisa.id = p_pesquisa_id
+    and pesquisa.modo_teste = true;
+
+  if not found then
+    raise exception 'pesquisa_teste_com_analise_required';
+  end if;
+
+  v_idempotency_key := format(
+    'piloto:%s:%s:%s',
+    p_tipo,
+    p_pesquisa_id,
+    v_analise_versao
+  );
+
+  v_alerta_id := public.fn_lia_criar_evento_alerta(
+    p_tipo,
+    'teste',
+    p_pesquisa_id,
+    v_analise_versao,
+    2,
+    v_aluno_nome,
+    v_unidade_id,
+    v_unidade_nome,
+    now(),
+    v_idempotency_key
+  );
+
+  if v_alerta_id is null then
+    select alerta.id
+    into v_alerta_id
+    from public.lia_alertas_privados alerta
+    join public.lia_pesquisa_eventos evento on evento.id = alerta.evento_id
+    where evento.idempotency_key = v_idempotency_key;
+  end if;
+
+  return v_alerta_id;
+end;
+$function$;
+
+create or replace function public.listar_lia_alertas_pendencias_administrativas(
+  p_limite integer default 50
+)
+returns table (
+  alerta_id uuid,
+  pesquisa_id uuid,
+  evento_tipo text,
+  aluno_nome text,
+  unidade_nome text,
+  operador_usuario_id integer,
+  motivo text,
+  criado_em timestamptz
+)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $function$
+begin
+  if auth.role() is distinct from 'service_role'
+     and not exists (
+       select 1
+       from public.usuarios usuario
+       where usuario.auth_user_id = auth.uid()
+         and usuario.ativo = true
+     ) then
+    raise exception 'usuario_interno_ativo_required';
+  end if;
+
+  return query
+  select
+    alerta.id,
+    evento.pesquisa_id,
+    evento.tipo,
+    evento.aluno_nome_snapshot,
+    evento.unidade_nome_snapshot,
+    evento.operador_usuario_id,
+    alerta.motivo_pendencia,
+    alerta.criado_em
+  from public.lia_alertas_privados alerta
+  join public.lia_pesquisa_eventos evento on evento.id = alerta.evento_id
+  where alerta.status in ('fila_administrativa', 'falha', 'resultado_ambiguo')
+  order by alerta.criado_em desc, alerta.id
+  limit least(greatest(coalesce(p_limite, 50), 1), 200);
+end;
+$function$;
+
+revoke all on function public.fn_lia_janela_envio_permitida(timestamptz)
+  from public, anon, authenticated;
+revoke all on function public.fn_lia_claim_alerta_privado_em(uuid, uuid, timestamptz)
+  from public, anon, authenticated;
+revoke all on function public.claim_lia_alerta_privado(uuid, uuid)
+  from public, anon, authenticated;
+revoke all on function public.concluir_lia_alerta_privado(uuid, uuid, text)
+  from public, anon, authenticated;
+revoke all on function public.falhar_lia_alerta_privado(uuid, uuid, text, boolean)
+  from public, anon, authenticated;
+revoke all on function public.enfileirar_lia_alerta_piloto(uuid, text)
+  from public, anon, authenticated;
+revoke all on function public.listar_lia_alertas_pendencias_administrativas(integer)
+  from public, anon;
+
+grant execute on function public.claim_lia_alerta_privado(uuid, uuid)
+  to service_role;
+grant execute on function public.concluir_lia_alerta_privado(uuid, uuid, text)
+  to service_role;
+grant execute on function public.falhar_lia_alerta_privado(uuid, uuid, text, boolean)
+  to service_role;
+grant execute on function public.enfileirar_lia_alerta_piloto(uuid, text)
+  to service_role;
+grant execute on function public.listar_lia_alertas_pendencias_administrativas(integer)
+  to authenticated, service_role;
+
 create or replace function public.expurgar_lia_alertas_privados()
 returns integer
 language plpgsql
