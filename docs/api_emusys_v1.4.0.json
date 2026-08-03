@@ -1,0 +1,3591 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Emusys CRM API",
+    "version": "1.4.0",
+    "description": "API para integração com o CRM Emusys — endpoints para leads, agendamento de aulas, campos personalizados e cadastros auxiliares. Todos os endpoints exigem o header `token`."
+  },
+  "servers": [
+    {
+      "url": "https://api.emusys.com.br/v1",
+      "description": "Produção"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "TokenHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "token",
+        "description": "Token da escola. Exemplo: `token: 3kyg15QNWzeDlnwBhqoflmSlH3L0xt`"
+      }
+    },
+    "schemas": {
+      "OkResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "ok"
+          }
+        }
+      },
+      "OkWithLeadIdResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "ok"
+          },
+          "lead_id": {
+            "type": "integer",
+            "example": 1234
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "Erro"
+          },
+          "msg": {
+            "type": "string",
+            "example": "Descrição do erro"
+          }
+        }
+      },
+      "CampoPersonalizado": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "campo_15"
+          },
+          "nome": {
+            "type": "string",
+            "example": "Como ouviu falar"
+          },
+          "tipo": {
+            "type": "string",
+            "example": "escolha"
+          },
+          "opcoes_validas": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "example": "1"
+                },
+                "nome": {
+                  "type": "string",
+                  "example": "Facebook"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Professor": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 5
+          },
+          "nome": {
+            "type": "string",
+            "example": "Professor Exemplo"
+          }
+        }
+      },
+      "Usuario": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 2
+          },
+          "nome": {
+            "type": "string",
+            "example": "João Silva"
+          }
+        }
+      },
+      "Sala": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 3
+          },
+          "nome": {
+            "type": "string",
+            "example": "Sala 1"
+          }
+        }
+      },
+      "Curso": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 10
+          },
+          "nome": {
+            "type": "string",
+            "example": "Violão"
+          }
+        }
+      },
+      "Disciplina": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 10
+          },
+          "nome": {
+            "type": "string",
+            "example": "Violão Teoria / Pratica de Conjunto"
+          }
+        }
+      },
+      "Disponibilidade": {
+        "type": "object",
+        "properties": {
+          "horario": {
+            "type": "string",
+            "example": "14:30"
+          }
+        }
+      },
+      "Instrumento": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 3
+          },
+          "nome": {
+            "type": "string",
+            "example": "Guitarra"
+          }
+        }
+      },
+      "ComoConheceuOpcao": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 1
+          },
+          "nome": {
+            "type": "string",
+            "example": "Indicação"
+          }
+        }
+      },
+      "Pessoa": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 100
+          },
+          "nome": {
+            "type": "string",
+            "example": "João Silva"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "joao@example.com"
+          },
+          "telefone": {
+            "type": "string",
+            "example": "(11) 99999-9999"
+          },
+          "cpf": {
+            "type": "string",
+            "example": "123.456.789-00"
+          }
+        }
+      },
+      "DisciplinaDeMatricula": {
+        "type": "object",
+        "properties": {
+          "matricula_disciplina_id": { "type": "integer", "example": 42, "description": "ID do vínculo matrícula-disciplina (MatrDisc_ID)" },
+          "disciplina_id": { "type": "integer", "example": 10, "description": "ID da disciplina/curso" },
+          "nome": { "type": "string", "example": "Teoria Musical" },
+          "tipo": { "type": "string", "example": "Individual" },
+          "nome_turma": { "type": "string", "example": "" },
+          "nr_aulas_contratadas": { "type": "integer", "example": 40 },
+          "nr_aulas_passadas": { "type": "integer", "example": 35, "description": "Aulas com data/hora anterior ao momento atual (inclui faltas)" },
+          "nr_aulas_futuras": { "type": "integer", "example": 5, "description": "Aulas com data/hora igual ou posterior ao momento atual" },
+          "data_hora_primeira_aula": { "type": "string", "example": "2024-02-01 14:00:00" },
+          "data_hora_ultima_aula": { "type": "string", "example": "2024-12-15 14:00:00" },
+          "id_professor": { "type": "integer", "example": 5 },
+          "nome_professor": { "type": "string", "example": "Professor Exemplo" },
+          "email_professor": { "type": "string", "example": "professor@email.com" },
+          "telefone_professor": { "type": "string", "example": "(11) 97777-7777" },
+          "frequencia_de_aulas": { "type": "string", "example": "Semanal" },
+          "agendamentos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "dia_da_semana": { "type": "integer", "example": 1 },
+                "dia_da_semana_nome": { "type": "string", "example": "Segunda-feira" },
+                "horario": { "type": "string", "example": "14:00" },
+                "duracao_em_minutos": { "type": "integer", "example": 60 },
+                "sala_id": { "type": "integer", "example": 1 },
+                "nome_sala": { "type": "string", "example": "Sala 01" }
+              }
+            }
+          }
+        }
+      },
+      "AulaExperimental": {
+        "type": "object",
+        "properties": {
+          "lead_id": {
+            "type": "integer",
+            "description": "ID do lead associado a esta aula experimental.",
+            "example": 1234
+          },
+          "professor_id": {
+            "type": "integer",
+            "description": "ID do professor que ministrará a aula experimental (opcional).",
+            "example": 5
+          },
+          "nome_aluno": {
+            "type": "string",
+            "description": "Nome do aluno que participará da aula experimental."
+          },
+          "nome_responsavel_aluno": {
+            "type": "string",
+            "description": "Nome do responsável pelo aluno (se aplicável)."
+          },
+          "data_nascimento_aluno": {
+            "type": "string",
+            "format": "date",
+            "description": "Data de nascimento do aluno."
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "E-mail de contato do aluno ou responsável."
+          },
+          "telefone": {
+            "type": "string",
+            "description": "Telefone de contato do aluno ou responsável."
+          },
+          "data": {
+            "type": "string",
+            "format": "date",
+            "description": "Data da aula experimental."
+          },
+          "dia_da_semana_nome": {
+            "type": "string",
+            "description": "Dia da semana em que a aula ocorrerá."
+          },
+          "horario": {
+            "type": "string",
+            "description": "Horário da aula experimental."
+          },
+          "sala": {
+            "type": "string",
+            "description": "Sala onde a aula será realizada."
+          },
+          "sala_id": {
+            "type": "integer",
+            "description": "ID da sala onde a aula será realizada.",
+            "example": 2
+          },
+          "curso": {
+            "type": "string",
+            "description": "Nome do curso ou instrumento da aula experimental."
+          },
+          "nome_professor": {
+            "type": "string",
+            "description": "Nome do professor responsável pela aula experimental."
+          },
+          "telefone_professor": {
+            "type": "string",
+            "description": "Telefone do professor responsável."
+          },
+          "email_professor": {
+            "type": "string",
+            "format": "email",
+            "description": "E-mail do professor responsável."
+          },
+          "nome_atendente": {
+            "type": "string",
+            "description": "Nome do atendente que cadastrou a aula experimental."
+          },
+          "endereco_escola": {
+            "type": "string",
+            "description": "Endereço completo da unidade escolar."
+          },
+          "unidade_escola": {
+            "type": "string",
+            "description": "Nome da unidade escolar."
+          },
+          "observacoes": {
+            "type": "string",
+            "description": "Observações adicionais registradas no momento do agendamento."
+          }
+        },
+        "required": [
+          "nome_aluno",
+          "email",
+          "data",
+          "horario",
+          "curso",
+          "nome_professor",
+          "unidade_escola"
+        ]
+      },
+      "PresencaStatus": {
+        "type": "string",
+        "enum": ["presente", "ausente"],
+        "description": "Situação de presença registrada na aula"
+      },
+
+      "ProfessorNaAula": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 5
+          },
+          "nome": {
+            "type": "string",
+            "example": "João Martins"
+          },
+          "telefone": {
+            "type": "string",
+            "nullable": true,
+            "example": "(21) 98888-7777"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "joao.martins@escolaexemplo.com"
+          },
+          "presenca": {
+            "$ref": "#/components/schemas/PresencaStatus"
+          },
+          "horario_presenca": {
+            "type": "string",
+            "format": "time",
+            "nullable": true,
+            "example": "10:00:00"
+          }
+        }
+      },
+
+      "AlunoNaAula": {
+        "type": "object",
+        "properties": {
+          "id_aluno": {
+            "type": "integer",
+            "nullable": true,
+            "description": "ID da pessoa (aluno cadastrado). Null se for lead sem matrícula.",
+            "example": 100
+          },
+          "id_lead": {
+            "type": "integer",
+            "description": "ID do lead. 0 se o aluno já tem cadastro no sistema.",
+            "example": 0
+          },
+          "nome_aluno": {
+            "type": "string",
+            "example": "Lucas Pereira"
+          },
+          "data_nascimento_aluno": {
+            "type": "string",
+            "format": "date",
+            "example": "2010-05-12"
+          },
+          "email_aluno": {
+            "type": "string",
+            "format": "email",
+            "nullable": true,
+            "example": "lucas.pereira@email.com"
+          },
+          "telefone_aluno": {
+            "type": "string",
+            "nullable": true,
+            "description": "Telefone de contato do aluno. Em aulas experimentais (aluno ainda é um lead), é espelhado a partir do contato do lead.",
+            "example": "(21) 97777-6666"
+          },
+          "nome_responsavel": {
+            "type": "string",
+            "nullable": true,
+            "example": "Ana Pereira"
+          },
+          "data_nascimento_responsavel": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "example": "1982-09-03"
+          },
+          "email_responsavel": {
+            "type": "string",
+            "format": "email",
+            "nullable": true,
+            "example": "ana.pereira@email.com"
+          },
+          "telefone_responsavel": {
+            "type": "string",
+            "nullable": true,
+            "example": "(21) 96666-5555"
+          },
+          "presenca": {
+            "$ref": "#/components/schemas/PresencaStatus"
+          },
+          "horario_presenca": {
+            "type": "string",
+            "format": "time",
+            "nullable": true,
+            "example": "09:58:00"
+          }
+        }
+      },
+
+      "Aula": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 654321
+          },
+          "matricula_disciplina_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "ID do vínculo matrícula-disciplina (MatrDisc_ID). Null para aulas de turma.",
+            "example": 42
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "individual",
+              "turma",
+              "ensaio"
+            ],
+            "example": "individual"
+          },
+          "categoria": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "extra",
+              "reposicao",
+              "experimental",
+              "avulsa"
+            ],
+            "example": "normal"
+          },
+          "turma_nome": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "curso_id": {
+            "type": "integer",
+            "example": 8
+          },
+          "curso_nome": {
+            "type": "string",
+            "example": "Piano Individual"
+          },
+          "cancelada": {
+            "type": "boolean",
+            "example": false
+          },
+          "justificada": {
+            "type": "boolean",
+            "example": false
+          },
+          "reagendada": {
+            "type": "boolean",
+            "description": "true se a aula foi reagendada, ou seja, se a data/hora atual diverge da data/hora original de agendamento.",
+            "example": false
+          },
+          "data_hora_inicio": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-12-01 10:00"
+          },
+          "data_hora_fim": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-12-01 10:50"
+          },
+          "data_hora_inicio_original": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Data e hora original da aula, antes de qualquer reagendamento. Igual a `data_hora_inicio` se a aula nunca foi reagendada.",
+            "example": "2025-12-01 10:00"
+          },
+          "duracao_minutos": {
+            "type": "integer",
+            "example": 50
+          },
+          "sala_id": {
+            "type": "integer",
+            "nullable": true,
+            "example": 3
+          },
+          "sala_nome": {
+            "type": "string",
+            "nullable": true,
+            "example": "Sala Verde"
+          },
+          "professores": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProfessorNaAula"
+            }
+          },
+          "alunos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlunoNaAula"
+            }
+          },
+          "anotacoes": {
+            "type": "string",
+            "nullable": true,
+            "example": "Trabalho de dinâmica e articulação"
+          }
+        }
+      },
+      "MatriculaWebhook": {
+        "type": "object",
+        "properties": {
+          "matricula_id": { "type": "integer", "example": 1234 },
+          "foto_aluno_url": { "type": "string", "example": "https://emusys.com.br/fotos/aluno_123.jpg" },
+          "nome_aluno": { "type": "string", "example": "João Silva" },
+          "nome_responsavel": { "type": "string", "example": "Maria Silva" },
+          "data_nascimento_aluno": { "type": "string", "format": "date", "example": "2010-05-15" },
+          "data_nascimento_responsavel": { "type": "string", "format": "date", "example": "1980-10-20" },
+          "email_aluno": { "type": "string", "format": "email", "example": "joao@email.com" },
+          "email_responsavel": { "type": "string", "format": "email", "example": "maria@email.com" },
+          "telefone_aluno": { "type": "string", "example": "(11) 99999-9999" },
+          "telefone_responsavel": { "type": "string", "example": "(11) 98888-8888" },
+          "curso_id": { "type": "integer", "example": 5, "description": "ID do curso (Não confundir com id da disciplina)." },
+          "data_primeira_aula": { "type": "string", "format": "date", "example": "2024-02-01" },
+          "data_ultima_aula": { "type": "string", "format": "date", "example": "2024-12-15" },
+          "lead_id": { "type": "integer", "description": "ID do lead associado a esta matrícula.", "example": 1234 },
+          "dia_vencimento_mensalidade": { "type": "integer", "example": 10 },
+          "nr_aulas": { "type": "integer", "example": 40 },
+          "valor": { "type": "number", "format": "float", "example": 350.00 },
+          "valor_taxa_matricula": { "type": "number", "format": "float", "example": 100.00 },
+          "tipo_pagamento": { "type": "string", "example": "Boleto" },
+          "nome_curso": { "type": "string", "example": "Piano" },
+          "nome_modulo": { "type": "string", "example": "Módulo 1" },
+          "data_matricula": { "type": "string", "format": "date", "example": "2024-01-20" },
+          "disciplinas": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/DisciplinaDeMatricula" }
+          },
+          "campos_personalizados_aluno": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string", "example": "23" },
+                "nome": { "type": "string", "example": "Como ouviu falar" },
+                "tipo": { "type": "string", "example": "escolha" },
+                "valor": {
+                  "oneOf": [
+                    { "type": "string" },
+                    { "type": "object", "properties": { "id": { "type": "integer" }, "valor": { "type": "string" } } }
+                  ],
+                  "example": { "id": 1, "valor": "Instagram" }
+                }
+              }
+            }
+          },
+          "usuario_realizou_matricula": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "integer", "example": 1 },
+              "nome": { "type": "string", "example": "Admin" }
+            }
+          }
+        }
+      },
+      "Matricula": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 1234 },
+          "data_matricula": { "type": "string", "format": "date", "example": "2024-01-20" },
+          "status": { "type": "string", "enum": ["ativa", "inativa", "trancada"], "example": "ativa", "description": "`trancada` significa que a matrícula tem um trancamento temporário em vigor hoje (veja `trancamento_ativo`). `inativa` cobre tanto uma matrícula interrompida definitivamente quanto uma matrícula já concluída (contrato encerrado). `trancamento_ativo` só vem preenchido quando o status é `trancada`." },
+          "trancamento_ativo": { "$ref": "#/components/schemas/TrancamentoAtivo" },
+          "motivo_inativa": { "type": "string", "enum": ["interrompida", "concluida"], "nullable": true, "example": null, "description": "Motivo de a matrícula estar `inativa`: `interrompida` (encerrada antes do previsto) ou `concluida` (contrato chegou ao fim normalmente). `null` quando o status é `ativa` ou `trancada`." },
+          "qtd_contratos": { "type": "integer", "example": 1, "description": "Número de renovações de contrato (0 = primeiro contrato)" },
+          "aluno": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "integer", "example": 100 },
+              "lead_id": { "type": "integer", "example": 567 },
+              "foto_url": { "type": "string", "nullable": true, "example": "https://emusys.com.br/fotos/aluno_123.jpg", "description": "URL da foto do aluno. Null se não houver foto cadastrada." },
+              "nome": { "type": "string", "example": "João Silva" },
+              "data_nascimento": { "type": "string", "format": "date", "example": "2010-05-15" },
+              "cpf": { "type": "string", "example": "123.456.789-00" },
+              "email": { "type": "string", "format": "email", "example": "joao@email.com" },
+              "telefone": { "type": "string", "example": "(11) 99999-9999" },
+              "observacoes": { "type": "string", "example": "" },
+              "data_anamnese": { "type": "string", "format": "date", "nullable": true, "example": "2024-03-15", "description": "Data em que a anamnese foi preenchida. Null se não houver anamnese cadastrada." },
+              "endereco": {
+                "type": "object",
+                "properties": {
+                  "logradouro": { "type": "string", "example": "Rua das Flores" },
+                  "numero": { "type": "string", "example": "123" },
+                  "complemento": { "type": "string", "example": "Apto 4" },
+                  "bairro": { "type": "string", "example": "Centro" },
+                  "cep": { "type": "string", "example": "01310-100" },
+                  "cidade": { "type": "string", "example": "São Paulo" },
+                  "estado": { "type": "string", "example": "SP" }
+                }
+              },
+              "campos_personalizados": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string", "example": "campo_15" },
+                    "nome": { "type": "string", "example": "Como ouviu falar" },
+                    "tipo": { "type": "string", "example": "escolha" },
+                    "valor": {
+                      "oneOf": [
+                        { "type": "string" },
+                        { "type": "object", "properties": { "id": { "type": "integer" }, "valor": { "type": "string" } } }
+                      ],
+                      "example": { "id": 1, "valor": "Instagram" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responsavel": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "id": { "type": "integer", "example": 101 },
+              "nome": { "type": "string", "example": "Maria Silva" },
+              "data_nascimento": { "type": "string", "format": "date", "example": "1980-10-20" },
+              "cpf": { "type": "string", "example": "987.654.321-00" },
+              "email": { "type": "string", "format": "email", "example": "maria@email.com" },
+              "telefone": { "type": "string", "example": "(11) 98888-8888" }
+            }
+          },
+          "contrato_atual": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "integer", "example": 456 },
+              "data_original_primeira_aula": { "type": "string", "format": "date", "example": "2024-02-01" },
+              "data_original_ultima_aula": { "type": "string", "format": "date", "example": "2024-12-15" },
+              "plano": { "type": "string", "example": "12 meses" },
+              "valor_mensalidade": { "type": "number", "format": "float", "example": 350.00 },
+              "valor_total": { "type": "number", "format": "float", "example": 4200.00 },
+              "desconto_fixo": { "type": "number", "format": "float", "example": 0.00 },
+              "desconto_condicional": { "type": "number", "format": "float", "example": 0.00 },
+              "bolsa": { "type": "boolean", "example": false },
+              "nr_faturas": { "type": "integer", "example": 12 },
+              "data_primeira_fatura": { "type": "string", "format": "date", "example": "2024-02-10" },
+              "dia_vencimento": { "type": "integer", "example": 10 },
+              "forma_pagamento": { "type": "string", "example": "Boleto" },
+              "nr_aulas_contratadas": { "type": "integer", "example": 40 },
+              "nr_aulas_passadas": { "type": "integer", "example": 35, "description": "Total de aulas passadas (inclui faltas)" },
+              "disciplinas": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/DisciplinaDeMatricula" }
+              },
+              "inadimplente": { "type": "boolean", "example": false, "description": "true se o contrato tiver alguma fatura não paga com vencimento anterior a hoje." },
+              "flag_nao_vai_renovar": { "type": "boolean", "example": false, "description": "true se o contrato estiver marcado como não será renovado." },
+              "contrato_assinado": { "type": "boolean", "example": false, "description": "true se o contrato foi assinado." }
+            }
+          },
+          "cobranca_automatica": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "id": { "type": "integer", "example": 789 },
+              "forma_pagamento": { "type": "string", "example": "Cartão de Crédito" },
+              "status": { "type": "string", "example": "ativa" }
+            }
+          }
+        }
+      },
+      "TrancamentoAtivo": {
+        "type": "object",
+        "nullable": true,
+        "description": "Detalhes do trancamento temporário em vigor hoje para esta matrícula. Preenchido exatamente quando `status` é `trancada`; `null` nos demais casos (`ativa` ou `inativa`).",
+        "properties": {
+          "id": { "type": "integer", "example": 123 },
+          "motivo": { "type": "string", "example": "Viagem" },
+          "data_inicial": { "type": "string", "format": "date", "example": "2024-06-01" },
+          "data_final": { "type": "string", "format": "date", "example": "2024-07-01" }
+        }
+      },
+      "AvisoPrevioMatricula": {
+        "type": "object",
+        "description": "Aviso prévio de finalização da matrícula: registro de que o aluno comunicou a intenção de encerrar a matrícula, com a data em que pretende parar.",
+        "properties": {
+          "id": { "type": "integer", "example": 321 },
+          "data_aviso": { "type": "string", "format": "date", "description": "Data em que o aluno avisou a intenção de encerrar a matrícula.", "example": "2026-08-01" },
+          "data_prevista_cancelamento": { "type": "string", "format": "date", "nullable": true, "description": "Data em que o aluno pretende parar. Pode ser null se ainda não foi definida.", "example": "2026-09-01" },
+          "motivo_id": { "type": "integer", "example": 4 },
+          "motivo": { "type": "string", "example": "Mudança de cidade" },
+          "observacoes": { "type": "string", "nullable": true, "example": "Aluno pretende voltar em 2027" },
+          "autor": {
+            "type": "object",
+            "description": "Usuário do sistema que registrou/editou o aviso prévio.",
+            "properties": {
+              "id": { "type": "integer", "example": 5 },
+              "nome": { "type": "string", "example": "Maria Oliveira" }
+            }
+          }
+        }
+      },
+      "Fatura": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 5678 },
+          "matricula_id": { "type": "integer", "example": 1234 },
+          "contrato_id": { "type": "integer", "example": 456 },
+          "aluno_id": { "type": "integer", "example": 100 },
+          "descricao": { "type": "string", "example": "Mensalidade 02/2024" },
+          "status": { "type": "string", "enum": ["aberta", "paga"], "example": "aberta" },
+          "data_vencimento": { "type": "string", "format": "date", "example": "2024-02-10" },
+          "data_pagamento": { "type": "string", "format": "date", "nullable": true, "example": null },
+          "valor_original": { "type": "number", "format": "float", "example": 350.00, "description": "Valor original da fatura, sem juros, multa ou descontos." },
+          "valor_pago": { "type": "number", "format": "float", "nullable": true, "example": null, "description": "Valor efetivamente recebido. Null se a fatura ainda não foi paga." },
+          "juros_e_multa": { "type": "number", "format": "float", "example": 0.00, "description": "Antes do pagamento: calculado dinamicamente a cada consulta (0 se a fatura ainda não venceu, juros + multa do dia se estiver vencida). Depois de paga: valor fixo, correspondente ao acréscimo efetivamente cobrado no pagamento." },
+          "desconto_aplicado": { "type": "number", "format": "float", "example": 0.00, "description": "Antes do pagamento: valor dinâmico do desconto condicional vigente hoje, caso a fatura seja paga agora (0 se já venceu). Depois de paga: valor fixo, correspondente ao desconto efetivamente concedido no pagamento (pode divergir do desconto_condicional configurado, caso um desconto manual tenha sido dado)." },
+          "desconto_fixo": { "type": "number", "format": "float", "example": 0.00, "description": "Desconto fixo configurado na fatura, já embutido no valor cobrado em boleto/cartão. Não varia com o tempo nem com o pagamento." },
+          "desconto_condicional": { "type": "number", "format": "float", "example": 0.00, "description": "Valor configurado da regra de desconto por antecipação (não indica se foi de fato aplicado — veja desconto_aplicado)." },
+          "numero_parcela": { "type": "integer", "nullable": true, "example": 3, "description": "Posição desta fatura entre as parcelas (mensalidades) do `contrato_id`. Null quando a fatura não é uma parcela regular do contrato (ex.: taxa de matrícula, fatura avulsa) ou quando não está vinculada a um contrato." },
+          "total_parcelas_contrato": { "type": "integer", "nullable": true, "example": 12, "description": "Número total de parcelas do contrato (`contrato_id`). Null quando a fatura não está vinculada a um contrato." },
+          "forma_pagamento_transacao": { "type": "string", "nullable": true, "example": "Pix", "description": "Meio efetivamente utilizado para liquidar esta fatura (diferente de `contrato_atual.forma_pagamento`, que é a forma preferencial configurada no contrato). O texto vem da forma de pagamento cadastrada na escola, então seu valor exato varia por escola (ex.: \"Pix\", \"Boleto\", \"Cartão de Crédito\", \"Dinheiro\"). Null se a fatura ainda não foi paga." },
+          "tarifa_meio_pagamento": { "type": "number", "format": "float", "nullable": true, "example": 2.49, "description": "Valor da tarifa cobrada pelo meio de pagamento nesta transação (ex.: tarifa de boleto, PIX ou cartão). Null se a fatura ainda não foi paga ou não há lançamento financeiro associado." },
+          "valor_liquido_recebido": { "type": "number", "format": "float", "nullable": true, "example": 347.51, "description": "Valor líquido efetivamente recebido, já descontada a `tarifa_meio_pagamento`. Null se a fatura ainda não foi paga ou não há lançamento financeiro associado." }
+        }
+      },
+      "Lead": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 1234
+          },
+          "nome_aluno": {
+            "type": "string",
+            "example": "Paula Santos"
+          },
+          "nome_responsavel_aluno": {
+            "type": "string",
+            "nullable": true,
+            "example": "Carlos Santos"
+          },
+          "data_nascimento_aluno": {
+            "type": "string",
+            "format": "date",
+            "example": "2010-05-15"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "paula@example.com"
+          },
+          "telefone": {
+            "type": "string",
+            "example": "(11) 98877-6655"
+          },
+          "nome_atendente": {
+            "type": "string",
+            "example": "João Silva"
+          },
+          "endereco_escola": {
+            "type": "string",
+            "example": "Rua das Flores, 123 - São Paulo, SP"
+          },
+          "unidade_escola": {
+            "type": "string",
+            "example": "Escola de Música Harmonia"
+          },
+          "observacoes": {
+            "type": "string",
+            "nullable": true,
+            "example": "Interessada em aulas aos sábados"
+          },
+          "data_hora_criacao": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-11-01 10:00:00"
+          },
+          "instrumento": {
+            "type": "string",
+            "example": "Piano"
+          },
+          "criado_por": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "example": 5
+              },
+              "nome": {
+                "type": "string",
+                "example": "Maria Oliveira"
+              }
+            }
+          },
+          "origem": {
+            "type": "string",
+            "example": "Manual"
+          },
+          "como_conheceu": {
+            "type": "string",
+            "example": "Instagram"
+          },
+          "curso_interesse": {
+            "type": "string",
+            "example": "Piano Individual"
+          },
+          "estagio_funil": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "example": 2
+              },
+              "nome": {
+                "type": "string",
+                "example": "Contato Realizado"
+              }
+            }
+          },
+          "arquivamento": {
+            "type": "object",
+            "properties": {
+              "data_hora": {
+                "type": "string",
+                "example": "2025-12-01 15:30:00"
+              },
+              "motivo_id": {
+                "type": "integer",
+                "example": 3
+              },
+              "motivo_nome": {
+                "type": "string",
+                "example": "Preço"
+              },
+              "observacoes": {
+                "type": "string",
+                "example": "Achou o valor muito alto"
+              }
+            }
+          },
+          "campos_personalizados": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "example": "23"
+                },
+                "nome": {
+                  "type": "string",
+                  "example": "Como ouviu falar"
+                },
+                "tipo": {
+                  "type": "string",
+                  "example": "escolha"
+                },
+                "valor": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "valor": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ],
+                  "example": { "id": 1, "valor": "Instagram" }
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "id",
+          "nome_aluno",
+          "data_hora_criacao"
+        ]
+      },
+      "Aniversariante": {
+        "type": "object",
+        "properties": {
+          "pessoa_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "ID da pessoa cadastrada no sistema. Null se for apenas um lead, sem cadastro.",
+            "example": 123
+          },
+          "lead_id": {
+            "type": "integer",
+            "description": "ID do lead. 0 se a pessoa já tem cadastro no sistema.",
+            "example": 0
+          },
+          "nome": {
+            "type": "string",
+            "example": "Maria Silva"
+          },
+          "data_nascimento": {
+            "type": "string",
+            "format": "date",
+            "example": "1994-07-19"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "maria@example.com"
+          },
+          "telefone": {
+            "type": "string",
+            "example": "(11) 99999-9999"
+          },
+          "papeis": {
+            "type": "array",
+            "description": "Uma pessoa pode ter mais de um papel simultaneamente (ex: professor que também é responsável por um aluno).",
+            "items": {
+              "type": "string",
+              "enum": ["aluno", "ex_aluno", "responsavel_aluno", "responsavel_ex_aluno", "professor", "usuario_escola", "lead"]
+            },
+            "example": ["professor", "responsavel_aluno"]
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "TokenHeader": []
+    }
+  ],
+  "webhooks": {
+    "matricula_nova": {
+      "post": {
+        "summary": "Webhook: Nova matrícula",
+        "description": "Enviado quando uma nova matrícula é realizada no sistema Emusys.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": { "type": "string", "example": "matricula_nova" },
+                  "id": { "type": "integer", "description": "ID único do evento." },
+                  "data_hora_criacao": { "type": "string", "format": "date-time" },
+                  "escola_id": { "type": "integer" },
+                  "escola_nome": { "type": "string" },
+                  "matricula": { "$ref": "#/components/schemas/MatriculaWebhook" }
+                },
+                "required": ["evento", "id", "data_hora_criacao", "escola_id", "escola_nome", "matricula"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    },
+    "matricula_renovacao": {
+      "post": {
+        "summary": "Webhook: Renovação de matrícula",
+        "description": "Enviado quando uma matrícula é renovada no sistema Emusys.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": { "type": "string", "example": "matricula_renovacao" },
+                  "id": { "type": "integer" },
+                  "data_hora_criacao": { "type": "string", "format": "date-time" },
+                  "escola_id": { "type": "integer" },
+                  "escola_nome": { "type": "string" },
+                  "renovacao": {
+                    "type": "object",
+                    "properties": {
+                      "data_ultima_aula": { "type": "string", "example": "2024-12-15" }
+                    }
+                  },
+                  "matricula": { "$ref": "#/components/schemas/MatriculaWebhook" }
+                },
+                "required": ["evento", "id", "data_hora_criacao", "escola_id", "escola_nome", "matricula", "renovacao"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    },
+    "matricula_trancamento": {
+      "post": {
+        "summary": "Webhook: Trancamento de matrícula",
+        "description": "Enviado quando uma matrícula é trancada no sistema Emusys.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": { "type": "string", "example": "matricula_trancamento" },
+                  "id": { "type": "integer" },
+                  "data_hora_criacao": { "type": "string", "format": "date-time" },
+                  "escola_id": { "type": "integer" },
+                  "escola_nome": { "type": "string" },
+                  "trancamento": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "integer", "example": 123 },
+                      "motivo": { "type": "string", "example": "Viagem" },
+                      "data_inicial": { "type": "string", "example": "2024-06-01" },
+                      "data_final": { "type": "string", "example": "2024-07-01" }
+                    }
+                  },
+                  "matricula": { "$ref": "#/components/schemas/MatriculaWebhook" }
+                },
+                "required": ["evento", "id", "data_hora_criacao", "escola_id", "escola_nome", "matricula", "trancamento"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    },
+    "matricula_finalizacao": {
+      "post": {
+        "summary": "Webhook: Finalização de matrícula",
+        "description": "Enviado quando uma matrícula é finalizada no sistema Emusys.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": { "type": "string", "example": "matricula_finalizacao" },
+                  "id": { "type": "integer" },
+                  "data_hora_criacao": { "type": "string", "format": "date-time" },
+                  "escola_id": { "type": "integer" },
+                  "escola_nome": { "type": "string" },
+                  "finalizacao": {
+                    "type": "object",
+                    "properties": {
+                      "data_ultima_aula": { "type": "string", "example": "1735689600" },
+                      "motivo": { "type": "string", "example": "Desistência" },
+                      "observacoes": { "type": "string", "example": "Mudança de cidade" }
+                    }
+                  },
+                  "matricula": { "$ref": "#/components/schemas/MatriculaWebhook" }
+                },
+                "required": ["evento", "id", "data_hora_criacao", "escola_id", "escola_nome", "matricula", "finalizacao"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    },
+    "matricula_alterada": {
+      "post": {
+        "summary": "Webhook: Alteração de matrícula",
+        "description": "Enviado quando uma matrícula sofre uma alteração no sistema Emusys (ex.: troca de curso, módulo, turma, disciplina, data da matrícula ou aulas).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": { "type": "string", "example": "matricula_alterada" },
+                  "id": { "type": "integer" },
+                  "data_hora_criacao": { "type": "string", "format": "date-time" },
+                  "escola_id": { "type": "integer" },
+                  "escola_nome": { "type": "string" },
+                  "alteracao": {
+                    "type": "object",
+                    "properties": {
+                      "descricao": { "type": "string", "example": "Curso alterado de <b>Piano (Módulo 1)</b> para <b>Piano (Módulo 2)</b>" }
+                    }
+                  },
+                  "matricula": { "$ref": "#/components/schemas/MatriculaWebhook" }
+                },
+                "required": ["evento", "id", "data_hora_criacao", "escola_id", "escola_nome", "matricula", "alteracao"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    },
+    "matricula_aviso_previo_adicionado": {
+      "post": {
+        "summary": "Webhook: Aviso prévio de finalização adicionado",
+        "description": "Enviado quando um aviso prévio de finalização de matrícula é registrado no sistema Emusys (aluno avisou a intenção de encerrar a matrícula antes da data efetiva de cancelamento).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": { "type": "string", "example": "matricula_aviso_previo_adicionado" },
+                  "id": { "type": "integer" },
+                  "data_hora_criacao": { "type": "string", "format": "date-time" },
+                  "escola_id": { "type": "integer" },
+                  "escola_nome": { "type": "string" },
+                  "aviso_previo": { "$ref": "#/components/schemas/AvisoPrevioMatricula" },
+                  "matricula": { "$ref": "#/components/schemas/MatriculaWebhook" }
+                },
+                "required": ["evento", "id", "data_hora_criacao", "escola_id", "escola_nome", "matricula", "aviso_previo"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    },
+    "matricula_aviso_previo_editado": {
+      "post": {
+        "summary": "Webhook: Aviso prévio de finalização editado",
+        "description": "Enviado quando um aviso prévio de finalização de matrícula já existente é editado no sistema Emusys (ex.: alteração de motivo, data prevista de cancelamento ou observações).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": { "type": "string", "example": "matricula_aviso_previo_editado" },
+                  "id": { "type": "integer" },
+                  "data_hora_criacao": { "type": "string", "format": "date-time" },
+                  "escola_id": { "type": "integer" },
+                  "escola_nome": { "type": "string" },
+                  "aviso_previo": { "$ref": "#/components/schemas/AvisoPrevioMatricula" },
+                  "matricula": { "$ref": "#/components/schemas/MatriculaWebhook" }
+                },
+                "required": ["evento", "id", "data_hora_criacao", "escola_id", "escola_nome", "matricula", "aviso_previo"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    },
+    "matricula_aviso_previo_removido": {
+      "post": {
+        "summary": "Webhook: Aviso prévio de finalização removido",
+        "description": "Enviado quando um aviso prévio de finalização de matrícula é removido no sistema Emusys — normalmente porque o aluno desistiu de encerrar a matrícula.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": { "type": "string", "example": "matricula_aviso_previo_removido" },
+                  "id": { "type": "integer" },
+                  "data_hora_criacao": { "type": "string", "format": "date-time" },
+                  "escola_id": { "type": "integer" },
+                  "escola_nome": { "type": "string" },
+                  "aviso_previo": { "$ref": "#/components/schemas/AvisoPrevioMatricula" },
+                  "matricula": { "$ref": "#/components/schemas/MatriculaWebhook" }
+                },
+                "required": ["evento", "id", "data_hora_criacao", "escola_id", "escola_nome", "matricula", "aviso_previo"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    },
+    "aula_experimental_criada": {
+      "post": {
+        "summary": "Webhook: Aula experimental criada",
+        "description": "Enviado quando uma nova aula experimental é criada no sistema Emusys. Esse webhook notifica seu sistema sobre os detalhes da aula, do aluno, professor e unidade escolar.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": {
+                    "type": "string",
+                    "example": "aula_experimental_criada",
+                    "description": "Identificador do tipo de evento disparado."
+                  },
+                  "id": {
+                    "type": "integer",
+                    "description": "ID único do evento."
+                  },
+                  "data_hora_criacao": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Data e hora em que o evento foi criado."
+                  },
+                  "escola_id": {
+                    "type": "integer",
+                    "description": "ID da escola associada ao evento."
+                  },
+                  "escola_nome": {
+                    "type": "string",
+                    "description": "Nome da escola associada ao evento."
+                  },
+                  "aula": {
+                    "$ref": "#/components/schemas/AulaExperimental"
+                  }
+                },
+                "required": [
+                  "evento",
+                  "id",
+                  "data_hora_criacao",
+                  "escola_id",
+                  "escola_nome",
+                  "aula"
+                ]
+              },
+              "example": {
+                "aula": {
+                  "nome_aluno": "Fulano de Tal",
+                  "nome_responsavel_aluno": "Fulano de Tal",
+                  "data_nascimento_aluno": "1994-07-19",
+                  "email": "email@gmail.com",
+                  "data": "2025-11-12",
+                  "dia_da_semana_nome": "Quarta-feira",
+                  "horario": "14:00",
+                  "sala": "Sala 1",
+                  "curso": "Bateria",
+                  "telefone": "(94) 1234-1234",
+                  "nome_professor": "Lucas Pereira da Silva Lima",
+                  "telefone_professor": "(94) 1234-1234",
+                  "email_professor": "email@email.com.br",
+                  "nome_atendente": "Atendente Tal",
+                  "endereco_escola": "Rua Tal, 234 - Bairro Centro, Cidade Tal Estado Tal, 34500-000",
+                  "unidade_escola": "Escola de Música Exemplo",
+                  "observacoes": "Aula de piano para o filho de 8 anos e talvez pra ela também de canto e piano"
+                },
+                "evento": "aula_experimental_criada",
+                "id": 1374,
+                "data_hora_criacao": "2025-11-12 00:04:46",
+                "escola_id": 5,
+                "escola_nome": "Escola de Música Exemplo"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Seu servidor deve retornar 200 OK para confirmar o recebimento do webhook."
+          }
+        }
+      }
+    },
+    "aula_experimental_reagendada": {
+      "post": {
+        "summary": "Webhook: Aula experimental reagendada",
+        "description": "Enviado quando uma aula experimental existente é reagendada no sistema Emusys. Esse webhook notifica seu sistema sobre a nova data, horário e demais informações atualizadas da aula.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": {
+                    "type": "string",
+                    "example": "aula_experimental_reagendada",
+                    "description": "Identificador do tipo de evento disparado."
+                  },
+                  "id": {
+                    "type": "integer",
+                    "description": "ID único do evento."
+                  },
+                  "data_hora_criacao": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Data e hora em que o evento foi criado."
+                  },
+                  "escola_id": {
+                    "type": "integer",
+                    "description": "ID da escola associada ao evento."
+                  },
+                  "escola_nome": {
+                    "type": "string",
+                    "description": "Nome da escola associada ao evento."
+                  },
+                  "aula": {
+                    "$ref": "#/components/schemas/AulaExperimental"
+                  }
+                },
+                "required": [
+                  "evento",
+                  "id",
+                  "data_hora_criacao",
+                  "escola_id",
+                  "escola_nome",
+                  "aula"
+                ]
+              },
+              "example": {
+                "aula": {
+                  "nome_aluno": "Fulano de Tal",
+                  "nome_responsavel_aluno": "Beltrano de Tal",
+                  "data_nascimento_aluno": "2008-05-12",
+                  "email": "fulano@email.com",
+                  "data": "2025-11-15",
+                  "dia_da_semana_nome": "Sábado",
+                  "horario": "14:30",
+                  "sala": "Sala 2",
+                  "curso": "Violão",
+                  "telefone": "(11) 91234-5678",
+                  "nome_professor": "Professor João Silva",
+                  "telefone_professor": "(11) 99876-5432",
+                  "email_professor": "joao.silva@escolademusica.com",
+                  "nome_atendente": "Maria Souza",
+                  "endereco_escola": "Rua das Flores, 123 - Bairro Centro, São Paulo - SP",
+                  "unidade_escola": "Escola de Música Harmonia",
+                  "observacoes": "Aula reagendada a pedido do aluno."
+                },
+                "evento": "aula_experimental_reagendada",
+                "id": 2001,
+                "data_hora_criacao": "2025-11-14 10:20:03",
+                "escola_id": 101,
+                "escola_nome": "Escola de Música Harmonia"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Seu servidor deve retornar 200 OK para confirmar o recebimento do webhook."
+          }
+        }
+      }
+    },
+    "aula_experimental_cancelada": {
+      "post": {
+        "summary": "Webhook: Aula experimental cancelada",
+        "description": "Enviado quando uma aula experimental é cancelada no sistema Emusys. Esse webhook informa seu sistema sobre o cancelamento, incluindo os dados da aula, aluno e unidade escolar relacionados.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": {
+                    "type": "string",
+                    "example": "aula_experimental_cancelada",
+                    "description": "Identificador do tipo de evento disparado."
+                  },
+                  "id": {
+                    "type": "integer",
+                    "description": "ID único do evento."
+                  },
+                  "data_hora_criacao": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Data e hora em que o evento foi criado."
+                  },
+                  "escola_id": {
+                    "type": "integer",
+                    "description": "ID da escola associada ao evento."
+                  },
+                  "escola_nome": {
+                    "type": "string",
+                    "description": "Nome da escola associada ao evento."
+                  },
+                  "aula": {
+                    "$ref": "#/components/schemas/AulaExperimental"
+                  }
+                },
+                "required": [
+                  "evento",
+                  "id",
+                  "data_hora_criacao",
+                  "escola_id",
+                  "escola_nome",
+                  "aula"
+                ]
+              },
+              "example": {
+                "aula": {
+                  "nome_aluno": "Ciclana de Tal",
+                  "nome_responsavel_aluno": "Beltrano de Tal",
+                  "data_nascimento_aluno": "2010-02-20",
+                  "email": "ciclana@email.com",
+                  "data": "2025-11-12",
+                  "dia_da_semana_nome": "Quarta-feira",
+                  "horario": "18:00",
+                  "sala": "Sala 1",
+                  "curso": "Piano",
+                  "telefone": "(21) 98765-4321",
+                  "nome_professor": "Professora Ana Pereira",
+                  "telefone_professor": "(21) 90000-1111",
+                  "email_professor": "ana.pereira@escolademusica.com",
+                  "nome_atendente": "Carlos Mendes",
+                  "endereco_escola": "Avenida Central, 456 - Bairro Jardim, Rio de Janeiro - RJ",
+                  "unidade_escola": "Escola de Música Harmonia",
+                  "observacoes": "Cancelada por indisponibilidade do aluno."
+                },
+                "evento": "aula_experimental_cancelada",
+                "id": 2002,
+                "data_hora_criacao": "2025-11-12 18:42:19",
+                "escola_id": 101,
+                "escola_nome": "Escola de Música Harmonia"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Seu servidor deve retornar 200 OK para confirmar o recebimento do webhook."
+          }
+        }
+      }
+    },
+    "aula_cancelada": {
+      "post": {
+        "summary": "Webhook: Aula cancelada",
+        "description": "Enviado quando uma aula é cancelada no sistema Emusys. Esse webhook notifica seu sistema sobre o cancelamento de aulas individuais, turmas ou ensaios.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": { "type": "string", "example": "aula_cancelada" },
+                  "id": { "type": "integer" },
+                  "data_hora_criacao": { "type": "string", "format": "date-time" },
+                  "escola_id": { "type": "integer" },
+                  "escola_nome": { "type": "string" },
+                  "aula": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "integer", "example": 123456 },
+                      "data_hora": { "type": "string", "example": "2025-12-01 10:00:00" },
+                      "motivo": { "type": "string", "example": "Aluno doente" },
+                      "status_reposicao": { "type": "string", "enum": ["pendente", "autorizada", "negada"], "example": "pendente" }
+                    }
+                  }
+                },
+                "required": ["evento", "id", "data_hora_criacao", "escola_id", "escola_nome", "aula"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    },
+    "lead_criado": {
+      "post": {
+        "summary": "Webhook: Lead criado",
+        "description": "Enviado quando um novo lead é criado no CRM Emusys. Esse webhook notifica seu sistema sobre os detalhes do lead, atendente responsável e unidade escolar.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": {
+                    "type": "string",
+                    "example": "lead_criado",
+                    "description": "Identificador do tipo de evento disparado."
+                  },
+                  "id": {
+                    "type": "integer",
+                    "description": "ID único do evento."
+                  },
+                  "data_hora_criacao": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Data e hora em que o evento foi criado."
+                  },
+                  "escola_id": {
+                    "type": "integer",
+                    "description": "ID da escola associada ao evento."
+                  },
+                  "escola_nome": {
+                    "type": "string",
+                    "description": "Nome da escola associada ao evento."
+                  },
+                  "lead": {
+                    "$ref": "#/components/schemas/Lead"
+                  }
+                },
+                "required": [
+                  "evento",
+                  "id",
+                  "data_hora_criacao",
+                  "escola_id",
+                  "escola_nome",
+                  "lead"
+                ]
+              },
+              "example": {
+                "lead": {
+                  "id": 1234,
+                  "nome_aluno": "Paula Santos",
+                  "nome_responsavel_aluno": "Carlos Santos",
+                  "data_nascimento_aluno": "2010-05-15",
+                  "email": "paula@example.com",
+                  "telefone": "(11) 98877-6655",
+                  "nome_atendente": "João Silva",
+                  "endereco_escola": "Rua das Flores, 123 - São Paulo, SP",
+                  "unidade_escola": "Escola de Música Harmonia",
+                  "observacoes": "Interessada em aulas aos sábados",
+                  "data_hora_criacao": "2025-11-01 10:00:00",
+                  "instrumento": "Piano",
+                  "criado_por": {
+                    "id": 5,
+                    "nome": "Maria Oliveira"
+                  },
+                  "origem": "Manual",
+                  "como_conheceu": "Instagram",
+                  "curso_interesse": "Piano Individual",
+                  "estagio_funil": {
+                    "id": 2,
+                    "nome": "Contato Realizado"
+                  },
+                  "campos_personalizados": [
+                    {
+                      "id": "42",
+                      "nome": "Como ouviu falar",
+                      "tipo": "escolha",
+                      "valor": { "id": 1, "valor": "Instagram" }
+                    }
+                  ]
+                },
+                "evento": "lead_criado",
+                "id": 5001,
+                "data_hora_criacao": "2025-11-01 10:00:05",
+                "escola_id": 101,
+                "escola_nome": "Escola de Música Harmonia"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Seu servidor deve retornar 200 OK para confirmar o recebimento do webhook."
+          }
+        }
+      }
+    },
+    "lead_editado": {
+      "post": {
+        "summary": "Webhook: Lead editado",
+        "description": "Enviado quando um lead é editado no CRM Emusys. Esse webhook notifica seu sistema sobre os detalhes atualizados do lead.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": {
+                    "type": "string",
+                    "example": "lead_editado",
+                    "description": "Identificador do tipo de evento disparado."
+                  },
+                  "id": {
+                    "type": "integer",
+                    "description": "ID único do evento."
+                  },
+                  "data_hora_criacao": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Data e hora em que o evento foi criado."
+                  },
+                  "escola_id": {
+                    "type": "integer",
+                    "description": "ID da escola associada ao evento."
+                  },
+                  "escola_nome": {
+                    "type": "string",
+                    "description": "Nome da escola associada ao evento."
+                  },
+                  "lead": {
+                    "$ref": "#/components/schemas/Lead"
+                  }
+                },
+                "required": [
+                  "evento",
+                  "id",
+                  "data_hora_criacao",
+                  "escola_id",
+                  "escola_nome",
+                  "lead"
+                ]
+              },
+              "example": {
+                "lead": {
+                  "id": 1234,
+                  "nome_aluno": "Paula Santos",
+                  "nome_responsavel_aluno": "Carlos Santos",
+                  "data_nascimento_aluno": "2010-05-15",
+                  "email": "paula@example.com",
+                  "telefone": "(11) 98877-6655",
+                  "nome_atendente": "João Silva",
+                  "endereco_escola": "Rua das Flores, 123 - São Paulo, SP",
+                  "unidade_escola": "Escola de Música Harmonia",
+                  "observacoes": "Interessada em aulas aos sábados",
+                  "data_hora_criacao": "2025-11-01 10:00:00",
+                  "instrumento": "Piano",
+                  "criado_por": {
+                    "id": 5,
+                    "nome": "Maria Oliveira"
+                  },
+                  "origem": "Manual",
+                  "como_conheceu": "Instagram",
+                  "curso_interesse": "Piano Individual",
+                  "estagio_funil": {
+                    "id": 2,
+                    "nome": "Contato Realizado"
+                  },
+                  "campos_personalizados": [
+                    {
+                      "id": "42",
+                      "nome": "Como ouviu falar",
+                      "tipo": "escolha",
+                      "valor": { "id": 1, "valor": "Instagram" }
+                    }
+                  ]
+                },
+                "evento": "lead_editado",
+                "id": 5005,
+                "data_hora_criacao": "2025-11-01 11:30:05",
+                "escola_id": 101,
+                "escola_nome": "Escola de Música Harmonia"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Seu servidor deve retornar 200 OK para confirmar o recebimento do webhook."
+          }
+        }
+      }
+    },
+    "lead_arquivado": {
+      "post": {
+        "summary": "Webhook: Lead arquivado",
+        "description": "Enviado quando um lead é arquivado no CRM Emusys. Esse webhook informa seu sistema sobre o arquivamento, incluindo o motivo, observações e os dados completos do lead.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "evento": {
+                    "type": "string",
+                    "example": "lead_arquivado",
+                    "description": "Identificador do tipo de evento disparado."
+                  },
+                  "id": {
+                    "type": "integer",
+                    "description": "ID único do evento."
+                  },
+                  "data_hora_criacao": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Data e hora em que o evento foi criado."
+                  },
+                  "escola_id": {
+                    "type": "integer",
+                    "description": "ID da escola associada ao evento."
+                  },
+                  "escola_nome": {
+                    "type": "string",
+                    "description": "Nome da escola associada ao evento."
+                  },
+                  "lead": {
+                    "$ref": "#/components/schemas/Lead"
+                  },
+                  "arquivamento": {
+                    "type": "object",
+                    "properties": {
+                      "data_hora": {
+                        "type": "string",
+                        "example": "2025-12-01 15:30:00"
+                      },
+                      "motivo_id": {
+                        "type": "integer",
+                        "example": 3
+                      },
+                      "motivo_nome": {
+                        "type": "string",
+                        "example": "Desistência"
+                      },
+                      "observacoes": {
+                        "type": "string",
+                        "example": "Achou o valor muito alto"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "evento",
+                  "id",
+                  "data_hora_criacao",
+                  "escola_id",
+                  "escola_nome",
+                  "lead",
+                  "arquivamento"
+                ]
+              },
+              "example": {
+                "lead": {
+                  "id": 1234,
+                  "nome_aluno": "Paula Santos",
+                  "nome_responsavel_aluno": "Carlos Santos",
+                  "data_nascimento_aluno": "2010-05-15",
+                  "email": "paula@example.com",
+                  "telefone": "(11) 98877-6655",
+                  "nome_atendente": "João Silva",
+                  "endereco_escola": "Rua das Flores, 123 - São Paulo, SP",
+                  "unidade_escola": "Escola de Música Harmonia",
+                  "observacoes": "Interessada em aulas aos sábados",
+                  "data_hora_criacao": "2025-11-01 10:00:00",
+                  "instrumento": "Piano",
+                  "criado_por": {
+                    "id": 5,
+                    "nome": "Maria Oliveira"
+                  },
+                  "origem": "Manual",
+                  "como_conheceu": "Instagram",
+                  "curso_interesse": "Piano Individual",
+                  "estagio_funil": {
+                    "id": 2,
+                    "nome": "Contato Realizado"
+                  },
+                  "arquivamento": {
+                    "data_hora": "2025-12-01 15:30:00",
+                    "motivo_id": 3,
+                    "motivo_nome": "Desistência",
+                    "observacoes": "Achou o valor muito alto"
+                  },
+                  "campos_personalizados": [
+                    {
+                      "id": "cp_15",
+                      "nome": "Como ouviu falar",
+                      "tipo": "escolha",
+                      "valor": { "id": 1, "valor": "Instagram" }
+                    }
+                  ]
+                },
+                "arquivamento": {
+                  "data_hora": "2025-12-01 15:30:00",
+                  "motivo_id": 3,
+                  "motivo_nome": "Desistência",
+                  "observacoes": "Achou o valor muito alto"
+                },
+                "evento": "lead_arquivado",
+                "id": 5002,
+                "data_hora_criacao": "2025-12-01 15:30:05",
+                "escola_id": 101,
+                "escola_nome": "Escola de Música Harmonia"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Seu servidor deve retornar 200 OK para confirmar o recebimento do webhook."
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/crm/leads/por_telefone": {
+      "patch": {
+        "summary": "Atualizar lead pelo telefone",
+        "description": "Atualiza os campos enviados do lead identificado pelo `numero`. O telefone não é atualizado. Se o lead não for encontrado, retorna erro.",
+        "tags": [
+          "Leads"
+        ],
+        "requestBody": {
+          "description": "Corpo JSON com campos a atualizar. O campo `numero` é obrigatório para localizar o lead.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "numero": {
+                    "type": "string",
+                    "description": "Número de telefone (apenas números) do lead que será atualizado",
+                    "example": "5511999887766"
+                  },
+                  "nome": {
+                    "type": "string",
+                    "example": "Maria Souza"
+                  },
+                  "usuario_id_responsavel": {
+                    "type": "integer",
+                    "example": 2
+                  },
+                  "observacoes": {
+                    "type": "string",
+                    "example": "Interessada em aulas aos sábados"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "maria@example.com"
+                  },
+                  "instrumento_id": {
+                    "type": "integer",
+                    "example": 3
+                  },
+                  "data_nascimento": {
+                    "type": "string",
+                    "example": "1994-07-19 ou 19/07/1994"
+                  },
+                  "nome_responsavel": {
+                    "type": "string",
+                    "example": "Carlos Souza"
+                  },
+                  "como_conheceu_id": {
+                    "type": "integer",
+                    "example": 4
+                  }
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "description": "Campos personalizados usando o ID do campo"
+                },
+                "required": [
+                  "numero"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Atualização bem-sucedida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkWithLeadIdResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Requisição inválida ou lead não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/crm/leads": {
+      "patch": {
+        "summary": "Atualizar lead pelo ID",
+        "description": "Atualiza os campos enviados do lead identificado pelo `id`. Somente os campos enviados serão atualizados.",
+        "tags": [
+          "Leads"
+        ],
+        "requestBody": {
+          "description": "Corpo JSON com `id` do lead e os campos a atualizar.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "example": 1234
+                  },
+                  "nome": {
+                    "type": "string",
+                    "example": "Maria Souza"
+                  },
+                  "usuario_id_responsavel": {
+                    "type": "integer",
+                    "example": 2,
+                    "description": "Use o endpoint de usuários para buscar os ids de usuário"
+                  },
+                  "observacoes": {
+                    "type": "string",
+                    "example": "Interessada em aulas aos sábados"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "maria@example.com"
+                  },
+                  "data_nascimento": {
+                    "type": "string",
+                    "example": "1994-07-19 ou 19/07/1994"
+                  },
+                  "instrumento_id": {
+                    "type": "integer",
+                    "example": 3,
+                    "description":"Use o endpoint de instrumentos para buscar os ids dos instrumentos"
+                  },
+                  "nome_responsavel": {
+                    "type": "string",
+                    "example": "Carlos Souza"
+                  },
+                  "como_conheceu_id": {
+                    "type": "integer",
+                    "example": 4,
+                    "description": "Use o endpoint de 'como conheceu' para buscar os ids das opções"
+                  }
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "description": "Campos personalizados usando o ID do campo. Veja o endpoint de campos personalizados."
+                },
+                "required": [
+                  "id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Atualização bem-sucedida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkWithLeadIdResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Requisição inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Criar lead no CRM",
+        "description": "Cria um novo lead. Campos personalizados podem ser adicionados usando o ID do campo como chave.",
+        "tags": [
+          "Leads"
+        ],
+        "requestBody": {
+          "description": "Corpo JSON com os dados do lead. `nome` e `numero` são obrigatórios.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nome": {
+                    "type": "string",
+                    "example": "Pedro Alves"
+                  },
+                  "numero": {
+                    "type": "string",
+                    "description": "Telefone (somente números)",
+                    "example": "5511987766554"
+                  },
+                  "usuario_id_responsavel": {
+                    "type": "integer",
+                    "example": 5
+                  },
+                  "observacoes": {
+                    "type": "string",
+                    "example": "Preferência por aulas noturnas"
+                  }
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "description": "Campos personalizados usando o ID do campo"
+                },
+                "required": [
+                  "nome",
+                  "numero"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Lead criado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Requisição inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/crm/campos": {
+      "get": {
+        "summary": "Buscar campos personalizados",
+        "description": "Retorna a lista de campos personalizados configurados na escola.",
+        "tags": [
+          "Config"
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de campos personalizados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "campos": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CampoPersonalizado"
+                      }
+                    }
+                  },
+                  "example": {
+                    "campos": [
+                      {
+                        "id": "campo_1",
+                        "nome": "Como conheceu",
+                        "tipo": "escolha",
+                        "opcoes_validas": [
+                          { "id": "1", "nome": "Facebook" },
+                          { "id": "2", "nome": "Indicação" }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erro interno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/professores": {
+      "get": {
+        "summary": "Buscar professores ativos do sistema",
+        "description": "Retorna a lista de professores ativos. Opcionalmente filtra pelos professores vinculados a um curso/disciplina específico. Quando nenhum filtro é enviado, retorna todos os professores ativos.",
+        "tags": [
+          "Config"
+        ],
+        "parameters": [
+          {
+            "name": "curso_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID do curso. Quando informado, retorna apenas os professores com vínculo ativo nesse curso."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de professores",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "professores": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Professor"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Curso inválido ou inativo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/salas": {
+      "get": {
+        "summary": "Buscar salas ativas do sistema",
+        "description": "Retorna a lista de salas ativas.",
+        "tags": [
+          "Config"
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de salas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "salas": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Sala"
+                      }
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/usuarios": {
+      "get": {
+        "summary": "Buscar usuários ativos do sistema",
+        "description": "Retorna a lista de usuários ativos.",
+        "tags": [
+          "Config"
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de usuários",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "usuarios": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Usuario"
+                      }
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/disciplinas": {
+      "get": {
+        "summary": "Buscar disciplinas ativas do sistema",
+        "description": "Retorna a lista de disciplinas ativas.",
+        "tags": [
+          "Config"
+        ],
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "individual",
+                "turma"
+              ]
+            },
+            "description": "Filtra as disciplinas pelo tipo informado. Aceita apenas 'individual' ou 'turma'. Se não for preenchido, retorna todas as disciplinas."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de disciplinas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "disciplinas": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Disciplina"
+                      }
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/crm/aula_experimental/disponibilidade": {
+      "get": {
+        "summary": "Buscar disponibilidade para agendamento de aulas experimentais",
+        "description": "Retorna horários disponíveis para uma data e disciplina informados. Para disciplinas em turma, horários de turmas que já estejam com o número de vagas preenchido não são retornados como disponíveis.",
+        "tags": [
+          "Agendamento"
+        ],
+        "parameters": [
+          {
+            "name": "contar_alunos_experimentais",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Se `true`, ao verificar se uma aula de uma turma específica está disponível, também conta os alunos (matriculados ou experimentais) já agendados para aquela aula naquele horário específico, e não apenas o total de alunos matriculados na turma. Se esse número atingir o nº nominal de vagas da turma, o horário não é retornado como disponível. Turmas sem limite de vagas definido (0 ou não preenchido) não são afetadas por este parâmetro. Padrão: `false`."
+          },
+          {
+            "name": "data",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "description": "Data no formato yyyy-mm-dd. Ex: 2025-11-01"
+          },
+          {
+            "name": "disciplina_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID da Disciplina de interesse"
+          },
+          {
+            "name": "professor_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID do Professor (opcional). Se informado, filtra a disponibilidade apenas para este professor."
+          },
+          {
+            "name": "sala_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "ID da Sala (opcional). Se informado, filtra a disponibilidade apenas para esta sala."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Disponibilidades retornadas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "disponibilidade": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Disponibilidade"
+                      }
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetros inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/crm/aula_experimental": {
+      "post": {
+        "summary": "Agendar aula experimental",
+        "description": "Agenda uma aula experimental. O sistema tenta localizar um lead por email ou telefone e cria um novo lead caso não exista. Se nem email nem telefone forem passados, será criado um novo lead. Para disciplinas em turma, turmas com o número de vagas preenchido são ignoradas na busca por uma turma disponível no horário informado.",
+        "tags": [
+          "Agendamento"
+        ],
+        "requestBody": {
+          "description": "Dados para agendamento. `data`, `disciplina_id` e `horario` são necessários para agendar.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2025-11-10"
+                  },
+                  "disciplina_id": {
+                    "type": "integer",
+                    "example": 10
+                  },
+                  "horario": {
+                    "type": "string",
+                    "example": "14:30"
+                  },
+                  "nome": {
+                    "type": "string",
+                    "example": "Paula Santos"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "paula@example.com"
+                  },
+                  "telefone": {
+                    "type": "string",
+                    "example": "+55 (11) 98877-6655"
+                  },
+                  "observacoes": {
+                    "type": "string",
+                    "example": "Prefere professora feminina"
+                  },
+                  "professor_id": {
+                    "type": "integer",
+                    "description": "ID do professor para agendar a aula (opcional).",
+                    "example": 5
+                  },
+                  "sala_id": {
+                    "type": "integer",
+                    "description": "ID da sala para agendar a aula (opcional).",
+                    "example": 2
+                  },
+                  "forcar_individual": {
+                    "type": "boolean",
+                    "description": "Se `true`, agenda a aula experimental como individual mesmo que o curso/disciplina seja em turma. Não tem efeito para cursos já individuais. O inverso (forçar turma para curso individual) não é suportado, pois não haveria turma para usar. Padrão: `false`.",
+                    "default": false,
+                    "example": false
+                  },
+                  "contar_alunos_experimentais": {
+                    "type": "boolean",
+                    "description": "Se `true`, ao buscar uma turma disponível para o horário informado, também conta os alunos (matriculados ou experimentais) já agendados para aquela aula específica, e não apenas o total de alunos matriculados na turma. Se esse número atingir o nº nominal de vagas da turma, essa turma é ignorada na busca, considerando outras turmas com o mesmo horário quando existirem. Turmas sem limite de vagas definido (0 ou não preenchido) não são afetadas por este parâmetro. Padrão: `false`.",
+                    "default": false,
+                    "example": false
+                  }
+                },
+                "required": [
+                  "data",
+                  "disciplina_id",
+                  "horario"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Aula experimental agendada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetros inválidos ou conflito de horário",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/instrumentos": {
+      "get": {
+        "summary": "Buscar instrumentos",
+        "description": "Retorna a lista de instrumentos disponíveis (usado para interesse do lead).",
+        "tags": [
+          "Config"
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de instrumentos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "instrumentos": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Instrumento"
+                      }
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/crm/leads/anotacao/por_telefone": {
+      "post": {
+        "summary": "Adicionar anotação em lead pelo telefone",
+        "description": "Adiciona uma anotação ao histórico do lead identificado pelo `telefone`.",
+        "tags": [
+          "Leads"
+        ],
+        "requestBody": {
+          "description": "Telefone do lead e texto da anotação.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "telefone": {
+                    "type": "string",
+                    "example": "5511987766554"
+                  },
+                  "anotacao": {
+                    "type": "string",
+                    "example": "Ligou confirmando presença"
+                  }
+                },
+                "required": [
+                  "telefone",
+                  "anotacao"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Anotação adicionada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetros inválidos ou lead não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/crm/leads/anotacao": {
+      "post": {
+        "summary": "Adicionar anotação em lead pelo ID",
+        "description": "Adiciona uma anotação no histórico do lead identificado pelo `id`.",
+        "tags": [
+          "Leads"
+        ],
+        "requestBody": {
+          "description": "ID do lead e texto da anotação.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "example": 1234
+                  },
+                  "anotacao": {
+                    "type": "string",
+                    "example": "Enviado material de boas-vindas"
+                  }
+                },
+                "required": [
+                  "id",
+                  "anotacao"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Anotação adicionada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetros inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/crm/opcoes_como_conheceu": {
+      "get": {
+        "summary": "Buscar opções de como conheceu a escola",
+        "description": "Retorna as opções de 'como conheceu a escola' configuradas.",
+        "tags": [
+          "Config"
+        ],
+        "responses": {
+          "200": {
+            "description": "Opções retornadas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "como_conheceu_a_escola": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ComoConheceuOpcao"
+                      }
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/crm/metricas": {
+      "get": {
+        "summary": "Buscar métricas do painel do CRM",
+        "description": "Retorna as mesmas métricas exibidas no painel do CRM, agrupadas por seção e mês, para o ano informado. Inclui leads novos, taxas de conversão, segmentação por como conheceu a escola, por instrumento e por motivo de arquivamento.",
+        "tags": [
+          "Métricas"
+        ],
+        "parameters": [
+          {
+            "name": "ano",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "example": 2025
+            },
+            "description": "Ano de referência para as métricas (ex: 2025)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Métricas retornadas com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ano": {
+                      "type": "integer",
+                      "example": 2025
+                    },
+                    "secoes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "titulo": {
+                            "type": "string",
+                            "example": "Leads Novos"
+                          },
+                          "metricas": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "nome": {
+                                  "type": "string",
+                                  "example": "Leads Novos"
+                                },
+                                "por_mes": {
+                                  "type": "object",
+                                  "description": "Chave: ano+mês no formato YYYYMM (ex: 202501). Valor: quantidade ou percentual.",
+                                  "additionalProperties": {
+                                    "type": "number"
+                                  },
+                                  "example": { "202501": 12, "202502": 8, "202503": 15 }
+                                },
+                                "total": {
+                                  "type": "number",
+                                  "nullable": true,
+                                  "description": "Soma dos meses já ocorridos. Null para métricas não somáveis (ex: taxas).",
+                                  "example": 35
+                                },
+                                "media": {
+                                  "type": "number",
+                                  "nullable": true,
+                                  "description": "Média mensal dos meses já ocorridos. Null para métricas não somáveis.",
+                                  "example": 11.67
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "ano": 2025,
+                  "secoes": [
+                    {
+                      "titulo": "Leads Novos",
+                      "metricas": [
+                        {
+                          "nome": "Leads Novos",
+                          "por_mes": { "202501": 12, "202502": 8, "202503": 15 },
+                          "total": 35,
+                          "media": 11.67
+                        },
+                        {
+                          "nome": "Leads novos que marcaram aula exp.",
+                          "por_mes": { "202501": 5, "202502": 3, "202503": 7 },
+                          "total": 15,
+                          "media": 5.0
+                        }
+                      ]
+                    },
+                    {
+                      "titulo": "Taxas de Conversão",
+                      "metricas": [
+                        {
+                          "nome": "Taxa de Matrícula - Geral",
+                          "por_mes": { "202501": 41.67, "202502": 25.0, "202503": 33.33 },
+                          "total": null,
+                          "media": null
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetro ano ausente ou inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/matriculas": {
+      "get": {
+        "summary": "Listagem de matrículas",
+        "description": "Retorna a lista de matrículas com dados completos do aluno, responsável, contrato atual e cobrança automática. Suporta paginação por cursor.",
+        "tags": ["Matrículas"],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["ativa", "inativa", "trancada", "todas"], "default": "todas" },
+            "description": "Filtra pelo status da matrícula. Padrão: todas. `trancada` = trancamento temporário em vigor hoje; `inativa` = interrompida definitivamente ou concluída. Por compatibilidade, `finalizada` também é aceito como sinônimo de `inativa`."
+          },
+          {
+            "name": "aluno_id",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer" },
+            "description": "Filtra pelo ID da pessoa (aluno).",
+            "example": 100
+          },
+          {
+            "name": "data_inicial",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "format": "date" },
+            "description": "Filtra matrículas com data de matrícula >= data_inicial (formato YYYY-MM-DD).",
+            "example": "2024-01-01"
+          },
+          {
+            "name": "data_final",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "format": "date" },
+            "description": "Filtra matrículas com data de matrícula <= data_final (formato YYYY-MM-DD).",
+            "example": "2024-12-31"
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 20, "minimum": 1, "maximum": 50 },
+            "description": "Quantidade máxima de registros por página (1–50). Padrão: 20.",
+            "example": 20
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Cursor opaco de paginação retornado em `paginacao.proximo_cursor`.",
+            "example": "eyJpZCI6MTIzNH0="
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de matrículas retornada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Matricula" }
+                    },
+                    "paginacao": {
+                      "type": "object",
+                      "properties": {
+                        "proximo_cursor": { "type": "string", "nullable": true, "example": "eyJpZCI6MTIzNH0=" },
+                        "tem_mais": { "type": "boolean", "example": true },
+                        "limite": { "type": "integer", "example": 20 }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetros inválidos",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/faturas": {
+      "get": {
+        "summary": "Listagem de faturas",
+        "description": "Retorna a lista de faturas com valores originais, pagos, juros/multa e descontos. Suporta paginação por cursor.",
+        "tags": ["Faturas"],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["aberta", "paga", "todas"], "default": "todas" },
+            "description": "Filtra pelo status da fatura. Padrão: todas."
+          },
+          {
+            "name": "matricula_id",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer" },
+            "description": "Filtra pelo ID da matrícula.",
+            "example": 1234
+          },
+          {
+            "name": "aluno_id",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer" },
+            "description": "Filtra pelo ID da pessoa (aluno).",
+            "example": 100
+          },
+          {
+            "name": "contrato_id",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer" },
+            "description": "Filtra pelo ID do contrato.",
+            "example": 456
+          },
+          {
+            "name": "data_vencimento_inicial",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "format": "date" },
+            "description": "Filtra faturas com vencimento >= data_vencimento_inicial (formato YYYY-MM-DD).",
+            "example": "2024-01-01"
+          },
+          {
+            "name": "data_vencimento_final",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "format": "date" },
+            "description": "Filtra faturas com vencimento <= data_vencimento_final (formato YYYY-MM-DD).",
+            "example": "2024-12-31"
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 20, "minimum": 1, "maximum": 50 },
+            "description": "Quantidade máxima de registros por página (1–50). Padrão: 20.",
+            "example": 20
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Cursor opaco de paginação retornado em `paginacao.proximo_cursor`.",
+            "example": "eyJpZCI6NTY3OH0="
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de faturas retornada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Fatura" }
+                    },
+                    "paginacao": {
+                      "type": "object",
+                      "properties": {
+                        "proximo_cursor": { "type": "string", "nullable": true, "example": "eyJpZCI6NTY3OH0=" },
+                        "tem_mais": { "type": "boolean", "example": true },
+                        "limite": { "type": "integer", "example": 20 }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetros inválidos",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/aulas": {
+      "get": {
+        "summary": "Listagem de aulas por período",
+        "description": "Retorna a lista de aulas (individuais, turmas e ensaios) dentro de um período informado, com paginação baseada em cursor. Os filtros de data são opcionais e podem ser combinados entre si. É possível filtrar também por `pessoa_id` ou `lead_id`.",
+        "tags": [
+          "Aulas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "data_hora_inicial",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"],
+              "format": "date-time"
+            },
+            "description": "Data e hora inicial do período de busca (opcional). Se omitido ou null, não aplica limite inferior de data.",
+            "example": "2025-12-01 00:00:00"
+          },
+          {
+            "name": "data_hora_final",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"],
+              "format": "date-time"
+            },
+            "description": "Data e hora final do período de busca (opcional). Se omitido ou null, não aplica limite superior de data.",
+            "example": "2025-12-01 23:59:59"
+          },
+          {
+            "name": "pessoa_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Filtra as aulas pela Pessoa_ID do aluno ou professor (opcional).",
+            "example": 42
+          },
+          {
+            "name": "lead_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Filtra as aulas pelo Lead_ID associado (opcional).",
+            "example": 1234
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Cursor para paginação (base64)",
+            "example": "eyJkYXRhX2hvcmEiOiIyMDI1LTEyLTAxIDEwOjAwOjAwIiwiaWQiOjEyMzQ1Nn0="
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20
+            },
+            "description": "Quantidade máxima de registros retornados por página",
+            "example": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de aulas encontrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Aula"
+                      }
+                    },
+                    "paginacao": {
+                      "type": "object",
+                      "properties": {
+                        "proximo_cursor": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Cursor para a próxima página de resultados",
+                          "example": "eyJkYXRhX2hvcmEiOiIyMDI1LTEyLTAxIDEwOjUwOjAwIiwiaWQiOjY1NDMyMX0="
+                        },
+                        "tem_mais": {
+                          "type": "boolean",
+                          "example": true
+                        },
+                        "limite": {
+                          "type": "integer",
+                          "example": 20
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parâmetros obrigatórios ausentes ou inválidos"
+          },
+          "401": {
+            "description": "API Key inválida ou ausente"
+          },
+          "500": {
+            "description": "Erro interno no servidor"
+          }
+        }
+      }
+    },
+    "/aulas/cancelar": {
+      "post": {
+        "summary": "Cancelar aula",
+        "description": "Cancela uma aula informando o ID da aula, motivo e se haverá reposição.",
+        "tags": [
+          "Aulas"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "aula_id": {
+                    "type": "integer",
+                    "description": "ID da aula a ser cancelada (RegPres_ID)",
+                    "example": 123456
+                  },
+                  "motivo": {
+                    "type": "string",
+                    "description": "Motivo do cancelamento",
+                    "example": "Aluno doente"
+                  },
+                  "status_reposicao": {
+                    "type": "string",
+                    "description": "Status da reposição",
+                    "enum": ["pendente", "autorizada", "negada"],
+                    "example": "pendente"
+                  }
+                },
+                "required": [
+                  "aula_id",
+                  "motivo",
+                  "status_reposicao"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Aula cancelada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Erro ao cancelar aula",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/aulas/reagendar": {
+      "patch": {
+        "summary": "Reagendar aula",
+        "description": "Reagenda uma aula para uma nova data e horário, opcionalmente alterando professor ou sala.",
+        "tags": [
+          "Aulas"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "aula_id": {
+                    "type": "integer",
+                    "description": "ID da aula a ser reagendada (RegPres_ID)",
+                    "example": 123456
+                  },
+                  "nova_data": {
+                    "type": "string",
+                    "description": "Nova data da aula (YYYY-MM-DD)",
+                    "example": "2026-05-20"
+                  },
+                  "novo_horario": {
+                    "type": "string",
+                    "description": "Novo horário da aula (HH:MM)",
+                    "example": "14:30"
+                  },
+                  "sala_id": {
+                    "type": "integer",
+                    "description": "ID da nova sala (opcional)",
+                    "example": 10
+                  },
+                  "professor_id": {
+                    "type": "integer",
+                    "description": "ID do novo professor (opcional)",
+                    "example": 42
+                  }
+                },
+                "required": [
+                  "aula_id",
+                  "nova_data",
+                  "novo_horario"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Aula reagendada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "aula": {
+                      "$ref": "#/components/schemas/Aula"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Erro ao reagendar aula",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pessoas/buscar": {
+      "get": {
+        "summary": "Buscar pessoa por e-mail, CPF ou telefone",
+        "description": "Retorna os dados de uma pessoa cadastrada no sistema, buscando por e-mail, CPF ou telefone. Ao menos um dos parâmetros deve ser informado. Ordem de prioridade: CPF > telefone > e-mail. Retorna `pessoa: null` quando não encontrada.",
+        "tags": [
+          "Config"
+        ],
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "email"
+            },
+            "description": "E-mail da pessoa",
+            "example": "joao@example.com"
+          },
+          {
+            "name": "cpf",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "CPF da pessoa (com ou sem formatação)",
+            "example": "123.456.789-00"
+          },
+          {
+            "name": "telefone",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Telefone da pessoa (com ou sem formatação)",
+            "example": "(11) 99999-9999"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Busca realizada com sucesso. `pessoa` é `null` quando não encontrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "pessoa": {
+                      "$ref": "#/components/schemas/Pessoa"
+                    }
+                  }
+                },
+                "examples": {
+                  "encontrada": {
+                    "summary": "Pessoa encontrada",
+                    "value": {
+                      "status": "ok",
+                      "pessoa": {
+                        "id": 100,
+                        "nome": "João Silva",
+                        "email": "joao@example.com",
+                        "telefone": "(11) 99999-9999",
+                        "cpf": "123.456.789-00"
+                      }
+                    }
+                  },
+                  "nao_encontrada": {
+                    "summary": "Pessoa não encontrada",
+                    "value": {
+                      "status": "ok",
+                      "pessoa": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nenhum parâmetro de busca informado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/crm/aula_experimental/reagendar": {
+      "patch": {
+        "summary": "Reagendar aula experimental",
+        "description": "Reagenda uma aula experimental para uma nova data e horário, opcionalmente alterando professor ou sala.",
+        "tags": [
+          "CRM"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "aula_id": {
+                    "type": "integer",
+                    "description": "ID da aula experimental a ser reagendada (RegPres_ID)",
+                    "example": 123456
+                  },
+                  "nova_data": {
+                    "type": "string",
+                    "description": "Nova data da aula (YYYY-MM-DD)",
+                    "example": "2026-05-20"
+                  },
+                  "novo_horario": {
+                    "type": "string",
+                    "description": "Novo horário da aula (HH:MM)",
+                    "example": "14:30"
+                  },
+                  "sala_id": {
+                    "type": "integer",
+                    "description": "ID da nova sala (opcional)",
+                    "example": 10
+                  },
+                  "professor_id": {
+                    "type": "integer",
+                    "description": "ID do novo professor (opcional)",
+                    "example": 42
+                  }
+                },
+                "required": [
+                  "aula_id",
+                  "nova_data",
+                  "novo_horario"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Aula experimental reagendada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "aula": {
+                      "$ref": "#/components/schemas/Aula"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Erro ao reagendar aula experimental",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/crm/aniversariantes": {
+      "get": {
+        "summary": "Buscar aniversariantes",
+        "description": "Retorna as pessoas que fazem aniversário num intervalo de dia/mês (ignorando o ano), junto com o(s) papel(is) que cada uma tem na escola (aluno, ex-aluno, responsável de aluno, responsável de ex-aluno, professor, usuário da escola ou lead). Pensado para disparo automático de mensagens de feliz aniversário. Suporta paginação por cursor.",
+        "tags": [
+          "Aniversariantes"
+        ],
+        "parameters": [
+          {
+            "name": "data_inicial",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Início do intervalo de aniversário, no formato YYYY-MM-DD (uma data qualquer — o ano é ignorado, apenas dia e mês são considerados na comparação).",
+            "example": "2025-07-01"
+          },
+          {
+            "name": "data_final",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Fim do intervalo de aniversário, inclusive, no formato YYYY-MM-DD (apenas dia e mês são considerados). Se o dia/mês correspondente for 'menor' que o de data_inicial, o intervalo cruza a virada do ano (ex: data_inicial em 2025-12-20 e data_final em 2026-01-05).",
+            "example": "2025-07-07"
+          },
+          {
+            "name": "papeis",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Lista separada por vírgula dos papéis desejados. Valores válidos: aluno, ex_aluno, responsavel_aluno, responsavel_ex_aluno, professor, usuario_escola, lead. Se omitido, retorna todos os papéis.",
+            "example": "aluno,professor"
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 50, "minimum": 1, "maximum": 100 },
+            "description": "Quantidade máxima de registros por página (1–100). Padrão: 50.",
+            "example": 50
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Cursor opaco de paginação retornado em `paginacao.proximo_cursor`.",
+            "example": "eyJvcmRlbSI6NSwibm9tZSI6Ik1hcmlhIFNpbHZhIiwiY2hhdmUiOiJQMTIzIn0="
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Busca realizada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Aniversariante"
+                      }
+                    },
+                    "paginacao": {
+                      "type": "object",
+                      "properties": {
+                        "proximo_cursor": { "type": "string", "nullable": true, "example": "eyJvcmRlbSI6NSwibm9tZSI6Ik1hcmlhIFNpbHZhIiwiY2hhdmUiOiJQMTIzIn0=" },
+                        "tem_mais": { "type": "boolean", "example": true },
+                        "limite": { "type": "integer", "example": 50 }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "items": [
+                    {
+                      "pessoa_id": 123,
+                      "lead_id": 0,
+                      "nome": "Maria Silva",
+                      "data_nascimento": "1994-07-19",
+                      "email": "maria@example.com",
+                      "telefone": "(11) 99999-9999",
+                      "papeis": ["professor", "responsavel_aluno"]
+                    },
+                    {
+                      "pessoa_id": null,
+                      "lead_id": 456,
+                      "nome": "Paula Santos",
+                      "data_nascimento": "2010-05-15",
+                      "email": "paula@example.com",
+                      "telefone": "(11) 98877-6655",
+                      "papeis": ["lead"]
+                    }
+                  ],
+                  "paginacao": {
+                    "proximo_cursor": null,
+                    "tem_mais": false,
+                    "limite": 50
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "data_inicial/data_final malformadas, papel inválido em 'papeis', limite fora do intervalo 1-100, ou cursor inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
