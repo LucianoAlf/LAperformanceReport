@@ -185,3 +185,14 @@ test('extrairFallbackCompetencia devolve os dados quando fallback e valido', asy
   );
   assert.deepEqual(fallback, { ano: 2026, mes: 7, rotulo: 'JULHO/2026' });
 });
+
+const modalAdmin = await readFile(
+  new URL('../src/components/App/Administrativo/ModalRelatorio.tsx', import.meta.url),
+  'utf8',
+);
+
+test('relatorio administrativo oferece a competencia disponivel', () => {
+  assert.match(modalAdmin, /solicitarRelatorioMensalComFallback/);
+  assert.match(modalAdmin, /useConfirmacaoCompetencia/);
+  assert.match(modalAdmin, /ModalConfirmacao/);
+});

@@ -28,6 +28,12 @@ import {
   valorPerdidoRelatorioMensal,
 } from '@/lib/relatorioMensalAdministrativo';
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
+import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
+import {
+  CancelamentoCompetenciaError,
+  solicitarRelatorioMensalComFallback,
+} from '@/lib/fallbackCompetenciaRelatorio';
+import { useConfirmacaoCompetencia } from '@/hooks/useConfirmacaoCompetencia';
 import {
   direcaoTransferenciaNaUnidade,
   isAlunoNovoForaComercial,
@@ -265,6 +271,12 @@ export function ModalRelatorio({
   competencia,
   unidade 
 }: ModalRelatorioProps) {
+  const {
+    pedirConfirmacao,
+    confirmacaoPendente,
+    confirmar: confirmarCompetencia,
+    cancelar: cancelarCompetencia,
+  } = useConfirmacaoCompetencia();
   const [tipoSelecionado, setTipoSelecionado] = useState<TipoRelatorio | null>(null);
   const [textoRelatorio, setTextoRelatorio] = useState('');
   const [copiado, setCopiado] = useState(false);
@@ -889,21 +901,13 @@ export function ModalRelatorio({
       throw new Error('Selecione uma unidade para gerar o relatório mensal administrativo.');
     }
 
-    const { data, error } = await supabase.functions.invoke('relatorio-admin-whatsapp', {
-      body: {
-        modo: 'dry_run_mensal_admin',
-        unidade,
-        ano: anoRelatorio,
-        mes: mesRelatorio,
-      },
+    return solicitarRelatorioMensalComFallback({
+      modo: 'dry_run_mensal_admin',
+      unidade,
+      ano: anoRelatorio,
+      mes: mesRelatorio,
+      pedirConfirmacao,
     });
-
-    if (error) throw error;
-    if (data?.success !== true || typeof data?.texto !== 'string' || !data.texto.trim()) {
-      throw new Error(data?.error || 'O fechamento oficial deste mês ainda não está disponível.');
-    }
-
-    return data.texto;
   }
 
   async function obterDadosRelatorioAvulsoAdministrativo(): Promise<DadosRelatorioMensalAdministrativo> {
@@ -1103,6 +1107,10 @@ export function ModalRelatorio({
       }
       setTextoRelatorio(texto);
     } catch (error) {
+      if (error instanceof CancelamentoCompetenciaError) {
+        setTipoSelecionado(null);
+        return;
+      }
       console.error('Erro ao gerar relatorio administrativo:', error);
       setTextoRelatorio('');
       toast.error(
@@ -1441,6 +1449,21 @@ export function ModalRelatorio({
           </div>
         )}
       </DialogContent>
+
+      <ModalConfirmacao
+        aberto={confirmacaoPendente !== null}
+        onClose={cancelarCompetencia}
+        onConfirmar={confirmarCompetencia}
+        tipo="warning"
+        titulo="Competência ainda não fechada"
+        mensagem={
+          confirmacaoPendente
+            ? `O mês selecionado ainda não teve fechamento. Gerar o relatório de ${confirmacaoPendente.rotulo}?`
+            : ''
+        }
+        textoConfirmar={confirmacaoPendente ? `Gerar ${confirmacaoPendente.rotulo}` : 'Confirmar'}
+        textoCancelar="Cancelar"
+      />
     </Dialog>
   );
 }
