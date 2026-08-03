@@ -14,6 +14,10 @@ const effectiveSourceMigrationPath = path.join(
   root,
   'supabase/migrations/20260803162000_health_score_v3_fonte_pilar_efetivo.sql',
 );
+const cicloMensalMigrationPath = path.join(
+  root,
+  'supabase/migrations/20260803220000_health_score_v3_ciclo_mensal_canonico.sql',
+);
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -59,6 +63,11 @@ function extractComparabilityFunction(sql) {
 }
 
 test('PostgreSQL aplica os gates de comparabilidade sem transformar ausencia em zero', async (t) => {
+  assert.equal(
+    fs.existsSync(cicloMensalMigrationPath),
+    true,
+    'migration com cobertura normalizada ainda nao existe',
+  );
   const dockerInfo = docker(['info']);
   if (dockerInfo.status !== 0) {
     t.skip('Docker indisponivel para fixture PostgreSQL');
