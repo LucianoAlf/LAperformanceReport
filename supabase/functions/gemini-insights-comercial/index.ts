@@ -154,7 +154,7 @@ Dados:
 ${JSON.stringify(dados, null, 2)}`;
 
   const response = await fetchGeminiComRetry(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${geminiApiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiApiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

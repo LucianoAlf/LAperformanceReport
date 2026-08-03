@@ -11,7 +11,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const MODELO_IA = 'gemini-3-flash-preview';
+const MODELO_IA = 'gemini-3.6-flash';
 
 interface RequestBody {
   aluno_id: number;
