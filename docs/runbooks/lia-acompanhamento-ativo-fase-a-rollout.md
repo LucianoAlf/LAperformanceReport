@@ -4,19 +4,28 @@
 
 - Produção: `ouqwbbermlzqqvtqwlul`.
 - Migration estrutural aplicada em produção em 03/08/2026, registrada remotamente
-  como `20260803124754_lia_alertas_privados_fase_a`; produção continua bloqueada.
+  como `20260803124754_lia_alertas_privados_fase_a`.
 - A auditoria de transporte confirmou que a caixa 3 já entrega notificações
   privadas para Fabi e Jéssica. A Fase A usará o mesmo caminho direto
   Edge → UAZAPI; worker, units e rota nova no bridge foram rejeitados.
-- `alertas_producao_liberados` nasce `false` e não existe migration de ativação.
+- **Fase A em produção desde 03/08/2026 às 13:39 BRT.** A migration local
+  `20260803213000_lia_alertas_privados_fase_a_ativacao.sql`, SHA-256
+  `05a276933cf6bfa416f819e44bec6ac5dea5b74d88588818e967b34eccd327cf`,
+  foi registrada remotamente como
+  `20260803163819_lia_alertas_privados_fase_a_ativacao`.
+- `alertas_producao_liberados=true`; existe exatamente um cron ativo chamado
+  `lia-alertas-privados-dispatcher-minuto`, job `88`, executado a cada minuto.
+- O segredo `lia_alertas_service_role_key` foi provisionado no Vault por canal
+  administrativo, sem ser impresso, persistido em arquivo ou incluído na
+  migration.
 - Em 03/08/2026, Jéssica fez dois envios produtivos, às 10:52 e 10:55 BRT,
   ambos `multipartes_v2` e inicialmente `sem_resposta`. Durante a implementação,
-  o primeiro recebeu conteúdo e passou a `coletando`: o trigger criou um evento
-  `resposta_nova` e uma entrega para o operador 29 em
-  `aguardando_liberacao`, sem `provider_message_id`. O segundo permaneceu
-  `sem_resposta`.
-- Nenhum alerta da Fase A foi enviado. O primeiro exige o piloto no número
-  governado do Alf e autorização separada, com ele presente.
+  Miguel Santos Borges respondeu: o trigger criou um evento `resposta_nova` e
+  uma entrega para o operador 29. A ativação revalidou e liberou essa entrega,
+  que foi enviada uma única vez para Jéssica pela caixa 3.
+- O piloto no número governado do Alf foi aceito antes da ativação produtiva.
+  Os três pilotos ficaram isolados, com uma tentativa e
+  `provider_message_id`; o último comprovou UTF-8 correto e filtro de eco.
 - A correção pós-piloto abre `/app/sucesso-aluno?destino=pesquisas-evasao`,
   suficiente para chegar em Acompanhamento > Pesquisas > Evasão. Deep link
   para expandir a pesquisa exata continua como melhoria posterior.
@@ -47,31 +56,36 @@
 - Fixture executável:
   `tests/fixtures/lia_alertas_privados_fase_a_pg17.sql`.
 - Testes estáticos/SQL: `tests/liaAlertasPrivadosFaseA.test.mjs`.
-- Migration complementar implementada localmente, ainda não aplicada:
+- Migration complementar aplicada em produção:
   `supabase/migrations/20260803210000_lia_alertas_dispatcher_edge.sql`.
-- Dispatcher implementado e testado localmente, ainda não publicado:
+- Dispatcher publicado com `verify_jwt=true`:
   `supabase/functions/processar-alertas-lia/`.
 - Contrato do dispatcher implementado e verde:
   `tests/liaAlertasDispatcherEdge.test.mjs`.
-- Correções pós-piloto ainda somente locais:
+- Correções pós-piloto aplicadas/publicadas:
   `20260803133000_lia_alertas_link_evasao.sql`,
   `20260803133500_lia_alertas_ecos_admin_cleanup.sql` e o filtro exato em
   `webhook-whatsapp-inbox`.
+- Migration de ativação aplicada:
+  `supabase/migrations/20260803213000_lia_alertas_privados_fase_a_ativacao.sql`.
+- Contrato da ativação:
+  `tests/liaAlertasAtivacao.test.mjs`.
 - `scripts/process_lia_alert_queue.py`, units systemd e rota `/send-alert`
   foram removidos do pacote. Não os reinstalar neste rollout.
 
-## Janela temporária até a ativação
+## Janela temporária até a ativação — encerrada
 
 - Respostas produtivas continuam entrando normalmente pelo
   `webhook-whatsapp-inbox`. A única alteração posterior da Fase A é o filtro
   exato do eco da própria outbox; o fluxo de mensagens de família permanece.
-- Até a ativação, respostas reais não geram alerta privado. Fabi e Jéssica
-  precisam abrir a tela do Sucesso do Aluno para acompanhar os casos.
-- As entregas produzidas nesse intervalo ficam em `aguardando_liberacao`. A
-  migration de ativação só poderá promovê-las a `pendente` depois de revalidar
-  usuário ativo, destino governado e vínculo com o operador original.
-- A ausência temporária do alerta é conhecida e não autoriza envio manual pela
-  Sol, pelo Fábio, pelo bridge da Lia ou por outro canal.
+- Antes da ativação, respostas reais ficaram em `aguardando_liberacao` e a
+  equipe precisava abrir a tela. Essa condição terminou em 03/08/2026 às
+  13:39 BRT.
+- A migration de ativação revalidou usuário ativo, destino governado, caixa 3,
+  vínculo com o operador original, zero tentativa prévia e snapshot intacto
+  antes de promover a entrega produtiva para `pendente`.
+- Alertas continuam exclusivos da Lia. Não enviar pela Sol, pelo Fábio, pelo
+  bridge da Lia ou por outro canal.
 
 ## Gate 0 — preflight somente leitura
 
@@ -101,7 +115,7 @@ Antes de qualquer escrita remota, reconfirmar e registrar:
 
 Qualquer divergência para e volta ao Alf. O preflight não autoriza escrita.
 
-## Gate 1 — fundação concluída; adaptação DDL ainda pendente
+## Gate 1 — fundação e adaptação DDL — concluído
 
 Fundação já confirmada em 03/08/2026: seeds 2/29/30 exatos, RLS/ACL fechadas,
 configuração produtiva `false`, zero evento e zero entrega.
@@ -129,7 +143,7 @@ Não reconciliar durante o piloto. Agendar uma janela própria para comparar
 conteúdo e hashes, confirmar os registros equivalentes e reparar o histórico de
 forma explícita, sem reaplicar DDL nem forjar uma versão sem evidência.
 
-## Gate 2 — dispatcher Edge, ainda sem cron
+## Gate 2 — dispatcher Edge sem cron — concluído
 
 Somente após o Gate 1 validado e nova autorização:
 
@@ -154,7 +168,7 @@ O dispatcher não usa `127.0.0.1:3001`, não instala processo na VPS e não toca
 nos bridges da Lia, Sol ou Fábio. Ele reaproveita o contrato produtivo já
 comprovado: Edge backend-only → credencial da caixa 3 → UAZAPI `/send/text`.
 
-## Gate 3 — piloto Alf, ponto de parada obrigatório
+## Gate 3 — piloto Alf — concluído e aceito
 
 Com o Alf presente e após autorização específica:
 
@@ -340,26 +354,27 @@ e os dois checks de segredo ficaram verdes. O frontend que interpreta
 `destino=pesquisas-evasao` está publicado. A migration de ativação e o cron
 continuam proibidos até o aceite humano do piloto.
 
-## Gate 4 — ativação humana e cron, artefato ainda inexistente
+## Gate 4 — ativação humana e cron — concluído em 03/08/2026
 
-Somente depois do aceite do piloto:
+O piloto foi aceito pelo Alf antes da criação e aplicação da ativação. Depois
+do aceite:
 
-1. provisionar manualmente no Vault o segredo
-   `lia_alertas_service_role_key`, sem imprimi-lo nem gravá-lo em arquivo ou
-   migration;
-2. criar `20260803213000_lia_alertas_privados_fase_a_ativacao.sql` para alterar
-   `alertas_producao_liberados` para `true`, reavaliar as entregas em
-   `aguardando_liberacao` e agendar
-   `lia-alertas-privados-dispatcher-minuto`;
-3. o job deve chamar `processar-alertas-lia` via `net.http_post`, lendo a chave
-   somente de `vault.decrypted_secrets` e sem literal sensível no SQL;
-4. revisar diff, hash, conteúdo do job e contagens;
-5. pedir autorização separada para aplicar;
-6. depois da aplicação, confirmar um único job ativo e a ausência de erros de
-   invocação.
-
-A migration de ativação não deve ser antecipada nem existir antes do piloto.
-O segredo de invocação também não é necessário antes desse gate.
+1. o segredo `lia_alertas_service_role_key` foi provisionado manualmente no
+   Vault sem aparecer em arquivo, migration, log ou resposta;
+2. o diff e o SHA-256 da migration local
+   `20260803213000_lia_alertas_privados_fase_a_ativacao.sql` foram apresentados
+   e aprovados explicitamente antes da escrita;
+3. a migration foi registrada remotamente como
+   `20260803163819_lia_alertas_privados_fase_a_ativacao`;
+4. `alertas_producao_liberados` passou para `true`;
+5. a única entrega produtiva retida foi revalidada e promovida de
+   `aguardando_liberacao` para `pendente`; nenhuma entrega foi desviada para
+   `fila_administrativa` durante a ativação;
+6. foi criado exatamente um cron ativo,
+   `lia-alertas-privados-dispatcher-minuto`, job `88`, com expressão
+   `* * * * *`;
+7. o job chama somente `processar-alertas-lia` via `net.http_post` e lê a
+   credencial em tempo de execução de `vault.decrypted_secrets`.
 
 ## Gate 5 — primeiro evento produtivo assistido
 
@@ -369,6 +384,42 @@ O segredo de invocação também não é necessário antes desse gate.
 - Nenhum outro operador ou grupo pode receber.
 - Resultado ambíguo ou divergência de destino aciona parada, sem correção
   improvisada nem reenvio.
+
+### Evidência produtiva aceita
+
+- Evento: resposta nova da família de Miguel Santos Borges.
+- Alerta: `58a64f22-ff43-4a8c-a597-c74a4aa0b642`.
+- Envio: `03/08/2026 13:39:02 BRT` (`16:39:02 UTC`).
+- Destinatária: Jéssica, `usuarios.id=29`, destino governado final `5110`.
+- Transporte: caixa 3, uma tentativa, status `enviado`.
+- Confirmação do provedor:
+  `provider_message_id=3EB0D84D0BB59F29047AB6`.
+- Privacidade: a mensagem não contém telefone da família, resposta, áudio,
+  transcrição ou motivo.
+- Isolamento: zero linha com esse `provider_message_id` em
+  `admin_mensagens` e em `pesquisa_evasao_mensagens`.
+- Idempotência: a rodada seguinte do cron, às 13:40 BRT, terminou com sucesso
+  e manteve a entrega com uma única tentativa e o mesmo `provider_message_id`.
+- Aceite humano: Alf confirmou no banco a entrega única e confirmou que
+  Jéssica recebeu o alerta. A Fase A foi aceita como ativa em produção.
+
+### Monitoramento pós-ativação
+
+O monitor começou em `03/08/2026 13:47:17 BRT` com baseline zerado e foi
+encerrado antecipadamente por decisão do Alf às 14:38 BRT, pois a evidência já
+era suficiente. Na última leitura consolidada havia:
+
+- 51 execuções do cron na janela, zero com status diferente de `succeeded`;
+- exatamente um cron ativo para o dispatcher;
+- zero entrega em `fila_administrativa`;
+- zero alerta com mais de uma tentativa;
+- zero `provider_message_id` repetido;
+- alerta de Miguel ainda `enviado`, com uma tentativa e o mesmo
+  `provider_message_id`.
+
+O encerramento antecipado foi deliberado; não representa falha nem perda de
+observabilidade. Ocorrências futuras serão tratadas pelos estados auditáveis da
+outbox e pelos logs do dispatcher.
 
 ## Fila administrativa
 
@@ -428,18 +479,20 @@ justifica alterar a pesquisa canônica.
 - A auditoria somente leitura do transporte comprovou 88 notificações para
   Fabi/Jéssica com `whatsapp_message_id`, todas pela caixa 3 e pelo número da
   Lia. Nenhuma depende do bridge da Sol ou da fila do Fábio.
-- A adaptação DDL e o dispatcher Edge foram implementados localmente. O núcleo
+- A adaptação DDL foi aplicada e o dispatcher Edge foi publicado. O núcleo
   cobre envio único, `message_id` obrigatório, falhas terminais e log
-  sanitizado; nenhum desses artefatos foi aplicado ou publicado.
+  sanitizado.
 - O pacote original não modificava `webhook-whatsapp-inbox`. O piloto revelou
   a necessidade de uma correção restrita: ignorar apenas ecos `fromMe` da caixa
   3 cujo `provider_message_id` esteja na outbox governada.
-- A fundação foi aplicada em produção com o bloqueio ativo; nenhum alerta da
-  Fase A, deploy de dispatcher ou ativação foi realizado.
+- A fundação foi aplicada inicialmente com o bloqueio ativo. O dispatcher foi
+  publicado e a produção somente foi liberada após piloto aceito e autorização
+  explícita do Alf.
 - O primeiro retorno produtivo ocorrido durante esta implementação comprovou a
-  janela segura: entrega `58a64f22-ff43-4a8c-a597-c74a4aa0b642` ficou em
-  `aguardando_liberacao`, destinada ao operador 29, sem `provider_message_id`.
-  `processar-alertas-lia` permanece ausente em produção e não há cron de consumo.
+  janela segura: entrega `58a64f22-ff43-4a8c-a597-c74a4aa0b642` ficou retida em
+  `aguardando_liberacao` até o Gate 4. Depois da ativação, foi enviada uma única
+  vez à operadora 29, com `provider_message_id` confirmado e sem eco na Caixa de
+  Entrada ou na ingestão da pesquisa.
 - `usuarios.id=29` foi corrigido de `Jessica` para `Jéssica` em 03/08/2026. Os
   dois envios produtivos anteriores preservaram `assinatura_nome_snapshot` e
   mensagem renderizada com o nome antigo, como exige a imutabilidade histórica.
@@ -553,3 +606,31 @@ ou criar a migration de ativação.
    exibido integralmente em um print desta auditoria. Atualizar todos os
    consumidores da credencial na mesma janela e provar o envio da Lia depois da
    rotação; não executar durante este rollout sem autorização própria.
+6. Reconciliar o histórico remoto de migrations com os nomes dos arquivos
+   locais em uma janela própria. A ativação local `20260803213000` foi registrada
+   remotamente como `20260803163819`, repetindo a divergência já observada em
+   migrations anteriores. Não usar `db push` até comparar hashes e reparar o
+   histórico com evidência.
+
+## Próximas fases e entregas — não fazem parte da Fase A
+
+1. **Fase B:** follow-up após 72 horas, resumo privado por operador e estados
+   visíveis na tela.
+2. **Fase C:** histórico, coortes e KPI agregado no grupo oficial do Sucesso do
+   Aluno.
+3. **Fase D:** follow-up automático à família; permanece desligado e exige nova
+   decisão do Alf, cópias aprovadas e rollout próprio.
+4. **Próxima entrega solicitada:** edição do texto na prévia da pesquisa de
+   evasão.
+
+As dívidas de higiene seguem separadas: retirar números hardcoded das Edge
+Functions em favor de `lia_destinos_privados`, corrigir os nomes das instâncias
+na UAZAPI, rotacionar o token da caixa 3 e reconciliar o histórico de migrations.
+
+## Encerramento
+
+A Fase A foi aceita em 03/08/2026. `pesquisa_evasao` e suas mensagens continuam
+como fontes da resposta da família; `lia_pesquisa_eventos` e
+`lia_alertas_privados` são estruturas operacionais e de auditoria, não fontes
+canônicas do conteúdo. O alerta avisa somente quem enviou a pesquisa e não
+transporta conteúdo privado da resposta.
