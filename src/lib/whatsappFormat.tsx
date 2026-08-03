@@ -1,4 +1,5 @@
 import React from 'react';
+import { segmentarPreviewWhatsApp } from './whatsappPreview';
 
 /**
  * Converte a marcação de formatação do WhatsApp em JSX, para que o painel de
@@ -61,4 +62,41 @@ export function formatarWhatsApp(texto: string | null | undefined): React.ReactN
   if (!texto) return texto ?? null;
   if (!/[*_~`]/.test(texto)) return texto; // atalho: nada para formatar
   return parseSegmento(texto);
+}
+
+interface PreviewWhatsAppFormatadoProps {
+  texto: string;
+  className?: string;
+}
+
+export function PreviewWhatsAppFormatado({
+  texto,
+  className,
+}: PreviewWhatsAppFormatadoProps) {
+  const linhas = segmentarPreviewWhatsApp(texto);
+
+  return (
+    <div className={className}>
+      {linhas.map((linha, indice) => {
+        if (linha.tipo === 'vazio') {
+          return <div key={indice} className="h-4" aria-hidden="true" />;
+        }
+        if (linha.tipo === 'citacao') {
+          return (
+            <blockquote
+              key={indice}
+              className="my-1 border-l-4 border-emerald-400/70 pl-3 text-slate-100"
+            >
+              {formatarWhatsApp(linha.conteudo)}
+            </blockquote>
+          );
+        }
+        return (
+          <div key={indice} className="min-h-5 whitespace-pre-wrap">
+            {formatarWhatsApp(linha.conteudo)}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
