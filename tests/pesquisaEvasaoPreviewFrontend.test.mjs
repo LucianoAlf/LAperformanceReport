@@ -13,6 +13,10 @@ const modalPath = resolve(
   repoRoot,
   'src/components/App/SucessoCliente/ModalPreviewPesquisaEvasao.tsx',
 );
+const editorPath = resolve(
+  repoRoot,
+  'src/components/App/SucessoCliente/EditorMensagemPesquisaEvasao.tsx',
+);
 const typesPath = resolve(
   repoRoot,
   'src/components/App/SucessoCliente/pesquisaEvasao.types.ts',
@@ -193,7 +197,50 @@ function objetosComAcao(source, acao) {
 
 test('cria os artefatos tipados da previsualizacao obrigatoria', () => {
   assert.equal(existsSync(modalPath), true, 'modal de preview ausente');
+  assert.equal(existsSync(editorPath), true, 'editor da mensagem ausente');
   assert.equal(existsSync(typesPath), true, 'contrato TypeScript do preview ausente');
+});
+
+test('editor explicita a edicao, conta Unicode e mostra a aparencia no WhatsApp', () => {
+  const editorSource = readOptional(editorPath);
+  const editor = codigoExecutavel(editorSource);
+
+  assert.match(editor, /< Textarea\b/);
+  assert.match(editor, /value = \{ mensagem \}/);
+  assert.match(editor, /onMensagemChange \( event \. target \. value \)/);
+  assert.match(editorSource, /Você pode ajustar o texto antes de enviar\./);
+  assert.match(editor, /Array \. from \( mensagem \) \. length/);
+  assert.match(editorSource, /2\.000 caracteres/);
+  assert.match(editor, /mensagem !== mensagemOriginal/);
+  assert.match(editorSource, /Texto editado/);
+  assert.match(editor, /mensagem \. trim \( \) \. length === 0/);
+  assert.match(editor, /Math \. max \( 0 , totalCaracteres - 2_000 \)/);
+  assert.match(editor, /role = "alert"/);
+  assert.match(editor, /aria - describedby/);
+  assert.match(editorSource, /Como aparecerá no WhatsApp/);
+  assert.match(editor, /< PreviewWhatsAppFormatado\b/);
+  assert.match(editor, /disabled = \{ desabilitado \}/);
+  assert.doesNotMatch(editorSource, /maxLength\s*=/);
+  assert.doesNotMatch(editorSource, /dangerouslySetInnerHTML/);
+});
+
+test('modal reinicia o texto por preview e bloqueia confirmacao invalida', () => {
+  const modal = codigoExecutavel(readOptional(modalPath));
+
+  assert.match(modal, /useState \( preview \?\. mensagem \?\? "" \)/);
+  assert.match(
+    modal,
+    /useEffect \( \( \) => \{ if \( ! aberto \|\| ! preview \) return ; setMensagemFinal \( preview \. mensagem \)/,
+  );
+  assert.match(modal, /preview \?\. preview_id/);
+  assert.match(modal, /< EditorMensagemPesquisaEvasao\b/);
+  assert.match(modal, /onConfirmar \( mensagemFinal \)/);
+  assert.match(modal, /mensagemFinal \. trim \( \) \. length === 0/);
+  assert.match(modal, /Array \. from \( mensagemFinal \) \. length > 2_000/);
+  assert.match(
+    modal,
+    /disabled = \{ confirmando \|\| expirado \|\| mensagemInvalida \}/,
+  );
 });
 
 test('tipo do preview espelha exatamente os campos retornados pelo servidor', () => {
@@ -299,9 +346,12 @@ test('modal mostra metadados, mensagem, alertas e confirmacao operacional', () =
   ]) {
     assert.match(modal, new RegExp(`preview \\. ${campo}\\b`));
   }
-  assert.match(modal, /whitespace-pre-wrap/);
+  assert.match(modal, /< EditorMensagemPesquisaEvasao\b/);
   assert.match(modal, /Confirmar envio como \{ preview \. assinatura \}/);
-  assert.match(modal, /disabled = \{ confirmando \|\| expirado \}/);
+  assert.match(
+    modal,
+    /disabled = \{ confirmando \|\| expirado \|\| mensagemInvalida \}/,
+  );
   assert.match(modal, /Loader2[\s\S]*animate-spin/);
   assert.ok(
     modalSource.indexOf('preview.alertas') <
@@ -318,7 +368,10 @@ test('expiracao usa expira_em real, limpa timer e impede confirmar', () => {
   assert.match(modal, /window \. setInterval \(/);
   assert.match(modal, /window \. clearInterval \(/);
   assert.match(modal, /return \( \) => window \. clearInterval \(/);
-  assert.match(modal, /if \( expirado \|\| confirmando \) return/);
+  assert.match(
+    modal,
+    /if \( expirado \|\| confirmando \|\| mensagemInvalida \) return/,
+  );
   assert.match(readOptional(modalPath), /Prévia expirada/i);
   assert.match(readOptional(modalPath), /gere uma nova prévia/i);
 });
