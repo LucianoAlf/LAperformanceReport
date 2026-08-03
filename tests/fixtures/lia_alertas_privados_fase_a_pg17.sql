@@ -22,15 +22,21 @@ $guard$;
 drop schema public cascade;
 create schema public;
 
-create role anon nologin;
-create role authenticated nologin;
-create role service_role nologin;
-create role fabio_agent nologin;
-create role lia_acesso_restrito nologin;
-create role mila_acesso_restrito nologin;
-create role sol_acesso_restrito nologin;
-create role maria_lareport_rpc nologin;
-create role ml_jobs nologin;
+do $roles$
+declare
+  v_role text;
+begin
+  foreach v_role in array array[
+    'anon', 'authenticated', 'service_role', 'fabio_agent',
+    'lia_acesso_restrito', 'mila_acesso_restrito',
+    'sol_acesso_restrito', 'maria_lareport_rpc', 'ml_jobs'
+  ] loop
+    if not exists (select 1 from pg_roles where rolname = v_role) then
+      execute format('create role %I nologin', v_role);
+    end if;
+  end loop;
+end;
+$roles$;
 
 create schema auth;
 create or replace function auth.role()
@@ -61,6 +67,14 @@ begin
         command = excluded.command
   returning jobid into v_jobid;
   return v_jobid;
+end;
+$$;
+
+create or replace function cron.unschedule(p_jobid bigint)
+returns boolean language plpgsql as $$
+begin
+  delete from cron.job where jobid = p_jobid;
+  return found;
 end;
 $$;
 
@@ -114,11 +128,39 @@ begin
 end;
 $fixture$;
 
--- A migration ainda será aplicada e os cenários serão preenchidos nas Tasks 2-4.
--- has_table_privilege authenticated
--- has_table_privilege service_role
+insert into public.usuarios(id, nome, ativo, auth_user_id) values
+  (2, 'Luciano Alf', true, '00000000-0000-4000-8000-000000000002'),
+  (29, 'Jessica', true, '00000000-0000-4000-8000-000000000029'),
+  (30, 'Fabi', true, '00000000-0000-4000-8000-000000000030');
+
+\ir ../../supabase/migrations/20260803090000_lia_alertas_privados_fase_a.sql
+
+select public.fixture_assert(
+  not has_table_privilege('authenticated', 'public.lia_destinos_privados', 'select'),
+  'authenticated nao pode ler destinos'
+);
+select public.fixture_assert(
+  not has_table_privilege('anon', 'public.lia_alertas_privados', 'select'),
+  'anon nao pode ler outbox'
+);
+select public.fixture_assert(
+  has_table_privilege('service_role', 'public.lia_destinos_privados', 'select'),
+  'service_role precisa ler destinos'
+);
+select public.fixture_assert(
+  (select count(*) from public.lia_destinos_privados where ativo) = 3,
+  'os tres destinos governados precisam existir'
+);
+select public.fixture_assert(
+  (select alertas_producao_liberados = false
+   from public.lia_alertas_configuracao where id = 1),
+  'producao precisa nascer bloqueada'
+);
+
+-- Os cenários do produtor serão preenchidos nas Tasks 3-4.
 -- uma rodada nao pode gerar dois alertas
 -- nao pode haver notificacao cruzada
 -- teste comum nao pode entrar na outbox produtiva
 
+select 'PESQUISA_EVASAO_CLAIM_PG17_OK';
 select 'LIA_ALERTAS_PRIVADOS_FASE_A_PG17_OK';
