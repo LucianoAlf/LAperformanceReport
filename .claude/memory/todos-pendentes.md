@@ -297,14 +297,111 @@ Resultado: leads como o "Carlos Yan" (ex: matriculou 15/04, experimental marcada
 - `lead_criado`, `lead_editado`, `aula_experimental_*`: cobertura 100% com o n8n, 0 erro, canal/curso/professor mapeando igual (canal cru resolvido pela RPC, curso e match batendo linha a linha). Pronto tecnicamente para virar a chave.
 - `lead_arquivado`: código adicionado em 30/07 (mesmo padrão dry-run, UPDATE via client parametrizado em vez do SQL cru com risco de injection que o n8n usa). **Nunca recebeu um webhook sequer** desde que o observador existe — sem dado real pra validar.
 
-**Achado novo (31/07):** `lead_arquivado` não é caso isolado. Dos 17 eventos configurados no webhook Emusys ("LAReport Sync" → `debug-webhook-emusys-observador`), **6 nunca chegaram nem uma vez**: `lead_arquivado`, `matricula_finalizacao`, `matricula_renovacao`, `boleto_pix_em_atraso`, `cobranca_cheque_vence_amanha`, `cobranca_recorrente_vence_amanha`. Os outros 11 chegam normalmente (`lead_editado` 814x, `lead_criado` 410x, etc. — ver `.claude/memory/integracao-infra.md`). ⚠️ `matricula_renovacao` chama atenção — renovação é processo central do negócio (fonte de verdade `movimentacoes_admin`), não deveria estar zerado. Investigar se é a Emusys que não dispara apesar de configurado, ou se o mecanismo real de renovação não gera esse evento.
+**Achado novo (31/07):** `lead_arquivado` não é caso isolado. Dos 17 eventos configurados no webhook Emusys ("LAReport Sync" → `debug-webhook-emusys-observador`), **6 nunca chegaram nem uma vez**: `lead_arquivado`, `matricula_finalizacao`, `matricula_renovacao`, `boleto_pix_em_atraso`, `cobranca_cheque_vence_amanha`, `cobranca_recorrente_vence_amanha`. Os outros 11 chegam normalmente (`lead_editado` 814x, `lead_criado` 410x, etc. — ver `.claude/memory/integracao-infra.md`).
 
-**Próximos passos:**
-1. Investigar por que os 6 eventos nunca chegam (começar por `matricula_renovacao`).
-2. Só depois decidir sobre `DRY_RUN=false` — e ao decidir, desligar SÓ os branches de `lead_criado`/`lead_editado`/experimental do n8n (mesmo workflow `EB0LibpOJCLhKp7M`/`j41tPbyjGXUQUxrN`); `lead_arquivado` sem dado real ainda não deveria entrar na primeira leva.
-3. Bug conhecido que **não** é corrigido ao virar a chave (fica pra depois, ver TODO de identidade de professor acima): camada 1 do `registrar_experimental` busca `emusys_lead_id` sem filtrar unidade.
+### 🔴 CORREÇÃO 2026-08-03 — não é "evento que não dispara", é RECEPÇÃO INCOMPLETA
 
-**Arquivos:** `supabase/functions/debug-webhook-emusys-observador/index.ts` (v17). Detalhes técnicos completos em `.claude/memory/integracao-infra.md` (seção "Observador emusys").
+O diagnóstico acima estava errado por olhar **só o log do observador**. O teste que discrimina é
+comparar com o log da edge `processar-matricula-emusys`, que recebe do Emusys por uma
+**configuração de webhook diferente**. Contar por `acao='webhook_recebido'` (a edge grava 2 linhas
+por evento: recebido + processado — contar o total dobra o número):
+
+| evento | disparou (edge) | chegou no observador | |
+|---|---|---|---|
+| `matricula_nova` | 22 | 22 | ✅ paridade |
+| `matricula_trancamento` | 4 | 4 | ✅ paridade |
+| `matricula_alterada` | 18 | 4 | ❌ faltam 14 |
+| `matricula_renovacao` | 5 | 2 | ❌ faltam 3 |
+| **`matricula_finalizacao`** | **20** | **0** | ❌ **faltam 20** |
+
+- **`matricula_renovacao` chegou pela primeira vez em 03/08** (2 eventos, batendo com as 2
+  renovações do dia). O evento existe e dispara — a lista de "nunca chegaram" caiu de 6 para 5.
+- **`matricula_finalizacao` dispara 20x e chega 0x.** Os 20 batem **exatamente** com as 20 evasões
+  de `movimentacoes_admin` no período → todas vieram do Emusys, nenhuma foi lançada à mão.
+  Descartada a hipótese "evasão é registro manual, por isso não há webhook".
+- ⚠️ **`matricula_alterada` e `matricula_renovacao` chegam PARCIALMENTE** — isso não estava
+  documentado. O endpoint do observador não recebe tudo o que o Emusys manda.
+
+**Consequência para a decisão:** a base de comparação que sustentaria virar `DRY_RUN=false` é
+menos confiável do que se supunha. Matrícula não é processada pelo observador (só logada), então
+não quebra nada hoje — mas invalida "cobertura 100%" como argumento geral.
+
+### 🎯 CAUSA (mesma investigação, 03/08): a config do webhook é POR UNIDADE e estão diferentes
+
+Cada unidade é um tenant separado no Emusys, com cadastro de webhook próprio. O "LAReport Sync"
+foi criado com **listas de eventos diferentes** em cada uma. Recorte por `escola_nome`
+(janela 23/07 → 03/08):
+
+| unidade | evento | disparou | chegou no observador |
+|---|---|---|---|
+| **Campo Grande** | `matricula_nova` | 5 | 5 ✅ |
+| | `matricula_alterada` | 4 | 4 ✅ |
+| **Barra** | `matricula_nova` | 9 | 9 ✅ |
+| | `matricula_renovacao` | 1 | 1 ✅ |
+| | `matricula_trancamento` | 2 | 2 ✅ |
+| | `matricula_alterada` | 1 | **0** ❌ |
+| **Recreio** | `matricula_nova` | 8 | 8 ✅ |
+| | `matricula_alterada` | 12 | **0** ❌ |
+| | `matricula_renovacao` | 4 | **1** ❌ |
+| | **`matricula_finalizacao`** | **20** | **0** ❌ |
+
+**Campo Grande é a referência (completa). Recreio é o buraco** — as 20 evasões do período foram
+todas de lá. Barra perde `matricula_alterada`.
+
+Provado que são webhooks legítimos, não chamada interna: payload com `id` sequencial do Emusys
+(71284, 71285), `data_hora_criacao` minutos antes, bloco `finalizacao:{motivo,observacoes}`
+completo. E `processar-matricula-emusys` não é invocada por outro código nosso que produzisse isso.
+
+⚠️ **Ressalvas (não superestimar):** janela curta e volume baixo. Ausência de um evento numa
+unidade **não prova** que esteja desmarcado lá (`matricula_finalizacao` não disparou em CG nem
+Barra no período). E `matricula_renovacao` do Recreio chegou 1 de 4 — parcial dentro da MESMA
+unidade e MESMO evento, que config sozinha não explica. Conferir a lista inteira nos 3 painéis.
+
+### ✅ CONFIRMADO NA FONTE E CORRIGIDO PELO HUGO (03/08/2026)
+
+O Hugo abriu os painéis e **confirmou**: `matricula_alterada` e `matricula_finalizacao` estavam
+**desmarcados nas unidades Barra e Recreio**. Ele marcou os dois no mesmo dia.
+Deixa de ser hipótese minha — é fato verificado na configuração.
+
+⚠️ **Forward-only.** O que já passou não é reenviado: os 20 `matricula_finalizacao` de 01/08
+(Recreio) e os 12 `matricula_alterada` estão perdidos para o observador. Não há backfill —
+o histórico de comparação começa em 03/08 para esses dois eventos.
+
+**Conferir nos próximos dias** (esperar evasão/alteração real acontecer em Barra ou Recreio;
+as duas colunas da direita têm que ficar iguais):
+
+```sql
+select coalesce(payload_bruto->>'escola_nome', detalhes->>'escola_nome') as escola,
+       evento,
+       count(*) filter (where workflow_id='processar-matricula-emusys'
+                          and acao='webhook_recebido')            as disparou,
+       count(*) filter (where workflow_id='debug-webhook-emusys-observador') as chegou_observador
+from automacao_log
+where created_at >= '2026-08-03' and evento like 'matricula%'
+group by 1,2 order by 1,2;
+```
+⚠️ Contar a edge SÓ por `acao='webhook_recebido'` — ela grava 2 linhas por evento
+(recebido + processado) e o total dobra o número.
+
+**Ainda em aberto após o fix:** `matricula_renovacao` do Recreio chegou 1 de 4 — parcial dentro
+da MESMA unidade e MESMO evento, o que config marcada/desmarcada não explica. Vigiar se some
+sozinho agora ou se é um segundo problema (entrega falhando, não configuração).
+
+**Próximos passos (atualizados 03/08):**
+1. ~~Igualar a lista de eventos nas 3 unidades~~ — **feito pelo Hugo em 03/08** (Barra + Recreio).
+   Rodar a query acima nos próximos dias para confirmar a paridade antes de qualquer decisão
+   sobre `DRY_RUN`.
+2. Só depois decidir sobre `DRY_RUN=false` — e ao decidir, desligar SÓ os branches de
+   `lead_criado`/`lead_editado`/experimental do n8n (mesmo workflow `EB0LibpOJCLhKp7M`/`j41tPbyjGXUQUxrN`);
+   `lead_arquivado` sem dado real ainda não deveria entrar na primeira leva.
+3. Bug conhecido que **não** é corrigido ao virar a chave (fica pra depois, ver TODO de identidade
+   de professor acima): camada 1 do `registrar_experimental` busca `emusys_lead_id` sem filtrar unidade.
+
+**Lição de método:** ausência de evento no log de UM consumidor não prova que o evento não ocorreu.
+Sempre cruzar com os outros consumidores do mesmo produtor antes de concluir "não dispara".
+
+**Arquivos:** `supabase/functions/debug-webhook-emusys-observador/index.ts` (**v18** em 03/08, era v17).
+Detalhes técnicos completos em `.claude/memory/integracao-infra.md` (seção "Observador emusys").
 
 ---
 

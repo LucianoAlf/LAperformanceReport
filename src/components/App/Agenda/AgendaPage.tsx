@@ -2,7 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { addDays, format, isValid, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, CalendarClock, Filter, Search, X } from 'lucide-react';
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsUpDown,
+  CalendarClock,
+  Filter,
+  Search,
+  X,
+} from 'lucide-react';
 import { useAgendaDia, type AulaAgenda } from '@/hooks/useAgendaDia';
 import {
   aulaJaOcorreu,
@@ -22,10 +31,25 @@ import {
   type LotacaoAula,
 } from '@/lib/agenda';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
-import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
-import { PageFilterBar } from '@/components/ui/page-filter-bar';
+import {
+  Select as SelectRaiz,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { AgendaTimeline } from './AgendaTimeline';
+import { SeletorPeriodo } from './SeletorPeriodo';
 import { AgendaDrawer } from './AgendaDrawer';
 import { cn } from '@/lib/utils';
 
@@ -35,10 +59,17 @@ import { cn } from '@/lib/utils';
  * derruba a pagina inteira — um valor ruim vindo de um filtro externo nao pode
  * ter esse poder.
  */
-function rotuloDoDia(data: string): string {
+function rotuloDoDia(data: string): { dia: string; ano: string } {
   const d = parseISO(data);
-  if (!isValid(d)) return data;
-  return format(d, "EEEE, d 'de' MMMM", { locale: ptBR });
+  if (!isValid(d)) return { dia: data, ano: '' };
+  return {
+    // "-feira" sai: ocupa quatro caracteres numa barra disputada e nao
+    // acrescenta nada que "Segunda" ja nao diga.
+    dia: format(d, "EEEE, d 'de' MMMM", { locale: ptBR }).replace('-feira', ''),
+    // Ano em separado para ficar apagado: quase sempre e o ano corrente e
+    // repeti-lo em destaque so rouba atencao do dia, que e o que muda.
+    ano: format(d, 'yyyy'),
+  };
 }
 
 // Retorno de useCompetenciaFiltro, repassado pelo AppLayout via Outlet. A
@@ -243,35 +274,17 @@ export default function AgendaPage() {
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      {/* Mesma barra de competencia das paginas irmas — componente compartilhado,
-          intocado de proposito. Como a Agenda e diaria, ela funciona como salto:
-          escolher Ago/2026 leva ao dia de hoje se ele cair no mes, senao ao dia 1;
-          "Personalizado" leva a data inicial. As setas seguem movendo dia a dia. */}
-      {competencia && (
-        // Alinhado a direita como nas paginas irmas: `PageFilterBar` e o
-        // `justify-end` compartilhado. Sem ele o filtro ficava a esquerda so
-        // aqui, quebrando a expectativa de onde procurar o periodo.
-        <PageFilterBar>
-        <CompetenciaFilter
-          filtro={competencia.filtro}
-          range={competencia.range}
-          anosDisponiveis={competencia.anosDisponiveis}
-          onTipoChange={competencia.setTipo}
-          onAnoChange={competencia.setAno}
-          onMesChange={competencia.setMes}
-          onTrimestreChange={competencia.setTrimestre}
-          onSemestreChange={competencia.setSemestre}
-          onDataInicioChange={competencia.setDataInicio}
-          onDataFimChange={competencia.setDataFim}
-        />
-        </PageFilterBar>
-      )}
+      {/* Barra de comando unica: navegacao do dia a esquerda, periodo a direita.
+          Antes eram DUAS faixas empilhadas (competencia numa, comandos noutra) e
+          as duas juntas comiam ~90px antes de a grade comecar — numa tela cuja
+          materia-prima e altura. Aqui e uma faixa so; `flex-wrap` devolve a
+          segunda linha sozinho quando a janela e estreita demais.
 
-      {/* Barra de comando unica. Antes eram duas faixas — navegacao do dia numa,
-          oito controles de filtro noutra — e a grade so comecava depois. Aqui
-          fica a vista o que se usa a cada minuto (dia, agrupamento, busca); o
-          resto vai para o popover, que anuncia no badge quantos filtros estao
-          ligados para nada ficar filtrando escondido. */}
+          A competencia continua sendo o componente compartilhado das paginas
+          irmas e continua a DIREITA, que e onde o usuario aprendeu a procurar.
+          Como a Agenda e diaria, ela funciona como salto: escolher Ago/2026 leva
+          ao dia de hoje se ele cair no mes, senao ao dia 1. As setas seguem
+          movendo dia a dia. */}
       <header className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => mover(-1)} aria-label="Dia anterior"
           className="grid h-[30px] w-[30px] place-items-center rounded-md border border-slate-700 text-slate-300 hover:text-white">
@@ -281,7 +294,10 @@ export default function AgendaPage() {
           className="grid h-[30px] w-[30px] place-items-center rounded-md border border-slate-700 text-slate-300 hover:text-white">
           <ChevronRight className="h-4 w-4" />
         </button>
-        <span className="px-1 font-semibold first-letter:uppercase">{rotuloDoDia(data)}</span>
+        <span className="px-1 font-semibold first-letter:uppercase">
+          {rotuloDoDia(data).dia}{' '}
+          <span className="font-normal text-slate-500">{rotuloDoDia(data).ano}</span>
+        </span>
 
         {data !== hoje && (
           <button
@@ -292,6 +308,8 @@ export default function AgendaPage() {
             Hoje
           </button>
         )}
+
+        {competencia && <SeletorPeriodo competencia={competencia} />}
 
         <span className="mx-1 h-5 w-px bg-slate-700" aria-hidden="true" />
 
@@ -412,6 +430,7 @@ export default function AgendaPage() {
         <div className="flex min-w-0 items-stretch overflow-hidden rounded-lg border border-slate-700">
           <div className="min-w-0 flex-1">
             <AgendaTimeline
+              data={data}
               aulas={aulas}
               agruparPor={agruparPor}
               selecionada={selecionada}
@@ -508,6 +527,29 @@ function Sparkline({
  * O badge com a contagem existe para que nada fique filtrando escondido: sem
  * ele, um filtro esquecido de ontem faria o dia parecer vazio sem explicacao.
  */
+/**
+ * Token de "sem filtro" nos selects. Existe porque o Radix trata `''` como
+ * "nenhum valor" e lanca excecao se um item declarar `value=""` — nao da para
+ * usar a string vazia como sentinela, que era o padrao com o `<select>` nativo.
+ */
+const SEM_FILTRO = '__todos';
+
+/**
+ * Seletor de qualquer camada flutuante aberta do design system — dropdown do
+ * Select e popover do combobox. O Radix monta as duas num portal no `<body>`,
+ * entao elas NAO estao dentro do popover de filtros, e sem esta guarda o
+ * clique numa opcao contaria como "clique fora".
+ */
+const PORTAL_FLUTUANTE = '[data-radix-popper-content-wrapper],[role="listbox"]';
+
+/** Gatilho do design system em versao densa, com a borda ciano quando o filtro esta ativo. */
+function gatilhoDeFiltro(valor: string | null): string {
+  return cn(
+    'h-9 text-[12.5px]',
+    valor === null ? 'text-slate-400' : 'border-cyan-600 text-white',
+  );
+}
+
 function PopoverFiltros({
   filtros,
   setFiltros,
@@ -530,10 +572,19 @@ function PopoverFiltros({
   useEffect(() => {
     if (!aberto) return;
     const aoClicar = (e: MouseEvent) => {
-      if (!caixaRef.current?.contains(e.target as Node)) setAberto(false);
+      const alvo = e.target as Element | null;
+      // O dropdown do Select vive num portal no <body>, fora de `caixaRef`.
+      // Sem esta guarda, escolher uma opcao contaria como "clique fora" e
+      // fecharia o popover no mesmo gesto em que a opcao seria selecionada.
+      if (alvo?.closest?.(PORTAL_FLUTUANTE)) return;
+      if (!caixaRef.current?.contains(alvo as Node)) setAberto(false);
     };
     const aoTeclar = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setAberto(false);
+      if (e.key !== 'Escape') return;
+      // Com um dropdown aberto, Esc pertence a ele: fecha a lista, nao o
+      // popover inteiro. Sem isto o primeiro Esc levaria os dois embora.
+      if (document.querySelector(PORTAL_FLUTUANTE)) return;
+      setAberto(false);
     };
     // `mousedown` e nao `click`: com `click` o proprio clique que abriu o
     // popover chegaria ao document e o fecharia no mesmo gesto.
@@ -570,7 +621,7 @@ function PopoverFiltros({
       {aberto && (
         <div className="absolute left-0 top-[calc(100%+6px)] z-40 grid w-[340px] grid-cols-2 gap-2.5 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-2xl">
           <Campo rotulo="Professor">
-            <Select
+            <ComboboxFiltro
               rotulo="Todos"
               valor={filtros.professor}
               opcoes={professores}
@@ -578,7 +629,7 @@ function PopoverFiltros({
             />
           </Campo>
           <Campo rotulo="Curso">
-            <Select
+            <ComboboxFiltro
               rotulo="Todos"
               valor={filtros.curso}
               opcoes={cursos}
@@ -586,7 +637,7 @@ function PopoverFiltros({
             />
           </Campo>
           <Campo rotulo="Turma">
-            <Select
+            <ComboboxFiltro
               rotulo="Todas"
               valor={filtros.turma}
               opcoes={turmas}
@@ -665,27 +716,36 @@ function SelectCategoria({
   onChange: (v: string | null) => void;
 }) {
   return (
-    <select
-      value={valor ?? ''}
-      aria-label="Categoria da aula"
-      onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
-      className={cn(
-        'h-[29px] w-full rounded-md border bg-slate-950 px-2 text-[12.5px] focus:border-cyan-500 focus:outline-none',
-        valor === null ? 'border-slate-700 text-slate-400' : 'border-cyan-600 text-white',
-      )}
+    <SelectRaiz
+      value={valor ?? SEM_FILTRO}
+      onValueChange={(v) => onChange(v === SEM_FILTRO ? null : v)}
     >
-      <option value="">Todas</option>
-      {opcoes.map((o) => (
-        <option key={o.valor} value={o.valor} disabled={o.qtd === 0}>
-          {o.rotulo} ({o.qtd})
-        </option>
-      ))}
-    </select>
+      <SelectTrigger aria-label="Categoria da aula" className={gatilhoDeFiltro(valor)}>
+        <SelectValue placeholder="Todas" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={SEM_FILTRO}>Todas</SelectItem>
+        {opcoes.map((o) => (
+          <SelectItem key={o.valor} value={o.valor} disabled={o.qtd === 0}>
+            {o.rotulo} ({o.qtd})
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </SelectRaiz>
   );
 }
 
-/** Select nativo: string vazia no <option> representa "sem filtro" (null). */
-function Select({ rotulo, valor, opcoes, onChange, formatar }: {
+/**
+ * Combobox com busca (`Command` + `Popover` do design system), no lugar de um
+ * select simples: professor passa de 20 opcoes numa unidade e de 40 na visao
+ * consolidada, e rolar uma lista alfabetica atras de um nome e mais lento do
+ * que digitar tres letras. Mesmo padrao de `combobox-nome`/`combobox-telefone`.
+ *
+ * Curso e turma usam o mesmo componente de proposito: tres controles vizinhos
+ * com comportamentos diferentes obrigariam o usuario a descobrir, um a um,
+ * qual deles aceita digitacao.
+ */
+function ComboboxFiltro({ rotulo, valor, opcoes, onChange, formatar }: {
   rotulo: string;
   valor: string | null;
   opcoes: string[];
@@ -693,29 +753,76 @@ function Select({ rotulo, valor, opcoes, onChange, formatar }: {
   // Traduz o valor cru do banco para exibicao (ex.: 'experimental' -> 'Experimental').
   formatar?: (v: string) => string;
 }) {
+  const [aberto, setAberto] = useState(false);
   // O filtro sobrevive a troca de dia, mas as opcoes sao do dia atual: sem isto
-  // um professor que nao da aula hoje sumiria da lista e o <select> cairia para
-  // o primeiro item, aparentando "sem filtro" enquanto ainda filtra tudo fora.
+  // um professor que nao da aula hoje sumiria da lista e o controle pareceria
+  // "sem filtro" enquanto ainda filtra tudo fora.
   const ausente = valor !== null && !opcoes.includes(valor);
+  const exibir = formatar ?? ((v: string) => v);
+
+  const escolher = (v: string | null) => {
+    onChange(v);
+    setAberto(false);
+  };
 
   return (
-    <select
-      value={valor ?? ''}
-      aria-label={rotulo}
-      onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
-      className={cn(
-        'h-[29px] w-full rounded-md border bg-slate-950 px-2 text-[12.5px] focus:border-cyan-500 focus:outline-none',
-        valor === null ? 'border-slate-700 text-slate-400' : 'border-cyan-600 text-white',
-      )}
-    >
-      <option value="">{rotulo}</option>
-      {ausente && (
-        <option value={valor}>{(formatar ?? ((v: string) => v))(valor)} (sem aula neste dia)</option>
-      )}
-      {opcoes.map((o) => (
-        <option key={o} value={o}>{formatar ? formatar(o) : o}</option>
-      ))}
-    </select>
+    <Popover open={aberto} onOpenChange={setAberto}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          role="combobox"
+          aria-expanded={aberto}
+          aria-label={rotulo}
+          className={cn(
+            'flex h-9 w-full items-center justify-between gap-1 rounded-xl border border-slate-700',
+            'bg-slate-800/50 px-3 text-left text-[12.5px] ring-offset-slate-950',
+            'focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2',
+            valor === null ? 'text-slate-400' : 'border-cyan-600 text-white',
+          )}
+        >
+          <span className="truncate">{valor === null ? rotulo : exibir(valor)}</span>
+          <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[240px] border-slate-700 bg-slate-900 p-0"
+        style={{ zIndex: 999999 }}
+      >
+        <Command className="bg-transparent">
+          <CommandInput placeholder={`Buscar ${rotulo.toLowerCase()}...`} className="h-9 text-white" />
+          <CommandList>
+            <CommandEmpty className="px-3 py-3 text-[12.5px] text-slate-400">
+              Nada encontrado
+            </CommandEmpty>
+            <CommandGroup>
+              <CommandItem value={rotulo} onSelect={() => escolher(null)} className="cursor-pointer">
+                <Check className={cn('mr-2 h-4 w-4', valor === null ? 'opacity-100' : 'opacity-0')} />
+                {rotulo}
+              </CommandItem>
+              {ausente && (
+                <CommandItem value={valor} onSelect={() => escolher(valor)} className="cursor-pointer">
+                  <Check className="mr-2 h-4 w-4 opacity-100" />
+                  <span className="truncate">{exibir(valor)}</span>
+                  <span className="ml-1 shrink-0 text-[10px] text-slate-500">(sem aula neste dia)</span>
+                </CommandItem>
+              )}
+              {opcoes.map((o) => (
+                <CommandItem
+                  key={o}
+                  value={exibir(o)}
+                  onSelect={() => escolher(o)}
+                  className="cursor-pointer"
+                >
+                  <Check className={cn('mr-2 h-4 w-4', valor === o ? 'opacity-100' : 'opacity-0')} />
+                  <span className="truncate">{exibir(o)}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
