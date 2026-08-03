@@ -82,3 +82,54 @@ Deno.test("códigos desconhecidos ficam disponíveis somente para log de auditor
     evidencias: {},
   }]), ["novo_sinal_interno"]);
 });
+
+Deno.test("prioridades deduplicam professor, limitam cinco e ordenam por evidência", () => {
+  const risco = (id: number, presenca: number, carteira: number) => ({
+    professor_id: id,
+    professor: `Professor ${id}`,
+    sinal: "possivel_sobrecarga",
+    severidade: "medio",
+    evidencias: {
+      carteira,
+      p75_unidade: 24,
+      retencao: 100,
+      meta_retencao: 90,
+      presenca,
+      meta_presenca: 80,
+      capacidade_fisica_excedida: false,
+    },
+  });
+  const sinais = [
+    ...[1, 2, 3, 4, 5, 6].map((id) => risco(id, 70 - id, 24 + id)),
+    {
+      professor_id: 3,
+      professor: "Professor 3",
+      sinal: "concentracao_operacional",
+      severidade: "alto",
+      evidencias: { capacidade_fisica_excedida: true, turmas: [{ turma_id: 10 }, { turma_id: 11 }] },
+    },
+  ];
+  const prioridades = projetarMapaSinaisPublico(sinais).prioridades;
+  assertEquals(prioridades.length, 5);
+  assertEquals(prioridades[0].professor, "Professor 3");
+  assertEquals(prioridades[0].agrupamentos_fisicos, 2);
+  assertEquals(new Set(prioridades.map((item) => item.professor_id)).size, 5);
+});
+
+Deno.test("possível sobrecarga sem correlação canônica não vira prioridade", () => {
+  const resultado = projetarMapaSinaisPublico([{
+    professor_id: 1,
+    professor: "Professor sem correlação",
+    sinal: "possivel_sobrecarga",
+    severidade: "medio",
+    evidencias: {
+      carteira: 20,
+      p75_unidade: 24,
+      presenca: 90,
+      meta_presenca: 80,
+      retencao: 100,
+      meta_retencao: 90,
+    },
+  }]);
+  assertEquals(resultado.prioridades, []);
+});
