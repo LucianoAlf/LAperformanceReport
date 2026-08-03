@@ -29,6 +29,7 @@ import {
   type HealthScoreV3SnapshotMetric,
 } from '@/lib/healthScoreProfessorV3';
 import {
+  doesHealthScoreV3MetricContributeToScore,
   formatHealthScoreV3BaseNumber,
   resolveHealthScoreV3EvidenceMessage,
   resolveHealthScoreV3PublicationLabel,
@@ -57,11 +58,6 @@ function formatV3Value(metric: HealthMetricKeyV3, value: number | null): string 
   return Math.round(value).toString();
 }
 
-function formatV3State(value: string | null | undefined): string {
-  if (!value) return 'Evidência pendente';
-  return value.replace(/_/g, ' ');
-}
-
 function formatV3ReferenceMonth(value: unknown): string {
   if (typeof value !== 'string' || !value) return 'mês anterior';
   const parsed = new Date(`${value.slice(0, 10)}T12:00:00`);
@@ -70,18 +66,17 @@ function formatV3ReferenceMonth(value: unknown): string {
   return formatted.charAt(0).toUpperCase() + formatted.slice(1).replace('.', '');
 }
 
-function getV3MetricStateLabel(metric: HealthScoreV3SnapshotMetric): string {
+function getV3MetricParticipationLabel(metric: HealthScoreV3SnapshotMetric): string {
+  if (doesHealthScoreV3MetricContributeToScore(metric)) return 'Compõe a nota';
   if (metric.detalhes.referencia_temporaria === true) {
-    return `Base de ${formatV3ReferenceMonth(metric.detalhes.competencia_referencia)}`;
+    return `Base de ${formatV3ReferenceMonth(metric.detalhes.competencia_referencia)} · fora da nota`;
   }
-  if (metric.papel === 'diagnostico' || metric.metrica === 'numero_alunos') return 'Diagnóstico';
-  if (metric.codigoEvidencia === 'amostra_insuficiente') return 'Amostra em formação';
-  if (
-    metric.metrica === 'conversao'
-    && (metric.detalhes.fora_do_score === true || metric.detalhes.provisorio_ciclo === true)
-  ) return 'Ciclo em acompanhamento';
-  if (!metric.metricaPublicavel && metric.valorBruto !== null) return 'Em apuração';
-  return formatV3State(metric.estadoBase);
+  if (metric.papel === 'diagnostico' || metric.metrica === 'numero_alunos') return 'Diagnóstico · fora da nota';
+  if (metric.estadoBase === 'sem_base_amostra' || metric.codigoEvidencia === 'amostra_insuficiente') {
+    return 'Amostra insuficiente · fora da nota';
+  }
+  if (!metric.metricaPublicavel && metric.valorBruto !== null) return 'Auditoria · fora da nota';
+  return 'Fora da nota atual';
 }
 
 function formatV3Base(metric: HealthScoreV3SnapshotMetric): string | null {
@@ -236,7 +231,7 @@ function HealthScoreV3MetricsPanel({
   const observed = snapshot.comparabilidadeEstado === 'em_maturacao';
   const scoreValue = comparable ? snapshot.scoreComparavel : observed ? snapshot.scoreObservado : null;
   const scoreLabel = scoreValue === null ? 'Sem base operacional' : Math.round(scoreValue).toString();
-  const scoreTitle = comparable ? 'Health Score V3' : observed ? 'Desempenho observado' : 'Sem base operacional';
+  const scoreTitle = comparable ? 'Health Score V3' : observed ? 'Nota em formação' : 'Sem base operacional';
   const coverageLabel = snapshot.cobertura === null ? 'Sem base' : `${snapshot.cobertura.toFixed(0)}%`;
 
   return (
@@ -251,7 +246,7 @@ function HealthScoreV3MetricsPanel({
           </div>
           <p className="mt-1 text-xs text-slate-400">Recorte: {recorte} | Configuração V{snapshot.configVersao}</p>
           <p className="mt-1 text-xs text-slate-400">
-            {snapshot.pilaresValidos}/{snapshot.pilaresEsperados} pilares válidos · {coverageLabel} de cobertura
+            {snapshot.pilaresValidos} de {snapshot.pilaresEsperados} pilares na nota · cobertura {coverageLabel}
           </p>
           {snapshot.comparabilidadeMotivo && (
             <p className="mt-1 text-xs text-amber-300">
@@ -267,7 +262,7 @@ function HealthScoreV3MetricsPanel({
         <div className="grid grid-cols-2 gap-2 text-center">
           <div className="min-w-[104px] rounded-md bg-slate-900/70 px-3 py-2">
             <p className="text-lg font-bold text-white">{scoreLabel}</p>
-            <p className="text-[10px] uppercase text-slate-500">{comparable ? 'Health Score' : 'Observado'}</p>
+            <p className="text-[10px] uppercase text-slate-500">{comparable ? 'Health Score' : 'Em formação'}</p>
           </div>
           <div className="min-w-[104px] rounded-md bg-slate-900/70 px-3 py-2">
             <p className="text-lg font-bold text-cyan-300">{coverageLabel}</p>
@@ -306,8 +301,8 @@ function HealthScoreV3MetricsPanel({
             <div key={key} className="min-h-[168px] rounded-lg border border-slate-700 bg-slate-800/40 p-4">
               <div className="flex items-start justify-between gap-2">
                 <p className="text-xs font-semibold text-slate-300">{HEALTH_SCORE_V3_LABELS[key]}</p>
-                <span className="rounded bg-slate-900/80 px-1.5 py-0.5 text-[10px] text-slate-400">
-                  {observed?.stateLabel ?? getV3MetricStateLabel(metric)}
+                <span className="whitespace-nowrap rounded bg-slate-900/80 px-1.5 py-0.5 text-[10px] text-slate-400">
+                  {getV3MetricParticipationLabel(metric)}
                 </span>
               </div>
               <p className={`mt-2 text-xl font-bold ${observedInAudit ? 'text-amber-300' : displayValue === null ? 'text-slate-500' : 'text-white'}`}>
@@ -994,7 +989,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                 </p>
               </div>
             </div>
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+            <span className={`whitespace-nowrap px-3 py-1 rounded-full text-sm font-medium ${
               HEALTH_SCORE_V3_MODAL_ENABLED
                 ? 'border border-violet-500/30 bg-violet-500/10 text-violet-300'
                 : healthScorePublicavel
@@ -1005,7 +1000,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                 ? healthScoreV3Performance?.comparabilidadeEstado === 'comparavel'
                   ? 'V3 comparável'
                   : healthScoreV3Performance?.comparabilidadeEstado === 'em_maturacao'
-                    ? 'V3 em maturação'
+                    ? 'V3 · Base em formação'
                     : 'V3 sem base operacional'
                 : healthScorePublicavel
                 ? (professor.status === 'critico' ? 'Crítico' : professor.status === 'atencao' ? 'Atenção' : 'Excelente')
