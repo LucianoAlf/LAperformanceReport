@@ -348,7 +348,8 @@ test('Edge nao muta fontes canonicas nem faz upsert direto do cabecalho', () => 
 
   const rpcs = chamadasComPrimeiroArgumentoString(edgeSource, 'rpc')
     .map(({ argumento }) => argumento);
-  assert.ok(rpcs.includes('claim_pesquisa_evasao_preview'));
+  assert.ok(rpcs.includes('claim_pesquisa_evasao_preview_editavel'));
+  assert.ok(!rpcs.includes('claim_pesquisa_evasao_preview'));
   assert.ok(rpcs.includes('registrar_resultado_pesquisa_evasao_envio'));
   assert.ok(rpcs.includes('is_movimentacao_admin_retencao_valida'));
   assert.ok(!rpcs.some((rpc) => /permissao_estrita/i.test(rpc)));
@@ -427,7 +428,7 @@ test('confirmacao usa ownership persistido antes do claim sem RBAC por unidade',
   assert.match(edge, /autenticarUsuarioAtivoUnico \(/);
   assert.match(edge, /auth_user_id/);
   assert.match(confirmacao, /previewPersistida \. auth_user_id !== identidade \. authUserId/);
-  assert.match(edge, /claim_pesquisa_evasao_preview/);
+  assert.match(edge, /claim_pesquisa_evasao_preview_editavel/);
   assert.match(edge, /mensagem_renderizada/);
   assert.doesNotMatch(edge, /autorizarIdentidadeComPreviewPersistida|permissao_estrita/i);
   assert.doesNotMatch(confirmacao, /resolverAssinaturaAtivaParaNovaPreview/);
@@ -440,6 +441,47 @@ test('confirmacao usa ownership persistido antes do claim sem RBAC por unidade',
     2,
     'deve existir somente a definicao e uma unica chamada de dispatch',
   );
+});
+
+test('confirmacao recalcula hash e envia somente o texto congelado pelo claim', () => {
+  const edge = codigoExecutavel(readOptional(edgePath));
+  const inicioConfirmacao = edge.indexOf('async function confirmar (');
+  const confirmacao = edge.slice(
+    inicioConfirmacao,
+    edge.indexOf('serve (', inicioConfirmacao),
+  );
+
+  for (const campo of [
+    'usuario_id',
+    'assinatura_id',
+    'template_id',
+    'template_versao',
+    'caixa_id',
+    'destinatario_tipo',
+    'telefone_destino',
+    'mensagem_template_original',
+    'mensagem_renderizada',
+    'payload_hash_original',
+  ]) {
+    assert.match(edge, new RegExp(`\\b${campo}\\b`));
+  }
+
+  assert.match(
+    confirmacao,
+    /request \. mensagem_final \?\? previewPersistida \. mensagem_renderizada/,
+  );
+  assert.match(confirmacao, /validarMensagemFinal \(/);
+  assert.match(confirmacao, /hashPreview \(/);
+  assert.match(confirmacao, /claim_pesquisa_evasao_preview_editavel/);
+  assert.match(confirmacao, /p_mensagem_final : mensagemFinal/);
+  assert.match(confirmacao, /p_payload_hash_final : payloadHashFinal/);
+  assert.match(confirmacao, /PESQUISA_EVASAO_PREVIEW_TEXTO_DIVERGENTE/);
+
+  const dispatch = edge.match(
+    /async function enviarAoProvider[\s\S]*?async function exigirSlotDisponivelParaPreview/,
+  )?.[0] ?? '';
+  assert.match(dispatch, /mensagem : claim \. mensagem_renderizada/);
+  assert.doesNotMatch(dispatch, /mensagemFinal|request \. mensagem_final/);
 });
 
 test('provider nao promete idempotencia ausente e separa sucesso, falha e ambiguidade', () => {

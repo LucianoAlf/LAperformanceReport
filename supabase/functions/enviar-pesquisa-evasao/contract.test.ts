@@ -509,7 +509,8 @@ Deno.test("renderiza mensagem para responsavel de menor", () => {
 });
 
 Deno.test("renderiza V2 para responsavel com formatacao exata e sem separador", () => {
-  const template = `{{responsavel_primeiro_nome}}! Aqui é {{assinatura_com_artigo}}, do Sucesso do Aluno da LA Music. 🎵
+  const template =
+    `{{responsavel_primeiro_nome}}! Aqui é {{assinatura_com_artigo}}, do Sucesso do Aluno da LA Music. 🎵
 
 Queria agradecer pelo tempo que {{aluno_primeiro_nome}} passou com a gente. As portas estarão sempre abertas!
 
@@ -551,7 +552,8 @@ Pode responder com texto ou áudio. Fique à vontade. 🙏`,
 
 Deno.test("renderiza V2 direto falando com o proprio aluno", () => {
   const mensagem = renderizarMensagem({
-    template: `{{aluno_primeiro_nome}}! Aqui é {{assinatura_com_artigo}}, do Sucesso do Aluno da LA Music. 🎵
+    template:
+      `{{aluno_primeiro_nome}}! Aqui é {{assinatura_com_artigo}}, do Sucesso do Aluno da LA Music. 🎵
 
 Queria agradecer pelo tempo que você passou com a gente. As portas estarão sempre abertas para você!
 
@@ -653,6 +655,19 @@ Deno.test("hash do preview e deterministico e muda com o conteudo", async () => 
   assertEquals(primeiro, segundo);
   assertEquals(primeiro.length, 64);
   assertNotEquals(primeiro, alterado);
+});
+
+Deno.test("hash final muda quando apenas uma quebra de linha muda", async () => {
+  const umaQuebra = await hashPreview({
+    ...snapshotValido,
+    mensagemRenderizada: "Primeira linha\nSegunda linha",
+  });
+  const duasQuebras = await hashPreview({
+    ...snapshotValido,
+    mensagemRenderizada: "Primeira linha\n\nSegunda linha",
+  });
+
+  assertNotEquals(umaQuebra, duasQuebras);
 });
 
 Deno.test("hash aceita assinaturaId nula quando usa fallback do login", async () => {
