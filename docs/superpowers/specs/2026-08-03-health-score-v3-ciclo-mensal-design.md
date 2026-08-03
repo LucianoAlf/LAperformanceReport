@@ -2,7 +2,7 @@
 
 **Data:** 03/08/2026
 
-**Status:** desenho aprovado em conversa; aguardando revisão documental antes do plano de implementação
+**Status:** desenho aprovado em conversa e desdobrado no plano de implementação de 03/08/2026
 
 **Escopo:** contrato canônico do Health Score Professor V3 nos recortes mensal e trimestral, comparabilidade, configuração, painel de Professores e relatórios da Coordenação
 
