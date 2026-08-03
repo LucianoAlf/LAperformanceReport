@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useSearchParams } from 'react-router-dom';
 import { Heart, Inbox, LineChart } from 'lucide-react';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
@@ -15,6 +15,9 @@ const sucessoTabs: PageTab<AbaModulo>[] = [
 ];
 
 export function SucessoClientePage() {
+  const [searchParams] = useSearchParams();
+  const abrirPesquisaEvasao = searchParams.get('destino') === 'pesquisas-evasao';
+
   useSetPageTitle({
     titulo: 'Sucesso do Aluno',
     subtitulo: 'Atendimento, acompanhamento, presença e retenção dos alunos',
@@ -26,13 +29,17 @@ export function SucessoClientePage() {
   const context = useOutletContext<{ unidadeSelecionada: UnidadeId }>();
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
 
-  const [aba, setAba] = useState<AbaModulo>('caixa');
+  const [aba, setAba] = useState<AbaModulo>(abrirPesquisaEvasao ? 'acompanhamento' : 'caixa');
   const [alunoParaCaixa, setAlunoParaCaixa] = useState<number | null>(null);
 
   const abrirConversaAluno = (alunoId: number) => {
     setAlunoParaCaixa(alunoId);
     setAba('caixa');
   };
+
+  useEffect(() => {
+    if (abrirPesquisaEvasao) setAba('acompanhamento');
+  }, [abrirPesquisaEvasao]);
 
   return (
     <div className="space-y-4">
@@ -48,7 +55,11 @@ export function SucessoClientePage() {
           alunoIdInicial={alunoParaCaixa}
         />
       ) : (
-        <TabSucessoAluno unidadeAtual={unidadeAtual} onAbrirConversa={abrirConversaAluno} />
+        <TabSucessoAluno
+          unidadeAtual={unidadeAtual}
+          onAbrirConversa={abrirConversaAluno}
+          abrirPesquisaEvasao={abrirPesquisaEvasao}
+        />
       )}
     </div>
   );

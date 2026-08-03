@@ -16,6 +16,7 @@ import {
   resolverPesquisa,
 } from './evasao.ts';
 import {
+  deveIgnorarEcoAlertaPrivadoLia,
   deveProcessarRespostaEvasao,
   encaminharPesquisaPrimeiraAula,
 } from './routing.ts';
@@ -1070,6 +1071,39 @@ serve(async (req: Request) => {
         }
 
         const whatsappMessageId = msg.key?.id || msg.id || msg.messageId;
+
+        // Alertas privados da Lia voltam pela UAZAPI como eco fromMe. Eles nao
+        // pertencem a uma conversa com familia e precisam parar antes de todos
+        // os roteamentos. O filtro e deliberadamente estrito: caixa 3, fromMe e
+        // provider_message_id com correspondencia exata na outbox governada.
+        const ignorarEcoAlerta = await deveIgnorarEcoAlertaPrivadoLia({
+          caixaId: caixaIdFromUrl,
+          fromMe: msg.key?.fromMe === true,
+          providerMessageId: typeof whatsappMessageId === 'string'
+            ? whatsappMessageId
+            : null,
+          existeNaOutbox: async (providerMessageId) => {
+            const { data, error } = await supabase
+              .from('lia_alertas_privados')
+              .select('id')
+              .eq('caixa_id', 3)
+              .eq('provider_message_id', providerMessageId)
+              .limit(1)
+              .maybeSingle();
+            if (error) throw error;
+            return Boolean(data);
+          },
+        });
+        if (ignorarEcoAlerta) {
+          diagnosticarWebhook(
+            correlationId,
+            caixaIdFromUrl,
+            eventTypeForDiagnostics,
+            'ignored',
+            'duplicate',
+          );
+          continue;
+        }
 
         // ========== RESPOSTA DA PESQUISA PÓS-1ª AULA (botão/lista) ==========
         // Encaminhar antes da evasão. Uma falha do processador é diagnosticada,

@@ -17,8 +17,9 @@
   `sem_resposta`.
 - Nenhum alerta da Fase A foi enviado. O primeiro exige o piloto no número
   governado do Alf e autorização separada, com ele presente.
-- Esta fase não altera frontend. O alerta abre `/app/sucesso-aluno`; deep link
-  para a pesquisa exata é melhoria posterior.
+- A correção pós-piloto abre `/app/sucesso-aluno?destino=pesquisas-evasao`,
+  suficiente para chegar em Acompanhamento > Pesquisas > Evasão. Deep link
+  para expandir a pesquisa exata continua como melhoria posterior.
 
 ## Contrato entregue pelo pacote local
 
@@ -52,13 +53,18 @@
   `supabase/functions/processar-alertas-lia/`.
 - Contrato do dispatcher implementado e verde:
   `tests/liaAlertasDispatcherEdge.test.mjs`.
+- Correções pós-piloto ainda somente locais:
+  `20260803133000_lia_alertas_link_evasao.sql`,
+  `20260803133500_lia_alertas_ecos_admin_cleanup.sql` e o filtro exato em
+  `webhook-whatsapp-inbox`.
 - `scripts/process_lia_alert_queue.py`, units systemd e rota `/send-alert`
   foram removidos do pacote. Não os reinstalar neste rollout.
 
 ## Janela temporária até a ativação
 
 - Respostas produtivas continuam entrando normalmente pelo
-  `webhook-whatsapp-inbox`; a Fase A não altera nem publica essa função.
+  `webhook-whatsapp-inbox`. A única alteração posterior da Fase A é o filtro
+  exato do eco da própria outbox; o fluxo de mensagens de família permanece.
 - Até a ativação, respostas reais não geram alerta privado. Fabi e Jéssica
   precisam abrir a tela do Sucesso do Aluno para acompanhar os casos.
 - As entregas produzidas nesse intervalo ficam em `aguardando_liberacao`. A
@@ -245,6 +251,83 @@ ambiente `teste`, operador/destinatário 2, destino final `8047`, caixa 3,
 armazenado começa por `🔕 *Família recusou novos contatos — Pesquisa de
 evasão*`. Produção continua bloqueada e não existe cron de entrega.
 
+## Bloqueio pós-piloto — eco do alerta na Caixa de Entrada
+
+Os dois pilotos chegaram corretamente ao WhatsApp do Alf, mas a UAZAPI também
+devolveu cada envio como eco `fromMe` ao `webhook-whatsapp-inbox`. Como o número
+do Alf é compartilhado por vários cadastros, os ecos foram anexados à conversa
+real `a9d1ad72-8621-429b-baf1-559e6850c0f9`. A Caixa de Entrada é usada pela
+Jéssica para conversas reais com responsáveis — inclusive houve atendimento
+ativo a Fernanda Martins em 03/08 — e não pode virar log técnico.
+
+Evidência somente leitura antes da correção:
+
+- os ecos são exatamente `3EB01E74F9436FFE432905` e
+  `3EB0D39B4723961827A2A2`, ambos confirmados na outbox da caixa 3;
+- existem exatamente duas linhas correspondentes em `admin_mensagens`;
+- nenhum desses IDs existe em `pesquisa_evasao_mensagens`, portanto os pilotos
+  não contaminaram resposta de pesquisa;
+- a conversa alvo possui mensagens reais e deve permanecer intacta;
+- nos dois pilotos, a outbox já continha o `provider_message_id` por 3,0 a 3,6
+  segundos antes de o eco ser persistido na inbox.
+
+Correção implementada e publicada em 03/08/2026:
+
+1. o webhook só ignora quando as três condições forem verdadeiras ao mesmo
+   tempo: `caixa_id=3`, `fromMe=true` e `provider_message_id` exato existente em
+   `lia_alertas_privados` para a caixa 3;
+2. o filtro não recebe nem consulta telefone, conteúdo ou nome e fica antes de
+   primeira aula, evasão, inbox administrativa e CRM;
+3. falha da consulta abre o fluxo normal. Assim, indisponibilidade nunca causa
+   descarte silencioso de uma mensagem potencialmente legítima;
+4. mensagem de responsável (`fromMe=false`), saída manual da Jéssica com ID não
+   pertencente à outbox, outra caixa ou ID ausente seguem o fluxo existente;
+5. a limpeza versionada apaga somente os dois IDs acima, exige correspondência
+   exata entre conteúdo da inbox e snapshot da outbox, prova zero evento de
+   evasão, preserva a conversa e recompõe seu preview pela última mensagem
+   restante. Não altera `nao_lidas` e nunca apaga `admin_conversas`;
+6. o link passa a abrir Pesquisas > Evasão. Alertas enviados permanecem
+   imutáveis; somente entregas ainda não enviadas, sem `provider_message_id`,
+   recebem template versão 2.
+
+Provas locais executadas antes da publicação:
+
+- testes unitários do roteador com eco exato, responsável real, saída manual,
+  outra caixa, ID ausente e erro de banco;
+- regressão estática garantindo que o filtro roda antes de todos os roteamentos;
+- regressões de primeira aula, evasão multipartes, inbox e privacidade;
+- build do frontend com o destino `pesquisas-evasao`;
+- preflight remoto repetindo as contagens exatas imediatamente antes da limpeza.
+
+Execução remota autorizada e evidências:
+
+1. a conversa real da Jéssica com Fernanda Martins, responsável por Sofia
+   Martins Guerreiro, foi fotografada antes da mudança: 7 mensagens, sendo 5
+   entradas e 2 saídas, entre `2026-07-31 21:23:03.278015+00` e
+   `2026-08-03 15:19:02.236316+00`, com fingerprint agregado
+   `f08fa868720395778460c8b9b8c4503c`;
+2. `webhook-whatsapp-inbox` foi publicado como versão 85, mantendo o contrato
+   existente do webhook e acrescentando somente o filtro exato da outbox;
+3. a migration local `20260803133000_lia_alertas_link_evasao.sql` foi
+   registrada remotamente como `20260803155959_lia_alertas_link_evasao`;
+4. a migration local `20260803133500_lia_alertas_ecos_admin_cleanup.sql` foi
+   registrada remotamente como `20260803160011_lia_alertas_ecos_admin_cleanup`;
+5. a limpeza removeu exatamente os dois ecos históricos, preservou a conversa
+   `a9d1ad72-8621-429b-baf1-559e6850c0f9` com 11 mensagens e não apagou a
+   conversa; a fotografia de Fernanda permaneceu com as mesmas 7 mensagens e
+   o mesmo fingerprint;
+6. o alerta controlado `78f265e0-91a9-41b1-b254-1cc37d3ab41a`, ambiente
+   `teste`, caixa 3 e destinatário 2, foi enviado uma única vez, com
+   `provider_message_id=3EB0C4D9E18ECC739FFC1F`; após o eco do provedor, esse
+   ID permaneceu com zero linhas em `admin_mensagens` e zero linhas em
+   `pesquisa_evasao_mensagens`;
+7. `alertas_producao_liberados=false` e o cron de consumo continua ausente.
+
+Ainda falta a prova controlada de uma entrada legítima `fromMe=false` depois da
+versão 85. A migration de ativação e o cron continuam proibidos enquanto esse
+gate não for aceito. O frontend que interpreta `destino=pesquisas-evasao`
+também permanece local até a publicação autorizada.
+
 ## Gate 4 — ativação humana e cron, artefato ainda inexistente
 
 Somente depois do aceite do piloto:
@@ -336,8 +419,9 @@ justifica alterar a pesquisa canônica.
 - A adaptação DDL e o dispatcher Edge foram implementados localmente. O núcleo
   cobre envio único, `message_id` obrigatório, falhas terminais e log
   sanitizado; nenhum desses artefatos foi aplicado ou publicado.
-- O pacote da Fase A não modifica `webhook-whatsapp-inbox`. Qualquer publicação
-  futura desta fase se limita a `processar-alertas-lia`.
+- O pacote original não modificava `webhook-whatsapp-inbox`. O piloto revelou
+  a necessidade de uma correção restrita: ignorar apenas ecos `fromMe` da caixa
+  3 cujo `provider_message_id` esteja na outbox governada.
 - A fundação foi aplicada em produção com o bloqueio ativo; nenhum alerta da
   Fase A, deploy de dispatcher ou ativação foi realizado.
 - O primeiro retorno produtivo ocorrido durante esta implementação comprovou a

@@ -35,3 +35,31 @@ export function deveProcessarRespostaEvasao(
 ): boolean {
   return !mensagem.buttonOrListid;
 }
+
+interface VerificarEcoAlertaPrivadoLiaParams {
+  caixaId: number | null;
+  fromMe: boolean;
+  providerMessageId: string | null;
+  existeNaOutbox: (providerMessageId: string) => Promise<boolean>;
+}
+
+export async function deveIgnorarEcoAlertaPrivadoLia(
+  params: VerificarEcoAlertaPrivadoLiaParams,
+): Promise<boolean> {
+  const providerMessageId = params.providerMessageId?.trim() ?? "";
+  if (
+    params.caixaId !== 3 ||
+    params.fromMe !== true ||
+    !providerMessageId
+  ) {
+    return false;
+  }
+
+  try {
+    return await params.existeNaOutbox(providerMessageId);
+  } catch {
+    // Falha aberta para o fluxo normal: indisponibilidade da consulta nunca
+    // pode descartar silenciosamente uma mensagem legitima da familia.
+    return false;
+  }
+}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Star, UserX, BarChart3 } from 'lucide-react';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { PesquisaPrimeiraAulaTab } from './PesquisaPrimeiraAulaTab';
@@ -10,10 +10,15 @@ type SubAba = 'pos_primeira_aula' | 'evasao' | 'respostas';
 interface Props {
   unidadeAtual: UnidadeId;
   onAbrirConversa?: (alunoId: number) => void;
+  abrirEvasao?: boolean;
 }
 
-export function PesquisasTab({ unidadeAtual, onAbrirConversa }: Props) {
-  const [subAba, setSubAba] = useState<SubAba>('pos_primeira_aula');
+export function PesquisasTab({ unidadeAtual, onAbrirConversa, abrirEvasao = false }: Props) {
+  const [subAba, setSubAba] = useState<SubAba>(abrirEvasao ? 'evasao' : 'pos_primeira_aula');
+
+  useEffect(() => {
+    if (abrirEvasao) setSubAba('evasao');
+  }, [abrirEvasao]);
 
   const botaoClasse = (ativo: boolean) =>
     `flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${

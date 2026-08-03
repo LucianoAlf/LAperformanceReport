@@ -71,6 +71,7 @@ interface AlertaSaude {
 interface Props {
   unidadeAtual: UnidadeId;
   onAbrirConversa?: (alunoId: number) => void;
+  abrirPesquisaEvasao?: boolean;
 }
 
 type SortKey = 'nome' | 'health_score_numerico' | 'fase_jornada' | 'percentual_presenca' |
@@ -143,7 +144,7 @@ const getSortValue = (aluno: AlunoSucesso, key: SortKey): number | string => {
   }
 };
 
-export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
+export function TabSucessoAluno({ unidadeAtual, onAbrirConversa, abrirPesquisaEvasao = false }: Props) {
   const toast = useToast();
   const sentinelRef = useWidgetOverlapSentinel();
 
@@ -155,7 +156,7 @@ export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
   const [recalculando, setRecalculando] = useState(false);
   const [modalAluno, setModalAluno] = useState<{ open: boolean; aluno: AlunoSucesso | null }>({ open: false, aluno: null });
   const [modalFeedback, setModalFeedback] = useState(false);
-  const [subAba, setSubAba] = useState<'tabela' | 'jornada' | 'pesquisa' | 'presenca' | 'faltas' | 'marcos' | 'analise' | 'cartoes' | 'automacoes'>('tabela');
+  const [subAba, setSubAba] = useState<'tabela' | 'jornada' | 'pesquisa' | 'presenca' | 'faltas' | 'marcos' | 'analise' | 'cartoes' | 'automacoes'>(abrirPesquisaEvasao ? 'pesquisa' : 'tabela');
   const [paginaAtual, setPaginaAtual] = useState(1);
   const itensPorPagina = 30;
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({
@@ -179,6 +180,10 @@ export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
   useEffect(() => {
     carregarDados();
   }, [unidadeAtual]);
+
+  useEffect(() => {
+    if (abrirPesquisaEvasao) setSubAba('pesquisa');
+  }, [abrirPesquisaEvasao]);
 
   // PostgREST corta em 1000 linhas por padrao. Sem paginar, alunos com id/ordenacao
   // além do corte somem em silêncio (achado real: Beatriz Gonçalves Pereira, aluno_id
@@ -989,7 +994,11 @@ export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
 
       {/* Conteúdo da Subaba PESQUISAS */}
       {subAba === 'pesquisa' && (
-        <PesquisasTab unidadeAtual={unidadeAtual} onAbrirConversa={onAbrirConversa} />
+        <PesquisasTab
+          unidadeAtual={unidadeAtual}
+          onAbrirConversa={onAbrirConversa}
+          abrirEvasao={abrirPesquisaEvasao}
+        />
       )}
 
       {/* Conteúdo da Subaba JORNADA */}
