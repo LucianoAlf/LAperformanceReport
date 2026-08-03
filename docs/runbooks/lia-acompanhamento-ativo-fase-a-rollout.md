@@ -320,6 +320,13 @@ Evidências:
   SHA-256 `8ef0afe0d578b7bee50b14dc802e955b6a92b2c583f121664666081316fc13c2`;
 - migration `20260803210000_lia_alertas_dispatcher_edge.sql`: `7.522` bytes,
   SHA-256 `c79244d60bd9c1fa811e9707f73973097acd1b3511163ffe3fffbade9429e51d`;
+- o artefato executado no ensaio estava em LF. Depois do rebase, o checkout
+  Windows materializa o mesmo SQL em CRLF (`7.792` bytes, SHA-256 bruto
+  `cc4d942967eaa3684ec4323c377535ae080707d870aa01aadcb5edc970cd2325`).
+  Normalizado para LF, ele volta a `7.522` bytes e ao SHA-256 do ensaio acima;
+  `git diff` entre o commit ensaiado e o atual confirma zero mudança semântica.
+  No rollout, calcular o hash dos bytes efetivamente transportados e registrar
+  também a forma de terminação de linha usada;
 - `1.213` versões remotas foram registradas apenas como baseline de versões,
   terminando em `20260803142013`, sem replay do histórico;
 - as seis roles estruturais foram criadas sem login;
