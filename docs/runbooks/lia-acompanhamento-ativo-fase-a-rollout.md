@@ -192,6 +192,27 @@ eliminando a dependência da variável global divergente. Essa correção exige
 teste e novo deploy autorizado; não alterar nem rotacionar o segredo global,
 pois outras Edge Functions dependem dele.
 
+A correção foi autorizada, implementada por TDD e publicada na Edge versão 2.
+O gateway permanece com `verify_jwt=true`; o handler exige simultaneamente
+`role=service_role` e `ref=ouqwbbermlzqqvtqwlul`, sem comparar a credencial com
+variável de ambiente. O bearer já validado pelo gateway é reutilizado no cliente
+administrativo. A matriz posterior confirmou:
+
+- chamada anônima: 401;
+- JWT malformado: 401;
+- JWT válido não privilegiado (`role=anon`): 403;
+- `role=authenticated`, projeto estrangeiro e token malformado: rejeitados nos
+  testes unitários;
+- JWT `service_role` deste projeto: 200 com `status=sem_pendencia` enquanto não
+  havia entrega `pendente`.
+
+O piloto foi somente enfileirado, sem invocar o dispatcher: alerta
+`77158141-e179-45fe-9edc-0dbb553f2822`, pesquisa teste de Davi Pedro Palmerini,
+ambiente `teste`, operador/destinatário 2, destino governado final `8047`, caixa
+3, status `pendente`, zero tentativas e `provider_message_id` nulo. Não existe
+entrega teste para 29 ou 30. Produção continua bloqueada, sem cron, e o alerta de
+Miguel Santos Borges permanece em `aguardando_liberacao` para a Jéssica.
+
 ## Gate 4 — ativação humana e cron, artefato ainda inexistente
 
 Somente depois do aceite do piloto:
