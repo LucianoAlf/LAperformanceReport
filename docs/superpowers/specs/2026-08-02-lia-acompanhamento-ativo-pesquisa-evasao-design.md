@@ -2,7 +2,8 @@
 
 **Data:** 02/08/2026
 
-**Status:** aprovada pelo Alf com fases A-D; nenhuma implementação autorizada
+**Status:** aprovada pelo Alf com fases A-D; Fase A implementada localmente,
+sem rollout, instalação na VPS ou envio autorizado
 
 **Autoridade de produto:** Alf
 
@@ -676,6 +677,22 @@ rapidamente — sem exigir deploy de quatro componentes de frontend.
   de health e prova de entrega antes de receber o KPI do Sucesso do Aluno.
 - “Sem resposta” é uma observação temporal, não causa de evasão nem julgamento
   sobre a família.
+
+### 20.1 Estado da implementação local da Fase A
+
+- O pacote local cria outbox própria, destinos governados, produtor por rodada,
+  claim atômico, desfechos terminais, fila administrativa e piloto restrito.
+- A produção nasce bloqueada por `alertas_producao_liberados=false`; não existe
+  migration de ativação.
+- O worker Hermes e as units estão versionados, mas não foram instalados nem
+  ativados.
+- A fixture PostgreSQL 17 e os testes Python cobrem idempotência, isolamento de
+  destinatário, ausência de fallback, janela BRT e não reenvio ambíguo.
+- O rollout é governado por
+  `docs/runbooks/lia-acompanhamento-ativo-fase-a-rollout.md` e para antes do
+  primeiro piloto.
+- Deep link exato e ajuste visual da consolidação duplicada permanecem fora da
+  Fase A.
 
 ## 21. Arquivos e contratos relacionados
 
