@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import {
+  contarFiltrosAvancados,
   filtrarAulas,
   filtroAtivo,
   normalizarBusca,
+  opcoesDeCategoria,
   opcoesDoCampo,
+  rotuloCategoria,
   FILTROS_AGENDA_VAZIOS,
   type AulaFiltravel,
   type FiltrosAgenda,
@@ -16,6 +19,7 @@ function aula(over: Partial<AulaFiltravel> = {}): AulaFiltravel {
     curso_nome: 'Violão',
     turma_nome: null,
     tipo: 'individual',
+    categoria: 'normal',
     cancelada: false,
     alunos: [{ nome: 'João Pereira' }],
     ...over,
@@ -84,6 +88,17 @@ assert.equal(filtroAtivo(filtros({ tipo: 'turma' })), true);
 // Tipo nulo (RPC sem contrato identificado) nao casa com nenhum dos dois
 assert.equal(filtrarAulas([aula({ tipo: null })], filtros({ tipo: 'individual' })).length, 0);
 
+// Categoria (experimental, extra...)
+const porCategoria = [aula(), aula({ categoria: 'experimental' }), aula({ categoria: 'extra' })];
+assert.equal(filtrarAulas(porCategoria, filtros({ categoria: 'experimental' })).length, 1);
+assert.equal(filtrarAulas(porCategoria, filtros({ categoria: 'normal' })).length, 1);
+assert.equal(filtrarAulas(porCategoria, filtros()).length, 3);
+assert.equal(filtroAtivo(filtros({ categoria: 'experimental' })), true);
+assert.deepEqual(opcoesDoCampo(porCategoria, 'categoria'), ['experimental', 'extra', 'normal']);
+// Categoria desconhecida cai no valor cru em vez de sumir do filtro
+assert.equal(rotuloCategoria('experimental'), 'Experimental');
+assert.equal(rotuloCategoria('categoria_nova_do_emusys'), 'categoria_nova_do_emusys');
+
 // Ocultar canceladas
 const comCancelada = [aula(), aula({ cancelada: true })];
 assert.equal(filtrarAulas(comCancelada, filtros()).length, 2);
@@ -108,5 +123,41 @@ assert.deepEqual(
   ),
   ['Ângela', 'Zeca'],
 );
+
+// contarFiltrosAvancados: so o que fica ESCONDIDO no popover
+assert.equal(contarFiltrosAvancados(filtros()), 0);
+// A busca e visivel na barra — nao entra na conta do badge
+assert.equal(contarFiltrosAvancados(filtros({ busca: 'joao' })), 0);
+assert.equal(contarFiltrosAvancados(filtros({ curso: 'Piano' })), 1);
+assert.equal(contarFiltrosAvancados(filtros({ ocultarCanceladas: true })), 1);
+assert.equal(
+  contarFiltrosAvancados(
+    filtros({ curso: 'Piano', professor: 'Carla', turma: 'G_Ter_14', tipo: 'turma', categoria: 'normal', ocultarCanceladas: true }),
+  ),
+  6,
+);
+
+// opcoesDeCategoria: conjunto FECHADO, lista tudo com contagem — inclusive zero.
+// Caso real (03/08/2026): Campo Grande sem nenhuma experimental fazia a opcao
+// sumir, e nao havia como saber se o filtro quebrou ou se nao havia aula.
+const soNormais = opcoesDeCategoria([{ categoria: 'normal' }, { categoria: 'normal' }]);
+assert.deepEqual(
+  soNormais.map((o) => `${o.valor}:${o.qtd}`),
+  ['normal:2', 'experimental:0', 'extra:0', 'reposicao:0', 'avulsa:0'],
+);
+assert.equal(soNormais[1].rotulo, 'Experimental');
+// Ordem e fixa (nao alfabetica nem por contagem), para o select nao dancar
+assert.deepEqual(
+  opcoesDeCategoria([{ categoria: 'extra' }, { categoria: 'extra' }, { categoria: 'experimental' }])
+    .map((o) => o.valor),
+  ['normal', 'experimental', 'extra', 'reposicao', 'avulsa'],
+);
+// Dia vazio ainda oferece as 5 conhecidas, todas zeradas
+assert.equal(opcoesDeCategoria([]).length, 5);
+assert.equal(opcoesDeCategoria([]).every((o) => o.qtd === 0), true);
+// Categoria nova do Emusys entra no FIM em vez de sumir
+const comNova = opcoesDeCategoria([{ categoria: 'ensaio_geral' }, { categoria: null }]);
+assert.equal(comNova.length, 6);
+assert.deepEqual(comNova[5], { valor: 'ensaio_geral', rotulo: 'ensaio_geral', qtd: 1 });
 
 console.log('agendaFiltros: OK');

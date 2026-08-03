@@ -10,6 +10,16 @@ export interface AlunoAgenda {
   responsavel_nome: string | null;
   responsavel_telefone: string | null;
   status_presenca: string | null;
+  // Numero da aula DESTE aluno no contrato dele. Vem por aluno, e nao da aula,
+  // porque em turma o campo do topo e nulo.
+  // ⚠️ nr_da_aula = 1 NAO significa aluno novo: renovacao abre contrato novo e
+  // zera o contador. Em 03/08/2026, 7 dos 11 alunos com nr_da_aula = 1 eram
+  // renovacao. Para "aluno novo" use `aluno_novo`.
+  nr_da_aula: number | null;
+  qtd_aulas_contrato: number | null;
+  // 1a aula regular do aluno na escola (experimental nao conta). Calculado no
+  // banco pela ausencia de aula anterior, nao por data_matricula.
+  aluno_novo: boolean;
   risco_pct: number | null;
   inadimplente: boolean;
   nota_pesquisa: number | null;

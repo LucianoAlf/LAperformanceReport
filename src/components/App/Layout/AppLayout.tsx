@@ -50,8 +50,17 @@ export function AppLayout() {
     <WidgetVisibilityProvider>
       <div className="flex min-h-screen bg-slate-950">
         <AppSidebar data-tour="sidebar" />
+        {/* `min-w-0` e obrigatorio aqui: um item de flex tem `min-width: auto`,
+            ou seja, ele se recusa a encolher abaixo do proprio min-content. Sem
+            isso esta coluna cresce alem da viewport sempre que a pagina tem
+            conteudo largo, e o que estiver mais a direita fica fora da tela —
+            foi o que escondia o painel de detalhe da Agenda, empurrado para
+            depois da borda em vez de a timeline ceder os 296px dele.
+            Nao ha `overflow-hidden` de proposito: assim conteudo genuinamente
+            largo continua transbordando visivel (com a barra do documento) em
+            vez de ser cortado em silencio. */}
         <div
-          className="flex-1 transition-all duration-300"
+          className="min-w-0 flex-1 transition-all duration-300"
           style={{
             marginLeft: isSidebarCollapsed ? '96px' : '256px'
           }}

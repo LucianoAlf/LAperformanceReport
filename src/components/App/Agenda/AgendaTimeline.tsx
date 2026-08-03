@@ -5,19 +5,24 @@ import {
   AGENDA_GAP_FAIXA_PX,
   AGENDA_LARGURA_HORA_AMPLA_PX,
   alocarFaixas,
+  aulaEmAndamento,
   contarFaixas,
+  cursoPredominante,
   formatarRelogio,
+  iniciaisDoNome,
   janelaDeHoras,
   larguraDaHora,
   larguraPx,
+  ocupacaoPct,
   posicaoPx,
+  resumoSobreposicao,
   segundosAgora,
 } from '@/lib/agenda';
 import type { AulaAgenda } from '@/hooks/useAgendaDia';
 import { AgendaCard } from './AgendaCard';
 
 const PADDING_TRILHO = 7;
-const LARGURA_ROTULO = 150;
+const LARGURA_ROTULO = 172;
 
 interface Props {
   aulas: AulaAgenda[];
@@ -99,76 +104,200 @@ export function AgendaTimeline({
   const reguaVisivel = ehHoje && horaDaRegua >= janela.inicio && horaDaRegua <= janela.fim;
   // A regua anda por segundo: posiciona pela fracao de hora, nao por 'HH:MM'.
   const posicaoRegua = (horaDaRegua - janela.inicio) * larguraHora;
+  // Minutos de agora, ou null quando o dia exibido nao e hoje — o card usa isso
+  // para saber se esta em andamento, e num outro dia a resposta e sempre nao.
+  const minutosAgoraOuNulo = ehHoje ? Math.floor(segundos / 60) : null;
+  // Largura do que ja passou, recortada na janela visivel.
+  const larguraVeu = reguaVisivel ? Math.max(0, posicaoRegua) : 0;
+  const horaCorrente = Math.floor(segundos / 3600);
+
+  const larguraTrilho = horas.length * larguraHora;
 
   return (
-    <div ref={containerRef} className="relative overflow-x-auto">
-      <div style={{ minWidth: LARGURA_ROTULO + horas.length * larguraHora }} className="relative">
-        <div
-          className="sticky top-0 z-10 grid border-b border-slate-700 bg-slate-800/95"
-          style={{
-            gridTemplateColumns: `${LARGURA_ROTULO}px repeat(${horas.length}, ${larguraHora}px)`,
-          }}
-        >
-          <div className="border-r border-slate-700 px-3.5 py-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">
-            {agruparPor === 'professor' ? 'Professor' : 'Sala'}
-          </div>
-          {horas.map((h) => (
-            <div key={h} className="border-l border-slate-800 py-1.5 pl-2 text-[11.5px] tabular-nums text-slate-400">
-              {String(h).padStart(2, '0')}:00
-            </div>
-          ))}
-        </div>
-
-        {[...grupos.entries()].map(([chave, { rotulo, unidade, aulas: doGrupo }]) => {
-          const comFaixa = alocarFaixas(doGrupo);
-          const nFaixas = contarFaixas(comFaixa);
-          const altura = PADDING_TRILHO * 2 + nFaixas * alturaFaixa + (nFaixas - 1) * AGENDA_GAP_FAIXA_PX;
-
-          return (
-            <div
-              key={chave}
-              className="grid border-b border-slate-800"
-              style={{ gridTemplateColumns: `${LARGURA_ROTULO}px 1fr` }}
-            >
-              <div className="flex flex-col justify-center border-r border-slate-700 px-3.5 py-2.5">
-                <span className="truncate text-[13px] font-semibold">{rotulo}</span>
-                <span className="truncate text-[11px] text-slate-400">
-                  {unidade && <span className="text-cyan-400">{unidade} · </span>}
-                  {doGrupo.filter((a) => !a.cancelada).length} aulas
-                </span>
-              </div>
-              <div className="relative" style={{ height: Math.max(52, altura) }}>
-                {comFaixa.map((aula) => (
-                  <AgendaCard
-                    key={aula.chave}
-                    aula={aula}
-                    selecionada={selecionada?.chave === aula.chave}
-                    onSelecionar={onSelecionar}
-                    amplo={amplo}
-                    estilo={{
-                      left: posicaoPx(aula.hora_inicio, larguraHora, janela.inicio),
-                      width: Math.max(46, larguraPx(aula.duracao_minutos, larguraHora) - 4),
-                      top: PADDING_TRILHO + aula.faixa * (alturaFaixa + AGENDA_GAP_FAIXA_PX),
-                      height: alturaFaixa,
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-
-        {reguaVisivel && (
+    <div className="flex min-w-0 flex-col">
+      <div ref={containerRef} className="relative overflow-x-auto">
+        <div style={{ minWidth: LARGURA_ROTULO + larguraTrilho }} className="relative">
           <div
-            className="pointer-events-none absolute bottom-0 top-0 z-20 w-0.5 bg-red-500"
-            style={{ left: LARGURA_ROTULO + posicaoRegua }}
+            className="sticky top-0 z-10 grid border-b border-slate-700 bg-slate-800/95"
+            style={{
+              gridTemplateColumns: `${LARGURA_ROTULO}px repeat(${horas.length}, ${larguraHora}px)`,
+            }}
           >
-            <span className="absolute left-1/2 top-0 -translate-x-1/2 rounded-b bg-red-500 px-1.5 text-[10.5px] font-bold tabular-nums text-white">
-              {relogio}
-            </span>
+            <div className="border-r border-slate-700 px-3.5 py-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">
+              {agruparPor === 'professor' ? 'Professor' : 'Sala'}
+            </div>
+            {horas.map((h) => (
+              <div
+                key={h}
+                className={
+                  ehHoje && h === horaCorrente
+                    ? 'border-l border-slate-800 py-1.5 pl-2 text-[11.5px] font-semibold tabular-nums text-emerald-400'
+                    : ehHoje && h < horaCorrente
+                      ? 'border-l border-slate-800 py-1.5 pl-2 text-[11.5px] tabular-nums text-slate-600'
+                      : 'border-l border-slate-800 py-1.5 pl-2 text-[11.5px] tabular-nums text-slate-400'
+                }
+              >
+                {String(h).padStart(2, '0')}:00
+              </div>
+            ))}
           </div>
-        )}
+
+          {/* Veu do que ja passou. O dia inteiro pintado igual nao diz onde
+              estamos; a regua sozinha e um traco de 2px que se perde numa grade
+              cheia. Aqui a metade vencida do dia recua e o que resta fica em
+              primeiro plano — le-se antes de qualquer numero. */}
+          {larguraVeu > 0 && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute bottom-0 top-0 z-[1] bg-slate-950/35"
+              style={{ left: LARGURA_ROTULO, width: larguraVeu }}
+            />
+          )}
+
+          {/* Gridlines. Antes eram um repeating-linear-gradient no fundo de cada
+              trilho, e isso dava dois defeitos: a repeticao acumulava erro de
+              sub-pixel e o navegador engolia parte das linhas, e cada trilho
+              desenhava as suas, entao a linha "quebrava" em toda borda de linha.
+              Aqui sao elementos proprios, posicionados na MESMA conta que os
+              cards usam (posicaoPx), atravessando a altura inteira da grade.
+              Vem antes dos trilhos no DOM de proposito: como sao posicionados,
+              pintam sobre as bordas horizontais (linha continua) e por ordem de
+              arvore ficam sob os cards, que sao posicionados e vem depois. */}
+          {horas.map((h, indice) => (
+            <div
+              key={`grade-${h}`}
+              aria-hidden="true"
+              className="pointer-events-none absolute bottom-0 top-0 z-[2] w-px bg-slate-700"
+              style={{ left: LARGURA_ROTULO + indice * larguraHora }}
+            />
+          ))}
+
+          {[...grupos.entries()].map(([chave, { rotulo, unidade, aulas: doGrupo }]) => {
+            const comFaixa = alocarFaixas(doGrupo);
+            const nFaixas = contarFaixas(comFaixa);
+            const altura = PADDING_TRILHO * 2 + nFaixas * alturaFaixa + (nFaixas - 1) * AGENDA_GAP_FAIXA_PX;
+            const vivas = doGrupo.filter((a) => !a.cancelada);
+            const conflito = resumoSobreposicao(doGrupo);
+            // Agrupado por SALA o curso predominante nao diz nada (uma sala
+            // recebe qualquer instrumento); agrupado por professor, e o dado
+            // que hoje so aparece abrindo cada aula.
+            const curso = agruparPor === 'professor' ? cursoPredominante(doGrupo) : null;
+            const ocupacao = ocupacaoPct(doGrupo, janela);
+
+            return (
+              <div
+                key={chave}
+                className="relative z-[3] grid border-b border-slate-800"
+                // Largura explicita em vez de `1fr`: com `1fr` o trilho estica
+                // alem de horas * larguraHora quando o piso de 88px entra em
+                // acao, e as gridlines deixam de casar com o cabecalho.
+                style={{ gridTemplateColumns: `${LARGURA_ROTULO}px ${larguraTrilho}px` }}
+              >
+                <div className="flex items-center gap-2.5 border-r border-slate-700 bg-slate-900 px-3 py-2.5">
+                  <span
+                    aria-hidden="true"
+                    className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-md bg-slate-800 text-[10.5px] font-semibold text-slate-300"
+                  >
+                    {iniciaisDoNome(rotulo)}
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-[13px] font-semibold">{rotulo}</span>
+                    <span className="truncate text-[11px] text-slate-400">
+                      {unidade && <span className="text-cyan-400">{unidade} · </span>}
+                      {curso && `${curso} · `}
+                      {vivas.length} {vivas.length === 1 ? 'aula' : 'aulas'}
+                    </span>
+                    {/* Ocupacao: da para ver quem esta com o dia cheio sem
+                        contar cartao a cartao. Uniao de intervalos, entao aula
+                        sobreposta nao infla o numero. */}
+                    <span
+                      aria-hidden="true"
+                      title={`${ocupacao}% da janela do dia ocupada`}
+                      className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-slate-800"
+                    >
+                      <span
+                        className="block h-full rounded-full bg-cyan-500/60"
+                        style={{ width: `${ocupacao}%` }}
+                      />
+                    </span>
+                    {/* O empilhamento em faixas ja acontece, mas so deixa o
+                        trilho mais alto — quem varre a grade de cima nao
+                        percebe. A etiqueta nomeia o conflito onde o olho esta.
+                        Nao vai no card: as bordas coloridas ja carregam estado
+                        e dois codigos de cor no mesmo lugar se anulam. */}
+                    {conflito && (
+                      <span className="mt-1 self-start rounded border border-amber-500/50 bg-amber-500/10 px-1.5 text-[9.5px] font-semibold text-amber-300">
+                        {conflito.qtd} às {conflito.hora}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="relative" style={{ height: Math.max(52, altura) }}>
+                  {comFaixa.map((aula) => (
+                    <AgendaCard
+                      key={aula.chave}
+                      aula={aula}
+                      selecionada={selecionada?.chave === aula.chave}
+                      onSelecionar={onSelecionar}
+                      amplo={amplo}
+                      emAndamento={aulaEmAndamento(aula, minutosAgoraOuNulo)}
+                      estilo={{
+                        left: posicaoPx(aula.hora_inicio, larguraHora, janela.inicio),
+                        width: Math.max(46, larguraPx(aula.duracao_minutos, larguraHora) - 4),
+                        top: PADDING_TRILHO + aula.faixa * (alturaFaixa + AGENDA_GAP_FAIXA_PX),
+                        height: alturaFaixa,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+
+          {reguaVisivel && (
+            <div
+              className="pointer-events-none absolute bottom-0 top-0 z-20 w-0.5 bg-rose-500"
+              style={{ left: LARGURA_ROTULO + posicaoRegua }}
+            >
+              <span className="absolute left-1/2 top-0 -translate-x-1/2 rounded-b bg-rose-500 px-1.5 text-[10.5px] font-bold tabular-nums text-white">
+                {relogio}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Legenda permanente. As marcas E / ✕ / R / ! que existiam antes so
+          significavam algo para quem construiu a tela; sinal sem legenda visivel
+          e enigma. Fica FORA do bloco rolavel para as gridlines nao a cruzarem
+          e para nao sumir quando a grade rola na horizontal. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-700 bg-slate-900 px-3.5 py-1.5 text-[10.5px] text-slate-400">
+        <Verbete cor="bg-emerald-500">acontecendo agora</Verbete>
+        <Verbete cor="bg-violet-400">experimental</Verbete>
+        <Verbete cor="bg-amber-400">reagendada</Verbete>
+        <Verbete cor="bg-rose-400">cancelada</Verbete>
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true" className="h-[7px] w-[7px] rounded-full bg-amber-400" />
+          risco ≥ 40%
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true" className="h-[7px] w-[7px] rounded-full bg-rose-400" />
+          inadimplente
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true" className="text-amber-300">★</span>
+          aluno novo
+        </span>
       </div>
     </div>
+  );
+}
+
+function Verbete({ cor, children }: { cor: string; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span aria-hidden="true" className={`h-[3px] w-3 rounded-full ${cor}`} />
+      {children}
+    </span>
   );
 }

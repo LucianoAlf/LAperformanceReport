@@ -53,6 +53,10 @@ assert.equal(larguraDaHora(1200, 6), 200);
 assert.equal(larguraDaHora(400, 14), AGENDA_LARGURA_HORA_MIN_PX);
 assert.equal(larguraDaHora(0, 6), 88);
 assert.equal(larguraDaHora(1200, 0), 88);
+// Sempre inteiro: fracao faz o navegador engolir parte das gridlines
+assert.equal(larguraDaHora(1240, 12), 103);   // 103,33 -> 103
+assert.equal(larguraDaHora(1000, 7), 142);    // 142,86 -> 142
+assert.ok(Number.isInteger(larguraDaHora(1333, 9)));
 
 // posicaoPx/larguraPx respeitam escala e inicio da janela
 assert.equal(posicaoPx('15:00', 200, 14), 200);
