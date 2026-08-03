@@ -132,3 +132,49 @@ export interface PesquisaEvasaoFilaRevisaoItem {
   ultima_mensagem_em: string | null;
   total_count: number;
 }
+
+export type PesquisaEvasaoFollowupEstado =
+  | 'aguardando_resposta'
+  | 'followup_pendente'
+  | 'followup_avisado'
+  | 'followup_realizado'
+  | 'followup_dispensado'
+  | 'respondendo'
+  | 'pronta_para_revisao'
+  | 'em_revisao'
+  | 'nova_rodada'
+  | 'revisada'
+  | 'opt_out';
+
+export type PesquisaEvasaoFollowupFiltro =
+  | 'todos'
+  | 'followup_pendente'
+  | 'followup_avisado'
+  | 'followup_realizado'
+  | 'followup_dispensado'
+  | 'aguardando_resposta';
+
+export type PesquisaEvasaoFollowupAcao = 'realizado' | 'dispensado';
+export type PesquisaEvasaoFollowupCanal = 'whatsapp' | 'telefone' | 'outro';
+
+export interface PesquisaEvasaoFollowupItem {
+  total_count: number;
+  pesquisa_id: string;
+  evasao_id: number;
+  aluno_nome: string;
+  unidade_id: string;
+  unidade_nome: string;
+  enviado_em: string;
+  vencido_em: string;
+  operador_usuario_id: number;
+  operador_nome: string;
+  estado_visivel: PesquisaEvasaoFollowupEstado;
+  followup_pendente: boolean;
+  interagiu_sem_resposta_valida: boolean;
+  alerta_enviado_em: string | null;
+  acao: PesquisaEvasaoFollowupAcao | null;
+  acao_canal: PesquisaEvasaoFollowupCanal | null;
+  acao_observacao: string | null;
+  acao_registrada_em: string | null;
+  acao_operador_nome: string | null;
+}
