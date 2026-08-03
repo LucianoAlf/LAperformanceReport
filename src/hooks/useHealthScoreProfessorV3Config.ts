@@ -29,6 +29,16 @@ interface UseHealthScoreProfessorV3ConfigReturn {
   apply: (configId: string, justificativa: string) => Promise<HealthScoreV3Config>;
 }
 
+const OPEN_CYCLE_REVISION_START = '2026-06-01';
+const OPEN_CYCLE_REVISION_END = '2026-08-31';
+
+function isOpenCycleRevision(
+  config: Pick<HealthScoreV3Config, 'vigenciaInicio' | 'vigenciaFim'> | null | undefined,
+): boolean {
+  return config?.vigenciaInicio === OPEN_CYCLE_REVISION_START
+    && config.vigenciaFim === OPEN_CYCLE_REVISION_END;
+}
+
 function messageFrom(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (error && typeof error === 'object' && 'message' in error) {
@@ -114,16 +124,30 @@ export function useHealthScoreProfessorV3Config(
     setMutating(true);
     setError(null);
     try {
-      if (!config?.ativa?.id) {
+      const activeConfig = config?.ativa;
+      if (!activeConfig?.id) {
         throw new Error('Nao existe configuracao vigente para a competencia selecionada.');
       }
-      const { data, error: rpcError } = await supabase.rpc('criar_health_score_professor_v3_config_rascunho',
-        {
-          p_vigencia_inicio: vigenciaInicio,
-          p_justificativa: justificativa,
-          p_config_origem_id: config.ativa.id,
-        },
-      );
+      const revisingOpenCycle = isOpenCycleRevision(activeConfig)
+        && vigenciaInicio === OPEN_CYCLE_REVISION_START;
+      const { data, error: rpcError } = revisingOpenCycle
+        ? await supabase.rpc(
+            'criar_health_score_professor_v3_config_revisao_ciclo_aberto',
+            {
+              p_config_origem_id: activeConfig.id,
+              p_vigencia_inicio: OPEN_CYCLE_REVISION_START,
+              p_vigencia_fim: OPEN_CYCLE_REVISION_END,
+              p_justificativa: justificativa,
+            },
+          )
+        : await supabase.rpc(
+            'criar_health_score_professor_v3_config_rascunho',
+            {
+              p_vigencia_inicio: vigenciaInicio,
+              p_justificativa: justificativa,
+              p_config_origem_id: activeConfig.id,
+            },
+          );
       if (rpcError) throw rpcError;
       const draft = parseHealthScoreV3Config(data);
       if (!draft) throw new Error('A RPC nao retornou o rascunho criado.');
@@ -135,7 +159,7 @@ export function useHealthScoreProfessorV3Config(
     } finally {
       setMutating(false);
     }
-  }, [config?.ativa?.id, refresh]);
+  }, [config?.ativa, refresh]);
 
   const startEditing = useCallback(async (): Promise<void> => {
     if (config?.rascunho) return;
@@ -198,8 +222,14 @@ export function useHealthScoreProfessorV3Config(
     setMutating(true);
     setError(null);
     try {
+      const draftConfig = config?.rascunho?.id === configId
+        ? config.rascunho
+        : null;
+      const activationRpc = isOpenCycleRevision(draftConfig)
+        ? 'ativar_health_score_professor_v3_config_revisao_ciclo_aberto'
+        : 'ativar_health_score_professor_v3_config';
       const { data, error: rpcError } = await supabase.rpc(
-        'ativar_health_score_professor_v3_config',
+        activationRpc,
         { p_config_id: configId, p_justificativa: justificativa },
       );
       if (rpcError) throw rpcError;
@@ -214,7 +244,7 @@ export function useHealthScoreProfessorV3Config(
     } finally {
       setMutating(false);
     }
-  }, [refresh]);
+  }, [config?.rascunho, refresh]);
 
   const restore = useCallback(async (): Promise<void> => {
     setSimulation(null);

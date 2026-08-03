@@ -411,9 +411,9 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
         />
         <KPICard
           icon={GraduationCap}
-          label="Alunos na Carteira"
+          label="Vínculos em Carteira"
           value={kpis.totalAlunos}
-          subvalue="pessoas canônicas"
+          subvalue="professor-aluno canônicos"
           variant="emerald"
         />
         <KPICard
