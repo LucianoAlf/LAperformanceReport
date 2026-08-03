@@ -140,7 +140,7 @@ test('tabela e modal não usam o rótulo genérico provisório', () => {
   const tab = read(tabPath);
   const modal = read(modalPath);
 
-  assert.match(tab, /Desempenho observado/);
+  assert.match(tab, /Nota em forma[cç][aã]o/i);
   assert.match(tab, /Health Score/);
   assert.match(tab, /Base de/);
   assert.doesNotMatch(tab, />\s*provisorio\s*</i);

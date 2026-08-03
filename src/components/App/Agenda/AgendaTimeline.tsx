@@ -1,11 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   AGENDA_ALTURA_FAIXA_AMPLA_PX,
+  AGENDA_ALTURA_FAIXA_MAX_PX,
   AGENDA_ALTURA_FAIXA_PX,
   AGENDA_GAP_FAIXA_PX,
   AGENDA_LARGURA_HORA_AMPLA_PX,
   alocarFaixas,
   aulaEmAndamento,
+  aulaJaOcorreu,
   contarFaixas,
   cursoPredominante,
   formatarRelogio,
@@ -39,6 +41,10 @@ interface Props {
   // hoje: desenhada num dia passado ou futuro ela marcaria um instante que nao
   // tem relacao nenhuma com as aulas ali.
   ehHoje?: boolean;
+  // Dia exibido ('yyyy-MM-dd'). `ehHoje` sozinho nao basta para saber se uma
+  // aula ja aconteceu: com ele falso, o dia pode ser passado OU futuro — e a
+  // presenca so pode ser exibida no primeiro caso.
+  data: string;
 }
 
 export function AgendaTimeline({
@@ -48,6 +54,7 @@ export function AgendaTimeline({
   onSelecionar,
   mostrarUnidade = false,
   ehHoje = false,
+  data,
 }: Props) {
   // Relogio proprio, de segundo em segundo, isolado neste componente: a regua
   // e a unica coisa que precisa dessa resolucao, e re-renderizar a pagina
@@ -74,6 +81,7 @@ export function AgendaTimeline({
     return () => observer.disconnect();
   }, []);
 
+
   const janela = useMemo(
     () => janelaDeHoras(aulas, ehHoje ? segundos : null),
     // `segundos` anda a cada tique, mas a janela so pode mudar quando muda de
@@ -86,7 +94,44 @@ export function AgendaTimeline({
   const horas = Array.from({ length: janela.fim - janela.inicio }, (_, i) => janela.inicio + i);
   const larguraHora = larguraDaHora(largura - LARGURA_ROTULO, horas.length);
   const amplo = larguraHora >= AGENDA_LARGURA_HORA_AMPLA_PX;
-  const alturaFaixa = amplo ? AGENDA_ALTURA_FAIXA_AMPLA_PX : AGENDA_ALTURA_FAIXA_PX;
+
+  // Altura minima da grade para ela ENCOSTAR no fim da viewport em vez de parar
+  // no ultimo trilho e deixar uma faixa morta embaixo — num dia de 6 professores
+  // sobrava quase um terco da tela.
+  //
+  // ⚠️ Medida aqui, e nao com `h-full` numa cadeia de flex: o AppLayout usa
+  // rolagem de DOCUMENTO (`min-h-screen`, `<main>` sem altura), entao `h-full`
+  // resolveria para `auto` e nao mudaria nada. Converter o layout inteiro para
+  // altura limitada mexeria na rolagem das ~75 telas do app — caro demais para
+  // resolver uma folga numa pagina so.
+  //
+  // E `minHeight` (nao `height`) de proposito: com muitos trilhos — a visao
+  // consolidada passa de 40 professores — o conteudo continua mandando e a
+  // pagina rola normalmente, como antes.
+  const rodapeRef = useRef<HTMLDivElement>(null);
+  const cabecalhoRef = useRef<HTMLDivElement>(null);
+  const [alturaMinima, setAlturaMinima] = useState(0);
+  // Medido, e nao chutado: entra na conta de quanto cada card pode crescer, e
+  // um erro aqui vira sobra ou estouro proporcional ao numero de trilhos.
+  const [alturaCabecalho, setAlturaCabecalho] = useState(30);
+  useLayoutEffect(() => {
+    const medir = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      const topo = el.getBoundingClientRect().top;
+      const rodape = rodapeRef.current?.offsetHeight ?? 0;
+      setAlturaCabecalho(cabecalhoRef.current?.offsetHeight ?? 30);
+      // FOLGA cobre o padding inferior do <main> (p-6 = 24px) mais uma margem
+      // pequena, para a borda do quadro nao ficar colada no fim da janela.
+      const FOLGA = 32;
+      setAlturaMinima(Math.max(0, window.innerHeight - topo - rodape - FOLGA));
+    };
+    medir();
+    window.addEventListener('resize', medir);
+    return () => window.removeEventListener('resize', medir);
+    // Remede quando muda o que esta ACIMA da grade (filtros e KPIs podem
+    // reflowar e mover o topo) ou a densidade das faixas.
+  }, [aulas, amplo, agruparPor]);
 
   const grupos = new Map<string, { rotulo: string; unidade: string | null; aulas: AulaAgenda[] }>();
   for (const aula of aulas) {
@@ -98,6 +143,38 @@ export function AgendaTimeline({
     if (grupo) grupo.aulas.push(aula);
     else grupos.set(chave, { rotulo, unidade, aulas: [aula] });
   }
+
+  // Faixas resolvidas ANTES de decidir a altura: para saber quanto cada card
+  // pode crescer e preciso saber quantas faixas empilhadas existem no total.
+  const trilhos = [...grupos.entries()].map(([chave, g]) => {
+    const comFaixa = alocarFaixas(g.aulas);
+    return { chave, ...g, comFaixa, nFaixas: contarFaixas(comFaixa) };
+  });
+
+  // Sobra de altura vira CARD MAIOR, nao grade vazia.
+  //
+  // Antes o espaco livre virava trilho em branco no fim da tela — ocupava a
+  // viewport sem entregar nada. Distribuindo a mesma sobra na altura da faixa,
+  // o card ganha corpo e o texto que vivia truncado passa a caber.
+  //
+  // Resolve  alturaMinima = fixo + nFaixasTotal * altura  para `altura`, onde
+  // `fixo` e o que nao escala (cabecalho das horas, padding e gaps dos trilhos).
+  const nFaixasTotal = trilhos.reduce((s, t) => s + t.nFaixas, 0);
+  const fixo =
+    alturaCabecalho +
+    trilhos.reduce((s, t) => s + PADDING_TRILHO * 2 + (t.nFaixas - 1) * AGENDA_GAP_FAIXA_PX, 0);
+  const alturaBase = amplo ? AGENDA_ALTURA_FAIXA_AMPLA_PX : AGENDA_ALTURA_FAIXA_PX;
+  const alturaFaixa =
+    alturaMinima > 0 && nFaixasTotal > 0
+      ? Math.min(
+          AGENDA_ALTURA_FAIXA_MAX_PX,
+          Math.max(alturaBase, Math.floor((alturaMinima - fixo) / nFaixasTotal)),
+        )
+      : alturaBase;
+
+  // Card alto comporta a 3a linha (horario · curso · turma) igual card largo —
+  // e o ganho que o usuario pediu: sobra de espaco virando texto legivel.
+  const cardAmplo = amplo || alturaFaixa >= AGENDA_ALTURA_FAIXA_AMPLA_PX;
 
   const relogio = formatarRelogio(segundos);
   const horaDaRegua = segundos / 3600;
@@ -116,8 +193,16 @@ export function AgendaTimeline({
   return (
     <div className="flex min-w-0 flex-col">
       <div ref={containerRef} className="relative overflow-x-auto">
-        <div style={{ minWidth: LARGURA_ROTULO + larguraTrilho }} className="relative">
+        {/* O minHeight vai AQUI, no bloco interno, e nao no container rolavel:
+            as gridlines, o veu do passado e a regua sao `absolute` com
+            `top-0 bottom-0` deste elemento. Esticar so o container deixaria as
+            linhas parando no ultimo trilho, com um vazio escuro embaixo. */}
+        <div
+          style={{ minWidth: LARGURA_ROTULO + larguraTrilho, minHeight: alturaMinima || undefined }}
+          className="relative"
+        >
           <div
+            ref={cabecalhoRef}
             className="sticky top-0 z-10 grid border-b border-slate-700 bg-slate-800/95"
             style={{
               gridTemplateColumns: `${LARGURA_ROTULO}px repeat(${horas.length}, ${larguraHora}px)`,
@@ -172,9 +257,7 @@ export function AgendaTimeline({
             />
           ))}
 
-          {[...grupos.entries()].map(([chave, { rotulo, unidade, aulas: doGrupo }]) => {
-            const comFaixa = alocarFaixas(doGrupo);
-            const nFaixas = contarFaixas(comFaixa);
+          {trilhos.map(({ chave, rotulo, unidade, aulas: doGrupo, comFaixa, nFaixas }) => {
             const altura = PADDING_TRILHO * 2 + nFaixas * alturaFaixa + (nFaixas - 1) * AGENDA_GAP_FAIXA_PX;
             const vivas = doGrupo.filter((a) => !a.cancelada);
             const conflito = resumoSobreposicao(doGrupo);
@@ -239,8 +322,9 @@ export function AgendaTimeline({
                       aula={aula}
                       selecionada={selecionada?.chave === aula.chave}
                       onSelecionar={onSelecionar}
-                      amplo={amplo}
+                      amplo={cardAmplo}
                       emAndamento={aulaEmAndamento(aula, minutosAgoraOuNulo)}
+                      jaOcorreu={aulaJaOcorreu(data, aula.hora_fim, new Date())}
                       estilo={{
                         left: posicaoPx(aula.hora_inicio, larguraHora, janela.inicio),
                         width: Math.max(46, larguraPx(aula.duracao_minutos, larguraHora) - 4),
@@ -271,7 +355,10 @@ export function AgendaTimeline({
           significavam algo para quem construiu a tela; sinal sem legenda visivel
           e enigma. Fica FORA do bloco rolavel para as gridlines nao a cruzarem
           e para nao sumir quando a grade rola na horizontal. */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-700 bg-slate-900 px-3.5 py-1.5 text-[10.5px] text-slate-400">
+      <div
+        ref={rodapeRef}
+        className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-700 bg-slate-900 px-3.5 py-1.5 text-[10.5px] text-slate-400"
+      >
         <Verbete cor="bg-emerald-500">acontecendo agora</Verbete>
         <Verbete cor="bg-violet-400">experimental</Verbete>
         <Verbete cor="bg-amber-400">reagendada</Verbete>

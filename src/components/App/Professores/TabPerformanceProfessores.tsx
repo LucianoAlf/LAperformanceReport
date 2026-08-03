@@ -40,6 +40,7 @@ import {
 import { useHealthScoreProfessorV3Performance } from '@/hooks/useHealthScoreProfessorV3Performance';
 import {
   compareHealthScoreV3OperationalRows,
+  doesHealthScoreV3MetricContributeToScore,
   isHealthScoreV3SnapshotVisible,
   mergeHealthScoreV3ActiveRoster,
   rankHealthScoreV3Metric,
@@ -150,6 +151,7 @@ function HealthScoreV3MetricCell({
     ? resolveHealthScoreV3MetricDisplay(snapshot, metricKey)
     : ({ value: null, observedValue: null, state: 'sem_base', rankable: false, metric: null, referenceCompetence: null } satisfies HealthScoreV3MetricDisplay);
   const metric = display.metric;
+  const contributesToScore = doesHealthScoreV3MetricContributeToScore(metric);
   const evidenceMessage = resolveHealthScoreV3EvidenceMessage(
     metric?.codigoEvidencia,
     metricKey,
@@ -179,6 +181,17 @@ function HealthScoreV3MetricCell({
         : display.state === 'sem_base'
           ? evidenceMessage
           : null;
+  const scoreRoleLabel = contributesToScore
+    ? null
+    : metricKey === 'numero_alunos' || metric?.papel === 'diagnostico'
+      ? 'diagnóstico · fora da nota'
+      : display.state === 'referencia_anterior'
+        ? `base ${formatHealthScoreV3ReferenceMonth(display.referenceCompetence)} · fora da nota`
+        : metric?.estadoBase === 'sem_base_amostra'
+          ? 'amostra insuficiente · fora da nota'
+          : display.value !== null
+            ? 'fora da nota atual'
+            : null;
   const metricTone = resolveHealthScoreV3MetricTone(metricKey, display.value, metric);
   const valueClass = metricTone === 'positive'
     ? 'text-emerald-300'
@@ -208,6 +221,9 @@ function HealthScoreV3MetricCell({
           )}
           <div className="space-y-1 text-slate-300">
             <p>Estado: <strong>{stateLabel || 'publicavel'}</strong></p>
+            <p>
+              Participação: <strong>{contributesToScore ? 'compõe a nota atual' : 'fora da nota atual'}</strong>
+            </p>
             {metric?.amostra !== null && metric?.amostra !== undefined && <p>Amostra: <strong>{metric.amostra}</strong></p>}
             {/* `metric` é null por desenho quando não há snapshot (ver o fallback com
                 metric: null acima). Checar só `metric?.numerador !== null` não basta: o
@@ -234,6 +250,11 @@ function HealthScoreV3MetricCell({
         }}
       >
         <span>{renderedValue}</span>
+        {scoreRoleLabel && (
+          <span className="whitespace-nowrap text-[9px] font-normal text-slate-500 no-underline">
+            {scoreRoleLabel}
+          </span>
+        )}
       </button>
     </Tooltip>
   );
@@ -250,7 +271,7 @@ function formatHealthScoreV3Status(status: HealthScoreV3UiStatus): string {
   if (status === 'atencao') return 'Atenção';
   if (status === 'saudavel') return 'Saudável';
   if (status === 'parcial') return 'Parcial';
-  if (status === 'em_maturacao') return 'Em maturação';
+  if (status === 'em_maturacao') return 'Base em formação';
   if (status === 'sem_base_operacional') return 'Sem base operacional';
   return 'Evidência pendente';
 }
@@ -259,6 +280,17 @@ interface AlertaPerformance {
   tipo: 'critico' | 'atencao' | 'saudavel' | 'excelente' | 'em_andamento' | 'parcial' | 'em_maturacao' | 'sem_base_operacional' | 'evidencia_pendente';
   quantidade: number;
   descricao: string;
+}
+
+function formatAlertaPerformanceCount(alerta: AlertaPerformance): string {
+  const sujeito = `${alerta.quantidade} professor${alerta.quantidade === 1 ? '' : 'es'}`;
+  if (alerta.tipo === 'critico') return `${sujeito} crítico${alerta.quantidade === 1 ? '' : 's'}`;
+  if (alerta.tipo === 'atencao') return `${sujeito} em atenção`;
+  if (alerta.tipo === 'parcial') return `${sujeito} com nota parcial`;
+  if (alerta.tipo === 'evidencia_pendente') return `${sujeito} com evidência pendente`;
+  if (alerta.tipo === 'em_maturacao') return `${sujeito} com base em formação`;
+  if (alerta.tipo === 'sem_base_operacional') return `${sujeito} sem base operacional`;
+  return alerta.quantidade === 1 ? `${sujeito} saudável` : `${sujeito} saudáveis`;
 }
 
 interface Props {
@@ -706,7 +738,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         { tipo: 'critico', quantidade: status.filter((item) => item === 'critico').length, descricao: 'Health Score V3 critico' },
         { tipo: 'atencao', quantidade: status.filter((item) => item === 'atencao').length, descricao: 'Health Score V3 em atencao' },
         { tipo: 'saudavel', quantidade: status.filter((item) => item === 'saudavel').length, descricao: 'Health Score V3 saudavel' },
-        { tipo: 'em_maturacao', quantidade: status.filter((item) => item === 'em_maturacao').length, descricao: 'Desempenho observado com base em formação' },
+        { tipo: 'em_maturacao', quantidade: status.filter((item) => item === 'em_maturacao').length, descricao: 'Nota calculada apenas com os pilares válidos' },
         { tipo: 'sem_base_operacional', quantidade: status.filter((item) => item === 'sem_base_operacional').length, descricao: 'Nenhum pilar válido no recorte' },
         { tipo: 'evidencia_pendente', quantidade: status.filter((item) => item === 'evidencia_pendente').length, descricao: 'Evidencia oficial ainda pendente' },
       ];
@@ -906,20 +938,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
               </span>
               <div>
                 <p className="font-medium text-sm">
-                  {alerta.quantidade} professor{alerta.quantidade !== 1 ? 'es' : ''}{' '}
-                  {alerta.tipo === 'critico'
-                    ? 'crítico'
-                    : alerta.tipo === 'atencao'
-                      ? 'em atenção'
-                      : alerta.tipo === 'parcial'
-                        ? 'com nota parcial'
-                      : alerta.tipo === 'evidencia_pendente'
-                          ? 'com evidência pendente'
-                          : alerta.tipo === 'em_maturacao'
-                            ? 'em maturação'
-                            : alerta.tipo === 'sem_base_operacional'
-                              ? 'sem base operacional'
-                          : 'saudável'}{alerta.quantidade !== 1 && !['atencao', 'parcial', 'evidencia_pendente'].includes(alerta.tipo) ? 's' : ''}
+                  {formatAlertaPerformanceCount(alerta)}
                 </p>
                 <p className="text-xs opacity-70">{alerta.descricao}</p>
               </div>
@@ -1195,12 +1214,12 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
       {/* Tabela de Performance */}
       <div data-tour="professores-tabela" className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="max-h-[70vh] overflow-auto">
           <table className="w-full">
-            <thead>
+            <thead className="sticky top-0 z-20 bg-slate-900/95 backdrop-blur">
               <tr className="border-b border-slate-700">
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Professor</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
+                <th className="min-w-[145px] text-center px-4 py-3 text-xs font-medium text-slate-400">
                   <div className="flex items-center justify-center gap-1">
                     <Heart className="w-3 h-3 text-violet-400" />
                     <span>Health</span>
@@ -1214,7 +1233,10 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                     </div>
                   </th>
                 )}
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Alunos</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
+                  <span className="block">Alunos</span>
+                  <span className="block text-[9px] font-normal text-slate-500">diagnóstico</span>
+                </th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Média/Turma</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Retenção</th>
                 {HEALTH_SCORE_V3_PERFORMANCE_ENABLED && (
@@ -1269,7 +1291,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                       </div>
                     </td>
                     {/* Health Score */}
-                    <td className="text-center px-4 py-3">
+                    <td className="min-w-[145px] text-center px-4 py-3">
                       {HEALTH_SCORE_V3_PERFORMANCE_ENABLED ? (
                         <Tooltip
                           side="top"
@@ -1317,12 +1339,18 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                               {professor.healthV3?.comparabilidadeEstado === 'comparavel'
                                 ? 'Health Score'
                                 : professor.healthV3?.comparabilidadeEstado === 'em_maturacao'
-                                  ? 'Desempenho observado'
+                                  ? 'Nota em formação'
                                   : 'Sem base operacional'}
                             </span>
                             {professor.healthV3?.comparabilidadeEstado === 'em_maturacao' && (
-                              <span className="text-[9px] text-cyan-300">
-                                {professor.healthV3.pilaresValidos}/{professor.healthV3.pilaresEsperados} pilares · {formatHealthScoreV3Coverage(professor.healthV3.cobertura)}
+                              <span className="whitespace-nowrap text-[9px] text-cyan-300">
+                                {professor.healthV3.pilaresValidos} de {professor.healthV3.pilaresEsperados} pilares na nota
+                              </span>
+                            )}
+                            {professor.healthV3?.comparabilidadeEstado === 'em_maturacao' && (
+                              <span className="whitespace-nowrap text-[9px] text-slate-500">
+                                Cobertura {formatHealthScoreV3Coverage(professor.healthV3.cobertura)}
+                                {professor.healthV3.comparabilidadeMotivo === 'cobertura_insuficiente' ? ' · abaixo do mínimo' : ''}
                               </span>
                             )}
                           </div>
@@ -1695,8 +1723,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                       </Tooltip>
                     </td>
                     )}
-                    <td className="text-center px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium border ${
+                    <td className="min-w-[140px] text-center px-4 py-3">
+                      <span className={`inline-flex items-center justify-center whitespace-nowrap px-2 py-1 rounded-full text-xs font-medium border ${
                         HEALTH_SCORE_V3_PERFORMANCE_ENABLED
                           ? getStatusColor(resolveHealthScoreV3ScoreStatus(professor.healthV3) || 'sem_base')
                           : professor.health_score_confiavel

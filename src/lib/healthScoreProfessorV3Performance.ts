@@ -313,6 +313,23 @@ export interface HealthScoreV3MetricDisplay {
   referenceCompetence: string | null;
 }
 
+export function doesHealthScoreV3MetricContributeToScore(
+  metric: Pick<
+    HealthScoreV3PerformanceMetric,
+    'papel' | 'nota' | 'pesoDisponivel' | 'pesoEfetivo' | 'detalhes'
+  > | null | undefined,
+): boolean {
+  return Boolean(
+    metric
+    && metric.papel === 'nota'
+    && metric.pesoDisponivel
+    && metric.nota !== null
+    && Number.isFinite(metric.nota)
+    && Number(metric.pesoEfetivo || 0) > 0
+    && metric.detalhes.nao_compoe_nota_atual !== true,
+  );
+}
+
 export type HealthScoreV3MetricTone = 'positive' | 'attention' | 'critical' | 'neutral' | 'missing';
 
 export function resolveHealthScoreV3MetricTone(

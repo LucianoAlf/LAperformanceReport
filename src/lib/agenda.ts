@@ -12,6 +12,10 @@ export const AGENDA_LARGURA_HORA_MIN_PX = 88;
 // A partir daqui a hora e larga o bastante para o card comportar uma 3a linha.
 export const AGENDA_LARGURA_HORA_AMPLA_PX = 150;
 export const AGENDA_ALTURA_FAIXA_AMPLA_PX = 54;
+// Teto do crescimento do card quando sobra altura na tela. Sem teto, um dia com
+// um professor so transformaria a aula num retangulo de meia tela — espaco que
+// nao vira informacao nenhuma, porque o conteudo do card e sempre 2 ou 3 linhas.
+export const AGENDA_ALTURA_FAIXA_MAX_PX = 96;
 // Janela minima de horas: um dia com uma aula so nao vira uma faixa de 1 hora
 // esticada na tela inteira, o que perderia a nocao de onde ela cai no dia.
 export const AGENDA_JANELA_MIN_HORAS = 5;
@@ -406,11 +410,25 @@ export type AulaFiltravel = {
   tipo: string | null;
   categoria: string | null;
   cancelada: boolean;
+  qtd_alunos: number;
   alunos: Array<{ nome: string }>;
 };
 
-/** A RPC normaliza o tipo da aula nesses dois valores (ou null). */
+/**
+ * Modalidade CONTRATADA da disciplina, vinda de `emusys_disciplinas_catalogo`.
+ * ⚠️ Nao serve como filtro na LA: 164 das 165 aulas de 03/08/2026 sao 'turma',
+ * porque quase toda disciplina daqui e de turma mesmo quando roda com um aluno
+ * so. Fica visivel no painel de detalhe; quem filtra quer `LotacaoAula`.
+ */
 export type TipoAula = 'individual' | 'turma';
+
+/**
+ * Quantas pessoas ha de fato no horario — a pergunta que se faz olhando a
+ * grade ("quem esta sozinho?"). Ate 03/08/2026 isto era exibido como se fosse
+ * modalidade, o que fazia um aluno sozinho numa aula de turma aparecer como
+ * "Individual" enquanto o Emusys mostrava "Grupo".
+ */
+export type LotacaoAula = 'sozinho' | 'turma';
 
 export interface FiltrosAgenda {
   /** Casa contra professor, sala, curso, turma E nome de aluno. */
@@ -421,8 +439,8 @@ export interface FiltrosAgenda {
   professor: string | null;
   /** null = todas as turmas. Aula individual tem turma_nome nulo e sai do filtro. */
   turma: string | null;
-  /** null = individual e turma juntas. */
-  tipo: TipoAula | null;
+  /** null = qualquer lotacao. 'sozinho' = 1 aluno no horario. */
+  lotacao: LotacaoAula | null;
   /** null = todas. Valores reais na base: normal, experimental, extra. */
   categoria: string | null;
   ocultarCanceladas: boolean;
@@ -486,7 +504,7 @@ export const FILTROS_AGENDA_VAZIOS: FiltrosAgenda = {
   curso: null,
   professor: null,
   turma: null,
-  tipo: null,
+  lotacao: null,
   categoria: null,
   ocultarCanceladas: false,
 };
@@ -497,7 +515,7 @@ export function filtroAtivo(filtros: FiltrosAgenda): boolean {
     filtros.curso !== null ||
     filtros.professor !== null ||
     filtros.turma !== null ||
-    filtros.tipo !== null ||
+    filtros.lotacao !== null ||
     filtros.categoria !== null ||
     filtros.ocultarCanceladas
   );
@@ -514,7 +532,7 @@ export function contarFiltrosAvancados(filtros: FiltrosAgenda): number {
     filtros.curso,
     filtros.professor,
     filtros.turma,
-    filtros.tipo,
+    filtros.lotacao,
     filtros.categoria,
     filtros.ocultarCanceladas ? 'sim' : null,
   ].filter((v) => v !== null && v !== false).length;
@@ -534,7 +552,12 @@ export function filtrarAulas<T extends AulaFiltravel>(aulas: T[], filtros: Filtr
     if (filtros.curso !== null && aula.curso_nome !== filtros.curso) return false;
     if (filtros.professor !== null && aula.professor_nome !== filtros.professor) return false;
     if (filtros.turma !== null && aula.turma_nome !== filtros.turma) return false;
-    if (filtros.tipo !== null && aula.tipo !== filtros.tipo) return false;
+    if (filtros.lotacao !== null) {
+      // 0 aluno vinculado nao e "sozinho": e aula sem vinculo, outro problema.
+      const sozinho = aula.qtd_alunos === 1;
+      if (filtros.lotacao === 'sozinho' && !sozinho) return false;
+      if (filtros.lotacao === 'turma' && aula.qtd_alunos <= 1) return false;
+    }
     if (filtros.categoria !== null && aula.categoria !== filtros.categoria) return false;
     if (termo === '') return true;
 
