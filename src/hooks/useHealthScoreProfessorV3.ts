@@ -4,6 +4,10 @@ import type {
   HealthMetricKeyV3,
   HealthScoreV3SnapshotMetric,
 } from '@/lib/healthScoreProfessorV3';
+import {
+  normalizeHealthScoreV3PerformanceRows,
+  type HealthScoreV3ProfessorPerformance,
+} from '@/lib/healthScoreProfessorV3Performance';
 
 interface SnapshotRow {
   professor_id: number;
@@ -65,6 +69,7 @@ export function useHealthScoreProfessorV3({
   enabled = true,
 }: UseHealthScoreProfessorV3Options) {
   const [metrics, setMetrics] = useState<HealthScoreV3SnapshotMetric[]>([]);
+  const [snapshot, setSnapshot] = useState<HealthScoreV3ProfessorPerformance | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadedRequestKey, setLoadedRequestKey] = useState<string | null>(null);
@@ -82,6 +87,7 @@ export function useHealthScoreProfessorV3({
 
     if (!enabled) {
       setMetrics([]);
+      setSnapshot(null);
       setLoadedRequestKey(requestKey);
       setLoading(false);
       setError(null);
@@ -106,7 +112,10 @@ export function useHealthScoreProfessorV3({
       if (rpcError) throw rpcError;
       if (requestId !== requestIdRef.current) return;
 
-      setMetrics(((data || []) as SnapshotRow[]).map((row) => ({
+      const rawRows = (data || []) as SnapshotRow[];
+      setSnapshot(normalizeHealthScoreV3PerformanceRows(rawRows)[0] ?? null);
+
+      setMetrics(rawRows.map((row) => ({
         professorId: row.professor_id,
         unidadeId: row.unidade_id,
         escopo: row.escopo,
@@ -154,6 +163,7 @@ export function useHealthScoreProfessorV3({
       if (requestId !== requestIdRef.current) return;
       setError(caught instanceof Error ? caught.message : 'Falha ao carregar o Health Score V3.');
       setMetrics([]);
+      setSnapshot(null);
       setLoadedRequestKey(requestKey);
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
@@ -169,6 +179,7 @@ export function useHealthScoreProfessorV3({
 
   return {
     metrics: loadedRequestKey === requestKey ? metrics : [],
+    snapshot: loadedRequestKey === requestKey ? snapshot : null,
     loading: loading || (enabled && loadedRequestKey !== requestKey),
     error: loadedRequestKey === requestKey ? error : null,
     reload: load,

@@ -19,12 +19,21 @@ export interface ProfessorCoordenacaoCanonico {
   professor_id: number;
   nome: string;
   score?: number | null;
+  score_observado?: number | null;
+  score_comparavel?: number | null;
   cobertura?: number | null;
   classificacao?: string | null;
   estado_publicacao?: string | null;
   score_exibivel?: boolean;
   ranking_habilitado?: boolean;
   estado_evidencia?: string | null;
+  pilares_validos?: number | null;
+  pilares_esperados?: number | null;
+  comparabilidade_estado?: 'comparavel' | 'em_maturacao' | 'sem_base_operacional' | null;
+  comparabilidade_motivo?: string | null;
+  competencia_referencia?: string | null;
+  score_referencia?: number | null;
+  classificacao_referencia?: string | null;
   metricas?: Record<string, MetricaCoordenacaoCanonica | undefined>;
   operacional?: {
     total_turmas?: number | null;
@@ -60,7 +69,11 @@ export interface RelatorioCoordenacaoCanonicoV2 {
     com_score?: number;
     parciais?: number;
     oficiais?: number;
+    comparaveis?: number;
     em_maturacao?: number;
+    sem_base_operacional?: number;
+    score_medio_comparavel?: number | null;
+    score_medio_observado?: number | null;
     score_medio_visivel?: number | null;
   };
   professores: ProfessorCoordenacaoCanonico[];
@@ -194,44 +207,96 @@ function rodape(dataGeracao = new Date()): string[] {
   ];
 }
 
-function professoresComScore(contrato: RelatorioCoordenacaoCanonicoV2) {
+function numeroOuNull(valor: unknown): number | null {
+  if (valor === null || valor === undefined || valor === '') return null;
+  const convertido = Number(valor);
+  return Number.isFinite(convertido) ? convertido : null;
+}
+
+function professoresComparaveis(contrato: RelatorioCoordenacaoCanonicoV2) {
   return contrato.professores
-    .filter((professor) => professor.score_exibivel !== false && Number.isFinite(Number(professor.score)))
-    .sort((a, b) => Number(b.score) - Number(a.score) || a.nome.localeCompare(b.nome, 'pt-BR'));
+    .filter((professor) =>
+      professor.comparabilidade_estado === 'comparavel'
+      && numeroOuNull(professor.score_comparavel) !== null
+    )
+    .sort((a, b) =>
+      Number(b.score_comparavel) - Number(a.score_comparavel)
+      || Number(b.cobertura || 0) - Number(a.cobertura || 0)
+      || a.nome.localeCompare(b.nome, 'pt-BR')
+    );
+}
+
+function professoresEmMaturacao(contrato: RelatorioCoordenacaoCanonicoV2) {
+  return contrato.professores
+    .filter((professor) => professor.comparabilidade_estado === 'em_maturacao')
+    .sort((a, b) =>
+      Number(b.cobertura || 0) - Number(a.cobertura || 0)
+      || Number(b.pilares_validos || 0) - Number(a.pilares_validos || 0)
+      || a.nome.localeCompare(b.nome, 'pt-BR')
+    );
+}
+
+function professoresSemBase(contrato: RelatorioCoordenacaoCanonicoV2) {
+  return contrato.professores
+    .filter((professor) => professor.comparabilidade_estado === 'sem_base_operacional')
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 function gerarRanking(params: GerarRelatorioCoordenacaoCanonicoParams): string {
   const { contrato } = params;
   const resumo = contrato.resumo_equipe;
-  const visiveis = professoresComScore(contrato);
+  const comparaveis = professoresComparaveis(contrato);
+  const emMaturacao = professoresEmMaturacao(contrato);
+  const semBase = professoresSemBase(contrato);
   const oficial = Array.isArray(contrato.ranking_oficial) && contrato.ranking_oficial.length > 0;
-  const linhasProfessores = oficial
+  const linhasComparaveis = oficial
     ? contrato.ranking_oficial!.map((professor, indice) =>
       `${indice + 1}. ${professor.nome} — ${numero(professor.score, 1)} pontos`)
-    : visiveis.map((professor) => {
-      const cobertura = Number.isFinite(Number(professor.cobertura))
+    : comparaveis.map((professor) => {
+      const cobertura = numeroOuNull(professor.cobertura) !== null
         ? ` | Cobertura: ${numero(professor.cobertura, 1)}%`
         : '';
-      const estado = professor.estado_evidencia === 'professor_em_maturacao' ? ' | Em maturação' : '';
-      return `• ${professor.nome} — ${numero(professor.score, 1)} pontos${cobertura}${estado}`;
+      return `• ${professor.nome} — ${numero(professor.score_comparavel, 1)} pontos${cobertura}`;
     });
+  const linhasMaturacao = emMaturacao.map((professor) => {
+    const observado = numeroOuNull(professor.score_observado);
+    const desempenho = observado === null
+      ? 'Desempenho observado indisponível'
+      : `Desempenho observado: ${numero(observado, 1)}`;
+    const referencia = numeroOuNull(professor.score_referencia) === null
+      ? ''
+      : ` | Referência comparável: ${numero(professor.score_referencia, 1)} (${professor.competencia_referencia || 'competência anterior'})`;
+    return `• ${professor.nome} — ${desempenho} | Cobertura: ${numero(professor.cobertura, 1)}% | ${numeroInteiro(professor.pilares_validos)}/${numeroInteiro(professor.pilares_esperados)} pilares${referencia}`;
+  });
+  const linhasSemBase = semBase.map((professor) =>
+    `• ${professor.nome} — Sem base operacional (${professor.comparabilidade_motivo || 'nenhum pilar válido'})`
+  );
 
   return [
     ...cabecalho('RELATÓRIO DE PROFESSORES — HEALTH SCORE', contrato),
     '👨‍🏫 *RESUMO DA EQUIPE*',
     '━━━━━━━━━━━━━━━━━━━━━━',
     `• Professores ativos: *${numeroInteiro(resumo.total_professores)}*`,
-    `• Professores com nota diagnóstica: *${numeroInteiro(resumo.com_score)}*`,
-    `• Média das notas visíveis: *${numero(resumo.score_medio_visivel, 1)}*`,
+    `• Professores comparáveis: *${numeroInteiro(resumo.comparaveis)}*`,
     `• Em maturação: *${numeroInteiro(resumo.em_maturacao)}*`,
+    `• Sem base operacional: *${numeroInteiro(resumo.sem_base_operacional)}*`,
+    `• Média do Health Score comparável: *${numero(resumo.score_medio_comparavel, 1)}*`,
     '',
-    oficial ? '🏆 *RANKING OFICIAL DO CICLO*' : '📋 *NOTAS VISÍVEIS EM ORDEM DIAGNÓSTICA*',
+    oficial ? '🏆 *RANKING OFICIAL DO CICLO*' : '📋 *PROFESSORES COM HEALTH SCORE COMPARÁVEL*',
     '━━━━━━━━━━━━━━━━━━━━━━',
-    ...(linhasProfessores.length > 0 ? linhasProfessores : ['• Nenhuma nota disponível nesta competência.']),
+    ...(linhasComparaveis.length > 0 ? linhasComparaveis : ['• Nenhum professor comparável nesta competência.']),
     '',
     ...(oficial ? [] : [
-      'ℹ️ Esta ordem serve para acompanhamento pedagógico; não vale como ranking oficial nem gera premiação.',
+      'ℹ️ Esta ordem inclui somente scores comparáveis; ranking e premiação exigem ciclo oficial fechado.',
     ]),
+    '',
+    '🌱 *EM MATURAÇÃO*',
+    '━━━━━━━━━━━━━━━━━━━━━━',
+    ...(linhasMaturacao.length > 0 ? linhasMaturacao : ['• Nenhum professor em maturação.']),
+    '',
+    '⏳ *SEM BASE OPERACIONAL*',
+    '━━━━━━━━━━━━━━━━━━━━━━',
+    ...(linhasSemBase.length > 0 ? linhasSemBase : ['• Nenhum professor sem base operacional.']),
     ...rodape(params.dataGeracao),
   ].join('\n');
 }

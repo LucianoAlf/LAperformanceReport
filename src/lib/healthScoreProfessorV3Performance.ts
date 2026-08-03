@@ -42,8 +42,19 @@ export interface HealthScoreV3ProfessorPerformance {
   rankingHabilitado: boolean;
   configVersao: number;
   revisao: number;
+  /** Valor matemático auditável, sem afirmar comparabilidade. */
+  scoreObservado: number | null;
+  /** Health Score classificável, liberado exclusivamente pelo contrato canônico. */
+  scoreComparavel: number | null;
   score: number | null;
   cobertura: number | null;
+  pilaresValidos: number;
+  pilaresEsperados: number;
+  comparabilidadeEstado: HealthScoreV3ComparabilityState;
+  comparabilidadeMotivo: string | null;
+  competenciaReferencia: string | null;
+  scoreReferencia: number | null;
+  classificacaoReferencia: string | null;
   classificacao: string | null;
   estado: string;
   snapshotPublicavel: boolean;
@@ -53,11 +64,18 @@ export interface HealthScoreV3ProfessorPerformance {
   metrics: Map<HealthMetricKeyV3, HealthScoreV3PerformanceMetric>;
 }
 
+export type HealthScoreV3ComparabilityState =
+  | 'comparavel'
+  | 'em_maturacao'
+  | 'sem_base_operacional';
+
 export type HealthScoreV3UiStatus =
   | 'saudavel'
   | 'atencao'
   | 'critico'
   | 'parcial'
+  | 'em_maturacao'
+  | 'sem_base_operacional'
   | 'evidencia_pendente';
 
 const HEALTH_SCORE_V3_METRIC_KEYS: HealthMetricKeyV3[] = [
@@ -71,22 +89,39 @@ const HEALTH_SCORE_V3_METRIC_KEYS: HealthMetricKeyV3[] = [
 
 const HEALTH_SCORE_V3_EVIDENCE_MESSAGES: Record<string, string> = {
   professor_em_maturacao: 'Professor em período de maturação',
-  amostra_insuficiente: 'Amostra insuficiente no período',
-  sem_experimental_periodo: 'Não realizou aula experimental no período',
+  amostra_insuficiente: 'Amostra em formação',
+  sem_experimental_periodo: 'Não realizou experimental no período',
   cobertura_presenca_insuficiente: 'Cobertura de presença insuficiente',
-  calendario_sem_aulas_elegiveis: 'Calendário sem aulas elegíveis no período',
+  calendario_sem_aulas_elegiveis: 'Sem aulas elegíveis no período',
+  presenca_em_auditoria: 'Presença em auditoria',
+  conversao_em_auditoria: 'Conversão em auditoria',
   segmentacao_incompleta: 'Vínculo de curso ou modalidade precisa de revisão',
-  fonte_canonica_indisponivel: 'Dados oficiais do período ainda não disponíveis',
-  metrica_nao_aplicavel: 'Indicador não aplicável a este professor',
+  fonte_canonica_indisponivel: 'Dados em auditoria',
+  metrica_nao_aplicavel: 'Não aplicável neste período',
   referencia_periodo_anterior: 'Referência temporária do período anterior',
   competencia_em_andamento: 'Competência em andamento',
+  sem_pilares_validos: 'Sem pilares válidos nesta competência',
+  fonte_em_auditoria: 'Dados em auditoria',
+  score_observado_indisponivel: 'Desempenho observado ainda indisponível',
+  pilares_insuficientes: 'Base em formação: menos de 3 pilares válidos',
+  cobertura_insuficiente: 'Cobertura insuficiente para comparação',
+  sem_pilar_fidelizacao: 'Base em formação: retenção ou permanência ainda indisponível',
+  criterios_atendidos: 'Critérios de comparabilidade atendidos',
 };
 
 export function resolveHealthScoreV3EvidenceMessage(
   codigo: string | null | undefined,
   metrica?: HealthMetricKeyV3,
   fallback?: string | null,
+  sample?: { amostra?: number | null; amostraMinima?: number | null },
 ): string {
+  if (codigo === 'amostra_insuficiente') {
+    const amostra = sample?.amostra;
+    const minima = sample?.amostraMinima;
+    if (Number.isFinite(amostra) && Number.isFinite(minima)) {
+      return `Amostra em formação: ${amostra} de ${minima}`;
+    }
+  }
   if (codigo && HEALTH_SCORE_V3_EVIDENCE_MESSAGES[codigo]) {
     return HEALTH_SCORE_V3_EVIDENCE_MESSAGES[codigo];
   }
@@ -163,8 +198,17 @@ export function buildHealthScoreV3MissingPerformance({
     rankingHabilitado: false,
     configVersao: 0,
     revisao: 0,
+    scoreObservado: null,
+    scoreComparavel: null,
     score: null,
     cobertura: null,
+    pilaresValidos: 0,
+    pilaresEsperados: 5,
+    comparabilidadeEstado: 'sem_base_operacional',
+    comparabilidadeMotivo: 'fonte_canonica_indisponivel',
+    competenciaReferencia: null,
+    scoreReferencia: null,
+    classificacaoReferencia: null,
     classificacao: null,
     estado: 'sem_base',
     snapshotPublicavel: false,
@@ -203,11 +247,12 @@ export function mergeHealthScoreV3ActiveRoster({
 
 export function resolveHealthScoreV3UiStatus(snapshot: Pick<
   HealthScoreV3ProfessorPerformance,
-  'score' | 'classificacao' | 'estadoPublicacao' | 'scoreExibivel'
+  'scoreComparavel' | 'classificacao' | 'comparabilidadeEstado'
 > | null | undefined): HealthScoreV3UiStatus {
-  if (!snapshot || snapshot.score === null || !snapshot.scoreExibivel) {
-    return 'evidencia_pendente';
-  }
+  if (!snapshot) return 'sem_base_operacional';
+  if (snapshot.comparabilidadeEstado === 'em_maturacao') return 'em_maturacao';
+  if (snapshot.comparabilidadeEstado === 'sem_base_operacional') return 'sem_base_operacional';
+  if (snapshot.scoreComparavel === null) return 'evidencia_pendente';
   if (snapshot.classificacao === 'critico') return 'critico';
   if (snapshot.classificacao === 'atencao') return 'atencao';
   if (snapshot.classificacao === 'saudavel') return 'saudavel';
@@ -226,11 +271,12 @@ export function resolveHealthScoreV3PublicationLabel(snapshot: Pick<
 
 export function resolveHealthScoreV3ScoreStatus(snapshot: Pick<
   HealthScoreV3ProfessorPerformance,
-  'score' | 'classificacao' | 'estadoPublicacao' | 'scoreExibivel'
+  'scoreComparavel' | 'classificacao' | 'comparabilidadeEstado'
 > | null | undefined): Exclude<HealthScoreV3UiStatus, 'parcial'> {
-  if (!snapshot || snapshot.score === null || !snapshot.scoreExibivel) {
-    return 'evidencia_pendente';
-  }
+  if (!snapshot) return 'sem_base_operacional';
+  if (snapshot.comparabilidadeEstado === 'em_maturacao') return 'em_maturacao';
+  if (snapshot.comparabilidadeEstado === 'sem_base_operacional') return 'sem_base_operacional';
+  if (snapshot.scoreComparavel === null) return 'evidencia_pendente';
   if (snapshot.classificacao === 'critico') return 'critico';
   if (snapshot.classificacao === 'atencao') return 'atencao';
   if (snapshot.classificacao === 'saudavel') return 'saudavel';
@@ -331,6 +377,13 @@ function asMetricRole(value: unknown): HealthScoreV3MetricRole | null {
   return value === 'nota' || value === 'diagnostico' ? value : null;
 }
 
+function asComparabilityState(value: unknown): HealthScoreV3ComparabilityState {
+  if (value === 'comparavel' || value === 'em_maturacao' || value === 'sem_base_operacional') {
+    return value;
+  }
+  return 'sem_base_operacional';
+}
+
 export function normalizeHealthScoreV3PerformanceRows(
   rows: unknown[],
 ): HealthScoreV3ProfessorPerformance[] {
@@ -359,8 +412,17 @@ export function normalizeHealthScoreV3PerformanceRows(
         rankingHabilitado: row.ranking_habilitado === true,
         configVersao: asNumber(row.config_versao),
         revisao: asNumber(row.revisao),
+        scoreObservado: asNullableNumber(row.score_observado ?? row.score),
+        scoreComparavel: asNullableNumber(row.score_comparavel),
         score: asNullableNumber(row.score),
         cobertura: asNullableNumber(row.cobertura),
+        pilaresValidos: asNumber(row.pilares_validos),
+        pilaresEsperados: asNumber(row.pilares_esperados, 5),
+        comparabilidadeEstado: asComparabilityState(row.comparabilidade_estado),
+        comparabilidadeMotivo: row.comparabilidade_motivo ? String(row.comparabilidade_motivo) : null,
+        competenciaReferencia: row.competencia_referencia ? String(row.competencia_referencia) : null,
+        scoreReferencia: asNullableNumber(row.score_referencia),
+        classificacaoReferencia: row.classificacao_referencia ? String(row.classificacao_referencia) : null,
         classificacao: row.classificacao ? String(row.classificacao) : null,
         estado: String(row.estado || ''),
         snapshotPublicavel: row.snapshot_publicavel === true,
@@ -544,7 +606,9 @@ export function averageHealthScoreV3Coverage(
 export function isHealthScoreV3SnapshotRankable(
   snapshot: HealthScoreV3ProfessorPerformance,
 ): boolean {
-  return snapshot.rankingHabilitado
+  return snapshot.comparabilidadeEstado === 'comparavel'
+    && snapshot.scoreComparavel !== null
+    && snapshot.rankingHabilitado
     && snapshot.estadoPublicacao === 'oficial'
     && snapshot.snapshotPublicavel
     && snapshot.score !== null;
@@ -552,24 +616,38 @@ export function isHealthScoreV3SnapshotRankable(
 
 interface HealthScoreV3OperationalRow {
   nome: string;
-  healthV3: Pick<HealthScoreV3ProfessorPerformance, 'score' | 'scoreExibivel'> | null;
+  healthV3: Pick<
+    HealthScoreV3ProfessorPerformance,
+    'comparabilidadeEstado' | 'scoreComparavel' | 'scoreObservado' | 'cobertura' | 'pilaresValidos'
+  > | null;
 }
 
 export function compareHealthScoreV3OperationalRows<TRow extends HealthScoreV3OperationalRow>(
   left: TRow,
   right: TRow,
 ): number {
-  const leftScore = left.healthV3?.scoreExibivel && Number.isFinite(left.healthV3.score)
-    ? Number(left.healthV3.score)
-    : null;
-  const rightScore = right.healthV3?.scoreExibivel && Number.isFinite(right.healthV3.score)
-    ? Number(right.healthV3.score)
-    : null;
+  const order: Record<HealthScoreV3ComparabilityState, number> = {
+    comparavel: 0,
+    em_maturacao: 1,
+    sem_base_operacional: 2,
+  };
+  const leftState = left.healthV3?.comparabilidadeEstado || 'sem_base_operacional';
+  const rightState = right.healthV3?.comparabilidadeEstado || 'sem_base_operacional';
+  if (order[leftState] !== order[rightState]) return order[leftState] - order[rightState];
 
-  if (leftScore !== null && rightScore !== null && leftScore !== rightScore) {
-    return rightScore - leftScore;
+  if (leftState === 'comparavel') {
+    const leftScore = Number(left.healthV3?.scoreComparavel ?? Number.NEGATIVE_INFINITY);
+    const rightScore = Number(right.healthV3?.scoreComparavel ?? Number.NEGATIVE_INFINITY);
+    if (leftScore !== rightScore) return rightScore - leftScore;
   }
-  if ((leftScore !== null) !== (rightScore !== null)) return leftScore !== null ? -1 : 1;
+  if (leftState === 'em_maturacao') {
+    const leftCoverage = left.healthV3?.cobertura ?? 0;
+    const rightCoverage = right.healthV3?.cobertura ?? 0;
+    if (leftCoverage !== rightCoverage) return rightCoverage - leftCoverage;
+    const leftPillars = left.healthV3?.pilaresValidos ?? 0;
+    const rightPillars = right.healthV3?.pilaresValidos ?? 0;
+    if (leftPillars !== rightPillars) return rightPillars - leftPillars;
+  }
   return left.nome.localeCompare(right.nome, 'pt-BR');
 }
 
@@ -588,8 +666,17 @@ export interface HealthScoreV3AiPayload {
   ranking_habilitado: boolean;
   config_versao: number;
   revisao: number;
+  score_observado: number | null;
+  score_comparavel: number | null;
   score: number | null;
   cobertura: number | null;
+  pilares_validos: number;
+  pilares_esperados: number;
+  comparabilidade_estado: HealthScoreV3ComparabilityState;
+  comparabilidade_motivo: string | null;
+  competencia_referencia: string | null;
+  score_referencia: number | null;
+  classificacao_referencia: string | null;
   classificacao: string | null;
   estado: string;
   snapshot_publicavel: boolean;
@@ -623,7 +710,8 @@ export interface HealthScoreV3AiPayload {
 export function isHealthScoreV3SnapshotVisible(
   snapshot: HealthScoreV3ProfessorPerformance,
 ): boolean {
-  return snapshot.scoreExibivel && snapshot.score !== null;
+  return snapshot.comparabilidadeEstado === 'comparavel'
+    && snapshot.scoreComparavel !== null;
 }
 
 function serializeMetricForAi(metric: HealthScoreV3PerformanceMetric) {
@@ -672,8 +760,17 @@ function performanceFromMetricRows(
     rankingHabilitado: first.rankingHabilitado,
     configVersao: first.configVersao,
     revisao: 0,
+    scoreObservado: first.score,
+    scoreComparavel: null,
     score: first.score,
     cobertura: first.cobertura,
+    pilaresValidos: 0,
+    pilaresEsperados: 5,
+    comparabilidadeEstado: 'sem_base_operacional',
+    comparabilidadeMotivo: 'contrato_modal_legado',
+    competenciaReferencia: null,
+    scoreReferencia: null,
+    classificacaoReferencia: null,
     classificacao: first.classificacao,
     estado: first.estado,
     snapshotPublicavel: first.snapshotPublicavel,
@@ -726,8 +823,17 @@ export function serializeHealthScoreV3ForAi(
     ranking_habilitado: snapshot.rankingHabilitado,
     config_versao: snapshot.configVersao,
     revisao: snapshot.revisao,
+    score_observado: snapshot.scoreObservado,
+    score_comparavel: snapshot.scoreComparavel,
     score: snapshot.score,
     cobertura: snapshot.cobertura,
+    pilares_validos: snapshot.pilaresValidos,
+    pilares_esperados: snapshot.pilaresEsperados,
+    comparabilidade_estado: snapshot.comparabilidadeEstado,
+    comparabilidade_motivo: snapshot.comparabilidadeMotivo,
+    competencia_referencia: snapshot.competenciaReferencia,
+    score_referencia: snapshot.scoreReferencia,
+    classificacao_referencia: snapshot.classificacaoReferencia,
     classificacao: snapshot.classificacao,
     estado: snapshot.estado,
     snapshot_publicavel: snapshot.snapshotPublicavel,

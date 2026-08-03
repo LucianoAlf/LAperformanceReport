@@ -9,11 +9,22 @@ const tabPath = 'src/components/App/Professores/TabPerformanceProfessores.tsx';
 
 const read = (path) => fs.readFileSync(path, 'utf8');
 
-function snapshot({ score, scoreExibivel = score !== null, classificacao = 'saudavel' }) {
+function snapshot({
+  score,
+  classificacao = 'saudavel',
+  comparabilidadeEstado = score === null ? 'sem_base_operacional' : 'comparavel',
+  cobertura = score === null ? 0 : 75,
+  pilaresValidos = score === null ? 0 : 4,
+}) {
   return {
     score,
-    scoreExibivel,
-    classificacao,
+    scoreObservado: score,
+    scoreComparavel: comparabilidadeEstado === 'comparavel' ? score : null,
+    scoreExibivel: comparabilidadeEstado === 'comparavel',
+    classificacao: comparabilidadeEstado === 'comparavel' ? classificacao : null,
+    comparabilidadeEstado,
+    cobertura,
+    pilaresValidos,
     estadoPublicacao: 'em_andamento',
   };
 }
@@ -24,7 +35,7 @@ test('tabela operacional ordena todo score visivel do maior para o menor', async
     { nome: 'Alexandre', healthV3: snapshot({ score: 86 }) },
     { nome: 'Ana Beatriz', healthV3: snapshot({ score: 47, classificacao: 'critico' }) },
     { nome: 'Joel', healthV3: snapshot({ score: 90 }) },
-    { nome: 'Caio sem base', healthV3: snapshot({ score: null, scoreExibivel: false, classificacao: null }) },
+    { nome: 'Caio sem base', healthV3: snapshot({ score: null, classificacao: null }) },
   ];
 
   professores.sort(compareHealthScoreV3OperationalRows);

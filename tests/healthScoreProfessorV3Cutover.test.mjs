@@ -158,7 +158,7 @@ test('read models expõem parcial mas habilitam ranking somente no oficial', () 
   assert.doesNotMatch(sql, /ticket|mrr|valor_parcela/i);
 });
 
-test('frontend envia periodicidade e distingue score parcial de ranking oficial', () => {
+test('frontend envia periodicidade e distingue comparabilidade de ranking oficial', () => {
   const performance = read(performanceHook);
   const modal = read(modalHook);
   const helper = read(performanceHelper);
@@ -172,7 +172,8 @@ test('frontend envia periodicidade e distingue score parcial de ranking oficial'
   assert.match(helper, /rankingHabilitado/i);
   assert.match(helper, /scoreExibivel/i);
   assert.match(helper, /rankingHabilitado\s*&&/i);
-  assert.match(tab, /Health Score parcial/i);
+  assert.match(tab, /Desempenho observado/i);
+  assert.match(tab, /Sem base operacional/i);
   assert.match(tab, /ranking[s]?[^\n]*oficial/i);
   assert.match(tab, /getHealthScoreV3Period/i);
   assert.doesNotMatch(tab, /Per[iÃ­]odo N[aÃ£]o Considerado/i);

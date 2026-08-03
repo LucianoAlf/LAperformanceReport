@@ -132,6 +132,7 @@ test('ranking V3 aceita somente snapshot oficial habilitado e nunca transforma s
   const {
     averageHealthScoreV3Coverage,
     formatHealthScoreV3Coverage,
+    isHealthScoreV3SnapshotRankable,
     rankHealthScoreV3Metric,
   } = await import(`../${helperPath}`);
 
@@ -143,9 +144,18 @@ test('ranking V3 aceita somente snapshot oficial habilitado e nunca transforma s
     trimestreInicio: '2026-07-01',
     configVersao: 1,
     revisao: 3,
+    scoreObservado: oficial ? 80 : null,
+    scoreComparavel: oficial ? 80 : null,
     score: oficial ? 80 : null,
     cobertura: 25,
-    classificacao: oficial ? 'saudavel' : 'sem_base',
+    pilaresValidos: oficial ? 4 : 0,
+    pilaresEsperados: 5,
+    comparabilidadeEstado: oficial ? 'comparavel' : 'sem_base_operacional',
+    comparabilidadeMotivo: oficial ? 'criterios_atendidos' : 'sem_pilares_validos',
+    competenciaReferencia: null,
+    scoreReferencia: null,
+    classificacaoReferencia: null,
+    classificacao: oficial ? 'saudavel' : null,
     estado: 'provisorio',
     estadoPublicacao: oficial ? 'oficial' : 'parcial',
     rankingHabilitado: oficial,
@@ -195,6 +205,18 @@ test('ranking V3 aceita somente snapshot oficial habilitado e nunca transforma s
     { cobertura: null },
     { cobertura: undefined },
   ]), null);
+
+  const payloadLegadoInconsistente = {
+    ...base(5, 1.8, true, true),
+    comparabilidadeEstado: 'em_maturacao',
+    scoreComparavel: null,
+    rankingHabilitado: true,
+  };
+  assert.equal(
+    isHealthScoreV3SnapshotRankable(payloadLegadoInconsistente),
+    false,
+    'comparabilidade canonica deve prevalecer sobre flag legada de ranking',
+  );
 });
 
 test('hook faz uma unica leitura batch e a tabela mantem rollback V2 por feature flag', () => {
@@ -234,36 +256,30 @@ test('equipe V3 parte do roster ativo e explica professor sem snapshot', async (
   assert.equal(equipe[0].score, null);
   assert.equal(equipe[0].motivoBloqueio, 'fonte_canonica_indisponivel');
   assert.equal(equipe[0].metrics.get('conversao')?.codigoEvidencia, 'fonte_canonica_indisponivel');
-  assert.equal(resolveHealthScoreV3UiStatus(equipe[0]), 'evidencia_pendente');
+  assert.equal(resolveHealthScoreV3UiStatus(equipe[0]), 'sem_base_operacional');
   assert.equal(
     resolveHealthScoreV3EvidenceMessage('sem_experimental_periodo', 'conversao'),
-    'Não realizou aula experimental no período',
+    'Não realizou experimental no período',
   );
   assert.equal(
     resolveHealthScoreV3EvidenceMessage('fonte_canonica_indisponivel', 'presenca'),
-    'Dados oficiais do período ainda não disponíveis',
+    'Dados em auditoria',
   );
 });
 
 test('status V3 separa classificação de saúde do estado da publicação', async () => {
   const { resolveHealthScoreV3UiStatus } = await import(`../${helperPath}`);
   const base = {
-    score: 82,
+    scoreComparavel: 82,
+    comparabilidadeEstado: 'comparavel',
     classificacao: 'saudavel',
-    scoreExibivel: true,
-    rankingHabilitado: false,
-    snapshotPublicavel: false,
   };
 
   assert.equal(resolveHealthScoreV3UiStatus({
     ...base,
-    estadoPublicacao: 'parcial',
   }), 'saudavel');
   assert.equal(resolveHealthScoreV3UiStatus({
     ...base,
-    estadoPublicacao: 'oficial',
-    rankingHabilitado: true,
-    snapshotPublicavel: true,
   }), 'saudavel');
 });
 
@@ -274,23 +290,20 @@ test('score parcial preserva a classificacao visual e bases opcionais nao quebra
   } = await import(`../${helperPath}`);
 
   assert.equal(resolveHealthScoreV3ScoreStatus({
-    score: 83,
+    scoreComparavel: 83,
+    comparabilidadeEstado: 'comparavel',
     classificacao: 'saudavel',
-    scoreExibivel: true,
-    estadoPublicacao: 'parcial',
   }), 'saudavel');
   assert.equal(resolveHealthScoreV3ScoreStatus({
-    score: 68,
+    scoreComparavel: 68,
+    comparabilidadeEstado: 'comparavel',
     classificacao: 'atencao',
-    scoreExibivel: true,
-    estadoPublicacao: 'parcial',
   }), 'atencao');
   assert.equal(resolveHealthScoreV3ScoreStatus({
-    score: null,
+    scoreComparavel: null,
+    comparabilidadeEstado: 'sem_base_operacional',
     classificacao: null,
-    scoreExibivel: false,
-    estadoPublicacao: 'sem_base',
-  }), 'evidencia_pendente');
+  }), 'sem_base_operacional');
 
   assert.equal(formatHealthScoreV3BaseNumber(12), '12');
   assert.equal(formatHealthScoreV3BaseNumber(12.5), '12,5');
@@ -304,9 +317,10 @@ test('tabela V3 oferece filtros por saúde e ordena a leitura operacional sem ha
 
   assert.match(tab, /mergeHealthScoreV3ActiveRoster/);
   assert.match(tab, /resolveHealthScoreV3UiStatus/);
-  assert.match(tab, /value="em_andamento"/);
-  assert.match(tab, /value="evidencia_pendente"/);
-  assert.match(tab, /Evidência pendente/);
+  assert.match(tab, /value="comparavel"/);
+  assert.match(tab, /value="em_maturacao"/);
+  assert.match(tab, /value="sem_base_operacional"/);
+  assert.match(tab, /Desempenho observado/);
   assert.match(tab, /compareHealthScoreV3OperationalRows/);
   assert.doesNotMatch(tab, /isHealthScoreV3SnapshotRankable/);
 });

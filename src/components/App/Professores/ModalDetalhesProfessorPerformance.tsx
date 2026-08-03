@@ -33,6 +33,7 @@ import {
   resolveHealthScoreV3EvidenceMessage,
   resolveHealthScoreV3PublicationLabel,
   serializeHealthScoreV3ForAi,
+  type HealthScoreV3ProfessorPerformance,
 } from '@/lib/healthScoreProfessorV3Performance';
 
 const HEALTH_SCORE_V3_MODAL_FLAG = import.meta.env.VITE_HEALTH_SCORE_V3_MODAL_ENABLED;
@@ -183,6 +184,7 @@ function getV3Transparency(metric: HealthScoreV3SnapshotMetric): string | null {
 
 interface HealthScoreV3MetricsPanelProps {
   metrics: HealthScoreV3SnapshotMetric[];
+  performance: HealthScoreV3ProfessorPerformance | null;
   loading: boolean;
   error: string | null;
   competencia: string;
@@ -191,12 +193,13 @@ interface HealthScoreV3MetricsPanelProps {
 
 function HealthScoreV3MetricsPanel({
   metrics,
+  performance,
   loading,
   error,
   competencia,
   unidadeLabel,
 }: HealthScoreV3MetricsPanelProps) {
-  const snapshot = metrics[0] ?? null;
+  const snapshot = performance;
   const [ano, mes] = competencia.split('-').map(Number);
   const recorte = snapshot
     ? `${snapshot.periodicidade === 'ciclo' ? snapshot.cicloCodigo : formatCompetencia(ano, mes)} | ${unidadeLabel}`
@@ -223,15 +226,18 @@ function HealthScoreV3MetricsPanel({
   if (!snapshot) {
     return (
       <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-4">
-        <p className="text-sm font-medium text-slate-200">Evidência pendente para este recorte</p>
-        <p className="mt-1 text-xs text-slate-400">Recorte: {recorte}. Dados oficiais do período ainda não disponíveis.</p>
+        <p className="text-sm font-medium text-slate-200">Sem base operacional para este recorte</p>
+        <p className="mt-1 text-xs text-slate-400">Recorte: {recorte}. Os dados canônicos ainda não produziram um pilar válido.</p>
       </div>
     );
   }
 
-  const scoreAvailable = snapshot.score !== null;
-  const scoreLabel = scoreAvailable ? Math.round(snapshot.score as number).toString() : 'Evidência pendente';
-  const coverageLabel = snapshot.cobertura === null ? 'Evidência pendente' : `${snapshot.cobertura.toFixed(0)}%`;
+  const comparable = snapshot.comparabilidadeEstado === 'comparavel';
+  const observed = snapshot.comparabilidadeEstado === 'em_maturacao';
+  const scoreValue = comparable ? snapshot.scoreComparavel : observed ? snapshot.scoreObservado : null;
+  const scoreLabel = scoreValue === null ? 'Sem base operacional' : Math.round(scoreValue).toString();
+  const scoreTitle = comparable ? 'Health Score V3' : observed ? 'Desempenho observado' : 'Sem base operacional';
+  const coverageLabel = snapshot.cobertura === null ? 'Sem base' : `${snapshot.cobertura.toFixed(0)}%`;
 
   return (
     <div className="space-y-4">
@@ -240,20 +246,28 @@ function HealthScoreV3MetricsPanel({
           <div className="flex items-center gap-2">
             <Heart className="h-4 w-4 text-violet-400" />
             <p className="text-sm font-semibold text-white">
-              Health Score V3 — {resolveHealthScoreV3PublicationLabel(snapshot)}
+              {scoreTitle}
             </p>
           </div>
           <p className="mt-1 text-xs text-slate-400">Recorte: {recorte} | Configuração V{snapshot.configVersao}</p>
-          {snapshot.motivoBloqueio && (
+          <p className="mt-1 text-xs text-slate-400">
+            {snapshot.pilaresValidos}/{snapshot.pilaresEsperados} pilares válidos · {coverageLabel} de cobertura
+          </p>
+          {snapshot.comparabilidadeMotivo && (
             <p className="mt-1 text-xs text-amber-300">
-              {resolveHealthScoreV3EvidenceMessage(snapshot.motivoBloqueio)}
+              {resolveHealthScoreV3EvidenceMessage(snapshot.comparabilidadeMotivo)}
+            </p>
+          )}
+          {snapshot.competenciaReferencia && snapshot.scoreReferencia !== null && (
+            <p className="mt-1 text-xs text-sky-300">
+              Referência comparável de {formatV3ReferenceMonth(snapshot.competenciaReferencia)}: {Math.round(snapshot.scoreReferencia)}. Não compõe o desempenho atual.
             </p>
           )}
         </div>
         <div className="grid grid-cols-2 gap-2 text-center">
           <div className="min-w-[104px] rounded-md bg-slate-900/70 px-3 py-2">
             <p className="text-lg font-bold text-white">{scoreLabel}</p>
-            <p className="text-[10px] uppercase text-slate-500">Score V3</p>
+            <p className="text-[10px] uppercase text-slate-500">{comparable ? 'Health Score' : 'Observado'}</p>
           </div>
           <div className="min-w-[104px] rounded-md bg-slate-900/70 px-3 py-2">
             <p className="text-lg font-bold text-cyan-300">{coverageLabel}</p>
@@ -420,6 +434,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
   const [competencia, setCompetencia] = useState(competenciaInicial);
   const {
     metrics: healthScoreV3Metrics,
+    snapshot: healthScoreV3Performance,
     loading: healthScoreV3Loading,
     error: healthScoreV3Error,
   } = useHealthScoreProfessorV3({
@@ -722,7 +737,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
     setLoadingInsights(true);
     setInsights(null);
 
-    const healthScoreV3Payload = serializeHealthScoreV3ForAi(healthScoreV3Metrics);
+    const healthScoreV3Payload = serializeHealthScoreV3ForAi(healthScoreV3Performance);
 
     const payload = {
       professor: {
@@ -821,7 +836,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
     setRelatorioTexto('');
 
     try {
-      const healthScoreV3Payload = serializeHealthScoreV3ForAi(healthScoreV3Metrics);
+      const healthScoreV3Payload = serializeHealthScoreV3ForAi(healthScoreV3Performance);
 
       const { data: responseIA, error: errorIA } = await supabase.functions.invoke(
         'gemini-relatorio-professor-individual',
@@ -987,7 +1002,11 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                 : 'text-slate-400 bg-slate-500/20'
             }`}>
               {HEALTH_SCORE_V3_MODAL_ENABLED
-                ? `V3 ${resolveHealthScoreV3PublicationLabel(healthScoreV3Metrics[0] ?? null).toLowerCase()}`
+                ? healthScoreV3Performance?.comparabilidadeEstado === 'comparavel'
+                  ? 'V3 comparável'
+                  : healthScoreV3Performance?.comparabilidadeEstado === 'em_maturacao'
+                    ? 'V3 em maturação'
+                    : 'V3 sem base operacional'
                 : healthScorePublicavel
                 ? (professor.status === 'critico' ? 'Crítico' : professor.status === 'atencao' ? 'Atenção' : 'Excelente')
                 : 'Em auditoria'}
@@ -1028,6 +1047,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
           {HEALTH_SCORE_V3_MODAL_ENABLED ? (
             <HealthScoreV3MetricsPanel
               metrics={healthScoreV3Metrics}
+              performance={healthScoreV3Performance}
               loading={healthScoreV3Loading}
               error={healthScoreV3Error}
               competencia={competencia}

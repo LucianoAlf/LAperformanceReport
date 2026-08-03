@@ -154,9 +154,13 @@ function HealthScoreV3MetricCell({
     metric?.codigoEvidencia,
     metricKey,
     metric?.motivoSemBase,
+    {
+      amostra: metric?.amostra,
+      amostraMinima: Number(metric?.detalhes.amostra_minima ?? 3),
+    },
   );
   const renderedValue = display.value === null
-    ? display.state === 'auditoria' ? 'Em auditoria' : 'Evidência pendente'
+    ? display.state === 'auditoria' ? 'Em auditoria' : evidenceMessage
     : formatHealthScoreV3MetricValue(metricKey, display.value);
   const stateLabel = display.state === 'observado'
     ? 'observado'
@@ -173,7 +177,7 @@ function HealthScoreV3MetricCell({
       : display.state === 'auditoria'
         ? 'auditoria'
         : display.state === 'sem_base'
-          ? 'evidência pendente'
+          ? evidenceMessage
           : null;
   const metricTone = resolveHealthScoreV3MetricTone(metricKey, display.value, metric);
   const valueClass = metricTone === 'positive'
@@ -246,11 +250,13 @@ function formatHealthScoreV3Status(status: HealthScoreV3UiStatus): string {
   if (status === 'atencao') return 'Atenção';
   if (status === 'saudavel') return 'Saudável';
   if (status === 'parcial') return 'Parcial';
+  if (status === 'em_maturacao') return 'Em maturação';
+  if (status === 'sem_base_operacional') return 'Sem base operacional';
   return 'Evidência pendente';
 }
 
 interface AlertaPerformance {
-  tipo: 'critico' | 'atencao' | 'saudavel' | 'excelente' | 'em_andamento' | 'parcial' | 'evidencia_pendente';
+  tipo: 'critico' | 'atencao' | 'saudavel' | 'excelente' | 'em_andamento' | 'parcial' | 'em_maturacao' | 'sem_base_operacional' | 'evidencia_pendente';
   quantidade: number;
   descricao: string;
 }
@@ -664,6 +670,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     if (filtroStatus !== 'todos') {
       resultado = HEALTH_SCORE_V3_PERFORMANCE_ENABLED
         ? resultado.filter((professor) => {
+            if (filtroStatus === 'comparavel') {
+              return professor.healthV3?.comparabilidadeEstado === 'comparavel';
+            }
             if (filtroStatus === 'em_andamento' || filtroStatus === 'parcial') {
               return professor.healthV3?.estadoPublicacao === filtroStatus;
             }
@@ -697,8 +706,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         { tipo: 'critico', quantidade: status.filter((item) => item === 'critico').length, descricao: 'Health Score V3 critico' },
         { tipo: 'atencao', quantidade: status.filter((item) => item === 'atencao').length, descricao: 'Health Score V3 em atencao' },
         { tipo: 'saudavel', quantidade: status.filter((item) => item === 'saudavel').length, descricao: 'Health Score V3 saudavel' },
-        { tipo: 'em_andamento', quantidade: healthV3SnapshotsAtivos.filter((snapshot) => snapshot.estadoPublicacao === 'em_andamento').length, descricao: 'Competência viva, fora do ranking oficial' },
-        { tipo: 'parcial', quantidade: healthV3SnapshotsAtivos.filter((snapshot) => snapshot.estadoPublicacao === 'parcial').length, descricao: 'Fechamento parcial, fora do ranking oficial' },
+        { tipo: 'em_maturacao', quantidade: status.filter((item) => item === 'em_maturacao').length, descricao: 'Desempenho observado com base em formação' },
+        { tipo: 'sem_base_operacional', quantidade: status.filter((item) => item === 'sem_base_operacional').length, descricao: 'Nenhum pilar válido no recorte' },
         { tipo: 'evidencia_pendente', quantidade: status.filter((item) => item === 'evidencia_pendente').length, descricao: 'Evidencia oficial ainda pendente' },
       ];
     }
@@ -793,7 +802,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       if (avaliaveis.length === 0) {
         return { media: 0, status: 'atencao' as const, disponivel: false };
       }
-      const media = avaliaveis.reduce((acc, snapshot) => acc + Number(snapshot.score), 0) / avaliaveis.length;
+      const media = avaliaveis.reduce((acc, snapshot) => acc + Number(snapshot.scoreComparavel), 0) / avaliaveis.length;
       const status = media >= 70 ? 'saudavel' : media >= 50 ? 'atencao' : 'critico';
       return { media: Math.round(media * 10) / 10, status, disponivel: true };
     }
@@ -816,6 +825,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       case 'saudavel': return 'text-green-400 bg-green-500/20 border-green-500/30';
       case 'parcial': return 'text-violet-300 bg-violet-500/20 border-violet-500/30';
       case 'em_andamento': return 'text-cyan-300 bg-cyan-500/20 border-cyan-500/30';
+      case 'em_maturacao': return 'text-cyan-300 bg-cyan-500/20 border-cyan-500/30';
+      case 'sem_base_operacional': return 'text-slate-300 bg-slate-500/20 border-slate-500/30';
       case 'evidencia_pendente': return 'text-slate-300 bg-slate-500/20 border-slate-500/30';
       default: return 'text-slate-400 bg-slate-500/20 border-slate-500/30';
     }
@@ -887,6 +898,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                       ? '🟣'
                       : alerta.tipo === 'em_andamento'
                         ? '🔵'
+                      : alerta.tipo === 'em_maturacao'
+                        ? '🔵'
                       : alerta.tipo === 'evidencia_pendente'
                         ? '⚪'
                         : '🟢'}
@@ -900,8 +913,12 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                       ? 'em atenção'
                       : alerta.tipo === 'parcial'
                         ? 'com nota parcial'
-                        : alerta.tipo === 'evidencia_pendente'
+                      : alerta.tipo === 'evidencia_pendente'
                           ? 'com evidência pendente'
+                          : alerta.tipo === 'em_maturacao'
+                            ? 'em maturação'
+                            : alerta.tipo === 'sem_base_operacional'
+                              ? 'sem base operacional'
                           : 'saudável'}{alerta.quantidade !== 1 && !['atencao', 'parcial', 'evidencia_pendente'].includes(alerta.tipo) ? 's' : ''}
                 </p>
                 <p className="text-xs opacity-70">{alerta.descricao}</p>
@@ -1067,8 +1084,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                 {HEALTH_SCORE_V3_PERFORMANCE_ENABLED ? (
                   <>
                     <SelectItem value="saudavel">🟢 Saudável</SelectItem>
-                    <SelectItem value="em_andamento">🔵 Em andamento</SelectItem>
-                    <SelectItem value="evidencia_pendente">⚪ Evidência pendente</SelectItem>
+                    <SelectItem value="comparavel">🟢 Comparável</SelectItem>
+                    <SelectItem value="em_maturacao">🔵 Em maturação</SelectItem>
+                    <SelectItem value="sem_base_operacional">⚪ Sem base operacional</SelectItem>
                   </>
                 ) : (
                   <SelectItem value="excelente">🟢 Excelente</SelectItem>
@@ -1259,14 +1277,25 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                             <div className="min-w-[240px] text-xs">
                               <p className="mb-1.5 font-bold text-slate-200">Health Score V3</p>
                               <p className="text-slate-300">
+                                Estado: <strong>{formatHealthScoreV3Status(resolveHealthScoreV3ScoreStatus(professor.healthV3))}</strong>
+                              </p>
+                              <p className="text-slate-300">
                                 Cobertura: <strong>{formatHealthScoreV3Coverage(professor.healthV3?.cobertura)}</strong>
+                              </p>
+                              <p className="text-slate-300">
+                                Pilares válidos: <strong>{professor.healthV3?.pilaresValidos ?? 0}/{professor.healthV3?.pilaresEsperados ?? 5}</strong>
                               </p>
                               <p className="text-slate-300">
                                 Revisão: <strong>{professor.healthV3?.revisao ?? '-'}</strong>
                               </p>
-                              {professor.healthV3?.motivoBloqueio && (
+                              {professor.healthV3?.comparabilidadeMotivo && (
                                 <p className="mt-1.5 text-amber-300">
-                                  {resolveHealthScoreV3EvidenceMessage(professor.healthV3.motivoBloqueio)}
+                                  {resolveHealthScoreV3EvidenceMessage(professor.healthV3.comparabilidadeMotivo)}
+                                </p>
+                              )}
+                              {professor.healthV3?.competenciaReferencia && professor.healthV3.scoreReferencia !== null && (
+                                <p className="mt-1.5 text-sky-300">
+                                  Referência comparável de {formatHealthScoreV3ReferenceMonth(professor.healthV3.competenciaReferencia)}: <strong>{Math.round(professor.healthV3.scoreReferencia)}</strong>. Não compõe a nota atual.
                                 </p>
                               )}
                             </div>
@@ -1277,14 +1306,25 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                               getStatusColor(resolveHealthScoreV3ScoreStatus(professor.healthV3))
                             }`}>
                               <span className="text-sm font-black">
-                                {professor.healthV3 && isHealthScoreV3SnapshotVisible(professor.healthV3)
-                                  ? Math.round(Number(professor.healthV3.score))
-                                  : '—'}
+                                {professor.healthV3?.comparabilidadeEstado === 'comparavel'
+                                  ? Math.round(Number(professor.healthV3.scoreComparavel))
+                                  : professor.healthV3?.comparabilidadeEstado === 'em_maturacao' && professor.healthV3.scoreObservado !== null
+                                    ? Math.round(professor.healthV3.scoreObservado)
+                                    : '—'}
                               </span>
                             </div>
                             <span className="text-[9px] font-medium uppercase tracking-wide text-slate-500">
-                              {resolveHealthScoreV3PublicationLabel(professor.healthV3)}
+                              {professor.healthV3?.comparabilidadeEstado === 'comparavel'
+                                ? 'Health Score'
+                                : professor.healthV3?.comparabilidadeEstado === 'em_maturacao'
+                                  ? 'Desempenho observado'
+                                  : 'Sem base operacional'}
                             </span>
+                            {professor.healthV3?.comparabilidadeEstado === 'em_maturacao' && (
+                              <span className="text-[9px] text-cyan-300">
+                                {professor.healthV3.pilaresValidos}/{professor.healthV3.pilaresEsperados} pilares · {formatHealthScoreV3Coverage(professor.healthV3.cobertura)}
+                              </span>
+                            )}
                           </div>
                         </Tooltip>
                       ) : (
