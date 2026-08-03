@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 const migrationPath =
-  'supabase/migrations/20260802234000_health_score_v3_ordem_estavel.sql';
+  'supabase/migrations/20260802235000_health_score_v3_nota_viva_coerente.sql';
 const helperPath = 'src/lib/healthScoreProfessorV3Performance.ts';
 const tabPath = 'src/components/App/Professores/TabPerformanceProfessores.tsx';
 
@@ -35,15 +35,15 @@ test('tabela operacional ordena todo score visivel do maior para o menor', async
   );
 });
 
-test('competencia viva preserva a ultima nota valida abaixo da cobertura minima', () => {
-  assert.equal(fs.existsSync(migrationPath), true, 'migration de estabilidade ainda nao existe');
+test('competencia viva preserva a referencia anterior sem substituir a nota atual', () => {
+  assert.equal(fs.existsSync(migrationPath), true, 'migration de nota viva ainda nao existe');
   const sql = read(migrationPath);
 
   assert.match(sql, /create or replace function public\.get_health_score_professor_v3_performance/i);
-  assert.match(sql, /referencia_score/i);
+  assert.match(sql, /score_referencia/i);
   assert.match(sql, /cobertura_minima/i);
-  assert.match(sql, /p\.cobertura\s*<\s*p\.cobertura_minima/i);
-  assert.match(sql, /r\.score_referencia/i);
+  assert.match(sql, /score_operacional_origem'[\s\S]*'competencia_atual'/i);
+  assert.doesNotMatch(sql, /r\.score_referencia\s+as\s+score/i);
   assert.match(sql, /estado_publicacao[\s\S]*'em_andamento'/i);
   assert.match(sql, /ranking_habilitado[\s\S]*false/i);
   assert.doesNotMatch(sql, /update\s+public\.health_score_professor_v3_snapshots/i);

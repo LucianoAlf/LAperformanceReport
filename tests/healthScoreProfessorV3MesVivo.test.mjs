@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
-const migrationPath = 'supabase/migrations/20260802233000_health_score_v3_mes_vivo.sql';
+const migrationPath = 'supabase/migrations/20260802235000_health_score_v3_nota_viva_coerente.sql';
 const helperPath = 'src/lib/healthScoreProfessorV3Performance.ts';
 const tabPath = 'src/components/App/Professores/TabPerformanceProfessores.tsx';
 const modalPath = 'src/components/App/Professores/ModalDetalhesProfessorPerformance.tsx';
@@ -14,8 +14,8 @@ test('mês corrente usa projeção canônica sem tocar snapshots fechados', () =
   const sql = read(migrationPath);
 
   assert.match(sql, /create or replace function public\.get_health_score_professor_v3_projecao_viva/i);
-  assert.match(sql, /get_health_score_professor_v3_metricas_periodo\s*\(/i);
-  assert.match(sql, /get_health_score_professor_v3_metricas_segmentadas_agregadas_v1\s*\(/i);
+  assert.match(sql, /get_health_score_professor_v3_projecao_viva\s*\(/i);
+  assert.match(sql, /get_health_score_professor_v3_projecao_viva_coerente\s*\(/i);
   assert.match(sql, /calcular_health_score_professor_v3_nota_diagnostica\s*\(/i);
   assert.match(sql, /timezone\s*\(\s*'America\/Sao_Paulo'/i);
   assert.match(sql, /estado_publicacao[\s\S]*'em_andamento'/i);
@@ -28,37 +28,37 @@ test('mês corrente usa projeção canônica sem tocar snapshots fechados', () =
 test('projecao viva reutiliza a nota segmentada e as regras do motor oficial', () => {
   const sql = read(migrationPath);
 
-  assert.match(sql, /when a\.metrica = 'media_turma' then a\.nota_segmentada/i);
+  assert.match(sql, /normalizar_health_score_professor_v3_meta_viva/i);
   assert.match(
     sql,
-    /a\.metrica in \('retencao', 'conversao', 'presenca'\)[\s\S]*least\(100::numeric, a\.valor_bruto\)/i,
+    /p_metrica in \('retencao', 'permanencia', 'conversao', 'presenca'\)[\s\S]*p_valor_bruto \/ nullif\(p_meta, 0\) \* 100/i,
   );
   assert.match(
     sql,
-    /a\.metrica = 'permanencia'[\s\S]*a\.valor_bruto \/ nullif\(cm\.meta, 0\) \* 100/i,
+    /p_metrica = 'media_turma'[\s\S]*p_nota_segmentada/i,
   );
   assert.doesNotMatch(
     sql,
-    /a\.metrica = 'media_turma'[\s\S]{0,180}100::numeric \* a\.numerador \/ nullif\(a\.denominador/i,
+    /p_metrica = 'media_turma'[\s\S]{0,180}100::numeric \* p_valor_bruto \/ nullif\(p_meta/i,
   );
 });
 
 test('referência do mês anterior é explícita, temporária e nunca pontua', () => {
   const sql = read(migrationPath);
 
-  assert.match(sql, /referencia_temporaria/i);
-  assert.match(sql, /competencia_referencia/i);
-  assert.match(sql, /valor_referencia/i);
-  assert.match(sql, /referencia_periodo_anterior/i);
-  assert.match(sql, /referencia_temporaria[\s\S]*peso_disponivel[\s\S]*false/i);
+  assert.match(sql, /score_competencia_referencia/i);
+  assert.match(sql, /score_referencia/i);
+  assert.match(sql, /score_referencia_origem'[\s\S]*'competencia_anterior'/i);
+  assert.match(sql, /score_operacional_origem'[\s\S]*'competencia_atual'/i);
+  assert.doesNotMatch(sql, /score_referencia\s+as\s+score/i);
 });
 
 test('ACL do contrato vivo continua restrita aos papéis autenticados', () => {
   const sql = read(migrationPath);
 
-  assert.match(sql, /revoke all on function public\.get_health_score_professor_v3_projecao_viva[\s\S]*from public, anon, authenticated/i);
+  assert.match(sql, /revoke all on function public\.get_health_score_professor_v3_projecao_viva_coerente[\s\S]*from public, anon, authenticated/i);
   assert.match(sql, /grant execute on function public\.get_health_score_professor_v3_performance[\s\S]*to authenticated, service_role/i);
-  assert.match(sql, /grant execute on function public\.get_health_score_professor_v3_snapshot_modal[\s\S]*to authenticated, service_role/i);
+  assert.match(sql, /grant execute on function public\.get_health_score_professor_v3_projecao_viva_coerente[\s\S]*to service_role/i);
 });
 
 test('frontend separa classificação do estado de publicação e explica a referência', async () => {
