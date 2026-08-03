@@ -19,7 +19,7 @@ interface SnapshotRow {
   periodo_inicio: string;
   periodo_fim: string;
   ciclo_codigo: string;
-  estado_publicacao: 'em_andamento' | 'parcial' | 'oficial' | 'sem_base';
+  estado_publicacao: 'em_andamento' | 'ciclo_em_acompanhamento' | 'parcial' | 'oficial' | 'sem_base';
   score_exibivel: boolean;
   ranking_habilitado: boolean;
   config_versao: number;

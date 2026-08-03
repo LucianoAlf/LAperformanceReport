@@ -326,7 +326,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
   const competencia = `${ano}-${String(mes).padStart(2, '0')}`;
 
   // Modo de visualização (mensal vs trimestral) — local desta aba
-  const [modoVisualizacao, setModoVisualizacao] = useState<'mensal' | 'trimestre'>('mensal');
+  const [modoVisualizacao, setModoVisualizacao] = useState<'mensal' | 'trimestre'>('trimestre');
   const periodoV3 = useMemo(
     () => getHealthScoreV3Period(ano, mes, modoVisualizacao === 'trimestre' ? 'ciclo' : 'mensal'),
     [ano, mes, modoVisualizacao],
@@ -1211,6 +1211,10 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           </button>
         </div>
       </div>
+
+      <p className="-mt-3 px-1 text-xs text-slate-400">
+        Visão principal: ciclo oficial · Mensal: evidências do mês.
+      </p>
 
       {/* Tabela de Performance */}
       <div data-tour="professores-tabela" className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
