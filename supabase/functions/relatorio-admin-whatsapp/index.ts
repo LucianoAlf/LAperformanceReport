@@ -2353,6 +2353,36 @@ serve(async (req) => {
     }
 
     // === MODO MANUAL (existente) ===
+    // Este ramo dispara mensagem no WhatsApp (grupos de destinatarios ou numero_teste).
+    // Como a funcao roda com verify_jwt = false, sem esta checagem qualquer chamada
+    // anonima que conheca a URL enviaria mensagem em nome da escola. Aceita a
+    // service_role (automacoes) ou um usuario autenticado (as telas do front, que
+    // ja mandam o token pelo supabase.functions.invoke).
+    {
+      const bearerManual = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+      if (!bearerManual) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Autenticação obrigatória para enviar relatório.' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      if (!serviceRoleKey || bearerManual !== serviceRoleKey) {
+        const anonKeyManual = Deno.env.get('SUPABASE_ANON_KEY');
+        if (!anonKeyManual) throw new Error('SUPABASE_ANON_KEY_AUSENTE');
+        const userClientManual = createClient(supabaseUrl, anonKeyManual, {
+          global: { headers: { Authorization: `Bearer ${bearerManual}` } },
+          auth: { autoRefreshToken: false, persistSession: false },
+        });
+        const { data: authManual, error: authManualError } = await userClientManual.auth.getUser();
+        if (authManualError || !authManual.user) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Token inválido para enviar relatório.' }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+      }
+    }
+
     if (!payload.texto) {
       return new Response(
         JSON.stringify({ success: false, error: 'Texto do relatório não informado' }),

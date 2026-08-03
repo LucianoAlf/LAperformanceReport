@@ -104,3 +104,20 @@ test('lista vazia ou nula devolve null', () => {
   assert.equal(competenciaFechadaAnterior([], 2026, 8), null);
   assert.equal(competenciaFechadaAnterior(null, 2026, 8), null);
 });
+
+test('modo manual de envio exige autenticacao', () => {
+  const manual = edge.slice(edge.indexOf('=== MODO MANUAL'));
+  const ateEnvio = manual.slice(0, manual.indexOf('// Modo teste'));
+
+  assert.match(
+    ateEnvio,
+    /Authorization/,
+    'o ramo que dispara WhatsApp precisa ler o header Authorization antes de enviar',
+  );
+  assert.match(
+    ateEnvio,
+    /getUser\(\)/,
+    'o ramo manual precisa validar o usuario quando o bearer nao e a service_role',
+  );
+  assert.match(ateEnvio, /status:\s*401/);
+});
