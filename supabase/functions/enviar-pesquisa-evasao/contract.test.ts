@@ -118,7 +118,7 @@ Deno.test("validarRequest normaliza celular e fixo locais com DDD 55", () => {
   }
 });
 
-Deno.test("confirmacao aceita somente preview_id", () => {
+Deno.test("confirmacao aceita contrato antigo e texto final opcional", () => {
   assertEquals(
     validarRequest({
       acao: "confirmar",
@@ -130,6 +130,20 @@ Deno.test("confirmacao aceita somente preview_id", () => {
     },
   );
 
+  const mensagem = "> *Pergunta aprovada*\n\n_Pedido sincero_ 🙏";
+  assertEquals(
+    validarRequest({
+      acao: "confirmar",
+      preview_id: previewIdCanonico,
+      mensagem_final: mensagem,
+    }),
+    {
+      acao: "confirmar",
+      preview_id: previewIdCanonico,
+      mensagem_final: mensagem,
+    },
+  );
+
   for (
     const campo of [
       "evasao_id",
@@ -138,6 +152,11 @@ Deno.test("confirmacao aceita somente preview_id", () => {
       "operador",
       "mensagem",
       "telefone_override",
+      "telefone",
+      "caixa_id",
+      "assinatura",
+      "template_id",
+      "payload_hash",
     ]
   ) {
     assertThrows(
@@ -151,6 +170,36 @@ Deno.test("confirmacao aceita somente preview_id", () => {
       `Campo nao permitido: ${campo}`,
     );
   }
+});
+
+Deno.test("confirmacao rejeita texto vazio ou acima de 2000 caracteres", () => {
+  for (const mensagem_final of ["", " \n\t ", "a".repeat(2001)]) {
+    assertThrows(
+      () =>
+        validarRequest({
+          acao: "confirmar",
+          preview_id: previewIdCanonico,
+          mensagem_final,
+        }),
+      Error,
+    );
+  }
+});
+
+Deno.test("confirmacao conta caracteres Unicode e preserva o texto exato", () => {
+  const mensagem_final = "🎵".repeat(2000);
+  assertEquals(
+    validarRequest({
+      acao: "confirmar",
+      preview_id: previewIdCanonico,
+      mensagem_final,
+    }),
+    {
+      acao: "confirmar",
+      preview_id: previewIdCanonico,
+      mensagem_final,
+    },
+  );
 });
 
 Deno.test("validarRequest aceita somente objeto JSON simples com campos proprios", () => {
@@ -460,7 +509,8 @@ Deno.test("renderiza mensagem para responsavel de menor", () => {
 });
 
 Deno.test("renderiza V2 para responsavel com formatacao exata e sem separador", () => {
-  const template = `{{responsavel_primeiro_nome}}! Aqui é {{assinatura_com_artigo}}, do Sucesso do Aluno da LA Music. 🎵
+  const template =
+    `{{responsavel_primeiro_nome}}! Aqui é {{assinatura_com_artigo}}, do Sucesso do Aluno da LA Music. 🎵
 
 Queria agradecer pelo tempo que {{aluno_primeiro_nome}} passou com a gente. As portas estarão sempre abertas!
 
@@ -502,7 +552,8 @@ Pode responder com texto ou áudio. Fique à vontade. 🙏`,
 
 Deno.test("renderiza V2 direto falando com o proprio aluno", () => {
   const mensagem = renderizarMensagem({
-    template: `{{aluno_primeiro_nome}}! Aqui é {{assinatura_com_artigo}}, do Sucesso do Aluno da LA Music. 🎵
+    template:
+      `{{aluno_primeiro_nome}}! Aqui é {{assinatura_com_artigo}}, do Sucesso do Aluno da LA Music. 🎵
 
 Queria agradecer pelo tempo que você passou com a gente. As portas estarão sempre abertas para você!
 
@@ -604,6 +655,19 @@ Deno.test("hash do preview e deterministico e muda com o conteudo", async () => 
   assertEquals(primeiro, segundo);
   assertEquals(primeiro.length, 64);
   assertNotEquals(primeiro, alterado);
+});
+
+Deno.test("hash final muda quando apenas uma quebra de linha muda", async () => {
+  const umaQuebra = await hashPreview({
+    ...snapshotValido,
+    mensagemRenderizada: "Primeira linha\nSegunda linha",
+  });
+  const duasQuebras = await hashPreview({
+    ...snapshotValido,
+    mensagemRenderizada: "Primeira linha\n\nSegunda linha",
+  });
+
+  assertNotEquals(umaQuebra, duasQuebras);
 });
 
 Deno.test("hash aceita assinaturaId nula quando usa fallback do login", async () => {

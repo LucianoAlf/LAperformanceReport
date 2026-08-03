@@ -485,7 +485,7 @@ test('historico de teste e invalidado no Realtime e apos confirmar teste', () =>
     /\/\/ Realtime:[\s\S]*?(?=\n\s*const\s+carregarDados\s*=)/,
   )?.[0] ?? '';
   const confirmar = tab.match(
-    /const\s+confirmarEnvio\s*=\s*async\s*\(\s*\)\s*=>\s*\{[\s\S]*?(?=\n\s*const\s+alterarModalPreview\s*=)/,
+    /const\s+confirmarEnvio\s*=\s*async\s*\(\s*mensagemFinal\s*:\s*string\s*\)\s*=>\s*\{[\s\S]*?(?=\n\s*const\s+alterarModalPreview\s*=)/,
   )?.[0] ?? '';
   const invalidar = tab.match(
     /const\s+invalidarHistoricoTeste\s*=\s*\(\s*\)\s*=>\s*\{[\s\S]*?(?=\n\s*\};)/,

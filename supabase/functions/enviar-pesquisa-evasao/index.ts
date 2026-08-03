@@ -18,6 +18,7 @@ import {
   mascararTelefone,
   renderizarMensagem,
   resolverDestinoPesquisaPorPublico,
+  validarMensagemFinal,
   validarRequest,
 } from "./contract.ts";
 import {
@@ -76,6 +77,16 @@ interface PreviewPersistida {
   unidade_id: string;
   modo_teste: boolean;
   evasao_id: number;
+  usuario_id: number;
+  assinatura_id: string | null;
+  template_id: string;
+  template_versao: number;
+  caixa_id: number;
+  destinatario_tipo: "aluno" | "responsavel" | "teste";
+  telefone_destino: string;
+  mensagem_template_original: string;
+  mensagem_renderizada: string;
+  payload_hash_original: string;
 }
 
 interface ClaimEnvio {
@@ -279,7 +290,9 @@ async function carregarPreviewPersistida(
 ): Promise<PreviewPersistida> {
   const { data, error } = await supabase
     .from("pesquisa_evasao_previews")
-    .select("auth_user_id, unidade_id, modo_teste, evasao_id")
+    .select(
+      "auth_user_id, unidade_id, modo_teste, evasao_id, usuario_id, assinatura_id, template_id, template_versao, caixa_id, destinatario_tipo, telefone_destino, mensagem_template_original, mensagem_renderizada, payload_hash_original",
+    )
     .eq("id", previewId)
     .limit(2);
 
@@ -288,12 +301,40 @@ async function carregarPreviewPersistida(
     throw new ErroHttp(404, "Preview nao encontrada");
   }
 
-  const { auth_user_id, unidade_id, modo_teste, evasao_id } = data[0];
+  const {
+    auth_user_id,
+    unidade_id,
+    modo_teste,
+    evasao_id,
+    usuario_id,
+    assinatura_id,
+    template_id,
+    template_versao,
+    caixa_id,
+    destinatario_tipo,
+    telefone_destino,
+    mensagem_template_original,
+    mensagem_renderizada,
+    payload_hash_original,
+  } = data[0];
   if (
     typeof auth_user_id !== "string" ||
     typeof unidade_id !== "string" ||
     typeof modo_teste !== "boolean" ||
-    !Number.isSafeInteger(Number(evasao_id))
+    !Number.isSafeInteger(Number(evasao_id)) ||
+    !Number.isSafeInteger(Number(usuario_id)) ||
+    !(assinatura_id === null || typeof assinatura_id === "string") ||
+    typeof template_id !== "string" ||
+    !Number.isSafeInteger(Number(template_versao)) ||
+    !Number.isSafeInteger(Number(caixa_id)) ||
+    !["aluno", "responsavel", "teste"].includes(String(destinatario_tipo)) ||
+    typeof telefone_destino !== "string" ||
+    typeof mensagem_template_original !== "string" ||
+    mensagem_template_original.trim().length === 0 ||
+    typeof mensagem_renderizada !== "string" ||
+    mensagem_renderizada.trim().length === 0 ||
+    typeof payload_hash_original !== "string" ||
+    payload_hash_original.trim().length === 0
   ) {
     throw new ErroHttp(500, "Preview persistida inconsistente");
   }
@@ -303,6 +344,17 @@ async function carregarPreviewPersistida(
     unidade_id,
     modo_teste,
     evasao_id: Number(evasao_id),
+    usuario_id: Number(usuario_id),
+    assinatura_id,
+    template_id,
+    template_versao: Number(template_versao),
+    caixa_id: Number(caixa_id),
+    destinatario_tipo:
+      destinatario_tipo as PreviewPersistida["destinatario_tipo"],
+    telefone_destino,
+    mensagem_template_original,
+    mensagem_renderizada,
+    payload_hash_original,
   };
 }
 
@@ -649,6 +701,8 @@ async function previsualizar(
       telefone_destino: destino.telefone,
       mensagem_renderizada: mensagem,
       payload_hash: payloadHash,
+      mensagem_template_original: mensagem,
+      payload_hash_original: payloadHash,
       idempotency_key: crypto.randomUUID(),
       expira_em: expiraEm,
       aluno_id: movimentacao.aluno_id,
@@ -705,16 +759,45 @@ async function confirmar(
     modoTeste: previewPersistida.modo_teste,
   });
 
-  const { auth_user_id } = previewPersistida;
+  const mensagemFinal = validarMensagemFinal(
+    request.mensagem_final ?? previewPersistida.mensagem_renderizada,
+  );
+  const payloadHashFinal = await hashPreview({
+    evasaoId: previewPersistida.evasao_id,
+    unidadeId: previewPersistida.unidade_id,
+    usuarioId: previewPersistida.usuario_id,
+    authUserId: previewPersistida.auth_user_id,
+    assinaturaId: previewPersistida.assinatura_id,
+    templateId: previewPersistida.template_id,
+    templateVersao: previewPersistida.template_versao,
+    caixaId: previewPersistida.caixa_id,
+    modoTeste: previewPersistida.modo_teste,
+    destinatarioTipo: previewPersistida.destinatario_tipo,
+    telefoneDestino: previewPersistida.telefone_destino,
+    mensagemRenderizada: mensagemFinal,
+  });
 
   const { data: claimsData, error: claimError } = await supabase.rpc(
-    "claim_pesquisa_evasao_preview",
+    "claim_pesquisa_evasao_preview_editavel",
     {
       p_preview_id: request.preview_id,
-      p_auth_user_id: auth_user_id,
+      p_auth_user_id: previewPersistida.auth_user_id,
+      p_mensagem_final: mensagemFinal,
+      p_payload_hash_final: payloadHashFinal,
     },
   );
-  if (claimError) throw claimError;
+  if (claimError) {
+    const mensagemClaim = typeof claimError.message === "string"
+      ? claimError.message
+      : "";
+    if (mensagemClaim.includes("PESQUISA_EVASAO_PREVIEW_TEXTO_DIVERGENTE")) {
+      throw new ErroHttp(
+        409,
+        "A previa ja foi confirmada com outro texto",
+      );
+    }
+    throw claimError;
+  }
 
   const claims = Array.isArray(claimsData) ? claimsData : [];
   if (claims.length !== 1) {

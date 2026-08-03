@@ -25,13 +25,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import type { PesquisaEvasaoPreview } from './pesquisaEvasao.types';
+import { EditorMensagemPesquisaEvasao } from './EditorMensagemPesquisaEvasao';
 
 interface ModalPreviewPesquisaEvasaoProps {
   aberto: boolean;
   preview: PesquisaEvasaoPreview | null;
   confirmando: boolean;
   onAbertoChange: (aberto: boolean) => void;
-  onConfirmar: () => void;
+  onConfirmar: (mensagemFinal: string) => void;
 }
 
 interface CampoPreviewProps {
@@ -75,6 +76,12 @@ export function ModalPreviewPesquisaEvasao({
 }: ModalPreviewPesquisaEvasaoProps) {
   const tituloRef = useRef<HTMLHeadingElement>(null);
   const [agora, setAgora] = useState(() => Date.now());
+  const [mensagemFinal, setMensagemFinal] = useState(preview?.mensagem ?? '');
+
+  useEffect(() => {
+    if (!aberto || !preview) return;
+    setMensagemFinal(preview.mensagem);
+  }, [aberto, preview?.preview_id, preview?.mensagem]);
 
   useEffect(() => {
     if (!aberto || !preview) return;
@@ -91,10 +98,12 @@ export function ModalPreviewPesquisaEvasao({
   const segundosRestantes = expirado
     ? 0
     : Math.max(0, Math.ceil((prazoExpiracao - agora) / 1_000));
+  const mensagemInvalida = mensagemFinal.trim().length === 0 ||
+    Array.from(mensagemFinal).length > 2_000;
 
   const confirmarSeValido = () => {
-    if (expirado || confirmando) return;
-    onConfirmar();
+    if (expirado || confirmando || mensagemInvalida) return;
+    onConfirmar(mensagemFinal);
   };
 
   const alterarAberto = (proximoAberto: boolean) => {
@@ -234,9 +243,12 @@ export function ModalPreviewPesquisaEvasao({
                 {preview.assinatura}
               </span>
             </div>
-            <p className="whitespace-pre-wrap px-5 py-5 text-[15px] leading-7 text-slate-200">
-              {preview.mensagem}
-            </p>
+            <EditorMensagemPesquisaEvasao
+              mensagemOriginal={preview.mensagem}
+              mensagem={mensagemFinal}
+              desabilitado={confirmando}
+              onMensagemChange={setMensagemFinal}
+            />
           </section>
 
           {preview.alertas.length > 0 && (
@@ -263,7 +275,7 @@ export function ModalPreviewPesquisaEvasao({
             <Button
               type="button"
               onClick={confirmarSeValido}
-              disabled={confirmando || expirado}
+              disabled={confirmando || expirado || mensagemInvalida}
               className={
                 preview.modo_teste
                   ? 'bg-yellow-400 text-slate-950 hover:bg-yellow-300'
