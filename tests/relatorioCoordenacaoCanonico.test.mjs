@@ -56,7 +56,7 @@ test('Edge busca o contrato com o JWT e limita a IA a narrativa', () => {
 
   assert.match(source, /createClient/i);
   assert.match(source, /authorization/i);
-  assert.match(source, /get_relatorio_coordenacao_canonico_v1/i);
+  assert.match(source, /get_relatorio_coordenacao_canonico_v2/i);
   assert.match(source, /body\?\.unidade|body\.unidade/i);
   assert.match(source, /body\?\.ano|body\.ano/i);
   assert.match(source, /body\?\.mes|body\.mes/i);
@@ -87,13 +87,14 @@ test('texto público bloqueia finanças, termos internos e paginação artificia
   assert.match(renderer, /recesso/i);
 });
 
-test('relatorio distingue mes vivo de simulacao historica sem repetir provisorio', () => {
+test('relatorio distingue mes vivo de dados historicos fechados sem chamar tudo de parcial', () => {
   const source = fs.readFileSync(edgePath, 'utf8');
 
   assert.match(source, /estado_publicacao\s*===\s*["']em_andamento["']/i);
   assert.match(source, /leitura do mês em andamento/i);
   assert.match(source, /Professores com nota disponível/i);
-  assert.match(source, /simulação V3 parcial e não oficial/i);
+  assert.match(source, /dados operacionais estão fechados/i);
+  assert.match(source, /ranking e premiação aguardam o fechamento oficial do ciclo/i);
 });
 
 test('botão mensal envia somente filtros e mantém cópia robusta', () => {

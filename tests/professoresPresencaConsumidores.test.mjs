@@ -47,7 +47,7 @@ test('edges de professores respeitam o bloqueio de publicacao', () => {
   for (const source of [edgeEquipe, edgeProfessor, edgeIndividual, edgeRanking]) {
     assert.match(source, /presenca_publicavel/);
   }
-  assert.match(edgeCoordenacao, /get_relatorio_coordenacao_canonico_v1/);
+  assert.match(edgeCoordenacao, /get_relatorio_coordenacao_canonico_v2/);
   assert.match(edgeCoordenacao, /estado_evidencia/);
   assert.doesNotMatch(edgeCoordenacao, /presenca_publicavel/);
   assert.doesNotMatch(edgeEquipe, /taxa_presenca:\s*number;/);

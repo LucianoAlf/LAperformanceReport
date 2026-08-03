@@ -40,23 +40,23 @@ test('relatorio mensal da coordenacao envia filtros e usa o produtor canonico do
   assert.match(modal, /gemini-relatorio-coordenacao/);
   assert.match(modal, /body:\s*\{\s*unidade:\s*unidadeId,\s*ano:\s*anoRelatorio,\s*mes:\s*mesRelatorio\s*\}/);
   assert.doesNotMatch(modal, /get_dados_relatorio_coordenacao|get_kpis_professor_periodo_canonico/);
-  assert.match(edge, /get_relatorio_coordenacao_canonico_v1/);
+  assert.match(edge, /get_relatorio_coordenacao_canonico_v2/);
   assert.match(migration, /sum\(\(p #>> '\{metricas,presenca,numerador\}'\)::numeric\)/);
   assert.match(migration, /sum\(\(p #>> '\{metricas,presenca,denominador\}'\)::numeric\)/);
 });
 
-test('relatorios instantaneos nao dependem da RPC legada do relatorio mensal', () => {
+test('relatorios instantaneos usam o mesmo contrato canonico V2 do mensal', () => {
   const modal = read('src/components/App/Professores/ModalRelatorioCoordenacao.tsx');
   const instantaneo = modal.slice(
     modal.indexOf('const gerarRelatorioInstantaneo'),
     modal.indexOf('const regenerarRelatorio'),
   );
 
-  assert.match(instantaneo, /gerarRelatorioCoordenacaoInstantaneo/);
-  assert.match(instantaneo, /professores,/);
+  assert.match(instantaneo, /gerarRelatorioCoordenacaoCanonico/);
+  assert.match(instantaneo, /get_relatorio_coordenacao_canonico_v2/);
   assert.doesNotMatch(instantaneo, /buscarDadosRelatorioCoordenacao/);
   assert.doesNotMatch(instantaneo, /get_dados_relatorio_coordenacao/);
-  assert.doesNotMatch(instantaneo, /supabase\.rpc/);
+  assert.match(instantaneo, /supabase\.rpc/);
 });
 
 test('produtor mensal da coordenacao usa o roster ativo da Performance', () => {
@@ -140,7 +140,7 @@ test('geradores pedagogicos consomem V3 e nao recalculam Health Score legado', (
   }
 
   const coordenacao = read('supabase/functions/gemini-relatorio-coordenacao/index.ts');
-  assert.match(coordenacao, /get_relatorio_coordenacao_canonico_v1/);
+  assert.match(coordenacao, /get_relatorio_coordenacao_canonico_v2/);
   assert.match(coordenacao, /estado_publicacao/i);
   assert.match(coordenacao, /estado_evidencia/i);
   assert.doesNotMatch(coordenacao, /function calcularHealthScore\s*\(/i);
@@ -245,12 +245,13 @@ test('Carteira exibe permanencia com o professor da mesma fonte V3 da Performanc
   );
 });
 
-test('Carteira calcula ticket contratual com o mesmo denominador canonico exibido no card', () => {
+test('Carteira exibe ticket contratual e denominador ja calculados pela fonte canonica', () => {
   const carteira = read('src/components/App/Professores/TabCarteiraProfessores.tsx');
 
   assert.match(carteira, /const mrrTotal = Number\(row\?\.mrr_total \?\? 0\)/);
-  assert.match(carteira, /ticket_medio:\s*totalAlunos > 0 \? mrrTotal \/ totalAlunos : 0/);
-  assert.doesNotMatch(carteira, /ticket_medio:\s*Number\(row\?\.ticket_medio/);
+  assert.match(carteira, /ticket_medio:\s*Number\(row\?\.ticket_medio \?\? 0\)/);
+  assert.match(carteira, /alunos_ticket:\s*Number\(row\?\.alunos_ticket \?\? 0\)/);
+  assert.match(carteira, /const baseTicket = dados\.reduce\(\(acc, c\) => acc \+ c\.alunos_ticket, 0\)/);
 });
 
 test('detalhes da Carteira usam jornada canonica e nunca professor_atual_id legado', () => {
