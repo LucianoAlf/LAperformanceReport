@@ -2,6 +2,7 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { filtrarSinaisParaNarrativa } from "./narrativa.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -131,6 +132,7 @@ const rotulosSinais: Record<string, string> = {
   expansao_sustentavel: "Expansão sustentável",
   oportunidade_distribuicao: "Oportunidade de distribuição",
   concentracao_operacional: "Concentração operacional",
+  capacidade_estimada_conferir: "Capacidade estimada — conferir cadastro",
   maturacao: "Professor em maturação",
 };
 
@@ -185,7 +187,8 @@ function narrativaDeterministica(dados: RelatorioCoordenacaoCanonico): Narrativa
   const total = inteiro(resumo.total_professores);
   const comScore = inteiro(resumo.com_score);
   const pendentes = inteiro(resumo.com_evidencia_pendente);
-  const alertas = dados.mapa_sinais.filter((sinal) => sinal.severidade !== "baixo");
+  const alertas = filtrarSinaisParaNarrativa(dados.mapa_sinais)
+    .filter((sinal) => sinal.severidade !== "baixo");
 
   return {
     resumo: `A equipe tem ${total} professores ativos; ${comScore} possuem nota disponível e ${pendentes} precisam completar evidências. O período deve ser lido como diagnóstico pedagógico, com foco em apoio e evolução.`,
@@ -257,7 +260,7 @@ async function gerarNarrativa(
       contexto: dados.periodo.contexto_operacional,
     },
     resumo_equipe: dados.resumo_equipe,
-    mapa_sinais: dados.mapa_sinais,
+    mapa_sinais: filtrarSinaisParaNarrativa(dados.mapa_sinais),
     qualidade_dados: dados.qualidade_dados,
     catalogo_treinamentos: catalogo,
   };
@@ -281,6 +284,7 @@ async function gerarNarrativa(
               "Você redige uma leitura pedagógica breve e empática para a Coordenação de uma escola de música.",
               "Use somente os sinais recebidos. Não calcule números, notas, médias, taxas, classificações ou rankings.",
               "Não invente fatos nem recomende punição. Sugira treinamentos apenas do catálogo recebido.",
+              "Capacidade estimada sem turma ou sala vinculada não comprova sobrecarga e não pode, isoladamente, gerar ponto de atenção, plano de ação ou treinamento.",
               "Responda JSON com: resumo, conquistas[], pontos_atencao[], treinamentos[{professor,treinamento,motivo}], plano_acao[].",
             ].join(" "),
           },
@@ -321,6 +325,9 @@ function descreverMetrica(chave: string, metrica: MetricaProfessor | undefined):
 function descreverSinal(sinal: SinalContrato): string {
   const evidencia = sinal.evidencias || {};
   const carteira = evidencia.carteira !== undefined ? ` Carteira: ${inteiro(evidencia.carteira)}.` : "";
+  if (sinal.sinal === "capacidade_estimada_conferir") {
+    return `${sinal.professor} — ${rotulosSinais[sinal.sinal]} (${sinal.severidade}). A referência é estimada porque não há turma ou sala física vinculada.`;
+  }
   return `${sinal.professor} — ${rotulosSinais[sinal.sinal] || sinal.sinal} (${sinal.severidade}).${carteira}`;
 }
 
@@ -341,6 +348,10 @@ function renderizarRelatorio(
       : "O período segue calendário regular e cada indicador respeita sua evidência disponível.";
 
   const sinais = dados.mapa_sinais.map(descreverSinal);
+  const professoresComAmostraMinima = dados.experimentais.professores_com_amostra_minima
+    ?? dados.experimentais.professores_com_amostra;
+  const professoresComConversaoPontuando = dados.experimentais.professores_com_conversao_pontuando
+    ?? dados.experimentais.professores_com_amostra;
   const professoresOrdenados = [...dados.professores].sort((a, b) =>
     a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" })
   );
@@ -427,7 +438,8 @@ function renderizarRelatorio(
     "",
     "🎸 *EXPERIMENTAIS*",
     "───────────────────────",
-    `• Professores com amostra suficiente: *${inteiro(dados.experimentais.professores_com_amostra)}*`,
+    `• Professores com amostra mínima observada: *${inteiro(professoresComAmostraMinima)}*`,
+    `• Conversão compondo a nota histórica: *${inteiro(professoresComConversaoPontuando)}*`,
     `• Sem experimental no período: *${inteiro(dados.experimentais.professores_sem_experimental)}*`,
     `• Com amostra insuficiente: *${inteiro(dados.experimentais.professores_com_amostra_insuficiente)}*`,
     `• Conversão observada da equipe: *${percentual(dados.experimentais.taxa_conversao_observada)}*`,
