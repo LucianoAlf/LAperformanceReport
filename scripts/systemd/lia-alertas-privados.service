@@ -5,6 +5,6 @@ After=network-online.target
 [Service]
 Type=oneshot
 User=sol
-WorkingDirectory=/opt/LA-Organizer/LA-performance-report
-EnvironmentFile=/home/sol/.openclaw/gateway.systemd.env
+WorkingDirectory=/opt/LA-Organizer
+EnvironmentFile=/home/sol/.config/la-report/lia-alertas-privados.env
 ExecStart=/usr/bin/python3 scripts/process_lia_alert_queue.py --once

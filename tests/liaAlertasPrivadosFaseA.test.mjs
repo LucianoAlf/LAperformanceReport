@@ -13,9 +13,19 @@ const fixturePath = resolve(
   root,
   'tests/fixtures/lia_alertas_privados_fase_a_pg17.sql',
 );
+const servicePath = resolve(
+  root,
+  'scripts/systemd/lia-alertas-privados.service',
+);
+const timerPath = resolve(
+  root,
+  'scripts/systemd/lia-alertas-privados.timer',
+);
 const read = (path) => existsSync(path) ? readFileSync(path, 'utf8') : '';
 const sql = read(migrationPath);
 const fixture = read(fixturePath);
+const service = read(servicePath);
+const timer = read(timerPath);
 
 test('fase A nasce bloqueada e usa destinos governados', () => {
   assert.ok(sql, `migration ausente: ${migrationPath}`);
@@ -124,6 +134,24 @@ test('piloto e fila administrativa preservam o isolamento', () => {
     funcaoFila,
     /destino_snapshot|mensagem_renderizada|resposta_texto|transcricao/i,
   );
+});
+
+test('units usam o checkout vivo, ambiente minimo e execucao somente once', () => {
+  assert.ok(service, `service ausente: ${servicePath}`);
+  assert.ok(timer, `timer ausente: ${timerPath}`);
+  assert.match(service, /^Type=oneshot$/m);
+  assert.match(service, /^User=sol$/m);
+  assert.match(service, /^WorkingDirectory=\/opt\/LA-Organizer$/m);
+  assert.match(
+    service,
+    /^EnvironmentFile=\/home\/sol\/.config\/la-report\/lia-alertas-privados\.env$/m,
+  );
+  assert.match(
+    service,
+    /^ExecStart=\/usr\/bin\/python3 scripts\/process_lia_alert_queue\.py --once$/m,
+  );
+  assert.doesNotMatch(service, /gateway\.systemd\.env/);
+  assert.match(timer, /^Persistent=true$/m);
 });
 
 test('fixture PG17 contém provas executáveis de isolamento e idempotência', () => {

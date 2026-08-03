@@ -3,8 +3,11 @@
 ## Estado e limite de autoridade
 
 - Produção: `ouqwbbermlzqqvtqwlul`.
-- Pacote preparado localmente; nenhuma migration deste bloco foi aplicada.
-- Worker e units estão apenas versionados; nada foi instalado ou ativado na VPS.
+- Migration estrutural aplicada em produção em 03/08/2026, registrada remotamente
+  como `20260803124754_lia_alertas_privados_fase_a`; produção continua bloqueada.
+- Worker e units seguem apenas versionados. O preflight da VPS encontrou o bridge
+  single-message desconectado e nenhuma instalação foi feita enquanto o health
+  não estiver verde.
 - `alertas_producao_liberados` nasce `false` e não existe migration de ativação.
 - Nenhum alerta foi enviado. O primeiro envio exige o piloto no número governado
   do Alf e autorização separada, com ele presente.
@@ -60,7 +63,7 @@ Antes de qualquer escrita remota, reconfirmar e registrar:
 
 Qualquer divergência para e volta ao Alf. O preflight não autoriza escrita.
 
-## Gate 1 — DDL estrutural, ainda bloqueado
+## Gate 1 — DDL estrutural concluído, produção bloqueada
 
 Somente após autorização explícita:
 
@@ -72,19 +75,38 @@ Somente após autorização explícita:
 6. provar que nenhum alerta está `pendente` em ambiente `producao`;
 7. confirmar o cron diário de expurgo, sem ativar transporte.
 
-Não criar nem aplicar migration de ativação neste gate.
+Postflight de 03/08/2026: seeds 2/29/30 exatos, configuração produtiva `false`,
+zero evento e zero entrega. Não foi criada nem aplicada migration de ativação.
 
-## Gate 2 — VPS sem timer, ainda bloqueado
+### Dívida de reconciliação do histórico remoto
+
+O conteúdo do arquivo local
+`20260803090000_lia_alertas_privados_fase_a.sql` foi registrado pelo canal de
+migration remoto como versão `20260803124754`. O mesmo tipo de divergência já
+ocorreu com os arquivos `20260730170000` e `20260730173000`. Um `db push` futuro
+pode interpretar os arquivos locais como pendentes e tentar reaplicá-los.
+
+Não reconciliar durante o piloto. Agendar uma janela própria para comparar
+conteúdo e hashes, confirmar os registros equivalentes e reparar o histórico de
+forma explícita, sem reaplicar DDL nem forjar uma versão sem evidência.
+
+## Gate 2 — VPS sem timer, bloqueado pelo health do bridge
 
 Somente após nova autorização:
 
 1. instalar o worker e as units;
 2. manter `lia-alertas-privados.timer` desabilitado;
-3. carregar somente `LA_REPORT_SUPABASE_URL` e
-   `LA_REPORT_SERVICE_ROLE_KEY` no processo; o helper aceita apenas bridge
-   loopback governado;
+3. usar `WorkingDirectory=/opt/LA-Organizer` e o arquivo dedicado
+   `/home/sol/.config/la-report/lia-alertas-privados.env`, contendo somente
+   `LA_REPORT_SUPABASE_URL` e `LA_REPORT_SERVICE_ROLE_KEY`; o helper aceita
+   apenas bridge loopback governado;
 4. validar health local do endpoint single-message;
 5. executar uma chamada sem pendência e confirmar zero envio.
+
+Preflight de 03/08/2026: `POST /send-report` com payload vazio no bridge
+loopback `127.0.0.1:3000` retornou `503 not_connected_to_whatsapp`. O bridge da
+Lia em `127.0.0.1:3001` não possui essa rota e retornou `404`. Portanto o worker
+e as units não foram instalados; o timer permanece inexistente/desabilitado.
 
 ## Gate 3 — piloto Alf, ponto de parada obrigatório
 
