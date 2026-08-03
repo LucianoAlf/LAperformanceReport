@@ -187,10 +187,11 @@ Disparo de templates Meta (WhatsApp Cloud API) + conversas + agentes IA. `Campan
   `processar-alertas-lia` estão implementadas/testadas localmente para enviar
   exclusivamente pela caixa 3, mas não foram aplicadas ou publicadas. Não há
   worker, bridge novo, cron de consumo nem migration de ativação. Dois envios
-  produtivos de Jéssica em 03/08/2026 já podem gerar entregas retidas em
-  `aguardando_liberacao`; até o piloto e a ativação, a equipe acompanha as
-  respostas pela tela. Este pacote não altera `webhook-whatsapp-inbox`. O alerta
-  abre a tela geral; deep link para o caso exato permanece melhoria posterior.
+  produtivos de Jéssica em 03/08/2026 já estão no motor V2; o primeiro retorno
+  gerou uma entrega retida em `aguardando_liberacao`, sem envio. Até o piloto e
+  a ativação, a equipe acompanha as respostas pela tela. Este pacote não altera
+  `webhook-whatsapp-inbox`. O alerta abre a tela geral; deep link para o caso
+  exato permanece melhoria posterior.
 
 ## Professores (`/app/professores`)
 `Professores/ProfessoresPage.tsx`; abas Cadastro, Performance, Carteira, Agenda, 360°, Checklists, Configurações.

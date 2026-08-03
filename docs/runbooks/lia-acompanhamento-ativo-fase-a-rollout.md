@@ -10,9 +10,11 @@
   Edge → UAZAPI; worker, units e rota nova no bridge foram rejeitados.
 - `alertas_producao_liberados` nasce `false` e não existe migration de ativação.
 - Em 03/08/2026, Jéssica fez dois envios produtivos, às 10:52 e 10:55 BRT,
-  ambos `multipartes_v2` e `sem_resposta`. Se uma família responder antes da
-  ativação, o trigger cria a entrega em `aguardando_liberacao`; o claim não a
-  consome e nenhuma mensagem interna é enviada.
+  ambos `multipartes_v2` e inicialmente `sem_resposta`. Durante a implementação,
+  o primeiro recebeu conteúdo e passou a `coletando`: o trigger criou um evento
+  `resposta_nova` e uma entrega para o operador 29 em
+  `aguardando_liberacao`, sem `provider_message_id`. O segundo permaneceu
+  `sem_resposta`.
 - Nenhum alerta da Fase A foi enviado. O primeiro exige o piloto no número
   governado do Alf e autorização separada, com ele presente.
 - Esta fase não altera frontend. O alerta abre `/app/sucesso-aluno`; deep link
@@ -89,7 +91,7 @@ Antes de qualquer escrita remota, reconfirmar e registrar:
 9. ausência de outro rollout concorrente sobre pesquisa de evasão, caixa 3 ou a
    mesma migration.
 10. as pesquisas produtivas enviadas às 10:52 e 10:55 BRT continuam
-    `multipartes_v2`; qualquer evento delas está retido e não enviado.
+    `multipartes_v2`; o evento já criado está retido e não enviado.
 
 Qualquer divergência para e volta ao Alf. O preflight não autoriza escrita.
 
@@ -256,6 +258,10 @@ justifica alterar a pesquisa canônica.
   futura desta fase se limita a `processar-alertas-lia`.
 - A fundação foi aplicada em produção com o bloqueio ativo; nenhum alerta da
   Fase A, deploy de dispatcher ou ativação foi realizado.
+- O primeiro retorno produtivo ocorrido durante esta implementação comprovou a
+  janela segura: entrega `58a64f22-ff43-4a8c-a597-c74a4aa0b642` ficou em
+  `aguardando_liberacao`, destinada ao operador 29, sem `provider_message_id`.
+  `processar-alertas-lia` permanece ausente em produção e não há cron de consumo.
 - `usuarios.id=29` foi corrigido de `Jessica` para `Jéssica` em 03/08/2026. Os
   dois envios produtivos anteriores preservaram `assinatura_nome_snapshot` e
   mensagem renderizada com o nome antigo, como exige a imutabilidade histórica.
@@ -300,6 +306,51 @@ O projeto `ophoqjodoltvbqwqrzeb` foi destruído ao final. Uma consulta posterior
 
 Este ensaio não autoriza a migration complementar, o deploy da Edge, o piloto
 ou a ativação.
+
+## Ensaio da adaptação do dispatcher — concluído em 03/08/2026
+
+A Task 9 foi validada no projeto Supabase descartável
+`oksvzkcxjijruonfzfzj` (`lia-fase-a-dispatcher-ddl-20260803-114823`). O projeto
+foi destruído ao final; a listagem posterior retornou zero projeto com esse ref
+ou com o prefixo `lia-fase-a-dispatcher-ddl-*`.
+
+Evidências:
+
+- dump somente do schema `public` atual de produção: `3.584.428` bytes,
+  SHA-256 `8ef0afe0d578b7bee50b14dc802e955b6a92b2c583f121664666081316fc13c2`;
+- migration `20260803210000_lia_alertas_dispatcher_edge.sql`: `7.522` bytes,
+  SHA-256 `c79244d60bd9c1fa811e9707f73973097acd1b3511163ffe3fffbade9429e51d`;
+- `1.213` versões remotas foram registradas apenas como baseline de versões,
+  terminando em `20260803142013`, sem replay do histórico;
+- as seis roles estruturais foram criadas sem login;
+- extensões reproduzidas nos schemas produtivos: `pg_cron` em `pg_catalog`,
+  `pg_net`, `pg_trgm` e `unaccent` em `public`, `pgcrypto`, `uuid-ossp` e
+  `pg_stat_statements` em `extensions`, e `supabase_vault` em `vault`;
+- nenhuma linha de aluno, pesquisa, conversa ou telefone foi copiada; a única
+  caixa criada foi a fixture sintética `id=3`, com URL `.invalid` e credencial
+  propositalmente inválida;
+- projetos Supabase novos aplicam default privileges diferentes aos objetos
+  restaurados. Como o `pg_dump` não serializa a ausência de grants, o laboratório
+  revogou explicitamente acesso de `anon`, `authenticated` e agentes às duas
+  tabelas `lia_*`, reproduzindo o estado confirmado por leitura em produção;
+- a migration aplicou sem colisão e criou `caixa_id NOT NULL DEFAULT 3`, FK para
+  `whatsapp_caixas(id)`, retorno do claim com `caixa_id` e contrato de falhas
+  `provider_*`; `bridge_timeout` foi rejeitado;
+- `service_role` executou o claim vazio; `anon` e `authenticated` não receberam
+  acesso ao claim nem às tabelas privadas;
+- `alertas_producao_liberados=false` permaneceu intacto; nenhuma entrega,
+  mensagem, cron de consumo, migration de ativação ou deploy foi criado.
+
+Três tentativas preparatórias também foram destruídas automaticamente:
+`mqocfkxigsbslacqaqnl` parou antes do restore por parsing do usuário do pooler,
+`wloxqlslpcfbvclwgkyu` revelou a diferença de default privileges do projeto
+novo, e `bcicwucycbiclenioisy` encontrou atraso de propagação do tenant no
+pooler. Nenhuma delas tocou produção; os dois achados foram incorporados ao
+procedimento que passou no ref final.
+
+Este ensaio autoriza somente avançar ao pedido de autorização da Task 10. Ele
+não autoriza aplicar a adaptação em produção, publicar a Edge, enviar o piloto
+ou criar a migration de ativação.
 
 ## Melhorias posteriores, fora da Fase A
 

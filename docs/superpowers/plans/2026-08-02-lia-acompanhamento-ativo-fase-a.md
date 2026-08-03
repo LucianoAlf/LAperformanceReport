@@ -74,8 +74,10 @@ Fora desta fase:
   piloto ou ativação. O dispatcher existe somente no checkout local.
 - Jéssica enviou duas pesquisas produtivas em 03/08/2026, às 10:52 e 10:55
   BRT. Ambas nasceram em `multipartes_v2` e estavam `sem_resposta` no
-  preflight. Se responderem antes da ativação, as entregas ficam em
-  `aguardando_liberacao`, fora do claim.
+  preflight. Durante a execução, o primeiro caso recebeu conteúdo e produziu
+  uma entrega `aguardando_liberacao`, sem `provider_message_id`; o segundo
+  permaneceu `sem_resposta`. Isso comprova que o claim não consome respostas
+  reais enquanto a configuração produtiva está bloqueada.
 - A Fase A não modifica nem publica `webhook-whatsapp-inbox`. Até a ativação, a
   equipe acompanha respostas reais diretamente na tela.
 - `usuarios.id=29` foi corrigido para `Jéssica`; snapshots dos dois envios
@@ -1295,7 +1297,7 @@ git add docs/runbooks/lia-acompanhamento-ativo-fase-a-rollout.md docs/MAPA-SISTE
 git commit -m "docs: governar rollout dos alertas privados da Lia"
 ```
 
-## Task 9: Ensaiar a adaptação DDL em ambiente descartável
+## Task 9: Ensaiar a adaptação DDL em ambiente descartável — CONCLUÍDA
 
 **Files:**
 
