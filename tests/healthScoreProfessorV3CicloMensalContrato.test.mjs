@@ -4,6 +4,10 @@ import test from 'node:test';
 
 const migrationPath =
   'supabase/migrations/20260803220000_health_score_v3_ciclo_mensal_canonico.sql';
+const performanceMigrationPath =
+  'supabase/migrations/20260803224500_health_score_v3_ciclo_performance.sql';
+const openPeriodMigrationPath =
+  'supabase/migrations/20260803225500_health_score_v3_periodo_aberto_carteira.sql';
 const periodSourcePath = 'src/lib/healthScoreProfessorV3Periodos.ts';
 const periodMigrationPath =
   'supabase/migrations/20260719120000_health_score_v3_ciclos_publicacao_parcial.sql';
@@ -76,4 +80,36 @@ test('ciclo aberto usa projecao viva e falha de produtor nao fabrica grade nula'
   assert.match(sql, /ciclo_em_acompanhamento/i);
   assert.match(sql, /HEALTH_SCORE_V3_CICLO_INDISPONIVEL/i);
   assert.doesNotMatch(sql, /HEALTH_SCORE_V3_CICLO_INDISPONIVEL[\s\S]*return\s+query[\s\S]*null::numeric/i);
+});
+
+test('projecao viva do ciclo reutiliza a agregacao segmentada ja produzida', () => {
+  assert.equal(
+    fs.existsSync(performanceMigrationPath),
+    true,
+    'migration corretiva de performance do ciclo ainda nao existe',
+  );
+  const sql = read(performanceMigrationPath);
+
+  assert.match(sql, /get_health_score_professor_v3_metricas_periodo\([\s\S]*'ciclo'/i);
+  assert.match(sql, /detalhes\s*->>\s*'nota_segmentada'/i);
+  assert.doesNotMatch(
+    sql,
+    /get_health_score_professor_v3_metricas_segmentadas_agregadas_v1/i,
+    'a projecao nao pode recalcular a agregacao segmentada do mesmo ciclo',
+  );
+});
+
+test('periodo aberto usa a mesma carteira canonica da aba Carteira sem alterar historico', () => {
+  assert.equal(
+    fs.existsSync(openPeriodMigrationPath),
+    true,
+    'migration da carteira canonica do periodo aberto ainda nao existe',
+  );
+  const sql = read(openPeriodMigrationPath);
+
+  assert.match(sql, /rename\s+to\s+get_hs_prof_v3_segmentadas_agregadas_base_20260803/i);
+  assert.match(sql, /date_trunc\('month',\s*p_competencia\)/i);
+  assert.match(sql, /get_carteira_professores\(p_unidade_id\)/i);
+  assert.match(sql, /get_hs_prof_v3_segmentadas_agregadas_base_20260803\(/i);
+  assert.match(sql, /numero_alunos[\s\S]*diagnostico/i);
 });

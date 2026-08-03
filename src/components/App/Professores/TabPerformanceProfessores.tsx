@@ -114,6 +114,48 @@ interface ProfessorPerformanceRow extends ProfessorPerformance {
   healthV3: HealthScoreV3ProfessorPerformance | null;
 }
 
+function hydrateProfessorPerformanceFromV3(
+  professor: ProfessorPerformance,
+  snapshot: HealthScoreV3ProfessorPerformance | null,
+): ProfessorPerformance {
+  if (!snapshot) return professor;
+
+  const numeroAlunos = snapshot.metrics.get('numero_alunos');
+  const mediaTurma = snapshot.metrics.get('media_turma');
+  const retencao = snapshot.metrics.get('retencao');
+  const conversao = snapshot.metrics.get('conversao');
+  const presenca = snapshot.metrics.get('presenca');
+  const scoreStatus = resolveHealthScoreV3ScoreStatus(snapshot);
+  const status: ProfessorPerformance['status'] = scoreStatus === 'critico'
+    ? 'critico'
+    : scoreStatus === 'atencao'
+      ? 'atencao'
+      : 'excelente';
+
+  return {
+    ...professor,
+    total_alunos: Number(numeroAlunos?.valorBruto ?? numeroAlunos?.numerador ?? 0),
+    total_turmas: Number(mediaTurma?.denominador ?? 0),
+    alunos_via_turmas: Number(mediaTurma?.numerador ?? 0),
+    turmas_elegiveis_media: Number(mediaTurma?.denominador ?? 0),
+    media_alunos_turma: Number(mediaTurma?.valorBruto ?? 0),
+    taxa_retencao: Number(retencao?.valorBruto ?? 0),
+    taxa_conversao: Number(conversao?.valorBruto ?? 0),
+    taxa_conversao_diagnostica: Number(conversao?.valorBruto ?? 0),
+    experimentais: Number(conversao?.denominador ?? 0),
+    experimentais_agendadas: Number(conversao?.denominador ?? 0),
+    matriculas_pos_exp: Number(conversao?.numerador ?? 0),
+    taxa_presenca: presenca?.valorBruto ?? null,
+    presenca_publicavel: presenca?.valorBruto !== null && presenca?.valorBruto !== undefined,
+    presenca_confianca: presenca?.confianca || 'sem_base',
+    presenca_eventos_confirmados: Number(presenca?.denominador ?? 0),
+    status,
+    health_score: Number(snapshot.scoreComparavel ?? snapshot.scoreObservado ?? 0),
+    health_status: status === 'excelente' ? 'saudavel' : status,
+    health_score_confiavel: snapshot.comparabilidadeEstado === 'comparavel',
+  };
+}
+
 const HEALTH_SCORE_V3_METRIC_LABELS: Record<HealthMetricKeyV3, string> = {
   retencao: 'Retencao atribuivel',
   permanencia: 'Permanencia com o professor',
@@ -421,6 +463,19 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         .from('professores_cursos')
         .select('professor_id, curso_id, cursos:curso_id (nome)');
 
+      // A Performance V3 ja entrega os numeradores, denominadores e valores
+      // canonicos usados pela tabela. A RPC legada e mantida somente para o
+      // modo V2 de contingencia, sem bloquear a tela V3.
+      const kpisAtuaisPromise = HEALTH_SCORE_V3_PERFORMANCE_ENABLED
+        ? Promise.resolve([])
+        : buscarKpisProfessoresCanonicos({
+            ano: anoFiltro,
+            mes: mesFiltro,
+            unidadeId: unidadeAtual,
+            dataInicio: modoVisualizacao === 'trimestre' ? periodoV3.inicio : null,
+            dataFim: modoVisualizacao === 'trimestre' ? periodoV3.fim : null,
+          });
+
       const [
         professoresResult,
         kpisAtuais,
@@ -428,13 +483,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         cursosResult,
       ] = await Promise.all([
         query,
-        buscarKpisProfessoresCanonicos({
-          ano: anoFiltro,
-          mes: mesFiltro,
-          unidadeId: unidadeAtual,
-          dataInicio: modoVisualizacao === 'trimestre' ? periodoV3.inicio : null,
-          dataFim: modoVisualizacao === 'trimestre' ? periodoV3.fim : null,
-        }),
+        kpisAtuaisPromise,
         unidadesRelQuery,
         Promise.resolve(cursosRelQuery).catch((error) => ({ data: [], error })),
       ]);
@@ -619,7 +668,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       setProfessores(professoresCompletos);
 
       // Historical trend is complementary and must never block the current panel.
-      if (modoVisualizacao !== 'trimestre') {
+      if (!HEALTH_SCORE_V3_PERFORMANCE_ENABLED && modoVisualizacao !== 'trimestre') {
         void Promise.allSettled([
           buscarKpisProfessoresCanonicos({
             ano: referenciaAnterior.getFullYear(),
@@ -688,10 +737,13 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
   );
 
   const professoresTabela = useMemo<ProfessorPerformanceRow[]>(
-    () => professores.map((professor) => ({
-      ...professor,
-      healthV3: healthV3ByProfessor.get(professor.id) || null,
-    })),
+    () => professores.map((professor) => {
+      const healthV3 = healthV3ByProfessor.get(professor.id) || null;
+      return {
+        ...hydrateProfessorPerformanceFromV3(professor, healthV3),
+        healthV3,
+      };
+    }),
     [healthV3ByProfessor, professores],
   );
 
@@ -784,27 +836,27 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
   // Métricas gerais para o Plano de Ação da Equipe
   const metricasGerais = useMemo(() => {
-    const totalAlunos = professores.reduce((acc, p) => acc + p.total_alunos, 0);
-    const totalTurmas = professores.reduce((acc, p) => acc + p.total_turmas, 0);
-    const totalEvasoes = professores.reduce((acc, p) => acc + p.evasoes_mes, 0);
-    const totalExperimentais = professores.reduce((acc, p) => acc + p.experimentais, 0);
-    const totalMatriculasPosExp = professores.reduce((acc, p) => acc + p.matriculas_pos_exp, 0);
+    const totalAlunos = professoresTabela.reduce((acc, p) => acc + p.total_alunos, 0);
+    const totalTurmas = professoresTabela.reduce((acc, p) => acc + p.total_turmas, 0);
+    const totalEvasoes = professoresTabela.reduce((acc, p) => acc + p.evasoes_mes, 0);
+    const totalExperimentais = professoresTabela.reduce((acc, p) => acc + p.experimentais, 0);
+    const totalMatriculasPosExp = professoresTabela.reduce((acc, p) => acc + p.matriculas_pos_exp, 0);
 
     return {
-      total_professores: professores.length,
+      total_professores: professoresTabela.length,
       total_alunos: totalAlunos,
       media_geral_turma: totalTurmas > 0 ? totalAlunos / totalTurmas : 0,
-      taxa_retencao_media: professores.length > 0 
-        ? professores.reduce((acc, p) => acc + p.taxa_retencao, 0) / professores.length 
+      taxa_retencao_media: professoresTabela.length > 0
+        ? professoresTabela.reduce((acc, p) => acc + p.taxa_retencao, 0) / professoresTabela.length
         : 0,
       taxa_conversao_media: totalExperimentais > 0 ? (totalMatriculasPosExp / totalExperimentais) * 100 : 0,
       nps_medio: 0, // DEPRECATED - mantido para compatibilidade
       total_evasoes: totalEvasoes,
-      professores_criticos: professores.filter(p => p.health_score_confiavel && p.status === 'critico').length,
-      professores_atencao: professores.filter(p => p.health_score_confiavel && p.status === 'atencao').length,
-      professores_excelentes: professores.filter(p => p.health_score_confiavel && p.status === 'excelente').length
+      professores_criticos: professoresTabela.filter(p => p.health_score_confiavel && p.status === 'critico').length,
+      professores_atencao: professoresTabela.filter(p => p.health_score_confiavel && p.status === 'atencao').length,
+      professores_excelentes: professoresTabela.filter(p => p.health_score_confiavel && p.status === 'excelente').length
     };
-  }, [professores]);
+  }, [professoresTabela]);
 
   // Health Score médio da equipe
   const conversaoEquipe = useMemo(() => {
@@ -1793,9 +1845,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       </div>
 
       {/* Plano de Ação Inteligente - Equipe */}
-      {professores.length > 0 && (
+      {professoresTabela.length > 0 && (
         <PlanoAcaoEquipe
-          professores={professores.map(p => ({
+          professores={professoresTabela.map(p => ({
             id: p.id,
             nome: p.nome,
             total_alunos: p.total_alunos,

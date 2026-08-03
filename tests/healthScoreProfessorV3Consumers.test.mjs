@@ -198,6 +198,17 @@ test('Dashboard e Performance agregam somente KPIs de vinculos ativos', () => {
   assert.match(performance, /const kpisAtivos = filtrarKpisPorVinculosAtivos/);
 });
 
+test('Performance V3 nao bloqueia a tela consultando o KPI legado e hidrata auxiliares pelo snapshot V3', () => {
+  const performance = read('src/components/App/Professores/TabPerformanceProfessores.tsx');
+
+  assert.match(
+    performance,
+    /const\s+kpisAtuaisPromise\s*=\s*HEALTH_SCORE_V3_PERFORMANCE_ENABLED[\s\S]*?Promise\.resolve\(\[\]\)[\s\S]*?:\s*buscarKpisProfessoresCanonicos/,
+  );
+  assert.match(performance, /hydrateProfessorPerformanceFromV3/);
+  assert.match(performance, /const\s+professoresTabela[\s\S]*?hydrateProfessorPerformanceFromV3/);
+});
+
 test('Analytics consulta vinculos ativos e preserva ausencia de base da presenca', () => {
   const analytics = read('src/components/GestaoMensal/TabProfessoresNew.tsx');
 
