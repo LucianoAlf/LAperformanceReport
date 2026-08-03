@@ -188,7 +188,7 @@ function narrativaDeterministica(dados: RelatorioCoordenacaoCanonico): Narrativa
   const alertas = dados.mapa_sinais.filter((sinal) => sinal.severidade !== "baixo");
 
   return {
-    resumo: `A equipe tem ${total} professores ativos; ${comScore} possuem leitura parcial ou oficial e ${pendentes} precisam completar evidências. O período deve ser lido como diagnóstico pedagógico, com foco em apoio e evolução.`,
+    resumo: `A equipe tem ${total} professores ativos; ${comScore} possuem nota disponível e ${pendentes} precisam completar evidências. O período deve ser lido como diagnóstico pedagógico, com foco em apoio e evolução.`,
     conquistas: [
       `${inteiro(resumo.saudaveis)} professores aparecem em faixa saudável entre os que possuem evidência suficiente.`,
       `${inteiro(dados.presenca.professores_com_evidencia)} professores possuem presença observável no período.`,
@@ -331,15 +331,23 @@ function renderizarRelatorio(
   const periodo = dados.periodo;
   const resumo = dados.resumo_equipe;
   const coordenadores = periodo.coordenadores?.length ? periodo.coordenadores.join(" e ") : "Coordenação Pedagógica";
+  const competenciaEmAndamento = dados.professores.some(
+    (professor) => professor.estado_publicacao === "em_andamento",
+  );
   const contexto = periodo.contexto_operacional === "recesso_parcial"
     ? "Julho teve recesso parcial. A leitura é uma simulação V3 parcial e não oficial; ausência de aulas elegíveis não penaliza o professor."
-    : "O período segue calendário regular e cada indicador respeita sua evidência disponível.";
+    : competenciaEmAndamento
+      ? "Leitura do mês em andamento. As notas acompanham as evidências já registradas e evoluem com a operação."
+      : "O período segue calendário regular e cada indicador respeita sua evidência disponível.";
 
   const sinais = dados.mapa_sinais.map(descreverSinal);
-  const professores = dados.professores.flatMap((professor, indice) => {
+  const professoresOrdenados = [...dados.professores].sort((a, b) =>
+    a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" })
+  );
+  const professores = professoresOrdenados.flatMap((professor, indice) => {
     const score = professor.score === null || professor.score === undefined
       ? `Sem nota — ${rotulosEvidencia[professor.estado_evidencia] || professor.estado_evidencia}`
-      : `${numero(professor.score, 1)} pontos | Cobertura: ${percentual(professor.cobertura)} | ${rotulosEvidencia[professor.estado_evidencia] || professor.estado_evidencia}`;
+      : `${numero(professor.score, 1)} pontos | Cobertura: ${percentual(professor.cobertura)}`;
     const pilares = metricasOrdenadas.map((metrica) => `   • ${descreverMetrica(metrica, professor.metricas?.[metrica])}`);
     const carteira = professor.metricas?.numero_alunos?.valor;
     const carteiraLinha = carteira === null || carteira === undefined
@@ -388,7 +396,7 @@ function renderizarRelatorio(
     "👨‍🏫 *VISÃO GERAL DA EQUIPE*",
     "───────────────────────",
     `• Professores ativos: *${inteiro(resumo.total_professores)}*`,
-    `• Com leitura parcial ou oficial: *${inteiro(resumo.com_score)}*`,
+    `• Professores com nota disponível: *${inteiro(resumo.com_score)}*`,
     `• Em maturação: *${inteiro(resumo.em_maturacao)}*`,
     `• Com evidência pendente: *${inteiro(resumo.com_evidencia_pendente)}*`,
     `• Faixa saudável: *${inteiro(resumo.saudaveis)}*`,

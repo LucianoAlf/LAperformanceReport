@@ -76,6 +76,15 @@ test('texto público bloqueia finanças, termos internos e paginação artificia
   assert.match(renderer, /recesso/i);
 });
 
+test('relatorio distingue mes vivo de simulacao historica sem repetir provisorio', () => {
+  const source = fs.readFileSync(edgePath, 'utf8');
+
+  assert.match(source, /estado_publicacao\s*===\s*["']em_andamento["']/i);
+  assert.match(source, /leitura do mês em andamento/i);
+  assert.match(source, /Professores com nota disponível/i);
+  assert.match(source, /simulação V3 parcial e não oficial/i);
+});
+
 test('botão mensal envia somente filtros e mantém cópia robusta', () => {
   const source = fs.readFileSync(modalPath, 'utf8');
   const monthlyStart = source.indexOf('const gerarRelatorioIA');
