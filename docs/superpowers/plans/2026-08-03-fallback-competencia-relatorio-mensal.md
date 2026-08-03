@@ -28,7 +28,7 @@
 |---|---|
 | `supabase/functions/_shared/relatorios-mensais-canonicos.ts` (modificar) | Passa a exportar `rotuloCompetencia(ano, mes)`, hoje embutido no módulo |
 | `supabase/functions/relatorio-admin-whatsapp/index.ts` (modificar) | Enriquece o 409 dos modos mensais com `fallback` |
-| `src/lib/fallbackCompetenciaRelatorio.ts` (criar) | Extrai `fallback` do erro do `functions.invoke` |
+| `src/lib/fallbackCompetenciaRelatorio.ts` (criar) | Extrai `fallback` do erro do `functions.invoke` e encapsula o ciclo tentar → oferecer → reenviar (única cópia da regra; as duas telas só a chamam) |
 | `src/hooks/useConfirmacaoCompetencia.ts` (criar) | Estado + promise da confirmação, reusável pelas duas telas |
 | `src/components/App/Administrativo/ModalRelatorio.tsx` (modificar) | Liga o fluxo no relatório administrativo |
 | `src/components/App/Comercial/ComercialPage.tsx` (modificar) | Liga o fluxo no relatório comercial |
@@ -199,6 +199,7 @@ git commit -m "feat(relatorio-mensal): edge informa ultimo mes fechado no 409"
 - Produces:
   - `type FallbackCompetencia = { ano: number; mes: number; rotulo: string }`
   - `extrairFallbackCompetencia(erro: unknown): Promise<FallbackCompetencia | null>`
+  - `solicitarRelatorioMensalComFallback(params): Promise<string>` — o ciclo completo, usado igual pelas Tasks 3 e 4
   - `useConfirmacaoCompetencia(): { pedirConfirmacao, confirmacaoPendente, confirmar, cancelar }` — usado pelas Tasks 3 e 4.
 
 - [ ] **Step 1: Escrever o teste de contrato falhando**
@@ -236,6 +237,10 @@ test('so aceita fallback com motivo de fechamento indisponivel', () => {
 test('o hook expoe a promise de confirmacao', () => {
   assert.match(hook, /export function useConfirmacaoCompetencia/);
   assert.match(hook, /Promise<boolean>/);
+});
+
+test('o ciclo tentar-oferecer-reenviar mora numa unica funcao', () => {
+  assert.match(lib, /export async function solicitarRelatorioMensalComFallback/);
 });
 ```
 
@@ -285,7 +290,52 @@ export async function extrairFallbackCompetencia(
     return null;
   }
 }
+
+type ModoMensal = 'dry_run_mensal_admin' | 'dry_run_mensal_comercial';
+
+/**
+ * Tenta a competência pedida. Se a edge responder que não há fechamento e
+ * oferecer um mês anterior, pede confirmação e refaz a chamada uma única vez.
+ */
+export async function solicitarRelatorioMensalComFallback(params: {
+  modo: ModoMensal;
+  unidade: string;
+  ano: number;
+  mes: number;
+  pedirConfirmacao: (fallback: FallbackCompetencia) => Promise<boolean>;
+}): Promise<string> {
+  const { modo, unidade, ano, mes, pedirConfirmacao } = params;
+
+  const solicitar = (anoAlvo: number, mesAlvo: number) =>
+    supabase.functions.invoke('relatorio-admin-whatsapp', {
+      body: { modo, unidade, ano: anoAlvo, mes: mesAlvo },
+    });
+
+  const extrairTexto = (data: { success?: boolean; texto?: string; error?: string } | null) => {
+    if (data?.success !== true || typeof data?.texto !== 'string' || !data.texto.trim()) {
+      throw new Error(data?.error || 'O fechamento oficial deste mês ainda não está disponível.');
+    }
+    return data.texto;
+  };
+
+  const primeira = await solicitar(ano, mes);
+  if (!primeira.error) return extrairTexto(primeira.data);
+
+  const fallback = await extrairFallbackCompetencia(primeira.error);
+  if (!fallback) throw primeira.error;
+
+  const aceitou = await pedirConfirmacao(fallback);
+  if (!aceitou) {
+    throw new Error('Geração cancelada. Escolha uma competência já fechada.');
+  }
+
+  const segunda = await solicitar(fallback.ano, fallback.mes);
+  if (segunda.error) throw segunda.error;
+  return extrairTexto(segunda.data);
+}
 ```
+
+O import do client entra no topo do arquivo: `import { supabase } from '@/lib/supabase';`
 
 - [ ] **Step 4: Criar o hook de confirmação**
 
@@ -359,7 +409,7 @@ const modalAdmin = await readFile(
 );
 
 test('relatorio administrativo oferece a competencia disponivel', () => {
-  assert.match(modalAdmin, /extrairFallbackCompetencia/);
+  assert.match(modalAdmin, /solicitarRelatorioMensalComFallback/);
   assert.match(modalAdmin, /useConfirmacaoCompetencia/);
   assert.match(modalAdmin, /ModalConfirmacao/);
 });
@@ -376,7 +426,7 @@ Em `src/components/App/Administrativo/ModalRelatorio.tsx`, junto aos demais impo
 
 ```typescript
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
-import { extrairFallbackCompetencia } from '@/lib/fallbackCompetenciaRelatorio';
+import { solicitarRelatorioMensalComFallback } from '@/lib/fallbackCompetenciaRelatorio';
 import { useConfirmacaoCompetencia } from '@/hooks/useConfirmacaoCompetencia';
 ```
 
@@ -404,37 +454,13 @@ Substituir o corpo da função (linhas 886-907) por:
       throw new Error('Selecione uma unidade para gerar o relatório mensal administrativo.');
     }
 
-    const solicitar = async (ano: number, mes: number) => {
-      const { data, error } = await supabase.functions.invoke('relatorio-admin-whatsapp', {
-        body: { modo: 'dry_run_mensal_admin', unidade, ano, mes },
-      });
-      return { data, error };
-    };
-
-    const primeira = await solicitar(anoRelatorio, mesRelatorio);
-
-    if (primeira.error) {
-      const fallback = await extrairFallbackCompetencia(primeira.error);
-      if (!fallback) throw primeira.error;
-
-      const aceitou = await pedirConfirmacao(fallback);
-      if (!aceitou) {
-        throw new Error('Geração cancelada. Escolha uma competência já fechada.');
-      }
-
-      const segunda = await solicitar(fallback.ano, fallback.mes);
-      if (segunda.error) throw segunda.error;
-      if (segunda.data?.success !== true || typeof segunda.data?.texto !== 'string' || !segunda.data.texto.trim()) {
-        throw new Error(segunda.data?.error || 'O fechamento oficial deste mês ainda não está disponível.');
-      }
-      return segunda.data.texto;
-    }
-
-    if (primeira.data?.success !== true || typeof primeira.data?.texto !== 'string' || !primeira.data.texto.trim()) {
-      throw new Error(primeira.data?.error || 'O fechamento oficial deste mês ainda não está disponível.');
-    }
-
-    return primeira.data.texto;
+    return solicitarRelatorioMensalComFallback({
+      modo: 'dry_run_mensal_admin',
+      unidade,
+      ano: anoRelatorio,
+      mes: mesRelatorio,
+      pedirConfirmacao,
+    });
   }
 ```
 
@@ -499,7 +525,7 @@ const paginaComercial = await readFile(
 );
 
 test('relatorio comercial oferece a competencia disponivel', () => {
-  assert.match(paginaComercial, /extrairFallbackCompetencia/);
+  assert.match(paginaComercial, /solicitarRelatorioMensalComFallback/);
   assert.match(paginaComercial, /useConfirmacaoCompetencia/);
   assert.match(paginaComercial, /ModalConfirmacao/);
 });
@@ -516,7 +542,7 @@ Em `src/components/App/Comercial/ComercialPage.tsx`, junto aos demais imports do
 
 ```typescript
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
-import { extrairFallbackCompetencia } from '@/lib/fallbackCompetenciaRelatorio';
+import { solicitarRelatorioMensalComFallback } from '@/lib/fallbackCompetenciaRelatorio';
 import { useConfirmacaoCompetencia } from '@/hooks/useConfirmacaoCompetencia';
 ```
 
@@ -545,37 +571,13 @@ Substituir o corpo da função (linhas 3174-3196) por:
       throw new Error('Selecione uma unidade para gerar o relatório mensal comercial.');
     }
 
-    const solicitar = async (anoAlvo: number, mesAlvo: number) => {
-      const { data, error } = await supabase.functions.invoke('relatorio-admin-whatsapp', {
-        body: { modo: 'dry_run_mensal_comercial', unidade: unidadeId, ano: anoAlvo, mes: mesAlvo },
-      });
-      return { data, error };
-    };
-
-    const primeira = await solicitar(ano, mes);
-
-    if (primeira.error) {
-      const fallback = await extrairFallbackCompetencia(primeira.error);
-      if (!fallback) throw primeira.error;
-
-      const aceitou = await pedirConfirmacao(fallback);
-      if (!aceitou) {
-        throw new Error('Geração cancelada. Escolha uma competência já fechada.');
-      }
-
-      const segunda = await solicitar(fallback.ano, fallback.mes);
-      if (segunda.error) throw segunda.error;
-      if (segunda.data?.success !== true || typeof segunda.data?.texto !== 'string' || !segunda.data.texto.trim()) {
-        throw new Error(segunda.data?.error || 'O fechamento oficial deste mês ainda não está disponível.');
-      }
-      return segunda.data.texto;
-    }
-
-    if (primeira.data?.success !== true || typeof primeira.data?.texto !== 'string' || !primeira.data.texto.trim()) {
-      throw new Error(primeira.data?.error || 'O fechamento oficial deste mês ainda não está disponível.');
-    }
-
-    return primeira.data.texto;
+    return solicitarRelatorioMensalComFallback({
+      modo: 'dry_run_mensal_comercial',
+      unidade: unidadeId,
+      ano,
+      mes,
+      pedirConfirmacao,
+    });
   };
 ```
 
