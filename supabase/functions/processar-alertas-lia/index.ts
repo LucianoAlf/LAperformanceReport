@@ -2,8 +2,8 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 import {
-  autorizarServiceRole,
   CAIXA_LIA_ID,
+  extrairServiceRoleToken,
   processarUmAlerta,
   validarPedidoDispatcher,
   type CaixaLia,
@@ -11,6 +11,8 @@ import {
   type CodigoFalhaProvider,
   type DispatcherAdapters,
 } from "./dispatcher.ts";
+
+const PROJECT_REF = "ouqwbbermlzqqvtqwlul";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -25,12 +27,17 @@ serve(async (req) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!supabaseUrl) {
     return json({ error: "configuracao_backend_indisponivel" }, 503);
   }
 
-  if (!autorizarServiceRole(req.headers.get("Authorization"), serviceRoleKey)) {
+  // verify_jwt=true valida a assinatura antes de o request chegar ao handler.
+  // Aqui restringimos o JWT ja validado ao service_role deste projeto.
+  const serviceRoleToken = extrairServiceRoleToken(
+    req.headers.get("Authorization"),
+    PROJECT_REF,
+  );
+  if (!serviceRoleToken) {
     return json({ error: "service_role_required" }, 403);
   }
 
@@ -41,8 +48,9 @@ serve(async (req) => {
     return json({ error: "pedido_invalido" }, 400);
   }
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+  const supabase = createClient(supabaseUrl, serviceRoleToken, {
     auth: { autoRefreshToken: false, persistSession: false },
+    global: { headers: { Authorization: `Bearer ${serviceRoleToken}` } },
   });
 
   const adapters: DispatcherAdapters = {

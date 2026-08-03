@@ -5,8 +5,8 @@ import {
 } from "jsr:@std/assert@1";
 
 import {
-  autorizarServiceRole,
   CAIXA_LIA_ID,
+  extrairServiceRoleToken,
   processarUmAlerta,
   validarPedidoDispatcher,
   type CaixaLia,
@@ -14,11 +14,37 @@ import {
   type DispatcherAdapters,
 } from "./dispatcher.ts";
 
-Deno.test("autoriza somente o bearer service role exato", () => {
-  assertEquals(autorizarServiceRole("Bearer CHAVE-INTERNA", "CHAVE-INTERNA"), true);
-  assertEquals(autorizarServiceRole("Bearer outra", "CHAVE-INTERNA"), false);
-  assertEquals(autorizarServiceRole(null, "CHAVE-INTERNA"), false);
-  assertEquals(autorizarServiceRole("Bearer CHAVE-INTERNA", ""), false);
+const PROJECT_REF = "ouqwbbermlzqqvtqwlul";
+
+function jwtFixture(claims: Record<string, unknown>): string {
+  const encode = (value: Record<string, unknown>) =>
+    btoa(JSON.stringify(value))
+      .replaceAll("+", "-")
+      .replaceAll("/", "_")
+      .replaceAll("=", "");
+  return `${encode({ alg: "HS256", typ: "JWT" })}.${encode(claims)}.assinatura-fixture`;
+}
+
+Deno.test("aceita service_role do projeto depois do gateway validar o JWT", () => {
+  const token = jwtFixture({ role: "service_role", ref: PROJECT_REF });
+  assertEquals(
+    extrairServiceRoleToken(`Bearer ${token}`, PROJECT_REF),
+    token,
+  );
+});
+
+Deno.test("rejeita service_role de outro projeto", () => {
+  const token = jwtFixture({ role: "service_role", ref: "outroprojeto" });
+  assertEquals(extrairServiceRoleToken(`Bearer ${token}`, PROJECT_REF), null);
+});
+
+Deno.test("rejeita usuario comum, anonimo e JWT malformado", () => {
+  const usuario = jwtFixture({ role: "authenticated", ref: PROJECT_REF });
+  const anon = jwtFixture({ role: "anon", ref: PROJECT_REF });
+  assertEquals(extrairServiceRoleToken(`Bearer ${usuario}`, PROJECT_REF), null);
+  assertEquals(extrairServiceRoleToken(`Bearer ${anon}`, PROJECT_REF), null);
+  assertEquals(extrairServiceRoleToken("Bearer nao-e-jwt", PROJECT_REF), null);
+  assertEquals(extrairServiceRoleToken(null, PROJECT_REF), null);
 });
 
 Deno.test("pedido aceita somente alerta_id UUID opcional", () => {

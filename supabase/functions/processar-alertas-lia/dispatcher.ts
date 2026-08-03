@@ -4,23 +4,34 @@ const PROVIDER_TIMEOUT_MS = 30_000;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function compararConstante(a: string, b: string): boolean {
-  const tamanho = Math.max(a.length, b.length);
-  let diferenca = a.length ^ b.length;
-  for (let i = 0; i < tamanho; i += 1) {
-    diferenca |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
-  }
-  return diferenca === 0;
-}
-
-export function autorizarServiceRole(
+export function extrairServiceRoleToken(
   authorization: string | null,
-  serviceRoleKey: string,
-): boolean {
-  if (!serviceRoleKey || !authorization) return false;
+  projectRefEsperado: string,
+): string | null {
+  if (!projectRefEsperado || !authorization) return null;
   const match = authorization.match(/^Bearer\s+(.+)$/i);
   const token = match?.[1]?.trim();
-  return Boolean(token) && compararConstante(token!, serviceRoleKey);
+  if (!token) return null;
+
+  const partes = token.split(".");
+  if (partes.length !== 3) return null;
+
+  try {
+    const base64 = partes[1]
+      .replaceAll("-", "+")
+      .replaceAll("_", "/")
+      .padEnd(Math.ceil(partes[1].length / 4) * 4, "=");
+    const claims = JSON.parse(atob(base64)) as Record<string, unknown>;
+    if (
+      claims.role !== "service_role" ||
+      claims.ref !== projectRefEsperado
+    ) {
+      return null;
+    }
+    return token;
+  } catch {
+    return null;
+  }
 }
 
 export function validarPedidoDispatcher(
