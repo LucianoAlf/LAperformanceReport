@@ -177,13 +177,45 @@ justifica alterar a pesquisa canônica.
   sanitizados e ausência de fallback para variáveis legadas.
 - Nenhum deploy, instalação, migration produtiva ou envio foi realizado.
 
-## Ensaio descartável — pendente
+## Ensaio descartável — concluído em 03/08/2026
 
-A Task 8 exige projeto Supabase descartável com schema-only de produção,
-roles/extensões equivalentes, migration repair, zero dados/caixas/segredos,
-aplicação apenas da migration estrutural, evidência e destruição do projeto.
-Esse ensaio não autoriza Gate 1 e precisa registrar project ref e confirmação de
-destruição aqui.
+O ensaio da Task 8 foi executado no projeto Supabase descartável
+`ophoqjodoltvbqwqrzeb` (`lia-fase-a-ddl-20260803-090844`), sem copiar dados,
+caixas ou segredos e sem escrever no projeto de produção.
+
+Evidências registradas:
+
+- dump somente do schema `public` de produção: `3.536.759` bytes, SHA-256
+  `688a8b7a907acfcfaecfde34bb56754ef4f086a1a4971fe725c5fc125c6ed608`;
+- migration ensaiada:
+  `20260803090000_lia_alertas_privados_fase_a.sql`, `26.504` bytes, SHA-256
+  `4948b98e0e83ca87ca08cd2c8e0185c37dfac723a9bc5836a8a497409dc5916a`;
+- roles e extensões estruturais foram criadas antes do restore;
+- o schema produtivo foi restaurado sem replay do histórico;
+- `1.206` versões remotas de migration foram registradas como baseline exato;
+- a migration estrutural foi aplicada isoladamente; nenhuma migration de
+  ativação foi criada ou aplicada;
+- verificação estrutural: quatro tabelas, três destinos governados ativos,
+  zero evento, zero alerta e um job de expurgo;
+- `alertas_producao_liberados = false` após a aplicação;
+- `anon` e `authenticated` não leem destinos/outbox;
+- `service_role` executa o claim e `authenticated` não o executa;
+- a fixture PostgreSQL 17 cobre os IDs e telefones exatos de 2/29/30,
+  idempotência por pesquisa/rodada/tipo, ausência de notificação cruzada,
+  isolamento do modo teste comum e piloto exclusivo do Alf.
+
+Limitação documentada: o checkout não possui arquivos locais para parte das
+versões antigas que constam no histórico remoto. Por isso a CLI recusa
+`migration repair` para essas versões. Como o schema já havia sido restaurado
+integralmente, o ensaio gravou diretamente as `1.206` versões remotas exatas em
+`supabase_migrations.schema_migrations`, apenas como baseline e sem replayar ou
+inventar migrations. Essa adaptação vale somente para o projeto descartável.
+
+O projeto `ophoqjodoltvbqwqrzeb` foi destruído ao final. Uma consulta posterior
+à lista de projetos retornou zero projeto com esse ref ou com o prefixo
+`lia-fase-a-ddl-*`.
+
+Este ensaio não autoriza o Gate 1 nem o piloto da Task 9.
 
 ## Melhorias posteriores, fora da Fase A
 
