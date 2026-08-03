@@ -5,6 +5,7 @@ import test from 'node:test';
 import { gerarRelatorioCoordenacaoCanonico } from '../src/lib/relatorioCoordenacaoCanonico.ts';
 
 const migrationPath = 'supabase/migrations/20260803110000_relatorios_coordenacao_canonicos_v2.sql';
+const migrationV3Path = 'supabase/migrations/20260803223000_relatorios_coordenacao_periodicidade_canonica.sql';
 const modalPath = 'src/components/App/Professores/ModalRelatorioCoordenacao.tsx';
 const edgePath = 'supabase/functions/gemini-relatorio-coordenacao/index.ts';
 
@@ -185,20 +186,24 @@ const params = (tipo) => ({
   dataGeracao: new Date('2026-08-03T09:00:00-03:00'),
 });
 
-test('todos os cinco relatorios passam pelo contrato canonico V2 do servidor', () => {
+test('V2 permanece compativel e os cinco relatorios atuais usam o contrato canonico V3', () => {
   assert.equal(fs.existsSync(migrationPath), true);
+  assert.equal(fs.existsSync(migrationV3Path), true);
   const sql = fs.readFileSync(migrationPath, 'utf8');
+  const sqlV3 = fs.readFileSync(migrationV3Path, 'utf8');
   const modal = fs.readFileSync(modalPath, 'utf8');
   const edge = fs.readFileSync(edgePath, 'utf8');
 
   assert.match(sql, /get_relatorio_coordenacao_canonico_v2/i);
   assert.match(sql, /fechamento_mensal_snapshots/i);
   assert.match(sql, /hash_jsonb_canonico/i);
-  assert.match(modal, /get_relatorio_coordenacao_canonico_v2/i);
+  assert.match(sqlV3, /get_relatorio_coordenacao_canonico_v3/i);
+  assert.match(sqlV3, /get_relatorio_coordenacao_canonico_v2/i);
+  assert.match(modal, /get_relatorio_coordenacao_canonico_v3/i);
   assert.match(modal, /gerarRelatorioCoordenacaoCanonico/i);
   assert.doesNotMatch(modal.slice(modal.indexOf('const gerarRelatorioInstantaneo'), modal.indexOf('const regenerarRelatorio')), /professores,/i);
-  assert.match(edge, /get_relatorio_coordenacao_canonico_v2/i);
-  assert.match(edge, /schema_version\s*!==\s*2/i);
+  assert.match(edge, /get_relatorio_coordenacao_canonico_v3/i);
+  assert.match(edge, /schema_version\s*!==\s*3/i);
 });
 
 test('relatorio separa score comparavel de desempenho observado sem publicar premiacao parcial', () => {

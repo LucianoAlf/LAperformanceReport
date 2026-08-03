@@ -40,6 +40,16 @@ export interface ProfessorCoordenacaoCanonico {
     alunos_via_turmas?: number | null;
     turmas_elegiveis_media?: number | null;
   };
+  auditoria_health_score?: {
+    data_corte?: string | null;
+    config_id?: string | null;
+    regra_fingerprint?: string | null;
+    peso_pontuavel_total?: number | null;
+    peso_disponivel_total?: number | null;
+    cobertura_normalizada?: number | null;
+    cobertura_minima_aplicada?: number | null;
+    comparabilidade_motivos?: string[] | null;
+  };
 }
 
 export interface MovimentoRetencaoCoordenacaoCanonico {
@@ -55,7 +65,7 @@ export interface MovimentoRetencaoCoordenacaoCanonico {
 }
 
 export interface RelatorioCoordenacaoCanonicoV2 {
-  schema_version: 2;
+  schema_version: 2 | 3;
   periodo: {
     unidade_id: string | null;
     unidade_nome: string;
@@ -63,6 +73,11 @@ export interface RelatorioCoordenacaoCanonicoV2 {
     mes: number;
     inicio: string;
     fim: string;
+    periodicidade?: 'mensal' | 'ciclo';
+    ciclo_codigo?: string;
+    label?: string;
+    estado_publicacao?: string;
+    data_corte?: string;
   };
   resumo_equipe: {
     total_professores?: number;
@@ -107,6 +122,16 @@ export interface RelatorioCoordenacaoCanonicoV2 {
     movimentos?: MovimentoRetencaoCoordenacaoCanonico[];
   };
   ranking_oficial?: Array<{ professor_id?: number; nome: string; score: number }> | null;
+  qualidade_dados?: {
+    capacidade_estimada_pendente?: {
+      professores_afetados?: number;
+      agrupamentos_estimados?: number;
+      impacta_nota?: boolean;
+      impacta_prioridade_pedagogica?: boolean;
+      direcionamento?: string;
+    };
+    [key: string]: unknown;
+  };
   auditoria?: {
     contrato?: string;
     imutavel?: boolean;
@@ -115,6 +140,11 @@ export interface RelatorioCoordenacaoCanonicoV2 {
     payload_hash?: string;
     versao?: number;
     status?: string;
+    periodicidade?: 'mensal' | 'ciclo';
+    ciclo_codigo?: string;
+    data_corte?: string;
+    config_id?: string;
+    regra_fingerprint?: string;
   };
 }
 
@@ -185,15 +215,24 @@ function cabecalho(titulo: string, contrato: RelatorioCoordenacaoCanonicoV2): st
   const mesAno = new Date(periodo.ano, periodo.mes - 1, 1)
     .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
     .toUpperCase();
+  const visao = periodo.periodicidade === 'ciclo'
+    ? `CICLO ${(periodo.label || periodo.ciclo_codigo || mesAno).toUpperCase()}`
+    : `EVIDÊNCIAS DO MÊS — ${mesAno}`;
+  const estado = periodo.periodicidade === 'ciclo'
+    && periodo.estado_publicacao === 'ciclo_em_acompanhamento'
+    ? 'Ciclo em acompanhamento — dados acumulados até a data de corte.'
+    : periodo.periodicidade === 'ciclo'
+      ? 'Ciclo oficial fechado.'
+      : 'Evidências exclusivas da competência selecionada.';
   return [
     '━━━━━━━━━━━━━━━━━━━━━━',
     `📊 *${titulo}*`,
     `🏢 *${periodo.unidade_nome.toUpperCase()}*`,
-    `📅 *${mesAno}*`,
+    `📅 *${visao}*`,
     `🗓 Período: ${formatarData(periodo.inicio)} até ${formatarData(periodo.fim)}`,
     '━━━━━━━━━━━━━━━━━━━━━━',
     '',
-    '_Dados oficiais da competência selecionada no LA Report._',
+    `_Dados oficiais do período selecionado no LA Report. ${estado}_`,
     '',
   ];
 }
@@ -447,7 +486,10 @@ function gerarRetencao(params: GerarRelatorioCoordenacaoCanonicoParams): string 
 export function gerarRelatorioCoordenacaoCanonico(
   params: GerarRelatorioCoordenacaoCanonicoParams,
 ): string {
-  if (!params.contrato || params.contrato.schema_version !== 2) {
+  if (
+    !params.contrato
+    || (params.contrato.schema_version !== 2 && params.contrato.schema_version !== 3)
+  ) {
     throw new Error('Os dados oficiais da Coordenação estão indisponíveis para esta competência.');
   }
   if (!Array.isArray(params.contrato.professores)) {

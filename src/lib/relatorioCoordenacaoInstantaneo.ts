@@ -10,7 +10,12 @@ export interface HealthV3RelatorioCoordenacao {
   scoreComparavel: number | null;
   cobertura: number | null;
   classificacao: string | null;
-  estadoPublicacao: 'parcial' | 'oficial' | 'sem_base';
+  estadoPublicacao:
+    | 'parcial'
+    | 'oficial'
+    | 'sem_base'
+    | 'em_andamento'
+    | 'ciclo_em_acompanhamento';
   scoreExibivel: boolean;
   rankingHabilitado: boolean;
   periodicidade: 'mensal' | 'ciclo' | 'legado_calendario';

@@ -38,6 +38,7 @@ interface RelatorioCoordenacaoRequest {
   unidade?: string | null;
   ano?: number;
   mes?: number;
+  periodicidade?: "mensal" | "ciclo";
   dados?: { periodo?: { unidade_id?: string | null; ano?: number; mes?: number } };
 }
 
@@ -93,6 +94,13 @@ interface RelatorioCoordenacaoCanonico {
     unidade_nome: string;
     ano: number;
     mes: number;
+    inicio?: string;
+    fim?: string;
+    periodicidade?: "mensal" | "ciclo";
+    ciclo_codigo?: string;
+    label?: string;
+    estado_publicacao?: string;
+    data_corte?: string;
     coordenadores?: string[];
     contexto_operacional?: string;
   };
@@ -356,13 +364,19 @@ function renderizarRelatorio(
   const resumo = dados.resumo_equipe;
   const coordenadores = periodo.coordenadores?.length ? periodo.coordenadores.join(" e ") : "Coordenação Pedagógica";
   const competenciaEmAndamento = dados.professores.some(
-    (professor) => professor.estado_publicacao === "em_andamento",
+    (professor) => professor.estado_publicacao === "em_andamento"
+      || professor.estado_publicacao === "ciclo_em_acompanhamento",
   );
+  const contextoPeriodo = periodo.periodicidade === "ciclo"
+    ? `Ciclo oficial ${periodo.label || periodo.ciclo_codigo || "selecionado"}. Os fatos são acumulados pelos numeradores e denominadores do período; ranking e premiação só aparecem após o fechamento oficial.`
+    : competenciaEmAndamento
+      ? "Leitura do mês em andamento, com as evidências exclusivas da competência selecionada."
+      : "Visão mensal com as evidências exclusivas da competência selecionada.";
   const contexto = periodo.contexto_operacional === "recesso_parcial"
     ? "Julho teve recesso parcial. Os dados operacionais estão fechados; as notas servem ao acompanhamento pedagógico, enquanto ranking e premiação aguardam o fechamento oficial do ciclo. A ausência de aulas elegíveis não penaliza o professor."
     : competenciaEmAndamento
-      ? "Leitura do mês em andamento. As notas acompanham as evidências já registradas e evoluem com a operação."
-      : "O período segue calendário regular e cada indicador respeita sua evidência disponível.";
+      ? `${contextoPeriodo} As notas acompanham as evidências já registradas e evoluem com a operação.`
+      : `${contextoPeriodo} Cada indicador respeita sua evidência disponível.`;
 
   const professoresComAmostraMinima = dados.experimentais.professores_com_amostra_minima
     ?? dados.experimentais.professores_com_amostra;
@@ -433,7 +447,10 @@ function renderizarRelatorio(
     "━━━━━━━━━━━━━━━━━━━━━━",
     "📊 *RELATÓRIO COORDENAÇÃO PEDAGÓGICA*",
     `🏢 *${periodo.unidade_nome.toUpperCase()}*`,
-    `📅 *${meses[periodo.mes].toUpperCase()}/${periodo.ano}*`,
+    `📅 *${periodo.periodicidade === "ciclo"
+      ? `CICLO ${String(periodo.label || periodo.ciclo_codigo || "").toUpperCase()}`
+      : `EVIDÊNCIAS DO MÊS — ${meses[periodo.mes].toUpperCase()}/${periodo.ano}`}*`,
+    `🗓 Período: ${periodo.inicio || "não informado"} até ${periodo.fim || "não informado"}`,
     `👥 Coordenadores: ${coordenadores}`,
     "━━━━━━━━━━━━━━━━━━━━━━",
     "",
@@ -518,7 +535,7 @@ function renderizarRelatorio(
     "• Ausência de evidência aparece com o motivo real e nunca é tratada como nota zero.",
     formatarQualidadeCapacidade(mapaPublico),
     "",
-    "✅ *CONQUISTAS DO MÊS*",
+    periodo.periodicidade === "ciclo" ? "✅ *CONQUISTAS DO CICLO*" : "✅ *CONQUISTAS DO MÊS*",
     "───────────────────────",
     listaOuNenhum(narrativa.conquistas, "Evolução será acompanhada após completar as evidências do período."),
     "",
@@ -540,18 +557,24 @@ function renderizarRelatorio(
   return relatorio;
 }
 
-function extrairFiltros(body: RelatorioCoordenacaoRequest): { unidade: string | null; ano: number; mes: number } {
+function extrairFiltros(body: RelatorioCoordenacaoRequest): {
+  unidade: string | null;
+  ano: number;
+  mes: number;
+  periodicidade: "mensal" | "ciclo";
+} {
   const legacyPeriodo = body?.dados?.periodo;
   const unidade = body?.unidade ?? legacyPeriodo?.unidade_id ?? null;
   const ano = Number(body?.ano ?? legacyPeriodo?.ano);
   const mes = Number(body?.mes ?? legacyPeriodo?.mes);
+  const periodicidade = body?.periodicidade === "ciclo" ? "ciclo" : "mensal";
   if (unidade !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(unidade)) {
     throw new Error("Unidade inválida.");
   }
   if (!Number.isInteger(ano) || ano < 2020 || ano > 2100 || !Number.isInteger(mes) || mes < 1 || mes > 12) {
     throw new Error("Competência inválida.");
   }
-  return { unidade, ano, mes };
+  return { unidade, ano, mes, periodicidade };
 }
 
 Deno.serve(async (req) => {
@@ -576,17 +599,18 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: authorization } },
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const { data, error } = await supabase.rpc("get_relatorio_coordenacao_canonico_v2", {
+    const { data, error } = await supabase.rpc("get_relatorio_coordenacao_canonico_v3", {
       p_unidade_id: filtros.unidade,
       p_ano: filtros.ano,
       p_mes: filtros.mes,
+      p_periodicidade: filtros.periodicidade,
     });
     if (error) {
       console.error("Falha ao consultar dados pedagógicos oficiais:", error.code, error.message);
       throw new Error("Não foi possível reunir os dados pedagógicos desta competência.");
     }
     const contrato = data as RelatorioCoordenacaoCanonico;
-    if (!contrato || contrato.schema_version !== 2 || !Array.isArray(contrato.professores)) {
+    if (!contrato || contrato.schema_version !== 3 || !Array.isArray(contrato.professores)) {
       throw new Error("Os dados pedagógicos retornaram incompletos.");
     }
     if (!Array.isArray(contrato.mapa_sinais)) {

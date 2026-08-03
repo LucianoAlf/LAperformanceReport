@@ -56,10 +56,11 @@ test('Edge busca o contrato com o JWT e limita a IA a narrativa', () => {
 
   assert.match(source, /createClient/i);
   assert.match(source, /authorization/i);
-  assert.match(source, /get_relatorio_coordenacao_canonico_v2/i);
+  assert.match(source, /get_relatorio_coordenacao_canonico_v3/i);
   assert.match(source, /body\?\.unidade|body\.unidade/i);
   assert.match(source, /body\?\.ano|body\.ano/i);
   assert.match(source, /body\?\.mes|body\.mes/i);
+  assert.match(source, /body\?\.periodicidade|body\.periodicidade/i);
   assert.doesNotMatch(source, /const\s+dados\s*=\s*body\.dados/i);
   assert.match(source, /resumo[\s\S]*conquistas[\s\S]*pontos_atencao[\s\S]*treinamentos[\s\S]*plano_acao/i);
   assert.match(source, /fallback|narrativaPadrao|narrativaDeterministica/i);
@@ -107,7 +108,7 @@ test('botão mensal envia somente filtros e mantém cópia robusta', () => {
   assert.notEqual(instantStart, -1);
   const monthly = source.slice(monthlyStart, instantStart);
 
-  assert.match(monthly, /body\s*:\s*\{\s*unidade\s*:\s*unidadeId\s*,\s*ano\s*:\s*anoRelatorio\s*,\s*mes\s*:\s*mesRelatorio\s*\}/s);
+  assert.match(monthly, /body\s*:\s*\{\s*unidade\s*:\s*unidadeId\s*,\s*ano\s*:\s*anoRelatorio\s*,\s*mes\s*:\s*mesRelatorio\s*,\s*periodicidade\s*,\s*\}/s);
   assert.doesNotMatch(monthly, /dados\s*:/i);
   assert.doesNotMatch(monthly, /buscarDadosRelatorioCoordenacao|buscarKpisHealthV3RelatorioCoordenacao/i);
   assert.match(source, /copyTextToClipboard\(textoRelatorio\)/);

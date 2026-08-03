@@ -34,6 +34,7 @@ import {
   type RelatorioCoordenacaoCanonicoV2,
   type TipoRelatorioCoordenacaoCanonico,
 } from '@/lib/relatorioCoordenacaoCanonico';
+import { getHealthScoreV3Period } from '@/lib/healthScoreProfessorV3Periodos';
 
 interface ModalRelatorioCoordenacaoProps {
   open: boolean;
@@ -42,6 +43,7 @@ interface ModalRelatorioCoordenacaoProps {
   unidadeNome: string;
   ano: number;
   mes: number;
+  periodicidade: 'mensal' | 'ciclo';
 }
 
 type TipoRelatorio = 'mensal' | TipoRelatorioCoordenacaoCanonico;
@@ -77,6 +79,7 @@ export function ModalRelatorioCoordenacao({
   unidadeNome,
   ano,
   mes,
+  periodicidade,
 }: ModalRelatorioCoordenacaoProps) {
   const toast = useToast();
   const [tipoRelatorio, setTipoRelatorio] = useState<TipoRelatorio | null>(null);
@@ -123,17 +126,26 @@ export function ModalRelatorioCoordenacao({
       && dataInicio.getMonth() === dataFim.getMonth();
 
     const mesSelecionado = dataInicio.getMonth() + 1;
+    const periodoCanonico = getHealthScoreV3Period(
+      dataInicio.getFullYear(),
+      mesSelecionado,
+      periodicidade,
+    );
 
     return {
       ano: dataInicio.getFullYear(),
       mes: mesSelecionado,
       mesmoMes,
-      label: `${mesesPorExtenso[mesSelecionado]}/${dataInicio.getFullYear()}`,
-      intervalo: dataInicio.toLocaleDateString('pt-BR') === dataFim.toLocaleDateString('pt-BR')
-        ? dataInicio.toLocaleDateString('pt-BR')
-        : `${dataInicio.toLocaleDateString('pt-BR')} ate ${dataFim.toLocaleDateString('pt-BR')}`,
+      label: periodicidade === 'ciclo'
+        ? periodoCanonico.label
+        : `${mesesPorExtenso[mesSelecionado]}/${dataInicio.getFullYear()}`,
+      intervalo: periodicidade === 'ciclo'
+        ? `${new Date(`${periodoCanonico.inicio}T12:00:00`).toLocaleDateString('pt-BR')} até ${new Date(`${periodoCanonico.fim}T12:00:00`).toLocaleDateString('pt-BR')}`
+        : dataInicio.toLocaleDateString('pt-BR') === dataFim.toLocaleDateString('pt-BR')
+          ? dataInicio.toLocaleDateString('pt-BR')
+          : `${dataInicio.toLocaleDateString('pt-BR')} ate ${dataFim.toLocaleDateString('pt-BR')}`,
     };
-  }, [dataFim, dataInicio, mesesPorExtenso]);
+  }, [dataFim, dataInicio, mesesPorExtenso, periodicidade]);
 
   const selecionarPeriodo = (modo: ModoPeriodo) => {
     setModoPeriodo(modo);
@@ -181,7 +193,12 @@ export function ModalRelatorioCoordenacao({
       const { data: responseIA, error: errorIA } = await supabase.functions.invoke(
         edgeFunctionName,
         {
-          body: { unidade: unidadeId, ano: anoRelatorio, mes: mesRelatorio }
+          body: {
+            unidade: unidadeId,
+            ano: anoRelatorio,
+            mes: mesRelatorio,
+            periodicidade,
+          }
         }
       );
 
@@ -227,10 +244,11 @@ export function ModalRelatorioCoordenacao({
 
     try {
       const { anoRelatorio, mesRelatorio } = validarCompetenciaMensal();
-      const { data, error } = await supabase.rpc('get_relatorio_coordenacao_canonico_v2', {
+      const { data, error } = await supabase.rpc('get_relatorio_coordenacao_canonico_v3', {
         p_unidade_id: unidadeId,
         p_ano: anoRelatorio,
         p_mes: mesRelatorio,
+        p_periodicidade: periodicidade,
       });
       if (error) {
         console.error('Erro ao consultar os dados oficiais da Coordenação:', error);
@@ -347,10 +365,11 @@ export function ModalRelatorioCoordenacao({
           <div className="space-y-5 py-6 overflow-y-auto pr-1">
             <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
               <Label className="text-slate-300 text-sm font-medium mb-3 block">
-                Período do relatório
+                {periodicidade === 'ciclo' ? 'Ciclo oficial da tela' : 'Período do relatório'}
               </Label>
 
-              <div className="flex flex-wrap gap-2 mb-3">
+              {periodicidade === 'mensal' && (
+                <div className="flex flex-wrap gap-2 mb-3">
                 {[
                   { id: 'mes_anterior' as const, label: 'Mês anterior' },
                   { id: 'competencia_tela' as const, label: 'Competência da tela' },
@@ -369,9 +388,10 @@ export function ModalRelatorioCoordenacao({
                     {periodo.label}
                   </button>
                 ))}
-              </div>
+                </div>
+              )}
 
-              {modoPeriodo === 'personalizado' && (
+              {periodicidade === 'mensal' && modoPeriodo === 'personalizado' && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                   <div>
                     <Label className="text-slate-400 text-xs mb-1 block">Data início</Label>
@@ -393,12 +413,17 @@ export function ModalRelatorioCoordenacao({
               <div className="mt-3 flex flex-col gap-1 text-xs">
                 <p className="text-cyan-400 flex items-center gap-1">
                   <Calendar className="w-3 h-3" />
-                  Competência usada: {periodoSelecionado.label}
+                  {periodicidade === 'ciclo' ? 'Ciclo usado' : 'Competência usada'}: {periodoSelecionado.label}
                   <span className="text-slate-500">({periodoSelecionado.intervalo})</span>
                 </p>
-                {!periodoSelecionado.mesmoMes && (
+                {periodicidade === 'mensal' && !periodoSelecionado.mesmoMes && (
                   <p className="text-amber-300">
                     Selecione datas dentro do mesmo mês. A fonte pedagógica atual é mensal.
+                  </p>
+                )}
+                {periodicidade === 'ciclo' && (
+                  <p className="text-slate-400">
+                    O ciclo acumula fatos brutos dos três meses e só libera ranking após o fechamento oficial.
                   </p>
                 )}
               </div>
@@ -420,7 +445,9 @@ export function ModalRelatorioCoordenacao({
                   <Sparkles className="w-6 h-6 text-violet-400" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-white">Relatório Mensal com IA</h3>
+                  <h3 className="font-semibold text-white">
+                    {periodicidade === 'ciclo' ? 'Relatório do Ciclo com IA' : 'Relatório Mensal com IA'}
+                  </h3>
                   <p className="text-xs text-slate-400">Análise completa da equipe</p>
                 </div>
               </div>
