@@ -2,7 +2,7 @@
 
 **Data:** 03/08/2026
 
-**Status:** desenho aprovado pelo Alf; implementação pendente
+**Status:** implementação local concluída; rollout pendente de autorização
 
 **Autoridade de produto:** Alf
 **Escopo:** edição exclusivamente do corpo da mensagem na última etapa antes do
@@ -51,6 +51,13 @@ A verificação somente leitura de 03/08/2026 confirmou no projeto de produção
   ainda não distingue texto original, texto editado e autoria da edição;
 - os templates V2 ativos possuem 542 caracteres para o público direto e 579
   para o responsável.
+
+O hardening de opt-out do Subprojeto B está isolado no commit `3826c22` e será
+um pré-requisito próprio do rollout. Em 03/08/2026, a Edge publicada ainda era
+a v43 e não continha essa checagem: o webhook marcava
+`resposta_status='recusada_opt_out'`, mas um novo envio ainda poderia ser
+confirmado. Nenhum opt-out havia sido registrado até esse baseline. A lacuna
+não será misturada silenciosamente ao diff da prévia editável.
 
 Há famílias reais aguardando resposta em `multipartes_v2`, e a Fase A da Lia
 está ativa com dispatcher a cada minuto. Esta entrega não altera o webhook de
@@ -321,21 +328,26 @@ Nenhum dado de resposta, rodada ou transcrição será alterado.
 
 O rollout exige autorização separada do Alf e seguirá:
 
-1. **Migration aditiva:** colunas de auditoria e RPC editável, preservando a RPC
+1. **Pré-requisito de opt-out isolado:** publicar e verificar exatamente a
+   proteção do commit `3826c22`, ainda com a prévia somente leitura. Confirmar
+   que estado `recusada_opt_out` bloqueia reenvio e que os demais estados
+   continuam operacionais.
+2. **Migration aditiva:** colunas de auditoria, trigger de compatibilidade e RPC editável, preservando a RPC
    atual. O frontend e a Edge publicados continuam funcionando.
-2. **Edge compatível:** `verify_jwt=true`, aceita confirmação antiga sem
+3. **Edge compatível:** `verify_jwt=true`, mantém a proteção de opt-out já
+   publicada, aceita confirmação antiga sem
    `mensagem_final` e confirmação nova com texto final. Não toca no webhook.
-3. **Frontend:** editor, contador, validação visível e visualização formatada.
-4. **Smoke em modo teste:** número interno do Alf, primeiro sem edição e depois
+4. **Frontend:** editor, contador, validação visível e visualização formatada.
+5. **Smoke em modo teste:** número interno do Alf, primeiro sem edição e depois
    com edição, sem disparo para família real.
-5. **Concorrência controlada:** confirmar a mesma prévia duas vezes com o mesmo
+6. **Concorrência controlada:** confirmar a mesma prévia duas vezes com o mesmo
    texto e provar uma entrega; repetir com texto divergente e provar conflito
    sem entrega adicional.
 
-Antes do deploy da Edge, o código local será comparado novamente com a versão
-ativa em produção. A verificação de 03/08 encontrou checks locais de opt-out que
-não aparecem na versão 43 publicada. Essa diferença não será embarcada
-silenciosamente: o diff e seu efeito serão explicitados no gate de rollout.
+Antes de cada deploy da Edge, o artefato será comparado com a versão ativa. O
+primeiro deploy contém somente o pré-requisito de opt-out; o segundo acrescenta
+somente o contrato compatível da edição. Assim, cada efeito permanece
+verificável e reversível de forma independente.
 
 O cron da Lia continua ativo e o webhook de recepção não será redeployado por
 esta entrega.
