@@ -313,7 +313,7 @@ function formatHealthScoreV3Status(status: HealthScoreV3UiStatus): string {
   if (status === 'atencao') return 'Atenção';
   if (status === 'saudavel') return 'Saudável';
   if (status === 'parcial') return 'Parcial';
-  if (status === 'em_maturacao') return 'Base em formação';
+  if (status === 'em_maturacao') return 'Em acompanhamento';
   if (status === 'sem_base_operacional') return 'Sem base operacional';
   return 'Evidência pendente';
 }
@@ -330,7 +330,7 @@ function formatAlertaPerformanceCount(alerta: AlertaPerformance): string {
   if (alerta.tipo === 'atencao') return `${sujeito} em atenção`;
   if (alerta.tipo === 'parcial') return `${sujeito} com nota parcial`;
   if (alerta.tipo === 'evidencia_pendente') return `${sujeito} com evidência pendente`;
-  if (alerta.tipo === 'em_maturacao') return `${sujeito} com base em formação`;
+  if (alerta.tipo === 'em_maturacao') return `${sujeito} em acompanhamento`;
   if (alerta.tipo === 'sem_base_operacional') return `${sujeito} sem base operacional`;
   return alerta.quantidade === 1 ? `${sujeito} saudável` : `${sujeito} saudáveis`;
 }
@@ -1395,7 +1395,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                               {professor.healthV3?.comparabilidadeEstado === 'comparavel'
                                 ? 'Health Score'
                                 : professor.healthV3?.comparabilidadeEstado === 'em_maturacao'
-                                  ? 'Nota em formação'
+                                  ? 'Desempenho observado'
                                   : 'Sem base operacional'}
                             </span>
                             {professor.healthV3?.comparabilidadeEstado === 'em_maturacao' && (

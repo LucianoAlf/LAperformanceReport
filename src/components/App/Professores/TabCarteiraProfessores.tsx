@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
@@ -87,12 +87,14 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
     open: false,
     professor: null
   });
+  const requisicaoAtivaRef = useRef(0);
 
   useEffect(() => {
     carregarDados();
   }, [unidadeAtual]);
 
   const carregarDados = async () => {
+    const requisicaoId = ++requisicaoAtivaRef.current;
     setLoading(true);
     setErro(null);
     try {
@@ -113,7 +115,6 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
       const [
         carteiraResult,
         kpisBrutos,
-        healthV3Result,
         professoresResult,
         vinculosResult,
         unidadesResult,
@@ -125,11 +126,6 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
           ano,
           mes,
           unidadeId: unidadeAtual,
-        }),
-        supabase.rpc('get_health_score_professor_v3_performance', {
-          p_competencia: competencia,
-          p_unidade_id: unidadeAtual === 'todos' ? null : unidadeAtual,
-          p_periodicidade: 'mensal',
         }),
         supabase
           .from('professores')
@@ -149,9 +145,6 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
       ]);
 
       if (carteiraResult.error) throw carteiraResult.error;
-      if (healthV3Result.error) {
-        throw new Error(`Health Score V3 indisponível: ${healthV3Result.error.message}`);
-      }
       if (professoresResult.error) throw professoresResult.error;
       if (vinculosResult.error) throw vinculosResult.error;
       if (unidadesResult.error) throw unidadesResult.error;
@@ -171,11 +164,6 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
       const kpisData = consolidarKpisProfessoresCanonicos(
         filtrarKpisPorVinculosAtivos(kpisBrutos, professoresAtivos, vinculosAtivos),
       );
-      const healthV3PorProfessor = new Map(
-        normalizeHealthScoreV3PerformanceRows(healthV3Result.data || [])
-          .map((snapshot) => [snapshot.professorId, snapshot]),
-      );
-
       const carteirasFinanceirasPorProfessor = new Map<number, any>(
         (carteiraResult.data || []).map((row: any) => [Number(row.professor_id), row]),
       );
@@ -212,28 +200,9 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
         const professorId = Number(kpis.professor_id);
         const row = carteirasFinanceirasPorProfessor.get(professorId);
         const professor = professoresPorId.get(professorId);
-        const snapshot = healthV3PorProfessor.get(professorId);
-        const numeroAlunosV3 = snapshot
-          ? resolveHealthScoreV3MetricDisplay(snapshot, 'numero_alunos').value
-          : null;
-        const mediaTurmaV3 = snapshot
-          ? resolveHealthScoreV3MetricDisplay(snapshot, 'media_turma').value
-          : null;
-        const permanenciaV3 = snapshot
-          ? resolveHealthScoreV3MetricDisplay(snapshot, 'permanencia').value
-          : null;
-        const totalAlunos = Number(numeroAlunosV3 ?? kpis.carteira_alunos ?? 0);
-        const mediaAlunosTurma = Number(mediaTurmaV3 ?? kpis.media_alunos_turma ?? 0);
+        const totalAlunos = Number(kpis.carteira_alunos ?? 0);
+        const mediaAlunosTurma = Number(kpis.media_alunos_turma ?? 0);
         const mrrTotal = Number(row?.mrr_total ?? 0);
-        const healthScoreExibivel = Boolean(
-          snapshot?.scoreExibivel
-          && snapshot.score !== null,
-        );
-        const healthStatus = snapshot?.classificacao === 'critico'
-          || snapshot?.classificacao === 'atencao'
-          || snapshot?.classificacao === 'saudavel'
-          ? snapshot.classificacao
-          : null;
 
         return {
           id: professorId,
@@ -248,22 +217,71 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
           // no denominador sem estarem no numerador, diluindo o ticket de 24 professores.
           ticket_medio: Number(row?.ticket_medio ?? 0),
           alunos_ticket: Number(row?.alunos_ticket ?? 0),
-          tempo_medio_meses: Number(permanenciaV3 ?? row?.tempo_medio_meses ?? 0),
+          tempo_medio_meses: Number(row?.tempo_medio_meses ?? 0),
           total_turmas: Number(kpis.total_turmas ?? row?.total_turmas ?? 0),
           media_alunos_turma: mediaAlunosTurma,
           cursos: row?.cursos?.length ? row.cursos : (cursosPorProfessor.get(professorId) || []),
           unidades: unidadesPorProfessor.get(professorId) || row?.unidades || [],
-          health_score: healthScoreExibivel ? snapshot!.score : null,
-          health_status: healthStatus,
-          health_score_exibivel: healthScoreExibivel,
-          health_score_estado_publicacao: snapshot?.estadoPublicacao || 'sem_base',
-          health_score_cobertura: snapshot?.cobertura ?? null,
-          health_score_motivo: snapshot?.motivoBloqueio || null,
+          health_score: null,
+          health_status: null,
+          health_score_exibivel: false,
+          health_score_estado_publicacao: 'sem_base',
+          health_score_cobertura: null,
+          health_score_motivo: 'Carregando Health Score V3',
         };
       });
 
-      // Filtrar apenas professores com alunos (ou todos se quiser mostrar vazios)
-      setCarteiras(carteirasCalculadas.filter(c => c.total_alunos > 0));
+      // A Carteira canônica é utilizável imediatamente. O enriquecimento de
+      // Health Score V3 é complementar e não bloqueia a página se expirar.
+      const carteirasComAlunos = carteirasCalculadas.filter(c => c.total_alunos > 0);
+      if (requisicaoId !== requisicaoAtivaRef.current) return;
+      setCarteiras(carteirasComAlunos);
+      setLoading(false);
+
+      void supabase.rpc('get_health_score_professor_v3_performance', {
+        p_competencia: competencia,
+        p_unidade_id: unidadeAtual === 'todos' ? null : unidadeAtual,
+        p_periodicidade: 'mensal',
+      }).then((healthV3Result) => {
+        if (requisicaoId !== requisicaoAtivaRef.current) return;
+        if (healthV3Result.error) {
+          console.warn('Health Score V3 indisponível na Carteira', healthV3Result.error);
+          setCarteiras((atuais) => atuais.map((carteira) => ({
+            ...carteira,
+            health_score_motivo: 'Health Score temporariamente indisponível; carteira preservada',
+          })));
+          return;
+        }
+
+        const healthV3PorProfessor = new Map(
+          normalizeHealthScoreV3PerformanceRows(healthV3Result.data || [])
+            .map((snapshot) => [snapshot.professorId, snapshot]),
+        );
+        setCarteiras((atuais) => atuais.map((carteira) => {
+          const snapshot = healthV3PorProfessor.get(carteira.id);
+          const healthScoreExibivel = Boolean(snapshot?.scoreExibivel && snapshot.score !== null);
+          const healthStatus = snapshot?.classificacao === 'critico'
+            || snapshot?.classificacao === 'atencao'
+            || snapshot?.classificacao === 'saudavel'
+            ? snapshot.classificacao
+            : null;
+          const permanencia = snapshot
+            ? resolveHealthScoreV3MetricDisplay(snapshot, 'permanencia').value
+            : null;
+          return {
+            ...carteira,
+            tempo_medio_meses: Number(permanencia ?? carteira.tempo_medio_meses),
+            health_score: healthScoreExibivel ? snapshot!.score : null,
+            health_status: healthStatus,
+            health_score_exibivel: healthScoreExibivel,
+            health_score_estado_publicacao: snapshot?.estadoPublicacao || 'sem_base',
+            health_score_cobertura: snapshot?.cobertura ?? null,
+            health_score_motivo: snapshot?.motivoBloqueio || null,
+          };
+        }));
+      }).catch((error) => {
+        console.warn('Health Score V3 indisponível na Carteira', error);
+      });
     } catch (error) {
       console.error('Erro ao carregar carteiras:', error);
       setCarteiras([]);

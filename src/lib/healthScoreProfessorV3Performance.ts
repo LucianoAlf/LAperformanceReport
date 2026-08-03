@@ -111,9 +111,9 @@ const HEALTH_SCORE_V3_EVIDENCE_MESSAGES: Record<string, string> = {
   sem_pilares_validos: 'Sem pilares válidos nesta competência',
   fonte_em_auditoria: 'Dados em auditoria',
   score_observado_indisponivel: 'Desempenho observado ainda indisponível',
-  pilares_insuficientes: 'Base em formação: menos de 3 pilares válidos',
+  pilares_insuficientes: 'Em acompanhamento: menos de 3 pilares comparáveis',
   cobertura_insuficiente: 'Cobertura insuficiente para comparação',
-  sem_pilar_fidelizacao: 'Base em formação: retenção ou permanência ainda indisponível',
+  sem_pilar_fidelizacao: 'Em acompanhamento: retenção ou permanência ainda indisponível',
   criterios_atendidos: 'Critérios de comparabilidade atendidos',
 };
 
