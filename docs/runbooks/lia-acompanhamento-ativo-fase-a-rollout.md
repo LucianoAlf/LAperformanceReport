@@ -334,10 +334,11 @@ Execução remota autorizada e evidências:
    `provider_message_id`;
 10. `alertas_producao_liberados=false` e o cron de consumo continua ausente.
 
-O gate técnico do filtro de eco está provado. A migration de ativação e o cron
-continuam proibidos até o aceite humano do piloto. O frontend que interpreta
-`destino=pesquisas-evasao` também permanece na branch isolada até a publicação
-autorizada.
+O gate técnico do filtro de eco está provado. A correção foi integrada à
+`main` no commit `02023a6`; o deploy automático da Vercel terminou com sucesso
+e os dois checks de segredo ficaram verdes. O frontend que interpreta
+`destino=pesquisas-evasao` está publicado. A migration de ativação e o cron
+continuam proibidos até o aceite humano do piloto.
 
 ## Gate 4 — ativação humana e cron, artefato ainda inexistente
 
