@@ -2,7 +2,7 @@
 
 **Data:** 02/08/2026
 
-**Status:** proposta para revisão do Alf; nenhuma implementação autorizada
+**Status:** aprovada pelo Alf com fases A-D; nenhuma implementação autorizada
 
 **Autoridade de produto:** Alf
 
@@ -70,11 +70,18 @@ A auditoria de 02/08/2026 foi somente leitura e confirmou o projeto de produçã
 
 ### 4.2 Destino privado do operador
 
-- Fabi (`usuarios.id=30`) possui telefone no cadastro atual.
-- Jessica (`usuarios.id=29`) possui autenticação ativa, mas não possui telefone
-  em `usuarios`.
-- O rollout privado exige cadastro e validação de um canal para ambas. Ausência
-  de canal nunca autoriza fallback para grupo.
+- A verificação somente leitura de 02/08/2026 confirmou os três usuários ativos,
+  autenticados e com telefone normalizado no projeto de produção:
+  - Alf (`usuarios.id=2`): `5521981278047`;
+  - Jessica (`usuarios.id=29`): `5521984695110`;
+  - Fabi (`usuarios.id=30`): `5521994696489`.
+- Esses valores serão seeds do cadastro governado de destino privado, com origem
+  e data de verificação. Não serão fallback consultado em `usuarios.telefone`
+  durante o envio.
+- O número do Alf é o destino obrigatório do piloto ponta a ponta. Nenhum alerta
+  real para Fabi ou Jessica pode ser liberado antes dessa prova.
+- Ausência, inatividade ou falha de um destino nunca autoriza fallback para
+  grupo nem envio para outra pessoa.
 
 ### 4.3 Motores existentes
 
@@ -157,7 +164,7 @@ reusar `bi_messages_lamusic` nem `notificacao_log` como fonte desses fatos.
 ### 6.3 Destinos
 
 - Destino privado: cadastro governado por `usuarios.id`, com JID/telefone
-  validado, ativo, data de verificação e horário de silêncio.
+  validado, ativo, origem e data de verificação.
 - Destino de grupo: configuração explícita de relatório do Sucesso do Aluno.
 - `usuarios.telefone` pode ajudar no provisionamento inicial, mas não deve ser
   fallback silencioso em tempo de execução.
@@ -176,8 +183,15 @@ Vão para o WhatsApp privado da pessoa que enviou:
 - resumo das pesquisas sem resposta após três dias;
 - erro operacional que exige ação daquela pessoa.
 
+O destinatário é **somente** `executado_por_usuario_id`, congelado na pesquisa
+original. Não existe notificação cruzada: Fabi não recebe os casos enviados por
+Jessica, Jessica não recebe os casos enviados por Fabi e nenhuma das duas
+recebe o conjunto completo por conveniência.
+
 Esses avisos não são encaminhados ao grupo quando o destino privado está
-ausente ou falha. A falha fica visível em uma fila administrativa de entrega.
+ausente ou falha. Se o operador estiver inativo, ausente ou sem destino
+verificado, o evento fica visível em uma fila administrativa de entrega; nunca
+é redirecionado para o grupo ou para outro operador.
 
 ### 7.2 Grupo
 
@@ -255,9 +269,8 @@ Chave idempotente recomendada:
 
 ### 8.4 KPI histórico
 
-Um snapshot diário fecha as métricas com horário de corte e versão da regra. O
-grupo recebe um resumo semanal por padrão; a cadência final depende da decisão
-do Alf.
+Um snapshot diário fecha as métricas com horário de corte e versão da regra. A
+cadência de publicação no grupo depende da decisão do Alf.
 
 ## 9. Conteúdo das mensagens internas
 
@@ -287,7 +300,22 @@ A família enviou novo conteúdo depois da revisão. O caso voltou para a fila e
 👉 {{link_caso}}
 ```
 
-### 9.3 Follow-up de três dias — privado
+### 9.3 Opt-out — privado
+
+```text
+🔕 *Família recusou novos contatos — Pesquisa de evasão*
+
+Aluno: {{aluno_nome}}
+Unidade: {{unidade_nome}}
+
+A família pediu para não receber novas mensagens desta pesquisa. O caso foi bloqueado para follow-up.
+
+👉 {{link_caso}}
+```
+
+O alerta não expõe o texto exato usado pela família.
+
+### 9.4 Follow-up de três dias — privado
 
 ```text
 ⏰ *Pesquisas aguardando follow-up — 3 dias*
@@ -303,7 +331,7 @@ Você tem {{total}} pesquisa(s) enviada(s) sem resposta válida:
 A lista contém somente aluno, unidade e data de envio. Não contém telefone,
 motivo da saída nem resposta.
 
-### 9.4 KPI — grupo
+### 9.5 KPI — grupo
 
 ```text
 📊 *Pesquisa de evasão — {{periodo}}*
@@ -401,7 +429,7 @@ completar três dias, desde que:
   envio;
 - não exista follow-up anterior manual ou automático;
 - o destinatário e o `caixa_id` sejam os snapshots da pesquisa original;
-- o horário esteja dentro da janela autorizada;
+- o horário esteja entre 08:00 e 20:00 BRT;
 - exista template ativo, versionado e aprovado para o público correto;
 - a tentativa use chave idempotente única por pesquisa;
 - o registro identifique `origem=lia_automatica`, sem atribuir a ação a Fabi,
@@ -409,6 +437,10 @@ completar três dias, desde que:
 
 O motor não troca telefone, responsável ou caixa com dados atuais. Divergência
 de snapshot bloqueia e encaminha para a equipe.
+
+As 72 horas são corridas. Qualquer interação não substantiva recebida bloqueia
+a automação e encaminha o caso para decisão humana. Não existe silêncio
+adicional além da janela diária de 08:00 a 20:00 BRT.
 
 ### 12.2 Cópia candidata — adulto
 
@@ -494,12 +526,15 @@ relatório posterior, nunca criar o fato nem autorizar o envio.
 - Links exigem login normal no LA Report e não carregam token público.
 - Logs técnicos usam IDs internos, tipo, status, tentativa e correlation ID;
   não incluem resposta, transcrição, áudio, telefone, JID ou segredo.
-- Conteúdo renderizado da notificação tem retenção curta e acesso restrito; o
-  histórico agregado não contém PII.
+- Conteúdo renderizado e destino snapshot da notificação têm acesso restrito e
+  são expurgados após 30 dias; metadados técnicos de evento e entrega permanecem
+  para auditoria sem conservar telefone ou cópia da mensagem.
 - Cada entrega registra evento, destinatário, canal, template, versão, status,
   tentativas, horário e ID do provedor.
 - Destino ausente, inativo ou não verificado é falha visível; não há fallback
   para grupo ou para outro número.
+- Operador original inativo encaminha a entrega para a fila administrativa,
+  sem notificar outro operador e sem publicar o caso no grupo.
 - Notificação falha não altera o estado canônico da pesquisa.
 
 ## 15. Fronteira com o Subprojeto E
@@ -522,73 +557,54 @@ Permanecem no Subprojeto E:
 Assim, o B.5 não espera o E inteiro, mas também não transforma uma correção de
 pesquisa em reescrita geral dos agentes.
 
-## 16. Decisões exigidas do Alf antes de implementar o follow-up automático
+## 16. Decisões ainda reservadas ao Alf
 
-1. Ativar ou não o envio automático. A primeira entrega recomendada é somente
-   alerta privado e fila visível.
-2. Aprovar as duas cópias, adulto e responsável.
-3. Confirmar 72 horas corridas ou três dias úteis.
-4. Definir janela de envio e horário de silêncio.
-5. Confirmar que qualquer interação não substantiva bloqueia a automação e
-   encaminha o caso para decisão humana — recomendação desta spec.
-6. Confirmar uso da mesma caixa e destino snapshot da pesquisa original —
-   recomendação desta spec.
-7. Definir o comportamento de resultado ambíguo do provedor — recomendação:
-   não reenviar automaticamente.
-8. Aprovar piloto, duração e limite diário antes da abertura geral.
+Somente três decisões permanecem abertas:
 
-Decisões operacionais também necessárias antes do rollout dos avisos:
+1. ativar ou não o follow-up automático à família;
+2. aprovar as duas cópias do follow-up automático, para adulto e responsável;
+3. definir o grupo oficial do Sucesso do Aluno e a cadência do KPI.
 
-- cadastrar e verificar o WhatsApp privado de Jessica;
-- validar o WhatsApp privado de Fabi;
-- escolher o grupo oficial do Sucesso do Aluno;
-- definir cadência e horário do KPI de grupo;
-- aprovar a retenção do texto das notificações internas;
-- definir substituto quando quem enviou estiver inativo. A recomendação é uma
-  fila administrativa, nunca o grupo como fallback automático.
+Já estão decididos e não voltam como gate de produto: 72 horas corridas; janela
+de 08:00 a 20:00 BRT; qualquer interação não substantiva bloqueia automação;
+uso da mesma caixa e do destino snapshot; resultado ambíguo do provedor não é
+reenviado; operador inativo vai para fila administrativa, nunca para o grupo.
 
-## 17. Ordem de implementação sugerida
+## 17. Ordem de implementação aprovada
 
-### Fase 0 — pré-flight e decisões
+### Fase A — eventos e alertas privados
 
-- auditar o processo real da Lia/Hermes na VPS em modo somente leitura;
-- provisionar destinos privados verificados;
-- configurar o grupo;
-- aprovar horários, templates internos e retenção;
-- manter follow-up ao aluno desligado.
+- outbox idempotente para `resposta_nova`, `rodada_nova_pos_revisao` e
+  `opt_out`;
+- cadastro governado dos destinos privados por `usuarios.id`;
+- entrega somente a quem enviou a pesquisa;
+- fila administrativa para operador inativo, destino ausente ou falha final;
+- observabilidade sem conteúdo da resposta ou telefone em log;
+- piloto ponta a ponta no número do Alf antes de liberar Fabi e Jessica.
 
-### Fase 1 — eventos, histórico e interface
+Esta fase entrega o primeiro valor operacional e não depende de estado ou filtro
+novo na interface.
 
-- outbox idempotente;
-- snapshots de KPI;
-- estados e filtro de follow-up na tela;
-- registro manual de follow-up;
-- nenhuma mensagem externa nesta fase.
+### Fase B — follow-up de 72 horas para a equipe
 
-### Fase 2 — avisos privados
-
-- resposta nova;
-- rodada nova depois de revisão;
-- opt-out;
-- fila de falhas e observabilidade;
-- piloto somente com pesquisas de teste.
-
-### Fase 3 — follow-up de três dias para a equipe
-
+- elegibilidade e fila de follow-up;
 - resumo privado por operador;
-- cancelamento por resposta concorrente;
-- prova de idempotência e horário de silêncio.
+- estados e filtro de follow-up na tela;
+- registro manual de conclusão ou dispensa;
+- qualquer interação não substantiva exige decisão humana.
 
-### Fase 4 — KPI agregado no grupo
+### Fase C — histórico, coortes e KPI agregado
 
-- snapshot histórico;
-- relatório agregado, versionado e sem PII;
-- comparação com período anterior.
+- snapshots históricos versionados;
+- taxa e tempo de resposta por coorte;
+- relatório agregado e sem PII no grupo oficial;
+- publicação somente depois de definidos grupo e cadência.
 
-### Fase 5 — follow-up automático opcional
+### Fase D — follow-up automático opcional
 
-Somente depois das decisões da seção 16, com dry-run, número interno, piloto
-limitado e autorização explícita de rollout.
+Somente depois das duas decisões de conteúdo e ativação da seção 16, com dry-run,
+número interno, uma única tentativa, janela de 08:00 a 20:00 BRT e autorização
+explícita de rollout.
 
 Depois dessas fases, o Subprojeto C pode classificar causas e transformar
 respostas revisadas em ações sem precisar resolver novamente alerta, prazo ou
@@ -614,10 +630,17 @@ canal.
 16. Queda da VPS não perde evento; recuperação respeita idempotência.
 17. Alerta contém link autenticado para o caso correto.
 18. Pessoa inativa não recebe mensagem e o caso entra na fila administrativa.
+19. Fabi recebe somente eventos de pesquisas enviadas por Fabi; Jessica recebe
+    somente eventos de pesquisas enviadas por Jessica.
+20. Os três destinos seedados correspondem aos IDs 2, 29 e 30, guardam origem e
+    data de verificação e não são resolvidos por fallback em `usuarios.telefone`.
+21. O primeiro envio ponta a ponta usa exclusivamente o destino governado do
+    Alf; Fabi e Jessica permanecem bloqueadas até o aceite desse piloto.
 
 ## 19. Critérios de aceite
 
-- Fabi e Jessica recebem individualmente os alertas de pesquisas que enviaram.
+- Fabi e Jessica recebem individualmente e somente os alertas das pesquisas que
+  cada uma enviou.
 - O grupo recebe somente KPI agregado.
 - Nova rodada pós-revisão é avisada uma única vez e volta à fila.
 - Toda pesquisa produtiva enviada aparece como aguardando ou follow-up devido.
@@ -630,7 +653,8 @@ canal.
 
 ## 20. Riscos residuais
 
-- Jessica ainda não possui destino privado cadastrado no contrato atual.
+- Os destinos existem em `usuarios`, mas o cadastro governado ainda não foi
+  criado; até lá, nenhum alerta privado novo está habilitado.
 - O serviço real da Lia na VPS não está versionado integralmente neste
   repositório; seu inventário é gate da implementação.
 - O transporte Sol/Hermes funciona, mas ainda carrega semântica de relatório e
