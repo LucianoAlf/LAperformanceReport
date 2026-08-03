@@ -2,6 +2,9 @@
 
 import { assertEquals, assertThrows } from "jsr:@std/assert@1";
 import {
+  formatarOportunidadesPublicas,
+  formatarPrioridadesPublicas,
+  formatarQualidadeCapacidade,
   listarCodigosSinaisDesconhecidos,
   projetarMapaSinaisPublico,
 } from "./mapaSinaisPublico.ts";
@@ -132,4 +135,84 @@ Deno.test("possível sobrecarga sem correlação canônica não vira prioridade"
     },
   }]);
   assertEquals(resultado.prioridades, []);
+});
+
+Deno.test("oportunidades são limitadas, ordenadas e não repetem prioridade", () => {
+  const oportunidades = [1, 2, 3, 4].map((id) => ({
+    professor_id: id,
+    professor: `Professor ${id}`,
+    sinal: id === 4 ? "expansao_sustentavel" : "oportunidade_distribuicao",
+    severidade: "baixo",
+    evidencias: {
+      carteira: id === 4 ? 12 : id,
+      p50_unidade: 10,
+      retencao: 100,
+      presenca: 90,
+      disponibilidade_cadastrada: id !== 4,
+    },
+  }));
+  const prioridade = {
+    professor_id: 1,
+    professor: "Professor 1",
+    sinal: "possivel_sobrecarga",
+    severidade: "medio",
+    evidencias: {
+      carteira: 30,
+      p75_unidade: 24,
+      retencao: 80,
+      meta_retencao: 90,
+      presenca: 70,
+      meta_presenca: 80,
+    },
+  };
+  const resultado = projetarMapaSinaisPublico([...oportunidades, prioridade]);
+  assertEquals(resultado.oportunidades.map((item) => item.professor), [
+    "Professor 2",
+    "Professor 3",
+    "Professor 4",
+  ]);
+  assertEquals(resultado.total_sinais_publicos, resultado.prioridades.length + 3);
+});
+
+Deno.test("formatadores publicam evidência factual e capacidade apenas na qualidade", () => {
+  const resultado = projetarMapaSinaisPublico([{
+    professor_id: 1,
+    professor: "Professor Prioritário",
+    sinal: "possivel_sobrecarga",
+    severidade: "medio",
+    evidencias: {
+      carteira: 30,
+      p75_unidade: 24,
+      retencao: 100,
+      meta_retencao: 90,
+      presenca: 67.5,
+      meta_presenca: 80,
+    },
+  }, {
+    professor_id: 2,
+    professor: "Professor Disponível",
+    sinal: "oportunidade_distribuicao",
+    severidade: "baixo",
+    evidencias: {
+      carteira: 6,
+      p50_unidade: 13.5,
+      retencao: 100,
+      presenca: 81,
+      disponibilidade_cadastrada: true,
+    },
+  }, {
+    professor_id: 3,
+    professor: "Professor Cadastro",
+    sinal: "capacidade_estimada_conferir",
+    severidade: "medio",
+    evidencias: { fonte: "estimada_segmento", turmas: [{ chave: "x" }] },
+  }]);
+  const prioridades = formatarPrioridadesPublicas(resultado);
+  const oportunidades = formatarOportunidadesPublicas(resultado);
+  const qualidade = formatarQualidadeCapacidade(resultado);
+  assertEquals(prioridades.includes("Possível sobrecarga"), false);
+  assertEquals(prioridades.includes("Carteira: *30* | Referência superior da unidade: *24*"), true);
+  assertEquals(oportunidades.includes("Professor Disponível"), true);
+  assertEquals(qualidade.includes("*1* agrupamento de ocupação de *1* professor"), true);
+  assertEquals(qualidade.includes("não representa sobrecarga e não altera nota"), true);
 });

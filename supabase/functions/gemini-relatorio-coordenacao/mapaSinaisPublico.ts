@@ -139,6 +139,105 @@ function construirPrioridades(
   }).slice(0, 5);
 }
 
+function construirOportunidades(
+  sinais: readonly SinalBrutoCoordenacao[],
+  prioridades: readonly PrioridadePublica[],
+): OportunidadePublica[] {
+  const bloqueados = new Set(prioridades.map((item) => item.professor_id));
+  const porProfessor = new Map<number, OportunidadePublica>();
+
+  for (const sinal of sinais) {
+    if (sinal.sinal !== "oportunidade_distribuicao" && sinal.sinal !== "expansao_sustentavel") continue;
+
+    validarIdentidade(sinal);
+    if (bloqueados.has(sinal.professor_id)) continue;
+
+    const evidencia = evidenciasDe(sinal);
+    const carteira = numeroOuNull(evidencia.carteira);
+    const p50 = numeroOuNull(evidencia.p50_unidade);
+    if (carteira === null || p50 === null) continue;
+
+    const distribuicao = sinal.sinal === "oportunidade_distribuicao";
+    if (distribuicao && (carteira >= p50 || evidencia.disponibilidade_cadastrada !== true)) continue;
+    if (!distribuicao && carteira < p50) continue;
+
+    porProfessor.set(sinal.professor_id, {
+      professor_id: sinal.professor_id,
+      professor: sinal.professor,
+      tipo: distribuicao ? "distribuicao" : "expansao_sustentavel",
+      carteira,
+      p50_unidade: p50,
+      retencao: numeroOuNull(evidencia.retencao),
+      presenca: numeroOuNull(evidencia.presenca),
+      disponibilidade_cadastrada: evidencia.disponibilidade_cadastrada === true,
+    });
+  }
+
+  return [...porProfessor.values()].sort((a, b) => {
+    if (a.tipo !== b.tipo) return a.tipo === "distribuicao" ? -1 : 1;
+    const distanciaA = Math.abs(a.carteira - a.p50_unidade);
+    const distanciaB = Math.abs(b.carteira - b.p50_unidade);
+    if (distanciaA !== distanciaB) return distanciaB - distanciaA;
+    return a.professor.localeCompare(b.professor, "pt-BR", { sensitivity: "base" });
+  }).slice(0, 3);
+}
+
+function pt(valor: number): string {
+  return valor.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+}
+
+function plural(total: number, singular: string, plural: string): string {
+  return total === 1 ? singular : plural;
+}
+
+export function formatarPrioridadesPublicas(projecao: ProjecaoMapaSinaisPublico): string {
+  if (projecao.prioridades.length === 0) return "• Nenhuma prioridade pedagógica registrada neste período.";
+
+  return projecao.prioridades.map((item, indice) => {
+    const linhas = [`${indice + 1}. *${item.professor}*`];
+    if (item.capacidade_fisica_excedida) {
+      linhas.push(
+        `   • Ocupação acima da capacidade física cadastrada: *${item.agrupamentos_fisicos}* ${plural(item.agrupamentos_fisicos, "agrupamento", "agrupamentos")}.`,
+      );
+    }
+    if (item.carteira !== null && item.p75_unidade !== null) {
+      linhas.push(`   • Carteira: *${pt(item.carteira)}* | Referência superior da unidade: *${pt(item.p75_unidade)}*`);
+    }
+    if (abaixo(item.presenca, item.meta_presenca)) {
+      linhas.push(`   • Presença: *${pt(item.presenca!)}%* | Referência: *${pt(item.meta_presenca!)}%*`);
+    }
+    if (abaixo(item.retencao, item.meta_retencao)) {
+      linhas.push(`   • Retenção: *${pt(item.retencao!)}%* | Referência: *${pt(item.meta_retencao!)}%*`);
+    }
+    linhas.push(`   • Direcionamento: ${item.direcionamento}`);
+    return linhas.join(String.fromCharCode(10));
+  }).join(`${String.fromCharCode(10)}${String.fromCharCode(10)}`);
+}
+
+export function formatarOportunidadesPublicas(projecao: ProjecaoMapaSinaisPublico): string {
+  if (projecao.oportunidades.length === 0) {
+    return "• Nenhuma oportunidade de distribuição registrada neste período.";
+  }
+
+  return projecao.oportunidades.map((item) => item.tipo === "distribuicao"
+    ? `• *${item.professor}* — carteira ${pt(item.carteira)}, abaixo da referência ${pt(item.p50_unidade)}, com disponibilidade cadastrada.`
+    : `• *${item.professor}* — expansão sustentável com carteira ${pt(item.carteira)}, presença ${item.presenca === null ? "não calculável" : `${pt(item.presenca)}%`} e retenção ${item.retencao === null ? "não calculável" : `${pt(item.retencao)}%`}.`
+  ).join(String.fromCharCode(10));
+}
+
+export function formatarQualidadeCapacidade(projecao: ProjecaoMapaSinaisPublico): string {
+  const { professores_afetados, agrupamentos_estimados } = projecao.qualidade_capacidade;
+  if (professores_afetados === 0) {
+    return "• Leitura de capacidade: nenhuma pendência cadastral identificada.";
+  }
+
+  return [
+    `• Leitura de capacidade: *${agrupamentos_estimados}* ${plural(agrupamentos_estimados, "agrupamento de ocupação", "agrupamentos de ocupação")} de *${professores_afetados}* ${plural(professores_afetados, "professor", "professores")} usam apenas referência estimada.`,
+    "• Complementar os vínculos de turma e sala para permitir a leitura de capacidade física.",
+    "• Essa pendência não representa sobrecarga e não altera nota ou prioridade pedagógica.",
+  ].join(String.fromCharCode(10));
+}
+
 export function listarCodigosSinaisDesconhecidos(
   sinais: readonly SinalBrutoCoordenacao[],
 ): string[] {
@@ -166,7 +265,7 @@ export function projetarMapaSinaisPublico(
   }
 
   const prioridades = construirPrioridades(sinais);
-  const oportunidades: OportunidadePublica[] = [];
+  const oportunidades = construirOportunidades(sinais, prioridades);
   return {
     prioridades,
     oportunidades,
