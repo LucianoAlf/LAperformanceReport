@@ -145,10 +145,30 @@ Modificar `sync-presenca-emusys` (v22) para chamar `GET /v1/professores/` no in�
 > unidade; sem match, abre divergência com `regra:'nome_apenas_sugestao_requer_validacao_humana'`
 > e **não cria vínculo**. O passo 2 da ordem sugerida provavelmente já está resolvido.
 >
-> **AINDA ABERTO (o que importa agora):** passo 1 — o n8n `j41tPbyjGXUQUxrN` continua
-> resolvendo por `professores.nome` sem filtrar `ativo`. É o único que ainda grava (o
-> observador está em `DRY_RUN=true`). Fechar via `DRY_RUN=false` + desligar os branches
-> do n8n no mesmo instante. Passo 3 (backoff/alerta no `sync-presenca-emusys`) também aberto.
+> **✅ PASSO 1 FEITO em 03\08/2026 23:07 BRT** — o lookup do n8n `j41tPbyjGXUQUxrN` (nó
+> `Buscar Professor`) passou a resolver por **telefone** (`professores.telefone_whatsapp`,
+> últimos 11 dígitos) com fallback em `professores_unidades.emusys_nome` **por unidade**,
+> sempre com `ativo = true`. O nó `Extrair Dados` ganhou `telefone_professor` (o campo já
+> vinha no payload e era descartado). Query, provas e plano de verificação em
+> `daily-notes/2026-08-03.md`. **Aguardando confirmação pelos dados dos próximos dias** —
+> não houve teste executável (rodar o fluxo grava experimental real).
+>
+> ⚠️ **Correção ao que estava escrito aqui:** filtrar só `ativo = true` **não resolve** —
+> testado, os 3 casos voltam NULL, porque o nome do webhook é o da unidade e o cadastro vivo
+> tem outro nome. Sozinho, troca "professor errado" por "sem professor".
+>
+> ⚠️ **Caso novo não previsto:** professor **44 Juliana Azevedo** recebeu experimental em
+> 29\07 (aula 01\08). Não é cadáver de merge — é professora desativada de verdade (última
+> aula 18\07). Mesmo bug, causa diferente. Pendente conferir com a secretaria.
+>
+> **AINDA ABERTO:** passo 2 (`sync-professores-emusys` casa por nome exato), passo 3
+> (backoff/alerta no `sync-presenca-emusys`) e passo 4 (reatribuir 54→52, 57→46 — só depois
+> de confirmar a torneira fechada). O observador segue em `DRY_RUN=true`.
+>
+> **Pedido ao fornecedor:** varridos 128 webhooks reais de 60 dias — **nenhum** evento do
+> Emusys manda id de professor, mas o MESMO payload traz `sala_id` e `lead_id`. Pedir ao
+> suporte que inclua `professor_id` no webhook de experimental; com ele, o lookup vira uma
+> linha e o telefone deixa de ser necessário.
 
 **Descrição:** Vários pontos do sistema resolvem professor comparando **nome**. Nome não
 identifica professor, por dois motivos que ocorrem ao mesmo tempo:
@@ -204,7 +224,7 @@ Os 79 pares `(professor, unidade)` estão limpos — 1 `emusys_id` por unidade, 
 O modelo de dados já está certo; o que erra é quem consulta.
 
 **Ordem sugerida:**
-1. Corrigir o lookup no n8n `j41tPbyjGXUQUxrN` → fecha a torneira (sem isso o resto volta).
+1. ~~Corrigir o lookup no n8n `j41tPbyjGXUQUxrN`~~ → **feito 03\08/2026**, ver nota no topo.
 2. Corrigir `sync-professores-emusys` (chave por telefone; hoje casa por nome exato).
 3. Adicionar **backoff/alerta** no `sync-presenca-emusys` — falha permanente não pode
    virar 31 retries silenciosos.
