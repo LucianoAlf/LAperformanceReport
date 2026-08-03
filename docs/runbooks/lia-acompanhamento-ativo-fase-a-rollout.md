@@ -321,12 +321,23 @@ Execução remota autorizada e evidências:
    `provider_message_id=3EB0C4D9E18ECC739FFC1F`; após o eco do provedor, esse
    ID permaneceu com zero linhas em `admin_mensagens` e zero linhas em
    `pesquisa_evasao_mensagens`;
-7. `alertas_producao_liberados=false` e o cron de consumo continua ausente.
+7. uma mensagem de outro número controlado, identificada como
+   `FLUXO LEGÍTIMO 16:05`, entrou normalmente às
+   `2026-08-03 16:06:57.376961+00`, com `direcao=entrada`, caixa 3 e conversa
+   aberta;
+8. a recontagem conjunta dos três `provider_message_id` dos alertas confirmou
+   zero linhas em `admin_mensagens` e zero linhas em
+   `pesquisa_evasao_mensagens`, enquanto a entrada controlada permaneceu com
+   exatamente uma linha;
+9. o alerta produtivo de Miguel Santos Borges continua intacto em
+   `aguardando_liberacao`, destinatário 29, caixa 3, zero tentativas e sem
+   `provider_message_id`;
+10. `alertas_producao_liberados=false` e o cron de consumo continua ausente.
 
-Ainda falta a prova controlada de uma entrada legítima `fromMe=false` depois da
-versão 85. A migration de ativação e o cron continuam proibidos enquanto esse
-gate não for aceito. O frontend que interpreta `destino=pesquisas-evasao`
-também permanece local até a publicação autorizada.
+O gate técnico do filtro de eco está provado. A migration de ativação e o cron
+continuam proibidos até o aceite humano do piloto. O frontend que interpreta
+`destino=pesquisas-evasao` também permanece na branch isolada até a publicação
+autorizada.
 
 ## Gate 4 — ativação humana e cron, artefato ainda inexistente
 
