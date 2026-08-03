@@ -1,0 +1,95 @@
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const migrationPath = resolve(
+  root,
+  'supabase/migrations/20260803090000_lia_alertas_privados_fase_a.sql',
+);
+const fixturePath = resolve(
+  root,
+  'tests/fixtures/lia_alertas_privados_fase_a_pg17.sql',
+);
+const read = (path) => existsSync(path) ? readFileSync(path, 'utf8') : '';
+const sql = read(migrationPath);
+const fixture = read(fixturePath);
+
+test('fase A nasce bloqueada e usa destinos governados', () => {
+  assert.ok(sql, `migration ausente: ${migrationPath}`);
+  assert.match(sql, /create table public\.lia_destinos_privados/i);
+  assert.match(sql, /create table public\.lia_alertas_configuracao/i);
+  assert.match(sql, /create table public\.lia_pesquisa_eventos/i);
+  assert.match(sql, /create table public\.lia_alertas_privados/i);
+  assert.match(sql, /alertas_producao_liberados[\s\S]*default false/i);
+  assert.match(sql, /\(2,\s*'5521981278047'/i);
+  assert.match(sql, /\(29,\s*'5521984695110'/i);
+  assert.match(sql, /\(30,\s*'5521994696489'/i);
+  assert.doesNotMatch(sql, /coalesce\([^)]*usuarios\.telefone/i);
+});
+
+test('tabelas privadas fecham RLS e ACL para clientes e agentes', () => {
+  for (const tabela of [
+    'lia_destinos_privados',
+    'lia_alertas_configuracao',
+    'lia_pesquisa_eventos',
+    'lia_alertas_privados',
+  ]) {
+    assert.match(
+      sql,
+      new RegExp(`alter table public\\.${tabela} enable row level security`, 'i'),
+    );
+    assert.match(
+      sql,
+      new RegExp(`revoke all on (?:table )?public\\.${tabela}[\\s\\S]*from public, anon, authenticated`, 'i'),
+    );
+  }
+  assert.match(sql, /fabio_agent[\s\S]*lia_acesso_restrito/i);
+  assert.match(sql, /sol_acesso_restrito[\s\S]*ml_jobs/i);
+});
+
+test('evento pertence ao operador original e nunca faz fanout', () => {
+  assert.match(sql, /executado_por_usuario_id/i);
+  assert.match(sql, /idempotency_key text not null unique/i);
+  assert.doesNotMatch(sql, /usuario_id\s+in\s*\(\s*29\s*,\s*30/i);
+  assert.doesNotMatch(sql, /usuarios\.telefone/i);
+});
+
+test('expurgo remove somente snapshots terminais depois de 30 dias', () => {
+  assert.match(sql, /create or replace function public\.expurgar_lia_alertas_privados\(\)/i);
+  assert.match(sql, /status in \('enviado', 'falha', 'resultado_ambiguo', 'fila_administrativa'\)/i);
+  assert.match(sql, /interval '30 days'/i);
+  assert.match(sql, /destino_snapshot = null[\s\S]*mensagem_renderizada = null/i);
+  assert.match(sql, /lia-alertas-privados-expurgo-diario/i);
+});
+
+test('fixture PG17 contém provas executáveis de isolamento e idempotência', () => {
+  assert.ok(fixture, `fixture ausente: ${fixturePath}`);
+  for (const evidence of [
+    /has_table_privilege[\s\S]*authenticated/i,
+    /has_table_privilege[\s\S]*service_role/i,
+    /uma rodada nao pode gerar dois alertas/i,
+    /nao pode haver notificacao cruzada/i,
+    /teste comum nao pode entrar na outbox produtiva/i,
+    /LIA_ALERTAS_PRIVADOS_FASE_A_PG17_OK/,
+  ]) {
+    assert.match(fixture, evidence);
+  }
+});
+
+test(
+  'fixture executável passa em PostgreSQL 17 isolado',
+  { skip: !process.env.PESQUISA_EVASAO_PG17_CONTAINER },
+  async () => {
+    const { runPesquisaEvasaoPg17Fixture } = await import(
+      './helpers/runPesquisaEvasaoPg17Fixture.mjs'
+    );
+    const result = runPesquisaEvasaoPg17Fixture({
+      container: process.env.PESQUISA_EVASAO_PG17_CONTAINER,
+      fixturePath: '/workspace/tests/fixtures/lia_alertas_privados_fase_a_pg17.sql',
+    });
+    assert.match(result.stdout, /LIA_ALERTAS_PRIVADOS_FASE_A_PG17_OK/);
+  },
+);
