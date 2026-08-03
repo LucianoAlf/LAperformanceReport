@@ -120,6 +120,7 @@ const moeda = new Intl.NumberFormat('pt-BR', {
 const inteiro = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 
 function numero(valor: unknown, casas = 1): string {
+  if (valor === null || valor === undefined || valor === '') return 'não calculável';
   const convertido = Number(valor);
   if (!Number.isFinite(convertido)) return 'não calculável';
   return convertido.toLocaleString('pt-BR', {

@@ -223,6 +223,27 @@ test('presenca usa o fechamento ponderado compartilhado pelo mensal', () => {
   assert.match(texto, /Pendências de evidência: \*0\*/);
 });
 
+test('presenca indisponivel nao vira zero artificial', () => {
+  const contratoSemPresenca = structuredClone(contrato);
+  contratoSemPresenca.presenca = {
+    presenca_media: null,
+    professores_com_evidencia: 0,
+    pendencias: 32,
+    eventos_elegiveis: 0,
+    presencas_confirmadas: 0,
+  };
+
+  const texto = gerarRelatorioCoordenacaoCanonico({
+    tipo: 'presenca',
+    contrato: contratoSemPresenca,
+    dataGeracao: new Date('2026-08-03T09:00:00-03:00'),
+  });
+
+  assert.match(texto, /Presença média ponderada: \*não calculável%\*/);
+  assert.doesNotMatch(texto, /Presença média ponderada: \*0,0%\*/);
+  assert.match(texto, /Pendências de evidência: \*32\*/);
+});
+
 test('retencao separa movimento total de impacto atribuivel e explica todo o MRR', () => {
   const texto = gerarRelatorioCoordenacaoCanonico(params('retencao'));
 
