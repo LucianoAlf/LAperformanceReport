@@ -8,6 +8,12 @@ const performanceMigrationPath =
   'supabase/migrations/20260803224500_health_score_v3_ciclo_performance.sql';
 const openPeriodMigrationPath =
   'supabase/migrations/20260803225500_health_score_v3_periodo_aberto_carteira.sql';
+const timeoutMigrationPath =
+  'supabase/migrations/20260803230500_health_score_v3_performance_timeout.sql';
+const payloadMigrationPath =
+  'supabase/migrations/20260803231500_health_score_v3_performance_payload.sql';
+const activeRosterMigrationPath =
+  'supabase/migrations/20260803232500_health_score_v3_equipe_ativa.sql';
 const periodSourcePath = 'src/lib/healthScoreProfessorV3Periodos.ts';
 const periodMigrationPath =
   'supabase/migrations/20260719120000_health_score_v3_ciclos_publicacao_parcial.sql';
@@ -112,4 +118,68 @@ test('periodo aberto usa a mesma carteira canonica da aba Carteira sem alterar h
   assert.match(sql, /get_carteira_professores\(p_unidade_id\)/i);
   assert.match(sql, /get_hs_prof_v3_segmentadas_agregadas_base_20260803\(/i);
   assert.match(sql, /numero_alunos[\s\S]*diagnostico/i);
+});
+
+test('periodo aberto elimina a segunda leitura historica da carteira segmentada', () => {
+  assert.equal(
+    fs.existsSync(timeoutMigrationPath),
+    true,
+    'migration de eliminacao do timeout V3 ainda nao existe',
+  );
+  const sql = read(timeoutMigrationPath);
+
+  assert.match(
+    sql,
+    /get_health_score_professor_v3_metricas_segmentadas_v1[\s\S]*v_competencia\s*=\s*v_competencia_atual/i,
+  );
+  assert.match(sql, /hs_v3_segmentos_detalhe_base_canonica\(/i);
+  assert.match(sql, /natureza_operacional\s*=\s*'pedagogica'/i);
+  assert.match(sql, /hs_v3_metricas_segmentadas_pre_cursos_pedagogicos_v1\(/i);
+});
+
+test('produtor mensal e ciclo nao atravessa wrappers legados nem triplica conversao', () => {
+  const sql = read(timeoutMigrationPath);
+
+  assert.match(sql, /get_health_score_prof_v3_metricas_base_20260728_c95\(/i);
+  assert.doesNotMatch(sql, /get_hs_prof_v3_metricas_periodo_base_20260803\(/i);
+  assert.equal(
+    (sql.match(/get_health_score_professor_v3_conversao_mensal\(/gi) || []).length,
+    1,
+  );
+  assert.equal(
+    (sql.match(/get_health_score_professor_v3_conversao_ciclo\(/gi) || []).length,
+    1,
+  );
+});
+
+test('contrato principal compacta listas segmentadas sem perder os totais canonicos', () => {
+  assert.equal(
+    fs.existsSync(payloadMigrationPath),
+    true,
+    'migration de compactacao do payload V3 ainda nao existe',
+  );
+  const sql = read(payloadMigrationPath);
+
+  assert.match(sql, /-\s*'segmentos_resumo'/i);
+  assert.match(sql, /-\s*'divergencias'/i);
+  assert.match(sql, /-\s*'alertas_capacidade'/i);
+  assert.match(sql, /'segmentos_capacidade_excedida'/i);
+  assert.match(sql, /'dados_sem_resolucao'/i);
+  assert.match(sql, /'estados_resolucao'/i);
+  assert.match(sql, /'codigo_evidencia'/i);
+});
+
+test('contrato principal exclui identidades inativas e mescladas da equipe publicada', () => {
+  assert.equal(
+    fs.existsSync(activeRosterMigrationPath),
+    true,
+    'migration do roster ativo do Health Score V3 ainda nao existe',
+  );
+  const sql = read(activeRosterMigrationPath);
+
+  assert.match(sql, /join\s+public\.professores\s+p[\s\S]*p\.ativo\s*=\s*true/i);
+  assert.match(sql, /from\s+public\.professores_unidades\s+pu/i);
+  assert.match(sql, /pu\.emusys_ativo\s*=\s*true/i);
+  assert.match(sql, /coalesce\(pu\.validacao_status,\s*'validado'\)\s*<>\s*'ignorado'/i);
+  assert.match(sql, /p_unidade_id\s+is\s+null\s+or\s+pu\.unidade_id\s*=\s*p_unidade_id/i);
 });

@@ -462,15 +462,20 @@ function gerarRetencao(params: GerarRelatorioCoordenacaoCanonicoParams): string 
     '',
     '🚪 *MOVIMENTAÇÕES DO PERÍODO*',
     ...(movimentos.length > 0
-      ? movimentos.flatMap((movimento, indice) => [
-        `${indice + 1}) ${movimento.aluno_nome}`,
-        `   • Data: ${formatarData(movimento.data)} | Tipo: ${movimento.tipo === 'nao_renovacao' ? 'Não renovação' : 'Evasão'}`,
-        `   • Professor: ${movimento.professor_nome || 'Não informado'}`,
-        `   • MRR perdido: ${formatarMoeda(movimento.valor_mrr)}`,
-        `   • Impacto no indicador do professor: ${movimento.conta_score_professor ? 'Sim' : 'Não'}`,
-        movimento.motivo ? `   • Motivo: ${movimento.motivo}` : '',
-        '',
-      ].filter(Boolean))
+      ? movimentos.flatMap((movimento, indice) => {
+        const professorNome = movimento.professor_id == null
+          ? 'Não informado'
+          : movimento.professor_nome || 'Não informado';
+        return [
+          `${indice + 1}) ${movimento.aluno_nome}`,
+          `   • Data: ${formatarData(movimento.data)} | Tipo: ${movimento.tipo === 'nao_renovacao' ? 'Não renovação' : 'Evasão'}`,
+          `   • Professor: ${professorNome}`,
+          `   • MRR perdido: ${formatarMoeda(movimento.valor_mrr)}`,
+          `   • Impacto no indicador do professor: ${movimento.conta_score_professor ? 'Sim' : 'Não'}`,
+          movimento.motivo ? `   • Motivo: ${movimento.motivo}` : '',
+          '',
+        ].filter(Boolean);
+      })
       : ['• Nenhuma evasão ou não renovação válida nesta competência.']),
     '🛡️ *RETENÇÃO ABAIXO DE 100%*',
     ...(atencao.length > 0

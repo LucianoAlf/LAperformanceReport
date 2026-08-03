@@ -271,6 +271,8 @@ test('retencao separa movimento total de impacto atribuivel e explica todo o MRR
   assert.match(texto, /Aluno Movimento Geral/);
   assert.match(texto, /Aluno Movimento Atribuivel/);
   assert.match(texto, /Aluno sem professor informado/);
+  assert.match(texto, /Professor: N\u00e3o informado/);
+  assert.doesNotMatch(texto, /Professor n\u00c3\u00a3o informado/);
 });
 
 test('texto publico sai em UTF-8 legivel e sem nomenclatura interna', () => {
