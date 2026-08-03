@@ -33,6 +33,7 @@ import {
 import {
   formatarRelatorioAdminMensalCanonico,
   formatarRelatorioComercialMensalCanonico,
+  rotuloCompetencia,
 } from '../_shared/relatorios-mensais-canonicos.ts';
 
 const FIELDS = 'id,nome,provedor,uazapi_url,uazapi_token,waha_url,waha_session,waha_api_key';
@@ -2100,15 +2101,45 @@ serve(async (req) => {
         parametrosMensais,
       );
       if (snapshotError) {
-        const acessoNegado = snapshotError.message?.includes('ACESSO_NEGADO');
+        if (snapshotError.message?.includes('ACESSO_NEGADO')) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Você não tem acesso a esta unidade.' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+
+        const dominioSnapshot = tipo === 'administrativo'
+          ? 'relatorio_admin_mensal'
+          : 'relatorio_comercial_mensal';
+        const { data: fechados } = await supabase
+          .from('fechamento_mensal_snapshots')
+          .select('ano, mes')
+          .eq('dominio', dominioSnapshot)
+          .eq('unidade_id', payload.unidade)
+          .eq('status', 'fechado')
+          .eq('escopo', 'unidade');
+
+        const alvo = payload.ano! * 100 + payload.mes!;
+        const anterior = (fechados ?? [])
+          .map((item) => ({ ano: item.ano as number, mes: item.mes as number }))
+          .filter((item) => item.ano * 100 + item.mes <= alvo)
+          .sort((a, b) => (b.ano * 100 + b.mes) - (a.ano * 100 + a.mes))[0] ?? null;
+
         return new Response(
           JSON.stringify({
             success: false,
-            error: acessoNegado
-              ? 'Você não tem acesso a esta unidade.'
-              : 'O fechamento oficial deste mês ainda não está disponível.',
+            motivo: 'fechamento_indisponivel',
+            error: 'O fechamento oficial deste mês ainda não está disponível.',
+            competencia_solicitada: { ano: payload.ano, mes: payload.mes },
+            fallback: anterior
+              ? {
+                ano: anterior.ano,
+                mes: anterior.mes,
+                rotulo: rotuloCompetencia(anterior.ano, anterior.mes),
+              }
+              : null,
           }),
-          { status: acessoNegado ? 403 : 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }
 

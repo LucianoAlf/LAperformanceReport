@@ -6,6 +6,10 @@ const MESES = [
   "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO",
 ];
 
+export function rotuloCompetencia(ano: number, mes: number): string {
+  return `${MESES[mes - 1] ?? "MÊS"}/${ano}`;
+}
+
 function numero(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
