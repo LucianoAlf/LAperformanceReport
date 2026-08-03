@@ -23,12 +23,14 @@
 9. Preview antiga preserva o texto congelado.
 10. Pergunta usa `> *...*`; sinceridade usa `_..._`; não existe separador.
 11. Produção exige nova autorização e reconfirmação do project ref.
-12. Antes de qualquer rollout da V2, o webhook inbound corrigido deve estar
-    publicado e revalidado ponta a ponta; código local não prova runtime.
+12. O gate do webhook inbound foi concluído em 03/08/2026 na versão 85 de
+    produção, com `resposta_status`, sem fallback global e sem payload integral
+    no debug log. Novos redeploys devem preservar esses contratos, mas esse
+    gate não permanece aberto.
 13. O fallback neutro é esperado para a maioria dos nomes e não é defeito. A
     ampliação do dicionário fica fora deste plano.
 
-## Task 0 — Gate local do retorno da pesquisa
+## Task 0 — Gate do retorno da pesquisa — concluído em produção
 
 **Files:**
 
@@ -45,12 +47,14 @@
 - [x] Confirmar que inbox administrativa, CRM, status, reação, edição e
   `buttonOrListid -> processar-resposta-pesquisa` permanecem roteados.
 
-### Step 2: separar fonte de runtime
+### Step 2: registrar a evidência de runtime
 
-- [x] Registrar que a correção já existe no código local.
-- [x] Registrar que produção continua pendente de redeploy e teste ponta a
-  ponta, conforme auditoria operacional de Alf.
-- [x] Não fazer deploy nesta execução local.
+- [x] Confirmar `webhook-whatsapp-inbox` versão 85 ativa em produção em
+  03/08/2026.
+- [x] Confirmar que a resposta real da família de Miguel Santos Borges foi
+  associada à pesquisa correta e gerou o alerta privado da Fase A para Jéssica.
+- [x] Tratar este gate como concluído; qualquer redeploy futuro deve executar
+  regressão dos mesmos contratos, sem reabrir o bloqueio histórico.
 
 ## Task 1 — Tratamento gramatical puro
 
@@ -627,14 +631,14 @@ git diff origin/main...HEAD -- supabase/functions/enviar-pesquisa-evasao supabas
 
 ## Task 8 — Rollout assistido, somente com nova autorização
 
-### Gate 0: retorno seguro obrigatório
+### Gate 0: retorno seguro — concluído em 03/08/2026
 
-- [ ] Reconfirmar que `webhook-whatsapp-inbox` produtivo contém a correção.
-- [ ] Fazer envio em modo teste, responder no número interno e provar associação
-  à pesquisa exata e preenchimento de `resposta_status`.
-- [ ] Confirmar que nenhuma outra pesquisa mudou e que `webhook_debug_log` não
-  recebeu o payload integral.
-- [ ] Reportar e parar; sem esse gate verde, não iniciar a Prosódia V2.
+- [x] `webhook-whatsapp-inbox` versão 85 ativo em produção.
+- [x] `resposta_status` preenchido e associação exata comprovada com a resposta
+  real da família de Miguel Santos Borges.
+- [x] Fallback global removido e payload integral ausente do debug log.
+- [x] Gate encerrado; manter esses itens somente como regressão obrigatória em
+  qualquer redeploy futuro do webhook.
 
 ### Gate 1: pré-flight
 

@@ -164,14 +164,19 @@ entrega; não é mais uma frente separada da Prosódia V2.
 - Identidade, artigo, template e mensagem continuam resolvidos no servidor.
 - O hash e o snapshot da prévia continuam cobrindo a mensagem final.
 
-### 8.1 Pré-requisito do retorno
+### 8.1 Gate do retorno — concluído
 
-A Prosódia V2 não altera o webhook inbound, mas seu rollout é proibido enquanto
-`webhook-whatsapp-inbox` não estiver publicado e revalidado em produção com o
-contrato já presente no código local: preencher `resposta_status`, remover o
-fallback global que podia escolher outra família e não persistir payload
-integral em `webhook_debug_log`. Melhorar a pergunta sem garantir a associação
-segura da resposta não conclui o fluxo.
+O gate do retorno foi concluído em 03/08/2026. O
+`webhook-whatsapp-inbox` está ativo na versão 85 em produção, preenchendo
+`resposta_status`, sem o fallback global que podia escolher outra família e sem
+persistir payload integral em `webhook_debug_log`.
+
+A resposta real da família de Miguel Santos Borges foi processada por essa
+versão e gerou corretamente o alerta privado da Fase A para Jéssica. Portanto,
+esta seção passa a registrar evidência histórica e não é um bloqueio aberto
+para novos rollouts da Prosódia ou da prévia editável. Qualquer redeploy futuro
+do webhook ainda deve preservar e testar esses três contratos, mas não faz
+parte desta entrega.
 
 ## 9. Validação
 
