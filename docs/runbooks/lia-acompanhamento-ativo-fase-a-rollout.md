@@ -213,6 +213,38 @@ ambiente `teste`, operador/destinatário 2, destino governado final `8047`, caix
 entrega teste para 29 ou 30. Produção continua bloqueada, sem cron, e o alerta de
 Miguel Santos Borges permanece em `aguardando_liberacao` para a Jéssica.
 
+### Piloto 1 e correção de encoding em 03/08/2026
+
+O alerta `77158141-e179-45fe-9edc-0dbb553f2822` foi processado exatamente uma
+vez pela caixa 3 e confirmado pelo provedor com
+`message_id=3EB01E74F9436FFE432905`. O isolamento passou: destino final `8047`,
+uma tentativa, ambiente `teste`, nenhuma entrega para 29/30 e o alerta produtivo
+de Miguel permaneceu em `aguardando_liberacao`.
+
+O aceite foi bloqueado porque emoji e acentos chegaram como mojibake. A
+investigação byte a byte localizou a corrupção antes da Edge: tanto o alerta
+armazenado quanto uma chamada nova de `fn_lia_renderizar_alerta_pesquisa`
+devolviam o prefixo UTF-8 corrompido, e `pg_get_functiondef` confirmou os
+literais já quebrados no Postgres. O dispatcher, o `JSON.stringify`, o header
+`Content-Type: application/json` e `/send/text` não eram a origem; os fluxos
+antigos que enviam corretamente usam o mesmo contrato HTTP.
+
+A correção versionada local
+`20260803124500_lia_alertas_utf8_correcao.sql` foi registrada em produção como
+`20260803153255_lia_alertas_utf8_correcao`. Ela recria somente o renderizador
+com fonte integralmente ASCII e escapes Unicode `U&`, sem alterar alertas
+históricos, liberar produção ou criar cron. PostgreSQL 17 validou os três
+templates com emoji e acentos corretos; a consulta pós-migration confirmou o
+prefixo canônico iniciado por bytes `f09f9494`.
+
+A Edge `processar-alertas-lia` foi republicada sem mudança de contrato como
+versão 3, `ACTIVE`, com `verify_jwt=true`. O piloto 2 ficou preparado, mas não
+foi enviado: alerta `1c69ed9f-da4c-4f9d-97c9-2add0a013689`, tipo `opt_out`,
+ambiente `teste`, operador/destinatário 2, destino final `8047`, caixa 3,
+`status=pendente`, zero tentativas e sem `provider_message_id`. O texto
+armazenado começa por `🔕 *Família recusou novos contatos — Pesquisa de
+evasão*`. Produção continua bloqueada e não existe cron de entrega.
+
 ## Gate 4 — ativação humana e cron, artefato ainda inexistente
 
 Somente depois do aceite do piloto:

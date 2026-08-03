@@ -156,6 +156,24 @@ insert into public.whatsapp_caixas(
 
 \ir ../../supabase/migrations/20260803090000_lia_alertas_privados_fase_a.sql
 \ir ../../supabase/migrations/20260803210000_lia_alertas_dispatcher_edge.sql
+\ir ../../supabase/migrations/20260803124500_lia_alertas_utf8_correcao.sql
+
+select public.fixture_assert(
+  (select mensagem_renderizada =
+    E'🔔 *Resposta recebida — Pesquisa de evasão*\n\nAluno: Davi\nUnidade: Barra\n\nA família respondeu à pesquisa que você enviou. O conteúdo permanece protegido no LA Report.\n\n👉 https://la-performance-report.vercel.app/app/sucesso-aluno'
+   from public.fn_lia_renderizar_alerta_pesquisa('resposta_nova', 'Davi', 'Barra')),
+  'renderizador precisa preservar UTF-8 na resposta nova'
+);
+select public.fixture_assert(
+  (select mensagem_renderizada like E'🔔 *Nova rodada após revisão*\n\nAluno: Davi\nUnidade: Barra\n\nA família enviou novo conteúdo%👉 https://%'
+   from public.fn_lia_renderizar_alerta_pesquisa('rodada_nova_pos_revisao', 'Davi', 'Barra')),
+  'renderizador precisa preservar UTF-8 na rodada nova'
+);
+select public.fixture_assert(
+  (select mensagem_renderizada like E'🔕 *Família recusou novos contatos — Pesquisa de evasão*\n\nAluno: Davi\nUnidade: Barra\n\nA família pediu para não receber%👉 https://%'
+   from public.fn_lia_renderizar_alerta_pesquisa('opt_out', 'Davi', 'Barra')),
+  'renderizador precisa preservar UTF-8 no opt-out'
+);
 
 select public.fixture_assert(
   not has_table_privilege('authenticated', 'public.lia_destinos_privados', 'select'),
