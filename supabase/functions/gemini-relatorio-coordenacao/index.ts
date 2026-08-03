@@ -2,7 +2,14 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { filtrarSinaisParaNarrativa } from "./narrativa.ts";
+import {
+  formatarOportunidadesPublicas,
+  formatarPrioridadesPublicas,
+  formatarQualidadeCapacidade,
+  listarCodigosSinaisDesconhecidos,
+  projetarMapaSinaisPublico,
+  type ProjecaoMapaSinaisPublico,
+} from "./mapaSinaisPublico.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -138,15 +145,6 @@ const rotulosEvidencia: Record<string, string> = {
   valida: "evidência suficiente",
 };
 
-const rotulosSinais: Record<string, string> = {
-  possivel_sobrecarga: "Possível sobrecarga",
-  expansao_sustentavel: "Expansão sustentável",
-  oportunidade_distribuicao: "Oportunidade de distribuição",
-  concentracao_operacional: "Concentração operacional",
-  capacidade_estimada_conferir: "Capacidade estimada — conferir cadastro",
-  maturacao: "Professor em maturação",
-};
-
 function numero(valor: unknown, casas = 1): string {
   if (valor === null || valor === undefined || valor === "") return "não calculável";
   const convertido = Number(valor);
@@ -193,13 +191,14 @@ function assertPublicReportSafe(texto: string): void {
   }
 }
 
-function narrativaDeterministica(dados: RelatorioCoordenacaoCanonico): NarrativaCoordenacao {
+function narrativaDeterministica(
+  dados: RelatorioCoordenacaoCanonico,
+  mapaPublico: ProjecaoMapaSinaisPublico,
+): NarrativaCoordenacao {
   const resumo = dados.resumo_equipe;
   const total = inteiro(resumo.total_professores);
   const comScore = inteiro(resumo.com_score);
   const pendentes = inteiro(resumo.com_evidencia_pendente);
-  const alertas = filtrarSinaisParaNarrativa(dados.mapa_sinais)
-    .filter((sinal) => sinal.severidade !== "baixo");
 
   return {
     resumo: `A equipe tem ${total} professores ativos; ${comScore} possuem nota disponível e ${pendentes} precisam completar evidências. O período deve ser lido como diagnóstico pedagógico, com foco em apoio e evolução.`,
@@ -207,11 +206,12 @@ function narrativaDeterministica(dados: RelatorioCoordenacaoCanonico): Narrativa
       `${inteiro(resumo.saudaveis)} professores aparecem em faixa saudável entre os que possuem evidência suficiente.`,
       `${inteiro(dados.presenca.professores_com_evidencia)} professores possuem presença observável no período.`,
     ],
-    pontos_atencao: alertas.slice(0, 3).map((sinal) => `${sinal.professor}: ${rotulosSinais[sinal.sinal] || sinal.sinal}.`),
+    pontos_atencao: mapaPublico.prioridades.slice(0, 3)
+      .map((item) => `${item.professor}: revisar as evidências pedagógicas destacadas no mapa priorizado.`),
     treinamentos: [],
     plano_acao: [
-      "Revisar primeiro os sinais de maior severidade com evidências concretas.",
-      "Completar cadastros e vínculos antes de interpretar professores com evidência pendente.",
+      "Revisar primeiro as prioridades pedagógicas com evidências concretas.",
+      "Tratar pendências cadastrais na qualidade dos dados, sem convertê-las em julgamento do professor.",
       "Acompanhar carteira, presença e retenção em conjunto, sem usar um indicador isolado como julgamento.",
     ],
   };
@@ -255,9 +255,10 @@ async function fetchOpenAIComRetry(url: string, options: RequestInit, maxRetries
 
 async function gerarNarrativa(
   dados: RelatorioCoordenacaoCanonico,
+  mapaPublico: ProjecaoMapaSinaisPublico,
   apiKey: string | undefined,
 ): Promise<NarrativaCoordenacao> {
-  const fallback = narrativaDeterministica(dados);
+  const fallback = narrativaDeterministica(dados, mapaPublico);
   if (!apiKey) return fallback;
 
   const catalogo = (dados.agenda_treinamentos.catalogo || []).map((item) => ({
@@ -271,7 +272,10 @@ async function gerarNarrativa(
       contexto: dados.periodo.contexto_operacional,
     },
     resumo_equipe: dados.resumo_equipe,
-    mapa_sinais: filtrarSinaisParaNarrativa(dados.mapa_sinais),
+    mapa_sinais_publico: {
+      prioridades: mapaPublico.prioridades,
+      oportunidades: mapaPublico.oportunidades,
+    },
     qualidade_dados: dados.qualidade_dados,
     catalogo_treinamentos: catalogo,
   };
@@ -295,7 +299,8 @@ async function gerarNarrativa(
               "Você redige uma leitura pedagógica breve e empática para a Coordenação de uma escola de música.",
               "Use somente os sinais recebidos. Não calcule números, notas, médias, taxas, classificações ou rankings.",
               "Não invente fatos nem recomende punição. Sugira treinamentos apenas do catálogo recebido.",
-              "Capacidade estimada sem turma ou sala vinculada não comprova sobrecarga e não pode, isoladamente, gerar ponto de atenção, plano de ação ou treinamento.",
+              "Prioridades, oportunidades, limites e ordenação já estão prontos na projeção pública; não promova, remova ou reclassifique professores.",
+              "Pontos de atenção e treinamentos podem mencionar somente professores presentes em prioridades; oportunidades servem apenas à redistribuição ou conquista.",
               "Responda JSON com: resumo, conquistas[], pontos_atencao[], treinamentos[{professor,treinamento,motivo}], plano_acao[].",
             ].join(" "),
           },
@@ -333,18 +338,10 @@ function descreverMetrica(chave: string, metrica: MetricaProfessor | undefined):
   return `${rotulo}: ${numero(metrica.valor, 1)}${unidade}${amostra}${peso}`;
 }
 
-function descreverSinal(sinal: SinalContrato): string {
-  const evidencia = sinal.evidencias || {};
-  const carteira = evidencia.carteira !== undefined ? ` Carteira: ${inteiro(evidencia.carteira)}.` : "";
-  if (sinal.sinal === "capacidade_estimada_conferir") {
-    return `${sinal.professor} — ${rotulosSinais[sinal.sinal]} (${sinal.severidade}). A referência é estimada porque não há turma ou sala física vinculada.`;
-  }
-  return `${sinal.professor} — ${rotulosSinais[sinal.sinal] || sinal.sinal} (${sinal.severidade}).${carteira}`;
-}
-
 function renderizarRelatorio(
   dados: RelatorioCoordenacaoCanonico,
   narrativa: NarrativaCoordenacao,
+  mapaPublico: ProjecaoMapaSinaisPublico,
 ): string {
   const periodo = dados.periodo;
   const resumo = dados.resumo_equipe;
@@ -358,7 +355,6 @@ function renderizarRelatorio(
       ? "Leitura do mês em andamento. As notas acompanham as evidências já registradas e evoluem com a operação."
       : "O período segue calendário regular e cada indicador respeita sua evidência disponível.";
 
-  const sinais = dados.mapa_sinais.map(descreverSinal);
   const professoresComAmostraMinima = dados.experimentais.professores_com_amostra_minima
     ?? dados.experimentais.professores_com_amostra;
   const professoresComConversaoPontuando = dados.experimentais.professores_com_conversao_pontuando
@@ -426,9 +422,13 @@ function renderizarRelatorio(
     `• Faixa crítica: *${inteiro(resumo.criticos)}*`,
     `• Média das notas visíveis: *${numero(resumo.score_medio_visivel, 1)}*`,
     "",
-    "🚦 *MAPA DE SINAIS*",
+    "🚦 *PRIORIDADES PEDAGÓGICAS*",
     "───────────────────────",
-    listaOuNenhum(sinais, "Nenhum sinal prioritário registrado neste período."),
+    formatarPrioridadesPublicas(mapaPublico),
+    "",
+    "🌱 *OPORTUNIDADES DE DISTRIBUIÇÃO*",
+    "───────────────────────",
+    formatarOportunidadesPublicas(mapaPublico),
     "",
     "👥 *PROFESSORES DA EQUIPE*",
     "───────────────────────",
@@ -463,7 +463,7 @@ function renderizarRelatorio(
     "───────────────────────",
     `• Alunos acompanhados nas carteiras: *${inteiro(dados.carteira_carga.alunos_na_carteira)}*`,
     `• Média por professor com carteira observada: *${numero(dados.carteira_carga.media_por_professor, 1)}*`,
-    `• Sinais de carga ou distribuição: *${inteiro(dados.carteira_carga.alertas_de_carga)}*`,
+    `• Sinais públicos de carga ou distribuição: *${inteiro(mapaPublico.total_sinais_publicos)}*`,
     "• A carteira contextualiza a operação e não aumenta nem reduz a nota.",
     "",
     "🏆 *RANKING DO CICLO*",
@@ -484,6 +484,7 @@ function renderizarRelatorio(
     "───────────────────────",
     `• Professores sem dados oficiais disponíveis: *${inteiro(dados.qualidade_dados.professores_sem_fonte)}*`,
     "• Ausência de evidência aparece com o motivo real e nunca é tratada como nota zero.",
+    formatarQualidadeCapacidade(mapaPublico),
     "",
     "✅ *CONQUISTAS DO MÊS*",
     "───────────────────────",
@@ -556,9 +557,17 @@ Deno.serve(async (req) => {
     if (!contrato || contrato.schema_version !== 2 || !Array.isArray(contrato.professores)) {
       throw new Error("Os dados pedagógicos retornaram incompletos.");
     }
+    if (!Array.isArray(contrato.mapa_sinais)) {
+      throw new Error("O mapa pedagógico retornou incompleto.");
+    }
 
-    const narrativa = await gerarNarrativa(contrato, Deno.env.get("OPENAI_API_KEY"));
-    const relatorio = renderizarRelatorio(contrato, narrativa);
+    const mapaPublico = projetarMapaSinaisPublico(contrato.mapa_sinais);
+    const codigosDesconhecidos = listarCodigosSinaisDesconhecidos(contrato.mapa_sinais);
+    if (codigosDesconhecidos.length > 0) {
+      console.warn("Códigos de sinais não publicados:", codigosDesconhecidos.join(", "));
+    }
+    const narrativa = await gerarNarrativa(contrato, mapaPublico, Deno.env.get("OPENAI_API_KEY"));
+    const relatorio = renderizarRelatorio(contrato, narrativa, mapaPublico);
     return new Response(JSON.stringify({ success: true, relatorio }), {
       status: 200,
       headers: jsonUtf8Headers,

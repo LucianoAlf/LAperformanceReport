@@ -83,7 +83,8 @@ test('texto público bloqueia finanças, termos internos e paginação artificia
   assert.doesNotMatch(renderer, /MRR|ticket\s+m[eé]dio|faturamento|parcela|financeiro/i);
   assert.match(renderer, /TODOS OS PROFESSORES|PROFESSORES DA EQUIPE/i);
   assert.match(renderer, /QUALIDADE DOS DADOS/i);
-  assert.match(renderer, /MAPA DE SINAIS/i);
+  assert.match(renderer, /PRIORIDADES PEDAGÓGICAS/i);
+  assert.match(renderer, /OPORTUNIDADES DE DISTRIBUIÇÃO/i);
   assert.match(renderer, /recesso/i);
 });
 
@@ -112,14 +113,21 @@ test('botão mensal envia somente filtros e mantém cópia robusta', () => {
   assert.match(source, /getManualCopyShortcut/);
 });
 
-test('relatorio explica amostra e capacidade estimada sem prescrever sobrecarga', () => {
+test('IA e renderer usam a mesma projeção pública do mapa de sinais', () => {
   const source = fs.readFileSync(edgePath, 'utf8');
-
-  assert.match(source, /const\s+alertas\s*=\s*filtrarSinaisParaNarrativa\(dados\.mapa_sinais\)/i);
-  assert.match(source, /mapa_sinais:\s*filtrarSinaisParaNarrativa\(dados\.mapa_sinais\)/i);
-
-  assert.match(source, /Professores com amostra m[ií]nima observada/i);
-  assert.match(source, /Convers[aã]o compondo a nota hist[oó]rica/i);
-  assert.match(source, /Capacidade estimada . conferir cadastro/i);
-  assert.match(source, /capacidade estimada[\s\S]{0,300}n[aã]o[\s\S]{0,160}(sobrecarga|treinamento)/i);
+  const rendererStart = source.indexOf('function renderizarRelatorio');
+  const renderer = source.slice(rendererStart);
+  assert.match(source, /projetarMapaSinaisPublico/i);
+  assert.match(source, /const\s+mapaPublico\s*=\s*projetarMapaSinaisPublico\(contrato\.mapa_sinais\)/i);
+  assert.match(source, /gerarNarrativa\(contrato,\s*mapaPublico,/i);
+  assert.match(source, /renderizarRelatorio\(contrato,\s*narrativa,\s*mapaPublico\)/i);
+  assert.match(source, /mapa_sinais_publico:\s*\{[\s\S]*prioridades:\s*mapaPublico\.prioridades[\s\S]*oportunidades:\s*mapaPublico\.oportunidades/i);
+  assert.doesNotMatch(renderer, /dados\.mapa_sinais\.map/i);
+  assert.match(renderer, /PRIORIDADES PEDAGÓGICAS/i);
+  assert.match(renderer, /OPORTUNIDADES DE DISTRIBUIÇÃO/i);
+  assert.match(renderer, /formatarQualidadeCapacidade\(mapaPublico\)/i);
+  assert.match(renderer, /mapaPublico\.total_sinais_publicos/i);
+  assert.match(renderer, /Professores com amostra m[ií]nima observada/i);
+  assert.match(renderer, /Convers[aã]o compondo a nota hist[oó]rica/i);
+  assert.doesNotMatch(renderer, /Capacidade estimada . conferir cadastro/i);
 });
