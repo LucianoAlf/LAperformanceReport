@@ -50,6 +50,8 @@ function professor(id, nome, scoreLegado, scoreV3) {
     fator_demanda_ponderado: 1,
     healthV3: {
       score: scoreV3,
+      scoreObservado: scoreV3,
+      scoreComparavel: scoreV3,
       cobertura: 100,
       classificacao: 'saudavel',
       estadoPublicacao: 'oficial',
@@ -57,6 +59,12 @@ function professor(id, nome, scoreLegado, scoreV3) {
       rankingHabilitado: true,
       periodicidade: 'ciclo',
       cicloCodigo: '2026-JUN-AGO',
+      pilaresValidos: 5,
+      pilaresEsperados: 5,
+      comparabilidadeEstado: 'comparavel',
+      comparabilidadeMotivo: 'criterios_atendidos',
+      competenciaReferencia: null,
+      scoreReferencia: null,
     },
   };
 }

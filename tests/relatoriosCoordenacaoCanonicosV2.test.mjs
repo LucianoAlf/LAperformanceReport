@@ -34,12 +34,20 @@ const professor = ({
   professor_id: id,
   nome,
   score,
+  score_observado: score,
+  score_comparavel: estado === 'em_maturacao' ? null : score,
   cobertura: 75,
-  classificacao: score >= 80 ? 'saudavel' : 'atencao',
+  classificacao: estado === 'em_maturacao' ? null : score >= 80 ? 'saudavel' : 'atencao',
   estado_publicacao: estado,
   score_exibivel: true,
   ranking_habilitado: false,
   estado_evidencia: estado === 'em_maturacao' ? 'professor_em_maturacao' : 'avaliacao_parcial',
+  pilares_validos: estado === 'em_maturacao' ? 2 : 4,
+  pilares_esperados: 5,
+  comparabilidade_estado: estado === 'em_maturacao' ? 'em_maturacao' : 'comparavel',
+  comparabilidade_motivo: estado === 'em_maturacao' ? 'pilares_insuficientes' : 'criterios_atendidos',
+  competencia_referencia: estado === 'em_maturacao' ? '2026-06-01' : null,
+  score_referencia: estado === 'em_maturacao' ? 72 : null,
   metricas: {
     retencao: metrica(retencao, retencaoAmostra, 33.3),
     permanencia: metrica(10, 20, 33.3),
@@ -69,8 +77,10 @@ const contrato = {
     total_professores: 24,
     com_score: 24,
     parciais: 20,
+    comparaveis: 1,
     em_maturacao: 4,
-    score_medio_visivel: 80.5,
+    sem_base_operacional: 0,
+    score_medio_comparavel: 93.4,
   },
   professores: [
     professor({
@@ -191,15 +201,15 @@ test('todos os cinco relatorios passam pelo contrato canonico V2 do servidor', (
   assert.match(edge, /schema_version\s*!==\s*2/i);
 });
 
-test('ranking mostra as 24 notas diagnosticas e a media sem publicar premiacao parcial', () => {
+test('relatorio separa score comparavel de desempenho observado sem publicar premiacao parcial', () => {
   const texto = gerarRelatorioCoordenacaoCanonico(params('ranking'));
 
-  assert.match(texto, /Professores com nota diagnóstica: \*24\*/);
-  assert.match(texto, /Média das notas visíveis: \*80,5\*/);
+  assert.match(texto, /Professores comparáveis: \*1\*/);
+  assert.match(texto, /Média do Health Score comparável: \*93,4\*/);
   assert.match(texto, /Professor Maior Score[\s\S]*93,4 pontos/);
-  assert.match(texto, /Professor Menor Score[\s\S]*66,7 pontos/);
+  assert.match(texto, /Professor Menor Score[^\n]*Desempenho observado: 66,7/);
   assert.ok(texto.indexOf('Professor Maior Score') < texto.indexOf('Professor Menor Score'));
-  assert.match(texto, /não vale como ranking oficial nem gera premiação/i);
+  assert.match(texto, /ranking e premiação exigem ciclo oficial fechado/i);
   assert.doesNotMatch(texto, /Health Score parcial médio: \*Sem base\*/i);
 });
 

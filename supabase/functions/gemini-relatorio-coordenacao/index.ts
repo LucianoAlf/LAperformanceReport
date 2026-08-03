@@ -60,12 +60,21 @@ interface ProfessorContrato {
   professor_id: number;
   nome: string;
   score?: number | null;
+  score_observado?: number | null;
+  score_comparavel?: number | null;
   cobertura?: number | null;
   classificacao?: string | null;
   confianca?: string | null;
   estado_publicacao?: string | null;
   ranking_habilitado?: boolean;
   estado_evidencia: string;
+  pilares_validos?: number | null;
+  pilares_esperados?: number | null;
+  comparabilidade_estado?: "comparavel" | "em_maturacao" | "sem_base_operacional";
+  comparabilidade_motivo?: string | null;
+  competencia_referencia?: string | null;
+  score_referencia?: number | null;
+  classificacao_referencia?: string | null;
   metricas: Record<string, MetricaProfessor>;
 }
 
@@ -197,11 +206,11 @@ function narrativaDeterministica(
 ): NarrativaCoordenacao {
   const resumo = dados.resumo_equipe;
   const total = inteiro(resumo.total_professores);
-  const comScore = inteiro(resumo.com_score);
-  const pendentes = inteiro(resumo.com_evidencia_pendente);
+  const comparaveis = inteiro(resumo.comparaveis);
+  const emMaturacao = inteiro(resumo.em_maturacao);
 
   return {
-    resumo: `A equipe tem ${total} professores ativos; ${comScore} possuem nota disponível e ${pendentes} precisam completar evidências. O período deve ser lido como diagnóstico pedagógico, com foco em apoio e evolução.`,
+    resumo: `A equipe tem ${total} professores ativos; ${comparaveis} possuem Health Score comparável e ${emMaturacao} estão em maturação. O período deve ser lido como diagnóstico pedagógico, com foco em apoio e evolução.`,
     conquistas: [
       `${inteiro(resumo.saudaveis)} professores aparecem em faixa saudável entre os que possuem evidência suficiente.`,
       `${inteiro(dados.presenca.professores_com_evidencia)} professores possuem presença observável no período.`,
@@ -359,13 +368,35 @@ function renderizarRelatorio(
     ?? dados.experimentais.professores_com_amostra;
   const professoresComConversaoPontuando = dados.experimentais.professores_com_conversao_pontuando
     ?? dados.experimentais.professores_com_amostra;
-  const professoresOrdenados = [...dados.professores].sort((a, b) =>
-    a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" })
-  );
+  const ordemComparabilidade = (estado: ProfessorContrato["comparabilidade_estado"]): number =>
+    estado === "comparavel" ? 0 : estado === "em_maturacao" ? 1 : 2;
+  const professoresOrdenados = [...dados.professores].sort((a, b) => {
+    const grupo = ordemComparabilidade(a.comparabilidade_estado)
+      - ordemComparabilidade(b.comparabilidade_estado);
+    if (grupo !== 0) return grupo;
+    if (a.comparabilidade_estado === "comparavel") {
+      return Number(b.score_comparavel || 0) - Number(a.score_comparavel || 0)
+        || Number(b.cobertura || 0) - Number(a.cobertura || 0)
+        || a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" });
+    }
+    if (a.comparabilidade_estado === "em_maturacao") {
+      return Number(b.cobertura || 0) - Number(a.cobertura || 0)
+        || Number(b.pilares_validos || 0) - Number(a.pilares_validos || 0)
+        || a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" });
+    }
+    return a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" });
+  });
   const professores = professoresOrdenados.flatMap((professor, indice) => {
-    const score = professor.score === null || professor.score === undefined
-      ? `Sem nota — ${rotulosEvidencia[professor.estado_evidencia] || professor.estado_evidencia}`
-      : `${numero(professor.score, 1)} pontos | Cobertura: ${percentual(professor.cobertura)}`;
+    const score = professor.comparabilidade_estado === "comparavel"
+      ? `Health Score V3: ${numero(professor.score_comparavel, 1)} pontos | Cobertura: ${percentual(professor.cobertura)}`
+      : professor.comparabilidade_estado === "em_maturacao"
+        ? `Desempenho observado: ${numero(professor.score_observado, 1)} | Cobertura: ${percentual(professor.cobertura)} | ${inteiro(professor.pilares_validos)}/${inteiro(professor.pilares_esperados)} pilares válidos`
+        : `Sem base operacional — ${professor.comparabilidade_motivo || "nenhum pilar válido"}`;
+    const referencia = professor.comparabilidade_estado !== "comparavel"
+      && professor.score_referencia !== null
+      && professor.score_referencia !== undefined
+      ? `   • Referência comparável anterior: ${numero(professor.score_referencia, 1)} (${professor.competencia_referencia || "competência anterior"}); não compõe a leitura atual`
+      : null;
     const pilares = metricasOrdenadas.map((metrica) => `   • ${descreverMetrica(metrica, professor.metricas?.[metrica])}`);
     const carteira = professor.metricas?.numero_alunos?.valor;
     const carteiraLinha = carteira === null || carteira === undefined
@@ -373,7 +404,8 @@ function renderizarRelatorio(
       : `   • Carteira: ${inteiro(carteira)} aluno(s) (diagnóstico; não altera a nota)`;
     return [
       `${indice + 1}) *${professor.nome}*`,
-      `   • Health Score V3: ${score}`,
+      `   • ${score}`,
+      ...(referencia ? [referencia] : []),
       ...pilares,
       carteiraLinha,
       "",
@@ -414,13 +446,13 @@ function renderizarRelatorio(
     "👨‍🏫 *VISÃO GERAL DA EQUIPE*",
     "───────────────────────",
     `• Professores ativos: *${inteiro(resumo.total_professores)}*`,
-    `• Professores com nota disponível: *${inteiro(resumo.com_score)}*`,
+    `• Professores comparáveis: *${inteiro(resumo.comparaveis)}*`,
     `• Em maturação: *${inteiro(resumo.em_maturacao)}*`,
-    `• Com evidência pendente: *${inteiro(resumo.com_evidencia_pendente)}*`,
+    `• Sem base operacional: *${inteiro(resumo.sem_base_operacional)}*`,
     `• Faixa saudável: *${inteiro(resumo.saudaveis)}*`,
     `• Faixa de atenção: *${inteiro(resumo.atencao)}*`,
     `• Faixa crítica: *${inteiro(resumo.criticos)}*`,
-    `• Média das notas visíveis: *${numero(resumo.score_medio_visivel, 1)}*`,
+    `• Média do Health Score comparável: *${numero(resumo.score_medio_comparavel, 1)}*`,
     "",
     "🚦 *PRIORIDADES PEDAGÓGICAS*",
     "───────────────────────",

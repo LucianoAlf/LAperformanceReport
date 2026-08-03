@@ -93,7 +93,8 @@ test('relatorio distingue mes vivo de dados historicos fechados sem chamar tudo 
 
   assert.match(source, /estado_publicacao\s*===\s*["']em_andamento["']/i);
   assert.match(source, /leitura do mês em andamento/i);
-  assert.match(source, /Professores com nota disponível/i);
+  assert.match(source, /Health Score comparável/i);
+  assert.match(source, /estão em maturação/i);
   assert.match(source, /dados operacionais estão fechados/i);
   assert.match(source, /ranking e premiação aguardam o fechamento oficial do ciclo/i);
 });

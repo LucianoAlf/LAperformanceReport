@@ -85,7 +85,16 @@ test('frontend separa classificação do estado de publicação e explica a refe
     config_versao: 4,
     revisao: 0,
     score: 84,
+    score_observado: 84,
+    score_comparavel: 84,
     cobertura: 65,
+    pilares_validos: 4,
+    pilares_esperados: 5,
+    comparabilidade_estado: 'comparavel',
+    comparabilidade_motivo: 'criterios_atendidos',
+    competencia_referencia: '2026-07-01',
+    score_referencia: 82,
+    classificacao_referencia: 'saudavel',
     classificacao: 'saudavel',
     estado: 'em_andamento',
     snapshot_publicavel: false,
@@ -131,7 +140,8 @@ test('tabela e modal não usam o rótulo genérico provisório', () => {
   const tab = read(tabPath);
   const modal = read(modalPath);
 
-  assert.match(tab, /Em andamento/);
+  assert.match(tab, /Desempenho observado/);
+  assert.match(tab, /Health Score/);
   assert.match(tab, /Base de/);
   assert.doesNotMatch(tab, />\s*provisorio\s*</i);
   assert.match(modal, /Aguardando eventos/);
