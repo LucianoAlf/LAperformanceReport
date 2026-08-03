@@ -18,9 +18,10 @@ function aula(over: Partial<AulaFiltravel> = {}): AulaFiltravel {
     sala_nome: 'Sala 1',
     curso_nome: 'Violão',
     turma_nome: null,
-    tipo: 'individual',
+    tipo: 'turma',
     categoria: 'normal',
     cancelada: false,
+    qtd_alunos: 1,
     alunos: [{ nome: 'João Pereira' }],
     ...over,
   };
@@ -79,14 +80,18 @@ const mistas = [
 ];
 assert.equal(filtrarAulas(mistas, filtros({ professor: 'Carla', curso: 'Piano' })).length, 1);
 
-// Tipo de aula: individual x turma
-const porTipo = [aula(), aula({ tipo: 'turma', turma_nome: 'G_Ter_14' })];
-assert.equal(filtrarAulas(porTipo, filtros({ tipo: 'individual' })).length, 1);
-assert.equal(filtrarAulas(porTipo, filtros({ tipo: 'turma' })).length, 1);
-assert.equal(filtrarAulas(porTipo, filtros()).length, 2);
-assert.equal(filtroAtivo(filtros({ tipo: 'turma' })), true);
-// Tipo nulo (RPC sem contrato identificado) nao casa com nenhum dos dois
-assert.equal(filtrarAulas([aula({ tipo: null })], filtros({ tipo: 'individual' })).length, 0);
+// Lotacao: quem esta sozinho no horario x quem tem turma junto.
+// ⚠️ NAO e modalidade — a modalidade contratada e 'turma' em 164 das 165 aulas.
+const porLotacao = [aula({ qtd_alunos: 1 }), aula({ qtd_alunos: 4, turma_nome: 'G_Ter_14' })];
+assert.equal(filtrarAulas(porLotacao, filtros({ lotacao: 'sozinho' })).length, 1);
+assert.equal(filtrarAulas(porLotacao, filtros({ lotacao: 'turma' })).length, 1);
+assert.equal(filtrarAulas(porLotacao, filtros()).length, 2);
+assert.equal(filtroAtivo(filtros({ lotacao: 'turma' })), true);
+// Aula SEM aluno vinculado nao e "sozinho" — e vinculo faltando, outro problema
+assert.equal(filtrarAulas([aula({ qtd_alunos: 0 })], filtros({ lotacao: 'sozinho' })).length, 0);
+assert.equal(filtrarAulas([aula({ qtd_alunos: 0 })], filtros({ lotacao: 'turma' })).length, 0);
+// Modalidade continua no dado (vai para o painel de detalhe), so nao filtra
+assert.equal(aula().tipo, 'turma');
 
 // Categoria (experimental, extra...)
 const porCategoria = [aula(), aula({ categoria: 'experimental' }), aula({ categoria: 'extra' })];
@@ -132,7 +137,7 @@ assert.equal(contarFiltrosAvancados(filtros({ curso: 'Piano' })), 1);
 assert.equal(contarFiltrosAvancados(filtros({ ocultarCanceladas: true })), 1);
 assert.equal(
   contarFiltrosAvancados(
-    filtros({ curso: 'Piano', professor: 'Carla', turma: 'G_Ter_14', tipo: 'turma', categoria: 'normal', ocultarCanceladas: true }),
+    filtros({ curso: 'Piano', professor: 'Carla', turma: 'G_Ter_14', lotacao: 'turma', categoria: 'normal', ocultarCanceladas: true }),
   ),
   6,
 );

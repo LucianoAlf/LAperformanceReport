@@ -19,7 +19,7 @@ import {
   riscoDesatualizado,
   FILTROS_AGENDA_VAZIOS,
   type FiltrosAgenda,
-  type TipoAula,
+  type LotacaoAula,
 } from '@/lib/agenda';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
@@ -602,16 +602,20 @@ function PopoverFiltros({
           </Campo>
 
           <div className="col-span-2">
-            <Campo rotulo="Modalidade">
+            {/* Lotacao, nao modalidade. A modalidade contratada e 'turma' em 164
+                das 165 aulas — filtrar por ela devolveria quase tudo ou quase
+                nada. O que se procura na grade e quem esta sozinho no horario.
+                A modalidade continua visivel no painel de detalhe. */}
+            <Campo rotulo="Lotação">
               <Grupo
                 opcoes={[
                   { valor: '', rotulo: 'Todas' },
-                  { valor: 'individual', rotulo: 'Individual' },
-                  { valor: 'turma', rotulo: 'Turma' },
+                  { valor: 'sozinho', rotulo: 'Sozinho' },
+                  { valor: 'turma', rotulo: 'Com turma' },
                 ]}
-                valor={filtros.tipo ?? ''}
+                valor={filtros.lotacao ?? ''}
                 onChange={(v) =>
-                  setFiltros((f) => ({ ...f, tipo: v === '' ? null : (v as TipoAula) }))
+                  setFiltros((f) => ({ ...f, lotacao: v === '' ? null : (v as LotacaoAula) }))
                 }
               />
             </Campo>

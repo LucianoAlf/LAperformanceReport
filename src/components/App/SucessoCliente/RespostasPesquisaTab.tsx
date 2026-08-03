@@ -12,6 +12,8 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { useAnalisePesquisas } from './hooks/useAnalisePesquisas';
 import { ModalLancarRespostaManual } from './ModalLancarRespostaManual';
 import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
+import { RespostasEvasaoTab } from './RespostasEvasaoTab';
+import { cn } from '@/lib/utils';
 
 interface Props {
   unidadeAtual: UnidadeId;
@@ -27,9 +29,20 @@ function Estrelas({ nota }: { nota: number }) {
   return <span className="text-amber-400">{'⭐'.repeat(nota)}</span>;
 }
 
+/**
+ * Qual pesquisa esta sendo analisada.
+ *
+ * ⚠️ Os dois modos tem layout PROPRIO de proposito. A pos-1a aula devolve nota
+ * 1-5 e rende media, distribuicao e evolucao; a de evasao devolve texto livre
+ * ou audio e nao tem numero nenhum para agregar — a analise dela e de TEMA.
+ * Forcar o mesmo painel produziria "Nota média: —" no topo da evasao.
+ */
+type QualPesquisa = 'primeira_aula' | 'evasao';
+
 export function RespostasPesquisaTab({ unidadeAtual, onAbrirConversa }: Props) {
   const sentinelRef = useWidgetOverlapSentinel();
   const hoje = new Date();
+  const [qual, setQual] = useState<QualPesquisa>('primeira_aula');
   const [ano, setAno] = useState(hoje.getFullYear());
   const [mes, setMes] = useState(hoje.getMonth()); // 0-11
   const [modalAberto, setModalAberto] = useState(false);
@@ -49,8 +62,41 @@ export function RespostasPesquisaTab({ unidadeAtual, onAbrirConversa }: Props) {
   const maxDist = Math.max(1, ...Object.values(distribuicao).map((v) => Number(v) || 0));
   const vazio = !loading && (!kpis || kpis.enviadas === 0);
 
+  const seletor = (
+    <div className="inline-flex gap-1 rounded-lg border border-slate-700 bg-slate-900 p-1">
+      {([
+        { valor: 'primeira_aula', rotulo: 'Pós-1ª aula' },
+        { valor: 'evasao', rotulo: 'Evasão' },
+      ] as const).map((o) => (
+        <button
+          key={o.valor}
+          type="button"
+          aria-pressed={qual === o.valor}
+          onClick={() => setQual(o.valor)}
+          className={cn(
+            'rounded-md px-3.5 py-1.5 text-sm transition-colors',
+            qual === o.valor ? 'bg-violet-500 font-semibold text-white' : 'text-slate-400 hover:text-white',
+          )}
+        >
+          {o.rotulo}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (qual === 'evasao') {
+    return (
+      <div className="space-y-5">
+        {seletor}
+        <RespostasEvasaoTab unidadeAtual={unidadeAtual} />
+        <div ref={sentinelRef} aria-hidden="true" className="h-px" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {seletor}
       {/* Filtro de período */}
       <div className="flex items-center gap-3">
         <Select value={String(mes)} onValueChange={(v) => setMes(Number(v))}>
