@@ -1228,8 +1228,35 @@ async function confirmarExperimentais(
     UNIDADES_CONFIGURADAS.map((unidade) => [unidade.id, unidade.nome]),
   );
 
+  // Backoff: buscar logs de nao_encontrada das últimas 24h para suprimir duplicatas.
+  // O sync roda a cada 15 min; sem isso, o mesmo lead órfão é logado dezenas de vezes.
+  const backoffLimite = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: logsRecentesNaoEncontrados } = await supabase
+    .from('leads_automacao_log')
+    .select('lead_id, detalhes')
+    .eq('workflow_id', 'sync-presenca-emusys')
+    .eq('acao', 'nao_encontrada')
+    .gte('created_at', backoffLimite);
+
+  const backoffChaves = new Set<string>();
+  for (const log of logsRecentesNaoEncontrados ?? []) {
+    const detalhe = log.detalhes as { data?: string } | null;
+    const chave = `${log.lead_id}|${detalhe?.data ?? ''}`;
+    backoffChaves.add(chave);
+  }
+
+  let suprimidosBackoff = 0;
+
   for (const exp of expPendentes) {
+    // Suprimir log duplicado: se já logamos nao_encontrada para este lead+data nas últimas 24h, pular
+    const chaveBackoff = `${exp.lead_id}|${exp.data_experimental ?? ''}`;
+    if (backoffChaves.has(chaveBackoff)) {
+      suprimidosBackoff++;
+      continue;
+    }
+
     if (!exp.professor_experimental_id) {
+      backoffChaves.add(chaveBackoff); // marcar como já logado para próximas iterações do mesmo run
       logs.push({
         lead_id: exp.lead_id,
         lead_nome: exp.nome_aluno || 'Sem nome',
@@ -1276,6 +1303,7 @@ async function confirmarExperimentais(
     const unidadeNome = unidadeNomes.get(exp.unidade_id) || exp.unidade_id;
 
     if (!aulasMatch?.length) {
+      backoffChaves.add(chaveBackoff); // marcar como já logado para próximas iterações do mesmo run
       logs.push({
         lead_id: exp.lead_id,
         lead_nome: exp.nome_aluno || 'Sem nome',
@@ -1364,7 +1392,7 @@ async function confirmarExperimentais(
     });
   }
 
-  console.log(`[sync-presenca] Experimentais: ${logs.filter(l => l.status === 'confirmada').length} confirmadas, ${logs.filter(l => l.status === 'nao_encontrada').length} não encontradas, ${logs.filter(l => l.status === 'cancelada').length} canceladas`);
+  console.log(`[sync-presenca] Experimentais: ${logs.filter(l => l.status === 'confirmada').length} confirmadas, ${logs.filter(l => l.status === 'nao_encontrada').length} não encontradas, ${logs.filter(l => l.status === 'cancelada').length} canceladas${suprimidosBackoff > 0 ? `, ${suprimidosBackoff} suprimidas (backoff 24h)` : ''}`);
 
   return logs;
 }

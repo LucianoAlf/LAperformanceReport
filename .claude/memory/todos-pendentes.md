@@ -100,6 +100,43 @@ Modificar `sync-presenca-emusys` (v22) para chamar `GET /v1/professores/` no in�
 > Detalhe completo, receita da transação e as 3 travas de imutabilidade do banco em
 > `daily-notes/2026-07-27.md`.
 >
+> ### ✅ ATUALIZAÇÃO 2026-08-03 — torneira fechada no lado da RPC + 2 bugs corrigidos
+>
+> **FEITO (3 fixes no repo, sem mexer no n8n):**
+>
+> 1. **Bug 1 — `registrar_experimental` sem filtrar unidade (corrigido):** a busca por
+>    `emusys_lead_id` na linha 39 agora filtra `AND unidade_id = p_unidade_id`. Como o id é
+>    namespaced por escola, uma experimental da Barra podia casar num lead do Recreio (caso
+>    real: `emusys_lead_id=6820` existe em ambas as unidades — "Line" na Barra, "reginatiburcio204"
+>    no Recreio). A `upsert_lead` já filtrava; só a `registrar_experimental` não. Migration
+>    `20260803180000`. Testado com o caso real — casou corretamente no Recreio.
+>
+> 2. **Bug 3 — Guard contra `professor_id` inativo (corrigido):** a RPC agora rejeita
+>    `p_professor_id` inativo e loga em `automacao_log` (`acao='professor_inativo_rejeitado'`).
+>    O n8n `j41tPbyjGXUQUxrN` continua mandando `professor_id=54` (inativo, mesclado) e `57`
+>    (inativo, mesclado) — a RPC rejeita e retorna `{"success":false,"reason":"professor_inativo"}`.
+>    Fecha a torneira sem editar o n8n. **Efeito colateral:** o lead fica sem experimental
+>    registrada até o Hugo corrigir o lookup no n8n (filtrar `ativo=true` ou resolver por
+>    `telefone_professor` do payload). Dado errado (experimental no 54) é pior que dado
+>    faltante. Testado: professor 54 rejeitado, log gravado, lead não criado.
+>
+> 3. **Bug 2 — sync-presenca sem backoff (corrigido):** 202 logs `nao_encontrada` em
+>    `leads_automacao_log` desde 27/07, 9 leads distintos (cada um logado ~22x). O sync
+>    roda a cada 15 min e logava o mesmo lead órfão repetidamente. Agora consulta logs das
+>    últimas 24h antes do loop e suprime duplicatas (chave `lead_id|data_experimental`).
+>    Console.log inclui contagem de suprimidos. Deploy via CLI.
+>
+> **AINDA ABERTO (depende do Hugo/n8n):**
+> - Passo 1 da ordem sugerida: corrigir o lookup no n8n `j41tPbyjGXUQUxrN` — filtrar
+>   `ativo=true` no mínimo; idealmente resolver por `telefone_professor` do payload.
+> - Conferir o `EB0LibpOJCLhKp7M` (lead) se tem o mesmo padrão.
+> - Bug independente: camada 1 do `registrar_experimental` busca `emusys_lead_id` sem
+>   filtrar unidade — **CORRIGIDO** (Bug 1 acima).
+> - Passo 3 (backoff/alerta no `sync-presenca-emusys`) — **CORRIGIDO** (Bug 2 acima).
+> - **Jeyson Gaia Ramos (id=49, ativo, CG, sem `emusys_id`):** buraco de mapeamento novo
+>   aparecido no monitor. Provavelmente o mesmo Jeyson Gaia (id=12, inativo) recriado com
+>   nome diferente. Vale conferir e unificar.
+>
 > **Consequência:** o `.limit(1)` do `resolverProfessor` (observador) virou determinístico
 > sozinho — não há mais telefone repetido entre ativos.
 >
