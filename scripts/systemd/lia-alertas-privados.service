@@ -1,0 +1,10 @@
+[Unit]
+Description=LA Report - alertas privados da Lia
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=sol
+WorkingDirectory=/opt/LA-Organizer/LA-performance-report
+EnvironmentFile=/home/sol/.openclaw/gateway.systemd.env
+ExecStart=/usr/bin/python3 scripts/process_lia_alert_queue.py --once
