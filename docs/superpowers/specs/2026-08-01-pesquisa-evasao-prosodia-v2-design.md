@@ -148,6 +148,13 @@ Não existe linha, pontilhado ou separador antes da última frase.
 - nenhum separador deve ser inserido entre o pedido de sinceridade e
   `Pode responder...`.
 
+**Atualização de 03/08/2026:** o item pendente em que a prévia exibia os
+marcadores `> *` e `_` de forma crua foi absorvido e resolvido no desenho
+`2026-08-03-pesquisa-evasao-preview-editavel-design.md`. O editor preserva o
+texto canônico com os marcadores e apresenta abaixo uma visualização formatada
+como o WhatsApp. A baixa definitiva desta dívida ocorre no rollout dessa
+entrega; não é mais uma frente separada da Prosódia V2.
+
 ## 8. Erros e segurança
 
 - Data de nascimento ausente ou inválida: bloquear antes de criar a prévia.
