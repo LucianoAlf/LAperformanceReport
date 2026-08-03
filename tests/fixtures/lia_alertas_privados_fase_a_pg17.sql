@@ -131,7 +131,8 @@ $fixture$;
 insert into public.usuarios(id, nome, ativo, auth_user_id) values
   (2, 'Luciano Alf', true, '00000000-0000-4000-8000-000000000002'),
   (29, 'Jessica', true, '00000000-0000-4000-8000-000000000029'),
-  (30, 'Fabi', true, '00000000-0000-4000-8000-000000000030');
+  (30, 'Fabi', true, '00000000-0000-4000-8000-000000000030'),
+  (31, 'Operador inativo', false, '00000000-0000-4000-8000-000000000031');
 
 \ir ../../supabase/migrations/20260803090000_lia_alertas_privados_fase_a.sql
 
@@ -157,10 +158,144 @@ select public.fixture_assert(
   'producao precisa nascer bloqueada'
 );
 
--- Os cenários do produtor serão preenchidos nas Tasks 3-4.
--- uma rodada nao pode gerar dois alertas
--- nao pode haver notificacao cruzada
--- teste comum nao pode entrar na outbox produtiva
+insert into public.unidades(id, nome) values
+  ('20000000-0000-4000-8000-000000000001', 'Barra');
+
+insert into public.pesquisa_evasao(
+  id, unidade_id, aluno_nome, modo_teste, executado_por_usuario_id
+) values
+  ('10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', 'Aluno Um', false, 29),
+  ('10000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000001', 'Aluno Audio', false, 29),
+  ('10000000-0000-4000-8000-000000000003', '20000000-0000-4000-8000-000000000001', 'Aluno Rodada', false, 29),
+  ('10000000-0000-4000-8000-000000000004', '20000000-0000-4000-8000-000000000001', 'Aluno Optout', false, 29),
+  ('10000000-0000-4000-8000-000000000005', '20000000-0000-4000-8000-000000000001', 'Aluno Dois Fatos', false, 29),
+  ('10000000-0000-4000-8000-000000000006', '20000000-0000-4000-8000-000000000001', 'Aluno Teste', true, 29),
+  ('10000000-0000-4000-8000-000000000007', '20000000-0000-4000-8000-000000000001', 'Aluno Sem Operador', false, null),
+  ('10000000-0000-4000-8000-000000000008', '20000000-0000-4000-8000-000000000001', 'Aluno Operador Inativo', false, 31);
+
+insert into public.pesquisa_evasao_analises(id, pesquisa_id, versao, status) values
+  ('30000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 1, 'rascunho'),
+  ('30000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000002', 1, 'rascunho'),
+  ('30000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000003', 1, 'revisada'),
+  ('30000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000003', 2, 'rascunho'),
+  ('30000000-0000-4000-8000-000000000005', '10000000-0000-4000-8000-000000000004', 1, 'rascunho'),
+  ('30000000-0000-4000-8000-000000000006', '10000000-0000-4000-8000-000000000005', 1, 'rascunho'),
+  ('30000000-0000-4000-8000-000000000007', '10000000-0000-4000-8000-000000000006', 1, 'rascunho'),
+  ('30000000-0000-4000-8000-000000000008', '10000000-0000-4000-8000-000000000007', 1, 'rascunho'),
+  ('30000000-0000-4000-8000-000000000009', '10000000-0000-4000-8000-000000000008', 1, 'rascunho');
+
+-- Dois fragmentos substantivos da mesma rodada geram um evento.
+insert into public.pesquisa_evasao_mensagens(
+  id, pesquisa_id, direcao, tipo, resolution_status, substantividade, analise_versao
+) values
+  ('40000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 'entrada', 'texto', 'resolvida', 'conteudo_substantivo', 1),
+  ('40000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000001', 'entrada', 'texto', 'resolvida', 'conteudo_substantivo', 1);
+
+update public.pesquisa_evasao_analises
+set status = 'revisada'
+where id = '30000000-0000-4000-8000-000000000001';
+
+insert into public.pesquisa_evasao_mensagens(
+  id, pesquisa_id, direcao, tipo, resolution_status, substantividade, analise_versao
+) values
+  ('40000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000001', 'entrada', 'texto', 'resolvida', 'conteudo_substantivo', 1);
+
+select public.fixture_assert(
+  (select count(*) from public.lia_pesquisa_eventos
+   where pesquisa_id = '10000000-0000-4000-8000-000000000001') = 1,
+  'uma rodada nao pode gerar dois alertas'
+);
+select public.fixture_assert(
+  (select array_agg(distinct destinatario_usuario_id)
+   from public.lia_alertas_privados alerta
+   join public.lia_pesquisa_eventos evento on evento.id = alerta.evento_id
+   where evento.pesquisa_id = '10000000-0000-4000-8000-000000000001') = array[29],
+  'nao pode haver notificacao cruzada'
+);
+
+-- Audio indeterminado nao gera evento; a classificacao posterior gera um.
+insert into public.pesquisa_evasao_mensagens(
+  id, pesquisa_id, direcao, tipo, resolution_status, substantividade, analise_versao
+) values
+  ('40000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000002', 'entrada', 'audio', 'resolvida', 'indeterminado', 1);
+select public.fixture_assert(
+  not exists (
+    select 1 from public.lia_pesquisa_eventos
+    where pesquisa_id = '10000000-0000-4000-8000-000000000002'
+  ),
+  'audio indeterminado nao pode alertar'
+);
+update public.pesquisa_evasao_mensagens
+set substantividade = 'conteudo_substantivo'
+where id = '40000000-0000-4000-8000-000000000004';
+select public.fixture_assert(
+  (select count(*) from public.lia_pesquisa_eventos
+   where pesquisa_id = '10000000-0000-4000-8000-000000000002') = 1,
+  'audio substantivo precisa alertar depois da transcricao'
+);
+
+-- Rodada posterior a revisao recebe o alerta prioritario.
+insert into public.pesquisa_evasao_mensagens(
+  id, pesquisa_id, direcao, tipo, resolution_status, substantividade, analise_versao
+) values
+  ('40000000-0000-4000-8000-000000000005', '10000000-0000-4000-8000-000000000003', 'entrada', 'texto', 'resolvida', 'conteudo_substantivo', 2);
+select public.fixture_assert(
+  (select tipo from public.lia_pesquisa_eventos
+   where pesquisa_id = '10000000-0000-4000-8000-000000000003') = 'rodada_nova_pos_revisao',
+  'rodada nova apos revisao precisa de alerta prioritario'
+);
+
+-- Opt-out e resposta sao fatos independentes na mesma rodada.
+insert into public.pesquisa_evasao_mensagens(
+  id, pesquisa_id, direcao, tipo, resolution_status, substantividade, analise_versao
+) values
+  ('40000000-0000-4000-8000-000000000006', '10000000-0000-4000-8000-000000000004', 'entrada', 'texto', 'resolvida', 'opt_out', 1),
+  ('40000000-0000-4000-8000-000000000007', '10000000-0000-4000-8000-000000000005', 'entrada', 'texto', 'resolvida', 'conteudo_substantivo', 1),
+  ('40000000-0000-4000-8000-000000000008', '10000000-0000-4000-8000-000000000005', 'entrada', 'texto', 'resolvida', 'opt_out', 1);
+select public.fixture_assert(
+  (select count(*) from public.lia_pesquisa_eventos
+   where pesquisa_id = '10000000-0000-4000-8000-000000000004'
+     and tipo = 'opt_out') = 1,
+  'opt-out deve gerar apenas o fato de recusa'
+);
+select public.fixture_assert(
+  (select array_agg(tipo order by tipo) from public.lia_pesquisa_eventos
+   where pesquisa_id = '10000000-0000-4000-8000-000000000005') =
+    array['opt_out', 'resposta_nova'],
+  'conteudo e opt-out precisam coexistir na mesma rodada'
+);
+
+-- Teste comum nunca entra na outbox produtiva.
+insert into public.pesquisa_evasao_mensagens(
+  id, pesquisa_id, direcao, tipo, resolution_status, substantividade, analise_versao
+) values
+  ('40000000-0000-4000-8000-000000000009', '10000000-0000-4000-8000-000000000006', 'entrada', 'texto', 'resolvida', 'conteudo_substantivo', 1);
+select public.fixture_assert(
+  not exists (
+    select 1 from public.lia_pesquisa_eventos
+    where pesquisa_id = '10000000-0000-4000-8000-000000000006'
+  ),
+  'teste comum nao pode entrar na outbox produtiva'
+);
+
+-- Operador ausente ou inativo vai para fila administrativa, sem destino.
+insert into public.pesquisa_evasao_mensagens(
+  id, pesquisa_id, direcao, tipo, resolution_status, substantividade, analise_versao
+) values
+  ('40000000-0000-4000-8000-000000000010', '10000000-0000-4000-8000-000000000007', 'entrada', 'texto', 'resolvida', 'conteudo_substantivo', 1),
+  ('40000000-0000-4000-8000-000000000011', '10000000-0000-4000-8000-000000000008', 'entrada', 'texto', 'resolvida', 'conteudo_substantivo', 1);
+select public.fixture_assert(
+  (select count(*)
+   from public.lia_alertas_privados alerta
+   join public.lia_pesquisa_eventos evento on evento.id = alerta.evento_id
+   where evento.pesquisa_id in (
+     '10000000-0000-4000-8000-000000000007',
+     '10000000-0000-4000-8000-000000000008'
+   )
+     and alerta.status = 'fila_administrativa'
+     and alerta.destino_snapshot is null) = 2,
+  'operador ausente ou inativo precisa ir para fila administrativa'
+);
 
 select 'PESQUISA_EVASAO_CLAIM_PG17_OK';
 select 'LIA_ALERTAS_PRIVADOS_FASE_A_PG17_OK';

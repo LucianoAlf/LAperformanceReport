@@ -192,6 +192,320 @@ insert into public.lia_alertas_configuracao (
   false
 );
 
+create or replace function public.fn_lia_renderizar_alerta_pesquisa(
+  p_tipo text,
+  p_aluno_nome text,
+  p_unidade_nome text
+)
+returns table (
+  template_codigo text,
+  template_versao integer,
+  mensagem_renderizada text
+)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $function$
+declare
+  v_base_url text;
+  v_link text;
+begin
+  select rtrim(config.app_base_url, '/')
+  into v_base_url
+  from public.lia_alertas_configuracao config
+  where config.id = 1;
+
+  if v_base_url is null then
+    raise exception 'configuracao_lia_ausente';
+  end if;
+
+  v_link := v_base_url || '/app/sucesso-aluno';
+  template_versao := 1;
+
+  case p_tipo
+    when 'resposta_nova' then
+      template_codigo := 'lia_evasao_resposta_nova';
+      mensagem_renderizada := format(
+        E'🔔 *Resposta recebida — Pesquisa de evasão*\n\nAluno: %s\nUnidade: %s\n\nA família respondeu à pesquisa que você enviou. O conteúdo permanece protegido no LA Report.\n\n👉 %s',
+        p_aluno_nome,
+        p_unidade_nome,
+        v_link
+      );
+    when 'rodada_nova_pos_revisao' then
+      template_codigo := 'lia_evasao_rodada_nova_pos_revisao';
+      mensagem_renderizada := format(
+        E'🔔 *Nova rodada após revisão*\n\nAluno: %s\nUnidade: %s\n\nA família enviou novo conteúdo depois da revisão. O caso voltou para a fila e precisa de uma nova leitura.\n\n👉 %s',
+        p_aluno_nome,
+        p_unidade_nome,
+        v_link
+      );
+    when 'opt_out' then
+      template_codigo := 'lia_evasao_opt_out';
+      mensagem_renderizada := format(
+        E'🔕 *Família recusou novos contatos — Pesquisa de evasão*\n\nAluno: %s\nUnidade: %s\n\nA família pediu para não receber novas mensagens desta pesquisa. O caso foi bloqueado para follow-up.\n\n👉 %s',
+        p_aluno_nome,
+        p_unidade_nome,
+        v_link
+      );
+    else
+      raise exception 'tipo_alerta_lia_invalido';
+  end case;
+
+  return next;
+end;
+$function$;
+
+create or replace function public.fn_lia_criar_evento_alerta(
+  p_tipo text,
+  p_ambiente text,
+  p_pesquisa_id uuid,
+  p_analise_versao integer,
+  p_operador_usuario_id integer,
+  p_aluno_nome text,
+  p_unidade_id uuid,
+  p_unidade_nome text,
+  p_ocorrido_em timestamptz,
+  p_idempotency_key text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $function$
+declare
+  v_evento_id uuid;
+  v_alerta_id uuid;
+  v_usuario_ativo boolean;
+  v_destino_id uuid;
+  v_destino text;
+  v_producao_liberada boolean;
+  v_template_codigo text;
+  v_template_versao integer;
+  v_mensagem text;
+  v_status text;
+  v_motivo text;
+begin
+  insert into public.lia_pesquisa_eventos (
+    tipo,
+    ambiente,
+    pesquisa_id,
+    analise_versao,
+    operador_usuario_id,
+    aluno_nome_snapshot,
+    unidade_id,
+    unidade_nome_snapshot,
+    ocorrido_em,
+    idempotency_key
+  ) values (
+    p_tipo,
+    p_ambiente,
+    p_pesquisa_id,
+    p_analise_versao,
+    p_operador_usuario_id,
+    p_aluno_nome,
+    p_unidade_id,
+    p_unidade_nome,
+    p_ocorrido_em,
+    p_idempotency_key
+  )
+  on conflict do nothing
+  returning id into v_evento_id;
+
+  if v_evento_id is null then
+    return null;
+  end if;
+
+  select
+    usuario.ativo,
+    destino.id,
+    destino.destino_normalizado
+  into
+    v_usuario_ativo,
+    v_destino_id,
+    v_destino
+  from public.usuarios usuario
+  left join public.lia_destinos_privados destino
+    on destino.usuario_id = usuario.id
+   and destino.canal = 'whatsapp'
+   and destino.ativo
+  where usuario.id = p_operador_usuario_id;
+
+  select config.alertas_producao_liberados
+  into v_producao_liberada
+  from public.lia_alertas_configuracao config
+  where config.id = 1;
+
+  select
+    render.template_codigo,
+    render.template_versao,
+    render.mensagem_renderizada
+  into
+    v_template_codigo,
+    v_template_versao,
+    v_mensagem
+  from public.fn_lia_renderizar_alerta_pesquisa(
+    p_tipo,
+    p_aluno_nome,
+    p_unidade_nome
+  ) render;
+
+  if not coalesce(v_usuario_ativo, false) then
+    v_status := 'fila_administrativa';
+    v_motivo := 'operador_inativo_ou_ausente';
+  elsif v_destino_id is null then
+    v_status := 'fila_administrativa';
+    v_motivo := 'destino_ausente';
+  elsif p_ambiente = 'teste' then
+    v_status := 'pendente';
+  elsif coalesce(v_producao_liberada, false) then
+    v_status := 'pendente';
+  else
+    v_status := 'aguardando_liberacao';
+  end if;
+
+  insert into public.lia_alertas_privados (
+    evento_id,
+    destinatario_usuario_id,
+    destino_id,
+    destino_snapshot,
+    template_codigo,
+    template_versao,
+    mensagem_renderizada,
+    status,
+    motivo_pendencia
+  ) values (
+    v_evento_id,
+    p_operador_usuario_id,
+    case when v_status = 'fila_administrativa' then null else v_destino_id end,
+    case when v_status = 'fila_administrativa' then null else v_destino end,
+    v_template_codigo,
+    v_template_versao,
+    case when v_status = 'fila_administrativa' then null else v_mensagem end,
+    v_status,
+    v_motivo
+  )
+  returning id into v_alerta_id;
+
+  return v_alerta_id;
+end;
+$function$;
+
+create or replace function public.fn_lia_evento_pesquisa_evasao()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $function$
+declare
+  v_modo_teste boolean;
+  v_operador_usuario_id integer;
+  v_aluno_nome text;
+  v_unidade_id uuid;
+  v_unidade_nome text;
+  v_tipo text;
+  v_idempotency_key text;
+begin
+  if new.pesquisa_id is null
+     or new.analise_versao is null
+     or new.direcao <> 'entrada'
+     or new.resolution_status <> 'resolvida'
+     or new.substantividade not in ('conteudo_substantivo', 'opt_out') then
+    return new;
+  end if;
+
+  if tg_op = 'UPDATE'
+     and old.substantividade is not distinct from new.substantividade then
+    return new;
+  end if;
+
+  select
+    pesquisa.modo_teste,
+    pesquisa.executado_por_usuario_id,
+    pesquisa.aluno_nome,
+    pesquisa.unidade_id,
+    unidade.nome
+  into
+    v_modo_teste,
+    v_operador_usuario_id,
+    v_aluno_nome,
+    v_unidade_id,
+    v_unidade_nome
+  from public.pesquisa_evasao pesquisa
+  join public.unidades unidade on unidade.id = pesquisa.unidade_id
+  where pesquisa.id = new.pesquisa_id;
+
+  if not found or v_modo_teste then
+    return new;
+  end if;
+
+  if new.substantividade = 'opt_out' then
+    v_tipo := 'opt_out';
+    v_idempotency_key := format(
+      'opt_out:%s:%s',
+      new.pesquisa_id,
+      new.analise_versao
+    );
+  elsif exists (
+    select 1
+    from public.pesquisa_evasao_analises anterior
+    where anterior.pesquisa_id = new.pesquisa_id
+      and anterior.versao < new.analise_versao
+      and anterior.status = 'revisada'
+  ) then
+    v_tipo := 'rodada_nova_pos_revisao';
+    v_idempotency_key := format(
+      'rodada_nova_pos_revisao:%s:%s',
+      new.pesquisa_id,
+      new.analise_versao
+    );
+  else
+    v_tipo := 'resposta_nova';
+    v_idempotency_key := format(
+      'resposta_nova:%s:%s',
+      new.pesquisa_id,
+      new.analise_versao
+    );
+  end if;
+
+  perform public.fn_lia_criar_evento_alerta(
+    v_tipo,
+    'producao',
+    new.pesquisa_id,
+    new.analise_versao,
+    v_operador_usuario_id,
+    v_aluno_nome,
+    v_unidade_id,
+    v_unidade_nome,
+    coalesce(new.provider_created_at, new.recebido_em, now()),
+    v_idempotency_key
+  );
+
+  return new;
+end;
+$function$;
+
+drop trigger if exists trg_lia_evento_pesquisa_evasao
+  on public.pesquisa_evasao_mensagens;
+create trigger trg_lia_evento_pesquisa_evasao
+after insert or update of substantividade
+on public.pesquisa_evasao_mensagens
+for each row execute function public.fn_lia_evento_pesquisa_evasao();
+
+revoke all on function public.fn_lia_renderizar_alerta_pesquisa(text, text, text)
+  from public, anon, authenticated;
+revoke all on function public.fn_lia_criar_evento_alerta(
+  text, text, uuid, integer, integer, text, uuid, text, timestamptz, text
+) from public, anon, authenticated;
+revoke all on function public.fn_lia_evento_pesquisa_evasao()
+  from public, anon, authenticated;
+
+grant execute on function public.fn_lia_renderizar_alerta_pesquisa(text, text, text)
+  to service_role;
+grant execute on function public.fn_lia_criar_evento_alerta(
+  text, text, uuid, integer, integer, text, uuid, text, timestamptz, text
+) to service_role;
+
 create or replace function public.expurgar_lia_alertas_privados()
 returns integer
 language plpgsql
@@ -241,7 +555,7 @@ end;
 $block$;
 
 comment on table public.lia_destinos_privados is
-  'Destinos privados governados da Lia; nunca resolvidos de usuarios.telefone em runtime.';
+  'Destinos privados governados da Lia; nunca resolvidos de cadastro operacional em runtime.';
 comment on table public.lia_pesquisa_eventos is
   'Fatos imutaveis e sem conteudo da resposta para alertas da pesquisa de evasao.';
 comment on table public.lia_alertas_privados is

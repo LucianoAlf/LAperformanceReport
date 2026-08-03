@@ -54,7 +54,39 @@ test('evento pertence ao operador original e nunca faz fanout', () => {
   assert.match(sql, /executado_por_usuario_id/i);
   assert.match(sql, /idempotency_key text not null unique/i);
   assert.doesNotMatch(sql, /usuario_id\s+in\s*\(\s*29\s*,\s*30/i);
-  assert.doesNotMatch(sql, /usuarios\.telefone/i);
+  assert.doesNotMatch(sql.replace(/--.*$/gm, ''), /usuarios\.telefone/i);
+});
+
+test('produtor reage somente a conteúdo resolvido e usa a rodada imutável', () => {
+  assert.match(sql, /create or replace function public\.fn_lia_evento_pesquisa_evasao\(\)/i);
+  assert.match(sql, /new\.direcao\s*<>\s*'entrada'/i);
+  assert.match(sql, /new\.resolution_status\s*<>\s*'resolvida'/i);
+  assert.match(sql, /new\.substantividade\s+not in\s*\('conteudo_substantivo',\s*'opt_out'\)/i);
+  assert.match(sql, /new\.analise_versao/i);
+  assert.match(sql, /anterior\.versao\s*<\s*new\.analise_versao/i);
+  assert.match(sql, /anterior\.status\s*=\s*'revisada'/i);
+  assert.match(sql, /after insert or update of substantividade/i);
+});
+
+test('renderização é determinística e não recebe conteúdo privado', () => {
+  assert.match(sql, /create or replace function public\.fn_lia_renderizar_alerta_pesquisa\s*\(/i);
+  assert.match(sql, /Resposta recebida — Pesquisa de evasão/i);
+  assert.match(sql, /Nova rodada após revisão/i);
+  assert.match(sql, /Família recusou novos contatos/i);
+  assert.match(sql, /\/app\/sucesso-aluno/i);
+  assert.doesNotMatch(
+    sql,
+    /fn_lia_renderizar_alerta_pesquisa\s*\([^)]*(?:resposta|transcricao|telefone|motivo)/i,
+  );
+});
+
+test('idempotência separa resposta de opt-out na mesma rodada', () => {
+  assert.match(sql, /on conflict do nothing/i);
+  assert.match(sql, /resposta_nova:%s:%s/i);
+  assert.match(sql, /rodada_nova_pos_revisao:%s:%s/i);
+  assert.match(sql, /opt_out:%s:%s/i);
+  assert.match(sql, /lia_pesquisa_eventos_resposta_rodada_uidx/i);
+  assert.match(sql, /lia_pesquisa_eventos_opt_out_rodada_uidx/i);
 });
 
 test('expurgo remove somente snapshots terminais depois de 30 dias', () => {
