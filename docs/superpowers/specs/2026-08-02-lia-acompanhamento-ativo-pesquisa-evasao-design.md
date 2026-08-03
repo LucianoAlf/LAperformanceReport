@@ -284,7 +284,7 @@ Unidade: {{unidade_nome}}
 
 A família respondeu à pesquisa que você enviou. O conteúdo permanece protegido no LA Report.
 
-👉 {{link_caso}}
+👉 {{link_sucesso_aluno}}
 ```
 
 ### 9.2 Rodada nova depois de revisão — privado
@@ -297,7 +297,7 @@ Unidade: {{unidade_nome}}
 
 A família enviou novo conteúdo depois da revisão. O caso voltou para a fila e precisa de uma nova leitura.
 
-👉 {{link_caso}}
+👉 {{link_sucesso_aluno}}
 ```
 
 ### 9.3 Opt-out — privado
@@ -310,7 +310,7 @@ Unidade: {{unidade_nome}}
 
 A família pediu para não receber novas mensagens desta pesquisa. O caso foi bloqueado para follow-up.
 
-👉 {{link_caso}}
+👉 {{link_sucesso_aluno}}
 ```
 
 O alerta não expõe o texto exato usado pela família.
@@ -521,7 +521,8 @@ relatório posterior, nunca criar o fato nem autorizar o envio.
 
 - Somente serviço autorizado cria e reclama entregas.
 - Usuário interno não lê a tabela de destinos privados nem a fila bruta.
-- Alertas privados contêm apenas aluno, unidade, natureza do evento e link.
+- Alertas privados contêm apenas aluno, unidade, natureza do evento e link para
+  a tela autenticada do Sucesso do Aluno.
 - Grupo contém somente agregado.
 - Links exigem login normal no LA Report e não carregam token público.
 - Logs técnicos usam IDs internos, tipo, status, tentativa e correlation ID;
@@ -610,6 +611,17 @@ Depois dessas fases, o Subprojeto C pode classificar causas e transformar
 respostas revisadas em ações sem precisar resolver novamente alerta, prazo ou
 canal.
 
+### Melhorias posteriores, fora da Fase A
+
+- deep link que abre automaticamente a subaba Evasão e expande a pesquisa exata;
+- ajuste da interface para não mostrar a lista de mensagens e a consolidação da
+  rodada como conteúdo duplicado, deixando a consolidação recolhida por padrão
+  ou oferecendo-a como texto corrido para copiar.
+
+Na primeira versão, o alerta abre somente a tela do Sucesso do Aluno. A pessoa
+localiza o caso pela lista. Isso preserva o valor principal da Fase A — avisar
+rapidamente — sem exigir deploy de quatro componentes de frontend.
+
 ## 18. Testes obrigatórios
 
 1. Três fragmentos da mesma rodada geram um alerta privado, não três.
@@ -628,7 +640,8 @@ canal.
 14. Mudança de regra cria nova versão sem reescrever snapshot fechado.
 15. `bi_messages_lamusic` não participa do transporte.
 16. Queda da VPS não perde evento; recuperação respeita idempotência.
-17. Alerta contém link autenticado para o caso correto.
+17. Alerta contém link autenticado para a tela do Sucesso do Aluno, sem token,
+    resposta ou identificador sensível na URL.
 18. Pessoa inativa não recebe mensagem e o caso entra na fila administrativa.
 19. Fabi recebe somente eventos de pesquisas enviadas por Fabi; Jessica recebe
     somente eventos de pesquisas enviadas por Jessica.

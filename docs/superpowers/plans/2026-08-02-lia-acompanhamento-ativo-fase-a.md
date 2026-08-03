@@ -6,7 +6,7 @@
 
 **Architecture:** O Postgres registra o fato imutável e uma entrega privada em outbox na mesma transação em que a mensagem substantiva é classificada. A outbox usa um cadastro governado por `usuarios.id`, nunca `usuarios.telefone` em tempo de execução, e fica bloqueada para produção até o piloto. Um worker pequeno na VPS reclama uma entrega por RPC atômica e reutiliza apenas o transporte single-message do Hermes; ele não lê respostas, não decide destinatário e não escreve nas filas de relatório existentes.
 
-**Tech Stack:** PostgreSQL 17/Supabase/RLS, PL/pgSQL, Python 3 `unittest`, Node `node:test`, React 19/React Router, Hermes WhatsApp bridge, systemd.
+**Tech Stack:** PostgreSQL 17/Supabase/RLS, PL/pgSQL, Python 3 `unittest`, Node `node:test`, Hermes WhatsApp bridge, systemd.
 
 ---
 
@@ -20,7 +20,7 @@ Incluído nesta fase:
 - cadastro governado dos destinos privados de Alf, Jessica e Fabi;
 - fila administrativa para operador inativo, destino ausente ou resultado ambíguo;
 - piloto ponta a ponta no número governado do Alf;
-- link autenticado para a pesquisa correta;
+- link autenticado para a tela do Sucesso do Aluno;
 - worker VPS/Hermes e observabilidade sanitizada.
 
 Fora desta fase:
@@ -31,6 +31,9 @@ Fora desta fase:
 - classificação de causa ou conteúdo da resposta, que pertence ao Subprojeto C;
 - notificação cruzada entre Fabi e Jessica;
 - reestruturação geral de Lia, Sol, Fábio ou Telegram.
+- deep link para abrir a pesquisa exata e os quatro componentes de frontend
+  necessários para isso;
+- ajuste visual da consolidação duplicada na conversa.
 
 ## Evidência e decisões congeladas em 02/08/2026
 
@@ -59,15 +62,10 @@ Fora desta fase:
 - `tests/test_process_lia_alert_queue.py` — contrato do worker e falhas ambíguas.
 - `scripts/systemd/lia-alertas-privados.service` — execução one-shot do worker.
 - `scripts/systemd/lia-alertas-privados.timer` — polling a cada minuto.
-- `tests/liaAlertasDeepLink.test.mjs` — contrato do link autenticado para a pesquisa.
 - `docs/runbooks/lia-acompanhamento-ativo-fase-a-rollout.md` — rollout em gates e evidências.
 
 **Modificar:**
 
-- `src/components/App/SucessoCliente/SucessoClientePage.tsx` — abrir Acompanhamento a partir do link.
-- `src/components/App/SucessoCliente/TabSucessoAluno.tsx` — abrir a seção Pesquisas.
-- `src/components/App/SucessoCliente/PesquisasTab.tsx` — abrir a subaba Evasão.
-- `src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx` — expandir a pesquisa informada no link.
 - `docs/superpowers/specs/2026-08-02-lia-acompanhamento-ativo-pesquisa-evasao-design.md` — manter a spec sincronizada com evidências de implementação.
 - `docs/MAPA-SISTEMA.md` — documentar outbox, worker e fronteira com o motor de relatórios.
 
@@ -288,7 +286,7 @@ Unidade: {{unidade_nome}}
 
 A família respondeu à pesquisa que você enviou. O conteúdo permanece protegido no LA Report.
 
-👉 {{link_caso}}
+👉 {{link_sucesso_aluno}}
 ```
 
 ```text
@@ -299,7 +297,7 @@ Unidade: {{unidade_nome}}
 
 A família enviou novo conteúdo depois da revisão. O caso voltou para a fila e precisa de uma nova leitura.
 
-👉 {{link_caso}}
+👉 {{link_sucesso_aluno}}
 ```
 
 ```text
@@ -310,13 +308,13 @@ Unidade: {{unidade_nome}}
 
 A família pediu para não receber novas mensagens desta pesquisa. O caso foi bloqueado para follow-up.
 
-👉 {{link_caso}}
+👉 {{link_sucesso_aluno}}
 ```
 
-`{{link_caso}}` é:
+`{{link_sucesso_aluno}}` é:
 
 ```text
-https://la-performance-report.vercel.app/app/sucesso-aluno?pesquisa_evasao_id={{pesquisa_id}}
+https://la-performance-report.vercel.app/app/sucesso-aluno
 ```
 
 ## Task 1: Fixar o contrato em testes vermelhos
@@ -571,12 +569,11 @@ operador nulo/inativo -> fila_administrativa
 Criar `public.fn_lia_renderizar_alerta_pesquisa(
   p_tipo text,
   p_aluno_nome text,
-  p_unidade_nome text,
-  p_pesquisa_id uuid
+  p_unidade_nome text
 )` como
 `SECURITY DEFINER`, `search_path = public, pg_temp`, exclusiva do
 `service_role` e das funções internas. Ela escolhe somente as três cópias
-aprovadas e monta o link com `app_base_url`.
+aprovadas e monta o link geral da tela do Sucesso do Aluno com `app_base_url`.
 
 O retorno é um registro com:
 
@@ -966,78 +963,13 @@ git add scripts/process_lia_alert_queue.py scripts/systemd/lia-alertas-privados.
 git commit -m "feat: transportar alertas privados da Lia pelo Hermes"
 ```
 
-## Task 6: Fazer o link abrir a pesquisa correta
+## Refinamentos adiados por decisão do Alf
 
-**Files:**
-
-- Modify: `src/components/App/SucessoCliente/SucessoClientePage.tsx`
-- Modify: `src/components/App/SucessoCliente/TabSucessoAluno.tsx`
-- Modify: `src/components/App/SucessoCliente/PesquisasTab.tsx`
-- Modify: `src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx`
-- Create: `tests/liaAlertasDeepLink.test.mjs`
-
-- [ ] **Step 1: Escrever o teste vermelho**
-
-Exigir a chave única `pesquisa_evasao_id`, propagada pelos quatro componentes, e
-proibir qualquer token no link:
-
-```js
-import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import test from 'node:test';
-
-const page = readFileSync('src/components/App/SucessoCliente/SucessoClientePage.tsx', 'utf8');
-const tab = readFileSync('src/components/App/SucessoCliente/TabSucessoAluno.tsx', 'utf8');
-const pesquisas = readFileSync('src/components/App/SucessoCliente/PesquisasTab.tsx', 'utf8');
-const evasao = readFileSync('src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx', 'utf8');
-const migration = readFileSync('supabase/migrations/20260803090000_lia_alertas_privados_fase_a.sql', 'utf8');
-
-test('deep link abre acompanhamento, pesquisas, evasao e a linha correta', () => {
-  assert.match(page, /useSearchParams/);
-  assert.match(page, /pesquisa_evasao_id/);
-  assert.match(tab, /focoPesquisaEvasaoId/);
-  assert.match(pesquisas, /focoPesquisaEvasaoId/);
-  assert.match(evasao, /setExpandido\(focoPesquisaEvasaoId\)/);
-});
-
-test('link nao carrega segredo ou resposta', () => {
-  assert.doesNotMatch(migration, /token=|resposta_texto=|telefone=/i);
-});
-```
-
-- [ ] **Step 2: Propagar o foco**
-
-Em `SucessoClientePage.tsx`:
-
-```tsx
-const [searchParams] = useSearchParams();
-const focoPesquisaEvasaoId = searchParams.get('pesquisa_evasao_id');
-
-useEffect(() => {
-  if (focoPesquisaEvasaoId) setAba('acompanhamento');
-}, [focoPesquisaEvasaoId]);
-```
-
-Passar `focoPesquisaEvasaoId` por `TabSucessoAluno` e `PesquisasTab`. Cada
-componente usa `useEffect` para selecionar `pesquisa` e `evasao`,
-respectivamente. `PesquisaEvasaoTab` expande apenas se o UUID focado existir na
-listagem carregada; caso contrário mostra aviso e mantém a tela funcional.
-
-- [ ] **Step 3: Rodar testes e build**
-
-```powershell
-node --test tests/liaAlertasDeepLink.test.mjs tests/pesquisaEvasaoConversaFrontend.test.mjs
-npm run build
-```
-
-Expected: PASS e build Vite sem erro.
-
-- [ ] **Step 4: Commit**
-
-```powershell
-git add src/components/App/SucessoCliente/SucessoClientePage.tsx src/components/App/SucessoCliente/TabSucessoAluno.tsx src/components/App/SucessoCliente/PesquisasTab.tsx src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx tests/liaAlertasDeepLink.test.mjs
-git commit -m "feat: abrir pesquisa de evasao pelo alerta da Lia"
-```
+O deep link para a pesquisa exata não pertence mais à Fase A. O alerta abre a
+tela autenticada do Sucesso do Aluno sem parâmetro; a pessoa localiza o caso
+pela lista. Também fica para depois o ajuste visual que evita repetir, ao mesmo
+tempo, a lista de mensagens e a consolidação da rodada. Nenhum dos quatro
+componentes de frontend citados na versão anterior deste plano será alterado.
 
 ## Task 7: Escrever o runbook e validar o pacote sem produção
 
@@ -1085,7 +1017,7 @@ Gate 4 — autorização humana
 Gate 5 — primeiro evento produtivo assistido
   confirmar destinatário = executado_por_usuario_id
   confirmar mensagem sem conteúdo da resposta
-  confirmar link autenticado para a pesquisa
+  confirmar link autenticado para a tela do Sucesso do Aluno
   confirmar que nenhum outro operador recebeu
 ```
 
@@ -1117,9 +1049,8 @@ timer, sem apagar eventos já entregues antes de exportar a evidência.
 - [ ] **Step 3: Rodar a suíte local completa relevante**
 
 ```powershell
-node --test tests/liaAlertasPrivadosFaseA.test.mjs tests/liaAlertasDeepLink.test.mjs tests/pesquisaEvasao*.test.mjs
+node --test tests/liaAlertasPrivadosFaseA.test.mjs tests/pesquisaEvasao*.test.mjs
 python -m unittest tests.test_process_lia_alert_queue tests.test_lareport_whatsapp_single -v
-npm run build
 git diff --check
 ```
 
@@ -1272,7 +1203,8 @@ git commit -m "feat: liberar alertas privados da Lia apos piloto"
 - O primeiro envio é o piloto no destino governado do Alf.
 - Produção só é liberada por migration criada depois do aceite do piloto.
 - Resultado ambíguo não é reenviado.
-- O link exige login e abre a pesquisa correta.
+- O link exige login e abre a tela do Sucesso do Aluno; localizar e expandir a
+  pesquisa exata fica como melhoria posterior.
 - `bi_messages_lamusic`, `fila_relatorios_whatsapp`,
   `fila_relatorios_sol_hermes` e `notificacao_*` não são fontes nem filas desta
   fase.
@@ -1290,5 +1222,4 @@ Parar e reportar sem improvisar se:
 - a VPS exigir acesso ao conteúdo da resposta para enviar;
 - o bridge não confirmar mensagem única com `message_id`;
 - o piloto tocar 29 ou 30;
-- a Vercel publicar frontend antes do backend necessário ao deep link;
 - outra conversa estiver alterando os mesmos arquivos ou migrations.
