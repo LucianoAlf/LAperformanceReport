@@ -9,6 +9,8 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const paths = {
   hook: resolve(repoRoot, 'src/components/App/SucessoCliente/hooks/useFollowupsEvasao.ts'),
   modal: resolve(repoRoot, 'src/components/App/SucessoCliente/ModalRegistrarFollowupEvasao.tsx'),
+  fila: resolve(repoRoot, 'src/components/App/SucessoCliente/FilaFollowupEvasao.tsx'),
+  tab: resolve(repoRoot, 'src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx'),
   types: resolve(repoRoot, 'src/components/App/SucessoCliente/pesquisaEvasao.types.ts'),
 };
 
@@ -54,4 +56,32 @@ test('modal deixa claro que a acao nao envia mensagem para a familia', () => {
   assert.match(source, /WhatsApp/);
   assert.match(source, /Ligação/);
   assert.match(source, /Outro/);
+});
+
+test('fila mostra contador, estados operacionais e contexto do envio', () => {
+  const source = readOptional(paths.fila);
+
+  for (const label of [
+    'Enviado em',
+    'Aguardando resposta',
+    'Follow-up pendente',
+    'Follow-up avisado',
+    'Follow-up realizado',
+    'Follow-up dispensado',
+    'Interagiu sem resposta válida',
+  ]) {
+    assert.match(source, new RegExp(label, 'i'));
+  }
+
+  assert.match(source, /ConversaPesquisaEvasao/);
+  assert.match(source, /Marcar realizado/);
+  assert.match(source, /Dispensar/);
+});
+
+test('aba monta a fila e respeita o filtro do link diario', () => {
+  const source = readOptional(paths.tab);
+
+  assert.match(source, /useSearchParams\s*\(/);
+  assert.match(source, /FilaFollowupEvasao/);
+  assert.match(source, /searchParams\.get\(['"]filtro['"]\)\s*===\s*['"]followup_pendente['"]/);
 });

@@ -1,4 +1,5 @@
 import { Fragment, useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -24,6 +25,7 @@ import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 import { ModalPreviewPesquisaEvasao } from './ModalPreviewPesquisaEvasao';
 import { ConversaPesquisaEvasao } from './ConversaPesquisaEvasao';
 import { FilaRevisaoEvasao } from './FilaRevisaoEvasao';
+import { FilaFollowupEvasao } from './FilaFollowupEvasao';
 import type {
   PesquisaEvasaoConfirmacao,
   PesquisaEvasaoListagemItem,
@@ -109,6 +111,9 @@ async function extrairMensagemErro(
 export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
   const toast = useToast();
   const sentinelRef = useWidgetOverlapSentinel();
+  const [searchParams] = useSearchParams();
+  const abrirFollowupPendente =
+    searchParams.get('filtro') === 'followup_pendente';
 
   const [evadidos, setEvadidos] = useState<EvadidoPesquisa[]>([]);
   const [stats, setStats] = useState<StatsPesquisa | null>(null);
@@ -656,6 +661,14 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
 
       <FilaRevisaoEvasao
         unidadeAtual={unidadeAtual}
+        onAlteracao={carregarDados}
+      />
+
+      <FilaFollowupEvasao
+        unidadeAtual={unidadeAtual}
+        ano={filtroAno}
+        mes={filtroMes}
+        filtroInicial={abrirFollowupPendente ? 'followup_pendente' : 'todos'}
         onAlteracao={carregarDados}
       />
 
