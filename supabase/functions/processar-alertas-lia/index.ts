@@ -1,3 +1,5 @@
+/// <reference lib="deno.ns" />
+
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -52,6 +54,20 @@ serve(async (req) => {
     auth: { autoRefreshToken: false, persistSession: false },
     global: { headers: { Authorization: `Bearer ${serviceRoleToken}` } },
   });
+
+  if (pedido.alertaId === null) {
+    const { error: produtorError } = await supabase.rpc(
+      "produzir_lia_resumos_followup_72h",
+      { p_agora: new Date().toISOString() },
+    );
+    if (produtorError) {
+      console.error(JSON.stringify({
+        evento: "lia_followup_produtor",
+        status: "erro",
+        erro_codigo: "produtor_indisponivel",
+      }));
+    }
+  }
 
   const adapters: DispatcherAdapters = {
     async claim(workerId, alertaId) {

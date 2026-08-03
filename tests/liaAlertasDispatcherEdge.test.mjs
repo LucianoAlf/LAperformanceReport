@@ -51,6 +51,19 @@ test('endpoint autentica service role antes do acesso privilegiado', () => {
   assert.doesNotMatch(source, /webhook-whatsapp-inbox/);
 });
 
+test('dispatcher acorda produtor da Fase B somente no ciclo automatico', () => {
+  const source = read(index);
+  assert.match(source, /produzir_lia_resumos_followup_72h/);
+  assert.match(source, /pedido\.alertaId\s*===\s*null/);
+  assert.match(source, /produtor_indisponivel/);
+  assert.ok(
+    source.indexOf('produzir_lia_resumos_followup_72h') <
+      source.indexOf('return json(await processarUmAlerta'),
+    'produtor precisa executar antes do claim normal',
+  );
+  assert.doesNotMatch(source, /webhook-whatsapp-inbox/);
+});
+
 test('migration audita a caixa e usa erros de provider', () => {
   const sql = read(migration);
   assert.match(sql, /add column caixa_id integer/i);

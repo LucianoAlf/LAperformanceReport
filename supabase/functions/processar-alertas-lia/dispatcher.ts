@@ -57,7 +57,11 @@ export type ClaimAlerta = {
   claim_token: string;
   destino: string;
   mensagem: string;
-  evento_tipo: "resposta_nova" | "rodada_nova_pos_revisao" | "opt_out";
+  evento_tipo:
+    | "resposta_nova"
+    | "rodada_nova_pos_revisao"
+    | "opt_out"
+    | "followup_3d_resumo";
   ambiente: "teste" | "producao";
   caixa_id: number;
 };

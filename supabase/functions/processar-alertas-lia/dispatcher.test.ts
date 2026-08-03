@@ -1,3 +1,5 @@
+/// <reference lib="deno.ns" />
+
 import {
   assertEquals,
   assertRejects,
@@ -178,6 +180,24 @@ Deno.test("envia uma única mensagem pela caixa 3 e exige message_id", async () 
   for (const proibido of [CLAIM.destino, CLAIM.mensagem, CAIXA.uazapi_token]) {
     assertEquals(logs.includes(proibido), false);
   }
+});
+
+Deno.test("resumo de follow-up usa o mesmo transporte e uma unica chamada", async () => {
+  const followup: ClaimAlerta = {
+    ...CLAIM,
+    alerta_id: "10000000-0000-4000-8000-000000000099",
+    evento_tipo: "followup_3d_resumo",
+  };
+  const { adapters, chamadas } = criarCenario({
+    claim: () => Promise.resolve(followup),
+  });
+
+  const resultado = await processarUmAlerta(adapters, followup.alerta_id);
+
+  assertEquals(resultado.status, "enviado");
+  assertEquals(chamadas.provider.length, 1);
+  assertEquals(chamadas.concluir.length, 1);
+  assertEquals(chamadas.falhar.length, 0);
 });
 
 Deno.test("caixa divergente falha fechado antes do provedor", async () => {
