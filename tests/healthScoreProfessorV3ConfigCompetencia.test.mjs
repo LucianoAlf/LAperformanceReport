@@ -81,7 +81,7 @@ test('frontend envia competencia e origem sem misturar versoes', () => {
   );
   assert.match(
     hook,
-    /p_config_origem_id:\s*config\.ativa\.id/,
+    /p_config_origem_id:\s*(?:config\.ativa|activeConfig)\.id/,
   );
   assert.match(page, /<HealthScoreV3Config\s+competencia=\{[\s\S]{0,100}startDate/);
 });
