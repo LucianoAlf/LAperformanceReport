@@ -812,6 +812,21 @@ rapidamente — sem exigir deploy de quatro componentes de frontend.
   resumo da manhã seguinte;
 - o follow-up automático à família permanece desligado e fora desta fase.
 
+### 20.3 Estado local da Fase B em 03/08/2026
+
+- a implementação das Tasks 1 a 7 está concluída na `main` local;
+- a migration estrutural nasce com `followup_72h_liberado=false`, não cria
+  cron novo e não contém ativação produtiva;
+- o produtor diário reaproveita o dispatcher e o cron por minuto da Fase A,
+  mas só materializa um resumo por operador/data às 09:00 BRT;
+- a tela calcula a fila pelo estado canônico exatamente em
+  `enviado_em + 72 hours`, independentemente do horário do resumo;
+- ações `realizado` e `dispensado` passam por RPC governada e preservam
+  operador, auth UID, horário, canal e observação;
+- testes Node, Deno, build e fixture PostgreSQL 17 estão verdes;
+- nenhuma migration, Edge Function ou interface desta fase foi publicada em
+  produção; o rollout continua bloqueado até a Task 8 e o piloto do Alf.
+
 ## 21. Arquivos e contratos relacionados
 
 - `docs/superpowers/specs/2026-07-30-pesquisa-evasao-v2-mapa-sinais-design.md`

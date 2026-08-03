@@ -13,7 +13,10 @@
 ## Limites e estado de partida
 
 - Trabalhar na `main` local, conforme decisão do Alf; não criar worktree, branch ou PR sem pedido posterior.
-- A `main` local estava limpa e quatro commits à frente de `origin/main` no início da execução. Esses commits são da frente Emusys e não pertencem à Fase B; não rebasear, reordenar ou misturar seus arquivos.
+- A `main` avançou durante a Task 1 por outra frente: os commits Emusys foram
+  preservados e o commit documental da Fase B foi rebaseado e publicado pelo
+  outro fluxo. As Tasks seguintes foram commitadas por caminho explícito, sem
+  rebasear, reordenar ou misturar arquivos da outra execução.
 - Esta etapa de planejamento não altera produção. Durante a execução, nenhuma migration, Edge Function, ativação, push ou envio de WhatsApp acontece sem o gate previsto neste documento.
 - Projeto de produção reconfirmado em leitura: `ouqwbbermlzqqvtqwlul`.
 - A Fase A está ativa: `processar-alertas-lia`, caixa 3 e o cron `lia-alertas-privados-dispatcher-minuto` já operam a cada minuto.
@@ -24,6 +27,14 @@
 - O resumo será consolidado uma vez por operador e por dia, às 09:00 BRT, agrupando todos os casos que venceram desde o resumo anterior. A pesquisa entra na tela exatamente em `enviado_em + 72 horas`; somente o aviso no WhatsApp espera o resumo diário. Um caso que vence às 11h de terça aparece na tela imediatamente e é avisado na manhã de quarta — consequência aceita pelo Alf.
 - O resumo lista no máximo dez casos e informa a quantidade restante. Todos os casos incluídos ficam vinculados ao mesmo resumo, inclusive os que não aparecem nominalmente por ultrapassarem dez.
 - O caso real de aceite é `pesquisa_evasao.id=4efcfd18-d1fc-4a35-8dc4-a80b36c3f527`, aluno Ezequiel FernandoFerreira de almeida, enviado por Jéssica (`usuarios.id=29`) em `2026-08-03 10:55:54 BRT`; vence em `2026-08-06 10:55:54 BRT`, depois do resumo de quinta, portanto deve entrar no resumo de sexta-feira, `2026-08-07 09:00 BRT`.
+
+## Estado da execução local em 03/08/2026
+
+- Tasks 1 a 7 implementadas e verificadas;
+- migration estrutural mantida desligada por padrão;
+- migration de ativação ainda não criada;
+- nenhuma migration, Edge, interface ou mensagem desta fase publicada;
+- Task 8 bloqueada até autorização separada e piloto presencial do Alf.
 
 ## Modelo de estado
 
