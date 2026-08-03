@@ -328,7 +328,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
     }
   };
 
-  const confirmarEnvio = async () => {
+  const confirmarEnvio = async (mensagemFinal: string) => {
     if (!preview || confirmandoRef.current) return;
 
     if (
@@ -347,6 +347,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
         body: {
           acao: 'confirmar',
           preview_id: preview_id,
+          mensagem_final: mensagemFinal,
         },
       });
 

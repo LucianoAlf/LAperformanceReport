@@ -298,8 +298,8 @@ test('requests de preview e confirmacao usam allowlists diferentes e exatas', ()
   for (const propriedades of confirmacoes) {
     assert.deepEqual(
       [...new Set(propriedades)].sort(),
-      ['acao', 'preview_id'].sort(),
-      'confirmacao deve enviar exatamente { acao, preview_id }',
+      ['acao', 'mensagem_final', 'preview_id'].sort(),
+      'confirmacao deve enviar exatamente { acao, preview_id, mensagem_final }',
     );
   }
 
@@ -407,7 +407,7 @@ test('modo teste e legados TESTE ficam inequivocos e sem acoes operacionais', ()
 test('fluxo trata erros HTTP e so recarrega apos enviado confirmado', () => {
   const tab = codigoExecutavel(readOptional(tabPath));
   const confirmar = tab.match(
-    /const confirmarEnvio = async \( \) => \{[\s\S]*?(?=const alterarModalPreview)/,
+    /const confirmarEnvio = async \( mensagemFinal : string \) => \{[\s\S]*?(?=const alterarModalPreview)/,
   )?.[0] ?? '';
 
   assert.match(tab, /error \. context instanceof Response/);
@@ -437,7 +437,7 @@ test('fluxo trata erros HTTP e so recarrega apos enviado confirmado', () => {
 test('aviso de captura despreparada aparece somente em envio real', () => {
   const tab = codigoExecutavel(readOptional(tabPath));
   const confirmar = tab.match(
-    /const confirmarEnvio = async \( \) => \{[\s\S]*?(?=const alterarModalPreview)/,
+    /const confirmarEnvio = async \( mensagemFinal : string \) => \{[\s\S]*?(?=const alterarModalPreview)/,
   )?.[0] ?? '';
 
   assert.match(
