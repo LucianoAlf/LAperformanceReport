@@ -154,6 +154,8 @@ test('fixture PG17 contém provas executáveis de isolamento e idempotência', (
     /teste comum nao pode entrar na outbox produtiva/i,
     /dois workers nao podem reclamar a mesma entrega/i,
     /resultado ambiguo nao pode voltar a pendente/i,
+    /toda entrega da Fase A deve auditar caixa_id=3/i,
+    /bridge_timeout deveria ser rejeitado/i,
     /piloto deve forcar o destino governado do Alf/i,
     /LIA_ALERTAS_PRIVADOS_FASE_A_PG17_OK/,
   ]) {

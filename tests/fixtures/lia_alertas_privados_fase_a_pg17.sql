@@ -85,6 +85,15 @@ create table public.usuarios (
   auth_user_id uuid
 );
 
+create table public.whatsapp_caixas (
+  id integer primary key,
+  nome text not null,
+  ativo boolean not null default true,
+  provedor text not null,
+  uazapi_url text,
+  uazapi_token text
+);
+
 create table public.unidades (
   id uuid primary key,
   nome text not null
@@ -134,7 +143,19 @@ insert into public.usuarios(id, nome, ativo, auth_user_id) values
   (30, 'Fabi', true, '00000000-0000-4000-8000-000000000030'),
   (31, 'Operador inativo', false, '00000000-0000-4000-8000-000000000031');
 
+insert into public.whatsapp_caixas(
+  id, nome, ativo, provedor, uazapi_url, uazapi_token
+) values (
+  3,
+  'Lia - Sucesso do Aluno',
+  true,
+  'uazapi',
+  'https://fixture.invalid',
+  'FIXTURE-INVALIDA'
+);
+
 \ir ../../supabase/migrations/20260803090000_lia_alertas_privados_fase_a.sql
+\ir ../../supabase/migrations/20260803210000_lia_alertas_dispatcher_edge.sql
 
 select public.fixture_assert(
   not has_table_privilege('authenticated', 'public.lia_destinos_privados', 'select'),
@@ -156,6 +177,14 @@ select public.fixture_assert(
   (select alertas_producao_liberados = false
    from public.lia_alertas_configuracao where id = 1),
   'producao precisa nascer bloqueada'
+);
+select public.fixture_assert(
+  not exists (
+    select 1
+    from public.lia_alertas_privados
+    where caixa_id <> 3
+  ),
+  'toda entrega da Fase A deve auditar caixa_id=3'
 );
 
 insert into public.unidades(id, nome) values
@@ -415,7 +444,7 @@ select public.fixture_assert(
   public.falhar_lia_alerta_privado(
     (select alerta_id from fixture_claim_ambiguo),
     (select claim_token from fixture_claim_ambiguo),
-    'bridge_timeout',
+    'provider_confirmacao_ambigua',
     true
   ),
   'falha ambigua precisa reconhecer o claim'
@@ -431,6 +460,25 @@ select public.fixture_assert(
   ),
   'resultado ambiguo nao pode voltar a pendente'
 );
+
+do $fixture_invalid_code$
+begin
+  begin
+    perform public.falhar_lia_alerta_privado(
+      gen_random_uuid(),
+      gen_random_uuid(),
+      'bridge_timeout',
+      false
+    );
+    raise exception 'FIXTURE_ASSERT: bridge_timeout deveria ser rejeitado';
+  exception
+    when others then
+      if sqlerrm <> 'erro_codigo_invalido' then
+        raise;
+      end if;
+  end;
+end;
+$fixture_invalid_code$;
 
 -- Destino alterado entre enqueue e claim falha fechado.
 update public.lia_alertas_privados alerta

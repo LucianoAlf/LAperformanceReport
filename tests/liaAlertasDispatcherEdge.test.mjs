@@ -38,6 +38,10 @@ test('migration audita a caixa e usa erros de provider', () => {
   const sql = read(migration);
   assert.match(sql, /add column caixa_id integer/i);
   assert.match(sql, /default 3/i);
+  assert.match(
+    sql,
+    /claim_lia_alerta_privado[\s\S]*returns table[\s\S]*caixa_id integer/i,
+  );
   assert.match(sql, /provider_confirmacao_ambigua/i);
   assert.doesNotMatch(sql, /bridge_/i);
 });
