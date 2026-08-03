@@ -179,13 +179,18 @@ Disparo de templates Meta (WhatsApp Cloud API) + conversas + agentes IA. `Campan
 - **Subaba Pós-1ª Aula** (`PesquisaPrimeiraAulaTab` + `usePesquisaPrimeiraAula`): lista **travada em "ontem"** (RPC `get_candidatos_pesquisa_primeira_aula` com `p_apenas_ontem=true`; MIN da 1ª aula real). Disparo manual em lote (1 clique) OU auto-disparo opt-in via cron (kill switch = toggle no cabeçalho da própria aba, `usePesquisaPrimeiraAula.toggleAutoPesquisa`, tabela `automacoes_config` slug `auto_pesquisa_1a_aula`, começa OFF). Textos editáveis (aluno/responsável) ficam em **Mensagens Automáticas** (`AutomacoesTab`).
 - **Views:** `vw_aluno_sucesso_lista` (health score, fase jornada, presença, pagamento), `vw_renovacoes_proximas`
 - **Tabelas:** `automacoes_config` (toggles de automação, ex. `auto_pesquisa_1a_aula`); `pesquisa_evasao`, `pesquisa_evasao_previews`, `pesquisa_evasao_templates` e `pesquisa_evasao_assinaturas` (fundação V2 e snapshots privados da pesquisa de evasão); `pesquisa_evasao_mensagens`, `pesquisa_evasao_transcricoes` e `pesquisa_evasao_analises` guardam a conversa append-only. No motor `multipartes_v2`, cada silêncio de 15 minutos delimita uma rodada/versão; uma continuação após revisão cria versão nova, preserva a anterior e religa o caso na fila com `conteudo_novo_desde_revisao`. `movimentacoes_admin.telefone_snapshot_origem` distingue snapshot real de contato recuperado por backfill. A fila V2 bloqueia menor sem responsável apto ou com snapshot divergente antes do envio.
-- **Lia — Fase A, pacote local ainda não implantado:** a migration
-  `20260803090000_lia_alertas_privados_fase_a.sql` prepara outbox privada para
-  resposta nova, rodada pós-revisão e opt-out, sempre destinada somente a quem
-  enviou a pesquisa. Produção nasce bloqueada; o worker Hermes e o timer estão
-  apenas versionados e o primeiro envio exige piloto no número governado do
-  Alf. O alerta abre a tela geral do Sucesso do Aluno; deep link para o caso
-  exato permanece melhoria posterior.
+- **Lia — Fase A, fundação aplicada e transporte local ainda não publicado:** a
+  migration `20260803090000_lia_alertas_privados_fase_a.sql`, registrada
+  remotamente como `20260803124754`, mantém a produção bloqueada e cria outbox
+  privada para resposta nova, rodada pós-revisão e opt-out, destinada somente a
+  quem enviou a pesquisa. A adaptação `20260803210000` e a Edge
+  `processar-alertas-lia` estão implementadas/testadas localmente para enviar
+  exclusivamente pela caixa 3, mas não foram aplicadas ou publicadas. Não há
+  worker, bridge novo, cron de consumo nem migration de ativação. Dois envios
+  produtivos de Jéssica em 03/08/2026 já podem gerar entregas retidas em
+  `aguardando_liberacao`; até o piloto e a ativação, a equipe acompanha as
+  respostas pela tela. Este pacote não altera `webhook-whatsapp-inbox`. O alerta
+  abre a tela geral; deep link para o caso exato permanece melhoria posterior.
 
 ## Professores (`/app/professores`)
 `Professores/ProfessoresPage.tsx`; abas Cadastro, Performance, Carteira, Agenda, 360°, Checklists, Configurações.

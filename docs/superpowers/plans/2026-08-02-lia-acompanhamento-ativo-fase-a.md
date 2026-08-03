@@ -1,27 +1,33 @@
 # Lia — Acompanhamento Ativo da Pesquisa de Evasão, Fase A Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execução:** seguir as tarefas sequencialmente na `main` local, com commits
+> normais, sem worktree, branch ou PR por tarefa. Migration, deploy de Edge e
+> envio de WhatsApp continuam exigindo autorização explícita separada.
 
-**Goal:** Entregar alertas privados, idempotentes e auditáveis para resposta nova, rodada nova após revisão e opt-out, sempre somente à pessoa que enviou a pesquisa, com piloto obrigatório no número do Alf antes de liberar Fabi e Jessica.
+**Goal:** Entregar alertas privados, idempotentes e auditáveis para resposta nova, rodada nova após revisão e opt-out, sempre somente à pessoa que enviou a pesquisa, com piloto obrigatório no número do Alf antes de liberar Fabi e Jéssica.
 
-**Architecture:** O Postgres registra o fato imutável e uma entrega privada em outbox na mesma transação em que a mensagem substantiva é classificada. A outbox usa um cadastro governado por `usuarios.id`, nunca `usuarios.telefone` em tempo de execução, e fica bloqueada para produção até o piloto. Um worker pequeno na VPS reclama uma entrega por RPC atômica e reutiliza apenas o transporte single-message do Hermes; ele não lê respostas, não decide destinatário e não escreve nas filas de relatório existentes.
+**Architecture:** O Postgres registra o fato imutável e uma entrega privada em outbox na mesma transação em que a mensagem substantiva é classificada. A outbox usa um cadastro governado por `usuarios.id`, nunca `usuarios.telefone` em tempo de execução, e fica bloqueada para produção até o piloto. Uma Edge Function backend-only, acordada por `pg_cron`, reclama no máximo uma entrega por RPC atômica e envia diretamente pela caixa 3 no mesmo `POST /send/text` da UAZAPI que já atende Fabi e Jéssica; não existe worker, unit ou rota nova no bridge.
 
-**Tech Stack:** PostgreSQL 17/Supabase/RLS, PL/pgSQL, Python 3 `unittest`, Node `node:test`, Hermes WhatsApp bridge, systemd.
+**Tech Stack:** PostgreSQL 17/Supabase/RLS, PL/pgSQL, Supabase Edge Functions/Deno, `pg_cron`, `pg_net`, Vault, Deno Test e Node `node:test`.
 
 ---
 
 ## Escopo fechado
+
+**Ponto de retomada:** Tasks 1 a 4 são histórico concluído e não devem ser
+reexecutadas. A próxima implementação começa na Task 5, removendo o transporte
+rejeitado antes de criar o dispatcher Edge.
 
 Incluído nesta fase:
 
 - outbox de `resposta_nova`, `rodada_nova_pos_revisao` e `opt_out`;
 - um alerta por pesquisa e versão da rodada;
 - destinatário exclusivamente igual a `pesquisa_evasao.executado_por_usuario_id`;
-- cadastro governado dos destinos privados de Alf, Jessica e Fabi;
+- cadastro governado dos destinos privados de Alf, Jéssica e Fabi;
 - fila administrativa para operador inativo, destino ausente ou resultado ambíguo;
 - piloto ponta a ponta no número governado do Alf;
 - link autenticado para a tela do Sucesso do Aluno;
-- worker VPS/Hermes e observabilidade sanitizada.
+- dispatcher Edge pela caixa 3, acionamento por `pg_cron` e observabilidade sanitizada.
 
 Fora desta fase:
 
@@ -29,49 +35,96 @@ Fora desta fase:
 - coortes, histórico de KPI e grupo, que pertencem à Fase C;
 - follow-up automático à família, que pertence à Fase D e segue desligado;
 - classificação de causa ou conteúdo da resposta, que pertence ao Subprojeto C;
-- notificação cruzada entre Fabi e Jessica;
+- notificação cruzada entre Fabi e Jéssica;
 - reestruturação geral de Lia, Sol, Fábio ou Telegram.
 - deep link para abrir a pesquisa exata e os quatro componentes de frontend
   necessários para isso;
 - ajuste visual da consolidação duplicada na conversa.
 
-## Evidência e decisões congeladas em 02/08/2026
+## Evidência e decisões reconciliadas em 03/08/2026
 
 - Projeto de produção confirmado: `ouqwbbermlzqqvtqwlul`.
 - Alias estável de produção confirmado na Vercel:
   `https://la-performance-report.vercel.app`.
 - Alf: `usuarios.id=2`, destino `5521981278047`.
-- Jessica: `usuarios.id=29`, destino `5521984695110`.
+- Jéssica: `usuarios.id=29`, destino `5521984695110`.
 - Fabi: `usuarios.id=30`, destino `5521994696489`.
 - Os três usuários estão ativos e possuem `auth_user_id`.
 - O primeiro alerta entregue usa somente o destino do Alf.
 - Alertas produtivos permanecem bloqueados até o piloto ser aceito.
 - Operador inativo vai para fila administrativa, nunca para grupo ou colega.
-- O worker envia entre 08:00 e 20:00 BRT. Fora dessa janela, mantém a entrega pendente.
+- O dispatcher envia entre 08:00 e 20:00 BRT. Fora dessa janela, mantém a entrega pendente.
 - Resultado ambíguo do transporte não é reenviado automaticamente.
 - `modo_teste=true` não gera alerta produtivo; o piloto usa uma RPC própria e ambiente `teste`.
+- A caixa 3 é `Lia - Sucesso do Aluno`, usa o número de origem
+  `+55 21 2342-5316` e já entregou 88 notificações confirmadas para Fabi e
+  Jéssica com `whatsapp_message_id`.
+- A UAZAPI apresenta o nome interno incorreto `Sol - Sucesso do Aluno`, mas o
+  fingerprint do token coincide com a caixa 3 e com o bridge da Lia. Não existe
+  compartilhamento de sessão.
+- Número, URL e webhook `caixa_id=3` coincidem entre UAZAPI e banco; o perfil no
+  provedor é `La Music`, com avatar da Lia. A caixa 1 é a instância ainda
+  nomeada `teste sol`; a caixa 2 usa WAHA, outro número e outra sessão.
+- Maria Financeiro, Fábio Pedagógico e Tom LA Organizer são instâncias
+  distintas e não cadastradas em `whatsapp_caixas`.
+- O transporte produtivo existente é backend-to-provider: Edge Function → caixa
+  3 → UAZAPI `/send/text`. A Fase A o reaproveita sem passar pelo bridge 3001.
+- A migration estrutural já foi aplicada em produção como versão remota
+  `20260803124754`; `alertas_producao_liberados=false` e ainda não existe cron,
+  piloto ou ativação. O dispatcher existe somente no checkout local.
+- Jéssica enviou duas pesquisas produtivas em 03/08/2026, às 10:52 e 10:55
+  BRT. Ambas nasceram em `multipartes_v2` e estavam `sem_resposta` no
+  preflight. Se responderem antes da ativação, as entregas ficam em
+  `aguardando_liberacao`, fora do claim.
+- A Fase A não modifica nem publica `webhook-whatsapp-inbox`. Até a ativação, a
+  equipe acompanha respostas reais diretamente na tela.
+- `usuarios.id=29` foi corrigido para `Jéssica`; snapshots dos dois envios
+  anteriores continuam com o valor histórico original.
 
 ## Mapa de arquivos
 
-**Criar:**
+**Já criados e preservados:**
 
 - `supabase/migrations/20260803090000_lia_alertas_privados_fase_a.sql` — cadastro governado, eventos, entregas, produtor, claims e piloto, com produção bloqueada.
 - `tests/liaAlertasPrivadosFaseA.test.mjs` — contrato estático e execução da fixture PostgreSQL 17.
 - `tests/fixtures/lia_alertas_privados_fase_a_pg17.sql` — prova real de idempotência, isolamento, roteamento e RLS.
-- `scripts/process_lia_alert_queue.py` — adaptador de transporte da outbox para o bridge Hermes.
-- `tests/test_process_lia_alert_queue.py` — contrato do worker e falhas ambíguas.
-- `scripts/systemd/lia-alertas-privados.service` — execução one-shot do worker.
-- `scripts/systemd/lia-alertas-privados.timer` — polling a cada minuto.
 - `docs/runbooks/lia-acompanhamento-ativo-fase-a-rollout.md` — rollout em gates e evidências.
+
+**Implementados localmente no transporte revisado:**
+
+- `supabase/migrations/20260803210000_lia_alertas_dispatcher_edge.sql` — adiciona
+  `caixa_id=3` à auditoria da outbox, expõe a caixa no claim e troca códigos de
+  falha do bridge por códigos do provedor.
+- `supabase/functions/processar-alertas-lia/index.ts` — endpoint backend-only que
+  reclama uma entrega, usa exatamente a caixa 3 e registra o desfecho.
+- `supabase/functions/processar-alertas-lia/dispatcher.ts` — núcleo testável,
+  sem dependência do runtime HTTP.
+- `supabase/functions/processar-alertas-lia/dispatcher.test.ts` — contratos de
+  envio único, confirmação, ambiguidade e log sanitizado.
+- `tests/liaAlertasDispatcherEdge.test.mjs` — contrato estático do pacote, do
+  `verify_jwt=true` e da ausência de bridge/worker.
+
+**Removidos ou revertidos no corte de arquitetura:**
+
+- `scripts/process_lia_alert_queue.py`;
+- `tests/test_process_lia_alert_queue.py`;
+- `scripts/systemd/lia-alertas-privados.service`;
+- `scripts/systemd/lia-alertas-privados.timer`;
+- `scripts/lia-whatsapp-bridge/` e
+  `tests/liaWhatsappAlertSingleMessage.test.mjs`;
+- alterações da Fase A em `scripts/lareport_whatsapp_single.py` e
+  `tests/test_lareport_whatsapp_single.py`; esses dois arquivos pertencem ao
+  transporte de relatórios existente e devem voltar ao contrato `/send-report`
+  da Sol.
 
 **Modificar:**
 
 - `docs/superpowers/specs/2026-08-02-lia-acompanhamento-ativo-pesquisa-evasao-design.md` — manter a spec sincronizada com evidências de implementação.
-- `docs/MAPA-SISTEMA.md` — documentar outbox, worker e fronteira com o motor de relatórios.
+- `docs/MAPA-SISTEMA.md` — documentar outbox, dispatcher Edge e fronteira com o motor de relatórios.
 
 **Criar somente depois do piloto aceito:**
 
-- `supabase/migrations/20260803093000_lia_alertas_privados_fase_a_ativacao.sql` — liberar entregas produtivas. Este arquivo não pode existir antes do aceite do piloto, para não ser aplicado acidentalmente junto da migration estrutural.
+- `supabase/migrations/20260803213000_lia_alertas_privados_fase_a_ativacao.sql` — liberar entregas produtivas e agendar o dispatcher. Este arquivo não pode existir antes do aceite do piloto.
 
 ## Contrato físico
 
@@ -317,7 +370,7 @@ A família pediu para não receber novas mensagens desta pesquisa. O caso foi bl
 https://la-performance-report.vercel.app/app/sucesso-aluno
 ```
 
-## Task 1: Fixar o contrato em testes vermelhos
+## Task 1: Fixar o contrato em testes vermelhos — CONCLUÍDA, NÃO REEXECUTAR
 
 **Files:**
 
@@ -428,7 +481,7 @@ git add tests/liaAlertasPrivadosFaseA.test.mjs tests/fixtures/lia_alertas_privad
 git commit -m "test: fixar contrato dos alertas privados da Lia"
 ```
 
-## Task 2: Criar schema, destinos governados e proteção de acesso
+## Task 2: Criar schema, destinos governados e proteção de acesso — CONCLUÍDA, NÃO REEXECUTAR
 
 **Files:**
 
@@ -538,7 +591,7 @@ git add supabase/migrations/20260803090000_lia_alertas_privados_fase_a.sql tests
 git commit -m "feat: criar outbox privada governada da Lia"
 ```
 
-## Task 3: Produzir eventos idempotentes no momento certo
+## Task 3: Produzir eventos idempotentes no momento certo — CONCLUÍDA, NÃO REEXECUTAR
 
 **Files:**
 
@@ -637,7 +690,7 @@ end;
 ```
 
 O insert da entrega usa somente `p_operador_usuario_id`; não há consulta a
-outro operador nem lista fixa de Fabi/Jessica.
+outro operador nem lista fixa de Fabi/Jéssica.
 
 - [ ] **Step 4: Implementar o trigger em mensagens**
 
@@ -666,7 +719,7 @@ git add supabase/migrations/20260803090000_lia_alertas_privados_fase_a.sql tests
 git commit -m "feat: produzir eventos privados da Lia por rodada"
 ```
 
-## Task 4: Criar claim, conclusão, falha e piloto controlado
+## Task 4: Criar claim, conclusão, falha e piloto controlado — CONCLUÍDA, NÃO REEXECUTAR
 
 **Files:**
 
@@ -789,179 +842,334 @@ git add supabase/migrations/20260803090000_lia_alertas_privados_fase_a.sql tests
 git commit -m "feat: adicionar claim seguro e piloto da Lia"
 ```
 
-## Task 5: Implementar o worker VPS/Hermes
+## Task 5: Retirar o transporte rejeitado e fixar o contrato Edge em vermelho — CONCLUÍDA LOCALMENTE
 
 **Files:**
 
-- Create: `scripts/process_lia_alert_queue.py`
-- Create: `tests/test_process_lia_alert_queue.py`
-- Create: `scripts/systemd/lia-alertas-privados.service`
-- Create: `scripts/systemd/lia-alertas-privados.timer`
+- Delete: `scripts/process_lia_alert_queue.py`
+- Delete: `tests/test_process_lia_alert_queue.py`
+- Delete: `scripts/systemd/lia-alertas-privados.service`
+- Delete: `scripts/systemd/lia-alertas-privados.timer`
+- Delete: `scripts/lia-whatsapp-bridge/alert-single-message.js`
+- Delete: `scripts/lia-whatsapp-bridge/bridge-alert-single-message.patch`
+- Delete: `tests/liaWhatsappAlertSingleMessage.test.mjs`
+- Restore contract: `scripts/lareport_whatsapp_single.py`
+- Restore contract: `tests/test_lareport_whatsapp_single.py`
+- Modify: `tests/liaAlertasPrivadosFaseA.test.mjs`
+- Create: `tests/liaAlertasDispatcherEdge.test.mjs`
 
-- [ ] **Step 1: Escrever testes vermelhos do worker**
+- [ ] **Step 1: Remover somente os artefatos rejeitados**
 
-Cobrir com `unittest.mock`:
+Usar `apply_patch` para excluir os sete arquivos específicos acima. Não remover
+outros helpers de relatório. Em `scripts/lareport_whatsapp_single.py`, restaurar:
 
 ```python
-import io
-import sys
-import unittest
-from contextlib import redirect_stdout
-from pathlib import Path
-from unittest.mock import patch
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from process_lia_alert_queue import process_once
-
-WORKER_ID = '10000000-0000-4000-8000-000000000099'
-CLAIM = {
-    'alerta_id': '20000000-0000-4000-8000-000000000001',
-    'claim_token': '30000000-0000-4000-8000-000000000001',
-    'destino': '5521981278047',
-    'mensagem': 'Alerta operacional',
-    'evento_tipo': 'resposta_nova',
-    'ambiente': 'teste',
-}
-
-class FakeApi:
-    def __init__(self, claim):
-        self.claim = claim
-        self.claim_filters = []
-        self.completed = []
-        self.failed = []
-
-    def claim_one(self, worker_id, alerta_id=None):
-        self.claim_filters.append(alerta_id)
-        return self.claim[0] if self.claim else None
-
-    def complete(self, alerta_id, claim_token, message_id):
-        self.completed.append((alerta_id, claim_token, message_id))
-
-    def fail(self, alerta_id, claim_token, error_code, resultado_ambiguo):
-        self.failed.append({
-            'alerta_id': alerta_id,
-            'claim_token': claim_token,
-            'error_code': error_code,
-            'resultado_ambiguo': resultado_ambiguo,
-        })
-
-class ProcessLiaAlertQueueTest(unittest.TestCase):
-    def test_claim_send_ack_once(self):
-        api = FakeApi(claim=[CLAIM])
-        with patch('process_lia_alert_queue.send_single_report', return_value={'message_id': 'MSG-1'}) as send:
-            result = process_once(api, worker_id=WORKER_ID)
-        self.assertEqual(result['status'], 'enviado')
-        send.assert_called_once_with(CLAIM['destino'], CLAIM['mensagem'])
-        self.assertEqual(api.completed, [(CLAIM['alerta_id'], CLAIM['claim_token'], 'MSG-1')])
-
-    def test_timeout_is_ambiguous_and_is_not_retried(self):
-        api = FakeApi(claim=[CLAIM])
-        with patch('process_lia_alert_queue.send_single_report', side_effect=TimeoutError('timeout')) as send:
-            result = process_once(api, worker_id=WORKER_ID)
-        self.assertEqual(result['status'], 'resultado_ambiguo')
-        self.assertEqual(send.call_count, 1)
-        self.assertEqual(api.failed[0]['resultado_ambiguo'], True)
-
-    def test_explicit_rejection_is_failure_and_is_not_requeued(self):
-        api = FakeApi(claim=[CLAIM])
-        with patch('process_lia_alert_queue.send_single_report', side_effect=RuntimeError('bridge_http_400')):
-            result = process_once(api, worker_id=WORKER_ID)
-        self.assertEqual(result['status'], 'falha')
-        self.assertEqual(api.failed[0]['resultado_ambiguo'], False)
-
-    def test_logs_do_not_contain_destination_or_message(self):
-        api = FakeApi(claim=[CLAIM])
-        output = io.StringIO()
-        with redirect_stdout(output), patch('process_lia_alert_queue.send_single_report', return_value={'message_id': 'MSG-1'}):
-            process_once(api, worker_id=WORKER_ID)
-        self.assertNotIn(CLAIM['destino'], output.getvalue())
-        self.assertNotIn(CLAIM['mensagem'], output.getvalue())
-
-    def test_specific_alert_id_limits_pilot(self):
-        api = FakeApi(claim=[CLAIM])
-        with patch('process_lia_alert_queue.send_single_report', return_value={'message_id': 'MSG-1'}):
-            process_once(api, worker_id=WORKER_ID, alerta_id=CLAIM['alerta_id'])
-        self.assertEqual(api.claim_filters, [CLAIM['alerta_id']])
+BRIDGE_REPORT_URL = os.environ.get(
+    'LA_REPORT_WHATSAPP_SINGLE_URL',
+    'http://127.0.0.1:3000/send-report',
+)
 ```
 
-- [ ] **Step 2: Executar e confirmar falha**
+e em `_validate_bridge_url` restaurar `parsed.path != '/send-report'`. O teste
+correspondente volta a exigir `http://127.0.0.1:3000/send-report`.
+
+- [ ] **Step 2: Remover do teste da fundação toda expectativa de VPS**
+
+`tests/liaAlertasPrivadosFaseA.test.mjs` continua cobrindo migration, produtor,
+claim, seeds, RLS e piloto. Remover imports e asserts de worker, service, timer e
+patch do bridge. Adicionar a proteção negativa:
+
+```js
+for (const rejected of [
+  'scripts/process_lia_alert_queue.py',
+  'scripts/systemd/lia-alertas-privados.service',
+  'scripts/systemd/lia-alertas-privados.timer',
+  'scripts/lia-whatsapp-bridge/alert-single-message.js',
+  'scripts/lia-whatsapp-bridge/bridge-alert-single-message.patch',
+]) {
+  assert.equal(existsSync(resolve(root, rejected)), false, `${rejected} deve sair`);
+}
+```
+
+- [ ] **Step 3: Criar o teste estático vermelho do dispatcher**
+
+`tests/liaAlertasDispatcherEdge.test.mjs` deve exigir:
+
+```js
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const migration = resolve(root, 'supabase/migrations/20260803210000_lia_alertas_dispatcher_edge.sql');
+const index = resolve(root, 'supabase/functions/processar-alertas-lia/index.ts');
+const dispatcher = resolve(root, 'supabase/functions/processar-alertas-lia/dispatcher.ts');
+const config = readFileSync(resolve(root, 'supabase/config.toml'), 'utf8');
+const read = (path) => existsSync(path) ? readFileSync(path, 'utf8') : '';
+
+test('dispatcher usa caixa 3 sem bridge ou fallback', () => {
+  const source = `${read(index)}\n${read(dispatcher)}`;
+  assert.match(source, /CAIXA_LIA_ID\s*=\s*3/);
+  assert.match(source, /\/send\/text/);
+  assert.match(source, /claim_lia_alerta_privado/);
+  assert.match(source, /concluir_lia_alerta_privado/);
+  assert.match(source, /falhar_lia_alerta_privado/);
+  assert.doesNotMatch(source, /3000|3001|8657|send-alert|send-report/);
+  assert.match(config, /\[functions\.processar-alertas-lia\][\s\S]*verify_jwt\s*=\s*true/);
+});
+
+test('migration audita a caixa e usa erros de provider', () => {
+  const sql = read(migration);
+  assert.match(sql, /add column caixa_id integer/i);
+  assert.match(sql, /default 3/i);
+  assert.match(sql, /provider_confirmacao_ambigua/i);
+  assert.doesNotMatch(sql, /bridge_/i);
+});
+```
+
+- [ ] **Step 4: Rodar a fase vermelha**
 
 ```powershell
-python -m unittest tests.test_process_lia_alert_queue -v
+node --test tests/liaAlertasPrivadosFaseA.test.mjs tests/liaAlertasDispatcherEdge.test.mjs
 ```
 
-Expected: FAIL porque o worker ainda não existe.
+Expected: a fundação continua verde e o contrato do dispatcher falha porque a
+migration e a Edge ainda não existem.
 
-- [ ] **Step 3: Implementar o worker**
+- [ ] **Step 5: Commit do corte de arquitetura e dos testes vermelhos**
 
-O worker deve:
-
-1. carregar somente `LA_REPORT_SUPABASE_URL`,
-   `LA_REPORT_SERVICE_ROLE_KEY` e a URL loopback já governada pelo helper;
-2. chamar `claim_lia_alerta_privado` com UUID de worker;
-3. chamar `send_single_report(destino, mensagem)` uma única vez;
-4. concluir com o `message_id` confirmado;
-5. em timeout, conexão encerrada após POST, JSON inválido ou confirmação
-   ambígua, gravar `resultado_ambiguo=true` e não repetir;
-6. em falha explícita antes de aceitação, gravar erro fechado e não reabrir
-   automaticamente nesta fase;
-7. imprimir apenas `alerta_id`, tipo, ambiente, status e duração.
-
-CLI:
-
-```text
-python scripts/process_lia_alert_queue.py --once
-python scripts/process_lia_alert_queue.py --once --alerta-id <uuid>
+```powershell
+git add -A -- scripts/process_lia_alert_queue.py tests/test_process_lia_alert_queue.py scripts/systemd/lia-alertas-privados.service scripts/systemd/lia-alertas-privados.timer scripts/lia-whatsapp-bridge tests/liaWhatsappAlertSingleMessage.test.mjs scripts/lareport_whatsapp_single.py tests/test_lareport_whatsapp_single.py tests/liaAlertasPrivadosFaseA.test.mjs tests/liaAlertasDispatcherEdge.test.mjs
+git commit -m "refactor: remover transporte paralelo dos alertas da Lia"
 ```
 
-Não suportar `--destino`, `--mensagem` ou fallback para tabela de usuários.
+## Task 6: Adaptar a outbox para o dispatcher Edge — CONCLUÍDA LOCALMENTE
 
-- [ ] **Step 4: Versionar as units sem ativá-las**
+**Files:**
 
-`scripts/systemd/lia-alertas-privados.service`:
+- Create: `supabase/migrations/20260803210000_lia_alertas_dispatcher_edge.sql`
+- Modify: `tests/fixtures/lia_alertas_privados_fase_a_pg17.sql`
+- Modify: `tests/liaAlertasDispatcherEdge.test.mjs`
 
-```ini
-[Unit]
-Description=LA Report - alertas privados da Lia
-After=network-online.target
+- [ ] **Step 1: Acrescentar à fixture a auditoria da caixa**
 
-[Service]
-Type=oneshot
-User=sol
-WorkingDirectory=/opt/LA-Organizer/LA-performance-report
-EnvironmentFile=/home/sol/.openclaw/gateway.systemd.env
-ExecStart=/usr/bin/python3 scripts/process_lia_alert_queue.py --once
+Após aplicar a nova migration, a fixture deve provar:
+
+```sql
+select public.fixture_assert(
+  not exists (
+    select 1
+    from public.lia_alertas_privados
+    where caixa_id <> 3
+  ),
+  'toda entrega da Fase A deve auditar caixa_id=3'
+);
 ```
 
-`scripts/systemd/lia-alertas-privados.timer`:
+Também deve chamar `falhar_lia_alerta_privado` com
+`provider_confirmacao_ambigua` e rejeitar `bridge_timeout`.
 
-```ini
-[Unit]
-Description=Executa a outbox privada da Lia a cada minuto
+- [ ] **Step 2: Criar a migration aditiva**
 
-[Timer]
-OnBootSec=2min
-OnUnitActiveSec=1min
-Persistent=true
+O início da migration é:
 
-[Install]
-WantedBy=timers.target
+```sql
+alter table public.lia_alertas_privados
+  add column caixa_id integer;
+
+update public.lia_alertas_privados
+set caixa_id = 3
+where caixa_id is null;
+
+alter table public.lia_alertas_privados
+  alter column caixa_id set default 3,
+  alter column caixa_id set not null;
+
+alter table public.lia_alertas_privados
+  add constraint lia_alertas_privados_caixa_id_fkey
+  foreign key (caixa_id) references public.whatsapp_caixas(id);
 ```
+
+A migration falha fechado antes do `UPDATE` se a caixa 3 não existir, estiver
+inativa ou não tiver `nome='Lia - Sucesso do Aluno'`. Ela não lê nem compara o
+token em SQL.
+
+- [ ] **Step 3: Substituir os códigos de falha do transporte**
+
+Recriar `public.falhar_lia_alerta_privado(uuid, uuid, text, boolean)` preservando
+o gate `service_role`, o match por `claim_token` e as transições atuais. A lista
+aceita passa a ser exatamente:
+
+```sql
+if p_erro_codigo not in (
+  'provider_timeout',
+  'provider_conexao_encerrada',
+  'provider_json_invalido',
+  'provider_confirmacao_ambigua',
+  'provider_rejeitado',
+  'provider_http',
+  'provider_configuracao',
+  'provider_interno'
+) then
+  raise exception 'erro_codigo_invalido';
+end if;
+```
+
+Nenhum estado `falha` ou `resultado_ambiguo` volta automaticamente a
+`pendente`.
+
+- [ ] **Step 4: Rodar fixture e contrato**
+
+```powershell
+node --test tests/liaAlertasPrivadosFaseA.test.mjs tests/liaAlertasDispatcherEdge.test.mjs
+```
+
+Expected: PASS no contrato estático; a fixture PostgreSQL 17 termina em
+`PESQUISA_EVASAO_CLAIM_PG17_OK`.
+
+- [ ] **Step 5: Commit da adaptação da outbox**
+
+```powershell
+git add supabase/migrations/20260803210000_lia_alertas_dispatcher_edge.sql tests/fixtures/lia_alertas_privados_fase_a_pg17.sql tests/liaAlertasDispatcherEdge.test.mjs
+git commit -m "feat: auditar transporte Edge dos alertas da Lia"
+```
+
+## Task 7: Implementar o dispatcher backend-only — CONCLUÍDA LOCALMENTE
+
+**Files:**
+
+- Create: `supabase/functions/processar-alertas-lia/dispatcher.ts`
+- Create: `supabase/functions/processar-alertas-lia/dispatcher.test.ts`
+- Create: `supabase/functions/processar-alertas-lia/index.ts`
+- Modify: `supabase/config.toml`
+
+- [ ] **Step 1: Escrever os testes vermelhos do núcleo**
+
+Definir adapters injetáveis com este contrato:
+
+```ts
+export type ClaimAlerta = {
+  alerta_id: string;
+  claim_token: string;
+  destino: string;
+  mensagem: string;
+  evento_tipo: 'resposta_nova' | 'rodada_nova_pos_revisao' | 'opt_out';
+  ambiente: 'teste' | 'producao';
+};
+
+export type DispatcherAdapters = {
+  claim(workerId: string, alertaId: string | null): Promise<ClaimAlerta | null>;
+  buscarCaixaExata(caixaId: number): Promise<{
+    id: number;
+    nome: string;
+    ativo: boolean;
+    provedor: string;
+    uazapi_url: string;
+    uazapi_token: string;
+  } | null>;
+  fetchProvider(url: string, init: RequestInit): Promise<Response>;
+  concluir(alertaId: string, claimToken: string, messageId: string): Promise<boolean>;
+  falhar(alertaId: string, claimToken: string, codigo: string, ambiguo: boolean): Promise<boolean>;
+  log(evento: Record<string, unknown>): void;
+  agora(): number;
+};
+```
+
+Os testes devem provar: nenhuma pendência não chama provedor; uma pendência faz
+uma única chamada; usa somente caixa 3 ativa, UAZAPI e nome canônico; HTTP 2xx
+com `messageid` conclui; HTTP explícito não 2xx falha sem retry; timeout, conexão
+encerrada, JSON inválido e 2xx sem ID viram `resultado_ambiguo`; `alerta_id`
+limita o piloto; logs não contêm destino, mensagem, token ou payload.
+
+- [ ] **Step 2: Implementar o núcleo mínimo**
+
+`processarUmAlerta` usa `CAIXA_LIA_ID = 3`, cria um UUID por invocação, chama
+`claim` uma vez e valida a caixa de forma fechada:
+
+```ts
+export const CAIXA_LIA_ID = 3;
+
+function validarCaixa(caixa: Awaited<ReturnType<DispatcherAdapters['buscarCaixaExata']>>) {
+  if (!caixa || caixa.id !== CAIXA_LIA_ID || caixa.ativo !== true ||
+      caixa.nome !== 'Lia - Sucesso do Aluno' || caixa.provedor !== 'uazapi' ||
+      !caixa.uazapi_url || !caixa.uazapi_token) {
+    throw new Error('provider_configuracao');
+  }
+  return caixa;
+}
+```
+
+O POST é único:
+
+```ts
+await adapters.fetchProvider(`${baseUrl}/send/text`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', token: caixa.uazapi_token },
+  body: JSON.stringify({
+    number: claim.destino,
+    text: claim.mensagem,
+    delay: 500,
+    readchat: true,
+  }),
+  signal: controller.signal,
+});
+```
+
+Extrair ID apenas de `messageid`, `id`, `msgId`, `messageId` ou `key.id`. Não
+iterar, não chunkar e não repetir o POST.
+
+- [ ] **Step 3: Implementar o endpoint runtime**
+
+`index.ts` aceita somente `POST`, depende de `SUPABASE_URL` e
+`SUPABASE_SERVICE_ROLE_KEY`, cria o client service-role e implementa os adapters
+com as RPCs já existentes. O body permitido é somente:
+
+```ts
+type Body = { alerta_id?: string };
+```
+
+Qualquer campo `destino`, `mensagem`, `caixa_id` ou `retry` retorna `400`. O
+`alerta_id` é opcional para cron e obrigatório no piloto manual. A resposta não
+devolve destino, mensagem nem token.
+
+- [ ] **Step 4: Fixar autenticação da Edge**
+
+Adicionar a `supabase/config.toml`:
+
+```toml
+[functions.processar-alertas-lia]
+verify_jwt = true
+```
+
+Além da validação do gateway, o endpoint rejeita JWT cujo claim `role` não seja
+`service_role`. O `pg_cron` usará uma service-role key armazenada no Vault; a
+chave não aparece em migration, teste, log ou documentação.
 
 - [ ] **Step 5: Rodar testes**
 
 ```powershell
-python -m unittest tests.test_process_lia_alert_queue tests.test_lareport_whatsapp_single -v
+deno test supabase/functions/processar-alertas-lia/dispatcher.test.ts
+node --test tests/liaAlertasPrivadosFaseA.test.mjs tests/liaAlertasDispatcherEdge.test.mjs
+git diff --check
 ```
 
-Expected: PASS; cada cenário contabiliza exatamente uma tentativa de bridge.
+Expected: todos passam; cada teste contabiliza no máximo um POST ao provedor.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Commit do dispatcher**
 
 ```powershell
-git add scripts/process_lia_alert_queue.py scripts/systemd/lia-alertas-privados.service scripts/systemd/lia-alertas-privados.timer tests/test_process_lia_alert_queue.py
-git commit -m "feat: transportar alertas privados da Lia pelo Hermes"
+git add supabase/functions/processar-alertas-lia supabase/config.toml tests/liaAlertasDispatcherEdge.test.mjs
+git commit -m "feat: processar outbox da Lia pela caixa 3"
 ```
+
+### Decisão de arquitetura consolidada
+
+O dispatcher não usa nenhum bridge. Lia, Sol e Fábio continuam separados por
+caixa, número, sessão e fila: a Fase A usa a caixa 3 e o número da Lia; Hermes
+conversacional continua em `3001`; Sol continua em `3000`; Fábio continua em
+`8657`. A indisponibilidade de um bridge não autoriza fallback para outro.
 
 ## Refinamentos adiados por decisão do Alf
 
@@ -971,7 +1179,7 @@ pela lista. Também fica para depois o ajuste visual que evita repetir, ao mesmo
 tempo, a lista de mensagens e a consolidação da rodada. Nenhum dos quatro
 componentes de frontend citados na versão anterior deste plano será alterado.
 
-## Task 7: Escrever o runbook e validar o pacote sem produção
+## Task 8: Reescrever o runbook para o transporte existente — CONCLUÍDA LOCALMENTE
 
 **Files:**
 
@@ -988,31 +1196,37 @@ Gate 0 — preflight somente leitura
   project ref = ouqwbbermlzqqvtqwlul
   usuários 2, 29 e 30 ativos e telefones iguais aos seeds
   alias Vercel estável confirmado
-  zero tabela/outbox anterior com o mesmo nome
-  worker/timer ainda ausentes ou desativados
+  fundação lia_* presente, outbox vazia e nenhum dispatcher/cron existente
+  caixa 3 ativa, nome canônico e origem +55 21 2342-5316
+  fingerprint do token do banco igual ao da instância da Lia
+  alertas_producao_liberados=false e outbox vazia
+  nenhum cron lia-alertas-privados-dispatcher-minuto
 
-Gate 1 — DDL bloqueado
-  aplicar somente 20260803090000
-  provar RLS/ACL, seeds e alertas_producao_liberados=false
-  não criar nem aplicar a migration 20260803093000
+Gate 1 — adaptação DDL, ainda bloqueada
+  aplicar somente 20260803210000
+  provar caixa_id=3 e códigos provider_*
+  provar que nenhuma entrega foi criada ou enviada
+  não criar a migration 20260803213000
 
-Gate 2 — VPS sem timer
-  instalar worker e units
-  não habilitar o timer
-  health local do bridge single-message
+Gate 2 — Edge publicada sem cron
+  publicar processar-alertas-lia com verify_jwt=true
+  provar 401/403 para anônimo, JWT inválido e usuário comum
+  invocação service_role sem pendência retorna sem_pendencia
+  não instalar worker, service, timer nem rota no bridge
 
 Gate 3 — piloto Alf
   escolher pesquisa modo_teste
   chamar enfileirar_lia_alerta_piloto
-  executar worker --once --alerta-id <id>
+  invocar a Edge uma vez com body contendo somente alerta_id
   confirmar uma mensagem no 5521981278047
-  confirmar provider_message_id, template, versão e ambiente teste
+  confirmar provider_message_id, caixa_id=3, template, versão e ambiente teste
   confirmar zero entrega para 29 ou 30
 
 Gate 4 — autorização humana
   Alf aceita o piloto
-  somente então criar/aplicar 20260803093000
-  habilitar timer
+  provisionar service_role no Vault sem registrar o valor
+  somente então criar/aplicar 20260803213000
+  ativar o pg_cron de um claim por minuto
 
 Gate 5 — primeiro evento produtivo assistido
   confirmar destinatário = executado_por_usuario_id
@@ -1021,8 +1235,8 @@ Gate 5 — primeiro evento produtivo assistido
   confirmar que nenhum outro operador recebeu
 ```
 
-Cada gate para e pede autorização antes de migration, escrita remota, instalação
-na VPS ou envio de WhatsApp.
+Cada gate para e pede autorização antes de migration, deploy de Edge, escrita
+remota ou envio de WhatsApp.
 
 - [ ] **Step 2: Documentar rollback cirúrgico**
 
@@ -1043,28 +1257,45 @@ drop table if exists public.lia_alertas_configuracao;
 drop table if exists public.lia_destinos_privados;
 ```
 
-O runbook deve alertar que o rollback de transporte começa desabilitando o
-timer, sem apagar eventos já entregues antes de exportar a evidência.
+O runbook deve alertar que o rollback de transporte começa desativando o
+`pg_cron` e voltando `alertas_producao_liberados=false`, sem apagar eventos já
+entregues antes de exportar a evidência. A Edge pode permanecer publicada e
+inoperante enquanto não houver chamada autenticada.
 
-- [ ] **Step 3: Rodar a suíte local completa relevante**
+- [ ] **Step 3: Registrar dívidas de higiene sem executá-las**
+
+O runbook deve registrar separadamente:
+
+1. migrar os números hardcoded de `notificar-primeira-aula-fabi`,
+   `disparar-pesquisa-1a-aula-auto` e `enviar-boas-vindas-matricula` para
+   `lia_destinos_privados` depois da estabilização;
+2. renomear os rótulos UAZAPI `Sol - Sucesso do Aluno` e `teste sol` sem trocar
+   sessão, número ou credencial;
+3. rotacionar coordenadamente o instance token da caixa 3, exposto em print,
+   atualizando todos os consumidores e provando o envio depois da rotação.
+
+Nenhum desses três itens faz parte da implementação ou do piloto deste plano.
+
+- [ ] **Step 4: Rodar a suíte local completa relevante**
 
 ```powershell
 node --test tests/liaAlertasPrivadosFaseA.test.mjs tests/pesquisaEvasao*.test.mjs
-python -m unittest tests.test_process_lia_alert_queue tests.test_lareport_whatsapp_single -v
+node --test tests/liaAlertasDispatcherEdge.test.mjs
+deno test supabase/functions/processar-alertas-lia/dispatcher.test.ts
 git diff --check
 ```
 
-Expected: todos os testes passam, build passa e `git diff --check` não aponta
-whitespace inválido.
+Expected: todos os testes passam e `git diff --check` não aponta whitespace
+inválido.
 
-- [ ] **Step 4: Commit documental**
+- [ ] **Step 5: Commit documental**
 
 ```powershell
 git add docs/runbooks/lia-acompanhamento-ativo-fase-a-rollout.md docs/MAPA-SISTEMA.md docs/superpowers/specs/2026-08-02-lia-acompanhamento-ativo-pesquisa-evasao-design.md
 git commit -m "docs: governar rollout dos alertas privados da Lia"
 ```
 
-## Task 8: Ensaiar o DDL em ambiente descartável
+## Task 9: Ensaiar a adaptação DDL em ambiente descartável
 
 **Files:**
 
@@ -1079,13 +1310,19 @@ schema-only de produção, somente leitura
 roles e extensões iguais às de produção
 migration repair do histórico
 sem dados reais
-sem caixas ou segredos
+uma única fixture estrutural sintética para whatsapp_caixas.id=3
+sem credencial real, conversa, aluno, telefone de família ou segredo
 ```
 
-- [ ] **Step 2: Aplicar somente a migration estrutural**
+- [ ] **Step 2: Reproduzir a fundação e aplicar somente a adaptação**
 
-Aplicar `20260803090000_lia_alertas_privados_fase_a.sql`. Não criar nem aplicar
-a migration de ativação.
+O ambiente recebe o schema atual de produção, que já contém a fundação remota
+`20260803124754`, e depois aplica
+`20260803210000_lia_alertas_dispatcher_edge.sql`. Não criar nem aplicar a
+migration de ativação. Antes da adaptação, inserir somente a caixa estrutural
+sintética `id=3`, `nome='Lia - Sucesso do Aluno'`, ativa, provedor `uazapi`, URL
+não produtiva e credencial inválida. Isso satisfaz a precondição da migration
+sem copiar configuração real.
 
 - [ ] **Step 3: Rodar fixture estrutural e ACL**
 
@@ -1096,6 +1333,8 @@ authenticated/anon não leem destinos nem outbox
 service_role executa claim
 produção nasce bloqueada
 seeds 2/29/30 são exatos
+caixa_id da entrega é sempre 3
+códigos bridge_* são rejeitados e códigos provider_* são aceitos
 idempotência por pesquisa/rodada/tipo
 modo teste comum não gera alerta produtivo
 ```
@@ -1108,27 +1347,32 @@ Anotar project ref, hashes, contagens e confirmação de destruição no runbook
 
 ```powershell
 git add docs/runbooks/lia-acompanhamento-ativo-fase-a-rollout.md
-git commit -m "docs: registrar ensaio DDL da fase A da Lia"
+git commit -m "docs: registrar ensaio do dispatcher Edge da Lia"
 ```
 
-## Task 9: Executar o piloto e só então criar a ativação
+## Task 10: Publicar, pilotar e só então criar a ativação
 
-> Esta tarefa exige autorização separada para migration, VPS e envio. Não faz
+> Esta tarefa exige autorização separada para migration, deploy e envio. Não faz
 > parte da implementação local automática.
 
 **Files:**
 
-- Create after pilot: `supabase/migrations/20260803093000_lia_alertas_privados_fase_a_ativacao.sql`
+- Create after pilot: `supabase/migrations/20260803213000_lia_alertas_privados_fase_a_ativacao.sql`
 - Modify: `docs/runbooks/lia-acompanhamento-ativo-fase-a-rollout.md`
 
-- [ ] **Step 1: Aplicar Gate 1 e instalar Gate 2 sem timer**
+- [ ] **Step 1: Aplicar Gate 1 e publicar Gate 2 sem cron**
 
-Parar e reportar antes de cada escrita remota.
+Aplicar a migration de adaptação, publicar `processar-alertas-lia` com
+`verify_jwt=true` e provar os bloqueios de autenticação. Não provisionar Vault,
+não criar cron e parar antes do piloto.
 
 - [ ] **Step 2: Enfileirar e entregar somente o piloto do Alf**
 
-Usar `--alerta-id` para impedir o worker de consumir qualquer outra linha.
-Confirmar no banco e no aparelho exatamente uma entrega de ambiente `teste`.
+Invocar a Edge uma única vez com `{ "alerta_id": "<uuid-do-piloto>" }`, usando
+credencial service-role apenas no ambiente de execução. Confirmar no banco e no
+aparelho exatamente uma entrega de ambiente `teste`, `caixa_id=3` e
+`provider_message_id` não vazio. A resposta HTTP não pode devolver destino nem
+mensagem.
 
 - [ ] **Step 3: Aguardar o aceite explícito do Alf**
 
@@ -1137,6 +1381,10 @@ Não criar a migration de ativação antes deste aceite.
 - [ ] **Step 4: Escrever a migration de ativação**
 
 Conteúdo mínimo:
+
+Antes de aplicar, provisionar no Vault, por operação manual e sem literal em
+arquivo, o segredo `lia_alertas_service_role_key`. A migration falha fechado se
+esse nome não existir ou estiver vazio.
 
 ```sql
 update public.lia_alertas_configuracao
@@ -1165,6 +1413,48 @@ left join public.lia_destinos_privados destino
  and destino.ativo
 where alerta.evento_id = evento.id
   and alerta.status = 'aguardando_liberacao';
+
+do $block$
+declare
+  v_job record;
+begin
+  if not exists (
+    select 1
+    from vault.decrypted_secrets
+    where name = 'lia_alertas_service_role_key'
+      and nullif(decrypted_secret, '') is not null
+  ) then
+    raise exception 'lia_alertas_service_role_key_required';
+  end if;
+
+  for v_job in
+    select jobid from cron.job
+    where jobname = 'lia-alertas-privados-dispatcher-minuto'
+  loop
+    perform cron.unschedule(v_job.jobid);
+  end loop;
+
+  perform cron.schedule(
+    'lia-alertas-privados-dispatcher-minuto',
+    '* * * * *',
+    $cron$
+      select net.http_post(
+        url := 'https://ouqwbbermlzqqvtqwlul.supabase.co/functions/v1/processar-alertas-lia',
+        headers := jsonb_build_object(
+          'Authorization', 'Bearer ' || (
+            select decrypted_secret
+            from vault.decrypted_secrets
+            where name = 'lia_alertas_service_role_key'
+          ),
+          'Content-Type', 'application/json'
+        ),
+        body := '{}'::jsonb,
+        timeout_milliseconds := 55000
+      );
+    $cron$
+  );
+end;
+$block$;
 ```
 
 A migration não cria evento, não envia mensagem e não consulta
@@ -1174,19 +1464,20 @@ A migration não cria evento, não envia mensagem e não consulta
 
 ```powershell
 git diff --check
-git diff -- supabase/migrations/20260803093000_lia_alertas_privados_fase_a_ativacao.sql
+git diff -- supabase/migrations/20260803213000_lia_alertas_privados_fase_a_ativacao.sql
 ```
 
-- [ ] **Step 6: Aplicar ativação, habilitar timer e assistir ao primeiro caso**
+- [ ] **Step 6: Aplicar ativação, observar o cron e assistir ao primeiro caso**
 
 Só depois de nova autorização. Se o destinatário não for o operador original,
 se o conteúdo da resposta aparecer no alerta ou se outra pessoa receber, parar
-sem corrigir em produção no improviso.
+sem corrigir em produção no improviso. Confirmar também uma única execução por
+minuto, um único POST por execução e nenhuma chamada aos bridges.
 
 - [ ] **Step 7: Commit final da ativação e evidência**
 
 ```powershell
-git add supabase/migrations/20260803093000_lia_alertas_privados_fase_a_ativacao.sql docs/runbooks/lia-acompanhamento-ativo-fase-a-rollout.md
+git add supabase/migrations/20260803213000_lia_alertas_privados_fase_a_ativacao.sql docs/runbooks/lia-acompanhamento-ativo-fase-a-rollout.md
 git commit -m "feat: liberar alertas privados da Lia apos piloto"
 ```
 
@@ -1196,13 +1487,16 @@ git commit -m "feat: liberar alertas privados da Lia apos piloto"
 - Uma rodada posterior a qualquer versão revisada usa o alerta prioritário.
 - Opt-out usa alerta próprio e não contém o texto da família.
 - Fabi recebe somente casos enviados por Fabi.
-- Jessica recebe somente casos enviados por Jessica.
+- Jéssica recebe somente casos enviados por Jéssica.
 - Operador inativo, ausente ou sem destino vai para fila administrativa.
 - Nenhum fallback consulta `usuarios.telefone` em runtime.
 - Nenhum alerta contém resposta, áudio, transcrição, telefone ou motivo.
 - O primeiro envio é o piloto no destino governado do Alf.
 - Produção só é liberada por migration criada depois do aceite do piloto.
 - Resultado ambíguo não é reenviado.
+- Toda entrega registra `caixa_id=3` e `provider_message_id` quando enviada.
+- O dispatcher faz no máximo um POST por invocação e não chama bridge, worker,
+  service ou timer da VPS.
 - O link exige login e abre a tela do Sucesso do Aluno; localizar e expandir a
   pesquisa exata fica como melhoria posterior.
 - `bi_messages_lamusic`, `fila_relatorios_whatsapp`,
@@ -1218,8 +1512,10 @@ Parar e reportar sem improvisar se:
 - a migration estrutural nascer com produção liberada;
 - a fixture permitir leitura de destino por `authenticated`, `anon` ou agente;
 - o produtor gerar dois alertas para a mesma pesquisa/rodada/tipo;
-- um evento de Fabi resolver Jessica, ou vice-versa;
-- a VPS exigir acesso ao conteúdo da resposta para enviar;
-- o bridge não confirmar mensagem única com `message_id`;
+- um evento de Fabi resolver Jéssica, ou vice-versa;
+- a Edge exigir acesso ao conteúdo da resposta para enviar;
+- a caixa 3 não confirmar mensagem única com `message_id`;
+- o dispatcher tentar outra caixa ou qualquer bridge como fallback;
+- o segredo de serviço aparecer em migration, diff, log ou resposta HTTP;
 - o piloto tocar 29 ou 30;
 - outra conversa estiver alterando os mesmos arquivos ou migrations.

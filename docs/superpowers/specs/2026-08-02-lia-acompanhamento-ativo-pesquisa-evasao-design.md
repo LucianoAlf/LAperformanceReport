@@ -2,8 +2,10 @@
 
 **Data:** 02/08/2026
 
-**Status:** aprovada pelo Alf com fases A-D; Fase A implementada localmente,
-sem rollout, instalação na VPS ou envio autorizado
+**Status:** aprovada pelo Alf com fases A-D; fundação estrutural da Fase A
+aplicada em produção com entregas produtivas bloqueadas; transporte reconciliado
+em 03/08/2026; dispatcher implementado localmente, ainda sem adaptação remota,
+piloto ou ativação
 
 **Autoridade de produto:** Alf
 
@@ -64,27 +66,61 @@ A auditoria de 02/08/2026 foi somente leitura e confirmou o projeto de produçã
 - As mensagens multipartes, transcrições e rodadas ficam nas tabelas do
   Subprojeto B.
 - O default de novas pesquisas é `multipartes_v2`.
-- Existem dez pesquisas enviadas, todas de teste; ainda não existe envio
-  produtivo. Oito testes possuem resposta válida.
-- Portanto, o histórico produtivo começa no rollout deste bloco. Nenhum teste
-  anterior pode ser usado como baseline.
+- Além das pesquisas de teste anteriores, Jéssica fez os dois primeiros envios
+  produtivos em 03/08/2026, às 10:52 e 10:55 BRT. Ambos nasceram em
+  `multipartes_v2` e estavam `sem_resposta` no preflight desta implementação.
+- O histórico produtivo começa com esses dois casos. Nenhum teste anterior pode
+  ser usado como baseline ou KPI.
 
 ### 4.2 Destino privado do operador
 
 - A verificação somente leitura de 02/08/2026 confirmou os três usuários ativos,
   autenticados e com telefone normalizado no projeto de produção:
   - Alf (`usuarios.id=2`): `5521981278047`;
-  - Jessica (`usuarios.id=29`): `5521984695110`;
+  - Jéssica (`usuarios.id=29`): `5521984695110`;
   - Fabi (`usuarios.id=30`): `5521994696489`.
 - Esses valores serão seeds do cadastro governado de destino privado, com origem
   e data de verificação. Não serão fallback consultado em `usuarios.telefone`
   durante o envio.
 - O número do Alf é o destino obrigatório do piloto ponta a ponta. Nenhum alerta
-  real para Fabi ou Jessica pode ser liberado antes dessa prova.
+  real para Fabi ou Jéssica pode ser liberado antes dessa prova.
 - Ausência, inatividade ou falha de um destino nunca autoriza fallback para
   grupo nem envio para outra pessoa.
 
 ### 4.3 Motores existentes
+
+A auditoria somente leitura de 03/08/2026 confirmou que a Lia já possui um
+caminho de saída produtivo e estável. Não é necessário criar um segundo bridge:
+
+- `whatsapp_caixas.id=3` é a caixa canônica `Lia - Sucesso do Aluno`, ativa,
+  usando `https://lamusic.uazapi.com` e o número de origem
+  `+55 21 2342-5316`;
+- a UAZAPI ainda apresenta o nome interno `Sol - Sucesso do Aluno`, mas o
+  fingerprint da credencial é idêntico ao da caixa 3 e ao bridge da Lia. É
+  somente uma divergência de nome, não compartilhamento de sessão;
+- o número, a URL e o webhook com `caixa_id=3` coincidem entre o painel da
+  UAZAPI e o banco. O perfil no provedor é `La Music`, com avatar da Lia;
+- as instâncias `Maria Financeiro` (`5521989784688`), `Fábio Pedagógico`
+  (`5521998250178`) e `Tom (LA Organizer)` (`5521997243082`) são canais
+  distintos e não estão cadastradas em `whatsapp_caixas`;
+- a caixa 1 `Mila teste` corresponde à instância UAZAPI ainda nomeada
+  `teste sol`; a caixa 2 `Sol` usa WAHA, outro número e outra sessão;
+- `notificar-primeira-aula-fabi`, acionada diariamente por `pg_cron`, envia
+  direto por `POST /send/text` da UAZAPI para a Fabi;
+- `disparar-pesquisa-1a-aula-auto` usa o mesmo caminho para avisos excepcionais
+  da Fabi;
+- `processar-matricula-emusys` chama `enviar-boas-vindas-matricula`, que usa a
+  mesma caixa 3 para notificar a Jéssica;
+- a produção registra 88 notificações confirmadas para as duas: 81 de nova
+  matrícula para Jéssica, seis resumos de primeira aula e um alerta de
+  auto-disparo para Fabi, todas com `whatsapp_message_id`;
+- o Hermes da Lia também usa a mesma credencial e o mesmo número pelo bridge
+  `3001`, principalmente para conversa e grupo. Ele não precisa participar da
+  entrega da outbox da Fase A.
+
+Os envios automáticos existentes não passam por `bi_messages_lamusic`, pelo
+bridge da Sol ou pela fila do Fábio. São chamadas backend-to-provider da própria
+caixa 3.
 
 - `bi_messages_lamusic` possui quatro mensagens concluídas. Seu contrato é de
   conversa do agente BI: `conversation_id`, papel, conteúdo, SQL, resultado e
@@ -124,14 +160,27 @@ segunda resposta recebida pelo mesmo operador no mesmo dia.
 **Decisão:** não usar como fonte de evento. O transporte existente pode ser
 reaproveitado somente por adaptador explícito.
 
-### 5.3 Outbox canônico no LA Report e adaptadores de transporte
+### 5.3 Outbox canônico com o transporte existente da caixa 3
 
-O domínio grava uma vez o evento e suas entregas. Um adaptador da VPS usa o
-transporte Hermes para os avisos privados; outro publica o relatório agregado
-na fila de grupo. Falha do canal não apaga nem recria o evento.
+O domínio grava uma vez o evento e sua entrega. Uma Edge Function backend-only
+reclama uma entrega por RPC atômica e envia diretamente pela caixa 3, usando o
+mesmo `POST /send/text` da UAZAPI que já entrega notificações para Fabi e
+Jéssica. O `pg_cron` apenas acorda o dispatcher; falha do canal não apaga nem
+recria o evento.
 
-**Decisão recomendada:** esta opção. Ela reutiliza o que já funciona sem
-transformar uma fila de BI ou relatório em fonte canônica da pesquisa.
+**Decisão aprovada:** esta opção. Ela preserva a outbox, o destino governado e a
+auditoria, mas elimina rota nova no bridge, worker Python, service e timer da
+VPS. O reaproveitamento é do transporte produtivo real da Lia, não de uma fila
+de BI ou relatório.
+
+### 5.4 Criar `POST /send-alert` no bridge 3001
+
+Funcionaria, mas duplicaria o caminho backend-to-provider que já existe e
+criaria mais quatro peças operacionais: rota, worker Python, service e timer.
+Também exigiria hardening do bridge antes de entregar valor.
+
+**Decisão:** rejeitada após auditoria. O rascunho local não será instalado e
+deve ser removido antes do commit da nova implementação.
 
 ## 6. Fontes e granularidade
 
@@ -174,6 +223,22 @@ reusar `bi_messages_lamusic` nem `notificacao_log` como fonte desses fatos.
 
 ## 7. Regra de canal
 
+### 7.0 Propriedade permanente dos canais
+
+Cada agente é proprietário do seu canal de saída e não compartilha número,
+sessão nem fila de envio com outro agente:
+
+- Lia: Sucesso do Aluno, caixa 3, número `+55 21 2342-5316`; o dispatcher da
+  outbox envia direto pela UAZAPI e o Hermes conversacional continua no bridge
+  próprio em `127.0.0.1:3001`;
+- Sol: administrativo, bridge próprio em `127.0.0.1:3000` e sessão própria;
+- Fábio: professores e coordenação, bridge próprio em `127.0.0.1:8657` e sessão
+  própria.
+
+As Fases B, C e D preservam essa fronteira. Uma indisponibilidade da Sol não
+pode parar alertas, follow-ups ou KPI do Sucesso do Aluno; uma indisponibilidade
+da Lia não pode ser contornada silenciosamente pelo número da Sol.
+
 ### 7.1 WhatsApp privado
 
 Vão para o WhatsApp privado da pessoa que enviou:
@@ -186,7 +251,7 @@ Vão para o WhatsApp privado da pessoa que enviou:
 
 O destinatário é **somente** `executado_por_usuario_id`, congelado na pesquisa
 original. Não existe notificação cruzada: Fabi não recebe os casos enviados por
-Jessica, Jessica não recebe os casos enviados por Fabi e nenhuma das duas
+Jéssica, Jéssica não recebe os casos enviados por Fabi e nenhuma das duas
 recebe o conjunto completo por conveniência.
 
 Esses avisos não são encaminhados ao grupo quando o destino privado está
@@ -434,7 +499,7 @@ completar três dias, desde que:
 - exista template ativo, versionado e aprovado para o público correto;
 - a tentativa use chave idempotente única por pesquisa;
 - o registro identifique `origem=lia_automatica`, sem atribuir a ação a Fabi,
-  Jessica ou outra pessoa.
+  Jéssica ou outra pessoa.
 
 O motor não troca telefone, responsável ou caixa com dados atuais. Divergência
 de snapshot bloqueia e encaminha para a equipe.
@@ -489,27 +554,39 @@ Responsável por:
 - registrar snapshots históricos;
 - produzir entregas estruturadas, sem dar ao agente acesso bruto às respostas.
 
-### 13.2 Plano de transporte — VPS/Hermes
+### 13.2 Plano de transporte — Edge Function e `pg_cron`
 
 Responsável por:
 
-- reclamar uma entrega pronta de forma atômica;
-- renderizar somente template aprovado com dados mínimos;
-- enviar ao JID já resolvido;
-- registrar sucesso ou erro sanitizado;
-- aplicar retry técnico, teto e watchdog;
+- ser invocada somente por `service_role`, com `verify_jwt=true`;
+- reclamar no máximo uma entrega pronta por chamada usando a RPC atômica;
+- usar obrigatoriamente `caixa_id=3`, sem fallback para outra caixa;
+- enviar uma única mensagem por `POST /send/text` da UAZAPI;
+- concluir somente com HTTP aceito e `message_id` não vazio;
+- registrar sucesso ou erro sanitizado na outbox;
+- não aplicar retry automático depois da chamada ao provedor;
 - nunca decidir se o evento existe ou quem deve recebê-lo.
 
-O código de envio do Hermes pode ser reaproveitado, mas a fila precisa de
-contrato neutro de mensagem interna. Não escrever o evento diretamente em
-`fila_relatorios_sol_hermes` com a unicidade atual.
+O `pg_cron` chama a Edge Function em intervalo curto usando uma credencial de
+serviço armazenada no Vault, nunca escrita na migration. Antes do piloto, a Edge
+é publicada, mas não existe cron produtivo e
+`alertas_producao_liberados=false`. O piloto chama o dispatcher com um
+`alerta_id` específico para impedir consumo de qualquer outra entrega.
+
+O dispatcher usa o transporte já comprovado da caixa 3. Não chama os bridges
+`3001`, `3000` ou `8657`, não escreve em `fila_relatorios_sol_hermes` e não
+mantém sessão própria. Timeout, conexão encerrada depois do POST, JSON inválido,
+HTTP aceito sem ID ou outro resultado ambíguo nunca são reenviados
+automaticamente. Logs contêm apenas IDs internos, tipo, ambiente, status e
+duração.
 
 ### 13.3 Relatório de grupo
 
 O KPI agregado pode aproveitar `fila_relatorios_whatsapp` e
 `whatsapp_destinatarios_relatorio` depois de incluir um tipo versionado próprio
 e destino autorizado do Sucesso do Aluno. A geração do KPI fica fora da função
-de transporte.
+de transporte, e a publicação desse KPI continua saindo pelo canal da Lia. A
+Sol publica somente relatórios administrativos pelo canal da Sol.
 
 ### 13.4 Papel da Lia
 
@@ -543,10 +620,10 @@ relatório posterior, nunca criar o fato nem autorizar o envio.
 
 Este bloco absorve somente a menor fatia necessária do E:
 
-- inventário do processo da VPS que entregará mensagens da Lia;
-- adaptador de transporte Hermes;
+- inventário do transporte já usado pela caixa 3;
 - configuração de destinos privados e do grupo do Sucesso do Aluno;
-- health, retry, idempotência e evidência desse caminho.
+- health, retry, idempotência e evidência do dispatcher da Lia;
+- registro explícito de que Lia, Sol e Fábio não compartilham sessão nem fila.
 
 Permanecem no Subprojeto E:
 
@@ -582,7 +659,7 @@ reenviado; operador inativo vai para fila administrativa, nunca para o grupo.
 - entrega somente a quem enviou a pesquisa;
 - fila administrativa para operador inativo, destino ausente ou falha final;
 - observabilidade sem conteúdo da resposta ou telefone em log;
-- piloto ponta a ponta no número do Alf antes de liberar Fabi e Jessica.
+- piloto ponta a ponta no número do Alf antes de liberar Fabi e Jéssica.
 
 Esta fase entrega o primeiro valor operacional e não depende de estado ou filtro
 novo na interface.
@@ -640,20 +717,21 @@ rapidamente — sem exigir deploy de quatro componentes de frontend.
 13. Coorte parcial é identificada como parcial.
 14. Mudança de regra cria nova versão sem reescrever snapshot fechado.
 15. `bi_messages_lamusic` não participa do transporte.
-16. Queda da VPS não perde evento; recuperação respeita idempotência.
+16. Falha da Edge, do `pg_cron` ou do provedor não perde evento; recuperação
+    respeita idempotência e não reenvia resultado ambíguo.
 17. Alerta contém link autenticado para a tela do Sucesso do Aluno, sem token,
     resposta ou identificador sensível na URL.
 18. Pessoa inativa não recebe mensagem e o caso entra na fila administrativa.
-19. Fabi recebe somente eventos de pesquisas enviadas por Fabi; Jessica recebe
-    somente eventos de pesquisas enviadas por Jessica.
+19. Fabi recebe somente eventos de pesquisas enviadas por Fabi; Jéssica recebe
+    somente eventos de pesquisas enviadas por Jéssica.
 20. Os três destinos seedados correspondem aos IDs 2, 29 e 30, guardam origem e
     data de verificação e não são resolvidos por fallback em `usuarios.telefone`.
 21. O primeiro envio ponta a ponta usa exclusivamente o destino governado do
-    Alf; Fabi e Jessica permanecem bloqueadas até o aceite desse piloto.
+    Alf; Fabi e Jéssica permanecem bloqueadas até o aceite desse piloto.
 
 ## 19. Critérios de aceite
 
-- Fabi e Jessica recebem individualmente e somente os alertas das pesquisas que
+- Fabi e Jéssica recebem individualmente e somente os alertas das pesquisas que
   cada uma enviou.
 - O grupo recebe somente KPI agregado.
 - Nova rodada pós-revisão é avisada uma única vez e volta à fila.
@@ -667,27 +745,53 @@ rapidamente — sem exigir deploy de quatro componentes de frontend.
 
 ## 20. Riscos residuais
 
-- Os destinos existem em `usuarios`, mas o cadastro governado ainda não foi
-  criado; até lá, nenhum alerta privado novo está habilitado.
-- O serviço real da Lia na VPS não está versionado integralmente neste
-  repositório; seu inventário é gate da implementação.
-- O transporte Sol/Hermes funciona, mas ainda carrega semântica de relatório e
-  grupo; reutilização direta criaria colisões.
+- O cadastro governado `lia_destinos_privados` e seus três seeds já existem em
+  produção. O bloqueio restante é intencional: não há dispatcher publicado,
+  cron nem liberação produtiva.
+- Os destinos da Fabi e da Jéssica ainda estão hardcoded nas Edge Functions
+  `notificar-primeira-aula-fabi`, `disparar-pesquisa-1a-aula-auto` e
+  `enviar-boas-vindas-matricula`. Depois da Fase A, esses fluxos devem migrar
+  para leitura de `lia_destinos_privados`; isso é dívida separada e não será
+  alterado neste rollout.
+- A UAZAPI nomeia internamente a instância da caixa 3 como
+  `Sol - Sucesso do Aluno`, embora a credencial e o número sejam da Lia. Renomear
+  em uma janela tranquila para evitar nova confusão. Renomear também `teste sol`
+  para refletir a caixa 1; nenhuma dessas ações muda token, número ou sessão.
+- O instance token da caixa 3 foi exibido integralmente em um print desta
+  auditoria. Rotacioná-lo em janela coordenada, atualizando todos os
+  consumidores e provando o envio da Lia; não rotacionar por improviso durante
+  o rollout da Fase A.
+- A chamada agendada da Edge exigirá a credencial de serviço no Vault. A
+  auditoria confirmou que ela ainda não existe; o provisionamento é gate manual
+  do rollout e o valor nunca entra em Git, migration ou log.
+- O transporte da Sol não é fallback da Lia. A queda atual da sessão Sol/Hermes
+  é incidente administrativo independente, sob responsabilidade do Alfredo.
 - `fila_relatorios_whatsapp` apresentou histórico relevante de erros e precisa
   de health e prova de entrega antes de receber o KPI do Sucesso do Aluno.
 - “Sem resposta” é uma observação temporal, não causa de evasão nem julgamento
   sobre a família.
 
-### 20.1 Estado da implementação local da Fase A
+### 20.1 Estado reconciliado da Fase A
 
-- O pacote local cria outbox própria, destinos governados, produtor por rodada,
+- A migration estrutural foi aplicada em produção sob a versão remota
+  `20260803124754`; ela criou outbox, destinos governados, produtor por rodada,
   claim atômico, desfechos terminais, fila administrativa e piloto restrito.
-- A produção nasce bloqueada por `alertas_producao_liberados=false`; não existe
-  migration de ativação.
-- O worker Hermes e as units estão versionados, mas não foram instalados nem
-  ativados.
-- A fixture PostgreSQL 17 e os testes Python cobrem idempotência, isolamento de
-  destinatário, ausência de fallback, janela BRT e não reenvio ambíguo.
+- A produção permanece bloqueada por `alertas_producao_liberados=false` e não
+  existe migration de ativação. Eventos reais criados antes dela ficam em
+  `aguardando_liberacao`, fora do claim do dispatcher.
+- O worker Python, as units e o rascunho de `POST /send-alert` foram removidos;
+  nenhum deles foi instalado na VPS.
+- A adaptação `20260803210000_lia_alertas_dispatcher_edge.sql` e o dispatcher
+  `processar-alertas-lia` existem e estão testados localmente, mas não foram
+  aplicados ou publicados. O cron de consumo continua inexistente.
+- A fixture PostgreSQL 17 e os testes de contrato da fundação cobrem
+  idempotência, isolamento de destinatário, ausência de fallback, janela BRT e
+  não reenvio ambíguo. Os testes do dispatcher cobrem uma única chamada ao
+  provedor, `message_id` obrigatório, caixa 3 exclusiva e logs sanitizados.
+- A Fase A não altera `webhook-whatsapp-inbox`; enquanto a produção estiver
+  bloqueada, a equipe acompanha respostas reais diretamente na tela.
+- O nome de `usuarios.id=29` foi corrigido para `Jéssica` sem reescrever os
+  snapshots dos dois envios já realizados.
 - O rollout é governado por
   `docs/runbooks/lia-acompanhamento-ativo-fase-a-rollout.md` e para antes do
   primeiro piloto.

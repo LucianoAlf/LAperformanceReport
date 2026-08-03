@@ -5,12 +5,16 @@
 - Produção: `ouqwbbermlzqqvtqwlul`.
 - Migration estrutural aplicada em produção em 03/08/2026, registrada remotamente
   como `20260803124754_lia_alertas_privados_fase_a`; produção continua bloqueada.
-- Worker e units seguem apenas versionados. O preflight da VPS encontrou o bridge
-  single-message desconectado e nenhuma instalação foi feita enquanto o health
-  não estiver verde.
+- A auditoria de transporte confirmou que a caixa 3 já entrega notificações
+  privadas para Fabi e Jéssica. A Fase A usará o mesmo caminho direto
+  Edge → UAZAPI; worker, units e rota nova no bridge foram rejeitados.
 - `alertas_producao_liberados` nasce `false` e não existe migration de ativação.
-- Nenhum alerta foi enviado. O primeiro envio exige o piloto no número governado
-  do Alf e autorização separada, com ele presente.
+- Em 03/08/2026, Jéssica fez dois envios produtivos, às 10:52 e 10:55 BRT,
+  ambos `multipartes_v2` e `sem_resposta`. Se uma família responder antes da
+  ativação, o trigger cria a entrega em `aguardando_liberacao`; o claim não a
+  consome e nenhuma mensagem interna é enviada.
+- Nenhum alerta da Fase A foi enviado. O primeiro exige o piloto no número
+  governado do Alf e autorização separada, com ele presente.
 - Esta fase não altera frontend. O alerta abre `/app/sucesso-aluno`; deep link
   para a pesquisa exata é melhoria posterior.
 
@@ -19,7 +23,7 @@
 - Um evento por `pesquisa + rodada + ambiente` para resposta substantiva ou
   rodada nova pós-revisão; opt-out tem chave independente na mesma rodada.
 - O destinatário é somente `executado_por_usuario_id` da pesquisa original.
-- Não existe fanout para Fabi/Jessica nem fallback para telefone operacional.
+- Não existe fanout para Fabi/Jéssica nem fallback para telefone operacional.
 - Operador ausente/inativo ou destino ausente/alterado vai para fila
   administrativa sanitizada.
 - Produção fica em `aguardando_liberacao`; piloto de teste pode entrar como
@@ -28,7 +32,7 @@
   só funciona entre 08:00 e 20:00 BRT.
 - Timeout ou confirmação ambígua não volta para pendente. Processamento
   abandonado há mais de 15 minutos vai para fila administrativa.
-- Logs do worker contêm somente IDs, tipo, ambiente, status e duração.
+- Logs do dispatcher contêm somente IDs, tipo, ambiente, status e duração.
 - Snapshots de destino e texto em estados terminais são expurgados após 30 dias.
 
 ## Artefatos
@@ -40,10 +44,26 @@
 - Fixture executável:
   `tests/fixtures/lia_alertas_privados_fase_a_pg17.sql`.
 - Testes estáticos/SQL: `tests/liaAlertasPrivadosFaseA.test.mjs`.
-- Worker: `scripts/process_lia_alert_queue.py`.
-- Units, ainda desativadas:
-  `scripts/systemd/lia-alertas-privados.service` e
-  `scripts/systemd/lia-alertas-privados.timer`.
+- Migration complementar implementada localmente, ainda não aplicada:
+  `supabase/migrations/20260803210000_lia_alertas_dispatcher_edge.sql`.
+- Dispatcher implementado e testado localmente, ainda não publicado:
+  `supabase/functions/processar-alertas-lia/`.
+- Contrato do dispatcher implementado e verde:
+  `tests/liaAlertasDispatcherEdge.test.mjs`.
+- `scripts/process_lia_alert_queue.py`, units systemd e rota `/send-alert`
+  foram removidos do pacote. Não os reinstalar neste rollout.
+
+## Janela temporária até a ativação
+
+- Respostas produtivas continuam entrando normalmente pelo
+  `webhook-whatsapp-inbox`; a Fase A não altera nem publica essa função.
+- Até a ativação, respostas reais não geram alerta privado. Fabi e Jéssica
+  precisam abrir a tela do Sucesso do Aluno para acompanhar os casos.
+- As entregas produzidas nesse intervalo ficam em `aguardando_liberacao`. A
+  migration de ativação só poderá promovê-las a `pendente` depois de revalidar
+  usuário ativo, destino governado e vínculo com o operador original.
+- A ausência temporária do alerta é conhecida e não autoriza envio manual pela
+  Sol, pelo Fábio, pelo bridge da Lia ou por outro canal.
 
 ## Gate 0 — preflight somente leitura
 
@@ -56,27 +76,38 @@ Antes de qualquer escrita remota, reconfirmar e registrar:
    - 29: `5521984695110`;
    - 30: `5521994696489`;
 4. alias estável `https://la-performance-report.vercel.app`;
-5. inexistência das quatro tabelas `lia_*` e das RPCs deste pacote;
-6. worker/timer ausentes ou desativados na VPS;
-7. ausência de outro rollout concorrente sobre pesquisa de evasão, Hermes ou a
+5. as quatro tabelas `lia_*` e as RPCs da fundação presentes;
+6. `alertas_producao_liberados=false`, nenhuma entrega produtiva em `pendente`,
+   `processando` ou `enviada`, e nenhum cron chamado
+   `lia-alertas-privados-dispatcher-minuto`; entregas em
+   `aguardando_liberacao` são esperadas se alguma família já tiver respondido;
+7. caixa 3 ativa, nome `Lia - Sucesso do Aluno`, origem
+   `+55 21 2342-5316`, webhook com `caixa_id=3` e fingerprint do token igual ao
+   da instância auditada, ainda rotulada `Sol - Sucesso do Aluno` na UAZAPI;
+8. Maria Financeiro, Fábio Pedagógico e Tom LA Organizer continuam como
+   instâncias separadas, e a caixa 2 Sol continua em WAHA com outro número;
+9. ausência de outro rollout concorrente sobre pesquisa de evasão, caixa 3 ou a
    mesma migration.
+10. as pesquisas produtivas enviadas às 10:52 e 10:55 BRT continuam
+    `multipartes_v2`; qualquer evento delas está retido e não enviado.
 
 Qualquer divergência para e volta ao Alf. O preflight não autoriza escrita.
 
-## Gate 1 — DDL estrutural concluído, produção bloqueada
+## Gate 1 — fundação concluída; adaptação DDL ainda pendente
 
-Somente após autorização explícita:
+Fundação já confirmada em 03/08/2026: seeds 2/29/30 exatos, RLS/ACL fechadas,
+configuração produtiva `false`, zero evento e zero entrega.
 
-1. conferir tamanho e SHA-256 da migration;
-2. aplicar apenas `20260803090000_lia_alertas_privados_fase_a.sql`;
-3. provar RLS e ACL: `anon`, `authenticated` e agentes não leem destinos/outbox;
-4. provar os três seeds exatos e com origem/data;
-5. provar `alertas_producao_liberados=false`;
-6. provar que nenhum alerta está `pendente` em ambiente `producao`;
-7. confirmar o cron diário de expurgo, sem ativar transporte.
+Após nova autorização, aplicar somente
+`20260803210000_lia_alertas_dispatcher_edge.sql` e provar:
 
-Postflight de 03/08/2026: seeds 2/29/30 exatos, configuração produtiva `false`,
-zero evento e zero entrega. Não foi criada nem aplicada migration de ativação.
+1. `lia_alertas_privados.caixa_id` existe, é `NOT NULL`, referencia
+   `whatsapp_caixas(id)` e tem default 3;
+2. nenhuma linha existente foi criada, removida ou enviada;
+3. `falhar_lia_alerta_privado` aceita somente códigos `provider_*` definidos no
+   plano e rejeita códigos `bridge_*`;
+4. `alertas_producao_liberados` continua `false`;
+5. não existe cron de consumo e a migration de ativação continua inexistente.
 
 ### Dívida de reconciliação do histórico remoto
 
@@ -90,23 +121,30 @@ Não reconciliar durante o piloto. Agendar uma janela própria para comparar
 conteúdo e hashes, confirmar os registros equivalentes e reparar o histórico de
 forma explícita, sem reaplicar DDL nem forjar uma versão sem evidência.
 
-## Gate 2 — VPS sem timer, bloqueado pelo health do bridge
+## Gate 2 — dispatcher Edge, ainda sem cron
 
-Somente após nova autorização:
+Somente após o Gate 1 validado e nova autorização:
 
-1. instalar o worker e as units;
-2. manter `lia-alertas-privados.timer` desabilitado;
-3. usar `WorkingDirectory=/opt/LA-Organizer` e o arquivo dedicado
-   `/home/sol/.config/la-report/lia-alertas-privados.env`, contendo somente
-   `LA_REPORT_SUPABASE_URL` e `LA_REPORT_SERVICE_ROLE_KEY`; o helper aceita
-   apenas bridge loopback governado;
-4. validar health local do endpoint single-message;
-5. executar uma chamada sem pendência e confirmar zero envio.
+1. publicar `processar-alertas-lia` com `verify_jwt=true`;
+2. confirmar que chamadas anônima, com JWT inválido e com JWT comum são
+   rejeitadas;
+3. confirmar que somente `service_role` consegue invocar o dispatcher;
+4. com a outbox vazia, invocar uma vez e receber `sem_pendencia`, sem contato
+   com o provedor;
+5. provar por teste e revisão de log que cada chamada reclama no máximo uma
+   entrega e faz no máximo um `POST /send/text`;
+6. exigir resposta HTTP aceita e `message_id` não vazio para concluir;
+7. tratar timeout, corpo inválido e confirmação ambígua como estado terminal,
+   sem retry automático;
+8. confirmar que a Edge busca exclusivamente `whatsapp_caixas.id=3`, não aceita
+   caixa, destino, texto ou política de retry no payload e não possui fallback;
+9. confirmar que logs não contêm número, conteúdo, token ou URL com segredo;
+10. manter ausentes o segredo de invocação no Vault, o cron de consumo e a
+    migration de ativação.
 
-Preflight de 03/08/2026: `POST /send-report` com payload vazio no bridge
-loopback `127.0.0.1:3000` retornou `503 not_connected_to_whatsapp`. O bridge da
-Lia em `127.0.0.1:3001` não possui essa rota e retornou `404`. Portanto o worker
-e as units não foram instalados; o timer permanece inexistente/desabilitado.
+O dispatcher não usa `127.0.0.1:3001`, não instala processo na VPS e não toca
+nos bridges da Lia, Sol ou Fábio. Ele reaproveita o contrato produtivo já
+comprovado: Edge backend-only → credencial da caixa 3 → UAZAPI `/send/text`.
 
 ## Gate 3 — piloto Alf, ponto de parada obrigatório
 
@@ -116,25 +154,33 @@ Com o Alf presente e após autorização específica:
 2. chamar `enfileirar_lia_alerta_piloto`;
 3. confirmar `ambiente=teste`, destinatário `usuarios.id=2` e destino governado
    terminado em `8047`;
-4. executar somente
-   `python scripts/process_lia_alert_queue.py --once --alerta-id <uuid>`;
+4. invocar `processar-alertas-lia` uma única vez com somente
+   `{ "alerta_id": "<uuid>" }` e credencial `service_role`;
 5. confirmar exatamente uma mensagem no número do Alf;
-6. conferir `provider_message_id`, template, versão e horário;
+6. conferir `caixa_id=3`, `provider_message_id`, template, versão e horário;
 7. confirmar zero entrega para os IDs 29 e 30;
 8. parar e aguardar aceite explícito.
 
-## Gate 4 — ativação humana, artefato ainda inexistente
+## Gate 4 — ativação humana e cron, artefato ainda inexistente
 
 Somente depois do aceite do piloto:
 
-1. criar uma migration nova e pequena que altere
-   `alertas_producao_liberados` para `true` e reavalie as entregas em
-   `aguardando_liberacao`;
-2. revisar diff, hash e contagens;
-3. pedir autorização separada para aplicar;
-4. somente depois habilitar o timer.
+1. provisionar manualmente no Vault o segredo
+   `lia_alertas_service_role_key`, sem imprimi-lo nem gravá-lo em arquivo ou
+   migration;
+2. criar `20260803213000_lia_alertas_privados_fase_a_ativacao.sql` para alterar
+   `alertas_producao_liberados` para `true`, reavaliar as entregas em
+   `aguardando_liberacao` e agendar
+   `lia-alertas-privados-dispatcher-minuto`;
+3. o job deve chamar `processar-alertas-lia` via `net.http_post`, lendo a chave
+   somente de `vault.decrypted_secrets` e sem literal sensível no SQL;
+4. revisar diff, hash, conteúdo do job e contagens;
+5. pedir autorização separada para aplicar;
+6. depois da aplicação, confirmar um único job ativo e a ausência de erros de
+   invocação.
 
 A migration de ativação não deve ser antecipada nem existir antes do piloto.
+O segredo de invocação também não é necessário antes desse gate.
 
 ## Gate 5 — primeiro evento produtivo assistido
 
@@ -157,10 +203,15 @@ processamento abandonado, falha e resultado ambíguo exigem decisão humana.
 Antes do DDL, capturar a lista atual de triggers de
 `pesquisa_evasao_mensagens` e o job de expurgo homônimo, se houver. Em rollback:
 
-1. desabilitar o timer na VPS antes de alterar banco;
+1. remover o cron `lia-alertas-privados-dispatcher-minuto` pelo `jobid` e
+   alterar `alertas_producao_liberados` para `false`;
 2. exportar metadados de eventos/entregas já produzidos;
 3. remover o cron `lia-alertas-privados-expurgo-diario` pelo `jobid`;
-4. executar, na ordem:
+4. manter a Edge publicada, mas inerte, enquanto houver evidência a preservar;
+5. se o rollback for somente do adaptador Edge, restaurar a assinatura anterior
+   de `falhar_lia_alerta_privado` e remover a constraint/coluna `caixa_id`
+   apenas depois de provar que nenhuma entrega depende dela;
+6. somente se a decisão for desfazer toda a Fase A, executar, na ordem:
 
 ```sql
 drop trigger if exists trg_lia_evento_pesquisa_evasao
@@ -191,13 +242,23 @@ justifica alterar a pesquisa canônica.
 
 ## Evidência local concluída
 
-- Ciclo red/green da fundação, produtor, claim e worker executado.
+- Ciclo red/green da fundação, produtor e claim executado.
 - PostgreSQL 17 isolado prova RLS/ACL, seeds, bloqueio produtivo, idempotência,
   ausência de notificação cruzada, claim exclusivo, janela BRT, falha fechada,
   resultado ambíguo terminal e piloto exclusivo do Alf.
-- Testes Python provam uma chamada ao bridge, ausência de retry, logs
-  sanitizados e ausência de fallback para variáveis legadas.
-- Nenhum deploy, instalação, migration produtiva ou envio foi realizado.
+- A auditoria somente leitura do transporte comprovou 88 notificações para
+  Fabi/Jéssica com `whatsapp_message_id`, todas pela caixa 3 e pelo número da
+  Lia. Nenhuma depende do bridge da Sol ou da fila do Fábio.
+- A adaptação DDL e o dispatcher Edge foram implementados localmente. O núcleo
+  cobre envio único, `message_id` obrigatório, falhas terminais e log
+  sanitizado; nenhum desses artefatos foi aplicado ou publicado.
+- O pacote da Fase A não modifica `webhook-whatsapp-inbox`. Qualquer publicação
+  futura desta fase se limita a `processar-alertas-lia`.
+- A fundação foi aplicada em produção com o bloqueio ativo; nenhum alerta da
+  Fase A, deploy de dispatcher ou ativação foi realizado.
+- `usuarios.id=29` foi corrigido de `Jessica` para `Jéssica` em 03/08/2026. Os
+  dois envios produtivos anteriores preservaram `assinatura_nome_snapshot` e
+  mensagem renderizada com o nome antigo, como exige a imutabilidade histórica.
 
 ## Ensaio descartável — concluído em 03/08/2026
 
@@ -237,10 +298,22 @@ O projeto `ophoqjodoltvbqwqrzeb` foi destruído ao final. Uma consulta posterior
 à lista de projetos retornou zero projeto com esse ref ou com o prefixo
 `lia-fase-a-ddl-*`.
 
-Este ensaio não autoriza o Gate 1 nem o piloto da Task 9.
+Este ensaio não autoriza a migration complementar, o deploy da Edge, o piloto
+ou a ativação.
 
 ## Melhorias posteriores, fora da Fase A
 
 1. Deep link autenticado que abre a subaba Evasão e expande a pesquisa exata.
 2. Interface da revisão sem duplicar simultaneamente timeline e consolidação;
    considerar consolidação recolhida ou texto corrido para copiar.
+3. Substituir os números hoje escritos diretamente em
+   `notificar-primeira-aula-fabi`, `disparar-pesquisa-1a-aula-auto` e
+   `enviar-boas-vindas-matricula` por leitura governada de
+   `lia_destinos_privados`, depois que a Fase A estiver estável.
+4. Renomear na UAZAPI a instância `552123425316` de
+   `Sol - Sucesso do Aluno` para Lia e a instância `teste sol` para refletir a
+   caixa 1. Alterar somente rótulos, sem trocar sessão, número ou credencial.
+5. Rotacionar de forma coordenada o instance token da caixa 3, pois ele foi
+   exibido integralmente em um print desta auditoria. Atualizar todos os
+   consumidores da credencial na mesma janela e provar o envio da Lia depois da
+   rotação; não executar durante este rollout sem autorização própria.
