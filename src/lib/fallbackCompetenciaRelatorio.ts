@@ -16,20 +16,29 @@ export class CancelamentoCompetenciaError extends Error {
   }
 }
 
+type CorpoErroRelatorio = {
+  fallback: FallbackCompetencia | null;
+  /** `error` do corpo da edge — a frase útil em português, quando houver. */
+  mensagem: string | null;
+};
+
 /**
  * `supabase.functions.invoke` converte qualquer resposta não-2xx em FunctionsHttpError
  * e não entrega o corpo. A resposta original fica em `context`, e é lá que a edge
- * manda qual competência está disponível.
+ * manda qual competência está disponível E a mensagem legível — a `message` do
+ * FunctionsHttpError é sempre o genérico "Edge Function returned a non-2xx status code".
  */
-export async function extrairFallbackCompetencia(
-  erro: unknown,
-): Promise<FallbackCompetencia | null> {
+async function lerCorpoErroRelatorio(erro: unknown): Promise<CorpoErroRelatorio> {
+  const vazio: CorpoErroRelatorio = { fallback: null, mensagem: null };
   const contexto = (erro as { context?: Response } | null)?.context;
-  if (!contexto || typeof contexto.json !== 'function') return null;
+  if (!contexto || typeof contexto.json !== 'function') return vazio;
 
   try {
     const corpo = await contexto.clone().json();
-    if (corpo?.motivo !== 'fechamento_indisponivel') return null;
+    const mensagem = typeof corpo?.error === 'string' && corpo.error.trim()
+      ? corpo.error.trim()
+      : null;
+    if (corpo?.motivo !== 'fechamento_indisponivel') return { fallback: null, mensagem };
 
     const fallback = corpo?.fallback;
     if (
@@ -38,13 +47,30 @@ export async function extrairFallbackCompetencia(
       || !Number.isInteger(fallback.mes)
       || typeof fallback.rotulo !== 'string'
     ) {
-      return null;
+      return { fallback: null, mensagem };
     }
 
-    return { ano: fallback.ano, mes: fallback.mes, rotulo: fallback.rotulo };
+    return {
+      fallback: { ano: fallback.ano, mes: fallback.mes, rotulo: fallback.rotulo },
+      mensagem,
+    };
   } catch {
-    return null;
+    return vazio;
   }
+}
+
+export async function extrairFallbackCompetencia(
+  erro: unknown,
+): Promise<FallbackCompetencia | null> {
+  return (await lerCorpoErroRelatorio(erro)).fallback;
+}
+
+/**
+ * Relança preservando a mensagem que a edge escreveu. Sem isso o usuário lê
+ * "Edge Function returned a non-2xx status code" no lugar da frase em português.
+ */
+function erroLegivel(erroOriginal: unknown, mensagem: string | null): unknown {
+  return mensagem ? new Error(mensagem) : erroOriginal;
 }
 
 type ModoMensal = 'dry_run_mensal_admin' | 'dry_run_mensal_comercial';
@@ -76,8 +102,8 @@ export async function executarCicloFallback(params: {
   const primeira = await invocar(ano, mes);
   if (!primeira.error) return extrairTexto(primeira.data);
 
-  const fallback = await extrairFallbackCompetencia(primeira.error);
-  if (!fallback) throw primeira.error;
+  const { fallback, mensagem } = await lerCorpoErroRelatorio(primeira.error);
+  if (!fallback) throw erroLegivel(primeira.error, mensagem);
 
   const aceitou = await pedirConfirmacao(fallback);
   if (!aceitou) {
@@ -85,7 +111,10 @@ export async function executarCicloFallback(params: {
   }
 
   const segunda = await invocar(fallback.ano, fallback.mes);
-  if (segunda.error) throw segunda.error;
+  if (segunda.error) {
+    const { mensagem: mensagemSegunda } = await lerCorpoErroRelatorio(segunda.error);
+    throw erroLegivel(segunda.error, mensagemSegunda);
+  }
   return extrairTexto(segunda.data);
 }
 

@@ -33,10 +33,25 @@ import {
 import {
   formatarRelatorioAdminMensalCanonico,
   formatarRelatorioComercialMensalCanonico,
+  competenciaFechadaAnterior,
   rotuloCompetencia,
 } from '../_shared/relatorios-mensais-canonicos.ts';
 
-const FIELDS = 'id,nome,provedor,uazapi_url,uazapi_token,waha_url,waha_session,waha_api_key';
+/**
+ * Exceções que significam "não existe fechamento válido para esta competência".
+ * Confirmadas no banco (pg_get_functiondef) em 2026-08-03:
+ *  - administrativo: get_relatorio_admin_mensal_rico_base_v1
+ *  - comercial:      get_relatorio_mensal_snapshot_base_v1
+ * Qualquer outra exceção dessas funções (PARAMETROS_INVALIDOS, FONTE_*_INVALIDA,
+ * ESTRUTURA_DIVERGENTE, *_DIVERGENTE, *_AUSENTES, HASH_DIVERGENTE, RETIFICACAO_*)
+ * é falha real e não deve virar oferta de outra competência.
+ */
+const ERROS_FECHAMENTO_INDISPONIVEL = [
+  'RELATORIO_ADMIN_MENSAL_FECHADO_INVALIDO',
+  'RELATORIO_MENSAL_FECHADO_INDISPONIVEL',
+];
+
+const FIELDS ='id,nome,provedor,uazapi_url,uazapi_token,waha_url,waha_session,waha_api_key';
 
 interface WhatsAppCreds {
   caixaId: number;
@@ -2108,22 +2123,45 @@ serve(async (req) => {
           );
         }
 
+        // Só é "fechamento indisponível" quando a RPC disse exatamente isso.
+        // Divergência de hash, parâmetro inválido, fonte corrompida etc. NÃO são
+        // ausência de fechamento — tratá-los como tal faria a UI oferecer um mês
+        // que também vai falhar (ou o próprio mês pedido).
+        const erroDeIndisponibilidade = ERROS_FECHAMENTO_INDISPONIVEL.some(
+          (codigo) => snapshotError.message?.includes(codigo),
+        );
+        if (!erroDeIndisponibilidade) {
+          console.error('[relatorio-mensal] falha da RPC nao relacionada a fechamento:', snapshotError);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'Não foi possível gerar o relatório mensal desta competência.',
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+
         const dominioSnapshot = tipo === 'administrativo'
           ? 'relatorio_admin_mensal'
           : 'relatorio_comercial_mensal';
-        const { data: fechados } = await supabase
+        const { data: fechados, error: fechadosError } = await supabase
           .from('fechamento_mensal_snapshots')
           .select('ano, mes')
           .eq('dominio', dominioSnapshot)
           .eq('unidade_id', payload.unidade)
           .eq('status', 'fechado')
           .eq('escopo', 'unidade');
+        if (fechadosError) {
+          // Sem isso, uma falha de rede/PostgREST viraria `fallback: null` —
+          // indistinguível de "não há mês anterior fechado".
+          console.error('[relatorio-mensal] falha ao buscar competencias fechadas:', fechadosError);
+        }
 
-        const alvo = payload.ano! * 100 + payload.mes!;
-        const anterior = (fechados ?? [])
-          .map((item) => ({ ano: item.ano as number, mes: item.mes as number }))
-          .filter((item) => item.ano * 100 + item.mes <= alvo)
-          .sort((a, b) => (b.ano * 100 + b.mes) - (a.ano * 100 + a.mes))[0] ?? null;
+        const anterior = competenciaFechadaAnterior(
+          (fechados ?? []).map((item) => ({ ano: item.ano as number, mes: item.mes as number })),
+          payload.ano!,
+          payload.mes!,
+        );
 
         return new Response(
           JSON.stringify({

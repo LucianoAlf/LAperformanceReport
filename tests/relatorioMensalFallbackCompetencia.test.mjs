@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { competenciaFechadaAnterior } from '../supabase/functions/_shared/relatorios-mensais-canonicos.ts';
 
 const edge = await readFile(
   new URL('../supabase/functions/relatorio-admin-whatsapp/index.ts', import.meta.url),
@@ -39,4 +40,67 @@ test('acesso negado continua 403 e sem fallback', () => {
 test('o relatorio diario do cron nao ganha fallback', () => {
   const cron = edge.slice(edge.indexOf("payload.modo === 'cron'"));
   assert.doesNotMatch(cron, /fechamento_indisponivel/);
+});
+
+test('a edge usa a funcao pura em vez de recalcular a ordenacao inline', () => {
+  assert.match(edge, /competenciaFechadaAnterior\(/);
+});
+
+test('so erro de ausencia de fechamento entra no ramo de fallback', () => {
+  assert.match(edge, /RELATORIO_ADMIN_MENSAL_FECHADO_INVALIDO/);
+  assert.match(edge, /RELATORIO_MENSAL_FECHADO_INDISPONIVEL/);
+});
+
+test('o erro da consulta de competencias fechadas nao e engolido', () => {
+  assert.match(edge, /error:\s*fechadosError/);
+  assert.match(edge, /console\.error\([^)]*fechadosError/);
+});
+
+// --- Testes comportamentais da regra de ordenacao (prova real contra a inversao) ---
+
+test('pedir agosto com julho disponivel devolve julho', () => {
+  assert.deepEqual(
+    competenciaFechadaAnterior([{ ano: 2026, mes: 7 }], 2026, 8),
+    { ano: 2026, mes: 7 },
+  );
+});
+
+test('pedir junho sem nada anterior devolve null', () => {
+  assert.equal(competenciaFechadaAnterior([], 2026, 6), null);
+});
+
+test('o fallback NUNCA avanca no tempo: junho com apenas julho devolve null', () => {
+  assert.equal(competenciaFechadaAnterior([{ ano: 2026, mes: 7 }], 2026, 6), null);
+});
+
+test('o fallback nunca devolve a propria competencia pedida', () => {
+  assert.equal(competenciaFechadaAnterior([{ ano: 2026, mes: 7 }], 2026, 7), null);
+});
+
+test('com varios meses devolve o mais recente estritamente anterior', () => {
+  assert.deepEqual(
+    competenciaFechadaAnterior(
+      [
+        { ano: 2025, mes: 12 },
+        { ano: 2026, mes: 3 },
+        { ano: 2026, mes: 8 },
+        { ano: 2026, mes: 5 },
+      ],
+      2026,
+      8,
+    ),
+    { ano: 2026, mes: 5 },
+  );
+});
+
+test('atravessa a virada de ano', () => {
+  assert.deepEqual(
+    competenciaFechadaAnterior([{ ano: 2025, mes: 12 }], 2026, 1),
+    { ano: 2025, mes: 12 },
+  );
+});
+
+test('lista vazia ou nula devolve null', () => {
+  assert.equal(competenciaFechadaAnterior([], 2026, 8), null);
+  assert.equal(competenciaFechadaAnterior(null, 2026, 8), null);
 });

@@ -10,6 +10,30 @@ export function rotuloCompetencia(ano: number, mes: number): string {
   return `${MESES[mes - 1] ?? "MÊS"}/${ano}`;
 }
 
+/**
+ * Dada a lista de competências com fechamento e a competência pedida, devolve a
+ * mais recente que seja ESTRITAMENTE ANTERIOR à pedida — ou `null`.
+ *
+ * O fallback nunca avança no tempo (pedir junho com só julho fechado devolve
+ * `null`, não julho) e nunca devolve a própria competência pedida: quando a RPC
+ * falha por outro motivo que não ausência de fechamento, o mês pedido pode
+ * constar como fechado, e oferecê-lo de volta só repetiria o mesmo erro.
+ */
+export function competenciaFechadaAnterior(
+  fechados: Array<{ ano: number; mes: number }>,
+  ano: number,
+  mes: number,
+): { ano: number; mes: number } | null {
+  const alvo = ano * 100 + mes;
+  return (fechados ?? [])
+    .filter((item) =>
+      Number.isInteger(item?.ano) && Number.isInteger(item?.mes)
+    )
+    .map((item) => ({ ano: item.ano, mes: item.mes }))
+    .filter((item) => item.ano * 100 + item.mes < alvo)
+    .sort((a, b) => (b.ano * 100 + b.mes) - (a.ano * 100 + a.mes))[0] ?? null;
+}
+
 function numero(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;

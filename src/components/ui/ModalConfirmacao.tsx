@@ -55,7 +55,15 @@ export function ModalConfirmacao({
 
   return (
     <Dialog open={aberto} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      {/*
+        z-[110]: confirmação é sempre a camada mais alta. O z-50 padrão do Radix
+        ficava ATRÁS dos modais caseiros do projeto (`fixed inset-0 z-[100]`, ex.
+        o Modal local de ComercialPage.tsx) — e como o DialogContent do Radix é
+        modal, o DismissableLayer põe `pointer-events: none` no body: a página
+        inteira travava com a confirmação invisível por baixo do backdrop.
+        Overlay e conteúdo sobem juntos, senão o backdrop fica sob o modal externo.
+      */}
+      <DialogContent className="sm:max-w-md z-[110]" overlayClassName="z-[110]">
         <DialogHeader>
           <div className="flex items-center gap-3 mb-2">
             <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${cores[tipo]} flex items-center justify-center`}>

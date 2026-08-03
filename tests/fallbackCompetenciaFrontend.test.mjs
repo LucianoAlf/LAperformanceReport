@@ -23,9 +23,11 @@ test('o corpo do erro e lido do context da resposta', () => {
   assert.match(lib, /\.json\(\)/);
 });
 
-test('parse ilegivel devolve null em vez de estourar', () => {
-  assert.match(lib, /catch/);
-  assert.match(lib, /return null/);
+test('parse ilegivel devolve null em vez de estourar', async () => {
+  const corpoQuebrado = new Response('<html>gateway timeout</html>', { status: 504 });
+  assert.equal(await extrairFallbackCompetencia({ context: corpoQuebrado }), null);
+  assert.equal(await extrairFallbackCompetencia(new Error('sem context')), null);
+  assert.equal(await extrairFallbackCompetencia(null), null);
 });
 
 test('so aceita fallback com motivo de fechamento indisponivel', () => {
@@ -153,7 +155,7 @@ test('segunda tentativa tambem falha: NAO chama invocar uma terceira vez', async
   assert.equal(chamadasInvocar, 2);
 });
 
-test('409 sem fallback: erro original propagado, pedirConfirmacao nunca chamado', async () => {
+test('409 sem fallback: mensagem legivel da edge propagada, pedirConfirmacao nunca chamado', async () => {
   let chamadasConfirmacao = 0;
   const erroOriginal = erroComFallback(null);
 
@@ -168,10 +170,50 @@ test('409 sem fallback: erro original propagado, pedirConfirmacao nunca chamado'
           return true;
         },
       }),
-    (erro) => erro === erroOriginal,
+    (erro) =>
+      erro instanceof Error
+      && erro.message === 'O fechamento oficial deste mês ainda não está disponível.',
   );
 
   assert.equal(chamadasConfirmacao, 0);
+});
+
+test('erro sem corpo legivel preserva o erro original', async () => {
+  const erroOriginal = new Error('Edge Function returned a non-2xx status code');
+
+  await assert.rejects(
+    () =>
+      executarCicloFallback({
+        invocar: async () => ({ data: null, error: erroOriginal }),
+        ano: 2026,
+        mes: 8,
+        pedirConfirmacao: async () => true,
+      }),
+    (erro) => erro === erroOriginal,
+  );
+});
+
+test('erro generico com corpo (sem motivo de fallback) mostra a frase da edge', async () => {
+  const response = new Response(
+    JSON.stringify({
+      success: false,
+      error: 'Não foi possível gerar o relatório mensal desta competência.',
+    }),
+    { status: 500 },
+  );
+
+  await assert.rejects(
+    () =>
+      executarCicloFallback({
+        invocar: async () => ({ data: null, error: { context: response } }),
+        ano: 2026,
+        mes: 8,
+        pedirConfirmacao: async () => true,
+      }),
+    (erro) =>
+      erro instanceof Error
+      && erro.message === 'Não foi possível gerar o relatório mensal desta competência.',
+  );
 });
 
 test('extrairFallbackCompetencia devolve null quando fallback e null', async () => {

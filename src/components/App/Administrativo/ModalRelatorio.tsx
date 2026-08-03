@@ -1113,10 +1113,9 @@ export function ModalRelatorio({
       }
       console.error('Erro ao gerar relatorio administrativo:', error);
       setTextoRelatorio('');
-      toast.error(
-        'Erro ao gerar relatorio',
-        error instanceof Error ? error.message : 'Tente novamente em instantes.',
-      );
+      toast.error('Erro ao gerar relatório', {
+        description: error instanceof Error ? error.message : 'Tente novamente em instantes.',
+      });
     }
   }
 
