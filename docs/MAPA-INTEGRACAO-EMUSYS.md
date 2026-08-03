@@ -238,6 +238,12 @@ O plano de contas e a auditoria da classificação continuam no projeto Super Fo
 | Marcação compareceu/faltou (manual) | `src/components/App/PreAtendimento/tabs/AgendaTab.tsx` |
 | Mila SDR (upstream) | `aHD4kJdzByLwFXA1` / `gSHJHYMOYDQZqleW` / `yko5HstPTze0gsIM` |
 
-### Health Score Professor V3 na competência aberta
+### Health Score Professor V3 mensal e por ciclo
 
-Presença, carteira e vínculos usados no mês vivo continuam vindo das fontes canônicas já sincronizadas do Emusys. A leitura não chama a API Emusys diretamente e não cria snapshot. Quando presença ou conversão ainda não têm evento na competência atual, a última competência disponível pode aparecer somente como referência identificada; ela nunca recebe peso na nota atual. Assim que o evento canônico chega ao banco, a próxima leitura passa a usar o valor do mês corrente.
+Presença, carteira, grade e vínculos continuam vindo das fontes canônicas já sincronizadas do Emusys. As leituras de Health Score e dos relatórios da Coordenação não chamam a API Emusys diretamente, não mudam a identidade canônica e não criam snapshot operacional no Emusys.
+
+O recorte mensal usa somente os fatos da competência selecionada. O recorte de ciclo resolve os intervalos fixos Mar-Abr-Mai, Jun-Jul-Ago, Set-Out-Nov e Dez-Jan-Fev; este último atravessa o ano civil. Taxas do ciclo somam numeradores e denominadores brutos antes da divisão, e média/turma soma ocupações e turmas. O ciclo nunca é calculado pela média de percentuais ou scores mensais.
+
+Quando presença ou outro pilar ainda não têm evento na competência atual, a última competência disponível pode aparecer somente como referência identificada, com peso zero. A pontuação contratual de presença começa em 03/08/2026; evidência anterior continua auditável e contextual. Assim que um evento canônico chega ao banco, a próxima leitura mensal ou de ciclo o incorpora conforme seu período.
+
+Essa separação de recorte e publicação não altera o pipeline Emusys: o mensal acompanha evidências do mês, o ciclo aberto publica `Ciclo em acompanhamento` e somente um snapshot oficial fechado pode liberar ranking de professores comparáveis.
