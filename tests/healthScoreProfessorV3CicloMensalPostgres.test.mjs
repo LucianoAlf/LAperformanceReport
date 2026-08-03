@@ -10,6 +10,10 @@ const migrationPath = path.join(
   root,
   'supabase/migrations/20260803220000_health_score_v3_ciclo_mensal_canonico.sql',
 );
+const configMigrationPath = path.join(
+  root,
+  'supabase/migrations/20260803215000_health_score_v3_config_comparabilidade.sql',
+);
 const periodMigrationPath = path.join(
   root,
   'supabase/migrations/20260719120000_health_score_v3_ciclos_publicacao_parcial.sql',
@@ -89,21 +93,23 @@ test('PostgreSQL normaliza 55 de 90 para 61.1 e aplica o corte versionado', asyn
       migration,
       'calcular_health_score_professor_v3_cobertura_normalizada',
     );
+    const configMigration = fs.readFileSync(configMigrationPath, 'utf8');
     const comparability = extractFunction(
-      migration,
+      configMigration,
       'avaliar_health_score_professor_v3_comparabilidade',
     );
     const setup = psql(container, `create schema if not exists public;\n${coverage}\n${comparability}`);
     assert.equal(setup.status, 0, setup.stderr || setup.stdout);
 
     const result = psql(container, `
-      with casos(nome, disponivel, total, pilares, fidelizacao) as (
+      with casos(nome, disponivel, total, pilares, fidelizacao, pilares_minimos) as (
         values
-          ('matheus_reis', 55::numeric, 90::numeric, 3, true),
-          ('pedro_sergio', 55::numeric, 90::numeric, 3, true),
-          ('willer', 55::numeric, 90::numeric, 3, true),
-          ('jeyson', 40::numeric, 90::numeric, 2, true),
-          ('adriana', 15::numeric, 90::numeric, 1, true)
+          ('matheus_reis', 55::numeric, 90::numeric, 3, true, 3),
+          ('pedro_sergio', 55::numeric, 90::numeric, 3, true, 3),
+          ('willer', 55::numeric, 90::numeric, 3, true, 3),
+          ('matheus_corte4', 55::numeric, 90::numeric, 3, true, 4),
+          ('jeyson', 40::numeric, 90::numeric, 2, true, 3),
+          ('adriana', 15::numeric, 90::numeric, 1, true, 3)
       )
       select jsonb_object_agg(
         nome,
@@ -117,6 +123,7 @@ test('PostgreSQL normaliza 55 de 90 para 61.1 e aplica o corte versionado', asyn
             pilares,
             fidelizacao,
             60,
+            pilares_minimos,
             true
           )
         )
@@ -130,6 +137,7 @@ test('PostgreSQL normaliza 55 de 90 para 61.1 e aplica o corte versionado', asyn
     assert.equal(payload.matheus_reis.avaliacao.estado, 'comparavel');
     assert.equal(payload.pedro_sergio.avaliacao.estado, 'comparavel');
     assert.equal(payload.willer.avaliacao.estado, 'comparavel');
+    assert.equal(payload.matheus_corte4.avaliacao.estado, 'em_maturacao');
     assert.equal(payload.jeyson.cobertura, 44.4);
     assert.equal(payload.jeyson.avaliacao.estado, 'em_maturacao');
     assert.equal(payload.adriana.avaliacao.estado, 'em_maturacao');

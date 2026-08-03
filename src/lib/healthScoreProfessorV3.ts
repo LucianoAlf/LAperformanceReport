@@ -158,6 +158,7 @@ export interface HealthScoreV3Config {
   vigenciaInicio: string;
   vigenciaFim: string | null;
   coberturaMinima: number;
+  pilaresMinimos: number;
   faixaAtencaoMin: number;
   faixaSaudavelMin: number;
   exigePilarFidelizacao: boolean;
@@ -540,6 +541,7 @@ function parseConfig(value: unknown): ParsedConfig {
       vigenciaInicio: String(row.vigencia_inicio || ''),
       vigenciaFim: row.vigencia_fim ? String(row.vigencia_fim) : null,
       coberturaMinima: asNumber(row.cobertura_minima),
+      pilaresMinimos: asNumber(row.pilares_minimos, 3),
       faixaAtencaoMin: asNumber(row.faixa_atencao_min),
       faixaSaudavelMin: asNumber(row.faixa_saudavel_min),
       exigePilarFidelizacao: Boolean(row.exige_pilar_fidelizacao),

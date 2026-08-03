@@ -656,9 +656,12 @@ as $function$
       r.*,
       c.id as config_id,
       c.cobertura_minima,
+      c.pilares_minimos,
+      c.exige_pilar_fidelizacao,
       c.faixa_atencao_min,
       c.faixa_saudavel_min,
-      public.fn_health_score_professor_v3_config_fingerprint(c.id) as regra_fingerprint,
+      public.fn_health_score_professor_v3_config_fingerprint_comparabilidade(c.id)
+        as regra_fingerprint,
       public.calcular_health_score_professor_v3_cobertura_normalizada(
         r.peso_disponivel_total,
         r.peso_pontuavel_total
@@ -672,6 +675,7 @@ as $function$
         r.pilares_validos,
         r.tem_fidelizacao,
         coalesce(c.cobertura_minima, 60),
+        coalesce(c.pilares_minimos, 3),
         r.fonte_canonica_disponivel
       ) as avaliacao
     from resumo r
@@ -708,6 +712,8 @@ as $function$
       'cobertura_normalizada', a.cobertura_normalizada,
       'cobertura_minima_aplicada', a.cobertura_minima,
       'comparabilidade_motivos', a.avaliacao -> 'motivos',
+      'pilares_minimos_aplicado', a.pilares_minimos,
+      'exige_pilar_fidelizacao', a.exige_pilar_fidelizacao,
       'config_id', a.config_id,
       'regra_fingerprint', a.regra_fingerprint
     ),
