@@ -231,7 +231,7 @@ function HealthScoreV3MetricsPanel({
   const observed = snapshot.comparabilidadeEstado === 'em_maturacao';
   const scoreValue = comparable ? snapshot.scoreComparavel : observed ? snapshot.scoreObservado : null;
   const scoreLabel = scoreValue === null ? 'Sem base operacional' : Math.round(scoreValue).toString();
-  const scoreTitle = comparable ? 'Health Score V3' : observed ? 'Nota em formação' : 'Sem base operacional';
+  const scoreTitle = comparable ? 'Health Score V3' : observed ? 'Desempenho observado' : 'Sem base operacional';
   const coverageLabel = snapshot.cobertura === null ? 'Sem base' : `${snapshot.cobertura.toFixed(0)}%`;
 
   return (
@@ -1000,7 +1000,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                 ? healthScoreV3Performance?.comparabilidadeEstado === 'comparavel'
                   ? 'V3 comparável'
                   : healthScoreV3Performance?.comparabilidadeEstado === 'em_maturacao'
-                    ? 'V3 · Base em formação'
+                    ? 'V3 · Em acompanhamento'
                     : 'V3 sem base operacional'
                 : healthScorePublicavel
                 ? (professor.status === 'critico' ? 'Crítico' : professor.status === 'atencao' ? 'Atenção' : 'Excelente')

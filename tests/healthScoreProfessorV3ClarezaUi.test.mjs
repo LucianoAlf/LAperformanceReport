@@ -55,22 +55,22 @@ test('distingue valor visivel de pilar que realmente compoe a nota', () => {
   }), false, 'carteira diagnostica nunca deve compor a nota');
 });
 
-test('tabela mantem contexto das colunas e explica base em formacao sem quebra ruim', () => {
+test('tabela mantem contexto das colunas e explica acompanhamento sem quebra ruim', () => {
   const source = fs.readFileSync(tabPath, 'utf8');
   const modalSource = fs.readFileSync(modalPath, 'utf8');
 
   assert.match(source, /<thead[^>]*className="[^"]*sticky[^"]*"/);
   assert.match(source, /className="[^"]*max-h-\[70vh\][^"]*overflow-auto[^"]*"/);
   assert.match(source, /<thead[^>]*className="[^"]*top-0[^"]*"/);
-  assert.match(source, /Nota em forma[cç][aã]o/i);
+  assert.match(source, /Desempenho observado/i);
   assert.match(source, /fora da nota/i);
   assert.match(source, /whitespace-nowrap/);
-  assert.match(modalSource, /Nota em forma/i);
+  assert.match(modalSource, /Desempenho observado/i);
   assert.match(modalSource, /pilares na nota/i);
   assert.match(modalSource, /Compõe a nota/i);
   assert.match(modalSource, /Diagnóstico · fora da nota/i);
   assert.match(modalSource, /whitespace-nowrap/);
-  assert.doesNotMatch(modalSource, /Desempenho observado/i);
+  assert.match(modalSource, /Em acompanhamento/i);
   assert.doesNotMatch(modalSource, /V3 em matura/i);
   assert.doesNotMatch(source, /professor\{alerta\.quantidade[\s\S]{0,900}em matura[cç][aã]o[\s\S]{0,120}\? 's'/i);
 });

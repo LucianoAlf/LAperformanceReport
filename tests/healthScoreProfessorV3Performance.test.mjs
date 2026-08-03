@@ -320,7 +320,7 @@ test('tabela V3 oferece filtros por saúde e ordena a leitura operacional sem ha
   assert.match(tab, /value="comparavel"/);
   assert.match(tab, /value="em_maturacao"/);
   assert.match(tab, /value="sem_base_operacional"/);
-  assert.match(tab, /Nota em forma[cç][aã]o/i);
+  assert.match(tab, /Desempenho observado/i);
   assert.match(tab, /compareHealthScoreV3OperationalRows/);
   assert.doesNotMatch(tab, /isHealthScoreV3SnapshotRankable/);
 });

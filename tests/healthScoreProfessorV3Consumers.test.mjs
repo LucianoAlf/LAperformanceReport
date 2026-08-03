@@ -226,7 +226,7 @@ test('Analytics consulta o ciclo pela competencia selecionada sem deslocar o mes
   assert.doesNotMatch(analytics, /healthPeriodicity\s*===\s*['"]ciclo['"][\s\S]{0,120}mes\s*\+\s*1/);
 });
 
-test('Carteira usa o snapshot V3 e nao recalcula o Health Score legado', () => {
+test('Carteira preserva a base canonica e enriquece com snapshot V3 sem recalcular o legado', () => {
   const carteira = read('src/components/App/Professores/TabCarteiraProfessores.tsx');
 
   assert.match(carteira, /get_health_score_professor_v3_performance/);
@@ -241,6 +241,8 @@ test('Carteira usa o snapshot V3 e nao recalcula o Health Score legado', () => {
   assert.match(carteira, /formatHealthScoreV3Coverage/);
   assert.doesNotMatch(carteira, /health_score_cobertura\?\.toFixed\(0\)\s*\?\?\s*['"]-['"]/);
   assert.doesNotMatch(carteira, /calcularHealthScore\s*\(/);
+  assert.doesNotMatch(carteira, /throw new Error\(`Health Score V3 indisponivel:/i);
+  assert.match(carteira, /setCarteiras\(carteirasComAlunos\)[\s\S]*get_health_score_professor_v3_performance/);
 });
 
 test('Carteira exibe permanencia com o professor da mesma fonte V3 da Performance', () => {
@@ -252,7 +254,7 @@ test('Carteira exibe permanencia com o professor da mesma fonte V3 da Performanc
   );
   assert.match(
     carteira,
-    /tempo_medio_meses:\s*Number\(permanenciaV3\s*\?\?\s*row\?\.tempo_medio_meses\s*\?\?\s*0\)/,
+    /tempo_medio_meses:\s*Number\(permanencia\s*\?\?\s*carteira\.tempo_medio_meses\)/,
   );
 });
 

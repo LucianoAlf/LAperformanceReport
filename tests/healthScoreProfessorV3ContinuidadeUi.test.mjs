@@ -16,8 +16,8 @@ const hook = readFileSync(
 );
 
 test('tabela diferencia Health Score comparavel de desempenho observado', () => {
-  assert.match(tab, /Nota em forma(?:ç|\u00e7)(?:ã|\u00e3)o/);
-  assert.match(tab, /Base em forma(?:ç|\u00e7)(?:ã|\u00e3)o/);
+  assert.match(tab, /Desempenho observado/);
+  assert.match(tab, /Em acompanhamento/);
   assert.match(tab, /Sem base operacional/);
   assert.match(tab, /pilaresValidos/);
   assert.match(tab, /scoreComparavel/);
@@ -34,7 +34,7 @@ test('modal consome o mesmo snapshot normalizado do read model', () => {
   assert.match(hook, /normalizeHealthScoreV3PerformanceRows/);
   assert.match(hook, /snapshot/);
   assert.match(modal, /performance=\{healthScoreV3Performance\}/);
-  assert.match(modal, /Nota em forma(?:ç|\u00e7)(?:ã|\u00e3)o/);
+  assert.match(modal, /Desempenho observado/);
   assert.match(modal, /Sem base operacional/);
 });
 

@@ -290,7 +290,7 @@ test('modal individual alterna V3 por flag e exibe base cobertura e recorte', ()
   assert.match(source, /VITE_HEALTH_SCORE_V3_MODAL_ENABLED[\s\S]*!==\s*['"]false['"]/i);
   assert.match(source, /useHealthScoreProfessorV3/i);
   assert.match(source, /Health Score V3/i);
-  assert.match(source, /Nota em forma[cç][aã]o/i);
+  assert.match(source, /Desempenho observado/i);
   assert.match(source, /comparabilidadeEstado/i);
   assert.match(source, /resolveHealthScoreV3PublicationLabel/i);
   assert.match(source, /Sem base/i);
