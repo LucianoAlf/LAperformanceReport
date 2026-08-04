@@ -50,11 +50,13 @@ const adminRico = {
     evasoes: 7,
   },
   indicadores_financeiros: {
-    ticket_medio: 449.15,
-    faturamento_previsto: 142925.2,
-    mrr_atual: 141032.2,
-    ltv_medio: 6692.34,
+    ticket_medio: 449.35,
+    faturamento_previsto: 150982.39,
+    faturamento_realizado: 149335.15,
+    mrr_atual: 150982.39,
+    ltv_medio: 6691.59,
     tempo_permanencia: 14.9,
+    fonte: "kpis_alunos_canonicos.totais",
   },
   indicadores_retencao: {
     churn_rate: 1.79,
@@ -172,8 +174,10 @@ Deno.test("mensal administrativo preserva modelo rico, multicurso e trancamentos
   assertStringIncludes(texto, "Retorno previsto: 31/07/2026");
   assertStringIncludes(texto, "Situação: *EXTENSÃO GERENCIAL*");
   assertStringIncludes(texto, "💰 *KPIs FINANCEIROS*");
-  assertStringIncludes(texto, "• Faturamento Previsto: *R$ 142.925,20*");
-  assertStringIncludes(texto, "• LTV (Tempo × Ticket): *R$ 6.692,34*");
+  assertStringIncludes(texto, "• Faturamento Previsto: *R$ 150.982,39*");
+  assertStringIncludes(texto, "• MRR da competência (pago + em aberto): *R$ 150.982,39*");
+  assertStringIncludes(texto, "• Faturamento Realizado (pago): *R$ 149.335,15*");
+  assertStringIncludes(texto, "• LTV (Tempo × Ticket): *R$ 6.691,59*");
   assertStringIncludes(texto, "📈 *KPIs DE RETENÇÃO*");
   assertStringIncludes(texto, "• Churn de alunos pagantes: *1,8%* — 6 saídas em 336 pagantes");
   assertStringIncludes(texto, "• Saídas totais: *7* (6 pagantes + 1 bolsista)");

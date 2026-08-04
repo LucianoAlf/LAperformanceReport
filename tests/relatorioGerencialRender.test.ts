@@ -33,10 +33,11 @@ Deno.test("renderer gerencial publica julho do Recreio sem inventar fonte ausent
         avisos_previos: 10,
       },
       indicadores_financeiros: {
-        mrr_atual: 141032.2,
-        faturamento_previsto: 142925.2,
-        ticket_medio: 449.15,
-        ltv_medio: 6692.34,
+        mrr_atual: 150982.39,
+        faturamento_previsto: 150982.39,
+        faturamento_realizado: 149335.15,
+        ticket_medio: 449.35,
+        ltv_medio: 6691.59,
         tempo_permanencia: 14.9,
       },
       indicadores_retencao: {
@@ -164,6 +165,8 @@ Deno.test("renderer gerencial publica julho do Recreio sem inventar fonte ausent
   for (
     const trecho of [
       "Ativos: *344*",
+      "MRR da competência (pago + em aberto): *R$ 150.982,39*",
+      "Faturamento realizado (pago): *R$ 149.335,15*",
       "No fechamento: *2 alunos / 2 matrículas*",
       "Layara Sales Magalhães — 55 dias",
       "Leads: *297*",

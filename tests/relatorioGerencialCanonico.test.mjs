@@ -103,6 +103,9 @@ test('texto publico preserva riqueza gerencial sem linguagem de implementacao', 
   }
 
   assert.match(renderer, /faturamento_previsto/);
+  assert.match(renderer, /faturamento_realizado/);
+  assert.match(rendererSemAcentos, /MRR da competencia \(pago \+ em aberto\)/i);
+  assert.match(rendererSemAcentos, /Faturamento realizado \(pago\)/i);
   assert.match(renderer, /ticket_medio_parcela/);
   assert.match(renderer, /ticket_medio_passaporte/);
   assert.doesNotMatch(renderer, /linhaMeta\("Ticket da base ativa",\s*financeiro\.ticket_medio,\s*metasMensais\.ticket_parcela/);

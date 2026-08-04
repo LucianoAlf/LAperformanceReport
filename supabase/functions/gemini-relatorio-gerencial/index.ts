@@ -120,6 +120,7 @@ function contratoGerencialValido(dados: RelatorioGerencialCanonico): boolean {
     "administrativo.resumo.alunos_com_4_ou_mais_cursos",
     "administrativo.indicadores_financeiros.mrr_atual",
     "administrativo.indicadores_financeiros.faturamento_previsto",
+    "administrativo.indicadores_financeiros.faturamento_realizado",
     "administrativo.indicadores_financeiros.ticket_medio",
     "administrativo.indicadores_financeiros.ltv_medio",
     "administrativo.indicadores_financeiros.tempo_permanencia",
@@ -699,9 +700,14 @@ export async function montarRelatorio(
 
   relatorio +=
     "───────────────────────\n💰 *FINANCEIRO*\n───────────────────────\n";
-  relatorio += `• MRR atual: *R$ ${moeda(financeiro.mrr_atual)}*\n`;
+  relatorio += `• MRR da competência (pago + em aberto): *R$ ${
+    moeda(financeiro.mrr_atual)
+  }*\n`;
   relatorio += `• Faturamento previsto: *R$ ${
     moeda(financeiro.faturamento_previsto)
+  }*\n`;
+  relatorio += `• Faturamento realizado (pago): *R$ ${
+    moeda(financeiro.faturamento_realizado)
   }*\n`;
   relatorio += `• Ticket médio da base ativa: *R$ ${
     moeda(financeiro.ticket_medio)
