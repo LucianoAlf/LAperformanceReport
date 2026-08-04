@@ -27,9 +27,9 @@ import {
 } from '@/lib/professoresKpisAgregados';
 import {
   formatHealthScoreV3Coverage,
-  normalizeHealthScoreV3PerformanceRows,
   resolveHealthScoreV3MetricDisplay,
 } from '@/lib/healthScoreProfessorV3Performance';
+import { fetchHealthScoreProfessorV3Performance } from '@/hooks/useHealthScoreProfessorV3Performance';
 import {
   buscarCarteiraProfessorDetalheCanonica,
   type AlunoCarteiraCanonico,
@@ -263,23 +263,14 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
       setCarteiras(carteirasComAlunos);
       setLoading(false);
 
-      void supabase.rpc('get_health_score_professor_v3_performance', {
-        p_competencia: competenciaHealth,
-        p_unidade_id: unidadeAtual === 'todos' ? null : unidadeAtual,
-        p_periodicidade: 'mensal',
-      }).then((healthV3Result) => {
+      void fetchHealthScoreProfessorV3Performance({
+        competencia: competenciaHealth,
+        unidadeId: unidadeAtual === 'todos' ? null : unidadeAtual,
+        periodicidade: 'mensal',
+      }).then((snapshots) => {
         if (requisicaoId !== requisicaoAtivaRef.current) return;
-        if (healthV3Result.error) {
-          console.warn('Health Score V3 indisponível na Carteira', healthV3Result.error);
-          setCarteiras((atuais) => atuais.map((carteira) => ({
-            ...carteira,
-            health_score_motivo: 'Health Score temporariamente indisponível; carteira preservada',
-          })));
-          return;
-        }
-
         const healthV3PorProfessor = new Map(
-          normalizeHealthScoreV3PerformanceRows(healthV3Result.data || [])
+          snapshots
             .map((snapshot) => [snapshot.professorId, snapshot]),
         );
         setCarteiras((atuais) => atuais.map((carteira) => {

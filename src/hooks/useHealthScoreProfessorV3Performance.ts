@@ -12,6 +12,46 @@ interface Options {
   enabled?: boolean;
 }
 
+export async function fetchHealthScoreProfessorV3Performance({
+  competencia,
+  unidadeId = null,
+  periodicidade = 'mensal',
+}: Omit<Options, 'enabled'>): Promise<HealthScoreV3ProfessorPerformance[]> {
+  const reference = /^\d{4}-\d{2}$/.test(competencia)
+    ? `${competencia}-01`
+    : competencia;
+  const unidadeFiltro = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
+  const consultarUnidade = (id: string) => supabase.rpc(
+    'get_health_score_professor_v3_performance',
+    {
+      p_competencia: reference,
+      p_unidade_id: id,
+      p_periodicidade: periodicidade,
+    },
+  );
+  const linhas: unknown[] = [];
+
+  if (unidadeFiltro) {
+    const resultado = await consultarUnidade(unidadeFiltro);
+    if (resultado.error) throw resultado.error;
+    linhas.push(...(resultado.data || []));
+  } else {
+    const { data: unidades, error: unidadesError } = await supabase
+      .from('unidades')
+      .select('id')
+      .eq('ativo', true);
+    if (unidadesError) throw unidadesError;
+
+    for (const unidade of unidades || []) {
+      const resultado = await consultarUnidade(String(unidade.id));
+      if (resultado.error) throw resultado.error;
+      linhas.push(...(resultado.data || []));
+    }
+  }
+
+  return normalizeHealthScoreV3PerformanceRows(linhas);
+}
+
 export function useHealthScoreProfessorV3Performance({
   competencia,
   unidadeId = null,
