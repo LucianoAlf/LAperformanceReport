@@ -177,6 +177,7 @@ insert into public.unidades(id, nome) values
 \ir ../../supabase/migrations/20260804090000_lia_followup_72h_fase_b.sql
 \ir ../../supabase/migrations/20260804123000_lia_followup_listagem_somente_producao.sql
 \ir ../../supabase/migrations/20260804173000_lia_followup_resumo_renderizar_itens_teste.sql
+\ir ../../supabase/migrations/20260804174500_lia_followup_pilotos_multiplos_mesmo_dia.sql
 
 select public.fixture_assert(
   not has_table_privilege(
@@ -211,7 +212,8 @@ insert into public.movimentacoes_admin(id, aluno_nome) values
   (5, 'Caso da Fabi'),
   (6, 'Pesquisa teste'),
   (7, 'Ação manual'),
-  (8, 'Vence depois das nove');
+  (8, 'Vence depois das nove'),
+  (9, 'Segunda pesquisa teste');
 
 insert into public.pesquisa_evasao(
   id, evasao_id, unidade_id, aluno_nome, modo_teste,
@@ -225,7 +227,8 @@ insert into public.pesquisa_evasao(
   ('10000000-0000-4000-8000-000000000005', 5, '20000000-0000-4000-8000-000000000002', 'Caso da Fabi', false, 30, 'enviado', 'sem_resposta', false, null, '2026-08-01 12:00:00+00'),
   ('10000000-0000-4000-8000-000000000006', 6, '20000000-0000-4000-8000-000000000001', 'Pesquisa teste', true, 29, 'enviado', 'sem_resposta', false, null, '2026-08-01 12:00:00+00'),
   ('10000000-0000-4000-8000-000000000007', 7, '20000000-0000-4000-8000-000000000001', 'Ação manual', false, 29, 'enviado', 'sem_resposta', false, null, clock_timestamp() - interval '4 days'),
-  ('10000000-0000-4000-8000-000000000008', 8, '20000000-0000-4000-8000-000000000001', 'Vence depois das nove', false, 29, 'enviado', 'sem_resposta', false, null, '2026-08-04 13:00:00+00');
+  ('10000000-0000-4000-8000-000000000008', 8, '20000000-0000-4000-8000-000000000001', 'Vence depois das nove', false, 29, 'enviado', 'sem_resposta', false, null, '2026-08-04 13:00:00+00'),
+  ('10000000-0000-4000-8000-000000000009', 9, '20000000-0000-4000-8000-000000000002', 'Segunda pesquisa teste', true, 29, 'enviado', 'sem_resposta', false, null, '2026-08-01 13:00:00+00');
 
 insert into public.pesquisa_evasao_mensagens(
   id, pesquisa_id, direcao, tipo, resolution_status, substantividade
@@ -250,6 +253,22 @@ select public.fixture_assert(
     where alerta.mensagem_renderizada like '%Pesquisa teste — Barra — enviada em 01/08 09:00%'
   ),
   'PILOT_LIST_RENDERED_OK'
+);
+
+create temp table fixture_followup_piloto_2 as
+select public.enfileirar_lia_followup_piloto(
+  '10000000-0000-4000-8000-000000000009'
+) as alerta_id;
+
+select public.fixture_assert(
+  (select count(*) from public.lia_followup_resumos where ambiente = 'teste') = 2
+  and exists (
+    select 1
+    from fixture_followup_piloto_2 piloto
+    join public.lia_alertas_privados alerta on alerta.id = piloto.alerta_id
+    where alerta.mensagem_renderizada like '%Segunda pesquisa teste — Recreio — enviada em 01/08 10:00%'
+  ),
+  'MULTIPLE_TEST_PILOTS_SAME_DAY_OK'
 );
 
 select public.fixture_assert(
@@ -444,5 +463,6 @@ select 'RESPONSE_BEFORE_CLAIM_CANCELS_OK';
 select 'OPERATOR_ISOLATION_OK';
 select 'MANUAL_ACTION_AUDIT_OK';
 select 'PILOT_LIST_RENDERED_OK';
+select 'MULTIPLE_TEST_PILOTS_SAME_DAY_OK';
 select 'LIA_FOLLOWUP_72H_FASE_B_PG17_OK';
 select 'PESQUISA_EVASAO_CLAIM_PG17_OK';

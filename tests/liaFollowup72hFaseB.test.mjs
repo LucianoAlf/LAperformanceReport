@@ -21,11 +21,16 @@ const renderPilotoMigrationPath = resolve(
   root,
   'supabase/migrations/20260804173000_lia_followup_resumo_renderizar_itens_teste.sql',
 );
+const multiplosPilotosMigrationPath = resolve(
+  root,
+  'supabase/migrations/20260804174500_lia_followup_pilotos_multiplos_mesmo_dia.sql',
+);
 const read = (path) => existsSync(path) ? readFileSync(path, 'utf8') : '';
 const sql = read(migrationPath);
 const fixture = read(fixturePath);
 const producaoOnlySql = read(producaoOnlyMigrationPath);
 const renderPilotoSql = read(renderPilotoMigrationPath);
+const multiplosPilotosSql = read(multiplosPilotosMigrationPath);
 
 test('fase B nasce desligada e nao cria novo cron de transporte', () => {
   assert.match(sql, /followup_72h_liberado\s+boolean\s+not null\s+default false/i);
@@ -84,6 +89,26 @@ test('renderer do resumo usa os itens congelados e inclui pesquisas de teste no 
     /fn_pesquisa_evasao_followup_estado/i,
   );
   assert.match(fixture, /PILOT_LIST_RENDERED_OK/);
+});
+
+test('pilotos distintos podem rodar no mesmo dia sem afrouxar a unicidade produtiva', () => {
+  assert.ok(
+    multiplosPilotosSql,
+    `migration de correção ausente: ${multiplosPilotosMigrationPath}`,
+  );
+  assert.match(
+    multiplosPilotosSql,
+    /drop\s+constraint\s+lia_followup_resumos_operador_usuario_id_ambiente_data_cort_key/i,
+  );
+  assert.match(
+    multiplosPilotosSql,
+    /create\s+unique\s+index[\s\S]*?\(operador_usuario_id,\s*data_corte_brt\)[\s\S]*?where\s+ambiente\s*=\s*'producao'/i,
+  );
+  assert.match(
+    multiplosPilotosSql,
+    /create\s+or\s+replace\s+function\s+public\.produzir_lia_resumos_followup_72h[\s\S]*?on\s+conflict\s*\(idempotency_key\)\s+do\s+nothing/i,
+  );
+  assert.match(fixture, /MULTIPLE_TEST_PILOTS_SAME_DAY_OK/);
 });
 
 test('acao manual resolve o operador pelo JWT', () => {
