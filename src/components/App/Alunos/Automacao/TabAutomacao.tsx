@@ -6,6 +6,7 @@ import { Loader2, AlertTriangle, Search, ChevronDown } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { ACOES_SOMBRA_IN } from '@/lib/automacaoSombra';
 
 interface AutomacaoLogItem {
   id: number;
@@ -32,6 +33,17 @@ const acaoStyles: Record<string, { bg: string; text: string; label: string }> = 
   evento_ignorado: { bg: 'bg-slate-500/20', text: 'text-slate-400', label: 'Ignorado' },
 };
 
+// Ações do observador em dry-run. Ficam FORA de `acaoStyles` de propósito: aquele mapa
+// também gera os cartões de contagem no topo, e sombra não é métrica de operação.
+// Sem estas entradas elas caíam no fallback e apareciam como "Atualizado" — parecendo
+// alteração real de aluno, quando nada foi escrito.
+const acaoStylesObservador: Record<string, { bg: string; text: string; label: string }> = {
+  processado_sombra: { bg: 'bg-slate-600/30', text: 'text-slate-300', label: 'Sombra (teste)' },
+  webhook_observado_direto: { bg: 'bg-slate-600/30', text: 'text-slate-300', label: 'Sombra (payload)' },
+  processado: { bg: 'bg-teal-500/20', text: 'text-teal-300', label: 'Processado (Emusys)' },
+  erro_processamento: { bg: 'bg-rose-500/20', text: 'text-rose-400', label: 'Erro no processamento' },
+};
+
 const eventoLabels: Record<string, string> = {
   matricula_nova: 'Matrícula Nova',
   matricula_renovacao: 'Renovação',
@@ -52,10 +64,11 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
   const [filtroPeriodo, setFiltroPeriodo] = useState<string>('7');
   const [busca, setBusca] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [mostrarSombra, setMostrarSombra] = useState(false);
 
   useEffect(() => {
     carregarRegistros();
-  }, [filtroEvento, filtroAcao, filtroPeriodo, unidadeAtual]);
+  }, [filtroEvento, filtroAcao, filtroPeriodo, unidadeAtual, mostrarSombra]);
 
   const carregarRegistros = async () => {
     setLoading(true);
@@ -79,6 +92,12 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
 
       if (filtroAcao && filtroAcao !== 'todos') {
         query = query.eq('acao', filtroAcao);
+      }
+
+      // Observador em sombra: escondido por padrão (não é operação real).
+      // `processado` (evento já migrado do n8n) NÃO é escondido — é operação de verdade.
+      if (!mostrarSombra) {
+        query = query.not('acao', 'in', ACOES_SOMBRA_IN);
       }
 
       if (unidadeAtual && unidadeAtual !== 'todos') {
@@ -249,6 +268,18 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
                 <SelectItem value="90">Últimos 3 meses</SelectItem>
               </SelectContent>
             </Select>
+            <label
+              className="flex items-center gap-2 cursor-pointer px-1"
+              title="Observador do Emusys em dry-run: não altera nada no sistema, só registra o que faria."
+            >
+              <input
+                type="checkbox"
+                checked={mostrarSombra}
+                onChange={(e) => setMostrarSombra(e.target.checked)}
+                className="accent-slate-400"
+              />
+              <span className="text-xs text-slate-300 whitespace-nowrap">Mostrar sombra (teste)</span>
+            </label>
           </div>
         </div>
 
@@ -278,7 +309,7 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
               </thead>
               <tbody>
                 {registrosFiltrados.map((registro) => {
-                  const style = acaoStyles[registro.acao] || acaoStyles.atualizado;
+                  const style = acaoStyles[registro.acao] || acaoStylesObservador[registro.acao] || acaoStyles.atualizado;
                   const detalhesStr = formatarDetalhes(registro);
                   const semProfessor = registro.detalhes?.sem_professor === true;
                   const isExpanded = expandedId === registro.id;

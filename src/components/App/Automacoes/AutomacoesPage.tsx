@@ -45,6 +45,10 @@ export function AutomacoesPage() {
     setFiltros(f => ({ ...f, apenasNaoVistos: !f.apenasNaoVistos }));
   }
 
+  function toggleSombra() {
+    setFiltros(f => ({ ...f, incluirSombra: !f.incluirSombra }));
+  }
+
   return (
     <div className="p-6 max-w-7xl mx-auto" key={refreshKey}>
       <div className="flex items-center justify-between mb-6">
@@ -112,6 +116,18 @@ export function AutomacoesPage() {
               className="accent-cyan-500"
             />
             <span className="text-xs text-gray-300">Apenas não vistas (críticas)</span>
+          </label>
+          <label
+            className="flex items-center gap-2 ml-4 cursor-pointer"
+            title="Registros do observador do Emusys em dry-run: não alteram nada no sistema, só mostram o que ele faria."
+          >
+            <input
+              type="checkbox"
+              checked={filtros.incluirSombra}
+              onChange={toggleSombra}
+              className="accent-slate-400"
+            />
+            <span className="text-xs text-gray-300">Mostrar sombra (teste)</span>
           </label>
         </div>
       </div>

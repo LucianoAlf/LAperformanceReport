@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Code2 } from 'lucide-react';
 import type { LogAutomacao, Invariante } from '@/hooks/useAutomacoesData';
+import { ehLogDeSombra } from '@/lib/automacaoSombra';
 import { ModalPayloadBruto } from './ModalPayloadBruto';
 
 type Props = {
@@ -36,6 +37,14 @@ export function LinhaEvento({ log, onMarcarVistas }: Props) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 text-sm">
             <span className="text-gray-400">{dataFmt}</span>
+            {ehLogDeSombra(log.acao) && (
+              <span
+                className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-700/60 text-slate-300 whitespace-nowrap"
+                title="Observador em dry-run: nada foi alterado no sistema."
+              >
+                SOMBRA
+              </span>
+            )}
             <span className="text-white font-medium">{log.evento}</span>
             <span className="text-gray-500">·</span>
             <span className="text-gray-300">{log.aluno_nome}</span>

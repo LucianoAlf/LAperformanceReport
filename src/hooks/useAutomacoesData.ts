@@ -1,6 +1,7 @@
 // src/hooks/useAutomacoesData.ts
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { ACOES_SOMBRA_IN } from '@/lib/automacaoSombra';
 
 export type Severidade = 'critico' | 'aviso';
 
@@ -42,6 +43,8 @@ export type Filtros = {
   evento: string | null;
   regra: string | null;
   severidade: Severidade | null;
+  /** Inclui os registros do observador em dry-run (ver `lib/automacaoSombra`). Off por padrão. */
+  incluirSombra: boolean;
   limit: number;
 };
 
@@ -59,6 +62,7 @@ export function defaultFiltros(): Filtros {
     evento: null,
     regra: null,
     severidade: null,
+    incluirSombra: false,
     limit: 200,
   };
 }
@@ -78,6 +82,7 @@ export function useAutomacoesData(filtros: Filtros) {
     e: filtros.evento,
     r: filtros.regra,
     sev: filtros.severidade,
+    sombra: filtros.incluirSombra,
     l: filtros.limit,
   }), [filtros]);
 
@@ -108,6 +113,9 @@ export function useAutomacoesData(filtros: Filtros) {
     }
     if (filtros.evento) {
       q = q.eq('evento', filtros.evento);
+    }
+    if (!filtros.incluirSombra) {
+      q = q.not('acao', 'in', ACOES_SOMBRA_IN);
     }
 
     const { data, error } = await q;
