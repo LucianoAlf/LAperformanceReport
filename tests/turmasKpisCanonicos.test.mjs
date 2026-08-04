@@ -4,6 +4,9 @@ import { test } from 'node:test';
 
 const migrationPath = 'supabase/migrations/20260804220000_kpis_turmas_canonicos_v1.sql';
 const helperPath = 'src/lib/turmasKpisCanonicos.ts';
+const sourcePath = 'supabase/migrations/20260715150000_professores_media_turma_pessoa_turma.sql';
+const reportCoordenacaoPath = 'supabase/migrations/20260803223000_relatorios_coordenacao_periodicidade_canonica.sql';
+const reportGerencialPath = 'supabase/migrations/20260801222500_corrigir_relatorio_gerencial_metas_matriculador.sql';
 
 const read = (path) => existsSync(path) ? readFileSync(path, 'utf8') : '';
 
@@ -66,6 +69,36 @@ test('consolidado divide somas e nunca calcula media das medias', () => {
   assert.equal(18 / 6, 3);
   assert.equal(13 / 13, 1);
   assert.equal(Number((49 / 40).toFixed(2)), 1.23);
+});
+
+test('regra homologada exclui projetos e preserva zero turmas sem divisao por zero', () => {
+  const source = read(sourcePath);
+  const migration = read(migrationPath);
+
+  assert.match(source, /is_projeto_banda/i);
+  assert.match(source, /count\s*\(\s*distinct\s*\(\s*b\.pessoa_chave\s*,\s*b\.turma_chave\s*\)\s*\)/i);
+  assert.match(migration, /case\s+when\s+b\.turmas_elegiveis_media\s*>\s*0[\s\S]*else\s+0/i);
+
+  const linhas = [
+    { ocupacoes: 4, turmas: 2, projetoBanda: false },
+    { ocupacoes: 12, turmas: 3, projetoBanda: true },
+  ];
+  const elegiveis = linhas.filter((linha) => !linha.projetoBanda);
+  assert.equal(elegiveis.reduce((soma, linha) => soma + linha.ocupacoes, 0), 4);
+  assert.equal(elegiveis.reduce((soma, linha) => soma + linha.turmas, 0), 2);
+  assert.equal((0 > 0 ? 0 / 0 : 0), 0);
+});
+
+test('relatorios de coordenacao e gerencial preservam numerador e denominador canonicos', () => {
+  const coordenacao = read(reportCoordenacaoPath);
+  const gerencial = read(reportGerencialPath);
+
+  assert.match(coordenacao, /sum\s*\(\s*coalesce\s*\(\s*nullif\s*\(\s*item->>'alunos_via_turmas'/i);
+  assert.match(coordenacao, /sum\s*\(\s*coalesce\s*\(\s*nullif\s*\(\s*item->>'turmas_elegiveis_media'/i);
+  assert.doesNotMatch(coordenacao, /avg\s*\([^)]*media_alunos_turma/i);
+  assert.match(gerencial, /h\.numerador\s+as\s+alunos_via_turmas/i);
+  assert.match(gerencial, /h\.denominador\s+as\s+turmas_elegiveis_media/i);
+  assert.doesNotMatch(gerencial, /avg\s*\([^)]*media_alunos_turma/i);
 });
 
 test('cliente indexa o grao professor e unidade para os consumidores detalhados', () => {
