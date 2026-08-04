@@ -39,6 +39,10 @@ import { useToast } from '@/hooks/useToast';
 import { isMatriculaBandaAtivaOperacional } from '@/lib/alunosFiltrosCanonicos';
 import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
 import { fetchAlunosAtivosAtuaisCanonicos } from '@/lib/estadoOperacionalAlunos';
+import {
+  buscarKpisTurmasCanonicos,
+  calcularTotaisKpisTurmasCanonicos,
+} from '@/lib/turmasKpisCanonicos';
 // Interfaces
 export interface Aluno {
   id: number;
@@ -136,7 +140,7 @@ export interface KPIsAlunos {
   totalMatriculasAtivas: number;
   totalPagantes: number;
   totalBolsistas: number;
-  mediaAlunosTurma: number;
+  mediaAlunosTurma: number | null;
   ticketMedio: number;
   ltvMedio: number;
   totalTurmas: number;
@@ -231,7 +235,11 @@ export function AlunosPage() {
     iconeWrapperCor: 'bg-gradient-to-br from-purple-500 to-pink-500',
   });
 
-  const context = useOutletContext<{ filtroAtivo: boolean; unidadeSelecionada: UnidadeId }>();
+  const context = useOutletContext<{
+    filtroAtivo: boolean;
+    unidadeSelecionada: UnidadeId;
+    competencia: ReturnType<typeof useCompetenciaFiltro>;
+  }>();
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
   const toast = useToast();
 
@@ -247,7 +255,7 @@ export function AlunosPage() {
     setSemestre: setCompetenciaSemestre,
     setDataInicio: setCompetenciaDataInicio,
     setDataFim: setCompetenciaDataFim,
-  } = useCompetenciaFiltro('todos');
+  } = context.competencia;
 
   // Modal de drill-down de permanência
   const [modalPermanenciaOpen, setModalPermanenciaOpen] = useState(false);
@@ -266,7 +274,7 @@ export function AlunosPage() {
     totalMatriculasAtivas: 0,
     totalPagantes: 0,
     totalBolsistas: 0,
-    mediaAlunosTurma: 0,
+    mediaAlunosTurma: null,
     ticketMedio: 0,
     ltvMedio: 0,
     totalTurmas: 0,
@@ -558,11 +566,23 @@ export function AlunosPage() {
     let qTurmasView = supabase.from('vw_turmas_implicitas').select('*');
     if (unidadeAtual && unidadeAtual !== 'todos') qTurmasView = qTurmasView.eq('unidade_id', unidadeAtual);
 
-    // Disparar tudo em paralelo: alunos (paginado), turmas view, anotações, turmas explícitas, opções, LTV
-    const [alunosR, alunosSaidaR, turmasViewR, anotacoesR, ...outrosResults] = await Promise.all([
+    const kpisTurmasPromise = buscarKpisTurmasCanonicos({
+      unidadeId: unidadeAtual,
+      ano: competenciaFiltro.ano,
+      mes: competenciaFiltro.mes,
+      dataInicio: competenciaRange.startDate || null,
+      dataFim: competenciaRange.endDate || null,
+    })
+      .then((data) => ({ data, error: null }))
+      .catch((error) => ({ data: null, error }));
+
+    // Disparar tudo em paralelo: alunos (paginado), turmas operacionais, KPI canônico,
+    // anotações, turmas explícitas, opções e LTV.
+    const [alunosR, alunosSaidaR, turmasViewR, kpisTurmasR, anotacoesR, ...outrosResults] = await Promise.all([
       fetchAllAlunos(buildMainQuery),
       buildSaidaQuery ? fetchAllAlunos(buildSaidaQuery) : Promise.resolve({ data: [] as any[], error: null }),
       qTurmasView,
+      kpisTurmasPromise,
       // Anotações pendentes — são poucas, buscar TODAS sem .in() de 1000 IDs
       supabase.from('anotacoes_alunos')
         .select('aluno_id, texto, categoria, created_at')
@@ -866,12 +886,16 @@ export function AlunosPage() {
         }
       }
 
-      // Turmas (da view já carregada)
+      // A view continua alimentando listas e diagnósticos operacionais. O KPI publicado
+      // vem exclusivamente da fonte canônica da competência selecionada.
       const totalTurmas = turmasViewData.length;
-      const mediaAlunosTurma = totalTurmas > 0
-        ? turmasViewData.reduce((sum: number, t: any) => sum + (t.total_alunos || 0), 0) / totalTurmas
-        : 0;
       const turmasSozinhos = turmasViewData.filter((t: any) => t.total_alunos === 1).length;
+      const mediaAlunosTurma = kpisTurmasR.data
+        ? calcularTotaisKpisTurmasCanonicos(kpisTurmasR.data).mediaAlunosTurma
+        : null;
+      if (kpisTurmasR.error) {
+        console.error('Erro ao buscar média canônica de alunos por turma:', kpisTurmasR.error);
+      }
 
       let kpisAdminOperacional: KPIsAlunosAdminOperacional | null = null;
       let kpisAlunosCanonicos: Awaited<ReturnType<typeof fetchKPIsAlunosCanonicos>> | null = null;
@@ -913,7 +937,9 @@ export function AlunosPage() {
         totalBolsistas: usarKpisAdminOperacional
           ? Math.round(kpisAdminOperacional.bolsistasIntegrais + kpisAdminOperacional.bolsistasParciais)
           : totalBolsistas,
-        mediaAlunosTurma: Math.round(mediaAlunosTurma * 100) / 100,
+        mediaAlunosTurma: mediaAlunosTurma === null
+          ? null
+          : Math.round(mediaAlunosTurma * 100) / 100,
         ticketMedio: Math.round(ticketMedioCanonico || ticketMedio),
         ltvMedio: Math.round((tempoPermanenciaCanonico || ltvMedio) * 10) / 10,
         totalTurmas,
@@ -1829,9 +1855,9 @@ export function AlunosPage() {
         />
         <KPICard
           title="Média/Turma"
-          tooltip="Media de alunos por turma. Calculado pela divisao do total de alunos pelo numero de turmas."
-          value={kpis.mediaAlunosTurma.toFixed(2)}
-          subvalue="alunos/turma"
+          tooltip="Ocupacoes elegiveis divididas pelas turmas regulares elegiveis na competencia selecionada. Projetos e bandas nao entram no calculo."
+          value={kpis.mediaAlunosTurma === null ? 'Indisponível' : kpis.mediaAlunosTurma.toFixed(2)}
+          subvalue={kpis.mediaAlunosTurma === null ? 'fonte canonica indisponivel' : competenciaRange.label}
           icon={BarChart3}
           variant="cyan"
         />
