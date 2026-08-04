@@ -426,123 +426,29 @@ export function DashboardPage() {
         const hojeMes = hoje.getMonth() + 1;
         const isPeriodoAtual = ano === hojeAno && mesInicio === hojeMes && mesFim === hojeMes;
 
-        // ===== DISPARO EM PARALELO =====
-        // Nenhuma destas requisições depende do resultado das outras: o que depende de
-        // `kpisAlunos` é o PROCESSAMENTO, feito mais abaixo na mesma ordem de sempre.
-        // Em série isto somava ~12s (a de alunos sozinha leva ~4s); em paralelo o custo
-        // passa a ser o da mais lenta. Cada bloco que antes tinha try/catch próprio
-        // ganha `.catch` individual para continuar engolindo o próprio erro sem
-        // derrubar os demais — Promise.all rejeita inteiro na primeira falha.
-        const startDateComercial = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
-        const endDateComercial = `${ano}-${String(mesFim).padStart(2, '0')}-${new Date(ano, mesFim, 0).getDate()}`;
-        const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
-        const ultimoDia = new Date(ano, mesFim, 0).getDate();
-        const endDate = `${ano}-${String(mesFim).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
-
+        // Buscar alertas inteligentes da nova view
         let alertasQuery = supabase
           .from('vw_alertas_inteligentes')
           .select('*');
-
+        
         // Filtrar por unidade se não for consolidado
         if (unidade !== 'todos') {
           alertasQuery = alertasQuery.eq('unidade_id', unidade);
         }
-
-        let passaporteQueryV2 = supabase
-          .from('alunos')
-          .select(`
-            valor_passaporte,
-            valor_parcela,
-            is_segundo_curso,
-            status,
-            cursos:curso_id!left(nome, is_projeto_banda),
-            tipos_matricula:tipo_matricula_id!left(codigo, conta_como_pagante, entra_ticket_medio)
-          `)
-          .gte('data_matricula', startDateComercial)
-          .lte('data_matricula', endDateComercial)
-          .gt('valor_passaporte', 0);
-
-        if (unidade !== 'todos') {
-          passaporteQueryV2 = passaporteQueryV2.eq('unidade_id', unidade);
-        }
-
-        // Histórico vem de dados_mensais; mês corrente vem da fonte canônica viva.
-        let evolucaoQuery = supabase
-          .from('dados_mensais')
-          .select('ano, mes, alunos_ativos, unidade_id')
-          .gte('ano', ano - 1)
-          .order('ano', { ascending: true })
-          .order('mes', { ascending: true });
-
-        if (unidade !== 'todos') {
-          evolucaoQuery = evolucaoQuery.eq('unidade_id', unidade);
-        }
-
-        const [
-          { data: alertasData },
-          kpisAlunos,
-          comercialV2,
-          { data: passaporteV2Data },
-          professoresR,
-          { data: evolucaoData },
-        ] = await Promise.all([
-          alertasQuery.limit(10),
-          fetchKPIsAlunosCanonicos({
-            unidadeId: unidade,
-            ano,
-            mes: mesInicio,
-            mesFim,
-          }),
-          // Fonte canônica v2. Não usar snapshots legados como fallback silencioso.
-          Promise.all([
-            fetchComercialOperacionalResumoV2({ unidadeId: unidade, ano, mesInicio, mesFim }),
-            fetchExperimentaisDiagnosticoComercialV2({ unidadeId: unidade, ano, mesInicio, mesFim }),
-          ]).catch((err) => {
-            console.error('Erro ao aplicar camada comercial v2 no Dashboard:', err);
-            return null;
-          }),
-          // O passaporte ficava dentro do try/catch do bloco comercial: uma falha dele
-          // era engolida sem derrubar o resto do Dashboard. Mantemos isso.
-          passaporteQueryV2.then(
-            (res) => res,
-            (err) => {
-              console.error('Erro ao buscar passaportes no Dashboard:', err);
-              return { data: null };
-            },
-          ),
-          // MESMA LÓGICA da página ProfessoresPage.tsx: professores ativos +
-          // vínculos por unidade + KPIs canônicos de professor e de turma.
-          Promise.all([
-            supabase.from('professores').select('id, nome, ativo').eq('ativo', true),
-            supabase
-              .from('professores_unidades')
-              .select('professor_id, unidade_id')
-              .eq('emusys_ativo', true)
-              .neq('validacao_status', 'ignorado'),
-            buscarKpisProfessoresCanonicos({
-              ano,
-              mes: mesInicio,
-              unidadeId: unidade,
-              dataInicio: startDate,
-              dataFim: endDate,
-            }),
-            buscarKpisTurmasCanonicos({
-              ano,
-              mes: mesInicio,
-              unidadeId: unidade,
-              dataInicio: startDate,
-              dataFim: endDate,
-            }).catch((error) => {
-              console.error('Erro ao buscar média canônica de alunos por turma no Dashboard:', error);
-              return null;
-            }),
-          ]),
-          evolucaoQuery,
-        ]);
+        
+        const { data: alertasData } = await alertasQuery.limit(10);
 
         if (alertasData) {
           setAlertas(alertasData as Alerta[]);
         }
+
+        // ===== DADOS DE GESTÃO =====
+        const kpisAlunos = await fetchKPIsAlunosCanonicos({
+          unidadeId: unidade,
+          ano,
+          mes: mesInicio,
+          mesFim,
+        });
 
         setFonteKpisAlunos({
           fonte: kpisAlunos.fonte,
@@ -567,13 +473,47 @@ export function DashboardPage() {
 
         // ===== DADOS COMERCIAIS =====
         // Fonte canônica v2. Não usar snapshots legados como fallback silencioso.
-        // `comercialV2` vem null quando a camada v2 falhou (erro já logado no disparo);
-        // nesse caso o painel fica vazio, como no comportamento anterior.
         setDadosComercial(null);
         setFunilComercial([]);
 
-        if (comercialV2) {
-          const [resumoComercialV2, diagnosticoExperimentaisV2] = comercialV2;
+        try {
+          const startDateComercial = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
+          const endDateComercial = `${ano}-${String(mesFim).padStart(2, '0')}-${new Date(ano, mesFim, 0).getDate()}`;
+
+          const [resumoComercialV2, diagnosticoExperimentaisV2] = await Promise.all([
+            fetchComercialOperacionalResumoV2({
+              unidadeId: unidade,
+              ano,
+              mesInicio,
+              mesFim,
+            }),
+            fetchExperimentaisDiagnosticoComercialV2({
+              unidadeId: unidade,
+              ano,
+              mesInicio,
+              mesFim,
+            }),
+          ]);
+
+          let passaporteQueryV2 = supabase
+            .from('alunos')
+            .select(`
+              valor_passaporte,
+              valor_parcela,
+              is_segundo_curso,
+              status,
+              cursos:curso_id!left(nome, is_projeto_banda),
+              tipos_matricula:tipo_matricula_id!left(codigo, conta_como_pagante, entra_ticket_medio)
+            `)
+            .gte('data_matricula', startDateComercial)
+            .lte('data_matricula', endDateComercial)
+            .gt('valor_passaporte', 0);
+
+          if (unidade !== 'todos') {
+            passaporteQueryV2 = passaporteQueryV2.eq('unidade_id', unidade);
+          }
+
+          const { data: passaporteV2Data } = await passaporteQueryV2;
           const passaportesCanonicos = (passaporteV2Data || []).filter(ehMatriculaComercialCanonica);
           const ticketPassaporteV2 =
             passaportesCanonicos.length > 0
@@ -607,13 +547,46 @@ export function DashboardPage() {
             },
             { etapa: 'Matrículas', valor: matriculasCanonicas, cor: '#10b981' },
           ]);
+        } catch (err) {
+          console.error('Erro ao aplicar camada comercial v2 no Dashboard:', err);
         }
 
         // ===== DADOS DE PROFESSORES =====
-        // MESMA LÓGICA da página ProfessoresPage.tsx: professores ativos, vínculos
-        // professor-unidade e KPIs canônicos de professor/turma — já buscados no
-        // disparo em paralelo acima.
-        const [profsR, profUnidR, kpisProfessores, kpisTurmas] = professoresR;
+        // MESMA LÓGICA da página ProfessoresPage.tsx:
+        // 1. Buscar professores ativos
+        // 2. Buscar relacionamentos professor-unidade
+        // 3. Buscar turmas (implícitas e explícitas) para calcular total_alunos e total_turmas
+        // 4. Filtrar por unidade e calcular KPIs
+        
+        // Buscar dados de professores em PARALELO (5 queries → 1 roundtrip)
+        const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
+        const ultimoDia = new Date(ano, mesFim, 0).getDate();
+        const endDate = `${ano}-${String(mesFim).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+        const [profsR, profUnidR, kpisProfessores, kpisTurmas] = await Promise.all([
+          supabase.from('professores').select('id, nome, ativo').eq('ativo', true),
+          supabase
+            .from('professores_unidades')
+            .select('professor_id, unidade_id')
+            .eq('emusys_ativo', true)
+            .neq('validacao_status', 'ignorado'),
+          buscarKpisProfessoresCanonicos({
+            ano,
+            mes: mesInicio,
+            unidadeId: unidade,
+            dataInicio: startDate,
+            dataFim: endDate,
+          }),
+          buscarKpisTurmasCanonicos({
+            ano,
+            mes: mesInicio,
+            unidadeId: unidade,
+            dataInicio: startDate,
+            dataFim: endDate,
+          }).catch((error) => {
+            console.error('Erro ao buscar média canônica de alunos por turma no Dashboard:', error);
+            return null;
+          }),
+        ]);
 
         const professoresAtivos = new Set((profsR.data || []).map((p: any) => Number(p.id)));
         const vinculosAtivos = new Set(
@@ -653,8 +626,20 @@ export function DashboardPage() {
         });
 
         // ===== EVOLUÇÃO DE ALUNOS ATIVOS (12 meses) =====
-        // `evolucaoData` (dados_mensais) já veio no disparo em paralelo acima; o mês
-        // corrente é sobrescrito abaixo pela fonte canônica viva.
+        // Histórico vem de dados_mensais; mês corrente vem da fonte canônica viva.
+        // IMPORTANTE: Filtrar por unidade se não for consolidado
+        let evolucaoQuery = supabase
+          .from('dados_mensais')
+          .select('ano, mes, alunos_ativos, unidade_id')
+          .gte('ano', ano - 1)
+          .order('ano', { ascending: true })
+          .order('mes', { ascending: true });
+
+        if (unidade !== 'todos') {
+          evolucaoQuery = evolucaoQuery.eq('unidade_id', unidade);
+        }
+
+        const { data: evolucaoData } = await evolucaoQuery;
         const ativosAtual = kpisAlunos.fonte !== 'indisponivel'
           ? Math.round(kpisAlunos.alunosAtivos)
           : 0;
@@ -701,36 +686,34 @@ export function DashboardPage() {
           }));
           setResumoUnidades(resumo);
         } else {
-          // Para períodos históricos, usar dados_mensais.
-          // As duas consultas não dependem uma da outra: vão juntas.
+          // Para períodos históricos, usar dados_mensais
           // Filtrar unidades se não for consolidado
           let unidadesQuery = supabase
             .from('unidades')
             .select('id, nome')
             .eq('ativo', true);
-
+          
           if (unidade !== 'todos') {
             unidadesQuery = unidadesQuery.eq('id', unidade);
           }
-
-          // Filtrar dados_mensais por unidade se não for consolidado
-          let dadosMensaisQuery = supabase
-            .from('dados_mensais')
-            .select('*')
-            .eq('ano', ano)
-            .gte('mes', mes)
-            .lte('mes', mesFim);
-
-          if (unidade !== 'todos') {
-            dadosMensaisQuery = dadosMensaisQuery.eq('unidade_id', unidade);
-          }
-
-          const [{ data: unidadesData }, { data: dadosMensaisUnidades }] = await Promise.all([
-            unidadesQuery,
-            dadosMensaisQuery,
-          ]);
+          
+          const { data: unidadesData } = await unidadesQuery;
 
           if (unidadesData) {
+            // Filtrar dados_mensais por unidade se não for consolidado
+            let dadosMensaisQuery = supabase
+              .from('dados_mensais')
+              .select('*')
+              .eq('ano', ano)
+              .gte('mes', mes)
+              .lte('mes', mesFim);
+            
+            if (unidade !== 'todos') {
+              dadosMensaisQuery = dadosMensaisQuery.eq('unidade_id', unidade);
+            }
+            
+            const { data: dadosMensaisUnidades } = await dadosMensaisQuery;
+
             if (dadosMensaisUnidades && dadosMensaisUnidades.length > 0) {
               const resumo: ResumoUnidade[] = unidadesData.map((u: any) => {
                 const dadosUnidade = dadosMensaisUnidades.filter((d: any) => d.unidade_id === u.id);
