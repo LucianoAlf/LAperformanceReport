@@ -882,3 +882,4 @@ comment on function public.get_health_score_professor_v3_performance(
 ) is 'Read model mensal/ciclo com score observado, cobertura normalizada, comparabilidade e snapshot oficial imutavel.';
 
 commit;
+;

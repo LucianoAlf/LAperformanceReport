@@ -18,4 +18,4 @@ COMMENT ON TABLE inadimplencia_emusys_cache IS 'Cache de inadimplencia/valor rea
 ALTER TABLE inadimplencia_emusys_cache ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "inadimplencia_emusys_cache_select_authenticated" ON inadimplencia_emusys_cache
-  FOR SELECT TO authenticated USING (true);
+  FOR SELECT TO authenticated USING (true);;

@@ -1,36 +1,3 @@
--- MRR da carteira do professor passa a seguir a regra canonica, e arquivado sai da base.
---
--- Decisao do Luciano (31/07/2026): "aluno bolsista parcial nao conta como aluno
--- pagante" e "aluno inativo/trancado tem que sair do MRR, isso e valor falso".
---
--- 1) MRR pelo criterio canonico. `get_kpis_alunos_financeiro_vivo_canonico` define
---    MRR com o MESMO `tipos_matricula.entra_ticket_medio` do ticket — MRR e o
---    numerador do ticket, nao um numero a parte. A carteira somava todo pagante,
---    inflando em R$ 2.433,50 (os bolsistas parciais que pagam). Com isso a coluna
---    `mrr_ticket`, criada horas antes na migration 20260731203000, virou redundante
---    e foi REMOVIDA — `mrr_total` agora e ela.
---
--- 2) Arquivado fora da base. `fn_aluno_entra_base_ativa_v131` nao filtra
---    `arquivado_em`, mas a RPC canonica de MRR filtra. Havia 5 matriculas na lixeira
---    contando como carteira e somando R$ 1.210,00 de MRR: Ester Soares (#1426),
---    Julia da Costa (#1430), Joao Pedro Costa (#1591), Leonardo Imperial (#1656) e
---    Matheus Lopes (#1585) — os quatro primeiros ja estavam na lista de "arquivados
---    mas vivos". Agora saem tambem do `total_alunos`.
---
--- TRANCADO E INATIVO JA ESTAVAM FORA — nao houve mudanca aqui. O `alunos.status`
--- local e apenas fallback (METRICAS.md, "Estado operacional"); o estado real vem de
--- `vw_alunos_estado_operacional_v131`, e nela trancado/inativo/evadido tem
--- `entra_base_ativa = false`. Os 6 casos levantados como suspeitos eram falso
--- positivo: o status local estava defasado e o Emusys diz `ativa` para todos os 6.
--- Verificado: 100% das 1.187 linhas da carteira tinham `status_operacional = ativo`.
---
--- Resultado: MRR 415.941,12 -> 412.297,62, que bate exatamente com o canonico.
--- Headcount 1.187 -> 1.182. Ticket agregado inalterado em R$ 402,24 (numerador e
--- denominador cairam juntos).
---
--- DROP + CREATE porque a assinatura perdeu `mrr_ticket`.
--- Unico chamador: src/components/App/Professores/TabCarteiraProfessores.tsx.
-
 drop function if exists public.get_carteira_professores(uuid);
 
 create function public.get_carteira_professores(p_unidade_id uuid default null)
@@ -88,7 +55,6 @@ begin
     count(*)::integer,
     count(*) filter (where ab.classificacao = 'LAMK')::integer,
     count(*) filter (where ab.classificacao = 'EMLA')::integer,
-    -- MRR = numerador do ticket. Mesmo filtro, por regra canonica.
     coalesce(sum(ab.valor_parcela) filter (where ab.entra_ticket), 0)::numeric(12,2),
     coalesce(
       round(
@@ -129,7 +95,6 @@ begin
     end::numeric(5,2),
     array_remove(array_agg(distinct ab.curso_nome), null)::text[],
     array_remove(array_agg(distinct ab.unidade_nome), null)::text[],
-    -- Denominador do ticket, exposto porque difere do headcount.
     count(*) filter (where ab.entra_ticket)::integer
   from public.professores p
   join alunos_base ab on ab.professor_atual_id = p.id
@@ -142,4 +107,4 @@ $function$;
 grant execute on function public.get_carteira_professores(uuid) to authenticated, service_role;
 
 comment on function public.get_carteira_professores(uuid) is
-  'Carteira por professor. MRR e ticket seguem tipos_matricula.entra_ticket_medio (regra canonica): banda, bolsista integral e bolsista parcial ficam de fora. Arquivados excluidos. total_alunos e o headcount (inclui banda/bolsista); alunos_ticket e o denominador do ticket.';
+  'Carteira por professor. MRR e ticket seguem tipos_matricula.entra_ticket_medio (regra canonica): banda, bolsista integral e bolsista parcial ficam de fora. Arquivados excluidos. total_alunos e o headcount (inclui banda/bolsista); alunos_ticket e o denominador do ticket.';;

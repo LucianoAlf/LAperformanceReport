@@ -327,3 +327,4 @@ comment on function public.claim_pesquisa_evasao_preview_editavel(
   text
 ) is
   'Congela texto final editavel, preserva o original e delega uma unica vez ao claim legado. Idempotencia compara o texto final exato.';
+;
