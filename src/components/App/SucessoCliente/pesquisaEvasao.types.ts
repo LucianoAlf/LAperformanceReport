@@ -178,3 +178,92 @@ export interface PesquisaEvasaoFollowupItem {
   acao_registrada_em: string | null;
   acao_operador_nome: string | null;
 }
+
+export const PESQUISA_EVASAO_CATEGORIAS = [
+  'financeiro',
+  'tempo_horario',
+  'saude',
+  'desanimo',
+  'pedagogico_professor',
+  'atendimento_experiencia',
+  'mudanca_endereco',
+  'familia_estudos_trabalho',
+  'outro',
+  'inconclusivo',
+  'resposta_invalida',
+] as const;
+
+export type PesquisaEvasaoCategoria = typeof PESQUISA_EVASAO_CATEGORIAS[number];
+
+export type PesquisaEvasaoRelacaoMotivo =
+  | 'confirmou'
+  | 'confirmou_parcialmente'
+  | 'complementou'
+  | 'divergiu'
+  | 'sem_motivo_anterior'
+  | 'inconclusivo'
+  | 'invalido';
+
+export type PesquisaEvasaoAcaoTipo =
+  | 'retorno_familia'
+  | 'encaminhar_coordenacao'
+  | 'encaminhar_financeiro'
+  | 'vincular_professor'
+  | 'tentativa_retencao'
+  | 'solucao_oferecida'
+  | 'outro';
+
+export type PesquisaEvasaoDesfecho =
+  | 'recuperou'
+  | 'prometeu_voltar'
+  | 'confirmou_saida';
+
+export interface PesquisaEvasaoClassificacaoVersao {
+  id: string;
+  versao: number;
+  analise_versao_max: number;
+  relacao_motivo: PesquisaEvasaoRelacaoMotivo;
+  justificativa: string;
+  categorias: PesquisaEvasaoCategoria[];
+  revisor_usuario_id: number;
+  revisor_nome: string;
+  revisado_em: string;
+}
+
+export interface PesquisaEvasaoAcao {
+  id: string;
+  tipo: PesquisaEvasaoAcaoTipo;
+  descricao: string;
+  resultado: string | null;
+  estado: 'pendente' | 'realizada' | 'cancelada';
+  prazo_em: string | null;
+  professor_id: number | null;
+  criado_por_usuario_id: number;
+  realizado_por_nome: string;
+  created_at: string;
+  concluida_por_usuario_id: number | null;
+  concluida_em: string | null;
+}
+
+export interface PesquisaEvasaoClassificacaoDados {
+  pesquisa_id: string;
+  motivo_cadastrado: string | null;
+  modo_teste: boolean;
+  analise_atual: {
+    id: string;
+    versao: number;
+    status: PesquisaEvasaoRodada['status'];
+    texto_consolidado: string | null;
+    revisado_em: string | null;
+  } | null;
+  classificacao_atual: PesquisaEvasaoClassificacaoVersao | null;
+  classificacao_desatualizada: boolean;
+  historico_classificacoes: PesquisaEvasaoClassificacaoVersao[];
+  acoes: PesquisaEvasaoAcao[];
+  desfecho_atual: {
+    id: string;
+    desfecho: PesquisaEvasaoDesfecho;
+    observacao: string;
+    registrado_em: string;
+  } | null;
+}
