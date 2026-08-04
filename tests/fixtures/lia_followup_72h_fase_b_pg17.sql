@@ -175,6 +175,7 @@ insert into public.unidades(id, nome) values
 \ir ../../supabase/migrations/20260803210000_lia_alertas_dispatcher_edge.sql
 \ir ../../supabase/migrations/20260803124500_lia_alertas_utf8_correcao.sql
 \ir ../../supabase/migrations/20260804090000_lia_followup_72h_fase_b.sql
+\ir ../../supabase/migrations/20260804123000_lia_followup_listagem_somente_producao.sql
 
 select public.fixture_assert(
   not has_table_privilege(
@@ -254,6 +255,14 @@ select public.fixture_assert(
    from public.fn_pesquisa_evasao_followup_estado('2026-08-07 12:00:00+00')
    where pesquisa_id = '10000000-0000-4000-8000-000000000002'),
   'NON_SUBSTANTIVE_STAYS_PENDING_OK'
+);
+select public.fixture_assert(
+  not exists (
+    select 1
+    from public.fn_pesquisa_evasao_followup_estado('2026-08-07 12:00:00+00')
+    where pesquisa_id = '10000000-0000-4000-8000-000000000006'
+  ),
+  'TEST_MODE_EXCLUDED_FROM_READ_MODEL_OK'
 );
 select public.fixture_assert(
   not exists (

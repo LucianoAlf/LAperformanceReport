@@ -179,3 +179,51 @@ O Alf aceitou o Gate B com a contenção da janela como comportamento correto.
 A prova física da entrega ficou programada para a reabertura das 08h BRT e
 passou a ser pré-condição do Gate D, não do deploy exclusivamente visual do
 Gate C. Não houve bypass da janela.
+
+## Gate C — frontend
+
+Executado em 03/08/2026, após o aceite explícito do Gate B.
+
+- a `main` foi reconciliada com `origin/main` antes da publicação; o commit
+  remoto preexistente `325c731` tocava apenas o domínio de health do professor
+  e não colidia com a Fase B;
+- frontend da Fase B publicado no commit
+  `809dcff99e274eaeaec4b46f5d9b36d8cd718761`;
+- verificação anterior ao push: `5/5` testes do frontend de follow-up aprovados
+  e `npm run build` concluído com sucesso;
+- Gitleaks do commit aprovado no GitHub Actions, execução `30864695265`;
+- deploy da Vercel concluído com sucesso;
+- este gate publicou apenas frontend: nenhuma migration, Edge Function,
+  alteração de banco ou mensagem de WhatsApp foi executada;
+- o Gate D permanece bloqueado até a abertura da janela de 08h BRT e a
+  confirmação de entrega do alerta controlado
+  `9c04dabb-a768-4ea7-b64f-3d5daffa771b`.
+
+### Correção do read model após o Gate C
+
+Em 04/08/2026 foi reproduzida uma regressão na opção `Todos` do painel: a
+função `fn_pesquisa_evasao_followup_estado` excluía `modo_teste=true` apenas
+do cálculo de `followup_pendente`, mas não da base retornada. Por isso o
+contador estava correto e a lista exibia pesquisas de teste.
+
+Evidência anterior à correção, no projeto `ouqwbbermlzqqvtqwlul`:
+
+- 29 pesquisas enviadas no read model: 14 de teste e 15 produtivas;
+- as 15 produtivas foram enviadas por Jéssica em 03/08/2026;
+- snapshot de 04/08 pela manhã: 13 em `aguardando_resposta`, uma em
+  `pronta_para_revisao` e uma `revisada`;
+- nenhuma linha de pesquisa precisa ser reescrita: a correção é somente a
+  substituição aditiva da função de leitura, filtrando `pe.modo_teste=false`
+  na base comum a todos os estados.
+
+Cadência do primeiro lote real:
+
+- o caso mais antigo vence em 06/08/2026 às 10:52:51 BRT;
+- os demais vencimentos do lote chegam até 14:15:19 BRT;
+- a fila da tela muda imediatamente quando cada caso completa 72 horas;
+- o produtor do resumo roda somente entre 09:00 e 09:01 BRT;
+- portanto, o resumo das 09h de quinta-feira, 06/08, ainda não inclui nenhum
+  caso desse lote; todos os casos que continuarem elegíveis serão agrupados no
+  resumo de sexta-feira, 07/08, às 09h;
+- essa defasagem é intencional: estado imediato na tela e lembrete privado
+  diário são cadências diferentes.

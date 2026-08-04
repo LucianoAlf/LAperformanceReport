@@ -13,9 +13,14 @@ const fixturePath = resolve(
   root,
   'tests/fixtures/lia_followup_72h_fase_b_pg17.sql',
 );
+const producaoOnlyMigrationPath = resolve(
+  root,
+  'supabase/migrations/20260804123000_lia_followup_listagem_somente_producao.sql',
+);
 const read = (path) => existsSync(path) ? readFileSync(path, 'utf8') : '';
 const sql = read(migrationPath);
 const fixture = read(fixturePath);
+const producaoOnlySql = read(producaoOnlyMigrationPath);
 
 test('fase B nasce desligada e nao cria novo cron de transporte', () => {
   assert.match(sql, /followup_72h_liberado\s+boolean\s+not null\s+default false/i);
@@ -29,6 +34,18 @@ test('estado exclui teste, resposta valida e opt-out', () => {
   assert.match(sql, /resposta_valida\s*=\s*false/i);
   assert.match(sql, /opt_out_em\s+is null/i);
   assert.match(sql, /recusada_opt_out/i);
+});
+
+test('read model exclui modo teste antes de listar qualquer estado', () => {
+  assert.match(
+    producaoOnlySql,
+    /create\s+or\s+replace\s+function\s+public\.fn_pesquisa_evasao_followup_estado/i,
+  );
+  assert.match(
+    producaoOnlySql,
+    /where\s+pe\.modo_teste\s*=\s*false[\s\S]*?and\s+pe\.envio_status\s+in/i,
+  );
+  assert.doesNotMatch(producaoOnlySql, /update\s+public\.pesquisa_evasao/i);
 });
 
 test('resumo e privado, diario e idempotente por operador', () => {
@@ -59,6 +76,7 @@ test('fixture executavel cobre prazo diario concorrencia e isolamento', () => {
     /AFTER_NINE_WAITS_NEXT_DAY_OK/,
     /DAILY_IDEMPOTENCY_OK/,
     /NON_SUBSTANTIVE_STAYS_PENDING_OK/,
+    /TEST_MODE_EXCLUDED_FROM_READ_MODEL_OK/,
     /OPT_OUT_BLOCKS_FOLLOWUP_OK/,
     /RESPONSE_BEFORE_CLAIM_CANCELS_OK/,
     /OPERATOR_ISOLATION_OK/,
