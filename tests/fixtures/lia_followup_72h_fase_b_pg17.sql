@@ -176,6 +176,7 @@ insert into public.unidades(id, nome) values
 \ir ../../supabase/migrations/20260803124500_lia_alertas_utf8_correcao.sql
 \ir ../../supabase/migrations/20260804090000_lia_followup_72h_fase_b.sql
 \ir ../../supabase/migrations/20260804123000_lia_followup_listagem_somente_producao.sql
+\ir ../../supabase/migrations/20260804173000_lia_followup_resumo_renderizar_itens_teste.sql
 
 select public.fixture_assert(
   not has_table_privilege(
@@ -235,6 +236,21 @@ insert into public.pesquisa_evasao_mensagens(
 );
 
 set request.jwt.claim.role = 'service_role';
+
+create temp table fixture_followup_piloto as
+select public.enfileirar_lia_followup_piloto(
+  '10000000-0000-4000-8000-000000000006'
+) as alerta_id;
+
+select public.fixture_assert(
+  exists (
+    select 1
+    from fixture_followup_piloto piloto
+    join public.lia_alertas_privados alerta on alerta.id = piloto.alerta_id
+    where alerta.mensagem_renderizada like '%Pesquisa teste — Barra — enviada em 01/08 09:00%'
+  ),
+  'PILOT_LIST_RENDERED_OK'
+);
 
 select public.fixture_assert(
   (select estado_visivel = 'aguardando_resposta'
@@ -350,7 +366,8 @@ select public.fixture_assert(
     from public.lia_followup_resumo_itens item
     join public.lia_followup_resumos resumo on resumo.id = item.resumo_id
     join public.pesquisa_evasao pesquisa on pesquisa.id = item.pesquisa_id
-    where resumo.operador_usuario_id <> pesquisa.executado_por_usuario_id
+    where resumo.ambiente = 'producao'
+      and resumo.operador_usuario_id <> pesquisa.executado_por_usuario_id
   ),
   'OPERATOR_ISOLATION_OK'
 );
@@ -426,5 +443,6 @@ select 'OPT_OUT_BLOCKS_FOLLOWUP_OK';
 select 'RESPONSE_BEFORE_CLAIM_CANCELS_OK';
 select 'OPERATOR_ISOLATION_OK';
 select 'MANUAL_ACTION_AUDIT_OK';
+select 'PILOT_LIST_RENDERED_OK';
 select 'LIA_FOLLOWUP_72H_FASE_B_PG17_OK';
 select 'PESQUISA_EVASAO_CLAIM_PG17_OK';

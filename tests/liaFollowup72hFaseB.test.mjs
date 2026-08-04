@@ -17,10 +17,15 @@ const producaoOnlyMigrationPath = resolve(
   root,
   'supabase/migrations/20260804123000_lia_followup_listagem_somente_producao.sql',
 );
+const renderPilotoMigrationPath = resolve(
+  root,
+  'supabase/migrations/20260804173000_lia_followup_resumo_renderizar_itens_teste.sql',
+);
 const read = (path) => existsSync(path) ? readFileSync(path, 'utf8') : '';
 const sql = read(migrationPath);
 const fixture = read(fixturePath);
 const producaoOnlySql = read(producaoOnlyMigrationPath);
+const renderPilotoSql = read(renderPilotoMigrationPath);
 
 test('fase B nasce desligada e nao cria novo cron de transporte', () => {
   assert.match(sql, /followup_72h_liberado\s+boolean\s+not null\s+default false/i);
@@ -59,6 +64,26 @@ test('resumo e privado, diario e idempotente por operador', () => {
   assert.match(sql, /YYYYMMDD/i);
   assert.doesNotMatch(sql, /YYYYMMDDHH24/i);
   assert.doesNotMatch(sql.replace(/--.*$/gm, ''), /usuarios\.telefone/i);
+});
+
+test('renderer do resumo usa os itens congelados e inclui pesquisas de teste no piloto', () => {
+  assert.ok(
+    renderPilotoSql,
+    `migration de correção ausente: ${renderPilotoMigrationPath}`,
+  );
+  assert.match(
+    renderPilotoSql,
+    /create\s+or\s+replace\s+function\s+public\.fn_lia_renderizar_resumo_followup/i,
+  );
+  assert.match(
+    renderPilotoSql,
+    /lia_followup_resumo_itens[\s\S]*?join\s+public\.pesquisa_evasao/i,
+  );
+  assert.doesNotMatch(
+    renderPilotoSql.replace(/^--.*$/gm, ''),
+    /fn_pesquisa_evasao_followup_estado/i,
+  );
+  assert.match(fixture, /PILOT_LIST_RENDERED_OK/);
 });
 
 test('acao manual resolve o operador pelo JWT', () => {
