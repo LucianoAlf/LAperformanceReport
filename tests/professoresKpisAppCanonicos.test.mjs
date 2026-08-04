@@ -6,6 +6,7 @@ const read = (path) => existsSync(path) ? readFileSync(path, 'utf8') : '';
 
 const helper = read('src/lib/professoresKpisCanonicos.ts');
 const dashboard = read('src/components/App/Dashboard/DashboardPage.tsx');
+const alunos = read('src/components/App/Alunos/AlunosPage.tsx');
 const cadastro = read('src/components/App/Professores/ProfessoresPage.tsx');
 const analytics = read('src/components/GestaoMensal/TabProfessoresNew.tsx');
 const carteira = read('src/components/App/Professores/TabCarteiraProfessores.tsx');
@@ -37,18 +38,30 @@ test('historico auxiliar nao derruba os KPIs atuais', () => {
 });
 
 test('dashboard nao recalcula media de professores pela view operacional', () => {
-  assert.match(dashboard, /buscarKpisProfessoresCanonicos/);
+  assert.match(dashboard, /buscarKpisTurmasCanonicos/);
   assert.doesNotMatch(dashboard, /from\(['"]vw_turmas_implicitas['"]\)/);
 });
 
+test('gestao de alunos usa a competencia e a fonte neutra no KPI de media por turma', () => {
+  assert.match(alunos, /buscarKpisTurmasCanonicos/);
+  assert.match(alunos, /calcularTotaisKpisTurmasCanonicos/);
+  assert.doesNotMatch(
+    alunos,
+    /turmasViewData\.reduce\(\(sum:[\s\S]{0,160}?total_alunos[\s\S]{0,80}?\/\s*totalTurmas/,
+  );
+});
+
 test('cadastro de professores usa mapas canonicos por professor e unidade', () => {
-  assert.match(cadastro, /buscarKpisProfessoresCanonicos/);
+  assert.match(cadastro, /buscarKpisTurmasCanonicos/);
+  assert.match(cadastro, /context\?\.competencia/);
+  assert.doesNotMatch(cadastro, /const agora = new Date\(\)/);
   assert.doesNotMatch(cadastro, /from\(['"]vw_turmas_implicitas['"]\)/);
   assert.doesNotMatch(cadastro, /M[eé]dia das m[eé]dias por professor/i);
 });
 
 test('analytics usa a RPC canonica e nao mistura views legadas de KPI', () => {
   assert.match(analytics, /buscarKpisProfessoresCanonicos/);
+  assert.match(analytics, /buscarKpisTurmasCanonicos/);
   assert.doesNotMatch(analytics, /vw_kpis_professor_(mensal|historico|completo)/);
   assert.doesNotMatch(analytics, /vw_evasoes_professores/);
   assert.doesNotMatch(analytics, /from\(['"]vw_turmas_implicitas['"]\)/);
