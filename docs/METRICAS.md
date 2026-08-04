@@ -541,11 +541,11 @@ A configuração segmentada segue o mesmo ciclo governado: rascunho, validação
 
 Os ciclos fixos aprovados são **Mar-Abr-Mai**, **Jun-Jul-Ago**, **Set-Out-Nov** e **Dez-Jan-Fev**. A RPC recebe a competência de referência selecionada e resolve o ciclo correspondente sem deslocar o mês. O ciclo Dez-Jan-Fev atravessa o ano civil: Dez/2026, por exemplo, resolve 01/12/2026 a 28/02/2027.
 
-- Número de alunos: diagnóstico do fechamento mensal; no ciclo contextualiza a carteira, mas não pontua nem altera a comparabilidade.
-- Média/turma: mês = ocupações/turmas elegíveis no mês; ciclo = soma das ocupações ÷ soma das turmas, nunca média simples das médias.
+- Número de alunos: fotografia da carteira no fim do recorte; no ciclo usa o último mês já alcançado, contextualiza a carga e não pontua nem altera a comparabilidade.
+- Média/turma: fotografia de ocupações/turmas elegíveis no fim do recorte. No ciclo usa o último mês já alcançado, nunca a média nem a soma das carteiras dos três meses.
 - Retenção e conversão: mês usa somente fatos mensais; ciclo soma numeradores e denominadores brutos dos meses elegíveis. É proibido obter taxa do ciclo pela média de percentuais mensais.
 - Permanência: histórico acumulado de vínculos encerrados, não apenas os três meses do ciclo. Vínculos com menos de quatro meses ficam no histórico, mas não entram na média/nota.
-- Presença: observado de junho/julho fica auditável; a pontuação contratual começa em 03/08/2026. Barra e Recreio podem contribuir conforme política versionada e cobertura mínima; Campo Grande permanece visível em auditoria e fora do score até nivelamento operacional.
+- Presença: taxa do ciclo = soma de presentes ÷ soma de eventos classificados no intervalo. A ocorrência é identificada também pela data da aula, impedindo que um ID externo reutilizado misture datas; a data de lançamento da chamada pode ser posterior e não exclui o evento. O observado de junho/julho fica auditável; a pontuação contratual começa em 03/08/2026.
 - Score do ciclo: é recalculado a partir das métricas agregadas do ciclo; nunca é média dos scores mensais.
 - Ciclo aberto: publica `Ciclo em acompanhamento` e não libera ranking. Ciclo oficial fechado materializa snapshot imutável.
 

@@ -235,6 +235,14 @@ function HealthScoreV3MetricCell({
             ? 'fora da nota atual'
             : null;
   const metricTone = resolveHealthScoreV3MetricTone(metricKey, display.value, metric);
+  const metricBaseLabel: Record<HealthMetricKeyV3, string> = {
+    retencao: 'Retidos/expostos',
+    permanencia: 'Meses acumulados/vínculos elegíveis',
+    conversao: 'Matrículas/experimentais',
+    media_turma: 'Ocupações/meta ponderada',
+    numero_alunos: 'Carteira/meta diagnóstica',
+    presenca: 'Presentes/classificados',
+  };
   const valueClass = metricTone === 'positive'
     ? 'text-emerald-300'
     : metricTone === 'attention'
@@ -273,7 +281,10 @@ function HealthScoreV3MetricCell({
                 aprova e o `metric.numerador` seguinte derruba a página inteira
                 ("Cannot read properties of null"). Testar `metric` primeiro resolve. */}
             {metric && metric.numerador !== null && metric.denominador !== null && (
-              <p>Base: <strong>{metric.numerador}/{metric.denominador}</strong></p>
+              <p>{metricBaseLabel[metricKey]}: <strong>{metric.numerador}/{metric.denominador}</strong></p>
+            )}
+            {snapshot?.periodicidade === 'ciclo' && ['media_turma', 'numero_alunos'].includes(metricKey) && (
+              <p className="text-sky-300">Fotografia do fim do recorte; não é média dos três meses.</p>
             )}
             {metric?.fonte && <p className="break-all">Fonte: <strong>{metric.fonte}</strong></p>}
           </div>

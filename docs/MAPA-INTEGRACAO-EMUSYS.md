@@ -242,7 +242,9 @@ O plano de contas e a auditoria da classificação continuam no projeto Super Fo
 
 Presença, carteira, grade e vínculos continuam vindo das fontes canônicas já sincronizadas do Emusys. As leituras de Health Score e dos relatórios da Coordenação não chamam a API Emusys diretamente, não mudam a identidade canônica e não criam snapshot operacional no Emusys.
 
-O recorte mensal usa somente os fatos da competência selecionada. O recorte de ciclo resolve os intervalos fixos Mar-Abr-Mai, Jun-Jul-Ago, Set-Out-Nov e Dez-Jan-Fev; este último atravessa o ano civil. Taxas do ciclo somam numeradores e denominadores brutos antes da divisão, e média/turma soma ocupações e turmas. O ciclo nunca é calculado pela média de percentuais ou scores mensais.
+O recorte mensal usa somente os fatos da competência selecionada. O recorte de ciclo resolve os intervalos fixos Mar-Abr-Mai, Jun-Jul-Ago, Set-Out-Nov e Dez-Jan-Fev; este último atravessa o ano civil. Conversão e presença somam numeradores e denominadores brutos antes da divisão. Carteira e média/turma usam a fotografia do último mês alcançado no recorte. O ciclo nunca é calculado pela média de percentuais ou scores mensais.
+
+Para presença, `data_aula` identifica a ocorrência em conjunto com professor, unidade, aula e pessoa. `respondido_em`/`evidencia_registrada_em` podem ser posteriores: chamadas lançadas tardiamente continuam válidas. A data da aula serve para impedir que o mesmo ID externo reutilizado em outra data contamine a taxa.
 
 Quando presença ou outro pilar ainda não têm evento na competência atual, a última competência disponível pode aparecer somente como referência identificada, com peso zero. A pontuação contratual de presença começa em 03/08/2026; evidência anterior continua auditável e contextual. Assim que um evento canônico chega ao banco, a próxima leitura mensal ou de ciclo o incorpora conforme seu período.
 
