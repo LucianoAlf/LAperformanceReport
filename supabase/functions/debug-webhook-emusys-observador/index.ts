@@ -59,6 +59,14 @@
 // dedup da registrar_experimental é por (lead, data, horário, curso) e o
 // emusys_aula_id usa COALESCE, então o segundo a chegar vira UPDATE.
 //
+// [v6 — 2026-08-04] REAGENDAMENTO PASSA A ENCERRAR A LINHA QUE SUBSTITUIU. Até aqui,
+// `aula_experimental_reagendada` era tratado como um agendamento qualquer: a RPC não
+// achava a chave (porque foi justamente ela que mudou), inseria linha nova e a antiga
+// ficava viva e agendada. Dois casos reais na agenda desta semana — Rafael Alberigi
+// (05/08 -> 12/08) e Beatriz Romero (Teclado -> Guitarra no mesmo horário) — apareciam
+// duas vezes, uma delas numa aula que não vai acontecer. Ver
+// `encerrarExperimentaisSubstituidas` para a regra e por que a grade é quem decide.
+//
 // OBSERVADOR_TOKEN (opcional): quando definido, exige o mesmo valor em
 // `x-observador-token` (header) ou `?token=` (query). Enquanto NÃO estiver definido, a
 // verificação fica desligada — de propósito, para o deploy não derrubar o webhook antes
@@ -408,6 +416,79 @@ async function aplicarDeltaExperimental(sb: any, expId: number, observacoes: str
   return { observacoes };
 }
 
+/** O Emusys manda `aula_experimental_reagendada` com o estado NOVO e ZERO referência ao
+ *  antigo — sem id de aula, sem a data anterior (conferido nas 20 entregas já observadas).
+ *  Como a chave de dedup da RPC é (lead, data, horário, curso), tudo que o reagendamento
+ *  muda faz a chave escapar: nasce linha nova e a anterior fica viva e agendada. Rafael
+ *  Alberigi remarcado de 05/08 pro 12/08 (mudou a data) e Beatriz Romero trocada de
+ *  Teclado pra Guitarra (mudou curso e professor) apareciam DUAS vezes na Agenda, uma
+ *  delas numa aula que não vai acontecer.
+ *
+ *  Quem decide qual morreu é a GRADE (`aulas_emusys`, espelho da API com soft-cancel: aula
+ *  que some da origem é marcada `cancelada`). Verificação contra a fonte, não palpite.
+ *
+ *  Dois desfechos encerram a candidata, e só eles:
+ *    (a) SEM par na grade — a aula não existe mais no Emusys (caso Rafael);
+ *    (b) COM par, mas ocupando o MESMO slot da linha que acabou de chegar — as duas
+ *        disputam uma aula só, e a vigente é a do webhook (caso Beatriz).
+ *
+ *  ⚠️ O professor ficou FORA do casamento de propósito. Incluí-lo separaria a Beatriz
+ *  direto, mas ao testar contra as 18 agendadas futuras acusou o Felipe Salgado como
+ *  fantasma com a aula dele existindo: nossa base diz professor 57, a grade diz 46. Ou
+ *  seja, divergência de cadastro viraria cancelamento de aula real. O desempate do slot
+ *  em (b) resolve a Beatriz sem correr esse risco.
+ *
+ *  Preserva o multi-instrumento legítimo: Isadora Rabelo, com Canto 16h e Teclado 15h no
+ *  mesmo dia, tem par para as duas e slots distintos — nenhuma é encerrada.
+ *
+ *  Nunca toca em linha já realizada/faltou/cancelada, nem na que acabou de ser gravada. */
+async function encerrarExperimentaisSubstituidas(
+  sb: any,
+  leadId: number,
+  expIdNovo: number | null,
+  slotNovo: { data: string | null; horario: string | null },
+) {
+  const { data: candidatas } = await sb
+    .from('lead_experimentais')
+    .select('id, unidade_id, nome_aluno, data_experimental, horario_experimental')
+    .eq('lead_id', leadId)
+    .eq('status', 'experimental_agendada');
+  if (!candidatas?.length) return null;
+
+  const encerradas: unknown[] = [];
+  for (const c of candidatas) {
+    if (expIdNovo && Number(c.id) === Number(expIdNovo)) continue;
+    if (!c.data_experimental || !c.horario_experimental) continue;
+
+    const { data: temPar, error } = await sb.rpc('experimental_tem_par_na_grade', {
+      p_unidade_id: c.unidade_id,
+      p_nome_aluno: c.nome_aluno,
+      p_data: c.data_experimental,
+      p_horario: c.horario_experimental,
+    });
+    // Falha na checagem = não sabemos. Preservar é o único erro reversível aqui.
+    if (error) continue;
+
+    const mesmoSlot = !!slotNovo.data
+      && c.data_experimental === slotNovo.data
+      && String(c.horario_experimental).slice(0, 5) === String(slotNovo.horario ?? '').slice(0, 5);
+
+    if (temPar === true && !mesmoSlot) continue;
+
+    await sb.from('lead_experimentais')
+      .update({ status: 'cancelada', updated_at: new Date().toISOString() })
+      .eq('id', c.id)
+      .eq('status', 'experimental_agendada');
+    encerradas.push({
+      id: c.id,
+      data: c.data_experimental,
+      horario: c.horario_experimental,
+      motivo: temPar === true ? 'mesmo_slot_da_nova' : 'sem_par_na_grade',
+    });
+  }
+  return encerradas.length ? { encerradas } : null;
+}
+
 async function processarExperimental(sb: any, body: any, unidadeId: string, evento: string, escrever: boolean) {
   const aula = body?.aula ?? {};
   const cancelamento = evento === 'aula_experimental_cancelada';
@@ -471,11 +552,30 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
     }
   }
 
+  // Depois de gravar a nova, encerra o que ela substituiu. SÓ no reagendamento: é o
+  // evento em que o Emusys declara que a experimental mudou de lugar. Em `criada` a
+  // linha nova pode conviver legitimamente com outra (2º instrumento), e a grade ainda
+  // nem sincronizou a aula recém-marcada — varrer ali cancelaria aula boa.
+  let substituidas: unknown = null;
+  if (evento === 'aula_experimental_reagendada' && data?.lead_id) {
+    try {
+      substituidas = await encerrarExperimentaisSubstituidas(
+        sb,
+        Number(data.lead_id),
+        expId ? Number(expId) : null,
+        { data: textoOuNulo(aula?.data), horario: textoOuNulo(aula?.horario) },
+      );
+    } catch (e: any) {
+      substituidas = { erro_substituidas: String(e?.message ?? e) };
+    }
+  }
+
   return {
     acao: 'registrar_experimental',
     resultado: data,
     professor_via: professor.via,
     delta_observador: delta,
+    substituidas,
     args,
   };
 }
