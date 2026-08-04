@@ -147,10 +147,11 @@ test('produtor gerencial compila e preserva os numeros dos documentos fechados',
               'renovacoes_realizadas', 23
             ),
             'indicadores_financeiros', jsonb_build_object(
-              'mrr_atual', 141032.20,
-              'faturamento_previsto', 142925.20,
-              'ticket_medio', 449.15,
-              'ltv_medio', 6692.34,
+              'mrr_atual', 150982.39,
+              'faturamento_previsto', 150982.39,
+              'faturamento_realizado', 149335.15,
+              'ticket_medio', 449.35,
+              'ltv_medio', 6691.59,
               'tempo_permanencia', 14.9
             ),
             'indicadores_retencao', jsonb_build_object(
