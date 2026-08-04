@@ -70,3 +70,35 @@ test('consultas consolidadas repartem a leitura canonica por unidade de forma co
   assert.match(kpisVivos, /for\s*\(const\s+unidade\s+of\s+unidades\s*\|\|\s*\[\]\)/i);
   assert.doesNotMatch(kpisVivos, /Promise\.all[\s\S]{0,320}consultarUnidade\(String\(unidade\.id\)\)/i);
 });
+
+test('Carteira usa a mesma leitura controlada de Performance e nunca dispara a RPC consolidada diretamente', () => {
+  const carteira = fs.readFileSync(
+    path.join(root, 'src/components/App/Professores/TabCarteiraProfessores.tsx'),
+    'utf8',
+  );
+
+  assert.match(carteira, /fetchHealthScoreProfessorV3Performance/i);
+  assert.doesNotMatch(
+    carteira,
+    /supabase\.rpc\(\s*['\"]get_health_score_professor_v3_performance['\"]/i,
+  );
+});
+
+test('KPIs canônicos de alunos têm margem local contra timeout sem alterar a fonte dos dados', () => {
+  const timeoutMigration = path.join(
+    root,
+    'supabase/migrations/20260804225000_kpis_alunos_canonicos_timeout_local.sql',
+  );
+
+  assert.equal(
+    fs.existsSync(timeoutMigration),
+    true,
+    'migration de margem local para KPIs canônicos ainda não existe',
+  );
+
+  const sql = fs.readFileSync(timeoutMigration, 'utf8');
+  assert.match(
+    sql,
+    /alter\s+function\s+public\.get_kpis_alunos_canonicos\s*\(\s*uuid\s*,\s*integer\s*,\s*integer\s*\)\s+set\s+statement_timeout\s*=\s*'15s'/i,
+  );
+});
