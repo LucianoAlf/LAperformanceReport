@@ -69,6 +69,7 @@ export interface PesquisaEvasaoListagemItem {
   possui_historico_teste: boolean;
   quantidade_testes: number;
   ultimo_teste_em: string | null;
+  elegivel_a_partir_em: string | null;
 }
 
 export interface PesquisaEvasaoTeste {

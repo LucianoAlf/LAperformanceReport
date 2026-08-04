@@ -565,6 +565,21 @@ async function previsualizar(
     supabase,
     request.evasao_id,
   );
+
+  if (!request.modo_teste) {
+    const { data: podeEnviar, error: erroElegibilidade } = await supabase.rpc(
+      "pode_enviar_pesquisa_evasao",
+      { p_evasao_id: movimentacao.id },
+    );
+    if (erroElegibilidade) throw erroElegibilidade;
+    if (podeEnviar !== true) {
+      throw new ErroHttp(
+        409,
+        "Pesquisa ainda nao elegivel: aguarde D+1 as 10h BRT",
+      );
+    }
+  }
+
   await exigirPesquisaSemOptOut(supabase, {
     evasaoId: movimentacao.id,
     modoTeste: request.modo_teste,
