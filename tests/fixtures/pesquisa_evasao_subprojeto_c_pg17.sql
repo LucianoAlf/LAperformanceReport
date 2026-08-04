@@ -41,7 +41,7 @@ create table public.professores (
 );
 create table public.motivos_saida (
   nome_normalizado text primary key,
-  categoria text,
+  categoria varchar(30),
   conta_score_professor boolean not null default false
 );
 create table public.pesquisa_evasao (
@@ -57,7 +57,7 @@ create table public.pesquisa_evasao (
   modo_teste boolean not null default false,
   resposta_status text not null default 'sem_resposta',
   resposta_texto text,
-  resposta_tipo text,
+  resposta_tipo varchar(20),
   respondido_em timestamptz,
   enviado_em timestamptz,
   categoria_resposta text,
@@ -157,6 +157,7 @@ insert into public.pesquisa_evasao_analises (
 \ir ../../supabase/migrations/20260804220000_pesquisa_evasao_subprojeto_c_schema.sql
 \ir ../../supabase/migrations/20260804223000_pesquisa_evasao_subprojeto_c_rpcs.sql
 \ir ../../supabase/migrations/20260804231000_pesquisa_evasao_subprojeto_c_gate_a_correcao.sql
+\ir ../../supabase/migrations/20260804232000_pesquisa_evasao_subprojeto_c_gate_a_correcao_tipos.sql
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);

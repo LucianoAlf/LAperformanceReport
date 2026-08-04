@@ -15,6 +15,13 @@ const correcaoPath = resolve(
   'supabase/migrations/20260804231000_pesquisa_evasao_subprojeto_c_gate_a_correcao.sql',
 );
 const correcaoSql = existsSync(correcaoPath) ? readFileSync(correcaoPath, 'utf8') : '';
+const correcaoTiposPath = resolve(
+  root,
+  'supabase/migrations/20260804232000_pesquisa_evasao_subprojeto_c_gate_a_correcao_tipos.sql',
+);
+const correcaoTiposSql = existsSync(correcaoTiposPath)
+  ? readFileSync(correcaoTiposPath, 'utf8')
+  : '';
 
 test('migration cria os contratos versionados de classificacao e analytics', () => {
   assert.ok(sql, 'migration de RPCs do Subprojeto C ainda nao existe');
@@ -87,6 +94,15 @@ test('correcao do Gate A alinha o tipo da RPC e fecha privilegios destrutivos de
   assert.match(correcaoSql, /u\.nome::text/i);
   assert.match(correcaoSql, /revoke truncate, trigger on table/i);
   assert.match(correcaoSql, /webhook_debug_log[\s\S]*from public, anon, authenticated/i);
+});
+
+test('correcao complementar converte todos os retornos varchar declarados como text', () => {
+  assert.ok(correcaoTiposSql, 'migration complementar de tipos ainda nao existe');
+  for (const column of [
+    'u.nome::text',
+    'ms.categoria::text',
+    'pe.resposta_tipo::text',
+  ]) assert.match(correcaoTiposSql, new RegExp(column.replace('.', '\\.'), 'i'));
 });
 
 test('fixture do Subprojeto C passa em PostgreSQL 17 isolado', {
