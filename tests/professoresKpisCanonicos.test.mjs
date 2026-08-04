@@ -17,6 +17,8 @@ const modalPath = 'src/components/App/Professores/ModalDetalhesProfessorPerforma
 const modalConversaoPath = 'src/components/App/Professores/ModalDetalhesConversao.tsx';
 const modalTurmasPath = 'src/components/App/Professores/ModalDetalhesTurmas.tsx';
 const edgePath = 'supabase/functions/gemini-relatorio-coordenacao/index.ts';
+const relatorioCoordenacaoV3Path = 'supabase/migrations/20260803223000_relatorios_coordenacao_periodicidade_canonica.sql';
+const relatorioGerencialCanonicoPath = 'supabase/migrations/20260801222500_corrigir_relatorio_gerencial_metas_matriculador.sql';
 
 const readOptional = (path) => existsSync(path) ? readFileSync(path, 'utf8') : '';
 
@@ -159,4 +161,17 @@ test('totais do relatorio recomputam taxas pelos numeradores canonicos', () => {
   assert.match(migration, /sum\s*\(\s*r\.experimentais\s*\)/i);
   assert.match(migration, /sum\s*\(\s*r\.renovacoes\s*\)/i);
   assert.match(migration, /sum\s*\(\s*r\.nao_renovacoes\s*\)/i);
+});
+
+test('relatorios atuais nao calculam media simples das medias por professor', () => {
+  const coordenacao = readOptional(relatorioCoordenacaoV3Path);
+  const gerencial = readOptional(relatorioGerencialCanonicoPath);
+
+  assert.match(coordenacao, /get_kpis_professor_periodo_canonico_v3/i);
+  assert.match(coordenacao, /alunos_via_turmas/i);
+  assert.match(coordenacao, /turmas_elegiveis_media/i);
+  assert.doesNotMatch(coordenacao, /avg\s*\([^)]*media_alunos_turma/i);
+  assert.match(gerencial, /get_health_score_professor_v3_performance/i);
+  assert.match(gerencial, /h\.numerador/i);
+  assert.match(gerencial, /h\.denominador/i);
 });

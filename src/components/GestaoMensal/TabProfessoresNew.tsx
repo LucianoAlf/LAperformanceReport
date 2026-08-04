@@ -23,6 +23,12 @@ import {
   type KPIProfessorCanonico,
 } from '@/lib/professoresKpisCanonicos';
 import {
+  buscarKpisTurmasCanonicos,
+  calcularTotaisKpisTurmasCanonicos,
+  indexarKpisTurmasCanonicos,
+  type KPITurmaCanonico,
+} from '@/lib/turmasKpisCanonicos';
+import {
   chaveProfessorUnidade,
   filtrarKpisPorVinculosAtivos,
 } from '@/lib/professoresKpisAgregados';
@@ -56,7 +62,7 @@ interface ProfessorKPI {
   id: number;
   nome: string;
   carteira_alunos: number;
-  media_alunos_turma: number;
+  media_alunos_turma: number | null;
   ticket_medio: number;
   experimentais: number;
   matriculas: number;
@@ -75,7 +81,7 @@ interface DadosProfessores {
   total_professores: number;
   carteira_media: number;
   alunos_total: number;
-  media_alunos_turma_geral: number;
+  media_alunos_turma_geral: number | null;
   experimentais_total: number;
   matriculas_total: number;
   taxa_conversao_geral: number;
@@ -90,9 +96,18 @@ interface DadosProfessores {
   professores: ProfessorKPI[];
 }
 
-function montarDados(linhas: KPIProfessorCanonico[]): DadosProfessores {
+function montarDados(
+  linhas: KPIProfessorCanonico[],
+  kpisTurmas: KPITurmaCanonico[] | null,
+): DadosProfessores {
   const professores = consolidarKpisProfessoresCanonicos(linhas);
   const totais = calcularTotaisKpisProfessoresCanonicos(linhas);
+  const totaisTurmas = kpisTurmas
+    ? calcularTotaisKpisTurmasCanonicos(kpisTurmas)
+    : null;
+  const indiceTurmas = kpisTurmas
+    ? indexarKpisTurmasCanonicos(kpisTurmas)
+    : null;
   const carteiraTotal = professores.reduce((soma, p) => soma + p.carteira_alunos, 0);
   const mediaPonderada = (campo: 'ticket_medio' | 'nps_medio') =>
     carteiraTotal > 0
@@ -103,7 +118,7 @@ function montarDados(linhas: KPIProfessorCanonico[]): DadosProfessores {
     total_professores: professores.length,
     carteira_media: professores.length > 0 ? carteiraTotal / professores.length : 0,
     alunos_total: carteiraTotal,
-    media_alunos_turma_geral: totais.mediaAlunosTurma,
+    media_alunos_turma_geral: totaisTurmas?.mediaAlunosTurma ?? null,
     experimentais_total: totais.experimentais,
     matriculas_total: totais.matriculasPosExp,
     taxa_conversao_geral: totais.taxaConversao,
@@ -119,7 +134,9 @@ function montarDados(linhas: KPIProfessorCanonico[]): DadosProfessores {
       id: p.professor_id,
       nome: p.professor_nome,
       carteira_alunos: p.carteira_alunos,
-      media_alunos_turma: p.media_alunos_turma,
+      media_alunos_turma: indiceTurmas?.get(
+        `${p.professor_id}_${p.unidade_id || 'todos'}`,
+      )?.media_alunos_turma ?? null,
       ticket_medio: p.ticket_medio,
       experimentais: p.experimentais,
       matriculas: p.matriculas_pos_exp,
@@ -173,13 +190,25 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
     async function fetchDados() {
       setLoading(true);
       try {
-        const [linhas, professoresResult, vinculosResult] = await Promise.all([
+        const dataInicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
+        const dataFim = dataFinal(ano, mesFinal);
+        const [linhas, kpisTurmas, professoresResult, vinculosResult] = await Promise.all([
           buscarKpisProfessoresCanonicos({
             ano,
             mes,
             unidadeId: unidade,
-            dataInicio: `${ano}-${String(mes).padStart(2, '0')}-01`,
-            dataFim: dataFinal(ano, mesFinal),
+            dataInicio,
+            dataFim,
+          }),
+          buscarKpisTurmasCanonicos({
+            ano,
+            mes,
+            unidadeId: unidade,
+            dataInicio,
+            dataFim,
+          }).catch((error) => {
+            console.error('Erro ao buscar média canônica de alunos por turma no Analytics:', error);
+            return null;
           }),
           supabase
             .from('professores')
@@ -211,7 +240,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           vinculosAtivos,
         );
 
-        if (ativo) setDados(montarDados(linhasAtivas));
+        if (ativo) setDados(montarDados(linhasAtivas, kpisTurmas));
       } catch (error) {
         console.error('Erro ao carregar KPIs canônicos de professores:', error);
         if (ativo) setDados(null);
@@ -353,7 +382,12 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             <KPICard
               icon={Users}
               label="Média Alunos/Turma"
-              value={dados.media_alunos_turma_geral.toFixed(1)}
+              value={dados.media_alunos_turma_geral === null
+                ? 'Indisponível'
+                : dados.media_alunos_turma_geral.toLocaleString('pt-BR', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
               variant="cyan"
               tooltip="Ocupações distintas em turmas regulares divididas pelas turmas regulares. Projetos e bandas não entram nesta média."
             />
