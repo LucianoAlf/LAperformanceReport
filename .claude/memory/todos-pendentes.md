@@ -113,12 +113,22 @@ Modificar `sync-presenca-emusys` (v22) para chamar `GET /v1/professores/` no in�
 >
 > 2. **Bug 3 — Guard contra `professor_id` inativo (corrigido):** a RPC agora rejeita
 >    `p_professor_id` inativo e loga em `automacao_log` (`acao='professor_inativo_rejeitado'`).
->    O n8n `j41tPbyjGXUQUxrN` continua mandando `professor_id=54` (inativo, mesclado) e `57`
->    (inativo, mesclado) — a RPC rejeita e retorna `{"success":false,"reason":"professor_inativo"}`.
->    Fecha a torneira sem editar o n8n. **Efeito colateral:** o lead fica sem experimental
->    registrada até o Hugo corrigir o lookup no n8n (filtrar `ativo=true` ou resolver por
->    `telefone_professor` do payload). Dado errado (experimental no 54) é pior que dado
->    faltante. Testado: professor 54 rejeitado, log gravado, lead não criado.
+>    Fecha a torneira sem editar o n8n. Testado: professor 54 rejeitado, log gravado,
+>    lead não criado.
+>
+>    > ⚠️ **Desatualizado a partir das 23:07 do MESMO dia** (os dois trabalhos correram em
+>    > paralelo): o n8n **não manda mais** 54/57 — o lookup foi corrigido (ver "PASSO 1 FEITO"
+>    > adiante). O guard virou rede de segurança inerte, que é o desejado.
+>    >
+>    > **Interação conferida:** o guard só dispara com `p_professor_id IS NOT NULL`. O n8n
+>    > corrigido manda **NULL** quando não acha ninguém → a experimental **continua sendo
+>    > criada**, sem professor. Se o guard rejeitasse NULL, os dois fixes juntos descartariam
+>    > experimentais em silêncio.
+>    >
+>    > ⚠️ **Aresta:** o guard roda **antes** do ramo de cancelamento. Um
+>    > `aula_experimental_cancelada` que chegasse com professor inativo seria rejeitado e o
+>    > cancelamento se perderia. Hoje não acontece (o nó `Cancelar Experimental` passa NULL no
+>    > 8º parâmetro), mas é frágil por construção.
 >
 > 3. **Bug 2 — sync-presenca sem backoff (corrigido):** 202 logs `nao_encontrada` em
 >    `leads_automacao_log` desde 27/07, 9 leads distintos (cada um logado ~22x). O sync
@@ -127,9 +137,14 @@ Modificar `sync-presenca-emusys` (v22) para chamar `GET /v1/professores/` no in�
 >    Console.log inclui contagem de suprimidos. Deploy via CLI.
 >
 > **AINDA ABERTO (depende do Hugo/n8n):**
-> - Passo 1 da ordem sugerida: corrigir o lookup no n8n `j41tPbyjGXUQUxrN` — filtrar
->   `ativo=true` no mínimo; idealmente resolver por `telefone_professor` do payload.
-> - Conferir o `EB0LibpOJCLhKp7M` (lead) se tem o mesmo padrão.
+> - ~~Passo 1: corrigir o lookup no n8n `j41tPbyjGXUQUxrN`~~ — **FEITO às 23:07 do mesmo dia**,
+>   ver adiante. ⚠️ E "filtrar `ativo=true` no mínimo" **não resolveria**: testado contra os
+>   3 casos reais, os três voltam NULL.
+> - ~~Conferir o `EB0LibpOJCLhKp7M` (lead) se tem o mesmo padrão~~ — **CONFERIDO: não tem.**
+>   Workflow aberto, os 20 nós são webhook, filtro de evento, preparar dados, upsert de lead,
+>   arquivamento e NocoDB. **Nenhum nó consulta `professores`**; trata `lead_criado`/
+>   `lead_editado`/`lead_arquivado`, eventos em que o Emusys nem manda professor. Era
+>   especulação, não pendência.
 > - Bug independente: camada 1 do `registrar_experimental` busca `emusys_lead_id` sem
 >   filtrar unidade — **CORRIGIDO** (Bug 1 acima).
 > - Passo 3 (backoff/alerta no `sync-presenca-emusys`) — **CORRIGIDO** (Bug 2 acima).
@@ -161,9 +176,11 @@ Modificar `sync-presenca-emusys` (v22) para chamar `GET /v1/professores/` no in�
 > 29\07 (aula 01\08). Não é cadáver de merge — é professora desativada de verdade (última
 > aula 18\07). Mesmo bug, causa diferente. Pendente conferir com a secretaria.
 >
-> **AINDA ABERTO:** passo 2 (`sync-professores-emusys` casa por nome exato), passo 3
-> (backoff/alerta no `sync-presenca-emusys`) e passo 4 (reatribuir 54→52, 57→46 — só depois
-> de confirmar a torneira fechada). O observador segue em `DRY_RUN=true`.
+> **AINDA ABERTO:** passo 2 (`sync-professores-emusys` casa por nome exato) e passo 4
+> (reatribuir 54→52, 57→46 e desativar — só depois de confirmar pelos dados que a torneira
+> está fechada; a limpeza de 27\07 sem corrigir a origem não durou uma semana). O passo 3
+> (backoff) **já foi resolvido** no mesmo dia — ver Bug 2 acima. O observador segue em
+> `DRY_RUN=true`.
 >
 > **Pedido ao fornecedor:** varridos 128 webhooks reais de 60 dias — **nenhum** evento do
 > Emusys manda id de professor, mas o MESMO payload traz `sala_id` e `lead_id`. Pedir ao
