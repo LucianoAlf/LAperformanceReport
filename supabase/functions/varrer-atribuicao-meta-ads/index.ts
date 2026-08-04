@@ -252,15 +252,38 @@ Deno.serve(async (req: Request) => {
       if (cid) jaLogado.add(`${cid}:${acao ?? ''}`);
     }
 
+    // ── 4b. Mapa anúncio -> app, para as conversas que vierem sem `source_app` ──
+    //
+    // O WhatsApp às vezes entrega o `additional_attributes` INCOMPLETO: vem `source_id` e
+    // `source_type: 'ad'`, mas sem `source_app` e sem `ctwa_clid` (visto ao vivo nas conversas
+    // 18973/18979 em 04/08 — 3 chaves em vez das 5 habituais). Nesses casos o lead ganhava o
+    // anúncio e ficava sem origem, e o fluxo n8n também não pegava (sem `ctwa_clid` a mensagem
+    // não carrega `external_ad_reply`).
+    //
+    // O mesmo anúncio, porém, aparece em outras conversas COM o campo preenchido. Usamos isso:
+    // a origem vem da própria Meta, para o mesmo `source_id` — não é chute nem inferência a
+    // partir dos nossos dados. ⚠️ NÃO usar `leads` como fonte aqui: o anúncio 120251062759270422
+    // tem 135 leads, 131 Instagram e 2 com canal diferente (preenchido por outra via), então
+    // deduzir dali propagaria o erro.
+    const appPorAnuncio = new Map<string, string>();
+    for (const a of alvos) {
+      if (a.sourceApp && !appPorAnuncio.has(a.sourceId)) appPorAnuncio.set(a.sourceId, a.sourceApp);
+    }
+
     // ── 5. Decide e aplica ─────────────────────────────────────────────────────
     let vinculados = 0, canaisPreenchidos = 0, jaCompletos = 0, ambiguos = 0, naoEncontrados = 0;
+    let appInferidos = 0;
     const pendentesRevisao: { conversa_id: number; telefone: string; lead_ids: number[] }[] = [];
     const logs: Record<string, unknown>[] = [];
 
     for (const a of alvos) {
       const encontrados = a.candidatos.flatMap(c => porTelefone.get(c) ?? []);
       const unicos = [...new Map(encontrados.map(l => [l.id, l])).values()];
-      const canalId = a.sourceApp ? CANAL_POR_SOURCE_APP[a.sourceApp.toLowerCase()] ?? null : null;
+      // App da conversa; se veio vazio, cai no app conhecido do MESMO anúncio (ver 4b).
+      const appInferido = !a.sourceApp ? appPorAnuncio.get(a.sourceId) ?? null : null;
+      const sourceAppEfetivo = a.sourceApp ?? appInferido;
+      const canalId = sourceAppEfetivo ? CANAL_POR_SOURCE_APP[sourceAppEfetivo.toLowerCase()] ?? null : null;
+      if (appInferido && canalId !== null) appInferidos++;
 
       // "Incompleto" = falta a atribuição OU falta o canal de origem (quando sabemos mapeá-lo).
       // O critério é esse, e não só a atribuição, porque um lead já atribuído pelo fluxo n8n
@@ -278,6 +301,7 @@ Deno.serve(async (req: Request) => {
         source_id: a.sourceId,
         ctwa_clid: a.ctwaClid,
         source_app: a.sourceApp,
+        source_app_inferido: appInferido,
         canal_origem_id: canalId,
         conversa_criada_em: new Date(a.criadaEm * 1000).toISOString(),
         matches: unicos.length,
@@ -380,6 +404,7 @@ Deno.serve(async (req: Request) => {
       conversas_anuncio: alvos.length,
       vinculados,
       canais_preenchidos: canaisPreenchidos,
+      canais_por_app_inferido: appInferidos,
       ja_completos: jaCompletos,
       ambiguos,
       nao_encontrados: naoEncontrados,
