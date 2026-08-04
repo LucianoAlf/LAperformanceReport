@@ -383,6 +383,26 @@ async function exigirPesquisaSemOptOut(
   }
 }
 
+async function exigirEvasaoElegivelParaEnvio(
+  supabase: SupabaseClient,
+  evasaoId: number,
+  modoTeste: boolean,
+): Promise<void> {
+  if (modoTeste) return;
+
+  const { data: podeEnviar, error } = await supabase.rpc(
+    "pode_enviar_pesquisa_evasao",
+    { p_evasao_id: evasaoId },
+  );
+  if (error) throw error;
+  if (podeEnviar !== true) {
+    throw new ErroHttp(
+      409,
+      "Pesquisa ainda nao elegivel: aguarde D+1 as 10h BRT",
+    );
+  }
+}
+
 async function registrarResultado(
   supabase: SupabaseClient,
   claim: ClaimEnvio,
@@ -566,19 +586,11 @@ async function previsualizar(
     request.evasao_id,
   );
 
-  if (!request.modo_teste) {
-    const { data: podeEnviar, error: erroElegibilidade } = await supabase.rpc(
-      "pode_enviar_pesquisa_evasao",
-      { p_evasao_id: movimentacao.id },
-    );
-    if (erroElegibilidade) throw erroElegibilidade;
-    if (podeEnviar !== true) {
-      throw new ErroHttp(
-        409,
-        "Pesquisa ainda nao elegivel: aguarde D+1 as 10h BRT",
-      );
-    }
-  }
+  await exigirEvasaoElegivelParaEnvio(
+    supabase,
+    movimentacao.id,
+    request.modo_teste,
+  );
 
   await exigirPesquisaSemOptOut(supabase, {
     evasaoId: movimentacao.id,
@@ -769,6 +781,11 @@ async function confirmar(
   if (previewPersistida.auth_user_id !== identidade.authUserId) {
     throw new ErroAutorizacao(403, "Preview pertence a outro usuario");
   }
+  await exigirEvasaoElegivelParaEnvio(
+    supabase,
+    previewPersistida.evasao_id,
+    previewPersistida.modo_teste,
+  );
   await exigirPesquisaSemOptOut(supabase, {
     evasaoId: previewPersistida.evasao_id,
     modoTeste: previewPersistida.modo_teste,

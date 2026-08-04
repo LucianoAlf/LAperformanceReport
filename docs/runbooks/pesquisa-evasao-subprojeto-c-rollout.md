@@ -141,13 +141,16 @@ Critérios:
 
 Parar e reportar antes do Gate C.
 
-## Gate C — D+1 e Edge compatível
+## Gate C — Edge compatível e D+1
 
-Aplicar somente:
+Primeiro publicar `enviar-pesquisa-evasao` com `verify_jwt=true`, ainda sob a
+definição anterior de `pode_enviar_pesquisa_evasao`. A Edge nova é compatível
+com esse contrato e a publicação anterior à migration evita uma janela em que
+o frontend permitiria uma prévia que o servidor ainda não validasse.
+
+Depois aplicar somente:
 
 - `20260804224500_pesquisa_evasao_subprojeto_c_d1.sql`.
-
-Depois publicar `enviar-pesquisa-evasao` com `verify_jwt=true`.
 
 Verificar:
 
@@ -155,6 +158,7 @@ Verificar:
 - `listar_evadidos_para_pesquisa_v3` retorna `elegivel_a_partir_em`;
 - saída antes de D+1 aparece como `aguardando_d1`;
 - saída em/apos D+1 pode gerar prévia manual;
+- prévia produtiva criada antes do cutover também repete o gate ao confirmar;
 - modo teste continua gerando e confirmando prévia;
 - não existe cron, `pg_net` ou disparo automático de pesquisa;
 - opt-out continua bloqueando reenvio;

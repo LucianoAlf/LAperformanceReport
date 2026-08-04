@@ -43,11 +43,15 @@ test('migration D+1 existe e calcula 10h BRT sem automatizar disparo', () => {
 test('D+1 endurece apenas novos envios produtivos e preserva modo teste', () => {
   const edge = read(edgePath);
 
-  assert.match(
-    edge,
-    /if\s*\(\s*!request\.modo_teste\s*\)[\s\S]*?rpc\(\s*["']pode_enviar_pesquisa_evasao["']/,
-  );
+  assert.match(edge, /async function exigirEvasaoElegivelParaEnvio/);
+  assert.match(edge, /if\s*\(\s*modoTeste\s*\)\s*return/);
+  assert.match(edge, /rpc\(\s*["']pode_enviar_pesquisa_evasao["']/);
   assert.match(edge, /throw\s+new\s+ErroHttp\(\s*409[\s\S]*?D\+1/i);
+  assert.equal(
+    (edge.match(/await exigirEvasaoElegivelParaEnvio\(/g) ?? []).length,
+    2,
+    'preview e confirmacao precisam repetir o gate D+1',
+  );
 });
 
 test('fila usa read model v3 e mostra quando a movimentacao fica elegivel', () => {

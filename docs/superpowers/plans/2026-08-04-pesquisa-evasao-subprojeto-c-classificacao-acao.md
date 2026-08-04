@@ -1451,10 +1451,12 @@ Revogar `PUBLIC`, `anon` e roles de agentes nas duas funções; conceder a v3 e
 
 - [ ] **Step 4: Repetir a regra na Edge produtiva**
 
-Antes de criar a prévia, apenas quando `modo_teste=false`, chamar
-`pode_enviar_pesquisa_evasao`. Se retornar falso, responder 409 com
-`Pesquisa elegível a partir de D+1 às 10h BRT`. Não alterar o caminho de teste,
-destinatário, opt-out, idempotência ou provider.
+Antes de criar a prévia e novamente antes de confirmar o envio, apenas quando
+`modo_teste=false`, chamar `pode_enviar_pesquisa_evasao`. Se retornar falso,
+responder 409 com `Pesquisa elegível a partir de D+1 às 10h BRT`. A segunda
+checagem impede que uma prévia criada antes do cutover atravesse a regra na
+confirmação. Não alterar o caminho de teste, destinatário, opt-out,
+idempotência ou provider.
 
 ```ts
 if (!request.modo_teste) {
@@ -1628,7 +1630,8 @@ específica de Alf.
 3. Aplicar schema/RLS/RPCs por `supabase db push`.
 4. Verificar ACLs, zero backfill legado e uma pesquisa revisada em
    `A classificar`.
-5. Aplicar migration D+1; publicar Edge compatível; provar modo teste.
+5. Publicar Edge compatível ainda sob a função anterior; aplicar migration
+   D+1; provar modo teste e a confirmação produtiva bloqueada antes do prazo.
 6. Publicar frontend; inspecionar classificação e analytics sem salvar caso
    real.
 7. Com autorização, classificar um caso produtivo e registrar ação/desfecho de
