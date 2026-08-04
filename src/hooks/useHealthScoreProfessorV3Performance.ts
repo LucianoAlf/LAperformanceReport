@@ -70,12 +70,13 @@ export function useHealthScoreProfessorV3Performance({
           .eq('ativo', true);
         if (unidadesError) throw unidadesError;
 
-        const resultados = await Promise.all(
-          (unidades || []).map(unidade => consultarUnidade(String(unidade.id))),
-        );
-        const erro = resultados.find(resultado => resultado.error)?.error;
-        if (erro) throw erro;
-        data = resultados.flatMap(resultado => resultado.data || []);
+        const linhas: unknown[] = [];
+        for (const unidade of unidades || []) {
+          const resultado = await consultarUnidade(String(unidade.id));
+          if (resultado.error) throw resultado.error;
+          linhas.push(...(resultado.data || []));
+        }
+        data = linhas;
       }
       if (requestId !== requestIdRef.current) return;
 

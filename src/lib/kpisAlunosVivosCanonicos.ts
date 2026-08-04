@@ -378,7 +378,7 @@ export async function fetchKPIsAlunosVivosCanonicos({
     data = resultado.data;
   } else {
     // Consolidado continua sendo a soma das mesmas leituras canônicas por
-    // unidade. A execução paralela elimina o timeout da RPC monolítica sem
+    // unidade. A execução controlada evita saturar o timeout da RPC sem
     // criar fallback, snapshot ou fórmula paralela.
     const { data: unidades, error: unidadesError } = await supabase
       .from('unidades')
@@ -386,13 +386,14 @@ export async function fetchKPIsAlunosVivosCanonicos({
       .eq('ativo', true);
     if (unidadesError) throw unidadesError;
 
-    const resultados = await Promise.all(
-      (unidades || []).map(unidade => consultarUnidade(String(unidade.id))),
-    );
-    const erro = resultados.find(resultado => resultado.error)?.error;
-    if (erro) throw erro;
+    const porUnidade: unknown[] = [];
+    for (const unidade of unidades || []) {
+      const resultado = await consultarUnidade(String(unidade.id));
+      if (resultado.error) throw resultado.error;
+      porUnidade.push(...(resultado.data?.por_unidade || []));
+    }
     data = {
-      por_unidade: resultados.flatMap(resultado => resultado.data?.por_unidade || []),
+      por_unidade: porUnidade,
     };
   }
 
