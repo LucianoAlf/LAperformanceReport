@@ -27,6 +27,15 @@ export interface AlunoAgenda {
   risco_calculado_em: string | null;
 }
 
+export interface LeadExperimentalAgenda {
+  experimental_id: number;
+  lead_id: number | null;
+  nome: string;
+  curso: string | null;
+  status: string | null;
+  observacoes: string | null;
+}
+
 export interface AulaAgenda {
   chave: string;
   unidade_id: string;
@@ -59,6 +68,11 @@ export interface AulaAgenda {
   // vem como 'ausente'. So tem significado depois que a aula ocorreu.
   professor_presenca: string | null;
   alunos: AlunoAgenda[];
+  // Quem vai na aula EXPERIMENTAL, vindo de `lead_experimentais`. Vazio nas demais.
+  // Existe porque `aula_alunos_emusys` nao tem UMA linha sequer de experimental —
+  // sem isto a agenda mostra a aula sem saber quem vem. Traz junto a `observacoes`
+  // do atendimento, que o Emusys manda em 100% dos payloads e ninguem gravava.
+  experimental_leads: LeadExperimentalAgenda[];
 }
 
 interface Params {

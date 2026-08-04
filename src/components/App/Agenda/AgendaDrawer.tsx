@@ -246,6 +246,32 @@ export function AgendaDrawer({
         </>
       )}
 
+      {/* Experimental: quem vem e o que o consultor anotou no agendamento.
+          Nao ha vinculo em aula_alunos_emusys para experimental, entao esta e a
+          UNICA forma de a agenda saber o nome de quem esta marcado. */}
+      {(aula.experimental_leads ?? []).length > 0 && (
+        <>
+          <p className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">
+            Aula experimental
+          </p>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {(aula.experimental_leads ?? []).map((l) => (
+              <li key={l.experimental_id} className="flex flex-col gap-1">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[13px] font-medium text-slate-100">{l.nome}</span>
+                  {l.curso && <span className="text-[11px] text-violet-300">{l.curso}</span>}
+                </div>
+                {l.observacoes ? (
+                  <p className="whitespace-pre-wrap text-[12.5px] text-slate-300">{l.observacoes}</p>
+                ) : (
+                  <p className="text-[12px] italic text-slate-500">Sem observações do atendimento</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
       {aula.anotacoes && (
         <>
           <p className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">

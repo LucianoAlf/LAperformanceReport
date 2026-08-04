@@ -151,6 +151,9 @@ function ResumoDaAula({
   const observacoes = [aula.anotacoes, aula.anotacoes_fabio]
     .map((t) => t?.trim())
     .filter((t): t is string => !!t);
+  // Numa experimental o `alunos` vem VAZIO (nao ha vinculo em aula_alunos_emusys),
+  // entao quem vem e o que o consultor anotou saem daqui.
+  const leads = aula.experimental_leads ?? [];
 
   // Titulo pela turma, como no Emusys: numa aula de grupo "B_Seg_16" identifica
   // o encontro melhor do que o nome de um dos alunos. Sem turma, cai no curso.
@@ -206,9 +209,17 @@ function ResumoDaAula({
             {modalidade}
           </span>
         )}
-        <span className="text-slate-400">
-          {aula.alunos.length === 1 ? '1 aluno nessa aula' : `${aula.alunos.length} alunos nessa aula`}
-        </span>
+        {/* Na experimental o denominador e o lead, nao o aluno — dizer "0 alunos"
+            numa aula que tem alguem marcado seria falso. */}
+        {aula.alunos.length === 0 && leads.length > 0 ? (
+          <span className="text-slate-400">
+            {leads.length === 1 ? '1 experimental marcada' : `${leads.length} experimentais marcadas`}
+          </span>
+        ) : (
+          <span className="text-slate-400">
+            {aula.alunos.length === 1 ? '1 aluno nessa aula' : `${aula.alunos.length} alunos nessa aula`}
+          </span>
+        )}
         {/* Agregado so quando ha mais de um aluno: com um so, a marca na linha
             dele logo abaixo ja diz isso, e repetir gasta duas das poucas
             linhas do tooltip para a mesma informacao. */}
@@ -257,6 +268,24 @@ function ResumoDaAula({
               +{aula.alunos.length - MAX_ALUNOS_NO_RESUMO} — abrir para ver todos
             </li>
           )}
+        </ul>
+      )}
+
+      {leads.length > 0 && (
+        <ul className="mt-0.5 flex flex-col gap-1 border-t border-slate-700 pt-1.5">
+          {leads.map((l) => (
+            <li key={l.experimental_id} className="flex flex-col gap-0.5">
+              <div className="flex items-baseline gap-1.5 text-[12px]">
+                <span className="min-w-0 flex-1 text-slate-100">{l.nome}</span>
+                {l.curso && <span className="shrink-0 text-[10px] text-violet-300">{l.curso}</span>}
+              </div>
+              {l.observacoes && (
+                <p className="line-clamp-3 text-[11px] italic leading-snug text-slate-300">
+                  {l.observacoes}
+                </p>
+              )}
+            </li>
+          ))}
         </ul>
       )}
 
