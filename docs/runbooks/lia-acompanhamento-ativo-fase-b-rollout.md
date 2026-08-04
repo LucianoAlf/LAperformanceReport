@@ -227,3 +227,20 @@ Cadência do primeiro lote real:
   resumo de sexta-feira, 07/08, às 09h;
 - essa defasagem é intencional: estado imediato na tela e lembrete privado
   diário são cadências diferentes.
+
+Aplicação e pós-flight:
+
+- arquivo versionado:
+  `20260804123000_lia_followup_listagem_somente_producao.sql`, SHA-256
+  `473d739dabc9b3d5e33e6b2f2abf213f3437eb0b59550ae66be571abb4a254fb`;
+- aplicado em produção pelo projeto confirmado `ouqwbbermlzqqvtqwlul`;
+- o histórico remoto registrou a versão `20260804102455`, nome
+  `lia_followup_listagem_somente_producao`; a diferença para o timestamp do
+  arquivo local entra na dívida já aberta de reconciliação do histórico;
+- pós-flight do read model: 15 produtivas, zero testes, 13 em
+  `aguardando_resposta`, uma em `pronta_para_revisao`, uma `revisada` e zero
+  `followup_pendente`;
+- smoke autenticado na opção `Todos`: paginação `1–15 de 15`, nenhum rótulo
+  `TESTE` no painel e nenhum dos nomes legados de teste;
+- nenhuma pesquisa, resposta, ação manual, alerta ou mensagem de WhatsApp foi
+  criada ou reescrita por esta correção.
