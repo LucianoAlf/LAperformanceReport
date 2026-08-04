@@ -29,7 +29,7 @@
 
 - `supabase/migrations/20260804220000_pesquisa_evasao_subprojeto_c_schema.sql` — tabelas, constraints, append-only, extensão e RLS de `aluno_acoes`.
 - `supabase/migrations/20260804223000_pesquisa_evasao_subprojeto_c_rpcs.sql` — classificação, ações, desfechos e read models governados.
-- `supabase/migrations/20260804224500_pesquisa_evasao_subprojeto_c_d1.sql` — RPC v3 de listagem e regra D+1 server-side.
+- `supabase/migrations/20260804233000_pesquisa_evasao_subprojeto_c_d1.sql` — RPC v3 de listagem e regra D+1 server-side.
 - `supabase/migrations/20260804230000_pesquisa_evasao_subprojeto_c_cutover_legado.sql` — revogação do escritor legado após o frontend.
 - `tests/pesquisaEvasaoSubprojetoCSchema.test.mjs` — contratos de schema, ACL e legado.
 - `tests/pesquisaEvasaoSubprojetoCRpcs.test.mjs` — contratos das RPCs e concorrência.
@@ -1322,7 +1322,7 @@ git commit -m "feat: mostrar analytics revisado de evasao"
 ## Task 8: Aplicar D+1 no banco, Edge e fila manual
 
 **Files:**
-- Create: `supabase/migrations/20260804224500_pesquisa_evasao_subprojeto_c_d1.sql`
+- Create: `supabase/migrations/20260804233000_pesquisa_evasao_subprojeto_c_d1.sql`
 - Create: `tests/pesquisaEvasaoSubprojetoCD1.test.mjs`
 - Modify: `supabase/functions/enviar-pesquisa-evasao/index.ts`
 - Modify: `src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx`
@@ -1491,7 +1491,7 @@ Expected: todos passando; nenhuma chamada de WhatsApp em teste.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add supabase/migrations/20260804224500_pesquisa_evasao_subprojeto_c_d1.sql tests/pesquisaEvasaoSubprojetoCD1.test.mjs supabase/functions/enviar-pesquisa-evasao/index.ts src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx src/components/App/SucessoCliente/pesquisaEvasao.types.ts
+git add supabase/migrations/20260804233000_pesquisa_evasao_subprojeto_c_d1.sql tests/pesquisaEvasaoSubprojetoCD1.test.mjs supabase/functions/enviar-pesquisa-evasao/index.ts src/components/App/SucessoCliente/PesquisaEvasaoTab.tsx src/components/App/SucessoCliente/pesquisaEvasao.types.ts
 git commit -m "feat: sinalizar envio manual de evasao em d mais um"
 ```
 

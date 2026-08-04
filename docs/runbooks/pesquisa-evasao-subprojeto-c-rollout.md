@@ -200,7 +200,7 @@ o frontend permitiria uma prévia que o servidor ainda não validasse.
 
 Depois aplicar somente:
 
-- `20260804224500_pesquisa_evasao_subprojeto_c_d1.sql`.
+- `20260804233000_pesquisa_evasao_subprojeto_c_d1.sql`.
 
 Verificar:
 
