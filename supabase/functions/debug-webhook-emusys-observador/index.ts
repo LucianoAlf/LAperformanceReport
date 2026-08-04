@@ -27,6 +27,10 @@
 //      motivo_arquivamento e etapa_pipeline_id derivada do estágio do funil.
 //      Aplicados DEPOIS da RPC, como delta, sem tocar no que ela gravou.
 //   3. Etapa do pipeline nunca regride (ORDEM_ETAPA): webhook atrasado não rebaixa lead.
+//   4. [v5] Professor por `aula.professor_id` (emusys_id) quando vier — match exato,
+//      antes de cair na heurística de telefone/nome.
+//   5. [v5] `observacoes` da experimental gravada em lead_experimentais (coluna existia e
+//      estava 0 de 311 preenchida; a RPC não tem parâmetro para ela).
 //
 // [v4 — 2026-07-30] Adicionado lead_arquivado (workflow EB0LibpOJCLhKp7M, nó "Arquivar
 // Lead no Supabase"). Esse nó não chama nenhuma RPC — é um UPDATE direto (arquivado=true,
@@ -36,9 +40,33 @@
 // risco de injection que não é replicado). Objetivo: fechar a paridade dos 3 eventos de
 // lead pra eventualmente tirar todos do n8n juntos, não só lead_criado/lead_editado.
 //
-// OBSERVADOR_DRY_RUN=true (default) => NÃO chama as RPCs. Roda um preview só de
-// leitura, que replica o matching das RPCs para o diff em sombra, e registra em
-// automacao_log o que faria. Trocar para 'false' liga a escrita, sem redeploy.
+// [v5 — 2026-08-04] LIBERAÇÃO POR EVENTO. Antes o interruptor era tudo-ou-nada:
+// OBSERVADOR_DRY_RUN=false ligava a escrita de lead + experimental + arquivamento de
+// uma vez. Como a migração do n8n vai ser gradual (começando pela experimental, que é
+// 8% do volume), agora dá para liberar evento por evento — sem redeploy, só variável.
+//
+//   OBSERVADOR_ESCREVE ausente/vazio ....... nada escreve (comportamento de hoje)
+//   OBSERVADOR_ESCREVE=aula_experimental_criada,aula_experimental_reagendada,
+//                      aula_experimental_cancelada ..... só experimental escreve
+//   OBSERVADOR_ESCREVE=*  (ou 'todos') ..... tudo escreve
+//
+// Compatibilidade: se OBSERVADOR_ESCREVE não existir e OBSERVADOR_DRY_RUN=false,
+// vale o comportamento antigo (escreve tudo). O default segue sendo NÃO escrever.
+//
+// ⚠️ Ordem da virada: liberar aqui PRIMEIRO, confirmar que gravou, e só então desligar
+// o ramo correspondente no n8n. O inverso abre uma janela sem ninguém escrevendo, e o
+// Emusys não reenvia. Durante a sobreposição os dois escrevem e isso é seguro — o
+// dedup da registrar_experimental é por (lead, data, horário, curso) e o
+// emusys_aula_id usa COALESCE, então o segundo a chegar vira UPDATE.
+//
+// OBSERVADOR_TOKEN (opcional): quando definido, exige o mesmo valor em
+// `x-observador-token` (header) ou `?token=` (query). Enquanto NÃO estiver definido, a
+// verificação fica desligada — de propósito, para o deploy não derrubar o webhook antes
+// de a gente saber se o Emusys consegue mandar header custom.
+// ⚠️ Sem token e escrevendo de verdade, o endereço é público e grava em `leads`.
+//
+// Em modo sombra roda um preview só de leitura, que replica o matching das RPCs para o
+// diff, e registra em automacao_log o que faria.
 // ⚠️ O preview é diagnóstico; quem escreve é a RPC. Se os dois divergirem, a RPC vale.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
@@ -46,7 +74,33 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const DRY_RUN = (Deno.env.get('OBSERVADOR_DRY_RUN') ?? 'true') === 'true';
+const TOKEN_ESPERADO = (Deno.env.get('OBSERVADOR_TOKEN') ?? '').trim();
+
+/** Eventos liberados para escrita. Vazio = sombra em tudo (default). '*' = tudo escreve. */
+const EVENTOS_LIBERADOS: Set<string> = (() => {
+  const bruto = (Deno.env.get('OBSERVADOR_ESCREVE') ?? '').trim();
+  if (bruto === '*' || bruto.toLowerCase() === 'todos') return new Set(['*']);
+  if (bruto) return new Set(bruto.split(',').map(s => s.trim()).filter(Boolean));
+  // sem a variável nova: honra o interruptor antigo, cujo default é NÃO escrever
+  const dryRunLegado = (Deno.env.get('OBSERVADOR_DRY_RUN') ?? 'true') === 'true';
+  return dryRunLegado ? new Set<string>() : new Set(['*']);
+})();
+
+function escreveDeVerdade(evento: string): boolean {
+  return EVENTOS_LIBERADOS.has('*') || EVENTOS_LIBERADOS.has(evento);
+}
+
+/** Token só é exigido quando configurado — ver comentário no cabeçalho. */
+function autorizado(req: Request): boolean {
+  if (!TOKEN_ESPERADO) return true;
+  const doHeader = req.headers.get('x-observador-token') ?? '';
+  if (doHeader && doHeader === TOKEN_ESPERADO) return true;
+  try {
+    return new URL(req.url).searchParams.get('token') === TOKEN_ESPERADO;
+  } catch (_e) {
+    return false;
+  }
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -147,10 +201,33 @@ async function resolverUnidade(sb: any, body: any): Promise<string | null> {
   return data ? data.id : null;
 }
 
-/** Professor por TELEFONE (identidade da pessoa) + ativo. Nunca por nome solto:
- *  a mesma pessoa tem nomes diferentes por unidade e há cadastros mesclados
- *  inativos com nome quase igual (Erick Osmy 54 x Erick Cosme da Silva 52). */
+/** Professor, em 3 camadas.
+ *
+ *  1) emusys_id do payload (`aula.professor_id`) — match EXATO, sem heurística.
+ *     ⚠️ SEMPRE filtrando unidade: `professores_unidades.emusys_id` NÃO é único
+ *     (o 1002 aparece em 2 unidades apontando para professores diferentes, 7 e 8).
+ *     ⚠️ Campo novo: apareceu pela 1ª vez em 04/08/2026 e só num evento. Enquanto não
+ *     vier, esta camada simplesmente não roda e vale o comportamento antigo.
+ *  2) TELEFONE (identidade da pessoa) + ativo.
+ *  3) nome como aparece NA UNIDADE + ativo.
+ *
+ *  Nunca por nome solto: a mesma pessoa tem nomes diferentes por unidade e há cadastros
+ *  mesclados inativos com nome quase igual (Erick Osmy 54 x Erick Cosme da Silva 52). */
 async function resolverProfessor(sb: any, aula: any, unidadeId: string) {
+  const emusysProfId = aula?.professor_id != null && aula.professor_id !== ''
+    ? Number(aula.professor_id)
+    : null;
+  if (emusysProfId && Number.isFinite(emusysProfId)) {
+    const { data } = await sb
+      .from('professores_unidades')
+      .select('professor_id, professores!inner(ativo)')
+      .eq('emusys_id', emusysProfId)
+      .eq('unidade_id', unidadeId)
+      .eq('professores.ativo', true)
+      .limit(1);
+    if (data && data.length) return { id: data[0].professor_id as number, via: 'emusys_professor_id' };
+  }
+
   const tel = normalizarTelefone(aula?.telefone_professor);
   if (tel) {
     const { data } = await sb
@@ -175,7 +252,7 @@ async function resolverProfessor(sb: any, aula: any, unidadeId: string) {
   return { id: null, via: 'nao_resolvido' };
 }
 
-// ------------------------------------------------- preview (só em DRY_RUN) ---
+// -------------------------------------- preview (só quando NÃO escreve) ---
 
 /** Replica a normalização de curso da registrar_experimental para o preview.
  *  Na escrita real quem resolve é a RPC — isto aqui é diagnóstico. */
@@ -277,7 +354,7 @@ async function aplicarDeltaLead(sb: any, leadId: number, lead: any) {
   return delta;
 }
 
-async function processarLead(sb: any, body: any, unidadeId: string) {
+async function processarLead(sb: any, body: any, unidadeId: string, escrever: boolean) {
   const lead = body?.lead ?? {};
   const emusysLeadId = lead?.id ? Number(lead.id) : null;
   if (!emusysLeadId) return { acao: 'ignorado', motivo: 'sem lead.id' };
@@ -299,7 +376,7 @@ async function processarLead(sb: any, body: any, unidadeId: string) {
     p_data_contato: String(lead?.data_hora_criacao ?? '').trim().substring(0, 10) || null,
   };
 
-  if (DRY_RUN) {
+  if (!escrever) {
     const achado = await previewLead(sb, unidadeId, emusysLeadId, telefone);
     return { acao: `upsert_lead(dry) -> ${achado.lead_id ? 'update' : 'insert'}`, match: achado, args };
   }
@@ -312,7 +389,26 @@ async function processarLead(sb: any, body: any, unidadeId: string) {
   return { acao: 'upsert_lead', resultado: data, delta_observador: delta, args };
 }
 
-async function processarExperimental(sb: any, body: any, unidadeId: string, evento: string) {
+/** `observacoes` chega em 100% dos payloads de experimental (preenchida em ~70%) e hoje é
+ *  descartada pelos dois lados: a `registrar_experimental` não tem parâmetro para ela,
+ *  embora `lead_experimentais` TENHA a coluna — que está 0 de 311 preenchida.
+ *
+ *  Gravamos como delta DEPOIS da RPC, em vez de mudar a RPC: ela é compartilhada com o
+ *  n8n e ganhar um parâmetro novo mexeria num objeto com consumidor ativo em produção.
+ *  Só preenche quando está vazia — nunca sobrescreve o que já existir. */
+async function aplicarDeltaExperimental(sb: any, expId: number, observacoes: string | null) {
+  if (!expId || !observacoes) return null;
+  const { data: atual } = await sb
+    .from('lead_experimentais')
+    .select('observacoes')
+    .eq('id', expId)
+    .maybeSingle();
+  if (atual && String(atual.observacoes ?? '').trim()) return { observacoes: 'preservada (ja tinha)' };
+  await sb.from('lead_experimentais').update({ observacoes }).eq('id', expId);
+  return { observacoes };
+}
+
+async function processarExperimental(sb: any, body: any, unidadeId: string, evento: string, escrever: boolean) {
   const aula = body?.aula ?? {};
   const cancelamento = evento === 'aula_experimental_cancelada';
   const telefone = normalizarTelefone(aula?.telefone);
@@ -326,6 +422,9 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
   const professor = cancelamento
     ? { id: null, via: 'nao_se_aplica' }
     : await resolverProfessor(sb, aula, unidadeId);
+
+  // Cancelamento não traz curso nem observações no payload — nada a preservar.
+  const observacoes = cancelamento ? null : textoOuNulo(aula?.observacoes);
 
   // Mesmos argumentos do nó "Agendar Experimental"/"Cancelar Experimental" do n8n.
   const args: Record<string, unknown> = {
@@ -345,7 +444,7 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
   // omitir p_created_at deixa a RPC aplicar o default now(), como o n8n faz com ''
   if (criadoEm) args.p_created_at = criadoEm;
 
-  if (DRY_RUN) {
+  if (!escrever) {
     const achado = await previewLeadExperimental(sb, unidadeId, emusysLeadId, telefone, nomeAluno);
     const cursoId = cancelamento ? null : await previewCurso(sb, aula?.curso);
     return {
@@ -353,18 +452,37 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
       match: achado,
       professor_via: professor.via,
       curso_id_previsto: cursoId,
+      observacoes_a_gravar: observacoes,
       args,
     };
   }
 
   const { data, error } = await sb.rpc('registrar_experimental', args);
   if (error) return { acao: 'erro_rpc', rpc: 'registrar_experimental', erro: error.message, args };
-  return { acao: 'registrar_experimental', resultado: data, professor_via: professor.via, args };
+
+  // Delta: só o que a RPC não conhece. Nunca bloqueia o resultado principal.
+  let delta: unknown = null;
+  const expId = data?.experimental_id ?? null;
+  if (expId && observacoes) {
+    try {
+      delta = await aplicarDeltaExperimental(sb, Number(expId), observacoes);
+    } catch (e: any) {
+      delta = { erro_delta: String(e?.message ?? e) };
+    }
+  }
+
+  return {
+    acao: 'registrar_experimental',
+    resultado: data,
+    professor_via: professor.via,
+    delta_observador: delta,
+    args,
+  };
 }
 
 /** Espelha o nó "Arquivar Lead no Supabase" do n8n: UPDATE direto (sem RPC), casando
  *  por unidade + status ainda não terminal + (emusys_lead_id OU telefone). */
-async function processarArquivamento(sb: any, body: any, unidadeId: string) {
+async function processarArquivamento(sb: any, body: any, unidadeId: string, escrever: boolean) {
   const lead = body?.lead ?? {};
   const emusysLeadId = lead?.id ? Number(lead.id) : null;
   const telefone = normalizarTelefone(lead?.telefone);
@@ -383,7 +501,7 @@ async function processarArquivamento(sb: any, body: any, unidadeId: string) {
   if (telefone) ors.push(`telefone.eq.${telefone}`);
   const args = { emusys_lead_id: emusysLeadId, telefone, motivo, data_arquivamento: dataArquivamento };
 
-  if (DRY_RUN) {
+  if (!escrever) {
     const { data } = await sb
       .from('leads')
       .select('id, nome, status')
@@ -427,6 +545,16 @@ const EVENTOS_ARQUIVAMENTO = ['lead_arquivado'];
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
+  // (0) TOKEN — só barra quando OBSERVADOR_TOKEN está configurado. Enquanto não estiver,
+  // nada muda. Rejeição não grava payload (senão vira vetor de flood no log).
+  if (!autorizado(req)) {
+    console.warn('[observador] requisição sem token válido rejeitada');
+    return new Response(JSON.stringify({ status: 'nao_autorizado' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   let body: any = null;
   let rawText = '';
   try {
@@ -460,31 +588,53 @@ serve(async (req: Request) => {
   const ehArquivamento = EVENTOS_ARQUIVAMENTO.indexOf(evento) >= 0;
 
   if (ehLead || ehExp || ehArquivamento) {
-    let resultado: unknown = null;
-    let acao = DRY_RUN ? 'processado_sombra' : 'processado';
+    let resultado: any = null;
+    const escrever = escreveDeVerdade(evento);
+    let acao = escrever ? 'processado' : 'processado_sombra';
     try {
       const unidadeId = await resolverUnidade(supabase, body);
       if (!unidadeId) {
         resultado = { acao: 'ignorado', motivo: 'unidade nao resolvida', escola: body?.escola_nome ?? null };
       } else if (ehLead) {
-        resultado = await processarLead(supabase, body, unidadeId);
+        resultado = await processarLead(supabase, body, unidadeId, escrever);
       } else if (ehExp) {
-        resultado = await processarExperimental(supabase, body, unidadeId, evento);
+        resultado = await processarExperimental(supabase, body, unidadeId, evento, escrever);
       } else {
-        resultado = await processarArquivamento(supabase, body, unidadeId);
+        resultado = await processarArquivamento(supabase, body, unidadeId, escrever);
       }
     } catch (e: any) {
       acao = 'erro_processamento';
       resultado = { erro: String(e?.message ?? e) };
       console.error('[observador/worker] falha ao processar:', e?.message ?? e);
     }
+    // `status` alimenta o filtro da tela de Automações. Em sombra fica sempre 'ok'
+    // (não escreveu, não há o que alertar); escrevendo de verdade, falha vira 'erro' e
+    // "não achei em quem escrever" vira 'warn' — senão sumiria no meio do log.
+    const acaoInterna = String(resultado?.acao ?? '');
+    // ⚠️ Na escrita real o "não achei o lead" NÃO vem em `acao` — vem dentro do retorno
+    // da RPC (`{success:false, reason:'lead_not_found'}`). A 1ª versão só olhava `acao`,
+    // que é o formato do modo sombra, e deixava passar como 'ok' justamente o caso que
+    // este campo existe para denunciar. Pego no smoke test do deploy (04/08).
+    const rpcRecusou = resultado?.resultado != null
+      && typeof resultado.resultado === 'object'
+      && resultado.resultado.success === false;
+    let status: 'ok' | 'warn' | 'erro' = 'ok';
+    if (acao === 'erro_processamento' || acaoInterna.indexOf('erro_') === 0) {
+      status = 'erro';
+    } else if (escrever && (acaoInterna === 'ignorado' || acaoInterna.indexOf('lead_not_found') >= 0 || rpcRecusou)) {
+      status = 'warn';
+    }
+
     try {
       await supabase.from('automacao_log').insert({
         evento,
         acao,
+        status,
         aluno_nome: extrairNome(body),
         unidade_nome: extrairUnidade(body),
-        detalhes: resultado,
+        detalhes: resultado && typeof resultado === 'object'
+          ? { ...resultado, modo: escrever ? 'escrita' : 'sombra' }
+          : resultado,
         workflow_id: 'observador-worker',
         execution_id: new Date().toISOString(),
         idempotency_key: body?.id != null ? String(body.id) : null,
