@@ -118,3 +118,64 @@ estado imediato da tela e o aviso diário é intencional e aceita.
 - piloto: deverá usar exclusivamente o destino governado do Alf;
 - activation migration: só será criada depois do aceite explícito do piloto;
 - follow-up automático à família: fora de escopo e sem implementação.
+
+## Gate A — migration estrutural em produção
+
+Executado em 03/08/2026, aproximadamente 20:40 BRT, no projeto
+`ouqwbbermlzqqvtqwlul`.
+
+- arquivo aplicado:
+  `supabase/migrations/20260804090000_lia_followup_72h_fase_b.sql`;
+- SHA-256 conferido antes da aplicação:
+  `f96edb6492ba8845e4f61576524f064b7acbb9fcc505c2b4a3dc81ba0bedd21c`;
+- registro remoto criado como versão `20260803234012`, nome
+  `20260804090000_lia_followup_72h_fase_b`;
+- `alertas_producao_liberados=true` permaneceu inalterado;
+- `followup_72h_liberado=false`, conforme o gate de contenção;
+- Ezequiel FernandoFerreira de almeida permaneceu em
+  `aguardando_resposta`, sem interação, resposta válida, opt-out ou follow-up
+  pendente; vencimento calculado em 06/08/2026 10:55:54 BRT;
+- contagens pós-migration: `0` ações manuais, `0` resumos, `0` itens e `0`
+  entregas de follow-up na outbox;
+- as cinco entregas preexistentes da Fase A permaneceram `enviado`, todas com
+  `provider_message_id`, sem falha e sem associação a resumo de follow-up;
+- o cron `lia-alertas-privados-dispatcher-minuto` permaneceu ativo a cada
+  minuto e a primeira execução observada após a migration terminou
+  `succeeded`;
+- nenhum deploy de Edge ou frontend e nenhum envio de WhatsApp foi realizado
+  neste gate.
+
+Gate B não iniciado; aguarda confirmação explícita do Alf.
+
+## Gate B — Edge compatível
+
+Iniciado em 03/08/2026, aproximadamente 20:45 BRT.
+
+- a versão publicada antes do gate era a `v3`, com `verify_jwt=true`, e
+  correspondia exatamente ao pacote da Fase A;
+- o diff publicado adicionou somente a chamada best effort do produtor
+  `produzir_lia_resumos_followup_72h` no ciclo automático e o tipo
+  `followup_3d_resumo`; `webhook-whatsapp-inbox` não entrou no pacote;
+- testes imediatamente anteriores ao deploy: `15` testes Deno e `5` testes
+  Node aprovados, além de `deno check` verde;
+- `processar-alertas-lia` foi publicada como `v4`, `verify_jwt=true`, digest
+  remoto `42e2758377bf923dc828a352fbecf5d3efdccce181bd774b817a83cb6a01d432`;
+- matriz ao vivo: anônimo `401`, JWT inválido `401`, usuário comum `403` com
+  `service_role_required`, e service role deste projeto `200` com
+  `sem_pendencia`;
+- o produtor retornou `(0,0)`, `followup_72h_liberado` permaneceu `false` e
+  continuaram existindo `0` resumos e `0` entregas de follow-up;
+- as execuções do cron sobre a `v4` retornaram `sem_pendencia`, sem log de erro
+  do produtor ou do dispatcher;
+- foi criado um alerta controlado da Fase A na pesquisa de teste, destinatário
+  governado `usuarios.id=2`, final `8047`, caixa 3, ambiente `teste`;
+- às 20:48 BRT a janela aprovada de 08h às 20h já estava fechada. O dispatcher
+  preservou corretamente a contenção: alerta
+  `9c04dabb-a768-4ea7-b64f-3d5daffa771b` ficou `pendente`, com `0` tentativas e
+  sem `provider_message_id`; nenhuma entrega foi criada para Jéssica ou Fabi;
+- nenhuma alteração foi feita no webhook inbound ou no frontend.
+
+O Alf aceitou o Gate B com a contenção da janela como comportamento correto.
+A prova física da entrega ficou programada para a reabertura das 08h BRT e
+passou a ser pré-condição do Gate D, não do deploy exclusivamente visual do
+Gate C. Não houve bypass da janela.
