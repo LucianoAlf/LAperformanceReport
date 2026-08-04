@@ -218,6 +218,23 @@ As 15 pesquisas produtivas que, no baseline de 04/08, já haviam sido enviadas
 entre 25,6 e 32,7 dias após a saída permanecem válidas e intocadas. D+1 só
 governa novas tentativas; não há atualização retroativa de linhas existentes.
 
+### Evidência de aplicação do D+1 — 04/08/2026
+
+O gate foi aplicado com a Edge `enviar-pesquisa-evasao` na versão 48, com
+`verify_jwt=true`, antes da migration. O checkout descartável
+`D:\\2026\\.codex-gate-c-d1-20260804`, montado somente a partir de
+`supabase migration fetch`, teve dry-run contendo exclusivamente
+`20260804233000_pesquisa_evasao_subprojeto_c_d1.sql`. A migration foi aplicada
+por `supabase db push`; a versão registrada em produção é exatamente
+`20260804233000`.
+
+Postflight: as 15 pesquisas produtivas já enviadas permaneceram com os mesmos
+`evasao_id`; todas as 15 saídas de julho continuam elegíveis pelo gate
+server-side. Seis saídas válidas lançadas em 04/08 aparecem como
+`aguardando_d1`, com liberação em 05/08 às 10:00 BRT. Não houve cron, update
+retroativo de `pesquisa_evasao` ou disparo automático de pesquisa. O checkout
+temporário foi removido após a verificação.
+
 Parar e reportar antes do Gate D.
 
 ## Gate D — frontend
