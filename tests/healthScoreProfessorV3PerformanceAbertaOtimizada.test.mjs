@@ -53,7 +53,7 @@ test('read model de performance tem margem de timeout somente na RPC critica', (
   );
 });
 
-test('consultas consolidadas repartem a leitura canonica por unidade, sem chamar a RPC pesada com escopo nulo', () => {
+test('consultas consolidadas repartem a leitura canonica por unidade de forma controlada, sem concorrencia que estoure o timeout', () => {
   const performanceHook = fs.readFileSync(
     path.join(root, 'src/hooks/useHealthScoreProfessorV3Performance.ts'),
     'utf8',
@@ -64,7 +64,9 @@ test('consultas consolidadas repartem a leitura canonica por unidade, sem chamar
   );
 
   assert.match(performanceHook, /from\('unidades'\)[\s\S]{0,240}eq\('ativo',\s*true\)/i);
-  assert.match(performanceHook, /Promise\.all[\s\S]{0,320}consultarUnidade\(String\(unidade\.id\)\)/i);
+  assert.match(performanceHook, /for\s*\(const\s+unidade\s+of\s+unidades\s*\|\|\s*\[\]\)/i);
+  assert.doesNotMatch(performanceHook, /Promise\.all[\s\S]{0,320}consultarUnidade\(String\(unidade\.id\)\)/i);
   assert.match(kpisVivos, /from\('unidades'\)[\s\S]{0,240}eq\('ativo',\s*true\)/i);
-  assert.match(kpisVivos, /Promise\.all[\s\S]{0,320}consultarUnidade\(String\(unidade\.id\)\)/i);
+  assert.match(kpisVivos, /for\s*\(const\s+unidade\s+of\s+unidades\s*\|\|\s*\[\]\)/i);
+  assert.doesNotMatch(kpisVivos, /Promise\.all[\s\S]{0,320}consultarUnidade\(String\(unidade\.id\)\)/i);
 });
