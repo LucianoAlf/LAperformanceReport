@@ -9,6 +9,10 @@ const migrationPath = resolve(
   root,
   'supabase/migrations/20260804220000_pesquisa_evasao_subprojeto_c_schema.sql',
 );
+const cutoverPath = resolve(
+  root,
+  'supabase/migrations/20260804230000_pesquisa_evasao_subprojeto_c_cutover_legado.sql',
+);
 const read = (path) => existsSync(path) ? readFileSync(path, 'utf8') : '';
 
 test('classificacao e desfecho sao versionados e append-only', () => {
@@ -60,4 +64,15 @@ test('schema fecha taxonomia e coerencia basica das acoes', () => {
   assert.match(sql, /estado in \('pendente', 'realizada', 'cancelada'\)/i);
   assert.match(sql, /classificacao_evasao_id uuid/i);
   assert.match(sql, /professor_id integer references public\.professores\(id\)/i);
+});
+
+test('cutover desliga escritor legado sem apagar ou promover dados antigos', () => {
+  const sql = read(cutoverPath);
+  assert.ok(sql, 'migration de cutover legado ainda nao existe');
+  assert.match(
+    sql,
+    /revoke\s+execute\s+on\s+function\s+public\.classificar_resposta_evasao\s*\(\s*uuid\s*,\s*text\s*\)\s+from[\s\S]*authenticated/i,
+  );
+  assert.doesNotMatch(sql, /drop\s+column[\s\S]*(categoria_resposta|sentimento)/i);
+  assert.doesNotMatch(sql, /update\s+public\.pesquisa_evasao/i);
 });
