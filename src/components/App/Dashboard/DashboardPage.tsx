@@ -49,6 +49,10 @@ import {
   calcularTotaisKpisProfessoresCanonicos,
 } from '@/lib/professoresKpisCanonicos';
 import {
+  buscarKpisTurmasCanonicos,
+  calcularTotaisKpisTurmasCanonicos,
+} from '@/lib/turmasKpisCanonicos';
+import {
   chaveProfessorUnidade,
   filtrarKpisPorVinculosAtivos,
 } from '@/lib/professoresKpisAgregados';
@@ -96,7 +100,7 @@ interface DadosProfessores {
   total_professores: number;
   media_alunos_professor: number;
   taxa_renovacao: number;
-  media_alunos_turma: number;
+  media_alunos_turma: number | null;
   professores_ativos_ids: number[];
 }
 
@@ -558,7 +562,7 @@ export function DashboardPage() {
         const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
         const ultimoDia = new Date(ano, mesFim, 0).getDate();
         const endDate = `${ano}-${String(mesFim).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
-        const [profsR, profUnidR, kpisProfessores] = await Promise.all([
+        const [profsR, profUnidR, kpisProfessores, kpisTurmas] = await Promise.all([
           supabase.from('professores').select('id, nome, ativo').eq('ativo', true),
           supabase
             .from('professores_unidades')
@@ -571,6 +575,16 @@ export function DashboardPage() {
             unidadeId: unidade,
             dataInicio: startDate,
             dataFim: endDate,
+          }),
+          buscarKpisTurmasCanonicos({
+            ano,
+            mes: mesInicio,
+            unidadeId: unidade,
+            dataInicio: startDate,
+            dataFim: endDate,
+          }).catch((error) => {
+            console.error('Erro ao buscar média canônica de alunos por turma no Dashboard:', error);
+            return null;
           }),
         ]);
 
@@ -596,6 +610,9 @@ export function DashboardPage() {
           vinculosAtivos,
         );
         const totaisProfessores = calcularTotaisKpisProfessoresCanonicos(kpisProfessoresAtivos);
+        const totaisTurmas = kpisTurmas
+          ? calcularTotaisKpisTurmasCanonicos(kpisTurmas)
+          : null;
         const totalProfs = professoresRelacionados.size || totaisProfessores.totalProfessores;
 
         setDadosProfessores({
@@ -604,7 +621,7 @@ export function DashboardPage() {
             ? Math.round((totaisProfessores.carteiraAlunos / totalProfs) * 10) / 10
             : 0,
           taxa_renovacao: totaisProfessores.taxaRenovacao,
-          media_alunos_turma: Math.round(totaisProfessores.mediaAlunosTurma * 10) / 10,
+          media_alunos_turma: totaisTurmas?.mediaAlunosTurma ?? null,
           professores_ativos_ids: Array.from(professoresRelacionados),
         });
 
@@ -947,9 +964,15 @@ export function DashboardPage() {
             icon={Target}
             label="Média Alunos/Turma"
             tooltip="Ocupações canônicas em turmas regulares divididas pelas turmas regulares elegíveis. Projetos e bandas não entram."
-            value={dadosProfessores?.media_alunos_turma ?? '--'}
-            format="number"
-            subvalue={dadosProfessores ? 'Fonte canônica do período' : 'Aguardando Emusys'}
+            value={dadosProfessores?.media_alunos_turma === null || !dadosProfessores
+              ? '--'
+              : dadosProfessores.media_alunos_turma.toLocaleString('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            subvalue={dadosProfessores?.media_alunos_turma === null || !dadosProfessores
+              ? 'Fonte canônica indisponível'
+              : competencia?.range?.label}
             variant="rose"
           />
           <KPICard
