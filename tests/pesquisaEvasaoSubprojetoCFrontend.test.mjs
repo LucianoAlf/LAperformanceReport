@@ -71,3 +71,30 @@ test('pesquisa de teste fica explicitamente fora dos indicadores', () => {
   assert.match(conversa, /Teste não gera classificação, ação ou indicador\./);
   assert.match(conversa, /ClassificacaoPesquisaEvasao/);
 });
+
+test('aba Respostas usa analytics multirrotulo somente leitura', () => {
+  const hook = read(resolve(
+    root,
+    'src/components/App/SucessoCliente/hooks/useRespostasEvasao.ts',
+  ));
+  const tab = read(resolve(
+    root,
+    'src/components/App/SucessoCliente/RespostasEvasaoTab.tsx',
+  ));
+  const analytics = read(resolve(root, 'src/lib/pesquisaEvasao.ts'));
+  assert.match(hook, /listar_respostas_evasao_analytics_v1/);
+  assert.doesNotMatch(hook, /classificar_resposta_evasao/);
+  assert.doesNotMatch(`${hook}\n${tab}\n${analytics}`, /categoria_resposta/);
+  assert.doesNotMatch(tab, /Tema declarado/);
+  assert.match(tab, /Causas relatadas/);
+  assert.match(tab, /Relação com o motivo registrado/);
+  assert.match(tab, /percentuais podem somar mais de 100%/i);
+  assert.match(tab, /amostra/i);
+  for (const estado of [
+    'aguardando_revisao_textual',
+    'aguardando_classificacao',
+    'acao_pendente',
+    'em_acompanhamento',
+    'encerrado',
+  ]) assert.match(`${hook}\n${tab}`, new RegExp(estado));
+});
