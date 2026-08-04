@@ -59,8 +59,34 @@ O `db push --dry-run` não chegou a listar migrations aplicáveis: tanto o CLI
 temporário foi destruído após a prova, e produção permaneceu sem as tabelas,
 funções ou alterações de ACL do Subprojeto C.
 
-O Gate A permanece bloqueado até a dívida dessas duas versões ser resolvida de
-forma explícita. Não renomear arquivos nem fabricar versões locais como atalho.
+O bloqueio foi resolvido em 04/08/2026 por normalização transacional das duas
+versões curtas para `20260626000000` e `20260627000000`, preservando nomes e
+hashes. `000000` é uma normalização determinística de versão que continha
+apenas a data, não um horário histórico de execução. Não houve reaplicação de
+DDL, `migration repair` ou uso de MCP para migrations.
+
+### Evidência de aplicação do Gate A — 04/08/2026
+
+O checkout descartável `D:\2026\.codex-gate-c-a-correcao-20260804`, montado a
+partir de `supabase migration fetch`, foi usado somente para os `db push`.
+Cada dry-run listou apenas a migration do respectivo passo. Foram aplicadas:
+
+1. `20260804220000_pesquisa_evasao_subprojeto_c_schema.sql`;
+2. `20260804223000_pesquisa_evasao_subprojeto_c_rpcs.sql`;
+3. `20260804231000_pesquisa_evasao_subprojeto_c_gate_a_correcao.sql`;
+4. `20260804232000_pesquisa_evasao_subprojeto_c_gate_a_correcao_tipos.sql`.
+
+As duas corretivas foram necessárias porque a RPC analítica declarava retornos
+`text` para três fontes `varchar`: `unidades.nome`, `motivos_saida.categoria`
+e `pesquisa_evasao.resposta_tipo`. A prova em PostgreSQL real executou a RPC
+com JWT autenticado e retornou `1` caso em `aguardando_classificacao` (rótulo
+da tela: **A classificar**) sem escrita de classificação.
+
+O varrimento de toda a árvore de `pesquisa_evasao`, `whatsapp_caixas`, tabelas
+da Lia, `webhook_debug_log` e tabelas novas do C retornou zero grants de
+`INSERT`, `UPDATE`, `DELETE`, `TRUNCATE` ou `TRIGGER` para `anon` e
+`authenticated`. O cron da Lia permaneceu ativo e com última execução bem
+sucedida. Gate B continua exigindo autorização separada.
 
 ## Pré-flight e baseline
 
@@ -127,13 +153,17 @@ Autorização separada obrigatória.
 Aplicar, por `db push`, somente:
 
 1. `20260804220000_pesquisa_evasao_subprojeto_c_schema.sql`;
-2. `20260804223000_pesquisa_evasao_subprojeto_c_rpcs.sql`.
+2. `20260804223000_pesquisa_evasao_subprojeto_c_rpcs.sql`;
+3. `20260804231000_pesquisa_evasao_subprojeto_c_gate_a_correcao.sql`;
+4. `20260804232000_pesquisa_evasao_subprojeto_c_gate_a_correcao_tipos.sql`.
 
 Verificar:
 
 - tabelas de classificação, categorias e desfechos presentes;
 - colunas governadas em `aluno_acoes` presentes;
 - escrita direta de `aluno_acoes` fechada para `authenticated`;
+- nenhum `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE` ou `TRIGGER` para papel de
+  cliente nas superfícies auditadas;
 - leitura interna preservada;
 - RPCs com execução apenas para os papéis previstos;
 - zero classificação, ação ou desfecho criado pela migration;
