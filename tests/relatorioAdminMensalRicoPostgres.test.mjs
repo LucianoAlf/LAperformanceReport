@@ -17,6 +17,13 @@ const retificacaoPath = path.join(
 const retificacao = fs.existsSync(retificacaoPath)
   ? fs.readFileSync(retificacaoPath, 'utf8')
   : '';
+const renovacoesAtividadesExtrasPath = path.join(
+  root,
+  'supabase/migrations/20260804190000_relatorio_admin_mensal_excluir_atividades_extras_renovacoes.sql',
+);
+const renovacoesAtividadesExtras = fs.existsSync(renovacoesAtividadesExtrasPath)
+  ? fs.readFileSync(renovacoesAtividadesExtrasPath, 'utf8')
+  : '';
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -54,6 +61,11 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
     retificacao,
     '',
     'migration de retificacao auditada de trancamento mensal ainda nao existe',
+  );
+  assert.notEqual(
+    renovacoesAtividadesExtras,
+    '',
+    'migration para excluir atividades extras das renovacoes mensais ainda nao existe',
   );
 
   const versao = docker(['version', '--format', '{{.Server.Version}}']);
@@ -135,6 +147,9 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
       create function public.pode_gerar_relatorio_admin_v1(p_unidade_id uuid)
       returns boolean language sql stable as $$ select true $$;
 
+      create function public.is_movimentacao_admin_retencao_valida(p_movimentacao_id integer)
+      returns boolean language sql stable as $$ select p_movimentacao_id <> 9002 $$;
+
       create function public.montar_relatorio_admin_mensal_payload_v1(
         p_unidade_id uuid,
         p_ano integer,
@@ -142,7 +157,11 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
       ) returns jsonb language sql stable as $$
         select jsonb_build_object(
           'capturado_em', '2026-08-01T00:00:00Z',
-          'resumo', '{}'::jsonb,
+          'resumo', jsonb_build_object('renovacoes_realizadas', 1),
+          'renovacoes', jsonb_build_array(
+            jsonb_build_object('id', 9001, 'aluno_nome', 'Renovacao valida'),
+            jsonb_build_object('id', 9002, 'aluno_nome', 'Atividade extra')
+          ),
           'evasoes', jsonb_build_array(jsonb_build_object('id', 3361, 'tipo_evasao', null))
         )
       $$;
@@ -157,6 +176,13 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
       retificacaoAplicada.status,
       0,
       retificacaoAplicada.stderr || retificacaoAplicada.stdout,
+    );
+
+    const renovacoesAtividadesExtrasAplicada = psql(container, renovacoesAtividadesExtras);
+    assert.equal(
+      renovacoesAtividadesExtrasAplicada.status,
+      0,
+      renovacoesAtividadesExtrasAplicada.stderr || renovacoesAtividadesExtrasAplicada.stdout,
     );
 
     const unidade = '11111111-1111-1111-1111-111111111111';
@@ -196,7 +222,11 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
             'matriculas_trancadas', 3,
             'nao_renovacoes', 2,
             'evasoes', 7,
-            'renovacoes_realizadas', 23
+            'renovacoes_realizadas', 1
+          ),
+          'renovacoes', jsonb_build_array(
+            jsonb_build_object('id', 9001, 'aluno_nome', 'Renovacao valida'),
+            jsonb_build_object('id', 9002, 'aluno_nome', 'Atividade extra')
           ),
           'trancamentos_detalhados', jsonb_build_object(
             'total_alunos', 3,
@@ -302,7 +332,10 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
         'davi_presente', (resultado#>'{payload,trancamentos_detalhados,itens}') @> '[{"aluno_nome":"Davi Lima Queiroz"}]'::jsonb,
         'snapshots', (select count(*) from public.fechamento_mensal_snapshots),
         'wrapper_futuro', public.montar_relatorio_admin_mensal_payload_v1('${unidade}', 2026, 7)#>>'{resumo,trancamentos_periodo}',
-        'wrapper_tipo_evasao', public.montar_relatorio_admin_mensal_payload_v1('${unidade}', 2026, 7)#>>'{evasoes,0,tipo_evasao}'
+        'wrapper_tipo_evasao', public.montar_relatorio_admin_mensal_payload_v1('${unidade}', 2026, 7)#>>'{evasoes,0,tipo_evasao}',
+        'renovacoes_validas', jsonb_array_length(resultado#>'{payload,renovacoes}'),
+        'renovacao_id', resultado#>>'{payload,renovacoes,0,id}',
+        'wrapper_renovacoes_validas', jsonb_array_length(public.montar_relatorio_admin_mensal_payload_v1('${unidade}', 2026, 7)->'renovacoes')
       )
       from (select public.get_relatorio_admin_mensal_rico_v1('${unidade}', 2026, 7) resultado) q;
     `);
@@ -321,6 +354,9 @@ test('RPC mensal administrativa compila e le o fechamento sem altera-lo', { time
       snapshots: 3,
       wrapper_futuro: '3',
       wrapper_tipo_evasao: 'interrompido_bolsista',
+      renovacoes_validas: 1,
+      renovacao_id: '9001',
+      wrapper_renovacoes_validas: 1,
     });
   } finally {
     docker(['rm', '--force', container]);
