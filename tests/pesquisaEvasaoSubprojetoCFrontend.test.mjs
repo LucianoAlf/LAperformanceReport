@@ -47,3 +47,27 @@ test('hook recarrega apos sucesso e nao faz atualizacao otimista', () => {
   assert.match(hook, /if \(error\) return \{ ok: false as const, erro: error \}/);
   assert.doesNotMatch(hook, /setDados\([^)]*entrada/);
 });
+
+test('conversa torna classificacao, acoes e historico visiveis', () => {
+  const source = `${read(paths.classificacao)}\n${read(paths.acoes)}`;
+  for (const rotulo of [
+    'Transformar resposta em dado',
+    'Motivo registrado',
+    'A classificar',
+    'Conteúdo novo — reclassificar',
+    'Criar ação',
+    'Registrar desfecho',
+    'Versões anteriores',
+  ]) assert.match(source, new RegExp(rotulo));
+  assert.match(source, /type="checkbox"/);
+  assert.doesNotMatch(source, /categoria_resposta/);
+});
+
+test('pesquisa de teste fica explicitamente fora dos indicadores', () => {
+  const conversa = read(resolve(
+    root,
+    'src/components/App/SucessoCliente/ConversaPesquisaEvasao.tsx',
+  ));
+  assert.match(conversa, /Teste não gera classificação, ação ou indicador\./);
+  assert.match(conversa, /ClassificacaoPesquisaEvasao/);
+});
