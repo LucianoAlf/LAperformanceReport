@@ -10,6 +10,11 @@ const migrationPath = resolve(
   'supabase/migrations/20260804223000_pesquisa_evasao_subprojeto_c_rpcs.sql',
 );
 const sql = existsSync(migrationPath) ? readFileSync(migrationPath, 'utf8') : '';
+const correcaoPath = resolve(
+  root,
+  'supabase/migrations/20260804231000_pesquisa_evasao_subprojeto_c_gate_a_correcao.sql',
+);
+const correcaoSql = existsSync(correcaoPath) ? readFileSync(correcaoPath, 'utf8') : '';
 
 test('migration cria os contratos versionados de classificacao e analytics', () => {
   assert.ok(sql, 'migration de RPCs do Subprojeto C ainda nao existe');
@@ -75,6 +80,13 @@ test('conclusao de acao e desfecho preservam auditoria e append-only', () => {
   assert.match(sql, /concluida_por_auth_user_id\s*=\s*auth\.uid\(\)/i);
   assert.match(sql, /select id into v_anterior[\s\S]*pesquisa_evasao_desfechos/i);
   assert.doesNotMatch(sql, /update\s+public\.pesquisa_evasao_desfechos/i);
+});
+
+test('correcao do Gate A alinha o tipo da RPC e fecha privilegios destrutivos de cliente', () => {
+  assert.ok(correcaoSql, 'migration corretiva do Gate A ainda nao existe');
+  assert.match(correcaoSql, /u\.nome::text/i);
+  assert.match(correcaoSql, /revoke truncate, trigger on table/i);
+  assert.match(correcaoSql, /webhook_debug_log[\s\S]*from public, anon, authenticated/i);
 });
 
 test('fixture do Subprojeto C passa em PostgreSQL 17 isolado', {

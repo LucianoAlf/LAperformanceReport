@@ -32,7 +32,7 @@ create table public.usuarios (
 );
 create table public.unidades (
   id uuid primary key,
-  nome text not null
+  nome varchar(100) not null
 );
 create table public.alunos (id integer primary key);
 create table public.professores (
@@ -97,6 +97,15 @@ create table public.aluno_acoes (
     tipo in ('ligacao', 'whatsapp', 'reuniao', 'observacao', 'plano_ia', 'email', 'visita')
   )
 );
+create table public.webhook_debug_log (
+  id bigint generated always as identity primary key,
+  payload jsonb not null default '{}'::jsonb
+);
+
+-- Reproduz os grants residuais observados em producao antes da correcao.
+grant references, trigger, truncate on table public.aluno_acoes to anon, authenticated;
+grant insert, update, delete, references, trigger, truncate
+  on table public.webhook_debug_log to anon, authenticated;
 
 create function public.fn_pesquisa_evasao_usuario_interno_ativo()
 returns boolean
@@ -147,9 +156,37 @@ insert into public.pesquisa_evasao_analises (
 
 \ir ../../supabase/migrations/20260804220000_pesquisa_evasao_subprojeto_c_schema.sql
 \ir ../../supabase/migrations/20260804223000_pesquisa_evasao_subprojeto_c_rpcs.sql
+\ir ../../supabase/migrations/20260804231000_pesquisa_evasao_subprojeto_c_gate_a_correcao.sql
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
+
+-- Exercita a RPC em PostgreSQL real. `unidades.nome` e varchar no schema
+-- canônico, enquanto a assinatura da RPC expõe unidade_nome como text.
+do $$
+declare
+  v_estado text;
+begin
+  select estado_operacional into strict v_estado
+  from public.listar_respostas_evasao_analytics_v1()
+  where pesquisa_id = '20000000-0000-0000-0000-000000000001';
+
+  if v_estado <> 'aguardando_classificacao' then
+    raise exception 'estado analitico esperado aguardando_classificacao, recebido %', v_estado;
+  end if;
+end
+$$;
+
+do $$
+begin
+  if has_table_privilege('anon', 'public.aluno_acoes', 'TRUNCATE')
+     or has_table_privilege('authenticated', 'public.aluno_acoes', 'TRIGGER')
+     or has_table_privilege('anon', 'public.webhook_debug_log', 'INSERT')
+     or has_table_privilege('authenticated', 'public.webhook_debug_log', 'TRUNCATE') then
+    raise exception 'cliente ainda possui privilegio destrutivo em superficie protegida';
+  end if;
+end
+$$;
 
 do $$
 begin
