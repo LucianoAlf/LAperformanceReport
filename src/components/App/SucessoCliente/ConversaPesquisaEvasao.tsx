@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/useToast';
+import { ClassificacaoPesquisaEvasao } from './ClassificacaoPesquisaEvasao';
 import type {
   PesquisaEvasaoConversa,
   PesquisaEvasaoRodada,
@@ -271,6 +272,17 @@ export function ConversaPesquisaEvasao({ pesquisaId, onAlteracao }: Props) {
           </section>
         );
       })}
+
+      {conversa.modo_teste ? (
+        <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-sm text-amber-200">
+          Teste não gera classificação, ação ou indicador.
+        </div>
+      ) : conversa.rodadas.some((rodada) => rodada.status === 'revisada') ? (
+        <ClassificacaoPesquisaEvasao
+          pesquisaId={pesquisaId}
+          onAlteracao={onAlteracao}
+        />
+      ) : null}
     </div>
   );
 }

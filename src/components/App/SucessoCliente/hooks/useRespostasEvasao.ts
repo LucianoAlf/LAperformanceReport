@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
+import type {
+  PesquisaEvasaoCategoria,
+  PesquisaEvasaoDesfecho,
+  PesquisaEvasaoRelacaoMotivo,
+} from '../pesquisaEvasao.types';
+
+export type PesquisaEvasaoEstadoOperacional =
+  | 'aguardando_revisao_textual'
+  | 'aguardando_classificacao'
+  | 'acao_pendente'
+  | 'em_acompanhamento'
+  | 'encerrado';
 
 export interface RespostaEvasaoLinha {
   pesquisa_id: string;
@@ -13,28 +25,30 @@ export interface RespostaEvasaoLinha {
   data_evasao: string;
   tempo_permanencia_meses: number | null;
   motivo_cadastrado: string | null;
-  /** `categoria` do catalogo motivos_saida. Pode ser null — "Saúde" nao tem. */
   motivo_categoria: string | null;
-  /** Se o motivo REGISTRADO penaliza o professor no score (3 dos 16 penalizam). */
   motivo_conta_score: boolean;
-  categoria_resposta: string | null;
   resposta_texto: string | null;
   resposta_tipo: string | null;
   tem_audio: boolean;
   transcrita: boolean;
-  /** Passou pela fila de revisao. Em 03/08/2026 nenhuma passou ainda. */
-  revisada: boolean;
   respondido_em: string | null;
   enviado_em: string | null;
+  analise_id: string | null;
+  analise_versao: number | null;
+  analise_status: string | null;
+  classificacao_id: string | null;
+  classificacao_versao: number | null;
+  categorias: PesquisaEvasaoCategoria[];
+  relacao_motivo: PesquisaEvasaoRelacaoMotivo | null;
+  justificativa: string | null;
+  classificacao_desatualizada: boolean;
+  total_acoes: number;
+  acoes_pendentes: number;
+  desfecho_atual: PesquisaEvasaoDesfecho | null;
+  estado_operacional: PesquisaEvasaoEstadoOperacional;
 }
 
-/**
- * Respostas de producao da pesquisa de evasao (modo teste fica de fora na RPC).
- *
- * O periodo filtra por `data_evasao`, nao por data da resposta: a pergunta do
- * usuario e "das pessoas que sairam em julho, o que descobrimos?" — e a resposta
- * costuma chegar semanas depois da saida.
- */
+/** Read model produtivo e somente leitura; classificação é feita na conversa revisada. */
 export function useRespostasEvasao(unidadeAtual: UnidadeId, ano: number, mes: number | null) {
   const [respostas, setRespostas] = useState<RespostaEvasaoLinha[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -43,49 +57,26 @@ export function useRespostasEvasao(unidadeAtual: UnidadeId, ano: number, mes: nu
   const carregar = useCallback(async () => {
     setCarregando(true);
     setErro(null);
-
-    const { data, error } = await supabase.rpc('get_respostas_evasao', {
-      p_unidade_id: unidadeAtual === 'todos' ? null : unidadeAtual,
-      p_ano: ano,
-      p_mes: mes,
-    });
-
+    const { data, error } = await supabase.rpc(
+      'listar_respostas_evasao_analytics_v1' as never,
+      {
+        p_unidade_id: unidadeAtual === 'todos' ? null : unidadeAtual,
+        p_ano: ano,
+        p_mes: mes,
+      } as never,
+    );
     if (error) {
       setErro(error.message);
       setRespostas([]);
     } else {
-      setRespostas((data || []) as unknown as RespostaEvasaoLinha[]);
+      setRespostas((data ?? []) as unknown as RespostaEvasaoLinha[]);
     }
     setCarregando(false);
   }, [unidadeAtual, ano, mes]);
 
   useEffect(() => {
-    carregar();
+    void carregar();
   }, [carregar]);
 
-  /**
-   * Marca (ou desmarca, com null) o tema declarado. Atualiza a linha na hora e
-   * so depois confirma no banco — classificar e um clique repetido dezenas de
-   * vezes seguidas, e esperar o round-trip a cada chip deixaria a lista travada.
-   * Em caso de erro, desfaz.
-   */
-  const classificar = useCallback(async (pesquisaId: string, tema: string | null) => {
-    const anterior = respostas;
-    setRespostas((atual) =>
-      atual.map((r) => (r.pesquisa_id === pesquisaId ? { ...r, categoria_resposta: tema } : r)),
-    );
-
-    const { error } = await supabase.rpc('classificar_resposta_evasao', {
-      p_pesquisa_id: pesquisaId,
-      p_categoria: tema,
-    });
-
-    if (error) {
-      setRespostas(anterior);
-      return { ok: false as const, erro: error.message };
-    }
-    return { ok: true as const };
-  }, [respostas]);
-
-  return { respostas, carregando, erro, recarregar: carregar, classificar };
+  return { respostas, carregando, erro, recarregar: carregar };
 }
