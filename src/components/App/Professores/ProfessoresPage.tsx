@@ -685,7 +685,7 @@ export function ProfessoresPage() {
 
       {/* Conteúdo da aba Carteira */}
       {abaAtiva === 'carteira' && (
-        <TabCarteiraProfessores unidadeAtual={unidadeAtual} />
+        <TabCarteiraProfessores unidadeAtual={unidadeAtual} onPeriodoChange={context?.setPeriodoLabel} />
       )}
 
       {/* Conteúdo da aba Agenda */}

@@ -60,12 +60,13 @@ interface CarteiraProfessor {
 
 interface Props {
   unidadeAtual: UnidadeId;
+  onPeriodoChange?: (label: string | null) => void;
 }
 
 type OrdenacaoTipo = 'alunos' | 'mrr' | 'ticket' | 'media_turma';
 type OrdenacaoDirecao = 'asc' | 'desc';
 
-export function TabCarteiraProfessores({ unidadeAtual }: Props) {
+export function TabCarteiraProfessores({ unidadeAtual, onPeriodoChange }: Props) {
   const [carteiras, setCarteiras] = useState<CarteiraProfessor[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -88,6 +89,13 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
     professor: null
   });
   const requisicaoAtivaRef = useRef(0);
+
+  // Esta aba ignora o filtro de período global (sempre traz o dado ao vivo).
+  // Sobrescrevemos o badge do header para não sugerir que reflete um mês fechado.
+  useEffect(() => {
+    onPeriodoChange?.('Ao vivo');
+    return () => { onPeriodoChange?.(null); };
+  }, [onPeriodoChange]);
 
   useEffect(() => {
     carregarDados();
