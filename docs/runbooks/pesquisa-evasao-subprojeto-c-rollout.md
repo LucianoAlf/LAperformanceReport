@@ -42,6 +42,26 @@ executado a partir de um checkout limpo no commit de corte indicado, sem as
 migrations dos gates seguintes. Conferir o hash do commit e o conteúdo do
 dry-run antes de escrever.
 
+### Evidência do pré-flight de 04/08/2026
+
+O primeiro ensaio do Gate A foi interrompido antes de qualquer escrita. Um
+checkout descartável, fora do repositório de trabalho, foi criado no commit de
+corte `2298b9bd`. O diretório ativo de migrations desse checkout foi substituído
+por 1.268 arquivos obtidos por `supabase migration fetch`, e somente os arquivos
+`20260804220000_pesquisa_evasao_subprojeto_c_schema.sql` e
+`20260804223000_pesquisa_evasao_subprojeto_c_rpcs.sql` foram acrescentados.
+
+O `db push --dry-run` não chegou a listar migrations aplicáveis: tanto o CLI
+2.40.7 quanto o 2.111.0 recusaram a comparação porque as versões remotas curtas
+`20260626` e `20260627` não são reconhecidas como pares locais, embora o próprio
+`migration fetch` tenha criado arquivos com esses prefixos. Não foram usados
+`migration repair`, `--include-all` nem `apply_migration` do MCP. O checkout
+temporário foi destruído após a prova, e produção permaneceu sem as tabelas,
+funções ou alterações de ACL do Subprojeto C.
+
+O Gate A permanece bloqueado até a dívida dessas duas versões ser resolvida de
+forma explícita. Não renomear arquivos nem fabricar versões locais como atalho.
+
 ## Pré-flight e baseline
 
 ### 1. Segurança operacional
