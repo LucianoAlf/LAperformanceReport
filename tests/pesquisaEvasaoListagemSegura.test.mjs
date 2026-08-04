@@ -300,7 +300,7 @@ test('historico retorna somente testes para usuario interno ativo', () => {
 
 test('frontend usa pagina de 50, total, range e reset de filtros', () => {
   assert.match(tab, /const\s+TAMANHO_PAGINA\s*=\s*50/);
-  assert.match(tab, /listar_evadidos_para_pesquisa_v2/);
+  assert.match(tab, /listar_evadidos_para_pesquisa_v3/);
   assert.match(tab, /p_limite:\s*TAMANHO_PAGINA/);
   assert.match(
     tab,

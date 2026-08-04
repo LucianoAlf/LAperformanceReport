@@ -220,7 +220,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
     setLoading(true);
     try {
       const { data: evadidosData, error: evadidosError } = await supabase.rpc(
-        'listar_evadidos_para_pesquisa_v2',
+        'listar_evadidos_para_pesquisa_v3',
         { 
           p_unidade_id: consulta.unidadeAtual === 'todos' ? null : consulta.unidadeAtual,
           p_limite: TAMANHO_PAGINA,
@@ -544,8 +544,26 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
     }
   };
 
-  const getElegibilidadeLabel = (regra: string) => {
+  const getElegibilidadeLabel = (
+    regra: string,
+    elegivelApartirEm: string | null,
+  ) => {
     switch (regra) {
+      case 'aguardando_d1': {
+        const data = elegivelApartirEm ? new Date(elegivelApartirEm) : null;
+        const dataValida = data && !Number.isNaN(data.getTime());
+        const quando = dataValida
+          ? new Intl.DateTimeFormat('pt-BR', {
+              timeZone: 'America/Sao_Paulo',
+              day: '2-digit',
+              month: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            }).format(data).replace(',', ' às')
+          : 'D+1 às 10h';
+        return `Aguardando D+1 — disponível em ${quando}`;
+      }
       case 'status_producao_nao_enviavel':
         return 'Envio produtivo já processado';
       default:
@@ -944,7 +962,10 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                             </Button>
                           ) : (
                             <span className="max-w-44 text-xs text-slate-500">
-                              {getElegibilidadeLabel(evadido.elegibilidade_regra) || '—'}
+                              {getElegibilidadeLabel(
+                                evadido.elegibilidade_regra,
+                                evadido.elegivel_a_partir_em,
+                              ) || '—'}
                             </span>
                           )}
                           {evadido.possui_historico_teste && (

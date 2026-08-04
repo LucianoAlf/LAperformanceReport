@@ -867,18 +867,17 @@ O escopo não será implementado em um único plano.
 
 ### Subprojeto C — Classificação, ação e analytics
 
-- taxonomia;
-- match/divergência;
-- revisão humana;
-- `aluno_acoes`;
-- indicadores;
-- relatório de causas e efetividade.
-
-Decisões abertas exclusivas do Subprojeto C:
-
-- disparo imediato, D+X ou outra janela em relação à data da movimentação;
-- se haverá lembrete, em quais condições, quantidade, intervalo e canal;
-- como a política de lembrete respeitará `recusada_opt_out`, interação não substantiva e pesquisas em revisão.
+- desenho aprovado em
+  [`2026-08-04-pesquisa-evasao-subprojeto-c-classificacao-acao-design.md`](./2026-08-04-pesquisa-evasao-subprojeto-c-classificacao-acao-design.md);
+- taxonomia multirrótulo, match/divergência, revisão humana, `aluno_acoes`,
+  desfechos e analytics governados;
+- envio manual elegível em D+1 às 10h BRT: o sistema sinaliza, mas não dispara
+  a pesquisa automaticamente;
+- a regra D+1 vale apenas para novas tentativas de envio e não reescreve as
+  pesquisas produtivas já enviadas;
+- lembrete automático à família permanece desligado;
+- IA poderá sugerir classificação no futuro, sempre sujeita à confirmação
+  humana e nunca promovida sozinha a fato sobre professor ou atendimento.
 
 Decisão já aprovada para o Subprojeto C em 02/08/2026:
 
