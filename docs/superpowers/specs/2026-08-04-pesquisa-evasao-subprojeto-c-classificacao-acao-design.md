@@ -437,4 +437,3 @@ Nenhuma migration, deploy ou escrita em produção é autorizada por esta spec.
 - indicador de professor;
 - automação do primeiro disparo;
 - follow-up automático à família.
-
