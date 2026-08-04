@@ -36,7 +36,9 @@ A tela trabalha com dois recortes distintos:
 
 O ciclo `Dez/Jan/Fev` atravessa o ano civil. Por exemplo, a referência Dez/2026 resolve o intervalo de 01/12/2026 a 28/02/2027.
 
-As taxas do ciclo são calculadas somando numeradores e denominadores brutos dos meses elegíveis. Médias de ocupação usam soma das ocupações dividida pela soma das turmas. Não é permitido calcular o ciclo pela média simples de percentuais mensais nem pela média dos scores mensais.
+As taxas de fluxo do ciclo são calculadas somando numeradores e denominadores brutos dos meses elegíveis. Conversão acumula matrículas e experimentais; presença acumula presentes e eventos classificados. Já `Número de alunos` e `Média de alunos por turma` são métricas de estado: usam a fotografia do último mês alcançado no recorte, sem somar carteiras nem fazer média dos três meses. Permanência continua sendo a posição histórica apurada até a data de corte. Não é permitido calcular o ciclo pela média dos scores mensais.
+
+Na presença, a identidade da ocorrência inclui professor, unidade, ID externo da aula, pessoa e `data_aula`. O momento em que a chamada foi registrada não limita sua validade: uma presença lançada posteriormente pela Secretaria continua pertencendo à aula original. A data evita apenas que ocorrências diferentes com um ID externo reutilizado sejam combinadas.
 
 Um ciclo aberto é identificado como `Ciclo em acompanhamento`: utiliza as evidências já disponíveis, mas não publica ranking nem premiação. O fechamento oficial materializa um snapshot imutável.
 
