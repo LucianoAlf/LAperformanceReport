@@ -25,12 +25,17 @@ const multiplosPilotosMigrationPath = resolve(
   root,
   'supabase/migrations/20260804174500_lia_followup_pilotos_multiplos_mesmo_dia.sql',
 );
+const ativacaoMigrationPath = resolve(
+  root,
+  'supabase/migrations/20260804180000_lia_followup_72h_fase_b_ativacao.sql',
+);
 const read = (path) => existsSync(path) ? readFileSync(path, 'utf8') : '';
 const sql = read(migrationPath);
 const fixture = read(fixturePath);
 const producaoOnlySql = read(producaoOnlyMigrationPath);
 const renderPilotoSql = read(renderPilotoMigrationPath);
 const multiplosPilotosSql = read(multiplosPilotosMigrationPath);
+const ativacaoSql = read(ativacaoMigrationPath);
 
 test('fase B nasce desligada e nao cria novo cron de transporte', () => {
   assert.match(sql, /followup_72h_liberado\s+boolean\s+not null\s+default false/i);
@@ -111,6 +116,30 @@ test('pilotos distintos podem rodar no mesmo dia sem afrouxar a unicidade produt
   assert.match(fixture, /MULTIPLE_TEST_PILOTS_SAME_DAY_OK/);
 });
 
+test('ativacao da fase B falha fechada e altera somente a flag governada', () => {
+  assert.ok(
+    ativacaoSql,
+    `migration de ativacao ausente: ${ativacaoMigrationPath}`,
+  );
+  assert.match(
+    ativacaoSql,
+    /where\s+id\s*=\s*1[\s\S]*?alertas_producao_liberados\s*=\s*true[\s\S]*?followup_72h_liberado\s*=\s*false/i,
+  );
+  assert.match(
+    ativacaoSql,
+    /raise\s+exception\s+'estado_invalido_para_ativar_followup_72h'/i,
+  );
+  assert.match(
+    ativacaoSql,
+    /update\s+public\.lia_alertas_configuracao[\s\S]*?set\s+followup_72h_liberado\s*=\s*true/i,
+  );
+  assert.doesNotMatch(
+    ativacaoSql,
+    /update\s+public\.(?:pesquisa_evasao|lia_followup_resumos|lia_alertas_privados)/i,
+  );
+  assert.doesNotMatch(ativacaoSql, /cron\.schedule|net\.http_post/i);
+});
+
 test('acao manual resolve o operador pelo JWT', () => {
   assert.match(sql, /registrar_followup_pesquisa_evasao_v1/i);
   assert.match(sql, /auth\.uid\(\)/i);
@@ -131,6 +160,7 @@ test('fixture executavel cobre prazo diario concorrencia e isolamento', () => {
     /RESPONSE_BEFORE_CLAIM_CANCELS_OK/,
     /OPERATOR_ISOLATION_OK/,
     /MANUAL_ACTION_AUDIT_OK/,
+    /FOLLOWUP_ACTIVATION_OK/,
     /LIA_FOLLOWUP_72H_FASE_B_PG17_OK/,
   ]) assert.match(fixture, evidence);
 });

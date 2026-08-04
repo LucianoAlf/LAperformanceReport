@@ -258,20 +258,63 @@ Aplicação e pós-flight:
   vencimento de 72 horas, ao longo da quinta-feira, antes do resumo privado da
   manhã seguinte.
 
-### Pré-condições para o Gate D
+### Gate D — piloto aceito em 04/08/2026
 
-Na próxima retomada matinal, antes de enfileirar o piloto de follow-up:
+- o alerta controlado da Fase A `9c04dabb-a768-4ea7-b64f-3d5daffa771b` foi
+  entregue às 08:00 BRT, no primeiro ciclo permitido pela janela, com uma
+  tentativa e `provider_message_id`;
+- o primeiro piloto de follow-up confirmou o transporte, mas revelou que o
+  renderer contava o item congelado e tentava listar o caso por um read model
+  que exclui corretamente `modo_teste=true`; por isso o total era um e a lista
+  chegava vazia;
+- a correção aditiva
+  `20260804173000_lia_followup_resumo_renderizar_itens_teste.sql` passou a
+  renderizar os itens congelados do próprio resumo, tanto no piloto quanto em
+  produção;
+- a correção aditiva
+  `20260804174500_lia_followup_pilotos_multiplos_mesmo_dia.sql` preservou a
+  unicidade diária em produção e permitiu repetir pilotos distintos no mesmo
+  dia;
+- o segundo piloto, alerta `bdbcf81b-116f-475a-a793-5dbf10d827c7`, foi
+  entregue às 08:24:02 BRT para o destino governado do Alf, pela caixa 3, com
+  uma tentativa e `provider_message_id 3EB0D965ADB9475419078A`;
+- o texto exibiu `Davi Jorge da Silva — Recreio — enviada em 03/08 16:54` e o
+  link abriu `destino=pesquisas-evasao&filtro=followup_pendente`;
+- não houve eco na Caixa de Entrada, evento falso em
+  `pesquisa_evasao_mensagens` nem entrega para Jéssica ou Fabi;
+- o Alf aceitou visualmente o piloto; `followup_72h_liberado` permaneceu
+  `false` e nenhum resumo produtivo foi criado.
 
-1. confirmar que o alerta controlado da Fase A
-   `9c04dabb-a768-4ea7-b64f-3d5daffa771b` foi entregue somente depois da
-   reabertura da janela às 08h BRT, com uma tentativa e
-   `provider_message_id`;
-2. confirmar que a fila de follow-up continua com zero casos pendentes,
-   `followup_72h_liberado=false`, nenhum resumo real criado e nenhuma entrega
-   indevida;
-3. somente com as duas verificações verdes, executar o Gate D por
-   `enfileirar_lia_followup_piloto`, exclusivamente para o destino governado do
-   Alf.
+### Gate E — migration aplicada em 04/08/2026
 
-Até essa retomada, o Gate D permanece bloqueado: nenhum piloto, ativação ou
-follow-up automático à família está autorizado.
+- arquivo:
+  `supabase/migrations/20260804180000_lia_followup_72h_fase_b_ativacao.sql`;
+- SHA-256:
+  `7CC028E54E5F19BEBCDC29EA6F8D97F4E0C17E1877F653ED56630F6284453AD8`;
+- a migration exige `id=1`, `alertas_producao_liberados=true` e
+  `followup_72h_liberado=false`, atualiza exatamente uma linha e falha fechado
+  com `estado_invalido_para_ativar_followup_72h` em qualquer outro estado;
+- não cria cron, não chama rede, não enfileira resumo, não altera pesquisas,
+  itens, ações ou alertas existentes;
+- validada em PostgreSQL 17 descartável: `10/10` testes aprovados;
+- projeto reconfirmado antes da escrita:
+  `https://ouqwbbermlzqqvtqwlul.supabase.co`;
+- a primeira tentativa de transporte foi rejeitada no parser porque o invólucro
+  do terminal anexou `Exit code: 0` ao SQL; nenhuma instrução da migration foi
+  executada e `followup_72h_liberado=false` foi reconfirmado antes da repetição;
+- aplicada às 08:35:48 BRT com o SQL exato já revisado;
+- o histórico remoto registrou a versão `20260804113548`, nome
+  `lia_followup_72h_fase_b_ativacao`; a diferença para o timestamp do arquivo
+  local entra na dívida já aberta de reconciliação do histórico;
+- pós-flight: `followup_72h_liberado=true`, zero resumos produtivos, zero outbox
+  produtiva de follow-up e zero casos vencidos;
+- cron `lia-alertas-privados-dispatcher-minuto`: uma única linha, job `88`,
+  ativo, agenda `* * * * *`; o primeiro ciclo posterior à ativação, às 08:36
+  BRT, terminou com `succeeded`, sem erro, e as respostas HTTP observadas foram
+  `200`;
+- a fila produtiva continua com 15 pesquisas da Jéssica: 13 em
+  `aguardando_resposta`, uma em `pronta_para_revisao` e uma `revisada`; nenhuma
+  está em `followup_pendente` antes de completar 72 horas;
+- o primeiro resumo real permanece previsto para sexta-feira, 07/08/2026, às
+  09h BRT, com cerca de 13 casos, todos atribuídos à Jéssica. O número final
+  dependerá das respostas, opt-outs ou ações manuais registrados até o corte.

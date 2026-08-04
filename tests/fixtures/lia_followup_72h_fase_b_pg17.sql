@@ -336,8 +336,15 @@ select public.fixture_assert(
 set request.jwt.claim.role = 'service_role';
 set request.jwt.claim.sub = '';
 update public.lia_alertas_configuracao
-set alertas_producao_liberados = true,
-    followup_72h_liberado = true;
+set alertas_producao_liberados = true;
+
+\ir ../../supabase/migrations/20260804180000_lia_followup_72h_fase_b_ativacao.sql
+
+select public.fixture_assert(
+  (select followup_72h_liberado = true
+   from public.lia_alertas_configuracao where id = 1),
+  'FOLLOWUP_ACTIVATION_OK'
+);
 
 select * from public.produzir_lia_resumos_followup_72h(
   '2026-08-06 13:55:54.975241+00'
