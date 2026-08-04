@@ -46,15 +46,37 @@ export function useHealthScoreProfessorV3Performance({
       const reference = /^\d{4}-\d{2}$/.test(competencia)
         ? `${competencia}-01`
         : competencia;
-      const { data, error: rpcError } = await supabase.rpc(
+      const consultarUnidade = (id: string | null) => supabase.rpc(
         'get_health_score_professor_v3_performance',
         {
           p_competencia: reference,
-          p_unidade_id: unidadeId,
+          p_unidade_id: id,
           p_periodicidade: periodicidade,
         },
       );
-      if (rpcError) throw rpcError;
+
+      let data: unknown[] | null = null;
+      if (unidadeId) {
+        const resultado = await consultarUnidade(unidadeId);
+        if (resultado.error) throw resultado.error;
+        data = resultado.data || [];
+      } else {
+        // O modelo canônico por unidade é o mesmo do consolidado. Repartir a
+        // leitura preserva a fonte e evita que uma única RPC atravesse o
+        // timeout do PostgREST ao recompor a rede inteira em série.
+        const { data: unidades, error: unidadesError } = await supabase
+          .from('unidades')
+          .select('id')
+          .eq('ativo', true);
+        if (unidadesError) throw unidadesError;
+
+        const resultados = await Promise.all(
+          (unidades || []).map(unidade => consultarUnidade(String(unidade.id))),
+        );
+        const erro = resultados.find(resultado => resultado.error)?.error;
+        if (erro) throw erro;
+        data = resultados.flatMap(resultado => resultado.data || []);
+      }
       if (requestId !== requestIdRef.current) return;
 
       setSnapshots(normalizeHealthScoreV3PerformanceRows(data || []));

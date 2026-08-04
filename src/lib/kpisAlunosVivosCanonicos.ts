@@ -365,13 +365,36 @@ export async function fetchKPIsAlunosVivosCanonicos({
   mes,
 }: FetchKPIsAlunosVivosParams): Promise<KPIsAlunosVivosPorUnidade[]> {
   const unidadeFiltro = unidadeId && unidadeId !== 'todos' ? String(unidadeId) : null;
-  const { data, error } = await supabase.rpc('get_kpis_alunos_canonicos', {
-    p_unidade_id: unidadeFiltro,
+  const consultarUnidade = (id: string) => supabase.rpc('get_kpis_alunos_canonicos', {
+    p_unidade_id: id,
     p_ano: ano,
     p_mes: mes,
   });
 
-  if (error) throw error;
+  let data: { por_unidade?: unknown[] } | null = null;
+  if (unidadeFiltro) {
+    const resultado = await consultarUnidade(unidadeFiltro);
+    if (resultado.error) throw resultado.error;
+    data = resultado.data;
+  } else {
+    // Consolidado continua sendo a soma das mesmas leituras canônicas por
+    // unidade. A execução paralela elimina o timeout da RPC monolítica sem
+    // criar fallback, snapshot ou fórmula paralela.
+    const { data: unidades, error: unidadesError } = await supabase
+      .from('unidades')
+      .select('id')
+      .eq('ativo', true);
+    if (unidadesError) throw unidadesError;
+
+    const resultados = await Promise.all(
+      (unidades || []).map(unidade => consultarUnidade(String(unidade.id))),
+    );
+    const erro = resultados.find(resultado => resultado.error)?.error;
+    if (erro) throw erro;
+    data = {
+      por_unidade: resultados.flatMap(resultado => resultado.data?.por_unidade || []),
+    };
+  }
 
   return (data?.por_unidade || []).map((row: any) => ({
     unidade_id: String(row.unidade_id || ''),
