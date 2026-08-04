@@ -76,3 +76,15 @@ test('conclusao de acao e desfecho preservam auditoria e append-only', () => {
   assert.match(sql, /select id into v_anterior[\s\S]*pesquisa_evasao_desfechos/i);
   assert.doesNotMatch(sql, /update\s+public\.pesquisa_evasao_desfechos/i);
 });
+
+test('fixture do Subprojeto C passa em PostgreSQL 17 isolado', {
+  skip: !process.env.PESQUISA_EVASAO_PG17_CONTAINER,
+}, async () => {
+  const { runPesquisaEvasaoSubprojetoCPg17Fixture } = await import(
+    './helpers/runPesquisaEvasaoSubprojetoCPg17Fixture.mjs'
+  );
+  const output = runPesquisaEvasaoSubprojetoCPg17Fixture({
+    container: process.env.PESQUISA_EVASAO_PG17_CONTAINER,
+  });
+  assert.match(output, /PESQUISA_EVASAO_SUBPROJETO_C_PG17_OK/);
+});
