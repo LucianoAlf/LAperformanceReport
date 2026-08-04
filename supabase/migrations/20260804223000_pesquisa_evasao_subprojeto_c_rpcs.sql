@@ -459,12 +459,250 @@ begin
 end
 $$;
 
+create or replace function public.registrar_acao_pesquisa_evasao_v1(
+  p_pesquisa_id uuid,
+  p_classificacao_id uuid,
+  p_tipo text,
+  p_descricao text,
+  p_prazo_em timestamptz default null,
+  p_professor_id integer default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_usuario public.usuarios%rowtype;
+  v_pesquisa public.pesquisa_evasao%rowtype;
+  v_id uuid;
+begin
+  if not public.fn_pesquisa_evasao_usuario_interno_ativo() then
+    raise exception 'PESQUISA_EVASAO_C_ACESSO_NEGADO' using errcode = '42501';
+  end if;
+
+  select * into strict v_usuario
+  from public.usuarios
+  where auth_user_id = auth.uid() and ativo = true;
+
+  select * into strict v_pesquisa
+  from public.pesquisa_evasao
+  where id = p_pesquisa_id
+  for update;
+
+  if v_pesquisa.modo_teste then
+    raise exception 'PESQUISA_EVASAO_C_TESTE_PROIBIDO' using errcode = '22023';
+  end if;
+
+  if not public.fn_pesquisa_evasao_c_classificacao_vigente(
+    p_pesquisa_id,
+    p_classificacao_id
+  ) then
+    raise exception 'PESQUISA_EVASAO_C_CLASSIFICACAO_DESATUALIZADA'
+      using errcode = '40001';
+  end if;
+
+  if v_pesquisa.aluno_id is null then
+    raise exception 'PESQUISA_EVASAO_C_ALUNO_AUSENTE' using errcode = '22023';
+  end if;
+
+  if p_tipo not in (
+    'retorno_familia', 'encaminhar_coordenacao', 'encaminhar_financeiro',
+    'vincular_professor', 'tentativa_retencao', 'solucao_oferecida', 'outro'
+  ) then
+    raise exception 'PESQUISA_EVASAO_C_ACAO_INVALIDA' using errcode = '22023';
+  end if;
+
+  if nullif(btrim(p_descricao), '') is null
+     or char_length(p_descricao) > 1000 then
+    raise exception 'PESQUISA_EVASAO_C_DESCRICAO_INVALIDA' using errcode = '22023';
+  end if;
+
+  if (p_tipo = 'vincular_professor')
+     is distinct from (p_professor_id is not null) then
+    raise exception 'PESQUISA_EVASAO_C_PROFESSOR_INCOERENTE' using errcode = '22023';
+  end if;
+
+  if p_professor_id is not null
+     and not exists (
+       select 1 from public.professores
+       where id = p_professor_id and ativo
+     ) then
+    raise exception 'PESQUISA_EVASAO_C_PROFESSOR_INVALIDO' using errcode = '22023';
+  end if;
+
+  insert into public.aluno_acoes (
+    aluno_id,
+    unidade_id,
+    tipo,
+    descricao,
+    realizado_por,
+    realizado_por_nome,
+    pesquisa_evasao_id,
+    classificacao_evasao_id,
+    professor_id,
+    estado,
+    prazo_em,
+    criado_por_usuario_id
+  ) values (
+    v_pesquisa.aluno_id,
+    v_pesquisa.unidade_id,
+    p_tipo,
+    btrim(p_descricao),
+    auth.uid(),
+    v_usuario.nome,
+    p_pesquisa_id,
+    p_classificacao_id,
+    p_professor_id,
+    'pendente',
+    p_prazo_em,
+    v_usuario.id
+  ) returning id into v_id;
+
+  return v_id;
+exception
+  when no_data_found then
+    raise exception 'PESQUISA_EVASAO_C_NAO_ENCONTRADA' using errcode = 'P0002';
+end
+$$;
+
+create or replace function public.concluir_acao_pesquisa_evasao_v1(
+  p_acao_id uuid,
+  p_estado text,
+  p_observacao text default ''
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_usuario public.usuarios%rowtype;
+  v_acao public.aluno_acoes%rowtype;
+begin
+  if not public.fn_pesquisa_evasao_usuario_interno_ativo() then
+    raise exception 'PESQUISA_EVASAO_C_ACESSO_NEGADO' using errcode = '42501';
+  end if;
+
+  if p_estado not in ('realizada', 'cancelada')
+     or char_length(coalesce(p_observacao, '')) > 1000 then
+    raise exception 'PESQUISA_EVASAO_C_CONCLUSAO_INVALIDA' using errcode = '22023';
+  end if;
+
+  select * into strict v_usuario
+  from public.usuarios
+  where auth_user_id = auth.uid() and ativo = true;
+
+  select * into strict v_acao
+  from public.aluno_acoes
+  where id = p_acao_id and pesquisa_evasao_id is not null
+  for update;
+
+  if v_acao.estado <> 'pendente' then
+    raise exception 'PESQUISA_EVASAO_C_ACAO_JA_ENCERRADA' using errcode = '40001';
+  end if;
+
+  update public.aluno_acoes
+  set
+    estado = p_estado,
+    resultado = nullif(btrim(p_observacao), ''),
+    concluida_por_usuario_id = v_usuario.id,
+    concluida_por_auth_user_id = auth.uid(),
+    concluida_em = clock_timestamp()
+  where id = p_acao_id;
+
+  return jsonb_build_object('acao_id', p_acao_id, 'estado', p_estado);
+exception
+  when no_data_found then
+    raise exception 'PESQUISA_EVASAO_C_ACAO_NAO_ENCONTRADA' using errcode = 'P0002';
+end
+$$;
+
+create or replace function public.registrar_desfecho_pesquisa_evasao_v1(
+  p_pesquisa_id uuid,
+  p_classificacao_id uuid,
+  p_desfecho text,
+  p_observacao text default ''
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_usuario public.usuarios%rowtype;
+  v_anterior uuid;
+  v_id uuid;
+begin
+  if not public.fn_pesquisa_evasao_usuario_interno_ativo() then
+    raise exception 'PESQUISA_EVASAO_C_ACESSO_NEGADO' using errcode = '42501';
+  end if;
+
+  perform 1
+  from public.pesquisa_evasao
+  where id = p_pesquisa_id
+  for update;
+  if not found then
+    raise exception 'PESQUISA_EVASAO_C_NAO_ENCONTRADA' using errcode = 'P0002';
+  end if;
+
+  if not public.fn_pesquisa_evasao_c_classificacao_vigente(
+    p_pesquisa_id,
+    p_classificacao_id
+  ) then
+    raise exception 'PESQUISA_EVASAO_C_CLASSIFICACAO_DESATUALIZADA'
+      using errcode = '40001';
+  end if;
+
+  if p_desfecho not in ('recuperou', 'prometeu_voltar', 'confirmou_saida')
+     or char_length(coalesce(p_observacao, '')) > 1000 then
+    raise exception 'PESQUISA_EVASAO_C_DESFECHO_INVALIDO' using errcode = '22023';
+  end if;
+
+  select * into strict v_usuario
+  from public.usuarios
+  where auth_user_id = auth.uid() and ativo = true;
+
+  select id into v_anterior
+  from public.pesquisa_evasao_desfechos
+  where pesquisa_id = p_pesquisa_id
+  order by registrado_em desc, id desc
+  limit 1;
+
+  insert into public.pesquisa_evasao_desfechos (
+    pesquisa_id,
+    classificacao_id,
+    desfecho,
+    observacao,
+    sucede_desfecho_id,
+    registrado_por_usuario_id,
+    registrado_por_auth_user_id
+  ) values (
+    p_pesquisa_id,
+    p_classificacao_id,
+    p_desfecho,
+    coalesce(p_observacao, ''),
+    v_anterior,
+    v_usuario.id,
+    auth.uid()
+  ) returning id into v_id;
+
+  return v_id;
+end
+$$;
+
 comment on function public.registrar_classificacao_pesquisa_evasao_v1(uuid, uuid, text[], text, text) is
   'Registra nova versao multirrotulo sobre a analise textual revisada mais recente. Nao escreve nas colunas legadas.';
 comment on function public.obter_dados_classificacao_pesquisa_evasao_v1(uuid) is
   'Envelope governado da classificacao, historico, acoes e desfecho de uma pesquisa.';
 comment on function public.listar_respostas_evasao_analytics_v1(uuid, integer, integer) is
   'Read model produtivo do Subprojeto C; exclui modo teste e nao usa categoria_resposta ou sentimento legados.';
+comment on function public.registrar_acao_pesquisa_evasao_v1(uuid, uuid, text, text, timestamptz, integer) is
+  'Registra acao vinculada a classificacao vigente, resolvendo aluno, unidade e operador no servidor.';
+comment on function public.concluir_acao_pesquisa_evasao_v1(uuid, text, text) is
+  'Conclui ou cancela uma acao de evasao pendente com autoria e horario server-side.';
+comment on function public.registrar_desfecho_pesquisa_evasao_v1(uuid, uuid, text, text) is
+  'Acrescenta desfecho versionado e append-only vinculado a classificacao vigente.';
 
 revoke all on function public.fn_pesquisa_evasao_c_classificacao_vigente(uuid, uuid)
   from public, anon, authenticated, mila_acesso_restrito, sol_acesso_restrito,
@@ -478,6 +716,15 @@ revoke all on function public.obter_dados_classificacao_pesquisa_evasao_v1(uuid)
 revoke all on function public.listar_respostas_evasao_analytics_v1(uuid, integer, integer)
   from public, anon, authenticated, mila_acesso_restrito, sol_acesso_restrito,
   fabio_agent, lia_acesso_restrito;
+revoke all on function public.registrar_acao_pesquisa_evasao_v1(uuid, uuid, text, text, timestamptz, integer)
+  from public, anon, authenticated, mila_acesso_restrito, sol_acesso_restrito,
+  fabio_agent, lia_acesso_restrito;
+revoke all on function public.concluir_acao_pesquisa_evasao_v1(uuid, text, text)
+  from public, anon, authenticated, mila_acesso_restrito, sol_acesso_restrito,
+  fabio_agent, lia_acesso_restrito;
+revoke all on function public.registrar_desfecho_pesquisa_evasao_v1(uuid, uuid, text, text)
+  from public, anon, authenticated, mila_acesso_restrito, sol_acesso_restrito,
+  fabio_agent, lia_acesso_restrito;
 
 grant execute on function public.fn_pesquisa_evasao_c_classificacao_vigente(uuid, uuid)
   to authenticated, service_role;
@@ -486,4 +733,10 @@ grant execute on function public.registrar_classificacao_pesquisa_evasao_v1(uuid
 grant execute on function public.obter_dados_classificacao_pesquisa_evasao_v1(uuid)
   to authenticated, service_role;
 grant execute on function public.listar_respostas_evasao_analytics_v1(uuid, integer, integer)
+  to authenticated, service_role;
+grant execute on function public.registrar_acao_pesquisa_evasao_v1(uuid, uuid, text, text, timestamptz, integer)
+  to authenticated, service_role;
+grant execute on function public.concluir_acao_pesquisa_evasao_v1(uuid, text, text)
+  to authenticated, service_role;
+grant execute on function public.registrar_desfecho_pesquisa_evasao_v1(uuid, uuid, text, text)
   to authenticated, service_role;

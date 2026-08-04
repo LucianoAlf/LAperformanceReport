@@ -57,3 +57,22 @@ test('ACL das RPCs fecha public, anon e agentes', () => {
     assert.match(sql, new RegExp(role));
   }
 });
+
+test('acoes e desfechos exigem classificacao vigente e identidade server-side', () => {
+  assert.match(sql, /registrar_acao_pesquisa_evasao_v1/i);
+  assert.match(sql, /concluir_acao_pesquisa_evasao_v1/i);
+  assert.match(sql, /registrar_desfecho_pesquisa_evasao_v1/i);
+  assert.match(sql, /fn_pesquisa_evasao_c_classificacao_vigente\s*\(\s*p_pesquisa_id\s*,\s*p_classificacao_id/i);
+  assert.match(sql, /criado_por_usuario_id[\s\S]*auth\.uid\(\)/i);
+  assert.match(sql, /professor_id[\s\S]*vincular_professor/i);
+  assert.match(sql, /sucede_desfecho_id/i);
+  assert.doesNotMatch(sql, /p_aluno_id|p_criado_por_usuario_id/i);
+});
+
+test('conclusao de acao e desfecho preservam auditoria e append-only', () => {
+  assert.match(sql, /v_acao\.estado\s*<>\s*'pendente'[\s\S]*PESQUISA_EVASAO_C_ACAO_JA_ENCERRADA/i);
+  assert.match(sql, /concluida_por_usuario_id\s*=\s*v_usuario\.id/i);
+  assert.match(sql, /concluida_por_auth_user_id\s*=\s*auth\.uid\(\)/i);
+  assert.match(sql, /select id into v_anterior[\s\S]*pesquisa_evasao_desfechos/i);
+  assert.doesNotMatch(sql, /update\s+public\.pesquisa_evasao_desfechos/i);
+});
