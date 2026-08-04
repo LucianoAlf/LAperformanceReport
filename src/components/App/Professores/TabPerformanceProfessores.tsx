@@ -34,6 +34,11 @@ import {
   consolidarKpisProfessoresCanonicos,
 } from '@/lib/professoresKpisCanonicos';
 import {
+  buscarKpisTurmasCanonicos,
+  indexarKpisTurmasCanonicos,
+  type KPITurmaCanonico,
+} from '@/lib/turmasKpisCanonicos';
+import {
   chaveProfessorUnidade,
   filtrarKpisPorVinculosAtivos,
 } from '@/lib/professoresKpisAgregados';
@@ -405,6 +410,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
   }, [periodoLabel]);
   
   const [professores, setProfessores] = useState<ProfessorPerformance[]>([]);
+  const [kpisTurmasPorProfessor, setKpisTurmasPorProfessor] = useState<Map<string, KPITurmaCanonico>>(new Map());
   const [loading, setLoading] = useState(true);
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
   const [filtroBusca, setFiltroBusca] = useState('');
@@ -486,15 +492,24 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             dataInicio: modoVisualizacao === 'trimestre' ? periodoV3.inicio : null,
             dataFim: modoVisualizacao === 'trimestre' ? periodoV3.fim : null,
           });
+      const kpisTurmasPromise = buscarKpisTurmasCanonicos({
+        ano: anoFiltro,
+        mes: mesFiltro,
+        unidadeId: unidadeAtual,
+        dataInicio: periodoV3.inicio,
+        dataFim: periodoV3.fim,
+      });
 
       const [
         professoresResult,
         kpisAtuais,
+        kpisTurmasAtuais,
         unidadesResult,
         cursosResult,
       ] = await Promise.all([
         query,
         kpisAtuaisPromise,
+        kpisTurmasPromise,
         unidadesRelQuery,
         Promise.resolve(cursosRelQuery).catch((error) => ({ data: [], error })),
       ]);
@@ -527,6 +542,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         vinculosAtivos,
       );
       const kpisData = consolidarKpisProfessoresCanonicos(kpisAtivos);
+      const kpisTurmasIndexados = indexarKpisTurmasCanonicos(kpisTurmasAtuais);
 
       // A consolidacao central resolve professores multiunidade sem perder o grao da competencia.
       const kpisPorProfessor = new Map(kpisData.map((kpi) => [kpi.professor_id, kpi]));
@@ -546,17 +562,20 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
           // Buscar KPIs reais do professor
           const kpis = kpisPorProfessor.get(prof.id);
+          const kpiTurma = kpisTurmasIndexados.get(
+            `${prof.id}_${unidadeAtual === 'todos' ? 'todos' : unidadeAtual}`,
+          );
 
           // Carteira de alunos (com matricula viva)
           const totalAlunos = Number(kpis?.carteira_alunos ?? 0);
 
           // A RPC canonica e a unica fonte para carteira, carga e media da competencia.
           const totalTurmas = Number(kpis?.total_turmas ?? 0);
-          const alunosViaTurmas = Number(kpis?.alunos_via_turmas ?? 0);
-          const turmasElegiveisMedia = Number(kpis?.turmas_elegiveis_media ?? 0);
+          const alunosViaTurmas = Number(kpiTurma?.ocupacoes_elegiveis ?? 0);
+          const turmasElegiveisMedia = Number(kpiTurma?.turmas_elegiveis ?? 0);
 
           const mediaAlunosTurma = turmasElegiveisMedia > 0
-            ? Number(kpis?.media_alunos_turma ?? (alunosViaTurmas / turmasElegiveisMedia))
+            ? Number(kpiTurma?.media_alunos_turma ?? 0)
             : 0;
 
           const experimentaisCanonicas = Number(kpis?.experimentais || 0);
@@ -676,12 +695,13 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         });
 
       if (requisicaoId !== requisicaoAtivaRef.current) return;
+      setKpisTurmasPorProfessor(kpisTurmasIndexados);
       setProfessores(professoresCompletos);
 
       // Historical trend is complementary and must never block the current panel.
       if (!HEALTH_SCORE_V3_PERFORMANCE_ENABLED && modoVisualizacao !== 'trimestre') {
         void Promise.allSettled([
-          buscarKpisProfessoresCanonicos({
+          buscarKpisTurmasCanonicos({
             ano: referenciaAnterior.getFullYear(),
             mes: referenciaAnterior.getMonth() + 1,
             unidadeId: unidadeAtual,
@@ -700,8 +720,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           }
 
           const anteriorPorProfessor = new Map(
-            consolidarKpisProfessoresCanonicos(resultado.value)
-              .map((kpi) => [kpi.professor_id, Number(kpi.media_alunos_turma || 0)] as const)
+            [...indexarKpisTurmasCanonicos(resultado.value).entries()]
+              .filter(([chave]) => chave.endsWith(`_${unidadeAtual === 'todos' ? 'todos' : unidadeAtual}`))
+              .map(([chave, kpi]) => [Number(chave.split('_')[0]), Number(kpi.media_alunos_turma || 0)] as const)
           );
 
           setProfessores((atuais) => atuais.map((professor) => {
@@ -719,6 +740,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       }
     } catch (error) {
       if (requisicaoId !== requisicaoAtivaRef.current) return;
+      setKpisTurmasPorProfessor(new Map());
+      setProfessores([]);
       const detalhe = error as { code?: string; message?: string; details?: string; hint?: string };
       console.error('Erro ao carregar dados:', JSON.stringify({
         code: detalhe?.code,
@@ -750,12 +773,19 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
   const professoresTabela = useMemo<ProfessorPerformanceRow[]>(
     () => professores.map((professor) => {
       const healthV3 = healthV3ByProfessor.get(professor.id) || null;
+      const hidratado = hydrateProfessorPerformanceFromV3(professor, healthV3);
+      const kpiTurma = kpisTurmasPorProfessor.get(
+        `${professor.id}_${unidadeAtual === 'todos' ? 'todos' : unidadeAtual}`,
+      );
       return {
-        ...hydrateProfessorPerformanceFromV3(professor, healthV3),
+        ...hidratado,
+        alunos_via_turmas: Number(kpiTurma?.ocupacoes_elegiveis ?? 0),
+        turmas_elegiveis_media: Number(kpiTurma?.turmas_elegiveis ?? 0),
+        media_alunos_turma: Number(kpiTurma?.media_alunos_turma ?? 0),
         healthV3,
       };
     }),
-    [healthV3ByProfessor, professores],
+    [healthV3ByProfessor, kpisTurmasPorProfessor, professores, unidadeAtual],
   );
 
   // Sob a flag V3, a tabela nunca recorre silenciosamente ao score V2.

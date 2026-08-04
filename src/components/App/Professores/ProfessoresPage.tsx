@@ -40,6 +40,11 @@ import {
   buscarKpisProfessoresCanonicos,
   indexarKpisProfessoresCanonicos,
 } from '@/lib/professoresKpisCanonicos';
+import {
+  buscarKpisTurmasCanonicos,
+  calcularTotaisKpisTurmasCanonicos,
+  indexarKpisTurmasCanonicos,
+} from '@/lib/turmasKpisCanonicos';
 import type { 
   Professor, Unidade, Curso, KPIsProfessores, 
   FiltrosProfessores, ProfessorFormData
@@ -72,10 +77,11 @@ export function ProfessoresPage() {
   const context = useOutletContext<{
     filtroAtivo: boolean;
     unidadeSelecionada: UnidadeId;
-    competencia?: { range: { startDate: string } };
+    competencia: ReturnType<typeof import('@/hooks/useCompetenciaFiltro').useCompetenciaFiltro>;
     setPeriodoLabel?: (label: string | null) => void;
   }>();
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
+  const competencia = context?.competencia;
   const { hasPermission } = useAuth();
   const toast = useToast();
   const { weights: healthWeights, saveWeights } = useHealthScoreConfig(unidadeAtual);
@@ -102,8 +108,7 @@ export function ProfessoresPage() {
   const [turmasPorProfessorUnidade, setTurmasPorProfessorUnidade] = useState<Map<string, number>>(new Map());
   const [alunosPorProfessorUnidade, setAlunosPorProfessorUnidade] = useState<Map<string, number>>(new Map());
   const [mediaAlunosTurmaPorProfessorUnidade, setMediaAlunosTurmaPorProfessorUnidade] = useState<Map<string, number>>(new Map());
-  const [ocupacoesRegularesPorProfessorUnidade, setOcupacoesRegularesPorProfessorUnidade] = useState<Map<string, number>>(new Map());
-  const [turmasRegularesPorProfessorUnidade, setTurmasRegularesPorProfessorUnidade] = useState<Map<string, number>>(new Map());
+  const [mediaAlunosTurmaGeralCanonica, setMediaAlunosTurmaGeralCanonica] = useState<number | null>(null);
 
   // Estados de filtros
   const [filtros, setFiltros] = useState<FiltrosProfessores>({
@@ -145,7 +150,11 @@ export function ProfessoresPage() {
   // Carregar dados iniciais
   useEffect(() => {
     carregarDados();
-  }, []);
+  }, [
+    unidadeAtual,
+    context?.competencia?.range.startDate,
+    context?.competencia?.range.endDate,
+  ]);
 
   const carregarDados = async () => {
     setLoading(true);
@@ -215,25 +224,36 @@ export function ProfessoresPage() {
           cursos:curso_id (nome)
         `);
 
-      const agora = new Date();
-      const kpisCanonicos = await buscarKpisProfessoresCanonicos({
-        ano: agora.getFullYear(),
-        mes: agora.getMonth() + 1,
-      });
+      if (!competencia) throw new Error('Competencia selecionada indisponivel');
+      const filtroPeriodo = {
+        ano: competencia.range.ano,
+        mes: competencia.range.mesInicio,
+        unidadeId: unidadeAtual,
+        dataInicio: competencia.range.startDate,
+        dataFim: competencia.range.endDate,
+      };
+      const [kpisCanonicos, kpisTurmasCanonicos] = await Promise.all([
+        buscarKpisProfessoresCanonicos(filtroPeriodo),
+        buscarKpisTurmasCanonicos(filtroPeriodo).catch((error) => {
+          console.error('Erro ao buscar media canonica de alunos por turma em Professores:', error);
+          return null;
+        }),
+      ]);
       const kpisPorProfessorUnidade = indexarKpisProfessoresCanonicos(kpisCanonicos);
+      const kpisTurmasPorProfessorUnidade = kpisTurmasCanonicos
+        ? indexarKpisTurmasCanonicos(kpisTurmasCanonicos)
+        : new Map();
 
       const turmasPorProfessorUnidade = new Map<string, number>();
       const alunosPorProfessorUnidade = new Map<string, number>();
       const mediaAlunosTurmaPorProfessorUnidade = new Map<string, number>();
-      const ocupacoesRegulares = new Map<string, number>();
-      const turmasRegulares = new Map<string, number>();
 
       kpisPorProfessorUnidade.forEach((kpi, key) => {
         turmasPorProfessorUnidade.set(key, kpi.total_turmas);
         alunosPorProfessorUnidade.set(key, kpi.carteira_alunos);
+      });
+      kpisTurmasPorProfessorUnidade.forEach((kpi, key) => {
         mediaAlunosTurmaPorProfessorUnidade.set(key, kpi.media_alunos_turma);
-        ocupacoesRegulares.set(key, kpi.alunos_via_turmas);
-        turmasRegulares.set(key, kpi.turmas_elegiveis_media);
       });
 
       const turmasPorProfessor = new Map<number, number>();
@@ -295,8 +315,9 @@ export function ProfessoresPage() {
       setTurmasPorProfessorUnidade(turmasPorProfessorUnidade);
       setAlunosPorProfessorUnidade(alunosPorProfessorUnidade);
       setMediaAlunosTurmaPorProfessorUnidade(mediaAlunosTurmaPorProfessorUnidade);
-      setOcupacoesRegularesPorProfessorUnidade(ocupacoesRegulares);
-      setTurmasRegularesPorProfessorUnidade(turmasRegulares);
+      setMediaAlunosTurmaGeralCanonica(kpisTurmasCanonicos
+        ? calcularTotaisKpisTurmasCanonicos(kpisTurmasCanonicos).mediaAlunosTurma
+        : null);
     } catch (error) {
       const detalhe = error as { code?: string; message?: string; details?: string; hint?: string };
       console.error('Erro ao carregar professores:', JSON.stringify({
@@ -416,16 +437,6 @@ export function ProfessoresPage() {
       ? professoresComNps.reduce((sum, p) => sum + (p.nps_medio || 0), 0) / professoresComNps.length
       : 0;
 
-    const totaisMedia = ativos.reduce((totais, professor) => {
-      const key = `${professor.id}_${unidadeKey}`;
-      totais.ocupacoes += ocupacoesRegularesPorProfessorUnidade.get(key) || 0;
-      totais.turmas += turmasRegularesPorProfessorUnidade.get(key) || 0;
-      return totais;
-    }, { ocupacoes: 0, turmas: 0 });
-    const mediaAlunosTurmaGeral = totaisMedia.turmas > 0
-      ? totaisMedia.ocupacoes / totaisMedia.turmas
-      : 0;
-
     return {
       totalAtivos: ativos.length,
       totalInativos: inativos.length,
@@ -435,7 +446,7 @@ export function ProfessoresPage() {
       mediaTurmasPorProfessor: ativos.length > 0 ? totalTurmas / ativos.length : 0,
       veteranos: veteranos.length,
       superVeteranos: superVeteranos.length,
-      mediaAlunosTurmaGeral,
+      mediaAlunosTurmaGeral: mediaAlunosTurmaGeralCanonica,
       npsMedio
     };
   }, [
@@ -443,8 +454,7 @@ export function ProfessoresPage() {
     unidadeAtual,
     turmasPorProfessorUnidade,
     alunosPorProfessorUnidade,
-    ocupacoesRegularesPorProfessorUnidade,
-    turmasRegularesPorProfessorUnidade,
+    mediaAlunosTurmaGeralCanonica,
   ]);
 
   // Handlers de CRUD
@@ -685,7 +695,11 @@ export function ProfessoresPage() {
 
       {/* Conteúdo da aba Carteira */}
       {abaAtiva === 'carteira' && (
-        <TabCarteiraProfessores unidadeAtual={unidadeAtual} onPeriodoChange={context?.setPeriodoLabel} />
+        <TabCarteiraProfessores
+          unidadeAtual={unidadeAtual}
+          competencia={competencia}
+          onPeriodoChange={context?.setPeriodoLabel}
+        />
       )}
 
       {/* Conteúdo da aba Agenda */}
@@ -857,7 +871,12 @@ export function ProfessoresPage() {
         />
         <KPICard
           label="Média Alunos/Turma"
-          value={kpis.mediaAlunosTurmaGeral > 0 ? kpis.mediaAlunosTurmaGeral.toFixed(2) : '-'}
+          value={kpis.mediaAlunosTurmaGeral === null
+            ? 'Indisponivel'
+            : kpis.mediaAlunosTurmaGeral.toLocaleString('pt-BR', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
           icon={Users}
           variant="purple"
           subvalue="por turma"

@@ -17,6 +17,11 @@ import {
   consolidarKpisProfessoresCanonicos,
 } from '@/lib/professoresKpisCanonicos';
 import {
+  buscarKpisTurmasCanonicos,
+  indexarKpisTurmasCanonicos,
+} from '@/lib/turmasKpisCanonicos';
+import type { CompetenciaRange } from '@/hooks/useCompetenciaFiltro';
+import {
   chaveProfessorUnidade,
   filtrarKpisPorVinculosAtivos,
 } from '@/lib/professoresKpisAgregados';
@@ -47,7 +52,7 @@ interface CarteiraProfessor {
   alunos_ticket: number;
   tempo_medio_meses: number;
   total_turmas: number;
-  media_alunos_turma: number;
+  media_alunos_turma: number | null;
   cursos: string[];
   unidades: string[];
   health_score: number | null;
@@ -60,13 +65,14 @@ interface CarteiraProfessor {
 
 interface Props {
   unidadeAtual: UnidadeId;
+  competencia: { range: CompetenciaRange };
   onPeriodoChange?: (label: string | null) => void;
 }
 
 type OrdenacaoTipo = 'alunos' | 'mrr' | 'ticket' | 'media_turma';
 type OrdenacaoDirecao = 'asc' | 'desc';
 
-export function TabCarteiraProfessores({ unidadeAtual, onPeriodoChange }: Props) {
+export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoChange }: Props) {
   const [carteiras, setCarteiras] = useState<CarteiraProfessor[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -90,16 +96,20 @@ export function TabCarteiraProfessores({ unidadeAtual, onPeriodoChange }: Props)
   });
   const requisicaoAtivaRef = useRef(0);
 
-  // Esta aba ignora o filtro de período global (sempre traz o dado ao vivo).
-  // Sobrescrevemos o badge do header para não sugerir que reflete um mês fechado.
+  // A carga operacional continua viva, mas a Media/Turma respeita a competencia
+  // selecionada para permanecer comparavel com Alunos, Dashboard e Analytics.
   useEffect(() => {
-    onPeriodoChange?.('Ao vivo');
+    onPeriodoChange?.(competencia.range.label);
     return () => { onPeriodoChange?.(null); };
-  }, [onPeriodoChange]);
+  }, [competencia.range.label, onPeriodoChange]);
 
   useEffect(() => {
     carregarDados();
-  }, [unidadeAtual]);
+  }, [
+    unidadeAtual,
+    competencia.range.startDate,
+    competencia.range.endDate,
+  ]);
 
   const carregarDados = async () => {
     const requisicaoId = ++requisicaoAtivaRef.current;
@@ -116,13 +126,20 @@ export function TabCarteiraProfessores({ unidadeAtual, onPeriodoChange }: Props)
 
       // Buscar carteira agregada via RPC (evita truncamento de 1000 linhas e RLS bypass da vw_turmas_implicitas)
       const rpcParams = unidadeAtual !== 'todos' ? { p_unidade_id: unidadeAtual } : {};
-      const agora = new Date();
-      const ano = agora.getFullYear();
-      const mes = agora.getMonth() + 1;
-      const competencia = `${ano}-${String(mes).padStart(2, '0')}-01`;
+      const ano = competencia.range.ano;
+      const mes = competencia.range.mesInicio;
+      const competenciaHealth = `${ano}-${String(mes).padStart(2, '0')}-01`;
+      const filtroPeriodo = {
+        ano,
+        mes,
+        unidadeId: unidadeAtual,
+        dataInicio: competencia.range.startDate,
+        dataFim: competencia.range.endDate,
+      };
       const [
         carteiraResult,
         kpisBrutos,
+        kpisTurmasBrutos,
         professoresResult,
         vinculosResult,
         unidadesResult,
@@ -130,11 +147,8 @@ export function TabCarteiraProfessores({ unidadeAtual, onPeriodoChange }: Props)
       ] = await Promise.all([
         // Enriquecimento financeiro contratual; nao define mais a populacao da Carteira.
         supabase.rpc('get_carteira_professores', rpcParams),
-        buscarKpisProfessoresCanonicos({
-          ano,
-          mes,
-          unidadeId: unidadeAtual,
-        }),
+        buscarKpisProfessoresCanonicos(filtroPeriodo),
+        buscarKpisTurmasCanonicos(filtroPeriodo),
         supabase
           .from('professores')
           .select('id, nome, foto_url')
@@ -172,6 +186,7 @@ export function TabCarteiraProfessores({ unidadeAtual, onPeriodoChange }: Props)
       const kpisData = consolidarKpisProfessoresCanonicos(
         filtrarKpisPorVinculosAtivos(kpisBrutos, professoresAtivos, vinculosAtivos),
       );
+      const kpisTurmasPorProfessor = indexarKpisTurmasCanonicos(kpisTurmasBrutos);
       const carteirasFinanceirasPorProfessor = new Map<number, any>(
         (carteiraResult.data || []).map((row: any) => [Number(row.professor_id), row]),
       );
@@ -209,7 +224,9 @@ export function TabCarteiraProfessores({ unidadeAtual, onPeriodoChange }: Props)
         const row = carteirasFinanceirasPorProfessor.get(professorId);
         const professor = professoresPorId.get(professorId);
         const totalAlunos = Number(kpis.carteira_alunos ?? 0);
-        const mediaAlunosTurma = Number(kpis.media_alunos_turma ?? 0);
+        const chaveTurma = `${professorId}_${unidadeAtual === 'todos' ? 'todos' : unidadeAtual}`;
+        const kpiTurma = kpisTurmasPorProfessor.get(chaveTurma);
+        const mediaAlunosTurma = kpiTurma ? Number(kpiTurma.media_alunos_turma) : null;
         const mrrTotal = Number(row?.mrr_total ?? 0);
 
         return {
@@ -247,7 +264,7 @@ export function TabCarteiraProfessores({ unidadeAtual, onPeriodoChange }: Props)
       setLoading(false);
 
       void supabase.rpc('get_health_score_professor_v3_performance', {
-        p_competencia: competencia,
+        p_competencia: competenciaHealth,
         p_unidade_id: unidadeAtual === 'todos' ? null : unidadeAtual,
         p_periodicidade: 'mensal',
       }).then((healthV3Result) => {
@@ -350,7 +367,14 @@ export function TabCarteiraProfessores({ unidadeAtual, onPeriodoChange }: Props)
         case 'alunos': valorA = a.total_alunos; valorB = b.total_alunos; break;
         case 'mrr': valorA = a.mrr_total; valorB = b.mrr_total; break;
         case 'ticket': valorA = a.ticket_medio; valorB = b.ticket_medio; break;
-        case 'media_turma': valorA = a.media_alunos_turma; valorB = b.media_alunos_turma; break;
+        case 'media_turma': {
+          if (a.media_alunos_turma === null && b.media_alunos_turma === null) return 0;
+          if (a.media_alunos_turma === null) return 1;
+          if (b.media_alunos_turma === null) return -1;
+          valorA = a.media_alunos_turma;
+          valorB = b.media_alunos_turma;
+          break;
+        }
       }
       return direcao === 'desc' ? valorB - valorA : valorA - valorB;
     });
@@ -377,13 +401,15 @@ export function TabCarteiraProfessores({ unidadeAtual, onPeriodoChange }: Props)
   }, [carteirasFiltradas]);
 
   // Cor do indicador de média/turma
-  const getCorMediaTurma = (media: number) => {
+  const getCorMediaTurma = (media: number | null) => {
+    if (media === null) return 'text-slate-400';
     if (media >= 1.8) return 'text-green-400';
     if (media >= 1.5) return 'text-yellow-400';
     return 'text-red-400';
   };
 
-  const getIndicadorMediaTurma = (media: number) => {
+  const getIndicadorMediaTurma = (media: number | null) => {
+    if (media === null) return '-';
     if (media >= 1.8) return '🟢';
     if (media >= 1.5) return '🟡';
     return '🔴';
@@ -423,7 +449,7 @@ export function TabCarteiraProfessores({ unidadeAtual, onPeriodoChange }: Props)
     <div className="space-y-6">
       <div className="inline-flex items-center gap-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-300">
         <Users className="h-3.5 w-3.5" />
-        Carteira operacional ao vivo - nao compara com competencia fechada
+        Media/Turma canonica de {competencia.range.label}; carteira detalhada operacional
       </div>
 
       {/* KPIs Consolidados */}
@@ -597,17 +623,22 @@ export function TabCarteiraProfessores({ unidadeAtual, onPeriodoChange }: Props)
 
                 {/* Badge Média/Turma */}
                 <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${
-                  carteira.media_alunos_turma >= 1.8 
-                    ? 'bg-green-500/10 border-green-500/20' 
-                    : carteira.media_alunos_turma >= 1.5 
-                      ? 'bg-yellow-500/10 border-yellow-500/20' 
+                  carteira.media_alunos_turma !== null && carteira.media_alunos_turma >= 1.8
+                    ? 'bg-green-500/10 border-green-500/20'
+                    : carteira.media_alunos_turma !== null && carteira.media_alunos_turma >= 1.5
+                      ? 'bg-yellow-500/10 border-yellow-500/20'
                       : 'bg-red-500/10 border-red-500/20'
                 }`}>
                   <span className="text-sm">
                     {getIndicadorMediaTurma(carteira.media_alunos_turma)}
                   </span>
                   <span className={`text-sm font-semibold ${getCorMediaTurma(carteira.media_alunos_turma)}`}>
-                    {carteira.media_alunos_turma.toFixed(1)}
+                    {carteira.media_alunos_turma === null
+                      ? 'Indisponivel'
+                      : carteira.media_alunos_turma.toLocaleString('pt-BR', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
                   </span>
                   <span className="text-xs text-slate-400">al/turma</span>
                 </div>
