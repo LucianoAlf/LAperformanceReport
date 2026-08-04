@@ -244,3 +244,34 @@ Aplicação e pós-flight:
   `TESTE` no painel e nenhum dos nomes legados de teste;
 - nenhuma pesquisa, resposta, ação manual, alerta ou mensagem de WhatsApp foi
   criada ou reescrita por esta correção.
+
+### Expectativa operacional do primeiro resumo real
+
+- o primeiro resumo real de Jéssica será enviado na sexta-feira, 07/08/2026,
+  às 09h BRT, e deverá concentrar cerca de 13 casos, conforme a elegibilidade
+  que permanecer no momento do corte;
+- a mensagem privada exibirá no máximo dez nomes e informará a quantidade
+  restante no formato `e mais N`;
+- trata-se de um lote grande para o primeiro contato da operadora com a
+  funcionalidade, mas é o comportamento esperado e não altera a cadência;
+- cada caso ficará visível individualmente na fila da tela desde o respectivo
+  vencimento de 72 horas, ao longo da quinta-feira, antes do resumo privado da
+  manhã seguinte.
+
+### Pré-condições para o Gate D
+
+Na próxima retomada matinal, antes de enfileirar o piloto de follow-up:
+
+1. confirmar que o alerta controlado da Fase A
+   `9c04dabb-a768-4ea7-b64f-3d5daffa771b` foi entregue somente depois da
+   reabertura da janela às 08h BRT, com uma tentativa e
+   `provider_message_id`;
+2. confirmar que a fila de follow-up continua com zero casos pendentes,
+   `followup_72h_liberado=false`, nenhum resumo real criado e nenhuma entrega
+   indevida;
+3. somente com as duas verificações verdes, executar o Gate D por
+   `enfileirar_lia_followup_piloto`, exclusivamente para o destino governado do
+   Alf.
+
+Até essa retomada, o Gate D permanece bloqueado: nenhum piloto, ativação ou
+follow-up automático à família está autorizado.
