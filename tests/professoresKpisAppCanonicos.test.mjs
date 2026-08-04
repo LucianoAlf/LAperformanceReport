@@ -69,6 +69,9 @@ test('analytics usa a RPC canonica e nao mistura views legadas de KPI', () => {
 
 test('carteira e hook nao publicam KPI de views legadas', () => {
   assert.match(carteira, /buscarKpisProfessoresCanonicos/);
+  assert.match(carteira, /buscarKpisTurmasCanonicos/);
+  assert.match(carteira, /competencia\.range\.startDate/);
+  assert.doesNotMatch(carteira, /const agora = new Date\(\)/);
   assert.doesNotMatch(carteira, /vw_kpis_professor_mensal/);
   assert.match(hook, /buscarKpisProfessoresCanonicos/);
   assert.doesNotMatch(hook, /vw_kpis_professor_completo/);
@@ -87,6 +90,8 @@ test('modal de performance evita fan-out concorrente da RPC canonica por mes', (
 
 test('performance e retencao historica nao retornam para tabelas agregadas legadas', () => {
   assert.match(performance, /buscarKpisProfessoresCanonicos/);
+  assert.match(performance, /buscarKpisTurmasCanonicos/);
+  assert.match(performance, /indexarKpisTurmasCanonicos/);
   assert.doesNotMatch(performance, /vw_kpis_professor_mensal/);
   assert.match(retencao, /buscarKpisProfessoresCanonicos/);
   assert.doesNotMatch(retencao, /professores_performance/);

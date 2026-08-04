@@ -86,7 +86,7 @@ export interface KPIsProfessores {
   mediaTurmasPorProfessor: number;
   veteranos: number; // > 5 anos
   superVeteranos: number; // > 10 anos
-  mediaAlunosTurmaGeral: number;
+  mediaAlunosTurmaGeral: number | null;
   npsMedio: number;
 }
 

@@ -27,7 +27,7 @@ interface CarteiraProfessor {
   ticket_medio: number;
   tempo_medio_meses: number;
   total_turmas: number;
-  media_alunos_turma: number;
+  media_alunos_turma: number | null;
   cursos: string[];
   unidades: string[];
 }
@@ -124,7 +124,8 @@ export function ModalCarteiraProfessor({ open, onClose, professor, unidadeAtual 
   ];
 
   // Cor do indicador de média/turma
-  const getCorMediaTurma = (media: number) => {
+  const getCorMediaTurma = (media: number | null) => {
+    if (media === null) return 'text-slate-400 bg-slate-500/20';
     if (media >= 1.8) return 'text-green-400 bg-green-500/20';
     if (media >= 1.5) return 'text-yellow-400 bg-yellow-500/20';
     return 'text-red-400 bg-red-500/20';
@@ -206,7 +207,12 @@ export function ModalCarteiraProfessor({ open, onClose, professor, unidadeAtual 
                 </div>
               </div>
               <p className={`text-xl font-bold ${getCorMediaTurma(professor.media_alunos_turma).split(' ')[0]}`}>
-                {professor.media_alunos_turma.toFixed(1)}
+                {professor.media_alunos_turma === null
+                  ? 'Indisponivel'
+                  : professor.media_alunos_turma.toLocaleString('pt-BR', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
               </p>
               <p className="text-xs text-slate-400">Média/Turma</p>
             </div>
