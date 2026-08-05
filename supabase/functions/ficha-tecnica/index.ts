@@ -245,7 +245,7 @@ async function lerToken(sb: ReturnType<typeof db>, token: string | null) {
   if (!token) return { erro: 'token ausente' };
   const { data, error } = await sb
     .from('ficha_tokens')
-    .select('id, token, colaborador_id, cargo_contexto, usado_em, ativo, colaboradores(id, nome, apelido, unidade_id, situacao)')
+    .select('id, token, colaborador_id, cargo_contexto, usado_em, ativo, colaboradores(id, nome, apelido, unidade_id, situacao, temperamento_codinome)')
     .eq('token', token)
     .maybeSingle();
   if (error) return { erro: error.message };
@@ -302,7 +302,7 @@ Deno.serve(async (req) => {
       }));
 
       return json({
-        colaborador: { id: colaborador?.id, nome: colaborador?.apelido || colaborador?.nome },
+        colaborador: { id: colaborador?.id, nome: colaborador?.apelido || colaborador?.nome, codinome: colaborador?.temperamento_codinome || null },
         cargo_contexto: cargo,
         diagnostico_feito: diagnosticoFeito,
         bloco_a: diagnosticoFeito ? [] : blocoA,
