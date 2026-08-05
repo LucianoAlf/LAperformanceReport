@@ -1641,26 +1641,32 @@ export function ModalFichaAluno({
     linhas.push(`${labelPrimario} + ${labelSecundario}${codinome}`);
     linhas.push(`Col ${colerico} · San ${sanguineo} · Fle ${fleumatico} · Mel ${melancolico}`);
     linhas.push('');
-    // FRONTEIRA DE SAUDE (05/08/2026, decisao do Alf): este texto vai para o
-    // WhatsApp do PROFESSOR, e o professor precisa saber COMO APOIAR -- nunca
-    // o nome do diagnostico, da condicao medica ou do medicamento.
-    // Diagnosticos, Medicacao e Cuidado medico saem daqui de proposito.
+    // SAUDE VAI PRO PROFESSOR — corrigido pelo Alf em 05/08/2026.
     //
-    // A mesma fronteira ja foi fechada na edge function notificar-anamnese (o
-    // envio automatico). Sem fechar aqui tambem, o caminho manual continuaria
-    // entregando o rotulo -- por copiar-e-colar, que e o mais dificil de
-    // auditar depois.
+    // Eu tinha cortado este bloco inteiro de manha, por privacidade. O
+    // argumento que derruba o meu: se a familia RELATOU na anamnese, ela espera
+    // que o professor saiba. O professor descobrir numa conversa com o pai que
+    // ninguem o avisou e pior por todos os lados. E parte disto nem e conducao
+    // de aula, e seguranca fisica -- no banco ha 'Anafilaxia a formiga' e
+    // 'Cardiopata'.
     //
-    // A ficha completa, com tudo, segue visivel para a coordenacao nesta mesma
-    // tela. O que muda e so o que sai daqui para fora.
-    const apoio = (anamnese.necessidade_apoio ?? '').trim();
-    const apoioEhReal = apoio !== '' && !['n', 'na', 'nao', 'não', 'no', 'nenhum', 'nenhuma', 'teste', '-']
-      .includes(apoio.toLowerCase().replace(/[.!]+$/, ''));
-    const comunicacao = isKids ? (anamnese.comunicacao_crianca ?? '').trim() : '';
-    if (apoioEhReal || comunicacao) {
-      linhas.push(`*🤝 Apoio e Comunicação*`);
-      if (apoioEhReal) linhas.push(`Apoio necessário: ${apoio}`);
-      if (comunicacao) linhas.push(`Comunicação: ${comunicacao}`);
+    // O que sobrou do corte, e que valia: nada de despejar campo vazio. Antes
+    // saia `Medicacao: nao / Cuidado medico: nao / Apoio necessario: nao` --
+    // tres linhas de nada, no meio das quais a informacao real se perdia.
+    const ehNegativo = (v?: string | null) => {
+      const s = (v ?? '').trim().toLowerCase().replace(/[.!]+$/, '');
+      return s === '' || ['n', 'na', 'nao', 'não', 'no', 'nenhum', 'nenhuma', 'teste', '-'].includes(s);
+    };
+    const saude: string[] = [];
+    const diagsReais = diagnosticos.filter((d) => !ehNegativo(d));
+    if (diagsReais.length) saude.push(`• *Diagnóstico:* ${diagsReais.join(', ')}`);
+    if (!ehNegativo(anamnese.cuidado_medico)) saude.push(`• *Cuidado médico:* ${anamnese.cuidado_medico!.trim()}`);
+    if (!ehNegativo(anamnese.medicacao_continua)) saude.push(`• *Medicação contínua:* ${anamnese.medicacao_continua!.trim()}`);
+    if (!ehNegativo(anamnese.necessidade_apoio)) saude.push(`• *Apoio necessário:* ${anamnese.necessidade_apoio!.trim()}`);
+    if (isKids && !ehNegativo(anamnese.comunicacao_crianca)) saude.push(`• *Comunicação:* ${anamnese.comunicacao_crianca!.trim()}`);
+    if (saude.length) {
+      linhas.push(`*⚠️ Saúde e necessidades*`);
+      saude.forEach((l) => linhas.push(l));
       linhas.push('');
     }
     linhas.push(`*🎯 Objetivos*`);
