@@ -26,6 +26,13 @@ interface FichaColaboradorProps {
   onVoltar: () => void;
 }
 
+/** Formata a idade da atualização do Rider: 0=hoje, 1=ontem, N=há N dias */
+function formatarDiasRider(dias: number): string {
+  if (dias <= 0) return 'hoje';
+  if (dias === 1) return 'ontem';
+  return `há ${dias} dias`;
+}
+
 export function FichaColaborador({ colaboradorId, onVoltar }: FichaColaboradorProps) {
   const { ficha, isLoading } = useFichaColaborador(colaboradorId);
 
@@ -269,7 +276,7 @@ function ReguaDistribuicao({ contagem }: { contagem: Record<string, number> }) {
   const total = entries.reduce((s, [, v]) => s + v, 0);
 
   return (
-    <div className="mt-6 mb-2">
+    <div className="mt-7 mb-8">
       <div className="flex h-2.5 rounded-md overflow-hidden gap-0.5">
         {entries.map(([key, val]) => {
           const cor = PERFIL_CORES[key] || '#5c7093';
@@ -392,7 +399,7 @@ function RiderCard({
           <div className="mt-4.5 flex items-center gap-2 text-xs text-slate-500">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-none" />
             {riderDias !== null
-              ? `Atualizado por ${nome.split(' ')[0].toLowerCase()} há ${riderDias} ${riderDias === 1 ? 'dia' : 'dias'} · sempre editável`
+              ? `Atualizado por ${nome.split(' ')[0].toLowerCase()} ${formatarDiasRider(riderDias)} · sempre editável`
               : 'Sempre editável'}
           </div>
         </>
