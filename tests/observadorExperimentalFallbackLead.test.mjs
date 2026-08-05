@@ -21,7 +21,6 @@ test('lead fallback criado com emusys_lead_id e sem telefone, na unidade certa',
   assert.match(source, /emusys_lead_id: emusysLeadId,/);
   assert.match(source, /unidade_id: unidadeId,/);
   assert.match(source, /telefone: null,/);
-  assert.match(source, /source_type: 'emusys',/);
 });
 
 test('lead_fallback aparece no retorno final da experimental', () => {

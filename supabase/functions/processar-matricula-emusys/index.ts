@@ -988,31 +988,36 @@ async function converterLead(supabase: any, p: Payload, alunoId: number | null):
 
   if (!leadId) return { leadId: null, action: 'lead_nao_encontrado' };
 
-  // Le o estado atual antes de decidir o que sobrescrever: quando dois irmaos convertem pro
-  // mesmo lead (casado pelo telefone do responsavel), so o primeiro deve fixar
-  // aluno_id/emusys_lead_id. O vinculo do 2o irmao com o lead ja fica registrado em
-  // alunos.lead_origem_id (gravado logo abaixo, no arquivo, com a mesma guarda IS NULL), que
-  // suporta N alunos por lead. leads.aluno_id/emusys_lead_id sao ponteiros 1:1 e nao devem
-  // trocar de dono depois de fixados - senao o 1o irmao fica sem referencia (caso real:
-  // Sophia/Luiz Felipe, lead #8025 com emusys_lead_id da Sophia e aluno_id do Luiz Felipe).
-  const { data: leadAtual } = await supabase
-    .from('leads')
-    .select('aluno_id, emusys_lead_id')
-    .eq('id', leadId)
-    .maybeSingle();
-
+  // Guarda ATOMICA via WHERE ... IS NULL, no mesmo padrao ja usado neste arquivo para
+  // alunos.lead_origem_id (.eq('id', alunoId).is('lead_origem_id', null)). Evita o
+  // read-then-write anterior: quando dois irmaos convertem pro mesmo lead (casado pelo
+  // telefone do responsavel), so o primeiro deve fixar aluno_id/emusys_lead_id, e uma
+  // leitura seguida de escrita abria uma janela de corrida onde os dois webhooks liam
+  // "vazio" antes de qualquer um escrever. O vinculo do 2o irmao com o lead ja fica
+  // registrado em alunos.lead_origem_id (gravado logo abaixo, no arquivo, com a mesma
+  // guarda IS NULL), que suporta N alunos por lead. leads.aluno_id/emusys_lead_id sao
+  // ponteiros 1:1 e nao devem trocar de dono depois de fixados - senao o 1o irmao fica
+  // sem referencia (caso real: Sophia/Luiz Felipe, lead #8025 com emusys_lead_id da
+  // Sophia e aluno_id do Luiz Felipe).
   const hoje = new Date().toISOString().split('T')[0];
-  const updates: any = {
+  const baseUpdates: any = {
     status: 'convertido',
     etapa_pipeline_id: 10,
     converteu: true,
     data_conversao: hoje,
     updated_at: new Date().toISOString(),
   };
-  if (p.emusysLeadId && !leadAtual?.emusys_lead_id) updates.emusys_lead_id = p.emusysLeadId;
-  if (alunoId && !leadAtual?.aluno_id) updates.aluno_id = alunoId;
 
-  await supabase.from('leads').update(updates).eq('id', leadId);
+  await supabase.from('leads').update(baseUpdates).eq('id', leadId);
+
+  if (p.emusysLeadId) {
+    await supabase.from('leads').update({ emusys_lead_id: p.emusysLeadId })
+      .eq('id', leadId).is('emusys_lead_id', null);
+  }
+  if (alunoId) {
+    await supabase.from('leads').update({ aluno_id: alunoId })
+      .eq('id', leadId).is('aluno_id', null);
+  }
 
   return { leadId, action: 'lead_convertido' };
 }

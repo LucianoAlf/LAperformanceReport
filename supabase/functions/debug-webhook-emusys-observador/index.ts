@@ -400,11 +400,15 @@ async function processarLead(sb: any, body: any, unidadeId: string, escrever: bo
   if (leadId && telefone) {
     const { data: leadAtual } = await sb.from('leads').select('telefone').eq('id', leadId).maybeSingle();
     if (leadAtual && leadAtual.telefone !== telefone) {
+      // Colisão de telefone não deve suprimir o delta (etapa_pipeline_id etc.) — só afeta
+      // o `acao`/`status` reportados. Ver finding #2 da revisão final.
+      const deltaColisao = await aplicarDeltaLead(sb, leadId, lead);
       return {
         acao: 'colisao_telefone_familia',
         motivo: 'telefone ja pertence a outro lead ativo na unidade',
         telefone_recusado: telefone,
         resultado: data,
+        delta_observador: deltaColisao,
         args,
       };
     }
@@ -522,10 +526,9 @@ async function criarLeadFallbackExperimental(
       nome: nomeAluno,
       unidade_id: unidadeId,
       telefone: null,
-      source_type: 'emusys',
       status: 'novo',
       etapa_pipeline_id: 5,
-      data_contato: new Date().toISOString().substring(0, 10),
+      data_contato: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().substring(0, 10),
     })
     .select('id')
     .single();
@@ -594,7 +597,13 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
   ) {
     const criado = await criarLeadFallbackExperimental(sb, unidadeId, emusysLeadId, nomeAluno);
     if (criado.erro) {
-      return { acao: 'erro_lead_fallback', erro: criado.erro, args };
+      // Falta de emusysLeadId é payload insuficiente (nada a chavear), não falha de sistema —
+      // acao distinta para cair no ramo 'warn' do serve(). O insert de fato falhando (infra/DB)
+      // continua caindo no 'erro_rpc' logo abaixo, que segue como erro real.
+      const acaoFallback = criado.erro === 'sem emusys_lead_id para criar o lead'
+        ? 'erro_lead_fallback_payload_insuficiente'
+        : 'erro_lead_fallback';
+      return { acao: acaoFallback, erro: criado.erro, args };
     }
     leadFallback = { lead_id: criado.leadId as number };
     const retry = await sb.rpc('registrar_experimental', args);
@@ -787,12 +796,19 @@ serve(async (req: Request) => {
       && typeof resultado.resultado === 'object'
       && resultado.resultado.success === false;
     let status: 'ok' | 'warn' | 'erro' = 'ok';
-    if (acao === 'erro_processamento' || acaoInterna.indexOf('erro_') === 0) {
+    // 'erro_lead_fallback_payload_insuficiente' fica de fora do bucket genérico 'erro_*':
+    // não é falha de sistema, é payload sem telefone/lead_id — nada para chavear a
+    // criação do lead. Cai no ramo 'warn' logo abaixo, junto com 'colisao_telefone_familia'.
+    if (
+      acao === 'erro_processamento'
+      || (acaoInterna.indexOf('erro_') === 0 && acaoInterna !== 'erro_lead_fallback_payload_insuficiente')
+    ) {
       status = 'erro';
     } else if (
       escrever
       && (acaoInterna === 'ignorado'
         || acaoInterna === 'colisao_telefone_familia'
+        || acaoInterna === 'erro_lead_fallback_payload_insuficiente'
         || acaoInterna.indexOf('lead_not_found') >= 0
         || rpcRecusou)
     ) {
