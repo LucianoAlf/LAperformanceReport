@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Users, ChevronRight, Search } from 'lucide-react';
+import { Users, ChevronRight, Search, UserPlus } from 'lucide-react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import { useColaboradores } from '@/hooks/useColaboradores';
@@ -12,6 +12,7 @@ import {
 } from '@/data/perfilTextos';
 import type { Colaborador } from './types';
 import { FichaColaborador } from './FichaColaborador';
+import { ModalAdicionarPessoa } from './ModalAdicionarPessoa';
 
 type UnidadeId = string | 'todos';
 
@@ -37,8 +38,9 @@ export function TimePage() {
   const [apenasRespondidos, setApenasRespondidos] = useState(false);
   const [busca, setBusca] = useState('');
   const [colaboradorSelecionado, setColaboradorSelecionado] = useState<number | null>(null);
+  const [modalAdicionar, setModalAdicionar] = useState(false);
 
-  const { colaboradores, unidades, departamentos, isLoading } = useColaboradores(
+  const { colaboradores, unidades, departamentos, isLoading, refetch } = useColaboradores(
     unidadeFiltro,
     departamentoFiltro,
     apenasRespondidos,
@@ -68,6 +70,16 @@ export function TimePage() {
     <div className="space-y-6">
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-3">
+        {/* Botão Adicionar pessoa — só admin */}
+        {isAdmin && (
+          <button
+            onClick={() => setModalAdicionar(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium transition-colors"
+          >
+            <UserPlus className="w-4 h-4" />
+            Adicionar pessoa
+          </button>
+        )}
         {/* Filtro de unidade */}
         {isAdmin && (
           <div className="bg-slate-800 p-1 rounded-lg inline-flex">
@@ -175,6 +187,16 @@ export function TimePage() {
             />
           ))}
         </div>
+      )}
+
+      {/* Modal Adicionar Pessoa — só admin */}
+      {isAdmin && (
+        <ModalAdicionarPessoa
+          open={modalAdicionar}
+          onOpenChange={setModalAdicionar}
+          unidades={unidades}
+          onSucesso={refetch}
+        />
       )}
     </div>
   );
