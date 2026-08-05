@@ -192,6 +192,8 @@ export function TabelaRenovacoes({
   }
 
   const reajusteCanonico = calcularReajusteMedioCanonico(data);
+  const totalParcelasNovas = data.reduce((soma, item) => soma + toNumber(item.valor_parcela_novo), 0);
+  const qtdComParcelaNova = data.filter(item => toNumber(item.valor_parcela_novo) > 0).length;
 
   return (
     <div className="overflow-x-auto">
@@ -444,10 +446,26 @@ export function TabelaRenovacoes({
               <td colSpan={6} className="px-4 py-3 text-right font-medium text-slate-400">
                 Totais: {data.length} renovações - {reajusteCanonico.total} válidas para reajuste
               </td>
-              <td className="px-4 py-3 text-center font-bold text-emerald-400">
-                +{reajusteCanonico.media.toFixed(1)}%
+              <td
+                className="whitespace-nowrap px-3 py-3 text-right font-bold text-emerald-400"
+                title={`Soma das parcelas novas de ${qtdComParcelaNova} renovação(ões) com valor preenchido`}
+              >
+                <div className="leading-tight">
+                  {formatCurrency(totalParcelasNovas)}
+                  <div className="text-[10px] font-normal uppercase tracking-wide text-slate-500">
+                    soma das parcelas
+                  </div>
+                </div>
               </td>
-              <td colSpan={4} className="px-4 py-3 text-slate-400">Reajuste médio</td>
+              <td className="px-3 py-3 text-center font-bold text-emerald-400">
+                <div className="leading-tight">
+                  +{reajusteCanonico.media.toFixed(1)}%
+                  <div className="text-[10px] font-normal uppercase tracking-wide text-slate-500">
+                    reajuste médio
+                  </div>
+                </div>
+              </td>
+              <td colSpan={3} className="px-4 py-3" />
             </tr>
           </tfoot>
         )}
