@@ -51,6 +51,20 @@ const SEGMENTACAO_KIDS_SCHOOL_CG_MAIO_2026 = {
   nota: 'Segmentação Kids/School reconstruída por critério histórico; snapshot original não possui essas colunas.',
 };
 
+function acumularCampoOpcional(atual: number | null, valor: unknown): number | null {
+  if (atual === null || valor === null || valor === undefined) return null;
+  const numero = Number(valor);
+  return Number.isFinite(numero) ? atual + numero : null;
+}
+
+function mediaCampoOpcional(total: number | null, quantidade: number): number | null {
+  return total === null || quantidade <= 0 ? null : Math.round(total / quantidade);
+}
+
+function valorKpiOuTraco(valor: number | null): number | string {
+  return valor === null ? '—' : valor;
+}
+
 function mapKPIAlunoCanonicoParaGestao(row: any) {
   return {
     unidade_id: row.unidade_id,
@@ -95,19 +109,19 @@ interface DadosGestao {
   total_alunos_ativos: number;
   total_alunos_pagantes: number;
   total_bolsistas_integrais: number;
-  total_bolsistas_integrais_regulares: number;
-  total_bolsistas_integrais_segundo_curso: number;
+  total_bolsistas_integrais_regulares: number | null;
+  total_bolsistas_integrais_segundo_curso: number | null;
   total_bolsistas_parciais: number;
   total_banda: number;
   matriculas_2_curso: number;
-  alunos_com_2_curso: number;
-  matriculas_2_curso_extras: number;
+  alunos_com_2_curso: number | null;
+  matriculas_2_curso_extras: number | null;
   novas_matriculas: number;
   evasoes: number;
   saldo_liquido: number;
-  total_la_kids: number;
-  total_la_adultos: number;
-  total_la_sem_classificação: number;
+  total_la_kids: number | null;
+  total_la_adultos: number | null;
+  total_la_sem_classificação: number | null;
   total_somente_banda_segundo: number;
   distribuicao_faixa_etaria: { name: string; value: number }[];
   
@@ -716,16 +730,16 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             total_alunos_ativos_sum: acc.total_alunos_ativos_sum + (item.total_alunos_ativos || 0),
             total_alunos_pagantes_sum: acc.total_alunos_pagantes_sum + (item.total_alunos_pagantes || 0),
             total_bolsistas_integrais_sum: acc.total_bolsistas_integrais_sum + (item.total_bolsistas_integrais || 0),
-            total_bolsistas_integrais_regulares_sum: acc.total_bolsistas_integrais_regulares_sum + (item.total_bolsistas_integrais_regulares || 0),
-            total_bolsistas_integrais_segundo_curso_sum: acc.total_bolsistas_integrais_segundo_curso_sum + (item.total_bolsistas_integrais_segundo_curso || 0),
+            total_bolsistas_integrais_regulares_sum: acumularCampoOpcional(acc.total_bolsistas_integrais_regulares_sum, item.total_bolsistas_integrais_regulares),
+            total_bolsistas_integrais_segundo_curso_sum: acumularCampoOpcional(acc.total_bolsistas_integrais_segundo_curso_sum, item.total_bolsistas_integrais_segundo_curso),
             total_bolsistas_parciais_sum: acc.total_bolsistas_parciais_sum + (item.total_bolsistas_parciais || 0),
             total_banda_sum: acc.total_banda_sum + (item.total_banda || 0),
             matriculas_2_curso_sum: acc.matriculas_2_curso_sum + (item.total_segundo_curso || item.matriculas_2_curso || 0),
-            alunos_com_2_curso_sum: acc.alunos_com_2_curso_sum + (item.alunos_com_2_curso || 0),
-            matriculas_2_curso_extras_sum: acc.matriculas_2_curso_extras_sum + (item.matriculas_2_curso_extras || 0),
-            total_la_kids_sum: acc.total_la_kids_sum + (item.total_la_kids || 0),
-            total_la_adultos_sum: acc.total_la_adultos_sum + (item.total_la_adultos || 0),
-            total_la_sem_classificação_sum: acc.total_la_sem_classificação_sum + (item.total_la_sem_classificação || 0),
+            alunos_com_2_curso_sum: acumularCampoOpcional(acc.alunos_com_2_curso_sum, item.alunos_com_2_curso),
+            matriculas_2_curso_extras_sum: acumularCampoOpcional(acc.matriculas_2_curso_extras_sum, item.matriculas_2_curso_extras),
+            total_la_kids_sum: acumularCampoOpcional(acc.total_la_kids_sum, item.total_la_kids),
+            total_la_adultos_sum: acumularCampoOpcional(acc.total_la_adultos_sum, item.total_la_adultos),
+            total_la_sem_classificação_sum: acumularCampoOpcional(acc.total_la_sem_classificação_sum, item.total_la_sem_classificação),
             ticket_medio_sum: acc.ticket_medio_sum + ((Number(item.ticket_medio) || 0) * (item.ticket_denominador_faturas || item.total_alunos_pagantes || 0)),
             ticket_denominador_sum: acc.ticket_denominador_sum + (item.ticket_denominador_faturas || item.total_alunos_pagantes || 0),
             mrr_sum: acc.mrr_sum + (Number(item.mrr) || 0),
@@ -744,10 +758,15 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             count: acc.count + 1,
           }), {
             total_alunos_ativos_sum: 0, total_alunos_pagantes_sum: 0, total_bolsistas_integrais_sum: 0,
-            total_bolsistas_integrais_regulares_sum: 0, total_bolsistas_integrais_segundo_curso_sum: 0,
+            total_bolsistas_integrais_regulares_sum: 0 as number | null,
+            total_bolsistas_integrais_segundo_curso_sum: 0 as number | null,
             total_bolsistas_parciais_sum: 0, total_banda_sum: 0, matriculas_2_curso_sum: 0,
-            alunos_com_2_curso_sum: 0, matriculas_2_curso_extras_sum: 0, total_la_kids_sum: 0,
-            total_la_adultos_sum: 0, total_la_sem_classificação_sum: 0, ticket_medio_sum: 0, mrr_sum: 0, arr_sum: 0,
+            alunos_com_2_curso_sum: 0 as number | null,
+            matriculas_2_curso_extras_sum: 0 as number | null,
+            total_la_kids_sum: 0 as number | null,
+            total_la_adultos_sum: 0 as number | null,
+            total_la_sem_classificação_sum: 0 as number | null,
+            ticket_medio_sum: 0, mrr_sum: 0, arr_sum: 0,
             ticket_denominador_sum: 0,
             tempo_permanencia_medio_sum: 0, ltv_medio_sum: 0, inadimplencia_pct_sum: 0,
             faturamento_previsto: 0, faturamento_realizado: 0, churn_rate_sum: 0, total_evasoes: 0, 
@@ -885,9 +904,9 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           // Kids/School: qualquer pessoa com matrícula ativa (regular, 2o ou banda)
           // is_segundo_curso é promovido automaticamente para classificação
           const pessoasComClassificacao = Array.from(pessoasMap.values()).filter(p => p.temRegular || p.temAtivo);
-          let totalLaKids = pessoasComClassificacao.filter(p => p.idade !== null && p.idade <= 11).length;
-          let totalLaAdultos = pessoasComClassificacao.filter(p => p.idade !== null && p.idade >= 12).length;
-          let totalLaSemClassificacao = pessoasComClassificacao.filter(p => p.idade === null).length;
+          let totalLaKids: number | null = pessoasComClassificacao.filter(p => p.idade !== null && p.idade <= 11).length;
+          let totalLaAdultos: number | null = pessoasComClassificacao.filter(p => p.idade !== null && p.idade >= 12).length;
+          let totalLaSemClassificacao: number | null = pessoasComClassificacao.filter(p => p.idade === null).length;
           // Total de matrículas de banda (para card Banda)
           const totalBanda = (alunosAtivosData || []).filter((a: any) =>
             a.cursos?.is_projeto_banda === true
@@ -969,27 +988,31 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           const mediaAlunos = mesesUnicos > 0 ? Math.round(g.total_alunos_ativos_sum / mesesUnicos) : 0;
           const mediaPagantes = mesesUnicos > 0 ? Math.round(g.total_alunos_pagantes_sum / mesesUnicos) : 0;
           const mediaBolsistasIntegrais = mesesUnicos > 0 ? Math.round(g.total_bolsistas_integrais_sum / mesesUnicos) : 0;
-          const mediaBolsistasIntegraisRegulares = mesesUnicos > 0 ? Math.round(g.total_bolsistas_integrais_regulares_sum / mesesUnicos) : 0;
-          const mediaBolsistasIntegraisSegundoCurso = mesesUnicos > 0 ? Math.round(g.total_bolsistas_integrais_segundo_curso_sum / mesesUnicos) : 0;
+          const mediaBolsistasIntegraisRegulares = mediaCampoOpcional(g.total_bolsistas_integrais_regulares_sum, mesesUnicos);
+          const mediaBolsistasIntegraisSegundoCurso = mediaCampoOpcional(g.total_bolsistas_integrais_segundo_curso_sum, mesesUnicos);
           const mediaBolsistasParciais = mesesUnicos > 0 ? Math.round(g.total_bolsistas_parciais_sum / mesesUnicos) : 0;
           const mediaBanda = mesesUnicos > 0 ? Math.round(g.total_banda_sum / mesesUnicos) : 0;
           const mediaMatriculas2Curso = mesesUnicos > 0 ? Math.round(g.matriculas_2_curso_sum / mesesUnicos) : 0;
-          const mediaAlunosCom2Curso = mesesUnicos > 0 ? Math.round(g.alunos_com_2_curso_sum / mesesUnicos) : 0;
-          const mediaMatriculas2CursoExtras = mesesUnicos > 0 ? Math.round(g.matriculas_2_curso_extras_sum / mesesUnicos) : 0;
-          const mediaKidsCanonicos = mesesUnicos > 0 ? Math.round(g.total_la_kids_sum / mesesUnicos) : 0;
-          const mediaSchoolCanonicos = mesesUnicos > 0 ? Math.round(g.total_la_adultos_sum / mesesUnicos) : 0;
-          const mediaSemClassificacaoCanonica = mesesUnicos > 0 ? Math.round(g.total_la_sem_classificação_sum / mesesUnicos) : 0;
-          const totalClassificado = totalLaKids + totalLaAdultos;
+          const mediaAlunosCom2Curso = mediaCampoOpcional(g.alunos_com_2_curso_sum, mesesUnicos);
+          const mediaMatriculas2CursoExtras = mediaCampoOpcional(g.matriculas_2_curso_extras_sum, mesesUnicos);
+          const mediaKidsCanonicos = mediaCampoOpcional(g.total_la_kids_sum, mesesUnicos);
+          const mediaSchoolCanonicos = mediaCampoOpcional(g.total_la_adultos_sum, mesesUnicos);
+          const mediaSemClassificacaoCanonica = mediaCampoOpcional(g.total_la_sem_classificação_sum, mesesUnicos);
+          const totalClassificado = (totalLaKids ?? 0) + (totalLaAdultos ?? 0);
           const usarBaseVivaCanonica = isPeriodoAtual && !mesFechado;
           const totalAlunosAtivosCanonico = isPeriodoAtual ? mediaAlunos : (usarBaseVivaCanonica ? pessoasComClassificacao.length : mediaAlunos);
 
-          if (isPeriodoAtual) {
-            totalLaKids = mediaKidsCanonicos;
-            totalLaAdultos = mediaSchoolCanonicos;
-            totalLaSemClassificacao = mediaSemClassificacaoCanonica;
-          }
+          // A segmentacao exibida deve respeitar a fonte canonica selecionada.
+          // Em dados_mensais historico ela fica desconhecida, nunca recalculada
+          // silenciosamente a partir da carteira atual.
+          totalLaKids = mediaKidsCanonicos;
+          totalLaAdultos = mediaSchoolCanonicos;
+          totalLaSemClassificacao = mediaSemClassificacaoCanonica;
 
-          if (!isPeriodoAtual && mesFechado && mediaAlunos > 0 && totalClassificado > 0 && totalClassificado !== mediaAlunos) {
+          if (
+            !isPeriodoAtual && mesFechado && mediaAlunos > 0 && totalClassificado > 0 &&
+            totalClassificado !== mediaAlunos && totalLaKids !== null && totalLaAdultos !== null
+          ) {
             totalLaKids = Math.round((totalLaKids / totalClassificado) * mediaAlunos);
             totalLaAdultos = mediaAlunos - totalLaKids;
             totalLaSemClassificacao = 0;
@@ -1027,11 +1050,15 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             total_la_adultos: totalLaAdultos,
             total_la_sem_classificação: totalLaSemClassificacao,
             total_somente_banda_segundo: totalBanda,
-            distribuicao_faixa_etaria: [
-              { name: 'LA Music Kids (até 11)', value: totalLaKids },
-              { name: 'LA Music School (12+)', value: totalLaAdultos },
-              ...(totalLaSemClassificacao > 0 ? [{ name: 'Sem classificação', value: totalLaSemClassificacao }] : []),
-            ],
+            distribuicao_faixa_etaria: totalLaKids === null || totalLaAdultos === null
+              ? []
+              : [
+                  { name: 'LA Music Kids (até 11)', value: totalLaKids },
+                  { name: 'LA Music School (12+)', value: totalLaAdultos },
+                  ...(totalLaSemClassificacao !== null && totalLaSemClassificacao > 0
+                    ? [{ name: 'Sem classificação', value: totalLaSemClassificacao }]
+                    : []),
+                ],
             
             // Financeiro - ticket/taxas = MÉDIA, faturamento = SOMA
             ticket_medio: g.ticket_denominador_sum > 0 ? g.ticket_medio_sum / g.ticket_denominador_sum : 0,
@@ -1540,9 +1567,11 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
       <p className="text-slate-500 text-sm">{mensagem}</p>
     </div>
   );
-  const totalSegmentacaoKidsSchool =
-    dados.total_la_kids + dados.total_la_adultos + (dados.total_la_sem_classificação || 0);
-  const semClassificacaoSuffix = dados.total_la_sem_classificação > 0
+  const segmentacaoKidsSchoolDisponivel = dados.total_la_kids !== null && dados.total_la_adultos !== null;
+  const totalSegmentacaoKidsSchool = segmentacaoKidsSchoolDisponivel
+    ? dados.total_la_kids! + dados.total_la_adultos! + (dados.total_la_sem_classificação ?? 0)
+    : null;
+  const semClassificacaoSuffix = dados.total_la_sem_classificação !== null && dados.total_la_sem_classificação > 0
     ? ` · ${dados.total_la_sem_classificação} sem classificação`
     : '';
 
@@ -1658,16 +1687,20 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               icon={Baby}
               label="LA Music Kids"
               tooltip="Pessoas da mesma base de Alunos Ativos classificadas como LA Music Kids."
-              value={dados.total_la_kids}
-              subvalue={`${totalSegmentacaoKidsSchool > 0 ? ((dados.total_la_kids / totalSegmentacaoKidsSchool) * 100).toFixed(0) : 0}% dos ativos${semClassificacaoSuffix}`}
+              value={valorKpiOuTraco(dados.total_la_kids)}
+              subvalue={totalSegmentacaoKidsSchool !== null && totalSegmentacaoKidsSchool > 0
+                ? `${((dados.total_la_kids! / totalSegmentacaoKidsSchool) * 100).toFixed(0)}% dos ativos${semClassificacaoSuffix}`
+                : 'Sem dado no histórico'}
               variant="rose"
             />
             <KPICard
               icon={GraduationCap}
               label="LA Music School"
               tooltip="Pessoas da mesma base de Alunos Ativos classificadas como LA Music School."
-              value={dados.total_la_adultos}
-              subvalue={`${totalSegmentacaoKidsSchool > 0 ? ((dados.total_la_adultos / totalSegmentacaoKidsSchool) * 100).toFixed(0) : 0}% dos ativos${semClassificacaoSuffix}`}
+              value={valorKpiOuTraco(dados.total_la_adultos)}
+              subvalue={totalSegmentacaoKidsSchool !== null && totalSegmentacaoKidsSchool > 0
+                ? `${((dados.total_la_adultos! / totalSegmentacaoKidsSchool) * 100).toFixed(0)}% dos ativos${semClassificacaoSuffix}`
+                : 'Sem dado no histórico'}
               variant="violet"
             />
             <KPICard
@@ -1723,7 +1756,9 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               tooltip="Alunos com tipo de matrícula bolsista integral (100% de desconto). Clique para ver a lista."
               value={dados.total_bolsistas_integrais}
               subvalue={
-                dados.total_bolsistas_integrais_regulares || dados.total_bolsistas_integrais_segundo_curso
+                dados.total_bolsistas_integrais_regulares === null || dados.total_bolsistas_integrais_segundo_curso === null
+                  ? 'Detalhamento indisponível no histórico'
+                  : dados.total_bolsistas_integrais_regulares || dados.total_bolsistas_integrais_segundo_curso
                   ? `${dados.total_bolsistas_integrais_regulares} reg. + ${dados.total_bolsistas_integrais_segundo_curso} 2o curso`
                   : undefined
               }
