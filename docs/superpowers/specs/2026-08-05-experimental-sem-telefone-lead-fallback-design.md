@@ -82,16 +82,23 @@ recebido.
 de uma experimental nova (`criada`); reagendar ou cancelar algo que nunca existiu não deveria
 criar um registro do zero.
 
-**Colisão de telefone (decisão registrada):** quando, mais tarde, um `lead_editado` trouxer o
-telefone do responsável para esse mesmo `emusys_lead_id`, e esse telefone já pertencer a um
-lead-irmão ativo na mesma unidade, a gravação colide com `idx_leads_telefone_unidade_unique` (a
-constraint já existe e não muda). **Não é um pré-check novo** — é o `UPDATE` de telefone em
-`processarLead` (mesmo arquivo, `debug-webhook-emusys-observador/index.ts`) capturando esse erro
-de constraint especificamente (por `code`/mensagem do Postgres) e, nesse caso, **não
-re-lançando**: loga um aviso em `automacao_log` (`status='warn'`, motivo explícito de colisão)
-para revisão manual futura, quando o projeto de família completo existir, em vez de deixar
-subir como `erro` genérico. Não há merge nem duplicata aceita nesta fase — o lead-criança
-simplesmente continua sem telefone.
+**Colisão de telefone (decisão registrada, corrigida após ler o corpo real da RPC):** a
+princípio a expectativa era que a colisão estourasse `idx_leads_telefone_unidade_unique` como
+exceção. Não é o caso — `upsert_lead` (branch UPDATE, `p_source_type='emusys'`) já se protege
+sozinha: só aceita o `p_telefone` recebido (`v_telefone_safe`) se **não existir outro lead ativo
+na mesma unidade com esse telefone**; caso contrário, mantém o telefone atual do lead
+(`COALESCE(v_telefone_safe, telefone)`) — silenciosamente, sem erro, `action:'updated'` como
+se nada tivesse acontecido.
+
+Por isso não há exceção para capturar. `processarLead` (mesmo arquivo,
+`debug-webhook-emusys-observador/index.ts`) passa a fazer uma **checagem pós-RPC**: quando
+`telefone` foi enviado (não nulo) e a chamada retorna sem erro, relê `leads.telefone` do
+`lead_id` devolvido; se o valor no banco **não bate** com o `telefone` que foi enviado, é sinal
+de que a RPC recusou a gravação por colisão. Nesse caso, o acao vira
+`'colisao_telefone_familia'` (o handler principal do `serve()` passa a tratar isso como
+`status='warn'`, junto às outras causas de warn já existentes) — registrado em `automacao_log`
+para revisão manual futura, quando o projeto de família completo existir. Não há merge nem
+duplicata forçada nesta fase — o lead-criança simplesmente continua sem telefone.
 
 ## Parte B — Parar de sobrescrever `leads.aluno_id`/`leads.emusys_lead_id`
 
