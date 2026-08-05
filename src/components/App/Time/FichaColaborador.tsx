@@ -93,7 +93,7 @@ function FichaConteudo({ ficha, onVoltar }: { ficha: FichaType; onVoltar: () => 
   const grupoMap: Record<string, number> = {};
   for (const campo of RIDER_CAMPOS) {
     const valor = riderRespostas[campo.id];
-    if (valor && valor.trim()) {
+    if (valor && valor.trim().length >= 3) {
       if (!(campo.grupo in grupoMap)) {
         grupoMap[campo.grupo] = riderGrupos.length;
         riderGrupos.push({ grupo: campo.grupo, campos: [] });
@@ -297,11 +297,11 @@ function ReguaDistribuicao({ contagem }: { contagem: Record<string, number> }) {
         {entries.map(([key, val]) => {
           const cor = PERFIL_CORES[key] || '#5c7093';
           return (
-            <span key={key} className="flex justify-center" style={{ flex: val }}>
+            <span key={key} className="flex justify-center gap-1" style={{ flex: val }}>
               <b className="font-semibold" style={{ color: cor }}>
                 {PERFIL_NOMES[key] || key}
-              </b>{' '}
-              {val}
+              </b>
+              <span>{val}</span>
             </span>
           );
         })}
