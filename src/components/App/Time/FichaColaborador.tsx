@@ -13,6 +13,8 @@ import {
   FALLBACK_VALORIZACAO,
   FALLBACK_EVITE,
   FALLBACK_COBRAR,
+  VALORES_NOMES,
+  VALORES_FRASES,
   corDoPerfil,
   perfilPrimario,
   perfilSecundario,
@@ -256,6 +258,16 @@ function FichaConteudo({ ficha, onVoltar }: { ficha: FichaType; onVoltar: () => 
                 valSecTexto={textoValSec?.reconhecer || ''}
                 eviteNome={valEvite ? VALORIZACAO_NOMES[valEvite] || '' : ''}
                 eviteTexto={textoEvite || ''}
+              />
+            )}
+
+            {/* O QUE ELA PRIORIZA — Bloco D (fit cultural) */}
+            {ficha.valores_primario && (
+              <ValoresCard
+                cor={cor}
+                primario={ficha.valores_primario}
+                secundario={ficha.valores_secundario}
+                sacrificado={ficha.valores_sacrificado}
               />
             )}
 
@@ -532,6 +544,89 @@ function ComoReconhecerCard({
             <span className="text-slate-400 text-sm">{eviteTexto}</span>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// O QUE ELA PRIORIZA — Bloco D (fit cultural)
+// ---------------------------------------------------------------------------
+function ValoresCard({
+  cor,
+  primario,
+  secundario,
+  sacrificado,
+}: {
+  cor: string;
+  primario: string;
+  secundario: string | null;
+  sacrificado: string | null;
+}) {
+  const primNome = VALORES_NOMES[primario] || primario;
+  const secNome = secundario ? VALORES_NOMES[secundario] || secundario : '';
+  const sacrNome = sacrificado ? VALORES_NOMES[sacrificado] || sacrificado : '';
+  const primFrase = VALORES_FRASES[primario] || '';
+  const secFrase = secundario ? VALORES_FRASES[secundario] || '' : '';
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+      <h3
+        className="text-xs font-bold uppercase tracking-wider mb-4"
+        style={{ color: cor, fontFamily: '"Space Grotesk", sans-serif' }}
+      >
+        O que ela prioriza
+      </h3>
+
+      {/* Priorizado */}
+      <div className="flex gap-3 items-start py-2">
+        <span
+          className="text-xs font-bold pt-0.5 w-14 flex-none tracking-wider"
+          style={{ fontFamily: '"Space Grotesk", sans-serif', color }}
+        >
+          1º
+        </span>
+        <div>
+          <b className="block text-slate-200 font-semibold mb-0.5">{primNome}</b>
+          <span className="text-slate-400 text-sm">{primFrase}</span>
+        </div>
+      </div>
+
+      {secundario && (
+        <div className="flex gap-3 items-start py-2 border-t border-slate-800">
+          <span
+            className="text-xs font-bold text-slate-500 pt-0.5 w-14 flex-none tracking-wider"
+            style={{ fontFamily: '"Space Grotesk", sans-serif' }}
+          >
+            2º
+          </span>
+          <div>
+            <b className="block text-slate-200 font-semibold mb-0.5">{secNome}</b>
+            <span className="text-slate-400 text-sm">{secFrase}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Sacrificado — destaque menor */}
+      {sacrificado && (
+        <div className="flex gap-3 items-start py-2 border-t border-slate-800">
+          <span
+            className="text-xs font-bold text-slate-600 pt-0.5 w-14 flex-none tracking-wider"
+            style={{ fontFamily: '"Space Grotesk", sans-serif' }}
+          >
+            Sacrifica
+          </span>
+          <div>
+            <b className="block text-slate-400 font-medium mb-0.5 text-sm">{sacrNome}</b>
+          </div>
+        </div>
+      )}
+
+      {/* Linha de leitura */}
+      {primNome && secNome && sacrNome && (
+        <p className="mt-4 pt-3 border-t border-slate-800 text-sm text-slate-400 italic">
+          Prioriza {primNome} e {secNome}. Quando aperta, sacrifica {sacrNome}.
+        </p>
       )}
     </div>
   );

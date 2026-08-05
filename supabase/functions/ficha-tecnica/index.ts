@@ -159,6 +159,50 @@ const VALORIZACAO: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// BLOCO D — fit cultural. Escolha forcada entre dois valores da LA, os dois
+// defensaveis. Nao existe resposta bonita: o que a pessoa escolhe revela
+// prioridade, e o que ela larga revela mais ainda.
+// COR coragem | EMP empatia | EXC excelencia | PAI paixao
+// ---------------------------------------------------------------------------
+type ParValor = { t: string; q: string; a: [string, string]; b: [string, string] };
+
+const BLOCO_D: ParValor[] = [
+  { t: 'A colega que caiu de rendimento',
+    q: 'Uma colega esta entregando abaixo do que consegue, e voce sabe que ela esta num momento dificil em casa. A gestora te pergunta como esta o time.',
+    a: ['COR', 'Falo o que estou vendo, mesmo sabendo que vai pesar pra ela agora'],
+    b: ['EMP', 'Seguro, dou um tempo pra ela se recuperar, e ajudo no que der'] },
+
+  { t: 'O erro no material impresso',
+    q: 'Falta uma hora pro evento e voce percebe um erro no material que ja foi impresso.',
+    a: ['COR', 'Aponto na hora e aceito o incomodo de parar tudo'],
+    b: ['EXC', 'Corrijo o que der sozinha e refaco direito depois, sem travar o evento'] },
+
+  { t: 'O processo novo que voce acha pior',
+    q: 'A escola vai adotar um processo novo que voce acha pior que o atual.',
+    a: ['COR', 'Falo abertamente que discordo, na reuniao, na frente de todos'],
+    b: ['PAI', 'Abraco e faco funcionar do melhor jeito, e trago os problemas depois com dados'] },
+
+  { t: 'O relatorio que nunca vem completo',
+    q: 'Um professor entrega o relatorio de aula sempre atrasado e sempre incompleto. Ele e querido pelos alunos.',
+    a: ['EXC', 'Puxo o padrao: incompleto volta pra ele refazer'],
+    b: ['EMP', 'Entendo o que esta travando e ajudo ele a chegar la no ritmo dele'] },
+
+  { t: 'A ultima energia do dia',
+    q: 'Fim de um dia caotico. Sobrou energia pra uma coisa so.',
+    a: ['EMP', 'Fico ouvindo a colega que teve um dia horrivel'],
+    b: ['PAI', 'Termino a ideia que me empolgou e que vai melhorar a semana toda'] },
+
+  { t: 'Bem feito ou logo',
+    q: 'Voce teve uma ideia boa pra recepcao, mas fazer bem feito levaria tres semanas.',
+    a: ['EXC', 'Faco a versao bem-acabada, mesmo demorando'],
+    b: ['PAI', 'Coloco de pe a versao simples essa semana e vou lapidando'] },
+];
+
+const VALORES: Record<string, string> = {
+  COR: 'CORAGEM', EMP: 'EMPATIA', EXC: 'EXCELENCIA', PAI: 'PAIXAO',
+};
+
+// ---------------------------------------------------------------------------
 // BLOCO C — Rider. Texto livre, tudo opcional, sempre editavel.
 // ---------------------------------------------------------------------------
 const RIDER_CAMPOS = [
@@ -301,12 +345,24 @@ Deno.serve(async (req) => {
         ]),
       }));
 
+      // Bloco D — fit cultural. Mesma estrutura do B, com titulo e texto.
+      const blocoD = BLOCO_D.map((p, i) => ({
+        n: i + 1,
+        titulo: p.t,
+        texto: p.q,
+        opcoes: embaralhar([
+          { id: `${i + 1}.a`, texto: p.a[1] },
+          { id: `${i + 1}.b`, texto: p.b[1] },
+        ]),
+      }));
+
       return json({
         colaborador: { id: colaborador?.id, nome: colaborador?.apelido || colaborador?.nome, codinome: colaborador?.temperamento_codinome || null },
         cargo_contexto: cargo,
         diagnostico_feito: diagnosticoFeito,
         bloco_a: diagnosticoFeito ? [] : blocoA,
         bloco_b: diagnosticoFeito ? [] : blocoB,
+        bloco_d: diagnosticoFeito ? [] : blocoD,
         rider_campos: RIDER_CAMPOS,
         rider_respostas: rider?.respostas ?? {},
         rider_versao: rider?.versao ?? 0,
@@ -320,10 +376,12 @@ Deno.serve(async (req) => {
       const body = await req.json();
       const escolhasA: string[] = body.bloco_a ?? []; // ["1.2", "2.0", ...]
       const escolhasB: string[] = body.bloco_b ?? []; // ["1.a", "2.b", ...]
+      const escolhasD: string[] = body.bloco_d ?? []; // ["1.a", "2.b", ...]
 
       const totalA = fixos.length + desempates.length;
       if (escolhasA.length !== totalA) return json({ error: 'bloco A incompleto' }, 400);
       if (escolhasB.length !== BLOCO_B.length) return json({ error: 'bloco B incompleto' }, 400);
+      if (escolhasD.length !== BLOCO_D.length) return json({ error: 'bloco D incompleto' }, 400);
 
       // Bloco A — id opaco -> letra canonica -> temperamento
       const votosFixos: string[] = [];
@@ -361,6 +419,22 @@ Deno.serve(async (req) => {
       const codinome = `${primario}/${secundario}`;
       const valPrim = rB[0][0], valSec = rB[1][0];
 
+      // Bloco D — fit cultural. Mesma logica do B: id opaco -> codigo -> valor.
+      const contD: Record<string, number> = { CORAGEM: 0, EMPATIA: 0, EXCELENCIA: 0, PAIXAO: 0 };
+      const respostasD = escolhasD.map((esc) => {
+        const [nStr, lado] = esc.split('.');
+        const n = Number(nStr);
+        const par = BLOCO_D[n - 1];
+        const cod = lado === 'a' ? par.a[0] : par.b[0];
+        contD[VALORES[cod]]++;
+        return { pergunta_numero: n, opcao_canonica: cod, resposta_posicao: lado === 'a' ? 0 : 1, bloco: 'D' };
+      });
+
+      const rD = ranking(contD);
+      const valPrimarioD = rD[0][0];
+      const valSecundarioD = rD[1][0];
+      const valSacrificadoD = rD[rD.length - 1][0];
+
       const { data: teste, error: e1 } = await sb
         .from('professor_perfil_testes')
         .insert({
@@ -377,24 +451,32 @@ Deno.serve(async (req) => {
           valorizacao_primaria: valPrim,
           valorizacao_secundaria: valSec,
           valorizacao_contagem: contB,
+          valores_primario: valPrimarioD,
+          valores_secundario: valSecundarioD,
+          valores_sacrificado: valSacrificadoD,
+          valores_contagem: contD,
           concluido_em: new Date().toISOString(),
         })
         .select('id')
         .single();
       if (e1) return json({ error: e1.message }, 500);
 
-      const linhas = [...respostasA, ...respostasB].map((r) => ({ ...r, teste_id: teste.id }));
+      const linhas = [...respostasA, ...respostasB, ...respostasD].map((r) => ({ ...r, teste_id: teste.id }));
       const { error: e2 } = await sb.from('professor_perfil_respostas').insert(linhas);
       if (e2) return json({ error: e2.message }, 500);
 
       await sb.from('colaboradores')
-        .update({ temperamento_codinome: codinome, valorizacao_codinome: `${valPrim}/${valSec}` })
+        .update({
+          temperamento_codinome: codinome,
+          valorizacao_codinome: `${valPrim}/${valSec}`,
+          valores_codinome: `${valPrimarioD}/${valSecundarioD}`,
+        })
         .eq('id', tk.colaborador_id);
       await sb.from('ficha_tokens')
         .update({ usado_em: new Date().toISOString() })
         .eq('id', tk.id);
 
-      return json({ ok: true, codinome, valorizacao: `${valPrim}/${valSec}` });
+      return json({ ok: true, codinome, valorizacao: `${valPrim}/${valSec}`, valores: `${valPrimarioD}/${valSecundarioD}` });
     }
 
     // -----------------------------------------------------------------

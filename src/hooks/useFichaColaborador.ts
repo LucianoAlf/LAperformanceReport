@@ -27,7 +27,7 @@ export function useFichaColaborador(colaboradorId: number | null): UseFichaColab
         .from('colaboradores')
         .select(`
           id, nome, apelido, foto_url, bio, cargo, tipo, situacao,
-          unidade_id, temperamento_codinome, valorizacao_codinome,
+          unidade_id, temperamento_codinome, valorizacao_codinome, valores_codinome,
           unidades!left ( nome )
         `)
         .eq('id', colaboradorId)
@@ -46,7 +46,7 @@ export function useFichaColaborador(colaboradorId: number | null): UseFichaColab
       // 2. Dados do teste (professor_perfil_testes, contexto COLAB)
       const { data: teste } = await supabase
         .from('professor_perfil_testes')
-        .select('temperamento_contagem, valorizacao_contagem, concluido_em')
+        .select('temperamento_contagem, valorizacao_contagem, valores_primario, valores_secundario, valores_sacrificado, concluido_em')
         .eq('colaborador_id', colaboradorId)
         .eq('contexto', 'COLAB')
         .order('concluido_em', { ascending: false })
@@ -67,6 +67,9 @@ export function useFichaColaborador(colaboradorId: number | null): UseFichaColab
         unidade_nome: unidadeNome,
         temperamento_contagem: teste?.temperamento_contagem ?? null,
         valorizacao_contagem: teste?.valorizacao_contagem ?? null,
+        valores_primario: teste?.valores_primario ?? null,
+        valores_secundario: teste?.valores_secundario ?? null,
+        valores_sacrificado: teste?.valores_sacrificado ?? null,
         concluido_em: teste?.concluido_em ?? null,
         rider_respostas: rider?.respostas ?? null,
         rider_updated_at: rider?.updated_at ?? null,
