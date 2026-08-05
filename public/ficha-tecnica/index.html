@@ -321,7 +321,7 @@
         <p class="eyebrow">Como você funciona</p>
         <p id="resultDesc"></p>
       </div>
-      <button class="btn" id="btnRider" onclick="go('screen-rider')">Continuar para o Meu Rider</button>
+      <button class="btn" id="btnRider" onclick="irParaRider()">Continuar para o Meu Rider</button>
     </div>
   </section>
 
@@ -627,6 +627,11 @@ function showResult(codinome, valorizacao){
 }
 
 /* =============== RIDER =============== */
+function irParaRider(){
+  renderRider();
+  go("screen-rider");
+}
+
 function renderRider(){
   const campos = dados?.rider_campos || [];
   const respostas = dados?.rider_respostas || {};
