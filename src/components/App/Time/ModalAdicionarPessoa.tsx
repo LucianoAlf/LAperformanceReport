@@ -126,7 +126,7 @@ export function ModalAdicionarPessoa({
     : '';
 
   const primeiroNome = (resultado?.nome || nome).split(' ')[0].toLowerCase();
-  const msgWhatsApp = `Oi, ${primeiroNome}! Tudo bem? Antes da nossa conversa, queria te pedir pra preencher a Ficha Técnica da LA. São uns 15 minutos e não tem resposta certa nem errada — é pra gente te conhecer melhor. Segue o link: ${link}`;
+  const msgWhatsApp = `Oi, ${primeiroNome}! Tudo bem? Antes da nossa conversa, queria te pedir pra preencher a Ficha Técnica da LA. São uns 20 minutos e não tem resposta certa nem errada — é pra gente te conhecer melhor. Segue o link: ${link}`;
   const linkWhatsApp = whatsappSalvo
     ? `https://wa.me/55${whatsappSalvo}?text=${encodeURIComponent(msgWhatsApp)}`
     : '';

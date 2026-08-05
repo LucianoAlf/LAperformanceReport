@@ -268,7 +268,7 @@
       <h1>Vamos te conhecer melhor</h1>
       <div class="intro-text">
         <p>Essa ficha existe pra gente saber como você funciona e trabalhar melhor com você.</p>
-        <p>São duas partes. A primeira traz situações do dia a dia da escola — não existe resposta certa nem errada, e nenhuma opção é melhor que a outra. Responda o que você realmente faria, não o que parece mais bonito. Leva uns 15 minutos.</p>
+        <p>São duas partes. A primeira traz situações do dia a dia da escola — não existe resposta certa nem errada, e nenhuma opção é melhor que a outra. Responda o que você realmente faria, não o que parece mais bonito. Leva uns 20 minutos.</p>
         <p>A segunda é sua: você conta como prefere ser tratado, o que te ajuda e o que te atrapalha. Essa parte fica sempre aberta pra editar quando quiser.</p>
         <p class="destaque">O resultado entra no seu cadastro e é usado pela liderança e pelo RH pra te dar o suporte certo. <strong>Não é avaliação de desempenho e não vale nota.</strong></p>
       </div>
@@ -369,12 +369,15 @@ const API = "https://ouqwbbermlzqqvtqwlul.supabase.co/functions/v1/ficha-tecnica
 let TOKEN = null;
 let dados = null;          // resposta do resolver
 let colaboradorNome = "";
-let perguntas = [];        // bloco_a + bloco_b concatenados (numeração contínua)
-let blocoASize = 0;        // quantas perguntas do Bloco A (para indexar respostasA/B)
+let perguntas = [];        // bloco_a + bloco_b + bloco_d concatenados (numeração contínua)
+let blocoASize = 0;        // quantas perguntas do Bloco A (para indexar respostasA/B/D)
+let blocoBSize = 0;        // quantas perguntas do Bloco B (para indexar respostasD)
 let respostasA = [];       // ids opacos ["1.2","2.0",...] — indexados por current (0..blocoASize-1)
 let respostasB = [];       // ids opacos ["1.a","2.b",...] — indexados por (current - blocoASize)
+let respostasD = [];       // ids opacos ["1.a","2.b",...] — indexados por (current - blocoASize - blocoBSize)
 let current = 0;
 let isBlocoB = false;
+let isBlocoD = false;
 let acaoRetry = null;    // função de retry para a tela de erro (preserva respostas em memória)
 
 /* =============== NAVEGAÇÃO =============== */
@@ -409,14 +412,17 @@ async function init(){
       return;
     }
 
-    // Monta a lista contínua de perguntas (Bloco A + Bloco B, sem divisória)
+    // Monta a lista contínua de perguntas (Bloco A + Bloco B + Bloco D, sem divisória)
     perguntas = [];
     (dados.bloco_a || []).forEach(q => perguntas.push({ ...q, bloco: "A" }));
     (dados.bloco_b || []).forEach(q => perguntas.push({ ...q, bloco: "B" }));
+    (dados.bloco_d || []).forEach(q => perguntas.push({ ...q, bloco: "D" }));
     blocoASize = dados.bloco_a?.length || 0;
+    blocoBSize = dados.bloco_b?.length || 0;
     // Pré-inicializa com undefined — permite substituir ao voltar sem deslocar índices
     respostasA = new Array(blocoASize);
-    respostasB = new Array(perguntas.length - blocoASize);
+    respostasB = new Array(blocoBSize);
+    respostasD = new Array(perguntas.length - blocoASize - blocoBSize);
 
     // Abertura
     document.getElementById("welcomeHello").textContent = colaboradorNome ? `E aí, ${colaboradorNome}!` : "E aí!";
@@ -449,7 +455,7 @@ function startQuiz(){
 }
 
 function buildProgress(){
-  // Barra contínua — num celular, 25 segmentos de 1,5% viram fiapo
+  // Barra contínua — num celular, 31 segmentos de ~1,6% viram fiapo
   const fill = document.getElementById("progressFill");
   if(fill) fill.style.width = "0%";
 }
@@ -457,6 +463,7 @@ function buildProgress(){
 function renderQuestion(){
   const q = perguntas[current];
   isBlocoB = q.bloco === "B";
+  isBlocoD = q.bloco === "D";
 
   // Numeração contínua — a pessoa não percebe a troca de bloco
   document.getElementById("qPill").textContent = `Situação ${current + 1} de ${perguntas.length}`;
@@ -474,7 +481,11 @@ function renderQuestion(){
   document.getElementById("btnBack").disabled = (current === 0);
 
   // Marca a opção já escolhida (caso de voltar pra conferir)
-  const jaEscolhida = isBlocoB ? respostasB[current - blocoASize] : respostasA[current];
+  const jaEscolhida = isBlocoD
+    ? respostasD[current - blocoASize - blocoBSize]
+    : isBlocoB
+      ? respostasB[current - blocoASize]
+      : respostasA[current];
 
   // Renderiza as opções na ordem que veio do servidor (já embaralhadas)
   const box = document.getElementById("qOptions");
@@ -500,7 +511,9 @@ function answer(optId){
   document.querySelectorAll("#qOptions .opt").forEach(b => b.disabled = true);
 
   // Registra a resposta. Se já existia (caso de voltar e refazer), substitui.
-  if(isBlocoB){
+  if(isBlocoD){
+    respostasD[current - blocoASize - blocoBSize] = optId;
+  }else if(isBlocoB){
     respostasB[current - blocoASize] = optId;
   }else{
     respostasA[current] = optId;
@@ -548,7 +561,7 @@ async function submitDiagnostico(){
     const res = await fetch(`${API}?action=submit&token=${encodeURIComponent(TOKEN)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bloco_a: respostasA.filter(Boolean), bloco_b: respostasB.filter(Boolean) })
+      body: JSON.stringify({ bloco_a: respostasA.filter(Boolean), bloco_b: respostasB.filter(Boolean), bloco_d: respostasD.filter(Boolean) })
     });
     const data = await res.json();
     if(!res.ok || data.error){

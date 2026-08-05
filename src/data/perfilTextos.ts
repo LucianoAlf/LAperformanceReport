@@ -42,6 +42,23 @@ export const VALORIZACAO_NOMES: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// VALORES (Bloco D — fit cultural) — nomes de exibição e frases
+// ---------------------------------------------------------------------------
+export const VALORES_NOMES: Record<string, string> = {
+  CORAGEM: 'Coragem',
+  EMPATIA: 'Empatia',
+  EXCELENCIA: 'Excelência',
+  PAIXAO: 'Paixão',
+};
+
+export const VALORES_FRASES: Record<string, string> = {
+  CORAGEM: 'fala o que precisa ser dito, mesmo quando custa',
+  EMPATIA: 'lê a pessoa antes de tratar do problema',
+  EXCELENCIA: 'não entrega abaixo do padrão que ela mesma se cobra',
+  PAIXAO: 'move pelo entusiasmo, prefere fazer acontecer a esperar o ideal',
+};
+
+// ---------------------------------------------------------------------------
 // TEXTO DO PERFIL (temperamento primário)
 // Usado em:
 //   - Briefing parágrafo 1 ("Como ela reage")
