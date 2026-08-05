@@ -393,6 +393,23 @@ async function processarLead(sb: any, body: any, unidadeId: string, escrever: bo
   if (error) return { acao: 'erro_rpc', rpc: 'upsert_lead', erro: error.message, args };
 
   const leadId = data?.lead_id ?? null;
+
+  // upsert_lead nunca lança exceção na colisão de telefone: se `telefone` já pertence a outro
+  // lead ativo na unidade, ela mantém o telefone atual em silêncio (COALESCE, ver corpo da
+  // RPC). Só dá pra perceber relendo o lead e comparando com o que foi enviado.
+  if (leadId && telefone) {
+    const { data: leadAtual } = await sb.from('leads').select('telefone').eq('id', leadId).maybeSingle();
+    if (leadAtual && leadAtual.telefone !== telefone) {
+      return {
+        acao: 'colisao_telefone_familia',
+        motivo: 'telefone ja pertence a outro lead ativo na unidade',
+        telefone_recusado: telefone,
+        resultado: data,
+        args,
+      };
+    }
+  }
+
   const delta = leadId ? await aplicarDeltaLead(sb, leadId, lead) : null;
   return { acao: 'upsert_lead', resultado: data, delta_observador: delta, args };
 }
@@ -489,6 +506,33 @@ async function encerrarExperimentaisSubstituidas(
   return encerradas.length ? { encerradas } : null;
 }
 
+/** Quando a experimental chega SEM telefone (nem do aluno, nem do responsável) e a RPC não acha
+ *  lead pra vincular, cria um lead mínimo pelo `emusys_lead_id` da própria aula — só assim a
+ *  experimental não se perde (o n8n tinha a mesma regra de descarte e perdia do mesmo jeito).
+ *  Telefone fica null. Se aparecer depois via lead_editado, quem decide o que fazer numa
+ *  eventual colisão de telefone é `processarLead` (ver ali). */
+async function criarLeadFallbackExperimental(
+  sb: any, unidadeId: string, emusysLeadId: number | null, nomeAluno: string | null,
+): Promise<{ leadId: number | null; erro: string | null }> {
+  if (!emusysLeadId) return { leadId: null, erro: 'sem emusys_lead_id para criar o lead' };
+  const { data, error } = await sb
+    .from('leads')
+    .insert({
+      emusys_lead_id: emusysLeadId,
+      nome: nomeAluno,
+      unidade_id: unidadeId,
+      telefone: null,
+      source_type: 'emusys',
+      status: 'novo',
+      etapa_pipeline_id: 5,
+      data_contato: new Date().toISOString().substring(0, 10),
+    })
+    .select('id')
+    .single();
+  if (error) return { leadId: null, erro: error.message };
+  return { leadId: data?.id ?? null, erro: null };
+}
+
 async function processarExperimental(sb: any, body: any, unidadeId: string, evento: string, escrever: boolean) {
   const aula = body?.aula ?? {};
   const cancelamento = evento === 'aula_experimental_cancelada';
@@ -538,8 +582,31 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
     };
   }
 
-  const { data, error } = await sb.rpc('registrar_experimental', args);
+  let { data, error } = await sb.rpc('registrar_experimental', args);
   if (error) return { acao: 'erro_rpc', rpc: 'registrar_experimental', erro: error.message, args };
+
+  let leadFallback: { lead_id: number } | null = null;
+  if (
+    evento === 'aula_experimental_criada'
+    && !telefone
+    && data?.success === false
+    && data?.reason === 'lead_not_found'
+  ) {
+    const criado = await criarLeadFallbackExperimental(sb, unidadeId, emusysLeadId, nomeAluno);
+    if (criado.erro) {
+      return { acao: 'erro_lead_fallback', erro: criado.erro, args };
+    }
+    leadFallback = { lead_id: criado.leadId as number };
+    const retry = await sb.rpc('registrar_experimental', args);
+    data = retry.data;
+    error = retry.error;
+    if (error) {
+      return {
+        acao: 'erro_rpc', rpc: 'registrar_experimental', erro: error.message, args,
+        lead_fallback: leadFallback,
+      };
+    }
+  }
 
   // Delta: só o que a RPC não conhece. Nunca bloqueia o resultado principal.
   let delta: unknown = null;
@@ -576,6 +643,7 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
     professor_via: professor.via,
     delta_observador: delta,
     substituidas,
+    lead_fallback: leadFallback,
     args,
   };
 }
@@ -721,7 +789,13 @@ serve(async (req: Request) => {
     let status: 'ok' | 'warn' | 'erro' = 'ok';
     if (acao === 'erro_processamento' || acaoInterna.indexOf('erro_') === 0) {
       status = 'erro';
-    } else if (escrever && (acaoInterna === 'ignorado' || acaoInterna.indexOf('lead_not_found') >= 0 || rpcRecusou)) {
+    } else if (
+      escrever
+      && (acaoInterna === 'ignorado'
+        || acaoInterna === 'colisao_telefone_familia'
+        || acaoInterna.indexOf('lead_not_found') >= 0
+        || rpcRecusou)
+    ) {
       status = 'warn';
     }
 
