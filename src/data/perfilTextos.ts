@@ -4,14 +4,14 @@
  * Tabelas fixas de texto para montar o briefing "Antes de falar com {nome}"
  * e os blocos "Perfil" / "Como reconhecer" da ficha de colaborador.
  *
- * Estes textos serao revisados por gente de negocio — manter separados do
- * componente para facilitar edicao.
+ * Estes textos serão revisados por gente de negócio — manter separados do
+ * componente para facilitar edição.
  *
  * Regra: nunca nomear os instrumentos. Usar "perfil" e "como reconhecer".
  */
 
 // ---------------------------------------------------------------------------
-// CORES DE IDENTIDADE (cor do perfil primario)
+// CORES DE IDENTIDADE (cor do perfil primário)
 // ---------------------------------------------------------------------------
 export const PERFIL_CORES: Record<string, string> = {
   SLASH: '#e4484d',
@@ -21,7 +21,7 @@ export const PERFIL_CORES: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// NOMES DE EXIBICAO (sem nomear o instrumento)
+// NOMES DE EXIBIÇÃO (sem nomear o instrumento)
 // ---------------------------------------------------------------------------
 export const PERFIL_NOMES: Record<string, string> = {
   SLASH: 'Slash',
@@ -31,7 +31,7 @@ export const PERFIL_NOMES: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// VALORIZACAO — nomes de exibicao
+// VALORIZAÇÃO — nomes de exibição
 // ---------------------------------------------------------------------------
 export const VALORIZACAO_NOMES: Record<string, string> = {
   PALAVRAS: 'Palavras',
@@ -41,63 +41,63 @@ export const VALORIZACAO_NOMES: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// TEXTO DO PERFIL (temperamento primario)
+// TEXTO DO PERFIL (temperamento primário)
 // Usado em:
-//   - Briefing paragrafo 1 ("Como ela reage")
-//   - Bloco "Perfil" (Forca / Escorrego)
+//   - Briefing parágrafo 1 ("Como ela reage")
+//   - Bloco "Perfil" (Força / Escorrego)
 // ---------------------------------------------------------------------------
 export interface TextoPerfil {
   /** O que a pessoa traz — frase curta pro briefing */
   reage: string;
-  /** Ponto cego — frase curta pro briefing (continuacao do reage) */
+  /** Ponto cego — frase curta pro briefing (continuação do reage) */
   pontoCego: string;
-  /** Forca — bloco Perfil */
+  /** Força — bloco Perfil */
   forca: string;
   /** Escorrego — bloco Perfil */
   escorrego: string;
-  /** Subtitulo do perfil (ex.: "Estabilidade com tempero de conexao") */
+  /** Subtítulo do perfil (ex.: "Estabilidade com tempero de conexão") */
   subtitulo: (secundario: string) => string;
 }
 
 export const PERFIS_TEXTOS: Record<string, TextoPerfil> = {
   SLASH: {
-    reage: 'Ela <b>entra em acao rapido</b> e puxa o ritmo quando tudo esta parado.',
-    pontoCego: 'Em compensacao, pode atropelar quem precisa de mais tempo pra processar — pise no freio antes de cobrar.',
-    forca: 'Empurra a situacao pra frente quando ninguem toma a iniciativa',
-    escorrego: 'Impaciencia com quem vai devagar; pode parecer que nao escuta',
+    reage: 'Ela <b>entra em ação rápido</b> e puxa o ritmo quando tudo está parado.',
+    pontoCego: 'Em compensação, pode atropelar quem precisa de mais tempo pra processar — pise no freio antes de cobrar.',
+    forca: 'Empurra a situação pra frente quando ninguém toma a iniciativa',
+    escorrego: 'Impaciência com quem vai devagar; pode parecer que não escuta',
     subtitulo: (s) => `Impulso com tempero de ${s.toLowerCase()}`,
   },
   CAZUZA: {
-    reage: 'Ela <b>le o ambiente e conecta as pessoas</b> antes de qualquer outra coisa.',
-    pontoCego: 'Por outro lado, raramente vai trazer o problema desconfortavel sozinha — pergunte diretamente em vez de esperar.',
-    forca: 'Conecta o time e le o clima antes de ninguem',
-    escorrego: 'Evita o atrito necessario; demora pra trazer problema',
-    subtitulo: (s) => `Conexao com tempero de ${s.toLowerCase()}`,
+    reage: 'Ela <b>lê o ambiente e conecta as pessoas</b> antes de qualquer outra coisa.',
+    pontoCego: 'Por outro lado, raramente vai trazer o problema desconfortável sozinha — pergunte diretamente em vez de esperar.',
+    forca: 'Conecta o time e lê o clima antes de ninguém',
+    escorrego: 'Evita o atrito necessário; demora pra trazer problema',
+    subtitulo: (s) => `Conexão com tempero de ${s.toLowerCase()}`,
   },
   AMY: {
     reage: 'Ela <b>mapeia tudo antes de se mover</b> e traz a resposta certa na hora certa.',
-    pontoCego: 'Porem, pode parecer que esta demorando demais quando o urgente bate na porta — combine checkpoints pra nao sufocar.',
-    forca: 'Ve o quadro inteiro e prepara antes de agir',
-    escorrego: 'Paralisia por analise; custa a largar quando falta dado',
-    subtitulo: (s) => `Visao com tempero de ${s.toLowerCase()}`,
+    pontoCego: 'Porém, pode parecer que está demorando demais quando o urgente bate na porta — combine checkpoints pra não sufocar.',
+    forca: 'Vê o quadro inteiro e prepara antes de agir',
+    escorrego: 'Paralisia por análise; custa a largar quando falta dado',
+    subtitulo: (s) => `Visão com tempero de ${s.toLowerCase()}`,
   },
   FRANK: {
-    reage: 'Ela <b>nao se desestabiliza facil</b> e traz a temperatura pra baixo quando o ambiente esquenta.',
-    pontoCego: 'Dificilmente vai levantar sozinha um problema que esta incomodando — pergunte diretamente em vez de esperar que ela traga.',
+    reage: 'Ela <b>não se desestabiliza fácil</b> e traz a temperatura pra baixo quando o ambiente esquenta.',
+    pontoCego: 'Dificilmente vai levantar sozinha um problema que está incomodando — pergunte diretamente em vez de esperar que ela traga.',
     forca: 'Segura o barco quando o mar agita',
-    escorrego: 'Calma virando inercia; evita o atrito necessario',
+    escorrego: 'Calma virando inércia; evita o atrito necessário',
     subtitulo: (s) => `Estabilidade com tempero de ${s.toLowerCase()}`,
   },
 };
 
 // ---------------------------------------------------------------------------
-// TEXTO DE VALORIZACAO (linguagem de valorizacao primaria)
+// TEXTO DE VALORIZAÇÃO (linguagem de valorização primária)
 // Usado em:
-//   - Briefing paragrafo 2 ("Como reconhecer")
+//   - Briefing parágrafo 2 ("Como reconhecer")
 //   - Bloco "Como reconhecer" (1º e 2º)
 // ---------------------------------------------------------------------------
 export interface TextoValorizacao {
-  /** Frase pratica de como reconhecer */
+  /** Frase prática de como reconhecer */
   reconhecer: string;
   /** Frase do briefing — como funciona com ela */
   briefing: string;
@@ -105,47 +105,47 @@ export interface TextoValorizacao {
 
 export const VALORIZACAO_TEXTOS: Record<string, TextoValorizacao> = {
   PALAVRAS: {
-    reconhecer: 'Reconhecimento dito ou escrito, especifico, na frente dos outros.',
+    reconhecer: 'Reconhecimento dito ou escrito, específico, na frente dos outros.',
     briefing: 'Reconhecimento com ela funciona por <b>palavra dita</b>, e melhor ainda na frente do time.',
   },
   TEMPO: {
-    reconhecer: 'Atencao exclusiva, conversa sem pauta.',
-    briefing: 'Reconhecimento com ela funciona por <b>tempo dedicado</b> — conversa sem pauta, atencao exclusiva.',
+    reconhecer: 'Atenção exclusiva, conversa sem pauta.',
+    briefing: 'Reconhecimento com ela funciona por <b>tempo dedicado</b> — conversa sem pauta, atenção exclusiva.',
   },
   APOIO: {
-    reconhecer: 'Alguem que se ofereceu pra ajudar quando precisou, sem pedir.',
-    briefing: 'Reconhecimento com ela funciona por <b>apoio concreto</b> — alguem que botou a mao na massa junto.',
+    reconhecer: 'Alguém que se ofereceu pra ajudar quando precisou, sem pedir.',
+    briefing: 'Reconhecimento com ela funciona por <b>apoio concreto</b> — alguém que botou a mão na massa junto.',
   },
   SIMBOLO: {
-    reconhecer: 'Presente e lembranca — algo fisico que mostra que pensaram nela.',
-    briefing: 'Reconhecimento com ela funciona por <b>simbolos</b> — presente e lembranca passam longe de despercebidos.',
+    reconhecer: 'Presente e lembrança — algo físico que mostra que pensaram nela.',
+    briefing: 'Reconhecimento com ela funciona por <b>símbolos</b> — presente e lembrança passam longe de despercebidos.',
   },
 };
 
 // ---------------------------------------------------------------------------
-// TEXTO DE "EVITE" (valorizacao com menor pontuacao)
+// TEXTO DE "EVITE" (valorização com menor pontuação)
 // ---------------------------------------------------------------------------
 export const VALORIZACAO_EVITE: Record<string, string> = {
-  PALAVRAS: 'Elogio generico e em publico passa batido com ela.',
+  PALAVRAS: 'Elogio genérico e em público passa batido com ela.',
   TEMPO: 'Conversa longa sem objeto a irrita — vai direto ao ponto.',
-  APOIO: 'Oferecer ajuda nao pedida a faz sentir que duvidam dela.',
-  SIMBOLO: 'Presente e lembranca passam quase despercebidos com ela.',
+  APOIO: 'Oferecer ajuda não pedida a faz sentir que duvidam dela.',
+  SIMBOLO: 'Presente e lembrança passam quase despercebidos com ela.',
 };
 
 // ---------------------------------------------------------------------------
-// TEXTO DE "COMO COBRAR" (derivado do primario)
-// Usado no briefing paragrafo 3
+// TEXTO DE "COMO COBRAR" (derivado do primário)
+// Usado no briefing parágrafo 3
 // ---------------------------------------------------------------------------
 export const PERFIS_COBRAR: Record<string, string> = {
-  SLASH: 'Se precisar de resultado, <b>deixa o objetivo claro e sai do caminho</b>. Microgestao trava.',
-  CAZUZA: 'Se precisar de resultado, <b>converse antes de cobrar</b>. Cobranca fria desarma.',
-  AMY: 'Se precisar de resultado, <b>traça o plano junto</b>. Pressao sem contexto paralisa.',
-  FRANK: 'Se precisar de velocidade, <b>combine o prazo junto com ela</b>. Pressao de cima nao acelera — trava.',
+  SLASH: 'Se precisar de resultado, <b>deixa o objetivo claro e sai do caminho</b>. Microgestão trava.',
+  CAZUZA: 'Se precisar de resultado, <b>converse antes de cobrar</b>. Cobrança fria desarma.',
+  AMY: 'Se precisar de resultado, <b>traça o plano junto</b>. Pressão sem contexto paralisa.',
+  FRANK: 'Se precisar de velocidade, <b>combine o prazo junto com ela</b>. Pressão de cima não acelera — trava.',
 };
 
 // ---------------------------------------------------------------------------
-// RIDER CAMPOS — copia da edge function ficha-tecnica (RIDER_CAMPOS)
-// Mantido identico para que os rotulos nao divergirem entre formulario e tela
+// RIDER CAMPOS — cópia da edge function ficha-tecnica (RIDER_CAMPOS)
+// Mantido idêntico para que os rótulos não divergirem entre formulário e tela
 // ---------------------------------------------------------------------------
 export const RIDER_CAMPOS = [
   { id: 'rende_mais',      grupo: 'Como eu trabalho',  label: 'Eu rendo mais quando...' },
@@ -175,7 +175,7 @@ export function formatarCodinome(codinome: string | null | undefined): string | 
     .join('-');
 }
 
-/** Formata valorizacao "PALAVRAS/TEMPO" -> "Palavras · Tempo" */
+/** Formata valorização "PALAVRAS/TEMPO" -> "Palavras · Tempo" */
 export function formatarValorizacao(codinome: string | null | undefined): string | null {
   if (!codinome) return null;
   return codinome
@@ -184,46 +184,46 @@ export function formatarValorizacao(codinome: string | null | undefined): string
     .join(' · ');
 }
 
-/** Retorna a cor do perfil primario a partir do codinome */
+/** Retorna a cor do perfil primário a partir do codinome */
 export function corDoPerfil(codinome: string | null | undefined): string | null {
   if (!codinome) return null;
   const prim = codinome.split('/')[0];
   return PERFIL_CORES[prim] || null;
 }
 
-/** Retorna a chave do perfil primario */
+/** Retorna a chave do perfil primário */
 export function perfilPrimario(codinome: string | null | undefined): string | null {
   if (!codinome) return null;
   return codinome.split('/')[0] || null;
 }
 
-/** Retorna a chave do perfil secundario */
+/** Retorna a chave do perfil secundário */
 export function perfilSecundario(codinome: string | null | undefined): string | null {
   if (!codinome) return null;
   return codinome.split('/')[1] || null;
 }
 
-/** Retorna a chave da valorizacao primaria */
+/** Retorna a chave da valorização primária */
 export function valorizacaoPrimaria(codinome: string | null | undefined): string | null {
   if (!codinome) return null;
   return codinome.split('/')[0] || null;
 }
 
-/** Retorna a chave da valorizacao secundaria */
+/** Retorna a chave da valorização secundária */
 export function valorizacaoSecundaria(codinome: string | null | undefined): string | null {
   if (!codinome) return null;
   return codinome.split('/')[1] || null;
 }
 
 /**
- * Encontra a valorizacao com menor pontuacao (o "Evite").
+ * Encontra a valorização com menor pontuação (o "Evite").
  * valorizacao_contagem vem como {"PALAVRAS":4,"TEMPO":3,"APOIO":1,"SIMBOLO":2}
  */
 export function valorizacaoEvite(contagem: Record<string, number> | null | undefined): string | null {
   if (!contagem || typeof contagem !== 'object') return null;
   const entries = Object.entries(contagem);
   if (entries.length === 0) return null;
-  // Ordena por valor ascendente — o menor e o "Evite"
+  // Ordena por valor ascendente — o menor é o "Evite"
   entries.sort((a, b) => a[1] - b[1]);
   return entries[0][0];
 }
