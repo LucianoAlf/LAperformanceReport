@@ -293,11 +293,11 @@ function ReguaDistribuicao({ contagem }: { contagem: Record<string, number> }) {
           );
         })}
       </div>
-      <div className="flex justify-between mt-2 text-xs text-slate-500 uppercase tracking-wider">
+      <div className="flex mt-2 text-xs text-slate-500 uppercase tracking-wider">
         {entries.map(([key, val]) => {
           const cor = PERFIL_CORES[key] || '#5c7093';
           return (
-            <span key={key}>
+            <span key={key} className="flex justify-center" style={{ flex: val }}>
               <b className="font-semibold" style={{ color: cor }}>
                 {PERFIL_NOMES[key] || key}
               </b>{' '}
