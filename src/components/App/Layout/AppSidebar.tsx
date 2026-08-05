@@ -57,6 +57,7 @@ const prefetchMap: Record<string, () => Promise<any>> = {
   '/app/alunos': () => import('@/components/App/Alunos'),
   '/app/sucesso-aluno': () => import('@/components/App/SucessoCliente'),
   '/app/professores': () => import('@/components/App/Professores'),
+  '/app/time': () => import('@/components/App/Time'),
   '/app/projetos': () => import('@/components/App/Projetos'),
   '/app/salas': () => import('@/components/App/Salas'),
   '/app/admin/usuarios': () => import('@/components/App/Admin'),
@@ -84,6 +85,7 @@ const operacional = [
   { path: '/app/alunos', label: 'Alunos', icon: Users },
   { path: '/app/sucesso-aluno', label: 'Sucesso do Aluno', icon: Heart },
   { path: '/app/professores', label: 'Professores', icon: GraduationCap },
+  { path: '/app/time', label: 'Time', icon: Users },
   { path: '/app/salas', label: 'Salas', icon: Building2 },
   { path: '/app/projetos', label: 'Projetos', icon: FolderKanban },
 ];
