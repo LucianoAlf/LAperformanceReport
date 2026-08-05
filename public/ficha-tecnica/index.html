@@ -430,14 +430,9 @@ function renderQuestion(){
   // Numeração contínua — a pessoa não percebe a troca de bloco
   document.getElementById("qPill").textContent = `Situação ${current + 1} de ${perguntas.length}`;
   document.getElementById("qTrack").textContent = colaboradorNome;
-  // Bloco A tem titulo + texto; Bloco B tem enunciado fixo (sem titulo visível)
-  if(isBlocoB){
-    document.getElementById("qTitle").textContent = "";
-    document.getElementById("qText").textContent = "Em cada par, marque o que faria mais diferença pra você.";
-  }else{
-    document.getElementById("qTitle").textContent = q.titulo || "";
-    document.getElementById("qText").textContent = q.texto || "";
-  }
+  // Ambos os blocos trazem titulo + texto do servidor (v2 da edge function)
+  document.getElementById("qTitle").textContent = q.titulo || "";
+  document.getElementById("qText").textContent = q.texto || "";
   document.querySelectorAll(".seg").forEach((f, i) =>
     f.classList.toggle("done", i < current)
   );
@@ -471,6 +466,12 @@ function answer(optId){
 }
 
 /* =============== SUBMIT (servidor calcula) =============== */
+let eqInterval = null; // referência da animação do EQ — precisa parar antes de mostrar o resultado
+
+function stopEqAnimation(){
+  if(eqInterval){ clearInterval(eqInterval); eqInterval = null; }
+}
+
 async function submitDiagnostico(){
   go("screen-reveal");
   document.getElementById("revealLabel").textContent = "Processando seu perfil…";
@@ -480,9 +481,9 @@ async function submitDiagnostico(){
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   if(!reduced){
     let ticks = 0;
-    const dance = setInterval(() => {
+    eqInterval = setInterval(() => {
       bars.forEach(b => b.style.height = (15 + Math.random() * 80) + "%");
-      if(++ticks >= 6) clearInterval(dance);
+      if(++ticks >= 6) stopEqAnimation();
     }, 280);
   }
 
@@ -494,7 +495,7 @@ async function submitDiagnostico(){
     });
     const data = await res.json();
     if(!res.ok || data.error){
-      // Para a animação e mostra erro
+      stopEqAnimation();
       document.getElementById("revealLabel").textContent = "";
       showError("Não foi possível salvar", data.error || "Tente novamente em instantes.");
       return;
@@ -502,21 +503,30 @@ async function submitDiagnostico(){
     // data = { ok, codinome: "AMY/FRANK", valorizacao: "PALAVRAS/APOIO" }
     showResult(data.codinome, data.valorizacao);
   }catch(e){
+    stopEqAnimation();
     showError("Erro de conexão", "Não consegui enviar suas respostas. Verifica seu sinal e tenta de novo pelo link.");
   }
 }
 
 /* =============== RESULTADO =============== */
-// Mapa de codinome -> dados visuais (artista, varname, chips, img)
+// Mapa de codinome -> dados visuais (artista, varname, chips, img, desc)
 // O codinome vem do servidor no formato "PRIMARIO/SECUNDARIO"
+// desc: texto em linguagem comum, sem nomear temperamento/DISC/linguagem de valorizacao
 const PERFIS = {
-  SLASH:  { artista: "Slash",  varname: "--slash",  chips: ["Energia","Experiência","Conexão"],        img: "assets/slash.png" },
-  CAZUZA: { artista: "Cazuza", varname: "--cazuza", chips: ["Direção","Resultado","Intensidade"],      img: "assets/cazuza.png" },
-  AMY:    { artista: "Amy",    varname: "--amy",    chips: ["Profundidade","Detalhe","Sensibilidade"], img: "assets/amy.png" },
-  FRANK:  { artista: "Frank",  varname: "--frank",  chips: ["Estabilidade","Paciência","Segurança"],   img: "assets/frank.png" },
+  SLASH:  { artista: "Slash",  varname: "--slash",  chips: ["Energia","Experiência","Conexão"],        img: "assets/slash.png",
+    desc: "Você é da energia que move a sala. Gente perto, conversa rolando, você rende. Tem facilidade pra ler o clima e puxar o grupo junto — quando entra, o ambiente fica mais leve. Cuidado com o impulso: às vezes fala antes de terminar de pensar e pode atropelar quem vai mais devagar." },
+  CAZUZA: { artista: "Cazuza", varname: "--cazuza", chips: ["Direção","Resultado","Intensidade"],      img: "assets/cazuza.png",
+    desc: "Você enxerga o que precisa ser feito e vai. Decide rápido, cobra o que combinou, não tem paciência pra enrolação. Entrega e cobra entrega. O perigo é quando a urgência sua vira a urgência de todo mundo — nem todos andam no seu ritmo, e cobrar demais pode desgastar quem está junto." },
+  AMY:    { artista: "Amy",    varname: "--amy",    chips: ["Profundidade","Detalhe","Sensibilidade"], img: "assets/amy.png",
+    desc: "Você sente tudo com profundidade e percebe o que a maioria passa direto. Capricho não é frescura pra você, é padrão. Quando mergulha num assunto, vai até o fundo. O custo disso é que você se cobra bastante e às vezes fica travado pensando quando o certo seria agir — confie mais no que você já sabe." },
+  FRANK:  { artista: "Frank",  varname: "--frank",  chips: ["Estabilidade","Paciência","Segurança"],   img: "assets/frank.png",
+    desc: "Você é quem segura o barco quando o mar agita. Calma de verdade, não de fachada — não se desestabiliza fácil e passa essa tranquilidade pra quem está perto. Confiável, no seu ritmo. O ponto de atenção é que essa mesma calma pode virar inércia: às vezes é preciso falar o que incomoda e mexer no que está parado." },
 };
 
 function showResult(codinome, valorizacao){
+  // Para a animação do EQ imediatamente — o resultado já chegou
+  stopEqAnimation();
+
   const [primKey, secKey] = codinome.split("/");
   const p = PERFIS[primKey];
   const s = PERFIS[secKey];
@@ -547,11 +557,10 @@ function showResult(codinome, valorizacao){
   sc.textContent = `tempero: ${s.chips[0].toLowerCase()}`;
   chips.appendChild(sc);
 
-  // Descrição — não exibimos o texto de temperamento (regra: nunca nomear os instrumentos)
-  // O resultado visual (avatar + codinome + chips) já entrega a revelação aprovada no protótipo
-  document.getElementById("resultDesc").textContent = "";
+  // Descrição do perfil primário — linguagem comum, sem nomear instrumentos
+  document.getElementById("resultDesc").textContent = p.desc;
 
-  // Para a animação do EQ e mostra as barras finais
+  // Mostra as barras finais do EQ (a animação já foi interrompida)
   const bars = document.querySelectorAll("#eq .bar");
   const barKeys = ["slash","cazuza","amy","frank"];
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;

@@ -1,14 +1,20 @@
-// Ficha Tecnica LA — Edge Function
+// Ficha Tecnica LA — Edge Function (v2)
 //
-// Fluxo por token pessoal. Serve tres coisas:
-//   GET  ?action=resolver&token=...     -> quem e a pessoa + o que falta responder + perguntas
-//   POST ?action=submit&token=...       -> grava Bloco A + Bloco B, calcula no servidor
-//   POST ?action=rider&token=...        -> salva/atualiza o Rider (sempre editavel)
+// GET  ?action=resolver&token=...  -> quem e a pessoa + o que falta + perguntas
+// POST ?action=submit&token=...    -> grava Bloco A + Bloco B, calcula no servidor
+// POST ?action=rider&token=...     -> salva/atualiza o Rider (sempre editavel)
 //
-// Diferenca deliberada em relacao a perfil-professor: ali o CLIENTE mandava a
-// opcao canonica, ou seja, o gabarito viajava ate o navegador. Aqui o banco de
-// perguntas mora no servidor e o cliente so devolve o id opaco da opcao que a
-// pessoa marcou. O gabarito nunca sai daqui.
+// O banco de perguntas mora aqui. O cliente recebe as opcoes ja embaralhadas
+// com um id opaco e devolve so o id escolhido. O gabarito nunca sai daqui.
+//
+// CORRECOES DA v2:
+//  1. O Bloco B agora vai com titulo e texto. Na v1 os pares saiam so com
+//     `opcoes`, e o app renderizava 10 telas com enunciado em branco.
+//  2. O desempate voltou a ser desempate. Na v1 as 15 respostas do Bloco A
+//     entravam no placar, o que quebrava o 4k+1 e trazia de volta o empate
+//     que os 13 cenarios existem pra evitar. Agora contam-se apenas os 13
+//     fixos; as duas ultimas so entram, e so entre os perfis empatados,
+//     quando ha empate de verdade.
 //
 // Deploy: supabase functions deploy ficha-tecnica --no-verify-jwt
 
@@ -28,7 +34,7 @@ const json = (body: unknown, status = 200) =>
 
 // ---------------------------------------------------------------------------
 // BLOCO A — temperamento. Gabarito: A=Slash, B=Cazuza, C=Amy, D=Frank.
-// 13 cenarios fixos (13 = 4k+1, minimiza empate) + 2 de desempate.
+// 13 cenarios fixos (13 = 4k+1) + 2 de desempate.
 // Regra de conteudo: as quatro opcoes descrevem alguem que faz um bom
 // atendimento na LA. A diferenca e o COMO, nunca o quanto a pessoa se importa.
 // ---------------------------------------------------------------------------
@@ -121,6 +127,7 @@ const DESEMPATE_A: Record<string, Cenario[]> = {
 
 const CANONICA_A = ['A', 'B', 'C', 'D'] as const;
 const TEMPERAMENTO: Record<string, string> = { A: 'SLASH', B: 'CAZUZA', C: 'AMY', D: 'FRANK' };
+const ORDEM_FALLBACK = ['CAZUZA', 'AMY', 'FRANK', 'SLASH']; // ultimo criterio, deterministico
 
 // ---------------------------------------------------------------------------
 // BLOCO B — linguagem de valorizacao.
@@ -129,20 +136,23 @@ const TEMPERAMENTO: Record<string, string> = { A: 'SLASH', B: 'CAZUZA', C: 'AMY'
 // PAL palavras | TEM tempo dedicado | APO atos de apoio
 // SIM simbolo/presente | CEL celebracao e proximidade
 // ---------------------------------------------------------------------------
-type Par = { a: [string, string]; b: [string, string] };
+type Par = { t: string; a: [string, string]; b: [string, string] };
 
+// O `t` e so um rotulo de tela. Nao nomeia o instrumento nem a categoria.
 const BLOCO_B: Par[] = [
-  { a: ['PAL', 'Receber um "mandou muito bem nisso" especifico, na frente do time'], b: ['TEM', 'O gestor sentar 15 minutos so pra ouvir como voce esta'] },
-  { a: ['APO', 'Alguem pegar uma tarefa da sua mao num dia pesado'], b: ['SIM', 'Ganhar uma lembranca que mostre que pensaram em voce'] },
-  { a: ['CEL', 'O time comemorar junto quando a meta bate'], b: ['PAL', 'Uma mensagem escrita reconhecendo seu trabalho'] },
-  { a: ['TEM', 'Ter um tempo reservado so seu com a lideranca'], b: ['APO', 'Alguem aparecer e perguntar "o que eu faco pra te ajudar?"'] },
-  { a: ['SIM', 'Um mimo inesperado pelo esforco da semana'], b: ['CEL', 'Um abraco ou um toca aqui na hora que deu certo'] },
-  { a: ['PAL', 'Ser citado pelo nome numa conquista da unidade'], b: ['APO', 'Alguem resolver por voce aquela pendencia travada'] },
-  { a: ['TEM', 'Um cafe com o gestor pra conversar sem pauta'], b: ['CEL', 'Uma comemoracao junto com o time quando da certo'] },
-  { a: ['SIM', 'Receber algo simbolico que marque uma entrega sua'], b: ['PAL', 'Ouvir da lideranca, olhando no olho, que voce fez diferenca'] },
-  { a: ['APO', 'Alguem ficar ate mais tarde pra te ajudar a fechar'], b: ['CEL', 'Sentir a energia do time celebrando com voce'] },
-  { a: ['SIM', 'Um presente pequeno que mostre que te conhecem'], b: ['TEM', 'Atencao exclusiva de quem te lidera, sem pressa'] },
+  { t: 'O que pesa mais', a: ['PAL', 'Receber um "mandou muito bem nisso" especifico, na frente do time'], b: ['TEM', 'O gestor sentar 15 minutos so pra ouvir como voce esta'] },
+  { t: 'Num dia pesado', a: ['APO', 'Alguem pegar uma tarefa da sua mao num dia pesado'], b: ['SIM', 'Ganhar uma lembranca que mostre que pensaram em voce'] },
+  { t: 'Quando da certo', a: ['CEL', 'O time comemorar junto quando a meta bate'], b: ['PAL', 'Uma mensagem escrita reconhecendo seu trabalho'] },
+  { t: 'Vindo da lideranca', a: ['TEM', 'Ter um tempo reservado so seu com a lideranca'], b: ['APO', 'Alguem aparecer e perguntar "o que eu faco pra te ajudar?"'] },
+  { t: 'Depois de uma semana dura', a: ['SIM', 'Um mimo inesperado pelo esforco da semana'], b: ['CEL', 'Um abraco ou um toca aqui na hora que deu certo'] },
+  { t: 'Numa conquista da unidade', a: ['PAL', 'Ser citado pelo nome numa conquista da unidade'], b: ['APO', 'Alguem resolver por voce aquela pendencia travada'] },
+  { t: 'Fora da correria', a: ['TEM', 'Um cafe com o gestor pra conversar sem pauta'], b: ['CEL', 'Uma comemoracao junto com o time quando da certo'] },
+  { t: 'Marcando uma entrega', a: ['SIM', 'Receber algo simbolico que marque uma entrega sua'], b: ['PAL', 'Ouvir da lideranca, olhando no olho, que voce fez diferenca'] },
+  { t: 'Na hora do aperto', a: ['APO', 'Alguem ficar ate mais tarde pra te ajudar a fechar'], b: ['CEL', 'Sentir a energia do time celebrando com voce'] },
+  { t: 'Sentir que te conhecem', a: ['SIM', 'Um presente pequeno que mostre que te conhecem'], b: ['TEM', 'Atencao exclusiva de quem te lidera, sem pressa'] },
 ];
+
+const ENUNCIADO_B = 'Pensando no seu dia a dia na escola, marque a opcao que faria mais diferenca pra voce.';
 
 const VALORIZACAO: Record<string, string> = {
   PAL: 'PALAVRAS', TEM: 'TEMPO', APO: 'APOIO', SIM: 'SIMBOLO', CEL: 'CELEBRACAO',
@@ -152,18 +162,18 @@ const VALORIZACAO: Record<string, string> = {
 // BLOCO C — Rider. Texto livre, tudo opcional, sempre editavel.
 // ---------------------------------------------------------------------------
 const RIDER_CAMPOS = [
-  { id: 'rende_mais',     grupo: 'Como eu trabalho',  label: 'Eu rendo mais quando...' },
-  { id: 'me_atrapalha',   grupo: 'Como eu trabalho',  label: 'O que me atrapalha ou me tira do serio...' },
-  { id: 'melhor_horario', grupo: 'Como eu trabalho',  label: 'Meu melhor horario do dia e...' },
-  { id: 'como_chamar',    grupo: 'Como falar comigo', label: 'A melhor forma de me chamar pra alguma coisa e...' },
-  { id: 'quando_quieto',  grupo: 'Como falar comigo', label: 'Quando eu fico quieto, geralmente significa...' },
-  { id: 'entendem_errado',grupo: 'Como falar comigo', label: 'Costumam entender errado sobre mim que...' },
-  { id: 'feedback',       grupo: 'Feedback',          label: 'Eu prefiro receber feedback assim...' },
-  { id: 'quando_erro',    grupo: 'Feedback',          label: 'Quando eu erro, o que mais me ajuda e...' },
-  { id: 'tempo_livre',    grupo: 'Fora do trabalho',  label: 'No meu tempo livre eu...' },
-  { id: 'habilidade',     grupo: 'Fora do trabalho',  label: 'Uma habilidade minha que quase ninguem aqui conhece...' },
-  { id: 'musica',         grupo: 'Fora do trabalho',  label: 'Se fosse escolher uma musica pra tocar quando eu chego, seria...' },
-  { id: 'quero_aprender', grupo: 'Fora do trabalho',  label: 'O que eu quero aprender ou desenvolver esse ano...' },
+  { id: 'rende_mais',      grupo: 'Como eu trabalho',  label: 'Eu rendo mais quando...' },
+  { id: 'me_atrapalha',    grupo: 'Como eu trabalho',  label: 'O que me atrapalha ou me tira do serio...' },
+  { id: 'melhor_horario',  grupo: 'Como eu trabalho',  label: 'Meu melhor horario do dia e...' },
+  { id: 'como_chamar',     grupo: 'Como falar comigo', label: 'A melhor forma de me chamar pra alguma coisa e...' },
+  { id: 'quando_quieto',   grupo: 'Como falar comigo', label: 'Quando eu fico quieto, geralmente significa...' },
+  { id: 'entendem_errado', grupo: 'Como falar comigo', label: 'Costumam entender errado sobre mim que...' },
+  { id: 'feedback',        grupo: 'Feedback',          label: 'Eu prefiro receber feedback assim...' },
+  { id: 'quando_erro',     grupo: 'Feedback',          label: 'Quando eu erro, o que mais me ajuda e...' },
+  { id: 'tempo_livre',     grupo: 'Fora do trabalho',  label: 'No meu tempo livre eu...' },
+  { id: 'habilidade',      grupo: 'Fora do trabalho',  label: 'Uma habilidade minha que quase ninguem aqui conhece...' },
+  { id: 'musica',          grupo: 'Fora do trabalho',  label: 'Se fosse escolher uma musica pra tocar quando eu chego, seria...' },
+  { id: 'quero_aprender',  grupo: 'Fora do trabalho',  label: 'O que eu quero aprender ou desenvolver esse ano...' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -179,7 +189,49 @@ function embaralhar<T>(arr: T[]): T[] {
 }
 
 function ranking(contagem: Record<string, number>) {
-  return Object.entries(contagem).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
+  return Object.entries(contagem)
+    .sort((x, y) => y[1] - x[1] || ORDEM_FALLBACK.indexOf(x[0]) - ORDEM_FALLBACK.indexOf(y[0]));
+}
+
+/**
+ * Resolve o placar do Bloco A.
+ * Conta SOMENTE os 13 cenarios fixos. As respostas de desempate entram como
+ * voto de minerva, e so entre os perfis que empataram — primeiro no primario,
+ * depois no secundario. Se ainda assim empatar, cai na ORDEM_FALLBACK.
+ */
+function resolverTemperamento(
+  votosFixos: string[],      // temperamentos das 13 primeiras
+  votosDesempate: string[],  // temperamentos das 2 ultimas
+) {
+  const cont: Record<string, number> = { SLASH: 0, CAZUZA: 0, AMY: 0, FRANK: 0 };
+  votosFixos.forEach((t) => cont[t]++);
+
+  const aplicar = (empatados: string[]) => {
+    const extra = { ...cont };
+    votosDesempate.forEach((t) => { if (empatados.includes(t)) extra[t] += 0.5; });
+    return extra;
+  };
+
+  let placar = { ...cont };
+  let r = ranking(placar);
+
+  // empate no primario
+  const empPrim = r.filter(([, v]) => v === r[0][1]).map(([k]) => k);
+  if (empPrim.length > 1) { placar = aplicar(empPrim); r = ranking(placar); }
+
+  const primario = r[0][0];
+
+  // empate no secundario, entre os que sobraram
+  const resto = r.slice(1);
+  const empSec = resto.filter(([, v]) => v === resto[0][1]).map(([k]) => k);
+  if (empSec.length > 1) {
+    const placar2 = aplicar(empSec);
+    delete (placar2 as Record<string, number>)[primario];
+    const r2 = ranking(placar2);
+    return { primario, secundario: r2[0][0], contagem: cont };
+  }
+
+  return { primario, secundario: resto[0][0], contagem: cont };
 }
 
 function db() {
@@ -216,6 +268,8 @@ Deno.serve(async (req) => {
 
     const cargo = tk.cargo_contexto || 'ATENDIMENTO';
     const colaborador = Array.isArray(tk.colaboradores) ? tk.colaboradores[0] : tk.colaboradores;
+    const fixos = BLOCO_A[cargo] ?? [];
+    const desempates = DESEMPATE_A[cargo] ?? [];
 
     // -----------------------------------------------------------------
     if (action === 'resolver') {
@@ -227,17 +281,20 @@ Deno.serve(async (req) => {
 
       const diagnosticoFeito = !!tk.usado_em;
 
-      // Perguntas ja embaralhadas, com id opaco por opcao. O gabarito fica aqui.
-      const cenarios = [...(BLOCO_A[cargo] ?? []), ...(DESEMPATE_A[cargo] ?? [])];
+      const cenarios = [...fixos, ...desempates];
       const blocoA = cenarios.map((c, i) => ({
         n: i + 1,
-        desempate: i >= (BLOCO_A[cargo] ?? []).length,
+        desempate: i >= fixos.length,
         titulo: c.t,
         texto: c.q,
         opcoes: embaralhar(c.o.map((texto, idx) => ({ id: `${i + 1}.${idx}`, texto }))),
       }));
+
+      // v2: pares agora vao com titulo e enunciado, senao a tela sai em branco
       const blocoB = BLOCO_B.map((p, i) => ({
         n: i + 1,
+        titulo: p.t,
+        texto: ENUNCIADO_B,
         opcoes: embaralhar([
           { id: `${i + 1}.a`, texto: p.a[1] },
           { id: `${i + 1}.b`, texto: p.b[1] },
@@ -264,21 +321,32 @@ Deno.serve(async (req) => {
       const escolhasA: string[] = body.bloco_a ?? []; // ["1.2", "2.0", ...]
       const escolhasB: string[] = body.bloco_b ?? []; // ["1.a", "2.b", ...]
 
-      const fixas = (BLOCO_A[cargo] ?? []).length;
-      if (escolhasA.length < fixas) return json({ error: 'bloco A incompleto' }, 400);
+      const totalA = fixos.length + desempates.length;
+      if (escolhasA.length !== totalA) return json({ error: 'bloco A incompleto' }, 400);
       if (escolhasB.length !== BLOCO_B.length) return json({ error: 'bloco B incompleto' }, 400);
 
-      // Bloco A — traduz id opaco -> letra canonica -> temperamento
-      const contA: Record<string, number> = { SLASH: 0, CAZUZA: 0, AMY: 0, FRANK: 0 };
+      // Bloco A — id opaco -> letra canonica -> temperamento
+      const votosFixos: string[] = [];
+      const votosDesempate: string[] = [];
       const respostasA = escolhasA.map((esc) => {
         const [nStr, idxStr] = esc.split('.');
         const n = Number(nStr), idx = Number(idxStr);
         const canonica = CANONICA_A[idx];
-        contA[TEMPERAMENTO[canonica]]++;
-        return { pergunta_numero: n, opcao_canonica: canonica, resposta_posicao: idx, bloco: 'A' };
+        const temp = TEMPERAMENTO[canonica];
+        if (n <= fixos.length) votosFixos.push(temp); else votosDesempate.push(temp);
+        return {
+          pergunta_numero: n,
+          opcao_canonica: canonica,
+          resposta_posicao: idx,
+          bloco: 'A',
+        };
       });
 
-      // Bloco B — traduz id opaco -> categoria
+      // v2: os 13 fixos definem o placar; o desempate so entra se houver empate
+      const { primario, secundario, contagem: contA } =
+        resolverTemperamento(votosFixos, votosDesempate);
+
+      // Bloco B — id opaco -> categoria
       const contB: Record<string, number> = { PALAVRAS: 0, TEMPO: 0, APOIO: 0, SIMBOLO: 0, CELEBRACAO: 0 };
       const respostasB = escolhasB.map((esc) => {
         const [nStr, lado] = esc.split('.');
@@ -289,9 +357,7 @@ Deno.serve(async (req) => {
         return { pergunta_numero: n, opcao_canonica: cat, resposta_posicao: lado === 'a' ? 0 : 1, bloco: 'B' };
       });
 
-      const rA = ranking(contA);
       const rB = ranking(contB);
-      const primario = rA[0][0], secundario = rA[1][0];
       const codinome = `${primario}/${secundario}`;
       const valPrim = rB[0][0], valSec = rB[1][0];
 
@@ -302,12 +368,12 @@ Deno.serve(async (req) => {
           unidade_id: colaborador?.unidade_id ?? null,
           contexto: 'COLAB',
           cargo_contexto: cargo,
-          versao_questionario: 1,
+          versao_questionario: 2,
           status: 'concluido',
           temperamento_primario: primario,
           temperamento_secundario: secundario,
           temperamento_codinome: codinome,
-          temperamento_contagem: contA,
+          temperamento_contagem: contA, // placar dos 13 fixos, sem o desempate
           valorizacao_primaria: valPrim,
           valorizacao_secundaria: valSec,
           valorizacao_contagem: contB,
@@ -321,7 +387,6 @@ Deno.serve(async (req) => {
       const { error: e2 } = await sb.from('professor_perfil_respostas').insert(linhas);
       if (e2) return json({ error: e2.message }, 500);
 
-      // desnormaliza no cadastro e trava o token para o diagnostico
       await sb.from('colaboradores')
         .update({ temperamento_codinome: codinome, valorizacao_codinome: `${valPrim}/${valSec}` })
         .eq('id', tk.colaborador_id);
