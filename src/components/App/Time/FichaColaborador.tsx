@@ -276,7 +276,7 @@ function ReguaDistribuicao({ contagem }: { contagem: Record<string, number> }) {
   const total = entries.reduce((s, [, v]) => s + v, 0);
 
   return (
-    <div className="mt-7 mb-8">
+    <div className="mt-12 mb-14">
       <div className="flex h-2.5 rounded-md overflow-hidden gap-0.5">
         {entries.map(([key, val]) => {
           const cor = PERFIL_CORES[key] || '#5c7093';
