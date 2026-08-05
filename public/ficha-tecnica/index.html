@@ -138,6 +138,7 @@
   }
   .opt:active{transform:scale(.985); border-color:var(--teal);}
   .opt[disabled]{opacity:.55; cursor:default; transform:none;}
+  .opt.selecionada{border-color:var(--teal); background:var(--surface2);}
   @media (hover:hover){ .opt:hover{border-color:var(--teal);} }
   .quiz-back{
     appearance:none; border:none; background:transparent; cursor:pointer;
@@ -255,7 +256,7 @@
     <div class="card error-card">
       <h2 id="errorTitle">Algo deu errado</h2>
       <p id="errorText">Não foi possível carregar sua ficha. Tente novamente pelo link que você recebeu.</p>
-      <button class="btn btn-ghost" onclick="location.reload()">Tentar de novo</button>
+      <button class="btn btn-ghost" id="btnRetry" onclick="retry()">Tentar de novo</button>
     </div>
   </section>
 
@@ -362,6 +363,7 @@ let respostasA = [];       // ids opacos ["1.2","2.0",...] — indexados por cur
 let respostasB = [];       // ids opacos ["1.a","2.b",...] — indexados por (current - blocoASize)
 let current = 0;
 let isBlocoB = false;
+let acaoRetry = null;    // função de retry para a tela de erro (preserva respostas em memória)
 
 /* =============== NAVEGAÇÃO =============== */
 function go(id){
@@ -413,10 +415,17 @@ async function init(){
   }
 }
 
-function showError(title, msg){
+function showError(title, msg, retry){
   document.getElementById("errorTitle").textContent = title;
   document.getElementById("errorText").textContent = msg;
+  acaoRetry = retry || null;
+  document.getElementById("btnRetry").textContent = acaoRetry ? "Tentar enviar de novo" : "Tentar de novo";
   go("screen-error");
+}
+
+function retry(){
+  if(acaoRetry){ const f = acaoRetry; acaoRetry = null; f(); }
+  else { location.reload(); }
 }
 
 /* =============== QUIZ =============== */
@@ -445,13 +454,16 @@ function renderQuestion(){
   document.getElementById("qTitle").textContent = q.titulo || "";
   document.getElementById("qText").textContent = q.texto || "";
 
-  // Barra contínua
-  const pct = perguntas.length > 1 ? (current / (perguntas.length - 1)) * 100 : 0;
+  // Barra contínua — denominador é o total, então só chega a 100% quando a última é respondida
+  const pct = perguntas.length > 0 ? (current / perguntas.length) * 100 : 0;
   const fill = document.getElementById("progressFill");
   if(fill) fill.style.width = pct + "%";
 
   // Botão voltar — esconde na primeira pergunta
   document.getElementById("btnBack").disabled = (current === 0);
+
+  // Marca a opção já escolhida (caso de voltar pra conferir)
+  const jaEscolhida = isBlocoB ? respostasB[current - blocoASize] : respostasA[current];
 
   // Renderiza as opções na ordem que veio do servidor (já embaralhadas)
   const box = document.getElementById("qOptions");
@@ -459,6 +471,7 @@ function renderQuestion(){
   q.opcoes.forEach(opt => {
     const b = document.createElement("button");
     b.className = "opt";
+    if(opt.id === jaEscolhida) b.classList.add("selecionada");
     b.textContent = opt.texto;
     // O id opaco é o que vai pro servidor. Nada de gabarito aqui.
     b.onclick = () => answer(opt.id);
@@ -530,14 +543,14 @@ async function submitDiagnostico(){
     if(!res.ok || data.error){
       stopEqAnimation();
       document.getElementById("revealLabel").textContent = "";
-      showError("Não foi possível salvar", data.error || "Tente novamente em instantes.");
+      showError("Não foi possível salvar", data.error || "Tente novamente em instantes.", submitDiagnostico);
       return;
     }
     // data = { ok, codinome: "AMY/FRANK", valorizacao: "PALAVRAS/APOIO" }
     showResult(data.codinome, data.valorizacao);
   }catch(e){
     stopEqAnimation();
-    showError("Erro de conexão", "Não consegui enviar suas respostas. Verifica seu sinal e tenta de novo pelo link.");
+    showError("Erro de conexão", "Não consegui enviar suas respostas. Verifica seu sinal e tenta de novo pelo link.", submitDiagnostico);
   }
 }
 
