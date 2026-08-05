@@ -1641,13 +1641,28 @@ export function ModalFichaAluno({
     linhas.push(`${labelPrimario} + ${labelSecundario}${codinome}`);
     linhas.push(`Col ${colerico} · San ${sanguineo} · Fle ${fleumatico} · Mel ${melancolico}`);
     linhas.push('');
-    linhas.push(`*⚠️ Saúde e Necessidades*`);
-    linhas.push(`Diagnósticos: ${diagnosticos.length ? diagnosticos.join(', ') : 'Não informado'}`);
-    linhas.push(`Medicação: ${anamnese.medicacao_continua || 'Não informado'}`);
-    linhas.push(`Cuidado médico: ${anamnese.cuidado_medico || 'Não informado'}`);
-    linhas.push(`Apoio necessário: ${anamnese.necessidade_apoio || 'Não informado'}`);
-    if (isKids) linhas.push(`Comunicação: ${anamnese.comunicacao_crianca || 'Não informado'}`);
-    linhas.push('');
+    // FRONTEIRA DE SAUDE (05/08/2026, decisao do Alf): este texto vai para o
+    // WhatsApp do PROFESSOR, e o professor precisa saber COMO APOIAR -- nunca
+    // o nome do diagnostico, da condicao medica ou do medicamento.
+    // Diagnosticos, Medicacao e Cuidado medico saem daqui de proposito.
+    //
+    // A mesma fronteira ja foi fechada na edge function notificar-anamnese (o
+    // envio automatico). Sem fechar aqui tambem, o caminho manual continuaria
+    // entregando o rotulo -- por copiar-e-colar, que e o mais dificil de
+    // auditar depois.
+    //
+    // A ficha completa, com tudo, segue visivel para a coordenacao nesta mesma
+    // tela. O que muda e so o que sai daqui para fora.
+    const apoio = (anamnese.necessidade_apoio ?? '').trim();
+    const apoioEhReal = apoio !== '' && !['n', 'na', 'nao', 'não', 'no', 'nenhum', 'nenhuma', 'teste', '-']
+      .includes(apoio.toLowerCase().replace(/[.!]+$/, ''));
+    const comunicacao = isKids ? (anamnese.comunicacao_crianca ?? '').trim() : '';
+    if (apoioEhReal || comunicacao) {
+      linhas.push(`*🤝 Apoio e Comunicação*`);
+      if (apoioEhReal) linhas.push(`Apoio necessário: ${apoio}`);
+      if (comunicacao) linhas.push(`Comunicação: ${comunicacao}`);
+      linhas.push('');
+    }
     linhas.push(`*🎯 Objetivos*`);
     linhas.push(`Objetivos: ${objetivos.length ? objetivos.join(', ') : 'Não informado'}`);
     linhas.push(`Tempo de estudo: ${anamnese.tempo_disponivel_estudo || 'Não informado'}`);
@@ -1669,10 +1684,10 @@ export function ModalFichaAluno({
       linhas.push(`*📝 Observações do Entrevistador*`);
       linhas.push(anamnese.observacoes_entrevistador);
     }
-    if (linkPerfilAnamnese) {
-      linhas.push('');
-      linhas.push(`Perfil completo: ${linkPerfilAnamnese}`);
-    }
+    // O link da ficha completa NAO vai mais neste texto. Desde a migration 030
+    // ele exige login, e o professor nao tem conta no sistema da anamnese --
+    // mandar levaria ele a uma tela de login que nao e dele. E a ficha carrega
+    // justamente os campos de saude que o bloco acima acabou de tirar.
     return linhas.join('\n');
   }
 
