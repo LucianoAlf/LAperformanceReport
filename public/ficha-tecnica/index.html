@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Ficha Técnica LA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  @font-face{
+    font-family:"Prompt";
+    src:url("assets/Prompt-Regular.ttf") format("truetype");
+    font-weight:400; font-style:normal; font-display:swap;
+  }
+  :root{
+    /* Design system LA Teacher */
+    --teal:#2A9D8F; --teal-ink:#04211C; --la:#E91451; --amber:#DB9E04;
+    --slash:#E4484D; --cazuza:#DB9E04; --amy:#4E7CF6; --frank:#2A9D8F;
+    --bg:#F2F7F5; --surface:#FFFFFF; --surface2:#E9F1EE;
+    --ink:#0F1D1A; --muted:#5E716C; --line:#DFE9E5;
+    --amber-bg:#FBF3DC; --shadow:0 8px 24px rgba(15,29,26,.07);
+    --radius:18px;
+  }
+  [data-theme="dark"]{
+    --bg:#0A0F0E; --surface:#111916; --surface2:#16211D;
+    --ink:#E7F5F5; --muted:#8AA09A; --line:#1E2B27;
+    --amber-bg:#25230D; --shadow:0 12px 30px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"Inter",system-ui,-apple-system,sans-serif;
+    font-size:16px; line-height:1.55;
+    transition:background .35s ease, color .35s ease;
+    display:flex; flex-direction:column; min-height:100dvh;
+    position:relative; overflow-x:hidden;
+  }
+  .watermark{
+    position:fixed; z-index:0; pointer-events:none;
+    width:150vw; max-width:900px; top:-6%; left:50%; transform:translateX(-46%) rotate(-4deg);
+    opacity:.05; filter:brightness(0);
+    transition:filter .35s, opacity .35s;
+  }
+  [data-theme="dark"] .watermark{filter:brightness(0) invert(1); opacity:.045;}
+
+  header{
+    position:relative; z-index:2;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 22px; max-width:620px; width:100%; margin:0 auto;
+  }
+  .brand{font-family:"Prompt",sans-serif; font-weight:700; font-size:1.05rem; letter-spacing:.01em;}
+  .brand .la{color:var(--la);}
+  .theme-btn{
+    border:1px solid var(--line); background:var(--surface); color:var(--ink);
+    width:40px; height:40px; border-radius:50%; cursor:pointer; font-size:1rem;
+    display:grid; place-items:center; transition:transform .15s ease, background .35s;
+    box-shadow:var(--shadow);
+  }
+  .theme-btn:active{transform:scale(.92);}
+
+  main{position:relative; z-index:1; flex:1; width:100%; max-width:620px; margin:0 auto; padding:6px 22px 40px; display:flex; flex-direction:column;}
+  .screen{display:none; animation:fadeUp .45s ease both;}
+  .screen.active{display:flex; flex-direction:column; flex:1;}
+  @keyframes fadeUp{from{opacity:0; transform:translateY(14px);} to{opacity:1; transform:none;}}
+
+  .hello-line{display:flex; align-items:center; gap:8px; font-family:"Prompt",sans-serif; font-weight:700; font-size:1.35rem; margin-bottom:4px;}
+  .datefmt{color:var(--muted); font-size:.9rem; margin-bottom:22px;}
+  h1{font-family:"Prompt",sans-serif; font-weight:700; line-height:1.18; font-size:clamp(1.55rem,5.6vw,2.15rem); margin-bottom:12px;}
+  .lead{color:var(--muted); font-size:1rem; max-width:46ch;}
+
+  .card{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:20px;
+  }
+
+  /* ---------- pills / badges (padrão LA Teacher) ---------- */
+  .pill{
+    display:inline-flex; align-items:center; gap:6px;
+    background:var(--amber-bg); color:var(--amber);
+    font-size:.76rem; font-weight:600; padding:6px 12px; border-radius:999px;
+  }
+  .eyebrow{
+    font-size:.74rem; font-weight:700; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--muted); margin-bottom:12px;
+  }
+
+  /* ---------- Welcome ---------- */
+  .cast{display:flex; justify-content:center; gap:4px; margin:28px 0 8px;}
+  .cast img{
+    width:86px; height:86px; object-fit:contain;
+    filter:drop-shadow(0 8px 14px rgba(0,0,0,.22));
+    animation:bob 3.4s ease-in-out infinite;
+  }
+  .cast img:nth-child(2){animation-delay:.5s;}
+  .cast img:nth-child(3){animation-delay:1s;}
+  .cast img:nth-child(4){animation-delay:1.5s;}
+  @keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(-7px);}}
+  .cast-caption{text-align:center; color:var(--muted); font-size:.82rem; margin-bottom:8px;}
+
+  .btn{
+    appearance:none; border:none; cursor:pointer;
+    font-family:"Inter",sans-serif; font-weight:700; font-size:1rem;
+    color:var(--teal-ink); background:var(--teal);
+    border-radius:14px; padding:16px 26px; width:100%;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    transition:transform .15s ease, opacity .2s, filter .2s; margin-top:24px;
+    box-shadow:0 6px 18px rgba(42,157,143,.35);
+  }
+  .btn:active{transform:scale(.98);}
+  .btn[disabled]{opacity:.4; cursor:not-allowed; box-shadow:none;}
+  .btn-ghost{background:transparent; color:var(--muted); border:1px solid var(--line); box-shadow:none; font-weight:600;}
+
+  /* ---------- Abertura ---------- */
+  .intro-text{margin-bottom:8px;}
+  .intro-text p{margin-bottom:14px; color:var(--muted); line-height:1.6;}
+  .intro-text p strong{color:var(--ink);}
+  .intro-text .destaque{
+    background:var(--amber-bg); border-radius:12px; padding:14px 16px;
+    color:var(--ink); font-size:.95rem;
+  }
+
+  /* ---------- Quiz ---------- */
+  .quiz-top{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;}
+  .track{font-size:.78rem; font-weight:600; color:var(--muted);}
+  .progress{display:flex; gap:5px; margin-bottom:20px;}
+  .seg{height:5px; flex:1; border-radius:3px; background:var(--line); transition:background .3s;}
+  .seg.done{background:var(--teal);}
+  .scenario-title{font-family:"Prompt",sans-serif; font-weight:700; font-size:1.2rem; margin-bottom:8px;}
+  .scenario-text{color:var(--muted); margin-bottom:22px;}
+  .options{display:flex; flex-direction:column; gap:12px;}
+  .opt{
+    text-align:left; background:var(--surface); color:var(--ink);
+    border:1.5px solid var(--line); border-radius:var(--radius);
+    padding:16px 18px; font-size:.96rem; line-height:1.5; cursor:pointer;
+    font-family:"Inter",sans-serif; box-shadow:var(--shadow);
+    transition:border-color .18s, transform .12s, background .35s;
+  }
+  .opt:active{transform:scale(.985); border-color:var(--teal);}
+  @media (hover:hover){ .opt:hover{border-color:var(--teal);} }
+
+  /* ---------- Reveal (EQ) ---------- */
+  #screen-reveal{align-items:center; justify-content:center; text-align:center;}
+  .eq-card{padding:34px 40px 26px; display:flex; flex-direction:column; align-items:center;}
+  .eq{display:flex; align-items:flex-end; gap:16px; height:180px; margin-bottom:22px;}
+  .eq .bar{width:32px; border-radius:9px 9px 4px 4px; height:20%; transition:height .5s cubic-bezier(.4,1.4,.5,1);}
+  .bar.slash{background:var(--slash);} .bar.cazuza{background:var(--cazuza);}
+  .bar.amy{background:var(--amy);} .bar.frank{background:var(--frank);}
+  .eq .bar.win{box-shadow:0 0 24px 2px currentColor;}
+  .reveal-label{font-size:.78rem; font-weight:700; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); animation:pulse 1.2s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:.55;}50%{opacity:1;}}
+
+  /* ---------- Resultado ---------- */
+  #screen-result{align-items:center; text-align:center;}
+  .halo{
+    width:192px; height:192px; border-radius:50%; margin:14px auto 6px;
+    display:grid; place-items:center; position:relative;
+    background:
+      radial-gradient(closest-side, var(--surface) 78%, transparent 79%),
+      conic-gradient(from 210deg, var(--accent), transparent 62%);
+    box-shadow:var(--shadow);
+    animation:haloIn .7s cubic-bezier(.2,1.4,.4,1) both;
+  }
+  @keyframes haloIn{from{transform:scale(.6); opacity:0;} to{transform:scale(1); opacity:1;}}
+  .halo img{width:148px; height:148px; object-fit:contain;}
+  .hello{color:var(--muted); margin-top:10px; font-size:.95rem;}
+  .codename{font-family:"Prompt",sans-serif; font-weight:700; font-size:clamp(1.9rem,8vw,2.6rem); margin:2px 0 4px; color:var(--accent);}
+  .subline{font-weight:600; margin-bottom:14px;}
+  .chips{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-bottom:20px;}
+  .chip{
+    font-size:.74rem; font-weight:600; padding:7px 12px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); background:var(--surface);
+  }
+  .chip.primary{border-color:transparent; color:#fff; background:var(--accent);}
+  [data-theme="dark"] .chip.primary{color:var(--teal-ink);}
+  .desc{max-width:52ch; text-align:left;}
+  .desc .eyebrow{margin-bottom:8px;}
+  footer{position:relative; z-index:1; text-align:center; padding:16px; font-size:.75rem; color:var(--muted);}
+
+  /* ---------- Rider ---------- */
+  #screen-rider{align-items:stretch;}
+  .rider-intro{margin-bottom:20px;}
+  .rider-group{margin-bottom:28px;}
+  .rider-group-title{
+    font-family:"Prompt",sans-serif; font-weight:700; font-size:1.05rem;
+    margin-bottom:14px; padding-bottom:8px; border-bottom:1px solid var(--line);
+    color:var(--ink);
+  }
+  .rider-field{margin-bottom:18px;}
+  .rider-field label{
+    display:block; font-size:.85rem; font-weight:600; letter-spacing:0;
+    text-transform:none; color:var(--ink); margin:0 0 8px;
+  }
+  .rider-field textarea{
+    width:100%; min-height:90px; padding:14px 16px; font-size:.95rem;
+    font-family:"Inter",sans-serif; color:var(--ink); line-height:1.5;
+    background:var(--surface); border:1.5px solid var(--line); border-radius:14px;
+    outline:none; resize:vertical; transition:border-color .2s, background .35s;
+  }
+  .rider-field textarea:focus{border-color:var(--teal);}
+  .rider-note{
+    font-size:.82rem; color:var(--muted); margin-bottom:16px;
+    background:var(--surface2); border-radius:12px; padding:12px 14px;
+  }
+  .rider-status{
+    font-size:.82rem; color:var(--teal); font-weight:600;
+    margin-top:10px; text-align:center; min-height:1.2em;
+  }
+  .rider-status.err{color:var(--la);}
+
+  /* ---------- Loading / Erro ---------- */
+  #screen-loading{align-items:center; justify-content:center; text-align:center;}
+  .spinner{
+    width:40px; height:40px; border:3px solid var(--line);
+    border-top-color:var(--teal); border-radius:50%;
+    animation:spin 1s linear infinite; margin-bottom:20px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #screen-error{align-items:center; justify-content:center; text-align:center;}
+  .error-card{max-width:400px;}
+  .error-card h2{font-family:"Prompt",sans-serif; font-size:1.3rem; margin-bottom:10px;}
+  .error-card p{color:var(--muted); margin-bottom:20px;}
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important; transition:none !important;}
+  }
+</style>
+</head>
+<body>
+<img class="watermark" src="assets/watermark.svg" alt="" aria-hidden="true">
+<header>
+  <div class="brand"><span class="la">LA</span> Ficha Técnica</div>
+  <button class="theme-btn" id="themeBtn" aria-label="Alternar tema">◐</button>
+</header>
+
+<main>
+  <!-- LOADING -->
+  <section class="screen active" id="screen-loading">
+    <div>
+      <div class="spinner" style="margin:0 auto 20px;"></div>
+      <p class="datefmt" id="loadingMsg">Carregando sua ficha…</p>
+    </div>
+  </section>
+
+  <!-- ERRO -->
+  <section class="screen" id="screen-error">
+    <div class="card error-card">
+      <h2 id="errorTitle">Algo deu errado</h2>
+      <p id="errorText">Não foi possível carregar sua ficha. Tente novamente pelo link que você recebeu.</p>
+      <button class="btn btn-ghost" onclick="location.reload()">Tentar de novo</button>
+    </div>
+  </section>
+
+  <!-- ABERTURA -->
+  <section class="screen" id="screen-welcome">
+    <div>
+      <div class="hello-line" id="welcomeHello">E aí!</div>
+      <p class="datefmt">Ficha Técnica LA</p>
+      <h1>Vamos te conhecer melhor</h1>
+      <div class="intro-text">
+        <p>Essa ficha existe pra gente saber como você funciona e trabalhar melhor com você.</p>
+        <p>São duas partes. A primeira traz situações do dia a dia da escola — não existe resposta certa nem errada, e nenhuma opção é melhor que a outra. Responda o que você realmente faria, não o que parece mais bonito. Leva uns 15 minutos.</p>
+        <p>A segunda é sua: você conta como prefere ser tratado, o que te ajuda e o que te atrapalha. Essa parte fica sempre aberta pra editar quando quiser.</p>
+        <p class="destaque">O resultado entra no seu cadastro e é usado pela liderança e pelo RH pra te dar o suporte certo. <strong>Não é avaliação de desempenho e não vale nota.</strong></p>
+      </div>
+      <div class="cast">
+        <img src="assets/slash.png" alt="Slash">
+        <img src="assets/cazuza.png" alt="Cazuza">
+        <img src="assets/amy.png" alt="Amy">
+        <img src="assets/frank.png" alt="Frank">
+      </div>
+      <button class="btn" id="btnStart" onclick="startQuiz()">Começar</button>
+    </div>
+  </section>
+
+  <!-- QUIZ (Bloco A + B contínuo) -->
+  <section class="screen" id="screen-quiz">
+    <div class="quiz-top">
+      <span class="pill" id="qPill">Situação 1</span>
+      <span class="track" id="qTrack"></span>
+    </div>
+    <div class="progress" id="progress"></div>
+    <h2 class="scenario-title" id="qTitle"></h2>
+    <p class="scenario-text" id="qText"></p>
+    <div class="options" id="qOptions"></div>
+  </section>
+
+  <!-- REVELAÇÃO (EQ) -->
+  <section class="screen" id="screen-reveal">
+    <div class="card eq-card">
+      <div class="eq" id="eq">
+        <div class="bar slash"></div>
+        <div class="bar cazuza"></div>
+        <div class="bar amy"></div>
+        <div class="bar frank"></div>
+      </div>
+      <p class="reveal-label" id="revealLabel">Processando seu perfil…</p>
+    </div>
+  </section>
+
+  <!-- RESULTADO -->
+  <section class="screen" id="screen-result">
+    <div style="display:flex;flex-direction:column;align-items:center;width:100%;">
+      <p class="eyebrow">Seu perfil LA</p>
+      <div class="halo" id="halo"><img id="resultImg" src="" alt=""></div>
+      <p class="hello" id="resultHello"></p>
+      <div class="codename" id="resultCodename"></div>
+      <div class="subline" id="resultSubline"></div>
+      <div class="chips" id="resultChips"></div>
+      <div class="card desc">
+        <p class="eyebrow">Como você funciona</p>
+        <p id="resultDesc"></p>
+      </div>
+      <button class="btn" id="btnRider" onclick="go('screen-rider')">Continuar para o Meu Rider</button>
+    </div>
+  </section>
+
+  <!-- MEU RIDER -->
+  <section class="screen" id="screen-rider">
+    <div>
+      <p class="eyebrow">Parte 2</p>
+      <h1>Meu Rider</h1>
+      <div class="rider-intro">
+        <p class="lead">Agora é a sua vez. Conta como você prefere ser tratado, o que te ajuda e o que te atrapalha. Tudo aqui é opcional — escreve o que fizer sentido pra você.</p>
+        <p class="rider-note">Pode voltar e editar quando quiser, sempre. Essa parte nunca fecha.</p>
+      </div>
+      <div id="riderFields"></div>
+      <button class="btn" id="btnSaveRider" onclick="saveRider()">Salvar</button>
+      <p class="rider-status" id="riderStatus"></p>
+    </div>
+  </section>
+</main>
+
+<footer>Ficha Técnica LA · LA Music</footer>
+
+<script>
+/* =============== TEMA =============== */
+let theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+const applyTheme = () => document.documentElement.setAttribute("data-theme", theme);
+applyTheme();
+document.getElementById("themeBtn").onclick = () => { theme = theme === "dark" ? "light" : "dark"; applyTheme(); };
+
+/* =============== CONFIG =============== */
+const API = "https://ouqwbbermlzqqvtqwlul.supabase.co/functions/v1/ficha-tecnica";
+
+/* =============== ESTADO =============== */
+let TOKEN = null;
+let dados = null;          // resposta do resolver
+let colaboradorNome = "";
+let perguntas = [];        // bloco_a + bloco_b concatenados (numeração contínua)
+let respostasA = [];       // ids opacos ["1.2","2.0",...]
+let respostasB = [];       // ids opacos ["1.a","2.b",...]
+let current = 0;
+let isBlocoB = false;
+
+/* =============== NAVEGAÇÃO =============== */
+function go(id){
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  window.scrollTo({top:0});
+}
+
+/* =============== INIT =============== */
+async function init(){
+  // Token da query string: /ficha-tecnica/?t=TOKEN
+  const params = new URLSearchParams(location.search);
+  TOKEN = params.get("t") || params.get("token");
+  if(!TOKEN){
+    showError("Link inválido", "Faltou o seu token de acesso no link. Use o link completo que você recebeu.");
+    return;
+  }
+  try{
+    const res = await fetch(`${API}?action=resolver&token=${encodeURIComponent(TOKEN)}`);
+    if(!res.ok){
+      const err = await res.json().catch(() => ({}));
+      showError("Não foi possível abrir sua ficha", err.error || "Token inválido ou expirado. Peça um link novo pra liderança ou RH.");
+      return;
+    }
+    dados = await res.json();
+    colaboradorNome = dados.colaborador?.nome || "";
+
+    // Se já fez o diagnóstico, vai direto pro Rider
+    if(dados.diagnostico_feito){
+      renderRider();
+      go("screen-rider");
+      return;
+    }
+
+    // Monta a lista contínua de perguntas (Bloco A + Bloco B, sem divisória)
+    perguntas = [];
+    (dados.bloco_a || []).forEach(q => perguntas.push({ ...q, bloco: "A" }));
+    (dados.bloco_b || []).forEach(q => perguntas.push({ ...q, bloco: "B" }));
+
+    // Abertura
+    document.getElementById("welcomeHello").textContent = colaboradorNome ? `E aí, ${colaboradorNome}!` : "E aí!";
+    go("screen-welcome");
+  }catch(e){
+    showError("Erro de conexão", "Não consegui falar com o servidor. Verifica seu sinal e tenta de novo.");
+  }
+}
+
+function showError(title, msg){
+  document.getElementById("errorTitle").textContent = title;
+  document.getElementById("errorText").textContent = msg;
+  go("screen-error");
+}
+
+/* =============== QUIZ =============== */
+function startQuiz(){
+  buildProgress();
+  renderQuestion();
+  go("screen-quiz");
+}
+
+function buildProgress(){
+  const el = document.getElementById("progress");
+  el.innerHTML = "";
+  for(let i = 0; i < perguntas.length; i++){
+    const f = document.createElement("div");
+    f.className = "seg";
+    el.appendChild(f);
+  }
+}
+
+function renderQuestion(){
+  const q = perguntas[current];
+  isBlocoB = q.bloco === "B";
+
+  // Numeração contínua — a pessoa não percebe a troca de bloco
+  document.getElementById("qPill").textContent = `Situação ${current + 1} de ${perguntas.length}`;
+  document.getElementById("qTrack").textContent = colaboradorNome;
+  // Bloco A tem titulo + texto; Bloco B tem enunciado fixo (sem titulo visível)
+  if(isBlocoB){
+    document.getElementById("qTitle").textContent = "";
+    document.getElementById("qText").textContent = "Em cada par, marque o que faria mais diferença pra você.";
+  }else{
+    document.getElementById("qTitle").textContent = q.titulo || "";
+    document.getElementById("qText").textContent = q.texto || "";
+  }
+  document.querySelectorAll(".seg").forEach((f, i) =>
+    f.classList.toggle("done", i < current)
+  );
+
+  // Renderiza as opções na ordem que veio do servidor (já embaralhadas)
+  const box = document.getElementById("qOptions");
+  box.innerHTML = "";
+  q.opcoes.forEach(opt => {
+    const b = document.createElement("button");
+    b.className = "opt";
+    b.textContent = opt.texto;
+    // O id opaco é o que vai pro servidor. Nada de gabarito aqui.
+    b.onclick = () => answer(opt.id);
+    box.appendChild(b);
+  });
+}
+
+function answer(optId){
+  if(isBlocoB){
+    respostasB.push(optId);
+  }else{
+    respostasA.push(optId);
+  }
+  if(current < perguntas.length - 1){
+    current++;
+    renderQuestion();
+    return;
+  }
+  // Acabou — envia pro servidor calcular
+  submitDiagnostico();
+}
+
+/* =============== SUBMIT (servidor calcula) =============== */
+async function submitDiagnostico(){
+  go("screen-reveal");
+  document.getElementById("revealLabel").textContent = "Processando seu perfil…";
+
+  // Animação decorativa do EQ enquanto espera (sem dados reais — o resultado vem do servidor)
+  const bars = document.querySelectorAll("#eq .bar");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(!reduced){
+    let ticks = 0;
+    const dance = setInterval(() => {
+      bars.forEach(b => b.style.height = (15 + Math.random() * 80) + "%");
+      if(++ticks >= 6) clearInterval(dance);
+    }, 280);
+  }
+
+  try{
+    const res = await fetch(`${API}?action=submit&token=${encodeURIComponent(TOKEN)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bloco_a: respostasA, bloco_b: respostasB })
+    });
+    const data = await res.json();
+    if(!res.ok || data.error){
+      // Para a animação e mostra erro
+      document.getElementById("revealLabel").textContent = "";
+      showError("Não foi possível salvar", data.error || "Tente novamente em instantes.");
+      return;
+    }
+    // data = { ok, codinome: "AMY/FRANK", valorizacao: "PALAVRAS/APOIO" }
+    showResult(data.codinome, data.valorizacao);
+  }catch(e){
+    showError("Erro de conexão", "Não consegui enviar suas respostas. Verifica seu sinal e tenta de novo pelo link.");
+  }
+}
+
+/* =============== RESULTADO =============== */
+// Mapa de codinome -> dados visuais (artista, varname, chips, img)
+// O codinome vem do servidor no formato "PRIMARIO/SECUNDARIO"
+const PERFIS = {
+  SLASH:  { artista: "Slash",  varname: "--slash",  chips: ["Energia","Experiência","Conexão"],        img: "assets/slash.png" },
+  CAZUZA: { artista: "Cazuza", varname: "--cazuza", chips: ["Direção","Resultado","Intensidade"],      img: "assets/cazuza.png" },
+  AMY:    { artista: "Amy",    varname: "--amy",    chips: ["Profundidade","Detalhe","Sensibilidade"], img: "assets/amy.png" },
+  FRANK:  { artista: "Frank",  varname: "--frank",  chips: ["Estabilidade","Paciência","Segurança"],   img: "assets/frank.png" },
+};
+
+function showResult(codinome, valorizacao){
+  const [primKey, secKey] = codinome.split("/");
+  const p = PERFIS[primKey];
+  const s = PERFIS[secKey];
+  if(!p || !s){
+    // Fallback: mostra só o codinome sem visual rico
+    document.getElementById("resultCodename").textContent = codinome;
+    go("screen-result");
+    return;
+  }
+
+  const accent = getComputedStyle(document.documentElement).getPropertyValue(p.varname).trim();
+  document.getElementById("screen-result").style.setProperty("--accent", accent);
+  document.getElementById("resultImg").src = p.img;
+  document.getElementById("resultHello").textContent = colaboradorNome ? `${colaboradorNome}, o seu perfil é` : "O seu perfil é";
+  document.getElementById("resultCodename").textContent = `${p.artista}-${s.artista}`;
+  document.getElementById("resultSubline").textContent = `com tempero ${s.artista}`;
+
+  const chips = document.getElementById("resultChips");
+  chips.innerHTML = "";
+  p.chips.forEach(c => {
+    const el = document.createElement("span");
+    el.className = "chip primary";
+    el.textContent = c;
+    chips.appendChild(el);
+  });
+  const sc = document.createElement("span");
+  sc.className = "chip";
+  sc.textContent = `tempero: ${s.chips[0].toLowerCase()}`;
+  chips.appendChild(sc);
+
+  // Descrição — não exibimos o texto de temperamento (regra: nunca nomear os instrumentos)
+  // O resultado visual (avatar + codinome + chips) já entrega a revelação aprovada no protótipo
+  document.getElementById("resultDesc").textContent = "";
+
+  // Para a animação do EQ e mostra as barras finais
+  const bars = document.querySelectorAll("#eq .bar");
+  const barKeys = ["slash","cazuza","amy","frank"];
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(!reduced){
+    bars.forEach((b, i) => {
+      const k = barKeys[i];
+      b.style.height = (k === primKey.toLowerCase()) ? "100%" : (k === secKey.toLowerCase() ? "65%" : "30%");
+      if(k === primKey.toLowerCase()){
+        b.classList.add("win");
+        b.style.color = getComputedStyle(document.documentElement).getPropertyValue(PERFIS[barKeys[i].toUpperCase()].varname);
+      }
+    });
+    document.getElementById("revealLabel").textContent = "Perfil encontrado";
+    setTimeout(() => go("screen-result"), 1400);
+  }else{
+    go("screen-result");
+  }
+}
+
+/* =============== RIDER =============== */
+function renderRider(){
+  const campos = dados?.rider_campos || [];
+  const respostas = dados?.rider_respostas || {};
+  const container = document.getElementById("riderFields");
+  container.innerHTML = "";
+
+  // Agrupa por grupo, preservando a ordem recebida
+  const grupos = [];
+  const grupoMap = {};
+  campos.forEach(c => {
+    if(!grupoMap[c.grupo]){
+      grupoMap[c.grupo] = [];
+      grupos.push(c.grupo);
+    }
+    grupoMap[c.grupo].push(c);
+  });
+
+  grupos.forEach(grupo => {
+    const g = document.createElement("div");
+    g.className = "rider-group";
+    const title = document.createElement("div");
+    title.className = "rider-group-title";
+    title.textContent = grupo;
+    g.appendChild(title);
+
+    grupoMap[grupo].forEach(campo => {
+      const f = document.createElement("div");
+      f.className = "rider-field";
+      const lbl = document.createElement("label");
+      lbl.textContent = campo.label;
+      lbl.htmlFor = `rider-${campo.id}`;
+      const ta = document.createElement("textarea");
+      ta.id = `rider-${campo.id}`;
+      ta.dataset.field = campo.id;
+      ta.placeholder = "Escreva aqui…";
+      ta.maxLength = 2000;
+      ta.value = respostas[campo.id] || "";
+      f.appendChild(lbl);
+      f.appendChild(ta);
+      g.appendChild(f);
+    });
+    container.appendChild(g);
+  });
+}
+
+async function saveRider(){
+  const status = document.getElementById("riderStatus");
+  const btn = document.getElementById("btnSaveRider");
+  status.className = "rider-status";
+  status.textContent = "Salvando…";
+  btn.disabled = true;
+
+  const respostas = {};
+  document.querySelectorAll("#riderFields textarea").forEach(ta => {
+    respostas[ta.dataset.field] = ta.value;
+  });
+
+  try{
+    const res = await fetch(`${API}?action=rider&token=${encodeURIComponent(TOKEN)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ respostas })
+    });
+    const data = await res.json();
+    if(!res.ok || data.error){
+      status.className = "rider-status err";
+      status.textContent = data.error || "Não salvou. Tente de novo.";
+    }else{
+      status.textContent = "Salvo! Pode editar quando quiser.";
+      dados.rider_versao = data.versao;
+    }
+  }catch(e){
+    status.className = "rider-status err";
+    status.textContent = "Erro de conexão. Tente de novo.";
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+/* =============== BOOT =============== */
+init();
+</script>
+</body>
+</html>

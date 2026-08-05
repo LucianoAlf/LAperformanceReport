@@ -4,7 +4,15 @@
   "framework": "vite",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/ficha-tecnica",
+      "destination": "/ficha-tecnica/index.html"
+    },
+    {
+      "source": "/ficha-tecnica/",
+      "destination": "/ficha-tecnica/index.html"
+    },
+    {
+      "source": "/((?!ficha-tecnica).*)",
       "destination": "/index.html"
     }
   ]
