@@ -90,6 +90,13 @@ export function ModalAdicionarPessoa({
     // Limpa WhatsApp: só números
     const whatsappLimpo = whatsapp.replace(/\D/g, '') || null;
 
+    // Por enquanto só existe o banco ATENDIMENTO na edge function.
+    // Quando houver mais, mapear departamento -> cargo_contexto aqui.
+    const CARGO_POR_DEPARTAMENTO: Record<string, string> = {
+      Atendimento: 'ATENDIMENTO',
+    };
+    const cargoContexto = CARGO_POR_DEPARTAMENTO[departamento] || 'ATENDIMENTO';
+
     try {
       const { data, error } = await supabase.rpc('criar_ficha_pessoa', {
         p_nome: nome.trim(),
@@ -97,7 +104,7 @@ export function ModalAdicionarPessoa({
         p_unidade_id: unidadeId,
         p_departamento: departamento,
         p_situacao: 'candidato',
-        p_cargo_contexto: 'ATENDIMENTO',
+        p_cargo_contexto: cargoContexto,
       });
 
       if (error) throw error;
@@ -212,9 +219,19 @@ export function ModalAdicionarPessoa({
                     <SelectValue placeholder="Selecione..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {DEPARTAMENTOS.map((d) => (
-                      <SelectItem key={d} value={d}>{d}</SelectItem>
-                    ))}
+                    {DEPARTAMENTOS.map((d) => {
+                      const disponivel = d === 'Atendimento';
+                      return (
+                        <SelectItem
+                          key={d}
+                          value={d}
+                          disabled={!disponivel}
+                          className={!disponivel ? 'opacity-40' : ''}
+                        >
+                          {d}{!disponivel ? ' (em breve)' : ''}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
