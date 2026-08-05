@@ -73,6 +73,7 @@ export interface OcupacaoTurmaCanonica {
 interface ResultadoCarteiraProfessorCanonica {
   alunos: AlunoCarteiraCanonico[];
   distribuicaoCursos: DistribuicaoCursoCanonica[];
+  alunosTrancados: AlunoCarteiraCanonico[];
 }
 
 export interface ResumoClassificacaoCarteiraCanonica {
@@ -149,28 +150,15 @@ export function resumirClassificacaoCarteiraCanonica(
   };
 }
 
-export function agruparCarteiraProfessorCanonica(
-  jornadas: JornadaCarteiraProfessor[],
-  alunosOperacionais: AlunoOperacionalCarteira[],
-): ResultadoCarteiraProfessorCanonica {
-  const alunosPorId = new Map(
-    alunosOperacionais.map((aluno) => [Number(aluno.id), aluno]),
-  );
-  const jornadasPorPessoa = new Map<string, JornadaCarteiraProfessor[]>();
-
-  jornadas
-    .filter((jornada) => jornada.status_matricula === 'ativa')
-    .forEach((jornada) => {
-      const chave = chavePessoa(jornada);
-      const atuais = jornadasPorPessoa.get(chave) || [];
-      atuais.push(jornada);
-      jornadasPorPessoa.set(chave, atuais);
-    });
-
+function montarPessoasCarteira(
+  jornadasPessoaPorChave: Map<string, JornadaCarteiraProfessor[]>,
+  alunosPorId: Map<number, AlunoOperacionalCarteira>,
+  status: string,
+): { pessoas: Map<string, AlunoCarteiraCanonico>; pessoasPorCurso: Map<string, Set<string>> } {
   const pessoas = new Map<string, AlunoCarteiraCanonico>();
   const pessoasPorCurso = new Map<string, Set<string>>();
 
-  jornadasPorPessoa.forEach((jornadasPessoa, pessoaChave) => {
+  jornadasPessoaPorChave.forEach((jornadasPessoa, pessoaChave) => {
     const alunosPessoa = [...new Map(
       jornadasPessoa
         .map((jornada) => alunosPorId.get(Number(jornada.aluno_id)))
@@ -209,9 +197,9 @@ export function agruparCarteiraProfessorCanonica(
         ...alunosPessoa.map((item) => Number(item.tempo_permanencia_meses) || 0),
       ),
       data_fim_contrato: dataMaisProxima(alunosPessoa.map(calcularFimContrato)),
-      // A linha só existe aqui quando a jornada canônica está ativa. O status
+      // A linha só existe aqui quando a jornada canônica está ativa/trancada. O status
       // cadastral local é enriquecimento e pode estar defasado/duplicado.
-      status: 'ativo',
+      status,
       health_score: principal?.health_score || null,
       telefone: alunosPessoa.find((item) => item.telefone)?.telefone || null,
       email: alunosPessoa.find((item) => item.email)?.email || null,
@@ -222,6 +210,45 @@ export function agruparCarteiraProfessorCanonica(
 
     pessoas.set(pessoaChave, aluno);
   });
+
+  return { pessoas, pessoasPorCurso };
+}
+
+function agruparJornadasPorPessoa(
+  jornadas: JornadaCarteiraProfessor[],
+): Map<string, JornadaCarteiraProfessor[]> {
+  const jornadasPorPessoa = new Map<string, JornadaCarteiraProfessor[]>();
+  jornadas.forEach((jornada) => {
+    const chave = chavePessoa(jornada);
+    const atuais = jornadasPorPessoa.get(chave) || [];
+    atuais.push(jornada);
+    jornadasPorPessoa.set(chave, atuais);
+  });
+  return jornadasPorPessoa;
+}
+
+export function agruparCarteiraProfessorCanonica(
+  jornadas: JornadaCarteiraProfessor[],
+  alunosOperacionais: AlunoOperacionalCarteira[],
+  jornadasTrancadas: JornadaCarteiraProfessor[] = [],
+): ResultadoCarteiraProfessorCanonica {
+  const alunosPorId = new Map(
+    alunosOperacionais.map((aluno) => [Number(aluno.id), aluno]),
+  );
+
+  const jornadasPorPessoa = agruparJornadasPorPessoa(
+    jornadas.filter((jornada) => jornada.status_matricula === 'ativa'),
+  );
+  const { pessoas, pessoasPorCurso } = montarPessoasCarteira(jornadasPorPessoa, alunosPorId, 'ativo');
+
+  // Alunos trancados sao exibidos a parte: nunca entram na distribuicao por
+  // curso nem na classificacao LAMK/EMLA, que continuam refletindo so ativos.
+  const jornadasTrancadasPorPessoa = agruparJornadasPorPessoa(
+    jornadasTrancadas.filter((jornada) => jornada.status_matricula === 'trancada'),
+  );
+  const { pessoas: pessoasTrancadas } = montarPessoasCarteira(jornadasTrancadasPorPessoa, alunosPorId, 'trancado');
+  const alunosTrancados = [...pessoasTrancadas.values()]
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 
   const alunos = [...pessoas.values()]
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
@@ -234,7 +261,7 @@ export function agruparCarteiraProfessorCanonica(
     }))
     .sort((a, b) => b.quantidade - a.quantidade || a.curso.localeCompare(b.curso, 'pt-BR'));
 
-  return { alunos, distribuicaoCursos };
+  return { alunos, distribuicaoCursos, alunosTrancados };
 }
 
 export function agruparOcupacoesTurmasProfessorCanonicas(
@@ -324,6 +351,23 @@ export async function buscarOcupacoesTurmasProfessorCanonicas({
   return agruparOcupacoesTurmasProfessorCanonicas(jornadas, cursosProjeto);
 }
 
+export async function buscarJornadasTrancadosProfessorCanonicas({
+  professorId,
+  unidadeId,
+}: {
+  professorId: number;
+  unidadeId: UnidadeId | string;
+}): Promise<JornadaCarteiraProfessor[]> {
+  const { supabase } = await import('@/lib/supabase');
+  const { data, error } = await supabase
+    .rpc('get_jornada_professor_trancados', { p_professor_id: professorId });
+
+  if (error) throw error;
+
+  return ((data || []) as JornadaCarteiraProfessor[])
+    .filter((jornada) => unidadeId === 'todos' || jornada.unidade_id === unidadeId);
+}
+
 export async function buscarCarteiraProfessorDetalheCanonica({
   professorId,
   unidadeId,
@@ -331,12 +375,16 @@ export async function buscarCarteiraProfessorDetalheCanonica({
   professorId: number;
   unidadeId: UnidadeId;
 }): Promise<ResultadoCarteiraProfessorCanonica> {
-  const jornadas = await buscarJornadasProfessorCanonicas({ professorId, unidadeId });
-  const alunoIds = [...new Set(jornadas.map((jornada) => Number(jornada.aluno_id)))]
-    .filter(Number.isFinite);
+  const [jornadas, jornadasTrancadas] = await Promise.all([
+    buscarJornadasProfessorCanonicas({ professorId, unidadeId }),
+    buscarJornadasTrancadosProfessorCanonicas({ professorId, unidadeId }),
+  ]);
+  const alunoIds = [...new Set(
+    [...jornadas, ...jornadasTrancadas].map((jornada) => Number(jornada.aluno_id)),
+  )].filter(Number.isFinite);
 
   if (alunoIds.length === 0) {
-    return { alunos: [], distribuicaoCursos: [] };
+    return { alunos: [], distribuicaoCursos: [], alunosTrancados: [] };
   }
 
   const { supabase } = await import('@/lib/supabase');
@@ -353,5 +401,6 @@ export async function buscarCarteiraProfessorDetalheCanonica({
   return agruparCarteiraProfessorCanonica(
     jornadas,
     (alunosData || []) as AlunoOperacionalCarteira[],
+    jornadasTrancadas,
   );
 }

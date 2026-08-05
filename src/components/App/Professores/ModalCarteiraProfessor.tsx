@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
   X, Users, Baby, School, Wallet, TrendingUp, Clock, Music,
-  Download, PieChart, BarChart3, GraduationCap
+  Download, PieChart, BarChart3, GraduationCap, Lock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -42,6 +42,7 @@ interface Props {
 export function ModalCarteiraProfessor({ open, onClose, professor, unidadeAtual }: Props) {
   const [distribuicaoCursos, setDistribuicaoCursos] = useState<DistribuicaoCursoCanonica[]>([]);
   const [alunosCompletos, setAlunosCompletos] = useState<AlunoCarteiraCanonico[]>([]);
+  const [alunosTrancados, setAlunosTrancados] = useState<AlunoCarteiraCanonico[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -61,10 +62,12 @@ export function ModalCarteiraProfessor({ open, onClose, professor, unidadeAtual 
       });
       setAlunosCompletos(detalhe.alunos);
       setDistribuicaoCursos(detalhe.distribuicaoCursos);
+      setAlunosTrancados(detalhe.alunosTrancados);
     } catch (error) {
       console.error('Erro ao carregar distribuição:', error);
       setAlunosCompletos([]);
       setDistribuicaoCursos([]);
+      setAlunosTrancados([]);
     } finally {
       setLoading(false);
     }
@@ -309,6 +312,25 @@ export function ModalCarteiraProfessor({ open, onClose, professor, unidadeAtual 
               ))}
             </div>
           </div>
+
+          {/* Trancados - exibicao a parte, fora dos cards de contagem acima */}
+          {alunosTrancados.length > 0 && (
+            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+              <div className="flex items-center gap-2 mb-3">
+                <Lock className="w-4 h-4 text-amber-400" />
+                <h3 className="font-medium text-white">Trancados ({alunosTrancados.length})</h3>
+                <span className="text-xs text-slate-500">trancamento vigente hoje · não entram nos cards acima</span>
+              </div>
+              <div className="space-y-2">
+                {alunosTrancados.map((aluno) => (
+                  <div key={aluno.id} className="flex items-center justify-between text-sm px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                    <span className="text-white">{aluno.nome}</span>
+                    <span className="text-slate-400">{aluno.curso}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Ações */}
           <div className="flex justify-end gap-3 pt-2">

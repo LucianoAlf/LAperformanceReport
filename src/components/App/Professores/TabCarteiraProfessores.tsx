@@ -4,7 +4,7 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
   Users, Wallet, TrendingUp, GraduationCap, Baby, School,
   ChevronDown, ChevronRight, Search, ArrowUpDown, Eye,
-  Loader2, Calendar, Clock, AlertTriangle, Heart
+  Loader2, Calendar, Clock, AlertTriangle, Heart, Lock
 } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { Button } from '@/components/ui/button';
@@ -61,6 +61,8 @@ interface CarteiraProfessor {
   health_score_estado_publicacao: 'parcial' | 'oficial' | 'sem_base';
   health_score_cobertura: number | null;
   health_score_motivo: string | null;
+  // Trancados sao exibidos a parte: nunca somam em total_alunos, mrr, ticket ou media/turma.
+  total_trancados: number;
 }
 
 interface Props {
@@ -144,6 +146,7 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
         vinculosResult,
         unidadesResult,
         cursosRelResult,
+        trancadosResult,
       ] = await Promise.all([
         // Enriquecimento financeiro contratual; nao define mais a populacao da Carteira.
         supabase.rpc('get_carteira_professores', rpcParams),
@@ -164,6 +167,8 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
         supabase
           .from('professores_cursos')
           .select('professor_id, cursos:curso_id (nome)'),
+        // Contagem de alunos trancados por professor - exibicao a parte, nunca soma na contagem de ativos.
+        supabase.rpc('get_contagem_trancados_professores', rpcParams),
       ]);
 
       if (carteiraResult.error) throw carteiraResult.error;
@@ -171,6 +176,11 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
       if (vinculosResult.error) throw vinculosResult.error;
       if (unidadesResult.error) throw unidadesResult.error;
       if (cursosRelResult.error) throw cursosRelResult.error;
+      if (trancadosResult.error) throw trancadosResult.error;
+
+      const trancadosPorProfessor = new Map<number, number>(
+        (trancadosResult.data || []).map((row: any) => [Number(row.professor_id), Number(row.total_trancados)]),
+      );
 
       const professoresAtivos = new Set(
         (professoresResult.data || []).map((professor) => Number(professor.id)),
@@ -253,6 +263,7 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
           health_score_estado_publicacao: 'sem_base',
           health_score_cobertura: null,
           health_score_motivo: 'Carregando Health Score V3',
+          total_trancados: trancadosPorProfessor.get(professorId) ?? 0,
         };
       });
 
@@ -316,7 +327,7 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
         unidadeId: unidadeAtual,
       });
 
-      setAlunosExpandido(detalhe.alunos);
+      setAlunosExpandido([...detalhe.alunos, ...detalhe.alunosTrancados]);
     } catch (error) {
       console.error('Erro ao carregar alunos:', error);
       setAlunosExpandido([]);
@@ -593,6 +604,17 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
                   <span className="text-sm font-semibold text-white">{carteira.total_alunos}</span>
                   <span className="text-xs text-slate-400">alunos</span>
                 </div>
+
+                {/* Badge Trancados - exibicao a parte, nao soma no badge de Alunos acima */}
+                {carteira.total_trancados > 0 && (
+                  <Tooltip content="Alunos com trancamento vigente hoje (Emusys). Nao contam em Alunos, MRR, Ticket ou Média/Turma.">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                      <Lock className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="text-sm font-semibold text-amber-400">{carteira.total_trancados}</span>
+                      <span className="text-xs text-slate-400">trancados</span>
+                    </div>
+                  </Tooltip>
+                )}
 
                 {/* Badge MRR */}
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
