@@ -16,6 +16,8 @@ export interface KPITurmaCanonico {
   ocupacoes_elegiveis: number;
   turmas_elegiveis: number;
   media_alunos_turma: number;
+  turmas_um_aluno: number;
+  percentual_turmas_um_aluno: number;
   competencia_status: 'aberto' | 'fechado';
   fonte: string;
   regra_versao: string;
@@ -25,6 +27,8 @@ export interface TotaisKPITurmaCanonico {
   totalOcupacoes: number;
   totalTurmas: number;
   mediaAlunosTurma: number;
+  totalTurmasUmAluno: number;
+  percentualTurmasUmAluno: number;
 }
 
 const consultasEmAndamento = new Map<string, Promise<KPITurmaCanonico[]>>();
@@ -43,6 +47,8 @@ function normalizarKpiTurma(row: Record<string, unknown>): KPITurmaCanonico {
     ocupacoes_elegiveis: numero(row.ocupacoes_elegiveis),
     turmas_elegiveis: numero(row.turmas_elegiveis),
     media_alunos_turma: numero(row.media_alunos_turma),
+    turmas_um_aluno: numero(row.turmas_um_aluno),
+    percentual_turmas_um_aluno: numero(row.percentual_turmas_um_aluno),
     competencia_status: row.competencia_status === 'fechado' ? 'fechado' : 'aberto',
     fonte: String(row.fonte ?? ''),
     regra_versao: String(row.regra_versao ?? ''),
@@ -64,7 +70,7 @@ export async function buscarKpisTurmasCanonicos(
   if (consultaExistente) return consultaExistente;
 
   const consulta = (async () => {
-    const { data, error } = await supabase.rpc('get_kpis_turmas_canonicos_v1', parametros);
+    const { data, error } = await supabase.rpc('get_kpis_turmas_canonicos_v2', parametros);
     if (error) throw error;
     return ((data || []) as Record<string, unknown>[]).map(normalizarKpiTurma);
   })();
@@ -88,11 +94,19 @@ export function calcularTotaisKpisTurmasCanonicos(
     (soma, linha) => soma + linha.turmas_elegiveis,
     0,
   );
+  const totalTurmasUmAluno = linhas.reduce(
+    (soma, linha) => soma + linha.turmas_um_aluno,
+    0,
+  );
 
   return {
     totalOcupacoes,
     totalTurmas,
     mediaAlunosTurma: totalTurmas > 0 ? totalOcupacoes / totalTurmas : 0,
+    totalTurmasUmAluno,
+    percentualTurmasUmAluno: totalTurmas > 0
+      ? (totalTurmasUmAluno / totalTurmas) * 100
+      : 0,
   };
 }
 
@@ -105,6 +119,8 @@ function combinarLinhas(linhas: KPITurmaCanonico[]): KPITurmaCanonico {
     ocupacoes_elegiveis: totais.totalOcupacoes,
     turmas_elegiveis: totais.totalTurmas,
     media_alunos_turma: totais.mediaAlunosTurma,
+    turmas_um_aluno: totais.totalTurmasUmAluno,
+    percentual_turmas_um_aluno: totais.percentualTurmasUmAluno,
     competencia_status: linhas.every((linha) => linha.competencia_status === 'fechado')
       ? 'fechado'
       : 'aberto',
