@@ -339,6 +339,18 @@
       <p class="rider-status" id="riderStatus"></p>
     </div>
   </section>
+
+  <!-- FIM (conclusão) -->
+  <section class="screen" id="screen-fim">
+    <div style="display:flex;flex-direction:column;align-items:center;width:100%;">
+      <p class="eyebrow">Tudo pronto</p>
+      <div class="halo" id="fimHalo"><img id="fimImg" src="" alt=""></div>
+      <h1 id="fimTitle" style="text-align:center; margin-top:16px;"></h1>
+      <p class="lead" style="text-align:center; margin-bottom:16px;" id="fimText"></p>
+      <p class="fineprint" style="text-align:center; margin-bottom:24px;" id="fimNote"></p>
+      <button class="btn btn-ghost" id="btnEditarRider" onclick="irParaRider()" style="max-width:280px;">Editar meu Rider</button>
+    </div>
+  </section>
 </main>
 
 <footer>Ficha Técnica LA · LA Music</footer>
@@ -391,10 +403,9 @@ async function init(){
     dados = await res.json();
     colaboradorNome = dados.colaborador?.nome || "";
 
-    // Se já fez o diagnóstico, vai direto pro Rider
+    // Se já fez o diagnóstico, vai direto pra tela de conclusão
     if(dados.diagnostico_feito){
-      renderRider();
-      go("screen-rider");
+      showFim();
       return;
     }
 
@@ -573,6 +584,11 @@ function showResult(codinome, valorizacao){
   // Para a animação do EQ imediatamente — o resultado já chegou
   stopEqAnimation();
 
+  // Guarda o codinome para a tela de conclusão do Rider
+  if(!dados) dados = {};
+  if(!dados.colaborador) dados.colaborador = {};
+  dados.colaborador.codinome = codinome;
+
   const [primKey, secKey] = codinome.split("/");
   const p = PERFIS[primKey];
   const s = PERFIS[secKey];
@@ -683,6 +699,7 @@ async function saveRider(){
   status.className = "rider-status";
   status.textContent = "Salvando…";
   btn.disabled = true;
+  btn.textContent = "Salvando…";
 
   const respostas = {};
   document.querySelectorAll("#riderFields textarea").forEach(ta => {
@@ -699,16 +716,43 @@ async function saveRider(){
     if(!res.ok || data.error){
       status.className = "rider-status err";
       status.textContent = data.error || "Não salvou. Tente de novo.";
+      btn.disabled = false;
+      btn.textContent = "Salvar";
     }else{
-      status.textContent = "Salvo! Pode editar quando quiser.";
       dados.rider_versao = data.versao;
+      // Atualiza respostas em memória para se a pessoa voltar a editar
+      dados.rider_respostas = { ...dados.rider_respostas, ...respostas };
+      showFim();
     }
   }catch(e){
     status.className = "rider-status err";
     status.textContent = "Erro de conexão. Tente de novo.";
-  }finally{
     btn.disabled = false;
+    btn.textContent = "Salvar";
   }
+}
+
+/* =============== TELA DE CONCLUSÃO =============== */
+function showFim(){
+  // Avatar do perfil primário (fecha o círculo com a revelação)
+  const codinome = dados?.colaborador?.codinome;
+  if(codinome){
+    const primKey = codinome.split("/")[0];
+    const p = PERFIS[primKey];
+    if(p){
+      const accent = getComputedStyle(document.documentElement).getPropertyValue(p.varname).trim();
+      document.getElementById("screen-fim").style.setProperty("--accent", accent);
+      document.getElementById("fimImg").src = p.img;
+    }
+  }
+
+  document.getElementById("fimTitle").textContent = colaboradorNome
+    ? `Pronto, ${colaboradorNome}. Sua ficha está completa.`
+    : "Pronto. Sua ficha está completa.";
+  document.getElementById("fimText").textContent = "Obrigado por dedicar esse tempo. O que você escreveu ajuda a gente a trabalhar melhor com você.";
+  document.getElementById("fimNote").textContent = "Seu Rider fica sempre aberto. É só voltar por este mesmo link quando quiser mudar alguma coisa.";
+
+  go("screen-fim");
 }
 
 /* =============== BOOT =============== */
