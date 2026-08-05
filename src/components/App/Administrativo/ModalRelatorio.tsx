@@ -126,6 +126,17 @@ function n(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function somarCampoCompleto<T>(rows: T[], getter: (row: T) => number | null | undefined): number | null {
+  if (rows.length === 0) return null;
+  const values = rows.map(getter);
+  if (values.some(value => value == null)) return null;
+  return values.reduce((total, value) => total + Number(value), 0);
+}
+
+function formatarNumeroOpcional(value: number | null | undefined): string {
+  return value == null ? '—' : String(value);
+}
+
 async function fetchFinanceiroFaturasEmusysRelatorio({
   unidadeId,
   ano,
@@ -290,34 +301,34 @@ export function ModalRelatorio({
   const { usuario } = useAuth();
 
   const formatarBolsistasIntegrais = (resumoBase: ResumoMes | null = resumo) => {
-    const regulares = resumoBase?.bolsistas_integrais_regulares || 0;
-    const total = regulares || resumoBase?.bolsistas_integrais || 0;
+    const total = resumoBase?.bolsistas_integrais ?? 0;
     return `*${total}*`;
   };
 
   const formatarBolsistasIntegraisTexto = (resumoBase: ResumoMes | null = resumo) => {
-    const regulares = resumoBase?.bolsistas_integrais_regulares || 0;
-    const total = regulares || resumoBase?.bolsistas_integrais || 0;
-    return `${total} integrais`;
+    const total = resumoBase?.bolsistas_integrais ?? 0;
+    const regulares = resumoBase?.bolsistas_integrais_regulares;
+    const segundoCurso = resumoBase?.bolsistas_integrais_segundo_curso;
+    return regulares == null || segundoCurso == null
+      ? `${total} integrais (Detalhamento indisponivel no historico)`
+      : `${total} integrais (${regulares} regulares + ${segundoCurso} 2o curso)`;
   };
 
   const formatarMatriculasSegundoCurso = (resumoBase: ResumoMes | null = resumo) => {
     const total = resumoBase?.matriculas_2_curso || 0;
-    const alunos = resumoBase?.alunos_com_2_curso || 0;
-    const extras = resumoBase?.matriculas_2_curso_extras || 0;
-    return alunos || extras
-      ? `*${total}* (${alunos} alunos${extras ? ` + ${extras} extras` : ''})`
-      : `*${total}*`;
+    const alunos = resumoBase?.alunos_com_2_curso;
+    const extras = resumoBase?.matriculas_2_curso_extras;
+    return alunos == null || extras == null
+      ? `*${total}* (Detalhamento indisponivel no historico)`
+      : `*${total}* (${alunos} alunos + ${extras} extras)`;
   };
 
   const formatarMatriculasAtivas = (resumoBase: ResumoMes | null = resumo) => {
     const total = resumoBase?.matriculas_ativas || 0;
-    const baseAlunos = resumoBase?.matriculas_base_alunos_ativos || resumoBase?.alunos_ativos || 0;
+    const baseAlunos = resumoBase?.matriculas_base_alunos_ativos;
     const banda = resumoBase?.matriculas_banda || 0;
     const segundoCurso = resumoBase?.matriculas_2_curso || 0;
-    return baseAlunos || banda || segundoCurso
-      ? `*${total}* (${baseAlunos} base alunos + ${banda} banda + ${segundoCurso} 2o curso)`
-      : `*${total}*`;
+    return `*${total}* (${formatarNumeroOpcional(baseAlunos)} base alunos + ${banda} banda + ${segundoCurso} 2o curso)`;
   };
   
   // Estado para período do relatório
@@ -518,13 +529,13 @@ export function ModalRelatorio({
             faturamento_realizado: canonico.faturamentoRealizado,
             churn_rate: canonico.churnRate,
             tempo_permanencia_medio: canonico.tempoPermanencia,
-            _matriculas_ativas: row._matriculas_ativas || canonico.matriculasAtivas,
-            _matriculas_base_alunos_ativos: row._matriculas_base_alunos_ativos || canonico.matriculasBaseAlunosAtivos,
-            _matriculas_banda: row._matriculas_banda || canonico.matriculasBanda,
-            _matriculas_2_curso: row._matriculas_2_curso || canonico.matriculasSegundoCurso,
-            _alunos_com_2_curso: row._alunos_com_2_curso || canonico.alunosComSegundoCurso,
-            _matriculas_2_curso_extras: row._matriculas_2_curso_extras || canonico.matriculasSegundoCursoExtras,
-            _alunos_coral: row._alunos_coral || canonico.matriculasCoral,
+            _matriculas_ativas: row._matriculas_ativas ?? canonico.matriculasAtivas,
+            _matriculas_base_alunos_ativos: row._matriculas_base_alunos_ativos ?? canonico.matriculasBaseAlunosAtivos,
+            _matriculas_banda: row._matriculas_banda ?? canonico.matriculasBanda,
+            _matriculas_2_curso: row._matriculas_2_curso ?? canonico.matriculasSegundoCurso,
+            _alunos_com_2_curso: row._alunos_com_2_curso ?? canonico.alunosComSegundoCurso,
+            _matriculas_2_curso_extras: row._matriculas_2_curso_extras ?? canonico.matriculasSegundoCursoExtras,
+            _alunos_coral: row._alunos_coral ?? canonico.matriculasCoral,
           };
         });
       }
@@ -581,29 +592,47 @@ export function ModalRelatorio({
     let matriculasAtivas = 0;
     let matriculasBanda = 0;
     let matriculas2Curso = 0;
-    let alunosCoral = 0;
+    let alunosCoral: number | null = null;
 
     if (snapshotMatriculas) {
       matriculasAtivas = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_ativas || 0), 0);
       matriculasBanda = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_banda || 0), 0);
       matriculas2Curso = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_2_curso || 0), 0);
-      alunosCoral = kpisData.reduce((acc: number, k: any) => acc + (k._alunos_coral || 0), 0);
+      alunosCoral = somarCampoCompleto(kpisData, (k: any) => k._alunos_coral);
     }
+
+    const bolsistasIntegraisRegulares = somarCampoCompleto(
+      kpisData,
+      (k: any) => k.total_bolsistas_integrais_regulares
+    );
+    const bolsistasIntegraisSegundoCurso = somarCampoCompleto(
+      kpisData,
+      (k: any) => k.total_bolsistas_integrais_segundo_curso
+    );
+    const matriculasBaseAlunosAtivos = somarCampoCompleto(
+      kpisData,
+      (k: any) => k._matriculas_base_alunos_ativos
+    );
+    const alunosComSegundoCurso = somarCampoCompleto(kpisData, (k: any) => k._alunos_com_2_curso);
+    const matriculasSegundoCursoExtras = somarCampoCompleto(
+      kpisData,
+      (k: any) => k._matriculas_2_curso_extras
+    );
 
     const kpis = kpisData.reduce((acc, k) => ({
       alunos_ativos: (acc.alunos_ativos || 0) + (k.total_alunos_ativos || 0),
       alunos_pagantes: (acc.alunos_pagantes || 0) + (k.total_alunos_pagantes || 0),
       alunos_nao_pagantes: (acc.alunos_nao_pagantes || 0) + ((k.total_alunos_ativos || 0) - (k.total_alunos_pagantes || 0)),
       bolsistas_integrais: (acc.bolsistas_integrais || 0) + (k.total_bolsistas_integrais || 0),
-      bolsistas_integrais_regulares: (acc.bolsistas_integrais_regulares || 0) + (k.total_bolsistas_integrais_regulares || 0),
-      bolsistas_integrais_segundo_curso: (acc.bolsistas_integrais_segundo_curso || 0) + (k.total_bolsistas_integrais_segundo_curso || 0),
+      bolsistas_integrais_regulares: bolsistasIntegraisRegulares,
+      bolsistas_integrais_segundo_curso: bolsistasIntegraisSegundoCurso,
       bolsistas_parciais: (acc.bolsistas_parciais || 0) + (k.total_bolsistas_parciais || 0),
       alunos_trancados: (acc.alunos_trancados || 0) + (k._alunos_trancados || 0),
       matriculas_banda: matriculasBanda,
-      matriculas_base_alunos_ativos: (acc.matriculas_base_alunos_ativos || 0) + (k._matriculas_base_alunos_ativos || 0),
+      matriculas_base_alunos_ativos: matriculasBaseAlunosAtivos,
       matriculas_2_curso: matriculas2Curso,
-      alunos_com_2_curso: (acc.alunos_com_2_curso || 0) + (k._alunos_com_2_curso || 0),
-      matriculas_2_curso_extras: (acc.matriculas_2_curso_extras || 0) + (k._matriculas_2_curso_extras || 0),
+      alunos_com_2_curso: alunosComSegundoCurso,
+      matriculas_2_curso_extras: matriculasSegundoCursoExtras,
       alunos_coral: alunosCoral,
       faturamento: (acc.faturamento || 0) + (Number(k.faturamento_realizado ?? k.faturamento_previsto) || 0),
       faturamento_previsto: (acc.faturamento_previsto || 0) + (Number(k.faturamento_previsto) || 0),
@@ -785,16 +814,16 @@ export function ModalRelatorio({
       alunos_trancados: isPeriodoAtual ? kpis.alunos_trancados || 0 : 0,
       trancamentos_periodo: trancamentos.length,
       bolsistas_integrais: kpis.bolsistas_integrais || 0,
-      bolsistas_integrais_regulares: kpis.bolsistas_integrais_regulares || 0,
-      bolsistas_integrais_segundo_curso: kpis.bolsistas_integrais_segundo_curso || 0,
+      bolsistas_integrais_regulares: kpis.bolsistas_integrais_regulares ?? null,
+      bolsistas_integrais_segundo_curso: kpis.bolsistas_integrais_segundo_curso ?? null,
       bolsistas_parciais: kpis.bolsistas_parciais || 0,
       alunos_novos: novosAlunos.length,
       matriculas_ativas: matriculasAtivas,
-      matriculas_base_alunos_ativos: kpis.matriculas_base_alunos_ativos || 0,
+      matriculas_base_alunos_ativos: kpis.matriculas_base_alunos_ativos ?? null,
       matriculas_banda: matriculasBanda,
       matriculas_2_curso: matriculas2Curso,
-      alunos_com_2_curso: kpis.alunos_com_2_curso || 0,
-      matriculas_2_curso_extras: kpis.matriculas_2_curso_extras || 0,
+      alunos_com_2_curso: kpis.alunos_com_2_curso ?? null,
+      matriculas_2_curso_extras: kpis.matriculas_2_curso_extras ?? null,
       alunos_coral: alunosCoral,
       renovacoes_previstas: renovacoesRealizadasCount + naoRenovacoesCount + renovacoesPendentesCount,
       renovacoes_realizadas: renovacoesRealizadasCount,
