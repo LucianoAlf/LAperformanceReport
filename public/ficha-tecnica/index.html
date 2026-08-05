@@ -10,8 +10,8 @@
 <style>
   @font-face{
     font-family:"Prompt";
-    src:url("assets/Prompt-Regular.ttf") format("truetype");
-    font-weight:400; font-style:normal; font-display:swap;
+    src:url("assets/Prompt-Bold.ttf") format("truetype");
+    font-weight:700; font-style:normal; font-display:swap;
   }
   :root{
     /* Design system LA Teacher */
@@ -124,9 +124,8 @@
   /* ---------- Quiz ---------- */
   .quiz-top{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;}
   .track{font-size:.78rem; font-weight:600; color:var(--muted);}
-  .progress{display:flex; gap:5px; margin-bottom:20px;}
-  .seg{height:5px; flex:1; border-radius:3px; background:var(--line); transition:background .3s;}
-  .seg.done{background:var(--teal);}
+  .progress{height:5px; border-radius:3px; background:var(--line); margin-bottom:20px; overflow:hidden;}
+  .progress-fill{height:100%; background:var(--teal); border-radius:3px; transition:width .3s ease;}
   .scenario-title{font-family:"Prompt",sans-serif; font-weight:700; font-size:1.2rem; margin-bottom:8px;}
   .scenario-text{color:var(--muted); margin-bottom:22px;}
   .options{display:flex; flex-direction:column; gap:12px;}
@@ -138,7 +137,15 @@
     transition:border-color .18s, transform .12s, background .35s;
   }
   .opt:active{transform:scale(.985); border-color:var(--teal);}
+  .opt[disabled]{opacity:.55; cursor:default; transform:none;}
   @media (hover:hover){ .opt:hover{border-color:var(--teal);} }
+  .quiz-back{
+    appearance:none; border:none; background:transparent; cursor:pointer;
+    color:var(--muted); font-size:.85rem; font-weight:600; font-family:"Inter",sans-serif;
+    padding:8px 0; margin-top:14px; display:inline-flex; align-items:center; gap:4px;
+  }
+  .quiz-back:active{opacity:.6;}
+  .quiz-back[disabled]{opacity:0; pointer-events:none;}
 
   /* ---------- Reveal (EQ) ---------- */
   #screen-reveal{align-items:center; justify-content:center; text-align:center;}
@@ -280,10 +287,11 @@
       <span class="pill" id="qPill">Situação 1</span>
       <span class="track" id="qTrack"></span>
     </div>
-    <div class="progress" id="progress"></div>
+    <div class="progress" id="progress"><div class="progress-fill" id="progressFill"></div></div>
     <h2 class="scenario-title" id="qTitle"></h2>
     <p class="scenario-text" id="qText"></p>
     <div class="options" id="qOptions"></div>
+    <button class="quiz-back" id="btnBack" onclick="goBack()">← Voltar</button>
   </section>
 
   <!-- REVELAÇÃO (EQ) -->
@@ -349,8 +357,9 @@ let TOKEN = null;
 let dados = null;          // resposta do resolver
 let colaboradorNome = "";
 let perguntas = [];        // bloco_a + bloco_b concatenados (numeração contínua)
-let respostasA = [];       // ids opacos ["1.2","2.0",...]
-let respostasB = [];       // ids opacos ["1.a","2.b",...]
+let blocoASize = 0;        // quantas perguntas do Bloco A (para indexar respostasA/B)
+let respostasA = [];       // ids opacos ["1.2","2.0",...] — indexados por current (0..blocoASize-1)
+let respostasB = [];       // ids opacos ["1.a","2.b",...] — indexados por (current - blocoASize)
 let current = 0;
 let isBlocoB = false;
 
@@ -391,6 +400,10 @@ async function init(){
     perguntas = [];
     (dados.bloco_a || []).forEach(q => perguntas.push({ ...q, bloco: "A" }));
     (dados.bloco_b || []).forEach(q => perguntas.push({ ...q, bloco: "B" }));
+    blocoASize = dados.bloco_a?.length || 0;
+    // Pré-inicializa com undefined — permite substituir ao voltar sem deslocar índices
+    respostasA = new Array(blocoASize);
+    respostasB = new Array(perguntas.length - blocoASize);
 
     // Abertura
     document.getElementById("welcomeHello").textContent = colaboradorNome ? `E aí, ${colaboradorNome}!` : "E aí!";
@@ -407,6 +420,8 @@ function showError(title, msg){
 }
 
 /* =============== QUIZ =============== */
+let travado = false; // trava anti-toque-duplo: só destrava no próximo render
+
 function startQuiz(){
   buildProgress();
   renderQuestion();
@@ -414,13 +429,9 @@ function startQuiz(){
 }
 
 function buildProgress(){
-  const el = document.getElementById("progress");
-  el.innerHTML = "";
-  for(let i = 0; i < perguntas.length; i++){
-    const f = document.createElement("div");
-    f.className = "seg";
-    el.appendChild(f);
-  }
+  // Barra contínua — num celular, 25 segmentos de 1,5% viram fiapo
+  const fill = document.getElementById("progressFill");
+  if(fill) fill.style.width = "0%";
 }
 
 function renderQuestion(){
@@ -433,9 +444,14 @@ function renderQuestion(){
   // Ambos os blocos trazem titulo + texto do servidor (v2 da edge function)
   document.getElementById("qTitle").textContent = q.titulo || "";
   document.getElementById("qText").textContent = q.texto || "";
-  document.querySelectorAll(".seg").forEach((f, i) =>
-    f.classList.toggle("done", i < current)
-  );
+
+  // Barra contínua
+  const pct = perguntas.length > 1 ? (current / (perguntas.length - 1)) * 100 : 0;
+  const fill = document.getElementById("progressFill");
+  if(fill) fill.style.width = pct + "%";
+
+  // Botão voltar — esconde na primeira pergunta
+  document.getElementById("btnBack").disabled = (current === 0);
 
   // Renderiza as opções na ordem que veio do servidor (já embaralhadas)
   const box = document.getElementById("qOptions");
@@ -448,14 +464,24 @@ function renderQuestion(){
     b.onclick = () => answer(opt.id);
     box.appendChild(b);
   });
+
+  // Destrava para a nova pergunta
+  travado = false;
 }
 
 function answer(optId){
+  if(travado) return;
+  travado = true;
+  // Desabilita os botões imediatamente — impede toque duplo e disparo de dois POST
+  document.querySelectorAll("#qOptions .opt").forEach(b => b.disabled = true);
+
+  // Registra a resposta. Se já existia (caso de voltar e refazer), substitui.
   if(isBlocoB){
-    respostasB.push(optId);
+    respostasB[current - blocoASize] = optId;
   }else{
-    respostasA.push(optId);
+    respostasA[current] = optId;
   }
+
   if(current < perguntas.length - 1){
     current++;
     renderQuestion();
@@ -463,6 +489,13 @@ function answer(optId){
   }
   // Acabou — envia pro servidor calcular
   submitDiagnostico();
+}
+
+function goBack(){
+  if(current > 0){
+    current--;
+    renderQuestion();
+  }
 }
 
 /* =============== SUBMIT (servidor calcula) =============== */
@@ -491,7 +524,7 @@ async function submitDiagnostico(){
     const res = await fetch(`${API}?action=submit&token=${encodeURIComponent(TOKEN)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bloco_a: respostasA, bloco_b: respostasB })
+      body: JSON.stringify({ bloco_a: respostasA.filter(Boolean), bloco_b: respostasB.filter(Boolean) })
     });
     const data = await res.json();
     if(!res.ok || data.error){
