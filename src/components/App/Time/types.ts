@@ -7,6 +7,7 @@ export interface Colaborador {
   cargo: string | null;
   tipo: string | null;
   situacao: string;
+  departamento: string | null;
   unidade_id: string | null;
   unidade_nome: string | null;
   temperamento_codinome: string | null;

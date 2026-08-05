@@ -121,7 +121,8 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
       let query = supabase
         .from('colaboradores')
         .select('id, nome, apelido')
-        .eq('ativo', true);
+        .eq('ativo', true)
+        .neq('tipo', 'professor');
 
       if (isAdmin) {
         query = query.order('nome');

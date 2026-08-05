@@ -33,12 +33,14 @@ export function TimePage() {
 
   // Filtros locais
   const [unidadeFiltro, setUnidadeFiltro] = useState<UnidadeId>('todos');
+  const [departamentoFiltro, setDepartamentoFiltro] = useState<string | 'todos'>('todos');
   const [apenasRespondidos, setApenasRespondidos] = useState(false);
   const [busca, setBusca] = useState('');
   const [colaboradorSelecionado, setColaboradorSelecionado] = useState<number | null>(null);
 
-  const { colaboradores, unidades, isLoading } = useColaboradores(
+  const { colaboradores, unidades, departamentos, isLoading } = useColaboradores(
     unidadeFiltro,
+    departamentoFiltro,
     apenasRespondidos,
   );
 
@@ -90,6 +92,35 @@ export function TimePage() {
                 }`}
               >
                 {u.nome}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Filtro de departamento — opções dinâmicas do banco */}
+        {departamentos.length > 0 && (
+          <div className="bg-slate-800 p-1 rounded-lg inline-flex">
+            <button
+              onClick={() => setDepartamentoFiltro('todos')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+                departamentoFiltro === 'todos'
+                  ? 'bg-cyan-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+              }`}
+            >
+              Todos
+            </button>
+            {departamentos.map((d) => (
+              <button
+                key={d}
+                onClick={() => setDepartamentoFiltro(d)}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+                  departamentoFiltro === d
+                    ? 'bg-cyan-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                }`}
+              >
+                {d}
               </button>
             ))}
           </div>

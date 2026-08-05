@@ -94,7 +94,8 @@ export function ChecklistsTab({ unidadeId, departamentoFixo }: ChecklistsTabProp
       let query = supabase
         .from('colaboradores')
         .select('id, nome, apelido')
-        .eq('ativo', true);
+        .eq('ativo', true)
+        .neq('tipo', 'professor');
       
       if (isAdmin) {
         // Admin vê todos os colaboradores ativos
