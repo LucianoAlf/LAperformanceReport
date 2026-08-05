@@ -90,6 +90,7 @@ const PainelPermissoes = lazy(() => import('./components/App/Admin/PainelPermiss
 const ComercialPage = lazy(() => import('./components/App/Comercial').then(m => ({ default: m.ComercialPage })));
 const PlanilhaRetencao = lazy(() => import('./components/App/Retencao').then(m => ({ default: m.PlanilhaRetencao })));
 const ProfessoresPage = lazy(() => import('./components/App/Professores').then(m => ({ default: m.ProfessoresPage })));
+const TimePage = lazy(() => import('./components/App/Time').then(m => ({ default: m.TimePage })));
 const AdministrativoPage = lazy(() => import('./components/App/Administrativo').then(m => ({ default: m.AdministrativoPage })));
 const AgendaPage = lazy(() => import('@/components/App/Agenda'));
 // Saúde das Automações (admin)
@@ -276,6 +277,10 @@ export const router = createBrowserRouter([
           {
             path: 'professores',
             element: <Suspense fallback={<PageLoader />}><ProfessoresPage /></Suspense>,
+          },
+          {
+            path: 'time',
+            element: <Suspense fallback={<PageLoader />}><TimePage /></Suspense>,
           },
           {
             path: 'projetos',
