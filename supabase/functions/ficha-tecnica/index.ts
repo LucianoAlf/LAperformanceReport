@@ -163,17 +163,17 @@ const VALORIZACAO: Record<string, string> = {
 // ---------------------------------------------------------------------------
 const RIDER_CAMPOS = [
   { id: 'rende_mais',      grupo: 'Como eu trabalho',  label: 'Eu rendo mais quando...' },
-  { id: 'me_atrapalha',    grupo: 'Como eu trabalho',  label: 'O que me atrapalha ou me tira do serio...' },
-  { id: 'melhor_horario',  grupo: 'Como eu trabalho',  label: 'Meu melhor horario do dia e...' },
-  { id: 'como_chamar',     grupo: 'Como falar comigo', label: 'A melhor forma de me chamar pra alguma coisa e...' },
-  { id: 'quando_quieto',   grupo: 'Como falar comigo', label: 'Quando eu fico quieto, geralmente significa...' },
-  { id: 'entendem_errado', grupo: 'Como falar comigo', label: 'Costumam entender errado sobre mim que...' },
+  { id: 'me_atrapalha',    grupo: 'Como eu trabalho',  label: 'O que mais me atrapalha ou me tira do sério é...' },
+  { id: 'melhor_horario',  grupo: 'Como eu trabalho',  label: 'Meu melhor horário do dia é...' },
+  { id: 'como_chamar',     grupo: 'Como falar comigo', label: 'A melhor forma de me chamar pra alguma coisa é...' },
+  { id: 'quando_quieto',   grupo: 'Como falar comigo', label: 'Quando eu fico quieto, geralmente significa que...' },
+  { id: 'entendem_errado', grupo: 'Como falar comigo', label: 'O que as pessoas costumam entender errado sobre mim é...' },
   { id: 'feedback',        grupo: 'Feedback',          label: 'Eu prefiro receber feedback assim...' },
-  { id: 'quando_erro',     grupo: 'Feedback',          label: 'Quando eu erro, o que mais me ajuda e...' },
+  { id: 'quando_erro',     grupo: 'Feedback',          label: 'Quando eu erro, o que mais me ajuda é...' },
   { id: 'tempo_livre',     grupo: 'Fora do trabalho',  label: 'No meu tempo livre eu...' },
-  { id: 'habilidade',      grupo: 'Fora do trabalho',  label: 'Uma habilidade minha que quase ninguem aqui conhece...' },
-  { id: 'musica',          grupo: 'Fora do trabalho',  label: 'Se fosse escolher uma musica pra tocar quando eu chego, seria...' },
-  { id: 'quero_aprender',  grupo: 'Fora do trabalho',  label: 'O que eu quero aprender ou desenvolver esse ano...' },
+  { id: 'habilidade',      grupo: 'Fora do trabalho',  label: 'Uma habilidade minha que quase ninguém aqui conhece é...' },
+  { id: 'musica',          grupo: 'Fora do trabalho',  label: 'Se fosse escolher uma música pra tocar quando eu chego, seria...' },
+  { id: 'quero_aprender',  grupo: 'Fora do trabalho',  label: 'O que eu quero aprender ou desenvolver esse ano é...' },
 ];
 
 // ---------------------------------------------------------------------------
