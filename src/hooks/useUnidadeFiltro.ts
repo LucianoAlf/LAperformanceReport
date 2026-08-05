@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import type { UnidadePermitida } from '../contexts/AuthContext';
 
 interface UseUnidadeFiltroReturn {
   unidadeSelecionada: string | null;
@@ -7,39 +8,50 @@ interface UseUnidadeFiltroReturn {
   filtroAtivo: string | null;
   isConsolidado: boolean;
   canChangeUnidade: boolean;
+  unidadesDisponiveis: UnidadePermitida[];
+  podeVerConsolidado: boolean;
 }
 
 /**
  * Hook para gerenciar o filtro de unidade
- * - Admin: pode alternar entre consolidado e unidades específicas
- * - Unidade: sempre filtrado pela sua unidade (não pode alterar)
+ * - Admin: alterna entre consolidado (rede inteira) e qualquer unidade
+ * - Multi-unidade não-admin: alterna entre as unidades dele, SEM consolidado
+ * - Unidade única: filtro fixo na unidade dele (não pode alterar)
  */
 export function useUnidadeFiltro(): UseUnidadeFiltroReturn {
-  const { isAdmin, unidadeId } = useAuth();
-  
-  // Estado local para admin selecionar unidade
-  const [unidadeSelecionada, setUnidadeSelecionada] = useState<string | null>(null);
+  const { isAdmin, unidadeId, unidadesPermitidas } = useAuth();
 
-  // Quando usuário de unidade loga, força o filtro para sua unidade
-  // Quando admin loga, garante que começa com Consolidado (null)
+  // Admin escolhe entre todas; não-admin só entre as unidades vinculadas a ele.
+  const unidadesDisponiveis = isAdmin ? [] : unidadesPermitidas;
+
+  // Admin entra pelo isAdmin porque seu vínculo RBAC é global (unidade_id NULL) e a lista
+  // dele vem VAZIA — sem essa cláusula, todo admin perderia o seletor.
+  const canChangeUnidade = isAdmin || unidadesPermitidas.length > 1;
+
+  // "Consolidado" significa a REDE INTEIRA, e as ~213 RPCs SECURITY DEFINER que recebem
+  // p_unidade_id honram null sem checar RLS. Quem tem 2 de 3 unidades veria a terceira.
+  const podeVerConsolidado = isAdmin;
+
+  // Unidade padrão de quem não é admin: a primeira das dele (evita p_unidade_id null).
+  const unidadePadrao = unidadesPermitidas[0]?.id ?? unidadeId;
+
+  const [unidadeSelecionada, setUnidadeSelecionada] = useState<string | null>(
+    isAdmin ? null : unidadePadrao
+  );
+
+  // Admin começa em Consolidado; os demais começam numa unidade concreta.
   useEffect(() => {
-    if (isAdmin) {
-      // Admin sempre começa com Consolidado
-      setUnidadeSelecionada(null);
-    } else if (unidadeId) {
-      // Usuário de unidade: força filtro para sua unidade
-      setUnidadeSelecionada(unidadeId);
-    }
-  }, [isAdmin, unidadeId]);
+    setUnidadeSelecionada(isAdmin ? null : unidadePadrao);
+  }, [isAdmin, unidadePadrao]);
 
-  // Filtro ativo: para admin é o selecionado, para unidade é fixo
-  const filtroAtivo = isAdmin ? unidadeSelecionada : unidadeId;
+  // Não-admin nunca manda null: se a seleção não for uma unidade dele, cai no padrão.
+  const selecaoValida =
+    unidadeSelecionada && unidadesPermitidas.some(u => u.id === unidadeSelecionada);
+  const filtroAtivo = isAdmin
+    ? unidadeSelecionada
+    : (selecaoValida ? unidadeSelecionada : unidadePadrao);
 
-  // Consolidado = admin sem unidade selecionada
-  const isConsolidado = isAdmin && !unidadeSelecionada;
-
-  // Só admin pode mudar unidade
-  const canChangeUnidade = isAdmin;
+  const isConsolidado = podeVerConsolidado && !unidadeSelecionada;
 
   return {
     unidadeSelecionada,
@@ -47,6 +59,8 @@ export function useUnidadeFiltro(): UseUnidadeFiltroReturn {
     filtroAtivo,
     isConsolidado,
     canChangeUnidade,
+    unidadesDisponiveis,
+    podeVerConsolidado,
   };
 }
 

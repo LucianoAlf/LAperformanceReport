@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback, useMemo } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
@@ -26,6 +26,12 @@ export interface PerfilUsuario {
   unidade_nome: string | null;
 }
 
+// Unidade que o usuário pode acessar (vem dos vínculos RBAC, com fallback no legado)
+export interface UnidadePermitida {
+  id: string;
+  nome: string | null;
+}
+
 // Interface para permissões
 export interface Permissao {
   codigo: string;
@@ -41,6 +47,7 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   unidadeId: string | null;
+  unidadesPermitidas: UnidadePermitida[];
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   canViewConsolidated: () => boolean;
@@ -325,6 +332,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = usuario?.perfil === 'admin' || perfis.some(p => p.perfil_nome.toLowerCase() === 'admin');
   const unidadeId = usuario?.unidade_id ?? null;
 
+  // Unidades que o usuário alcança. Os vínculos RBAC são a fonte; o legado (uma unidade só)
+  // entra como fallback para quem ainda não tem vínculo.
+  // Admin fica de fora de propósito: seu vínculo é global (unidade_id NULL), então a lista
+  // vem vazia e o acesso dele nunca pode depender dela — ver canChangeUnidade.
+  const unidadesPermitidas = useMemo<UnidadePermitida[]>(() => {
+    const porId = new Map<string, UnidadePermitida>();
+
+    perfis.forEach(p => {
+      if (p.unidade_id) porId.set(p.unidade_id, { id: p.unidade_id, nome: p.unidade_nome });
+    });
+
+    if (porId.size === 0 && usuario?.unidade_id) {
+      porId.set(usuario.unidade_id, {
+        id: usuario.unidade_id,
+        nome: usuario.unidade_nome ?? null,
+      });
+    }
+
+    return Array.from(porId.values()).sort((a, b) =>
+      (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR')
+    );
+  }, [perfis, usuario?.unidade_id, usuario?.unidade_nome]);
+
   const canViewConsolidated = () => isAdmin;
   const canManageUsers = () => isAdmin;
 
@@ -344,6 +374,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     isAdmin,
     unidadeId,
+    unidadesPermitidas,
     signIn,
     signOut,
     canViewConsolidated,

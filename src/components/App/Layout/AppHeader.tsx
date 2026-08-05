@@ -17,9 +17,17 @@ interface AppHeaderProps {
 }
 
 export function AppHeader({ unidadeSelecionada, onUnidadeChange, periodoLabel }: AppHeaderProps) {
-  const { usuario, isAdmin, loading } = useAuth();
+  const { usuario, isAdmin, loading, unidadesPermitidas } = useAuth();
   const { pageTitle } = usePageTitle();
   const [unidades, setUnidades] = useState<Unidade[]>([]);
+
+  // Não-admin com mais de um vínculo escolhe entre as unidades DELE — sem "Consolidado",
+  // que significa a rede inteira e passaria direto pelas RPCs SECURITY DEFINER.
+  const multiUnidade = !isAdmin && unidadesPermitidas.length > 1;
+  const unidadeAtualNome =
+    unidadesPermitidas.find(u => u.id === unidadeSelecionada)?.nome
+    ?? usuario?.unidade_nome
+    ?? 'Unidade';
 
   // Carregar unidades quando usuario for admin
   useEffect(() => {
@@ -61,7 +69,7 @@ export function AppHeader({ unidadeSelecionada, onUnidadeChange, periodoLabel }:
 
         {/* Controles */}
         <div className="flex items-center gap-4">
-          {/* Seletor de Unidade - APENAS PARA ADMIN */}
+          {/* Seletor de Unidade: admin (com Consolidado) ou multi-unidade (só as dele) */}
           {isAdmin ? (
             <div data-tour="header-unidade" className="flex items-center gap-2">
               <MapPin className="w-4 h-4 text-gray-500" />
@@ -82,10 +90,29 @@ export function AppHeader({ unidadeSelecionada, onUnidadeChange, periodoLabel }:
                 </SelectContent>
               </Select>
             </div>
+          ) : multiUnidade ? (
+            <div data-tour="header-unidade" className="flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-gray-500" />
+              <Select
+                value={unidadeSelecionada ?? undefined}
+                onValueChange={(value) => onUnidadeChange(value)}
+              >
+                <SelectTrigger className="w-[180px] bg-slate-800/50 border-slate-700">
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {unidadesPermitidas.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.nome ?? 'Unidade'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           ) : (
             <div className="flex items-center gap-2 bg-slate-800/50 rounded-xl px-3 py-2">
               <Building2 className="w-4 h-4 text-cyan-400" />
-              <span className="text-sm text-white">{usuario?.unidade_nome || 'Unidade'}</span>
+              <span className="text-sm text-white">{unidadeAtualNome}</span>
             </div>
           )}
 
