@@ -7,6 +7,9 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Copy, ExternalLink, AlertTriangle, Loader2, Check } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Unidade } from './types';
@@ -153,64 +156,67 @@ export function ModalAdicionarPessoa({
 
             <div className="space-y-4">
               {/* Nome */}
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">
+              <div className="space-y-1.5">
+                <Label className="text-slate-300">
                   Nome completo <span className="text-red-400">*</span>
-                </label>
-                <input
+                </Label>
+                <Input
                   type="text"
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
                   placeholder="Ex.: Maria Silva"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-cyan-500/50"
                 />
               </div>
 
               {/* WhatsApp */}
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">
-                  WhatsApp <span className="text-slate-500 text-xs">(opcional, só números com DDD)</span>
-                </label>
-                <input
+              <div className="space-y-1.5">
+                <Label className="text-slate-300">
+                  WhatsApp <span className="text-slate-500 text-xs font-normal">(opcional, só números com DDD)</span>
+                </Label>
+                <Input
                   type="tel"
                   value={whatsapp}
                   onChange={(e) => setWhatsapp(e.target.value.replace(/\D/g, ''))}
                   placeholder="Ex.: 21999999999"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-cyan-500/50"
                 />
               </div>
 
               {/* Unidade */}
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">
+              <div className="space-y-1.5">
+                <Label className="text-slate-300">
                   Unidade <span className="text-red-400">*</span>
-                </label>
-                <select
+                </Label>
+                <Select
                   value={unidadeId}
-                  onChange={(e) => setUnidadeId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-cyan-500/50"
+                  onValueChange={(value) => setUnidadeId(value)}
                 >
-                  <option value="">Selecione...</option>
-                  {unidades.map((u) => (
-                    <option key={u.id} value={u.id}>{u.nome}</option>
-                  ))}
-                </select>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unidades.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Departamento */}
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Departamento
-                </label>
-                <select
+              <div className="space-y-1.5">
+                <Label className="text-slate-300">Departamento</Label>
+                <Select
                   value={departamento}
-                  onChange={(e) => setDepartamento(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-cyan-500/50"
+                  onValueChange={(value) => setDepartamento(value)}
                 >
-                  {DEPARTAMENTOS.map((d) => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DEPARTAMENTOS.map((d) => (
+                      <SelectItem key={d} value={d}>{d}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
