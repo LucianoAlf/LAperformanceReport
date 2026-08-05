@@ -3,7 +3,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const migrationPath = 'supabase/migrations/20260804220000_kpis_turmas_canonicos_v1.sql';
+const migrationV2Path = 'supabase/migrations/20260805203000_kpis_turmas_canonicos_v2.sql';
 const helperPath = 'src/lib/turmasKpisCanonicos.ts';
+const alunosPagePath = 'src/components/App/Alunos/AlunosPage.tsx';
 const sourcePath = 'supabase/migrations/20260715150000_professores_media_turma_pessoa_turma.sql';
 const reportCoordenacaoPath = 'supabase/migrations/20260803223000_relatorios_coordenacao_periodicidade_canonica.sql';
 const reportGerencialPath = 'supabase/migrations/20260801222500_corrigir_relatorio_gerencial_metas_matriculador.sql';
@@ -42,7 +44,7 @@ test('RPC neutra protege escopo e grants do navegador', () => {
 test('cliente unico consulta e normaliza a RPC neutra sem fallback', () => {
   const helper = read(helperPath);
 
-  assert.match(helper, /get_kpis_turmas_canonicos_v1/);
+  assert.match(helper, /get_kpis_turmas_canonicos_v2/);
   assert.match(helper, /buscarKpisTurmasCanonicos/);
   assert.match(helper, /ocupacoes_elegiveis:\s*numero/);
   assert.match(helper, /turmas_elegiveis:\s*numero/);
@@ -108,4 +110,37 @@ test('cliente indexa o grao professor e unidade para os consumidores detalhados'
   assert.match(helper, /professor_id/);
   assert.match(helper, /unidade_id/);
   assert.match(helper, /_todos/);
+});
+
+test('v2 publica turmas unitarias e percentual no mesmo universo canonico', () => {
+  const migration = read(migrationV2Path);
+
+  assert.match(migration, /get_kpis_turmas_canonicos_v2/i);
+  assert.match(migration, /get_kpis_turmas_canonicos_v1/i);
+  assert.match(migration, /get_carteira_professor_periodo_detalhe_canonico_v1/i);
+  assert.match(migration, /turmas_um_aluno/i);
+  assert.match(migration, /percentual_turmas_um_aluno/i);
+  assert.match(migration, /count\(distinct jsonb_build_array\([\s\S]*pessoa_chave[\s\S]*ocupacao_chave/i);
+  assert.match(migration, /ocupacoes_na_turma\s*=\s*1/i);
+});
+
+test('cliente soma numerador denominador e turmas unitarias sem media de percentuais', () => {
+  const helper = read(helperPath);
+
+  assert.match(helper, /get_kpis_turmas_canonicos_v2/);
+  assert.match(helper, /turmas_um_aluno:\s*numero/);
+  assert.match(helper, /percentual_turmas_um_aluno:\s*numero/);
+  assert.match(helper, /totalTurmasUmAluno/);
+  assert.match(helper, /totalTurmasUmAluno\s*\/\s*totalTurmas/);
+  assert.doesNotMatch(helper, /percentual_turmas_um_aluno[^\n]+\/\s*linhas\.length/);
+});
+
+test('card de alunos mostra a conta e o diagnostico de turmas unitarias', () => {
+  const page = read(alunosPagePath);
+
+  assert.match(page, /mediaAlunosTurmaNumerador/);
+  assert.match(page, /mediaAlunosTurmaDenominador/);
+  assert.match(page, /turmasUmAlunoPercentual/);
+  assert.match(page, /ocupa[cç][oõ]es[^`]*turmas regulares/i);
+  assert.match(page, /turmas com 1 aluno/i);
 });

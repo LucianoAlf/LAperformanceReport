@@ -141,6 +141,10 @@ export interface KPIsAlunos {
   totalPagantes: number;
   totalBolsistas: number;
   mediaAlunosTurma: number | null;
+  mediaAlunosTurmaNumerador: number;
+  mediaAlunosTurmaDenominador: number;
+  turmasUmAluno: number;
+  turmasUmAlunoPercentual: number;
   ticketMedio: number;
   ltvMedio: number;
   totalTurmas: number;
@@ -275,6 +279,10 @@ export function AlunosPage() {
     totalPagantes: 0,
     totalBolsistas: 0,
     mediaAlunosTurma: null,
+    mediaAlunosTurmaNumerador: 0,
+    mediaAlunosTurmaDenominador: 0,
+    turmasUmAluno: 0,
+    turmasUmAlunoPercentual: 0,
     ticketMedio: 0,
     ltvMedio: 0,
     totalTurmas: 0,
@@ -890,9 +898,10 @@ export function AlunosPage() {
       // vem exclusivamente da fonte canônica da competência selecionada.
       const totalTurmas = turmasViewData.length;
       const turmasSozinhos = turmasViewData.filter((t: any) => t.total_alunos === 1).length;
-      const mediaAlunosTurma = kpisTurmasR.data
-        ? calcularTotaisKpisTurmasCanonicos(kpisTurmasR.data).mediaAlunosTurma
+      const totaisKpisTurmas = kpisTurmasR.data
+        ? calcularTotaisKpisTurmasCanonicos(kpisTurmasR.data)
         : null;
+      const mediaAlunosTurma = totaisKpisTurmas?.mediaAlunosTurma ?? null;
       if (kpisTurmasR.error) {
         console.error('Erro ao buscar média canônica de alunos por turma:', kpisTurmasR.error);
       }
@@ -940,6 +949,10 @@ export function AlunosPage() {
         mediaAlunosTurma: mediaAlunosTurma === null
           ? null
           : Math.round(mediaAlunosTurma * 100) / 100,
+        mediaAlunosTurmaNumerador: totaisKpisTurmas?.totalOcupacoes ?? 0,
+        mediaAlunosTurmaDenominador: totaisKpisTurmas?.totalTurmas ?? 0,
+        turmasUmAluno: totaisKpisTurmas?.totalTurmasUmAluno ?? 0,
+        turmasUmAlunoPercentual: totaisKpisTurmas?.percentualTurmasUmAluno ?? 0,
         ticketMedio: Math.round(ticketMedioCanonico || ticketMedio),
         ltvMedio: Math.round((tempoPermanenciaCanonico || ltvMedio) * 10) / 10,
         totalTurmas,
@@ -1857,7 +1870,9 @@ export function AlunosPage() {
           title="Média/Turma"
           tooltip="Ocupacoes elegiveis divididas pelas turmas regulares elegiveis na competencia selecionada. Projetos e bandas nao entram no calculo."
           value={kpis.mediaAlunosTurma === null ? 'Indisponível' : kpis.mediaAlunosTurma.toFixed(2)}
-          subvalue={kpis.mediaAlunosTurma === null ? 'fonte canonica indisponivel' : competenciaRange.label}
+          subvalue={kpis.mediaAlunosTurma === null
+            ? 'fonte canonica indisponivel'
+            : `${kpis.mediaAlunosTurmaNumerador.toLocaleString('pt-BR')} ocupacoes / ${kpis.mediaAlunosTurmaDenominador.toLocaleString('pt-BR')} turmas regulares`}
           icon={BarChart3}
           variant="cyan"
         />
@@ -1878,17 +1893,17 @@ export function AlunosPage() {
           variant="green"
           onClick={() => setModalPermanenciaOpen(true)}
         />
-        <div className={`bg-red-900/30 border border-red-500/50 rounded-xl p-4 ${kpis.turmasSozinhos > 0 ? 'animate-pulse' : ''}`}>
+        <div className={`bg-red-900/30 border border-red-500/50 rounded-xl p-4 ${kpis.turmasUmAluno > 0 ? 'animate-pulse' : ''}`}>
           <div className="flex items-center justify-between mb-2">
             <span className="text-red-400 text-xs font-medium uppercase">Sozinhos</span>
             <div className="w-8 h-8 bg-red-500/20 rounded-lg flex items-center justify-center">
               <AlertTriangle className="w-4 h-4 text-red-400" />
             </div>
           </div>
-          <p className="text-3xl font-bold text-red-400">{kpis.turmasSozinhos}</p>
+          <p className="text-3xl font-bold text-red-400">{kpis.turmasUmAluno}</p>
           <p className="text-xs text-red-300 mt-1">
-            {kpis.totalTurmas > 0
-              ? `${Math.round((kpis.turmasSozinhos / kpis.totalTurmas) * 100)}% das turmas com 1 aluno`
+            {kpis.mediaAlunosTurmaDenominador > 0
+              ? `${kpis.turmasUmAlunoPercentual.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% das turmas com 1 aluno`
               : 'turmas com 1 aluno'
             }
           </p>
