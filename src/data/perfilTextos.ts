@@ -38,6 +38,7 @@ export const VALORIZACAO_NOMES: Record<string, string> = {
   TEMPO: 'Tempo',
   APOIO: 'Apoio',
   SIMBOLO: 'Símbolo',
+  CELEBRACAO: 'Celebração',
 };
 
 // ---------------------------------------------------------------------------
@@ -120,6 +121,10 @@ export const VALORIZACAO_TEXTOS: Record<string, TextoValorizacao> = {
     reconhecer: 'Presente e lembrança — algo físico que mostra que pensaram nela.',
     briefing: 'Reconhecimento com ela funciona por <b>símbolos</b> — presente e lembrança passam longe de despercebidos.',
   },
+  CELEBRACAO: {
+    reconhecer: 'Comemorar junto, na hora que dá certo — vibrar com ela, não depois.',
+    briefing: 'Reconhecimento com ela funciona por <b>celebração</b> — comemorar junto, na hora que dá certo, vibrar com ela.',
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -130,6 +135,7 @@ export const VALORIZACAO_EVITE: Record<string, string> = {
   TEMPO: 'Conversa longa sem objeto a irrita — vai direto ao ponto.',
   APOIO: 'Oferecer ajuda não pedida a faz sentir que duvidam dela.',
   SIMBOLO: 'Presente e lembrança passam quase despercebidos com ela.',
+  CELEBRACAO: 'Deixar a conquista passar em branco ou só registrar num relatório.',
 };
 
 // ---------------------------------------------------------------------------
@@ -165,6 +171,26 @@ export const RIDER_CAMPOS = [
 // ---------------------------------------------------------------------------
 // HELPERS
 // ---------------------------------------------------------------------------
+
+// Fallbacks genéricos — usados quando uma chave não existe nas tabelas acima.
+// Evita que blocos inteiros da ficha sumam silenciosamente por causa de uma
+// chave nova no banco que ainda não foi mapeada aqui.
+export const FALLBACK_PERFIL: TextoPerfil = {
+  reage: 'Ela <b>tem um perfil válido</b> mas o texto ainda não foi mapeado.',
+  pontoCego: 'Em compensação, vale conversar pra entender os limites desse perfil.',
+  forca: 'Perfil em mapeamento — força a confirmar',
+  escorrego: 'Perfil em mapeamento — escorrego a confirmar',
+  subtitulo: (s) => `Perfil com tempero de ${s.toLowerCase()}`,
+};
+
+export const FALLBACK_VALORIZACAO: TextoValorizacao = {
+  reconhecer: 'Linguagem de valorização em mapeamento — confirme com ela como gosta de ser reconhecida.',
+  briefing: 'Reconhecimento com ela funciona de um jeito que <b>ainda está sendo mapeado</b>.',
+};
+
+export const FALLBACK_EVITE = 'Evite em mapeamento — confirme o que não funciona com ela.';
+
+export const FALLBACK_COBRAR = 'Se precisar de resultado, <b>combine o objetivo e o prazo junto com ela</b>.';
 
 /** Formata codinome "AMY/CAZUZA" -> "Amy-Cazuza" */
 export function formatarCodinome(codinome: string | null | undefined): string | null {

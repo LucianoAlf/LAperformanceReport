@@ -9,6 +9,10 @@ import {
   VALORIZACAO_NOMES,
   PERFIL_CORES,
   RIDER_CAMPOS,
+  FALLBACK_PERFIL,
+  FALLBACK_VALORIZACAO,
+  FALLBACK_EVITE,
+  FALLBACK_COBRAR,
   corDoPerfil,
   perfilPrimario,
   perfilSecundario,
@@ -73,11 +77,11 @@ function FichaConteudo({ ficha, onVoltar }: { ficha: FichaType; onVoltar: () => 
   const valSec = valorizacaoSecundaria(ficha.valorizacao_codinome);
   const valEvite = valorizacaoEvite(ficha.valorizacao_contagem);
 
-  const textoPerfil = primKey ? PERFIS_TEXTOS[primKey] : null;
-  const textoValPrim = valPrim ? VALORIZACAO_TEXTOS[valPrim] : null;
-  const textoValSec = valSec ? VALORIZACAO_TEXTOS[valSec] : null;
-  const textoCobrar = primKey ? PERFIS_COBRAR[primKey] : null;
-  const textoEvite = valEvite ? VALORIZACAO_EVITE[valEvite] : null;
+  const textoPerfil = primKey ? (PERFIS_TEXTOS[primKey] ?? FALLBACK_PERFIL) : null;
+  const textoValPrim = valPrim ? (VALORIZACAO_TEXTOS[valPrim] ?? FALLBACK_VALORIZACAO) : null;
+  const textoValSec = valSec ? (VALORIZACAO_TEXTOS[valSec] ?? FALLBACK_VALORIZACAO) : null;
+  const textoCobrar = primKey ? (PERFIS_COBRAR[primKey] ?? FALLBACK_COBRAR) : null;
+  const textoEvite = valEvite ? (VALORIZACAO_EVITE[valEvite] ?? FALLBACK_EVITE) : null;
 
   const temPerfil = !!ficha.temperamento_codinome;
   const contagem = ficha.temperamento_contagem;
@@ -174,7 +178,7 @@ function FichaConteudo({ ficha, onVoltar }: { ficha: FichaType; onVoltar: () => 
               </span>
               {ficha.valorizacao_codinome && (
                 <span className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-700 text-slate-400 bg-slate-800/50">
-                  {ficha.valorizacao_codinome.split('/').map(p => VALORIZACAO_NOMES[p] || p).join(' · ')}
+                  {ficha.valorizacao_codinome.split('/').map(p => VALORIZACAO_NOMES[p] || p.charAt(0) + p.slice(1).toLowerCase()).join(' · ')}
                 </span>
               )}
             </>
