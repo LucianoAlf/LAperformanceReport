@@ -109,7 +109,7 @@ function FichaConteudo({ ficha, onVoltar }: { ficha: FichaType; onVoltar: () => 
 
   return (
     <div
-      className="space-y-0 max-w-[1080px] mx-auto"
+      className="max-w-[1080px] mx-auto"
       style={{ ['--eu' as string]: cor }}
     >
       {/* Breadcrumb + voltar */}
