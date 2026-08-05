@@ -70,6 +70,8 @@ recebido.
    - `unidade_id` já resolvida pelo fluxo existente
    - `telefone = null`
    - `source_type = 'emusys'`
+   - `status = 'novo'` (default da tabela; não é uma stub diferenciada — segue como qualquer
+     lead novo, só sem telefone)
    - `etapa_pipeline_id = 5` (Experimental Agendada), mesmo valor que a RPC aplicaria
 2. Chama `registrar_experimental` novamente com os mesmos argumentos — agora a RPC encontra o
    lead pela camada 1 (`emusys_lead_id`) e grava a linha em `lead_experimentais` normalmente.
@@ -80,12 +82,16 @@ recebido.
 de uma experimental nova (`criada`); reagendar ou cancelar algo que nunca existiu não deveria
 criar um registro do zero.
 
-**Colisão de telefone (decisão registrada):** quando, mais tarde, um `lead_editado` ou uma
-matrícula trouxer o telefone do responsável para esse mesmo `emusys_lead_id`, e esse telefone
-já pertencer a um lead-irmão ativo na mesma unidade (violaria
-`idx_leads_telefone_unidade_unique`), o sistema **não escreve o telefone** nesse lead — só
-registra um aviso em `automacao_log` para revisão manual futura, quando o projeto de família
-completo existir. Não há merge nem duplicata aceita nesta fase.
+**Colisão de telefone (decisão registrada):** quando, mais tarde, um `lead_editado` trouxer o
+telefone do responsável para esse mesmo `emusys_lead_id`, e esse telefone já pertencer a um
+lead-irmão ativo na mesma unidade, a gravação colide com `idx_leads_telefone_unidade_unique` (a
+constraint já existe e não muda). **Não é um pré-check novo** — é o `UPDATE` de telefone em
+`processarLead` (mesmo arquivo, `debug-webhook-emusys-observador/index.ts`) capturando esse erro
+de constraint especificamente (por `code`/mensagem do Postgres) e, nesse caso, **não
+re-lançando**: loga um aviso em `automacao_log` (`status='warn'`, motivo explícito de colisão)
+para revisão manual futura, quando o projeto de família completo existir, em vez de deixar
+subir como `erro` genérico. Não há merge nem duplicata aceita nesta fase — o lead-criança
+simplesmente continua sem telefone.
 
 ## Parte B — Parar de sobrescrever `leads.aluno_id`/`leads.emusys_lead_id`
 
