@@ -151,6 +151,7 @@ export function ProfessoresPage() {
   useEffect(() => {
     carregarDados();
   }, [
+    abaAtiva,
     unidadeAtual,
     context?.competencia?.range.startDate,
     context?.competencia?.range.endDate,
@@ -232,12 +233,19 @@ export function ProfessoresPage() {
         dataInicio: competencia.range.startDate,
         dataFim: competencia.range.endDate,
       };
+      // Performance e Carteira têm leitores próprios. O container do Cadastro
+      // não pode abrir as RPCs pesadas desses KPIs quando outra aba está ativa.
+      const carregarKpisCadastro = abaAtiva === 'cadastro';
       const [kpisCanonicos, kpisTurmasCanonicos] = await Promise.all([
-        buscarKpisProfessoresCanonicos(filtroPeriodo),
-        buscarKpisTurmasCanonicos(filtroPeriodo).catch((error) => {
-          console.error('Erro ao buscar media canonica de alunos por turma em Professores:', error);
-          return null;
-        }),
+        carregarKpisCadastro
+          ? buscarKpisProfessoresCanonicos(filtroPeriodo)
+          : Promise.resolve([]),
+        carregarKpisCadastro
+          ? buscarKpisTurmasCanonicos(filtroPeriodo).catch((error) => {
+            console.error('Erro ao buscar media canonica de alunos por turma em Professores:', error);
+            return null;
+          })
+          : Promise.resolve(null),
       ]);
       const kpisPorProfessorUnidade = indexarKpisProfessoresCanonicos(kpisCanonicos);
       const kpisTurmasPorProfessorUnidade = kpisTurmasCanonicos

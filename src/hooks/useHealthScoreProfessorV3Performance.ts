@@ -12,44 +12,32 @@ interface Options {
   enabled?: boolean;
 }
 
+async function readSnapshotRows({
+  competencia,
+  unidadeId,
+  periodicidade,
+}: Required<Pick<Options, 'competencia' | 'periodicidade'>> & { unidadeId: string | null }) {
+  const reference = /^\d{4}-\d{2}$/.test(competencia)
+    ? `${competencia}-01`
+    : competencia;
+  const resultado = await supabase.rpc(
+    'get_health_score_professor_v3_performance_snapshot_v3',
+    {
+      p_competencia: reference,
+      p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+      p_periodicidade: periodicidade,
+    },
+  );
+  if (resultado.error) throw resultado.error;
+  return normalizeHealthScoreV3PerformanceRows(resultado.data || []);
+}
+
 export async function fetchHealthScoreProfessorV3Performance({
   competencia,
   unidadeId = null,
   periodicidade = 'mensal',
 }: Omit<Options, 'enabled'>): Promise<HealthScoreV3ProfessorPerformance[]> {
-  const reference = /^\d{4}-\d{2}$/.test(competencia)
-    ? `${competencia}-01`
-    : competencia;
-  const unidadeFiltro = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
-  const consultarUnidade = (id: string) => supabase.rpc(
-    'get_health_score_professor_v3_performance',
-    {
-      p_competencia: reference,
-      p_unidade_id: id,
-      p_periodicidade: periodicidade,
-    },
-  );
-  const linhas: unknown[] = [];
-
-  if (unidadeFiltro) {
-    const resultado = await consultarUnidade(unidadeFiltro);
-    if (resultado.error) throw resultado.error;
-    linhas.push(...(resultado.data || []));
-  } else {
-    const { data: unidades, error: unidadesError } = await supabase
-      .from('unidades')
-      .select('id')
-      .eq('ativo', true);
-    if (unidadesError) throw unidadesError;
-
-    for (const unidade of unidades || []) {
-      const resultado = await consultarUnidade(String(unidade.id));
-      if (resultado.error) throw resultado.error;
-      linhas.push(...(resultado.data || []));
-    }
-  }
-
-  return normalizeHealthScoreV3PerformanceRows(linhas);
+  return readSnapshotRows({ competencia, unidadeId, periodicidade });
 }
 
 export function useHealthScoreProfessorV3Performance({
@@ -83,44 +71,13 @@ export function useHealthScoreProfessorV3Performance({
     setLoading(true);
     setError(null);
     try {
-      const reference = /^\d{4}-\d{2}$/.test(competencia)
-        ? `${competencia}-01`
-        : competencia;
-      const consultarUnidade = (id: string | null) => supabase.rpc(
-        'get_health_score_professor_v3_performance',
-        {
-          p_competencia: reference,
-          p_unidade_id: id,
-          p_periodicidade: periodicidade,
-        },
-      );
-
-      let data: unknown[] | null = null;
-      if (unidadeId) {
-        const resultado = await consultarUnidade(unidadeId);
-        if (resultado.error) throw resultado.error;
-        data = resultado.data || [];
-      } else {
-        // O modelo canônico por unidade é o mesmo do consolidado. Repartir a
-        // leitura preserva a fonte e evita que uma única RPC atravesse o
-        // timeout do PostgREST ao recompor a rede inteira em série.
-        const { data: unidades, error: unidadesError } = await supabase
-          .from('unidades')
-          .select('id')
-          .eq('ativo', true);
-        if (unidadesError) throw unidadesError;
-
-        const linhas: unknown[] = [];
-        for (const unidade of unidades || []) {
-          const resultado = await consultarUnidade(String(unidade.id));
-          if (resultado.error) throw resultado.error;
-          linhas.push(...(resultado.data || []));
-        }
-        data = linhas;
-      }
+      const nextSnapshots = await readSnapshotRows({
+        competencia,
+        unidadeId,
+        periodicidade,
+      });
       if (requestId !== requestIdRef.current) return;
-
-      setSnapshots(normalizeHealthScoreV3PerformanceRows(data || []));
+      setSnapshots(nextSnapshots);
       setLoadedRequestKey(requestKey);
     } catch (caught) {
       if (requestId !== requestIdRef.current) return;
