@@ -103,7 +103,7 @@ export function ModalAdicionarPessoa({
         p_whatsapp: whatsappLimpo,
         p_unidade_id: unidadeId,
         p_departamento: departamento,
-        p_situacao: 'candidato',
+        p_situacao: 'ativo',
         p_cargo_contexto: cargoContexto,
       });
 
@@ -157,7 +157,7 @@ export function ModalAdicionarPessoa({
             <DialogHeader>
               <DialogTitle>Adicionar pessoa</DialogTitle>
               <DialogDescription>
-                Cria um candidato e gera o link da Ficha Técnica pra enviar.
+                Cria uma pessoa do time e gera o link da Ficha Técnica.
               </DialogDescription>
             </DialogHeader>
 
@@ -273,7 +273,7 @@ export function ModalAdicionarPessoa({
             <DialogHeader>
               <DialogTitle>Ficha criada!</DialogTitle>
               <DialogDescription>
-                {resultado.nome} foi adicionada como candidata.
+                {resultado.nome} foi adicionada ao time.
               </DialogDescription>
             </DialogHeader>
 

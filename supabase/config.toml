@@ -1,5 +1,9 @@
 project_id = "ouqwbbermlzqqvtqwlul"
 
+[functions.ficha-criar-pessoa]
+# Ponte servidor-servidor: valida o segredo sincronizado no próprio código.
+verify_jwt = false
+
 [functions.relatorio-admin-whatsapp]
 verify_jwt = false
 

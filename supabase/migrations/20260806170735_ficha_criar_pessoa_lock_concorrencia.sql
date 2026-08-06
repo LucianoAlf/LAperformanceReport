@@ -1,0 +1,4 @@
+-- Histórico já aplicado em produção em 2026-08-06.
+-- A implementação definitiva da RPC (incluindo pg_advisory_xact_lock) está
+-- consolidada na migration seguinte, que também corrige o tipo da unidade.
+-- Esta versão fica registrada para preservar a linha do tempo remota.
