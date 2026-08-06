@@ -76,6 +76,35 @@
 // Em modo sombra roda um preview só de leitura, que replica o matching das RPCs para o
 // diff, e registra em automacao_log o que faria.
 // ⚠️ O preview é diagnóstico; quem escreve é a RPC. Se os dois divergirem, a RPC vale.
+//
+// [v7 — 2026-08-05] FALLBACK DE LEAD SEM TELEFONE NA EXPERIMENTAL. Uma
+// aula_experimental_criada sem telefone (nem do aluno, nem do responsável) e sem lead
+// pra vincular era descartada silenciosamente (mesma regra do n8n). Agora cria um lead
+// mínimo pelo emusys_lead_id da própria aula e tenta de novo, garantindo que a
+// experimental sempre seja registrada. Adiciona também detecção pós-RPC de colisão de
+// telefone em processarLead (upsert_lead nunca lança exceção nesse caso, só mantém o
+// telefone atual em silêncio) — vira status=warn pra revisão manual.
+// Ver docs/superpowers/specs/2026-08-05-experimental-sem-telefone-lead-fallback-design.md
+//
+// [v8 — 2026-08-06] RETRY CONTRA A CORRIDA COM O WEBHOOK DE LEAD. O Emusys às vezes manda a
+// experimental ANTES do evento do lead (quem cadastra a pessoa e marca a aula no mesmo gesto),
+// e a `registrar_experimental` recusa com `lead_not_found` porque o lead ainda não existe do
+// nosso lado — não por falta de dado no payload (`aula.lead_id` vem em 153 de 155 entregas dos
+// últimos 30 dias). Caso real: Herika Galiza, Recreio, 05/08/2026 — experimental às
+// 17:44:46.787, lead criado às 17:44:47.579, 0,46s depois de a RPC rodar. A aula se perdeu em
+// silêncio e foi reinserida à mão (lead_experimentais 1670).
+//
+// ⚠️ O n8n cobria isso e a migração de 04/08 não percebeu: o sub-workflow `j41tPbyjGXUQUxrN`
+// tem um nó `Delay 5s` ANTES de chamar a RPC. A migração seguiu o critério "mesmas RPCs, mesmos
+// argumentos" — e o delay não é nem RPC nem argumento, é ordenação. Por isso a corrida só
+// apareceu depois de o n8n ser desligado e o observador virar o único a escrever.
+//
+// Agora `registrarExperimentalComRetry` reespera 2s/4s/8s SÓ quando a RPC recusa por
+// `lead_not_found` (o caminho normal não paga nada, e a janela fica ~3× a do n8n). Esgotado o
+// retry, o fallback de criação de lead deixa de exigir `!telefone`: passa a valer para qualquer
+// recusa com `emusys_lead_id`, gravando o telefone do payload — com guarda, se o telefone já
+// pertence a um lead da unidade (INCLUSIVE arquivado, que a RPC não casa) não cria nada e
+// reporta `lead_existente_nao_casado` como warn, para decisão humana.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -510,13 +539,78 @@ async function encerrarExperimentaisSubstituidas(
   return encerradas.length ? { encerradas } : null;
 }
 
-/** Quando a experimental chega SEM telefone (nem do aluno, nem do responsável) e a RPC não acha
- *  lead pra vincular, cria um lead mínimo pelo `emusys_lead_id` da própria aula — só assim a
- *  experimental não se perde (o n8n tinha a mesma regra de descarte e perdia do mesmo jeito).
- *  Telefone fica null. Se aparecer depois via lead_editado, quem decide o que fazer numa
- *  eventual colisão de telefone é `processarLead` (ver ali). */
+/** A RPC recusou por não achar lead? O motivo vem DENTRO do retorno, não em `error`. */
+function recusouPorLeadNaoEncontrado(data: any): boolean {
+  return data?.success === false && data?.reason === 'lead_not_found';
+}
+
+const dormir = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
+/** Esperas entre as retentativas da RPC. Somadas dão ~14s — quase 3× a janela que o
+ *  `Delay 5s` do n8n cobria (ver `registrarExperimentalComRetry`). */
+const ESPERAS_RETRY_MS = [2000, 4000, 8000];
+
+/** O Emusys às vezes manda a experimental ANTES do evento do lead: quem cadastra a pessoa e
+ *  marca a aula no mesmo gesto dispara `aula_experimental_criada` primeiro, e o `lead_criado`/
+ *  `lead_editado` chega um pouco depois. Aconteceu com a Herika Galiza em 05/08/2026 —
+ *  experimental às 17:44:46.787, lead criado no nosso banco às 17:44:47.579, 0,46s depois da
+ *  RPC rodar. As 3 camadas de match da `registrar_experimental` (emusys_lead_id -> telefone ->
+ *  nome) falharam juntas, não por falta de dado no payload, mas porque o outro lado ainda não
+ *  tinha chegado. A experimental se perdeu em silêncio.
+ *
+ *  ⚠️ O n8n cobria isso e a migração não percebeu: o sub-workflow `j41tPbyjGXUQUxrN` tem um nó
+ *  `Delay 5s` (`setTimeout(5000)`) logo ANTES de chamar a RPC. A migração foi feita com o
+ *  critério "chamar as mesmas RPCs com os mesmos argumentos" — e o delay não é nem RPC nem
+ *  argumento, é ordenação. Ficou de fora.
+ *
+ *  Aqui é retry em vez de delay fixo: o caminho normal (~95%) não paga nada, e o caso raro
+ *  ganha uma janela maior que a do n8n. Só para agendamento — cancelamento de um lead que
+ *  nunca existiu não deve ficar esperando por ele. */
+async function registrarExperimentalComRetry(
+  sb: any, args: Record<string, unknown>, podeReesperar: boolean,
+): Promise<{ data: any; error: any; tentativas: number }> {
+  let { data, error } = await sb.rpc('registrar_experimental', args);
+  let tentativas = 1;
+  if (error || !podeReesperar || !recusouPorLeadNaoEncontrado(data)) {
+    return { data, error, tentativas };
+  }
+  for (const espera of ESPERAS_RETRY_MS) {
+    await dormir(espera);
+    const nova = await sb.rpc('registrar_experimental', args);
+    tentativas++;
+    data = nova.data;
+    error = nova.error;
+    if (error || !recusouPorLeadNaoEncontrado(data)) break;
+  }
+  return { data, error, tentativas };
+}
+
+/** Existe lead com esse telefone na unidade, INCLUSIVE arquivado? A camada de telefone da
+ *  `registrar_experimental` filtra `arquivado = false`, então um lead arquivado faz a RPC
+ *  recusar sem que o telefone esteja livre — criar outro ali produziria duas linhas com o
+ *  mesmo telefone na mesma unidade. Nesse caso a decisão é humana, não automática. */
+async function leadExistentePorTelefone(
+  sb: any, unidadeId: string, telefone: string | null,
+): Promise<{ id: number; arquivado: boolean } | null> {
+  if (!telefone) return null;
+  const { data } = await sb
+    .from('leads')
+    .select('id, arquivado')
+    .eq('telefone', telefone)
+    .eq('unidade_id', unidadeId)
+    .limit(1);
+  if (!data?.length) return null;
+  return { id: data[0].id as number, arquivado: !!data[0].arquivado };
+}
+
+/** Esgotado o retry e ainda sem lead, cria um lead mínimo pelo `emusys_lead_id` da própria
+ *  aula — só assim a experimental não se perde (o n8n tinha a mesma regra de descarte e perdia
+ *  do mesmo jeito). Grava o telefone do payload quando ele veio: 148 de 155 experimentais dos
+ *  últimos 30 dias trazem telefone, e deixá-lo null obrigaria um segundo evento pra completar.
+ *  Quem chama já garantiu que esse telefone não pertence a outro lead da unidade. */
 async function criarLeadFallbackExperimental(
   sb: any, unidadeId: string, emusysLeadId: number | null, nomeAluno: string | null,
+  telefone: string | null,
 ): Promise<{ leadId: number | null; erro: string | null }> {
   if (!emusysLeadId) return { leadId: null, erro: 'sem emusys_lead_id para criar o lead' };
   const { data, error } = await sb
@@ -525,7 +619,7 @@ async function criarLeadFallbackExperimental(
       emusys_lead_id: emusysLeadId,
       nome: nomeAluno,
       unidade_id: unidadeId,
-      telefone: null,
+      telefone,
       status: 'novo',
       etapa_pipeline_id: 5,
       data_contato: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().substring(0, 10),
@@ -585,17 +679,27 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
     };
   }
 
-  let { data, error } = await sb.rpc('registrar_experimental', args);
+  // Retry curto antes de qualquer escrita: cobre a corrida com o webhook de lead sem criar nada.
+  let { data, error, tentativas } = await registrarExperimentalComRetry(sb, args, !cancelamento);
   if (error) return { acao: 'erro_rpc', rpc: 'registrar_experimental', erro: error.message, args };
 
   let leadFallback: { lead_id: number } | null = null;
-  if (
-    evento === 'aula_experimental_criada'
-    && !telefone
-    && data?.success === false
-    && data?.reason === 'lead_not_found'
-  ) {
-    const criado = await criarLeadFallbackExperimental(sb, unidadeId, emusysLeadId, nomeAluno);
+  if (evento === 'aula_experimental_criada' && recusouPorLeadNaoEncontrado(data)) {
+    // O lead não apareceu nem depois da espera. Antes de criar, checar se o telefone já é de
+    // alguém: se for, criar produziria duplicata e o certo é um humano olhar.
+    const jaExiste = await leadExistentePorTelefone(sb, unidadeId, telefone);
+    if (jaExiste) {
+      return {
+        acao: 'lead_existente_nao_casado',
+        motivo: jaExiste.arquivado
+          ? 'telefone pertence a um lead ARQUIVADO na unidade (a RPC só casa com arquivado=false)'
+          : 'telefone pertence a outro lead da unidade que a RPC nao casou',
+        lead_conflitante: jaExiste,
+        tentativas_rpc: tentativas,
+        args,
+      };
+    }
+    const criado = await criarLeadFallbackExperimental(sb, unidadeId, emusysLeadId, nomeAluno, telefone);
     if (criado.erro) {
       // Falta de emusysLeadId é payload insuficiente (nada a chavear), não falha de sistema —
       // acao distinta para cair no ramo 'warn' do serve(). O insert de fato falhando (infra/DB)
@@ -603,7 +707,7 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
       const acaoFallback = criado.erro === 'sem emusys_lead_id para criar o lead'
         ? 'erro_lead_fallback_payload_insuficiente'
         : 'erro_lead_fallback';
-      return { acao: acaoFallback, erro: criado.erro, args };
+      return { acao: acaoFallback, erro: criado.erro, tentativas_rpc: tentativas, args };
     }
     leadFallback = { lead_id: criado.leadId as number };
     const retry = await sb.rpc('registrar_experimental', args);
@@ -653,6 +757,9 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
     delta_observador: delta,
     substituidas,
     lead_fallback: leadFallback,
+    // >1 significa que a corrida com o webhook de lead aconteceu e o retry a absorveu.
+    // Serve para saber se a espera está sendo usada e se a janela está bem dimensionada.
+    tentativas_rpc: tentativas,
     args,
   };
 }
@@ -809,6 +916,8 @@ serve(async (req: Request) => {
       && (acaoInterna === 'ignorado'
         || acaoInterna === 'colisao_telefone_familia'
         || acaoInterna === 'erro_lead_fallback_payload_insuficiente'
+        // telefone já é de outro lead: o fallback recuou de propósito, precisa de humano
+        || acaoInterna === 'lead_existente_nao_casado'
         || acaoInterna.indexOf('lead_not_found') >= 0
         || rpcRecusou)
     ) {

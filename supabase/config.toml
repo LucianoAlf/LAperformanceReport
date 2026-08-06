@@ -72,3 +72,12 @@ verify_jwt = false
 # antes do codigo rodar -- foi exatamente o que matou a sync-inadimplencia-emusys por
 # 13 dias, sem ninguem notar (o pg_cron marcava "succeeded").
 verify_jwt = false
+
+[functions.debug-webhook-emusys-observador]
+# Webhook chamado direto pelo Emusys, que nao manda Authorization. Com verify_jwt = true o
+# gateway devolve 401 antes do codigo rodar e a funcao para de receber -- sem erro visivel,
+# porque quem chama e o Emusys e ele nao reenvia. A autenticacao propria e o OBSERVADOR_TOKEN
+# (validado DENTRO da funcao, hoje desligado ate sabermos se o Emusys manda header custom).
+# Estava faltando aqui ate 06/08/2026: a funcao rodava com false em producao sem nada no repo
+# declarar isso, entao um deploy pelo MCP (que reseta para true) a derrubaria em silencio.
+verify_jwt = false
