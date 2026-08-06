@@ -158,6 +158,14 @@ export function ProfessoresPage() {
   ]);
 
   const carregarDados = async () => {
+    // Performance e Carteira possuem leitores próprios. Não carregar a base
+    // completa do Cadastro ao alternar para essas abas: além de ser inútil,
+    // essa concorrência pode esgotar o tempo das RPCs da própria aba.
+    if (abaAtiva !== 'cadastro') {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       // Carregar unidades

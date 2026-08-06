@@ -15,3 +15,10 @@ test('Cadastro é o único tab que inicia KPI canônico pesado no contêiner pai
     /carregarKpisCadastro\s*\?\s*buscarKpisTurmasCanonicos\(filtroPeriodo\)[\s\S]*?:\s*Promise\.resolve\(null\)/,
   );
 });
+
+test('Performance e Carteira não carregam a base do Cadastro no contêiner pai', () => {
+  assert.match(
+    source,
+    /const carregarDados = async \(\) => \{[\s\S]*?if \(abaAtiva !== ['"]cadastro['"]\) \{\s*setLoading\(false\);\s*return;\s*\}[\s\S]*?await carregarProfessores\(\);/,
+  );
+});
