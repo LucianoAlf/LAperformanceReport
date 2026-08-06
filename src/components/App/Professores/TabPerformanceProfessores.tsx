@@ -396,6 +396,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     snapshots: healthV3Snapshots,
     loading: healthV3Loading,
     error: healthV3Error,
+    reload: reloadHealthV3,
   } = useHealthScoreProfessorV3Performance({
     competencia,
     unidadeId: healthV3UnitId,
@@ -492,21 +493,26 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             dataInicio: modoVisualizacao === 'trimestre' ? periodoV3.inicio : null,
             dataFim: modoVisualizacao === 'trimestre' ? periodoV3.fim : null,
           });
-      const kpisTurmasPromise = buscarKpisTurmasCanonicos({
-        ano: anoFiltro,
-        mes: mesFiltro,
-        unidadeId: unidadeAtual,
-        dataInicio: periodoV3.inicio,
-        dataFim: periodoV3.fim,
-      });
+      // No V3, Média/Turma já compõe o retrato materializado junto dos demais
+      // pilares. Reconsultar a cadeia viva duplica trabalho e, se ela expirar,
+      // não pode retardar nem derrubar a visualização por snapshot.
+      const kpisTurmasPromise = HEALTH_SCORE_V3_PERFORMANCE_ENABLED
+        ? Promise.resolve([] as KPITurmaCanonico[])
+        : buscarKpisTurmasCanonicos({
+          ano: anoFiltro,
+          mes: mesFiltro,
+          unidadeId: unidadeAtual,
+          dataInicio: periodoV3.inicio,
+          dataFim: periodoV3.fim,
+        });
 
       const [
-        professoresResult,
-        kpisAtuais,
-        kpisTurmasAtuais,
-        unidadesResult,
-        cursosResult,
-      ] = await Promise.all([
+        professoresResultado,
+        kpisAtuaisResultado,
+        kpisTurmasResultado,
+        unidadesResultado,
+        cursosResultado,
+      ] = await Promise.allSettled([
         query,
         kpisAtuaisPromise,
         kpisTurmasPromise,
@@ -515,6 +521,28 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       ]);
 
       if (requisicaoId !== requisicaoAtivaRef.current) return;
+
+      if (professoresResultado.status === 'rejected') throw professoresResultado.reason;
+      if (unidadesResultado.status === 'rejected') throw unidadesResultado.reason;
+
+      const professoresResult = professoresResultado.value;
+      const unidadesResult = unidadesResultado.value;
+      const kpisAtuais = kpisAtuaisResultado.status === 'fulfilled'
+        ? kpisAtuaisResultado.value
+        : [];
+      const kpisTurmasAtuais = kpisTurmasResultado.status === 'fulfilled'
+        ? kpisTurmasResultado.value
+        : [];
+      const cursosResult = cursosResultado.status === 'fulfilled'
+        ? cursosResultado.value
+        : { data: [], error: cursosResultado.reason };
+
+      if (kpisTurmasResultado.status === 'rejected') {
+        console.warn('[Professores] Média/Turma canônica indisponível; mantendo a Performance V3.', kpisTurmasResultado.reason);
+      }
+      if (kpisAtuaisResultado.status === 'rejected') {
+        console.warn('[Professores] KPIs legados indisponíveis; mantendo a Performance V3.', kpisAtuaisResultado.reason);
+      }
 
       const { data: professoresData, error: profError } = professoresResult;
       if (profError) throw profError;
@@ -757,13 +785,44 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     }
   };
 
-  const healthV3SnapshotsAtivos = useMemo(() => mergeHealthScoreV3ActiveRoster({
+  const healthV3SnapshotProfessorIds = useMemo(
+    () => new Set(healthV3Snapshots.map((snapshot) => snapshot.professorId)),
+    [healthV3Snapshots],
+  );
+
+  const healthV3MissingSnapshotCount = useMemo(
+    () => professores.filter((professor) => !healthV3SnapshotProfessorIds.has(professor.id)).length,
+    [healthV3SnapshotProfessorIds, professores],
+  );
+
+  const healthV3SnapshotCoverageIncomplete = HEALTH_SCORE_V3_PERFORMANCE_ENABLED
+    && !healthV3Error
+    && professores.length > 0
+    && healthV3MissingSnapshotCount > 0;
+
+  const healthV3SnapshotsAtivos = useMemo(() => healthV3Error ? [] : mergeHealthScoreV3ActiveRoster({
     snapshots: healthV3Snapshots,
     professorIds: professores.map((professor) => professor.id),
     competencia,
     unidadeId: healthV3UnitId,
     periodicidade: modoVisualizacao === 'trimestre' ? 'ciclo' : 'mensal',
-  }), [competencia, healthV3Snapshots, healthV3UnitId, modoVisualizacao, professores]);
+  }), [competencia, healthV3Error, healthV3Snapshots, healthV3UnitId, modoVisualizacao, professores]);
+
+  const healthV3SnapshotUnavailable = HEALTH_SCORE_V3_PERFORMANCE_ENABLED
+    && !healthV3Error
+    && professores.length > 0
+    && healthV3Snapshots.length === 0;
+
+  const retratoCalculadoEm = useMemo(() => healthV3Snapshots.reduce<string | null>(
+    (latest, snapshot) => {
+      if (!snapshot.retratoCalculadoEm) return latest;
+      if (!latest) return snapshot.retratoCalculadoEm;
+      return new Date(snapshot.retratoCalculadoEm) > new Date(latest)
+        ? snapshot.retratoCalculadoEm
+        : latest;
+    },
+    null,
+  ), [healthV3Snapshots]);
 
   const healthV3ByProfessor = useMemo(
     () => new Map(healthV3SnapshotsAtivos.map((snapshot) => [snapshot.professorId, snapshot])),
@@ -991,6 +1050,36 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     );
   }
 
+  if (HEALTH_SCORE_V3_PERFORMANCE_ENABLED && (
+    healthV3Error || healthV3SnapshotUnavailable || healthV3SnapshotCoverageIncomplete
+  )) {
+    return (
+      <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-5 text-sm text-amber-100">
+        <p className="font-semibold">
+          {healthV3Error
+            ? 'Dados de Performance indisponiveis'
+            : healthV3SnapshotCoverageIncomplete
+              ? 'Retrato incompleto'
+              : 'Retrato de Performance sendo preparado'}
+        </p>
+        <p className="mt-1 text-amber-100/80">
+          {healthV3Error
+            ? 'A leitura falhou. Nenhum professor foi classificado como sem base por causa desse erro.'
+            : healthV3SnapshotCoverageIncomplete
+              ? `Faltam retratos materializados para ${healthV3MissingSnapshotCount} professor(es). Nenhum professor foi classificado como sem base por causa dessa cobertura parcial.`
+              : 'Ainda nao existe uma fotografia materializada para este periodo e escopo.'}
+        </p>
+        <button
+          type="button"
+          onClick={() => void reloadHealthV3()}
+          className="mt-3 rounded-lg border border-amber-300/40 px-3 py-1.5 font-medium hover:bg-amber-400/10"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {HEALTH_SCORE_V3_PERFORMANCE_ENABLED && healthV3Error && (
@@ -1004,7 +1093,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           <AlertTriangle className="w-5 h-5 text-yellow-400" />
           <h2 className="font-semibold text-white">Alertas de Performance</h2>
           <span className="text-xs text-slate-400 ml-auto">
-            Atualizado {format(new Date(), "HH:mm", { locale: ptBR })}
+            {retratoCalculadoEm
+              ? `Retrato calculado em ${format(new Date(retratoCalculadoEm), "dd/MM HH:mm", { locale: ptBR })}`
+              : 'Retrato sem horario informado'}
           </span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-3">

@@ -34,6 +34,7 @@ import {
   buscarCarteiraProfessorDetalheCanonica,
   type AlunoCarteiraCanonico,
 } from '@/lib/carteiraProfessorDetalheCanonica';
+import { montarCarteirasFallbackContratual } from '@/lib/carteiraFallbackContratual.mjs';
 
 // Interface para carteira do professor
 interface CarteiraProfessor {
@@ -58,11 +59,11 @@ interface CarteiraProfessor {
   health_score: number | null;
   health_status: 'critico' | 'atencao' | 'saudavel' | null;
   health_score_exibivel: boolean;
-  health_score_estado_publicacao: 'parcial' | 'oficial' | 'sem_base';
+  health_score_estado_publicacao: 'parcial' | 'oficial' | 'sem_base' | 'indisponivel';
   health_score_cobertura: number | null;
   health_score_motivo: string | null;
   // Trancados sao exibidos a parte: nunca somam em total_alunos, mrr, ticket ou media/turma.
-  total_trancados: number;
+  total_trancados: number | null;
 }
 
 interface Props {
@@ -78,6 +79,7 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
   const [carteiras, setCarteiras] = useState<CarteiraProfessor[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [avisoEnriquecimento, setAvisoEnriquecimento] = useState<string | null>(null);
   const [filtroBusca, setFiltroBusca] = useState('');
   const [filtroCurso, setFiltroCurso] = useState('todos');
   const [cursos, setCursos] = useState<{ id: number; nome: string }[]>([]);
@@ -115,8 +117,12 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
 
   const carregarDados = async () => {
     const requisicaoId = ++requisicaoAtivaRef.current;
+    let linhasContratuaisFallback: any[] = [];
+    let trancadosFallback = new Map<number, number>();
+    let trancadosFallbackDisponiveis = false;
     setLoading(true);
     setErro(null);
+    setAvisoEnriquecimento(null);
     try {
       // Buscar cursos para filtro
       const { data: cursosData } = await supabase
@@ -127,7 +133,10 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
       setCursos(cursosData || []);
 
       // Buscar carteira agregada via RPC (evita truncamento de 1000 linhas e RLS bypass da vw_turmas_implicitas)
-      const rpcParams = unidadeAtual !== 'todos' ? { p_unidade_id: unidadeAtual } : {};
+      // PostgREST resolve a sobrecarga pelo nome do argumento. No Consolidado,
+      // enviar explicitamente null preserva a assinatura (em vez de procurar
+      // uma inexistente variante sem parâmetros).
+      const rpcParams = { p_unidade_id: unidadeAtual !== 'todos' ? unidadeAtual : null };
       const ano = competencia.range.ano;
       const mes = competencia.range.mesInicio;
       const competenciaHealth = `${ano}-${String(mes).padStart(2, '0')}-01`;
@@ -138,20 +147,19 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
         dataInicio: competencia.range.startDate,
         dataFim: competencia.range.endDate,
       };
-      const [
-        carteiraResult,
-        kpisBrutos,
-        kpisTurmasBrutos,
-        professoresResult,
-        vinculosResult,
-        unidadesResult,
-        cursosRelResult,
-        trancadosResult,
-      ] = await Promise.all([
-        // Enriquecimento financeiro contratual; nao define mais a populacao da Carteira.
-        supabase.rpc('get_carteira_professores', rpcParams),
-        buscarKpisProfessoresCanonicos(filtroPeriodo),
-        buscarKpisTurmasCanonicos(filtroPeriodo),
+      // A carteira contratual é o caminho mínimo para manter a tela útil.
+      // Iniciamos todos os carregamentos juntos, mas confirmamos e guardamos
+      // seu resultado antes de aguardar enriquecimentos que podem expirar.
+      const carteiraPromise = supabase.rpc('get_carteira_professores', rpcParams);
+      const complementaresPromise = Promise.all([
+        // KPI de período é enriquecimento: se expirar, a carteira contratual
+        // continua disponível e a indisponibilidade fica explícita na tela.
+        buscarKpisProfessoresCanonicos(filtroPeriodo)
+          .then((data) => ({ data, error: null as unknown }))
+          .catch((error) => ({ data: [], error })),
+        buscarKpisTurmasCanonicos(filtroPeriodo)
+          .then((data) => ({ data, error: null as unknown }))
+          .catch((error) => ({ data: [], error })),
         supabase
           .from('professores')
           .select('id, nome, foto_url')
@@ -170,17 +178,43 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
         // Contagem de alunos trancados por professor - exibicao a parte, nunca soma na contagem de ativos.
         supabase.rpc('get_contagem_trancados_professores', rpcParams),
       ]);
-
+      const carteiraResult = await carteiraPromise;
       if (carteiraResult.error) throw carteiraResult.error;
+      linhasContratuaisFallback = carteiraResult.data || [];
+      // A carteira contratual é suficiente para a operação. Publica-a antes
+      // dos enriquecimentos de competência, que podem expirar de forma
+      // independente e jamais devem deixar a aba vazia.
+      const carteirasContratuaisIniciais = montarCarteirasFallbackContratual({
+        linhasContratuais: linhasContratuaisFallback,
+        trancadosDisponiveis: false,
+        mediaTurmaDisponivel: false,
+      }) as CarteiraProfessor[];
+      if (requisicaoId !== requisicaoAtivaRef.current) return;
+      setCarteiras(carteirasContratuaisIniciais.filter((carteira) => carteira.total_alunos > 0));
+      setAvisoEnriquecimento('A carteira contratual está disponível. Carregando indicadores complementares da competência.');
+      setLoading(false);
+      const [
+        kpisResultado,
+        kpisTurmasResultado,
+        professoresResult,
+        vinculosResult,
+        unidadesResult,
+        cursosRelResult,
+        trancadosResult,
+      ] = await complementaresPromise;
       if (professoresResult.error) throw professoresResult.error;
       if (vinculosResult.error) throw vinculosResult.error;
       if (unidadesResult.error) throw unidadesResult.error;
       if (cursosRelResult.error) throw cursosRelResult.error;
-      if (trancadosResult.error) throw trancadosResult.error;
+      const trancadosDisponiveis = !trancadosResult.error;
 
       const trancadosPorProfessor = new Map<number, number>(
-        (trancadosResult.data || []).map((row: any) => [Number(row.professor_id), Number(row.total_trancados)]),
+        trancadosDisponiveis
+          ? (trancadosResult.data || []).map((row: any) => [Number(row.professor_id), Number(row.total_trancados)])
+          : [],
       );
+      trancadosFallback = trancadosPorProfessor;
+      trancadosFallbackDisponiveis = trancadosDisponiveis;
 
       const professoresAtivos = new Set(
         (professoresResult.data || []).map((professor) => Number(professor.id)),
@@ -193,10 +227,16 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
           ))
           .filter((chave): chave is string => chave !== null),
       );
-      const kpisData = consolidarKpisProfessoresCanonicos(
-        filtrarKpisPorVinculosAtivos(kpisBrutos, professoresAtivos, vinculosAtivos),
-      );
-      const kpisTurmasPorProfessor = indexarKpisTurmasCanonicos(kpisTurmasBrutos);
+      const kpisCanonicosDisponiveis = !kpisResultado.error;
+      const kpisTurmasDisponiveis = !kpisTurmasResultado.error;
+      const kpisData = kpisCanonicosDisponiveis
+        ? consolidarKpisProfessoresCanonicos(
+          filtrarKpisPorVinculosAtivos(kpisResultado.data, professoresAtivos, vinculosAtivos),
+        )
+        : [];
+      const kpisTurmasPorProfessor = kpisTurmasDisponiveis
+        ? indexarKpisTurmasCanonicos(kpisTurmasResultado.data)
+        : new Map();
       const carteirasFinanceirasPorProfessor = new Map<number, any>(
         (carteiraResult.data || []).map((row: any) => [Number(row.professor_id), row]),
       );
@@ -228,8 +268,10 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
         cursosPorProfessor.set(professorId, nomes);
       });
 
-      // A populacao nasce da carteira canonica; a RPC legada apenas enriquece valores financeiros.
-      const carteirasCalculadas: CarteiraProfessor[] = kpisData.map((kpis) => {
+      // A populacao nasce da carteira canonica quando ela respondeu. Se ela
+      // estiver indisponível, a RPC contratual é uma fonte válida de fallback:
+      // mostramos o que chegou e jamais substituímos a falha por "sem base".
+      const carteirasCalculadas: CarteiraProfessor[] = kpisCanonicosDisponiveis ? kpisData.map((kpis) => {
         const professorId = Number(kpis.professor_id);
         const row = carteirasFinanceirasPorProfessor.get(professorId);
         const professor = professoresPorId.get(professorId);
@@ -260,11 +302,16 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
           health_score: null,
           health_status: null,
           health_score_exibivel: false,
-          health_score_estado_publicacao: 'sem_base',
+          health_score_estado_publicacao: 'indisponivel',
           health_score_cobertura: null,
           health_score_motivo: 'Carregando Health Score V3',
-          total_trancados: trancadosPorProfessor.get(professorId) ?? 0,
+          total_trancados: trancadosDisponiveis ? (trancadosPorProfessor.get(professorId) ?? 0) : null,
         };
+      }) : montarCarteirasFallbackContratual({
+        linhasContratuais: carteiraResult.data || [],
+        trancadosPorProfessor,
+        trancadosDisponiveis,
+        mediaTurmaDisponivel: false,
       });
 
       // A Carteira canônica é utilizável imediatamente. O enriquecimento de
@@ -272,6 +319,14 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
       const carteirasComAlunos = carteirasCalculadas.filter(c => c.total_alunos > 0);
       if (requisicaoId !== requisicaoAtivaRef.current) return;
       setCarteiras(carteirasComAlunos);
+      const indisponibilidades = [
+        !kpisCanonicosDisponiveis ? 'KPIs de período' : null,
+        !kpisTurmasDisponiveis ? 'Média/Turma da competência' : null,
+        !trancadosDisponiveis ? 'contagem de trancados' : null,
+      ].filter((item): item is string => Boolean(item));
+      setAvisoEnriquecimento(indisponibilidades.length > 0
+        ? `A carteira contratual está disponível. Indisponível agora: ${indisponibilidades.join(', ')}. Tente novamente em instantes.`
+        : null);
       setLoading(false);
 
       void fetchHealthScoreProfessorV3Performance({
@@ -311,8 +366,21 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
       });
     } catch (error) {
       console.error('Erro ao carregar carteiras:', error);
-      setCarteiras([]);
-      setErro(error instanceof Error ? error.message : 'Falha ao carregar a carteira dos professores.');
+      const fallback = montarCarteirasFallbackContratual({
+        linhasContratuais: linhasContratuaisFallback,
+        trancadosPorProfessor: trancadosFallback,
+        trancadosDisponiveis: trancadosFallbackDisponiveis,
+        mediaTurmaDisponivel: false,
+      }) as CarteiraProfessor[];
+      if (fallback.length > 0) {
+        if (requisicaoId !== requisicaoAtivaRef.current) return;
+        setCarteiras(fallback);
+        setErro(null);
+        setAvisoEnriquecimento('A carteira contratual está disponível. Os dados complementares de período estão indisponíveis agora; tente novamente em instantes.');
+      } else {
+        setCarteiras([]);
+        setErro(error instanceof Error ? error.message : 'Falha ao carregar a carteira dos professores.');
+      }
     } finally {
       setLoading(false);
     }
@@ -453,6 +521,12 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
         <Users className="h-3.5 w-3.5" />
         Media/Turma canonica de {competencia.range.label}; carteira detalhada operacional
       </div>
+
+      {avisoEnriquecimento && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          {avisoEnriquecimento}
+        </div>
+      )}
 
       {/* KPIs Consolidados */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -606,7 +680,14 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
                 </div>
 
                 {/* Badge Trancados - exibicao a parte, nao soma no badge de Alunos acima */}
-                {carteira.total_trancados > 0 && (
+                {carteira.total_trancados === null ? (
+                  <Tooltip content="A contagem de alunos trancados está indisponível neste momento. Não foi tratada como zero.">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-500/10 border border-slate-500/20">
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="text-xs text-slate-300">trancados indisponível</span>
+                    </div>
+                  </Tooltip>
+                ) : carteira.total_trancados > 0 && (
                   <Tooltip content="Alunos com trancamento vigente hoje (Emusys). Nao contam em Alunos, MRR, Ticket ou Média/Turma.">
                     <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
                       <Lock className="w-3.5 h-3.5 text-amber-400" />
@@ -659,7 +740,9 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
                 {/* Badge Health Score */}
                 <Tooltip content={carteira.health_score_exibivel
                   ? `Health Score V3 ${carteira.health_score_estado_publicacao}: ${carteira.health_score?.toFixed(1)} (${carteira.health_status === 'saudavel' ? 'Saudável' : carteira.health_status === 'atencao' ? 'Atenção' : 'Crítico'}). Cobertura: ${formatHealthScoreV3Coverage(carteira.health_score_cobertura)}.`
-                  : `Health Score V3 sem base. ${carteira.health_score_motivo || 'Snapshot canônico indisponível para o recorte.'}`}>
+                  : carteira.health_score_estado_publicacao === 'indisponivel'
+                    ? `Health Score V3 indisponível. ${carteira.health_score_motivo || 'Tente novamente em instantes.'}`
+                    : `Health Score V3 sem base. ${carteira.health_score_motivo || 'Snapshot canônico indisponível para o recorte.'}`}>
                   <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${
                     !carteira.health_score_exibivel
                       ? 'bg-slate-800 border-slate-600'
@@ -681,7 +764,9 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
                     }`}>
                       {carteira.health_score_exibivel && carteira.health_score !== null
                         ? Math.round(carteira.health_score)
-                        : 'Sem base'}
+                        : carteira.health_score_estado_publicacao === 'indisponivel'
+                          ? 'Indisponível'
+                          : 'Sem base'}
                     </span>
                     {carteira.health_score_exibivel
                       && carteira.health_score_estado_publicacao === 'parcial' && (
