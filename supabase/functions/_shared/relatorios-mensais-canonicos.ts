@@ -320,7 +320,11 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
     `- Bolsistas: *${totalBolsistas}* (${inteiro(r.bolsistas_integrais)} integrais + ${inteiro(r.bolsistas_parciais)} parciais)`,
     `• Trancados no fechamento: *${inteiro(r.alunos_trancados)}* (alunos)`,
     `• Matrículas trancadas no fechamento: *${inteiro(r.matriculas_trancadas)}*`,
-    `• Trancamentos no período: *${inteiro(payload.trancamentos_periodo)}*`,
+    // "(matrículas)" é obrigatório: este contador conta LINHAS de trancamento
+    // do mês, enquanto os dois de cima contam quem seguia trancado no
+    // fechamento. Aluno de 2 cursos entra aqui duas vezes, e sem o rótulo a
+    // unidade lê os dois números como se fossem a mesma base e acusa erro.
+    `• Trancamentos no período: *${inteiro(payload.trancamentos_periodo)}* (matrículas)`,
     `• Novos no mês: *${inteiro(r.novos_alunos)}*`,
     `• Transferências recebidas no mês: *${inteiro(r.transferencias_recebidas)}*`,
     `• Entrada de novos alunos no mês: *${entradas}*`,
@@ -361,9 +365,15 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
     "💰 *KPIs FINANCEIROS*",
     LINHA,
     `• Ticket Médio: *${moeda(financeiro.ticket_medio)}*`,
-    `• Faturamento Previsto: *${moeda(financeiro.faturamento_previsto)}*`,
-    `• MRR da competência (pago + em aberto): *${moeda(financeiro.mrr_atual)}*`,
-    `• Faturamento Realizado (pago): *${moeda(financeiro.faturamento_realizado)}*`,
+    // Três números distintos, na ordem em que a pergunta muda:
+    // quanto a base vale -> quanto virou fatura -> quanto entrou.
+    // Antes, "Faturamento Previsto" e "MRR da competência" repetiam o MESMO
+    // valor e o rótulo do MRR prometia "pago + em aberto", que é conta de
+    // fatura e não de contrato — foi o que fez a unidade comparar com o
+    // Emusys e concluir que o relatório inteiro estava errado.
+    `• MRR / Base contratual: *${moeda(financeiro.mrr_atual)}*`,
+    `• Faturado no Emusys (pago + em aberto): *${moeda(financeiro.faturado_emusys)}*`,
+    `• Recebido na competência (pago): *${moeda(financeiro.faturamento_realizado)}*`,
     `• LTV (Tempo × Ticket): *${moeda(financeiro.ltv_medio)}*`,
     `• Tempo Permanência: *${numeroPublico(financeiro.tempo_permanencia)} meses*`,
     "",
