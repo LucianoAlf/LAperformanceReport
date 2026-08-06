@@ -134,7 +134,7 @@ import {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const VERSAO = 'v32';
+const VERSAO = 'v33';
 const EVENTOS_JORNADA_CANONICA = new Set([
   'matricula_nova',
   'matricula_renovacao',
@@ -900,6 +900,34 @@ async function resolverProfessorId(
   return resolverProfessorOperacional(supabase, unidadeId, emusysId);
 }
 
+// O payload de matricula_nova traz UM professor: o titular da turma contratada. Quem deu a aula
+// experimental nao vem nesse evento -- mora em lead_experimentais, gravado la atras pelo webhook
+// de experimental e reconciliado depois pelo sync-presenca-emusys (que casa por emusys_aula_id).
+// Ate a v32 este campo recebia uma COPIA do titular, o que produzia 91,9% dos alunos com os dois
+// campos iguais e afirmava um professor que nunca deu a experimental daquele aluno.
+// Regra: so grava quando a resposta e inequivoca -- uma unica pessoa, em experimental realizada,
+// ocorrida ATE a data da matricula. Multi-curso (professores diferentes) e experimental posterior
+// a matricula devolvem null, porque nesses casos nao da para saber qual originou a venda.
+async function resolverProfessorExperimental(
+  supabase: any,
+  p: Payload,
+): Promise<number | null> {
+  if (p.emusysLeadId == null || !p.dataMatricula) return null;
+
+  const { data, error } = await supabase
+    .from('lead_experimentais')
+    .select('professor_experimental_id')
+    .eq('emusys_lead_id', p.emusysLeadId)
+    .in('status', ['experimental_realizada', 'convertido'])
+    .lte('data_experimental', p.dataMatricula)
+    .not('professor_experimental_id', 'is', null);
+
+  if (error || !data?.length) return null;
+
+  const professores = [...new Set(data.map((r: any) => r.professor_experimental_id))];
+  return professores.length === 1 ? Number(professores[0]) : null;
+}
+
 const ALUNO_SELECT = 'id, professor_atual_id, curso_id, valor_parcela, numero_renovacoes, status, is_segundo_curso, emusys_matricula_id, nome';
 
 async function buscarAluno(
@@ -1144,6 +1172,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
   try {
     const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId, p.unidadeId);
     const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId);
+    const professorExperimentalId = await resolverProfessorExperimental(supabase, p);
 
     // Tenta encontrar aluno EXATO (por matricula_id ou nome+curso)
     const found = await buscarAluno(supabase, p, cursoId);
@@ -1185,7 +1214,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
           horario_aula: p.horarioAula,
           curso_id: cursoId,
           professor_atual_id: professorId,
-          professor_experimental_id: professorId,
+          professor_experimental_id: professorExperimentalId,
           emusys_matricula_id: p.matriculaIdEmusys,
           emusys_lead_id: p.emusysLeadId != null ? String(p.emusysLeadId) : null,
           responsavel_nome: p.nomeResponsavel,
@@ -1253,7 +1282,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
         horario_aula: p.horarioAula,
         curso_id: cursoId,
         professor_atual_id: professorId,
-        professor_experimental_id: professorId,
+        professor_experimental_id: professorExperimentalId,
         emusys_matricula_id: p.matriculaIdEmusys,
         emusys_lead_id: p.emusysLeadId != null ? String(p.emusysLeadId) : null,
         responsavel_nome: p.nomeResponsavel,
