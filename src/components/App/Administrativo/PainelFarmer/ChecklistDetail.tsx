@@ -97,7 +97,6 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
     professoresUnidade,
     refetch,
   } = useChecklistDetail(checklistId, unidadeId);
-  const sentinelRef = useWidgetOverlapSentinel();
 
   const [activeSubTab, setActiveSubTab] = useState<DetailSubTab>('tarefas');
   const [modalNovoItemAberto, setModalNovoItemAberto] = useState(false);
@@ -1117,6 +1116,10 @@ function CarteiraSubTab({ contatos, onAtualizarContato, cursosUnidade, professor
   const [pagina, setPagina] = useState(0);
   const [acoesAbertoId, setAcoesAbertoId] = useState<string | null>(null);
   const POR_PAGINA = 10;
+
+  // A barra de paginação é o elemento sentinela — o widget flutuante não pode
+  // cobri-la. O hook mora aqui, junto do ref, e não no ChecklistDetail.
+  const sentinelRef = useWidgetOverlapSentinel();
 
   // Estado do modal WhatsApp
   const [whatsappModalAberto, setWhatsappModalAberto] = useState(false);
