@@ -106,6 +106,37 @@
 // pertence a um lead da unidade (INCLUSIVE arquivado, que a RPC não casa) não cria nada e
 // reporta `lead_existente_nao_casado` como warn, para decisão humana.
 
+// [v9 — 2026-08-07] O ENCERRAMENTO DE SUBSTITUÍDAS (v6) FOI DESLIGADO. Ele rodou uma única
+// vez em produção — 05/08, lead 11164, irmãos Antônio e Maria Fernanda (Recreio) — encerrou
+// 10 linhas e 7 tinham par real na grade. Duas causas independentes:
+//   (a) CORRIDA COM O SYNC DA GRADE. As aulas 829555-829558 entraram em `aulas_emusys` às
+//       18:10:34; os encerramentos rodaram 18:02-18:05. `sem_par_na_grade` era FALSO — a
+//       grade sincroniza a cada 15 min e o webhook sempre chega antes. Atinge qualquer
+//       aluno, não só irmãos.
+//   (b) `mesmoSlot` CRUZA IRMÃOS. O filtro é `.eq('lead_id', leadId)`, e `lead_id` é o
+//       telefone: 2 irmãos (emusys_lead_id 8128 e 8129) casam no mesmo lead nosso. Um evento
+//       do Antônio cancelou a linha da irmã que JÁ tinha par na grade (18:15:52). Há 17 leads
+//       com 2 emusys_lead_id desde junho — não é caso isolado.
+//
+// ⚠️ E a grade é a fonte errada por construção: `aulas_emusys` é alimentada por upsert e
+// NUNCA remove. Ela sabe o que existe, não sabe o que deixou de existir. Quem sabe isso é o
+// snapshot (`emusys_experimentais_raw.snapshot_ativo` + `emusys_experimentais_snapshot_execucoes`,
+// no ar desde 30/07). Medido em 07/08: as duas fontes concordam em 27 de 28 experimentais
+// futuras, e na única divergência (Amelie Fontoura, CG 08/08) o snapshot é quem está certo.
+//
+// Desligar devolve o comportamento que vigorou até 04/08 — NÃO é regressão perante o n8n, que
+// nunca encerrou nada (os fantasmas Rafael Alberigi e Beatriz Romero, que motivaram a v6, foram
+// criados por ELE). O fantasma volta a existir; é erro por omissão, visível e reversível, contra
+// erro por ação, silencioso e destrutivo.
+//
+// A solução definitiva é reconciliar contra o snapshot, dentro do sync, com 4 travas:
+//   1. só julgar linha ANTERIOR ao início da execução (senão cancela o que o webhook acabou de
+//      criar — a mesma corrida, pelo espelho; CG chegou a ficar 4h com foto velha em 07/08);
+//   2. só execução `status='completo'` e recusando queda brusca vs. a anterior (foto parcial);
+//   3. casar por `emusys_lead_id` (100% de cobertura dos dois lados), nunca por slot;
+//   4. não julgar experimental de origem manual/fallback — nunca esteve na foto do Emusys.
+// Entrar em SOMBRA primeiro. Ver daily-notes/2026-08-07.md.
+
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -155,6 +186,26 @@ function extrairNome(body: any): string {
 
 function extrairUnidade(body: any): string | null {
   return body?.escola_nome ?? null;
+}
+
+/** Headers sempre chegaram em `req.headers` — nunca foram lidos, então nunca soubemos o que o
+ *  Emusys manda. Isso importa para decidir a autenticação: se ele mandasse header custom, o
+ *  `x-observador-token` bastaria; se não manda, sobra o `?token=` na URL (ou allowlist de IP,
+ *  via `x-real-ip`/`x-forwarded-for`).
+ *
+ *  ⚠️ Valores de header de credencial NÃO são gravados. O log é lido por gente e por outras
+ *  automações; escrever segredo ali repetiria o problema do token do Chatwoot em `agentes`,
+ *  que está em texto puro e qualquer SELECT expõe. Sensível vira '***', o resto vai inteiro —
+ *  `x-real-ip` e `user-agent` só servem se der para ler o valor. */
+const HEADERS_SENSIVEIS = ['authorization', 'apikey', 'api-key', 'cookie', 'x-observador-token', 'token'];
+
+function coletarHeaders(req: Request): Record<string, string> {
+  const out: Record<string, string> = {};
+  req.headers.forEach((valor, nome) => {
+    const chave = nome.toLowerCase();
+    out[chave] = HEADERS_SENSIVEIS.indexOf(chave) >= 0 ? '***' : valor;
+  });
+  return out;
 }
 
 // ---------------------------------------------------------------- de-para ---
@@ -466,7 +517,13 @@ async function aplicarDeltaExperimental(sb: any, expId: number, observacoes: str
   return { observacoes };
 }
 
-/** O Emusys manda `aula_experimental_reagendada` com o estado NOVO e ZERO referência ao
+/** ⚠️⚠️ NÃO CHAMAR — DESLIGADA EM 07/08/2026 (v9). Mantida só como registro do que foi
+ *  tentado e por que falhou; a explicação está no cabeçalho do arquivo. Em resumo: ela
+ *  pergunta "a aula sumiu?" para `aulas_emusys`, que é upsert-only e NUNCA remove nada, e
+ *  ainda pergunta antes de o sync de 15 min ter chegado. Encerrou 7 aulas reais de 10.
+ *  O substituto é a reconciliação contra o snapshot, no sync — não aqui, não por evento.
+ *
+ *  O Emusys manda `aula_experimental_reagendada` com o estado NOVO e ZERO referência ao
  *  antigo — sem id de aula, sem a data anterior (conferido nas 20 entregas já observadas).
  *  Como a chave de dedup da RPC é (lead, data, horário, curso), tudo que o reagendamento
  *  muda faz a chave escapar: nasce linha nova e a anterior fica viva e agendada. Rafael
@@ -736,19 +793,11 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
   // evento em que o Emusys declara que a experimental mudou de lugar. Em `criada` a
   // linha nova pode conviver legitimamente com outra (2º instrumento), e a grade ainda
   // nem sincronizou a aula recém-marcada — varrer ali cancelaria aula boa.
-  let substituidas: unknown = null;
-  if (evento === 'aula_experimental_reagendada' && data?.lead_id) {
-    try {
-      substituidas = await encerrarExperimentaisSubstituidas(
-        sb,
-        Number(data.lead_id),
-        expId ? Number(expId) : null,
-        { data: textoOuNulo(aula?.data), horario: textoOuNulo(aula?.horario) },
-      );
-    } catch (e: any) {
-      substituidas = { erro_substituidas: String(e?.message ?? e) };
-    }
-  }
+  // ⚠️ DESLIGADO em 07/08 (v9). A chamada a `encerrarExperimentaisSubstituidas` ficava aqui e
+  // cancelou 7 aulas reais no único dia em que rodou. O campo continua no retorno, sempre null,
+  // porque `automacao_log` já tem histórico com ele. Motivo completo e o desenho do substituto
+  // (reconciliação por snapshot) no cabeçalho deste arquivo.
+  const substituidas: unknown = null;
 
   return {
     acao: 'registrar_experimental',
@@ -858,6 +907,7 @@ serve(async (req: Request) => {
       aluno_nome: extrairNome(body),
       unidade_nome: extrairUnidade(body),
       payload_bruto: body ?? { raw_nao_json: rawText },
+      detalhes: { headers_recebidos: coletarHeaders(req) },
       workflow_id: 'debug-webhook-emusys-observador',
       execution_id: new Date().toISOString(),
     });
