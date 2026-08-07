@@ -35,6 +35,10 @@ import {
   type AlunoCarteiraCanonico,
 } from '@/lib/carteiraProfessorDetalheCanonica';
 import { montarCarteirasFallbackContratual } from '@/lib/carteiraFallbackContratual.mjs';
+import {
+  consultarOpcional,
+  consultarSupabaseOpcional,
+} from '@/lib/professoresConsultasOpcionais.mjs';
 
 // Interface para carteira do professor
 interface CarteiraProfessor {
@@ -154,29 +158,25 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
       const complementaresPromise = Promise.all([
         // KPI de período é enriquecimento: se expirar, a carteira contratual
         // continua disponível e a indisponibilidade fica explícita na tela.
-        buscarKpisProfessoresCanonicos(filtroPeriodo)
-          .then((data) => ({ data, error: null as unknown }))
-          .catch((error) => ({ data: [], error })),
-        buscarKpisTurmasCanonicos(filtroPeriodo)
-          .then((data) => ({ data, error: null as unknown }))
-          .catch((error) => ({ data: [], error })),
-        supabase
+        consultarOpcional(buscarKpisProfessoresCanonicos(filtroPeriodo)),
+        consultarOpcional(buscarKpisTurmasCanonicos(filtroPeriodo)),
+        consultarSupabaseOpcional(supabase
           .from('professores')
           .select('id, nome, foto_url')
-          .eq('ativo', true),
-        supabase
+          .eq('ativo', true)),
+        consultarSupabaseOpcional(supabase
           .from('professores_unidades')
           .select('professor_id, unidade_id')
           .eq('emusys_ativo', true)
-          .neq('validacao_status', 'ignorado'),
-        supabase
+          .neq('validacao_status', 'ignorado')),
+        consultarSupabaseOpcional(supabase
           .from('unidades')
-          .select('id, nome'),
-        supabase
+          .select('id, nome')),
+        consultarSupabaseOpcional(supabase
           .from('professores_cursos')
-          .select('professor_id, cursos:curso_id (nome)'),
+          .select('professor_id, cursos:curso_id (nome)')),
         // Contagem de alunos trancados por professor - exibicao a parte, nunca soma na contagem de ativos.
-        supabase.rpc('get_contagem_trancados_professores', rpcParams),
+        consultarSupabaseOpcional(supabase.rpc('get_contagem_trancados_professores', rpcParams)),
       ]);
       const carteiraResult = await carteiraPromise;
       if (carteiraResult.error) throw carteiraResult.error;
@@ -202,10 +202,9 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
         cursosRelResult,
         trancadosResult,
       ] = await complementaresPromise;
-      if (professoresResult.error) throw professoresResult.error;
-      if (vinculosResult.error) throw vinculosResult.error;
-      if (unidadesResult.error) throw unidadesResult.error;
-      if (cursosRelResult.error) throw cursosRelResult.error;
+      // Nenhum enriquecimento pode apagar a carteira contratual já renderizada.
+      // Quando uma dessas consultas falha, usamos os dados disponíveis na RPC
+      // contratual e marcamos a indisponibilidade abaixo.
       const trancadosDisponiveis = !trancadosResult.error;
 
       const trancadosPorProfessor = new Map<number, number>(
@@ -322,6 +321,10 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
       const indisponibilidades = [
         !kpisCanonicosDisponiveis ? 'KPIs de período' : null,
         !kpisTurmasDisponiveis ? 'Média/Turma da competência' : null,
+        professoresResult.error ? 'cadastro de professores' : null,
+        vinculosResult.error ? 'vínculos de unidades' : null,
+        unidadesResult.error ? 'unidades' : null,
+        cursosRelResult.error ? 'cursos' : null,
         !trancadosDisponiveis ? 'contagem de trancados' : null,
       ].filter((item): item is string => Boolean(item));
       setAvisoEnriquecimento(indisponibilidades.length > 0
