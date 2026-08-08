@@ -35,7 +35,12 @@ Deno.test("renderer gerencial publica julho do Recreio sem inventar fonte ausent
       indicadores_financeiros: {
         mrr_atual: 150982.39,
         faturamento_previsto: 150982.39,
-        faturamento_realizado: 149335.15,
+        // Recreio/julho-2026 real: base contratual vale 150.982,39, o Emusys
+        // faturou 142.925,20 e entrou 141.032,20. Os três precisam ser
+        // diferentes na fixture, senão o teste passa mesmo se a leitura voltar
+        // a derivar o realizado de mrr - inadimplência.
+        faturamento_realizado: 141032.20,
+        faturado_emusys: 142925.20,
         ticket_medio: 449.35,
         ltv_medio: 6691.59,
         tempo_permanencia: 14.9,
@@ -165,8 +170,9 @@ Deno.test("renderer gerencial publica julho do Recreio sem inventar fonte ausent
   for (
     const trecho of [
       "Ativos: *344*",
-      "MRR da competência (pago + em aberto): *R$ 150.982,39*",
-      "Faturamento realizado (pago): *R$ 149.335,15*",
+      "MRR / Base contratual: *R$ 150.982,39*",
+      "Faturado no Emusys (pago + em aberto): *R$ 142.925,20*",
+      "Recebido na competência (pago): *R$ 141.032,20*",
       "No fechamento: *2 alunos / 2 matrículas*",
       "Layara Sales Magalhães — 55 dias",
       "Leads: *297*",

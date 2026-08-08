@@ -700,13 +700,17 @@ export async function montarRelatorio(
 
   relatorio +=
     "───────────────────────\n💰 *FINANCEIRO*\n───────────────────────\n";
-  relatorio += `• MRR da competência (pago + em aberto): *R$ ${
-    moeda(financeiro.mrr_atual)
+  // Três números distintos, na ordem em que a pergunta muda: quanto a base
+  // vale -> quanto virou fatura -> quanto entrou. Antes, "MRR da competência"
+  // e "Faturamento previsto" repetiam o MESMO valor e o rótulo do MRR prometia
+  // "pago + em aberto", que é conta de fatura e não de contrato — foi o que
+  // levou a unidade a comparar com o Emusys e concluir que o relatório estava
+  // errado. O mesmo ajuste foi feito no relatório administrativo.
+  relatorio += `• MRR / Base contratual: *R$ ${moeda(financeiro.mrr_atual)}*\n`;
+  relatorio += `• Faturado no Emusys (pago + em aberto): *R$ ${
+    moeda(financeiro.faturado_emusys)
   }*\n`;
-  relatorio += `• Faturamento previsto: *R$ ${
-    moeda(financeiro.faturamento_previsto)
-  }*\n`;
-  relatorio += `• Faturamento realizado (pago): *R$ ${
+  relatorio += `• Recebido na competência (pago): *R$ ${
     moeda(financeiro.faturamento_realizado)
   }*\n`;
   relatorio += `• Ticket médio da base ativa: *R$ ${

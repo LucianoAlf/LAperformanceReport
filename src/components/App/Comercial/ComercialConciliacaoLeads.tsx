@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Loader2,
+  Pencil,
   RefreshCw,
   Route,
   Search,
@@ -13,6 +14,7 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { ModalEditarLead } from '@/components/App/PreAtendimento/components/ModalEditarLead';
 import {
   Select,
   SelectContent,
@@ -180,6 +182,32 @@ export function ComercialConciliacaoLeads({
   const [busca, setBusca] = useState('');
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [salvandoKey, setSalvandoKey] = useState<string | null>(null);
+
+  // Edicao da ficha direto daqui: a tela lista o lead e deixa escolher origem e
+  // curso, mas nao permitia corrigir nome, telefone ou o agendamento da
+  // experimental -- para isso era preciso sair para Pre-Atendimento e procurar
+  // o lead de novo. Reusa o ModalEditarLead (mesmo componente do Pre-Atendimento
+  // e do funil desta pagina) em vez de duplicar formulario.
+  const [leadParaEditar, setLeadParaEditar] = useState<any | null>(null);
+  const [carregandoFicha, setCarregandoFicha] = useState<number | null>(null);
+
+  const abrirFicha = async (leadId: number) => {
+    setCarregandoFicha(leadId);
+    try {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('id, nome, telefone, canal_origem_id, curso_interesse_id, professor_experimental_id, data_experimental, horario_experimental, observacoes')
+        .eq('id', leadId)
+        .single();
+      if (error) throw error;
+      setLeadParaEditar(data);
+    } catch (e) {
+      console.error('[conciliacao-leads] falha ao abrir ficha', e);
+      toast.error('Nao foi possivel abrir a ficha deste lead.');
+    } finally {
+      setCarregandoFicha(null);
+    }
+  };
 
   // Sincronizacao do pai (loadData, pesado) fica adiada: so dispara quando o usuario sai da
   // aba (unmount) se houve alguma resolucao. Ref evita closure velha no cleanup.
@@ -396,7 +424,18 @@ export function ComercialConciliacaoLeads({
                 <div className="flex flex-col gap-3 border-b border-slate-700/60 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-semibold text-white">{lead.nome || `Lead #${lead.lead_id}`}</h3>
+                      <button
+                        type="button"
+                        onClick={() => void abrirFicha(Number(lead.lead_id))}
+                        disabled={carregandoFicha === Number(lead.lead_id)}
+                        title="Abrir a ficha para editar nome, telefone, origem, curso e a experimental"
+                        className="group inline-flex items-center gap-1.5 rounded font-semibold text-white underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 disabled:opacity-60"
+                      >
+                        {lead.nome || `Lead #${lead.lead_id}`}
+                        {carregandoFicha === Number(lead.lead_id)
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-300" />
+                          : <Pencil className="h-3.5 w-3.5 text-slate-500 transition-colors group-hover:text-teal-300" />}
+                      </button>
                       <span className="rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-slate-300">
                         {lead.unidade_codigo || lead.unidade_nome || 'Unidade'}
                       </span>
@@ -477,6 +516,20 @@ export function ComercialConciliacaoLeads({
           </div>
         )}
       </div>
+
+      <ModalEditarLead
+        aberto={!!leadParaEditar}
+        lead={leadParaEditar}
+        onClose={() => setLeadParaEditar(null)}
+        onSalvo={() => {
+          setLeadParaEditar(null);
+          // Editar origem ou curso pela ficha resolve a propria pendencia que a
+          // tela lista, entao a lista precisa ser relida -- senao a tarefa
+          // continua aparecendo como pendente depois de ja ter sido corrigida.
+          paiDesatualizado.current = true;
+          void carregar();
+        }}
+      />
     </section>
   );
 }
