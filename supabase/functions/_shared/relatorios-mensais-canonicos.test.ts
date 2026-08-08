@@ -171,6 +171,10 @@ Deno.test("mensal administrativo preserva modelo rico, multicurso e trancamentos
   assertStringIncludes(texto, "📅 *JULHO/2026*");
   assertStringIncludes(texto, "👥 Por Fernanda e Daiana");
   assertStringIncludes(texto, "• Matrículas Ativas: *430* (344 base alunos + 59 banda + 27 adicionais)");
+  // 25 com exatamente 2 cursos + 1 com 3 = 26 pessoas, gerando 27 matrículas
+  // adicionais. A ADM comparou 26 com a linha "2 cursos: 25" e reportou erro;
+  // o total explícito é o que desfaz a confusão.
+  assertStringIncludes(texto, "- Alunos com curso adicional: *26* (27 matrículas)");
   assertStringIncludes(texto, "- Alunos com 3 cursos: *1*");
   assertStringIncludes(texto, "• Trancamentos no período: *3* (matrículas)");
   assertStringIncludes(texto, "⏸️ *TRANCAMENTOS ATUAIS (2 alunos / 2 matrículas)*");

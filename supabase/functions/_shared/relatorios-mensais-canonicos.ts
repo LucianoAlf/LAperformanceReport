@@ -262,6 +262,9 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
   }
 
   const totalBolsistas = inteiro(r.bolsistas_integrais) + inteiro(r.bolsistas_parciais);
+  const alunosComCursoAdicional = inteiro(r.alunos_com_exatamente_2_cursos)
+    + inteiro(r.alunos_com_exatamente_3_cursos)
+    + inteiro(r.alunos_com_4_ou_mais_cursos);
   const entradas = inteiro(r.novos_alunos) + inteiro(r.transferencias_recebidas);
   const renovacoesPrevistas = inteiro(retencao.renovacoes_previstas);
   const taxaNaoRenovacao = renovacoesPrevistas > 0
@@ -334,6 +337,12 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
     `• Matrículas Ativas: *${inteiro(r.matriculas_ativas)}* (${inteiro(r.matriculas_base)} base alunos + ${inteiro(r.matriculas_banda)} banda + ${inteiro(r.matriculas_adicionais)} adicionais)`,
     `• Matrículas em Banda: *${inteiro(r.matriculas_banda)}*`,
     `• Matrículas adicionais: *${inteiro(r.matriculas_adicionais)}*`,
+    // O total de PESSOAS com curso adicional é o número que a unidade tem na
+    // cabeça, mas só existiam as linhas por faixa. A ADM do Recreio somou
+    // 25 + 1 = 26 e reportou a linha "2 cursos: 25" como errada. Os dois estão
+    // certos: 26 pessoas geram 27 matrículas adicionais (25x1 + 1x2). Explicitar
+    // o total evita a comparação errada.
+    `- Alunos com curso adicional: *${alunosComCursoAdicional}* (${inteiro(r.matriculas_adicionais)} matrículas)`,
     `- Alunos com 2 cursos: *${inteiro(r.alunos_com_exatamente_2_cursos)}*`,
     `- Alunos com 3 cursos: *${inteiro(r.alunos_com_exatamente_3_cursos)}*`,
     `- Alunos com 4 ou mais cursos: *${inteiro(r.alunos_com_4_ou_mais_cursos)}*`,
