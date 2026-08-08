@@ -36,6 +36,12 @@ interface Aluno {
   curso?: { nome: string };
   data_matricula: string;
   valor_parcela: number | null;
+  // Identidade da matrícula no Emusys e curso: a busca já usa select('*'), então
+  // vinham no objeto e só não eram gravados. Sem eles a renovação manual nasce
+  // órfã e a deduplicação contra o webhook do Emusys não tem por onde casar.
+  emusys_matricula_id: string | null;
+  curso_id: number | null;
+  professor_atual_id: number | null;
 }
 
 export function FormRenovacao() {
@@ -114,6 +120,11 @@ export function FormRenovacao() {
         data_ultima_renovacao: data.data_renovacao,
       }).eq('id', data.aluno_id);
 
+      // competencia_referencia = primeiro dia do mês da renovação. Sem ela, os
+      // relatórios caem no fallback por `data` e a renovação pode ser contada
+      // em competência diferente da que a unidade enxerga.
+      const competenciaReferencia = `${String(data.data_renovacao).slice(0, 7)}-01`;
+
       await supabase.from('movimentacoes_admin').insert({
         aluno_id: data.aluno_id,
         unidade_id: selectedAluno?.unidade_id,
@@ -123,6 +134,15 @@ export function FormRenovacao() {
         valor_parcela_novo: data.valor_novo,
         renovacao_status: 'confirmada',
         observacoes: data.observacoes || null,
+        // Estes quatro campos existiam no aluno e não eram gravados. O
+        // emusys_matricula_id é o que permite deduplicar contra o webhook de
+        // renovação do Emusys: sem ele, o lançamento manual e o automático
+        // viram duas linhas para a mesma renovação — origem das duplicatas
+        // mapeadas em vw_renovacoes_duplicadas_suspeitas.
+        emusys_matricula_id: selectedAluno?.emusys_matricula_id || null,
+        curso_id: selectedAluno?.curso_id ?? null,
+        professor_id: selectedAluno?.professor_atual_id ?? null,
+        competencia_referencia: competenciaReferencia,
       });
 
       await supabase.from('movimentacoes').insert({

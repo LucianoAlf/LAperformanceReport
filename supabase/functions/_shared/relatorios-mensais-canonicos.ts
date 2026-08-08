@@ -262,6 +262,9 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
   }
 
   const totalBolsistas = inteiro(r.bolsistas_integrais) + inteiro(r.bolsistas_parciais);
+  const alunosComCursoAdicional = inteiro(r.alunos_com_exatamente_2_cursos)
+    + inteiro(r.alunos_com_exatamente_3_cursos)
+    + inteiro(r.alunos_com_4_ou_mais_cursos);
   const entradas = inteiro(r.novos_alunos) + inteiro(r.transferencias_recebidas);
   const renovacoesPrevistas = inteiro(retencao.renovacoes_previstas);
   const taxaNaoRenovacao = renovacoesPrevistas > 0
@@ -320,7 +323,11 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
     `- Bolsistas: *${totalBolsistas}* (${inteiro(r.bolsistas_integrais)} integrais + ${inteiro(r.bolsistas_parciais)} parciais)`,
     `• Trancados no fechamento: *${inteiro(r.alunos_trancados)}* (alunos)`,
     `• Matrículas trancadas no fechamento: *${inteiro(r.matriculas_trancadas)}*`,
-    `• Trancamentos no período: *${inteiro(payload.trancamentos_periodo)}*`,
+    // "(matrículas)" é obrigatório: este contador conta LINHAS de trancamento
+    // do mês, enquanto os dois de cima contam quem seguia trancado no
+    // fechamento. Aluno de 2 cursos entra aqui duas vezes, e sem o rótulo a
+    // unidade lê os dois números como se fossem a mesma base e acusa erro.
+    `• Trancamentos no período: *${inteiro(payload.trancamentos_periodo)}* (matrículas)`,
     `• Novos no mês: *${inteiro(r.novos_alunos)}*`,
     `• Transferências recebidas no mês: *${inteiro(r.transferencias_recebidas)}*`,
     `• Entrada de novos alunos no mês: *${entradas}*`,
@@ -330,6 +337,12 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
     `• Matrículas Ativas: *${inteiro(r.matriculas_ativas)}* (${inteiro(r.matriculas_base)} base alunos + ${inteiro(r.matriculas_banda)} banda + ${inteiro(r.matriculas_adicionais)} adicionais)`,
     `• Matrículas em Banda: *${inteiro(r.matriculas_banda)}*`,
     `• Matrículas adicionais: *${inteiro(r.matriculas_adicionais)}*`,
+    // O total de PESSOAS com curso adicional é o número que a unidade tem na
+    // cabeça, mas só existiam as linhas por faixa. A ADM do Recreio somou
+    // 25 + 1 = 26 e reportou a linha "2 cursos: 25" como errada. Os dois estão
+    // certos: 26 pessoas geram 27 matrículas adicionais (25x1 + 1x2). Explicitar
+    // o total evita a comparação errada.
+    `- Alunos com curso adicional: *${alunosComCursoAdicional}* (${inteiro(r.matriculas_adicionais)} matrículas)`,
     `- Alunos com 2 cursos: *${inteiro(r.alunos_com_exatamente_2_cursos)}*`,
     `- Alunos com 3 cursos: *${inteiro(r.alunos_com_exatamente_3_cursos)}*`,
     `- Alunos com 4 ou mais cursos: *${inteiro(r.alunos_com_4_ou_mais_cursos)}*`,
@@ -361,9 +374,15 @@ export function formatarRelatorioAdminMensalCanonico(payload: JsonObject): strin
     "💰 *KPIs FINANCEIROS*",
     LINHA,
     `• Ticket Médio: *${moeda(financeiro.ticket_medio)}*`,
-    `• Faturamento Previsto: *${moeda(financeiro.faturamento_previsto)}*`,
-    `• MRR da competência (pago + em aberto): *${moeda(financeiro.mrr_atual)}*`,
-    `• Faturamento Realizado (pago): *${moeda(financeiro.faturamento_realizado)}*`,
+    // Três números distintos, na ordem em que a pergunta muda:
+    // quanto a base vale -> quanto virou fatura -> quanto entrou.
+    // Antes, "Faturamento Previsto" e "MRR da competência" repetiam o MESMO
+    // valor e o rótulo do MRR prometia "pago + em aberto", que é conta de
+    // fatura e não de contrato — foi o que fez a unidade comparar com o
+    // Emusys e concluir que o relatório inteiro estava errado.
+    `• MRR / Base contratual: *${moeda(financeiro.mrr_atual)}*`,
+    `• Faturado no Emusys (pago + em aberto): *${moeda(financeiro.faturado_emusys)}*`,
+    `• Recebido na competência (pago): *${moeda(financeiro.faturamento_realizado)}*`,
     `• LTV (Tempo × Ticket): *${moeda(financeiro.ltv_medio)}*`,
     `• Tempo Permanência: *${numeroPublico(financeiro.tempo_permanencia)} meses*`,
     "",

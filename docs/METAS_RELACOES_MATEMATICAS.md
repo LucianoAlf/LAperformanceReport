@@ -1,5 +1,15 @@
 # 🧮 METAS E RELAÇÕES MATEMÁTICAS - Simulador LA Music
 
+> # 🚫 DOCUMENTO LEGADO — NÃO USAR COMO FONTE DE REGRA
+>
+> **Depreciado em 2026-08-08.** As relações matemáticas aqui descrevem o simulador antigo e
+> divergem das regras canônicas. Erro confirmado: churn como `evasoes / alunos_ativos` (chamado
+> de `G2/G1`) — o correto é **`evasoes / alunos_pagantes × 100`**.
+>
+> **Fonte canônica atual:** [`docs/REGRAS-DE-NEGOCIO.md`](./REGRAS-DE-NEGOCIO.md)
+>
+> Mantido apenas como registro histórico do simulador.
+
 ## Objetivo
 Definir **TODAS** as metas que o simulador pode calcular e suas interdependências matemáticas, para que o usuário possa editar qualquer uma e o sistema recalcule as outras automaticamente.
 

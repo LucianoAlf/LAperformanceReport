@@ -52,11 +52,16 @@ const adminRico = {
   indicadores_financeiros: {
     ticket_medio: 449.35,
     faturamento_previsto: 150982.39,
-    faturamento_realizado: 149335.15,
+    // Recreio/julho-2026 real: a base contratual vale 150.982,39, o Emusys
+    // faturou 142.925,20 e entrou 141.032,20. Os três precisam ser diferentes
+    // na fixture, senão o teste passa mesmo se a leitura voltar a derivar o
+    // realizado de mrr - inadimplência.
+    faturamento_realizado: 141032.20,
+    faturado_emusys: 142925.20,
     mrr_atual: 150982.39,
     ltv_medio: 6691.59,
     tempo_permanencia: 14.9,
-    fonte: "kpis_alunos_canonicos.totais",
+    fonte: "kpis_alunos_canonicos.totais + financeiro_faturas_emusys",
   },
   indicadores_retencao: {
     churn_rate: 1.79,
@@ -166,17 +171,21 @@ Deno.test("mensal administrativo preserva modelo rico, multicurso e trancamentos
   assertStringIncludes(texto, "📅 *JULHO/2026*");
   assertStringIncludes(texto, "👥 Por Fernanda e Daiana");
   assertStringIncludes(texto, "• Matrículas Ativas: *430* (344 base alunos + 59 banda + 27 adicionais)");
+  // 25 com exatamente 2 cursos + 1 com 3 = 26 pessoas, gerando 27 matrículas
+  // adicionais. A ADM comparou 26 com a linha "2 cursos: 25" e reportou erro;
+  // o total explícito é o que desfaz a confusão.
+  assertStringIncludes(texto, "- Alunos com curso adicional: *26* (27 matrículas)");
   assertStringIncludes(texto, "- Alunos com 3 cursos: *1*");
-  assertStringIncludes(texto, "• Trancamentos no período: *3*");
+  assertStringIncludes(texto, "• Trancamentos no período: *3* (matrículas)");
   assertStringIncludes(texto, "⏸️ *TRANCAMENTOS ATUAIS (2 alunos / 2 matrículas)*");
   assertStringIncludes(texto, "Nome: *Davi Lima Queiroz*");
   assertStringIncludes(texto, "Tempo trancado: Não calculável");
   assertStringIncludes(texto, "Retorno previsto: 31/07/2026");
   assertStringIncludes(texto, "Situação: *EXTENSÃO GERENCIAL*");
   assertStringIncludes(texto, "💰 *KPIs FINANCEIROS*");
-  assertStringIncludes(texto, "• Faturamento Previsto: *R$ 150.982,39*");
-  assertStringIncludes(texto, "• MRR da competência (pago + em aberto): *R$ 150.982,39*");
-  assertStringIncludes(texto, "• Faturamento Realizado (pago): *R$ 149.335,15*");
+  assertStringIncludes(texto, "• MRR / Base contratual: *R$ 150.982,39*");
+  assertStringIncludes(texto, "• Faturado no Emusys (pago + em aberto): *R$ 142.925,20*");
+  assertStringIncludes(texto, "• Recebido na competência (pago): *R$ 141.032,20*");
   assertStringIncludes(texto, "• LTV (Tempo × Ticket): *R$ 6.691,59*");
   assertStringIncludes(texto, "📈 *KPIs DE RETENÇÃO*");
   assertStringIncludes(texto, "• Churn de alunos pagantes: *1,8%* — 6 saídas em 336 pagantes");

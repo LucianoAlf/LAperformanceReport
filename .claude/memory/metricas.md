@@ -71,9 +71,9 @@ saldo_mes = novas_matriculas_mes − evasoes_mes
 motivos_saida.conta_score_professor = true
 ```
 
-**Lookup:**
-1. `evasoes.motivo_saida_id` (FK) — preferencial
-2. Fallback ILIKE em `evasoes.motivo` (texto) contra `motivos_saida.nome`
+**Lookup** (⚠️ corrigido em 2026-08-08 — a tabela `evasoes` **não existe mais**; a fonte é `movimentacoes_admin`):
+1. `movimentacoes_admin.motivo_saida_id` (FK) — preferencial
+2. Fallback ILIKE em `movimentacoes_admin.motivo` (texto) contra `motivos_saida.nome`
 3. **Motivo NULL sem match = NÃO conta** (regra alterada em 2026-04, antes contava por padrão)
 
 **Onde é calculada:**
@@ -133,12 +133,15 @@ WHERE valor_passaporte > 0
 
 **Definição:** % de evasões sobre base ativa do período.
 
-**Fórmula:**
+**Fórmula canônica (Alf P1 — confirmada no banco em 2026-08-08):**
 ```
-churn = evasoes_periodo / (alunos_inicio_periodo + novas_matriculas_periodo) * 100
+churn = evasoes_periodo / alunos_pagantes * 100
 ```
 
+🚫 **A fórmula anterior deste arquivo (`evasoes / (alunos_inicio + novas_matriculas) * 100`) estava ERRADA** e foi corrigida em 2026-08-08. Não usar.
+
 **Decisões:**
+- Transferência interna entre unidades **não** entra no numerador
 - Risco por professor: crítico ≥ 15%, alto ≥ 10%, médio ≥ 5%, normal < 5%
 - Meta corporativa: ver `metas.taxa_churn` por unidade
 - Cursos `is_projeto_banda` são excluídos (não entram em alunos nem em evasoes)
@@ -179,12 +182,14 @@ Detalhes completos em `regras-negocio.md` → "Histórico LTV / Tempo de Perman�
 
 **Definição:** % de alunos elegíveis que renovaram o contrato no período.
 
-**Fórmula:**
+**Fórmula canônica (Alf — resolvida em 2026-08-08):**
 ```
-taxa_renovacao = renovacoes / (renovacoes + nao_renovacoes + aviso_previo) * 100
+taxa_renovacao = renovacoes / (renovacoes + nao_renovacoes) * 100
 ```
 
-Tracking em `movimentacoes_admin` com `tipo IN ('renovacao', 'nao_renovacao', 'aviso_previo')`.
+🚫 **A fórmula anterior deste arquivo incluía `aviso_previo` no denominador — ERRADA.** Aviso prévio e taxa de renovação são indicadores distintos. Aviso prévio cobre o mês vigente do aviso + o seguinte (2 meses) e vira não-renovação/evasão na competência da saída real.
+
+Tracking em `movimentacoes_admin` com `tipo IN ('renovacao', 'nao_renovacao')`. Renovação só conta se **confirmada** (exclui `pendente_validacao`); movimentações de atividade extra ficam fora via `is_movimentacao_admin_retencao_valida`.
 
 **Reajuste médio:** `AVG((valor_parcela - valor_parcela_anterior) / valor_parcela_anterior * 100)`.
 

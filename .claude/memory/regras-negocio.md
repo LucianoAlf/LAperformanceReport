@@ -83,7 +83,9 @@ Definidas em `ComercialPage.tsx` (~linha 764):
 
 ## Evasao (Churn)
 - Tipos: `interrompido` (4 subtipos: padrao, bolsista, banda, 2o_curso) ou `transferencia`
-- Formula churn: evasoes / (alunos_inicio + novas_matriculas) x 100
+- **Formula churn (canonica, Alf P1 — confirmada no banco 2026-08-08): `evasoes / alunos_pagantes * 100`**
+- 🚫 A formula anterior deste arquivo (`evasoes / (alunos_inicio + novas_matriculas) x 100`) estava ERRADA e foi corrigida em 2026-08-08.
+- Transferencia interna entre unidades NAO entra no numerador
 - Risco por professor: critico >= 15, alto >= 10, medio >= 5, normal < 5
 - Tabela `motivos_saida` com id, nome, categoria, ativo, `conta_score_professor`
 

@@ -6,7 +6,11 @@
 >
 > ⚠️ **Antes de "corrigir" qualquer critério aqui:** mudança em métrica afeta dashboards e metas. Validar com SELECT-only e confirmar com o Hugo (regra de colaborador). Ver seção [Inconsistências percebidas](#inconsistências-percebidas-a-decidir) no fim.
 >
-> Última atualização: 2026-07-30.
+> Última atualização: 2026-08-08 (auditoria contra o banco de produção).
+>
+> 📘 **Regras de negócio consolidadas de todos os âmbitos:** [`docs/REGRAS-DE-NEGOCIO.md`](./REGRAS-DE-NEGOCIO.md).
+> Este arquivo (`METRICAS.md`) continua sendo o detalhamento técnico de **onde** cada métrica é calculada;
+> o `REGRAS-DE-NEGOCIO.md` é o **o quê** e o **porquê**, validado contra o banco.
 
 ## Conceitos-base
 
@@ -60,7 +64,10 @@ continuam vindo de `movimentacoes_admin` e não são o mesmo indicador que
   `get_kpis_alunos_admin_operacional`,
   `get_kpis_alunos_financeiro_vivo_canonico` e
   `get_kpis_alunos_canonicos`.
-- Bolsista integral **não** é pagante; bolsista parcial conta conforme `conta_como_pagante`.
+- Bolsista integral **não** é pagante. **Bolsista parcial também não** — `conta_como_pagante = false`
+  no banco (verificado 2026-08-08), conforme validação do Alf (P5).
+- Trancado **não** entra. **Quem tem só banda ou só coral também não** — são atividades extras
+  e exigem curso regular; contam em `matriculas_banda`/`matriculas_coral`.
 
 ### Aluno ativo / Carteira viva
 `entra_base_ativa = true`, deduplicado pela identidade canônica de pessoa na
@@ -145,11 +152,12 @@ Média de `valor_parcela` dos alunos com `entra_financeiro_ativo = true` **E**
 `tipo_matricula.entra_ticket_medio = true` **E** `valor_parcela > 0`,
 deduplicado por pessoa canônica e unidade.
 - RPC: `get_kpis_alunos_financeiro_vivo_canonico`.
-- ⚠️ A dedup por pessoa **soma** os cursos da pessoa no numerador mas conta a pessoa
-  **uma vez** no denominador — então segundo curso **eleva** o ticket (é o que o
-  `tipos_matricula` descreve: "eleva ticket médio, conta como 1 aluno"). Isso
-  contradiz o texto de "Segundo curso" abaixo, que diz "excluído do ticket médio".
-  Constatado no código em 31/07/2026; qual dos dois é a intenção não foi confirmado.
+- ✅ **Ambiguidade RESOLVIDA em 2026-08-08.** A dedup por pessoa **soma** os cursos da pessoa no
+  numerador mas conta a pessoa **uma vez** no denominador — então o segundo curso **eleva** o
+  ticket. **Esta é a intenção correta**, validada pelo Alf em 2026-06-06 e confirmada no banco
+  (`tipos_matricula.SEGUNDO_CURSO.entra_ticket_medio = true`).
+  O texto de "Segundo curso" abaixo diz que ele é "excluído do ticket médio" — isso vale apenas
+  para o **denominador** (não duplicar a pessoa), nunca para o numerador.
 
 ### MRR (mensalidade recorrente)
 **Mesma base e mesmo filtro do ticket médio** — MRR é o numerador do ticket:
@@ -464,10 +472,15 @@ Leads que agendaram/realizaram experimental ÷ total de leads do período.
 
 ### Evasão (contagem e MRR perdido)
 `movimentacoes_admin.tipo ∈ {evasao, nao_renovacao}` — **sem** `aviso_previo` nem `trancamento`.
+Movimentações de **atividade extra** (banda, canto coral, power kids, minha banda, garageband, percussion kids) ficam fora, via `is_movimentacao_admin_retencao_valida` → `is_atividade_extra_curso`.
+**Transferência interna entre unidades não é evasão nem churn global.**
+⚠️ **Aviso prévio** cobre o mês vigente do aviso + o seguinte (2 meses); a evasão entra na competência da **saída real**.
 - `DashboardPage.tsx:238`, `TabGestao.tsx:842`, `TabProfessoresNew.tsx:284` (MRR perdido = soma `valor_parcela`).
 
 ### Taxa de renovação
-`renovacoes / (renovacoes + nao_renovacoes) × 100`. Renovação só conta se **confirmada** (`isRenovacaoConfirmadaOperacional`, exclui `pendente_validacao`). Renovação antecipada: `renovacao_antecipada=true` ou status `antecipada_*`.
+✅ **Canônica (confirmada com o Alf em 2026-08-08):** `renovacoes / (renovacoes + nao_renovacoes) × 100`.
+**Aviso prévio NÃO entra no denominador** — aviso prévio e taxa de renovação são indicadores distintos.
+Renovação só conta se **confirmada** (`isRenovacaoConfirmadaOperacional`, exclui `pendente_validacao`). Renovação antecipada: `renovacao_antecipada=true` ou status `antecipada_*`.
 - `AdministrativoPage.tsx:508/617`, `TabPerformanceProfessores.tsx:325`.
 - Por professor: `renovacoes / contratos_a_vencer × 100` (`useProfessoresPerformance.ts:140`).
 
@@ -496,7 +509,7 @@ O V3 é calculado e persistido no banco. Frontend, relatórios e agentes apenas 
 | Permanência com o professor | 25% | 12 meses | vínculos encerrados de `vw_professor_periodos_efetivos_v3_sombra` |
 | Conversão Exp→Mat | 15% | 70% | ciclo de 3 meses; experimental/evento no denominador e matrícula canônica em D+30 no numerador |
 | Média de alunos/turma | 15% | segmentada | ocupações únicas de pessoas por turma regular elegível |
-| Número de alunos | 0% (diagnóstico) | segmentada | pessoas canônicas únicas na carteira professor+unidade |
+| Número de alunos | ⚠️ **10%** na config ativa | segmentada | pessoas canônicas únicas na carteira professor+unidade |
 | Presença dos alunos | 10% | 80% | roster + `vw_aluno_presenca_semantica_v1` |
 
 Nos pilares percentuais, a nota é o percentual real. Nos pilares com meta de
@@ -619,8 +632,15 @@ Para impedir que a virada de mês recalcule/altere competências já fechadas, o
 > Itens que notei ao mapear. **Não alterei nada** — são decisões de negócio. Sinalizando para você decidir se ajustamos.
 
 1. **Snapshot Kids/School hardcoded** — `SEGMENTACAO_KIDS_SCHOOL_CG_MAIO_2026 = {kids:202, school:294}` fixo em `TabGestao.tsx:43-50`. É um valor reconstituído manualmente; se a fonte viva divergir, o histórico de CG/maio-2026 mostra número fixo. Candidato a remover quando a segmentação por idade estiver confiável no histórico.
-2. **Valores fixos na Retenção** — `useEvasoesData.ts` usa **churn médio fixo `4.86`** (`:88`) e **taxa de renovação fixa `80%`** (`:91`). Não são calculados; o dado real vem de `useProfessoresPerformance`. O dashboard de Retenção pode exibir números que não batem com Administrativo/Professores.
-3. **Duas fontes de evasão/renovação** — Retenção (`useEvasoesData`) lê a tabela **legada `evasoes`**, enquanto Administrativo/Professores usam **`movimentacoes_admin`** (canônico). Risco de números divergentes entre as páginas.
+2. **🐛 BUG CONFIRMADO (2026-08-08) — Retenção está sem dado.** `useEvasoesData.ts:30` consulta
+   `.from('evasoes')`, e **a tabela `evasoes` não existe mais no banco**. O hook alimenta **8
+   componentes**: `RetencaoVisaoGeral`, `RetencaoAlertas`, `RetencaoMotivos`, `RetencaoTendencias`,
+   `RetencaoSazonalidade`, `RetencaoComparativo`, `RetencaoAcoes`, `RetencaoInicio`. Além disso usa
+   **churn fixo `4.86`** (`:88`) e **taxa de renovação fixa `80%`** (`:91`), e `RetencaoInicio` chama
+   com **`ano = 2025` fixo**. `FormEvasao.tsx:187` grava na mesma tabela inexistente.
+   **Correção:** migrar para `movimentacoes_admin` com as regras canônicas de evasão e churn.
+3. ~~**Duas fontes de evasão/renovação**~~ — resolvido pela via errada: `evasoes` e `renovacoes`
+   foram aposentadas e **removidas**. A fonte única é `movimentacoes_admin`. O que sobrou é o bug do item 2.
 4. **Conversão experimental calculada de 2 jeitos** — Dashboard/Comercial usam `leads.experimental_realizada`; o canônico do professor usa `lead_experimentais`. CLAUDE.md já registra que a fonte canônica virou `lead_experimentais` — o Dashboard pode estar com a taxa antiga (inflada). Vale alinhar.
 5. **Métricas bloqueadas em Metas** — `taxa_exp_mat` e `taxa_conversao_exp` estão desativadas (`MetasPageNew.tsx`) aguardando regra canônica. Enquanto isso, não dá pra metar conversão de experimental.
 6. **Forms de Entrada gravam em tabelas legadas** — `FormMatricula/Evasao/Renovacao` escrevem em `movimentacoes`/`renovacoes`/`evasoes`, não em `movimentacoes_admin`. Se ainda forem usados, geram dados fora do fluxo canônico Emusys.
