@@ -65,6 +65,50 @@ Confirmado pela unidade: os alunos saíram, mas as não-renovações nunca entra
 `movimentacoes_admin`. Taxa de renovação de CG em julho passou de **91,2% para
 77,5%** (meta ≥90%). 6 em julho, 1 em junho, R$ 2.419,00 de MRR perdido.
 
+### ⚠️ O sync de faturas nunca teve cron — corrigido
+
+**Causa raiz do relatório financeiro estar errado todo mês.** Entre os 54 jobs do
+`pg_cron` havia sync de presença, matrículas, grade, professores, disciplinas,
+metadados e agenda — **nenhum de faturas**. Ele só rodava por `internal_refresh`
+(disparo interno da aplicação), que atualiza **apenas a competência corrente**.
+
+Quando agosto virou o mês atual, julho congelou em 23/07. Mas o aluno continua
+pagando a fatura de julho **durante** agosto:
+
+- 39 faturas pagas entre 24/07 e 05/08 que o banco dava como abertas
+- 30 faturas que nem existiam no espelho
+- **R$ 15.942,90** a menos no faturamento de julho
+
+Agravante: `fechamento-mensal-automatico` (jobid 83) roda **dia 1 às 01:00 UTC**,
+no minuto seguinte ao fim do mês. O snapshot financeiro nascia antes de qualquer
+pagamento tardio existir — **nunca teve chance de estar certo**.
+
+Criados dois jobs (migration `20260808185259`):
+
+| Job | Horário | Papel |
+|---|---|---|
+| `sync-faturas-competencia-atual` (107) | 00:30 UTC | Roda **antes** do fechamento das 01:00 do dia 1 |
+| `sync-faturas-competencia-anterior` (108) | 03:00 UTC | Captura pagamento tardio o mês inteiro — **era o que faltava** |
+
+⚠️ **Validar por `sync_runs`, nunca por `pg_cron`** (que marca `succeeded` mesmo em
+401 — foi assim que o `sync-inadimplencia-emusys` ficou 13 dias morto). Teste real
+em 08/08: `succeeded`, `requested_by='sync_admin_token'`, 1.042 atualizadas, 28
+inseridas, `snapshot_complete=true`, 27 segundos.
+
+### Faturamento e inadimplência reais de julho (após ressincronização)
+
+⚠️ **Faturamento = SÓ PARCELAS** (regra do Alf, 2026-08-08). Passaporte, lojinha,
+taxa de matrícula, ingresso de evento e locação **não entram**.
+
+| Unidade | Faturamento realizado | Inadimplência | Alunos inadimplentes |
+|---|---|---|---|
+| Recreio | **R$ 142.351,40** | R$ 480,00 | **1** |
+| Campo Grande | **R$ 137.319,06** | R$ 9.447,00 | 26 |
+| Barra | **R$ 97.235,13** | R$ 1.397,00 | 3 |
+
+O relatório publicado de julho mostrava R$ 141.032,20 (Recreio) e R$ 124.505,56
+(CG) — **os snapshots seguem congelados com os valores antigos**.
+
 ### Outros
 - **193 divergências de conciliação resolvidas**; status divergente **zerado** nas 3 unidades
 - **41 nomes de responsável** completados (só onde o Emusys era complemento do nome)
@@ -87,6 +131,8 @@ Confirmado pela unidade: os alunos saíram, mas as não-renovações nunca entra
 | 4 | **Sync de faturas de CG defasado** | Espelho dizia 15 inadimplentes, API disse 6. Disparar `sync-faturas-emusys` para `2026-07-01` fora da janela dos crons. |
 | 5 | **PR #75 sem revisão** | Mexe em rótulo que vai para as unidades. |
 | 6 | **Texto para a Fernanda** | Pronto na conversa de 08/08. |
+| 7 | **Snapshots de julho congelados com valores antigos** | O relatório mensal ainda publica o faturamento e a inadimplência de antes da ressincronização. Atualizar exige reescrever o payload **e recalcular `payload_hash`** — se errar, `hash_jsonb_canonico(payload) <> payload_hash` derruba a leitura do relatório nas 3 unidades. Mexer **só** nas chaves financeiras. |
+| 8 | **28 faturas não-parcela fora do banco** | Passaporte, ingresso do L.A Session #4, locação, taxa de matrícula (R$ 9.172,66). O sync oficial já as inseriu em 08/08; ficam registradas porque não são faturamento e não devem entrar nesse KPI. |
 
 ---
 
