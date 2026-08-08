@@ -110,6 +110,12 @@ serve(async (req) => {
 - URLs de foto de perfil do WhatsApp/UAZAPI expiram → o `onError` precisa ser robusto.
 - `bg-gradient-to-br` sem `from-`/`to-` definidos = gradiente sem cor; só aplicar a classe quando houver as cores do gradiente.
 
+## Identificador indefinido = rota fora do ar (2026-08-06)
+- Variável usada sem existir no escopo vira `ReferenceError` **no render**, e o error boundary do React Router derruba a **rota inteira** — não só o componente. Dois casos no mesmo dia: `FichaColaborador.tsx` usava a shorthand `color` num `style` quando a prop chama `cor`; `CarteiraSubTab` (em `ChecklistDetail.tsx`) usava `sentinelRef` sem declarar, porque o `useWidgetOverlapSentinel()` estava no componente **pai**, que não usava o ref.
+- ⚠️ **`npm run build` NÃO detecta isso** — roda só `vite build` (esbuild), que remove tipos sem checar. Quem pega é `tsc --noEmit` (`TS18004` shorthand, `TS2304` nome). CI trava só esses dois códigos: `.github/workflows/typecheck-refs.yml` + `tsconfig.ci.json` (o repo tem ~186 erros de tipo pré-existentes sem efeito em runtime; reprovar tudo viraria ruído).
+- ⚠️ **Bug desse tipo fica latente até o primeiro dado real** — o bloco só renderiza sob condição (`{valores_primario && …}`, `{totalPaginas > 1 && …}`). O da ficha dormiu desde que subiu e só explodiu quando a 1ª pessoa ganhou `valores_codinome`. Não confie em "passou em review e ninguém viu quebrar".
+- Hook que produz `ref` mora no componente que **aplica** o `ref`, nunca no pai (padrão dos 12 usos de `useWidgetOverlapSentinel`). `registerSentinel` guarda um elemento só — pai e filho registrando concorrem, e o cleanup de um zera o do outro.
+
 ## Entrypoint híbrido (raiz + src/) — NÃO é código morto
 - Cadeia real: `index.html` → `/index.tsx` (raiz) → `./src/router` → **`../App.tsx` (raiz, importado em `src/router.tsx`)** → `./constants` + `./types` (raiz).
 - ⚠️ `App.tsx` (~140KB), `constants.tsx` e `types.ts` na RAIZ são **código VIVO**, apesar de o grosso da app estar em `src/`. Não confundir com `src/components/App/` (pasta de páginas).
