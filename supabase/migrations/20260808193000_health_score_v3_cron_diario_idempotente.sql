@@ -341,14 +341,11 @@ declare
   v_resultado jsonb;
   v_resultados jsonb := '[]'::jsonb;
   v_secret text;
-  v_alerta_url text;
 begin
   perform set_config('statement_timeout', '600s', true);
 
   select decrypted_secret into v_secret
   from vault.decrypted_secrets where name = 'lia_alertas_service_role_key' limit 1;
-  select decrypted_secret into v_alerta_url
-  from vault.decrypted_secrets where name = 'health_score_professor_v3_alerta_url' limit 1;
 
   for v_unidade in
     select id from public.unidades where ativo order by id
@@ -358,10 +355,9 @@ begin
     );
     v_resultados := v_resultados || jsonb_build_array(v_resultado);
     if v_resultado->>'status' = 'erro'
-      and nullif(btrim(v_alerta_url), '') is not null
       and nullif(btrim(v_secret), '') is not null then
       perform net.http_post(
-        url := v_alerta_url,
+        url := 'https://ouqwbbermlzqqvtqwlul.supabase.co/functions/v1/projeto-alertas-whatsapp',
         headers := jsonb_build_object('Authorization', 'Bearer ' || v_secret, 'Content-Type', 'application/json'),
         body := jsonb_build_object('action', 'health_score_professor_v3_falha', 'execution_id', v_resultado->>'execution_id'),
         timeout_milliseconds := 55000
@@ -374,10 +370,9 @@ begin
   );
   v_resultados := v_resultados || jsonb_build_array(v_resultado);
   if v_resultado->>'status' = 'erro'
-    and nullif(btrim(v_alerta_url), '') is not null
     and nullif(btrim(v_secret), '') is not null then
     perform net.http_post(
-      url := v_alerta_url,
+      url := 'https://ouqwbbermlzqqvtqwlul.supabase.co/functions/v1/projeto-alertas-whatsapp',
       headers := jsonb_build_object('Authorization', 'Bearer ' || v_secret, 'Content-Type', 'application/json'),
       body := jsonb_build_object('action', 'health_score_professor_v3_falha', 'execution_id', v_resultado->>'execution_id'),
       timeout_milliseconds := 55000
@@ -394,17 +389,35 @@ revoke all on function public.executar_health_score_professor_v3_cron_diario()
   from public, anon, authenticated;
 grant execute on function public.executar_health_score_professor_v3_cron_diario() to service_role;
 
--- O alerta e desativado por padrao. Ele apenas e habilitado apos a configuracao
--- de contatos e a validacao do rollout; ausencia de Vault nunca interrompe o cron.
+-- O alerta so e ativado quando os dois destinatarios operacionais exatos existem.
+-- Nenhuma busca por nome parcial e usada: contatos homonimos/teste nao podem receber alerta.
 insert into public.notificacao_config (tipo, ativo, antecedencia_dias, dias_inatividade)
 values ('health_score_professor_v3_falha', false, 0, 0)
 on conflict (tipo) do nothing;
 
--- Destinatarios e URL do alerta sao configuracao operacional, nao inferencia
--- de migration. O banco possui mais de um usuario com "Hugo" no nome; escolher
--- um deles por e-mail presumido poderia notificar a pessoa errada. A ativacao
--- so ocorre depois de configurar explicitamente os dois destinatarios e a URL
--- autenticada no Vault, mantendo a rotina em modo somente auditoria ate la.
+insert into public.notificacao_destinatarios (config_id, pessoa_tipo, pessoa_id, canal)
+select c.id, 'usuario', u.id, 'whatsapp'
+from public.notificacao_config c
+join public.usuarios u on (
+  lower(coalesce(u.email, '')) = 'lucianoalf.la@gmail.com'
+  or (
+    lower(coalesce(u.nome, '')) = 'hugo'
+    and nullif(btrim(coalesce(u.telefone, '')), '') is not null
+  )
+)
+where c.tipo = 'health_score_professor_v3_falha'
+on conflict (config_id, pessoa_tipo, pessoa_id) do nothing;
+
+update public.notificacao_config c
+set ativo = true
+where c.tipo = 'health_score_professor_v3_falha'
+  and (
+    select count(*)
+    from public.notificacao_destinatarios d
+    where d.config_id = c.id
+      and d.pessoa_tipo = 'usuario'
+      and d.canal in ('whatsapp', 'ambos')
+  ) = 2;
 
 do $cron$
 declare

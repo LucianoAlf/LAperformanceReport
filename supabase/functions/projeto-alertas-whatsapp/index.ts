@@ -130,6 +130,81 @@ async function logNotificacao(params: {
 }
 
 // ============================================
+// HEALTH SCORE V3 — FALHA DE MATERIALIZACAO
+// ============================================
+
+async function alertarFalhaHealthScoreProfessorV3(
+  creds: WhatsAppCreds,
+  executionId?: string,
+) {
+  if (!executionId) {
+    return { skipped: true, reason: 'execution_id ausente' };
+  }
+
+  const config = await getConfig('health_score_professor_v3_falha');
+  if (!config?.ativo) {
+    return { skipped: true, reason: 'Config desativada' };
+  }
+
+  const { data: execucao, error: execucaoError } = await supabase
+    .from('health_score_professor_v3_materializacao_execucoes')
+    .select('id, competencia, escopo, unidade_id, erro, iniciado_em, finalizado_em, status')
+    .eq('id', executionId)
+    .single();
+
+  if (execucaoError || !execucao || execucao.status !== 'erro') {
+    return {
+      skipped: true,
+      reason: execucaoError ? 'Execucao nao encontrada' : 'Execucao sem falha confirmada',
+    };
+  }
+
+  const destinatarios = await getDestinatarios(config.id);
+  if (destinatarios.length === 0) {
+    return { skipped: true, reason: 'Sem destinatários' };
+  }
+
+  const competencia = new Date(`${execucao.competencia}T00:00:00`).toLocaleDateString('pt-BR', {
+    month: '2-digit',
+    year: 'numeric',
+  });
+  const escopo = execucao.escopo === 'consolidado' ? 'Consolidado' : 'Unidade';
+  const mensagem = [
+    '🚨 *FALHA NA MATERIALIZAÇÃO DO HEALTH SCORE V3*',
+    '',
+    `Competência: ${competencia}`,
+    `Escopo: ${escopo}`,
+    `Execução: ${execucao.id}`,
+    `Erro: ${execucao.erro || 'não informado'}`,
+    '',
+    'O LA Report exibirá o último retrato disponível. Verifique a execução antes de usar a Performance.',
+  ].join('\n');
+
+  let enviados = 0;
+  for (const dest of destinatarios) {
+    if (dest.canal === 'sistema') continue;
+
+    const phone = getPhoneNumber(dest);
+    if (!phone) continue;
+
+    const success = await sendWhatsApp(phone, mensagem, creds);
+    await logNotificacao({
+      configId: config.id,
+      tipo: 'health_score_professor_v3_falha',
+      destinatarioTipo: dest.pessoa_tipo,
+      destinatarioId: dest.pessoa_id,
+      canal: 'whatsapp',
+      mensagem,
+      status: success ? 'enviado' : 'erro',
+      erroMensagem: success ? undefined : 'Falha ao enviar alerta de Health Score V3',
+    });
+    if (success) enviados++;
+  }
+
+  return { enviados, execution_id: executionId };
+}
+
+// ============================================
 // 1. TAREFAS ATRASADAS
 // ============================================
 
@@ -457,7 +532,7 @@ serve(async (req) => {
 
   try {
     const creds = await getWhatsAppCredentials(supabase, { funcao: 'sistema' });
-    const { action } = await req.json();
+    const { action, execution_id } = await req.json();
 
     let result;
 
@@ -473,6 +548,9 @@ serve(async (req) => {
         break;
       case 'resumo_semanal':
         result = await enviarResumoSemanal(creds);
+        break;
+      case 'health_score_professor_v3_falha':
+        result = await alertarFalhaHealthScoreProfessorV3(creds, execution_id);
         break;
       case 'all':
         // Executa todos (exceto resumo semanal)

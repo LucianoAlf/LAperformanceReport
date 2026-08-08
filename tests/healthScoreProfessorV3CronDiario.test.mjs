@@ -47,10 +47,14 @@ test('cron fica restrito ao mes aberto e usa teto explicito de 600 segundos', as
   assert.doesNotMatch(sql, /estado_publicacao\s*=\s*'oficial'/i);
 });
 
-test('cron nao infere destinatario de alerta por um e-mail Hugo nao homologado', async () => {
+test('cron ativa alerta somente para Alf e Hugo identificados de forma exata', async () => {
   const sql = await migration();
 
   assert.doesNotMatch(sql, /hugo@gmail\.com/i);
-  assert.match(sql, /health_score_professor_v3_alerta_url/i);
+  assert.doesNotMatch(sql, /health_score_professor_v3_alerta_url/i);
+  assert.match(sql, /lower\(coalesce\(u\.email,\s*''\)\)\s*=\s*'lucianoalf\.la@gmail\.com'/i);
+  assert.match(sql, /lower\(coalesce\(u\.nome,\s*''\)\)\s*=\s*'hugo'/i);
+  assert.doesNotMatch(sql, /like\s+'%hugo%'/i);
+  assert.match(sql, /https:\/\/ouqwbbermlzqqvtqwlul\.supabase\.co\/functions\/v1\/projeto-alertas-whatsapp/i);
   assert.match(sql, /values\s*\('health_score_professor_v3_falha',\s*false,\s*0,\s*0\)/i);
 });
