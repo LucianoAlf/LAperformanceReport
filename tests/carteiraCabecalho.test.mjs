@@ -12,4 +12,7 @@ test('exibe cabeçalho das métricas da lista de Carteira', () => {
   for (const label of ['Professor', 'Alunos', 'Trancados', 'MRR', 'Ticket', 'Média/Turma', 'Health Score']) {
     assert.match(cabecalho, new RegExp(label), `faltou a coluna ${label}`);
   }
+
+  assert.match(cabecalho, /bg-slate-950\/60/, 'o cabeçalho precisa estar integrado ao reader');
+  assert.match(cabecalho, /border-b/, 'o cabeçalho precisa separar a régua da lista');
 });
