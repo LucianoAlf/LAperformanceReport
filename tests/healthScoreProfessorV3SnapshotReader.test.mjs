@@ -86,6 +86,17 @@ test('leitor v3 evita a normalizacao legada quando o retrato ja possui papel', a
   assert.match(sql, /where e\.tem_papel_ausente/i);
 });
 
+test('leitor de snapshot devolve linhas em ordem deterministica por professor e pilar', async () => {
+  const sql = await readFile(
+    new URL('../supabase/migrations/20260808194000_health_score_v3_snapshot_reader_ordem_estavel.sql', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(sql, /create or replace function public\.get_health_score_professor_v3_performance_snapshot_v3\s*\(/i);
+  assert.match(sql, /select \* from leitura[\s\S]*order by professor_id, metrica/i);
+  assert.doesNotMatch(sql, /get_health_score_professor_v3_performance\s*\(/i);
+});
+
 test('materializador por escopo delega unidade para o produtor canônico e impede consolidado de repetir unidades', async () => {
   const sql = await readFile(
     new URL('../supabase/migrations/20260806190000_health_score_v3_materializador_escopo_explicito.sql', import.meta.url),
