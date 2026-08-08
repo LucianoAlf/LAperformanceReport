@@ -182,6 +182,38 @@ Grade do dia por unidade. Fonte é `aulas_emusys` + `aula_alunos_emusys`; leitur
 - **Item de flex tem `min-width: auto` — ele NÃO encolhe abaixo do próprio min-content.** A coluna principal do `AppLayout` (o `flex-1` ao lado da sidebar) estava sem `min-w-0`, então crescia além da viewport sempre que a página tinha conteúdo largo, e o que estivesse mais à direita ficava fora da tela. Sintoma que revelou (03/08/2026): o painel de detalhe da Agenda abria **escondido** depois da borda direita — a timeline não cedia os 296 px dele, a coluna inteira é que esticava. Corrigido com `min-w-0` em [AppLayout.tsx](src/components/App/Layout/AppLayout.tsx). ⚠️ **Sem `overflow-hidden` junto**, de propósito: assim conteúdo genuinamente largo continua transbordando visível (com a barra do documento) em vez de ser cortado em silêncio. Regra: todo `flex-1`/`flex-auto` que contém conteúdo de largura imprevisível precisa de `min-w-0`, e quem resolve a rolagem é o filho largo, com `overflow-x-auto` — 82 arquivos do projeto já fazem isso.
 - **`cn()` usa `twMerge`: a ÚLTIMA classe conflitante vence, não a ordem de precedência que a lista sugere.** Condições de estilo que podem ser verdadeiras ao mesmo tempo precisam ser mutuamente exclusivas (senão a "prioridade" pretendida depende da ordem das classes no array, não da regra de negócio). Causou bug real no módulo Agenda: 1 em cada 5 aulas experimentais canceladas/reagendadas renderizava com a cor contradizendo o próprio badge.
 
+## Governança de branch (OBRIGATÓRIO — ler antes do primeiro commit)
+
+**Frente encerrada = merge feito.** Não existe "commitei e deixei o PR aberto para depois".
+PR aberto com código já aplicado em produção é risco ativo: o banco fica corrigido e a
+`main` fica com o código antigo, então qualquer deploy a partir dela **reverte a correção
+sem ninguém perceber** — e o sintoma some, porque o dado continua certo. Aconteceu em
+2026-08-08 com o PR #75 (faturamento realizado).
+
+Checklist, na ordem:
+
+1. **Antes do primeiro commit, verifique onde está:**
+   `git branch --show-current` + `git branch --merged origin/main | grep -Fx "<branch>"`.
+   Se a branch atual **já foi mergeada**, NÃO commite nela — crie outra a partir de
+   `origin/main`. Branch mergeada está congelada: o PR não reabre, o nome já não descreve
+   o novo trabalho e a base está velha (em 08/08 estava 5 commits atrás).
+2. **Uma branch por assunto**, nome descrevendo o que ela faz.
+3. **Ao encerrar:** commit → push → PR → **merge** → `git branch -d` local e remota.
+   Deixar a branch viva depois do merge é o que produziu 14 branches órfãs e 24 worktrees
+   mortas até a limpeza de 08/08.
+4. **Trabalho em produção via MCP conta como entregue:** migration aplicada e edge
+   deployada precisam do arquivo versionado **no mesmo dia**. `apply_migration` e
+   `deploy_edge_function` não geram arquivo — versionar à mão e conferir (comparar o md5
+   do corpo da função com produção).
+5. **Nunca `--force` sem necessidade real.** O único uso legítimo em 08/08 foi remover
+   credencial do histórico depois que o gitleaks barrou o CI.
+
+⚠️ **A `main` pode estar presa numa worktree.** O git não permite a mesma branch em dois
+lugares; se `git checkout main` falhar com *"already used by worktree"*, é isso. Nesse
+caso trabalhe em branch e mergeie ao final — não tente liberar a `main` removendo worktree
+alheia sem conferir `git status` dela (em 08/08 a que segurava a `main` tinha 8 arquivos
+modificados de outra pessoa).
+
 ## Subagents
 
 - **`fiscal-dados`** (em `.claude/agents/fiscal-dados.md`): auditor read-only de automações de dados (webhooks Emusys, syncs, Mila SDR, WhatsApp). Use proativamente quando o usuário pedir verificação de integridade, divergências entre sistemas, FK NULLs, duplicatas, falhas silenciosas. Lê `integracao-infra.md` + auto-discovery via `list_edge_functions` → reporta gaps de documentação. Tools restritas (sem Edit/Write).
