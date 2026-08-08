@@ -1402,7 +1402,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
       {/* Tabela de Performance */}
       <div data-tour="professores-tabela" className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
-        <div className="max-h-[70vh] overflow-auto">
+        <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="sticky top-0 z-20 bg-slate-900/95 backdrop-blur">
               <tr className="border-b border-slate-700">
