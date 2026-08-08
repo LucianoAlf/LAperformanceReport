@@ -626,6 +626,23 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
       </div>
 
       {/* Lista de Professores (Accordion) */}
+      <div
+        aria-label="Cabeçalho das métricas da Carteira"
+        className="hidden md:flex items-center gap-4 px-4 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500"
+      >
+        <div className="w-5 shrink-0" aria-hidden="true" />
+        <div className="w-10 shrink-0" aria-hidden="true" />
+        <div className="min-w-0 flex-1">Professor</div>
+        <div className="flex items-center gap-2" aria-hidden="true">
+          <span className="px-3">Alunos</span>
+          <span className="px-3">Trancados</span>
+          <span className="px-3">MRR</span>
+          <span className="px-3">Ticket</span>
+          <span className="px-3">Média/Turma</span>
+          <span className="px-3">Health Score</span>
+        </div>
+        <div className="w-9 shrink-0" aria-hidden="true" />
+      </div>
       <div className="space-y-2">
         {carteirasFiltradas.map((carteira) => (
           <div key={carteira.id} className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
