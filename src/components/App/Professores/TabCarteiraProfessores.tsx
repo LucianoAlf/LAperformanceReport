@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { Fragment, useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
@@ -626,118 +626,116 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
       </div>
 
       {/* Lista de Professores (Accordion) */}
-      <div className="rounded-xl border border-slate-800/80 bg-slate-950/20 overflow-hidden">
-        <div
-          aria-label="Cabeçalho das métricas da Carteira"
-          className="hidden md:flex items-center gap-4 px-4 py-3 bg-slate-950/60 border-b border-slate-800/80 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500"
-        >
-          <div className="w-5 shrink-0" aria-hidden="true" />
-          <div className="w-10 shrink-0" aria-hidden="true" />
-          <div className="min-w-0 flex-1">Professor</div>
-          <div className="flex items-center gap-2" aria-hidden="true">
-            <span className="px-3">Alunos</span>
-            <span className="px-3">Trancados</span>
-            <span className="px-3">MRR</span>
-            <span className="px-3">Ticket</span>
-            <span className="px-3">Média/Turma</span>
-            <span className="px-3">Health Score</span>
-          </div>
-          <div className="w-9 shrink-0" aria-hidden="true" />
-        </div>
-        <div className="space-y-2 p-2">
+      <div data-tour="professores-carteira-tabela" className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
+        <div className="max-h-[70vh] overflow-auto">
+          <table className="w-full min-w-[1024px]">
+            <thead className="sticky top-0 z-20 bg-slate-900/95 backdrop-blur">
+              <tr className="border-b border-slate-700">
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Professor</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Alunos</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Trancados</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">MRR</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Ticket</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Média/Turma</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Health Score</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-700/50">
         {carteirasFiltradas.map((carteira) => (
-          <div key={carteira.id} className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
-            {/* Header do Accordion */}
-            <div
-              className="flex items-center gap-4 p-4 cursor-pointer hover:bg-slate-700/30 transition"
+          <Fragment key={carteira.id}>
+            <tr
+              className="cursor-pointer hover:bg-slate-700/30 transition-colors"
               onClick={() => toggleExpansao(carteira.id)}
             >
-              {/* Chevron */}
-              <div className="text-slate-400">
-                {expandido === carteira.id ? (
-                  <ChevronDown className="w-5 h-5" />
-                ) : (
-                  <ChevronRight className="w-5 h-5" />
-                )}
-              </div>
-
-              {/* Avatar */}
-              {carteira.foto_url ? (
-                <img 
-                  src={carteira.foto_url} 
-                  alt={carteira.nome}
-                  className="w-10 h-10 rounded-full object-cover"
-                />
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
-                  {getIniciais(carteira.nome)}
+              <td className="px-4 py-3">
+                <div className="flex items-center gap-3 min-w-[260px]">
+                  <div className="text-slate-400 shrink-0">
+                    {expandido === carteira.id ? (
+                      <ChevronDown className="w-5 h-5" />
+                    ) : (
+                      <ChevronRight className="w-5 h-5" />
+                    )}
+                  </div>
+                  {carteira.foto_url ? (
+                    <img
+                      src={carteira.foto_url}
+                      alt={carteira.nome}
+                      className="w-10 h-10 rounded-full object-cover shrink-0"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm shrink-0">
+                      {getIniciais(carteira.nome)}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p
+                      className="font-medium text-white truncate cursor-pointer hover:text-violet-400 transition"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setModalDetalhes({ open: true, professor: carteira });
+                      }}
+                    >
+                      {carteira.nome}
+                    </p>
+                    <p className="text-xs text-slate-400 truncate">
+                      {carteira.cursos.slice(0, 3).join(', ')}
+                      {carteira.cursos.length > 3 && ` +${carteira.cursos.length - 3}`}
+                    </p>
+                  </div>
                 </div>
-              )}
-
-              {/* Nome e Cursos */}
-              <div className="flex-1 min-w-0">
-                <p 
-                  className="font-medium text-white truncate cursor-pointer hover:text-violet-400 transition"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setModalDetalhes({ open: true, professor: carteira });
-                  }}
-                >
-                  {carteira.nome}
-                </p>
-                <p className="text-xs text-slate-400 truncate">
-                  {carteira.cursos.slice(0, 3).join(', ')}
-                  {carteira.cursos.length > 3 && ` +${carteira.cursos.length - 3}`}
-                </p>
-              </div>
-
-              {/* Badges com métricas */}
-              <div className="hidden md:flex items-center gap-2">
+              </td>
+              <td className="px-2 py-3 text-center align-middle">
                 {/* Badge Alunos */}
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20 whitespace-nowrap">
                   <Users className="w-3.5 h-3.5 text-violet-400" />
                   <span className="text-sm font-semibold text-white">{carteira.total_alunos}</span>
                   <span className="text-xs text-slate-400">alunos</span>
                 </div>
-
+              </td>
+              <td className="px-2 py-3 text-center align-middle">
                 {/* Badge Trancados - exibicao a parte, nao soma no badge de Alunos acima */}
                 {carteira.total_trancados === null ? (
                   <Tooltip content="A contagem de alunos trancados está indisponível neste momento. Não foi tratada como zero.">
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-500/10 border border-slate-500/20">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-500/10 border border-slate-500/20 whitespace-nowrap">
                       <Lock className="w-3.5 h-3.5 text-slate-400" />
                       <span className="text-xs text-slate-300">trancados indisponível</span>
                     </div>
                   </Tooltip>
                 ) : carteira.total_trancados > 0 && (
                   <Tooltip content="Alunos com trancamento vigente hoje (Emusys). Nao contam em Alunos, MRR, Ticket ou Média/Turma.">
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 whitespace-nowrap">
                       <Lock className="w-3.5 h-3.5 text-amber-400" />
                       <span className="text-sm font-semibold text-amber-400">{carteira.total_trancados}</span>
                       <span className="text-xs text-slate-400">trancados</span>
                     </div>
                   </Tooltip>
                 )}
-
+                {carteira.total_trancados === 0 && <span className="text-sm text-slate-500">—</span>}
+              </td>
+              <td className="px-2 py-3 text-center align-middle">
                 {/* Badge MRR */}
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 whitespace-nowrap">
                   <Wallet className="w-3.5 h-3.5 text-emerald-400" />
                   <span className="text-sm font-semibold text-emerald-400">
                     {carteira.mrr_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                   </span>
                   <span className="text-xs text-slate-400">MRR</span>
                 </div>
-
+              </td>
+              <td className="px-2 py-3 text-center align-middle">
                 {/* Badge Ticket */}
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 whitespace-nowrap">
                   <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
                   <span className="text-sm font-semibold text-cyan-400">
                     {carteira.ticket_medio.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                   </span>
                   <span className="text-xs text-slate-400">ticket</span>
                 </div>
-
+              </td>
+              <td className="px-2 py-3 text-center align-middle">
                 {/* Badge Média/Turma */}
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${
+                <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border whitespace-nowrap ${
                   carteira.media_alunos_turma !== null && carteira.media_alunos_turma >= 1.8
                     ? 'bg-green-500/10 border-green-500/20'
                     : carteira.media_alunos_turma !== null && carteira.media_alunos_turma >= 1.5
@@ -757,14 +755,16 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
                   </span>
                   <span className="text-xs text-slate-400">al/turma</span>
                 </div>
+              </td>
 
+              <td className="px-2 py-3 text-center align-middle">
                 {/* Badge Health Score */}
                 <Tooltip content={carteira.health_score_exibivel
                   ? `Health Score V3 ${carteira.health_score_estado_publicacao}: ${carteira.health_score?.toFixed(1)} (${carteira.health_status === 'saudavel' ? 'Saudável' : carteira.health_status === 'atencao' ? 'Atenção' : 'Crítico'}). Cobertura: ${formatHealthScoreV3Coverage(carteira.health_score_cobertura)}.`
                   : carteira.health_score_estado_publicacao === 'indisponivel'
                     ? `Health Score V3 indisponível. ${carteira.health_score_motivo || 'Tente novamente em instantes.'}`
                     : `Health Score V3 sem base. ${carteira.health_score_motivo || 'Snapshot canônico indisponível para o recorte.'}`}>
-                  <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${
+                  <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border whitespace-nowrap ${
                     !carteira.health_score_exibivel
                       ? 'bg-slate-800 border-slate-600'
                       : carteira.health_status === 'saudavel'
@@ -797,25 +797,29 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
                     )}
                   </div>
                 </Tooltip>
-              </div>
+              </td>
 
               {/* Botão Ver Detalhes */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setModalDetalhes({ open: true, professor: carteira });
-                }}
-                className="text-slate-400 hover:text-white"
-              >
-                <Eye className="w-4 h-4" />
-              </Button>
-            </div>
+              <td className="px-4 py-3 text-center align-middle">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setModalDetalhes({ open: true, professor: carteira });
+                  }}
+                  className="text-slate-400 hover:text-white"
+                >
+                  <Eye className="w-4 h-4" />
+                </Button>
+              </td>
+            </tr>
 
             {/* Conteúdo Expandido - Tabela de Alunos */}
             {expandido === carteira.id && (
-              <div className="border-t border-slate-700/50 p-4 bg-slate-900/30">
+              <tr className="bg-slate-900/30">
+                <td colSpan={8} className="p-0">
+              <div className="border-t border-slate-700/50 p-4">
                 {loadingAlunos ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
@@ -915,16 +919,22 @@ export function TabCarteiraProfessores({ unidadeAtual, competencia, onPeriodoCha
                   </div>
                 )}
               </div>
+                </td>
+              </tr>
             )}
-          </div>
+          </Fragment>
         ))}
 
         {carteirasFiltradas.length === 0 && (
-          <div className="text-center py-12 text-slate-400">
+          <tr>
+            <td colSpan={8} className="text-center py-12 text-slate-400">
             <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
             <p>Nenhum professor encontrado com os filtros aplicados</p>
-          </div>
+            </td>
+          </tr>
         )}
+            </tbody>
+          </table>
         </div>
       </div>
 
