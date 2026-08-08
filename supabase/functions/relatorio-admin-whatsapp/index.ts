@@ -185,6 +185,26 @@ function isRenovacaoAutomaticaEmusys(mov: any): boolean {
   return pareceAutomacao || !isRenovacaoConfirmadaOperacional(mov);
 }
 
+/**
+ * Espelha isRenovacaoPendenteJaOcorrida de src/lib/retencaoOperacionalCanonica.ts.
+ * Mudar a regla aqui exige mudar la tambem -- as duas implementacoes existem
+ * porque a edge nao importa do bundle do front.
+ *
+ * `pendente_validacao` guarda duas coisas: renovacao ja ocorrida esperando
+ * conferencia (data passada) e previsao de contrato a vencer (data futura).
+ * Regra validada pelo Alf em 2026-08-08: renovou no Emusys, a equipe nao e
+ * penalizada por nao ter clicado em confirmar -- entao pendente com data
+ * passada conta como feita. Pendente futuro fica fora: ainda nao aconteceu.
+ */
+function isRenovacaoPendenteJaOcorrida(mov: any): boolean {
+  const referencia = String(mov?.data || mov?.competencia_referencia || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(referencia)) return false;
+  const hojeIso = new Date(
+    new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }),
+  ).toISOString().slice(0, 10);
+  return referencia <= hojeIso;
+}
+
 function isRenovacaoConfirmadaOperacional(mov: any): boolean {
   if (mov?.tipo !== 'renovacao') return false;
 
@@ -193,7 +213,7 @@ function isRenovacaoConfirmadaOperacional(mov: any): boolean {
   }
 
   if (mov?.renovacao_status === 'pendente_validacao' || mov?.renovacao_status === 'antecipada_pendente') {
-    return false;
+    return isRenovacaoPendenteJaOcorrida(mov);
   }
 
   const agente = String(mov?.agente_comercial || mov?.agente || '').trim();

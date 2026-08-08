@@ -190,6 +190,35 @@ export function isRenovacaoAutomaticaEmusys(mov: MovimentacaoRetencaoRow): boole
   return pareceAutomacao || !isRenovacaoConfirmadaOperacional(mov);
 }
 
+/**
+ * `pendente_validacao` guarda DUAS coisas distintas, e tratá-las igual distorce
+ * a taxa de renovação nos dois sentidos:
+ *
+ *   - data no passado  -> a renovação já aconteceu e só falta alguém conferir
+ *                         no report. O contrato existe no Emusys.
+ *   - data no futuro   -> é PREVISÃO: contrato que vai vencer. Não aconteceu.
+ *
+ * Medido em 2026-08-08: 47 pendentes com data passada contra 41 com data futura
+ * (todos em 28/08/2026), ou seja, quase metade de cada tipo no mesmo campo.
+ *
+ * Regra validada pelo Alf em 2026-08-08: se renovou no Emusys, a equipe NÃO é
+ * penalizada por não ter clicado em confirmar. Por isso pendente com data
+ * passada conta como renovação feita. O pendente futuro continua fora — contá-lo
+ * como realizado inflaria a taxa com renovação que ainda nem ocorreu.
+ */
+export function isRenovacaoPendenteJaOcorrida(
+  mov: MovimentacaoRetencaoRow,
+  hoje: Date = new Date(),
+): boolean {
+  const referencia = String(mov.data || mov.competencia_referencia || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(referencia)) return false;
+  // Comparação em texto (ISO) evita fuso: ambos ficam em YYYY-MM-DD.
+  const hojeIso = new Date(hoje.getTime() - hoje.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+  return referencia <= hojeIso;
+}
+
 export function isRenovacaoConfirmadaOperacional(mov: MovimentacaoRetencaoRow): boolean {
   if (mov.tipo !== 'renovacao') return false;
 
@@ -198,7 +227,7 @@ export function isRenovacaoConfirmadaOperacional(mov: MovimentacaoRetencaoRow): 
   }
 
   if (mov.renovacao_status === 'pendente_validacao' || mov.renovacao_status === 'antecipada_pendente') {
-    return false;
+    return isRenovacaoPendenteJaOcorrida(mov);
   }
 
   const agente = String(mov.agente_comercial || '').trim();
