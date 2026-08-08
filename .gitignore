@@ -77,3 +77,6 @@ staff/
 
 # graphify — indice AST local (regerar com: graphify extract . --code-only)
 graphify-out/
+
+# Rascunhos temporarios do Devin (mensagem de commit / corpo de PR)
+.devin-*
