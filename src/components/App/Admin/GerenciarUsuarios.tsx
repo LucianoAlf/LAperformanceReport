@@ -71,10 +71,18 @@ export function GerenciarUsuarios() {
   const carregarDados = async () => {
     setLoading(true);
     try {
-      // Carregar usuários com nome da unidade
+      // Carregar usuários com nome da unidade.
+      //
+      // O filtro por perfil não é enfeite: este painel é de acesso ADMINISTRATIVO
+      // — o tipo Usuario daqui declara `perfil: 'admin' | 'unidade'` e o render da
+      // linha só trata esses dois. A tabela `usuarios` é compartilhada com o LA
+      // Teacher, que passa a criar uma linha `perfil='professor'` para cada
+      // professor liberado (44 deles). Sem este filtro eles apareceriam aqui,
+      // caindo no ramo "unidade" do render, numa tela que não é sobre eles.
       const { data: usuariosData } = await supabase
         .from('usuarios')
         .select('*, unidade:unidades(nome)')
+        .in('perfil', ['admin', 'unidade'])
         .order('nome');
 
       if (usuariosData) {

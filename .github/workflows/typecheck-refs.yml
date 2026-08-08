@@ -1,0 +1,59 @@
+name: typecheck-refs
+
+# Trava a classe de erro que derruba tela em produção: identificador usado sem
+# existir no escopo (TS2304 "Cannot find name" e TS18004 "No value exists in
+# scope for the shorthand property"). Em runtime isso vira ReferenceError, e o
+# error boundary do React derruba a ROTA inteira, não só o componente.
+#
+# Aconteceu duas vezes em 06/08/2026:
+#   - FichaColaborador.tsx usava `color` no lugar de `cor`  -> /app/time fora do ar
+#   - CarteiraSubTab usava `sentinelRef` sem declarar        -> Painel Farmer
+# Os dois passaram porque `npm run build` roda só `vite build` (esbuild), que
+# remove tipos sem checar nada.
+#
+# Por que não rodamos `tsc` inteiro: o repo tem dezenas de erros de tipo
+# pré-existentes (prop `key`, namespace React, casts do Supabase) que não têm
+# efeito em runtime. Reprovar tudo faria o check virar ruído e ser ignorado.
+# Este job olha só os dois códigos que quebram a tela.
+
+# Escopo de propósito estreito: PR para main e a própria main.
+# Rodar em `push:` de qualquer branch reprovaria toda branch de trabalho aberta
+# antes do fix de 06/08 — elas carregam o bug no tree e só o perdem ao trazer
+# main. Em pull_request o GitHub checa o MERGE do PR com a base, que já está
+# corrigida, então a branch antiga passa sem precisar rebasear no meio do voo.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  refs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Procurar identificador indefinido em src/
+        run: |
+          # tsc sai != 0 por causa dos erros pré-existentes; o veredito é o grep.
+          npx tsc --noEmit -p tsconfig.ci.json > tsc.log 2>&1 || true
+
+          if grep -E "error TS(2304|18004):" tsc.log; then
+            echo ""
+            echo "::error::Identificador usado sem estar declarado. Isso vira ReferenceError e derruba a rota em producao."
+            echo "Corrija as linhas acima antes de mergear."
+            exit 1
+          fi
+
+          echo "OK: nenhum identificador indefinido em src/."

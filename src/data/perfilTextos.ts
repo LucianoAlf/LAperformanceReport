@@ -209,6 +209,29 @@ export const FALLBACK_EVITE = 'Evite em mapeamento — confirme o que não funci
 
 export const FALLBACK_COBRAR = 'Se precisar de resultado, <b>combine o objetivo e o prazo junto com ela</b>.';
 
+export const FALLBACK_VALOR_FRASE = 'valor em mapeamento — confirme com ela o que ele significa na prática';
+
+/** Cor usada quando o perfil não tem cor mapeada (ou nem tem perfil ainda) */
+export const COR_PADRAO = '#5c7093';
+
+/**
+ * Nome de exibição de um valor do Bloco D.
+ * Chave não mapeada vira "Lealdade" em vez de sumir ou quebrar o bloco.
+ */
+export function nomeDoValor(chave: string | null | undefined): string {
+  if (!chave) return '';
+  return VALORES_NOMES[chave] || chave.charAt(0) + chave.slice(1).toLowerCase();
+}
+
+/**
+ * Frase explicativa de um valor do Bloco D.
+ * Chave não mapeada cai num texto genérico — o bloco continua legível.
+ */
+export function fraseDoValor(chave: string | null | undefined): string {
+  if (!chave) return '';
+  return VALORES_FRASES[chave] || FALLBACK_VALOR_FRASE;
+}
+
 /** Formata codinome "AMY/CAZUZA" -> "Amy-Cazuza" */
 export function formatarCodinome(codinome: string | null | undefined): string | null {
   if (!codinome) return null;

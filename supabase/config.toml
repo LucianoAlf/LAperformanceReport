@@ -85,3 +85,12 @@ verify_jwt = false
 # Estava faltando aqui ate 06/08/2026: a funcao rodava com false em producao sem nada no repo
 # declarar isso, entao um deploy pelo MCP (que reseta para true) a derrubaria em silencio.
 verify_jwt = false
+
+[functions.processar-matricula-emusys]
+# ATENCAO: aqui verify_jwt = TRUE de proposito (conferido em producao 06/08/2026, version 78).
+# Ao contrario do observador, esta funcao NAO e chamada direto pelo Emusys: o webhook passa pelo
+# n8n, que manda Authorization. Deployar com false abriria o processamento de matricula para
+# qualquer chamada anonima. O motivo de estar declarado aqui e o inverso do caso do observador --
+# nao para impedir que o MCP resete para true, e sim para que ninguem "corrija" para false por
+# analogia com as outras funcoes de webhook do Emusys.
+verify_jwt = true

@@ -160,6 +160,33 @@ Os dois casos que batem são justamente os sem divergência; nos demais a tela m
 
 ---
 
+## 🚨 [Webhook] `matricula_alterada` manda a data ANTIGA em `matricula.data_matricula`
+
+**Identificado em:** 2026-08-06 (investigando o fechamento de julho da Barra)
+
+**Descrição:** No evento `matricula_alterada` disparado por uma alteração de **data de matrícula**, o campo estruturado `matricula.data_matricula` vem com o valor **anterior** à alteração. A data nova só existe dentro do HTML de `alteracao.descricao`. Quem consumir o payload (o comportamento óbvio) grava o valor errado — ou, pior, **desfaz** uma correção já aplicada.
+
+**Evidência (matrícula 840, Luíza P Caruso, Barra):** a Kailane alterou no Emusys em 01/08/2026 às 14h01 a data de 01/08 para 31/07. O webhook chegou 15s depois (evento `71590`, em `automacao_log` id 17454):
+
+```
+matricula.data_matricula = "2026-08-01"            ← data ANTIGA
+alteracao.descricao      = "Data da matrícula alterada de <b>01/08/2026</b> para <b>31/07/2026</b>"
+```
+
+Só existe **um** `matricula_alterada` para essa matrícula — não veio um segundo evento com o valor correto.
+
+⚠️ **É específico deste campo.** Testados os outros tipos de alteração (167 eventos desde 07/07/2026): `Curso alterado`, `Alteração de disciplina`, `Turma alterada`, `Aulas alteradas (primeira/última aula, nr de aulas)` — em **todos** o payload traz o valor **NOVO**, coerente com a descrição. A defasagem só foi observada em `data_matricula` (amostra de 1 — é a única ocorrência desse tipo até hoje).
+
+**Hipótese:** o objeto `matricula` do evento é montado a partir de um estado anterior ao commit da alteração, ou a data da matrícula é lida de outra tabela que ainda não havia sido atualizada. Como os demais campos vêm corretos, não parece ser race geral do disparo.
+
+**Impacto:** quando `matricula_alterada` passar a ser aplicado (hoje o handler só loga — ver `integracao-infra.md`), este campo **não pode** ser espelhado do payload: teria gravado 01/08 e jogado a matrícula para a competência de agosto. No caso real, quem consertou foi a própria Kailane, à mão, 1h19 depois (`audit_log`, origem `manual`). Correção de data para o mês anterior é justamente o caso que mexe em fechamento já publicado — foi o que obrigou a retificação manual do relatório de julho da Barra.
+
+**Workaround no nosso lado:** para alteração de data, extrair o valor de `alteracao.descricao` ou reconsultar `GET /matriculas` antes de gravar — nunca confiar em `matricula.data_matricula` nesse evento.
+
+**Solicitação ideal (Emusys):** enviar em `matricula.data_matricula` o valor **já alterado**, coerente com `alteracao.descricao` (como o evento faz com curso, turma, disciplina e datas de aula). Idealmente, expor a alteração também de forma estruturada (`alteracao.campo`, `alteracao.valor_anterior`, `alteracao.valor_novo`) em vez de só o HTML da descrição.
+
+---
+
 ## Resolvidos (histórico)
 
 - **✅ 2026-07-21** — Webhook fan-out (mesmo evento → 2+ URLs). Era de 2026-07-07: na época o observador (`debug-webhook-emusys-observador`, grava payload bruto em `automacao_log` `workflow_id='debug-webhook-emusys-observador'`) só recebia `aula_cancelada` — evento sem webhook n8n — porque o Emusys mandava cada evento para uma única URL. **O Emusys resolveu**: verificado ao vivo 21/07, o observador agora recebe `lead_criado`/`lead_editado`/`boleto_pix_pago` **em paralelo** ao n8n (69 eventos só no dia 21/07). Fan-out do mesmo evento p/ múltiplos destinos agora funciona → dá pra observar/testar um novo destino sem cutover.

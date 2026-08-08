@@ -7,7 +7,7 @@
 - [dominio-comercial.md](dominio-comercial.md) — Pipeline comercial, leads, funil, etapas, cards de entrada
 - [dominio-alunos.md](dominio-alunos.md) — Alunos, matriculas, renovacoes, evasoes, presenca
 - [dominio-operacional.md](dominio-operacional.md) — Professores (schema multi-unidade + sync), turmas, salas, metas, lojinha, administrativo
-- [integracao-infra.md](integracao-infra.md) — Edge functions, pg_cron, WhatsApp CRM, UAZAPI, Gemini AI
+- [integracao-infra.md](integracao-infra.md) — Edge functions, pg_cron, WhatsApp CRM, UAZAPI, Gemini AI, deploy do frontend (Vercel)
 - [emusys-api.md](emusys-api.md) — API Emusys (tokens, endpoints, convenções, webhooks)
 - [chatwoot.md](chatwoot.md) — Chatwoot CRM (inboxes, agentes, labels, endpoints, filtros, quirks de timezone)
 - [modulo-saude-automacoes.md](modulo-saude-automacoes.md) — Monitoramento de webhooks Emusys (edge auditor, helper invariantes, automacao_log/invariantes, frontend)

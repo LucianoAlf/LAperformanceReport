@@ -13,8 +13,9 @@ import {
   FALLBACK_VALORIZACAO,
   FALLBACK_EVITE,
   FALLBACK_COBRAR,
-  VALORES_NOMES,
-  VALORES_FRASES,
+  COR_PADRAO,
+  nomeDoValor,
+  fraseDoValor,
   corDoPerfil,
   perfilPrimario,
   perfilSecundario,
@@ -72,7 +73,7 @@ export function FichaColaborador({ colaboradorId, onVoltar }: FichaColaboradorPr
 // ---------------------------------------------------------------------------
 function FichaConteudo({ ficha, onVoltar }: { ficha: FichaType; onVoltar: () => void }) {
   const nome = ficha.apelido || ficha.nome;
-  const cor = corDoPerfil(ficha.temperamento_codinome) || '#5c7093';
+  const cor = corDoPerfil(ficha.temperamento_codinome) || COR_PADRAO;
   const primKey = perfilPrimario(ficha.temperamento_codinome);
   const secKey = perfilSecundario(ficha.temperamento_codinome);
   const valPrim = valorizacaoPrimaria(ficha.valorizacao_codinome);
@@ -563,17 +564,20 @@ function ValoresCard({
   secundario: string | null;
   sacrificado: string | null;
 }) {
-  const primNome = VALORES_NOMES[primario] || primario;
-  const secNome = secundario ? VALORES_NOMES[secundario] || secundario : '';
-  const sacrNome = sacrificado ? VALORES_NOMES[sacrificado] || sacrificado : '';
-  const primFrase = VALORES_FRASES[primario] || '';
-  const secFrase = secundario ? VALORES_FRASES[secundario] || '' : '';
+  // Blindagem: chave fora dos mapas (CORAGEM/EMPATIA/EXCELENCIA/PAIXAO) mostra
+  // fallback em vez de derrubar o bloco — mesmo padrão dos FALLBACK_* do perfil.
+  const corSegura = cor || COR_PADRAO;
+  const primNome = nomeDoValor(primario);
+  const secNome = nomeDoValor(secundario);
+  const sacrNome = nomeDoValor(sacrificado);
+  const primFrase = fraseDoValor(primario);
+  const secFrase = fraseDoValor(secundario);
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
       <h3
         className="text-xs font-bold uppercase tracking-wider mb-4"
-        style={{ color: cor, fontFamily: '"Space Grotesk", sans-serif' }}
+        style={{ color: corSegura, fontFamily: '"Space Grotesk", sans-serif' }}
       >
         O que ela prioriza
       </h3>
@@ -582,7 +586,7 @@ function ValoresCard({
       <div className="flex gap-3 items-start py-2">
         <span
           className="text-xs font-bold pt-0.5 w-14 flex-none tracking-wider"
-          style={{ fontFamily: '"Space Grotesk", sans-serif', color }}
+          style={{ fontFamily: '"Space Grotesk", sans-serif', color: corSegura }}
         >
           1º
         </span>

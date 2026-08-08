@@ -69,6 +69,10 @@ export interface HealthScoreV3ProfessorPerformance {
   publicado: boolean;
   motivoBloqueio: string | null;
   regraVersaoSnapshot: string;
+  retratoCalculadoEm: string | null;
+  retratoExecucaoId: string | null;
+  retratoEstado: string | null;
+  retratoDefasagemMinutos: number | null;
   metrics: Map<HealthMetricKeyV3, HealthScoreV3PerformanceMetric>;
 }
 
@@ -231,6 +235,10 @@ export function buildHealthScoreV3MissingPerformance({
     publicado: false,
     motivoBloqueio: 'fonte_canonica_indisponivel',
     regraVersaoSnapshot: 'health_score_v3_evidencia_v1',
+    retratoCalculadoEm: null,
+    retratoExecucaoId: null,
+    retratoEstado: null,
+    retratoDefasagemMinutos: null,
     metrics: new Map(
       HEALTH_SCORE_V3_METRIC_KEYS.map((metrica) => [metrica, buildMissingMetric(metrica)]),
     ),
@@ -477,6 +485,10 @@ export function normalizeHealthScoreV3PerformanceRows(
         publicado: row.publicado === true,
         motivoBloqueio: row.motivo_bloqueio ? String(row.motivo_bloqueio) : null,
         regraVersaoSnapshot: String(row.regra_versao_snapshot || ''),
+        retratoCalculadoEm: row.retrato_calculado_em ? String(row.retrato_calculado_em) : null,
+        retratoExecucaoId: row.retrato_execucao_id ? String(row.retrato_execucao_id) : null,
+        retratoEstado: row.retrato_estado ? String(row.retrato_estado) : null,
+        retratoDefasagemMinutos: asNullableNumber(row.retrato_defasagem_minutos),
         metrics: new Map(),
       };
       snapshots.set(professorId, snapshot);

@@ -1,0 +1,12 @@
+{
+  // Config usada só pelo check de CI (.github/workflows/typecheck-refs.yml).
+  // Escopo: código de aplicação em src/. Fora: scripts/ (tem .js que nem parseia)
+  // e os testes Deno, que usam o global `Deno` e não entram no bundle do browser.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "noEmit": true
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}
