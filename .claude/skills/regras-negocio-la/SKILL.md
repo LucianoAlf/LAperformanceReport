@@ -42,26 +42,29 @@ risk: low
 
 ### 2. Quem NUNCA entra em "Pagantes"
 - 📋 `bolsista_integral`
-- ✅ `bolsista_parcial` — confirmado pelo Alf: NÃO conta como pagante (P5)
+- ✅ `bolsista_parcial` — confirmado pelo Alf e no banco (`conta_como_pagante = false`): NÃO conta como pagante (P5)
 - 📋 `nao_pagante`
-- 📋 `is_segundo_curso` (nível pessoa — evita duplicar)
+- 📋 `is_segundo_curso` (**só para não duplicar a pessoa no denominador** — ver aviso abaixo)
 - 📋 `cursos.is_projeto_banda = true`
-- � `cursos.nome` contendo "canto coral" — legado temporário; canônica é `cursos.is_coral = true` (P4)
-- 📋 **Regra frontend (TabGestao):** `conta_como_pagante=true` **E** `valor_parcela > 0`.
-- 🚫 **View 20260531 usa `COUNT(*)` (linhas) em vez de `COUNT(DISTINCT nome)` (pessoas)** → possível bug.
+- 📋 Canto coral (atividade extra, igual banda). ⚠️ `cursos.is_coral` **nunca foi criada** — hoje o filtro é por nome, com 4 critérios divergentes (ver `docs/REGRAS-DE-NEGOCIO.md` §14/P1)
+- 📋 Trancado **não** conta como ativo nem como pagante
+- ⚠️ **NÃO confundir:** o segundo curso sai do **denominador** (para não duplicar a pessoa), mas **ENTRA no numerador** do MRR e **eleva o ticket médio** (`tipos_matricula.SEGUNDO_CURSO.entra_ticket_medio = true`).
 
 ### 3. Evasão = Cancelamento + Não Renovação
 - 📋 `movimentacoes_admin.tipo IN ('evasao', 'nao_renovacao')`
-- 📋 **Aviso prévio NÃO é evasão.**
+- ✅ **Aviso prévio NÃO é evasão** — cobre o mês vigente do aviso + o seguinte (2 meses). Usar a competência da **saída real**.
 - 📋 **Trancamento NÃO é evasão.**
+- ✅ **Transferência interna entre unidades NÃO é evasão nem churn global.**
 - 📋 **Deduplicação:** banco usa `DISTINCT ON (nome, unidade, ano, mes)`; frontend NÃO deduplica.
-- 🚫 **NÃO usar `evasoes_v2`** — tabela desatualizada. Usar `movimentacoes_admin`.
+- ✅ Movimentações de **atividade extra** (banda, canto coral, power kids, minha banda, garageband, percussion kids) ficam fora da retenção — função canônica `is_atividade_extra_curso`.
+- 🚫 **As tabelas `evasoes`, `renovacoes` e `evasoes_v2` não são fonte.** `evasoes` e `renovacoes` **nem existem mais** no banco (2026-08-08). Usar `movimentacoes_admin`.
 
 ### 4. Aulas Experimentais Contam Quando São FEITAS
 - 📋 `experimentais_realizadas` = `status IN ('experimental_realizada', 'matriculado')`.
-- 📋 `experimentais_agendadas` inclui também `experimental_agendada`.
+- 📋 `experimentais_agendadas` = todas as experimentais do período **não canceladas**.
 - 📋 **NUNCA contar pela data de agendamento.**
-- ❓ **Banco filtra por `data_contato` em vez de `data_experimental_realizada`** — pendente correção.
+- ✅ **Resolvido em 2026-08-08:** o canônico `get_kpis_comercial_canonicos_v2` conta pela **`data_experimental`**. A pendência antiga valia para `vw_kpis_gestao_mensal`, que não é o caminho canônico.
+- 📋 **Cancelamento sempre prevalece.** Aula futura vem do Emusys com `presenca='ausente'` por padrão — antes do início, a situação é `agendada`, não falta.
 
 ### 5. Kids / School (Classificação)
 - 📋 **Base = mesma de "Total Alunos Ativos"** (pessoas, exclui 2º curso).
@@ -73,6 +76,13 @@ risk: low
 ### 6. Ticket Médio Passaporte
 - 📋 `SUM(valor_passaporte) / COUNT(*) WHERE valor_passaporte > 0`
 - 📋 Matrículas com `valor_passaporte = 0` (re-matrícula, bolsista) **NÃO entram**.
+- 📋 O agrupamento por pessoa acontece **antes** da divisão: 2º curso soma no numerador mas não cria outro denominador.
+
+### 6b. Ticket Médio (mensalidade) — não confundir com o do passaporte
+- ✅ `soma das parcelas de TODOS os cursos dos alunos pagantes / alunos pagantes únicos`
+- ✅ Segundo curso **soma** no numerador e a pessoa conta **1×** → o 2º curso **eleva** o ticket.
+- 🚫 Nunca `AVG(valor_parcela)` por linha.
+- ⚠️ Refinamento validado (Alf 07/07/2026) e **não implementado**: o numerador deve vir da **fatura da competência**, não de `alunos.valor_parcela`.
 
 ### 7. Sync de Presença Ignora Status
 - 📋 O sync do Emusys casa aula→aluno **só por nome+curso**, não olha `status`.
@@ -93,8 +103,8 @@ risk: low
 ### ✅ VALIDADAS PELO ALF
 | Métrica | Fórmula |
 |---------|---------|
-| Total Alunos Ativos | `COUNT(DISTINCT nome) WHERE status IN ('ativo','trancado') AND is_segundo_curso=false` |
-| Matrículas Ativas | `COUNT(*) WHERE status IN ('ativo','trancado')` (inclui 1º, 2º, banda) |
+| Total Alunos Ativos | Pessoas com ≥1 matrícula **acadêmica** e `entra_base_ativa=true`. **Trancado NÃO conta**; **só banda ou só coral NÃO conta** |
+| Matrículas Ativas | `COUNT(*)` de vínculos/registros — inclui 1º curso, 2º curso, banda, coral e bolsistas. **Base diferente de "Alunos Ativos" (pessoas), por isso é sempre maior. Não tente reconciliar as duas.** |
 | Evasão | `movimentacoes_admin.tipo IN ('evasao', 'nao_renovacao')` |
 | Aviso Prévio | NÃO é evasão |
 | Reajuste Médio | `AVG((novo - anterior) / anterior * 100) WHERE novo > anterior AND anterior > 0` |
@@ -110,7 +120,7 @@ risk: low
 ### 📋 INFERIDAS DO CÓDIGO ATUAL
 | Métrica | Fórmula | Nota |
 |---------|---------|------|
-| Taxa Renovação | `renovacoes / (renovacoes + nao_renovacoes)` | Código atual, mas canônico diz `+ aviso_previo` |
+| Taxa Renovação | ✅ `renovacoes / (renovacoes + nao_renovacoes) * 100` | **Resolvida em 2026-08-08:** aviso prévio NÃO entra no denominador |
 | MRR | `SUM(valor_parcela) WHERE conta_como_pagante AND status <> 'sem_parcela'` | View 20260531 |
 
 ### ❓ PENDENTES DE VALIDAÇÃO
@@ -122,7 +132,7 @@ risk: low
 | Métrica | Fórmula Legada | Por que não usar |
 |---------|----------------|------------------|
 | Churn | `evasoes / total_alunos_ativos * 100` | Doc `KPIs_LA_MUSIC_PERFORMANCE_REPORT.md` desatualizado |
-| Churn | `evasoes / (alunos_inicio + novas) * 100` | Canônico não confirmado se é esta |
+| Churn | `evasoes / (alunos_inicio + novas) * 100` | ❌ Descartada em 2026-08-08. A canônica é `evasoes / alunos_pagantes * 100` |
 | Renovacao | `renovacoes / total_contratos` | Contrato antigo, não usa aviso_previo |
 | Evasões | `FROM evasoes_v2` | Tabela desatualizada, usar `movimentacoes_admin` |
 | Ticket | `AVG(valor_parcela) FILTER (WHERE tipo_aluno NOT IN (...))` | View antiga (fase3), não usa `tipos_matricula` |
@@ -134,7 +144,8 @@ risk: low
 | Questão | Resposta | Status |
 |---------|----------|--------|
 | `is_segundo_curso` inclui banda? | **Não.** Banda é `is_projeto_banda=true`. | ✅ |
-| Trancado conta como ativo? | **Sim** para "Total Alunos Ativos". **Não** para carteira do professor. | ✅ |
+| Trancado conta como ativo? | **Não** — nem em "Total Alunos Ativos", nem na carteira do professor. Corrigido em 2026-08-08 (regra Emusys v1.3.1). Aparece só em "Trancados agora". | ✅ |
+| Quem só faz banda/coral é aluno ativo? | **Não.** São atividades extras — exigem curso regular. Contam em `matriculas_banda`/`matriculas_coral`. | ✅ |
 | Matrícula direta entra no funil? | **Sim**, desde 2026-05-25 (fonte = `alunos`, não `leads`). | ✅ |
 | Lead arquivado conta no funil? | **Não**. `arquivado=true` é excluído. | ✅ |
 | Re-matrícula = nova matrícula? | **Sim** (cria nova linha em `alunos` se não existia matrícula viva). | ✅ |

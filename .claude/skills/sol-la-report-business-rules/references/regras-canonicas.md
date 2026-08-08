@@ -27,8 +27,9 @@ Classificação:
 ✅ Regra validada pelo Alf em 2026-06-08:
 
 - Base = **pessoas/alunos únicos**, não matrículas/vínculos.
-- Inclui alunos com `status IN ('ativo', 'trancado')`.
-- Inclui pagantes, bolsistas integrais, bolsistas parciais e alunos que estão só em banda/projeto.
+- Inclui pagantes, bolsistas integrais e bolsistas parciais.
+- ✅ **Correção validada em 2026-08-08:** quem tem **apenas banda ou apenas coral NÃO conta como aluno ativo**. Banda e coral são atividades extras — para fazê-las o aluno precisa ser aluno de um curso regular. Eles contam em cards próprios (`matriculas_banda`, `matriculas_coral`). O texto anterior ("inclui alunos que estão só em banda/projeto") contrariava a implementação viva e foi retirado.
+- ⚠️ **Trancado NÃO conta como ativo.** A regra viva (`vw_alunos_estado_operacional_v131`) tira trancado da base ativa; o texto anterior incluía `status = 'trancado'` e está superado desde a v1.3.1 do Emusys (29/07/2026).
 - Segundo curso e múltiplas matrículas do mesmo aluno **não duplicam** aluno ativo.
 - Kids/School deve usar a mesma base de alunos ativos; `Kids + School + Sem classificação` deve fechar com `alunos_ativos`.
 - 🚫 `COUNT(*)` sobre linhas de `alunos` para ativos/pagantes é bug quando duplica pessoa por matrícula, segundo curso ou vínculo adicional.
@@ -110,7 +111,8 @@ Implica buscar a fatura por competência (via `/faturas`, idealmente sincronizad
 - 📋 Para análise por unidade, transferência pode aparecer como saída operacional da unidade origem e entrada na unidade destino, mas deve ficar separada de evasão/não renovação.
 - 📋 Para análise global LA Music, transferência interna não entra no numerador de churn.
 - ✅ Aviso prévio não é evasão na competência em que foi avisado.
-- ✅ Regra operacional validada pelo Alf em 2026-06-07: quando o aviso prévio é dado em maio, o aluno ainda cumpre/assiste maio, junho e julho; se não houver reversão, a saída real é julho. Portanto, aviso prévio de maio não entra como evasão/churn de maio. Para KPI, usar a competência da saída real/encerramento, não a competência do aviso.
+- ✅ **Regra corrigida em 2026-08-08 (Alf):** o aviso prévio cobre o **mês vigente do aviso + o mês seguinte** — 2 meses. Exemplo: aviso dado em **agosto** → o aluno estuda **agosto e setembro**; a saída real é no fim de setembro. Para KPI, usar a competência da saída real/encerramento, não a do aviso.
+- 🚫 A versão anterior deste arquivo dizia "aviso em maio → cumpre maio, junho e julho" (3 meses). Está **errada** e foi corrigida.
 - 📋 Trancamento não é evasão.
 - 🚫 Movimentação por nome, sem vínculo confiável por `aluno_id`, `matricula_id` ou `emusys_matricula_id`, não autoriza classificar evasão.
 - 🚫 Não usar `evasoes_v2` como fonte viva.
@@ -125,12 +127,17 @@ evasoes / alunos_pagantes * 100
 
 ### Taxa de renovação
 
-❓ Ainda pendente:
+✅ **Resolvida em 2026-08-08 (Alf):**
 
-- código atual: `renovacoes / (renovacoes + nao_renovacoes)`;
-- possível canônico: `renovacoes / (renovacoes + nao_renovacoes + aviso_previo)`.
+```sql
+renovacoes / (renovacoes + nao_renovacoes) * 100
+```
 
-Não alterar sem validação do Alf.
+- **Aviso prévio NÃO entra no denominador** — aviso prévio e taxa de renovação são indicadores distintos.
+- Confere com a implementação viva (`vw_kpis_gestao_mensal`, `AdministrativoPage`).
+- Renovação só conta se **confirmada** (exclui `pendente_validacao`).
+- Movimentações de atividade extra (banda/coral) ficam fora, via `is_movimentacao_admin_retencao_valida`.
+- Meta: `>= 80%`.
 
 ### Renovação antecipada
 
@@ -168,9 +175,18 @@ Não alterar sem validação do Alf.
 
 ### Canto Coral
 
-✅ Regra validada: criar/usar `cursos.is_coral`.
+✅ **Regra de negócio (Alf, 2026-08-08):** Canto Coral é **atividade extra**, igual banda — não é cobrado e **não conta como aluno pagante**.
 
-🚫 Filtro por nome (`ILIKE '%canto coral%'`) é legado frágil e deve ser substituído.
+⚠️ **A coluna `cursos.is_coral` NUNCA foi criada** (verificado no banco em 2026-08-08). A decisão P4 segue não implementada, e hoje convivem 4 critérios por nome:
+
+| Onde | Critério vigente |
+|---|---|
+| KPI de alunos (`get_kpis_alunos_admin_operacional_impl_v2`) | `nome LIKE '%coral%'` |
+| Retenção (`is_atividade_extra_curso`) | `nome ILIKE '%canto coral%'` |
+| `vw_kpis_gestao_mensal` | `nome ILIKE '%canto coral%'` |
+| Frontend (8 arquivos) | `includes('canto coral')` |
+
+Efeito: um curso "Coral Infantil" **sai** da contagem de alunos e **entra** na de retenção. Padronização pendente — ver `docs/REGRAS-DE-NEGOCIO.md` §14 (P1).
 
 ---
 
@@ -202,7 +218,7 @@ Implicações:
 - 📋 A experimental conta quando é realizada, não quando é agendada.
 - 📋 `experimentais_realizadas`: status `experimental_realizada` ou `matriculado`.
 - 📋 `experimentais_agendadas`: inclui `experimental_agendada`, `experimental_realizada`, `matriculado`.
-- ❓ Banco usando `data_contato` em vez de `data_experimental_realizada` é pendência/possível bug.
+- ✅ **Resolvido em 2026-08-08:** o caminho canônico `get_kpis_comercial_canonicos_v2` conta pela **`data_experimental`**, não por `data_contato`. A pendência antiga valia para `vw_kpis_gestao_mensal`, que agrupa por `data_contato` e não é o caminho canônico.
 
 ### Conversão geral do funil
 

@@ -1,6 +1,9 @@
 # Regras de Negócio Canônicas — LA Music Performance Report
 
-> **Versão:** 2026-06-04 (auditada)  
+> ⚠️ **Consolidação de 2026-08-08:** este arquivo foi auditado contra o banco de produção. As regras marcadas "corrigido em 2026-08-08" tiveram o texto anterior invalidado por evidência no banco.
+> **Documento único e completo (todos os âmbitos):** [`docs/REGRAS-DE-NEGOCIO.md`](../../docs/REGRAS-DE-NEGOCIO.md).
+>
+> **Versão:** 2026-06-04 (auditada) · revisada em 2026-08-08  
 > **Uso:** Referência obrigatória para qualquer agente IA ao gerar código, queries, análises ou respostas.  
 > **Princípio de Classificação:**
 > - ✅ **VALIDADA PELO ALF** — confirmada pelo Alf, fonte da verdade
@@ -67,17 +70,22 @@
 
 ### 2.1 Total Alunos Ativos
 - 📋 **Base = PESSOAS**, não matrículas.
-- 📋 Inclui `ativo` + `trancado`.
+- ✅ **Corrigido em 2026-08-08 (validação no banco + Alf):** a base é a pessoa com pelo menos uma matrícula **acadêmica** com `entra_base_ativa = true`.
+  - **Trancado NÃO conta como ativo.** (O texto anterior dizia "inclui `ativo` + `trancado`" — superado pela v1.3.1 do Emusys, 29/07/2026, que tirou trancamento vigente de "ativa".)
+  - **Quem tem só banda ou só coral NÃO conta como ativo.** Banda e coral são atividades extras: para fazê-las o aluno precisa ser aluno de um curso regular. Contam em `matriculas_banda`/`matriculas_coral`. (O texto anterior dizia o contrário.)
+  - Medido em 2026-08-08: 4 pessoas em CG na condição "só atividade extra" — 1 regular trancado com banda ativa + 3 bolsistas integrais de banda/Power Kids. Nenhuma é erro de cadastro.
 - 📋 **Exclui `is_segundo_curso = true`** para não duplicar pessoa.
-- 📋 Inclui banda/projeto (a pessoa está ativa, a banda é uma das matrículas dela).
-- 🚫 **View 20260531 usa `COUNT(*)` em vez de `COUNT(DISTINCT nome)`** → possível bug.
-- 🚫 **DashboardPage fallback usa `filter(!is_segundo_curso).length` sem DISTINCT** → possível bug.
+- 📋 Dedup pela identidade da pessoa. ⚠️ Convivem duas: KPI de alunos usa identidade **Emusys** (`emusys_student_id`, fallback `local:<id>`); o financeiro ainda usa `nome + unidade_id`.
+- 📋 `Kids + School + Sem classificação` deve fechar com `alunos_ativos`.
+- ⚠️ **View `vw_kpis_gestao_mensal` usa `COUNT(*)`** — mas ela **não é o caminho canônico**. O caminho vivo é `get_kpis_alunos_admin_operacional`, que conta por pessoa. A view só alimenta `get_dados_retencao_ia`.
 
 ### 2.2 Alunos Pagantes
-- 📋 Inclui `ativo` + `trancado` (se pagante).
-- 📋 Exclui: `bolsista_integral`, `bolsista_parcial`, `nao_pagante`, `is_segundo_curso`, banda/projeto, coral.
-- 📋 No frontend (TabGestao fallback): `conta_como_pagante = true` **E** `valor_parcela > 0`.
-- 🚫 **View 20260531 conta `COUNT(*)` (linhas) em vez de `COUNT(DISTINCT nome)` (pessoas)** → possível bug.
+- ✅ **Por PESSOA.** Aluno com múltiplos cursos conta como **1 aluno pagante**.
+- ✅ **Corrigido em 2026-08-08:** trancado **não** entra (o texto anterior incluía).
+- 📋 Exclui do **denominador**: `BOLSISTA_INT`, `BOLSISTA_PARC`, `nao_pagante`, banda/projeto, coral, e a pessoa não é duplicada pelo `is_segundo_curso`.
+- ⚠️ **Cuidado com a redação antiga:** `is_segundo_curso` é excluído para **não duplicar a pessoa no denominador**. Isso **não** significa que o segundo curso saia do numerador financeiro — ele **entra** no MRR e **eleva** o ticket médio (ver 2.13 e `tipos_matricula.SEGUNDO_CURSO.entra_ticket_medio = true`).
+- 📋 Critério vivo: `entra_base_ativa` + matrícula acadêmica + `entra_ticket_medio = true` + `valor_parcela > 0` + tipo fora de (`BOLSISTA_INT`, `BOLSISTA_PARC`, `BANDA`).
+- 📋 **Inadimplente conta como pagante** — é base faturável do mês, não "quem pagou".
 
 ### 2.3 Matrículas Ativas
 - 📋 **Base = REGISTROS** (linhas em `alunos`).
@@ -102,14 +110,19 @@
 - 📋 Aviso prévio NÃO é evasão.
 - 📋 Trancamento NÃO é evasão.
 - 📋 **Deduplicação:** banco usa `DISTINCT ON (nome, unidade, ano, mes)`, frontend NÃO deduplica.
-- 🚫 **View `vw_kpis_retencao_mensal` ainda lê `evasoes_v2` (tabela desatualizada)** — não usar.
+- ✅ **Corrigido em 2026-08-08:** `vw_kpis_retencao_mensal` **já não lê `evasoes_v2`** — usa `movimentacoes_admin`. O alerta anterior estava obsoleto.
+- 🚫 **As tabelas `evasoes` e `renovacoes` NÃO EXISTEM MAIS** no banco (verificado 2026-08-08). Qualquer código que as consulte está quebrado — é o caso de `useEvasoesData.ts:30` e `FormEvasao.tsx:187`.
+- ✅ Movimentações de **atividade extra** (banda, canto coral, power kids, minha banda, garageband, percussion kids) são excluídas da retenção pela função canônica `is_movimentacao_admin_retencao_valida` → `is_atividade_extra_curso`.
+- ✅ **Transferência interna entre unidades não é evasão nem churn global.**
 
 ### 2.7 Taxa de Renovação
-- ❓ **Fórmula no canônico:** `renovacoes / (renovacoes + nao_renovacoes + aviso_previo) * 100`
-- ❓ **Fórmula na view 20260531:** `renovacoes_realizadas / (renovacoes_realizadas + nao_renovacoes)` — **aviso_previo EXCLUÍDO**
-- ❓ **Fórmula no frontend:** mesma da view 20260531 (sem aviso_previo no denominador)
-- 🚫 **Documento `KPIs_LA_MUSIC_PERFORMANCE_REPORT.md` (legado):** `renovacoes / total_contratos` — contrato antigo, não usar.
-- **PENDENTE:** Confirmar com Alf se aviso_previo entra no denominador.
+- ✅ **RESOLVIDO em 2026-08-08 (Alf):** `renovacoes / (renovacoes + nao_renovacoes) * 100`.
+- ✅ **Aviso prévio NÃO entra no denominador** — aviso prévio e taxa de renovação são indicadores distintos.
+- 📋 Renovação só conta se **confirmada** (exclui `pendente_validacao`).
+- 📋 Movimentações de atividade extra ficam fora, via `is_movimentacao_admin_retencao_valida`.
+- 📋 Por professor: `renovacoes / contratos_a_vencer * 100`.
+- 🚫 `renovacoes / total_alunos` ou `/ base inteira` — legado, não usar.
+- **Meta:** `>= 80%`.
 
 ### 2.8 Reajuste Médio
 - 📋 **Apenas aumentos positivos entram:** `novo > anterior` E `anterior > 0`.
@@ -172,7 +185,9 @@
 - 📋 `experimentais_realizadas` = leads com `status IN ('experimental_realizada', 'matriculado')`.
 - 📋 `experimentais_agendadas` = leads com `status IN ('experimental_agendada', 'experimental_realizada', 'matriculado')`.
 - 📋 `faltaram = agendadas - realizadas`.
-- ❓ **Banco filtra por `data_contato` (data do lead), não por `data_experimental_realizada`** — aula agendada em Maio e feita em Junho conta em Maio. Pendente: usar campo correto.
+- ✅ **RESOLVIDO em 2026-08-08:** o caminho canônico `get_kpis_comercial_canonicos_v2` conta pela **`data_experimental`**, não por `data_contato`. A pendência antiga valia para `vw_kpis_gestao_mensal`, que não é o caminho canônico.
+- 📋 O canônico publica duas medidas de "realizada": `..._presenca_confirmada` (presença individual no Emusys) e `..._status_operacional` (`status IN ('experimental_realizada','convertido')`). Agendadas = todas as do período **não canceladas**.
+- 📋 **Cancelamento sempre prevalece.** Antes do início da aula (BRT), mesmo com `presenca='ausente'` vindo do Emusys, a situação é `agendada` — o Emusys marca aula futura como ausente por padrão.
 
 ### 3.3 Taxa Show-Up
 - 📋 `taxa_showup = experimentais_realizadas / experimentais_agendadas * 100`
@@ -232,7 +247,7 @@
 | R2 | Deduplicação de evasões | 📋 | Existe só no banco (DISTINCT ON), não no frontend. |
 | R3 | Chave única de pessoa | ❓ | View 20260531 usa `nome + nasc + unidade`; view V5 usa apenas `nome`. Divergente. |
 | R4 | Banda como projeto | ✅ | `is_projeto_banda` exclui de turmas/carteira/score. |
-| R5 | Canto coral excluído | ✅ | Canônica: usar `cursos.is_coral = true`. 🚫 Legado: filtros por nome (`ILIKE '%canto coral%'`) são frágeis e devem ser substituídos. |
+| R5 | Canto coral excluído | ⚠️ | Regra de negócio ✅: coral é **atividade extra**, igual banda — não cobrado, não pagante. Implementação ⚠️: **`cursos.is_coral` NUNCA foi criada** (verificado no banco 2026-08-08); convivem 4 filtros por nome divergentes. Ver `docs/REGRAS-DE-NEGOCIO.md` §14/P1. |
 | R6 | Status "sem_parcela" | 📋 | Excluído do MRR. Passaporte não entra no MRR mensal. |
 | R7 | Assimetria experimental/matricula | 🚫 | Taxa >100% é bug. Canônica: somente matrículas com experimental realizada pelo professor entram no numerador (P7). |
 | R8 | Trimestre para professores | ✅ | T1/T2/T3/NC definidos. |
@@ -262,8 +277,13 @@
 | # | Pendência | Impacto | Onde Usada |
 |---|-----------|---------|------------|
 | ❓ P8/P11 | **Snapshot `dados_mensais`:** Decisão de negócio: histórico mensal deve ser preservado; recalcular mês passado não pode sobrescrever sem audit trail. Próximo passo: SELECT-only para confirmar estrutura, depois migration de congelamento + audit trail. | CRÍTICO | Automação, histórico, arquitetura de dados |
-| ❓ | **Taxa de Renovação:** Confirmar se `aviso_previo` entra no denominador | MÉDIO | Retenção |
 | ❓ | **Taxa Conversão Geral do funil:** `novas / total_leads` (código) vs `novas / leads_com_exp` (regra #16) | MÉDIO | Funil |
+| ⚠️ | **`cursos.is_coral` nunca foi criada** (P4 não implementada). 4 critérios por nome divergentes convivem — "Coral Infantil" sai da contagem de alunos e entra na de retenção | MÉDIO | Alunos, retenção |
+| ⚠️ | **Ticket médio pela fatura da competência** (Alf 07/07/2026): validado, **não implementado** em nenhum dos 4 pontos de cálculo | ALTO | Ticket, LTV |
+| ⚠️ | **Duas identidades de pessoa** convivendo: KPI de alunos usa `emusys_student_id`; financeiro usa `nome + unidade_id` | MÉDIO | Alunos × Financeiro |
+| ⚠️ | **Health Score:** `docs/METRICAS.md` diz peso 0 para "Número de alunos"; config ativa no banco tem peso 10. Não tratado ainda | MÉDIO | Professores |
+| ⚠️ | **2 configs de Health Score V3 com `status='ativa'`** (20/07 e 27/07). Pesos idênticos, sem impacto numérico hoje | BAIXO | Professores |
+| 🐛 | **`useEvasoesData.ts:30` consulta a tabela `evasoes`, que não existe** — quebra 8 componentes de Retenção. Tem `churnMedio: 4.86` e `taxaRenovacao: 80` chumbados | ALTO | Retenção |
 
 ---
 

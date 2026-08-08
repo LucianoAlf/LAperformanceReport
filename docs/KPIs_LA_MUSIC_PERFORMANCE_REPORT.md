@@ -1,5 +1,18 @@
 # 📊 KPIs LA MUSIC - DOCUMENTAÇÃO COMPLETA
 
+> # 🚫 DOCUMENTO LEGADO — NÃO USAR COMO FONTE DE REGRA
+>
+> **Depreciado em 2026-08-08.** As fórmulas deste arquivo estão desatualizadas e várias
+> contradizem as regras canônicas validadas. Exemplos confirmados errados:
+> - Churn como `evasoes / total_alunos_ativos` → o correto é **`evasoes / alunos_pagantes × 100`**
+> - Inadimplência como `(previsto − realizado) / previsto` → o correto é **% de cabeças, `inadimplentes / alunos_pagantes × 100`**
+> - Taxa de renovação sobre `total_contratos` (base inteira) → o correto é **`renovacoes / (renovacoes + nao_renovacoes)`**
+> - Consultas em `evasoes` / `evasoes_v2` → essas tabelas **não são fonte**; `evasoes` nem existe mais
+>
+> **Fonte canônica atual:** [`docs/REGRAS-DE-NEGOCIO.md`](./REGRAS-DE-NEGOCIO.md)
+>
+> Mantido apenas como registro histórico.
+
 > **Versão:** 1.0  
 > **Data:** 18/01/2026  
 > **Projeto:** LA Music Performance Report 2026

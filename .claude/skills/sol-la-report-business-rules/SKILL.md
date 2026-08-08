@@ -103,6 +103,9 @@ Resumo rápido:
 
 - Churn: `evasoes / alunos_pagantes * 100`; transferência interna entre unidades não conta como evasão/churn global.
 - Inadimplência: `% cabeças = qtd_inadimplentes / alunos_pagantes * 100`.
+- Alunos ativos: só quem tem matrícula **acadêmica** ativa. Quem faz **só banda ou só coral não conta**; trancado também não.
+- Aviso prévio: cobre o **mês vigente do aviso + o seguinte** (2 meses). Não é evasão e **não entra no denominador da renovação**.
+- Taxa de renovação: `renovacoes / (renovacoes + nao_renovacoes) * 100`.
 - Ticket médio: soma/faturamento de todos os cursos dos alunos pagantes ÷ alunos pagantes por pessoa; segundo curso entra no numerador, mas não duplica o denominador; bolsista integral/parcial fora.
 - Canto Coral: usar `cursos.is_coral`; filtro por nome é legado.
 - Bolsista parcial: não conta como pagante e não entra no ticket médio.
@@ -119,8 +122,11 @@ Ainda não fechar como canônico final sem nova validação:
 
 - P8/P11 `dados_mensais`: SELECT-only liberado; migration v3 aprovada só como desenho técnico; produção travada.
 - Campo Grande/Maio 2026: fechamento histórico validado em 470 pagantes; não substituir por cálculo vivo atual sem auditoria forense e aprovação explícita.
-- Taxa de renovação: confirmar se `aviso_previo` entra no denominador.
 - Taxa de conversão geral do funil: `novas / total_leads` vs `novas / leads_com_exp`.
+- Critério técnico de Canto Coral: `cursos.is_coral` nunca foi criada; 4 filtros por nome divergentes convivem.
+- Ticket médio pela fatura da competência (Alf 07/07/2026): validado, **não implementado**.
+
+> Consolidação completa e validada contra o banco: **`docs/REGRAS-DE-NEGOCIO.md`** (2026-08-08).
 
 ---
 
