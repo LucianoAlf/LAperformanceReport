@@ -224,7 +224,11 @@ A migration ainda vale: antes o bloqueio existia igual, só que **mudo** — sem
 
 ---
 
-### 🔴 CP9 — 54% das experimentais sem pessoa canônica *(achado 09/08, não corrigido)*
+### CP9 — Resíduos de identidade das experimentais *(achado 09/08; escopo corrigido, ver bloco de correção)*
+
+> ⚠️ O título original deste checkpoint era **"54% das experimentais sem pessoa canônica"** e estava errado.
+> Os 54% eram o denominador funcionando (gente que fez experimental e não matriculou). O que sobra de verdade
+> está na tabela de nomes ao fim desta seção.
 
 **Consequência 1 — a conversão fica subestimada para todo mundo.** Sem pessoa canônica resolvida não dá para
 creditar a matrícula, então o **numerador** cai enquanto o denominador fica inteiro. A taxa de conversão de
@@ -333,11 +337,64 @@ de leitura: é uma métrica marcada como não publicável sendo publicada.
 
 </details>
 
-⚠️ **Duplicação de ingestão em `emusys_experimentais_raw`** (achada junto): Benjamin Duarte tem **139 linhas
-para 1 única aula, 1 data, 1 professor**, com 139 `raw_key` distintos; Daniel Barros, 162 linhas para 3
-aulas. O `raw_key` não deduplica. **A métrica não é contaminada** — a função faz `distinct on (evento_chave)`
-e colapsa (1.665 linhas raw → 196 experimentais) — mas a tabela raw tem lixo e qualquer consumidor que não
-deduplique vai errar feio.
+#### Os nomes reais (levantados 09/08 a pedido do Alf, para conferência no painel do Emusys)
+
+**A. Não existem do nosso lado — 3 pessoas, 4 eventos.** Conferidos por `emusys_student_id`, `emusys_lead_id`
+e por nome (sem acento, `like`) em `alunos` **e** em `leads`: **nenhum** casa. Não é falha de matching, é
+ausência de cadastro.
+
+| pessoa | unidade | data | professor | curso | ID no Emusys | telefone |
+|---|---|---|---|---|---|---|
+| **Júlia Corrêa Gomes Diniz** | Barra | 11/06 10:00 | Gabriel Santos Teixeira da Silva | Aula Experimental | `aluno:288` ⚠️ | resp. Nathalia dos Santos Corrêa Diniz — 5521240524356 |
+| **Manuela Fernandez Barbosa** | Barra | 31/07 17:00 | Isaque Mendes da Silva | Aula Experimental | `lead:7102` | 5521983091029 (resp. Johanna e Diego) |
+| **Manuela Fernandez Barbosa** | Barra | 31/07 17:30 | Matheus Lana da Silva | Aula Experimental | `lead:7102` | *(mesma pessoa, 2 instrumentos no mesmo dia)* |
+| **Samara Abreu Rodrigues** | Campo Grande | 03/06 19:00 | Matheus dos Santos Silva de Oliveira | Canto T | — (`id_lead=0`, sem `id_aluno`) | 5521981784943 |
+
+⚠️ **Júlia é o caso mais informativo:** o Emusys mandou `emusys_aluno_id = 288` e o `participante_chave` está
+gravado como `aluno:288`. **Nós temos o ID e não temos a pessoa** — `emusys_student_id` está preenchido em
+1.615 de 1.632 alunos, então a coluna é usada; simplesmente não há linha com 288 na Barra. Vale conferir no
+painel se é aluno de outra unidade, cadastro apagado, ou aluno que nunca foi criado no nosso lado.
+
+**B. Lead declarado convertido, sem matrícula nenhuma — 1 caso.** É o **único** furo que trava
+`apta_oficial` da conversão (`conversoes_declaradas_sem_matricula_canonica = 1`):
+
+| lead | unidade | experimental | professor | dados |
+|---|---|---|---|---|
+| **Ravi Marques Leone** | Barra | 05/06 17:00 | Gabriel Antony Alves de Araújo | `leads.id=9764`, `emusys_lead_id=6667`, `converteu=true`, `data_conversao=05/06`, `status='convertido'`, tel. 5521967843373, resp. Karine Marques da Silva |
+
+O lead está marcado como convertido desde 05/06 e **não existe nenhum aluno** com esse `lead_origem_id` nem
+com esse nome na Barra. Conferir no Emusys: Ravi matriculou? Se sim, a matrícula não chegou; se não, o lead
+foi marcado convertido por engano.
+
+**C. Os outros 10 "sem lead" não precisam de conferência.** Têm `aluno_id` resolvido (José Demétrio, Davi
+Guilherme, Heiton Fernando, Davi de Oliveira Azevedo, Luana Ferreira, Gael dos Santos ×2, Flávia Santiago,
+Vicente Gomes, Guilherme Ferreira Muniz). Falta só o **lead**, e o lead não entra no cálculo — o numerador
+usa `pessoa_chave`, que vem do aluno. É perda de rastreabilidade, não de número.
+
+#### ⚠️ A "duplicação" da raw tem causa exata e não é duplicação: é log append-only
+
+`emusys_experimentais_raw` tem **36.650 linhas para 323 eventos reais** (113,5 linhas por evento, 31 MB).
+Mas `snapshot_ativo = true` em exatamente **322** — o mecanismo de snapshot funciona.
+
+A causa está na composição da chave. Amostra do evento 824059 (Benjamin Duarte):
+
+```
+95553e96-…:824059:lead:8015:96d06c2c-0755-4391-980e-3d1a9e0f2275   ativo=true   02:55
+95553e96-…:824059:lead:8015:473c7844-2bfe-4313-8ee0-16bd554353d6   ativo=false  02:40
+95553e96-…:824059:lead:8015:2f5e4af3-d768-4533-b165-455bf1fdd20b   ativo=false  02:25
+95553e96-…:824059:lead:8015:dc83ed75-ca5d-41ea-8e55-6a788d0503f6   ativo=false  02:10
+```
+
+`raw_key = unidade : aula : participante : **snapshot_execucao_id**`. O UUID da execução está **dentro da
+chave**, então cada rodada do cron de 15 min gera uma chave nova e o upsert é impossível por construção.
+Os intervalos de 15 minutos são visíveis na coluna de horário.
+
+⚠️ **Corrigido o número que eu tinha dado:** eram 128 linhas para Benjamin (não 139) e 126 para Bernardo.
+
+**A métrica não é contaminada** — a função faz `distinct on (evento_chave)` e colapsa. Mas qualquer consumidor
+que leia a raw sem deduplicar (ou sem filtrar `snapshot_ativo`) erra por ~113×. Não precisa de conferência
+no Emusys; é decisão nossa se a chave passa a excluir o `snapshot_execucao_id` (com histórico em coluna
+separada) ou se fica como log.
 
 ### CP4 — Retenção: cruzamento com o Emusys **feito** (09/08); curadoria pendente
 
@@ -434,6 +491,97 @@ caminho, e também está `false`/`null` em 100%.
 mudança **localizada nessas duas linhas** mais a regra de casamento (aluno + data ±15d, já validada acima),
 não uma tubulação nova; ou (b) revisar a regra pós-corte para não depender de campo que ninguém alimenta.
 Enquanto nenhuma das duas, a retenção fica travada por construção.
+
+---
+
+#### ✅ CP8 parte 1 — resolvida em 09/08 (troca de professor não é evasão)
+
+Alf autorizou a regra: *"não é porque um aluno saiu de um professor e foi para outro que ele saiu da escola.
+Isso não é evasão e nem penaliza o professor."*
+
+⚠️ **Ao aplicar, o diagnóstico acima virou pela metade.** Eu tinha assumido que as 15 pendências pós-corte
+eram encerramentos reais esperando um motivo. **Não eram.** Abrindo as 15 uma a uma:
+
+- **15 de 15** têm `tipo_fim = 'troca_confirmada_transicao'`
+- **15 de 15** têm o aluno **ativo no Emusys** com outro professor
+- **0 de 15** têm qualquer linha em `movimentacoes_admin`
+
+Ou seja: ligar o cano **não resolveria nenhuma das 15**, porque não há motivo de saída para buscar — o aluno
+não saiu. A pendência não era falta de dado; era a regra cobrando motivo de saída de quem trocou de professor.
+
+**A separação já existia no dado e ninguém olhava.** Medido no ciclo, consolidado:
+
+| `tipo_fim` | penalizava | aluno segue ativo | com evasão registrada |
+|---|---|---|---|
+| `fim_jornada` | 92 | **0** | 43 |
+| `troca_confirmada_transicao` | 25 | 24 | **0** |
+| `troca_sustentada` | 25 | 23 | **0** |
+| `troca_confirmada_jornada` | 15 | 11 | **0** |
+| `troca_confirmada_cadeia_posterior` | 1 | 1 | **0** |
+| `fim_evidencia_historica` | 1 | 0 | 0 |
+
+A família `troca%` — 66 encerramentos — não tem **uma única** evasão registrada, e 59 têm o aluno ativo. A
+família `fim_jornada` não tem **um único** aluno ativo. Separação limpa.
+
+E a origem do rótulo é o próprio webhook de troca: `vw_professor_periodos_baseline_v3_sombra` sintetiza
+`troca_confirmada_transicao` quando o período está `ativo` na tabela-base e existe linha em
+`aluno_professor_transicoes`. O sistema **já sabia** que era troca de professor.
+
+**Aplicado** (migration `20260809180201`, via `pg_get_functiondef` + `replace` com guarda):
+`coalesce(pe.tipo_fim,'') not like 'troca%'` nos dois contadores — `encerramentos_penalizadores` e
+`encerramentos_pos_corte_pendentes`.
+
+| | antes | depois |
+|---|---|---|
+| encerramentos penalizadores | 159 | **93** |
+| pendências pós-corte | 15 | **0** |
+| retenção agregada do ciclo | 88,10% | **93,04%** |
+| vínculos em revisão | 17 | 17 *(é o CP4, não muda)* |
+
+⚠️ **Isto move um número exibido**, e move para cima: a inflação de ~4× que o CP4 já tinha detectado era
+exatamente isto. `valor_bruto` sobe porque 66 trocas de professor deixaram de contar como evasão.
+
+---
+
+#### 🔴 CP8 parte 2 — o bloqueio real: **a reconstrução não roda desde 18/07** *(achado 09/08)*
+
+Antes de ligar o cano, fui verificar se "zero saídas reais pós-corte" era a realidade ou atraso de
+materialização. **Era atraso.**
+
+```
+professor_periodos_reconstrucoes_v1 → última execução 2026-07-18, recorte até 2026-07-16
+cron.job com 'reconstru%' ou 'periodos-professor' → ZERO linhas
+```
+
+**Não existe cron para a reconstrução.** Ela é manual, rodou pela última vez em 18/07 e o recorte para em
+**16/07**. Tudo que aconteceu depois disso só aparece porque a *view* sintetiza o fim ao vivo a partir de
+`aluno_professor_transicoes` — e transição de professor é a **única** coisa que ela consegue sintetizar.
+
+O que está faltando na base, medido em `aluno_jornada_matricula_disciplina` (espelho do Emusys, atualizado
+hoje às 15:33):
+
+| | |
+|---|---|
+| saídas reais com última aula entre 17/07 e hoje, **não reconstruídas** | **27** |
+| vínculos novos com primeira aula entre 17/07 e hoje, **não reconstruídos** | **90** |
+| saídas do ciclo já reconstruídas (01/06 → 16/07) | 104 |
+
+A retenção do ciclo `2026-JUN-AGO` está sendo calculada sobre uma base que **para em 16/07** — falta ~26%
+das saídas e 90 vínculos novos no denominador. E o buraco **cresce todo dia** até 31/08.
+
+**Ordem correta do que falta**, porque ligar o cano antes disto não produz efeito nenhum:
+
+1. **Rodar a reconstrução** com recorte até hoje, nas 3 unidades. Só depois disso os `fim_jornada`
+   pós-03/08 existem — e são eles, não as trocas, que vão precisar de motivo.
+2. **Criar o cron** da reconstrução (⚠️ conferir `verify_jwt` no `config.toml` e mandar `Authorization`
+   junto do `x-sync-token` — a armadilha que já derrubou `sync-inadimplencia-emusys` e `sync-presenca-emusys`).
+3. **Ligar o cano** (`reconstrucao-periodos-professor.mjs:727-728`) só para `tipo_fim` da família de saída
+   real (`fim_jornada`, `fim_evidencia_historica`) — nunca para `troca%`, que agora sabemos não ter motivo
+   por definição.
+
+⚠️ **Dos 92 `fim_jornada` do ciclo, só 43 têm evasão registrada em `movimentacoes_admin`.** Ligar o cano
+resolve 43; os outros 49 são saídas reais que ninguém registrou. Essa parte é curadoria humana de verdade —
+e é a única parte do CP8 que realmente é curadoria.
 
 ### ⚠️ Divergências que precisam de confirmação humana
 
