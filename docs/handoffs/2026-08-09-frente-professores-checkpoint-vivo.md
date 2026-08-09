@@ -583,6 +583,87 @@ das saídas e 90 vínculos novos no denominador. E o buraco **cresce todo dia** 
 resolve 43; os outros 49 são saídas reais que ninguém registrou. Essa parte é curadoria humana de verdade —
 e é a única parte do CP8 que realmente é curadoria.
 
+---
+
+#### 🔴 A raiz da parte 2: **o pipeline nunca foi automatizado** *(achado 09/08)*
+
+A reconstrução **não lê das tabelas vivas**. Ela lê de duas tabelas de staging
+(`emusys_aulas_historico_staging_v1` e `emusys_aula_alunos_historico_staging_v1`), preenchidas pela edge
+`backfill-historico-professor-emusys`. O estado encontrado:
+
+| unidade | aulas no staging | última aula | **depois de 16/07** |
+|---|---|---|---|
+| Campo Grande | 213.100 | 16/07/2026 | **0** |
+| Recreio | 154.999 | 16/07/2026 | **0** |
+| Barra | 61.282 | 16/07/2026 | **0** |
+
+E o histórico das execuções:
+
+- **Backfill:** rodou **uma vez**, em 17/07/2026, janela `2018-01-01 → 2026-07-16`.
+- **Reconstrução:** rodou em 18/07, em cima daquele staging.
+- **`cron.job` com `%backfill%` / `%reconstru%` / `%periodos-professor%`: ZERO linhas.**
+
+Não é "um cron quebrou": **nunca houve cron**. Foi construído como carga histórica de uma vez só e o
+incremental diário jamais foi ligado. Por construção, a retenção do professor congela na data da última
+carga manual — ela nunca ia avançar sozinha.
+
+Pior: a edge do backfill é **checkpointada** (avança no máximo 10 páginas por chamada e devolve o estado),
+então nem basta um cron disparar uma vez — alguém precisa repetir até `concluido`. É por isso que o
+`scripts/conduzir-backfill-historico.mjs` existe.
+
+**Executado em 09/08** (`scripts/conduzir-backfill-historico.mjs` + `conduzir-reconstrucao-professor.mjs`):
+
+| etapa | resultado |
+|---|---|
+| backfill 17/07 → 09/08 | CG 1.099 aulas / Barra 778 / Recreio 1.062 — **2.939 aulas** que faltavam |
+| staging depois | última aula **08/08** nas 3 (09/08 é domingo) |
+| manifesto | CG 223.617 eventos / Barra 63.505 / Recreio 150.355, 32 partições cada |
+
+⚠️ **Nota de proveniência:** a reconstrução exige (`execucaoCobreRecorte`) uma execução de backfill cuja
+janela **cubra** o recorte. Foram criadas 3 execuções declarando `2018-01-01 → hoje` partindo do checkpoint
+`2026-07-17`; o trecho `2018 → 16/07` já estava no staging pela execução concluída em 17/07. Elas fecham
+`concluido` com `paginas_processadas` refletindo só a janela incremental — o número baixo é esperado e **não**
+significa que só esse trecho foi reconstruído.
+
+---
+
+#### ✅ Validação canônica contra a API do Emusys (09/08, a pedido do Alf)
+
+`GET /matriculas?status=todas` nas 3 unidades — **4.840 matrículas, 137 páginas**, respeitando o teto de
+60 req/min (`scripts/auditoria-canonica-emusys.mjs` + `comparar-canonico-emusys.mjs`). Cruzado por
+`aluno_id`, `matricula_id`, `matricula_disciplina_id` e `lead_id`:
+
+| unidade | API | nossa jornada | **só na API** | só no nosso | status divergente |
+|---|---|---|---|---|---|
+| Campo Grande | 2.524 | 2.534 | **0** | 10 | **0** |
+| Barra | 824 | 835 | **0** | 11 | 10 |
+| Recreio | 1.492 | 1.539 | **0** | 47 | 9 |
+
+**Zero matrícula-disciplina da API faltando no espelho, nas três.** A fonte que alimenta a reconstrução é fiel.
+
+- Os **19 "status divergente"** são todos o mesmo caso: nossa jornada diz `desconhecido` onde a API diz
+  `ativa` — matrículas novas com status ainda não resolvido.
+- Os **68 "só no nosso"** são linhas que a API não devolve mais (matrícula apagada no Emusys, provavelmente).
+- ⚠️ **`lead_id` vem preenchido em 100% das 4.840 matrículas.** A identidade de quem converteu está inteira
+  do lado do Emusys — o buraco do CP9 é só de vínculo do nosso lado.
+
+**Cruzamento triplo dos 9 casos de CG** (API `inativa/2026-08-07` × jornada `finalizada/2026-08-07` × período
+ainda aberto na base): bate **data a data**. Os três sistemas concordam.
+
+⚠️ **A conciliação `sync-matriculas-emusys` também estava parada.** Último registro escrito em
+`matriculas_divergencias`: **07/08 00:47 UTC**; zero linhas tocadas em 08 e 09/08, apesar de `pg_cron`
+marcar `succeeded` nos três jobs (24/25/26). Disparada à mão em 09/08, respondeu **200** e detectou **204
+divergências** só em CG (149 `auto_preview`, 9 `valor_divergente`, 9 `status_divergente`, 2
+`ausente_nosso_sistema`). Entre elas, **9 alunos que o Emusys diz `inativa`/`trancada` e nós dizemos `ativo`**
+— Benjamin da Silva Barbosa, Catia dos Santos Machado, Fabrício Ravi Ramos Medeiros, Heitor Dias Berriel
+Abreu, Marcelo da Silva Galvão, Maria Aurora Ferreira Costa Jordão da Silva dos Anjos, Pedro Gusmão Morgado,
+Veronica Nascimento da Silva, Wagner Amaral Mesquita Pereira — e **2 alunos ativos no Emusys inexistentes no
+nosso sistema** (Julia da Costa de Oliveira, Ester Soares Gomes Christianes).
+
+⚠️ **`professor_matricula_disciplina_periodos_v1.emusys_matricula_id` é NULL nas 126.631 linhas.** A coluna
+existe e nunca é preenchida — mesma doença de `motivo_saida_id`. Quem cruzar períodos com matrícula precisa
+usar `emusys_matricula_disciplina_id`.
+
 ### ⚠️ Divergências que precisam de confirmação humana
 
 Casos onde o Emusys e o nosso registro discordam e alguém precisa dizer quem está certo:
