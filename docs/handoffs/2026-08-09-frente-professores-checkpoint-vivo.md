@@ -81,10 +81,31 @@ vínculos**. As 108 nasceram em `2026-07-30`, dia seguinte ao encerramento em ma
 buraco e sem sobreposição. O espelho do Emusys já havia confirmado, professor a professor, que esses
 professores seguiam ativos.
 
-### CP3 — Rematerializar o ciclo `2026-JUN-AGO` ⬅️ **PRÓXIMO, e cresceu**
-**Medido em transação com rollback (nada gravado ainda).** Rematerializar Campo Grande com as atribuições já
-corrigidas dá: `segmentacao_incompleta` **zerada** e `media_turma` com nota em **29 de 35** professores — a
-métrica destravou, que era a pergunta do checkpoint.
+### ~~CP3 — Rematerializar o ciclo `2026-JUN-AGO`~~ ✅ **fechado em 09/08 (PR #94)**
+
+O ciclo foi rematerializado em produção nos quatro escopos (3 unidades + consolidado), competência
+`2026-08-01`, com as atribuições já corrigidas **e** com o bug do `apta_oficial` resolvido.
+
+**Causa do bloqueio, achada e corrigida:** a materialização roda em estágios sucessivos. No estágio 2, o ramo
+de `numero_alunos` **substitui** o `detalhes` inteiro (recalculando `apta_oficial`), enquanto o de
+`media_turma` **preserva** o `detalhes` do estágio 1 e acrescenta 4 chaves. Ele corrigia `estado_base` para
+`'ok'`, calculava `publicavel` e a nota — mas **carregava o `apta_oficial` congelado** de quando o estado
+ainda era `segmentacao_incompleta`. A regra não mudou; passou a ser avaliada com os valores que o próprio
+estágio acabou de corrigir.
+
+**Estado do fechamento de 01/09 — quem ainda bloqueia** (consolidado, última revisão):
+
+| métrica | com nota | aptas | **bloqueiam** | natureza |
+|---|---|---|---|---|
+| `media_turma` | 42 | 42 | **0** | ✅ resolvido |
+| `numero_alunos` | 0 | 42 | **0** | ✅ não bloqueia (sem nota) |
+| `retencao` | 37 | 0 | **37** | trava de data (31/08) + pendências → **CP4** |
+| `presenca` | 7 | 0 | **7** | trava de data (31/08), resolve sozinho |
+| `conversao` | 27 | 0 | **27** | ⚠️ regra não investigada |
+| `permanencia` | 38 | 31 | **7** | sem trava de data — 7 casos reais de curadoria |
+
+⚠️ **`conversao` é item novo**: 27 bloqueios e não sei a regra do `apta_oficial` dela. Não estava em nenhum
+checkpoint. Precisa entrar na lista.
 
 Mas `apta_oficial` continua **0**, e a razão **não** é data. A regra das métricas segmentadas é
 `periodicidade='ciclo' AND estado_base_calculado='ok' AND nota_segmentada IS NOT NULL` — **sem trava de
