@@ -107,17 +107,33 @@ Mas `apta_oficial` é calculado **dentro** dessa base, com `p_periodicidade = 'c
 chegando, a primeira condição é falsa **sempre**. O `||` de fora sobrescreve o rótulo `periodicidade` para
 `'ciclo'` e acrescenta `semantica_ciclo: 'fotografia_fim_recorte'`, mas **não recalcula a flag derivada**.
 
-**Consequência:** `media_turma` e `numero_alunos` **nunca** podem ser `apta_oficial` num snapshot de ciclo.
-Como o fechamento exige que toda métrica **com nota** seja apta, os 29 professores de CG com nota de
-`media_turma` bloqueiam — `fechar_health_score_professor_v3_ciclo` em 01/09 produziria ~zero oficiais.
+⚠️ **CORREÇÃO (mesma sessão, 09/08).** A conclusão acima — *"`media_turma` e `numero_alunos` nunca podem ser
+`apta_oficial` num snapshot de ciclo"* — **é falsa e foi publicada cedo demais**. Fica registrada porque o
+erro é instrutivo: eu li a cadeia do **caminho de leitura** (`get_…_agregadas_v1`, que de fato repassa
+`'mensal'`) e concluí sobre o **caminho de escrita**, que é outro.
 
-Verificado chamando a função direto (sem gravar): `media_turma` com 29 notas e **0 aptas**, com
-`seg_incompleta`, `regra_ausente` e `div_nao_ofertada` todos zerados. Não sobra bloqueio de dado — só a flag.
+`materializar_health_score_professor_v3_periodo_impl_base_202607` tem **cópia própria e inline** da mesma
+expressão, usando o `p_periodicidade` **dele** — que é `'ciclo'`. Prova, medida em transação com rollback
+sobre o snapshot real de Campo Grande:
 
-⚠️ **Decisão é do Alf, não mecânica.** Corrigir muda quem entra no fechamento oficial e no ranking, e o
-handoff é explícito: *não alterar a fórmula do V3*. As saídas possíveis são (a) recalcular `apta_oficial` na
-camada de fora, usando a periodicidade real; (b) assumir que métrica de estado não é elegível a oficial e
-tirá-la do filtro de elegibilidade do fechamento. São políticas diferentes, com efeitos diferentes no ranking.
+| métrica | `estado_base` | `apta_oficial` | linhas | com nota |
+|---|---|---|---|---|
+| `numero_alunos` | `ok` | **true** | 54 | 27 |
+| `media_turma` | `ok` | **false** | 58 | 58 |
+
+Ou seja: métrica segmentada **pode** ser apta num snapshot de ciclo — `numero_alunos` é. O que sobra é uma
+**assimetria entre as duas métricas sob `estado_base` idêntico**, ainda **não explicada**. O repasse de
+`'mensal'` no caminho de leitura é real e continua sendo um cheiro forte (afeta o que a API/UI devolve), mas
+**não** explica a assimetria, porque lá as duas passam pelo mesmo ramo.
+
+⚠️ **Não mexer ainda.** A causa não está isolada, e o handoff é explícito: *não alterar a fórmula do V3*.
+Próximo passo é comparar as duas métricas linha a linha dentro de `pontuadas`/`avaliadas` do impl — o
+diferenciador tem que estar em `nota_segmentada` ou no `denominador` agregado, já que `estado_base` e
+periodicidade são iguais.
+
+**Duas lições de método:** (1) neste banco a mesma regra aparece **duplicada** em implementação de leitura e
+de escrita — achar a expressão numa não diz o que a outra faz; (2) publicar conclusão de causa raiz sem
+medir no caminho que realmente grava é como o erro entrou.
 
 ⚠️ **Armadilha de leitura que me pegou:** filtrei `detalhes->>'tem_segmentacao_incompleta'` e li "0 bloqueios"
 — só que essa chave **não existe** no payload, e `NULL` não é `true`. Contar ausência como negativa dá
