@@ -88,9 +88,40 @@ métrica destravou, que era a pergunta do checkpoint.
 
 Mas `apta_oficial` continua **0**, e a razão **não** é data. A regra das métricas segmentadas é
 `periodicidade='ciclo' AND estado_base_calculado='ok' AND nota_segmentada IS NOT NULL` — **sem trava de
-`periodo_fim`**, ao contrário de `presenca`/`retencao`. Logo há bloqueio remanescente em
-`estado_base_calculado`, que **não é persistido no `detalhes`** — só o `apta_oficial` derivado dele. Fechar
-exige ler `hs_v3_segmentos_agregado_base_canonica` na fonte.
+`periodo_fim`**, ao contrário de `presenca`/`retencao`.
+
+🔴 **CAUSA ENCONTRADA — e é o verdadeiro bloqueador de 01/09, não as atribuições nem a data.**
+Em `get_health_score_professor_v3_metricas_segmentadas_agregadas_v1`, o ramo do ciclo trata `media_turma` e
+`numero_alunos` como *fotografia do último mês alcançado* e, por isso, chama a base com **`'mensal'`**:
+
+```sql
+-- Metricas de estado usam somente a fotografia do ultimo mes alcancado.
+select ... , coalesce(b.detalhes,'{}') || jsonb_build_object('periodicidade','ciclo', ...)
+from public.get_hs_prof_v3_segmentadas_agregadas_before_snapshot_20260804(
+  v_competencia_fotografia, p_config_id, p_unidade_id, 'mensal'   -- <<<
+) b
+where b.metrica in ('media_turma','numero_alunos');
+```
+
+Mas `apta_oficial` é calculado **dentro** dessa base, com `p_periodicidade = 'ciclo' AND …`. Com `'mensal'`
+chegando, a primeira condição é falsa **sempre**. O `||` de fora sobrescreve o rótulo `periodicidade` para
+`'ciclo'` e acrescenta `semantica_ciclo: 'fotografia_fim_recorte'`, mas **não recalcula a flag derivada**.
+
+**Consequência:** `media_turma` e `numero_alunos` **nunca** podem ser `apta_oficial` num snapshot de ciclo.
+Como o fechamento exige que toda métrica **com nota** seja apta, os 29 professores de CG com nota de
+`media_turma` bloqueiam — `fechar_health_score_professor_v3_ciclo` em 01/09 produziria ~zero oficiais.
+
+Verificado chamando a função direto (sem gravar): `media_turma` com 29 notas e **0 aptas**, com
+`seg_incompleta`, `regra_ausente` e `div_nao_ofertada` todos zerados. Não sobra bloqueio de dado — só a flag.
+
+⚠️ **Decisão é do Alf, não mecânica.** Corrigir muda quem entra no fechamento oficial e no ranking, e o
+handoff é explícito: *não alterar a fórmula do V3*. As saídas possíveis são (a) recalcular `apta_oficial` na
+camada de fora, usando a periodicidade real; (b) assumir que métrica de estado não é elegível a oficial e
+tirá-la do filtro de elegibilidade do fechamento. São políticas diferentes, com efeitos diferentes no ranking.
+
+⚠️ **Armadilha de leitura que me pegou:** filtrei `detalhes->>'tem_segmentacao_incompleta'` e li "0 bloqueios"
+— só que essa chave **não existe** no payload, e `NULL` não é `true`. Contar ausência como negativa dá
+falso alívio. Confirmar que a chave existe antes de tirar conclusão de um filtro sobre jsonb.
 
 ⚠️ **Descoberta que muda o planejamento de 01/09: nenhuma automação materializa o ciclo.** O cron 109
 (`materializar-health-score-professor-v3-diario`, 03:30 BRT) fixa `'mensal'` nos quatro pontos de chamada, e
