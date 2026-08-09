@@ -249,9 +249,65 @@ Boente, que aparece em **dois** professores (Letícia e Ana Beatriz) e no Emusys
 ⚠️ **A API não expõe motivo de saída, só status** — para os 2 de evasão real o motivo continua sendo
 curadoria em `movimentacoes_admin`. Mas isso agora é 2 casos, não 17.
 
-**Pendente:** (a) aplicar a disposição de cada um dos 17 (o mecanismo que vira `publicavel` não foi
-investigado — não chutar); (b) os ~14 `encerramentos_pos_corte_pendentes`, que **não** foram cruzados ainda e
-têm causa diferente (atribuição/motivo faltando após 03/08, não período não publicável).
+**Os 15 `encerramentos_pos_corte_pendentes` também foram cruzados (09/08).** O resultado é uniforme:
+**100%** com `pendencia = 'sem atribuição confirmada'`, **100%** com `motivo_saida_id` nulo, e **14 de 15 com
+o aluno ATIVO no Emusys**, quase sempre com outro professor. Não são saídas — são trocas de professor.
+Samuel Muniz de Oliveira sozinho gera 4 linhas (Lohana, Marcos, Valdo ×2) e no Emusys está ativo com o Valdo.
+O 15º é FK órfã (Leonardo Castro, período sem aluno).
+
+**Pendente:** aplicar a disposição de cada caso — o mecanismo que vira `publicavel` não foi investigado, e
+não convém chutar.
+
+---
+
+### 🔴 CP8 — Motivo de saída não chega na retenção *(achado 09/08, é cano desconectado, não curadoria)*
+
+Investigando o CP4, o buraco apareceu inteiro. A regra pós-corte
+(`somente_atribuicao_confirmada_e_motivo_atribuivel`, vigente desde **2026-08-03**) exige três coisas:
+`atribuicao_confirmada is true`, `motivo_saida_id not null`, e `conta_retencao_professor` casando com
+`motivos_saida.conta_score_professor`.
+
+Medido em `vw_professor_periodos_efetivos_v3_sombra` — **8.297 linhas**:
+
+| campo exigido pela regra | preenchido |
+|---|---|
+| `atribuicao_confirmada = true` | **0** (8.280 `false`, 17 `null`) |
+| `conta_retencao_professor` | **0** |
+| `motivo_saida_id` | **0** |
+
+E nas tabelas-base, o mesmo: `professor_matricula_disciplina_periodos_v1` **126.631 linhas, 0 com motivo**;
+`professor_periodos_revisoes_v1` 382/0; `aluno_professor_transicoes` 48/0. **Nada escreve nessas colunas** —
+é infraestrutura pronta e nunca ligada.
+
+⚠️ **O dado EXISTE, e do lado certo.** `movimentacoes_admin` tem `motivo_saida_id` em **97 de 117** evasões
+do ciclo (83%) e motivo em texto em **100%**. Cruzando os 186 encerramentos do ciclo por aluno + data (±15
+dias): 45 têm evasão registrada, 38 dessas com `motivo_saida_id` — e **nos 38 o motivo não chega na view**.
+Os outros 141 não têm evasão nenhuma, coerente com serem troca de professor.
+
+**Consequência, e é a parte séria:** nenhum encerramento pós-03/08 pode **jamais** satisfazer a regra. A
+retenção não fica `apta_oficial` enquanto isso não for ligado, e o número de pendências **cresce todos os
+dias** — a janela vai de 03/08 até o fim do ciclo. Hoje são 15 porque só se passaram 7 dias; em 31/08 serão
+todos os encerramentos do mês.
+
+**Decisão a tomar:** (a) ligar `movimentacoes_admin` → períodos do professor (o cruzamento por aluno + data
+±15d já funciona e está validado acima), ou (b) revisar a regra pós-corte para não depender de campo que
+ninguém alimenta. Enquanto nenhuma das duas, a retenção fica travada por construção.
+
+### ⚠️ Divergências que precisam de confirmação humana
+
+Casos onde o Emusys e o nosso registro discordam e alguém precisa dizer quem está certo:
+
+1. **Emusys ativo com o MESMO professor, nós encerramos** — 3 casos: Caio Tenório × Clarisse Maria Vignerom
+   Lira (nosso fim 18/06; Emusys última aula 13/05/2027), Lohana × Gabriela Dornas (fim 10/07; Emusys
+   09/07/2027), Matheus dos Santos × Arthur Galvão Barbosa (fim 16/06; Emusys 23/03/2027).
+2. **Mesmo aluno encerrado em dois professores** — Lohan Marques Boente (Letícia e Ana Beatriz), com o
+   Emusys mostrando ativo com um terceiro (Erick Osmy). E Miguel Santos Borges, encerrado em Gabriel Santos
+   e Alexandre — nesse o Emusys confirma `finalizada/interrompida`, então a saída é real; a dúvida é a
+   atribuição.
+3. **Períodos sem aluno (FK órfã)** — 2 casos: Erick Cosme da Silva (conflito `jornada_atual_divergente`) e
+   Leonardo Castro. Não são casos de retenção; é dado quebrado.
+4. **Conclusão contada como saída** — Guilherme Dias da Silva aparece como encerramento e no Emusys é
+   `finalizada/concluida`. Conclusão de curso não deveria penalizar retenção.
 
 ⚠️ **Correção de memória:** a nota antiga dizia que snapshot de ciclo **não** tem `vinculos_expostos_limpos`
 nem `encerramentos_pos_corte_pendentes`. **Tem** — medido em 09/08. Isso pode ter mudado na reescrita de
