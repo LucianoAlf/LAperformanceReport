@@ -289,9 +289,26 @@ retenção não fica `apta_oficial` enquanto isso não for ligado, e o número d
 dias** — a janela vai de 03/08 até o fim do ciclo. Hoje são 15 porque só se passaram 7 dias; em 31/08 serão
 todos os encerramentos do mês.
 
-**Decisão a tomar:** (a) ligar `movimentacoes_admin` → períodos do professor (o cruzamento por aluno + data
-±15d já funciona e está validado acima), ou (b) revisar a regra pós-corte para não depender de campo que
-ninguém alimenta. Enquanto nenhuma das duas, a retenção fica travada por construção.
+**Onde exatamente o cano está solto (achado 09/08).** A tubulação inteira já existe: a coluna está nas
+tabelas, o RPC genérico `materializar_periodos_professor_v1` insere
+`motivo_saida_id` e `conta_retencao_professor` a partir do payload (`v_periodo->>'motivo_saida_id'`), e o
+chamador é a edge `reconstruir-periodos-professor` via
+`finalizar_reconstrucao_particionada_professor_v1`. O elo que falta são **duas linhas literais** no gerador
+do payload, em `supabase/functions/_shared/reconstrucao-periodos-professor.mjs:727-728`:
+
+```js
+motivo_saida_id: null,
+conta_retencao_professor: null,
+```
+
+São `null` **hardcoded** — placeholder que nunca foi preenchido. Não há rotina quebrada para consertar:
+nunca houve fonte ligada. `atribuicao_confirmada` sequer aparece nesse arquivo; a view a deriva de outro
+caminho, e também está `false`/`null` em 100%.
+
+**Decisão a tomar:** (a) ligar `movimentacoes_admin` → períodos do professor — que agora se sabe ser uma
+mudança **localizada nessas duas linhas** mais a regra de casamento (aluno + data ±15d, já validada acima),
+não uma tubulação nova; ou (b) revisar a regra pós-corte para não depender de campo que ninguém alimenta.
+Enquanto nenhuma das duas, a retenção fica travada por construção.
 
 ### ⚠️ Divergências que precisam de confirmação humana
 
