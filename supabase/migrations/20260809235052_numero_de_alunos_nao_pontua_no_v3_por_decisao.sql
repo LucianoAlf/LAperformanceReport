@@ -1,0 +1,32 @@
+-- DECISAO DO ALF, 09/08/2026: `numero_alunos` NAO pontua no Health Score V3.
+--
+-- O numero deve APARECER correto para o gestor, mas nao entra como nota do professor.
+--
+-- Isto e documentacao de INTENCAO, nao mudanca de comportamento: o estado atual ja e o
+-- desejado. Existe porque ele PARECE bug e alguem vai tentar "consertar":
+--
+--   No caminho vivo (`health-score-professor-v3-nota-viva-coerente-1`, cron das 06:30),
+--   a metrica `numero_alunos` sai com:
+--     valor_bruto preenchido em 129/129   <- o numero existe e e exibido
+--     nota .................... NULL em 129/129
+--     peso_disponivel ......... false em 129/129
+--   E 69 dessas 129 estao com `estado_base = 'ok'` e SEM motivo_sem_base — ou seja, a
+--   metrica esta saudavel e ainda assim nao pontua. Isso tem cara de defeito.
+--
+--   A razao tecnica de fundo: o caminho diario (`..._escopo_diario`) nao escreve
+--   `health_score_professor_v3_snapshot_metrica_segmentos`, e e do segmento que sai a meta
+--   por curso/modalidade que viraria nota. So o caminho do periodo escreve segmento.
+--
+-- ⚠️ NAO "corrigir" fazendo o caminho diario escrever segmentos com o objetivo de destravar
+-- a nota. Isso devolveria o pilar ao score de todos os professores, que e exatamente o que
+-- a decisao proibe. Se um dia o segmento for escrito por outro motivo (ex.: exibir o
+-- detalhamento por curso na tela), a nota de `numero_alunos` precisa continuar fora do
+-- score — por peso zero na config, nao por acidente de pipeline.
+--
+-- Pendencia separada, NAO resolvida aqui: o valor exibido diverge da carteira real em parte
+-- dos professores (amostra: Rafael Alves 49 no snapshot x 58 alunos com aula em agosto;
+-- Larissa 44 x 50; Gabriel Antony 42 x 42). Pode ser diferenca de definicao (carteira
+-- formal x quem teve aula) e nao erro — precisa ser medido contra a definicao canonica
+-- antes de qualquer mudanca.
+comment on table public.health_score_professor_v3_snapshot_metrica_segmentos is
+  'Detalhamento por curso/modalidade da metrica numero_alunos. ATENCAO (decisao Alf 09/08/2026): so o caminho do PERIODO escreve aqui; o caminho DIARIO nao escreve, e por isso numero_alunos sai com nota NULL e peso_disponivel=false no score vivo. Isso e INTENCIONAL — numero_alunos nao pontua no V3. Nao "corrigir" escrevendo segmentos no diario para destravar a nota.';
