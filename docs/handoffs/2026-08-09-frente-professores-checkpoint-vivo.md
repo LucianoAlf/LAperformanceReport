@@ -283,6 +283,35 @@ experimental; isso infla o denominador da conversão do professor envolvido. Inv
 ⚠️ **`situacao_operacional = 'matriculado'` é zero em 1.665 linhas** — o estado que marcaria a conversão nunca
 aparece. Verificar se o crédito de matrícula depende dele.
 
+**IMPACTO MEDIDO (09/08) — a conversão exibida hoje é um piso, não uma medida.**
+
+| medida | valor |
+|---|---|
+| experimentais no ciclo | 196 |
+| matrículas creditadas | 82 |
+| sem pessoa canônica | **106** |
+| **taxa exibida hoje** | **41,8%** |
+| taxa só entre as com identidade resolvida | 91,1% |
+
+A meta é **70%**. Com 41,8% praticamente todo professor reprova na conversão — e ela vale **16,67%** da nota.
+
+⚠️ **Os 91,1% são teto enviesado, não a verdade.** A identidade se resolve preferencialmente para quem
+**matriculou** (o vínculo aparece quando a pessoa vira aluno, via `alunos.lead_origem_id`), então o
+subconjunto resolvido pende para os convertidos. O que se pode afirmar é a **direção**: 41,8% é um **piso**,
+porque identidade não resolvida só remove crédito, nunca adiciona. A verdade está entre 41,8% e 91,1% — e a
+meta de 70% cai no meio do intervalo. **Hoje é impossível dizer se a conversão passa ou reprova.**
+
+🔴 **Duas travas explícitas que o estágio de nota ignora.** A função marca, para este ciclo:
+`publicavel = false` (**hardcoded**, não é condicional) e `estado_base = 'provisorio_ciclo'`. Ou seja, a
+métrica se declara não-publicável e provisória — e mesmo assim entra no score com 16,67%. Não é ambiguidade
+de leitura: é uma métrica marcada como não publicável sendo publicada.
+
+⚠️ **Duplicação de ingestão em `emusys_experimentais_raw`** (achada junto): Benjamin Duarte tem **139 linhas
+para 1 única aula, 1 data, 1 professor**, com 139 `raw_key` distintos; Daniel Barros, 162 linhas para 3
+aulas. O `raw_key` não deduplica. **A métrica não é contaminada** — a função faz `distinct on (evento_chave)`
+e colapsa (1.665 linhas raw → 196 experimentais) — mas a tabela raw tem lixo e qualquer consumidor que não
+deduplique vai errar feio.
+
 ### CP4 — Retenção: cruzamento com o Emusys **feito** (09/08); curadoria pendente
 
 ⚠️ **O número "~166" estava errado.** No ciclo `2026-JUN-AGO` são **17 vínculos em revisão**, não 166.
