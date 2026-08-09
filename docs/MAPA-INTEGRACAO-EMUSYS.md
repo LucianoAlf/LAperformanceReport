@@ -218,6 +218,35 @@ Detalhes em `pendencias-emusys.md`. Resumo atualizado:
 `export-contas-receber` lê somente snapshots live completos. Com `sync_run_id`, exporta o run exato; com `require_latest=true`, também exige que ele seja o último completo. Sem ID, seleciona o último completo da competência para o fallback read-only. O manifesto informa `sync_run_id` e `latest_complete_sync_run_id`. O exportador cruza aluno/curso por `(unidade_id, emusys_matricula_id)` e usa o UUID estável de `emusys_faturas` como `la_report_fatura_id`. `row_source_hash` e `manifest_hash` excluem IDs técnicos de run/item e timestamps operacionais.
 
 O plano de contas e a auditoria da classificação continuam no projeto Super Folha.
+
+## 11. Histórico do professor (backfill + reconstrução de períodos)
+
+Pipeline de duas etapas que alimenta a **retenção do professor** (`vw_professor_periodos_*_v3_sombra` →
+`get_professor_retencao_v3_governada`):
+
+1. `backfill-historico-professor-emusys` — `GET /aulas` por unidade, caminha **mês a mês**, checkpointado
+   (máx. 10 páginas por chamada), popula `emusys_aulas_historico_staging_v1` + `..._aula_alunos_...`.
+   Exige `execucao_id` de uma linha em `emusys_historico_backfill_execucoes_v1`.
+2. `reconstruir-periodos-professor` — lê o staging e monta os períodos professor↔aluno em
+   `professor_matricula_disciplina_periodos_v1`. **Particionada em 32 por unidade**; a finalização
+   materializa quando as 32 fecham e a reconstrução **publica sozinha** (vira baseline).
+
+**Nenhuma das duas roda por `pg_cron` direto** (uma exige `execucao_id`, a outra `particao_indice`). Quem as
+dirige é a edge **`orquestrar-historico-professor`** (re-entrante, ~95 s por tick), chamada pelo cron
+**jobid 129** (`7,37 * * * *`). Cadência real dentro da edge: **backfill diário, reconstrução a cada 7 dias**.
+Kill switch em `automacoes_config(slug='auto_historico_professor')`; trava em `orquestracao_locks_v1`.
+
+⚠️ **A curadoria (`professor_periodos_revisoes_v1`) só sobrevive à reconstrução por causa da chave natural**
+ancorada no `emusys_aula_id` da 1ª aula do período (`fn_chave_natural_periodo_professor_v1`). Antes disso,
+reconstruir orfanizava 100% das revisões — era o motivo de nunca ter havido cron. Ver
+`docs/handoffs/2026-08-09-frente-professores-checkpoint-vivo.md`.
+
+⚠️ O `execucaoCobreRecorte` (`_shared/checkpoint-historico-professor.mjs`) exige que a execução de backfill
+**declare** cobertura ≥ o recorte da reconstrução. O staging é **cumulativo** entre execuções, então o
+incremental diário declara `2018-01-01 → hoje` e só varre a janela recente — mas só depois de confirmar que
+existe execução `concluido` anterior com essa cobertura. **Não inferir cobertura do formato do dado**: a
+Barra abriu em 09/10/2021 e não tem aula antiga por não existir, não por falta de carga.
+
 - **Dash do rayan** (`emusys-webhook` no projeto `aexacbmirdlcssmjjbzx`) — recebe cópia dos webhooks, projeto separado.
 - **emusys-agent** (chat) — repositório separado.
 

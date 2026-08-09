@@ -802,27 +802,65 @@ unidades cobrindo `2018-01-01 → hoje`). A próxima reconstrução não baixa n
 
 ---
 
-#### 🔴 **O cron não pode ser criado hoje — falta uma edge orquestradora** *(verificado na fonte, 09/08)*
+#### ✅ **Cron em produção — edge `orquestrar-historico-professor` + job 129** *(09/08)*
 
-Nenhuma das duas edges pode ser dirigida por um `pg_cron` simples. Conferido lendo o código, não por inferência:
+Nenhuma das duas edges podia ser dirigida por um `pg_cron` simples. Conferido lendo o código:
 
 | edge | `verify_jwt` | por que um cron sozinho não fecha o ciclo |
 |---|---|---|
-| `backfill-historico-professor-emusys` | **`true`** | exige `execucao_id` (`EXECUCAO_ID_OBRIGATORIO`, linha 472) criado fora dela, e avança **no máximo 10 páginas por chamada** — precisa de N chamadas até `concluido` |
-| `reconstruir-periodos-professor` | **`true`** | exige `particao_indice` + `particao_total` explícitos (`PARTICIONAMENTO_INCOMPLETO`, linha 313) — **32 chamadas por unidade** |
+| `backfill-historico-professor-emusys` | `true` | exige `execucao_id` (`EXECUCAO_ID_OBRIGATORIO`, linha 472) criado fora dela, e avança **no máximo 10 páginas por chamada** |
+| `reconstruir-periodos-professor` | `true` | exige `particao_indice` + `particao_total` explícitos (`PARTICIONAMENTO_INCOMPLETO`, linha 313) — **32 chamadas por unidade** |
 
-**O que falta construir:** uma edge orquestradora re-entrante no padrão de `disparar-pesquisa-1a-aula-auto`,
-chamada por cron a cada N minutos, que (a) acha ou cria a execução de backfill da unidade e a avança, e
-(b) depois de `concluido`, caminha as 32 partições da reconstrução. Hoje quem faz esse papel são os dois
-scripts em `scripts/`, rodados à mão.
+**A edge orquestradora** (padrão de `disparar-pesquisa-1a-aula-auto`) é re-entrante: cada tick faz até ~95 s
+de trabalho e devolve o estado. Ela **não duplica lógica** — chama as duas edges existentes por HTTP.
+Política de cadência dentro dela, não no schedule: **backfill diário, reconstrução a cada 7 dias**
+(relê 2018→hoje inteiro e materializa ~8,3 mil períodos; o histórico antigo não muda).
 
-⚠️ **Quando existir, o cron precisa mandar `Authorization` (JWT de service_role) além de qualquer token** —
-as duas edges têm `verify_jwt = true` no `config.toml`. Só `x-sync-token` devolve `401` no gateway antes do
-código rodar, e o `pg_cron` marca `succeeded` assim mesmo (foi o que matou `sync-inadimplencia-emusys` por
-13 dias). **Conferir pelo log da edge, nunca pelo `pg_cron`.**
+**Estado derivado do banco, sem tabela de estado nova.** O ciclo por unidade:
+backfill `ja_concluido` → reconstrução `nao_vencida` (estado estacionário, ~150 ms sem tocar na API).
 
-**Ordem que sobra:** 1. edge orquestradora + cron · 2. motivo de saída (`reconstrucao-periodos-professor.mjs`
-linhas 727-728) · 3. curadoria das 14 pendências pós-corte e dos 61 em revisão.
+⚠️ **`verify_jwt = true` de propósito nesta edge.** Com `false`, o gateway não valida assinatura e ler o
+claim `role` seria forjável por qualquer um. Com `true`, a assinatura vem validada e o claim pode ser
+confiado — o que cobre rotação de chave (a service_role do `.env` é de **outra geração** que a variável
+interna da função; a comparação por string sozinha falhou no teste). Bônus: redeploy pelo MCP reseta
+`verify_jwt` para `true`, que aqui é o valor **correto** — esta edge não cai naquela armadilha.
+
+⚠️ **Os dois headers do cron, por motivos diferentes:** `Authorization` satisfaz o gateway; `x-sync-token`
+satisfaz a edge. **Ambos vêm do vault** — `cron.job` tem leitura **pública** (`relacl` contém
+`=r/supabase_admin`), então segredo literal no comando vazaria. Por isso também **não** se usa service_role
+ali. O projeto já tinha vault com 8 segredos; não foi preciso criar nada.
+
+**Trava** `orquestracao_locks_v1` + `fn_orquestracao_tentar_travar_v1` (TTL 15 min, aquisição atômica em um
+único UPDATE). Não é advisory lock do Postgres porque aquele é por **sessão**, e cada chamada da edge abre
+uma sessão nova — não sobreviveria às dezenas de requisições de um ciclo.
+
+**Kill switch** `automacoes_config(slug='auto_historico_professor')`, nasceu desligado, **ligado em 09/08**
+após validação.
+
+**Validado end-to-end, não só "subiu":**
+
+| teste | resultado |
+|---|---|
+| sem header | 401 no gateway |
+| anon key | recusada (`UNAUTHORIZED_LEGACY_JWT`) |
+| service_role | passa gateway + edge |
+| kill switch desligado | `auto_desligado`, não executa |
+| **caminho exato do cron** (`net.http_post` + vault) | **200** |
+| modo background (`waitUntil`) | trava pega 20:22:54.958 → solta 20:22:55.191 |
+| segredo em claro no `cron.job` | **nenhum** |
+
+**Dois bugs meus achados na validação, antes de subir:**
+1. A guarda de cobertura histórica olhava "tem aula antes de 2019?" — a **Barra abriu em 09/10/2021** e
+   passaria por "sem histórico", disparando varredura de 8 anos **todo dia**. Trocada pela escrituração do
+   próprio pipeline (existe execução `concluido` declarando `data_inicio <= 2018-01-01`?).
+2. Execução `pausado`/`falhou` era reaproveitada, mas a edge de backfill lança **409
+   `EXECUCAO_REQUER_RETOMADA`** para esses — o cron falharia todo dia, para sempre. Agora ele **para e
+   reporta** (`requer_retomada`) sem empilhar linha nova; no dia seguinte o recorte muda e o ciclo se
+   recompõe.
+
+**Ordem que sobra:** 1. motivo de saída (`reconstrucao-periodos-professor.mjs` linhas 727-728) ·
+2. curadoria das 14 pendências pós-corte e dos 61 em revisão · 3. política de retenção da
+`professor_matricula_disciplina_periodos_v1` (548 MB; +8,3 mil linhas por reconstrução semanal).
 
 ### ⚠️ Divergências que precisam de confirmação humana
 
