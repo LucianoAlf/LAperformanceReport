@@ -697,29 +697,132 @@ confiança é praticamente idêntica:
 **automatizar como está apagaria 382 decisões por dia.** O pipeline foi desenhado como carga histórica de uma
 vez só, com a curadoria por cima. Não é esquecimento — é uma dependência que ninguém resolveu.
 
-**Estado deixado:** as 99 reconstruções novas em **quarentena reversível** (`status='pendente'`,
-`concluido_em=null`; a view baseline só enxerga `concluido`). **Nada apagado.** Produção conferida de volta ao
-baseline **exato**: 1.336 expostos, 93 penalizadores, 0 pendências, 17 em revisão, 93,04%, 37 publicáveis,
-24 em `ok`.
+⚠️ **Correção do número acima:** eram **236** revisões apontando para a reconstrução vigente, não 382. As
+outras **146 já estavam órfãs antes** (apontam para v1.8, v1.18…v1.22). E ali há uma pista forte: as **mesmas
+23 revisões humanas aparecem repetidas em v1.18, v1.19, v1.20, v1.21 e v1.22** — alguém já batia neste
+problema e resolvia **re-registrando à mão a cada reconstrução**. Não era defeito desconhecido; era custo
+manual que ninguém automatizou.
 
-✅ **Ganho permanente que fica:** o staging foi recarregado (2.939 aulas de 17/07 a 09/08; backfill concluído
-nas 3 unidades cobrindo `2018-01-01 → hoje`). A próxima reconstrução não baixa nada.
+---
 
-**Ordem correta daqui**, revisada:
+#### ✅ **RESOLVIDO no mesmo dia — a curadoria agora atravessa a reconstrução** *(09/08, migrations `20260809194944`, `…195007`, `…195308`)*
 
-1. **Fazer a reconstrução carregar a curadoria adiante** — re-vincular as revisões por chave natural
-   (`pessoa_chave` + `emusys_matricula_disciplina_id` + `emusys_professor_id` + `data_inicio`) e re-rodar a
-   promoção automática. **Sem isto, nada mais pode ser ligado.**
-2. Reativar as reconstruções em quarentena e conferir contra o baseline.
-3. Só então os crons (backfill + reconstrução).
-4. Só então o motivo de saída.
+**A chave natural existe e é canônica:**
 
-⚠️ **Duas armadilhas medidas ao rodar:**
+```
+(unidade_id, pessoa_chave, emusys_matricula_disciplina_id, emusys_professor_id, PRIMEIRA AULA)
+```
+
+A âncora é `evidencias->'aulas'->>0` — o **`emusys_aula_id` da primeira aula do período**, um id do próprio
+Emusys, não um valor derivado por nós. Critérios testados antes de escolher:
+
+| candidato a âncora | resultado |
+|---|---|
+| **primeira aula do período** | **232 de 236 casam (98,3%)** ✅ |
+| menor `emusys_aula_id` do período | 227 casam — e é **subconjunto** (`so_menor = 0`) |
+| `data_inicio` | o algoritmo **recalcula** a data; instável por construção |
+| sem `emusys_matricula_disciplina_id` | **189 colisões** — inutilizável |
+
+Unicidade: **8.269/8.269** na reconstrução antiga e **8.338/8.338** na nova, **zero colisões** dos dois lados.
+`md:-` é fallback consciente para aula de turma (a API não devolve `matricula_disciplina_id` ali) — sem ele a
+cobertura cairia de 8.269 para 8.116.
+
+**Implementação (sem tocar na tabela de 548 MB):** `fn_chave_natural_periodo_professor_v1` (`IMMUTABLE`),
+usada na baseline como coluna nova, e a view efetiva passou a resolver a revisão por ela — com o `periodo_id`
+antigo **de rede** onde não há âncora, para não perder o caso degenerado. Coluna gerada `STORED` teria
+reescrito 402 mil linhas; a função não reescreve nada e é reversível.
+
+**Paridade provada antes de qualquer troca** (reconstrução antiga ainda vigente):
+
+- baseline: **8.294 de 8.297 linhas idênticas** · 3 ganham revisão · **0 perdem** · 0 trocam
+- RPC `get_professor_retencao_v3_governada`: **120 de 120 linhas professor×escopo idênticas em TODOS os
+  campos**, incluindo o `md5` do jsonb `detalhes`
+- as 3 que ganham são revisões humanas de 16/07 que estavam órfãs — recuperá-las é o objetivo
+
+**Efeito ao reconstruir** (reconstrução até 09/08 ativa, medido no mesmo instante):
+
+| resolução | linhas com curadoria |
+|---|---|
+| antiga (por uuid) | **0 de 8.341** |
+| chave natural | **235** |
+
+Travessia por tipo de decisão — **98 das 100 correções humanas passam**:
+
+| grupo | decisão | revisões | atravessam |
+|---|---|---|---|
+| apontava p/ a vigente | **corrigido** | 18 | **18 (100%)** |
+| apontava p/ a vigente | rejeitado | 3 | **3 (100%)** |
+| apontava p/ a vigente | promoção automática | 207 | 204 (98,6%) |
+| já órfã antes | **corrigido** | 82 | **80 (97,6%)** |
+| já órfã antes | aprovado | 60 | 38 (63,3%) |
+| já órfã antes | rejeitado / manter_revisao | 4 | 0 |
+
+**As 4 que não atravessam, nomeadas:** 2 escopos que **sumiram do Emusys** (batem com as "só no nosso" da
+validação canônica), 1 período com **evidências sem nenhuma aula** (âncora impossível) e 1 cuja
+`pessoa_chave` canônica mudou (57 aulas viraram 20, início pulou de 2025-02 para 2026-03) — **este merece
+conferência humana**.
+
+**Reconstrução reativada** (uma por unidade, as únicas com `inicio_incompleto = 0`): Barra `5c2d9ac3`,
+CG `7b92f9c0`, Recreio `86729dce`. Números no ciclo `2026-JUN-AGO`:
+
+| métrica | recorte até 16/07 | recorte até 09/08 |
+|---|---|---|
+| expostos limpos | 1.336 | 1.325 |
+| penalizadores | 93 | 113 |
+| **pendências pós-corte** | **0** | **14** |
+| em revisão | 17 | 61 |
+| **publicáveis** | **37** | **37** |
+| `estado_ok` | 24 | 7 |
+| retenção | 93,04% | **91,47%** |
+
+⚠️ **`estado_ok` 24 → 7 não é regressão.** O conjunto publicável **não mudou** (37 = 24+13 = 7+30): os
+professores só migraram de `ok` para `ok_com_pendencias`. As pendências eram zero **porque o recorte antigo
+terminava em 16/07, antes do corte de 03/08** — não havia dado algum na janela pós-corte. Os 14 são
+encerramentos reais entre 03 e 09/08 esperando motivo. É a governança funcionando, não quebrando.
+
+⚠️ **Três armadilhas medidas ao rodar:**
 - **`inicio_completo: true` é obrigatório** quando o recorte começa em 2018-01-01. Sem ele, o primeiro
   período de cada partição nasce truncado: `inicio_incompleto` 0 → **2.269**, vínculos em revisão 17 → **498**.
   Está escrito dentro de `scripts/conduzir-reconstrucao-professor.mjs`, com o número.
-- **A finalização cria uma reconstrução nova a cada partição** — 32 linhas por unidade por execução. Só a
-  última tem as 32 partições dentro e `inicio_incompleto = 0`. Conferir a última, nunca uma qualquer.
+- **Rodar o script DUAS VEZES sobre o mesmo conjunto de partições materializa 33 vezes.** A finalização tem
+  guarda (`if particoes_concluidas < total then return 'aguardando_particoes'`), então uma execução limpa
+  materializa **uma vez só**. No segundo passe, cada uma das 32 chamadas já encontra as 32 partições
+  completas e materializa de novo — foi assim que 09/08 gerou **275.253 linhas de período num dia** (68% da
+  tabela). Isso **não** acontece no cron, porque a chave da partição inclui `data_fim`, que muda a cada dia.
+- **Só a ÚLTIMA reconstrução da execução tem `inicio_incompleto = 0`.** As anteriores acumulam de 12 a 1.135.
+  Ao reativar, escolher pela contagem, nunca pela ordem.
+
+⚠️ **A chave natural depende do período ORIGINAL existir** (a view calcula a âncora fazendo join de
+`revisao.periodo_id` na tabela de períodos). Qualquer limpeza futura de reconstruções antigas **mataria a
+curadoria** — antes de apagar qualquer coisa, materializar a chave numa tabela auxiliar (`INSERT`-only, para
+respeitar o `PROFESSOR_PERIODOS_REVISAO_APPEND_ONLY`).
+
+✅ **Ganho permanente:** o staging foi recarregado (2.939 aulas de 17/07 a 09/08; backfill concluído nas 3
+unidades cobrindo `2018-01-01 → hoje`). A próxima reconstrução não baixa nada.
+
+---
+
+#### 🔴 **O cron não pode ser criado hoje — falta uma edge orquestradora** *(verificado na fonte, 09/08)*
+
+Nenhuma das duas edges pode ser dirigida por um `pg_cron` simples. Conferido lendo o código, não por inferência:
+
+| edge | `verify_jwt` | por que um cron sozinho não fecha o ciclo |
+|---|---|---|
+| `backfill-historico-professor-emusys` | **`true`** | exige `execucao_id` (`EXECUCAO_ID_OBRIGATORIO`, linha 472) criado fora dela, e avança **no máximo 10 páginas por chamada** — precisa de N chamadas até `concluido` |
+| `reconstruir-periodos-professor` | **`true`** | exige `particao_indice` + `particao_total` explícitos (`PARTICIONAMENTO_INCOMPLETO`, linha 313) — **32 chamadas por unidade** |
+
+**O que falta construir:** uma edge orquestradora re-entrante no padrão de `disparar-pesquisa-1a-aula-auto`,
+chamada por cron a cada N minutos, que (a) acha ou cria a execução de backfill da unidade e a avança, e
+(b) depois de `concluido`, caminha as 32 partições da reconstrução. Hoje quem faz esse papel são os dois
+scripts em `scripts/`, rodados à mão.
+
+⚠️ **Quando existir, o cron precisa mandar `Authorization` (JWT de service_role) além de qualquer token** —
+as duas edges têm `verify_jwt = true` no `config.toml`. Só `x-sync-token` devolve `401` no gateway antes do
+código rodar, e o `pg_cron` marca `succeeded` assim mesmo (foi o que matou `sync-inadimplencia-emusys` por
+13 dias). **Conferir pelo log da edge, nunca pelo `pg_cron`.**
+
+**Ordem que sobra:** 1. edge orquestradora + cron · 2. motivo de saída (`reconstrucao-periodos-professor.mjs`
+linhas 727-728) · 3. curadoria das 14 pendências pós-corte e dos 61 em revisão.
 
 ### ⚠️ Divergências que precisam de confirmação humana
 
