@@ -211,8 +211,45 @@ negócio embutidas:
    **4 experimentais sem pessoa canônica** — sob a regra antiga isso reprovaria. Escolher quais desses
    contadores travam a oficialização é decisão do Alf, não minha.
 
-**Recomendação:** decidir (1) primeiro, porque muda a data-alvo do fechamento e, com ela, o planejamento dos
-outros checkpoints.
+✅ **DECIDIDO E APLICADO em 09/08 (Alf): manter a janela D+30.** Migration
+`20260809200000_cp7_conversao_apta_oficial_janela_d30`. A regra antiga foi traduzida fiel para o vocabulário
+novo: `current_date >= periodo_fim + 30` **and** `experimentais >= 3` **and** `sem_pessoa_canonica = 0`.
+**A data-alvo do fechamento do ciclo passa a ser 30/09, não 01/09.**
+
+🔴 **Mas isso NÃO destrava o fechamento — e a medição revelou um problema maior (ver CP9).** Com a janela
+cumprida, **zero** dos 43 professores passariam: os 27 com amostra suficiente têm **todos**
+`experimentais_sem_pessoa_canonica > 0`. No agregado, **99 de 182 experimentais do ciclo (54%) estão sem
+pessoa canônica resolvida**, variando de 25% a 87,5% por professor.
+A migration ainda vale: antes o bloqueio existia igual, só que **mudo** — sem chave e sem motivo legível.
+
+---
+
+### 🔴 CP9 — 54% das experimentais sem pessoa canônica *(achado 09/08, não corrigido)*
+
+**Consequência 1 — a conversão fica subestimada para todo mundo.** Sem pessoa canônica resolvida não dá para
+creditar a matrícula, então o **numerador** cai enquanto o denominador fica inteiro. A taxa de conversão de
+todos os professores sai para baixo, e nenhum fica apto nem depois de 30/09.
+
+**Consequência 2, mais grave — isso está pontuando o score agora.** A conversão vale **16,67%** do Health
+Score do ciclo (15% renormalizado, porque `numero_alunos` saiu da nota). Ou seja, um sexto da nota de cada
+professor está sendo calculado sobre um dado com 54% de identidade não resolvida.
+
+⚠️ **E a própria função diz que não deveria pontuar.** `get_hs_prof_v3_conversao_ciclo_base_20260803` marca
+`fora_do_score: true` e `provisorio_ciclo: true` para o ciclo `2026-JUN-AGO`, com
+`motivo_sem_base = 'ciclo visivel para diagnostico; conversao fora do score'` e
+`'aguardando calibracao das escalas antes de pontuar'`. Mas o estágio posterior
+`health-score-professor-v3-nota-diagnostica-1` **sobrescreve** para `fora_do_score: false` e atribui o peso.
+É a **terceira** ocorrência hoje do mesmo padrão: um estágio decide, o seguinte ignora — as outras duas foram
+`media_turma`/`apta_oficial` (CP3) e o `estado_base` congelado.
+
+⚠️ **Cronologia relevante:** a config **v4** (peso 15% para conversão) foi homologada em **27/07**; a função
+que a tira do score é de **03/08** — **posterior**. A decisão mais recente é "fora do score", e ela não está
+sendo respeitada.
+
+**Decisão do Alf:** (a) honrar o `fora_do_score` e tirar a conversão do score deste ciclo — **muda a nota
+exibida de todos os professores**; ou (b) mantê-la pontuando e priorizar a resolução de identidade.
+Investigar em paralelo por que `lead_experimentais` / `emusys_experimentais_raw` não resolvem pessoa canônica
+em metade dos casos.
 
 ### CP4 — Retenção: cruzamento com o Emusys **feito** (09/08); curadoria pendente
 
