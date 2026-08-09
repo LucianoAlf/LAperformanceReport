@@ -858,9 +858,85 @@ após validação.
    reporta** (`requer_retomada`) sem empilhar linha nova; no dia seguinte o recorte muda e o ciclo se
    recompõe.
 
-**Ordem que sobra:** 1. motivo de saída (`reconstrucao-periodos-professor.mjs` linhas 727-728) ·
-2. curadoria das 14 pendências pós-corte e dos 61 em revisão · 3. política de retenção da
-`professor_matricula_disciplina_periodos_v1` (548 MB; +8,3 mil linhas por reconstrução semanal).
+---
+
+#### ✅ **O MOTIVO DE SAÍDA chega à retenção** *(09/08, migrations `…210352`, `…210605`, `…210703`)*
+
+`professor_matricula_disciplina_periodos_v1.motivo_saida_id` e `.conta_retencao_professor` sempre foram
+gravados como **NULL** pela reconstrução — todo encerramento pós-corte caía em "pendência" por falta de
+motivo atribuível.
+
+**Onde ligar: na VIEW, não copiando para a tabela.** `movimentacoes_admin` é a fonte de verdade e muda por
+decisão administrativa, independente do histórico de aulas — um snapshot semanal (cadência da reconstrução)
+ficaria até 7 dias velho, e o fluxo de curadoria é justamente *"registrei o motivo, quero a pendência sumir"*.
+Copiar criaria uma segunda cópia do mesmo fato. A movimentação entra como terceiro elo da cadeia que já
+existia. **Precedência: revisão > transição > período > movimentação** (provado: 0 casos de revisão perdendo).
+
+**Como casar — medido sobre os 4.457 períodos encerrados não-troca:**
+
+| chave | resultado |
+|---|---|
+| `aluno_id` do período | 120 casam — o campo é **NULL em 3.404 deles (76%)** |
+| `pessoa_chave` | 256, mas **8 evasões reclamadas por DOIS professores** ⚠️ |
+| `pessoa_chave` + `curso_id` | ambiguidade cai para 1 |
+| **`pessoa_chave` + `professor_id`** | **220 atribuíveis, ZERO ambíguas** ✅ |
+
+O desempate estava no próprio dado: **`movimentacoes_admin.professor_id` já diz de quem é a saída**. As 32
+combinações em que ele diverge do professor do período são corretamente descartadas.
+
+**Reuso, nada reinventado:** o lookup FK-ou-texto de `motivos_saida` e a função
+`is_movimentacao_admin_retencao_valida` vêm de `get_saidas_professor_periodo_canonicas_v1`. ⚠️ Só **348 das
+758** evasões têm o FK `motivo_saida_id` — o resto tem só o texto, por isso o lookup precisa dos dois caminhos.
+
+**Efeito no ciclo `2026-JUN-AGO`:**
+
+| escopo | pendências | penalizadores | retenção |
+|---|---|---|---|
+| Barra | 1 → **0** | 21 → 21 | 92,66% (igual) |
+| Campo Grande | 12 → **9** | 63 → 63 | 89,41% (igual) |
+| Recreio | 1 → **0** | 29 → **30** | 93,47% → 93,24% |
+| **Consolidado** | **14 → 9** | 113 → **114** | 91,47% → **91,40%** |
+
+Das 29 pendências pós-corte publicáveis, 6 achavam movimentação e 5 resolveram (a 6ª tem texto de motivo que
+não casa com nenhum `motivos_saida` — fica pendente, que é o comportamento correto). Só **3 dos 18 motivos**
+penalizam o professor, por isso 5 pendências resolvidas moveram só 1 penalizador.
+
+⚠️ **Custo — três iterações até ficar aceitável**, todas medidas na mesma query (baseline, 8.341 linhas):
+
+| versão | tempo | buffers |
+|---|---|---|
+| sem motivo | 53,5 ms | 2.681 |
+| lateral correlacionado | **2.227 ms** | **168.771** ← identidade reexecutada por linha |
+| CTE materializado | 556 ms | 88.795 ← ordem de junção ruim |
+| **dois CTEs (final)** | **437 ms** | **6.475** |
+
+RPC da tela: **489 ms / 12.832 buffers**, contra `statement_timeout` de 8 s. Paridade 119/119 entre a 2ª e a
+3ª versão (só o plano mudou). ⚠️ Seria tentador trocar `vw_aluno_identidade_unidade_canonica` por join direto
+em `alunos` — mas **`alunos.pessoa_chave` não existe**, a identidade é derivada dentro da view; duplicar a
+fórmula é o que a regra de DRY proíbe. Os ~435 ms que sobram são o preço consciente de reusar a regra.
+
+**Garantias reconferidas depois:** 0 `troca%` com motivo (PR #104 intacto) · 0 período ativo com motivo ·
+0 revisão perdendo para movimentação · chave natural 8.338/8.338 sem colisão.
+
+---
+
+#### ✅ **Correção: a "armadilha" da chave natural NÃO EXISTE** *(09/08)*
+
+Eu documentei que apagar reconstrução antiga mataria a curadoria, porque a chave natural é calculada em
+tempo de leitura via join no período original. **Estava errado — o schema já garante:**
+
+```
+periodo_id      → professor_matricula_disciplina_periodos_v1(id)  ON DELETE RESTRICT
+reconstrucao_id → professor_periodos_reconstrucoes_v1(id)          ON DELETE RESTRICT
+```
+
+Provado em transação revertida: as duas deleções falham com **`23503`** (violação de FK). Uma política de
+retenção não pode silenciosamente matar a curadoria — ela vai **falhar alto** se tentar apagar período ou
+reconstrução referenciada. A tabela auxiliar que eu tinha proposto **não é necessária e não foi criada**.
+
+**Ordem que sobra:** 1. curadoria das **9** pendências pós-corte e dos 61 em revisão (trabalho humano) ·
+2. política de retenção da `professor_matricula_disciplina_periodos_v1` (548 MB; +8,3 mil linhas por
+reconstrução semanal) — deve **excluir** o que tem revisão, senão bate no FK.
 
 ### ⚠️ Divergências que precisam de confirmação humana
 
