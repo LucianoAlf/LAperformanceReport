@@ -41,6 +41,11 @@ conclusões erradas (seção 5); ele só vale se for honesto sobre o que não fo
 | **v3 — diagnóstico** | **sem** trabalho duplicado; 704 ms reais; limite de otimização documentado com decisão de não mexer | PR #88, bloco no `CLAUDE.md` |
 | **Cron do Health Score V3** | validado funcionando: 4 escopos, `sem_alteracao`, sem revisão duplicada | execução manual de `executar_health_score_professor_v3_cron_diario()` |
 | **Smoke perfil `unidade`** | passa — carteira 31, trancados 9, Média/Turma 31, v3 33, recortado na unidade certa | JWT real de usuário `unidade` (CG) |
+| **CP1 — materialização das atribuições** | destravada nas 3 unidades; sync roda com `falhas` vazio e materialização limpa | PR #90, migrations `20260809140000`, `20260809150000`, `20260809151000` |
+| **CP2 — Campo Grande** | **108 atribuições ativas em 29 professores** (era 0 desde 29/07); zero sobreposições na tabela inteira | execução real do sync: 37/37, materialização `criados: 108` |
+| **Guarda anti-inativação em massa** | finalização aborta sem escrever se ≥50% do catálogo ativo sairia numa execução | `finalizar_sync_professor_disciplinas_emusys_v1` |
+| **Falha de materialização visível** | passa a entrar em `falhas`, não só no jsonb de estatísticas | mesma migration |
+| **Colisão de cron (429)** | disciplinas movidas de `:15/:35/:55` para `:07/:27/:47` | `20260809151000` |
 
 Todo o conteúdo está na `main` (`9d92d386`, `1fd1929e`). As branches `fix/turmas-v2-elimina-recalculo-duplicado`
 e `docs/limite-otimizacao-professores` aparecem como "não mergeadas" apenas porque o merge foi **squash** —
@@ -50,32 +55,60 @@ o conteúdo está lá (conferido com `git ls-tree`). Podem ser deletadas.
 
 ## 2. Checkpoints abertos
 
-### CP0 — Pausar ou não os crons 76/77/78
-**Recomendação: não pausar.** As execuções que **falham** abortam a transação e não encerram nada; o dano de
-29/07 veio de uma execução que **passou** com o catálogo vazio. Pausar adia o risco em vez de eliminá-lo, e o
-custo (catálogo desatualizado) já está ocorrendo de fato no Recreio. Quem protege é a guarda do CP1.
-Se quiser margem até lá: `select cron.unschedule(78);` (só CG, a unidade já ferida). Reversível.
+### ~~CP0 — Pausar ou não os crons 76/77/78~~ ✅ **resolvido sem pausar**
+A recomendação era não pausar, e o CP1 tornou a questão obsoleta: a guarda entrou e os crons foram
+realinhados. Seguem ativos.
 
-### CP1 — Estabilizar a materialização de `professor_unidade_curso_modalidade` ⬅️ **PRÓXIMO**
-Escopo real (maior do que o handoff supunha):
-- **(a) Falha intermitente nas TRÊS unidades.** Medido em 09/08: Recreio falhando **4 dias seguidos**
-  (06–09/08); Barra falhou 06 e 07; CG falhou 06. Erros: `PROFESSOR_CURSO_MODALIDADE_CHAVE_IMUTAVEL`
-  (23514) e `PROFESSOR_CURSO_MODALIDADE_SOBREPOSICAO` (23P01).
-- **(b) Falha silenciosa.** A execução do sync fica `status='completa'` mesmo com a materialização falhando.
-  Mesmo padrão que já queimou `sync-inadimplencia-emusys` e `sync-presenca-emusys`.
-- **(c) Falta guarda contra inativação em massa do catálogo** — a causa do desastre (seção 3).
-  Precedente no projeto: `atualizar-inadimplencia-emusys` **aborta sem escrever** se a paginação da API vier
-  incompleta. Copiar essa postura.
+### ~~CP1 — Estabilizar a materialização~~ ✅ **fechado em 09/08 (PR #90)**
+Eram **três** causas, não duas — e a terceira não estava no radar:
+1. **`CHAVE_IMUTAVEL` (23514)**, Recreio e Barra. O UPDATE fazia `vigencia_inicio = least(atual, evidência)`
+   e o predicado do WHERE selecionava justamente as linhas em que o valor mudaria — enquanto o trigger
+   `proteger_historico` proíbe alterar `vigencia_inicio` de linha ativa. **A função pedia o que o trigger
+   proíbe.** Uma única evidência com início anterior derrubava a execução da unidade inteira.
+2. **`SOBREPOSICAO` (23P01)**, Campo Grande. O INSERT só checava linha **ativa**; o trigger
+   `impedir_sobreposicao` compara contra **todas**, inclusive encerradas. Com início retroativo, todo vínculo
+   já encerrado colidia com o próprio histórico: **108 de 108**, nenhum passava.
+3. **`EMUSYS_HTTP_429`**, Barra e CG desde 07/08. Os três `sync-metadados-aulas-15m` ocupam **todo minuto
+   múltiplo de 5** batendo na mesma API, e os crons de disciplinas estavam exatamente em `:15/:35/:55`.
 
-Alvos: `reconciliar_professor_curso_modalidade_v2` (8.058 chars, `SECURITY DEFINER`) e
-`fn_professor_curso_modalidade_evidencias_v2`.
+⚠️ **A hipótese "Recreio falhando 4 dias" estava certa no fato e errada na leitura**: o `status='falhou'` de
+CG/Barra era do 429 (sync), não da materialização. Quem falhava em silêncio era o Recreio, com
+`status='completa'`.
 
-### CP2 — Reativar os 123 vínculos de Campo Grande *(bloqueado por CP1)*
-Cruzar professor × curso × modalidade × **unidade** contra a jornada do Emusys. ⚠️ IDs do Emusys são
-**namespaced por unidade** — nunca cruzar sem a unidade. Reativar antes do CP1 é remendo: a rotina desfaz.
+### ~~CP2 — Reativar os vínculos de Campo Grande~~ ✅ **resolvido junto com o CP1**
+Não precisou de reativação manual nem de cruzamento com o Emusys: **corrigida a rotina, ela mesma recriou os
+vínculos**. As 108 nasceram em `2026-07-30`, dia seguinte ao encerramento em massa — histórico contínuo, sem
+buraco e sem sobreposição. O espelho do Emusys já havia confirmado, professor a professor, que esses
+professores seguiam ativos.
 
-### CP3 — Rematerializar o ciclo `2026-JUN-AGO` e reconferir `apta_oficial` *(bloqueado por CP2)*
-Baseline a superar: **0 aptos** em 09/08.
+### CP3 — Rematerializar o ciclo `2026-JUN-AGO` ⬅️ **PRÓXIMO, e cresceu**
+**Medido em transação com rollback (nada gravado ainda).** Rematerializar Campo Grande com as atribuições já
+corrigidas dá: `segmentacao_incompleta` **zerada** e `media_turma` com nota em **29 de 35** professores — a
+métrica destravou, que era a pergunta do checkpoint.
+
+Mas `apta_oficial` continua **0**, e a razão **não** é data. A regra das métricas segmentadas é
+`periodicidade='ciclo' AND estado_base_calculado='ok' AND nota_segmentada IS NOT NULL` — **sem trava de
+`periodo_fim`**, ao contrário de `presenca`/`retencao`. Logo há bloqueio remanescente em
+`estado_base_calculado`, que **não é persistido no `detalhes`** — só o `apta_oficial` derivado dele. Fechar
+exige ler `hs_v3_segmentos_agregado_base_canonica` na fonte.
+
+⚠️ **Descoberta que muda o planejamento de 01/09: nenhuma automação materializa o ciclo.** O cron 109
+(`materializar-health-score-professor-v3-diario`, 03:30 BRT) fixa `'mensal'` nos quatro pontos de chamada, e
+`executar_health_score_professor_v3_escopo_diario` **levanta exceção** se a periodicidade não for `mensal`
+(guard na linha 8). O ciclo está congelado em **22/07** — calculado quando Campo Grande ainda tinha zero
+atribuições. Sem rematerialização manual, `fechar_health_score_professor_v3_ciclo` em 01/09 fecharia um
+retrato de três semanas atrás, sem agosto.
+
+✅ **Rematerializar em agosto é seguro**: o fechamento escolhe, por professor+unidade,
+`order by competencia desc, revisao desc` — a competência mais nova vence. Snapshots de ciclo com competência
+`2026-08-01` convivem com os de `2026-07-01`, não conflitam.
+Entrada correta: `materializar_health_score_professor_v3_escopo(competência, 'ciclo', escopo, unidade, null)`.
+
+⚠️ **Nuance do filtro de elegibilidade:** o fechamento exige que **toda métrica que tem `nota`** seja
+`apta_oficial`. Métrica com `nota IS NULL` **não** bloqueia. Isso muda a leitura de "quantos faltam".
+
+⚠️ Também apareceu um erro do dia no cron 109: `HEALTH_SCORE_V3_PILARES_INCOMPLETOS` numa unidade (mensal,
+09/08 06:30 UTC) — não investigado.
 
 ### CP4 — Cruzar os ~166 vínculos em revisão da retenção com o Emusys *(independente)*
 Retenção reprova por `pendencias_total > 0`. Cruzar para separar: aluno **ativo** (não houve saída → descartar
@@ -86,9 +119,17 @@ continua sendo curadoria em `movimentacoes_admin`.
 43 snapshots e **0 segmentos**, contra 7.606 em julho/consolidado e 948 em agosto/unidade. Suspeita de
 materialização emergencial incompleta — **não confirmado**, pode ser diferença de caminho de materialização.
 
-### CP6 — Blindagem + housekeeping
-Confirmar que o CP1 protege Barra e Recreio (elas escaparam em julho por **ordem de cron**, não por regra).
-Deletar as duas branches órfãs já squashed.
+### CP6 — Blindagem + housekeeping *(parcialmente feito)*
+✅ Branches órfãs deletadas. ✅ Guarda anti-inativação em massa no ar. ✅ Barra e Recreio validadas com
+execução real de sync (21/21 e 29/29, `falhas` vazio) — não dependem mais de ordem de cron.
+
+Pendente:
+- **Retry com backoff na edge `sync-professor-disciplinas-emusys`.** Mover o cron reduz a colisão, não elimina
+  o risco: qualquer outro consumidor da API no mesmo instante reabre o 429. É a blindagem definitiva.
+- ⚠️ **Os crons 76/77/78 mandam só `x-sync-token`, sem `Authorization`.** Funciona porque a edge tem
+  `verify_jwt = false`; um redeploy pelo MCP reseta para `true` e o cron morre em **401 silencioso** — o
+  `pg_cron` marca `succeeded` de qualquer jeito. Exatamente o que matou o `sync-inadimplencia-emusys`.
+- **`HEALTH_SCORE_V3_PILARES_INCOMPLETOS`** no cron 109 de 09/08 (mensal, uma unidade).
 
 ---
 
