@@ -214,7 +214,48 @@ negócio embutidas:
 **Recomendação:** decidir (1) primeiro, porque muda a data-alvo do fechamento e, com ela, o planejamento dos
 outros checkpoints.
 
-### CP4 — Cruzar os ~166 vínculos em revisão da retenção com o Emusys *(independente)*
+### CP4 — Retenção: cruzamento com o Emusys **feito** (09/08); curadoria pendente
+
+⚠️ **O número "~166" estava errado.** No ciclo `2026-JUN-AGO` são **17 vínculos em revisão**, não 166.
+E dos 37 bloqueios de retenção no consolidado, **18 professores não têm pendência nenhuma** — estão em
+`estado_base='ok'`, com `vinculos_em_revisao = 0` e `encerramentos_pos_corte_pendentes = 0`. O que os trava é
+só `periodo_fim <= current_date` (31/08): **resolvem sozinhos em 01/09**, sem trabalho humano.
+Sobram **19 professores** em `ok_com_pendencias`.
+
+**Regras lidas na fonte** (`get_professor_retencao_v3_governada`, fonte `vw_professor_periodos_efetivos_v3_sombra`):
+- `vinculos_em_revisao` = períodos com `publicavel is false`
+- `encerramentos_pos_corte_pendentes` = encerrados **a partir de 2026-08-03** (data de corte) sem
+  `atribuicao_confirmada`, sem `motivo_saida_id`, ou com `conta_retencao_professor` divergindo de
+  `motivos_saida.conta_score_professor`
+- `apta_oficial` = `ciclo AND periodo_fim <= current_date AND expostos_limpos >= 10 AND pendencias_total = 0`
+
+**Cruzamento com o espelho do Emusys** (`aluno_jornada_matricula_disciplina`, campos `status_matricula` /
+`status_emusys` / `motivo_inativa`), por `aluno_id` + `unidade_id`, priorizando o mesmo `curso_id`:
+
+| classificação | n | leitura |
+|---|---|---|
+| **Ativo no Emusys, professor DIFERENTE** | **9** | troca de professor — o aluno **não saiu** |
+| **Ativo no Emusys, MESMO professor** | **3** | divergência pura: nós encerramos, o Emusys não |
+| `finalizada` + `interrompida` | 2 | evasão real |
+| `finalizada` + `concluida` | 1 | conclusão de curso — **não é evasão** |
+| `trancada` | 1 | trancamento — **não é evasão** |
+| sem aluno (FK órfã) | 1 | dado quebrado, não é caso de retenção |
+
+**12 dos 17 têm o aluno ATIVO no Emusys** — nenhuma saída aconteceu. Casos ilustrativos: Caio Tenório ×
+Clarisse (nós: encerrado 18/06; Emusys: ativa **com o próprio Caio**, última aula 13/05/2027) e Lohan Marques
+Boente, que aparece em **dois** professores (Letícia e Ana Beatriz) e no Emusys está ativo com um terceiro
+(Erick Osmy).
+
+⚠️ **A API não expõe motivo de saída, só status** — para os 2 de evasão real o motivo continua sendo
+curadoria em `movimentacoes_admin`. Mas isso agora é 2 casos, não 17.
+
+**Pendente:** (a) aplicar a disposição de cada um dos 17 (o mecanismo que vira `publicavel` não foi
+investigado — não chutar); (b) os ~14 `encerramentos_pos_corte_pendentes`, que **não** foram cruzados ainda e
+têm causa diferente (atribuição/motivo faltando após 03/08, não período não publicável).
+
+⚠️ **Correção de memória:** a nota antiga dizia que snapshot de ciclo **não** tem `vinculos_expostos_limpos`
+nem `encerramentos_pos_corte_pendentes`. **Tem** — medido em 09/08. Isso pode ter mudado na reescrita de
+03/08, ou a observação original foi de um snapshot antigo.
 Retenção reprova por `pendencias_total > 0`. Cruzar para separar: aluno **ativo** (não houve saída → descartar
 da penalização), **trancado**, **finalizado**. ⚠️ A API **não expõe motivo de saída**, só status — o motivo
 continua sendo curadoria em `movimentacoes_admin`.
