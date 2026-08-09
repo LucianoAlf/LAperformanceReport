@@ -664,6 +664,63 @@ nosso sistema** (Julia da Costa de Oliveira, Ester Soares Gomes Christianes).
 existe e nunca é preenchida — mesma doença de `motivo_saida_id`. Quem cruzar períodos com matrícula precisa
 usar `emusys_matricula_disciplina_id`.
 
+---
+
+#### 🔴 **A reconstrução APAGA a curadoria** — e é por isso que nunca foi automatizada *(achado 09/08)*
+
+Rodei a reconstrução nas 3 unidades: **96/96 partições, zero falhas**, 8.341 períodos. Tecnicamente
+impecável. E o número **piorou**: retenção 93,04% → 89,87%, vínculos em revisão **17 → 231**, professores em
+estado `ok` **24 → 0**.
+
+Não foi o dado. Comparando a **mesma janela do ciclo** entre as duas reconstruções, a distribuição de
+confiança é praticamente idêntica:
+
+| | vínculos no ciclo | alta | media | revisar |
+|---|---|---|---|---|
+| antiga (16/07) | 1.330 | 1.110 | 211 | 9 |
+| nova (09/08) | 1.386 | 1.155 | 215 | 16 |
+
+**A causa é a curadoria.** `professor_periodos_revisoes_v1` é chaveada por `periodo_id`, e a view casa por
+`b.periodo_chave = 'baseline:' || rv.periodo_id`. Reconstruir gera **ids novos**, então:
+
+| origem | decisão | revisões | apontam p/ a reconstrução nova |
+|---|---|---|---|
+| `promocao_automatica` | aprovado | 207 | **0** |
+| `revisao_humana` | corrigido | **100** | **0** |
+| `revisao_humana` | aprovado | 68 | **0** |
+| `revisao_humana` | rejeitado | 5 | **0** |
+| `revisao_humana` | manter_revisao | 2 | **0** |
+
+**382 decisões órfãs, 100 delas correções humanas de quem deu aula para quem.**
+
+⚠️ **Isto fecha o raciocínio do item anterior.** A pergunta "por que ninguém criou o cron?" tem resposta:
+**automatizar como está apagaria 382 decisões por dia.** O pipeline foi desenhado como carga histórica de uma
+vez só, com a curadoria por cima. Não é esquecimento — é uma dependência que ninguém resolveu.
+
+**Estado deixado:** as 99 reconstruções novas em **quarentena reversível** (`status='pendente'`,
+`concluido_em=null`; a view baseline só enxerga `concluido`). **Nada apagado.** Produção conferida de volta ao
+baseline **exato**: 1.336 expostos, 93 penalizadores, 0 pendências, 17 em revisão, 93,04%, 37 publicáveis,
+24 em `ok`.
+
+✅ **Ganho permanente que fica:** o staging foi recarregado (2.939 aulas de 17/07 a 09/08; backfill concluído
+nas 3 unidades cobrindo `2018-01-01 → hoje`). A próxima reconstrução não baixa nada.
+
+**Ordem correta daqui**, revisada:
+
+1. **Fazer a reconstrução carregar a curadoria adiante** — re-vincular as revisões por chave natural
+   (`pessoa_chave` + `emusys_matricula_disciplina_id` + `emusys_professor_id` + `data_inicio`) e re-rodar a
+   promoção automática. **Sem isto, nada mais pode ser ligado.**
+2. Reativar as reconstruções em quarentena e conferir contra o baseline.
+3. Só então os crons (backfill + reconstrução).
+4. Só então o motivo de saída.
+
+⚠️ **Duas armadilhas medidas ao rodar:**
+- **`inicio_completo: true` é obrigatório** quando o recorte começa em 2018-01-01. Sem ele, o primeiro
+  período de cada partição nasce truncado: `inicio_incompleto` 0 → **2.269**, vínculos em revisão 17 → **498**.
+  Está escrito dentro de `scripts/conduzir-reconstrucao-professor.mjs`, com o número.
+- **A finalização cria uma reconstrução nova a cada partição** — 32 linhas por unidade por execução. Só a
+  última tem as 32 partições dentro e `inicio_incompleto = 0`. Conferir a última, nunca uma qualquer.
+
 ### ⚠️ Divergências que precisam de confirmação humana
 
 Casos onde o Emusys e o nosso registro discordam e alguém precisa dizer quem está certo:

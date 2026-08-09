@@ -28,6 +28,15 @@ const DATA_INICIO = '2018-01-01';
 const DATA_FIM = process.env.DATA_FIM || new Date().toISOString().slice(0, 10);
 const TOTAL_PARTICOES = 32;
 
+// ⚠️ SEM isto, TODO primeiro período de cada partição nasce `inicio_incompleto`,
+// o que derruba a confiança para 'media' e tira o vínculo de publicável.
+// Medido em 09/08 ao esquecer o parâmetro: `inicio_incompleto` foi de 0 para 2.269
+// e os vínculos em revisão de 17 para 498. O recorte começa em 2018-01-01, que é o
+// início real do histórico no Emusys — então a afirmação é verdadeira, não conveniência.
+const INICIO_COMPLETO = true;
+const EVIDENCIA_INICIO_COMPLETO =
+  `Recorte integral Emusys ${DATA_INICIO} a ${DATA_FIM}; staging recarregado pelo backfill incremental de 09/08/2026.`;
+
 const UNIDADES = [
   { nome: 'Campo Grande', id: '2ec861f6-023f-4d7b-9927-3960ad8c2a92', backfill: 'e458d32a-c96d-4997-8691-7df07e5524f4' },
   { nome: 'Barra', id: '368d47f5-2d88-4475-bc14-ba084a9a348e', backfill: '0dd86f6d-f4f0-4d03-9b51-91921a4bf1d5' },
@@ -51,6 +60,8 @@ async function processarParticao(unidade, indice) {
         data_fim: DATA_FIM,
         versao_reconstrucao: VERSAO,
         execucao_backfill_id: unidade.backfill,
+        inicio_completo: INICIO_COMPLETO,
+        evidencia_inicio_completo: EVIDENCIA_INICIO_COMPLETO,
         particao_total: TOTAL_PARTICOES,
         particao_indice: indice,
       }),
