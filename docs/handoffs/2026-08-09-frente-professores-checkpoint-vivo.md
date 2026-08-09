@@ -178,6 +178,42 @@ Entrada correta: `materializar_health_score_professor_v3_escopo(competência, 'c
 ⚠️ Também apareceu um erro do dia no cron 109: `HEALTH_SCORE_V3_PILARES_INCOMPLETOS` numa unidade (mensal,
 09/08 06:30 UTC) — não investigado.
 
+### CP7 — `conversao` não emite `apta_oficial` no ciclo *(diagnosticado 09/08, NÃO corrigido)*
+
+**27 professores com nota bloqueiam o fechamento** — 2º maior bloqueador, atrás só da retenção. Só apareceu
+depois que o CP3 resolveu `media_turma`; até então estava encoberto.
+
+**Diagnóstico completo.** A cadeia vigente para conversão no ciclo é
+`get_health_score_professor_v3_metricas_periodo` → `get_hs_prof_v3_metricas_periodo_base_20260803` →
+`get_health_score_professor_v3_conversao_ciclo` → `get_hs_prof_v3_conversao_ciclo_base_20260803` (03/08).
+**Nenhuma das quatro emite a chave `apta_oficial`.** O `detalhes` gravado não tem a chave, e o filtro do
+fechamento faz `coalesce((detalhes->>'apta_oficial')::boolean, false) is not true` — **ausência conta como
+reprovação**. Ironia: o mesmo payload traz `ranking_elegivel: true` e `codigo_evidencia: "evidencia_valida"`.
+
+A implementação **anterior** (`get_health_score_prof_v3_metricas_base_20260728_c95`) emitia:
+
+```sql
+'apta_oficial', p_periodicidade = 'ciclo'
+  and current_date >= v_fim_periodo + 30      -- janela D+30 de maturação
+  and coalesce(e.experimentais, 0) >= 3
+  and coalesce(e.sem_identidade, 0) = 0
+```
+
+⚠️ **NÃO é fix mecânico como o do CP3.** Lá a expressão existia e só recebia entrada velha; aqui a chave
+sumiu na reescrita de 03/08 e restaurá-la exige **decidir a regra** para o vocabulário novo. Duas decisões de
+negócio embutidas:
+
+1. **Manter a janela D+30?** Se sim, o ciclo `2026-JUN-AGO` (fim 31/08) só amadurece em **30/09** — ou seja,
+   **o fechamento oficial não pode ocorrer em 01/09**, mesmo com tudo o mais resolvido. Isso muda a data-alvo
+   da frente inteira. A janela existe por um motivo real: uma experimental ainda vira matrícula em até 30 dias.
+2. **O que zera hoje?** O payload novo trocou `sem_identidade` por `experimentais_sem_pessoa_canonica`,
+   `experimentais_somente_evento` e `conversoes_declaradas_sem_matricula_canonica`. Numa amostra real havia
+   **4 experimentais sem pessoa canônica** — sob a regra antiga isso reprovaria. Escolher quais desses
+   contadores travam a oficialização é decisão do Alf, não minha.
+
+**Recomendação:** decidir (1) primeiro, porque muda a data-alvo do fechamento e, com ela, o planejamento dos
+outros checkpoints.
+
 ### CP4 — Cruzar os ~166 vínculos em revisão da retenção com o Emusys *(independente)*
 Retenção reprova por `pendencias_total > 0`. Cruzar para separar: aluno **ativo** (não houve saída → descartar
 da penalização), **trancado**, **finalizado**. ⚠️ A API **não expõe motivo de saída**, só status — o motivo
