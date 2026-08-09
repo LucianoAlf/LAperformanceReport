@@ -246,10 +246,42 @@ professor está sendo calculado sobre um dado com 54% de identidade não resolvi
 que a tira do score é de **03/08** — **posterior**. A decisão mais recente é "fora do score", e ela não está
 sendo respeitada.
 
-**Decisão do Alf:** (a) honrar o `fora_do_score` e tirar a conversão do score deste ciclo — **muda a nota
-exibida de todos os professores**; ou (b) mantê-la pontuando e priorizar a resolução de identidade.
-Investigar em paralelo por que `lead_experimentais` / `emusys_experimentais_raw` não resolvem pessoa canônica
-em metade dos casos.
+✅ **DECIDIDO pelo Alf em 09/08: a conversão PONTUA.** Opção (b) — manter no score e resolver a identidade.
+Também decidido: o crédito da conversão é do **professor que deu a aula experimental**, não daquele com quem
+o aluno acabou matriculando (às vezes são pessoas diferentes) — conferir se a implementação respeita isso.
+
+🔎 **RAIZ ENCONTRADA (09/08) — o Emusys já entregou tudo; o vínculo é que nunca foi ligado.**
+Em `emusys_experimentais_raw`, no ciclo (1.665 experimentais com professor e presença):
+
+| campo | preenchido |
+|---|---|
+| `emusys_lead_id` (ID do lado do Emusys) | **1.648 (99%)** |
+| `emusys_lead_id_zero` (aluno já cadastrado, `id_lead=0`) | 17 — e têm `emusys_aluno_id` |
+| **`lead_id` (FK interna para `leads`)** | **0** |
+| `aluno_id` (FK interna) | 260 (15,6%) |
+| `situacao_operacional = 'matriculado'` | **0** (todas `presente`) |
+
+1.648 + 17 = 1.665: **cobertura 100% do lado do Emusys, 0% do lado do vínculo.** A API entrega `id_aluno` e
+`id_lead` em `AlunoNaAula` desde 21/06/2026; a ingestão guarda o ID do Emusys e nunca resolve a FK.
+
+**Ligando `emusys_lead_id` + `unidade_id` → `leads`:**
+
+| situação | linhas | como resolve |
+|---|---|---|
+| casa em `leads` | **1.244 (75%)** | só ligar — **sem chamada à API** |
+| `emusys_lead_id_zero` | 17 | por `emusys_aluno_id` |
+| lead ausente no banco | 304 | precisa vir do Emusys |
+| lead existe em **outra** unidade | 100 | ⚠️ investigar: ID é namespaced por unidade, pode ser cadastro na unidade errada — **não casar cross-unidade** |
+
+São só **17 `emusys_lead_id` distintos** gerando as 404 linhas que faltam, e cada um tem **exatamente um nome**
+— o dado é consistente, não há colisão.
+
+⚠️ **Anomalia de ingestão dentro desses 404:** `8038` Daniel Barros Pontes Rodrigues com **162 linhas** e
+`8015` Benjamin Duarte com **128** — juntos, 290 das 404. Uma pessoa com 162 "experimentais" num ciclo não é
+experimental; isso infla o denominador da conversão do professor envolvido. Investigar antes de ligar.
+
+⚠️ **`situacao_operacional = 'matriculado'` é zero em 1.665 linhas** — o estado que marcaria a conversão nunca
+aparece. Verificar se o crédito de matrícula depende dele.
 
 ### CP4 — Retenção: cruzamento com o Emusys **feito** (09/08); curadoria pendente
 
