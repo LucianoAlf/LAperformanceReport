@@ -52,6 +52,17 @@ verify_jwt = true
 [functions.reconstruir-periodos-professor]
 verify_jwt = true
 
+# Orquestrador do pipeline de histórico do professor, chamado por cron.
+# ⚠️ verify_jwt = TRUE de propósito. Com `false`, o gateway não valida a assinatura do JWT
+# e ler o claim `role` seria forjável por qualquer um. Com `true`, a assinatura já vem
+# validada e a edge pode confiar no claim — que é o que cobre rotação de chave (a
+# service_role do `.env` pode ser de outra geração que a variável interna da função).
+# O cron manda `Authorization: Bearer <service_role>`, como manda a regra do projeto.
+# Bônus: um redeploy pelo MCP reseta verify_jwt para `true`, que aqui é o valor CORRETO —
+# esta edge não pode ser derrubada por aquela armadilha.
+[functions.orquestrar-historico-professor]
+verify_jwt = true
+
 [functions.export-contas-receber]
 # Integracao servidor-servidor: autentica o segredo dedicado no proprio codigo.
 verify_jwt = false
