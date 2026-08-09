@@ -283,6 +283,31 @@ experimental; isso infla o denominador da conversão do professor envolvido. Inv
 ⚠️ **`situacao_operacional = 'matriculado'` é zero em 1.665 linhas** — o estado que marcaria a conversão nunca
 aparece. Verificar se o crédito de matrícula depende dele.
 
+🔴 **CORREÇÃO (09/08, mesma sessão) — o bloco abaixo está ERRADO e fica à vista de propósito.**
+Separando os dois contadores: das 196 experimentais do ciclo, só **14 estão sem lead resolvido** (7%) — a
+função já resolve o lead em 93% pela cadeia de fallback. As 106 "sem pessoa canônica" **não são buraco de
+dado**: `experimentais_sem_pessoa_canonica` conta quem fez experimental e **não virou aluno**, que é o estado
+normal de quem não converteu. Das 92 que têm lead e não têm pessoa, apenas **1** declarou conversão sem
+matrícula canônica (contador `conversoes_declaradas_sem_matricula_canonica`) — **esse** é o furo real.
+
+**Consequências da correção:**
+- **Os 41,8% são a taxa real de conversão, não um piso.** Os "91,1%" foram calculados tirando os
+  não-convertidos do denominador — que é justamente onde eles devem estar. Não há distorção de 2×.
+- **A regra que a migration `20260809200000` aplicou estava errada:** `sem_pessoa_canonica = 0` exige na
+  prática **100% de conversão** para a métrica virar oficial. Corrigida em `20260809210000` para
+  `conversoes_declaradas_sem_matricula_canonica = 0`. Medido: critério errado deixava **0 de 27** passarem;
+  o correto deixa **26 de 27**.
+- **Cai o alarme do CP9.** A cobertura de identidade não é o problema que eu descrevi; o que sobra é pequeno
+  (14 sem lead + 1 conversão sem matrícula canônica) e a duplicação da tabela raw, que não contamina a nota.
+
+**Lição de método:** dois contadores com nomes parecidos mediam coisas opostas. Antes de chamar um número de
+"buraco", conferir se ele não é simplesmente **o denominador fazendo o seu trabalho**.
+
+---
+
+<details>
+<summary>Bloco original, mantido para rastreabilidade (contém os números errados)</summary>
+
 **IMPACTO MEDIDO (09/08) — a conversão exibida hoje é um piso, não uma medida.**
 
 | medida | valor |
@@ -305,6 +330,8 @@ meta de 70% cai no meio do intervalo. **Hoje é impossível dizer se a conversã
 `publicavel = false` (**hardcoded**, não é condicional) e `estado_base = 'provisorio_ciclo'`. Ou seja, a
 métrica se declara não-publicável e provisória — e mesmo assim entra no score com 16,67%. Não é ambiguidade
 de leitura: é uma métrica marcada como não publicável sendo publicada.
+
+</details>
 
 ⚠️ **Duplicação de ingestão em `emusys_experimentais_raw`** (achada junto): Benjamin Duarte tem **139 linhas
 para 1 única aula, 1 data, 1 professor**, com 139 `raw_key` distintos; Daniel Barros, 162 linhas para 3
