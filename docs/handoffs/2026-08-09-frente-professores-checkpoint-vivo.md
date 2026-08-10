@@ -951,8 +951,11 @@ Casos onde o Emusys e o nosso registro discordam e alguém precisa dizer quem es
    atribuição.
 3. **Períodos sem aluno (FK órfã)** — 2 casos: Erick Cosme da Silva (conflito `jornada_atual_divergente`) e
    Leonardo Castro. Não são casos de retenção; é dado quebrado.
-4. **Conclusão contada como saída** — Guilherme Dias da Silva aparece como encerramento e no Emusys é
-   `finalizada/concluida`. Conclusão de curso não deveria penalizar retenção.
+4. ~~**Conclusão contada como saída**~~ — **RESOLVIDO em 10/08** (ver CP11 abaixo). A hipótese estava
+   metade certa: conclusão de contrato **com o aluno saindo** é não-renovação e penaliza, sim. O caso
+   nomeado prova: Guilherme Dias da Silva está `inativo`, 40/40 aulas, e tem **2 saídas registradas**.
+   O que não podia acontecer é o inverso — conclusão **com o aluno ativo** (renovação pendente) entrando
+   como pendência de governança. Esse era o erro, e foi corrigido.
 
 ⚠️ **Correção de memória:** a nota antiga dizia que snapshot de ciclo **não** tem `vinculos_expostos_limpos`
 nem `encerramentos_pos_corte_pendentes`. **Tem** — medido em 09/08. Isso pode ter mudado na reescrita de
@@ -1060,6 +1063,58 @@ O ciclo `2026-JUN-AGO` termina **31/08/2026** → antes de **01/09** não há o 
    **mensais**, que nunca são aptos — deu "1 apto em 42", número sem sentido.
 4. **Ir à fonte antes de gerar lista de curadoria.** A lista que quase geramos teria mandado as unidades
    recadastrarem à mão 384 segmentos que o próprio sistema apagou. Cruzar com o Emusys revelou o bug.
+
+---
+
+### CP11 — "Concluído — Renovação Pendente" não é saída sem motivo *(FECHADO 10/08)*
+
+O Alf viu a lista de pendências renascer depois de já ter conferido os alunos um a um e perguntou:
+*"a gente já tinha resolvido esses alunos aí. É só alunos que estão com renovação pendente. Por que que
+a gente acabou voltando nela?"*. Ele estava certo, e o erro não era de curadoria — era da regra.
+
+`encerramentos_pos_corte_pendentes` perguntava **"o período encerrou e não tem motivo de saída?"**.
+A pergunta certa é **"o aluno saiu?"**. O período do professor encerra quando a **jornada** acaba (última
+aula do contrato); o aluno segue matriculado esperando renovar. Mesmo erro de categoria que o CP8 corrigiu
+para troca de professor, agora no fim de contrato — e por isso a lista renascia sozinha todo dia, com os
+contratos que iam vencendo. Nenhuma conferência no Emusys resolveria: o problema não estava lá.
+
+**O que separa os dois casos, medido antes de mexer (ciclo JUN-AGO consolidado):**
+
+| | as 9 pendências | as 19 penalizadoras `concluida` |
+|---|---|---|
+| aluno | **8 de 9 ATIVO** | **19 de 19 INATIVO** |
+| dias desde o fim | 3 a 7 | 32 a 69 |
+| saída registrada | 0 | 14 de 17 |
+
+O corte é limpo e a variável que separa é o **estado do aluno**, não o tempo.
+
+⚠️ **O motivo estava na origem e nunca tinha sido lido.** `GET /matriculas` devolve `motivo_inativa`, com
+exatamente dois valores no banco inteiro: **`interrompida`** (3.240 — parou no meio = saída) e
+**`concluida`** (409 — cumpriu até a última aula = fim de jornada). Nas 9, `motivo_inativa='concluida'` e
+`nr_aulas_passadas = nr_aulas_contratadas` (40/40, 43/43, 45/45, 50/50). O Emusys já dizia que ninguém
+tinha saído. Mesmo padrão das outras correções desta frente: **ancorar no estado da fonte em vez de derivar**.
+
+**Trava de 45 dias, de propósito.** Sem ela, um aluno eternamente "ativo" sem renovar sumiria da governança
+para sempre. 45 dias não é número escolhido a esmo: é a **mesma janela** que a `vw_professor_periodos_baseline_v3_sombra`
+já usa para aceitar uma movimentação de saída como evidência (`s.data between data_fim-45 and data_fim+45`).
+Alarmar antes disso é alarmar antes de a evidência poder existir. Nada é escondido — só adiado até ser acionável.
+
+**Não mexe no número da retenção.** Provado recriando a versão anterior sob outro nome e comparando linha a
+linha em 7 cenários (ciclo consolidado + 3 unidades, mensal jun/jul/ago): **248 linhas, 0 diferenças** em
+`valor_bruto`, `numerador`, `denominador` e `publicavel`. Mudam só `estado_base`/`confianca` de **2 professores**
+(Fabricio Costa de Oliveira e Matheus dos Santos Silva de Oliveira: `ok_com_pendencias` → `ok`, `media` → `alta`),
+com o valor idêntico. Pendências somadas nos 7 cenários: **27 → 3**. No ciclo consolidado: **9 → 1**.
+
+A que fica é **Anna Klara de Abreu Coutinho** (Lohana, fim 03/08): `inativo`, saída real sem motivo
+registrado. A lista fazendo o trabalho dela.
+
+⚠️ **Isto NÃO destrava `apta_oficial`.** `pendencias_total = vinculos_em_revisao + encerramentos_pos_corte_pendentes`,
+e `vinculos_em_revisao` continua **61** no consolidado — que é o **CP4**, ainda aberto. Zerar as pendências
+pós-corte era condição necessária, não suficiente.
+
+Migration `20260810180000_renovacao_pendente_nao_e_saida_sem_motivo.sql` (pg_get_functiondef + replace com
+guarda, padrão do CP8). Os 9 testes de contrato passam — eles leem o **arquivo** da migration original, que
+não foi tocado. ⚠️ Reaplicar `20260727120000_..._universo_governado.sql` desfaz esta correção.
 
 ---
 
