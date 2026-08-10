@@ -1,0 +1,27 @@
+-- A view nasceu (20260810134413) com security_invoker DESLIGADO, que e o default
+-- do Postgres: ela executa com os direitos do DONO, nao de quem consulta. Como
+-- ela tem grant select para `authenticated`, isso significa que a view enxerga
+-- movimentacoes_admin ignorando o RLS da tabela.
+--
+-- Hoje isso nao vaza nada: a policy de movimentacoes_admin e
+-- "Permitir acesso total para usuarios autenticados" com qual = true, entao a
+-- tabela ja e integralmente legivel por qualquer autenticado -- medido como o
+-- usuario cg@lamusic.com.br, que ve as 3 unidades pela TABELA tambem.
+--
+-- E uma bomba-relogio, nao um bug atual: no dia em que essa policy for apertada
+-- para filtrar por unidade (o resto do projeto ja e assim), a tabela passaria a
+-- filtrar e a view continuaria devolvendo tudo, em silencio. Ligar o
+-- security_invoker faz a view acompanhar a tabela para sempre.
+--
+-- Nao afeta as 5 RPCs que a consomem: sao SECURITY DEFINER, entao o "invoker"
+-- dentro delas e o dono da funcao. Conferido apos a alteracao: as 4 RPCs de
+-- relatorio/fideliza/retencao/financeiro respondem nas 3 unidades.
+--
+-- Equivalencia provada como authenticated de unidade antes e depois: mesmo
+-- md5 do agregado de ids (84e47b6f17b26d37624f559ae422706c, 1654 linhas).
+--
+-- ACL conferida: {postgres, service_role, authenticated=r, + 4 roles de agente
+-- com r}. Sem anon, sem public -- ver a regra sobre ALTER DEFAULT PRIVILEGES
+-- pegar VIEW no CLAUDE.md.
+
+alter view public.movimentacoes_admin_vigentes set (security_invoker = on);
