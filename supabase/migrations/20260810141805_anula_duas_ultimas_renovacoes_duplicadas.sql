@@ -1,4 +1,4 @@
--- Fecha as duas duplicatas que sobraram do lote por contrato (20260810160000).
+-- Fecha as duas duplicatas que sobraram do lote por contrato (20260810141701).
 -- As duas ficaram de fora la porque nao tem parcela emitida no Emusys -- Noah e
 -- bolsista (mensalidade 0) e a matricula do Daniel esta inativa -- entao o
 -- criterio "contrato que estreia em 2026" nao alcancava nenhuma das duas. A
