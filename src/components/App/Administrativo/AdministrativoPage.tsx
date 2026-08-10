@@ -1143,18 +1143,28 @@ export function AdministrativoPage() {
 
     setExcluindo(true);
     try {
-      const { error } = await supabase
-        .from('movimentacoes_admin')
-        .delete()
-        .eq('id', itemParaExcluir.id);
+      // Arquiva em vez de apagar: a linha vai para movimentacoes_admin_arquivadas
+      // com autor, data e motivo, e some das leituras. DELETE direto e bloqueado
+      // no banco desde 2026-08-10 — foi um DELETE aqui que apagou a renovacao da
+      // Catarina Petrolongo (a unica linha que tinha a data da 1a aula do novo
+      // ciclo), deixando o relatorio de julho apontando para um registro que nao
+      // existia mais.
+      const { error } = await supabase.rpc('arquivar_movimentacao_admin', {
+        p_id: itemParaExcluir.id,
+        p_motivo: `Excluido pela tela Administrativo — ${itemParaExcluir.nome}`,
+      });
       if (error) throw error;
-      
+
       setModalConfirmacaoExcluir(false);
       setItemParaExcluir(null);
       await loadData();
     } catch (error) {
       console.error('Erro ao excluir:', error);
-      alert('Erro ao excluir registro. Tente novamente.');
+      toastError(
+        error instanceof Error && error.message.includes('DELETE_BLOQUEADO')
+          ? 'Este registro não pode ser apagado. Use a opção de arquivar.'
+          : 'Não foi possível excluir o registro. Tente novamente.'
+      );
     } finally {
       setExcluindo(false);
     }

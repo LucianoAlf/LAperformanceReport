@@ -420,19 +420,29 @@ export function PlanilhaRetencao() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sb = supabase as any;
+      // Arquiva em vez de apagar: a linha vai para movimentacoes_admin_arquivadas
+      // com autor, data e motivo, e some das leituras. DELETE direto e bloqueado
+      // no banco desde 2026-08-10 — foi um DELETE por esse caminho que apagou a
+      // renovacao da Catarina Petrolongo (a unica linha que tinha a data da 1a
+      // aula do novo ciclo), deixando o relatorio de julho apontando para um
+      // registro inexistente.
       // row.tabela é um discriminador interno de forma de escrita; a tabela física é sempre movimentacoes_admin
-      const { error } = await sb
-        .from('movimentacoes_admin')
-        .delete()
-        .eq('id', row.id);
+      const { error } = await sb.rpc('arquivar_movimentacao_admin', {
+        p_id: row.id,
+        p_motivo: `Removido pela Planilha de Retenção — ${row.aluno_nome ?? 'registro'}`,
+      });
 
       if (error) throw error;
 
       setRows(prev => prev.filter((_, i) => i !== index));
-      toast.success('Registro removido!');
+      toast.success('Registro arquivado!');
     } catch (error) {
-      console.error('Erro ao deletar:', error);
-      toast.error('Erro ao remover registro');
+      console.error('Erro ao arquivar:', error);
+      toast.error(
+        error instanceof Error && error.message.includes('DELETE_BLOQUEADO')
+          ? 'Este registro não pode ser apagado. Fale com o admin.'
+          : 'Erro ao remover registro'
+      );
     }
   };
 
