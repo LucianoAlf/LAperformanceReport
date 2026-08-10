@@ -1085,10 +1085,15 @@ async function registrarMovimentacao(
     // observado (<1 a ~30 dias) e muito menor que um ciclo real de renovacao (>= ~6 meses),
     // entao nunca bloqueia a renovacao legitima do ciclo seguinte. Multi-curso e seguro:
     // cada curso tem matricula_id proprio (validado: Carlos Eduardo Canto 1205 / Contrabaixo 1316).
+    // `anulado` significa "esta linha nao existe para efeito de negocio" em todo o
+    // resto do sistema (a leitura canonica e movimentacoes_admin_vigentes). Sem
+    // este filtro, uma linha anulada por engano bloquearia a reentrada da
+    // renovacao legitima para sempre, e em silencio.
     if (p.matriculaIdEmusys) {
       const { data: jaExistePorMatricula } = await supabase.from('movimentacoes_admin')
         .select('id')
         .eq('tipo', 'renovacao')
+        .eq('anulado', false)
         .eq('emusys_matricula_id', p.matriculaIdEmusys)
         .gte('data', addDiasISO(dataMovimento, -60))
         .limit(1);
@@ -1473,7 +1478,11 @@ async function handleRenovacao(supabase: any, p: Payload) {
     // gated de novo (mesma regra) dentro de registrarMovimentacao.
     // Fonte = movimentacoes_admin (a tabela legada renovacoes deixou de ser gravada na v27).
     const inicioMes = classificacaoCompetencia.competenciaReferencia;
-    let existenteQuery = supabase.from('movimentacoes_admin').select('id').eq('tipo', 'renovacao');
+    let existenteQuery = supabase
+      .from('movimentacoes_admin')
+      .select('id, renovacao_primeira_aula_novo_ciclo, competencia_referencia, renovacao_status, emusys_matricula_id')
+      .eq('tipo', 'renovacao')
+      .eq('anulado', false);
     if (p.matriculaIdEmusys) {
       existenteQuery = existenteQuery
         .eq('emusys_matricula_id', p.matriculaIdEmusys)
@@ -1485,7 +1494,108 @@ async function handleRenovacao(supabase: any, p: Payload) {
         .eq('competencia_referencia', inicioMes);
     }
     const { data: existente } = await existenteQuery.limit(1);
-    const renovacaoDuplicada = !!existente?.length;
+    let linhaCandidata = existente?.[0] ?? null;
+
+    // Rede para o lancamento adiantado SEM vinculo.
+    //
+    // Quando a busca acima usa emusys_matricula_id, ela nao alcanca o registro que
+    // a equipe lancou a mao antes de o Emusys existir -- aquele nasceu sem vinculo.
+    // Era exatamente esse o buraco: o webhook nao achava nada e inseria uma segunda
+    // linha, gerando a duplicata com competencias diferentes.
+    //
+    // Escopo estreito de proposito: mesmo aluno, mesma unidade, MESMO CURSO (senao
+    // quem faz 2 instrumentos teria a renovacao do segundo engolida pela do
+    // primeiro), sem vinculo, sem 1a aula preenchida e dentro de 60 dias.
+    if (!linhaCandidata && p.matriculaIdEmusys && dataPrimeiraAulaNovoCiclo) {
+      let orfaQuery = supabase
+        .from('movimentacoes_admin')
+        .select('id, renovacao_primeira_aula_novo_ciclo, competencia_referencia, renovacao_status, emusys_matricula_id')
+        .eq('tipo', 'renovacao')
+        .eq('anulado', false)
+        .eq('aluno_id', aluno.id)
+        .eq('unidade_id', p.unidadeId)
+        .is('emusys_matricula_id', null)
+        .is('renovacao_primeira_aula_novo_ciclo', null)
+        .gte('data', addDiasISO(hoje, -60));
+      const cursoParaCasar = cursoId || aluno.curso_id || null;
+      if (cursoParaCasar) orfaQuery = orfaQuery.eq('curso_id', cursoParaCasar);
+
+      const { data: orfas } = await orfaQuery.order('data', { ascending: false }).limit(1);
+      linhaCandidata = orfas?.[0] ?? null;
+      if (linhaCandidata) {
+        console.log('[renovacao] lancamento adiantado sem vinculo localizado', {
+          movimentacao_id: linhaCandidata.id,
+          aluno_id: aluno.id,
+          matricula_id: p.matriculaIdEmusys,
+        });
+      }
+    }
+
+    const renovacaoDuplicada = !!linhaCandidata;
+
+    // Reconciliacao do lancamento adiantado.
+    //
+    // A equipe costuma registrar a renovacao a mao assim que negocia, dias antes
+    // de o Emusys emitir o contrato. Esse registro nasce SEM a data da 1a aula do
+    // novo ciclo -- e, sem ela, o formulario cai no mes do LANCAMENTO para definir
+    // a competencia, que e outra regra (a canonica e o mes da 1a aula).
+    //
+    // Ate aqui a edge apenas ignorava o registro existente, entao a competencia
+    // errada ficava para sempre. Foi o que produziu, so em julho/2026 no Recreio,
+    // 4 renovacoes contadas em julho cujo ciclo so comeca em agosto (Daniel Duque,
+    // Lara Dias, Lohan e Miguel Holanda: lancadas no lote manual de 03/07, 1a aula
+    // real em 03/08, 05/08 e 10/08).
+    //
+    // O webhook sabe a data real. Completar o registro em vez de descarta-lo faz o
+    // lancamento adiantado convergir sozinho, sem a unidade ter que corrigir nada.
+    // So preenche o que esta VAZIO: se a linha ja tem 1a aula, ela veio do proprio
+    // Emusys e nao se toca.
+    const linhaExistente = linhaCandidata;
+    if (
+      linhaExistente &&
+      dataPrimeiraAulaNovoCiclo &&
+      !linhaExistente.renovacao_primeira_aula_novo_ciclo
+    ) {
+      const patch: Record<string, unknown> = {
+        renovacao_primeira_aula_novo_ciclo: dataPrimeiraAulaNovoCiclo,
+        competencia_referencia: classificacaoCompetencia.competenciaReferencia,
+        renovacao_antecipada: classificacaoCompetencia.antecipada,
+        updated_at: new Date().toISOString(),
+      };
+      // Backfill do vinculo: sem ele a proxima reentrega do webhook nao acha esta
+      // linha e volta a duplicar.
+      if (p.matriculaIdEmusys && !linhaExistente.emusys_matricula_id) {
+        patch.emusys_matricula_id = p.matriculaIdEmusys;
+      }
+      // A decisao humana (confirmada x pendente) e preservada; so o prefixo
+      // "antecipada_" acompanha a competencia recalculada.
+      const statusAtual = String(linhaExistente.renovacao_status ?? '');
+      const jaConfirmada = statusAtual.endsWith('confirmada');
+      if (statusAtual) {
+        patch.renovacao_status = jaConfirmada
+          ? classificacaoCompetencia.statusConfirmada
+          : classificacaoCompetencia.statusPendente;
+      }
+
+      const { error: erroReconciliacao } = await supabase
+        .from('movimentacoes_admin')
+        .update(patch)
+        .eq('id', linhaExistente.id);
+
+      if (erroReconciliacao) {
+        console.error('[renovacao] falha ao reconciliar lancamento adiantado', {
+          movimentacao_id: linhaExistente.id,
+          erro: erroReconciliacao.message,
+        });
+      } else {
+        console.log('[renovacao] lancamento adiantado reconciliado', {
+          movimentacao_id: linhaExistente.id,
+          competencia_de: linhaExistente.competencia_referencia,
+          competencia_para: classificacaoCompetencia.competenciaReferencia,
+          primeira_aula_novo_ciclo: dataPrimeiraAulaNovoCiclo,
+        });
+      }
+    }
 
     const alunoUpdate: any = {
       status: 'ativo',
