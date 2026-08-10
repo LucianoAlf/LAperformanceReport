@@ -18,6 +18,11 @@ import { supabase } from '../../../lib/supabase';
 const renovacaoSchema = z.object({
   aluno_id: z.string().uuid('Selecione um aluno'),
   data_renovacao: z.string().min(1, 'Data obrigatória'),
+  // A competência da renovação é o mês da PRIMEIRA AULA do novo ciclo, não o mês
+  // em que a equipe negociou. Opcional porque nem sempre a data já é conhecida na
+  // hora do lançamento; quando fica vazia, o webhook do Emusys preenche depois
+  // (processar-matricula-emusys v81 reconcilia o lançamento adiantado).
+  data_primeira_aula_novo_ciclo: z.string().optional(),
   valor_anterior: z.coerce.number(),
   valor_novo: z.coerce.number().min(1, 'Valor obrigatório'),
   percentual_reajuste: z.coerce.number(),
@@ -70,6 +75,16 @@ export function FormRenovacao() {
   const valorNovo = watch('valor_novo');
   const percentualReajuste = watch('percentual_reajuste');
 
+  // Mostra, antes de salvar, em que mês a renovação vai cair. A regra é a mesma do
+  // webhook: manda a 1ª aula do novo ciclo; sem ela, a data da negociação.
+  const dataRenovacaoAtual = watch('data_renovacao');
+  const primeiraAulaAtual = watch('data_primeira_aula_novo_ciclo');
+  const baseCompetenciaPreview = primeiraAulaAtual || dataRenovacaoAtual;
+  const competenciaPrevista = baseCompetenciaPreview
+    ? new Date(`${String(baseCompetenciaPreview).slice(0, 7)}-01T12:00:00`)
+        .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+    : null;
+
   useEffect(() => {
     if (valorAnterior && valorNovo) {
       const percentual = ((valorNovo - valorAnterior) / valorAnterior) * 100;
@@ -120,10 +135,23 @@ export function FormRenovacao() {
         data_ultima_renovacao: data.data_renovacao,
       }).eq('id', data.aluno_id);
 
-      // competencia_referencia = primeiro dia do mês da renovação. Sem ela, os
-      // relatórios caem no fallback por `data` e a renovação pode ser contada
-      // em competência diferente da que a unidade enxerga.
-      const competenciaReferencia = `${String(data.data_renovacao).slice(0, 7)}-01`;
+      // A competência da renovação é o mês da PRIMEIRA AULA do novo ciclo — não o
+      // mês em que a equipe negociou. Era essa a divergência entre os dois
+      // caminhos de escrita: o webhook do Emusys sempre usou a 1ª aula, e este
+      // formulário usava a data do lançamento. Como as duas linhas nasciam com
+      // competências diferentes, a deduplicação (que casa por aluno+curso+
+      // competência) não pegava, e a renovação era contada duas vezes, em meses
+      // diferentes.
+      //
+      // Quando a data da 1ª aula não é informada, mantém o mês do lançamento e o
+      // webhook corrige depois (a edge reconcilia o lançamento adiantado, v81).
+      const baseCompetencia = data.data_primeira_aula_novo_ciclo || data.data_renovacao;
+      const competenciaReferencia = `${String(baseCompetencia).slice(0, 7)}-01`;
+      const primeiraAulaNovoCiclo = data.data_primeira_aula_novo_ciclo || null;
+      // "Antecipada" = o ciclo novo só começa depois do mês em que foi negociada.
+      const renovacaoAntecipada =
+        !!primeiraAulaNovoCiclo &&
+        competenciaReferencia > `${String(data.data_renovacao).slice(0, 7)}-01`;
 
       await supabase.from('movimentacoes_admin').insert({
         aluno_id: data.aluno_id,
@@ -132,7 +160,9 @@ export function FormRenovacao() {
         data: data.data_renovacao,
         valor_parcela_anterior: data.valor_anterior,
         valor_parcela_novo: data.valor_novo,
-        renovacao_status: 'confirmada',
+        renovacao_status: renovacaoAntecipada ? 'antecipada_confirmada' : 'confirmada',
+        renovacao_primeira_aula_novo_ciclo: primeiraAulaNovoCiclo,
+        renovacao_antecipada: renovacaoAntecipada,
         observacoes: data.observacoes || null,
         // Estes quatro campos existiam no aluno e não eram gravados. O
         // emusys_matricula_id é o que permite deduplicar contra o webhook de
@@ -301,6 +331,27 @@ export function FormRenovacao() {
                     <option value={24}>24 meses</option>
                   </select>
                 </div>
+              </div>
+
+              {/* É esta data — não a da negociação — que define em qual mês a
+                  renovação é contada no relatório. Deixar em branco não trava o
+                  lançamento: o Emusys preenche quando emitir o contrato. */}
+              <div className="mt-4">
+                <label className="block text-sm text-gray-400 mb-1">
+                  Primeira aula do novo ciclo
+                  <span className="ml-2 text-xs text-gray-500">(opcional)</span>
+                </label>
+                <input {...register('data_primeira_aula_novo_ciclo')} type="date"
+                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500/50" />
+                <p className="mt-1.5 text-xs text-gray-500">
+                  A renovação conta no mês da primeira aula do novo ciclo. Se o ciclo só
+                  começa no mês que vem, informe aqui — senão ela entra no mês de hoje.
+                  {competenciaPrevista && (
+                    <span className="block mt-1 text-cyan-400/80">
+                      Vai contar em <strong>{competenciaPrevista}</strong>.
+                    </span>
+                  )}
+                </p>
               </div>
 
               <div className="mt-4">
