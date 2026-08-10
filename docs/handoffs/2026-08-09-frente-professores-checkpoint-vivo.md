@@ -1151,22 +1151,66 @@ guarda antiga promoveria de novo o que já foi decidido, inclusive por cima de d
 entrou é período ATIVO, e os dois contadores de encerramento filtram `status_periodo='encerrado'`. Só o
 denominador cresceu. Maior movimento individual do dia: **+0,76 pp** (Leonardo Castro 90,48 → 91,67).
 
-**Os 20 que sobram são curadoria humana de verdade** — e a maioria é uma pergunta só:
+### CP13 — Troca confirmada pela jornada passa a contar *(10/08, PR #130)*
 
-- **10 são troca de professor confirmada pelo Emusys**: encerramos com o professor A e a jornada mostra
-  o aluno ativo com o professor B (Rafael Alves→Erick Osmy, Renan Amorim→Kaio Felipe, Marcos
-  Delfino→Erick Osmy, Rodrigo Pinheiro→Kaio Felipe, Willer→Jeyson Gaia, Gabriel Antony→Willer, Jordan
-  Barbosa→Gabriel Barbosa, Alexandre→Gabriel Santos, Letícia e Ana Beatriz→Erick Osmy, Gabriel
-  Barbosa→Vicente Pinheiro). Reclassificar como `troca%` os tornaria publicáveis **sem penalizar**
-  (regra do CP8) — mas é decisão de negócio, não de dado.
-- **6 não têm jornada no Emusys** (`status_emusys` NULL): Caio Tenório/Clarisse Vignerom, Israel/Sirley
-  Dantas, Lohana/Gabriela Dornas, Matheus dos Santos/Arthur Galvão, Willer/Luana Ferreira,
-  Letícia/Lohan Boente. São os mesmos casos que a seção de divergências já listava.
-- **2 encerramos com o Emusys mostrando o MESMO professor ativo**: ⚠️ **Isabela Corrêa Pena** (Gabriel
-  Santos Teixeira) está `ativa` com **40 aulas futuras** e nós marcamos encerrado em 08/08 — o vínculo
-  está vivo. Miguel Santos Borges é `interrompida`, saída real.
-- **2 ativos com professor divergente**: Daiana Pacifico/Isadora Florenzano (jornada diz Gabriel Santos)
-  e Kaio Felipe/Vicente Dias Botelho (jornada diz Rodrigo Pinheiro, com conflito).
+> *"Se tá no Emusys trocado, troca aqui também."* — Alf
+
+Dos 20 acima, **9 eram encerramento em que a jornada do Emusys mostra o aluno ativo com OUTRO
+professor**. Isso é troca, não saída. Pela regra do CP8 troca não penaliza — mas esses vínculos estavam
+`publicavel=false`, então não entravam **nem no denominador**: o professor perdia o aluno da conta
+inteira em vez de manter o vínculo sem penalidade.
+
+Crivo estrito: jornada existe, está **`ativa`**, é **única** para a matrícula-disciplina, e aponta
+professor **diferente**. Jornada `inativa` fica de fora de propósito — Alexandre/Miguel Santos Borges
+(`interrompida`) e Gabriel Barbosa/Guilherme Dias (`concluida`) são saída de verdade.
+
+⚠️ **O snapshot zera `conflitos`.** Dois casos tinham `["jornada_atual_divergente"]` — e o conflito **é
+a prova da troca**, não um impedimento. Sem zerar, a regra de publicável recusaria justamente os casos
+que ela existe para tratar.
+
+⚠️ **Alcance maior que o ciclo**: o dry-run devolveu **32**, não 9 — a medição anterior estava presa à
+janela JUN-AGO e a função varre todo o histórico (2022-08 a 2026-08). Mantido: a classificação está
+certa ou errada independente da data, e nenhum snapshot estava `fechado`. **Penalizadores inalterados em
+todos os períodos** (ciclo 114, set/25 72, fev/26 72, jun/26 58).
+
+⚠️ **A primeira tentativa abortou na guarda de unicidade**: `pg_get_viewdef` normaliza e **remove o
+alias `pr.`** do SELECT final. A guarda fez o trabalho dela — âncora de view tem que ser cópia literal
+da saída do banco, não do arquivo que a criou.
+
+**Verificado e descartado como não-problema:** existem 24 encerramentos cuja jornada está ativa com o
+**mesmo** professor. Parecia grave (22 já publicáveis), mas **nenhum penaliza** — 21 são `troca_*`, que
+nunca penalizam. A única errada é **Isabela Corrêa Pena** (Gabriel Santos, `fim_evidencia_historica`,
+40 aulas futuras), que não é publicável e por isso também não penaliza.
+
+### O que sobra: 11 vínculos, e a trava de data
+
+| escopo | em revisão | pendências | penalizadores | expostos | `ok` |
+|---|---|---|---|---|---|
+| consolidado | **11** | 0 | 114 | 1.375 | **27** de 44 |
+| Barra | 3 | 0 | 21 | 303 | 9 de 19 |
+| CG | 7 | 0 | 63 | 608 | 17 de 31 |
+| Recreio | **1** | 0 | 30 | 464 | 15 de 25 |
+
+⚠️ **`apta_oficial` é 0 e vai continuar 0 até 31/08** — a regra exige `periodo_fim <= current_date` e o
+ciclo JUN-AGO ainda está correndo. Nenhuma curadoria muda isso. **27 dos 44 professores já estão prontos**
+(estado `ok`, sem pendência); os outros 10 dependem dos 11 vínculos abaixo e 7 não têm amostra mínima.
+
+**Os 11 restantes, por tipo de decisão:**
+
+- **5 não têm jornada nenhuma no Emusys** (`status_emusys` NULL — a `matricula_disciplina_id` não existe
+  em `aluno_jornada_matricula_disciplina`): Caio Tenório/Clarisse Vignerom, Israel/Sirley Dantas,
+  Lohana/Gabriela Dornas, Matheus dos Santos/Arthur Galvão, Willer/Luana Ferreira. Dado quebrado, não
+  decisão de negócio — investigar por que o sync não trouxe a jornada.
+- **3 são saída real com jornada `inativa`**, falta motivo/atribuição: Alexandre/Miguel Santos Borges
+  (`interrompida`, Emusys aponta Gabriel Santos), Gabriel Santos/Miguel Santos Borges (`interrompida`,
+  professor bate — a saída é dele), Gabriel Barbosa/Guilherme Dias (`concluida`, Emusys aponta Vicente
+  Pinheiro). ⚠️ O Miguel aparece duas vezes: para o Alexandre foi troca, para o Gabriel Santos foi saída.
+- **2 são o INVERSO da troca do CP13**: nosso período segue `ativo` mas o Emusys já mostra outro
+  professor — Daiana Pacifico/Isadora Florenzano (Emusys: Gabriel Santos, 20 aulas futuras) e Kaio
+  Felipe/Vicente Dias Botelho (Emusys: Rodrigo Pinheiro, 31 futuras, com conflito). Encerrar exigiria
+  inventar uma data de fim; a candidata natural é a última aula do professor antigo.
+- **1 é encerramento errado nosso**: **Isabela Corrêa Pena** (Gabriel Santos Teixeira) está `ativa` no
+  Emusys, mesmo professor, **40 aulas futuras**, e marcamos encerrado em 08/08. O vínculo está vivo.
 
 ⚠️ **`apta_oficial` segue 0** e seguirá enquanto houver qualquer vínculo em revisão — a regra exige
 `pendencias_total = 0`, e `pendencias_total = vinculos_em_revisao + encerramentos_pos_corte_pendentes`.
