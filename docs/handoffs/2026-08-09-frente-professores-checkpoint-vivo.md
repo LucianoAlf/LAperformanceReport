@@ -1116,6 +1116,64 @@ Migration `20260810180000_renovacao_pendente_nao_e_saida_sem_motivo.sql` (pg_get
 guarda, padrão do CP8). Os 9 testes de contrato passam — eles leem o **arquivo** da migration original, que
 não foi tocado. ⚠️ Reaplicar `20260727120000_..._universo_governado.sql` desfaz esta correção.
 
+### CP12 — Os vínculos em revisão: 61 → 20 *(10/08, PRs #127 e #128)*
+
+Depois do CP11 zerar as pendências, o que travava o ciclo era `vinculos_em_revisao = 61`. Abrindo,
+**43 eram períodos ATIVOS** — ninguém tinha saído, não havia evento de retenção nenhum. Dois bugs:
+
+**1. A promoção automática se auto-anulava (12 vínculos, PR #127).** Ela grava
+`snapshot_posterior.status_periodo='ativo'` com o motivo *"período ativo sustentado por jornada atual
+exata"* — conferiu contra o Emusys e concluiu que o vínculo está vivo. Mas não havia como dizer "este
+período não tem fim": `data_fim_efetiva` era `COALESCE(rv.data_fim_corrigida, b.data_fim)` e a corrigida
+é NULL nos 12, então o COALESCE devolvia a data do baseline. Em seguida a **própria** regra de
+`publicavel` do ramo `promocao_automatica` exige `data_fim_efetiva IS NULL`. **Aprovava e se recusava no
+mesmo passo.** No dado aparecia como `status_periodo='ativo'` COM `data_fim` — estado impossível; dois
+deles com data em **2027**, que é a última aula *agendada* do contrato. Corrigido na view: status e fim
+são um fato só.
+
+**2. A promoção nunca teve cadência (29 vínculos, PR #128).** Era uma **migration de uma vez só**
+(`20260727121000`): 207 promoções em 27/07 e nunca mais. Como a reconstrução gera períodos novos toda
+semana, tudo que nasceu depois ficou parado em `media`/`publicavel=false`. Mesmo apodrecimento da
+reconstrução antes do cron de 09/08. Virou função periódica (**cron 131**, `0 6 * * *`, meia hora antes
+da materialização) que deduplica por **chave natural** — `periodo_id` muda a cada reconstrução, então a
+guarda antiga promoveria de novo o que já foi decidido, inclusive por cima de decisão humana.
+⚠️ Exige `data_fim IS NULL` para não recair no bug 1.
+
+| | início do dia | fim do dia |
+|---|---|---|
+| pendências pós-corte | 9 | **0** |
+| vínculos em revisão | 61 | **20** |
+| vínculos expostos | 1.325 | **1.366** |
+| estado `ok` | 8 | **19** |
+| `encerramentos_penalizadores` | 114 | **114** |
+
+⚠️ **Ninguém perdeu retenção em nenhuma das quatro mudanças.** Os penalizadores não se moveram: tudo que
+entrou é período ATIVO, e os dois contadores de encerramento filtram `status_periodo='encerrado'`. Só o
+denominador cresceu. Maior movimento individual do dia: **+0,76 pp** (Leonardo Castro 90,48 → 91,67).
+
+**Os 20 que sobram são curadoria humana de verdade** — e a maioria é uma pergunta só:
+
+- **10 são troca de professor confirmada pelo Emusys**: encerramos com o professor A e a jornada mostra
+  o aluno ativo com o professor B (Rafael Alves→Erick Osmy, Renan Amorim→Kaio Felipe, Marcos
+  Delfino→Erick Osmy, Rodrigo Pinheiro→Kaio Felipe, Willer→Jeyson Gaia, Gabriel Antony→Willer, Jordan
+  Barbosa→Gabriel Barbosa, Alexandre→Gabriel Santos, Letícia e Ana Beatriz→Erick Osmy, Gabriel
+  Barbosa→Vicente Pinheiro). Reclassificar como `troca%` os tornaria publicáveis **sem penalizar**
+  (regra do CP8) — mas é decisão de negócio, não de dado.
+- **6 não têm jornada no Emusys** (`status_emusys` NULL): Caio Tenório/Clarisse Vignerom, Israel/Sirley
+  Dantas, Lohana/Gabriela Dornas, Matheus dos Santos/Arthur Galvão, Willer/Luana Ferreira,
+  Letícia/Lohan Boente. São os mesmos casos que a seção de divergências já listava.
+- **2 encerramos com o Emusys mostrando o MESMO professor ativo**: ⚠️ **Isabela Corrêa Pena** (Gabriel
+  Santos Teixeira) está `ativa` com **40 aulas futuras** e nós marcamos encerrado em 08/08 — o vínculo
+  está vivo. Miguel Santos Borges é `interrompida`, saída real.
+- **2 ativos com professor divergente**: Daiana Pacifico/Isadora Florenzano (jornada diz Gabriel Santos)
+  e Kaio Felipe/Vicente Dias Botelho (jornada diz Rodrigo Pinheiro, com conflito).
+
+⚠️ **`apta_oficial` segue 0** e seguirá enquanto houver qualquer vínculo em revisão — a regra exige
+`pendencias_total = 0`, e `pendencias_total = vinculos_em_revisao + encerramentos_pos_corte_pendentes`.
+
+⚠️ **Falha de teste pré-existente**, não relacionada: `healthScoreProfessorV3PerformanceAbertaOtimizada.test.mjs`
+tem 1 asserção quebrada sobre `useHealthScoreProfessorV3Performance.ts` — falha igual na `main`.
+
 ---
 
 ## 6. Retomada rápida
