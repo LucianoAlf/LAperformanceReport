@@ -1804,6 +1804,13 @@ serve(async (req: Request) => {
                   unidade_id: unidade.id,
                   aluno_chave: criarAlunoChave(aluno, alunoId, normalizarNome),
                   aluno_emusys_id: aluno.id_aluno ?? null,
+                  // A API manda 0 quando ja e aluno cadastrado (nao e lead) — vira null,
+                  // senao o join da costura da experimental casaria coisa errada.
+                  emusys_lead_id:
+                    (aluno as { id_lead?: number | null }).id_lead != null &&
+                    (aluno as { id_lead?: number | null }).id_lead! > 0
+                      ? (aluno as { id_lead?: number | null }).id_lead
+                      : null,
                   aluno_id: alunoId ?? null,
                   aluno_nome: nome,
                   aluno_nome_normalizado: normalizarNome(nome),

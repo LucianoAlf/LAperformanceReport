@@ -925,7 +925,10 @@ async function gerarRelatorioDiario(
       const competencia = competenciaReferenciaMovimento(r).slice(0, 7);
       texto += `${i + 1}) Nome: *${r.aluno_nome}*\n`;
       texto += `   Competência efetiva: *${competencia}*\n`;
-      texto += `   Curso: ${r.curso_nome || 'N/A'}\n\n`;
+      // `movimentacoes_admin` nao tem coluna `curso_nome` — o curso chega como objeto
+      // anexado por `anexarCursosMovimentacoes` (row.cursos). Ler `r.curso_nome` fazia
+      // as 11 antecipadas do relatorio de 08/08/2026 sairem todas como "N/A".
+      texto += `   Curso: ${r.cursos?.nome || r.curso_nome || 'N/A'}\n\n`;
     });
   }
 

@@ -10,7 +10,7 @@ import {
   Users, GraduationCap, Building2, BookOpen, Award, TrendingUp,
   Plus, Search, RotateCcw, Edit2, Trash2, Eye, MoreHorizontal,
   ChevronDown, Filter, Music, BarChart3, Table, LayoutGrid, MapPin, Clock,
-  Calendar, Target, Settings, ClipboardList
+  Calendar, Target, Settings, ClipboardList, ShieldQuestion
 } from 'lucide-react';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 
@@ -29,6 +29,7 @@ import { TabPerformanceProfessores } from './TabPerformanceProfessores';
 import { TabAgendaProfessores } from './TabAgendaProfessores';
 import { TabCarteiraProfessores } from './TabCarteiraProfessores';
 import { Tab360Professores } from './Tab360Professores';
+import { TabDivergenciasProfessores } from './TabDivergenciasProfessores';
 import { HealthScoreConfig } from './HealthScoreConfig';
 import { HealthScoreV3Config } from './HealthScoreV3Config';
 import { MotivosScoreConfig } from './MotivosScoreConfig';
@@ -50,7 +51,7 @@ import type {
   FiltrosProfessores, ProfessorFormData
 } from './types';
 
-type AbaAtiva = 'cadastro' | 'performance' | 'carteira' | 'agenda' | '360' | 'checklists' | 'configuracoes';
+type AbaAtiva = 'cadastro' | 'performance' | 'carteira' | 'agenda' | '360' | 'divergencias' | 'checklists' | 'configuracoes';
 
 const HEALTH_SCORE_V3_CONFIG_ENABLED =
   import.meta.env.VITE_HEALTH_SCORE_V3_CONFIG_ENABLED !== 'false';
@@ -61,6 +62,7 @@ const professoresTabs: PageTab<AbaAtiva>[] = [
   { id: 'carteira', label: 'Carteira', shortLabel: 'Carteira', icon: Users },
   { id: 'agenda', label: 'Agenda', shortLabel: 'Agenda', icon: Calendar },
   { id: '360', label: '360°', shortLabel: '360°', icon: BarChart3 },
+  { id: 'divergencias', label: 'Divergências', shortLabel: 'Diverg.', icon: ShieldQuestion },
   { id: 'checklists', label: 'Checklists', shortLabel: 'Checks', icon: ClipboardList },
   { id: 'configuracoes', label: 'Configurações', shortLabel: 'Config', icon: Settings },
 ];
@@ -730,6 +732,11 @@ export function ProfessoresPage() {
           competencia={competencia360}
           onCompetenciaChange={setCompetencia360}
         />
+      )}
+
+      {/* Conteúdo da aba Divergências de cadastro (professor nosso x Emusys) */}
+      {abaAtiva === 'divergencias' && (
+        <TabDivergenciasProfessores unidadeAtual={unidadeAtual} />
       )}
 
       {/* Conteúdo da aba Checklists */}

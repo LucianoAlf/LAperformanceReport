@@ -80,3 +80,8 @@ graphify-out/
 
 # Rascunhos temporarios do Devin (mensagem de commit / corpo de PR)
 .devin-*
+
+# Extratos crus da API do Emusys: contem dado pessoal de aluno (nome, CPF, email,
+# telefone, endereco). Gerados por scripts/auditoria-canonica-emusys.mjs.
+outputs/emusys-matriculas-*.json
+outputs/comparacao-canonica.json
