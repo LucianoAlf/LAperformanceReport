@@ -48,7 +48,7 @@ Snapshots mensais já fechados **não mudam** — a correção vale para leitura
 
 ## Onde a anulação é respeitada
 
-`movimentacoes_admin_vigentes` (view) filtra `anulado = false`. Consomem ela: `get_dados_retencao_ia`, `get_programa_fideliza_dados`, `get_relatorio_admin_mensal_rico_base_v1`, `montar_relatorio_admin_mensal_payload_base_v1` e — desde `20260810162000` — `get_kpis_alunos_financeiro_vivo_canonico`, que calcula o **reajuste médio**.
+`movimentacoes_admin_vigentes` (view) filtra `anulado = false`. Consomem ela: `get_dados_retencao_ia`, `get_programa_fideliza_dados`, `get_relatorio_admin_mensal_rico_base_v1`, `montar_relatorio_admin_mensal_payload_base_v1` e — desde `20260810142005` — `get_kpis_alunos_financeiro_vivo_canonico`, que calcula o **reajuste médio**.
 
 Continuam lendo a tabela crua, de propósito, 5 funções de **legado versionado**: `get_dados_relatorio_coordenacao_legado_20260711`, `get_dados_relatorio_gerencial_legacy_p19/p20/p21_20260707` e `get_kpis_professor_periodo_base_legado_20260713`.
 
