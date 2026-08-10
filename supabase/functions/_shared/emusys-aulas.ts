@@ -151,6 +151,12 @@ export interface VinculoAulaAluno {
   unidade_id: string;
   aluno_chave: string;
   aluno_emusys_id: number | null;
+  /**
+   * `id_lead` que o GET /aulas devolve desde 21/06/2026. E a chave CANONICA para casar
+   * a experimental do CRM com a aula real — antes disso so havia nome + data, que e o
+   * que produziu 362 experimentais com id errado e a duplicata em lead_experimentais.
+   */
+  emusys_lead_id: number | null;
   aluno_nome: string;
   aluno_nome_normalizado: string;
   sincronizado_em: string;
@@ -192,6 +198,9 @@ export function montarVinculosAulaAlunos(
         // e sempre undefined aqui: a chave sai como `emusys:` ou `nome:`.
         aluno_chave: criarAlunoChave(aluno, undefined, normalizarNome),
         aluno_emusys_id: aluno.id_aluno ?? null,
+        // A API manda 0 quando a pessoa ja e aluno cadastrado (nao e lead). Guardar 0
+        // faria join casar coisa errada, entao vira null.
+        emusys_lead_id: aluno.id_lead != null && aluno.id_lead > 0 ? aluno.id_lead : null,
         aluno_nome: nome,
         aluno_nome_normalizado: normalizarNome(nome),
         sincronizado_em: sincronizadoEm,
