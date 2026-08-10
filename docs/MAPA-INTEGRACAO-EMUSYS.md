@@ -67,6 +67,31 @@
 1. **Automático:** o `sync-presenca-emusys` (ver 2.1) cruza as aulas `categoria=experimental` do `GET /aulas/` (`presenca: presente/ausente`) com as agendadas → marca `experimental_realizada` (etapa 7) ou `faltou_experimental` (etapa 9). Auto-marca `faltou` após +7 dias sem confirmação.
 2. **Manual:** consultor pode marcar na aba **Agenda do Pré-Atendimento** (`AgendaTab.tsx`).
 
+**Propagação do professor da experimental para a matrícula (trigger, desde 2026-08-10):**
+
+`alunos.professor_experimental_id` é uma **cópia derivada** de `lead_experimentais`, preenchida em dois momentos:
+
+1. **Na matrícula** — `processar-matricula-emusys` v33+, função `resolverProfessorExperimental`. Só grava quando a resposta é inequívoca: professor único, `status in ('experimental_realizada','convertido')`, `data_experimental <= data_matricula`.
+2. **Na promoção** — trigger `trg_propagar_professor_experimental` em `lead_experimentais` (`AFTER INSERT OR UPDATE OF status`) → RPC `propagar_professor_experimental(p_emusys_lead_id)`.
+
+⚠️ **Por que o passo 2 existe:** a matrícula frequentemente chega **antes** de a experimental ser promovida — **55% das matrículas acontecem no mesmo dia da experimental** (40 de 72 desde junho). A promoção depende do sync de presença, e a janela medida entre a aula acontecer e a linha ser promovida vai de **0,0h a 25,2h**. Matrícula que cai nessa janela recebia `null` **para sempre**, porque o `sync-presenca-emusys` só **lê** `alunos` (dois `.select('id')`) e nunca escreve. Caso que originou: Amelie #1925 — aula 08/08 11:00, matrícula 12:24, promoção 14:45, campo vazio por 46h.
+
+⚠️ **Por que trigger e não dentro da edge:** **cinco** caminhos promovem o status — a reconciliação do `sync-presenca-emusys` (~linha 845), o `confirmarExperimentais` da mesma edge (~1351), `fn_reconciliar_experimental_aulas`, `registrar_experimental` e a edição manual pela tela. A regra é invariante da relação `lead_experimentais ↔ alunos`, não passo do sync; dentro de um dos cinco escritores ficaria furada nos outros quatro. Mesmo padrão de `fn_experimental_recebe_id_da_aula` e `trg_usuarios_sincroniza_rbac`.
+
+**As 4 travas da RPC** (nenhuma é opcional): só grava onde `professor_experimental_id IS NULL` (repetida no UPDATE como guarda de corrida) · exige lastro de **professor único** · `data_experimental <= data_matricula` · recusa linha com edição humana no campo (`audit_log` com `origem='manual'` — foi o que preservou a Manuela #1759, cujo campo a Dai esvaziou de propósito em 08/06).
+
+O trigger **nunca bloqueia a promoção**: erro vira `warning`. Deixa rastro em `leads_automacao_log` (`workflow_id='trg_propagar_professor_experimental'`) **só quando preenche**. Custo medido: **7,9 ms** por lead (a varredura sem argumento custa 823 ms — usada só no backfill).
+
+✅ **A GRADE (`GET /aulas` → `aulas_emusys`) É A FONTE BOA para "quem deu a experimental".** Ela traz `categoria='experimental'`, `professores[].id`, `cancelada`, e — decisivo — `reagendada` + `data_hora_inicio_original`, que permitem reconstruir reagendamento **e** reatribuição de professor. Onde a nossa base diverge dela, a suspeita padrão é da **nossa** base.
+
+⚠️ **Ao comparar, casar por AULA, nunca por aluno ou por data isolada.** Um lead pode ter mais de uma experimental, e nossa base costuma ter linhas a mais que a realidade (fantasma de reagendamento — ver §1.2 acima).
+
+**Caso-escola (Júlia Barroso, lead 7829, apurado 10/08/2026):** a grade tem **2** experimentais — `815546` em 16/07 com **Lohana** (`data_hora_inicio_original` = 15/07 14:30) e `823968` em 29/07 com **Leticia**. Nossa base tinha **3** linhas: 1126 (15/07, Erick), 1132 (16/07, Leticia, `emusys_aula_id` órfão 60160) e 1216 (16/07, Lohana). O `data_hora_inicio_original` prova que a 1126 é o **fantasma pré-reagendamento** da própria 815546 — a aula mudou de dia **e de professor** (Erick → Lohana). A 1132 não corresponde a aula nenhuma.
+
+⚠️ **Erro de análise a não repetir:** ao ver "grade diz Lohana, curadoria diz Leticia", é tentador concluir que a grade é pouco confiável. **Eram aulas diferentes** — Lohana deu a de 16/07, Leticia a de 29/07, e a anotação do CRM que embasou a curadoria é de 02/08, posterior a ambas. As fontes **concordam**. Antes de declarar a grade errada, confira `data_hora_inicio_original` e verifique se as linhas comparadas são da mesma aula.
+
+ℹ️ O histórico de estágio do lead no CRM do Emusys (anotações do tipo *"Experimental efetivada por Fulano"*) **não é exposto por nenhum endpoint da API** — não existe GET de histórico de lead (ver §8). É útil como conferência humana na tela, mas a grade já resolve os casos automatizáveis.
+
 ### 1.3 Matrículas → n8n `WF_Matricula_Funcional` → edge `processar-matricula-emusys`
 **Webhook:** `POST .../webhook/webhook_matricula`. O n8n:
 1. **Reencaminha o body cru pra edge** `processar-matricula-emusys` (com retry).
