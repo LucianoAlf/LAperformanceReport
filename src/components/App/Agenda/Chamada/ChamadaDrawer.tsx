@@ -125,13 +125,13 @@ function ConteudoDrawer({
   return (
     <div className="flex max-h-[90vh] flex-col">
       {/* Cabeçalho */}
-      <header className="flex items-start justify-between gap-3 border-b border-slate-700/50 p-5">
+      <header className="border-b border-slate-700/50 p-5">
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             <Clock className="h-3 w-3" />
             {aula.hora_inicio}–{aula.hora_fim} · {aula.duracao_minutos} min
           </p>
-          <h2 className="mt-1 text-lg font-semibold text-white">
+          <h2 className="mt-1.5 text-lg font-semibold text-white">
             {aula.turma_nome || aula.curso_nome || 'Aula'}
           </h2>
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -148,26 +148,18 @@ function ConteudoDrawer({
             {aula.categoria && <Tag cor="slate">{aula.categoria}</Tag>}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onFechar}
-          aria-label="Fechar"
-          className="rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
-        >
-          <X className="h-4 w-4" />
-        </button>
       </header>
 
       {/* Ações de aula — reagendar e cancelar. So fazem sentido em aula nao
           cancelada. O cancelamento abre modal (motivo obrigatorio); o
           reagendamento hoje e orientacao operacional (Fase 1). */}
       {!aula.cancelada && vinculados.length > 0 && (
-        <div className="flex gap-2 border-b border-slate-700/40 px-5 py-2.5">
+        <div className="flex gap-2 border-b border-slate-700/40 px-5 py-3">
           <button
             type="button"
             disabled={salvando}
             onClick={() => onReagendarAula(aula)}
-            className="flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-300 transition-colors hover:bg-amber-500/20 disabled:opacity-50"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-300 transition-all hover:bg-amber-500/20 hover:border-amber-500/50 disabled:opacity-50"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             Reagendar
@@ -176,7 +168,7 @@ function ConteudoDrawer({
             type="button"
             disabled={salvando}
             onClick={() => onCancelarAula(aula)}
-            className="flex items-center gap-1.5 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-300 transition-colors hover:bg-rose-500/20 disabled:opacity-50"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-300 transition-all hover:bg-rose-500/20 hover:border-rose-500/50 disabled:opacity-50"
           >
             <XCircle className="h-3.5 w-3.5" />
             Cancelar aula
@@ -310,12 +302,20 @@ function LinhaAlunoDrawer({
     falta_justificada: 'Falta justificada',
     indeterminado: 'Sem destino',
   };
+  // Borda e fundo coloridos por estado — o card inteiro comunica o destino
+  // sem precisar ler o rótulo.
+  const bordaPorEstado: Record<EstadoChamada, string> = {
+    presente: 'border-emerald-500/40 bg-emerald-500/5',
+    falta: 'border-rose-500/40 bg-rose-500/5',
+    falta_justificada: 'border-amber-500/40 bg-amber-500/5',
+    indeterminado: 'border-dashed border-slate-500/60 bg-slate-700/10',
+  };
 
   return (
-    <li className="rounded-lg border border-slate-700/40 bg-slate-800/30 p-2.5">
+    <li className={cn('rounded-xl border p-3.5 transition-colors', bordaPorEstado[estado])}>
       <div className="flex items-center justify-between">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-slate-200">{aluno.nome}</p>
+          <p className="truncate text-sm font-semibold text-white">{aluno.nome}</p>
           {aluno.nr_da_aula != null && aluno.qtd_aulas_contrato != null && (
             <p className="text-[10px] text-slate-500">
               Aula {aluno.nr_da_aula} de {aluno.qtd_aulas_contrato}
@@ -323,38 +323,39 @@ function LinhaAlunoDrawer({
             </p>
           )}
         </div>
-        <span className={cn('text-xs font-semibold', cor[estado])}>{rotulo[estado]}</span>
+        <span className={cn('rounded-md px-2 py-0.5 text-[11px] font-bold', cor[estado])}>{rotulo[estado]}</span>
       </div>
 
-      {/* Botoes de chamada — iguais ao card da visao Dia. So em aula que ja
+      {/* Botoes de chamada — grandes, com borda e icone. Toggle: clicar no
+          estado ativo desmarca (volta para indeterminado). So em aula que ja
           ocorreu e nao esta cancelada, e quando o aluno tem vinculo real. */}
       {podeOperar && !semVinculo && (
-        <div className="mt-2 flex gap-1" role="group" aria-label={`Destino de ${aluno.nome}`}>
+        <div className="mt-3 flex gap-1.5" role="group" aria-label={`Destino de ${aluno.nome}`}>
           <button
             type="button"
             disabled={salvando}
             onClick={() => onMarcar(aluno, estado === 'presente' ? 'indeterminado' : 'presente')}
             className={cn(
-              'flex-1 rounded-md py-1 text-[10px] font-bold transition-all hover:-translate-y-px disabled:opacity-50',
+              'flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-all hover:-translate-y-px disabled:opacity-50',
               estado === 'presente'
-                ? 'bg-emerald-500/10 text-emerald-400 shadow-[inset_0_0_0_1.5px_currentColor]'
-                : 'text-slate-500 hover:bg-emerald-500/10 hover:text-emerald-400',
+                ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.3)]'
+                : 'border-slate-700 text-slate-400 hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-400',
             )}
           >
-            <Check className="mr-0.5 inline h-3 w-3" />Presente
+            <Check className="h-4 w-4" />Presente
           </button>
           <button
             type="button"
             disabled={salvando}
             onClick={() => onMarcar(aluno, estado === 'falta' ? 'indeterminado' : 'falta')}
             className={cn(
-              'flex-1 rounded-md py-1 text-[10px] font-bold transition-all hover:-translate-y-px disabled:opacity-50',
+              'flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-all hover:-translate-y-px disabled:opacity-50',
               estado === 'falta'
-                ? 'bg-rose-500/10 text-rose-400 shadow-[inset_0_0_0_1.5px_currentColor]'
-                : 'text-slate-500 hover:bg-rose-500/10 hover:text-rose-400',
+                ? 'border-rose-500/60 bg-rose-500/15 text-rose-300 shadow-[inset_0_0_0_1px_rgba(251,113,133,0.3)]'
+                : 'border-slate-700 text-slate-400 hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-400',
             )}
           >
-            <X className="mr-0.5 inline h-3 w-3" />Falta
+            <X className="h-4 w-4" />Falta
           </button>
           <button
             type="button"
@@ -367,18 +368,18 @@ function LinhaAlunoDrawer({
               }
             }}
             className={cn(
-              'flex-1 rounded-md py-1 text-[10px] font-bold transition-all hover:-translate-y-px disabled:opacity-50',
+              'flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-all hover:-translate-y-px disabled:opacity-50',
               estado === 'falta_justificada'
-                ? 'bg-amber-500/10 text-amber-400 shadow-[inset_0_0_0_1.5px_currentColor]'
-                : 'text-slate-500 hover:bg-amber-500/10 hover:text-amber-400',
+                ? 'border-amber-500/60 bg-amber-500/15 text-amber-300 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.3)]'
+                : 'border-slate-700 text-slate-400 hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-400',
             )}
           >
-            <FileText className="mr-0.5 inline h-3 w-3" />Justif.
+            <FileText className="h-4 w-4" />Justif.
           </button>
         </div>
       )}
 
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-500">
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-500">
         <span>Origem: {rotuloOrigem(aluno.respondido_por)}</span>
         {aluno.emusys_presenca_bruta && (
           <span>Emusys: {aluno.emusys_presenca_bruta}</span>
@@ -397,7 +398,7 @@ function LinhaAlunoDrawer({
       </div>
 
       {aluno.justificada_motivo && (
-        <p className="mt-1.5 text-[11px] text-slate-400">
+        <p className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5 text-[11px] text-slate-400">
           <b className="text-amber-300">Motivo:</b> {aluno.justificada_motivo}
           {aluno.justificada_evidencia && (
             <span className="ml-1 inline-flex items-center gap-0.5 text-amber-300">
@@ -408,8 +409,8 @@ function LinhaAlunoDrawer({
       )}
 
       {conflito && (
-        <p className="mt-1.5 flex items-center gap-1 text-[10px] text-amber-400">
-          <AlertTriangle className="h-3 w-3" />
+        <p className="mt-2 flex items-center gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5 text-[10px] text-amber-400">
+          <AlertTriangle className="h-3 w-3 shrink-0" />
           Conflito: Emusys registrou “{aluno.emusys_presenca_bruta}”; resposta humana prevalece.
         </p>
       )}
