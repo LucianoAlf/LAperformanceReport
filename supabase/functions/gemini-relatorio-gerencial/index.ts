@@ -338,6 +338,8 @@ function motivoComparativoLegivel(bloco: any): string {
     payload_atual_invalido: "integridade dos dados do fechamento atual inválida",
     fingerprint_incompativel: "versão ou contrato do fechamento incompatível",
     fechamento_anterior_incompativel: "fechamento anterior incompatível",
+    COMPETENCIA_ANTERIOR_SEM_SNAPSHOTS: "competência anterior sem snapshots históricos",
+    RENOVACOES_MENSAL_DIVERGENTE: "captura histórica bloqueada por divergência de renovações",
   };
   const detalhes: string[] = [];
   if (Array.isArray(bloco?.dominios_ausentes) && bloco.dominios_ausentes.length) {
@@ -348,6 +350,9 @@ function motivoComparativoLegivel(bloco: any): string {
   }
   if (Array.isArray(bloco?.componentes_diferentes) && bloco.componentes_diferentes.length) {
     detalhes.push(`componentes diferentes: ${bloco.componentes_diferentes.join(", ")}`);
+  }
+  if (bloco?.bloqueio_captura?.motivo) {
+    detalhes.push(`bloqueio da captura: ${bloco.bloqueio_captura.motivo}`);
   }
   return `${motivos[motivo] || motivo}${detalhes.length ? `; ${detalhes.join("; ")}` : ""}`;
 }
@@ -588,7 +593,8 @@ function fallbackNarrativa(
   const matriculasAbaixo =
     numero(comercial.matriculas) < numero(metasOperacionais.matriculas, Infinity);
   const comparativos = dados.comparativos;
-  const comparativoDisponivel = comparativos?.disponibilidade === "disponivel";
+  const comparativoDisponivel = comparativos?.disponibilidade === "disponivel" ||
+    (comparativos?.disponibilidade == null && comparativos?.status === "disponivel");
 
   return {
     resumo_executivo:
@@ -1205,7 +1211,7 @@ export async function montarRelatorio(
     relatorio += "\n";
   } else {
     const comparativoDisponivel = comparativos.disponibilidade === "disponivel" ||
-      (comparativos.disponibilidade == null && comparativos.status === "disponivel");
+      (comparativos.disponibilidade == null && comparativos?.status === "disponivel");
     if (comparativoDisponivel) {
       relatorio += "Comparação disponível com competências equivalentes.\n\n";
     } else {
@@ -1251,7 +1257,11 @@ export async function montarRelatorio(
   );
   relatorio += "\n📈 *COMERCIAL*\n";
   relatorio += linhaMeta("Leads", comercialResumo.leads, metasOperacionais.leads);
-  relatorio += "• Experimentais realizadas: meta equivalente não cadastrada\n";
+  relatorio += linhaMeta(
+    "Experimentais realizadas",
+    comercialResumo.experimentais,
+    metasOperacionais.experimentais,
+  );
   relatorio += linhaMeta(
     "Matrículas",
     comercialResumo.matriculas,
