@@ -44,6 +44,8 @@ export interface LeadExperimentalAgenda {
   lead_id: number | null;
   nome: string;
   curso: string | null;
+  curso_interesse_id: number | null;
+  telefone: string | null;
   status: string | null;
   observacoes: string | null;
 }

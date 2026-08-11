@@ -18,6 +18,7 @@ interface Props {
   aulas: AulaAgenda[];
   salvando: boolean;
   onRegistrar: (itens: ItemChamada[]) => void;
+  onRegistrarExperimental: (experimentalId: number, status: 'experimental_realizada' | 'experimental_faltou') => void;
   onJustificar: (aluno: AlunoAgenda, aula: AulaAgenda) => void;
   onCancelarAula: (aula: AulaAgenda) => void;
   onReagendarAula: (aula: AulaAgenda) => void;
@@ -36,6 +37,7 @@ export function ChamadaDia({
   aulas,
   salvando,
   onRegistrar,
+  onRegistrarExperimental,
   onJustificar,
   onCancelarAula,
   onReagendarAula,
@@ -103,6 +105,7 @@ export function ChamadaDia({
                 },
               ])
             }
+            onMarcarExperimental={onRegistrarExperimental}
             onJustificar={(aluno) => onJustificar(aluno, aula)}
             onTodosPresentes={(a) => onRegistrarTodosPresentes(a, onRegistrar)}
             onCancelarAula={onCancelarAula}

@@ -13,6 +13,7 @@ interface Props {
   unidadeId: string | null;
   salvando: boolean;
   onRegistrar: (itens: ItemChamada[]) => void;
+  onRegistrarExperimental: (experimentalId: number, status: 'experimental_realizada' | 'experimental_faltou') => void;
   onJustificar: (aluno: AlunoAgenda, aula: AulaAgenda) => void;
   onCancelarAula: (aula: AulaAgenda) => void;
   onReagendarAula: (aula: AulaAgenda) => void;
@@ -35,6 +36,7 @@ export function ChamadaSemana({
   unidadeId,
   salvando,
   onRegistrar,
+  onRegistrarExperimental,
   onJustificar,
   onCancelarAula,
   onReagendarAula,
@@ -207,6 +209,7 @@ function ColunaDia({
                 agora={agora}
                 salvando={salvando}
                 onRegistrar={onRegistrar}
+                onRegistrarExperimental={onRegistrarExperimental}
                 onJustificar={onJustificar}
                 onCancelarAula={onCancelarAula}
                 onReagendarAula={onReagendarAula}
@@ -240,6 +243,7 @@ function CardAulaSemana({
   agora,
   salvando,
   onRegistrar,
+  onRegistrarExperimental,
   onJustificar,
   onCancelarAula,
   onReagendarAula,
@@ -250,6 +254,7 @@ function CardAulaSemana({
   agora: Date;
   salvando: boolean;
   onRegistrar: (itens: ItemChamada[]) => void;
+  onRegistrarExperimental: (experimentalId: number, status: 'experimental_realizada' | 'experimental_faltou') => void;
   onJustificar: (aluno: AlunoAgenda, aula: AulaAgenda) => void;
   onCancelarAula: (aula: AulaAgenda) => void;
   onReagendarAula: (aula: AulaAgenda) => void;
@@ -362,7 +367,7 @@ function CardAulaSemana({
       </div>
 
       {/* Lista de alunos com botões — igual a visão Dia, mas compacta */}
-      {total > 0 && !aula.cancelada && (
+      {(total > 0 || (aula.experimental_leads ?? []).length > 0) && !aula.cancelada && (
         <ul className="mt-1.5 space-y-1">
           {vinculados.map((aluno) => {
             const estado = estadoDoAluno(aluno);
@@ -411,6 +416,50 @@ function CardAulaSemana({
                     </BotaoSemana>
                   </div>
                 )}
+              </li>
+            );
+          })}
+          {(aula.experimental_leads ?? []).map((lead) => {
+            const presente = lead.status === 'experimental_realizada';
+            const faltou = lead.status === 'experimental_faltou';
+            return (
+              <li key={`lead-${lead.experimental_id}`} className="space-y-0.5">
+                <button
+                  type="button"
+                  onClick={onAbrirDrawer}
+                  className="block w-full truncate text-left text-[10.5px] font-medium text-violet-300 hover:text-violet-200"
+                  title={`${lead.nome} (experimental)`}
+                >
+                  {lead.nome} <span className="text-[8px] text-violet-400/70">exp.</span>
+                </button>
+                <div className="flex gap-0.5" role="group" aria-label={`Destino de ${lead.nome}`}>
+                  <button
+                    type="button"
+                    disabled={salvando}
+                    onClick={() => onRegistrarExperimental(lead.experimental_id, 'experimental_realizada')}
+                    className={cn(
+                      'flex-1 rounded py-0.5 text-[9px] font-bold transition-all hover:-translate-y-px disabled:opacity-50',
+                      presente
+                        ? 'bg-emerald-500/10 text-emerald-400 shadow-[inset_0_0_0_1.5px_currentColor]'
+                        : 'text-slate-500 hover:bg-emerald-500/10 hover:text-emerald-400',
+                    )}
+                  >
+                    <Check className="inline h-2.5 w-2.5" />P
+                  </button>
+                  <button
+                    type="button"
+                    disabled={salvando}
+                    onClick={() => onRegistrarExperimental(lead.experimental_id, 'experimental_faltou')}
+                    className={cn(
+                      'flex-1 rounded py-0.5 text-[9px] font-bold transition-all hover:-translate-y-px disabled:opacity-50',
+                      faltou
+                        ? 'bg-rose-500/10 text-rose-400 shadow-[inset_0_0_0_1.5px_currentColor]'
+                        : 'text-slate-500 hover:bg-rose-500/10 hover:text-rose-400',
+                    )}
+                  >
+                    <X className="inline h-2.5 w-2.5" />F
+                  </button>
+                </div>
               </li>
             );
           })}

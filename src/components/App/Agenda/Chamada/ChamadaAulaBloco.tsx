@@ -1,7 +1,8 @@
 import { Check, RotateCcw, XCircle } from 'lucide-react';
-import type { AlunoAgenda, AulaAgenda } from '@/hooks/useAgendaDia';
+import type { AlunoAgenda, AulaAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
 import { estadoDoAluno } from './chamadaUtils';
 import { ChamadaAlunoCard } from './ChamadaAlunoCard';
+import { ChamadaLeadCard } from './ChamadaLeadCard';
 
 interface Props {
   aula: AulaAgenda;
@@ -9,6 +10,7 @@ interface Props {
   podeOperar: boolean;
   salvando: boolean;
   onMarcar: (aluno: AlunoAgenda, status: 'presente' | 'falta' | 'indeterminado') => void;
+  onMarcarExperimental: (experimentalId: number, status: 'experimental_realizada' | 'experimental_faltou') => void;
   onJustificar: (aluno: AlunoAgenda) => void;
   onTodosPresentes: (aula: AulaAgenda) => void;
   onCancelarAula: (aula: AulaAgenda) => void;
@@ -27,6 +29,7 @@ export function ChamadaAulaBloco({
   podeOperar,
   salvando,
   onMarcar,
+  onMarcarExperimental,
   onJustificar,
   onTodosPresentes,
   onCancelarAula,
@@ -34,6 +37,8 @@ export function ChamadaAulaBloco({
   onAbrirDrawer,
 }: Props) {
   const vinculados = aula.alunos.filter((a) => a.aluno_id != null);
+  const leads = aula.experimental_leads ?? [];
+  const totalPessoas = vinculados.length + leads.length;
   const contagens = vinculados.reduce(
     (acc, a) => {
       acc[estadoDoAluno(a)] += 1;
@@ -128,8 +133,8 @@ export function ChamadaAulaBloco({
         </div>
       </div>
 
-      {vinculados.length === 0 ? (
-        <p className="p-4 text-xs text-slate-500">Sem alunos vinculados nesta aula.</p>
+      {totalPessoas === 0 ? (
+        <p className="p-4 text-xs text-slate-500">Sem alunos nem leads nesta aula.</p>
       ) : (
         <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {vinculados.map((aluno) => (
@@ -140,6 +145,15 @@ export function ChamadaAulaBloco({
               salvando={salvando}
               onMarcar={onMarcar}
               onJustificar={onJustificar}
+            />
+          ))}
+          {leads.map((lead) => (
+            <ChamadaLeadCard
+              key={`lead-${lead.experimental_id}`}
+              lead={lead}
+              podeOperar={podeOperar}
+              salvando={salvando}
+              onMarcar={onMarcarExperimental}
             />
           ))}
         </div>

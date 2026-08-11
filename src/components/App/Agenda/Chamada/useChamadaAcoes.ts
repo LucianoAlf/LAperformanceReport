@@ -30,6 +30,7 @@ const MENSAGENS_ERRO: Record<string, string> = {
   status_invalido: 'status inválido',
   motivo_obrigatorio_justificada: 'justificativa exige motivo',
   aluno_fora_do_roster: 'aluno fora do roster da aula',
+  experimental_nao_encontrada: 'aula experimental não encontrada',
 };
 
 /** Upload de evidencia (atestado, comunicado) no bucket privado. */
@@ -123,5 +124,29 @@ export function useChamadaAcoes(aoConcluir: () => void) {
     [aoConcluir],
   );
 
-  return { salvando, registrar, cancelarAula };
+  const registrarPresencaExperimental = useCallback(
+    async (experimentalId: number, status: 'experimental_realizada' | 'experimental_faltou'): Promise<boolean> => {
+      setSalvando(true);
+      try {
+        const { error } = await supabase.rpc('app_registrar_presenca_experimental', {
+          p_experimental_id: experimentalId,
+          p_status: status,
+        });
+        if (error) throw error;
+        toast.success(status === 'experimental_realizada' ? 'Presença registrada' : 'Falta registrada');
+        aoConcluir();
+        return true;
+      } catch (e) {
+        toast.error('Não foi possível registrar', {
+          description: e instanceof Error ? e.message : String(e),
+        });
+        return false;
+      } finally {
+        setSalvando(false);
+      }
+    },
+    [aoConcluir],
+  );
+
+  return { salvando, registrar, cancelarAula, registrarPresencaExperimental };
 }

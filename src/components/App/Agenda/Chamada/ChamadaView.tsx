@@ -51,7 +51,7 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
   const [drawerAula, setDrawerAula] = useState<AulaAgenda | null>(null);
   const [drawerData, setDrawerData] = useState<string>(data);
 
-  const { salvando, registrar, cancelarAula } = useChamadaAcoes(recarregar);
+  const { salvando, registrar, cancelarAula, registrarPresencaExperimental } = useChamadaAcoes(recarregar);
 
   const abrirDrawer = useCallback((aula: AulaAgenda, dia?: string) => {
     setDrawerAula(aula);
@@ -123,6 +123,7 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
           aulas={aulas}
           salvando={salvando}
           onRegistrar={registrar}
+          onRegistrarExperimental={registrarPresencaExperimental}
           onJustificar={(aluno, aula) => setAlunoJustificar({ aluno, aula })}
           onCancelarAula={setAulaCancelar}
           onReagendarAula={setAulaReagendar}
@@ -136,6 +137,7 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
           unidadeId={unidadeId}
           salvando={salvando}
           onRegistrar={registrar}
+          onRegistrarExperimental={registrarPresencaExperimental}
           onJustificar={(aluno, aula) => setAlunoJustificar({ aluno, aula })}
           onCancelarAula={setAulaCancelar}
           onReagendarAula={setAulaReagendar}
