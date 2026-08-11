@@ -210,6 +210,19 @@ Deno.test("renderer gerencial publica julho do Recreio sem inventar fonte ausent
       status: "indisponivel",
       disponibilidade: "indisponivel",
       motivo: "fechamento_anterior_incompativel",
+      mes_anterior: {
+        status: "indisponivel",
+        disponibilidade: "indisponivel",
+        motivo: "dominio_anterior_ausente",
+        competencia_anterior: { ano: 2026, mes: 6 },
+        dominios_ausentes: ["relatorio_admin_mensal", "relatorio_comercial_mensal"],
+      },
+      ano_anterior: {
+        status: "indisponivel",
+        disponibilidade: "indisponivel",
+        motivo: "payload_anterior_invalido",
+        competencia_anterior: { ano: 2025, mes: 7 },
+      },
     },
   };
 
@@ -253,7 +266,9 @@ Deno.test("renderer gerencial publica julho do Recreio sem inventar fonte ausent
       "Curso de interesse ausente: *176*",
       "Reajuste (8,13%/10,00%)",
       "Reajuste campeão (8,13%/7,00%)",
-      "Comparação não disponível",
+      "Comparação mensal não disponível",
+      "domínios ausentes: relatorio_admin_mensal, relatorio_comercial_mensal",
+      "Comparação anual não disponível (integridade dos dados do fechamento anterior inválida)",
     ]
   ) assertStringIncludes(texto, trecho);
 

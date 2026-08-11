@@ -321,6 +321,46 @@ function linhasRankingMensal(
   ).join("\n") + "\n";
 }
 
+function competenciaComparativo(bloco: any): string {
+  const competencia = bloco?.competencia_anterior;
+  if (!competencia?.ano || !competencia?.mes) return "competência anterior";
+  return `${mesesPorExtenso[numero(competencia.mes)] || "Mês"}/${competencia.ano}`;
+}
+
+function motivoComparativoLegivel(bloco: any): string {
+  const motivo = String(bloco?.motivo || "fechamento_anterior_incompativel");
+  const motivos: Record<string, string> = {
+    dominio_anterior_ausente: "domínio do fechamento anterior ausente",
+    fechamento_anterior_nao_fechado: "fechamento anterior não está fechado",
+    payload_anterior_invalido: "integridade dos dados do fechamento anterior inválida",
+    dominio_atual_ausente: "domínio do fechamento atual ausente",
+    fechamento_atual_nao_fechado: "fechamento atual não está fechado",
+    payload_atual_invalido: "integridade dos dados do fechamento atual inválida",
+    fingerprint_incompativel: "versão ou contrato do fechamento incompatível",
+    fechamento_anterior_incompativel: "fechamento anterior incompatível",
+  };
+  const detalhes: string[] = [];
+  if (Array.isArray(bloco?.dominios_ausentes) && bloco.dominios_ausentes.length) {
+    detalhes.push(`domínios ausentes: ${bloco.dominios_ausentes.join(", ")}`);
+  }
+  if (Array.isArray(bloco?.status_anterior) && bloco.status_anterior.length) {
+    detalhes.push(`status encontrados: ${bloco.status_anterior.join(", ")}`);
+  }
+  if (Array.isArray(bloco?.componentes_diferentes) && bloco.componentes_diferentes.length) {
+    detalhes.push(`componentes diferentes: ${bloco.componentes_diferentes.join(", ")}`);
+  }
+  return `${motivos[motivo] || motivo}${detalhes.length ? `; ${detalhes.join("; ")}` : ""}`;
+}
+
+function linhaComparativo(bloco: any, rotulo: string): string {
+  if (!bloco) return "";
+  const disponivel = bloco.disponibilidade === "disponivel" || bloco.status === "disponivel";
+  if (disponivel) {
+    return `${rotulo} disponível com competência equivalente (${competenciaComparativo(bloco)}).\n`;
+  }
+  return `${rotulo} não disponível (${motivoComparativoLegivel(bloco)}).\n`;
+}
+
 function linhasDistribuicao(
   itens: unknown,
   limite = 5,
@@ -1153,16 +1193,24 @@ export async function montarRelatorio(
 
   relatorio +=
     "───────────────────────\n⚖️ *COMPARATIVOS*\n───────────────────────\n";
-  const comparativoDisponivel = dados.comparativos?.disponibilidade === "disponivel" ||
-    (dados.comparativos?.disponibilidade == null &&
-      dados.comparativos?.status === "disponivel");
-  if (comparativoDisponivel) {
-    relatorio += "Comparação disponível com competências equivalentes.\n\n";
+  const comparativos = dados.comparativos || {};
+  const mesAnterior = comparativos.mes_anterior;
+  const anoAnterior = comparativos.ano_anterior;
+  if (mesAnterior || anoAnterior) {
+    relatorio += linhaComparativo(mesAnterior, "Comparação mensal") ||
+      "Comparação mensal não disponível (não há fechamento equivalente disponível).\n";
+    if (anoAnterior) {
+      relatorio += linhaComparativo(anoAnterior, "Comparação anual");
+    }
+    relatorio += "\n";
   } else {
-    const motivo = dados.comparativos?.motivo === "fechamento_anterior_incompativel"
-      ? "fechamento anterior incompatível"
-      : "não há fechamento equivalente disponível";
-    relatorio += `Comparação não disponível para este período com os mesmos critérios de fechamento (${motivo}).\n\n`;
+    const comparativoDisponivel = comparativos.disponibilidade === "disponivel" ||
+      (comparativos.disponibilidade == null && comparativos.status === "disponivel");
+    if (comparativoDisponivel) {
+      relatorio += "Comparação disponível com competências equivalentes.\n\n";
+    } else {
+      relatorio += `Comparação não disponível para este período com os mesmos critérios de fechamento (${motivoComparativoLegivel(comparativos)}).\n\n`;
+    }
   }
 
   relatorio +=
