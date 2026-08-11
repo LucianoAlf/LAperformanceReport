@@ -97,6 +97,26 @@ export function ProfessorPresencaToggle({
     }
   }
 
+  async function marcarTodasAulas(presenteAula: boolean) {
+    setSalvando(true);
+    try {
+      const rpc = presenteAula ? 'app_registrar_presenca_professor_dia' : 'app_remover_presenca_professor_dia';
+      const { error } = await supabase.rpc(rpc, {
+        p_professor_id: professorId,
+        p_data: data,
+        p_unidade_id: unidadeId,
+      });
+      if (error) throw error;
+      toast.success(`${professorNome} — todas as aulas ${presenteAula ? 'presentes' : 'ausentes'}`);
+      onMudou();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : typeof e === 'object' && e !== null && 'message' in e ? String((e as Record<string, unknown>).message) : String(e);
+      toast.error('Nao foi possivel alterar', { description: msg });
+    } finally {
+      setSalvando(false);
+    }
+  }
+
   const inicial = professorNome
     .split(' ')
     .map((n) => n[0])
@@ -205,9 +225,29 @@ export function ProfessorPresencaToggle({
 
             {/* Lista de aulas */}
             <div className="flex-1 overflow-y-auto p-5">
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Ajuste fino por aula
-              </p>
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  Ajuste fino por aula
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => marcarTodasAulas(true)}
+                    disabled={salvando}
+                    className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
+                  >
+                    Todas presentes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => marcarTodasAulas(false)}
+                    disabled={salvando}
+                    className="rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
+                  >
+                    Todas ausentes
+                  </button>
+                </div>
+              </div>
               <div className="space-y-2">
                 {aulas.map((aula) => {
                   const aulaId = aula.aula_ids[0];
