@@ -6,6 +6,7 @@ import { useOutletContext } from 'react-router-dom';
 import { chamadaCompleta, estadoDoAluno } from './chamadaUtils';
 import { ChamadaAulaBloco } from './ChamadaAulaBloco';
 import { AlertaPendencias } from './AlertaPendencias';
+import { ProfessorPresencaToggle } from './ProfessorPresencaToggle';
 import type { ItemChamada } from './useChamadaAcoes';
 import type { AlunoAgenda } from '@/hooks/useAgendaDia';
 import { cn } from '@/lib/utils';
@@ -67,6 +68,31 @@ export function ChamadaDia({
 
   const totalAulas = filtradas.length;
   const aulasConcluidas = filtradas.filter((a) => chamadaCompleta(a, data, agora)).length;
+
+  // Agrupa aulas por professor para o toggle de presenca
+  const aulasPorProfessor = useMemo(() => {
+    const mapa = new Map<number, { nome: string; aulas: AulaAgenda[]; presente: boolean | null }>();
+    for (const aula of filtradas) {
+      if (aula.professor_id == null) continue;
+      const existente = mapa.get(aula.professor_id);
+      if (existente) {
+        existente.aulas.push(aula);
+      } else {
+        // Determina se o professor esta presente baseado na primeira aula
+        const presente = aula.professor_presenca === 'presente'
+          ? true
+          : aula.professor_presenca === 'ausente'
+            ? false
+            : null;
+        mapa.set(aula.professor_id, {
+          nome: aula.professor_nome ?? 'Professor',
+          aulas: [aula],
+          presente,
+        });
+      }
+    }
+    return Array.from(mapa.entries()).sort((a, b) => a[1].nome.localeCompare(b[1].nome));
+  }, [filtradas]);
 
   if (ordenadas.length === 0) {
     return (
@@ -132,6 +158,25 @@ export function ChamadaDia({
           {filtradas.filter((a) => a.cancelada).length} cancelada(s)
         </span>
       </div>
+
+      {/* Presenca dos professores — toggle por professor para o dia inteiro */}
+      {podeOperar && aulasPorProfessor.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Professores:</span>
+          {aulasPorProfessor.map(([professorId, { nome, aulas: aulasProf, presente }]) => (
+            <ProfessorPresencaToggle
+              key={professorId}
+              professorId={professorId}
+              professorNome={nome}
+              data={data}
+              unidadeId={context?.unidadeSelecionada ?? ''}
+              totalAulas={aulasProf.length}
+              presente={presente}
+              onMudou={() => onRegistrar([])} // forca recarga
+            />
+          ))}
+        </div>
+      )}
 
       {/* Blocos de aula em ordem de horario */}
       <div className="space-y-3">
