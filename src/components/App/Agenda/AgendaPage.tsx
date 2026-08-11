@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { addDays, format, isValid, parseISO } from 'date-fns';
+import { addDays, addWeeks, format, isValid, parseISO, startOfWeek, endOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   AlertTriangle,
@@ -107,6 +107,10 @@ export default function AgendaPage() {
   const [agruparPor, setAgruparPor] = useState<'professor' | 'sala'>('professor');
   const [visao, setVisao] = useState<'professor' | 'sala' | 'chamada'>('professor');
   const ehChamada = visao === 'chamada';
+  // Sub-visao da Chamada (dia/semana/lista). Quando 'semana', as setas do
+  // topo movem 7 dias e o rotulo mostra o intervalo da semana.
+  const [subVisaoChamada, setSubVisaoChamada] = useState<'dia' | 'semana' | 'lista'>('dia');
+  const ehSemanaChamada = ehChamada && subVisaoChamada === 'semana';
   const [selecionada, setSelecionada] = useState<AulaAgenda | null>(null);
   const [filtros, setFiltros] = useState<FiltrosAgenda>(FILTROS_AGENDA_VAZIOS);
 
@@ -290,6 +294,11 @@ export default function AgendaPage() {
   }
 
   function mover(dias: number) {
+    // Na visao Semana (dentro da Chamada), as setas movem de semana em semana.
+    if (ehSemanaChamada) {
+      irPara(format(addWeeks(parseISO(data), dias), 'yyyy-MM-dd'));
+      return;
+    }
     irPara(format(addDays(parseISO(data), dias), 'yyyy-MM-dd'));
   }
 
@@ -316,8 +325,26 @@ export default function AgendaPage() {
           <ChevronRight className="h-4 w-4" />
         </button>
         <span className="px-1 font-semibold first-letter:uppercase">
-          {rotuloDoDia(data).dia}{' '}
-          <span className="font-normal text-slate-500">{rotuloDoDia(data).ano}</span>
+          {ehSemanaChamada ? (
+            <>
+              {(() => {
+                const d = parseISO(data);
+                const ini = startOfWeek(d, { weekStartsOn: 1 });
+                const fim = endOfWeek(d, { weekStartsOn: 1 });
+                // "10 a 15 de agosto" — compacto para a barra de comando.
+                const mesmoMes = ini.getMonth() === fim.getMonth();
+                return mesmoMes
+                  ? `${format(ini, 'd')} a ${format(fim, "d 'de' MMMM", { locale: ptBR })}`
+                  : `${format(ini, "d 'de' MMMM", { locale: ptBR })} a ${format(fim, "d 'de' MMMM", { locale: ptBR })}`;
+              })()}{' '}
+              <span className="font-normal text-slate-500">{format(parseISO(data), 'yyyy')}</span>
+            </>
+          ) : (
+            <>
+              {rotuloDoDia(data).dia}{' '}
+              <span className="font-normal text-slate-500">{rotuloDoDia(data).ano}</span>
+            </>
+          )}
         </span>
 
         {data !== hoje && (
@@ -491,6 +518,7 @@ export default function AgendaPage() {
           aulas={aulas}
           recarregar={recarregar}
           onIrParaDia={irPara}
+          onSubVisaoChange={setSubVisaoChamada}
         />
       ) : (
         <div className="flex min-w-0 items-stretch overflow-hidden rounded-lg border border-slate-700">

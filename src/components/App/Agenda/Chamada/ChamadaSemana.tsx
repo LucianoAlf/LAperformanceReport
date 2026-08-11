@@ -266,6 +266,19 @@ function CardAulaSemana({
   const completa = chamadaCompleta(aula, dia, agora);
   const ocorrida = aulaJaOcorreu(dia, aula.hora_fim, agora);
   const podeOperar = !aula.cancelada && vinculados.length > 0;
+  const total = vinculados.length;
+
+  // Porcentagem da chamada para a barra de progresso
+  const pctCompleta = total > 0 ? ((contagens.presente + contagens.falta + contagens.falta_justificada) / total) * 100 : 0;
+
+  // Cor da barra de progresso por estado
+  const corBarra = aula.cancelada
+    ? 'bg-rose-500'
+    : completa && total > 0
+      ? 'bg-emerald-500'
+      : ocorrida && contagens.indeterminado > 0
+        ? 'bg-amber-500'
+        : 'bg-slate-600';
 
   const marcar = (aluno: AlunoAgenda, status: 'presente' | 'falta' | 'indeterminado') => {
     if (!aluno.aula_emusys_id || !aluno.aluno_id) return;
@@ -284,17 +297,17 @@ function CardAulaSemana({
   return (
     <div
       className={cn(
-        'rounded-lg border px-2 py-1.5 transition-colors',
+        'rounded-xl border px-2.5 py-2 transition-all hover:-translate-y-px',
         aula.cancelada
-          ? 'border-rose-500/30 bg-rose-500/5'
+          ? 'border-rose-500/30 bg-rose-500/5 opacity-70'
           : contagens.indeterminado > 0 && ocorrida
             ? 'border-amber-500/40 bg-amber-500/5'
-            : completa && vinculados.length > 0
+            : completa && total > 0
               ? 'border-emerald-500/30 bg-emerald-500/5'
               : 'border-slate-700/40 bg-slate-800/30',
       )}
     >
-      {/* Cabecalho do card: horario + status + acoes de aula */}
+      {/* Cabeçalho: horário + status + contagens + ações */}
       <div className="flex items-center justify-between gap-1">
         <button
           type="button"
@@ -305,12 +318,22 @@ function CardAulaSemana({
           <span className="text-[11px] font-bold text-slate-200">{aula.hora_inicio}</span>
           {aula.cancelada ? (
             <XCircle className="h-3 w-3 shrink-0 text-rose-400" />
-          ) : completa && vinculados.length > 0 ? (
+          ) : completa && total > 0 ? (
             <Check className="h-3 w-3 shrink-0 text-emerald-400" />
           ) : ocorrida && contagens.indeterminado > 0 ? (
             <Clock className="h-3 w-3 shrink-0 text-amber-400" />
           ) : null}
         </button>
+
+        {/* Contagem compacta: 2P 1F 1J 1? */}
+        {total > 0 && !aula.cancelada && (
+          <span className="text-[9px] font-semibold text-slate-500">
+            {contagens.presente > 0 && <span className="text-emerald-400">{contagens.presente}P</span>}
+            {contagens.falta > 0 && <span className="text-rose-400"> {contagens.falta}F</span>}
+            {contagens.falta_justificada > 0 && <span className="text-amber-400"> {contagens.falta_justificada}J</span>}
+            {contagens.indeterminado > 0 && <span className="text-slate-500"> {contagens.indeterminado}?</span>}
+          </span>
+        )}
         {podeOperar && (
           <div className="flex shrink-0 gap-0.5">
             <button
@@ -342,13 +365,26 @@ function CardAulaSemana({
         )}
       </div>
 
-      <p className="mt-0.5 truncate text-[10px] text-slate-400">
-        {aula.professor_nome ?? '—'}
-      </p>
-      <p className="truncate text-[10px] text-slate-500">{aula.curso_nome}</p>
+      {/* Barra de progresso colorida */}
+      {!aula.cancelada && total > 0 && (
+        <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-700/60">
+          <div
+            className={cn('h-full rounded-full transition-all', corBarra)}
+            style={{ width: `${pctCompleta}%` }}
+          />
+        </div>
+      )}
 
-      {/* Lista de alunos com botoes — igual a visao Dia, mas compacta */}
-      {vinculados.length > 0 && !aula.cancelada && (
+      {/* Info da aula */}
+      <div className="mt-1 flex items-baseline justify-between gap-1">
+        <p className="truncate text-[10px] font-medium text-slate-400">
+          {aula.professor_nome ?? '—'}
+        </p>
+        <p className="truncate text-[9.5px] text-slate-500">{aula.curso_nome}</p>
+      </div>
+
+      {/* Lista de alunos com botões — igual a visão Dia, mas compacta */}
+      {total > 0 && !aula.cancelada && (
         <ul className="mt-1.5 space-y-1">
           {vinculados.map((aluno) => {
             const estado = estadoDoAluno(aluno);

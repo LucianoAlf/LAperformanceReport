@@ -83,6 +83,7 @@ test('competencia sem fechamento retorna indisponibilidade explicita ao usuario'
 
   assert.match(edge, /RELATORIO_ADMIN_MENSAL_FECHADO_INVALIDO/);
   assert.match(edge, /indisponivel\s*\?\s*409\s*:\s*500/);
+  assert.match(edge, /etapaRelatorio/);
   assert.match(admin, /errorEdge as \{ context\?: Response \}\)\.context/);
   assert.match(admin, /responseData\?\.error/);
 });

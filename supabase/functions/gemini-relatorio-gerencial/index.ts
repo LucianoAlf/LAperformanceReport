@@ -1403,12 +1403,14 @@ if (import.meta.main) {
       return json({ success: false, error: "Método não permitido." }, 405);
     }
 
+    let etapaRelatorio = "entrada";
     try {
       const authorization = req.headers.get("Authorization");
       if (!authorization) {
         return json({ success: false, error: "Sessão não informada." }, 401);
       }
 
+      etapaRelatorio = "validacao_requisicao";
       const body = await req.json() as Partial<RelatorioGerencialRequest>;
       if (
         !uuidValido(body.unidade) || !Number.isInteger(body.ano) ||
@@ -1422,6 +1424,7 @@ if (import.meta.main) {
         }, 400);
       }
 
+      etapaRelatorio = "configuracao_supabase";
       const supabaseUrl = Deno.env.get("SUPABASE_URL");
       const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
       if (!supabaseUrl || !anonKey) {
@@ -1437,6 +1440,7 @@ if (import.meta.main) {
         auth: { persistSession: false, autoRefreshToken: false },
       });
 
+      etapaRelatorio = "autenticacao";
       const { data: authData, error: authError } = await supabase.auth
         .getUser();
       if (authError || !authData.user) {
@@ -1446,6 +1450,7 @@ if (import.meta.main) {
         );
       }
 
+      etapaRelatorio = "rpc_fechamento";
       const { data, error } = await supabase.rpc(
         "get_relatorio_gerencial_canonico_v1",
         {
@@ -1475,6 +1480,7 @@ if (import.meta.main) {
         }, status);
       }
 
+      etapaRelatorio = "validacao_contrato";
       if (
         !data || data.status !== "fechado" ||
         numero(data.schema_version) !== 1 ||
@@ -1486,9 +1492,11 @@ if (import.meta.main) {
         }, 500);
       }
 
+      etapaRelatorio = "montagem_relatorio";
       const relatorio = await montarRelatorio(
         data as RelatorioGerencialCanonico,
       );
+      etapaRelatorio = "resposta_sucesso";
       return json({
         success: true,
         relatorio,
@@ -1496,13 +1504,15 @@ if (import.meta.main) {
         schema_version: data.schema_version,
       });
     } catch (error) {
+      const detalhe = error instanceof Error ? error.message : String(error);
       console.error(
         "Erro inesperado no relatório gerencial",
-        error instanceof Error ? error.message : String(error),
+        etapaRelatorio,
+        detalhe,
       );
       return json({
         success: false,
-        error: "Não foi possível gerar o relatório gerencial.",
+        error: `Não foi possível gerar o relatório gerencial. (etapa: ${etapaRelatorio}; detalhe: ${detalhe})`,
       }, 500);
     }
   });

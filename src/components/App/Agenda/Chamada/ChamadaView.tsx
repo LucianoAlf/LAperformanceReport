@@ -19,15 +19,27 @@ interface Props {
   aulas: AulaAgenda[];
   recarregar: () => void;
   onIrParaDia: (data: string) => void;
+  onSubVisaoChange?: (subVisao: SubVisao) => void;
 }
 
 /**
  * Orquestra a visao Chamada dentro da AgendaPage. Recebe as aulas do dia
  * atual (ja filtradas pela AgendaPage) e o callback de recarga. As tres
  * sub-visoes (dia/semana/lista) compartilham os mesmos modais e o drawer.
+ *
+ * `onSubVisaoChange` notifica a AgendaPage quando a sub-visao muda, para
+ * que as setas de navegacao e o rotulo do topo se adaptem (semana vs dia).
  */
-export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia }: Props) {
+export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, onSubVisaoChange }: Props) {
   const [subVisao, setSubVisao] = useState<SubVisao>('dia');
+
+  const trocarSubVisao = useCallback(
+    (nova: SubVisao) => {
+      setSubVisao(nova);
+      onSubVisaoChange?.(nova);
+    },
+    [onSubVisaoChange],
+  );
 
   // Estado dos modais — cada um guarda o contexto necessario para confirmar.
   const [alunoJustificar, setAlunoJustificar] = useState<{ aluno: AlunoAgenda; aula: AulaAgenda } | null>(null);
@@ -92,7 +104,7 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia }:
           <button
             key={v.valor}
             type="button"
-            onClick={() => setSubVisao(v.valor)}
+            onClick={() => trocarSubVisao(v.valor)}
             aria-pressed={subVisao === v.valor}
             className={cn(
               'flex items-center gap-1.5 rounded px-3 py-1 text-[12.5px] transition-colors',
