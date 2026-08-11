@@ -101,6 +101,7 @@ const SalasPage = lazy(() => import('./components/App/Salas').then(m => ({ defau
 const ProjetosPage = lazy(() => import('./components/App/Projetos').then(m => ({ default: m.ProjetosPage })));
 const PreAtendimentoPage = lazy(() => import('./components/App/PreAtendimento').then(m => ({ default: m.PreAtendimentoPage })));
 const CampanhasPage = lazy(() => import('./components/App/Campanhas').then(m => ({ default: m.CampanhasPage })));
+const CampanhaDetalhePage = lazy(() => import('./components/App/Campanhas').then(m => ({ default: m.CampanhaDetalhePage })));
 const TrafegoPagoPage = lazy(() => import('./components/App/TrafegoPago').then(m => ({ default: m.TrafegoPagoPage })));
 
 // Metas
@@ -249,6 +250,10 @@ export const router = createBrowserRouter([
           {
             path: 'campanhas',
             element: <CampanhasGuard><Suspense fallback={<PageLoader />}><CampanhasPage /></Suspense></CampanhasGuard>,
+          },
+          {
+            path: 'campanhas/:campanhaId',
+            element: <CampanhasGuard><Suspense fallback={<PageLoader />}><CampanhaDetalhePage /></Suspense></CampanhasGuard>,
           },
           {
             path: 'trafego-pago',
