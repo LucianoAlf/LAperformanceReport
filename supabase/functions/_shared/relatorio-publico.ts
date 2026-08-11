@@ -9,6 +9,11 @@ const TERMOS_TECNICOS_PUBLICOS = [
   /\bAmerica\/Sao_Paulo\b/i,
 ] as const;
 
+// UTF-8 recodificado como Latin-1/Windows-1252 aparece como "NÃ£o",
+// "â€¢" ou "ðŸ…". Bloqueamos esse estado antes de gravar/enviar a fila;
+// uma mensagem pública corrompida não deve ser considerada um envio válido.
+const PADRAO_MOJIBAKE_UTF8 = /(?:[ÃÂ](?=[\u0080-\uFFFF])|â[\u0080-\uFFFF]|ðŸ|�)/u;
+
 export function formatarDataPublica(dataIso: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dataIso);
   if (!match) {
@@ -41,6 +46,9 @@ export function formatarDataHoraPublica(
 }
 
 export function validarTextoPublicoRelatorio(texto: string): string {
+  if (PADRAO_MOJIBAKE_UTF8.test(texto)) {
+    throw new Error("RELATORIO_TEXTO_ENCODING");
+  }
   if (TERMOS_TECNICOS_PUBLICOS.some((padrao) => padrao.test(texto))) {
     throw new Error("RELATORIO_TEXTO_TECNICO");
   }

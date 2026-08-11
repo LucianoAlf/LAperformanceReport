@@ -61,6 +61,7 @@ import { AgendaTimeline } from './AgendaTimeline';
 import { SeletorPeriodo } from './SeletorPeriodo';
 import { AgendaDrawer } from './AgendaDrawer';
 import { ChamadaView } from './Chamada';
+import { CalendarioEscolar } from './CalendarioEscolar';
 import { cn } from '@/lib/utils';
 
 /**
@@ -112,8 +113,9 @@ export default function AgendaPage() {
   const hoje = format(new Date(), 'yyyy-MM-dd');
   const [data, setData] = useState(hoje);
   const [agruparPor, setAgruparPor] = useState<'professor' | 'sala'>('professor');
-  const [visao, setVisao] = useState<'professor' | 'sala' | 'chamada'>('professor');
+  const [visao, setVisao] = useState<'professor' | 'sala' | 'chamada' | 'calendario'>('professor');
   const ehChamada = visao === 'chamada';
+  const ehCalendario = visao === 'calendario';
   // Sub-visao da Chamada (dia/semana/lista). Quando 'semana', as setas do
   // topo movem 7 dias e o rotulo mostra o intervalo da semana.
   const [subVisaoChamada, setSubVisaoChamada] = useState<'dia' | 'semana' | 'lista'>('dia');
@@ -385,10 +387,11 @@ export default function AgendaPage() {
             { valor: 'professor', rotulo: 'Professores' },
             { valor: 'sala', rotulo: 'Salas' },
             { valor: 'chamada', rotulo: 'Chamada' },
+            { valor: 'calendario', rotulo: 'Calendário' },
           ]}
           valor={visao}
           onChange={(v) => {
-            setVisao(v as 'professor' | 'sala' | 'chamada');
+            setVisao(v as 'professor' | 'sala' | 'chamada' | 'calendario');
             if (v !== 'professor' && v !== 'sala') return;
             setAgruparPor(v);
           }}
@@ -556,6 +559,8 @@ export default function AgendaPage() {
           onIrParaDia={irPara}
           onSubVisaoChange={setSubVisaoChamada}
         />
+      ) : ehCalendario ? (
+        <CalendarioEscolar />
       ) : (
         <div className="flex min-w-0 items-stretch overflow-hidden rounded-lg border border-slate-700">
           <div className="min-w-0 flex-1">
