@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calendário Inteligente — LA Music Report</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            grotesk: ['Space Grotesk', 'sans-serif'],
+          },
+          colors: {
+            accent: {
+              cyan: '#00d4ff',
+              pink: '#ff3366',
+              green: '#00cc66',
+              yellow: '#ffaa00',
+              purple: '#8b5cf6',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background: rgb(15 23 42); color: rgb(226 232 240); font-family: 'Inter', sans-serif; }
+    .card { background: rgb(30 41 59 / 0.5); border: 1px solid rgb(51 65 85 / 0.5); border-radius: 12px; }
+    .card-hover:hover { border-color: rgb(51 65 85); }
+    .btn { border: 1px solid rgb(51 65 85); color: rgb(203 213 225); padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; transition: all 0.2s; }
+    .btn:hover { color: white; border-color: rgb(71 85 105); }
+    .btn-primary { background: rgb(8 145 178 / 0.2); border-color: rgb(8 145 178 / 0.4); color: rgb(103 232 249); }
+    .btn-primary:hover { background: rgb(8 145 178 / 0.3); }
+    .btn-danger { background: rgb(225 29 72 / 0.2); border-color: rgb(225 29 72 / 0.4); color: rgb(253 164 175); }
+    .btn-danger:hover { background: rgb(225 29 72 / 0.3); }
+    .badge { padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+    .badge-emerald { background: rgb(16 185 129 / 0.2); color: rgb(52 211 153); }
+    .badge-rose { background: rgb(225 29 72 / 0.2); color: rgb(251 113 133); }
+    .badge-amber { background: rgb(245 158 11 / 0.2); color: rgb(251 191 36); }
+    .badge-violet { background: rgb(139 92 246 / 0.2); color: rgb(167 139 250); }
+    .badge-slate { background: rgb(51 65 85 / 0.5); color: rgb(148 163 184); }
+    .semaforo-verde { color: rgb(52 211 153); }
+    .semaforo-amarelo { color: rgb(251 191 36); }
+    .semaforo-vermelho { color: rgb(251 113 133); }
+    .dia-cell { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; }
+    .dia-aula { background: rgb(8 145 178 / 0.3); color: rgb(103 232 249); }
+    .dia-feriado { background: rgb(225 29 72 / 0.3); color: rgb(251 113 133); }
+    .dia-recesso { background: rgb(51 65 85 / 0.5); color: rgb(100 116 139); }
+    .dia-emenda { background: rgb(245 158 11 / 0.3); color: rgb(251 191 36); }
+    .dia-vazio { background: transparent; color: rgb(51 65 85); }
+    .dia-hoje { ring: 2px; ring-color: rgb(16 185 129); }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-50">
+  <div class="mx-auto max-w-7xl px-6 py-8">
+
+    <!-- Header -->
+    <div class="mb-6 flex items-center justify-between">
+      <div>
+        <h1 class="font-grotesk text-2xl font-bold text-white">Calendário Inteligente</h1>
+        <p class="mt-1 text-sm text-slate-400">Ano letivo 2026 · LA Music — 3 unidades</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="btn btn-primary">Simular emenda</button>
+        <button class="btn">Exportar</button>
+      </div>
+    </div>
+
+    <!-- KPIs do calendário -->
+    <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+      <div class="card p-4">
+        <p class="text-xs font-medium text-slate-400">Aulas no ano</p>
+        <p class="mt-1 text-2xl font-bold text-white">40</p>
+        <p class="mt-1 text-xs text-slate-500">pacote padrão</p>
+      </div>
+      <div class="card p-4">
+        <p class="text-xs font-medium text-slate-400">Feriados</p>
+        <p class="mt-1 text-2xl font-bold text-rose-400">14</p>
+        <p class="mt-1 text-xs text-slate-500">nacionais + RJ</p>
+      </div>
+      <div class="card p-4">
+        <p class="text-xs font-medium text-slate-400">Recessos</p>
+        <p class="mt-1 text-2xl font-bold text-slate-300">3</p>
+        <p class="mt-1 text-xs text-slate-500">Carnaval, jul, dez</p>
+      </div>
+      <div class="card p-4">
+        <p class="text-xs font-medium text-slate-400">Emendas</p>
+        <p class="mt-1 text-2xl font-bold text-amber-400">0</p>
+        <p class="mt-1 text-xs text-slate-500">nenhuma confirmada</p>
+      </div>
+      <div class="card p-4">
+        <p class="text-xs font-medium text-slate-400">Melhor dia</p>
+        <p class="mt-1 text-2xl font-bold text-emerald-400">Quarta</p>
+        <p class="mt-1 text-xs text-slate-500">+4 de banco</p>
+      </div>
+      <div class="card p-4">
+        <p class="text-xs font-medium text-slate-400">Pior dia</p>
+        <p class="mt-1 text-2xl font-bold text-rose-400">Segunda</p>
+        <p class="mt-1 text-xs text-slate-500">+1 de banco</p>
+      </div>
+      <div class="card p-4">
+        <p class="text-xs font-medium text-slate-400">Contratos ativos</p>
+        <p class="mt-1 text-2xl font-bold text-white">1.247</p>
+        <p class="mt-1 text-xs text-slate-500">projetados</p>
+      </div>
+    </div>
+
+    <!-- Grid principal -->
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+
+      <!-- Coluna 1: Calendário do ano -->
+      <div class="lg:col-span-2">
+        <div class="card p-5">
+          <div class="mb-4 flex items-center justify-between">
+            <h2 class="font-grotesk text-lg font-bold text-white">Ano letivo 2026</h2>
+            <div class="flex items-center gap-3 text-[10px] text-slate-500">
+              <span class="flex items-center gap-1"><span class="dia-cell dia-aula" style="width:12px;height:12px;"></span> Aula</span>
+              <span class="flex items-center gap-1"><span class="dia-cell dia-feriado" style="width:12px;height:12px;"></span> Feriado</span>
+              <span class="flex items-center gap-1"><span class="dia-cell dia-recesso" style="width:12px;height:12px;"></span> Recesso</span>
+              <span class="flex items-center gap-1"><span class="dia-cell dia-emenda" style="width:12px;height:12px;"></span> Emenda</span>
+            </div>
+          </div>
+
+          <!-- Dias da semana -->
+          <div class="mb-2 grid grid-cols-7 gap-1">
+            <span class="text-center text-[10px] font-semibold uppercase tracking-wider text-slate-500">Seg</span>
+            <span class="text-center text-[10px] font-semibold uppercase tracking-wider text-slate-500">Ter</span>
+            <span class="text-center text-[10px] font-semibold uppercase tracking-wider text-slate-500">Qua</span>
+            <span class="text-center text-[10px] font-semibold uppercase tracking-wider text-slate-500">Qui</span>
+            <span class="text-center text-[10px] font-semibold uppercase tracking-wider text-slate-500">Sex</span>
+            <span class="text-center text-[10px] font-semibold uppercase tracking-wider text-slate-500">Sáb</span>
+            <span class="text-center text-[10px] font-semibold uppercase tracking-wider text-slate-500">Dom</span>
+          </div>
+
+          <!-- Semanas do ano — exemplo simplificado -->
+          <div class="space-y-1">
+            <!-- Semana 1 -->
+            <div class="grid grid-cols-7 gap-1">
+              <span class="dia-cell dia-vazio"></span>
+              <span class="dia-cell dia-vazio"></span>
+              <span class="dia-cell dia-vazio"></span>
+              <span class="dia-cell dia-vazio"></span>
+              <span class="dia-cell dia-vazio"></span>
+              <span class="dia-cell dia-vazio"></span>
+              <span class="dia-cell dia-recesso">1</span>
+            </div>
+            <!-- Semana 2 -->
+            <div class="grid grid-cols-7 gap-1">
+              <span class="dia-cell dia-recesso">2</span>
+              <span class="dia-cell dia-recesso">3</span>
+              <span class="dia-cell dia-recesso">4</span>
+              <span class="dia-cell dia-recesso">5</span>
+              <span class="dia-cell dia-recesso">6</span>
+              <span class="dia-cell dia-recesso">7</span>
+              <span class="dia-cell dia-recesso">8</span>
+            </div>
+            <!-- Semana 3 -->
+            <div class="grid grid-cols-7 gap-1">
+              <span class="dia-cell dia-recesso">9</span>
+              <span class="dia-cell dia-recesso">10</span>
+              <span class="dia-cell dia-recesso">11</span>
+              <span class="dia-cell dia-recesso">12</span>
+              <span class="dia-cell dia-recesso">13</span>
+              <span class="dia-cell dia-recesso">14</span>
+              <span class="dia-cell dia-recesso">15</span>
+            </div>
+            <!-- Semana 4 -->
+            <div class="grid grid-cols-7 gap-1">
+              <span class="dia-cell dia-recesso">16</span>
+              <span class="dia-cell dia-recesso">17</span>
+              <span class="dia-cell dia-recesso">18</span>
+              <span class="dia-cell dia-recesso">19</span>
+              <span class="dia-cell dia-recesso">20</span>
+              <span class="dia-cell dia-recesso">21</span>
+              <span class="dia-cell dia-recesso">22</span>
+            </div>
+            <!-- Semana 5 -->
+            <div class="grid grid-cols-7 gap-1">
+              <span class="dia-cell dia-aula">23</span>
+              <span class="dia-cell dia-aula">24</span>
+              <span class="dia-cell dia-aula">25</span>
+              <span class="dia-cell dia-aula">26</span>
+              <span class="dia-cell dia-aula">27</span>
+              <span class="dia-cell dia-aula">28</span>
+              <span class="dia-cell dia-vazio">29</span>
+            </div>
+            <!-- Semana 6 -->
+            <div class="grid grid-cols-7 gap-1">
+              <span class="dia-cell dia-aula">30</span>
+              <span class="dia-cell dia-aula">31</span>
+              <span class="dia-cell dia-aula">1</span>
+              <span class="dia-cell dia-aula">2</span>
+              <span class="dia-cell dia-aula">3</span>
+              <span class="dia-cell dia-aula">4</span>
+              <span class="dia-cell dia-vazio">5</span>
+            </div>
+            <!-- ... mais semanas ... -->
+            <div class="pt-2 text-center text-xs text-slate-500">
+              ↓ 46 semanas restantes ↓
+            </div>
+          </div>
+
+          <!-- Resumo por dia da semana -->
+          <div class="mt-6 border-t border-slate-700/50 pt-4">
+            <h3 class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Banco de segurança por dia</h3>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-slate-400">Segunda</span>
+                <div class="flex items-center gap-2">
+                  <div class="h-2 w-32 rounded-full bg-slate-700">
+                    <div class="h-2 rounded-full bg-cyan-500" style="width: 25%"></div>
+                  </div>
+                  <span class="text-xs font-bold text-cyan-400">+1</span>
+                  <span class="badge badge-amber">justo</span>
+                </div>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-slate-400">Terça</span>
+                <div class="flex items-center gap-2">
+                  <div class="h-2 w-32 rounded-full bg-slate-700">
+                    <div class="h-2 rounded-full bg-cyan-500" style="width: 50%"></div>
+                  </div>
+                  <span class="text-xs font-bold text-cyan-400">+2</span>
+                  <span class="badge badge-emerald">ok</span>
+                </div>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-slate-400">Quarta</span>
+                <div class="flex items-center gap-2">
+                  <div class="h-2 w-32 rounded-full bg-slate-700">
+                    <div class="h-2 rounded-full bg-emerald-500" style="width: 100%"></div>
+                  </div>
+                  <span class="text-xs font-bold text-emerald-400">+4</span>
+                  <span class="badge badge-emerald">folgado</span>
+                </div>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-slate-400">Quinta</span>
+                <div class="flex items-center gap-2">
+                  <div class="h-2 w-32 rounded-full bg-slate-700">
+                    <div class="h-2 rounded-full bg-cyan-500" style="width: 50%"></div>
+                  </div>
+                  <span class="text-xs font-bold text-cyan-400">+2</span>
+                  <span class="badge badge-emerald">ok</span>
+                </div>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-slate-400">Sexta</span>
+                <div class="flex items-center gap-2">
+                  <div class="h-2 w-32 rounded-full bg-slate-700">
+                    <div class="h-2 rounded-full bg-cyan-500" style="width: 25%"></div>
+                  </div>
+                  <span class="text-xs font-bold text-cyan-400">+1</span>
+                  <span class="badge badge-amber">justo</span>
+                </div>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-slate-400">Sábado</span>
+                <div class="flex items-center gap-2">
+                  <div class="h-2 w-32 rounded-full bg-slate-700">
+                    <div class="h-2 rounded-full bg-cyan-500" style="width: 25%"></div>
+                  </div>
+                  <span class="text-xs font-bold text-cyan-400">+1</span>
+                  <span class="badge badge-amber">justo</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Coluna 2: Painel lateral -->
+      <div class="space-y-4">
+
+        <!-- Feriados -->
+        <div class="card p-4">
+          <h3 class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Feriados 2026</h3>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-2">
+              <div>
+                <p class="text-xs font-medium text-slate-200">Carnaval</p>
+                <p class="text-[10px] text-slate-500">16 e 17 de fevereiro</p>
+              </div>
+              <span class="badge badge-slate">recesso</span>
+            </div>
+            <div class="flex items-center justify-between rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-2">
+              <div>
+                <p class="text-xs font-medium text-slate-200">Sexta-feira Santa</p>
+                <p class="text-[10px] text-slate-500">3 de abril</p>
+              </div>
+              <span class="badge badge-rose">perde sexta</span>
+            </div>
+            <div class="flex items-center justify-between rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-2">
+              <div>
+                <p class="text-xs font-medium text-slate-200">Tiradentes</p>
+                <p class="text-[10px] text-slate-500">21 de abril</p>
+              </div>
+              <span class="badge badge-rose">perde terça</span>
+            </div>
+            <div class="flex items-center justify-between rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-2">
+              <div>
+                <p class="text-xs font-medium text-slate-200">São Jorge</p>
+                <p class="text-[10px] text-slate-500">23 de abril</p>
+              </div>
+              <span class="badge badge-rose">perde quinta</span>
+            </div>
+            <div class="flex items-center justify-between rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-2">
+              <div>
+                <p class="text-xs font-medium text-slate-200">Data Magna do RJ</p>
+                <p class="text-[10px] text-slate-500">20 de julho</p>
+              </div>
+              <span class="badge badge-slate">recesso</span>
+            </div>
+            <div class="pt-2 text-center">
+              <button class="text-xs text-cyan-400 hover:text-cyan-300">Ver todos os 14 feriados →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recessos -->
+        <div class="card p-4">
+          <h3 class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Recessos 2026</h3>
+          <div class="space-y-2">
+            <div class="rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-2">
+              <div class="flex items-center justify-between">
+                <p class="text-xs font-medium text-slate-200">Carnaval</p>
+                <span class="badge badge-emerald">confirmado</span>
+              </div>
+              <p class="mt-1 text-[10px] text-slate-500">14 a 21 de fevereiro</p>
+              <p class="mt-1 text-[10px] text-emerald-400">Engole 2 feriados</p>
+            </div>
+            <div class="rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-2">
+              <div class="flex items-center justify-between">
+                <p class="text-xs font-medium text-slate-200">Julho</p>
+                <span class="badge badge-emerald">confirmado</span>
+              </div>
+              <p class="mt-1 text-[10px] text-slate-500">18 de julho a 2 de agosto</p>
+              <p class="mt-1 text-[10px] text-emerald-400">Engole Data Magna</p>
+            </div>
+            <div class="rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-2">
+              <div class="flex items-center justify-between">
+                <p class="text-xs font-medium text-slate-200">Dezembro/Janeiro</p>
+                <span class="badge badge-emerald">confirmado</span>
+              </div>
+              <p class="mt-1 text-[10px] text-slate-500">19 de dezembro a 4 de janeiro</p>
+              <p class="mt-1 text-[10px] text-emerald-400">Engole Natal e Ano-Novo</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Emendas -->
+        <div class="card p-4">
+          <h3 class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Emendas</h3>
+          <div class="rounded-lg border border-dashed border-slate-700 bg-slate-800/20 p-4 text-center">
+            <p class="text-xs text-slate-500">Nenhuma emenda confirmada</p>
+            <button class="btn btn-primary mt-2 w-full">Simular emenda</button>
+          </div>
+        </div>
+
+        <!-- Alertas -->
+        <div class="card border-amber-500/30 bg-amber-500/5 p-4">
+          <h3 class="mb-3 text-xs font-semibold uppercase tracking-wider text-amber-400">Alertas</h3>
+          <div class="space-y-2">
+            <div class="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-2">
+              <span class="text-amber-400">⚠</span>
+              <div>
+                <p class="text-xs font-medium text-amber-200">Segunda tem banco de +1</p>
+                <p class="text-[10px] text-amber-300/70">Reposição liberada só com atestado</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-2">
+              <span class="text-amber-400">⚠</span>
+              <div>
+                <p class="text-xs font-medium text-amber-200">3 contratos estouram em janeiro</p>
+                <p class="text-[10px] text-amber-300/70">Ver watchlist para detalhes</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Watchlist -->
+    <div class="mt-6">
+      <div class="card p-5">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="font-grotesk text-lg font-bold text-white">Alunos que precisam de olhar</h2>
+          <span class="text-xs text-slate-500">Atualizado agora</span>
+        </div>
+        <div class="overflow-hidden rounded-lg border border-slate-700/50">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-800/60 text-[10px] uppercase tracking-wider text-slate-500">
+              <tr>
+                <th class="px-4 py-2 font-semibold">Aluno</th>
+                <th class="px-4 py-2 font-semibold">Dia</th>
+                <th class="px-4 py-2 font-semibold">Aulas</th>
+                <th class="px-4 py-2 font-semibold">Última aula</th>
+                <th class="px-4 py-2 font-semibold">Última parcela</th>
+                <th class="px-4 py-2 font-semibold">Status</th>
+                <th class="px-4 py-2 font-semibold">Ação</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <tr class="hover:bg-slate-800/40">
+                <td class="px-4 py-3 font-medium text-slate-200">Maria Silva</td>
+                <td class="px-4 py-3 text-slate-400">Quarta</td>
+                <td class="px-4 py-3 text-slate-400">38/40</td>
+                <td class="px-4 py-3 text-slate-400">15/07/2027</td>
+                <td class="px-4 py-3 text-slate-400">15/06/2027</td>
+                <td class="px-4 py-3"><span class="badge badge-rose">estourando</span></td>
+                <td class="px-4 py-3"><button class="btn btn-primary text-[10px]">Agendar reposição</button></td>
+              </tr>
+              <tr class="hover:bg-slate-800/40">
+                <td class="px-4 py-3 font-medium text-slate-200">João Santos</td>
+                <td class="px-4 py-3 text-slate-400">Segunda</td>
+                <td class="px-4 py-3 text-slate-400">35/40</td>
+                <td class="px-4 py-3 text-slate-400">14/12/2026</td>
+                <td class="px-4 py-3 text-slate-400">15/12/2026</td>
+                <td class="px-4 py-3"><span class="badge badge-amber">sem margem</span></td>
+                <td class="px-4 py-3"><button class="btn text-[10px]">Acompanhar</button></td>
+              </tr>
+              <tr class="hover:bg-slate-800/40">
+                <td class="px-4 py-3 font-medium text-slate-200">Ana Costa</td>
+                <td class="px-4 py-3 text-slate-400">Quarta</td>
+                <td class="px-4 py-3 text-slate-400">38/40</td>
+                <td class="px-4 py-3 text-slate-400">09/06/2027</td>
+                <td class="px-4 py-3 text-slate-400">15/06/2027</td>
+                <td class="px-4 py-3"><span class="badge badge-emerald">janela de renovação</span></td>
+                <td class="px-4 py-3"><button class="btn text-[10px]">Chamar para renovar</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>
