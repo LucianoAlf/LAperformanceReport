@@ -248,9 +248,31 @@ Quando a jornada é sincronizada (webhook de matrícula ou sync), materializa a 
 
 ### 5.1 Página: Calendário Escolar (`/app/agenda/calendario`)
 
-- Lista de feriados (globais) + recessos/emendas por unidade
-- Botão "Simular emenda" — mostra o impacto antes de confirmar
-- Visualização do ano por dia da semana (banco de segurança)
+**Não é só visualização — é a máquina de criar o calendário.** O gestor precisa cadastrar feriados, recessos e emendas ANTES do ano começar. O motor usa esse calendário para projetar os contratos.
+
+- **Cadastro de feriados/recessos/emendas** — tipo Google Calendar: visualização mensal, trimestral, semestral, anual
+- **Import do Emusys** — se a escola já cadastrou no Emusys, puxa automaticamente
+- **Simulador de emenda** — mostra o impacto no banco de cada dia antes de confirmar
+- **Visualização do ano por dia da semana** — quantas aulas cada dia tem, qual o banco
+
+**A tela de cadastro:**
+
+```
+┌─────────────────────────────────────────┐
+│  Janeiro 2026                    [< >]  │
+├─────────────────────────────────────────┤
+│  Seg  Ter  Qua  Qui  Sex  Sáb  Dom     │
+│         1    2    3    4    5    6     │
+│   7    8    9   10   11   12   13      │
+│  14   15   16   17   18   19   20      │
+│  21   22   23   24   25   26   27      │
+│  28   29   30   31                     │
+│                                         │
+│  [+] Adicionar feriado/recesso/emenda  │
+└─────────────────────────────────────────┘
+```
+
+Clica num dia → abre modal para marcar como feriado/recesso/emenda.
 
 ### 5.2 Componente: Semáforo da Matrícula
 
@@ -358,15 +380,19 @@ Aula 35 ●─── Aula 36 ●─── Aula 37 ○─── Aula 38 ○──
 
 4. **Emenda confirmada entra no cálculo.** Emenda simulada não — é só para o gestor testar.
 
-5. **O banco de segurança é por dia da semana, mas excesso é ruim.** Quarta tem +4 — isso NÃO é bom. Significa que o aluno paga 40 mas tem 44 disponíveis: ele termina de pagar e ainda tem aula sobrando. O motor precisa **desacelerar** — marcar as excedentes como "evento" ou "recesso" para a última aula cair junto com a 12ª parcela.
+5. **O alvo é 39-40 semanas, não 40 cravado.** A última aula deve cair entre a 39ª e a 42ª semana do ciclo. Se cai antes da 39ª, o aluno termina antes de pagar — precisa acelerar. Se cai depois da 42ª, o aluno paga e ainda tem aula — precisa desacelerar.
 
-6. **O alvo é 39-42, não 40 cravado.** A última aula deve cair entre a 39ª e a 42ª semana do ciclo. Se cai na 44ª, o aluno já pagou tudo e ainda tem aula — experiência ruim. O motor ajusta o ritmo para fechar em 39-42.
+6. **Reposição estratégica desacelera o ritmo.** Quando o dia da semana tem excesso (ex: quarta com 44), o motor agenda reposições estratégicas no meio do ano (julho, janeiro) para o aluno terminar junto com a 12ª parcela. Não é só evento — é aula de reposição planejada.
 
-7. **Reposição restrita protege o banco.** Só com atestado médico + 2 cortesias por contrato. O motor não deixa a reposição consumir o banco além do limite.
+7. **O 13º mês é a primeira parcela do próximo contrato.** O ciclo anterior precisa terminar na 12ª parcela. Se o aluno termina antes da 39ª semana, ele renova antes de completar o ano — problema de fluxo de caixa.
 
-7. **Contrato rolling atravessa a virada de ano.** A projeção usa o calendário do ano seguinte (provisório) quando necessário.
+8. **O planejamento estratégico considera quando o aluno entrou.** Aluno que entra em agosto pega recesso de dezembro/janeiro + Carnaval + julho. O motor calcula o impacto disso na projeção.
 
-8. **O Emusys é a fonte de verdade para a primeira e última aula.** O motor materializa as do meio e alerta quando a projeção real diverge da do Emusys.
+9. **Contrato rolling atravessa a virada de ano.** A projeção usa o calendário do ano seguinte (provisório) quando necessário.
+
+10. **O Emusys é a fonte de verdade para a primeira e última aula.** O motor materializa as do meio e alerta quando a projeção real diverge da do Emusys.
+
+11. **O calendário precisa ser cadastrado antes do ano começar.** O gestor usa a ferramenta de cadastro (tipo Google Calendar) para marcar feriados, recessos e emendas. O motor usa esse calendário para projetar. Se o Emusys já tem, puxa automaticamente.
 
 ---
 
