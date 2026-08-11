@@ -57,6 +57,49 @@ const corsHeaders = {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const EMUSYS_PAGE_THROTTLE_MS = 1500;
+const EMUSYS_429_MAX_RETRIES = 4;
+
+/**
+ * O Emusys aplica rate limit por IP compartilhado entre as Edge Functions.
+ * Um 429 transitório não pode transformar uma fotografia operacional válida
+ * em uma execução incompleta; repetimos a mesma página com backoff e só
+ * falhamos depois do limite explícito de tentativas.
+ */
+async function fetchEmusysMatriculas(
+  url: string,
+  token: string,
+  status: string,
+): Promise<Response> {
+  for (let tentativa = 0; tentativa <= EMUSYS_429_MAX_RETRIES; tentativa++) {
+    let resp: Response;
+    try {
+      resp = await fetch(url, { headers: { token } });
+    } catch (error) {
+      if (tentativa === EMUSYS_429_MAX_RETRIES) {
+        throw new Error(`API indisponivel (${status}) apos ${tentativa + 1} tentativas: ${String(error)}`);
+      }
+      const backoffMs = 2500 * (2 ** tentativa);
+      await sleep(Math.min(backoffMs, 30000));
+      continue;
+    }
+    if (resp.status !== 429) return resp;
+
+    if (tentativa === EMUSYS_429_MAX_RETRIES) {
+      throw new Error(`API 429 (${status}) apos ${tentativa + 1} tentativas`);
+    }
+
+    const retryAfterSeconds = Number(resp.headers.get('retry-after') || '0');
+    const retryAfterMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+      ? retryAfterSeconds * 1000
+      : 0;
+    const backoffMs = 2500 * (2 ** tentativa);
+    await sleep(Math.min(Math.max(retryAfterMs, backoffMs), 30000));
+  }
+
+  throw new Error(`API 429 (${status}) sem resposta apos retry`);
+}
+
 async function validarAcessoSync(req: Request): Promise<Response | null> {
   const syncToken = req.headers.get('x-sync-token')?.trim() || '';
   if (SYNC_ADMIN_TOKEN && syncToken && syncToken === SYNC_ADMIN_TOKEN) return null;
@@ -637,7 +680,7 @@ async function fetchTodasMatriculasCompletoLegacy(token: string) {
   let cursor = '';
   for (let i = 0; i < 200; i++) {
     const url = `${EMUSYS_API}/matriculas?status=todas&limite=50${cursor ? `&cursor=${cursor}` : ''}`;
-    const resp = await fetch(url, { headers: { token } });
+    const resp = await fetchEmusysMatriculas(url, token, 'todas');
     if (!resp.ok) throw new Error(`API ${resp.status}`);
     const json = await resp.json();
     for (const m of json.items || []) {
@@ -648,7 +691,7 @@ async function fetchTodasMatriculasCompletoLegacy(token: string) {
     }
     if (!json.paginacao?.tem_mais || !json.paginacao?.proximo_cursor) break;
     cursor = json.paginacao.proximo_cursor;
-    await sleep(1100); // throttle: rate limit 60/min por IP
+    await sleep(EMUSYS_PAGE_THROTTLE_MS); // throttle: rate limit 60/min por IP
   }
   return { porId, ativasPorNome: todasPorNome };
 }
@@ -673,7 +716,7 @@ async function fetchMatriculasOperacionais(token: string): Promise<MatriculasFet
     let paginaCompleta = false;
     for (let i = 0; i < 200; i++) {
       const url = `${EMUSYS_API}/matriculas?status=${status}&limite=50${cursor ? `&cursor=${cursor}` : ''}`;
-      const resp = await fetch(url, { headers: { token } });
+      const resp = await fetchEmusysMatriculas(url, token, status);
       if (!resp.ok) throw new Error(`API ${resp.status} (${status})`);
       const json = await resp.json();
       for (const m of json.items || []) {
@@ -691,7 +734,7 @@ async function fetchMatriculasOperacionais(token: string): Promise<MatriculasFet
       }
       if (!json.paginacao?.proximo_cursor) break;
       cursor = json.paginacao.proximo_cursor;
-      await sleep(1100); // throttle: rate limit 60/min por IP
+      await sleep(EMUSYS_PAGE_THROTTLE_MS); // throttle: rate limit 60/min por IP
     }
     if (!paginaCompleta) snapshotCompleto = false;
   }

@@ -19,6 +19,19 @@ test('o sync de matriculas tem um escopo operacional curto e explicito', () => {
   assert.match(syncSource, /snapshotCompleto|SNAPSHOT_OPERACIONAL_INCOMPLETO/i);
 });
 
+test('o sync trata limite 429 do Emusys com retry e backoff', () => {
+  const retryBlock = syncSource.slice(
+    syncSource.indexOf('async function fetchEmusysMatriculas'),
+    syncSource.indexOf('async function validarAcessoSync'),
+  );
+  assert.notEqual(retryBlock, '', 'helper de retry nao encontrado');
+  assert.match(retryBlock, /status\s*!==\s*429|resp\.status\s*!==\s*429/i);
+  assert.match(retryBlock, /retry-after/i);
+  assert.match(retryBlock, /backoff|Math\.max\(.*retry/i);
+  assert.match(retryBlock, /tentativ|retry/i);
+  assert.match(retryBlock, /catch\s*\(/i);
+});
+
 test('o sync reconcilia contratos ativos ausentes somente depois de um snapshot completo', () => {
   assert.match(syncSource, /reconciliarEstadosOperacionaisAusentes/i);
   assert.match(syncSource, /snapshotCompleto/i);
