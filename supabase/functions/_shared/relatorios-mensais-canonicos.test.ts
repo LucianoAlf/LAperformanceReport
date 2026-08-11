@@ -254,6 +254,7 @@ Deno.test("mensal comercial exibe valores, dois tickets e taxa com alerta", () =
     unidade: { ...base.unidade, hunter: "Clayton" },
     resumo: {
       leads: 297,
+      alunos_pagantes: 336,
       experimentais: 41,
       faltas: 8,
       visitas: 0,
@@ -290,6 +291,7 @@ Deno.test("mensal comercial exibe valores, dois tickets e taxa com alerta", () =
   });
 
   assertStringIncludes(texto, "RELATÓRIO MENSAL COMERCIAL");
+  assertStringIncludes(texto, "Alunos pagantes: *336*");
   assertStringIncludes(texto, "Ticket médio dos passaportes: *R$ 362,94*");
   assertStringIncludes(texto, "Ticket médio das parcelas: *R$ 403,59*");
   assertStringIncludes(texto, "Experimental → Matrícula: *34,1%* (14/41)");
@@ -319,4 +321,20 @@ Deno.test("mensal comercial usa responsavel vigente apenas no cabecalho", () => 
   assertStringIncludes(texto, "👤 Daiana");
   assertFalse(texto.includes("Clayton"));
   assertEquals(payload.unidade.hunter, "Clayton");
+});
+
+Deno.test("mensal comercial nao inventa zero quando pagantes nao estao na fonte", () => {
+  const texto = formatarRelatorioComercialMensalCanonico({
+    ...base,
+    tipo: "comercial",
+    resumo: {},
+    leads_por_canal: [],
+    leads_por_curso: [],
+    matriculas_por_canal: [],
+    matriculas_por_curso: [],
+    matriculas: [],
+    alertas: [],
+  });
+
+  assertFalse(texto.includes("Alunos pagantes: *0*"));
 });

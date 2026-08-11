@@ -516,6 +516,7 @@ export function formatarRelatorioComercialMensalCanonico(
   const r = resumo(payload);
   const matriculas = lista(payload.matriculas);
   const responsavelComercial = texto(responsavelComercialVigente).trim() || texto(u.hunter).trim();
+  const alunosPagantes = r.alunos_pagantes == null ? null : inteiro(r.alunos_pagantes);
   const linhas = [
     LINHA,
     "📊 *RELATÓRIO MENSAL COMERCIAL*",
@@ -526,6 +527,7 @@ export function formatarRelatorioComercialMensalCanonico(
     "",
     "⚡ *RESULTADO DO MÊS*",
     LINHA,
+    ...(alunosPagantes == null ? [] : [`• Alunos pagantes: *${alunosPagantes}*`]),
     `• Leads: *${inteiro(r.leads)}*`,
     `• Experimentais realizadas: *${inteiro(r.experimentais)}*`,
     `• Faltas: *${inteiro(r.faltas)}*`,
