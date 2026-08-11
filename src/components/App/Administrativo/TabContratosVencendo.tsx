@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   useContratosVencendo,
   type JanelaDias,
@@ -68,8 +68,14 @@ export function TabContratosVencendo({
   unidadeId,
   ano,
   mes,
-}: { unidadeId: string; ano: number; mes: number }) {
-  const [recorte, setRecorte] = useState<Recorte>(30);
+  recorteInicial = 30,
+}: { unidadeId: string; ano: number; mes: number; recorteInicial?: Recorte }) {
+  const [recorte, setRecorte] = useState<Recorte>(recorteInicial);
+
+  // Quem chega pelo link do card "N sem renovação registrada" tem que cair na MESMA
+  // base do card — senão o número da lista discorda do que estava escrito no botão.
+  // Só reage quando a prop muda, para não desfazer a escolha manual do usuário.
+  useEffect(() => { setRecorte(recorteInicial); }, [recorteInicial]);
   const [criterio, setCriterio] = useState<CriterioVencimento>('aula');
   const [busca, setBusca] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
@@ -84,13 +90,10 @@ export function TabContratosVencendo({
     criterio,
     ativo: porJanela,
   });
-  const competencia = useCoberturaRenovacao({
-    unidadeId,
-    ano,
-    mes,
-    criterio,
-    ativo: !porJanela,
-  });
+  // Sempre ativo, mesmo nas janelas de dias: é dele que sai o contador no botão
+  // "Este mês". Sem isso, quem abre a aba no padrão de 30 dias não tem nenhuma pista
+  // de que existe uma leitura por competência — e o recorte fica escondido.
+  const competencia = useCoberturaRenovacao({ unidadeId, ano, mes, criterio });
 
   // No recorte de competência a lista é de quem AINDA não renovou — quem já renovou
   // vira numerador, não trabalho a fazer.
@@ -138,14 +141,25 @@ export function TabContratosVencendo({
         </div>
         <button
           onClick={() => setRecorte('mes')}
-          title="Contratos que terminam na competência selecionada no topo"
-          className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+          title="Contratos que terminam na competência selecionada no topo, ainda sem renovação registrada"
+          className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 ${
             recorte === 'mes'
               ? 'bg-amber-500 text-slate-900'
               : 'bg-slate-800/50 text-gray-300 hover:bg-slate-700/50'
           }`}
         >
           Este mês
+          {/* contador de pendentes da competência: é a única pista de que este recorte
+              existe para quem abre a aba no padrão de 30 dias */}
+          {competencia.faltam > 0 && (
+            <span
+              className={`rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums ${
+                recorte === 'mes' ? 'bg-slate-900/25 text-slate-900' : 'bg-amber-500/20 text-amber-300'
+              }`}
+            >
+              {competencia.faltam}
+            </span>
+          )}
         </button>
         {JANELAS.map((dias) => (
           <button
