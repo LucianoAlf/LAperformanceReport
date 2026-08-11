@@ -40,6 +40,11 @@ export function CampanhaConversasPanel({ campanhaId }: { campanhaId: string }) {
         setContatos(Array.from(porConversa.values()))
         setLoading(false)
       })
+      .catch((error) => {
+        console.error('Erro ao carregar conversas da campanha:', error)
+        setContatos([])
+        setLoading(false)
+      })
   }, [campanhaId])
 
   if (loading) {
