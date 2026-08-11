@@ -27,7 +27,7 @@ export interface ConversaoCampanha {
 
 const SELECT_ALUNO_CANONICO = `
   id, nome, status, data_matricula, valor_parcela, valor_passaporte,
-  is_segundo_curso, is_banda,
+  is_segundo_curso,
   cursos(nome, is_projeto_banda),
   tipos_matricula(codigo, conta_como_pagante, entra_ticket_medio)
 `
