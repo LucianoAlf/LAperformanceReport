@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, RotateCcw } from 'lucide-react';
 import {
   AGENDA_ALTURA_FAIXA_AMPLA_PX,
   AGENDA_ALTURA_FAIXA_MAX_PX,
@@ -374,6 +375,14 @@ export function AgendaTimeline({
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden="true" className="text-amber-300">★</span>
           aluno novo
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <AlertTriangle className="h-3 w-3 text-amber-400" aria-hidden="true" />
+          conflito Emusys x humano
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <RotateCcw className="h-3 w-3 text-amber-400" aria-hidden="true" />
+          reposição pendente
         </span>
       </div>
     </div>

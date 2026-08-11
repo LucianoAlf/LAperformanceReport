@@ -85,3 +85,5 @@ graphify-out/
 # telefone, endereco). Gerados por scripts/auditoria-canonica-emusys.mjs.
 outputs/emusys-matriculas-*.json
 outputs/comparacao-canonica.json
+
+.tmp-edge-source/

@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agenda — Chamada (mock completo)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  body { background: #070b14; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+  .card-aluno { transition: border-color .15s, background .15s, box-shadow .15s; }
+  .btn-estado { transition: all .12s ease; }
+  .btn-estado:hover { transform: translateY(-1px); }
+  .btn-estado.ativo { box-shadow: 0 0 0 1.5px currentColor inset; }
+  @keyframes pulso-cinza { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+  .indeterminado-pulsa { animation: pulso-cinza 2.2s ease-in-out infinite; }
+  .fade-in { animation: fadeIn .18s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  .drawer { transition: transform .22s ease; }
+  .mini-aula { transition: border-color .12s, transform .12s; }
+  .mini-aula:hover { transform: translateY(-1px); }
+  .lista-row { transition: background .12s; }
+  .lista-row:hover { background: rgba(139,92,246,.06); }
+</style>
+</head>
+<body class="text-slate-200 antialiased">
+
+<!-- ============ HEADER ============ -->
+<header class="border-b border-slate-800/80 bg-[#0a101d]">
+  <div class="mx-auto max-w-[1400px] px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center text-white font-extrabold text-sm">LA</div>
+      <div>
+        <h1 class="text-lg font-bold text-white leading-tight">Agenda</h1>
+        <p class="text-xs text-slate-500">Aulas do dia por professor ou sala, ao vivo</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <span class="text-xs text-slate-500 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Sincronizado há 3 min</span>
+      <div class="bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-300">Consolidado ▾</div>
+      <div class="bg-violet-600/20 border border-violet-500/40 rounded-lg px-3 py-1.5 text-sm text-violet-300 font-semibold">Ago/2026</div>
+    </div>
+  </div>
+</header>
+
+<main class="mx-auto max-w-[1400px] px-6 py-5 space-y-5">
+
+  <!-- Navegação + abas principais + sub-visões -->
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div class="flex items-center gap-2">
+      <button class="w-8 h-8 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500">‹</button>
+      <span class="text-sm font-semibold text-white">Terça, 11 de agosto <span class="text-slate-500 font-normal">2026</span></span>
+      <button class="w-8 h-8 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500">›</button>
+    </div>
+    <div class="flex items-center gap-3">
+      <!-- Visões da Agenda -->
+      <div class="flex items-center bg-slate-800/50 rounded-xl border border-slate-700 p-1">
+        <button class="px-4 py-1.5 text-xs font-semibold rounded-lg text-slate-400 hover:text-white">Professores</button>
+        <button class="px-4 py-1.5 text-xs font-semibold rounded-lg text-slate-400 hover:text-white">Salas</button>
+        <button class="px-4 py-1.5 text-xs font-semibold rounded-lg bg-violet-600 text-white shadow-lg shadow-violet-900/40">Chamada</button>
+      </div>
+      <!-- Sub-visões da Chamada -->
+      <div class="flex items-center bg-slate-800/50 rounded-xl border border-slate-700 p-1" id="subvisoes">
+        <button data-visao="dia" class="btn-visao px-4 py-1.5 text-xs font-semibold rounded-lg bg-slate-700 text-white">Dia</button>
+        <button data-visao="semana" class="btn-visao px-4 py-1.5 text-xs font-semibold rounded-lg text-slate-400 hover:text-white">Semana</button>
+        <button data-visao="lista" class="btn-visao px-4 py-1.5 text-xs font-semibold rounded-lg text-slate-400 hover:text-white">Lista</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div class="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-4 text-center">
+      <div class="text-2xl font-extrabold text-violet-400">185</div>
+      <div class="text-[11px] text-slate-500 uppercase tracking-wide mt-0.5">Aulas no dia</div>
+    </div>
+    <div class="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-4 text-center">
+      <div class="text-2xl font-extrabold text-emerald-400">96</div>
+      <div class="text-[11px] text-slate-500 uppercase tracking-wide mt-0.5">Chamadas concluídas</div>
+    </div>
+    <div class="bg-slate-800/30 border border-amber-500/30 rounded-2xl p-4 text-center">
+      <div class="text-2xl font-extrabold text-amber-400" id="kpi-pendentes">21</div>
+      <div class="text-[11px] text-slate-500 uppercase tracking-wide mt-0.5">Alunos sem destino</div>
+    </div>
+    <div class="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-4 text-center">
+      <div class="text-2xl font-extrabold text-rose-400">3</div>
+      <div class="text-[11px] text-slate-500 uppercase tracking-wide mt-0.5">Canceladas</div>
+    </div>
+  </div>
+
+  <!-- Banner digest -->
+  <div class="flex items-start gap-3 bg-amber-500/5 border border-amber-500/25 rounded-2xl px-4 py-3">
+    <span class="text-amber-400 mt-0.5">⚠</span>
+    <div class="text-sm">
+      <span class="font-semibold text-amber-300">Ontem fechou com 7 alunos sem destino.</span>
+      <span class="text-slate-400"> Lembrete enviado ao grupo admin às 08:05 — a equipe precisa dar presença, falta, justificativa, cancelamento ou reagendamento para cada um.</span>
+      <button class="ml-2 text-amber-400 font-semibold hover:underline" onclick="trocarVisao('lista')">Revisar ontem →</button>
+    </div>
+  </div>
+
+  <!-- ================= VISÃO: DIA ================= -->
+  <div id="visao-dia" class="space-y-5">
+
+    <!-- AULA 1: em andamento -->
+    <section class="bg-slate-800/25 border border-slate-700/50 rounded-2xl overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-3.5 border-b border-slate-700/40 bg-slate-800/30 cursor-pointer" onclick="abrirDrawer()">
+        <div class="flex items-center gap-4">
+          <div class="text-lg font-extrabold text-white">18:00</div>
+          <div>
+            <div class="text-sm font-semibold text-slate-200">Caio Tenório de Souza <span class="text-slate-500 font-normal">· Canto T · Sala 8 B · Campo Grande</span></div>
+            <div class="text-[11px] text-slate-500">Turma — 5 alunos</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2" onclick="event.stopPropagation()">
+          <span class="text-xs text-slate-400 mr-1"><span class="text-emerald-400 font-bold">2</span> presenças · <span class="text-rose-400 font-bold">1</span> falta · <span class="text-amber-400 font-bold">1</span> justificada · <span class="text-slate-500 font-bold">1</span> pendente</span>
+          <button class="btn-estado text-xs font-semibold bg-emerald-600/15 text-emerald-300 border border-emerald-500/30 rounded-lg px-3 py-1.5 hover:bg-emerald-600/25" onclick="todosPresentes('aula-1')">✓ Todos presentes</button>
+          <button class="btn-estado text-xs font-semibold bg-sky-600/10 text-sky-300 border border-sky-500/30 rounded-lg px-3 py-1.5 hover:bg-sky-600/20" onclick="alternarModal('modal-reagendar')">↻ Reagendar</button>
+          <button class="btn-estado text-xs font-semibold bg-rose-600/10 text-rose-300 border border-rose-500/30 rounded-lg px-3 py-1.5 hover:bg-rose-600/20" onclick="alternarModal('modal-cancelar')">✕ Cancelar aula</button>
+          <button class="w-8 h-8 rounded-lg border border-slate-600 text-slate-400 hover:text-white hover:border-slate-400" onclick="alternarMenu('menu-1')">⋮</button>
+        </div>
+      </div>
+
+      <div id="menu-1" class="hidden fade-in mx-5 mt-3 mb-1 w-72 bg-[#121a2c] border border-slate-600/60 rounded-xl shadow-2xl shadow-black/50 overflow-hidden">
+        <div class="px-4 py-2.5 border-b border-slate-700/60 text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Aula — Ter 18:00 · Sala 8 B</div>
+        <button class="w-full text-left px-4 py-2.5 text-sm text-slate-200 hover:bg-violet-600/15 hover:text-white" onclick="abrirDrawer()">✓ Fazer chamada (drawer)</button>
+        <button class="w-full text-left px-4 py-2.5 text-sm text-slate-200 hover:bg-violet-600/15 hover:text-white">👤 Trocar professor / sala</button>
+        <button class="w-full text-left px-4 py-2.5 text-sm text-slate-200 hover:bg-violet-600/15 hover:text-white">� Ver histórico da aula</button>
+      </div>
+
+      <div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3" id="aula-1">
+
+        <div class="card-aluno rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-3" data-estado="presente">
+          <div class="flex items-center gap-2.5 mb-2.5">
+            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-sm">AR</div>
+            <div class="min-w-0">
+              <div class="text-sm font-semibold text-white truncate">Arthur Reis</div>
+              <div class="text-[10px] text-slate-500">Aula 12 de 40</div>
+            </div>
+          </div>
+          <div class="flex gap-1">
+            <button class="btn-estado ativo text-emerald-400 flex-1 text-[10px] font-bold rounded-md py-1 bg-emerald-500/10" onclick="marcar(this,'presente')">✓ Presente</button>
+            <button class="btn-estado text-slate-500 flex-1 text-[10px] font-bold rounded-md py-1 hover:text-rose-400 hover:bg-rose-500/10" onclick="marcar(this,'falta')">✕ Falta</button>
+            <button class="btn-estado text-slate-500 flex-1 text-[10px] font-bold rounded-md py-1 hover:text-amber-400 hover:bg-amber-500/10" onclick="pedirJustificada(this)">📄 Justif.</button>
+          </div>
+          <div class="mt-2 text-[10px] text-slate-500 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-violet-400"></span>Teacher · 18:04</div>
+        </div>
+
+        <div class="card-aluno rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-3" data-estado="presente">
+          <div class="flex items-center gap-2.5 mb-2.5">
+            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center text-white font-bold text-sm">MC</div>
+            <div class="min-w-0">
+              <div class="text-sm font-semibold text-white truncate">Maria Clara</div>
+              <div class="text-[10px] text-slate-500">Aula 7 de 40</div>
+            </div>
+          </div>
+          <div class="flex gap-1">
+            <button class="btn-estado ativo text-emerald-400 flex-1 text-[10px] font-bold rounded-md py-1 bg-emerald-500/10" onclick="marcar(this,'presente')">✓ Presente</button>
+            <button class="btn-estado text-slate-500 flex-1 text-[10px] font-bold rounded-md py-1 hover:text-rose-400 hover:bg-rose-500/10" onclick="marcar(this,'falta')">✕ Falta</button>
+            <button class="btn-estado text-slate-500 flex-1 text-[10px] font-bold rounded-md py-1 hover:text-amber-400 hover:bg-amber-500/10" onclick="pedirJustificada(this)">📄 Justif.</button>
+          </div>
+          <div class="mt-2 text-[10px] text-slate-500 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Você · agora</div>
+        </div>
+
+        <div class="card-aluno rounded-xl border border-rose-500/40 bg-rose-500/5 p-3" data-estado="falta">
+          <div class="flex items-center gap-2.5 mb-2.5">
+            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-rose-500 to-orange-600 flex items-center justify-center text-white font-bold text-sm">LP</div>
+            <div class="min-w-0">
+              <div class="text-sm font-semibold text-white truncate">Lucas Prado</div>
+              <div class="text-[10px] text-slate-500">Aula 21 de 40 · <span class="text-rose-400">desconta do pacote</span></div>
+            </div>
+          </div>
+          <div class="flex gap-1">
+            <button class="btn-estado text-slate-500 flex-1 text-[10px] font-bold rounded-md py-1 hover:text-emerald-400 hover:bg-emerald-500/10" onclick="marcar(this,'presente')">✓ Presente</button>
+            <button class="btn-estado ativo text-rose-400 flex-1 text-[10px] font-bold rounded-md py-1 bg-rose-500/10" onclick="marcar(this,'falta')">✕ Falta</button>
+            <button class="btn-estado text-slate-500 flex-1 text-[10px] font-bold rounded-md py-1 hover:text-amber-400 hover:bg-amber-500/10" onclick="pedirJustificada(this)">📄 Justif.</button>
+          </div>
+          <div class="mt-2 text-[10px] text-amber-400/90" title="O Emusys mandou 'ausente' por fallback; você marcou falta. Humano vence.">⚠ Emusys: ausente · você confirmou falta</div>
+        </div>
+
+        <div class="card-aluno rounded-xl border border-amber-500/40 bg-amber-500/5 p-3" data-estado="justificada">
+          <div class="flex items-center gap-2.5 mb-2.5">
+            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center text-white font-bold text-sm">SL</div>
+            <div class="min-w-0">
+              <div class="text-sm font-semibold text-white truncate">Sofia Lemos</div>
+              <div class="text-[10px] text-slate-500">Aula 15 de 40 · <span class="text-amber-400">repor depois</span></div>
+            </div>
+          </div>
+          <div class="flex gap-1">
+            <button class="btn-estado text-slate-500 flex-1 text-[10px] font-bold rounded-md py-1 hover:text-emerald-400 hover:bg-emerald-500/10" onclick="marcar(this,'presente')">✓ Presente</button>
+            <button class="btn-estado text-slate-500 flex-1 text-[10px] font-bold rounded-md py-1 hover:text-rose-400 hover:bg-rose-500/10" onclick="marcar(this,'falta')">✕ Falta</button>
+            <button class="btn-estado ativo text-amber-400 flex-1 text-[10px] font-bold rounded-md py-1 bg-amber-500/10" onclick="pedirJustificada(this)">📄 Justif.</button>
+          </div>
+          <div class="mt-2 space-y-1">
+            <div class="text-[10px] text-slate-400">Atestado médico · por Ana, 18:20</div>
+            <div class="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-md px-1.5 py-0.5">↻ 1 reposição pendente</div>
+          </div>
+        </div>
+
+        <div class="card-aluno indeterminado-pulsa rounded-xl border border-dashed border-slate-500/60 bg-slate-700/10 p-3" data-estado="indeterminado">
+          <div class="flex items-center gap-2.5 mb-2.5">
+            <div class="w-10 h-10 rounded-full bg-slate-600 flex items-center justify-center text-slate-300 font-bold text-sm">GT</div>
+            <div class="min-w-0">
+              <div class="text-sm font-semibold text-slate-300 truncate">Gabriel Telles</div>
+              <div class="text-[10px] text-slate-500">Aula 9 de 40</div>
+            </div>
+          </div>
+          <div class="flex gap-1">
+            <button class="btn-estado text-slate-500 flex-1 text-[10px] font-bold rounded-md py-1 hover:text-emerald-400 hover:bg-emerald-500/10" onclick="marcar(this,'presente')">✓ Presente</button>
+            <button class="btn-estado text-slate-500 flex-1 text-[10px] font-bold rounded-md py-1 hover:text-rose-400 hover:bg-rose-500/10" onclick="marcar(this,'falta')">✕ Falta</button>
+            <button class="btn-estado text-slate-500 flex-1 text-[10px] font-bold rounded-md py-1 hover:text-amber-400 hover:bg-amber-500/10" onclick="pedirJustificada(this)">📄 Justif.</button>
+          </div>
+          <div class="mt-2 text-[10px] text-slate-500 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>Sem destino — entra no digest de amanhã</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- AULA 2: cancelada -->
+    <section class="bg-slate-800/20 border border-rose-500/25 rounded-2xl overflow-hidden cursor-pointer" onclick="abrirDrawer()">
+      <div class="flex items-center justify-between px-5 py-3.5">
+        <div class="flex items-center gap-4">
+          <div class="text-lg font-extrabold text-slate-500 line-through">19:00</div>
+          <div>
+            <div class="text-sm font-semibold text-slate-400">Daiana Pacifico <span class="text-slate-600 font-normal">· Canto · Sala 5 · Campo Grande</span></div>
+            <div class="text-[11px] text-rose-300/90 font-medium">✕ Cancelada — “Vendaval, unidade fechada” · por Ana, 16:42</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-1">↻ 3 créditos de reposição gerados</span>
+          <span class="text-[11px] text-slate-500">ninguém toma falta · pacote estica</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- AULA 3: concluída com reposição -->
+    <section class="bg-slate-800/25 border border-slate-700/50 rounded-2xl overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-3.5 border-b border-slate-700/40 bg-slate-800/30 cursor-pointer" onclick="abrirDrawer()">
+        <div class="flex items-center gap-4">
+          <div class="text-lg font-extrabold text-white">20:00</div>
+          <div>
+            <div class="text-sm font-semibold text-slate-200">Gabriel Barbosa <span class="text-slate-500 font-normal">· Guitarra · Sala 12 · Campo Grande</span></div>
+            <div class="text-[11px] text-slate-500">Individual</div>
+          </div>
+        </div>
+        <span class="text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-2.5 py-1">✓ Chamada concluída · 1/1</span>
+      </div>
+      <div class="p-4">
+        <div class="card-aluno rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-3 max-w-xs">
+          <div class="flex items-center gap-2.5 mb-2">
+            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm">DG</div>
+            <div>
+              <div class="text-sm font-semibold text-white">Davi Gomes</div>
+              <div class="text-[10px] text-slate-500">Aula de reposição</div>
+            </div>
+          </div>
+          <div class="inline-flex items-center gap-1 text-[10px] font-semibold text-sky-300 bg-sky-500/10 border border-sky-500/30 rounded-md px-1.5 py-0.5">↻ Repõe falta justificada de 04/08 · crédito consumido</div>
+          <div class="mt-1.5 text-[10px] text-slate-500 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-violet-400"></span>Teacher · 20:03</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= VISÃO: SEMANA ================= -->
+  <div id="visao-semana" class="hidden">
+    <div class="grid grid-cols-7 gap-2" id="grade-semana"><!-- JS --></div>
+    <div class="flex items-center gap-4 justify-center pt-3 text-[10px] text-slate-500">
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-emerald-500/60"></span>chamada completa</span>
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-amber-500/60"></span>parcial / pendente</span>
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-slate-600"></span>não iniciada</span>
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-rose-500/60"></span>cancelada</span>
+    </div>
+  </div>
+
+  <!-- ================= VISÃO: LISTA ================= -->
+  <div id="visao-lista" class="hidden space-y-3">
+    <div class="flex items-center gap-2 flex-wrap" id="filtros-lista">
+      <button data-filtro="todos" class="btn-filtro px-3 py-1.5 text-xs font-semibold rounded-lg bg-violet-600 text-white">Todos</button>
+      <button data-filtro="indeterminado" class="btn-filtro px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800/60 border border-slate-700 text-slate-400 hover:text-white">⚠ Sem destino</button>
+      <button data-filtro="presente" class="btn-filtro px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800/60 border border-slate-700 text-slate-400 hover:text-white">Presentes</button>
+      <button data-filtro="falta" class="btn-filtro px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800/60 border border-slate-700 text-slate-400 hover:text-white">Faltas</button>
+      <button data-filtro="justificada" class="btn-filtro px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800/60 border border-slate-700 text-slate-400 hover:text-white">Justificadas</button>
+      <button data-filtro="cancelada" class="btn-filtro px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800/60 border border-slate-700 text-slate-400 hover:text-white">Canceladas</button>
+    </div>
+    <div class="bg-slate-800/25 border border-slate-700/50 rounded-2xl overflow-hidden">
+      <div class="grid grid-cols-[64px_60px_1fr_150px_90px_110px_130px] gap-2 px-4 py-2.5 border-b border-slate-700/40 text-[10px] uppercase tracking-wide text-slate-500 font-semibold">
+        <span>Data</span><span>Hora</span><span>Aluno</span><span>Professor · Curso</span><span>Unidade</span><span>Origem</span><span class="text-right">Estado</span>
+      </div>
+      <div id="corpo-lista"><!-- JS --></div>
+    </div>
+  </div>
+
+  <p class="text-center text-[11px] text-slate-600 pt-2">Mock interativo — troque as visões, clique nos botões dos alunos, abra o drawer clicando numa aula.</p>
+</main>
+
+<!-- ================= MODAL: CANCELAR AULA ================= -->
+<div id="modal-cancelar" class="hidden fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4" onclick="if(event.target===this) alternarModal('modal-cancelar')">
+  <div class="fade-in w-full max-w-md bg-[#0c1220] border border-rose-500/30 rounded-2xl shadow-2xl shadow-black/60 overflow-hidden">
+    <div class="px-5 py-4 border-b border-slate-700/50">
+      <h3 class="text-base font-extrabold text-white">✕ Cancelar aula — Ter 18:00 · Canto T · Sala 8 B</h3>
+      <p class="text-xs text-slate-400 mt-1">A aula deixa de existir no pacote: <b class="text-slate-200">nenhum dos 5 alunos toma falta</b> e cada um recebe <b class="text-amber-300">1 crédito de reposição</b>.</p>
+    </div>
+    <div class="px-5 py-4 space-y-3">
+      <div>
+        <div class="text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-1.5">Motivo do cancelamento <span class="text-rose-400">· obrigatório</span></div>
+        <textarea id="motivo-cancelar" class="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-rose-500/50" rows="2" placeholder="Ex.: professor sofreu um acidente a caminho da unidade"></textarea>
+        <div class="flex flex-wrap gap-1.5 mt-1.5">
+          <span class="text-[10px] text-slate-600 mr-1">sugestões:</span>
+          <button class="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-slate-800/60 border border-slate-700 text-slate-500 hover:text-slate-200" onclick="preencherMotivo('motivo-cancelar','Vendaval / condições climáticas — unidade fechada')">Vendaval/clima</button>
+          <button class="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-slate-800/60 border border-slate-700 text-slate-500 hover:text-slate-200" onclick="preencherMotivo('motivo-cancelar','Falta do professor')">Falta do professor</button>
+          <button class="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-slate-800/60 border border-slate-700 text-slate-500 hover:text-slate-200" onclick="preencherMotivo('motivo-cancelar','Feriado')">Feriado</button>
+          <button class="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-slate-800/60 border border-slate-700 text-slate-500 hover:text-slate-200" onclick="preencherMotivo('motivo-cancelar','Problema na sala')">Problema na sala</button>
+        </div>
+      </div>
+      <button class="w-full flex items-center justify-center gap-2 border border-dashed border-slate-600 rounded-xl px-3 py-2.5 text-xs text-slate-400 hover:border-slate-400 hover:text-slate-200">
+        📎 Anexar evidência (opcional) — print, foto, comunicado
+      </button>
+      <label class="flex items-center gap-2 text-xs text-slate-400">
+        <input type="checkbox" class="accent-rose-500" />
+        Cancelar também as outras aulas da unidade hoje (caso vendaval/fechamento)
+      </label>
+    </div>
+    <div class="px-5 py-3.5 border-t border-slate-700/50 flex justify-end gap-2">
+      <button class="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white" onclick="alternarModal('modal-cancelar')">Voltar</button>
+      <button class="px-4 py-2 text-xs font-bold bg-rose-600 text-white rounded-lg hover:bg-rose-500" onclick="confirmarCancelamento()">Cancelar aula e gerar créditos</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL: FALTA JUSTIFICADA (por aluno) ================= -->
+<div id="modal-justificada" class="hidden fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4" onclick="if(event.target===this) alternarModal('modal-justificada')">
+  <div class="fade-in w-full max-w-md bg-[#0c1220] border border-amber-500/30 rounded-2xl shadow-2xl shadow-black/60 overflow-hidden">
+    <div class="px-5 py-4 border-b border-slate-700/50">
+      <h3 class="text-base font-extrabold text-white">📄 Falta justificada — <span id="just-aluno">Sofia Lemos</span></h3>
+      <p class="text-xs text-slate-400 mt-1">Conta como falta nos indicadores, mas gera <b class="text-amber-300">1 crédito de reposição</b> — a aula vai pro final do pacote.</p>
+    </div>
+    <div class="px-5 py-4 space-y-3">
+      <div>
+        <div class="text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-1.5">Motivo <span class="text-amber-400">· obrigatório</span></div>
+        <textarea id="motivo-justificada" class="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/50" rows="2" placeholder="Ex.: mãe avisou que o aluno está com febre"></textarea>
+        <div class="flex flex-wrap gap-1.5 mt-1.5">
+          <span class="text-[10px] text-slate-600 mr-1">sugestões:</span>
+          <button class="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-slate-800/60 border border-slate-700 text-slate-500 hover:text-slate-200" onclick="preencherMotivo('motivo-justificada','Atestado médico')">Atestado médico</button>
+          <button class="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-slate-800/60 border border-slate-700 text-slate-500 hover:text-slate-200" onclick="preencherMotivo('motivo-justificada','Doença (aviso da família)')">Doença</button>
+          <button class="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-slate-800/60 border border-slate-700 text-slate-500 hover:text-slate-200" onclick="preencherMotivo('motivo-justificada','Viagem')">Viagem</button>
+          <button class="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-slate-800/60 border border-slate-700 text-slate-500 hover:text-slate-200" onclick="preencherMotivo('motivo-justificada','Compromisso escolar')">Compromisso escolar</button>
+        </div>
+      </div>
+      <div>
+        <div class="text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-1.5">Evidência</div>
+        <button id="btn-anexo-justificada" class="w-full flex items-center justify-center gap-2 border border-dashed border-slate-600 rounded-xl px-3 py-2.5 text-xs text-slate-400 hover:border-amber-500/50 hover:text-slate-200" onclick="anexarEvidencia()">
+          📎 Subir atestado / comprovante (foto ou PDF)
+        </button>
+        <div class="text-[10px] text-slate-600 mt-1">Se a família mandou atestado, ele sobe aqui e fica vinculado à falta — acabou o “cadê o atestado?”.</div>
+      </div>
+    </div>
+    <div class="px-5 py-3.5 border-t border-slate-700/50 flex justify-end gap-2">
+      <button class="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white" onclick="alternarModal('modal-justificada')">Voltar</button>
+      <button class="px-4 py-2 text-xs font-bold bg-amber-500 text-slate-900 rounded-lg hover:bg-amber-400" onclick="confirmarJustificada()">Justificar e gerar crédito</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL: REAGENDAR AULA ================= -->
+<div id="modal-reagendar" class="hidden fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4" onclick="if(event.target===this) alternarModal('modal-reagendar')">
+  <div class="fade-in w-full max-w-md bg-[#0c1220] border border-sky-500/30 rounded-2xl shadow-2xl shadow-black/60 overflow-hidden">
+    <div class="px-5 py-4 border-b border-slate-700/50">
+      <h3 class="text-base font-extrabold text-white">↻ Reagendar aula — Ter 18:00 · Canto T · Sala 8 B</h3>
+      <p class="text-xs text-slate-400 mt-1">A aula <b class="text-slate-200">move de data/horário</b> mantendo o lugar no pacote (não desconta, não duplica). Se houver créditos de reposição abertos, o motor <b class="text-sky-300">consome automaticamente</b> quando a aula reagendada chegar do Emusys.</p>
+    </div>
+    <div class="px-5 py-4 space-y-3">
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <div class="text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-1">Nova data</div>
+          <div class="bg-slate-800/50 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-300">14/08/2026</div>
+        </div>
+        <div>
+          <div class="text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-1">Novo horário</div>
+          <div class="bg-slate-800/50 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-300">18:30</div>
+        </div>
+      </div>
+      <div class="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Motivo</div>
+      <div class="flex flex-wrap gap-2">
+        <button class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-sky-600/20 border border-sky-500/50 text-sky-200">↻ Reposição de falta justificada</button>
+        <button class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800/60 border border-slate-700 text-slate-400 hover:text-white">Reposição de cancelamento</button>
+        <button class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800/60 border border-slate-700 text-slate-400 hover:text-white">Logística (não é reposição)</button>
+      </div>
+      <div class="text-[11px] text-slate-500 bg-slate-800/40 border border-slate-700/50 rounded-lg px-3 py-2">Fase 1: o reagendamento é feito no Emusys e a gente detecta. Fase 2: este botão chama a API do Emusys direto daqui.</div>
+    </div>
+    <div class="px-5 py-3.5 border-t border-slate-700/50 flex justify-end gap-2">
+      <button class="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white" onclick="alternarModal('modal-reagendar')">Voltar</button>
+      <button class="px-4 py-2 text-xs font-bold bg-sky-600 text-white rounded-lg hover:bg-sky-500" onclick="alternarModal('modal-reagendar')">Registrar reagendamento</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= DRAWER LATERAL ================= -->
+<div id="drawer-overlay" class="hidden fixed inset-0 bg-black/50 z-40" onclick="fecharDrawer()"></div>
+<aside id="drawer" class="drawer fixed top-0 right-0 h-full w-[440px] bg-[#0c1220] border-l border-slate-700/60 z-50 translate-x-full shadow-2xl shadow-black/60 flex flex-col">
+  <div class="px-5 py-4 border-b border-slate-700/50 flex items-start justify-between">
+    <div>
+      <div class="text-[11px] text-slate-500 font-semibold">16:00–16:50 · 50 MIN</div>
+      <h2 class="text-lg font-extrabold text-white">Canto T — Turma 8B</h2>
+      <div class="text-xs text-slate-400 mt-0.5">Caio Tenório de Souza · Sala 8 B · <span class="text-sky-400">Campo Grande</span></div>
+      <div class="flex gap-1.5 mt-2">
+        <span class="text-[10px] font-semibold bg-slate-700/60 text-slate-300 rounded-md px-2 py-0.5">Turma</span>
+        <span class="text-[10px] font-semibold bg-slate-700/60 text-slate-300 rounded-md px-2 py-0.5">5 alunos</span>
+        <span class="text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-md px-2 py-0.5">1 pendente</span>
+      </div>
+    </div>
+    <button class="w-8 h-8 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700/40" onclick="fecharDrawer()">✕</button>
+  </div>
+
+  <div class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+    <!-- Ações da aula -->
+    <div class="grid grid-cols-3 gap-2">
+      <button class="btn-estado text-[11px] font-semibold bg-slate-800/60 border border-slate-700 text-slate-300 rounded-lg px-2 py-2 hover:border-violet-500/50 hover:text-white">↻ Reagendar</button>
+      <button class="btn-estado text-[11px] font-semibold bg-slate-800/60 border border-slate-700 text-rose-300 rounded-lg px-2 py-2 hover:border-rose-500/50">✕ Cancelar aula</button>
+      <button class="btn-estado text-[11px] font-semibold bg-slate-800/60 border border-slate-700 text-slate-300 rounded-lg px-2 py-2 hover:border-violet-500/50 hover:text-white">👤 Professor/sala</button>
+    </div>
+    <button class="btn-estado w-full text-xs font-bold bg-emerald-600/15 text-emerald-300 border border-emerald-500/30 rounded-xl px-3 py-2.5 hover:bg-emerald-600/25">✓ Todos presentes</button>
+
+    <!-- Alunos -->
+    <div>
+      <div class="text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-2">Chamada · aluno a aluno</div>
+      <div class="space-y-2" id="drawer-alunos"><!-- JS --></div>
+    </div>
+
+    <!-- Reposições vinculadas -->
+    <div class="bg-amber-500/5 border border-amber-500/25 rounded-xl p-3">
+      <div class="text-[11px] uppercase tracking-wide text-amber-400/80 font-semibold mb-1.5">Reposições</div>
+      <div class="text-xs text-slate-300">↻ <span className="font-semibold">Sofia Lemos</span> — crédito aberto hoje (atestado médico). Reagendar pelo Emusys consome automaticamente.</div>
+    </div>
+
+    <!-- Histórico de retificações -->
+    <div>
+      <div class="text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-2">Histórico da aula</div>
+      <div class="space-y-2 text-xs">
+        <div class="flex gap-2.5"><span class="text-slate-600 font-mono">18:04</span><span class="text-slate-400">Teacher marcou <b class="text-emerald-400">presença</b> de Arthur Reis</span></div>
+        <div class="flex gap-2.5"><span class="text-slate-600 font-mono">18:20</span><span class="text-slate-400">Ana marcou <b class="text-rose-400">falta</b> de Sofia Lemos</span></div>
+        <div class="flex gap-2.5"><span class="text-slate-600 font-mono">19:05</span><span class="text-slate-400">Ana retificou para <b class="text-amber-400">falta justificada</b> — “atestado médico” · crédito gerado</span></div>
+        <div class="flex gap-2.5"><span class="text-slate-600 font-mono">19:12</span><span class="text-slate-400">Emusys enviou “ausente” p/ Lucas Prado — <b class="text-slate-200">ignorado</b> (humano já respondeu)</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="px-5 py-3 border-t border-slate-700/50 text-[10px] text-slate-600">
+    Toda mudança grava autor, horário e motivo — nada se apaga, tudo se retifica.
+  </div>
+</aside>
+
+<script>
+/* ================= DADOS FAKE ================= */
+const ALUNOS_DRAWER = [
+  { ini:'AR', nome:'Arthur Reis',   aula:'Aula 12 de 40', risco:null, estado:'presente',    cor:'from-emerald-500 to-teal-600',   obs:'Teacher · 18:04' },
+  { ini:'MC', nome:'Maria Clara',   aula:'Aula 7 de 40',  risco:6,    estado:'presente',    cor:'from-violet-500 to-fuchsia-600', obs:'Você · agora' },
+  { ini:'LP', nome:'Lucas Prado',   aula:'Aula 21 de 40', risco:34,   estado:'falta',       cor:'from-rose-500 to-orange-600',    obs:'⚠ Emusys: ausente · humano confirmou' },
+  { ini:'SL', nome:'Sofia Lemos',   aula:'Aula 15 de 40', risco:12,   estado:'justificada', cor:'from-amber-500 to-yellow-600',   obs:'Atestado médico · ↻ 1 reposição pendente' },
+  { ini:'GT', nome:'Gabriel Telles',aula:'Aula 9 de 40',  risco:9,    estado:'indeterminado',cor:'from-slate-500 to-slate-600',   obs:'Sem destino' },
+];
+
+const SEMANA = [
+  { dia:'SEG', num:10, aulas:[
+    { h:'16:00', t:'Mus. Infantil · MI_Ter_16', p:'3/3', st:'completa' },
+    { h:'17:00', t:'Canto T · Sala 8B', p:'5/5', st:'completa' },
+    { h:'19:00', t:'Teclado T · Sala 12', p:'2/4', st:'parcial' },
+  ]},
+  { dia:'TER', num:11, hoje:true, aulas:[
+    { h:'16:00', t:'Mus. Infantil · Sala 7', p:'4/5', st:'parcial' },
+    { h:'18:00', t:'Canto T · Sala 8B', p:'4/5', st:'parcial' },
+    { h:'19:00', t:'Canto · Sala 5', p:'—', st:'cancelada' },
+    { h:'20:00', t:'Guitarra · Sala 12', p:'1/1', st:'completa' },
+  ]},
+  { dia:'QUA', num:12, aulas:[
+    { h:'09:00', t:'Kids Club · Sala 3', p:'0/6', st:'nao_iniciada' },
+    { h:'15:00', t:'Ringo St. · Sala 1', p:'0/4', st:'nao_iniciada' },
+    { h:'18:00', t:'Elton Jo. · Sala 6', p:'0/3', st:'nao_iniciada' },
+  ]},
+  { dia:'QUI', num:13, aulas:[
+    { h:'14:00', t:'Amy L. · Sala 2', p:'0/5', st:'nao_iniciada' },
+    { h:'17:00', t:'Sing Kid. · Sala 4', p:'0/4', st:'nao_iniciada' },
+  ]},
+  { dia:'SEX', num:14, aulas:[
+    { h:'16:00', t:'Mozart · Sala 1K', p:'0/5', st:'nao_iniciada' },
+    { h:'19:00', t:'Steve W. · Sala 2', p:'0/3', st:'nao_iniciada' },
+  ]},
+  { dia:'SÁB', num:15, aulas:[
+    { h:'10:00', t:'Banda T · Sala 8', p:'0/6', st:'nao_iniciada' },
+  ]},
+  { dia:'DOM', num:16, aulas:[] },
+];
+
+const LISTA = [
+  { d:'10/08', h:'16:00', al:'Arthur Passos Queiroz', prof:'Caio Tenório · Mus. Infantil', un:'CG',  origem:'Teacher',   st:'presente' },
+  { d:'10/08', h:'17:00', al:'Larissa do Nascimento', prof:'Daiana Pacifico · Canto',     un:'CG',  origem:'Emusys',    st:'indeterminado' },
+  { d:'10/08', h:'17:00', al:'Samuel Bilatt',         prof:'Daiana Pacifico · Canto',     un:'CG',  origem:'Emusys',    st:'indeterminado' },
+  { d:'10/08', h:'18:00', al:'Pedro Henrique Sales',  prof:'Erick Cosme · Canto T',       un:'BAR', origem:'Secretaria',st:'falta' },
+  { d:'10/08', h:'19:00', al:'Isabela Moreno',        prof:'Gabriel Antony · Teclado T',  un:'BAR', origem:'Secretaria',st:'justificada' },
+  { d:'10/08', h:'19:30', al:'Turma Violão 1',        prof:'Jeyson Gaia · Violão T',      un:'BAR', origem:'Secretaria',st:'cancelada' },
+  { d:'11/08', h:'18:00', al:'Arthur Reis',           prof:'Caio Tenório · Canto T',      un:'CG',  origem:'Teacher',   st:'presente' },
+  { d:'11/08', h:'18:00', al:'Maria Clara',           prof:'Caio Tenório · Canto T',      un:'CG',  origem:'Secretaria',st:'presente' },
+  { d:'11/08', h:'18:00', al:'Lucas Prado',           prof:'Caio Tenório · Canto T',      un:'CG',  origem:'Secretaria',st:'falta' },
+  { d:'11/08', h:'18:00', al:'Sofia Lemos',           prof:'Caio Tenório · Canto T',      un:'CG',  origem:'Secretaria',st:'justificada' },
+  { d:'11/08', h:'18:00', al:'Gabriel Telles',        prof:'Caio Tenório · Canto T',      un:'CG',  origem:'—',         st:'indeterminado' },
+  { d:'11/08', h:'19:00', al:'Turma Canto 5 (3 alunos)', prof:'Daiana Pacifico · Canto',  un:'CG',  origem:'Secretaria',st:'cancelada' },
+  { d:'11/08', h:'20:00', al:'Davi Gomes (reposição)',prof:'Gabriel Barbosa · Guitarra',  un:'CG',  origem:'Teacher',   st:'presente' },
+];
+
+const ROTULO_ST = {
+  presente:     '<span class="text-[10px] font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-md px-2 py-0.5">✓ Presente</span>',
+  falta:        '<span class="text-[10px] font-bold text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-md px-2 py-0.5">✕ Falta</span>',
+  justificada:  '<span class="text-[10px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-md px-2 py-0.5">📄 Justificada</span>',
+  cancelada:    '<span class="text-[10px] font-bold text-rose-300/80 bg-rose-500/5 border border-rose-500/20 rounded-md px-2 py-0.5">✕ Aula cancelada</span>',
+  indeterminado:'<span class="text-[10px] font-bold text-slate-300 bg-slate-500/15 border border-dashed border-slate-500/50 rounded-md px-2 py-0.5">? Sem destino</span>',
+};
+
+/* ================= VISÕES ================= */
+function trocarVisao(v) {
+  ['dia','semana','lista'].forEach(x => document.getElementById('visao-'+x).classList.toggle('hidden', x !== v));
+  document.querySelectorAll('.btn-visao').forEach(b => {
+    const ativo = b.dataset.visao === v;
+    b.classList.toggle('bg-slate-700', ativo);
+    b.classList.toggle('text-white', ativo);
+    b.classList.toggle('text-slate-400', !ativo);
+  });
+}
+document.querySelectorAll('.btn-visao').forEach(b => b.addEventListener('click', () => trocarVisao(b.dataset.visao)));
+
+/* ================= SEMANA ================= */
+const ST_SEMANA = {
+  completa:     { borda:'border-emerald-500/40', barra:'bg-emerald-500', txt:'text-emerald-400' },
+  parcial:      { borda:'border-amber-500/40',   barra:'bg-amber-500',   txt:'text-amber-400' },
+  nao_iniciada: { borda:'border-slate-700/60',   barra:'bg-slate-600',   txt:'text-slate-500' },
+  cancelada:    { borda:'border-rose-500/40',    barra:'bg-rose-500',    txt:'text-rose-400' },
+};
+document.getElementById('grade-semana').innerHTML = SEMANA.map(dia => `
+  <div class="bg-slate-800/30 border rounded-xl p-2 min-h-[220px] ${dia.hoje ? 'border-violet-500/50 bg-violet-500/5' : 'border-slate-700/50'}">
+    <div class="text-center mb-2 pb-2 border-b border-slate-700/30">
+      <div class="text-[10px] text-slate-500 uppercase">${dia.dia}</div>
+      <div class="text-lg font-extrabold ${dia.hoje ? 'text-violet-300' : 'text-slate-300'}">${dia.num}</div>
+    </div>
+    <div class="space-y-1.5">
+      ${dia.aulas.map(a => {
+        const s = ST_SEMANA[a.st];
+        const pct = a.p.includes('/') ? (parseInt(a.p) / parseInt(a.p.split('/')[1]) * 100) : 0;
+        return `
+        <button onclick="abrirDrawer()" class="mini-aula w-full text-left bg-slate-900/50 border ${s.borda} rounded-lg p-2 ${a.st==='cancelada'?'opacity-60':''}">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-bold text-slate-300 ${a.st==='cancelada'?'line-through':''}">${a.h}</span>
+            <span class="text-[9px] font-bold ${s.txt}">${a.st==='cancelada' ? 'cancelada' : a.p}</span>
+          </div>
+          <div class="text-[9px] text-slate-500 truncate mt-0.5">${a.t}</div>
+          ${a.st!=='cancelada' ? `<div class="h-1 bg-slate-700/60 rounded-full mt-1.5 overflow-hidden"><div class="h-full ${s.barra} rounded-full" style="width:${pct}%"></div></div>` : ''}
+        </button>`;
+      }).join('') || '<div class="text-center text-slate-700 text-xs py-6">—</div>'}
+    </div>
+  </div>`).join('');
+
+/* ================= LISTA ================= */
+let filtroLista = 'todos';
+function renderLista() {
+  const rows = LISTA.filter(r => filtroLista === 'todos' || r.st === filtroLista);
+  document.getElementById('corpo-lista').innerHTML = rows.map(r => `
+    <button onclick="abrirDrawer()" class="lista-row w-full grid grid-cols-[64px_60px_1fr_150px_90px_110px_130px] gap-2 px-4 py-2.5 border-b border-slate-800/60 text-left items-center ${r.st==='indeterminado' ? 'bg-amber-500/[0.03]' : ''}">
+      <span class="text-[11px] text-slate-500 font-mono">${r.d}</span>
+      <span class="text-[11px] text-slate-400 font-mono">${r.h}</span>
+      <span class="text-xs font-semibold text-slate-200 truncate">${r.al}</span>
+      <span class="text-[11px] text-slate-500 truncate">${r.prof}</span>
+      <span class="text-[10px] font-bold text-slate-400 bg-slate-700/50 rounded px-1.5 py-0.5 w-fit">${r.un}</span>
+      <span class="text-[10px] text-slate-500">${r.origem}</span>
+      <span class="text-right">${ROTULO_ST[r.st]}</span>
+    </button>`).join('') || '<div class="p-8 text-center text-slate-600 text-sm">Nada aqui com esse filtro.</div>';
+}
+document.querySelectorAll('.btn-filtro').forEach(b => b.addEventListener('click', () => {
+  filtroLista = b.dataset.filtro;
+  document.querySelectorAll('.btn-filtro').forEach(x => {
+    const ativo = x === b;
+    x.className = 'btn-filtro px-3 py-1.5 text-xs font-semibold rounded-lg ' + (ativo ? 'bg-violet-600 text-white' : 'bg-slate-800/60 border border-slate-700 text-slate-400 hover:text-white');
+  });
+  renderLista();
+}));
+renderLista();
+
+/* ================= DRAWER ================= */
+const ESTILO_ST = {
+  presente:      { wrap:'border-emerald-500/40 bg-emerald-500/5' },
+  falta:         { wrap:'border-rose-500/40 bg-rose-500/5' },
+  justificada:   { wrap:'border-amber-500/40 bg-amber-500/5' },
+  indeterminado: { wrap:'border-dashed border-slate-500/60 bg-slate-700/10' },
+};
+function renderDrawerAlunos() {
+  document.getElementById('drawer-alunos').innerHTML = ALUNOS_DRAWER.map((a, i) => `
+    <div class="rounded-xl border p-3 ${ESTILO_ST[a.estado].wrap}" data-i="${i}">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-full bg-gradient-to-br ${a.cor} flex items-center justify-center text-white font-bold text-xs shrink-0">${a.ini}</div>
+        <div class="min-w-0 flex-1">
+          <div class="text-sm font-semibold text-white truncate">${a.nome}</div>
+          <div class="text-[10px] text-slate-500">${a.aula}${a.risco != null ? ` · risco <span class="${a.risco > 25 ? 'text-rose-400' : 'text-emerald-400'} font-bold">${a.risco}%</span>` : ''}</div>
+        </div>
+      </div>
+      <div class="flex gap-1 mt-2">
+        <button class="btn-dr flex-1 text-[10px] font-bold rounded-md py-1 ${a.estado==='presente' ? 'text-emerald-400 bg-emerald-500/10 ativo' : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10'}" onclick="marcarDrawer(${i},'presente')">✓ Presente</button>
+        <button class="btn-dr flex-1 text-[10px] font-bold rounded-md py-1 ${a.estado==='falta' ? 'text-rose-400 bg-rose-500/10 ativo' : 'text-slate-500 hover:text-rose-400 hover:bg-rose-500/10'}" onclick="marcarDrawer(${i},'falta')">✕ Falta</button>
+        <button class="btn-dr flex-1 text-[10px] font-bold rounded-md py-1 ${a.estado==='justificada' ? 'text-amber-400 bg-amber-500/10 ativo' : 'text-slate-500 hover:text-amber-400 hover:bg-amber-500/10'}" onclick="marcarDrawer(${i},'justificada')">📄 Justif.</button>
+      </div>
+      <div class="mt-1.5 text-[10px] text-slate-500">${a.obs}</div>
+    </div>`).join('');
+}
+function marcarDrawer(i, estado) {
+  ALUNOS_DRAWER[i].estado = estado;
+  ALUNOS_DRAWER[i].obs = 'Você · agora' + (estado === 'justificada' ? ' · motivo obrigatório' : '');
+  renderDrawerAlunos();
+}
+renderDrawerAlunos();
+
+function abrirDrawer() {
+  document.getElementById('drawer').classList.remove('translate-x-full');
+  document.getElementById('drawer-overlay').classList.remove('hidden');
+}
+function fecharDrawer() {
+  document.getElementById('drawer').classList.add('translate-x-full');
+  document.getElementById('drawer-overlay').classList.add('hidden');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharDrawer(); });
+
+/* ================= CHAMADA (visão dia) ================= */
+const ESTILOS = {
+  presente:    { borda: 'border-emerald-500/40', fundo: 'bg-emerald-500/5', ativo: 'text-emerald-400 bg-emerald-500/10' },
+  falta:       { borda: 'border-rose-500/40',    fundo: 'bg-rose-500/5',    ativo: 'text-rose-400 bg-rose-500/10' },
+  justificada: { borda: 'border-amber-500/40',   fundo: 'bg-amber-500/5',   ativo: 'text-amber-400 bg-amber-500/10' },
+  indeterminado: { borda: 'border-dashed border-slate-500/60', fundo: 'bg-slate-700/10', ativo: '' },
+};
+const TODAS_BORDAS = ['border-emerald-500/40','border-rose-500/40','border-amber-500/40','border-dashed','border-slate-500/60'];
+const TODOS_FUNDOS = ['bg-emerald-500/5','bg-rose-500/5','bg-amber-500/5','bg-slate-700/10'];
+
+function marcar(btn, estado) {
+  const card = btn.closest('.card-aluno');
+  const anterior = card.dataset.estado;
+  if (anterior === estado) return;
+  card.dataset.estado = estado;
+  card.classList.remove(...TODAS_BORDAS, ...TODOS_FUNDOS, 'indeterminado-pulsa');
+  card.classList.add(...ESTILOS[estado].borda.split(' '), ESTILOS[estado].fundo);
+  card.querySelectorAll('.btn-estado').forEach(b => {
+    b.classList.remove('ativo','text-emerald-400','text-rose-400','text-amber-400','bg-emerald-500/10','bg-rose-500/10','bg-amber-500/10');
+    b.classList.add('text-slate-500');
+  });
+  btn.classList.add('ativo');
+  btn.classList.remove('text-slate-500');
+  ESTILOS[estado].ativo.split(' ').forEach(c => btn.classList.add(c));
+  const kpi = document.getElementById('kpi-pendentes');
+  let n = parseInt(kpi.textContent);
+  if (anterior === 'indeterminado') n--;
+  if (estado === 'indeterminado') n++;
+  kpi.textContent = n;
+}
+function todosPresentes(aulaId) {
+  document.querySelectorAll('#' + aulaId + ' .card-aluno').forEach(card => {
+    const btn = card.querySelector('.btn-estado');
+    marcar(btn, 'presente');
+  });
+}
+function alternarMenu(id) { document.getElementById(id).classList.toggle('hidden'); }
+function alternarModal(id) { document.getElementById(id).classList.toggle('hidden'); }
+function preencherMotivo(campoId, texto) {
+  const el = document.getElementById(campoId);
+  el.value = texto;
+  el.focus();
+}
+function anexarEvidencia() {
+  const btn = document.getElementById('btn-anexo-justificada');
+  btn.innerHTML = '✅ atestado-medico.pdf anexado';
+  btn.classList.remove('border-dashed','border-slate-600','text-slate-400');
+  btn.classList.add('border-amber-500/50','text-amber-300','bg-amber-500/10');
+}
+
+/* Justificada passa por modal (motivo + evidência). Presente/falta são diretos. */
+let cardPendenteJustificada = null;
+function pedirJustificada(btn) {
+  cardPendenteJustificada = btn;
+  const nome = btn.closest('.card-aluno').querySelector('.text-sm.font-semibold')?.textContent || 'aluno';
+  document.getElementById('just-aluno').textContent = nome;
+  alternarModal('modal-justificada');
+}
+function confirmarJustificada() {
+  const motivo = document.getElementById('motivo-justificada').value.trim();
+  if (motivo.length < 3) {
+    document.getElementById('motivo-justificada').classList.add('border-rose-500');
+    document.getElementById('motivo-justificada').placeholder = 'Sem motivo não justifica — escreva aqui';
+    return;
+  }
+  alternarModal('modal-justificada');
+  if (cardPendenteJustificada) marcar(cardPendenteJustificada, 'justificada');
+  cardPendenteJustificada = null;
+}
+function confirmarCancelamento() {
+  const motivo = document.getElementById('motivo-cancelar').value.trim();
+  if (motivo.length < 3) {
+    document.getElementById('motivo-cancelar').classList.add('border-rose-500');
+    document.getElementById('motivo-cancelar').placeholder = 'Não pode cancelar por cancelar — qual o motivo?';
+    return;
+  }
+  alternarModal('modal-cancelar');
+}
+</script>
+</body>
+</html>

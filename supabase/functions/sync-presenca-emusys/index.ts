@@ -284,13 +284,36 @@ function parseDataHoraEmusys(dataHora: string): string {
   return dataHora.replace(' ', 'T') + ':00-03:00';
 }
 
+// Cancelamento humano (secretaria na Agenda, app_cancelar_aula) NAO pode ser
+// desfeito pelo sync: se o Emusys reativar a aula, mantemos cancelada e
+// registramos o conflito para revisao. Mesma filosofia do upsert_presenca_emusys_bruta:
+// resposta humana vence evidencia automatica.
+async function carregarCancelamentosHumanos(
+  supabase: any,
+  unidadeId: string,
+  dataInicio: string,
+  dataFim: string
+): Promise<Set<number>> {
+  const { data, error } = await supabase
+    .from('aulas_emusys')
+    .select('emusys_id')
+    .eq('unidade_id', unidadeId)
+    .eq('cancelada_origem', 'agenda_secretaria')
+    .gte('data_aula', dataInicio)
+    .lte('data_aula', dataFim);
+  if (error) {
+    console.error('[sync-presenca] Falha ao carregar cancelamentos humanos:', error.message);
+    return new Set();
+  }
+  return new Set((data || []).map((r: { emusys_id: number }) => r.emusys_id));
+}
+
 async function sincronizarMetadadosAulas(
   supabase: any,
   unidades: readonly UnidadeEmusys[],
   dataInicio: string,
   dataFim: string
-) {
-  const resultados: Array<Record<string, unknown>> = [];
+) {  const resultados: Array<Record<string, unknown>> = [];
   const aulasPorUnidade: Array<{
     unidade: UnidadeEmusys;
     dataInicio: string;
@@ -304,10 +327,14 @@ async function sincronizarMetadadosAulas(
 
   for (const unidade of unidades) {
     const mapaProfessores = await carregarMapaProfessoresEmusys(supabase, unidade.id);
+    const cancelamentosHumanos = await carregarCancelamentosHumanos(supabase, unidade.id, dataInicio, dataFim);
     const aulas = await fetchAulasRange(unidade.token, dataInicio, dataFim);
     const linhas = aulas.map((aula) => {
       const profNome = aula.professores?.[0]?.nome || null;
       const professor = resolverProfessorDaAula(aula.professores, mapaProfessores);
+      if (cancelamentosHumanos.has(aula.id) && aula.cancelada !== true) {
+        console.warn(`[sync-presenca] Conflito: aula ${aula.id} cancelada pela secretaria e reativada no Emusys (metadados)`);
+      }
 
       return {
         emusys_id: aula.id,
@@ -328,7 +355,7 @@ async function sincronizarMetadadosAulas(
         emusys_professor_id: professor.emusysProfessorId,
         professor_id: professor.professorId,
         sem_acompanhamento: professor.semAcompanhamento,
-        cancelada: aula.cancelada === true,
+        cancelada: cancelamentosHumanos.has(aula.id) ? true : aula.cancelada === true,
         reagendada: aula.reagendada === true,
         justificada: aula.justificada === true,
         data_hora_inicio_original: aula.data_hora_inicio_original
@@ -1726,6 +1753,7 @@ serve(async (req: Request) => {
         // 1. Buscar aulas do dia no Emusys
         const aulas = await fetchAulasDia(unidade.token, dataAlvo);
         const mapaProfessores = mapasProfessoresPorUnidade.get(unidade.id) ?? new Map();
+        const cancelamentosHumanos = await carregarCancelamentosHumanos(supabase, unidade.id, dataAlvo, dataAlvo);
 
         const mapaAlunosEmusys = alunosPorUnidadeEmusys.get(unidade.id) || new Map();
         const mapaAlunos = alunosPorUnidadeSimples.get(unidade.id) || new Map();
@@ -1762,7 +1790,7 @@ serve(async (req: Request) => {
               professorId,
               professorNome: profNome,
               unidadeId: unidade.id,
-              cancelada: aula.cancelada,
+              cancelada: cancelamentosHumanos.has(aula.id) ? true : aula.cancelada,
               cursoId: cursoMapa.get(normalizarCurso(aula.curso_nome || '')) ?? null,
               cursoNome: aula.curso_nome || null,
               alunos: aula.alunos || [],
@@ -1772,6 +1800,19 @@ serve(async (req: Request) => {
           // 2a. UPSERT dados da aula na aulas_emusys (sempre, inclusive cancelada —
           // se o Emusys marcou cancelada, nosso espelho tem que refletir isso, senão
           // fica desalinhado: a aula simplesmente não existiria aqui).
+          // Excecao: cancelamento humano (agenda_secretaria) nunca e desfeito pelo Emusys.
+          const canceladaEfetiva = cancelamentosHumanos.has(aula.id) ? true : aula.cancelada;
+          if (cancelamentosHumanos.has(aula.id) && aula.cancelada !== true) {
+            console.warn(`[sync-presenca] Conflito: aula ${aula.id} cancelada pela secretaria e reativada no Emusys`);
+            await supabase.from('automacao_log').insert({
+              unidade_nome: unidade.nome,
+              evento: 'sync_presenca',
+              acao: 'conflito_cancelamento_humano',
+              detalhes: { emusys_aula_id: aula.id, data: dataAlvo, curso: aula.curso_nome, professor: profNome },
+              workflow_id: 'sync-presenca-emusys',
+              execution_id: new Date().toISOString(),
+            });
+          }
           const { data: aulaDB, error: aulaError } = await supabase
             .from('aulas_emusys')
             .upsert(
@@ -1792,7 +1833,7 @@ serve(async (req: Request) => {
                 emusys_professor_id: professor.emusysProfessorId,
                 professor_id: professorId,
                 sem_acompanhamento: professor.semAcompanhamento,
-                cancelada: aula.cancelada,
+                cancelada: canceladaEfetiva === true,
                 reagendada: aula.reagendada === true,
                 justificada: aula.justificada === true,
                 data_hora_inicio_original: aula.data_hora_inicio_original
@@ -1895,7 +1936,9 @@ serve(async (req: Request) => {
           // Aula cancelada: só espelha em emusys_experimentais_raw (auditoria/conciliação
           // já sabe lidar com situacao_operacional='cancelada'), sem processar presença —
           // não houve aula de verdade, não há frequência real pra sincronizar.
-          if (aula.cancelada) {
+          // canceladaEfetiva inclui o cancelamento humano (agenda_secretaria): aula
+          // cancelada pela secretaria tambem nao gera presenca, mesmo ativa no Emusys.
+          if (canceladaEfetiva) {
             if (aula.categoria === 'experimental') {
               for (const aluno of aula.alunos || []) {
                 if (!aluno.nome_aluno?.trim()) continue;
@@ -2051,6 +2094,15 @@ serve(async (req: Request) => {
     // Recalcular percentual_presenca somente nos alvos autorizados.
     for (const unidade of unidadesProcessar) {
       await supabase.rpc('atualizar_percentual_presenca', { p_unidade_id: unidade.id });
+    }
+
+    // Motor de reposicoes: depois de cada sync, casa creditos pendentes com
+    // aulas reagendadas (elo direto) ou novas (rede) e marca as realizadas.
+    const { data: casamento, error: erroCasamento } = await supabase.rpc('casar_reposicoes');
+    if (erroCasamento) {
+      console.error('[sync-presenca] casar_reposicoes falhou (best effort):', erroCasamento.message);
+    } else {
+      console.log('[sync-presenca] casar_reposicoes:', JSON.stringify(casamento));
     }
 
     // Reconciliar experimentais órfãs (rede de segurança do webhook)

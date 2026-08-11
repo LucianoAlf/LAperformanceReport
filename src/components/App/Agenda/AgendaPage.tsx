@@ -3,6 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { addDays, format, isValid, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
+  AlertTriangle,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -13,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAgendaDia, type AulaAgenda } from '@/hooks/useAgendaDia';
+import { alunoSemDestino } from './Chamada/chamadaUtils';
 import {
   aulaJaOcorreu,
   contarEmAulaAgora,
@@ -51,6 +53,7 @@ import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { AgendaTimeline } from './AgendaTimeline';
 import { SeletorPeriodo } from './SeletorPeriodo';
 import { AgendaDrawer } from './AgendaDrawer';
+import { ChamadaView } from './Chamada';
 import { cn } from '@/lib/utils';
 
 /**
@@ -102,6 +105,8 @@ export default function AgendaPage() {
   const hoje = format(new Date(), 'yyyy-MM-dd');
   const [data, setData] = useState(hoje);
   const [agruparPor, setAgruparPor] = useState<'professor' | 'sala'>('professor');
+  const [visao, setVisao] = useState<'professor' | 'sala' | 'chamada'>('professor');
+  const ehChamada = visao === 'chamada';
   const [selecionada, setSelecionada] = useState<AulaAgenda | null>(null);
   const [filtros, setFiltros] = useState<FiltrosAgenda>(FILTROS_AGENDA_VAZIOS);
 
@@ -128,7 +133,7 @@ export default function AgendaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inicio, fim, hoje]);
 
-  const { aulas: todasAsAulas, carregando, erro, frescor, prefetch } = useAgendaDia({
+  const { aulas: todasAsAulas, carregando, erro, frescor, recarregar, prefetch } = useAgendaDia({
     data,
     unidadeId,
   });
@@ -225,6 +230,22 @@ export default function AgendaPage() {
   }, [aulas]);
   const riscoGeralDesatualizado = riscoDesatualizado(dataCalculoRisco, new Date());
 
+  // Pendencias da chamada: alunos em aulas JA OCORRIDAS sem destino humano
+  // (presente/falta/justificada/cancelamento). E o que o digest diario cobra.
+  // Mostrar aqui faz a equipe saltar para a visao Chamada antes do digest.
+  const pendenciasChamada = useMemo(() => {
+    let count = 0;
+    const agora = new Date();
+    for (const aula of aulas) {
+      if (aula.cancelada) continue;
+      if (!aulaJaOcorreu(data, aula.hora_fim, agora)) continue;
+      for (const aluno of aula.alunos) {
+        if (aluno.aluno_id != null && alunoSemDestino(aula, aluno, data, agora)) count++;
+      }
+    }
+    return count;
+  }, [aulas, data]);
+
   // Trocar de unidade no header troca o conjunto de aulas: a selecao antiga
   // sumiu da timeline, mas o drawer continuaria mostrando ela. Mesmo motivo
   // pelo qual `mover()` limpa a selecao ao trocar de dia.
@@ -317,9 +338,14 @@ export default function AgendaPage() {
           opcoes={[
             { valor: 'professor', rotulo: 'Professores' },
             { valor: 'sala', rotulo: 'Salas' },
+            { valor: 'chamada', rotulo: 'Chamada' },
           ]}
-          valor={agruparPor}
-          onChange={(v) => setAgruparPor(v as 'professor' | 'sala')}
+          valor={visao}
+          onChange={(v) => {
+            setVisao(v as 'professor' | 'sala' | 'chamada');
+            if (v !== 'professor' && v !== 'sala') return;
+            setAgruparPor(v);
+          }}
         />
 
         <div className="relative">
@@ -370,7 +396,33 @@ export default function AgendaPage() {
           recarregando && 'pointer-events-none opacity-50',
         )}
       >
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-slate-700 bg-slate-700 sm:grid-cols-5">
+      {/* Banner de pendencias da chamada — alunos sem destino em aulas que ja
+          ocorreram. Aparece em TODAS as visoes (Professores/Salas/Chamada) para
+          cobrar acao da equipe antes do digest diario. Clicar leva a visao
+          Chamada, onde o banner detalha aluno a aluno. */}
+      {pendenciasChamada > 0 && !ehChamada && (
+        <button
+          type="button"
+          onClick={() => setVisao('chamada')}
+          className="flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-left transition-colors hover:bg-amber-500/15"
+        >
+          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-400" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-amber-200">
+              {pendenciasChamada} {pendenciasChamada === 1 ? 'aluno sem destino' : 'alunos sem destino'}{' '}
+              em aulas que já ocorreram
+            </p>
+            <p className="text-xs text-amber-300/80">
+              Ninguém registrou presença, falta ou justificativa. Abrir a visão Chamada para resolver.
+            </p>
+          </div>
+          <span className="shrink-0 rounded-md border border-amber-500/40 px-2.5 py-1 text-xs font-semibold text-amber-300">
+            Abrir Chamada
+          </span>
+        </button>
+      )}
+
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-slate-700 bg-slate-700 sm:grid-cols-3 lg:grid-cols-6">
         <Kpi
           rotulo="Aulas no dia"
           valor={String(aulas.length)}
@@ -412,6 +464,12 @@ export default function AgendaPage() {
               : undefined
           }
         />
+        <Kpi
+          rotulo="Sem destino"
+          valor={String(pendenciasChamada)}
+          destaque={pendenciasChamada > 0 ? 'text-amber-400' : undefined}
+          rodape={pendenciasChamada > 0 ? 'chamada pendente' : 'tudo resolvido'}
+        />
       </div>
 
       {erro ? (
@@ -426,6 +484,14 @@ export default function AgendaPage() {
         </p>
       ) : aulas.length === 0 ? (
         <p className="p-8 text-center text-sm text-slate-400">Nenhuma aula neste dia.</p>
+      ) : ehChamada ? (
+        <ChamadaView
+          data={data}
+          unidadeId={unidadeId}
+          aulas={aulas}
+          recarregar={recarregar}
+          onIrParaDia={irPara}
+        />
       ) : (
         <div className="flex min-w-0 items-stretch overflow-hidden rounded-lg border border-slate-700">
           <div className="min-w-0 flex-1">

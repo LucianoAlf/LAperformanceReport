@@ -10,6 +10,18 @@ export interface AlunoAgenda {
   responsavel_nome: string | null;
   responsavel_telefone: string | null;
   status_presenca: string | null;
+  // Campos da chamada (Fase 2, 11/08/2026):
+  // aula_emusys_id = a linha DESTE aluno em aulas_emusys (em turma, cada
+  // contrato tem a sua) — e o alvo da app_registrar_chamada_agenda.
+  aula_emusys_id: number | null;
+  respondido_por: string | null;
+  // Evidencia bruta do Emusys; quando diverge do status final (humano), a tela
+  // mostra badge de conflito em vez de esconder a divergencia.
+  emusys_presenca_bruta: string | null;
+  justificada_motivo: string | null;
+  justificada_evidencia: string | null;
+  // Saldo de creditos de reposicao abertos (aluno_reposicoes, status pendente).
+  reposicoes_pendentes: number;
   // Numero da aula DESTE aluno no contrato dele. Vem por aluno, e nao da aula,
   // porque em turma o campo do topo e nulo.
   // ⚠️ nr_da_aula = 1 NAO significa aluno novo: renovacao abre contrato novo e
@@ -68,6 +80,12 @@ export interface AulaAgenda {
   // vem como 'ausente'. So tem significado depois que a aula ocorreu.
   professor_presenca: string | null;
   alunos: AlunoAgenda[];
+  // Linhas de aulas_emusys que formam este slot (container de turma + uma por
+  // contrato). Necessario para cancelar o slot inteiro via app_cancelar_aula.
+  aula_ids: number[];
+  // Cancelamento humano (secretaria pela Agenda). Null = nao cancelada por aqui.
+  cancelada_motivo: string | null;
+  cancelada_origem: 'emusys' | 'agenda_secretaria' | null;
   // Quem vai na aula EXPERIMENTAL, vindo de `lead_experimentais`. Vazio nas demais.
   // Existe porque `aula_alunos_emusys` nao tem UMA linha sequer de experimental —
   // sem isto a agenda mostra a aula sem saber quem vem. Traz junto a `observacoes`

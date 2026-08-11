@@ -1,3 +1,4 @@
+import { AlertTriangle, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip } from '@/components/ui/Tooltip';
 import type { AulaAgenda } from '@/hooks/useAgendaDia';
@@ -15,6 +16,30 @@ interface Props {
   emAndamento?: boolean;
   // A aula ja terminou. Portao para exibir PRESENCA — ver ResumoDaAula.
   jaOcorreu?: boolean;
+}
+
+/**
+ * Conflito de presenca: algum aluno da aula tem resposta humana que diverge
+ * do bruto do Emusys. Nao e falta nem presenca — e a divergencia que a
+ * secretaria precisa ver para retificar. Ver `temConflito` em chamadaUtils.
+ */
+function temConflitoAula(aula: AulaAgenda): boolean {
+  for (const a of aula.alunos) {
+    if (!a.emusys_presenca_bruta || !a.respondido_por) continue;
+    const humanas = new Set([
+      'professor_la_teacher', 'professor_whatsapp', 'manual', 'fabio_audio', 'agenda_secretaria',
+    ]);
+    if (!humanas.has(a.respondido_por)) continue;
+    const humanoPresente = a.status_presenca === 'presente';
+    const emusysPresente = a.emusys_presenca_bruta === 'presente';
+    if (humanoPresente !== emusysPresente) return true;
+  }
+  return false;
+}
+
+/** Soma de creditos de reposicao pendentes entre os alunos da aula. */
+function reposicoesPendentesAula(aula: AulaAgenda): number {
+  return aula.alunos.reduce((s, a) => s + (a.reposicoes_pendentes ?? 0), 0);
 }
 
 /**
@@ -352,6 +377,10 @@ export function AgendaCard({
   // Aluno novo: 1a aula regular dele na escola. NAO e `nr_da_aula === 1`, que
   // tambem vale para renovacao (contrato novo zera o contador).
   const calouros = aula.alunos.filter((a) => a.aluno_novo).length;
+  // Sinais da chamada (Fase 2): conflito Emusys x humano e reposicoes pendentes.
+  // So fazem sentido em aula que tem aluno e nao esta cancelada.
+  const conflito = estado !== 'cancelada' && temConflitoAula(aula);
+  const reposicoes = estado !== 'cancelada' ? reposicoesPendentesAula(aula) : 0;
   // Sinal de aluno nao faz sentido em aula cancelada: ninguem vai estar la.
   const mostrarSinais = estado !== 'cancelada';
 
@@ -400,8 +429,17 @@ export function AgendaCard({
             ⚠️ Sem `title` aqui: o tooltip nativo do SO apareceria POR CIMA do
             resumo do card, com atraso e estilo do Windows. Quem decodifica os
             sinais e a legenda fixa do rodape, e o resumo os escreve por extenso. */}
-        {mostrarSinais && (emRisco || inadimplentes > 0 || calouros > 0 || aula.alunos.length > 1) && (
+        {mostrarSinais && (emRisco || inadimplentes > 0 || calouros > 0 || aula.alunos.length > 1 || conflito || reposicoes > 0) && (
           <span className="flex shrink-0 items-center gap-1">
+            {conflito && (
+              <AlertTriangle className="h-3 w-3 text-amber-400" aria-label="conflito com Emusys" />
+            )}
+            {reposicoes > 0 && (
+              <span className="inline-flex items-center text-amber-400" aria-label="reposição pendente">
+                <RotateCcw className="h-3 w-3" />
+                {reposicoes > 1 && <span className="ml-0.5 text-[9px] font-bold">{reposicoes}</span>}
+              </span>
+            )}
             {emRisco && <span className="h-[7px] w-[7px] rounded-full bg-amber-400" />}
             {inadimplentes > 0 && <span className="h-[7px] w-[7px] rounded-full bg-rose-400" />}
             {calouros > 0 && (

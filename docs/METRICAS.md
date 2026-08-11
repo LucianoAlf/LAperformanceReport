@@ -527,6 +527,18 @@ Apenas evasões cujo `motivos_saida.conta_score_professor = true`. Motivo `NULL`
 Ex-alunos com **≥ 4 meses** e saída real (saiu de TODAS as matrículas). Exclui bolsistas, banda e 2º curso. Taxa de retorno = % pessoas com 2+ passagens.
 - RPC `get_historico_ltv`; `ModalPermanenciaDetalhe.tsx`.
 
+### Presença do aluno — camadas e chamada na Agenda (2026-08-11)
+
+Camadas (mais bruta → mais semântica): `aluno_presenca` (evidência) → `aluno_presenca_administrativo` (justificativa: motivo + evidência + autor) → `aluno_presenca_retificacoes` (trilha de correções) → `vw_aluno_presenca_semantica_v1` (**v1.4**) → `aluno_reposicoes` (créditos de reposição).
+
+- **Status possíveis (`status_presenca`):** `presente`, `falta`, `falta_justificada`. **Falta justificada conta como falta** (`considera_falta = true`, denominador intacto — decisão D2 do spec); o rótulo fino sai pela coluna `status_presenca` da view.
+- **Origem (`respondido_por`):** `agenda_secretaria` entra como fonte humana forte em `fn_presenca_e_forte` — o sync do Emusys nunca sobrescreve (`upsert_presenca_emusys_bruta` já filtra por `respondido_por`).
+- **Escrita humana:** RPC `app_registrar_chamada_agenda` (lote por aula; alterar resposta humana existente exige motivo e gera retificação), `app_justificar_falta` (atalho), `app_cancelar_aula` (aula ou `unidade_dia` — em massa só admin; motivo obrigatório). Permissão: `agenda.chamada`.
+- **Cancelamento humano é protegido do sync:** `aulas_emusys.cancelada_origem = 'agenda_secretaria'` trava reativação pelo Emusys (conflito logado em `automacao_log`).
+- **Reposições:** `aluno_reposicoes.status`: `pendente → agendada → realizada` (+ `expirada`/`cancelada`). `casar_reposicoes()` roda ao fim de cada `sync-presenca-emusys`: elo direto = aula de origem reagendada (mesma linha, `data_hora_inicio_original`); rede = aula nova do mesmo aluno + disciplina após a data original.
+- ⚠️ **Fallback `ausente→falta_confirmada` segue ativo** (`presenca_politicas_confiabilidade`) até o Alf validar o corte no rollout (spec item 7.1).
+- Spec completo: `docs/superpowers/plans/2026-08-11-chamada-agenda-motor-presenca.md`.
+
 ---
 
 ## Professores
