@@ -1,6 +1,7 @@
 /// <reference lib="deno.ns" />
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { runWithTimeout } from "../_shared/fetch-with-timeout.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +12,7 @@ const corsHeaders = {
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const OPENAI_MODEL = "gpt-4.1-mini";
+const NARRATIVA_TIMEOUT_MS = 5000;
 
 interface RelatorioGerencialRequest {
   unidade: string;
@@ -704,29 +706,34 @@ Quando o comparativo estiver indisponivel, nao afirme aumento, reducao, crescime
 Retorne somente o JSON solicitado.`;
 
   try {
-    const response = await fetch(OPENAI_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        temperature: 0.2,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: JSON.stringify(resumoParaIA(dados)) },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "narrativa_relatorio_gerencial",
-            strict: true,
-            schema: narrativaSchema,
+    const response = await runWithTimeout(
+      (signal) =>
+        fetch(OPENAI_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
           },
-        },
-      }),
-    });
+          body: JSON.stringify({
+            model: OPENAI_MODEL,
+            temperature: 0.2,
+            messages: [
+              { role: "system", content: system },
+              { role: "user", content: JSON.stringify(resumoParaIA(dados)) },
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "narrativa_relatorio_gerencial",
+                strict: true,
+                schema: narrativaSchema,
+              },
+            },
+          }),
+          signal,
+        }),
+      NARRATIVA_TIMEOUT_MS,
+    );
 
     if (!response.ok) {
       console.error("Falha ao gerar narrativa gerencial", response.status);
@@ -765,10 +772,14 @@ Retorne somente o JSON solicitado.`;
         : fallback.mensagem_final,
     };
   } catch (error) {
-    console.error(
-      "Falha ao processar narrativa gerencial",
-      error instanceof Error ? error.message : String(error),
-    );
+    const detalhe = error instanceof Error ? error.message : String(error);
+    if (detalhe.startsWith("Tempo limite excedido")) {
+      console.warn(
+        "Narrativa gerencial excedeu o prazo; usando fallback determinístico",
+      );
+    } else {
+      console.error("Falha ao processar narrativa gerencial", detalhe);
+    }
     return fallback;
   }
 }

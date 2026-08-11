@@ -48,6 +48,11 @@ export interface LeadExperimentalAgenda {
   curso: string | null;
   curso_interesse_id: number | null;
   telefone: string | null;
+  canal: string | null;
+  canal_origem_id: number | null;
+  faixa_etaria: string | null;
+  professor_experimental_id: number | null;
+  professor_nome: string | null;
   status: string | null;
   observacoes: string | null;
 }

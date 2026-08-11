@@ -16,6 +16,7 @@ interface Props {
   onCancelarAula: (aula: AulaAgenda) => void;
   onReagendarAula: (aula: AulaAgenda) => void;
   onAbrirDrawer: (aula: AulaAgenda) => void;
+  onAbrirDrawerLead: (lead: LeadExperimentalAgenda, aula: AulaAgenda) => void;
 }
 
 /**
@@ -35,6 +36,7 @@ export function ChamadaAulaBloco({
   onCancelarAula,
   onReagendarAula,
   onAbrirDrawer,
+  onAbrirDrawerLead,
 }: Props) {
   const vinculados = aula.alunos.filter((a) => a.aluno_id != null);
   const leads = aula.experimental_leads ?? [];
@@ -154,6 +156,7 @@ export function ChamadaAulaBloco({
               podeOperar={podeOperar}
               salvando={salvando}
               onMarcar={onMarcarExperimental}
+              onAbrirDrawer={() => onAbrirDrawerLead(lead, aula)}
             />
           ))}
         </div>

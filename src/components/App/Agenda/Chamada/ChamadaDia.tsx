@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { CalendarX } from 'lucide-react';
-import type { AulaAgenda } from '@/hooks/useAgendaDia';
+import type { AulaAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOutletContext } from 'react-router-dom';
 import { chamadaCompleta, estadoDoAluno } from './chamadaUtils';
@@ -23,6 +23,7 @@ interface Props {
   onCancelarAula: (aula: AulaAgenda) => void;
   onReagendarAula: (aula: AulaAgenda) => void;
   onAbrirDrawer: (aula: AulaAgenda) => void;
+  onAbrirDrawerLead: (lead: LeadExperimentalAgenda, aula: AulaAgenda) => void;
 }
 
 /**
@@ -42,6 +43,7 @@ export function ChamadaDia({
   onCancelarAula,
   onReagendarAula,
   onAbrirDrawer,
+  onAbrirDrawerLead,
 }: Props) {
   const { hasPermission } = useAuth();
   const podeOperar = hasPermission('agenda.chamada');
@@ -111,6 +113,7 @@ export function ChamadaDia({
             onCancelarAula={onCancelarAula}
             onReagendarAula={onReagendarAula}
             onAbrirDrawer={onAbrirDrawer}
+            onAbrirDrawerLead={onAbrirDrawerLead}
           />
         ))}
       </div>

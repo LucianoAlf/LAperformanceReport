@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'react';
 import { CalendarDays, List, LayoutGrid } from 'lucide-react';
-import type { AulaAgenda, AlunoAgenda } from '@/hooks/useAgendaDia';
+import type { AulaAgenda, AlunoAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
 import { useChamadaAcoes, type ItemChamada } from './useChamadaAcoes';
 import { ChamadaDia } from './ChamadaDia';
 import { ChamadaSemana } from './ChamadaSemana';
 import { ChamadaLista } from './ChamadaLista';
 import { ChamadaDrawer } from './ChamadaDrawer';
+import { ChamadaLeadDrawer } from './ChamadaLeadDrawer';
 import { ModalJustificarFalta } from './ModalJustificarFalta';
 import { ModalCancelarAula } from './ModalCancelarAula';
 import { ModalReagendarAula } from './ModalReagendarAula';
@@ -50,6 +51,8 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
   // a data junto. Na dia/lista, e sempre a data atual.
   const [drawerAula, setDrawerAula] = useState<AulaAgenda | null>(null);
   const [drawerData, setDrawerData] = useState<string>(data);
+  // Drawer do lead experimental (separado do drawer da aula).
+  const [drawerLead, setDrawerLead] = useState<{ lead: LeadExperimentalAgenda; aula: AulaAgenda } | null>(null);
 
   const { salvando, registrar, cancelarAula, registrarPresencaExperimental } = useChamadaAcoes(recarregar);
 
@@ -57,6 +60,10 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
     setDrawerAula(aula);
     setDrawerData(dia ?? data);
   }, [data]);
+
+  const abrirDrawerLead = useCallback((lead: LeadExperimentalAgenda, aula: AulaAgenda) => {
+    setDrawerLead({ lead, aula });
+  }, []);
 
   const handleJustificar = useCallback(
     (motivo: string, evidenciaPath?: string) => {
@@ -128,6 +135,7 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
           onCancelarAula={setAulaCancelar}
           onReagendarAula={setAulaReagendar}
           onAbrirDrawer={(a) => abrirDrawer(a)}
+          onAbrirDrawerLead={abrirDrawerLead}
         />
       )}
 
@@ -178,7 +186,7 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
         aula={aulaReagendar}
       />
 
-      {/* Drawer lateral */}
+      {/* Drawer lateral da aula */}
       <ChamadaDrawer
         aula={drawerAula}
         data={drawerData}
@@ -188,6 +196,16 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
         onCancelarAula={setAulaCancelar}
         onReagendarAula={setAulaReagendar}
         onFechar={() => setDrawerAula(null)}
+      />
+
+      {/* Drawer do lead experimental */}
+      <ChamadaLeadDrawer
+        lead={drawerLead?.lead ?? null}
+        aula={drawerLead?.aula ?? null}
+        data={data}
+        salvando={salvando}
+        onMarcar={registrarPresencaExperimental}
+        onFechar={() => setDrawerLead(null)}
       />
     </div>
   );
