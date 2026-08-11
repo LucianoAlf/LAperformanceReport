@@ -17,6 +17,13 @@ import {
   DialogContent,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
 import type { LeadExperimentalAgenda, AulaAgenda } from '@/hooks/useAgendaDia';
 import { cn } from '@/lib/utils';
@@ -329,7 +336,7 @@ function CampoTexto({ icon, rotulo, valor, onChange, placeholder }: {
         value={valor}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:border-violet-500/50 focus:outline-none"
+        className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/30"
       />
     </div>
   );
@@ -349,16 +356,21 @@ function CampoSelect({ icon, rotulo, valor, onChange, opcoes, placeholder }: {
         {icon}
         {rotulo}
       </label>
-      <select
-        value={valor ?? ''}
-        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
-        className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-xs text-slate-200 focus:border-violet-500/50 focus:outline-none"
+      <Select
+        value={valor != null ? String(valor) : ''}
+        onValueChange={(v) => onChange(v ? Number(v) : null)}
       >
-        <option value="">{placeholder}</option>
-        {opcoes.map((o) => (
-          <option key={o.id} value={o.id}>{o.nome}</option>
-        ))}
-      </select>
+        <SelectTrigger className="h-9 rounded-lg border-slate-700 bg-slate-800/50 text-xs text-slate-200">
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {opcoes.map((o) => (
+            <SelectItem key={o.id} value={String(o.id)} className="text-xs">
+              {o.nome}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }
