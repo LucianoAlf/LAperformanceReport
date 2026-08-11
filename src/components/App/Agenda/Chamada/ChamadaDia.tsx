@@ -153,21 +153,6 @@ export function ChamadaDia({
         onAbrirDrawer={onAbrirDrawer}
       />
 
-      {/* Progresso do dia */}
-      <div className="flex items-center justify-between rounded-xl border border-slate-700/50 bg-slate-800/30 px-4 py-2.5 text-xs text-slate-400">
-        <span>
-          <b className="text-slate-200">{aulasConcluidas}</b> de <b className="text-slate-200">{totalAulas}</b> aulas com chamada completa
-          {filtroExperimental !== 'todas' && (
-            <span className="ml-1 text-slate-500">
-              ({filtroExperimental === 'regulares' ? 'regulares' : 'experimentais'})
-            </span>
-          )}
-        </span>
-        <span>
-          {filtradas.filter((a) => a.cancelada).length} cancelada(s)
-        </span>
-      </div>
-
       {/* Presenca dos professores — toggle por professor para o dia inteiro */}
       {podeOperar && aulasPorProfessor.length > 0 && (
         <div className="space-y-2">
@@ -210,34 +195,47 @@ export function ChamadaDia({
         </div>
       )}
 
-      {/* Filtro: separar experimental de regular — abaixo dos professores */}
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Mostrar:</span>
-        <button
-          type="button"
-          onClick={() => setFiltroExperimental(filtroExperimental === 'todas' ? 'regulares' : 'todas')}
-          className={cn(
-            'rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-colors',
-            filtroExperimental !== 'experimentais'
-              ? 'border-cyan-500 bg-cyan-500/10 text-cyan-300'
-              : 'border-slate-700 text-slate-400 hover:text-slate-200',
+      {/* Progresso + Filtro — juntos, acima dos cards de aula */}
+      <div className="flex items-center justify-between rounded-xl border border-slate-700/50 bg-slate-800/30 px-4 py-2.5 text-xs text-slate-400">
+        <span>
+          <b className="text-slate-200">{aulasConcluidas}</b> de <b className="text-slate-200">{totalAulas}</b> aulas com chamada completa
+          {filtroExperimental !== 'todas' && (
+            <span className="ml-1 text-slate-500">
+              ({filtroExperimental === 'regulares' ? 'regulares' : 'experimentais'})
+            </span>
           )}
-        >
-          Regulares
-        </button>
-        <button
-          type="button"
-          onClick={() => setFiltroExperimental(filtroExperimental === 'experimentais' ? 'todas' : 'experimentais')}
-          className={cn(
-            'rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-colors',
-            filtroExperimental === 'experimentais'
-              ? 'border-violet-500 bg-violet-500/10 text-violet-300'
-              : 'border-slate-700 text-slate-400 hover:text-slate-200',
-          )}
-        >
-          <User className="mr-1 inline h-3 w-3" />
-          Experimentais
-        </button>
+        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Mostrar:</span>
+          <button
+            type="button"
+            onClick={() => setFiltroExperimental(filtroExperimental === 'todas' ? 'regulares' : 'todas')}
+            className={cn(
+              'rounded-md border px-2 py-0.5 text-[10px] font-semibold transition-colors',
+              filtroExperimental !== 'experimentais'
+                ? 'border-cyan-500 bg-cyan-500/10 text-cyan-300'
+                : 'border-slate-700 text-slate-400 hover:text-slate-200',
+            )}
+          >
+            Regulares
+          </button>
+          <button
+            type="button"
+            onClick={() => setFiltroExperimental(filtroExperimental === 'experimentais' ? 'todas' : 'experimentais')}
+            className={cn(
+              'rounded-md border px-2 py-0.5 text-[10px] font-semibold transition-colors',
+              filtroExperimental === 'experimentais'
+                ? 'border-violet-500 bg-violet-500/10 text-violet-300'
+                : 'border-slate-700 text-slate-400 hover:text-slate-200',
+            )}
+          >
+            <User className="mr-0.5 inline h-3 w-3" />
+            Experimentais
+          </button>
+          <span className="ml-2 text-slate-500">
+            {filtradas.filter((a) => a.cancelada).length} cancelada(s)
+          </span>
+        </div>
       </div>
 
       {/* Blocos de aula em ordem de horario */}
