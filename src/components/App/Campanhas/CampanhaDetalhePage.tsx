@@ -1,22 +1,28 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Play, Pause, RotateCw, RefreshCw, Send, CheckCircle, Eye, MessageSquare, AlertTriangle, ImageIcon } from 'lucide-react'
+import {
+  ArrowLeft, Play, Pause, RotateCw, RefreshCw, Send, CheckCheck, Eye, MessageCircle,
+  AlertTriangle, ImageIcon, GraduationCap, Percent, Wallet,
+} from 'lucide-react'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import type { Campanha } from './hooks/useCampanhas'
 import { useConversaoCampanhas } from './hooks/useConversaoCampanhas'
-import { DeliveryCoverageRing } from './components/DeliveryCoverageRing'
 import { CampanhaConversasPanel } from './components/CampanhaConversasPanel'
 import { CampanhaContatosPanel } from './components/CampanhaContatosPanel'
 
-const STATUS_CFG: Record<string, { label: string; cls: string; bgCls: string }> = {
-  rascunho:   { label: 'Rascunho',   cls: 'text-gray-400 border-gray-500/30', bgCls: 'bg-gray-500/10' },
-  executando: { label: 'Executando', cls: 'text-blue-400 border-blue-500/30', bgCls: 'bg-blue-500/10' },
-  pausada:    { label: 'Pausada',    cls: 'text-yellow-400 border-yellow-500/30', bgCls: 'bg-yellow-500/10' },
-  concluida:  { label: 'Concluída',  cls: 'text-emerald-400 border-emerald-500/30', bgCls: 'bg-emerald-500/10' },
-  falha:      { label: 'Falha',      cls: 'text-red-400 border-red-500/30', bgCls: 'bg-red-500/10' },
+const STATUS_CFG: Record<string, { label: string; cls: string; bgCls: string; dot: string }> = {
+  rascunho:   { label: 'Rascunho',   cls: 'text-gray-400 border-gray-500/30', bgCls: 'bg-gray-500/10', dot: 'bg-gray-400' },
+  executando: { label: 'Executando', cls: 'text-blue-400 border-blue-500/30', bgCls: 'bg-blue-500/10', dot: 'bg-blue-400 animate-pulse' },
+  pausada:    { label: 'Pausada',    cls: 'text-yellow-400 border-yellow-500/30', bgCls: 'bg-yellow-500/10', dot: 'bg-yellow-400' },
+  concluida:  { label: 'Concluída',  cls: 'text-emerald-400 border-emerald-500/30', bgCls: 'bg-emerald-500/10', dot: 'bg-emerald-400' },
+  falha:      { label: 'Falha',      cls: 'text-red-400 border-red-500/30', bgCls: 'bg-red-500/10', dot: 'bg-red-400' },
 }
+
+const FUNIL_COLORS = ['#3b82f6', '#10b981', '#a855f7', '#f59e0b']
+const FUNIL_ICONS = [Send, CheckCheck, Eye, MessageCircle]
 
 export function CampanhaDetalhePage() {
   const { campanhaId } = useParams<{ campanhaId: string }>()
@@ -104,54 +110,71 @@ export function CampanhaDetalhePage() {
 
   const cfg = STATUS_CFG[campanha.status] ?? STATUS_CFG.rascunho
 
+  const funil = [
+    { etapa: 'Enviados', valor: campanha.enviados, pct: 100 },
+    { etapa: 'Entregues', valor: campanha.entregues, pct: campanha.enviados > 0 ? Math.round((campanha.entregues / campanha.enviados) * 100) : 0 },
+    { etapa: 'Lidos', valor: campanha.lidos, pct: campanha.entregues > 0 ? Math.round((campanha.lidos / campanha.entregues) * 100) : 0 },
+    { etapa: 'Respostas', valor: campanha.respondidos, pct: campanha.entregues > 0 ? Math.round((campanha.respondidos / campanha.entregues) * 100) : 0 },
+  ]
+  const maxFunil = Math.max(...funil.map(f => f.valor), 1)
+
+  const donutConversao = conversao && conversao.leadsGerados > 0
+    ? [
+        { name: 'Matriculados', value: conversao.matriculados, color: '#10b981' },
+        { name: 'Ainda não converteu', value: conversao.leadsGerados - conversao.matriculados, color: '#334155' },
+      ].filter(d => d.value > 0)
+    : []
+
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-5 max-w-6xl">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3 min-w-0">
-          <button onClick={() => navigate('/app/campanhas')} className="p-2 text-gray-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors flex-shrink-0 mt-0.5">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-bold text-white truncate">{campanha.nome}</h1>
-              <span className={cn('inline-flex items-center text-xs px-2 py-0.5 rounded-full border', cfg.cls, cfg.bgCls)}>
-                {cfg.label}
-              </span>
+      <div className="relative overflow-hidden rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800/70 via-slate-800/40 to-slate-800/70 p-5">
+        <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
+        <div className="relative flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-start gap-3 min-w-0">
+            <button onClick={() => navigate('/app/campanhas')} className="p-2 text-gray-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors flex-shrink-0 mt-0.5">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl font-bold text-white truncate">{campanha.nome}</h1>
+                <span className={cn('inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border', cfg.cls, cfg.bgCls)}>
+                  <span className={cn('w-1.5 h-1.5 rounded-full', cfg.dot)} />
+                  {cfg.label}
+                </span>
+              </div>
+              <p className="text-sm text-gray-500 mt-0.5">
+                {campanha.template_nome ?? 'Sem template'} · {campanha.numero_nome ?? 'Sem número'}
+              </p>
             </div>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {campanha.template_nome ?? 'Sem template'} · {campanha.numero_nome ?? 'Sem número'}
-            </p>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {campanha.status === 'rascunho' && (
+              <button onClick={() => handleAction('iniciar')} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors">
+                <Play className="w-4 h-4" /> Iniciar
+              </button>
+            )}
+            {campanha.status === 'executando' && (
+              <button onClick={() => handleAction('pausar')} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-yellow-400 hover:bg-yellow-500/20 rounded-lg transition-colors">
+                <Pause className="w-4 h-4" /> Pausar
+              </button>
+            )}
+            {campanha.status === 'pausada' && (
+              <button onClick={() => handleAction('retomar')} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors">
+                <RotateCw className="w-4 h-4" /> Retomar
+              </button>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          {campanha.status === 'rascunho' && (
-            <button onClick={() => handleAction('iniciar')} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors">
-              <Play className="w-4 h-4" /> Iniciar
-            </button>
-          )}
-          {campanha.status === 'executando' && (
-            <button onClick={() => handleAction('pausar')} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-yellow-400 hover:bg-yellow-500/20 rounded-lg transition-colors">
-              <Pause className="w-4 h-4" /> Pausar
-            </button>
-          )}
-          {campanha.status === 'pausada' && (
-            <button onClick={() => handleAction('retomar')} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors">
-              <RotateCw className="w-4 h-4" /> Retomar
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Métricas de entrega */}
-      <div className="flex gap-6 items-start bg-slate-800/50 border border-slate-700/50 rounded-xl p-5">
-        <DeliveryCoverageRing total={campanha.total_contatos} entregues={campanha.entregues} lidos={campanha.lidos} size={100} />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
-          <MiniKPI icon={Send} label="Enviados" value={campanha.enviados} total={campanha.total_contatos} color="blue" />
-          <MiniKPI icon={CheckCircle} label="Entregues" value={campanha.entregues} sub={campanha.enviados > 0 ? `${Math.round((campanha.entregues / campanha.enviados) * 100)}%` : undefined} color="emerald" />
-          <MiniKPI icon={Eye} label="Lidos" value={campanha.lidos} sub={campanha.entregues > 0 ? `${Math.round((campanha.lidos / campanha.entregues) * 100)}%` : undefined} color="purple" />
-          <MiniKPI icon={MessageSquare} label="Respostas" value={campanha.respondidos} sub={campanha.entregues > 0 ? `${Math.round((campanha.respondidos / campanha.entregues) * 100)}%` : undefined} color="amber" />
+        {/* Timeline horizontal, embutida no header */}
+        <div className="relative flex items-center gap-2 mt-4 text-xs text-gray-500 flex-wrap">
+          <TimelinePonto label="Criada" data={campanha.created_at} ativo />
+          <TimelineTraco />
+          <TimelinePonto label="Iniciada" data={campanha.iniciada_em} ativo={!!campanha.iniciada_em} />
+          <TimelineTraco />
+          <TimelinePonto label="Concluída" data={campanha.concluida_em} ativo={!!campanha.concluida_em} />
         </div>
       </div>
 
@@ -168,101 +191,131 @@ export function CampanhaDetalhePage() {
         </div>
       )}
 
-      {/* Template completo */}
-      {erroTemplate && (
-        <div className="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-          <AlertTriangle className="w-4 h-4 text-red-400" />
-          <span className="text-sm text-red-300">{erroTemplate}</span>
-        </div>
-      )}
-      {template && (
-        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
-          <div className="flex items-center gap-1.5 px-4 pt-3 pb-1.5">
-            <ImageIcon className="w-4 h-4 text-emerald-400" />
-            <span className="text-xs text-gray-500 uppercase tracking-wide font-medium">Template</span>
-          </div>
-          {template.header_type === 'IMAGE' && (() => {
-            const imgUrl = campanha.media_url_custom || template.media_url || template.componentes?.[0]?.example?.header_handle?.[0]
-            return imgUrl ? (
-              <div className="px-4 pb-2">
-                <img src={imgUrl} alt="Header" className="w-full max-h-72 object-cover rounded-lg" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+      {/* Funil de entrega — cards visuais */}
+      <div>
+        <p className="text-xs text-gray-500 uppercase tracking-wide mb-2.5">Funil de entrega</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {funil.map((item, i) => {
+            const Icon = FUNIL_ICONS[i]
+            const color = FUNIL_COLORS[i]
+            const pctWidth = (item.valor / maxFunil) * 100
+            return (
+              <div key={item.etapa} className="relative overflow-hidden rounded-xl border border-slate-700/30 bg-slate-800/30 p-4">
+                <div className="absolute inset-y-0 left-0 opacity-[0.08]" style={{ width: `${pctWidth}%`, backgroundColor: color }} />
+                <div className="relative flex items-start justify-between">
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">{item.etapa}</p>
+                    <p className="text-2xl font-bold text-white tracking-tight">{item.valor.toLocaleString('pt-BR')}</p>
+                    {i > 0 && <p className="text-xs mt-1" style={{ color }}>{item.pct}% do anterior</p>}
+                  </div>
+                  <div className="p-2 rounded-lg flex-shrink-0" style={{ backgroundColor: `${color}15` }}>
+                    <Icon className="w-4 h-4" style={{ color }} />
+                  </div>
+                </div>
               </div>
-            ) : null
-          })()}
-          {template.body_text && (
-            <div className="px-4 pb-3">
-              <p className="text-sm text-gray-300 whitespace-pre-wrap">{template.body_text}</p>
-            </div>
-          )}
-          {template.componentes?.find((c: any) => c.type === 'BUTTONS')?.buttons && (
-            <div className="px-4 pb-3 flex flex-wrap gap-2">
-              {template.componentes.find((c: any) => c.type === 'BUTTONS').buttons.map((btn: any, i: number) => (
-                <span key={i} className="text-xs px-2.5 py-1 rounded-full bg-slate-700/50 text-blue-400 border border-slate-600/50">
-                  {btn.text}
-                </span>
-              ))}
-            </div>
-          )}
+            )
+          })}
         </div>
-      )}
+      </div>
 
-      {/* Conversão */}
-      <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 space-y-4">
-        <p className="text-xs text-gray-400">Conversão</p>
-        {loadingConversao ? (
-          <div className="flex items-center justify-center py-6"><RefreshCw className="w-4 h-4 text-slate-500 animate-spin" /></div>
-        ) : !conversao || conversao.leadsGerados === 0 ? (
-          <p className="text-sm text-gray-500">Nenhum lead atribuído a esta campanha ainda.</p>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <MiniKPI icon={MessageSquare} label="Leads gerados" value={conversao.leadsGerados} color="blue" />
-              <MiniKPI icon={CheckCircle} label="Matriculados" value={conversao.matriculados} color="emerald" />
-              <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
-                <span className="text-xs text-gray-500 block mb-1">Taxa de conversão</span>
-                <span className="text-lg font-bold text-white">{(conversao.taxaConversao * 100).toFixed(1)}%</span>
+      {/* Conversão + Template lado a lado */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
+        {/* Conversão */}
+        <div className="lg:col-span-2 bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 space-y-4">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Conversão</p>
+          {loadingConversao ? (
+            <div className="flex items-center justify-center py-10"><RefreshCw className="w-4 h-4 text-slate-500 animate-spin" /></div>
+          ) : !conversao || conversao.leadsGerados === 0 ? (
+            <p className="text-sm text-gray-500 py-6 text-center">Nenhum lead atribuído a esta campanha ainda.</p>
+          ) : (
+            <>
+              <div className="flex items-center justify-center">
+                <DonutConversao data={donutConversao} total={conversao.leadsGerados} />
               </div>
-              <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
-                <span className="text-xs text-gray-500 block mb-1">Custo por matrícula</span>
-                <span className="text-lg font-bold text-white">
-                  {conversao.custoPorMatricula != null && conversao.custoPorMatricula > 0
-                    ? `${conversao.custoMoeda === 'USD' ? 'US$' : 'R$'} ${conversao.custoPorMatricula.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                    : '—'}
-                </span>
+              <div className="grid grid-cols-3 gap-2">
+                <StatChip icon={GraduationCap} label="Matriculados" value={conversao.matriculados.toString()} color="emerald" />
+                <StatChip icon={Percent} label="Taxa" value={`${(conversao.taxaConversao * 100).toFixed(1)}%`} color="violet" />
+                <StatChip
+                  icon={Wallet}
+                  label="Custo/matríc."
+                  value={
+                    conversao.custoPorMatricula != null && conversao.custoPorMatricula > 0
+                      ? `${conversao.custoMoeda === 'USD' ? 'US$' : 'R$'} ${conversao.custoPorMatricula.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
+                      : '—'
+                  }
+                  color="amber"
+                />
               </div>
+              {conversao.matriculasDetalhe.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <p className="text-xs text-gray-500">Quem matriculou</p>
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {conversao.matriculasDetalhe.map(m => (
+                      <div key={m.leadId} className="flex items-center justify-between px-3 py-2 bg-slate-900/50 rounded-lg text-sm">
+                        <span className="text-gray-200 truncate">{m.nome}</span>
+                        <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
+                          {formatarDataMatricula(m.dataMatricula)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Template — mockup de bolha de WhatsApp */}
+        <div className="lg:col-span-3">
+          {erroTemplate && (
+            <div className="flex items-center gap-2 px-4 py-3 mb-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+              <AlertTriangle className="w-4 h-4 text-red-400" />
+              <span className="text-sm text-red-300">{erroTemplate}</span>
             </div>
-            {conversao.matriculasDetalhe.length > 0 && (
-              <div className="space-y-1.5">
-                <p className="text-xs text-gray-500">Quem matriculou</p>
-                {conversao.matriculasDetalhe.map(m => (
-                  <div key={m.leadId} className="flex items-center justify-between px-3 py-2 bg-slate-900/50 rounded-lg text-sm">
-                    <span className="text-gray-200">{m.nome}</span>
-                    <span className="text-xs text-gray-500">
-                      {formatarDataMatricula(m.dataMatricula)}
+          )}
+          {template && (
+            <div className="h-full rounded-xl border border-slate-700/50 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.06),_transparent_55%)] bg-slate-900/40 p-4 flex flex-col">
+              <div className="flex items-center gap-1.5 mb-3">
+                <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-xs text-gray-500 uppercase tracking-wide font-medium">Como chega no WhatsApp</span>
+              </div>
+              <div className="flex-1 flex items-start">
+                <div className="max-w-[380px] w-full rounded-2xl rounded-tl-sm bg-[#202c33] border border-black/20 shadow-lg shadow-black/30 overflow-hidden">
+                  {template.header_type === 'IMAGE' && (() => {
+                    const imgUrl = campanha.media_url_custom || template.media_url || template.componentes?.[0]?.example?.header_handle?.[0]
+                    return imgUrl ? (
+                      <img src={imgUrl} alt="Header" className="w-full max-h-48 object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+                    ) : null
+                  })()}
+                  {template.body_text && (
+                    <p className="px-3.5 pt-2.5 pb-1 text-[13px] leading-snug text-[#e9edef] whitespace-pre-wrap">{template.body_text}</p>
+                  )}
+                  {template.componentes?.find((c: any) => c.type === 'BUTTONS')?.buttons && (
+                    <div className="border-t border-white/10">
+                      {template.componentes.find((c: any) => c.type === 'BUTTONS').buttons.map((btn: any, i: number) => (
+                        <div key={i} className="px-3.5 py-2 text-center text-[13px] text-[#00a5f4] border-t border-white/10 first:border-t-0">
+                          {btn.text}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="px-3.5 pb-1.5 text-right">
+                    <span className="text-[10px] text-[#8696a0]">
+                      {new Date(campanha.iniciada_em ?? campanha.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                ))}
+                </div>
               </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Timeline */}
-      <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-        <p className="text-xs text-gray-400 mb-3">Timeline</p>
-        <div className="space-y-2">
-          <TimelineItem label="Criada" data={campanha.created_at} />
-          {campanha.iniciada_em && <TimelineItem label="Iniciada" data={campanha.iniciada_em} />}
-          {campanha.concluida_em && <TimelineItem label="Concluída" data={campanha.concluida_em} />}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Conversas */}
-      <CampanhaConversasPanel campanhaId={campanha.id} numeroMetaId={campanha.numero_meta_id} />
-
-      {/* Contatos */}
-      <CampanhaContatosPanel campanha={campanha} onReenviarFalhas={handleReenviarFalhas} />
+      {/* Conversas + Contatos lado a lado */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <CampanhaConversasPanel campanhaId={campanha.id} numeroMetaId={campanha.numero_meta_id} />
+        <CampanhaContatosPanel campanha={campanha} onReenviarFalhas={handleReenviarFalhas} />
+      </div>
     </div>
   )
 }
@@ -285,36 +338,60 @@ function formatarDataMatricula(value: string | null): string {
   return data.toLocaleDateString('pt-BR')
 }
 
-function MiniKPI({ icon: Icon, label, value, total, sub, color }: {
-  icon: React.ElementType; label: string; value: number; total?: number; sub?: string
-  color: 'blue' | 'emerald' | 'purple' | 'amber'
-}) {
-  const colors = { blue: 'text-blue-400', emerald: 'text-emerald-400', purple: 'text-purple-400', amber: 'text-amber-400' }
+function TimelinePonto({ label, data, ativo }: { label: string; data: string | null; ativo: boolean }) {
   return (
-    <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
-      <div className="flex items-center gap-1.5 mb-1">
-        <Icon className={cn('w-3.5 h-3.5', colors[color])} />
-        <span className="text-xs text-gray-500">{label}</span>
-      </div>
-      <div className="text-lg font-bold text-white leading-tight">
-        {value.toLocaleString('pt-BR')}
-        {total !== undefined && <span className="text-xs text-gray-600 font-normal ml-1">/ {total}</span>}
-      </div>
-      {sub && <span className={cn('text-xs', colors[color])}>{sub}</span>}
+    <div className={cn('flex items-center gap-1.5', !ativo && 'opacity-40')}>
+      <span className={cn('w-1.5 h-1.5 rounded-full', ativo ? 'bg-amber-400' : 'bg-slate-600')} />
+      <span className={ativo ? 'text-gray-300' : 'text-gray-600'}>{label}</span>
+      {data && <span className="text-gray-600">· {new Date(data).toLocaleDateString('pt-BR')}</span>}
     </div>
   )
 }
 
-function TimelineItem({ label, data }: { label: string; data: string }) {
-  const d = new Date(data)
+function TimelineTraco() {
+  return <div className="w-6 h-px bg-slate-700 flex-shrink-0" />
+}
+
+function StatChip({ icon: Icon, label, value, color }: {
+  icon: React.ElementType; label: string; value: string; color: 'emerald' | 'violet' | 'amber'
+}) {
+  const colors = { emerald: 'text-emerald-400', violet: 'text-violet-400', amber: 'text-amber-400' }
   return (
-    <div className="flex items-center gap-3">
-      <div className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" />
-      <div className="flex-1 flex items-center justify-between">
-        <span className="text-sm text-gray-400">{label}</span>
-        <span className="text-xs text-gray-500">
-          {d.toLocaleDateString('pt-BR')} {d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-        </span>
+    <div className="bg-slate-900/50 rounded-lg p-2.5 border border-slate-700/50 text-center">
+      <Icon className={cn('w-3.5 h-3.5 mx-auto mb-1', colors[color])} />
+      <p className="text-sm font-bold text-white leading-tight">{value}</p>
+      <p className="text-[10px] text-gray-500 mt-0.5">{label}</p>
+    </div>
+  )
+}
+
+const DONUT_TOOLTIP_STYLE = { background: '#0f172a', border: '1px solid rgba(148, 163, 184, 0.15)', borderRadius: 12, color: '#f1f5f9', fontSize: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }
+
+function DonutConversao({ data, total }: { data: { name: string; value: number; color?: string }[]; total: number }) {
+  return (
+    <div className="flex items-center gap-4 w-full">
+      <div className="relative w-28 h-28 flex-shrink-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={data} cx="50%" cy="50%" innerRadius={34} outerRadius={54} paddingAngle={3} cornerRadius={5} dataKey="value" strokeWidth={0}>
+              {data.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+            </Pie>
+            <Tooltip contentStyle={DONUT_TOOLTIP_STYLE} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <span className="text-lg font-bold text-white">{total}</span>
+          <span className="text-[9px] text-slate-500 uppercase tracking-wide">Leads</span>
+        </div>
+      </div>
+      <div className="flex-1 min-w-0 space-y-1.5">
+        {data.map((item, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
+            <span className="text-xs text-gray-300 truncate flex-1">{item.name}</span>
+            <span className="text-xs font-semibold text-white">{item.value}</span>
+          </div>
+        ))}
       </div>
     </div>
   )
