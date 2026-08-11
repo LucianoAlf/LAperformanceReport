@@ -4,6 +4,8 @@ import { addDays, addWeeks, format, isValid, parseISO, startOfWeek, endOfWeek } 
 import { ptBR } from 'date-fns/locale';
 import {
   AlertTriangle,
+  Calendar,
+  CalendarX,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -11,10 +13,15 @@ import {
   CalendarClock,
   Filter,
   Search,
+  UserX,
+  Users,
   X,
+  XCircle,
+  Zap,
 } from 'lucide-react';
+import { KPICard } from '@/components/ui/KPICard';
 import { useAgendaDia, type AulaAgenda } from '@/hooks/useAgendaDia';
-import { alunoSemDestino } from './Chamada/chamadaUtils';
+import { alunoSemDestino, estadoDoAluno } from './Chamada/chamadaUtils';
 import {
   aulaJaOcorreu,
   contarEmAulaAgora,
@@ -234,6 +241,18 @@ export default function AgendaPage() {
   }, [aulas]);
   const riscoGeralDesatualizado = riscoDesatualizado(dataCalculoRisco, new Date());
 
+  // Faltas do dia: alunos com status falta em aulas nao canceladas
+  const faltasDoDia = useMemo(() => {
+    let count = 0;
+    for (const aula of aulas) {
+      if (aula.cancelada) continue;
+      for (const aluno of aula.alunos) {
+        if (aluno.aluno_id != null && estadoDoAluno(aluno) === 'falta') count++;
+      }
+    }
+    return count;
+  }, [aulas]);
+
   // Pendencias da chamada: alunos em aulas JA OCORRIDAS sem destino humano
   // (presente/falta/justificada/cancelamento). E o que o digest diario cobra.
   // Mostrar aqui faz a equipe saltar para a visao Chamada antes do digest.
@@ -449,53 +468,70 @@ export default function AgendaPage() {
         </button>
       )}
 
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-slate-700 bg-slate-700 sm:grid-cols-3 lg:grid-cols-6">
-        <Kpi
-          rotulo="Aulas no dia"
-          valor={String(aulas.length)}
-          nota={filtrando ? `de ${todasAsAulas.length}` : `${jaOcorreram} já ocorreram`}
-        >
-          <Sparkline dados={porHora} horaCorrente={data === hoje ? Math.floor(minutos / 60) : null} />
-        </Kpi>
-        <Kpi
-          rotulo="Em aula agora"
-          valor={String(agora.aulas)}
-          destaque="text-emerald-400"
-          rodape={agora.aulas > 0 ? `${agora.salas} ${agora.salas === 1 ? 'sala ocupada' : 'salas ocupadas'}` : undefined}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+        <KPICard
+          label="Aulas no dia"
+          icon={Calendar}
+          value={aulas.length}
+          variant="cyan"
+          subvalue={filtrando ? `de ${todasAsAulas.length}` : `${jaOcorreram} já ocorreram`}
+          size="sm"
         />
-        <Kpi
-          rotulo="Canceladas"
-          valor={String(canceladas)}
-          destaque="text-rose-400"
-          // `justificada` e o unico qualificador que a API entrega sobre um
-          // cancelamento. "Com reposicao pendente" seria mais util, mas esse
-          // dado nao existe na nossa base — nao da para exibir o que nao temos.
-          rodape={justificadas > 0 ? `${justificadas} justificadas` : undefined}
+        <KPICard
+          label="Em aula agora"
+          icon={Zap}
+          value={agora.aulas}
+          variant="emerald"
+          subvalue={agora.aulas > 0 ? `${agora.salas} ${agora.salas === 1 ? 'sala ocupada' : 'salas ocupadas'}` : undefined}
+          size="sm"
         />
-        <Kpi
-          rotulo="Experimentais"
-          valor={String(experimentais)}
-          rodape={
+        <KPICard
+          label="Faltas"
+          icon={UserX}
+          value={faltasDoDia}
+          variant="rose"
+          subvalue={faltasDoDia > 0 ? 'alunos faltaram' : 'nenhuma falta'}
+          size="sm"
+        />
+        <KPICard
+          label="Canceladas"
+          icon={CalendarX}
+          value={canceladas}
+          variant="rose"
+          subvalue={justificadas > 0 ? `${justificadas} justificadas` : undefined}
+          size="sm"
+        />
+        <KPICard
+          label="Experimentais"
+          icon={Users}
+          value={experimentais}
+          variant="violet"
+          subvalue={
             experimentaisPendentes > 0
               ? `${experimentaisPendentes} ainda ${experimentaisPendentes === 1 ? 'por acontecer' : 'por acontecer'}`
               : undefined
           }
+          size="sm"
         />
-        <Kpi
-          rotulo="Alunos em risco"
-          valor={String(emRisco)}
-          destaque="text-amber-400"
-          rodape={
+        <KPICard
+          label="Alunos em risco"
+          icon={AlertTriangle}
+          value={emRisco}
+          variant="amber"
+          subvalue={
             riscoGeralDesatualizado
               ? `modelo pausado desde ${formatarDataCalculo(dataCalculoRisco)}`
               : undefined
           }
+          size="sm"
         />
-        <Kpi
-          rotulo="Sem destino"
-          valor={String(pendenciasChamada)}
-          destaque={pendenciasChamada > 0 ? 'text-amber-400' : undefined}
-          rodape={pendenciasChamada > 0 ? 'chamada pendente' : 'tudo resolvido'}
+        <KPICard
+          label="Sem destino"
+          icon={XCircle}
+          value={pendenciasChamada}
+          variant={pendenciasChamada > 0 ? 'amber' : 'emerald'}
+          subvalue={pendenciasChamada > 0 ? 'chamada pendente' : 'tudo resolvido'}
+          size="sm"
         />
       </div>
 
@@ -550,77 +586,6 @@ export default function AgendaPage() {
   );
 }
 
-/**
- * Cartao de KPI. `nota` acompanha o numero na mesma linha (qualifica o proprio
- * numero: "23 · 9 ja ocorreram"); `rodape` e uma linha abaixo, para o que
- * qualifica o dado sem ser parte dele ("4 salas ocupadas", "modelo pausado").
- * Antes tudo virava nota inline e saia "5 4 salas", que se le como um numero so.
- */
-function Kpi({ rotulo, valor, nota, destaque, rodape, children }: {
-  rotulo: string;
-  valor: string;
-  nota?: string;
-  destaque?: string;
-  rodape?: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-0.5 bg-slate-900 px-4 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">{rotulo}</p>
-      <p className={cn('text-2xl font-bold leading-tight tabular-nums', destaque)}>
-        {valor}
-        {nota && (
-          <span className="ml-1 text-[11px] font-normal text-slate-500">· {nota}</span>
-        )}
-      </p>
-      {rodape && <p className="text-[10.5px] leading-snug text-slate-500">{rodape}</p>}
-      {children}
-    </div>
-  );
-}
-
-/**
- * Distribuicao das aulas por hora. Nao substitui a timeline — responde de
- * relance se o movimento esta concentrado a tarde ou espalhado pelo dia, coisa
- * que "166 aulas" nao diz. A barra da hora corrente sai em esmeralda, mesma
- * cor de "acontecendo agora" no resto da tela.
- */
-function Sparkline({
-  dados,
-  horaCorrente,
-}: {
-  dados: Array<{ hora: number; qtd: number }>;
-  horaCorrente: number | null;
-}) {
-  if (dados.length === 0) return null;
-  const pico = Math.max(...dados.map((d) => d.qtd));
-  if (pico === 0) return null;
-
-  return (
-    <span aria-hidden="true" className="mt-1 flex h-4 items-end gap-[2px]">
-      {dados.map((d) => (
-        <span
-          key={d.hora}
-          title={`${String(d.hora).padStart(2, '0')}:00 — ${d.qtd} ${d.qtd === 1 ? 'aula' : 'aulas'}`}
-          className={cn(
-            'w-[5px] shrink-0 rounded-[1px]',
-            d.hora === horaCorrente ? 'bg-emerald-400' : 'bg-cyan-500/50',
-          )}
-          // Piso de 2px para a hora vazia continuar desenhando o eixo — sem
-          // isso o sparkline vira barras soltas sem nocao de continuidade.
-          style={{ height: d.qtd === 0 ? 2 : Math.max(3, (d.qtd / pico) * 16) }}
-        />
-      ))}
-    </span>
-  );
-}
-
-/**
- * Filtros avancados num popover. Eles saem da barra porque sao usados de vez
- * em quando, mas custavam uma faixa inteira acima da grade o tempo todo.
- * O badge com a contagem existe para que nada fique filtrando escondido: sem
- * ele, um filtro esquecido de ontem faria o dia parecer vazio sem explicacao.
- */
 /**
  * Token de "sem filtro" nos selects. Existe porque o Radix trata `''` como
  * "nenhum valor" e lanca excecao se um item declarar `value=""` — nao da para
