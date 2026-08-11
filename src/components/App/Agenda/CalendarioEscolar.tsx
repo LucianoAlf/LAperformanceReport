@@ -50,6 +50,7 @@ interface WatchlistItem {
 export function CalendarioEscolar() {
   const context = useOutletContext<OutletContext | undefined>();
   const unidadeId = context?.unidadeSelecionada;
+  const consolidado = !unidadeId;
 
   const [anoAtual, setAnoAtual] = useState(new Date().getFullYear());
   const [itens, setItens] = useState<CalendarioItem[]>([]);
@@ -66,34 +67,42 @@ export function CalendarioEscolar() {
   const [novoStatus, setNovoStatus] = useState<'simulado' | 'confirmado'>('confirmado');
 
   const carregar = useCallback(async () => {
-    if (!unidadeId) return;
     setCarregando(true);
     try {
+      // Em modo consolidado, busca de todas as unidades
+      const queryItens = supabase
+        .from('calendario_escolar')
+        .select('*')
+        .eq('ano', anoAtual)
+        .order('data_inicio');
+
+      const queryFeriados = supabase
+        .from('feriados')
+        .select('*')
+        .eq('ativo', true)
+        .gte('data', `${anoAtual}-01-01`)
+        .lte('data', `${anoAtual}-12-31`)
+        .order('data');
+
+      // Se nao e consolidado, filtra por unidade
       const [itensRes, feriadosRes] = await Promise.all([
-        supabase
-          .from('calendario_escolar')
-          .select('*')
-          .eq('unidade_id', unidadeId)
-          .eq('ano', anoAtual)
-          .order('data_inicio'),
-        supabase
-          .from('feriados')
-          .select('*')
-          .eq('ativo', true)
-          .gte('data', `${anoAtual}-01-01`)
-          .lte('data', `${anoAtual}-12-31`)
-          .order('data'),
+        consolidado ? queryItens : queryItens.eq('unidade_id', unidadeId),
+        queryFeriados,
       ]);
       setItens(itensRes.data ?? []);
       setFeriados(feriadosRes.data ?? []);
 
       // Watchlist: contratos que estouram ou estão sem margem
-      const { data: projecoes } = await supabase
+      // Em modo consolidado, busca de todas as unidades
+      const queryProjecoes = supabase
         .from('projecao_aulas')
         .select('aluno_id, matricula_disciplina_id, data_projetada, sequencia')
-        .eq('unidade_id', unidadeId)
         .eq('status', 'projetada')
         .order('data_projetada', { ascending: false });
+
+      const { data: projecoes } = consolidado
+        ? await queryProjecoes
+        : await queryProjecoes.eq('unidade_id', unidadeId);
 
       if (projecoes) {
         // Agrupa por contrato e pega a última aula projetada
@@ -260,11 +269,11 @@ export function CalendarioEscolar() {
     }
   }
 
-  if (!unidadeId) {
+  if (carregando) {
     return (
       <div className="rounded-2xl border border-slate-700/50 bg-slate-800/20 p-12 text-center">
         <Calendar className="mx-auto mb-3 h-10 w-10 text-slate-600" />
-        <p className="text-sm text-slate-400">Selecione uma unidade para ver o calendário.</p>
+        <p className="text-sm text-slate-400">Carregando calendário…</p>
       </div>
     );
   }
