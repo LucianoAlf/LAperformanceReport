@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ChevronDown, ChevronRight, RefreshCw, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
+import { Paginacao } from '@/components/App/Automacoes/Paginacao'
+
+const POR_PAGINA_PADRAO = 10
 
 interface ContatoConversa {
   conversaId: string
@@ -31,6 +34,8 @@ export function CampanhaConversasPanel({ campanhaId, numeroMetaId }: { campanhaI
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandido, setExpandido] = useState<string | null>(null)
+  const [pagina, setPagina] = useState(1)
+  const [porPagina, setPorPagina] = useState(POR_PAGINA_PADRAO)
 
   useEffect(() => {
     let cancelado = false
@@ -123,6 +128,14 @@ export function CampanhaConversasPanel({ campanhaId, numeroMetaId }: { campanhaI
     return () => { cancelado = true }
   }, [campanhaId, numeroMetaId])
 
+  useEffect(() => { setPagina(1) }, [campanhaId, numeroMetaId, porPagina])
+
+  const totalPaginas = Math.max(1, Math.ceil(contatos.length / porPagina))
+  const contatosPagina = useMemo(
+    () => contatos.slice((pagina - 1) * porPagina, pagina * porPagina),
+    [contatos, pagina, porPagina],
+  )
+
   if (loading) {
     return (
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4">
@@ -147,26 +160,36 @@ export function CampanhaConversasPanel({ campanhaId, numeroMetaId }: { campanhaI
       {contatos.length === 0 ? (
         <p className="text-sm text-gray-500 py-4 text-center">Ninguém respondeu a esta campanha ainda.</p>
       ) : (
-        contatos.map(c => (
-          <div key={c.conversaId} className="bg-slate-900/50 rounded-lg overflow-hidden">
-            <button
-              onClick={() => setExpandido(expandido === c.conversaId ? null : c.conversaId)}
-              className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-slate-900 transition-colors"
-            >
-              <div className="min-w-0">
-                <p className="text-sm text-gray-200 truncate">{c.nomeContato ?? c.telefone}</p>
-                <p className="text-xs text-gray-500 truncate">{c.ultimaMensagem ?? '—'}</p>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                <span className="text-xs text-gray-600">
-                  {c.ultimaMensagemEm ? new Date(c.ultimaMensagemEm).toLocaleDateString('pt-BR') : ''}
-                </span>
-                {expandido === c.conversaId ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
-              </div>
-            </button>
-            {expandido === c.conversaId && <ThreadSomenteLeitura conversaId={c.conversaId} />}
-          </div>
-        ))
+        <>
+          {contatosPagina.map(c => (
+            <div key={c.conversaId} className="bg-slate-900/50 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setExpandido(expandido === c.conversaId ? null : c.conversaId)}
+                className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-slate-900 transition-colors"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm text-gray-200 truncate">{c.nomeContato ?? c.telefone}</p>
+                  <p className="text-xs text-gray-500 truncate">{c.ultimaMensagem ?? '—'}</p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                  <span className="text-xs text-gray-600">
+                    {c.ultimaMensagemEm ? new Date(c.ultimaMensagemEm).toLocaleDateString('pt-BR') : ''}
+                  </span>
+                  {expandido === c.conversaId ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
+                </div>
+              </button>
+              {expandido === c.conversaId && <ThreadSomenteLeitura conversaId={c.conversaId} />}
+            </div>
+          ))}
+          <Paginacao
+            pagina={pagina}
+            totalPaginas={totalPaginas}
+            totalItens={contatos.length}
+            porPagina={porPagina}
+            onMudarPagina={setPagina}
+            onMudarPorPagina={setPorPagina}
+          />
+        </>
       )}
     </div>
   )
