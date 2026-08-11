@@ -268,18 +268,6 @@ function CardAulaSemana({
   const podeOperar = !aula.cancelada && vinculados.length > 0;
   const total = vinculados.length;
 
-  // Porcentagem da chamada para a barra de progresso
-  const pctCompleta = total > 0 ? ((contagens.presente + contagens.falta + contagens.falta_justificada) / total) * 100 : 0;
-
-  // Cor da barra de progresso por estado
-  const corBarra = aula.cancelada
-    ? 'bg-rose-500'
-    : completa && total > 0
-      ? 'bg-emerald-500'
-      : ocorrida && contagens.indeterminado > 0
-        ? 'bg-amber-500'
-        : 'bg-slate-600';
-
   const marcar = (aluno: AlunoAgenda, status: 'presente' | 'falta' | 'indeterminado') => {
     if (!aluno.aula_emusys_id || !aluno.aluno_id) return;
     onRegistrar([{ aula_emusys_id: aluno.aula_emusys_id, aluno_id: aluno.aluno_id, status }]);
@@ -364,16 +352,6 @@ function CardAulaSemana({
           </div>
         )}
       </div>
-
-      {/* Barra de progresso colorida */}
-      {!aula.cancelada && total > 0 && (
-        <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-700/60">
-          <div
-            className={cn('h-full rounded-full transition-all', corBarra)}
-            style={{ width: `${pctCompleta}%` }}
-          />
-        </div>
-      )}
 
       {/* Info da aula */}
       <div className="mt-1 flex items-baseline justify-between gap-1">
