@@ -177,7 +177,9 @@ export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirD
             </span>
           )}
         </span>
-        <span className="truncate text-[10px] opacity-60">{curso}</span>
+        <span className="truncate text-[10px] opacity-60">
+          {p.aula.professor_nome?.split(' ')[0] ?? ''} · {curso}
+        </span>
         <span className="shrink-0 text-[10px] opacity-50">{formatarTempo(p.minutosDesdeFim)}</span>
         <ChevronRight className="h-3 w-3 shrink-0 opacity-40" />
       </button>
