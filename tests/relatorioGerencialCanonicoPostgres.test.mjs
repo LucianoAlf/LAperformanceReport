@@ -382,6 +382,8 @@ test('produtor gerencial compila e preserva os numeros dos documentos fechados',
         'meta_churn', r#>>'{metas,fideliza,meta_churn_maximo}',
         'comparativos', r#>>'{comparativos,disponibilidade}',
         'comparative_reason', r#>>'{comparativos,motivo}',
+        'comparative_policy', r#>>'{comparativos,politica,versao}',
+        'comparative_fingerprint_length', length(r#>>'{comparativos,fingerprint_atual}')::text,
         'admin_hash', r#>>'{auditoria,administrativo,payload_hash}',
         'comercial_retificado', r#>>'{auditoria,comercial,retificado}'
       )
@@ -417,6 +419,8 @@ test('produtor gerencial compila e preserva os numeros dos documentos fechados',
       meta_churn: '4',
       comparativos: 'indisponivel',
       comparative_reason: 'fechamento_anterior_incompativel',
+      comparative_policy: 'fechamento-equivalente-v1',
+      comparative_fingerprint_length: '32',
       admin_hash: 'hash-admin',
       comercial_retificado: 'true',
     });

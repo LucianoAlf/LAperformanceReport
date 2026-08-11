@@ -372,7 +372,34 @@ begin
     'comparativos', jsonb_build_object(
       'disponibilidade', 'indisponivel',
       'status', 'indisponivel',
-      'motivo', 'fechamento_anterior_incompativel'
+      'motivo', 'fechamento_anterior_incompativel',
+      'politica', jsonb_build_object(
+        'versao', 'fechamento-equivalente-v1',
+        'dominio', 'gerencial',
+        'grao', 'competencia-mensal',
+        'status_exigido', 'fechado'
+      ),
+      'atual', jsonb_build_object(
+        'status_administrativo', v_admin_doc->>'status',
+        'status_comercial', v_comercial_doc->>'status',
+        'snapshot_administrativo', v_admin_doc->'snapshot_id',
+        'snapshot_comercial', v_comercial_doc->'snapshot_id',
+        'payload_hash_administrativo', v_admin_doc->'payload_hash',
+        'payload_hash_comercial', v_comercial_doc->'payload_hash'
+      ),
+      'anterior', jsonb_build_object(
+        'status', 'nao_carregado',
+        'motivo', 'fechamento_anterior_incompativel'
+      ),
+      'fingerprint_atual', md5(jsonb_build_object(
+        'unidade_id', p_unidade_id,
+        'dominio', 'gerencial',
+        'grao', 'competencia-mensal',
+        'regra', 'fechamento-equivalente-v1',
+        'administrativo_payload_hash', v_admin_doc->'payload_hash',
+        'comercial_payload_hash', v_comercial_doc->'payload_hash'
+      )::text),
+      'fingerprint_anterior', null
     ),
     'auditoria', jsonb_build_object(
       'administrativo', jsonb_strip_nulls(jsonb_build_object(

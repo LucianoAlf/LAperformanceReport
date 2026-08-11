@@ -167,6 +167,9 @@ test('migration de integridade publica campos separados e ACL nominal', () => {
   assert.match(sql, /leads_por_canal/);
   assert.match(sql, /matriculas_por_curso/);
   assert.match(sql, /comparativos[\s\S]*disponibilidade/);
+  assert.match(sql, /status_exigido[\s\S]*fechado/);
+  assert.match(sql, /fingerprint_atual/);
+  assert.match(sql, /fingerprint_anterior/);
   assert.match(sql, /destaques_mensais_parciais/);
   assert.match(sql, /revoke all on function public\.get_relatorio_gerencial_canonico_v1/);
   assert.match(sql, /grant execute on function public\.get_relatorio_gerencial_canonico_v1[\s\S]*authenticated, service_role/);
