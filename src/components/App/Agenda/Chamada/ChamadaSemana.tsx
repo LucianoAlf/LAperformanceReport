@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback as useCb } from 'react';
 import { addDays, format, parseISO, startOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CalendarX, Check, Clock, FileText, X, XCircle } from 'lucide-react';
@@ -25,6 +25,10 @@ interface Props {
  * Cada dia carrega seu proprio `useAgendaDia`. Os mini-cards sao EXPANDIDOS:
  * mostram os alunos com os mesmos 3 botoes (Presente/Falta/Justif.) da visao
  * Dia, para que a equipe possa fazer a chamada sem trocar de aba.
+ *
+ * Apos cada acao (registrar/cancelar/reagendar), as colunas sao remontadas
+ * via `contadorRecarga` para buscar dados frescos — o `recarregar` do
+ * ChamadaView so recarrega o dia selecionado, nao as colunas da semana.
  */
 export function ChamadaSemana({
   data,
@@ -50,20 +54,55 @@ export function ChamadaSemana({
 
   const hoje = format(new Date(), 'yyyy-MM-dd');
 
+  // Contador de recarga: incrementa apos cada acao para forcar a remontagem
+  // das ColunaDia (que faz fetch fresco sem cache stale).
+  const [contadorRecarga, setContadorRecarga] = useState(0);
+  const forcarRecarga = useCb(() => setContadorRecarga((c) => c + 1), []);
+
+  // Wrappers que chamam a acao e depois forcam recarga da semana inteira.
+  const registrarERecarregar = useCb(
+    (itens: ItemChamada[]) => {
+      onRegistrar(itens);
+      forcarRecarga();
+    },
+    [onRegistrar, forcarRecarga],
+  );
+  const justificarERecarregar = useCb(
+    (aluno: AlunoAgenda, aula: AulaAgenda) => {
+      onJustificar(aluno, aula);
+      forcarRecarga();
+    },
+    [onJustificar, forcarRecarga],
+  );
+  const cancelarERecarregar = useCb(
+    (aula: AulaAgenda) => {
+      onCancelarAula(aula);
+      forcarRecarga();
+    },
+    [onCancelarAula, forcarRecarga],
+  );
+  const reagendarERecarregar = useCb(
+    (aula: AulaAgenda) => {
+      onReagendarAula(aula);
+      forcarRecarga();
+    },
+    [onReagendarAula, forcarRecarga],
+  );
+
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
       {dias.map((dia) => (
         <ColunaDia
-          key={dia}
+          key={`${dia}-${contadorRecarga}`}
           dia={dia}
           unidadeId={unidadeId}
           ehHoje={dia === hoje}
           ehSelecionado={dia === data}
           salvando={salvando}
-          onRegistrar={onRegistrar}
-          onJustificar={onJustificar}
-          onCancelarAula={onCancelarAula}
-          onReagendarAula={onReagendarAula}
+          onRegistrar={registrarERecarregar}
+          onJustificar={justificarERecarregar}
+          onCancelarAula={cancelarERecarregar}
+          onReagendarAula={reagendarERecarregar}
           onAbrirDia={() => onAbrirDia(dia)}
           onAbrirDrawer={(aula) => onAbrirDrawer(aula, dia)}
         />
