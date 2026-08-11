@@ -50,6 +50,16 @@ node --test tests/historicoPreservacao.test.mjs
 Os testes PostgreSQL usam `postgres:17-alpine` isolado e descartável. O
 resultado não é evidência de aplicação remota.
 
+Verificação final local concluída em 10/08/2026:
+
+- `npm test` — 20 testes aprovados;
+- suíte Node canônica, Lead ID e histórico — 10 testes aprovados;
+- suíte Deno de renderer, jornada, reconciliação, snapshot e histórico — 52 testes aprovados;
+- `npm run build` — build Vite aprovado (somente avisos preexistentes de Rollup/chunks);
+- `deno check` das três Edges alteradas — aprovado.
+
+`git diff --check` também passou.
+
 ## Rollout pendente
 
 As etapas abaixo permanecem deliberadamente fora desta entrega e exigem nova
