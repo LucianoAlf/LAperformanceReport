@@ -2370,7 +2370,7 @@ serve(async (req) => {
       } catch (error) {
         if (!(error instanceof Error) || error.message !== 'DATA_REFERENCIA_COMERCIAL_INVALIDA') throw error;
         return new Response(
-          JSON.stringify({ success: false, error: 'data_referencia invÃ¡lida: use YYYY-MM-DD' }),
+          JSON.stringify({ success: false, error: 'data_referencia inválida: use YYYY-MM-DD' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
