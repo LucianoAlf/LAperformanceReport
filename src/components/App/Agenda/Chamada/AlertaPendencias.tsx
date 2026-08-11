@@ -180,7 +180,7 @@ export function AlertaPendencias({ data, aulas, consolidado, onAbrirDrawer }: Pr
       </div>
 
       {/* Lista de pendências — separada por hoje/ontem e por unidade */}
-      <div className="mt-3 space-y-3 border-t border-current/10 pt-3">
+      <div className="mt-3 space-y-3">
         {consolidado ? (
           <>
             <SecaoComUnidade titulo="Hoje" itens={pendentesHoje} />
