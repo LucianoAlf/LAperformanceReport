@@ -1862,6 +1862,20 @@ serve(async (req: Request) => {
           const cursoIdAula = cursoMapa.get(normalizarCurso(aula.curso_nome || '')) ?? null;
 
           // Roster e justificativa sao sincronizados sem criar uma resposta de presenca.
+          // Coleta TODAS as chaves possiveis que a API retornou para DEPOIS remover
+          // os vinculos obsoletos. criarAlunoChave pode gerar chaves diferentes
+          // dependendo de quem gravou (grade futura usa alunoIdLocal=undefined,
+          // sync de presenca usa o ID resolvido). Coletamos todos os formatos.
+          const chavesRetornadas = new Set<string>();
+          for (const aluno of aula.alunos || []) {
+            const nome = aluno.nome_aluno?.trim();
+            if (!nome) continue;
+            const alunoIdTemp = resolverAlunoLocal(aluno, cursoIdAula, mapaAlunosEmusys, mapaAlunosComposto, mapaAlunos);
+            chavesRetornadas.add(criarAlunoChave(aluno, alunoIdTemp, normalizarNome));
+            chavesRetornadas.add(criarAlunoChave(aluno, null, normalizarNome));
+            chavesRetornadas.add(criarAlunoChave(aluno, undefined, normalizarNome));
+          }
+
           for (const aluno of aula.alunos || []) {
             const nome = aluno.nome_aluno?.trim();
             if (!nome) continue;
@@ -1930,6 +1944,30 @@ serve(async (req: Request) => {
               if (administrativoError) {
                 console.error(`[sync-presenca] Administrativo ${nome} aula ${aula.id}:`, administrativoError.message);
               }
+            }
+          }
+
+          // 2026-08-11: Limpa vinculos obsoletos da grade. Se a API retornou a aula
+          // mas NAO retornou um aluno que estava na grade, o vinculo e obsoleto
+          // (aluno removido da turma no Emusys). Sem isso, alunos evadidos/trancados
+          // apareciam na Chamada como "sem destino" (caso Heiton Paixao, 11/08).
+          if (chavesRetornadas.size === 0) {
+            // API retornou aula sem alunos — remove todos os vinculos
+            const { error: limpezaError } = await supabase
+              .from('aula_alunos_emusys')
+              .delete()
+              .eq('aula_emusys_id', aulaLocalId);
+            if (limpezaError) {
+              console.error(`[sync-presenca] Limpeza roster vazio aula ${aula.id}:`, limpezaError.message);
+            }
+          } else {
+            const { error: limpezaError } = await supabase
+              .from('aula_alunos_emusys')
+              .delete()
+              .eq('aula_emusys_id', aulaLocalId)
+              .not('aluno_chave', 'in', `(${[...chavesRetornadas].map((c) => `"${c}"`).join(',')})`);
+            if (limpezaError) {
+              console.error(`[sync-presenca] Limpeza roster aula ${aula.id}:`, limpezaError.message);
             }
           }
 
