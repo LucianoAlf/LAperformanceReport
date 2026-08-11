@@ -56,6 +56,7 @@ test('matriculadores respeitam o mesmo universo de professores da unidade', () =
 test('renderer usa ranking do fechamento mensal e nao o rotula como destaque parcial', () => {
   const edge = fs.readFileSync(edgePath, 'utf8');
   assert.match(edge, /rankings\.mensais/);
+  assert.match(edge, /Object\.values\(rankingsMensais\)\.some/);
   assert.match(edge, /RANKINGS DO FECHAMENTO MENSAL/);
   assert.doesNotMatch(edge, /DESTAQUES MENSAIS PARCIAIS[\s\S]{0,240}rankings\.mensais/);
 });

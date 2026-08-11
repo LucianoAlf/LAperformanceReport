@@ -122,24 +122,30 @@ Deno.test("renderer gerencial publica julho do Recreio sem inventar fonte ausent
     rankings: {
       oficiais: [],
       mensais: {
-        status: "oficial",
-        tipo: "fechamento_mensal",
         retencao: {
+          status: "oficial",
+          tipo: "fechamento_mensal",
           cobertura: "19 de 24 professores",
           regra: "permanencia-media-v1",
           itens: [{ professor: "Matheus Lana da Silva", tempo_medio_permanencia: 20.3 }],
         },
         matriculadores: {
+          status: "oficial",
+          tipo: "fechamento_mensal",
           cobertura: "8 de 24 professores",
           regra: "conversao-experimental-mensal-v1",
           itens: [{ professor: "Erick Cosme da Silva", matriculas: 4, experimentais: 291, taxa_conversao: 1.37 }],
         },
         presenca: {
+          status: "oficial",
+          tipo: "fechamento_mensal",
           cobertura: "21 de 24 professores",
           regra: "presenca-media-v1",
           itens: [{ professor: "Willian De Andrade Da Silva", presenca_media: 81.5 }],
         },
         media_turma: {
+          status: "oficial",
+          tipo: "fechamento_mensal",
           cobertura: "24 de 24 professores",
           regra: "media-alunos-turma-v1",
           itens: [{ professor: "Ana Beatriz Paz de Almeida", media_alunos_turma: 1.5 }],

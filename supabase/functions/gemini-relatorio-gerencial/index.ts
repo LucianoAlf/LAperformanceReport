@@ -1064,11 +1064,14 @@ export async function montarRelatorio(
   const rankingsMensais = rankings.mensais &&
       typeof rankings.mensais === "object" &&
       !Array.isArray(rankings.mensais) &&
-      (rankings.mensais as Record<string, unknown>).status === "oficial" &&
-      (rankings.mensais as Record<string, unknown>).tipo === "fechamento_mensal"
+      (rankings.mensais as Record<string, unknown>)
     ? rankings.mensais as Record<string, unknown>
     : {};
-  const rankingMensalAtivo = Object.keys(rankingsMensais).length > 0;
+  const rankingMensalAtivo = Object.values(rankingsMensais).some((bloco) =>
+    bloco && typeof bloco === "object" && !Array.isArray(bloco) &&
+    (bloco as Record<string, unknown>).status === "oficial" &&
+    (bloco as Record<string, unknown>).tipo === "fechamento_mensal"
+  );
   const rankingsOficiais = rankings.oficiais &&
       typeof rankings.oficiais === "object" &&
       !Array.isArray(rankings.oficiais) &&
