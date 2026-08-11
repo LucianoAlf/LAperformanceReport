@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase';
 export interface ItemChamada {
   aula_emusys_id: number;
   aluno_id: number;
-  status: 'presente' | 'falta' | 'falta_justificada';
+  status: 'presente' | 'falta' | 'falta_justificada' | 'indeterminado';
   motivo?: string;
   evidencia_path?: string;
 }

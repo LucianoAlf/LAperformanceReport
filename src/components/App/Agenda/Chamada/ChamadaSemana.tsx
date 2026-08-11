@@ -228,7 +228,7 @@ function CardAulaSemana({
   const ocorrida = aulaJaOcorreu(dia, aula.hora_fim, agora);
   const podeOperar = !aula.cancelada && vinculados.length > 0;
 
-  const marcar = (aluno: AlunoAgenda, status: 'presente' | 'falta') => {
+  const marcar = (aluno: AlunoAgenda, status: 'presente' | 'falta' | 'indeterminado') => {
     if (!aluno.aula_emusys_id || !aluno.aluno_id) return;
     onRegistrar([{ aula_emusys_id: aluno.aula_emusys_id, aluno_id: aluno.aluno_id, status }]);
   };
@@ -330,7 +330,7 @@ function CardAulaSemana({
                       estado={estado}
                       alvo="presente"
                       disabled={salvando}
-                      onClick={() => marcar(aluno, 'presente')}
+                      onClick={() => marcar(aluno, estado === 'presente' ? 'indeterminado' : 'presente')}
                     >
                       <Check className="inline h-2.5 w-2.5" />P
                     </BotaoSemana>
@@ -338,7 +338,7 @@ function CardAulaSemana({
                       estado={estado}
                       alvo="falta"
                       disabled={salvando}
-                      onClick={() => marcar(aluno, 'falta')}
+                      onClick={() => marcar(aluno, estado === 'falta' ? 'indeterminado' : 'falta')}
                     >
                       <X className="inline h-2.5 w-2.5" />F
                     </BotaoSemana>
@@ -346,7 +346,13 @@ function CardAulaSemana({
                       estado={estado}
                       alvo="justif"
                       disabled={salvando}
-                      onClick={() => onJustificar(aluno, aula)}
+                      onClick={() => {
+                        if (estado === 'falta_justificada') {
+                          marcar(aluno, 'indeterminado');
+                        } else {
+                          onJustificar(aluno, aula);
+                        }
+                      }}
                     >
                       <FileText className="inline h-2.5 w-2.5" />J
                     </BotaoSemana>

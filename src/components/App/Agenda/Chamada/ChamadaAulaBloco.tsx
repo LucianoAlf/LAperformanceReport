@@ -8,7 +8,7 @@ interface Props {
   data: string;
   podeOperar: boolean;
   salvando: boolean;
-  onMarcar: (aluno: AlunoAgenda, status: 'presente' | 'falta') => void;
+  onMarcar: (aluno: AlunoAgenda, status: 'presente' | 'falta' | 'indeterminado') => void;
   onJustificar: (aluno: AlunoAgenda) => void;
   onTodosPresentes: (aula: AulaAgenda) => void;
   onCancelarAula: (aula: AulaAgenda) => void;

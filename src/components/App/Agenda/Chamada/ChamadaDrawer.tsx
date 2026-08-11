@@ -292,7 +292,7 @@ function LinhaAlunoDrawer({
   aula: AulaAgenda;
   salvando: boolean;
   podeOperar: boolean;
-  onMarcar: (aluno: AlunoAgenda, status: 'presente' | 'falta') => void;
+  onMarcar: (aluno: AlunoAgenda, status: 'presente' | 'falta' | 'indeterminado') => void;
   onJustificar: (aluno: AlunoAgenda) => void;
 }) {
   const estado = estadoDoAluno(aluno);
@@ -333,7 +333,7 @@ function LinhaAlunoDrawer({
           <button
             type="button"
             disabled={salvando}
-            onClick={() => onMarcar(aluno, 'presente')}
+            onClick={() => onMarcar(aluno, estado === 'presente' ? 'indeterminado' : 'presente')}
             className={cn(
               'flex-1 rounded-md py-1 text-[10px] font-bold transition-all hover:-translate-y-px disabled:opacity-50',
               estado === 'presente'
@@ -346,7 +346,7 @@ function LinhaAlunoDrawer({
           <button
             type="button"
             disabled={salvando}
-            onClick={() => onMarcar(aluno, 'falta')}
+            onClick={() => onMarcar(aluno, estado === 'falta' ? 'indeterminado' : 'falta')}
             className={cn(
               'flex-1 rounded-md py-1 text-[10px] font-bold transition-all hover:-translate-y-px disabled:opacity-50',
               estado === 'falta'
@@ -359,7 +359,13 @@ function LinhaAlunoDrawer({
           <button
             type="button"
             disabled={salvando}
-            onClick={() => onJustificar(aluno)}
+            onClick={() => {
+              if (estado === 'falta_justificada') {
+                onMarcar(aluno, 'indeterminado');
+              } else {
+                onJustificar(aluno);
+              }
+            }}
             className={cn(
               'flex-1 rounded-md py-1 text-[10px] font-bold transition-all hover:-translate-y-px disabled:opacity-50',
               estado === 'falta_justificada'
