@@ -4,6 +4,7 @@ import {
   type JanelaDias,
   type CriterioVencimento,
 } from '@/hooks/useContratosVencendo';
+import { useCoberturaRenovacao } from '@/hooks/useCoberturaRenovacao';
 import {
   SortableHeader,
   alternarOrdenacao,
@@ -12,6 +13,12 @@ import {
 } from '@/components/ui/SortableHeader';
 
 const JANELAS: JanelaDias[] = [30, 60, 90];
+
+// "Este mês" não é uma janela de dias — é a competência do seletor do topo. Os dois
+// recortes convivem porque respondem perguntas diferentes: as janelas são rolantes
+// ("o que vem pela frente"), a competência é fechada ("quem tinha que renovar em agosto")
+// e é a única que fecha com o card Cobertura de Renovação do Resumo.
+type Recorte = JanelaDias | 'mes';
 
 // Espelha o alternador da tela "Renovacao de Matriculas" do Emusys. Os dois criterios
 // devolvem listas diferentes: o contrato acaba as aulas e a fatura num mes, e as
@@ -57,17 +64,40 @@ const VALOR_ORDENACAO: Record<string, (c: any) => string | number | null> = {
   situacao: (c) => (c.inadimplente == null ? null : c.inadimplente ? 'Inadimplente' : 'Em dia'),
 };
 
-export function TabContratosVencendo({ unidadeId }: { unidadeId: string }) {
-  const [janelaDias, setJanelaDias] = useState<JanelaDias>(30);
+export function TabContratosVencendo({
+  unidadeId,
+  ano,
+  mes,
+}: { unidadeId: string; ano: number; mes: number }) {
+  const [recorte, setRecorte] = useState<Recorte>(30);
   const [criterio, setCriterio] = useState<CriterioVencimento>('aula');
   const [busca, setBusca] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
 
-  const { contratos, loading, erro, ultimoSync } = useContratosVencendo({
+  const porJanela = recorte !== 'mes';
+
+  // Os dois hooks ficam montados; o inativo não busca porque recebe janela 0.
+  // Trocar a origem do dado sem desmontar evita o flash de tabela vazia ao alternar.
+  const janela = useContratosVencendo({
     unidadeId,
-    janelaDias,
+    janelaDias: porJanela ? (recorte as JanelaDias) : 30,
     criterio,
+    ativo: porJanela,
   });
+  const competencia = useCoberturaRenovacao({
+    unidadeId,
+    ano,
+    mes,
+    criterio,
+    ativo: !porJanela,
+  });
+
+  // No recorte de competência a lista é de quem AINDA não renovou — quem já renovou
+  // vira numerador, não trabalho a fazer.
+  const contratos = porJanela ? janela.contratos : competencia.pendentes;
+  const loading = porJanela ? janela.loading : competencia.loading;
+  const erro = porJanela ? janela.erro : competencia.erro;
+  const ultimoSync = porJanela ? janela.ultimoSync : competencia.ultimoSync;
 
   const termo = busca.trim().toLowerCase();
   const filtrados = termo
@@ -106,12 +136,23 @@ export function TabContratosVencendo({ unidadeId }: { unidadeId: string }) {
             </button>
           ))}
         </div>
+        <button
+          onClick={() => setRecorte('mes')}
+          title="Contratos que terminam na competência selecionada no topo"
+          className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+            recorte === 'mes'
+              ? 'bg-amber-500 text-slate-900'
+              : 'bg-slate-800/50 text-gray-300 hover:bg-slate-700/50'
+          }`}
+        >
+          Este mês
+        </button>
         {JANELAS.map((dias) => (
           <button
             key={dias}
-            onClick={() => setJanelaDias(dias)}
+            onClick={() => setRecorte(dias)}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-              janelaDias === dias
+              recorte === dias
                 ? 'bg-cyan-500 text-white'
                 : 'bg-slate-800/50 text-gray-300 hover:bg-slate-700/50'
             }`}
@@ -135,6 +176,23 @@ export function TabContratosVencendo({ unidadeId }: { unidadeId: string }) {
         )}
       </div>
 
+      {/* No recorte de competência a lista sozinha esconde metade da história: quem já
+          renovou some dela. A faixa devolve o denominador e explica o sumiço. */}
+      {!porJanela && !competencia.loading && competencia.base > 0 && (
+        <div className="flex flex-wrap items-center gap-5 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+          <span className="text-2xl font-bold tabular-nums text-amber-400">
+            {competencia.renovados}
+            <span className="text-sm font-normal text-gray-400"> de {competencia.base}</span>
+          </span>
+          <span className="max-w-[52ch] text-xs text-gray-300">
+            <b className="font-semibold text-gray-100">Cobertura da competência.</b>{' '}
+            {competencia.faltam === 0
+              ? 'Todos os contratos que terminam neste mês já têm ciclo novo.'
+              : `${competencia.faltam} ${competencia.faltam === 1 ? 'contrato termina' : 'contratos terminam'} neste mês e ainda não ${competencia.faltam === 1 ? 'tem' : 'têm'} ciclo novo. Os outros ${competencia.renovados} já renovaram e saíram da lista.`}
+          </span>
+        </div>
+      )}
+
       {erro && (
         <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
           Erro ao carregar: {erro}
@@ -147,9 +205,11 @@ export function TabContratosVencendo({ unidadeId }: { unidadeId: string }) {
         <p className="text-gray-400">
           {termo
             ? `Nenhum aluno encontrado para "${busca}".`
-            : criterio === 'aula'
-              ? `Nenhuma matrícula com AULAS acabando nos próximos ${janelaDias} dias.`
-              : `Nenhuma matrícula com a última FATURA vencendo nos próximos ${janelaDias} dias.`}
+            : !porJanela
+              ? 'Nenhum contrato termina nesta competência sem renovação registrada.'
+              : criterio === 'aula'
+                ? `Nenhuma matrícula com AULAS acabando nos próximos ${recorte} dias.`
+                : `Nenhuma matrícula com a última FATURA vencendo nos próximos ${recorte} dias.`}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-700/50">
