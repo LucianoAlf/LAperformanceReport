@@ -1,8 +1,9 @@
 import { useMemo, useState, useCallback as useCb } from 'react';
-import { addDays, format, parseISO, startOfWeek } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CalendarX, Check, Clock, FileText, X, XCircle } from 'lucide-react';
-import { useAgendaDia, type AulaAgenda, type AlunoAgenda, type LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
+import { useAgendaSemana } from '@/hooks/useAgendaSemana';
+import type { AulaAgenda, AlunoAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
 import { aulaJaOcorreu } from '@/lib/agenda';
 import { alunoSemDestino, chamadaCompleta, estadoDoAluno, type EstadoChamada } from './chamadaUtils';
 import type { ItemChamada } from './useChamadaAcoes';
@@ -45,16 +46,9 @@ export function ChamadaSemana({
   onAbrirDrawer,
   onAbrirDrawerLead,
 }: Props) {
-  const inicio = useMemo(() => {
-    const d = parseISO(data);
-    return startOfWeek(d, { weekStartsOn: 1 });
-  }, [data]);
-
-  // Segunda a sabado (6 dias) — domingo removido: a escola nao tem aula.
-  const dias = useMemo(
-    () => Array.from({ length: 6 }, (_, i) => format(addDays(inicio, i), 'yyyy-MM-dd')),
-    [inicio],
-  );
+  // Uma unica chamada RPC para a semana inteira (seg-sab).
+  // Antes: 6 useAgendaDia separados, 6 chamadas RPC, 6x mais lento.
+  const { aulasDoDia, dias, carregando } = useAgendaSemana({ data, unidadeId });
 
   const hoje = format(new Date(), 'yyyy-MM-dd');
 
@@ -99,7 +93,8 @@ export function ChamadaSemana({
         <ColunaDia
           key={`${dia}-${contadorRecarga}`}
           dia={dia}
-          unidadeId={unidadeId}
+          aulas={aulasDoDia(dia)}
+          carregando={carregando}
           ehHoje={dia === hoje}
           ehSelecionado={dia === data}
           salvando={salvando}
@@ -119,7 +114,8 @@ export function ChamadaSemana({
 
 function ColunaDia({
   dia,
-  unidadeId,
+  aulas,
+  carregando,
   ehHoje,
   ehSelecionado,
   salvando,
@@ -133,7 +129,8 @@ function ColunaDia({
   onAbrirDrawerLead,
 }: {
   dia: string;
-  unidadeId: string | null;
+  aulas: AulaAgenda[];
+  carregando: boolean;
   ehHoje: boolean;
   ehSelecionado: boolean;
   salvando: boolean;
@@ -146,7 +143,6 @@ function ColunaDia({
   onAbrirDrawer: (aula: AulaAgenda) => void;
   onAbrirDrawerLead: (lead: LeadExperimentalAgenda, aula: AulaAgenda) => void;
 }) {
-  const { aulas, carregando } = useAgendaDia({ data: dia, unidadeId });
   const agora = useMemo(() => new Date(), []);
   const dataObj = parseISO(dia);
 
