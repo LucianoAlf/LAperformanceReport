@@ -45,15 +45,23 @@ export function ChamadaAlunoCard({ aluno, podeOperar, salvando, onMarcar, onJust
   return (
     <div className={cn('rounded-xl border p-3 transition-colors', ESTILO_CARD[estado])}>
       <div className="mb-2.5 flex items-center gap-2.5">
-        <div
-          className={cn(
-            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-sm font-bold text-white',
-            GRADIENTE_AVATAR[estado],
-          )}
-          aria-hidden="true"
-        >
-          {iniciais(aluno.nome)}
-        </div>
+        {aluno.foto_url ? (
+          <img
+            src={aluno.foto_url}
+            alt={aluno.nome}
+            className="h-10 w-10 shrink-0 rounded-full object-cover"
+          />
+        ) : (
+          <div
+            className={cn(
+              'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-sm font-bold text-white',
+              GRADIENTE_AVATAR[estado],
+            )}
+            aria-hidden="true"
+          >
+            {iniciais(aluno.nome)}
+          </div>
+        )}
         <div className="min-w-0">
           <p className={cn('truncate text-sm font-semibold', estado === 'indeterminado' ? 'text-slate-300' : 'text-white')}>
             {aluno.nome}
@@ -69,32 +77,32 @@ export function ChamadaAlunoCard({ aluno, podeOperar, salvando, onMarcar, onJust
       </div>
 
       {podeOperar && !semVinculo && (
-        <div className="flex gap-1" role="group" aria-label={`Destino de ${aluno.nome}`}>
+        <div className="flex gap-1.5" role="group" aria-label={`Destino de ${aluno.nome}`}>
           <button
             type="button"
             disabled={salvando}
             onClick={() => onMarcar(aluno, estado === 'presente' ? 'indeterminado' : 'presente')}
             className={cn(
-              'flex-1 rounded-md py-1 text-[10px] font-bold transition-all hover:-translate-y-px disabled:opacity-50',
+              'flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-all hover:-translate-y-px disabled:opacity-50',
               estado === 'presente'
-                ? 'bg-emerald-500/10 text-emerald-400 shadow-[inset_0_0_0_1.5px_currentColor]'
-                : 'text-slate-500 hover:bg-emerald-500/10 hover:text-emerald-400',
+                ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.3)]'
+                : 'border-slate-700 text-slate-400 hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-400',
             )}
           >
-            <Check className="mr-0.5 inline h-3 w-3" />Presente
+            <Check className="h-4 w-4" />Presente
           </button>
           <button
             type="button"
             disabled={salvando}
             onClick={() => onMarcar(aluno, estado === 'falta' ? 'indeterminado' : 'falta')}
             className={cn(
-              'flex-1 rounded-md py-1 text-[10px] font-bold transition-all hover:-translate-y-px disabled:opacity-50',
+              'flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-all hover:-translate-y-px disabled:opacity-50',
               estado === 'falta'
-                ? 'bg-rose-500/10 text-rose-400 shadow-[inset_0_0_0_1.5px_currentColor]'
-                : 'text-slate-500 hover:bg-rose-500/10 hover:text-rose-400',
+                ? 'border-rose-500/60 bg-rose-500/15 text-rose-300 shadow-[inset_0_0_0_1px_rgba(251,113,133,0.3)]'
+                : 'border-slate-700 text-slate-400 hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-400',
             )}
           >
-            <X className="mr-0.5 inline h-3 w-3" />Falta
+            <X className="h-4 w-4" />Falta
           </button>
           <button
             type="button"
@@ -107,13 +115,13 @@ export function ChamadaAlunoCard({ aluno, podeOperar, salvando, onMarcar, onJust
               }
             }}
             className={cn(
-              'flex-1 rounded-md py-1 text-[10px] font-bold transition-all hover:-translate-y-px disabled:opacity-50',
+              'flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-all hover:-translate-y-px disabled:opacity-50',
               estado === 'falta_justificada'
-                ? 'bg-amber-500/10 text-amber-400 shadow-[inset_0_0_0_1.5px_currentColor]'
-                : 'text-slate-500 hover:bg-amber-500/10 hover:text-amber-400',
+                ? 'border-amber-500/60 bg-amber-500/15 text-amber-300 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.3)]'
+                : 'border-slate-700 text-slate-400 hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-400',
             )}
           >
-            <FileText className="mr-0.5 inline h-3 w-3" />Justif.
+            <FileText className="h-4 w-4" />Justif.
           </button>
         </div>
       )}

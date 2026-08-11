@@ -51,7 +51,7 @@ export function ChamadaLeadCard({ lead, podeOperar, salvando, onMarcar }: Props)
             presente ? 'text-emerald-400' : faltou ? 'text-rose-400' : 'text-slate-500',
           )}
         >
-          {presente ? 'Presente' : faltou ? 'Falta' : 'Sem destino'}
+          {presente ? 'Presente' : faltou ? 'Falta' : 'Aguardando'}
         </span>
       </div>
 

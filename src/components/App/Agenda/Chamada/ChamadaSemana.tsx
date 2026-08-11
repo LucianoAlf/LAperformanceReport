@@ -102,6 +102,7 @@ export function ChamadaSemana({
           ehSelecionado={dia === data}
           salvando={salvando}
           onRegistrar={registrarERecarregar}
+          onRegistrarExperimental={onRegistrarExperimental}
           onJustificar={justificarERecarregar}
           onCancelarAula={cancelarERecarregar}
           onReagendarAula={reagendarERecarregar}
@@ -120,6 +121,7 @@ function ColunaDia({
   ehSelecionado,
   salvando,
   onRegistrar,
+  onRegistrarExperimental,
   onJustificar,
   onCancelarAula,
   onReagendarAula,
@@ -132,6 +134,7 @@ function ColunaDia({
   ehSelecionado: boolean;
   salvando: boolean;
   onRegistrar: (itens: ItemChamada[]) => void;
+  onRegistrarExperimental: (experimentalId: number, status: 'experimental_realizada' | 'experimental_faltou') => void;
   onJustificar: (aluno: AlunoAgenda, aula: AulaAgenda) => void;
   onCancelarAula: (aula: AulaAgenda) => void;
   onReagendarAula: (aula: AulaAgenda) => void;

@@ -6,6 +6,8 @@ export interface AlunoAgenda {
   // integer no banco (alunos.id), nao uuid. Null quando o participante e lead.
   aluno_id: number | null;
   nome: string;
+  // Foto do aluno (foto_url da tabela alunos). Null = avatar com iniciais.
+  foto_url: string | null;
   idade: number | null;
   responsavel_nome: string | null;
   responsavel_telefone: string | null;
