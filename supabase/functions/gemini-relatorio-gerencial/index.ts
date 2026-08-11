@@ -1512,7 +1512,7 @@ if (import.meta.main) {
       );
       return json({
         success: false,
-        error: `Não foi possível gerar o relatório gerencial. (etapa: ${etapaRelatorio}; detalhe: ${detalhe})`,
+        error: "Não foi possível gerar o relatório gerencial.",
       }, 500);
     }
   });
