@@ -125,7 +125,7 @@ export function CampanhaConversasPanel({ campanhaId, numeroMetaId }: { campanhaI
 
   if (loading) {
     return (
-      <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+      <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4">
         <div className="flex items-center justify-center py-6"><RefreshCw className="w-4 h-4 text-slate-500 animate-spin" /></div>
       </div>
     )
@@ -133,7 +133,7 @@ export function CampanhaConversasPanel({ campanhaId, numeroMetaId }: { campanhaI
 
   if (error) {
     return (
-      <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+      <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4">
         <div className="flex items-center gap-2 text-sm text-red-400 py-4 justify-center">
           <AlertTriangle className="w-4 h-4" /> {error}
         </div>
@@ -142,7 +142,7 @@ export function CampanhaConversasPanel({ campanhaId, numeroMetaId }: { campanhaI
   }
 
   return (
-    <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 space-y-2">
+    <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 space-y-2">
       <p className="text-xs text-gray-400">Conversas ({contatos.length} responderam)</p>
       {contatos.length === 0 ? (
         <p className="text-sm text-gray-500 py-4 text-center">Ninguém respondeu a esta campanha ainda.</p>

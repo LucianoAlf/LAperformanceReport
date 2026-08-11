@@ -38,7 +38,7 @@ export function CampanhaContatosPanel({ campanha, onReenviarFalhas }: { campanha
   } = useContatosCampanha(campanha.id)
 
   return (
-    <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 space-y-3">
+    <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 space-y-3">
       <p className="text-xs text-gray-400">Contatos ({campanha.total_contatos})</p>
 
       <div className="flex gap-1.5 flex-wrap">

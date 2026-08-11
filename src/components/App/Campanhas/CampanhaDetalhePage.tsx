@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Play, Pause, RotateCw, RefreshCw, Send, CheckCheck, Eye, MessageCircle,
-  AlertTriangle, ImageIcon, GraduationCap, Percent, Wallet,
+  AlertTriangle, GraduationCap, Percent, Wallet, Users,
 } from 'lucide-react'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
+import { KPICard } from '@/components/ui/KPICard'
+import { DonutChart } from '@/components/ui/DonutChart'
 import type { Campanha } from './hooks/useCampanhas'
 import { useConversaoCampanhas } from './hooks/useConversaoCampanhas'
 import { CampanhaConversasPanel } from './components/CampanhaConversasPanel'
@@ -126,7 +127,7 @@ export function CampanhaDetalhePage() {
     : []
 
   return (
-    <div className="space-y-5 max-w-6xl">
+    <div className="space-y-5">
       {/* Header */}
       <div className="relative overflow-hidden rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800/70 via-slate-800/40 to-slate-800/70 p-5">
         <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
@@ -218,97 +219,111 @@ export function CampanhaDetalhePage() {
         </div>
       </div>
 
-      {/* Conversão + Template lado a lado */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
-        {/* Conversão */}
-        <div className="lg:col-span-2 bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 space-y-4">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Conversão</p>
-          {loadingConversao ? (
-            <div className="flex items-center justify-center py-10"><RefreshCw className="w-4 h-4 text-slate-500 animate-spin" /></div>
-          ) : !conversao || conversao.leadsGerados === 0 ? (
-            <p className="text-sm text-gray-500 py-6 text-center">Nenhum lead atribuído a esta campanha ainda.</p>
-          ) : (
-            <>
-              <div className="flex items-center justify-center">
-                <DonutConversao data={donutConversao} total={conversao.leadsGerados} />
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <StatChip icon={GraduationCap} label="Matriculados" value={conversao.matriculados.toString()} color="emerald" />
-                <StatChip icon={Percent} label="Taxa" value={`${(conversao.taxaConversao * 100).toFixed(1)}%`} color="violet" />
-                <StatChip
-                  icon={Wallet}
-                  label="Custo/matríc."
-                  value={
-                    conversao.custoPorMatricula != null && conversao.custoPorMatricula > 0
-                      ? `${conversao.custoMoeda === 'USD' ? 'US$' : 'R$'} ${conversao.custoPorMatricula.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
-                      : '—'
-                  }
-                  color="amber"
-                />
-              </div>
-              {conversao.matriculasDetalhe.length > 0 && (
-                <div className="space-y-1.5 pt-1">
-                  <p className="text-xs text-gray-500">Quem matriculou</p>
-                  <div className="space-y-1 max-h-40 overflow-y-auto">
-                    {conversao.matriculasDetalhe.map(m => (
-                      <div key={m.leadId} className="flex items-center justify-between px-3 py-2 bg-slate-900/50 rounded-lg text-sm">
-                        <span className="text-gray-200 truncate">{m.nome}</span>
-                        <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
-                          {formatarDataMatricula(m.dataMatricula)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+      {/* Conversão — mesmo padrão visual (KPICard + DonutChart) usado na aba Conversão */}
+      <div className="space-y-4">
+        <p className="text-xs text-gray-500 uppercase tracking-wide">Conversão</p>
 
-        {/* Template — mockup de bolha de WhatsApp */}
-        <div className="lg:col-span-3">
-          {erroTemplate && (
-            <div className="flex items-center gap-2 px-4 py-3 mb-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-              <AlertTriangle className="w-4 h-4 text-red-400" />
-              <span className="text-sm text-red-300">{erroTemplate}</span>
+        {loadingConversao ? (
+          <div className="flex items-center justify-center py-10"><RefreshCw className="w-4 h-4 text-slate-500 animate-spin" /></div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <KPICard label="Leads gerados" value={conversao?.leadsGerados ?? 0} icon={Users} variant="cyan" />
+              <KPICard label="Matriculados" value={conversao?.matriculados ?? 0} icon={GraduationCap} variant="emerald" />
+              <KPICard label="Taxa de conversão" value={(conversao?.taxaConversao ?? 0) * 100} format="percent" icon={Percent} variant="violet" />
+              <KPICard
+                label={conversao?.custoMoeda ? `Custo / matrícula (${conversao.custoMoeda})` : 'Custo / matrícula'}
+                value={
+                  conversao?.custoPorMatricula != null && conversao.custoPorMatricula > 0
+                    ? formatarMoeda(conversao.custoPorMatricula, conversao.custoMoeda)
+                    : '—'
+                }
+                icon={Wallet}
+                variant="amber"
+              />
             </div>
-          )}
-          {template && (
-            <div className="h-full rounded-xl border border-slate-700/50 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.06),_transparent_55%)] bg-slate-900/40 p-4 flex flex-col">
-              <div className="flex items-center gap-1.5 mb-3">
-                <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-xs text-gray-500 uppercase tracking-wide font-medium">Como chega no WhatsApp</span>
+
+            {!conversao || conversao.leadsGerados === 0 ? (
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-8 text-center text-sm text-gray-500">
+                Nenhum lead atribuído a esta campanha ainda.
               </div>
-              <div className="flex-1 flex items-start">
-                <div className="max-w-[380px] w-full rounded-2xl rounded-tl-sm bg-[#202c33] border border-black/20 shadow-lg shadow-black/30 overflow-hidden">
-                  {template.header_type === 'IMAGE' && (() => {
-                    const imgUrl = campanha.media_url_custom || template.media_url || template.componentes?.[0]?.example?.header_handle?.[0]
-                    return imgUrl ? (
-                      <img src={imgUrl} alt="Header" className="w-full max-h-48 object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-                    ) : null
-                  })()}
-                  {template.body_text && (
-                    <p className="px-3.5 pt-2.5 pb-1 text-[13px] leading-snug text-[#e9edef] whitespace-pre-wrap">{template.body_text}</p>
-                  )}
-                  {template.componentes?.find((c: any) => c.type === 'BUTTONS')?.buttons && (
-                    <div className="border-t border-white/10">
-                      {template.componentes.find((c: any) => c.type === 'BUTTONS').buttons.map((btn: any, i: number) => (
-                        <div key={i} className="px-3.5 py-2 text-center text-[13px] text-[#00a5f4] border-t border-white/10 first:border-t-0">
-                          {btn.text}
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-stretch">
+                <DonutChart
+                  data={donutConversao}
+                  title="Matriculados x ainda não converteu"
+                  centerLabel="Leads"
+                  className="lg:col-span-2 h-full"
+                />
+                <div className="lg:col-span-3 bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5 flex flex-col">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-base font-bold text-white">Quem matriculou</h3>
+                    <span className="text-xs text-slate-500">{conversao.matriculasDetalhe.length}</span>
+                  </div>
+                  {conversao.matriculasDetalhe.length === 0 ? (
+                    <div className="flex-1 flex items-center justify-center text-sm text-gray-500 py-6">
+                      Nenhuma matrícula ainda.
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 flex-1 overflow-y-auto max-h-[280px]">
+                      {conversao.matriculasDetalhe.map(m => (
+                        <div key={m.leadId} className="flex items-center justify-between px-3 py-2.5 bg-slate-900/50 hover:bg-slate-900 rounded-lg transition-colors">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                            <span className="text-sm text-gray-200 truncate">{m.nome}</span>
+                          </div>
+                          <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
+                            {formatarDataMatricula(m.dataMatricula)}
+                          </span>
                         </div>
                       ))}
                     </div>
                   )}
-                  <div className="px-3.5 pb-1.5 text-right">
-                    <span className="text-[10px] text-[#8696a0]">
-                      {new Date(campanha.iniciada_em ?? campanha.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
                 </div>
               </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Template — mockup de bolha de WhatsApp */}
+      <div>
+        <p className="text-xs text-gray-500 uppercase tracking-wide mb-2.5">Como chega no WhatsApp</p>
+        {erroTemplate && (
+          <div className="flex items-center gap-2 px-4 py-3 mb-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+            <AlertTriangle className="w-4 h-4 text-red-400" />
+            <span className="text-sm text-red-300">{erroTemplate}</span>
+          </div>
+        )}
+        {template && (
+          <div className="rounded-2xl border border-slate-700/50 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.06),_transparent_55%)] bg-slate-900/40 p-6 flex justify-center">
+            <div className="max-w-[380px] w-full rounded-2xl rounded-tl-sm bg-[#202c33] border border-black/20 shadow-lg shadow-black/30 overflow-hidden">
+              {template.header_type === 'IMAGE' && (() => {
+                const imgUrl = campanha.media_url_custom || template.media_url || template.componentes?.[0]?.example?.header_handle?.[0]
+                return imgUrl ? (
+                  <img src={imgUrl} alt="Header" className="w-full max-h-48 object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+                ) : null
+              })()}
+              {template.body_text && (
+                <p className="px-3.5 pt-2.5 pb-1 text-[13px] leading-snug text-[#e9edef] whitespace-pre-wrap">{template.body_text}</p>
+              )}
+              {template.componentes?.find((c: any) => c.type === 'BUTTONS')?.buttons && (
+                <div className="border-t border-white/10">
+                  {template.componentes.find((c: any) => c.type === 'BUTTONS').buttons.map((btn: any, i: number) => (
+                    <div key={i} className="px-3.5 py-2 text-center text-[13px] text-[#00a5f4] border-t border-white/10 first:border-t-0">
+                      {btn.text}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="px-3.5 pb-1.5 text-right">
+                <span className="text-[10px] text-[#8696a0]">
+                  {new Date(campanha.iniciada_em ?? campanha.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Conversas + Contatos lado a lado */}
@@ -352,47 +367,7 @@ function TimelineTraco() {
   return <div className="w-6 h-px bg-slate-700 flex-shrink-0" />
 }
 
-function StatChip({ icon: Icon, label, value, color }: {
-  icon: React.ElementType; label: string; value: string; color: 'emerald' | 'violet' | 'amber'
-}) {
-  const colors = { emerald: 'text-emerald-400', violet: 'text-violet-400', amber: 'text-amber-400' }
-  return (
-    <div className="bg-slate-900/50 rounded-lg p-2.5 border border-slate-700/50 text-center">
-      <Icon className={cn('w-3.5 h-3.5 mx-auto mb-1', colors[color])} />
-      <p className="text-sm font-bold text-white leading-tight">{value}</p>
-      <p className="text-[10px] text-gray-500 mt-0.5">{label}</p>
-    </div>
-  )
-}
-
-const DONUT_TOOLTIP_STYLE = { background: '#0f172a', border: '1px solid rgba(148, 163, 184, 0.15)', borderRadius: 12, color: '#f1f5f9', fontSize: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }
-
-function DonutConversao({ data, total }: { data: { name: string; value: number; color?: string }[]; total: number }) {
-  return (
-    <div className="flex items-center gap-4 w-full">
-      <div className="relative w-28 h-28 flex-shrink-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie data={data} cx="50%" cy="50%" innerRadius={34} outerRadius={54} paddingAngle={3} cornerRadius={5} dataKey="value" strokeWidth={0}>
-              {data.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-            </Pie>
-            <Tooltip contentStyle={DONUT_TOOLTIP_STYLE} />
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span className="text-lg font-bold text-white">{total}</span>
-          <span className="text-[9px] text-slate-500 uppercase tracking-wide">Leads</span>
-        </div>
-      </div>
-      <div className="flex-1 min-w-0 space-y-1.5">
-        {data.map((item, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
-            <span className="text-xs text-gray-300 truncate flex-1">{item.name}</span>
-            <span className="text-xs font-semibold text-white">{item.value}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
+function formatarMoeda(valor: number, moeda: string): string {
+  const simbolo = moeda === 'USD' ? 'US$' : 'R$'
+  return `${simbolo} ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
 }
