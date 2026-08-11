@@ -176,7 +176,7 @@ export function ChamadaDia({
                 fotoUrl={fotoUrl}
                 data={data}
                 unidadeId={context?.unidadeSelecionada ?? ''}
-                totalAulas={aulasProf.length}
+                aulas={aulasProf}
                 primeiraAula={primeira}
                 ultimaAula={ultima}
                 presente={presente}
