@@ -41,6 +41,7 @@ import { PlanoAcaoRetencao } from './PlanoAcaoRetencao';
 import { TabProgramaFideliza } from './TabProgramaFideliza';
 import { TabLojinha } from '../Lojinha';
 import { TabContratosVencendo } from './TabContratosVencendo';
+import { useCoberturaRenovacao } from '@/hooks/useCoberturaRenovacao';
 import { PainelFarmer } from './PainelFarmer';
 import { Trophy, ShoppingBag, ClipboardList, MessageSquare, Wallet } from 'lucide-react';
 import { CaixaEntradaTab } from './CaixaEntrada';
@@ -320,6 +321,11 @@ export function AdministrativoPage() {
 
   // Competência formatada para os modais (YYYY-MM)
   const competencia = `${ano}-${String(mes).padStart(2, '0')}`;
+
+  // Cobertura de renovação: base = contratos que TERMINAM na competência (jornada),
+  // não o que foi lançado em movimentacoes_admin. Consulta própria e independente do
+  // carregamento pesado da página — se falhar, o card mostra "—" e o resto segue.
+  const cobertura = useCoberturaRenovacao({ unidadeId: unidade, ano, mes });
 
   useEffect(() => {
     let cancelado = false;
@@ -1327,7 +1333,7 @@ export function AdministrativoPage() {
 
       {/* Conteúdo baseado na tab principal */}
       {mainTab === 'contratos' ? (
-        <TabContratosVencendo unidadeId={unidade} />
+        <TabContratosVencendo unidadeId={unidade} ano={ano} mes={mes} />
       ) : mainTab === 'caixa_financeiro' ? (
         <CaixaFinanceiroTab
           unidadeId={unidade}
@@ -1548,7 +1554,7 @@ export function AdministrativoPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
               Indicadores
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Taxa de Renovação */}
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Taxa de Renovação</p>
@@ -1559,11 +1565,52 @@ export function AdministrativoPage() {
                     return (((resumo?.renovacoes_realizadas || 0) / totalVencimentos) * 100).toFixed(1);
                   })()}%
                 </p>
+                {/* "lançamentos", não "vencimentos": o denominador aqui são as movimentações
+                    digitadas (realizadas + não renovações + pendentes), não os contratos que
+                    venceram no mês. Quem mede vencimento de verdade é o card ao lado. */}
                 <p className="text-xs text-slate-500 mt-1">
-                  {resumo?.renovacoes_realizadas || 0} de {(resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0) + (resumo?.renovacoes_pendentes || 0)} vencimentos
+                  {resumo?.renovacoes_realizadas || 0} de {(resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0) + (resumo?.renovacoes_pendentes || 0)} lançamentos
                 </p>
               </div>
-              
+
+              {/* Cobertura de Renovação — denominador = contratos que TERMINAM na competência.
+                  Regra §5.4 (`renovações / contratos_a_vencer`), hoje canônica só no recorte
+                  por professor, aplicada aqui ao recorte de unidade. */}
+              <div className="bg-slate-800/50 rounded-xl p-4 border border-amber-500/30">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Cobertura de Renovação</p>
+                {cobertura.loading ? (
+                  <p className="text-3xl font-bold text-slate-600">—</p>
+                ) : cobertura.base === 0 ? (
+                  <>
+                    <p className="text-3xl font-bold text-slate-500">—</p>
+                    <p className="text-xs text-slate-500 mt-1">nenhum contrato termina neste mês</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-3xl font-bold text-amber-400">
+                      {cobertura.renovados}
+                      <span className="text-lg font-normal text-slate-400"> de {cobertura.base}</span>
+                    </p>
+                    <div className="h-1.5 rounded-full bg-slate-700/60 mt-2 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-amber-400"
+                        style={{ width: `${cobertura.taxa ?? 0}%` }}
+                      />
+                    </div>
+                    {cobertura.faltam > 0 ? (
+                      <button
+                        onClick={() => setMainTab('contratos')}
+                        className="text-xs text-amber-400/90 hover:text-amber-300 underline underline-offset-2 mt-2 text-left"
+                      >
+                        {cobertura.faltam} sem renovação registrada →
+                      </button>
+                    ) : (
+                      <p className="text-xs text-slate-500 mt-2">todos renovados</p>
+                    )}
+                  </>
+                )}
+              </div>
+
               {/* Churn Rate */}
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Churn Rate</p>

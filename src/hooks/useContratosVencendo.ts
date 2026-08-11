@@ -49,14 +49,19 @@ type Params = {
   unidadeId: string | 'todos';
   janelaDias: JanelaDias;
   criterio?: CriterioVencimento;
+  /** false mantém o hook montado sem consultar — usado quando a aba está noutro recorte. */
+  ativo?: boolean;
 };
 
-export function useContratosVencendo({ unidadeId, janelaDias, criterio = 'aula' }: Params) {
+export function useContratosVencendo({
+  unidadeId, janelaDias, criterio = 'aula', ativo = true,
+}: Params) {
   const [contratos, setContratos] = useState<ContratoVencendo[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
   const buscar = useCallback(async () => {
+    if (!ativo) { setLoading(false); return; }
     setLoading(true);
     setErro(null);
 
@@ -81,7 +86,7 @@ export function useContratosVencendo({ unidadeId, janelaDias, criterio = 'aula' 
       setContratos((data ?? []) as ContratoVencendo[]);
     }
     setLoading(false);
-  }, [unidadeId, janelaDias, criterio]);
+  }, [unidadeId, janelaDias, criterio, ativo]);
 
   useEffect(() => { buscar(); }, [buscar]);
 
