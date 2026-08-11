@@ -149,7 +149,9 @@ export function ChamadaAlunoCard({ aluno, podeOperar, salvando, onMarcar, onJust
         {estado === 'indeterminado' && (
           <p className="flex items-center gap-1 text-[10px] text-slate-500">
             <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
-            Sem destino — entra no lembrete do WhatsApp
+            {aluno.emusys_presenca_bruta === 'ausente'
+              ? 'Emusys marcou ausente — confirme ou ajuste'
+              : 'Sem destino — entra no lembrete do WhatsApp'}
           </p>
         )}
         {(aluno.reposicoes_pendentes ?? 0) > 0 && estado !== 'falta_justificada' && (

@@ -2014,11 +2014,11 @@ serve(async (req: Request) => {
             matched++;
             const status = aluno.presenca === 'presente' ? 'presente' : 'ausente';
             if (status === 'presente') presentes++;
-            else if (podeMaterializarFalta(aula)) ausentes++;
-            else {
-              faltasAguardandoMaturidade++;
-              continue;
-            }
+            else ausentes++;
+
+            // 2026-08-11: removida a maturidade de 24h. Ausente do Emusys grava
+            // imediatamente como evidencia bruta (status_presenca = NULL = neutro).
+            // A equipe decide na Chamada se e falta ou se foi erro de marcacao.
 
             // Reconcilia apenas a evidencia bruta do Emusys. A RPC preserva
             // respostas humanas e permite corrigir um "ausente" default quando
