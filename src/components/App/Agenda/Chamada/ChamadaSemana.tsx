@@ -2,7 +2,7 @@ import { useMemo, useState, useCallback as useCb } from 'react';
 import { addDays, format, parseISO, startOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CalendarX, Check, Clock, FileText, X, XCircle } from 'lucide-react';
-import { useAgendaDia, type AulaAgenda, type AlunoAgenda } from '@/hooks/useAgendaDia';
+import { useAgendaDia, type AulaAgenda, type AlunoAgenda, type LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
 import { aulaJaOcorreu } from '@/lib/agenda';
 import { alunoSemDestino, chamadaCompleta, estadoDoAluno, type EstadoChamada } from './chamadaUtils';
 import type { ItemChamada } from './useChamadaAcoes';
@@ -19,6 +19,7 @@ interface Props {
   onReagendarAula: (aula: AulaAgenda) => void;
   onAbrirDia: (data: string) => void;
   onAbrirDrawer: (aula: AulaAgenda, data: string) => void;
+  onAbrirDrawerLead: (lead: LeadExperimentalAgenda, aula: AulaAgenda) => void;
 }
 
 /**
@@ -42,6 +43,7 @@ export function ChamadaSemana({
   onReagendarAula,
   onAbrirDia,
   onAbrirDrawer,
+  onAbrirDrawerLead,
 }: Props) {
   const inicio = useMemo(() => {
     const d = parseISO(data);
@@ -108,6 +110,7 @@ export function ChamadaSemana({
           onReagendarAula={reagendarERecarregar}
           onAbrirDia={() => onAbrirDia(dia)}
           onAbrirDrawer={(aula) => onAbrirDrawer(aula, dia)}
+          onAbrirDrawerLead={onAbrirDrawerLead}
         />
       ))}
     </div>
@@ -127,6 +130,7 @@ function ColunaDia({
   onReagendarAula,
   onAbrirDia,
   onAbrirDrawer,
+  onAbrirDrawerLead,
 }: {
   dia: string;
   unidadeId: string | null;
@@ -140,6 +144,7 @@ function ColunaDia({
   onReagendarAula: (aula: AulaAgenda) => void;
   onAbrirDia: () => void;
   onAbrirDrawer: (aula: AulaAgenda) => void;
+  onAbrirDrawerLead: (lead: LeadExperimentalAgenda, aula: AulaAgenda) => void;
 }) {
   const { aulas, carregando } = useAgendaDia({ data: dia, unidadeId });
   const agora = useMemo(() => new Date(), []);
@@ -217,6 +222,7 @@ function ColunaDia({
                 onCancelarAula={onCancelarAula}
                 onReagendarAula={onReagendarAula}
                 onAbrirDrawer={() => onAbrirDrawer(aula)}
+                onAbrirDrawerLead={onAbrirDrawerLead}
               />
             ))
         )}
@@ -251,6 +257,7 @@ function CardAulaSemana({
   onCancelarAula,
   onReagendarAula,
   onAbrirDrawer,
+  onAbrirDrawerLead,
 }: {
   aula: AulaAgenda;
   dia: string;
@@ -262,6 +269,7 @@ function CardAulaSemana({
   onCancelarAula: (aula: AulaAgenda) => void;
   onReagendarAula: (aula: AulaAgenda) => void;
   onAbrirDrawer: () => void;
+  onAbrirDrawerLead: (lead: LeadExperimentalAgenda, aula: AulaAgenda) => void;
 }) {
   const vinculados = aula.alunos.filter((a) => a.aluno_id != null);
   const contagens = vinculados.reduce(
@@ -380,7 +388,7 @@ function CardAulaSemana({
                 <button
                   type="button"
                   onClick={onAbrirDrawer}
-                  className="block w-full truncate text-left text-[10.5px] font-medium text-slate-300 hover:text-white"
+                  className="block w-full cursor-pointer truncate rounded px-1 py-0.5 text-left text-[10.5px] font-medium text-slate-300 transition-colors hover:bg-slate-700/30 hover:text-white"
                   title={aluno.nome}
                 >
                   {aluno.nome}
@@ -429,8 +437,8 @@ function CardAulaSemana({
               <li key={`lead-${lead.experimental_id}`} className="space-y-0.5">
                 <button
                   type="button"
-                  onClick={onAbrirDrawer}
-                  className="block w-full truncate text-left text-[10.5px] font-medium text-violet-300 hover:text-violet-200"
+                  onClick={() => onAbrirDrawerLead(lead, aula)}
+                  className="block w-full cursor-pointer truncate rounded px-1 py-0.5 text-left text-[10.5px] font-medium text-violet-300 transition-colors hover:bg-violet-500/10 hover:text-violet-200"
                   title={`${lead.nome} (experimental)`}
                 >
                   {lead.nome} <span className="text-[8px] text-violet-400/70">exp.</span>
