@@ -71,14 +71,15 @@ export function ChamadaDia({
 
   // Agrupa aulas por professor para o toggle de presenca
   const aulasPorProfessor = useMemo(() => {
-    const mapa = new Map<number, { nome: string; aulas: AulaAgenda[]; presente: boolean | null }>();
+    const mapa = new Map<number, { nome: string; fotoUrl: string | null; aulas: AulaAgenda[]; presente: boolean | null; primeira: string; ultima: string }>();
     for (const aula of filtradas) {
       if (aula.professor_id == null) continue;
       const existente = mapa.get(aula.professor_id);
       if (existente) {
         existente.aulas.push(aula);
+        if (aula.hora_inicio < existente.primeira) existente.primeira = aula.hora_inicio;
+        if (aula.hora_fim > existente.ultima) existente.ultima = aula.hora_fim;
       } else {
-        // Determina se o professor esta presente baseado na primeira aula
         const presente = aula.professor_presenca === 'presente'
           ? true
           : aula.professor_presenca === 'ausente'
@@ -86,8 +87,11 @@ export function ChamadaDia({
             : null;
         mapa.set(aula.professor_id, {
           nome: aula.professor_nome ?? 'Professor',
+          fotoUrl: aula.professor_foto_url ?? null,
           aulas: [aula],
           presente,
+          primeira: aula.hora_inicio,
+          ultima: aula.hora_fim,
         });
       }
     }
@@ -161,20 +165,25 @@ export function ChamadaDia({
 
       {/* Presenca dos professores — toggle por professor para o dia inteiro */}
       {podeOperar && aulasPorProfessor.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Professores:</span>
-          {aulasPorProfessor.map(([professorId, { nome, aulas: aulasProf, presente }]) => (
-            <ProfessorPresencaToggle
-              key={professorId}
-              professorId={professorId}
-              professorNome={nome}
-              data={data}
-              unidadeId={context?.unidadeSelecionada ?? ''}
-              totalAulas={aulasProf.length}
-              presente={presente}
-              onMudou={() => onRegistrar([])} // forca recarga
-            />
-          ))}
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Presença dos professores</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {aulasPorProfessor.map(([professorId, { nome, fotoUrl, aulas: aulasProf, presente, primeira, ultima }]) => (
+              <ProfessorPresencaToggle
+                key={professorId}
+                professorId={professorId}
+                professorNome={nome}
+                fotoUrl={fotoUrl}
+                data={data}
+                unidadeId={context?.unidadeSelecionada ?? ''}
+                totalAulas={aulasProf.length}
+                primeiraAula={primeira}
+                ultimaAula={ultima}
+                presente={presente}
+                onMudou={() => onRegistrar([])} // forca recarga
+              />
+            ))}
+          </div>
         </div>
       )}
 

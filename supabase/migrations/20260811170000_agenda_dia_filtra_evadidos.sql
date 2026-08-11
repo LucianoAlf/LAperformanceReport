@@ -12,7 +12,7 @@
 create or replace function public.get_agenda_dia(p_data date, p_unidade_id uuid default null::uuid)
 returns table(
   chave text, unidade_id uuid, unidade_nome text, professor_nome text,
-  professor_id integer, sala_nome text, curso_nome text, turma_nome text,
+  professor_id integer, professor_foto_url text, sala_nome text, curso_nome text, turma_nome text,
   hora_inicio text, hora_fim text, duracao_minutos integer, categoria text,
   tipo text, cancelada boolean, justificada boolean, reagendada boolean,
   hora_original text, nr_da_aula integer, qtd_aulas_contrato integer,
@@ -27,6 +27,7 @@ set search_path to 'public'
 as $function$
 with base as (
   select ae.*, u.nome as unidade_nome, dc.modalidade as modalidade_disciplina,
+    prof.foto_url as professor_foto_url,
     md5(
       ae.unidade_id::text || '|' || coalesce(ae.professor_nome, '') || '|' ||
       coalesce(ae.sala_nome, '') || '|' || ae.data_hora_inicio::text || '|' ||
@@ -38,6 +39,7 @@ with base as (
   left join vw_disciplinas_modalidade dc
     on dc.emusys_disciplina_id = ae.curso_emusys_id
    and dc.unidade_id = ae.unidade_id
+  left join professores prof on prof.id = ae.professor_id
   where ae.data_aula = p_data
     and (p_unidade_id is null or ae.unidade_id = p_unidade_id)
 ),
@@ -216,6 +218,7 @@ agrupado as (
     b.unidade_id,
     b.unidade_nome,
     b.professor_nome,
+    max(b.professor_foto_url) as professor_foto_url,
     b.sala_nome,
     b.curso_nome,
     b.turma_nome,
@@ -271,6 +274,7 @@ select
   a.unidade_nome,
   a.professor_nome,
   a.professor_id,
+  a.professor_foto_url,
   a.sala_nome,
   a.curso_nome,
   a.turma_nome,

@@ -63,6 +63,7 @@ export interface AulaAgenda {
   unidade_nome: string;
   professor_nome: string | null;
   professor_id: number | null;
+  professor_foto_url: string | null;
   sala_nome: string | null;
   curso_nome: string | null;
   turma_nome: string | null;
