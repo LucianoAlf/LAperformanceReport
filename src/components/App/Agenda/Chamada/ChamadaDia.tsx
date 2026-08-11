@@ -61,6 +61,39 @@ export function ChamadaDia({
     [aulas],
   );
 
+  // Marca todos os professores como presentes ou ausentes de uma vez
+  async function marcarTodosProfessores(presente: boolean) {
+    const { supabase } = await import('@/lib/supabase');
+    const { toast } = await import('sonner');
+    const unidadeId = context?.unidadeSelecionada;
+    if (!unidadeId) return;
+
+    const rpc = presente ? 'app_registrar_presenca_professor_dia' : 'app_remover_presenca_professor_dia';
+    let sucessos = 0;
+    let erros = 0;
+
+    for (const [professorId] of aulasPorProfessor) {
+      try {
+        const { error } = await supabase.rpc(rpc, {
+          p_professor_id: professorId,
+          p_data: data,
+          p_unidade_id: unidadeId,
+        });
+        if (error) erros++;
+        else sucessos++;
+      } catch {
+        erros++;
+      }
+    }
+
+    if (erros > 0) {
+      toast.warning(`${sucessos} professores atualizados, ${erros} com erro`);
+    } else {
+      toast.success(`${sucessos} professores marcados como ${presente ? 'presentes' : 'ausentes'}`);
+    }
+    recarregar?.();
+  }
+
   // Filtro: separar experimental de regular
   const filtradas = useMemo(() => {
     if (filtroExperimental === 'regulares') return ordenadas.filter((a) => a.categoria !== 'experimental');
@@ -120,7 +153,64 @@ export function ChamadaDia({
         onAbrirDrawer={onAbrirDrawer}
       />
 
-      {/* Filtro: separar experimental de regular */}
+      {/* Progresso do dia */}
+      <div className="flex items-center justify-between rounded-xl border border-slate-700/50 bg-slate-800/30 px-4 py-2.5 text-xs text-slate-400">
+        <span>
+          <b className="text-slate-200">{aulasConcluidas}</b> de <b className="text-slate-200">{totalAulas}</b> aulas com chamada completa
+          {filtroExperimental !== 'todas' && (
+            <span className="ml-1 text-slate-500">
+              ({filtroExperimental === 'regulares' ? 'regulares' : 'experimentais'})
+            </span>
+          )}
+        </span>
+        <span>
+          {filtradas.filter((a) => a.cancelada).length} cancelada(s)
+        </span>
+      </div>
+
+      {/* Presenca dos professores — toggle por professor para o dia inteiro */}
+      {podeOperar && aulasPorProfessor.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Presença dos professores</p>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => marcarTodosProfessores(true)}
+                className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-500/20"
+              >
+                Todos presentes
+              </button>
+              <button
+                type="button"
+                onClick={() => marcarTodosProfessores(false)}
+                className="rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-300 hover:bg-rose-500/20"
+              >
+                Todos ausentes
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {aulasPorProfessor.map(([professorId, { nome, fotoUrl, aulas: aulasProf, presente, primeira, ultima }]) => (
+              <ProfessorPresencaToggle
+                key={professorId}
+                professorId={professorId}
+                professorNome={nome}
+                fotoUrl={fotoUrl}
+                data={data}
+                unidadeId={context?.unidadeSelecionada ?? ''}
+                aulas={aulasProf}
+                primeiraAula={primeira}
+                ultimaAula={ultima}
+                presente={presente}
+                onMudou={() => recarregar?.()}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Filtro: separar experimental de regular — abaixo dos professores */}
       <div className="flex items-center gap-2">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Mostrar:</span>
         <button
@@ -149,45 +239,6 @@ export function ChamadaDia({
           Experimentais
         </button>
       </div>
-
-      {/* Progresso do dia */}
-      <div className="flex items-center justify-between rounded-xl border border-slate-700/50 bg-slate-800/30 px-4 py-2.5 text-xs text-slate-400">
-        <span>
-          <b className="text-slate-200">{aulasConcluidas}</b> de <b className="text-slate-200">{totalAulas}</b> aulas com chamada completa
-          {filtroExperimental !== 'todas' && (
-            <span className="ml-1 text-slate-500">
-              ({filtroExperimental === 'regulares' ? 'regulares' : 'experimentais'})
-            </span>
-          )}
-        </span>
-        <span>
-          {filtradas.filter((a) => a.cancelada).length} cancelada(s)
-        </span>
-      </div>
-
-      {/* Presenca dos professores — toggle por professor para o dia inteiro */}
-      {podeOperar && aulasPorProfessor.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Presença dos professores</p>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {aulasPorProfessor.map(([professorId, { nome, fotoUrl, aulas: aulasProf, presente, primeira, ultima }]) => (
-              <ProfessorPresencaToggle
-                key={professorId}
-                professorId={professorId}
-                professorNome={nome}
-                fotoUrl={fotoUrl}
-                data={data}
-                unidadeId={context?.unidadeSelecionada ?? ''}
-                aulas={aulasProf}
-                primeiraAula={primeira}
-                ultimaAula={ultima}
-                presente={presente}
-                onMudou={() => recarregar?.()}
-              />
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Blocos de aula em ordem de horario */}
       <div className="space-y-3">
