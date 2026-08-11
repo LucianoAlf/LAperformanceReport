@@ -64,9 +64,8 @@ export function ProfessorPresencaToggle({
       }
       onMudou();
     } catch (e) {
-      toast.error('Nao foi possivel alterar', {
-        description: e instanceof Error ? e.message : String(e),
-      });
+      const msg = e instanceof Error ? e.message : typeof e === 'object' && e !== null && 'message' in e ? String((e as Record<string, unknown>).message) : String(e);
+      toast.error('Nao foi possivel alterar', { description: msg });
     } finally {
       setSalvando(false);
     }
@@ -87,9 +86,8 @@ export function ProfessorPresencaToggle({
       toast.success(`${professorNome} ${novaPresenca} na aula das ${aula.hora_inicio}`);
       onMudou();
     } catch (e) {
-      toast.error('Nao foi possivel alterar', {
-        description: e instanceof Error ? e.message : String(e),
-      });
+      const msg = e instanceof Error ? e.message : typeof e === 'object' && e !== null && 'message' in e ? String((e as Record<string, unknown>).message) : String(e);
+      toast.error('Nao foi possivel alterar', { description: msg });
     } finally {
       setSalvandoAula(null);
     }
