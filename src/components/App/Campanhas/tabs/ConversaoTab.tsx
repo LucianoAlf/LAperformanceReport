@@ -3,8 +3,8 @@ import { TrendingUp, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useConversaoCampanhas } from '../hooks/useConversaoCampanhas'
 
-export function ConversaoTab({ unidadeId: _unidadeId }: { unidadeId: string | null }) {
-  const { conversoes, loading, error } = useConversaoCampanhas()
+export function ConversaoTab({ unidadeId }: { unidadeId: string | null }) {
+  const { conversoes, loading, error } = useConversaoCampanhas(undefined, unidadeId)
   const navigate = useNavigate()
 
   if (loading) {
@@ -51,8 +51,8 @@ export function ConversaoTab({ unidadeId: _unidadeId }: { unidadeId: string | nu
                 {c.leadsGerados > 0 ? `${(c.taxaConversao * 100).toFixed(1)}%` : '—'}
               </td>
               <td className="px-4 py-3 text-right text-gray-300">
-                {c.custoPorMatricula != null
-                  ? `US$ ${c.custoPorMatricula.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                {c.custoPorMatricula != null && c.custoPorMatricula > 0
+                  ? `${c.custoMoeda === 'USD' ? 'US$' : 'R$'} ${c.custoPorMatricula.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
                   : '—'}
               </td>
               <td className="px-4 py-3 text-right">

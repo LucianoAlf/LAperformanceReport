@@ -25,6 +25,7 @@ export function CampanhaDetalhePage() {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [template, setTemplate] = useState<any>(null)
+  const [erroTemplate, setErroTemplate] = useState<string | null>(null)
   const { conversoes, loading: loadingConversao } = useConversaoCampanhas(campanhaId)
   const conversao = conversoes[0]
 
@@ -49,13 +50,22 @@ export function CampanhaDetalhePage() {
   useEffect(() => { fetchCampanha() }, [fetchCampanha])
 
   useEffect(() => {
-    if (!campanha?.template_id) { setTemplate(null); return }
+    if (!campanha?.template_id) { setTemplate(null); setErroTemplate(null); return }
+    setErroTemplate(null)
     supabase
       .from('templates_meta')
       .select('nome, header_type, media_url, body_text, componentes')
       .eq('id', campanha.template_id)
       .single()
-      .then(({ data }) => setTemplate(data))
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Erro ao carregar template da campanha:', error)
+          setTemplate(null)
+          setErroTemplate('Erro ao carregar template.')
+          return
+        }
+        setTemplate(data)
+      })
   }, [campanha?.template_id])
 
   async function handleAction(action: 'iniciar' | 'pausar' | 'retomar') {
@@ -159,6 +169,12 @@ export function CampanhaDetalhePage() {
       )}
 
       {/* Template completo */}
+      {erroTemplate && (
+        <div className="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+          <AlertTriangle className="w-4 h-4 text-red-400" />
+          <span className="text-sm text-red-300">{erroTemplate}</span>
+        </div>
+      )}
       {template && (
         <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
           <div className="flex items-center gap-1.5 px-4 pt-3 pb-1.5">
@@ -209,7 +225,9 @@ export function CampanhaDetalhePage() {
               <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
                 <span className="text-xs text-gray-500 block mb-1">Custo por matrícula</span>
                 <span className="text-lg font-bold text-white">
-                  {conversao.custoPorMatricula != null ? `US$ ${conversao.custoPorMatricula.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}
+                  {conversao.custoPorMatricula != null && conversao.custoPorMatricula > 0
+                    ? `${conversao.custoMoeda === 'USD' ? 'US$' : 'R$'} ${conversao.custoPorMatricula.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                    : '—'}
                 </span>
               </div>
             </div>
@@ -220,7 +238,7 @@ export function CampanhaDetalhePage() {
                   <div key={m.leadId} className="flex items-center justify-between px-3 py-2 bg-slate-900/50 rounded-lg text-sm">
                     <span className="text-gray-200">{m.nome}</span>
                     <span className="text-xs text-gray-500">
-                      {m.dataMatricula ? new Date(m.dataMatricula).toLocaleDateString('pt-BR') : '—'}
+                      {formatarDataMatricula(m.dataMatricula)}
                     </span>
                   </div>
                 ))}
@@ -241,7 +259,7 @@ export function CampanhaDetalhePage() {
       </div>
 
       {/* Conversas */}
-      <CampanhaConversasPanel campanhaId={campanha.id} />
+      <CampanhaConversasPanel campanhaId={campanha.id} numeroMetaId={campanha.numero_meta_id} />
 
       {/* Contatos */}
       <CampanhaContatosPanel campanha={campanha} onReenviarFalhas={handleReenviarFalhas} />
@@ -250,6 +268,22 @@ export function CampanhaDetalhePage() {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * `alunos.data_matricula` é uma coluna `date` (sem hora) — o PostgREST manda
+ * "2026-08-01" e `new Date(...)` interpreta como meia-noite UTC, exibindo o
+ * dia anterior em BRT (UTC-3). Parseia por partes em vez de deixar o Date
+ * nativo assumir UTC. Mesmo padrão de `parseDateOnly` em
+ * src/lib/retencaoOperacionalCanonica.ts. Ver Achado 4 da revisão de 2026-08-11.
+ */
+function formatarDataMatricula(value: string | null): string {
+  if (!value) return '—'
+  const [ano, mes, dia] = value.split('T')[0].split('-').map(Number)
+  if (!ano || !mes || !dia) return '—'
+  const data = new Date(ano, mes - 1, dia)
+  if (Number.isNaN(data.getTime())) return '—'
+  return data.toLocaleDateString('pt-BR')
+}
 
 function MiniKPI({ icon: Icon, label, value, total, sub, color }: {
   icon: React.ElementType; label: string; value: number; total?: number; sub?: string

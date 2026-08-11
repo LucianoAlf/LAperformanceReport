@@ -30,7 +30,7 @@ const TAB_BADGE_COLORS: Record<string, string> = {
   emerald: 'bg-emerald-500/20 text-emerald-400',
 }
 
-export function CampanhaContatosPanel({ campanha, onReenviarFalhas }: { campanha: Campanha; onReenviarFalhas: () => void }) {
+export function CampanhaContatosPanel({ campanha, onReenviarFalhas }: { campanha: Campanha; onReenviarFalhas: () => Promise<void> }) {
   const {
     loading, contadores, filtrados,
     searchTerm, setSearchTerm, activeTab, setActiveTab,
@@ -97,7 +97,7 @@ export function CampanhaContatosPanel({ campanha, onReenviarFalhas }: { campanha
 
       <BulkActionBar
         falhas={campanha.falhas}
-        onReenviarFalhas={async () => { onReenviarFalhas() }}
+        onReenviarFalhas={onReenviarFalhas}
         onCopiarNumeros={copiarNaoEntregues}
         onExportarCSV={() => exportarCSV(campanha.nome)}
       />

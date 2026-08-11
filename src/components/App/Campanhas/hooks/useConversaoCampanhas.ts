@@ -22,6 +22,7 @@ export interface ConversaoCampanha {
   matriculados: number
   taxaConversao: number
   custoPorMatricula: number | null
+  custoMoeda: string
   matriculasDetalhe: MatriculaConversao[]
 }
 
@@ -32,17 +33,35 @@ const SELECT_ALUNO_CANONICO = `
   tipos_matricula(codigo, conta_como_pagante, entra_ticket_medio)
 `
 
-export function useConversaoCampanhas(campanhaId?: string | null) {
+/**
+ * `campanhaId` distingue dois modos: omitido (undefined, default) lista TODAS
+ * as campanhas — uso da aba "Conversão" geral. Passado explicitamente mas
+ * vazio ('' ou null) é tratado como erro do chamador (ex: rota sem
+ * :campanhaId resolvido) e retorna lista vazia, nunca cai no modo "todas" —
+ * senão a página de detalhamento de uma campanha mostraria os números de
+ * OUTRA campanha. Ver Achado 8 da revisão de 2026-08-11.
+ */
+export function useConversaoCampanhas(campanhaId?: string | null, unidadeId?: string | null) {
   const [conversoes, setConversoes] = useState<ConversaoCampanha[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const campanhaIdInvalido = campanhaId !== undefined && !campanhaId
+
   const fetchConversoes = useCallback(async () => {
     setLoading(true)
     setError(null)
+
+    if (campanhaIdInvalido) {
+      setConversoes([])
+      setLoading(false)
+      return
+    }
+
     try {
-      let query = supabase.from('campanhas').select('id, nome, unidade_id, numero_meta_id, custo_real')
+      let query = supabase.from('campanhas').select('id, nome, unidade_id, numero_meta_id, custo_real, custo_moeda')
       if (campanhaId) query = query.eq('id', campanhaId)
+      if (unidadeId) query = query.eq('unidade_id', unidadeId)
       const { data: campanhas, error: campErr } = await query
       if (campErr) throw campErr
       if (!campanhas || campanhas.length === 0) { setConversoes([]); return }
@@ -97,6 +116,7 @@ export function useConversaoCampanhas(campanhaId?: string | null) {
           matriculados,
           taxaConversao: calcularTaxaConversao(leadsGerados, matriculados),
           custoPorMatricula: calcularCustoPorMatricula(campanha.custo_real ?? 0, matriculados),
+          custoMoeda: campanha.custo_moeda ?? 'USD',
           matriculasDetalhe,
         })
       }
@@ -107,14 +127,14 @@ export function useConversaoCampanhas(campanhaId?: string | null) {
     } finally {
       setLoading(false)
     }
-  }, [campanhaId])
+  }, [campanhaId, unidadeId, campanhaIdInvalido])
 
   useEffect(() => { fetchConversoes() }, [fetchConversoes])
 
   return { conversoes, loading, error, refetch: fetchConversoes }
 }
 
-function vazio(campanha: { id: string; nome: string }): ConversaoCampanha {
+function vazio(campanha: { id: string; nome: string; custo_moeda?: string }): ConversaoCampanha {
   return {
     campanhaId: campanha.id,
     campanhaNome: campanha.nome,
@@ -122,6 +142,7 @@ function vazio(campanha: { id: string; nome: string }): ConversaoCampanha {
     matriculados: 0,
     taxaConversao: 0,
     custoPorMatricula: null,
+    custoMoeda: campanha.custo_moeda ?? 'USD',
     matriculasDetalhe: [],
   }
 }
