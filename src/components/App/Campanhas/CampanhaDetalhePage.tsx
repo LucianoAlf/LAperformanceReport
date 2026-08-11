@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import type { Campanha } from './hooks/useCampanhas'
+import { useConversaoCampanhas } from './hooks/useConversaoCampanhas'
 import { DeliveryCoverageRing } from './components/DeliveryCoverageRing'
 import { CampanhaContatosPanel } from './components/CampanhaContatosPanel'
 
@@ -23,6 +24,8 @@ export function CampanhaDetalhePage() {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [template, setTemplate] = useState<any>(null)
+  const { conversoes, loading: loadingConversao } = useConversaoCampanhas(campanhaId)
+  const conversao = conversoes[0]
 
   const fetchCampanha = useCallback(async () => {
     if (!campanhaId) return
@@ -185,6 +188,46 @@ export function CampanhaDetalhePage() {
           )}
         </div>
       )}
+
+      {/* Conversão */}
+      <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 space-y-4">
+        <p className="text-xs text-gray-400">Conversão</p>
+        {loadingConversao ? (
+          <div className="flex items-center justify-center py-6"><RefreshCw className="w-4 h-4 text-slate-500 animate-spin" /></div>
+        ) : !conversao || conversao.leadsGerados === 0 ? (
+          <p className="text-sm text-gray-500">Nenhum lead atribuído a esta campanha ainda.</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <MiniKPI icon={MessageSquare} label="Leads gerados" value={conversao.leadsGerados} color="blue" />
+              <MiniKPI icon={CheckCircle} label="Matriculados" value={conversao.matriculados} color="emerald" />
+              <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
+                <span className="text-xs text-gray-500 block mb-1">Taxa de conversão</span>
+                <span className="text-lg font-bold text-white">{(conversao.taxaConversao * 100).toFixed(1)}%</span>
+              </div>
+              <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
+                <span className="text-xs text-gray-500 block mb-1">Custo por matrícula</span>
+                <span className="text-lg font-bold text-white">
+                  {conversao.custoPorMatricula != null ? `US$ ${conversao.custoPorMatricula.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}
+                </span>
+              </div>
+            </div>
+            {conversao.matriculasDetalhe.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs text-gray-500">Quem matriculou</p>
+                {conversao.matriculasDetalhe.map(m => (
+                  <div key={m.leadId} className="flex items-center justify-between px-3 py-2 bg-slate-900/50 rounded-lg text-sm">
+                    <span className="text-gray-200">{m.nome}</span>
+                    <span className="text-xs text-gray-500">
+                      {m.dataMatricula ? new Date(m.dataMatricula).toLocaleDateString('pt-BR') : '—'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {/* Timeline */}
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
