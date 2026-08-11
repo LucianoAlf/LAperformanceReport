@@ -325,16 +325,16 @@ async function processarMensagem(supabase: any, phoneNumberId: string, msg: any,
       // Responde a QUALQUER um que escreve (sem trava de campanha).
       // Debounce: não reenvia se já respondeu este contato nos últimos 10 minutos.
       const dezMinAtras = new Date(Date.now() - 10 * 60 * 1000).toISOString()
-      const { data: autoReplyRecente } = await supabase
+      const { data: autoRepliesRecentes } = await supabase
         .from('mensagens_campanha')
         .select('id')
         .eq('conversa_id', conversa.id)
         .eq('direcao', 'outbound')
         .eq('metadata->>auto_reply', 'true')
         .gte('created_at', dezMinAtras)
-        .maybeSingle()
+        .limit(1)
 
-      if (!autoReplyRecente) {
+      if (!autoRepliesRecentes || autoRepliesRecentes.length === 0) {
         await enviarMensagemTexto(
           { phone_number_id: phoneNumberId, access_token: numero.access_token },
           telefone, numero.auto_reply_message,
