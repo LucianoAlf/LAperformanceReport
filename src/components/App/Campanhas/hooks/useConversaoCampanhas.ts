@@ -68,7 +68,7 @@ export function useConversaoCampanhas(campanhaId?: string | null) {
 
         const { data: linhas, error: leadsErr } = await supabase
           .from('leads_campanhas')
-          .select(`lead_id, leads(id, aluno_id, unidade_id, alunos(${SELECT_ALUNO_CANONICO}))`)
+          .select(`lead_id, leads(id, aluno_id, unidade_id, alunos!leads_aluno_id_fkey(${SELECT_ALUNO_CANONICO}))`)
           .eq('campanha_slug', label)
         if (leadsErr) throw leadsErr
 
