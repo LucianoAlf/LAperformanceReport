@@ -16,7 +16,7 @@ function matriculaFake(overrides: Record<string, unknown> = {}) {
     id: 238,
     status: 'ativa',
     qtd_contratos: 2,
-    aluno: { id: 408, nome: 'Natan Pereira Calvo Demidoff' },
+    aluno: { id: 408, lead_id: 701, nome: 'Natan Pereira Calvo Demidoff' },
     contrato_atual: {
       id: 834,
       nr_faturas: 12,
@@ -40,6 +40,7 @@ function matriculaFake(overrides: Record<string, unknown> = {}) {
 
 Deno.test('extrai campos de contrato do payload da API', () => {
   const input = buildJornadaInputFromMatriculaApi(matriculaFake(), UNIDADE);
+  assertEquals(input?.emusysLeadId, 701);
   assertEquals(input?.nrFaturas, 12);
   assertEquals(input?.dataPrimeiraFatura, '2025-06-05');
   assertEquals(input?.diaVencimentoEmusys, 5);
@@ -55,6 +56,14 @@ Deno.test('campos de contrato ausentes viram null', () => {
   assertEquals(input?.dataPrimeiraFatura, null);
   assertEquals(input?.diaVencimentoEmusys, null);
   assertEquals(input?.inadimplenteEmusys, null);
+});
+
+Deno.test('Lead ID zero da API representa aluno ja convertido e vira null', () => {
+  const input = buildJornadaInputFromMatriculaApi(
+    { id: 1, aluno: { id: 2, lead_id: 0 }, contrato_atual: { disciplinas: [] } },
+    UNIDADE,
+  );
+  assertEquals(input?.emusysLeadId, null);
 });
 
 Deno.test('campos de contrato repetem em cada linha de disciplina', () => {
@@ -206,6 +215,7 @@ Deno.test('API preserva estado v1.3.1 e detalhes do trancamento na jornada', () 
   const { rows } = buildJornadaRowsForUpsert(input);
   const row = rows[0];
 
+  assertEquals(row.payload_snapshot.matricula.lead_id, 701);
   assertEquals(row.status_matricula, 'trancada');
   assertEquals(row.status_emusys, 'trancada');
   assertEquals(row.motivo_inativa, null);

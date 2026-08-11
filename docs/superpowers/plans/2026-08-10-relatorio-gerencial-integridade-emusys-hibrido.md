@@ -232,6 +232,7 @@ git commit -m "feat: publicar contrato canonico de metas e cobertura"
 **Files:**
 - Create: \`supabase/functions/_shared/lead-id-reconciliacao.ts\`
 - Create: \`supabase/functions/_shared/lead-id-reconciliacao.test.ts\`
+- Create: \`supabase/migrations/20260811131500_emusys_lead_id_alunos.sql\`
 - Modify: \`supabase/functions/sync-matriculas-emusys/index.ts:929-1025,1080-1260\`
 - Modify: \`supabase/functions/_shared/jornada-canonica.ts\`
 

@@ -51,6 +51,7 @@ import {
   type CorpoSyncPresenca,
   type ModoSyncPresenca,
 } from '../_shared/sync-presenca-authorization.ts';
+import { selecionarCandidatoExperimental } from '../_shared/experimental-reconciliacao.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -845,25 +846,62 @@ async function reconciliarExperimentaisOrfas(
       const novoStatus = presente ? 'experimental_realizada' : 'experimental_faltou';
 
       // 1. Match primário pela AULA real (emusys_aula_id) — não colapsa multi-instrumento.
-      let consultaExistente = supabase
+      const camposCandidato = 'id, status, unidade_id, lead_id, curso_interesse_id, professor_experimental_id, emusys_aula_id, emusys_lead_id, aluno_id, data_experimental, horario_experimental';
+      const { data: candidatosPorAula, error: candidatosPorAulaError } = await supabase
         .from('lead_experimentais')
-        .select('id, status, lead_id, curso_interesse_id, professor_experimental_id, emusys_aula_id, emusys_lead_id, aluno_id')
+        .select(camposCandidato)
         .eq('unidade_id', exp.unidadeId)
         .eq('emusys_aula_id', exp.emusysAulaId)
-        .neq('status', 'cancelada');
-      if (somenteIdentidadesEstaveis && idLead > 0) {
-        consultaExistente = consultaExistente.eq('emusys_lead_id', idLead);
-      } else if (somenteIdentidadesEstaveis && idAluno != null) {
-        consultaExistente = consultaExistente.eq('aluno_id', idAluno);
-      } else if (somenteIdentidadesEstaveis) {
-        continue;
-      }
-      let { data: expExistente, error: expExistenteError } =
-        await consultaExistente
-        .limit(1)
-        .maybeSingle();
-      if (somenteIdentidadesEstaveis && expExistenteError) {
+        .neq('status', 'cancelada')
+        .limit(20);
+      if (somenteIdentidadesEstaveis && candidatosPorAulaError) {
         throw new Error('FALHA_CONSULTAR_EXPERIMENTAL_SNAPSHOT');
+      }
+
+      const identidadeExperimental = {
+        unidadeId: exp.unidadeId,
+        emusysAulaId: exp.emusysAulaId,
+        emusysLeadId: idLead > 0 ? idLead : null,
+        emusysAlunoId: idAluno,
+        data: exp.dataAula,
+        horario: exp.horarioBanco,
+        cursoId: exp.cursoId,
+      };
+      const normalizarCandidato = (candidato: any) => ({
+        ...candidato,
+        id: Number(candidato.id),
+        unidadeId: String(candidato.unidade_id),
+        emusysAulaId: candidato.emusys_aula_id == null ? null : Number(candidato.emusys_aula_id),
+        emusysLeadId: candidato.emusys_lead_id == null ? null : Number(candidato.emusys_lead_id),
+        emusysAlunoId: candidato.aluno_id == null ? null : Number(candidato.aluno_id),
+        dataAula: candidato.data_experimental == null ? null : String(candidato.data_experimental),
+        horarioBanco: candidato.horario_experimental == null ? null : String(candidato.horario_experimental),
+        cursoId: candidato.curso_interesse_id == null ? null : Number(candidato.curso_interesse_id),
+      });
+      let expExistente = selecionarCandidatoExperimental(
+        identidadeExperimental,
+        (candidatosPorAula || []).map(normalizarCandidato),
+      ) as any;
+      const aulaAmbigua = (candidatosPorAula || []).length > 1;
+
+      // Se a aula ainda nao estiver ligada, usa Lead/data/campos estaveis para
+      // recuperar a linha legada do webhook. Nao usa nome e nunca usa maybeSingle
+      // antes de o seletor provar unicidade.
+      if (!expExistente && !aulaAmbigua && (idLead > 0 || idAluno != null)) {
+        const { data: candidatosPorIdentidade, error: candidatosPorIdentidadeError } = await supabase
+          .from('lead_experimentais')
+          .select(camposCandidato)
+          .eq('unidade_id', exp.unidadeId)
+          .eq('data_experimental', exp.dataAula)
+          .neq('status', 'cancelada')
+          .limit(50);
+        if (somenteIdentidadesEstaveis && candidatosPorIdentidadeError) {
+          throw new Error('FALHA_CONSULTAR_EXPERIMENTAL_SNAPSHOT');
+        }
+        expExistente = selecionarCandidatoExperimental(
+          { ...identidadeExperimental, emusysAulaId: null },
+          (candidatosPorIdentidade || []).map(normalizarCandidato),
+        ) as any;
       }
 
       // 2. Fallback legado: linha sem aula_id (criada antes), casa por nome+data+unidade.

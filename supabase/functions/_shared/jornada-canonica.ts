@@ -30,6 +30,7 @@ export interface JornadaMatriculaInput {
   estadoEmusysPresente: boolean;
   lifecycle: EmusysMatriculaLifecycleResolution | null;
   emusysAlunoId: number | null;
+  emusysLeadId: number | null;
   emusysMatriculaId: number | null;
   nomeAluno: string | null;
   dataNascimentoAluno: string | null;
@@ -97,6 +98,11 @@ function numberOrNull(value: unknown): number | null {
   if (value == null || value === '') return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function leadIdOrNull(value: unknown): number | null {
+  const parsed = numberOrNull(value);
+  return parsed != null && Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function textOrNull(value: unknown): string | null {
@@ -262,6 +268,9 @@ export function buildJornadaInputFromWebhook(
     estadoEmusysPresente: lifecycle.presente,
     lifecycle: lifecycle.resolution,
     emusysAlunoId: numberOrNull(matricula.aluno_id ?? matricula.id_aluno),
+    emusysLeadId: leadIdOrNull(
+      matricula.aluno?.lead_id ?? matricula.lead_id ?? body?.aluno?.lead_id,
+    ),
     emusysMatriculaId: numberOrNull(matricula.matricula_id ?? matricula.id),
     nomeAluno: textOrNull(matricula.nome_aluno),
     dataNascimentoAluno: textOrNull(matricula.data_nascimento_aluno),
@@ -272,7 +281,7 @@ export function buildJornadaInputFromWebhook(
     dataPrimeiraFatura: null,
     diaVencimentoEmusys: null,
     inadimplenteEmusys: null,
-    disciplinas: disciplinasRaw.map(extractDisciplina).filter((d) => d.matriculaDisciplinaId != null),
+    disciplinas: disciplinasRaw.map(extractDisciplina).filter((d: JornadaDisciplinaInput) => d.matriculaDisciplinaId != null),
     raw: body,
   };
 }
@@ -294,6 +303,9 @@ export function buildJornadaInputFromMatriculaApi(
     estadoEmusysPresente: lifecycle.presente,
     lifecycle: lifecycle.resolution,
     emusysAlunoId: numberOrNull(mat.aluno?.id ?? mat.aluno_id ?? mat.id_aluno),
+    emusysLeadId: leadIdOrNull(
+      mat.aluno?.lead_id ?? mat.lead_id ?? contrato.lead_id,
+    ),
     emusysMatriculaId: numberOrNull(mat.id ?? mat.matricula_id),
     nomeAluno: textOrNull(mat.aluno?.nome ?? mat.nome_aluno),
     dataNascimentoAluno: textOrNull(mat.aluno?.data_nascimento ?? mat.data_nascimento_aluno),
@@ -302,7 +314,7 @@ export function buildJornadaInputFromMatriculaApi(
     dataPrimeiraFatura: parseDateOnly(contrato.data_primeira_fatura),
     diaVencimentoEmusys: numberOrNull(contrato.dia_vencimento),
     inadimplenteEmusys: typeof contrato.inadimplente === 'boolean' ? contrato.inadimplente : null,
-    disciplinas: disciplinasRaw.map(extractDisciplina).filter((d) => d.matriculaDisciplinaId != null),
+    disciplinas: disciplinasRaw.map(extractDisciplina).filter((d: JornadaDisciplinaInput) => d.matriculaDisciplinaId != null),
     raw: mat,
   };
 }
@@ -449,6 +461,7 @@ export function buildJornadaRowsForUpsert(
         matricula: {
           id: input.emusysMatriculaId,
           aluno_id: input.emusysAlunoId,
+          lead_id: input.emusysLeadId,
           nome_aluno: input.nomeAluno,
           status: input.statusMatricula,
           motivo_inativa: input.lifecycle?.rawReason ?? null,
@@ -517,6 +530,7 @@ export async function upsertJornadaMatriculaDisciplina(
         matricula: {
           id: input.emusysMatriculaId,
           aluno_id: input.emusysAlunoId,
+          lead_id: input.emusysLeadId,
           status: input.statusMatricula,
           motivo_inativa: input.lifecycle?.rawReason ?? null,
           qtd_contratos: input.qtdContratos,

@@ -25,6 +25,7 @@ import {
 } from '../_shared/jornada-canonica.ts';
 import { resolveEmusysMatriculaLifecycle } from '../_shared/emusys-matricula-lifecycle.ts';
 import { deveConverterFinalizadaEmNaoRenovacao } from '../_shared/nao-renovacao-canonica.ts';
+import { decidirLeadId } from '../_shared/lead-id-reconciliacao.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -658,6 +659,39 @@ function numeroFinitoOuNull(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function leadIdFinitoOuNull(value: unknown): number | null {
+  const parsed = numeroFinitoOuNull(value);
+  return parsed != null && Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+/**
+ * Resolve uma linha de aluno somente por identidade externa no escopo da
+ * unidade. Se o aluno Emusys tiver mais de uma linha local (segundo curso),
+ * o fallback por aluno fica ambíguo e nenhuma linha recebe Lead ID por nome.
+ */
+function localizarAlunoParaLeadId(
+  alunos: any[],
+  unidadeId: string,
+  matricula: any,
+): any | null {
+  const matriculaId = numeroFinitoOuNull(matricula?.id);
+  if (matriculaId == null) return null;
+
+  const noEscopo = alunos.filter((aluno) => String(aluno.unidade_id) === String(unidadeId));
+  const porMatricula = noEscopo.filter((aluno) =>
+    numeroFinitoOuNull(aluno.emusys_matricula_id) === matriculaId
+  );
+  if (porMatricula.length === 1) return porMatricula[0];
+  if (porMatricula.length > 1) return null;
+
+  const alunoEmusysId = numeroFinitoOuNull(matricula?.aluno?.id);
+  if (alunoEmusysId == null) return null;
+  const porAluno = noEscopo.filter((aluno) =>
+    numeroFinitoOuNull(aluno.emusys_student_id) === alunoEmusysId
+  );
+  return porAluno.length === 1 ? porAluno[0] : null;
+}
+
 type JornadaUpsertResumo = {
   atualizadas: number;
   erros: number;
@@ -904,6 +938,15 @@ serve(async (req) => {
     fila: {},
     atributos: {},
     jornadas: { atualizadas: 0, puladas: 0, erros: 0 },
+    lead_id: {
+      preenchidos: 0,
+      idempotentes: 0,
+      divergencias: 0,
+      sem_dado: 0,
+      sem_correspondencia: 0,
+      ambiguos: 0,
+      erros: 0,
+    },
     estados_atual: { recebidas: 0, gravadas: 0, rejeitadas: 0, erros: 0 },
     nao_renovacoes_convertidas: 0,
     nao_renovacoes_erros: [],
@@ -960,7 +1003,7 @@ serve(async (req) => {
     const formasPagamentoMap = new Map<number, any>((formasPagamento || []).map((f: any) => [f.id, f]));
 
     const { data: alunos } = await supabase.from('alunos')
-      .select('id, unidade_id, nome, curso_id, professor_atual_id, emusys_matricula_id, emusys_student_id, status, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id, dia_aula, horario_aula, telefone, whatsapp, email, responsavel_nome, responsavel_telefone, foto_url, photo_url, instagram, instagram_nao_possui, status_pagamento, forma_pagamento_id, anamnese_preenchida, aguardando_renovacao')
+      .select('id, unidade_id, nome, curso_id, professor_atual_id, emusys_matricula_id, emusys_student_id, emusys_lead_id, status, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id, dia_aula, horario_aula, telefone, whatsapp, email, responsavel_nome, responsavel_telefone, foto_url, photo_url, instagram, instagram_nao_possui, status_pagamento, forma_pagamento_id, anamnese_preenchida, aguardando_renovacao')
       .eq('unidade_id', u.id)
       .is('arquivado_em', null);
 
@@ -1072,6 +1115,103 @@ serve(async (req) => {
         const campo = (d as any).matriculas_divergencias?.campo || '';
         if (tp) jaDecidido.add(`${d.aluno_id}|${tp}`);
         if (tp) jaDecididoCampo.add(`${d.aluno_id}|${tp}|${campo}`);
+      }
+    }
+
+    // Lead ID: identidade externa capturada na API, sempre resolvida por
+    // (unidade + matricula) ou por aluno Emusys univoco. Segundo curso e
+    // homonimo nunca entram como criterio de escolha.
+    for (const mat of porId.values()) {
+      const remoto = leadIdFinitoOuNull(mat?.aluno?.lead_id);
+      if (remoto == null) {
+        resumo.lead_id.sem_dado++;
+        continue;
+      }
+
+      const alunoLocal = localizarAlunoParaLeadId(alunos || [], u.id, mat);
+      if (!alunoLocal) {
+        resumo.lead_id.sem_correspondencia++;
+        logs.push({
+          aluno_id: null,
+          unidade_nome: u.nome,
+          evento: 'sync_matriculas_lead_id',
+          acao: 'sem_correspondencia_segura',
+          detalhes: {
+            unidade_id: u.id,
+            emusys_matricula_id: mat.id,
+            emusys_aluno_id: mat.aluno?.id ?? null,
+            emusys_lead_id: remoto,
+          },
+          workflow_id: 'sync-matriculas-emusys',
+          execution_id: new Date().toISOString(),
+        });
+        continue;
+      }
+
+      const decisao = decidirLeadId({
+        unidadeId: u.id,
+        local: numeroFinitoOuNull(alunoLocal.emusys_lead_id),
+        emusys: remoto,
+      });
+
+      if (decisao.acao === 'manter') {
+        resumo.lead_id.idempotentes++;
+        continue;
+      }
+      if (decisao.acao === 'preencher') {
+        const { error: leadUpdateError } = await supabase
+          .from('alunos')
+          .update({ emusys_lead_id: decisao.valor })
+          .eq('id', alunoLocal.id)
+          .eq('unidade_id', u.id)
+          .is('emusys_lead_id', null);
+        if (leadUpdateError) {
+          resumo.lead_id.erros++;
+          logs.push({
+            aluno_id: alunoLocal.id,
+            unidade_nome: u.nome,
+            evento: 'sync_matriculas_lead_id',
+            acao: 'erro_preenchimento',
+            detalhes: {
+              unidade_id: u.id,
+              emusys_matricula_id: mat.id,
+              emusys_lead_id: decisao.valor,
+              erro: leadUpdateError.message,
+            },
+            workflow_id: 'sync-matriculas-emusys',
+            execution_id: new Date().toISOString(),
+          });
+        } else {
+          resumo.lead_id.preenchidos++;
+        }
+        continue;
+      }
+      if (decisao.acao !== 'auditar_divergencia') continue;
+
+      resumo.lead_id.divergencias++;
+      const jaTemDecisao = jaDecidido.has(`${alunoLocal.id}|lead_id_divergente`);
+      if (!jaTemDecisao) {
+        divs.push({
+          aluno_id: alunoLocal.id,
+          emusys_matricula_id: String(mat.id),
+          unidade_id: u.id,
+          tipo_divergencia: 'lead_id_divergente',
+          campo: 'emusys_lead_id',
+          fonte: 'sync',
+          valor_nosso: {
+            nome: alunoLocal.nome,
+            emusys_lead_id: decisao.local,
+          },
+          valor_api: {
+            emusys_matricula_id: mat.id,
+            emusys_aluno_id: mat.aluno?.id ?? null,
+            emusys_lead_id: decisao.remoto,
+          },
+          sugestao: null,
+          severidade: 'alta',
+          resolvido: false,
+          updated_at: new Date().toISOString(),
+        });
       }
     }
 
