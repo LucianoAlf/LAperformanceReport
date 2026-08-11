@@ -136,6 +136,7 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
           onReagendarAula={setAulaReagendar}
           onAbrirDrawer={(a) => abrirDrawer(a)}
           onAbrirDrawerLead={abrirDrawerLead}
+          recarregar={recarregar}
         />
       )}
 

@@ -26,6 +26,7 @@ interface Props {
   onReagendarAula: (aula: AulaAgenda) => void;
   onAbrirDrawer: (aula: AulaAgenda) => void;
   onAbrirDrawerLead: (lead: LeadExperimentalAgenda, aula: AulaAgenda) => void;
+  recarregar?: () => void;
 }
 
 /**
@@ -46,6 +47,7 @@ export function ChamadaDia({
   onReagendarAula,
   onAbrirDrawer,
   onAbrirDrawerLead,
+  recarregar,
 }: Props) {
   const { hasPermission } = useAuth();
   const podeOperar = hasPermission('agenda.chamada');
@@ -180,7 +182,7 @@ export function ChamadaDia({
                 primeiraAula={primeira}
                 ultimaAula={ultima}
                 presente={presente}
-                onMudou={() => onRegistrar([])} // forca recarga
+                onMudou={() => recarregar?.()}
               />
             ))}
           </div>
