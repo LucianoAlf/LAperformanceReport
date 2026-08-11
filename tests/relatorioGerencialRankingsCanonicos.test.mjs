@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const migrationPath = path.join(
   root,
-  'supabase/migrations/20260811200527_relatorio_gerencial_rankings_todos_canonicos.sql',
+  'supabase/migrations/20260811200702_relatorio_gerencial_rankings_todos_canonicos.sql',
 );
 
 test('ranking mensal usa produtores canonicos para todas as metricas', () => {
