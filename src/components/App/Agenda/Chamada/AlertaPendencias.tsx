@@ -98,10 +98,10 @@ export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirD
         <PartyPopper className="h-5 w-5 shrink-0 text-emerald-400" />
         <div>
           <p className="text-sm font-semibold text-emerald-300">
-            {nomes ? `Parabéns, ${nomes}!` : 'Parabéns!'} Chamada completa — nenhum aluno sem destino.
+            {nomes ? `Parabéns, ${nomes}!` : 'Parabéns!'} Tudo fechado na ficha de chamada.
           </p>
           <p className="mt-0.5 text-xs text-emerald-400/70">
-            Tudo fechado. O lembrete de presenças do WhatsApp não vai precisar sair hoje.
+            O lembrete de presenças do WhatsApp não vai precisar aparecer amanhã no grupo.
           </p>
         </div>
       </div>
