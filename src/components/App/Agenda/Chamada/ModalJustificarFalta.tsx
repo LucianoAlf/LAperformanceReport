@@ -81,8 +81,8 @@ export function ModalJustificarFalta({ aberto, onFechar, aula, aluno, salvando, 
             Falta justificada — {aluno?.nome}
           </DialogTitle>
           <DialogDescription className="text-slate-400">
-            Conta como falta nos indicadores, mas gera <b className="text-amber-300">1 crédito de reposição</b> —
-            a aula vai para o final do pacote.
+            Conta como falta nos indicadores, mas gera <b className="text-amber-300">1 crédito de reposição</b>,
+            mediante comprovante de atestado médico ou declaração de trabalho.
             {aula && (
               <span className="mt-1 block text-xs text-slate-500">
                 {aula.hora_inicio} · {aula.curso_nome} · {aula.sala_nome} · {aula.unidade_nome}

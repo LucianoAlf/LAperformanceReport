@@ -78,9 +78,7 @@ function respondido_por_vazio(valor: string | null): boolean {
 /** Motivos sugeridos (chips) — o texto livre e o que vale; chips so agilizam. */
 export const SUGESTOES_JUSTIFICATIVA = [
   'Atestado médico',
-  'Doença (aviso da família)',
-  'Viagem',
-  'Compromisso escolar',
+  'Declaração de trabalho',
 ] as const;
 
 export const SUGESTOES_CANCELAMENTO = [
