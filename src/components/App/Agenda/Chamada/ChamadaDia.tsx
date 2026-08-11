@@ -1,12 +1,17 @@
 import { useMemo } from 'react';
-import { AlertTriangle, CalendarX, Clock } from 'lucide-react';
+import { CalendarX } from 'lucide-react';
 import type { AulaAgenda } from '@/hooks/useAgendaDia';
 import { useAuth } from '@/contexts/AuthContext';
-import { aulaJaOcorreu } from '@/lib/agenda';
-import { alunoSemDestino, chamadaCompleta, estadoDoAluno } from './chamadaUtils';
+import { useOutletContext } from 'react-router-dom';
+import { chamadaCompleta, estadoDoAluno } from './chamadaUtils';
 import { ChamadaAulaBloco } from './ChamadaAulaBloco';
+import { AlertaPendencias } from './AlertaPendencias';
 import type { ItemChamada } from './useChamadaAcoes';
 import type { AlunoAgenda } from '@/hooks/useAgendaDia';
+
+interface OutletContext {
+  unidadeSelecionada: string | null;
+}
 
 interface Props {
   data: string;
@@ -39,28 +44,13 @@ export function ChamadaDia({
   const { hasPermission } = useAuth();
   const podeOperar = hasPermission('agenda.chamada');
   const agora = useMemo(() => new Date(), []);
+  const context = useOutletContext<OutletContext | undefined>();
+  const consolidado = !context?.unidadeSelecionada;
 
   const ordenadas = useMemo(
     () => [...aulas].sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio)),
     [aulas],
   );
-
-  // Pendencias: alunos em aulas JA OCORRIDAS sem destino humano. E o que o
-  // digest diario cobra — mostrar aqui deixa a equipe agir antes do digest.
-  const pendentes = useMemo(() => {
-    const lista: Array<{ aula: AulaAgenda; aluno: AlunoAgenda }> = [];
-    for (const aula of ordenadas) {
-      if (aula.cancelada) continue;
-      if (!aulaJaOcorreu(data, aula.hora_fim, agora)) continue;
-      for (const aluno of aula.alunos) {
-        if (aluno.aluno_id == null) continue;
-        if (alunoSemDestino(aula, aluno, data, agora)) {
-          lista.push({ aula, aluno });
-        }
-      }
-    }
-    return lista;
-  }, [ordenadas, data, agora]);
 
   const totalAulas = ordenadas.length;
   const aulasConcluidas = ordenadas.filter((a) => chamadaCompleta(a, data, agora)).length;
@@ -76,33 +66,13 @@ export function ChamadaDia({
 
   return (
     <div className="space-y-4">
-      {/* Banner de pendencias — so aparece quando ha alunos sem destino em
-          aulas que ja terminaram. E o "digest" ao vivo, na cara da equipe. */}
-      {pendentes.length > 0 && (
-        <div className="flex items-start gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-amber-200">
-              {pendentes.length} {pendentes.length === 1 ? 'aluno sem destino' : 'alunos sem destino'}
-              {' '}em aulas que já ocorreram
-            </p>
-            <p className="mt-0.5 text-xs text-amber-300/80">
-              Ninguém registrou presença, falta ou justificativa. Esses alunos entram no digest diário.
-            </p>
-            <ul className="mt-2 max-h-32 space-y-0.5 overflow-y-auto text-xs text-amber-200/90">
-              {pendentes.slice(0, 8).map(({ aula, aluno }) => (
-                <li key={`${aula.chave}-${aluno.aluno_id}`} className="truncate">
-                  <Clock className="mr-1 inline h-3 w-3" />
-                  {aula.hora_inicio} · {aluno.nome} · {aula.curso_nome}
-                </li>
-              ))}
-              {pendentes.length > 8 && (
-                <li className="text-amber-400/70">… e mais {pendentes.length - 8}</li>
-              )}
-            </ul>
-          </div>
-        </div>
-      )}
+      {/* Alerta de pendências — ao vivo, separado por hoje/ontem, clicável */}
+      <AlertaPendencias
+        data={data}
+        aulas={ordenadas}
+        consolidado={consolidado}
+        onAbrirDrawer={onAbrirDrawer}
+      />
 
       {/* Progresso do dia */}
       <div className="flex items-center justify-between rounded-xl border border-slate-700/50 bg-slate-800/30 px-4 py-2.5 text-xs text-slate-400">
