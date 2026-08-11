@@ -71,6 +71,7 @@ export function ChamadaDia({
         data={data}
         aulas={ordenadas}
         consolidado={consolidado}
+        unidadeId={context?.unidadeSelecionada ?? null}
         onAbrirDrawer={onAbrirDrawer}
       />
 

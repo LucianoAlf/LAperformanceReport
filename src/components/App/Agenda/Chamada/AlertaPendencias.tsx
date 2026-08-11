@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { formatDistanceToNowStrict, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { AlertTriangle, CheckCircle2, Clock, ChevronRight } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, ChevronRight, PartyPopper } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import type { AulaAgenda, AlunoAgenda } from '@/hooks/useAgendaDia';
 import { aulaJaOcorreu } from '@/lib/agenda';
 import { alunoSemDestino } from './chamadaUtils';
@@ -19,6 +20,8 @@ interface Props {
   aulas: AulaAgenda[];
   /** Se true, agrupa por unidade (consolidado). Se false, mostra flat. */
   consolidado: boolean;
+  /** ID da unidade selecionada (null = consolidado). Usado para buscar a equipe. */
+  unidadeId: string | null;
   onAbrirDrawer: (aula: AulaAgenda) => void;
 }
 
@@ -34,9 +37,31 @@ interface Props {
  *
  * Cada item é clicável: abre o drawer da aula para a equipe agir na hora.
  */
-export function AlertaPendencias({ data, aulas, consolidado, onAbrirDrawer }: Props) {
+export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirDrawer }: Props) {
   const agora = useMemo(() => new Date(), []);
   const hoje = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const [nomesEquipe, setNomesEquipe] = useState<string[]>([]);
+
+  // Busca os nomes da equipe da unidade (para o parabéns personalizado).
+  // Filtra usuarios genéricos (Equipe X, testes, etc.) — so pega nomes reais.
+  useEffect(() => {
+    if (!unidadeId) { setNomesEquipe([]); return; }
+    let cancelado = false;
+    (async () => {
+      const { data: rows } = await supabase
+        .from('usuarios')
+        .select('nome')
+        .eq('unidade_id', unidadeId)
+        .eq('ativo', true)
+        .order('nome');
+      if (cancelado) return;
+      const nomes = (rows ?? [])
+        .map((r: { nome: string }) => r.nome)
+        .filter((n: string) => n && !n.toLowerCase().includes('equipe') && !n.toLowerCase().includes('teste'));
+      setNomesEquipe(nomes);
+    })();
+    return () => { cancelado = true; };
+  }, [unidadeId]);
 
   const pendentes = useMemo(() => {
     const lista: Pendencia[] = [];
@@ -61,20 +86,30 @@ export function AlertaPendencias({ data, aulas, consolidado, onAbrirDrawer }: Pr
   const pendentesHoje = pendentes.filter((p) => data === hoje);
   const pendentesOntem = pendentes.filter((p) => data !== hoje);
 
-  // Se não tem pendências, mostra parabéns (verde)
+  // Se não tem pendências, mostra parabéns (verde) com os nomes da equipe
   if (pendentes.length === 0) {
+    const nomes = nomesEquipe.length > 0
+      ? nomesEquipe.length === 1
+        ? nomesEquipe[0]
+        : `${nomesEquipe.slice(0, -1).join(', ')} e ${nomesEquipe.at(-1)}`
+      : null;
     return (
       <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4">
-        <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
-        <p className="text-sm font-semibold text-emerald-300">
-          Chamada completa — nenhum aluno sem destino em aulas que já ocorreram.
-        </p>
+        <PartyPopper className="h-5 w-5 shrink-0 text-emerald-400" />
+        <div>
+          <p className="text-sm font-semibold text-emerald-300">
+            {nomes ? `Parabéns, ${nomes}!` : 'Parabéns!'} Chamada completa — nenhum aluno sem destino.
+          </p>
+          <p className="mt-0.5 text-xs text-emerald-400/70">
+            Tudo fechado. O lembrete de presenças do WhatsApp não vai precisar sair hoje.
+          </p>
+        </div>
       </div>
     );
   }
 
   const total = pendentes.length;
-  const urgente = total > 5;
+  const urgente = total > 10;
 
   const corFundo = urgente
     ? 'border-rose-500/40 bg-rose-500/10'
