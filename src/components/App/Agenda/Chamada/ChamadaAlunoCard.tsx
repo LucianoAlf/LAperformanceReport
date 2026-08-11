@@ -77,32 +77,32 @@ export function ChamadaAlunoCard({ aluno, podeOperar, salvando, onMarcar, onJust
       </div>
 
       {podeOperar && !semVinculo && (
-        <div className="flex gap-1.5" role="group" aria-label={`Destino de ${aluno.nome}`}>
+        <div className="flex gap-1" role="group" aria-label={`Destino de ${aluno.nome}`}>
           <button
             type="button"
             disabled={salvando}
             onClick={() => onMarcar(aluno, estado === 'presente' ? 'indeterminado' : 'presente')}
             className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-all hover:-translate-y-px disabled:opacity-50',
+              'flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1.5 text-[11px] font-bold transition-all hover:-translate-y-px disabled:opacity-50',
               estado === 'presente'
                 ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.3)]'
                 : 'border-slate-700 text-slate-400 hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-400',
             )}
           >
-            <Check className="h-4 w-4" />Presente
+            <Check className="h-3.5 w-3.5" />Presente
           </button>
           <button
             type="button"
             disabled={salvando}
             onClick={() => onMarcar(aluno, estado === 'falta' ? 'indeterminado' : 'falta')}
             className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-all hover:-translate-y-px disabled:opacity-50',
+              'flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1.5 text-[11px] font-bold transition-all hover:-translate-y-px disabled:opacity-50',
               estado === 'falta'
                 ? 'border-rose-500/60 bg-rose-500/15 text-rose-300 shadow-[inset_0_0_0_1px_rgba(251,113,133,0.3)]'
                 : 'border-slate-700 text-slate-400 hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-400',
             )}
           >
-            <X className="h-4 w-4" />Falta
+            <X className="h-3.5 w-3.5" />Falta
           </button>
           <button
             type="button"
@@ -115,13 +115,13 @@ export function ChamadaAlunoCard({ aluno, podeOperar, salvando, onMarcar, onJust
               }
             }}
             className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-all hover:-translate-y-px disabled:opacity-50',
+              'flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1.5 text-[11px] font-bold transition-all hover:-translate-y-px disabled:opacity-50',
               estado === 'falta_justificada'
                 ? 'border-amber-500/60 bg-amber-500/15 text-amber-300 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.3)]'
                 : 'border-slate-700 text-slate-400 hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-400',
             )}
           >
-            <FileText className="h-4 w-4" />Justif.
+            <FileText className="h-3.5 w-3.5" />Justif.
           </button>
         </div>
       )}
@@ -149,7 +149,7 @@ export function ChamadaAlunoCard({ aluno, podeOperar, salvando, onMarcar, onJust
         {estado === 'indeterminado' && (
           <p className="flex items-center gap-1 text-[10px] text-slate-500">
             <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
-            Sem destino — entra no digest
+            Sem destino — entra no lembrete do WhatsApp
           </p>
         )}
         {(aluno.reposicoes_pendentes ?? 0) > 0 && estado !== 'falta_justificada' && (
