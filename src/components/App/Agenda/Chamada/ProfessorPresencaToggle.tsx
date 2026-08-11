@@ -1,7 +1,12 @@
 import { useState } from 'react';
-import { CheckCircle2, XCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import type { AulaAgenda } from '@/hooks/useAgendaDia';
 
@@ -19,9 +24,8 @@ interface Props {
 }
 
 /**
- * Card expansivel de presenca do professor. Clica no card para abrir as aulas
- * individuais e ajustar fino (saiu mais cedo, chegou mais tarde, etc).
- * O botao de status faz o toggle do dia inteiro.
+ * Card compacto de presenca do professor. Clica para abrir modal com ajuste
+ * fino por aula. O botao de status faz toggle do dia inteiro.
  */
 export function ProfessorPresencaToggle({
   professorId,
@@ -36,7 +40,7 @@ export function ProfessorPresencaToggle({
   onMudou,
 }: Props) {
   const [salvando, setSalvando] = useState(false);
-  const [expandido, setExpandido] = useState(false);
+  const [modalAberto, setModalAberto] = useState(false);
   const [salvandoAula, setSalvandoAula] = useState<number | null>(null);
 
   const totalAulas = aulas.length;
@@ -101,23 +105,21 @@ export function ProfessorPresencaToggle({
     .toUpperCase();
 
   return (
-    <div
-      className={cn(
-        'rounded-xl border transition-all',
-        presente === true
-          ? 'border-emerald-500/40 bg-emerald-500/10'
-          : presente === false
-            ? 'border-rose-500/40 bg-rose-500/10'
-            : 'border-slate-700 bg-slate-800/40',
-      )}
-    >
-      {/* Cabecalho do card — clicavel para expandir */}
+    <>
+      {/* Card compacto — clicavel para abrir modal */}
       <div
         role="button"
         tabIndex={0}
-        onClick={() => setExpandido(!expandido)}
-        onKeyDown={(e) => { if (e.key === 'Enter') setExpandido(!expandido); }}
-        className="flex cursor-pointer items-center gap-3 p-3"
+        onClick={() => setModalAberto(true)}
+        onKeyDown={(e) => { if (e.key === 'Enter') setModalAberto(true); }}
+        className={cn(
+          'flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-all',
+          presente === true
+            ? 'border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/15'
+            : presente === false
+              ? 'border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/15'
+              : 'border-slate-700 bg-slate-800/40 hover:border-slate-600 hover:bg-slate-800/60',
+        )}
       >
         {/* Foto */}
         {fotoUrl ? (
@@ -145,7 +147,7 @@ export function ProfessorPresencaToggle({
           </p>
         </div>
 
-        {/* Toggle do dia */}
+        {/* Toggle do dia — stopPropagation para nao abrir modal */}
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); toggleDia(); }}
@@ -171,60 +173,84 @@ export function ProfessorPresencaToggle({
           )}
           {presente === true ? 'Presente' : presente === false ? 'Ausente' : 'Marcar'}
         </button>
-
-        {/* Chevron expandir */}
-        <div className="shrink-0 text-slate-500">
-          {expandido ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </div>
       </div>
 
-      {/* Aulas individuais — so aparece quando expandido */}
-      {expandido && (
-        <div className="border-t border-slate-700/50 px-3 pb-3 pt-2">
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-            Ajuste fino por aula
-          </p>
-          <div className="space-y-1">
-            {aulas.map((aula) => {
-              const aulaId = aula.aula_ids[0];
-              const presenteAula = aula.professor_presenca === 'presente';
-              return (
-                <div
-                  key={aula.chave}
-                  className="flex items-center justify-between rounded-lg bg-slate-800/30 px-2.5 py-1.5"
-                >
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="font-mono text-slate-400">{aula.hora_inicio}</span>
-                    <span className="text-slate-300">{aula.curso_nome}</span>
-                    <span className="text-slate-500">{aula.sala_nome}</span>
+      {/* Modal com ajuste fino por aula */}
+      <Dialog open={modalAberto} onOpenChange={setModalAberto}>
+        <DialogContent className="z-[110] max-w-none border-slate-700 bg-[#0c1220] p-0 sm:max-w-[480px]">
+          <DialogTitle className="sr-only">Presenca de {professorNome}</DialogTitle>
+          <div className="flex max-h-[80vh] flex-col">
+            {/* Cabecalho do modal */}
+            <header className="border-b border-slate-700/50 p-5">
+              <div className="flex items-center gap-3">
+                {fotoUrl ? (
+                  <img
+                    src={fotoUrl}
+                    alt={professorNome}
+                    className="h-12 w-12 rounded-full border-2 border-slate-600 object-cover"
+                  />
+                ) : (
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-slate-600 bg-slate-700 text-sm font-bold text-slate-300">
+                    {inicial}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => toggleAula(aula)}
-                    disabled={salvandoAula === aulaId}
-                    className={cn(
-                      'flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold transition-colors',
-                      presenteAula
-                        ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
-                        : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700/70',
-                      salvandoAula === aulaId && 'opacity-50',
-                    )}
-                  >
-                    {salvandoAula === aulaId ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : presenteAula ? (
-                      <CheckCircle2 className="h-3 w-3" />
-                    ) : (
-                      <XCircle className="h-3 w-3" />
-                    )}
-                    {presenteAula ? 'Presente' : 'Ausente'}
-                  </button>
+                )}
+                <div>
+                  <h2 className="text-lg font-semibold text-white">{professorNome}</h2>
+                  <p className="text-xs text-slate-400">
+                    {primeiraAula} — {ultimaAula} · {totalAulas} {totalAulas === 1 ? 'aula' : 'aulas'}
+                  </p>
                 </div>
-              );
-            })}
+              </div>
+            </header>
+
+            {/* Lista de aulas */}
+            <div className="flex-1 overflow-y-auto p-5">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Ajuste fino por aula
+              </p>
+              <div className="space-y-2">
+                {aulas.map((aula) => {
+                  const aulaId = aula.aula_ids[0];
+                  const presenteAula = aula.professor_presenca === 'presente';
+                  return (
+                    <div
+                      key={aula.chave}
+                      className="flex items-center justify-between rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-2.5"
+                    >
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="font-mono text-slate-400">{aula.hora_inicio}</span>
+                        <span className="font-medium text-slate-200">{aula.curso_nome}</span>
+                        <span className="text-slate-500">{aula.sala_nome}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => toggleAula(aula)}
+                        disabled={salvandoAula === aulaId}
+                        className={cn(
+                          'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors',
+                          presenteAula
+                            ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
+                            : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700/70',
+                          salvandoAula === aulaId && 'opacity-50',
+                        )}
+                      >
+                        {salvandoAula === aulaId ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : presenteAula ? (
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        ) : (
+                          <XCircle className="h-3.5 w-3.5" />
+                        )}
+                        {presenteAula ? 'Presente' : 'Ausente'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
