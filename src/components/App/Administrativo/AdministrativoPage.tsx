@@ -327,6 +327,10 @@ export function AdministrativoPage() {
   // carregamento pesado da página — se falhar, o card mostra "—" e o resto segue.
   const cobertura = useCoberturaRenovacao({ unidadeId: unidade, ano, mes });
 
+  // Recorte com que a aba Contratos abre. Vira 'mes' quando o usuário chega pelo link do
+  // card de cobertura, para a lista falar da mesma base que o número em que ele clicou.
+  const [recorteContratos, setRecorteContratos] = useState<30 | 60 | 90 | 'mes'>(30);
+
   useEffect(() => {
     let cancelado = false;
 
@@ -1333,7 +1337,7 @@ export function AdministrativoPage() {
 
       {/* Conteúdo baseado na tab principal */}
       {mainTab === 'contratos' ? (
-        <TabContratosVencendo unidadeId={unidade} ano={ano} mes={mes} />
+        <TabContratosVencendo unidadeId={unidade} ano={ano} mes={mes} recorteInicial={recorteContratos} />
       ) : mainTab === 'caixa_financeiro' ? (
         <CaixaFinanceiroTab
           unidadeId={unidade}
@@ -1599,7 +1603,7 @@ export function AdministrativoPage() {
                     </div>
                     {cobertura.faltam > 0 ? (
                       <button
-                        onClick={() => setMainTab('contratos')}
+                        onClick={() => { setRecorteContratos('mes'); setMainTab('contratos'); }}
                         className="text-xs text-amber-400/90 hover:text-amber-300 underline underline-offset-2 mt-2 text-left"
                       >
                         {cobertura.faltam} sem renovação registrada →
