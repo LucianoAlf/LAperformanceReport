@@ -1,8 +1,12 @@
+import { useState, useEffect, useMemo } from 'react'
 import { Search, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Campanha } from '../hooks/useCampanhas'
 import { useContatosCampanha, type TabStatus } from '../hooks/useContatosCampanha'
 import { BulkActionBar } from './BulkActionBar'
+import { Paginacao } from '@/components/App/Automacoes/Paginacao'
+
+const POR_PAGINA_PADRAO = 10
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   pendente: { label: 'Pendente', cls: 'bg-gray-500/20 text-gray-400' },
@@ -37,8 +41,19 @@ export function CampanhaContatosPanel({ campanha, onReenviarFalhas }: { campanha
     copiarNaoEntregues, exportarCSV,
   } = useContatosCampanha(campanha.id)
 
+  const [pagina, setPagina] = useState(1)
+  const [porPagina, setPorPagina] = useState(POR_PAGINA_PADRAO)
+
+  useEffect(() => { setPagina(1) }, [campanha.id, activeTab, searchTerm, porPagina])
+
+  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina))
+  const filtradosPagina = useMemo(
+    () => filtrados.slice((pagina - 1) * porPagina, pagina * porPagina),
+    [filtrados, pagina, porPagina],
+  )
+
   return (
-    <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 space-y-3">
+    <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 flex flex-col h-full space-y-3">
       <p className="text-xs text-gray-400">Contatos ({campanha.total_contatos})</p>
 
       <div className="flex gap-1.5 flex-wrap">
@@ -72,13 +87,13 @@ export function CampanhaContatosPanel({ campanha, onReenviarFalhas }: { campanha
         />
       </div>
 
-      <div className="space-y-1 max-h-96 overflow-y-auto">
+      <div className="space-y-1 flex-1 min-h-0 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center py-8"><RefreshCw className="w-4 h-4 text-slate-500 animate-spin" /></div>
         ) : filtrados.length === 0 ? (
           <p className="text-center text-gray-500 text-sm py-6">Nenhum contato nesta categoria</p>
         ) : (
-          filtrados.map(ct => {
+          filtradosPagina.map(ct => {
             const badge = STATUS_BADGE[ct.status] ?? STATUS_BADGE.pendente
             const isFalha = ct.status === 'falha'
             return (
@@ -94,6 +109,17 @@ export function CampanhaContatosPanel({ campanha, onReenviarFalhas }: { campanha
           })
         )}
       </div>
+
+      {filtrados.length > 0 && (
+        <Paginacao
+          pagina={pagina}
+          totalPaginas={totalPaginas}
+          totalItens={filtrados.length}
+          porPagina={porPagina}
+          onMudarPagina={setPagina}
+          onMudarPorPagina={setPorPagina}
+        />
+      )}
 
       <BulkActionBar
         falhas={campanha.falhas}

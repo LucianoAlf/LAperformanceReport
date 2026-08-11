@@ -7,11 +7,13 @@ import { cn } from '@/lib/utils'
 import { KPICard } from '@/components/ui/KPICard'
 import { DonutChart } from '@/components/ui/DonutChart'
 import { useConversaoCampanhas, type ConversaoCampanha } from '../hooks/useConversaoCampanhas'
+import { useCotacaoUSDBRL } from '@/hooks/useCotacaoUSDBRL'
 
 const TOOLTIP_STYLE = { background: '#0f172a', border: '1px solid rgba(148, 163, 184, 0.15)', borderRadius: 12, color: '#f1f5f9', fontSize: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }
 
 export function ConversaoTab({ unidadeId }: { unidadeId: string | null }) {
   const { conversoes, loading, error } = useConversaoCampanhas(undefined, unidadeId)
+  const { cotacao, loading: loadingCotacao, error: errorCotacao } = useCotacaoUSDBRL()
   const navigate = useNavigate()
 
   if (loading) {
@@ -37,7 +39,7 @@ export function ConversaoTab({ unidadeId }: { unidadeId: string | null }) {
   const totalLeads = conversoes.reduce((acc, c) => acc + c.leadsGerados, 0)
   const totalMatriculados = conversoes.reduce((acc, c) => acc + c.matriculados, 0)
   const taxaGeral = totalLeads > 0 ? (totalMatriculados / totalLeads) * 100 : 0
-  const custoMedio = calcularCustoMedioPrincipal(conversoes)
+  const custoMedioBRL = calcularCustoMedioBRL(conversoes, cotacao)
 
   const comMovimento = conversoes.filter(c => c.leadsGerados > 0)
   const chartData = comMovimento
@@ -56,8 +58,13 @@ export function ConversaoTab({ unidadeId }: { unidadeId: string | null }) {
         <KPICard label="Matriculados" value={totalMatriculados} icon={GraduationCap} variant="emerald" size="lg" />
         <KPICard label="Taxa de conversão" value={taxaGeral} format="percent" icon={Percent} variant="violet" size="lg" />
         <KPICard
-          label={custoMedio ? `Custo médio / matrícula (${custoMedio.moeda})` : 'Custo médio / matrícula'}
-          value={custoMedio ? formatarMoeda(custoMedio.valor, custoMedio.moeda) : '—'}
+          label="Custo médio / matrícula"
+          value={
+            loadingCotacao ? '…'
+              : custoMedioBRL != null ? formatarReais(custoMedioBRL)
+              : errorCotacao ? 'Câmbio indisponível'
+              : '—'
+          }
           icon={Wallet}
           variant="amber"
           size="lg"
@@ -136,9 +143,7 @@ export function ConversaoTab({ unidadeId }: { unidadeId: string | null }) {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-300">
-                    {c.custoPorMatricula != null && c.custoPorMatricula > 0
-                      ? formatarMoeda(c.custoPorMatricula, c.custoMoeda)
-                      : '—'}
+                    {formatarCustoBRL(c.custoPorMatricula, c.custoMoeda, cotacao, loadingCotacao)}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <ArrowRight className="w-4 h-4 text-gray-600 inline-block" />
@@ -171,39 +176,52 @@ function encurtarNome(nome: string): string {
   return nome.replace(/^Feirão de Matrículas \d{4}\s*—\s*/i, '').trim() || nome
 }
 
-function formatarMoeda(valor: number, moeda: string): string {
-  const simbolo = moeda === 'USD' ? 'US$' : 'R$'
-  return `${simbolo} ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+function formatarReais(valor: number): string {
+  return `R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
 }
 
 /**
- * Custo por matrícula não pode ser somado entre moedas diferentes sem conversão
- * cambial (que este módulo não tem). Em vez de inventar uma taxa de câmbio,
- * calcula a média ponderada só dentro da moeda com mais matrículas reais —
- * hoje isso é sempre USD (as campanhas antigas em BRL têm custo_real=0, nunca
- * calculado). Se não houver nenhuma campanha com custo conhecido, retorna null.
+ * Converte pra BRL usando a cotação ao vivo (useCotacaoUSDBRL). Se a moeda já
+ * é BRL, passa direto. Se é USD e a cotação ainda não chegou/falhou, retorna
+ * null — quem chama decide o fallback (nunca inventa taxa de câmbio).
  */
-function calcularCustoMedioPrincipal(conversoes: ConversaoCampanha[]): { valor: number; moeda: string } | null {
+function converterParaBRL(valor: number, moeda: string, cotacao: number | null): number | null {
+  if (moeda === 'BRL') return valor
+  if (moeda === 'USD') return cotacao != null ? valor * cotacao : null
+  return null
+}
+
+function formatarCustoBRL(
+  valorOriginal: number | null,
+  moedaOriginal: string,
+  cotacao: number | null,
+  loadingCotacao: boolean,
+): string {
+  if (valorOriginal == null || valorOriginal <= 0) return '—'
+  if (moedaOriginal === 'BRL') return formatarReais(valorOriginal)
+  if (loadingCotacao) return '…'
+  const emReais = converterParaBRL(valorOriginal, moedaOriginal, cotacao)
+  if (emReais != null) return formatarReais(emReais)
+  return `US$ ${valorOriginal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (câmbio indisp.)`
+}
+
+/**
+ * Custo médio por matrícula agregado de todas as campanhas, já convertido pra
+ * BRL. Campanhas cuja moeda não converteu (cotação indisponível) ficam de
+ * fora do agregado — melhor omitir do que misturar moedas.
+ */
+function calcularCustoMedioBRL(conversoes: ConversaoCampanha[], cotacao: number | null): number | null {
   const comCusto = conversoes.filter(c => c.custoPorMatricula != null && c.custoPorMatricula > 0 && c.matriculados > 0)
   if (comCusto.length === 0) return null
 
-  const porMoeda = new Map<string, { custoTotal: number; matriculados: number }>()
+  let custoTotal = 0
+  let matriculados = 0
   for (const c of comCusto) {
-    const atual = porMoeda.get(c.custoMoeda) ?? { custoTotal: 0, matriculados: 0 }
-    atual.custoTotal += (c.custoPorMatricula ?? 0) * c.matriculados
-    atual.matriculados += c.matriculados
-    porMoeda.set(c.custoMoeda, atual)
+    const emReais = converterParaBRL(c.custoPorMatricula!, c.custoMoeda, cotacao)
+    if (emReais == null) continue
+    custoTotal += emReais * c.matriculados
+    matriculados += c.matriculados
   }
 
-  let melhorMoeda = ''
-  let melhorMatriculados = -1
-  for (const [moeda, dados] of porMoeda) {
-    if (dados.matriculados > melhorMatriculados) {
-      melhorMoeda = moeda
-      melhorMatriculados = dados.matriculados
-    }
-  }
-
-  const dados = porMoeda.get(melhorMoeda)!
-  return { valor: dados.custoTotal / dados.matriculados, moeda: melhorMoeda }
+  return matriculados > 0 ? custoTotal / matriculados : null
 }

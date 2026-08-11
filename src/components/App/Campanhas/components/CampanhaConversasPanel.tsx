@@ -138,16 +138,16 @@ export function CampanhaConversasPanel({ campanhaId, numeroMetaId }: { campanhaI
 
   if (loading) {
     return (
-      <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4">
-        <div className="flex items-center justify-center py-6"><RefreshCw className="w-4 h-4 text-slate-500 animate-spin" /></div>
+      <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 h-full flex items-center justify-center">
+        <RefreshCw className="w-4 h-4 text-slate-500 animate-spin" />
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4">
-        <div className="flex items-center gap-2 text-sm text-red-400 py-4 justify-center">
+      <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 h-full flex items-center justify-center">
+        <div className="flex items-center gap-2 text-sm text-red-400">
           <AlertTriangle className="w-4 h-4" /> {error}
         </div>
       </div>
@@ -155,32 +155,36 @@ export function CampanhaConversasPanel({ campanhaId, numeroMetaId }: { campanhaI
   }
 
   return (
-    <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 space-y-2">
+    <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 flex flex-col h-full space-y-2">
       <p className="text-xs text-gray-400">Conversas ({contatos.length} responderam)</p>
       {contatos.length === 0 ? (
-        <p className="text-sm text-gray-500 py-4 text-center">Ninguém respondeu a esta campanha ainda.</p>
+        <div className="flex-1 flex items-center justify-center text-sm text-gray-500 text-center">
+          Ninguém respondeu a esta campanha ainda.
+        </div>
       ) : (
         <>
-          {contatosPagina.map(c => (
-            <div key={c.conversaId} className="bg-slate-900/50 rounded-lg overflow-hidden">
-              <button
-                onClick={() => setExpandido(expandido === c.conversaId ? null : c.conversaId)}
-                className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-slate-900 transition-colors"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm text-gray-200 truncate">{c.nomeContato ?? c.telefone}</p>
-                  <p className="text-xs text-gray-500 truncate">{c.ultimaMensagem ?? '—'}</p>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                  <span className="text-xs text-gray-600">
-                    {c.ultimaMensagemEm ? new Date(c.ultimaMensagemEm).toLocaleDateString('pt-BR') : ''}
-                  </span>
-                  {expandido === c.conversaId ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
-                </div>
-              </button>
-              {expandido === c.conversaId && <ThreadSomenteLeitura conversaId={c.conversaId} />}
-            </div>
-          ))}
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-2">
+            {contatosPagina.map(c => (
+              <div key={c.conversaId} className="bg-slate-900/50 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setExpandido(expandido === c.conversaId ? null : c.conversaId)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-slate-900 transition-colors"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-200 truncate">{c.nomeContato ?? c.telefone}</p>
+                    <p className="text-xs text-gray-500 truncate">{c.ultimaMensagem ?? '—'}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                    <span className="text-xs text-gray-600">
+                      {c.ultimaMensagemEm ? new Date(c.ultimaMensagemEm).toLocaleDateString('pt-BR') : ''}
+                    </span>
+                    {expandido === c.conversaId ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
+                  </div>
+                </button>
+                {expandido === c.conversaId && <ThreadSomenteLeitura conversaId={c.conversaId} />}
+              </div>
+            ))}
+          </div>
           <Paginacao
             pagina={pagina}
             totalPaginas={totalPaginas}

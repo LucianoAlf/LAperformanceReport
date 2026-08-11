@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { KPICard } from '@/components/ui/KPICard'
 import { DonutChart } from '@/components/ui/DonutChart'
+import { useCotacaoUSDBRL } from '@/hooks/useCotacaoUSDBRL'
 import type { Campanha } from './hooks/useCampanhas'
 import { useConversaoCampanhas } from './hooks/useConversaoCampanhas'
 import { CampanhaConversasPanel } from './components/CampanhaConversasPanel'
@@ -35,6 +36,7 @@ export function CampanhaDetalhePage() {
   const [erroTemplate, setErroTemplate] = useState<string | null>(null)
   const { conversoes, loading: loadingConversao } = useConversaoCampanhas(campanhaId)
   const conversao = conversoes[0]
+  const { cotacao, loading: loadingCotacao, error: errorCotacao } = useCotacaoUSDBRL()
 
   const fetchCampanha = useCallback(async () => {
     if (!campanhaId) return
@@ -232,12 +234,8 @@ export function CampanhaDetalhePage() {
               <KPICard label="Matriculados" value={conversao?.matriculados ?? 0} icon={GraduationCap} variant="emerald" />
               <KPICard label="Taxa de conversão" value={(conversao?.taxaConversao ?? 0) * 100} format="percent" icon={Percent} variant="violet" />
               <KPICard
-                label={conversao?.custoMoeda ? `Custo / matrícula (${conversao.custoMoeda})` : 'Custo / matrícula'}
-                value={
-                  conversao?.custoPorMatricula != null && conversao.custoPorMatricula > 0
-                    ? formatarMoeda(conversao.custoPorMatricula, conversao.custoMoeda)
-                    : '—'
-                }
+                label="Custo / matrícula"
+                value={formatarCustoBRL(conversao?.custoPorMatricula ?? null, conversao?.custoMoeda ?? 'USD', cotacao, loadingCotacao, errorCotacao)}
                 icon={Wallet}
                 variant="amber"
               />
@@ -327,7 +325,7 @@ export function CampanhaDetalhePage() {
       </div>
 
       {/* Conversas + Contatos lado a lado */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
         <CampanhaConversasPanel campanhaId={campanha.id} numeroMetaId={campanha.numero_meta_id} />
         <CampanhaContatosPanel campanha={campanha} onReenviarFalhas={handleReenviarFalhas} />
       </div>
@@ -367,7 +365,27 @@ function TimelineTraco() {
   return <div className="w-6 h-px bg-slate-700 flex-shrink-0" />
 }
 
-function formatarMoeda(valor: number, moeda: string): string {
-  const simbolo = moeda === 'USD' ? 'US$' : 'R$'
-  return `${simbolo} ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+function formatarReais(valor: number): string {
+  return `R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+}
+
+/**
+ * Converte custo/matrícula pra BRL usando a cotação ao vivo (useCotacaoUSDBRL,
+ * fetch em CampanhaDetalhePage). Mesma lógica de ConversaoTab.tsx — se um dia
+ * crescer mais, extrair pra um helper compartilhado.
+ */
+function formatarCustoBRL(
+  valorOriginal: number | null,
+  moedaOriginal: string,
+  cotacao: number | null,
+  loadingCotacao: boolean,
+  errorCotacao: string | null,
+): string {
+  if (valorOriginal == null || valorOriginal <= 0) return '—'
+  if (moedaOriginal === 'BRL') return formatarReais(valorOriginal)
+  if (loadingCotacao) return '…'
+  if (cotacao != null) return formatarReais(valorOriginal * cotacao)
+  return errorCotacao
+    ? `US$ ${valorOriginal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (câmbio indisp.)`
+    : '—'
 }
