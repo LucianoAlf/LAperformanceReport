@@ -17,6 +17,9 @@ export type ContratoVencendo = {
   dias_ate_vencimento: number;
   nr_aulas_futuras: number | null;
   venc_ultima_fatura: string | null;
+  // null quando o contrato nao tem faturas (nr_faturas = 0): nao ha vencimento
+  // financeiro a medir, entao a linha simplesmente nao entra na janela por fatura.
+  dias_ate_venc_fatura: number | null;
   valor_parcela: number | null;
   inadimplente: boolean | null;
   telefone: string | null;
@@ -26,9 +29,29 @@ export type ContratoVencendo = {
 
 export type JanelaDias = 30 | 60 | 90;
 
-type Params = { unidadeId: string | 'todos'; janelaDias: JanelaDias };
+// Os dois criterios do alternador da tela de Renovacao de Matriculas do Emusys.
+// Nao sao equivalentes: em 78% dos contratos ativos a ultima aula e a ultima fatura
+// caem em MESES diferentes -- ora sobra parcela depois das aulas, ora sobra aula
+// depois das parcelas. Cada criterio devolve uma lista diferente, de proposito.
+export type CriterioVencimento = 'aula' | 'fatura';
 
-export function useContratosVencendo({ unidadeId, janelaDias }: Params) {
+const COLUNA_JANELA: Record<CriterioVencimento, string> = {
+  aula: 'dias_ate_vencimento',
+  fatura: 'dias_ate_venc_fatura',
+};
+
+const COLUNA_ORDEM: Record<CriterioVencimento, string> = {
+  aula: 'data_ultima_aula',
+  fatura: 'venc_ultima_fatura',
+};
+
+type Params = {
+  unidadeId: string | 'todos';
+  janelaDias: JanelaDias;
+  criterio?: CriterioVencimento;
+};
+
+export function useContratosVencendo({ unidadeId, janelaDias, criterio = 'aula' }: Params) {
   const [contratos, setContratos] = useState<ContratoVencendo[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -37,13 +60,16 @@ export function useContratosVencendo({ unidadeId, janelaDias }: Params) {
     setLoading(true);
     setErro(null);
 
+    const colunaJanela = COLUNA_JANELA[criterio];
+
     let query = supabase
       .from('vw_contratos_vencendo')
       .select('*')
-      // dias_ate_vencimento negativo = contrato ja vencido; fora do escopo da tela.
-      .gte('dias_ate_vencimento', 0)
-      .lte('dias_ate_vencimento', janelaDias)
-      .order('data_ultima_aula', { ascending: true });
+      // negativo = ja vencido; fora do escopo da tela. No criterio de fatura, a coluna
+      // e NULL para contrato sem faturas, e o PostgREST ja descarta NULL nesses filtros.
+      .gte(colunaJanela, 0)
+      .lte(colunaJanela, janelaDias)
+      .order(COLUNA_ORDEM[criterio], { ascending: true });
 
     if (unidadeId !== 'todos') query = query.eq('unidade_id', unidadeId);
 
@@ -55,7 +81,7 @@ export function useContratosVencendo({ unidadeId, janelaDias }: Params) {
       setContratos((data ?? []) as ContratoVencendo[]);
     }
     setLoading(false);
-  }, [unidadeId, janelaDias]);
+  }, [unidadeId, janelaDias, criterio]);
 
   useEffect(() => { buscar(); }, [buscar]);
 
