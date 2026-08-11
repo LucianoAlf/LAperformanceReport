@@ -1,5 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { useContratosVencendo, type JanelaDias } from '@/hooks/useContratosVencendo';
+import {
+  useContratosVencendo,
+  type JanelaDias,
+  type CriterioVencimento,
+} from '@/hooks/useContratosVencendo';
 import {
   SortableHeader,
   alternarOrdenacao,
@@ -8,6 +12,14 @@ import {
 } from '@/components/ui/SortableHeader';
 
 const JANELAS: JanelaDias[] = [30, 60, 90];
+
+// Espelha o alternador da tela "Renovacao de Matriculas" do Emusys. Os dois criterios
+// devolvem listas diferentes: o contrato acaba as aulas e a fatura num mes, e as
+// parcelas noutro, em 78% dos casos.
+const CRITERIOS: Array<{ valor: CriterioVencimento; rotulo: string; ajuda: string }> = [
+  { valor: 'aula', rotulo: 'Última aula', ajuda: 'Contratos cujas AULAS terminam na janela' },
+  { valor: 'fatura', rotulo: 'Última fatura', ajuda: 'Contratos cuja última PARCELA vence na janela' },
+];
 
 function formatarData(iso: string | null): string {
   if (!iso) return '—';
@@ -47,10 +59,15 @@ const VALOR_ORDENACAO: Record<string, (c: any) => string | number | null> = {
 
 export function TabContratosVencendo({ unidadeId }: { unidadeId: string }) {
   const [janelaDias, setJanelaDias] = useState<JanelaDias>(30);
+  const [criterio, setCriterio] = useState<CriterioVencimento>('aula');
   const [busca, setBusca] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
 
-  const { contratos, loading, erro, ultimoSync } = useContratosVencendo({ unidadeId, janelaDias });
+  const { contratos, loading, erro, ultimoSync } = useContratosVencendo({
+    unidadeId,
+    janelaDias,
+    criterio,
+  });
 
   const termo = busca.trim().toLowerCase();
   const filtrados = termo
@@ -73,6 +90,22 @@ export function TabContratosVencendo({ unidadeId }: { unidadeId: string }) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
+        <div className="flex rounded-xl border border-slate-700/50 bg-slate-800/50 p-1">
+          {CRITERIOS.map((c) => (
+            <button
+              key={c.valor}
+              onClick={() => setCriterio(c.valor)}
+              title={c.ajuda}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                criterio === c.valor
+                  ? 'bg-cyan-500 text-white'
+                  : 'text-gray-300 hover:bg-slate-700/50'
+              }`}
+            >
+              {c.rotulo}
+            </button>
+          ))}
+        </div>
         {JANELAS.map((dias) => (
           <button
             key={dias}
@@ -114,7 +147,9 @@ export function TabContratosVencendo({ unidadeId }: { unidadeId: string }) {
         <p className="text-gray-400">
           {termo
             ? `Nenhum aluno encontrado para "${busca}".`
-            : `Nenhuma matrícula com contrato acabando nos próximos ${janelaDias} dias.`}
+            : criterio === 'aula'
+              ? `Nenhuma matrícula com AULAS acabando nos próximos ${janelaDias} dias.`
+              : `Nenhuma matrícula com a última FATURA vencendo nos próximos ${janelaDias} dias.`}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-700/50">
