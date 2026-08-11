@@ -173,6 +173,21 @@ Só existe quando o contrato do ciclo informa simultaneamente:
 
 O relatório usa exclusivamente esse snapshot fechado. Configuração ativa posterior não recalcula nem reordena o ciclo encerrado.
 
+### 8.3 Adendo de produto — fechamento mensal do relatório gerencial (2026-08-11)
+
+O relatório gerencial fecha por competência mensal. Portanto, quando a competência
+consultada estiver fechada (por exemplo, julho/2026), ele deve publicar os melhores
+números observados naquele mês em `rankings.mensais`, com ordinalidade, regra e
+cobertura por métrica. A seção exibida é `RANKINGS DO FECHAMENTO MENSAL` e não
+`Destaques mensais parciais`.
+
+Essa decisão não promove o mês a ciclo oficial de premiação do Health Score V3:
+`rankings.oficiais` continua reservado ao ciclo configurado, fechado e habilitado.
+O bloco mensal de matriculadores usa a fonte comercial canônica do próprio mês
+(`get_kpis_professor_periodo_canonico_v3`) e deve respeitar o mesmo universo de
+professores da unidade; quando a amostra mínima não existir, o relatório informa a
+cobertura e não fabrica colocação.
+
 ### 8.2 Destaques mensais parciais
 
 Durante ciclo em acompanhamento, o relatório pode mostrar valores mensais observados, desde que:

@@ -304,6 +304,23 @@ function linhasDestaquesParciais(
     ).join("\n") + "\n";
 }
 
+function linhasRankingMensal(
+  bloco: unknown,
+  detalhe: (item: any) => string,
+): string {
+  if (!bloco || typeof bloco !== "object") return "Sem dados suficientes.\n";
+  const dados = bloco as Record<string, unknown>;
+  const itens = lista(dados.itens ?? dados.valores).slice(0, 3);
+  const cobertura = dados.cobertura
+    ? `Cobertura: ${String(dados.cobertura)}\n`
+    : "";
+  const regra = dados.regra ? `Regra: ${String(dados.regra)}\n` : "";
+  if (!itens.length) return `${cobertura}${regra}Sem dados suficientes.\n`;
+  return `${cobertura}${regra}` + itens.map((item, index) =>
+    `${index + 1}. ${item?.professor || item?.professor_nome || "Não informado"} - ${detalhe(item)}`
+  ).join("\n") + "\n";
+}
+
 function linhasDistribuicao(
   itens: unknown,
   limite = 5,
@@ -1044,20 +1061,38 @@ export async function montarRelatorio(
 
   relatorio +=
     "───────────────────────\n🏆 *RANKINGS OFICIAIS*\n───────────────────────\n";
+  const rankingsMensais = rankings.mensais &&
+      typeof rankings.mensais === "object" &&
+      !Array.isArray(rankings.mensais) &&
+      (rankings.mensais as Record<string, unknown>).status === "oficial" &&
+      (rankings.mensais as Record<string, unknown>).tipo === "fechamento_mensal"
+    ? rankings.mensais as Record<string, unknown>
+    : {};
+  const rankingMensalAtivo = Object.keys(rankingsMensais).length > 0;
   const rankingsOficiais = rankings.oficiais &&
       typeof rankings.oficiais === "object" &&
       !Array.isArray(rankings.oficiais) &&
       (rankings.oficiais as Record<string, unknown>).status === "oficial"
     ? rankings.oficiais as Record<string, unknown>
     : {};
+  const renderRanking = (chave: string, detalhe: (item: any) => string) =>
+    rankingMensalAtivo
+      ? linhasRankingMensal(rankingsMensais[chave], detalhe)
+      : linhasRanking(rankingsOficiais[chave], detalhe);
+  relatorio = relatorio.replace(
+    "🏆 *RANKINGS OFICIAIS*",
+    rankingMensalAtivo
+      ? "🏆 *RANKINGS DO FECHAMENTO MENSAL*"
+      : "🏆 *RANKINGS OFICIAIS*",
+  );
   relatorio += "🥇 *TOP PROFESSORES EM PERMANÊNCIA*\n";
-  relatorio += linhasRanking(
-    rankingsOficiais.retencao,
+  relatorio += renderRanking(
+    "retencao",
     (item) => `${formatarNumero(item?.tempo_medio_permanencia)} meses`,
   );
   relatorio += "\n🎯 *TOP PROFESSORES MATRICULADORES*\n";
-  relatorio += linhasRanking(
-    rankingsOficiais.matriculadores,
+  relatorio += renderRanking(
+    "matriculadores",
     (item) => {
       const totalMatriculas = numero(item?.matriculas);
       return `${totalMatriculas} ${
@@ -1066,13 +1101,13 @@ export async function montarRelatorio(
     },
   );
   relatorio += "\n📊 *TOP PRESENÇA MÉDIA*\n";
-  relatorio += linhasRanking(
-    rankingsOficiais.presenca,
+  relatorio += renderRanking(
+    "presenca",
     (item) => percentual(item?.presenca_media),
   );
   relatorio += "\n👥 *TOP MÉDIA DE ALUNOS POR TURMA*\n";
-  relatorio += linhasRanking(
-    rankingsOficiais.media_turma,
+  relatorio += renderRanking(
+    "media_turma",
     (item) => `${formatarNumero(item?.media_alunos_turma)} alunos/turma`,
   );
   const destaquesParciais = rankings.destaques_mensais_parciais &&
@@ -1084,7 +1119,7 @@ export async function montarRelatorio(
     item && typeof item === "object" &&
       lista((item as Record<string, unknown>).itens ?? (item as Record<string, unknown>).valores).length > 0
   );
-  if (temDestaquesParciais) {
+  if (temDestaquesParciais && !rankingMensalAtivo) {
     relatorio += "\n🎯 *DESTAQUES MENSAIS PARCIAIS (NÃO OFICIAIS)*\n";
     if (destaquesParciais.retencao) {
       relatorio += "Permanência:\n" + linhasDestaquesParciais(

@@ -121,6 +121,30 @@ Deno.test("renderer gerencial publica julho do Recreio sem inventar fonte ausent
     },
     rankings: {
       oficiais: [],
+      mensais: {
+        status: "oficial",
+        tipo: "fechamento_mensal",
+        retencao: {
+          cobertura: "19 de 24 professores",
+          regra: "permanencia-media-v1",
+          itens: [{ professor: "Matheus Lana da Silva", tempo_medio_permanencia: 20.3 }],
+        },
+        matriculadores: {
+          cobertura: "8 de 24 professores",
+          regra: "conversao-experimental-mensal-v1",
+          itens: [{ professor: "Erick Cosme da Silva", matriculas: 4, experimentais: 291, taxa_conversao: 1.37 }],
+        },
+        presenca: {
+          cobertura: "21 de 24 professores",
+          regra: "presenca-media-v1",
+          itens: [{ professor: "Willian De Andrade Da Silva", presenca_media: 81.5 }],
+        },
+        media_turma: {
+          cobertura: "24 de 24 professores",
+          regra: "media-alunos-turma-v1",
+          itens: [{ professor: "Ana Beatriz Paz de Almeida", media_alunos_turma: 1.5 }],
+        },
+      },
       destaques_mensais_parciais: {
         presenca: {
           cobertura: "3 de 24 professores",
@@ -214,8 +238,9 @@ Deno.test("renderer gerencial publica julho do Recreio sem inventar fonte ausent
       "Total de saídas: *7*",
       "Não renovações: *2*",
       "Renovações: *23/27* (85,2%)",
-      "DESTAQUES MENSAIS PARCIAIS (NÃO OFICIAIS)",
-      "Willian De Andrade Da Silva - 81,5%",
+      "RANKINGS DO FECHAMENTO MENSAL",
+      "1. Willian De Andrade Da Silva - 81,5%",
+      "1. Erick Cosme da Silva - 4 matrículas",
       "LEADS POR CANAL",
       "MATRÍCULAS POR CURSO",
       "Detalhamento histórico indisponível: *1*",
@@ -228,7 +253,7 @@ Deno.test("renderer gerencial publica julho do Recreio sem inventar fonte ausent
 
   assert(!texto.includes("Davi Lima Queiroz"));
   assert(!texto.includes("Mestres da lojinha"));
-  assert(!texto.includes("1. Willian De Andrade Da Silva"));
+  assert(!texto.includes("DESTAQUES MENSAIS PARCIAIS (NÃO OFICIAIS)"));
   assert(!/\b(?:RPC|payload|snapshot|camada can[oô]nica)\b/i.test(texto));
   assertEquals((texto.match(/RELATÓRIO GERENCIAL/g) || []).length, 1);
 });
