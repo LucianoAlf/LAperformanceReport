@@ -567,10 +567,10 @@ function Kpi({ rotulo, valor, nota, destaque, rodape, children }: {
   return (
     <div className="flex flex-col gap-0.5 bg-slate-900 px-4 py-3">
       <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">{rotulo}</p>
-      <p className={cn('font-grotesk text-[23px] font-semibold leading-tight tabular-nums', destaque)}>
+      <p className={cn('text-2xl font-bold leading-tight tabular-nums', destaque)}>
         {valor}
         {nota && (
-          <span className="ml-1 font-sans text-[11.5px] font-normal text-slate-500">· {nota}</span>
+          <span className="ml-1 text-[11px] font-normal text-slate-500">· {nota}</span>
         )}
       </p>
       {rodape && <p className="text-[10.5px] leading-snug text-slate-500">{rodape}</p>}

@@ -78,7 +78,14 @@ export function ChamadaLista({ data, aulas, onAbrirDrawer }: Props) {
         return l.estado === 'indeterminado';
       });
     }
-    return linhas.filter((l) => l.estado === filtro);
+    return linhas.filter((l) => {
+      const estadoParaFiltro: Record<string, string> = {
+        presentes: 'presente',
+        faltas: 'falta',
+        justificadas: 'falta_justificada',
+      };
+      return l.estado === (estadoParaFiltro[filtro] ?? filtro);
+    });
   }, [linhas, filtro, data, agora]);
 
   const contagemPorFiltro = useMemo(() => {
