@@ -14,6 +14,8 @@ interface Pendencia {
   lead?: LeadExperimentalAgenda;
   /** Minutos desde que a aula terminou */
   minutosDesdeFim: number;
+  /** Emusys marcou ausente — a equipe precisa confirmar se e falta ou nao */
+  emusysAusente?: boolean;
 }
 
 interface Props {
@@ -77,7 +79,12 @@ export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirD
       for (const aluno of aula.alunos) {
         if (aluno.aluno_id == null) continue;
         if (alunoSemDestino(aula, aluno, data, agora)) {
-          lista.push({ aula, aluno, minutosDesdeFim: minutos });
+          lista.push({
+            aula,
+            aluno,
+            minutosDesdeFim: minutos,
+            emusysAusente: aluno.emusys_presenca_bruta === 'ausente',
+          });
         }
       }
 
@@ -94,6 +101,10 @@ export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirD
   // Separa hoje vs ontem
   const pendentesHoje = pendentes.filter((p) => data === hoje);
   const pendentesOntem = pendentes.filter((p) => data !== hoje);
+
+  // Separa "Emusys marcou ausente" (revisao) de "sem destino" (ninguem marcou)
+  const emusysAusentes = pendentes.filter((p) => p.emusysAusente);
+  const semDestinoReal = pendentes.filter((p) => !p.emusysAusente);
 
   // Se não tem pendências, mostra parabéns (verde) com os nomes da equipe
   if (pendentes.length === 0) {
@@ -160,6 +171,11 @@ export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirD
         <span className="min-w-0 flex-1 truncate font-medium">
           {nome}
           {ehLead && <span className="ml-1 text-[9px] font-bold uppercase text-violet-400">lead</span>}
+          {p.emusysAusente && (
+            <span className="ml-1 rounded bg-slate-600/40 px-1 py-px text-[9px] font-semibold text-slate-400">
+              Emusys: ausente
+            </span>
+          )}
         </span>
         <span className="truncate text-[10px] opacity-60">{curso}</span>
         <span className="shrink-0 text-[10px] opacity-50">{formatarTempo(p.minutosDesdeFim)}</span>
@@ -223,27 +239,41 @@ export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirD
         <AlertTriangle className={cn('mt-0.5 h-5 w-5 shrink-0', corIcone)} />
         <div className="min-w-0 flex-1">
           <p className={cn('text-sm font-semibold', corTitulo)}>
-            {total} {total === 1 ? 'aluno sem destino' : 'alunos sem destino'}
+            {semDestinoReal.length > 0 && (
+              <>{semDestinoReal.length} {semDestinoReal.length === 1 ? 'aluno sem destino' : 'alunos sem destino'}</>
+            )}
+            {semDestinoReal.length > 0 && emusysAusentes.length > 0 && ' · '}
+            {emusysAusentes.length > 0 && (
+              <>{emusysAusentes.length} {emusysAusentes.length === 1 ? 'ausente' : 'ausentes'} no Emusys</>
+            )}
             {' '}em aulas que já ocorreram
           </p>
           <p className={cn('mt-0.5 text-xs', corTexto)}>
-            Ninguém registrou presença, falta ou justificativa. Esses alunos entram no lembrete
-            de presenças diárias do grupo do WhatsApp.
+            {emusysAusentes.length > 0 && semDestinoReal.length === 0
+              ? 'O Emusys marcou ausente. Confirme se é falta ou ajuste.'
+              : semDestinoReal.length > 0 && emusysAusentes.length === 0
+                ? 'Ninguém registrou presença, falta ou justificativa.'
+                : 'Confirme os ausentes do Emusys e dê destino aos que faltam.'}
+            {' '}Esses alunos entram no lembrete de presenças diárias do grupo do WhatsApp.
           </p>
         </div>
       </div>
 
-      {/* Lista de pendências — separada por hoje/ontem e por unidade */}
+      {/* Lista de pendências — separada por tipo, hoje/ontem e unidade */}
       <div className="mt-3 space-y-3">
         {consolidado ? (
           <>
-            <SecaoComUnidade titulo="Hoje" itens={pendentesHoje} />
-            <SecaoComUnidade titulo="Ontem" itens={pendentesOntem} />
+            <SecaoComUnidade titulo="Ausentes no Emusys" itens={emusysAusentes.filter((p) => data === hoje)} />
+            <SecaoComUnidade titulo="Sem destino" itens={semDestinoReal.filter((p) => data === hoje)} />
+            <SecaoComUnidade titulo="Ontem — Ausentes no Emusys" itens={emusysAusentes.filter((p) => data !== hoje)} />
+            <SecaoComUnidade titulo="Ontem — Sem destino" itens={semDestinoReal.filter((p) => data !== hoje)} />
           </>
         ) : (
           <>
-            <Secao titulo="Hoje" itens={pendentesHoje} />
-            <Secao titulo="Ontem" itens={pendentesOntem} />
+            <Secao titulo="Ausentes no Emusys" itens={emusysAusentes.filter((p) => data === hoje)} />
+            <Secao titulo="Sem destino" itens={semDestinoReal.filter((p) => data === hoje)} />
+            <Secao titulo="Ontem — Ausentes no Emusys" itens={emusysAusentes.filter((p) => data !== hoje)} />
+            <Secao titulo="Ontem — Sem destino" itens={semDestinoReal.filter((p) => data !== hoje)} />
           </>
         )}
       </div>
