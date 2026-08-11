@@ -62,3 +62,17 @@ Deno.test("aceita linguagem operacional e nome do sistema", () => {
   ].join("\n");
   assertEquals(validarTextoPublicoRelatorio(texto), texto);
 });
+
+Deno.test("bloqueia UTF-8 recodificado antes do envio", () => {
+  for (const texto of [
+    "â”â”â”â”â”",
+    "ðŸ“‹ *RELATÃ“RIO DIÃRIO*",
+    "NÃ£o Pagantes",
+  ]) {
+    assertThrows(
+      () => validarTextoPublicoRelatorio(texto),
+      Error,
+      "RELATORIO_TEXTO_ENCODING",
+    );
+  }
+});
