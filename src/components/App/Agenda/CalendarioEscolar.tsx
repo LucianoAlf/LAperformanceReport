@@ -92,71 +92,42 @@ export function CalendarioEscolar() {
       setItens(itensRes.data ?? []);
       setFeriados(feriadosRes.data ?? []);
 
-      // Watchlist: contratos que estouram ou estão sem margem
-      // Em modo consolidado, busca de todas as unidades
-      const queryProjecoes = supabase
-        .from('projecao_aulas')
-        .select('aluno_id, matricula_disciplina_id, data_projetada, sequencia')
-        .eq('status', 'projetada')
-        .order('data_projetada', { ascending: false });
+      // Watchlist real: chama a RPC get_watchlist_projecao
+      const { data: watchlistData, error: watchlistError } = await supabase.rpc('get_watchlist_projecao', {
+        p_unidade_id: consolidado ? null : unidadeId,
+        p_dias_futuros: 30,
+      });
 
-      const { data: projecoes } = consolidado
-        ? await queryProjecoes
-        : await queryProjecoes.eq('unidade_id', unidadeId);
-
-      if (projecoes) {
-        // Agrupa por contrato e pega a última aula projetada
-        const porContrato = new Map<string, { aluno_id: number; ultima: string; total: number }>();
-        for (const p of projecoes) {
-          const chave = `${p.aluno_id}-${p.matricula_disciplina_id}`;
-          const existente = porContrato.get(chave);
-          if (!existente || p.data_projetada > existente.ultima) {
-            porContrato.set(chave, { aluno_id: p.aluno_id, ultima: p.data_projetada, total: p.sequencia });
-          }
-        }
-
-        // Busca os alunos
-        const alunoIds = [...new Set([...porContrato.values()].map((p) => p.aluno_id))];
-        const { data: alunos } = await supabase
-          .from('alunos')
-          .select('id, nome')
-          .in('id', alunoIds);
-
-        const nomes = new Map(alunos?.map((a) => [a.id, a.nome]) ?? []);
-
-        // Monta a watchlist
-        const lista: WatchlistItem[] = [];
-        for (const [chave, p] of porContrato) {
-          const [alunoId] = chave.split('-');
-          const ultimaProjetada = parseISO(p.ultima);
-          const hoje = new Date();
-          const deltaDias = Math.ceil((ultimaProjetada.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
-
-          // Status: estourando se a última aula já passou, sem margem se falta menos de 30 dias
-          let status: WatchlistItem['status_alerta'] = 'janela_renovacao';
-          if (deltaDias < 0) status = 'estourando';
-          else if (deltaDias < 30) status = 'sem_margem';
-
-          lista.push({
-            aluno_id: p.aluno_id,
-            aluno_nome: nomes.get(Number(alunoId)) ?? 'Aluno',
-            dia_semana: '', // TODO: buscar da jornada
-            aulas_restantes: p.total,
-            ultima_aula_projetada: p.ultima,
-            ultima_parcela: '', // TODO: calcular
-            delta_dias: deltaDias,
-            status_alerta: status,
-          });
-        }
-
-        setWatchlist(lista.sort((a, b) => a.delta_dias - b.delta_dias).slice(0, 10));
+      if (!watchlistError && watchlistData) {
+        setWatchlist(watchlistData.map((w: {
+          aluno_id: number;
+          aluno_nome: string;
+          matricula_disciplina_id: number;
+          dia_semana: string;
+          aulas_restantes: number;
+          ultima_aula_projetada: string;
+          ultima_aula_emusys: string;
+          delta_dias: number;
+          status_alerta: string;
+          folga_banco: number;
+        }) => ({
+          aluno_id: w.aluno_id,
+          aluno_nome: w.aluno_nome,
+          dia_semana: w.dia_semana,
+          aulas_restantes: w.aulas_restantes,
+          ultima_aula_projetada: w.ultima_aula_projetada,
+          ultima_parcela: w.ultima_aula_emusys,
+          delta_dias: w.delta_dias,
+          status_alerta: w.status_alerta as WatchlistItem['status_alerta'],
+        })));
       }
+
     } catch (e) {
       toast.error('Erro ao carregar calendário', { description: String(e) });
     } finally {
       setCarregando(false);
     }
-  }, [unidadeId, anoAtual]);
+  }, [unidadeId, anoAtual, consolidado]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
