@@ -38,17 +38,33 @@ interface RelatorioGerencialCanonico {
   };
   administrativo: Record<string, any>;
   comercial: Record<string, any>;
-  rankings: Record<string, any[]>;
+  rankings: Record<string, any>;
   metas: {
+    operacionais?: Record<string, unknown>;
     mensais?: Record<string, unknown>;
     fideliza?: Record<string, unknown>;
     matriculador?: Record<string, unknown>;
   };
   comparativos?: {
+    disponibilidade?: "disponivel" | "indisponivel";
     status?: string;
+    motivo?: string;
+    fingerprint?: string;
     mes_anterior?: Record<string, unknown>;
     ano_anterior?: Record<string, unknown>;
   };
+}
+
+interface CoberturaCursoInteresse {
+  total_leads: number;
+  detalhamento_disponivel: number;
+  detalhamento_indisponivel: number;
+  curso_declarado_informado: number;
+  curso_declarado_ausente: number;
+  percentual_detalhamento_disponivel?: number;
+  percentual_curso_declarado_ausente?: number;
+  fonte: string;
+  versao_regra: string;
 }
 
 interface NarrativaGerencial {
@@ -119,7 +135,7 @@ function contratoGerencialValido(dados: RelatorioGerencialCanonico): boolean {
     "administrativo.resumo.alunos_com_exatamente_3_cursos",
     "administrativo.resumo.alunos_com_4_ou_mais_cursos",
     "administrativo.indicadores_financeiros.mrr_atual",
-    "administrativo.indicadores_financeiros.faturamento_previsto",
+    "administrativo.indicadores_financeiros.faturado_emusys",
     "administrativo.indicadores_financeiros.faturamento_realizado",
     "administrativo.indicadores_financeiros.ticket_medio",
     "administrativo.indicadores_financeiros.ltv_medio",
@@ -157,15 +173,45 @@ function contratoGerencialValido(dados: RelatorioGerencialCanonico): boolean {
     "administrativo.avisos_previos",
     "comercial.alertas",
     "comercial.leads_por_curso",
+    "comercial.leads_por_canal",
     "comercial.matriculas_por_canal",
+    "comercial.matriculas_por_curso",
   ];
+
+  const cobertura = lerCaminho(dados, "comercial.cobertura_curso_interesse") as
+    | Partial<CoberturaCursoInteresse>
+    | undefined;
+  const totalLeads = numeroOpcional(cobertura?.total_leads);
+  const detalhamentoDisponivel = numeroOpcional(
+    cobertura?.detalhamento_disponivel,
+  );
+  const detalhamentoIndisponivel = numeroOpcional(
+    cobertura?.detalhamento_indisponivel,
+  );
+  const cursosInformados = numeroOpcional(cobertura?.curso_declarado_informado);
+  const cursosAusentes = numeroOpcional(cobertura?.curso_declarado_ausente);
+  const coberturaValida = totalLeads !== null && totalLeads >= 0 &&
+    detalhamentoDisponivel !== null && detalhamentoDisponivel >= 0 &&
+    detalhamentoIndisponivel !== null && detalhamentoIndisponivel >= 0 &&
+    cursosInformados !== null && cursosInformados >= 0 &&
+    cursosAusentes !== null && cursosAusentes >= 0 &&
+    detalhamentoDisponivel + detalhamentoIndisponivel === totalLeads &&
+    cursosInformados + cursosAusentes === detalhamentoDisponivel &&
+    typeof cobertura?.fonte === "string" && cobertura.fonte.length > 0 &&
+    typeof cobertura?.versao_regra === "string" && cobertura.versao_regra.length > 0;
+  const comparativos = dados.comparativos;
+  const comparativoExplicito = comparativos?.disponibilidade === "disponivel" ||
+    comparativos?.disponibilidade === "indisponivel";
+  const oficiais = dados.rankings?.oficiais;
+  const oficiaisValidos = oficiais == null ||
+    (typeof oficiais === "object" && !Array.isArray(oficiais));
 
   return numerosObrigatorios.every((caminho) =>
     numeroOpcional(lerCaminho(dados, caminho)) !== null
   ) &&
     listasObrigatorias.every((caminho) =>
       Array.isArray(lerCaminho(dados, caminho))
-    );
+    ) && coberturaValida && comparativoExplicito && oficiaisValidos;
 }
 
 function moeda(value: unknown): string {
@@ -211,6 +257,7 @@ function linhaMeta(
   metaRaw: unknown,
   formato: "numero" | "percentual" | "moeda" = "numero",
   menorMelhor = false,
+  casas = 1,
 ): string {
   const atual = numeroOpcional(atualRaw);
   const meta = numeroOpcional(metaRaw);
@@ -220,7 +267,7 @@ function linhaMeta(
   const progresso = progressoMeta(atual, meta, menorMelhor);
   const formatar = (valor: number) => {
     if (formato === "moeda") return `R$ ${moeda(valor)}`;
-    if (formato === "percentual") return percentual(valor);
+    if (formato === "percentual") return percentual(valor, casas);
     return formatarNumero(valor);
   };
   return `${barra(progresso)} ${Math.round(progresso)}% ${rotulo} (${
@@ -239,6 +286,22 @@ function linhasRanking(
       item?.professor || item?.professor_nome || "Não informado"
     } - ${detalhe(item)}`
   ).join("\n") + "\n";
+}
+
+function linhasDestaquesParciais(
+  bloco: unknown,
+  detalhe: (item: any) => string,
+): string {
+  if (!bloco || typeof bloco !== "object") return "Sem dados suficientes.\n";
+  const dados = bloco as Record<string, unknown>;
+  const itens = lista(dados.itens ?? dados.valores).slice(0, 3);
+  if (!itens.length) return "Sem dados suficientes.\n";
+  const cobertura = String(dados.cobertura || "amostra não informada");
+  const regra = String(dados.regra || "regra não informada");
+  return `Amostra: ${cobertura}\nRegra: ${regra}\n` +
+    itens.map((item) =>
+      `• ${item?.professor || item?.professor_nome || "Não informado"} - ${detalhe(item)}`
+    ).join("\n") + "\n";
 }
 
 function linhasDistribuicao(
@@ -269,8 +332,18 @@ function contarMotivos(
 ): Array<{ motivo: string; quantidade: number }> {
   const mapa = new Map<string, number>();
   for (const item of itens) {
-    const motivo = String(item?.motivo || "Não informado").trim() ||
+    const bruto = String(item?.motivo || "Não informado").trim() ||
       "Não informado";
+    const chave = normalizarControle(bruto).replace(/\s+/g, " ");
+    const motivo = chave === "dificuldade financeira"
+      ? "Dificuldade financeira"
+      : chave === "mudanca de endereco"
+      ? "Mudança de endereço"
+      : chave === "troca de unidade"
+      ? "Troca de unidade"
+      : chave === "desistencia"
+      ? "Desistência"
+      : bruto;
     mapa.set(motivo, (mapa.get(motivo) || 0) + 1);
   }
   return [...mapa.entries()]
@@ -408,8 +481,41 @@ export function narrativaPublicavel(value: unknown): value is string {
   return true;
 }
 
-function filtrarListaNarrativa(value: unknown, fallback: string[]): string[] {
-  const itens = lista(value).filter(narrativaPublicavel).slice(0, 5);
+const termosTemporaisSemComparativo = [
+  "aument",
+  "redu",
+  "crescimento",
+  "queda",
+  "melhora",
+  "piora",
+  "proxim",
+  "previst",
+  "evoluc",
+  "compar",
+];
+
+export function narrativaTemporalmenteSegura(
+  value: unknown,
+  comparativos?: RelatorioGerencialCanonico["comparativos"],
+): value is string {
+  if (!narrativaPublicavel(value)) return false;
+  const disponibilidade = comparativos?.disponibilidade ??
+    (comparativos?.status === "disponivel" ? "disponivel" : "indisponivel");
+  if (disponibilidade === "disponivel") return true;
+  const normalizado = normalizarControle(value);
+  return !termosTemporaisSemComparativo.some((termo) =>
+    normalizado.includes(termo)
+  );
+}
+
+function filtrarListaNarrativa(
+  value: unknown,
+  fallback: string[],
+  comparativos?: RelatorioGerencialCanonico["comparativos"],
+): string[] {
+  const itens = lista(value).filter((item) =>
+    narrativaTemporalmenteSegura(item, comparativos)
+  ).slice(0, 5);
   return itens.length ? itens : fallback;
 }
 
@@ -418,12 +524,14 @@ function fallbackNarrativa(
 ): NarrativaGerencial {
   const retencao = dados.administrativo?.indicadores_retencao || {};
   const comercial = dados.comercial?.resumo || {};
-  const metasMensais = dados.metas?.mensais || {};
+  const metasOperacionais = dados.metas?.operacionais || {};
   const alertas = lista(dados.comercial?.alertas);
   const renovacaoAbaixo = numero(retencao.taxa_renovacao) <
-    numero(metasMensais.taxa_renovacao, Infinity);
+    numero(metasOperacionais.taxa_renovacao, Infinity);
   const matriculasAbaixo =
-    numero(comercial.matriculas) < numero(metasMensais.matriculas, Infinity);
+    numero(comercial.matriculas) < numero(metasOperacionais.matriculas, Infinity);
+  const comparativos = dados.comparativos;
+  const comparativoDisponivel = comparativos?.disponibilidade === "disponivel";
 
   return {
     resumo_executivo:
@@ -431,15 +539,17 @@ function fallbackNarrativa(
     conquistas: [
       "O fechamento reúne visão financeira, base de alunos, funil comercial e desempenho da equipe.",
       "As conversões do mês estão disponíveis para acompanhamento gerencial.",
-      "Os rankings destacam os resultados publicáveis da equipe pedagógica.",
+      comparativoDisponivel
+        ? "Os rankings oficiais reúnem os resultados publicáveis da equipe pedagógica."
+        : "Os dados pedagógicos disponíveis ficam identificados para acompanhamento gerencial.",
     ],
     pontos_atencao: [
       renovacaoAbaixo
-        ? "A renovação ficou abaixo do objetivo mensal e exige acompanhamento dos casos pendentes."
-        : "A renovação deve continuar acompanhada para preservar o resultado alcançado.",
+        ? "A renovação requer acompanhamento dos casos pendentes."
+        : "A renovação registrada deve continuar acompanhada pela equipe.",
       matriculasAbaixo
-        ? "O volume de matrículas ficou abaixo do objetivo mensal."
-        : "O ritmo de matrículas deve ser mantido ao longo do próximo ciclo.",
+        ? "O volume de matrículas requer ação comercial dedicada."
+        : "O volume de matrículas deve continuar na rotina de acompanhamento.",
       alertas.length
         ? "Há cadastros comerciais que precisam ser completados pela equipe."
         : "A qualidade dos cadastros comerciais deve permanecer na rotina de conferência.",
@@ -505,6 +615,12 @@ function resumoParaIA(
       lista(admin.trancamentos_detalhados?.itens)
         .filter((item) => item?.faixa_politica !== "contratual").length,
     metas: dados.metas,
+    comparativos: dados.comparativos,
+    rankings_status: dados.rankings?.oficiais &&
+      typeof dados.rankings.oficiais === "object" &&
+      !Array.isArray(dados.rankings.oficiais)
+      ? dados.rankings.oficiais
+      : { status: "parcial" },
   };
 }
 
@@ -521,6 +637,7 @@ Responda em portugues do Brasil, com linguagem executiva, humana e pronta para W
 Nao escreva numeros, percentuais, valores monetarios, fracoes, nomes de alunos ou termos de implementacao.
 Nao mencione fonte, sistema, banco, API, RPC, payload, snapshot, camada, conciliacao, versao ou metrica legada.
 Nao calcule indicadores. Use os dados apenas para escolher prioridades e redigir analises qualitativas.
+Quando o comparativo estiver indisponivel, nao afirme aumento, reducao, crescimento, queda, melhora, piora ou proximidade de meta temporal.
 Retorne somente o JSON solicitado.`;
 
   try {
@@ -556,22 +673,31 @@ Retorne somente o JSON solicitado.`;
     const body = await response.json();
     const parsed = JSON.parse(body?.choices?.[0]?.message?.content || "{}");
     return {
-      resumo_executivo: narrativaPublicavel(parsed?.resumo_executivo)
+      resumo_executivo: narrativaTemporalmenteSegura(
+        parsed?.resumo_executivo,
+        dados.comparativos,
+      )
         ? parsed.resumo_executivo
         : fallback.resumo_executivo,
       conquistas: filtrarListaNarrativa(
         parsed?.conquistas,
         fallback.conquistas,
+        dados.comparativos,
       ),
       pontos_atencao: filtrarListaNarrativa(
         parsed?.pontos_atencao,
         fallback.pontos_atencao,
+        dados.comparativos,
       ),
       plano_acao: filtrarListaNarrativa(
         parsed?.plano_acao,
         fallback.plano_acao,
+        dados.comparativos,
       ),
-      mensagem_final: narrativaPublicavel(parsed?.mensagem_final)
+      mensagem_final: narrativaTemporalmenteSegura(
+        parsed?.mensagem_final,
+        dados.comparativos,
+      )
         ? parsed.mensagem_final
         : fallback.mensagem_final,
     };
@@ -613,6 +739,23 @@ function dataGeracao(): string {
   }).format(new Date()).replace(",", " às");
 }
 
+function narrativaCompletaSegura(
+  narrativa: NarrativaGerencial,
+  comparativos?: RelatorioGerencialCanonico["comparativos"],
+): boolean {
+  return narrativaTemporalmenteSegura(narrativa.resumo_executivo, comparativos) &&
+    narrativa.conquistas.every((item) =>
+      narrativaTemporalmenteSegura(item, comparativos)
+    ) &&
+    narrativa.pontos_atencao.every((item) =>
+      narrativaTemporalmenteSegura(item, comparativos)
+    ) &&
+    narrativa.plano_acao.every((item) =>
+      narrativaTemporalmenteSegura(item, comparativos)
+    ) &&
+    narrativaTemporalmenteSegura(narrativa.mensagem_final, comparativos);
+}
+
 export async function montarRelatorio(
   dados: RelatorioGerencialCanonico,
   narrativaInformada?: NarrativaGerencial,
@@ -624,11 +767,14 @@ export async function montarRelatorio(
   const trancamentosDetalhados = admin.trancamentos_detalhados || {};
   const comercial = dados.comercial || {};
   const comercialResumo = comercial.resumo || {};
-  const metasMensais = dados.metas?.mensais || {};
+  const metasOperacionais = dados.metas?.operacionais || {};
   const metasFideliza = dados.metas?.fideliza || {};
   const metasMatriculador = dados.metas?.matriculador || {};
   const rankings = dados.rankings || {};
-  const narrativa = narrativaInformada || await gerarNarrativa(dados);
+  const narrativa = narrativaInformada &&
+      narrativaCompletaSegura(narrativaInformada, dados.comparativos)
+    ? narrativaInformada
+    : await gerarNarrativa(dados);
   const mesNome = mesesPorExtenso[numero(dados.competencia?.mes)] ||
     String(dados.competencia?.mes || "");
 
@@ -823,12 +969,32 @@ export async function montarRelatorio(
   })\n\n`;
 
   relatorio += "🎯 *INTERESSES MAIS PROCURADOS*\n";
+  const coberturaCurso = comercial.cobertura_curso_interesse as
+    | Partial<CoberturaCursoInteresse>
+    | undefined;
+  if (coberturaCurso) {
+    const total = numero(coberturaCurso.total_leads);
+    const disponivel = numero(coberturaCurso.detalhamento_disponivel);
+    const indisponivel = numero(coberturaCurso.detalhamento_indisponivel);
+    const informado = numero(coberturaCurso.curso_declarado_informado);
+    const ausente = numero(coberturaCurso.curso_declarado_ausente);
+    const percentualDisponivel = coberturaCurso.percentual_detalhamento_disponivel ??
+      (total > 0 ? (disponivel / total) * 100 : 0);
+    relatorio += `• Cobertura do detalhamento: *${percentual(percentualDisponivel, 2)}* (${disponivel}/${total} leads)\n`;
+    relatorio += `• Detalhamento histórico indisponível: *${indisponivel}*\n`;
+    relatorio += `• Curso de interesse informado: *${informado}*\n`;
+    relatorio += `• Curso de interesse ausente: *${ausente}*\n`;
+  }
   relatorio += linhasDistribuicao(comercial.leads_por_curso, 5, [
     "Sem curso",
     "Não informado",
   ]);
+  relatorio += "\n📱 *LEADS POR CANAL*\n";
+  relatorio += linhasDistribuicao(comercial.leads_por_canal, 5);
   relatorio += "\n📱 *MATRÍCULAS POR CANAL*\n";
   relatorio += linhasDistribuicao(comercial.matriculas_por_canal, 5);
+  relatorio += "\n📚 *MATRÍCULAS POR CURSO*\n";
+  relatorio += linhasDistribuicao(comercial.matriculas_por_curso, 5);
   relatorio += "\n";
 
   if (alertas.length) {
@@ -877,15 +1043,20 @@ export async function montarRelatorio(
   }
 
   relatorio +=
-    "───────────────────────\n🏆 *RANKINGS*\n───────────────────────\n";
+    "───────────────────────\n🏆 *RANKINGS OFICIAIS*\n───────────────────────\n";
+  const rankingsOficiais = rankings.oficiais &&
+      typeof rankings.oficiais === "object" &&
+      !Array.isArray(rankings.oficiais)
+    ? rankings.oficiais as Record<string, unknown>
+    : {};
   relatorio += "🥇 *TOP PROFESSORES EM PERMANÊNCIA*\n";
   relatorio += linhasRanking(
-    rankings.retencao,
+    rankingsOficiais.retencao,
     (item) => `${formatarNumero(item?.tempo_medio_permanencia)} meses`,
   );
   relatorio += "\n🎯 *TOP PROFESSORES MATRICULADORES*\n";
   relatorio += linhasRanking(
-    rankings.matriculadores,
+    rankingsOficiais.matriculadores,
     (item) => {
       const totalMatriculas = numero(item?.matriculas);
       return `${totalMatriculas} ${
@@ -895,23 +1066,64 @@ export async function montarRelatorio(
   );
   relatorio += "\n📊 *TOP PRESENÇA MÉDIA*\n";
   relatorio += linhasRanking(
-    rankings.presenca,
+    rankingsOficiais.presenca,
     (item) => percentual(item?.presenca_media),
   );
   relatorio += "\n👥 *TOP MÉDIA DE ALUNOS POR TURMA*\n";
   relatorio += linhasRanking(
-    rankings.media_turma,
+    rankingsOficiais.media_turma,
     (item) => `${formatarNumero(item?.media_alunos_turma)} alunos/turma`,
   );
+  const destaquesParciais = rankings.destaques_mensais_parciais &&
+      typeof rankings.destaques_mensais_parciais === "object" &&
+      !Array.isArray(rankings.destaques_mensais_parciais)
+    ? rankings.destaques_mensais_parciais as Record<string, unknown>
+    : {};
+  const temDestaquesParciais = Object.values(destaquesParciais).some((item) =>
+    item && typeof item === "object" &&
+      lista((item as Record<string, unknown>).itens ?? (item as Record<string, unknown>).valores).length > 0
+  );
+  if (temDestaquesParciais) {
+    relatorio += "\n🎯 *DESTAQUES MENSAIS PARCIAIS (NÃO OFICIAIS)*\n";
+    if (destaquesParciais.retencao) {
+      relatorio += "Permanência:\n" + linhasDestaquesParciais(
+        destaquesParciais.retencao,
+        (item) => `${formatarNumero(item?.tempo_medio_permanencia)} meses`,
+      );
+    }
+    if (destaquesParciais.matriculadores) {
+      relatorio += "Matrículas:\n" + linhasDestaquesParciais(
+        destaquesParciais.matriculadores,
+        (item) => `${numero(item?.matriculas)} matrículas`,
+      );
+    }
+    if (destaquesParciais.presenca) {
+      relatorio += "Presença:\n" + linhasDestaquesParciais(
+        destaquesParciais.presenca,
+        (item) => percentual(item?.presenca_media),
+      );
+    }
+    if (destaquesParciais.media_turma) {
+      relatorio += "Média de alunos por turma:\n" + linhasDestaquesParciais(
+        destaquesParciais.media_turma,
+        (item) => `${formatarNumero(item?.media_alunos_turma)} alunos/turma`,
+      );
+    }
+  }
   relatorio += "\n";
 
   relatorio +=
     "───────────────────────\n⚖️ *COMPARATIVOS*\n───────────────────────\n";
-  if (dados.comparativos?.status === "disponivel") {
+  const comparativoDisponivel = dados.comparativos?.disponibilidade === "disponivel" ||
+    (dados.comparativos?.disponibilidade == null &&
+      dados.comparativos?.status === "disponivel");
+  if (comparativoDisponivel) {
     relatorio += "Comparação disponível com competências equivalentes.\n\n";
   } else {
-    relatorio +=
-      "Comparação não disponível para este período com os mesmos critérios de fechamento.\n\n";
+    const motivo = dados.comparativos?.motivo === "fechamento_anterior_incompativel"
+      ? "fechamento anterior incompatível"
+      : "não há fechamento equivalente disponível";
+    relatorio += `Comparação não disponível para este período com os mesmos critérios de fechamento (${motivo}).\n\n`;
   }
 
   relatorio +=
@@ -920,64 +1132,66 @@ export async function montarRelatorio(
   relatorio += linhaMeta(
     "Alunos pagantes",
     administrativoResumo.alunos_pagantes,
-    metasMensais.alunos_pagantes,
+    metasOperacionais.alunos_pagantes,
   );
   relatorio += linhaMeta(
     "Churn",
     retencao.churn_rate,
-    metasMensais.churn_rate,
+    metasOperacionais.churn_rate,
     "percentual",
     true,
   );
   relatorio += linhaMeta(
     "Renovação",
     retencao.taxa_renovacao,
-    metasMensais.taxa_renovacao,
+    metasOperacionais.taxa_renovacao,
     "percentual",
   );
   relatorio += linhaMeta(
     "Inadimplência",
     retencao.inadimplencia,
-    metasMensais.inadimplencia,
+    metasOperacionais.inadimplencia,
     "percentual",
     true,
   );
   relatorio += linhaMeta(
     "Reajuste",
     retencao.reajuste_medio,
-    metasMensais.reajuste_medio,
+    metasOperacionais.reajuste_medio,
     "percentual",
+    false,
+    2,
   );
   relatorio += "\n📈 *COMERCIAL*\n";
-  relatorio += linhaMeta("Leads", comercialResumo.leads, metasMensais.leads);
+  relatorio += linhaMeta("Leads", comercialResumo.leads, metasOperacionais.leads);
   relatorio += "• Experimentais realizadas: meta equivalente não cadastrada\n";
   relatorio += linhaMeta(
     "Matrículas",
     comercialResumo.matriculas,
-    metasMensais.matriculas,
+    metasOperacionais.matriculas,
   );
   relatorio += linhaMeta(
     "Ticket das novas parcelas",
     comercialResumo.ticket_medio_parcela,
-    metasMensais.ticket_parcela,
+    metasOperacionais.ticket_parcela,
     "moeda",
   );
   relatorio += linhaMeta(
     "Lead → Experimental",
     comercialResumo.taxa_lead_exp,
-    metasMensais.taxa_lead_exp,
+    metasOperacionais.taxa_lead_exp,
     "percentual",
   );
   relatorio += linhaMeta(
     "Experimental → Matrícula",
     comercialResumo.taxa_exp_mat,
-    metasMensais.taxa_exp_mat,
+    metasOperacionais.taxa_exp_mat,
     "percentual",
   );
   relatorio += linhaMeta(
     "Lead → Matrícula",
     comercialResumo.taxa_lead_mat,
-    metasMensais.taxa_conversao,
+    metasOperacionais.taxa_conversao,
     "percentual",
   );
   relatorio += "\n";
@@ -1009,6 +1223,8 @@ export async function montarRelatorio(
     retencao.reajuste_medio,
     metasFideliza.meta_reajuste_minimo,
     "percentual",
+    false,
+    2,
   );
   if (
     metasFideliza.valor_lojinha != null && metasFideliza.meta_lojinha != null

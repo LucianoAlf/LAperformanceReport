@@ -102,14 +102,14 @@ test('texto publico preserva riqueza gerencial sem linguagem de implementacao', 
     assert.match(rendererSemAcentos, new RegExp(secao.replace(/[+]/g, '\\+'), 'i'));
   }
 
-  assert.match(renderer, /faturamento_previsto/);
+  assert.match(renderer, /faturado_emusys/);
   assert.match(renderer, /faturamento_realizado/);
-  assert.match(rendererSemAcentos, /MRR da competencia \(pago \+ em aberto\)/i);
-  assert.match(rendererSemAcentos, /Faturamento realizado \(pago\)/i);
+  assert.match(rendererSemAcentos, /Faturado no Emusys \(pago \+ em aberto\)/i);
+  assert.match(rendererSemAcentos, /Recebido na competencia \(pago\)/i);
   assert.match(renderer, /ticket_medio_parcela/);
   assert.match(renderer, /ticket_medio_passaporte/);
   assert.doesNotMatch(renderer, /linhaMeta\("Ticket da base ativa",\s*financeiro\.ticket_medio,\s*metasMensais\.ticket_parcela/);
-  assert.match(renderer, /linhaMeta\(\s*"Ticket das novas parcelas",\s*comercialResumo\.ticket_medio_parcela,\s*metasMensais\.ticket_parcela/);
+  assert.match(renderer, /linhaMeta\(\s*"Ticket das novas parcelas",\s*comercialResumo\.ticket_medio_parcela,\s*metasOperacionais\.ticket_parcela/);
   assert.doesNotMatch(renderer, /linhaMeta\("Experimentais",\s*comercialResumo\.experimentais,\s*metasMensais\.experimentais/);
   assert.match(renderer, /matriculas_adicionais/);
   assert.match(renderer, /renovacoes_previstas/);
@@ -144,4 +144,16 @@ test('ausencia de dado nao e publicada como zero e comparacao incompatível e om
   assert.match(rendererSemAcentos, /comparacao nao disponivel/i);
   assert.doesNotMatch(renderer, /n\(dados\?\.vendas_lojinha\)/);
   assert.match(renderer, /lojinha[\s\S]*!=\s*null/i);
+});
+
+test('contrato gerencial explicita metas, cobertura, distribuicoes e destaques parciais', () => {
+  const edge = read('supabase/functions/gemini-relatorio-gerencial/index.ts');
+  assert.match(edge, /metas\??\.operacionais/);
+  assert.match(edge, /cobertura_curso_interesse/);
+  assert.match(edge, /leads_por_canal/);
+  assert.match(edge, /matriculas_por_curso/);
+  assert.match(edge, /rankings\.oficiais/);
+  assert.match(edge, /rankings\.destaques_mensais_parciais/);
+  assert.match(edge, /narrativaTemporalmenteSegura/);
+  assert.match(edge, /normalizarControle\(bruto\)/);
 });

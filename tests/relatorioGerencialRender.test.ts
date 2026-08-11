@@ -104,9 +104,30 @@ Deno.test("renderer gerencial publica julho do Recreio sem inventar fonte ausent
         { nome: "Sem curso", quantidade: 176 },
         { nome: "Canto", quantidade: 36 },
       ],
+      cobertura_curso_interesse: {
+        total_leads: 297,
+        detalhamento_disponivel: 296,
+        detalhamento_indisponivel: 1,
+        curso_declarado_informado: 120,
+        curso_declarado_ausente: 176,
+        percentual_detalhamento_disponivel: 99.66,
+        percentual_curso_declarado_ausente: 59.26,
+        fonte: "leads.curso_interesse",
+        versao_regra: "curso-interesse-v2",
+      },
+      leads_por_canal: [{ nome: "Visita/Placa", quantidade: 7 }],
       matriculas_por_canal: [{ nome: "Visita/Placa", quantidade: 7 }],
+      matriculas_por_curso: [{ nome: "Canto", quantidade: 8 }],
     },
     rankings: {
+      oficiais: [],
+      destaques_mensais_parciais: {
+        presenca: {
+          cobertura: "3 de 24 professores",
+          regra: "presenca-media-v1",
+          itens: [{ professor: "Willian De Andrade Da Silva", presenca_media: 81.5 }],
+        },
+      },
       retencao: [{
         professor: "Matheus Lana da Silva",
         tempo_medio_permanencia: 20.3,
@@ -131,6 +152,13 @@ Deno.test("renderer gerencial publica julho do Recreio sem inventar fonte ausent
         matriculas: 21,
         ticket_parcela: 435,
         taxa_renovacao: 90,
+        reajuste_medio: 7,
+      },
+      operacionais: {
+        leads: 160,
+        matriculas: 21,
+        ticket_parcela: 435,
+        reajuste_medio: 10,
       },
       fideliza: {
         meta_churn_maximo: 4,
@@ -148,7 +176,11 @@ Deno.test("renderer gerencial publica julho do Recreio sem inventar fonte ausent
         meta_ticket: 435,
       },
     },
-    comparativos: { status: "indisponivel" },
+    comparativos: {
+      status: "indisponivel",
+      disponibilidade: "indisponivel",
+      motivo: "fechamento_anterior_incompativel",
+    },
   };
 
   const texto = await montarRelatorio(dados as never, {
@@ -182,15 +214,21 @@ Deno.test("renderer gerencial publica julho do Recreio sem inventar fonte ausent
       "Total de saídas: *7*",
       "Não renovações: *2*",
       "Renovações: *23/27* (85,2%)",
-      "Erick Cosme da Silva - 4 matrículas",
-      "Renan Amorim Guimarães - 1 matrícula",
+      "DESTAQUES MENSAIS PARCIAIS (NÃO OFICIAIS)",
+      "Willian De Andrade Da Silva - 81,5%",
+      "LEADS POR CANAL",
+      "MATRÍCULAS POR CURSO",
+      "Detalhamento histórico indisponível: *1*",
+      "Curso de interesse ausente: *176*",
+      "Reajuste (8,13%/10,00%)",
+      "Reajuste campeão (8,13%/7,00%)",
       "Comparação não disponível",
     ]
   ) assertStringIncludes(texto, trecho);
 
   assert(!texto.includes("Davi Lima Queiroz"));
   assert(!texto.includes("Mestres da lojinha"));
-  assert(!texto.includes("Renan Amorim Guimarães - 1 matrículas"));
+  assert(!texto.includes("1. Willian De Andrade Da Silva"));
   assert(!/\b(?:RPC|payload|snapshot|camada can[oô]nica)\b/i.test(texto));
   assertEquals((texto.match(/RELATÓRIO GERENCIAL/g) || []).length, 1);
 });
