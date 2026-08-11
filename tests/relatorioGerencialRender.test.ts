@@ -1,8 +1,37 @@
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import {
+  linhaComparativo,
   montarRelatorio,
   narrativaPublicavel,
 } from "../supabase/functions/gemini-relatorio-gerencial/index.ts";
+
+Deno.test("comparativo mensal publica valores atuais, anteriores e variacoes", () => {
+  const texto = linhaComparativo({
+    disponibilidade: "disponivel",
+    competencia_anterior: { ano: 2026, mes: 6 },
+    atual: {
+      administrativo: {
+        resumo: { alunos_ativos: 344, alunos_pagantes: 336 },
+      },
+      comercial: {
+        resumo: { leads: 297, matriculas: 17 },
+      },
+    },
+    anterior: {
+      administrativo: {
+        resumo: { alunos_ativos: 336, alunos_pagantes: 327 },
+      },
+      comercial: {
+        resumo: { leads: 260, matriculas: 20 },
+      },
+    },
+  }, "Comparação mensal");
+
+  assertStringIncludes(texto, "Alunos ativos: *344* vs *336* (+8)");
+  assertStringIncludes(texto, "Alunos pagantes: *336* vs *327* (+9)");
+  assertStringIncludes(texto, "Leads: *297* vs *260* (+37)");
+  assertStringIncludes(texto, "Matrículas: *17* vs *20* (-3)");
+});
 
 Deno.test("renderer gerencial publica julho do Recreio sem inventar fonte ausente", async () => {
   const dados = {

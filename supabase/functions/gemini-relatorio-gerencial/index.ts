@@ -359,11 +359,84 @@ function motivoComparativoLegivel(bloco: any): string {
   return `${motivos[motivo] || motivo}${detalhes.length ? `; ${detalhes.join("; ")}` : ""}`;
 }
 
-function linhaComparativo(bloco: any, rotulo: string): string {
+type CampoComparativo = {
+  label: string;
+  caminho: string;
+  formato?: "numero" | "percentual" | "moeda";
+};
+
+const camposComparativos: CampoComparativo[] = [
+  { label: "Alunos ativos", caminho: "administrativo.resumo.alunos_ativos" },
+  { label: "Alunos pagantes", caminho: "administrativo.resumo.alunos_pagantes" },
+  { label: "Matr\u00edculas ativas", caminho: "administrativo.resumo.matriculas_ativas" },
+  { label: "Novos alunos", caminho: "administrativo.resumo.novos_alunos" },
+  { label: "Evas\u00f5es", caminho: "administrativo.resumo.evasoes" },
+  { label: "Leads", caminho: "comercial.resumo.leads" },
+  { label: "Experimentais", caminho: "comercial.resumo.experimentais" },
+  { label: "Matr\u00edculas", caminho: "comercial.resumo.matriculas" },
+  {
+    label: "Ticket m\u00e9dio das parcelas",
+    caminho: "comercial.resumo.ticket_medio_parcela",
+    formato: "moeda",
+  },
+  {
+    label: "Lead \u2192 Experimental",
+    caminho: "comercial.resumo.taxa_lead_exp",
+    formato: "percentual",
+  },
+  {
+    label: "Experimental \u2192 Matr\u00edcula",
+    caminho: "comercial.resumo.taxa_exp_mat",
+    formato: "percentual",
+  },
+  {
+    label: "Lead \u2192 Matr\u00edcula",
+    caminho: "comercial.resumo.taxa_lead_mat",
+    formato: "percentual",
+  },
+];
+
+function formatarValorComparativo(value: number, formato = "numero"): string {
+  if (formato === "moeda") return `R$ ${moeda(value)}`;
+  if (formato === "percentual") return percentual(value, 1);
+  return formatarNumero(value);
+}
+
+function formatarVariacaoComparativo(
+  value: number,
+  formato = "numero",
+): string {
+  const sinal = value > 0 ? "+" : value < 0 ? "-" : "";
+  const absoluto = Math.abs(value);
+  if (formato === "moeda") return `${sinal}R$ ${moeda(absoluto)}`;
+  if (formato === "percentual") return `${sinal}${percentual(absoluto, 1)} p.p.`;
+  return `${sinal}${formatarNumero(absoluto)}`;
+}
+
+function linhasValoresComparativos(bloco: any): string {
+  const atual = bloco?.atual;
+  const anterior = bloco?.anterior;
+  if (!atual || !anterior) return "";
+
+  const linhas = camposComparativos.flatMap((campo) => {
+    const valorAtual = numeroOpcional(lerCaminho(atual, campo.caminho));
+    const valorAnterior = numeroOpcional(lerCaminho(anterior, campo.caminho));
+    if (valorAtual === null || valorAnterior === null) return [];
+    const formato = campo.formato || "numero";
+    const variacao = valorAtual - valorAnterior;
+    return [
+      `\u2022 ${campo.label}: *${formatarValorComparativo(valorAtual, formato)}* vs *${formatarValorComparativo(valorAnterior, formato)}* (${formatarVariacaoComparativo(variacao, formato)})`,
+    ];
+  });
+
+  return linhas.length ? `${linhas.join("\n")}\n` : "";
+}
+
+export function linhaComparativo(bloco: any, rotulo: string): string {
   if (!bloco) return "";
   const disponivel = bloco.disponibilidade === "disponivel" || bloco.status === "disponivel";
   if (disponivel) {
-    return `${rotulo} disponível com competência equivalente (${competenciaComparativo(bloco)}).\n`;
+    return `${rotulo} dispon\u00edvel com compet\u00eancia equivalente (${competenciaComparativo(bloco)}).\n${linhasValoresComparativos(bloco)}`;
   }
   return `${rotulo} não disponível (${motivoComparativoLegivel(bloco)}).\n`;
 }
