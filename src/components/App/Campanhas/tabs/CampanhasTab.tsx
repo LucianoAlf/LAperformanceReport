@@ -1,10 +1,10 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Plus, Play, Pause, RotateCw, Trash2, RefreshCw, Megaphone, CheckCircle, XCircle, Clock, AlertTriangle, Pencil, Check, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useCampanhas, type Campanha, type FiltroStatus } from '../hooks/useCampanhas'
 import { ModalNovaCampanha } from '../components/ModalNovaCampanha'
-import { CampanhaDrawer } from '../components/CampanhaDrawer'
 import { Button } from '@/components/ui/button'
 
 // ─── Status config ────────────────────────────────────────────────────────────
@@ -20,10 +20,10 @@ const STATUS_CFG: Record<string, { label: string; icon: React.ElementType; cls: 
 // ─── CampanhasTab ─────────────────────────────────────────────────────────────
 
 export function CampanhasTab({ unidadeId }: { unidadeId: string | null }) {
+  const navigate = useNavigate()
   const { campanhas, loading, refetch, controlar, excluir, reenviarFalhas, atualizarLimiteDisparo, atualizarCustoReal } = useCampanhas(unidadeId ?? undefined)
   const [filtro, setFiltro] = useState<FiltroStatus>('todos')
   const [modalAberta, setModalAberta] = useState(false)
-  const [drawerCampanha, setDrawerCampanha] = useState<Campanha | null>(null)
 
   const filtradas = campanhas.filter(c => filtro === 'todos' || c.status === filtro)
 
@@ -116,7 +116,7 @@ export function CampanhasTab({ unidadeId }: { unidadeId: string | null }) {
               onRetry={handleRetry}
               onLimiteDisparo={handleLimiteDisparo}
               onAtualizarCusto={handleAtualizarCusto}
-              onClick={() => setDrawerCampanha(c)}
+              onClick={() => navigate(`/app/campanhas/${c.id}`)}
             />
           ))}
         </div>
@@ -128,8 +128,6 @@ export function CampanhasTab({ unidadeId }: { unidadeId: string | null }) {
         onCriada={() => refetch()}
         unidadeId={unidadeId}
       />
-
-      <CampanhaDrawer campanha={drawerCampanha} onClose={() => setDrawerCampanha(null)} onReenviarFalhas={handleRetry} />
     </div>
   )
 }
