@@ -67,7 +67,10 @@ export function useChamadaAcoes(aoConcluir: () => void) {
             .join('; ');
           toast.warning(`Chamada parcialmente registrada`, { description: detalhes });
         } else {
-          toast.success('Chamada registrada');
+          // Quando todos os itens são 'indeterminado', a operação é um
+          // "desmarcar" (toggle) — não faz sentido dizer "Chamada registrada".
+          const todosIndeterminado = itens.every((i) => i.status === 'indeterminado');
+          toast.success(todosIndeterminado ? 'Marcação removida' : 'Chamada registrada');
         }
         aoConcluir();
         return erros.length === 0;

@@ -881,7 +881,15 @@ export function ModalRelatorio({
 
       if (errorEdge) {
         console.error('Erro na Edge Function:', errorEdge);
-        throw new Error('Erro ao gerar relatório gerencial');
+        let mensagem = 'Erro ao gerar relatório gerencial';
+        const contexto = (errorEdge as { context?: Response }).context;
+        if (contexto) {
+          const payload = await contexto.clone().json().catch(() => null) as
+            | { error?: string }
+            | null;
+          if (payload?.error) mensagem = payload.error;
+        }
+        throw new Error(mensagem);
       }
 
       if (responseData?.success && responseData?.relatorio) {

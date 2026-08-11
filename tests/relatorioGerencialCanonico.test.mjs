@@ -77,6 +77,16 @@ test('botao gerencial envia somente unidade e competencia para a edge', () => {
   assert.doesNotMatch(body, /is_consolidado/);
 });
 
+test('competencia sem fechamento retorna indisponibilidade explicita ao usuario', () => {
+  const edge = read('supabase/functions/gemini-relatorio-gerencial/index.ts');
+  const admin = read('src/components/App/Administrativo/ModalRelatorio.tsx');
+
+  assert.match(edge, /RELATORIO_ADMIN_MENSAL_FECHADO_INVALIDO/);
+  assert.match(edge, /indisponivel\s*\?\s*409\s*:\s*500/);
+  assert.match(admin, /errorEdge as \{ context\?: Response \}\)\.context/);
+  assert.match(admin, /responseData\?\.error/);
+});
+
 test('texto publico preserva riqueza gerencial sem linguagem de implementacao', () => {
   const edge = read('supabase/functions/gemini-relatorio-gerencial/index.ts');
   const renderer = edge.slice(

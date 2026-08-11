@@ -1461,15 +1461,18 @@ if (import.meta.main) {
           error.code,
           error.message,
         );
-        const indisponivel = /NAO_FECHADO|DIVERGENTE|COMPETENCIA/i.test(
+        const indisponivel = /NAO_FECHADO|DIVERGENTE|COMPETENCIA|RELATORIO_ADMIN_MENSAL_FECHADO_INVALIDO/i.test(
           error.message || "",
         );
+        const status = indisponivel ? 409 : 500;
         return json({
           success: false,
           error: indisponivel
-            ? "O fechamento completo desta competência ainda não está disponível."
+            ? /RELATORIO_ADMIN_MENSAL_FECHADO_INVALIDO/i.test(error.message || "")
+              ? "A competência selecionada ainda não possui fechamento mensal válido."
+              : "O fechamento completo desta competência ainda não está disponível."
             : "Não foi possível gerar o relatório gerencial.",
-        }, indisponivel ? 409 : 500);
+        }, status);
       }
 
       if (
