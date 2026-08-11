@@ -155,9 +155,9 @@ returns jsonb
 
 | Estado | Condição | Significado |
 |---|---|---|
-| Verde | Última projetada ≤ última Emusys | Contrato fecha bem, com folga |
-| Amarelo | Última projetada = última Emusys | Sem margem para reposição |
-| Vermelho | Última projetada > última Emusys | Estoura o ciclo — precisa de ajuste |
+| Verde | Última projetada entre 39ª e 42ª semana | Contrato fecha junto com a 12ª parcela — perfeito |
+| Amarelo | Última projetada entre 37ª e 38ª ou 43ª e 44ª semana | Folga apertada ou excesso leve — atenção |
+| Vermelho | Última projetada antes da 37ª ou depois da 44ª semana | Estoura o ciclo ou sobra demais — precisa de ajuste |
 
 ### 3.2 `recalcular_projecao`
 
@@ -358,9 +358,11 @@ Aula 35 ●─── Aula 36 ●─── Aula 37 ○─── Aula 38 ○──
 
 4. **Emenda confirmada entra no cálculo.** Emenda simulada não — é só para o gestor testar.
 
-5. **O banco de segurança é por dia da semana.** Quarta tem +4, segunda tem +1. O motor usa esse excedente para reposições e eventos.
+5. **O banco de segurança é por dia da semana, mas excesso é ruim.** Quarta tem +4 — isso NÃO é bom. Significa que o aluno paga 40 mas tem 44 disponíveis: ele termina de pagar e ainda tem aula sobrando. O motor precisa **desacelerar** — marcar as excedentes como "evento" ou "recesso" para a última aula cair junto com a 12ª parcela.
 
-6. **Reposição restrita protege o banco.** Só com atestado médico + 2 cortesias por contrato. O motor não deixa a reposição consumir o banco além do limite.
+6. **O alvo é 39-42, não 40 cravado.** A última aula deve cair entre a 39ª e a 42ª semana do ciclo. Se cai na 44ª, o aluno já pagou tudo e ainda tem aula — experiência ruim. O motor ajusta o ritmo para fechar em 39-42.
+
+7. **Reposição restrita protege o banco.** Só com atestado médico + 2 cortesias por contrato. O motor não deixa a reposição consumir o banco além do limite.
 
 7. **Contrato rolling atravessa a virada de ano.** A projeção usa o calendário do ano seguinte (provisório) quando necessário.
 
