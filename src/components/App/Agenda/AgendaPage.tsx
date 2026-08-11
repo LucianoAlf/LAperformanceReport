@@ -449,7 +449,7 @@ export default function AgendaPage() {
           ocorreram. Aparece em TODAS as visoes (Professores/Salas/Chamada) para
           cobrar acao da equipe antes do digest diario. Clicar leva a visao
           Chamada, onde o banner detalha aluno a aluno. */}
-      {pendenciasChamada > 0 && !ehChamada && (
+      {pendenciasChamada > 0 && !ehChamada && !ehCalendario && (
         <button
           type="button"
           onClick={() => setVisao('chamada')}
@@ -471,6 +471,7 @@ export default function AgendaPage() {
         </button>
       )}
 
+      {!ehCalendario && (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
         <KPICard
           label="Aulas no dia"
@@ -537,6 +538,7 @@ export default function AgendaPage() {
           size="sm"
         />
       </div>
+      )}
 
       {erro ? (
         <p className="rounded-md border border-rose-500/40 bg-rose-500/10 p-3 text-[13px] text-rose-200">
