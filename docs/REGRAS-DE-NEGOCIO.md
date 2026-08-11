@@ -763,6 +763,46 @@ As RPCs operacionais leem o estado **atual** do banco — recalcular uma compet�
 - Próximas experimentais: só do snapshot vigente, `situacao = 'agendada'`, não cancelada, início estritamente futuro e ≤ D+7; limite de 10, com total excedente informado.
 - Chave diária de idempotência: `tipo_relatorio + unidade_id + jid + data_dia`.
 
+### 10.5 Integridade do relatório gerencial e do espelho Emusys ✅
+
+`get_relatorio_gerencial_canonico_v1` é montado no servidor a partir dos dois
+documentos mensais fechados. A Edge `gemini-relatorio-gerencial` não consulta o
+Emusys diretamente e não aceita KPIs enviados pelo navegador.
+
+- **Metas:** Gestão e Comercial usam `metas.operacionais`, cuja fonte é
+  `metas_kpi` para a unidade e competência. Fideliza+ usa somente
+  `programa_fideliza_config`; Matriculador+ usa somente
+  `programa_matriculador_config`. Meta ausente é `meta não cadastrada`, nunca
+  zero. Os três blocos não podem ser misturados.
+- **Cobertura de curso de interesse:** no fechamento Recreio/julho/2026, os
+  denominadores são `297` leads totais, `296` com detalhamento disponível, `1`
+  com detalhamento histórico indisponível, `120` com curso declarado e `176`
+  sem curso declarado. O item indisponível não é inferido como "sem curso" e
+  não é preenchido pelo curso da matrícula ou da experimental.
+- **Distribuições:** `leads_por_canal` e `matriculas_por_curso` são listas
+  próprias do documento, com seu grão e total; não precisam somar ao total de
+  pessoas ou linhas de matrícula de outro bloco.
+- **Comparativos:** só ficam disponíveis quando os dois lados são snapshots
+  `fechado` da mesma unidade, domínio, grão, população, regra, semântica de
+  competência e cobertura mínima. A política `fechamento-equivalente-v1` e o
+  `fingerprint_atual` ficam no contrato; sem fechamento anterior equivalente,
+  o motivo publicado é `fechamento_anterior_incompativel` e a narrativa não
+  pode afirmar aumento, queda, crescimento, redução ou proximidade ao previsto.
+- **Professores:** o modelo híbrido separa `rankings.oficiais` (ciclo fechado,
+  oficial, habilitado e publicável) de `destaques_mensais_parciais` (evidência
+  mensal identificada, sem ordinalidade, medalha ou premiação). Ausência de
+  base continua ausente, não zero.
+- **Lead ID:** `alunos.emusys_lead_id` é identidade externa escopada por
+  `(unidade_id, emusys_matricula_id)` ou por aluno Emusys unívoco. O sync
+  preenche somente campo local nulo, mantém valor idêntico e abre
+  `matriculas_divergencias` em caso de conflito; nome nunca resolve identidade.
+- **Experimentais e histórico:** `(unidade_id, emusys_aula_id)` é a chave mais
+  forte. Diferença de horário não veta uma aula com ID exato; fallback sem ID
+  exige Lead/Aluno + data e tolerância limitada. Ausência na fotografia corrente
+  do `/aulas` não autoriza apagar `aulas_emusys`, `aula_alunos_emusys` ou
+  `aluno_presenca`; o estado é classificado como ausente, movido, cancelado,
+  visto ou histórico preservado.
+
 ---
 
 ## 11. Programas gamificados

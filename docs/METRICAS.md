@@ -466,6 +466,38 @@ limite é dez participações e o total excedente é informado.
 ### Taxa Lead → Experimental
 Leads que agendaram/realizaram experimental ÷ total de leads do período.
 
+### Contrato de integridade do relatório gerencial (10/08/2026)
+
+O relatório mensal usa os documentos fechados e preserva o grão de cada bloco.
+As metas são separadas por fonte: `metas_kpi` alimenta Gestão/Comercial,
+`programa_fideliza_config` alimenta Fideliza+ e `programa_matriculador_config`
+alimenta Matriculador+. Nenhum consumidor deve usar a configuração de um
+programa como meta operacional.
+
+Para curso de interesse, a cobertura é publicada com denominadores nomeados:
+
+| Campo | Recreio jul/2026 | Significado |
+|---|---:|---|
+| `total_leads` | 297 | população de leads do fechamento |
+| `detalhamento_disponivel` | 296 | linhas com detalhamento recuperável |
+| `detalhamento_indisponivel` | 1 | histórico sem detalhamento, não "sem curso" |
+| `curso_declarado_informado` | 120 | curso declarado no lead |
+| `curso_declarado_ausente` | 176 | lead sem curso declarado |
+
+Os percentuais usam `total_leads` como denominador. O relatório também passa
+`leads_por_canal` e `matriculas_por_curso` sem forçar a soma dessas listas a
+coincidir com outro grão.
+
+Comparativo mensal exige snapshots fechados equivalentes: unidade, domínio,
+grão, população, versão de regra, semântica da competência e cobertura mínima.
+O fingerprint é determinístico e exclui apenas o mês civil; se a política não
+for atendida, a disponibilidade é `indisponivel` com motivo estruturado.
+
+No Health Score, ranking oficial requer ciclo fechado, publicação oficial,
+habilitação, snapshot íntegro e score comparável. Evidência mensal sem ciclo
+fechado aparece apenas como destaque parcial não oficial, sem posição ordinal.
+Snapshots fechados e configurações ativas permanecem imutáveis.
+
 ---
 
 ## Retenção / Evasão

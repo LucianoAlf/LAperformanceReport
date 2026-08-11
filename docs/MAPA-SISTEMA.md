@@ -81,6 +81,19 @@ Administrativo e Comercial da mesma competência, agrega metas e rankings V3 e
 mantém os metadados de auditoria fora do texto público. A IA participa apenas
 dos cinco blocos qualitativos; não recebe autoridade para alterar KPIs.
 
+O contrato de integridade separa `metas.operacionais` (fonte `metas_kpi`),
+`metas.fideliza` e `metas.matriculador`, publica cobertura de curso de interesse
+(`297/296/1/120/176`) e reapresenta as listas já existentes de leads por canal e
+matrículas por curso. Comparativos só são habilitados por fechamentos
+equivalentes e fingerprint compatível. No ciclo aberto, o bloco de professores
+é `destaques_mensais_parciais` sem ordinalidade; `rankings.oficiais` só recebe
+snapshots oficiais, fechados e comparáveis.
+
+O sync de matrículas captura `mat.aluno.lead_id` no campo
+`alunos.emusys_lead_id`, sempre escopado pela unidade. O sync de presença usa o
+ID da aula como chave primária de experimental e não remove aula, roster ou
+presença histórica quando a fotografia atual do Emusys não a contém.
+
 Cobertura histórica: snapshot completo só existe de **junho/2026 em diante**. Antes disso
 há apenas `dados_mensais` (~12 campos).
 
@@ -311,6 +324,11 @@ Formulários de lançamento manual (React Hook Form + Zod). Escrevem direto nas 
 Na aba Performance de `/app/professores`, mês e ciclo consomem `get_health_score_professor_v3_performance_snapshot_v3`: leitor direto da última fotografia materializada, sem disparar o produtor vivo pelo clique. Para a competência aberta aceita retratos `provisorio`, `em_maturacao` ou `sem_base`; competência fechada exige a publicação apropriada quando essa etapa for ativada. O leitor é determinístico por `revisao desc, criado_em desc, id desc` e retorna `retrato_calculado_em`, execução, estado e defasagem como metadados. O modal individual consome o mesmo retrato por `get_health_score_professor_v3_snapshot_modal`.
 
 A projeção mensal reutiliza fatos exclusivos da competência. No ciclo, conversão e presença acumulam fatos brutos; carteira e média/turma são fotografias do último mês alcançado; permanência é apurada até o corte. O motor nunca tira média dos scores mensais. A presença casa roster e chamada pela data da aula, mas aceita que a Secretaria registre a chamada depois. Referências anteriores são apenas visuais, não pontuam e carregam a competência de origem. Histórico e snapshots fechados continuam append-only e não são recalculados pela leitura.
+
+O relatório gerencial mensal segue a mesma fronteira: ele não faz GET no Emusys
+durante a leitura; consome os snapshots fechados produzidos pelos syncs. A
+ausência de uma linha no lote corrente é um estado de cobertura a auditar, não
+uma autorização para apagar dados históricos.
 
 ---
 

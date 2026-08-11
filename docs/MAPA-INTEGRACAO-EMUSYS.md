@@ -156,6 +156,24 @@ A edge faz `switch(evento)`:
   inventa a data histórica de evasão, conclusão ou trancamento. Movimentos
   históricos só nascem de evento com data real.
 
+#### Identidade e reconciliação usadas pelo relatório gerencial
+
+- O payload de matrícula lê `mat.aluno.lead_id` e o materializa em
+  `alunos.emusys_lead_id`. O ID externo sempre é interpretado no escopo da
+  unidade; a atualização é nula-somente, idempotente e protegida por
+  `unidade_id`.
+- Conflito entre valor local e Emusys não é sobrescrito: entra em
+  `matriculas_divergencias` como `lead_id_divergente`, preservando os dois
+  valores para decisão humana. Segundo curso e homônimo não são critérios de
+  escolha.
+- Para experimentais, `sync-presenca-emusys` prioriza
+  `(unidade_id, emusys_aula_id)`. A hora, a data, o curso e o nome não vetam
+  um ID exato; sem ID de aula, a conciliação exige identidade de Lead/Aluno,
+  data e tolerância de horário de até 30 minutos.
+- A fotografia atual do `/aulas` não é tombstone histórico. Ausência corrente
+  só pode produzir estado de auditoria (`ausente_no_snapshot_corrente`);
+  aulas, roster e presença já capturados permanecem nas tabelas históricas.
+
 ---
 
 ## 3. UPSTREAM — Mila SDR (produto separado, fora do sistema)
