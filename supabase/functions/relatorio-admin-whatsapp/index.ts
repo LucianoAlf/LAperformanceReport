@@ -170,6 +170,34 @@ function n(value: unknown): number {
   return 0;
 }
 
+const SYNC_OPERACIONAL_MAX_AGE_MS = 26 * 60 * 60 * 1000;
+
+async function fetchSyncMatriculasOperacionalFresco(
+  supabase: any,
+  unidadeId: string,
+  agora = new Date(),
+) {
+  const { data, error } = await supabase
+    .from('emusys_matriculas_sync_execucoes')
+    .select('id, completed_at, linhas_recebidas, linhas_ativas, linhas_trancadas, linhas_inativadas')
+    .eq('unidade_id', unidadeId)
+    .eq('escopo', 'operacional')
+    .eq('status', 'succeeded')
+    .not('completed_at', 'is', null)
+    .order('completed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  const completedAt = data?.completed_at ? new Date(data.completed_at) : null;
+  const idadeMs = completedAt ? agora.getTime() - completedAt.getTime() : Number.POSITIVE_INFINITY;
+  if (!data || !completedAt || !Number.isFinite(completedAt.getTime()) || idadeMs > SYNC_OPERACIONAL_MAX_AGE_MS) {
+    const referencia = data?.completed_at || 'nunca';
+    throw new Error(`SYNC_OPERACIONAL_STALE: ultima fotografia operacional concluida em ${referencia}`);
+  }
+  return data;
+}
+
 function normalizeText(value: unknown): string {
   return String(value || '')
     .normalize('NFD')
@@ -455,6 +483,7 @@ async function fetchKPIsAlunosRelatorioAdmin(
   ano: number,
   mes: number
 ) {
+  await fetchSyncMatriculasOperacionalFresco(supabase, unidadeId);
   const { data, error } = await supabase.rpc('get_kpis_alunos_admin_operacional', {
     p_unidade_id: unidadeId,
     p_ano: ano,

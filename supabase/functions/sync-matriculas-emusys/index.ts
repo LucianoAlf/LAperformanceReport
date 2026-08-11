@@ -630,7 +630,7 @@ async function persistirDivergenciasAtributos(supabase: any, unidadeId: string, 
   }
 }
 
-async function fetchTodasMatriculas(token: string) {
+async function fetchTodasMatriculasCompletoLegacy(token: string) {
   const porId = new Map<number, any>();
   // indexa TODOS os status para o fallback de nome — a reconciliação resolve o conflito depois
   const todasPorNome = new Map<string, any[]>();
@@ -651,6 +651,74 @@ async function fetchTodasMatriculas(token: string) {
     await sleep(1100); // throttle: rate limit 60/min por IP
   }
   return { porId, ativasPorNome: todasPorNome };
+}
+
+type MatriculasFetchResult = {
+  porId: Map<number, any>;
+  ativasPorNome: Map<string, any[]>;
+  snapshotCompleto: boolean;
+  linhasRecebidas: number;
+  linhasAtivas: number;
+  linhasTrancadas: number;
+};
+
+async function fetchMatriculasOperacionais(token: string): Promise<MatriculasFetchResult> {
+  const porId = new Map<number, any>();
+  const todasPorNome = new Map<string, any[]>();
+  let snapshotCompleto = true;
+
+  // O escopo operacional consulta explicitamente status=ativa e status=trancada.
+  for (const status of ['ativa', 'trancada']) {
+    let cursor = '';
+    let paginaCompleta = false;
+    for (let i = 0; i < 200; i++) {
+      const url = `${EMUSYS_API}/matriculas?status=${status}&limite=50${cursor ? `&cursor=${cursor}` : ''}`;
+      const resp = await fetch(url, { headers: { token } });
+      if (!resp.ok) throw new Error(`API ${resp.status} (${status})`);
+      const json = await resp.json();
+      for (const m of json.items || []) {
+        const id = Number(m.id);
+        if (!Number.isFinite(id)) continue;
+        porId.set(id, m);
+        const k = normalizarNome(m.aluno?.nome || '');
+        if (!todasPorNome.has(k)) todasPorNome.set(k, []);
+        const existentes = todasPorNome.get(k)!;
+        if (!existentes.some((existente) => Number(existente.id) === id)) existentes.push(m);
+      }
+      if (!json.paginacao?.tem_mais) {
+        paginaCompleta = true;
+        break;
+      }
+      if (!json.paginacao?.proximo_cursor) break;
+      cursor = json.paginacao.proximo_cursor;
+      await sleep(1100); // throttle: rate limit 60/min por IP
+    }
+    if (!paginaCompleta) snapshotCompleto = false;
+  }
+
+  return {
+    porId,
+    ativasPorNome: todasPorNome,
+    snapshotCompleto,
+    linhasRecebidas: porId.size,
+    linhasAtivas: [...porId.values()].filter((mat) => mat.status === 'ativa').length,
+    linhasTrancadas: [...porId.values()].filter((mat) => mat.status === 'trancada').length,
+  };
+}
+
+async function fetchTodasMatriculas(
+  token: string,
+  escopo: 'operacional' | 'completo' = 'completo',
+): Promise<MatriculasFetchResult> {
+  if (escopo === 'operacional') return fetchMatriculasOperacionais(token);
+  const resultado = await fetchTodasMatriculasCompletoLegacy(token);
+  return {
+    ...resultado,
+    snapshotCompleto: true,
+    linhasRecebidas: resultado.porId.size,
+    linhasAtivas: [...resultado.porId.values()].filter((mat) => mat.status === 'ativa').length,
+    linhasTrancadas: [...resultado.porId.values()].filter((mat) => mat.status === 'trancada').length,
+  };
 }
 
 function numeroFinitoOuNull(value: unknown): number | null {
@@ -823,6 +891,47 @@ async function upsertEstadosAtuaisEmLote(supabase: any, u: { id: string }, rows:
   return result;
 }
 
+async function reconciliarEstadosOperacionaisAusentes(
+  supabase: any,
+  unidadeId: string,
+  idsOperacionais: number[],
+  sincronizadoEm: string,
+) {
+  let query = supabase
+    .from('emusys_matriculas_estado_atual')
+    .update({
+      status_emusys: 'inativa',
+      status_emusys_bruto: 'inativa',
+      motivo_inativa: null,
+      motivo_inativa_bruto: null,
+      status_local_resolvido: null,
+      status_jornada_resolvido: 'desconhecido',
+      tipo_movimento_resolvido: null,
+      transicao_automatica: false,
+      motivo_auditoria: 'fora_do_snapshot_operacional',
+      trancamento_id: null,
+      trancamento_motivo: null,
+      trancamento_data_inicial: null,
+      trancamento_data_final: null,
+      sincronizado_em: sincronizadoEm,
+      updated_at: sincronizadoEm,
+    })
+    .eq('unidade_id', unidadeId)
+    .in('status_emusys', ['ativa', 'trancada']);
+
+  if (idsOperacionais.length > 0) {
+    query = query.not(
+      'emusys_matricula_id',
+      'in',
+      `(${idsOperacionais.join(',')})`,
+    );
+  }
+
+  const { data, error } = await query.select('emusys_matricula_id');
+  if (error) throw error;
+  return (data || []).length;
+}
+
 function resolverCursoContrato(mat: any, depara: Map<number, number | null>, banda: Set<number>) {
   const cursos: number[] = [];
   const cursosBanda: number[] = [];
@@ -926,7 +1035,9 @@ serve(async (req) => {
   const bloqueioAcesso = await validarAcessoSync(req);
   if (bloqueioAcesso) return bloqueioAcesso;
 
-  const alvo = new URL(req.url).searchParams.get('u') || 'cg';
+  const url = new URL(req.url);
+  const alvo = url.searchParams.get('u') || 'cg';
+  const escopo = url.searchParams.get('escopo') === 'completo' ? 'completo' : 'operacional';
   const u = UNIDADES[alvo];
   if (!u) return new Response(JSON.stringify({ erro: 'unidade inválida; use ?u=cg|recreio|barra' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
@@ -934,6 +1045,8 @@ serve(async (req) => {
   const resumo: any = {
     modo: 'sugestao',
     unidade: u.nome,
+    escopo,
+    sync_execucao_id: null,
     auto: 0,
     fila: {},
     atributos: {},
@@ -958,8 +1071,31 @@ serve(async (req) => {
   // dry-run: alunos cujo upd seria aplicado (prévia do que o sync faria em produção)
   const previewAlunoIds: number[] = [];
 
+  let syncExecucaoId: string | null = null;
+
   try {
-    const { porId, ativasPorNome } = await fetchTodasMatriculas(u.token);
+    const { data: execucao, error: execucaoError } = await supabase
+      .from('emusys_matriculas_sync_execucoes')
+      .insert({ unidade_id: u.id, escopo, status: 'running' })
+      .select('id')
+      .single();
+    if (execucaoError) throw execucaoError;
+    syncExecucaoId = execucao.id;
+    resumo.sync_execucao_id = syncExecucaoId;
+
+    const {
+      porId,
+      ativasPorNome,
+      snapshotCompleto,
+      linhasRecebidas,
+      linhasAtivas,
+      linhasTrancadas,
+    } = await fetchTodasMatriculas(u.token, escopo);
+    resumo.snapshot_completo = snapshotCompleto;
+    resumo.linhas_recebidas = linhasRecebidas;
+    resumo.linhas_ativas = linhasAtivas;
+    resumo.linhas_trancadas = linhasTrancadas;
+    if (!snapshotCompleto) throw new Error('SNAPSHOT_OPERACIONAL_INCOMPLETO');
 
     const { data: cursosBanda } = await supabase.from('cursos').select('id').eq('is_projeto_banda', true);
     const banda = new Set<number>((cursosBanda || []).map((c: any) => c.id));
@@ -1055,6 +1191,39 @@ serve(async (req) => {
       throw new Error(
         `Falha ao materializar ${resumo.estados_atual.erros} estados atuais de matricula`,
       );
+    }
+
+    if (escopo === 'operacional') {
+      const sincronizadoEm = new Date().toISOString();
+      const linhasInativadas = await reconciliarEstadosOperacionaisAusentes(
+        supabase,
+        u.id,
+        [...porId.keys()],
+        sincronizadoEm,
+      );
+      resumo.estados_atual.linhas_inativadas = linhasInativadas;
+      resumo.status = 'succeeded';
+      const { error: finalizacaoError } = await supabase
+        .from('emusys_matriculas_sync_execucoes')
+        .update({
+          status: 'succeeded',
+          completed_at: sincronizadoEm,
+          linhas_recebidas: linhasRecebidas,
+          linhas_ativas: linhasAtivas,
+          linhas_trancadas: linhasTrancadas,
+          linhas_inativadas: linhasInativadas,
+          metadados: {
+            snapshot_completo: snapshotCompleto,
+            estados_gravados: resumo.estados_atual.gravadas,
+            estados_rejeitados: resumo.estados_atual.rejeitadas,
+          },
+        })
+        .eq('id', syncExecucaoId);
+      if (finalizacaoError) throw finalizacaoError;
+
+      return new Response(JSON.stringify(resumo, null, 2), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const linhasJornada: any[] = [];
@@ -1587,11 +1756,49 @@ serve(async (req) => {
       if (previewAlunoIds.length) q = q.not('aluno_id', 'in', `(${previewAlunoIds.join(',')})`);
       await q;
     }
+
+    const finalizacaoCompletaEm = new Date().toISOString();
+    resumo.status = 'succeeded';
+    await supabase
+      .from('emusys_matriculas_sync_execucoes')
+      .update({
+        status: 'succeeded',
+        completed_at: finalizacaoCompletaEm,
+        linhas_recebidas: linhasRecebidas,
+        linhas_ativas: linhasAtivas,
+        linhas_trancadas: linhasTrancadas,
+        linhas_inativadas: 0,
+        metadados: {
+          snapshot_completo: snapshotCompleto,
+          estados_gravados: resumo.estados_atual.gravadas,
+          estados_rejeitados: resumo.estados_atual.rejeitadas,
+          jornadas_atualizadas: resumo.jornadas.atualizadas,
+        },
+      })
+      .eq('id', syncExecucaoId);
   } catch (e) {
     resumo.erro_unidade = String(e);
+    resumo.status = 'failed';
+    if (syncExecucaoId) {
+      await supabase
+        .from('emusys_matriculas_sync_execucoes')
+        .update({
+          status: 'failed',
+          completed_at: new Date().toISOString(),
+          erro: String(e),
+          metadados: {
+            estados_atual: resumo.estados_atual,
+            linhas_recebidas: resumo.linhas_recebidas ?? 0,
+          },
+        })
+        .eq('id', syncExecucaoId);
+    }
   }
 
-  return new Response(JSON.stringify(resumo, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify(resumo, null, 2), {
+    status: resumo.erro_unidade ? 500 : 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
 });
 
 // Extrai o dia da semana do nome da turma (ex: "G_Ter_14" → "Terça", "BT_Seg_18" → "Segunda").
