@@ -448,9 +448,13 @@ async function processarLead(sb: any, body: any, unidadeId: string, escrever: bo
   if (!emusysLeadId) return { acao: 'ignorado', motivo: 'sem lead.id' };
 
   const telefone = normalizarTelefone(lead?.telefone);
-  // paridade com o n8n: o nó "tem numero?2" descarta lead sem telefone antes do upsert.
-  if (!telefone) return { acao: 'ignorado', motivo: 'sem telefone (mesma regra do n8n)', emusys_lead_id: emusysLeadId };
+  // v10 — 2026-08-11: NÃO descarta mais por falta de telefone. O Emusys às vezes
+  // cria o lead sem telefone (a secretaria preenche depois), mas já manda email,
+  // data_nascimento, canal e instrumento. Antes jogávamos tudo fora ("mesma regra
+  // do n8n"), e o lead ficava pelado na base. Agora importamos o que vier — a
+  // upsert_lead já lida com telefone null (match por emusys_lead_id, não telefone).
 
+  const dataNascimento = textoOuNulo(lead?.data_nascimento_aluno);
   const args = {
     p_nome: textoOuNulo(lead?.nome_aluno),
     p_telefone: telefone,
@@ -462,6 +466,7 @@ async function processarLead(sb: any, body: any, unidadeId: string, escrever: bo
     p_source_type: 'emusys',
     p_arquivar: false,
     p_data_contato: String(lead?.data_hora_criacao ?? '').trim().substring(0, 10) || null,
+    p_data_nascimento: dataNascimento ? dataNascimento.substring(0, 10) : null,
   };
 
   if (!escrever) {

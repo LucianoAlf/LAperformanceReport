@@ -30,7 +30,7 @@ function appSpaFallbackPlugin(): Plugin {
 export default defineConfig(() => {
     return {
       server: {
-        port: 3000,
+        port: 5175,
         host: '0.0.0.0',
       },
       plugins: [appSpaFallbackPlugin(), react()],
