@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { Megaphone, LayoutDashboard, MessageSquare, Bot, FileText, BarChart2, Settings } from 'lucide-react'
+import { Megaphone, LayoutDashboard, MessageSquare, Bot, FileText, BarChart2, Settings, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { DashboardTab } from './tabs/DashboardTab'
 import { CampanhasTab } from './tabs/CampanhasTab'
+import { ConversaoTab } from './tabs/ConversaoTab'
 import { ConversasTab } from './tabs/ConversasTab'
 import { AgentesTab } from './tabs/AgentesTab'
 import { TemplatesTab } from './tabs/TemplatesTab'
@@ -14,11 +15,12 @@ import { AnalyticsTab } from './tabs/AnalyticsTab'
 import { ConfigTab } from './tabs/ConfigTab'
 import { useCampanhasConfig } from './hooks/useCampanhasConfig'
 
-type Aba = 'dashboard' | 'campanhas' | 'conversas' | 'agentes' | 'templates' | 'analytics' | 'config'
+type Aba = 'dashboard' | 'campanhas' | 'conversao' | 'conversas' | 'agentes' | 'templates' | 'analytics' | 'config'
 
 const abas: { id: Aba; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'campanhas', label: 'Campanhas', icon: Megaphone },
+  { id: 'conversao', label: 'Conversão', icon: TrendingUp },
   { id: 'conversas', label: 'Conversas', icon: MessageSquare },
   { id: 'agentes', label: 'Agentes IA', icon: Bot },
   { id: 'templates', label: 'Templates', icon: FileText },
@@ -95,6 +97,7 @@ export function CampanhasPage() {
       <div>
         {abaAtiva === 'dashboard' && <DashboardTab unidadeId={unidadeId} />}
         {abaAtiva === 'campanhas' && <CampanhasTab unidadeId={unidadeId} />}
+        {abaAtiva === 'conversao' && <ConversaoTab unidadeId={unidadeId} />}
         {abaAtiva === 'conversas' && <ConversasTab unidadeId={unidadeId} />}
         {abaAtiva === 'agentes' && <AgentesTab unidadeId={unidadeId} />}
         {abaAtiva === 'templates' && <TemplatesTab unidadeId={unidadeId} />}
