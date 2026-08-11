@@ -165,7 +165,7 @@ git commit -m "feat: separar metas cobertura e destaques no relatorio"
 ### Task 3: Publicar o contrato SQL do Gate 1 (RED → GREEN)
 
 **Files:**
-- Create: \`supabase/migrations/20260810120000_relatorio_gerencial_integridade_hibrido.sql\`
++ Create: \`supabase/migrations/20260811123000_relatorio_gerencial_integridade_hibrido.sql\`
 - Modify: \`tests/relatorioGerencialCanonico.test.mjs\`
 - Modify: \`tests/relatorioGerencialCanonicoPostgres.test.mjs\`
 
@@ -223,7 +223,7 @@ node --test tests/relatorioGerencialCanonico.test.mjs tests/relatorioGerencialCa
 Expected: PASS, including JSON assertions for 297/296/1/120/176 and the separate meta sources. Commit:
 
 ~~~powershell
-git add supabase/migrations/20260810120000_relatorio_gerencial_integridade_hibrido.sql tests/relatorioGerencialCanonico.test.mjs tests/relatorioGerencialCanonicoPostgres.test.mjs
+git add supabase/migrations/20260811123000_relatorio_gerencial_integridade_hibrido.sql tests/relatorioGerencialCanonico.test.mjs tests/relatorioGerencialCanonicoPostgres.test.mjs
 git commit -m "feat: publicar contrato canonico de metas e cobertura"
 ~~~
 
@@ -334,7 +334,7 @@ git commit -m "fix: priorizar identidade exata da aula na reconciliacao"
 **Files:**
 - Create: \`supabase/functions/_shared/relatorio-comparabilidade.ts\`
 - Create: \`supabase/functions/_shared/relatorio-comparabilidade.test.ts\`
-- Modify: \`supabase/migrations/20260810120000_relatorio_gerencial_integridade_hibrido.sql\`
++ Modify: \`supabase/migrations/20260811123000_relatorio_gerencial_integridade_hibrido.sql\`
 - Modify: \`tests/relatorioGerencialCanonicoPostgres.test.mjs\`
 
 - [ ] **Step 1: Write RED fingerprint eligibility tests**
@@ -373,7 +373,7 @@ node --test tests/relatorioGerencialCanonicoPostgres.test.mjs
 Expected: PASS; snapshots remain immutable, history is not deleted, and incompatible periods return a structured reason. Commit:
 
 ~~~powershell
-git add supabase/functions/_shared/relatorio-comparabilidade.ts supabase/functions/_shared/relatorio-comparabilidade.test.ts supabase/migrations/20260810120000_relatorio_gerencial_integridade_hibrido.sql tests/relatorioGerencialCanonicoPostgres.test.mjs
+git add supabase/functions/_shared/relatorio-comparabilidade.ts supabase/functions/_shared/relatorio-comparabilidade.test.ts supabase/migrations/20260811123000_relatorio_gerencial_integridade_hibrido.sql tests/relatorioGerencialCanonicoPostgres.test.mjs
 git commit -m "feat: bloquear comparativos sem fechamento equivalente"
 ~~~
 
@@ -421,7 +421,7 @@ Expected: every command exits 0. If Deno is unavailable, report the exact comman
 
 ~~~powershell
 git diff --check
-rg -n "CREATE OR REPLACE FUNCTION public\.get_relatorio_gerencial_canonico_v1|revoke all on function public\.get_relatorio_gerencial_canonico_v1|grant execute on function public\.get_relatorio_gerencial_canonico_v1|DELETE FROM|\.delete\(" supabase/migrations/20260810120000_relatorio_gerencial_integridade_hibrido.sql supabase/functions/sync-matriculas-emusys/index.ts supabase/functions/sync-presenca-emusys/index.ts
+rg -n "CREATE OR REPLACE FUNCTION public\.get_relatorio_gerencial_canonico_v1|revoke all on function public\.get_relatorio_gerencial_canonico_v1|grant execute on function public\.get_relatorio_gerencial_canonico_v1|DELETE FROM|\.delete\(" supabase/migrations/20260811123000_relatorio_gerencial_integridade_hibrido.sql supabase/functions/sync-matriculas-emusys/index.ts supabase/functions/sync-presenca-emusys/index.ts
 git status --short --branch
 ~~~
 

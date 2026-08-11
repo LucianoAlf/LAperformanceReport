@@ -1046,7 +1046,8 @@ export async function montarRelatorio(
     "───────────────────────\n🏆 *RANKINGS OFICIAIS*\n───────────────────────\n";
   const rankingsOficiais = rankings.oficiais &&
       typeof rankings.oficiais === "object" &&
-      !Array.isArray(rankings.oficiais)
+      !Array.isArray(rankings.oficiais) &&
+      (rankings.oficiais as Record<string, unknown>).status === "oficial"
     ? rankings.oficiais as Record<string, unknown>
     : {};
   relatorio += "🥇 *TOP PROFESSORES EM PERMANÊNCIA*\n";

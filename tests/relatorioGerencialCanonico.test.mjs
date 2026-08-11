@@ -8,6 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const semAcentos = (value) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const migrationPath = 'supabase/migrations/20260801222500_corrigir_relatorio_gerencial_metas_matriculador.sql';
+const integridadeMigrationPath = 'supabase/migrations/20260811123000_relatorio_gerencial_integridade_hibrido.sql';
 
 test('produtor gerencial compoe somente fechamentos mensais e rankings canonicos', () => {
   assert.equal(fs.existsSync(path.join(root, migrationPath)), true, 'migration canonica ainda nao existe');
@@ -156,4 +157,17 @@ test('contrato gerencial explicita metas, cobertura, distribuicoes e destaques p
   assert.match(edge, /rankings\.destaques_mensais_parciais/);
   assert.match(edge, /narrativaTemporalmenteSegura/);
   assert.match(edge, /normalizarControle\(bruto\)/);
+});
+
+test('migration de integridade publica campos separados e ACL nominal', () => {
+  assert.equal(fs.existsSync(path.join(root, integridadeMigrationPath)), true, 'migration de integridade ainda nao existe');
+  const sql = read(integridadeMigrationPath);
+  assert.match(sql, /metas[\s\S]*operacionais/);
+  assert.match(sql, /cobertura_curso_interesse/);
+  assert.match(sql, /leads_por_canal/);
+  assert.match(sql, /matriculas_por_curso/);
+  assert.match(sql, /comparativos[\s\S]*disponibilidade/);
+  assert.match(sql, /destaques_mensais_parciais/);
+  assert.match(sql, /revoke all on function public\.get_relatorio_gerencial_canonico_v1/);
+  assert.match(sql, /grant execute on function public\.get_relatorio_gerencial_canonico_v1[\s\S]*authenticated, service_role/);
 });

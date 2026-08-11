@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const migrationPath = path.join(
   root,
-  'supabase/migrations/20260801222500_corrigir_relatorio_gerencial_metas_matriculador.sql',
+  'supabase/migrations/20260811123000_relatorio_gerencial_integridade_hibrido.sql',
 );
 
 function docker(args, input) {
@@ -178,6 +178,16 @@ test('produtor gerencial compila e preserva os numeros dos documentos fechados',
               'reajuste_medio', 10,
               'alunos_pagantes', 357
             ),
+            'metas_kpi', jsonb_build_object(
+              'alunos_pagantes', 360,
+              'churn_rate', 4,
+              'inadimplencia', 1,
+              'taxa_renovacao', 90,
+              'reajuste_medio', 10,
+              'leads', 160,
+              'matriculas', 21,
+              'ticket_parcela', 435
+            ),
             'trancamentos_detalhados', jsonb_build_object(
               'total_alunos', 2,
               'total_matriculas', 2,
@@ -248,6 +258,17 @@ test('produtor gerencial compila e preserva os numeros dos documentos fechados',
             'leads_por_curso', jsonb_build_array(
               jsonb_build_object('nome', 'Sem curso', 'quantidade', 177),
               jsonb_build_object('nome', 'Canto', 'quantidade', 36)
+            ),
+            'cobertura_curso_interesse', jsonb_build_object(
+              'total_leads', 297,
+              'detalhamento_disponivel', 296,
+              'detalhamento_indisponivel', 1,
+              'curso_declarado_informado', 120,
+              'curso_declarado_ausente', 176,
+              'percentual_detalhamento_disponivel', 99.66,
+              'percentual_curso_declarado_ausente', 59.26,
+              'fonte', 'leads.curso_interesse',
+              'versao_regra', 'curso-interesse-v2'
             ),
             'matriculas_por_canal', jsonb_build_array(
               jsonb_build_object('nome', 'Visita/Placa', 'quantidade', 7)
@@ -350,10 +371,17 @@ test('produtor gerencial compila e preserva os numeros dos documentos fechados',
         'taxa_lead_exp', r#>>'{comercial,resumo,taxa_lead_exp}',
         'ticket_parcela', r#>>'{comercial,resumo,ticket_medio_parcela}',
         'ranking', r#>>'{rankings,retencao,0,professor}',
+        'ranking_oficial_status', r#>>'{rankings,oficiais,status}',
+        'coverage_total', r#>>'{comercial,cobertura_curso_interesse,total_leads}',
+        'coverage_available', r#>>'{comercial,cobertura_curso_interesse,detalhamento_disponivel}',
+        'coverage_unavailable', r#>>'{comercial,cobertura_curso_interesse,detalhamento_indisponivel}',
+        'course_absent', r#>>'{comercial,cobertura_curso_interesse,curso_declarado_ausente}',
+        'meta_operacional_reajuste', r#>>'{metas,operacionais,reajuste_medio}',
         'meta_volume', r#>>'{metas,matriculador,meta_volume}',
         'meta_ticket', r#>>'{metas,matriculador,meta_ticket}',
         'meta_churn', r#>>'{metas,fideliza,meta_churn_maximo}',
-        'comparativos', r#>>'{comparativos,status}',
+        'comparativos', r#>>'{comparativos,disponibilidade}',
+        'comparative_reason', r#>>'{comparativos,motivo}',
         'admin_hash', r#>>'{auditoria,administrativo,payload_hash}',
         'comercial_retificado', r#>>'{auditoria,comercial,retificado}'
       )
@@ -378,10 +406,17 @@ test('produtor gerencial compila e preserva os numeros dos documentos fechados',
       taxa_lead_exp: '13.8',
       ticket_parcela: '426.82',
       ranking: 'Professora Canonica',
+      ranking_oficial_status: 'oficial',
+      coverage_total: '297',
+      coverage_available: '296',
+      coverage_unavailable: '1',
+      course_absent: '176',
+      meta_operacional_reajuste: '10',
       meta_volume: '20',
       meta_ticket: '435',
       meta_churn: '4',
       comparativos: 'indisponivel',
+      comparative_reason: 'fechamento_anterior_incompativel',
       admin_hash: 'hash-admin',
       comercial_retificado: 'true',
     });
