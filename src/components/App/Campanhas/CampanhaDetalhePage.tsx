@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import type { Campanha } from './hooks/useCampanhas'
 import { DeliveryCoverageRing } from './components/DeliveryCoverageRing'
+import { CampanhaContatosPanel } from './components/CampanhaContatosPanel'
 
 const STATUS_CFG: Record<string, { label: string; cls: string; bgCls: string }> = {
   rascunho:   { label: 'Rascunho',   cls: 'text-gray-400 border-gray-500/30', bgCls: 'bg-gray-500/10' },
@@ -194,6 +195,9 @@ export function CampanhaDetalhePage() {
           {campanha.concluida_em && <TimelineItem label="Concluída" data={campanha.concluida_em} />}
         </div>
       </div>
+
+      {/* Contatos */}
+      <CampanhaContatosPanel campanha={campanha} onReenviarFalhas={handleReenviarFalhas} />
     </div>
   )
 }
