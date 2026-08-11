@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { supabase } from '@/lib/supabase';
-import { X, CheckCircle2, Loader2, AlertCircle, AlertTriangle, Brain } from 'lucide-react';
+import { X, CheckCircle2, Loader2, AlertCircle, AlertTriangle, Brain, CalendarClock } from 'lucide-react';
 import { gerarHorariosDisponiveis } from '@/lib/horarios';
 import type { DisponibilidadeSemanal } from '../Professores/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -11,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCheckAlunoDuplicado, type AlunoDuplicado } from '@/hooks/useCheckAlunoDuplicado';
+import { cn } from '@/lib/utils';
 
 export interface DadosIniciaisMatricula {
   aluno_nome?: string;
@@ -135,6 +138,16 @@ export function ModalNovoAluno({
   const [disponibilidadeProfessor, setDisponibilidadeProfessor] = useState<DisponibilidadeSemanal | null>(null);
   const [cursosProfessor, setCursosProfessor] = useState<{id: number, nome: string}[]>([]);
 
+  // Previsao da projecao do contrato (semaforo)
+  const [previsao, setPrevisao] = useState<{
+    ultima_aula_projetada: string;
+    ultima_parcela: string;
+    delta_dias: number;
+    semaforo: 'verde' | 'amarelo' | 'vermelho';
+    aulas_projetadas: number;
+  } | null>(null);
+  const [carregandoPrevisao, setCarregandoPrevisao] = useState(false);
+
   // Verificacao de duplicidade
   const [confirmouDuplicata, setConfirmouDuplicata] = useState(false);
   const [ignorarFortes, setIgnorarFortes] = useState<Set<number>>(new Set());
@@ -250,6 +263,32 @@ export function ModalNovoAluno({
     }
     return gerarHorariosDisponiveis('08:00', '21:00', 60);
   }, [formData.dia_aula, disponibilidadeProfessor]);
+
+  // Previsao da projecao quando dia + horario estao preenchidos
+  useEffect(() => {
+    async function prever() {
+      if (!formData.dia_aula || !formData.horario_aula || !formData.unidade_id) {
+        setPrevisao(null);
+        return;
+      }
+      setCarregandoPrevisao(true);
+      try {
+        const { data, error } = await supabase.rpc('prever_projecao_contrato', {
+          p_unidade_id: formData.unidade_id,
+          p_dia_semana: formData.dia_aula,
+          p_data_inicio: formData.data.toISOString().split('T')[0],
+          p_qtd_aulas: 40,
+        });
+        if (error) throw error;
+        setPrevisao(data);
+      } catch {
+        setPrevisao(null);
+      } finally {
+        setCarregandoPrevisao(false);
+      }
+    }
+    prever();
+  }, [formData.dia_aula, formData.horario_aula, formData.unidade_id, formData.data]);
 
   useEffect(() => {
     async function loadData() {
@@ -768,6 +807,58 @@ export function ModalNovoAluno({
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+            )}
+
+            {/* Semáforo da projeção do contrato */}
+            {formData.dia_aula && formData.horario_aula && (
+              <div className={cn(
+                'rounded-xl border p-4',
+                previsao?.semaforo === 'verde' && 'border-emerald-500/30 bg-emerald-500/10',
+                previsao?.semaforo === 'amarelo' && 'border-amber-500/30 bg-amber-500/10',
+                previsao?.semaforo === 'vermelho' && 'border-rose-500/30 bg-rose-500/10',
+                !previsao && 'border-slate-700 bg-slate-800/30',
+              )}>
+                <div className="flex items-center gap-2">
+                  <CalendarClock className={cn(
+                    'h-4 w-4',
+                    previsao?.semaforo === 'verde' && 'text-emerald-400',
+                    previsao?.semaforo === 'amarelo' && 'text-amber-400',
+                    previsao?.semaforo === 'vermelho' && 'text-rose-400',
+                    !previsao && 'text-slate-500',
+                  )} />
+                  <h4 className="text-sm font-semibold text-white">Projeção do contrato</h4>
+                </div>
+                {carregandoPrevisao ? (
+                  <p className="mt-2 text-xs text-slate-400">Calculando projeção...</p>
+                ) : previsao ? (
+                  <div className="mt-2 space-y-1 text-xs">
+                    <p className="text-slate-300">
+                      <b>{previsao.aulas_projetadas} aulas</b> projetadas · última em <b>{format(parseISO(previsao.ultima_aula_projetada), 'dd/MM/yyyy')}</b>
+                    </p>
+                    <p className="text-slate-400">
+                      Última parcela: {format(parseISO(previsao.ultima_parcela), 'dd/MM/yyyy')}
+                      {' · '}
+                      Delta: <b className={cn(
+                        previsao.semaforo === 'verde' && 'text-emerald-400',
+                        previsao.semaforo === 'amarelo' && 'text-amber-400',
+                        previsao.semaforo === 'vermelho' && 'text-rose-400',
+                      )}>
+                        {previsao.delta_dias > 0 ? `+${previsao.delta_dias}` : previsao.delta_dias} dias
+                      </b>
+                    </p>
+                    <p className={cn(
+                      'mt-1 font-semibold',
+                      previsao.semaforo === 'verde' && 'text-emerald-400',
+                      previsao.semaforo === 'amarelo' && 'text-amber-400',
+                      previsao.semaforo === 'vermelho' && 'text-rose-400',
+                    )}>
+                      {previsao.semaforo === 'verde' && 'Contrato fecha bem — aula e parcela terminam juntas'}
+                      {previsao.semaforo === 'amarelo' && 'Atenção — folga apertada ou excesso leve'}
+                      {previsao.semaforo === 'vermelho' && 'Estoura o ciclo — considere outro dia ou data de início'}
+                    </p>
+                  </div>
+                ) : null}
               </div>
             )}
 
