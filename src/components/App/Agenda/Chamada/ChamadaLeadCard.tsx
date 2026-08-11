@@ -40,26 +40,21 @@ export function ChamadaLeadCard({ lead, podeOperar, salvando, onMarcar, onAbrirD
           : faltou
             ? 'border-rose-500/40 bg-rose-500/5'
             : 'border-dashed border-violet-500/50 bg-violet-500/5',
+        onAbrirDrawer && 'cursor-pointer hover:border-violet-500/70',
       )}
+      onClick={onAbrirDrawer}
+      role={onAbrirDrawer ? 'button' : undefined}
+      tabIndex={onAbrirDrawer ? 0 : undefined}
+      onKeyDown={onAbrirDrawer ? (e) => { if (e.key === 'Enter') onAbrirDrawer(); } : undefined}
     >
-      {/* Badge Experimental + nome (clicavel para abrir drawer) */}
+      {/* Badge Experimental + nome */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-violet-500/40 bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-300">
             <User className="h-2.5 w-2.5" />
             Lead
           </span>
-          {onAbrirDrawer ? (
-            <button
-              type="button"
-              onClick={onAbrirDrawer}
-              className="truncate text-sm font-semibold text-white hover:text-violet-300"
-            >
-              {lead.nome}
-            </button>
-          ) : (
-            <p className="truncate text-sm font-semibold text-white">{lead.nome}</p>
-          )}
+          <p className="truncate text-sm font-semibold text-white">{lead.nome}</p>
         </div>
         <span
           className={cn(
@@ -88,11 +83,11 @@ export function ChamadaLeadCard({ lead, podeOperar, salvando, onMarcar, onAbrirD
 
       {/* Botões de chamada — só Presente/Falta (experimental não tem justificativa) */}
       {podeOperar && (
-        <div className="mt-3 flex gap-1.5" role="group" aria-label={`Destino de ${lead.nome}`}>
+        <div className="mt-3 flex gap-1.5" role="group" aria-label={`Destino de ${lead.nome}`} onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
             disabled={salvando}
-            onClick={() => onMarcar(lead.experimental_id, 'experimental_realizada')}
+            onClick={(e) => { e.stopPropagation(); onMarcar(lead.experimental_id, 'experimental_realizada'); }}
             className={cn(
               'flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-all hover:-translate-y-px disabled:opacity-50',
               presente
@@ -106,7 +101,7 @@ export function ChamadaLeadCard({ lead, podeOperar, salvando, onMarcar, onAbrirD
           <button
             type="button"
             disabled={salvando}
-            onClick={() => onMarcar(lead.experimental_id, 'experimental_faltou')}
+            onClick={(e) => { e.stopPropagation(); onMarcar(lead.experimental_id, 'experimental_faltou'); }}
             className={cn(
               'flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-all hover:-translate-y-px disabled:opacity-50',
               faltou

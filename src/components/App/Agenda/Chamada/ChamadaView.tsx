@@ -206,6 +206,7 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
         salvando={salvando}
         onMarcar={registrarPresencaExperimental}
         onFechar={() => setDrawerLead(null)}
+        onSalvo={() => { setDrawerLead(null); recarregar(); }}
       />
     </div>
   );

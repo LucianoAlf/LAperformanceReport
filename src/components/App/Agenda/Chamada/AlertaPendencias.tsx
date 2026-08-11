@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatDistanceToNowStrict, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { AlertTriangle, CheckCircle2, Clock, ChevronRight, PartyPopper } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, ChevronRight, PartyPopper, User } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import type { AulaAgenda, AlunoAgenda } from '@/hooks/useAgendaDia';
+import type { AulaAgenda, AlunoAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
 import { aulaJaOcorreu } from '@/lib/agenda';
 import { alunoSemDestino } from './chamadaUtils';
 import { cn } from '@/lib/utils';
 
 interface Pendencia {
   aula: AulaAgenda;
-  aluno: AlunoAgenda;
+  aluno?: AlunoAgenda;
+  lead?: LeadExperimentalAgenda;
   /** Minutos desde que a aula terminou */
   minutosDesdeFim: number;
 }
@@ -68,14 +69,22 @@ export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirD
     for (const aula of aulas) {
       if (aula.cancelada) continue;
       if (!aulaJaOcorreu(data, aula.hora_fim, agora)) continue;
+      const [h, m] = aula.hora_fim.split(':').map(Number);
+      const fim = new Date(`${data}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`);
+      const minutos = Math.max(0, Math.round((agora.getTime() - fim.getTime()) / 60000));
+
+      // Alunos sem destino
       for (const aluno of aula.alunos) {
         if (aluno.aluno_id == null) continue;
         if (alunoSemDestino(aula, aluno, data, agora)) {
-          // Calcula minutos desde o fim da aula
-          const [h, m] = aula.hora_fim.split(':').map(Number);
-          const fim = new Date(`${data}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`);
-          const minutos = Math.max(0, Math.round((agora.getTime() - fim.getTime()) / 60000));
           lista.push({ aula, aluno, minutosDesdeFim: minutos });
+        }
+      }
+
+      // Leads experimentais sem destino (aguardando presença/falta)
+      for (const lead of aula.experimental_leads ?? []) {
+        if (lead.status === 'experimental_agendada') {
+          lista.push({ aula, lead, minutosDesdeFim: minutos });
         }
       }
     }
@@ -129,6 +138,9 @@ export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirD
   }
 
   function ItemPendencia({ p }: { p: Pendencia }) {
+    const ehLead = p.lead != null;
+    const nome = ehLead ? p.lead!.nome : p.aluno!.nome;
+    const curso = ehLead ? (p.lead!.curso ?? 'Experimental') : p.aula.curso_nome;
     return (
       <button
         type="button"
@@ -139,10 +151,17 @@ export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirD
           corHover,
         )}
       >
-        <Clock className="h-3 w-3 shrink-0 opacity-60" />
+        {ehLead ? (
+          <User className="h-3 w-3 shrink-0 text-violet-400" />
+        ) : (
+          <Clock className="h-3 w-3 shrink-0 opacity-60" />
+        )}
         <span className="font-mono text-[11px] opacity-70">{p.aula.hora_inicio}</span>
-        <span className="min-w-0 flex-1 truncate font-medium">{p.aluno.nome}</span>
-        <span className="truncate text-[10px] opacity-60">{p.aula.curso_nome}</span>
+        <span className="min-w-0 flex-1 truncate font-medium">
+          {nome}
+          {ehLead && <span className="ml-1 text-[9px] font-bold uppercase text-violet-400">lead</span>}
+        </span>
+        <span className="truncate text-[10px] opacity-60">{curso}</span>
         <span className="shrink-0 text-[10px] opacity-50">{formatarTempo(p.minutosDesdeFim)}</span>
         <ChevronRight className="h-3 w-3 shrink-0 opacity-40" />
       </button>
@@ -158,7 +177,7 @@ export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirD
         </p>
         <ul className="space-y-0.5">
           {itens.map((p) => (
-            <li key={`${p.aula.chave}-${p.aluno.aluno_id}`}>
+            <li key={p.lead ? `lead-${p.lead.experimental_id}` : `${p.aula.chave}-${p.aluno!.aluno_id}`}>
               <ItemPendencia p={p} />
             </li>
           ))}
@@ -186,7 +205,7 @@ export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirD
             <p className="mb-0.5 text-[10px] font-semibold opacity-50">{unidade}</p>
             <ul className="space-y-0.5">
               {lista.map((p) => (
-                <li key={`${p.aula.chave}-${p.aluno.aluno_id}`}>
+                <li key={p.lead ? `lead-${p.lead.experimental_id}` : `${p.aula.chave}-${p.aluno!.aluno_id}`}>
                   <ItemPendencia p={p} />
                 </li>
               ))}

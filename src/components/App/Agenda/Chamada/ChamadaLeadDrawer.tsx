@@ -5,11 +5,13 @@ import {
   CheckCircle2,
   FileText,
   GraduationCap,
+  Loader2,
   Phone,
   Tag,
   User,
   XCircle,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -26,88 +28,110 @@ interface Props {
   salvando: boolean;
   onMarcar: (experimentalId: number, status: 'experimental_realizada' | 'experimental_faltou') => void;
   onFechar: () => void;
+  onSalvo: () => void;
 }
 
-interface LeadCompleto {
+interface Opcao {
   id: number;
   nome: string;
-  telefone: string | null;
-  email: string | null;
-  canal_origem_id: number | null;
-  canal_nome: string | null;
-  curso_interesse_id: number | null;
-  curso_nome: string | null;
-  faixa_etaria: string | null;
-  status: string | null;
-  observacoes: string | null;
 }
 
 /**
- * Drawer do lead experimental na Chamada. Mostra todas as informações do lead
- * e permite marcar presença/falta. Campos faltantes aparecem como alerta
- * amarelo — o comercial precisa completar para fechar a venda.
+ * Drawer do lead experimental na Chamada. Mostra todas as informações do lead,
+ * permite marcar presença/falta e EDITAR os campos faltantes direto aqui —
+-- sem precisar ir na ficha do lead. A atualização propaga para leads e
+ * lead_experimentais, e a Conciliação do Comercial reflete automaticamente.
  */
-export function ChamadaLeadDrawer({ lead, aula, data, salvando, onMarcar, onFechar }: Props) {
-  const [leadCompleto, setLeadCompleto] = useState<LeadCompleto | null>(null);
+export function ChamadaLeadDrawer({ lead, aula, data, salvando, onMarcar, onFechar, onSalvo }: Props) {
   const [carregando, setCarregando] = useState(false);
+  const [salvandoCampos, setSalvandoCampos] = useState(false);
 
-  // Busca os dados completos do lead quando o drawer abre
+  // Opções para os selects
+  const [canais, setCanais] = useState<Opcao[]>([]);
+  const [cursos, setCursos] = useState<Opcao[]>([]);
+  const [professores, setProfessores] = useState<Opcao[]>([]);
+
+  // Valores editáveis
+  const [telefone, setTelefone] = useState('');
+  const [canalId, setCanalId] = useState<number | null>(null);
+  const [cursoId, setCursoId] = useState<number | null>(null);
+  const [faixaEtaria, setFaixaEtaria] = useState('');
+  const [professorId, setProfessorId] = useState<number | null>(null);
+
+  // Carrega opções e valores iniciais
   useEffect(() => {
-    if (!lead?.lead_id) { setLeadCompleto(null); return; }
+    if (!lead) return;
     let cancelado = false;
     setCarregando(true);
+
     (async () => {
-      const { data: rows } = await supabase
-        .from('leads')
-        .select('id, nome, telefone, email, canal_origem_id, faixa_etaria, status, observacoes')
-        .eq('id', lead.lead_id)
-        .single();
+      // Busca opções em paralelo
+      const [canaisRes, cursosRes, profsRes] = await Promise.all([
+        supabase.from('canais_origem').select('id, nome').eq('ativo', true).order('nome'),
+        supabase.from('cursos').select('id, nome').order('nome'),
+        supabase.from('professores').select('id, nome').eq('ativo', true).order('nome'),
+      ]);
+
       if (cancelado) return;
+      setCanais(canaisRes.data ?? []);
+      setCursos(cursosRes.data ?? []);
+      setProfessores(profsRes.data ?? []);
 
-      // Busca nome do canal
-      let canalNome: string | null = null;
-      if (rows?.canal_origem_id) {
-        const { data: canal } = await supabase
-          .from('canais_origem')
-          .select('nome')
-          .eq('id', rows.canal_origem_id)
-          .single();
-        canalNome = canal?.nome ?? null;
-      }
-
-      // Busca nome do curso de interesse
-      let cursoNome: string | null = null;
-      if (lead.curso_interesse_id) {
-        const { data: curso } = await supabase
-          .from('cursos')
-          .select('nome')
-          .eq('id', lead.curso_interesse_id)
-          .single();
-        cursoNome = curso?.nome ?? null;
-      }
-
-      setLeadCompleto({
-        ...rows,
-        canal_nome: canalNome,
-        curso_nome: cursoNome,
-        curso_interesse_id: lead.curso_interesse_id,
-      });
+      // Preenche valores atuais
+      setTelefone(lead.telefone ?? '');
+      setCanalId(lead.canal_origem_id ?? null);
+      setCursoId(lead.curso_interesse_id ?? null);
+      setFaixaEtaria(lead.faixa_etaria ?? '');
+      setProfessorId(lead.professor_experimental_id ?? null);
       setCarregando(false);
     })();
+
     return () => { cancelado = true; };
-  }, [lead?.lead_id, lead?.curso_interesse_id]);
+  }, [lead]);
 
   if (!lead || !aula) return null;
 
   const presente = lead.status === 'experimental_realizada';
   const faltou = lead.status === 'experimental_faltou';
 
+  // Campos que ainda faltam (baseado nos valores editáveis, não no banco)
   const camposFaltantes: string[] = [];
-  if (!leadCompleto?.telefone && !lead.telefone) camposFaltantes.push('telefone');
-  if (!lead.curso_interesse_id) camposFaltantes.push('curso de interesse');
-  if (!leadCompleto?.canal_origem_id && !lead.canal_origem_id) camposFaltantes.push('canal de origem');
-  if (!leadCompleto?.faixa_etaria && !lead.faixa_etaria) camposFaltantes.push('faixa etária');
-  if (!lead.professor_experimental_id) camposFaltantes.push('professor da experimental');
+  if (!telefone.trim()) camposFaltantes.push('telefone');
+  if (!cursoId) camposFaltantes.push('curso de interesse');
+  if (!canalId) camposFaltantes.push('canal de origem');
+  if (!faixaEtaria.trim()) camposFaltantes.push('faixa etária');
+  if (!professorId) camposFaltantes.push('professor da experimental');
+
+  const temMudanca =
+    telefone !== (lead.telefone ?? '') ||
+    canalId !== (lead.canal_origem_id ?? null) ||
+    cursoId !== (lead.curso_interesse_id ?? null) ||
+    faixaEtaria !== (lead.faixa_etaria ?? '') ||
+    professorId !== (lead.professor_experimental_id ?? null);
+
+  async function salvarCampos() {
+    if (!lead || !temMudanca) return;
+    setSalvandoCampos(true);
+    try {
+      const { error } = await supabase.rpc('app_atualizar_lead_campos', {
+        p_experimental_id: lead.experimental_id,
+        p_telefone: telefone.trim() || null,
+        p_canal_origem_id: canalId,
+        p_curso_interesse_id: cursoId,
+        p_faixa_etaria: faixaEtaria.trim() || null,
+        p_professor_experimental_id: professorId,
+      });
+      if (error) throw error;
+      toast.success('Campos atualizados');
+      onSalvo();
+    } catch (e) {
+      toast.error('Não foi possível salvar', {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setSalvandoCampos(false);
+    }
+  }
 
   return (
     <Dialog open={lead != null} onOpenChange={(o) => !o && onFechar()}>
@@ -173,38 +197,86 @@ export function ChamadaLeadDrawer({ lead, aula, data, salvando, onMarcar, onFech
               </div>
             </section>
 
-            {/* Campos faltantes */}
+            {/* Campos faltantes — editável inline */}
             {camposFaltantes.length > 0 && (
               <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
                 <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-300">
                   <AlertTriangle className="h-3.5 w-3.5" />
                   Campos pendentes ({camposFaltantes.length})
                 </p>
-                <ul className="mt-2 space-y-1">
-                  {camposFaltantes.map((campo) => (
-                    <li key={campo} className="text-xs text-amber-200/80">
-                      • {campo}
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2 text-[10px] text-amber-300/60">
-                  Complete na ficha do lead (Comercial → Leads) para fechar a venda.
+                <p className="mt-1 text-[10px] text-amber-300/70">
+                  Preencha abaixo e clique em Salvar — a Conciliação do Comercial reflete automaticamente.
                 </p>
               </section>
             )}
 
-            {/* Informações do lead */}
+            {/* Formulário de campos do lead */}
             <section>
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 Informações do lead
               </p>
-              <div className="space-y-2.5 rounded-xl border border-slate-700/40 bg-slate-800/30 p-3.5">
-                <InfoRow icon={<Phone className="h-3.5 w-3.5" />} rotulo="Telefone" valor={leadCompleto?.telefone ?? lead.telefone} />
-                <InfoRow icon={<Tag className="h-3.5 w-3.5" />} rotulo="Canal" valor={leadCompleto?.canal_nome ?? lead.canal} />
-                <InfoRow icon={<GraduationCap className="h-3.5 w-3.5" />} rotulo="Curso de interesse" valor={leadCompleto?.curso_nome ?? lead.curso} />
-                <InfoRow icon={<User className="h-3.5 w-3.5" />} rotulo="Faixa etária" valor={leadCompleto?.faixa_etaria ?? lead.faixa_etaria} />
-                <InfoRow icon={<Calendar className="h-3.5 w-3.5" />} rotulo="Professor" valor={lead.professor_nome} />
-              </div>
+              {carregando ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <CampoTexto
+                    icon={<Phone className="h-3.5 w-3.5" />}
+                    rotulo="Telefone"
+                    valor={telefone}
+                    onChange={setTelefone}
+                    placeholder="5521999999999"
+                  />
+                  <CampoSelect
+                    icon={<Tag className="h-3.5 w-3.5" />}
+                    rotulo="Canal de origem"
+                    valor={canalId}
+                    onChange={setCanalId}
+                    opcoes={canais}
+                    placeholder="Selecione o canal"
+                  />
+                  <CampoSelect
+                    icon={<GraduationCap className="h-3.5 w-3.5" />}
+                    rotulo="Curso de interesse"
+                    valor={cursoId}
+                    onChange={setCursoId}
+                    opcoes={cursos}
+                    placeholder="Selecione o curso"
+                  />
+                  <CampoTexto
+                    icon={<User className="h-3.5 w-3.5" />}
+                    rotulo="Faixa etária"
+                    valor={faixaEtaria}
+                    onChange={setFaixaEtaria}
+                    placeholder="Ex.: 6-8 anos"
+                  />
+                  <CampoSelect
+                    icon={<Calendar className="h-3.5 w-3.5" />}
+                    rotulo="Professor da experimental"
+                    valor={professorId}
+                    onChange={setProfessorId}
+                    opcoes={professores}
+                    placeholder="Selecione o professor"
+                  />
+
+                  {temMudanca && (
+                    <button
+                      type="button"
+                      disabled={salvandoCampos}
+                      onClick={salvarCampos}
+                      className="w-full rounded-lg border border-emerald-500/40 bg-emerald-600/20 px-3 py-2.5 text-xs font-bold text-emerald-300 transition-all hover:bg-emerald-600/30 disabled:opacity-50"
+                    >
+                      {salvandoCampos ? (
+                        <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />
+                      )}
+                      Salvar campos
+                    </button>
+                  )}
+                </div>
+              )}
             </section>
 
             {/* Observações do atendimento */}
@@ -239,16 +311,54 @@ export function ChamadaLeadDrawer({ lead, aula, data, salvando, onMarcar, onFech
   );
 }
 
-function InfoRow({ icon, rotulo, valor }: { icon: React.ReactNode; rotulo: string; valor: string | null }) {
+function CampoTexto({ icon, rotulo, valor, onChange, placeholder }: {
+  icon: React.ReactNode;
+  rotulo: string;
+  valor: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+}) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
+    <div>
+      <label className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
         {icon}
         {rotulo}
-      </span>
-      <span className={cn('text-xs', valor ? 'text-slate-200' : 'text-slate-600 italic')}>
-        {valor ?? 'Não informado'}
-      </span>
+      </label>
+      <input
+        type="text"
+        value={valor}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:border-violet-500/50 focus:outline-none"
+      />
+    </div>
+  );
+}
+
+function CampoSelect({ icon, rotulo, valor, onChange, opcoes, placeholder }: {
+  icon: React.ReactNode;
+  rotulo: string;
+  valor: number | null;
+  onChange: (v: number | null) => void;
+  opcoes: Opcao[];
+  placeholder: string;
+}) {
+  return (
+    <div>
+      <label className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+        {icon}
+        {rotulo}
+      </label>
+      <select
+        value={valor ?? ''}
+        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+        className="w-full rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-xs text-slate-200 focus:border-violet-500/50 focus:outline-none"
+      >
+        <option value="">{placeholder}</option>
+        {opcoes.map((o) => (
+          <option key={o.id} value={o.id}>{o.nome}</option>
+        ))}
+      </select>
     </div>
   );
 }
