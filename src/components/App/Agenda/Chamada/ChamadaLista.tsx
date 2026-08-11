@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { AlertTriangle, Filter, Paperclip, RotateCcw } from 'lucide-react';
-import type { AulaAgenda, AlunoAgenda } from '@/hooks/useAgendaDia';
+import { AlertTriangle, Filter, Paperclip, RotateCcw, User } from 'lucide-react';
+import type { AulaAgenda, AlunoAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
 import { aulaJaOcorreu } from '@/lib/agenda';
 import { estadoDoAluno, rotuloOrigem, temConflito, type EstadoChamada } from './chamadaUtils';
 import { cn } from '@/lib/utils';
@@ -13,7 +13,7 @@ interface Props {
   onAbrirDrawer: (aula: AulaAgenda) => void;
 }
 
-type FiltroLista = 'todos' | 'pendentes' | 'presentes' | 'faltas' | 'justificadas' | 'canceladas';
+type FiltroLista = 'todos' | 'pendentes' | 'presentes' | 'faltas' | 'justificadas' | 'canceladas' | 'experimentais';
 
 const FILTROS: Array<{ valor: FiltroLista; rotulo: string }> = [
   { valor: 'todos', rotulo: 'Todos' },
@@ -22,12 +22,14 @@ const FILTROS: Array<{ valor: FiltroLista; rotulo: string }> = [
   { valor: 'faltas', rotulo: 'Faltas' },
   { valor: 'justificadas', rotulo: 'Justificadas' },
   { valor: 'canceladas', rotulo: 'Canceladas' },
+  { valor: 'experimentais', rotulo: 'Experimentais' },
 ];
 
 interface LinhaLista {
   aula: AulaAgenda;
   aluno: AlunoAgenda | null;
-  estado: EstadoChamada | 'cancelada';
+  lead?: LeadExperimentalAgenda | null;
+  estado: EstadoChamada | 'cancelada' | 'experimental';
 }
 
 /**
@@ -46,9 +48,19 @@ export function ChamadaLista({ data, aulas, onAbrirDrawer }: Props) {
         out.push({ aula, aluno: null, estado: 'cancelada' });
         continue;
       }
+      // Alunos matriculados
       for (const aluno of aula.alunos) {
         if (aluno.aluno_id == null) continue;
         out.push({ aula, aluno, estado: estadoDoAluno(aluno) });
+      }
+      // Leads experimentais
+      for (const lead of aula.experimental_leads ?? []) {
+        const estadoLead = lead.status === 'experimental_realizada'
+          ? 'presente'
+          : lead.status === 'experimental_faltou'
+            ? 'falta'
+            : 'experimental';
+        out.push({ aula, aluno: null, lead, estado: estadoLead as LinhaLista['estado'] });
       }
     }
     return out;
@@ -57,9 +69,11 @@ export function ChamadaLista({ data, aulas, onAbrirDrawer }: Props) {
   const filtradas = useMemo(() => {
     if (filtro === 'todos') return linhas;
     if (filtro === 'canceladas') return linhas.filter((l) => l.estado === 'cancelada');
+    if (filtro === 'experimentais') return linhas.filter((l) => l.lead != null);
     if (filtro === 'pendentes') {
       return linhas.filter((l) => {
         if (l.estado === 'cancelada') return false;
+        if (l.lead) return l.estado === 'experimental';
         if (l.aluno && !aulaJaOcorreu(data, l.aula.hora_fim, agora)) return false;
         return l.estado === 'indeterminado';
       });
@@ -75,9 +89,15 @@ export function ChamadaLista({ data, aulas, onAbrirDrawer }: Props) {
       faltas: 0,
       justificadas: 0,
       canceladas: 0,
+      experimentais: 0,
     };
     for (const l of linhas) {
-      if (l.estado === 'cancelada') c.canceladas++;
+      if (l.lead) {
+        c.experimentais++;
+        if (l.estado === 'experimental') c.pendentes++;
+        else if (l.estado === 'presente') c.presentes++;
+        else if (l.estado === 'falta') c.faltas++;
+      } else if (l.estado === 'cancelada') c.canceladas++;
       else if (l.estado === 'presente') c.presentes++;
       else if (l.estado === 'falta') c.faltas++;
       else if (l.estado === 'falta_justificada') c.justificadas++;
@@ -148,13 +168,15 @@ export function ChamadaLista({ data, aulas, onAbrirDrawer }: Props) {
 function LinhaTabela({
   aula,
   aluno,
+  lead,
   estado,
   data,
   onAbrir,
 }: {
   aula: AulaAgenda;
   aluno: AlunoAgenda | null;
-  estado: EstadoChamada | 'cancelada';
+  lead?: LeadExperimentalAgenda | null;
+  estado: EstadoChamada | 'cancelada' | 'experimental';
   data: string;
   onAbrir: () => void;
 }) {
@@ -165,13 +187,22 @@ function LinhaTabela({
   return (
     <tr
       onClick={onAbrir}
-      className="cursor-pointer bg-slate-900/30 text-slate-300 hover:bg-slate-800/40"
+      className={cn(
+        'cursor-pointer text-slate-300 hover:bg-slate-800/40',
+        lead ? 'bg-violet-500/[0.04]' : 'bg-slate-900/30',
+      )}
     >
       <td className="whitespace-nowrap px-3 py-2 font-mono text-[11px] text-slate-400">
         {rotuloData} {aula.hora_inicio}
       </td>
       <td className="px-3 py-2">
-        {aluno ? (
+        {lead ? (
+          <div className="flex items-center gap-1.5">
+            <User className="h-3 w-3 text-violet-400" />
+            <span className="font-medium text-violet-200">{lead.nome}</span>
+            <span className="rounded bg-violet-500/15 px-1 py-0.5 text-[9px] font-bold text-violet-300">exp.</span>
+          </div>
+        ) : aluno ? (
           <div className="flex items-center gap-1.5">
             <span className="font-medium text-slate-200">{aluno.nome}</span>
             {aluno.nr_da_aula != null && aluno.qtd_aulas_contrato != null && (
@@ -194,7 +225,7 @@ function LinhaTabela({
       <td className="px-3 py-2">
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] text-slate-500">
-            {aluno ? rotuloOrigem(aluno.respondido_por) : aula.cancelada_origem ?? '—'}
+            {lead ? 'Emusys' : aluno ? rotuloOrigem(aluno.respondido_por) : aula.cancelada_origem ?? '—'}
           </span>
           {conflito && (
             <AlertTriangle className="h-3 w-3 text-amber-400" aria-label="conflito com Emusys" />
@@ -210,16 +241,17 @@ function BadgeEstado({
   motivo,
   evidencia,
 }: {
-  estado: EstadoChamada | 'cancelada';
+  estado: EstadoChamada | 'cancelada' | 'experimental';
   motivo: string | null;
   evidencia: string | null;
 }) {
-  const map: Record<EstadoChamada | 'cancelada', { rotulo: string; classe: string }> = {
+  const map: Record<EstadoChamada | 'cancelada' | 'experimental', { rotulo: string; classe: string }> = {
     presente: { rotulo: 'Presente', classe: 'bg-emerald-500/15 text-emerald-300' },
     falta: { rotulo: 'Falta', classe: 'bg-rose-500/15 text-rose-300' },
     falta_justificada: { rotulo: 'Falta justificada', classe: 'bg-amber-500/15 text-amber-300' },
     indeterminado: { rotulo: 'Sem destino', classe: 'bg-slate-700/40 text-slate-400' },
     cancelada: { rotulo: 'Cancelada', classe: 'bg-rose-500/15 text-rose-300' },
+    experimental: { rotulo: 'Aguardando', classe: 'bg-violet-500/15 text-violet-300' },
   };
   const cfg = map[estado];
   return (

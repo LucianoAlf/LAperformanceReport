@@ -433,6 +433,12 @@ function CardAulaSemana({
           {(aula.experimental_leads ?? []).map((lead) => {
             const presente = lead.status === 'experimental_realizada';
             const faltou = lead.status === 'experimental_faltou';
+            const camposFaltantes: string[] = [];
+            if (!lead.curso_interesse_id) camposFaltantes.push('curso');
+            if (!lead.telefone) camposFaltantes.push('telefone');
+            if (!lead.canal_origem_id) camposFaltantes.push('canal');
+            if (!lead.faixa_etaria) camposFaltantes.push('faixa');
+            if (!lead.professor_experimental_id) camposFaltantes.push('professor');
             return (
               <li key={`lead-${lead.experimental_id}`} className="space-y-0.5">
                 <button
@@ -443,11 +449,17 @@ function CardAulaSemana({
                 >
                   {lead.nome} <span className="text-[8px] text-violet-400/70">exp.</span>
                 </button>
-                <div className="flex gap-0.5" role="group" aria-label={`Destino de ${lead.nome}`}>
+                {camposFaltantes.length > 0 && (
+                  <p className="flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-1 py-0.5 text-[8px] text-amber-300">
+                    <span className="font-bold">!</span>
+                    Falta: {camposFaltantes.join(', ')}
+                  </p>
+                )}
+                <div className="flex gap-0.5" role="group" aria-label={`Destino de ${lead.nome}`} onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
                     disabled={salvando}
-                    onClick={() => onRegistrarExperimental(lead.experimental_id, 'experimental_realizada')}
+                    onClick={(e) => { e.stopPropagation(); onRegistrarExperimental(lead.experimental_id, 'experimental_realizada'); }}
                     className={cn(
                       'flex-1 rounded py-0.5 text-[9px] font-bold transition-all hover:-translate-y-px disabled:opacity-50',
                       presente
@@ -460,7 +472,7 @@ function CardAulaSemana({
                   <button
                     type="button"
                     disabled={salvando}
-                    onClick={() => onRegistrarExperimental(lead.experimental_id, 'experimental_faltou')}
+                    onClick={(e) => { e.stopPropagation(); onRegistrarExperimental(lead.experimental_id, 'experimental_faltou'); }}
                     className={cn(
                       'flex-1 rounded py-0.5 text-[9px] font-bold transition-all hover:-translate-y-px disabled:opacity-50',
                       faltou

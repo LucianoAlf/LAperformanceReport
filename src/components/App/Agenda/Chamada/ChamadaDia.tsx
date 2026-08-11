@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { CalendarX } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { CalendarX, User } from 'lucide-react';
 import type { AulaAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOutletContext } from 'react-router-dom';
@@ -8,6 +8,7 @@ import { ChamadaAulaBloco } from './ChamadaAulaBloco';
 import { AlertaPendencias } from './AlertaPendencias';
 import type { ItemChamada } from './useChamadaAcoes';
 import type { AlunoAgenda } from '@/hooks/useAgendaDia';
+import { cn } from '@/lib/utils';
 
 interface OutletContext {
   unidadeSelecionada: string | null;
@@ -50,14 +51,22 @@ export function ChamadaDia({
   const agora = useMemo(() => new Date(), []);
   const context = useOutletContext<OutletContext | undefined>();
   const consolidado = !context?.unidadeSelecionada;
+  const [filtroExperimental, setFiltroExperimental] = useState<'todas' | 'regulares' | 'experimentais'>('todas');
 
   const ordenadas = useMemo(
     () => [...aulas].sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio)),
     [aulas],
   );
 
-  const totalAulas = ordenadas.length;
-  const aulasConcluidas = ordenadas.filter((a) => chamadaCompleta(a, data, agora)).length;
+  // Filtro: separar experimental de regular
+  const filtradas = useMemo(() => {
+    if (filtroExperimental === 'regulares') return ordenadas.filter((a) => a.categoria !== 'experimental');
+    if (filtroExperimental === 'experimentais') return ordenadas.filter((a) => a.categoria === 'experimental');
+    return ordenadas;
+  }, [ordenadas, filtroExperimental]);
+
+  const totalAulas = filtradas.length;
+  const aulasConcluidas = filtradas.filter((a) => chamadaCompleta(a, data, agora)).length;
 
   if (ordenadas.length === 0) {
     return (
@@ -79,19 +88,54 @@ export function ChamadaDia({
         onAbrirDrawer={onAbrirDrawer}
       />
 
+      {/* Filtro: separar experimental de regular */}
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Mostrar:</span>
+        <button
+          type="button"
+          onClick={() => setFiltroExperimental(filtroExperimental === 'todas' ? 'regulares' : 'todas')}
+          className={cn(
+            'rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-colors',
+            filtroExperimental !== 'experimentais'
+              ? 'border-cyan-500 bg-cyan-500/10 text-cyan-300'
+              : 'border-slate-700 text-slate-400 hover:text-slate-200',
+          )}
+        >
+          Regulares
+        </button>
+        <button
+          type="button"
+          onClick={() => setFiltroExperimental(filtroExperimental === 'experimentais' ? 'todas' : 'experimentais')}
+          className={cn(
+            'rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-colors',
+            filtroExperimental === 'experimentais'
+              ? 'border-violet-500 bg-violet-500/10 text-violet-300'
+              : 'border-slate-700 text-slate-400 hover:text-slate-200',
+          )}
+        >
+          <User className="mr-1 inline h-3 w-3" />
+          Experimentais
+        </button>
+      </div>
+
       {/* Progresso do dia */}
       <div className="flex items-center justify-between rounded-xl border border-slate-700/50 bg-slate-800/30 px-4 py-2.5 text-xs text-slate-400">
         <span>
           <b className="text-slate-200">{aulasConcluidas}</b> de <b className="text-slate-200">{totalAulas}</b> aulas com chamada completa
+          {filtroExperimental !== 'todas' && (
+            <span className="ml-1 text-slate-500">
+              ({filtroExperimental === 'regulares' ? 'regulares' : 'experimentais'})
+            </span>
+          )}
         </span>
         <span>
-          {ordenadas.filter((a) => a.cancelada).length} cancelada(s)
+          {filtradas.filter((a) => a.cancelada).length} cancelada(s)
         </span>
       </div>
 
       {/* Blocos de aula em ordem de horario */}
       <div className="space-y-3">
-        {ordenadas.map((aula) => (
+        {filtradas.map((aula) => (
           <ChamadaAulaBloco
             key={aula.chave}
             aula={aula}
