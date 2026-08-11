@@ -154,9 +154,10 @@ drawer. Definir se o componente `CampanhaDrawer.tsx` é removido ou mantido como
 ## Testes
 
 1. **Atribuição por unidade:** com os dados reais do Feirão, `useConversaoCampanhas` sem
-   `campanhaId` deve devolver Campo Grande=17 leads/4 matriculados, Barra=10/0, Recreio=10/0
-   (nomes reais conferidos: Luíza P Caruso, Benjamin Mota Falci Ramos, Mayara Caio Manhães de
-   Moraes, José Gabriel Borges — todos `unidade_id` de Campo Grande).
+   `campanhaId` deve devolver Campo Grande=17 leads/1 matriculado (Mayara Caio Manhães de
+   Moraes), Barra=10 leads/1 matriculado (Luíza P Caruso), Recreio=10 leads/2 matriculados
+   (Benjamin Mota Falci Ramos, José Gabriel Borges) — confirmado por `leads.unidade_id` de cada
+   um dos 4 convertidos, não pela contagem agregada por campanha_slug.
 2. **Regra canônica aplicada:** criar (ambiente de teste) um lead convertido cujo `aluno`
    correspondente seja segundo curso (`is_segundo_curso=true`) ou banda — confirmar que **não**
    entra em `matriculados`, mesmo com `leads.converteu=true`.

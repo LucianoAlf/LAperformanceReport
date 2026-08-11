@@ -346,9 +346,19 @@ Expected: sem novos erros relacionados a `useConversaoCampanhas.ts` (o projeto p
 - [ ] **Step 3: Verificação manual com dado real (Feirão)**
 
 Antes de existir UI (Task 3), verificar via console do navegador na página do app (com sessão logada) ou script Node com o client Supabase: chamar o hook indiretamente rodando a mesma query pelo MCP `execute_sql` já usada durante o brainstorming e comparar:
-- Campo Grande: `leadsGerados=17`, `matriculados=4`
-- Recreio: `leadsGerados=10`, `matriculados=0`
-- Barra: `leadsGerados=10`, `matriculados=0`
+- Campo Grande: `leadsGerados=17`, `matriculados=1` (Mayara Caio Manhães de Moraes)
+- Barra: `leadsGerados=10`, `matriculados=1` (Luíza P Caruso)
+- Recreio: `leadsGerados=10`, `matriculados=2` (Benjamin Mota Falci Ramos, José Gabriel Borges)
+
+**Correção pós-verificação (2026-08-11):** a versão original deste plano afirmava que os 4
+matriculados eram todos de Campo Grande ("todos unidade_id de Campo Grande") — essa afirmação
+nunca foi checada por uma query que trouxesse `leads.unidade_id` junto, só assumida a partir da
+contagem agregada (17/10/10) bater com as transferências. A distribuição real, confirmada por
+`select l.unidade_id, u.nome from leads_campanhas lc join leads l on ... where campanha_slug=
+'feirao-matriculas26' and l.converteu=true`, é a acima — descoberta durante a implementação da
+Task 2 (o hook devolveu os números certos; o texto do plano estava errado). Os números batem
+com `leads.unidade_id`, que é a mesma coluna usada por `filtrarLeadsCampanhaPorUnidade` — não há
+ambiguidade sobre qual é a fonte de verdade.
 
 (Esses números já foram confirmados por SQL direto durante o design; aqui é só validar que o hook reproduz o mesmo resultado depois de implementado — pode ser adiado pra depois da Task 3, quando há UI pra olhar.)
 
@@ -493,7 +503,7 @@ Linhas 96-102, inserir a renderização:
 - [ ] **Step 3: Testar manualmente no navegador**
 
 Run: `npm run dev`, abrir `/app/campanhas`, clicar na aba "Conversão".
-Expected: tabela com as 3 campanhas do Feirão mostrando Campo Grande com 17 leads/4 matriculados, Recreio e Barra com 10 leads/0 matriculados cada, custo por matrícula só preenchido na de CG. Clicar numa linha navega pra `/app/campanhas/<id>` (rota ainda não existe — 404 esperado até a Task 4, tudo bem, só confirmar que a navegação dispara pro id certo pela URL).
+Expected: tabela com as 3 campanhas do Feirão mostrando Campo Grande com 17 leads/1 matriculado, Barra com 10 leads/1 matriculado, Recreio com 10 leads/2 matriculados, custo por matrícula preenchido nas três (nenhuma tem `matriculados=0`). Clicar numa linha navega pra `/app/campanhas/<id>` (rota ainda não existe — 404 esperado até a Task 4, tudo bem, só confirmar que a navegação dispara pro id certo pela URL).
 
 - [ ] **Step 4: Commit**
 
@@ -1063,7 +1073,7 @@ Inserir logo depois do bloco de Template (antes da Timeline):
 - [ ] **Step 3: Testar manualmente**
 
 Run: `npm run dev`, abrir a página da campanha de Campo Grande.
-Expected: bloco "Conversão" com Leads gerados=17, Matriculados=4, Taxa=23.5%, Custo por matrícula preenchido, lista com os 4 nomes reais (Luíza P Caruso, Benjamin Mota Falci Ramos, Mayara Caio Manhães de Moraes, José Gabriel Borges) e suas datas. Abrir a de Recreio/Barra: Leads gerados=10, Matriculados=0, Custo por matrícula "—".
+Expected: na campanha de Campo Grande, bloco "Conversão" com Leads gerados=17, Matriculados=1, Taxa=5.9%, Custo por matrícula preenchido, lista com "Mayara Caio Manhães de Moraes" e a data. Na de Barra: Leads gerados=10, Matriculados=1 ("Luíza P Caruso"). Na de Recreio: Leads gerados=10, Matriculados=2 ("Benjamin Mota Falci Ramos", "José Gabriel Borges"). Nenhuma das três mostra "—" no custo por matrícula, já que todas têm ao menos 1 matriculado.
 
 - [ ] **Step 4: Commit**
 
