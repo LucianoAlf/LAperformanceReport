@@ -62,6 +62,16 @@ export function useChamadaAcoes(aoConcluir: () => void) {
 
         const resultado = data as ResultadoChamada;
         const erros = resultado?.erros ?? [];
+        const gravados = (resultado?.inseridos ?? 0) + (resultado?.atualizados ?? 0) + (resultado?.retificados ?? 0);
+        if (erros.length > 0 && gravados === 0) {
+          // NADA gravou: erro vermelho, não warning — warning amarelo passava
+          // por sucesso e a equipe achava que tinha registrado (caso 12/08).
+          const detalhes = erros
+            .map((e) => MENSAGENS_ERRO[e.erro] ?? e.erro)
+            .join('; ');
+          toast.error('Não foi possível registrar', { description: detalhes });
+          return false;
+        }
         if (erros.length > 0) {
           const detalhes = erros
             .map((e) => `aluno ${e.aluno_id}: ${MENSAGENS_ERRO[e.erro] ?? e.erro}`)

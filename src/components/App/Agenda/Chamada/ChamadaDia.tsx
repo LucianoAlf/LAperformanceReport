@@ -104,11 +104,16 @@ export function ChamadaDia({
   const totalAulas = filtradas.length;
   const aulasConcluidas = filtradas.filter((a) => chamadaCompleta(a, data, agora)).length;
 
-  // Agrupa aulas por professor para o toggle de presenca
+  // Agrupa aulas por professor para o toggle de presenca.
+  // Aula cancelada NAO entra: a RPC de presenca pula canceladas, e ler o
+  // professor_presenca de uma cancelada (que fica 'ausente' por default do
+  // Emusys) deixava o card vermelho mesmo depois de marcar presente — caso
+  // real do Pedro em 12/08 (aula das 17:00 cancelada escondia o presente).
   const aulasPorProfessor = useMemo(() => {
     const mapa = new Map<number, { nome: string; fotoUrl: string | null; aulas: AulaAgenda[]; presente: boolean | null; primeira: string; ultima: string }>();
     for (const aula of filtradas) {
       if (aula.professor_id == null) continue;
+      if (aula.cancelada) continue;
       const existente = mapa.get(aula.professor_id);
       if (existente) {
         existente.aulas.push(aula);
