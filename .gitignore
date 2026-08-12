@@ -36,6 +36,9 @@ __pycache__/
 .claude/scheduled_tasks.lock
 .mcp.json
 
+# Grok local (pode ter MCP com headers/tokens; config real do PAT fica em ~/.grok/)
+.grok/
+
 # Supabase CLI temp files (atualizam a cada upgrade da CLI)
 supabase/.temp/
 
