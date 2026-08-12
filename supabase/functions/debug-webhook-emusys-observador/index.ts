@@ -7,7 +7,11 @@
 //
 // [v2 — 2026-07-28] Passou a também PROCESSAR os eventos de lead e de aula
 // experimental, reimplementando em TypeScript o que o n8n faz. Matrícula NÃO é
-// processada aqui — segue no n8n.
+// processada aqui — o webhook CHEGA e vira log bruto, mas quem processa é a edge
+// `processar-matricula-emusys` (o Emusys dispara para os dois endereços).
+// ⚠️ Até 12/08/2026 este comentário dizia "segue no n8n", o que era falso: a edge
+// dedicada assumiu matrícula e o log prova (`workflow_id='processar-matricula-emusys'`
+// em 100% das ações reais de matrícula).
 //
 // [v3 — 2026-07-29] A reimplementação foi DESFEITA. Dois dias de sombra mostraram
 // que ela regredia em três frentes (50% das experimentais sem lead, curso NULL em
@@ -136,6 +140,34 @@
 //   3. casar por `emusys_lead_id` (100% de cobertura dos dois lados), nunca por slot;
 //   4. não julgar experimental de origem manual/fallback — nunca esteve na foto do Emusys.
 // Entrar em SOMBRA primeiro. Ver daily-notes/2026-08-07.md.
+//
+// [v11 — 2026-08-12] UNIDADE PASSA A SAIR DO `escola_id`, e o observador se prepara para
+// ASSUMIR O LEAD no lugar do n8n (decisão do Hugo).
+//
+// Contexto: em 11/08 às 15h uma migration criou um OVERLOAD de `upsert_lead` (11 args, com
+// `p_data_nascimento DEFAULT NULL`) sem remover a de 10. Chamada com 10 argumentos passou a
+// casar nas duas e o Postgres recusou: "function upsert_lead(...) is not unique". O nó
+// "Upsert Lead1" do workflow EB0LibpOJCLhKp7M falhou em 100% das execuções por ~21h e 22
+// leads não entraram na base — existem só como payload em `automacao_log`.
+//
+// O observador NÃO caía nesse erro: ele chama a RPC pelo PostgREST com as 11 chaves
+// NOMEADAS, o que resolve para a função nova sem ambiguidade. Ele registrou os 40 leads do
+// período em sombra, com a unidade certa e os args certos — teria absorvido a queda inteira
+// se a escrita estivesse ligada. Foi o que motivou a virada.
+//
+// Mudança desta versão: `resolverUnidade` usa `escola_id` (mapa fixo, igual ao n8n) e só cai
+// no nome como reserva. Motivo: o ID não muda quando renomeiam a escola. Sem default de
+// unidade — ver UNIDADE_POR_ESCOLA_ID.
+//
+// ⚠️ Ordem da virada (a mesma da v5, e vale repetir porque é contraintuitivo): ligar a escrita
+// AQUI primeiro, confirmar em evento real, e só ENTÃO desligar o ramo de lead no n8n. O
+// inverso abre uma janela sem ninguém escrevendo — e o Emusys não reenvia. Com os dois
+// ligados não há duplicata: a RPC casa por `emusys_lead_id`+unidade e o segundo vira UPDATE.
+//
+// ⚠️ Antes de ligar a escrita de lead, DEFINIR `OBSERVADOR_TOKEN`. Sem ele a verificação fica
+// desligada e este endereço aceita POST de qualquer origem — hoje inofensivo (só grava log),
+// mas gravando em `leads` vira porta aberta para injetar lead no funil. Os headers do Emusys
+// foram medidos e não trazem nada custom, então o caminho é `?token=` na URL cadastrada lá.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -198,6 +230,49 @@ function extrairUnidade(body: any): string | null {
  *  que está em texto puro e qualquer SELECT expõe. Sensível vira '***', o resto vai inteiro —
  *  `x-real-ip` e `user-agent` só servem se der para ler o valor. */
 const HEADERS_SENSIVEIS = ['authorization', 'apikey', 'api-key', 'cookie', 'x-observador-token', 'token'];
+
+/** Diagnóstico do token ANTES de exigi-lo, para não derrubar a captação ao ligar a trava.
+ *
+ *  Motivo: o campo de URL do Emusys mostra o endereço truncado na tela, e se ele cortar o
+ *  token no cadastro, ativar `OBSERVADOR_TOKEN` faria a edge rejeitar 100% dos webhooks —
+ *  e o Emusys NÃO reenvia. Então primeiro medimos o que está chegando, depois exigimos.
+ *
+ *  ⚠️ NÃO grava o valor: só a origem, o comprimento e os 12 primeiros hex do SHA-256. O hash
+ *  basta para provar identidade contra o token esperado (comparando com o sha256 do que
+ *  guardamos), sem escrever credencial num log que é lido por gente e por automação — a
+ *  mesma regra do HEADERS_SENSIVEIS logo acima. */
+async function diagnosticarToken(req: Request): Promise<Record<string, unknown>> {
+  let bruto = '';
+  let via: string | null = null;
+  const doHeader = req.headers.get('x-observador-token') ?? '';
+  if (doHeader) {
+    bruto = doHeader;
+    via = 'header';
+  } else {
+    try {
+      const daQuery = new URL(req.url).searchParams.get('token') ?? '';
+      if (daQuery) {
+        bruto = daQuery;
+        via = 'query';
+      }
+    } catch (_e) {
+      // URL inválida não deve derrubar o log
+    }
+  }
+  if (!via) return { via: null, len: 0, sha256_12: null };
+
+  let sha = null;
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(bruto));
+    sha = Array.from(new Uint8Array(buf))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+      .substring(0, 12);
+  } catch (_e) {
+    // ambiente sem WebCrypto: o comprimento sozinho já denuncia truncamento
+  }
+  return { via, len: bruto.length, sha256_12: sha };
+}
 
 function coletarHeaders(req: Request): Record<string, string> {
   const out: Record<string, string> = {};
@@ -282,7 +357,30 @@ function dataHoraBRT(bruto: unknown): string | null {
 
 // --------------------------------------------------------------- resolvers ---
 
+/** `escola_id` do Emusys -> unidade. Mesmo mapa do n8n (nó "Preparar Dados Lead1").
+ *
+ *  O ID é a chave estável: o Emusys mandou `escola_id` em 100% dos webhooks reais dos
+ *  últimos 30 dias (3.752 eventos), e ele não muda quando alguém renomeia a escola no
+ *  cadastro — o `escola_nome` muda.
+ *
+ *  ⚠️ Unidade nova exige acrescentar a linha aqui. É de propósito que não exista default:
+ *  o n8n manda todo `escola_id` desconhecido para a BARRA
+ *  (`... : '368d47f5-...'`), então uma unidade nova entraria como Barra em silêncio e o
+ *  erro só apareceria no funil, semanas depois. Aqui, ID desconhecido cai no fallback por
+ *  nome e, se nem isso resolver, o evento é registrado como `ignorado` com status `warn`. */
+const UNIDADE_POR_ESCOLA_ID: Record<string, string> = {
+  '39': '2ec861f6-023f-4d7b-9927-3960ad8c2a92',  // LA Music School Campo Grande
+  '40': '95553e96-971b-4590-a6eb-0201d013c14d',  // LA Music School Recreio
+  '316': '368d47f5-2d88-4475-bc14-ba084a9a348e', // LA Music School Barra
+};
+
+/** ID primeiro, nome como reserva. O fallback por nome é o comportamento que valeu de
+ *  29/07 a 12/08 e resolveu certo todos os leads observados em sombra — fica como rede
+ *  para o caso de o payload vir sem `escola_id` (só visto em testes manuais nossos). */
 async function resolverUnidade(sb: any, body: any): Promise<string | null> {
+  const escolaId = String(body?.escola_id ?? '').trim();
+  if (escolaId && UNIDADE_POR_ESCOLA_ID[escolaId]) return UNIDADE_POR_ESCOLA_ID[escolaId];
+
   const nome = nomeUnidade(body?.escola_nome);
   if (!nome) return null;
   const { data } = await sb.from('unidades').select('id').eq('nome', nome).maybeSingle();
@@ -912,7 +1010,11 @@ serve(async (req: Request) => {
       aluno_nome: extrairNome(body),
       unidade_nome: extrairUnidade(body),
       payload_bruto: body ?? { raw_nao_json: rawText },
-      detalhes: { headers_recebidos: coletarHeaders(req) },
+      detalhes: {
+        headers_recebidos: coletarHeaders(req),
+        // temporário: mede o token que está chegando antes de a trava ser ativada
+        token_diagnostico: await diagnosticarToken(req),
+      },
       workflow_id: 'debug-webhook-emusys-observador',
       execution_id: new Date().toISOString(),
     });
@@ -920,7 +1022,8 @@ serve(async (req: Request) => {
     console.error('[debug-webhook-emusys-observador] falha ao gravar log:', e?.message ?? e);
   }
 
-  // (2) PROCESSAMENTO — lead, experimental e arquivamento. Matrícula segue no n8n.
+  // (2) PROCESSAMENTO — lead, experimental e arquivamento. Matrícula só vira log bruto
+  // aqui; quem processa é a edge `processar-matricula-emusys`.
   const evento: string = body?.evento ?? 'observador_desconhecido';
   const ehLead = EVENTOS_LEAD.indexOf(evento) >= 0;
   const ehExp = EVENTOS_EXP.indexOf(evento) >= 0;
@@ -933,7 +1036,13 @@ serve(async (req: Request) => {
     try {
       const unidadeId = await resolverUnidade(supabase, body);
       if (!unidadeId) {
-        resultado = { acao: 'ignorado', motivo: 'unidade nao resolvida', escola: body?.escola_nome ?? null };
+        resultado = {
+          acao: 'ignorado',
+          motivo: 'unidade nao resolvida',
+          escola: body?.escola_nome ?? null,
+          // sem o id não dá para saber QUAL linha falta em UNIDADE_POR_ESCOLA_ID
+          escola_id: body?.escola_id ?? null,
+        };
       } else if (ehLead) {
         resultado = await processarLead(supabase, body, unidadeId, escrever);
       } else if (ehExp) {
