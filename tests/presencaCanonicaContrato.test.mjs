@@ -8,6 +8,8 @@ const migrationName = readdirSync(migrationsDir)
   .find((name) => /_presenca_canonica_resolvedor_conflitos\.sql$/u.test(name));
 const hardeningName = readdirSync(migrationsDir)
   .find((name) => /_presenca_canonica_conflitos_acl\.sql$/u.test(name));
+const confirmacaoName = readdirSync(migrationsDir)
+  .find((name) => /_presenca_canonica_confirmacao_respeita_falta_humana\.sql$/u.test(name));
 
 test('a migration canônica de presença existe e fecha somente estados terminais', () => {
   assert.ok(migrationName, 'falta a migration única presenca_canonica_resolvedor_conflitos');
@@ -68,4 +70,17 @@ test('a tabela de conflitos não herda escrita/leitura direta do navegador', () 
   const sql = readFileSync(join(migrationsDir, hardeningName), 'utf8');
   assert.match(sql, /revoke\s+all\s+on\s+table\s+public\.aluno_presenca_conflitos\s+from\s+public\s*,\s*anon\s*,\s*authenticated/iu);
   assert.match(sql, /grant\s+all\s+on\s+table\s+public\.aluno_presenca_conflitos\s+to\s+service_role/iu);
+});
+
+test('manual confirmation preserves canonical human absence', () => {
+  assert.ok(confirmacaoName, 'missing confirmation migration that preserves human absence');
+
+  const sql = readFileSync(join(migrationsDir, confirmacaoName), 'utf8');
+
+  assert.match(sql, /create\s+or\s+replace\s+function\s+public\.fn_materializar_presenca_padrao/iu);
+  assert.match(sql, /public\.fn_presenca_e_forte\s*\(\s*v_decisao\.respondido_por\s*\)/iu);
+  assert.match(sql, /'falta'\s*,\s*'falta_justificada'/iu);
+  assert.match(sql, /v_presenca\s*:=\s*'ausente'/iu);
+  assert.match(sql, /v_presenca\s*:=\s*'presente'/iu);
+  assert.match(sql, /revoke\s+all\s+on\s+function\s+public\.fn_materializar_presenca_padrao/iu);
 });
