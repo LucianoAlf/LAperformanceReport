@@ -52,6 +52,11 @@ test('o relatorio nao publica KPIs de uma fonte Emusys vencida', () => {
   assert.match(reportSource, /fetchSyncMatriculasOperacionalFresco/i);
 });
 
+test('o relatorio publica criterio, equacao e horario da fotografia do Emusys', () => {
+  assert.match(reportSource, /formatarConciliacaoBaseAlunosAdmin/i);
+  assert.match(reportSource, /snapshotEmusysEm:\s*String\(syncOperacional\.completed_at\)/i);
+});
+
 test('a reconciliacao canonica separa atividade extra da base academica', () => {
   const emusysAtivos = 423;
   const somenteAtividadeExtra = 4;

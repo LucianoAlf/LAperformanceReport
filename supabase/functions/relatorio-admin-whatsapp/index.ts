@@ -22,6 +22,7 @@ import {
   obterSnapshotComAdmissao,
 } from '../_shared/snapshot-refresh-admission.ts';
 import {
+  formatarConciliacaoBaseAlunosAdmin,
   formatarResumoMatriculasAdmin,
   formatarTrancamentosAdmin,
   parseDataReferenciaAdminBrt,
@@ -483,7 +484,7 @@ async function fetchKPIsAlunosRelatorioAdmin(
   ano: number,
   mes: number
 ) {
-  await fetchSyncMatriculasOperacionalFresco(supabase, unidadeId);
+  const syncOperacional = await fetchSyncMatriculasOperacionalFresco(supabase, unidadeId);
   const { data, error } = await supabase.rpc('get_kpis_alunos_admin_operacional', {
     p_unidade_id: unidadeId,
     p_ano: ano,
@@ -532,6 +533,7 @@ async function fetchKPIsAlunosRelatorioAdmin(
     matriculasTrancadas: n(totalCampo('matriculas_trancadas')),
     alunosCoral,
     evasoes: n(totalCampo('evasoes', 'total_evasoes')),
+    snapshotEmusysEm: String(syncOperacional.completed_at),
   };
 }
 
@@ -908,6 +910,12 @@ async function gerarRelatorioDiario(
   texto += `• Ativos: *${alunosAtivos}*\n`;
   texto += `• Pagantes: *${alunosPagantes}*\n`;
   texto += `• Não Pagantes: *${alunosNaoPagantes}* (${taxaInadimplencia.toFixed(1)}%)\n`;
+  texto += `${formatarConciliacaoBaseAlunosAdmin({
+    alunosAtivos,
+    alunosPagantes,
+    alunosNaoPagantes,
+    snapshotEmusysEm: kpisAlunos.snapshotEmusysEm,
+  })}\n`;
   texto += `- Bolsistas Integrais: ${bolsistasIntegraisTexto}\n`;
   texto += `• Bolsistas Parciais: *${bolsistasParciais}*\n`;
   texto += `• Trancados agora: *${trancadosAtuais || 0}* (alunos)\n`;

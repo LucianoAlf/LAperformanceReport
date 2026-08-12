@@ -7,10 +7,41 @@ import {
   assertThrows,
 } from "jsr:@std/assert@1";
 import {
+  formatarConciliacaoBaseAlunosAdmin,
   formatarResumoMatriculasAdmin,
   formatarTrancamentosAdmin,
   parseDataReferenciaAdminBrt,
 } from "./relatorio-admin-canonico.ts";
+
+Deno.test("conciliacao explica o universo academico e a fotografia do Emusys", () => {
+  const texto = formatarConciliacaoBaseAlunosAdmin({
+    alunosAtivos: 419,
+    alunosPagantes: 388,
+    alunosNaoPagantes: 31,
+    snapshotEmusysEm: "2026-08-12T02:00:27.568Z",
+  });
+
+  assertStringIncludes(
+    texto,
+    "base acadêmica; trancados e vínculos exclusivamente de banda, coral ou atividade extra ficam fora",
+  );
+  assertStringIncludes(texto, "Conferência dos pagantes: *419 - 31 = 388*");
+  assertStringIncludes(texto, "Fotografia do Emusys: *11/08/2026 às 23:00*");
+});
+
+Deno.test("conciliacao bloqueia uma equacao de pagantes inconsistente", () => {
+  assertThrows(
+    () =>
+      formatarConciliacaoBaseAlunosAdmin({
+        alunosAtivos: 419,
+        alunosPagantes: 387,
+        alunosNaoPagantes: 31,
+        snapshotEmusysEm: "2026-08-12T02:00:27.568Z",
+      }),
+    Error,
+    "BASE_ALUNOS_ADMIN_INCONSISTENTE",
+  );
+});
 
 Deno.test("resumo distingue matriculas adicionais e pessoas com dois ou tres cursos", () => {
   const texto = formatarResumoMatriculasAdmin({

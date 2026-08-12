@@ -9,6 +9,13 @@ export interface ResumoMatriculasAdmin {
   alunosCom4OuMaisCursos: number;
 }
 
+export interface ConciliacaoBaseAlunosAdmin {
+  alunosAtivos: number;
+  alunosPagantes: number;
+  alunosNaoPagantes: number;
+  snapshotEmusysEm: string;
+}
+
 export type FaixaPoliticaTrancamento =
   | "contratual"
   | "extensao_gerencial"
@@ -67,6 +74,41 @@ export function parseDataReferenciaAdminBrt(value: unknown): string {
   }
 
   return value;
+}
+
+function formatarSnapshotEmusysBrt(value: string): string {
+  const data = new Date(value);
+  if (!Number.isFinite(data.getTime())) {
+    throw new Error("SNAPSHOT_EMUSYS_INVALIDO");
+  }
+
+  const partes = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(data);
+  const parte = (tipo: Intl.DateTimeFormatPartTypes) =>
+    partes.find((item) => item.type === tipo)?.value || "";
+
+  return `${parte("day")}/${parte("month")}/${parte("year")} às ${parte("hour")}:${parte("minute")}`;
+}
+
+export function formatarConciliacaoBaseAlunosAdmin(
+  dados: ConciliacaoBaseAlunosAdmin,
+): string {
+  if (dados.alunosAtivos - dados.alunosNaoPagantes !== dados.alunosPagantes) {
+    throw new Error("BASE_ALUNOS_ADMIN_INCONSISTENTE");
+  }
+
+  return [
+    "• Critério dos ativos: base acadêmica; trancados e vínculos exclusivamente de banda, coral ou atividade extra ficam fora.",
+    `• Conferência dos pagantes: *${dados.alunosAtivos} - ${dados.alunosNaoPagantes} = ${dados.alunosPagantes}*`,
+    `• Fotografia do Emusys: *${formatarSnapshotEmusysBrt(dados.snapshotEmusysEm)}*`,
+  ].join("\n");
 }
 
 export function formatarResumoMatriculasAdmin(
