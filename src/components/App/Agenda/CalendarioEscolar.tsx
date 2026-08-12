@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { format, addMonths, startOfMonth, endOfMonth, eachDayOfInterval, isToday, parseISO, startOfYear, endOfYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Calendar, ChevronLeft, ChevronRight, Plus, Trash2, AlertTriangle, CalendarX, CalendarClock, Users, Zap } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Plus, Trash2, AlertTriangle, CalendarX, CalendarClock, Users, Zap, Download } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useOutletContext } from 'react-router-dom';
@@ -25,7 +25,9 @@ interface Feriado {
   id: string;
   data: string;
   nome: string;
-  tipo: string;
+  tipo: 'nacional' | 'estadual' | 'municipal';
+  uf: string | null;
+  cidade: string | null;
   ativo: boolean;
 }
 
@@ -67,6 +69,8 @@ export function CalendarioEscolar() {
   const [novoDataFim, setNovoDataFim] = useState<Date | undefined>(undefined);
   const [novoStatus, setNovoStatus] = useState<'simulado' | 'confirmado'>('confirmado');
   const [modalFeriadosAberto, setModalFeriadosAberto] = useState(false);
+  const [filtroTipoFeriado, setFiltroTipoFeriado] = useState<string>('todos');
+  const [importando, setImportando] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -235,10 +239,33 @@ export function CalendarioEscolar() {
     if (itensDoDia?.some((i) => i.tipo === 'feriado')) partes.push(`Feriado: ${itensDoDia[0].nome}`);
     if (itensDoDia?.some((i) => i.tipo === 'evento')) partes.push(`Evento: ${itensDoDia[0].nome}`);
     if (itensDoDia?.some((i) => i.tipo === 'day_off')) partes.push(`Day off: ${itensDoDia[0].nome}`);
-    if (feriado) partes.push(`Feriado: ${feriado.nome}`);
+    if (feriado) {
+      const tipoLabel = feriado.tipo === 'nacional' ? 'Feriado nacional'
+        : feriado.tipo === 'estadual' ? `Feriado estadual${feriado.uf ? ` (${feriado.uf})` : ''}`
+        : `Feriado municipal${feriado.cidade ? ` (${feriado.cidade})` : ''}`;
+      partes.push(`${tipoLabel}: ${feriado.nome}`);
+    }
     if (isToday(dia)) partes.push('Hoje');
 
     return partes.join(' · ');
+  }
+
+  async function importarFeriados() {
+    setImportando(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-feriados', {
+        body: { ano: anoAtual, uf: 'RJ' },
+      });
+      if (error) throw error;
+      toast.success(`Feriados importados`, {
+        description: `${data.inseridos} feriados atualizados para ${anoAtual}`,
+      });
+      carregar();
+    } catch (e) {
+      toast.error('Erro ao importar feriados', { description: String(e) });
+    } finally {
+      setImportando(false);
+    }
   }
 
   async function salvarItem() {
@@ -294,6 +321,15 @@ export function CalendarioEscolar() {
           <p className="text-xs text-slate-500">Ano letivo {anoAtual} · O motor usa isso para projetar os contratos</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={importarFeriados}
+            disabled={importando}
+            className="flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {importando ? 'Importando…' : 'Importar feriados'}
+          </button>
           <button
             type="button"
             onClick={() => setModalAberto(true)}
@@ -525,26 +561,56 @@ export function CalendarioEscolar() {
         <div className="space-y-4">
           {/* Feriados */}
           <div className="rounded-xl border border-slate-700/50 bg-slate-800/20 p-4">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Feriados {anoAtual}</h3>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Feriados {anoAtual}</h3>
+              <div className="flex gap-1">
+                {(['todos', 'nacional', 'estadual', 'municipal'] as const).map((tipo) => (
+                  <button
+                    key={tipo}
+                    type="button"
+                    onClick={() => setFiltroTipoFeriado(tipo)}
+                    className={cn(
+                      'rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase',
+                      filtroTipoFeriado === tipo
+                        ? tipo === 'nacional' ? 'bg-emerald-500/20 text-emerald-300'
+                        : tipo === 'estadual' ? 'bg-blue-500/20 text-blue-300'
+                        : tipo === 'municipal' ? 'bg-pink-500/20 text-pink-300'
+                        : 'bg-slate-600/50 text-slate-300'
+                        : 'text-slate-500 hover:text-slate-300',
+                    )}
+                  >
+                    {tipo === 'todos' ? 'Todos' : tipo}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="space-y-2">
-              {feriados.slice(0, 5).map((f) => (
+              {feriados
+                .filter((f) => filtroTipoFeriado === 'todos' || f.tipo === filtroTipoFeriado)
+                .slice(0, 5)
+                .map((f) => (
                 <div key={f.id} className="flex items-center justify-between rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-2">
                   <div>
                     <p className="text-xs font-medium text-slate-200">{f.nome}</p>
                     <p className="text-[10px] text-slate-500">{format(parseISO(f.data), 'dd/MM')}</p>
                   </div>
-                  <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-rose-300">
-                    {f.tipo}
+                  <span className={cn(
+                    'rounded px-1.5 py-0.5 text-[9px] font-bold uppercase',
+                    f.tipo === 'nacional' && 'bg-emerald-500/20 text-emerald-300',
+                    f.tipo === 'estadual' && 'bg-blue-500/20 text-blue-300',
+                    f.tipo === 'municipal' && 'bg-pink-500/20 text-pink-300',
+                  )}>
+                    {f.tipo === 'nacional' ? 'Nacional' : f.tipo === 'estadual' ? `Estadual ${f.uf ?? ''}` : `Municipal ${f.cidade ?? ''}`}
                   </span>
                 </div>
               ))}
-              {feriados.length > 5 && (
+              {feriados.filter((f) => filtroTipoFeriado === 'todos' || f.tipo === filtroTipoFeriado).length > 5 && (
                 <button
                   type="button"
                   onClick={() => setModalFeriadosAberto(true)}
                   className="w-full pt-2 text-center text-xs text-cyan-400 hover:text-cyan-300"
                 >
-                  Ver todos os {feriados.length} feriados →
+                  Ver todos os {feriados.filter((f) => filtroTipoFeriado === 'todos' || f.tipo === filtroTipoFeriado).length} feriados →
                 </button>
               )}
             </div>
@@ -878,8 +944,13 @@ export function CalendarioEscolar() {
                     <p className="text-xs font-medium text-slate-200">{f.nome}</p>
                     <p className="text-[10px] text-slate-500">{format(parseISO(f.data), 'dd/MM/yyyy')}</p>
                   </div>
-                  <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-rose-300">
-                    {f.tipo}
+                  <span className={cn(
+                    'rounded px-1.5 py-0.5 text-[9px] font-bold uppercase',
+                    f.tipo === 'nacional' && 'bg-emerald-500/20 text-emerald-300',
+                    f.tipo === 'estadual' && 'bg-blue-500/20 text-blue-300',
+                    f.tipo === 'municipal' && 'bg-pink-500/20 text-pink-300',
+                  )}>
+                    {f.tipo === 'nacional' ? 'Nacional' : f.tipo === 'estadual' ? `Estadual ${f.uf ?? ''}` : `Municipal ${f.cidade ?? ''}`}
                   </span>
                 </div>
               ))}

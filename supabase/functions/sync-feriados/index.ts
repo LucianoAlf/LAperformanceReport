@@ -13,7 +13,8 @@ const corsHeaders = {
 interface FeriadoAPI {
   date: string;
   name: string;
-  type: string;
+  type: 'national' | 'state';
+  state?: string;
 }
 
 serve(async (req) => {
@@ -29,9 +30,10 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const ano = body.ano || new Date().getFullYear();
+    const uf = body.uf || 'RJ';
 
-    // 1. Buscar feriados nacionais da BrasilAPI
-    const response = await fetch(`https://brasilapi.com.br/api/feriados/v1/${ano}`);
+    // 1. Buscar feriados nacionais + estaduais da BrasilAPI
+    const response = await fetch(`https://brasilapi.com.br/api/feriados/v1/${ano}?uf=${uf}`);
     if (!response.ok) {
       throw new Error(`BrasilAPI retornou ${response.status}`);
     }
@@ -56,13 +58,17 @@ serve(async (req) => {
         continue;
       }
 
+      const tipo = feriado.type === 'state' ? 'estadual' : 'nacional';
+      const ufFeriado = feriado.type === 'state' ? (feriado.state ?? uf) : null;
+
       const { error } = await supabase
         .from('feriados')
         .upsert(
           {
             data: feriado.date,
             nome: feriado.name,
-            tipo: 'national',
+            tipo,
+            uf: ufFeriado,
             ativo: true,
           },
           { onConflict: 'data' }
@@ -75,6 +81,7 @@ serve(async (req) => {
       JSON.stringify({
         sucesso: true,
         ano,
+        uf,
         total_api: feriados.length,
         inseridos,
         ignorados_desativados: ignorados,
