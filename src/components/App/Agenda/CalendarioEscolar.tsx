@@ -12,7 +12,7 @@ interface CalendarioItem {
   id: string;
   unidade_id: string;
   ano: number;
-  tipo: 'recesso' | 'emenda';
+  tipo: 'recesso' | 'emenda' | 'feriado' | 'evento' | 'day_off';
   data_inicio: string;
   data_fim: string;
   nome: string;
@@ -60,11 +60,12 @@ export function CalendarioEscolar() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
 
   // Form do novo item
-  const [novoTipo, setNovoTipo] = useState<'recesso' | 'emenda'>('recesso');
+  const [novoTipo, setNovoTipo] = useState<'recesso' | 'emenda' | 'feriado' | 'evento' | 'day_off'>('recesso');
   const [novoNome, setNovoNome] = useState('');
   const [novoDataInicio, setNovoDataInicio] = useState<Date | undefined>(undefined);
   const [novoDataFim, setNovoDataFim] = useState<Date | undefined>(undefined);
   const [novoStatus, setNovoStatus] = useState<'simulado' | 'confirmado'>('confirmado');
+  const [modalFeriadosAberto, setModalFeriadosAberto] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -200,9 +201,29 @@ export function CalendarioEscolar() {
 
     if (itensDoDia?.some((i) => i.tipo === 'recesso')) return 'bg-slate-600/50 text-slate-400';
     if (itensDoDia?.some((i) => i.tipo === 'emenda')) return 'bg-amber-500/30 text-amber-300';
+    if (itensDoDia?.some((i) => i.tipo === 'feriado')) return 'bg-rose-500/30 text-rose-300';
+    if (itensDoDia?.some((i) => i.tipo === 'evento')) return 'bg-violet-500/30 text-violet-300';
+    if (itensDoDia?.some((i) => i.tipo === 'day_off')) return 'bg-cyan-500/30 text-cyan-300';
     if (feriado) return 'bg-rose-500/30 text-rose-300';
     if (isToday(dia)) return 'bg-emerald-500/30 text-emerald-300 font-bold';
     return 'bg-slate-800/30 text-slate-300 hover:bg-slate-700/50';
+  }
+
+  function tooltipDoDia(dia: Date): string {
+    const chave = format(dia, 'yyyy-MM-dd');
+    const itensDoDia = mapaItens.get(chave);
+    const feriado = mapaFeriados.get(chave);
+    const partes: string[] = [format(dia, 'dd/MM/yyyy')];
+
+    if (itensDoDia?.some((i) => i.tipo === 'recesso')) partes.push(`Recesso: ${itensDoDia[0].nome}`);
+    if (itensDoDia?.some((i) => i.tipo === 'emenda')) partes.push(`Emenda: ${itensDoDia[0].nome}`);
+    if (itensDoDia?.some((i) => i.tipo === 'feriado')) partes.push(`Feriado: ${itensDoDia[0].nome}`);
+    if (itensDoDia?.some((i) => i.tipo === 'evento')) partes.push(`Evento: ${itensDoDia[0].nome}`);
+    if (itensDoDia?.some((i) => i.tipo === 'day_off')) partes.push(`Day off: ${itensDoDia[0].nome}`);
+    if (feriado) partes.push(`Feriado: ${feriado.nome}`);
+    if (isToday(dia)) partes.push('Hoje');
+
+    return partes.join(' · ');
   }
 
   async function salvarItem() {
@@ -466,7 +487,7 @@ export function CalendarioEscolar() {
                               setNovoDataFim(dia);
                               setModalAberto(true);
                             }}
-                            title={format(dia, 'dd/MM/yyyy')}
+                            title={tooltipDoDia(dia)}
                             className={cn(
                               'flex h-8 items-center justify-center rounded-lg text-xs transition-colors',
                               corDoDia(dia),
@@ -503,9 +524,13 @@ export function CalendarioEscolar() {
                 </div>
               ))}
               {feriados.length > 5 && (
-                <p className="pt-2 text-center text-xs text-cyan-400">
-                  Ver todos os {feriados.length} feriados
-                </p>
+                <button
+                  type="button"
+                  onClick={() => setModalFeriadosAberto(true)}
+                  className="w-full pt-2 text-center text-xs text-cyan-400 hover:text-cyan-300"
+                >
+                  Ver todos os {feriados.length} feriados →
+                </button>
               )}
             </div>
           </div>
@@ -648,12 +673,12 @@ export function CalendarioEscolar() {
             <div className="space-y-3">
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-400">Tipo</label>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => setNovoTipo('recesso')}
                     className={cn(
-                      'flex-1 rounded-lg border px-3 py-2 text-xs font-semibold',
+                      'rounded-lg border px-3 py-2 text-xs font-semibold',
                       novoTipo === 'recesso'
                         ? 'border-slate-500 bg-slate-700 text-white'
                         : 'border-slate-700 text-slate-400 hover:text-slate-200',
@@ -665,7 +690,7 @@ export function CalendarioEscolar() {
                     type="button"
                     onClick={() => setNovoTipo('emenda')}
                     className={cn(
-                      'flex-1 rounded-lg border px-3 py-2 text-xs font-semibold',
+                      'rounded-lg border px-3 py-2 text-xs font-semibold',
                       novoTipo === 'emenda'
                         ? 'border-amber-500/50 bg-amber-500/10 text-amber-300'
                         : 'border-slate-700 text-slate-400 hover:text-slate-200',
@@ -673,7 +698,50 @@ export function CalendarioEscolar() {
                   >
                     Emenda
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setNovoTipo('feriado')}
+                    className={cn(
+                      'rounded-lg border px-3 py-2 text-xs font-semibold',
+                      novoTipo === 'feriado'
+                        ? 'border-rose-500/50 bg-rose-500/10 text-rose-300'
+                        : 'border-slate-700 text-slate-400 hover:text-slate-200',
+                    )}
+                  >
+                    Feriado
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNovoTipo('evento')}
+                    className={cn(
+                      'rounded-lg border px-3 py-2 text-xs font-semibold',
+                      novoTipo === 'evento'
+                        ? 'border-violet-500/50 bg-violet-500/10 text-violet-300'
+                        : 'border-slate-700 text-slate-400 hover:text-slate-200',
+                    )}
+                  >
+                    Evento
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNovoTipo('day_off')}
+                    className={cn(
+                      'rounded-lg border px-3 py-2 text-xs font-semibold',
+                      novoTipo === 'day_off'
+                        ? 'border-cyan-500/50 bg-cyan-500/10 text-cyan-300'
+                        : 'border-slate-700 text-slate-400 hover:text-slate-200',
+                    )}
+                  >
+                    Day off
+                  </button>
                 </div>
+                <p className="mt-1 text-[10px] text-slate-500">
+                  {novoTipo === 'recesso' && 'Período sem aula (Carnaval, julho, dezembro). O motor pula esses dias.'}
+                  {novoTipo === 'emenda' && 'Feriado que vira dia sem aula por decisão da escola. O motor pula esse dia.'}
+                  {novoTipo === 'feriado' && 'Feriado local (estadual/municipal). O motor pula esse dia.'}
+                  {novoTipo === 'evento' && 'Evento pedagógico (Summer Camp, Cineminha). Conta como aula mas não é regular.'}
+                  {novoTipo === 'day_off' && 'Dia sem aula por decisão da escola (não é feriado nem recesso). O motor pula esse dia.'}
+                </p>
               </div>
 
               <div>
@@ -757,6 +825,37 @@ export function CalendarioEscolar() {
               >
                 Salvar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de todos os feriados */}
+      {modalFeriadosAberto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white">Feriados {anoAtual}</h3>
+              <button
+                type="button"
+                onClick={() => setModalFeriadosAberto(false)}
+                className="rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-300"
+              >
+                <CalendarX className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="max-h-96 space-y-2 overflow-y-auto">
+              {feriados.map((f) => (
+                <div key={f.id} className="flex items-center justify-between rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-2">
+                  <div>
+                    <p className="text-xs font-medium text-slate-200">{f.nome}</p>
+                    <p className="text-[10px] text-slate-500">{format(parseISO(f.data), 'dd/MM/yyyy')}</p>
+                  </div>
+                  <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-rose-300">
+                    {f.tipo}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
