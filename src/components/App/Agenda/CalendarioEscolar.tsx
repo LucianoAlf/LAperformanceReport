@@ -40,7 +40,7 @@ interface WatchlistItem {
   ultima_aula_projetada: string;
   ultima_parcela: string;
   delta_dias: number;
-  status_alerta: 'estourando' | 'sem_margem' | 'janela_renovacao';
+  status_alerta: 'estourando' | 'sem_margem' | 'janela_renovacao' | 'concluido';
 }
 
 /**
@@ -294,25 +294,65 @@ export function CalendarioEscolar() {
         <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-4">
           <p className="text-xs font-medium text-slate-400">Melhor dia</p>
           <p className="mt-1 text-2xl font-bold text-emerald-400">
-            {bancoPorDia.reduce((a, b) => (a.banco > b.banco ? a : b)).dia.slice(0, 3)}
+            {bancoPorDia.length > 0 && bancoPorDia.some((b) => b.banco > 0)
+              ? bancoPorDia.reduce((a, b) => (a.banco > b.banco ? a : b)).dia.slice(0, 3)
+              : '—'}
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            +{bancoPorDia.reduce((a, b) => (a.banco > b.banco ? a : b)).banco} de banco
+            {bancoPorDia.length > 0 && bancoPorDia.some((b) => b.banco > 0)
+              ? `+${bancoPorDia.reduce((a, b) => (a.banco > b.banco ? a : b)).banco} de banco`
+              : 'sem dados'}
           </p>
         </div>
         <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-4">
           <p className="text-xs font-medium text-slate-400">Pior dia</p>
           <p className="mt-1 text-2xl font-bold text-rose-400">
-            {bancoPorDia.reduce((a, b) => (a.banco < b.banco ? a : b)).dia.slice(0, 3)}
+            {bancoPorDia.length > 0 && bancoPorDia.some((b) => b.banco < 0)
+              ? bancoPorDia.reduce((a, b) => (a.banco < b.banco ? a : b)).dia.slice(0, 3)
+              : '—'}
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            +{bancoPorDia.reduce((a, b) => (a.banco < b.banco ? a : b)).banco} de banco
+            {bancoPorDia.length > 0 && bancoPorDia.some((b) => b.banco < 0)
+              ? `+${bancoPorDia.reduce((a, b) => (a.banco < b.banco ? a : b)).banco} de banco`
+              : 'sem dados'}
           </p>
         </div>
         <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-4">
           <p className="text-xs font-medium text-slate-400">Contratos ativos</p>
           <p className="mt-1 text-2xl font-bold text-white">{watchlist.length}</p>
           <p className="mt-1 text-xs text-slate-500">projetados</p>
+        </div>
+      </div>
+
+      {/* Banco de segurança por dia — logo após os KPIs, antes do calendário */}
+      <div className="rounded-xl border border-slate-700/50 bg-slate-800/20 p-5">
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Banco de segurança por dia</h3>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {bancoPorDia.map(({ dia, total, comAula, banco }) => (
+            <div key={dia} className="rounded-lg border border-slate-700/40 bg-slate-800/30 p-3">
+              <p className="text-xs font-medium text-slate-300">{dia}</p>
+              <div className="mt-2 flex items-center gap-2">
+                <div className="h-2 flex-1 rounded-full bg-slate-700">
+                  <div
+                    className={cn(
+                      'h-2 rounded-full',
+                      banco >= 2 ? 'bg-emerald-500' : banco >= 0 ? 'bg-cyan-500' : 'bg-rose-500',
+                    )}
+                    style={{ width: `${Math.min(100, Math.max(0, (banco / 4) * 100))}%` }}
+                  />
+                </div>
+                <span className={cn(
+                  'text-xs font-bold',
+                  banco >= 2 ? 'text-emerald-400' : banco >= 0 ? 'text-cyan-400' : 'text-rose-400',
+                )}>
+                  {banco >= 0 ? `+${banco}` : banco}
+                </span>
+              </div>
+              <p className="mt-1 text-[10px] text-slate-500">
+                {banco >= 2 ? 'ideal' : banco >= 0 ? 'justo' : 'excesso'}
+              </p>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -403,41 +443,6 @@ export function CalendarioEscolar() {
                   </div>
                 );
               })}
-            </div>
-
-            {/* Banco de segurança por dia */}
-            <div className="mt-6 border-t border-slate-700/50 pt-4">
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Banco de segurança por dia</h3>
-              <div className="space-y-2">
-                {bancoPorDia.map(({ dia, total, comAula, banco }) => (
-                  <div key={dia} className="flex items-center justify-between">
-                    <span className="text-xs text-slate-400">{dia}</span>
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-32 rounded-full bg-slate-700">
-                        <div
-                          className={cn(
-                            'h-2 rounded-full',
-                            banco >= 2 ? 'bg-emerald-500' : banco >= 0 ? 'bg-cyan-500' : 'bg-rose-500',
-                          )}
-                          style={{ width: `${Math.min(100, Math.max(0, (banco / 4) * 100))}%` }}
-                        />
-                      </div>
-                      <span className={cn(
-                        'text-xs font-bold',
-                        banco >= 2 ? 'text-emerald-400' : banco >= 0 ? 'text-cyan-400' : 'text-rose-400',
-                      )}>
-                        {banco >= 0 ? `+${banco}` : banco}
-                      </span>
-                      <span className={cn(
-                        'rounded px-1.5 py-0.5 text-[9px] font-bold uppercase',
-                        banco >= 2 ? 'bg-emerald-500/20 text-emerald-300' : banco >= 0 ? 'bg-cyan-500/20 text-cyan-300' : 'bg-rose-500/20 text-rose-300',
-                      )}>
-                        {banco >= 2 ? 'ideal' : banco >= 0 ? 'justo' : 'excesso'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         </div>
@@ -575,13 +580,14 @@ export function CalendarioEscolar() {
                         w.status_alerta === 'estourando' && 'bg-rose-500/20 text-rose-300',
                         w.status_alerta === 'sem_margem' && 'bg-amber-500/20 text-amber-300',
                         w.status_alerta === 'janela_renovacao' && 'bg-emerald-500/20 text-emerald-300',
+                        w.status_alerta === 'concluido' && 'bg-slate-500/20 text-slate-300',
                       )}>
-                        {w.status_alerta === 'estourando' ? 'estourando' : w.status_alerta === 'sem_margem' ? 'sem margem' : 'janela de renovação'}
+                        {w.status_alerta === 'estourando' ? 'estourando' : w.status_alerta === 'sem_margem' ? 'sem margem' : w.status_alerta === 'concluido' ? 'concluído' : 'janela de renovação'}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <button className="rounded-md border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-500/20">
-                        {w.status_alerta === 'estourando' ? 'Agendar reposição' : w.status_alerta === 'sem_margem' ? 'Acompanhar' : 'Chamar para renovar'}
+                        {w.status_alerta === 'estourando' ? 'Agendar reposição' : w.status_alerta === 'sem_margem' ? 'Acompanhar' : w.status_alerta === 'concluido' ? 'Renovar contrato' : 'Chamar para renovar'}
                       </button>
                     </td>
                   </tr>
