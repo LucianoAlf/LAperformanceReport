@@ -892,6 +892,35 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
     }
   }
 
+  // Data de nascimento a partir da EXPERIMENTAL, não do lead.
+  //
+  // O payload de experimental traz `aula.data_nascimento_aluno`, e é de longe a melhor fonte:
+  // medido em 30 dias, vem preenchido em 88,9% das experimentais (177/199) contra 4,6% do
+  // `lead_criado` (36/780) e 22,4% do `lead_editado`. Faz sentido — na criação do lead ninguém
+  // pergunta a idade, mas para AGENDAR a experimental a secretaria precisa dela: é o que decide
+  // LAMK (até 11 anos) x EMLA (12+) e o professor.
+  //
+  // Só preenche quando está vazio; o trigger `trg_calcular_faixa_etaria_lead` deriva a
+  // `faixa_etaria` sozinho e também não sobrescreve o que foi posto à mão.
+  let nascimento: unknown = null;
+  const dataNascimento = textoOuNulo(aula?.data_nascimento_aluno);
+  const leadIdAlvo = data?.lead_id ?? leadFallback?.lead_id ?? null;
+  if (dataNascimento && leadIdAlvo) {
+    try {
+      const { data: linhas } = await sb
+        .from('leads')
+        .update({ data_nascimento: dataNascimento.substring(0, 10) })
+        .eq('id', Number(leadIdAlvo))
+        .is('data_nascimento', null)      // nunca sobrescreve o que já existe
+        .select('id, data_nascimento, faixa_etaria');
+      nascimento = linhas && linhas.length
+        ? { gravado: linhas[0] }
+        : { ignorado: 'lead ja tinha data_nascimento' };
+    } catch (e: any) {
+      nascimento = { erro: String(e?.message ?? e) };
+    }
+  }
+
   // Depois de gravar a nova, encerra o que ela substituiu. SÓ no reagendamento: é o
   // evento em que o Emusys declara que a experimental mudou de lugar. Em `criada` a
   // linha nova pode conviver legitimamente com outra (2º instrumento), e a grade ainda
@@ -907,6 +936,7 @@ async function processarExperimental(sb: any, body: any, unidadeId: string, even
     resultado: data,
     professor_via: professor.via,
     delta_observador: delta,
+    nascimento_do_lead: nascimento,
     substituidas,
     lead_fallback: leadFallback,
     // >1 significa que a corrida com o webhook de lead aconteceu e o retry a absorveu.

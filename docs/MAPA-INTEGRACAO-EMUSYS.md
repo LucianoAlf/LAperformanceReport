@@ -53,6 +53,45 @@
 - Telefone chega `(21) 99999-9999` → normalizado para `5521...`.
 - ⚠️ `upsert_lead` **não recebe o estágio do funil** → `lead_editado` não marca experimental realizada/faltou (ver 1.2).
 - ⚠️ Os nós NocoDB deste workflow estão **desconectados** — não gravam no NocoDB.
+- ⚠️ O nó `Gravar Raw Lead` (INSERT em `leads_automacao_log`, evento `webhook_lead_raw`) tem
+  `continueOnFail` e **está falhando calado**: zero eventos `webhook_lead_raw` nos últimos 10 dias.
+  O log bruto real hoje é o do observador, em `automacao_log`.
+- ⚠️ **Este workflow está em vias de ser desligado** — ver 1.1.b.
+
+#### 1.1.a ⚠️ Incidente 11–12/08/2026 — 21h sem captar lead
+
+A migration `20260811160000` fez `CREATE OR REPLACE FUNCTION upsert_lead(..., p_data_nascimento
+date DEFAULT NULL)`. **Lista de parâmetros diferente não substitui — cria overload.** Ficaram duas
+funções e, como a nova tem `DEFAULT` no 11º argumento, a chamada de 10 args do nó `Upsert Lead1`
+passou a casar nas duas: `function upsert_lead(...) is not unique`.
+
+- 100% das execuções em erro de **11/08 15:01** a **12/08 14:03 BRT**; **22 leads** não entraram.
+- Atingiu também o `agente-webhook` (campanhas), que chama a mesma RPC com 10 args nomeados **e não
+  checa o `error`** — parou de criar lead no funil sem nenhum sinal.
+- Resolvido pelo `drop` do overload (`20260812135824`). **21 leads recuperados** do `payload_bruto`
+  do observador, sem tocar na API do Emusys; 3 ficaram de fora por colisão de telefone (família).
+- ⚠️ A função nova também trocou `v_action` de `inserted` para `created`, o que sumiria com o lead
+  novo do badge "Novos" em `TabAutomacaoLeads.tsx`. Realinhado em `20260812133837`.
+
+#### 1.1.b Virada em curso: o observador assume o lead
+
+O `debug-webhook-emusys-observador` **recebe os mesmos eventos em paralelo** (o Emusys tem os dois
+endereços cadastrados nas 3 unidades) e já reimplementa os 3 eventos de lead chamando **as mesmas
+RPCs**. Está em **sombra** (`OBSERVADOR_ESCREVE` só libera experimental hoje).
+
+Ele não caiu no incidente acima porque chama a RPC pelo PostgREST com as **11 chaves nomeadas** —
+sem ambiguidade. Registrou os 40 leads do período com unidade e argumentos corretos: teria absorvido
+a queda inteira se a escrita estivesse ligada.
+
+O que ele **adiciona** sobre o n8n: `data_nascimento`, `agente_comercial`, `motivo_arquivamento`,
+etapa do pipeline derivada do estágio (que nunca regride), `?token=` na URL, arquivamento
+parametrizado (o do n8n monta SQL por interpolação de string) e o "como conheceu" aceitando o campo
+como string **ou** objeto — o n8n exige objeto e devolve vazio no outro formato.
+
+⚠️ **Ordem da virada:** ligar a escrita no observador **primeiro**, confirmar em evento real, e só
+então desligar o ramo de lead no n8n. O inverso abre janela sem ninguém escrevendo, e **o Emusys não
+reenvia** — foi exatamente assim que os 22 leads se perderam. Com os dois ligados não há duplicata:
+a RPC casa por `emusys_lead_id`+unidade e o segundo vira UPDATE.
 
 ### 1.2 Aula experimental → n8n `Fucq0bQwF4oeuWnv` (+ sub `j41tPbyjGXUQUxrN`)
 **Webhook** (ativo). Switch separa **Criada / Reagendada / Cancelada**. Grava direto em `leads` (Postgres):
