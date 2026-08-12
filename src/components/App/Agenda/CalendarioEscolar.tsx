@@ -269,6 +269,34 @@ export function CalendarioEscolar() {
         </div>
       </div>
 
+      {/* Como usar — guia rápido */}
+      <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-4">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-cyan-400">Como usar</h3>
+        <div className="grid grid-cols-1 gap-2 text-xs text-slate-300 sm:grid-cols-3">
+          <div className="flex items-start gap-2">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-[10px] font-bold text-cyan-400">1</span>
+            <div>
+              <p className="font-medium text-white">Planeje o ano</p>
+              <p className="text-slate-400">Cadastre feriados, recessos e emendas. O motor usa isso para projetar.</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-[10px] font-bold text-cyan-400">2</span>
+            <div>
+              <p className="font-medium text-white">Veja o impacto</p>
+              <p className="text-slate-400">O banco de segurança mostra se cada dia da semana fecha as 40 aulas.</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-[10px] font-bold text-cyan-400">3</span>
+            <div>
+              <p className="font-medium text-white">Acompanhe os alunos</p>
+              <p className="text-slate-400">A watchlist mostra quem precisa de olhar — renovação, reposição, ajuste.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
         <div className="rounded-xl border border-slate-700/50 bg-slate-800/50 p-4">
@@ -324,9 +352,16 @@ export function CalendarioEscolar() {
         </div>
       </div>
 
-      {/* Banco de segurança por dia — logo após os KPIs, antes do calendário */}
+      {/* Passo 1: Planeje o ano — banco de segurança por dia */}
       <div className="rounded-xl border border-slate-700/50 bg-slate-800/20 p-5">
-        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Banco de segurança por dia</h3>
+        <div className="mb-3 flex items-center gap-2">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/20 text-[10px] font-bold text-cyan-400">1</span>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Planeje o ano — banco de segurança por dia</h3>
+        </div>
+        <p className="mb-3 text-xs text-slate-400">
+          Cada dia da semana tem um número diferente de aulas possíveis. O banco é o excedente sobre as 40 vendidas.
+          Se o banco é negativo, o dia não fecha o pacote — precisa de ajuste.
+        </p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {bancoPorDia.map(({ dia, total, comAula, banco }) => (
             <div key={dia} className="rounded-lg border border-slate-700/40 bg-slate-800/30 p-3">
@@ -356,13 +391,16 @@ export function CalendarioEscolar() {
         </div>
       </div>
 
-      {/* Grid principal */}
+      {/* Passo 2: Veja o impacto — calendário do ano */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Coluna 1: Calendário do ano */}
         <div className="lg:col-span-2">
           <div className="rounded-xl border border-slate-700/50 bg-slate-800/20 p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="font-grotesk text-lg font-bold text-white">Ano letivo {anoAtual}</h3>
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/20 text-[10px] font-bold text-cyan-400">2</span>
+                <h3 className="font-grotesk text-lg font-bold text-white">Ano letivo {anoAtual}</h3>
+              </div>
               <div className="flex items-center gap-3 text-[10px] text-slate-500">
                 <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded bg-cyan-500/30" /> Aula</span>
                 <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded bg-rose-500/30" /> Feriado</span>
@@ -542,10 +580,13 @@ export function CalendarioEscolar() {
         </div>
       </div>
 
-      {/* Watchlist */}
+      {/* Passo 3: Acompanhe os alunos — watchlist */}
       <div className="rounded-xl border border-slate-700/50 bg-slate-800/20 p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-grotesk text-lg font-bold text-white">Alunos que precisam de olhar</h3>
+          <div className="flex items-center gap-2">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/20 text-[10px] font-bold text-cyan-400">3</span>
+            <h3 className="font-grotesk text-lg font-bold text-white">Alunos que precisam de olhar</h3>
+          </div>
           <span className="text-xs text-slate-500">Atualizado agora</span>
         </div>
         <div className="overflow-hidden rounded-lg border border-slate-700/50">
