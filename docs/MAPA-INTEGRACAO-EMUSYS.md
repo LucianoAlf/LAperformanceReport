@@ -360,3 +360,13 @@ Para presença, `data_aula` identifica a ocorrência em conjunto com professor, 
 Quando presença ou outro pilar ainda não têm evento na competência atual, a última competência disponível pode aparecer somente como referência identificada, com peso zero. A pontuação contratual de presença começa em 03/08/2026; evidência anterior continua auditável e contextual. Assim que um evento canônico chega ao banco, a próxima leitura mensal ou de ciclo o incorpora conforme seu período.
 
 Essa separação de recorte e publicação não altera o pipeline Emusys: o mensal acompanha evidências do mês, o ciclo aberto publica `Ciclo em acompanhamento` e somente um snapshot oficial fechado pode liberar ranking de professores comparáveis.
+
+### Evento bruto versus aula operacional (12/08/2026)
+
+`sync-grade-futura-emusys` continua persistindo todos os eventos devolvidos
+pela API; ausência no snapshot, cancelamento e duplicidade não autorizam DELETE.
+Quando o Emusys devolve uma turma vazia antiga e outro evento com roster para o
+mesmo professor/unidade/curso/intervalo, `fn_aula_operacional_id` seleciona o
+evento utilizável para agenda, pendências e áudio. O evento descartado da UI
+permanece auditável em `aulas_emusys` e pode reaparecer como alerta se deixar de
+existir uma concorrente válida.

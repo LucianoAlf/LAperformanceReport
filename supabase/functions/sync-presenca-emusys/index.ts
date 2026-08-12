@@ -1805,6 +1805,10 @@ serve(async (req: Request) => {
           if (cancelamentosHumanos.has(aula.id) && aula.cancelada !== true) {
             console.warn(`[sync-presenca] Conflito: aula ${aula.id} cancelada pela secretaria e reativada no Emusys`);
             await supabase.from('automacao_log').insert({
+              aluno_nome: aula.alunos
+                .map((aluno) => aluno.nome_aluno?.trim())
+                .filter(Boolean)
+                .join(', ') || `Aula Emusys ${aula.id} sem roster`,
               unidade_nome: unidade.nome,
               evento: 'sync_presenca',
               acao: 'conflito_cancelamento_humano',

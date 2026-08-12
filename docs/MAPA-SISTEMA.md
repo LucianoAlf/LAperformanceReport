@@ -343,3 +343,13 @@ uma autorização para apagar dados históricos.
 - **Admin/usuários:** `admin-create-user`, `admin-update-email`, `admin-update-password`, `validar-token-feedback`
 
 > Lista de edge functions **disparada pelo frontend**. Edges de webhook/cron (ex: `processar-matricula-emusys`, `sync-matriculas-emusys`, `enviar-boas-vindas-matricula`, `meta-webhook-campanhas`) não aparecem aqui — ver `.claude/memory/integracao-infra.md`.
+
+### Resolução operacional da agenda (12/08/2026)
+
+O espelho bruto permanece em `aulas_emusys`. A função privada
+`fn_aula_operacional_id` escolhe, dentro do mesmo professor/unidade/curso e
+intervalo, o evento com maior roster. `app_minha_agenda_sessao`,
+`vw_registro_pendencia`, `vw_presenca_pendencia`, `fabio_aulas_candidatas` e
+`fn_enfileirar_audio_core` consomem o mesmo ID. Assim LA Teacher, LA Report e
+Fábio não divergem quando o Emusys mantém uma turma antiga vazia ao lado do
+evento atual.
