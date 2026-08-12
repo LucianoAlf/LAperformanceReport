@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useOutletContext } from 'react-router-dom';
 import { DatePicker } from '@/components/ui/date-picker';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { cn } from '@/lib/utils';
 
 interface CalendarioItem {
@@ -131,6 +132,20 @@ export function CalendarioEscolar() {
   }, [unidadeId, anoAtual, consolidado]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Fecha qualquer modal ao apertar ESC
+  useEffect(() => {
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setModalAberto(false);
+        setModalFeriadosAberto(false);
+      }
+    }
+    if (modalAberto || modalFeriadosAberto) {
+      window.addEventListener('keydown', handleEsc);
+      return () => window.removeEventListener('keydown', handleEsc);
+    }
+  }, [modalAberto, modalFeriadosAberto]);
 
   // Dias do ano atual
   const diasDoAno = useMemo(() => {
@@ -479,23 +494,23 @@ export function CalendarioEscolar() {
                       {diasMes.map((dia) => {
                         const chave = format(dia, 'yyyy-MM-dd');
                         return (
-                          <button
-                            key={chave}
-                            type="button"
-                            onClick={() => {
-                              setNovoDataInicio(dia);
-                              setNovoDataFim(dia);
-                              setModalAberto(true);
-                            }}
-                            title={tooltipDoDia(dia)}
-                            className={cn(
-                              'flex h-8 items-center justify-center rounded-lg text-xs transition-colors',
-                              corDoDia(dia),
-                              isToday(dia) && 'ring-2 ring-emerald-500',
-                            )}
-                          >
-                            {format(dia, 'd')}
-                          </button>
+                          <Tooltip key={chave} content={tooltipDoDia(dia)} side="top">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNovoDataInicio(dia);
+                                setNovoDataFim(dia);
+                                setModalAberto(true);
+                              }}
+                              className={cn(
+                                'flex h-8 w-full items-center justify-center rounded-lg text-xs transition-colors',
+                                corDoDia(dia),
+                                isToday(dia) && 'ring-2 ring-emerald-500',
+                              )}
+                            >
+                              {format(dia, 'd')}
+                            </button>
+                          </Tooltip>
                         );
                       })}
                     </div>
@@ -666,8 +681,14 @@ export function CalendarioEscolar() {
 
       {/* Modal de novo item */}
       {modalAberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-5">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setModalAberto(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="mb-4 text-sm font-semibold text-white">Adicionar ao calendário</h3>
 
             <div className="space-y-3">
@@ -832,8 +853,14 @@ export function CalendarioEscolar() {
 
       {/* Modal de todos os feriados */}
       {modalFeriadosAberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-5">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setModalFeriadosAberto(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-white">Feriados {anoAtual}</h3>
               <button
