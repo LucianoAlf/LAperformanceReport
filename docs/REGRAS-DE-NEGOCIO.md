@@ -980,4 +980,14 @@ Ao mudar a regra de cálculo de qualquer métrica: **atualizar este documento no
 
 ---
 
+### Aula operacional no espelho Emusys (12/08/2026)
+
+`aulas_emusys` é evidência bruta e pode conter mais de um evento do mesmo
+professor/unidade/curso/horário. Nenhuma leitura operacional deve escolher
+“turma primeiro” sem olhar o roster. `fn_aula_operacional_id(aula_id)` resolve
+o evento com maior roster; em empate prefere turma e depois o ID local mais
+recente. Evento vazio único continua visível como falha de sincronização. Um
+evento vazio concorrente é preservado no raw, mas não vira agenda, pendência ou
+destino de áudio.
+
 *Documento antigo divergente = legado. Código divergente = possível bug. Regra validada pelo Alf = canônica.*

@@ -691,3 +691,13 @@ Para impedir que a virada de mês recalcule/altere competências já fechadas, o
 7. **Ticket Médio: numerador precisa vir de fatura por competência, não de `alunos.valor_parcela`** — Clayton (07/07) reportou que o ticket médio do LA Report não bate com a planilha/Financeiro do Emusys que a ADM usa. Investigado: **não é passaporte/lojinha** (já descartados no cálculo atual — `alunos.valor_passaporte` é coluna separada, lojinha não existe em `alunos`). **Denominador "por pessoa" está correto** (regra validada pelo Alf, P3, não muda). A causa real é a **fonte do numerador**: o `alunos_ticket` da view `vw_kpis_gestao_mensal` (e as cópias equivalentes em `AlunosPage.tsx:682-696`, `kpisAlunosVivosCanonicos.ts:263,312`, `TabProfessoresNew.tsx:662-669` — "Ticket Médio Geral") somam o campo **cadastral estático `alunos.valor_parcela`**, mas a regra final (Alf, 07/07) exige o valor da **fatura da competência**: `valor_pago` se paga; valor devido atualizado (sem desconto de pontualidade perdido + juros/multa) se aberta/inadimplente. Validado ao vivo para Recreio jun/2026: previsto líquido calculado via fatura R$136.510,68 vs tela real da ADM R$136.475,68. `emusys_faturas` permanece o espelho atual, mas a exportação por competência agora lê exclusivamente o `sync_run_items` de um `sync_run_id` completo. Os quatro cálculos de Ticket Médio/LTV listados acima ainda não foram migrados. **Faturamento Previsto/MRR/ARR não são afetados**.
 
 8. **Frescor financeiro não vem de timestamp de linha** — somente `sync_runs.run_type='live'`, `status='succeeded'`, `snapshot_complete=true` e `unidades_concluidas=3` prova frescor. O `baseline` derivado do legado serve para detectar ausências, mas nunca autoriza aplicação financeira por si só.
+
+### Evento operacional da aula (12/08/2026)
+
+Contagens de agenda, presença pendente e registro pedagógico não deduplicam o
+raw por exclusão. A ocorrência operacional é resolvida por
+`fn_aula_operacional_id`: mesma unidade, professor, início, fim e curso; maior
+quantidade de linhas em `aula_alunos_emusys`; turma no empate; ID mais recente
+no empate final. Isso impede que uma turma vazia esconda uma reposição
+individual ou receba um áudio, sem alterar denominadores históricos baseados no
+espelho bruto.

@@ -21,6 +21,22 @@ A Chamada é a **fonte de verdade operacional** para presença de alunos e profe
 
 > **Evidência ≠ Decisão.** O Emusys traz evidência bruta (presente/ausente). A decisão final é humana. O sistema registra ambos e mostra o conflito quando divergem.
 
+### Regra canônica entre Emusys, LA Report, LA Teacher e Fábio
+
+Desde 12/08/2026, `aluno_presenca` é a única decisão operacional local para os
+quatro canais. A função `fn_presenca_fecha_chamada(status_presenca,
+respondido_por)` responde à pergunta operacional **"a chamada está resolvida?"**:
+
+- decisão humana terminal (`presente`, `falta` ou `falta_justificada`) fecha;
+- `Emusys + presente` também fecha, com badge **Emusys**;
+- `Emusys + ausente` continua como pendência humana — não vira falta automática;
+- origem desconhecida, estado nulo e estados não terminais não fecham a chamada.
+
+`fn_presenca_e_forte` continua existindo para identificar autoria humana; ele não
+substitui o resolvedor. Fila de pendência, sessão do Teacher e candidatos do
+Fábio usam o resolvedor canônico. Não há escrita de volta no Emusys enquanto a
+API externa não oferecer endpoint autenticado e idempotente para isso.
+
 ---
 
 ## 2. Arquitetura
@@ -62,6 +78,8 @@ Emusys API ──→ sync-presenca-emusys (edge) ──→ aulas_emusys + aluno_
 | `app_cancelar_aula` | Cancela aula individual (gera crédito de reposição) |
 | `app_reagendar_aula` | Reagenda aula para outro dia/horário |
 | `upsert_presenca_emusys_bruta` | Grava evidência bruta do Emusys sem sobrescrever humano |
+| `fn_presenca_fecha_chamada` | Resolve, de modo puro e status-aware, se aquela presença fecha a chamada |
+| `fabio_confirmar_chamada_acao` | Confirma a chamada do WhatsApp pela ação, shortlist e idempotência já existentes |
 
 ---
 
@@ -113,6 +131,12 @@ Emusys API ──→ sync-presenca-emusys (edge) ──→ aulas_emusys + aluno_
 - `NULL` — Emusys não retornou o aluno
 
 Quando a evidência diverge da decisão humana, a UI mostra badge de conflito.
+
+O sync nunca apaga o último raw: uma troca automática `presente → ausente`
+reabre a pendência se não houver decisão humana. Se contradiz uma decisão humana,
+abre conflito revisável; não inventa falta nem substitui a decisão silenciosamente.
+Em aulas gêmeas de turma/individual, a decisão humana pode ser espelhada com
+referência à linha de origem, mas o raw Emusys fica na própria aula de origem.
 
 ### 3.4 Toggle de presença
 
@@ -255,3 +279,22 @@ O professor pode chegar atrasado ou sair mais cedo. Precisa de:
 | `ac3394dc` | Filtra evadidos da agenda |
 | `e9c190f3` | Limpa roster obsoleto |
 | `65e10fb3` | Lead sem telefone não é descartado |
+| migrations `20260812172432` e `20260812172556` | Resolvedor canônico, conflito/proveniência e ACL privada da trilha de conflitos |
+
+## 8. Checkpoint de implantação — 12/08/2026
+
+- As migrations canônicas foram aplicadas diretamente no projeto principal
+  `ouqwbbermlzqqvtqwlul`, sem branch Supabase e sem dados sintéticos.
+- `aluno_presenca_conflitos` tem RLS ativo, sem policy de navegador; `anon` e
+  `authenticated` não têm `SELECT`, enquanto `service_role` mantém a porta de
+  serviço. As leituras do app seguem pelas RPCs autorizadas.
+- Foi detectada no histórico remoto a migration concorrente
+  `20260812171943_chamada_retroativa_fallback_emusys`, ainda ausente do Git
+  remoto. Ela antecede esta entrega e deve ser reconciliada com seu autor antes
+  de um próximo deploy de schema; não foi reaplicada, alterada nem recriada aqui.
+- O bridge do Fábio foi publicado com confirmação atômica por ação, shortlist e
+  `wa_message_id`; não houve mensagem nem presença de teste. O próximo passo de
+  produto é consumir `origem_presenca` e `tem_conflito_presenca` nos badges do
+  LA Teacher/Report. O formulário manual continua uma frente separada:
+  rascunho por professor+aula+aluno, autosave, versão e cópia apenas dentro do
+  roster, nunca da presença.
