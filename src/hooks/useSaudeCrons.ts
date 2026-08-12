@@ -60,6 +60,12 @@ function mapearJobParaSync(jobname: string): { tipo: string; codigo: string | nu
   // Meta Ads: evidencia em meta_ads_cache.enriquecido_em/erro.
   if (jobname === 'enriquecer-meta-ads-diario') return { tipo: 'meta_ads', codigo: null };
 
+  // Fila de audios do Fabio (LA Teacher). O cron so chama fn_fabio_retry_fila e volta 'ok'
+  // sempre — quem falha e a edge que ele aciona. Em 12/08/2026 isso escondeu por 2 dias um
+  // retry infinito (49 tentativas, HTTP 500 a cada 5 min) e 4 audios de professor que foram
+  // transcritos e nunca viraram prontuario. A evidencia real esta em fabio_fila_audios.
+  if (jobname === 'fabio-retry-fila') return { tipo: 'fabio_audios', codigo: null };
+
   return null;
 }
 
