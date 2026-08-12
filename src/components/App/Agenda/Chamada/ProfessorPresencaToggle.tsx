@@ -81,13 +81,14 @@ export function ProfessorPresencaToggle({
     if (!aulaId) return;
     setSalvandoAula(aulaId);
     try {
-      const novaPresenca = aula.professor_presenca === 'presente' ? 'ausente' : 'presente';
-      const { error } = await supabase
-        .from('aulas_emusys')
-        .update({ professor_presenca: novaPresenca })
-        .eq('id', aulaId);
+      const novoPresente = aula.professor_presenca !== 'presente';
+      // RPC security definer — UPDATE direto falhava por RLS (aulas_emusys so tem SELECT)
+      const { error } = await supabase.rpc('app_marcar_presenca_professor_aula', {
+        p_aula_emusys_id: aulaId,
+        p_presente: novoPresente,
+      });
       if (error) throw error;
-      toast.success(`${professorNome} ${novaPresenca} na aula das ${aula.hora_inicio}`);
+      toast.success(`${professorNome} ${novoPresente ? 'presente' : 'ausente'} na aula das ${aula.hora_inicio}`);
       onMudou();
     } catch (e) {
       const msg = e instanceof Error ? e.message : typeof e === 'object' && e !== null && 'message' in e ? String((e as Record<string, unknown>).message) : String(e);
