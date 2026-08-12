@@ -292,8 +292,9 @@ O professor pode chegar atrasado ou sair mais cedo. Precisa de:
   `20260812171943_chamada_retroativa_fallback_emusys`, ainda ausente do Git
   remoto. Ela antecede esta entrega e deve ser reconciliada com seu autor antes
   de um próximo deploy de schema; não foi reaplicada, alterada nem recriada aqui.
-- O próximo passo de produto é consumir `origem_presenca` e
-  `tem_conflito_presenca` nos badges do LA Teacher/Report e publicar o bridge do
-  Fábio com a confirmação atômica. O formulário manual continua uma frente
-  separada: rascunho por professor+aula+aluno, autosave, versão e cópia apenas
-  dentro do roster, nunca da presença.
+- O bridge do Fábio foi publicado com confirmação atômica por ação, shortlist e
+  `wa_message_id`; não houve mensagem nem presença de teste. O próximo passo de
+  produto é consumir `origem_presenca` e `tem_conflito_presenca` nos badges do
+  LA Teacher/Report. O formulário manual continua uma frente separada:
+  rascunho por professor+aula+aluno, autosave, versão e cópia apenas dentro do
+  roster, nunca da presença.
