@@ -231,6 +231,49 @@ function extrairUnidade(body: any): string | null {
  *  `x-real-ip` e `user-agent` só servem se der para ler o valor. */
 const HEADERS_SENSIVEIS = ['authorization', 'apikey', 'api-key', 'cookie', 'x-observador-token', 'token'];
 
+/** Diagnóstico do token ANTES de exigi-lo, para não derrubar a captação ao ligar a trava.
+ *
+ *  Motivo: o campo de URL do Emusys mostra o endereço truncado na tela, e se ele cortar o
+ *  token no cadastro, ativar `OBSERVADOR_TOKEN` faria a edge rejeitar 100% dos webhooks —
+ *  e o Emusys NÃO reenvia. Então primeiro medimos o que está chegando, depois exigimos.
+ *
+ *  ⚠️ NÃO grava o valor: só a origem, o comprimento e os 12 primeiros hex do SHA-256. O hash
+ *  basta para provar identidade contra o token esperado (comparando com o sha256 do que
+ *  guardamos), sem escrever credencial num log que é lido por gente e por automação — a
+ *  mesma regra do HEADERS_SENSIVEIS logo acima. */
+async function diagnosticarToken(req: Request): Promise<Record<string, unknown>> {
+  let bruto = '';
+  let via: string | null = null;
+  const doHeader = req.headers.get('x-observador-token') ?? '';
+  if (doHeader) {
+    bruto = doHeader;
+    via = 'header';
+  } else {
+    try {
+      const daQuery = new URL(req.url).searchParams.get('token') ?? '';
+      if (daQuery) {
+        bruto = daQuery;
+        via = 'query';
+      }
+    } catch (_e) {
+      // URL inválida não deve derrubar o log
+    }
+  }
+  if (!via) return { via: null, len: 0, sha256_12: null };
+
+  let sha = null;
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(bruto));
+    sha = Array.from(new Uint8Array(buf))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+      .substring(0, 12);
+  } catch (_e) {
+    // ambiente sem WebCrypto: o comprimento sozinho já denuncia truncamento
+  }
+  return { via, len: bruto.length, sha256_12: sha };
+}
+
 function coletarHeaders(req: Request): Record<string, string> {
   const out: Record<string, string> = {};
   req.headers.forEach((valor, nome) => {
@@ -967,7 +1010,11 @@ serve(async (req: Request) => {
       aluno_nome: extrairNome(body),
       unidade_nome: extrairUnidade(body),
       payload_bruto: body ?? { raw_nao_json: rawText },
-      detalhes: { headers_recebidos: coletarHeaders(req) },
+      detalhes: {
+        headers_recebidos: coletarHeaders(req),
+        // temporário: mede o token que está chegando antes de a trava ser ativada
+        token_diagnostico: await diagnosticarToken(req),
+      },
       workflow_id: 'debug-webhook-emusys-observador',
       execution_id: new Date().toISOString(),
     });
