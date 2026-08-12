@@ -52,12 +52,16 @@ function mapearJobParaSync(jobname: string): { tipo: string; codigo: string | nu
   // o status real vem da evidencia de envio em fila_relatorios_whatsapp.
   if (jobname.startsWith('relatorio-diario')) return { tipo: 'relatorio_diario', codigo: null };
 
-  // Alertas de projeto (mesma edge projeto-alertas-whatsapp, evidencia em notificacao_log).
-  if (jobname === 'alertas-diarios') return { tipo: 'alerta_diario', codigo: null };
-  if (jobname === 'alertas-tarefas-atrasadas') return { tipo: 'alerta_tarefa_atrasada', codigo: null };
-  if (jobname === 'resumo-semanal') return { tipo: 'resumo_semanal', codigo: null };
+  // ⚠️ Os 3 alertas de projeto (alertas-diarios, alertas-tarefas-atrasadas, resumo-semanal)
+  // NAO sao mapeados de proposito. Eles chamam projeto-alertas-whatsapp, que so grava em
+  // notificacao_log QUANDO HA o que alertar — e `projeto_tarefas` esta vazia (0 tarefas,
+  // 7 projetos). Medir por "tempo desde o ultimo envio" deixaria os tres permanentemente
+  // vermelhos por silencio legitimo, e falso positivo ensina a ignorar a tela.
+  // Ate 12/08/2026 havia mapeamento aqui para tipos que a RPC nunca devolveu (orfaos), o que
+  // dava falsa sensacao de cobertura. Se o modulo de projetos passar a ser usado, medir por
+  // execucao-sem-erro, nao por ausencia de notificacao.
 
-  // Meta Ads: evidencia em meta_ads_cache.enriquecido_em/erro.
+  // Meta Ads: evidencia em meta_ads_cache.enriquecido_em (cron 05:10 BRT, tolerancia 26h).
   if (jobname === 'enriquecer-meta-ads-diario') return { tipo: 'meta_ads', codigo: null };
 
   // Fila de audios do Fabio (LA Teacher). O cron so chama fn_fabio_retry_fila e volta 'ok'
