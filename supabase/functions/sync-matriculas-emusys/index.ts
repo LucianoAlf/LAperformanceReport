@@ -23,10 +23,10 @@
 //         operacional = status ativa + trancada; completo = todos os status
 //   A3. Monta de-para de curso, professor e aluno↔matrícula
 //   A4. Grava a fotografia crua ............ emusys_matriculas_estado_atual
-//   A5. (só operacional) reconcilia ausentes, registra execução e RETORNA
+//   A5. Jornada canônica .......... aluno_jornada_matricula_disciplina
+//   A6. (só operacional) reconcilia ausentes, registra execução e RETORNA
 //
-// FASE B — hoje só o escopo 'completo' alcança (ver o return do escopo operacional):
-//   B1. Jornada canônica .......... aluno_jornada_matricula_disciplina
+// FASE B — só o escopo 'completo' alcança (ver o return do escopo operacional):
 //   B2. Decisões canônicas de matrícula
 //   B3. Régua de classificação (tipos_matricula)
 //   B4. Lead ID .................................. alunos.emusys_lead_id
@@ -35,10 +35,11 @@
 //   B6. Limpeza de alertas obsoletos + varredura reversa (contratos órfãos)
 //
 // ⚠️ O cron diário chama com escopo=operacional, então NADA da fase B roda
-//    automaticamente desde 2026-08-11 (migration 20260811210319). Quem depende
-//    disso: Contratos Vencendo e Cobertura de Renovação (leem a jornada, B1) e a
-//    aba Conciliação (lê a fila, B5). A fase B NÃO chama a API do Emusys — ela
-//    trabalha sobre os dados já carregados na fase A.
+//    automaticamente desde 2026-08-11 (migration 20260811210319). A jornada estava
+//    nesse grupo e voltou para a fase A em 2026-08-12, porque Contratos Vencendo e
+//    Cobertura de Renovação liam dado congelado sem nenhum erro aparecer. Segue
+//    parada a fase B, incluindo a fila da aba Conciliação (B5). A fase B NÃO chama
+//    a API do Emusys — ela trabalha sobre os dados já carregados na fase A.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -1260,10 +1261,49 @@ serve(async (req) => {
       );
     }
 
-    // ─── A5. Saída do escopo operacional ──────────────────────────────────────
-    // ⚠️ ATENÇÃO: este `return` encerra a invocação. TODA a fase B abaixo (jornada,
-    // decisões canônicas, classificação, lead_id, fila de divergências, conversão
-    // de não-renovação, varredura reversa) fica de fora quando escopo=operacional
+    // ─── A5. Jornada canônica ─────────────────────────────────────────────────
+    // Espelha o contrato vigente de cada matrícula×disciplina em
+    // aluno_jornada_matricula_disciplina: data da primeira/última aula, aulas
+    // passadas/futuras, nr_faturas e data_primeira_fatura. É a fonte de
+    // vw_jornada_aluno_atual (20+ consumidores: carteira, agenda, health score) e,
+    // por ela, de vw_contratos_vencendo e vw_renovacao_ciclos.
+    // `skipped` conta matrícula sem de-para de curso/aluno — não é erro, é linha
+    // que não dá para posicionar. O upsert dispara trg_jornada_ciclo_sucedido,
+    // que marca o ciclo antigo como sucedido quando a renovação cria um novo.
+    //
+    // ⚠️ Roda ANTES do return do escopo operacional de propósito. De 2026-08-11 a
+    // 2026-08-12 este bloco ficou depois do return e o cron diário parou de
+    // atualizar a jornada nas 3 unidades — Contratos Vencendo e Cobertura de
+    // Renovação passaram a ler dado congelado, sem nenhum erro aparecer (a função
+    // seguia respondendo 200/succeeded). Não mova para baixo do return.
+    // ⚠️ No escopo operacional o snapshot traz só ativa+trancada: quem foi
+    // finalizado some do payload e NÃO é atualizado aqui. Quem cobre isso é o
+    // webhook matricula_finalizacao (tempo real) e o escopo completo.
+    const linhasJornada: any[] = [];
+    for (const mat of porId.values()) {
+      const input = buildJornadaInputFromMatriculaApi(mat, u.id, 'sync-matriculas-emusys');
+      if (!input) continue;
+      const { rows, skipped } = buildJornadaRowsForUpsert(input, {
+        alunoIdPorMatriculaEmusys,
+        alunoIdPorAlunoEmusys,
+        cursoIdPorDisciplinaEmusys: depara,
+        professorIdPorProfessorEmusys: profMapJornada,
+      });
+      linhasJornada.push(...rows);
+      resumo.jornadas.puladas += skipped;
+    }
+
+    const jornadas = await upsertJornadasEmLote(supabase, linhasJornada);
+    resumo.jornadas.atualizadas += jornadas.atualizadas;
+    resumo.jornadas.erros += jornadas.erros;
+    if (jornadas.mensagens.length) {
+      resumo.jornadas.mensagens = jornadas.mensagens;
+    }
+
+    // ─── A6. Saída do escopo operacional ──────────────────────────────────────
+    // ⚠️ ATENÇÃO: este `return` encerra a invocação. TODA a fase B abaixo (decisões
+    // canônicas, classificação, lead_id, fila de divergências, conversão de
+    // não-renovação, varredura reversa) fica de fora quando escopo=operacional
     // — que é o que o cron diário usa. Nenhum daqueles blocos chama a API do
     // Emusys: eles só processam o que já está em `porId`, então o custo de incluí-los
     // aqui é de banco, não de rede. Antes de mover qualquer coisa para cá, confira
@@ -1300,36 +1340,6 @@ serve(async (req) => {
       return new Response(JSON.stringify(resumo, null, 2), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
-    }
-
-    // ─── B1. Jornada canônica ─────────────────────────────────────────────────
-    // Espelha o contrato vigente de cada matrícula×disciplina em
-    // aluno_jornada_matricula_disciplina: data da primeira/última aula, aulas
-    // passadas/futuras, nr_faturas e data_primeira_fatura. É a fonte de
-    // vw_jornada_aluno_atual (20+ consumidores: carteira, agenda, health score) e,
-    // por ela, de vw_contratos_vencendo e vw_renovacao_ciclos.
-    // `skipped` conta matrícula sem de-para de curso/aluno — não é erro, é linha
-    // que não dá para posicionar. O upsert dispara trg_jornada_ciclo_sucedido,
-    // que marca o ciclo antigo como sucedido quando a renovação cria um novo.
-    const linhasJornada: any[] = [];
-    for (const mat of porId.values()) {
-      const input = buildJornadaInputFromMatriculaApi(mat, u.id, 'sync-matriculas-emusys');
-      if (!input) continue;
-      const { rows, skipped } = buildJornadaRowsForUpsert(input, {
-        alunoIdPorMatriculaEmusys,
-        alunoIdPorAlunoEmusys,
-        cursoIdPorDisciplinaEmusys: depara,
-        professorIdPorProfessorEmusys: profMapJornada,
-      });
-      linhasJornada.push(...rows);
-      resumo.jornadas.puladas += skipped;
-    }
-
-    const jornadas = await upsertJornadasEmLote(supabase, linhasJornada);
-    resumo.jornadas.atualizadas += jornadas.atualizadas;
-    resumo.jornadas.erros += jornadas.erros;
-    if (jornadas.mensagens.length) {
-      resumo.jornadas.mensagens = jornadas.mensagens;
     }
 
     // ─── B2. Decisões canônicas ───────────────────────────────────────────────
