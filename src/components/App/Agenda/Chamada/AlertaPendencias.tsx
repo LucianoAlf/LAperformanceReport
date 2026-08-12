@@ -106,7 +106,30 @@ export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirD
   const emusysAusentes = pendentes.filter((p) => p.emusysAusente);
   const semDestinoReal = pendentes.filter((p) => !p.emusysAusente);
 
-  // Se não tem pendências, mostra parabéns (verde) com os nomes da equipe
+  // Quantas aulas do dia já terminaram (para saber se o parabéns é merecido)
+  const aulasQueJaOcorreram = aulas.filter(
+    (a) => !a.cancelada && aulaJaOcorreu(data, a.hora_fim, agora),
+  ).length;
+
+  // Se não tem pendências MAS também nenhuma aula ocorreu ainda, mostra
+  // mensagem neutra em vez de parabéns — as aulas nem começaram.
+  if (pendentes.length === 0 && aulasQueJaOcorreram === 0) {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl border border-slate-700/50 bg-slate-800/20 p-4">
+        <Clock className="h-5 w-5 shrink-0 text-slate-500" />
+        <div>
+          <p className="text-sm font-semibold text-slate-300">
+            As aulas de hoje ainda não começaram.
+          </p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Quando a primeira aula terminar, a ficha de chamada aparece aqui.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Se não tem pendências e aulas já ocorreram, mostra parabéns (verde) com os nomes da equipe
   if (pendentes.length === 0) {
     const nomes = nomesEquipe.length > 0
       ? nomesEquipe.length === 1
