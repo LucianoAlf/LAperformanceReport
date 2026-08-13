@@ -346,6 +346,21 @@ create table public.health_score_v3_executor_calls (
   unidade_id uuid
 );
 
+create table public.health_score_professor_v3_materializacao_execucoes (
+  id text primary key,
+  cron_reconciliacao_status text,
+  cron_reconciliacao_erro text,
+  cron_reconciliado_em timestamptz
+);
+
+insert into public.health_score_professor_v3_materializacao_execucoes (id)
+values
+  ('exec-sem-alteracao'),
+  ('exec-parcial'),
+  ('exec-materializado'),
+  ('exec-erro'),
+  ('exec-fixture-invalido');
+
 create or replace function public.executar_health_score_professor_v3_escopo_diario(
   p_competencia date,
   p_periodicidade text,
@@ -827,6 +842,23 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
     assert.equal(reconciliationFailureResult.execution_id, 'exec-sem-alteracao');
     assert.equal(reconciliationFailureResult.reconciliacao_status, 'falha');
     assert.match(reconciliationFailureResult.reconciliacao_erro, /fixture-cron-schedule-failure/iu);
+    const persistedReconciliationFailure = psql(
+      container,
+      `select jsonb_build_object(
+         'status', cron_reconciliacao_status,
+         'erro', cron_reconciliacao_erro,
+         'registrado', cron_reconciliado_em is not null
+       )::text
+       from public.health_score_professor_v3_materializacao_execucoes
+       where id = 'exec-sem-alteracao';`,
+    );
+    assert.equal(persistedReconciliationFailure.status, 0, persistedReconciliationFailure.stderr);
+    const persistedReconciliationFailureResult = JSON.parse(
+      persistedReconciliationFailure.stdout.trim(),
+    );
+    assert.equal(persistedReconciliationFailureResult.status, 'falha');
+    assert.match(persistedReconciliationFailureResult.erro, /fixture-cron-schedule-failure/iu);
+    assert.equal(persistedReconciliationFailureResult.registrado, true);
     const catalogAfterReconciliationFailure = psql(
       container,
       `select jsonb_agg(to_jsonb(j) - 'jobid' order by jobname, username)::text
