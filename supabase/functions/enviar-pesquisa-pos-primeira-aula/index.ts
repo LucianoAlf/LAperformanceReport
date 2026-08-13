@@ -115,35 +115,63 @@ async function enviarBotoes(baseUrl, token, numero, texto) {
   }
 }
 
+function somenteDigitos(valor) {
+  return String(valor || '').replace(/\D/g, '');
+}
+
+// O aluno pode ter mais de uma conversa no mesmo departamento: a de boas-vindas nasce no
+// telefone do responsável e depois aparece a do telefone dele. Por isso a conversa é casada
+// pelo telefone da mensagem, e não por "a conversa do aluno".
+async function resolverConversaAluno(supabase, { alunoId, unidadeId, jid, caixaId }) {
+  const alvo = somenteDigitos(jid);
+
+  const { data: existentes } = await supabase
+    .from('admin_conversas')
+    .select('id, whatsapp_jid')
+    .eq('aluno_id', alunoId)
+    .eq('departamento', DEPARTAMENTO);
+
+  const conversas = existentes || [];
+  const doTelefone = conversas.find((c) => somenteDigitos(c.whatsapp_jid) === alvo);
+  if (doTelefone) return doTelefone.id;
+
+  const semTelefone = conversas.find((c) => !c.whatsapp_jid);
+  if (semTelefone) return semTelefone.id;
+
+  const { data: nova, error: criarErr } = await supabase
+    .from('admin_conversas')
+    .insert({
+      aluno_id: alunoId,
+      unidade_id: unidadeId,
+      departamento: DEPARTAMENTO,
+      caixa_id: caixaId,
+      whatsapp_jid: jid,
+      status: 'aberta',
+    })
+    .select('id')
+    .single();
+  if (nova?.id) return nova.id;
+
+  // uq_admin_conversas_jid_depto recusa o insert quando o número já tem conversa — corrida com
+  // o webhook, ou conversa aberta como contato externo antes de virar aluno.
+  const { data: porJid } = await supabase
+    .from('admin_conversas')
+    .select('id')
+    .eq('whatsapp_jid', jid)
+    .eq('departamento', DEPARTAMENTO)
+    .maybeSingle();
+  if (porJid?.id) return porJid.id;
+
+  console.error('[enviar-pesquisa] conversa nao resolvida:', { alunoId, jid, erro: criarErr?.message });
+  return null;
+}
+
 async function registrarNaCaixa(supabase, { alunoId, unidadeId, jid, caixaId, messageId, status, texto, nomeExterno }) {
   try {
     let conversaId = null;
 
     if (alunoId) {
-      const { data: conv } = await supabase
-        .from('admin_conversas')
-        .select('id')
-        .eq('aluno_id', alunoId)
-        .eq('departamento', DEPARTAMENTO)
-        .maybeSingle();
-
-      if (conv) {
-        conversaId = conv.id;
-      } else {
-        const { data: nova } = await supabase
-          .from('admin_conversas')
-          .insert({
-            aluno_id: alunoId,
-            unidade_id: unidadeId,
-            departamento: DEPARTAMENTO,
-            caixa_id: caixaId,
-            whatsapp_jid: jid,
-            status: 'aberta',
-          })
-          .select('id')
-          .single();
-        conversaId = nova?.id || null;
-      }
+      conversaId = await resolverConversaAluno(supabase, { alunoId, unidadeId, jid, caixaId });
     } else {
       // Contato externo: busca conversa pelo JID
       const { data: conv } = await supabase
@@ -173,6 +201,16 @@ async function registrarNaCaixa(supabase, { alunoId, unidadeId, jid, caixaId, me
           .select('id')
           .single();
         conversaId = nova?.id || null;
+
+        if (!conversaId) {
+          const { data: porJid } = await supabase
+            .from('admin_conversas')
+            .select('id')
+            .eq('whatsapp_jid', jid)
+            .eq('departamento', DEPARTAMENTO)
+            .maybeSingle();
+          conversaId = porJid?.id || null;
+        }
       }
     }
 
@@ -183,7 +221,7 @@ async function registrarNaCaixa(supabase, { alunoId, unidadeId, jid, caixaId, me
       opcoes: OPCOES_INTERATIVO,
     });
 
-    await supabase.from('admin_mensagens').insert({
+    const { error: msgErr } = await supabase.from('admin_mensagens').insert({
       conversa_id: conversaId,
       aluno_id: alunoId,
       direcao: 'saida',
@@ -194,6 +232,12 @@ async function registrarNaCaixa(supabase, { alunoId, unidadeId, jid, caixaId, me
       status_entrega: status,
       whatsapp_message_id: messageId || null,
     });
+
+    // Sem isto a pesquisa some da Caixa em silêncio: o envio ao WhatsApp já saiu e a edge
+    // responde ok. O eco do webhook até grava a mensagem, mas achatada em texto.
+    if (msgErr) {
+      console.error('[enviar-pesquisa] mensagem nao gravada na caixa:', { alunoId, conversaId, erro: msgErr.message });
+    }
 
     await supabase.from('admin_conversas')
       .update({
