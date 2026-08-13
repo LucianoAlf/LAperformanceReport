@@ -143,7 +143,8 @@ as $function$
       b.metrica,
       b.metrica_publicavel desc nulls last,
       (b.nota is not null) desc,
-      b.unidade_id nulls last
+      b.unidade_id nulls last,
+      to_jsonb(b)::text desc
   ), modelo as (
     select distinct on (b.professor_id) b.*
     from base_unica b
@@ -225,6 +226,10 @@ as $function$
         nullif(to_jsonb(c) ->> 'pilares_minimos', '')::integer,
         3
       ) as pilares_minimos,
+      coalesce(
+        nullif(to_jsonb(c) ->> 'exige_pilar_fidelizacao', '')::boolean,
+        true
+      ) as exige_pilar_fidelizacao,
       c.faixa_atencao_min,
       c.faixa_saudavel_min,
       r.score_observado is not null
@@ -236,7 +241,13 @@ as $function$
           case when g.pilares_esperados <= 0 then 0::numeric
             else round(r.pilares_validos * 100.0 / g.pilares_esperados, 1) end
         ) >= coalesce(c.cobertura_minima, 60)
-        and r.tem_fidelizacao
+        and (
+          not coalesce(
+            nullif(to_jsonb(c) ->> 'exige_pilar_fidelizacao', '')::boolean,
+            true
+          )
+          or r.tem_fidelizacao
+        )
         and r.fonte_canonica_disponivel as comparavel
     from resumo r
     cross join governo g
@@ -247,7 +258,7 @@ as $function$
     case when p_unidade_id is null then null::uuid else p_unidade_id end,
     case when p_unidade_id is null then 'consolidado'::text else 'unidade'::text end,
     p.competencia,
-    coalesce(md.trimestre_inicio, date_trunc('quarter', p.competencia)::date),
+    p.periodo_inicio,
     p_periodicidade,
     p.periodo_inicio,
     p.periodo_fim,
@@ -330,15 +341,16 @@ as $function$
       when a.pilares_validos < a.pilares_minimos then 'pilares_insuficientes'::text
       when a.cobertura_pilares < coalesce(a.cobertura_minima, 60)
         then 'cobertura_insuficiente'::text
-      when not a.tem_fidelizacao then 'sem_pilar_fidelizacao'::text
+      when a.exige_pilar_fidelizacao and not a.tem_fidelizacao
+        then 'sem_pilar_fidelizacao'::text
       else 'criterios_atendidos'::text
     end,
     md.competencia_referencia,
     md.score_referencia,
     md.classificacao_referencia,
-    coalesce(md.data_corte, current_date),
+    least(current_date, p.periodo_fim),
     c.id,
-    coalesce(md.regra_fingerprint, 'health-score-professor-v3-roster-canonico-1'),
+    public.fn_health_score_professor_v3_config_fingerprint_comparabilidade(c.id),
     a.peso_pontuavel_total,
     a.peso_disponivel_total,
     a.cobertura_pilares,
@@ -352,7 +364,7 @@ as $function$
         then '["pilares_insuficientes"]'::jsonb else '[]'::jsonb end
       || case when a.cobertura_pilares < coalesce(a.cobertura_minima, 60)
         then '["cobertura_insuficiente"]'::jsonb else '[]'::jsonb end
-      || case when not a.tem_fidelizacao
+      || case when a.exige_pilar_fidelizacao and not a.tem_fidelizacao
         then '["sem_pilar_fidelizacao"]'::jsonb else '[]'::jsonb end
       || case when not a.fonte_canonica_disponivel
         then '["fonte_canonica_indisponivel"]'::jsonb else '[]'::jsonb end
