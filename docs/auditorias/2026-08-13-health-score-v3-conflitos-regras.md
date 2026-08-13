@@ -15,6 +15,39 @@ Este documento corrige o registro da auditoria e congela a baseline verificada e
 2026-08-13. A criação deste arquivo também foi estritamente documental: não fez
 nova consulta ao banco remoto e não valida nenhuma correção de código.
 
+### 1.1 Mapa compacto de reprodutibilidade e evidência
+
+| Item | Registro |
+|---|---|
+| Momento da observação | 2026-08-13, fuso `America/Sao_Paulo`; o horário exato de relógio não foi capturado na evidência e não deve ser inferido |
+| Alvo | Projeto Supabase hospedado `ouqwbbermlzqqvtqwlul`, inspecionado somente para leitura |
+| Limite operacional | Nenhuma escrita, rematerialização, backfill, fechamento, migration ou deploy fez parte da investigação |
+
+| Grupo de evidência | Fontes inspecionadas |
+|---|---|
+| Agendamento e execução | `cron.job_run_details` para o job `109`; `health_score_professor_v3_materializacao_execucoes` |
+| Configuração do limite | `pg_settings`, parâmetro `statement_timeout` |
+| Snapshots e métricas | `health_score_professor_v3_snapshots`; `health_score_professor_v3_snapshot_metricas` |
+| Configuração governada | `health_score_professor_v3_config_versoes` |
+| Contrato em execução | leitores e produtores atuais do Health Score Professor V3 |
+
+As definições versionadas relevantes para reproduzir a leitura do contrato são:
+
+| Versão | Papel na evidência |
+|---|---|
+| `20260808193000_health_score_v3_cron_diario_idempotente.sql` | cron diário, execução idempotente e registro operacional |
+| `20260806190200_health_score_v3_performance_snapshot_reader_fastpath.sql` | fast path do leitor de snapshot |
+| `20260808194000_health_score_v3_snapshot_reader_ordem_estavel.sql` | ordenação estável do leitor de snapshot |
+| `20260806143000_health_score_v3_performance_snapshot_reader.sql` | leitor V1 |
+| `20260806143100_health_score_v3_performance_snapshot_reader_legacy_metric_roles.sql` | leitor V2 e fallback de papéis legados |
+| `20260719203100_health_score_v3_metricas_segmentadas_hardening.sql` | função de fechamento de ciclo |
+| `20260804120000_health_score_v3_cobertura_pilares_canonica.sql` | cobertura canônica de cinco pilares pontuáveis |
+
+As contagens registradas neste documento são um retrato datado do estado ao vivo
+em 2026-08-13. Elas devem ser atualizadas antes de qualquer rollout; não podem ser
+reutilizadas como se descrevessem automaticamente o estado corrente de uma etapa
+posterior.
+
 ## 2. Baseline verificada em 2026-08-13
 
 ### 2.1 Leitor atual versus roster atual
@@ -185,6 +218,24 @@ Como não existem snapshots V3 fechados ou oficiais, esta é uma lacuna preventi
 comprovada no contrato da função, não evidência de que um fechamento V3 já tenha
 corrompido dados existentes.
 
+### 4.1 Critérios de regressão de autorização e imutabilidade
+
+Uma correção do fechamento de ciclo deve provar, sem afrouxar o contrato atual:
+
+- preservação da chamada ao guard
+  `fn_health_score_professor_v3_ator_gerenciador`, que exige
+  `professores.editar` do ator autenticado;
+- preservação dos grants restritos da função de fechamento: revogação ampla de
+  `public`, `anon` e `authenticated`, seguida de concessão de execução somente a
+  `authenticated` e `service_role`;
+- falha de chamadores não autorizados, sem criação ou mutação parcial de snapshot;
+- sucesso do ator autorizado e do caminho `service_role`, quando todas as demais
+  pré-condições válidas de fechamento forem satisfeitas;
+- cópia integral de `papel`, `codigo_evidencia` e `peso_efetivo` no caminho
+  autorizado;
+- imutabilidade de snapshots fechados, com rejeição de reescrita ou novo
+  fechamento que altere a revisão já oficializada.
+
 ## 5. Prioridades corrigidas
 
 A ordem de tratamento deve ser:
@@ -197,12 +248,14 @@ A ordem de tratamento deve ser:
    periodicidades ou revisões estagnadas sem estado operacional explícito.
 4. **Eliminar trabalho duplicado do produtor:** impedir a execução integral no
    fingerprint e novamente na materialização.
-5. **Integridade do fechamento e ciclo de vida mensal:** preservar `papel`,
-   `codigo_evidencia` e `peso_efetivo`, além de definir abertura, revisão,
-   fechamento e imutabilidade por periodicidade.
-6. **Estados não bloqueantes e staleness na UI:** mostrar maturação, insuficiência,
+5. **Integridade e autorização do fechamento de ciclo:** preservar `papel`,
+   `codigo_evidencia`, `peso_efetivo`, guard, grants e imutabilidade.
+6. **Desenho e implementação do ciclo de vida mensal:** ainda não existe contrato
+   de fechamento mensal demonstrado; abertura, revisão, fechamento e
+   imutabilidade mensal precisam ser definidos e implementados antes de uso.
+7. **Estados não bloqueantes e staleness na UI:** mostrar maturação, insuficiência,
    erro e defasagem sem publicar classificação indevida nem bloquear toda a tela.
-7. **Rematerialização controlada e E2E:** recalcular somente o universo aprovado,
+8. **Rematerialização controlada e E2E:** recalcular somente o universo aprovado,
    comparar revisões e validar leitor, UI e consumidores sem apagar histórico.
 
 ## 6. Critérios GO/STOP do Sprint 0
@@ -215,13 +268,15 @@ O Sprint 0 Task 0.1 pode ser considerado concluído quando:
   documental;
 - ficar explícito que não houve escrita em banco ou produção e que nenhum código
   foi corrigido;
-- as contagens, casos nominais, execuções do cron, origem do timeout e ausência de
-  snapshots oficiais estiverem registrados sem extrapolação;
+- as contagens, casos nominais, execuções do cron, origem/configuração do limite de
+  120 s e ausência de snapshots oficiais estiverem registrados sem extrapolação,
+  mantendo não resolvida a causa-raiz da desaceleração de execução;
 - os falsos positivos anteriores estiverem corrigidos, incluindo o guard final de
   Jonathan, a vigência adjacente, o estado atual de `papel` e os limites da
   evidência de latência;
-- a lacuna de fechamento e a ordem de prioridades estiverem incorporadas ao gate
-  das próximas tarefas.
+- a lacuna de fechamento de ciclo, seus critérios de autorização e a ausência de
+  desenho/implementação do fechamento mensal estiverem incorporadas ao gate das
+  próximas tarefas.
 
 ### STOP — não avançar para escrita, ativação ou declaração de correção
 
@@ -232,8 +287,11 @@ separados:
 - contrato aprovado para a matriz completa e para o catálogo/denominador;
 - desenho resiliente da materialização e eliminação verificável da dupla execução
   do produtor;
-- fechamento que copie integralmente `papel`, `codigo_evidencia` e
-  `peso_efetivo`, com teste do ciclo de vida mensal;
+- fechamento de ciclo que copie integralmente `papel`, `codigo_evidencia` e
+  `peso_efetivo`, preserve guard/grants, rejeite chamadores não autorizados,
+  permita o caminho autorizado/service e mantenha snapshots fechados imutáveis;
+- desenho e implementação explícitos do fechamento mensal, ainda inexistentes,
+  seguidos de testes próprios do ciclo de vida mensal;
 - plano de rematerialização delimitado por revisão, competência, periodicidade e
   unidade, com preservação do histórico;
 - E2E do leitor até a UI comprovando estados, staleness, score comparável nulo e
