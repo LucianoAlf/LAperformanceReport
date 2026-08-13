@@ -70,6 +70,10 @@ const performanceReturn = `
   cobertura_normalizada numeric, cobertura_minima_aplicada numeric,
   comparabilidade_motivos jsonb
 `;
+const performanceColumns = performanceReturn
+  .split(',')
+  .map((definition) => definition.trim().split(/\s+/u)[0])
+  .join(', ');
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -159,36 +163,28 @@ function assertPinnedDefinitionsAreCurrent() {
   }
 }
 
-function collectIncompleteProfessorReports(payload, reports = []) {
-  if (Array.isArray(payload)) {
-    for (const item of payload) collectIncompleteProfessorReports(item, reports);
-    return reports;
-  }
-  if (payload === null || typeof payload !== 'object') return reports;
-
-  if (Number.isInteger(payload.professor_id)) {
-    const missingMetricArrays = Object.values(payload).filter((value) => (
-      Array.isArray(value)
-      && value.length > 0
-      && value.length < expectedMetrics.length
-      && value.every((item) => expectedMetrics.includes(item))
-    ));
-    for (const metrics of missingMetricArrays) {
-      reports.push({
-        professor_id: payload.professor_id,
-        metricas_ausentes: [...metrics].sort(),
-      });
-    }
-  }
-
-  for (const value of Object.values(payload)) {
-    collectIncompleteProfessorReports(value, reports);
-  }
-  return reports;
+function readStrictIncompleteProfessors(payload) {
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  if (!Object.hasOwn(payload, 'professores_incompletos')) return null;
+  const value = payload.professores_incompletos;
+  const valid = Array.isArray(value) && value.every((item) => (
+    item !== null
+    && typeof item === 'object'
+    && !Array.isArray(item)
+    && JSON.stringify(Object.keys(item).sort())
+      === JSON.stringify(['metricas_ausentes', 'professor_id'])
+    && Number.isInteger(item.professor_id)
+    && Array.isArray(item.metricas_ausentes)
+    && item.metricas_ausentes.every((metric) => typeof metric === 'string')
+    && JSON.stringify(item.metricas_ausentes)
+      === JSON.stringify([...item.metricas_ausentes].sort())
+  ));
+  return valid ? value : { schema_invalido: true, valor: value };
 }
 
 const fixture = `
   create extension if not exists pgcrypto;
+  create extension if not exists dblink;
   create schema auth;
   create role anon;
   create role authenticated;
@@ -316,7 +312,19 @@ const fixture = `
     finalizado_em timestamptz,
     executado_por text not null default session_user
   );
-  create sequence public.fixture_health_score_v3_produtor_chamadas;
+  create table public.fixture_health_score_v3_produtor_contador (
+    singleton boolean primary key default true check (singleton),
+    chamadas integer not null check (chamadas >= 0)
+  );
+  insert into public.fixture_health_score_v3_produtor_contador (chamadas) values (0);
+  create table public.fixture_health_score_v3_fonte_capturada (
+    invocacao_id integer not null,
+    professor_id integer not null,
+    metrica text not null,
+    payload jsonb not null,
+    primary key (invocacao_id, professor_id, metrica)
+  );
+  create type public.fixture_health_score_v3_performance_row as (${performanceReturn});
 
   insert into public.unidades values ('${unitId}', 'Unidade Sintetica', true);
   insert into public.professores values
@@ -349,8 +357,16 @@ const fixture = `
   ) returns table (${performanceReturn})
   language plpgsql volatile set search_path = public, pg_temp
   as $$
+  declare
+    v_invocacao_id integer;
   begin
-    perform nextval('public.fixture_health_score_v3_produtor_chamadas');
+    select chamada
+    into v_invocacao_id
+    from dblink(
+      'dbname=postgres',
+      'update public.fixture_health_score_v3_produtor_contador '
+        || 'set chamadas = chamadas + 1 returning chamadas'
+    ) as contador(chamada integer);
     return query
     with roster(professor_id, metricas) as (
       values
@@ -365,7 +381,7 @@ const fixture = `
       cross join lateral unnest(r.metricas) x(metrica)
       join public.health_score_professor_v3_config_metricas m
         on m.config_id = '${configId}' and m.metrica = x.metrica
-    )
+    ), fonte (${performanceColumns}) as (
     select
       b.professor_id, p_unidade_id,
       case when p_unidade_id is null then 'consolidado' else 'unidade' end,
@@ -404,7 +420,19 @@ const fixture = `
       case when b.professor_id = 202 then 44.4::numeric else 100::numeric end,
       60::numeric,
       case when b.professor_id = 202 then '["pilares_insuficientes"]'::jsonb else '[]'::jsonb end
-    from base b;
+    from base b
+    ), capturada as (
+      insert into public.fixture_health_score_v3_fonte_capturada (
+        invocacao_id, professor_id, metrica, payload
+      )
+      select v_invocacao_id, f.professor_id, f.metrica, to_jsonb(f)
+      from fonte f
+      returning payload
+    )
+    select (jsonb_populate_record(
+      null::public.fixture_health_score_v3_performance_row,
+      c.payload
+    )).* from capturada c;
   end;
   $$;
 
@@ -497,6 +525,11 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
     const installed = psql(container, currentFunctions);
     assert.equal(installed.status, 0, installed.stderr || installed.stdout);
 
+    const zeroSafeCounter = Number(psql(container, `
+      select chamadas from public.fixture_health_score_v3_produtor_contador;
+    `).stdout.trim());
+    assert.equal(zeroSafeCounter, 0, 'contador deve representar zero chamadas sem coercao');
+
     const producerSmoke = runJson(container, `
       with fonte as materialized (
         select *
@@ -521,11 +554,15 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
       linhas: 16,
       metricas_ausentes_202: expectedMissingMetrics,
     }, 'fixture deve emitir 6 + 4 + 6 metricas e duas ausencias exatas');
-    const resetCalls = psql(
-      container,
-      "alter sequence public.fixture_health_score_v3_produtor_chamadas restart with 1;",
+    const resetInstrumentation = psql(container, `
+      truncate public.fixture_health_score_v3_fonte_capturada;
+      update public.fixture_health_score_v3_produtor_contador set chamadas = 0;
+    `);
+    assert.equal(
+      resetInstrumentation.status,
+      0,
+      resetInstrumentation.stderr || resetInstrumentation.stdout,
     );
-    assert.equal(resetCalls.status, 0, resetCalls.stderr || resetCalls.stdout);
 
     if (fs.existsSync(correctiveMigrationPath)) {
       const corrected = psql(container, fs.readFileSync(correctiveMigrationPath, 'utf8'));
@@ -603,7 +640,7 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
     const first = runJson(container, executionSql);
     const callsAfterFirst = Number(psql(
       container,
-      "select last_value from public.fixture_health_score_v3_produtor_chamadas;",
+      'select chamadas from public.fixture_health_score_v3_produtor_contador;',
     ).stdout.trim());
     const snapshotsAfterFirst = Number(psql(container, `
       select count(*) from public.health_score_professor_v3_snapshots
@@ -613,12 +650,129 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
     const second = runJson(container, executionSql);
     const callsAfterSecond = Number(psql(
       container,
-      "select last_value from public.fixture_health_score_v3_produtor_chamadas;",
+      'select chamadas from public.fixture_health_score_v3_produtor_contador;',
     ).stdout.trim());
     const snapshotsAfterSecond = Number(psql(container, `
       select count(*) from public.health_score_professor_v3_snapshots
       where periodicidade = 'mensal';
     `).stdout.trim());
+
+    const sourceCaptureContract = runJson(container, `
+      with capturas as (
+        select
+          invocacao_id,
+          count(*)::integer as linhas,
+          md5(jsonb_agg(payload order by professor_id, metrica)::text) as fingerprint
+        from public.fixture_health_score_v3_fonte_capturada
+        group by invocacao_id
+      ), execucoes as (
+        select
+          row_number() over (order by iniciado_em, id)::integer as invocacao_id,
+          fingerprint_fonte
+        from public.health_score_professor_v3_materializacao_execucoes
+        where competencia = date_trunc('month', current_date)::date
+          and periodicidade = 'mensal'
+          and escopo = 'unidade'
+          and unidade_id = '${unitId}'::uuid
+      )
+      select jsonb_build_object(
+        'invocacoes', (select count(*) from capturas),
+        'linhas_por_invocacao', coalesce((
+          select jsonb_agg(linhas order by invocacao_id) from capturas
+        ), '[]'::jsonb),
+        'fingerprints_execucao_correspondem',
+          (select count(*) from execucoes) = (select count(*) from capturas)
+          and not exists (
+            select 1
+            from execucoes e
+            full join capturas c using (invocacao_id)
+            where e.invocacao_id is null
+              or c.invocacao_id is null
+              or e.fingerprint_fonte is distinct from c.fingerprint
+          ),
+        'execucoes_sem_captura_exclusiva', (
+          select count(*)
+          from execucoes e
+          full join capturas c using (invocacao_id)
+          where e.invocacao_id is null or c.invocacao_id is null
+        )
+      )::text;
+    `);
+
+    const persistedMetricsMatchFirstCapture = runJson(container, `
+      with professores_validos(professor_id) as (values (201), (203)),
+      fonte as (
+        select
+          c.professor_id,
+          c.metrica,
+          jsonb_build_object(
+            'metrica', c.payload->'metrica',
+            'valor_bruto', c.payload->'valor_bruto',
+            'numerador', c.payload->'numerador',
+            'denominador', c.payload->'denominador',
+            'amostra', c.payload->'amostra',
+            'estado_base', c.payload->'estado_base',
+            'publicavel', c.payload->'metrica_publicavel',
+            'confianca', c.payload->'confianca',
+            'fonte', c.payload->'fonte',
+            'regra_versao', c.payload->'regra_versao_metrica',
+            'motivo_sem_base', c.payload->'motivo_sem_base',
+            'detalhes', c.payload->'detalhes',
+            'nota', c.payload->'nota',
+            'peso', c.payload->'peso',
+            'peso_disponivel', c.payload->'peso_disponivel',
+            'contribuicao', c.payload->'contribuicao',
+            'meta_aplicada', c.payload->'meta',
+            'peso_efetivo', c.payload->'peso_efetivo',
+            'codigo_evidencia', c.payload->'codigo_evidencia',
+            'papel', c.payload->'papel'
+          ) as payload
+        from public.fixture_health_score_v3_fonte_capturada c
+        join professores_validos p using (professor_id)
+        where c.invocacao_id = 1
+      ), persistidas as (
+        select
+          s.professor_id,
+          m.metrica,
+          to_jsonb(m) - 'id' - 'snapshot_id' as payload
+        from public.health_score_professor_v3_snapshots s
+        join public.health_score_professor_v3_snapshot_metricas m
+          on m.snapshot_id = s.id
+        join professores_validos p using (professor_id)
+        where s.competencia = date_trunc('month', current_date)::date
+          and s.periodicidade = 'mensal'
+          and s.escopo = 'unidade'
+          and s.unidade_id = '${unitId}'::uuid
+          and s.revisao = 1
+      ), contagens as (
+        select
+          p.professor_id,
+          (select count(*) from fonte f where f.professor_id = p.professor_id) as fonte,
+          (select count(*) from persistidas x where x.professor_id = p.professor_id) as persistidas
+        from professores_validos p
+      )
+      select jsonb_build_object(
+        'linhas_por_professor', (
+          select jsonb_object_agg(
+            professor_id::text,
+            jsonb_build_object('fonte', fonte, 'persistidas', persistidas)
+            order by professor_id
+          )
+          from contagens
+        ),
+        'linhas_exatamente_iguais',
+          not exists (
+            select professor_id, metrica, payload from fonte
+            except
+            select professor_id, metrica, payload from persistidas
+          )
+          and not exists (
+            select professor_id, metrica, payload from persistidas
+            except
+            select professor_id, metrica, payload from fonte
+          )
+      )::text;
+    `);
 
     const monthlySnapshots = runJson(container, `
       select coalesce(jsonb_agg(jsonb_build_object(
@@ -685,11 +839,13 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
     const observed = {
       first_status: first.status,
       first_error: Object.hasOwn(first, 'erro') ? first.erro : null,
-      incomplete_professors_reported: collectIncompleteProfessorReports(first),
+      incomplete_professors_reported: readStrictIncompleteProfessors(first),
       second_status: second.status,
       execution_statuses: executionStatuses,
       producer_calls_after_first: callsAfterFirst,
       producer_calls_after_second: callsAfterSecond,
+      source_capture_contract: sourceCaptureContract,
+      persisted_metrics_match_first_capture: persistedMetricsMatchFirstCapture,
       snapshots_after_first: snapshotsAfterFirst,
       snapshots_after_second: snapshotsAfterSecond,
       monthly_snapshots: monthlySnapshots,
@@ -711,6 +867,19 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
       execution_statuses: ['parcial', 'sem_alteracao'],
       producer_calls_after_first: 1,
       producer_calls_after_second: 2,
+      source_capture_contract: {
+        invocacoes: 2,
+        linhas_por_invocacao: [16, 16],
+        fingerprints_execucao_correspondem: true,
+        execucoes_sem_captura_exclusiva: 0,
+      },
+      persisted_metrics_match_first_capture: {
+        linhas_por_professor: {
+          201: { fonte: 6, persistidas: 6 },
+          203: { fonte: 6, persistidas: 6 },
+        },
+        linhas_exatamente_iguais: true,
+      },
       snapshots_after_first: 2,
       snapshots_after_second: 2,
       monthly_snapshots: expectedValidSnapshots,
