@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, readdir } from 'node:fs/promises';
 import test from 'node:test';
 
+const legacyMigrationName =
+  '20260808193000_health_score_v3_cron_diario_idempotente.sql';
 const migrationPath = new URL(
-  '../supabase/migrations/20260808193000_health_score_v3_cron_diario_idempotente.sql',
+  `../supabase/migrations/${legacyMigrationName}`,
   import.meta.url,
 );
+const migrationsDirectory = new URL('../supabase/migrations/', import.meta.url);
 
 async function migration() {
   try {
@@ -13,6 +16,44 @@ async function migration() {
     return await readFile(migrationPath, 'utf8');
   } catch {
     return '';
+  }
+}
+
+async function migrationCorretivaCronIsolado() {
+  const names = (await readdir(migrationsDirectory))
+    .filter((name) => /^\d{14}_.+\.sql$/u.test(name))
+    .filter((name) => name > legacyMigrationName)
+    .sort();
+
+  for (const name of names) {
+    const rawSql = await readFile(new URL(name, migrationsDirectory), 'utf8');
+    const sql = rawSql
+      .replace(/\/\*[\s\S]*?\*\//gu, ' ')
+      .replace(/--[^\r\n]*/gu, ' ');
+    if (
+      /materializar-health-score-professor-v3-diario/iu.test(sql)
+      && /cron\.unschedule\s*\(/iu.test(sql)
+      && /cron\.schedule\s*\(/iu.test(sql)
+      && /executar_health_score_professor_v3_escopo_diario\s*\(/iu.test(sql)
+    ) {
+      return { name, sql };
+    }
+  }
+
+  return null;
+}
+
+function assertSemAumentoDoTimeout(sql) {
+  assert.doesNotMatch(sql, /statement_timeout\s*=\s*['"]?0/iu);
+  const matches = sql.matchAll(
+    /set_config\s*\(\s*'statement_timeout'\s*,\s*'(\d+)\s*(ms|s|min)'/giu,
+  );
+  for (const match of matches) {
+    const amount = Number(match[1]);
+    const seconds = match[2].toLowerCase() === 'ms'
+      ? amount / 1000
+      : match[2].toLowerCase() === 'min' ? amount * 60 : amount;
+    assert.ok(seconds <= 75, `statement_timeout nao pode exceder o gate de 75s: ${match[0]}`);
   }
 }
 
@@ -37,7 +78,7 @@ test('cron usa somente as tres unidades reais, mais o consolidado explicito', as
   assert.match(sql, /where f\.escopo is distinct from v_escopo[\s\S]*or f\.unidade_id is distinct from v_unidade_id[\s\S]*HEALTH_SCORE_V3_ESCOPO_DIVERGENTE/i);
 });
 
-test('cron fica restrito ao mes aberto e usa teto explicito de 600 segundos', async () => {
+test('migration legada ancora mes aberto e evidencia a dependencia antiga de timeout', async () => {
   const sql = await migration();
 
   assert.match(sql, /date_trunc\('month',\s*current_date\)::date/i);
@@ -45,6 +86,26 @@ test('cron fica restrito ao mes aberto e usa teto explicito de 600 segundos', as
   assert.doesNotMatch(sql, /statement_timeout',\s*'0'/i);
   assert.doesNotMatch(sql, /estado\s*=\s*'fechado'/i);
   assert.doesNotMatch(sql, /estado_publicacao\s*=\s*'oficial'/i);
+});
+
+test('migration posterior substitui o cron monolitico sem depender de timeout maior', async () => {
+  const corretiva = await migrationCorretivaCronIsolado();
+
+  assert.ok(
+    corretiva,
+    'migration corretiva real do cron isolado deve existir depois da ancora legada',
+  );
+  assert.match(corretiva.name, /^\d{14}_.+\.sql$/u);
+  assert.match(
+    corretiva.sql,
+    /cron\.unschedule\s*\([\s\S]*materializar-health-score-professor-v3-diario/iu,
+  );
+  assert.match(corretiva.sql, /cron\.schedule\s*\(/iu);
+  assert.doesNotMatch(
+    corretiva.sql,
+    /(?:insert\s+into|update|delete\s+from)\s+cron\.job\b/iu,
+  );
+  assertSemAumentoDoTimeout(corretiva.sql);
 });
 
 test('cron ativa alerta somente para Alf e Hugo identificados de forma exata', async () => {
