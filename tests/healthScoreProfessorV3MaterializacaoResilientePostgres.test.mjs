@@ -31,9 +31,9 @@ const expectedMissingMetrics = ['permanencia', 'retencao'];
 
 const unitId = '10000000-0000-0000-0000-000000000001';
 const healthyUnitId = '10000000-0000-0000-0000-000000000002';
+const absentUnitId = '10000000-0000-0000-0000-000000000003';
 const configId = '20000000-0000-0000-0000-000000000001';
 const cycleSnapshotId = '30000000-0000-0000-0000-000000000001';
-const healthyCycleSnapshotId = '30000000-0000-0000-0000-000000000002';
 
 const performanceReturn = `
   professor_id integer, unidade_id uuid, escopo text, competencia date,
@@ -172,6 +172,27 @@ function assertPinnedDefinitionsAreCurrent(correctiveMigrationNames) {
       `fixture desatualizada: ${functionName} foi redefinida por ${definitions.at(-1)}`,
     );
   }
+}
+
+function directMaterializerLockContract() {
+  const definitionName = localFunctionDefinitions(
+    'materializar_health_score_professor_v3_escopo_diario',
+  ).at(-1);
+  const definition = extractFunction(
+    fs.readFileSync(path.join(migrationsDir, definitionName), 'utf8'),
+    'materializar_health_score_professor_v3_escopo_diario',
+  ).toLowerCase();
+  const lockIndex = definition.indexOf('pg_advisory_xact_lock');
+  const captureIndex = definition.indexOf('get_health_score_professor_v3_performance');
+  const revisionIndex = definition.indexOf('max(s.revisao)');
+  return {
+    lock_before_capture: lockIndex !== -1
+      && captureIndex !== -1
+      && lockIndex < captureIndex,
+    lock_before_revision: lockIndex !== -1
+      && revisionIndex !== -1
+      && lockIndex < revisionIndex,
+  };
 }
 
 function readStrictIncompleteProfessors(payload) {
@@ -339,17 +360,20 @@ const fixture = `
 
   insert into public.unidades values
     ('${unitId}', 'Unidade Sintetica Incompleta', true),
-    ('${healthyUnitId}', 'Unidade Sintetica Saudavel', true);
+    ('${healthyUnitId}', 'Unidade Sintetica Saudavel', true),
+    ('${absentUnitId}', 'Unidade Ativa Sem Snapshot', true);
   insert into public.professores values
     (201, 'Professor Valido Um', true),
     (202, 'Professor Incompleto', true),
     (203, 'Professor Valido Dois', true),
-    (301, 'Professor Roster Saudavel', true);
+    (301, 'Professor Roster Saudavel', true),
+    (401, 'Professor Unidade Ausente', true);
   insert into public.professores_unidades values
     (201, '${unitId}', true, 'validado'),
     (202, '${unitId}', true, 'validado'),
     (203, '${unitId}', true, 'validado'),
-    (301, '${healthyUnitId}', true, 'validado');
+    (301, '${healthyUnitId}', true, 'validado'),
+    (401, '${absentUnitId}', true, 'validado');
   insert into public.health_score_professor_v3_config_versoes values (
     '${configId}', 4, 'ativa', date '2026-08-01', null, 60, 70, 85
   );
@@ -456,47 +480,73 @@ const fixture = `
     (codigo, data_inicio, data_fim, estado, publicacao_oficial, ranking_habilitado)
   values
     ('fixture-ciclo-incompleto', date '1999-01-01', date '2000-01-01', 'aberto', false, false),
-    ('fixture-ciclo-saudavel', date '1999-01-01', date '2000-01-01', 'aberto', false, false);
+    ('fixture-ciclo-saudavel', date '2000-01-01', date '2001-01-01', 'aberto', false, false);
   insert into public.health_score_professor_v3_snapshots (
     id, professor_id, escopo, unidade_id, competencia, trimestre_inicio,
     revisao, estado, config_id, config_versao, score, cobertura,
     classificacao, publicavel, publicado, regra_versao, periodicidade,
     periodo_inicio, periodo_fim, ciclo_codigo, estado_publicacao,
     score_exibivel, ranking_habilitado
-  ) values
-  (
+  ) values (
     '${cycleSnapshotId}', 201, 'unidade', '${unitId}', date '2000-01-01',
     date '2000-01-01', 1, 'provisorio', '${configId}', 4, 90, 100,
     'saudavel', false, false, 'fixture-ciclo-incompleto', 'ciclo', date '1999-01-01',
     date '2000-01-01', 'fixture-ciclo-incompleto', 'parcial', true, false
-  ),
-  (
-    '${healthyCycleSnapshotId}', 301, 'unidade', '${healthyUnitId}', date '2000-01-01',
-    date '2000-01-01', 1, 'provisorio', '${configId}', 4, 90, 100,
-    'saudavel', false, false, 'fixture-ciclo-saudavel', 'ciclo', date '1999-01-01',
-    date '2000-01-01', 'fixture-ciclo-saudavel', 'parcial', true, false
   );
+
+  -- Controle positivo global: todas as unidades ativas e o consolidado estao
+  -- retratados. No ciclo incompleto, a unidade 3 permanece com zero snapshots.
+  insert into public.health_score_professor_v3_snapshots (
+    professor_id, escopo, unidade_id, competencia, trimestre_inicio,
+    revisao, estado, config_id, config_versao, score, cobertura,
+    classificacao, publicavel, publicado, regra_versao, periodicidade,
+    periodo_inicio, periodo_fim, ciclo_codigo, estado_publicacao,
+    score_exibivel, ranking_habilitado
+  )
+  with roster_unidade(professor_id, unidade_id) as (values
+    (201, '${unitId}'::uuid),
+    (202, '${unitId}'::uuid),
+    (203, '${unitId}'::uuid),
+    (301, '${healthyUnitId}'::uuid),
+    (401, '${absentUnitId}'::uuid)
+  ), roster_global as (
+    select professor_id, 'unidade'::text as escopo, unidade_id
+    from roster_unidade
+    union all
+    select distinct professor_id, 'consolidado'::text, null::uuid
+    from roster_unidade
+  )
+  select
+    professor_id, escopo, unidade_id, date '2001-01-01', date '2001-01-01',
+    1, 'provisorio', '${configId}', 4, 90, 100, 'saudavel', false, false,
+    'fixture-ciclo-saudavel', 'ciclo', date '2000-01-01', date '2001-01-01',
+    'fixture-ciclo-saudavel', 'parcial', true, false
+  from roster_global;
+
   insert into public.health_score_professor_v3_snapshot_metricas (
     snapshot_id, metrica, valor_bruto, numerador, denominador, amostra,
     estado_base, publicavel, confianca, fonte, regra_versao, detalhes,
     nota, peso, peso_disponivel, contribuicao, meta_aplicada,
     peso_efetivo, codigo_evidencia, papel
   )
-  select snapshot_id, m.metrica,
+  select s.id, m.metrica,
     case when m.metrica = 'numero_alunos' then 20 else 90 end,
-    9, 10, 20, 'ok', true, 'alta', 'fixture_sintetica', ciclo_codigo,
+    9, 10, 20, 'ok', true, 'alta', 'fixture_sintetica', s.ciclo_codigo,
     '{"apta_oficial":true}'::jsonb,
     case when m.metrica = 'numero_alunos' then null else 90 end,
     m.peso, m.metrica <> 'numero_alunos',
     case when m.metrica = 'numero_alunos' then null else 9 end,
-    m.meta, case when m.metrica = 'numero_alunos' then 0 else m.peso end,
-    'evidencia_valida', coalesce(m.parametros->>'papel', 'nota')
-  from (values
-    ('${cycleSnapshotId}'::uuid, 'fixture-ciclo-incompleto'::text),
-    ('${healthyCycleSnapshotId}'::uuid, 'fixture-ciclo-saudavel'::text)
-  ) ciclos(snapshot_id, ciclo_codigo)
+    m.meta,
+    case when m.metrica = 'numero_alunos'
+      then (s.professor_id % 10)::numeric / 100
+      else m.peso + (s.professor_id % 10)::numeric / 100
+    end,
+    format('evidencia-%s-%s', s.professor_id, m.metrica),
+    coalesce(m.parametros->>'papel', 'nota')
+  from public.health_score_professor_v3_snapshots s
   cross join public.health_score_professor_v3_config_metricas m
-  where m.config_id = '${configId}';
+  where m.config_id = '${configId}'
+    and s.periodicidade = 'ciclo';
 `;
 
 function runJson(container, sql) {
@@ -826,7 +876,10 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
 
     const closeAttempt = runJson(container, `
       do $capture$
-      declare v_result jsonb;
+      declare
+        v_result jsonb;
+        v_message text;
+        v_detail text;
       begin
         create temporary table fixture_close_result(payload jsonb) on commit preserve rows;
         begin
@@ -837,8 +890,15 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
             jsonb_build_object('status', 'fechado', 'resultado', v_result)
           );
         exception when others then
+          get stacked diagnostics
+            v_message = message_text,
+            v_detail = pg_exception_detail;
           insert into fixture_close_result values (
-            jsonb_build_object('status', 'recusado', 'erro', sqlerrm)
+            jsonb_build_object(
+              'status', 'recusado',
+              'mensagem', v_message,
+              'detalhe', nullif(v_detail, '')::jsonb
+            )
           );
         end;
       end;
@@ -921,6 +981,50 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
       where c.codigo = 'fixture-ciclo-saudavel';
     `);
 
+    const healthyMetricParity = runJson(container, `
+      with origens as (
+        select s.*
+        from public.health_score_professor_v3_snapshots s
+        where s.ciclo_codigo = 'fixture-ciclo-saudavel'
+          and s.estado_publicacao = 'parcial'
+      ), oficiais as (
+        select s.*
+        from public.health_score_professor_v3_snapshots s
+        where s.ciclo_codigo = 'fixture-ciclo-saudavel'
+          and s.estado_publicacao = 'oficial'
+      ), pares as (
+        select
+          o.id as origem_id,
+          f.id as oficial_id,
+          om.metrica,
+          to_jsonb(om) - 'id' - 'snapshot_id' - 'detalhes' as payload_origem,
+          to_jsonb(fm) - 'id' - 'snapshot_id' - 'detalhes' as payload_oficial
+        from origens o
+        join oficiais f on f.snapshot_anterior_id = o.id
+        join public.health_score_professor_v3_snapshot_metricas om
+          on om.snapshot_id = o.id
+        join public.health_score_professor_v3_snapshot_metricas fm
+          on fm.snapshot_id = f.id and fm.metrica = om.metrica
+      )
+      select jsonb_build_object(
+        'snapshots_origem', (select count(*) from origens),
+        'snapshots_oficiais', (select count(*) from oficiais),
+        'metricas_comparadas', (select count(*) from pares),
+        'payload_exato_exceto_detalhes', not exists (
+          select 1 from pares p
+          where p.payload_origem is distinct from p.payload_oficial
+        ),
+        'campos_governados_nao_nulos', not exists (
+          select 1
+          from public.health_score_professor_v3_snapshot_metricas m
+          join origens o on o.id = m.snapshot_id
+          where m.peso_efetivo is null
+             or m.codigo_evidencia is null
+             or m.papel is null
+        )
+      )::text;
+    `);
+
     const expectedValidSnapshots = [
       { professor_id: 201, revisao: 1, estado_publicacao: 'parcial', ranking_habilitado: false },
       { professor_id: 203, revisao: 1, estado_publicacao: 'parcial', ranking_habilitado: false },
@@ -938,11 +1042,10 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
       snapshots_after_first: snapshotsAfterFirst,
       snapshots_after_second: snapshotsAfterSecond,
       monthly_snapshots: monthlySnapshots,
+      direct_materializer_lock: directMaterializerLockContract(),
       official_close_status: closeAttempt.status,
-      official_close_reports_incomplete_roster: (
-        typeof closeAttempt.erro === 'string'
-        && /(?:roster|professores|pilares).*incomplet/iu.test(closeAttempt.erro)
-      ),
+      official_close_message: closeAttempt.mensagem ?? null,
+      official_close_detail: closeAttempt.detalhe ?? null,
       official_state: officialState,
       healthy_close: {
         status: healthyCloseAttempt.status,
@@ -952,6 +1055,7 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
         snapshots_fechados: healthyCloseAttempt.resultado?.snapshots_fechados ?? null,
       },
       healthy_official_state: healthyOfficialState,
+      healthy_metric_parity: healthyMetricParity,
     };
     const expected = {
       first_status: 'parcial',
@@ -980,8 +1084,26 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
       snapshots_after_first: 2,
       snapshots_after_second: 2,
       monthly_snapshots: expectedValidSnapshots,
+      direct_materializer_lock: {
+        lock_before_capture: true,
+        lock_before_revision: true,
+      },
       official_close_status: 'recusado',
-      official_close_reports_incomplete_roster: true,
+      official_close_message: 'HEALTH_SCORE_V3_FECHAMENTO_BLOQUEADO: roster incompleto',
+      official_close_detail: {
+        professores_ausentes: [
+          { unidade_id: null, professor_id: 201 },
+          { unidade_id: null, professor_id: 202 },
+          { unidade_id: null, professor_id: 203 },
+          { unidade_id: null, professor_id: 301 },
+          { unidade_id: null, professor_id: 401 },
+          { unidade_id: unitId, professor_id: 202 },
+          { unidade_id: unitId, professor_id: 203 },
+          { unidade_id: healthyUnitId, professor_id: 301 },
+          { unidade_id: absentUnitId, professor_id: 401 },
+        ],
+        professores_excedentes: [],
+      },
       official_state: {
         estado: 'aberto',
         publicacao_oficial: false,
@@ -993,7 +1115,7 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
         ciclo_codigo: 'fixture-ciclo-saudavel',
         estado_publicacao: 'oficial',
         ranking_habilitado: true,
-        snapshots_fechados: 1,
+        snapshots_fechados: 10,
       },
       healthy_official_state: {
         roster_ativo: [301],
@@ -1001,7 +1123,14 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
         estado: 'fechado',
         publicacao_oficial: true,
         ranking_habilitado: true,
-        snapshots_oficiais: 1,
+        snapshots_oficiais: 10,
+      },
+      healthy_metric_parity: {
+        snapshots_origem: 10,
+        snapshots_oficiais: 10,
+        metricas_comparadas: 60,
+        payload_exato_exceto_detalhes: true,
+        campos_governados_nao_nulos: true,
       },
     };
 
