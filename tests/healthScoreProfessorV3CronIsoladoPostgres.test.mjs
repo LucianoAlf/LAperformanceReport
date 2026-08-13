@@ -630,7 +630,11 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
       container,
       `with wrapper as (
          select p.oid,
-                format('public.%I(%s)', p.proname, pg_get_function_identity_arguments(p.oid)) as assinatura,
+                format(
+                  'public.%I(%s)',
+                  p.proname,
+                  replace(pg_get_function_identity_arguments(p.oid), ', ', ',')
+                ) as assinatura,
                 p.prosecdef, p.proconfig, p.proacl, p.proowner,
                 pg_get_functiondef(p.oid) as definicao
            from pg_proc p
