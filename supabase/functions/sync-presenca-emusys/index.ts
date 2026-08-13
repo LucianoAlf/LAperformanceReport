@@ -2045,7 +2045,22 @@ serve(async (req: Request) => {
                   unidade_nome: unidade.nome,
                   evento: 'sync_presenca',
                   acao: 'nao_encontrado',
-                  detalhes: { curso: aula.curso_nome, professor: profNome, data: dataAlvo },
+                  // Os ids vem no payload do GET /aulas e eram descartados: sem eles o
+                  // log so dizia "o nome tal nao casou", sem permitir diagnostico nem
+                  // religar o vinculo depois. `resolverAlunoLocal` ja tenta id_aluno ->
+                  // nome+nascimento+curso -> nome; cair aqui significa que as tres
+                  // falharam, e o id_aluno e justamente o que diz se o aluno tem
+                  // emusys_id do nosso lado ou se o nome bateu em 2+ cadastros.
+                  detalhes: {
+                    curso: aula.curso_nome,
+                    professor: profNome,
+                    data: dataAlvo,
+                    id_aluno_emusys: aluno.id_aluno ?? null,
+                    id_lead_emusys: aluno.id_lead ?? null,
+                    aula_emusys_id: aula.id ?? null,
+                    aula_local_id: aulaLocalId ?? null,
+                    categoria: aula.categoria ?? null,
+                  },
                   workflow_id: 'sync-presenca-emusys',
                   execution_id: new Date().toISOString()
                 });
