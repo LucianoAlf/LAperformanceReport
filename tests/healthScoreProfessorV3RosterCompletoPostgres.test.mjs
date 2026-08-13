@@ -161,7 +161,7 @@ function maskSqlCommentsAndLiterals(sql) {
       continue;
     }
     if (sql[index] === '$') {
-      const delimiter = sql.slice(index).match(/^\\$(?:[A-Za-z_][A-Za-z0-9_]*)?\\$/u)?.[0];
+      const delimiter = sql.slice(index).match(/^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/u)?.[0];
       if (delimiter) {
         const closing = sql.indexOf(delimiter, index + delimiter.length);
         const boundary = closing === -1 ? sql.length : closing + delimiter.length;
@@ -236,6 +236,8 @@ test('detector reconhece apenas declaracao SQL de nivel superior do montador fin
     `/* create or replace function public.${rosterContractFunctionName}() */ select 1;`,
     `select 'create function public.${rosterContractFunctionName}()';`,
     `do $body$ begin execute 'create or replace function public.${rosterContractFunctionName}()'; end $body$;`,
+    `select $$ select 1; create or replace function public.${rosterContractFunctionName}() $$;`,
+    `select $sql$ select 1; create or replace function public.${rosterContractFunctionName}() $sql$;`,
   ]) {
     assert.equal(findTopLevelFunctionDeclaration(falsePositive, rosterContractFunctionName), -1);
   }
