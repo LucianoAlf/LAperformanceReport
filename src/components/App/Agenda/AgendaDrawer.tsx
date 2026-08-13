@@ -221,8 +221,9 @@ export function AgendaDrawer({
             {aula.alunos.map((a, indice) => (
               <li
                 key={a.aluno_id ?? `${a.nome}-${indice}`}
-                className="flex items-center justify-between gap-2"
+                className="flex flex-col gap-0.5"
               >
+                <div className="flex items-center justify-between gap-2">
                 <span className="min-w-0 flex-1 truncate text-slate-300">
                   {a.aluno_novo && (
                     <span className="mr-1 text-amber-300" title="Aluno novo">★</span>
@@ -258,6 +259,20 @@ export function AgendaDrawer({
                     {a.risco_pct}%
                   </span>
                 )}
+                </div>
+                {/* Mesma barra do bloco "Progresso no contrato", por aluno. Mais fina
+                    (h-0.5) porque aqui ela se repete por linha da turma — na espessura
+                    do bloco individual viraria um bloco de listras. */}
+                {a.nr_da_aula != null && a.qtd_aulas_contrato ? (
+                  <div className="h-0.5 overflow-hidden rounded-full bg-slate-700">
+                    <div
+                      className="h-full rounded-full bg-cyan-500"
+                      style={{
+                        width: `${Math.min(100, Math.round((a.nr_da_aula / a.qtd_aulas_contrato) * 100))}%`,
+                      }}
+                    />
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
