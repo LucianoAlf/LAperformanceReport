@@ -221,8 +221,9 @@ export function AgendaDrawer({
             {aula.alunos.map((a, indice) => (
               <li
                 key={a.aluno_id ?? `${a.nome}-${indice}`}
-                className="flex items-center justify-between gap-2"
+                className="flex flex-col gap-0.5"
               >
+                <div className="flex items-center justify-between gap-2">
                 <span className="min-w-0 flex-1 truncate text-slate-300">
                   {a.aluno_novo && (
                     <span className="mr-1 text-amber-300" title="Aluno novo">★</span>
@@ -230,6 +231,24 @@ export function AgendaDrawer({
                   {a.nome}
                   {a.inadimplente && <span className="ml-1 text-rose-400" title="Inadimplente">$</span>}
                 </span>
+                {/* Progresso no contrato DESTE aluno. O bloco "Progresso no
+                    contrato" la em cima usa aula.nr_da_aula, que a RPC devolve
+                    nulo em turma com 2+ contratos (nao existe "o" numero da
+                    aula quando cada aluno esta num ponto diferente do proprio
+                    contrato). Aqui o numero e por aluno, entao existe sempre —
+                    mesmo formato que a Chamada ja usa. */}
+                {a.nr_da_aula != null && (
+                  <span
+                    className="shrink-0 text-[10.5px] tabular-nums text-slate-500"
+                    title={
+                      a.qtd_aulas_contrato
+                        ? `Aula ${a.nr_da_aula} de ${a.qtd_aulas_contrato}`
+                        : `Aula ${a.nr_da_aula}`
+                    }
+                  >
+                    {a.qtd_aulas_contrato ? `${a.nr_da_aula}/${a.qtd_aulas_contrato}` : a.nr_da_aula}
+                  </span>
+                )}
                 {a.status_presenca && (
                   <span className="shrink-0 text-[10.5px] uppercase text-slate-500">
                     {a.status_presenca}
@@ -240,6 +259,20 @@ export function AgendaDrawer({
                     {a.risco_pct}%
                   </span>
                 )}
+                </div>
+                {/* Mesma barra do bloco "Progresso no contrato", por aluno. Mais fina
+                    (h-0.5) porque aqui ela se repete por linha da turma — na espessura
+                    do bloco individual viraria um bloco de listras. */}
+                {a.nr_da_aula != null && a.qtd_aulas_contrato ? (
+                  <div className="h-0.5 overflow-hidden rounded-full bg-slate-700">
+                    <div
+                      className="h-full rounded-full bg-cyan-500"
+                      style={{
+                        width: `${Math.min(100, Math.round((a.nr_da_aula / a.qtd_aulas_contrato) * 100))}%`,
+                      }}
+                    />
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
