@@ -431,7 +431,6 @@ begin
     raise exception 'HEALTH_SCORE_V3_ESCOPO_INCOMPATIVEL' using errcode = '22023';
   end if;
 
-  perform set_config('statement_timeout', '600s', true);
   perform pg_advisory_xact_lock(hashtextextended(
     format('health-score-professor-v3-diario:%s:%s:%s', v_competencia, p_escopo, coalesce(p_unidade_id::text, 'rede')), 0
   ));
