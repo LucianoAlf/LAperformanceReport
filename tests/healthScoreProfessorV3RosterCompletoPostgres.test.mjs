@@ -13,6 +13,12 @@ const currentProducerPath = path.join(
   migrationsDir,
   pinnedProducerMigrationName,
 );
+const rosterFunctionManifest = [
+  'get_health_score_professor_v3_performance',
+  'get_professor_retencao_v3_governada',
+  'get_health_score_professor_v3_permanencia_periodo_v2',
+  'get_health_score_professor_v3_metricas_segmentadas_agregadas_v1',
+];
 
 const unitA = '10000000-0000-0000-0000-000000000001';
 const unitB = '10000000-0000-0000-0000-000000000002';
@@ -110,40 +116,47 @@ function functionDeclarationPattern(functionName) {
   );
 }
 
-function localProducerDefinitionCandidates() {
-  const candidatePattern = /create\s+(?:or\s+\w+\s+)?function\s+public\.get_health_score_professor_v3_performance\s*\(/iu;
+function localMigrationNames() {
   return fs.readdirSync(migrationsDir)
     .filter((name) => name.endsWith('.sql'))
-    .filter((name) => candidatePattern.test(
-      fs.readFileSync(path.join(migrationsDir, name), 'utf8'),
-    ))
     .sort();
 }
 
 function discoverCorrectiveMigrations() {
-  const definitions = localProducerDefinitionCandidates();
-  const pinnedIndex = definitions.indexOf(pinnedProducerMigrationName);
+  const migrationNames = localMigrationNames();
+  const pinnedIndex = migrationNames.indexOf(pinnedProducerMigrationName);
   assert.notEqual(
     pinnedIndex,
     -1,
-    `get_health_score_professor_v3_performance deve continuar ancorada em ${pinnedProducerMigrationName}`,
+    `cadeia do roster deve continuar ancorada em ${pinnedProducerMigrationName}`,
   );
 
-  return definitions.slice(pinnedIndex + 1).map((migrationName) => {
+  const pinnedSql = fs.readFileSync(currentProducerPath, 'utf8');
+  assert.match(
+    pinnedSql,
+    functionDeclarationPattern('get_health_score_professor_v3_performance'),
+    `${pinnedProducerMigrationName} deve declarar o produtor principal ancorado`,
+  );
+
+  const discovered = new Map();
+  for (const migrationName of migrationNames.slice(pinnedIndex + 1)) {
+    const migrationPath = path.join(migrationsDir, migrationName);
+    const sql = fs.readFileSync(migrationPath, 'utf8');
+    const declaredFunctions = rosterFunctionManifest.filter((functionName) => (
+      functionDeclarationPattern(functionName).test(sql)
+    ));
+    if (declaredFunctions.length === 0) continue;
+
     assert.match(
       migrationName,
       /^\d{14}_.+\.sql$/u,
       'migration corretiva deve ter nome gerado pelo Supabase CLI',
     );
-    const migrationPath = path.join(migrationsDir, migrationName);
-    const sql = fs.readFileSync(migrationPath, 'utf8');
-    assert.match(
-      sql,
-      functionDeclarationPattern('get_health_score_professor_v3_performance'),
-      `${migrationName} deve declarar get_health_score_professor_v3_performance`,
-    );
-    return { migrationName, sql };
-  });
+    discovered.set(migrationName, { migrationName, sql, declaredFunctions });
+  }
+  return [...discovered.values()].sort((a, b) => (
+    a.migrationName.localeCompare(b.migrationName)
+  ));
 }
 
 function assertFullyWithoutBaseAggregate(rows, scopeName) {
@@ -485,12 +498,12 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
     const installed = psql(container, currentProducer);
     assert.equal(installed.status, 0, installed.stderr || installed.stdout);
 
-    for (const { migrationName, sql } of correctiveMigrations) {
+    for (const { migrationName, sql, declaredFunctions } of correctiveMigrations) {
       const corrected = psql(container, sql);
       assert.equal(
         corrected.status,
         0,
-        `${migrationName}: ${corrected.stderr || corrected.stdout}`,
+        `${migrationName} (${declaredFunctions.join(', ')}): ${corrected.stderr || corrected.stdout}`,
       );
     }
 
