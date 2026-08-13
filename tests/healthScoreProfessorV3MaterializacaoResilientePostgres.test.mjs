@@ -11,8 +11,6 @@ const pinnedCronMigrationName =
   '20260808193000_health_score_v3_cron_diario_idempotente.sql';
 const pinnedCloseMigrationName =
   '20260719203100_health_score_v3_metricas_segmentadas_hardening.sql';
-const correctiveMigrationName =
-  '20260813120000_health_score_v3_roster_completo_materializacao_resiliente.sql';
 const currentCronPath = path.join(
   migrationsDir,
   pinnedCronMigrationName,
@@ -20,10 +18,6 @@ const currentCronPath = path.join(
 const currentClosePath = path.join(
   migrationsDir,
   pinnedCloseMigrationName,
-);
-const correctiveMigrationPath = path.join(
-  migrationsDir,
-  correctiveMigrationName,
 );
 
 const pinnedDefinitions = [
@@ -33,19 +27,13 @@ const pinnedDefinitions = [
   ['executar_health_score_professor_v3_cron_diario', pinnedCronMigrationName],
   ['fechar_health_score_professor_v3_ciclo', pinnedCloseMigrationName],
 ];
-const expectedMetrics = [
-  'conversao',
-  'media_turma',
-  'numero_alunos',
-  'permanencia',
-  'presenca',
-  'retencao',
-];
 const expectedMissingMetrics = ['permanencia', 'retencao'];
 
 const unitId = '10000000-0000-0000-0000-000000000001';
+const healthyUnitId = '10000000-0000-0000-0000-000000000002';
 const configId = '20000000-0000-0000-0000-000000000001';
 const cycleSnapshotId = '30000000-0000-0000-0000-000000000001';
+const healthyCycleSnapshotId = '30000000-0000-0000-0000-000000000002';
 
 const performanceReturn = `
   professor_id integer, unidade_id uuid, escopo text, competencia date,
@@ -149,7 +137,29 @@ function localFunctionDefinitions(functionName) {
     .sort();
 }
 
-function assertPinnedDefinitionsAreCurrent() {
+function discoverCorrectiveMigrationNames() {
+  const discovered = new Set();
+  for (const [functionName, pinnedMigrationName] of pinnedDefinitions) {
+    const definitions = localFunctionDefinitions(functionName);
+    const pinnedIndex = definitions.indexOf(pinnedMigrationName);
+    assert.notEqual(
+      pinnedIndex,
+      -1,
+      `${functionName} deve continuar ancorada em ${pinnedMigrationName}`,
+    );
+    for (const migrationName of definitions.slice(pinnedIndex + 1)) {
+      assert.match(
+        migrationName,
+        /^\d{14}_.+\.sql$/u,
+        'migration corretiva deve ter nome gerado pelo Supabase CLI',
+      );
+      discovered.add(migrationName);
+    }
+  }
+  return [...discovered].sort();
+}
+
+function assertPinnedDefinitionsAreCurrent(correctiveMigrationNames) {
   for (const [functionName, pinnedMigrationName] of pinnedDefinitions) {
     const definitions = localFunctionDefinitions(functionName);
     assert.ok(
@@ -157,7 +167,8 @@ function assertPinnedDefinitionsAreCurrent() {
       `${functionName} deve continuar ancorada em ${pinnedMigrationName}`,
     );
     assert.ok(
-      [pinnedMigrationName, correctiveMigrationName].includes(definitions.at(-1)),
+      definitions.at(-1) === pinnedMigrationName
+        || correctiveMigrationNames.includes(definitions.at(-1)),
       `fixture desatualizada: ${functionName} foi redefinida por ${definitions.at(-1)}`,
     );
   }
@@ -326,15 +337,19 @@ const fixture = `
   );
   create type public.fixture_health_score_v3_performance_row as (${performanceReturn});
 
-  insert into public.unidades values ('${unitId}', 'Unidade Sintetica', true);
+  insert into public.unidades values
+    ('${unitId}', 'Unidade Sintetica Incompleta', true),
+    ('${healthyUnitId}', 'Unidade Sintetica Saudavel', true);
   insert into public.professores values
     (201, 'Professor Valido Um', true),
     (202, 'Professor Incompleto', true),
-    (203, 'Professor Valido Dois', true);
+    (203, 'Professor Valido Dois', true),
+    (301, 'Professor Roster Saudavel', true);
   insert into public.professores_unidades values
     (201, '${unitId}', true, 'validado'),
     (202, '${unitId}', true, 'validado'),
-    (203, '${unitId}', true, 'validado');
+    (203, '${unitId}', true, 'validado'),
+    (301, '${healthyUnitId}', true, 'validado');
   insert into public.health_score_professor_v3_config_versoes values (
     '${configId}', 4, 'ativa', date '2026-08-01', null, 60, 70, 85
   );
@@ -436,21 +451,30 @@ const fixture = `
   end;
   $$;
 
-  -- Um candidato de ciclo aparentemente apto; o roster oficial ainda esta incompleto.
+  -- Um candidato aparentemente apto em escopo cujo roster oficial esta incompleto.
   insert into public.health_score_professor_v3_ciclos
     (codigo, data_inicio, data_fim, estado, publicacao_oficial, ranking_habilitado)
-  values ('fixture-ciclo', date '1999-01-01', date '2000-01-01', 'aberto', false, false);
+  values
+    ('fixture-ciclo-incompleto', date '1999-01-01', date '2000-01-01', 'aberto', false, false),
+    ('fixture-ciclo-saudavel', date '1999-01-01', date '2000-01-01', 'aberto', false, false);
   insert into public.health_score_professor_v3_snapshots (
     id, professor_id, escopo, unidade_id, competencia, trimestre_inicio,
     revisao, estado, config_id, config_versao, score, cobertura,
     classificacao, publicavel, publicado, regra_versao, periodicidade,
     periodo_inicio, periodo_fim, ciclo_codigo, estado_publicacao,
     score_exibivel, ranking_habilitado
-  ) values (
+  ) values
+  (
     '${cycleSnapshotId}', 201, 'unidade', '${unitId}', date '2000-01-01',
     date '2000-01-01', 1, 'provisorio', '${configId}', 4, 90, 100,
-    'saudavel', false, false, 'fixture-ciclo', 'ciclo', date '1999-01-01',
-    date '2000-01-01', 'fixture-ciclo', 'parcial', true, false
+    'saudavel', false, false, 'fixture-ciclo-incompleto', 'ciclo', date '1999-01-01',
+    date '2000-01-01', 'fixture-ciclo-incompleto', 'parcial', true, false
+  ),
+  (
+    '${healthyCycleSnapshotId}', 301, 'unidade', '${healthyUnitId}', date '2000-01-01',
+    date '2000-01-01', 1, 'provisorio', '${configId}', 4, 90, 100,
+    'saudavel', false, false, 'fixture-ciclo-saudavel', 'ciclo', date '1999-01-01',
+    date '2000-01-01', 'fixture-ciclo-saudavel', 'parcial', true, false
   );
   insert into public.health_score_professor_v3_snapshot_metricas (
     snapshot_id, metrica, valor_bruto, numerador, denominador, amostra,
@@ -458,16 +482,20 @@ const fixture = `
     nota, peso, peso_disponivel, contribuicao, meta_aplicada,
     peso_efetivo, codigo_evidencia, papel
   )
-  select '${cycleSnapshotId}', m.metrica,
+  select snapshot_id, m.metrica,
     case when m.metrica = 'numero_alunos' then 20 else 90 end,
-    9, 10, 20, 'ok', true, 'alta', 'fixture_sintetica', 'fixture-ciclo',
+    9, 10, 20, 'ok', true, 'alta', 'fixture_sintetica', ciclo_codigo,
     '{"apta_oficial":true}'::jsonb,
     case when m.metrica = 'numero_alunos' then null else 90 end,
     m.peso, m.metrica <> 'numero_alunos',
     case when m.metrica = 'numero_alunos' then null else 9 end,
     m.meta, case when m.metrica = 'numero_alunos' then 0 else m.peso end,
     'evidencia_valida', coalesce(m.parametros->>'papel', 'nota')
-  from public.health_score_professor_v3_config_metricas m
+  from (values
+    ('${cycleSnapshotId}'::uuid, 'fixture-ciclo-incompleto'::text),
+    ('${healthyCycleSnapshotId}'::uuid, 'fixture-ciclo-saudavel'::text)
+  ) ciclos(snapshot_id, ciclo_codigo)
+  cross join public.health_score_professor_v3_config_metricas m
   where m.config_id = '${configId}';
 `;
 
@@ -484,7 +512,8 @@ function runJson(container, sql) {
 }
 
 test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechamento estrito', { timeout: 120_000 }, async (t) => {
-  assertPinnedDefinitionsAreCurrent();
+  const correctiveMigrationNames = discoverCorrectiveMigrationNames();
+  assertPinnedDefinitionsAreCurrent(correctiveMigrationNames);
   assert.equal(fs.existsSync(currentCronPath), true, 'migration atual do cron deve existir');
   assert.equal(fs.existsSync(currentClosePath), true, 'migration atual do fechamento deve existir');
   const dockerInfo = docker(['version', '--format', '{{.Server.Version}}']);
@@ -564,8 +593,9 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
       resetInstrumentation.stderr || resetInstrumentation.stdout,
     );
 
-    if (fs.existsSync(correctiveMigrationPath)) {
-      const corrected = psql(container, fs.readFileSync(correctiveMigrationPath, 'utf8'));
+    for (const migrationName of correctiveMigrationNames) {
+      const migrationPath = path.join(migrationsDir, migrationName);
+      const corrected = psql(container, fs.readFileSync(migrationPath, 'utf8'));
       assert.equal(corrected.status, 0, corrected.stderr || corrected.stdout);
     }
 
@@ -801,7 +831,7 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
         create temporary table fixture_close_result(payload jsonb) on commit preserve rows;
         begin
           v_result := public.fechar_health_score_professor_v3_ciclo(
-            'fixture-ciclo', 'fixture de fechamento estrito'
+            'fixture-ciclo-incompleto', 'fixture de fechamento estrito'
           );
           insert into fixture_close_result values (
             jsonb_build_object('status', 'fechado', 'resultado', v_result)
@@ -829,7 +859,66 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
         )
       )::text
       from public.health_score_professor_v3_ciclos c
-      where c.codigo = 'fixture-ciclo';
+      where c.codigo = 'fixture-ciclo-incompleto';
+    `);
+
+    const healthyCloseAttempt = runJson(container, `
+      do $capture$
+      declare v_result jsonb;
+      begin
+        create temporary table fixture_healthy_close_result(payload jsonb)
+          on commit preserve rows;
+        begin
+          v_result := public.fechar_health_score_professor_v3_ciclo(
+            'fixture-ciclo-saudavel', 'controle positivo de fechamento saudavel'
+          );
+          insert into fixture_healthy_close_result values (
+            jsonb_build_object('status', 'fechado', 'resultado', v_result)
+          );
+        exception when others then
+          insert into fixture_healthy_close_result values (
+            jsonb_build_object('status', 'recusado', 'erro', sqlerrm)
+          );
+        end;
+      end;
+      $capture$;
+      select payload::text from fixture_healthy_close_result;
+    `);
+
+    const healthyOfficialState = runJson(container, `
+      select jsonb_build_object(
+        'roster_ativo', (
+          select coalesce(jsonb_agg(p.id order by p.id), '[]'::jsonb)
+          from public.professores_unidades pu
+          join public.professores p on p.id = pu.professor_id
+          where pu.unidade_id = '${healthyUnitId}'::uuid
+            and pu.emusys_ativo
+            and pu.validacao_status = 'validado'
+            and p.ativo
+        ),
+        'roster_retratado', (
+          select coalesce(jsonb_agg(r.professor_id order by r.professor_id), '[]'::jsonb)
+          from (
+            select distinct s.professor_id
+            from public.health_score_professor_v3_snapshots s
+            where s.ciclo_codigo = c.codigo
+              and s.unidade_id = '${healthyUnitId}'::uuid
+              and s.estado_publicacao in ('parcial', 'oficial')
+          ) r
+        ),
+        'estado', c.estado,
+        'publicacao_oficial', c.publicacao_oficial,
+        'ranking_habilitado', c.ranking_habilitado,
+        'snapshots_oficiais', (
+          select count(*)
+          from public.health_score_professor_v3_snapshots s
+          where s.ciclo_codigo = c.codigo
+            and s.estado_publicacao = 'oficial'
+            and s.ranking_habilitado
+        )
+      )::text
+      from public.health_score_professor_v3_ciclos c
+      where c.codigo = 'fixture-ciclo-saudavel';
     `);
 
     const expectedValidSnapshots = [
@@ -855,6 +944,14 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
         && /(?:roster|professores|pilares).*incomplet/iu.test(closeAttempt.erro)
       ),
       official_state: officialState,
+      healthy_close: {
+        status: healthyCloseAttempt.status,
+        ciclo_codigo: healthyCloseAttempt.resultado?.ciclo_codigo ?? null,
+        estado_publicacao: healthyCloseAttempt.resultado?.estado_publicacao ?? null,
+        ranking_habilitado: healthyCloseAttempt.resultado?.ranking_habilitado ?? null,
+        snapshots_fechados: healthyCloseAttempt.resultado?.snapshots_fechados ?? null,
+      },
+      healthy_official_state: healthyOfficialState,
     };
     const expected = {
       first_status: 'parcial',
@@ -891,12 +988,27 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
         ranking_habilitado: false,
         snapshots_oficiais: 0,
       },
+      healthy_close: {
+        status: 'fechado',
+        ciclo_codigo: 'fixture-ciclo-saudavel',
+        estado_publicacao: 'oficial',
+        ranking_habilitado: true,
+        snapshots_fechados: 1,
+      },
+      healthy_official_state: {
+        roster_ativo: [301],
+        roster_retratado: [301],
+        estado: 'fechado',
+        publicacao_oficial: true,
+        ranking_habilitado: true,
+        snapshots_oficiais: 1,
+      },
     };
 
     assert.deepEqual(
       observed,
       expected,
-      `falta materializacao resiliente da migration ${path.basename(correctiveMigrationPath)}; `
+      `faltam correcoes de materializacao resiliente; migrations descobertas: ${correctiveMigrationNames.join(', ') || 'nenhuma'}; `
         + 'o cron atual aborta em HEALTH_SCORE_V3_PILARES_INCOMPLETOS e chama o produtor duas vezes',
     );
   } finally {
