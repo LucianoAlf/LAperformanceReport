@@ -6,6 +6,19 @@ const migrationPath = new URL(
   '../supabase/migrations/20260806143100_health_score_v3_performance_snapshot_reader_legacy_metric_roles.sql',
   import.meta.url,
 );
+const historicalReaderMigrationPath = new URL(
+  '../supabase/migrations/20260813204212_health_score_v3_historico_leitura_nao_bloqueante.sql',
+  import.meta.url,
+);
+
+test('leitor histórico entrega retratos provisórios sem promovê-los a oficiais', async () => {
+  const sql = await readFile(historicalReaderMigrationPath, 'utf8');
+
+  assert.match(sql, /get_health_score_professor_v3_performance_snapshot_v1/i);
+  assert.match(sql, /estado\s+in\s*\(\s*'fechado'\s*,\s*'provisorio'\s*,\s*'em_maturacao'\s*\)/i);
+  assert.match(sql, /estado_publicacao\s+in\s*\(\s*'oficial'\s*,\s*'parcial'\s*,\s*'sem_base'\s*\)/i);
+  assert.doesNotMatch(sql, /update\s+public\.health_score_professor_v3_snapshots/i);
+});
 
 test('leitor direto usa somente snapshots e preserva o contrato operacional', async () => {
   const sql = await readFile(migrationPath, 'utf8');
@@ -70,6 +83,23 @@ test('frontend consulta o leitor rapido de snapshot e nunca o produtor vivo', as
   assert.match(tab, /healthV3Error\s*\?\s*\[\]\s*:\s*mergeHealthScoreV3ActiveRoster/i);
   assert.match(tab, /healthV3SnapshotCoverageIncomplete/i);
   assert.match(tab, /Retrato incompleto/i);
+});
+
+test('cobertura parcial mantém a tabela visível e sinaliza a lacuna sem bloquear o roster', async () => {
+  const tab = await readFile(
+    new URL('../src/components/App/Professores/TabPerformanceProfessores.tsx', import.meta.url),
+    'utf8',
+  );
+
+  assert.doesNotMatch(
+    tab,
+    /healthV3Error\s*\|\|\s*healthV3SnapshotUnavailable\s*\|\|\s*healthV3SnapshotCoverageIncomplete/,
+  );
+  assert.match(
+    tab,
+    /healthV3SnapshotUnavailable\s*\|\|\s*healthV3SnapshotCoverageIncomplete\s*\)\s*&&\s*\(/,
+  );
+  assert.match(tab, /mergeHealthScoreV3ActiveRoster\(\{/i);
 });
 
 test('leitor v3 evita a normalizacao legada quando o retrato ja possui papel', async () => {

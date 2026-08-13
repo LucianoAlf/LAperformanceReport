@@ -1050,24 +1050,14 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     );
   }
 
-  if (HEALTH_SCORE_V3_PERFORMANCE_ENABLED && (
-    healthV3Error || healthV3SnapshotUnavailable || healthV3SnapshotCoverageIncomplete
-  )) {
+  if (HEALTH_SCORE_V3_PERFORMANCE_ENABLED && healthV3Error) {
     return (
       <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-5 text-sm text-amber-100">
         <p className="font-semibold">
-          {healthV3Error
-            ? 'Dados de Performance indisponiveis'
-            : healthV3SnapshotCoverageIncomplete
-              ? 'Retrato incompleto'
-              : 'Retrato de Performance sendo preparado'}
+          Dados de Performance indisponiveis
         </p>
         <p className="mt-1 text-amber-100/80">
-          {healthV3Error
-            ? 'A leitura falhou. Nenhum professor foi classificado como sem base por causa desse erro.'
-            : healthV3SnapshotCoverageIncomplete
-              ? `Faltam retratos materializados para ${healthV3MissingSnapshotCount} professor(es). Nenhum professor foi classificado como sem base por causa dessa cobertura parcial.`
-              : 'Ainda nao existe uma fotografia materializada para este periodo e escopo.'}
+          A leitura falhou. Nenhum professor foi classificado como sem base por causa desse erro.
         </p>
         <button
           type="button"
@@ -1082,6 +1072,29 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
   return (
     <div className="space-y-6">
+      {HEALTH_SCORE_V3_PERFORMANCE_ENABLED && (
+        healthV3SnapshotUnavailable || healthV3SnapshotCoverageIncomplete
+      ) && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-5 text-sm text-amber-100">
+          <p className="font-semibold">
+            {healthV3SnapshotCoverageIncomplete
+              ? 'Retrato incompleto (tabela disponivel)'
+              : 'Retrato de Performance sendo preparado'}
+          </p>
+          <p className="mt-1 text-amber-100/80">
+            {healthV3SnapshotCoverageIncomplete
+              ? `Faltam retratos materializados para ${healthV3MissingSnapshotCount} professor(es). O roster continua visivel e os faltantes ficam como sem base operacional.`
+              : 'Ainda nao existe uma fotografia materializada para este periodo e escopo. O roster continua visivel ate a materializacao.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => void reloadHealthV3()}
+            className="mt-3 rounded-lg border border-amber-300/40 px-3 py-1.5 font-medium hover:bg-amber-400/10"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
       {HEALTH_SCORE_V3_PERFORMANCE_ENABLED && healthV3Error && (
         <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           A Performance V3 nao foi carregada. Nenhum indicador V2 foi usado como substituto: {healthV3Error}
