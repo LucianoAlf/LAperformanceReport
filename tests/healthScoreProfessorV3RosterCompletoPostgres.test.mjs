@@ -13,10 +13,6 @@ const currentProducerPath = path.join(
   migrationsDir,
   pinnedProducerMigrationName,
 );
-const correctiveMigrationPath = path.join(
-  root,
-  'supabase/migrations/20260813120000_health_score_v3_roster_completo_materializacao_resiliente.sql',
-);
 
 const unitA = '10000000-0000-0000-0000-000000000001';
 const unitB = '10000000-0000-0000-0000-000000000002';
@@ -116,6 +112,39 @@ function localProducerDefinitions() {
     .filter((name) => /create\s+or\s+replace\s+function\s+public\.get_health_score_professor_v3_performance\(/iu
       .test(fs.readFileSync(path.join(migrationsDir, name), 'utf8')))
     .sort();
+}
+
+function discoverCorrectiveMigrationNames() {
+  const definitions = localProducerDefinitions();
+  const pinnedIndex = definitions.indexOf(pinnedProducerMigrationName);
+  assert.notEqual(
+    pinnedIndex,
+    -1,
+    `get_health_score_professor_v3_performance deve continuar ancorada em ${pinnedProducerMigrationName}`,
+  );
+
+  const correctiveMigrationNames = definitions.slice(pinnedIndex + 1);
+  for (const migrationName of correctiveMigrationNames) {
+    assert.match(
+      migrationName,
+      /^\d{14}_.+\.sql$/u,
+      'migration corretiva deve ter nome gerado pelo Supabase CLI',
+    );
+  }
+  return correctiveMigrationNames;
+}
+
+function assertPinnedProducerDefinitionIsCurrent(correctiveMigrationNames) {
+  const definitions = localProducerDefinitions();
+  assert.ok(
+    definitions.includes(pinnedProducerMigrationName),
+    `get_health_score_professor_v3_performance deve continuar ancorada em ${pinnedProducerMigrationName}`,
+  );
+  assert.ok(
+    definitions.at(-1) === pinnedProducerMigrationName
+      || correctiveMigrationNames.includes(definitions.at(-1)),
+    `fixture desatualizada: get_health_score_professor_v3_performance foi redefinida por ${definitions.at(-1)}`,
+  );
 }
 
 function assertFullyWithoutBaseAggregate(rows, scopeName) {
@@ -429,12 +458,8 @@ function readRows(container, unitId) {
 }
 
 test('PostgreSQL exige roster completo e denominador governado em unidade e consolidado', { timeout: 120_000 }, async (t) => {
-  const producerDefinitions = localProducerDefinitions();
-  assert.equal(
-    producerDefinitions.at(-1),
-    pinnedProducerMigrationName,
-    `fixture desatualizada: ultima migration local do produtor e ${producerDefinitions.at(-1)}`,
-  );
+  const correctiveMigrationNames = discoverCorrectiveMigrationNames();
+  assertPinnedProducerDefinitionIsCurrent(correctiveMigrationNames);
   assert.equal(fs.existsSync(currentProducerPath), true, 'migration atual do roster deve existir');
   const dockerInfo = docker(['version', '--format', '{{.Server.Version}}']);
   if (dockerInfo.status !== 0) {
@@ -462,8 +487,9 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
     const installed = psql(container, currentProducer);
     assert.equal(installed.status, 0, installed.stderr || installed.stdout);
 
-    if (fs.existsSync(correctiveMigrationPath)) {
-      const corrected = psql(container, fs.readFileSync(correctiveMigrationPath, 'utf8'));
+    for (const migrationName of correctiveMigrationNames) {
+      const migrationPath = path.join(migrationsDir, migrationName);
+      const corrected = psql(container, fs.readFileSync(migrationPath, 'utf8'));
       assert.equal(corrected.status, 0, corrected.stderr || corrected.stdout);
     }
 
@@ -767,7 +793,7 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
     assert.deepEqual(
       violations,
       [],
-      `falta comportamento da migration corretiva ${path.basename(correctiveMigrationPath)}`,
+      `falta comportamento das migrations corretivas descobertas: ${correctiveMigrationNames.join(', ') || 'nenhuma'}`,
     );
   } finally {
     docker(['stop', container]);
