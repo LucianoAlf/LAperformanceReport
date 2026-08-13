@@ -6,6 +6,11 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const DEPARTAMENTO = 'sucesso_aluno';
 
+// Janela da trava anti-duplicata do AUTO-disparo. As 42 duplicatas medidas (30 alunos, desde
+// 03/07/2026) ficaram todas dentro de 60s; o reenvio espaçado mais próximo está a 19,5h. Ou
+// seja: 10 min separa acidente de reenvio legítimo com folga dos dois lados.
+const JANELA_ANTIDUPLICATA_MIN = 10;
+
 const FOOTER_MENSAGEM = 'Toque em *Avaliar* e escolha uma opção 👇 — e, se quiser, me conta também o que mais gostou!';
 
 function primeiroNome(nome) {
@@ -259,6 +264,9 @@ serve(async (req) => {
     const body = await req.json();
     const alunos = body?.alunos;
     const dryRun = body?.dry_run === true;
+    // Só o caminho automático trava duplicata (decisão Hugo, 13/08/2026). Chamada sem origem
+    // — a aba Pós-1ª Aula — segue livre para reenviar.
+    const origemAuto = body?.origem === 'auto';
     if (!Array.isArray(alunos) || alunos.length === 0) {
       return new Response(JSON.stringify({ error: 'alunos obrigatorio e nao pode ser vazio' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -385,18 +393,48 @@ serve(async (req) => {
           continue;
         }
 
-        // Upsert idempotente — reutiliza linha de tentativa anterior
-        const { error: upsertErr } = await supabase
-          .from('pesquisas_whatsapp')
-          .upsert(
-            { aluno_id, unidade_id, tipo: 'pos_primeira_aula', data_matricula, enviado_ok: false, erro_detalhes: null },
-            { onConflict: 'aluno_id,tipo,data_matricula' }
+        if (origemAuto) {
+          // Reserva ATÔMICA antes do POST: das execuções paralelas, uma leva a linha e as
+          // outras recebem false. Consultar-e-então-enviar não serviria — elas leem no mesmo
+          // segundo, antes de qualquer marcação.
+          const { data: reservou, error: reservaErr } = await supabase.rpc(
+            'reservar_envio_pesquisa_whatsapp',
+            {
+              p_aluno_id: aluno_id,
+              p_unidade_id: unidade_id,
+              p_tipo: 'pos_primeira_aula',
+              p_data_matricula: data_matricula,
+              p_janela_minutos: JANELA_ANTIDUPLICATA_MIN,
+            },
           );
 
-        if (upsertErr) {
-          console.error('[enviar-pesquisa] upsert erro:', upsertErr);
-          resultados.push({ aluno_id, ok: false, erro: upsertErr.message });
-          continue;
+          if (reservaErr) {
+            console.error('[enviar-pesquisa] reserva falhou:', reservaErr);
+            resultados.push({ aluno_id, ok: false, erro: reservaErr.message });
+            continue;
+          }
+
+          if (reservou !== true) {
+            // ok:true de propósito — a pesquisa saiu, só que por outra execução. Como falha,
+            // a orquestradora concluiria que ninguém recebeu e reenviaria o lote inteiro.
+            resultados.push({ aluno_id, ok: true, pulado: 'ja_enviada_recentemente' });
+            continue;
+          }
+        } else {
+          // Manual (aba Pós-1ª Aula): sem trava — a Fabi reenvia quando quiser, inclusive
+          // segundos depois. Upsert idempotente, reutiliza linha de tentativa anterior.
+          const { error: upsertErr } = await supabase
+            .from('pesquisas_whatsapp')
+            .upsert(
+              { aluno_id, unidade_id, tipo: 'pos_primeira_aula', data_matricula, enviado_ok: false, erro_detalhes: null },
+              { onConflict: 'aluno_id,tipo,data_matricula' }
+            );
+
+          if (upsertErr) {
+            console.error('[enviar-pesquisa] upsert erro:', upsertErr);
+            resultados.push({ aluno_id, ok: false, erro: upsertErr.message });
+            continue;
+          }
         }
 
         const resultado = await enviarBotoes(baseUrl, token, numero, textoMsg);
@@ -421,9 +459,11 @@ serve(async (req) => {
 
           resultados.push({ aluno_id, ok: true });
         } else {
+          // Libera a reserva. Sem isto, uma falha real prenderia o aluno pela janela inteira e
+          // o retry da orquestradora (5s depois) não teria efeito. No manual já é nulo.
           await supabase
             .from('pesquisas_whatsapp')
-            .update({ erro_detalhes: JSON.stringify(resultado.data) })
+            .update({ erro_detalhes: JSON.stringify(resultado.data), tentativa_envio_em: null })
             .eq('aluno_id', aluno_id)
             .eq('tipo', 'pos_primeira_aula')
             .eq('data_matricula', data_matricula);
