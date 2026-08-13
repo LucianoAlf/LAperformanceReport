@@ -4,11 +4,39 @@ import test from 'node:test';
 
 const legacyMigrationName =
   '20260808193000_health_score_v3_cron_diario_idempotente.sql';
+const resilientMaterializationMigrationName =
+  '20260813151923_health_score_v3_materializacao_resiliente.sql';
+const isolatedCronMigrationName =
+  '20260813173236_health_score_v3_cron_escopos_isolados.sql';
 const migrationPath = new URL(
   `../supabase/migrations/${legacyMigrationName}`,
   import.meta.url,
 );
 const migrationsDirectory = new URL('../supabase/migrations/', import.meta.url);
+
+function extractFinalFunctionDefinition(sql, functionName) {
+  const escapedFunctionName = functionName.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  const definitions = [
+    ...sql.matchAll(new RegExp(
+      String.raw`create\s+or\s+replace\s+function\s+${escapedFunctionName}\s*\([\s\S]*?\)\s*returns\s+[\s\S]*?as\s+\$function\$[\s\S]*?\$function\$\s*;`,
+      'giu',
+    )),
+  ];
+
+  assert.ok(definitions.length > 0, `definicao ausente para ${functionName}`);
+  return definitions.at(-1)[0];
+}
+
+function assertActivePathHasNoStatementTimeout(sql) {
+  for (const [pattern, mechanism] of [
+    [/\bstatement_timeout\b/iu, 'statement_timeout'],
+    [/\bset_config\s*\(\s*['"]statement_timeout['"]/iu, 'set_config de timeout'],
+    [/\bset\s+local\s+statement_timeout\b/iu, 'SET LOCAL'],
+    [/\balter\s+(?:role|database)\b[^;]*\bstatement_timeout\b/iu, 'ALTER ROLE/DATABASE'],
+  ]) {
+    assert.doesNotMatch(sql, pattern, `caminho ativo nao pode usar ${mechanism}`);
+  }
+}
 
 async function migration() {
   try {
@@ -50,6 +78,32 @@ function assertSemStatementTimeout(sql) {
     'migration de isolamento nao pode alterar statement_timeout por nenhum mecanismo',
   );
 }
+
+test('wrapper isolado chama executor final da 2A sem timeout transitivo', async () => {
+  const materializationSql = await readFile(
+    new URL(resilientMaterializationMigrationName, migrationsDirectory),
+    'utf8',
+  );
+  const isolatedCronSql = await readFile(
+    new URL(isolatedCronMigrationName, migrationsDirectory),
+    'utf8',
+  );
+  const executorDefinition = extractFinalFunctionDefinition(
+    materializationSql,
+    'public.executar_health_score_professor_v3_escopo_diario',
+  );
+  const wrapperDefinition = extractFinalFunctionDefinition(
+    isolatedCronSql,
+    'public.executar_health_score_professor_v3_job_escopo',
+  );
+
+  assert.match(
+    wrapperDefinition,
+    /public\.executar_health_score_professor_v3_escopo_diario\s*\(\s*date_trunc\('month',\s*current_date\)::date,\s*'mensal',\s*v_escopo,\s*v_unidade_id\s*\)/iu,
+    'wrapper 2B deve chamar a assinatura de quatro argumentos redefinida pela 2A',
+  );
+  assertActivePathHasNoStatementTimeout(`${wrapperDefinition}\n${executorDefinition}`);
+});
 
 test('cron diario registra fingerprint e evita nova revisao quando o retrato nao muda', async () => {
   const sql = await migration();
