@@ -11,6 +11,8 @@ const pinnedCronMigrationName =
   '20260808193000_health_score_v3_cron_diario_idempotente.sql';
 const pinnedCloseMigrationName =
   '20260719203100_health_score_v3_metricas_segmentadas_hardening.sql';
+const pinnedExplicitScopeMigrationName =
+  '20260806190000_health_score_v3_materializador_escopo_explicito.sql';
 const currentCronPath = path.join(
   migrationsDir,
   pinnedCronMigrationName,
@@ -21,6 +23,7 @@ const currentClosePath = path.join(
 );
 
 const pinnedDefinitions = [
+  ['materializar_health_score_professor_v3_escopo', pinnedExplicitScopeMigrationName],
   ['fingerprint_health_score_professor_v3_escopo', pinnedCronMigrationName],
   ['materializar_health_score_professor_v3_escopo_diario', pinnedCronMigrationName],
   ['executar_health_score_professor_v3_escopo_diario', pinnedCronMigrationName],
@@ -239,6 +242,71 @@ function cycleCloseLockContract() {
   };
 }
 
+function explicitScopeMaterializerLockOrderContract() {
+  const functionName = 'materializar_health_score_professor_v3_escopo';
+  const predecessorName = 'materializar_hs_prof_v3_escopo_before_lock_order_20260813';
+  const definitionName = localFunctionDefinitions(functionName).at(-1);
+  const migration = fs.readFileSync(path.join(migrationsDir, definitionName), 'utf8');
+  const migrationLower = migration.toLowerCase();
+  const wrapper = extractFunction(migration, functionName).toLowerCase();
+  const predecessor = extractFunction(
+    fs.readFileSync(path.join(migrationsDir, pinnedExplicitScopeMigrationName), 'utf8'),
+    functionName,
+  ).toLowerCase();
+  const closing = extractFunction(
+    fs.readFileSync(
+      path.join(
+        migrationsDir,
+        localFunctionDefinitions('fechar_health_score_professor_v3_ciclo').at(-1),
+      ),
+      'utf8',
+    ),
+    'fechar_health_score_professor_v3_ciclo',
+  ).toLowerCase();
+
+  const renamePattern = new RegExp(
+    `alter\\s+function\\s+public\\.${functionName}\\s*\\(\\s*date\\s*,\\s*text\\s*,\\s*text\\s*,\\s*uuid\\s*,\\s*integer\\s*\\)\\s+rename\\s+to\\s+${predecessorName}`,
+    'giu',
+  );
+  const commonKeyIndex = wrapper.indexOf('health_score_v3_periodo:');
+  const wrapperLockIndex = wrapper.indexOf('pg_advisory_xact_lock');
+  const delegateIndex = wrapper.indexOf(`public.${predecessorName}(`);
+  const truncatedCompetenceIndex = wrapper.indexOf("date_trunc('month', p_competencia)");
+  const periodicityIndex = wrapper.indexOf('p_periodicidade', commonKeyIndex);
+  const explicitKeyIndex = predecessor.indexOf('health_score_professor_v3:');
+  const predecessorLockIndex = predecessor.indexOf('pg_advisory_xact_lock');
+  const closingCommonIndex = closing.indexOf('health_score_v3_periodo:');
+  const closingExplicitIndex = closing.indexOf(
+    'health_score_professor_v3:',
+    closingCommonIndex + 1,
+  );
+
+  return {
+    unique_predecessor_rename: [...migrationLower.matchAll(renamePattern)].length === 1,
+    identical_signature_defaults:
+      /p_competencia\s+date\s*,\s*p_periodicidade\s+text\s+default\s+'mensal'\s*,\s*p_escopo\s+text\s+default\s+'unidade'\s*,\s*p_unidade_id\s+uuid\s+default\s+null\s*,\s*p_professor_id\s+integer\s+default\s+null/iu
+        .test(wrapper),
+    wrapper_security_contract: wrapper.includes('security definer')
+      && wrapper.includes('set search_path = public, pg_temp'),
+    common_lock_before_delegate: wrapperLockIndex !== -1
+      && commonKeyIndex > wrapperLockIndex
+      && delegateIndex > commonKeyIndex,
+    lock_uses_truncated_competence_and_periodicity:
+      truncatedCompetenceIndex !== -1
+      && truncatedCompetenceIndex < wrapperLockIndex
+      && periodicityIndex > commonKeyIndex
+      && periodicityIndex < delegateIndex,
+    predecessor_has_explicit_lock: predecessorLockIndex !== -1
+      && explicitKeyIndex > predecessorLockIndex,
+    delegates_all_arguments:
+      /public\.materializar_hs_prof_v3_escopo_before_lock_order_20260813\s*\(\s*p_competencia\s*,\s*p_periodicidade\s*,\s*p_escopo\s*,\s*p_unidade_id\s*,\s*p_professor_id\s*\)/iu
+        .test(wrapper),
+    same_common_then_explicit_order_as_closing: closingCommonIndex !== -1
+      && closingExplicitIndex > closingCommonIndex
+      && wrapperLockIndex < delegateIndex,
+  };
+}
+
 function nullableClassificationMigrationContract() {
   const migrationName = localFunctionDefinitions(
     'materializar_health_score_professor_v3_escopo_diario',
@@ -298,6 +366,47 @@ const fixture = `
   create role service_role;
   create function auth.role() returns text language sql stable
     as $$ select 'service_role'::text $$;
+
+  -- A fixture representa a funcao explicita ja existente quando a migration
+  -- 2A e aplicada. O corpo minimo preserva assinatura, defaults, lock explicito
+  -- e ACL para exercitar o rename + wrapper sem duplicar a implementacao real.
+  create function public.materializar_health_score_professor_v3_escopo(
+    p_competencia date,
+    p_periodicidade text default 'mensal',
+    p_escopo text default 'unidade',
+    p_unidade_id uuid default null,
+    p_professor_id integer default null
+  ) returns jsonb
+  language plpgsql
+  security definer
+  set search_path = public, pg_temp
+  as $stub$
+  begin
+    perform pg_advisory_xact_lock(hashtextextended(
+      format(
+        'health_score_professor_v3:%s:%s:%s',
+        date_trunc('month', p_competencia)::date,
+        lower(trim(coalesce(p_escopo, ''))),
+        coalesce(p_unidade_id::text, 'rede')
+      ),
+      0
+    ));
+    return jsonb_build_object(
+      'competencia', p_competencia,
+      'periodicidade', p_periodicidade,
+      'escopo', p_escopo,
+      'unidade_id', p_unidade_id,
+      'professor_id', p_professor_id,
+      'predecessor', true
+    );
+  end;
+  $stub$;
+  revoke all on function public.materializar_health_score_professor_v3_escopo(
+    date, text, text, uuid, integer
+  ) from public, anon, authenticated;
+  grant execute on function public.materializar_health_score_professor_v3_escopo(
+    date, text, text, uuid, integer
+  ) to service_role;
 
   create table public.unidades (
     id uuid primary key,
@@ -875,6 +984,7 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
     const securityContract = runJson(container, `
       with funcoes(nome, assinatura) as (
         values
+          ('materializador_escopo', 'public.materializar_health_score_professor_v3_escopo(date,text,text,uuid,integer)'),
           ('fingerprint', 'public.fingerprint_health_score_professor_v3_escopo(date,text,text,uuid)'),
           ('materializador', 'public.materializar_health_score_professor_v3_escopo_diario(date,text,text,uuid)'),
           ('executor', 'public.executar_health_score_professor_v3_escopo_diario(date,text,text,uuid)'),
@@ -897,6 +1007,13 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
       join pg_proc p on p.oid = f.assinatura::regprocedure;
     `);
     assert.deepEqual(securityContract, {
+      materializador_escopo: {
+        security_definer: true,
+        search_path: 'search_path=public, pg_temp',
+        anon: false,
+        authenticated: false,
+        service_role: true,
+      },
       fingerprint: {
         security_definer: true,
         search_path: 'search_path=public, pg_temp',
@@ -1440,6 +1557,7 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
       snapshots_after_third: snapshotsAfterThird,
       monthly_snapshots: monthlySnapshots,
       direct_materializer_lock: directMaterializerLockContract(),
+      explicit_scope_materializer_lock: explicitScopeMaterializerLockOrderContract(),
       cycle_close_lock: cycleCloseLockContract(),
       official_close_status: closeAttempt.status,
       official_close_message: closeAttempt.mensagem ?? null,
@@ -1514,6 +1632,16 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
       direct_materializer_lock: {
         lock_before_capture: true,
         lock_before_revision: true,
+      },
+      explicit_scope_materializer_lock: {
+        unique_predecessor_rename: true,
+        identical_signature_defaults: true,
+        wrapper_security_contract: true,
+        common_lock_before_delegate: true,
+        lock_uses_truncated_competence_and_periodicity: true,
+        predecessor_has_explicit_lock: true,
+        delegates_all_arguments: true,
+        same_common_then_explicit_order_as_closing: true,
       },
       cycle_close_lock: {
         complete_month_series: true,
