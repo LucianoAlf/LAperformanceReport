@@ -26,6 +26,18 @@ const expectedMetrics = [
   'presenca',
   'retencao',
 ];
+const allowedNoEvidenceStates = new Set(['sem_base']);
+const expectedMissingSources = {
+  unidade_a: {
+    101: ['media_turma', 'permanencia', 'retencao'],
+    102: expectedMetrics,
+  },
+  unidade_b: {},
+  consolidado: {
+    101: ['media_turma', 'permanencia', 'retencao'],
+    102: expectedMetrics,
+  },
+};
 
 const performanceReturn = `
   professor_id integer, unidade_id uuid, escopo text, competencia date,
@@ -190,10 +202,29 @@ const fixture = `
   insert into public.fixture_health_score_v3_evidencias
     (professor_id, unidade_id, metrica, valor_bruto, numerador, denominador, nota, amostra)
   select p.professor_id, p.unidade_id, c.metrica,
-    case when c.metrica = 'numero_alunos' then 20 else 90 end,
-    case when c.metrica = 'numero_alunos' then 20 else 9 end,
+    case
+      when c.metrica = 'numero_alunos' and p.professor_id = 105 and p.unidade_id = '${unitA}' then 21
+      when c.metrica = 'numero_alunos' and p.professor_id = 105 and p.unidade_id = '${unitB}' then 32
+      when c.metrica = 'numero_alunos' then 20
+      when p.professor_id = 105 and p.unidade_id = '${unitA}' then 91
+      when p.professor_id = 105 and p.unidade_id = '${unitB}' then 72
+      else 90
+    end,
+    case
+      when c.metrica = 'numero_alunos' and p.professor_id = 105 and p.unidade_id = '${unitA}' then 21
+      when c.metrica = 'numero_alunos' and p.professor_id = 105 and p.unidade_id = '${unitB}' then 32
+      when c.metrica = 'numero_alunos' then 20
+      when p.professor_id = 105 and p.unidade_id = '${unitA}' then 91
+      when p.professor_id = 105 and p.unidade_id = '${unitB}' then 72
+      else 9
+    end,
     case when c.metrica = 'numero_alunos' then null else 10 end,
-    case when c.metrica = 'numero_alunos' then null else 90 end,
+    case
+      when c.metrica = 'numero_alunos' then null
+      when p.professor_id = 105 and p.unidade_id = '${unitA}' then 91
+      when p.professor_id = 105 and p.unidade_id = '${unitB}' then 72
+      else 90
+    end,
     20
   from (values
     (103, '${unitA}'::uuid),
@@ -273,7 +304,7 @@ const fixture = `
   $$;
 `;
 
-function readRows(container, unitId, scope) {
+function readRows(container, unitId) {
   const unitSql = unitId === null ? 'null::uuid' : `'${unitId}'::uuid`;
   const result = psql(container, `
     select jsonb_agg(jsonb_build_object(
@@ -300,8 +331,7 @@ function readRows(container, unitId, scope) {
     ) order by professor_id, metrica)::text
     from public.get_health_score_professor_v3_performance(
       date_trunc('month', current_date)::date, ${unitSql}, 'mensal'
-    )
-    where escopo = '${scope}' and unidade_id is not distinct from ${unitSql};
+    );
   `);
   assert.equal(result.status, 0, result.stderr || result.stdout);
   return JSON.parse(result.stdout.trim() || '[]');
@@ -340,15 +370,45 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
       assert.equal(corrected.status, 0, corrected.stderr || corrected.stdout);
     }
 
+    const governedCatalog = psql(container, `
+      select jsonb_build_object(
+        'pillar_count', count(*),
+        'weight_total', coalesce(sum(peso), 0)
+      )::text
+      from public.health_score_professor_v3_config_metricas
+      where config_id = '${configId}'
+        and parametros->>'papel' = 'nota';
+    `);
+    assert.equal(governedCatalog.status, 0, governedCatalog.stderr || governedCatalog.stdout);
+    const governedScoring = JSON.parse(governedCatalog.stdout.trim());
+    assert.deepEqual(
+      governedScoring,
+      { pillar_count: 5, weight_total: 90 },
+      'fixture deve derivar cinco pilares e peso 90 do catalogo governado',
+    );
+
     const scopes = [
       { name: 'unidade_a', unitId: unitA, scope: 'unidade', professors: [101, 102, 103, 105] },
       { name: 'unidade_b', unitId: unitB, scope: 'unidade', professors: [104, 105] },
       { name: 'consolidado', unitId: null, scope: 'consolidado', professors: [101, 102, 103, 104, 105] },
     ];
     const violations = [];
+    const rowsByScope = new Map();
 
     for (const expected of scopes) {
-      const rows = readRows(container, expected.unitId, expected.scope);
+      const rawRows = readRows(container, expected.unitId);
+      const unexpectedRows = rawRows.filter(
+        (row) => row.escopo !== expected.scope || row.unidade_id !== expected.unitId,
+      );
+      assert.deepEqual(
+        unexpectedRows,
+        [],
+        `${expected.name}: RPC bruto nao pode devolver linha de outro escopo/unidade`,
+      );
+      const rows = rawRows.filter(
+        (row) => row.escopo === expected.scope && row.unidade_id === expected.unitId,
+      );
+      rowsByScope.set(expected.name, rows);
       const byProfessor = new Map();
       for (const row of rows) {
         const current = byProfessor.get(row.professor_id) ?? [];
@@ -356,11 +416,25 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
         byProfessor.set(row.professor_id, current);
       }
 
-      assert.deepEqual(
-        [...byProfessor.keys()].sort((a, b) => a - b),
-        expected.professors,
-        `${expected.name}: migration corretiva deve incluir todo professor ativo do roster`,
-      );
+      const returnedProfessors = [...byProfessor.keys()].sort((a, b) => a - b);
+      for (const professorId of expected.professors.filter(
+        (id) => !returnedProfessors.includes(id),
+      )) {
+        violations.push({
+          scope: expected.name,
+          professor_id: professorId,
+          problem: 'professor_ativo_ausente_do_roster_emitido',
+        });
+      }
+      for (const professorId of returnedProfessors.filter(
+        (id) => !expected.professors.includes(id),
+      )) {
+        violations.push({
+          scope: expected.name,
+          professor_id: professorId,
+          problem: 'professor_inesperado_no_escopo',
+        });
+      }
 
       for (const professorId of expected.professors) {
         const professorRows = byProfessor.get(professorId) ?? [];
@@ -376,41 +450,82 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
           }
         }
 
-        for (const row of professorRows.filter((item) => item.estado_base === 'sem_base')) {
-          if (
-            row.metrica_publicavel !== false
-            || row.valor_bruto !== null
-            || row.nota !== null
-            || row.numerador !== null
-            || row.denominador !== null
-            || row.peso_disponivel !== false
-            || Number(row.peso_efetivo) !== 0
-            || !row.motivo_sem_base
-            || !row.codigo_evidencia
-          ) {
-            violations.push({ scope: expected.name, professor_id: professorId, metric: row.metrica, problem: 'sem_base_invalida' });
-          }
-        }
-
         const numeroAlunos = professorRows.find((row) => row.metrica === 'numero_alunos');
         if (numeroAlunos?.papel !== 'diagnostico') {
           violations.push({ scope: expected.name, professor_id: professorId, problem: 'numero_alunos_nao_diagnostico' });
         }
-        if (professorRows.some((row) => Number(row.pilares_esperados) !== 5)) {
+        if (professorRows.some(
+          (row) => Number(row.pilares_esperados) !== governedScoring.pillar_count,
+        )) {
           violations.push({ scope: expected.name, professor_id: professorId, problem: 'pilares_esperados_nao_governados' });
         }
-        if (professorRows.some((row) => Number(row.peso_pontuavel_total) !== 90)) {
+        if (professorRows.some(
+          (row) => Number(row.peso_pontuavel_total) !== governedScoring.weight_total,
+        )) {
           violations.push({ scope: expected.name, professor_id: professorId, problem: 'peso_total_nao_governado' });
         }
       }
 
-      const expectedUnit = expected.unitId;
-      if (rows.some((row) => row.escopo !== expected.scope || row.unidade_id !== expectedUnit)) {
-        violations.push({ scope: expected.name, problem: 'vazamento_de_escopo' });
+      for (const [professorIdText, missingMetrics] of Object.entries(
+        expectedMissingSources[expected.name],
+      )) {
+        const professorId = Number(professorIdText);
+        for (const metric of missingMetrics) {
+          const matchingRows = rows.filter(
+            (row) => row.professor_id === professorId && row.metrica === metric,
+          );
+          if (matchingRows.length !== 1) {
+            violations.push({
+              scope: expected.name,
+              professor_id: professorId,
+              metric,
+              problem: 'linha_explicita_de_fonte_ausente_nao_emitida',
+              emitted_rows: matchingRows.length,
+            });
+            continue;
+          }
+
+          const [row] = matchingRows;
+          if (
+            !allowedNoEvidenceStates.has(row.estado_base)
+            || row.valor_bruto !== null
+            || row.numerador !== null
+            || row.denominador !== null
+            || row.nota !== null
+            || row.metrica_publicavel !== false
+            || row.peso_disponivel !== false
+            || Number(row.peso_efetivo) !== 0
+            || typeof row.motivo_sem_base !== 'string'
+            || row.motivo_sem_base.trim() === ''
+            || typeof row.codigo_evidencia !== 'string'
+            || row.codigo_evidencia.trim() === ''
+          ) {
+            violations.push({
+              scope: expected.name,
+              professor_id: professorId,
+              metric,
+              problem: 'linha_explicita_de_fonte_ausente_invalida',
+            });
+          }
+
+          if (
+            row.valor_bruto === 0
+            || row.numerador === 0
+            || row.denominador === 0
+            || row.nota === 0
+          ) {
+            violations.push({
+              scope: expected.name,
+              professor_id: professorId,
+              metric,
+              problem: 'fonte_ausente_convertida_em_zero',
+            });
+          }
+        }
       }
     }
 
-    const unitARows = readRows(container, unitA, 'unidade');
+    const unitARows = rowsByScope.get('unidade_a');
     for (const professorId of [101, 102]) {
       const rows = unitARows.filter((row) => row.professor_id === professorId);
       if (rows.some((row) => row.score_comparavel !== null || row.classificacao !== null)) {
@@ -421,9 +536,51 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
     if (recentlyLinked && recentlyLinked.score_observado === null) {
       violations.push({ scope: 'unidade_a', professor_id: 101, problem: 'score_observado_parcial_ausente' });
     }
-    const noEvidence = unitARows.filter((row) => row.professor_id === 102);
-    if (noEvidence.some((row) => row.valor_bruto === 0 || row.nota === 0)) {
-      violations.push({ scope: 'unidade_a', professor_id: 102, problem: 'ausencia_convertida_em_zero' });
+    const unitBRows = rowsByScope.get('unidade_b');
+    const consolidatedRows = rowsByScope.get('consolidado');
+    const multiUnitFacts = [
+      { scope: 'unidade_a', rows: unitARows, metric: 'presenca', expectedValue: 91 },
+      { scope: 'unidade_a', rows: unitARows, metric: 'numero_alunos', expectedValue: 21 },
+      { scope: 'unidade_b', rows: unitBRows, metric: 'presenca', expectedValue: 72 },
+      { scope: 'unidade_b', rows: unitBRows, metric: 'numero_alunos', expectedValue: 32 },
+    ];
+    for (const fact of multiUnitFacts) {
+      const row = fact.rows.find(
+        (item) => item.professor_id === 105 && item.metrica === fact.metric,
+      );
+      if (Number(row?.valor_bruto) !== fact.expectedValue) {
+        violations.push({
+          scope: fact.scope,
+          professor_id: 105,
+          metric: fact.metric,
+          problem: 'fato_da_unidade_incorreto',
+          expected: fact.expectedValue,
+          actual: row?.valor_bruto ?? null,
+        });
+      }
+    }
+
+    if (consolidatedRows.length !== 5 * expectedMetrics.length) {
+      violations.push({
+        scope: 'consolidado',
+        problem: 'quantidade_de_linhas_consolidada_incorreta',
+        expected: 5 * expectedMetrics.length,
+        actual: consolidatedRows.length,
+      });
+    }
+    const multiUnitConsolidated = consolidatedRows.filter(
+      (row) => row.professor_id === 105,
+    );
+    if (
+      multiUnitConsolidated.length !== expectedMetrics.length
+      || new Set(multiUnitConsolidated.map((row) => row.metrica)).size !== expectedMetrics.length
+    ) {
+      violations.push({
+        scope: 'consolidado',
+        professor_id: 105,
+        problem: 'professor_multiunidade_duplicado',
+        rows: multiUnitConsolidated.length,
+      });
     }
 
     assert.deepEqual(
