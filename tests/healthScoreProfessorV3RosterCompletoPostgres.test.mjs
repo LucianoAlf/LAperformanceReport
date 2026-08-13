@@ -298,7 +298,8 @@ const fixture = `
   create table public.professores (
     id integer primary key,
     nome text not null,
-    ativo boolean not null
+    ativo boolean not null,
+    mesclado_em_professor_id integer references public.professores(id)
   );
   create table public.professores_unidades (
     professor_id integer not null references public.professores(id),
@@ -341,15 +342,18 @@ const fixture = `
   insert into public.unidades values
     ('${unitA}', 'Unidade Sintetica A', true),
     ('${unitB}', 'Unidade Sintetica B', true);
-  insert into public.professores values
-    (101, 'Professor Recem Vinculado', true),
-    (102, 'Professor Sem Turmas Elegiveis', true),
-    (103, 'Professor Matriz Completa', true),
-    (104, 'Professor Unidade B', true),
-    (105, 'Professor Multiunidade', true),
-    (106, 'Professor Globalmente Inativo', false),
-    (107, 'Professor Vinculo Emusys Inativo', true),
-    (108, 'Professor Vinculo Ignorado', true);
+  insert into public.professores
+    (id, nome, ativo, mesclado_em_professor_id)
+  values
+    (101, 'Professor Recem Vinculado', true, null),
+    (102, 'Professor Sem Turmas Elegiveis', true, null),
+    (103, 'Professor Matriz Completa', true, null),
+    (104, 'Professor Unidade B', true, null),
+    (105, 'Professor Multiunidade', true, null),
+    (106, 'Professor Globalmente Inativo', false, null),
+    (107, 'Professor Vinculo Emusys Inativo', true, null),
+    (108, 'Professor Vinculo Ignorado', true, null),
+    (109, 'Professor Cadastro Mesclado', true, 103);
   insert into public.professores_unidades values
     (101, '${unitA}', true, 'validado'),
     (102, '${unitA}', true, 'validado'),
@@ -359,7 +363,8 @@ const fixture = `
     (105, '${unitB}', true, 'validado'),
     (106, '${unitA}', true, 'validado'),
     (107, '${unitA}', false, 'validado'),
-    (108, '${unitA}', true, 'ignorado');
+    (108, '${unitA}', true, 'ignorado'),
+    (109, '${unitA}', true, 'validado');
 
   insert into public.health_score_professor_v3_config_versoes values (
     '${configId}', 4, 'ativa', date '2026-08-01', null, 60, 70, 85
@@ -416,7 +421,8 @@ const fixture = `
     (105, '${unitB}'::uuid),
     (106, '${unitA}'::uuid),
     (107, '${unitA}'::uuid),
-    (108, '${unitA}'::uuid)
+    (108, '${unitA}'::uuid),
+    (109, '${unitA}'::uuid)
   ) p(professor_id, unidade_id)
   cross join public.health_score_professor_v3_config_metricas c
   where c.config_id = '${configId}';
@@ -523,18 +529,34 @@ function readRows(container, unitId) {
       'professor_id', professor_id,
       'unidade_id', unidade_id,
       'escopo', escopo,
+      'estado_publicacao', estado_publicacao,
+      'score_exibivel', score_exibivel,
+      'ranking_habilitado', ranking_habilitado,
+      'score', score,
+      'estado', estado,
+      'snapshot_publicavel', snapshot_publicavel,
+      'publicado', publicado,
+      'motivo_bloqueio', motivo_bloqueio,
       'metrica', metrica,
       'valor_bruto', valor_bruto,
       'numerador', numerador,
       'denominador', denominador,
       'nota', nota,
+      'meta', meta,
+      'amostra', amostra,
       'estado_base', estado_base,
       'metrica_publicavel', metrica_publicavel,
+      'confianca', confianca,
+      'fonte', fonte,
+      'regra_versao_metrica', regra_versao_metrica,
       'motivo_sem_base', motivo_sem_base,
+      'peso', peso,
       'peso_disponivel', peso_disponivel,
       'peso_efetivo', peso_efetivo,
+      'contribuicao', contribuicao,
       'codigo_evidencia', codigo_evidencia,
       'papel', papel,
+      'detalhes', detalhes,
       'score_observado', score_observado,
       'score_comparavel', score_comparavel,
       'classificacao', classificacao,
@@ -542,8 +564,11 @@ function readRows(container, unitId) {
       'cobertura_normalizada', cobertura_normalizada,
       'pilares_validos', pilares_validos,
       'pilares_esperados', pilares_esperados,
+      'comparabilidade_estado', comparabilidade_estado,
+      'comparabilidade_motivo', comparabilidade_motivo,
       'peso_pontuavel_total', peso_pontuavel_total,
-      'peso_disponivel_total', peso_disponivel_total
+      'peso_disponivel_total', peso_disponivel_total,
+      'comparabilidade_motivos', comparabilidade_motivos
     ) order by professor_id, metrica)::text
     from public.get_health_score_professor_v3_performance(
       date_trunc('month', current_date)::date, ${unitSql}, 'mensal'
@@ -581,6 +606,18 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
     );
     const installed = psql(container, currentProducer);
     assert.equal(installed.status, 0, installed.stderr || installed.stdout);
+
+    const healthyProfessorsByScope = [
+      { name: 'unidade_a', unitId: unitA, professorIds: [103, 105] },
+      { name: 'unidade_b', unitId: unitB, professorIds: [104, 105] },
+      { name: 'consolidado', unitId: null, professorIds: [103, 104, 105] },
+    ];
+    const healthyProducerBaseline = new Map(healthyProfessorsByScope.map((scope) => [
+      scope.name,
+      readRows(container, scope.unitId).filter(
+        (row) => scope.professorIds.includes(row.professor_id),
+      ),
+    ]));
 
     for (const { migrationName, sql } of correctiveMigrations) {
       const corrected = psql(container, sql);
@@ -653,7 +690,7 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
       from (
         select professor_id, count(*)::integer as quantidade
         from public.fixture_health_score_v3_evidencias
-        where professor_id in (106, 107, 108)
+        where professor_id in (106, 107, 108, 109)
         group by professor_id
         order by professor_id
       ) q;
@@ -661,7 +698,7 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
     assert.equal(negativeEvidence.status, 0, negativeEvidence.stderr || negativeEvidence.stdout);
     assert.deepEqual(
       JSON.parse(negativeEvidence.stdout.trim()),
-      { 106: 6, 107: 6, 108: 6 },
+      { 106: 6, 107: 6, 108: 6, 109: 6 },
       'controles negativos devem possuir seis evidencias sinteticas reais cada',
     );
 
@@ -776,6 +813,7 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
             || row.numerador !== null
             || row.denominador !== null
             || row.nota !== null
+            || row.amostra !== null
             || row.metrica_publicavel !== false
             || row.peso_disponivel !== false
             || Number(row.peso_efetivo) !== 0
@@ -810,7 +848,7 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
     }
 
     const unitARows = rowsByScope.get('unidade_a');
-    for (const negativeProfessorId of [106, 107, 108]) {
+    for (const negativeProfessorId of [106, 107, 108, 109]) {
       for (const [scope, rows] of rowsByScope) {
         assert.equal(
           rows.some((row) => row.professor_id === negativeProfessorId),
@@ -841,6 +879,16 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
 
     const unitBRows = rowsByScope.get('unidade_b');
     const consolidatedRows = rowsByScope.get('consolidado');
+    for (const scope of healthyProfessorsByScope) {
+      const actualHealthyRows = rowsByScope.get(scope.name).filter(
+        (row) => scope.professorIds.includes(row.professor_id),
+      );
+      assert.deepEqual(
+        actualHealthyRows,
+        healthyProducerBaseline.get(scope.name),
+        `${scope.name}: professor totalmente saudavel deve preservar integralmente o payload de negocio do produtor vigente`,
+      );
+    }
     assertFullyWithoutBaseAggregate(unitARows, 'unidade_a');
     assertFullyWithoutBaseAggregate(consolidatedRows, 'consolidado');
     const multiUnitFacts = [
