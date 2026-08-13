@@ -148,6 +148,19 @@ as $function$
     select distinct on (b.professor_id) b.*
     from base_unica b
     order by b.professor_id, (b.config_id is not null) desc, b.metrica
+  ), saudaveis as (
+    select b.professor_id
+    from base_unica b
+    join catalogo c on c.metrica = b.metrica
+    cross join governo g
+    group by b.professor_id, g.pilares_esperados
+    having count(*) = (select count(*) from catalogo)
+      and count(*) filter (
+        where c.papel = 'nota'
+          and b.nota is not null
+          and coalesce(b.peso_disponivel, false)
+          and coalesce(b.metrica_publicavel, false)
+      ) = g.pilares_esperados
   ), matriz as materialized (
     select
       r.professor_id,
@@ -279,7 +292,7 @@ as $function$
       else null::numeric
     end,
     m.meta,
-    case when m.evidencia_emitida then m.amostra else 0 end,
+    case when m.evidencia_emitida then m.amostra else null::integer end,
     case when m.evidencia_emitida then m.estado_base else 'sem_base'::text end,
     case when m.evidencia_emitida then m.metrica_publicavel else false end,
     case when m.evidencia_emitida then m.confianca else 'sem_base'::text end,
@@ -348,7 +361,18 @@ as $function$
   join avaliada a on a.professor_id = m.professor_id
   cross join parametros p
   cross join configuracao c
-  left join modelo md on md.professor_id = m.professor_id;
+  left join modelo md on md.professor_id = m.professor_id
+  where not exists (
+    select 1 from saudaveis s where s.professor_id = m.professor_id
+  )
+
+  union all
+
+  -- Professor ja completo e comparavel atravessa a fronteira sem qualquer
+  -- recalculo. A Sprint 1 so completa lacunas; nao reinterpreta dado saudavel.
+  select b.*
+  from base_unica b
+  join saudaveis s on s.professor_id = b.professor_id;
 $function$;
 
 revoke all on function public.get_health_score_professor_v3_performance(
