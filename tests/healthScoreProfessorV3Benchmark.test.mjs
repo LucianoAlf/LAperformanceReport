@@ -5,9 +5,12 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+  assertStatusContract,
   assertTrackFunctions,
+  cronBudgetMs,
   dominantFunctionDelta,
   restartWindowMinutes,
+  summarizeRounds,
   validateActiveUnits,
   validateRestartEvidence,
 } from '../scripts/benchmark-health-score-professor-v3.mjs';
@@ -164,10 +167,67 @@ test('benchmark recusa track_functions diferente de all', () => {
   assert.throws(() => assertTrackFunctions(''), /valor atual: vazio/iu);
 });
 
-test('benchmark mede quatro executores completos em rollback e preserva EXPLAIN bruto', () => {
-  assert.match(script, /begin;[\s\S]*explain\s*\(analyze,\s*buffers,\s*format json\)[\s\S]*executar_health_score_professor_v3_escopo_diario[\s\S]*rollback;/iu);
+test('benchmark exige estado inicial materializado e reruns sem alteracao', () => {
+  for (const status of ['materializado', 'parcial', 'baseline_adotado']) {
+    assert.equal(assertStatusContract(1, status), status);
+  }
+  assert.equal(assertStatusContract(2, 'sem_alteracao'), 'sem_alteracao');
+  assert.equal(assertStatusContract(3, 'sem_alteracao'), 'sem_alteracao');
+  assert.throws(() => assertStatusContract(1, 'sem_alteracao'), /rodada 1.*inesperado/iu);
+  assert.throws(() => assertStatusContract(2, 'materializado'), /deve exercitar sem_alteracao/iu);
+  assert.throws(() => assertStatusContract(3, 'parcial'), /deve exercitar sem_alteracao/iu);
+});
+
+test('resumo decide pelo total dos quatro escopos sem apagar decisao historica', () => {
+  const scopes = [
+    ...unitIds.map((id) => ({ escopo: 'unidade', unidade_id: id })),
+    { escopo: 'consolidado', unidade_id: null },
+  ];
+  const measurements = [1, 2, 3].flatMap((round) => scopes.map((scope, index) => ({
+    round,
+    scope,
+    status: round === 1 ? 'materializado' : 'sem_alteracao',
+    summary: { execution_time_ms: (index + 1) * 1_000 },
+  })));
+  const eligible = summarizeRounds(measurements, { 1: 11_000, 2: 10_500, 3: 10_250 });
+  assert.deepEqual(
+    eligible.rounds.map((round) => round.execution_time_total_ms),
+    [10_000, 10_000, 10_000],
+  );
+  assert.deepEqual(
+    eligible.rounds.map((round) => round.classification),
+    ['abaixo_75s', 'abaixo_75s', 'abaixo_75s'],
+  );
+  assert.equal(eligible.rounds[0].wall_clock_ms, 11_000);
+  assert.equal(eligible.rounds[0].max_scope.execution_time_ms, 4_000);
+  assert.equal(Object.keys(eligible.rounds[0].states_by_scope).length, 4);
+  assert.equal(eligible.decision.decisao_global, 'sequencial_elegivel');
+  assert.equal(eligible.decision.decisao_historica, 'isolamento_obrigatorio');
+  assert.equal(eligible.decision.decisao_operacional, 'isolamento_obrigatorio');
+
+  const slow = structuredClone(measurements);
+  slow.find((entry) => entry.round === 2).summary.execution_time_ms = cronBudgetMs - 9_000;
+  const isolated = summarizeRounds(slow, { 1: 11_000, 2: 80_000, 3: 10_250 });
+  assert.equal(isolated.rounds[1].classification, 'atingiu_ou_superou_75s');
+  assert.equal(isolated.rounds[1].execution_time_total_ms, cronBudgetMs);
+  assert.equal(isolated.decision.decisao_global, 'isolamento_obrigatorio');
+  assert.equal(isolated.decision.decisao_historica, 'isolamento_obrigatorio');
+});
+
+test('benchmark mede doze executores numa transacao com rollback unico no finally', () => {
+  assert.equal((script.match(/session\.query\('begin;'\)/gu) || []).length, 1);
+  assert.equal((script.match(/session\.query\('rollback;'\)/gu) || []).length, 1);
+  assert.match(script, /try\s*\{[\s\S]*for\s*\(let round = 1; round <= 3; round \+= 1\)[\s\S]*finally\s*\{[\s\S]*rollbackOnce\(\)/u);
+  assert.match(script, /process\.once\('SIGINT',\s*signalHandler\)/u);
+  assert.match(script, /process\.once\('SIGTERM',\s*signalHandler\)/u);
+  assert.match(script, /create temporary table health_score_v3_benchmark_resultados/iu);
+  assert.match(script, /explain\s*\(analyze,\s*buffers,\s*format json\)[\s\S]*insert into health_score_v3_benchmark_resultados[\s\S]*executar_health_score_professor_v3_escopo_diario/iu);
+  assert.doesNotMatch(script, /function executionSql[\s\S]{0,900}\bbegin;|function executionSql[\s\S]{0,900}\brollback;/iu);
   assert.doesNotMatch(script, /get_health_score_professor_v3_performance\s*\(/iu);
   assert.match(script, /for\s*\(let round = 1; round <= 3; round \+= 1\)/u);
+  assert.match(script, /assertStatusContract\(round,\s*result\.status\)/u);
+  assert.match(script, /writes_preserved_between_rounds:\s*true/u);
+  assert.match(script, /transaction_policy:\s*'uma_transacao_12_execucoes_rollback_unico_finally'/u);
   assert.match(script, /raw_explain:\s*rawExplain/u);
   assert.match(script, /requiredNumber\(root,\s*'Temp Read Blocks'/u);
   assert.match(script, /requiredNumber\(root,\s*'Temp Written Blocks'/u);
@@ -179,18 +239,25 @@ test('benchmark mede quatro executores completos em rollback e preserva EXPLAIN 
   assert.match(script, /dominant_function_pg_stat:\s*dominantFunction/u);
   assert.match(script, /pg_stat_user_functions sem delta positivo/iu);
   assert.doesNotMatch(script, /available:\s*false/u);
-  assert.match(script, /benchmark incompleto: funcao dominante indisponivel/iu);
   assert.match(script, /funcid::text/iu);
   assert.doesNotMatch(script, /dominant_node|Function Name/iu);
   assert.match(script, /pg_postmaster_start_time\s*\(\)/u);
   assert.match(script, /shared_buffers_reiniciado_observavel/u);
   assert.match(script, /:\s*'aquecida'/u);
-  assert.match(script, /cache do sistema operacional nao e controlado nem garantido/iu);
+  assert.match(script, /cache\s+do sistema operacional nao e controlado nem garantido/iu);
   assert.match(script, /postgres_restarted_after_evidence/iu);
   assert.match(script, /first_round_started_at/iu);
   assert.match(script, /reiniciou entre a verificacao e a primeira rodada/iu);
   assert.match(script, /from public\.unidades[\s\S]*where ativo = true/iu);
   assert.match(script, /alert_wrapper:\s*'validado_separadamente_nao_disparado_no_benchmark'/u);
+  assert.match(script, /execution_time_total_ms/iu);
+  assert.match(script, /wall_clock_ms/iu);
+  assert.match(script, /max_scope/iu);
+  assert.match(script, /states_by_scope/iu);
+  assert.match(script, /abaixo_75s/iu);
+  assert.match(script, /atingiu_ou_superou_75s/iu);
+  assert.match(script, /sequencial_elegivel/iu);
+  assert.match(script, /decisao_historica:\s*'isolamento_obrigatorio'/u);
   assert.match(script, /PowerShell \(uma linha\)/u);
   assert.doesNotMatch(script, /node scripts\/benchmark[^\n]*\\\s*$/mu);
 });
