@@ -121,7 +121,7 @@ Os nulos históricos de `papel` são reais nas linhas brutas:
 | Mensal | 960/2358 |
 
 Entretanto, as revisões elegíveis mais recentes de agosto têm **zero** papel nulo.
-Logo, o fast path V1 não está atualmente morto por esse motivo. Os números
+Logo, o fast path V1 está ativo para as leituras elegíveis atuais. Os números
 históricos não sustentam recomendação de backfill indiscriminado: qualquer
 reparo futuro deve delimitar revisões realmente consumidas, demonstrar impacto e
 preservar a proveniência antes de escrever.
