@@ -13,12 +13,10 @@ const currentProducerPath = path.join(
   migrationsDir,
   pinnedProducerMigrationName,
 );
-const rosterFunctionManifest = [
-  'get_health_score_professor_v3_performance',
-  'get_professor_retencao_v3_governada',
-  'get_health_score_professor_v3_permanencia_periodo_v2',
-  'get_health_score_professor_v3_metricas_segmentadas_agregadas_v1',
-];
+// Fronteira canonica desta sprint: evidencias podem continuar esparsas nos
+// produtores; a migration corretiva deve redefinir este montador final para
+// completar a matriz professor x metrica depois de anexar essas evidencias.
+const rosterContractFunctionName = 'get_health_score_professor_v3_performance';
 
 const unitA = '10000000-0000-0000-0000-000000000001';
 const unitB = '10000000-0000-0000-0000-000000000002';
@@ -100,7 +98,7 @@ async function waitForPostgres(container) {
 }
 
 function extractFunction(sql, functionName) {
-  const start = sql.search(functionDeclarationPattern(functionName));
+  const start = findTopLevelFunctionDeclaration(sql, functionName);
   assert.notEqual(start, -1, `funcao ${functionName} deve existir na migration atual`);
   const bodyStart = sql.indexOf('$function$', start);
   const end = sql.indexOf('$function$;', bodyStart + '$function$'.length);
@@ -109,11 +107,82 @@ function extractFunction(sql, functionName) {
   return sql.slice(start, end + '$function$;'.length);
 }
 
-function functionDeclarationPattern(functionName) {
-  return new RegExp(
-    `create\\s+(?:or\\s+replace\\s+)?function\\s+public\\.${functionName}\\s*\\(`,
+function maskSqlCommentsAndLiterals(sql) {
+  const masked = sql.split('');
+  const blank = (start, end) => {
+    for (let index = start; index < end; index += 1) {
+      if (masked[index] !== '\n' && masked[index] !== '\r') masked[index] = ' ';
+    }
+  };
+
+  for (let index = 0; index < sql.length;) {
+    if (sql.startsWith('--', index)) {
+      const end = sql.indexOf('\n', index + 2);
+      const boundary = end === -1 ? sql.length : end;
+      blank(index, boundary);
+      index = boundary;
+      continue;
+    }
+    if (sql.startsWith('/*', index)) {
+      let depth = 1;
+      let cursor = index + 2;
+      while (cursor < sql.length && depth > 0) {
+        if (sql.startsWith('/*', cursor)) {
+          depth += 1;
+          cursor += 2;
+        } else if (sql.startsWith('*/', cursor)) {
+          depth -= 1;
+          cursor += 2;
+        } else {
+          cursor += 1;
+        }
+      }
+      blank(index, cursor);
+      index = cursor;
+      continue;
+    }
+    if (sql[index] === "'" || sql[index] === '"') {
+      const quote = sql[index];
+      let cursor = index + 1;
+      while (cursor < sql.length) {
+        if (sql[cursor] === quote && sql[cursor + 1] === quote) {
+          cursor += 2;
+        } else if (sql[cursor] === quote) {
+          cursor += 1;
+          break;
+        } else if (quote === "'" && sql[cursor] === '\\') {
+          cursor += 2;
+        } else {
+          cursor += 1;
+        }
+      }
+      blank(index, cursor);
+      index = cursor;
+      continue;
+    }
+    if (sql[index] === '$') {
+      const delimiter = sql.slice(index).match(/^\\$(?:[A-Za-z_][A-Za-z0-9_]*)?\\$/u)?.[0];
+      if (delimiter) {
+        const closing = sql.indexOf(delimiter, index + delimiter.length);
+        const boundary = closing === -1 ? sql.length : closing + delimiter.length;
+        blank(index, boundary);
+        index = boundary;
+        continue;
+      }
+    }
+    index += 1;
+  }
+  return masked.join('');
+}
+
+function findTopLevelFunctionDeclaration(sql, functionName) {
+  const executableSql = maskSqlCommentsAndLiterals(sql);
+  const declaration = new RegExp(
+    `(?:^|;)\\s*(create\\s+(?:or\\s+replace\\s+)?function\\s+public\\.${functionName}\\s*\\()`,
     'iu',
-  );
+  ).exec(executableSql);
+  if (!declaration) return -1;
+  return declaration.index + declaration[0].lastIndexOf(declaration[1]);
 }
 
 function localMigrationNames() {
@@ -132,9 +201,9 @@ function discoverCorrectiveMigrations() {
   );
 
   const pinnedSql = fs.readFileSync(currentProducerPath, 'utf8');
-  assert.match(
-    pinnedSql,
-    functionDeclarationPattern('get_health_score_professor_v3_performance'),
+  assert.notEqual(
+    findTopLevelFunctionDeclaration(pinnedSql, rosterContractFunctionName),
+    -1,
     `${pinnedProducerMigrationName} deve declarar o produtor principal ancorado`,
   );
 
@@ -142,22 +211,35 @@ function discoverCorrectiveMigrations() {
   for (const migrationName of migrationNames.slice(pinnedIndex + 1)) {
     const migrationPath = path.join(migrationsDir, migrationName);
     const sql = fs.readFileSync(migrationPath, 'utf8');
-    const declaredFunctions = rosterFunctionManifest.filter((functionName) => (
-      functionDeclarationPattern(functionName).test(sql)
-    ));
-    if (declaredFunctions.length === 0) continue;
+    if (findTopLevelFunctionDeclaration(sql, rosterContractFunctionName) === -1) continue;
 
     assert.match(
       migrationName,
       /^\d{14}_.+\.sql$/u,
       'migration corretiva deve ter nome gerado pelo Supabase CLI',
     );
-    discovered.set(migrationName, { migrationName, sql, declaredFunctions });
+    discovered.set(migrationName, { migrationName, sql });
   }
   return [...discovered.values()].sort((a, b) => (
     a.migrationName.localeCompare(b.migrationName)
   ));
 }
+
+test('detector reconhece apenas declaracao SQL de nivel superior do montador final', () => {
+  const declaration = `create function public.${rosterContractFunctionName}() returns void as $$ begin null; end $$ language plpgsql;`;
+  const replacement = `set check_function_bodies = off;\ncreate or replace function public.${rosterContractFunctionName}() returns void as $body$ begin null; end $body$ language plpgsql;`;
+  assert.notEqual(findTopLevelFunctionDeclaration(declaration, rosterContractFunctionName), -1);
+  assert.notEqual(findTopLevelFunctionDeclaration(replacement, rosterContractFunctionName), -1);
+
+  for (const falsePositive of [
+    `-- create function public.${rosterContractFunctionName}()`,
+    `/* create or replace function public.${rosterContractFunctionName}() */ select 1;`,
+    `select 'create function public.${rosterContractFunctionName}()';`,
+    `do $body$ begin execute 'create or replace function public.${rosterContractFunctionName}()'; end $body$;`,
+  ]) {
+    assert.equal(findTopLevelFunctionDeclaration(falsePositive, rosterContractFunctionName), -1);
+  }
+});
 
 function assertFullyWithoutBaseAggregate(rows, scopeName) {
   const professorRows = rows.filter((row) => row.professor_id === 102);
@@ -498,12 +580,12 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
     const installed = psql(container, currentProducer);
     assert.equal(installed.status, 0, installed.stderr || installed.stdout);
 
-    for (const { migrationName, sql, declaredFunctions } of correctiveMigrations) {
+    for (const { migrationName, sql } of correctiveMigrations) {
       const corrected = psql(container, sql);
       assert.equal(
         corrected.status,
         0,
-        `${migrationName} (${declaredFunctions.join(', ')}): ${corrected.stderr || corrected.stdout}`,
+        `${migrationName} (${rosterContractFunctionName}): ${corrected.stderr || corrected.stdout}`,
       );
     }
 
