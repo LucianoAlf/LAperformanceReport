@@ -33,6 +33,7 @@ const unitId = '10000000-0000-0000-0000-000000000001';
 const healthyUnitId = '10000000-0000-0000-0000-000000000002';
 const absentUnitId = '10000000-0000-0000-0000-000000000003';
 const configId = '20000000-0000-0000-0000-000000000001';
+const inconsistentConfigId = '20000000-0000-0000-0000-000000000002';
 const cycleSnapshotId = '30000000-0000-0000-0000-000000000001';
 
 const performanceReturn = `
@@ -195,6 +196,34 @@ function directMaterializerLockContract() {
   };
 }
 
+function cycleCloseLockContract() {
+  const definitionName = localFunctionDefinitions(
+    'fechar_health_score_professor_v3_ciclo',
+  ).at(-1);
+  const definition = extractFunction(
+    fs.readFileSync(path.join(migrationsDir, definitionName), 'utf8'),
+    'fechar_health_score_professor_v3_ciclo',
+  ).toLowerCase();
+  const seriesIndex = definition.indexOf('generate_series');
+  const startIndex = definition.indexOf('v_ciclo.data_inicio', seriesIndex);
+  const endIndex = definition.indexOf('v_ciclo.data_fim', seriesIndex);
+  const orderIndex = definition.indexOf('order by competencia', seriesIndex);
+  const lockIndex = definition.indexOf('pg_advisory_xact_lock', seriesIndex);
+  const cycleKeyIndex = definition.indexOf("|| ':ciclo'", lockIndex);
+  const rosterValidationIndex = definition.indexOf('with roster_unidade');
+  const candidatesIndex = definition.indexOf('with candidatos');
+  return {
+    complete_month_series: seriesIndex !== -1
+      && startIndex > seriesIndex
+      && endIndex > startIndex,
+    ordered_before_lock: orderIndex > seriesIndex && lockIndex > orderIndex,
+    cycle_materializer_key: cycleKeyIndex > lockIndex,
+    lock_before_roster_and_candidates: lockIndex !== -1
+      && rosterValidationIndex > lockIndex
+      && candidatesIndex > rosterValidationIndex,
+  };
+}
+
 function readStrictIncompleteProfessors(payload) {
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return null;
   if (!Object.hasOwn(payload, 'professores_incompletos')) return null;
@@ -210,6 +239,28 @@ function readStrictIncompleteProfessors(payload) {
     && item.metricas_ausentes.every((metric) => typeof metric === 'string')
     && JSON.stringify(item.metricas_ausentes)
       === JSON.stringify([...item.metricas_ausentes].sort())
+  ));
+  return valid ? value : { schema_invalido: true, valor: value };
+}
+
+function readStrictInconsistentConfigurations(payload) {
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  if (!Object.hasOwn(payload, 'professores_configuracao_inconsistente')) return null;
+  const value = payload.professores_configuracao_inconsistente;
+  const valid = Array.isArray(value) && value.every((item) => (
+    item !== null
+    && typeof item === 'object'
+    && !Array.isArray(item)
+    && JSON.stringify(Object.keys(item).sort())
+      === JSON.stringify(['config_ids', 'config_versoes', 'professor_id'])
+    && Number.isInteger(item.professor_id)
+    && Array.isArray(item.config_ids)
+    && item.config_ids.every((id) => typeof id === 'string')
+    && JSON.stringify(item.config_ids) === JSON.stringify([...item.config_ids].sort())
+    && Array.isArray(item.config_versoes)
+    && item.config_versoes.every((version) => Number.isInteger(version))
+    && JSON.stringify(item.config_versoes)
+      === JSON.stringify([...item.config_versoes].sort((a, b) => a - b))
   ));
   return valid ? value : { schema_invalido: true, valor: value };
 }
@@ -366,17 +417,23 @@ const fixture = `
     (201, 'Professor Valido Um', true),
     (202, 'Professor Incompleto', true),
     (203, 'Professor Valido Dois', true),
+    (204, 'Professor Sem Linha na Fonte', true),
+    (205, 'Professor Em Maturacao', true),
+    (206, 'Professor Configuracao Misturada', true),
     (301, 'Professor Roster Saudavel', true),
     (401, 'Professor Unidade Ausente', true);
   insert into public.professores_unidades values
     (201, '${unitId}', true, 'validado'),
     (202, '${unitId}', true, 'validado'),
     (203, '${unitId}', true, 'validado'),
+    (204, '${unitId}', true, 'validado'),
+    (205, '${unitId}', true, 'validado'),
+    (206, '${unitId}', true, 'validado'),
     (301, '${healthyUnitId}', true, 'validado'),
     (401, '${absentUnitId}', true, 'validado');
-  insert into public.health_score_professor_v3_config_versoes values (
-    '${configId}', 4, 'ativa', date '2026-08-01', null, 60, 70, 85
-  );
+  insert into public.health_score_professor_v3_config_versoes values
+    ('${configId}', 4, 'ativa', date '2026-08-01', null, 60, 70, 85),
+    ('${inconsistentConfigId}', 5, 'rascunho', date '2026-08-01', null, 60, 70, 85);
   insert into public.health_score_professor_v3_config_metricas
     (config_id, metrica, peso, meta, parametros)
   values
@@ -390,7 +447,8 @@ const fixture = `
   create function public.fn_health_score_professor_v3_ator_gerenciador()
   returns integer language sql stable as $$ select 999::integer $$;
 
-  -- Produtor atual instrumentado: 201 e 203 sao validos; 202 nao tem retencao/permanencia.
+  -- 204 tem zero linhas; 205 possui seis linhas, mas permanece em maturacao;
+  -- 206 mistura duas configuracoes dentro da mesma captura.
   create function public.get_health_score_professor_v3_performance(
     p_competencia date, p_unidade_id uuid, p_periodicidade text
   ) returns table (${performanceReturn})
@@ -411,7 +469,9 @@ const fixture = `
       values
         (201, array['retencao','permanencia','conversao','media_turma','numero_alunos','presenca']::text[]),
         (202, array['conversao','media_turma','numero_alunos','presenca']::text[]),
-        (203, array['retencao','permanencia','conversao','media_turma','numero_alunos','presenca']::text[])
+        (203, array['retencao','permanencia','conversao','media_turma','numero_alunos','presenca']::text[]),
+        (205, array['retencao','permanencia','conversao','media_turma','numero_alunos','presenca']::text[]),
+        (206, array['retencao','permanencia','conversao','media_turma','numero_alunos','presenca']::text[])
     ), base as (
       select r.professor_id, m.metrica, m.peso, m.meta,
         coalesce(m.parametros->>'papel', 'nota') as papel,
@@ -429,36 +489,69 @@ const fixture = `
       p_periodicidade,
       date_trunc('month', p_competencia)::date,
       (date_trunc('month', p_competencia) + interval '1 month - 1 day')::date,
-      to_char(p_competencia, 'YYYY-MM'), 'em_andamento', true, false,
-      4, 0, 90::numeric, 100::numeric,
-      case when b.professor_id = 202 then null else 'saudavel' end,
-      case when b.professor_id = 202 then 'em_maturacao' else 'provisorio' end,
+      to_char(p_competencia, 'YYYY-MM'), 'em_andamento',
+      b.professor_id <> 205, false,
+      case when b.professor_id = 206 and b.metrica in ('retencao', 'permanencia', 'conversao')
+        then 5 else 4 end,
+      0,
+      case when b.professor_id = 205 then 72::numeric else 90::numeric end,
+      case when b.professor_id = 205 then 40::numeric else 100::numeric end,
+      case when b.professor_id in (202, 205) then null else 'saudavel' end,
+      case when b.professor_id in (202, 205) then 'em_maturacao' else 'provisorio' end,
       false, false,
-      case when b.professor_id = 202 then 'pilares_insuficientes' else null end,
+      case
+        when b.professor_id = 202 then 'pilares_insuficientes'
+        when b.professor_id = 205 then 'cobertura_insuficiente'
+        else null
+      end,
       'fixture-produtor',
       b.metrica,
       case when b.metrica = 'numero_alunos' then 20::numeric else 90::numeric end,
       case when b.metrica = 'numero_alunos' then 20::numeric else 9::numeric end,
       case when b.metrica = 'numero_alunos' then null::numeric else 10::numeric end,
       case when b.metrica = 'numero_alunos' then null::numeric else 90::numeric end,
-      b.peso, b.papel = 'nota',
-      case when b.papel = 'nota' then round(b.peso * 100 / 90, 4) else 0 end,
-      case when b.papel = 'nota' then 90 * b.peso / 100 else null end,
+      b.peso,
+      b.papel = 'nota' and (
+        b.professor_id <> 205 or b.metrica in ('conversao', 'presenca')
+      ),
+      case
+        when b.papel = 'nota' and (
+          b.professor_id <> 205 or b.metrica in ('conversao', 'presenca')
+        ) then round(b.peso * 100 / 90, 4)
+        else 0
+      end,
+      case
+        when b.papel = 'nota' and (
+          b.professor_id <> 205 or b.metrica in ('conversao', 'presenca')
+        ) then 90 * b.peso / 100
+        else null
+      end,
       b.meta, 20, 'ok', true, 'alta', 'fixture_sintetica',
       'fixture-produtor', null, 'evidencia_valida', b.papel, '{}'::jsonb,
-      90::numeric,
-      case when b.professor_id = 202 then null else 90::numeric end,
-      b.pilares_validos,
-      case when b.professor_id = 202 then 3 else 5 end,
-      case when b.professor_id = 202 then 'em_maturacao' else 'comparavel' end,
-      case when b.professor_id = 202 then 'pilares_insuficientes' else null end,
+      case when b.professor_id = 205 then 72::numeric else 90::numeric end,
+      case when b.professor_id in (202, 205) then null else 90::numeric end,
+      case when b.professor_id = 205 then 2 else b.pilares_validos end,
+      case when b.professor_id in (202, 205) then 5 else 5 end,
+      case when b.professor_id in (202, 205) then 'em_maturacao' else 'comparavel' end,
+      case
+        when b.professor_id = 202 then 'pilares_insuficientes'
+        when b.professor_id = 205 then 'cobertura_insuficiente'
+        else null
+      end,
       null::date, null::numeric, null::text,
-      current_date, '${configId}'::uuid, 'fixture-produtor',
-      case when b.professor_id = 202 then 40::numeric else 90::numeric end,
-      case when b.professor_id = 202 then 40::numeric else 90::numeric end,
-      case when b.professor_id = 202 then 44.4::numeric else 100::numeric end,
+      current_date,
+      case when b.professor_id = 206 and b.metrica in ('retencao', 'permanencia', 'conversao')
+        then '${inconsistentConfigId}'::uuid else '${configId}'::uuid end,
+      'fixture-produtor',
+      case when b.professor_id in (202, 205) then 40::numeric else 90::numeric end,
+      case when b.professor_id in (202, 205) then 25::numeric else 90::numeric end,
+      case when b.professor_id in (202, 205) then 40::numeric else 100::numeric end,
       60::numeric,
-      case when b.professor_id = 202 then '["pilares_insuficientes"]'::jsonb else '[]'::jsonb end
+      case
+        when b.professor_id = 202 then '["pilares_insuficientes"]'::jsonb
+        when b.professor_id = 205 then '["cobertura_insuficiente"]'::jsonb
+        else '[]'::jsonb
+      end
     from base b
     ), capturada as (
       insert into public.fixture_health_score_v3_fonte_capturada (
@@ -507,6 +600,9 @@ const fixture = `
     (201, '${unitId}'::uuid),
     (202, '${unitId}'::uuid),
     (203, '${unitId}'::uuid),
+    (204, '${unitId}'::uuid),
+    (205, '${unitId}'::uuid),
+    (206, '${unitId}'::uuid),
     (301, '${healthyUnitId}'::uuid),
     (401, '${absentUnitId}'::uuid)
   ), roster_global as (
@@ -615,24 +711,69 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
         from public.get_health_score_professor_v3_performance(
           date_trunc('month', current_date)::date, '${unitId}'::uuid, 'mensal'
         )
-      ), ausentes_202 as (
-        select coalesce(jsonb_agg(c.metrica order by c.metrica), '[]'::jsonb) as metricas
+      ), catalogo as (
+        select c.metrica
         from public.health_score_professor_v3_config_metricas c
         where c.config_id = '${configId}'::uuid
-          and not exists (
+      ), ausentes_202 as (
+        select coalesce(jsonb_agg(c.metrica order by c.metrica), '[]'::jsonb) as metricas
+        from catalogo c
+        where not exists (
             select 1 from fonte f
             where f.professor_id = 202 and f.metrica = c.metrica
           )
+      ), ausentes_204 as (
+        select coalesce(jsonb_agg(c.metrica order by c.metrica), '[]'::jsonb) as metricas
+        from catalogo c
+        where not exists (
+          select 1 from fonte f
+          where f.professor_id = 204 and f.metrica = c.metrica
+        )
       )
       select jsonb_build_object(
         'linhas', (select count(*) from fonte),
-        'metricas_ausentes_202', (select metricas from ausentes_202)
+        'metricas_ausentes_202', (select metricas from ausentes_202),
+        'metricas_ausentes_204', (select metricas from ausentes_204),
+        'config_ids_206', (
+          select jsonb_agg(distinct f.config_id order by f.config_id)
+          from fonte f where f.professor_id = 206
+        ),
+        'config_versoes_206', (
+          select jsonb_agg(distinct f.config_versao order by f.config_versao)
+          from fonte f where f.professor_id = 206
+        ),
+        'autoridade_205', (
+          select jsonb_build_object(
+            'score_observado', min(f.score_observado),
+            'score_comparavel', min(f.score_comparavel),
+            'classificacao', min(f.classificacao),
+            'estado', min(f.estado),
+            'comparabilidade_estado', min(f.comparabilidade_estado),
+            'motivo_bloqueio', min(f.motivo_bloqueio),
+            'score_exibivel', bool_or(f.score_exibivel)
+          ) from fonte f where f.professor_id = 205
+        )
       )::text;
     `);
     assert.deepEqual(producerSmoke, {
-      linhas: 16,
+      linhas: 28,
       metricas_ausentes_202: expectedMissingMetrics,
-    }, 'fixture deve emitir 6 + 4 + 6 metricas e duas ausencias exatas');
+      metricas_ausentes_204: [
+        'conversao', 'media_turma', 'numero_alunos',
+        'permanencia', 'presenca', 'retencao',
+      ],
+      config_ids_206: [configId, inconsistentConfigId],
+      config_versoes_206: [4, 5],
+      autoridade_205: {
+        score_observado: 72,
+        score_comparavel: null,
+        classificacao: null,
+        estado: 'em_maturacao',
+        comparabilidade_estado: 'em_maturacao',
+        motivo_bloqueio: 'cobertura_insuficiente',
+        score_exibivel: false,
+      },
+    }, 'fixture deve separar ausencia, maturacao e configuracao inconsistente');
     const resetInstrumentation = psql(container, `
       truncate public.fixture_health_score_v3_fonte_capturada;
       update public.fixture_health_score_v3_produtor_contador set chamadas = 0;
@@ -780,7 +921,7 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
     `);
 
     const persistedMetricsMatchFirstCapture = runJson(container, `
-      with professores_validos(professor_id) as (values (201), (203)),
+      with professores_validos(professor_id) as (values (201), (203), (205)),
       fonte as (
         select
           c.professor_id,
@@ -858,7 +999,15 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
       select coalesce(jsonb_agg(jsonb_build_object(
         'professor_id', professor_id,
         'revisao', revisao,
+        'score', score,
+        'cobertura', cobertura,
+        'classificacao', classificacao,
+        'estado', estado,
+        'publicavel', publicavel,
+        'publicado', publicado,
+        'motivo_bloqueio', motivo_bloqueio,
         'estado_publicacao', estado_publicacao,
+        'score_exibivel', score_exibivel,
         'ranking_habilitado', ranking_habilitado
       ) order by professor_id, revisao), '[]'::jsonb)::text
       from public.health_score_professor_v3_snapshots
@@ -1026,13 +1175,31 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
     `);
 
     const expectedValidSnapshots = [
-      { professor_id: 201, revisao: 1, estado_publicacao: 'parcial', ranking_habilitado: false },
-      { professor_id: 203, revisao: 1, estado_publicacao: 'parcial', ranking_habilitado: false },
+      {
+        professor_id: 201, revisao: 1, score: 90, cobertura: 100,
+        classificacao: 'saudavel', estado: 'provisorio', publicavel: false,
+        publicado: false, motivo_bloqueio: null, estado_publicacao: 'parcial',
+        score_exibivel: true, ranking_habilitado: false,
+      },
+      {
+        professor_id: 203, revisao: 1, score: 90, cobertura: 100,
+        classificacao: 'saudavel', estado: 'provisorio', publicavel: false,
+        publicado: false, motivo_bloqueio: null, estado_publicacao: 'parcial',
+        score_exibivel: true, ranking_habilitado: false,
+      },
+      {
+        professor_id: 205, revisao: 1, score: 72, cobertura: 40,
+        classificacao: null, estado: 'em_maturacao', publicavel: false,
+        publicado: false, motivo_bloqueio: 'cobertura_insuficiente',
+        estado_publicacao: 'em_andamento', score_exibivel: false,
+        ranking_habilitado: false,
+      },
     ];
     const observed = {
       first_status: first.status,
       first_error: Object.hasOwn(first, 'erro') ? first.erro : null,
       incomplete_professors_reported: readStrictIncompleteProfessors(first),
+      inconsistent_configurations_reported: readStrictInconsistentConfigurations(first),
       second_status: second.status,
       execution_statuses: executionStatuses,
       producer_calls_after_first: callsAfterFirst,
@@ -1043,6 +1210,7 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
       snapshots_after_second: snapshotsAfterSecond,
       monthly_snapshots: monthlySnapshots,
       direct_materializer_lock: directMaterializerLockContract(),
+      cycle_close_lock: cycleCloseLockContract(),
       official_close_status: closeAttempt.status,
       official_close_message: closeAttempt.mensagem ?? null,
       official_close_detail: closeAttempt.detalhe ?? null,
@@ -1063,6 +1231,17 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
       incomplete_professors_reported: [{
         professor_id: 202,
         metricas_ausentes: expectedMissingMetrics,
+      }, {
+        professor_id: 204,
+        metricas_ausentes: [
+          'conversao', 'media_turma', 'numero_alunos',
+          'permanencia', 'presenca', 'retencao',
+        ],
+      }],
+      inconsistent_configurations_reported: [{
+        professor_id: 206,
+        config_ids: [configId, inconsistentConfigId],
+        config_versoes: [4, 5],
       }],
       second_status: 'sem_alteracao',
       execution_statuses: ['parcial', 'sem_alteracao'],
@@ -1070,7 +1249,7 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
       producer_calls_after_second: 2,
       source_capture_contract: {
         invocacoes: 2,
-        linhas_por_invocacao: [16, 16],
+        linhas_por_invocacao: [28, 28],
         fingerprints_execucao_correspondem: true,
         execucoes_sem_captura_exclusiva: 0,
       },
@@ -1078,15 +1257,22 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
         linhas_por_professor: {
           201: { fonte: 6, persistidas: 6 },
           203: { fonte: 6, persistidas: 6 },
+          205: { fonte: 6, persistidas: 6 },
         },
         linhas_exatamente_iguais: true,
       },
-      snapshots_after_first: 2,
-      snapshots_after_second: 2,
+      snapshots_after_first: 3,
+      snapshots_after_second: 3,
       monthly_snapshots: expectedValidSnapshots,
       direct_materializer_lock: {
         lock_before_capture: true,
         lock_before_revision: true,
+      },
+      cycle_close_lock: {
+        complete_month_series: true,
+        ordered_before_lock: true,
+        cycle_materializer_key: true,
+        lock_before_roster_and_candidates: true,
       },
       official_close_status: 'recusado',
       official_close_message: 'HEALTH_SCORE_V3_FECHAMENTO_BLOQUEADO: roster incompleto',
@@ -1095,10 +1281,16 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
           { unidade_id: null, professor_id: 201 },
           { unidade_id: null, professor_id: 202 },
           { unidade_id: null, professor_id: 203 },
+          { unidade_id: null, professor_id: 204 },
+          { unidade_id: null, professor_id: 205 },
+          { unidade_id: null, professor_id: 206 },
           { unidade_id: null, professor_id: 301 },
           { unidade_id: null, professor_id: 401 },
           { unidade_id: unitId, professor_id: 202 },
           { unidade_id: unitId, professor_id: 203 },
+          { unidade_id: unitId, professor_id: 204 },
+          { unidade_id: unitId, professor_id: 205 },
+          { unidade_id: unitId, professor_id: 206 },
           { unidade_id: healthyUnitId, professor_id: 301 },
           { unidade_id: absentUnitId, professor_id: 401 },
         ],
@@ -1115,7 +1307,7 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
         ciclo_codigo: 'fixture-ciclo-saudavel',
         estado_publicacao: 'oficial',
         ranking_habilitado: true,
-        snapshots_fechados: 10,
+        snapshots_fechados: 16,
       },
       healthy_official_state: {
         roster_ativo: [301],
@@ -1123,12 +1315,12 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
         estado: 'fechado',
         publicacao_oficial: true,
         ranking_habilitado: true,
-        snapshots_oficiais: 10,
+        snapshots_oficiais: 16,
       },
       healthy_metric_parity: {
-        snapshots_origem: 10,
-        snapshots_oficiais: 10,
-        metricas_comparadas: 60,
+        snapshots_origem: 16,
+        snapshots_oficiais: 16,
+        metricas_comparadas: 96,
         payload_exato_exceto_detalhes: true,
         campos_governados_nao_nulos: true,
       },
