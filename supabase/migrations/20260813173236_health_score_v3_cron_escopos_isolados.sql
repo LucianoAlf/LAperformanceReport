@@ -3,7 +3,47 @@ begin;
 alter table public.health_score_professor_v3_materializacao_execucoes
   add column if not exists cron_reconciliacao_status text null,
   add column if not exists cron_reconciliacao_erro text null,
-  add column if not exists cron_reconciliado_em timestamptz null;
+  add column if not exists cron_reconciliado_em timestamptz null,
+  add column if not exists cron_alerta_request_id bigint null,
+  add column if not exists cron_alerta_status text null,
+  add column if not exists cron_alerta_erro text null,
+  add column if not exists cron_alerta_atualizado_em timestamptz null;
+
+create or replace function public.reconciliar_health_score_professor_v3_alertas()
+returns integer
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $function$
+declare
+  v_atualizadas integer;
+begin
+  update public.health_score_professor_v3_materializacao_execucoes e
+     set cron_alerta_status = case
+           when r.timed_out then 'timeout'
+           when r.error_msg is not null then 'falha'
+           when r.status_code between 200 and 299 then 'entregue'
+           else 'falha'
+         end,
+         cron_alerta_erro = case
+           when r.timed_out then coalesce(r.error_msg, 'Timeout na entrega do alerta')
+           when r.error_msg is not null then r.error_msg
+           when r.status_code between 200 and 299 then null
+           else format('HTTP %s: %s', r.status_code, left(coalesce(r.content, ''), 1000))
+         end,
+         cron_alerta_atualizado_em = clock_timestamp()
+    from net._http_response r
+   where e.cron_alerta_status = 'enfileirado'
+     and e.cron_alerta_request_id = r.id
+     and (r.timed_out or r.error_msg is not null or r.status_code is not null);
+
+  get diagnostics v_atualizadas = row_count;
+  return v_atualizadas;
+end;
+$function$;
+
+revoke all on function public.reconciliar_health_score_professor_v3_alertas()
+  from public, anon, authenticated, service_role;
 
 create or replace function public.configurar_health_score_professor_v3_cron_escopos()
 returns void
@@ -18,6 +58,8 @@ declare
   v_total_unidades integer;
   v_total_minutos integer;
   v_agenda text;
+  v_jobname text;
+  v_command text;
   v_inicio_minutos constant integer := 390;
   v_intervalo_minutos constant integer := 5;
 begin
@@ -39,8 +81,34 @@ begin
   for v_job in
     select j.jobid
     from cron.job j
-    where j.jobname = 'materializar-health-score-professor-v3-diario'
-       or j.jobname like 'materializar-health-score-professor-v3-diario-%'
+    where (
+      j.jobname = 'materializar-health-score-professor-v3-diario'
+      or j.jobname like 'materializar-health-score-professor-v3-diario-%'
+      or j.jobname = 'reconciliar-health-score-professor-v3-alertas'
+    )
+      and (
+        j.jobname = 'materializar-health-score-professor-v3-diario'
+        or j.username <> current_user
+        or (
+          j.jobname like 'materializar-health-score-professor-v3-diario-unidade-%'
+          and not exists (
+            select 1
+            from public.unidades u
+            where u.ativo = true
+              and j.jobname = 'materializar-health-score-professor-v3-diario-unidade-' || u.id::text
+          )
+        )
+        or j.jobname not in (
+          'materializar-health-score-professor-v3-diario-consolidado',
+          'reconciliar-health-score-professor-v3-alertas'
+        ) and j.jobname not like 'materializar-health-score-professor-v3-diario-unidade-%'
+        or exists (
+          select 1 from cron.job menor
+          where menor.jobname = j.jobname
+            and menor.username = current_user
+            and menor.jobid < j.jobid
+        )
+      )
     order by j.jobid
   loop
     perform cron.unschedule(v_job.jobid);
@@ -54,6 +122,11 @@ begin
     where u.ativo = true
     order by u.id
   loop
+    v_jobname := 'materializar-health-score-professor-v3-diario-unidade-' || v_unidade.id::text;
+    v_command := format(
+      'select public.executar_health_score_professor_v3_job_escopo(''unidade'', %L::uuid);',
+      v_unidade.id::text
+    );
     v_total_minutos := v_inicio_minutos
       + ((v_unidade.ordem - 1) * v_intervalo_minutos);
     v_agenda := format(
@@ -62,15 +135,15 @@ begin
       v_total_minutos / 60
     );
 
-    v_job_id := cron.schedule(
-      'materializar-health-score-professor-v3-diario-unidade-' || v_unidade.id::text,
-      v_agenda,
-      format(
-        'select public.executar_health_score_professor_v3_job_escopo(''unidade'', %L::uuid);',
-        v_unidade.id::text
-      )
-    );
-    perform cron.alter_job(v_job_id, active := true);
+    select j.jobid into v_job_id
+    from cron.job j
+    where j.jobname = v_jobname and j.username = current_user
+    order by j.jobid limit 1;
+    if v_job_id is null then
+      v_job_id := cron.schedule(v_jobname, v_agenda, v_command);
+    else
+      perform cron.alter_job(v_job_id, schedule := v_agenda, command := v_command, active := true);
+    end if;
   end loop;
 
   v_total_minutos := v_inicio_minutos
@@ -80,12 +153,29 @@ begin
     mod(v_total_minutos, 60),
     v_total_minutos / 60
   );
-  v_job_id := cron.schedule(
-    'materializar-health-score-professor-v3-diario-consolidado',
-    v_agenda,
-    'select public.executar_health_score_professor_v3_job_escopo(''consolidado'', null::uuid);'
-  );
-  perform cron.alter_job(v_job_id, active := true);
+  v_jobname := 'materializar-health-score-professor-v3-diario-consolidado';
+  v_command := 'select public.executar_health_score_professor_v3_job_escopo(''consolidado'', null::uuid);';
+  select j.jobid into v_job_id from cron.job j
+   where j.jobname = v_jobname and j.username = current_user
+   order by j.jobid limit 1;
+  if v_job_id is null then
+    v_job_id := cron.schedule(v_jobname, v_agenda, v_command);
+  else
+    perform cron.alter_job(v_job_id, schedule := v_agenda, command := v_command, active := true);
+  end if;
+
+  v_total_minutos := v_total_minutos + v_intervalo_minutos;
+  v_agenda := format('%s %s * * *', mod(v_total_minutos, 60), v_total_minutos / 60);
+  v_jobname := 'reconciliar-health-score-professor-v3-alertas';
+  v_command := 'select public.reconciliar_health_score_professor_v3_alertas();';
+  select j.jobid into v_job_id from cron.job j
+   where j.jobname = v_jobname and j.username = current_user
+   order by j.jobid limit 1;
+  if v_job_id is null then
+    v_job_id := cron.schedule(v_jobname, v_agenda, v_command);
+  else
+    perform cron.alter_job(v_job_id, schedule := v_agenda, command := v_command, active := true);
+  end if;
 end;
 $function$;
 
@@ -108,10 +198,13 @@ declare
   v_secret text;
   v_alerta_status text := 'nao_aplicavel';
   v_alerta_erro text;
+  v_alerta_request_id bigint;
   v_reconciliacao_status text := 'nao_aplicavel';
   v_reconciliacao_erro text;
   v_execution_id text;
 begin
+  perform public.reconciliar_health_score_professor_v3_alertas();
+
   if v_escopo not in ('unidade', 'consolidado')
     or (v_escopo = 'unidade' and v_unidade_id is null)
     or (v_escopo = 'consolidado' and v_unidade_id is not null) then
@@ -167,7 +260,7 @@ begin
         v_alerta_status := 'nao_configurado';
         v_alerta_erro := 'segredo lia_alertas_service_role_key nao configurado';
       else
-        perform net.http_post(
+        select net.http_post(
           url := 'https://ouqwbbermlzqqvtqwlul.supabase.co/functions/v1/projeto-alertas-whatsapp',
           headers := jsonb_build_object(
             'Authorization', 'Bearer ' || v_secret,
@@ -181,8 +274,8 @@ begin
             'resultado', v_resultado
           ),
           timeout_milliseconds := 55000
-        );
-        v_alerta_status := 'enviado';
+        ) into v_alerta_request_id;
+        v_alerta_status := 'enfileirado';
       end if;
     exception
       when others then
@@ -191,9 +284,19 @@ begin
     end;
   end if;
 
+  if v_execution_id is not null then
+    update public.health_score_professor_v3_materializacao_execucoes e
+       set cron_alerta_request_id = v_alerta_request_id,
+           cron_alerta_status = v_alerta_status,
+           cron_alerta_erro = v_alerta_erro,
+           cron_alerta_atualizado_em = clock_timestamp()
+     where e.id::text = v_execution_id;
+  end if;
+
   return coalesce(v_resultado, '{}'::jsonb) || jsonb_build_object(
     'alerta_status', v_alerta_status,
     'alerta_erro', v_alerta_erro,
+    'alerta_request_id', v_alerta_request_id,
     'reconciliacao_status', v_reconciliacao_status,
     'reconciliacao_erro', v_reconciliacao_erro
   );
@@ -214,6 +317,9 @@ comment on function public.executar_health_score_professor_v3_job_escopo(text, u
   'Entrypoint operacional unico: reconcilia o catalogo no consolidado, executa um escopo mensal e isola falhas do alerta.';
 
 comment on function public.configurar_health_score_professor_v3_cron_escopos() is
-  'Recria sob advisory lock o catalogo diario exato de unidades ativas e consolidado, usando somente APIs do pg_cron.';
+  'Reconcilia diferencialmente sob advisory lock o catalogo diario, preservando jobids canonicos e usando somente APIs do pg_cron.';
+
+comment on function public.reconciliar_health_score_professor_v3_alertas() is
+  'Consolida respostas assincronas do pg_net para alertas enfileirados pelo cron Health Score V3.';
 
 commit;

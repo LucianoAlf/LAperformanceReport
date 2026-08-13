@@ -901,7 +901,8 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
     const catalogBeforeReconciliationFailure = reconciledCatalog.stdout.trim();
     const reconciliationFailure = psql(
       container,
-      `update cron.fixture_control set fail_schedule = true;
+      `update public.unidades set ativo = true where id = '${unitIds[0]}'::uuid;
+       update cron.fixture_control set fail_schedule = true;
        set role service_role;
        select public.executar_health_score_professor_v3_job_escopo(
          'consolidado', null::uuid
