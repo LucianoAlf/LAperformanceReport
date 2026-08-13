@@ -1178,13 +1178,13 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
       {
         professor_id: 201, revisao: 1, score: 90, cobertura: 100,
         classificacao: 'saudavel', estado: 'provisorio', publicavel: false,
-        publicado: false, motivo_bloqueio: null, estado_publicacao: 'parcial',
+        publicado: false, motivo_bloqueio: null, estado_publicacao: 'em_andamento',
         score_exibivel: true, ranking_habilitado: false,
       },
       {
         professor_id: 203, revisao: 1, score: 90, cobertura: 100,
         classificacao: 'saudavel', estado: 'provisorio', publicavel: false,
-        publicado: false, motivo_bloqueio: null, estado_publicacao: 'parcial',
+        publicado: false, motivo_bloqueio: null, estado_publicacao: 'em_andamento',
         score_exibivel: true, ranking_habilitado: false,
       },
       {
