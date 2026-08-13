@@ -52,6 +52,14 @@ import {
   type ModoSyncPresenca,
 } from '../_shared/sync-presenca-authorization.ts';
 import { selecionarCandidatoExperimental } from '../_shared/experimental-reconciliacao.ts';
+import {
+  resolverAlunoLocal,
+  normalizarNomeMatcher,
+  normalizarDiaSemana,
+  horarioHHMM,
+  type ContextoAulaMatcher,
+  type JornadaContrato,
+} from '../_shared/matcher-presenca.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -124,16 +132,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-sync-token',
 };
 
-// Normalizar nome para matching (mesmo padrão do parseEmusysFile.ts)
-function normalizarNome(nome: string): string {
-  return nome
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\(.*?\)/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+// Normalizar nome para matching (mesmo padrão do parseEmusysFile.ts).
+// Vive em _shared/matcher-presenca.ts junto com o resolver de aluno local.
+const normalizarNome = normalizarNomeMatcher;
 
 // Normalizar nome de curso: lowercase + sem acentos + remove sufixos do Emusys
 // (" t" — turma, " para instrumento" — variante de Musicalizacao Preparatoria)
@@ -201,28 +202,8 @@ function podeMaterializarFalta(aula: AulaEmusys, agora = new Date()): boolean {
 // criarAlunoChave vive em _shared/emusys-aulas.ts: as duas edges que gravam em
 // aula_alunos_emusys precisam produzir EXATAMENTE a mesma chave, senao o mesmo
 // aluno na mesma aula vira duas linhas.
-
-function resolverAlunoLocal(
-  aluno: AlunoEmusys,
-  cursoIdAula: number | null,
-  mapaAlunosEmusys: Map<string, number[]>,
-  mapaAlunosComposto: Map<string, number[]>,
-  mapaAlunos: Map<string, number>
-): number | undefined {
-  if (aluno.id_aluno != null && aluno.id_aluno > 0) {
-    const candidatosEmusys = mapaAlunosEmusys.get(String(aluno.id_aluno)) ?? [];
-    if (candidatosEmusys.length === 1) return candidatosEmusys[0];
-  }
-
-  const nomeNorm = normalizarNome(aluno.nome_aluno || '');
-  if (cursoIdAula != null) {
-    const chave = `${nomeNorm}|${aluno.data_nascimento_aluno ?? ''}|${cursoIdAula}`;
-    const candidatos = mapaAlunosComposto.get(chave) ?? [];
-    if (candidatos.length === 1) return candidatos[0];
-  }
-
-  return mapaAlunos.get(nomeNorm);
-}
+// resolverAlunoLocal (e o desempate por contrato/dia-horario) vive em
+// _shared/matcher-presenca.ts, importado no topo deste arquivo.
 
 // Buscar todas as aulas de um dia no Emusys (com paginação)
 async function fetchAulasDia(token: string, data: string): Promise<AulaEmusys[]> {
@@ -1741,6 +1722,65 @@ serve(async (req: Request) => {
       alunosPorUnidadeSimples.get(uid)!.set(nomeNorm, aluno.id);
     }
 
+    // Jornada ativa (contrato -> aluno, com dia/horario da grade). Fonte do
+    // desempate quando a pessoa tem varias matriculas: o contrato da aula
+    // aponta exatamente para qual delas, e o dia/horario desempata a linha
+    // container (tipo=turma). Carregada paginada: sao ~1.3k linhas no total,
+    // acima do teto padrao de 1000 do PostgREST.
+    const contratosPorUnidade = new Map<string, Map<number, JornadaContrato>>();
+    const jornadaPorAlunoPorUnidade = new Map<string, Map<number, JornadaContrato[]>>();
+    {
+      const idsCanonicos = new Set<number>(alunosDB.map((aluno) => aluno.id));
+      const idsUnidades = new Set<string>(alunosDB.map((aluno) => aluno.unidade_id));
+      for (const uid of idsUnidades) {
+        contratosPorUnidade.set(uid, new Map());
+        jornadaPorAlunoPorUnidade.set(uid, new Map());
+      }
+
+      const TAMANHO_PAGINA = 1000;
+      for (let offset = 0; ; offset += TAMANHO_PAGINA) {
+        const { data: pagina, error: jornadaError } = await supabase
+          .from('aluno_jornada_matricula_disciplina')
+          .select('unidade_id, aluno_id, emusys_matricula_disciplina_id, dia_semana, horario')
+          .or('status_matricula.is.null,status_matricula.neq.finalizada')
+          .range(offset, offset + TAMANHO_PAGINA - 1);
+        if (jornadaError) {
+          console.error('[sync-presenca] Falha ao carregar jornada p/ matcher:', jornadaError.message);
+          break;
+        }
+        if (!pagina || pagina.length === 0) break;
+
+        for (const linha of pagina as Array<{
+          unidade_id: string;
+          aluno_id: number;
+          emusys_matricula_disciplina_id: number | null;
+          dia_semana: string | null;
+          horario: string | null;
+        }>) {
+          const alunoId = Number(linha.aluno_id);
+          // Mesmo universo do matcher antigo: so alunos ativos canonicos.
+          if (!idsCanonicos.has(alunoId)) continue;
+          const uid = String(linha.unidade_id);
+          const entrada: JornadaContrato = {
+            alunoId,
+            diaSemana: normalizarDiaSemana(linha.dia_semana),
+            horario: horarioHHMM(linha.horario),
+          };
+          if (linha.emusys_matricula_disciplina_id != null && linha.emusys_matricula_disciplina_id > 0) {
+            const mapaContratos = contratosPorUnidade.get(uid) ?? new Map<number, JornadaContrato>();
+            mapaContratos.set(Number(linha.emusys_matricula_disciplina_id), entrada);
+            contratosPorUnidade.set(uid, mapaContratos);
+          }
+          const mapaAluno = jornadaPorAlunoPorUnidade.get(uid) ?? new Map<number, JornadaContrato[]>();
+          const arr = mapaAluno.get(alunoId) ?? [];
+          arr.push(entrada);
+          mapaAluno.set(alunoId, arr);
+          jornadaPorAlunoPorUnidade.set(uid, mapaAluno);
+        }
+        if (pagina.length < TAMANHO_PAGINA) break;
+      }
+    }
+
     const resultados = [];
     const experimentaisColetadas: ExperimentalParaReconciliar[] = [];
 
@@ -1758,6 +1798,8 @@ serve(async (req: Request) => {
         const mapaAlunosEmusys = alunosPorUnidadeEmusys.get(unidade.id) || new Map();
         const mapaAlunos = alunosPorUnidadeSimples.get(unidade.id) || new Map();
         const mapaAlunosComposto = alunosPorUnidadeComposta.get(unidade.id) || new Map();
+        const mapaContratos = contratosPorUnidade.get(unidade.id) || new Map<number, JornadaContrato>();
+        const mapaJornadaPorAluno = jornadaPorAlunoPorUnidade.get(unidade.id) || new Map<number, JornadaContrato[]>();
         let totalPresencas = 0;
         let matched = 0;
         let naoEncontrados = 0;
@@ -1865,6 +1907,14 @@ serve(async (req: Request) => {
           // Resolver curso_id local da aula (para match composto)
           const cursoIdAula = cursoMapa.get(normalizarCurso(aula.curso_nome || '')) ?? null;
 
+          // Contexto do matcher: contrato da aula + horario (original quando
+          // reagendada, pois a jornada reflete a grade regular do contrato).
+          const contextoAula: ContextoAulaMatcher = {
+            matriculaDisciplinaId: aula.matricula_disciplina_id ?? null,
+            dataHoraInicio: aula.data_hora_inicio ?? null,
+            dataHoraInicioOriginal: aula.data_hora_inicio_original ?? null,
+          };
+
           // Roster e justificativa sao sincronizados sem criar uma resposta de presenca.
           // Coleta TODAS as chaves possiveis que a API retornou para DEPOIS remover
           // os vinculos obsoletos. criarAlunoChave pode gerar chaves diferentes
@@ -1874,7 +1924,7 @@ serve(async (req: Request) => {
           for (const aluno of aula.alunos || []) {
             const nome = aluno.nome_aluno?.trim();
             if (!nome) continue;
-            const alunoIdTemp = resolverAlunoLocal(aluno, cursoIdAula, mapaAlunosEmusys, mapaAlunosComposto, mapaAlunos);
+            const alunoIdTemp = resolverAlunoLocal(aluno, cursoIdAula, contextoAula, mapaAlunosEmusys, mapaAlunosComposto, mapaAlunos, mapaContratos, mapaJornadaPorAluno);
             chavesRetornadas.add(criarAlunoChave(aluno, alunoIdTemp, normalizarNome));
             chavesRetornadas.add(criarAlunoChave(aluno, null, normalizarNome));
             chavesRetornadas.add(criarAlunoChave(aluno, undefined, normalizarNome));
@@ -1887,9 +1937,12 @@ serve(async (req: Request) => {
             const alunoId = resolverAlunoLocal(
               aluno,
               cursoIdAula,
+              contextoAula,
               mapaAlunosEmusys,
               mapaAlunosComposto,
-              mapaAlunos
+              mapaAlunos,
+              mapaContratos,
+              mapaJornadaPorAluno
             );
             const sincronizadoEm = new Date().toISOString();
 
@@ -2015,9 +2068,12 @@ serve(async (req: Request) => {
             const alunoId = resolverAlunoLocal(
               aluno,
               cursoIdAula,
+              contextoAula,
               mapaAlunosEmusys,
               mapaAlunosComposto,
-              mapaAlunos
+              mapaAlunos,
+              mapaContratos,
+              mapaJornadaPorAluno
             );
 
             if (aula.categoria === 'experimental') {
