@@ -9,6 +9,11 @@ alter table public.health_score_professor_v3_materializacao_execucoes
   add column if not exists cron_alerta_erro text null,
   add column if not exists cron_alerta_atualizado_em timestamptz null;
 
+create index if not exists idx_hs_v3_materializacao_alertas_pendentes
+  on public.health_score_professor_v3_materializacao_execucoes (
+    cron_alerta_request_id, cron_alerta_atualizado_em
+  ) where cron_alerta_status = 'enfileirado';
+
 create or replace function public.reconciliar_health_score_professor_v3_alertas()
 returns integer
 language plpgsql
@@ -17,6 +22,7 @@ set search_path = public, pg_temp
 as $function$
 declare
   v_atualizadas integer;
+  v_expiradas integer;
 begin
   update public.health_score_professor_v3_materializacao_execucoes e
      set cron_alerta_status = case
@@ -38,7 +44,20 @@ begin
      and (r.timed_out or r.error_msg is not null or r.status_code is not null);
 
   get diagnostics v_atualizadas = row_count;
-  return v_atualizadas;
+
+  update public.health_score_professor_v3_materializacao_execucoes e
+     set cron_alerta_status = 'sem_resposta',
+         cron_alerta_erro = 'Resposta pg_net ausente apos 30 minutos',
+         cron_alerta_atualizado_em = clock_timestamp()
+   where e.cron_alerta_status = 'enfileirado'
+     and e.cron_alerta_atualizado_em < clock_timestamp() - interval '30 minutes'
+     and not exists (
+       select 1 from net._http_response r
+       where r.id = e.cron_alerta_request_id
+     );
+  get diagnostics v_expiradas = row_count;
+
+  return v_atualizadas + v_expiradas;
 end;
 $function$;
 
@@ -164,8 +183,7 @@ begin
     perform cron.alter_job(v_job_id, schedule := v_agenda, command := v_command, active := true);
   end if;
 
-  v_total_minutos := v_total_minutos + v_intervalo_minutos;
-  v_agenda := format('%s %s * * *', mod(v_total_minutos, 60), v_total_minutos / 60);
+  v_agenda := '*/5 * * * *';
   v_jobname := 'reconciliar-health-score-professor-v3-alertas';
   v_command := 'select public.reconciliar_health_score_professor_v3_alertas();';
   select j.jobid into v_job_id from cron.job j
@@ -202,8 +220,17 @@ declare
   v_reconciliacao_status text := 'nao_aplicavel';
   v_reconciliacao_erro text;
   v_execution_id text;
+  v_alertas_reconciliacao_status text := 'ok';
+  v_alertas_reconciliacao_erro text;
 begin
-  perform public.reconciliar_health_score_professor_v3_alertas();
+  begin
+    perform public.reconciliar_health_score_professor_v3_alertas();
+  exception
+    when others then
+      v_alertas_reconciliacao_status := 'falha';
+      v_alertas_reconciliacao_erro := sqlerrm;
+      raise warning 'HEALTH_SCORE_V3_RECONCILIACAO_ALERTAS_FALHOU: %', sqlerrm;
+  end;
 
   if v_escopo not in ('unidade', 'consolidado')
     or (v_escopo = 'unidade' and v_unidade_id is null)
@@ -297,6 +324,8 @@ begin
     'alerta_status', v_alerta_status,
     'alerta_erro', v_alerta_erro,
     'alerta_request_id', v_alerta_request_id,
+    'alertas_reconciliacao_status', v_alertas_reconciliacao_status,
+    'alertas_reconciliacao_erro', v_alertas_reconciliacao_erro,
     'reconciliacao_status', v_reconciliacao_status,
     'reconciliacao_erro', v_reconciliacao_erro
   );
