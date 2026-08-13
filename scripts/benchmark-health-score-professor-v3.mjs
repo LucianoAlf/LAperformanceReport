@@ -14,9 +14,9 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}
 
 function usage() {
   return `Uso seguro em PowerShell (uma linha):
-  $env:DATABASE_URL='<url-nao-producao>'; node scripts/benchmark-health-score-professor-v3.mjs --competencia YYYY-MM-01 --unit-id <uuid-1> --unit-id <uuid-2> --unit-id <uuid-3> --postgres-restarted-after <ISO-8601> --output <arquivo-novo.json> --confirm-non-production
+  $env:DATABASE_URL='<url-nao-producao>'; node scripts/benchmark-health-score-professor-v3.mjs --competencia YYYY-MM-01 --unit-id <uuid-1> [--unit-id <uuid-N> ...] --postgres-restarted-after <ISO-8601> --output <arquivo-novo.json> --confirm-non-production
 
-Executa 3 rodadas x 4 escopos em uma unica transacao. Cada executor completo e
+Executa 3 rodadas x (N unidades ativas + consolidado) em uma unica transacao. Cada executor completo e
 medido por EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON), grava o status em tabela
 temporaria e preserva seus writes para as rodadas seguintes. Um unico ROLLBACK
 no finally desfaz tudo, inclusive em erro ou sinal.
@@ -81,9 +81,9 @@ export function assertInputs(args, databaseUrl) {
     Number.isNaN(competence.valueOf())
     || competence.toISOString().slice(0, 10) !== args.competencia
   ) throw new Error('--competencia deve ser uma data valida YYYY-MM-01');
-  if (args.unitIds.length !== 3) throw new Error('Informe exatamente tres --unit-id');
-  if (new Set(args.unitIds.map((id) => id.toLowerCase())).size !== 3) {
-    throw new Error('Os tres --unit-id devem ser distintos');
+  if (args.unitIds.length < 1) throw new Error('Informe ao menos um --unit-id');
+  if (new Set(args.unitIds.map((id) => id.toLowerCase())).size !== args.unitIds.length) {
+    throw new Error('Os --unit-id devem ser distintos');
   }
   for (const id of args.unitIds) {
     if (!uuidPattern.test(id)) throw new Error(`--unit-id invalido: ${id}`);
@@ -223,6 +223,10 @@ export function validateRestartEvidence({ evidenceIso, postmasterStartIso, verif
 export function validateActiveUnits(requestedIds, rows) {
   if (!Array.isArray(rows)) throw new Error('consulta de unidades nao retornou array');
   const requested = requestedIds.map((id) => id.toLowerCase()).sort();
+  if (requested.length < 1) throw new Error('informe ao menos uma unidade ativa');
+  if (new Set(requested).size !== requested.length) {
+    throw new Error('lista solicitada contem unidades duplicadas');
+  }
   const resolved = rows.map((row) => {
     if (typeof row.id !== 'string' || typeof row.ativo !== 'boolean') {
       throw new Error('consulta de unidades retornou payload invalido');
@@ -230,8 +234,12 @@ export function validateActiveUnits(requestedIds, rows) {
     return { id: row.id.toLowerCase(), ativo: row.ativo, nome: row.nome ?? null };
   });
   const active = resolved.filter((row) => row.ativo).map((row) => row.id).sort();
-  if (resolved.length !== 3 || active.length !== 3 || active.join(',') !== requested.join(',')) {
-    throw new Error('os tres UUIDs devem corresponder exatamente a unidades ativas existentes');
+  if (
+    resolved.length !== active.length
+    || new Set(active).size !== active.length
+    || active.join(',') !== requested.join(',')
+  ) {
+    throw new Error('os UUIDs devem corresponder exatamente a todas as unidades ativas');
   }
   return resolved.sort((a, b) => a.id.localeCompare(b.id));
 }
@@ -246,18 +254,16 @@ export function assertTrackFunctions(value) {
 
 function verifyEnvironment(databaseUrl, args) {
   const trackFunctions = assertTrackFunctions(runPsql(databaseUrl, 'show track_functions;'));
-  const values = args.unitIds.map((id) => `(${sqlLiteral(id)}::uuid)`).join(', ');
   const environment = parseJson(runPsql(databaseUrl, `
-    with solicitadas(id) as (values ${values})
     select jsonb_build_object(
       'verified_at', clock_timestamp(),
       'postmaster_start_time', pg_postmaster_start_time(),
       'units', coalesce(jsonb_agg(jsonb_build_object(
-        'id', s.id, 'nome', u.nome, 'ativo', coalesce(u.ativo, false)
-      ) order by s.id), '[]'::jsonb)
+        'id', u.id, 'nome', u.nome, 'ativo', u.ativo
+      ) order by u.id), '[]'::jsonb)
     )::text
-    from solicitadas s
-    left join (select id, nome, ativo from public.unidades where ativo = true) u on u.id = s.id;
+    from public.unidades u
+    where ativo = true;
   `), 'verificacao do ambiente');
   return {
     track_functions: trackFunctions,
@@ -429,7 +435,12 @@ function executionSql(round, scope, competencia) {
 }
 
 export function assertStatusContract(round, status) {
-  const allowedFirst = new Set(['materializado', 'parcial', 'baseline_adotado']);
+  if (round === 1 && status === 'baseline_adotado') {
+    throw new Error(
+      'rodada 1 retornou baseline_adotado: fixture nao limpa; prepare snapshots compativeis antes de medir',
+    );
+  }
+  const allowedFirst = new Set(['materializado', 'parcial']);
   if (round === 1 && !allowedFirst.has(status)) {
     throw new Error(`rodada 1 retornou status inesperado: ${status}`);
   }
@@ -440,9 +451,21 @@ export function assertStatusContract(round, status) {
 }
 
 export function summarizeRounds(measurements, wallClockByRound) {
+  const firstRound = measurements.filter((entry) => entry.round === 1);
+  const expectedScopeKeys = firstRound.map((entry) => scopeKey(entry.scope)).sort();
+  if (expectedScopeKeys.length < 2 || new Set(expectedScopeKeys).size !== expectedScopeKeys.length) {
+    throw new Error('rodada 1 deve conter N unidades distintas e um consolidado');
+  }
+  if (expectedScopeKeys.filter((key) => key === 'consolidado').length !== 1) {
+    throw new Error('rodada 1 deve conter exatamente um escopo consolidado');
+  }
   const rounds = [1, 2, 3].map((round) => {
     const entries = measurements.filter((entry) => entry.round === round);
-    if (entries.length !== 4) throw new Error(`rodada ${round} deve conter quatro escopos`);
+    const actualScopeKeys = entries.map((entry) => scopeKey(entry.scope)).sort();
+    if (
+      actualScopeKeys.length !== expectedScopeKeys.length
+      || actualScopeKeys.join(',') !== expectedScopeKeys.join(',')
+    ) throw new Error(`rodada ${round} deve conter o mesmo conjunto dinamico de escopos`);
     const total = entries.reduce((sum, entry) => sum + entry.summary.execution_time_ms, 0);
     const maximum = [...entries].sort((a, b) => b.summary.execution_time_ms - a.summary.execution_time_ms)[0];
     const states = Object.fromEntries(entries.map((entry) => [scopeKey(entry.scope), entry.status]));
@@ -586,6 +609,8 @@ async function main() {
   const environment = verifyEnvironment(databaseUrl, args);
   const benchmark = await runBenchmarkTransaction(databaseUrl, args, environment);
   const summary = summarizeRounds(benchmark.measurements, benchmark.wallClockByRound);
+  const scopesPerRound = args.unitIds.length + 1;
+  const executionsPerBenchmark = scopesPerRound * 3;
   const report = {
     generated_at: new Date().toISOString(),
     competencia: args.competencia,
@@ -598,11 +623,11 @@ async function main() {
       os_cache_guaranteed: false,
       os_cache_note: 'reinicio comprova shared_buffers; cache do sistema operacional nao e garantido',
     },
-    executions: 12,
+    executions: executionsPerBenchmark,
     rounds: 3,
-    scopes_per_round: 4,
+    scopes_per_round: scopesPerRound,
     sequential: true,
-    transaction_policy: 'uma_transacao_12_execucoes_rollback_unico_finally',
+    transaction_policy: `uma_transacao_${executionsPerBenchmark}_execucoes_rollback_unico_finally`,
     writes_preserved_between_rounds: true,
     writes_preserved_after_benchmark: false,
     rollback_strategy: benchmark.rollback_strategy,
