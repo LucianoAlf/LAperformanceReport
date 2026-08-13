@@ -154,6 +154,21 @@ test('migration posterior substitui o cron monolitico sem depender de timeout ma
     /(?:insert\s+into|update|delete\s+from)\s+cron\.job\b/iu,
   );
   assertSemStatementTimeout(corretiva.sql);
+  assert.match(
+    corretiva.sql,
+    /pg_advisory_xact_lock\s*\(/iu,
+    'reconciliador deve serializar alteracoes do catalogo cron',
+  );
+  assert.match(
+    corretiva.sql,
+    /revoke\s+all\s+on\s+function\s+public\.executar_health_score_professor_v3_cron_diario\s*\(\s*\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated\s*,\s*service_role/iu,
+    'executor monolitico legado nao pode continuar como entrypoint operacional',
+  );
+  assert.match(
+    corretiva.sql,
+    /if\s+v_escopo\s*=\s*'consolidado'[\s\S]*configurar_health_score_professor_v3_cron_escopos\s*\(\s*\)[\s\S]*exception\s+when\s+others/iu,
+    'wrapper consolidado deve reconciliar com falha protegida antes de materializar',
+  );
 });
 
 test('cron ativa alerta somente para Alf e Hugo identificados de forma exata', async () => {

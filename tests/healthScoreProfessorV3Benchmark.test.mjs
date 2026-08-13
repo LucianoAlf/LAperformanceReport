@@ -45,7 +45,7 @@ function completeArgs() {
   ];
 }
 
-test('benchmark exige alvo, competencia, tres unidades, output e confirmacao nao produtiva', () => {
+test('benchmark exige alvo, competencia, lista nao vazia de unidades, output e confirmacao nao produtiva', () => {
   const missingDatabase = runScript(completeArgs(), undefined);
   assert.equal(missingDatabase.status, 1);
   assert.match(missingDatabase.stderr, /DATABASE_URL e obrigatoria/iu);
@@ -64,11 +64,21 @@ test('benchmark exige alvo, competencia, tres unidades, output e confirmacao nao
   assert.equal(invalidCompetence.status, 1);
   assert.match(invalidCompetence.stderr, /YYYY-MM-01/iu);
 
-  const onlyTwoUnits = completeArgs();
-  onlyTwoUnits.splice(onlyTwoUnits.indexOf(unitIds[2]) - 1, 2);
-  const missingUnit = runScript(onlyTwoUnits, 'postgresql://fixture.invalid/postgres');
+  const noUnits = completeArgs().filter((arg, index, all) => (
+    arg !== '--unit-id' && all[index - 1] !== '--unit-id'
+  ));
+  const missingUnit = runScript(noUnits, 'postgresql://fixture.invalid/postgres');
   assert.equal(missingUnit.status, 1);
-  assert.match(missingUnit.stderr, /exatamente tres --unit-id/iu);
+  assert.match(missingUnit.stderr, /ao menos um --unit-id/iu);
+
+  const oneUnit = completeArgs();
+  for (const id of unitIds.slice(1)) oneUnit.splice(oneUnit.indexOf(id) - 1, 2);
+  const dynamicList = runScript(oneUnit, 'postgresql://fixture.invalid/postgres');
+  assert.notEqual(
+    dynamicList.stderr.match(/exatamente tres --unit-id/iu)?.[0],
+    'exatamente tres --unit-id',
+    'lista com uma unidade deve passar pela validacao de quantidade e chegar ao alvo fixture',
+  );
 
   const missingOutput = completeArgs();
   missingOutput.splice(missingOutput.indexOf('--output'), 2);
@@ -124,25 +134,34 @@ test('benchmark recusa reinicio sem prova recente e anterior a primeira rodada',
   }), /ISO-8601 valido/iu);
 });
 
-test('benchmark exige correspondencia exata das tres unidades ativas', () => {
+test('benchmark exige igualdade exata entre a lista dinamica e todas as unidades ativas', () => {
   const rows = unitIds.map((id, index) => ({ id, nome: `Unidade ${index + 1}`, ativo: true }));
   assert.deepEqual(validateActiveUnits(unitIds, rows).map((row) => row.id), [...unitIds].sort());
+
+  const single = [rows[0]];
+  assert.deepEqual(validateActiveUnits([unitIds[0]], single), single);
   assert.throws(
     () => validateActiveUnits(unitIds, rows.map((row, index) => (
       index === 1 ? { ...row, ativo: false } : row
     ))),
-    /unidades ativas existentes/iu,
+    /todas as unidades ativas/iu,
   );
   assert.throws(
     () => validateActiveUnits(unitIds, rows.slice(0, 2)),
-    /unidades ativas existentes/iu,
+    /todas as unidades ativas/iu,
   );
   assert.throws(
     () => validateActiveUnits(unitIds, [
       rows[0], rows[1], { ...rows[2], id: '20000000-0000-4000-8000-000000000003' },
     ]),
-    /unidades ativas existentes/iu,
+    /todas as unidades ativas/iu,
   );
+  assert.throws(
+    () => validateActiveUnits(unitIds.slice(0, 2), rows),
+    /todas as unidades ativas/iu,
+    'unidade ativa extra no banco deve invalidar o benchmark',
+  );
+  assert.throws(() => validateActiveUnits([], []), /ao menos uma unidade ativa/iu);
 });
 
 test('funcao dominante usa delta por OID e exige chamada positiva', () => {
@@ -228,9 +247,13 @@ test('benchmark recusa track_functions diferente de all', () => {
 });
 
 test('benchmark exige estado inicial materializado e reruns sem alteracao', () => {
-  for (const status of ['materializado', 'parcial', 'baseline_adotado']) {
+  for (const status of ['materializado', 'parcial']) {
     assert.equal(assertStatusContract(1, status), status);
   }
+  assert.throws(
+    () => assertStatusContract(1, 'baseline_adotado'),
+    /baseline_adotado.*fixture nao limpa/iu,
+  );
   assert.equal(assertStatusContract(2, 'sem_alteracao'), 'sem_alteracao');
   assert.equal(assertStatusContract(3, 'sem_alteracao'), 'sem_alteracao');
   assert.throws(() => assertStatusContract(1, 'sem_alteracao'), /rodada 1.*inesperado/iu);
@@ -238,7 +261,7 @@ test('benchmark exige estado inicial materializado e reruns sem alteracao', () =
   assert.throws(() => assertStatusContract(3, 'parcial'), /deve exercitar sem_alteracao/iu);
 });
 
-test('resumo decide pelo total dos quatro escopos sem apagar decisao historica', () => {
+test('resumo decide pelo total dinamico de N mais um escopos sem apagar decisao historica', () => {
   const scopes = [
     ...unitIds.map((id) => ({ escopo: 'unidade', unidade_id: id })),
     { escopo: 'consolidado', unidade_id: null },
@@ -265,6 +288,17 @@ test('resumo decide pelo total dos quatro escopos sem apagar decisao historica',
   assert.equal(eligible.decision.decisao_historica, 'isolamento_obrigatorio');
   assert.equal(eligible.decision.decisao_operacional, 'isolamento_obrigatorio');
 
+  const reducedScopes = [scopes[0], scopes.at(-1)];
+  const dynamicMeasurements = [1, 2, 3].flatMap((round) => reducedScopes.map((scope) => ({
+    round,
+    scope,
+    status: round === 1 ? 'parcial' : 'sem_alteracao',
+    summary: { execution_time_ms: 500 },
+  })));
+  const dynamic = summarizeRounds(dynamicMeasurements, { 1: 1_100, 2: 1_050, 3: 1_025 });
+  assert.deepEqual(dynamic.rounds.map((round) => round.execution_time_total_ms), [1_000, 1_000, 1_000]);
+  assert.ok(dynamic.rounds.every((round) => Object.keys(round.states_by_scope).length === 2));
+
   const slow = structuredClone(measurements);
   slow.find((entry) => entry.round === 2).summary.execution_time_ms = cronBudgetMs - 9_000;
   const isolated = summarizeRounds(slow, { 1: 11_000, 2: 80_000, 3: 10_250 });
@@ -274,7 +308,7 @@ test('resumo decide pelo total dos quatro escopos sem apagar decisao historica',
   assert.equal(isolated.decision.decisao_historica, 'isolamento_obrigatorio');
 });
 
-test('benchmark mede doze executores e observa funcoes somente depois do rollback', () => {
+test('benchmark mede tres rodadas de N mais um escopos e observa funcoes somente depois do rollback', () => {
   assert.equal((script.match(/session\.query\('begin;'\)/gu) || []).length, 1);
   assert.equal((script.match(/session\.query\('rollback;'\)/gu) || []).length, 1);
   assert.match(script, /try\s*\{[\s\S]*baseline = await captureBaseline\(\)[\s\S]*await beginTransaction\(\)[\s\S]*finally\s*\{[\s\S]*await rollbackTransaction\(\)[\s\S]*await capturePostRollback\(baseline\)/u);
@@ -292,7 +326,9 @@ test('benchmark mede doze executores e observa funcoes somente depois do rollbac
   assert.ok(executionCallbacks, 'callbacks das 12 execucoes devem estar declarados');
   assert.doesNotMatch(executionCallbacks, /statsSql\(\)|pg_stat_user_functions|pg_stat_clear_snapshot/iu);
   assert.match(script, /writes_preserved_between_rounds:\s*true/u);
-  assert.match(script, /transaction_policy:\s*'uma_transacao_12_execucoes_rollback_unico_finally'/u);
+  assert.match(script, /transaction_policy:\s*`uma_transacao_\$\{executionsPerBenchmark\}_execucoes_rollback_unico_finally`/u);
+  assert.match(script, /executions:\s*executionsPerBenchmark/u);
+  assert.match(script, /scopes_per_round:\s*scopesPerRound/u);
   assert.match(script, /raw_explain:\s*rawExplain/u);
   assert.match(script, /requiredNumber\(root,\s*'Temp Read Blocks'/u);
   assert.match(script, /requiredNumber\(root,\s*'Temp Written Blocks'/u);

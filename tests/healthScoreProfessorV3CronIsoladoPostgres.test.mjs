@@ -160,6 +160,7 @@ const setupSql = String.raw`
 create role anon nologin;
 create role authenticated nologin;
 create role service_role nologin;
+create role cron_other nologin;
 
 create schema cron;
 create schema net;
@@ -186,8 +187,15 @@ create table cron.job (
   database text not null default current_database(),
   username text not null default current_user,
   active boolean not null default true,
-  jobname text not null unique
+  jobname text not null,
+  unique (jobname, username)
 );
+
+create table cron.fixture_control (
+  singleton boolean primary key default true,
+  fail_schedule boolean not null default false
+);
+insert into cron.fixture_control default values;
 
 create table cron.api_calls (
   id bigint generated always as identity primary key,
@@ -195,6 +203,7 @@ create table cron.api_calls (
   jobname text,
   schedule text,
   command text
+  , username text
 );
 
 create or replace function cron.schedule(
@@ -208,16 +217,20 @@ as $$
 declare
   v_jobid bigint;
 begin
-  insert into cron.job (jobname, schedule, command)
-  values ($1, $2, $3)
-  on conflict (jobname) do update
+  if (select fail_schedule from cron.fixture_control where singleton) then
+    raise exception 'fixture-cron-schedule-failure';
+  end if;
+
+  insert into cron.job (jobname, schedule, command, username)
+  values ($1, $2, $3, current_user)
+  on conflict (jobname, username) do update
     set schedule = excluded.schedule,
         command = excluded.command,
         active = true
   returning jobid into v_jobid;
 
-  insert into cron.api_calls (operation, jobname, schedule, command)
-  values ('schedule', $1, $2, $3);
+  insert into cron.api_calls (operation, jobname, schedule, command, username)
+  values ('schedule', $1, $2, $3, current_user);
   return v_jobid;
 end;
 $$;
@@ -228,10 +241,13 @@ language plpgsql
 as $$
 declare
   v_jobname text;
+  v_username text;
 begin
-  select j.jobname into v_jobname from cron.job j where j.jobid = $1;
+  select j.jobname, j.username into v_jobname, v_username
+    from cron.job j where j.jobid = $1;
   delete from cron.job j where j.jobid = $1;
-  insert into cron.api_calls (operation, jobname) values ('unschedule', v_jobname);
+  insert into cron.api_calls (operation, jobname, username)
+  values ('unschedule', v_jobname, v_username);
   return found;
 end;
 $$;
@@ -291,6 +307,13 @@ create table net.http_calls (
   body jsonb not null
 );
 
+create sequence net.http_attempts_seq;
+create table net.fixture_control (
+  singleton boolean primary key default true,
+  fail_http boolean not null default false
+);
+insert into net.fixture_control default values;
+
 create or replace function net.http_post(
   url text,
   body jsonb default '{}'::jsonb,
@@ -304,6 +327,10 @@ as $$
 declare
   v_id bigint;
 begin
+  perform nextval('net.http_attempts_seq');
+  if (select fail_http from net.fixture_control where singleton) then
+    raise exception 'fixture-http-post-failure';
+  end if;
   insert into net.http_calls (url, headers, body)
   values (url, headers, body)
   returning id into v_id;
@@ -392,9 +419,11 @@ revoke all on function public.executar_health_score_professor_v3_cron_diario()
 grant execute on function public.executar_health_score_professor_v3_cron_diario()
   to service_role;
 
-insert into cron.job (jobname, schedule, command) values
-  ('${legacyJobName}', '30 6 * * *', 'select public.executar_health_score_professor_v3_cron_diario();'),
-  ('job-alheio-nao-tocar', '5 1 * * *', 'select 42;');
+insert into cron.job (jobname, schedule, command, username) values
+  ('${legacyJobName}', '30 6 * * *', 'select public.executar_health_score_professor_v3_cron_diario();', 'postgres'),
+  ('${legacyJobName}', '31 6 * * *', 'select public.executar_health_score_professor_v3_cron_diario();', 'cron_other'),
+  ('${jobPrefix}unidade-${unitIds[0]}', '32 6 * * *', 'select 99;', 'cron_other'),
+  ('job-alheio-nao-tocar', '5 1 * * *', 'select 42;', 'cron_other');
 `;
 
 test('migration corretiva real usa somente APIs publicas do pg_cron', () => {
@@ -437,7 +466,7 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
 
       const firstCatalog = psql(
         container,
-        `select jsonb_agg(to_jsonb(j) order by jobname)::text
+        `select jsonb_agg(to_jsonb(j) - 'jobid' order by jobname, username)::text
            from cron.job j
           where jobname like '${jobPrefix}%';`,
       );
@@ -447,7 +476,7 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
       assert.equal(secondApply.status, 0, secondApply.stderr);
       const secondCatalog = psql(
         container,
-        `select jsonb_agg(to_jsonb(j) order by jobname)::text
+        `select jsonb_agg(to_jsonb(j) - 'jobid' order by jobname, username)::text
            from cron.job j
           where jobname like '${jobPrefix}%';`,
       );
@@ -470,13 +499,13 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
 
     assert.equal(catalog.legacy_count, 0, 'job legado deve ser removido pelo nome exato');
     assert.deepEqual(catalog.unrelated, [{
-      jobid: 2,
+      jobid: 4,
       schedule: '5 1 * * *',
       command: 'select 42;',
       nodename: 'localhost',
       nodeport: 5432,
       database: 'postgres',
-      username: 'postgres',
+      username: 'cron_other',
       active: true,
       jobname: 'job-alheio-nao-tocar',
     }]);
@@ -487,6 +516,10 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
       `${jobPrefix}consolidado`,
     ].sort();
     assert.deepEqual(catalog.isolated.map((job) => job.jobname).sort(), expectedNames);
+    assert.ok(
+      catalog.isolated.every((job) => job.username === 'postgres'),
+      'todos os jobs do modulo devem ser recriados pelo owner atual da migration',
+    );
     assert.ok(
       catalog.isolated.every((job) => !job.jobname.includes(inactiveUnitId)),
       'unidade inativa nao pode ganhar job',
@@ -504,9 +537,19 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
     const cronApiCalls = JSON.parse(cronApiResult.stdout.trim());
     assert.ok(
       cronApiCalls.some((call) => (
-        call.operation === 'unschedule' && call.jobname === legacyJobName
+        call.operation === 'unschedule'
+        && call.jobname === legacyJobName
+        && call.username === 'cron_other'
       )),
-      'job legado deve ser desagendado pelo nome exato',
+      'homonimo legado de outro owner deve ser desagendado por jobid',
+    );
+    assert.ok(
+      cronApiCalls.some((call) => (
+        call.operation === 'unschedule'
+        && call.jobname === `${jobPrefix}unidade-${unitIds[0]}`
+        && call.username === 'cron_other'
+      )),
+      'homonimo isolado de outro owner deve ser desagendado por jobid',
     );
     assert.ok(
       cronApiCalls.every((call) => call.jobname !== 'job-alheio-nao-tocar'),
@@ -597,9 +640,14 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
     assert.deepEqual(byUnit.get(unitIds[1]).professores_incompletos, []);
     assert.equal(byUnit.get(unitIds[2]).status, 'erro');
     assert.equal(byUnit.get(unitIds[2]).erro, 'fixture-error');
+    assert.equal(byUnit.get(unitIds[2]).execution_id, 'exec-erro');
+    assert.equal(byUnit.get(unitIds[2]).alerta_status, 'enviado');
+    assert.equal(byUnit.get(unitIds[2]).alerta_erro, null);
     assert.deepEqual(byUnit.get(unitIds[2]).professores_incompletos, [303]);
     assert.equal(byUnit.get(null).status, 'sem_alteracao');
     assert.deepEqual(byUnit.get(null).professores_incompletos, []);
+    assert.equal(byUnit.get(null).reconciliacao_status, 'ok');
+    assert.equal(byUnit.get(null).reconciliacao_erro, null);
 
     const alertsResult = psql(
       container,
@@ -624,6 +672,172 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
         `${nonErrorExecutionId} nao pode disparar alerta`,
       );
     }
+
+    const alertAttemptsBeforeFailures = psql(
+      container,
+      `select last_value::text from net.http_attempts_seq;`,
+    );
+    assert.equal(alertAttemptsBeforeFailures.status, 0, alertAttemptsBeforeFailures.stderr);
+
+    const httpFailure = psql(
+      container,
+      `update net.fixture_control set fail_http = true;
+       set role service_role;
+       select public.executar_health_score_professor_v3_job_escopo(
+         'unidade', '${unitIds[2]}'::uuid
+       )::text;`,
+    );
+    assert.equal(httpFailure.status, 0, httpFailure.stderr);
+    const httpFailureResult = JSON.parse(httpFailure.stdout.trim());
+    assert.equal(httpFailureResult.status, 'erro');
+    assert.equal(httpFailureResult.execution_id, 'exec-erro');
+    assert.equal(httpFailureResult.erro, 'fixture-error');
+    assert.deepEqual(httpFailureResult.professores_incompletos, [303]);
+    assert.equal(httpFailureResult.alerta_status, 'falha');
+    assert.match(httpFailureResult.alerta_erro, /fixture-http-post-failure/iu);
+    const alertAttemptsAfterHttpFailure = psql(
+      container,
+      `select last_value::text from net.http_attempts_seq;`,
+    );
+    assert.equal(alertAttemptsAfterHttpFailure.status, 0, alertAttemptsAfterHttpFailure.stderr);
+    assert.equal(
+      Number(alertAttemptsAfterHttpFailure.stdout.trim()),
+      Number(alertAttemptsBeforeFailures.stdout.trim()) + 1,
+      'falha HTTP deve fazer uma unica tentativa, sem segundo alerta',
+    );
+
+    const vaultFailure = psql(
+      container,
+      `update net.fixture_control set fail_http = false;
+       alter table vault.decrypted_secrets rename to decrypted_secrets_indisponivel;
+       set role service_role;
+       select public.executar_health_score_professor_v3_job_escopo(
+         'unidade', '${unitIds[2]}'::uuid
+       )::text;
+       reset role;
+       alter table vault.decrypted_secrets_indisponivel rename to decrypted_secrets;`,
+    );
+    assert.equal(vaultFailure.status, 0, vaultFailure.stderr);
+    const vaultFailureResult = JSON.parse(vaultFailure.stdout.trim());
+    assert.equal(vaultFailureResult.status, 'erro');
+    assert.equal(vaultFailureResult.execution_id, 'exec-erro');
+    assert.equal(vaultFailureResult.erro, 'fixture-error');
+    assert.deepEqual(vaultFailureResult.professores_incompletos, [303]);
+    assert.equal(vaultFailureResult.alerta_status, 'falha');
+    assert.match(vaultFailureResult.alerta_erro, /decrypted_secrets/iu);
+    const alertAttemptsAfterVaultFailure = psql(
+      container,
+      `select last_value::text from net.http_attempts_seq;`,
+    );
+    assert.equal(alertAttemptsAfterVaultFailure.status, 0, alertAttemptsAfterVaultFailure.stderr);
+    assert.equal(
+      alertAttemptsAfterVaultFailure.stdout.trim(),
+      alertAttemptsAfterHttpFailure.stdout.trim(),
+      'falha no Vault nao pode tentar HTTP nem um alerta secundario',
+    );
+
+    const missingSecret = psql(
+      container,
+      `delete from vault.decrypted_secrets
+        where name = 'lia_alertas_service_role_key';
+       set role service_role;
+       select public.executar_health_score_professor_v3_job_escopo(
+         'unidade', '${unitIds[2]}'::uuid
+       )::text;`,
+    );
+    assert.equal(missingSecret.status, 0, missingSecret.stderr);
+    const missingSecretResult = JSON.parse(missingSecret.stdout.trim());
+    assert.equal(missingSecretResult.status, 'erro');
+    assert.equal(missingSecretResult.execution_id, 'exec-erro');
+    assert.equal(missingSecretResult.alerta_status, 'nao_configurado');
+    assert.match(missingSecretResult.alerta_erro, /segredo.*nao configurado/iu);
+    const alertAttemptsAfterMissingSecret = psql(
+      container,
+      `select last_value::text from net.http_attempts_seq;`,
+    );
+    assert.equal(alertAttemptsAfterMissingSecret.status, 0, alertAttemptsAfterMissingSecret.stderr);
+    assert.equal(
+      alertAttemptsAfterMissingSecret.stdout.trim(),
+      alertAttemptsAfterVaultFailure.stdout.trim(),
+      'segredo ausente nao pode tentar HTTP',
+    );
+
+    const dynamicReconciliation = psql(
+      container,
+      `insert into vault.decrypted_secrets (name, decrypted_secret) values
+         ('lia_alertas_service_role_key', 'fixture-secret-never-in-job');
+       update public.unidades set ativo = true where id = '${inactiveUnitId}'::uuid;
+       set role service_role;
+       select public.executar_health_score_professor_v3_job_escopo(
+         'consolidado', null::uuid
+       )::text;`,
+    );
+    assert.equal(dynamicReconciliation.status, 0, dynamicReconciliation.stderr);
+    const activatedResult = JSON.parse(dynamicReconciliation.stdout.trim());
+    assert.equal(activatedResult.status, 'sem_alteracao');
+    assert.equal(activatedResult.execution_id, 'exec-sem-alteracao');
+    assert.equal(activatedResult.reconciliacao_status, 'ok');
+    assert.equal(activatedResult.reconciliacao_erro, null);
+
+    const activatedCatalog = psql(
+      container,
+      `select jsonb_agg(to_jsonb(j) - 'jobid' order by jobname, username)::text
+         from cron.job j where jobname like '${jobPrefix}%';`,
+    );
+    assert.equal(activatedCatalog.status, 0, activatedCatalog.stderr);
+    const activatedJobs = JSON.parse(activatedCatalog.stdout.trim());
+    assert.equal(activatedJobs.length, 5, '4 unidades ativas + consolidado apos reconciliar');
+    assert.ok(activatedJobs.some((job) => job.jobname.includes(inactiveUnitId)));
+
+    const deactivatedReconciliation = psql(
+      container,
+      `update public.unidades set ativo = false where id = '${unitIds[0]}'::uuid;
+       set role service_role;
+       select public.executar_health_score_professor_v3_job_escopo(
+         'consolidado', null::uuid
+       )::text;`,
+    );
+    assert.equal(deactivatedReconciliation.status, 0, deactivatedReconciliation.stderr);
+    const deactivatedResult = JSON.parse(deactivatedReconciliation.stdout.trim());
+    assert.equal(deactivatedResult.status, 'sem_alteracao');
+    assert.equal(deactivatedResult.reconciliacao_status, 'ok');
+    const reconciledCatalog = psql(
+      container,
+      `select jsonb_agg(to_jsonb(j) - 'jobid' order by jobname, username)::text
+         from cron.job j where jobname like '${jobPrefix}%';`,
+    );
+    assert.equal(reconciledCatalog.status, 0, reconciledCatalog.stderr);
+    const reconciledJobs = JSON.parse(reconciledCatalog.stdout.trim());
+    assert.equal(reconciledJobs.length, 4, '3 unidades ativas + consolidado apos reconciliar');
+    assert.ok(reconciledJobs.every((job) => !job.jobname.includes(unitIds[0])));
+    assert.equal(new Set(reconciledJobs.map((job) => `${job.jobname}:${job.username}`)).size, 4);
+
+    const catalogBeforeReconciliationFailure = reconciledCatalog.stdout.trim();
+    const reconciliationFailure = psql(
+      container,
+      `update cron.fixture_control set fail_schedule = true;
+       set role service_role;
+       select public.executar_health_score_professor_v3_job_escopo(
+         'consolidado', null::uuid
+       )::text;`,
+    );
+    assert.equal(reconciliationFailure.status, 0, reconciliationFailure.stderr);
+    const reconciliationFailureResult = JSON.parse(reconciliationFailure.stdout.trim());
+    assert.equal(reconciliationFailureResult.status, 'sem_alteracao');
+    assert.equal(reconciliationFailureResult.execution_id, 'exec-sem-alteracao');
+    assert.equal(reconciliationFailureResult.reconciliacao_status, 'falha');
+    assert.match(reconciliationFailureResult.reconciliacao_erro, /fixture-cron-schedule-failure/iu);
+    const catalogAfterReconciliationFailure = psql(
+      container,
+      `select jsonb_agg(to_jsonb(j) - 'jobid' order by jobname, username)::text
+         from cron.job j where jobname like '${jobPrefix}%';`,
+    );
+    assert.equal(catalogAfterReconciliationFailure.status, 0, catalogAfterReconciliationFailure.stderr);
+    assert.equal(
+      catalogAfterReconciliationFailure.stdout.trim(),
+      catalogBeforeReconciliationFailure,
+      'subtransacao deve preservar catalogo anterior quando reconciliacao falhar',
+    );
 
     const exactSignature = [...parsedCommands.values()][0].signature;
     const securityResult = psql(
@@ -672,6 +886,36 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
     assert.equal(wrapper.core_calls, 1);
     assert.equal(wrapper.has_loop, false);
     assert.equal(wrapper.reads_units, false);
+
+    const aclResult = psql(
+      container,
+      `select jsonb_build_object(
+         'legacy_service_role', has_function_privilege(
+           'service_role', 'public.executar_health_score_professor_v3_cron_diario()', 'EXECUTE'
+         ),
+         'legacy_owner', has_function_privilege(
+           'postgres', 'public.executar_health_score_professor_v3_cron_diario()', 'EXECUTE'
+         ),
+         'config_service_role', has_function_privilege(
+           'service_role', 'public.configurar_health_score_professor_v3_cron_escopos()', 'EXECUTE'
+         ),
+         'config_owner', has_function_privilege(
+           'postgres', 'public.configurar_health_score_professor_v3_cron_escopos()', 'EXECUTE'
+         ),
+         'core_service_role', has_function_privilege(
+           'service_role',
+           'public.executar_health_score_professor_v3_escopo_diario(date,text,text,uuid)',
+           'EXECUTE'
+         )
+       )::text;`,
+    );
+    assert.equal(aclResult.status, 0, aclResult.stderr);
+    const acl = JSON.parse(aclResult.stdout.trim());
+    assert.equal(acl.legacy_service_role, false);
+    assert.equal(acl.legacy_owner, true);
+    assert.equal(acl.config_service_role, false);
+    assert.equal(acl.config_owner, true);
+    assert.equal(acl.core_service_role, false);
   } finally {
     docker(['rm', '--force', container]);
   }
