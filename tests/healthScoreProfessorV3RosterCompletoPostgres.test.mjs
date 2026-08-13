@@ -118,6 +118,46 @@ function localProducerDefinitions() {
     .sort();
 }
 
+function assertFullyWithoutBaseAggregate(rows, scopeName) {
+  const professorRows = rows.filter((row) => row.professor_id === 102);
+  if (professorRows.length === 0) return;
+
+  for (const row of professorRows) {
+    assert.equal(
+      row.score_observado,
+      null,
+      `${scopeName}: sem base nao pode fabricar score observado`,
+    );
+    for (const field of [
+      'pilares_validos',
+      'peso_disponivel_total',
+      'cobertura',
+      'cobertura_normalizada',
+    ]) {
+      assert.notEqual(
+        row[field],
+        null,
+        `${scopeName}: ${field} sem base deve ser zero explicito, nao null`,
+      );
+      assert.equal(
+        row[field],
+        0,
+        `${scopeName}: ${field} sem base deve ser zero numerico`,
+      );
+    }
+    assert.equal(
+      row.score_comparavel,
+      null,
+      `${scopeName}: sem base nao pode ser comparavel`,
+    );
+    assert.equal(
+      row.classificacao,
+      null,
+      `${scopeName}: sem base nao pode receber classificacao`,
+    );
+  }
+}
+
 const fixture = `
   create extension if not exists pgcrypto;
   create schema auth;
@@ -675,28 +715,10 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
       assert.equal(row.classificacao, null);
     }
 
-    const fullyWithoutBaseRows = unitARows.filter((row) => row.professor_id === 102);
-    if (fullyWithoutBaseRows.length > 0) {
-      for (const row of fullyWithoutBaseRows) {
-        assert.equal(row.score_observado, null, 'sem base nao pode fabricar score observado');
-        assert.equal(Number(row.pilares_validos), 0, 'sem base deve ter zero pilares validos');
-        assert.equal(
-          Number(row.peso_disponivel_total),
-          0,
-          'sem base deve ter peso disponivel total zero',
-        );
-        assert.equal(Number(row.cobertura), 0, 'sem base deve ter cobertura zero');
-        assert.equal(
-          Number(row.cobertura_normalizada),
-          0,
-          'sem base deve ter cobertura normalizada zero',
-        );
-        assert.equal(row.score_comparavel, null, 'sem base nao pode ser comparavel');
-        assert.equal(row.classificacao, null, 'sem base nao pode receber classificacao');
-      }
-    }
     const unitBRows = rowsByScope.get('unidade_b');
     const consolidatedRows = rowsByScope.get('consolidado');
+    assertFullyWithoutBaseAggregate(unitARows, 'unidade_a');
+    assertFullyWithoutBaseAggregate(consolidatedRows, 'consolidado');
     const multiUnitFacts = [
       { scope: 'unidade_a', rows: unitARows, metric: 'presenca', expectedValue: 91 },
       { scope: 'unidade_a', rows: unitARows, metric: 'numero_alunos', expectedValue: 21 },
