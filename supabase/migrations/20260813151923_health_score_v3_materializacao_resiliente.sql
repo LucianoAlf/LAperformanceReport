@@ -1,11 +1,22 @@
 begin;
 
+-- O produtor governa a comparabilidade. Retratos em maturacao precisam
+-- persistir classificacao nula sem fabricar uma faixa a partir do score bruto.
+alter table public.health_score_professor_v3_snapshots
+  alter column classificacao drop not null;
+
 -- A execucao parcial e um resultado concluido e auditavel: o escopo foi
 -- materializado para todos os professores cuja captura continha as seis
 -- metricas, enquanto as lacunas ficaram explicitadas no retorno.
 alter table public.health_score_professor_v3_materializacao_execucoes
   drop constraint if exists
     health_score_professor_v3_materializacao_execucoes_status_check;
+
+alter table public.health_score_professor_v3_materializacao_execucoes
+  add column if not exists professores_incompletos jsonb
+    not null default '[]'::jsonb,
+  add column if not exists professores_configuracao_inconsistente jsonb
+    not null default '[]'::jsonb;
 
 alter table public.health_score_professor_v3_materializacao_execucoes
   add constraint health_score_professor_v3_materializacao_execucoes_status_check
@@ -182,10 +193,18 @@ begin
     ), configuracoes as (
       select
         f.professor_id,
-        count(distinct f.config_id)::integer as quantidade_ids,
-        count(distinct f.config_versao)::integer as quantidade_versoes,
-        jsonb_agg(distinct f.config_id order by f.config_id) as config_ids,
-        jsonb_agg(distinct f.config_versao order by f.config_versao) as config_versoes,
+        count(distinct coalesce(f.config_id::text, '__NULL__'))::integer
+          as quantidade_ids,
+        count(distinct coalesce(f.config_versao::text, '__NULL__'))::integer
+          as quantidade_versoes,
+        jsonb_agg(
+          distinct coalesce(f.config_id::text, '__NULL__')
+          order by coalesce(f.config_id::text, '__NULL__')
+        ) as config_ids,
+        jsonb_agg(
+          distinct coalesce(f.config_versao::text, '__NULL__')
+          order by coalesce(f.config_versao::text, '__NULL__')
+        ) as config_versoes,
         min(f.config_id::text)::uuid as unico_config_id,
         min(f.config_versao)::integer as unica_config_versao
       from health_score_v3_diario_fonte f
@@ -462,10 +481,18 @@ begin
     ), configuracoes as (
       select
         f.professor_id,
-        count(distinct f.config_id)::integer as quantidade_ids,
-        count(distinct f.config_versao)::integer as quantidade_versoes,
-        jsonb_agg(distinct f.config_id order by f.config_id) as config_ids,
-        jsonb_agg(distinct f.config_versao order by f.config_versao) as config_versoes,
+        count(distinct coalesce(f.config_id::text, '__NULL__'))::integer
+          as quantidade_ids,
+        count(distinct coalesce(f.config_versao::text, '__NULL__'))::integer
+          as quantidade_versoes,
+        jsonb_agg(
+          distinct coalesce(f.config_id::text, '__NULL__')
+          order by coalesce(f.config_id::text, '__NULL__')
+        ) as config_ids,
+        jsonb_agg(
+          distinct coalesce(f.config_versao::text, '__NULL__')
+          order by coalesce(f.config_versao::text, '__NULL__')
+        ) as config_versoes,
         min(f.config_id::text)::uuid as unico_config_id,
         min(f.config_versao)::integer as unica_config_versao
       from health_score_v3_diario_fonte f
@@ -478,12 +505,6 @@ begin
        or c.quantidade_versoes <> 1
        or c.unico_config_id is distinct from a.config_id
        or c.unica_config_versao is distinct from a.config_versao;
-
-    select md5(coalesce(
-      jsonb_agg(to_jsonb(f) order by f.professor_id, f.metrica)::text,
-      '[]'
-    )) into v_fingerprint_atual
-    from health_score_v3_diario_fonte f;
 
     select coalesce(
       jsonb_agg(jsonb_build_object(
@@ -503,6 +524,32 @@ begin
       '[]'::jsonb
     ) into v_inconsistentes
     from health_score_v3_diario_config_inconsistente i;
+
+    -- O fingerprint representa o estado materializavel completo da captura:
+    -- fonte unica, roster esperado e diagnosticos ordenados. Assim, uma
+    -- mudanca apenas no roster invalida a idempotencia sem reler o produtor.
+    select md5(jsonb_build_object(
+      'fonte', coalesce((
+        select jsonb_agg(to_jsonb(f) order by f.professor_id, f.metrica)
+        from health_score_v3_diario_fonte f
+      ), '[]'::jsonb),
+      'roster_esperado', coalesce((
+        select jsonb_agg(r.professor_id order by r.professor_id)
+        from (
+          select distinct p.id as professor_id
+          from public.professores p
+          join public.professores_unidades pu on pu.professor_id = p.id
+          join public.unidades u on u.id = pu.unidade_id and u.ativo = true
+          where p.ativo = true
+            and pu.emusys_ativo = true
+            and pu.validacao_status is distinct from 'ignorado'
+            and to_jsonb(p) ->> 'mesclado_em_professor_id' is null
+            and (p_escopo = 'consolidado' or pu.unidade_id = p_unidade_id)
+        ) r
+      ), '[]'::jsonb),
+      'professores_incompletos', v_incompletos,
+      'professores_configuracao_inconsistente', v_inconsistentes
+    )::text) into v_fingerprint_atual;
   exception when others then
     perform set_config('app.health_score_v3_fonte_preparada', 'off', true);
     insert into public.health_score_professor_v3_materializacao_execucoes (
@@ -524,9 +571,12 @@ begin
 
   if v_fingerprint_atual is not distinct from v_fingerprint_anterior then
     insert into public.health_score_professor_v3_materializacao_execucoes (
-      competencia, periodicidade, escopo, unidade_id, fingerprint_fonte, status, finalizado_em
+      competencia, periodicidade, escopo, unidade_id, fingerprint_fonte, status,
+      professores_incompletos, professores_configuracao_inconsistente,
+      finalizado_em
     ) values (
-      v_competencia, p_periodicidade, p_escopo, p_unidade_id, v_fingerprint_atual, 'sem_alteracao', now()
+      v_competencia, p_periodicidade, p_escopo, p_unidade_id,
+      v_fingerprint_atual, 'sem_alteracao', v_incompletos, v_inconsistentes, now()
     ) returning id into v_execucao_id;
     return jsonb_build_object(
       'execution_id', v_execucao_id,
@@ -542,9 +592,12 @@ begin
       and s.escopo = p_escopo and s.unidade_id is not distinct from p_unidade_id
   ) then
     insert into public.health_score_professor_v3_materializacao_execucoes (
-      competencia, periodicidade, escopo, unidade_id, fingerprint_fonte, status, finalizado_em
+      competencia, periodicidade, escopo, unidade_id, fingerprint_fonte, status,
+      professores_incompletos, professores_configuracao_inconsistente,
+      finalizado_em
     ) values (
-      v_competencia, p_periodicidade, p_escopo, p_unidade_id, v_fingerprint_atual, 'baseline_adotado', now()
+      v_competencia, p_periodicidade, p_escopo, p_unidade_id,
+      v_fingerprint_atual, 'baseline_adotado', v_incompletos, v_inconsistentes, now()
     ) returning id into v_execucao_id;
     return jsonb_build_object(
       'execution_id', v_execucao_id,
@@ -555,9 +608,11 @@ begin
   end if;
 
   insert into public.health_score_professor_v3_materializacao_execucoes (
-    competencia, periodicidade, escopo, unidade_id, fingerprint_fonte, status
+    competencia, periodicidade, escopo, unidade_id, fingerprint_fonte, status,
+    professores_incompletos, professores_configuracao_inconsistente
   ) values (
-    v_competencia, p_periodicidade, p_escopo, p_unidade_id, v_fingerprint_atual, 'iniciada'
+    v_competencia, p_periodicidade, p_escopo, p_unidade_id,
+    v_fingerprint_atual, 'iniciada', v_incompletos, v_inconsistentes
   ) returning id into v_execucao_id;
 
   begin
@@ -574,6 +629,8 @@ begin
     update public.health_score_professor_v3_materializacao_execucoes
       set status = v_status, snapshot_ids = coalesce(v_resultado->'snapshot_ids', '[]'::jsonb),
           snapshots_criados = coalesce((v_resultado->>'snapshots_criados')::integer, 0),
+          professores_incompletos = v_incompletos,
+          professores_configuracao_inconsistente = v_inconsistentes,
           erro = null, finalizado_em = now()
       where id = v_execucao_id;
     return v_resultado || jsonb_build_object(
@@ -635,21 +692,53 @@ begin
     raise exception 'HEALTH_SCORE_V3_FECHAMENTO_BLOQUEADO: ciclo ja oficial';
   end if;
 
+  -- A ordem global e unica para todas as sessoes: competencia, familia e
+  -- unidade. Assim o fechamento coordena tanto o materializador periodico
+  -- quanto o materializador legado de escopo explicito sem ciclo de espera.
   for v_lock in
-    select gs::date as competencia
-    from generate_series(
-      date_trunc('month', v_ciclo.data_inicio)::timestamp,
-      date_trunc('month', v_ciclo.data_fim)::timestamp,
-      interval '1 month'
-    ) gs
-    order by competencia
+    with competencias as (
+      select gs::date as competencia
+      from generate_series(
+        date_trunc('month', v_ciclo.data_inicio)::timestamp,
+        date_trunc('month', v_ciclo.data_fim)::timestamp,
+        interval '1 month'
+      ) gs
+    ), unidades_ativas as (
+      select u.id as unidade_id
+      from public.unidades u
+      where u.ativo = true
+    ), chaves as (
+      select
+        c.competencia,
+        0 as ordem_familia,
+        null::uuid as unidade_id,
+        'health_score_v3_periodo:' || c.competencia::text || ':ciclo' as chave
+      from competencias c
+
+      union all
+
+      select
+        c.competencia,
+        1 as ordem_familia,
+        null::uuid as unidade_id,
+        'health_score_professor_v3:' || c.competencia::text || ':consolidado:rede' as chave
+      from competencias c
+
+      union all
+
+      select
+        c.competencia,
+        2 as ordem_familia,
+        u.unidade_id,
+        'health_score_professor_v3:' || c.competencia::text || ':unidade:' || u.unidade_id::text as chave
+      from competencias c
+      cross join unidades_ativas u
+    )
+    select competencia, ordem_familia, unidade_id, chave
+    from chaves
+    order by competencia, ordem_familia, unidade_id nulls first
   loop
-    perform pg_advisory_xact_lock(hashtextextended(
-      'health_score_v3_periodo:'
-        || v_lock.competencia::text
-        || ':ciclo',
-      0
-    ));
+    perform pg_advisory_xact_lock(hashtextextended(v_lock.chave, 0));
   end loop;
 
   -- Sob os mesmos advisory locks da materializacao, o fechamento e recusado
