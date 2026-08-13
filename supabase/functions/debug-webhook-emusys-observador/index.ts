@@ -1099,7 +1099,14 @@ async function repassarParaProcessamentoMatricula(
       detalhes,
       workflow_id: 'observador-repasse',
       execution_id: new Date().toISOString(),
-      idempotency_key: body?.id != null ? String(body.id) : null,
+      // ⚠️ SEM idempotency_key DE PROPOSITO. `automacao_log_idempotency_key_uq` e UNIQUE
+      // GLOBAL (nao por workflow_id), entao usar `body.id` aqui faz o log da SEGUNDA
+      // entrega do mesmo evento bater no indice e ser engolido pelo catch — o repasse
+      // acontece e nao deixa rastro. Pego no proprio teste de idempotencia em 13/08: o
+      // 3o disparo registrou `webhook_recebido` na edge de destino e NENHUM
+      // `observador-repasse`. Este e um log de TENTATIVA: cada entrega precisa aparecer,
+      // inclusive a repetida — e sobretudo ela, que e o caso em que se quer conferir se a
+      // duplicata foi mesmo absorvida.
     });
   } catch (e: any) {
     console.error('[observador/repasse] falha ao gravar log:', e?.message ?? e);
