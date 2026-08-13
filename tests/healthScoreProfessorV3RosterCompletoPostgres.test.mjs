@@ -342,12 +342,24 @@ const fixture = `
     primary key (professor_id, unidade_id, metrica)
   );
 
+  create table public.fixture_health_score_v3_fingerprint_contador (
+    singleton boolean primary key default true check (singleton),
+    chamadas integer not null default 0
+  );
+  insert into public.fixture_health_score_v3_fingerprint_contador
+    (singleton, chamadas) values (true, 0);
+
   create function public.fn_health_score_professor_v3_config_fingerprint_comparabilidade(
     p_config_id uuid
   ) returns text
-  language sql immutable set search_path = public, pg_temp
+  language plpgsql volatile set search_path = public, pg_temp
   as $$
-    select 'fixture-fingerprint:' || p_config_id::text
+  begin
+    update public.fixture_health_score_v3_fingerprint_contador
+    set chamadas = chamadas + 1
+    where singleton = true;
+    return 'fixture-fingerprint:' || p_config_id::text;
+  end;
   $$;
 
   insert into public.unidades values
@@ -551,9 +563,7 @@ const fixture = `
         (date_trunc('month', p_competencia) + interval '1 month - 1 day')::date
       ),
       '${configId}'::uuid,
-      public.fn_health_score_professor_v3_config_fingerprint_comparabilidade(
-        '${configId}'::uuid
-      ),
+      'fixture-fingerprint:${configId}'::text,
       g.peso_pontuavel_total, c.peso_disponivel,
       round(c.pilares_disponiveis * 100.0 / g.pilares_esperados, 1), 60::numeric,
       case when c.pilares_disponiveis = g.pilares_esperados then '[]'::jsonb
@@ -568,6 +578,12 @@ function readRows(container, unitId, options = {}) {
   const competenciaSql = options.competenciaSql
     ?? "date_trunc('month', current_date)::date";
   const periodicidade = options.periodicidade ?? 'mensal';
+  const resetCounter = psql(container, `
+    update public.fixture_health_score_v3_fingerprint_contador
+    set chamadas = 0
+    where singleton = true;
+  `);
+  assert.equal(resetCounter.status, 0, resetCounter.stderr || resetCounter.stdout);
   const result = psql(container, `
     select jsonb_agg(jsonb_build_object(
       'professor_id', professor_id,
@@ -629,6 +645,17 @@ function readRows(container, unitId, options = {}) {
     );
   `);
   assert.equal(result.status, 0, result.stderr || result.stdout);
+  const counter = psql(container, `
+    select chamadas::text
+    from public.fixture_health_score_v3_fingerprint_contador
+    where singleton = true;
+  `);
+  assert.equal(counter.status, 0, counter.stderr || counter.stdout);
+  assert.equal(
+    Number(counter.stdout.trim()),
+    options.expectedFingerprintCalls ?? 1,
+    'cada execucao de get_performance deve calcular o fingerprint exatamente uma vez',
+  );
   return JSON.parse(result.stdout.trim() || '[]');
 }
 
@@ -668,7 +695,7 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
     ];
     const healthyProducerBaseline = new Map(healthyProfessorsByScope.map((scope) => [
       scope.name,
-      readRows(container, scope.unitId).filter(
+      readRows(container, scope.unitId, { expectedFingerprintCalls: 0 }).filter(
         (row) => scope.professorIds.includes(row.professor_id),
       ),
     ]));
@@ -902,6 +929,18 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
     }
 
     const unitARows = rowsByScope.get('unidade_a');
+    for (const [scope, rows] of rowsByScope) {
+      assert.equal(
+        rows.every((row) => row.periodicidade === 'mensal'),
+        true,
+        `${scope}: consulta mensal deve preservar periodicidade mensal`,
+      );
+      assert.equal(
+        rows.every((row) => row.trimestre_inicio === '2026-07-01'),
+        true,
+        `${scope}: linhas saudaveis e sintetizadas devem usar o trimestre civil vigente no mensal`,
+      );
+    }
     for (const negativeProfessorId of [106, 107, 108, 109]) {
       for (const [scope, rows] of rowsByScope) {
         assert.equal(
