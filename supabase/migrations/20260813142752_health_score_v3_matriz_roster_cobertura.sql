@@ -88,8 +88,11 @@ as $function$
       end as ciclo_codigo
     where p_competencia is not null
       and p_periodicidade in ('mensal', 'ciclo')
-  ), configuracao as (
-    select c.*
+  ), config_ativa as materialized (
+    select
+      c.*,
+      public.fn_health_score_professor_v3_config_fingerprint_comparabilidade(c.id)
+        as fingerprint_comparabilidade
     from public.health_score_professor_v3_config_versoes c
     cross join parametros p
     where c.status = 'ativa'
@@ -105,7 +108,7 @@ as $function$
       cm.meta::numeric as meta,
       coalesce(nullif(cm.parametros ->> 'papel', ''), 'nota')::text as papel
     from public.health_score_professor_v3_config_metricas cm
-    join configuracao c on c.id = cm.config_id
+    join config_ativa c on c.id = cm.config_id
     where cm.metrica in (
       'retencao', 'permanencia', 'conversao',
       'media_turma', 'numero_alunos', 'presenca'
@@ -251,14 +254,17 @@ as $function$
         and r.fonte_canonica_disponivel as comparavel
     from resumo r
     cross join governo g
-    cross join configuracao c
+    cross join config_ativa c
   )
   select
     m.professor_id,
     case when p_unidade_id is null then null::uuid else p_unidade_id end,
     case when p_unidade_id is null then 'consolidado'::text else 'unidade'::text end,
     p.competencia,
-    p.periodo_inicio,
+    case
+      when p_periodicidade = 'ciclo' then p.periodo_inicio
+      else coalesce(md.trimestre_inicio, date_trunc('quarter', p.competencia)::date)
+    end,
     p_periodicidade,
     p.periodo_inicio,
     p.periodo_fim,
@@ -350,7 +356,7 @@ as $function$
     md.classificacao_referencia,
     least(current_date, p.periodo_fim),
     c.id,
-    public.fn_health_score_professor_v3_config_fingerprint_comparabilidade(c.id),
+    c.fingerprint_comparabilidade,
     a.peso_pontuavel_total,
     a.peso_disponivel_total,
     a.cobertura_pilares,
@@ -372,7 +378,7 @@ as $function$
   from matriz m
   join avaliada a on a.professor_id = m.professor_id
   cross join parametros p
-  cross join configuracao c
+  cross join config_ativa c
   left join modelo md on md.professor_id = m.professor_id
   where not exists (
     select 1 from saudaveis s where s.professor_id = m.professor_id
