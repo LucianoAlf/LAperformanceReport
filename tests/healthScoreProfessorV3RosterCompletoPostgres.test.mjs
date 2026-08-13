@@ -34,11 +34,13 @@ const expectedMissingSources = {
   unidade_a: {
     101: ['media_turma', 'permanencia', 'retencao'],
     102: expectedMetrics,
+    110: ['permanencia', 'retencao'],
   },
   unidade_b: {},
   consolidado: {
     101: ['media_turma', 'permanencia', 'retencao'],
     102: expectedMetrics,
+    110: ['permanencia', 'retencao'],
   },
 };
 
@@ -316,7 +318,8 @@ const fixture = `
     vigencia_fim date,
     cobertura_minima numeric not null,
     faixa_atencao_min numeric not null,
-    faixa_saudavel_min numeric not null
+    faixa_saudavel_min numeric not null,
+    exige_pilar_fidelizacao boolean not null
   );
   create table public.health_score_professor_v3_config_metricas (
     id uuid primary key default gen_random_uuid(),
@@ -339,6 +342,14 @@ const fixture = `
     primary key (professor_id, unidade_id, metrica)
   );
 
+  create function public.fn_health_score_professor_v3_config_fingerprint_comparabilidade(
+    p_config_id uuid
+  ) returns text
+  language sql immutable set search_path = public, pg_temp
+  as $$
+    select 'fixture-fingerprint:' || p_config_id::text
+  $$;
+
   insert into public.unidades values
     ('${unitA}', 'Unidade Sintetica A', true),
     ('${unitB}', 'Unidade Sintetica B', true);
@@ -353,7 +364,8 @@ const fixture = `
     (106, 'Professor Globalmente Inativo', false, null),
     (107, 'Professor Vinculo Emusys Inativo', true, null),
     (108, 'Professor Vinculo Ignorado', true, null),
-    (109, 'Professor Cadastro Mesclado', true, 103);
+    (109, 'Professor Cadastro Mesclado', true, 103),
+    (110, 'Professor Sem Fidelizacao', true, null);
   insert into public.professores_unidades values
     (101, '${unitA}', true, 'validado'),
     (102, '${unitA}', true, 'validado'),
@@ -364,10 +376,11 @@ const fixture = `
     (106, '${unitA}', true, 'validado'),
     (107, '${unitA}', false, 'validado'),
     (108, '${unitA}', true, 'ignorado'),
-    (109, '${unitA}', true, 'validado');
+    (109, '${unitA}', true, 'validado'),
+    (110, '${unitA}', true, 'validado');
 
   insert into public.health_score_professor_v3_config_versoes values (
-    '${configId}', 4, 'ativa', date '2026-08-01', null, 60, 70, 85
+    '${configId}', 4, 'ativa', date '2025-01-01', null, 60, 70, 85, true
   );
   insert into public.health_score_professor_v3_config_metricas
     (config_id, metrica, peso, meta, parametros)
@@ -384,6 +397,13 @@ const fixture = `
     (101, '${unitA}', 'conversao', 7, 7, 10, 100, 10),
     (101, '${unitA}', 'numero_alunos', 8, 8, null, null, 8),
     (101, '${unitA}', 'presenca', 90, 9, 10, 90, 10);
+
+  -- Tres pilares validos atingem 60% de cobertura, mas sem fidelizacao.
+  insert into public.fixture_health_score_v3_evidencias values
+    (110, '${unitA}', 'conversao', 90, 9, 10, 90, 10),
+    (110, '${unitA}', 'media_turma', 90, 9, 10, 90, 10),
+    (110, '${unitA}', 'numero_alunos', 12, 12, null, null, 12),
+    (110, '${unitA}', 'presenca', 90, 9, 10, 90, 10);
 
   -- Controles positivos e negativos possuem evidencia real na fonte sintetica.
   -- O multiunidade tem fatos distintos nas duas unidades.
@@ -461,7 +481,7 @@ const fixture = `
             and (p_unidade_id is null or pu.unidade_id = p_unidade_id)
         )
       order by e.professor_id, e.metrica, e.unidade_id
-    ), calculada as (
+    ), calculada_base as (
       select e.*,
         count(*) filter (where e.papel = 'nota' and e.nota is not null)
           over (partition by e.professor_id) as pilares_disponiveis,
@@ -475,6 +495,20 @@ const fixture = `
           2
         ) as nota_observada
       from evidencias e
+    ), calculada as (
+      select cb.*
+      from calculada_base cb
+
+      union all
+
+      select
+        cb.professor_id, cb.unidade_id, cb.metrica,
+        999::numeric, 999::numeric, cb.denominador, cb.nota, 999::integer,
+        cb.peso, cb.meta, cb.papel,
+        cb.pilares_disponiveis, cb.peso_disponivel, cb.nota_observada
+      from calculada_base cb
+      where cb.professor_id = 101
+        and cb.metrica = 'presenca'
     )
     select
       c.professor_id,
@@ -512,7 +546,14 @@ const fixture = `
       case when c.pilares_disponiveis = g.pilares_esperados
         then null else 'pilares_insuficientes' end,
       null::date, null::numeric, null::text,
-      current_date, '${configId}'::uuid, 'fixture-esparsa',
+      least(
+        current_date,
+        (date_trunc('month', p_competencia) + interval '1 month - 1 day')::date
+      ),
+      '${configId}'::uuid,
+      public.fn_health_score_professor_v3_config_fingerprint_comparabilidade(
+        '${configId}'::uuid
+      ),
       g.peso_pontuavel_total, c.peso_disponivel,
       round(c.pilares_disponiveis * 100.0 / g.pilares_esperados, 1), 60::numeric,
       case when c.pilares_disponiveis = g.pilares_esperados then '[]'::jsonb
@@ -522,13 +563,22 @@ const fixture = `
   $$;
 `;
 
-function readRows(container, unitId) {
+function readRows(container, unitId, options = {}) {
   const unitSql = unitId === null ? 'null::uuid' : `'${unitId}'::uuid`;
+  const competenciaSql = options.competenciaSql
+    ?? "date_trunc('month', current_date)::date";
+  const periodicidade = options.periodicidade ?? 'mensal';
   const result = psql(container, `
     select jsonb_agg(jsonb_build_object(
       'professor_id', professor_id,
       'unidade_id', unidade_id,
       'escopo', escopo,
+      'competencia', competencia,
+      'trimestre_inicio', trimestre_inicio,
+      'periodicidade', periodicidade,
+      'periodo_inicio', periodo_inicio,
+      'periodo_fim', periodo_fim,
+      'ciclo_codigo', ciclo_codigo,
       'estado_publicacao', estado_publicacao,
       'score_exibivel', score_exibivel,
       'ranking_habilitado', ranking_habilitado,
@@ -555,7 +605,8 @@ function readRows(container, unitId) {
       'peso_efetivo', peso_efetivo,
       'contribuicao', contribuicao,
       'codigo_evidencia', codigo_evidencia,
-      'papel', papel,
+      'papel', papel
+    ) || jsonb_build_object(
       'detalhes', detalhes,
       'score_observado', score_observado,
       'score_comparavel', score_comparavel,
@@ -566,12 +617,15 @@ function readRows(container, unitId) {
       'pilares_esperados', pilares_esperados,
       'comparabilidade_estado', comparabilidade_estado,
       'comparabilidade_motivo', comparabilidade_motivo,
+      'data_corte', data_corte,
+      'config_id', config_id,
+      'regra_fingerprint', regra_fingerprint,
       'peso_pontuavel_total', peso_pontuavel_total,
       'peso_disponivel_total', peso_disponivel_total,
       'comparabilidade_motivos', comparabilidade_motivos
     ) order by professor_id, metrica)::text
     from public.get_health_score_professor_v3_performance(
-      date_trunc('month', current_date)::date, ${unitSql}, 'mensal'
+      ${competenciaSql}, ${unitSql}, '${periodicidade}'
     );
   `);
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -703,9 +757,9 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
     );
 
     const scopes = [
-      { name: 'unidade_a', unitId: unitA, scope: 'unidade', professors: [101, 102, 103, 105] },
+      { name: 'unidade_a', unitId: unitA, scope: 'unidade', professors: [101, 102, 103, 105, 110] },
       { name: 'unidade_b', unitId: unitB, scope: 'unidade', professors: [104, 105] },
-      { name: 'consolidado', unitId: null, scope: 'consolidado', professors: [101, 102, 103, 104, 105] },
+      { name: 'consolidado', unitId: null, scope: 'consolidado', professors: [101, 102, 103, 104, 105, 110] },
     ];
     const violations = [];
     const rowsByScope = new Map();
@@ -857,7 +911,7 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
         );
       }
     }
-    for (const professorId of [101, 102]) {
+    for (const professorId of [101, 102, 110]) {
       const rows = unitARows.filter((row) => row.professor_id === professorId);
       if (rows.some((row) => row.score_comparavel !== null || row.classificacao !== null)) {
         violations.push({ scope: 'unidade_a', professor_id: professorId, problem: 'gate_de_comparabilidade_aberto' });
@@ -879,6 +933,34 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
 
     const unitBRows = rowsByScope.get('unidade_b');
     const consolidatedRows = rowsByScope.get('consolidado');
+    const expectedFingerprint = `fixture-fingerprint:${configId}`;
+    for (const [scope, rows] of rowsByScope) {
+      assert.equal(
+        rows.every((row) => row.config_id === configId),
+        true,
+        `${scope}: toda linha deve apontar para a configuracao governada vigente`,
+      );
+      assert.equal(
+        rows.every((row) => row.regra_fingerprint === expectedFingerprint),
+        true,
+        `${scope}: fingerprint deve vir da funcao canonica da configuracao`,
+      );
+    }
+
+    const duplicateWinner = unitARows.find(
+      (row) => row.professor_id === 101 && row.metrica === 'presenca',
+    );
+    assert.equal(
+      Number(duplicateWinner?.valor_bruto),
+      999,
+      'desempate total deve escolher a representacao estavel do payload semanticamente empatado',
+    );
+    const repeatedUnitARows = readRows(container, unitA);
+    assert.deepEqual(
+      repeatedUnitARows,
+      unitARows,
+      'consultas repetidas devem produzir exatamente a mesma linha vencedora e a mesma ordem',
+    );
     for (const scope of healthyProfessorsByScope) {
       const actualHealthyRows = rowsByScope.get(scope.name).filter(
         (row) => scope.professorIds.includes(row.professor_id),
@@ -913,11 +995,11 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
       }
     }
 
-    if (consolidatedRows.length !== 5 * expectedMetrics.length) {
+    if (consolidatedRows.length !== 6 * expectedMetrics.length) {
       violations.push({
         scope: 'consolidado',
         problem: 'quantidade_de_linhas_consolidada_incorreta',
-        expected: 5 * expectedMetrics.length,
+        expected: 6 * expectedMetrics.length,
         actual: consolidatedRows.length,
       });
     }
@@ -935,6 +1017,74 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
         rows: multiUnitConsolidated.length,
       });
     }
+
+    const currentCycleRows = readRows(container, unitA, {
+      competenciaSql: "date '2026-08-01'",
+      periodicidade: 'ciclo',
+    }).filter((row) => row.professor_id === 102);
+    assert.equal(currentCycleRows.length, expectedMetrics.length);
+    const currentCycleCut = psql(container, `
+      select least(current_date, date '2026-08-31')::text;
+    `);
+    assert.equal(currentCycleCut.status, 0, currentCycleCut.stderr || currentCycleCut.stdout);
+    for (const row of currentCycleRows) {
+      assert.equal(row.competencia, '2026-08-01');
+      assert.equal(row.periodicidade, 'ciclo');
+      assert.equal(row.trimestre_inicio, '2026-06-01');
+      assert.equal(row.periodo_inicio, '2026-06-01');
+      assert.equal(row.periodo_fim, '2026-08-31');
+      assert.equal(row.ciclo_codigo, '2026-JUN-AGO');
+      assert.equal(row.config_id, configId);
+      assert.equal(row.regra_fingerprint, expectedFingerprint);
+      assert.equal(row.data_corte, currentCycleCut.stdout.trim());
+    }
+
+    const historicalCycleRows = readRows(container, unitA, {
+      competenciaSql: "date '2025-08-01'",
+      periodicidade: 'ciclo',
+    }).filter((row) => row.professor_id === 102);
+    assert.equal(historicalCycleRows.length, expectedMetrics.length);
+    for (const row of historicalCycleRows) {
+      assert.equal(row.trimestre_inicio, '2025-06-01');
+      assert.equal(row.periodo_inicio, '2025-06-01');
+      assert.equal(row.periodo_fim, '2025-08-31');
+      assert.equal(row.ciclo_codigo, '2025-JUN-AGO');
+      assert.equal(row.regra_fingerprint, expectedFingerprint);
+      assert.equal(
+        row.data_corte,
+        '2025-08-31',
+        'periodo historico encerrado deve manter corte estavel no fim governado',
+      );
+    }
+
+    const fidelityRequiredRows = unitARows.filter((row) => row.professor_id === 110);
+    assert.equal(fidelityRequiredRows.length, expectedMetrics.length);
+    assert.equal(fidelityRequiredRows.every(
+      (row) => row.cobertura === 60
+        && row.pilares_validos === 3
+        && row.score_comparavel === null
+        && row.classificacao === null
+        && row.comparabilidade_motivo === 'sem_pilar_fidelizacao'
+    ), true, 'configuracao com fidelizacao obrigatoria deve manter o professor bloqueado');
+
+    const disabledFidelity = psql(container, `
+      update public.health_score_professor_v3_config_versoes
+      set exige_pilar_fidelizacao = false
+      where id = '${configId}'::uuid;
+    `);
+    assert.equal(disabledFidelity.status, 0, disabledFidelity.stderr || disabledFidelity.stdout);
+    const fidelityOptionalRows = readRows(container, unitA)
+      .filter((row) => row.professor_id === 110);
+    assert.equal(fidelityOptionalRows.length, expectedMetrics.length);
+    assert.equal(fidelityOptionalRows.every(
+      (row) => row.cobertura === 60
+        && row.pilares_validos === 3
+        && row.score_comparavel === 90
+        && row.classificacao === 'saudavel'
+        && row.comparabilidade_estado === 'comparavel'
+        && row.comparabilidade_motivo === 'criterios_atendidos'
+        && row.regra_fingerprint === expectedFingerprint
+    ), true, 'fidelizacao opcional deve liberar comparabilidade sem inventar os pilares ausentes');
 
     assert.deepEqual(
       violations,
