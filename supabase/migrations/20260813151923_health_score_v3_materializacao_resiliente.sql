@@ -30,14 +30,11 @@ declare
   v_escopo text := lower(trim(coalesce(p_escopo, '')));
   v_unidade_id uuid;
   v_linha record;
-  v_config record;
   v_snapshot_id uuid;
   v_snapshot_ids jsonb := '[]'::jsonb;
   v_incompletos jsonb := '[]'::jsonb;
+  v_inconsistentes jsonb := '[]'::jsonb;
   v_count integer := 0;
-  v_classificacao text;
-  v_estado_snapshot text;
-  v_estado_publicacao text;
   v_fonte_preparada boolean := coalesce(
     current_setting('app.health_score_v3_fonte_preparada', true),
     'off'
@@ -84,6 +81,7 @@ begin
   if not v_fonte_preparada then
     drop table if exists pg_temp.health_score_v3_diario_fonte;
     drop table if exists pg_temp.health_score_v3_diario_incompletos;
+    drop table if exists pg_temp.health_score_v3_diario_config_inconsistente;
 
     create temporary table health_score_v3_diario_fonte on commit drop as
     select p.*
@@ -98,15 +96,50 @@ begin
       metricas_ausentes jsonb not null
     ) on commit drop;
 
+    create temporary table health_score_v3_diario_config_inconsistente (
+      professor_id integer primary key,
+      config_ids jsonb not null,
+      config_versoes jsonb not null
+    ) on commit drop;
+
     insert into health_score_v3_diario_incompletos (
       professor_id, metricas_ausentes
     )
-    with professores_fonte as (
-      select f.professor_id, min(f.config_id::text)::uuid as config_id,
-        count(*)::integer as linhas,
+    with config_ativa as (
+      select c.id as config_id, c.versao as config_versao
+      from public.health_score_professor_v3_config_versoes c
+      where c.status = 'ativa'
+        and v_competencia >= c.vigencia_inicio
+        and (c.vigencia_fim is null or v_competencia <= c.vigencia_fim)
+      order by c.vigencia_inicio desc, c.versao desc, c.id desc
+      limit 1
+    ), catalogo as (
+      select c.metrica
+      from public.health_score_professor_v3_config_metricas c
+      join config_ativa a on a.config_id = c.config_id
+      where c.metrica in (
+        'retencao', 'permanencia', 'conversao',
+        'media_turma', 'numero_alunos', 'presenca'
+      )
+    ), roster_escopo as (
+      select distinct p.id as professor_id
+      from public.professores p
+      join public.professores_unidades pu on pu.professor_id = p.id
+      join public.unidades u on u.id = pu.unidade_id and u.ativo = true
+      where p.ativo = true
+        and pu.emusys_ativo = true
+        and pu.validacao_status is distinct from 'ignorado'
+        and to_jsonb(p) ->> 'mesclado_em_professor_id' is null
+        and (v_escopo = 'consolidado' or pu.unidade_id = v_unidade_id)
+    ), professores_fonte as (
+      select
+        r.professor_id,
+        count(f.*)::integer as linhas,
         count(distinct f.metrica)::integer as metricas_distintas
-      from health_score_v3_diario_fonte f
-      group by f.professor_id
+      from roster_escopo r
+      left join health_score_v3_diario_fonte f
+        on f.professor_id = r.professor_id
+      group by r.professor_id
     ), avaliados as (
       select
         p.professor_id,
@@ -125,12 +158,7 @@ begin
           '[]'::jsonb
         ) as metricas_ausentes
       from professores_fonte p
-      join public.health_score_professor_v3_config_metricas c
-        on c.config_id = p.config_id
-       and c.metrica in (
-         'retencao', 'permanencia', 'conversao',
-         'media_turma', 'numero_alunos', 'presenca'
-       )
+      cross join catalogo c
       group by p.professor_id, p.linhas, p.metricas_distintas
     )
     select a.professor_id, a.metricas_ausentes
@@ -139,10 +167,42 @@ begin
        or a.metricas_distintas <> 6
        or a.metricas_esperadas <> 6
        or jsonb_array_length(a.metricas_ausentes) > 0;
+
+    insert into health_score_v3_diario_config_inconsistente (
+      professor_id, config_ids, config_versoes
+    )
+    with config_ativa as (
+      select c.id as config_id, c.versao as config_versao
+      from public.health_score_professor_v3_config_versoes c
+      where c.status = 'ativa'
+        and v_competencia >= c.vigencia_inicio
+        and (c.vigencia_fim is null or v_competencia <= c.vigencia_fim)
+      order by c.vigencia_inicio desc, c.versao desc, c.id desc
+      limit 1
+    ), configuracoes as (
+      select
+        f.professor_id,
+        count(distinct f.config_id)::integer as quantidade_ids,
+        count(distinct f.config_versao)::integer as quantidade_versoes,
+        jsonb_agg(distinct f.config_id order by f.config_id) as config_ids,
+        jsonb_agg(distinct f.config_versao order by f.config_versao) as config_versoes,
+        min(f.config_id::text)::uuid as unico_config_id,
+        min(f.config_versao)::integer as unica_config_versao
+      from health_score_v3_diario_fonte f
+      group by f.professor_id
+    )
+    select c.professor_id, c.config_ids, c.config_versoes
+    from configuracoes c
+    cross join config_ativa a
+    where c.quantidade_ids <> 1
+       or c.quantidade_versoes <> 1
+       or c.unico_config_id is distinct from a.config_id
+       or c.unica_config_versao is distinct from a.config_versao;
   end if;
 
   if to_regclass('pg_temp.health_score_v3_diario_fonte') is null
-    or to_regclass('pg_temp.health_score_v3_diario_incompletos') is null then
+    or to_regclass('pg_temp.health_score_v3_diario_incompletos') is null
+    or to_regclass('pg_temp.health_score_v3_diario_config_inconsistente') is null then
     raise exception 'HEALTH_SCORE_V3_FONTE_TEMPORARIA_AUSENTE'
       using errcode = 'P0001';
   end if;
@@ -170,6 +230,16 @@ begin
   ) into v_incompletos
   from health_score_v3_diario_incompletos i;
 
+  select coalesce(
+    jsonb_agg(jsonb_build_object(
+      'professor_id', i.professor_id,
+      'config_ids', i.config_ids,
+      'config_versoes', i.config_versoes
+    ) order by i.professor_id),
+    '[]'::jsonb
+  ) into v_inconsistentes
+  from health_score_v3_diario_config_inconsistente i;
+
   drop table if exists pg_temp.health_score_v3_diario_snapshots;
   create temporary table health_score_v3_diario_snapshots (
     professor_id integer primary key,
@@ -184,32 +254,13 @@ begin
       from health_score_v3_diario_incompletos i
       where i.professor_id = f.professor_id
     )
+      and not exists (
+        select 1
+        from health_score_v3_diario_config_inconsistente i
+        where i.professor_id = f.professor_id
+      )
     order by f.professor_id, f.metrica
   loop
-    select c.faixa_saudavel_min, c.faixa_atencao_min
-      into v_config
-    from public.health_score_professor_v3_config_versoes c
-    where c.id = v_linha.config_id;
-
-    if not found then
-      raise exception 'HEALTH_SCORE_V3_CONFIG_AUSENTE' using errcode = 'P0001';
-    end if;
-
-    v_classificacao := coalesce(
-      v_linha.classificacao,
-      case
-        when v_linha.score is null then 'sem_base'
-        when v_linha.score >= v_config.faixa_saudavel_min then 'saudavel'
-        when v_linha.score >= v_config.faixa_atencao_min then 'atencao'
-        else 'critico'
-      end
-    );
-    v_estado_snapshot := case when exists (
-      select 1 from health_score_v3_diario_fonte f
-      where f.professor_id = v_linha.professor_id and f.estado_base = 'em_maturacao'
-    ) then 'em_maturacao' else 'provisorio' end;
-    v_estado_publicacao := case when v_linha.score is null then 'sem_base' else 'parcial' end;
-
     insert into public.health_score_professor_v3_snapshots (
       professor_id, escopo, unidade_id, competencia, trimestre_inicio, revisao,
       estado, config_id, config_versao, score, cobertura, classificacao,
@@ -225,11 +276,13 @@ begin
           and s.escopo = v_escopo and s.unidade_id is not distinct from v_unidade_id
           and s.competencia = v_competencia and s.periodicidade = p_periodicidade
       ), 1),
-      v_estado_snapshot, v_linha.config_id, v_linha.config_versao,
-      v_linha.score, v_linha.cobertura, v_classificacao,
-      false, false, v_linha.motivo_bloqueio, v_linha.regra_versao_snapshot, null,
+      v_linha.estado, v_linha.config_id, v_linha.config_versao,
+      v_linha.score, v_linha.cobertura, v_linha.classificacao,
+      v_linha.snapshot_publicavel, v_linha.publicado,
+      v_linha.motivo_bloqueio, v_linha.regra_versao_snapshot, null,
       v_linha.periodicidade, v_linha.periodo_inicio, v_linha.periodo_fim,
-      v_linha.ciclo_codigo, v_estado_publicacao, v_linha.score is not null, false
+      v_linha.ciclo_codigo, v_linha.estado_publicacao,
+      v_linha.score_exibivel, v_linha.ranking_habilitado
     ) returning id into v_snapshot_id;
 
     insert into health_score_v3_diario_snapshots (professor_id, snapshot_id)
@@ -260,6 +313,7 @@ begin
     'escopo', v_escopo, 'unidade_id', v_unidade_id,
     'snapshots_criados', v_count, 'snapshot_ids', v_snapshot_ids,
     'professores_incompletos', v_incompletos,
+    'professores_configuracao_inconsistente', v_inconsistentes,
     'origem', 'get_health_score_professor_v3_performance', 'formula_alterada', false
   );
 end;
@@ -288,6 +342,7 @@ declare
   v_execucao_id uuid;
   v_resultado jsonb;
   v_incompletos jsonb := '[]'::jsonb;
+  v_inconsistentes jsonb := '[]'::jsonb;
   v_status text;
 begin
   if date_trunc('month', p_competencia)::date <> v_competencia or p_periodicidade <> 'mensal' then
@@ -306,6 +361,7 @@ begin
   begin
     drop table if exists pg_temp.health_score_v3_diario_fonte;
     drop table if exists pg_temp.health_score_v3_diario_incompletos;
+    drop table if exists pg_temp.health_score_v3_diario_config_inconsistente;
 
     create temporary table health_score_v3_diario_fonte on commit drop as
     select p.*
@@ -320,15 +376,50 @@ begin
       metricas_ausentes jsonb not null
     ) on commit drop;
 
+    create temporary table health_score_v3_diario_config_inconsistente (
+      professor_id integer primary key,
+      config_ids jsonb not null,
+      config_versoes jsonb not null
+    ) on commit drop;
+
     insert into health_score_v3_diario_incompletos (
       professor_id, metricas_ausentes
     )
-    with professores_fonte as (
-      select f.professor_id, min(f.config_id::text)::uuid as config_id,
-        count(*)::integer as linhas,
+    with config_ativa as (
+      select c.id as config_id, c.versao as config_versao
+      from public.health_score_professor_v3_config_versoes c
+      where c.status = 'ativa'
+        and v_competencia >= c.vigencia_inicio
+        and (c.vigencia_fim is null or v_competencia <= c.vigencia_fim)
+      order by c.vigencia_inicio desc, c.versao desc, c.id desc
+      limit 1
+    ), catalogo as (
+      select c.metrica
+      from public.health_score_professor_v3_config_metricas c
+      join config_ativa a on a.config_id = c.config_id
+      where c.metrica in (
+        'retencao', 'permanencia', 'conversao',
+        'media_turma', 'numero_alunos', 'presenca'
+      )
+    ), roster_escopo as (
+      select distinct p.id as professor_id
+      from public.professores p
+      join public.professores_unidades pu on pu.professor_id = p.id
+      join public.unidades u on u.id = pu.unidade_id and u.ativo = true
+      where p.ativo = true
+        and pu.emusys_ativo = true
+        and pu.validacao_status is distinct from 'ignorado'
+        and to_jsonb(p) ->> 'mesclado_em_professor_id' is null
+        and (p_escopo = 'consolidado' or pu.unidade_id = p_unidade_id)
+    ), professores_fonte as (
+      select
+        r.professor_id,
+        count(f.*)::integer as linhas,
         count(distinct f.metrica)::integer as metricas_distintas
-      from health_score_v3_diario_fonte f
-      group by f.professor_id
+      from roster_escopo r
+      left join health_score_v3_diario_fonte f
+        on f.professor_id = r.professor_id
+      group by r.professor_id
     ), avaliados as (
       select
         p.professor_id,
@@ -347,12 +438,7 @@ begin
           '[]'::jsonb
         ) as metricas_ausentes
       from professores_fonte p
-      join public.health_score_professor_v3_config_metricas c
-        on c.config_id = p.config_id
-       and c.metrica in (
-         'retencao', 'permanencia', 'conversao',
-         'media_turma', 'numero_alunos', 'presenca'
-       )
+      cross join catalogo c
       group by p.professor_id, p.linhas, p.metricas_distintas
     )
     select a.professor_id, a.metricas_ausentes
@@ -361,6 +447,37 @@ begin
        or a.metricas_distintas <> 6
        or a.metricas_esperadas <> 6
        or jsonb_array_length(a.metricas_ausentes) > 0;
+
+    insert into health_score_v3_diario_config_inconsistente (
+      professor_id, config_ids, config_versoes
+    )
+    with config_ativa as (
+      select c.id as config_id, c.versao as config_versao
+      from public.health_score_professor_v3_config_versoes c
+      where c.status = 'ativa'
+        and v_competencia >= c.vigencia_inicio
+        and (c.vigencia_fim is null or v_competencia <= c.vigencia_fim)
+      order by c.vigencia_inicio desc, c.versao desc, c.id desc
+      limit 1
+    ), configuracoes as (
+      select
+        f.professor_id,
+        count(distinct f.config_id)::integer as quantidade_ids,
+        count(distinct f.config_versao)::integer as quantidade_versoes,
+        jsonb_agg(distinct f.config_id order by f.config_id) as config_ids,
+        jsonb_agg(distinct f.config_versao order by f.config_versao) as config_versoes,
+        min(f.config_id::text)::uuid as unico_config_id,
+        min(f.config_versao)::integer as unica_config_versao
+      from health_score_v3_diario_fonte f
+      group by f.professor_id
+    )
+    select c.professor_id, c.config_ids, c.config_versoes
+    from configuracoes c
+    cross join config_ativa a
+    where c.quantidade_ids <> 1
+       or c.quantidade_versoes <> 1
+       or c.unico_config_id is distinct from a.config_id
+       or c.unica_config_versao is distinct from a.config_versao;
 
     select md5(coalesce(
       jsonb_agg(to_jsonb(f) order by f.professor_id, f.metrica)::text,
@@ -376,6 +493,16 @@ begin
       '[]'::jsonb
     ) into v_incompletos
     from health_score_v3_diario_incompletos i;
+
+    select coalesce(
+      jsonb_agg(jsonb_build_object(
+        'professor_id', i.professor_id,
+        'config_ids', i.config_ids,
+        'config_versoes', i.config_versoes
+      ) order by i.professor_id),
+      '[]'::jsonb
+    ) into v_inconsistentes
+    from health_score_v3_diario_config_inconsistente i;
   exception when others then
     perform set_config('app.health_score_v3_fonte_preparada', 'off', true);
     insert into public.health_score_professor_v3_materializacao_execucoes (
@@ -404,7 +531,8 @@ begin
     return jsonb_build_object(
       'execution_id', v_execucao_id,
       'status', 'sem_alteracao',
-      'professores_incompletos', v_incompletos
+      'professores_incompletos', v_incompletos,
+      'professores_configuracao_inconsistente', v_inconsistentes
     );
   end if;
 
@@ -421,7 +549,8 @@ begin
     return jsonb_build_object(
       'execution_id', v_execucao_id,
       'status', 'baseline_adotado',
-      'professores_incompletos', v_incompletos
+      'professores_incompletos', v_incompletos,
+      'professores_configuracao_inconsistente', v_inconsistentes
     );
   end if;
 
@@ -438,7 +567,8 @@ begin
     );
     perform set_config('app.health_score_v3_fonte_preparada', 'off', true);
     v_status := case
-      when jsonb_array_length(v_incompletos) > 0 then 'parcial'
+      when jsonb_array_length(v_incompletos) > 0
+        or jsonb_array_length(v_inconsistentes) > 0 then 'parcial'
       else 'materializado'
     end;
     update public.health_score_professor_v3_materializacao_execucoes
@@ -449,7 +579,8 @@ begin
     return v_resultado || jsonb_build_object(
       'execution_id', v_execucao_id,
       'status', v_status,
-      'professores_incompletos', v_incompletos
+      'professores_incompletos', v_incompletos,
+      'professores_configuracao_inconsistente', v_inconsistentes
     );
   exception when others then
     perform set_config('app.health_score_v3_fonte_preparada', 'off', true);
@@ -505,18 +636,18 @@ begin
   end if;
 
   for v_lock in
-    select distinct
-      date_trunc('month', s.competencia)::date as competencia,
-      s.periodicidade
-    from public.health_score_professor_v3_snapshots s
-    where s.periodicidade = 'ciclo'
-      and s.ciclo_codigo = p_ciclo_codigo
-    order by competencia, s.periodicidade
+    select gs::date as competencia
+    from generate_series(
+      date_trunc('month', v_ciclo.data_inicio)::timestamp,
+      date_trunc('month', v_ciclo.data_fim)::timestamp,
+      interval '1 month'
+    ) gs
+    order by competencia
   loop
     perform pg_advisory_xact_lock(hashtextextended(
       'health_score_v3_periodo:'
         || v_lock.competencia::text
-        || ':' || v_lock.periodicidade,
+        || ':ciclo',
       0
     ));
   end loop;
