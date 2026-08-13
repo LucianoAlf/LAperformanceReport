@@ -674,6 +674,27 @@ test('PostgreSQL exige roster completo e denominador governado em unidade e cons
       assert.equal(row.score_comparavel, null);
       assert.equal(row.classificacao, null);
     }
+
+    const fullyWithoutBaseRows = unitARows.filter((row) => row.professor_id === 102);
+    if (fullyWithoutBaseRows.length > 0) {
+      for (const row of fullyWithoutBaseRows) {
+        assert.equal(row.score_observado, null, 'sem base nao pode fabricar score observado');
+        assert.equal(Number(row.pilares_validos), 0, 'sem base deve ter zero pilares validos');
+        assert.equal(
+          Number(row.peso_disponivel_total),
+          0,
+          'sem base deve ter peso disponivel total zero',
+        );
+        assert.equal(Number(row.cobertura), 0, 'sem base deve ter cobertura zero');
+        assert.equal(
+          Number(row.cobertura_normalizada),
+          0,
+          'sem base deve ter cobertura normalizada zero',
+        );
+        assert.equal(row.score_comparavel, null, 'sem base nao pode ser comparavel');
+        assert.equal(row.classificacao, null, 'sem base nao pode receber classificacao');
+      }
+    }
     const unitBRows = rowsByScope.get('unidade_b');
     const consolidatedRows = rowsByScope.get('consolidado');
     const multiUnitFacts = [
