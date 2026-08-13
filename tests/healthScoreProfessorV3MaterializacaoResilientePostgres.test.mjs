@@ -268,6 +268,14 @@ function explicitScopeMaterializerLockOrderContract() {
     `alter\\s+function\\s+public\\.${functionName}\\s*\\(\\s*date\\s*,\\s*text\\s*,\\s*text\\s*,\\s*uuid\\s*,\\s*integer\\s*\\)\\s+rename\\s+to\\s+${predecessorName}`,
     'giu',
   );
+  const predecessorRevokePattern = new RegExp(
+    `revoke\\s+all\\s+on\\s+function\\s+public\\.${predecessorName}\\s*\\(\\s*date\\s*,\\s*text\\s*,\\s*text\\s*,\\s*uuid\\s*,\\s*integer\\s*\\)\\s+from\\s+public\\s*,\\s*anon\\s*,\\s*authenticated\\s*,\\s*service_role\\s*;`,
+    'iu',
+  );
+  const predecessorGrantPattern = new RegExp(
+    `grant\\s+[\\s\\S]*?on\\s+function\\s+public\\.${predecessorName}\\s*\\(`,
+    'iu',
+  );
   const commonKeyIndex = wrapper.indexOf('health_score_v3_periodo:');
   const wrapperLockIndex = wrapper.indexOf('pg_advisory_xact_lock');
   const delegateIndex = wrapper.indexOf(`public.${predecessorName}(`);
@@ -283,6 +291,8 @@ function explicitScopeMaterializerLockOrderContract() {
 
   return {
     unique_predecessor_rename: [...migrationLower.matchAll(renamePattern)].length === 1,
+    predecessor_execute_revoked: predecessorRevokePattern.test(migrationLower)
+      && !predecessorGrantPattern.test(migrationLower),
     identical_signature_defaults:
       /p_competencia\s+date\s*,\s*p_periodicidade\s+text\s+default\s+'mensal'\s*,\s*p_escopo\s+text\s+default\s+'unidade'\s*,\s*p_unidade_id\s+uuid\s+default\s+null\s*,\s*p_professor_id\s+integer\s+default\s+null/iu
         .test(wrapper),
@@ -1051,6 +1061,74 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
       },
     }, 'migration corretiva deve preservar definer, search_path e ACLs atuais');
 
+    const lockBypassAcl = runJson(container, `
+      with funcoes(nome, assinatura) as (
+        values
+          (
+            'wrapper',
+            'public.materializar_health_score_professor_v3_escopo(date,text,text,uuid,integer)'
+          ),
+          (
+            'predecessor',
+            'public.materializar_hs_prof_v3_escopo_before_lock_order_20260813(date,text,text,uuid,integer)'
+          )
+      )
+      select jsonb_object_agg(f.nome, jsonb_build_object(
+        'owner', pg_get_userbyid(p.proowner),
+        'public', exists (
+          select 1
+          from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
+          where acl.grantee = 0
+            and acl.privilege_type = 'EXECUTE'
+        ),
+        'anon', has_function_privilege('anon', f.assinatura, 'EXECUTE'),
+        'authenticated', has_function_privilege(
+          'authenticated', f.assinatura, 'EXECUTE'
+        ),
+        'service_role', has_function_privilege(
+          'service_role', f.assinatura, 'EXECUTE'
+        ),
+        'postgres', has_function_privilege('postgres', f.assinatura, 'EXECUTE')
+      ))::text
+      from funcoes f
+      join pg_proc p on p.oid = f.assinatura::regprocedure;
+    `);
+    assert.deepEqual(lockBypassAcl, {
+      wrapper: {
+        owner: 'postgres',
+        public: false,
+        anon: false,
+        authenticated: false,
+        service_role: true,
+        postgres: true,
+      },
+      predecessor: {
+        owner: 'postgres',
+        public: false,
+        anon: false,
+        authenticated: false,
+        service_role: false,
+        postgres: true,
+      },
+    }, 'somente owner/wrapper podem alcancar o predecessor apos o rename');
+
+    const wrapperAsServiceRole = runJson(container, `
+      set role service_role;
+      select public.materializar_health_score_professor_v3_escopo(
+        date_trunc('month', current_date)::date,
+        'mensal', 'unidade', '${unitId}'::uuid, null
+      )::text;
+      reset role;
+    `);
+    assert.deepEqual(wrapperAsServiceRole, {
+      competencia: new Date().toISOString().slice(0, 7) + '-01',
+      periodicidade: 'mensal',
+      escopo: 'unidade',
+      unidade_id: unitId,
+      professor_id: null,
+      predecessor: true,
+    }, 'wrapper SECURITY DEFINER deve continuar chamando o predecessor como owner');
+
     const executionSql = `
       select public.executar_health_score_professor_v3_escopo_diario(
         date_trunc('month', current_date)::date,
@@ -1635,6 +1713,7 @@ test('PostgreSQL materializa parcialmente sem duplicar produtor e mantem fechame
       },
       explicit_scope_materializer_lock: {
         unique_predecessor_rename: true,
+        predecessor_execute_revoked: true,
         identical_signature_defaults: true,
         wrapper_security_contract: true,
         common_lock_before_delegate: true,
