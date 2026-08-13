@@ -19,6 +19,12 @@ verify_jwt = true
 # A função valida o bearer por comparação constante com SUPABASE_SERVICE_ROLE_KEY.
 verify_jwt = false
 
+[functions.reconciliar-grade-aluno]
+# Worker interno: o gateway não aceita a service key opaca usada entre Edges
+# (mesmo motivo de transcrever-mensagem-evasao). A função valida o bearer por
+# comparação constante com SUPABASE_SERVICE_ROLE_KEY antes de ler o body.
+verify_jwt = false
+
 [functions.processar-conversa-evasao]
 # pg_cron não possui JWT de service_role neste projeto; autenticação interna
 # ocorre no código por x-sync-token antes de ler body ou criar o cliente.

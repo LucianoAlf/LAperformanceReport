@@ -230,6 +230,24 @@ export function AgendaDrawer({
                   {a.nome}
                   {a.inadimplente && <span className="ml-1 text-rose-400" title="Inadimplente">$</span>}
                 </span>
+                {/* Progresso no contrato DESTE aluno. O bloco "Progresso no
+                    contrato" la em cima usa aula.nr_da_aula, que a RPC devolve
+                    nulo em turma com 2+ contratos (nao existe "o" numero da
+                    aula quando cada aluno esta num ponto diferente do proprio
+                    contrato). Aqui o numero e por aluno, entao existe sempre —
+                    mesmo formato que a Chamada ja usa. */}
+                {a.nr_da_aula != null && (
+                  <span
+                    className="shrink-0 text-[10.5px] tabular-nums text-slate-500"
+                    title={
+                      a.qtd_aulas_contrato
+                        ? `Aula ${a.nr_da_aula} de ${a.qtd_aulas_contrato}`
+                        : `Aula ${a.nr_da_aula}`
+                    }
+                  >
+                    {a.qtd_aulas_contrato ? `${a.nr_da_aula}/${a.qtd_aulas_contrato}` : a.nr_da_aula}
+                  </span>
+                )}
                 {a.status_presenca && (
                   <span className="shrink-0 text-[10.5px] uppercase text-slate-500">
                     {a.status_presenca}

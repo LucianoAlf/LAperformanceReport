@@ -134,7 +134,10 @@ import {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const VERSAO = 'v33';
+// v34 (2026-08-13): matricula_alterada passa a reconciliar a grade futura do aluno
+// (edge reconciliar-grade-aluno). Fecha o buraco em que mudar a data da 1a aula
+// deixava a aula do dia antigo viva na Agenda para sempre.
+const VERSAO = 'v34';
 const EVENTOS_JORNADA_CANONICA = new Set([
   'matricula_nova',
   'matricula_renovacao',
@@ -2337,11 +2340,52 @@ async function handleFinalizacaoCanonica(supabase: any, p: Payload) {
   );
 }
 
+/**
+ * Reconcilia a grade FUTURA do aluno contra a foto viva do Emusys.
+ *
+ * Existe porque `matricula_alterada` e o unico aviso que recebemos quando o Emusys
+ * APAGA aulas: ao mudar a data da 1a aula ele regera o cronograma, e a ocorrencia
+ * antiga so PARA DE VIR no GET /aulas. Upsert nao enxerga ausencia, entao sem isto
+ * a aula fica viva na Agenda para sempre — o soft-cancel do sync-grade-futura roda
+ * 1x/dia e filtra `data_aula > hoje`, justamente pulando a aula de hoje.
+ *
+ * Dispara em TODA alteracao, sem filtrar pela `alteracao.descricao`: o texto e HTML
+ * em portugues gerado pelo Emusys e quebraria em silencio se eles mudarem a frase.
+ * O custo e uma chamada com `pessoa_id` (1 pagina no caso tipico).
+ *
+ * NUNCA derruba o webhook: erro aqui e engolido e logado pela propria edge chamada.
+ */
+async function reconciliarGradeDoAluno(p: Payload): Promise<void> {
+  if (!p.alunoEmusysId || !p.escolaId) return;
+
+  try {
+    const resposta = await fetch(`${SUPABASE_URL}/functions/v1/reconciliar-grade-aluno`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify({
+        aluno_emusys_id: p.alunoEmusysId,
+        escola_id: p.escolaId,
+        dry_run: false,
+      }),
+    });
+    if (!resposta.ok) {
+      console.error(`[${VERSAO}] reconciliar-grade-aluno respondeu ${resposta.status}`);
+    }
+  } catch (erro: any) {
+    console.error(`[${VERSAO}] reconciliar-grade-aluno falhou:`, erro?.message ?? erro);
+  }
+}
+
 async function handleMatriculaAlterada(supabase: any, p: Payload) {
   const result = {
     action: 'jornada_matricula_alterada_recebida',
     emusys_matricula_id: p.matriculaIdEmusys,
   };
+
+  await reconciliarGradeDoAluno(p);
 
   await gravarLog(supabase, {
     evento: p.evento,
