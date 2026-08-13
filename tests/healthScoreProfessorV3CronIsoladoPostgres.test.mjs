@@ -307,6 +307,15 @@ create table net.http_calls (
   body jsonb not null
 );
 
+create table net._http_response (
+  id bigint primary key,
+  status_code integer,
+  timed_out boolean not null default false,
+  error_msg text,
+  content text,
+  created timestamptz not null default now()
+);
+
 create sequence net.http_attempts_seq;
 create table net.fixture_control (
   singleton boolean primary key default true,
@@ -350,7 +359,11 @@ create table public.health_score_professor_v3_materializacao_execucoes (
   id text primary key,
   cron_reconciliacao_status text,
   cron_reconciliacao_erro text,
-  cron_reconciliado_em timestamptz
+  cron_reconciliado_em timestamptz,
+  cron_alerta_request_id bigint,
+  cron_alerta_status text,
+  cron_alerta_erro text,
+  cron_alerta_atualizado_em timestamptz
 );
 
 insert into public.health_score_professor_v3_materializacao_execucoes (id)
@@ -481,7 +494,7 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
 
       const firstCatalog = psql(
         container,
-        `select jsonb_agg(to_jsonb(j) - 'jobid' order by jobname, username)::text
+        `select jsonb_agg(to_jsonb(j) order by jobname, username)::text
            from cron.job j
           where jobname like '${jobPrefix}%';`,
       );
@@ -491,7 +504,7 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
       assert.equal(secondApply.status, 0, secondApply.stderr);
       const secondCatalog = psql(
         container,
-        `select jsonb_agg(to_jsonb(j) - 'jobid' order by jobname, username)::text
+        `select jsonb_agg(to_jsonb(j) order by jobname, username)::text
            from cron.job j
           where jobname like '${jobPrefix}%';`,
       );
@@ -656,8 +669,9 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
     assert.equal(byUnit.get(unitIds[2]).status, 'erro');
     assert.equal(byUnit.get(unitIds[2]).erro, 'fixture-error');
     assert.equal(byUnit.get(unitIds[2]).execution_id, 'exec-erro');
-    assert.equal(byUnit.get(unitIds[2]).alerta_status, 'enviado');
+    assert.equal(byUnit.get(unitIds[2]).alerta_status, 'enfileirado');
     assert.equal(byUnit.get(unitIds[2]).alerta_erro, null);
+    assert.equal(typeof byUnit.get(unitIds[2]).alerta_request_id, 'number');
     assert.deepEqual(byUnit.get(unitIds[2]).professores_incompletos, [303]);
     assert.equal(byUnit.get(null).status, 'sem_alteracao');
     assert.deepEqual(byUnit.get(null).professores_incompletos, []);
@@ -676,6 +690,63 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
     )?.[1];
     assert.equal(authorization, 'Bearer fixture-secret-never-in-job');
     assert.equal(alerts[0].body.execution_id, 'exec-erro');
+    const queuedAlert = psql(
+      container,
+      `select jsonb_build_object(
+         'request_id', cron_alerta_request_id,
+         'status', cron_alerta_status,
+         'erro', cron_alerta_erro,
+         'registrado', cron_alerta_atualizado_em is not null
+       )::text
+       from public.health_score_professor_v3_materializacao_execucoes
+       where id = 'exec-erro';`,
+    );
+    assert.equal(queuedAlert.status, 0, queuedAlert.stderr);
+    const queuedAlertResult = JSON.parse(queuedAlert.stdout.trim());
+    assert.equal(queuedAlertResult.request_id, byUnit.get(unitIds[2]).alerta_request_id);
+    assert.equal(queuedAlertResult.status, 'enfileirado');
+    assert.equal(queuedAlertResult.erro, null);
+    assert.equal(queuedAlertResult.registrado, true);
+
+    const asynchronousResponses = [
+      { statusCode: 401, timedOut: false, error: null, expected: 'falha', pattern: /HTTP 401/iu },
+      { statusCode: 500, timedOut: false, error: null, expected: 'falha', pattern: /HTTP 500/iu },
+      { statusCode: null, timedOut: true, error: 'Timeout', expected: 'timeout', pattern: /Timeout/iu },
+    ];
+    let pendingRequestId = queuedAlertResult.request_id;
+    for (const response of asynchronousResponses) {
+      const reconciledAlert = psql(
+        container,
+        `insert into net._http_response (id, status_code, timed_out, error_msg, content)
+         values (${pendingRequestId}, ${response.statusCode ?? 'null'}, ${response.timedOut}, ${response.error ? `'${response.error}'` : 'null'}, '{}');
+         set role service_role;
+         select public.executar_health_score_professor_v3_job_escopo('consolidado', null::uuid)::text;
+         reset role;
+         select jsonb_build_object(
+           'status', cron_alerta_status,
+           'erro', cron_alerta_erro
+         )::text
+         from public.health_score_professor_v3_materializacao_execucoes
+         where id = 'exec-erro';`,
+      );
+      assert.equal(reconciledAlert.status, 0, reconciledAlert.stderr);
+      const lines = parseJsonLines(reconciledAlert.stdout);
+      const persisted = lines.at(-1);
+      assert.equal(persisted.status, response.expected);
+      assert.match(persisted.erro, response.pattern);
+
+      if (response !== asynchronousResponses.at(-1)) {
+        const nextAlert = psql(
+          container,
+          `set role service_role;
+           select public.executar_health_score_professor_v3_job_escopo(
+             'unidade', '${unitIds[2]}'::uuid
+           )::text;`,
+        );
+        assert.equal(nextAlert.status, 0, nextAlert.stderr);
+        pendingRequestId = JSON.parse(nextAlert.stdout.trim()).alerta_request_id;
+      }
+    }
     for (const nonErrorExecutionId of [
       'exec-parcial',
       'exec-materializado',
