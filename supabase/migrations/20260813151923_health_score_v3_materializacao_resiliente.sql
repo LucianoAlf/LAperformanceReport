@@ -7,6 +7,10 @@ alter function public.materializar_health_score_professor_v3_escopo(
   date, text, text, uuid, integer
 ) rename to materializar_hs_prof_v3_escopo_before_lock_order_20260813;
 
+revoke all on function public.materializar_hs_prof_v3_escopo_before_lock_order_20260813(
+  date, text, text, uuid, integer
+) from public, anon, authenticated, service_role;
+
 create or replace function public.materializar_health_score_professor_v3_escopo(
   p_competencia date,
   p_periodicidade text default 'mensal',
