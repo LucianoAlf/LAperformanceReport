@@ -546,7 +546,7 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
     const alertReconcilerJob = catalog.reconciler[0];
     assert.equal(alertReconcilerJob.username, 'postgres');
     assert.equal(alertReconcilerJob.active, true);
-    assert.equal(alertReconcilerJob.schedule, '50 6 * * *');
+    assert.equal(alertReconcilerJob.schedule, '*/5 * * * *');
     assert.equal(
       alertReconcilerJob.command,
       'select public.reconciliar_health_score_professor_v3_alertas();',
@@ -769,6 +769,54 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
         pendingRequestId = JSON.parse(nextAlert.stdout.trim()).alerta_request_id;
       }
     }
+
+    const staleAlert = psql(
+      container,
+      `insert into public.health_score_professor_v3_materializacao_execucoes (
+         id, cron_alerta_request_id, cron_alerta_status, cron_alerta_atualizado_em
+       ) values ('exec-stale', 999999, 'enfileirado', now() - interval '31 minutes');
+       ${alertReconcilerJob.command}
+       select jsonb_build_object(
+         'status', cron_alerta_status,
+         'erro', cron_alerta_erro
+       )::text from public.health_score_professor_v3_materializacao_execucoes
+       where id = 'exec-stale';`,
+    );
+    assert.equal(staleAlert.status, 0, staleAlert.stderr);
+    const staleAlertResult = parseJsonLines(staleAlert.stdout).at(-1);
+    assert.equal(staleAlertResult.status, 'sem_resposta');
+    assert.match(staleAlertResult.erro, /30 minutos/iu);
+
+    const callsBeforeUnavailableResponses = psql(
+      container,
+      'select count(*)::text from public.health_score_v3_executor_calls;',
+    );
+    assert.equal(callsBeforeUnavailableResponses.status, 0, callsBeforeUnavailableResponses.stderr);
+    const unavailableResponses = psql(
+      container,
+      `alter table net._http_response rename to http_response_indisponivel;
+       set role service_role;
+       select public.executar_health_score_professor_v3_job_escopo(
+         'unidade', '${unitIds[1]}'::uuid
+       )::text;
+       reset role;
+       alter table net.http_response_indisponivel rename to _http_response;`,
+    );
+    assert.equal(unavailableResponses.status, 0, unavailableResponses.stderr);
+    const unavailableResponsesResult = JSON.parse(unavailableResponses.stdout.trim());
+    assert.equal(unavailableResponsesResult.status, 'materializado');
+    assert.equal(unavailableResponsesResult.alertas_reconciliacao_status, 'falha');
+    assert.match(unavailableResponsesResult.alertas_reconciliacao_erro, /_http_response/iu);
+    const callsAfterUnavailableResponses = psql(
+      container,
+      'select count(*)::text from public.health_score_v3_executor_calls;',
+    );
+    assert.equal(callsAfterUnavailableResponses.status, 0, callsAfterUnavailableResponses.stderr);
+    assert.equal(
+      Number(callsAfterUnavailableResponses.stdout.trim()),
+      Number(callsBeforeUnavailableResponses.stdout.trim()) + 1,
+      'falha do reconciliador de alertas nao pode bloquear o executor principal',
+    );
     for (const nonErrorExecutionId of [
       'exec-parcial',
       'exec-materializado',
