@@ -451,6 +451,7 @@ insert into cron.job (jobname, schedule, command, username) values
   ('${legacyJobName}', '30 6 * * *', 'select public.executar_health_score_professor_v3_cron_diario();', 'postgres'),
   ('${legacyJobName}', '31 6 * * *', 'select public.executar_health_score_professor_v3_cron_diario();', 'cron_other'),
   ('${jobPrefix}unidade-${unitIds[0]}', '32 6 * * *', 'select 99;', 'cron_other'),
+  ('${jobPrefix}unidade-${unitIds[1]}', '1 1 * * *', 'select 98;', 'postgres'),
   ('job-alheio-nao-tocar', '5 1 * * *', 'select 42;', 'cron_other');
 `;
 
@@ -519,7 +520,9 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
          'unrelated', jsonb_agg(to_jsonb(j) order by jobname)
            filter (where jobname = 'job-alheio-nao-tocar'),
          'isolated', jsonb_agg(to_jsonb(j) order by jobname)
-           filter (where jobname like '${jobPrefix}%')
+           filter (where jobname like '${jobPrefix}%'),
+         'reconciler', jsonb_agg(to_jsonb(j) order by jobname)
+           filter (where jobname = 'reconciliar-health-score-professor-v3-alertas')
        )::text from cron.job j;`,
     );
     assert.equal(catalogResult.status, 0, catalogResult.stderr);
@@ -527,7 +530,7 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
 
     assert.equal(catalog.legacy_count, 0, 'job legado deve ser removido pelo nome exato');
     assert.deepEqual(catalog.unrelated, [{
-      jobid: 4,
+      jobid: 5,
       schedule: '5 1 * * *',
       command: 'select 42;',
       nodename: 'localhost',
@@ -539,11 +542,26 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
     }]);
 
     assert.equal(catalog.isolated?.length, 4, 'devem existir 3 unidades ativas + consolidado');
+    assert.equal(catalog.reconciler?.length, 1, 'deve existir reconciliador assincrono dedicado');
+    const alertReconcilerJob = catalog.reconciler[0];
+    assert.equal(alertReconcilerJob.username, 'postgres');
+    assert.equal(alertReconcilerJob.active, true);
+    assert.equal(alertReconcilerJob.schedule, '50 6 * * *');
+    assert.equal(
+      alertReconcilerJob.command,
+      'select public.reconciliar_health_score_professor_v3_alertas();',
+    );
     const expectedNames = [
       ...unitIds.map((id) => `${jobPrefix}unidade-${id}`),
       `${jobPrefix}consolidado`,
     ].sort();
     assert.deepEqual(catalog.isolated.map((job) => job.jobname).sort(), expectedNames);
+    const correctedCanonicalJob = catalog.isolated.find(
+      (job) => job.jobname === `${jobPrefix}unidade-${unitIds[1]}`,
+    );
+    assert.equal(correctedCanonicalJob.jobid, 4, 'alter_job deve preservar o jobid canonico');
+    assert.equal(correctedCanonicalJob.schedule, '35 6 * * *');
+    assert.match(correctedCanonicalJob.command, new RegExp(unitIds[1], 'iu'));
     assert.ok(
       catalog.isolated.every((job) => job.username === 'postgres'),
       'todos os jobs do modulo devem ser recriados pelo owner atual da migration',
@@ -709,6 +727,7 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
     assert.equal(queuedAlertResult.registrado, true);
 
     const asynchronousResponses = [
+      { statusCode: 204, timedOut: false, error: null, expected: 'entregue', pattern: null },
       { statusCode: 401, timedOut: false, error: null, expected: 'falha', pattern: /HTTP 401/iu },
       { statusCode: 500, timedOut: false, error: null, expected: 'falha', pattern: /HTTP 500/iu },
       { statusCode: null, timedOut: true, error: 'Timeout', expected: 'timeout', pattern: /Timeout/iu },
@@ -719,8 +738,10 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
         container,
         `insert into net._http_response (id, status_code, timed_out, error_msg, content)
          values (${pendingRequestId}, ${response.statusCode ?? 'null'}, ${response.timedOut}, ${response.error ? `'${response.error}'` : 'null'}, '{}');
-         set role service_role;
-         select public.executar_health_score_professor_v3_job_escopo('consolidado', null::uuid)::text;
+         ${response.statusCode === 204 ? '' : 'set role service_role;'}
+         ${response.statusCode === 204
+    ? alertReconcilerJob.command
+    : "select public.executar_health_score_professor_v3_job_escopo('consolidado', null::uuid)::text;"}
          reset role;
          select jsonb_build_object(
            'status', cron_alerta_status,
@@ -733,7 +754,8 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
       const lines = parseJsonLines(reconciledAlert.stdout);
       const persisted = lines.at(-1);
       assert.equal(persisted.status, response.expected);
-      assert.match(persisted.erro, response.pattern);
+      if (response.pattern) assert.match(persisted.erro, response.pattern);
+      else assert.equal(persisted.erro, null);
 
       if (response !== asynchronousResponses.at(-1)) {
         const nextAlert = psql(
