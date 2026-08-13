@@ -1,5 +1,10 @@
 begin;
 
+alter table public.health_score_professor_v3_materializacao_execucoes
+  add column if not exists cron_reconciliacao_status text null,
+  add column if not exists cron_reconciliacao_erro text null,
+  add column if not exists cron_reconciliado_em timestamptz null;
+
 create or replace function public.configurar_health_score_professor_v3_cron_escopos()
 returns void
 language plpgsql
@@ -105,6 +110,7 @@ declare
   v_alerta_erro text;
   v_reconciliacao_status text := 'nao_aplicavel';
   v_reconciliacao_erro text;
+  v_execution_id text;
 begin
   if v_escopo not in ('unidade', 'consolidado')
     or (v_escopo = 'unidade' and v_unidade_id is null)
@@ -130,6 +136,24 @@ begin
     v_escopo,
     v_unidade_id
   );
+
+  v_execution_id := nullif(v_resultado->>'execution_id', '');
+  if v_execution_id is not null then
+    update public.health_score_professor_v3_materializacao_execucoes e
+       set cron_reconciliacao_status = v_reconciliacao_status,
+           cron_reconciliacao_erro = v_reconciliacao_erro,
+           cron_reconciliado_em = clock_timestamp()
+     where e.id::text = v_execution_id;
+
+    if not found and v_reconciliacao_status = 'falha' then
+      raise exception 'HEALTH_SCORE_V3_RECONCILIACAO_NAO_PERSISTIDA'
+        using errcode = 'P0001',
+              detail = format('execution_id=%s; erro=%s', v_execution_id, v_reconciliacao_erro);
+    end if;
+  elsif v_reconciliacao_status = 'falha' then
+    raise exception 'HEALTH_SCORE_V3_RECONCILIACAO_SEM_EXECUTION_ID'
+      using errcode = 'P0001', detail = v_reconciliacao_erro;
+  end if;
 
   if v_resultado->>'status' = 'erro' then
     begin
