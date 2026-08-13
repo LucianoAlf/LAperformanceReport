@@ -1,5 +1,60 @@
 begin;
 
+-- Preserva integralmente a implementacao explicita vigente e antepoe o lock
+-- comum de periodo. O predecessor continua responsavel por autorizacao,
+-- validacoes de dominio, lock de escopo e materializacao.
+alter function public.materializar_health_score_professor_v3_escopo(
+  date, text, text, uuid, integer
+) rename to materializar_hs_prof_v3_escopo_before_lock_order_20260813;
+
+create or replace function public.materializar_health_score_professor_v3_escopo(
+  p_competencia date,
+  p_periodicidade text default 'mensal',
+  p_escopo text default 'unidade',
+  p_unidade_id uuid default null,
+  p_professor_id integer default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $function$
+declare
+  v_competencia date := date_trunc('month', p_competencia)::date;
+begin
+  if p_competencia is null
+    or nullif(btrim(p_periodicidade), '') is null then
+    raise exception 'HEALTH_SCORE_V3_PARAMETRO_INVALIDO: competencia e periodicidade obrigatorias'
+      using errcode = '22023';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(
+    'health_score_v3_periodo:' || v_competencia::text
+      || ':' || p_periodicidade,
+    0
+  ));
+
+  return public.materializar_hs_prof_v3_escopo_before_lock_order_20260813(
+    p_competencia,
+    p_periodicidade,
+    p_escopo,
+    p_unidade_id,
+    p_professor_id
+  );
+end;
+$function$;
+
+revoke all on function public.materializar_health_score_professor_v3_escopo(
+  date, text, text, uuid, integer
+) from public, anon, authenticated;
+grant execute on function public.materializar_health_score_professor_v3_escopo(
+  date, text, text, uuid, integer
+) to service_role;
+
+comment on function public.materializar_health_score_professor_v3_escopo(
+  date, text, text, uuid, integer
+) is 'Serializa a materializacao V3 na ordem global periodo -> escopo e delega sem alterar o contrato do materializador explicito vigente.';
+
 -- O produtor governa a comparabilidade. Retratos em maturacao precisam
 -- persistir classificacao nula sem fabricar uma faixa a partir do score bruto.
 alter table public.health_score_professor_v3_snapshots
