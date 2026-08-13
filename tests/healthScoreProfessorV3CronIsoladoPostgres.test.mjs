@@ -32,7 +32,7 @@ function psql(container, sql, { tuplesOnly = true } = {}) {
     'psql', '--no-psqlrc', '-v', 'ON_ERROR_STOP=1',
     '-U', 'postgres', '-d', 'postgres',
   ];
-  if (tuplesOnly) args.push('-At');
+  if (tuplesOnly) args.push('-qAt');
   return docker(args, sql);
 }
 
@@ -82,18 +82,29 @@ function withoutSqlComments(sql) {
     .replace(/--[^\r\n]*/gu, ' ');
 }
 
-function assertNoTimeoutAboveBudget(sql) {
-  assert.doesNotMatch(sql, /statement_timeout\s*=\s*['"]?0/iu);
-  const matches = sql.matchAll(
-    /set_config\s*\(\s*'statement_timeout'\s*,\s*'(\d+)\s*(ms|s|min)'/giu,
+function assertNoStatementTimeout(sql) {
+  assert.doesNotMatch(
+    sql,
+    /\bstatement_timeout\b/iu,
+    'migration nova nao pode depender de SET, SET LOCAL, set_config ou ALTER para timeout',
   );
-  for (const match of matches) {
-    const amount = Number(match[1]);
-    const seconds = match[2].toLowerCase() === 'ms'
-      ? amount / 1000
-      : match[2].toLowerCase() === 'min' ? amount * 60 : amount;
-    assert.ok(seconds <= 75, `statement_timeout nao pode exceder 75s: ${match[0]}`);
-  }
+}
+
+function parseScheduledCommand(command) {
+  const match = /^\s*select\s+public\.([a-z_][a-z0-9_]*)\s*\(\s*'(unidade|consolidado)'\s*(?:::text)?\s*,\s*(null\s*::\s*uuid|'([0-9a-f-]{36})'\s*(?:::uuid)?)\s*\)\s*;?\s*$/iu.exec(command);
+  assert.ok(
+    match,
+    `command deve chamar wrapper publico com assinatura contratada (text,uuid): ${command}`,
+  );
+  const scope = match[2].toLowerCase();
+  const unitId = match[4]?.toLowerCase() ?? null;
+  assert.equal(scope === 'unidade', unitId !== null, `escopo/unidade incompatível: ${command}`);
+  return {
+    functionName: match[1].toLowerCase(),
+    signature: `public.${match[1].toLowerCase()}(text,uuid)`,
+    scope,
+    unitId,
+  };
 }
 
 function parseJsonLines(stdout) {
@@ -105,6 +116,45 @@ function parseCronMinute(schedule) {
   assert.ok(match, `agenda deve usar cron UTC diario explicito: ${schedule}`);
   return Number(match[2]) * 60 + Number(match[1]);
 }
+
+test('detector proibe qualquer mecanismo de statement_timeout', () => {
+  for (const sql of [
+    "select set_config('statement_timeout', '75s', true);",
+    'set statement_timeout = 75000;',
+    "set local statement_timeout to '75s';",
+    'alter role service_role set statement_timeout = 0;',
+    "alter database postgres set statement_timeout to '1min';",
+  ]) {
+    assert.throws(() => assertNoStatementTimeout(sql));
+  }
+  assert.doesNotThrow(() => assertNoStatementTimeout('select cron.schedule(1, 2, 3);'));
+});
+
+test('parser ancora a assinatura exata chamada pelos jobs', () => {
+  assert.deepEqual(
+    parseScheduledCommand(
+      "select public.executar_health_score_professor_v3_job_escopo('unidade', '10000000-0000-0000-0000-000000000001'::uuid);",
+    ),
+    {
+      functionName: 'executar_health_score_professor_v3_job_escopo',
+      signature: 'public.executar_health_score_professor_v3_job_escopo(text,uuid)',
+      scope: 'unidade',
+      unitId: '10000000-0000-0000-0000-000000000001',
+    },
+  );
+  assert.equal(
+    parseScheduledCommand(
+      "select public.executar_health_score_professor_v3_job_escopo('consolidado', null::uuid);",
+    ).signature,
+    'public.executar_health_score_professor_v3_job_escopo(text,uuid)',
+  );
+  assert.throws(
+    () => parseScheduledCommand(
+      "select public.executar_health_score_professor_v3_escopo_diario(current_date, 'mensal', 'consolidado', null::uuid);",
+    ),
+    /assinatura contratada/iu,
+  );
+});
 
 const setupSql = String.raw`
 create role anon nologin;
@@ -289,20 +339,38 @@ begin
     p_competencia, p_periodicidade, p_escopo, p_unidade_id
   );
 
-  if p_unidade_id = '${unitIds[2]}'::uuid then
-    v_result := jsonb_build_object(
-      'status', 'erro',
-      'execution_id', 'exec-erro',
-      'erro', 'fixture-error',
-      'professores_incompletos', jsonb_build_array(303)
-    );
-  else
-    v_result := jsonb_build_object(
-      'status', 'parcial',
-      'execution_id', 'exec-ok',
-      'professores_incompletos', jsonb_build_array(101)
-    );
-  end if;
+  v_result := case
+    when p_escopo = 'consolidado' and p_unidade_id is null then
+      jsonb_build_object(
+        'status', 'sem_alteracao',
+        'execution_id', 'exec-sem-alteracao',
+        'professores_incompletos', '[]'::jsonb
+      )
+    when p_unidade_id = '${unitIds[0]}'::uuid then
+      jsonb_build_object(
+        'status', 'parcial',
+        'execution_id', 'exec-parcial',
+        'professores_incompletos', jsonb_build_array(101)
+      )
+    when p_unidade_id = '${unitIds[1]}'::uuid then
+      jsonb_build_object(
+        'status', 'materializado',
+        'execution_id', 'exec-materializado',
+        'professores_incompletos', '[]'::jsonb
+      )
+    when p_unidade_id = '${unitIds[2]}'::uuid then
+      jsonb_build_object(
+        'status', 'erro',
+        'execution_id', 'exec-erro',
+        'erro', 'fixture-error',
+        'professores_incompletos', jsonb_build_array(303)
+      )
+    else
+      jsonb_build_object(
+        'status', 'fixture_invalido',
+        'execution_id', 'exec-fixture-invalido'
+      )
+  end;
   return v_result;
 end;
 $$;
@@ -343,7 +411,7 @@ test('migration corretiva real usa somente APIs publicas do pg_cron', () => {
   assert.match(sql, /cron\.unschedule\s*\(/iu);
   assert.match(sql, /cron\.schedule\s*\(/iu);
   assert.doesNotMatch(sql, /(?:insert\s+into|update|delete\s+from)\s+cron\.job\b/iu);
-  assertNoTimeoutAboveBudget(sql);
+  assertNoStatementTimeout(sql);
   assert.doesNotMatch(sql, /fixture-secret-never-in-job/iu);
 });
 
@@ -423,6 +491,10 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
       catalog.isolated.every((job) => !job.jobname.includes(inactiveUnitId)),
       'unidade inativa nao pode ganhar job',
     );
+    assert.ok(
+      catalog.isolated.every((job) => job.active === true),
+      'os quatro jobs isolados devem permanecer ativos',
+    );
 
     const cronApiResult = psql(
       container,
@@ -450,16 +522,29 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
       'jobs devem ter intervalo minimo de cinco minutos',
     );
 
+    const parsedCommands = new Map();
     for (const job of catalog.isolated) {
       assert.doesNotMatch(job.command, /executar_health_score_professor_v3_cron_diario/iu);
       assert.doesNotMatch(job.command, /from\s+public\.unidades|\bloop\b/iu);
       assert.doesNotMatch(job.command, /fixture-secret|bearer\s+/iu);
-      assert.equal(
-        (job.command.match(/select\s+public\.[a-z0-9_]+\s*\(/giu) || []).length,
-        1,
-        `job deve chamar exatamente um wrapper de escopo: ${job.command}`,
-      );
+      parsedCommands.set(job.jobname, parseScheduledCommand(job.command));
     }
+    assert.equal(
+      new Set([...parsedCommands.values()].map((parsed) => parsed.signature)).size,
+      1,
+      'todos os jobs devem chamar a mesma assinatura publica contratada',
+    );
+    assert.deepEqual(
+      [...parsedCommands.values()]
+        .filter((parsed) => parsed.scope === 'unidade')
+        .map((parsed) => parsed.unitId)
+        .sort(),
+      [...unitIds].sort(),
+    );
+    assert.equal(
+      [...parsedCommands.values()].filter((parsed) => parsed.scope === 'consolidado').length,
+      1,
+    );
 
     const beforeExecution = psql(
       container,
@@ -472,9 +557,14 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
     ));
     const returnedResults = [];
     for (const job of orderedJobs) {
-      const execution = psql(container, job.command);
+      const parsedCommand = parsedCommands.get(job.jobname);
+      const execution = psql(container, `set role service_role; ${job.command}`);
       assert.equal(execution.status, 0, execution.stderr);
-      returnedResults.push(...parseJsonLines(execution.stdout));
+      returnedResults.push(...parseJsonLines(execution.stdout).map((result) => ({
+        scope: parsedCommand.scope,
+        unidade_id: parsedCommand.unitId,
+        result,
+      })));
     }
 
     const callsResult = psql(
@@ -496,15 +586,20 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
       [null],
     );
     assert.equal(returnedResults.length, 4);
-    assert.ok(returnedResults.some((result) => (
-      result.status === 'parcial'
-      && result.professores_incompletos?.[0] === 101
-    )));
-    assert.ok(returnedResults.some((result) => (
-      result.status === 'erro'
-      && result.erro === 'fixture-error'
-      && result.professores_incompletos?.[0] === 303
-    )));
+    assert.deepEqual(
+      returnedResults.map(({ result }) => result.status).sort(),
+      ['erro', 'materializado', 'parcial', 'sem_alteracao'],
+    );
+    const byUnit = new Map(returnedResults.map((entry) => [entry.unidade_id, entry.result]));
+    assert.equal(byUnit.get(unitIds[0]).status, 'parcial');
+    assert.deepEqual(byUnit.get(unitIds[0]).professores_incompletos, [101]);
+    assert.equal(byUnit.get(unitIds[1]).status, 'materializado');
+    assert.deepEqual(byUnit.get(unitIds[1]).professores_incompletos, []);
+    assert.equal(byUnit.get(unitIds[2]).status, 'erro');
+    assert.equal(byUnit.get(unitIds[2]).erro, 'fixture-error');
+    assert.deepEqual(byUnit.get(unitIds[2]).professores_incompletos, [303]);
+    assert.equal(byUnit.get(null).status, 'sem_alteracao');
+    assert.deepEqual(byUnit.get(null).professores_incompletos, []);
 
     const alertsResult = psql(
       container,
@@ -518,22 +613,38 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
     )?.[1];
     assert.equal(authorization, 'Bearer fixture-secret-never-in-job');
     assert.equal(alerts[0].body.execution_id, 'exec-erro');
+    for (const nonErrorExecutionId of [
+      'exec-parcial',
+      'exec-materializado',
+      'exec-sem-alteracao',
+    ]) {
+      assert.equal(
+        alerts.filter((alert) => alert.body.execution_id === nonErrorExecutionId).length,
+        0,
+        `${nonErrorExecutionId} nao pode disparar alerta`,
+      );
+    }
 
+    const exactSignature = [...parsedCommands.values()][0].signature;
     const securityResult = psql(
       container,
-      `with wrappers as (
-         select p.oid, p.oid::regprocedure::text as assinatura,
-                p.prosecdef, p.proconfig, pg_get_functiondef(p.oid) as definicao
+      `with wrapper as (
+         select p.oid,
+                format('public.%I(%s)', p.proname, pg_get_function_identity_arguments(p.oid)) as assinatura,
+                p.prosecdef, p.proconfig, p.proacl, p.proowner,
+                pg_get_functiondef(p.oid) as definicao
            from pg_proc p
-           join pg_namespace n on n.oid = p.pronamespace
-          where n.nspname = 'public'
-            and pg_get_functiondef(p.oid) ilike '%executar_health_score_professor_v3_escopo_diario(%'
-            and p.proname <> 'executar_health_score_professor_v3_escopo_diario'
+          where p.oid = to_regprocedure('${exactSignature}')
        )
-       select jsonb_agg(jsonb_build_object(
+       select jsonb_build_object(
          'assinatura', assinatura,
          'security_definer', prosecdef,
          'config', proconfig,
+         'public', exists (
+           select 1
+           from aclexplode(coalesce(proacl, acldefault('f', proowner))) a
+           where a.grantee = 0 and a.privilege_type = 'EXECUTE'
+         ),
          'anon', has_function_privilege('anon', oid, 'EXECUTE'),
          'authenticated', has_function_privilege('authenticated', oid, 'EXECUTE'),
          'service_role', has_function_privilege('service_role', oid, 'EXECUTE'),
@@ -542,21 +653,21 @@ test('PostgreSQL 17 substitui o monolito por quatro jobs isolados e idempotentes
            / length('executar_health_score_professor_v3_escopo_diario('),
          'has_loop', lower(definicao) ~ '\\mloop\\M',
          'reads_units', lower(definicao) like '%from public.unidades%'
-       ) order by assinatura)::text from wrappers;`,
+       )::text from wrapper;`,
     );
     assert.equal(securityResult.status, 0, securityResult.stderr);
-    const wrappers = JSON.parse(securityResult.stdout.trim());
-    assert.ok(wrappers?.length >= 1, 'jobs devem usar wrapper SECURITY DEFINER por escopo');
-    for (const wrapper of wrappers) {
-      assert.equal(wrapper.security_definer, true);
-      assert.ok(wrapper.config?.includes('search_path=public, pg_temp'));
-      assert.equal(wrapper.anon, false);
-      assert.equal(wrapper.authenticated, false);
-      assert.equal(wrapper.service_role, true);
-      assert.equal(wrapper.core_calls, 1);
-      assert.equal(wrapper.has_loop, false);
-      assert.equal(wrapper.reads_units, false);
-    }
+    assert.notEqual(securityResult.stdout.trim(), '', `assinatura ausente: ${exactSignature}`);
+    const wrapper = JSON.parse(securityResult.stdout.trim());
+    assert.equal(wrapper.assinatura, exactSignature);
+    assert.equal(wrapper.security_definer, true);
+    assert.ok(wrapper.config?.includes('search_path=public, pg_temp'));
+    assert.equal(wrapper.public, false);
+    assert.equal(wrapper.anon, false);
+    assert.equal(wrapper.authenticated, false);
+    assert.equal(wrapper.service_role, true);
+    assert.equal(wrapper.core_calls, 1);
+    assert.equal(wrapper.has_loop, false);
+    assert.equal(wrapper.reads_units, false);
   } finally {
     docker(['rm', '--force', container]);
   }

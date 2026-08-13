@@ -43,18 +43,12 @@ async function migrationCorretivaCronIsolado() {
   return null;
 }
 
-function assertSemAumentoDoTimeout(sql) {
-  assert.doesNotMatch(sql, /statement_timeout\s*=\s*['"]?0/iu);
-  const matches = sql.matchAll(
-    /set_config\s*\(\s*'statement_timeout'\s*,\s*'(\d+)\s*(ms|s|min)'/giu,
+function assertSemStatementTimeout(sql) {
+  assert.doesNotMatch(
+    sql,
+    /\bstatement_timeout\b/iu,
+    'migration de isolamento nao pode alterar statement_timeout por nenhum mecanismo',
   );
-  for (const match of matches) {
-    const amount = Number(match[1]);
-    const seconds = match[2].toLowerCase() === 'ms'
-      ? amount / 1000
-      : match[2].toLowerCase() === 'min' ? amount * 60 : amount;
-    assert.ok(seconds <= 75, `statement_timeout nao pode exceder o gate de 75s: ${match[0]}`);
-  }
 }
 
 test('cron diario registra fingerprint e evita nova revisao quando o retrato nao muda', async () => {
@@ -105,7 +99,7 @@ test('migration posterior substitui o cron monolitico sem depender de timeout ma
     corretiva.sql,
     /(?:insert\s+into|update|delete\s+from)\s+cron\.job\b/iu,
   );
-  assertSemAumentoDoTimeout(corretiva.sql);
+  assertSemStatementTimeout(corretiva.sql);
 });
 
 test('cron ativa alerta somente para Alf e Hugo identificados de forma exata', async () => {
