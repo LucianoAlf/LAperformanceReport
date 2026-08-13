@@ -9,6 +9,7 @@ import {
   assertTrackFunctions,
   cronBudgetMs,
   dominantFunctionDelta,
+  executeObservableSequence,
   restartWindowMinutes,
   summarizeRounds,
   validateActiveUnits,
@@ -160,6 +161,65 @@ test('funcao dominante usa delta por OID e exige chamada positiva', () => {
   assert.equal(dominantFunctionDelta(before, before), null);
 });
 
+test('orquestrador prova baseline antes do BEGIN e stats somente apos ROLLBACK', async () => {
+  const order = [];
+  const executions = Array.from({ length: 12 }, (_, index) => async () => {
+    order.push(`execution:${index + 1}`);
+  });
+  const result = await executeObservableSequence({
+    captureBaseline: async () => { order.push('baseline'); return [{ oid: '10' }]; },
+    beginTransaction: async () => { order.push('begin'); },
+    executions,
+    rollbackTransaction: async () => { order.push('rollback'); },
+    capturePostRollback: async (baseline) => {
+      assert.deepEqual(baseline, [{ oid: '10' }]);
+      order.push('stats');
+      return { available: true, oid: '10', calls_delta: 12 };
+    },
+  });
+  assert.deepEqual(order, [
+    'baseline', 'begin',
+    ...Array.from({ length: 12 }, (_, index) => `execution:${index + 1}`),
+    'rollback', 'stats',
+  ]);
+  assert.deepEqual(result.events, [
+    'baseline', 'begin',
+    ...Array.from({ length: 12 }, (_, index) => `execution:${index + 1}`),
+    'rollback', 'stats',
+  ]);
+});
+
+test('falha preserva erro original depois de rollback e tentativa de stats', async () => {
+  const order = [];
+  const original = new Error('falha-original-executor');
+  const executions = Array.from({ length: 12 }, (_, index) => async () => {
+    order.push(`execution:${index + 1}`);
+    if (index === 2) throw original;
+  });
+  await assert.rejects(
+    executeObservableSequence({
+      captureBaseline: async () => { order.push('baseline'); return []; },
+      beginTransaction: async () => { order.push('begin'); },
+      executions,
+      rollbackTransaction: async () => { order.push('rollback'); },
+      capturePostRollback: async () => {
+        order.push('stats');
+        throw new Error('falha-secundaria-stats');
+      },
+    }),
+    (error) => {
+      assert.equal(error, original);
+      assert.equal(error.benchmarkCleanup.rollback_error, null);
+      assert.equal(error.benchmarkCleanup.stats_error, 'falha-secundaria-stats');
+      return true;
+    },
+  );
+  assert.deepEqual(order, [
+    'baseline', 'begin', 'execution:1', 'execution:2', 'execution:3',
+    'rollback', 'stats',
+  ]);
+});
+
 test('benchmark recusa track_functions diferente de all', () => {
   assert.equal(assertTrackFunctions('all\n'), 'all');
   assert.throws(() => assertTrackFunctions('none'), /track_functions deve ser all/iu);
@@ -214,10 +274,10 @@ test('resumo decide pelo total dos quatro escopos sem apagar decisao historica',
   assert.equal(isolated.decision.decisao_historica, 'isolamento_obrigatorio');
 });
 
-test('benchmark mede doze executores numa transacao com rollback unico no finally', () => {
+test('benchmark mede doze executores e observa funcoes somente depois do rollback', () => {
   assert.equal((script.match(/session\.query\('begin;'\)/gu) || []).length, 1);
   assert.equal((script.match(/session\.query\('rollback;'\)/gu) || []).length, 1);
-  assert.match(script, /try\s*\{[\s\S]*for\s*\(let round = 1; round <= 3; round \+= 1\)[\s\S]*finally\s*\{[\s\S]*rollbackOnce\(\)/u);
+  assert.match(script, /try\s*\{[\s\S]*baseline = await captureBaseline\(\)[\s\S]*await beginTransaction\(\)[\s\S]*finally\s*\{[\s\S]*await rollbackTransaction\(\)[\s\S]*await capturePostRollback\(baseline\)/u);
   assert.match(script, /process\.once\('SIGINT',\s*signalHandler\)/u);
   assert.match(script, /process\.once\('SIGTERM',\s*signalHandler\)/u);
   assert.match(script, /create temporary table health_score_v3_benchmark_resultados/iu);
@@ -226,6 +286,11 @@ test('benchmark mede doze executores numa transacao com rollback unico no finall
   assert.doesNotMatch(script, /get_health_score_professor_v3_performance\s*\(/iu);
   assert.match(script, /for\s*\(let round = 1; round <= 3; round \+= 1\)/u);
   assert.match(script, /assertStatusContract\(round,\s*result\.status\)/u);
+  assert.match(script, /captureBaseline:[\s\S]*statsSql\(\)[\s\S]*beginTransaction:[\s\S]*session\.query\('begin;'\)/u);
+  assert.match(script, /rollbackTransaction:\s*rollbackOnce[\s\S]*capturePostRollback:/u);
+  const executionCallbacks = /executions:\s*executions\.map[\s\S]*?\}\),\s*rollbackTransaction:/u.exec(script)?.[0];
+  assert.ok(executionCallbacks, 'callbacks das 12 execucoes devem estar declarados');
+  assert.doesNotMatch(executionCallbacks, /statsSql\(\)|pg_stat_user_functions|pg_stat_clear_snapshot/iu);
   assert.match(script, /writes_preserved_between_rounds:\s*true/u);
   assert.match(script, /transaction_policy:\s*'uma_transacao_12_execucoes_rollback_unico_finally'/u);
   assert.match(script, /raw_explain:\s*rawExplain/u);
@@ -236,7 +301,8 @@ test('benchmark mede doze executores numa transacao com rollback unico no finall
   assert.match(script, /normalized !== 'all'/u);
   assert.match(script, /pg_stat_clear_snapshot\s*\(\)/u);
   assert.doesNotMatch(script, /pg_stat_reset\s*\(/u);
-  assert.match(script, /dominant_function_pg_stat:\s*dominantFunction/u);
+  assert.match(script, /function_observability:\s*'nao_atribuivel_sem_instrumentacao_intrusiva'/u);
+  assert.match(script, /aggregate_dominant_function:\s*benchmark\.aggregate_dominant_function/u);
   assert.match(script, /pg_stat_user_functions sem delta positivo/iu);
   assert.doesNotMatch(script, /available:\s*false/u);
   assert.match(script, /funcid::text/iu);

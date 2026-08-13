@@ -341,14 +341,75 @@ function wait(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function waitForFunctionDelta(session, beforeRows) {
+async function waitForFunctionDelta(databaseUrl, beforeRows) {
   for (let attempt = 1; attempt <= statsRetryAttempts; attempt += 1) {
-    const afterRows = parseFunctionStats(await session.query(statsSql()));
+    const afterRows = parseFunctionStats(runPsql(databaseUrl, statsSql()));
     const dominant = dominantFunctionDelta(beforeRows, afterRows);
     if (dominant) return { available: true, attempts: attempt, ...dominant };
     if (attempt < statsRetryAttempts) await wait(statsRetryDelayMs);
   }
   throw new Error(`pg_stat_user_functions sem delta positivo apos ${statsRetryAttempts} tentativas`);
+}
+
+export async function executeObservableSequence({
+  captureBaseline,
+  beginTransaction,
+  prepareTransaction = async () => {},
+  executions,
+  rollbackTransaction,
+  capturePostRollback,
+}) {
+  const events = [];
+  let baseline;
+  let aggregateDominantFunction;
+  let transactionStarted = false;
+  let originalError = null;
+  let rollbackError = null;
+  let statsError = null;
+  try {
+    baseline = await captureBaseline();
+    events.push('baseline');
+    await beginTransaction();
+    transactionStarted = true;
+    events.push('begin');
+    await prepareTransaction();
+    for (let index = 0; index < executions.length; index += 1) {
+      await executions[index]();
+      events.push(`execution:${index + 1}`);
+    }
+  } catch (error) {
+    originalError = error;
+  } finally {
+    if (transactionStarted) {
+      try {
+        await rollbackTransaction();
+        events.push('rollback');
+      } catch (error) {
+        rollbackError = error;
+      }
+    }
+    if (baseline !== undefined) {
+      try {
+        aggregateDominantFunction = await capturePostRollback(baseline);
+        events.push('stats');
+      } catch (error) {
+        statsError = error;
+      }
+    }
+  }
+  if (originalError) {
+    originalError.benchmarkCleanup = {
+      rollback_error: rollbackError?.message ?? null,
+      stats_error: statsError?.message ?? null,
+    };
+    throw originalError;
+  }
+  if (rollbackError) throw rollbackError;
+  if (statsError) throw statsError;
+  if (!aggregateDominantFunction?.available) {
+    throw new Error('funcao dominante agregada indisponivel apos rollback');
+  }
+  return { baseline, aggregateDominantFunction, events };
 }
 
 function scopeKey(scope) {
@@ -413,11 +474,10 @@ export function summarizeRounds(measurements, wallClockByRound) {
 
 async function runBenchmarkTransaction(databaseUrl, args, environment) {
   const session = new PsqlSession(databaseUrl);
-  let transactionStarted = false;
   let rollbackCompleted = false;
   let rollbackPromise = null;
   const rollbackOnce = () => {
-    if (!transactionStarted || rollbackCompleted) return Promise.resolve();
+    if (rollbackCompleted) return Promise.resolve();
     if (!rollbackPromise) {
       rollbackPromise = session.query('rollback;').finally(() => { rollbackCompleted = true; });
     }
@@ -435,44 +495,49 @@ async function runBenchmarkTransaction(databaseUrl, args, environment) {
 
   const measurements = [];
   const wallClockByRound = {};
+  const scopes = [
+    ...args.unitIds.map((unidadeId) => ({ escopo: 'unidade', unidade_id: unidadeId })),
+    { escopo: 'consolidado', unidade_id: null },
+  ];
+  const executions = [];
+  for (let round = 1; round <= 3; round += 1) {
+    scopes.forEach((scope, scopeIndex) => executions.push({ round, scope, scopeIndex }));
+  }
+  const wallStartedByRound = {};
   try {
-    await session.query('begin;');
-    transactionStarted = true;
-    await session.query(`
-      create temporary table health_score_v3_benchmark_resultados (
-        rodada integer not null,
-        escopo text not null,
-        unidade_id uuid,
-        resultado jsonb not null
-      ) on commit drop;
-    `);
-    const marker = parseJson(await session.query(`
-      select jsonb_build_object(
-        'postmaster_start_time', pg_postmaster_start_time(),
-        'first_round_started_at', clock_timestamp(),
-        'track_functions', current_setting('track_functions')
-      )::text;
-    `), 'marcador da primeira rodada');
-    assertTrackFunctions(marker.track_functions);
-    if (new Date(marker.postmaster_start_time).valueOf()
-      !== new Date(environment.restart.postmaster_start_time).valueOf()) {
-      throw new Error('PostgreSQL reiniciou entre a verificacao e a primeira rodada');
-    }
-    environment.restart = validateRestartEvidence({
-      evidenceIso: environment.restart.postgres_restarted_after_evidence,
-      postmasterStartIso: marker.postmaster_start_time,
-      verifiedAtIso: marker.first_round_started_at,
-      firstRoundStartedAtIso: marker.first_round_started_at,
-    });
-
-    const scopes = [
-      ...args.unitIds.map((unidadeId) => ({ escopo: 'unidade', unidade_id: unidadeId })),
-      { escopo: 'consolidado', unidade_id: null },
-    ];
-    for (let round = 1; round <= 3; round += 1) {
-      const wallStarted = performance.now();
-      for (const scope of scopes) {
-        const statsBefore = parseFunctionStats(await session.query(statsSql()));
+    const sequence = await executeObservableSequence({
+      captureBaseline: async () => parseFunctionStats(runPsql(databaseUrl, statsSql())),
+      beginTransaction: async () => session.query('begin;'),
+      prepareTransaction: async () => {
+        await session.query(`
+          create temporary table health_score_v3_benchmark_resultados (
+            rodada integer not null,
+            escopo text not null,
+            unidade_id uuid,
+            resultado jsonb not null
+          ) on commit drop;
+        `);
+        const marker = parseJson(await session.query(`
+          select jsonb_build_object(
+            'postmaster_start_time', pg_postmaster_start_time(),
+            'first_round_started_at', clock_timestamp(),
+            'track_functions', current_setting('track_functions')
+          )::text;
+        `), 'marcador da primeira rodada');
+        assertTrackFunctions(marker.track_functions);
+        if (new Date(marker.postmaster_start_time).valueOf()
+          !== new Date(environment.restart.postmaster_start_time).valueOf()) {
+          throw new Error('PostgreSQL reiniciou entre a verificacao e a primeira rodada');
+        }
+        environment.restart = validateRestartEvidence({
+          evidenceIso: environment.restart.postgres_restarted_after_evidence,
+          postmasterStartIso: marker.postmaster_start_time,
+          verifiedAtIso: marker.first_round_started_at,
+          firstRoundStartedAtIso: marker.first_round_started_at,
+        });
+      },
+      executions: executions.map(({ round, scope, scopeIndex }) => async () => {
+        if (scopeIndex === 0) wallStartedByRound[String(round)] = performance.now();
         const rawExplain = parseJson(await session.query(executionSql(round, scope, args.competencia)), 'EXPLAIN');
         assertExplainDocument(rawExplain);
         const result = parseJson(await session.query(`
@@ -481,7 +546,6 @@ async function runBenchmarkTransaction(databaseUrl, args, environment) {
             and unidade_id is not distinct from ${scope.unidade_id ? `${sqlLiteral(scope.unidade_id)}::uuid` : 'null::uuid'};
         `), 'resultado do executor');
         const status = assertStatusContract(round, result.status);
-        const dominantFunction = await waitForFunctionDelta(session, statsBefore);
         measurements.push({
           round,
           cache_observation: round === 1 ? 'shared_buffers_reiniciado_observavel' : 'aquecida',
@@ -490,25 +554,27 @@ async function runBenchmarkTransaction(databaseUrl, args, environment) {
           status,
           executor_result: result,
           summary: summarizePlan(rawExplain[0]),
-          dominant_function_pg_stat: dominantFunction,
+          function_observability: 'nao_atribuivel_sem_instrumentacao_intrusiva',
           raw_explain: rawExplain,
         });
-      }
-      wallClockByRound[String(round)] = performance.now() - wallStarted;
-    }
-    return { measurements, wallClockByRound, rollback_strategy: 'rollback_unico_no_finally' };
+        if (scopeIndex === scopes.length - 1) {
+          wallClockByRound[String(round)] = performance.now() - wallStartedByRound[String(round)];
+        }
+      }),
+      rollbackTransaction: rollbackOnce,
+      capturePostRollback: async (baseline) => waitForFunctionDelta(databaseUrl, baseline),
+    });
+    return {
+      measurements,
+      wallClockByRound,
+      aggregate_dominant_function: sequence.aggregateDominantFunction,
+      observability_order: sequence.events,
+      rollback_strategy: 'rollback_unico_no_finally',
+    };
   } finally {
     process.removeListener('SIGINT', signalHandler);
     process.removeListener('SIGTERM', signalHandler);
-    try {
-      await rollbackOnce();
-    } catch (rollbackError) {
-      // Se o cliente ja encerrou, o PostgreSQL desfaz a transacao ao fechar a
-      // conexao. Uma sessao ainda viva, porem, precisa confirmar o ROLLBACK.
-      if (!session.closed) throw rollbackError;
-    } finally {
-      await session.close();
-    }
+    await session.close();
   }
 }
 
@@ -540,6 +606,8 @@ async function main() {
     writes_preserved_between_rounds: true,
     writes_preserved_after_benchmark: false,
     rollback_strategy: benchmark.rollback_strategy,
+    observability_order: benchmark.observability_order,
+    aggregate_dominant_function: benchmark.aggregate_dominant_function,
     alert_wrapper: 'validado_separadamente_nao_disparado_no_benchmark',
     round_summaries: summary.rounds,
     decision: summary.decision,
