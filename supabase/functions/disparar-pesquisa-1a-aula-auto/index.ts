@@ -122,9 +122,12 @@ serve(async (req) => {
       nome: a.nome, curso: a.curso_nome, data_matricula: a.data_matricula,
     });
 
+    // origem:'auto' liga a trava anti-duplicata da edge de envio (reserva atômica, janela de
+    // 10 min). É o que impede as séries paralelas e o retry abaixo de mandarem a mesma
+    // pesquisa duas vezes. O caminho manual da aba não passa por aqui e segue sem trava.
     const enviarLote = async (alunos) => {
       const { data: envio, error: envErr } = await supabase.functions.invoke(
-        'enviar-pesquisa-pos-primeira-aula', { body: { alunos: alunos.map(mapAluno) } },
+        'enviar-pesquisa-pos-primeira-aula', { body: { alunos: alunos.map(mapAluno), origem: 'auto' } },
       );
       if (envErr) console.error('[disparar-pesquisa-auto] invoke erro:', envErr.message);
       return (envio && envio.resultados) || [];

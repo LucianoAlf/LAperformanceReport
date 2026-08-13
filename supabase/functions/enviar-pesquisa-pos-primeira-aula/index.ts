@@ -6,6 +6,11 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const DEPARTAMENTO = 'sucesso_aluno';
 
+// Janela da trava anti-duplicata do AUTO-disparo. As 42 duplicatas medidas (30 alunos, desde
+// 03/07/2026) ficaram todas dentro de 60s; o reenvio espaçado mais próximo está a 19,5h. Ou
+// seja: 10 min separa acidente de reenvio legítimo com folga dos dois lados.
+const JANELA_ANTIDUPLICATA_MIN = 10;
+
 const FOOTER_MENSAGEM = 'Toque em *Avaliar* e escolha uma opção 👇 — e, se quiser, me conta também o que mais gostou!';
 
 function primeiroNome(nome) {
@@ -115,35 +120,63 @@ async function enviarBotoes(baseUrl, token, numero, texto) {
   }
 }
 
+function somenteDigitos(valor) {
+  return String(valor || '').replace(/\D/g, '');
+}
+
+// O aluno pode ter mais de uma conversa no mesmo departamento: a de boas-vindas nasce no
+// telefone do responsável e depois aparece a do telefone dele. Por isso a conversa é casada
+// pelo telefone da mensagem, e não por "a conversa do aluno".
+async function resolverConversaAluno(supabase, { alunoId, unidadeId, jid, caixaId }) {
+  const alvo = somenteDigitos(jid);
+
+  const { data: existentes } = await supabase
+    .from('admin_conversas')
+    .select('id, whatsapp_jid')
+    .eq('aluno_id', alunoId)
+    .eq('departamento', DEPARTAMENTO);
+
+  const conversas = existentes || [];
+  const doTelefone = conversas.find((c) => somenteDigitos(c.whatsapp_jid) === alvo);
+  if (doTelefone) return doTelefone.id;
+
+  const semTelefone = conversas.find((c) => !c.whatsapp_jid);
+  if (semTelefone) return semTelefone.id;
+
+  const { data: nova, error: criarErr } = await supabase
+    .from('admin_conversas')
+    .insert({
+      aluno_id: alunoId,
+      unidade_id: unidadeId,
+      departamento: DEPARTAMENTO,
+      caixa_id: caixaId,
+      whatsapp_jid: jid,
+      status: 'aberta',
+    })
+    .select('id')
+    .single();
+  if (nova?.id) return nova.id;
+
+  // uq_admin_conversas_jid_depto recusa o insert quando o número já tem conversa — corrida com
+  // o webhook, ou conversa aberta como contato externo antes de virar aluno.
+  const { data: porJid } = await supabase
+    .from('admin_conversas')
+    .select('id')
+    .eq('whatsapp_jid', jid)
+    .eq('departamento', DEPARTAMENTO)
+    .maybeSingle();
+  if (porJid?.id) return porJid.id;
+
+  console.error('[enviar-pesquisa] conversa nao resolvida:', { alunoId, jid, erro: criarErr?.message });
+  return null;
+}
+
 async function registrarNaCaixa(supabase, { alunoId, unidadeId, jid, caixaId, messageId, status, texto, nomeExterno }) {
   try {
     let conversaId = null;
 
     if (alunoId) {
-      const { data: conv } = await supabase
-        .from('admin_conversas')
-        .select('id')
-        .eq('aluno_id', alunoId)
-        .eq('departamento', DEPARTAMENTO)
-        .maybeSingle();
-
-      if (conv) {
-        conversaId = conv.id;
-      } else {
-        const { data: nova } = await supabase
-          .from('admin_conversas')
-          .insert({
-            aluno_id: alunoId,
-            unidade_id: unidadeId,
-            departamento: DEPARTAMENTO,
-            caixa_id: caixaId,
-            whatsapp_jid: jid,
-            status: 'aberta',
-          })
-          .select('id')
-          .single();
-        conversaId = nova?.id || null;
-      }
+      conversaId = await resolverConversaAluno(supabase, { alunoId, unidadeId, jid, caixaId });
     } else {
       // Contato externo: busca conversa pelo JID
       const { data: conv } = await supabase
@@ -173,6 +206,16 @@ async function registrarNaCaixa(supabase, { alunoId, unidadeId, jid, caixaId, me
           .select('id')
           .single();
         conversaId = nova?.id || null;
+
+        if (!conversaId) {
+          const { data: porJid } = await supabase
+            .from('admin_conversas')
+            .select('id')
+            .eq('whatsapp_jid', jid)
+            .eq('departamento', DEPARTAMENTO)
+            .maybeSingle();
+          conversaId = porJid?.id || null;
+        }
       }
     }
 
@@ -183,7 +226,7 @@ async function registrarNaCaixa(supabase, { alunoId, unidadeId, jid, caixaId, me
       opcoes: OPCOES_INTERATIVO,
     });
 
-    await supabase.from('admin_mensagens').insert({
+    const { error: msgErr } = await supabase.from('admin_mensagens').insert({
       conversa_id: conversaId,
       aluno_id: alunoId,
       direcao: 'saida',
@@ -194,6 +237,12 @@ async function registrarNaCaixa(supabase, { alunoId, unidadeId, jid, caixaId, me
       status_entrega: status,
       whatsapp_message_id: messageId || null,
     });
+
+    // Sem isto a pesquisa some da Caixa em silêncio: o envio ao WhatsApp já saiu e a edge
+    // responde ok. O eco do webhook até grava a mensagem, mas achatada em texto.
+    if (msgErr) {
+      console.error('[enviar-pesquisa] mensagem nao gravada na caixa:', { alunoId, conversaId, erro: msgErr.message });
+    }
 
     await supabase.from('admin_conversas')
       .update({
@@ -215,6 +264,9 @@ serve(async (req) => {
     const body = await req.json();
     const alunos = body?.alunos;
     const dryRun = body?.dry_run === true;
+    // Só o caminho automático trava duplicata (decisão Hugo, 13/08/2026). Chamada sem origem
+    // — a aba Pós-1ª Aula — segue livre para reenviar.
+    const origemAuto = body?.origem === 'auto';
     if (!Array.isArray(alunos) || alunos.length === 0) {
       return new Response(JSON.stringify({ error: 'alunos obrigatorio e nao pode ser vazio' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -341,18 +393,48 @@ serve(async (req) => {
           continue;
         }
 
-        // Upsert idempotente — reutiliza linha de tentativa anterior
-        const { error: upsertErr } = await supabase
-          .from('pesquisas_whatsapp')
-          .upsert(
-            { aluno_id, unidade_id, tipo: 'pos_primeira_aula', data_matricula, enviado_ok: false, erro_detalhes: null },
-            { onConflict: 'aluno_id,tipo,data_matricula' }
+        if (origemAuto) {
+          // Reserva ATÔMICA antes do POST: das execuções paralelas, uma leva a linha e as
+          // outras recebem false. Consultar-e-então-enviar não serviria — elas leem no mesmo
+          // segundo, antes de qualquer marcação.
+          const { data: reservou, error: reservaErr } = await supabase.rpc(
+            'reservar_envio_pesquisa_whatsapp',
+            {
+              p_aluno_id: aluno_id,
+              p_unidade_id: unidade_id,
+              p_tipo: 'pos_primeira_aula',
+              p_data_matricula: data_matricula,
+              p_janela_minutos: JANELA_ANTIDUPLICATA_MIN,
+            },
           );
 
-        if (upsertErr) {
-          console.error('[enviar-pesquisa] upsert erro:', upsertErr);
-          resultados.push({ aluno_id, ok: false, erro: upsertErr.message });
-          continue;
+          if (reservaErr) {
+            console.error('[enviar-pesquisa] reserva falhou:', reservaErr);
+            resultados.push({ aluno_id, ok: false, erro: reservaErr.message });
+            continue;
+          }
+
+          if (reservou !== true) {
+            // ok:true de propósito — a pesquisa saiu, só que por outra execução. Como falha,
+            // a orquestradora concluiria que ninguém recebeu e reenviaria o lote inteiro.
+            resultados.push({ aluno_id, ok: true, pulado: 'ja_enviada_recentemente' });
+            continue;
+          }
+        } else {
+          // Manual (aba Pós-1ª Aula): sem trava — a Fabi reenvia quando quiser, inclusive
+          // segundos depois. Upsert idempotente, reutiliza linha de tentativa anterior.
+          const { error: upsertErr } = await supabase
+            .from('pesquisas_whatsapp')
+            .upsert(
+              { aluno_id, unidade_id, tipo: 'pos_primeira_aula', data_matricula, enviado_ok: false, erro_detalhes: null },
+              { onConflict: 'aluno_id,tipo,data_matricula' }
+            );
+
+          if (upsertErr) {
+            console.error('[enviar-pesquisa] upsert erro:', upsertErr);
+            resultados.push({ aluno_id, ok: false, erro: upsertErr.message });
+            continue;
+          }
         }
 
         const resultado = await enviarBotoes(baseUrl, token, numero, textoMsg);
@@ -377,9 +459,11 @@ serve(async (req) => {
 
           resultados.push({ aluno_id, ok: true });
         } else {
+          // Libera a reserva. Sem isto, uma falha real prenderia o aluno pela janela inteira e
+          // o retry da orquestradora (5s depois) não teria efeito. No manual já é nulo.
           await supabase
             .from('pesquisas_whatsapp')
-            .update({ erro_detalhes: JSON.stringify(resultado.data) })
+            .update({ erro_detalhes: JSON.stringify(resultado.data), tentativa_envio_em: null })
             .eq('aluno_id', aluno_id)
             .eq('tipo', 'pos_primeira_aula')
             .eq('data_matricula', data_matricula);
