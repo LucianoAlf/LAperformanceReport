@@ -66,6 +66,19 @@ begin
 
   v_unidade_id := case when v_escopo = 'unidade' then p_unidade_id else null::uuid end;
 
+  -- A chamada direta compartilha a mesma serializacao do executor. O lock e
+  -- reentrante na transacao, portanto o caminho executor -> materializador nao
+  -- cria deadlock e nenhuma captura/revisao acontece fora dele.
+  perform pg_advisory_xact_lock(hashtextextended(
+    format(
+      'health-score-professor-v3-diario:%s:%s:%s',
+      v_competencia,
+      v_escopo,
+      coalesce(v_unidade_id::text, 'rede')
+    ),
+    0
+  ));
+
   -- O executor prepara estas tabelas na propria sessao. A chamada direta do
   -- materializador continua valida e tambem captura o produtor apenas uma vez.
   if not v_fonte_preparada then
@@ -510,21 +523,20 @@ begin
 
   -- Sob os mesmos advisory locks da materializacao, o fechamento e recusado
   -- antes de criar qualquer revisao se um escopo nao retratar o roster ativo.
-  with escopos as (
-    select distinct s.unidade_id
-    from public.health_score_professor_v3_snapshots s
-    where s.periodicidade = 'ciclo'
-      and s.ciclo_codigo = p_ciclo_codigo
-  ), roster_esperado as (
-    select distinct e.unidade_id, p.id as professor_id
-    from escopos e
-    join public.professores_unidades pu
-      on e.unidade_id is null or pu.unidade_id = e.unidade_id
+  with roster_unidade as (
+    select distinct pu.unidade_id, p.id as professor_id
+    from public.professores_unidades pu
     join public.unidades u on u.id = pu.unidade_id and u.ativo = true
     join public.professores p on p.id = pu.professor_id and p.ativo = true
     where pu.emusys_ativo = true
       and pu.validacao_status is distinct from 'ignorado'
       and to_jsonb(p) ->> 'mesclado_em_professor_id' is null
+  ), roster_esperado as (
+    select r.unidade_id, r.professor_id
+    from roster_unidade r
+    union
+    select null::uuid, r.professor_id
+    from roster_unidade r
   ), roster_retratado as (
     select distinct s.unidade_id, s.professor_id
     from public.health_score_professor_v3_snapshots s
@@ -559,9 +571,10 @@ begin
 
   if jsonb_array_length(v_roster_diagnostico->'professores_ausentes') > 0
     or jsonb_array_length(v_roster_diagnostico->'professores_excedentes') > 0 then
-    raise exception 'HEALTH_SCORE_V3_FECHAMENTO_BLOQUEADO: roster incompleto: %',
-      v_roster_diagnostico::text
-      using errcode = 'P0001';
+    raise exception using
+      errcode = 'P0001',
+      message = 'HEALTH_SCORE_V3_FECHAMENTO_BLOQUEADO: roster incompleto',
+      detail = v_roster_diagnostico::text;
   end if;
 
   for v_origem in
@@ -617,13 +630,14 @@ begin
       snapshot_id, metrica, valor_bruto, numerador, denominador, amostra,
       estado_base, publicavel, confianca, fonte, regra_versao,
       motivo_sem_base, detalhes, nota, peso, peso_disponivel,
-      contribuicao, meta_aplicada
+      contribuicao, meta_aplicada, peso_efetivo, codigo_evidencia, papel
     )
     select v_novo_id, m.metrica, m.valor_bruto, m.numerador, m.denominador,
       m.amostra, m.estado_base, m.publicavel, m.confianca, m.fonte,
       m.regra_versao, m.motivo_sem_base,
       m.detalhes || jsonb_build_object('fechado_oficialmente_em', now()),
-      m.nota, m.peso, m.peso_disponivel, m.contribuicao, m.meta_aplicada
+      m.nota, m.peso, m.peso_disponivel, m.contribuicao, m.meta_aplicada,
+      m.peso_efetivo, m.codigo_evidencia, m.papel
     from public.health_score_professor_v3_snapshot_metricas m
     where m.snapshot_id = v_origem.id;
 
