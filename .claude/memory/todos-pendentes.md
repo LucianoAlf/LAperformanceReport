@@ -361,7 +361,44 @@ Resultado: leads como o "Carlos Yan" (ex: matriculou 15/04, experimental marcada
 
 ---
 
-## 👀 [OBSERVAR] Observador emusys — decisão de virar `DRY_RUN=false` pendente
+## 👀 [OBSERVAR] Observador emusys — ✅ VIRADA FEITA em 12/08/2026
+
+> ✅ **A decisão descrita abaixo foi TOMADA E EXECUTADA em 12/08/2026.** O observador escreve
+> (`OBSERVADOR_ESCREVE` com os 3 eventos de lead + os 3 de experimental) e a conexão
+> `Webhook1 → tem numero?2` do n8n foi removida pelo Hugo às 13:31 BRT. O n8n segue ligado **de
+> propósito**, como auditor: cada execução dele prova um webhook que o Emusys entregou, cobrindo
+> o ponto cego do observador (401 e edge fora do ar não deixam rastro).
+>
+> Aferido em 13/08 (72h): **128 `lead_criado`, 127 `ok`, 1 `perdido`** — e o perdido é o
+> `ZZTESTE OBSERVADOR V11 IGNORAR`. Zero `erro_rpc`/`erro_processamento` em 7 dias; observado ×
+> processado fecha 1:1. Detalhe e queries na auto-memory (`virada-lead-observador-em-curso`).
+>
+> ⚠️ **`lead_arquivado` ainda não passou com a escrita ligada** (o único em 7 dias foi 07/08,
+> ainda em sombra) — é o que mantém este item aberto, e continua sendo o único dos três com
+> UPDATE destrutivo.
+>
+> ✅ **A paridade de webhook cobrada no fim deste item foi verificada em 13/08 e o fix de 03/08
+> funcionou**: `matricula_alterada` Barra 19/19 e CG 33/33, `matricula_finalizacao` 6/6 e 16/16,
+> `matricula_renovacao` 10/10 e 17/17. O `matricula_renovacao` do Recreio que ficou "1 de 4" e
+> era o mistério em aberto **fechou sozinho (38/38)** — era resíduo da config, não um segundo
+> problema. Sobra `matricula_alterada` do Recreio: 36 / **31**.
+>
+> 🔴 **Mas apareceu um buraco NOVO no mesmo formato:** `matricula_aviso_previo_*` (v1.4.0, nasceu
+> depois do acerto de 03/08) **não está marcado no cadastro `webhook_matricula` da Barra** —
+> Catarina Perim e Liv Ribeiro Oliveira avisaram em 13/08 que saem em 01/10 e **não há registro
+> nosso** (as duas seguem `ativo`, zero linhas em `movimentacoes_admin`).
+>
+> Cadeia verificada na fonte: o observador recebe (mas só loga matrícula); o **n8n não filtra
+> evento** (`WF_Matricula_Funcional`/`ZzuR9slRx8UqXg9N`: `Webhook → LAPerformanceReport` direto) e
+> **não teve execução nos horários dos avisos**; a edge tem o handler e é idempotente. Logo, o
+> Emusys não entregou ao endpoint do n8n → **conserto é no PAINEL da Barra**, não em código.
+> Recuperável: o payload está salvo. Detalhes e ação em `aviso-previo-webhook-nao-marcado-barra`.
+>
+> ⚠️ **NÃO detectar isso casando pelo `id` do payload.** Tentei em 13/08 e o Emusys gera um id
+> por **ENTREGA**, não por evento: o mesmo `matricula_nova` chegou 81798 na edge e 81799 no
+> observador, e a view acusou **242** perdidos quando o real era **2**. Criada e dropada no mesmo
+> minuto. Casar por evento + `escola_id` + `matricula_id` + janela; a query de paridade manual
+> (no fim deste item) já basta e não precisa de objeto novo no banco.
 
 **Identificado em:** 2026-07-29, atualizado em 2026-07-31
 

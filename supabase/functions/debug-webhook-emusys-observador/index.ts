@@ -1008,6 +1008,104 @@ const EVENTOS_LEAD = ['lead_criado', 'lead_editado'];
 const EVENTOS_EXP = ['aula_experimental_criada', 'aula_experimental_reagendada', 'aula_experimental_cancelada'];
 const EVENTOS_ARQUIVAMENTO = ['lead_arquivado'];
 
+// Eventos de MATRICULA que o observador recebe e repassa para quem processa.
+//
+// POR QUE ISSO EXISTE (incidente 13/08/2026)
+// Ha DOIS cadastros de webhook por unidade no Emusys, com listas de eventos independentes:
+//   Emusys --> este observador                      (direto)
+//   Emusys --> webhook_matricula (n8n) --> processar-matricula-emusys
+// Quando um evento e marcado no primeiro e esquecido no segundo, o payload chega aqui e
+// **nada acontece no sistema**. Foi o que aconteceu com `matricula_aviso_previo_adicionado`
+// na Barra: Catarina Perim e Liv Ribeiro Oliveira avisaram em 13/08 que sairiam em 01/10,
+// o payload ficou no log e as duas seguiram `status='ativo'` sem nenhuma movimentacao.
+// Ja tinha acontecido em 03/08 com `matricula_alterada` e `matricula_finalizacao` (20 evasoes
+// do Recreio perdidas). O cadastro e manual e por unidade, entao repete a cada evento NOVO
+// que o Emusys lanca — os 3 de aviso previo sao da v1.4.0, de 03/08, nasceram DEPOIS daquele
+// acerto e por isso ficaram de fora.
+//
+// ⚠️ POR QUE REPASSAR EM VEZ DE PROCESSAR AQUI
+// `handleAvisoPrevio` (processar-matricula-emusys) nao e um insert simples: resolve curso,
+// casa o aluno em camadas, faz backfill de `emusys_matricula_id`, mapeia `motivos_saida`,
+// deduplica por `emusys_aviso_previo_id` e ainda **adota** o lancamento manual equivalente
+// (mesmo aluno + mes_saida sem id do Emusys) em vez de criar duplicata. Reimplementar isso
+// aqui duplicaria regra de negocio pesada em duas edges, que divergiriam na primeira mudanca.
+//
+// ⚠️ SO OS 3 DE AVISO PREVIO, de proposito. O repasse e seguro porque `handleAvisoPrevio` e
+// idempotente (busca `existente` por `emusys_aviso_previo_id` e faz UPDATE). Se um cadastro
+// for corrigido no painel, o evento passa a chegar pelos dois caminhos e a edge recebe 2x —
+// sem efeito. **Ampliar esta lista exige auditar a idempotencia do handler correspondente**;
+// repassar `matricula_nova`/`matricula_renovacao` as cegas poderia duplicar matricula.
+const EVENTOS_REPASSADOS_PARA_MATRICULA = [
+  'matricula_aviso_previo_adicionado',
+  'matricula_aviso_previo_editado',
+  'matricula_aviso_previo_removido',
+];
+
+// Repassa o payload ORIGINAL para a edge que processa matricula.
+//
+// ⚠️ A chamada usa `Bearer SUPABASE_SERVICE_ROLE_KEY` e a edge de destino tem
+// `verify_jwt = true` — funciona porque a chave injetada no runtime das edges e valida
+// (confirmado em 13/08: `processar-matricula-emusys` chama `enviar-boas-vindas-matricula`
+// pelo mesmo padrao, e as boas-vindas sairam as 11:43, 13:17, 15:00 e 18:13 do mesmo dia).
+// ⚠️ NAO testar esse caminho com a chave de um `.env.local`: a chave legada foi desativada no
+// projeto e devolve `401 UNAUTHORIZED_LEGACY_JWT`, o que parece falha de permissao e nao e.
+//
+// Nunca lanca: falha de repasse nao pode derrubar o observador, que ja gravou o payload bruto
+// (passo 1) e portanto mantem o evento recuperavel de qualquer forma.
+async function repassarParaProcessamentoMatricula(
+  supabase: any,
+  evento: string,
+  body: any,
+): Promise<void> {
+  if (EVENTOS_REPASSADOS_PARA_MATRICULA.indexOf(evento) < 0) return;
+
+  const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
+  const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  let acao = 'repassado';
+  let detalhes: any = {};
+
+  try {
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/processar-matricula-emusys`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const texto = await resp.text();
+    if (!resp.ok) acao = 'repasse_falhou';
+    detalhes = {
+      destino: 'processar-matricula-emusys',
+      http_status: resp.status,
+      // o corpo diz QUAL desfecho o handler deu (aviso_previo_registrado / _adotado /
+      // erro_aluno_nao_encontrado...), que e o que interessa para auditar depois
+      resposta: texto.slice(0, 600),
+    };
+  } catch (e: any) {
+    acao = 'repasse_falhou';
+    detalhes = { destino: 'processar-matricula-emusys', erro: String(e?.message ?? e) };
+    console.error('[observador/repasse] falha:', e?.message ?? e);
+  }
+
+  try {
+    await supabase.from('automacao_log').insert({
+      evento,
+      acao,
+      status: acao === 'repassado' ? 'ok' : 'erro',
+      aluno_nome: extrairNome(body),
+      unidade_nome: extrairUnidade(body),
+      detalhes,
+      workflow_id: 'observador-repasse',
+      execution_id: new Date().toISOString(),
+      idempotency_key: body?.id != null ? String(body.id) : null,
+    });
+  } catch (e: any) {
+    console.error('[observador/repasse] falha ao gravar log:', e?.message ?? e);
+  }
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -1136,6 +1234,10 @@ serve(async (req: Request) => {
       console.error('[observador/worker] falha ao gravar resultado:', e?.message ?? e);
     }
   }
+
+  // (3) REPASSE — evento de matrícula que chega aqui e não chega em quem processa.
+  // Ver comentário em EVENTOS_REPASSADOS_PARA_MATRICULA. Nunca lança.
+  await repassarParaProcessamentoMatricula(supabase, evento, body);
 
   return new Response(JSON.stringify({ status: 'ok' }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },

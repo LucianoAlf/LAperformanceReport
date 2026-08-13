@@ -1,0 +1,24 @@
+-- Remove a view `vw_webhooks_matricula_nao_processados`, criada 1 minuto antes na migration
+-- `20260813212124` (que NAO foi versionada de proposito — nasceu e morreu no mesmo minuto, e
+-- versionar o CREATE faria um `supabase db reset` recriar uma view sabidamente errada).
+--
+-- ⚠️ POR QUE ELA ESTAVA ERRADA — a licao vale para qualquer webhook do Emusys:
+-- Ela casava as duas entregas do mesmo evento por `payload_bruto->>'id'`, supondo que fosse o
+-- id do evento de negocio. **NAO E.** O Emusys gera um id por **ENTREGA**, entao o MESMO evento
+-- chega com ids diferentes em cada endpoint. Medido em 13/08/2026 — matricula_nova do aluno
+-- Nicolas Gime (aluno_id 2259, lead_id 8231, mesmo valor, curso e horario):
+--    id 81798 -> processar-matricula-emusys
+--    id 81799 -> debug-webhook-emusys-observador
+-- Resultado: a view acusava **242 "perdidos"**, incluindo `matricula_alterada` da Barra 19 —
+-- sendo que a contagem por unidade+evento, no mesmo dia, dava 19/19 de paridade. Contradicao
+-- direta, e o numero real de eventos perdidos era **2**.
+--
+-- E o mesmo engano ja registrado no CLAUDE.md sobre o `body.id` do webhook de experimental
+-- ("NAO e o id da aula — e id de EVENTO"). Vale para os webhooks de matricula tambem: para
+-- casar a mesma ocorrencia entre dois endpoints, use evento + escola_id + matricula_id +
+-- janela de tempo, nunca o `id` do envelope.
+--
+-- Nao substituida por outra chave agora, de proposito: uma view de alerta que grita 242 quando
+-- o numero real e 2 ensina a ignorar o alerta — foi exatamente o defeito da v1 da
+-- `vw_observador_leads_orfaos`. Melhor nenhuma view do que uma que mente.
+drop view if exists public.vw_webhooks_matricula_nao_processados;
