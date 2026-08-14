@@ -18,6 +18,10 @@ const cicloMensalMigrationPath = path.join(
   root,
   'supabase/migrations/20260803220000_health_score_v3_ciclo_mensal_canonico.sql',
 );
+const configuravelMigrationPath = path.join(
+  root,
+  'supabase/migrations/20260813270200_health_score_v3_comparabilidade_configuravel.sql',
+);
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -55,6 +59,18 @@ function extractComparabilityFunction(sql) {
     /create\s+or\s+replace\s+function\s+public\.avaliar_health_score_professor_v3_comparabilidade\(/i,
   );
   assert.notEqual(start, -1, 'funcao pura de comparabilidade deve existir');
+  const bodyStart = sql.indexOf('$function$', start);
+  const end = sql.indexOf('$function$;', bodyStart + '$function$'.length);
+  assert.notEqual(bodyStart, -1);
+  assert.notEqual(end, -1);
+  return sql.slice(start, end + '$function$;'.length);
+}
+
+function extractConfigurableComparabilityFunction(sql) {
+  const start = sql.search(
+    /create\s+or\s+replace\s+function\s+public\.avaliar_health_score_professor_v3_comparabilidade\(\s*p_score_observado\s+numeric[\s\S]*?p_exige_pilar_fidelizacao\s+boolean/i,
+  );
+  assert.notEqual(start, -1, 'overload configuravel de comparabilidade deve existir');
   const bodyStart = sql.indexOf('$function$', start);
   const end = sql.indexOf('$function$;', bodyStart + '$function$'.length);
   assert.notEqual(bodyStart, -1);
@@ -122,6 +138,59 @@ test('PostgreSQL aplica os gates de comparabilidade sem transformar ausencia em 
     assert.equal(payload.fonte_em_auditoria.motivo, 'fonte_em_auditoria');
     assert.equal(payload.sem_base.estado, 'sem_base_operacional');
     assert.equal(payload.sem_base.score_comparavel, null);
+  } finally {
+    docker(['stop', container]);
+  }
+});
+
+test('PostgreSQL respeita a exigencia de fidelizacao versionada', async (t) => {
+  assert.equal(fs.existsSync(configuravelMigrationPath), true);
+  const dockerInfo = docker(['info']);
+  if (dockerInfo.status !== 0) {
+    t.skip('Docker indisponivel para fixture PostgreSQL');
+    return;
+  }
+
+  const container = `la-health-comparabilidade-config-${process.pid}`;
+  const start = docker([
+    'run', '--rm', '--name', container,
+    '-e', 'POSTGRES_PASSWORD=postgres',
+    '-d', 'postgres:17-alpine',
+  ]);
+  assert.equal(start.status, 0, start.stderr || start.stdout);
+
+  try {
+    await waitForPostgres(container);
+    const migration = fs.readFileSync(configuravelMigrationPath, 'utf8');
+    const helper = extractConfigurableComparabilityFunction(migration);
+    const setup = psql(container, `create schema if not exists public;\n${helper}`);
+    assert.equal(setup.status, 0, setup.stderr || setup.stdout);
+
+    const result = psql(container, `
+      with casos(nome, exige_fidelizacao, pilares, cobertura, fonte) as (
+        values
+          ('obrigatoria_sem_pilar', true, 3, 60::numeric, true),
+          ('opcional_sem_pilar', false, 3, 60::numeric, true),
+          ('opcional_pilares_insuficientes', false, 2, 80::numeric, true),
+          ('opcional_fonte_auditoria', false, 3, 80::numeric, false)
+      )
+      select jsonb_object_agg(
+        nome,
+        public.avaliar_health_score_professor_v3_comparabilidade(
+          90::numeric, cobertura, pilares, false, 60::numeric,
+          3, exige_fidelizacao, fonte
+        )
+      )::text
+      from casos;
+    `);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout.trim());
+
+    assert.equal(payload.obrigatoria_sem_pilar.motivo, 'sem_pilar_fidelizacao');
+    assert.equal(payload.opcional_sem_pilar.estado, 'comparavel');
+    assert.equal(payload.opcional_sem_pilar.score_comparavel, 90);
+    assert.equal(payload.opcional_pilares_insuficientes.motivo, 'pilares_insuficientes');
+    assert.equal(payload.opcional_fonte_auditoria.motivo, 'fonte_em_auditoria');
   } finally {
     docker(['stop', container]);
   }
