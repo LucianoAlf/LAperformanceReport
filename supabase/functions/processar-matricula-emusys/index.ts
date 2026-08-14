@@ -257,8 +257,20 @@ async function complementarDescontoMatricula(
     // desconto_fixo foi embutido no valor_mensalidade, resultando em líquido negativo).
     if (!travados.has('tipo_matricula_id') && cheio > 0 && parcelaComercial >= 0) {
       const bolsa = c.bolsa === true;
+      // Alinha com sync-matriculas/financeiro.ts (analisarFinanceiroContrato):
+      // bolsista INTEGRAL = bolsa E (sem fatura e sem cobrança automática) OU
+      // parcela comercial <= 0. O desconto_condicional varia independente da bolsa
+      // e não deve decidir integral vs parcial — caso Maria Eduarda Artacho (Recreio,
+      // irmã de Arthur/Noah que são INT) foi rotulada PARC porque desconto_condicional=0
+      // enquanto o irmão tinha desconto_condicional=15.
+      const nrFaturas = Number(c.nr_faturas ?? 0);
+      const valorTotal = Number(c.valor_total ?? 0);
+      const temCobrancaAutomatica = Boolean(mat?.cobranca_automatica);
+      const semFaturaSemCobranca =
+        (nrFaturas === 0 || valorTotal === 0) && !temCobrancaAutomatica;
+      const bolsaIntegral = bolsa && (semFaturaSemCobranca || parcelaComercial <= 0);
       const tipoCode = bolsa
-        ? (parcelaComercial <= 0 ? 'BOLSISTA_INT' : 'BOLSISTA_PARC')
+        ? (bolsaIntegral ? 'BOLSISTA_INT' : 'BOLSISTA_PARC')
         : (isSegundoCurso ? 'SEGUNDO_CURSO' : 'REGULAR');
       const { data: tipoRow } = await supabase
         .from('tipos_matricula').select('id').eq('codigo', tipoCode).single();
