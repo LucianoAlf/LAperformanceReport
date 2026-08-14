@@ -174,6 +174,7 @@ export function Tab360Professores({
         { id: 'jhonatan', nome: 'Jhonatan' },
         { id: 'fernanda', nome: 'Fernanda' },
         { id: 'daiana', nome: 'Daiana' },
+        { id: 'vitoria_andrade', nome: 'Vitória Andrade' },
         { id: 'eduarda', nome: 'Eduarda' },
         { id: 'arthur', nome: 'Arthur' },
         { id: 'vitoria', nome: 'Vitória' },
