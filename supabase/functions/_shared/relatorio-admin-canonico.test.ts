@@ -13,7 +13,7 @@ import {
   parseDataReferenciaAdminBrt,
 } from "./relatorio-admin-canonico.ts";
 
-Deno.test("conciliacao explica o universo academico e a fotografia do Emusys", () => {
+Deno.test("conciliacao explica o universo academico e os pagantes", () => {
   const texto = formatarConciliacaoBaseAlunosAdmin({
     alunosAtivos: 419,
     alunosPagantes: 388,
@@ -26,7 +26,8 @@ Deno.test("conciliacao explica o universo academico e a fotografia do Emusys", (
     "base acadêmica; trancados e vínculos exclusivamente de banda, coral ou atividade extra ficam fora",
   );
   assertStringIncludes(texto, "Conferência dos pagantes: *419 - 31 = 388*");
-  assertStringIncludes(texto, "Fotografia do Emusys: *11/08/2026 às 23:00*");
+  // Detalhe de snapshot do Emusys e interno (dev), nao deve aparecer no relatorio administrativo.
+  assertEquals(texto.includes("Fotografia do Emusys"), false);
 });
 
 Deno.test("conciliacao bloqueia uma equacao de pagantes inconsistente", () => {
