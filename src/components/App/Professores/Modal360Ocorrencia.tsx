@@ -45,6 +45,7 @@ const COLABORADORES = [
   { id: 'jhonatan', nome: 'Jhonatan', cargo: 'Farmer - CG' },
   { id: 'fernanda', nome: 'Fernanda', cargo: 'Farmer - REC' },
   { id: 'daiana', nome: 'Daiana', cargo: 'Farmer - REC' },
+  { id: 'vitoria_andrade', nome: 'Vitória Andrade', cargo: 'Farmer - REC' },
   { id: 'eduarda', nome: 'Eduarda', cargo: 'Farmer - BARRA' },
   { id: 'arthur', nome: 'Arthur', cargo: 'Farmer - BARRA' },
   { id: 'vitoria', nome: 'Vitória', cargo: 'Hunter - CG' },
