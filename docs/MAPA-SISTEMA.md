@@ -215,6 +215,13 @@ Disparo de templates Meta (WhatsApp Cloud API) + conversas + agentes IA. `Campan
   exato permanece melhoria posterior.
 
 ## Professores (`/app/professores`)
+
+**Alinhamento da carteira com o V3 (14/08/2026):** o indicador
+`numero_alunos` do periodo aberto usa `get_carteira_professor_periodo_canonica`,
+a mesma fonte baseada na jornada ativa que abastece os KPIs da Carteira.
+`get_carteira_professores` permanece somente como contrato legado de ticket e
+contagem; nao e fonte do retrato V3. O consolidado soma as linhas canonicas por
+unidade.
 `Professores/ProfessoresPage.tsx`; abas Cadastro, Performance, Carteira, Agenda, 360°, Divergências, Checklists, Configurações.
 - **Hooks:** `useCompetenciaFiltro`, `useHealthScoreProfessorV3`, `useHealthScoreProfessorV3Performance`, `useHealthScoreProfessorV3Config`, `useProfessor360`/`useConfig360`/`useOcorrenciasComLog`, `useProfessorDependencies`, `useProfessoresPerformance`, `useProfessoresDivergencias`.
 - **Aba Divergências (09/08/2026):** `TabDivergenciasProfessores.tsx` + `useProfessoresDivergencias`. Fila de divergências de identidade nosso cadastro × Emusys (`professores_emusys_divergencias`, populada pelo cron das 07:00 do `sync-professores-emusys`). Existia desde junho **sem tela nenhuma** — foi por isso que o Jonathan (professor ativo na Barra com 10 aulas futuras e nenhum vínculo) ficou dias em aberto sem ninguém ver. ⚠️ A tabela tem **RLS ligado e zero policies**: ler direto devolve vazio sem erro. A única porta é a RPC `get_professores_divergencias_emusys(p_incluir_resolvidas, p_unidade_id)` (`SECURITY DEFINER`), e a decisão é gravada por `decidir_professor_divergencia_emusys(p_id, p_decisao, p_observacao)` — **autoria vem do JWT, nunca do cliente**, com recusa de redecidir (guarda de corrida no próprio UPDATE). ⚠️ **É ferramenta de gestão:** `fn_pode_operar_fila_divergencias_professor()` exige perfil admin ou unidade. Escopo por unidade sozinho não bastava — `get_user_unidade_ids()` cai no legado `usuarios.unidade_id` e deixava o **professor** ver a fila da unidade dele. O cartão destaca em vermelho a divergência com **aula futura órfã**, que é o sinal de que alguém está dando aula sem o registro chegar em ninguém.
@@ -321,6 +328,11 @@ Formulários de lançamento manual (React Hook Form + Zod). Escrevem direto nas 
 - **Tabelas:** `aluno_feedback_sessoes`, `aluno_feedback_professor` (upsert por `aluno_id+professor_id+competencia`). Escala verde/amarelo/vermelho.
 
 ## Health Score Professor V3 — mensal e ciclo
+
+No periodo aberto, o produtor do retrato usa `get_carteira_professor_periodo_canonica`
+para `numero_alunos`. Assim, Performance e Carteira partem da mesma jornada ativa;
+uma divergencia em `alunos.professor_atual_id` nao reduz o diagnostico nem altera
+o professor atual. O historico fechado preserva sua fonte e seu snapshot original.
 
 Na aba Performance de `/app/professores`, mês e ciclo consomem `get_health_score_professor_v3_performance_snapshot_v3`: leitor direto da última fotografia materializada, sem disparar o produtor vivo pelo clique. Para a competência aberta aceita retratos `provisorio`, `em_maturacao` ou `sem_base`; competência fechada exige a publicação apropriada quando essa etapa for ativada. O leitor é determinístico por `revisao desc, criado_em desc, id desc` e retorna `retrato_calculado_em`, execução, estado e defasagem como metadados. O modal individual consome o mesmo retrato por `get_health_score_professor_v3_snapshot_modal`.
 

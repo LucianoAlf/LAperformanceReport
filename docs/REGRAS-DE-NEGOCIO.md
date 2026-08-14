@@ -588,6 +588,15 @@ COUNT(alunos) WHERE professor_atual_id = <prof> AND matrícula ativa
 - Inclui trancado? **Não** (decisão de 2026-05-20).
 - Exige `entra_carteira_professor = true` no estado operacional.
 
+**Fonte canonica da leitura atual:** na Carteira e no Health Score V3 do periodo
+aberto, o numero de alunos vem de
+`get_carteira_professor_periodo_canonica`, que prioriza a jornada ativa
+`aluno_jornada_matricula_disciplina` por professor e unidade. A RPC legada
+`get_carteira_professores` continua existindo para o contrato/ticket legado, mas
+nao pode alimentar o V3 nem substituir a jornada por
+`alunos.professor_atual_id`; esse campo pode estar defasado. No consolidado, o
+V3 soma as linhas canonicas das unidades, mantendo o mesmo criterio da Carteira.
+
 ### 7.2 Score do professor — evasões que contam ✅
 
 ```

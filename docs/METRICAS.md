@@ -584,6 +584,13 @@ Média/turma e Número de alunos não usam uma meta global no V3. Cada regra per
 - capacidade excedida gera alerta operacional, sem cortar ocupação, valor bruto ou nota;
 - o total de pessoas do professor continua vindo da carteira canônica e não pode ser inflado pela soma de cursos simultâneos.
 
+Para o periodo aberto, essa carteira canonica e lida por
+`get_carteira_professor_periodo_canonica`, com jornada ativa por professor e
+unidade (`aluno_jornada_matricula_disciplina`). O V3 nao usa
+`alunos.professor_atual_id` como fonte principal do diagnostico e nao soma a
+carteira legada. No consolidado, soma as linhas canonicas das unidades, igual ao
+agregador dos KPIs da Carteira.
+
 A configuração segmentada segue o mesmo ciclo governado: rascunho, validação, simulação e ativação separada. Enquanto houver regra inválida, os comandos de salvar, simular e ativar permanecem bloqueados.
 
 - Classificação inicial: **Saudável ≥ 70** · **Atenção 50–69** · **Crítico < 50**.

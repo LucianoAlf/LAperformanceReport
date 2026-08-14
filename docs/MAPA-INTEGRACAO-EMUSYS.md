@@ -353,6 +353,13 @@ Barra abriu em 09/10/2021 e não tem aula antiga por não existir, não por falt
 
 Presença, carteira, grade e vínculos continuam vindo das fontes canônicas já sincronizadas do Emusys. As leituras de Health Score e dos relatórios da Coordenação não chamam a API Emusys diretamente, não mudam a identidade canônica e não criam snapshot operacional no Emusys.
 
+Na competencia aberta, a carteira usada pelo Health Score V3 e
+`get_carteira_professor_periodo_canonica`, baseada na jornada ativa por
+professor/unidade; `get_carteira_professores` e legado de contrato/ticket e nao
+participa desse retrato. Isso evita que uma atribuicao antiga em
+`alunos.professor_atual_id` faca Performance e Carteira mostrarem universos
+distintos.
+
 O recorte mensal usa somente os fatos da competência selecionada. O recorte de ciclo resolve os intervalos fixos Mar-Abr-Mai, Jun-Jul-Ago, Set-Out-Nov e Dez-Jan-Fev; este último atravessa o ano civil. Conversão e presença somam numeradores e denominadores brutos antes da divisão. Carteira e média/turma usam a fotografia do último mês alcançado no recorte. O ciclo nunca é calculado pela média de percentuais ou scores mensais.
 
 Para presença, `data_aula` identifica a ocorrência em conjunto com professor, unidade, aula e pessoa. `respondido_em`/`evidencia_registrada_em` podem ser posteriores: chamadas lançadas tardiamente continuam válidas. A data da aula serve para impedir que o mesmo ID externo reutilizado em outra data contamine a taxa.
