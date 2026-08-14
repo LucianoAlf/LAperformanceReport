@@ -78,6 +78,12 @@ $trecho$;
 begin
   select pg_get_functiondef('public.app_minha_agenda_sessao(date)'::regprocedure)
     into v_sql;
+  -- pg_get_functiondef preserves function-body line endings, while this
+  -- migration may be checked out with CRLF or LF. Normalize before the
+  -- guard and replacement so line formatting is not a false contract diff.
+  v_sql := replace(replace(v_sql, chr(13) || chr(10), chr(10)), chr(13), chr(10));
+  v_antigo := replace(replace(v_antigo, chr(13) || chr(10), chr(10)), chr(13), chr(10));
+  v_novo := replace(replace(v_novo, chr(13) || chr(10), chr(10)), chr(13), chr(10));
   if position(v_antigo in v_sql) = 0 then
     raise exception 'AULA_OPERACIONAL_APP_AGENDA_TRECHO_DIVERGIU';
   end if;
@@ -215,6 +221,9 @@ declare
 begin
   select pg_get_functiondef('public.fabio_aulas_candidatas(integer,text,timestamp with time zone)'::regprocedure)
     into v_sql;
+  v_sql := replace(replace(v_sql, chr(13) || chr(10), chr(10)), chr(13), chr(10));
+  v_antigo := replace(replace(v_antigo, chr(13) || chr(10), chr(10)), chr(13), chr(10));
+  v_novo := replace(replace(v_novo, chr(13) || chr(10), chr(10)), chr(13), chr(10));
   v_ocorrencias := (length(v_sql) - length(replace(v_sql, v_antigo, ''))) / length(v_antigo);
   if v_ocorrencias <> 2 then
     raise exception 'AULA_OPERACIONAL_FABIO_OCORRENCIAS_DIVERGIRAM: %', v_ocorrencias;
@@ -238,6 +247,9 @@ declare
 begin
   select pg_get_functiondef('public.fn_enfileirar_audio_core(integer,text,integer,uuid,text,integer)'::regprocedure)
     into v_sql;
+  v_sql := replace(replace(v_sql, chr(13) || chr(10), chr(10)), chr(13), chr(10));
+  v_antigo := replace(replace(v_antigo, chr(13) || chr(10), chr(10)), chr(13), chr(10));
+  v_novo := replace(replace(v_novo, chr(13) || chr(10), chr(10)), chr(13), chr(10));
   if position(v_antigo in v_sql) = 0 then
     raise exception 'AULA_OPERACIONAL_ENFILEIRAR_TRECHO_DIVERGIU';
   end if;
