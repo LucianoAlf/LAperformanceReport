@@ -107,7 +107,6 @@ export function formatarConciliacaoBaseAlunosAdmin(
   return [
     "• Critério dos ativos: base acadêmica; trancados e vínculos exclusivamente de banda, coral ou atividade extra ficam fora.",
     `• Conferência dos pagantes: *${dados.alunosAtivos} - ${dados.alunosNaoPagantes} = ${dados.alunosPagantes}*`,
-    `• Fotografia do Emusys: *${formatarSnapshotEmusysBrt(dados.snapshotEmusysEm)}*`,
   ].join("\n");
 }
 
