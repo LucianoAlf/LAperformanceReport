@@ -552,8 +552,6 @@ export function AlunosPage() {
     const buildMainQuery = () => {
       let q = supabase.from('alunos').select(selectFields).is('arquivado_em', null).order('nome');
       if (unidadeAtual && unidadeAtual !== 'todos') q = q.eq('unidade_id', unidadeAtual);
-      if (competenciaRange.startDate) q = q.gte('data_matricula', competenciaRange.startDate);
-      if (competenciaRange.endDate) q = q.lte('data_matricula', competenciaRange.endDate);
       return q;
     };
 
@@ -821,7 +819,7 @@ export function AlunosPage() {
       setAlunos(alunosComInadimplenciaEmusys);
 
       // ── FASE 3: calcular KPIs no JS (elimina 5 queries) ──
-      // KPIs usam apenas alunos da query principal (por data_matricula), não os mesclados por data_saida
+      // KPIs usam apenas a carteira principal de alunos não arquivados, não os mesclados por data_saida
       const alunosParaKPIs = alunosRaw ?? [];
       // IDs de tipos: 3=BOLSISTA_INT, 4=BOLSISTA_PARC
       const ativosOperacionais = alunosParaKPIs.filter((a: any) => a.status === 'ativo');

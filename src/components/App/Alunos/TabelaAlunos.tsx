@@ -190,6 +190,11 @@ export function TabelaAlunos({
   const alunos = alunosLocal;
   
   const [paginaAtual, setPaginaAtual] = useState(1);
+
+  useEffect(() => {
+    setPaginaAtual(1);
+  }, [filtros, alunosProp]);
+
   const [alunoParaExcluir, setAlunoParaExcluir] = useState<Aluno | null>(null);
   const [modalDestrancamento, setModalDestrancamento] = useState(false);
   const [alunoParaDestrancar, setAlunoParaDestrancar] = useState<Aluno | null>(null);
