@@ -5,6 +5,7 @@ import {
   type CriterioVencimento,
 } from '@/hooks/useContratosVencendo';
 import { useCoberturaRenovacao } from '@/hooks/useCoberturaRenovacao';
+import { PainelAlunosSemFatura } from './PainelAlunosSemFatura';
 import {
   SortableHeader,
   alternarOrdenacao,
@@ -18,7 +19,12 @@ const JANELAS: JanelaDias[] = [30, 60, 90];
 // recortes convivem porque respondem perguntas diferentes: as janelas são rolantes
 // ("o que vem pela frente"), a competência é fechada ("quem tinha que renovar em agosto")
 // e é a única que fecha com o card Cobertura de Renovação do Resumo.
-type Recorte = JanelaDias | 'mes';
+//
+// "sem_fatura" é um terceiro tipo: não pergunta quando vence, e sim quem tem aula num
+// mês e não tem a mensalidade dele emitida. Replica a tela "Alunos com aula mas sem
+// fatura por mês" do Emusys, inclusive as 3 abas de competência. Precisa ser recorte
+// (e não filtro) porque a maioria desses contratos não está em nenhuma janela.
+type Recorte = JanelaDias | 'mes' | 'sem_fatura';
 
 // Espelha o alternador da tela "Renovacao de Matriculas" do Emusys. Os dois criterios
 // devolvem listas diferentes: o contrato acaba as aulas e a fatura num mes, e as
@@ -109,7 +115,8 @@ export function TabContratosVencendo({
   const [busca, setBusca] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
 
-  const porJanela = recorte !== 'mes';
+  const semFatura = recorte === 'sem_fatura';
+  const porJanela = recorte !== 'mes' && !semFatura;
 
   // Os dois hooks ficam montados; o inativo não busca porque recebe janela 0.
   // Trocar a origem do dado sem desmontar evita o flash de tabela vazia ao alternar.
@@ -152,22 +159,26 @@ export function TabContratosVencendo({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex rounded-xl border border-slate-700/50 bg-slate-800/50 p-1">
-          {CRITERIOS.map((c) => (
-            <button
-              key={c.valor}
-              onClick={() => setCriterio(c.valor)}
-              title={c.ajuda}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                criterio === c.valor
-                  ? 'bg-cyan-500 text-white'
-                  : 'text-gray-300 hover:bg-slate-700/50'
-              }`}
-            >
-              {c.rotulo}
-            </button>
-          ))}
-        </div>
+        {/* O alternador aula/fatura é sobre QUANDO o contrato vence — não faz sentido
+            no recorte "Sem fatura", que pergunta outra coisa e tem seletor próprio. */}
+        {!semFatura && (
+          <div className="flex rounded-xl border border-slate-700/50 bg-slate-800/50 p-1">
+            {CRITERIOS.map((c) => (
+              <button
+                key={c.valor}
+                onClick={() => setCriterio(c.valor)}
+                title={c.ajuda}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                  criterio === c.valor
+                    ? 'bg-cyan-500 text-white'
+                    : 'text-gray-300 hover:bg-slate-700/50'
+                }`}
+              >
+                {c.rotulo}
+              </button>
+            ))}
+          </div>
+        )}
         <button
           onClick={() => setRecorte('mes')}
           title="Contratos que terminam na competência selecionada no topo, ainda sem renovação registrada"
@@ -203,25 +214,44 @@ export function TabContratosVencendo({
             {dias} dias
           </button>
         ))}
-        <input
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar aluno…"
-          className="rounded-xl border border-slate-700/50 bg-slate-800/50 px-3 py-2 text-sm text-gray-200 placeholder:text-gray-500"
-        />
-        <span className="rounded-lg bg-slate-800/50 px-2.5 py-1 text-xs font-medium text-cyan-300">
-          {visiveis.length} {visiveis.length === 1 ? 'registro encontrado' : 'registros encontrados'}
-        </span>
-        {ultimoSync && (
-          <span className="ml-auto text-xs text-gray-400">
-            Dados do Emusys sincronizados em {formatarData(ultimoSync)}
-          </span>
+        <button
+          onClick={() => setRecorte('sem_fatura')}
+          title="Alunos com aula no mês e sem a mensalidade emitida — mesma lista da tela do Emusys"
+          className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+            semFatura
+              ? 'bg-rose-500 text-white'
+              : 'bg-slate-800/50 text-gray-300 hover:bg-slate-700/50'
+          }`}
+        >
+          Sem fatura
+        </button>
+        {/* Busca, contador e data de sync do recorte "Sem fatura" são do próprio painel,
+            porque falam de outra consulta. */}
+        {!semFatura && (
+          <>
+            <input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar aluno…"
+              className="rounded-xl border border-slate-700/50 bg-slate-800/50 px-3 py-2 text-sm text-gray-200 placeholder:text-gray-500"
+            />
+            <span className="rounded-lg bg-slate-800/50 px-2.5 py-1 text-xs font-medium text-cyan-300">
+              {visiveis.length} {visiveis.length === 1 ? 'registro encontrado' : 'registros encontrados'}
+            </span>
+            {ultimoSync && (
+              <span className="ml-auto text-xs text-gray-400">
+                Dados do Emusys sincronizados em {formatarData(ultimoSync)}
+              </span>
+            )}
+          </>
         )}
       </div>
 
+      {semFatura && <PainelAlunosSemFatura unidadeId={unidadeId} />}
+
       {/* No recorte de competência a lista sozinha esconde metade da história: quem já
           renovou some dela. A faixa devolve o denominador e explica o sumiço. */}
-      {!porJanela && !competencia.loading && competencia.base > 0 && (
+      {!semFatura && !porJanela && !competencia.loading && competencia.base > 0 && (
         <div className="flex flex-wrap items-center gap-5 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
           <span className="text-2xl font-bold tabular-nums text-amber-400">
             {competencia.renovados}
@@ -236,13 +266,13 @@ export function TabContratosVencendo({
         </div>
       )}
 
-      {erro && (
+      {!semFatura && erro && (
         <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
           Erro ao carregar: {erro}
         </div>
       )}
 
-      {loading ? (
+      {semFatura ? null : loading ? (
         <p className="text-gray-400">Carregando…</p>
       ) : visiveis.length === 0 ? (
         <p className="text-gray-400">
