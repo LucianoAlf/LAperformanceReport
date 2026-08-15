@@ -110,7 +110,8 @@ const fixtureSchema = String.raw`
     (90, 900, '11111111-1111-1111-1111-111111111111', (now() at time zone 'America/Sao_Paulo')::date + 1, 'normal', false),
     (100, 1000, '11111111-1111-1111-1111-111111111111', (now() at time zone 'America/Sao_Paulo')::date + 1, 'normal', false),
     (110, 1100, '11111111-1111-1111-1111-111111111111', (now() at time zone 'America/Sao_Paulo')::date + 1, 'normal', false),
-    (120, 1200, '11111111-1111-1111-1111-111111111111', (now() at time zone 'America/Sao_Paulo')::date + 1, 'normal', false);
+    (120, 1200, '11111111-1111-1111-1111-111111111111', (now() at time zone 'America/Sao_Paulo')::date + 1, 'normal', false),
+    (130, 1300, '11111111-1111-1111-1111-111111111111', (now() at time zone 'America/Sao_Paulo')::date + 1, 'normal', false);
 
   insert into public.aula_alunos_emusys
     (aula_emusys_id, unidade_id, aluno_id, aluno_emusys_id, aluno_chave, aluno_nome)
@@ -123,7 +124,8 @@ const fixtureSchema = String.raw`
     (70, '11111111-1111-1111-1111-111111111111', 701, 701, 'local:701', 'Chave legada com identidade Emusys'),
     (20, '11111111-1111-1111-1111-111111111111', 203, 203, 'nome:segredo:2000-01-01', 'Chave que nao pode vazar'),
     (110, '11111111-1111-1111-1111-111111111111', 1101, 1101, 'emusys:1101', 'Presenca legada no roster'),
-    (120, '11111111-1111-1111-1111-111111111111', 1201, 1201, 'emusys:1201', 'Vinculo estavel que a fonte ambigua nao pode apagar');
+    (120, '11111111-1111-1111-1111-111111111111', 1201, 1201, 'emusys:1201', 'Vinculo estavel que a fonte ambigua nao pode apagar'),
+    (130, '11111111-1111-1111-1111-111111111111', 1301, 1301, 'emusys:1301', 'Vinculo estavel que roster vazio nao pode apagar');
 
   insert into public.aluno_presenca
     (aula_emusys_id, aluno_id, status_presenca, respondido_por)
@@ -163,6 +165,7 @@ test('reconciliacao por fotografia completa preserva presença humana e não toc
     { emusys_id: 700, aluno_chaves: ['emusys:701'] },
     { emusys_id: 1100, aluno_chaves: [] },
     { emusys_id: 1200, aluno_chaves: ['emusys:1202', 'nome:aluno sem id:2000-01-01'] },
+    { emusys_id: 1300, aluno_chaves: [] },
   ]);
 
   try {
@@ -233,7 +236,7 @@ test('reconciliacao por fotografia completa preserva presença humana e não toc
       where id in (10, 40, 50, 80, 90, 100)
       order by id;
       select aluno_chave from public.aula_alunos_emusys
-      where aula_emusys_id in (20, 30, 60, 70, 110, 120)
+      where aula_emusys_id in (20, 30, 60, 70, 110, 120, 130)
       order by aula_emusys_id, aluno_chave;
     `);
     assert.equal(aplicado.status, 0, aplicado.stderr || aplicado.stdout);
@@ -251,6 +254,7 @@ test('reconciliacao por fotografia completa preserva presença humana e não toc
       'local:701',
       'emusys:1101',
       'emusys:1201',
+      'emusys:1301',
     ]);
 
     const repetido = psql(container, `

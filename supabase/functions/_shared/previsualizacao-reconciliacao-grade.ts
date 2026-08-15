@@ -98,7 +98,11 @@ function vinculoExisteNaFonte(
 function fonteTemSomenteIdentidadesEstaveis(
   alunoChavesFonte: Set<string>,
 ): boolean {
-  return [...alunoChavesFonte].every((chave) => chave.startsWith("emusys:"));
+  // Um roster vazio nao prova que todos os alunos foram removidos: pode ser
+  // apenas uma resposta parcial da fonte. Sem pelo menos uma identidade
+  // estavel recebida, a reconciliacao deve preservar os vinculos locais.
+  return alunoChavesFonte.size > 0 &&
+    [...alunoChavesFonte].every((chave) => chave.startsWith("emusys:"));
 }
 
 /**

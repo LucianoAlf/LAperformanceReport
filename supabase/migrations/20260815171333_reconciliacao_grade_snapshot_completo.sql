@@ -107,11 +107,12 @@ begin
       -- Nome e nascimento sao apenas fallback de reconciliacao assistida;
       -- nao provam que a ausencia de um vinculo local corresponde a remocao
       -- no Emusys. Se a aula tiver ao menos um participante sem id Emusys,
-      -- toda remocao automatica de roster daquela aula fica bloqueada.
+      -- ou se a fonte nao trouxe participante algum, toda remocao automatica
+      -- de roster daquela aula fica bloqueada.
       coalesce(
         bool_and(chaves.valor ~ '^emusys:[1-9][0-9]*$')
           filter (where chaves.valor is not null and chaves.valor <> ''),
-        true
+        false
       ) as participantes_com_identidade_estavel
     from snapshot_bruto sb
     left join lateral jsonb_array_elements_text(sb.aluno_chaves_json) as chaves(valor)

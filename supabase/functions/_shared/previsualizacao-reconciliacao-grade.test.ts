@@ -145,3 +145,25 @@ Deno.test("previsualizacao preserva roster quando a origem ainda depende de nome
     { aula_local_id: 50, emusys_aula_id: 500, vinculo_id: 501 },
   ]);
 });
+
+Deno.test("previsualizacao preserva roster quando a origem nao trouxe participantes", () => {
+  const resultado = previsualizarReconciliacaoGrade({
+    snapshot: [{ emusys_id: 600, aluno_chaves: [] }],
+    aulas: [{ id: 60, emusys_id: 600 }],
+    vinculos: [
+      {
+        id: 601,
+        aula_emusys_id: 60,
+        aluno_id: 91,
+        aluno_emusys_id: 901,
+        aluno_chave: "emusys:901",
+      },
+    ],
+    presencas: [],
+  });
+
+  assertEquals(resultado.candidatas.vinculos_remover, []);
+  assertEquals(resultado.protegidas.identidade_ambigua, [
+    { aula_local_id: 60, emusys_aula_id: 600, vinculo_id: 601 },
+  ]);
+});
