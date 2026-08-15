@@ -54,14 +54,14 @@ export const VALORES_NOMES: Record<string, string> = {
 export const VALORES_FRASES: Record<string, string> = {
   CORAGEM: 'fala o que precisa ser dito, mesmo quando custa',
   EMPATIA: 'lê a pessoa antes de tratar do problema',
-  EXCELENCIA: 'não entrega abaixo do padrão que ela mesma se cobra',
+  EXCELENCIA: 'não entrega abaixo do padrão que se cobra',
   PAIXAO: 'move pelo entusiasmo, prefere fazer acontecer a esperar o ideal',
 };
 
 // ---------------------------------------------------------------------------
 // TEXTO DO PERFIL (temperamento primário)
 // Usado em:
-//   - Briefing parágrafo 1 ("Como ela reage")
+//   - Briefing parágrafo 1 ("Como reage")
 //   - Bloco "Perfil" (Força / Escorrego)
 // ---------------------------------------------------------------------------
 export interface TextoPerfil {
@@ -79,32 +79,32 @@ export interface TextoPerfil {
 
 export const PERFIS_TEXTOS: Record<string, TextoPerfil> = {
   SLASH: {
-    reage: 'Ela <b>entra em ação rápido</b> e puxa o ritmo quando tudo está parado.',
+    reage: '<b>Entra em ação rápido</b> e puxa o ritmo quando tudo está parado.',
     pontoCego: 'Em compensação, pode atropelar quem precisa de mais tempo pra processar — pise no freio antes de cobrar.',
     forca: 'Empurra a situação pra frente quando ninguém toma a iniciativa',
     escorrego: 'Impaciência com quem vai devagar; pode parecer que não escuta',
-    subtitulo: (s) => `Impulso com tempero de ${s.toLowerCase()}`,
+    subtitulo: (s) => `Impulso com tempero de ${s}`,
   },
   CAZUZA: {
-    reage: 'Ela <b>lê o ambiente e conecta as pessoas</b> antes de qualquer outra coisa.',
-    pontoCego: 'Por outro lado, raramente vai trazer o problema desconfortável sozinha — pergunte diretamente em vez de esperar.',
+    reage: '<b>Lê o ambiente e conecta as pessoas</b> antes de qualquer outra coisa.',
+    pontoCego: 'Por outro lado, raramente vai trazer o problema desconfortável por conta própria — pergunte diretamente em vez de esperar.',
     forca: 'Conecta o time e lê o clima antes de ninguém',
     escorrego: 'Evita o atrito necessário; demora pra trazer problema',
-    subtitulo: (s) => `Conexão com tempero de ${s.toLowerCase()}`,
+    subtitulo: (s) => `Conexão com tempero de ${s}`,
   },
   AMY: {
-    reage: 'Ela <b>mapeia tudo antes de se mover</b> e traz a resposta certa na hora certa.',
+    reage: '<b>Mapeia tudo antes de se mover</b> e traz a resposta certa na hora certa.',
     pontoCego: 'Porém, pode parecer que está demorando demais quando o urgente bate na porta — combine checkpoints pra não sufocar.',
     forca: 'Vê o quadro inteiro e prepara antes de agir',
     escorrego: 'Paralisia por análise; custa a largar quando falta dado',
-    subtitulo: (s) => `Visão com tempero de ${s.toLowerCase()}`,
+    subtitulo: (s) => `Visão com tempero de ${s}`,
   },
   FRANK: {
-    reage: 'Ela <b>não se desestabiliza fácil</b> e traz a temperatura pra baixo quando o ambiente esquenta.',
-    pontoCego: 'Dificilmente vai levantar sozinha um problema que está incomodando — pergunte diretamente em vez de esperar que ela traga.',
+    reage: '<b>Não se desestabiliza fácil</b> e traz a temperatura pra baixo quando o ambiente esquenta.',
+    pontoCego: 'Dificilmente vai levantar um problema que está incomodando — pergunte diretamente em vez de esperar que apareça.',
     forca: 'Segura o barco quando o mar agita',
     escorrego: 'Calma virando inércia; evita o atrito necessário',
-    subtitulo: (s) => `Estabilidade com tempero de ${s.toLowerCase()}`,
+    subtitulo: (s) => `Estabilidade com tempero de ${s}`,
   },
 };
 
@@ -117,30 +117,30 @@ export const PERFIS_TEXTOS: Record<string, TextoPerfil> = {
 export interface TextoValorizacao {
   /** Frase prática de como reconhecer */
   reconhecer: string;
-  /** Frase do briefing — como funciona com ela */
+  /** Frase do briefing — como funciona na prática */
   briefing: string;
 }
 
 export const VALORIZACAO_TEXTOS: Record<string, TextoValorizacao> = {
   PALAVRAS: {
     reconhecer: 'Reconhecimento dito ou escrito, específico, na frente dos outros.',
-    briefing: 'Reconhecimento com ela funciona por <b>palavra dita</b>, e melhor ainda na frente do time.',
+    briefing: 'Reconhecimento funciona por <b>palavra dita</b>, e melhor ainda na frente do time.',
   },
   TEMPO: {
     reconhecer: 'Atenção exclusiva, conversa sem pauta.',
-    briefing: 'Reconhecimento com ela funciona por <b>tempo dedicado</b> — conversa sem pauta, atenção exclusiva.',
+    briefing: 'Reconhecimento funciona por <b>tempo dedicado</b> — conversa sem pauta, atenção exclusiva.',
   },
   APOIO: {
     reconhecer: 'Alguém que se ofereceu pra ajudar quando precisou, sem pedir.',
-    briefing: 'Reconhecimento com ela funciona por <b>apoio concreto</b> — alguém que botou a mão na massa junto.',
+    briefing: 'Reconhecimento funciona por <b>apoio concreto</b> — alguém que botou a mão na massa junto.',
   },
   SIMBOLO: {
-    reconhecer: 'Presente e lembrança — algo físico que mostra que pensaram nela.',
-    briefing: 'Reconhecimento com ela funciona por <b>símbolos</b> — presente e lembrança passam longe de despercebidos.',
+    reconhecer: 'Presente e lembrança — algo físico que mostra que houve intenção.',
+    briefing: 'Reconhecimento funciona por <b>símbolos</b> — presente e lembrança mostram atenção.',
   },
   CELEBRACAO: {
-    reconhecer: 'Comemorar junto, na hora que dá certo — vibrar com ela, não depois.',
-    briefing: 'Reconhecimento com ela funciona por <b>celebração</b> — comemorar junto, na hora que dá certo, vibrar com ela.',
+    reconhecer: 'Comemorar junto, na hora que dá certo — vibrar junto, não depois.',
+    briefing: 'Reconhecimento funciona por <b>celebração</b> — comemorar junto, na hora que dá certo, vibrar junto.',
   },
 };
 
@@ -148,10 +148,10 @@ export const VALORIZACAO_TEXTOS: Record<string, TextoValorizacao> = {
 // TEXTO DE "EVITE" (valorização com menor pontuação)
 // ---------------------------------------------------------------------------
 export const VALORIZACAO_EVITE: Record<string, string> = {
-  PALAVRAS: 'Elogio genérico e em público passa batido com ela.',
-  TEMPO: 'Conversa longa sem objeto a irrita — vai direto ao ponto.',
-  APOIO: 'Oferecer ajuda não pedida a faz sentir que duvidam dela.',
-  SIMBOLO: 'Presente e lembrança passam quase despercebidos com ela.',
+  PALAVRAS: 'Elogio genérico e em público pode passar batido.',
+  TEMPO: 'Conversa longa sem objeto não ajuda — vai direto ao ponto.',
+  APOIO: 'Oferecer ajuda não pedida pode soar como dúvida sobre a capacidade.',
+  SIMBOLO: 'Presente e lembrança podem passar quase despercebidos.',
   CELEBRACAO: 'Deixar a conquista passar em branco ou só registrar num relatório.',
 };
 
@@ -163,7 +163,7 @@ export const PERFIS_COBRAR: Record<string, string> = {
   SLASH: 'Se precisar de resultado, <b>deixa o objetivo claro e sai do caminho</b>. Microgestão trava.',
   CAZUZA: 'Se precisar de resultado, <b>converse antes de cobrar</b>. Cobrança fria desarma.',
   AMY: 'Se precisar de resultado, <b>traça o plano junto</b>. Pressão sem contexto paralisa.',
-  FRANK: 'Se precisar de velocidade, <b>combine o prazo junto com ela</b>. Pressão de cima não acelera — trava.',
+  FRANK: 'Se precisar de velocidade, <b>combine o prazo junto</b>. Pressão de cima não acelera — trava.',
 };
 
 // ---------------------------------------------------------------------------
@@ -193,23 +193,23 @@ export const RIDER_CAMPOS = [
 // Evita que blocos inteiros da ficha sumam silenciosamente por causa de uma
 // chave nova no banco que ainda não foi mapeada aqui.
 export const FALLBACK_PERFIL: TextoPerfil = {
-  reage: 'Ela <b>tem um perfil válido</b> mas o texto ainda não foi mapeado.',
+  reage: '<b>Tem um perfil válido</b> mas o texto ainda não foi mapeado.',
   pontoCego: 'Em compensação, vale conversar pra entender os limites desse perfil.',
   forca: 'Perfil em mapeamento — força a confirmar',
   escorrego: 'Perfil em mapeamento — escorrego a confirmar',
-  subtitulo: (s) => `Perfil com tempero de ${s.toLowerCase()}`,
+  subtitulo: (s) => `Perfil com tempero de ${s}`,
 };
 
 export const FALLBACK_VALORIZACAO: TextoValorizacao = {
-  reconhecer: 'Linguagem de valorização em mapeamento — confirme com ela como gosta de ser reconhecida.',
-  briefing: 'Reconhecimento com ela funciona de um jeito que <b>ainda está sendo mapeado</b>.',
+  reconhecer: 'Linguagem de valorização em mapeamento — confirme qual forma de reconhecimento funciona melhor.',
+  briefing: 'Reconhecimento funciona de um jeito que <b>ainda está sendo mapeado</b>.',
 };
 
-export const FALLBACK_EVITE = 'Evite em mapeamento — confirme o que não funciona com ela.';
+export const FALLBACK_EVITE = 'Evite em mapeamento — confirme o que não funciona.';
 
-export const FALLBACK_COBRAR = 'Se precisar de resultado, <b>combine o objetivo e o prazo junto com ela</b>.';
+export const FALLBACK_COBRAR = 'Se precisar de resultado, <b>combine o objetivo e o prazo junto</b>.';
 
-export const FALLBACK_VALOR_FRASE = 'valor em mapeamento — confirme com ela o que ele significa na prática';
+export const FALLBACK_VALOR_FRASE = 'valor em mapeamento — confirme o significado na prática';
 
 /** Cor usada quando o perfil não tem cor mapeada (ou nem tem perfil ainda) */
 export const COR_PADRAO = '#5c7093';

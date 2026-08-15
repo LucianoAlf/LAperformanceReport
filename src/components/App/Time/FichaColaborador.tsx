@@ -107,6 +107,7 @@ function FichaConteudo({
   onReconsultar: () => Promise<void>;
 }) {
   const nome = ficha.apelido || ficha.nome;
+  const nomeCurto = ficha.apelido?.trim() || ficha.nome.trim().split(/\s+/)[0] || ficha.nome;
   const cor = corDoPerfil(ficha.temperamento_codinome) || COR_PADRAO;
   const primKey = perfilPrimario(ficha.temperamento_codinome);
   const secKey = perfilSecundario(ficha.temperamento_codinome);
@@ -259,7 +260,7 @@ function FichaConteudo({
             {/* BRIEFING */}
             {textoPerfil && textoValPrim && textoCobrar && (
               <Briefing
-                nome={nome}
+                nome={nomeCurto}
                 cor={cor}
                 reage={textoPerfil.reage}
                 pontoCego={textoPerfil.pontoCego}
@@ -304,7 +305,7 @@ function FichaConteudo({
               />
             )}
 
-            {/* O QUE ELA PRIORIZA — Bloco D (fit cultural) */}
+            {/* O QUE PRIORIZA — Bloco D (fit cultural) */}
             {ficha.valores_primario && (
               <ValoresCard
                 cor={cor}
@@ -449,14 +450,21 @@ function FichaLinkAcoes({
 // REGUA DE DISTRIBUICAO
 // ---------------------------------------------------------------------------
 function ReguaDistribuicao({ contagem }: { contagem: Record<string, number> }) {
-  const entries = Object.entries(contagem).filter(([, v]) => v > 0);
-  if (entries.length === 0) return null;
-  const total = entries.reduce((s, [, v]) => s + v, 0);
+  const perfisConhecidos = Object.keys(PERFIL_NOMES);
+  const entradasExtras = Object.entries(contagem).filter(
+    ([key, valor]) => !perfisConhecidos.includes(key) && valor > 0,
+  );
+  const entradasLegenda = [
+    ...perfisConhecidos.map((key) => [key, contagem[key] ?? 0] as const),
+    ...entradasExtras,
+  ];
+  const entradasBarra = entradasLegenda.filter(([, valor]) => valor > 0);
+  if (entradasBarra.length === 0) return null;
 
   return (
     <div className="mt-12 mb-14">
       <div className="flex h-2.5 rounded-md overflow-hidden gap-0.5">
-        {entries.map(([key, val]) => {
+        {entradasBarra.map(([key, val]) => {
           const cor = PERFIL_CORES[key] || '#5c7093';
           return (
             <div
@@ -468,10 +476,10 @@ function ReguaDistribuicao({ contagem }: { contagem: Record<string, number> }) {
         })}
       </div>
       <div className="flex mt-2 text-xs text-slate-500 uppercase tracking-wider">
-        {entries.map(([key, val]) => {
+        {entradasLegenda.map(([key, val]) => {
           const cor = PERFIL_CORES[key] || '#5c7093';
           return (
-            <span key={key} className="flex justify-center gap-1" style={{ flex: val }}>
+            <span key={key} className="flex-1 flex justify-center gap-1">
               <b className="font-semibold" style={{ color: cor }}>
                 {PERFIL_NOMES[key] || key}
               </b>
@@ -712,7 +720,7 @@ function ComoReconhecerCard({
 }
 
 // ---------------------------------------------------------------------------
-// O QUE ELA PRIORIZA — Bloco D (fit cultural)
+// O QUE PRIORIZA — Bloco D (fit cultural)
 // ---------------------------------------------------------------------------
 function ValoresCard({
   cor,
@@ -740,7 +748,7 @@ function ValoresCard({
         className="text-xs font-bold uppercase tracking-wider mb-4"
         style={{ color: corSegura, fontFamily: '"Space Grotesk", sans-serif' }}
       >
-        O que ela prioriza
+        O que prioriza
       </h3>
 
       {/* Priorizado */}
