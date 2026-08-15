@@ -23,6 +23,7 @@ import {
   reconciliarGradeSnapshotEmusys,
   verificarIntegridadeMapaAulas,
 } from '../_shared/reconciliacao-grade-snapshot.ts';
+import { prepararExecucaoSyncGrade } from '../_shared/sync-grade-authorization.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -41,7 +42,7 @@ const UNIDADES = [
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-sync-token',
 };
 
 function normalizarNome(nome: string): string {
@@ -100,6 +101,46 @@ async function fetchAulasRange(
 
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  let autorizacao;
+  try {
+    autorizacao = await prepararExecucaoSyncGrade(
+      {
+        authorization: req.headers.get('authorization'),
+        xSyncToken: req.headers.get('x-sync-token'),
+      },
+      {
+        chaveServiceRole: SUPABASE_SERVICE_ROLE_KEY,
+        validarTokenInterno: async (token) => {
+          const validador = createClient(
+            SUPABASE_URL,
+            SUPABASE_SERVICE_ROLE_KEY,
+          );
+          const { data, error } = await validador.rpc(
+            'validar_token_sync_grade_interno_v1',
+            { p_token: token },
+          );
+          return !error && data === true;
+        },
+      },
+    );
+  } catch {
+    autorizacao = {
+      permitido: false,
+      status: 401,
+      codigo: 'NAO_AUTENTICADO',
+    };
+  }
+
+  if (autorizacao.permitido === false) {
+    return new Response(
+      JSON.stringify({ error: autorizacao.codigo }),
+      {
+        status: autorizacao.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      },
+    );
+  }
 
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
