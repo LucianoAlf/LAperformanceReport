@@ -112,4 +112,3 @@ O E2E usará Pedro Sérgio como caso sem token e Ana Beatriz como caso já
 existente. A validação final exige segundo clique com o mesmo link e abertura
 da ficha pública mostrando os cenários de professor. O departamento não será
 liberado além do escopo aprovado antes dessa prova.
-

@@ -143,4 +143,3 @@ Passos:
 - migration/RPC e Edge estão protegidas contra acesso anônimo e duplicidade;
 - UI não expõe token cru, não duplica DDI e não cria colaborador;
 - E2E real comprova emissão, idempotência e banco de cenários `PROFESSOR`.
-
