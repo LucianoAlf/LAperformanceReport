@@ -26,7 +26,12 @@ function psql(container, sql) {
 
 async function waitForPostgres(container) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    if (psql(container, 'select 1;').status === 0) return;
+    if (psql(container, 'select 1;').status === 0) {
+      // O PostgreSQL provisório do initdb aceita uma conexão e reinicia em
+      // seguida. Só liberar o fixture depois da segunda conexão estável.
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      if (psql(container, 'select 1;').status === 0) return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error('PostgreSQL de teste nao iniciou a tempo');

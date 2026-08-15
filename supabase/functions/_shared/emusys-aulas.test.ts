@@ -3,6 +3,7 @@
 
 import { assertEquals, assertRejects } from "jsr:@std/assert@1";
 import {
+  buscarTodasAulasEmusys,
   buscarPaginaAulasEmusys,
   criarAlunoChave,
   EmusysApiError,
@@ -33,6 +34,43 @@ async function comFetchMock<T>(
     globalThis.fetch = originalFetch;
   }
 }
+
+Deno.test("buscarTodasAulasEmusys so entrega fotografia apos todas as paginas", async () => {
+  const cursores: Array<string | null | undefined> = [];
+  const aulas = await buscarTodasAulasEmusys<{ id: number }>({
+    dataInicio: "2026-08-15",
+    dataFim: "2026-08-15",
+    fetchPage: async ({ cursor }) => {
+      cursores.push(cursor);
+      if (!cursor) {
+        return {
+          items: [{ id: 1 }],
+          paginacao: { tem_mais: true, proximo_cursor: "pagina-2" },
+        };
+      }
+      return {
+        items: [{ id: 2 }],
+        paginacao: { tem_mais: false, proximo_cursor: null },
+      };
+    },
+  });
+
+  assertEquals(aulas, [{ id: 1 }, { id: 2 }]);
+  assertEquals(cursores, [null, "pagina-2"]);
+
+  await assertRejects(
+    () => buscarTodasAulasEmusys<{ id: number }>({
+      dataInicio: "2026-08-15",
+      dataFim: "2026-08-15",
+      fetchPage: async () => ({
+        items: [{ id: 3 }],
+        paginacao: { tem_mais: true, proximo_cursor: null },
+      }),
+    }),
+    Error,
+    "EMUSYS_AULAS_CURSOR_AUSENTE",
+  );
+});
 
 Deno.test("buscarPaginaAulasEmusys devolve pagina tipada valida", async () => {
   const result = await comFetchMock(

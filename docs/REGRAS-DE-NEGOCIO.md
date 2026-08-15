@@ -688,6 +688,7 @@ onde cada turma ativa = 1h e a capacidade = `nº_salas × 73h/semana` (seg–sex
 
 ### Agenda / grade do dia 📋
 
+- **Reconciliação da grade Emusys (15/08/2026):** `sync-grade-futura-emusys` e o modo `metadados` de `sync-presenca-emusys` usam uma fotografia completa e paginada de `/aulas`. Só `categoria='normal'` de hoje em diante entra em `reconciliar_grade_snapshot_emusys_v1`: aula ausente vira cancelamento lógico `sync_ausente_emusys`; participante ausente pode remover apenas seu vínculo de roster. Nunca apaga `aluno_presenca`, justificativa ou retificação. Qualquer evidência que `fn_presenca_fecha_chamada` reconheça, inclusive o fallback legado de `status`, ou identidade aluno/Emusys ambígua, bloqueia a alteração automática. Erro de upsert, roster incompleto ou fotografia inválida aborta somente a reconciliação daquela unidade; a janela de ontem fica exclusivamente com a reconciliação individual do webhook.
 - **`tipo` é a MODALIDADE contratada, não a lotação.** A modalidade verdadeira vem de `emusys_disciplinas_catalogo.modalidade`. Na LA quase tudo é disciplina de turma (164 de 165 aulas) e a maioria roda com um aluno só.
 - O filtro da tela é de **lotação** (Sozinho / Com turma), lendo `qtd_alunos` — filtrar por modalidade devolveria quase tudo ou quase nada.
 - **`professor_presenca` é `'ausente'` por DEFAULT no Emusys** — 100% das aulas futuras vêm assim. Só exibir presença depois que a aula terminou.
