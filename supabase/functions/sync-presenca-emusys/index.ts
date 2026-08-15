@@ -18,6 +18,7 @@ import {
 import {
   montarSnapshotGradeEmusys,
   reconciliarGradeSnapshotEmusys,
+  verificarIntegridadeMapaAulas,
   type ResultadoReconciliacaoGradeSnapshot,
 } from '../_shared/reconciliacao-grade-snapshot.ts';
 import {
@@ -364,10 +365,21 @@ async function sincronizarMetadadosAulas(
       }
     }
 
-    if (idPorEmusysId.size < aulas.length) {
-      console.log(
-        `[sync-presenca] ${unidade.nome}: aulas=${aulas.length} mapeadas=${idPorEmusysId.size} (diferenca indica retorno de upsert incompleto)`,
+    const integridadeMapaAulas = verificarIntegridadeMapaAulas(linhas, idPorEmusysId);
+    if (!integridadeMapaAulas.completo) {
+      console.error(
+        `[sync-presenca] ${unidade.nome}: mapa de aulas incompleto; roster e reconciliação preservados (esperadas=${integridadeMapaAulas.aulas_esperadas}, mapeadas=${integridadeMapaAulas.aulas_mapeadas}, ausentes=${integridadeMapaAulas.emusys_ids_ausentes.length})`,
       );
+      resultados.push({
+        unidade: unidade.nome,
+        status: 'upsert_aulas_incompleto_preservado',
+        aulas_recebidas: aulas.length,
+        aulas_gravadas: gravadas,
+        aulas_esperadas: integridadeMapaAulas.aulas_esperadas,
+        aulas_mapeadas: integridadeMapaAulas.aulas_mapeadas,
+      });
+      aulasPorUnidade.push({ unidade, dataInicio, dataFim, aulas });
+      continue;
     }
 
     // Casa os vinculos aluno-aula tambem no sync de 15 min: sem isso, um

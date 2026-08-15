@@ -41,6 +41,10 @@ jobs:
           node-version: '22'
           cache: npm
 
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Instalar dependencias
         run: npm ci
 
@@ -57,3 +61,6 @@ jobs:
           fi
 
           echo "OK: nenhum identificador indefinido em src/."
+
+      - name: Testar reconciliação de grade e contratos
+        run: npm test

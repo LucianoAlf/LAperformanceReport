@@ -103,7 +103,16 @@ begin
         array_agg(distinct chaves.valor order by chaves.valor)
           filter (where chaves.valor is not null and chaves.valor <> ''),
         array[]::text[]
-      ) as aluno_chaves
+      ) as aluno_chaves,
+      -- Nome e nascimento sao apenas fallback de reconciliacao assistida;
+      -- nao provam que a ausencia de um vinculo local corresponde a remocao
+      -- no Emusys. Se a aula tiver ao menos um participante sem id Emusys,
+      -- toda remocao automatica de roster daquela aula fica bloqueada.
+      coalesce(
+        bool_and(chaves.valor ~ '^emusys:[1-9][0-9]*$')
+          filter (where chaves.valor is not null and chaves.valor <> ''),
+        true
+      ) as participantes_com_identidade_estavel
     from snapshot_bruto sb
     left join lateral jsonb_array_elements_text(sb.aluno_chaves_json) as chaves(valor)
       on true
@@ -160,6 +169,8 @@ begin
       a.emusys_id,
       aa.id as vinculo_id,
       case
+        when not s.participantes_com_identidade_estavel
+          then 'preservar_identidade_ambigua'
         -- Linhas legadas podem trazer aluno_chave=local:<id> embora já tenham
         -- aluno_emusys_id. A comparação abaixo reconhece esse caso. Sem uma
         -- identidade local e externa completa, não há como provar que uma

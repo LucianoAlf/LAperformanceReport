@@ -21,6 +21,7 @@ import {
 import {
   montarSnapshotGradeEmusys,
   reconciliarGradeSnapshotEmusys,
+  verificarIntegridadeMapaAulas,
 } from '../_shared/reconciliacao-grade-snapshot.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -206,10 +207,8 @@ serve(async (req: Request) => {
         }
       }
 
-      const idsAulasEsperados = new Set(
-        linhas.map((linha) => Number(linha.emusys_id)),
-      );
-      if (idPorEmusysId.size < idsAulasEsperados.size) {
+      const integridadeMapaAulas = verificarIntegridadeMapaAulas(linhas, idPorEmusysId);
+      if (!integridadeMapaAulas.completo) {
         upsertAulasIncompleto = true;
       }
       if (upsertAulasIncompleto) {

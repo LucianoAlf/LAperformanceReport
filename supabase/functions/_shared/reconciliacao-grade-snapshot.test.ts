@@ -1,7 +1,10 @@
 /// <reference lib="deno.ns" />
 
 import { assertEquals, assertThrows } from "jsr:@std/assert@1";
-import { montarSnapshotGradeEmusys } from "./reconciliacao-grade-snapshot.ts";
+import {
+  montarSnapshotGradeEmusys,
+  verificarIntegridadeMapaAulas,
+} from "./reconciliacao-grade-snapshot.ts";
 
 function normalizarNome(nome: string): string {
   return nome
@@ -59,5 +62,39 @@ Deno.test("montarSnapshotGradeEmusys falha fechada para fotografia incompleta", 
       alunos: [{ id_aluno: 321, nome_aluno: "" }],
     }], normalizarNome),
     [{ emusys_id: 10, aluno_chaves: ["emusys:321"] }],
+  );
+});
+
+Deno.test("verificarIntegridadeMapaAulas deduplica a origem e bloqueia mapa parcial", () => {
+  const linhas = [
+    { emusys_id: 10 },
+    { emusys_id: 10 },
+    { emusys_id: 20 },
+  ];
+
+  assertEquals(
+    verificarIntegridadeMapaAulas(
+      linhas,
+      new Map<number, number>([[10, 100], [20, 200]]),
+    ),
+    {
+      completo: true,
+      aulas_esperadas: 2,
+      aulas_mapeadas: 2,
+      emusys_ids_ausentes: [],
+    },
+  );
+
+  assertEquals(
+    verificarIntegridadeMapaAulas(
+      linhas,
+      new Map<number, number>([[10, 100]]),
+    ),
+    {
+      completo: false,
+      aulas_esperadas: 2,
+      aulas_mapeadas: 1,
+      emusys_ids_ausentes: [20],
+    },
   );
 });

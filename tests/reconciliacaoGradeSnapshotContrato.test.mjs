@@ -32,17 +32,17 @@ test('syncs delegam a remoção de grade à reconciliação protegida por fotogr
   assert.match(syncPresenca, /reconciliarGradeSnapshotEmusys/u);
   assert.match(
     syncGrade,
-    /aula\.data_hora_inicio\.split\(' '\)\[0\] <= dataFim/u,
+    /aula\.data_hora_inicio\.split\(["'] ["']\)\[0\] <= dataFim/u,
     'a fotografia futura deve ignorar retorno do Emusys fora da janela pedida',
   );
   assert.match(
     syncPresenca,
-    /aula\.data_hora_inicio\.split\(' '\)\[0\] <= dataFim/u,
+    /aula\.data_hora_inicio\.split\(["'] ["']\)\[0\] <= dataFim/u,
     'a fotografia de metadados deve ignorar retorno do Emusys fora da janela pedida',
   );
   assert.match(
     syncPresenca,
-    /aula\.data_hora_inicio\.split\(' '\)\[0\] === dataAlvo/u,
+    /aula\.data_hora_inicio\.split\(["'] ["']\)\[0\] === dataAlvo/u,
     'a fotografia diaria deve conter somente o proprio dia',
   );
   assert.match(
@@ -54,14 +54,29 @@ test('syncs delegam a remoção de grade à reconciliação protegida por fotogr
   assert.doesNotMatch(syncGrade, /\.update\(\{ cancelada: true \}\)/u);
   assert.doesNotMatch(
     syncPresenca,
-    /from\('aula_alunos_emusys'\)\s*\.delete\(\)/u,
+    /from\(["']aula_alunos_emusys["']\)\s*\.delete\(\)/u,
     'o sync de presença não pode apagar roster sem a trava de presença da RPC',
   );
   assert.match(helper, /EMUSYS_SNAPSHOT_ROSTER_AUSENTE/u);
   assert.match(helper, /EMUSYS_SNAPSHOT_ALUNO_SEM_IDENTIDADE/u);
-  assert.match(syncGrade, /status: 'upsert_aulas_incompleto_preservado'/u);
-  assert.match(syncGrade, /status: 'roster_incompleto_preservado'/u);
-  assert.match(syncPresenca, /status: 'roster_incompleto_preservado'/u);
+  assert.match(syncGrade, /status: ["']upsert_aulas_incompleto_preservado["']/u);
+  assert.match(syncGrade, /status: ["']roster_incompleto_preservado["']/u);
+  assert.match(syncPresenca, /status: ["']roster_incompleto_preservado["']/u);
+  assert.match(
+    syncPresenca,
+    /verificarIntegridadeMapaAulas\(\s*linhas,\s*idPorEmusysId,?\s*\)/u,
+    'metadados precisa bloquear roster e reconcilia\u00e7\u00e3o quando o mapa do upsert estiver parcial',
+  );
+  assert.match(
+    syncPresenca,
+    /status: ["']upsert_aulas_incompleto_preservado["']/u,
+    'metadados precisa expor que preservou a grade em vez de reconciliar parcialmente',
+  );
+  assert.match(
+    migration,
+    /when not s\.participantes_com_identidade_estavel\s+then 'preservar_identidade_ambigua'/u,
+    'a RPC deve preservar o roster quando a fotografia depender de nome',
+  );
   assert.match(syncPresenca, /gradeIncompleta = true/u);
   assert.match(
     migration,

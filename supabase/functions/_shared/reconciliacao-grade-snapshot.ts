@@ -19,11 +19,56 @@ export interface ResultadoReconciliacaoGradeSnapshot {
   detalhe?: unknown;
 }
 
+export interface ResultadoIntegridadeMapaAulas {
+  completo: boolean;
+  aulas_esperadas: number;
+  aulas_mapeadas: number;
+  emusys_ids_ausentes: number[];
+}
+
 interface ClienteRpc {
   rpc: (
     nome: string,
     parametros: Record<string, unknown>,
   ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+}
+
+/**
+ * O Emusys pode repetir uma aula por participante. O retorno do upsert, por
+ * outro lado, precisa conter uma linha para cada id de aula distinto antes de
+ * gravarmos roster ou deixarmos a RPC reconciliar ausencias. Falhar fechado
+ * aqui evita que uma resposta parcial apague vinculos que ainda nao puderam
+ * ser regravados.
+ */
+export function verificarIntegridadeMapaAulas(
+  linhas: ReadonlyArray<{ emusys_id?: unknown }>,
+  idPorEmusysId: ReadonlyMap<number, number>,
+): ResultadoIntegridadeMapaAulas {
+  const idsEsperados = new Set<number>();
+  let origemInvalida = false;
+
+  for (const linha of linhas) {
+    const emusysId = Number(linha.emusys_id);
+    if (!Number.isSafeInteger(emusysId) || emusysId <= 0) {
+      origemInvalida = true;
+      continue;
+    }
+    idsEsperados.add(emusysId);
+  }
+
+  const emusysIdsAusentes = [...idsEsperados]
+    .filter((emusysId) => {
+      const aulaLocalId = idPorEmusysId.get(emusysId);
+      return !Number.isSafeInteger(aulaLocalId) || aulaLocalId <= 0;
+    })
+    .sort((a, b) => a - b);
+
+  return {
+    completo: !origemInvalida && emusysIdsAusentes.length === 0,
+    aulas_esperadas: idsEsperados.size,
+    aulas_mapeadas: idsEsperados.size - emusysIdsAusentes.length,
+    emusys_ids_ausentes: emusysIdsAusentes,
+  };
 }
 
 /**
