@@ -22,11 +22,11 @@ import {
 
 const ESCOLA_ID_CAMPO_GRANDE = 39;
 const UNIDADE_ID_CAMPO_GRANDE = "2ec861f6-023f-4d7b-9927-3960ad8c2a92";
-// Previa autorizada em 15/08/2026. O hash abaixo aceita somente o token
-// efemero desta leitura e esta versao sera invalidada logo apos a resposta.
+// Previa concluida em 15/08/2026. Esta versao e deliberadamente inoperante:
+// nao reintroduzir um token para repetir a fotografia sem nova autorizacao.
 const PREVIEW_TOKEN_SHA256 =
-  "9a0b77811fc20645b0131424efc776ead1c2a5bbe5a0487fe1bbb955953e335f";
-const PREVIEW_TOKEN_EXPIRA_EM = "2026-08-15T19:33:52.146Z";
+  "0000000000000000000000000000000000000000000000000000000000000000";
+const PREVIEW_TOKEN_EXPIRA_EM = "2000-01-01T00:00:00Z";
 const MAX_PAGINAS_EMUSYS = 120;
 const TIMEOUT_EMUSYS_MS = 30_000;
 const LIMITE_ITENS_RETORNO = 1_000;
