@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   useAlunosSemFatura,
   competenciasDisponiveis,
@@ -11,6 +11,7 @@ import {
   compararParaOrdenacao,
   type SortConfig,
 } from '@/components/ui/SortableHeader';
+import { Paginacao, ITENS_POR_PAGINA_PADRAO } from '@/components/ui/Paginacao';
 
 /**
  * "Alunos com aula mas sem fatura por mês" — espelha a tela homônima do Emusys,
@@ -67,6 +68,16 @@ export function PainelAlunosSemFatura({ unidadeId }: { unidadeId: string }) {
   }, [filtrados, sortConfig]);
 
   const ordenarPor = (key: string) => setSortConfig((atual) => alternarOrdenacao(atual, key));
+
+  const [pagina, setPagina] = useState(1);
+  // Trocar competência, busca ou ordenação refaz a lista — permanecer na página 4
+  // mostraria tabela vazia sem explicação.
+  useEffect(() => { setPagina(1); }, [competencia, termo, sortConfig, unidadeId]);
+
+  const paginados = useMemo(
+    () => visiveis.slice((pagina - 1) * ITENS_POR_PAGINA_PADRAO, pagina * ITENS_POR_PAGINA_PADRAO),
+    [visiveis, pagina],
+  );
 
   // Contrato de 1 parcela com o ano inteiro de aula costuma ser pagamento à vista, não
   // cobrança parada. Avisar antes que alguém saia cobrando quem já pagou.
@@ -157,7 +168,7 @@ export function PainelAlunosSemFatura({ unidadeId }: { unidadeId: string }) {
               </tr>
             </thead>
             <tbody>
-              {visiveis.map((a) => (
+              {paginados.map((a) => (
                 <tr
                   key={`${a.unidade_id}-${a.emusys_matricula_disciplina_id}`}
                   className="border-t border-slate-700/40 text-gray-200"
@@ -193,6 +204,12 @@ export function PainelAlunosSemFatura({ unidadeId }: { unidadeId: string }) {
               ))}
             </tbody>
           </table>
+          <Paginacao
+            paginaAtual={pagina}
+            totalItens={visiveis.length}
+            onMudarPagina={setPagina}
+            rotuloItens="alunos"
+          />
         </div>
       )}
     </div>

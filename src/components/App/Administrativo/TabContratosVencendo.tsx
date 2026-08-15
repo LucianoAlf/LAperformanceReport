@@ -6,6 +6,7 @@ import {
 } from '@/hooks/useContratosVencendo';
 import { useCoberturaRenovacao } from '@/hooks/useCoberturaRenovacao';
 import { PainelAlunosSemFatura } from './PainelAlunosSemFatura';
+import { Paginacao, ITENS_POR_PAGINA_PADRAO } from '@/components/ui/Paginacao';
 import {
   SortableHeader,
   alternarOrdenacao,
@@ -156,6 +157,16 @@ export function TabContratosVencendo({
 
   const ordenarPor = (key: string) => setSortConfig((atual) => alternarOrdenacao(atual, key));
 
+  const [pagina, setPagina] = useState(1);
+  // Trocar recorte, critério, busca ou ordenação muda a lista inteira — ficar na página 4
+  // de uma lista que agora tem 1 página mostraria tabela vazia sem explicação.
+  useEffect(() => { setPagina(1); }, [recorte, criterio, termo, sortConfig, unidadeId]);
+
+  const paginados = useMemo(
+    () => visiveis.slice((pagina - 1) * ITENS_POR_PAGINA_PADRAO, pagina * ITENS_POR_PAGINA_PADRAO),
+    [visiveis, pagina],
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
@@ -301,7 +312,7 @@ export function TabContratosVencendo({
               </tr>
             </thead>
             <tbody>
-              {visiveis.map((c) => (
+              {paginados.map((c) => (
                 <tr
                   key={`${c.unidade_id}-${c.emusys_matricula_disciplina_id}`}
                   className="border-t border-slate-700/40 text-gray-200"
@@ -341,6 +352,12 @@ export function TabContratosVencendo({
               ))}
             </tbody>
           </table>
+          <Paginacao
+            paginaAtual={pagina}
+            totalItens={visiveis.length}
+            onMudarPagina={setPagina}
+            rotuloItens="contratos"
+          />
         </div>
       )}
     </div>
