@@ -49,6 +49,33 @@ function formatarMoeda(valor: number | null): string {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+// Coluna "Faturas" da tela de Renovação de Matrículas do Emusys: nº de faturas em
+// aberto e VENCIDAS, com semáforo verde 0 / âmbar 1 / vermelho 2+.
+//
+// ⚠️ A cor sai de `inadimplente` (booleano do contrato, sempre correto) e não da
+// contagem: `emusys_faturas` só cobre de jun/2026 em diante, e 2 dos 41 inadimplentes
+// não têm nenhuma fatura vencida no espelho — decidir pela contagem os pintaria de
+// verde. Pela mesma razão o número aparece como "≥N": é piso, não valor exato.
+function situacaoFaturas(c: { inadimplente: boolean | null; faturas_vencidas_abertas?: number }) {
+  const vencidas = c.faturas_vencidas_abertas ?? 0;
+  const pendente = c.inadimplente === true || vencidas > 0;
+
+  if (!pendente) {
+    // inadimplente === null é "não sabemos" — não afirmar "em dia".
+    if (c.inadimplente == null) return { rotulo: '—', classe: 'text-gray-500', titulo: 'Sem dado de inadimplência para esta matrícula' };
+    return { rotulo: '0', classe: 'bg-emerald-500/15 text-emerald-300', titulo: 'Nenhuma fatura vencida em aberto' };
+  }
+
+  const n = Math.max(vencidas, 1);
+  return {
+    rotulo: `≥${n}`,
+    classe: n >= 2 ? 'bg-rose-500/15 text-rose-300' : 'bg-amber-500/15 text-amber-300',
+    titulo: vencidas > 0
+      ? `${vencidas} fatura(s) vencida(s) e não paga(s) no espelho local (desde jun/2026). O Emusys pode mostrar mais, se houver atraso anterior.`
+      : 'Contrato marcado como inadimplente no Emusys, mas a fatura vencida é anterior a jun/2026 e não está no espelho local.',
+  };
+}
+
 // Valor de cada coluna para efeito de ordenação. Datas usam a string ISO crua
 // (YYYY-MM-DD... ordena igual cronologicamente, sem custo de parse); números vêm
 // como número para não cair na comparação textual (onde "9" > "10").
@@ -61,7 +88,9 @@ const VALOR_ORDENACAO: Record<string, (c: any) => string | number | null> = {
   venc_fatura: (c) => c.venc_ultima_fatura,
   aulas_restantes: (c) => c.nr_aulas_futuras,
   valor: (c) => c.valor_parcela,
-  situacao: (c) => (c.inadimplente == null ? null : c.inadimplente ? 'Inadimplente' : 'Em dia'),
+  // Ordena pelo nº de vencidas, mas com o inadimplente sem fatura no espelho valendo
+  // 1 — senão ele cairia junto de quem está em dia, que é o oposto do que interessa.
+  faturas: (c) => (c.inadimplente === true ? Math.max(c.faturas_vencidas_abertas ?? 0, 1) : c.faturas_vencidas_abertas ?? 0),
 };
 
 export function TabContratosVencendo({
@@ -238,7 +267,7 @@ export function TabContratosVencendo({
                 <SortableHeader label="Venc. últ. fatura" sortKey="venc_fatura" sortConfig={sortConfig} onSort={ordenarPor} className="text-left" />
                 <SortableHeader label="Aulas restantes" sortKey="aulas_restantes" sortConfig={sortConfig} onSort={ordenarPor} className="text-right" />
                 <SortableHeader label="Valor" sortKey="valor" sortConfig={sortConfig} onSort={ordenarPor} className="text-right" />
-                <SortableHeader label="Situação" sortKey="situacao" sortConfig={sortConfig} onSort={ordenarPor} className="text-left" />
+                <SortableHeader label="Faturas" sortKey="faturas" sortConfig={sortConfig} onSort={ordenarPor} className="text-center" />
               </tr>
             </thead>
             <tbody>
@@ -265,16 +294,18 @@ export function TabContratosVencendo({
                   >
                     {formatarMoeda(c.valor_parcela)}
                   </td>
-                  <td className="px-4 py-3">
-                    {c.inadimplente == null ? (
-                      <span className="text-gray-500">—</span>
-                    ) : c.inadimplente ? (
-                      <span className="rounded-lg bg-rose-500/15 px-2 py-1 text-xs text-rose-300">
-                        Inadimplente
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-400">Em dia</span>
-                    )}
+                  <td className="px-4 py-3 text-center">
+                    {(() => {
+                      const s = situacaoFaturas(c);
+                      return (
+                        <span
+                          title={s.titulo}
+                          className={`inline-block min-w-[2.25rem] rounded-lg px-2 py-1 text-xs font-semibold tabular-nums ${s.classe}`}
+                        >
+                          {s.rotulo}
+                        </span>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}

@@ -36,6 +36,8 @@ export type CicloRenovacao = {
   competencia_aula: string | null;
   venc_ultima_fatura: string | null;
   competencia_fatura: string | null;
+  /** Mesma semântica (e mesmo limite) de ContratoVencendo.faturas_vencidas_abertas. */
+  faturas_vencidas_abertas: number;
 };
 
 const COLUNA_COMPETENCIA: Record<CriterioVencimento, string> = {
