@@ -6,3 +6,9 @@
 61b7a2a3fd54350b04bca2f35f3ccc7c9acfcd0a:supabase/functions/enviar-pesquisa-evasao/contract.test.ts:generic-api-key:500
 70a8fd85c1b68d982df7080aad8dc543657db323:supabase/functions/enviar-pesquisa-evasao/contract.test.ts:generic-api-key:500
 1052d24c32b2c9a1dc6f03e4f5415824f88ccf8b:supabase/functions/enviar-pesquisa-evasao/contract.test.ts:generic-api-key:262
+
+# A prévia pontual de reconciliação usou apenas o SHA-256 de um token efêmero.
+# O valor bruto nunca foi versionado; a Edge publicada foi invalidada após a
+# leitura e hoje devolve 401. Esta exceção é deliberadamente limitada ao
+# fingerprint histórico, sem permitir hashes ou tokens futuros.
+d9b599b245b888c02eda8f38ad50442294b118d5:supabase/functions/previsualizar-reconciliacao-grade-emusys/index.ts:generic-api-key:23
