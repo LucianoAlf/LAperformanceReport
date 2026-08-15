@@ -2,7 +2,7 @@
 
 // Edge Function: reconciliar-grade-aluno
 //
-// Remove da nossa Agenda as aulas FUTURAS de um aluno que o Emusys nao reconhece
+// Remove da nossa Agenda as aulas de ONTEM em diante que o Emusys nao reconhece
 // mais ("fantasmas").
 //
 // POR QUE ISSO PRECISA EXISTIR
@@ -20,7 +20,8 @@
 // `sync-grade-futura-emusys` — 1x por dia e com filtro `data_aula > hoje`, que
 // justamente PULA a aula de hoje (e amanha ela ja e passado, fora da janela).
 //
-// ESCOPO: so o futuro. Decisao do Hugo em 13/08/2026 — o passado fica como esta.
+// ESCOPO: ontem e futuro. A janela curta absorve o webhook recebido depois do
+// relatorio diario sem permitir limpeza automatica do historico anterior.
 // A trava dura mora na RPC `reconciliar_grade_aluno_v1`, nao aqui.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
@@ -30,7 +31,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const EMUSYS_API = 'https://api.emusys.com.br/v1';
 
-const VERSAO = 'v1';
+const VERSAO = 'v2';
 
 // Mesmo mapa de `processar-matricula-emusys`. Duplicado de proposito: sao duas
 // edges independentes e um import compartilhado criaria acoplamento de deploy
@@ -159,8 +160,9 @@ serve(async (req: Request) => {
     );
   }
 
-  const dataInicio = hojeBRT();
-  const dataFim = somarDias(dataInicio, dias);
+  const hoje = hojeBRT();
+  const dataInicio = somarDias(hoje, -1);
+  const dataFim = somarDias(hoje, dias);
 
   try {
     const idsVivos = await buscarAulasDoAluno(token, alunoEmusysId, dataInicio, dataFim);
