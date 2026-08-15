@@ -31,6 +31,8 @@ export type ContratoVencendo = {
   // Emusys mostra 2 para o Renan onde temos 1). Quem exibe deve tirar a COR de
   // `inadimplente`, que vem do contrato e não tem esse limite.
   faturas_vencidas_abertas: number;
+  /** Nº de parcelas do contrato. 1 com muitas aulas pela frente costuma ser pagamento à vista. */
+  nr_faturas: number | null;
 };
 
 export type JanelaDias = 30 | 60 | 90;
