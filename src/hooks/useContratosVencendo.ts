@@ -25,6 +25,12 @@ export type ContratoVencendo = {
   telefone: string | null;
   whatsapp: string | null;
   ultima_sincronizacao_emusys: string | null;
+  // Faturas vencidas e não pagas — replica a coluna "Faturas" da tela de Renovação
+  // de Matrículas do Emusys. É um PISO, não o valor exato: `emusys_faturas` só cobre
+  // de jun/2026 em diante, então atraso mais antigo não entra na conta (medido: o
+  // Emusys mostra 2 para o Renan onde temos 1). Quem exibe deve tirar a COR de
+  // `inadimplente`, que vem do contrato e não tem esse limite.
+  faturas_vencidas_abertas: number;
 };
 
 export type JanelaDias = 30 | 60 | 90;

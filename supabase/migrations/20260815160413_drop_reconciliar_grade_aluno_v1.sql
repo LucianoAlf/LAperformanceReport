@@ -1,0 +1,13 @@
+-- Remove a v1, substituida pela v2 (migration 20260815155829).
+--
+-- ⚠️ A v1 CANCELAVA A AULA, e isso estava conceitualmente errado: o insumo
+-- `p_ids_vivos` vem de `GET /aulas?pessoa_id=`, que responde "as aulas DO ALUNO",
+-- nao "as aulas que existem". Quando o aluno troca de turma a aula antiga continua
+-- viva no Emusys (conferido na API e na tela) — cancelar tiraria a aula dos colegas.
+--
+-- Nao pode ficar no banco depois da troca: a edge ja aponta para a v2, mas uma RPC
+-- `SECURITY DEFINER` que cancela aula viva, executavel por `authenticated`, e um
+-- risco parado esperando alguem chamar. Ate 15/08 ela estava acidentalmente inofensiva
+-- porque batia numa CHECK constraint; a correcao dessa constraint (~09:54 de 15/08) a
+-- destravou.
+drop function if exists public.reconciliar_grade_aluno_v1(bigint,uuid,date,date,integer[],boolean);

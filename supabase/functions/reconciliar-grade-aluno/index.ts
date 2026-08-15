@@ -22,7 +22,7 @@
 //
 // ESCOPO: ontem e futuro. A janela curta absorve o webhook recebido depois do
 // relatorio diario sem permitir limpeza automatica do historico anterior.
-// A trava dura mora na RPC `reconciliar_grade_aluno_v1`, nao aqui.
+// A trava dura mora na RPC `reconciliar_grade_aluno_v2`, nao aqui.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -167,7 +167,14 @@ serve(async (req: Request) => {
   try {
     const idsVivos = await buscarAulasDoAluno(token, alunoEmusysId, dataInicio, dataFim);
 
-    const { data, error } = await supabase.rpc('reconciliar_grade_aluno_v1', {
+    // v2 (15/08/2026): REMOVE O VINCULO do aluno, nao cancela a aula.
+    // A v1 cancelava, e isso estava errado: `p_ids_vivos` vem de
+    // `GET /aulas?pessoa_id=`, que responde "as aulas DO ALUNO", nao "as aulas que
+    // existem". Quando o aluno troca de turma, a aula antiga continua viva no Emusys
+    // (conferido na API e na tela: emusys_id 735900/735901/735902/735904 do aluno
+    // 1452 seguem `cancelada=false` com `alunos=0`) — cancelar tiraria a aula dos
+    // colegas. Detalhes na migration 20260815143000.
+    const { data, error } = await supabase.rpc('reconciliar_grade_aluno_v2', {
       p_aluno_emusys_id: alunoEmusysId,
       p_unidade_id: escola.id,
       p_data_inicio: dataInicio,
@@ -175,15 +182,17 @@ serve(async (req: Request) => {
       p_ids_vivos: idsVivos,
       p_dry_run: dryRun,
     });
-    if (error) throw new Error(`RPC reconciliar_grade_aluno_v1: ${error.message}`);
+    if (error) throw new Error(`RPC reconciliar_grade_aluno_v2: ${error.message}`);
 
     const resultado = data as Record<string, unknown>;
     const aplicadas = Number(resultado?.aplicadas ?? 0);
 
-    // So loga quando houve veredito sobre algum slot. Alteracao de matricula que nao
+    // So loga quando houve veredito sobre alguma aula. Alteracao de matricula que nao
     // mexe em aula (troca de turma, de curso) e o caso MAIS COMUM — 128 de 210
     // eventos em 5 semanas — e encheria o automacao_log de linha vazia.
-    const slotsAvaliados = Number(resultado?.slots_avaliados ?? 0);
+    // ⚠️ A v2 devolve `aulas_avaliadas` (a v1 devolvia `slots_avaliados`): a decisao
+    // deixou de ser por slot e passou a ser por linha de vinculo.
+    const slotsAvaliados = Number(resultado?.aulas_avaliadas ?? 0);
     if (slotsAvaliados > 0) {
       await supabase.from('automacao_log').insert({
         evento: 'matricula_alterada',
