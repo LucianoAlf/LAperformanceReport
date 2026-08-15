@@ -107,6 +107,7 @@ function FichaConteudo({
   onReconsultar: () => Promise<void>;
 }) {
   const nome = ficha.apelido || ficha.nome;
+  const nomeCurto = ficha.apelido?.trim() || ficha.nome.trim().split(/\s+/)[0] || ficha.nome;
   const cor = corDoPerfil(ficha.temperamento_codinome) || COR_PADRAO;
   const primKey = perfilPrimario(ficha.temperamento_codinome);
   const secKey = perfilSecundario(ficha.temperamento_codinome);
@@ -259,7 +260,7 @@ function FichaConteudo({
             {/* BRIEFING */}
             {textoPerfil && textoValPrim && textoCobrar && (
               <Briefing
-                nome={nome}
+                nome={nomeCurto}
                 cor={cor}
                 reage={textoPerfil.reage}
                 pontoCego={textoPerfil.pontoCego}
@@ -304,7 +305,7 @@ function FichaConteudo({
               />
             )}
 
-            {/* O QUE ELA PRIORIZA — Bloco D (fit cultural) */}
+            {/* O QUE PRIORIZA — Bloco D (fit cultural) */}
             {ficha.valores_primario && (
               <ValoresCard
                 cor={cor}
@@ -712,7 +713,7 @@ function ComoReconhecerCard({
 }
 
 // ---------------------------------------------------------------------------
-// O QUE ELA PRIORIZA — Bloco D (fit cultural)
+// O QUE PRIORIZA — Bloco D (fit cultural)
 // ---------------------------------------------------------------------------
 function ValoresCard({
   cor,
@@ -740,7 +741,7 @@ function ValoresCard({
         className="text-xs font-bold uppercase tracking-wider mb-4"
         style={{ color: corSegura, fontFamily: '"Space Grotesk", sans-serif' }}
       >
-        O que ela prioriza
+        O que prioriza
       </h3>
 
       {/* Priorizado */}
