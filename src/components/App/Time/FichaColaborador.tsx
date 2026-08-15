@@ -1,5 +1,9 @@
-import { ArrowLeft } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, Check, Copy, Link2, Loader2, MessageCircle } from 'lucide-react';
 import { useFichaColaborador } from '@/hooks/useFichaColaborador';
+import { copyTextToClipboard } from '@/lib/clipboard';
+import { normalizarTelefone } from '@/lib/normalizarTelefone';
+import { formatarDataGeracaoFicha, montarLinkWhatsAppFicha } from '@/lib/fichaLink';
 import {
   PERFIS_TEXTOS,
   VALORIZACAO_TEXTOS,
@@ -41,7 +45,14 @@ function formatarDiasRider(dias: number): string {
 }
 
 export function FichaColaborador({ colaboradorId, onVoltar }: FichaColaboradorProps) {
-  const { ficha, isLoading } = useFichaColaborador(colaboradorId);
+  const {
+    ficha,
+    isLoading,
+    tokenError,
+    emitindoToken,
+    emitirLink,
+    refetch,
+  } = useFichaColaborador(colaboradorId);
 
   if (isLoading) {
     return (
@@ -65,13 +76,36 @@ export function FichaColaborador({ colaboradorId, onVoltar }: FichaColaboradorPr
     );
   }
 
-  return <FichaConteudo ficha={ficha} onVoltar={onVoltar} />;
+  return (
+    <FichaConteudo
+      ficha={ficha}
+      onVoltar={onVoltar}
+      onEmitirLink={emitirLink}
+      emitindoToken={emitindoToken}
+      tokenError={tokenError}
+      onReconsultar={refetch}
+    />
+  );
 }
 
 // ---------------------------------------------------------------------------
 // CONTEUDO DA FICHA — segue o prototipo visual
 // ---------------------------------------------------------------------------
-function FichaConteudo({ ficha, onVoltar }: { ficha: FichaType; onVoltar: () => void }) {
+function FichaConteudo({
+  ficha,
+  onVoltar,
+  onEmitirLink,
+  emitindoToken,
+  tokenError,
+  onReconsultar,
+}: {
+  ficha: FichaType;
+  onVoltar: () => void;
+  onEmitirLink: () => Promise<void>;
+  emitindoToken: boolean;
+  tokenError: Error | null;
+  onReconsultar: () => Promise<void>;
+}) {
   const nome = ficha.apelido || ficha.nome;
   const cor = corDoPerfil(ficha.temperamento_codinome) || COR_PADRAO;
   const primKey = perfilPrimario(ficha.temperamento_codinome);
@@ -206,6 +240,14 @@ function FichaConteudo({ ficha, onVoltar }: { ficha: FichaType; onVoltar: () => 
           <p className="text-slate-500 text-sm mt-1">
             Quando responder, o perfil e o Rider aparecem aqui.
           </p>
+          <FichaLinkAcoes
+            ficha={ficha}
+            nome={nome}
+            onEmitirLink={onEmitirLink}
+            emitindoToken={emitindoToken}
+            tokenError={tokenError}
+            onReconsultar={onReconsultar}
+          />
         </div>
       )}
 
@@ -280,6 +322,125 @@ function FichaConteudo({ ficha, onVoltar }: { ficha: FichaType; onVoltar: () => 
       <p className="mt-8 text-center text-xs text-slate-600">
         LA Music Report · Time
       </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LINK DA FICHA — emissao idempotente para colaborador existente
+// ---------------------------------------------------------------------------
+function FichaLinkAcoes({
+  ficha,
+  nome,
+  onEmitirLink,
+  emitindoToken,
+  tokenError,
+  onReconsultar,
+}: {
+  ficha: FichaType;
+  nome: string;
+  onEmitirLink: () => Promise<void>;
+  emitindoToken: boolean;
+  tokenError: Error | null;
+  onReconsultar: () => Promise<void>;
+}) {
+  const [copiado, setCopiado] = useState(false);
+  const [erroCopia, setErroCopia] = useState<string | null>(null);
+  const status = ficha.ficha_token;
+  const telefone = normalizarTelefone(ficha.whatsapp);
+  const linkWhatsApp = status?.link
+    ? montarLinkWhatsAppFicha(nome.split(' ')[0], telefone, status.link)
+    : null;
+  const dataGeracao = formatarDataGeracaoFicha(status?.gerado_em ?? null);
+
+  async function copiarLink() {
+    if (!status?.link) return;
+    const result = await copyTextToClipboard(status.link);
+    if (!result.ok) {
+      setErroCopia('Não foi possível copiar o link.');
+      return;
+    }
+    setErroCopia(null);
+    setCopiado(true);
+    window.setTimeout(() => setCopiado(false), 2000);
+  }
+
+  if (!status) {
+    return (
+      <div className="mt-5 pt-5 border-t border-slate-800">
+        <p className="text-sm text-amber-300">Não foi possível consultar o estado do link.</p>
+        <button
+          type="button"
+          onClick={() => void onReconsultar()}
+          className="mt-3 text-sm text-cyan-300 hover:text-cyan-200 underline underline-offset-4"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
+
+  if (status.ja_respondeu) {
+    return (
+      <div className="mt-5 pt-5 border-t border-slate-800">
+        <p className="text-sm text-emerald-300">Esta pessoa já respondeu à Ficha Técnica.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-5 pt-5 border-t border-slate-800 text-left">
+      {tokenError && (
+        <p className="mb-3 text-sm text-rose-300" role="alert">{tokenError.message}</p>
+      )}
+
+      {!status.link ? (
+        <button
+          type="button"
+          onClick={() => void onEmitirLink()}
+          disabled={emitindoToken}
+          className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {emitindoToken ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+          {emitindoToken ? 'Gerando link...' : 'Gerar link da Ficha'}
+        </button>
+      ) : (
+        <>
+          <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Link da Ficha Técnica</p>
+          <a
+            href={status.link}
+            target="_blank"
+            rel="noreferrer"
+            className="block break-all rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-2 text-sm font-mono text-cyan-300 hover:text-cyan-200"
+          >
+            {status.link}
+          </a>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void copiarLink()}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700"
+            >
+              {copiado ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+              {copiado ? 'Copiado!' : 'Copiar link'}
+            </button>
+            <button
+              type="button"
+              onClick={() => linkWhatsApp && window.open(linkWhatsApp, '_blank', 'noopener,noreferrer')}
+              disabled={!linkWhatsApp}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-emerald-700/60 bg-emerald-900/30 px-3 py-2 text-sm text-emerald-200 hover:bg-emerald-900/50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <MessageCircle className="w-4 h-4" />
+              Abrir WhatsApp
+            </button>
+          </div>
+
+          {dataGeracao && <p className="mt-2 text-xs text-slate-500">Gerado em {dataGeracao}</p>}
+          {!telefone && <p className="mt-2 text-xs text-slate-500">WhatsApp não cadastrado — botão desabilitado.</p>}
+          {erroCopia && <p className="mt-2 text-xs text-rose-300" role="alert">{erroCopia}</p>}
+        </>
+      )}
     </div>
   );
 }

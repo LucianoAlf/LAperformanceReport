@@ -12,6 +12,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Copy, ExternalLink, AlertTriangle, Loader2, Check } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { normalizarTelefone } from '@/lib/normalizarTelefone';
+import { montarLinkWhatsAppFicha } from '@/lib/fichaLink';
 import type { Unidade } from './types';
 
 interface ModalAdicionarPessoaProps {
@@ -22,6 +24,10 @@ interface ModalAdicionarPessoaProps {
 }
 
 const DEPARTAMENTOS = ['Atendimento', 'Administrativo', 'Professores'] as const;
+const CARGO_POR_DEPARTAMENTO: Record<string, string> = {
+  Atendimento: 'ATENDIMENTO',
+  Professores: 'PROFESSOR',
+};
 
 type EstadoModal = 'form' | 'salvando' | 'sucesso' | 'erro';
 
@@ -87,15 +93,13 @@ export function ModalAdicionarPessoa({
     setEstado('salvando');
     setErroMsg('');
 
-    // Limpa WhatsApp: só números
-    const whatsappLimpo = whatsapp.replace(/\D/g, '') || null;
-
-    // Por enquanto só existe o banco ATENDIMENTO na edge function.
-    // Quando houver mais, mapear departamento -> cargo_contexto aqui.
-    const CARGO_POR_DEPARTAMENTO: Record<string, string> = {
-      Atendimento: 'ATENDIMENTO',
-    };
-    const cargoContexto = CARGO_POR_DEPARTAMENTO[departamento] || 'ATENDIMENTO';
+    const whatsappLimpo = normalizarTelefone(whatsapp);
+    const cargoContexto = CARGO_POR_DEPARTAMENTO[departamento];
+    if (!cargoContexto) {
+      setErroMsg('Ainda não há banco de cenários para esse departamento.');
+      setEstado('erro');
+      return;
+    }
 
     try {
       const { data, error } = await supabase.rpc('criar_ficha_pessoa', {
@@ -125,11 +129,8 @@ export function ModalAdicionarPessoa({
     ? `https://la-performance-report.vercel.app/ficha-tecnica/?t=${resultado.token}`
     : '';
 
-  const primeiroNome = (resultado?.nome || nome).split(' ')[0].toLowerCase();
-  const msgWhatsApp = `Oi, ${primeiroNome}! Tudo bem? Antes da nossa conversa, queria te pedir pra preencher a Ficha Técnica da LA. São uns 20 minutos e não tem resposta certa nem errada — é pra gente te conhecer melhor. Segue o link: ${link}`;
-  const linkWhatsApp = whatsappSalvo
-    ? `https://wa.me/55${whatsappSalvo}?text=${encodeURIComponent(msgWhatsApp)}`
-    : '';
+  const primeiroNome = (resultado?.nome || nome).split(' ')[0];
+  const linkWhatsApp = montarLinkWhatsAppFicha(primeiroNome, whatsappSalvo || null, link) || '';
 
   async function copiarLink() {
     try {
@@ -220,7 +221,7 @@ export function ModalAdicionarPessoa({
                   </SelectTrigger>
                   <SelectContent>
                     {DEPARTAMENTOS.map((d) => {
-                      const disponivel = d === 'Atendimento';
+                      const disponivel = d !== 'Administrativo';
                       return (
                         <SelectItem
                           key={d}

@@ -73,11 +73,12 @@ test('a garantia de JWT da ficha permanece explícita no repositório', () => {
   assert.match(config, /\[functions\.ficha-tecnica\][\s\S]*?verify_jwt\s*=\s*false/);
 });
 
-test('a UI mantém Professores bloqueado até o teste real', () => {
+test('a UI libera Professores e mantém Administrativo bloqueado', () => {
   const modalSource = fs.readFileSync(modalPath, 'utf8');
   assert.match(modalSource, /Professores/);
   assert.match(modalSource, /em breve/);
-  assert.match(modalSource, /disabled/);
+  assert.match(modalSource, /Professores\s*:\s*['"]PROFESSOR['"]/i);
+  assert.match(modalSource, /d\s*!==\s*['"]Administrativo['"]/);
 });
 
 if (fs.existsSync(logicPath)) {
