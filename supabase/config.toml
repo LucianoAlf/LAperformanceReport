@@ -1,5 +1,9 @@
 project_id = "ouqwbbermlzqqvtqwlul"
 
+[functions.ficha-tecnica]
+# Formulario publico autenticado pelo bearer token proprio da ficha.
+verify_jwt = false
+
 [functions.ficha-criar-pessoa]
 # Ponte servidor-servidor: valida o segredo sincronizado no próprio código.
 verify_jwt = false
