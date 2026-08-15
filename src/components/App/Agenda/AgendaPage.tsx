@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { useAgendaDia, type AulaAgenda } from '@/hooks/useAgendaDia';
-import { alunoSemDestino, estadoDoAluno } from './Chamada/chamadaUtils';
+import { alunoSemDestino, estadoDoAluno, leadExperimentalSemDestino } from './Chamada/chamadaUtils';
 import {
   aulaJaOcorreu,
   contarEmAulaAgora,
@@ -266,6 +266,9 @@ export default function AgendaPage() {
       if (!aulaJaOcorreu(data, aula.hora_fim, agora)) continue;
       for (const aluno of aula.alunos) {
         if (aluno.aluno_id != null && alunoSemDestino(aula, aluno, data, agora)) count++;
+      }
+      for (const lead of aula.experimental_leads ?? []) {
+        if (leadExperimentalSemDestino(aula, lead, data, agora)) count++;
       }
     }
     return count;

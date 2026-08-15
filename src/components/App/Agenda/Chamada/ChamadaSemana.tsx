@@ -5,7 +5,13 @@ import { CalendarX, Check, Clock, FileText, X, XCircle } from 'lucide-react';
 import { useAgendaSemana } from '@/hooks/useAgendaSemana';
 import type { AulaAgenda, AlunoAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
 import { aulaJaOcorreu } from '@/lib/agenda';
-import { alunoSemDestino, chamadaCompleta, estadoDoAluno, type EstadoChamada } from './chamadaUtils';
+import {
+  alunoSemDestino,
+  chamadaCompleta,
+  estadoDoAluno,
+  leadExperimentalSemDestino,
+  type EstadoChamada,
+} from './chamadaUtils';
 import type { ItemChamada } from './useChamadaAcoes';
 import { cn } from '@/lib/utils';
 
@@ -156,6 +162,9 @@ function ColunaDia({
       for (const aluno of aula.alunos) {
         if (aluno.aluno_id != null && alunoSemDestino(aula, aluno, dia, agora)) count++;
       }
+      for (const lead of aula.experimental_leads ?? []) {
+        if (leadExperimentalSemDestino(aula, lead, dia, agora)) count++;
+      }
     }
     return count;
   }, [aulas, dia, agora]);
@@ -277,7 +286,8 @@ function CardAulaSemana({
   );
   const completa = chamadaCompleta(aula, dia, agora);
   const ocorrida = aulaJaOcorreu(dia, aula.hora_fim, agora);
-  const podeOperar = !aula.cancelada && vinculados.length > 0;
+  const leads = aula.experimental_leads ?? [];
+  const podeOperar = !aula.cancelada && (vinculados.length > 0 || leads.length > 0);
   const total = vinculados.length;
 
   const marcar = (aluno: AlunoAgenda, status: 'presente' | 'falta' | 'indeterminado') => {

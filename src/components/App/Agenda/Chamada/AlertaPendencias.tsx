@@ -5,7 +5,7 @@ import { AlertTriangle, CheckCircle2, Clock, ChevronRight, PartyPopper, User } f
 import { supabase } from '@/lib/supabase';
 import type { AulaAgenda, AlunoAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
 import { aulaJaOcorreu } from '@/lib/agenda';
-import { alunoSemDestino } from './chamadaUtils';
+import { alunoSemDestino, leadExperimentalSemDestino } from './chamadaUtils';
 import { cn } from '@/lib/utils';
 
 interface Pendencia {
@@ -90,7 +90,7 @@ export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirD
 
       // Leads experimentais sem destino (aguardando presença/falta)
       for (const lead of aula.experimental_leads ?? []) {
-        if (lead.status === 'experimental_agendada') {
+        if (leadExperimentalSemDestino(aula, lead, data, agora)) {
           lista.push({ aula, lead, minutosDesdeFim: minutos });
         }
       }
