@@ -136,6 +136,34 @@ export function aulaJaOcorreu(data: string, horaFim: string, agora: Date): boole
   return minutosAgora(agora) >= minutosDeHHMM(horaFim);
 }
 
+export interface LeadExperimentalPendencia {
+  /** Identidade operacional do aluno quando o lead já foi convertido. */
+  aluno_id?: number | null;
+  status: string | null;
+}
+
+export interface ParticipanteAgendaIdentidade {
+  aluno_id: number | null;
+}
+
+/**
+ * Define se um lead experimental ainda pode abrir pendência de chamada.
+ *
+ * Um lead convertido continua podendo aparecer na fonte comercial depois de
+ * uma aula reagendada, mas, quando a mesma identidade já está no roster da
+ * aula, o destino pertence ao registro do aluno. Contá-lo também como lead
+ * duplicaria a pendência; a presença/falta do aluno continua sendo avaliada
+ * pelo consumidor normal da chamada.
+ */
+export function leadExperimentalCobrePendencia(
+  lead: LeadExperimentalPendencia,
+  participantes: ParticipanteAgendaIdentidade[],
+): boolean {
+  if (lead.status !== 'experimental_agendada') return false;
+  if (lead.aluno_id == null) return true;
+  return !participantes.some((participante) => participante.aluno_id === lead.aluno_id);
+}
+
 export function dentroDoExpediente(minutos: number): boolean {
   return minutos >= AGENDA_HORA_INICIO * 60 && minutos <= AGENDA_HORA_FIM * 60;
 }

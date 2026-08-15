@@ -1,5 +1,5 @@
-import type { AlunoAgenda, AulaAgenda } from '@/hooks/useAgendaDia';
-import { aulaJaOcorreu } from '@/lib/agenda';
+import type { AlunoAgenda, AulaAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
+import { aulaJaOcorreu, leadExperimentalCobrePendencia } from '@/lib/agenda';
 
 /**
  * Estados da chamada (Fase 2, spec 2026-08-11).
@@ -39,12 +39,28 @@ export function alunoSemDestino(aula: AulaAgenda, aluno: AlunoAgenda, data: stri
   return estadoDoAluno(aluno) === 'indeterminado';
 }
 
-/** Aula com a chamada completa: todo aluno vinculado tem destino. */
+/** Lead experimental sem destino, apos a aula ter ocorrido. */
+export function leadExperimentalSemDestino(
+  aula: AulaAgenda,
+  lead: LeadExperimentalAgenda,
+  data: string,
+  agora: Date,
+): boolean {
+  if (aula.cancelada) return false;
+  if (!aulaJaOcorreu(data, aula.hora_fim, agora)) return false;
+  return leadExperimentalCobrePendencia(lead, aula.alunos);
+}
+
+/** Aula com a chamada completa: todo participante vinculado tem destino. */
 export function chamadaCompleta(aula: AulaAgenda, data: string, agora: Date): boolean {
   if (aula.cancelada) return true;
   const vinculados = aula.alunos.filter((a) => a.aluno_id != null);
-  if (vinculados.length === 0) return false;
-  return vinculados.every((a) => !alunoSemDestino(aula, a, data, agora));
+  const leads = aula.experimental_leads ?? [];
+  if (vinculados.length === 0 && leads.length === 0) return false;
+  return (
+    vinculados.every((a) => !alunoSemDestino(aula, a, data, agora))
+    && leads.every((lead) => !leadExperimentalSemDestino(aula, lead, data, agora))
+  );
 }
 
 /** Evidencia bruta do Emusys diverge do destino humano final. */

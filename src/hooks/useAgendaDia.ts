@@ -44,6 +44,10 @@ export interface AlunoAgenda {
 export interface LeadExperimentalAgenda {
   experimental_id: number;
   lead_id: number | null;
+  // Identidade operacional quando o lead comercial ja foi convertido.
+  // Nessa situacao a chamada deve ser cobrada pelo registro do aluno, nao
+  // duplicada como lead experimental.
+  aluno_id: number | null;
   nome: string;
   curso: string | null;
   curso_interesse_id: number | null;
