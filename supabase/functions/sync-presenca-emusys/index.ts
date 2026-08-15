@@ -16,6 +16,12 @@ import {
   gravarVinculosAulaAlunos,
 } from '../_shared/emusys-aulas.ts';
 import {
+  montarSnapshotGradeEmusys,
+  reconciliarGradeSnapshotEmusys,
+  verificarIntegridadeMapaAulas,
+  type ResultadoReconciliacaoGradeSnapshot,
+} from '../_shared/reconciliacao-grade-snapshot.ts';
+import {
   buscarTodasAulas,
   normalizarSituacaoExperimental as normalizarSituacaoSnapshot,
   type AulaEmusys as AulaSnapshotEmusys,
@@ -65,7 +71,6 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const EMUSYS_API = 'https://api.emusys.com.br/v1';
 const MATUREZA_FALTA_HORAS = 24;
 
 type SyncRequestBody = CorpoSyncPresenca & {
@@ -135,6 +140,10 @@ const corsHeaders = {
 // Normalizar nome para matching (mesmo padrão do parseEmusysFile.ts).
 // Vive em _shared/matcher-presenca.ts junto com o resolver de aluno local.
 const normalizarNome = normalizarNomeMatcher;
+
+function dataAtualBrt(): string {
+  return new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().split('T')[0];
+}
 
 // Normalizar nome de curso: lowercase + sem acentos + remove sufixos do Emusys
 // (" t" — turma, " para instrumento" — variante de Musicalizacao Preparatoria)
@@ -207,30 +216,9 @@ function podeMaterializarFalta(aula: AulaEmusys, agora = new Date()): boolean {
 
 // Buscar todas as aulas de um dia no Emusys (com paginação)
 async function fetchAulasDia(token: string, data: string): Promise<AulaEmusys[]> {
-  const todas: AulaEmusys[] = [];
-  let cursor: string | null = null;
-  let temMais = true;
-
-  while (temMais) {
-    let url = `${EMUSYS_API}/aulas/?data_hora_inicial=${data}T00:00:00&data_hora_final=${data}T23:59:59&limite=100`;
-    if (cursor) url += `&cursor=${cursor}`;
-
-    const resp = await fetch(url, { headers: { token } });
-    if (!resp.ok) {
-      console.error(`[sync-presenca] Emusys API error: ${resp.status}`);
-      break;
-    }
-
-    const json = await resp.json();
-    const items = json.items || [];
-    todas.push(...items);
-
-    const pag = json.paginacao || {};
-    temMais = pag.tem_mais === true;
-    cursor = pag.proximo_cursor || null;
-  }
-
-  return todas;
+  // Uma pagina ausente nao e prova de que a aula saiu da grade. O coletor
+  // compartilhado falha fechado em HTTP, cursor ausente ou cursor repetido.
+  return fetchAulasRange(token, data, data);
 }
 
 async function fetchAulasRange(
@@ -377,10 +365,21 @@ async function sincronizarMetadadosAulas(
       }
     }
 
-    if (idPorEmusysId.size < aulas.length) {
-      console.log(
-        `[sync-presenca] ${unidade.nome}: aulas=${aulas.length} mapeadas=${idPorEmusysId.size} (diferenca indica retorno de upsert incompleto)`,
+    const integridadeMapaAulas = verificarIntegridadeMapaAulas(linhas, idPorEmusysId);
+    if (!integridadeMapaAulas.completo) {
+      console.error(
+        `[sync-presenca] ${unidade.nome}: mapa de aulas incompleto; roster e reconciliação preservados (esperadas=${integridadeMapaAulas.aulas_esperadas}, mapeadas=${integridadeMapaAulas.aulas_mapeadas}, ausentes=${integridadeMapaAulas.emusys_ids_ausentes.length})`,
       );
+      resultados.push({
+        unidade: unidade.nome,
+        status: 'upsert_aulas_incompleto_preservado',
+        aulas_recebidas: aulas.length,
+        aulas_gravadas: gravadas,
+        aulas_esperadas: integridadeMapaAulas.aulas_esperadas,
+        aulas_mapeadas: integridadeMapaAulas.aulas_mapeadas,
+      });
+      aulasPorUnidade.push({ unidade, dataInicio, dataFim, aulas });
+      continue;
     }
 
     // Casa os vinculos aluno-aula tambem no sync de 15 min: sem isso, um
@@ -388,15 +387,54 @@ async function sincronizarMetadadosAulas(
     // (roda 1x/dia) so apareceria no dia seguinte.
     const vinculos = montarVinculosAulaAlunos(aulas, idPorEmusysId, unidade.id, normalizarNome);
     const resultadoVinculos = await gravarVinculosAulaAlunos(supabase, vinculos);
-    for (const erro of resultadoVinculos.erros) {
-      console.error(`[sync-presenca] upsert aula_alunos_emusys (${unidade.nome}): ${erro}`);
+    if (resultadoVinculos.erros.length > 0) {
+      console.error(`[sync-presenca] ${unidade.nome}: upsert de roster falhou; reconciliação preservada`);
+      resultados.push({
+        unidade: unidade.nome,
+        status: 'roster_incompleto_preservado',
+        aulas_recebidas: aulas.length,
+        aulas_gravadas: gravadas,
+        vinculos_gravados: resultadoVinculos.gravados,
+        vinculos_com_erro: resultadoVinculos.erros.length,
+      });
+      aulasPorUnidade.push({ unidade, dataInicio, dataFim, aulas });
+      continue;
     }
+
+    // O modo de metadados ja recebe a foto paginada da janela inteira. So a
+    // faixa de hoje em diante pode alterar a grade; ontem continua no webhook
+    // individual para nao reescrever historico por ausencia de uma foto atual.
+    const hojeReconciliacao = dataAtualBrt();
+    const inicioReconciliacao = dataInicio < hojeReconciliacao
+      ? hojeReconciliacao
+      : dataInicio;
+    const reconciliacaoGrade: ResultadoReconciliacaoGradeSnapshot = inicioReconciliacao <= dataFim
+      ? await reconciliarGradeSnapshotEmusys(supabase, {
+          unidadeId: unidade.id,
+          dataInicio: inicioReconciliacao,
+          dataFim,
+          snapshot: montarSnapshotGradeEmusys(
+            aulas.filter((aula) =>
+              aula.categoria === 'normal'
+              && aula.data_hora_inicio.split(' ')[0] >= inicioReconciliacao
+              && aula.data_hora_inicio.split(' ')[0] <= dataFim
+            ),
+            normalizarNome,
+          ),
+        })
+      : { status: 'fora_da_janela_operacional' };
 
     resultados.push({
       unidade: unidade.nome,
       aulas_recebidas: aulas.length,
       aulas_gravadas: gravadas,
       vinculos_gravados: resultadoVinculos.gravados,
+      vinculos_com_erro: resultadoVinculos.erros.length,
+      reconciliacao_grade: {
+        status: reconciliacaoGrade.status,
+        aulas_canceladas: reconciliacaoGrade.aulas_canceladas ?? 0,
+        vinculos_removidos: reconciliacaoGrade.vinculos_removidos ?? 0,
+      },
     });
     aulasPorUnidade.push({ unidade, dataInicio, dataFim, aulas });
   }
@@ -1809,6 +1847,7 @@ serve(async (req: Request) => {
         let faltasAguardandoMaturidade = 0;
         let rosterSincronizados = 0;
         let aulasProcessadas = 0;
+        let gradeIncompleta = false;
 
         // 2. Processar aula por aula (não mais agrupado por dia)
         for (const aula of aulas) {
@@ -1898,7 +1937,8 @@ serve(async (req: Request) => {
             .single();
 
           if (aulaError) {
-            console.error(`[sync-presenca] Upsert aula ${aula.id} error:`, aulaError.message);
+            console.error(`[sync-presenca] Aula ${aula.id} não foi gravada; reconciliação preservada`);
+            gradeIncompleta = true;
             continue;
           }
 
@@ -1914,21 +1954,6 @@ serve(async (req: Request) => {
             dataHoraInicio: aula.data_hora_inicio ?? null,
             dataHoraInicioOriginal: aula.data_hora_inicio_original ?? null,
           };
-
-          // Roster e justificativa sao sincronizados sem criar uma resposta de presenca.
-          // Coleta TODAS as chaves possiveis que a API retornou para DEPOIS remover
-          // os vinculos obsoletos. criarAlunoChave pode gerar chaves diferentes
-          // dependendo de quem gravou (grade futura usa alunoIdLocal=undefined,
-          // sync de presenca usa o ID resolvido). Coletamos todos os formatos.
-          const chavesRetornadas = new Set<string>();
-          for (const aluno of aula.alunos || []) {
-            const nome = aluno.nome_aluno?.trim();
-            if (!nome) continue;
-            const alunoIdTemp = resolverAlunoLocal(aluno, cursoIdAula, contextoAula, mapaAlunosEmusys, mapaAlunosComposto, mapaAlunos, mapaContratos, mapaJornadaPorAluno);
-            chavesRetornadas.add(criarAlunoChave(aluno, alunoIdTemp, normalizarNome));
-            chavesRetornadas.add(criarAlunoChave(aluno, null, normalizarNome));
-            chavesRetornadas.add(criarAlunoChave(aluno, undefined, normalizarNome));
-          }
 
           for (const aluno of aula.alunos || []) {
             const nome = aluno.nome_aluno?.trim();
@@ -1974,7 +1999,8 @@ serve(async (req: Request) => {
               );
 
             if (rosterError) {
-              console.error(`[sync-presenca] Roster ${nome} aula ${aula.id}:`, rosterError.message);
+              console.error(`[sync-presenca] Roster aula ${aula.id} falhou; reconciliação preservada`);
+              gradeIncompleta = true;
             } else {
               rosterSincronizados++;
             }
@@ -2001,30 +2027,6 @@ serve(async (req: Request) => {
               if (administrativoError) {
                 console.error(`[sync-presenca] Administrativo ${nome} aula ${aula.id}:`, administrativoError.message);
               }
-            }
-          }
-
-          // 2026-08-11: Limpa vinculos obsoletos da grade. Se a API retornou a aula
-          // mas NAO retornou um aluno que estava na grade, o vinculo e obsoleto
-          // (aluno removido da turma no Emusys). Sem isso, alunos evadidos/trancados
-          // apareciam na Chamada como "sem destino" (caso Heiton Paixao, 11/08).
-          if (chavesRetornadas.size === 0) {
-            // API retornou aula sem alunos — remove todos os vinculos
-            const { error: limpezaError } = await supabase
-              .from('aula_alunos_emusys')
-              .delete()
-              .eq('aula_emusys_id', aulaLocalId);
-            if (limpezaError) {
-              console.error(`[sync-presenca] Limpeza roster vazio aula ${aula.id}:`, limpezaError.message);
-            }
-          } else {
-            const { error: limpezaError } = await supabase
-              .from('aula_alunos_emusys')
-              .delete()
-              .eq('aula_emusys_id', aulaLocalId)
-              .not('aluno_chave', 'in', `(${[...chavesRetornadas].map((c) => `"${c}"`).join(',')})`);
-            if (limpezaError) {
-              console.error(`[sync-presenca] Limpeza roster aula ${aula.id}:`, limpezaError.message);
             }
           }
 
@@ -2161,6 +2163,26 @@ serve(async (req: Request) => {
           }
         }
 
+        const hojeReconciliacao = dataAtualBrt();
+        const reconciliacaoGrade: ResultadoReconciliacaoGradeSnapshot = dataAlvo >= hojeReconciliacao && !gradeIncompleta
+          ? await reconciliarGradeSnapshotEmusys(supabase, {
+              unidadeId: unidade.id,
+              dataInicio: dataAlvo,
+              dataFim: dataAlvo,
+              snapshot: montarSnapshotGradeEmusys(
+                aulas.filter((aula) =>
+                  aula.categoria === 'normal'
+                  && aula.data_hora_inicio.split(' ')[0] === dataAlvo
+                ),
+                normalizarNome,
+              ),
+            })
+          : {
+              status: gradeIncompleta
+                ? 'grade_incompleta_preservada'
+                : 'fora_da_janela_operacional',
+            };
+
         // 3. Log
         await supabase.from('emusys_sync_log').insert({
           unidade_id: unidade.id,
@@ -2186,6 +2208,11 @@ serve(async (req: Request) => {
           ausentes,
           faltas_aguardando_maturidade: faltasAguardandoMaturidade,
           roster_sincronizados: rosterSincronizados,
+          reconciliacao_grade: {
+            status: reconciliacaoGrade.status,
+            aulas_canceladas: reconciliacaoGrade.aulas_canceladas ?? 0,
+            vinculos_removidos: reconciliacaoGrade.vinculos_removidos ?? 0,
+          },
         });
       }
     }

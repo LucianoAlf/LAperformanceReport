@@ -119,6 +119,41 @@ export async function buscarPaginaAulasEmusys<
   return parsePaginaAulas<T>(json);
 }
 
+/**
+ * Percorre a paginação do GET /aulas sem aceitar uma fotografia parcial.
+ * Cursor ausente ou repetido é erro da origem, nunca sinal de que a grade
+ * terminou — especialmente antes de uma reconciliação destrutiva.
+ */
+export async function buscarTodasAulasEmusys<
+  T extends Record<string, unknown>,
+>(params: {
+  dataInicio: string;
+  dataFim: string;
+  fetchPage: (input: {
+    cursor: string | null;
+    limite: number;
+  }) => Promise<EmusysPaginaAulas<T>>;
+}): Promise<T[]> {
+  const todas: T[] = [];
+  const cursoresVistos = new Set<string>();
+  let cursor: string | null = null;
+
+  while (true) {
+    const pagina = await params.fetchPage({ cursor, limite: 100 });
+    todas.push(...pagina.items);
+
+    if (!pagina.paginacao.tem_mais) return todas;
+
+    const proximoCursor = pagina.paginacao.proximo_cursor;
+    if (!proximoCursor) throw new Error("EMUSYS_AULAS_CURSOR_AUSENTE");
+    if (cursoresVistos.has(proximoCursor)) {
+      throw new Error("EMUSYS_AULAS_CURSOR_REPETIDO");
+    }
+    cursoresVistos.add(proximoCursor);
+    cursor = proximoCursor;
+  }
+}
+
 export interface AlunoNaAulaEmusys {
   id_aluno?: number | null;
   id_lead?: number | null;

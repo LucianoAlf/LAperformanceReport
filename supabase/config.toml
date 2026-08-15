@@ -57,6 +57,17 @@ verify_jwt = true
 # A funcao valida service_role, x-sync-token ou JWT+permissao antes dos sinks.
 verify_jwt = false
 
+[functions.sync-grade-futura-emusys]
+# Worker interno: a grade futura escreve com service_role e o gateway deve
+# validar o JWT. Declarar isto evita que um deploy futuro abra a funcao.
+verify_jwt = true
+
+[functions.previsualizar-reconciliacao-grade-emusys]
+# Ferramenta temporaria de auditoria: sem JWT no gateway porque autentica no
+# proprio codigo por token efemero hasheado; nao possui CORS nem comandos de escrita.
+# A orquestracao invalida a versao imediatamente depois da previsualizacao autorizada.
+verify_jwt = false
+
 [functions.gerar-relatorio-pedagogico]
 verify_jwt = false
 

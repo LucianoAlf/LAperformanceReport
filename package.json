@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "pretest": "deno test supabase/functions/_shared/reconciliacao-grade-snapshot.test.ts supabase/functions/_shared/previsualizacao-reconciliacao-grade.test.ts && node --test tests/previsualizacaoReconciliacaoGradeContrato.test.mjs tests/reconciliacaoGradeSnapshotContrato.test.mjs tests/reconciliacaoGradeSnapshotPostgres.test.mjs tests/syncGradeAuthorization.test.mjs",
     "test": "node --test tests/carteiraFallbackContratual.test.mjs tests/getContagemTrancadosProfessoresMigration.test.mjs tests/healthScoreProfessorV3SnapshotReader.test.mjs tests/healthScoreProfessorV3CarteiraAbertaCanonica.test.mjs tests/healthScoreProfessorV3PapelCanonico.test.mjs tests/healthScoreProfessorV3PapelCanonicoPostgres.test.mjs tests/performanceTurmasComplementar.test.mjs tests/professoresPageKpisSobDemanda.test.mjs tests/carteiraDisponibilidadeProgressiva.test.mjs tests/turmasV2SemRecalculoDuplicado.test.mjs tests/campanhasConversao.test.mjs tests/presencaCanonicaContrato.test.mjs tests/presencaPendenciasTrancamentoReagendamentoPostgres.test.mjs tests/aulaOperacionalContrato.test.mjs tests/aulaOperacionalPostgres.test.mjs tests/syncPresencaAutomacaoLog.test.mjs tests/alunosAtributosDivergenciasContrato.test.mjs tests/pesquisaPrimeiraAulaRegistroCaixa.test.mjs tests/pesquisaPrimeiraAulaTravaDuplicata.test.mjs tests/authSessionRecovery.test.mjs"
   },
   "overrides": {

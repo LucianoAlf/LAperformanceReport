@@ -12,14 +12,21 @@ import {
   type EmusysProfessorRef,
 } from '../_shared/professor-emusys.ts';
 import {
+  buscarPaginaAulasEmusys,
+  buscarTodasAulasEmusys,
   montarVinculosAulaAlunos,
   gravarVinculosAulaAlunos,
   type AlunoNaAulaEmusys,
 } from '../_shared/emusys-aulas.ts';
+import {
+  montarSnapshotGradeEmusys,
+  reconciliarGradeSnapshotEmusys,
+  verificarIntegridadeMapaAulas,
+} from '../_shared/reconciliacao-grade-snapshot.ts';
+import { prepararExecucaoSyncGrade } from '../_shared/sync-grade-authorization.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const EMUSYS_API = 'https://api.emusys.com.br/v1';
 
 function requiredEnv(name: string): string {
   const value = Deno.env.get(name)?.trim();
@@ -35,7 +42,7 @@ const UNIDADES = [
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-sync-token',
 };
 
 function normalizarNome(nome: string): string {
@@ -48,7 +55,7 @@ function normalizarNome(nome: string): string {
     .trim();
 }
 
-interface AulaEmusys {
+interface AulaEmusys extends Record<string, unknown> {
   id: number;
   nr_da_aula: number | null;
   tipo: string;
@@ -78,28 +85,62 @@ async function fetchAulasRange(
   dataIni: string,
   dataFim: string,
 ): Promise<AulaEmusys[]> {
-  const todas: AulaEmusys[] = [];
-  let cursor: string | null = null;
-  let temMais = true;
-
-  while (temMais) {
-    let url = `${EMUSYS_API}/aulas/?data_hora_inicial=${dataIni}T00:00:00&data_hora_final=${dataFim}T23:59:59&limite=100`;
-    if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
-
-    const response = await fetch(url, { headers: { token } });
-    if (!response.ok) throw new Error(`Emusys API ${response.status} em ${url}`);
-
-    const json = await response.json();
-    todas.push(...(json.items || []));
-    temMais = json.paginacao?.tem_mais === true;
-    cursor = json.paginacao?.proximo_cursor || null;
-  }
-
-  return todas;
+  return buscarTodasAulasEmusys<AulaEmusys>({
+    dataInicio: dataIni,
+    dataFim,
+    fetchPage: ({ cursor, limite }) =>
+      buscarPaginaAulasEmusys<AulaEmusys>({
+        token,
+        dataInicio: dataIni,
+        dataFim,
+        cursor,
+        limite,
+      }),
+  });
 }
 
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  let autorizacao;
+  try {
+    autorizacao = await prepararExecucaoSyncGrade(
+      {
+        authorization: req.headers.get('authorization'),
+        xSyncToken: req.headers.get('x-sync-token'),
+      },
+      {
+        chaveServiceRole: SUPABASE_SERVICE_ROLE_KEY,
+        validarTokenInterno: async (token) => {
+          const validador = createClient(
+            SUPABASE_URL,
+            SUPABASE_SERVICE_ROLE_KEY,
+          );
+          const { data, error } = await validador.rpc(
+            'validar_token_sync_grade_interno_v1',
+            { p_token: token },
+          );
+          return !error && data === true;
+        },
+      },
+    );
+  } catch {
+    autorizacao = {
+      permitido: false,
+      status: 401,
+      codigo: 'NAO_AUTENTICADO',
+    };
+  }
+
+  if (autorizacao.permitido === false) {
+    return new Response(
+      JSON.stringify({ error: autorizacao.codigo }),
+      {
+        status: autorizacao.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      },
+    );
+  }
 
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -135,14 +176,12 @@ serve(async (req: Request) => {
         continue;
       }
 
-      const vivosEmusysId = new Set<number>();
       const linhas: Record<string, unknown>[] = [];
 
       for (const aula of aulas) {
         const dataAula = aula.data_hora_inicio?.split(' ')[0] || hoje;
         if (dataAula < hoje) continue;
 
-        vivosEmusysId.add(aula.id);
         const profNome = aula.professores?.[0]?.nome || null;
         const professor = resolverProfessorDaAula(aula.professores, mapaProfessores);
 
@@ -191,6 +230,7 @@ serve(async (req: Request) => {
       // silencioso que ja causou vinculos descartados sem erro/log uma vez.
       const chunkSize = 500;
       const idPorEmusysId = new Map<number, number>();
+      let upsertAulasIncompleto = false;
       for (let offset = 0; offset < linhas.length; offset += chunkSize) {
         const lote = linhas.slice(offset, offset + chunkSize);
         const { data: loteGravado, error } = await supabase
@@ -198,8 +238,9 @@ serve(async (req: Request) => {
           .upsert(lote, { onConflict: 'emusys_id,unidade_id', ignoreDuplicates: false })
           .select('id, emusys_id');
         if (error) {
-          console.error(`[sync-grade-futura] upsert lote (${unidade.nome}) offset ${offset}: ${error.message}`);
-          continue;
+          console.error(`[sync-grade-futura] ${unidade.nome}: upsert de aula falhou; reconciliação preservada`);
+          upsertAulasIncompleto = true;
+          break;
         }
         gravadas += lote.length;
         for (const linhaGravada of loteGravado || []) {
@@ -207,13 +248,19 @@ serve(async (req: Request) => {
         }
       }
 
-      // Se algum lote de upsert falhar, o continue acima pula o preenchimento
-      // do mapa para aquele lote inteiro. Loga a divergencia para o caso
-      // ficar visivel sem precisar cruzar contadores manualmente.
-      if (idPorEmusysId.size < aulas.length) {
-        console.log(
-          `[sync-grade-futura] ${unidade.nome}: aulas=${aulas.length} mapeadas=${idPorEmusysId.size} (diferenca pode indicar lote de upsert com erro)`,
-        );
+      const integridadeMapaAulas = verificarIntegridadeMapaAulas(linhas, idPorEmusysId);
+      if (!integridadeMapaAulas.completo) {
+        upsertAulasIncompleto = true;
+      }
+      if (upsertAulasIncompleto) {
+        resultados.push({
+          unidade: unidade.nome,
+          status: 'upsert_aulas_incompleto_preservado',
+          janela: { inicio: hoje, fim: dataFim, dias: janelaDias },
+          aulas_recebidas: aulas.length,
+          aulas_gravadas: gravadas,
+        });
+        continue;
       }
 
       // Persiste o alunos[] que a resposta ja traz. Sem isso a grade futura
@@ -221,82 +268,52 @@ serve(async (req: Request) => {
 
       const vinculos = montarVinculosAulaAlunos(aulas, idPorEmusysId, unidade.id, normalizarNome);
       const resultado = await gravarVinculosAulaAlunos(supabase, vinculos, chunkSize);
-      for (const erro of resultado.erros) {
-        console.error(`[sync-grade-futura] upsert aula_alunos_emusys (${unidade.nome}): ${erro}`);
+      if (resultado.erros.length > 0) {
+        console.error(`[sync-grade-futura] ${unidade.nome}: upsert de roster falhou; reconciliação preservada`);
+        resultados.push({
+          unidade: unidade.nome,
+          status: 'roster_incompleto_preservado',
+          janela: { inicio: hoje, fim: dataFim, dias: janelaDias },
+          aulas_recebidas: aulas.length,
+          aulas_gravadas: gravadas,
+          vinculos_gravados: resultado.gravados,
+          vinculos_com_erro: resultado.erros.length,
+        });
+        continue;
       }
       console.log(
         `[sync-grade-futura] ${unidade.nome}: ${resultado.gravados} vinculos aluno-aula`,
       );
 
-      // Trava de seguranca do soft-cancel. Ele marca aula como cancelada, entao
-      // so pode rodar sobre uma foto COMPLETA da API. fetchAulasRange lanca em
-      // resposta nao-OK, mas uma janela que voltou vazia (ou quase) indica
-      // problema na origem, e cancelar em massa sobre isso destruiria a grade.
-      const podeCancelarFantasmas = vivosEmusysId.size > 0;
-      if (!podeCancelarFantasmas) {
-        console.error(
-          `[sync-grade-futura] ${unidade.nome}: API nao devolveu aulas na janela; soft-cancel ABORTADO para nao cancelar grade real`,
-        );
-      }
-
-      const existentesFuturas: Array<{ emusys_id: number }> = [];
-      let canceladas = 0;
-
-      if (podeCancelarFantasmas) {
-        // Leitura paginada: sem isso o PostgREST corta em ~1000 linhas e a aula
-        // fantasma que cai fora do corte nunca e cancelada. O order('emusys_id')
-        // e obrigatorio — sem ordenacao estavel o range() repete ou pula linhas.
-        const tamanhoPagina = 1000;
-        let leituraFalhou = false;
-        for (let pagina = 0; ; pagina++) {
-          const { data: bloco, error } = await supabase
-            .from('aulas_emusys')
-            .select('emusys_id')
-            .eq('unidade_id', unidade.id)
-            .gt('data_aula', hoje)
-            .lte('data_aula', dataFim)
-            .eq('cancelada', false)
-            .order('emusys_id', { ascending: true })
-            .range(pagina * tamanhoPagina, (pagina + 1) * tamanhoPagina - 1);
-
-          if (error) {
-            console.error(
-              `[sync-grade-futura] ${unidade.nome}: falha ao ler aulas futuras p/ soft-cancel: ${error.message}`,
-            );
-            leituraFalhou = true;
-            break;
-          }
-          if (!bloco || bloco.length === 0) break;
-          existentesFuturas.push(...(bloco as Array<{ emusys_id: number }>));
-          if (bloco.length < tamanhoPagina) break;
-        }
-
-        // Lista parcial e exatamente o bug que esta task corrige: se a leitura
-        // falhou no meio, pula o soft-cancel desta unidade nesta execucao.
-        if (leituraFalhou) {
-          console.error(
-            `[sync-grade-futura] ${unidade.nome}: soft-cancel PULADO (leitura parcial das aulas futuras)`,
-          );
-        } else {
-          const fantasmas = existentesFuturas
-            .map((row) => row.emusys_id as number)
-            .filter((id) => !vivosEmusysId.has(id));
-
-          for (let offset = 0; offset < fantasmas.length; offset += chunkSize) {
-            const bloco = fantasmas.slice(offset, offset + chunkSize);
-            const { error } = await supabase
-              .from('aulas_emusys')
-              .update({ cancelada: true })
-              .eq('unidade_id', unidade.id)
-              .gt('data_aula', hoje)
-              .in('emusys_id', bloco);
-            if (error) {
-              console.error(`[sync-grade-futura] soft-cancel (${unidade.nome}): ${error.message}`);
-            } else {
-              canceladas += bloco.length;
-            }
-          }
-        }
+      // A reconciliacao recebe a foto COMPLETA da API e concentra a regra de
+      // seguranca: so hoje/futuro, sem apagar historico e sem tocar em aula ou
+      // vinculo que ja tenha decisao terminal de presenca.
+      let reconciliacao;
+      try {
+        reconciliacao = await reconciliarGradeSnapshotEmusys(supabase, {
+          unidadeId: unidade.id,
+          dataInicio: hoje,
+          dataFim,
+          snapshot: montarSnapshotGradeEmusys(
+            aulas.filter((aula) =>
+              aula.categoria === 'normal'
+              && aula.data_hora_inicio.split(' ')[0] >= hoje
+              && aula.data_hora_inicio.split(' ')[0] <= dataFim
+            ),
+            normalizarNome,
+          ),
+        });
+      } catch {
+        console.error(`[sync-grade-futura] ${unidade.nome}: fotografia inválida; reconciliação preservada`);
+        resultados.push({
+          unidade: unidade.nome,
+          status: 'fotografia_invalida_preservada',
+          janela: { inicio: hoje, fim: dataFim, dias: janelaDias },
+          aulas_recebidas: aulas.length,
+          aulas_gravadas: gravadas,
+          vinculos_gravados: resultado.gravados,
+        });
+        continue;
       }
 
       resultados.push({
@@ -305,10 +322,13 @@ serve(async (req: Request) => {
         janela: { inicio: hoje, fim: dataFim, dias: janelaDias },
         aulas_recebidas: aulas.length,
         aulas_gravadas: gravadas,
-        fantasmas_avaliadas: existentesFuturas.length,
-        fantasmas_canceladas: canceladas,
+        reconciliacao_grade: {
+          status: reconciliacao.status,
+          aulas_canceladas: reconciliacao.aulas_canceladas ?? 0,
+          vinculos_removidos: reconciliacao.vinculos_removidos ?? 0,
+        },
         vinculos_gravados: resultado.gravados,
-        vinculos_erros: resultado.erros,
+        vinculos_com_erro: resultado.erros.length,
       });
     }
 
