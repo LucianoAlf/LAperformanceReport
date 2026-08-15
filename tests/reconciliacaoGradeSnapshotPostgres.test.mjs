@@ -7,11 +7,10 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const migrationsDir = path.join(root, 'supabase/migrations');
-const migrationPath = fs.readdirSync(migrationsDir)
-  .filter((file) => file.endsWith('_reconciliacao_grade_snapshot_completo.sql'))
+const migrationPaths = fs.readdirSync(migrationsDir)
+  .filter((file) => /_reconciliacao_grade_(?:snapshot_completo|ausente_preserva_presenca)\.sql$/u.test(file))
   .map((file) => path.join(migrationsDir, file))
-  .sort()
-  .at(-1);
+  .sort();
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -53,6 +52,14 @@ const fixtureSchema = String.raw`
   create role authenticated;
   create role service_role;
 
+  create table public.unidades (
+    id uuid primary key,
+    nome text not null
+  );
+
+  insert into public.unidades (id, nome)
+  values ('11111111-1111-1111-1111-111111111111', 'Campo Grande');
+
   create table public.aulas_emusys (
     id integer primary key,
     emusys_id integer not null,
@@ -61,6 +68,8 @@ const fixtureSchema = String.raw`
     categoria text default 'normal',
     cancelada boolean not null default false,
     cancelada_origem text,
+    cancelada_motivo text,
+    cancelada_em timestamptz,
     constraint aulas_emusys_cancelada_origem_check
       check (cancelada_origem is null or cancelada_origem in ('emusys', 'agenda_secretaria', 'sync_ausente_emusys'))
   );
@@ -111,7 +120,10 @@ const fixtureSchema = String.raw`
     (100, 1000, '11111111-1111-1111-1111-111111111111', (now() at time zone 'America/Sao_Paulo')::date + 1, 'normal', false),
     (110, 1100, '11111111-1111-1111-1111-111111111111', (now() at time zone 'America/Sao_Paulo')::date + 1, 'normal', false),
     (120, 1200, '11111111-1111-1111-1111-111111111111', (now() at time zone 'America/Sao_Paulo')::date + 1, 'normal', false),
-    (130, 1300, '11111111-1111-1111-1111-111111111111', (now() at time zone 'America/Sao_Paulo')::date + 1, 'normal', false);
+    (130, 1300, '11111111-1111-1111-1111-111111111111', (now() at time zone 'America/Sao_Paulo')::date + 1, 'normal', false),
+    (140, 1400, '11111111-1111-1111-1111-111111111111', (now() at time zone 'America/Sao_Paulo')::date + 1, 'normal', false),
+    (263139, 515512, '11111111-1111-1111-1111-111111111111', date '2026-08-15', 'normal', false),
+    (263210, 680696, '11111111-1111-1111-1111-111111111111', date '2026-08-15', 'normal', false);
 
   insert into public.aula_alunos_emusys
     (aula_emusys_id, unidade_id, aluno_id, aluno_emusys_id, aluno_chave, aluno_nome)
@@ -125,14 +137,18 @@ const fixtureSchema = String.raw`
     (20, '11111111-1111-1111-1111-111111111111', 203, 203, 'nome:segredo:2000-01-01', 'Chave que nao pode vazar'),
     (110, '11111111-1111-1111-1111-111111111111', 1101, 1101, 'emusys:1101', 'Presenca legada no roster'),
     (120, '11111111-1111-1111-1111-111111111111', 1201, 1201, 'emusys:1201', 'Vinculo estavel que a fonte ambigua nao pode apagar'),
-    (130, '11111111-1111-1111-1111-111111111111', 1301, 1301, 'emusys:1301', 'Vinculo estavel que roster vazio nao pode apagar');
+    (130, '11111111-1111-1111-1111-111111111111', 1301, 1301, 'emusys:1301', 'Vinculo estavel que roster vazio nao pode apagar'),
+    (140, '11111111-1111-1111-1111-111111111111', 1401, 1401, 'emusys:1401', 'Aula concorrente com presenca'),
+    (263139, '11111111-1111-1111-1111-111111111111', 2631391, 2631391, 'emusys:2631391', 'Presenca historica Matheus');
 
   insert into public.aluno_presenca
     (aula_emusys_id, aluno_id, status_presenca, respondido_por)
   values
     (30, 301, 'presente', 'agenda_secretaria'),
     (40, 401, 'presente', 'agenda_secretaria'),
-    (90, 901, 'falta', 'emusys');
+    (90, 901, 'falta', 'emusys'),
+    (140, 1401, 'presente', 'agenda_secretaria'),
+    (263139, 2631391, 'falta', 'agenda_secretaria');
 
   insert into public.aluno_presenca
     (aula_emusys_id, aluno_id, status, status_presenca, respondido_por)
@@ -142,7 +158,7 @@ const fixtureSchema = String.raw`
 `;
 
 test('reconciliacao por fotografia completa preserva presença humana e não toca passado', async (t) => {
-  assert.ok(migrationPath, 'falta migration reconciliacao_grade_snapshot_completo');
+  assert.ok(migrationPaths.length > 0, 'falta migration reconciliacao_grade_snapshot_completo');
 
   const dockerInfo = docker(['info']);
   if (dockerInfo.status !== 0) {
@@ -166,15 +182,45 @@ test('reconciliacao por fotografia completa preserva presença humana e não toc
     { emusys_id: 1100, aluno_chaves: [] },
     { emusys_id: 1200, aluno_chaves: ['emusys:1202', 'nome:aluno sem id:2000-01-01'] },
     { emusys_id: 1300, aluno_chaves: [] },
+    { emusys_id: 1400, aluno_chaves: ['emusys:1401'] },
   ]);
+  const snapshotSem140 = JSON.stringify(
+    JSON.parse(snapshot).filter((aula) => aula.emusys_id !== 1400),
+  );
 
   try {
     await waitForPostgres(container);
     const fixture = psql(container, fixtureSchema);
     assert.equal(fixture.status, 0, fixture.stderr || fixture.stdout);
 
-    const migration = psql(container, fs.readFileSync(migrationPath, 'utf8'));
-    assert.equal(migration.status, 0, migration.stderr || migration.stdout);
+    for (const migrationPath of migrationPaths) {
+      const migration = psql(container, fs.readFileSync(migrationPath, 'utf8'));
+      assert.equal(migration.status, 0, migration.stderr || migration.stdout);
+    }
+
+    const remediacaoMatheus = psql(container, `
+      select id || '|' || cancelada::text || '|' || coalesce(cancelada_origem, '<null>')
+      from public.aulas_emusys
+      where id in (263139, 263210)
+      order by id;
+      select count(*)::text
+      from public.aluno_presenca
+      where aula_emusys_id = 263139
+        and aluno_id = 2631391
+        and status_presenca = 'falta'
+        and respondido_por = 'agenda_secretaria';
+      select count(*)::text
+      from public.aula_alunos_emusys
+      where aula_emusys_id = 263139
+        and aluno_id = 2631391;
+    `);
+    assert.equal(remediacaoMatheus.status, 0, remediacaoMatheus.stderr || remediacaoMatheus.stdout);
+    assert.deepEqual(lines(remediacaoMatheus.stdout), [
+      '263139|true|sync_ausente_emusys',
+      '263210|true|sync_ausente_emusys',
+      '1',
+      '1',
+    ]);
 
     const fotografiaVazia = psql(container, `
       select (
@@ -203,34 +249,56 @@ test('reconciliacao por fotografia completa preserva presença humana e não toc
     ]);
 
     const dryRun = psql(container, `
-      select public.reconciliar_grade_snapshot_emusys_v1(
-        '11111111-1111-1111-1111-111111111111',
-        (now() at time zone 'America/Sao_Paulo')::date,
-        (now() at time zone 'America/Sao_Paulo')::date + 1,
-        '${snapshot}'::jsonb,
-        true
-      )->>'aulas_canceladas';
+      with resultado as (
+        select public.reconciliar_grade_snapshot_emusys_v1(
+          '11111111-1111-1111-1111-111111111111',
+          (now() at time zone 'America/Sao_Paulo')::date,
+          (now() at time zone 'America/Sao_Paulo')::date + 1,
+          '${snapshot}'::jsonb,
+          true
+        ) as valor
+      )
+      select (valor->>'aulas_canceladas') || '|'
+          || (valor->>'aulas_canceladas_aplicadas') || '|'
+          || (valor->>'alteracoes_aplicadas') || '|'
+          || (
+            select count(*)::text
+            from jsonb_array_elements(valor->'detalhe') as detalhe(valor)
+            where detalhe.valor->>'acao' = 'cancelar_aula_ausente_preservando_marcacao'
+          )
+      from resultado;
       select cancelada::text from public.aulas_emusys where id = 10;
       select count(*)::text from public.aula_alunos_emusys where aula_emusys_id = 20;
-      select not ((public.reconciliar_grade_snapshot_emusys_v1(
-        '11111111-1111-1111-1111-111111111111',
-        (now() at time zone 'America/Sao_Paulo')::date,
-        (now() at time zone 'America/Sao_Paulo')::date + 1,
-        '${snapshot}'::jsonb,
-        true
-      )->'detalhe')::text like '%nome:%');
+      with resultado as (
+        select public.reconciliar_grade_snapshot_emusys_v1(
+          '11111111-1111-1111-1111-111111111111',
+          (now() at time zone 'America/Sao_Paulo')::date,
+          (now() at time zone 'America/Sao_Paulo')::date + 1,
+          '${snapshot}'::jsonb,
+          true
+        ) as valor
+      )
+      select not ((valor->'detalhe')::text like '%nome:%') from resultado;
     `);
     assert.equal(dryRun.status, 0, dryRun.stderr || dryRun.stdout);
-    assert.deepEqual(lines(dryRun.stdout), ['2', 'false', '3', 't']);
+    assert.deepEqual(lines(dryRun.stdout), ['4|0|0|2', 'false', '3', 't']);
 
     const aplicado = psql(container, `
-      select public.reconciliar_grade_snapshot_emusys_v1(
-        '11111111-1111-1111-1111-111111111111',
-        (now() at time zone 'America/Sao_Paulo')::date,
-        (now() at time zone 'America/Sao_Paulo')::date + 1,
-        '${snapshot}'::jsonb,
-        false
-      )->>'vinculos_removidos';
+      with resultado as (
+        select public.reconciliar_grade_snapshot_emusys_v1(
+          '11111111-1111-1111-1111-111111111111',
+          (now() at time zone 'America/Sao_Paulo')::date,
+          (now() at time zone 'America/Sao_Paulo')::date + 1,
+          '${snapshot}'::jsonb,
+          false
+        ) as valor
+      )
+      select (valor->>'aulas_canceladas') || '|'
+          || (valor->>'aulas_canceladas_aplicadas') || '|'
+          || (valor->>'vinculos_removidos') || '|'
+          || (valor->>'vinculos_removidos_aplicados') || '|'
+          || (valor->>'alteracoes_aplicadas')
+      from resultado;
       select id || '|' || cancelada::text || '|' || coalesce(cancelada_origem, '<null>')
       from public.aulas_emusys
       where id in (10, 40, 50, 80, 90, 100)
@@ -238,16 +306,26 @@ test('reconciliacao por fotografia completa preserva presença humana e não toc
       select aluno_chave from public.aula_alunos_emusys
       where aula_emusys_id in (20, 30, 60, 70, 110, 120, 130)
       order by aula_emusys_id, aluno_chave;
+      select count(*)::text
+      from public.aluno_presenca
+      where aula_emusys_id = 40
+        and aluno_id = 401
+        and status_presenca = 'presente'
+        and respondido_por = 'agenda_secretaria';
+      select count(*)::text
+      from public.aula_alunos_emusys
+      where aula_emusys_id = 40
+        and aluno_id = 401;
     `);
     assert.equal(aplicado.status, 0, aplicado.stderr || aplicado.stdout);
     assert.deepEqual(lines(aplicado.stdout), [
-      '2',
+      '4|4|2|2|6',
       '10|true|sync_ausente_emusys',
-      '40|false|<null>',
+      '40|true|sync_ausente_emusys',
       '50|false|<null>',
       '80|false|<null>',
       '90|true|sync_ausente_emusys',
-      '100|false|<null>',
+      '100|true|sync_ausente_emusys',
       'emusys:201',
       'emusys:301',
       'emusys:601',
@@ -255,6 +333,8 @@ test('reconciliacao por fotografia completa preserva presença humana e não toc
       'emusys:1101',
       'emusys:1201',
       'emusys:1301',
+      '1',
+      '1',
     ]);
 
     const repetido = psql(container, `
@@ -277,6 +357,78 @@ test('reconciliacao por fotografia completa preserva presença humana e não toc
     `);
     assert.equal(repetido.status, 0, repetido.stderr || repetido.stdout);
     assert.deepEqual(lines(repetido.stdout), ['0', 'false|true']);
+
+    const concorrenciaEntreBaseEMarcacao = psql(container, `
+      -- Simula a corrida em que a base planejou cancelar uma aula, mas uma
+      -- marcacao humana terminal entrou antes do UPDATE dela. O wrapper deve
+      -- concluir o cancelamento sem dobrar a mesma aula nas metricas.
+      create or replace function public.reconciliar_grade_snapshot_emusys_v1_base(
+        p_unidade_id uuid,
+        p_data_inicio date,
+        p_data_fim date,
+        p_snapshot jsonb,
+        p_dry_run boolean default true
+      ) returns jsonb
+      language sql
+      security definer
+      set search_path to 'pg_catalog', 'public'
+      as $$
+        select jsonb_build_object(
+          'status', 'ok',
+          'aulas_canceladas', 1,
+          'aulas_canceladas_aplicadas', 0,
+          'alteracoes_aplicadas', 0,
+          'detalhe', jsonb_build_array(jsonb_build_object(
+            'acao', 'cancelar_aula_ausente',
+            'aula_local_id', 140,
+            'emusys_aula_id', 1400,
+            'vinculo_id', null
+          ))
+        );
+      $$;
+
+      with resultado as (
+        select public.reconciliar_grade_snapshot_emusys_v1(
+          '11111111-1111-1111-1111-111111111111',
+          (now() at time zone 'America/Sao_Paulo')::date,
+          (now() at time zone 'America/Sao_Paulo')::date + 1,
+          '${snapshotSem140}'::jsonb,
+          false
+        ) as valor
+      )
+      select (valor->>'aulas_canceladas') || '|'
+          || (valor->>'aulas_canceladas_aplicadas') || '|'
+          || (valor->>'alteracoes_aplicadas') || '|'
+          || (
+            select count(*)::text
+            from jsonb_array_elements(valor->'detalhe') as detalhe(valor)
+            where detalhe.valor->>'acao' = 'cancelar_aula_ausente_preservando_marcacao'
+          )
+      from resultado;
+      select cancelada::text || '|' || coalesce(cancelada_origem, '<null>')
+      from public.aulas_emusys
+      where id = 140;
+      select (
+        select count(*)::text
+        from public.aluno_presenca
+        where aula_emusys_id = 140
+          and aluno_id = 1401
+          and status_presenca = 'presente'
+          and respondido_por = 'agenda_secretaria'
+      ) || '|' || (
+        select count(*)::text
+        from public.aula_alunos_emusys
+        where aula_emusys_id = 140
+          and aluno_id = 1401
+      );
+    `);
+    assert.equal(concorrenciaEntreBaseEMarcacao.status, 0, concorrenciaEntreBaseEMarcacao.stderr || concorrenciaEntreBaseEMarcacao.stdout);
+    assert.deepEqual(lines(concorrenciaEntreBaseEMarcacao.stdout), [
+      'CREATE FUNCTION',
+      '1|1|1|1',
+      'true|sync_ausente_emusys',
+      '1|1',
+    ]);
   } finally {
     docker(['stop', container]);
   }
