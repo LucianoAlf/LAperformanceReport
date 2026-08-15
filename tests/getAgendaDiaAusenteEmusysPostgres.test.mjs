@@ -105,7 +105,14 @@ const fixture = String.raw`
          50, 'normal'::text, 'turma'::text, false, false, false, null::text,
          null::integer, null::integer, 1, null::text, null::text, null::text,
          '[]'::jsonb, array[701]::integer[],
-         null::text, null::text, '[]'::jsonb)
+         null::text, null::text, '[]'::jsonb),
+        ('reativada'::text, '11111111-1111-1111-1111-111111111111'::uuid,
+         'Campo Grande'::text, 'Professor reativado'::text, 31, null::text, 'Sala 3'::text,
+         'Canto T'::text, 'C_Sa_12'::text, '12:00'::text, '12:50'::text,
+         50, 'normal'::text, 'turma'::text, false, false, false, null::text,
+         null::integer, null::integer, 1, null::text, null::text, null::text,
+         '[]'::jsonb, array[702]::integer[],
+         null::text, 'sync_ausente_emusys'::text, '[]'::jsonb)
     ) as agenda(
       chave, unidade_id, unidade_nome, professor_nome, professor_id, professor_foto_url,
       sala_nome, curso_nome, turma_nome, hora_inicio, hora_fim, duracao_minutos,
@@ -173,7 +180,7 @@ test('get_agenda_dia oculta somente aula removida do Emusys e preserva cancelame
     `);
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.deepEqual(result.stdout.trim().split(/\r?\n/u), [
-      'ativa|<null>,cancelada_real|emusys',
+      'ativa|<null>,cancelada_real|emusys,reativada|sync_ausente_emusys',
       'true|true|false|false',
     ]);
   } finally {

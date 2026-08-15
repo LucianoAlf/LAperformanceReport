@@ -1,6 +1,7 @@
 -- A fotografia atual do Emusys define a existencia operacional da aula.
--- Aulas marcadas como ausentes nessa fotografia continuam no banco para
--- auditoria, mas nao devem voltar pela leitura operacional da Agenda.
+-- Aulas ainda canceladas e ausentes nessa fotografia continuam no banco para
+-- auditoria, mas nao devem voltar pela leitura operacional da Agenda. Se um
+-- upsert posterior as reativar, a origem historica sozinha nao as oculta.
 
 do $migration$
 begin
@@ -87,7 +88,8 @@ as $function$
     historico.cancelada_origem,
     historico.experimental_leads
   from public.get_agenda_dia_historico_sync_v1(p_data, p_unidade_id) as historico
-  where historico.cancelada_origem is distinct from 'sync_ausente_emusys';
+  where historico.cancelada is not true
+     or historico.cancelada_origem is distinct from 'sync_ausente_emusys';
 $function$;
 
 revoke all on function public.get_agenda_dia_historico_sync_v1(date, uuid)
