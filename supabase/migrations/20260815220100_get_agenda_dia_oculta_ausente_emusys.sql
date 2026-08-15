@@ -2,6 +2,8 @@
 -- Aulas ainda canceladas e ausentes nessa fotografia continuam no banco para
 -- auditoria, mas nao devem voltar pela leitura operacional da Agenda. Se um
 -- upsert posterior as reativar, a origem historica sozinha nao as oculta.
+-- O wrapper permanece SECURITY INVOKER para conservar as politicas de RLS da
+-- funcao historica e das tabelas que ela consulta.
 
 do $migration$
 begin
@@ -54,7 +56,7 @@ returns table(
 )
 language sql
 stable
-security definer
+security invoker
 set search_path to 'pg_catalog', 'public', 'pg_temp'
 as $function$
   select
@@ -94,6 +96,8 @@ $function$;
 
 revoke all on function public.get_agenda_dia_historico_sync_v1(date, uuid)
   from public, anon, authenticated, service_role;
+grant execute on function public.get_agenda_dia_historico_sync_v1(date, uuid)
+  to authenticated, service_role;
 
 revoke all on function public.get_agenda_dia(date, uuid)
   from public, anon, authenticated, service_role;
