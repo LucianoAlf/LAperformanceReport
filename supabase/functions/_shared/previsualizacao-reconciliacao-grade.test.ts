@@ -118,3 +118,30 @@ Deno.test("previsualizacao classifica somente candidatos seguros e omite chaves 
   const serializado = JSON.stringify(resultado);
   assertNotMatch(serializado, /aluno_chave|emusys:|local:/u);
 });
+
+Deno.test("previsualizacao preserva roster quando a origem ainda depende de nome", () => {
+  const resultado = previsualizarReconciliacaoGrade({
+    snapshot: [
+      {
+        emusys_id: 500,
+        aluno_chaves: ["nome:identidade-nao-estavel:2000-01-01"],
+      },
+    ],
+    aulas: [{ id: 50, emusys_id: 500 }],
+    vinculos: [
+      {
+        id: 501,
+        aula_emusys_id: 50,
+        aluno_id: 90,
+        aluno_emusys_id: 900,
+        aluno_chave: "emusys:900",
+      },
+    ],
+    presencas: [],
+  });
+
+  assertEquals(resultado.candidatas.vinculos_remover, []);
+  assertEquals(resultado.protegidas.identidade_ambigua, [
+    { aula_local_id: 50, emusys_aula_id: 500, vinculo_id: 501 },
+  ]);
+});

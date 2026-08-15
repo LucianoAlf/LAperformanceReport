@@ -52,6 +52,7 @@ verify_jwt = false
 [functions.previsualizar-reconciliacao-grade-emusys]
 # Ferramenta temporaria de auditoria: sem JWT no gateway porque autentica no
 # proprio codigo por token efemero hasheado; nao possui CORS nem comandos de escrita.
+# A orquestracao invalida a versao imediatamente depois da previsualizacao autorizada.
 verify_jwt = false
 
 [functions.gerar-relatorio-pedagogico]

@@ -90,6 +90,18 @@ function vinculoExisteNaFonte(
 }
 
 /**
+ * `montarSnapshotGradeEmusys` so produz `local:` quando recebe um id local,
+ * coisa que a fotografia bruta do Emusys nunca recebe. Logo, qualquer chave
+ * que nao comece com `emusys:` e um fallback por nome/data; ela nao prova que
+ * um vinculo local especifico desapareceu da turma.
+ */
+function fonteTemSomenteIdentidadesEstaveis(
+  alunoChavesFonte: Set<string>,
+): boolean {
+  return [...alunoChavesFonte].every((chave) => chave.startsWith("emusys:"));
+}
+
+/**
  * Replica em memória, sem DML e sem expor chaves de aluno, as decisões da RPC
  * de reconciliação. A Edge usa este resultado apenas para auditar a fotografia
  * antes de qualquer migration ou reparo aplicado.
@@ -148,7 +160,11 @@ export function previsualizarReconciliacaoGrade(params: {
       if (vinculoExisteNaFonte(vinculo, alunoChavesFonte)) continue;
 
       const item = itemTecnico(aula, vinculo.id);
-      if (vinculo.aluno_id === null || vinculo.aluno_emusys_id === null) {
+      if (
+        !fonteTemSomenteIdentidadesEstaveis(alunoChavesFonte) ||
+        vinculo.aluno_id === null ||
+        vinculo.aluno_emusys_id === null
+      ) {
         resultado.protegidas.identidade_ambigua.push(item);
       } else if (
         alunoComMarcacaoFechada.has(`${aula.id}:${vinculo.aluno_id}`)

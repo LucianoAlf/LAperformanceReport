@@ -2,6 +2,8 @@
 
 // Edge temporaria, estritamente somente leitura, para auditar a fotografia
 // completa do Emusys antes de aplicar a reconciliação de grade em produção.
+// O token é efêmero e esta versão será invalidada por novo deploy logo após a
+// prévia; expiração não é, por si só, consumo atômico de uso único.
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -21,9 +23,11 @@ import {
 const ESCOLA_ID_CAMPO_GRANDE = 39;
 const UNIDADE_ID_CAMPO_GRANDE = "2ec861f6-023f-4d7b-9927-3960ad8c2a92";
 const PREVIEW_TOKEN_SHA256 =
-  "ff780234857271317fe1e846feb8cb0929288c70fb092d83f79a703b2f72993f";
-const PREVIEW_TOKEN_EXPIRA_EM = "2026-08-15T19:21:41Z";
-const LIMITE_ITENS_RETORNO = 200;
+  "5a65491115a020e75a0278bfade8c1efaf1ac65197d68f300b4c6efb09dd4496";
+const PREVIEW_TOKEN_EXPIRA_EM = "2026-08-15T19:30:24Z";
+const MAX_PAGINAS_EMUSYS = 120;
+const TIMEOUT_EMUSYS_MS = 30_000;
+const LIMITE_ITENS_RETORNO = 1_000;
 const TAMANHO_PAGINA_BANCO = 500;
 
 const respostaHeaders = {
@@ -110,10 +114,58 @@ function dataDaAula(aula: AulaEmusysPrevisualizacao): string {
   const data = typeof aula.data_hora_inicio === "string"
     ? aula.data_hora_inicio.slice(0, 10)
     : "";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+  const dataVerificada = new Date(`${data}T12:00:00Z`);
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(data) ||
+    Number.isNaN(dataVerificada.getTime()) ||
+    dataVerificada.toISOString().slice(0, 10) !== data
+  ) {
     throw new Error("FOTOGRAFIA_EMUSYS_DATA_INVALIDA");
   }
   return data;
+}
+
+function validarAulaFonte(aula: AulaEmusysPrevisualizacao): void {
+  if (
+    !Number.isSafeInteger(aula.id) ||
+    aula.id <= 0 ||
+    typeof aula.categoria !== "string" ||
+    aula.categoria.length === 0
+  ) {
+    throw new Error("FOTOGRAFIA_EMUSYS_AULA_INVALIDA");
+  }
+  dataDaAula(aula);
+  if (aula.categoria === "normal" && !Array.isArray(aula.alunos)) {
+    throw new Error("FOTOGRAFIA_EMUSYS_ROSTER_AUSENTE");
+  }
+}
+
+async function carregarFotografiaEmusys(
+  token: string,
+  dataInicio: string,
+  dataFim: string,
+): Promise<AulaEmusysPrevisualizacao[]> {
+  let paginasLidas = 0;
+  return await buscarTodasAulasEmusys<AulaEmusysPrevisualizacao>({
+    dataInicio,
+    dataFim,
+    fetchPage: async ({ cursor, limite }) => {
+      paginasLidas += 1;
+      if (paginasLidas > MAX_PAGINAS_EMUSYS) {
+        throw new Error("EMUSYS_AULAS_PAGINACAO_EXCEDIDA");
+      }
+      const pagina = await buscarPaginaAulasEmusys<AulaEmusysPrevisualizacao>({
+        token,
+        dataInicio,
+        dataFim,
+        cursor,
+        limite,
+        signal: AbortSignal.timeout(TIMEOUT_EMUSYS_MS),
+      });
+      pagina.items.forEach(validarAulaFonte);
+      return pagina;
+    },
+  });
 }
 
 function dividirEmLotes<T>(itens: T[], tamanho: number): T[][] {
@@ -265,6 +317,31 @@ function resumirItens<T>(itens: T[]) {
   };
 }
 
+function somenteTotal(resumo: { total: number }) {
+  return { total: resumo.total };
+}
+
+async function hashFotografiaCompleta(
+  snapshot: Awaited<ReturnType<typeof montarSnapshotGradeEmusys>>,
+): Promise<string> {
+  return await sha256(JSON.stringify(snapshot));
+}
+
+async function hashEstadoLocal(params: {
+  aulas: AulaLocalParaPrevisualizacao[];
+  vinculos: VinculoLocalParaPrevisualizacao[];
+  presencas: PresencaParaPrevisualizacao[];
+}): Promise<string> {
+  return await sha256(JSON.stringify({
+    aulas: [...params.aulas].sort((a, b) => a.id - b.id),
+    // A chave só entra na assinatura não reversível; nunca no payload ou log.
+    vinculos: [...params.vinculos].sort((a, b) => a.id - b.id),
+    presencas: [...params.presencas].sort((a, b) =>
+      a.aula_emusys_id - b.aula_emusys_id || a.aluno_id - b.aluno_id
+    ),
+  }));
+}
+
 serve(async (req: Request) => {
   if (req.method !== "POST") return json({ erro: "metodo_nao_permitido" }, 405);
   if (!await autenticado(req)) return json({ erro: "nao_autorizado" }, 401);
@@ -295,27 +372,20 @@ serve(async (req: Request) => {
 
   const chave = chaveServiceRole();
   const tokenEmusys = Deno.env.get("EMUSYS_TOKEN_CG")?.trim();
-  if (!chave || !tokenEmusys) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
+  if (!chave || !tokenEmusys || !supabaseUrl) {
     return json({ erro: "configuracao_indisponivel" }, 503);
   }
 
   const dataInicio = hojeBrt();
   const dataFim = somarDias(dataInicio, janelaDias);
+  const leituraIniciadaEm = new Date().toISOString();
 
   try {
-    const aulasBrutas = await buscarTodasAulasEmusys<AulaEmusysPrevisualizacao>(
-      {
-        dataInicio,
-        dataFim,
-        fetchPage: ({ cursor, limite }) =>
-          buscarPaginaAulasEmusys<AulaEmusysPrevisualizacao>({
-            token: tokenEmusys,
-            dataInicio,
-            dataFim,
-            cursor,
-            limite,
-          }),
-      },
+    const aulasBrutas = await carregarFotografiaEmusys(
+      tokenEmusys,
+      dataInicio,
+      dataFim,
     );
     const aulasNormais = aulasBrutas.filter((aula) => {
       if (aula.categoria !== "normal") return false;
@@ -332,7 +402,7 @@ serve(async (req: Request) => {
       });
     }
 
-    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, chave);
+    const supabase = createClient(supabaseUrl, chave);
     const aulas = await carregarAulasLocais(supabase, dataInicio, dataFim);
     const [vinculos, presencas] = await Promise.all([
       carregarVinculosLocais(supabase, aulas),
@@ -344,27 +414,11 @@ serve(async (req: Request) => {
       vinculos,
       presencas,
     });
-    const fotografiaHash = await sha256(
-      snapshot.map((aula) => aula.emusys_id).sort((a, b) => a - b).join(","),
-    );
-
-    console.info("[previsualizacao-grade] Campo Grande concluida sem escrita");
-    return json({
-      success: true,
-      status: "ok",
-      escola_id: ESCOLA_ID_CAMPO_GRANDE,
-      unidade_id: UNIDADE_ID_CAMPO_GRANDE,
-      gerado_em: new Date().toISOString(),
-      janela: { inicio: dataInicio, fim: dataFim, dias: janelaDias },
-      fonte: {
-        aulas_brutas: aulasBrutas.length,
-        aulas_normais_agrupadas: snapshot.length,
-        fotografia_aulas_sha256: fotografiaHash,
-      },
-      local: {
-        aulas_normais_ativas: aulas.length,
-        vinculos_ativos: vinculos.length,
-      },
+    const [fotografiaHash, estadoLocalHash] = await Promise.all([
+      hashFotografiaCompleta(snapshot),
+      hashEstadoLocal({ aulas, vinculos, presencas }),
+    ]);
+    const resumos = {
       candidatas: {
         aulas_cancelar: resumirItens(resultado.candidatas.aulas_cancelar),
         vinculos_remover: resumirItens(resultado.candidatas.vinculos_remover),
@@ -380,6 +434,69 @@ serve(async (req: Request) => {
           resultado.protegidas.identidade_ambigua,
         ),
       },
+    };
+    const leituraConcluidaEm = new Date().toISOString();
+    const base = {
+      escola_id: ESCOLA_ID_CAMPO_GRANDE,
+      unidade_id: UNIDADE_ID_CAMPO_GRANDE,
+      gerado_em: leituraConcluidaEm,
+      janela: { inicio: dataInicio, fim: dataFim, dias: janelaDias },
+      regra_avaliada: "codigo_do_branch_pre_migration",
+      fonte: {
+        aulas_brutas: aulasBrutas.length,
+        aulas_normais_agrupadas: snapshot.length,
+        fotografia_completa_sha256: fotografiaHash,
+      },
+      local: {
+        aulas_normais_ativas: aulas.length,
+        vinculos_ativos: vinculos.length,
+      },
+      consistencia: {
+        leitura_local_nao_transacional: true,
+        leitura_iniciada_em: leituraIniciadaEm,
+        leitura_concluida_em: leituraConcluidaEm,
+        estado_local_sha256: estadoLocalHash,
+      },
+    };
+    const truncada = Object.values(resumos.candidatas).some((resumo) =>
+      resumo.truncada
+    ) ||
+      Object.values(resumos.protegidas).some((resumo) => resumo.truncada);
+
+    if (truncada) {
+      console.info(
+        "[previsualizacao-grade] resultado nao auditavel sem escrita",
+      );
+      return json({
+        success: false,
+        status: "resultado_nao_auditavel_truncado",
+        resultado_auditavel: false,
+        ...base,
+        candidatas: {
+          aulas_cancelar: somenteTotal(resumos.candidatas.aulas_cancelar),
+          vinculos_remover: somenteTotal(resumos.candidatas.vinculos_remover),
+        },
+        protegidas: {
+          marcacao_fechada_aula: somenteTotal(
+            resumos.protegidas.marcacao_fechada_aula,
+          ),
+          marcacao_fechada_vinculo: somenteTotal(
+            resumos.protegidas.marcacao_fechada_vinculo,
+          ),
+          identidade_ambigua: somenteTotal(
+            resumos.protegidas.identidade_ambigua,
+          ),
+        },
+      });
+    }
+
+    console.info("[previsualizacao-grade] Campo Grande concluida sem escrita");
+    return json({
+      success: true,
+      status: "ok",
+      resultado_auditavel: true,
+      ...base,
+      ...resumos,
     });
   } catch {
     console.error("[previsualizacao-grade] falha sem alteracao");

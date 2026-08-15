@@ -22,6 +22,11 @@ test('a previsualizacao remota e limitada, autenticada e sem comandos de escrita
   assert.match(edge, /buscarTodasAulasEmusys/u);
   assert.match(edge, /montarSnapshotGradeEmusys/u);
   assert.match(edge, /previsualizarReconciliacaoGrade/u);
+  assert.match(edge, /MAX_PAGINAS_EMUSYS/u);
+  assert.match(edge, /AbortSignal\.timeout/u);
+  assert.match(edge, /resultado_nao_auditavel_truncado/u);
+  assert.match(edge, /fotografia_completa_sha256/u);
+  assert.match(edge, /leitura_local_nao_transacional/u);
   assert.match(edge, /Cache-Control": "no-store"/u);
   assert.match(
     config,
