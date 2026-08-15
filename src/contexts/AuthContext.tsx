@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback, useMemo } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { recuperarSessaoRevogada } from '../lib/authSessionRecovery';
 
 export interface Usuario {
   id: number;
@@ -235,10 +236,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let authResolvida = false;
+
+    const limparEstadoAutenticacao = () => {
+      setSession(null);
+      setUser(null);
+      setUsuario(null);
+      setPerfis([]);
+      setPermissoes(new Set());
+    };
+
+    const recuperarRefreshTokenRevogado = async (erro: unknown) => {
+      const recuperou = await recuperarSessaoRevogada({
+        erro,
+        limparSessaoLocal: async () => {
+          const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
+          if (signOutError) {
+            console.warn('[Auth] Não foi possível remover a sessão local expirada:', signOutError.message);
+          }
+        },
+        limparEstado: limparEstadoAutenticacao,
+      });
+
+      if (recuperou) {
+        console.warn('[Auth] Sessão local expirada; redirecionando para novo login.');
+      }
+    };
     
     // Timeout de segurança - 15 segundos para garantir recuperação da sessão
     const safetyTimeout = setTimeout(() => {
-      if (mounted && loading) {
+      if (mounted && !authResolvida) {
         console.warn('Timeout de autenticação - forçando fim do loading');
         setLoading(false);
       }
@@ -252,7 +279,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (error || !mounted) {
           console.log('[Auth] Abortando - error ou desmontado:', { error, mounted });
-          if (mounted) setLoading(false);
+          if (error && mounted) {
+            await recuperarRefreshTokenRevogado(error);
+          }
           return;
         }
 
@@ -270,8 +299,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (error) {
+        if (mounted) {
+          await recuperarRefreshTokenRevogado(error);
+        }
         console.error('Erro ao carregar sessão:', error);
       } finally {
+        authResolvida = true;
         if (mounted) setLoading(false);
       }
     };
