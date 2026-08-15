@@ -83,28 +83,28 @@ export const PERFIS_TEXTOS: Record<string, TextoPerfil> = {
     pontoCego: 'Em compensação, pode atropelar quem precisa de mais tempo pra processar — pise no freio antes de cobrar.',
     forca: 'Empurra a situação pra frente quando ninguém toma a iniciativa',
     escorrego: 'Impaciência com quem vai devagar; pode parecer que não escuta',
-    subtitulo: (s) => `Impulso com tempero de ${s.toLowerCase()}`,
+    subtitulo: (s) => `Impulso com tempero de ${s}`,
   },
   CAZUZA: {
     reage: '<b>Lê o ambiente e conecta as pessoas</b> antes de qualquer outra coisa.',
     pontoCego: 'Por outro lado, raramente vai trazer o problema desconfortável por conta própria — pergunte diretamente em vez de esperar.',
     forca: 'Conecta o time e lê o clima antes de ninguém',
     escorrego: 'Evita o atrito necessário; demora pra trazer problema',
-    subtitulo: (s) => `Conexão com tempero de ${s.toLowerCase()}`,
+    subtitulo: (s) => `Conexão com tempero de ${s}`,
   },
   AMY: {
     reage: '<b>Mapeia tudo antes de se mover</b> e traz a resposta certa na hora certa.',
     pontoCego: 'Porém, pode parecer que está demorando demais quando o urgente bate na porta — combine checkpoints pra não sufocar.',
     forca: 'Vê o quadro inteiro e prepara antes de agir',
     escorrego: 'Paralisia por análise; custa a largar quando falta dado',
-    subtitulo: (s) => `Visão com tempero de ${s.toLowerCase()}`,
+    subtitulo: (s) => `Visão com tempero de ${s}`,
   },
   FRANK: {
     reage: '<b>Não se desestabiliza fácil</b> e traz a temperatura pra baixo quando o ambiente esquenta.',
     pontoCego: 'Dificilmente vai levantar um problema que está incomodando — pergunte diretamente em vez de esperar que apareça.',
     forca: 'Segura o barco quando o mar agita',
     escorrego: 'Calma virando inércia; evita o atrito necessário',
-    subtitulo: (s) => `Estabilidade com tempero de ${s.toLowerCase()}`,
+    subtitulo: (s) => `Estabilidade com tempero de ${s}`,
   },
 };
 
@@ -197,7 +197,7 @@ export const FALLBACK_PERFIL: TextoPerfil = {
   pontoCego: 'Em compensação, vale conversar pra entender os limites desse perfil.',
   forca: 'Perfil em mapeamento — força a confirmar',
   escorrego: 'Perfil em mapeamento — escorrego a confirmar',
-  subtitulo: (s) => `Perfil com tempero de ${s.toLowerCase()}`,
+  subtitulo: (s) => `Perfil com tempero de ${s}`,
 };
 
 export const FALLBACK_VALORIZACAO: TextoValorizacao = {

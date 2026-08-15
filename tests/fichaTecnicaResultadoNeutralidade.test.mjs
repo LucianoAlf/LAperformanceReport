@@ -48,3 +48,16 @@ test('briefing usa apelido ou primeiro nome, sem alterar o nome completo do topo
   assert.ok(timeSource.includes('ficha.nome.trim().split(/\\s+/)[0]'));
   assert.match(timeSource, /<Briefing[\s\S]*?nome=\{nomeCurto\}/);
 });
+
+test('régua mantém todos os perfis na legenda mesmo quando a contagem é zero', () => {
+  assert.match(timeSource, /Object\.keys\(PERFIL_NOMES\)/);
+  assert.match(timeSource, /contagem\[key\] \?\? 0/);
+  assert.match(timeSource, /entradasLegenda\.map/);
+  assert.match(timeSource, /const entradasBarra = entradasLegenda\.filter\(\(\[, valor\]\) => valor > 0\)/);
+  assert.doesNotMatch(timeSource, /const entries = Object\.entries\(contagem\)\.filter\(\(\[, v\]\) => v > 0\)/);
+});
+
+test('subtítulo da ficha Time preserva a capitalização do artista secundário', () => {
+  assert.doesNotMatch(perfilSource, /subtitulo: \(s\) => `[^`]*\$\{s\.toLowerCase\(\)\}`/);
+  assert.match(perfilSource, /subtitulo: \(s\) => `Estabilidade com tempero de \$\{s\}`/);
+});
