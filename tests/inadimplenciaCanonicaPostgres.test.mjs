@@ -12,6 +12,7 @@ const migrationPaths = [
   'supabase/migrations/20260816013502_inadimplencia_canonica_quarentena_identidade.sql',
   'supabase/migrations/20260816013512_financeiro_faturas_relatorios_canonicos.sql',
   'supabase/migrations/20260816020631_inadimplencia_canonica_vencimento_estrito.sql',
+  'supabase/migrations/20260816115755_inadimplencia_canonica_ignora_competencia_futura.sql',
 ].map((migration) => path.join(root, migration));
 const UNIT_A = '11111111-1111-1111-1111-111111111111';
 const UNIT_B = '22222222-2222-2222-2222-222222222222';
@@ -322,6 +323,57 @@ test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e au
       [['10000000-0000-0000-0000-000000000001', 'aberta', false]],
     );
     assert.equal(fresh.items[0].data_vencimento < fresh.as_of_date, true);
+
+    seed(container, `
+      delete from public.sync_run_items;
+      delete from public.sync_runs;
+
+      insert into public.sync_runs (
+        id, competencia, run_type, status, snapshot_complete,
+        unidades_concluidas, completed_at, stale_after
+      ) values
+        (
+          '00000000-0000-0000-0000-000000000013', ${month},
+          'live', 'succeeded', true, 3,
+          now(), now() + interval '1 hour'
+        ),
+        (
+          '00000000-0000-0000-0000-000000000014',
+          (${month} + interval '1 month')::date,
+          'live', 'succeeded', true, 3,
+          now() - interval '2 hours', now() - interval '1 hour'
+        );
+
+      insert into public.sync_run_items (
+        canonical_fatura_id, unidade_id, unidade_codigo, competencia, run_id,
+        emusys_fatura_id, emusys_matricula_id, emusys_contrato_id,
+        emusys_student_id, descricao, status, data_vencimento, valor_original,
+        desconto_condicional, juros_e_multa, source_missing
+      ) values
+        (
+          '13000000-0000-0000-0000-000000000001', '${UNIT_A}', 'CG',
+          ${month}, '00000000-0000-0000-0000-000000000013',
+          1301, 2301, 3301, 4301, 'Atraso atual', 'aberta',
+          ${day} - 2, 100, 0, 0, false
+        ),
+        (
+          '14000000-0000-0000-0000-000000000001', '${UNIT_A}', 'CG',
+          (${month} + interval '1 month')::date,
+          '00000000-0000-0000-0000-000000000014',
+          1401, 2401, 3401, 4401, 'Fatura futura stale', 'aberta',
+          ${day} + 20, 200, 0, 0, false
+        );
+    `, 'cenario 1a: competencia futura nao bloqueia inadimplencia');
+
+    const futureStale = jsonFrom(
+      callAs(container, 'authenticated', UNIT_A, asOfDate),
+      'cenario 1a: competencia futura stale ignorada',
+    );
+    assert.equal(futureStale.status, 'ok');
+    assert.equal(futureStale.freshness.competencias_necessarias, 1);
+    assert.equal(futureStale.freshness.competencias_stale, 0);
+    assert.equal(futureStale.items.length, 1);
+    assert.equal(futureStale.items[0].canonical_fatura_id, '13000000-0000-0000-0000-000000000001');
 
     seed(container, `
       delete from public.sync_run_items;
