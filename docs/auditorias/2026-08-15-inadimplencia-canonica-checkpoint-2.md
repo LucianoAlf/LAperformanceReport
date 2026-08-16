@@ -6,7 +6,7 @@ Branch: `fix/inadimplencia-canonica-frescor`
 
 ## Contrato publicado no código
 
-`public.get_inadimplencia_canonica(uuid, integer, date)` devolve uma linha por
+`public.get_inadimplencia_canonica(uuid, date)` devolve uma linha por
 fatura canônica e expõe:
 
 - `status`: `ok`, `incomplete` ou `stale`;
@@ -23,6 +23,8 @@ fatura canônica e expõe:
 Se qualquer competência conhecida com fatura aberta ou indeterminada não tiver
 um `live` completo recente, a função retorna `status = 'stale'`, zera os totais
 e devolve `items = []`. O snapshot antigo não é servido silenciosamente.
+O limite é o `sync_runs.stale_after` gravado pelo sync; não há parâmetro de
+caller que possa ampliar essa janela.
 
 ## Evidência
 

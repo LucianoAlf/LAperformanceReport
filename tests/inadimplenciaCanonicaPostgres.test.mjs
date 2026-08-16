@@ -73,7 +73,6 @@ function callAs(container, role, unitId, asOfDate, authUnitId = UNIT_A) {
     set app.test_unidade_id = '${authUnitId}';
     select public.get_inadimplencia_canonica(
       '${unitId}'::uuid,
-      30,
       date '${asOfDate}'
     )::text;
   `);
@@ -102,7 +101,8 @@ const fixtureSchema = `
   );
 
   create table public.sync_run_items (
-    canonical_fatura_id uuid primary key,
+    id bigint generated always as identity primary key,
+    canonical_fatura_id uuid not null,
     unidade_id uuid not null references public.unidades(id),
     unidade_codigo text not null,
     competencia date not null,
@@ -316,7 +316,7 @@ test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e au
         '00000000-0000-0000-0000-000000000003',
         ${month},
         'live', 'succeeded', true, 3,
-        now() - interval '2 hours', now() + interval '1 day'
+        now() - interval '2 hours', now() - interval '90 minutes'
       );
 
       insert into public.sync_run_items (
@@ -329,7 +329,13 @@ test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e au
         ${month},
         '00000000-0000-0000-0000-000000000003',
         1201, 2201, 3201, 4201, 'Snapshot velho', 'aberta',
-          ${day} - 3, 100, 0, false
+        ${day} - 3, 100, 0, false
+      ), (
+        '30000000-0000-0000-0000-000000000002', '${UNIT_A}', 'CG',
+        ${month},
+        '00000000-0000-0000-0000-000000000003',
+        1202, 2202, 3202, 4202, 'Ausente em snapshot velho', 'aberta',
+        ${day} - 3, 100, 0, true
       );
     `, 'cenario 3: snapshot antigo');
 
@@ -339,6 +345,7 @@ test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e au
     );
     assert.equal(stale.status, 'stale');
     assert.equal(stale.freshness.competencias_stale, 1);
+    assert.equal(stale.reconciliation.source_missing_count, 1);
     assert.deepEqual(stale.items, []);
     assert.equal(stale.totals.total_faturas, 0);
 
@@ -362,10 +369,16 @@ test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e au
         desconto_condicional, juros_e_multa, source_missing
       ) values (
         '40000000-0000-0000-0000-000000000001', '${UNIT_A}', 'CG',
-          ${month},
+        ${month},
         '00000000-0000-0000-0000-000000000004',
         1301, 2301, 3301, 4301, 'Formula pro rata', 'aberta',
-          ${day} - 30, 100, 0, 0, false
+        ${day} - 30, 100, 0, 0, false
+      ), (
+        '40000000-0000-0000-0000-000000000001', '${UNIT_A}', 'CG',
+        ${month},
+        '00000000-0000-0000-0000-000000000004',
+        1302, 2302, 3302, 4302, 'Duplicata da mesma fatura', 'aberta',
+        ${day} - 30, 100, 0, 0, false
       );
     `, 'cenario 4: formula de juros');
 
@@ -373,6 +386,9 @@ test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e au
       callAs(container, 'authenticated', UNIT_A, asOfDate),
       'cenario 4: leitura com formula de juros',
     );
+    assert.equal(interest.status, 'incomplete');
+    assert.equal(interest.reconciliation.duplicate_fatura_count, 1);
+    assert.equal(interest.items.length, 1);
     assert.equal(interest.items[0].dias_atraso, 30);
     assert.equal(interest.items[0].multa_pct, 0.02);
     assert.equal(interest.items[0].mora_pct_mes, 0.01);

@@ -15,8 +15,7 @@
 
 create or replace function public.get_inadimplencia_canonica(
   p_unidade_id uuid default null,
-  p_max_age_minutes integer default 30,
-  p_as_of_date date default current_date
+  p_as_of_date date default (now() at time zone 'America/Sao_Paulo')::date
 ) returns jsonb
 language plpgsql
 stable
@@ -28,12 +27,6 @@ declare
   v_is_admin boolean := false;
   v_result jsonb;
 begin
-  if p_max_age_minutes is null or p_max_age_minutes < 1 or p_max_age_minutes > 1440 then
-    raise exception using
-      errcode = '22023',
-      message = 'p_max_age_minutes deve estar entre 1 e 1440';
-  end if;
-
   if p_as_of_date is null or p_as_of_date > (now() at time zone 'America/Sao_Paulo')::date then
     raise exception using
       errcode = '22023',
@@ -94,22 +87,16 @@ begin
            ur.completed_at,
            case
              when ur.id is null then null::timestamptz
-             else least(
-               ur.stale_after,
-               ur.completed_at + make_interval(mins => p_max_age_minutes)
-             )
+             else ur.stale_after
            end as fresh_until,
            (
              ur.id is not null
-             and now() <= least(
-               ur.stale_after,
-               ur.completed_at + make_interval(mins => p_max_age_minutes)
-             )
+             and now() <= ur.stale_after
            ) as is_fresh
     from competencias_necessarias cn
     left join ultimo_run_por_competencia ur on ur.competencia = cn.competencia
   ),
-  itens_confirmados as (
+  itens_confirmados_raw as (
     select i.canonical_fatura_id,
            i.unidade_id,
            i.unidade_codigo,
@@ -146,6 +133,24 @@ begin
       and i.source_missing is false
       and i.data_vencimento <= p_as_of_date
   ),
+  itens_confirmados as (
+    select r.*
+    from (
+      select r.*,
+             row_number() over (
+               partition by r.unidade_id, r.canonical_fatura_id
+               order by r.competencia desc, r.data_vencimento, r.emusys_fatura_id
+             ) as rn
+      from itens_confirmados_raw r
+    ) r
+    where r.rn = 1
+  ),
+  duplicatas_confirmadas as (
+    select unidade_id, canonical_fatura_id, count(*)::integer as linhas
+    from itens_confirmados_raw
+    group by unidade_id, canonical_fatura_id
+    having count(*) > 1
+  ),
   itens_indeterminados as (
     select i.canonical_fatura_id,
            i.unidade_id,
@@ -166,8 +171,7 @@ begin
       on i.run_id = f.run_id
      and i.unidade_id = f.unidade_id
      and i.competencia = f.competencia
-    where f.is_fresh
-      and i.source_missing is true
+      where i.source_missing is true
   ),
   resumo_itens as (
     select count(*)::integer as total_faturas,
@@ -189,12 +193,17 @@ begin
   resumo_indeterminado as (
     select count(*)::integer as source_missing_count
     from itens_indeterminados
+  ),
+  resumo_integridade as (
+    select count(*)::integer as duplicate_fatura_count
+    from duplicatas_confirmadas
   )
   select jsonb_build_object(
     'schema_version', 1,
     'status', case
       when rf.competencias_stale > 0 then 'stale'
       when ri.source_missing_count > 0 then 'incomplete'
+      when rint.duplicate_fatura_count > 0 then 'incomplete'
       else 'ok'
     end,
     'fonte', 'sync_run_items',
@@ -202,7 +211,7 @@ begin
     'unidade_id', p_unidade_id,
     'as_of_date', p_as_of_date,
     'freshness', jsonb_build_object(
-      'max_age_minutes', p_max_age_minutes,
+      'policy', 'sync_runs.stale_after',
       'competencias_necessarias', rf.competencias_necessarias,
       'competencias_frescas', rf.competencias_frescas,
       'competencias_stale', rf.competencias_stale,
@@ -221,8 +230,20 @@ begin
       ), '[]'::jsonb)
     ),
     'reconciliation', jsonb_build_object(
-      'status', case when ri.source_missing_count > 0 then 'pending' else 'clear' end,
+      'status', case
+        when ri.source_missing_count > 0 or rint.duplicate_fatura_count > 0 then 'pending'
+        else 'clear'
+      end,
       'source_missing_count', ri.source_missing_count,
+      'duplicate_fatura_count', rint.duplicate_fatura_count,
+      'duplicate_invoices', coalesce((
+        select jsonb_agg(jsonb_build_object(
+          'unidade_id', d.unidade_id,
+          'canonical_fatura_id', d.canonical_fatura_id,
+          'linhas', d.linhas
+        ) order by d.unidade_id, d.canonical_fatura_id)
+        from duplicatas_confirmadas d
+      ), '[]'::jsonb),
       'unknown_invoices', coalesce((
         select jsonb_agg(jsonb_build_object(
           'canonical_fatura_id', i.canonical_fatura_id,
@@ -294,16 +315,17 @@ begin
   into v_result
   from resumo_frescor rf
   cross join resumo_itens rs
-  cross join resumo_indeterminado ri;
+  cross join resumo_indeterminado ri
+  cross join resumo_integridade rint;
 
   return v_result;
 end;
 $function$;
 
-comment on function public.get_inadimplencia_canonica(uuid, integer, date)
+comment on function public.get_inadimplencia_canonica(uuid, date)
 is 'Leitura canônica por fatura/matrícula; falha fechada em snapshot stale, source_missing é reconciliação pendente e juros seguem multa 2% + mora 1% ao mês pro rata die.';
 
-revoke all on function public.get_inadimplencia_canonica(uuid, integer, date)
+revoke all on function public.get_inadimplencia_canonica(uuid, date)
   from public, anon;
-grant execute on function public.get_inadimplencia_canonica(uuid, integer, date)
+grant execute on function public.get_inadimplencia_canonica(uuid, date)
   to authenticated, service_role;
