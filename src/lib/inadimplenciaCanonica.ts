@@ -274,6 +274,8 @@ function normalizeV2(root: Record<string, unknown>): InadimplenciaCanonicaState 
     return errorState();
   }
 
+  if (status === 'error') return errorState(scalarError(root) ?? invalidResponseMessage);
+
   const items = normalizeItems(root.items);
   if (!items) return errorState();
 
@@ -288,7 +290,7 @@ function normalizeV2(root: Record<string, unknown>): InadimplenciaCanonicaState 
     'blocked',
     [],
     [],
-    status === 'error' ? scalarError(root) ?? invalidResponseMessage : null,
+    null,
   );
 }
 

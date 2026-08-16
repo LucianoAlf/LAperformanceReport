@@ -212,6 +212,51 @@ Deno.test('rollout v2 mantem somente ok permitido e nunca sintetiza partial', ()
   ]);
 });
 
+Deno.test('erro v2 descarta totais, reconciliacao e itens maliciosos', () => {
+  const result = normalizarInadimplenciaCanonica(payloadV2({
+    status: 'error',
+    error: 'unsupported_invoice_status',
+    totals: {
+      total_faturas: 99,
+      total_matriculas: 88,
+      total_original: 777.77,
+      total_atualizado: 888.88,
+      maior_atraso: 66,
+    },
+    reconciliation: {
+      source_missing_count: 5,
+      source_missing_open_count: 3,
+      source_missing_other_count: 2,
+      duplicate_fatura_count: 4,
+      invalid_identity_invoice_count: 6,
+      validation_issue_count: 7,
+    },
+    items: [item()],
+  }));
+
+  assertEquals(result.status, 'error');
+  assertEquals(result.erro, 'unsupported_invoice_status');
+  assertEquals([result.collectionAllowed, result.collectionScope, result.blockReasons, result.items], [
+    false,
+    'blocked',
+    [],
+    [],
+  ]);
+  assertEquals([
+    result.totalFaturas,
+    result.totalMatriculas,
+    result.totalOriginal,
+    result.totalAtualizado,
+    result.maiorAtraso,
+    result.sourceMissingCount,
+    result.sourceMissingOpenCount,
+    result.sourceMissingOtherCount,
+    result.duplicateFaturaCount,
+    result.invalidIdentityInvoiceCount,
+    result.validationIssueCount,
+  ], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+});
+
 Deno.test('contagens source missing abertas e outras nao entram nos totais ou indice financeiro', () => {
   const result = normalizarInadimplenciaCanonica(payloadV3({
     reconciliation: {
