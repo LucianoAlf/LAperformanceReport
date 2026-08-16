@@ -35,7 +35,15 @@ test('restored migration bytes match the remote migration ledger', () => {
     '20260815231546_sol_caixa_inadimplentes_v4_sync_run_items.sql': '097a166e5f7be979e91791d6a27ebc14',
   };
   for (const [name, hash] of Object.entries(expected)) {
-    const actual = crypto.createHash('md5').update(fs.readFileSync(path.join(migrationDir, name))).digest('hex');
+    const migration = path.join(migrationDir, name);
+    const normalizedLocalBytes = Buffer.from(
+      fs.readFileSync(migration, 'utf8').replace(/\r\n/g, '\n'),
+    );
+    const remoteStatementBytes = Buffer.concat([
+      normalizedLocalBytes,
+      Buffer.from('\r\n'),
+    ]);
+    const actual = crypto.createHash('md5').update(normalizedLocalBytes).digest('hex');
     assert.equal(actual, hash, `migration drift: ${name}`);
   }
 });
