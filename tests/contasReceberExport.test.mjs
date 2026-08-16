@@ -7,6 +7,7 @@ import {
   buildManifest,
   validateCompetencia,
 } from '../supabase/functions/_shared/contasReceberExport.ts';
+import { prepararExportacaoInadimplenciaCanonica } from '../supabase/functions/_shared/inadimplenciaCanonicaExport.ts';
 
 const UNIDADE_CG = '2ec861f6-023f-4d7b-9927-3960ad8c2a92';
 const UNIDADE_REC = '95553e96-971b-4590-a6eb-0201d013c14d';
@@ -76,6 +77,12 @@ const cursos = [
   { id: 9, nome: 'Canto' },
 ];
 
+const exportFunctionSource = readFileSync(
+  new URL('../supabase/functions/export-contas-receber/index.ts', import.meta.url),
+  'utf8',
+);
+const supabaseConfig = readFileSync(new URL('../supabase/config.toml', import.meta.url), 'utf8');
+
 test('competencia e obrigatoria e normalizada para o primeiro dia do mes', () => {
   assert.equal(validateCompetencia('2026-07-01'), '2026-07-01');
   assert.throws(() => validateCompetencia('2026-07-10'), /competencia/i);
@@ -102,14 +109,21 @@ test('join por unidade e matricula preserva uma linha por fatura e explicita dup
 });
 
 test('fronteira Data API converte ids bigint para texto antes do JavaScript', () => {
-  const source = readFileSync(
-    new URL('../supabase/functions/export-contas-receber/index.ts', import.meta.url),
-    'utf8',
-  );
+  assert.match(exportFunctionSource, /emusys_fatura_id::text/);
+  assert.match(exportFunctionSource, /emusys_matricula_id::text/);
+  assert.match(exportFunctionSource, /emusys_student_id::text/);
+});
 
-  assert.match(source, /emusys_fatura_id::text/);
-  assert.match(source, /emusys_matricula_id::text/);
-  assert.match(source, /emusys_student_id::text/);
+test('modo snapshot, autenticacao propria e respostas 400 ou 409 permanecem preservados', () => {
+  assert.match(exportFunctionSource, /x-super-folha-sync-secret/);
+  assert.match(exportFunctionSource, /safeEqual\(supplied,\s*INTERNAL_SECRET\)/);
+  assert.match(exportFunctionSource, /body\.modo\s*\?\?\s*['"]snapshot['"]/);
+  assert.match(exportFunctionSource, /modo deve ser snapshot ou inadimplencia[\s\S]*?400/);
+  assert.match(exportFunctionSource, /leitura canonica indisponivel[\s\S]*?409/);
+  assert.match(
+    supabaseConfig,
+    /\[functions\.export-contas-receber\][\s\S]*?verify_jwt\s*=\s*false/,
+  );
 });
 
 test('exportador rejeita identificador numerico fora da faixa segura', async () => {
@@ -183,4 +197,80 @@ test('hash canonico ignora ids tecnicos de run/item e reage ao estado de ausenci
     cursos,
   });
   assert.notEqual(rows[0].row_source_hash, rowsWithMissingReasonChanged[0].row_source_hash);
+});
+
+test('exportacao canonica rejeita source_missing em vez de transforma-lo em cobranca', async () => {
+  const freshUntil = '2026-08-16T13:00:00.000Z';
+  const canonical = {
+    schema_version: 3,
+    status: 'partial',
+    fonte: 'sync_run_items',
+    avaliado_em: '2026-08-16T11:31:00.000Z',
+    unidade_id: UNIDADE_CG,
+    as_of_date: '2026-08-16',
+    policy: { delinquency_rule: 'd_plus_0', collection_grace_days: 2 },
+    operational: {
+      collection_allowed: true,
+      collection_scope: 'confirmed_only',
+      consumer_must_apply_collection_grace: true,
+      block_reasons: [],
+    },
+    freshness: {
+      competencias_necessarias: 1,
+      competencias_frescas: 1,
+      competencias_stale: 0,
+      fresh_until: freshUntil,
+    },
+    reconciliation: {
+      status: 'pending',
+      source_missing_count: 1,
+      source_missing_open_count: 1,
+      source_missing_other_count: 0,
+      duplicate_fatura_count: 0,
+      invalid_identity_invoice_count: 0,
+      contact_resolution_pending_count: 0,
+      validation_issue_count: 0,
+    },
+    totals: {
+      total_faturas: 1,
+      total_matriculas: 1,
+      total_original: 447,
+      total_atualizado: 457.58,
+      maior_atraso: 11,
+    },
+    items: [{
+      canonical_fatura_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
+      unidade_id: UNIDADE_CG,
+      unidade_codigo: 'CG',
+      competencia: '2026-08-01',
+      run_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
+      sync_completed_at: '2026-08-16T11:30:00.000Z',
+      sync_fresh_until: freshUntil,
+      emusys_fatura_id: '1001',
+      emusys_matricula_id: '2001',
+      emusys_contrato_id: '3001',
+      aluno_id_canonico: 10,
+      contact_resolution_status: 'resolved',
+      descricao: 'Parcela 08/2026',
+      status: 'aberta',
+      data_vencimento: '2026-08-05',
+      data_pagamento: null,
+      dias_atraso: 11,
+      valor_original: 447,
+      desconto_condicional_perdido: 40,
+      multa_pct: 0.02,
+      mora_pct_mes: 0.01,
+      valor_atualizado: 457.58,
+      source_missing: true,
+    }],
+  };
+
+  await assert.rejects(
+    () => prepararExportacaoInadimplenciaCanonica(canonical, {
+      unidadeId: UNIDADE_CG,
+      asOfDate: '2026-08-16',
+      agoraMs: Date.parse('2026-08-16T12:00:00.000Z'),
+    }),
+    /leitura canonica indisponivel/i,
+  );
 });

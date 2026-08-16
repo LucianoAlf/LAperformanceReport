@@ -3,6 +3,10 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const exportador = readFileSync('supabase/functions/export-contas-receber/index.ts', 'utf8');
+const exportadorCanonico = readFileSync(
+  'supabase/functions/_shared/inadimplenciaCanonicaExport.ts',
+  'utf8',
+);
 const farmerHook = readFileSync(
   'src/components/App/Administrativo/PainelFarmer/hooks/useAlertas.ts',
   'utf8',
@@ -23,9 +27,13 @@ const latestSolInadimplenciaMigration = solInadimplenciaMigrations.at(-1);
 test('exportacao de inadimplencia consome a RPC canonica e bloqueia leitura nao confiavel', () => {
   assert.match(exportador, /modo\s*===\s*['"]inadimplencia['"]/);
   assert.match(exportador, /\.rpc\(\s*['"]get_inadimplencia_canonica['"]/);
-  assert.match(exportador, /status\s*!==\s*['"]ok['"]/);
-  assert.match(exportador, /valor_atualizado/);
-  assert.match(exportador, /fresh_until/);
+  assert.match(exportador, /prepararExportacaoInadimplenciaCanonica/);
+  assert.doesNotMatch(exportador, /status\s*!==\s*['"]ok['"]/);
+  assert.match(exportadorCanonico, /collection_allowed/);
+  assert.match(exportadorCanonico, /collection_scope/);
+  assert.match(exportadorCanonico, /valor_atualizado/);
+  assert.match(exportadorCanonico, /fresh_until/);
+  assert.doesNotMatch(exportadorCanonico, /unknown_invoices/);
 });
 
 test('exportacao de snapshot sinaliza frescor e nao serve stale por padrao', () => {

@@ -5,12 +5,12 @@ import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supa
 import {
   buildExportRows,
   buildManifest,
-  sha256,
   validateCompetencia,
   type AlunoSource,
   type CursoSource,
   type FaturaSource,
 } from '../_shared/contasReceberExport.ts';
+import { prepararExportacaoInadimplenciaCanonica } from '../_shared/inadimplenciaCanonicaExport.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -193,78 +193,10 @@ async function readCanonicalDelinquency(
     ...(asOfDate ? { p_as_of_date: asOfDate } : {}),
   });
   if (error) throw error;
-
-  const payload = typeof data === 'string' ? JSON.parse(data) : data;
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    throw new Error('leitura canonica retornou payload invalido');
-  }
-  const canonical = payload as Record<string, unknown>;
-  const status = String(canonical.status ?? 'error');
-  if (status !== 'ok') {
-    throw new Error(`leitura canonica indisponivel: status ${status}`);
-  }
-
-  const freshness = canonical.freshness && typeof canonical.freshness === 'object'
-    ? canonical.freshness as Record<string, unknown>
-    : {};
-  const items = Array.isArray(canonical.items)
-    ? canonical.items.map((value) => {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        throw new Error('leitura canonica retornou item invalido');
-      }
-      const item = value as Record<string, unknown>;
-      return {
-        canonical_fatura_id: nullableString(item.canonical_fatura_id),
-        unidade_id: nullableString(item.unidade_id),
-        unidade_codigo: nullableString(item.unidade_codigo),
-        competencia: nullableString(item.competencia),
-        emusys_fatura_id: nullableString(item.emusys_fatura_id),
-        emusys_matricula_id: nullableString(item.emusys_matricula_id),
-        emusys_student_id: nullableString(item.emusys_student_id),
-        descricao: nullableString(item.descricao),
-        status: 'aberta',
-        source_missing: false,
-        data_vencimento: nullableString(item.data_vencimento),
-        dias_atraso: Number(item.dias_atraso ?? 0),
-        valor_original: Number(item.valor_original ?? 0),
-        valor_atualizado: Number(item.valor_atualizado ?? 0),
-        multa_pct: Number(item.multa_pct ?? 0.02),
-        mora_pct_mes: Number(item.mora_pct_mes ?? 0.01),
-        sync_completed_at: nullableString(item.sync_completed_at),
-        sync_fresh_until: nullableString(item.sync_fresh_until),
-      };
-    }).sort((left, right) => String(left.canonical_fatura_id ?? '')
-      .localeCompare(String(right.canonical_fatura_id ?? '')))
-    : [];
-  const freshUntil = nullableString(freshness.fresh_until);
-  if (freshUntil) {
-    const freshUntilMs = new Date(freshUntil).getTime();
-    if (!Number.isFinite(freshUntilMs) || Date.now() > freshUntilMs) {
-      throw new Error('leitura canonica indisponivel: frescor expirou durante a exportacao');
-    }
-  }
-
-  return {
-    itens: items,
-    manifesto: {
-      modo: 'inadimplencia',
-      schema_version: canonical.schema_version ?? null,
-      fonte: canonical.fonte ?? 'sync_run_items',
-      unidade_id: unidadeId,
-      as_of_date: canonical.as_of_date ?? asOfDate,
-      avaliado_em: canonical.avaliado_em ?? null,
-      fresh_until: freshUntil,
-      is_fresh: true,
-      totals: canonical.totals ?? {},
-      manifest_hash: await sha256({
-        schema_version: canonical.schema_version ?? null,
-        unidade_id: unidadeId,
-        as_of_date: canonical.as_of_date ?? asOfDate,
-        fresh_until: freshUntil,
-        items,
-      }),
-    },
-  };
+  return prepararExportacaoInadimplenciaCanonica(data, {
+    unidadeId,
+    asOfDate,
+  });
 }
 
 serve(async (request) => {
