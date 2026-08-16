@@ -9,6 +9,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const migrationPaths = [
   'supabase/migrations/20260816003732_inadimplencia_canonica_frescor.sql',
   'supabase/migrations/20260816004257_inadimplencia_canonica_dedupe_global.sql',
+  'supabase/migrations/20260816020000_inadimplencia_canonica_quarentena_identidade.sql',
 ].map((migration) => path.join(root, migration));
 const UNIT_A = '11111111-1111-1111-1111-111111111111';
 const UNIT_B = '22222222-2222-2222-2222-222222222222';
@@ -132,7 +133,8 @@ const fixtureSchema = `
     juros_e_multa numeric(12, 2),
     source_missing boolean not null default false,
     source_missing_reason text,
-    source_missing_detected_at timestamptz
+    source_missing_detected_at timestamptz,
+    payload jsonb not null default '{}'::jsonb
   );
 
   create function auth.role()
@@ -265,6 +267,64 @@ test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e au
       [['10000000-0000-0000-0000-000000000001', 'aberta', false]],
     );
     assert.equal(fresh.items[0].data_vencimento <= fresh.as_of_date, true);
+
+    seed(container, `
+      delete from public.sync_run_items;
+      delete from public.sync_runs;
+
+      insert into public.sync_runs (
+        id, competencia, run_type, status, snapshot_complete,
+        unidades_concluidas, completed_at, stale_after
+      ) values (
+        '00000000-0000-0000-0000-000000000007',
+        ${month},
+        'live', 'succeeded', true, 3, now(), now() + interval '1 hour'
+      );
+
+      insert into public.sync_run_items (
+        canonical_fatura_id, unidade_id, unidade_codigo, competencia, run_id,
+        emusys_fatura_id, emusys_matricula_id, emusys_contrato_id,
+        emusys_student_id, descricao, status, data_vencimento, valor_original,
+        desconto_condicional, juros_e_multa, source_missing, payload
+      ) values
+        (
+          '70000000-0000-0000-0000-000000000001', '${UNIT_A}', 'CG',
+          ${month}, '00000000-0000-0000-0000-000000000007',
+          1701, null, 3701, 4701, 'Matricula invalida na origem', 'aberta',
+          ${day} - 2, 100, 0, 0, false,
+          jsonb_build_object(
+            '_la_report', jsonb_build_object(
+              'validation_issues', jsonb_build_array(jsonb_build_object(
+                'field', 'matricula_id',
+                'code', 'invalid_optional_identifier',
+                'raw_value', 'matricula-invalida'
+              ))
+            )
+          )
+        ),
+        (
+          '70000000-0000-0000-0000-000000000002', '${UNIT_A}', 'CG',
+          ${month}, '00000000-0000-0000-0000-000000000007',
+          1702, 2702, 3702, 4702, 'Fatura valida no mesmo snapshot', 'aberta',
+          ${day} - 2, 200, 0, 0, false, '{}'::jsonb
+        );
+    `, 'cenario 1c: identificador opcional invalido auditado');
+
+    const invalidIdentity = jsonFrom(
+      callAs(container, 'authenticated', UNIT_A, asOfDate),
+      'cenario 1c: leitura bloqueada por identidade invalida',
+    );
+    assert.equal(invalidIdentity.status, 'incomplete');
+    assert.equal(invalidIdentity.reconciliation.status, 'pending');
+    assert.equal(invalidIdentity.reconciliation.validation_issue_count, 1);
+    assert.equal(invalidIdentity.reconciliation.invalid_identity_invoice_count, 1);
+    assert.equal(invalidIdentity.reconciliation.invalid_identity_invoices.length, 1);
+    assert.equal(
+      invalidIdentity.reconciliation.invalid_identity_invoices[0].validation_issues[0].field,
+      'matricula_id',
+    );
+    assert.deepEqual(invalidIdentity.items, []);
+    assert.equal(invalidIdentity.totals.total_faturas, 0);
 
     seed(container, `
       delete from public.sync_run_items;

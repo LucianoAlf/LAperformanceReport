@@ -8,6 +8,7 @@ const root = process.cwd();
 const migrations = [
   path.join(root, 'supabase', 'migrations', '20260816003732_inadimplencia_canonica_frescor.sql'),
   path.join(root, 'supabase', 'migrations', '20260816004257_inadimplencia_canonica_dedupe_global.sql'),
+  path.join(root, 'supabase', 'migrations', '20260816020000_inadimplencia_canonica_quarentena_identidade.sql'),
 ];
 
 function sql() {
@@ -24,7 +25,7 @@ test('canonical migration files match the remote migration ledger bytes', () => 
     ['20260816004257_inadimplencia_canonica_dedupe_global.sql', 'badcb830c5475154f83a6dddf8c9af43'],
   ]);
 
-  for (const migration of migrations) {
+  for (const migration of migrations.slice(0, 2)) {
     const remoteStatementBytes = Buffer.concat([
       fs.readFileSync(migration),
       Buffer.from('\r\n'),
@@ -69,6 +70,15 @@ test('canonical reader exposes unknown source_missing rows instead of calling th
   assert.match(source, /source_missing.*true|is\s+true.*source_missing/is);
   assert.match(source, /incomplete|reconciliation|reconcili/i);
   assert.doesNotMatch(source, /source_missing[^\n]*pago|pago[^\n]*source_missing/i);
+});
+
+test('canonical reader quarantines optional invalid identifiers instead of charging them', () => {
+  const source = effectiveSql();
+  assert.match(source, /payload\s*#>\s*'\{_la_report,validation_issues\}'/i);
+  assert.match(source, /jsonb_array_length/i);
+  assert.match(source, /validation_issue_count/i);
+  assert.match(source, /invalid_identity_invoices/i);
+  assert.match(source, /tem_identidade_invalida/i);
 });
 
 test('canonical reader has explicit authenticated/service-role authorization and no Sol operational RPCs', () => {
