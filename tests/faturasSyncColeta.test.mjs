@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   coletarFaturasUnidade,
+  EmusysRateLimitError,
   GlobalRateLimiter,
   mapFatura,
   REQUEST_INTERVAL_MS,
@@ -61,6 +62,31 @@ test('mapeia IDs bigint como texto e bloqueia ID, data ou competencia invalidos'
   assert.throws(() => mapFatura(rawFatura({ id: 'x1' }), 'cg', UNIDADE, COMPETENCIA), /identificador.*invalido/i);
   assert.throws(() => mapFatura(rawFatura({ data_vencimento: '2026-02-31' }), 'cg', UNIDADE, COMPETENCIA), /data.*invalida/i);
   assert.throws(() => mapFatura(rawFatura({ data_vencimento: '2026-07-10' }), 'cg', UNIDADE, COMPETENCIA), /competencia/i);
+});
+
+test('preserva a fatura e audita identificadores opcionais invalidos', () => {
+  const mapped = mapFatura(rawFatura({
+    matricula_id: 'matricula-invalida',
+    contrato_id: 0,
+    aluno_id: -88,
+  }), 'cg', UNIDADE, COMPETENCIA);
+
+  assert.equal(mapped.emusys_fatura_id, '9007199254740993');
+  assert.equal(mapped.emusys_matricula_id, null);
+  assert.equal(mapped.emusys_contrato_id, null);
+  assert.equal(mapped.emusys_student_id, null);
+  assert.deepEqual(
+    mapped.validation_issues.map((issue) => [issue.field, issue.code, issue.raw_value]),
+    [
+      ['matricula_id', 'invalid_optional_identifier', 'matricula-invalida'],
+      ['contrato_id', 'invalid_optional_identifier', '0'],
+      ['aluno_id', 'invalid_optional_identifier', '-88'],
+    ],
+  );
+  assert.deepEqual(
+    mapped.payload._la_report.validation_issues,
+    mapped.validation_issues,
+  );
 });
 
 test('coleta todas as paginas completas e limita globalmente a 50 requisicoes por minuto', async () => {
@@ -145,23 +171,34 @@ test('bloqueia IDs duplicados dentro da unidade', async () => {
   );
 });
 
-test('429 respeita Retry-After e refaz a chamada', async () => {
+test('429 respeita Retry-After e devolve o controle para o backoff persistente', async () => {
   const clock = fakeClock();
   const limiter = new GlobalRateLimiter(REQUEST_INTERVAL_MS, clock.sleep, clock.now);
-  const responses = [
-    jsonResponse({ erro: 'limite' }, { status: 429, headers: { 'Retry-After': '2' } }),
-    jsonResponse({ items: [rawFatura()], paginacao: { tem_mais: false, proximo_cursor: null } }),
-  ];
-  const result = await coletarFaturasUnidade({
-    apiBaseUrl: 'https://api.example/v1',
-    competencia: COMPETENCIA,
-    unidadeCodigo: 'cg',
-    unidade: UNIDADE,
-    limiter,
-    sleepFn: clock.sleep,
-    fetchFn: async () => responses.shift(),
-  });
+  let calls = 0;
 
-  assert.equal(result.rows.length, 1);
-  assert.ok(clock.sleeps.includes(2000));
+  await assert.rejects(
+    () => coletarFaturasUnidade({
+      apiBaseUrl: 'https://api.example/v1',
+      competencia: COMPETENCIA,
+      unidadeCodigo: 'cg',
+      unidade: UNIDADE,
+      limiter,
+      sleepFn: clock.sleep,
+      fetchFn: async () => {
+        calls += 1;
+        return jsonResponse(
+          { erro: 'limite' },
+          { status: 429, headers: { 'Retry-After': '2' } },
+        );
+      },
+    }),
+    (error) => (
+      error instanceof EmusysRateLimitError
+      && error.code === 'EMUSYS_RATE_LIMIT'
+      && error.retryAfterMs === 2000
+    ),
+  );
+
+  assert.equal(calls, 1);
+  assert.deepEqual(clock.sleeps, []);
 });
