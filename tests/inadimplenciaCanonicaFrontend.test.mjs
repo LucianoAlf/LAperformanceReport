@@ -63,11 +63,13 @@ test('consumidores da lista usam o helper operacional e partial nao depende de s
 test('banner separa leitura financeira D+0 e quarentenas sem contaminar totais', () => {
   assert.match(tabelaAlunos, /totalMatriculas/);
   assert.match(tabelaAlunos, /inadimplências confirmadas \(D\+0\) — leitura financeira disponível/u);
+  assert.doesNotMatch(tabelaAlunos, /fora da cobrança/iu);
+  assert.match(tabelaAlunos, /Contato operacional somente na carteira amigável D\+2 \(Farmer\)/u);
   assert.match(tabelaAlunos, /sourceMissingCount/);
-  assert.match(tabelaAlunos, /faturas aguardando reconciliação — fora da cobrança/u);
+  assert.match(tabelaAlunos, /faturas aguardando reconciliação — não incluídas nos totais confirmados/u);
   assert.match(tabelaAlunos, /invalidIdentityInvoiceCount/);
   assert.match(tabelaAlunos, /validationIssueCount/);
-  assert.match(tabelaAlunos, /fatura\(s\) com identidade inválida aguardando conciliação — fora da cobrança/u);
+  assert.match(tabelaAlunos, /fatura\(s\) com identidade inválida aguardando conciliação — não incluída\(s\) nos totais confirmados/u);
   assert.doesNotMatch(tabelaAlunos, /inadimplências confirmadas[^\n]*cobrança liberada/iu);
 
   const confirmedSection = tabelaAlunos.match(/const inadimplenciaConfirmada[\s\S]*?const reconciliacaoPendente/)?.[0] ?? '';
@@ -77,8 +79,8 @@ test('banner separa leitura financeira D+0 e quarentenas sem contaminar totais',
   assert.doesNotMatch(confirmedSection, /sourceMissingCount/);
   assert.doesNotMatch(confirmedSection, /invalidIdentityInvoiceCount|validationIssueCount/);
 
-  const sourcePhraseIndex = tabelaAlunos.indexOf('faturas aguardando reconciliação — fora da cobrança');
-  const invalidPhraseIndex = tabelaAlunos.indexOf('fatura(s) com identidade inválida aguardando conciliação — fora da cobrança');
+  const sourcePhraseIndex = tabelaAlunos.indexOf('faturas aguardando reconciliação — não incluídas nos totais confirmados');
+  const invalidPhraseIndex = tabelaAlunos.indexOf('fatura(s) com identidade inválida aguardando conciliação — não incluída(s) nos totais confirmados');
   const sourceMissingNotice = tabelaAlunos.slice(
     tabelaAlunos.lastIndexOf('{leituraFinanceiraDisponivel', sourcePhraseIndex),
     tabelaAlunos.indexOf(')}', sourcePhraseIndex) + 2,

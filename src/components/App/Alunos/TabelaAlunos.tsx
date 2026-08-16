@@ -2011,13 +2011,16 @@ export function TabelaAlunos({
                 {' — '}{inadimplenciaConfirmada.totalFaturas} fatura(s), R$ {inadimplenciaConfirmada.totalAtualizado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} corrigidos
                 {' · '}
                 <span className="text-cyan-200/70">snapshot mais antigo atualizado {formatarTempoDecorrido(inadimplenciaInfoCanonica.atualizadoEm)}</span>
+                <span className="mt-1 block text-xs text-cyan-200/80">
+                  Contato operacional somente na carteira amigável D+2 (Farmer).
+                </span>
               </div>
             )}
 
             {leituraFinanceiraDisponivel && inadimplenciaInfoCanonica.status === 'partial' && inadimplenciaInfoCanonica.sourceMissing > 0 && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-200">
                 <strong className="text-amber-100">
-                  {reconciliacaoPendente.sourceMissingCount} faturas aguardando reconciliação — fora da cobrança
+                  {reconciliacaoPendente.sourceMissingCount} faturas aguardando reconciliação — não incluídas nos totais confirmados
                 </strong>
               </div>
             )}
@@ -2030,7 +2033,7 @@ export function TabelaAlunos({
                 <strong className="text-amber-100">
                   {reconciliacaoPendente.invalidIdentityInvoiceCount > 0
                     ? reconciliacaoPendente.invalidIdentityInvoiceCount
-                    : 'Há'} fatura(s) com identidade inválida aguardando conciliação — fora da cobrança
+                    : 'Há'} fatura(s) com identidade inválida aguardando conciliação — não incluída(s) nos totais confirmados
                 </strong>
               </div>
             )}
