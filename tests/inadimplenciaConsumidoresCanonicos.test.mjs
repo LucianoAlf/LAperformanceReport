@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const exportador = readFileSync('supabase/functions/export-contas-receber/index.ts', 'utf8');
@@ -14,6 +14,10 @@ const farmerDashboard = readFileSync(
 const financeiroClient = readFileSync('src/lib/financeiroFaturasEmusys.ts', 'utf8');
 const modalRelatorio = readFileSync('src/components/App/Administrativo/ModalRelatorio.tsx', 'utf8');
 const migrationPath = 'supabase/migrations/20260816013512_financeiro_faturas_relatorios_canonicos.sql';
+const solInadimplenciaMigrations = readdirSync('supabase/migrations')
+  .filter((name) => /^\d+_sol_caixa_inadimplentes.*\.sql$/u.test(name))
+  .sort();
+const latestSolInadimplenciaMigration = solInadimplenciaMigrations.at(-1);
 
 test('exportacao de inadimplencia consome a RPC canonica e bloqueia leitura nao confiavel', () => {
   assert.match(exportador, /modo\s*===\s*['"]inadimplencia['"]/);
@@ -60,4 +64,13 @@ test('consumidores do relatorio propagam status e frescor sem sobrepor historico
   assert.match(modalRelatorio, /data\?\.status\s*!==\s*['"]ok['"]/);
   assert.match(modalRelatorio, /isPeriodoAtual\s*\?/);
   assert.match(modalRelatorio, /snapshot mensal fechado/i);
+});
+
+test('a lista da Sol consome a leitura canonica e nao replica o sync de faturas', () => {
+  assert.ok(latestSolInadimplenciaMigration, 'migration da inadimplencia da Sol ausente');
+  const sql = readFileSync(`supabase/migrations/${latestSolInadimplenciaMigration}`, 'utf8');
+  assert.match(sql, /get_inadimplencia_canonica/i);
+  assert.doesNotMatch(sql, /from\s+sync_run_items/i);
+  assert.match(sql, /status.*incomplete|incomplete.*status/is);
+  assert.match(sql, /freshness|frescor/i);
 });
