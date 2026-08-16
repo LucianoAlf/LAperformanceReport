@@ -38,6 +38,8 @@ test('painel farmer usa a leitura canonica, valor corrigido e estado de frescor'
   assert.match(farmerHook, /\.rpc\(\s*['"]get_inadimplencia_canonica['"]/);
   assert.doesNotMatch(farmerHook, /\.from\(\s*['"]vw_farmer_inadimplentes['"]/);
   assert.match(farmerHook, /montarAlertasInadimplenciaCanonica/);
+  assert.match(farmerHook, /collectionGraceDays:\s*estadoCanonico\.collectionGraceDays/);
+  assert.match(farmerHook, /item\.dias_atraso\s*>=\s*estadoCanonico\.collectionGraceDays/);
   assert.match(farmerDashboard, /inadimplenciaCanonica\.status/);
   assert.match(farmerDashboard, /valor_atualizado/);
   assert.doesNotMatch(farmerDashboard, /item\.valor_parcela/);
@@ -97,13 +99,26 @@ test('farmer expira uma vez, limpa cobranca e desfaz timer na troca de unidade',
 
 test('dashboard mostra partial acionavel e reconciliacao separada sem misturar dinheiro', () => {
   assert.match(farmerDashboard, /podeCobrarInadimplenciaCanonica/);
-  assert.match(farmerDashboard, /inadimplências confirmadas — cobrança liberada/iu);
+  assert.match(farmerDashboard, /Inadimplências elegíveis — cobrança amigável D\+2/iu);
   assert.match(farmerDashboard, /faturas aguardando reconciliação — fora da cobrança/iu);
+  assert.match(farmerDashboard, /fatura\(s\) com identidade inválida aguardando conciliação — fora da cobrança/iu);
   assert.match(farmerDashboard, /sourceMissingCount/);
+  assert.match(farmerDashboard, /invalidIdentityInvoiceCount/);
+  assert.match(farmerDashboard, /validationIssueCount/);
   assert.match(farmerDashboard, /variant="success"/);
 
   const reconciliationNotice = farmerDashboard.match(/sourceMissingCount\s*>\s*0[\s\S]*?<\/div>\s*\)}/)?.[0] ?? '';
+  const invalidIdentityNotice = farmerDashboard.match(/(?:invalidIdentityInvoiceCount|validationIssueCount)\s*>\s*0[\s\S]*?<\/div>\s*\)}/)?.[0] ?? '';
+  assert.ok(reconciliationNotice, 'aviso independente de source_missing ausente');
+  assert.ok(invalidIdentityNotice, 'aviso independente de identidade inválida ausente');
   assert.doesNotMatch(reconciliationNotice, /totalAtualizado|valor_atualizado|R\$/);
+  assert.doesNotMatch(invalidIdentityNotice, /totalAtualizado|valor_atualizado|R\$/);
+});
+
+test('farmer aplica a carencia publicada pelo estado e nao um limiar local ambiguo', () => {
+  assert.match(farmerHook, /estadoCanonico\.collectionGraceDays/);
+  assert.doesNotMatch(farmerHook, /dias_atraso\s*>=\s*2/);
+  assert.doesNotMatch(farmerHook, /COBRANCA_AMIGAVEL_CARENCIA_DIAS/);
 });
 
 test('dashboard mantem stale incomplete e error bloqueados e distintos', () => {

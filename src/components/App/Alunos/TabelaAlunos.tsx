@@ -334,7 +334,7 @@ export function TabelaAlunos({
     }
   }
 
-  const cobrancaLiberada = podeCobrarInadimplenciaCanonica(inadimplenciaCanonica);
+  const leituraFinanceiraDisponivel = podeCobrarInadimplenciaCanonica(inadimplenciaCanonica);
   const inadimplenciaConfirmada = {
     totalMatriculas: inadimplenciaCanonica.totalMatriculas,
     totalFaturas: inadimplenciaCanonica.totalFaturas,
@@ -342,6 +342,8 @@ export function TabelaAlunos({
   };
   const reconciliacaoPendente = {
     sourceMissingCount: inadimplenciaCanonica.sourceMissingCount,
+    invalidIdentityInvoiceCount: inadimplenciaCanonica.invalidIdentityInvoiceCount,
+    validationIssueCount: inadimplenciaCanonica.validationIssueCount,
   };
   const inadimplenciaInfoCanonica = {
     total: inadimplenciaConfirmada.totalMatriculas,
@@ -354,9 +356,11 @@ export function TabelaAlunos({
     blockReasons: inadimplenciaCanonica.blockReasons,
     mostrar: inadimplenciaCanonica.status !== 'loading'
       && (
-        !cobrancaLiberada
+        !leituraFinanceiraDisponivel
         || inadimplenciaCanonica.totalFaturas > 0
         || inadimplenciaCanonica.sourceMissingCount > 0
+        || inadimplenciaCanonica.invalidIdentityInvoiceCount > 0
+        || inadimplenciaCanonica.validationIssueCount > 0
       ),
   };
   const tituloBloqueioInadimplencia = (() => {
@@ -1988,25 +1992,29 @@ export function TabelaAlunos({
 
       {/* Alerta financeiro canônico */}
       {inadimplenciaInfoCanonica.mostrar && !alertaInadimplenciaDismissed && (
-        <div className="flex items-start gap-3 rounded-xl border border-slate-700/80 bg-slate-900/70 px-4 py-3 text-sm">
-          <AlertTriangle className={`mt-0.5 h-5 w-5 flex-shrink-0 ${
-            cobrancaLiberada
-              ? inadimplenciaInfoCanonica.total > 0 ? 'text-emerald-400' : 'text-amber-300'
+        <div
+          className="flex items-start gap-3 rounded-xl border border-slate-700/80 bg-slate-900/70 px-4 py-3 text-sm"
+          role="status"
+          aria-live="polite"
+        >
+          <AlertTriangle aria-hidden="true" className={`mt-0.5 h-5 w-5 flex-shrink-0 ${
+            leituraFinanceiraDisponivel
+              ? inadimplenciaInfoCanonica.total > 0 ? 'text-cyan-400' : 'text-amber-300'
               : 'text-red-400'
           }`} />
           <div className="min-w-0 flex-1 space-y-2">
-            {cobrancaLiberada && inadimplenciaInfoCanonica.total > 0 && (
-              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-emerald-200">
-                <strong className="text-emerald-100">
-                  {inadimplenciaConfirmada.totalMatriculas} inadimplências confirmadas — cobrança liberada
+            {leituraFinanceiraDisponivel && inadimplenciaInfoCanonica.total > 0 && (
+              <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-cyan-200">
+                <strong className="text-cyan-100">
+                  {inadimplenciaConfirmada.totalMatriculas} inadimplências confirmadas (D+0) — leitura financeira disponível
                 </strong>
                 {' — '}{inadimplenciaConfirmada.totalFaturas} fatura(s), R$ {inadimplenciaConfirmada.totalAtualizado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} corrigidos
                 {' · '}
-                <span className="text-emerald-200/70">snapshot mais antigo atualizado {formatarTempoDecorrido(inadimplenciaInfoCanonica.atualizadoEm)}</span>
+                <span className="text-cyan-200/70">snapshot mais antigo atualizado {formatarTempoDecorrido(inadimplenciaInfoCanonica.atualizadoEm)}</span>
               </div>
             )}
 
-            {cobrancaLiberada && inadimplenciaInfoCanonica.status === 'partial' && inadimplenciaInfoCanonica.sourceMissing > 0 && (
+            {leituraFinanceiraDisponivel && inadimplenciaInfoCanonica.status === 'partial' && inadimplenciaInfoCanonica.sourceMissing > 0 && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-200">
                 <strong className="text-amber-100">
                   {reconciliacaoPendente.sourceMissingCount} faturas aguardando reconciliação — fora da cobrança
@@ -2014,7 +2022,20 @@ export function TabelaAlunos({
               </div>
             )}
 
-            {!cobrancaLiberada && (
+            {leituraFinanceiraDisponivel
+              && inadimplenciaInfoCanonica.status === 'partial'
+              && (reconciliacaoPendente.invalidIdentityInvoiceCount > 0
+                || reconciliacaoPendente.validationIssueCount > 0) && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-200">
+                <strong className="text-amber-100">
+                  {reconciliacaoPendente.invalidIdentityInvoiceCount > 0
+                    ? reconciliacaoPendente.invalidIdentityInvoiceCount
+                    : 'Há'} fatura(s) com identidade inválida aguardando conciliação — fora da cobrança
+                </strong>
+              </div>
+            )}
+
+            {!leituraFinanceiraDisponivel && (
               <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-red-200">
                 <strong className="text-red-100">{tituloBloqueioInadimplencia}</strong>
                 {motivosBloqueioAmigaveis.length > 0 && (
@@ -2028,12 +2049,12 @@ export function TabelaAlunos({
               </div>
             )}
           </div>
-          {cobrancaLiberada && inadimplenciaInfoCanonica.total > 0 && (
+          {leituraFinanceiraDisponivel && inadimplenciaInfoCanonica.total > 0 && (
             <button
               onClick={() => setFiltros(prev => ({ ...prev, inadimplente_emusys_live: true }))}
-              className="whitespace-nowrap rounded-lg border border-emerald-500/30 bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-100 transition-colors hover:bg-emerald-500/30"
+              className="whitespace-nowrap rounded-lg border border-cyan-500/30 bg-cyan-500/20 px-3 py-1 text-xs font-medium text-cyan-100 transition-colors hover:bg-cyan-500/30 focus-visible:ring-2 focus-visible:ring-cyan-300/70"
             >
-              Filtrar ativos inadimplentes
+              Filtrar inadimplentes confirmados (D+0)
             </button>
           )}
           <button
@@ -2045,10 +2066,11 @@ export function TabelaAlunos({
           </button>
           <button
             onClick={() => setAlertaInadimplenciaDismissed(true)}
-            className="p-1 hover:bg-white/10 rounded transition-colors"
+            className="p-1 hover:bg-white/10 rounded transition-colors focus-visible:ring-2 focus-visible:ring-slate-300/70"
             title="Dispensar alerta"
+            aria-label="Dispensar alerta financeiro"
           >
-            <X className={`h-4 w-4 ${cobrancaLiberada ? 'text-slate-400' : 'text-red-400'}`} />
+            <X aria-hidden="true" className={`h-4 w-4 ${leituraFinanceiraDisponivel ? 'text-slate-400' : 'text-red-400'}`} />
           </button>
         </div>
       )}

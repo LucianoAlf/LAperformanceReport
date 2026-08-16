@@ -60,17 +60,37 @@ test('consumidores da lista usam o helper operacional e partial nao depende de s
   assert.doesNotMatch(tabelaAlunos, /status\s*===\s*['"]ok['"]\s*&&\s*inadimplenciaInfoCanonica\.totalFaturas/);
 });
 
-test('banner separa cobranca confirmada de reconciliacao sem contaminar totais', () => {
+test('banner separa leitura financeira D+0 e quarentenas sem contaminar totais', () => {
   assert.match(tabelaAlunos, /totalMatriculas/);
-  assert.match(tabelaAlunos, /inadimplências confirmadas — cobrança liberada/u);
+  assert.match(tabelaAlunos, /inadimplências confirmadas \(D\+0\) — leitura financeira disponível/u);
   assert.match(tabelaAlunos, /sourceMissingCount/);
   assert.match(tabelaAlunos, /faturas aguardando reconciliação — fora da cobrança/u);
+  assert.match(tabelaAlunos, /invalidIdentityInvoiceCount/);
+  assert.match(tabelaAlunos, /validationIssueCount/);
+  assert.match(tabelaAlunos, /fatura\(s\) com identidade inválida aguardando conciliação — fora da cobrança/u);
+  assert.doesNotMatch(tabelaAlunos, /inadimplências confirmadas[^\n]*cobrança liberada/iu);
 
   const confirmedSection = tabelaAlunos.match(/const inadimplenciaConfirmada[\s\S]*?const reconciliacaoPendente/)?.[0] ?? '';
   assert.match(confirmedSection, /totalMatriculas/);
   assert.match(confirmedSection, /totalFaturas/);
   assert.match(confirmedSection, /totalAtualizado/);
   assert.doesNotMatch(confirmedSection, /sourceMissingCount/);
+  assert.doesNotMatch(confirmedSection, /invalidIdentityInvoiceCount|validationIssueCount/);
+
+  const sourcePhraseIndex = tabelaAlunos.indexOf('faturas aguardando reconciliação — fora da cobrança');
+  const invalidPhraseIndex = tabelaAlunos.indexOf('fatura(s) com identidade inválida aguardando conciliação — fora da cobrança');
+  const sourceMissingNotice = tabelaAlunos.slice(
+    tabelaAlunos.lastIndexOf('{leituraFinanceiraDisponivel', sourcePhraseIndex),
+    tabelaAlunos.indexOf(')}', sourcePhraseIndex) + 2,
+  );
+  const invalidIdentityNotice = tabelaAlunos.slice(
+    tabelaAlunos.lastIndexOf('{leituraFinanceiraDisponivel', invalidPhraseIndex),
+    tabelaAlunos.indexOf(')}', invalidPhraseIndex) + 2,
+  );
+  assert.ok(sourceMissingNotice, 'aviso independente de source_missing ausente');
+  assert.ok(invalidIdentityNotice, 'aviso independente de identidade inválida ausente');
+  assert.doesNotMatch(sourceMissingNotice, /totalAtualizado|valor_atualizado|R\$/);
+  assert.doesNotMatch(invalidIdentityNotice, /totalAtualizado|valor_atualizado|R\$/);
 });
 
 test('estados bloqueados sao distintos e incomplete explica os motivos amigavelmente', () => {
@@ -85,13 +105,23 @@ test('filtro canonico so existe com gate valido e nao repete status ativo local'
   const liveFilterStart = alunosPage.indexOf('if (filtros.inadimplente_emusys_live');
   const liveFilterEnd = alunosPage.indexOf('if (filtros.anamnese)', liveFilterStart);
   const liveFilter = alunosPage.slice(liveFilterStart, liveFilterEnd);
-  assert.match(liveFilter, /cobrancaInadimplenciaLiberada/);
+  assert.match(liveFilter, /leituraFinanceiraDisponivel/);
   assert.match(liveFilter, /inadimplente_emusys/);
   assert.doesNotMatch(liveFilter, /\.status/);
 
-  assert.match(tabelaAlunos, /cobrancaLiberada\s*&&\s*inadimplenciaInfoCanonica\.total\s*>\s*0/);
-  assert.match(tabelaAlunos, /Filtrar ativos inadimplentes/);
+  assert.match(tabelaAlunos, /leituraFinanceiraDisponivel\s*&&\s*inadimplenciaInfoCanonica\.total\s*>\s*0/);
+  assert.match(tabelaAlunos, /Filtrar inadimplentes confirmados \(D\+0\)/);
   assert.match(alunosPage, /inadimplente_emusys_live:\s*false/);
+});
+
+test('contrato v3 exige politica D+0, carencia D+2 e aplicacao obrigatoria no consumidor', () => {
+  assert.match(canonicalClient, /COBRANCA_AMIGAVEL_CARENCIA_DIAS\s*=\s*2/);
+  assert.match(canonicalClient, /delinquencyRule:\s*['"]d_plus_0['"]/);
+  assert.match(canonicalClient, /collectionGraceDays/);
+  assert.match(canonicalClient, /consumerMustApplyCollectionGrace/);
+  assert.match(canonicalClient, /policy\.delinquency_rule\s*!==\s*['"]d_plus_0['"]/);
+  assert.match(canonicalClient, /policy\.collection_grace_days\s*!==\s*COBRANCA_AMIGAVEL_CARENCIA_DIAS/);
+  assert.match(canonicalClient, /operational\.consumer_must_apply_collection_grace\s*!==\s*true/);
 });
 
 test('expiracao limpa flags e filtro, recarrega uma vez e sempre limpa o timer', () => {

@@ -2,6 +2,7 @@
 
 import { assert, assertEquals, assertStringIncludes } from 'jsr:@std/assert@1';
 import {
+  COBRANCA_AMIGAVEL_CARENCIA_DIAS,
   INADIMPLENCIA_CANONICA_LOADING,
   indexarInadimplenciaPorMatricula,
   montarAlertasInadimplenciaCanonica,
@@ -79,10 +80,15 @@ const payloadV3 = (overrides: Record<string, unknown> = {}) => ({
   schema_version: 3,
   status: 'partial',
   avaliado_em: '2026-08-15T18:01:00Z',
+  policy: {
+    delinquency_rule: 'd_plus_0',
+    collection_grace_days: 2,
+  },
   operational: {
     collection_allowed: true,
     collection_scope: 'confirmed_only',
     block_reasons: [],
+    consumer_must_apply_collection_grace: true,
   },
   freshness: fresh(),
   reconciliation: partialReconciliation,
@@ -109,12 +115,8 @@ const blockedV3 = (
     }
     : {
       freshness: fresh(),
-      reconciliation: {
-        ...cleanReconciliation,
-        invalid_identity_invoice_count: 1,
-        validation_issue_count: 1,
-      },
-      block_reasons: ['invalid_invoice_identity'],
+      reconciliation: cleanReconciliation,
+      block_reasons: [],
       error: 'unsupported_invoice_status',
     };
 
@@ -124,6 +126,7 @@ const blockedV3 = (
       collection_allowed: false,
       collection_scope: 'blocked',
       block_reasons: facts.block_reasons,
+      consumer_must_apply_collection_grace: true,
     },
     freshness: facts.freshness,
     reconciliation: facts.reconciliation,
@@ -168,13 +171,18 @@ const assertLocalError = (payload: unknown) => {
   assertStringIncludes(result.erro ?? '', 'Resposta invalida');
 };
 
-Deno.test('v3 partial fresco preserva somente itens confirmados e permite cobranca', () => {
+Deno.test('v3 partial fresco preserva somente itens confirmados e libera leitura financeira D+0', () => {
   const result = normalizarInadimplenciaCanonica(payloadV3());
 
   assertEquals([result.status, result.collectionAllowed, result.collectionScope, result.blockReasons], [
     'partial', true, 'confirmed_only', [],
   ]);
   assertEquals(result.avaliadoEm, '2026-08-15T18:01:00Z');
+  assertEquals([
+    result.delinquencyRule,
+    result.collectionGraceDays,
+    result.consumerMustApplyCollectionGrace,
+  ], ['d_plus_0', 2, true]);
   assertEquals(result.items.length, 1);
   assertEquals([result.sourceMissingCount, result.sourceMissingOpenCount, result.sourceMissingOtherCount], [1, 1, 0]);
   assertEquals(podeCobrarInadimplenciaCanonica(result, new Date('2026-08-15T18:30:00Z')), true);
@@ -195,38 +203,76 @@ Deno.test('shape real v3 aceita error null em partial e ok fresco sem divida', (
   assertEquals([ok.status, ok.collectionAllowed, ok.freshUntil, ok.items], ['ok', true, null, []]);
 });
 
-Deno.test('v3 preserva diagnosticos de identidade sem inferir faturas por validation issues', () => {
-  const semMetadata = normalizarInadimplenciaCanonica(blockedV3('incomplete', {
+Deno.test('v3 mantem identidade invalida em quarentena partial sem contaminar itens ou totais', () => {
+  const somenteIdentidade = normalizarInadimplenciaCanonica(payloadV3({
     reconciliation: {
       ...cleanReconciliation,
       invalid_identity_invoice_count: 1,
       validation_issue_count: 0,
     },
-    operational: {
-      collection_allowed: false,
-      collection_scope: 'blocked',
-      block_reasons: ['invalid_invoice_identity'],
-    },
+    totals: oneItemTotals,
+    items: [item()],
   }));
-  const multiplasIssues = normalizarInadimplenciaCanonica(blockedV3('incomplete', {
+  const identidadeEOrigem = normalizarInadimplenciaCanonica(payloadV3({
     reconciliation: {
-      ...cleanReconciliation,
+      ...partialReconciliation,
       invalid_identity_invoice_count: 1,
       validation_issue_count: 2,
     },
-    operational: {
-      collection_allowed: false,
-      collection_scope: 'blocked',
-      block_reasons: ['invalid_invoice_identity'],
-    },
   }));
 
-  assertEquals([semMetadata.status, semMetadata.invalidIdentityInvoiceCount, semMetadata.validationIssueCount], [
-    'incomplete', 1, 0,
+  assertEquals([
+    somenteIdentidade.status,
+    somenteIdentidade.collectionAllowed,
+    somenteIdentidade.invalidIdentityInvoiceCount,
+    somenteIdentidade.validationIssueCount,
+    somenteIdentidade.totalFaturas,
+    somenteIdentidade.items.length,
+  ], [
+    'partial', true, 1, 0, 1, 1,
   ]);
-  assertEquals([multiplasIssues.status, multiplasIssues.invalidIdentityInvoiceCount, multiplasIssues.validationIssueCount], [
-    'incomplete', 1, 2,
+  assertEquals([
+    identidadeEOrigem.status,
+    identidadeEOrigem.sourceMissingCount,
+    identidadeEOrigem.invalidIdentityInvoiceCount,
+    identidadeEOrigem.validationIssueCount,
+    identidadeEOrigem.totalAtualizado,
+  ], [
+    'partial', 1, 1, 2, 102.17,
   ]);
+});
+
+Deno.test('v3 exige politica D+0 e carencia operacional D+2 de forma fail closed', () => {
+  const invalidos = [
+    payloadV3({ policy: undefined }),
+    payloadV3({ policy: { collection_grace_days: 2 } }),
+    payloadV3({ policy: { delinquency_rule: 'd_plus_1', collection_grace_days: 2 } }),
+    payloadV3({ policy: { delinquency_rule: 'd_plus_0' } }),
+    payloadV3({ policy: { delinquency_rule: 'd_plus_0', collection_grace_days: 1 } }),
+    payloadV3({
+      operational: {
+        collection_allowed: true,
+        collection_scope: 'confirmed_only',
+        block_reasons: [],
+      },
+    }),
+    payloadV3({
+      operational: {
+        collection_allowed: true,
+        collection_scope: 'confirmed_only',
+        block_reasons: [],
+        consumer_must_apply_collection_grace: false,
+      },
+    }),
+  ];
+
+  invalidos.forEach(assertLocalError);
+  assertEquals(COBRANCA_AMIGAVEL_CARENCIA_DIAS, 2);
+  assertEquals([
+    INADIMPLENCIA_CANONICA_LOADING.delinquencyRule,
+    INADIMPLENCIA_CANONICA_LOADING.collectionGraceDays,
+    INADIMPLENCIA_CANONICA_LOADING.consumerMustApplyCollectionGrace,
+  ], ['d_plus_0', 2, true]);
 });
 
 Deno.test('v3 stale preserva somente o diagnostico SQL conhecido de erro', () => {
@@ -402,6 +448,11 @@ Deno.test('v2 conserva apenas snapshots internamente coerentes e bloqueados limp
   const error = normalizarInadimplenciaCanonica(blockedV2('error'));
 
   assertEquals([ok.status, ok.collectionAllowed, ok.collectionScope], ['ok', true, 'confirmed_only']);
+  assertEquals([
+    ok.delinquencyRule,
+    ok.collectionGraceDays,
+    ok.consumerMustApplyCollectionGrace,
+  ], ['d_plus_0', 2, true]);
   assertEquals([stale.status, stale.items, stale.totalFaturas], ['stale', [], 0]);
   assertEquals([incomplete.status, incomplete.items, incomplete.totalFaturas], ['incomplete', [], 0]);
   assertEquals([error.status, error.erro, error.items, error.totalFaturas], [
@@ -520,6 +571,73 @@ Deno.test('source missing nao entra no dinheiro e a mesma matricula em unidades 
   assertEquals(index.size, 2);
   assertEquals(index.get(`${unidadeA}|2001`)?.valorAtualizado, 102.17);
   assertEquals(index.get(`${unidadeB}|2001`)?.valorAtualizado, 51.1);
+});
+
+Deno.test('D+1 permanece na consulta financeira D+0, mas somente D+2 entra nos alertas do Farmer', () => {
+  const itemD1 = item({
+    dias_atraso: 1,
+    data_vencimento: '2026-08-14',
+  });
+  const itemD2 = item({
+    canonical_fatura_id: '10000000-0000-0000-0000-000000000002',
+    emusys_fatura_id: '1002',
+    emusys_matricula_id: '2002',
+    dias_atraso: 2,
+    data_vencimento: '2026-08-13',
+    valor_original: 50,
+    valor_atualizado: 51.1,
+  });
+  const state = normalizarInadimplenciaCanonica(payloadV3({
+    items: [itemD1, itemD2],
+    totals: {
+      total_faturas: 2,
+      total_matriculas: 2,
+      total_original: 150,
+      total_atualizado: 153.27,
+      maior_atraso: 2,
+    },
+  }));
+  const agora = new Date('2026-08-15T18:30:00Z');
+
+  const consultaD0 = indexarInadimplenciaPorMatricula(state, agora);
+  const filaD2 = montarAlertasInadimplenciaCanonica(state, [{
+    id: 10,
+    nome: 'Aluno D+1',
+    unidade_id: unidadeA,
+    emusys_matricula_id: '2001',
+    status: 'ativo',
+  }, {
+    id: 20,
+    nome: 'Aluno D+2',
+    unidade_id: unidadeA,
+    emusys_matricula_id: '2002',
+    status: 'inativo',
+    telefone: '5521888888888',
+  }], {
+    agora,
+    collectionGraceDays: state.collectionGraceDays,
+  });
+
+  assertEquals(consultaD0.size, 2);
+  assertEquals(consultaD0.has(`${unidadeA}|2001`), true);
+  assertEquals(filaD2, {
+    alertas: [{
+      aluno_id: 20,
+      aluno_nome: 'Aluno D+2',
+      whatsapp: '5521888888888',
+      unidade_id: unidadeA,
+      emusys_matricula_id: '2002',
+      valor_atualizado: 51.1,
+      total_faturas: 1,
+      professor_id: null,
+      professor_nome: null,
+      instrumento: null,
+      dias_atraso: 2,
+      ultimo_sync: '2026-08-15T18:00:00Z',
+    }],
+    totalAtivos: 1,
+    semCadastroAtivo: 0,
+  });
 });
 
 Deno.test('indice escolhe sync mais recente por epoch e alerta preserva a chave unidade matricula', () => {

@@ -340,7 +340,7 @@ export function AlunosPage() {
     diagnostico: '',
     sem_telefone: false,
   });
-  const cobrancaInadimplenciaLiberada = podeCobrarInadimplenciaCanonica(inadimplenciaCanonica);
+  const leituraFinanceiraDisponivel = podeCobrarInadimplenciaCanonica(inadimplenciaCanonica);
 
   const limparInadimplenciaDerivada = useCallback(() => {
     setAlunos(prev => prev.map(aluno => ({
@@ -718,12 +718,12 @@ export function AlunosPage() {
       inadimplenciaR.data,
       inadimplenciaR.error,
     );
-    const cobrancaLiberada = podeCobrarInadimplenciaCanonica(inadimplenciaAtual);
-    const leituraExpirada = inadimplenciaAtual.collectionAllowed && !cobrancaLiberada;
+    const leituraFinanceiraDisponivel = podeCobrarInadimplenciaCanonica(inadimplenciaAtual);
+    const leituraExpirada = inadimplenciaAtual.collectionAllowed && !leituraFinanceiraDisponivel;
     setInadimplenciaCanonica(
       leituraExpirada ? bloquearInadimplenciaPorExpiracao(inadimplenciaAtual) : inadimplenciaAtual,
     );
-    if (!cobrancaLiberada) limparInadimplenciaDerivada();
+    if (!leituraFinanceiraDisponivel) limparInadimplenciaDerivada();
 
     // Mesclar alunos por data_saida (sem duplicatas)
     let alunosMesclados = alunosRaw ?? [];
@@ -883,7 +883,7 @@ export function AlunosPage() {
           const inadimplenciaOutroCurso = chaveOc ? inadimplenciaMap.get(chaveOc) : undefined;
           return {
             ...oc,
-            inadimplente_emusys: inadimplenciaOutroCurso ? true : (cobrancaLiberada ? false : undefined),
+            inadimplente_emusys: inadimplenciaOutroCurso ? true : (leituraFinanceiraDisponivel ? false : undefined),
             _inadimplencia_atualizado_em: inadimplenciaOutroCurso?.ultimoSync ?? null,
             _inadimplencia_valor_atualizado: inadimplenciaOutroCurso?.valorAtualizado ?? 0,
             _inadimplencia_total_faturas: inadimplenciaOutroCurso?.faturas ?? 0,
@@ -892,7 +892,7 @@ export function AlunosPage() {
 
         return {
           ...aluno,
-          inadimplente_emusys: principal ? true : (cobrancaLiberada ? false : undefined),
+          inadimplente_emusys: principal ? true : (leituraFinanceiraDisponivel ? false : undefined),
           _inadimplencia_atualizado_em: principal?.ultimoSync ?? null,
           _inadimplencia_valor_atualizado: principal?.valorAtualizado ?? 0,
           _inadimplencia_total_faturas: principal?.faturas ?? 0,
@@ -1334,7 +1334,7 @@ export function AlunosPage() {
     }
 
     // Filtro pela leitura canonica de faturas -- independente do status_pagamento manual.
-    if (filtros.inadimplente_emusys_live && cobrancaInadimplenciaLiberada) {
+    if (filtros.inadimplente_emusys_live && leituraFinanceiraDisponivel) {
       resultado = resultado.filter(a => {
         const principalInadimplente = a.inadimplente_emusys === true;
         const outroCursoInadimplente = a.outros_cursos?.some(oc => oc.inadimplente_emusys === true);
@@ -1377,7 +1377,7 @@ export function AlunosPage() {
     }
 
     return resultado;
-  }, [alunos, filtros, turmas, cursos, cobrancaInadimplenciaLiberada]);
+  }, [alunos, filtros, turmas, cursos, leituraFinanceiraDisponivel]);
 
   // Adicionar contagem de alunos na turma para cada aluno
   const alunosComTurma = useMemo(() => {

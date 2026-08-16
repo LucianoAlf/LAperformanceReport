@@ -89,7 +89,7 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
     inadimplenciaSemCadastroAtivo,
     loading: loadingAlertas 
   } = useAlertas(unidadeId);
-  const cobrancaInadimplenciaLiberada = podeCobrarInadimplenciaCanonica(inadimplenciaCanonica);
+  const gateCanonicoValido = podeCobrarInadimplenciaCanonica(inadimplenciaCanonica);
   const { 
     tarefas, 
     tarefasPendentes, 
@@ -503,10 +503,10 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
               />
             )}
 
-            {!cobrancaInadimplenciaLiberada && inadimplenciaCanonica.status !== 'loading' && (
-              <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-100">
+            {!gateCanonicoValido && inadimplenciaCanonica.status !== 'loading' && (
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-100" role="alert">
                 <div className="flex items-start gap-2">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-400" />
+                  <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-400" />
                   <div>
                     <p className="font-medium">
                       {inadimplenciaCanonica.status === 'stale'
@@ -519,7 +519,7 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
                       {inadimplenciaCanonica.status === 'stale'
                         ? 'O snapshot do Emusys venceu. Aguarde uma sincronização completa e fresca.'
                         : inadimplenciaCanonica.status === 'incomplete'
-                          ? 'Há duplicidades ou identidades de fatura que precisam de correção antes de qualquer ação.'
+                          ? 'Há duplicidades ou inconsistências estruturais que precisam de correção antes de qualquer ação.'
                           : 'Não foi possível validar a leitura canônica; nenhuma ação financeira está disponível.'}
                     </p>
                   </div>
@@ -527,33 +527,52 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
               </div>
             )}
 
-            {cobrancaInadimplenciaLiberada
+            {gateCanonicoValido
               && inadimplenciaCanonica.status === 'partial'
               && inadimplenciaCanonica.sourceMissingCount > 0 && (
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100" role="status">
                 <div className="flex items-start gap-2">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-400" />
+                  <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-400" />
                   <p>
                     <strong>{inadimplenciaCanonica.sourceMissingCount} faturas aguardando reconciliação — fora da cobrança</strong>
-                    <span className="mt-0.5 block text-xs text-amber-200/80">A cobrança confirmada permanece disponível sem incluir esse universo.</span>
+                    <span className="mt-0.5 block text-xs text-amber-200/80">A fila confirmada D+2 permanece disponível sem incluir esse universo.</span>
                   </p>
                 </div>
               </div>
             )}
 
-            {cobrancaInadimplenciaLiberada && inadimplenciaSemCadastroAtivo > 0 && (
+            {gateCanonicoValido
+              && inadimplenciaCanonica.status === 'partial'
+              && (inadimplenciaCanonica.invalidIdentityInvoiceCount > 0
+                || inadimplenciaCanonica.validationIssueCount > 0) && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100" role="status">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-400" />
+                  <p>
+                    <strong>
+                      {inadimplenciaCanonica.invalidIdentityInvoiceCount > 0
+                        ? inadimplenciaCanonica.invalidIdentityInvoiceCount
+                        : 'Há'} fatura(s) com identidade inválida aguardando conciliação — fora da cobrança
+                    </strong>
+                    <span className="mt-0.5 block text-xs text-amber-200/80">A quarentena de identidade não entra nos valores nem nos contatos elegíveis.</span>
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {gateCanonicoValido && inadimplenciaSemCadastroAtivo > 0 && (
               <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
                 {inadimplenciaSemCadastroAtivo} matrícula(s) confirmada(s) sem vínculo local para contato. Nenhuma associação foi feita por nome ou ID de aluno.
               </div>
             )}
 
             {/* Alerta: Inadimplentes */}
-            {cobrancaInadimplenciaLiberada && inadimplentes.length > 0 && (
+            {gateCanonicoValido && inadimplentes.length > 0 && (
               <AlertaItem
                 icon="💰"
                 count={inadimplentes.length}
-                title="Inadimplências confirmadas — cobrança liberada"
-                subtitle={`Valores corrigidos • ${formatarFrescorFinanceiro(inadimplenciaCanonica.ultimoSyncMaisAntigo)}`}
+                title="Inadimplências elegíveis — cobrança amigável D+2"
+                subtitle={`Somente faturas confirmadas com 2+ dias de atraso • ${formatarFrescorFinanceiro(inadimplenciaCanonica.ultimoSyncMaisAntigo)}`}
                 variant="success"
                 expanded={expandedAlerts.has('inadimplentes')}
                 onToggle={() => toggleAlert('inadimplentes')}

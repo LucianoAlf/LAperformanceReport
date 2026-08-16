@@ -120,19 +120,22 @@ export function useAlertas(unidadeId: string) {
         inadimplenciaResult.data,
         inadimplenciaResult.error,
       );
-      const cobrancaLiberada = podeCobrarInadimplenciaCanonica(estadoCanonico);
-      const leituraExpirada = estadoCanonico.collectionAllowed && !cobrancaLiberada;
+      const gateCanonicoValido = podeCobrarInadimplenciaCanonica(estadoCanonico);
+      const leituraExpirada = estadoCanonico.collectionAllowed && !gateCanonicoValido;
       setInadimplenciaCanonica(
         leituraExpirada ? bloquearInadimplenciaPorExpiracao(estadoCanonico) : estadoCanonico,
       );
 
       let alertasCanonicos: AlertaInadimplente[] = [];
       let semCadastroAtivo = 0;
-      if (cobrancaLiberada && estadoCanonico.items.length > 0) {
-        const matriculas = [...new Set(estadoCanonico.items
+      const itensElegiveisCobrancaAmigavel = estadoCanonico.items.filter(
+        (item) => item.dias_atraso >= estadoCanonico.collectionGraceDays,
+      );
+      if (gateCanonicoValido && itensElegiveisCobrancaAmigavel.length > 0) {
+        const matriculas = [...new Set(itensElegiveisCobrancaAmigavel
           .map((item) => item.emusys_matricula_id)
           .filter((id): id is string => Boolean(id)))];
-        const unidades = [...new Set(estadoCanonico.items.map((item) => item.unidade_id))];
+        const unidades = [...new Set(itensElegiveisCobrancaAmigavel.map((item) => item.unidade_id))];
 
         const alunosQuery = supabase
           .from('alunos')
@@ -152,12 +155,12 @@ export function useAlertas(unidadeId: string) {
           ...row,
           // A view canônica já delimitou o universo financeiro ativo. A tabela local
           // apenas enriquece contato pela identidade exata unidade + matrícula.
-          status: 'ativo',
-          arquivado_em: null,
           professor: Array.isArray(row.professores) ? row.professores[0] ?? null : row.professores,
           curso: Array.isArray(row.cursos) ? row.cursos[0] ?? null : row.cursos,
         }));
-        const alertas = montarAlertasInadimplenciaCanonica(estadoCanonico, alunosCanonicos);
+        const alertas = montarAlertasInadimplenciaCanonica(estadoCanonico, alunosCanonicos, {
+          collectionGraceDays: estadoCanonico.collectionGraceDays,
+        });
         alertasCanonicos = alertas.alertas;
         semCadastroAtivo = alertas.semCadastroAtivo;
       }
@@ -169,14 +172,14 @@ export function useAlertas(unidadeId: string) {
         if (unidadeFilter) {
           setResumo({
             ...resumoData[0],
-            inadimplentes: cobrancaLiberada ? alertasCanonicos.length : 0,
+            inadimplentes: gateCanonicoValido ? alertasCanonicos.length : 0,
           });
         } else {
           const consolidado: ResumoAlertas = {
             unidade_id: 'todos',
             unidade_nome: 'Todas as Unidades',
             aniversariantes_hoje: resumoData.reduce((acc, r) => acc + (r.aniversariantes_hoje || 0), 0),
-            inadimplentes: cobrancaLiberada ? alertasCanonicos.length : 0,
+            inadimplentes: gateCanonicoValido ? alertasCanonicos.length : 0,
             novos_matriculados: resumoData.reduce((acc, r) => acc + (r.novos_matriculados || 0), 0),
             renovacoes_vencidas: resumoData.reduce((acc, r) => acc + (r.renovacoes_vencidas || 0), 0),
             renovacoes_urgentes: resumoData.reduce((acc, r) => acc + (r.renovacoes_urgentes || 0), 0),

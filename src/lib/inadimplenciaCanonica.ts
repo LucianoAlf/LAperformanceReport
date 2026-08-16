@@ -7,6 +7,9 @@ export type InadimplenciaCanonicaStatus =
   | 'error';
 
 export type InadimplenciaCollectionScope = 'confirmed_only' | 'blocked';
+export type InadimplenciaDelinquencyRule = 'd_plus_0';
+
+export const COBRANCA_AMIGAVEL_CARENCIA_DIAS = 2;
 
 export type InadimplenciaBlockReason =
   | 'stale_competencia'
@@ -28,6 +31,9 @@ export interface InadimplenciaCanonicaItem {
 export interface InadimplenciaCanonicaState {
   status: InadimplenciaCanonicaStatus;
   schemaVersion: number;
+  delinquencyRule: InadimplenciaDelinquencyRule;
+  collectionGraceDays: number;
+  consumerMustApplyCollectionGrace: boolean;
   totalFaturas: number;
   totalMatriculas: number;
   totalOriginal: number;
@@ -92,9 +98,17 @@ export interface AlertasInadimplenciaCanonicaResult {
   semCadastroAtivo: number;
 }
 
+export interface MontarAlertasInadimplenciaCanonicaOptions {
+  agora?: Date;
+  collectionGraceDays?: number;
+}
+
 export const INADIMPLENCIA_CANONICA_LOADING: InadimplenciaCanonicaState = {
   status: 'loading',
   schemaVersion: 0,
+  delinquencyRule: 'd_plus_0',
+  collectionGraceDays: COBRANCA_AMIGAVEL_CARENCIA_DIAS,
+  consumerMustApplyCollectionGrace: true,
   totalFaturas: 0,
   totalMatriculas: 0,
   totalOriginal: 0,
@@ -437,7 +451,6 @@ function expectedReasons(
   return BLOCK_REASON_ORDER.filter((reason) => (
     (reason === 'stale_competencia' && freshness.competenciasStale > 0)
     || (reason === 'duplicate_confirmed_fatura' && reconciliation.duplicateFaturaCount > 0)
-    || (reason === 'invalid_invoice_identity' && reconciliation.invalidIdentityInvoiceCount > 0)
   ));
 }
 
@@ -461,6 +474,9 @@ function stateFrom(
   return {
     status,
     schemaVersion,
+    delinquencyRule: 'd_plus_0',
+    collectionGraceDays: COBRANCA_AMIGAVEL_CARENCIA_DIAS,
+    consumerMustApplyCollectionGrace: true,
     totalFaturas: totals.totalFaturas,
     totalMatriculas: totals.totalMatriculas,
     totalOriginal: totals.totalOriginal,
@@ -486,6 +502,7 @@ function stateFrom(
 
 function normalizeV3(root: Record<string, unknown>): InadimplenciaCanonicaState {
   const status = root.status;
+  const policy = asRecord(root.policy);
   const operational = asRecord(root.operational);
   const items = parseItems(root.items);
   const totals = parseTotals(root.totals);
@@ -494,8 +511,12 @@ function normalizeV3(root: Record<string, unknown>): InadimplenciaCanonicaState 
   if (
     typeof status !== 'string'
     || !['ok', 'partial', 'stale', 'incomplete', 'error'].includes(status)
+    || !policy
+    || policy.delinquency_rule !== 'd_plus_0'
+    || policy.collection_grace_days !== COBRANCA_AMIGAVEL_CARENCIA_DIAS
     || !operational
     || typeof operational.collection_allowed !== 'boolean'
+    || operational.consumer_must_apply_collection_grace !== true
     || (operational.collection_scope !== 'confirmed_only' && operational.collection_scope !== 'blocked')
     || !Array.isArray(operational.block_reasons)
     || !operational.block_reasons.every((reason) => BLOCK_REASON_ORDER.includes(reason as InadimplenciaBlockReason))
@@ -518,9 +539,11 @@ function normalizeV3(root: Record<string, unknown>): InadimplenciaCanonicaState 
   const derivedStatus: InadimplenciaCanonicaStatus = freshness.competenciasStale > 0
     ? 'stale'
     : scalarError ? 'error'
-    : reconciliation.duplicateFaturaCount > 0 || reconciliation.invalidIdentityInvoiceCount > 0
+    : reconciliation.duplicateFaturaCount > 0
     ? 'incomplete'
     : reconciliation.sourceMissingCount > 0
+      || reconciliation.invalidIdentityInvoiceCount > 0
+      || reconciliation.validationIssueCount > 0
     ? 'partial'
     : 'ok';
   const reasons = expectedReasons(freshness, reconciliation);
@@ -690,18 +713,29 @@ export function indexarInadimplenciaPorMatricula(
 export function montarAlertasInadimplenciaCanonica(
   state: InadimplenciaCanonicaState,
   alunos: AlunoInadimplenciaCanonicaSource[],
-  agora = new Date(),
+  options: Date | MontarAlertasInadimplenciaCanonicaOptions = {},
 ): AlertasInadimplenciaCanonicaResult {
+  const agora = options instanceof Date ? options : options.agora ?? new Date();
+  const collectionGraceDays = options instanceof Date
+    ? state.collectionGraceDays
+    : options.collectionGraceDays ?? state.collectionGraceDays;
+  if (!nonNegativeInteger(collectionGraceDays)) {
+    return { alertas: [], totalAtivos: 0, semCadastroAtivo: 0 };
+  }
   if (!podeCobrarInadimplenciaCanonica(state, agora)) {
     return { alertas: [], totalAtivos: 0, semCadastroAtivo: 0 };
   }
 
-  const inadimplenciaPorMatricula = indexarInadimplenciaPorMatricula(state, agora);
+  const stateElegivel = {
+    ...state,
+    items: state.items.filter((item) => item.dias_atraso >= collectionGraceDays),
+  };
+  const inadimplenciaPorMatricula = indexarInadimplenciaPorMatricula(stateElegivel, agora);
   const alunosPorMatricula = new Map<string, AlunoInadimplenciaCanonicaSource[]>();
 
   for (const aluno of alunos) {
     const matricula = sourceMatricula(aluno.emusys_matricula_id);
-    if (!matricula || aluno.status !== 'ativo' || aluno.arquivado_em != null) continue;
+    if (!matricula) continue;
     const key = chaveInadimplenciaMatricula(aluno.unidade_id, matricula);
     const candidatos = alunosPorMatricula.get(key) ?? [];
     candidatos.push(aluno);
