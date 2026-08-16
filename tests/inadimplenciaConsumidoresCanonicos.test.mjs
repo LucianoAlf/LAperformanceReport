@@ -81,9 +81,28 @@ test('a lista da Sol consome a leitura canonica e nao replica o sync de faturas'
   assert.ok(latestSolInadimplenciaMigration, 'migration da inadimplencia da Sol ausente');
   const sql = readFileSync(`supabase/migrations/${latestSolInadimplenciaMigration}`, 'utf8');
   assert.match(sql, /get_inadimplencia_canonica/i);
-  assert.doesNotMatch(sql, /from\s+sync_run_items/i);
-  assert.match(sql, /status.*incomplete|incomplete.*status/is);
-  assert.match(sql, /freshness|frescor/i);
+  assert.doesNotMatch(sql, /from\s+(?:public\.)?sync_run_items/i);
+  assert.doesNotMatch(sql, /from\s+(?:public\.)?emusys_faturas/i);
+  assert.doesNotMatch(sql, /inadimplente_emusys/i);
+  assert.match(sql, /collection_allowed/i);
+  assert.match(sql, /collection_scope/i);
+  assert.match(sql, /canonical_status/i);
+  assert.match(sql, /jsonb_array_elements\s*\(\s*coalesce\(v_canonical->'items'/i);
+  assert.match(sql, /contact_resolution_status[^\n]+resolved/i);
+  assert.match(sql, /aluno_id_canonico/i);
+  assert.doesNotMatch(sql, /al\.emusys_student_id\s*=/i);
+  assert.doesNotMatch(sql, /order\s+by\s+al\.updated_at/i);
+  assert.match(sql, /p_carencia_dias\s+is\s+distinct\s+from\s+2/i);
+  assert.match(sql, /p_multa_pct\s+is\s+distinct\s+from\s+0\.02/i);
+  assert.match(sql, /p_mora_pct_mes\s+is\s+distinct\s+from\s+0\.01/i);
+  for (const protectedRpc of [
+    'sol_caixa_lancar_recebimento',
+    'sol_caixa_abrir',
+    'sol_caixa_fechar',
+    'sol_caixa_casar_parcela',
+  ]) {
+    assert.doesNotMatch(sql, new RegExp(protectedRpc, 'i'));
+  }
 });
 
 test('farmer usa helper para liberar partial confirmado sem decisao local de status', () => {

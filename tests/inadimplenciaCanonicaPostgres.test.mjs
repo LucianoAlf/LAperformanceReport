@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { normalizarInadimplenciaCanonica } from '../src/lib/inadimplenciaCanonica.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const migrationPaths = [
+const canonicalMigrationPaths = [
   '20260816003732_inadimplencia_canonica_frescor.sql',
   '20260816004257_inadimplencia_canonica_dedupe_global.sql',
   '20260816013502_inadimplencia_canonica_quarentena_identidade.sql',
@@ -18,7 +18,14 @@ const migrationPaths = [
   '20260816125329_inadimplencia_canonica_ativos_janela_tres.sql',
   '20260816150000_inadimplencia_canonica_liberacao_parcial_v3.sql',
 ].map((name) => path.join(root, 'supabase', 'migrations', name));
-const V3_MIGRATION = migrationPaths.at(-1);
+const V3_MIGRATION = canonicalMigrationPaths.at(-1);
+const SOL_V3_MIGRATION = path.join(
+  root,
+  'supabase',
+  'migrations',
+  '20260816151000_sol_caixa_inadimplentes_liberacao_parcial_v3.sql',
+);
+const migrationPaths = [...canonicalMigrationPaths, SOL_V3_MIGRATION];
 const UNIT_A = '11111111-1111-1111-1111-111111111111';
 const UNIT_B = '22222222-2222-2222-2222-222222222222';
 const AUTH_UID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -62,6 +69,7 @@ function dockerIsAvailable() {
 
 function assertV3Exists() {
   assert.equal(fs.existsSync(V3_MIGRATION), true, `migration canonica v3 ausente: ${V3_MIGRATION}`);
+  assert.equal(fs.existsSync(SOL_V3_MIGRATION), true, `migration Sol v3 ausente: ${SOL_V3_MIGRATION}`);
 }
 
 function assertAuthorizationFailure(result, label) {
@@ -100,6 +108,26 @@ function callFinanceAs(container, role, unitId, asOfDate) {
   `);
 }
 
+function callSolAs(container, role, unitId, options = {}) {
+  const {
+    carenciaDias = 2,
+    multaPct = 0.02,
+    moraPctMes = 0.01,
+    graveDias = 30,
+    criticoDias = 40,
+  } = options;
+  return psql(container, `
+    set role ${role};
+    set app.test_role = '${role}';
+    set app.test_uid = '${AUTH_UID}';
+    set app.test_unidade_id = '${unitId}';
+    select public.sol_caixa_inadimplentes(
+      '${unitId}'::uuid,
+      ${carenciaDias}, ${multaPct}, ${moraPctMes}, ${graveDias}, ${criticoDias}
+    )::text;
+  `);
+}
+
 const fixtureSchema = `
   create role anon nologin;
   create role authenticated nologin;
@@ -108,7 +136,7 @@ const fixtureSchema = `
 
   create table public.unidades (id uuid primary key, nome text not null, ativo boolean not null default true);
   create table public.tipos_matricula (id bigint primary key, conta_como_pagante boolean not null default false, entra_ticket_medio boolean not null default false);
-  create table public.cursos (id bigint primary key, is_projeto_banda boolean not null default false);
+  create table public.cursos (id bigint primary key, nome text, is_projeto_banda boolean not null default false);
   create table public.alunos (
     id bigint primary key,
     unidade_id uuid not null references public.unidades(id),
@@ -1397,5 +1425,112 @@ test('v3 usa o snapshot mais recente, janela de tres meses e autorizacao por uni
     assertAuthorizationFailure(denied, 'autenticado nao pode consultar outra unidade');
     const service = jsonFrom(callAllAs(container, 'service_role', asOfDate), 'service role consolidado');
     assert.equal(service.items.some((item) => item.unidade_id === UNIT_B), true);
+  });
+});
+
+test('Sol consome partial D+2 por pessoa, preserva dividas exatas e falha fechada', { timeout: 90_000 }, async (t) => {
+  await withCanonicalFixture(t, async (container, asOfDate) => {
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
+    seed(container, `insert into public.cursos (id, nome) values (1, 'Piano');`, 'curso da Sol');
+
+    insertAluno(container, 701, UNIT_A, '2701', { course: 1, name: 'Pessoa Atual' });
+    insertAluno(container, 711, UNIT_A, '2711', {
+      course: 1,
+      name: 'Pessoa Historica',
+      student: 12701,
+      status: 'inativo',
+      exited: true,
+    });
+    insertAluno(container, 702, UNIT_A, '2702', { course: 1 });
+    insertAluno(container, 703, UNIT_A, '2703', { course: 1 });
+    insertAluno(container, 704, UNIT_A, '2704', { course: 1, student: 12704 });
+    insertAluno(container, 705, UNIT_A, '2705', { course: 1, student: 12704 });
+    insertAluno(container, 706, UNIT_B, '2701', { course: 1 });
+
+    const run = '00000000-0000-0000-0000-000000000999';
+    seedRun(container, run, month);
+    insertInvoices(container, [
+      invoice('99000000-0000-0000-0000-000000000001', UNIT_A, run, month, 2701, {
+        value: 100,
+        due: `date '${asOfDate}' - 2`,
+      }),
+      invoice('99000000-0000-0000-0000-000000000002', UNIT_A, run, month, 2711, {
+        value: 50,
+        student: 12701,
+        due: `date '${asOfDate}' - 3`,
+      }),
+      invoice('99000000-0000-0000-0000-000000000003', UNIT_A, run, month, 2702, {
+        value: 200,
+        sourceMissing: true,
+        reason: 'nao retornada na origem',
+      }),
+      invoice('99000000-0000-0000-0000-000000000004', UNIT_A, run, month, 2703, {
+        value: 30,
+        due: `date '${asOfDate}' - 1`,
+      }),
+      invoice('99000000-0000-0000-0000-000000000005', UNIT_A, run, month, 2704, {
+        value: 40,
+        student: 12704,
+      }),
+      invoice('99000000-0000-0000-0000-000000000006', UNIT_A, run, month, null, {
+        value: 60,
+        fatura: 9906,
+        student: 12701,
+        payload: `'{}'::jsonb`,
+      }),
+      invoice('99000000-0000-0000-0000-000000000007', UNIT_B, run, month, 2701, {
+        value: 70,
+      }),
+    ], 'universo completo da Sol');
+
+    const result = jsonFrom(callSolAs(container, 'service_role', UNIT_A), 'Sol partial D+2');
+    assert.equal(result.status, 'partial');
+    assert.equal(result.canonical_status, 'partial');
+    assert.equal(result.collection_allowed, true);
+    assert.equal(result.collection_scope, 'confirmed_only');
+    assert.equal(result.canonical_delinquency_rule, 'd_plus_0');
+    assert.equal(result.carencia_dias, 2);
+    assert.equal(result.source_missing_count, 1);
+    assert.equal(result.reconciliation.invalid_identity_invoice_count, 1);
+    assert.equal(result.reconciliation.contact_resolution_pending_count, 1);
+    assert.equal(result.confirmados.total_faturas, 4);
+    assert.equal(result.total_alunos, 1);
+    assert.equal(result.total_original, 150);
+    assert.equal(result.total_atualizado, 153.12);
+    assert.deepEqual(result.faixas, { critico: 0, atencao: 0, normal: 1 });
+    assert.equal(result.alunos.length, 1);
+    assert.equal(result.alunos[0].aluno_id_canonico, 701);
+    assert.equal(result.alunos[0].nome, 'Pessoa Atual');
+    assert.deepEqual(result.alunos[0].emusys_matricula_ids, ['2701', '2711']);
+    assert.equal(result.alunos[0].parcelas, 2);
+    assert.equal(result.alunos[0].faturas.length, 2);
+    assert.deepEqual(
+      result.alunos[0].faturas.map((fatura) => fatura.canonical_fatura_id).sort(),
+      [
+        '99000000-0000-0000-0000-000000000001',
+        '99000000-0000-0000-0000-000000000002',
+      ],
+    );
+    assert.equal(result.alunos[0].faturas.some((fatura) => fatura.unidade_id === UNIT_B), false);
+
+    seed(container, `update public.sync_runs set stale_after = now() - interval '1 minute' where id = '${run}';`, 'Sol stale');
+    const stale = jsonFrom(callSolAs(container, 'service_role', UNIT_A), 'Sol bloqueada por stale');
+    assert.equal(stale.canonical_status, 'stale');
+    assert.equal(stale.collection_allowed, false);
+    assert.equal(stale.total_alunos, 0);
+    assert.deepEqual(stale.alunos, []);
+
+    for (const [label, options] of [
+      ['carencia', { carenciaDias: 1 }],
+      ['multa', { multaPct: 0.03 }],
+      ['mora', { moraPctMes: 0.02 }],
+    ]) {
+      const denied = callSolAs(container, 'service_role', UNIT_A, options);
+      assert.notEqual(denied.status, 0, `${label} divergente deveria falhar`);
+      assert.match(`${denied.stderr}\n${denied.stdout}`, /politica financeira invalida/i);
+    }
+
+    assertAuthorizationFailure(callSolAs(container, 'anon', UNIT_A), 'anon nao executa Sol');
+    assertAuthorizationFailure(callSolAs(container, 'authenticated', UNIT_A), 'authenticated nao executa Sol');
   });
 });
