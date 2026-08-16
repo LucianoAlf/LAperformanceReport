@@ -6,6 +6,11 @@ import path from 'node:path';
 
 const root = process.cwd();
 const migrationDir = path.join(root, 'supabase', 'migrations');
+
+function normalizeEol(value) {
+  return value.replace(/\r\n?/g, '\n');
+}
+
 const migrationNames = [
   '20260815222313_sol_caixa_inadimplentes.sql',
   '20260815222416_sol_caixa_inadimplentes_v2_dedupe.sql',
@@ -36,18 +41,15 @@ test('restored migration bytes match the remote migration ledger', () => {
   };
   for (const [name, hash] of Object.entries(expected)) {
     const migration = path.join(migrationDir, name);
-    const normalizedLocalBytes = Buffer.from(
-      fs.readFileSync(migration, 'utf8').replace(/\r\n/g, '\n'),
+    const normalizedLocalBytes = Buffer.from(normalizeEol(fs.readFileSync(migration, 'utf8')));
+    const remoteStatementBytes = Buffer.from(
+      normalizedLocalBytes.toString('utf8').replace(/\n/g, '\r\n'),
     );
-    const remoteStatementBytes = Buffer.concat([
-      normalizedLocalBytes,
-      Buffer.from('\r\n'),
-    ]);
-    const normalizedRemoteBytes = Buffer.from(
-      remoteStatementBytes.toString('utf8').replace(/\r\n/g, '\n'),
-    ).subarray(0, -1);
-    const actual = crypto.createHash('md5').update(normalizedRemoteBytes).digest('hex');
+    const normalizedRemoteBytes = Buffer.from(normalizeEol(remoteStatementBytes.toString('utf8')));
+    const actual = crypto.createHash('md5').update(normalizedLocalBytes).digest('hex');
+    const normalizedRemoteHash = crypto.createHash('md5').update(normalizedRemoteBytes).digest('hex');
     assert.equal(actual, hash, `migration drift: ${name}`);
+    assert.equal(normalizedRemoteHash, actual, `EOL normalization drift: ${name}`);
   }
 });
 
