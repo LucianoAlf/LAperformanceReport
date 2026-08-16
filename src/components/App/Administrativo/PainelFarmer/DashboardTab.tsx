@@ -46,6 +46,7 @@ import { gerarMensagemAniversario, gerarMensagemBoasVindas } from '@/services/me
 import { useColaboradorAtual, useRotinas, useAlertas, useTarefas, useFarmersUnidade, useDashboardStats, useSucessoAlunoAlertas, useFeedbackPendente } from './hooks';
 import type { AlertaRenovacao, AlertaInadimplente, AlertaAniversariante, AlertaNovoMatriculado } from './types';
 import { supabase } from '@/lib/supabase';
+import { podeCobrarInadimplenciaCanonica } from '@/lib/inadimplenciaCanonica';
 
 interface DashboardTabProps {
   unidadeId: string;
@@ -88,6 +89,7 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
     inadimplenciaSemCadastroAtivo,
     loading: loadingAlertas 
   } = useAlertas(unidadeId);
+  const cobrancaInadimplenciaLiberada = podeCobrarInadimplenciaCanonica(inadimplenciaCanonica);
   const { 
     tarefas, 
     tarefasPendentes, 
@@ -501,38 +503,58 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
               />
             )}
 
-            {inadimplenciaCanonica.status !== 'ok' && inadimplenciaCanonica.status !== 'loading' && (
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+            {!cobrancaInadimplenciaLiberada && inadimplenciaCanonica.status !== 'loading' && (
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-100">
                 <div className="flex items-start gap-2">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-400" />
+                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-400" />
                   <div>
-                    <p className="font-medium">Cobrança financeira temporariamente indisponível</p>
-                    <p className="mt-0.5 text-xs text-amber-200/80">
+                    <p className="font-medium">
                       {inadimplenciaCanonica.status === 'stale'
-                        ? 'O snapshot do Emusys venceu. A lista fica bloqueada até uma sincronização completa e fresca.'
+                        ? 'Dados de inadimplência desatualizados — cobrança bloqueada'
                         : inadimplenciaCanonica.status === 'incomplete'
-                          ? 'Há faturas aguardando reconciliação. Nenhuma cobrança é liberada com leitura parcial.'
-                          : 'Não foi possível validar a leitura canônica de inadimplência.'}
+                          ? 'Leitura financeira inválida — cobrança bloqueada'
+                          : 'Falha na leitura financeira — cobrança bloqueada'}
+                    </p>
+                    <p className="mt-0.5 text-xs text-red-200/80">
+                      {inadimplenciaCanonica.status === 'stale'
+                        ? 'O snapshot do Emusys venceu. Aguarde uma sincronização completa e fresca.'
+                        : inadimplenciaCanonica.status === 'incomplete'
+                          ? 'Há duplicidades ou identidades de fatura que precisam de correção antes de qualquer ação.'
+                          : 'Não foi possível validar a leitura canônica; nenhuma ação financeira está disponível.'}
                     </p>
                   </div>
                 </div>
               </div>
             )}
 
-            {inadimplenciaCanonica.status === 'ok' && inadimplenciaSemCadastroAtivo > 0 && (
+            {cobrancaInadimplenciaLiberada
+              && inadimplenciaCanonica.status === 'partial'
+              && inadimplenciaCanonica.sourceMissingCount > 0 && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-400" />
+                  <p>
+                    <strong>{inadimplenciaCanonica.sourceMissingCount} faturas aguardando reconciliação — fora da cobrança</strong>
+                    <span className="mt-0.5 block text-xs text-amber-200/80">A cobrança confirmada permanece disponível sem incluir esse universo.</span>
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {cobrancaInadimplenciaLiberada && inadimplenciaSemCadastroAtivo > 0 && (
               <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
-                {inadimplenciaSemCadastroAtivo} matrícula(s) inadimplente(s) sem vínculo local ativo. A cobrança foi bloqueada para esses casos.
+                {inadimplenciaSemCadastroAtivo} matrícula(s) confirmada(s) sem vínculo local para contato. Nenhuma associação foi feita por nome ou ID de aluno.
               </div>
             )}
 
             {/* Alerta: Inadimplentes */}
-            {inadimplentes.length > 0 && (
+            {cobrancaInadimplenciaLiberada && inadimplentes.length > 0 && (
               <AlertaItem
                 icon="💰"
                 count={inadimplentes.length}
-                title="Inadimplentes"
+                title="Inadimplências confirmadas — cobrança liberada"
                 subtitle={`Valores corrigidos • ${formatarFrescorFinanceiro(inadimplenciaCanonica.ultimoSyncMaisAntigo)}`}
-                variant="warning"
+                variant="success"
                 expanded={expandedAlerts.has('inadimplentes')}
                 onToggle={() => toggleAlert('inadimplentes')}
                 items={inadimplentes}

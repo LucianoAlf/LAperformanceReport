@@ -47,7 +47,10 @@ import {
 } from '@/components/ui/command';
 import { ContatoPopover } from './ContatoPopover';
 import type { Aluno, Filtros } from './AlunosPage';
-import type { InadimplenciaCanonicaState } from '@/lib/inadimplenciaCanonica';
+import {
+  podeCobrarInadimplenciaCanonica,
+  type InadimplenciaCanonicaState,
+} from '@/lib/inadimplenciaCanonica';
 import {
   analisarMudancaParaSemParcela,
   buscarContextosStatusPagamento,
@@ -64,7 +67,7 @@ interface TabelaAlunosProps {
   todosAlunos: Aluno[]; // Todos os alunos sem filtro para contagem fixa
   inadimplenciaCanonica: InadimplenciaCanonicaState;
   filtros: Filtros;
-  setFiltros: (filtros: Filtros) => void;
+  setFiltros: React.Dispatch<React.SetStateAction<Filtros>>;
   limparFiltros: () => void;
   professores: {id: number, nome: string}[];
   cursos: {id: number, nome: string, is_projeto_banda?: boolean}[];
@@ -291,6 +294,15 @@ export function TabelaAlunos({
           include_backlog: true,
         },
       });
+      const httpStatus = Number((error as any)?.context?.status ?? data?.status ?? 0);
+      await onRecarregar();
+
+      if (httpStatus === 429) {
+        const proximaTentativa = data?.next_attempt_at
+          ? ` Próxima tentativa: ${new Date(data.next_attempt_at).toLocaleString('pt-BR')}.`
+          : '';
+        throw new Error(`A sincronização está temporariamente limitada.${proximaTentativa}`);
+      }
       if (error) throw error;
 
       const concluido = data?.ok === true
@@ -314,7 +326,6 @@ export function TabelaAlunos({
       } else {
         throw new Error(data?.erro || 'O worker não confirmou um snapshot financeiro completo.');
       }
-      await onRecarregar();
     } catch (error: any) {
       console.error('Erro ao atualizar inadimplência:', error);
       toast.addToast('Erro ao atualizar inadimplência', 'error', error.message || 'Não foi possível sincronizar com o Emusys agora.');
@@ -323,39 +334,48 @@ export function TabelaAlunos({
     }
   }
 
-  const inadimplenciaInfoCanonica = {
-    total: inadimplenciaCanonica.totalMatriculas,
+  const cobrancaLiberada = podeCobrarInadimplenciaCanonica(inadimplenciaCanonica);
+  const inadimplenciaConfirmada = {
+    totalMatriculas: inadimplenciaCanonica.totalMatriculas,
     totalFaturas: inadimplenciaCanonica.totalFaturas,
-    valor: inadimplenciaCanonica.totalAtualizado,
+    totalAtualizado: inadimplenciaCanonica.totalAtualizado,
+  };
+  const reconciliacaoPendente = {
+    sourceMissingCount: inadimplenciaCanonica.sourceMissingCount,
+  };
+  const inadimplenciaInfoCanonica = {
+    total: inadimplenciaConfirmada.totalMatriculas,
+    totalFaturas: inadimplenciaConfirmada.totalFaturas,
+    valor: inadimplenciaConfirmada.totalAtualizado,
     atualizadoEm: inadimplenciaCanonica.ultimoSyncMaisAntigo,
     status: inadimplenciaCanonica.status,
-    sourceMissing: inadimplenciaCanonica.sourceMissingCount,
+    sourceMissing: reconciliacaoPendente.sourceMissingCount,
     validationIssues: inadimplenciaCanonica.validationIssueCount,
+    blockReasons: inadimplenciaCanonica.blockReasons,
     mostrar: inadimplenciaCanonica.status !== 'loading'
-      && (inadimplenciaCanonica.status !== 'ok' || inadimplenciaCanonica.totalFaturas > 0),
+      && (
+        !cobrancaLiberada
+        || inadimplenciaCanonica.totalFaturas > 0
+        || inadimplenciaCanonica.sourceMissingCount > 0
+      ),
   };
-  const alertaFinanceiroCritico = inadimplenciaInfoCanonica.status === 'ok'
-    && inadimplenciaInfoCanonica.totalFaturas > 0;
-  const tituloInadimplencia = (() => {
+  const tituloBloqueioInadimplencia = (() => {
     if (inadimplenciaInfoCanonica.status === 'stale') {
       return 'Dados de inadimplência desatualizados — lista bloqueada';
     }
     if (inadimplenciaInfoCanonica.status === 'error') {
-      return 'Não foi possível carregar a inadimplência canônica';
+      return 'Falha na leitura financeira — cobrança bloqueada';
     }
     if (inadimplenciaInfoCanonica.status === 'incomplete') {
-      return 'Leitura financeira incompleta — conciliação pendente';
+      return 'Leitura financeira inválida — cobrança bloqueada';
     }
-    return `${inadimplenciaInfoCanonica.total} matrícula${inadimplenciaInfoCanonica.total !== 1 ? 's' : ''} inadimplente${inadimplenciaInfoCanonica.total !== 1 ? 's' : ''}`;
+    return 'Cobrança financeira bloqueada';
   })();
-  const detalhesReconciliacao = [
-    inadimplenciaInfoCanonica.sourceMissing > 0
-      ? `${inadimplenciaInfoCanonica.sourceMissing} fatura(s) aguardando reconciliação`
-      : null,
-    inadimplenciaInfoCanonica.validationIssues > 0
-      ? `${inadimplenciaInfoCanonica.validationIssues} erro(s) de identidade em quarentena`
-      : null,
-  ].filter(Boolean).join(' · ');
+  const motivosBloqueioAmigaveis = inadimplenciaInfoCanonica.blockReasons.map((reason) => {
+    if (reason === 'stale_competencia') return 'Há competências fora da janela de frescor.';
+    if (reason === 'duplicate_confirmed_fatura') return 'Foram encontradas faturas confirmadas duplicadas.';
+    return 'Há faturas com identidade inválida aguardando correção.';
+  });
 
   function formatarTempoDecorrido(iso: string | null): string {
     if (!iso) return 'nunca sincronizado';
@@ -1968,25 +1988,50 @@ export function TabelaAlunos({
 
       {/* Alerta financeiro canônico */}
       {inadimplenciaInfoCanonica.mostrar && !alertaInadimplenciaDismissed && (
-        <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border text-sm ${
-          alertaFinanceiroCritico ? 'bg-red-500/15 border-red-500/30' : 'bg-amber-500/15 border-amber-500/30'
-        }`}>
-          <AlertTriangle className={`w-5 h-5 flex-shrink-0 ${alertaFinanceiroCritico ? 'text-red-400' : 'text-amber-300'}`} />
-          <span className={`${alertaFinanceiroCritico ? 'text-red-300' : 'text-amber-200'} flex-1`}>
-            <strong className={alertaFinanceiroCritico ? 'text-red-200' : 'text-amber-100'}>
-              {tituloInadimplencia}
-            </strong>
-            {inadimplenciaInfoCanonica.totalFaturas > 0 && (
-              <> — {inadimplenciaInfoCanonica.totalFaturas} fatura(s), R$ {inadimplenciaInfoCanonica.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} corrigidos</>
+        <div className="flex items-start gap-3 rounded-xl border border-slate-700/80 bg-slate-900/70 px-4 py-3 text-sm">
+          <AlertTriangle className={`mt-0.5 h-5 w-5 flex-shrink-0 ${
+            cobrancaLiberada
+              ? inadimplenciaInfoCanonica.total > 0 ? 'text-emerald-400' : 'text-amber-300'
+              : 'text-red-400'
+          }`} />
+          <div className="min-w-0 flex-1 space-y-2">
+            {cobrancaLiberada && inadimplenciaInfoCanonica.total > 0 && (
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-emerald-200">
+                <strong className="text-emerald-100">
+                  {inadimplenciaConfirmada.totalMatriculas} inadimplências confirmadas — cobrança liberada
+                </strong>
+                {' — '}{inadimplenciaConfirmada.totalFaturas} fatura(s), R$ {inadimplenciaConfirmada.totalAtualizado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} corrigidos
+                {' · '}
+                <span className="text-emerald-200/70">snapshot mais antigo atualizado {formatarTempoDecorrido(inadimplenciaInfoCanonica.atualizadoEm)}</span>
+              </div>
             )}
-            {detalhesReconciliacao ? <> · {detalhesReconciliacao}</> : null}
-            {' · '}
-            <span className="opacity-70">snapshot mais antigo atualizado {formatarTempoDecorrido(inadimplenciaInfoCanonica.atualizadoEm)}</span>
-          </span>
-          {inadimplenciaInfoCanonica.total > 0 && (
+
+            {cobrancaLiberada && inadimplenciaInfoCanonica.status === 'partial' && inadimplenciaInfoCanonica.sourceMissing > 0 && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-200">
+                <strong className="text-amber-100">
+                  {reconciliacaoPendente.sourceMissingCount} faturas aguardando reconciliação — fora da cobrança
+                </strong>
+              </div>
+            )}
+
+            {!cobrancaLiberada && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-red-200">
+                <strong className="text-red-100">{tituloBloqueioInadimplencia}</strong>
+                {motivosBloqueioAmigaveis.length > 0 && (
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-red-200/80">
+                    {motivosBloqueioAmigaveis.map(motivo => <li key={motivo}>{motivo}</li>)}
+                  </ul>
+                )}
+                {inadimplenciaInfoCanonica.status === 'error' && (
+                  <p className="mt-1 text-xs text-red-200/80">Nenhuma ação financeira está disponível até uma leitura canônica válida.</p>
+                )}
+              </div>
+            )}
+          </div>
+          {cobrancaLiberada && inadimplenciaInfoCanonica.total > 0 && (
             <button
-              onClick={() => setFiltros({ ...filtros, inadimplente_emusys_live: true })}
-              className="px-3 py-1 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap bg-red-500/20 hover:bg-red-500/30 border-red-500/30 text-red-200"
+              onClick={() => setFiltros(prev => ({ ...prev, inadimplente_emusys_live: true }))}
+              className="whitespace-nowrap rounded-lg border border-emerald-500/30 bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-100 transition-colors hover:bg-emerald-500/30"
             >
               Filtrar ativos inadimplentes
             </button>
@@ -2003,7 +2048,7 @@ export function TabelaAlunos({
             className="p-1 hover:bg-white/10 rounded transition-colors"
             title="Dispensar alerta"
           >
-            <X className={`w-4 h-4 ${alertaFinanceiroCritico ? 'text-red-400' : 'text-amber-300'}`} />
+            <X className={`h-4 w-4 ${cobrancaLiberada ? 'text-slate-400' : 'text-red-400'}`} />
           </button>
         </div>
       )}

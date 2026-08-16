@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
@@ -48,6 +48,7 @@ import {
   indexarInadimplenciaPorMatricula,
   INADIMPLENCIA_CANONICA_LOADING,
   normalizarInadimplenciaCanonica,
+  podeCobrarInadimplenciaCanonica,
   type InadimplenciaCanonicaState,
 } from '@/lib/inadimplenciaCanonica';
 // Interfaces
@@ -228,6 +229,24 @@ export interface Filtros {
 
 type TabAtiva = 'lista' | 'turmas' | 'grade' | 'distribuicao' | 'importar' | 'automacao' | 'historico' | 'conciliacao';
 
+const bloquearInadimplenciaPorExpiracao = (
+  state: InadimplenciaCanonicaState,
+): InadimplenciaCanonicaState => ({
+  ...state,
+  status: 'stale',
+  totalFaturas: 0,
+  totalMatriculas: 0,
+  totalOriginal: 0,
+  totalAtualizado: 0,
+  maiorAtraso: 0,
+  competenciasStale: Math.max(1, state.competenciasStale),
+  collectionAllowed: false,
+  collectionScope: 'blocked',
+  blockReasons: ['stale_competencia'],
+  items: [],
+  erro: null,
+});
+
 const alunosTabs: PageTab<TabAtiva>[] = [
   { id: 'lista', label: 'Lista de Alunos', shortLabel: 'Lista', icon: Users },
   { id: 'turmas', label: 'Gestão de Turmas', shortLabel: 'Turmas', icon: Calendar },
@@ -284,6 +303,7 @@ export function AlunosPage() {
   const [inadimplenciaCanonica, setInadimplenciaCanonica] = useState<InadimplenciaCanonicaState>(
     INADIMPLENCIA_CANONICA_LOADING,
   );
+  const carregarDadosRef = useRef<() => Promise<void>>(async () => undefined);
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [kpis, setKpis] = useState<KPIsAlunos>({
     totalAtivos: 0,
@@ -320,6 +340,32 @@ export function AlunosPage() {
     diagnostico: '',
     sem_telefone: false,
   });
+  const cobrancaInadimplenciaLiberada = podeCobrarInadimplenciaCanonica(inadimplenciaCanonica);
+
+  const limparInadimplenciaDerivada = useCallback(() => {
+    setAlunos(prev => prev.map(aluno => ({
+      ...aluno,
+      inadimplente_emusys: undefined,
+      _inadimplencia_atualizado_em: null,
+      _inadimplencia_valor_atualizado: 0,
+      _inadimplencia_total_faturas: 0,
+      outros_cursos: aluno.outros_cursos?.map(outroCurso => ({
+        ...outroCurso,
+        inadimplente_emusys: undefined,
+        _inadimplencia_atualizado_em: null,
+        _inadimplencia_valor_atualizado: 0,
+        _inadimplencia_total_faturas: 0,
+      })),
+    })));
+    setFiltros(prev => prev.inadimplente_emusys_live
+      ? { ...prev, inadimplente_emusys_live: false }
+      : prev);
+  }, []);
+
+  const invalidarInadimplenciaExpirada = useCallback(() => {
+    setInadimplenciaCanonica(prev => bloquearInadimplenciaPorExpiracao(prev));
+    limparInadimplenciaDerivada();
+  }, [limparInadimplenciaDerivada]);
 
   // Estados de opções para selects
   const [professores, setProfessores] = useState<{ id: number, nome: string }[]>([]);
@@ -490,10 +536,46 @@ export function AlunosPage() {
   const [alertaTurma, setAlertaTurma] = useState<{ show: boolean, aluno?: Aluno, turmaExistente?: Turma } | null>(null);
   const [turmaDetalheAbrir, setTurmaDetalheAbrir] = useState<Turma | null>(null);
 
-  // Carregar dados iniciais
+  carregarDadosRef.current = carregarDados;
+
+  // Carregar dados iniciais e invalidar imediatamente qualquer leitura da unidade anterior.
   useEffect(() => {
-    carregarDados();
-  }, [unidadeAtual, competenciaRange.startDate, competenciaRange.endDate]);
+    setInadimplenciaCanonica(INADIMPLENCIA_CANONICA_LOADING);
+    limparInadimplenciaDerivada();
+    void carregarDadosRef.current();
+  }, [
+    unidadeAtual,
+    competenciaRange.startDate,
+    competenciaRange.endDate,
+    limparInadimplenciaDerivada,
+  ]);
+
+  const inadimplenciaCollectionAllowed = inadimplenciaCanonica.collectionAllowed;
+  const inadimplenciaFreshUntil = inadimplenciaCanonica.freshUntil;
+  useEffect(() => {
+    if (!inadimplenciaCollectionAllowed || !inadimplenciaFreshUntil) return;
+
+    const limiteFrescor = Date.parse(inadimplenciaFreshUntil);
+    const tempoAteExpirar = limiteFrescor - Date.now();
+    if (!Number.isFinite(limiteFrescor) || tempoAteExpirar <= 0) {
+      invalidarInadimplenciaExpirada();
+      return;
+    }
+
+    const timerExpiracao = window.setTimeout(() => {
+      invalidarInadimplenciaExpirada();
+      void carregarDadosRef.current().catch(() => {
+        invalidarInadimplenciaExpirada();
+      });
+    }, tempoAteExpirar);
+
+    return () => window.clearTimeout(timerExpiracao);
+  }, [
+    inadimplenciaCollectionAllowed,
+    inadimplenciaFreshUntil,
+    unidadeAtual,
+    invalidarInadimplenciaExpirada,
+  ]);
 
   useEffect(() => {
     if (competenciaMensal.bloqueiaEscrita) {
@@ -636,7 +718,12 @@ export function AlunosPage() {
       inadimplenciaR.data,
       inadimplenciaR.error,
     );
-    setInadimplenciaCanonica(inadimplenciaAtual);
+    const cobrancaLiberada = podeCobrarInadimplenciaCanonica(inadimplenciaAtual);
+    const leituraExpirada = inadimplenciaAtual.collectionAllowed && !cobrancaLiberada;
+    setInadimplenciaCanonica(
+      leituraExpirada ? bloquearInadimplenciaPorExpiracao(inadimplenciaAtual) : inadimplenciaAtual,
+    );
+    if (!cobrancaLiberada) limparInadimplenciaDerivada();
 
     // Mesclar alunos por data_saida (sem duplicatas)
     let alunosMesclados = alunosRaw ?? [];
@@ -782,7 +869,6 @@ export function AlunosPage() {
       // A RPC canonica ja aplicou frescor, reconciliacao, dedupe e juros. Aqui so
       // indexamos por (unidade, matricula Emusys) para ligar as faturas aos alunos.
       const inadimplenciaMap = indexarInadimplenciaPorMatricula(inadimplenciaAtual);
-      const leituraCompleta = inadimplenciaAtual.status === 'ok';
 
       const alunosComInadimplenciaEmusys = alunosComSegundoCurso.map(aluno => {
         const chavePrincipal = aluno.emusys_matricula_id
@@ -797,7 +883,7 @@ export function AlunosPage() {
           const inadimplenciaOutroCurso = chaveOc ? inadimplenciaMap.get(chaveOc) : undefined;
           return {
             ...oc,
-            inadimplente_emusys: inadimplenciaOutroCurso ? true : (leituraCompleta ? false : undefined),
+            inadimplente_emusys: inadimplenciaOutroCurso ? true : (cobrancaLiberada ? false : undefined),
             _inadimplencia_atualizado_em: inadimplenciaOutroCurso?.ultimoSync ?? null,
             _inadimplencia_valor_atualizado: inadimplenciaOutroCurso?.valorAtualizado ?? 0,
             _inadimplencia_total_faturas: inadimplenciaOutroCurso?.faturas ?? 0,
@@ -806,7 +892,7 @@ export function AlunosPage() {
 
         return {
           ...aluno,
-          inadimplente_emusys: principal ? true : (leituraCompleta ? false : undefined),
+          inadimplente_emusys: principal ? true : (cobrancaLiberada ? false : undefined),
           _inadimplencia_atualizado_em: principal?.ultimoSync ?? null,
           _inadimplencia_valor_atualizado: principal?.valorAtualizado ?? 0,
           _inadimplencia_total_faturas: principal?.faturas ?? 0,
@@ -1248,13 +1334,10 @@ export function AlunosPage() {
     }
 
     // Filtro pela leitura canonica de faturas -- independente do status_pagamento manual.
-    if (filtros.inadimplente_emusys_live) {
+    if (filtros.inadimplente_emusys_live && cobrancaInadimplenciaLiberada) {
       resultado = resultado.filter(a => {
-        if (String(a.status || '').toLowerCase() !== 'ativo') return false;
         const principalInadimplente = a.inadimplente_emusys === true;
-        const outroCursoInadimplente = a.outros_cursos?.some(oc =>
-          String(oc.status || '').toLowerCase() === 'ativo' && oc.inadimplente_emusys === true
-        );
+        const outroCursoInadimplente = a.outros_cursos?.some(oc => oc.inadimplente_emusys === true);
         return principalInadimplente || outroCursoInadimplente;
       });
     }
@@ -1294,7 +1377,7 @@ export function AlunosPage() {
     }
 
     return resultado;
-  }, [alunos, filtros, turmas, cursos]);
+  }, [alunos, filtros, turmas, cursos, cobrancaInadimplenciaLiberada]);
 
   // Adicionar contagem de alunos na turma para cada aluno
   const alunosComTurma = useMemo(() => {

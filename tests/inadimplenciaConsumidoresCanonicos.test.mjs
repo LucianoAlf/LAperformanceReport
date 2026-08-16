@@ -74,3 +74,41 @@ test('a lista da Sol consome a leitura canonica e nao replica o sync de faturas'
   assert.match(sql, /status.*incomplete|incomplete.*status/is);
   assert.match(sql, /freshness|frescor/i);
 });
+
+test('farmer usa helper para liberar partial confirmado sem decisao local de status', () => {
+  assert.match(farmerHook, /podeCobrarInadimplenciaCanonica/);
+  assert.match(farmerHook, /podeCobrarInadimplenciaCanonica\(estadoCanonico\)/);
+  assert.doesNotMatch(farmerHook, /estadoCanonico\.status\s*===\s*['"]ok['"]/);
+  assert.doesNotMatch(farmerHook, /\.eq\(\s*['"]status['"]\s*,\s*['"]ativo['"]\s*\)/);
+  assert.match(farmerHook, /\.in\(\s*['"]emusys_matricula_id['"]\s*,\s*matriculas\s*\)/);
+  assert.match(farmerHook, /\.in\(\s*['"]unidade_id['"]\s*,\s*unidades\s*\)/);
+  assert.doesNotMatch(farmerHook, /emusys_student_id/);
+});
+
+test('farmer expira uma vez, limpa cobranca e desfaz timer na troca de unidade', () => {
+  assert.match(farmerHook, /freshUntil/);
+  assert.match(farmerHook, /window\.setTimeout/);
+  assert.match(farmerHook, /window\.clearTimeout/);
+  assert.match(farmerHook, /tempoAteExpirar\s*<=\s*0/);
+  assert.match(farmerHook, /setInadimplentes\(\[\]\)/);
+  assert.match(farmerHook, /void fetchAlertas\(\)/);
+  assert.match(farmerHook, /\[[^\]]*inadimplenciaCollectionAllowed[^\]]*unidadeId[^\]]*\]/);
+});
+
+test('dashboard mostra partial acionavel e reconciliacao separada sem misturar dinheiro', () => {
+  assert.match(farmerDashboard, /podeCobrarInadimplenciaCanonica/);
+  assert.match(farmerDashboard, /inadimplências confirmadas — cobrança liberada/iu);
+  assert.match(farmerDashboard, /faturas aguardando reconciliação — fora da cobrança/iu);
+  assert.match(farmerDashboard, /sourceMissingCount/);
+  assert.match(farmerDashboard, /variant="success"/);
+
+  const reconciliationNotice = farmerDashboard.match(/sourceMissingCount\s*>\s*0[\s\S]*?<\/div>\s*\)}/)?.[0] ?? '';
+  assert.doesNotMatch(reconciliationNotice, /totalAtualizado|valor_atualizado|R\$/);
+});
+
+test('dashboard mantem stale incomplete e error bloqueados e distintos', () => {
+  assert.match(farmerDashboard, /Dados de inadimplência desatualizados — cobrança bloqueada/u);
+  assert.match(farmerDashboard, /Leitura financeira inválida — cobrança bloqueada/u);
+  assert.match(farmerDashboard, /Falha na leitura financeira — cobrança bloqueada/u);
+  assert.doesNotMatch(farmerDashboard, /nenhuma cobrança é liberada com leitura parcial/iu);
+});
