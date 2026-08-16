@@ -16,14 +16,14 @@ const canonicalMigrationPaths = [
   '20260816020631_inadimplencia_canonica_vencimento_estrito.sql',
   '20260816115755_inadimplencia_canonica_ignora_competencia_futura.sql',
   '20260816125329_inadimplencia_canonica_ativos_janela_tres.sql',
-  '20260816150000_inadimplencia_canonica_liberacao_parcial_v3.sql',
+  '20260816184837_inadimplencia_canonica_liberacao_parcial_v3.sql',
 ].map((name) => path.join(root, 'supabase', 'migrations', name));
 const V3_MIGRATION = canonicalMigrationPaths.at(-1);
 const SOL_V3_MIGRATION = path.join(
   root,
   'supabase',
   'migrations',
-  '20260816151000_sol_caixa_inadimplentes_liberacao_parcial_v3.sql',
+  '20260816184845_sol_caixa_inadimplentes_liberacao_parcial_v3.sql',
 );
 const migrationPaths = [...canonicalMigrationPaths, SOL_V3_MIGRATION];
 const UNIT_A = '11111111-1111-1111-1111-111111111111';

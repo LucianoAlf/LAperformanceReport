@@ -12,7 +12,7 @@ const migrations = [
   path.join(root, 'supabase', 'migrations', '20260816020631_inadimplencia_canonica_vencimento_estrito.sql'),
   path.join(root, 'supabase', 'migrations', '20260816115755_inadimplencia_canonica_ignora_competencia_futura.sql'),
   path.join(root, 'supabase', 'migrations', '20260816125329_inadimplencia_canonica_ativos_janela_tres.sql'),
-  path.join(root, 'supabase', 'migrations', '20260816150000_inadimplencia_canonica_liberacao_parcial_v3.sql'),
+  path.join(root, 'supabase', 'migrations', '20260816184837_inadimplencia_canonica_liberacao_parcial_v3.sql'),
 ];
 
 function sql() {
@@ -47,7 +47,7 @@ test('effective canonical migration is the v3 partial-release contract', () => {
   const effectiveMigration = migrations.at(-1);
   assert.equal(
     path.basename(effectiveMigration),
-    '20260816150000_inadimplencia_canonica_liberacao_parcial_v3.sql',
+    '20260816184837_inadimplencia_canonica_liberacao_parcial_v3.sql',
   );
   assert.equal(fs.existsSync(effectiveMigration), true, 'migration canonica v3 ausente');
 });

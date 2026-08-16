@@ -14,7 +14,7 @@
 
 - Trabalhar somente em `D:\2026\LA-performance-report\.worktrees\inadimplencia-liberacao-parcial`, branch `fix/inadimplencia-liberacao-parcial`.
 - Não alterar migrations já aplicadas. Criar migrations aditivas com `supabase migration new`, conferir o nome gerado e só então renomear para um timestamp livre se necessário.
-- Antes de criar migrations, executar `git fetch origin`, comparar `origin/main` e interromper para replanejar timestamps se já existir migration com timestamp igual ou posterior a `20260816150000`.
+- Antes de criar migrations, executar `git fetch origin`, comparar `origin/main` e interromper para replanejar timestamps se já existir migration com timestamp igual ou posterior a `20260816184837`.
 - Não usar `supabase db push --include-all` nem qualquer atalho para contornar drift.
 - Não alterar `verify_jwt=false` de `export-contas-receber`; a função já possui autenticação própria.
 - Não tocar em `sol_caixa_lancar_recebimento`, `sol_caixa_abrir`, `sol_caixa_fechar` ou `sol_caixa_casar_parcela`.
@@ -98,11 +98,11 @@ git commit -m "test(financeiro): normalizar EOL na prova de migrations"
 - Modify: `tests/inadimplenciaCanonicaContract.test.mjs`
 - Modify: `tests/inadimplenciaCanonicaPostgres.test.mjs`
 - Modify: `tests/inadimplenciaConsumidoresCanonicos.test.mjs`
-- Create later: `supabase/migrations/20260816150000_inadimplencia_canonica_liberacao_parcial_v3.sql`
+- Create later: `supabase/migrations/20260816184837_inadimplencia_canonica_liberacao_parcial_v3.sql`
 
 - [ ] **Step 1: Fazer o teste de contrato apontar para a migration v3 ainda ausente**
 
-No resolvedor da migration efetiva, exigir que a última migration canônica seja `20260816150000_inadimplencia_canonica_liberacao_parcial_v3.sql`. Adicionar assertions para:
+No resolvedor da migration efetiva, exigir que a última migration canônica seja `20260816184837_inadimplencia_canonica_liberacao_parcial_v3.sql`. Adicionar assertions para:
 
 ```js
 assert.match(source, /'schema_version',\s*3/i);
@@ -254,7 +254,7 @@ Não fazer commit enquanto os testes estiverem RED; a criação do SQL na Task 3
 
 **Files:**
 
-- Create: `supabase/migrations/20260816150000_inadimplencia_canonica_liberacao_parcial_v3.sql`
+- Create: `supabase/migrations/20260816184837_inadimplencia_canonica_liberacao_parcial_v3.sql`
 - Test: `tests/inadimplenciaCanonicaContract.test.mjs`
 - Test: `tests/inadimplenciaCanonicaPostgres.test.mjs`
 
@@ -270,7 +270,7 @@ Get-ChildItem -LiteralPath supabase\migrations -Filter '*.sql' |
 supabase migration list --linked
 ```
 
-Expected: worktree contém somente as mudanças de teste RED; ledger remoto não contém uma migration conflitante. Se `origin/main` avançou em arquivos deste plano ou surgiu timestamp `>= 20260816150000`, parar, integrar/revisar e renumerar as duas migrations novas e as referências dos testes antes de continuar.
+Expected: worktree contém somente as mudanças de teste RED; ledger remoto não contém uma migration conflitante. Se `origin/main` avançou em arquivos deste plano ou surgiu timestamp `>= 20260816184837`, parar, integrar/revisar e renumerar as duas migrations novas e as referências dos testes antes de continuar.
 
 - [ ] **Step 2: Criar a migration pela CLI e fixar o nome verificado**
 
@@ -280,7 +280,7 @@ Get-ChildItem -LiteralPath supabase\migrations -Filter '*_inadimplencia_canonica
   Select-Object FullName,Length,LastWriteTime
 ```
 
-Confirmar que há exatamente um arquivo novo e vazio. Confirmar que o destino `supabase/migrations/20260816150000_inadimplencia_canonica_liberacao_parcial_v3.sql` não existe; então renomear somente esse arquivo para o destino. Nunca substituir um arquivo existente.
+Confirmar que há exatamente um arquivo novo e vazio. Confirmar que o destino `supabase/migrations/20260816184837_inadimplencia_canonica_liberacao_parcial_v3.sql` não existe; então renomear somente esse arquivo para o destino. Nunca substituir um arquivo existente.
 
 - [ ] **Step 3: Preservar assinatura e autorização da RPC**
 
@@ -503,14 +503,14 @@ Expected: todos verdes; o teste PostgreSQL executa em PostgreSQL 17 real, sem sk
 Revisar ainda:
 
 ```powershell
-rg -n "source_missing.*pag|pag.*source_missing|emusys_student_id.*items|nome.*join" supabase\migrations\20260816150000_inadimplencia_canonica_liberacao_parcial_v3.sql
-rg -n "security definer|set search_path|revoke all|grant execute" supabase\migrations\20260816150000_inadimplencia_canonica_liberacao_parcial_v3.sql
+rg -n "source_missing.*pag|pag.*source_missing|emusys_student_id.*items|nome.*join" supabase\migrations\20260816184837_inadimplencia_canonica_liberacao_parcial_v3.sql
+rg -n "security definer|set search_path|revoke all|grant execute" supabase\migrations\20260816184837_inadimplencia_canonica_liberacao_parcial_v3.sql
 ```
 
 - [ ] **Step 11: Commit do contrato canônico e seus testes**
 
 ```powershell
-git add supabase/migrations/20260816150000_inadimplencia_canonica_liberacao_parcial_v3.sql tests/inadimplenciaCanonicaContract.test.mjs tests/inadimplenciaCanonicaPostgres.test.mjs tests/inadimplenciaConsumidoresCanonicos.test.mjs
+git add supabase/migrations/20260816184837_inadimplencia_canonica_liberacao_parcial_v3.sql tests/inadimplenciaCanonicaContract.test.mjs tests/inadimplenciaCanonicaPostgres.test.mjs tests/inadimplenciaConsumidoresCanonicos.test.mjs
 git commit -m "feat(financeiro): liberar inadimplencia confirmada com seguranca"
 ```
 
@@ -877,7 +877,7 @@ git commit -m "feat(financeiro): exportar somente inadimplencia confirmada"
 
 **Files:**
 
-- Create: `supabase/migrations/20260816151000_sol_caixa_inadimplentes_liberacao_parcial_v3.sql`
+- Create: `supabase/migrations/20260816184845_sol_caixa_inadimplentes_liberacao_parcial_v3.sql`
 - Modify: `tests/inadimplenciaCanonicaPostgres.test.mjs`
 - Modify: `tests/inadimplenciaConsumidoresCanonicos.test.mjs`
 
@@ -934,7 +934,7 @@ Get-ChildItem -LiteralPath supabase\migrations -Filter '*_sol_caixa_inadimplente
   Select-Object FullName,Length,LastWriteTime
 ```
 
-Confirmar arquivo único e vazio, confirmar que `20260816151000_sol_caixa_inadimplentes_liberacao_parcial_v3.sql` não existe e renomear somente o arquivo recém-criado. Se o timestamp não estiver mais livre, parar e renumerar este plano/testes.
+Confirmar arquivo único e vazio, confirmar que `20260816184845_sol_caixa_inadimplentes_liberacao_parcial_v3.sql` não existe e renomear somente o arquivo recém-criado. Se o timestamp não estiver mais livre, parar e renumerar este plano/testes.
 
 - [ ] **Step 4: Fixar a política contratual antes de ler dados**
 
@@ -1023,14 +1023,14 @@ Manter `security definer` e `set search_path = public, pg_temp`.
 
 ```powershell
 node --test tests/inadimplenciaCanonicaPostgres.test.mjs tests/inadimplenciaConsumidoresCanonicos.test.mjs
-rg -n "sol_caixa_lancar_recebimento|sol_caixa_abrir|sol_caixa_fechar|sol_caixa_casar_parcela" supabase\migrations\20260816151000_sol_caixa_inadimplentes_liberacao_parcial_v3.sql
+rg -n "sol_caixa_lancar_recebimento|sol_caixa_abrir|sol_caixa_fechar|sol_caixa_casar_parcela" supabase\migrations\20260816184845_sol_caixa_inadimplentes_liberacao_parcial_v3.sql
 git diff --check
 ```
 
 Expected: testes verdes e o `rg` não retorna ocorrências.
 
 ```powershell
-git add supabase/migrations/20260816151000_sol_caixa_inadimplentes_liberacao_parcial_v3.sql tests/inadimplenciaCanonicaPostgres.test.mjs tests/inadimplenciaConsumidoresCanonicos.test.mjs
+git add supabase/migrations/20260816184845_sol_caixa_inadimplentes_liberacao_parcial_v3.sql tests/inadimplenciaCanonicaPostgres.test.mjs tests/inadimplenciaConsumidoresCanonicos.test.mjs
 git commit -m "feat(sol): consumir liberacao parcial canonica"
 ```
 
@@ -1149,9 +1149,9 @@ Expected: todos os testes Deno, Node e PostgreSQL verdes; build Vite concluído;
 - [ ] **Step 4: Rodar verificações de segurança e contrato**
 
 ```powershell
-rg -n "security definer" supabase/migrations/20260816150000_inadimplencia_canonica_liberacao_parcial_v3.sql supabase/migrations/20260816151000_sol_caixa_inadimplentes_liberacao_parcial_v3.sql
-rg -n "set search_path = public, pg_temp" supabase/migrations/20260816150000_inadimplencia_canonica_liberacao_parcial_v3.sql supabase/migrations/20260816151000_sol_caixa_inadimplentes_liberacao_parcial_v3.sql
-rg -n "grant execute|revoke all" supabase/migrations/20260816150000_inadimplencia_canonica_liberacao_parcial_v3.sql supabase/migrations/20260816151000_sol_caixa_inadimplentes_liberacao_parcial_v3.sql
+rg -n "security definer" supabase/migrations/20260816184837_inadimplencia_canonica_liberacao_parcial_v3.sql supabase/migrations/20260816184845_sol_caixa_inadimplentes_liberacao_parcial_v3.sql
+rg -n "set search_path = public, pg_temp" supabase/migrations/20260816184837_inadimplencia_canonica_liberacao_parcial_v3.sql supabase/migrations/20260816184845_sol_caixa_inadimplentes_liberacao_parcial_v3.sql
+rg -n "grant execute|revoke all" supabase/migrations/20260816184837_inadimplencia_canonica_liberacao_parcial_v3.sql supabase/migrations/20260816184845_sol_caixa_inadimplentes_liberacao_parcial_v3.sql
 node --test tests/inadimplenciaMigrationDrift.test.mjs tests/financeiroSyncAuthorization.test.mjs
 ```
 
@@ -1260,8 +1260,8 @@ supabase db push --linked --dry-run
 Expected: o dry-run lista somente:
 
 ```text
-20260816150000_inadimplencia_canonica_liberacao_parcial_v3.sql
-20260816151000_sol_caixa_inadimplentes_liberacao_parcial_v3.sql
+20260816184837_inadimplencia_canonica_liberacao_parcial_v3.sql
+20260816184845_sol_caixa_inadimplentes_liberacao_parcial_v3.sql
 ```
 
 Qualquer migration adicional, versão remota ausente ou drift interrompe o rollout; não usar `--include-all`.
