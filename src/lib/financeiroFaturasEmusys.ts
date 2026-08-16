@@ -19,11 +19,23 @@ export interface FinanceiroFaturasUnidade {
   ticket_denominador_previsto: number;
 }
 
+export type FinanceiroFaturasStatus = 'ok' | 'stale' | 'incomplete' | 'unavailable' | 'error';
+
+export interface FinanceiroFaturasFreshness {
+  sync_run_id: string | null;
+  sync_completed_at: string | null;
+  stale_after: string | null;
+  is_fresh: boolean;
+}
+
 export interface FinanceiroFaturasPayload {
+  status: FinanceiroFaturasStatus;
   ano: number;
   mes: number;
   tem_dados: boolean;
   fonte: string;
+  freshness: FinanceiroFaturasFreshness;
+  inadimplencia_canonica: unknown;
   por_unidade: FinanceiroFaturasUnidade[];
   totais: FinanceiroFaturasUnidade | null;
 }
@@ -85,6 +97,7 @@ export async function fetchFinanceiroFaturasEmusys({
   if (!data) return null;
 
   const payload = data as any;
+  const status = String(payload?.status || 'unavailable') as FinanceiroFaturasStatus;
   const porUnidade = Array.isArray(payload?.por_unidade)
     ? payload.por_unidade.map(normalizeFinanceiroFaturas)
     : [];
@@ -93,10 +106,20 @@ export async function fetchFinanceiroFaturasEmusys({
     : null;
 
   return {
+    status: String(payload?.status || 'unavailable') as FinanceiroFaturasStatus,
     ano: n(payload?.ano) || ano,
     mes: n(payload?.mes) || mes,
-    tem_dados: Boolean(payload?.tem_dados) || porUnidade.length > 0,
-    fonte: String(payload?.fonte || 'emusys_faturas'),
+    tem_dados: status === 'ok' && (Boolean(payload?.tem_dados) || porUnidade.length > 0),
+    fonte: String(payload?.fonte || 'sync_run_items'),
+    freshness: {
+      sync_run_id: payload?.freshness?.sync_run_id == null ? null : String(payload.freshness.sync_run_id),
+      sync_completed_at: payload?.freshness?.sync_completed_at == null
+        ? null
+        : String(payload.freshness.sync_completed_at),
+      stale_after: payload?.freshness?.stale_after == null ? null : String(payload.freshness.stale_after),
+      is_fresh: payload?.freshness?.is_fresh === true,
+    },
+    inadimplencia_canonica: payload?.inadimplencia_canonica ?? null,
     por_unidade: porUnidade,
     totais,
   };

@@ -208,14 +208,15 @@ Média de `valor_passaporte > 0` das matrículas novas canônicas do período (e
 ### Status de pagamento
 `status_pagamento ∈ {em_dia, inadimplente, parcial, sem_parcela}`. Aberto/indefinido = `null`/`'-'`. Governança de `sem_parcela` em `Alunos/statusPagamentoGovernanca.ts` (considera presença recente ≤30 dias).
 
-### Inadimplência operacional (regra nova, jun/2026)
-Conta como inadimplente **somente** `entra_financeiro_ativo = true` **E**
-`status_pagamento = 'inadimplente'` **E** `valor_parcela > 0`. **Trancado,
-evadido, inativo e desconhecido NÃO entram** no alerta/contagem de
-inadimplência operacional. O `sync-matriculas-emusys` não propõe
-`status_pagamento` para matrícula não ativa.
-- Motivo: inadimplentes haviam "saltado" de ~16 p/ ~40 por incluir trancado/evadido/histórico. Fonte: commit `restrict delinquency to active students`.
-- **BANDA e bolsista integral permanecem `sem_parcela`** mesmo quando o Emusys retorna `em_dia` (migration `p08k`).
+### Inadimplência operacional canônica (ago/2026)
+
+`get_inadimplencia_canonica` retorna uma linha por fatura canônica vencida quando o último run da competência é `live + succeeded + snapshot_complete + 3 unidades`, ainda está dentro de `stale_after`, a fatura está `aberta` e `source_missing=false`.
+
+- Chave de matrícula: `(unidade_id, emusys_matricula_id)`. IDs externos nunca são globais.
+- O Farmer escolhe um único vínculo local `ativo`, não arquivado e prefere o curso principal; trancado, evadido, inativo e vínculo sem identidade não são liberados para cobrança.
+- Snapshot stale falha fechado: totais zerados e `items=[]`. `source_missing`, identidade inválida ou duplicidade são reconciliação `incomplete`, nunca evidência de pagamento.
+- Valor na data de corte: `valor_original × (1 + 0,02 + 0,01 × dias_atraso/30)`, arredondado em centavos. O desconto condicional já foi perdido; `juros_e_multa` do payload é evidência da fonte, não a fórmula canônica.
+- O booleano `aluno_jornada_matricula_disciplina.inadimplente_emusys` e `status_pagamento` permanecem campos de compatibilidade e não alimentam mais a lista operacional.
 
 ### Classificação de bolsista (KPI / MRR)
 Usa o **`tipo_matricula_id` canônico** (`BOLSISTA_INT`/`BOLSISTA_PARC`), **não** o `tipo_aluno` legado — que pode estar contaminado (ex.: aluno marcado `bolsista_integral` em `tipo_aluno` mas pagante regular no contrato). RPC `get_kpis_alunos_admin_operacional`. Fonte: migration `admin_operacional_bolsista_por_tipo_canonico`.
@@ -673,7 +674,7 @@ Para impedir que a virada de mês recalcule/altere competências já fechadas, o
   3. `atualizar_dados_mensais_por_snapshot(...)` — atualiza `dados_mensais` por compatibilidade a partir do snapshot aprovado (`dry_run` default).
 - **Tabelas:** `fechamento_mensal_snapshots`, `fechamento_mensal_auditoria` (RLS: `authenticated` lê, escrita só `service_role`).
 - **Writers legados bloqueados** para `anon`/`authenticated`: `snapshot_dados_mensais`, `fechar_dados_mensais`, `recalcular_dados_mensais`, `upsert_dados_mensais` (só `service_role`).
-- **Financeiro do mês = faturamento PREVISTO por parcela canônica** (mensalidade − desconto condicional). Faturamento realizado com juros/multa aguarda endpoint de faturas do Emusys (ainda inexistente).
+- **Financeiro do mês aberto:** `get_financeiro_faturas_emusys` lê somente o último snapshot imutável completo e fresco em `sync_run_items`. Paga usa `valor_pago`; aberta compõe previsto/aberto; cancelada não compõe previsto. Snapshot stale ou integridade pendente retorna `tem_dados=false`. Competência fechada preserva o snapshot mensal e não recebe sobreposição viva.
 - Fonte: migrations `p09a`–`p09g` (`20260630*`), commit `c401724 feat: add canonical monthly closing safeguards`, relatório `docs/luciano/relatorio_randolph_fechamento_junho_2026.md`.
 - ⚠️ Junho/2026 **ainda não foi fechado** — infraestrutura criada e validada (`preview` = `aprovavel`, 0 bloqueios), gravação pendente de autorização.
 
@@ -696,9 +697,9 @@ Para impedir que a virada de mês recalcule/altere competências já fechadas, o
 4. **Conversão experimental calculada de 2 jeitos** — Dashboard/Comercial usam `leads.experimental_realizada`; o canônico do professor usa `lead_experimentais`. CLAUDE.md já registra que a fonte canônica virou `lead_experimentais` — o Dashboard pode estar com a taxa antiga (inflada). Vale alinhar.
 5. **Métricas bloqueadas em Metas** — `taxa_exp_mat` e `taxa_conversao_exp` estão desativadas (`MetasPageNew.tsx`) aguardando regra canônica. Enquanto isso, não dá pra metar conversão de experimental.
 6. **Forms de Entrada gravam em tabelas legadas** — `FormMatricula/Evasao/Renovacao` escrevem em `movimentacoes`/`renovacoes`/`evasoes`, não em `movimentacoes_admin`. Se ainda forem usados, geram dados fora do fluxo canônico Emusys.
-7. **Ticket Médio: numerador precisa vir de fatura por competência, não de `alunos.valor_parcela`** — Clayton (07/07) reportou que o ticket médio do LA Report não bate com a planilha/Financeiro do Emusys que a ADM usa. Investigado: **não é passaporte/lojinha** (já descartados no cálculo atual — `alunos.valor_passaporte` é coluna separada, lojinha não existe em `alunos`). **Denominador "por pessoa" está correto** (regra validada pelo Alf, P3, não muda). A causa real é a **fonte do numerador**: o `alunos_ticket` da view `vw_kpis_gestao_mensal` (e as cópias equivalentes em `AlunosPage.tsx:682-696`, `kpisAlunosVivosCanonicos.ts:263,312`, `TabProfessoresNew.tsx:662-669` — "Ticket Médio Geral") somam o campo **cadastral estático `alunos.valor_parcela`**, mas a regra final (Alf, 07/07) exige o valor da **fatura da competência**: `valor_pago` se paga; valor devido atualizado (sem desconto de pontualidade perdido + juros/multa) se aberta/inadimplente. Validado ao vivo para Recreio jun/2026: previsto líquido calculado via fatura R$136.510,68 vs tela real da ADM R$136.475,68. `emusys_faturas` permanece o espelho atual, mas a exportação por competência agora lê exclusivamente o `sync_run_items` de um `sync_run_id` completo. Os quatro cálculos de Ticket Médio/LTV listados acima ainda não foram migrados. **Faturamento Previsto/MRR/ARR não são afetados**.
+7. **Ticket Médio: migração parcial para fatura por competência** — Clayton (07/07) reportou que o ticket médio não batia com o Financeiro do Emusys. O denominador por pessoa continua correto. `get_financeiro_faturas_emusys` e o relatório administrativo aberto agora leem o último `sync_run_items` completo e fresco e conciliam por unidade+matrícula; a exportação também lê esse snapshot. Os cálculos legados de Ticket Médio/LTV que ainda somam `alunos.valor_parcela` continuam pendentes e não devem ser confundidos com o novo reader.
 
-8. **Frescor financeiro não vem de timestamp de linha** — somente `sync_runs.run_type='live'`, `status='succeeded'`, `snapshot_complete=true` e `unidades_concluidas=3` prova frescor. O `baseline` derivado do legado serve para detectar ausências, mas nunca autoriza aplicação financeira por si só.
+8. **Frescor financeiro não vem de timestamp de linha** — somente `sync_runs.run_type='live'`, `status='succeeded'`, `snapshot_complete=true`, `unidades_concluidas=3` e `now() <= stale_after` autoriza leitura operacional. O `baseline` serve para detectar ausências, mas nunca autoriza aplicação financeira. Export histórico velho exige `require_fresh=false` explícito e continua marcado `is_fresh=false`.
 
 ### Evento operacional da aula (12/08/2026)
 

@@ -96,6 +96,10 @@ verify_jwt = false
 # Integracao servidor-servidor: autentica o segredo dedicado no proprio codigo.
 verify_jwt = false
 
+[functions.sync-faturas-emusys]
+# Publicacao financeira aceita somente JWT tecnico ou service_role validado pelo gateway.
+verify_jwt = true
+
 [functions.sync-professor-disciplinas-emusys]
 # Cron usa segredo dedicado; navegador valida JWT e permissao dentro da funcao.
 verify_jwt = false
@@ -107,10 +111,9 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.atualizar-inadimplencia-emusys]
-# Cron/servidor usa x-sync-token; navegador manda JWT. Os dois sao validados DENTRO da
-# funcao. Esta linha e obrigatoria: sem ela o gateway exige Authorization e devolve 401
-# antes do codigo rodar -- foi exatamente o que matou a sync-inadimplencia-emusys por
-# 13 dias, sem ninguem notar (o pg_cron marcava "succeeded").
+# Endpoint de compatibilidade do botao: navegador manda JWT e servidor pode mandar
+# x-sync-token, ambos validados dentro da funcao. Ele apenas encaminha para a fila unica
+# de contas a receber e nao grava mais o booleano concorrente na jornada.
 verify_jwt = false
 
 [functions.debug-webhook-emusys-observador]

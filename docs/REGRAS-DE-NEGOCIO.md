@@ -289,7 +289,7 @@ Ticket médio = faturamento total dos cursos dos alunos pagantes / alunos pagant
 
 **Consequência correta e intencional: o segundo curso ELEVA o ticket médio** (soma no numerador, conta 1 no denominador). É o que a flag `entra_ticket_medio = true` do tipo `SEGUNDO_CURSO` descreve.
 
-#### Refinamento pendente de implementação ⚠️
+#### Refinamento por fatura da competência
 
 ✅ Validado pelo Alf em 2026-07-07 (resolvendo divergência com o Financeiro do Emusys):
 
@@ -300,8 +300,9 @@ Ticket médio = soma das parcelas de mensalidade da competência / alunos pagant
 - O denominador "por pessoa" **está correto e não muda**.
 - O que muda é a **fonte do numerador**: deve vir da **fatura da competência** (`GET /faturas`), não do campo cadastral estático `alunos.valor_parcela`.
 - Entra só fatura de **Parcela/Mensalidade** — passaporte, taxa de matrícula e lojinha não entram.
-- Valor de cada fatura: fatura **paga** → `valor_pago`; fatura **aberta/inadimplente** → valor devido **atualizado** (sem o desconto condicional de pontualidade perdido, + juros/multa quando aplicável).
-- ⚠️ **Ainda não implementado.** Ver §14, pendência P2.
+- Valor de cada fatura: fatura **paga** → `valor_pago`; fatura **aberta** → valor devido do snapshot. Fatura cancelada não compõe aberto nem previsto.
+- `get_financeiro_faturas_emusys` e o relatório administrativo do período aberto já usam o último `sync_run_items` live, completo e fresco. Competência histórica usa o snapshot mensal fechado e não recebe sobreposição viva.
+- ⚠️ Os KPIs legados de Ticket Médio/LTV que ainda partem de `alunos.valor_parcela` continuam na pendência P2; esta entrega não os recalcula retroativamente.
 
 ### 4.5 Ticket médio da carteira do professor ✅
 
@@ -318,11 +319,13 @@ inadimplência % = qtd_inadimplentes / alunos_pagantes × 100
 
 **Percentual de PESSOAS (cabeças), não de valor.**
 
-Conta como inadimplente **somente**:
+Conta como inadimplente operacional **somente** uma matrícula local ativa e não arquivada que possua fatura confirmada pela leitura `get_inadimplencia_canonica`:
 ```
-entra_financeiro_ativo = true
-AND status_pagamento = 'inadimplente'
-AND valor_parcela > 0
+ultimo snapshot live completo e ainda fresco da competência
+AND status da fatura = 'aberta'
+AND source_missing = false
+AND data_vencimento <= data de corte
+AND identidade = unidade_id + emusys_matricula_id
 ```
 
 - **Trancado, evadido, inativo e desconhecido NÃO entram.** (Antes entravam e a lista saltava de ~16 para ~40.)
@@ -330,7 +333,11 @@ AND valor_parcela > 0
 - 🚫 Percentual por **valor** (`mrr_inadimplente / mrr_contratual`) foi **rejeitado pelo Alf**.
 - 🚫 `(faturamento_previsto − faturamento_realizado) / faturamento_previsto` é legado — não usar.
 
-**Fonte da inadimplência ao vivo:** `aluno_jornada_matricula_disciplina.inadimplente_emusys`, espelho de `contrato_atual.inadimplente`. 🚫 Não usar `inadimplencia_emusys_cache_legado` (aposentada em 2026-07-28; nunca funcionou).
+**Fonte canônica:** `get_inadimplencia_canonica`, sobre `sync_runs` + `sync_run_items`. O booleano `aluno_jornada_matricula_disciplina.inadimplente_emusys` permanece compatibilidade, não autoriza lista ou cobrança. `source_missing` significa reconciliação pendente e **nunca** pagamento.
+
+Qualquer competência necessária stale bloqueia a lista inteira (`items=[]`). Identidade opcional inválida, duplicidade ou ausência na fonte deixa o estado `incomplete`; Farmer e exportação de cobrança só liberam ações com `status='ok'`.
+
+**Valor atualizado único:** perde-se o desconto condicional e parte-se de `valor_original`; aplica-se multa de 2% + mora de 1% ao mês pro rata die (`dias_atraso / 30`). O Emusys continua fonte do status; este cálculo apenas apresenta o valor contratual na data de corte.
 
 ### 4.7 Faturamento ✅
 
@@ -339,7 +346,7 @@ faturamento_previsto  = MRR
 faturamento_realizado = MRR − valor da inadimplência
 ```
 
-Financeiro do mês = **faturamento PREVISTO por parcela canônica**. Faturamento realizado com juros e multa depende do endpoint de faturas do Emusys.
+Financeiro do mês = **faturamento PREVISTO por parcela canônica**. O período aberto só usa snapshot completo e fresco; stale ou integridade pendente retorna `tem_dados=false`. O realizado usa `valor_pago` do Emusys. O bloco de inadimplência anexo usa a fórmula contratual acima.
 
 ### 4.8 Status de pagamento 📋
 
@@ -903,7 +910,7 @@ A regra de negócio é clara (coral = atividade extra, não cobrada, não pagant
 
 ### P2 — Ticket médio pela fatura da competência ⚠️
 
-A regra final (Alf, 2026-07-07) exige que o numerador venha da **fatura da competência**, não de `alunos.valor_parcela`. **Ainda não implementado** em nenhum dos quatro pontos de cálculo. O denominador por pessoa não muda. Faturamento previsto, MRR e ARR não são afetados.
+A regra final (Alf, 2026-07-07) exige que o numerador venha da **fatura da competência**, não de `alunos.valor_parcela`. A RPC `get_financeiro_faturas_emusys` e o relatório administrativo aberto já foram migrados para o snapshot imutável; ainda faltam os cálculos legados de Ticket Médio/LTV fora desse caminho. O denominador por pessoa não muda e fechamentos antigos permanecem imutáveis.
 
 ### P3 — Taxa de conversão geral do funil ⚠️
 
@@ -923,7 +930,7 @@ Existem **2 versões com `status = 'ativa'`** simultaneamente (2026-07-20 e 2026
 
 ### P7 — Duas identidades de pessoa ⚠️
 
-KPIs de alunos usam identidade Emusys; o financeiro ainda usa `nome + unidade`. Podem divergir para homônimos e para quem não tem identidade Emusys. Ver §2.2.
+O relatório financeiro e a inadimplência agora conciliam por `(unidade_id, emusys_matricula_id)`. KPIs financeiros legados que ainda usam `nome + unidade` podem divergir para homônimos ou identidade ausente e continuam pendentes. Ver §2.2.
 
 ### P8 — Governança de `dados_mensais` ⚠️
 

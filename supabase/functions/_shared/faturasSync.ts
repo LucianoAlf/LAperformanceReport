@@ -23,6 +23,40 @@ export interface FaturaEmusys {
   desconto_condicional?: number | string | null;
 }
 
+export type FaturaValidationIssue = {
+  field: 'matricula_id' | 'contrato_id' | 'aluno_id';
+  code: 'invalid_optional_identifier';
+  raw_value: string;
+};
+
+export class EmusysRateLimitError extends Error {
+  readonly code = 'EMUSYS_RATE_LIMIT';
+  readonly retryAfterMs: number;
+
+  constructor(
+    retryAfterMs: number,
+    unidade: string,
+  ) {
+    super(`Emusys /faturas ${unidade}: HTTP 429`);
+    this.name = 'EmusysRateLimitError';
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+export class EmusysHttpError extends Error {
+  readonly code = 'EMUSYS_HTTP_ERROR';
+  readonly status: number;
+
+  constructor(
+    status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'EmusysHttpError';
+    this.status = status;
+  }
+}
+
 export class GlobalRateLimiter {
   readonly intervalMs: number;
   readonly sleepFn: (ms: number) => Promise<void>;
@@ -62,6 +96,24 @@ const identifier = (value: unknown, field: string, required = false) => {
     throw new Error(`identificador invalido em ${field}`);
   }
   return normalized;
+};
+
+const optionalIdentifier = (
+  value: unknown,
+  field: FaturaValidationIssue['field'],
+  issues: FaturaValidationIssue[],
+) => {
+  if (value == null || String(value).trim() === '') return null;
+  try {
+    return identifier(value, field);
+  } catch {
+    issues.push({
+      field,
+      code: 'invalid_optional_identifier',
+      raw_value: String(value).trim(),
+    });
+    return null;
+  }
 };
 
 const strictDate = (value: unknown, field: string, required = false) => {
@@ -109,6 +161,7 @@ export function mapFatura(
 ) {
   const competencia = validateCompetencia(competenciaValue);
   const dataVencimento = strictDate(row.data_vencimento, 'data_vencimento', true)!;
+  const validationIssues: FaturaValidationIssue[] = [];
   if (`${dataVencimento.slice(0, 7)}-01` !== competencia) {
     throw new Error(`data_vencimento fora da competencia ${competencia}`);
   }
@@ -117,9 +170,9 @@ export function mapFatura(
     unidade_id: unidade.id,
     unidade_codigo: unidadeCodigo,
     emusys_fatura_id: identifier(row.id, 'id', true)!,
-    emusys_matricula_id: identifier(row.matricula_id, 'matricula_id'),
-    emusys_contrato_id: identifier(row.contrato_id, 'contrato_id'),
-    emusys_student_id: identifier(row.aluno_id, 'aluno_id'),
+    emusys_matricula_id: optionalIdentifier(row.matricula_id, 'matricula_id', validationIssues),
+    emusys_contrato_id: optionalIdentifier(row.contrato_id, 'contrato_id', validationIssues),
+    emusys_student_id: optionalIdentifier(row.aluno_id, 'aluno_id', validationIssues),
     descricao: String(row.descricao ?? '').trim(),
     status: cleanStatus(row.status),
     data_vencimento: dataVencimento,
@@ -131,7 +184,13 @@ export function mapFatura(
     desconto_aplicado: money(row.desconto_aplicado, 'desconto_aplicado'),
     desconto_fixo: money(row.desconto_fixo, 'desconto_fixo'),
     desconto_condicional: money(row.desconto_condicional, 'desconto_condicional'),
-    payload: row,
+    validation_issues: validationIssues,
+    payload: {
+      ...row,
+      _la_report: {
+        validation_issues: validationIssues,
+      },
+    },
   };
 }
 
@@ -149,28 +208,27 @@ async function fetchPage({
   unidade,
   limiter,
   fetchFn,
-  sleepFn,
 }: {
   url: string;
   unidade: UnidadeSyncConfig;
   limiter: GlobalRateLimiter;
   fetchFn: typeof fetch;
-  sleepFn: (ms: number) => Promise<void>;
 }) {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    await limiter.wait();
-    const response = await fetchFn(url, { headers: { token: unidade.token } });
-    if (response.status === 429) {
-      if (attempt === 4) throw new Error(`Emusys /faturas ${unidade.nome}: HTTP 429 apos 5 tentativas`);
-      await sleepFn(retryAfterMs(response.headers.get('Retry-After'), Date.now()));
-      continue;
-    }
-    if (!response.ok) {
-      throw new Error(`Emusys /faturas ${unidade.nome}: HTTP ${response.status} - ${await response.text()}`);
-    }
-    return await response.json();
+  await limiter.wait();
+  const response = await fetchFn(url, { headers: { token: unidade.token } });
+  if (response.status === 429) {
+    throw new EmusysRateLimitError(
+      retryAfterMs(response.headers.get('Retry-After'), Date.now()),
+      unidade.nome,
+    );
   }
-  throw new Error(`Emusys /faturas ${unidade.nome}: retry esgotado`);
+  if (!response.ok) {
+    throw new EmusysHttpError(
+      response.status,
+      `Emusys /faturas ${unidade.nome}: HTTP ${response.status} - ${await response.text()}`,
+    );
+  }
+  return await response.json();
 }
 
 export async function coletarFaturasUnidade(options: {
@@ -188,7 +246,6 @@ export async function coletarFaturasUnidade(options: {
     unidade,
     limiter,
     fetchFn = fetch,
-    sleepFn = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   } = options;
   const competencia = validateCompetencia(options.competencia);
   const year = Number(competencia.slice(0, 4));
@@ -214,7 +271,6 @@ export async function coletarFaturasUnidade(options: {
       unidade,
       limiter,
       fetchFn,
-      sleepFn,
     });
     const pageItems = Array.isArray(payload?.items)
       ? payload.items
@@ -277,6 +333,7 @@ export async function coletarFaturasUnidade(options: {
       parcelas_abertas: parcelas.filter((row) => row.status !== 'paga').length,
       total_recebido_parcelas: Number(totalRecebidoParcelas.toFixed(2)),
       faturamento_previsto_parcelas: Number(totalPrevistoParcelas.toFixed(2)),
+      validation_issues: rows.reduce((sum, row) => sum + row.validation_issues.length, 0),
       complete: true,
     },
   };
