@@ -1,6 +1,7 @@
 -- Contrato v3 da inadimplencia canonica.
--- Somente faturas confirmadas de matriculas operacionalmente ativas podem ser
--- acionadas. source_missing permanece em quarentena e nao contamina os totais.
+-- Somente faturas com matricula exata e pessoa atualmente ativa ou trancada
+-- podem ser acionadas. source_missing permanece em quarentena e nao contamina
+-- os totais.
 
 create or replace function public.get_inadimplencia_canonica(
   p_unidade_id uuid default null,
@@ -64,37 +65,52 @@ begin
       (date_trunc('month', p_as_of_date)::date - interval '2 months')::date as inicio,
       date_trunc('month', p_as_of_date)::date as fim
   ),
-  matriculas_financeiras_ativas as (
-    select distinct
-      estado.unidade_id,
-      btrim(estado.emusys_matricula_id) as emusys_matricula_id
-    from public.vw_alunos_estado_operacional_v131 estado
-    join public.alunos a on a.id = estado.aluno_id
-    join unidades_autorizadas ua on ua.id = estado.unidade_id
-    where estado.entra_financeiro_ativo is true
-      and nullif(btrim(estado.emusys_matricula_id), '') is not null
-      and a.arquivado_em is null
-      and a.data_saida is null
-  ),
-  candidatos_ativos_por_student_id as (
-    select distinct
-      estado.unidade_id,
-      btrim(a.emusys_student_id) as emusys_student_id
-    from public.vw_alunos_estado_operacional_v131 estado
-    join public.alunos a on a.id = estado.aluno_id
-    join unidades_autorizadas ua on ua.id = estado.unidade_id
-    where estado.entra_financeiro_ativo is true
-      and nullif(btrim(a.emusys_student_id), '') is not null
-      and a.arquivado_em is null
-      and a.data_saida is null
+  pessoas_financeiramente_atuais as (
+    select
+      candidatos.unidade_id,
+      candidatos.emusys_student_id,
+      count(*)::integer as candidatos_atuais,
+      case
+        when count(*) = 1 then min(candidatos.aluno_id)
+        else null
+      end as aluno_id_canonico
+    from (
+      select distinct
+        estado.unidade_id,
+        btrim(a.emusys_student_id) as emusys_student_id,
+        a.id as aluno_id
+      from public.vw_alunos_estado_operacional_v131 estado
+      join public.alunos a on a.id = estado.aluno_id
+      join unidades_autorizadas ua on ua.id = estado.unidade_id
+      where nullif(btrim(a.emusys_student_id), '') is not null
+        and (
+          estado.entra_financeiro_ativo is true
+          or estado.eh_trancamento_atual is true
+        )
+        and a.arquivado_em is null
+        and (
+          (
+            estado.raw_encontrado is true
+            and estado.status_emusys in ('ativa', 'trancada')
+          )
+          or (
+            estado.raw_encontrado is not true
+            and estado.status_operacional in ('ativo', 'trancado')
+            and a.data_saida is null
+          )
+        )
+    ) candidatos
+    group by candidatos.unidade_id, candidatos.emusys_student_id
   ),
   matriculas_locais_conhecidas as (
     select distinct
       a.unidade_id,
-      btrim(a.emusys_matricula_id) as emusys_matricula_id
+      btrim(a.emusys_matricula_id) as emusys_matricula_id,
+      btrim(a.emusys_student_id) as emusys_student_id
     from public.alunos a
     join unidades_autorizadas ua on ua.id = a.unidade_id
     where nullif(btrim(a.emusys_matricula_id), '') is not null
+      and nullif(btrim(a.emusys_student_id), '') is not null
   ),
   runs_elegiveis as (
     select
@@ -158,28 +174,37 @@ begin
       end as validation_issues,
       exists (
         select 1
-        from matriculas_financeiras_ativas mfa
-        where mfa.unidade_id = i.unidade_id
-          and i.emusys_matricula_id is not null
-          and mfa.emusys_matricula_id = btrim(i.emusys_matricula_id::text)
-      ) as tem_matricula_ativa,
-      exists (
-        select 1
         from matriculas_locais_conhecidas mlc
         where mlc.unidade_id = i.unidade_id
           and i.emusys_matricula_id is not null
+          and i.emusys_student_id is not null
           and mlc.emusys_matricula_id = btrim(i.emusys_matricula_id::text)
-      ) as tem_matricula_local_conhecida,
+          and mlc.emusys_student_id = btrim(i.emusys_student_id::text)
+      ) as tem_matricula_exata_da_fatura,
+      pfa.candidatos_atuais is not null as tem_papel_aluno_atual,
+      pfa.aluno_id_canonico,
+      case
+        when pfa.candidatos_atuais = 1 then 'resolved'
+        when pfa.candidatos_atuais is null then 'missing'
+        else 'ambiguous'
+      end as contact_resolution_status,
       exists (
         select 1
-        from candidatos_ativos_por_student_id cap
-        where cap.unidade_id = i.unidade_id
-          and i.emusys_student_id is not null
-          and cap.emusys_student_id = btrim(i.emusys_student_id::text)
-      ) as tem_candidato_ativo_por_student_id
+        from matriculas_locais_conhecidas mlc
+        join pessoas_financeiramente_atuais pfa
+          on pfa.unidade_id = mlc.unidade_id
+         and pfa.emusys_student_id = mlc.emusys_student_id
+        where mlc.unidade_id = i.unidade_id
+          and i.emusys_matricula_id is not null
+          and mlc.emusys_matricula_id = btrim(i.emusys_matricula_id::text)
+      ) as tem_dono_matricula_atual
     from ultimo_run_por_competencia ur
     join public.sync_run_items i on i.run_id = ur.id
     join unidades_autorizadas ua on ua.id = i.unidade_id
+    left join pessoas_financeiramente_atuais pfa
+      on pfa.unidade_id = i.unidade_id
+     and i.emusys_student_id is not null
+     and pfa.emusys_student_id = btrim(i.emusys_student_id::text)
     cross join janela_competencias jc
     where i.competencia between jc.inicio and jc.fim
       and i.data_vencimento < p_as_of_date
@@ -188,13 +213,18 @@ begin
     select
       lus.*,
       (
+        lus.tem_matricula_exata_da_fatura is true
+        and lus.tem_papel_aluno_atual is true
+      ) as fatura_elegivel,
+      (
+        lus.tem_papel_aluno_atual is true
+        or lus.tem_dono_matricula_atual is true
+      ) as tem_candidato_atual_para_identidade,
+      (
         jsonb_array_length(lus.validation_issues) > 0
         or lus.emusys_matricula_id is null
-        or (
-          lus.emusys_matricula_id is not null
-          and lus.tem_matricula_ativa is false
-          and lus.tem_matricula_local_conhecida is false
-        )
+        or lus.emusys_student_id is null
+        or lus.tem_matricula_exata_da_fatura is false
       ) as identidade_invalida,
       btrim(lus.status) not in ('aberta', 'paga', 'cancelada')
         as status_nao_suportado
@@ -204,18 +234,21 @@ begin
     select
       la.unidade_id,
       la.canonical_fatura_id,
-      bool_or(la.tem_matricula_ativa is true) as tem_matricula_ativa,
+      bool_or(la.fatura_elegivel is true) as tem_fatura_elegivel,
       bool_or(la.source_missing is true) as tem_source_missing,
       count(*) filter (
         where la.source_missing is false
           and la.status = 'aberta'
-          and la.tem_matricula_ativa is true
+          and la.fatura_elegivel is true
           and la.identidade_invalida is false
       )::integer as open_candidate_count,
       count(*) filter (
         where la.source_missing is false
       )::integer as confirmed_observation_count,
-      bool_or(la.identidade_invalida is true) as tem_identidade_invalida,
+      bool_or(
+        la.identidade_invalida is true
+        and la.tem_candidato_atual_para_identidade is true
+      ) as tem_identidade_invalida,
       bool_or(la.status_nao_suportado is true) as tem_status_nao_suportado,
       coalesce(
         bool_or(la.status = 'aberta') filter (where la.source_missing is true),
@@ -229,7 +262,7 @@ begin
     select gft.*
     from grupos_fatura_todos gft
     where (
-        gft.tem_matricula_ativa is true
+        gft.tem_fatura_elegivel is true
         or gft.tem_identidade_invalida is true
       )
       and (
@@ -237,7 +270,7 @@ begin
         or gft.open_candidate_count > 0
         or gft.tem_identidade_invalida is true
         or (
-          gft.tem_matricula_ativa is true
+          gft.tem_fatura_elegivel is true
           and gft.tem_status_nao_suportado is true
         )
       )
@@ -284,7 +317,7 @@ begin
       gf.unidade_id,
       gf.canonical_fatura_id
     from grupos_fatura gf
-    where gf.tem_matricula_ativa is true
+    where gf.tem_fatura_elegivel is true
       and gf.tem_status_nao_suportado is true
   ),
   linhas_unknown_ranqueadas as (
@@ -313,7 +346,11 @@ begin
       lr.*,
       row_number() over (
         partition by lr.unidade_id, lr.canonical_fatura_id
-        order by lr.identidade_invalida desc,
+        order by (
+                   lr.identidade_invalida is true
+                   and lr.tem_candidato_atual_para_identidade is true
+                 ) desc,
+                 lr.identidade_invalida desc,
                  lr.source_missing desc,
                  lr.sync_completed_at desc nulls last,
                  lr.emusys_fatura_id desc nulls last
@@ -327,6 +364,7 @@ begin
       on gf.unidade_id = lir.unidade_id
      and gf.canonical_fatura_id = lir.canonical_fatura_id
     where gf.tem_identidade_invalida is true
+      and lir.tem_candidato_atual_para_identidade is true
       and lir.rn = 1
   ),
   linhas_confirmadas_ranqueadas as (
@@ -341,7 +379,7 @@ begin
     from linhas_relevantes lr
     where lr.status = 'aberta'
       and lr.source_missing is false
-      and lr.tem_matricula_ativa is true
+      and lr.fatura_elegivel is true
       and lr.identidade_invalida is false
   ),
   itens_confirmados as (
@@ -409,29 +447,39 @@ begin
       coalesce(max(ic.dias_atraso), 0)::integer as maior_atraso
     from itens_confirmados ic
   ),
+  resumo_contato as (
+    select
+      count(*) filter (
+        where ic.contact_resolution_status <> 'resolved'
+      )::integer as contact_resolution_pending_count
+    from itens_confirmados ic
+  ),
   estado_global as (
     select
       case
         when rf.competencias_stale > 0 then 'stale'
         when ri.unsupported_invoice_status_count > 0 then 'error'
-        when ri.duplicate_fatura_count > 0
-          or ri.invalid_identity_invoice_count > 0 then 'incomplete'
-        when rsm.source_missing_count > 0 then 'partial'
+        when ri.duplicate_fatura_count > 0 then 'incomplete'
+        when rsm.source_missing_count > 0
+          or ri.invalid_identity_invoice_count > 0
+          or rc.contact_resolution_pending_count > 0 then 'partial'
         else 'ok'
       end as status,
       array_remove(array[
         case when rf.competencias_stale > 0 then 'stale_competencia' end,
-        case when ri.duplicate_fatura_count > 0 then 'duplicate_confirmed_fatura' end,
-        case when ri.invalid_identity_invoice_count > 0 then 'invalid_invoice_identity' end
+        case when ri.duplicate_fatura_count > 0 then 'duplicate_confirmed_fatura' end
       ]::text[], null) as block_reasons
     from resumo_frescor rf
     cross join resumo_integridade ri
     cross join resumo_source_missing rsm
+    cross join resumo_contato rc
   )
   select jsonb_build_object(
     'schema_version', 3,
     'policy', jsonb_build_object(
-      'student_scope', 'vw_alunos_estado_operacional_v131.entra_financeiro_ativo=true AND arquivado_em IS NULL AND data_saida IS NULL',
+      'student_scope', 'exact_invoice_enrollment(unidade_id+emusys_matricula_id+emusys_student_id) + current_student_role(active_or_locked; non_archived; raw_precedes_data_saida; fallback_requires_data_saida_null)',
+      'delinquency_rule', 'd_plus_0',
+      'collection_grace_days', 2,
       'competencias_inicio', jc.inicio,
       'competencia_fim', jc.fim
     ),
@@ -450,6 +498,7 @@ begin
         when eg.status in ('ok', 'partial') then 'confirmed_only'
         else 'blocked'
       end,
+      'consumer_must_apply_collection_grace', true,
       'block_reasons', to_jsonb(eg.block_reasons)
     ),
     'freshness', jsonb_build_object(
@@ -474,7 +523,8 @@ begin
       'status', case
         when rsm.source_missing_count > 0
           or ri.duplicate_fatura_count > 0
-          or ri.invalid_identity_invoice_count > 0 then 'pending'
+          or ri.invalid_identity_invoice_count > 0
+          or rc.contact_resolution_pending_count > 0 then 'pending'
         else 'clear'
       end,
       'source_missing_count', rsm.source_missing_count,
@@ -482,6 +532,7 @@ begin
       'source_missing_other_count', rsm.source_missing_other_count,
       'duplicate_fatura_count', ri.duplicate_fatura_count,
       'invalid_identity_invoice_count', ri.invalid_identity_invoice_count,
+      'contact_resolution_pending_count', rc.contact_resolution_pending_count,
       'validation_issue_count', ri.validation_issue_count,
       'unknown_invoices', coalesce((
         select jsonb_agg(jsonb_build_object(
@@ -517,9 +568,9 @@ begin
           'emusys_matricula_id', iii.emusys_matricula_id,
           'emusys_student_id', iii.emusys_student_id,
           'competencia', iii.competencia,
-          'data_vencimento', iii.data_vencimento,
-          'validation_issues', iii.validation_issues,
-          'active_candidate_by_student_id', iii.tem_candidato_ativo_por_student_id,
+           'data_vencimento', iii.data_vencimento,
+           'validation_issues', iii.validation_issues,
+           'active_candidate_by_student_id', iii.tem_papel_aluno_atual,
           'sync_completed_at', iii.sync_completed_at
         ) order by iii.unidade_id, iii.data_vencimento, iii.canonical_fatura_id)
         from itens_identidade_invalida iii
@@ -552,9 +603,11 @@ begin
           'run_id', ic.run_id,
           'sync_completed_at', ic.sync_completed_at,
           'sync_fresh_until', ic.sync_fresh_until,
-          'emusys_fatura_id', ic.emusys_fatura_id,
-          'emusys_matricula_id', ic.emusys_matricula_id,
+          'emusys_fatura_id', ic.emusys_fatura_id::text,
+          'emusys_matricula_id', ic.emusys_matricula_id::text,
           'emusys_contrato_id', ic.emusys_contrato_id,
+          'aluno_id_canonico', ic.aluno_id_canonico,
+          'contact_resolution_status', ic.contact_resolution_status,
           'descricao', ic.descricao,
           'status', ic.status,
           'data_vencimento', ic.data_vencimento,
@@ -576,6 +629,7 @@ begin
   cross join resumo_source_missing rsm
   cross join resumo_integridade ri
   cross join resumo_itens rit
+  cross join resumo_contato rc
   cross join estado_global eg;
 
   return v_result;
@@ -583,7 +637,7 @@ end;
 $function$;
 
 comment on function public.get_inadimplencia_canonica(uuid, date) is
-  'Contrato v3: inadimplencia confirmada, gate de frescor e quarentena source_missing.';
+  'Contrato v3: verdade financeira D+0, carencia operacional D+2, gate de frescor e quarentena isolada.';
 
 revoke all on function public.get_inadimplencia_canonica(uuid, date)
   from public, anon;

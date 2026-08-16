@@ -5,6 +5,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { normalizarInadimplenciaCanonica } from '../src/lib/inadimplenciaCanonica.ts';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const migrationPaths = [
   '20260816003732_inadimplencia_canonica_frescor.sql',
@@ -127,6 +129,8 @@ const fixtureSchema = `
     unidade_id uuid not null references public.unidades(id),
     emusys_matricula_id text not null,
     aluno_id bigint,
+    status_emusys text not null,
+    motivo_inativa text,
     status_local_resolvido text not null,
     sincronizado_em timestamptz not null,
     primary key (unidade_id, emusys_matricula_id)
@@ -135,10 +139,27 @@ const fixtureSchema = `
   select a.id as aluno_id,
     a.unidade_id,
     a.emusys_matricula_id,
+    e.emusys_matricula_id is not null as raw_encontrado,
+    case
+      when e.emusys_matricula_id is not null then lower(trim(e.status_emusys))
+      else null
+    end as status_emusys,
+    case
+      when e.emusys_matricula_id is not null then lower(trim(e.motivo_inativa))
+      else null
+    end as motivo_inativa,
+    case
+      when e.emusys_matricula_id is not null then lower(trim(e.status_local_resolvido))
+      else lower(trim(a.status))
+    end as status_operacional,
     case
       when e.emusys_matricula_id is not null then lower(trim(e.status_local_resolvido)) = 'ativo'
       else lower(trim(a.status)) = 'ativo'
-    end as entra_financeiro_ativo
+    end as entra_financeiro_ativo,
+    case
+      when e.emusys_matricula_id is not null then lower(trim(e.status_emusys)) = 'trancada'
+      else lower(trim(a.status)) = 'trancado'
+    end as eh_trancamento_atual
   from public.alunos a
   left join public.emusys_matriculas_estado_atual e
     on e.unidade_id = a.unidade_id
@@ -224,7 +245,8 @@ async function withCanonicalFixture(t, callback) {
 
 function insertAluno(container, id, unitId, matricula, options = {}) {
   const status = options.status ?? 'ativo';
-  const student = options.student ?? null;
+  const defaultStudent = matricula === null ? null : Number(matricula) + 10_000;
+  const student = options.student === undefined ? defaultStudent : options.student;
   const name = options.name ?? `Aluno ${id}`;
   const archived = options.archived ? 'now()' : 'null';
   const exited = options.exited ? "current_date" : 'null';
@@ -234,10 +256,16 @@ function insertAluno(container, id, unitId, matricula, options = {}) {
   `, `aluno ${id}`);
 }
 
-function insertOperationalState(container, unitId, matricula, alunoId, status) {
+function insertOperationalState(container, unitId, matricula, alunoId, status, rawStatus = null, inactiveReason = null) {
+  const statusEmusys = rawStatus ?? ({
+    ativo: 'ativa',
+    trancado: 'trancada',
+    evadido: 'inativa',
+    inativo: 'inativa',
+  }[status] ?? status);
   seed(container, `
-    insert into public.emusys_matriculas_estado_atual (unidade_id, emusys_matricula_id, aluno_id, status_local_resolvido, sincronizado_em)
-    values ('${unitId}', '${matricula}', ${alunoId}, '${status}', now());
+    insert into public.emusys_matriculas_estado_atual (unidade_id, emusys_matricula_id, aluno_id, status_emusys, motivo_inativa, status_local_resolvido, sincronizado_em)
+    values ('${unitId}', '${matricula}', ${alunoId}, '${statusEmusys}', ${inactiveReason === null ? 'null' : `'${inactiveReason}'`}, '${status}', now());
   `, `estado operacional ${unitId}/${matricula}`);
 }
 
@@ -252,7 +280,8 @@ function invoice(id, unitId, runId, competencia, matricula, options = {}) {
   const matriculaNumero = matricula === null ? null : Number(matricula);
   const status = options.status ?? 'aberta';
   const sourceMissing = options.sourceMissing ?? false;
-  const student = options.student ?? (matriculaNumero === null ? null : matriculaNumero + 10_000);
+  const defaultStudent = matriculaNumero === null ? null : matriculaNumero + 10_000;
+  const student = options.student === undefined ? defaultStudent : options.student;
   const fatura = options.fatura ?? (matriculaNumero === null ? null : matriculaNumero + 1_000);
   const contrato = matriculaNumero === null ? null : matriculaNumero + 2_000;
   const due = options.due ?? "current_date - 3";
@@ -352,13 +381,49 @@ test('fixture operacional v3 prova tipos e constraints reais antes das migration
     insertAluno(container, 3, UNIT_A, '200', { status: 'ativo', updatedOffset: -1 });
     insertOperationalState(container, UNIT_A, '100', 1, 'trancado');
     const rows = jsonFrom(psql(container, `
-      select coalesce(jsonb_agg(jsonb_build_object('aluno_id', aluno_id, 'matricula', emusys_matricula_id, 'ativo', entra_financeiro_ativo) order by aluno_id), '[]'::jsonb)::text
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'aluno_id', aluno_id,
+        'matricula', emusys_matricula_id,
+        'raw_encontrado', raw_encontrado,
+        'status_emusys', status_emusys,
+        'motivo_inativa', motivo_inativa,
+        'status_operacional', status_operacional,
+        'ativo', entra_financeiro_ativo,
+        'trancado_atual', eh_trancamento_atual
+      ) order by aluno_id), '[]'::jsonb)::text
       from public.vw_alunos_estado_operacional_v131;
     `), 'leitura da view operacional da fixture');
     assert.deepEqual(rows, [
-      { aluno_id: 1, matricula: '100', ativo: false },
-      { aluno_id: 2, matricula: '200', ativo: true },
-      { aluno_id: 3, matricula: '200', ativo: true },
+      {
+        aluno_id: 1,
+        matricula: '100',
+        raw_encontrado: true,
+        status_emusys: 'trancada',
+        motivo_inativa: null,
+        status_operacional: 'trancado',
+        ativo: false,
+        trancado_atual: true,
+      },
+      {
+        aluno_id: 2,
+        matricula: '200',
+        raw_encontrado: false,
+        status_emusys: null,
+        motivo_inativa: null,
+        status_operacional: 'ativo',
+        ativo: true,
+        trancado_atual: false,
+      },
+      {
+        aluno_id: 3,
+        matricula: '200',
+        raw_encontrado: false,
+        status_emusys: null,
+        motivo_inativa: null,
+        status_operacional: 'ativo',
+        ativo: true,
+        trancado_atual: false,
+      },
     ]);
     const syntheticNameColumn = psql(container, 'select i.aluno_nome from public.sync_run_items i;');
     assert.notEqual(syntheticNameColumn.status, 0, 'fixture nao pode aceitar coluna sintetica de nome');
@@ -556,7 +621,7 @@ test('v3 bloqueia aberta ativa contra cancelada inativa no mesmo snapshot canoni
   });
 });
 
-test('v3 bloqueia identidade invalida quando fatura ativa colide com metadado invalido de matricula inativa', { timeout: 90_000 }, async (t) => {
+test('v3 isola identidade invalida em partial quando fatura confirmada colide com metadado invalido', { timeout: 90_000 }, async (t) => {
   await withCanonicalFixture(t, async (container, asOfDate) => {
     const month = `date_trunc('month', date '${asOfDate}')::date`;
     insertAluno(container, 231, UNIT_A, '2231', { status: 'ativo' });
@@ -574,10 +639,10 @@ test('v3 bloqueia identidade invalida quando fatura ativa colide com metadado in
     ], 'colisao identidade invalida ativa e inativa');
 
     const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'colisao identidade invalida ativa e inativa');
-    assert.equal(result.status, 'incomplete');
-    assert.equal(result.operational.collection_allowed, false);
-    assert.equal(result.operational.collection_scope, 'blocked');
-    assert.deepEqual(result.operational.block_reasons, ['invalid_invoice_identity']);
+    assert.equal(result.status, 'partial');
+    assert.equal(result.operational.collection_allowed, true);
+    assert.equal(result.operational.collection_scope, 'confirmed_only');
+    assert.deepEqual(result.operational.block_reasons, []);
     assert.deepEqual(result.items, []);
     assert.equal(result.totals.total_faturas, 0);
     assert.equal(result.totals.total_original, 0);
@@ -765,22 +830,38 @@ test('v3 bloqueia duplicata confirmada na mesma unidade e isola o mesmo ID entre
   });
 });
 
-test('v3 exige identidade de matricula: homonimos e emusys_student_id isolado nunca autorizam', { timeout: 90_000 }, async (t) => {
+test('v3 exige identidade de matricula: homonimos e emusys_student_id isolado ficam so na quarentena partial', { timeout: 90_000 }, async (t) => {
   await withCanonicalFixture(t, async (container, asOfDate) => {
     const month = `date_trunc('month', date '${asOfDate}')::date`;
-    insertAluno(container, 501, UNIT_A, '2501', { student: '7501', name: 'Ana Souza' });
+    insertAluno(container, 501, UNIT_A, '2501', { student: '7501', name: 'Ana Souza', status: 'trancado' });
     insertAluno(container, 502, UNIT_A, '2502', { student: '7502', name: 'Ana Souza' });
     const nominalPayload = "jsonb_build_object('_la_report', jsonb_build_object('nome', 'Ana Souza'))";
-    const assertInvalidScenario = (result, invalidId) => {
-      assert.equal(result.status, 'incomplete');
-      assert.equal(result.operational.collection_allowed, false);
-      assert.deepEqual(result.operational.block_reasons, ['invalid_invoice_identity']);
+    const assertInvalidScenario = (result, invalidId, controlId, activeCandidate, relevantToRadar) => {
+      if (!relevantToRadar) {
+        assert.equal(result.status, 'ok');
+        assert.equal(result.operational.collection_allowed, true);
+        assert.equal(result.reconciliation.status, 'clear');
+        assert.equal(result.reconciliation.invalid_identity_invoice_count, 0);
+        assert.deepEqual(result.reconciliation.invalid_identity_invoices, []);
+        assert.deepEqual(result.items.map((item) => item.canonical_fatura_id), [controlId]);
+        assert.equal(result.items.some((item) => item.canonical_fatura_id === invalidId), false);
+        return;
+      }
+      assert.equal(result.status, 'partial');
+      assert.equal(result.operational.collection_allowed, true);
+      assert.equal(result.operational.collection_scope, 'confirmed_only');
+      assert.deepEqual(result.operational.block_reasons, []);
       assert.equal(result.reconciliation.invalid_identity_invoice_count, 1);
       assert.deepEqual(
         result.reconciliation.invalid_identity_invoices.map((item) => item.canonical_fatura_id),
         [invalidId],
       );
-      assert.deepEqual(result.items, []);
+      assert.equal(
+        result.reconciliation.invalid_identity_invoices[0].active_candidate_by_student_id,
+        activeCandidate,
+      );
+      assert.deepEqual(result.items.map((item) => item.canonical_fatura_id), [controlId]);
+      assert.equal(result.items.some((item) => item.canonical_fatura_id === invalidId), false);
     };
     const scenarios = [
       {
@@ -788,6 +869,8 @@ test('v3 exige identidade de matricula: homonimos e emusys_student_id isolado nu
         invalid: '50000000-0000-0000-0000-000000000501',
         control: '50000000-0000-0000-0000-000000000511',
         row: (id, run) => invoice(id, UNIT_A, run, month, null, { fatura: 3501, student: 7501, payload: nominalPayload }),
+        activeCandidate: true,
+        relevantToRadar: true,
         label: 'matricula nula com emusys_student_id correspondente',
       },
       {
@@ -795,6 +878,8 @@ test('v3 exige identidade de matricula: homonimos e emusys_student_id isolado nu
         invalid: '50000000-0000-0000-0000-000000000502',
         control: '50000000-0000-0000-0000-000000000512',
         row: (id, run) => invoice(id, UNIT_A, run, month, 9999, { student: 7501, payload: nominalPayload }),
+        activeCandidate: true,
+        relevantToRadar: true,
         label: 'matricula errada com emusys_student_id correspondente',
       },
       {
@@ -802,6 +887,8 @@ test('v3 exige identidade de matricula: homonimos e emusys_student_id isolado nu
         invalid: '50000000-0000-0000-0000-000000000503',
         control: '50000000-0000-0000-0000-000000000513',
         row: (id, run) => invoice(id, UNIT_A, run, month, 9998, { student: 7999, payload: nominalPayload }),
+        activeCandidate: false,
+        relevantToRadar: false,
         label: 'homonimo somente no payload',
       },
     ];
@@ -809,18 +896,21 @@ test('v3 exige identidade de matricula: homonimos e emusys_student_id isolado nu
       seedRun(container, scenario.run, month);
       insertInvoices(container, [
         scenario.row(scenario.invalid, scenario.run),
-        invoice(scenario.control, UNIT_A, scenario.run, month, 2502),
+        invoice(scenario.control, UNIT_A, scenario.run, month, 2502, { student: 7502 }),
       ], scenario.label);
       assertInvalidScenario(
         jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), scenario.label),
         scenario.invalid,
+        scenario.control,
+        scenario.activeCandidate,
+        scenario.relevantToRadar,
       );
       seed(container, 'delete from public.sync_run_items; delete from public.sync_runs;', `limpeza ${scenario.label}`);
     }
   });
 });
 
-test('v3 faz invalid_invoice_identity prevalecer sobre partial de source_missing e preserva auditoria', { timeout: 90_000 }, async (t) => {
+test('v3 combina identidade invalida e source_missing em partial sem perder auditoria', { timeout: 90_000 }, async (t) => {
   await withCanonicalFixture(t, async (container, asOfDate) => {
     const month = `date_trunc('month', date '${asOfDate}')::date`;
     insertAluno(container, 551, UNIT_A, '2551');
@@ -837,11 +927,14 @@ test('v3 faz invalid_invoice_identity prevalecer sobre partial de source_missing
       invoice('55000000-0000-0000-0000-000000000552', UNIT_A, run, month, 2552),
     ], 'source_missing com identidade invalida');
     const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'precedencia da identidade invalida');
-    assert.equal(result.status, 'incomplete');
-    assert.equal(result.operational.collection_allowed, false);
-    assert.equal(result.operational.collection_scope, 'blocked');
-    assert.deepEqual(result.operational.block_reasons, ['invalid_invoice_identity']);
-    assert.deepEqual(result.items, []);
+    assert.equal(result.status, 'partial');
+    assert.equal(result.operational.collection_allowed, true);
+    assert.equal(result.operational.collection_scope, 'confirmed_only');
+    assert.deepEqual(result.operational.block_reasons, []);
+    assert.deepEqual(
+      result.items.map((item) => item.canonical_fatura_id),
+      ['55000000-0000-0000-0000-000000000552'],
+    );
     assert.equal(result.reconciliation.source_missing_count, 1);
     assert.equal(result.reconciliation.validation_issue_count, 1);
     assert.equal(result.reconciliation.invalid_identity_invoice_count, 1);
@@ -856,33 +949,307 @@ test('v3 faz invalid_invoice_identity prevalecer sobre partial de source_missing
   });
 });
 
-test('v3 usa estado operacional exato, mas mantem exclusoes financeiras e unidade no vinculo', { timeout: 90_000 }, async (t) => {
+test('v3 deriva o papel financeiro atual por pessoa com precedencia raw, fallback conservador e arquivo fora', { timeout: 90_000 }, async (t) => {
   await withCanonicalFixture(t, async (container, asOfDate) => {
     const month = `date_trunc('month', date '${asOfDate}')::date`;
-    insertAluno(container, 601, UNIT_A, '2601', { status: 'ativo' });
-    insertOperationalState(container, UNIT_A, '2601', 601, 'trancado');
-    insertAluno(container, 602, UNIT_A, '2602', { status: 'trancado' });
-    insertOperationalState(container, UNIT_A, '2602', 602, 'ativo');
-    insertAluno(container, 603, UNIT_A, '2603', { archived: true });
-    insertOperationalState(container, UNIT_A, '2603', 603, 'ativo');
-    insertAluno(container, 604, UNIT_A, '2604', { exited: true });
-    insertOperationalState(container, UNIT_A, '2604', 604, 'ativo');
-    insertAluno(container, 605, UNIT_A, '2605', { status: 'trancado' });
-    insertOperationalState(container, UNIT_A, '2605', 605, 'trancado');
-    insertAluno(container, 606, UNIT_B, '2605', { status: 'ativo' });
-    insertOperationalState(container, UNIT_B, '2605', 606, 'ativo');
+    insertAluno(container, 601, UNIT_A, '2601', { status: 'evadido', exited: true });
+    insertOperationalState(container, UNIT_A, '2601', 601, 'ativo', 'ativa');
+    insertAluno(container, 602, UNIT_A, '2602', { status: 'evadido' });
+    insertOperationalState(container, UNIT_A, '2602', 602, 'trancado', 'trancada');
+    insertAluno(container, 603, UNIT_A, '2603', { status: 'ativo' });
+    insertOperationalState(container, UNIT_A, '2603', 603, 'evadido', 'inativa', 'interrompida');
+    insertAluno(container, 604, UNIT_A, '2604', { status: 'ativo' });
+    insertOperationalState(container, UNIT_A, '2604', 604, 'inativo', 'inativa', 'concluida');
+    insertAluno(container, 605, UNIT_A, '2605', { status: 'ativo' });
+    insertAluno(container, 606, UNIT_A, '2606', { status: 'trancado' });
+    insertAluno(container, 607, UNIT_A, '2607', { status: 'ativo', exited: true });
+    insertAluno(container, 608, UNIT_A, '2608', { status: 'trancado', exited: true });
+    insertAluno(container, 609, UNIT_A, '2609', { status: 'ativo', archived: true });
+    insertOperationalState(container, UNIT_A, '2609', 609, 'ativo', 'ativa');
+    insertAluno(container, 610, UNIT_A, '2610', { status: 'trancado', archived: true });
+    insertOperationalState(container, UNIT_A, '2610', 610, 'trancado', 'trancada');
     const run = '00000000-0000-0000-0000-000000000601';
     seedRun(container, run, month);
-    const included = '60000000-0000-0000-0000-000000000602';
+    const rawActiveReentry = '60000000-0000-0000-0000-000000000601';
+    const rawLocked = '60000000-0000-0000-0000-000000000602';
+    const fallbackActive = '60000000-0000-0000-0000-000000000605';
+    const fallbackLocked = '60000000-0000-0000-0000-000000000606';
     insertInvoices(container, [
-      invoice('60000000-0000-0000-0000-000000000601', UNIT_A, run, month, 2601),
-      invoice(included, UNIT_A, run, month, 2602),
+      invoice(rawActiveReentry, UNIT_A, run, month, 2601),
+      invoice(rawLocked, UNIT_A, run, month, 2602),
       invoice('60000000-0000-0000-0000-000000000603', UNIT_A, run, month, 2603),
       invoice('60000000-0000-0000-0000-000000000604', UNIT_A, run, month, 2604),
-      invoice('60000000-0000-0000-0000-000000000605', UNIT_A, run, month, 2605),
-    ], 'estado operacional e exclusoes financeiras');
-    const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'estado operacional v3');
-    assert.deepEqual(result.items.map((item) => item.canonical_fatura_id), [included]);
+      invoice(fallbackActive, UNIT_A, run, month, 2605),
+      invoice(fallbackLocked, UNIT_A, run, month, 2606),
+      invoice('60000000-0000-0000-0000-000000000607', UNIT_A, run, month, 2607),
+      invoice('60000000-0000-0000-0000-000000000608', UNIT_A, run, month, 2608),
+      invoice('60000000-0000-0000-0000-000000000609', UNIT_A, run, month, 2609),
+      invoice('60000000-0000-0000-0000-000000000610', UNIT_A, run, month, 2610),
+    ], 'matriz de estado atual A-F');
+
+    const lockedState = jsonFrom(psql(container, `
+      select jsonb_build_object(
+        'entra_financeiro_ativo', entra_financeiro_ativo,
+        'eh_trancamento_atual', eh_trancamento_atual
+      )::text
+      from public.vw_alunos_estado_operacional_v131
+      where aluno_id = 602;
+    `), 'evidencia da matricula raw trancada');
+    assert.deepEqual(lockedState, {
+      entra_financeiro_ativo: false,
+      eh_trancamento_atual: true,
+    });
+    const inactiveStates = jsonFrom(psql(container, `
+      select jsonb_agg(jsonb_build_object(
+        'aluno_id', aluno_id,
+        'status_emusys', status_emusys,
+        'motivo_inativa', motivo_inativa,
+        'status_operacional', status_operacional
+      ) order by aluno_id)::text
+      from public.vw_alunos_estado_operacional_v131
+      where aluno_id in (603, 604);
+    `), 'evidencia dos ramos raw inativa');
+    assert.deepEqual(inactiveStates, [
+      {
+        aluno_id: 603,
+        status_emusys: 'inativa',
+        motivo_inativa: 'interrompida',
+        status_operacional: 'evadido',
+      },
+      {
+        aluno_id: 604,
+        status_emusys: 'inativa',
+        motivo_inativa: 'concluida',
+        status_operacional: 'inativo',
+      },
+    ]);
+
+    const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'papel financeiro atual A-F');
+    assert.equal(result.status, 'ok');
+    assert.deepEqual(result.items.map((item) => item.canonical_fatura_id).sort(), [
+      rawActiveReentry,
+      rawLocked,
+      fallbackActive,
+      fallbackLocked,
+    ].sort());
+    assert.deepEqual(
+      result.items
+        .map((item) => ({
+          canonical_fatura_id: item.canonical_fatura_id,
+          aluno_id_canonico: item.aluno_id_canonico,
+          contact_resolution_status: item.contact_resolution_status,
+        }))
+        .sort((left, right) => left.canonical_fatura_id.localeCompare(right.canonical_fatura_id)),
+      [
+        { canonical_fatura_id: rawActiveReentry, aluno_id_canonico: 601, contact_resolution_status: 'resolved' },
+        { canonical_fatura_id: rawLocked, aluno_id_canonico: 602, contact_resolution_status: 'resolved' },
+        { canonical_fatura_id: fallbackActive, aluno_id_canonico: 605, contact_resolution_status: 'resolved' },
+        { canonical_fatura_id: fallbackLocked, aluno_id_canonico: 606, contact_resolution_status: 'resolved' },
+      ].sort((left, right) => left.canonical_fatura_id.localeCompare(right.canonical_fatura_id)),
+    );
+    assert.equal(result.reconciliation.contact_resolution_pending_count, 0);
+  });
+});
+
+test('v3 inclui fatura exata da matricula anterior quando a mesma pessoa reingressou em outra matricula', { timeout: 90_000 }, async (t) => {
+  await withCanonicalFixture(t, async (container, asOfDate) => {
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
+    insertAluno(container, 621, UNIT_A, '2621', {
+      student: '8621',
+      status: 'evadido',
+      exited: true,
+      archived: true,
+    });
+    insertOperationalState(container, UNIT_A, '2621', 621, 'evadido', 'inativa');
+    insertAluno(container, 622, UNIT_A, '2622', {
+      student: '8621',
+      status: 'evadido',
+      exited: true,
+    });
+    insertOperationalState(container, UNIT_A, '2622', 622, 'ativo', 'ativa');
+    const run = '00000000-0000-0000-0000-000000000621';
+    const previousEnrollmentInvoice = '62000000-0000-0000-0000-000000000621';
+    seedRun(container, run, month);
+    insertInvoices(container, [
+      invoice(previousEnrollmentInvoice, UNIT_A, run, month, 2621, { student: 8621 }),
+    ], 'reingresso com fatura da matricula anterior');
+
+    const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'reingresso oficial por pessoa');
+    assert.equal(result.status, 'ok');
+    assert.deepEqual(result.items.map((item) => item.canonical_fatura_id), [previousEnrollmentInvoice]);
+    assert.equal(result.items[0].aluno_id_canonico, 622);
+    assert.equal(result.items[0].contact_resolution_status, 'resolved');
+    assert.equal(result.reconciliation.contact_resolution_pending_count, 0);
+  });
+});
+
+test('v3 deixa fora fatura exata da matricula anterior quando a pessoa nao possui papel atual', { timeout: 90_000 }, async (t) => {
+  await withCanonicalFixture(t, async (container, asOfDate) => {
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
+    insertAluno(container, 631, UNIT_A, '2631', {
+      student: '8631',
+      status: 'evadido',
+      exited: true,
+      archived: true,
+    });
+    insertOperationalState(container, UNIT_A, '2631', 631, 'evadido', 'inativa');
+    const run = '00000000-0000-0000-0000-000000000631';
+    seedRun(container, run, month);
+    insertInvoices(container, [
+      invoice('63000000-0000-0000-0000-000000000631', UNIT_A, run, month, 2631, { student: 8631 }),
+    ], 'ex-aluno sem matricula atual');
+
+    const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'ex-aluno fora do radar');
+    assert.equal(result.status, 'ok');
+    assert.deepEqual(result.items, []);
+    assert.equal(result.reconciliation.invalid_identity_invoice_count, 0);
+    assert.equal(result.reconciliation.contact_resolution_pending_count, 0);
+  });
+});
+
+test('v3 mantem fatura confirmada e sinaliza contato ambiguo quando a pessoa possui dois candidatos atuais', { timeout: 90_000 }, async (t) => {
+  await withCanonicalFixture(t, async (container, asOfDate) => {
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
+    insertAluno(container, 671, UNIT_A, '2671', { student: '8671', status: 'evadido' });
+    insertOperationalState(container, UNIT_A, '2671', 671, 'ativo', 'ativa');
+    insertAluno(container, 672, UNIT_A, '2672', { student: '8671', status: 'evadido' });
+    insertOperationalState(container, UNIT_A, '2672', 672, 'trancado', 'trancada');
+    const run = '00000000-0000-0000-0000-000000000671';
+    const confirmedInvoice = '67000000-0000-0000-0000-000000000671';
+    seedRun(container, run, month);
+    insertInvoices(container, [
+      invoice(confirmedInvoice, UNIT_A, run, month, 2671, { student: 8671, value: 150 }),
+    ], 'fatura confirmada com dois candidatos atuais para contato');
+
+    const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'contato atual ambiguo');
+    assert.equal(result.status, 'partial');
+    assert.equal(result.operational.collection_allowed, true);
+    assert.equal(result.operational.collection_scope, 'confirmed_only');
+    assert.equal(result.items.length, 1);
+    assert.equal(result.items[0].canonical_fatura_id, confirmedInvoice);
+    assert.equal(typeof result.items[0].emusys_fatura_id, 'string');
+    assert.equal(typeof result.items[0].emusys_matricula_id, 'string');
+    assert.equal(result.items[0].aluno_id_canonico, null);
+    assert.equal(result.items[0].contact_resolution_status, 'ambiguous');
+    assert.equal(result.totals.total_faturas, 1);
+    assert.equal(result.totals.total_matriculas, 1);
+    assert.equal(result.totals.total_original, 150);
+    assert.equal(result.reconciliation.status, 'pending');
+    assert.equal(result.reconciliation.contact_resolution_pending_count, 1);
+    assert.equal(result.reconciliation.invalid_identity_invoice_count, 0);
+
+    const normalized = normalizarInadimplenciaCanonica(result);
+    assert.notEqual(normalized.status, 'error');
+    assert.equal(normalized.status, result.status);
+    assert.equal(normalized.items.length, result.items.length);
+    assert.deepEqual(
+      normalized.items.map((item) => ({
+        canonical_fatura_id: item.canonical_fatura_id,
+        aluno_id_canonico: item.aluno_id_canonico,
+        contact_resolution_status: item.contact_resolution_status,
+      })),
+      result.items.map((item) => ({
+        canonical_fatura_id: item.canonical_fatura_id,
+        aluno_id_canonico: item.aluno_id_canonico,
+        contact_resolution_status: item.contact_resolution_status,
+      })),
+    );
+    assert.equal(
+      normalized.contactResolutionPendingCount,
+      result.reconciliation.contact_resolution_pending_count,
+    );
+  });
+});
+
+test('v3 quarentena em partial matricula conhecida cujo student_id da fatura diverge do dono local', { timeout: 90_000 }, async (t) => {
+  await withCanonicalFixture(t, async (container, asOfDate) => {
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
+    insertAluno(container, 641, UNIT_A, '2641', { student: '8641', status: 'ativo' });
+    insertOperationalState(container, UNIT_A, '2641', 641, 'ativo', 'ativa');
+    insertAluno(container, 642, UNIT_A, '2642', { student: '8642', status: 'trancado' });
+    insertOperationalState(container, UNIT_A, '2642', 642, 'trancado', 'trancada');
+    const run = '00000000-0000-0000-0000-000000000641';
+    const invalidOwner = '64000000-0000-0000-0000-000000000641';
+    const control = '64000000-0000-0000-0000-000000000642';
+    seedRun(container, run, month);
+    insertInvoices(container, [
+      invoice(invalidOwner, UNIT_A, run, month, 2641, { student: 8642 }),
+      invoice(control, UNIT_A, run, month, 2642, { student: 8642 }),
+    ], 'student_id divergente do dono da matricula');
+
+    const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'identidade exata com dono divergente');
+    assert.equal(result.status, 'partial');
+    assert.equal(result.operational.collection_allowed, true);
+    assert.deepEqual(result.items.map((item) => item.canonical_fatura_id), [control]);
+    assert.deepEqual(
+      result.reconciliation.invalid_identity_invoices.map((item) => item.canonical_fatura_id),
+      [invalidOwner],
+    );
+    assert.equal(result.reconciliation.invalid_identity_invoices[0].active_candidate_by_student_id, true);
+  });
+});
+
+test('v3 ignora identidade desconhecida de pessoa sem matricula atual sem alterar status ou reconciliacao', { timeout: 90_000 }, async (t) => {
+  await withCanonicalFixture(t, async (container, asOfDate) => {
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
+    insertAluno(container, 651, UNIT_A, '2651', {
+      student: '8651',
+      status: 'evadido',
+      exited: true,
+    });
+    insertOperationalState(container, UNIT_A, '2651', 651, 'evadido', 'inativa', 'interrompida');
+    const run = '00000000-0000-0000-0000-000000000651';
+    seedRun(container, run, month);
+    insertInvoices(container, [
+      invoice('65000000-0000-0000-0000-000000000651', UNIT_A, run, month, 9651, {
+        student: 8651,
+        value: 250,
+      }),
+    ], 'identidade desconhecida de ex-aluno');
+
+    const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'ex-aluno desconhecido fora do radar');
+    assert.equal(result.status, 'ok');
+    assert.equal(result.reconciliation.status, 'clear');
+    assert.equal(result.reconciliation.invalid_identity_invoice_count, 0);
+    assert.equal(result.reconciliation.source_missing_count, 0);
+    assert.deepEqual(result.reconciliation.invalid_identity_invoices, []);
+    assert.deepEqual(result.items, []);
+    assert.deepEqual(result.totals, {
+      maior_atraso: 0,
+      total_faturas: 0,
+      total_matriculas: 0,
+      total_original: 0,
+      total_atualizado: 0,
+    });
+  });
+});
+
+test('v3 quarentena student_id nulo quando a matricula conhecida pertence a pessoa atual', { timeout: 90_000 }, async (t) => {
+  await withCanonicalFixture(t, async (container, asOfDate) => {
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
+    insertAluno(container, 661, UNIT_A, '2661', { student: '8661', status: 'ativo' });
+    insertOperationalState(container, UNIT_A, '2661', 661, 'ativo', 'ativa');
+    insertAluno(container, 662, UNIT_A, '2662', { student: '8662', status: 'ativo' });
+    insertOperationalState(container, UNIT_A, '2662', 662, 'ativo', 'ativa');
+    const run = '00000000-0000-0000-0000-000000000661';
+    const missingStudent = '66000000-0000-0000-0000-000000000661';
+    const control = '66000000-0000-0000-0000-000000000662';
+    seedRun(container, run, month);
+    insertInvoices(container, [
+      invoice(missingStudent, UNIT_A, run, month, 2661, { student: null, value: 200 }),
+      invoice(control, UNIT_A, run, month, 2662, { student: 8662, value: 100 }),
+    ], 'student_id nulo com dono atual conhecido');
+
+    const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'dono atual mantem identidade incompleta em quarentena');
+    assert.equal(result.status, 'partial');
+    assert.equal(result.reconciliation.invalid_identity_invoice_count, 1);
+    assert.deepEqual(result.items.map((item) => item.canonical_fatura_id), [control]);
+    assert.equal(result.totals.total_original, 100);
+    assert.deepEqual(
+      result.reconciliation.invalid_identity_invoices.map((item) => item.canonical_fatura_id),
+      [missingStudent],
+    );
+    assert.equal(result.reconciliation.invalid_identity_invoices[0].active_candidate_by_student_id, false);
   });
 });
 

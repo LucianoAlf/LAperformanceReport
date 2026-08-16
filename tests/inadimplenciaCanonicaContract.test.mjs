@@ -71,11 +71,19 @@ test('canonical v3 reader is unit-scoped, strict about identity, and centralizes
   assert.match(source, /'collection_scope'/i);
   assert.match(source, /'block_reasons'/i);
   assert.match(source, /vw_alunos_estado_operacional_v131/i);
+  assert.match(source, /pessoas_financeiramente_atuais/i);
+  assert.match(source, /matriculas_locais_conhecidas/i);
   assert.match(source, /entra_financeiro_ativo\s+is\s+true/i);
+  assert.match(source, /eh_trancamento_atual\s+is\s+true/i);
+  assert.match(source, /raw_encontrado/i);
+  assert.match(source, /status_emusys/i);
   assert.match(source, /source_missing_open_count/i);
   assert.match(source, /source_missing_other_count/i);
   assert.match(source, /duplicate_confirmed_fatura/i);
-  assert.match(source, /invalid_invoice_identity/i);
+  assert.match(source, /invalid_identity_invoices/i);
+  assert.match(source, /aluno_id_canonico/i);
+  assert.match(source, /contact_resolution_status/i);
+  assert.match(source, /contact_resolution_pending_count/i);
   assert.match(source, /grupos_fatura_todos/i);
   assert.match(source, /open_candidate_count/i);
   assert.match(source, /confirmed_observation_count/i);
@@ -108,20 +116,70 @@ test('canonical reader exposes unknown source_missing rows instead of calling th
 test('canonical reader quarantines invalid unit-scoped invoice identity instead of charging it', () => {
   const source = effectiveSql();
   const compactSource = source.replace(/\s+/g, ' ');
-  assert.match(source, /invalid_invoice_identity/i);
+  assert.match(source, /invalid_identity_invoices/i);
   assert.match(source, /emusys_matricula_id\s+is\s+null/i);
+  assert.match(source, /emusys_student_id\s+is\s+null/i);
+  assert.match(source, /mlc\.emusys_student_id\s*=\s*btrim\(i\.emusys_student_id::text\)/i);
   assert.doesNotMatch(compactSource, /\b(?:nome|aluno_nome)\b.*?(?:=|is not distinct from).*?\b(?:nome|aluno_nome)\b/i);
   assert.doesNotMatch(compactSource, /\bor\s*\(\s*i\.emusys_matricula_id\s+is\s+null\s+and\s+i\.emusys_student_id\s+is\s+not\s+null/i);
+  assert.doesNotMatch(source, /crm\/aniversariantes/i);
 });
 
-test('canonical reader limits collection by operational state, financial scope, and three current competencies', () => {
+test('canonical reader combines exact invoice enrollment with current active-or-locked person role', () => {
   const source = effectiveSql();
+  const currentPeopleCte = source.match(
+    /pessoas_financeiramente_atuais\s+as\s*\(([\s\S]*?)\n\s*\),\s*\n\s*matriculas_locais_conhecidas\s+as\s*\(/i,
+  );
+  assert.ok(currentPeopleCte, 'CTE pessoas_financeiramente_atuais ausente');
+  const currentPeopleSql = currentPeopleCte[1];
+
+  assert.match(
+    currentPeopleSql,
+    /\(\s*estado\.entra_financeiro_ativo\s+is\s+true\s+or\s+estado\.eh_trancamento_atual\s+is\s+true\s*\)/i,
+  );
+  assert.match(currentPeopleSql, /a\.arquivado_em\s+is\s+null/i);
+  assert.match(
+    currentPeopleSql,
+    /\(\s*\(\s*estado\.raw_encontrado\s+is\s+true\s+and\s+estado\.status_emusys\s+in\s*\(\s*'ativa'\s*,\s*'trancada'\s*\)\s*\)\s*or\s*\(\s*estado\.raw_encontrado\s+is\s+not\s+true\s+and\s+estado\.status_operacional\s+in\s*\(\s*'ativo'\s*,\s*'trancado'\s*\)\s+and\s+a\.data_saida\s+is\s+null\s*\)\s*\)/i,
+  );
+  assert.equal(
+    [...currentPeopleSql.matchAll(/a\.data_saida\s+is\s+null/gi)].length,
+    1,
+    'data_saida deve existir somente no fallback sem raw',
+  );
+  assert.match(currentPeopleSql, /a\.id\s+as\s+aluno_id/i);
+  assert.match(
+    currentPeopleSql,
+    /group\s+by[\s\S]*?unidade_id\s*,[\s\S]*?emusys_student_id/i,
+  );
+  assert.match(currentPeopleSql, /count\s*\(\s*\*\s*\)[\s\S]*?candidatos_atuais/i);
+  assert.match(
+    currentPeopleSql,
+    /case\s+when\s+count\s*\(\s*\*\s*\)\s*=\s*1\s+then[\s\S]*?aluno_id_canonico/i,
+  );
+
   assert.match(source, /janela_competencias/i);
   assert.match(source, /interval\s+'2 months'/i);
-  assert.match(source, /vw_alunos_estado_operacional_v131/i);
-  assert.match(source, /entra_financeiro_ativo\s+is\s+true/i);
-  assert.match(source, /a\.arquivado_em\s+is\s+null/i);
-  assert.match(source, /a\.data_saida\s+is\s+null/i);
+  assert.match(source, /matriculas_locais_conhecidas[\s\S]*?emusys_matricula_id[\s\S]*?emusys_student_id/i);
+  assert.match(source, /exact_invoice_enrollment/i);
+  assert.match(source, /current_student_role\(active_or_locked\b/i);
+  assert.match(source, /tem_dono_matricula_atual/i);
+  assert.match(source, /tem_candidato_atual_para_identidade/i);
+  assert.match(source, /'resolved'/i);
+  assert.match(source, /'missing'/i);
+  assert.match(source, /'ambiguous'/i);
+  assert.match(source, /'aluno_id_canonico'\s*,\s*ic\.aluno_id_canonico/i);
+  assert.match(source, /'contact_resolution_status'\s*,\s*ic\.contact_resolution_status/i);
+  assert.match(source, /'emusys_fatura_id'\s*,\s*ic\.emusys_fatura_id::text/i);
+  assert.match(source, /'emusys_matricula_id'\s*,\s*ic\.emusys_matricula_id::text/i);
+  assert.match(
+    source,
+    /'contact_resolution_pending_count'\s*,\s*\w+\.contact_resolution_pending_count/i,
+  );
+  assert.match(
+    source,
+    /identidade_invalida\s+is\s+true\s+and\s+la\.tem_candidato_atual_para_identidade\s+is\s+true/i,
+  );
   assert.match(source, /i\.competencia\s+between\s+jc\.inicio\s+and\s+jc\.fim/i);
 });
 
