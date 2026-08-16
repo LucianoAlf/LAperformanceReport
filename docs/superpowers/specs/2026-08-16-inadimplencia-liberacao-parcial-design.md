@@ -17,8 +17,11 @@ Essa é uma liberação parcial explícita, não uma redução de segurança:
 - fatura em quarentena não pode ser cobrada;
 - `source_missing` continua significando “não confirmada na origem neste
   snapshot”, nunca “paga”;
-- snapshot velho, identidade inválida ou duplicidade não isolável continuam
-  bloqueando a leitura inteira;
+- snapshot velho, status financeiro desconhecido ou duplicidade confirmada não
+  isolável continuam bloqueando a leitura inteira;
+- identidade opcional inválida (`matricula_id`, `aluno_id` ou `contrato_id`)
+  fica auditada em `validation_issues` e em quarentena; ela não derruba a
+  coleta nem autoriza cobrança daquela fatura;
 - a Sol consome o contrato canônico do LA Report e não cria sincronização ou
   regra financeira própria.
 
@@ -40,26 +43,62 @@ próprios e não bloqueará esta liberação operacional.
 
 ## Fonte, grão e identidade
 
+Nota de versão documental: o anexo `api_emusys (2).json` informa OpenAPI
+`1.2.2`; ele confirma `/matriculas` e `/faturas`, mas é anterior a
+`/crm/aniversariantes` v1.3.0 e à semântica de matrícula v1.3.1. Ausência nesse
+snapshot antigo não será interpretada como ausência na API atual; para esses
+dois pontos prevalecem o changelog/GitBook atual e o comportamento versionado
+no sync. O snapshot já versionado no repositório,
+`docs/api_emusys_v1.4.0.json`, contém `trancamento_ativo`, `motivo_inativa` e
+`/crm/aniversariantes`.
+
 - Fonte persistida: último snapshot `live`, `succeeded`, completo e fresco de
   `sync_runs` + `sync_run_items`.
 - Grão da saída: uma fatura Emusys canônica vencida.
 - Chave da fatura: `canonical_fatura_id`, sempre escopada pela unidade.
-- Vínculo operacional apto a cobrança: `unidade_id + emusys_matricula_id`.
+- Identidade da dívida: a fatura precisa casar exatamente com
+  `unidade_id + emusys_matricula_id`, e a matrícula conhecida precisa pertencer
+  ao mesmo `unidade_id + emusys_student_id` informado na fatura.
 - `unidade_id + emusys_student_id` pode localizar um candidato para
   reconciliação quando a matrícula está ausente, mas nunca autoriza cobrança;
   nome nunca é chave automática.
-- Universo de alunos: `vw_alunos_estado_operacional_v131.entra_financeiro_ativo
-  = true`, unido a `alunos`, com `arquivado_em IS NULL` e `data_saida IS NULL`.
-  O campo local `alunos.status` fica somente como fallback já encapsulado pela
-  view operacional.
+- Universo financeiro: pessoa com **qualquer** matrícula atual `ativa` ou
+  `trancada` na mesma unidade, identificada por
+  `unidade_id + emusys_student_id`. A matrícula que prova o papel atual deve
+  estar não arquivada. `entra_financeiro_ativo` continua significando apenas
+  `ativa` para os demais consumidores; a RPC financeira acrescenta
+  `eh_trancamento_atual=true` sem alterar a view compartilhada.
+- Quando há estado v1.3.1 sincronizado (`raw_encontrado=true`), ele prevalece:
+  `status_emusys IN ('ativa', 'trancada')` autoriza o recorte financeiro mesmo
+  se uma `data_saida` histórica permaneceu na linha local após reingresso.
+  `status_emusys='inativa'`, com motivo `interrompida` ou `concluida`, fica fora.
+  Sem estado Emusys atual, o fallback local só aceita `ativo|trancado` com
+  `data_saida IS NULL`.
 - Janela: mês da data de corte e as duas competências anteriores. Em
   agosto/2026, portanto, junho, julho e agosto — não 90 dias móveis.
-- Vencimento: `data_vencimento < p_as_of_date`. A carência operacional da Sol
-  permanece uma filtragem posterior e não altera a verdade financeira.
+- Vencimento/verdade financeira: `data_vencimento < p_as_of_date`, isto é,
+  **D+0** segundo o contrato oficial de `contrato_atual.inadimplente` do
+  Emusys. Esse universo alimenta consulta, totais financeiros e a página de
+  Faturas.
+- Cobrança amigável: **D+2**, aplicada depois do gate canônico por Farmer e
+  `sol_caixa_inadimplentes` com `dias_atraso >= 2`. A carência não altera a
+  verdade financeira D+0 e o booleano D+0 do Emusys nunca autoriza contato por
+  si só.
 
-Alunos inativos, evadidos, arquivados ou com saída registrada ficam fora desta
-lista. A futura carteira de ex-alunos devedores é outro produto e não será
-inferida nesta entrega.
+Quem não possui nenhuma matrícula atual `ativa|trancada` fica fora desta lista,
+mesmo que exista fatura antiga na janela. `data_saida` não pode, sozinha,
+transformar um reingresso confirmado pelo Emusys em ex-aluno. A classificação
+oficial `aluno|ex_aluno` de
+`GET /crm/aniversariantes` será usada como prova de reconciliação, não como uma
+segunda dependência operacional: o endpoint é orientado a aniversários e a
+mesma verdade de ciclo de vida já chega pelo sync de `GET /matriculas`. A futura
+carteira de ex-alunos devedores continua sendo outro produto.
+
+Consequência explícita do reingresso: uma fatura da matrícula anterior pode
+entrar, dentro da janela de três competências, quando a matrícula da própria
+fatura for conhecida exatamente, pertencer à mesma pessoa e essa pessoa tiver
+outra matrícula atual `ativa|trancada`. O `emusys_student_id` prova o papel
+atual, mas nunca substitui o casamento exato da fatura.
 
 ## Classificação de cada fatura
 
@@ -72,7 +111,8 @@ AND status = 'aberta'
 AND source_missing = false
 AND data_vencimento < data de corte
 AND competência dentro da janela de três meses
-AND matrícula local ativa e não arquivada
+AND matrícula da fatura conhecida exatamente e pertencente à mesma pessoa
+AND pessoa com alguma matrícula atual ativa ou trancada na unidade
 AND identidade válida
 AND canonical_fatura_id sem duplicidade confirmada
 ```
@@ -86,8 +126,11 @@ Regras de isolamento:
    leitura inteira em erro de duplicidade.
 3. Duas ou mais ocorrências confirmadas do mesmo ID, sem `source_missing`, são
    duplicidade de integridade e bloqueiam a leitura inteira.
-4. Metadado de identidade inválido bloqueia a leitura inteira até ser
-   corrigido. Não haverá fallback inventado por nome.
+4. Metadado opcional de identidade inválido é isolado por
+   `canonical_fatura_id`, registrado em `validation_issues` e
+   `invalid_identity_invoices`, e fica fora de itens e totais. Os demais
+   confirmados continuam disponíveis em `partial`. Não haverá fallback
+   inventado por nome ou `emusys_student_id`.
 5. O estado anterior de uma fatura `source_missing` — inclusive `aberta` ou
    `paga` — será apenas contexto de reconciliação. Ele nunca entra nos totais
    nem decide cobrança.
@@ -110,13 +153,16 @@ Forma resumida:
   "as_of_date": "YYYY-MM-DD",
   "avaliado_em": "timestamp",
   "policy": {
-    "student_scope": "vw_alunos_estado_operacional_v131.entra_financeiro_ativo=true AND arquivado_em IS NULL AND data_saida IS NULL",
+    "student_scope": "exact_invoice_enrollment + current_student_role(active_or_locked); raw Emusys atual prevalece sobre data_saida legado",
+    "delinquency_rule": "d_plus_0",
+    "collection_grace_days": 2,
     "competencias_inicio": "YYYY-MM-01",
     "competencia_fim": "YYYY-MM-01"
   },
   "operational": {
     "collection_allowed": true,
     "collection_scope": "confirmed_only | blocked",
+    "consumer_must_apply_collection_grace": true,
     "block_reasons": []
   },
   "freshness": {
@@ -156,19 +202,28 @@ Forma resumida:
 | Estado | Condição | `collection_allowed` | Saída operacional |
 |---|---|---:|---|
 | `ok` | snapshots frescos e nenhuma pendência | `true` | todos os confirmados |
-| `partial` | snapshots frescos; a única pendência global é `source_missing` isolável | `true` | somente confirmados |
+| `partial` | snapshots frescos; há `source_missing`, identidade inválida isolável e/ou contato local não unívoco | `true` | somente confirmados; contato apenas dos resolvidos |
 | `stale` | ao menos uma competência necessária fora do frescor | `false` | `items=[]` e totais zerados |
-| `incomplete` | identidade inválida ou duplicidade confirmada não isolável | `false` | `items=[]` e totais zerados |
+| `incomplete` | duplicidade confirmada ou falha estrutural não isolável | `false` | `items=[]` e totais zerados |
 
 A precedência será `stale` → `incomplete` → `partial` → `ok`. Consumidores
 devem obedecer a `operational.collection_allowed`; não devem reinterpretar o
 texto de `status`. Também devem invalidar ações quando o relógio ultrapassar
 `freshness.fresh_until` sem uma nova leitura.
 
-Os valores de `operational.block_reasons` serão estáveis e enumerados:
-`stale_competencia`, `duplicate_confirmed_fatura` e `invalid_invoice_identity`.
-Em `partial`, `block_reasons` ficará vazio porque a pendência isolada não
-bloqueia; o motivo continuará registrado em `reconciliation`.
+Os valores bloqueantes de `operational.block_reasons` serão estáveis:
+`stale_competencia` e `duplicate_confirmed_fatura`. Em `partial`,
+`block_reasons` ficará vazio porque cada pendência foi isolada; os motivos
+continuarão registrados em `reconciliation`.
+
+`operational.collection_allowed=true` significa que o conjunto confirmado
+passou pelos gates de integridade e frescor. Não significa que toda fatura D+0
+já possa receber contato: `consumer_must_apply_collection_grace=true` obriga o
+consumidor operacional a aplicar `policy.collection_grace_days=2`. Além disso,
+cada item publica `aluno_id_canonico` e `contact_resolution_status`. Só
+`contact_resolution_status='resolved'` com um único `aluno_id_canonico` pode
+ser enriquecido para contato; `missing|ambiguous` permanece no total financeiro
+D+0 e entra em `reconciliation.contact_resolution_pending_count`.
 
 Em `partial`, `totals` e `items` descrevem exclusivamente os confirmados. Os
 valores em `reconciliation.unknown_invoices` são metadados de investigação e
@@ -199,6 +254,11 @@ valor_atualizado = valor_original ×
 - arredondamento monetário por fatura em duas casas;
 - o Emusys continua sendo a fonte do status; o cálculo local só apresenta o
   valor contratual na data de corte.
+- a resposta ao vivo de `GET /faturas` também fornece `juros_e_multa` e
+  `desconto_aplicado` calculados dinamicamente. O sync deve preservar esses
+  campos como evidência da origem, mas a régua contratual acima continua sendo
+  o único cálculo canônico; o gate de produção compara os dois e explica toda
+  divergência por item.
 
 ## Consumidores
 
@@ -207,9 +267,15 @@ valor_atualizado = valor_original ×
 - O normalizador aceitará `schema_version=3` e o estado `partial`.
 - Alertas e filtro serão liberados quando
   `operational.collection_allowed=true` e `fresh_until` ainda estiver válido.
-- O banner separará visualmente os dois universos, por exemplo:
-  “15 inadimplências confirmadas — cobrança liberada” e
+- A Lista de Alunos exibirá o universo financeiro D+0, sem prometer contato,
+  por exemplo: “15 inadimplências confirmadas (D+0) — leitura financeira
+  disponível”. O Farmer exibirá somente elegíveis D+2 como “cobrança amigável
+  D+2”.
+- O banner separará visualmente o confirmado das quarentenas, por exemplo:
+  “15 inadimplências confirmadas (D+0)” e
   “16 faturas aguardando reconciliação — fora da cobrança”.
+- Contato local ausente ou ambíguo terá aviso próprio: a fatura continua no
+  total financeiro D+0, mas não entra no Farmer D+2.
 - Ações e totais nunca incluirão itens de reconciliação.
 - `stale`, `incomplete` e erro continuarão sem lista acionável.
 
@@ -217,8 +283,10 @@ valor_atualizado = valor_original ×
 
 O modo de exportação de inadimplência exportará `ok` ou `partial` quando
 `collection_allowed=true`. O manifesto registrará `schema_version`, `status`,
-`collection_scope`, `fresh_until`, contagem de confirmados e contagem em
-reconciliação. A exportação conterá somente itens confirmados.
+`collection_scope`, `fresh_until`, `delinquency_rule=d_plus_0`,
+`collection_grace_days=2`, `collection_grace_applied=false`, contagem de
+confirmados e contagem em reconciliação. A exportação conterá somente itens
+confirmados e não será, sozinha, autorização para contato.
 
 Relatórios financeiros que prometem fechamento completo não ganharão essa
 exceção automaticamente; continuarão bloqueados se sua própria integridade
@@ -241,7 +309,9 @@ public.sol_caixa_inadimplentes(
 
 Essa RPC chamará `get_inadimplencia_canonica` e obedecerá a
 `operational.collection_allowed`. Em `partial`, agregará somente `items`
-confirmados; em `stale` ou `incomplete`, devolverá lista vazia.
+confirmados; em `stale` ou `incomplete`, devolverá lista vazia. Antes de
+agregar, aplicará `dias_atraso >= p_carencia_dias`, cujo default e valor
+operacional aprovado são `2`.
 
 Os parâmetros `p_multa_pct` e `p_mora_pct_mes` serão mantidos apenas para
 compatibilidade de assinatura. Os únicos valores aceitos serão `0.02` e
@@ -299,21 +369,34 @@ expirar, a cobrança volta a ser bloqueada até uma fotografia fresca.
 5. mesmo ID com linha confirmada e `source_missing` → ID inteiro em quarentena,
    sem bloqueio dos demais confirmados;
 6. duplicidade entre linhas confirmadas → `incomplete`, bloqueio total;
-7. identidade inválida → `incomplete`, bloqueio total;
+7. identidade opcional inválida → `partial`, fatura em quarentena e demais
+   confirmados preservados;
 8. uma competência stale → `stale`, bloqueio total;
-9. somente aluno com `entra_financeiro_ativo=true`, não arquivado e sem
-   `data_saida`;
-10. somente mês corrente e dois anteriores;
-11. cálculo por fatura de multa e mora com arredondamento;
-12. LA Report mostra confirmados e aviso separado no estado `partial`;
-13. exportação parcial contém somente confirmados e manifesto explícito;
-14. Sol retorna somente confirmados em `partial` e vazio em `stale` ou
+9. pessoa com alguma matrícula atual `ativa|trancada` entra; sem nenhuma
+   matrícula atual, fica fora como ex-aluno;
+10. reingresso com estado Emusys atual `ativa|trancada` não é excluído por
+    `data_saida` histórica; no fallback sem raw, `data_saida` continua
+    excluindo;
+11. fatura da matrícula anterior só entra se a matrícula for conhecida
+    exatamente, pertencer à mesma pessoa e houver outra matrícula atual dessa
+    pessoa; divergência de `student_id` fica em quarentena;
+12. somente mês corrente e dois anteriores;
+13. cálculo por fatura de multa e mora com arredondamento;
+14. Lista de Alunos mostra confirmados D+0 sem prometer cobrança; Farmer mostra
+    somente D+2 e aviso separado no estado `partial`;
+15. exportação parcial contém somente confirmados e manifesto explícito;
+16. Sol retorna somente confirmados em `partial` e vazio em `stale` ou
     `incomplete`;
-15. matrícula ausente localizada apenas por `emusys_student_id` fica em
+17. matrícula ausente localizada apenas por `emusys_student_id` fica em
     reconciliação e nunca é cobrada;
-16. parâmetros de juros diferentes do contrato são rejeitados pela RPC da
+18. parâmetros de juros diferentes do contrato são rejeitados pela RPC da
     Sol;
-17. ACL impede chamada anônima e mantém acesso administrativo/service role.
+19. ACL impede chamada anônima e mantém acesso administrativo/service role.
+20. exatamente um cadastro atual publica `aluno_id_canonico` resolvido;
+    zero/múltiplos cadastros não são desempates por ordenação, permanecem nos
+    totais D+0 e ficam fora do contato D+2;
+21. reingresso usa o cadastro atual como contato, nunca a linha histórica da
+    matrícula devedora.
 
 Os testes de banco usarão PostgreSQL real com transação descartável/rollback,
 incluindo duas unidades, IDs Emusys repetidos entre unidades e aluno com dois
@@ -330,8 +413,10 @@ Antes de ativar qualquer cobrança automática:
    continua publicando Campo Grande, Recreio e Barra atomicamente;
 4. comparar item a item os confirmados da unidade escolhida com a tela “Contas
    a Receber → Em Atraso” do Emusys para a mesma competência e instante;
-   IDs, vencimentos e `valor_original` sem juros devem coincidir, enquanto o
-   `valor_atualizado` é validado separadamente pela fórmula contratual;
+   IDs, vencimentos e `valor_original` sem juros devem coincidir; a mesma
+   consulta ao vivo também confrontará `juros_e_multa` e `desconto_aplicado`
+   contra os campos preservados e a fórmula contratual, explicando qualquer
+   divergência por item;
 5. provar que cada `source_missing` ficou fora dos itens/totais de cobrança;
 6. chamar `sol_caixa_inadimplentes` e comparar seus alunos e valores com os
    mesmos itens canônicos;
@@ -353,6 +438,12 @@ virar um módulo genérico de contas a pagar. A direção aprovada contém:
 - atalhos contextuais na Lista de Alunos e no Comercial, abrindo a página já
   filtrada;
 - área explícita de “Aguardando reconciliação”, sem misturar com cobrança;
+- detalhe/histórico por matrícula consultado ao vivo com
+  `GET /faturas?matricula_id=...`, sem janela de datas, paginação por cursor e
+  limite máximo de 50; IDs continuam escopados pela unidade;
+- fallback de detalhe também poderá usar `aluno_id` ou `contrato_id` somente
+  como filtros explícitos e auditados, nunca como casamento automático entre
+  unidades;
 - permissões operacionais/administrativas; nenhuma informação financeira será
   enviada ao LA Teacher;
 - evolução posterior para recebidas, passaportes e entradas, sem incluir

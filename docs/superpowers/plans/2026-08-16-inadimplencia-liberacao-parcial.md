@@ -112,6 +112,7 @@ assert.match(source, /'collection_scope'/i);
 assert.match(source, /'block_reasons'/i);
 assert.match(source, /vw_alunos_estado_operacional_v131/i);
 assert.match(source, /entra_financeiro_ativo\s+is\s+true/i);
+assert.match(source, /eh_trancamento_atual\s+is\s+true/i);
 assert.match(source, /source_missing_open_count/i);
 assert.match(source, /source_missing_other_count/i);
 assert.match(source, /duplicate_confirmed_fatura/i);
@@ -133,9 +134,16 @@ Em `fixtureSchema`:
 
 1. adicionar a coluna `updated_at timestamptz` em `alunos`, necessária para a RPC da Sol;
 2. adicionar `nome`, `whatsapp` e `telefone` em `alunos`;
-3. criar uma tabela mínima `emusys_matriculas_estado_atual` com `unidade_id`, `emusys_matricula_id`, `aluno_id`, `status_local_resolvido` e `sincronizado_em`;
-4. criar uma view mínima `vw_alunos_estado_operacional_v131` com `aluno_id`, `unidade_id`, `emusys_matricula_id` e `entra_financeiro_ativo`;
-5. derivar `entra_financeiro_ativo` primeiro da linha exata em `emusys_matriculas_estado_atual` e usar `alunos.status='ativo'` somente quando não houver estado Emusys.
+3. criar uma tabela mínima `emusys_matriculas_estado_atual` com `unidade_id`,
+   `emusys_matricula_id`, `aluno_id`, `status_emusys`, `motivo_inativa`,
+   `status_local_resolvido` e `sincronizado_em`;
+4. criar uma view mínima `vw_alunos_estado_operacional_v131` com `aluno_id`,
+   `unidade_id`, `emusys_matricula_id`, `raw_encontrado`, `status_emusys`,
+   `status_operacional`, `entra_financeiro_ativo` e
+   `eh_trancamento_atual`;
+5. derivar o estado primeiro da linha exata em
+   `emusys_matriculas_estado_atual`; usar `alunos.status` somente quando não
+   houver estado Emusys.
 
 O teste deve provar que a RPC consulta a view, sem depender do texto legado de `alunos.status`.
 
@@ -202,10 +210,23 @@ O cenário legado com o mesmo ID em `UNIT_A` e `UNIT_B` deve passar a esperar du
 
 Adicionar casos independentes:
 
-- `emusys_matricula_id=null`, mas `emusys_student_id` encontra aluno: `incomplete`, motivo `invalid_invoice_identity`, sem cobrança;
+- `emusys_matricula_id=null`, mas `emusys_student_id` encontra aluno atual:
+  `partial`, motivo `invalid_invoice_identity`, fatura isolada e demais
+  confirmados preservados;
 - matrícula exata cujo estado Emusys é inativo apesar de `alunos.status='ativo'`: excluída;
 - matrícula exata cujo estado Emusys é ativo apesar de `alunos.status='trancado'`: incluída;
-- `arquivado_em` preenchido ou `data_saida` preenchida: excluída mesmo se a view disser ativo;
+- matrícula Emusys `trancada`: incluída no recorte financeiro, sem alterar o
+  significado compartilhado de `entra_financeiro_ativo`;
+- matrícula Emusys `inativa`, tanto `interrompida` quanto `concluida`: excluída;
+- `arquivado_em` preenchido: excluída;
+- reingresso com raw Emusys `ativa|trancada` e `data_saida` histórica:
+  incluído; sem raw Emusys, `data_saida` preenchida continua excluindo;
+- fatura de matrícula anterior/inativa, conhecida exatamente e pertencente à
+  mesma pessoa que possui outra matrícula atual `ativa|trancada`: incluída;
+- fatura de matrícula anterior quando a pessoa não possui nenhuma matrícula
+  atual: excluída como carteira futura de ex-aluno;
+- matrícula exata conhecida, mas `emusys_student_id` da fatura divergente do
+  dono local: identidade inválida em quarentena, nunca cobrança;
 - IDs Emusys iguais em unidades distintas: somente `unidade_id + emusys_matricula_id` associa a fatura;
 - aluno com dois cursos para a mesma matrícula: uma única matrícula financeira nos totais.
 
@@ -299,24 +320,54 @@ Somente linhas com `competencia` dentro da janela e `data_vencimento < p_as_of_d
 
 Uma competência é necessária quando o último snapshot contém ao menos uma linha vencida relevante para o universo operacional: `status='aberta'` ou `source_missing=true` ou metadado de identidade inválido associado a candidato ativo. Para cada competência necessária, usar `sync_runs.stale_after`; `fresh_until` é o menor `stale_after` entre elas. Se não houver competência necessária, retornar zero dívida com `status='ok'` e `fresh_until=null`.
 
-- [ ] **Step 5: Delimitar alunos ativos sem multiplicar cursos**
+- [ ] **Step 5: Separar identidade da fatura do papel atual da pessoa**
 
-Criar `matriculas_financeiras_ativas` como conjunto distinto:
+Criar `pessoas_financeiramente_atuais` como conjunto distinto por
+`unidade_id + emusys_student_id`. O campo compartilhado
+`entra_financeiro_ativo` não muda; o papel financeiro atual inclui o
+trancamento por regra contratual:
 
 ```sql
 select distinct
   estado.unidade_id,
-  btrim(estado.emusys_matricula_id) as emusys_matricula_id
+  btrim(a.emusys_student_id) as emusys_student_id
 from public.vw_alunos_estado_operacional_v131 estado
 join public.alunos a on a.id = estado.aluno_id
-where estado.entra_financeiro_ativo is true
+where (
+    estado.entra_financeiro_ativo is true
+    or estado.eh_trancamento_atual is true
+  )
   and a.arquivado_em is null
-  and a.data_saida is null
+  and (
+    (estado.raw_encontrado is true
+      and estado.status_emusys in ('ativa', 'trancada'))
+    or
+    (estado.raw_encontrado is not true
+      and estado.status_operacional in ('ativo', 'trancado')
+      and a.data_saida is null)
+  )
 ```
 
-Usar `exists` na associação da fatura para que dois cursos locais não dupliquem fatura nem total. A autorização financeira exige igualdade exata de `unidade_id` e `emusys_matricula_id::text`. `emusys_student_id` e nome não entram nessa condição.
+O estado v1.3.1 atual prevalece sobre `data_saida` legado para não excluir
+reingresso. `status_emusys='inativa'` nunca entra. A classificação
+`aluno|ex_aluno` de `/crm/aniversariantes` será apenas prova de reconciliação;
+não será chamada pela RPC nem criará nova fonte de elegibilidade.
 
-Para fatura sem matrícula válida, `emusys_student_id` pode apenas localizar um aluno operacional ativo para produzir `invalid_invoice_identity`; ele nunca coloca a fatura em `items`.
+Separadamente, `matriculas_locais_conhecidas` deve manter
+`unidade_id + emusys_matricula_id + emusys_student_id`. Uma fatura confirmada
+exige simultaneamente:
+
+```text
+matrícula da fatura conhecida exatamente na unidade
+AND student_id da fatura = dono local da matrícula
+AND unidade + student_id pertence a pessoas_financeiramente_atuais
+```
+
+Assim, dois cursos não duplicam fatura nem total; uma dívida de matrícula
+anterior pode entrar após reingresso, mas `emusys_student_id` nunca substitui o
+casamento exato da matrícula e nome nunca entra nessa condição.
+
+Para fatura sem matrícula válida, `emusys_student_id` pode apenas localizar um aluno operacional ativo para produzir uma pendência de identidade auditável; ele nunca coloca a fatura em `items`, nunca autoriza casamento e não derruba os demais confirmados.
 
 - [ ] **Step 6: Classificar por chave escopada à unidade**
 
@@ -346,13 +397,13 @@ tem_source_missing = false AND confirmed_count > 1
   => duplicate_confirmed_fatura; bloqueio global
 
 tem_identidade_invalida = true
-  => invalid_invoice_identity; bloqueio global
+  => invalid_identity_invoices/validation_issues; quarentena isolada; nunca items
 
 confirmed_count = 1 AND identidade válida
   => candidato confirmado
 ```
 
-Metadado de identidade inválida continua sendo bloqueio global mesmo quando a mesma fatura também está `source_missing`; a precedência final será `incomplete`, não `partial`.
+Metadado opcional de identidade inválida é isolável porque a fatura conserva `unidade_id + canonical_fatura_id`. Ele produz `partial`, assim como `source_missing`, e não bloqueia os demais confirmados. Somente falha estrutural que impeça identificar a própria fatura ou duplicidade confirmada não isolável bloqueia globalmente.
 
 O mesmo `canonical_fatura_id` em unidades diferentes não é duplicidade; o teste deve exigir particionamento por `unidade_id, canonical_fatura_id`.
 
@@ -374,7 +425,7 @@ valor_atualizado := round(
 );
 ```
 
-`valor_original` é o valor cheio da fatura após perda do desconto condicional. Não somar `juros_e_multa` vindo do snapshot e não aceitar taxa de consumidor.
+`valor_original` é o valor cheio da fatura após perda do desconto condicional. Não somar `juros_e_multa` vindo do snapshot e não aceitar taxa de consumidor. O mapper deve preservar `juros_e_multa` e `desconto_aplicado` recebidos do Emusys como evidência; a comparação com o valor dinâmico ao vivo ocorre no gate produtivo.
 
 - [ ] **Step 8: Montar estado, gate e payload atômico**
 
@@ -383,9 +434,9 @@ Calcular os flags globais e a precedência:
 ```sql
 case
   when competencias_stale > 0 then 'stale'
-  when duplicate_fatura_count > 0
-    or invalid_identity_invoice_count > 0 then 'incomplete'
-  when source_missing_count > 0 then 'partial'
+  when duplicate_fatura_count > 0 then 'incomplete'
+  when source_missing_count > 0
+    or invalid_identity_invoice_count > 0 then 'partial'
   else 'ok'
 end
 ```
@@ -393,15 +444,17 @@ end
 Montar `operational`:
 
 ```text
-ok/partial   => collection_allowed=true,  collection_scope=confirmed_only
+ok/partial   => collection_allowed=true,  collection_scope=confirmed_only,
+                consumer_must_apply_collection_grace=true
 stale/error  => collection_allowed=false, collection_scope=blocked
 ```
 
-`block_reasons` usa somente os valores estáveis e em ordem fixa:
+O bloco `policy` também fixa `delinquency_rule=d_plus_0` e `collection_grace_days=2`. `collection_allowed` libera o conjunto confirmado pelo gate; não autoriza contatar cada item antes de aplicar a carência.
+
+`block_reasons` usa somente os valores bloqueantes estáveis e em ordem fixa:
 
 1. `stale_competencia`;
-2. `duplicate_confirmed_fatura`;
-3. `invalid_invoice_identity`.
+2. `duplicate_confirmed_fatura`.
 
 Em `stale` ou `incomplete`, construir `items` como `[]` e todos os campos de `totals` como zero. Em `ok` ou `partial`, agregar somente candidatos confirmados. Nunca produzir payload `incomplete` com itens acionáveis.
 
@@ -428,7 +481,7 @@ Em `stale` ou `incomplete`, construir `items` como `[]` e todos os campos de `to
 
 ```sql
 comment on function public.get_inadimplencia_canonica(uuid, date) is
-  'Contrato v3: inadimplencia confirmada, gate de frescor e quarentena source_missing.';
+  'Contrato v3: verdade financeira D+0, carencia operacional D+2, gate de frescor e quarentena isolada.';
 
 revoke all on function public.get_inadimplencia_canonica(uuid, date)
   from public, anon;
@@ -476,7 +529,12 @@ Alterar o payload de teste principal para `schema_version: 3` e acrescentar:
 operational: {
   collection_allowed: true,
   collection_scope: 'confirmed_only',
+  consumer_must_apply_collection_grace: true,
   block_reasons: [],
+},
+policy: {
+  delinquency_rule: 'd_plus_0',
+  collection_grace_days: 2,
 },
 reconciliation: {
   source_missing_count: 1,
@@ -490,12 +548,14 @@ reconciliation: {
 
 Adicionar testes para:
 
-1. `partial` fresco preserva itens confirmados e permite cobrança;
+1. `partial` fresco preserva itens confirmados e permite uso do conjunto após a carência do consumidor;
 2. `partial` após `freshUntil` falha fechado sem precisar aguardar refetch;
 3. `stale`, `incomplete`, `error` e `loading` nunca permitem cobrança;
 4. schema v3 sem `operational`, com `collection_allowed` não booleano ou scope inválido vira `error` e descarta itens;
 5. durante o rollout, schema v2 `ok` continua normalizado com gate seguro derivado; schema v2 `incomplete` continua bloqueado;
-6. `sourceMissingOpenCount` e `sourceMissingOtherCount` são expostos sem entrar na soma financeira.
+6. `sourceMissingOpenCount` e `sourceMissingOtherCount` são expostos sem entrar na soma financeira;
+7. v3 sem `delinquency_rule=d_plus_0`, `collection_grace_days=2` ou `consumer_must_apply_collection_grace=true` falha fechado;
+8. identidade opcional inválida pode coexistir com confirmados em `partial` sem entrar em itens/totais.
 
 Assinatura do helper:
 
@@ -531,12 +591,15 @@ export type InadimplenciaBlockReason =
 // Em InadimplenciaCanonicaState:
 collectionAllowed: boolean;
 collectionScope: InadimplenciaCollectionScope;
+delinquencyRule: 'd_plus_0';
+collectionGraceDays: number;
+consumerMustApplyCollectionGrace: boolean;
 blockReasons: InadimplenciaBlockReason[];
 sourceMissingOpenCount: number;
 sourceMissingOtherCount: number;
 ```
 
-No estado loading/error, usar `collectionAllowed=false`, `collectionScope='blocked'`, arrays vazios e contagens zero.
+No estado loading/error, usar `collectionAllowed=false`, `collectionScope='blocked'`, carência segura de 2 dias, arrays vazios e contagens zero.
 
 - [ ] **Step 4: Normalizar v3 de modo estrito e v2 de modo conservador**
 
@@ -564,7 +627,7 @@ Usar comparação estrita: no instante igual a `freshUntil`, a cobrança já est
 
 - [ ] **Step 6: Fazer agregadores obedecerem ao helper**
 
-`indexarInadimplenciaPorMatricula` e `montarAlertasInadimplenciaCanonica` devem retornar coleção vazia quando `podeCobrarInadimplenciaCanonica` for falso. Eles não leem `unknown_invoices` e não recalculam juros.
+`indexarInadimplenciaPorMatricula` e `montarAlertasInadimplenciaCanonica` devem retornar coleção vazia quando `podeCobrarInadimplenciaCanonica` for falso. Eles não leem `unknown_invoices` e não recalculam juros. A indexação da Lista de Alunos preserva a verdade D+0; `montarAlertasInadimplenciaCanonica` aplica exclusivamente `state.collectionGraceDays=2`. Nenhum consumidor pode sobrescrever a carência.
 
 - [ ] **Step 7: Rodar GREEN e commit**
 
@@ -591,16 +654,18 @@ git commit -m "feat(financeiro): normalizar gate canonico v3"
 
 Atualizar os testes estáticos para exigir importação e uso de `podeCobrarInadimplenciaCanonica`, aceitar `partial` como acionável somente pelo gate e proibir decisões por `status === 'ok'` isolado.
 
-Exigir no banner da Lista de Alunos os dois textos sem misturar universos:
+Exigir no banner da Lista de Alunos os textos sem misturar universos nem prometer contato D+0:
 
 ```text
-texto principal = totalMatriculas + “inadimplências confirmadas — cobrança liberada”
+texto principal = totalMatriculas + “inadimplências confirmadas (D+0) — leitura financeira disponível”
 texto secundário = sourceMissingCount + “faturas aguardando reconciliação — fora da cobrança”
+texto identidade = invalidIdentityInvoiceCount + “faturas com identidade inválida aguardando conciliação — fora da cobrança”
+texto contato = contactResolutionPendingCount + “faturas confirmadas sem contato local unívoco”
 ```
 
 Exigir no Farmer:
 
-- alerta de cobrança com itens confirmados em `partial`;
+- alerta de “cobrança amigável D+2” somente com itens confirmados cujo `dias_atraso >= 2`;
 - aviso separado e não bloqueante para reconciliação;
 - aviso bloqueante distinto para `stale`, `incomplete` e `error`;
 - nenhuma frase “nenhuma cobrança é liberada com leitura parcial”.
@@ -637,8 +702,10 @@ ok + confirmados:
   banner de cobrança confirmada
 
 partial:
-  linha principal com quantidade/valor confirmado e “cobrança liberada”
+  linha principal com quantidade/valor confirmado D+0 e “leitura financeira disponível”
   linha secundária âmbar com sourceMissingCount e “fora da cobrança”
+  linha secundária âmbar com invalidIdentityInvoiceCount e “fora da cobrança”
+  linha secundária âmbar com contactResolutionPendingCount, deixando explícito que permanece no financeiro D+0 mas não entra no contato D+2
 
 stale:
   “Dados de inadimplência desatualizados — lista bloqueada”
@@ -668,11 +735,13 @@ Preservar o fluxo `atualizar-inadimplencia-emusys` → `refresh-contas-receber`.
 Em `useAlertas.ts`:
 
 - usar `podeCobrarInadimplenciaCanonica(estadoCanonico)` para decidir a consulta de alunos;
-- consultar alunos somente pelas matrículas confirmadas em `items`;
-- manter unidade na query e remover dependência de `status='ativo'` como regra financeira autônoma; o canônico já delimitou o universo e a query local só enriquece dados de contato;
+- consultar alunos somente por `items[].aluno_id_canonico` cujo `contact_resolution_status='resolved'`;
+- manter unidade na query e remover qualquer desempate local por matrícula, nome, `student_id`, `is_segundo_curso` ou ordenação; a RPC publica o único ID apto a fornecer contato;
+- zero ou múltiplos candidatos atuais preservam a fatura nos totais D+0, mas publicam `aluno_id_canonico=null`, entram em `contactResolutionPendingCount` e ficam fora da carteira D+2;
 - se o gate expirar, limpar `inadimplentes` e agendar uma única releitura; cancelar timer ao trocar unidade/unmount.
+- deixar `montarAlertasInadimplenciaCanonica` aplicar `state.collectionGraceDays`; uma fatura com 1 dia fica na consulta financeira D+0, mas não entra no Farmer, enquanto 2 dias entra. O hook não duplica nem sobrescreve essa regra.
 
-Em `DashboardTab.tsx`, renderizar `partial` como cobrança disponível, com um aviso separado de reconciliação. `stale`, `incomplete` e `error` continuam bloqueantes.
+Em `DashboardTab.tsx`, renderizar `partial` como cobrança amigável D+2 disponível, com avisos separados de `source_missing`, identidade inválida e contato não unívoco. `stale`, `incomplete` e `error` continuam bloqueantes.
 
 - [ ] **Step 7: Rodar GREEN, typecheck e build focal**
 
@@ -724,7 +793,7 @@ Casos obrigatórios em `inadimplenciaCanonicaExport.test.ts`:
 3. `partial` com `collection_allowed=false` é rejeitado;
 4. `stale` e `incomplete` são rejeitados;
 5. `fresh_until` inválido ou `agoraMs >= fresh_until` é rejeitado;
-6. manifesto de `partial` contém `schema_version`, `status`, `collection_scope`, `fresh_until`, `confirmed_invoice_count`, `source_missing_count` e hash estável;
+6. manifesto de `partial` contém `schema_version`, `status`, `collection_scope`, `fresh_until`, `delinquency_rule`, `collection_grace_days`, `collection_grace_applied=false`, `confirmed_invoice_count`, `source_missing_count`, `invalid_identity_invoice_count` e hash estável;
 7. identificador numérico JavaScript inseguro é rejeitado; IDs textuais grandes são preservados.
 
 O manifesto esperado contém:
@@ -737,8 +806,12 @@ O manifesto esperado contém:
   "collection_allowed": true,
   "collection_scope": "confirmed_only",
   "fresh_until": "timestamp",
+  "delinquency_rule": "d_plus_0",
+  "collection_grace_days": 2,
+  "collection_grace_applied": false,
   "confirmed_invoice_count": 1,
   "source_missing_count": 2,
+  "invalid_identity_invoice_count": 1,
   "is_fresh": true
 }
 ```
@@ -760,6 +833,9 @@ schema_version = 3
 status in (ok, partial)
 operational.collection_allowed = true
 operational.collection_scope = confirmed_only
+operational.consumer_must_apply_collection_grace = true
+policy.delinquency_rule = d_plus_0
+policy.collection_grace_days = 2
 fresh_until ausente somente quando competencias_necessarias = 0;
 caso presente, Date.parse válido e agoraMs < limite
 items é array de objetos confirmados
@@ -767,7 +843,7 @@ items é array de objetos confirmados
 
 Mapear cada item mantendo IDs como texto e forçando `status='aberta'`, `source_missing=false`. Não aceitar nem visitar `reconciliation.unknown_invoices` ao construir linhas.
 
-O hash deve cobrir `schema_version`, `status`, unidade, data de corte, scope, `fresh_until`, contagens e itens ordenados por `unidade_id + canonical_fatura_id`.
+O hash deve cobrir `schema_version`, `status`, unidade, data de corte, scope, `fresh_until`, regra D+0, carência D+2 ainda não aplicada, contagens e itens ordenados por `unidade_id + canonical_fatura_id`.
 
 - [ ] **Step 4: Simplificar a Edge Function**
 
@@ -831,15 +907,16 @@ function callSolAs(container, role, unitId, options = {}) {
 
 Casos RED:
 
-1. canônico `partial` com uma confirmada e uma `source_missing`: Sol retorna apenas a matrícula confirmada;
+1. canônico `partial` com uma confirmada, uma `source_missing` e uma identidade inválida: Sol retorna apenas a matrícula confirmada elegível em D+2;
 2. resposta expõe `canonical_status='partial'`, `collection_allowed=true`, `collection_scope='confirmed_only'`, `fresh_until` e `source_missing_count=1`;
 3. canônico `stale` ou `incomplete`: `collection_allowed=false`, `alunos=[]`, totais zero;
 4. `p_multa_pct<>0.02` ou `p_mora_pct_mes<>0.01`: exceção explícita de política;
 5. item só localizável por `emusys_student_id`: nunca enriquecido/cobrado;
 6. mesma matrícula em unidades diferentes: apenas a unidade pedida;
-7. dois cursos para a mesma matrícula: um aluno financeiro, escolha local determinística;
+7. dois cursos para a mesma matrícula: um único contato pelo `aluno_id_canonico` já resolvido, sem escolha ou desempate local;
 8. `anon` e `authenticated` não podem executar; `service_role` pode;
-9. nenhuma das quatro RPCs protegidas de caixa aparece na migration.
+9. nenhuma das quatro RPCs protegidas de caixa aparece na migration;
+10. fatura com 1 dia de atraso permanece na verdade D+0, mas não entra na Sol com `p_carencia_dias=2`; fatura com 2 dias entra.
 
 - [ ] **Step 2: Confirmar RED**
 
@@ -892,23 +969,21 @@ v_collection_scope := coalesce(
 
 Se `collection_allowed=false`, retornar lista e totais vazios com o diagnóstico canônico preservado. Se true, consumir exclusivamente `v_canonical->'items'`; não consultar `sync_run_items`, `emusys_faturas`, flag legado ou Emusys.
 
-- [ ] **Step 6: Agregar e enriquecer somente pela matrícula exata**
+- [ ] **Step 6: Agregar contato por pessoa e preservar as matrículas exatas**
 
-Agrupar faturas por `unidade_id + emusys_matricula_id`, já filtradas por `p_carencia_dias`. Não agrupar por `emusys_student_id` e não criar fallback.
+Agrupar a ação de contato por `unidade_id + aluno_id_canonico`, já filtrada pela carência canônica publicada, para que a mesma pessoa não receba ações duplicadas quando possui dívida em mais de uma matrícula. Preservar no payload a lista ordenada de `emusys_matricula_ids` e as faturas exatas que formam o total. O valor operacional é obrigatoriamente 2 e o payload deve expor `carencia_dias=2` e `canonical_delinquency_rule='d_plus_0'`. A Sol consome `aluno_id_canonico` somente quando `contact_resolution_status='resolved'`; não seleciona nem desempata cadastro por `emusys_student_id`.
 
 Enriquecer com:
 
 ```text
 item.unidade_id = alunos.unidade_id
-AND item.emusys_matricula_id = alunos.emusys_matricula_id
-AND existe vw_alunos_estado_operacional_v131.entra_financeiro_ativo=true
-AND alunos.arquivado_em IS NULL
-AND alunos.data_saida IS NULL
+AND item.aluno_id_canonico = alunos.id
+AND item.contact_resolution_status = 'resolved'
 ```
 
-Se houver mais de um curso para a mesma matrícula, escolher deterministicamente `is_segundo_curso=false` primeiro, depois `updated_at desc`, `id desc`. Isso afeta somente nome/contato/curso exibido, nunca a soma da dívida.
+Se houver zero ou mais de um cadastro atual da pessoa, o canônico publica contato pendente e a Sol não cria linha acionável. Isso nunca altera a soma financeira D+0. A matrícula exata da fatura já foi validada pelo canônico e deve permanecer no payload.
 
-Se um item canônico permitido não encontrar cadastro exato, falhar fechado nessa resposta: `status='incomplete'`, `collection_allowed=false`, totais zero e alunos vazios. Registrar `cadastro_nao_encontrado`; não tentar resgatar por nome/student ID.
+Se um item canônico resolvido não encontrar o `aluno_id_canonico` exato na unidade, colocá-lo em quarentena operacional (`cadastro_nao_encontrado`) sem contaminar as demais linhas. Nunca tentar resgatar por nome ou `student_id`.
 
 - [ ] **Step 7: Publicar metadados suficientes para o Claude**
 
@@ -987,6 +1062,7 @@ Expected:
 - somente um worker é reclamado por vez;
 - backlog inclui competência antiga ainda aberta, inclusive junho/2026;
 - identificador opcional inválido em `matricula_id` vira `payload._la_report.validation_issues`, não derruba toda a coleta;
+- `juros_e_multa` e `desconto_aplicado` não zero são preservados no item e no payload do snapshot;
 - erro de ID obrigatório continua falha estrutural;
 - probe é read-only e exige service role.
 
@@ -1027,12 +1103,17 @@ git commit -m "fix(financeiro): preservar fila unica no backlog Emusys"
 Em `docs/REGRAS-DE-NEGOCIO.md`, registrar de forma operacional:
 
 - fonte: `get_inadimplencia_canonica`, alimentada por `sync_runs + sync_run_items`;
-- universo: `entra_financeiro_ativo=true`, sem arquivo e sem saída;
+- universo: pessoa com qualquer matrícula atual `ativa|trancada`, sem
+  arquivamento nessa matrícula atual; estado Emusys v1.3.1 prevalece sobre
+  `data_saida` legado, que só exclui no fallback;
+- identidade da dívida: matrícula exata conhecida e pertencente ao mesmo
+  `unidade_id + emusys_student_id` atual;
 - janela: mês corrente e dois meses-calendário anteriores;
 - vencida: `data_vencimento < data de corte`;
+- verdade financeira: D+0; cobrança amigável: D+2 em Farmer/Sol;
 - identidade apta: `unidade_id + emusys_matricula_id` exata;
 - `source_missing` significa não confirmada, nunca paga;
-- `partial` libera somente confirmados;
+- `partial` libera somente confirmados; `source_missing` e identidade opcional inválida permanecem em quarentena;
 - `stale`/`incomplete` bloqueiam tudo;
 - valor atualizado: valor original × `(1 + 2% + 1% × dias/30)`, arredondado por fatura;
 - ex-alunos devedores e competências anteriores à janela ficam fora desta carteira e terão produto próprio;
@@ -1047,8 +1128,9 @@ inadimplencias_confirmadas = count(distinct unidade_id, canonical_fatura_id) dos
 matriculas_inadimplentes = count(distinct unidade_id, emusys_matricula_id) dos items
 valor_original_confirmado = sum(valor_original dos items)
 valor_atualizado_confirmado = sum(valor_atualizado arredondado por item)
-faturas_em_reconciliacao = reconciliation.source_missing_count
+faturas_em_reconciliacao = reconciliation.source_missing_count + reconciliation.invalid_identity_invoice_count
 frescor_valido = collection_allowed do servidor AND agora < fresh_until, quando presente
+cobranca_amigavel_elegivel = item confirmado AND dias_atraso >= collection_grace_days (2)
 ```
 
 Explicitar que contagens de reconciliação não entram nos quatro primeiros indicadores.
@@ -1264,7 +1346,7 @@ $probe = Invoke-RestMethod `
   -Body $probeBody
 ```
 
-Confirmar `ok=true`, `probe=true` e ausência de novo `sync_run_id`/snapshot publicado. Comparar item a item o probe com “Contas a Receber → Em Atraso → AGO 2026” do Emusys: fatura/matrícula, vencimento, status e `valor_original` sem juros.
+Confirmar `ok=true`, `probe=true` e ausência de novo `sync_run_id`/snapshot publicado. Comparar item a item o probe com “Contas a Receber → Em Atraso → AGO 2026” do Emusys: fatura/matrícula, vencimento, status, `valor_original`, `juros_e_multa` dinâmico e `desconto_aplicado` dinâmico.
 
 Baseline visual informado para Campo Grande em 16/08/2026, antes do recorte de alunos ativos:
 
@@ -1302,6 +1384,7 @@ Verificar no banco/manifesto:
 - run `live`, `succeeded`, `snapshot_complete=true`, `unidades_concluidas=3`;
 - uma linha por fatura retornada, mantendo unidade;
 - IDs inválidos opcionais preservados em `payload._la_report.validation_issues`;
+- `juros_e_multa` e `desconto_aplicado` do probe preservados no snapshot, inclusive valores não zero;
 - nenhuma linha partial de uma unidade publicada como snapshot completo;
 - o conjunto bruto de CG/agosto coincide com o probe e a tela no mesmo instante.
 
@@ -1346,10 +1429,14 @@ Validar:
 - `schema_version=3`;
 - `status` coerente com as pendências;
 - `collection_allowed=true` somente em `ok|partial` e antes de `fresh_until`;
-- `items` contém apenas abertas, vencidas, confirmadas e matrículas operacionais ativas;
+- `items` contém apenas abertas, vencidas e confirmadas, com matrícula da
+  fatura conhecida exatamente e pessoa atualmente `aluno` por possuir alguma
+  matrícula `ativa|trancada`;
 - cada `source_missing` está somente em `unknown_invoices`;
+- cada identidade opcional inválida está somente em `invalid_identity_invoices`/`validation_issues` e não bloqueia os demais confirmados;
 - totais são a soma exata dos itens;
 - `valor_atualizado` confere pela fórmula por item;
+- `policy.delinquency_rule='d_plus_0'`, `policy.collection_grace_days=2` e `operational.consumer_must_apply_collection_grace=true`;
 - junho, julho e agosto presentes quando têm dívida ativa; maio e anteriores ausentes.
 
 - [ ] **Step 7: Reconciliar os dois universos sem mascarar diferença**
@@ -1358,17 +1445,22 @@ Usar a tela do Emusys e os três XLSX para produzir duas equações:
 
 ```text
 Emusys bruto da competência
-- matrículas sem entra_financeiro_ativo
-- arquivados
-- alunos com data_saida
+- pessoas sem qualquer matrícula atual ativa|trancada
+- matrículas atuais arquivadas
+- saídas no fallback sem estado Emusys atual
+- matrícula da fatura desconhecida ou student_id divergente
 - source_missing não confirmado
 = itens canônicos confirmados
 
 sum(valor_original dos itens canônicos)
 = total_original canônico
+
+itens canônicos D+0
+- itens com dias_atraso < 2
+= carteira amigável D+2 da Sol/Farmer
 ```
 
-Toda diferença deve ter lista de `unidade_id + emusys_matricula_id + canonical_fatura_id` e um motivo verificável. Não aprovar por “total próximo”. Não usar nome como prova de identidade.
+Toda diferença deve ter lista de `unidade_id + emusys_matricula_id + canonical_fatura_id` e um motivo verificável. Não aprovar por “total próximo”. Não usar nome como prova de identidade. Para cada fatura vencida, comparar também o `juros_e_multa` da consulta ao vivo com `valor_atualizado - valor_original`; a fórmula contratual continua prevalecendo, mas toda divergência deve ser explicada e registrada.
 
 - [ ] **Step 8: Fazer dry-run da Sol sem mensagens**
 
@@ -1389,7 +1481,7 @@ $solCg = Invoke-RestMethod `
   -Body $solBody
 ```
 
-Comparar alunos, matrículas, parcelas e valores da Sol aos mesmos `items` canônicos após a carência. Confirmar explicitamente que nenhuma função de envio/mensagem foi chamada.
+Comparar alunos, matrículas, parcelas e valores da Sol aos mesmos `items` canônicos após `dias_atraso >= 2`. Provar o limite com ao menos um caso de 1 dia excluído e um de 2 dias incluído. Confirmar explicitamente que nenhuma função de envio/mensagem foi chamada.
 
 - [ ] **Step 9: Validar exportação canônica**
 
@@ -1415,20 +1507,20 @@ $exportCg = Invoke-RestMethod `
   -Body $exportBody
 ```
 
-O manifesto e os itens devem coincidir com o canônico; `source_missing` não aparece nas linhas.
+O manifesto e os itens devem coincidir com o canônico D+0; `source_missing` e identidade inválida não aparecem nas linhas. Confirmar `collection_grace_applied=false` para impedir que a exportação seja interpretada como carteira pronta para contato.
 
 - [ ] **Step 10: Fazer prova autenticada no navegador**
 
 Abrir produção em uma sessão real autenticada e validar Campo Grande em `/app/alunos`:
 
-1. banner mostra confirmados e reconciliação em linhas distintas;
+1. banner da Lista mostra confirmados D+0 e reconciliação em linhas distintas, sem a frase “cobrança liberada”;
 2. em `partial`, o filtro de inadimplentes confirmados funciona;
 3. nenhuma matrícula em `unknown_invoices` aparece filtrada;
 4. “Atualizar agora” mostra `retry_wait` como processamento, nunca sucesso;
 5. recarregar a página mantém os mesmos números;
 6. após simular/aguardar expiração do frescor, ações ficam bloqueadas;
 7. console sem erros novos e requests da RPC/Edge sem 4xx/5xx inesperados;
-8. Farmer mostra a mesma lista confirmada e aviso separado.
+8. Farmer mostra somente elegíveis D+2, com título explícito “cobrança amigável D+2” e avisos separados.
 
 Vercel `Ready` e HTTP 200 não substituem esta prova.
 
@@ -1469,7 +1561,8 @@ O documento deve informar:
 - cadeia: Sol → RPC da Sol → `get_inadimplencia_canonica` → snapshots;
 - assinatura e exemplo de request sem segredo;
 - semântica de `canonical_status`, `collection_allowed`, `collection_scope`, `fresh_until`, `source_missing_count`, totais, faixas e alunos;
-- `partial` é acionável somente nos itens retornados;
+- canônico é verdade financeira D+0; a RPC da Sol aplica obrigatoriamente a carência amigável D+2;
+- `partial` é acionável somente nos itens retornados que já passaram por `p_carencia_dias=2`;
 - `stale`, `incomplete`, `error`, frescor expirado ou `collection_allowed=false` impedem mensagens;
 - taxas obrigatórias 0.02/0.01;
 - proibição de consultar `sync_run_items`, `emusys_faturas`, booleano legado ou Emusys diretamente;
@@ -1483,10 +1576,12 @@ Checklist mínimo:
 
 ```text
 [ ] chamar uma unidade com carência 2 e taxas fixas
+[ ] confirmar canonical_delinquency_rule=d_plus_0 e carencia_dias=2
 [ ] rejeitar resposta se collection_allowed=false
 [ ] rejeitar resposta se agora >= fresh_until
 [ ] comparar total_alunos e total_atualizado com o gate assinado
 [ ] confirmar source_missing_count apenas informativo
+[ ] confirmar identidades inválidas apenas em diagnóstico, nunca em alunos
 [ ] registrar payload/hash do dry-run
 [ ] mostrar lista ao Alfredo para aprovação
 [ ] não enviar mensagem até autorização explícita
