@@ -1,8 +1,8 @@
 # Validação da inadimplência — Campo Grande, Recreio e Barra
 
-Data da leitura canônica: 16/08/2026  
-Data de corte: `2026-08-16`  
-Fonte canônica: `public.get_inadimplencia_canonica(uuid, date)`  
+Data da leitura canônica: 16/08/2026
+Data de corte: `2026-08-16`
+Fonte canônica: `public.get_inadimplencia_canonica(uuid, date)`
 Projeto Supabase: `ouqwbbermlzqqvtqwlul`
 
 ## Limite desta validação

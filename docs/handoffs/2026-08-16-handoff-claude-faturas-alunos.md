@@ -1,8 +1,8 @@
 # Handoff para o Claude — página Faturas de Alunos e consumo canônico
 
-Data: 16/08/2026  
-Repositório LA Report: commit `847efdf4` em `main`  
-Supabase: `ouqwbbermlzqqvtqwlul`  
+Data: 16/08/2026
+Repositório LA Report: commit `847efdf4` em `main`
+Supabase: `ouqwbbermlzqqvtqwlul`
 Design aprovado: A+C
 
 ## Prompt para copiar e enviar ao Claude
