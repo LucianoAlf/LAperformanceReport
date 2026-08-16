@@ -195,24 +195,54 @@ begin
           and lus.tem_matricula_ativa is false
           and lus.tem_matricula_local_conhecida is false
         )
-      ) as identidade_invalida
+      ) as identidade_invalida,
+      btrim(lus.status) not in ('aberta', 'paga', 'cancelada')
+        as status_nao_suportado
     from linhas_ultimo_snapshot lus
+  ),
+  grupos_fatura_todos as (
+    select
+      la.unidade_id,
+      la.canonical_fatura_id,
+      bool_or(la.tem_matricula_ativa is true) as tem_matricula_ativa,
+      bool_or(la.source_missing is true) as tem_source_missing,
+      count(*) filter (
+        where la.source_missing is false
+          and la.status = 'aberta'
+      )::integer as confirmed_count,
+      bool_or(la.identidade_invalida is true) as tem_identidade_invalida,
+      bool_or(la.status_nao_suportado is true) as tem_status_nao_suportado,
+      coalesce(
+        bool_or(la.status = 'aberta') filter (where la.source_missing is true),
+        false
+      ) as tem_last_known_aberta,
+      count(*)::integer as linhas
+    from linhas_avaliadas la
+    group by la.unidade_id, la.canonical_fatura_id
+  ),
+  grupos_fatura as (
+    select gft.*
+    from grupos_fatura_todos gft
+    where (
+        gft.tem_matricula_ativa is true
+        or gft.tem_identidade_invalida is true
+      )
+      and (
+        gft.tem_source_missing is true
+        or gft.confirmed_count > 0
+        or gft.tem_identidade_invalida is true
+        or (
+          gft.tem_matricula_ativa is true
+          and gft.tem_status_nao_suportado is true
+        )
+      )
   ),
   linhas_relevantes as (
     select la.*
     from linhas_avaliadas la
-    where (
-        la.tem_matricula_ativa is true
-        or (
-          la.tem_matricula_local_conhecida is false
-          and la.identidade_invalida is true
-        )
-      )
-      and (
-        la.status = 'aberta'
-        or la.source_missing is true
-        or la.identidade_invalida is true
-      )
+    join grupos_fatura gf
+      on gf.unidade_id = la.unidade_id
+     and gf.canonical_fatura_id = la.canonical_fatura_id
   ),
   competencias_necessarias as (
     select distinct
@@ -231,24 +261,6 @@ begin
       now() <= cn.sync_fresh_until as is_fresh
     from competencias_necessarias cn
   ),
-  grupos_fatura as (
-    select
-      lr.unidade_id,
-      lr.canonical_fatura_id,
-      bool_or(lr.source_missing is true) as tem_source_missing,
-      count(*) filter (
-        where lr.source_missing is false
-          and lr.status = 'aberta'
-      )::integer as confirmed_count,
-      bool_or(lr.identidade_invalida is true) as tem_identidade_invalida,
-      coalesce(
-        bool_or(lr.status = 'aberta') filter (where lr.source_missing is true),
-        false
-      ) as tem_last_known_aberta,
-      count(*)::integer as linhas
-    from linhas_relevantes lr
-    group by lr.unidade_id, lr.canonical_fatura_id
-  ),
   duplicatas_canonicas as (
     select
       gf.unidade_id,
@@ -258,6 +270,14 @@ begin
     from grupos_fatura gf
     where gf.tem_source_missing is false
       and gf.confirmed_count > 1
+  ),
+  grupos_status_nao_suportado as (
+    select
+      gf.unidade_id,
+      gf.canonical_fatura_id
+    from grupos_fatura gf
+    where gf.tem_matricula_ativa is true
+      and gf.tem_status_nao_suportado is true
   ),
   linhas_unknown_ranqueadas as (
     select
@@ -313,6 +333,8 @@ begin
     from linhas_relevantes lr
     where lr.status = 'aberta'
       and lr.source_missing is false
+      and lr.tem_matricula_ativa is true
+      and lr.identidade_invalida is false
   ),
   itens_confirmados as (
     select
@@ -336,6 +358,7 @@ begin
       and gf.tem_source_missing is false
       and gf.confirmed_count = 1
       and gf.tem_identidade_invalida is false
+      and gf.tem_status_nao_suportado is false
   ),
   resumo_frescor as (
     select
@@ -361,6 +384,8 @@ begin
     select
       (select count(*)::integer from duplicatas_canonicas) as duplicate_fatura_count,
       (select count(*)::integer from itens_identidade_invalida) as invalid_identity_invoice_count,
+      (select count(*)::integer from grupos_status_nao_suportado)
+        as unsupported_invoice_status_count,
       coalesce((
         select sum(jsonb_array_length(iii.validation_issues))::integer
         from itens_identidade_invalida iii
@@ -379,6 +404,7 @@ begin
     select
       case
         when rf.competencias_stale > 0 then 'stale'
+        when ri.unsupported_invoice_status_count > 0 then 'error'
         when ri.duplicate_fatura_count > 0
           or ri.invalid_identity_invoice_count > 0 then 'incomplete'
         when rsm.source_missing_count > 0 then 'partial'
@@ -401,6 +427,13 @@ begin
       'competencia_fim', jc.fim
     ),
     'status', eg.status,
+    'error', case
+      when ri.unsupported_invoice_status_count > 0 then jsonb_build_object(
+        'code', 'unsupported_invoice_status',
+        'message', 'unsupported_invoice_status'
+      )
+      else null
+    end,
     'fonte', 'sync_run_items',
     'avaliado_em', now(),
     'unidade_id', p_unidade_id,
@@ -487,7 +520,7 @@ begin
       ), '[]'::jsonb)
     ),
     'totals', case
-      when eg.status in ('stale', 'incomplete') then jsonb_build_object(
+      when eg.status in ('stale', 'incomplete', 'error') then jsonb_build_object(
         'total_faturas', 0,
         'total_matriculas', 0,
         'total_original', 0,
@@ -503,7 +536,7 @@ begin
       )
     end,
     'items', case
-      when eg.status in ('stale', 'incomplete') then '[]'::jsonb
+      when eg.status in ('stale', 'incomplete', 'error') then '[]'::jsonb
       else coalesce((
         select jsonb_agg(jsonb_build_object(
           'canonical_fatura_id', ic.canonical_fatura_id,

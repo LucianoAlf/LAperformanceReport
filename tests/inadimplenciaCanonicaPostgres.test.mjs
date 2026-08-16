@@ -146,18 +146,38 @@ const fixtureSchema = `
   ;
   create table public.sync_runs (
     id uuid primary key, competencia date not null, run_type text not null, status text not null,
-    snapshot_complete boolean not null, unidades_concluidas integer not null, completed_at timestamptz, stale_after timestamptz
+    snapshot_complete boolean not null, unidades_concluidas integer not null, completed_at timestamptz, stale_after timestamptz not null,
+    constraint sync_runs_competencia_primeiro_dia_chk check (competencia = date_trunc('month', competencia)::date),
+    constraint sync_runs_run_type_chk check (run_type in ('live', 'baseline')),
+    constraint sync_runs_status_chk check (status in ('running', 'succeeded', 'failed')),
+    constraint sync_runs_unidades_chk check (unidades_concluidas between 0 and 3),
+    constraint sync_runs_frescor_chk check (
+      snapshot_complete = false
+      or (
+        run_type = 'live'
+        and status = 'succeeded'
+        and completed_at is not null
+        and unidades_concluidas = 3
+      )
+    )
   );
   create table public.sync_run_items (
-    id bigint generated always as identity primary key,
+    id uuid primary key default gen_random_uuid(),
     canonical_fatura_id uuid not null, unidade_id uuid not null references public.unidades(id), unidade_codigo text not null,
-    competencia date not null, run_id uuid not null references public.sync_runs(id), emusys_fatura_id bigint,
-    emusys_matricula_id bigint, emusys_contrato_id bigint, emusys_student_id bigint, descricao text,
-    status text not null, data_vencimento date not null, data_pagamento date, valor_original numeric(12, 2) not null,
+    competencia date not null, run_id uuid not null references public.sync_runs(id), emusys_fatura_id bigint not null,
+    emusys_matricula_id bigint, emusys_contrato_id bigint, emusys_student_id bigint, descricao text not null default '',
+    status text not null default 'desconhecido', data_vencimento date not null, data_pagamento date, valor_original numeric(12, 2) not null,
     valor_pago numeric(12, 2), desconto_aplicado numeric(12, 2) not null default 0,
-    desconto_fixo numeric(12, 2) not null default 0, desconto_condicional numeric(12, 2), juros_e_multa numeric(12, 2),
+    desconto_fixo numeric(12, 2) not null default 0, desconto_condicional numeric(12, 2) not null default 0, juros_e_multa numeric(12, 2) not null default 0,
     source_missing boolean not null default false, source_missing_reason text, source_missing_detected_at timestamptz,
-    payload jsonb not null default '{}'::jsonb
+    payload jsonb not null default '{}'::jsonb,
+    constraint sync_run_items_identidade_uniq unique (run_id, competencia, unidade_id, emusys_fatura_id),
+    constraint sync_run_items_competencia_primeiro_dia_chk check (competencia = date_trunc('month', competencia)::date),
+    constraint sync_run_items_status_chk check (status in ('aberta', 'paga', 'cancelada', 'desconhecido', '')),
+    constraint sync_run_items_missing_reason_chk check (
+      (source_missing = false and source_missing_reason is null)
+      or (source_missing = true and nullif(btrim(source_missing_reason), '') is not null)
+    )
   );
   create function auth.role() returns text language sql stable as $$
     select coalesce(nullif(current_setting('app.test_role', true), ''), current_user::text);
@@ -254,9 +274,54 @@ function insertInvoices(container, values, label) {
   `, label);
 }
 
-test('fixture operacional v3 inicia e prioriza estado Emusys exato antes do fallback local', { timeout: 90_000 }, async (t) => {
+test('fixture operacional v3 prova tipos e constraints reais antes das migrations canonicas', { timeout: 90_000 }, async (t) => {
   await withContainer(t, async (container) => {
     seed(container, fixtureSchema, 'schema operacional minimo');
+    const schemaEvidence = jsonFrom(psql(container, `
+      select jsonb_build_object(
+        'item_id_type', (
+          select data_type from information_schema.columns
+          where table_schema = 'public' and table_name = 'sync_run_items' and column_name = 'id'
+        ),
+        'stale_after_nullable', (
+          select is_nullable from information_schema.columns
+          where table_schema = 'public' and table_name = 'sync_runs' and column_name = 'stale_after'
+        ),
+        'constraints', (
+          select jsonb_agg(conname order by conname)
+          from pg_constraint
+          where conrelid in ('public.sync_runs'::regclass, 'public.sync_run_items'::regclass)
+        )
+      )::text;
+    `), 'fidelidade estrutural da fixture sem IF NOT EXISTS');
+    assert.equal(schemaEvidence.item_id_type, 'uuid');
+    assert.equal(schemaEvidence.stale_after_nullable, 'NO');
+    assert.equal(schemaEvidence.constraints.includes('sync_runs_frescor_chk'), true);
+    assert.equal(schemaEvidence.constraints.includes('sync_run_items_identidade_uniq'), true);
+    assert.equal(schemaEvidence.constraints.includes('sync_run_items_status_chk'), true);
+
+    const nullStaleAfter = psql(container, `
+      insert into public.sync_runs (
+        id, competencia, run_type, status, snapshot_complete, unidades_concluidas, completed_at, stale_after
+      ) values (
+        'ffffffff-0000-0000-0000-000000000001', date_trunc('month', current_date)::date,
+        'live', 'running', false, 0, null, null
+      );
+    `);
+    assert.notEqual(nullStaleAfter.status, 0, 'stale_after nulo deve ser rejeitado pela fixture');
+    assert.match(nullStaleAfter.stderr, /stale_after.*not-null|null value.*stale_after/i);
+
+    const completeWithoutCompletedAt = psql(container, `
+      insert into public.sync_runs (
+        id, competencia, run_type, status, snapshot_complete, unidades_concluidas, completed_at, stale_after
+      ) values (
+        'ffffffff-0000-0000-0000-000000000002', date_trunc('month', current_date)::date,
+        'live', 'succeeded', true, 3, null, now() + interval '1 hour'
+      );
+    `);
+    assert.notEqual(completeWithoutCompletedAt.status, 0, 'snapshot completo sem completed_at deve ser rejeitado');
+    assert.match(completeWithoutCompletedAt.stderr, /sync_runs_frescor_chk|check constraint/i);
+
     insertAluno(container, 1, UNIT_A, '100', { status: 'ativo' });
     insertAluno(container, 2, UNIT_A, '200', { status: 'ativo' });
     insertAluno(container, 3, UNIT_A, '200', { status: 'ativo', updatedOffset: -1 });
@@ -324,7 +389,7 @@ test('v3 quarentena o grupo misto por unidade sem transformar conflito em duplic
     const good = '20000000-0000-0000-0000-000000000202';
     insertInvoices(container, [
       invoice(mixed, UNIT_A, run, month, 2201),
-      invoice(mixed, UNIT_A, run, month, 2201, { sourceMissing: true }),
+      invoice(mixed, UNIT_A, run, month, 2201, { sourceMissing: true, fatura: 3299 }),
       invoice(good, UNIT_A, run, month, 2202),
     ], 'grupo misto v3');
     const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'grupo misto v3');
@@ -344,6 +409,102 @@ test('v3 quarentena o grupo misto por unidade sem transformar conflito em duplic
     );
     assert.equal(result.items.some((item) => item.canonical_fatura_id === mixed), false);
     assert.deepEqual(result.items.map((item) => item.canonical_fatura_id), [good]);
+  });
+});
+
+test('v3 quarentena ID quando fatura ativa confirmada colide com source_missing de matricula inativa', { timeout: 90_000 }, async (t) => {
+  await withCanonicalFixture(t, async (container, asOfDate) => {
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
+    insertAluno(container, 211, UNIT_A, '2211', { status: 'ativo' });
+    insertAluno(container, 212, UNIT_A, '2212', { status: 'trancado' });
+    const run = '00000000-0000-0000-0000-000000000211';
+    const canonicalId = '21000000-0000-0000-0000-000000000211';
+    seedRun(container, run, month);
+    insertInvoices(container, [
+      invoice(canonicalId, UNIT_A, run, month, 2211, { value: 100 }),
+      invoice(canonicalId, UNIT_A, run, month, 2212, { value: 200, sourceMissing: true, reason: 'ausente inativa' }),
+    ], 'colisao source_missing ativa e inativa');
+
+    const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'colisao source_missing ativa e inativa');
+    assert.equal(result.status, 'partial');
+    assert.equal(result.operational.collection_allowed, true);
+    assert.equal(result.operational.collection_scope, 'confirmed_only');
+    assert.deepEqual(result.operational.block_reasons, []);
+    assert.deepEqual(result.items, []);
+    assert.deepEqual(result.totals, {
+      maior_atraso: 0,
+      total_faturas: 0,
+      total_matriculas: 0,
+      total_original: 0,
+      total_atualizado: 0,
+    });
+    assert.equal(result.reconciliation.source_missing_count, 1);
+    assert.equal(result.reconciliation.source_missing_open_count, 1);
+    assert.equal(result.reconciliation.source_missing_other_count, 0);
+    assert.equal(result.reconciliation.duplicate_fatura_count, 0);
+    assert.equal(result.reconciliation.invalid_identity_invoice_count, 0);
+    assert.deepEqual(result.reconciliation.unknown_invoices.map((item) => item.canonical_fatura_id), [canonicalId]);
+  });
+});
+
+test('v3 bloqueia duplicata quando fatura ativa confirmada colide com confirmada de matricula inativa', { timeout: 90_000 }, async (t) => {
+  await withCanonicalFixture(t, async (container, asOfDate) => {
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
+    insertAluno(container, 221, UNIT_A, '2221', { status: 'ativo' });
+    insertAluno(container, 222, UNIT_A, '2222', { status: 'trancado' });
+    const run = '00000000-0000-0000-0000-000000000221';
+    const canonicalId = '22000000-0000-0000-0000-000000000221';
+    seedRun(container, run, month);
+    insertInvoices(container, [
+      invoice(canonicalId, UNIT_A, run, month, 2221, { value: 100 }),
+      invoice(canonicalId, UNIT_A, run, month, 2222, { value: 200 }),
+    ], 'colisao duplicada ativa e inativa');
+
+    const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'colisao duplicada ativa e inativa');
+    assert.equal(result.status, 'incomplete');
+    assert.equal(result.operational.collection_allowed, false);
+    assert.equal(result.operational.collection_scope, 'blocked');
+    assert.deepEqual(result.operational.block_reasons, ['duplicate_confirmed_fatura']);
+    assert.deepEqual(result.items, []);
+    assert.equal(result.totals.total_faturas, 0);
+    assert.equal(result.totals.total_original, 0);
+    assert.equal(result.reconciliation.source_missing_count, 0);
+    assert.equal(result.reconciliation.duplicate_fatura_count, 1);
+    assert.equal(result.reconciliation.invalid_identity_invoice_count, 0);
+    assert.deepEqual(result.reconciliation.duplicate_invoices.map((item) => item.canonical_fatura_id), [canonicalId]);
+  });
+});
+
+test('v3 bloqueia identidade invalida quando fatura ativa colide com metadado invalido de matricula inativa', { timeout: 90_000 }, async (t) => {
+  await withCanonicalFixture(t, async (container, asOfDate) => {
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
+    insertAluno(container, 231, UNIT_A, '2231', { status: 'ativo' });
+    insertAluno(container, 232, UNIT_A, '2232', { status: 'trancado' });
+    const run = '00000000-0000-0000-0000-000000000231';
+    const canonicalId = '23000000-0000-0000-0000-000000000231';
+    seedRun(container, run, month);
+    insertInvoices(container, [
+      invoice(canonicalId, UNIT_A, run, month, 2231, { value: 100 }),
+      invoice(canonicalId, UNIT_A, run, month, 2232, {
+        status: 'paga',
+        value: 200,
+        payload: "jsonb_build_object('_la_report', jsonb_build_object('validation_issues', jsonb_build_array(jsonb_build_object('field', 'matricula_id', 'code', 'invalid_optional_identifier', 'raw_value', 'inativa-invalida'))))",
+      }),
+    ], 'colisao identidade invalida ativa e inativa');
+
+    const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'colisao identidade invalida ativa e inativa');
+    assert.equal(result.status, 'incomplete');
+    assert.equal(result.operational.collection_allowed, false);
+    assert.equal(result.operational.collection_scope, 'blocked');
+    assert.deepEqual(result.operational.block_reasons, ['invalid_invoice_identity']);
+    assert.deepEqual(result.items, []);
+    assert.equal(result.totals.total_faturas, 0);
+    assert.equal(result.totals.total_original, 0);
+    assert.equal(result.reconciliation.source_missing_count, 0);
+    assert.equal(result.reconciliation.duplicate_fatura_count, 0);
+    assert.equal(result.reconciliation.invalid_identity_invoice_count, 1);
+    assert.equal(result.reconciliation.validation_issue_count, 1);
+    assert.deepEqual(result.reconciliation.invalid_identity_invoices.map((item) => item.canonical_fatura_id), [canonicalId]);
   });
 });
 
@@ -420,6 +581,86 @@ test('v3 cobra somente fatura vencida, nunca vencimento de hoje ou futuro', { ti
   });
 });
 
+test('v3 falha fechado para status desconhecido e vazio sem reclassificar a fatura', { timeout: 90_000 }, async (t) => {
+  await withCanonicalFixture(t, async (container, asOfDate) => {
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
+    insertAluno(container, 321, UNIT_A, '2321');
+    const scenarios = [
+      {
+        status: 'desconhecido',
+        run: '00000000-0000-0000-0000-000000000321',
+        canonicalId: '32000000-0000-0000-0000-000000000321',
+      },
+      {
+        status: '',
+        run: '00000000-0000-0000-0000-000000000322',
+        canonicalId: '32000000-0000-0000-0000-000000000322',
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      seedRun(container, scenario.run, month);
+      insertInvoices(container, [
+        invoice(scenario.canonicalId, UNIT_A, scenario.run, month, 2321, { status: scenario.status }),
+      ], `status nao suportado ${scenario.status || 'vazio'}`);
+
+      const result = jsonFrom(
+        callAs(container, 'authenticated', UNIT_A, asOfDate),
+        `status nao suportado ${scenario.status || 'vazio'}`,
+      );
+      assert.equal(result.status, 'error');
+      assert.deepEqual(result.error, {
+        code: 'unsupported_invoice_status',
+        message: 'unsupported_invoice_status',
+      });
+      assert.equal(result.operational.collection_allowed, false);
+      assert.equal(result.operational.collection_scope, 'blocked');
+      assert.deepEqual(result.operational.block_reasons, []);
+      assert.deepEqual(result.items, []);
+      assert.deepEqual(result.totals, {
+        maior_atraso: 0,
+        total_faturas: 0,
+        total_matriculas: 0,
+        total_original: 0,
+        total_atualizado: 0,
+      });
+      assert.equal(result.reconciliation.status, 'clear');
+      assert.equal(result.reconciliation.source_missing_count, 0);
+      assert.equal(result.reconciliation.duplicate_fatura_count, 0);
+      assert.equal(result.reconciliation.invalid_identity_invoice_count, 0);
+      assert.deepEqual(result.reconciliation.unknown_invoices, []);
+      assert.deepEqual(result.reconciliation.duplicate_invoices, []);
+      assert.deepEqual(result.reconciliation.invalid_identity_invoices, []);
+
+      seed(container, 'delete from public.sync_run_items; delete from public.sync_runs;', `limpeza ${scenario.status || 'vazio'}`);
+    }
+  });
+});
+
+test('v3 preserva stale antes do erro de status nao suportado', { timeout: 90_000 }, async (t) => {
+  await withCanonicalFixture(t, async (container, asOfDate) => {
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
+    insertAluno(container, 331, UNIT_A, '2331');
+    const run = '00000000-0000-0000-0000-000000000331';
+    seedRun(container, run, month, true);
+    insertInvoices(container, [
+      invoice('33000000-0000-0000-0000-000000000331', UNIT_A, run, month, 2331, { status: 'desconhecido' }),
+    ], 'status nao suportado em snapshot stale');
+
+    const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'stale antes de status nao suportado');
+    assert.equal(result.status, 'stale');
+    assert.deepEqual(result.error, {
+      code: 'unsupported_invoice_status',
+      message: 'unsupported_invoice_status',
+    });
+    assert.equal(result.operational.collection_allowed, false);
+    assert.equal(result.operational.collection_scope, 'blocked');
+    assert.deepEqual(result.operational.block_reasons, ['stale_competencia']);
+    assert.deepEqual(result.items, []);
+    assert.equal(result.totals.total_faturas, 0);
+  });
+});
+
 test('v3 bloqueia duplicata confirmada na mesma unidade e isola o mesmo ID entre unidades', { timeout: 90_000 }, async (t) => {
   await withCanonicalFixture(t, async (container, asOfDate) => {
     const month = `date_trunc('month', date '${asOfDate}')::date`;
@@ -471,7 +712,7 @@ test('v3 exige identidade de matricula: homonimos e emusys_student_id isolado nu
         run: '00000000-0000-0000-0000-000000000501',
         invalid: '50000000-0000-0000-0000-000000000501',
         control: '50000000-0000-0000-0000-000000000511',
-        row: (id, run) => invoice(id, UNIT_A, run, month, null, { student: 7501, payload: nominalPayload }),
+        row: (id, run) => invoice(id, UNIT_A, run, month, null, { fatura: 3501, student: 7501, payload: nominalPayload }),
         label: 'matricula nula com emusys_student_id correspondente',
       },
       {
@@ -586,7 +827,7 @@ test('v3 conta uma matricula financeira uma vez mesmo com dois cursos', { timeou
     seedRun(container, run, month);
     insertInvoices(container, [
       invoice('70000000-0000-0000-0000-000000000701', UNIT_A, run, month, 2701, { value: 100 }),
-      invoice('70000000-0000-0000-0000-000000000702', UNIT_A, run, month, 2701, { value: 200 }),
+      invoice('70000000-0000-0000-0000-000000000702', UNIT_A, run, month, 2701, { value: 200, fatura: 3702 }),
     ], 'duas faturas da mesma matricula');
     const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'matricula financeira unica');
     assert.deepEqual(result.items.map((item) => item.canonical_fatura_id).sort(), [
@@ -610,9 +851,9 @@ test('relatorio financeiro preserva snapshot fresco, stale e source_missing sem 
     const run = '00000000-0000-0000-0000-000000000751';
     seedRun(container, run, month);
     insertInvoices(container, [
-      invoice('75000000-0000-0000-0000-000000000751', UNIT_A, run, month, 2751, { status: 'paga', value: 100, valorPago: 100, description: 'Parcela 1/3' }),
-      invoice('75000000-0000-0000-0000-000000000752', UNIT_A, run, month, 2751, { value: 200, description: 'Parcela 2/3' }),
-      invoice('75000000-0000-0000-0000-000000000753', UNIT_A, run, month, 2751, { status: 'cancelada', value: 300, description: 'Parcela 3/3' }),
+      invoice('75000000-0000-0000-0000-000000000751', UNIT_A, run, month, 2751, { status: 'paga', value: 100, valorPago: 100, fatura: 3751, description: 'Parcela 1/3' }),
+      invoice('75000000-0000-0000-0000-000000000752', UNIT_A, run, month, 2751, { value: 200, fatura: 3752, description: 'Parcela 2/3' }),
+      invoice('75000000-0000-0000-0000-000000000753', UNIT_A, run, month, 2751, { status: 'cancelada', value: 300, fatura: 3753, description: 'Parcela 3/3' }),
     ], 'snapshot financeiro fresco');
     const fresh = jsonFrom(callFinanceAs(container, 'authenticated', UNIT_A, asOfDate), 'relatorio financeiro fresco');
     assert.equal(fresh.status, 'ok');
