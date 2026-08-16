@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
-import { useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { 
   Smartphone, 
   Guitar, 
@@ -39,7 +39,8 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowUpDown,
-  ClipboardCheck
+  ClipboardCheck,
+  ReceiptText
 } from 'lucide-react';
 import { TarefasRapidasTab } from '@/components/shared/TarefasRapidas';
 import { CanalOrigemBadge } from '@/components/shared/CanalOrigemBadge';
@@ -51,6 +52,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { copyTextToClipboard, getManualCopyShortcut } from '@/lib/clipboard';
 import { ehMatriculaComercialCanonica } from '@/lib/comercialMatriculasCanonicas';
+import { criarUrlFaturasAlunos } from '@/lib/faturasAlunosCanonicas';
 import { resolverProfessorExperimentalCanonico } from '@/lib/comercialProfessorExperimental.js';
 import { calcularRangeRelatorioMensalComercial } from '@/lib/relatorioComercialMensal';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
@@ -456,6 +458,7 @@ export function ComercialPage() {
   });
 
   const { usuario, isAdmin, unidadeId } = useAuth();
+  const navigate = useNavigate();
   const context = useOutletContext<{ filtroAtivo: string | null; unidadeSelecionada: string | null; setPeriodoLabel?: (label: string | null) => void }>();
   const filtroAtivo = context?.filtroAtivo;
 
@@ -3725,6 +3728,17 @@ export function ComercialPage() {
           onDataInicioChange={competencia.setDataInicio}
           onDataFimChange={competencia.setDataFim}
         />
+        <button
+          type="button"
+          onClick={() => navigate(criarUrlFaturasAlunos({
+            unidadeId: (isAdmin ? context?.unidadeSelecionada : unidadeId) || 'todos',
+            situacao: 'confirmadas',
+          }))}
+          className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-medium text-emerald-100 transition hover:bg-emerald-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
+        >
+          <ReceiptText className="h-4 w-4" />
+          Faturas de alunos
+        </button>
         <button
           onClick={() => setRelatorioOpen(true)}
           className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-cyan-500/20"

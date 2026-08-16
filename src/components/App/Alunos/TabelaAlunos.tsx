@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown, Columns3, Phone, Brain } from 'lucide-react';
 import { CelulaEditavel } from '@/components/ui/CelulaEditavel';
@@ -11,6 +12,7 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { SortableHeader } from '@/components/ui/SortableHeader';
 import { useToast } from '@/hooks/useToast';
 import { ModalFichaAluno } from './ModalFichaAluno';
+import { criarUrlFaturasAlunos } from '@/lib/faturasAlunosCanonicas';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -175,6 +177,8 @@ export function TabelaAlunos({
   onAbrirModalTurma
 }: TabelaAlunosProps) {
   const { usuario } = useAuth();
+  const navigate = useNavigate();
+  const [tableSearchParams, setTableSearchParams] = useSearchParams();
   const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
   const sentinelRef = useWidgetOverlapSentinel();
   // Estado local para permitir edição otimista
@@ -231,6 +235,24 @@ export function TabelaAlunos({
   const [colunasDropdownOpen, setColunasDropdownOpen] = useState(false);
   const [alunoFicha, setAlunoFicha] = useState<Aluno | null>(null);
   const [alunosExpandidos, setAlunosExpandidos] = useState<Set<number>>(new Set());
+  const alunoIdUrl = tableSearchParams.get('aluno');
+
+  useEffect(() => {
+    const alunoId = Number(alunoIdUrl);
+    if (!Number.isSafeInteger(alunoId) || alunoId <= 0) return;
+    const candidato = alunosLocal
+      .flatMap((row) => [row, ...(row.outros_cursos ?? [])])
+      .find((row) => row.id === alunoId);
+    if (candidato) setAlunoFicha(candidato);
+  }, [alunoIdUrl, alunosLocal]);
+
+  const fecharFichaAluno = () => {
+    setAlunoFicha(null);
+    if (!tableSearchParams.has('aluno')) return;
+    const next = new URLSearchParams(tableSearchParams);
+    next.delete('aluno');
+    setTableSearchParams(next, { replace: true });
+  };
 
   // Ao buscar por nome, auto-expandir linhas com outros cursos (inclusive inativos)
   useEffect(() => {
@@ -2589,6 +2611,18 @@ export function TabelaAlunos({
                           <FileEdit className="w-4 h-4 mr-2" />
                           Editar cadastro
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => navigate(criarUrlFaturasAlunos({
+                            unidadeId: aluno.unidade_id,
+                            alunoId: aluno.id,
+                            matriculaId: aluno.emusys_matricula_id,
+                            situacao: 'confirmadas',
+                          }))}
+                          className="cursor-pointer text-emerald-400 focus:bg-emerald-500/10 focus:text-emerald-400"
+                        >
+                          <Receipt className="mr-2 h-4 w-4" />
+                          Ver faturas canônicas
+                        </DropdownMenuItem>
                         <DropdownMenuItem 
                           onClick={() => carregarHistorico(aluno)}
                           className="cursor-pointer text-blue-400 focus:text-blue-400 focus:bg-blue-500/10"
@@ -3365,7 +3399,7 @@ export function TabelaAlunos({
       {alunoFicha && (
         <ModalFichaAluno
           aluno={alunoFicha}
-          onClose={() => setAlunoFicha(null)}
+          onClose={fecharFichaAluno}
           onSalvar={onRecarregar}
           professores={professores}
           cursos={cursos}

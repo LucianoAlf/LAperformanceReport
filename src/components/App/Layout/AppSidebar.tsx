@@ -27,7 +27,8 @@ import {
   Activity,
   Heart,
   MousePointerClick,
-  CalendarClock
+  CalendarClock,
+  ReceiptText
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -55,6 +56,7 @@ const prefetchMap: Record<string, () => Promise<any>> = {
   '/app/agenda': () => import('@/components/App/Agenda'),
   '/app/administrativo': () => import('@/components/App/Administrativo'),
   '/app/alunos': () => import('@/components/App/Alunos'),
+  '/app/faturas': () => import('@/components/App/FaturasAlunos'),
   '/app/sucesso-aluno': () => import('@/components/App/SucessoCliente'),
   '/app/professores': () => import('@/components/App/Professores'),
   '/app/time': () => import('@/components/App/Time'),
@@ -83,6 +85,7 @@ const operacional = [
   { path: '/app/agenda', label: 'Agenda', icon: CalendarClock },
   { path: '/app/administrativo', label: 'Administrativo', icon: ClipboardList },
   { path: '/app/alunos', label: 'Alunos', icon: Users },
+  { path: '/app/faturas', label: 'Faturas', icon: ReceiptText },
   { path: '/app/sucesso-aluno', label: 'Sucesso do Aluno', icon: Heart },
   { path: '/app/professores', label: 'Professores', icon: GraduationCap },
   { path: '/app/time', label: 'Time', icon: Users },

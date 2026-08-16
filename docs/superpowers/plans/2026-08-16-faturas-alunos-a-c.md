@@ -10,6 +10,14 @@ Entregar uma página dedicada `/app/faturas` para a equipe consultar faturas de
 alunos com origem, frescor, competência, vínculo de matrícula e reconciliação,
 mantendo atalhos contextuais em Alunos e Comercial.
 
+## Estado de execução — 16/08/2026
+
+- [x] adaptador canônico v3 e filtros determinísticos;
+- [x] página dedicada, estados operacionais e detalhe por fatura;
+- [x] rota, menu e atalhos A+C;
+- [x] testes de contrato/interface e build de produção;
+- [ ] prova autenticada em produção, console e estabilidade após reload.
+
 ## Pré-condições já concluídas
 
 - contrato canônico v3 publicado em `get_inadimplencia_canonica`;

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 
 const parseLocalDate = (s: string | null | undefined): Date | null =>
   s ? new Date(s + 'T00:00:00') : null;
@@ -7,6 +8,7 @@ const formatLocalDate = (d: Date | null | undefined): string | null =>
   d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : null;
 import { supabase } from '@/lib/supabase';
 import { copyTextToClipboard } from '@/lib/clipboard';
+import { criarUrlFaturasAlunos } from '@/lib/faturasAlunosCanonicas';
 import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil, Brain, ExternalLink, MessageCircle, Search, Star, BookOpen, ClipboardList, Printer, Copy, Check, RotateCcw, Send, CalendarDays } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
@@ -2141,6 +2143,24 @@ export function ModalFichaAluno({
 
             {/* ABA FINANCEIRO */}
             <TabsContent value="financeiro" className="space-y-4 mt-0">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4">
+                <div>
+                  <p className="text-sm font-medium text-emerald-100">Leitura financeira canônica</p>
+                  <p className="mt-0.5 text-xs text-emerald-200/65">Consulte faturas, vencimentos, frescor e reconciliação na área dedicada.</p>
+                </div>
+                <Link
+                  to={criarUrlFaturasAlunos({
+                    unidadeId: aluno.unidade_id,
+                    alunoId: aluno.id,
+                    matriculaId: aluno.emusys_matricula_id,
+                    situacao: 'confirmadas',
+                  })}
+                  onClick={onClose}
+                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/25 bg-emerald-500/15 px-3 py-2 text-xs font-medium text-emerald-100 transition hover:bg-emerald-500/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
+                >
+                  Ver faturas canônicas <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="mb-2 block">Tipo de Aluno</Label>

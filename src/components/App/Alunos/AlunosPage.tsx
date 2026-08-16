@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
-import { useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -9,7 +9,7 @@ import { ptBR } from 'date-fns/locale';
 import {
   Users, DollarSign, BarChart3, Clock, Layers, AlertTriangle, BookOpen,
   Plus, Search, RotateCcw, Edit2, Trash2, Check, X, History,
-  Calendar, Upload, Zap, RefreshCw, Lock, Unlock, Link2, GraduationCap
+  Calendar, Upload, Zap, RefreshCw, Lock, Unlock, Link2, GraduationCap, ReceiptText
 } from 'lucide-react';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { COMPETENCIA_FECHADA_MESSAGE, useCompetenciaMensalStatus } from '@/hooks/useCompetenciaMensalStatus';
@@ -51,6 +51,7 @@ import {
   podeCobrarInadimplenciaCanonica,
   type InadimplenciaCanonicaState,
 } from '@/lib/inadimplenciaCanonica';
+import { criarUrlFaturasAlunos } from '@/lib/faturasAlunosCanonicas';
 // Interfaces
 export interface Aluno {
   id: number;
@@ -273,6 +274,8 @@ export function AlunosPage() {
     competencia: ReturnType<typeof useCompetenciaFiltro>;
   }>();
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
+  const navigate = useNavigate();
+  const [pageSearchParams, setPageSearchParams] = useSearchParams();
   const toast = useToast();
 
   // Filtro de competência (período)
@@ -298,13 +301,28 @@ export function AlunosPage() {
   const [carregandoModalMatriculas, setCarregandoModalMatriculas] = useState(false);
 
   // Estados principais
-  const [tabAtiva, setTabAtiva] = useState<TabAtiva>('lista');
+  const tabInicial = pageSearchParams.get('tab');
+  const [tabAtiva, setTabAtiva] = useState<TabAtiva>(() => (
+    alunosTabs.some((tab) => tab.id === tabInicial) ? tabInicial as TabAtiva : 'lista'
+  ));
+  const tabUrl = pageSearchParams.get('tab');
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [inadimplenciaCanonica, setInadimplenciaCanonica] = useState<InadimplenciaCanonicaState>(
     INADIMPLENCIA_CANONICA_LOADING,
   );
   const carregarDadosRef = useRef<() => Promise<void>>(async () => undefined);
   const [turmas, setTurmas] = useState<Turma[]>([]);
+
+  useEffect(() => {
+    if (tabUrl && alunosTabs.some((item) => item.id === tabUrl)) setTabAtiva(tabUrl as TabAtiva);
+  }, [tabUrl]);
+
+  const alterarTab = (tab: TabAtiva) => {
+    setTabAtiva(tab);
+    const next = new URLSearchParams(pageSearchParams);
+    if (tab === 'lista') next.delete('tab'); else next.set('tab', tab);
+    setPageSearchParams(next, { replace: true });
+  };
   const [kpis, setKpis] = useState<KPIsAlunos>({
     totalAtivos: 0,
     totalMatriculasAtivas: 0,
@@ -1896,6 +1914,17 @@ export function AlunosPage() {
 
       {/* Header actions */}
       <div className="flex flex-wrap items-center justify-end gap-4">
+        <button
+          type="button"
+          onClick={() => navigate(criarUrlFaturasAlunos({
+            unidadeId: unidadeAtual,
+            situacao: 'confirmadas',
+          }))}
+          className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
+        >
+          <ReceiptText className="h-4 w-4" />
+          Faturas de alunos
+        </button>
         {/* Badge de Alerta - Alunos sem lançamento de pagamento */}
         {alertaPagamentos.mostrar && (
           <button
@@ -1993,7 +2022,7 @@ export function AlunosPage() {
       <PageTabs
         tabs={alunosTabs}
         activeTab={tabAtiva}
-        onTabChange={setTabAtiva}
+        onTabChange={alterarTab}
         data-tour="alunos-tabs"
       />
 

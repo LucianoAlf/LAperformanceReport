@@ -20,10 +20,15 @@ export type InadimplenciaBlockReason =
 export interface InadimplenciaCanonicaItem {
   canonical_fatura_id: string;
   unidade_id: string;
+  unidade_codigo: string | null;
+  competencia: string | null;
   emusys_fatura_id: string;
   emusys_matricula_id: string;
+  emusys_contrato_id: string | null;
   aluno_id_canonico: number | null;
   contact_resolution_status: InadimplenciaContactResolutionStatus;
+  descricao: string | null;
+  status: string | null;
   data_vencimento: string;
   dias_atraso: number;
   valor_original: number;
@@ -248,8 +253,15 @@ function parseItem(
   if (!row) return null;
   const canonicalFaturaId = nonEmptyString(row.canonical_fatura_id);
   const unidadeId = nonEmptyString(row.unidade_id);
+  const unidadeCodigo = nullableText(row.unidade_codigo);
+  const competencia = row.competencia == null
+    ? null
+    : validDate(row.competencia) ? row.competencia : null;
   const faturaId = nonEmptyString(row.emusys_fatura_id);
   const matriculaId = nonEmptyString(row.emusys_matricula_id);
+  const contratoId = nullableText(row.emusys_contrato_id);
+  const descricao = nullableText(row.descricao);
+  const statusFatura = nullableText(row.status);
   const sync = row.sync_completed_at === null ? null : parseAbsoluteTimestamp(row.sync_completed_at);
   const contactStatus = requireContactResolution
     ? row.contact_resolution_status
@@ -263,6 +275,10 @@ function parseItem(
     || !unidadeId || !UUID.test(unidadeId)
     || !faturaId
     || !matriculaId
+    || (row.competencia != null && !competencia)
+    || (row.emusys_contrato_id != null && !contratoId)
+    || (row.descricao != null && !descricao)
+    || (row.status != null && !statusFatura)
     || !validDate(row.data_vencimento)
     || !nonNegativeInteger(row.dias_atraso)
     || !validMoney(row.valor_original)
@@ -276,10 +292,15 @@ function parseItem(
   return {
     canonical_fatura_id: canonicalFaturaId,
     unidade_id: unidadeId,
+    unidade_codigo: unidadeCodigo,
+    competencia,
     emusys_fatura_id: faturaId,
     emusys_matricula_id: matriculaId,
+    emusys_contrato_id: contratoId,
     aluno_id_canonico: contactStatus === 'resolved' ? alunoIdCanonico as number : null,
     contact_resolution_status: contactStatus,
+    descricao,
+    status: statusFatura,
     data_vencimento: row.data_vencimento,
     dias_atraso: row.dias_atraso,
     valor_original: row.valor_original,
