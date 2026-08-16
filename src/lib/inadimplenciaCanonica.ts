@@ -1,9 +1,17 @@
 export type InadimplenciaCanonicaStatus =
   | 'loading'
   | 'ok'
+  | 'partial'
   | 'stale'
   | 'incomplete'
   | 'error';
+
+export type InadimplenciaCollectionScope = 'confirmed_only' | 'blocked';
+
+export type InadimplenciaBlockReason =
+  | 'stale_competencia'
+  | 'duplicate_confirmed_fatura'
+  | 'invalid_invoice_identity';
 
 export interface InadimplenciaCanonicaItem {
   canonical_fatura_id: string;
@@ -30,9 +38,14 @@ export interface InadimplenciaCanonicaState {
   freshUntil: string | null;
   competenciasStale: number;
   sourceMissingCount: number;
+  sourceMissingOpenCount: number;
+  sourceMissingOtherCount: number;
   duplicateFaturaCount: number;
   invalidIdentityInvoiceCount: number;
   validationIssueCount: number;
+  collectionAllowed: boolean;
+  collectionScope: InadimplenciaCollectionScope;
+  blockReasons: InadimplenciaBlockReason[];
   items: InadimplenciaCanonicaItem[];
   erro: string | null;
 }
@@ -92,9 +105,14 @@ export const INADIMPLENCIA_CANONICA_LOADING: InadimplenciaCanonicaState = {
   freshUntil: null,
   competenciasStale: 0,
   sourceMissingCount: 0,
+  sourceMissingOpenCount: 0,
+  sourceMissingOtherCount: 0,
   duplicateFaturaCount: 0,
   invalidIdentityInvoiceCount: 0,
   validationIssueCount: 0,
+  collectionAllowed: false,
+  collectionScope: 'blocked',
+  blockReasons: [],
   items: [],
   erro: null,
 };
@@ -114,6 +132,15 @@ const nullableString = (value: unknown) => {
   const normalized = String(value ?? '').trim();
   return normalized || null;
 };
+
+const invalidResponseMessage = 'Resposta invalida da leitura canonica de inadimplencia.';
+
+const errorState = (erro = invalidResponseMessage): InadimplenciaCanonicaState => ({
+  ...INADIMPLENCIA_CANONICA_LOADING,
+  status: 'error',
+  erro,
+  items: [],
+});
 
 function normalizeItem(value: unknown): InadimplenciaCanonicaItem | null {
   const row = asRecord(value);
@@ -137,47 +164,30 @@ function normalizeItem(value: unknown): InadimplenciaCanonicaItem | null {
   };
 }
 
-export function normalizarInadimplenciaCanonica(
-  payload: unknown,
-  error?: { message?: string } | null,
+function normalizeItems(value: unknown): InadimplenciaCanonicaItem[] | null {
+  if (!Array.isArray(value)) return null;
+  const items = value.map(normalizeItem);
+  return items.every((item): item is InadimplenciaCanonicaItem => item != null)
+    ? items
+    : null;
+}
+
+function scalarError(root: Record<string, unknown>): string | null {
+  return typeof root.error === 'string' ? nullableString(root.error) : null;
+}
+
+function baseState(
+  root: Record<string, unknown>,
+  status: InadimplenciaCanonicaStatus,
+  collectionAllowed: boolean,
+  collectionScope: InadimplenciaCollectionScope,
+  blockReasons: InadimplenciaBlockReason[],
+  items: InadimplenciaCanonicaItem[],
+  erro: string | null,
 ): InadimplenciaCanonicaState {
-  if (error) {
-    return {
-      ...INADIMPLENCIA_CANONICA_LOADING,
-      status: 'error',
-      erro: error.message || 'Falha ao carregar a inadimplencia canonica.',
-      items: [],
-    };
-  }
-
-  let parsedPayload = payload;
-  if (typeof payload === 'string') {
-    try {
-      parsedPayload = JSON.parse(payload);
-    } catch {
-      parsedPayload = null;
-    }
-  }
-  const root = asRecord(parsedPayload);
-  const rawStatus = nullableString(root?.status);
-  if (!root || !['ok', 'stale', 'incomplete'].includes(rawStatus ?? '')) {
-    return {
-      ...INADIMPLENCIA_CANONICA_LOADING,
-      status: 'error',
-      erro: 'Resposta invalida da leitura canonica de inadimplencia.',
-      items: [],
-    };
-  }
-
-  const status = rawStatus as 'ok' | 'stale' | 'incomplete';
   const totals = asRecord(root.totals) ?? {};
   const freshness = asRecord(root.freshness) ?? {};
   const reconciliation = asRecord(root.reconciliation) ?? {};
-  const items: InadimplenciaCanonicaItem[] = status === 'stale'
-    ? []
-    : (Array.isArray(root.items)
-      ? root.items.map(normalizeItem).filter((item): item is InadimplenciaCanonicaItem => item != null)
-      : []);
 
   return {
     status,
@@ -192,12 +202,126 @@ export function normalizarInadimplenciaCanonica(
     freshUntil: nullableString(freshness.fresh_until),
     competenciasStale: finiteNumber(freshness.competencias_stale),
     sourceMissingCount: finiteNumber(reconciliation.source_missing_count),
+    sourceMissingOpenCount: finiteNumber(reconciliation.source_missing_open_count),
+    sourceMissingOtherCount: finiteNumber(reconciliation.source_missing_other_count),
     duplicateFaturaCount: finiteNumber(reconciliation.duplicate_fatura_count),
     invalidIdentityInvoiceCount: finiteNumber(reconciliation.invalid_identity_invoice_count),
     validationIssueCount: finiteNumber(reconciliation.validation_issue_count),
+    collectionAllowed,
+    collectionScope,
+    blockReasons,
     items,
-    erro: null,
+    erro,
   };
+}
+
+function normalizeV3(root: Record<string, unknown>): InadimplenciaCanonicaState {
+  const status = root.status;
+  const operational = asRecord(root.operational);
+  const items = normalizeItems(root.items);
+  const validReasons: InadimplenciaBlockReason[] = [
+    'stale_competencia',
+    'duplicate_confirmed_fatura',
+    'invalid_invoice_identity',
+  ];
+
+  if (
+    typeof status !== 'string'
+    || !['ok', 'partial', 'stale', 'incomplete', 'error'].includes(status)
+    || !operational
+    || typeof operational.collection_allowed !== 'boolean'
+    || (operational.collection_scope !== 'confirmed_only' && operational.collection_scope !== 'blocked')
+    || !Array.isArray(operational.block_reasons)
+    || !operational.block_reasons.every((reason): reason is InadimplenciaBlockReason => (
+      typeof reason === 'string' && validReasons.includes(reason as InadimplenciaBlockReason)
+    ))
+    || !items
+  ) return errorState();
+
+  const allowedStatus = status === 'ok' || status === 'partial';
+  const blockedStatus = status === 'stale' || status === 'incomplete' || status === 'error';
+  const allowedContract = allowedStatus
+    && operational.collection_allowed === true
+    && operational.collection_scope === 'confirmed_only'
+    && operational.block_reasons.length === 0;
+  const blockedContract = blockedStatus
+    && operational.collection_allowed === false
+    && operational.collection_scope === 'blocked'
+    && items.length === 0;
+
+  if (!allowedContract && !blockedContract) return errorState();
+
+  if (allowedContract) {
+    return baseState(root, status as 'ok' | 'partial', true, 'confirmed_only', [], items, null);
+  }
+
+  if (status === 'error') return errorState(scalarError(root) ?? invalidResponseMessage);
+
+  return baseState(
+    root,
+    status as 'stale' | 'incomplete',
+    false,
+    'blocked',
+    operational.block_reasons as InadimplenciaBlockReason[],
+    [],
+    null,
+  );
+}
+
+function normalizeV2(root: Record<string, unknown>): InadimplenciaCanonicaState {
+  const status = root.status;
+  if (status !== 'ok' && status !== 'stale' && status !== 'incomplete' && status !== 'error') {
+    return errorState();
+  }
+
+  const items = normalizeItems(root.items);
+  if (!items) return errorState();
+
+  if (status === 'ok') {
+    return baseState(root, 'ok', true, 'confirmed_only', [], items, null);
+  }
+
+  return baseState(
+    root,
+    status,
+    false,
+    'blocked',
+    [],
+    [],
+    status === 'error' ? scalarError(root) ?? invalidResponseMessage : null,
+  );
+}
+
+export function normalizarInadimplenciaCanonica(
+  payload: unknown,
+  error?: { message?: string } | null,
+): InadimplenciaCanonicaState {
+  if (error) return errorState(error.message || 'Falha ao carregar a inadimplencia canonica.');
+
+  let parsedPayload = payload;
+  if (typeof payload === 'string') {
+    try {
+      parsedPayload = JSON.parse(payload);
+    } catch {
+      parsedPayload = null;
+    }
+  }
+
+  const root = asRecord(parsedPayload);
+  if (!root) return errorState();
+  if (root.schema_version === 3) return normalizeV3(root);
+  if (root.schema_version === 2) return normalizeV2(root);
+  return errorState();
+}
+
+export function podeCobrarInadimplenciaCanonica(
+  state: InadimplenciaCanonicaState,
+  agora = new Date(),
+): boolean {
+  if (!state.collectionAllowed) return false;
+  if (!state.freshUntil) return true;
+  const limite = Date.parse(state.freshUntil);
+  return Number.isFinite(limite) && agora.getTime() < limite;
 }
 
 export const chaveInadimplenciaMatricula = (
@@ -205,8 +329,13 @@ export const chaveInadimplenciaMatricula = (
   emusysMatriculaId: string | number,
 ) => `${unidadeId}|${String(emusysMatriculaId).trim()}`;
 
-export function indexarInadimplenciaPorMatricula(state: InadimplenciaCanonicaState) {
+export function indexarInadimplenciaPorMatricula(
+  state: InadimplenciaCanonicaState,
+  agora = new Date(),
+) {
   const index = new Map<string, InadimplenciaPorMatricula>();
+  if (!podeCobrarInadimplenciaCanonica(state, agora)) return index;
+
   for (const item of state.items) {
     if (!item.emusys_matricula_id) continue;
     const key = chaveInadimplenciaMatricula(item.unidade_id, item.emusys_matricula_id);
@@ -228,27 +357,23 @@ export function indexarInadimplenciaPorMatricula(state: InadimplenciaCanonicaSta
 }
 
 /**
- * Converte a leitura financeira em alertas operacionais sem misturar vinculos.
- * Somente o estado `ok` habilita cobranca: stale, incomplete e erro falham fechados.
+ * Converte a leitura financeira confirmada em alertas operacionais sem misturar vinculos.
  */
 export function montarAlertasInadimplenciaCanonica(
   state: InadimplenciaCanonicaState,
   alunos: AlunoInadimplenciaCanonicaSource[],
+  agora = new Date(),
 ): AlertasInadimplenciaCanonicaResult {
-  if (state.status !== 'ok') {
+  if (!podeCobrarInadimplenciaCanonica(state, agora)) {
     return { alertas: [], totalAtivos: 0, semCadastroAtivo: 0 };
   }
 
-  const inadimplenciaPorMatricula = indexarInadimplenciaPorMatricula(state);
+  const inadimplenciaPorMatricula = indexarInadimplenciaPorMatricula(state, agora);
   const alunosPorMatricula = new Map<string, AlunoInadimplenciaCanonicaSource[]>();
 
   for (const aluno of alunos) {
     const matricula = nullableString(aluno.emusys_matricula_id);
-    if (
-      !matricula
-      || aluno.status !== 'ativo'
-      || aluno.arquivado_em != null
-    ) continue;
+    if (!matricula || aluno.status !== 'ativo' || aluno.arquivado_em != null) continue;
 
     const key = chaveInadimplenciaMatricula(aluno.unidade_id, matricula);
     const candidatos = alunosPorMatricula.get(key) ?? [];
@@ -295,9 +420,5 @@ export function montarAlertasInadimplenciaCanonica(
     || left.aluno_id - right.aluno_id
   ));
 
-  return {
-    alertas,
-    totalAtivos: alertas.length,
-    semCadastroAtivo,
-  };
+  return { alertas, totalAtivos: alertas.length, semCadastroAtivo };
 }
