@@ -52,3 +52,10 @@ test('cards financeiros flexionam pessoa, elegibilidade, validacao e contato com
   assert.match(page, /contactResolutionPendingCount === 1 \? 'contato pendente' : 'contatos pendentes'/);
   assert.doesNotMatch(page, /elegíveleis/);
 });
+
+test('valores financeiros preservam duas casas decimais em cards, tabela e detalhe', () => {
+  const page = read('src/components/App/FaturasAlunos/FaturasAlunosPage.tsx');
+  assert.match(page, /formatarMoedaFinanceira\s*=\s*\(value: number\).*formatCurrency\(value, 2\)/);
+  assert.match(page, /value=\{formatarMoedaFinanceira\(state\.totalAtualizado\)\}/);
+  assert.doesNotMatch(page, /format=\"currency\"/);
+});

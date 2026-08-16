@@ -102,6 +102,7 @@ const formatarDataHora = (value: string | null) => value
   : '—';
 
 const rotuloCompetencia = (value: string) => COMPETENCIA_BR.format(dataSomenteUtc(value));
+const formatarMoedaFinanceira = (value: number) => formatCurrency(value, 2);
 
 function ultimasCompetencias(dataCorte: string): string[] {
   const [ano, mes] = dataCorte.split('-').map(Number);
@@ -423,7 +424,7 @@ export function FaturasAlunosPage() {
               title="Confirmadas D+0"
               tooltip="Faturas abertas e vencidas confirmadas pela leitura canônica."
               value={state.totalFaturas}
-              subvalue={`${state.totalMatriculas} matrículas • ${formatCurrency(state.totalOriginal)} original`}
+              subvalue={`${state.totalMatriculas} matrículas • ${formatarMoedaFinanceira(state.totalOriginal)} original`}
               icon={BadgeCheck}
               variant="cyan"
             />
@@ -438,9 +439,8 @@ export function FaturasAlunosPage() {
             <KPICard
               title="Valor atualizado"
               tooltip="Total calculado no contrato canônico; a interface não recalcula juros."
-              value={state.totalAtualizado}
-              format="currency"
-              subvalue={`${formatCurrency(state.totalOriginal)} sem acréscimos`}
+              value={formatarMoedaFinanceira(state.totalAtualizado)}
+              subvalue={`${formatarMoedaFinanceira(state.totalOriginal)} sem acréscimos`}
               icon={CircleDollarSign}
               variant="emerald"
             />
@@ -612,8 +612,8 @@ export function FaturasAlunosPage() {
                           <td className="px-3 py-3.5 text-slate-300">{formatarData(item.data_vencimento)}</td>
                           <td className="px-3 py-3.5 text-right"><span className="rounded-full bg-rose-500/10 px-2 py-1 text-xs font-medium text-rose-300">{item.dias_atraso}d</span></td>
                           <td className="px-3 py-3.5"><span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/20 bg-rose-500/10 px-2 py-1 text-xs text-rose-200"><span className="h-1.5 w-1.5 rounded-full bg-rose-400" />{item.status ?? 'aberta'}</span></td>
-                          <td className="px-3 py-3.5 text-right tabular-nums text-slate-400">{formatCurrency(item.valor_original)}</td>
-                          <td className="px-3 py-3.5 text-right font-semibold tabular-nums text-emerald-300">{formatCurrency(item.valor_atualizado)}</td>
+                          <td className="px-3 py-3.5 text-right tabular-nums text-slate-400">{formatarMoedaFinanceira(item.valor_original)}</td>
+                          <td className="px-3 py-3.5 text-right font-semibold tabular-nums text-emerald-300">{formatarMoedaFinanceira(item.valor_atualizado)}</td>
                           <td className="px-3 py-3.5 font-mono text-xs text-slate-400">{item.emusys_matricula_id}</td>
                           <td className="px-4 py-3.5 text-right">
                             <button
@@ -687,11 +687,11 @@ function FaturaDetailDialog({
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-slate-800 bg-slate-950/45 p-3">
                   <p className="text-[10px] uppercase tracking-wide text-slate-500">Original</p>
-                  <p className="mt-1 font-semibold text-slate-100">{formatCurrency(item.valor_original)}</p>
+                  <p className="mt-1 font-semibold text-slate-100">{formatarMoedaFinanceira(item.valor_original)}</p>
                 </div>
                 <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
                   <p className="text-[10px] uppercase tracking-wide text-emerald-400/70">Atualizado</p>
-                  <p className="mt-1 font-semibold text-emerald-300">{formatCurrency(item.valor_atualizado)}</p>
+                  <p className="mt-1 font-semibold text-emerald-300">{formatarMoedaFinanceira(item.valor_atualizado)}</p>
                 </div>
                 <div className="col-span-2 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 sm:col-span-1">
                   <p className="text-[10px] uppercase tracking-wide text-rose-400/70">Em atraso</p>
