@@ -609,10 +609,7 @@ test('v3 falha fechado para status desconhecido e vazio sem reclassificar a fatu
         `status nao suportado ${scenario.status || 'vazio'}`,
       );
       assert.equal(result.status, 'error');
-      assert.deepEqual(result.error, {
-        code: 'unsupported_invoice_status',
-        message: 'unsupported_invoice_status',
-      });
+      assert.equal(result.error, 'unsupported_invoice_status');
       assert.equal(result.operational.collection_allowed, false);
       assert.equal(result.operational.collection_scope, 'blocked');
       assert.deepEqual(result.operational.block_reasons, []);
@@ -649,10 +646,7 @@ test('v3 preserva stale antes do erro de status nao suportado', { timeout: 90_00
 
     const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'stale antes de status nao suportado');
     assert.equal(result.status, 'stale');
-    assert.deepEqual(result.error, {
-      code: 'unsupported_invoice_status',
-      message: 'unsupported_invoice_status',
-    });
+    assert.equal(result.error, 'unsupported_invoice_status');
     assert.equal(result.operational.collection_allowed, false);
     assert.equal(result.operational.collection_scope, 'blocked');
     assert.deepEqual(result.operational.block_reasons, ['stale_competencia']);

@@ -428,10 +428,7 @@ begin
     ),
     'status', eg.status,
     'error', case
-      when ri.unsupported_invoice_status_count > 0 then jsonb_build_object(
-        'code', 'unsupported_invoice_status',
-        'message', 'unsupported_invoice_status'
-      )
+      when ri.unsupported_invoice_status_count > 0 then 'unsupported_invoice_status'
       else null
     end,
     'fonte', 'sync_run_items',
