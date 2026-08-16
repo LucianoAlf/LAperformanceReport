@@ -96,6 +96,10 @@ verify_jwt = false
 # Integracao servidor-servidor: autentica o segredo dedicado no proprio codigo.
 verify_jwt = false
 
+[functions.sync-faturas-emusys]
+# Publicacao financeira aceita somente JWT tecnico ou service_role validado pelo gateway.
+verify_jwt = true
+
 [functions.sync-professor-disciplinas-emusys]
 # Cron usa segredo dedicado; navegador valida JWT e permissao dentro da funcao.
 verify_jwt = false

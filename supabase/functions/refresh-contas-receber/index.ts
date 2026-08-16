@@ -46,11 +46,20 @@ function currentCompetenciaBrt() {
 
 function namedCompetencia(value: unknown) {
   const normalized = String(value ?? '').trim().toLowerCase();
-  if (normalized !== 'atual' && normalized !== 'anterior') return validateCompetencia(value);
+  if (!['atual', 'anterior', 'seguinte'].includes(normalized)) return validateCompetencia(value);
   const current = currentCompetenciaBrt();
   const date = new Date(Date.UTC(current.year, current.month - 1, 1));
   if (normalized === 'anterior') date.setUTCMonth(date.getUTCMonth() - 1);
+  if (normalized === 'seguinte') date.setUTCMonth(date.getUTCMonth() + 1);
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-01`;
+}
+
+function parseCompetencias(body: Record<string, unknown>) {
+  const requested = Array.isArray(body.competencias)
+    ? body.competencias
+    : (body.competencia != null ? [body.competencia] : []);
+  if (requested.length > 24) throw new Error('informe no maximo 24 competencias');
+  return [...new Set(requested.map(namedCompetencia))].sort();
 }
 
 serve(async (request) => {
@@ -63,50 +72,45 @@ serve(async (request) => {
 
   try {
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
-    const requested = Array.isArray(body.competencias)
-      ? body.competencias
-      : [body.competencia];
-    if (requested.length < 1 || requested.length > 2 || requested.some((item) => item == null)) {
-      return json({ success: false, erro: 'informe uma competencia ou atual+anterior' }, 400);
+    const competencias = parseCompetencias(body);
+    const includeBacklog = body.include_backlog !== false;
+    if (competencias.length === 0 && !includeBacklog) {
+      return json({ success: false, erro: 'informe competencias ou include_backlog' }, 400);
     }
-    const competencias = [...new Set(requested.map(namedCompetencia))];
-    const resultados = [];
 
-    for (const competencia of competencias) {
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/sync-faturas-emusys`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          competencia,
-          trigger_source: competencias.length > 1 ? 'cron' : 'internal_refresh',
-        }),
-      });
-      const payload = await response.json().catch(() => ({ erro: `HTTP ${response.status}` }));
-      const snapshotComplete = payload.resultado?.snapshot_complete === true;
-      resultados.push({ competencia, ...payload, snapshot_complete: snapshotComplete });
-      if (!response.ok || !payload.ok || !payload.sync_run_id || !snapshotComplete) {
-        return json({
-          success: false,
-          erro: `refresh falhou na competencia ${competencia}`,
-          sync_run_id: payload.sync_run_id ?? null,
-          resultados,
-        }, response.status === 409 ? 409 : 502);
-      }
-    }
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/sync-faturas-emusys`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        mode: 'enqueue_and_work',
+        competencias,
+        include_backlog: includeBacklog,
+        trigger_source: 'internal_refresh',
+      }),
+    });
+    const payload = await response.json().catch(() => ({ erro: `HTTP ${response.status}` })) as Record<string, unknown>;
+    const success = response.ok && payload.ok === true;
 
     return json({
-      success: true,
-      sync_run_id: resultados.length === 1 ? resultados[0].sync_run_id : null,
-      snapshot_complete: resultados.length === 1 ? resultados[0].snapshot_complete : null,
-      sync_run_ids: resultados.map((item) => item.sync_run_id),
-      resultados,
-    });
+      ...payload,
+      success,
+      queue_status: payload.queue_status ?? 'error',
+      next_attempt_at: payload.next_attempt_at ?? null,
+      sync_run_id: payload.sync_run_id ?? null,
+      snapshot_complete: payload.snapshot_complete === true,
+    }, response.status);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('[refresh-contas-receber]', error);
-    return json({ success: false, erro: message }, /competencia/i.test(message) ? 400 : 500);
+    return json({
+      success: false,
+      queue_status: 'error',
+      next_attempt_at: null,
+      sync_run_id: null,
+      erro: message,
+    }, /competencia|no maximo 24/i.test(message) ? 400 : 500);
   }
 });

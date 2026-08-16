@@ -49,14 +49,36 @@ test('publicacao atomica aplica sanidade e override auditado somente por service
   assert.match(sql, /source_missing_reason/i);
 });
 
-test('sync coleta tres unidades antes de publicar e registra falha fora da publicacao', () => {
+test('sync publica tres unidades somente depois de reclamar um job da fila', () => {
   const source = readIfPresent(syncUrl);
 
+  assert.match(source, /enqueue_financeiro_sync_competencias/);
+  assert.match(source, /enqueue_financeiro_sync_backlog/);
+  assert.match(source, /claim_financeiro_sync_job/);
   assert.match(source, /start_financeiro_sync_run/);
   assert.match(source, /publish_financeiro_sync_run/);
   assert.match(source, /fail_financeiro_sync_run/);
+  assert.match(source, /retry_financeiro_sync_job/);
+  assert.match(source, /complete_financeiro_sync_job/);
+  assert.match(source, /fail_financeiro_sync_job/);
   assert.match(source, /Object\.entries\(UNIDADES\)/);
   assert.doesNotMatch(source, /\.from\('emusys_faturas'\)[\s\S]{0,160}\.upsert\(/);
+});
+
+test('probe de uma unidade e read-only e exige service_role', () => {
+  const source = readIfPresent(syncUrl);
+  const probeStart = source.indexOf('async function executarProbe');
+  const probeEnd = source.indexOf('async function processarQueueJob');
+  const probeSource = source.slice(probeStart, probeEnd);
+
+  assert.ok(probeStart >= 0 && probeEnd > probeStart, 'ramo probe deve ser isolado');
+  assert.match(source, /mode\s*===\s*'probe'/);
+  assert.match(source, /probe exige service_role/i);
+  assert.match(probeSource, /coletarFaturasUnidade/);
+  assert.doesNotMatch(
+    probeSource,
+    /start_financeiro_sync_run|publish_financeiro_sync_run|claim_financeiro_sync_job/,
+  );
 });
 
 test('coletor compartilhado torna paginacao, ids, datas, rate limit e 429 testaveis', () => {
@@ -73,24 +95,27 @@ test('coletor compartilhado torna paginacao, ids, datas, rate limit e 429 testav
   assert.match(source, /duplicad/i);
 });
 
-test('refresh interno retorna run e export le somente o snapshot completo exato', () => {
+test('refresh interno enfileira backlog sem limite artificial de duas competencias', () => {
   assert.ok(existsSync(refreshUrl), 'endpoint refresh-contas-receber deve existir');
   const refresh = readIfPresent(refreshUrl);
   const exporter = readIfPresent(exportUrl);
 
   assert.match(refresh, /sync_run_id/);
   assert.match(refresh, /competencia/i);
+  assert.match(refresh, /include_backlog/i);
+  assert.doesNotMatch(refresh, /requested\.length\s*>\s*2(?!\d)/);
   assert.match(exporter, /sync_run_id/);
   assert.match(exporter, /snapshot_complete/);
   assert.match(exporter, /\.from\('sync_run_items'\)/);
   assert.doesNotMatch(exporter, /\.from\('emusys_faturas'\)/);
 });
 
-test('refresh de uma competencia declara snapshot completo no contrato de resposta', () => {
+test('refresh propaga estado da fila e nao chama retry_wait de sucesso', () => {
   const refresh = readIfPresent(refreshUrl);
 
-  assert.match(refresh, /snapshot_complete/);
-  assert.match(refresh, /resultado[^\n]+snapshot_complete|snapshot_complete[^\n]+resultado/);
+  assert.match(refresh, /queue_status/);
+  assert.match(refresh, /next_attempt_at/);
+  assert.match(refresh, /payload\.ok\s*===\s*true/);
 });
 
 test('export publica o ultimo run completo e honra require_latest', () => {
@@ -122,4 +147,5 @@ test('cron atual e anterior e endpoints internos usam Vault sem segredo versiona
   assert.match(sql, /competencias[^\n]+atual[^\n]+anterior/i);
   assert.doesNotMatch(sql, /SYNC_FATURAS_ADMIN_TOKEN\s*[:=]\s*['"][^'"]+/i);
   assert.match(config, /\[functions\.refresh-contas-receber\]/);
+  assert.match(config, /\[functions\.sync-faturas-emusys\][\s\S]*?verify_jwt\s*=\s*true/i);
 });
