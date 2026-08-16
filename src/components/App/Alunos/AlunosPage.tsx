@@ -43,6 +43,13 @@ import {
   buscarKpisTurmasCanonicos,
   calcularTotaisKpisTurmasCanonicos,
 } from '@/lib/turmasKpisCanonicos';
+import {
+  chaveInadimplenciaMatricula,
+  indexarInadimplenciaPorMatricula,
+  INADIMPLENCIA_CANONICA_LOADING,
+  normalizarInadimplenciaCanonica,
+  type InadimplenciaCanonicaState,
+} from '@/lib/inadimplenciaCanonica';
 // Interfaces
 export interface Aluno {
   id: number;
@@ -107,9 +114,11 @@ export interface Aluno {
   photo_url?: string | null;
   instagram?: string | null;
   emusys_matricula_id?: string | null;
-  // Inadimplencia vinda da API Emusys via jornada (nao confundir com status_pagamento, que e manual)
+  // Inadimplencia da leitura canonica por fatura (nao confundir com status_pagamento manual).
   inadimplente_emusys?: boolean;
   _inadimplencia_atualizado_em?: string | null;
+  _inadimplencia_valor_atualizado?: number;
+  _inadimplencia_total_faturas?: number;
   anamnese_diagnosticos?: string[];
 }
 
@@ -272,6 +281,9 @@ export function AlunosPage() {
   // Estados principais
   const [tabAtiva, setTabAtiva] = useState<TabAtiva>('lista');
   const [alunos, setAlunos] = useState<Aluno[]>([]);
+  const [inadimplenciaCanonica, setInadimplenciaCanonica] = useState<InadimplenciaCanonicaState>(
+    INADIMPLENCIA_CANONICA_LOADING,
+  );
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [kpis, setKpis] = useState<KPIsAlunos>({
     totalAtivos: 0,
@@ -584,7 +596,15 @@ export function AlunosPage() {
 
     // Disparar tudo em paralelo: alunos (paginado), turmas operacionais, KPI canônico,
     // anotações, turmas explícitas, opções e LTV.
-    const [alunosR, alunosSaidaR, turmasViewR, kpisTurmasR, anotacoesR, ...outrosResults] = await Promise.all([
+    const [
+      alunosR,
+      alunosSaidaR,
+      turmasViewR,
+      kpisTurmasR,
+      anotacoesR,
+      inadimplenciaR,
+      ...outrosResults
+    ] = await Promise.all([
       fetchAllAlunos(buildMainQuery),
       buildSaidaQuery ? fetchAllAlunos(buildSaidaQuery) : Promise.resolve({ data: [] as any[], error: null }),
       qTurmasView,
@@ -594,6 +614,9 @@ export function AlunosPage() {
         .select('aluno_id, texto, categoria, created_at')
         .eq('resolvido', false)
         .order('created_at', { ascending: false }),
+      supabase.rpc('get_inadimplencia_canonica', {
+        p_unidade_id: unidadeAtual && unidadeAtual !== 'todos' ? unidadeAtual : null,
+      }),
       // Turmas explícitas
       carregarTurmasExplicitas(),
       // Opções (selects)
@@ -609,6 +632,11 @@ export function AlunosPage() {
 
     // ── FASE 2: processar alunos ──
     const { data: alunosRaw, error } = alunosR;
+    const inadimplenciaAtual = normalizarInadimplenciaCanonica(
+      inadimplenciaR.data,
+      inadimplenciaR.error,
+    );
+    setInadimplenciaCanonica(inadimplenciaAtual);
 
     // Mesclar alunos por data_saida (sem duplicatas)
     let alunosMesclados = alunosRaw ?? [];
@@ -751,67 +779,37 @@ export function AlunosPage() {
 
       alunosComSegundoCurso.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
 
-      // Merge da inadimplencia do Emusys, lida da JORNADA (so leitura -- nao altera
-      // status_pagamento nem valor_parcela). Match por (unidade_id, emusys_matricula_id)
-      // -- IDs do Emusys sao por unidade, nunca globais.
-      //
-      // Fonte trocada de inadimplencia_emusys_cache para aluno_jornada_matricula_disciplina
-      // em 2026-07-28: os 9 crons daquele cache nunca funcionaram (mandavam so x-sync-token
-      // contra uma edge com verify_jwt=true -> 401 no gateway do Supabase, antes do codigo
-      // rodar), entao ele estava congelado em 15/07 e Campo Grande nunca teve uma linha
-      // sequer. As 682 linhas que existiam vieram de cliques manuais no botao "Atualizar
-      // agora", que mandava o JWT do usuario. A jornada carrega o MESMO campo da MESMA API
-      // (contrato_atual.inadimplente), gravado pelo sync-matriculas-emusys, cujo cron funciona.
-      //
-      // A jornada tem 1 linha por DISCIPLINA (matricula multi-instrumento gera varias com o
-      // mesmo emusys_matricula_id) e o campo de contrato se repete identico em todas --
-      // por isso a primeira linha de cada matricula basta.
-      const unidadesEnvolvidas = [...new Set(alunosComSegundoCurso.map(a => a.unidade_id).filter(Boolean))];
-      const inadimplenciaMap = new Map<string, { inadimplente: boolean; atualizado_em: string }>();
-      if (unidadesEnvolvidas.length > 0) {
-        // Paginado (mesmo padrão de fetchAllAlunos) -- teto de 1000 linhas por resposta
-        // do PostgREST truncaria silenciosamente com as 3 unidades juntas.
-        const linhas: any[] = [];
-        let offset = 0;
-        let temMais = true;
-        while (temMais) {
-          const { data: pagina } = await supabase
-            .from('aluno_jornada_matricula_disciplina')
-            .select('unidade_id, emusys_matricula_id, inadimplente_emusys, ultima_sincronizacao_emusys')
-            .in('unidade_id', unidadesEnvolvidas)
-            .eq('status_matricula', 'ativa')
-            .not('inadimplente_emusys', 'is', null)
-            .range(offset, offset + PAGE_SIZE - 1);
-          if (pagina) linhas.push(...pagina);
-          temMais = pagina?.length === PAGE_SIZE;
-          offset += PAGE_SIZE;
-        }
-        linhas.forEach((row: any) => {
-          const chave = `${row.unidade_id}|${row.emusys_matricula_id}`;
-          if (inadimplenciaMap.has(chave)) return;
-          inadimplenciaMap.set(chave, {
-            inadimplente: row.inadimplente_emusys === true,
-            atualizado_em: row.ultima_sincronizacao_emusys,
-          });
-        });
-      }
+      // A RPC canonica ja aplicou frescor, reconciliacao, dedupe e juros. Aqui so
+      // indexamos por (unidade, matricula Emusys) para ligar as faturas aos alunos.
+      const inadimplenciaMap = indexarInadimplenciaPorMatricula(inadimplenciaAtual);
+      const leituraCompleta = inadimplenciaAtual.status === 'ok';
 
       const alunosComInadimplenciaEmusys = alunosComSegundoCurso.map(aluno => {
-        const chavePrincipal = aluno.emusys_matricula_id ? `${aluno.unidade_id}|${aluno.emusys_matricula_id}` : null;
+        const chavePrincipal = aluno.emusys_matricula_id
+          ? chaveInadimplenciaMatricula(aluno.unidade_id, aluno.emusys_matricula_id)
+          : null;
         const principal = chavePrincipal ? inadimplenciaMap.get(chavePrincipal) : undefined;
 
         const outrosCursosComInadimplencia = aluno.outros_cursos?.map(oc => {
-          const chaveOc = oc.emusys_matricula_id ? `${oc.unidade_id}|${oc.emusys_matricula_id}` : null;
+          const chaveOc = oc.emusys_matricula_id
+            ? chaveInadimplenciaMatricula(oc.unidade_id, oc.emusys_matricula_id)
+            : null;
+          const inadimplenciaOutroCurso = chaveOc ? inadimplenciaMap.get(chaveOc) : undefined;
           return {
             ...oc,
-            inadimplente_emusys: (chaveOc ? inadimplenciaMap.get(chaveOc) : undefined)?.inadimplente,
+            inadimplente_emusys: inadimplenciaOutroCurso ? true : (leituraCompleta ? false : undefined),
+            _inadimplencia_atualizado_em: inadimplenciaOutroCurso?.ultimoSync ?? null,
+            _inadimplencia_valor_atualizado: inadimplenciaOutroCurso?.valorAtualizado ?? 0,
+            _inadimplencia_total_faturas: inadimplenciaOutroCurso?.faturas ?? 0,
           };
         });
 
         return {
           ...aluno,
-          inadimplente_emusys: principal?.inadimplente,
-          _inadimplencia_atualizado_em: principal?.atualizado_em ?? null,
+          inadimplente_emusys: principal ? true : (leituraCompleta ? false : undefined),
+          _inadimplencia_atualizado_em: principal?.ultimoSync ?? null,
+          _inadimplencia_valor_atualizado: principal?.valorAtualizado ?? 0,
+          _inadimplencia_total_faturas: principal?.faturas ?? 0,
           outros_cursos: outrosCursosComInadimplencia,
         };
       });
@@ -1249,7 +1247,7 @@ export function AlunosPage() {
       });
     }
 
-    // Filtro por inadimplencia ao vivo (Emusys) -- independente do status_pagamento manual
+    // Filtro pela leitura canonica de faturas -- independente do status_pagamento manual.
     if (filtros.inadimplente_emusys_live) {
       resultado = resultado.filter(a => {
         if (String(a.status || '').toLowerCase() !== 'ativo') return false;
@@ -1927,6 +1925,7 @@ export function AlunosPage() {
             <TabelaAlunos
               alunos={alunosComTurma}
               todosAlunos={alunos}
+              inadimplenciaCanonica={inadimplenciaCanonica}
               filtros={filtros}
               setFiltros={setFiltros}
               limparFiltros={limparFiltros}
