@@ -4,6 +4,7 @@ import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
 import { prepararExportacaoInadimplenciaCanonica } from './inadimplenciaCanonicaExport.ts';
 
 const UNIDADE_CG = '11111111-1111-4111-8111-111111111111';
+const UNIDADE_REC = '22222222-2222-4222-8222-222222222222';
 const AGORA_MS = Date.parse('2026-08-16T12:00:00.000Z');
 const FRESH_UNTIL = '2026-08-16T13:00:00.000Z';
 
@@ -262,6 +263,8 @@ Deno.test('manifesto partial publica metadados completos e hash estavel para qua
     emusys_fatura_id: '9007199254740999',
     emusys_matricula_id: '9007199254741001',
     emusys_contrato_id: null,
+    aluno_id_canonico: null,
+    contact_resolution_status: 'missing',
     valor_original: 100,
     valor_atualizado: 102.37,
   });
@@ -352,6 +355,26 @@ Deno.test('item fora do universo confirmado nunca e exportado', async () => {
       () => prepararExportacaoInadimplenciaCanonica(payload({
         items: [item(alteracao)],
       }), contexto()),
+      Error,
+      'leitura canonica indisponivel',
+    );
+  }
+});
+
+Deno.test('escopo de unidade, totais e resolucao de contato precisam ser coerentes', async () => {
+  const invalidos = [
+    payload({ unidade_id: UNIDADE_REC }),
+    payload({ items: [item({ unidade_id: UNIDADE_REC })] }),
+    payload({ totals: { ...payload().totals as Record<string, unknown>, total_atualizado: 1 } }),
+    payload({
+      status: 'partial',
+      reconciliation: reconciliation({ status: 'pending', contact_resolution_pending_count: 1 }),
+    }),
+  ];
+
+  for (const invalido of invalidos) {
+    await assertRejects(
+      () => prepararExportacaoInadimplenciaCanonica(invalido, contexto()),
       Error,
       'leitura canonica indisponivel',
     );

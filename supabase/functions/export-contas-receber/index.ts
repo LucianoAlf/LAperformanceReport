@@ -252,7 +252,7 @@ serve(async (request) => {
       ? 400
       : (/nao encontrado|nenhum snapshot/i.test(message)
         ? 404
-        : (/snapshot live completo|ultimo snapshot completo|snapshot stale|leitura canonica indisponivel/i.test(message) ? 409 : 500));
+        : (/snapshot live completo|ultimo snapshot completo|snapshot stale|leitura canonica indisponivel|identificador numerico inseguro/i.test(message) ? 409 : 500));
     return json({ success: false, erro: message }, status);
   }
 });
