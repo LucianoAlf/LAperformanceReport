@@ -6,10 +6,10 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const migrationPath = path.join(
-  root,
-  'supabase/migrations/20260816000731_inadimplencia_canonica_frescor.sql',
-);
+const migrationPaths = [
+  'supabase/migrations/20260816003732_inadimplencia_canonica_frescor.sql',
+  'supabase/migrations/20260816004257_inadimplencia_canonica_dedupe_global.sql',
+].map((migration) => path.join(root, migration));
 const UNIT_A = '11111111-1111-1111-1111-111111111111';
 const UNIT_B = '22222222-2222-2222-2222-222222222222';
 const AUTH_UID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -73,6 +73,18 @@ function callAs(container, role, unitId, asOfDate, authUnitId = UNIT_A) {
     set app.test_unidade_id = '${authUnitId}';
     select public.get_inadimplencia_canonica(
       '${unitId}'::uuid,
+      date '${asOfDate}'
+    )::text;
+  `);
+}
+
+function callAllAs(container, role, asOfDate) {
+  return psql(container, `
+    set role ${role};
+    set app.test_role = '${role}';
+    set app.test_uid = '${AUTH_UID}';
+    select public.get_inadimplencia_canonica(
+      null,
       date '${asOfDate}'
     )::text;
   `);
@@ -161,7 +173,9 @@ const fixtureSchema = `
 test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e autorizacao', {
   timeout: 90_000,
 }, async (t) => {
-  assert.equal(fs.existsSync(migrationPath), true, 'migration do Checkpoint 2 nao existe');
+  for (const migrationPath of migrationPaths) {
+    assert.equal(fs.existsSync(migrationPath), true, `migration do Checkpoint 2 nao existe: ${migrationPath}`);
+  }
 
   const dockerInfo = docker(['info'], undefined, 5_000);
   const dockerVersion = docker(
@@ -192,7 +206,7 @@ test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e au
   try {
     await waitForPostgres(container);
 
-    const migration = fs.readFileSync(migrationPath, 'utf8');
+    const migration = migrationPaths.map((migrationPath) => fs.readFileSync(migrationPath, 'utf8')).join('\n');
     const setup = psql(container, `${fixtureSchema}\n${migration}`);
     assertPsql(setup, 'fixture minima + migration do Checkpoint 2');
     const asOfDate = currentDate(container);
@@ -251,6 +265,53 @@ test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e au
       [['10000000-0000-0000-0000-000000000001', 'aberta', false]],
     );
     assert.equal(fresh.items[0].data_vencimento <= fresh.as_of_date, true);
+
+    seed(container, `
+      delete from public.sync_run_items;
+      delete from public.sync_runs;
+
+      insert into public.sync_runs (
+        id, competencia, run_type, status, snapshot_complete,
+        unidades_concluidas, completed_at, stale_after
+      ) values
+        (
+          '00000000-0000-0000-0000-000000000011', ${month},
+          'live', 'succeeded', true, 3,
+          now() - interval '2 hours', now() - interval '90 minutes'
+        ),
+        (
+          '00000000-0000-0000-0000-000000000012', ${month},
+          'live', 'succeeded', true, 3,
+          now(), now() + interval '1 hour'
+        );
+
+      insert into public.sync_run_items (
+        canonical_fatura_id, unidade_id, unidade_codigo, competencia, run_id,
+        emusys_fatura_id, emusys_matricula_id, emusys_contrato_id,
+        emusys_student_id, descricao, status, data_vencimento, data_pagamento,
+        valor_original, desconto_condicional, juros_e_multa, source_missing
+      ) values
+        (
+          '10000000-0000-0000-0000-000000000011', '${UNIT_A}', 'CG',
+          ${month}, '00000000-0000-0000-0000-000000000011',
+          1011, 2011, 3011, 4011, 'Aberta no snapshot antigo', 'aberta',
+          ${day} - 10, null, 100, 0, 0, false
+        ),
+        (
+          '10000000-0000-0000-0000-000000000011', '${UNIT_A}', 'CG',
+          ${month}, '00000000-0000-0000-0000-000000000012',
+          1011, 2011, 3011, 4011, 'Paga no snapshot mais novo', 'paga',
+          ${day} - 10, ${day} - 1, 100, 0, 0, false
+        );
+    `, 'cenario 1b: snapshot novo quitou a fatura antiga');
+
+    const paidInLatest = jsonFrom(
+      callAs(container, 'authenticated', UNIT_A, asOfDate),
+      'cenario 1b: competencia quitada sai da janela necessaria',
+    );
+    assert.equal(paidInLatest.status, 'ok');
+    assert.equal(paidInLatest.freshness.competencias_necessarias, 0);
+    assert.deepEqual(paidInLatest.items, []);
 
     seed(container, `
       delete from public.sync_run_items;
@@ -394,6 +455,70 @@ test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e au
     assert.equal(interest.items[0].mora_pct_mes, 0.01);
     assert.equal(interest.items[0].valor_atualizado, 103);
     assert.equal(interest.totals.total_atualizado, 103);
+
+    seed(container, `
+      delete from public.sync_run_items;
+      delete from public.sync_runs;
+
+      insert into public.sync_runs (
+        id, competencia, run_type, status, snapshot_complete,
+        unidades_concluidas, completed_at, stale_after
+      ) values (
+        '00000000-0000-0000-0000-000000000006',
+        ${month},
+        'live', 'succeeded', true, 3, now(), now() + interval '1 hour'
+      );
+
+      insert into public.sync_run_items (
+        canonical_fatura_id, unidade_id, unidade_codigo, competencia, run_id,
+        emusys_fatura_id, emusys_matricula_id, emusys_contrato_id,
+        emusys_student_id, descricao, status, data_vencimento, valor_original,
+        desconto_condicional, juros_e_multa, source_missing
+      ) values (
+        '60000000-0000-0000-0000-000000000001', '${UNIT_A}', 'CG',
+        ${month},
+        '00000000-0000-0000-0000-000000000006',
+        1601, 2601, 3601, 4601, 'Duplicata global A', 'aberta',
+        ${day} - 2, 100, 0, 0, false
+      ), (
+        '60000000-0000-0000-0000-000000000001', '${UNIT_B}', 'REC',
+        ${month},
+        '00000000-0000-0000-0000-000000000006',
+        1602, 2602, 3602, 4602, 'Duplicata global B', 'aberta',
+        ${day} - 2, 100, 0, 0, false
+      );
+    `, 'cenario 5: duplicata global entre unidades');
+
+    const crossUnitDuplicate = jsonFrom(
+      callAllAs(container, 'service_role', asOfDate),
+      'cenario 5: dedupe global entre unidades',
+    );
+    assert.equal(crossUnitDuplicate.status, 'incomplete');
+    assert.equal(crossUnitDuplicate.reconciliation.duplicate_fatura_count, 1);
+    assert.equal(crossUnitDuplicate.items.length, 1);
+    assert.deepEqual(
+      crossUnitDuplicate.reconciliation.duplicate_invoices[0].unidade_ids.sort(),
+      [UNIT_A, UNIT_B].sort(),
+    );
+
+    seed(container, `
+      update public.sync_run_items
+      set source_missing = true,
+          source_missing_reason = 'conflito confirmado e ausente',
+          source_missing_detected_at = now()
+      where canonical_fatura_id = '60000000-0000-0000-0000-000000000001'
+        and unidade_id = '${UNIT_B}';
+    `, 'cenario 6: conflito confirmado e source_missing');
+
+    const confirmedAndMissing = jsonFrom(
+      callAllAs(container, 'service_role', asOfDate),
+      'cenario 6: conflito confirmado e source_missing',
+    );
+    assert.equal(confirmedAndMissing.status, 'incomplete');
+    assert.equal(confirmedAndMissing.reconciliation.duplicate_fatura_count, 1);
+    assert.equal(confirmedAndMissing.reconciliation.source_missing_count, 1);
+    assert.equal(confirmedAndMissing.reconciliation.unknown_invoices.length, 1);
+    assert.deepEqual(confirmedAndMissing.items, []);
 
     seed(container, `
       delete from public.sync_run_items;

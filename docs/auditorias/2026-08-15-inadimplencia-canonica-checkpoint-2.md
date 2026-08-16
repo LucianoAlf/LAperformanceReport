@@ -28,6 +28,18 @@ caller que possa ampliar essa janela.
 
 ## Evidência
 
+As duas migrations foram aplicadas e alinhadas ao ledger remoto, sem usar
+`--include-all`:
+
+- `20260816003732_inadimplencia_canonica_frescor`;
+- `20260816004257_inadimplencia_canonica_dedupe_global`.
+
+A segunda migration mantém a primeira imutável e corrige o grain global de
+`canonical_fatura_id`: duplicatas entre unidades são consolidadas e
+diagnosticadas. Se a mesma fatura aparecer simultaneamente confirmada e como
+`source_missing`, ela fica somente em `unknown_invoices` e não entra nos
+totais nem em `items`.
+
 `tests/inadimplenciaCanonicaPostgres.test.mjs` aplicou a migration em uma
 fixture PostgreSQL descartável e comprovou:
 
@@ -35,13 +47,24 @@ fixture PostgreSQL descartável e comprovou:
 2. reconciliação pendente para `source_missing`;
 3. bloqueio de snapshot velho;
 4. cálculo `100 * (1 + 0,02 + 0,01 * 30/30) = 103`;
-5. bloqueio de usuário autenticado em outra unidade e leitura de
+5. deduplicação global entre unidades;
+6. conflito entre linha confirmada e `source_missing` sem cobrança;
+7. competência quitada no snapshot mais novo deixa a janela obrigatória;
+8. bloqueio de usuário autenticado em outra unidade e leitura de
    `service_role`.
 
 O teste de contrato também protege invoice grain, frescor, juros, ACL e a
 fronteira das RPCs operacionais da Sol. O teste foi executado com
 `--test-isolation=none` por uma limitação intermitente do runner Node no
 Windows; a fixture PostgreSQL passou 1/1.
+
+No remoto, a assinatura efetiva é `get_inadimplencia_canonica(uuid,date)`,
+com default de data em `America/Sao_Paulo`, `SECURITY DEFINER`, execução apenas
+para `authenticated` e `service_role` e sem permissão para `anon`. A leitura
+real das três unidades retornou `status = 'stale'` e `items = []`; portanto,
+nenhum snapshot antigo foi exposto como lista de cobrança. Os avisos dos
+advisors do Supabase são informativos e preexistentes, sem alerta novo ligado
+a estas funções.
 
 ## Escopo ainda não concluído
 
