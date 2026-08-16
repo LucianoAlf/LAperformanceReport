@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const migrationPath = path.join(
   root,
-  'supabase/migrations/20260816010000_financeiro_sync_queue.sql',
+  'supabase/migrations/20260816013455_financeiro_sync_queue.sql',
 );
 
 const WORKER_A = 'aaaaaaaa-1111-1111-1111-111111111111';

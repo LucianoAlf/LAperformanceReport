@@ -12,6 +12,11 @@ const migrationNames = [
   '20260815224037_sol_caixa_inadimplentes_v3_juros_faixas.sql',
   '20260815231546_sol_caixa_inadimplentes_v4_sync_run_items.sql',
 ];
+const ledgerAlignedNames = [
+  '20260816013455_financeiro_sync_queue.sql',
+  '20260816013502_inadimplencia_canonica_quarentena_identidade.sql',
+  '20260816013512_financeiro_faturas_relatorios_canonicos.sql',
+];
 
 test('checkpoint 1 versions all four remotely applied delinquency migrations', () => {
   for (const name of migrationNames) {
@@ -29,6 +34,20 @@ test('restored migration bytes match the remote migration ledger', () => {
   for (const [name, hash] of Object.entries(expected)) {
     const actual = crypto.createHash('md5').update(fs.readFileSync(path.join(migrationDir, name))).digest('hex');
     assert.equal(actual, hash, `migration drift: ${name}`);
+  }
+});
+
+test('financial canonical migrations use the versions recorded by the remote ledger', () => {
+  for (const name of ledgerAlignedNames) {
+    assert.ok(fs.existsSync(path.join(migrationDir, name)), `missing ledger-aligned migration: ${name}`);
+  }
+
+  for (const provisionalName of [
+    '20260816010000_financeiro_sync_queue.sql',
+    '20260816020000_inadimplencia_canonica_quarentena_identidade.sql',
+    '20260816030000_financeiro_faturas_relatorios_canonicos.sql',
+  ]) {
+    assert.equal(fs.existsSync(path.join(migrationDir, provisionalName)), false, `provisional migration remained: ${provisionalName}`);
   }
 });
 

@@ -13,7 +13,7 @@ const farmerDashboard = readFileSync(
 );
 const financeiroClient = readFileSync('src/lib/financeiroFaturasEmusys.ts', 'utf8');
 const modalRelatorio = readFileSync('src/components/App/Administrativo/ModalRelatorio.tsx', 'utf8');
-const migrationPath = 'supabase/migrations/20260816030000_financeiro_faturas_relatorios_canonicos.sql';
+const migrationPath = 'supabase/migrations/20260816013512_financeiro_faturas_relatorios_canonicos.sql';
 
 test('exportacao de inadimplencia consome a RPC canonica e bloqueia leitura nao confiavel', () => {
   assert.match(exportador, /modo\s*===\s*['"]inadimplencia['"]/);

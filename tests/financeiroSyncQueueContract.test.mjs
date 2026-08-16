@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const migrationUrl = new URL(
-  '../supabase/migrations/20260816010000_financeiro_sync_queue.sql',
+  '../supabase/migrations/20260816013455_financeiro_sync_queue.sql',
   import.meta.url,
 );
 
@@ -75,4 +75,3 @@ test('migration neutraliza somente os tres crons diretos e nao liga outro', () =
   assert.match(source, /cron\.unschedule/i);
   assert.doesNotMatch(source, /cron\.schedule\s*\(/i);
 });
-

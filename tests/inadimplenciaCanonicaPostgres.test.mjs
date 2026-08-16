@@ -9,8 +9,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const migrationPaths = [
   'supabase/migrations/20260816003732_inadimplencia_canonica_frescor.sql',
   'supabase/migrations/20260816004257_inadimplencia_canonica_dedupe_global.sql',
-  'supabase/migrations/20260816020000_inadimplencia_canonica_quarentena_identidade.sql',
-  'supabase/migrations/20260816030000_financeiro_faturas_relatorios_canonicos.sql',
+  'supabase/migrations/20260816013502_inadimplencia_canonica_quarentena_identidade.sql',
+  'supabase/migrations/20260816013512_financeiro_faturas_relatorios_canonicos.sql',
 ].map((migration) => path.join(root, migration));
 const UNIT_A = '11111111-1111-1111-1111-111111111111';
 const UNIT_B = '22222222-2222-2222-2222-222222222222';

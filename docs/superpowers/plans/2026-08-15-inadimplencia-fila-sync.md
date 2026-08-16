@@ -84,7 +84,7 @@ git commit -m "fix(financeiro): tornar 429 e ids opcionais auditaveis"
 ### Task 2: Fila durável e backlog canônico
 
 **Files:**
-- Create: `supabase/migrations/20260816010000_financeiro_sync_queue.sql`
+- Create: `supabase/migrations/20260816013455_financeiro_sync_queue.sql`
 - Create: `tests/financeiroSyncQueuePostgres.test.mjs`
 - Create: `tests/financeiroSyncQueueContract.test.mjs`
 - Modify: `package.json`
@@ -179,7 +179,7 @@ Expected: PASS, incluindo backlog de junho e ACL.
 - [ ] **Step 5: commit**
 
 ```powershell
-git add -- package.json supabase/migrations/20260816010000_financeiro_sync_queue.sql tests/financeiroSyncQueueContract.test.mjs tests/financeiroSyncQueuePostgres.test.mjs
+git add -- package.json supabase/migrations/20260816013455_financeiro_sync_queue.sql tests/financeiroSyncQueueContract.test.mjs tests/financeiroSyncQueuePostgres.test.mjs
 git commit -m "feat(financeiro): adicionar fila duravel de sincronizacao"
 ```
 

@@ -8,7 +8,7 @@ const root = process.cwd();
 const migrations = [
   path.join(root, 'supabase', 'migrations', '20260816003732_inadimplencia_canonica_frescor.sql'),
   path.join(root, 'supabase', 'migrations', '20260816004257_inadimplencia_canonica_dedupe_global.sql'),
-  path.join(root, 'supabase', 'migrations', '20260816020000_inadimplencia_canonica_quarentena_identidade.sql'),
+  path.join(root, 'supabase', 'migrations', '20260816013502_inadimplencia_canonica_quarentena_identidade.sql'),
 ];
 
 function sql() {
