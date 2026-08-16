@@ -11,6 +11,7 @@ const migrationPaths = [
   'supabase/migrations/20260816004257_inadimplencia_canonica_dedupe_global.sql',
   'supabase/migrations/20260816013502_inadimplencia_canonica_quarentena_identidade.sql',
   'supabase/migrations/20260816013512_financeiro_faturas_relatorios_canonicos.sql',
+  'supabase/migrations/20260816020631_inadimplencia_canonica_vencimento_estrito.sql',
 ].map((migration) => path.join(root, migration));
 const UNIT_A = '11111111-1111-1111-1111-111111111111';
 const UNIT_B = '22222222-2222-2222-2222-222222222222';
@@ -35,8 +36,12 @@ function psql(container, sql) {
 
 async function waitForPostgres(container) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const ready = psql(container, 'select 1;');
-    if (ready.status === 0) return;
+    const logs = docker(['logs', container]);
+    const initialized = /PostgreSQL init process complete; ready for start up\./u.test(
+      `${logs.stdout || ''}\n${logs.stderr || ''}`,
+    );
+    const ready = initialized ? psql(container, 'select 1;') : null;
+    if (ready?.status === 0) return;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error('PostgreSQL de teste nao iniciou a tempo');
@@ -297,6 +302,13 @@ test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e au
           '00000000-0000-0000-0000-000000000001',
           1003, 2003, 3003, 4003, 'Paga vencida', 'paga',
           ${day} - 10, ${day} - 8, 300, 0, 0, false
+        ),
+        (
+          '10000000-0000-0000-0000-000000000004', '${UNIT_A}', 'CG',
+          ${month},
+          '00000000-0000-0000-0000-000000000001',
+          1004, 2004, 3004, 4004, 'Aberta vence hoje', 'aberta',
+          ${day}, null, 400, 0, 0, false
         );
     `, 'cenario 1: snapshot fresco completo');
 
@@ -309,7 +321,7 @@ test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e au
       fresh.items.map((item) => [item.canonical_fatura_id, item.status, item.source_missing]),
       [['10000000-0000-0000-0000-000000000001', 'aberta', false]],
     );
-    assert.equal(fresh.items[0].data_vencimento <= fresh.as_of_date, true);
+    assert.equal(fresh.items[0].data_vencimento < fresh.as_of_date, true);
 
     seed(container, `
       delete from public.sync_run_items;

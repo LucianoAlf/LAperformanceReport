@@ -9,6 +9,7 @@ const migrations = [
   path.join(root, 'supabase', 'migrations', '20260816003732_inadimplencia_canonica_frescor.sql'),
   path.join(root, 'supabase', 'migrations', '20260816004257_inadimplencia_canonica_dedupe_global.sql'),
   path.join(root, 'supabase', 'migrations', '20260816013502_inadimplencia_canonica_quarentena_identidade.sql'),
+  path.join(root, 'supabase', 'migrations', '20260816020631_inadimplencia_canonica_vencimento_estrito.sql'),
 ];
 
 function sql() {
@@ -59,6 +60,8 @@ test('canonical reader is invoice-grain, strict about source_missing, and centra
   assert.match(source, /0\.02/);
   assert.match(source, /0\.01/);
   assert.match(source, /data_vencimento/);
+  assert.match(source, /data_vencimento\s*<\s*p_as_of_date/i);
+  assert.doesNotMatch(source, /data_vencimento\s*<=\s*p_as_of_date/i);
   assert.match(source, /valor_atualizado/);
   assert.match(source, /partition\s+by\s+\w+\.canonical_fatura_id/i);
   assert.doesNotMatch(source, /partition\s+by\s+\w+\.unidade_id\s*,\s*\w+\.canonical_fatura_id/i);

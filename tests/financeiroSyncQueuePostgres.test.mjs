@@ -41,7 +41,11 @@ function asRole(container, role, sql) {
 
 async function waitForPostgres(container) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    if (psql(container, 'select 1;').status === 0) return;
+    const logs = docker(['logs', container]);
+    const initialized = /PostgreSQL init process complete; ready for start up\./u.test(
+      `${logs.stdout || ''}\n${logs.stderr || ''}`,
+    );
+    if (initialized && psql(container, 'select 1;').status === 0) return;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error('PostgreSQL de teste nao iniciou a tempo');

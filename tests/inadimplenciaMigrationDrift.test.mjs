@@ -16,6 +16,7 @@ const ledgerAlignedNames = [
   '20260816013455_financeiro_sync_queue.sql',
   '20260816013502_inadimplencia_canonica_quarentena_identidade.sql',
   '20260816013512_financeiro_faturas_relatorios_canonicos.sql',
+  '20260816020631_inadimplencia_canonica_vencimento_estrito.sql',
 ];
 
 test('checkpoint 1 versions all four remotely applied delinquency migrations', () => {
@@ -49,6 +50,16 @@ test('financial canonical migrations use the versions recorded by the remote led
   ]) {
     assert.equal(fs.existsSync(path.join(migrationDir, provisionalName)), false, `provisional migration remained: ${provisionalName}`);
   }
+
+  const strictOverdue = fs.readFileSync(
+    path.join(migrationDir, '20260816020631_inadimplencia_canonica_vencimento_estrito.sql'),
+    'utf8',
+  ).replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, '');
+  assert.equal(
+    crypto.createHash('md5').update(strictOverdue).digest('hex'),
+    '62ba14a50f6a79bfb18d3f9e3b6c505a',
+    'migration drift: 20260816020631_inadimplencia_canonica_vencimento_estrito.sql',
+  );
 });
 
 test('v4 is the sync_run_items implementation and fails closed on source_missing', () => {
