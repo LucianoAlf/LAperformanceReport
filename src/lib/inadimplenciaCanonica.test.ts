@@ -195,6 +195,51 @@ Deno.test('shape real v3 aceita error null em partial e ok fresco sem divida', (
   assertEquals([ok.status, ok.collectionAllowed, ok.freshUntil, ok.items], ['ok', true, null, []]);
 });
 
+Deno.test('v3 preserva diagnosticos de identidade sem inferir faturas por validation issues', () => {
+  const semMetadata = normalizarInadimplenciaCanonica(blockedV3('incomplete', {
+    reconciliation: {
+      ...cleanReconciliation,
+      invalid_identity_invoice_count: 1,
+      validation_issue_count: 0,
+    },
+    operational: {
+      collection_allowed: false,
+      collection_scope: 'blocked',
+      block_reasons: ['invalid_invoice_identity'],
+    },
+  }));
+  const multiplasIssues = normalizarInadimplenciaCanonica(blockedV3('incomplete', {
+    reconciliation: {
+      ...cleanReconciliation,
+      invalid_identity_invoice_count: 1,
+      validation_issue_count: 2,
+    },
+    operational: {
+      collection_allowed: false,
+      collection_scope: 'blocked',
+      block_reasons: ['invalid_invoice_identity'],
+    },
+  }));
+
+  assertEquals([semMetadata.status, semMetadata.invalidIdentityInvoiceCount, semMetadata.validationIssueCount], [
+    'incomplete', 1, 0,
+  ]);
+  assertEquals([multiplasIssues.status, multiplasIssues.invalidIdentityInvoiceCount, multiplasIssues.validationIssueCount], [
+    'incomplete', 1, 2,
+  ]);
+});
+
+Deno.test('v3 stale preserva somente o diagnostico SQL conhecido de erro', () => {
+  const stale = normalizarInadimplenciaCanonica(blockedV3('stale', {
+    error: 'unsupported_invoice_status',
+  }));
+
+  assertEquals([stale.status, stale.collectionAllowed, stale.collectionScope, stale.items, stale.erro], [
+    'stale', false, 'blocked', [], 'unsupported_invoice_status',
+  ]);
+  assertLocalError(blockedV3('stale', { error: 'erro_desconhecido' }));
+});
+
 Deno.test('freshUntil expira localmente e a igualdade da fronteira falha fechada', () => {
   const result = normalizarInadimplenciaCanonica(payloadV3());
 
@@ -334,8 +379,13 @@ Deno.test('v3 valida totais e reconciliacao contra itens e fontes antes de liber
     blockedV3('error', {
       reconciliation: {
         ...cleanReconciliation,
-        invalid_identity_invoice_count: 1,
-        validation_issue_count: 0,
+        invalid_identity_invoice_count: 0,
+        validation_issue_count: 1,
+      },
+      operational: {
+        collection_allowed: false,
+        collection_scope: 'blocked',
+        block_reasons: [],
       },
     }),
     blockedV3('stale', { totals: oneItemTotals }),
@@ -362,6 +412,80 @@ Deno.test('v2 conserva apenas snapshots internamente coerentes e bloqueados limp
   assertLocalError(blockedV2('incomplete', { items: [item()] }));
   assertLocalError(blockedV2('error', { totals: oneItemTotals }));
   assertLocalError(payloadV2({ totals: { ...oneItemTotals, total_atualizado: 1 } }));
+});
+
+Deno.test('v2 ok exige reconciliacao limpa e freshness valido para qualquer divida', () => {
+  const semFreshness = payloadV2();
+  delete (semFreshness as Record<string, unknown>).freshness;
+  const zeroDebt = normalizarInadimplenciaCanonica(payloadV2({
+    totals: zeroTotals,
+    items: [],
+    freshness: fresh({ fresh_until: null }),
+  }));
+  const invalidos = [
+    semFreshness,
+    payloadV2({ freshness: fresh({ fresh_until: null }) }),
+    payloadV2({ freshness: fresh({ competencias_stale: 1 }) }),
+    payloadV2({ reconciliation: { ...cleanReconciliation, duplicate_fatura_count: 1 } }),
+    payloadV2({
+      reconciliation: {
+        ...cleanReconciliation,
+        invalid_identity_invoice_count: 1,
+        validation_issue_count: 0,
+      },
+    }),
+    payloadV2({
+      reconciliation: {
+        ...cleanReconciliation,
+        source_missing_count: 1,
+        source_missing_other_count: 1,
+      },
+    }),
+  ];
+
+  assertEquals([zeroDebt.status, zeroDebt.collectionAllowed, zeroDebt.freshUntil, zeroDebt.items], [
+    'ok', true, null, [],
+  ]);
+  for (const invalido of invalidos) assertLocalError(invalido);
+});
+
+Deno.test('v3 rejeita dinheiro sem centavos seguros e soma que excede safe integer', () => {
+  const limiteIndividual = payloadV3({
+    items: [item({ valor_original: Number.MAX_VALUE, valor_atualizado: Number.MAX_VALUE })],
+    totals: { ...oneItemTotals, total_original: Number.MAX_VALUE, total_atualizado: Number.MAX_VALUE },
+  });
+  const tresCasas = payloadV3({
+    items: [item({ valor_original: 0.001, valor_atualizado: 0.001 })],
+    totals: { ...oneItemTotals, total_original: 0.001, total_atualizado: 0.001 },
+  });
+  const fracaoMicroscopica = payloadV3({
+    items: [item({ valor_original: 1.00000000001, valor_atualizado: 1.00000000001 })],
+    totals: { ...oneItemTotals, total_original: 1.00000000001, total_atualizado: 1.00000000001 },
+  });
+  const metadeMaximoSeguro = 45_035_996_273_704.96;
+  const overflow = payloadV3({
+    items: [
+      item({ valor_original: metadeMaximoSeguro, valor_atualizado: metadeMaximoSeguro }),
+      item({
+        canonical_fatura_id: '10000000-0000-0000-0000-000000000002',
+        emusys_fatura_id: '1002',
+        valor_original: metadeMaximoSeguro,
+        valor_atualizado: metadeMaximoSeguro,
+      }),
+    ],
+    totals: {
+      total_faturas: 2,
+      total_matriculas: 1,
+      total_original: metadeMaximoSeguro * 2,
+      total_atualizado: metadeMaximoSeguro * 2,
+      maior_atraso: 5,
+    },
+  });
+
+  assertLocalError(limiteIndividual);
+  assertLocalError(tresCasas);
+  assertLocalError(fracaoMicroscopica);
+  assertLocalError(overflow);
 });
 
 Deno.test('source missing nao entra no dinheiro e a mesma matricula em unidades distintas gera chaves independentes', () => {

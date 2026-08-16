@@ -202,7 +202,23 @@ const validDate = (value: unknown): value is string => {
     && parsed.getUTCDate() === day;
 };
 
-const cents = (value: number) => Math.round(value * 100);
+function centsOf(value: number): number | null {
+  if (!Number.isFinite(value)) return null;
+  const fixed = value.toFixed(2);
+  if (Number(fixed) !== value) return null;
+  const [whole, fractional] = fixed.split('.');
+  const result = Number(`${whole}${fractional}`);
+  return Number.isSafeInteger(result) ? result : null;
+}
+
+const validMoney = (value: unknown): value is number => (
+  nonNegativeNumber(value) && centsOf(value) !== null
+);
+
+const safeAddCents = (left: number, right: number): number | null => {
+  const total = left + right;
+  return Number.isSafeInteger(total) ? total : null;
+};
 
 const errorState = (erro = INVALID_RESPONSE): InadimplenciaCanonicaState => ({
   ...INADIMPLENCIA_CANONICA_LOADING,
@@ -226,8 +242,8 @@ function parseItem(value: unknown): InadimplenciaCanonicaItem | null {
     || !matriculaId
     || !validDate(row.data_vencimento)
     || !nonNegativeInteger(row.dias_atraso)
-    || !nonNegativeNumber(row.valor_original)
-    || !nonNegativeNumber(row.valor_atualizado)
+    || !validMoney(row.valor_original)
+    || !validMoney(row.valor_atualizado)
     || (row.sync_completed_at !== null && !sync)
   ) return null;
 
@@ -256,8 +272,8 @@ function parseTotals(value: unknown): Totals | null {
     !totals
     || !nonNegativeInteger(totals.total_faturas)
     || !nonNegativeInteger(totals.total_matriculas)
-    || !nonNegativeNumber(totals.total_original)
-    || !nonNegativeNumber(totals.total_atualizado)
+    || !validMoney(totals.total_original)
+    || !validMoney(totals.total_atualizado)
     || !nonNegativeInteger(totals.maior_atraso)
   ) return null;
 
@@ -291,7 +307,7 @@ function parseReconciliation(value: unknown): Reconciliation | null {
     validationIssueCount: reconciliation.validation_issue_count,
   };
   return result.sourceMissingOpenCount + result.sourceMissingOtherCount === result.sourceMissingCount
-    && result.validationIssueCount === result.invalidIdentityInvoiceCount
+    && (result.validationIssueCount === 0 || result.invalidIdentityInvoiceCount > 0)
     ? result
     : null;
 }
@@ -319,6 +335,10 @@ function parseV2Reconciliation(value: unknown): Reconciliation | null {
   if (hasOwn(reconciliation, 'source_missing_open_count') || hasOwn(reconciliation, 'source_missing_other_count')) {
     return parseReconciliation(reconciliation);
   }
+  if (
+    reconciliation.validation_issue_count > 0
+    && reconciliation.invalid_identity_invoice_count === 0
+  ) return null;
   return {
     sourceMissingCount: reconciliation.source_missing_count,
     sourceMissingOpenCount: 0,
@@ -378,13 +398,27 @@ function parseV2Freshness(value: unknown): Freshness | null {
 
 function totalsMatchItems(totals: Totals, items: InadimplenciaCanonicaItem[]): boolean {
   const matriculas = new Set(items.map((item) => `${item.unidade_id}|${item.emusys_matricula_id}`));
-  const totalOriginal = items.reduce((sum, item) => sum + cents(item.valor_original), 0);
-  const totalAtualizado = items.reduce((sum, item) => sum + cents(item.valor_atualizado), 0);
+  let totalOriginal = 0;
+  let totalAtualizado = 0;
+  for (const item of items) {
+    const original = centsOf(item.valor_original);
+    const atualizado = centsOf(item.valor_atualizado);
+    if (original === null || atualizado === null) return false;
+    const nextOriginal = safeAddCents(totalOriginal, original);
+    const nextAtualizado = safeAddCents(totalAtualizado, atualizado);
+    if (nextOriginal === null || nextAtualizado === null) return false;
+    totalOriginal = nextOriginal;
+    totalAtualizado = nextAtualizado;
+  }
+  const expectedOriginal = centsOf(totals.totalOriginal);
+  const expectedAtualizado = centsOf(totals.totalAtualizado);
   const maiorAtraso = items.reduce((max, item) => Math.max(max, item.dias_atraso), 0);
   return totals.totalFaturas === items.length
     && totals.totalMatriculas === matriculas.size
-    && cents(totals.totalOriginal) === totalOriginal
-    && cents(totals.totalAtualizado) === totalAtualizado
+    && expectedOriginal !== null
+    && expectedAtualizado !== null
+    && expectedOriginal === totalOriginal
+    && expectedAtualizado === totalAtualizado
     && totals.maiorAtraso === maiorAtraso;
 }
 
@@ -422,6 +456,7 @@ function stateFrom(
   blockReasons: InadimplenciaBlockReason[],
   items: InadimplenciaCanonicaItem[],
   avaliadoEm: string | null,
+  erro: string | null = null,
 ): InadimplenciaCanonicaState {
   return {
     status,
@@ -445,7 +480,7 @@ function stateFrom(
     collectionScope,
     blockReasons,
     items,
-    erro: null,
+    erro,
   };
 }
 
@@ -473,9 +508,11 @@ function normalizeV3(root: Record<string, unknown>): InadimplenciaCanonicaState 
 
   const hasError = hasOwn(root, 'error');
   const scalarError = typeof root.error === 'string' ? root.error.trim() : null;
+  const knownSqlError = scalarError === 'unsupported_invoice_status';
   if (
-    (status === 'error' && scalarError !== 'unsupported_invoice_status')
-    || (status !== 'error' && hasError && root.error !== null)
+    (status === 'error' && !knownSqlError)
+    || (status === 'stale' && hasError && root.error !== null && !knownSqlError)
+    || (status !== 'error' && status !== 'stale' && hasError && root.error !== null)
   ) return errorState();
 
   const derivedStatus: InadimplenciaCanonicaStatus = freshness.competenciasStale > 0
@@ -520,6 +557,7 @@ function normalizeV3(root: Record<string, unknown>): InadimplenciaCanonicaState 
     collectionAllowed ? [] : reasons,
     collectionAllowed ? items : [],
     nullableText(root.avaliado_em),
+    status === 'stale' && knownSqlError ? scalarError : null,
   );
 }
 
@@ -538,7 +576,18 @@ function normalizeV2(root: Record<string, unknown>): InadimplenciaCanonicaState 
 
   if (status === 'ok') {
     const items = parseItems(root.items);
-    if (!items || !totalsMatchItems(totals, items)) return errorState();
+    const zeroDebt = items?.length === 0 && totalsAreZero(totals);
+    const reconciliationClear = reconciliation.sourceMissingCount === 0
+      && reconciliation.duplicateFaturaCount === 0
+      && reconciliation.invalidIdentityInvoiceCount === 0
+      && reconciliation.validationIssueCount === 0;
+    if (
+      !items
+      || !totalsMatchItems(totals, items)
+      || freshness.competenciasStale > 0
+      || !reconciliationClear
+      || (freshness.freshUntil === null && !zeroDebt)
+    ) return errorState();
     return stateFrom(
       2,
       'ok',
