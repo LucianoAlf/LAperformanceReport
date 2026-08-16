@@ -75,6 +75,8 @@ test('probe de uma unidade e read-only e exige service_role', () => {
   assert.match(source, /mode\s*===\s*'probe'/);
   assert.match(source, /probe exige service_role/i);
   assert.match(probeSource, /coletarFaturasUnidade/);
+  assert.match(probeSource, /juros_e_multa:\s*row\.juros_e_multa/);
+  assert.match(probeSource, /desconto_aplicado:\s*row\.desconto_aplicado/);
   assert.doesNotMatch(
     probeSource,
     /start_financeiro_sync_run|publish_financeiro_sync_run|claim_financeiro_sync_job/,

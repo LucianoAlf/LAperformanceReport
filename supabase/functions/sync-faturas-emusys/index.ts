@@ -204,6 +204,8 @@ async function executarProbe(competencia: string, unidadeCodigo: string) {
       data_pagamento: row.data_pagamento,
       valor_original: row.valor_original,
       valor_pago: row.valor_pago,
+      juros_e_multa: row.juros_e_multa,
+      desconto_aplicado: row.desconto_aplicado,
       desconto_condicional: row.desconto_condicional,
       validation_issues: row.validation_issues,
     })),
