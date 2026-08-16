@@ -17,6 +17,8 @@ const ledgerAlignedNames = [
   '20260816013502_inadimplencia_canonica_quarentena_identidade.sql',
   '20260816013512_financeiro_faturas_relatorios_canonicos.sql',
   '20260816020631_inadimplencia_canonica_vencimento_estrito.sql',
+  '20260816115755_inadimplencia_canonica_ignora_competencia_futura.sql',
+  '20260816125329_inadimplencia_canonica_ativos_janela_tres.sql',
 ];
 
 test('checkpoint 1 versions all four remotely applied delinquency migrations', () => {

@@ -13,6 +13,7 @@ const migrationPaths = [
   'supabase/migrations/20260816013512_financeiro_faturas_relatorios_canonicos.sql',
   'supabase/migrations/20260816020631_inadimplencia_canonica_vencimento_estrito.sql',
   'supabase/migrations/20260816115755_inadimplencia_canonica_ignora_competencia_futura.sql',
+  'supabase/migrations/20260816125329_inadimplencia_canonica_ativos_janela_tres.sql',
 ].map((migration) => path.join(root, migration));
 const UNIT_A = '11111111-1111-1111-1111-111111111111';
 const UNIT_B = '22222222-2222-2222-2222-222222222222';
@@ -139,6 +140,7 @@ const fixtureSchema = `
   create table public.alunos (
     id bigint primary key,
     unidade_id uuid not null references public.unidades(id),
+    emusys_student_id text,
     emusys_matricula_id text,
     status text,
     arquivado_em timestamptz,
@@ -219,6 +221,19 @@ const fixtureSchema = `
   insert into public.unidades (id, nome, ativo) values
     ('${UNIT_A}'::uuid, 'Campo Grande', true),
     ('${UNIT_B}'::uuid, 'Recreio', true);
+
+  insert into public.alunos (id, unidade_id, emusys_matricula_id, status)
+  select row_number() over (order by matricula, unidade_id), unidade_id,
+         matricula::text, 'ativo'
+  from (
+    select m.matricula, u.id as unidade_id
+    from (values
+      (2001::bigint), (2002), (2003), (2004), (2011),
+      (2101), (2102), (2201), (2202), (2301), (2302),
+      (2401), (2601), (2602), (2702), (2901)
+    ) as m(matricula)
+    cross join public.unidades u
+  ) as seed;
 `;
 
 test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e autorizacao', {
@@ -386,6 +401,12 @@ test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e au
         '00000000-0000-0000-0000-000000000007',
         ${month},
         'live', 'succeeded', true, 3, now(), now() + interval '1 hour'
+      );
+
+      insert into public.alunos (
+        id, unidade_id, emusys_student_id, status, arquivado_em, data_saida
+      ) values (
+        9991, '${UNIT_A}', '4701', 'ativo', null, null
       );
 
       insert into public.sync_run_items (
@@ -824,6 +845,156 @@ test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e au
     assert.equal(incompleteFinance.tem_dados, false);
     assert.equal(incompleteFinance.integrity.source_missing_count, 1);
     assert.deepEqual(incompleteFinance.por_unidade, []);
+  } finally {
+    docker(['rm', '--force', container]);
+  }
+});
+
+test('regra de cobranca usa somente alunos ativos nas tres competencias correntes', {
+  timeout: 90_000,
+}, async (t) => {
+  const dockerInfo = docker(['info'], undefined, 5_000);
+  const dockerVersion = docker(
+    ['version', '--format', '{{.Server.Version}}'],
+    undefined,
+    5_000,
+  );
+  if (
+    dockerInfo.status !== 0
+    || dockerInfo.error
+    || !/Server Version:/u.test(dockerInfo.stdout || '')
+    || dockerVersion.status !== 0
+    || dockerVersion.error
+    || !dockerVersion.stdout?.trim()
+  ) {
+    t.skip('Docker indisponivel para fixture PostgreSQL descartavel da janela de cobranca');
+    return;
+  }
+
+  const container = `la-inadimplencia-janela-${process.pid}-${Date.now()}`;
+  const started = docker([
+    'run', '--rm', '--name', container,
+    '-e', 'POSTGRES_PASSWORD=postgres',
+    '-d', 'postgres:17-alpine',
+  ]);
+  assert.equal(started.status, 0, started.stderr || started.stdout);
+
+  try {
+    await waitForPostgres(container);
+
+    const migration = migrationPaths.map((migrationPath) => fs.readFileSync(migrationPath, 'utf8')).join('\n');
+    const setup = psql(container, `${fixtureSchema}\n${migration}`);
+    assertPsql(setup, 'fixture minima + migration da janela de cobranca');
+    const asOfDate = currentDate(container);
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
+    const day = `date '${asOfDate}'`;
+
+    seed(container, `
+      delete from public.sync_run_items;
+      delete from public.sync_runs;
+      delete from public.alunos;
+
+      insert into public.alunos (
+        id, unidade_id, emusys_matricula_id, status, arquivado_em, data_saida
+      ) values
+        (9001, '${UNIT_A}', '9001', 'ativo', null, null),
+        (9002, '${UNIT_A}', '9002', 'evadido', null, date '${asOfDate}' - 1),
+        (9003, '${UNIT_A}', '9003', 'ativo', null, null),
+        (9004, '${UNIT_A}', '9004', 'ativo', null, null),
+        (9005, '${UNIT_A}', '9005', 'trancado', null, null),
+        (9006, '${UNIT_A}', '9006', 'ativo', now(), null);
+
+      insert into public.sync_runs (
+        id, competencia, run_type, status, snapshot_complete,
+        unidades_concluidas, completed_at, stale_after
+      ) values
+        (
+          '90000000-0000-0000-0000-000000000001', ${month},
+          'live', 'succeeded', true, 3, now(), now() + interval '1 hour'
+        ),
+        (
+          '90000000-0000-0000-0000-000000000002',
+          (${month} - interval '1 month')::date,
+          'live', 'succeeded', true, 3, now(), now() + interval '1 hour'
+        ),
+        (
+          '90000000-0000-0000-0000-000000000003',
+          (${month} - interval '2 months')::date,
+          'live', 'succeeded', true, 3, now(), now() + interval '1 hour'
+        ),
+        (
+          '90000000-0000-0000-0000-000000000004',
+          (${month} - interval '3 months')::date,
+          'live', 'succeeded', true, 3, now() - interval '2 hours', now() - interval '1 hour'
+        );
+
+      insert into public.sync_run_items (
+        canonical_fatura_id, unidade_id, unidade_codigo, competencia, run_id,
+        emusys_fatura_id, emusys_matricula_id, emusys_student_id,
+        descricao, status, data_vencimento, valor_original,
+        desconto_condicional, juros_e_multa, source_missing
+      ) values
+        (
+          '91000000-0000-0000-0000-000000000001', '${UNIT_A}', 'CG', ${month},
+          '90000000-0000-0000-0000-000000000001', 9101, 9001, 9901,
+          'Ativo corrente', 'aberta', ${day} - 5, 100, 0, 0, false
+        ),
+        (
+          '91000000-0000-0000-0000-000000000002', '${UNIT_A}', 'CG', ${month},
+          '90000000-0000-0000-0000-000000000001', 9102, 9002, 9902,
+          'Evadido corrente', 'aberta', ${day} - 5, 400, 0, 0, false
+        ),
+        (
+          '91000000-0000-0000-0000-000000000003', '${UNIT_A}', 'CG', ${month},
+          '90000000-0000-0000-0000-000000000001', 9103, 9005, 9905,
+          'Trancado corrente', 'aberta', ${day} - 5, 500, 0, 0, false
+        ),
+        (
+          '91000000-0000-0000-0000-000000000004', '${UNIT_A}', 'CG', ${month},
+          '90000000-0000-0000-0000-000000000001', 9104, 9006, 9906,
+          'Ativo arquivado corrente', 'aberta', ${day} - 5, 600, 0, 0, false
+        ),
+        (
+          '91000000-0000-0000-0000-000000000005', '${UNIT_A}', 'CG',
+          (${month} - interval '1 month')::date,
+          '90000000-0000-0000-0000-000000000002', 9105, 9003, 9903,
+          'Ativo competencia anterior', 'aberta', ${day} - 35, 200, 0, 0, false
+        ),
+        (
+          '91000000-0000-0000-0000-000000000006', '${UNIT_A}', 'CG',
+          (${month} - interval '2 months')::date,
+          '90000000-0000-0000-0000-000000000003', 9106, 9004, 9904,
+          'Ativo competencia limite', 'aberta', ${day} - 65, 300, 0, 0, false
+        ),
+        (
+          '91000000-0000-0000-0000-000000000007', '${UNIT_A}', 'CG',
+          (${month} - interval '3 months')::date,
+          '90000000-0000-0000-0000-000000000004', 9107, 9004, 9904,
+          'Ativo fora da janela', 'aberta', ${day} - 95, 700, 0, 0, false
+        );
+    `, 'cenario janela de tres competencias');
+
+    const result = jsonFrom(
+      callAs(container, 'authenticated', UNIT_A, asOfDate),
+      'leitura da janela de tres competencias e alunos ativos',
+    );
+    assert.equal(result.status, 'ok');
+    assert.equal(result.freshness.competencias_necessarias, 3);
+    assert.equal(result.freshness.competencias_stale, 0);
+    assert.equal(result.totals.total_faturas, 3);
+    assert.equal(result.totals.total_original, 600);
+    assert.deepEqual(
+      result.items.map((item) => item.canonical_fatura_id).sort(),
+      [
+        '91000000-0000-0000-0000-000000000001',
+        '91000000-0000-0000-0000-000000000005',
+        '91000000-0000-0000-0000-000000000006',
+      ].sort(),
+    );
+    assert.equal(
+      result.items.some((item) => item.canonical_fatura_id === '91000000-0000-0000-0000-000000000007'),
+      false,
+    );
   } finally {
     docker(['rm', '--force', container]);
   }

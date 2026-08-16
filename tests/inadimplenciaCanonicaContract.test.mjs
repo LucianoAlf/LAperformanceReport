@@ -10,6 +10,8 @@ const migrations = [
   path.join(root, 'supabase', 'migrations', '20260816004257_inadimplencia_canonica_dedupe_global.sql'),
   path.join(root, 'supabase', 'migrations', '20260816013502_inadimplencia_canonica_quarentena_identidade.sql'),
   path.join(root, 'supabase', 'migrations', '20260816020631_inadimplencia_canonica_vencimento_estrito.sql'),
+  path.join(root, 'supabase', 'migrations', '20260816115755_inadimplencia_canonica_ignora_competencia_futura.sql'),
+  path.join(root, 'supabase', 'migrations', '20260816125329_inadimplencia_canonica_ativos_janela_tres.sql'),
 ];
 
 function sql() {
@@ -82,6 +84,17 @@ test('canonical reader quarantines optional invalid identifiers instead of charg
   assert.match(source, /validation_issue_count/i);
   assert.match(source, /invalid_identity_invoices/i);
   assert.match(source, /tem_identidade_invalida/i);
+});
+
+test('canonical reader limits collection to active students and the three current competencies', () => {
+  const source = effectiveSql();
+  assert.match(source, /janela_competencias/i);
+  assert.match(source, /interval\s+'2 months'/i);
+  assert.match(source, /alunos_ativos/i);
+  assert.match(source, /lower\(trim\(a\.status\)\)\s*=\s*'ativo'/i);
+  assert.match(source, /a\.arquivado_em\s+is\s+null/i);
+  assert.match(source, /a\.data_saida\s+is\s+null/i);
+  assert.match(source, /i\.competencia\s+between\s+jc\.inicio\s+and\s+jc\.fim/i);
 });
 
 test('canonical reader has explicit authenticated/service-role authorization and no Sol operational RPCs', () => {
