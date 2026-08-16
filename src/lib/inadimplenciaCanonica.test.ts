@@ -180,6 +180,21 @@ Deno.test('v3 partial fresco preserva somente itens confirmados e permite cobran
   assertEquals(podeCobrarInadimplenciaCanonica(result, new Date('2026-08-15T18:30:00Z')), true);
 });
 
+Deno.test('shape real v3 aceita error null em partial e ok fresco sem divida', () => {
+  const partial = normalizarInadimplenciaCanonica(payloadV3({ error: null }));
+  const ok = normalizarInadimplenciaCanonica(payloadV3({
+    status: 'ok',
+    error: null,
+    reconciliation: cleanReconciliation,
+    totals: zeroTotals,
+    items: [],
+    freshness: fresh({ fresh_until: null }),
+  }));
+
+  assertEquals([partial.status, partial.collectionAllowed, partial.items.length], ['partial', true, 1]);
+  assertEquals([ok.status, ok.collectionAllowed, ok.freshUntil, ok.items], ['ok', true, null, []]);
+});
+
 Deno.test('freshUntil expira localmente e a igualdade da fronteira falha fechada', () => {
   const result = normalizarInadimplenciaCanonica(payloadV3());
 
@@ -229,6 +244,7 @@ Deno.test('v3 valida operational, status, error e reasons contraditorios de form
     payloadV3({ operational: { collection_allowed: true, collection_scope: 'confirmed_only', block_reasons: ['desconhecido'] } }),
     payloadV3({ operational: { collection_allowed: true, collection_scope: 'confirmed_only', block_reasons: ['stale_competencia'] } }),
     payloadV3({ error: 'unsupported_invoice_status' }),
+    payloadV3({ error: { code: 'unsupported_invoice_status' } }),
     blockedV3('error', { error: 'outro_erro_sql' }),
     blockedV3('stale', { freshness: fresh({ competencias_stale: 0 }) }),
     blockedV3('incomplete', { status: 'partial' }),

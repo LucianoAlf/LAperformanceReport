@@ -475,7 +475,7 @@ function normalizeV3(root: Record<string, unknown>): InadimplenciaCanonicaState 
   const scalarError = typeof root.error === 'string' ? root.error.trim() : null;
   if (
     (status === 'error' && scalarError !== 'unsupported_invoice_status')
-    || (status !== 'error' && hasError)
+    || (status !== 'error' && hasError && root.error !== null)
   ) return errorState();
 
   const derivedStatus: InadimplenciaCanonicaStatus = freshness.competenciasStale > 0
