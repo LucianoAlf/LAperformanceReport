@@ -17,7 +17,7 @@ export interface InadimplenciaCanonicaItem {
   canonical_fatura_id: string;
   unidade_id: string;
   emusys_fatura_id: string;
-  emusys_matricula_id: string | null;
+  emusys_matricula_id: string;
   data_vencimento: string;
   dias_atraso: number;
   valor_original: number;
@@ -117,114 +117,345 @@ export const INADIMPLENCIA_CANONICA_LOADING: InadimplenciaCanonicaState = {
   erro: null,
 };
 
+interface Totals {
+  totalFaturas: number;
+  totalMatriculas: number;
+  totalOriginal: number;
+  totalAtualizado: number;
+  maiorAtraso: number;
+}
+
+interface Reconciliation {
+  sourceMissingCount: number;
+  sourceMissingOpenCount: number;
+  sourceMissingOtherCount: number;
+  duplicateFaturaCount: number;
+  invalidIdentityInvoiceCount: number;
+  validationIssueCount: number;
+}
+
+interface Freshness {
+  competenciasStale: number;
+  ultimoSyncMaisAntigo: string | null;
+  freshUntil: string | null;
+}
+
+const INVALID_RESPONSE = 'Resposta invalida da leitura canonica de inadimplencia.';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const ABSOLUTE_ISO = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+const BLOCK_REASON_ORDER: InadimplenciaBlockReason[] = [
+  'stale_competencia',
+  'duplicate_confirmed_fatura',
+  'invalid_invoice_identity',
+];
+
 const asRecord = (value: unknown): Record<string, unknown> | null => (
   value != null && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null
 );
 
-const finiteNumber = (value: unknown) => {
-  const parsed = Number(value ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
+const hasOwn = (value: Record<string, unknown>, key: string) => (
+  Object.prototype.hasOwnProperty.call(value, key)
+);
+
+const nonEmptyString = (value: unknown): string | null => (
+  typeof value === 'string' && value.trim().length > 0 ? value : null
+);
+
+const nullableText = (value: unknown): string | null => (
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+);
+
+const sourceMatricula = (value: unknown): string | null => {
+  const text = nullableText(value);
+  if (text) return text;
+  return typeof value === 'number' && Number.isFinite(value) ? String(value) : null;
 };
 
-const nullableString = (value: unknown) => {
-  const normalized = String(value ?? '').trim();
-  return normalized || null;
+const nonNegativeNumber = (value: unknown): value is number => (
+  typeof value === 'number' && Number.isFinite(value) && value >= 0
+);
+
+const nonNegativeInteger = (value: unknown): value is number => (
+  nonNegativeNumber(value) && Number.isInteger(value)
+);
+
+const parseAbsoluteTimestamp = (value: unknown): string | null => (
+  typeof value === 'string'
+  && ABSOLUTE_ISO.test(value)
+  && validDate(value.slice(0, 10))
+  && Number.isFinite(Date.parse(value))
+    ? value
+    : null
+);
+
+const validDate = (value: unknown): value is string => {
+  if (typeof value !== 'string') return false;
+  const match = DATE.exec(value);
+  if (!match) return false;
+  const [year, month, day] = match.slice(1).map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === month - 1
+    && parsed.getUTCDate() === day;
 };
 
-const invalidResponseMessage = 'Resposta invalida da leitura canonica de inadimplencia.';
+const cents = (value: number) => Math.round(value * 100);
 
-const errorState = (erro = invalidResponseMessage): InadimplenciaCanonicaState => ({
+const errorState = (erro = INVALID_RESPONSE): InadimplenciaCanonicaState => ({
   ...INADIMPLENCIA_CANONICA_LOADING,
   status: 'error',
   erro,
-  items: [],
 });
 
-function normalizeItem(value: unknown): InadimplenciaCanonicaItem | null {
+function parseItem(value: unknown): InadimplenciaCanonicaItem | null {
   const row = asRecord(value);
   if (!row) return null;
-  const canonicalFaturaId = nullableString(row.canonical_fatura_id);
-  const unidadeId = nullableString(row.unidade_id);
-  const emusysFaturaId = nullableString(row.emusys_fatura_id);
-  const dataVencimento = nullableString(row.data_vencimento);
-  if (!canonicalFaturaId || !unidadeId || !emusysFaturaId || !dataVencimento) return null;
+  const canonicalFaturaId = nonEmptyString(row.canonical_fatura_id);
+  const unidadeId = nonEmptyString(row.unidade_id);
+  const faturaId = nonEmptyString(row.emusys_fatura_id);
+  const matriculaId = nonEmptyString(row.emusys_matricula_id);
+  const sync = row.sync_completed_at === null ? null : parseAbsoluteTimestamp(row.sync_completed_at);
+
+  if (
+    !canonicalFaturaId || !UUID.test(canonicalFaturaId)
+    || !unidadeId || !UUID.test(unidadeId)
+    || !faturaId
+    || !matriculaId
+    || !validDate(row.data_vencimento)
+    || !nonNegativeInteger(row.dias_atraso)
+    || !nonNegativeNumber(row.valor_original)
+    || !nonNegativeNumber(row.valor_atualizado)
+    || (row.sync_completed_at !== null && !sync)
+  ) return null;
 
   return {
     canonical_fatura_id: canonicalFaturaId,
     unidade_id: unidadeId,
-    emusys_fatura_id: emusysFaturaId,
-    emusys_matricula_id: nullableString(row.emusys_matricula_id),
-    data_vencimento: dataVencimento,
-    dias_atraso: finiteNumber(row.dias_atraso),
-    valor_original: finiteNumber(row.valor_original),
-    valor_atualizado: finiteNumber(row.valor_atualizado),
-    sync_completed_at: nullableString(row.sync_completed_at),
+    emusys_fatura_id: faturaId,
+    emusys_matricula_id: matriculaId,
+    data_vencimento: row.data_vencimento,
+    dias_atraso: row.dias_atraso,
+    valor_original: row.valor_original,
+    valor_atualizado: row.valor_atualizado,
+    sync_completed_at: sync,
   };
 }
 
-function normalizeItems(value: unknown): InadimplenciaCanonicaItem[] | null {
+function parseItems(value: unknown): InadimplenciaCanonicaItem[] | null {
   if (!Array.isArray(value)) return null;
-  const items = value.map(normalizeItem);
-  return items.every((item): item is InadimplenciaCanonicaItem => item != null)
-    ? items
+  const items = value.map(parseItem);
+  return items.every((item): item is InadimplenciaCanonicaItem => item != null) ? items : null;
+}
+
+function parseTotals(value: unknown): Totals | null {
+  const totals = asRecord(value);
+  if (
+    !totals
+    || !nonNegativeInteger(totals.total_faturas)
+    || !nonNegativeInteger(totals.total_matriculas)
+    || !nonNegativeNumber(totals.total_original)
+    || !nonNegativeNumber(totals.total_atualizado)
+    || !nonNegativeInteger(totals.maior_atraso)
+  ) return null;
+
+  return {
+    totalFaturas: totals.total_faturas,
+    totalMatriculas: totals.total_matriculas,
+    totalOriginal: totals.total_original,
+    totalAtualizado: totals.total_atualizado,
+    maiorAtraso: totals.maior_atraso,
+  };
+}
+
+function parseReconciliation(value: unknown): Reconciliation | null {
+  const reconciliation = asRecord(value);
+  if (
+    !reconciliation
+    || !nonNegativeInteger(reconciliation.source_missing_count)
+    || !nonNegativeInteger(reconciliation.source_missing_open_count)
+    || !nonNegativeInteger(reconciliation.source_missing_other_count)
+    || !nonNegativeInteger(reconciliation.duplicate_fatura_count)
+    || !nonNegativeInteger(reconciliation.invalid_identity_invoice_count)
+    || !nonNegativeInteger(reconciliation.validation_issue_count)
+  ) return null;
+
+  const result = {
+    sourceMissingCount: reconciliation.source_missing_count,
+    sourceMissingOpenCount: reconciliation.source_missing_open_count,
+    sourceMissingOtherCount: reconciliation.source_missing_other_count,
+    duplicateFaturaCount: reconciliation.duplicate_fatura_count,
+    invalidIdentityInvoiceCount: reconciliation.invalid_identity_invoice_count,
+    validationIssueCount: reconciliation.validation_issue_count,
+  };
+  return result.sourceMissingOpenCount + result.sourceMissingOtherCount === result.sourceMissingCount
+    && result.validationIssueCount === result.invalidIdentityInvoiceCount
+    ? result
     : null;
 }
 
-function scalarError(root: Record<string, unknown>): string | null {
-  return typeof root.error === 'string' ? nullableString(root.error) : null;
+function parseV2Reconciliation(value: unknown): Reconciliation | null {
+  if (value === undefined) {
+    return {
+      sourceMissingCount: 0,
+      sourceMissingOpenCount: 0,
+      sourceMissingOtherCount: 0,
+      duplicateFaturaCount: 0,
+      invalidIdentityInvoiceCount: 0,
+      validationIssueCount: 0,
+    };
+  }
+  const reconciliation = asRecord(value);
+  if (
+    !reconciliation
+    || !nonNegativeInteger(reconciliation.source_missing_count)
+    || !nonNegativeInteger(reconciliation.duplicate_fatura_count)
+    || !nonNegativeInteger(reconciliation.invalid_identity_invoice_count)
+    || !nonNegativeInteger(reconciliation.validation_issue_count)
+  ) return null;
+
+  if (hasOwn(reconciliation, 'source_missing_open_count') || hasOwn(reconciliation, 'source_missing_other_count')) {
+    return parseReconciliation(reconciliation);
+  }
+  return {
+    sourceMissingCount: reconciliation.source_missing_count,
+    sourceMissingOpenCount: 0,
+    sourceMissingOtherCount: reconciliation.source_missing_count,
+    duplicateFaturaCount: reconciliation.duplicate_fatura_count,
+    invalidIdentityInvoiceCount: reconciliation.invalid_identity_invoice_count,
+    validationIssueCount: reconciliation.validation_issue_count,
+  };
 }
 
-function baseState(
-  root: Record<string, unknown>,
+function parseFreshness(value: unknown): Freshness | null {
+  const freshness = asRecord(value);
+  if (!freshness || !hasOwn(freshness, 'fresh_until') || !nonNegativeInteger(freshness.competencias_stale)) {
+    return null;
+  }
+
+  const oldest = freshness.ultimo_sync_mais_antigo == null
+    ? null
+    : parseAbsoluteTimestamp(freshness.ultimo_sync_mais_antigo);
+  const freshUntil = freshness.fresh_until === null
+    ? null
+    : parseAbsoluteTimestamp(freshness.fresh_until);
+  if (
+    (freshness.ultimo_sync_mais_antigo != null && !oldest)
+    || (freshness.fresh_until !== null && !freshUntil)
+  ) return null;
+
+  return {
+    competenciasStale: freshness.competencias_stale,
+    ultimoSyncMaisAntigo: oldest,
+    freshUntil,
+  };
+}
+
+function parseV2Freshness(value: unknown): Freshness | null {
+  if (value === undefined) {
+    return { competenciasStale: 0, ultimoSyncMaisAntigo: null, freshUntil: null };
+  }
+  const freshness = asRecord(value);
+  if (!freshness) return null;
+  const competenciasStale = freshness.competencias_stale === undefined
+    ? 0
+    : freshness.competencias_stale;
+  if (!nonNegativeInteger(competenciasStale)) return null;
+  const oldest = freshness.ultimo_sync_mais_antigo == null
+    ? null
+    : parseAbsoluteTimestamp(freshness.ultimo_sync_mais_antigo);
+  const freshUntil = freshness.fresh_until == null
+    ? null
+    : parseAbsoluteTimestamp(freshness.fresh_until);
+  if (
+    (freshness.ultimo_sync_mais_antigo != null && !oldest)
+    || (freshness.fresh_until != null && !freshUntil)
+  ) return null;
+  return { competenciasStale, ultimoSyncMaisAntigo: oldest, freshUntil };
+}
+
+function totalsMatchItems(totals: Totals, items: InadimplenciaCanonicaItem[]): boolean {
+  const matriculas = new Set(items.map((item) => `${item.unidade_id}|${item.emusys_matricula_id}`));
+  const totalOriginal = items.reduce((sum, item) => sum + cents(item.valor_original), 0);
+  const totalAtualizado = items.reduce((sum, item) => sum + cents(item.valor_atualizado), 0);
+  const maiorAtraso = items.reduce((max, item) => Math.max(max, item.dias_atraso), 0);
+  return totals.totalFaturas === items.length
+    && totals.totalMatriculas === matriculas.size
+    && cents(totals.totalOriginal) === totalOriginal
+    && cents(totals.totalAtualizado) === totalAtualizado
+    && totals.maiorAtraso === maiorAtraso;
+}
+
+const totalsAreZero = (totals: Totals) => (
+  totals.totalFaturas === 0
+  && totals.totalMatriculas === 0
+  && totals.totalOriginal === 0
+  && totals.totalAtualizado === 0
+  && totals.maiorAtraso === 0
+);
+
+function expectedReasons(
+  freshness: Freshness,
+  reconciliation: Reconciliation,
+): InadimplenciaBlockReason[] {
+  return BLOCK_REASON_ORDER.filter((reason) => (
+    (reason === 'stale_competencia' && freshness.competenciasStale > 0)
+    || (reason === 'duplicate_confirmed_fatura' && reconciliation.duplicateFaturaCount > 0)
+    || (reason === 'invalid_invoice_identity' && reconciliation.invalidIdentityInvoiceCount > 0)
+  ));
+}
+
+const equalReasons = (left: unknown[], right: InadimplenciaBlockReason[]) => (
+  left.length === right.length && left.every((reason, index) => reason === right[index])
+);
+
+function stateFrom(
+  schemaVersion: number,
   status: InadimplenciaCanonicaStatus,
+  totals: Totals,
+  freshness: Freshness,
+  reconciliation: Reconciliation,
   collectionAllowed: boolean,
   collectionScope: InadimplenciaCollectionScope,
   blockReasons: InadimplenciaBlockReason[],
   items: InadimplenciaCanonicaItem[],
-  erro: string | null,
+  avaliadoEm: string | null,
 ): InadimplenciaCanonicaState {
-  const totals = asRecord(root.totals) ?? {};
-  const freshness = asRecord(root.freshness) ?? {};
-  const reconciliation = asRecord(root.reconciliation) ?? {};
-
   return {
     status,
-    schemaVersion: finiteNumber(root.schema_version),
-    totalFaturas: finiteNumber(totals.total_faturas),
-    totalMatriculas: finiteNumber(totals.total_matriculas),
-    totalOriginal: finiteNumber(totals.total_original),
-    totalAtualizado: finiteNumber(totals.total_atualizado),
-    maiorAtraso: finiteNumber(totals.maior_atraso),
-    avaliadoEm: nullableString(root.avaliado_em),
-    ultimoSyncMaisAntigo: nullableString(freshness.ultimo_sync_mais_antigo),
-    freshUntil: nullableString(freshness.fresh_until),
-    competenciasStale: finiteNumber(freshness.competencias_stale),
-    sourceMissingCount: finiteNumber(reconciliation.source_missing_count),
-    sourceMissingOpenCount: finiteNumber(reconciliation.source_missing_open_count),
-    sourceMissingOtherCount: finiteNumber(reconciliation.source_missing_other_count),
-    duplicateFaturaCount: finiteNumber(reconciliation.duplicate_fatura_count),
-    invalidIdentityInvoiceCount: finiteNumber(reconciliation.invalid_identity_invoice_count),
-    validationIssueCount: finiteNumber(reconciliation.validation_issue_count),
+    schemaVersion,
+    totalFaturas: totals.totalFaturas,
+    totalMatriculas: totals.totalMatriculas,
+    totalOriginal: totals.totalOriginal,
+    totalAtualizado: totals.totalAtualizado,
+    maiorAtraso: totals.maiorAtraso,
+    avaliadoEm,
+    ultimoSyncMaisAntigo: freshness.ultimoSyncMaisAntigo,
+    freshUntil: freshness.freshUntil,
+    competenciasStale: freshness.competenciasStale,
+    sourceMissingCount: reconciliation.sourceMissingCount,
+    sourceMissingOpenCount: reconciliation.sourceMissingOpenCount,
+    sourceMissingOtherCount: reconciliation.sourceMissingOtherCount,
+    duplicateFaturaCount: reconciliation.duplicateFaturaCount,
+    invalidIdentityInvoiceCount: reconciliation.invalidIdentityInvoiceCount,
+    validationIssueCount: reconciliation.validationIssueCount,
     collectionAllowed,
     collectionScope,
     blockReasons,
     items,
-    erro,
+    erro: null,
   };
 }
 
 function normalizeV3(root: Record<string, unknown>): InadimplenciaCanonicaState {
   const status = root.status;
   const operational = asRecord(root.operational);
-  const items = normalizeItems(root.items);
-  const validReasons: InadimplenciaBlockReason[] = [
-    'stale_competencia',
-    'duplicate_confirmed_fatura',
-    'invalid_invoice_identity',
-  ];
-
+  const items = parseItems(root.items);
+  const totals = parseTotals(root.totals);
+  const freshness = parseFreshness(root.freshness);
+  const reconciliation = parseReconciliation(root.reconciliation);
   if (
     typeof status !== 'string'
     || !['ok', 'partial', 'stale', 'incomplete', 'error'].includes(status)
@@ -232,65 +463,112 @@ function normalizeV3(root: Record<string, unknown>): InadimplenciaCanonicaState 
     || typeof operational.collection_allowed !== 'boolean'
     || (operational.collection_scope !== 'confirmed_only' && operational.collection_scope !== 'blocked')
     || !Array.isArray(operational.block_reasons)
-    || !operational.block_reasons.every((reason): reason is InadimplenciaBlockReason => (
-      typeof reason === 'string' && validReasons.includes(reason as InadimplenciaBlockReason)
-    ))
+    || !operational.block_reasons.every((reason) => BLOCK_REASON_ORDER.includes(reason as InadimplenciaBlockReason))
+    || new Set(operational.block_reasons).size !== operational.block_reasons.length
     || !items
+    || !totals
+    || !freshness
+    || !reconciliation
   ) return errorState();
 
-  const allowedStatus = status === 'ok' || status === 'partial';
-  const blockedStatus = status === 'stale' || status === 'incomplete' || status === 'error';
-  const allowedContract = allowedStatus
-    && operational.collection_allowed === true
-    && operational.collection_scope === 'confirmed_only'
-    && operational.block_reasons.length === 0;
-  const blockedContract = blockedStatus
-    && operational.collection_allowed === false
-    && operational.collection_scope === 'blocked'
-    && items.length === 0;
+  const hasError = hasOwn(root, 'error');
+  const scalarError = typeof root.error === 'string' ? root.error.trim() : null;
+  if (
+    (status === 'error' && scalarError !== 'unsupported_invoice_status')
+    || (status !== 'error' && hasError)
+  ) return errorState();
 
-  if (!allowedContract && !blockedContract) return errorState();
+  const derivedStatus: InadimplenciaCanonicaStatus = freshness.competenciasStale > 0
+    ? 'stale'
+    : scalarError ? 'error'
+    : reconciliation.duplicateFaturaCount > 0 || reconciliation.invalidIdentityInvoiceCount > 0
+    ? 'incomplete'
+    : reconciliation.sourceMissingCount > 0
+    ? 'partial'
+    : 'ok';
+  const reasons = expectedReasons(freshness, reconciliation);
+  const collectionAllowed = status === 'ok' || status === 'partial';
+  const zeroDebtOk = status === 'ok' && items.length === 0 && totalsAreZero(totals)
 
-  if (allowedContract) {
-    return baseState(root, status as 'ok' | 'partial', true, 'confirmed_only', [], items, null);
-  }
+  if (
+    status !== derivedStatus
+    || !equalReasons(operational.block_reasons, reasons)
+    || (freshness.freshUntil === null && !zeroDebtOk)
+    || (collectionAllowed && (
+      operational.collection_allowed !== true
+      || operational.collection_scope !== 'confirmed_only'
+      || reasons.length !== 0
+      || !totalsMatchItems(totals, items)
+    ))
+    || (!collectionAllowed && (
+      operational.collection_allowed !== false
+      || operational.collection_scope !== 'blocked'
+      || items.length !== 0
+      || !totalsAreZero(totals)
+    ))
+  ) return errorState();
 
-  if (status === 'error') return errorState(scalarError(root) ?? invalidResponseMessage);
-
-  return baseState(
-    root,
-    status as 'stale' | 'incomplete',
-    false,
-    'blocked',
-    operational.block_reasons as InadimplenciaBlockReason[],
-    [],
-    null,
+  if (status === 'error') return errorState(scalarError);
+  return stateFrom(
+    3,
+    status,
+    totals,
+    freshness,
+    reconciliation,
+    collectionAllowed,
+    collectionAllowed ? 'confirmed_only' : 'blocked',
+    collectionAllowed ? [] : reasons,
+    collectionAllowed ? items : [],
+    nullableText(root.avaliado_em),
   );
 }
 
 function normalizeV2(root: Record<string, unknown>): InadimplenciaCanonicaState {
   const status = root.status;
-  if (status !== 'ok' && status !== 'stale' && status !== 'incomplete' && status !== 'error') {
-    return errorState();
-  }
-
-  if (status === 'error') return errorState(scalarError(root) ?? invalidResponseMessage);
-
-  const items = normalizeItems(root.items);
-  if (!items) return errorState();
+  const totals = parseTotals(root.totals);
+  const reconciliation = parseV2Reconciliation(root.reconciliation);
+  const freshness = parseV2Freshness(root.freshness);
+  if (
+    (status !== 'ok' && status !== 'stale' && status !== 'incomplete' && status !== 'error')
+    || !totals
+    || !reconciliation
+    || !freshness
+    || !Array.isArray(root.items)
+  ) return errorState();
 
   if (status === 'ok') {
-    return baseState(root, 'ok', true, 'confirmed_only', [], items, null);
+    const items = parseItems(root.items);
+    if (!items || !totalsMatchItems(totals, items)) return errorState();
+    return stateFrom(
+      2,
+      'ok',
+      totals,
+      freshness,
+      reconciliation,
+      true,
+      'confirmed_only',
+      [],
+      items,
+      nullableText(root.avaliado_em),
+    );
   }
 
-  return baseState(
-    root,
+  if (root.items.length !== 0 || !totalsAreZero(totals)) return errorState();
+  if (status === 'error') {
+    const scalarError = typeof root.error === 'string' ? root.error.trim() : null;
+    return scalarError ? errorState(scalarError) : errorState();
+  }
+  return stateFrom(
+    2,
     status,
+    totals,
+    freshness,
+    reconciliation,
     false,
     'blocked',
     [],
     [],
-    null,
+    nullableText(root.avaliado_em),
   );
 }
 
@@ -339,7 +617,6 @@ export function indexarInadimplenciaPorMatricula(
   if (!podeCobrarInadimplenciaCanonica(state, agora)) return index;
 
   for (const item of state.items) {
-    if (!item.emusys_matricula_id) continue;
     const key = chaveInadimplenciaMatricula(item.unidade_id, item.emusys_matricula_id);
     const current = index.get(key) ?? {
       faturas: 0,
@@ -350,7 +627,9 @@ export function indexarInadimplenciaPorMatricula(
     current.faturas += 1;
     current.valorAtualizado = Number((current.valorAtualizado + item.valor_atualizado).toFixed(2));
     current.maiorAtraso = Math.max(current.maiorAtraso, item.dias_atraso);
-    if (item.sync_completed_at && (!current.ultimoSync || item.sync_completed_at > current.ultimoSync)) {
+    const currentEpoch = current.ultimoSync ? Date.parse(current.ultimoSync) : Number.NaN;
+    const itemEpoch = item.sync_completed_at ? Date.parse(item.sync_completed_at) : Number.NaN;
+    if (Number.isFinite(itemEpoch) && (!Number.isFinite(currentEpoch) || itemEpoch > currentEpoch)) {
       current.ultimoSync = item.sync_completed_at;
     }
     index.set(key, current);
@@ -358,9 +637,7 @@ export function indexarInadimplenciaPorMatricula(
   return index;
 }
 
-/**
- * Converte a leitura financeira confirmada em alertas operacionais sem misturar vinculos.
- */
+/** Converte a leitura financeira confirmada em alertas operacionais sem misturar vinculos. */
 export function montarAlertasInadimplenciaCanonica(
   state: InadimplenciaCanonicaState,
   alunos: AlunoInadimplenciaCanonicaSource[],
@@ -374,9 +651,8 @@ export function montarAlertasInadimplenciaCanonica(
   const alunosPorMatricula = new Map<string, AlunoInadimplenciaCanonicaSource[]>();
 
   for (const aluno of alunos) {
-    const matricula = nullableString(aluno.emusys_matricula_id);
+    const matricula = sourceMatricula(aluno.emusys_matricula_id);
     if (!matricula || aluno.status !== 'ativo' || aluno.arquivado_em != null) continue;
-
     const key = chaveInadimplenciaMatricula(aluno.unidade_id, matricula);
     const candidatos = alunosPorMatricula.get(key) ?? [];
     candidatos.push(aluno);
@@ -385,7 +661,6 @@ export function montarAlertasInadimplenciaCanonica(
 
   const alertas: AlertaInadimplenciaCanonica[] = [];
   let semCadastroAtivo = 0;
-
   for (const [key, inadimplencia] of inadimplenciaPorMatricula) {
     const candidatos = [...(alunosPorMatricula.get(key) ?? [])].sort((left, right) => (
       Number(left.is_segundo_curso === true) - Number(right.is_segundo_curso === true)
@@ -397,19 +672,19 @@ export function montarAlertasInadimplenciaCanonica(
       continue;
     }
 
-    const matricula = nullableString(aluno.emusys_matricula_id);
+    const matricula = sourceMatricula(aluno.emusys_matricula_id);
     if (!matricula) continue;
     alertas.push({
       aluno_id: aluno.id,
       aluno_nome: aluno.nome,
-      whatsapp: nullableString(aluno.whatsapp) ?? nullableString(aluno.telefone),
+      whatsapp: nullableText(aluno.whatsapp) ?? nullableText(aluno.telefone),
       unidade_id: aluno.unidade_id,
       emusys_matricula_id: matricula,
       valor_atualizado: inadimplencia.valorAtualizado,
       total_faturas: inadimplencia.faturas,
       professor_id: aluno.professor?.id ?? null,
-      professor_nome: nullableString(aluno.professor?.nome),
-      instrumento: nullableString(aluno.curso?.nome),
+      professor_nome: nullableText(aluno.professor?.nome),
+      instrumento: nullableText(aluno.curso?.nome),
       dias_atraso: inadimplencia.maiorAtraso,
       ultimo_sync: inadimplencia.ultimoSync,
     });
@@ -421,6 +696,5 @@ export function montarAlertasInadimplenciaCanonica(
     || left.aluno_nome.localeCompare(right.aluno_nome, 'pt-BR')
     || left.aluno_id - right.aluno_id
   ));
-
   return { alertas, totalAtivos: alertas.length, semCadastroAtivo };
 }
