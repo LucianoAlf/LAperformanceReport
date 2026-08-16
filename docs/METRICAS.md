@@ -52,10 +52,12 @@ compatibilidade quando ainda não existe estado Emusys associado.
 | `inativa` + `concluida` | `inativo` | contrato concluído/não renovação, não evasão |
 | ausente ou ambíguo | `desconhecido` | auditoria; nunca presume ativo ou evasão |
 
-Somente matrícula com status Emusys resolvido como `ativa` entra em carteira,
-financeiro atual, presença, Health Score e churn atual. Trancamentos no período
-continuam vindo de `movimentacoes_admin` e não são o mesmo indicador que
-**Trancados agora**.
+Somente matrícula com status Emusys resolvido como `ativa` entra nos
+denominadores de base viva, carteira, presença, Health Score e churn atual.
+O radar de faturas vencidas é a exceção: considera pessoa com alguma matrícula
+atual `ativa|trancada`, pois o trancamento temporário mantém a parcela do mês.
+Trancamentos no período continuam vindo de `movimentacoes_admin` e não são o
+mesmo indicador que **Trancados agora**.
 
 ### Aluno pagante
 `entra_financeiro_ativo = true` **E** `conta_como_pagante = true` **E**
@@ -66,7 +68,7 @@ continuam vindo de `movimentacoes_admin` e não são o mesmo indicador que
   `get_kpis_alunos_canonicos`.
 - Bolsista integral **não** é pagante. **Bolsista parcial também não** — `conta_como_pagante = false`
   no banco (verificado 2026-08-08), conforme validação do Alf (P5).
-- Trancado **não** entra. **Quem tem só banda ou só coral também não** — são atividades extras
+- Trancado **não** entra no denominador de pagantes; pode, porém, entrar no radar de fatura vencida. **Quem tem só banda ou só coral também não** — são atividades extras
   e exigem curso regular; contam em `matriculas_banda`/`matriculas_coral`.
 
 ### Aluno ativo / Carteira viva
@@ -210,13 +212,29 @@ Média de `valor_passaporte > 0` das matrículas novas canônicas do período (e
 
 ### Inadimplência operacional canônica (ago/2026)
 
-`get_inadimplencia_canonica` retorna uma linha por fatura canônica vencida quando o último run da competência é `live + succeeded + snapshot_complete + 3 unidades`, ainda está dentro de `stale_after`, a fatura está `aberta` e `source_missing=false`.
+`get_inadimplencia_canonica` retorna uma linha por fatura canônica vencida quando o último run da competência é `live + succeeded + snapshot_complete + 3 unidades`, ainda está dentro de `stale_after`, a fatura está `aberta`, `source_missing=false`, pertence à janela mês atual + dois anteriores e a pessoa possui alguma matrícula atual ativa ou trancada na unidade.
 
-- Chave de matrícula: `(unidade_id, emusys_matricula_id)`. IDs externos nunca são globais.
-- O Farmer escolhe um único vínculo local `ativo`, não arquivado e prefere o curso principal; trancado, evadido, inativo e vínculo sem identidade não são liberados para cobrança.
-- Snapshot stale falha fechado: totais zerados e `items=[]`. `source_missing`, identidade inválida ou duplicidade são reconciliação `incomplete`, nunca evidência de pagamento.
+- Identidade exata da dívida: `(unidade_id, emusys_matricula_id, emusys_student_id)`. IDs externos nunca são globais e nome não é chave.
+- Papel atual é por pessoa: qualquer matrícula Emusys `ativa|trancada`, não arquivada, torna a pessoa atual naquela unidade. Reingresso não é ex-aluno; sem raw Emusys, o fallback exige estado local `ativo|trancado` sem `data_saida`.
+- A RPC publica `aluno_id_canonico` somente quando há um único candidato atual. Farmer/Sol enriquecem exclusivamente por esse ID e agrupam uma ação por pessoa/unidade; nunca preferem curso principal nem desempatem por nome, `student_id` ou ordenação local.
+- Snapshot stale/incomplete falha fechado: totais zerados e `items=[]`. `partial` fresco preserva somente itens confirmados. `source_missing`, identidade inválida, duplicidade e contato não unívoco são contagens de reconciliação e nunca evidência de pagamento.
+- Verdade financeira D+0: `data_vencimento < data de corte`. Cobrança amigável D+2: item confirmado com `dias_atraso >= collection_grace_days`, cujo valor canônico é 2.
 - Valor na data de corte: `valor_original × (1 + 0,02 + 0,01 × dias_atraso/30)`, arredondado em centavos. O desconto condicional já foi perdido; `juros_e_multa` do payload é evidência da fonte, não a fórmula canônica.
 - O booleano `aluno_jornada_matricula_disciplina.inadimplente_emusys` e `status_pagamento` permanecem campos de compatibilidade e não alimentam mais a lista operacional.
+
+Indicadores canônicos:
+
+```text
+inadimplencias_confirmadas = count(distinct unidade_id, canonical_fatura_id) dos items
+matriculas_inadimplentes = count(distinct unidade_id, emusys_matricula_id) dos items
+valor_original_confirmado = sum(valor_original dos items)
+valor_atualizado_confirmado = sum(valor_atualizado arredondado por item)
+faturas_em_reconciliacao = reconciliation.source_missing_count + reconciliation.invalid_identity_invoice_count
+frescor_valido = operational.collection_allowed do servidor AND agora < fresh_until, quando presente
+cobranca_amigavel_elegivel = item confirmado AND dias_atraso >= collection_grace_days (2)
+```
+
+As contagens de reconciliação não entram nos quatro primeiros indicadores. Competências anteriores à janela e ex-alunos devedores pertencem a uma futura carteira separada.
 
 ### Classificação de bolsista (KPI / MRR)
 Usa o **`tipo_matricula_id` canônico** (`BOLSISTA_INT`/`BOLSISTA_PARC`), **não** o `tipo_aluno` legado — que pode estar contaminado (ex.: aluno marcado `bolsista_integral` em `tipo_aluno` mas pagante regular no contrato). RPC `get_kpis_alunos_admin_operacional`. Fonte: migration `admin_operacional_bolsista_por_tipo_canonico`.

@@ -117,7 +117,7 @@ Fonte canônica: `vw_alunos_estado_operacional_v131`, resolvida por `unidade_id 
 | `inativa` + `concluida` | `inativo` | contrato concluído / não renovação — **não é evasão** |
 | ausente ou ambíguo | `desconhecido` | auditoria; **nunca** presume ativo nem evasão |
 
-Só matrícula resolvida como `ativa` entra em carteira, financeiro atual, presença, Health Score e churn.
+Só matrícula resolvida como `ativa` entra nos denominadores de base viva, carteira, presença, Health Score e churn. **Exceção financeira explícita:** o radar de faturas vencidas inclui a pessoa com matrícula atual `ativa` ou `trancada`, porque o trancamento temporário mantém a parcela do mês (§4.6 e cláusula contratual 6.1).
 
 ### 3.2 Aluno ativo ✅
 
@@ -319,25 +319,33 @@ inadimplência % = qtd_inadimplentes / alunos_pagantes × 100
 
 **Percentual de PESSOAS (cabeças), não de valor.**
 
-Conta como inadimplente operacional **somente** uma matrícula local ativa e não arquivada que possua fatura confirmada pela leitura `get_inadimplencia_canonica`:
+Conta na verdade financeira canônica **somente** uma fatura confirmada pela leitura `get_inadimplencia_canonica`, quando a pessoa possui ao menos uma matrícula atual ativa ou trancada, não arquivada, na mesma unidade:
 ```
 ultimo snapshot live completo e ainda fresco da competência
 AND status da fatura = 'aberta'
 AND source_missing = false
-AND data_vencimento <= data de corte
-AND identidade = unidade_id + emusys_matricula_id
+AND data_vencimento < data de corte
+AND competência entre o mês corrente e os dois meses-calendário anteriores
+AND identidade exata = unidade_id + emusys_matricula_id + emusys_student_id
+AND papel atual da pessoa = alguma matrícula ativa ou trancada na unidade
 ```
 
-- **Trancado, evadido, inativo e desconhecido NÃO entram.** (Antes entravam e a lista saltava de ~16 para ~40.)
+- **Trancado entra no radar financeiro.** O trancamento temporário não elimina a parcela mensal prevista no contrato. A view operacional continua livre para excluir trancados de carteira pedagógica e headcount ativo; a RPC financeira inclui explicitamente `eh_trancamento_atual`.
+- **Ex-aluno sem nenhuma matrícula atual ativa ou trancada fica fora.** Reingresso conta como aluno atual: o estado Emusys v1.3.1 (`ativa|trancada`) prevalece sobre `data_saida` histórica. Sem raw atual, o fallback local exige `ativo|trancado` e `data_saida IS NULL`.
+- Uma dívida da matrícula anterior só pode acompanhar um reingresso quando a matrícula da fatura é conhecida, pertence ao mesmo `unidade_id + emusys_student_id` e existe papel atual da pessoa. Nome nunca participa da identidade.
 - **Banda e bolsista integral permanecem `sem_parcela`** mesmo quando o Emusys devolve `em_dia`.
 - 🚫 Percentual por **valor** (`mrr_inadimplente / mrr_contratual`) foi **rejeitado pelo Alf**.
 - 🚫 `(faturamento_previsto − faturamento_realizado) / faturamento_previsto` é legado — não usar.
 
 **Fonte canônica:** `get_inadimplencia_canonica`, sobre `sync_runs` + `sync_run_items`. O booleano `aluno_jornada_matricula_disciplina.inadimplente_emusys` permanece compatibilidade, não autoriza lista ou cobrança. `source_missing` significa reconciliação pendente e **nunca** pagamento.
 
-Qualquer competência necessária stale bloqueia a lista inteira (`items=[]`). Identidade opcional inválida, duplicidade ou ausência na fonte deixa o estado `incomplete`; Farmer e exportação de cobrança só liberam ações com `status='ok'`.
+Qualquer competência necessária stale bloqueia a lista inteira (`items=[]`). Erro estrutural ou snapshot incompleto também bloqueia. `partial` fresco libera **somente** os `items` confirmados; `source_missing`, identidade inválida e contato local não unívoco permanecem em quarentena, fora dos totais confirmados ou do contato conforme o tipo do problema. `source_missing` só se resolve por run fresco/status autoritativo; “sumiu” nunca significa “pagou”.
+
+**Duas réguas, uma fonte:** a verdade financeira é D+0 (`data_vencimento < hoje`). Farmer e Sol aplicam a carência amigável D+2 publicada pelo mesmo contrato; nenhum consumidor pode sobrescrevê-la. O contato é agrupado uma vez por `unidade_id + aluno_id_canonico`, preservando no payload todas as matrículas e faturas exatas. Zero ou múltiplos candidatos locais mantêm o valor no financeiro, mas não geram ação de contato.
 
 **Valor atualizado único:** perde-se o desconto condicional e parte-se de `valor_original`; aplica-se multa de 2% + mora de 1% ao mês pro rata die (`dias_atraso / 30`). O Emusys continua fonte do status; este cálculo apenas apresenta o valor contratual na data de corte.
+
+**Fora desta carteira:** competências anteriores à janela de três meses-calendário e ex-alunos devedores serão tratados em produto separado. Sol, LA Report, exportação e agentes não podem consultar uma fonte paralela para reconstruir esta lista.
 
 ### 4.7 Faturamento ✅
 
@@ -433,6 +441,7 @@ Renovação lançada no Emusys **antes** da competência efetiva do novo ciclo.
 ### 5.7 Trancamento 📋
 
 Pausa temporária, **não é cancelamento**. Requer `previsao_retorno`; status vai para `trancado`.
+Sai dos denominadores pedagógicos ativos, mas continua elegível no radar de faturas vencidas enquanto o trancamento estiver vigente; isso não transforma o aluno em ativo para as demais métricas.
 
 - Trancado **não** conta em alunos ativos, carteira do professor nem denominadores financeiros.
 - **"Trancados agora"** (foto atual) e **"trancamentos do período"** (movimentações) são indicadores **diferentes** — não confundir.
