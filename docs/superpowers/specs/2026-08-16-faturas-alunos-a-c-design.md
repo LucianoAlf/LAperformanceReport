@@ -1,7 +1,7 @@
 # Faturas de Alunos — especificação de produto A+C
 
 Data: 16/08/2026
-Status: implementação concluída; prova autenticada de produção pendente
+Status: implementação e prova autenticada de produção concluídas
 Projeto: LA Report
 Supabase: `ouqwbbermlzqqvtqwlul`
 

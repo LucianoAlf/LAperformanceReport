@@ -1,21 +1,58 @@
-# Handoff — inadimplência canônica para a Sol
+# Handoff final — inadimplência canônica para a Sol
 
 Data: 16/08/2026
 Projeto Supabase: `ouqwbbermlzqqvtqwlul`
-Commit publicado em `main`: `8dafb2d0`
+Backend publicado: `2cd9147e`
+Frontend publicado: `35aaf3da`
 
-## Resultado publicado
+## Contrato definitivo
 
-- A verdade financeira D+0 está em `get_inadimplencia_canonica`.
-- A lista operacional da Sol está em `sol_caixa_inadimplentes` e aplica D+2.
-- A Sol não dispara sync próprio e não lê `sync_run_items`, `emusys_faturas`
-  nem `inadimplente_emusys` diretamente.
-- `partial + collection_allowed=true + collection_scope=confirmed_only` é uma
-  liberação segura: somente os itens confirmados podem ser usados; quarentenas
-  continuam visíveis separadamente.
-- `stale`, `incomplete`, `error` ou `collection_allowed=false` bloqueiam toda
-  ação. Não existe fallback por nome, student ID, snapshot antigo ou flag.
-- Nenhum cron de cobrança nem mensagem automática foi ativado neste rollout.
+- Verdade financeira D+0: `public.get_inadimplencia_canonica(uuid, date)`.
+- Lista operacional D+2 da Sol: `public.sol_caixa_inadimplentes(...)`.
+- Página operacional do LA Report: `/app/faturas`.
+- A Sol é consumidora da leitura canônica; não possui sync próprio.
+- As RPCs de caixa `sol_caixa_lancar_recebimento`, `sol_caixa_abrir`,
+  `sol_caixa_fechar` e `sol_caixa_casar_parcela` não foram alteradas.
+
+### Fonte e universo
+
+Entram na leitura canônica somente faturas que atendem simultaneamente a:
+
+1. competência no mês corrente ou nos dois meses anteriores;
+2. `status = 'aberta'`;
+3. vencimento anterior à data de corte;
+4. `source_missing = false`;
+5. unidade, matrícula e pessoa identificadas de forma exata;
+6. matrícula atual com estado Emusys `ativa` na mesma unidade;
+7. cadastro não arquivado.
+
+Alunos `trancada`, `evadido`, `inativa` e ex-alunos sem matrícula ativa ficam
+fora da lista principal. Eles não são apagados: permanecem disponíveis para a
+camada futura de histórico/reconciliação. Reingresso conta como aluno atual
+somente quando a matrícula atual ativa e a identidade Emusys estão comprovadas.
+
+`source_missing` significa apenas “não observado na consulta fresca da origem”.
+Nunca significa pagamento. Só `status = 'paga'` em observação válida confirma
+pagamento.
+
+### Gate de segurança
+
+Uma leitura pode ser usada somente quando:
+
+```text
+status IN ('ok', 'partial')
+AND operational.collection_allowed = true
+AND operational.collection_scope = 'confirmed_only'
+AND freshness.fresh_until ainda não expirou
+```
+
+Em `partial`, somente `items` confirmados estão liberados. Os blocos de
+`source_missing`, identidade inválida, validação e contato pendente são
+reconciliação e não entram nos totais nem em mensagens.
+
+Em `stale`, `incomplete`, `error`, `collection_allowed=false` ou
+`collection_scope='blocked'`, a Sol deve retornar lista vazia, registrar o
+bloqueio e não fazer fallback.
 
 ## RPC operacional da Sol
 
@@ -30,173 +67,118 @@ public.sol_caixa_inadimplentes(
 ) returns jsonb
 ```
 
-Permissão: somente `service_role`. A chave nunca pode ir para navegador,
-mensagem, log ou prompt.
+A execução é exclusiva de `service_role` e deve ocorrer somente no backend.
+Nenhuma chave pode ir para navegador, log, URL, mensagem ou prompt.
 
-Os três parâmetros de régua financeira são contrato fixo. A RPC rejeita
-qualquer chamada com carência diferente de 2, multa diferente de 2% ou mora
-diferente de 1% ao mês.
+A RPC já:
 
-### Regra de consumo
+- chama `get_inadimplencia_canonica`;
+- aplica carência D+2;
+- exclui contato não resolvido;
+- agrega uma ação por pessoa e unidade;
+- preserva todas as faturas e matrículas exatas da pessoa;
+- usa os valores original e atualizado publicados pelo canônico.
 
-Pode usar `alunos` somente quando:
+Nunca reconstruir identidade por nome, telefone, posição, curso ou
+`emusys_student_id`. Use somente `aluno_id_canonico`, `contato`,
+`emusys_matricula_ids` e `faturas` retornados pela RPC.
 
-```text
-status IN ('ok', 'partial')
-AND collection_allowed = true
-AND collection_scope = 'confirmed_only'
-```
+## Regra de valor
 
-Cada linha de `alunos` já é uma única ação por pessoa e unidade. Quando a mesma
-pessoa tem mais de uma matrícula devedora, a RPC agrega a pessoa uma vez e
-preserva os vínculos exatos em `emusys_matricula_ids` e `faturas`.
-
-Campos principais por pessoa:
-
-- `aluno_id_canonico`, `unidade_id`, `nome`, `curso`, `contato`;
-- `emusys_matricula_ids`;
-- `faturas`, com `canonical_fatura_id`, `emusys_fatura_id`,
-  `emusys_matricula_id`, `emusys_contrato_id`, competência, vencimento, dias e
-  valores;
-- `parcelas`, `meses`, `dias`, `mais_antiga`;
-- `valor_original`, `valor_atualizado`, `faixa`.
-
-Nunca reconstruir identidade por nome, telefone, ordenação local ou
-`emusys_student_id`. O único contato permitido é o publicado em
-`aluno_id_canonico`/`contato` pela RPC.
-
-## Regras de negócio fechadas
-
-- Janela: mês atual e dois meses anteriores.
-- Verdade financeira: fatura `aberta`, vencimento anterior a hoje,
-  `source_missing=false`.
-- Cobrança amigável da Sol: somente a partir de D+2.
-- Pessoa atual: possui alguma matrícula atual `ativa` ou `trancada` na mesma
-  unidade. Trancamento temporário continua financeiramente responsável.
-- Ex-aluno: não possui nenhuma matrícula atual ativa ou trancada; fica fora
-  desta lista mesmo que tenha dívida antiga.
-- Reingresso conta como aluno atual. A dívida exata da matrícula anterior pode
-  acompanhá-lo quando matrícula, unidade e pessoa estão comprovadas.
-- `source_missing` significa “não confirmado na origem”, nunca “pago”.
-- IDs opcionais inválidos e contato ambíguo ficam em quarentena e não derrubam
-  os itens seguros.
-- Valor atualizado por fatura:
+O canônico publica o valor atualizado por fatura, arredondado em duas casas:
 
 ```text
 valor_original × (1 + 0,02 + 0,01 × dias_atraso / 30)
 ```
 
-O desconto condicional já foi perdido. O arredondamento ocorre por fatura em
-duas casas.
+A parcela vencida perdeu o desconto condicional. O consumidor não deve
+recalcular juros. O campo vivo `juros_e_multa` do Emusys ficou em zero nos
+probes de 16/08/2026, apesar da documentação dizer que seria dinâmico; por isso
+o contrato publicado continua sendo a fonte operacional até nova reconciliação
+formal.
 
-## Confirmações do ciclo de vida Emusys
+## Evidência validada em produção
 
-- A OpenAPI versionada no repositório é a v1.4.0 e confirma os estados
-  `ativa|inativa|trancada`, `trancamento_ativo` e
-  `motivo_inativa=interrompida|concluida`. O anexo
-  `api_emusys (2).json` é um snapshot anterior, v1.2.2; por isso ele não
-  contém esses campos nem `/crm/aniversariantes`.
-- Em produção, a projeção v1.3.1 tinha 14 matrículas `trancada` na auditoria
-  de 16/08/2026. Para elas, `entra_financeiro_ativo=false` e
-  `eh_trancamento_atual=true`.
-- Essa separação é intencional: `entra_financeiro_ativo` continua sendo o
-  denominador de aluno ativo dos KPIs. O radar de inadimplência acrescenta
-  explicitamente `eh_trancamento_atual`, incluindo o trancado na cobrança sem
-  transformá-lo em ativo pedagógico ou em pagante do MRR.
-- O papel atual da pessoa vem de `GET /matriculas`, por unidade e identidade
-  Emusys. Estado bruto atual `ativa|trancada` prevalece sobre `data_saida`
-  histórica; `data_saida IS NULL` existe apenas no fallback sem estado bruto.
-  A auditoria encontrou três linhas atuais com data de saída histórica, o caso
-  que representa reingresso e que não pode ser excluído.
-- `alunos.is_ex_aluno` e `/crm/aniversariantes` não participam da autorização
-  de cobrança. O primeiro é um rótulo local sujeito a defasagem; o segundo é
-  orientado a aniversários. O papel `aluno|ex_aluno` desse endpoint pode servir
-  como reconciliação, mas nunca como uma segunda fonte operacional paralela.
+Leitura de 16/08/2026, com três competências frescas e
+`collection_allowed=true`. Os timestamps são evidência daquele gate, não
+autorização permanente: toda execução precisa validar o frescor atual.
 
-## Gate real executado
+| Unidade | D+0 faturas / matrículas | Original | Atualizado | Sol D+2 pessoas | Original D+2 | Atualizado D+2 |
+|---|---:|---:|---:|---:|---:|---:|
+| Campo Grande | 15 / 11 | R$ 6.705,00 | R$ 6.910,14 | 11 | R$ 6.705,00 | R$ 6.910,14 |
+| Barra | 19 / 18 | R$ 7.976,00 | R$ 8.156,85 | 15 | R$ 6.629,00 | R$ 6.782,46 |
+| Recreio | 4 / 4 | R$ 1.910,87 | R$ 1.954,03 | 3 | R$ 1.420,00 | R$ 1.452,36 |
 
-Relatórios oficiais do Emusys, sem juros:
+No Recreio existe uma fatura confirmada de R$ 490,87, matrícula Emusys `645`,
+sem contato local unívoco. Ela aparece na visão financeira D+0, mas fica fora
+da lista da Sol até o vínculo ser resolvido. Isso explica 4 matrículas no
+financeiro e 3 pessoas acionáveis na Sol.
 
-| Competência | Emusys CG | Canônico CG | Explicação |
-|---|---:|---:|---|
-| 06/2026 | 6 / R$ 2.682,00 | 4 / R$ 1.788,00 | 2 ex-alunos excluídos |
-| 07/2026 | 8 / R$ 3.576,00 | 8 / R$ 3.576,00 | coincidência integral |
-| 08/2026 | 3 / R$ 1.341,00 | 3 / R$ 1.341,00 | coincidência integral |
+Totais visuais consolidados na página:
 
-O probe read-only de CG/agosto conferiu item a item:
+- 38 faturas confirmadas D+0;
+- 33 matrículas;
+- R$ 16.591,87 original;
+- R$ 17.021,02 atualizado;
+- 35 faturas D+2, agrupadas em 30 pessoas elegíveis;
+- 1 contato pendente, fora de qualquer ação.
 
-- Brenda Pereira Dias — fatura `45123`, matrícula `2460`, R$ 447,00;
-- Francisco Adilson Costa Ribeiro — fatura `46232`, matrícula `2506`,
-  R$ 447,00;
-- Renan de Souza Corrêa — fatura `46815`, matrícula `2249`, R$ 447,00.
+Confronto sem juros com os XLSX oficiais:
 
-Os três vencimentos são 05/08/2026 e os cursos coincidem com o relatório.
-
-Snapshots publicados:
-
-- agosto: `5f13edb3-e713-41e1-80b6-87c5043e4b9f`;
-- julho: `f6b12a40-d7f2-4d11-87fd-8f8f87c9e50e`;
-- junho: `5ec95d35-2c4d-4fae-b967-f869404fd3e8`.
-
-Todos terminaram `succeeded`, `snapshot_complete=true`, com as três unidades.
-Julho passou mesmo com IDs opcionais inválidos: eles foram para
-`validation_issues` e não derrubaram a coleta.
-
-Leitura canônica de Campo Grande após o gate:
-
-- `status=partial`, `collection_allowed=true`,
-  `collection_scope=confirmed_only`;
-- 15 faturas, 11 matrículas/pessoas;
-- R$ 6.705,00 original e R$ 6.910,14 atualizado;
-- Sol: 11 ações, 0 cadastros ausentes, 7 normais e 4 críticas.
-
-### Juros do Emusys ao vivo
-
-A OpenAPI diz que `juros_e_multa` é dinâmico. Porém, o payload vivo das três
-faturas de agosto trouxe explicitamente `juros_e_multa=0` e
-`desconto_aplicado=0`. Para cada R$ 447,00 vencido há 11 dias, a cláusula 2.5
-produz R$ 10,58 e total atualizado de R$ 457,58. Até o Emusys corrigir essa
-divergência, a Sol deve usar exclusivamente `valor_atualizado` publicado pela
-RPC canônica.
+| Unidade | Competência | Emusys | Canônico ativo | Explicação |
+|---|---:|---:|---:|---|
+| Campo Grande | 06/2026 | 6 / R$ 2.682,00 | 4 / R$ 1.788,00 | 2 evadidos excluídos |
+| Campo Grande | 07/2026 | 8 / R$ 3.576,00 | 8 / R$ 3.576,00 | bateu |
+| Campo Grande | 08/2026 | 3 / R$ 1.341,00 | 3 / R$ 1.341,00 | bateu |
+| Recreio | 06/2026 | 1 / R$ 480,00 | 0 | Cherley evadido |
+| Recreio | 07/2026 | 1 / R$ 480,00 | 0 | Ísis evadida |
+| Recreio | 08/2026 | 5 / R$ 2.390,87 | 4 / R$ 1.910,87 | Ísis evadida |
+| Barra | 06/2026 | 0 | 0 | sem registros |
+| Barra | 07/2026 | 1 / R$ 397,00 | 1 / R$ 397,00 | bateu |
+| Barra | 08/2026 | 18 / R$ 7.579,00 | 18 / R$ 7.579,00 | bateu |
 
 ## Prompt pronto para o Claude
 
 ```text
-Claude, a Sol deve consumir exclusivamente a RPC
+Claude, conecte a Sol exclusivamente à RPC
 public.sol_caixa_inadimplentes da instância Supabase
-ouqwbbermlzqqvtqwlul, sempre no backend com service_role.
+ouqwbbermlzqqvtqwlul, somente no backend com service_role.
 
-Não crie sync próprio. Não leia sync_run_items, emusys_faturas,
-inadimplente_emusys ou qualquer view antiga. Não altere as RPCs protegidas
-sol_caixa_lancar_recebimento, sol_caixa_abrir, sol_caixa_fechar e
+Não crie sync próprio e não leia sync_run_items, emusys_faturas,
+inadimplente_emusys, status_pagamento ou qualquer view antiga. Não altere
+sol_caixa_lancar_recebimento, sol_caixa_abrir, sol_caixa_fechar nem
 sol_caixa_casar_parcela.
 
-Não consulte /crm/aniversariantes nem alunos.is_ex_aluno para decidir quem
-pode ser cobrado. A RPC já resolve o papel atual pela matrícula Emusys; esses
-dois sinais são apenas de reconciliação.
+Para cada unidade, chame:
+sol_caixa_inadimplentes(unidade_id, 2, 0.02, 0.01, 30, 40).
 
-Chame sol_caixa_inadimplentes(unidade_id, 2, 0.02, 0.01, 30, 40).
-Só permita ação quando status for ok ou partial, collection_allowed=true e
-collection_scope='confirmed_only'. Em stale, incomplete, error ou bloqueio,
-não envie nada e não faça fallback.
+Só use o array alunos quando status estiver em ok|partial,
+collection_allowed=true, collection_scope='confirmed_only' e fresh_until ainda
+estiver válido. Em stale, incomplete, error, bloqueio ou expiração, não envie
+nada, não use cache antigo e não faça fallback. Solicite atualização pelo fluxo
+oficial do LA Report; a Sol não dispara o Emusys diretamente.
 
-Use apenas o array alunos retornado. Ele já aplica D+2, uma ação por pessoa e
-unidade, mantém trancados no radar, exclui ex-alunos sem matrícula atual e
-preserva reingressos. Identifique o contato somente por aluno_id_canonico e
-contato publicados. Nunca case por nome, telefone, student_id ou posição.
+Use somente aluno_id_canonico e contato publicados. Não case pessoas por nome,
+telefone, student_id, curso ou ordenação. Preserve emusys_matricula_ids e o
+array faturas na auditoria. A RPC já aplica D+2, exclui alunos trancados,
+evadidos/inativos, ex-alunos e contatos não resolvidos, agrega uma ação por
+pessoa/unidade e publica valor_atualizado. Não recalcule juros.
 
-Preserve emusys_matricula_ids e faturas na auditoria de cada contato. Use
-valor_atualizado da RPC; não recalcule juros e não use juros_e_multa bruto do
-Emusys, pois o gate vivo de 16/08/2026 mostrou zero indevido nesse campo.
-
-Antes de ligar qualquer cron, execute em modo sombra: leia as três unidades,
-grave somente auditoria interna, compare contagens/valores com o contrato e
-mostre o resultado ao Alf. Não envie WhatsApp, e-mail ou cobrança nesse teste.
+Antes de ligar qualquer envio, rode em modo sombra nas três unidades: grave o
+payload e o timestamp, valide os gates, compare os totais acima e mostre ao Alf
+as pessoas/faturas que seriam acionadas. O teste não pode enviar WhatsApp,
+e-mail nem alterar caixa. Só ative o cron de cobrança após aprovação explícita
+desse modo sombra.
 ```
 
-## Publicação
+## Página operacional
 
-- Migrations: `20260816184837` e `20260816184845`.
-- Edge `export-contas-receber`: versão 20, `verify_jwt=false` preservado.
-- Edge `sync-faturas-emusys`: versão 30, `verify_jwt=true` preservado.
-- Frontend Vercel: produção publicada a partir de `main`.
+A página `/app/faturas` está publicada no LA Report e usa apenas
+`get_inadimplencia_canonica`. Ela mostra confirmados D+0, elegibilidade D+2,
+valores, frescor, reconciliação e detalhe por fatura. Não executa cobrança nem
+mutação financeira.
+
+Especificação e plano:
+
+- `docs/superpowers/specs/2026-08-16-faturas-alunos-a-c-design.md`;
+- `docs/superpowers/plans/2026-08-16-faturas-alunos-a-c.md`.

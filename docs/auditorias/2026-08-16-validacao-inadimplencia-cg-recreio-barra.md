@@ -70,28 +70,30 @@ usar apenas alunos ativos.
 Não foi feito backfill por nome, não foi marcado `source_missing` como pago e
 nenhuma fatura foi apagada.
 
-## Gate de frescor
+## Gate de frescor concluído
 
-Na consulta das 17:28 no horário de Brasília, o snapshot mais recente já havia
-passado o `stale_after` das três competências. A RPC retornou deliberadamente:
+Após o estado `stale` observado às 17:28, foi executado o fluxo oficial de sync
+para junho, julho e agosto. As três competências terminaram completas e a RPC
+voltou para:
 
-- `status = stale`;
-- `operational.collection_allowed = false`;
-- `collection_scope = blocked`;
-- `block_reasons = ["stale_competencia"]`;
-- `items = []` e totais zerados.
+- `status = partial`;
+- `operational.collection_allowed = true`;
+- `collection_scope = confirmed_only`;
+- três competências frescas;
+- itens confirmados liberados e reconciliação isolada.
 
-Isso é o comportamento de segurança esperado: a conciliação estrutural está
-verde, mas a cobrança não deve consumir um snapshot expirado. É necessário um
-novo sync completo das três competências antes de liberar a lista operacional.
+Na prova autenticada de produção, a página A+C mostrou os totais esperados nas
+três unidades e no consolidado, preservou os centavos após reload e não gerou
+erros no console. A evidência temporal tinha `fresh_until` em 16/08/2026 às
+18:51 no horário de Brasília; esse horário não é permanente e precisa ser
+revalidado por todo consumidor em cada execução.
 
-## Próximo gate antes do front-end
+## Resultado do gate
 
-1. Rodar um sync controlado de junho, julho e agosto.
-2. Confirmar que a RPC volta para `partial` ou `ok`, com
-   `collection_allowed = true`.
-3. Conferir os totais esperados: Recreio R$ 1.910,87 em agosto; Barra
-   R$ 397,00 em julho e R$ 7.579,00 em agosto; Campo Grande R$ 1.788,00 em
-   junho, R$ 3.576,00 em julho e R$ 1.341,00 em agosto.
-4. Só então a página A+C de Faturas de Alunos e a integração da Sol devem
-   consumir a leitura canônica liberada.
+1. Recreio: R$ 1.910,87 em agosto, com Ísis/Cherley excluídos por evasão.
+2. Barra: R$ 397,00 em julho e R$ 7.579,00 em agosto.
+3. Campo Grande: R$ 1.788,00 em junho, R$ 3.576,00 em julho e R$ 1.341,00 em
+   agosto.
+4. A página `/app/faturas` foi publicada e pode consumir os confirmados.
+5. A Sol pode iniciar modo sombra pela RPC operacional, mas nenhum cron ou
+   mensagem está autorizado sem nova aprovação explícita.

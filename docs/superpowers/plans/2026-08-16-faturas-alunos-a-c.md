@@ -16,7 +16,19 @@ mantendo atalhos contextuais em Alunos e Comercial.
 - [x] página dedicada, estados operacionais e detalhe por fatura;
 - [x] rota, menu e atalhos A+C;
 - [x] testes de contrato/interface e build de produção;
-- [ ] prova autenticada em produção, console e estabilidade após reload.
+- [x] prova autenticada em produção, console e estabilidade após reload.
+
+### Evidência de encerramento
+
+- produção validada no commit `35aaf3da`;
+- Campo Grande: 15 faturas, 11 matrículas, R$ 6.705,00 original;
+- Barra: 19 faturas, 18 matrículas, R$ 7.976,00 original;
+- Recreio: 4 faturas, 4 matrículas, R$ 1.910,87 original;
+- consolidado: 38 faturas, 33 matrículas, R$ 16.591,87 original e
+  R$ 17.021,02 atualizado;
+- atalhos de Alunos e Comercial navegando para `/app/faturas`;
+- detalhe por fatura, reload/query string e console sem erros conferidos em
+  sessão autenticada.
 
 ## Pré-condições já concluídas
 
