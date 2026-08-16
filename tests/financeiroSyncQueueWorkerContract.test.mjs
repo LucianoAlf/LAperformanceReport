@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const migrationUrl = new URL(
-  '../supabase/migrations/20260816195000_financeiro_sync_queue_worker.sql',
+  '../supabase/migrations/20260816194355_financeiro_sync_queue_worker.sql',
   import.meta.url,
 );
 const syncUrl = new URL('../supabase/functions/sync-faturas-emusys/index.ts', import.meta.url);
