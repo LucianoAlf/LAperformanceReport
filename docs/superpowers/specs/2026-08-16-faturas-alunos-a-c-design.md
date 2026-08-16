@@ -112,9 +112,10 @@ ou fazer fallback para `emusys_faturas`, `sync_run_items`,
 - em 16/08/2026: junho, julho e agosto de 2026;
 - verdade financeira: `status = aberta` e vencimento anterior à data de corte;
 - `source_missing` nunca significa paga: fica em reconciliação;
-- pessoa atual: matrícula Emusys `ativa` ou `trancada` na mesma unidade;
+- pessoa atual: matrícula Emusys `ativa` na mesma unidade;
 - ex-aluno sem matrícula atual fica fora da lista operacional;
-- trancado continua no radar financeiro, sem virar ativo pedagógico;
+- trancado e evadido ficam fora da cobrança principal, preservados no histórico
+  e na reconciliação;
 - cobrança amigável só depois de D+2, no consumidor operacional;
 - valor atualizado exibido pelo contrato:
 
@@ -169,7 +170,8 @@ deve dizer “aguardando confirmação na origem”.
 - competência: junho, julho, agosto e a janela publicada pelo payload;
 - situação: todas, vencidas confirmadas, elegíveis D+2;
 - curso;
-- aluno trancado;
+- estado operacional: ativos (trancados e evadidos aparecem somente na
+  reconciliação, quando houver fatura correspondente);
 - botão limpar;
 - query string compartilhável, por exemplo:
   `/app/faturas?unidade=<uuid>&competencia=2026-08-01&situacao=confirmadas`.
@@ -207,7 +209,7 @@ O detalhe deve mostrar:
 - valor original, multa, mora e total atualizado;
 - fórmula contratual e data de corte;
 - último sync e `fresh_until`;
-- status atual: ativo ou trancado;
+- status atual: ativo;
 - vínculo exato usado na reconciliação;
 - link/atalho para a ficha do aluno;
 - sem botão de cobrança ou alteração na primeira versão.

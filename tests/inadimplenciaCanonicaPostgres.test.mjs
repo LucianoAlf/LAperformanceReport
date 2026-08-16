@@ -19,6 +19,10 @@ const canonicalMigrationPaths = [
   '20260816184837_inadimplencia_canonica_liberacao_parcial_v3.sql',
 ].map((name) => path.join(root, 'supabase', 'migrations', name));
 const V3_MIGRATION = canonicalMigrationPaths.at(-1);
+const POLICY_PATCH_MIGRATIONS = [
+  '20260816213000_inadimplencia_exclui_trancados_repara_matricula.sql',
+  '20260816220000_inadimplencia_patch_ativo_idempotente.sql',
+].map((name) => path.join(root, 'supabase', 'migrations', name));
 const SOL_V3_MIGRATION = path.join(
   root,
   'supabase',
@@ -147,6 +151,7 @@ const fixtureSchema = `
     telefone text,
     status text,
     updated_at timestamptz not null default now(),
+    updated_by text,
     arquivado_em timestamptz,
     tipo_matricula_id bigint references public.tipos_matricula(id),
     curso_id bigint references public.cursos(id),
@@ -196,6 +201,7 @@ const fixtureSchema = `
   create table public.sync_runs (
     id uuid primary key, competencia date not null, run_type text not null, status text not null,
     snapshot_complete boolean not null, unidades_concluidas integer not null, completed_at timestamptz, stale_after timestamptz not null,
+    created_at timestamptz not null default now(),
     constraint sync_runs_competencia_primeiro_dia_chk check (competencia = date_trunc('month', competencia)::date),
     constraint sync_runs_run_type_chk check (run_type in ('live', 'baseline')),
     constraint sync_runs_status_chk check (status in ('running', 'succeeded', 'failed')),
@@ -496,6 +502,52 @@ test('v3 libera somente faturas confirmadas quando a reconciliacao parcial e fre
     assert.equal(unknown.source_missing_reason, 'paga ausente');
     assert.ok(unknown.source_missing_detected_at);
     assert.ok(unknown.sync_completed_at);
+  });
+});
+
+test('patch operacional exclui trancado e repara aluno por matricula unica', { timeout: 90_000 }, async (t) => {
+  await withCanonicalFixture(t, async (container) => {
+    const month = "date '2026-08-01'";
+    const asOfDate = '2026-08-16';
+    insertAluno(container, 701, UNIT_A, '2701', { student: null, status: 'ativo' });
+    insertOperationalState(container, UNIT_A, '2701', 701, 'ativo', 'ativa');
+    insertAluno(container, 702, UNIT_A, '2702', { status: 'trancado' });
+    insertOperationalState(container, UNIT_A, '2702', 702, 'trancado', 'trancada');
+    const run = '00000000-0000-0000-0000-000000000701';
+    const activeInvoice = '70000000-0000-0000-0000-000000000701';
+    const lockedInvoice = '70000000-0000-0000-0000-000000000702';
+    seedRun(container, run, month);
+    insertInvoices(container, [
+      invoice(activeInvoice, UNIT_A, run, month, 2701, { student: 9701, value: 100 }),
+      invoice(lockedInvoice, UNIT_A, run, month, 2702, { value: 200 }),
+    ], 'patch de estado financeiro ativo');
+
+    for (const migration of POLICY_PATCH_MIGRATIONS) {
+      seed(
+        container,
+        fs.readFileSync(migration, 'utf8'),
+        `aplicacao do patch de estado financeiro ${path.basename(migration)}`,
+      );
+    }
+
+    const repaired = jsonFrom(psql(container, `
+      select jsonb_build_object(
+        'student', emusys_student_id,
+        'updated_by', updated_by
+      )::text
+      from public.alunos
+      where id = 701;
+    `), 'vinculo por matricula unica');
+    assert.deepEqual(repaired, {
+      student: '9701',
+      updated_by: 'migration:20260816213000',
+    });
+
+    const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'trancado fora do radar');
+    assert.equal(result.status, 'ok');
+    assert.deepEqual(result.items.map((item) => item.canonical_fatura_id), [activeInvoice]);
+    assert.equal(result.totals.total_original, 100);
+    assert.equal(result.reconciliation.invalid_identity_invoice_count, 0);
   });
 });
 

@@ -16,9 +16,9 @@ mantendo atalhos contextuais em Alunos e Comercial.
 - fila/backoff do sync Emusys publicada e drenada;
 - Campo Grande validado contra os relatórios de junho, julho e agosto;
 - Sol preparada para consumir a leitura canônica, sem sync próprio;
-- decisões de negócio: janela de três competências, trancado no radar
-  financeiro, ex-aluno fora da cobrança operacional, `source_missing` em
-  quarentena.
+- decisões de negócio: janela de três competências, somente aluno ativo no
+  radar financeiro, trancado/evadido fora da cobrança principal, ex-aluno fora
+  da cobrança operacional, `source_missing` em quarentena.
 
 ## Tarefas
 

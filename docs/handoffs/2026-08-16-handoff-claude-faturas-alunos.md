@@ -42,8 +42,9 @@ Regras de negócio já fechadas:
 - janela operacional = mês atual + dois meses anteriores;
 - em 16/08/2026 = junho, julho e agosto;
 - fatura = status aberta + vencimento anterior à data de corte;
-- pessoa atual = matrícula Emusys ativa ou trancada na mesma unidade;
-- trancado entra no radar financeiro, mas não vira ativo pedagógico;
+- pessoa atual = matrícula Emusys ativa na mesma unidade;
+- trancado e evadido ficam fora da cobrança principal e permanecem apenas no
+  histórico/reconciliação;
 - ex-aluno sem matrícula atual não entra na lista operacional;
 - cobrança amigável é D+2 no consumidor da Sol, não na verdade D+0 da UI;
 - valor atualizado já vem do canônico pela regra contratual 2% + 1% ao mês pro
@@ -105,13 +106,19 @@ Recreio, Barra e consolidado autorizado, confira console e reload, e devolva:
 - `source_missing` isolado, sem ser interpretado como pagamento;
 - consumidores operacionais ajustados para consumir o canônico;
 - tela atual de Alunos liberando apenas o conjunto confirmado;
-- Campo Grande conferido item a item e por competência.
+- Campo Grande conferido item a item e por competência;
+- regra operacional publicada: somente aluno ativo; trancado e evadido ficam
+  fora da cobrança principal e permanecem na reconciliação/histórico;
+- vínculo determinístico da Manuela reparado por unidade + matrícula única,
+  sem associação por nome;
+- exportações oficiais de Recreio e Barra reconciliadas por competência.
 
 ### Ainda pendente
 
 - implementação visual da página `/app/faturas`;
 - atalhos A+C;
-- exportações oficiais atuais de Recreio e Barra para reconciliação visual;
+- novo sync controlado das três competências para o canônico voltar de
+  `stale` a `partial` ou `ok`, com `collection_allowed = true`;
 - histórico completo de faturas e carteira separada de ex-alunos;
 - prova final da página em produção e handoff final do Claude.
 
