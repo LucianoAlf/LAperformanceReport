@@ -383,6 +383,9 @@ export function FaturasAlunosPage() {
     row.aluno_id_canonico ?? `${row.unidade_id}|${row.emusys_matricula_id}`
   ))).size;
   const totalReconciliacao = state.sourceMissingCount + state.invalidIdentityInvoiceCount;
+  const rotuloPessoasD2 = `${pessoasD2} ${pessoasD2 === 1 ? 'pessoa elegível' : 'pessoas elegíveis'}`;
+  const rotuloValidacoes = `${state.validationIssueCount} ${state.validationIssueCount === 1 ? 'validação' : 'validações'}`;
+  const rotuloContatos = `${state.contactResolutionPendingCount} ${state.contactResolutionPendingCount === 1 ? 'contato pendente' : 'contatos pendentes'}`;
 
   if (state.status === 'loading') return <LoadingState />;
 
@@ -428,7 +431,7 @@ export function FaturasAlunosPage() {
               title="Cobrança amigável D+2"
               tooltip="Recorte operacional que respeita a carência contratada pelo consumidor."
               value={faturasD2.length}
-              subvalue={`${pessoasD2} pessoa${pessoasD2 === 1 ? '' : 's'} elegível${pessoasD2 === 1 ? '' : 'eis'}`}
+              subvalue={rotuloPessoasD2}
               icon={HandCoins}
               variant="amber"
             />
@@ -445,7 +448,7 @@ export function FaturasAlunosPage() {
               title="Reconciliação"
               tooltip="Registros fora da cobrança e aguardando confirmação na origem."
               value={totalReconciliacao}
-              subvalue={`${state.validationIssueCount} validações • ${state.contactResolutionPendingCount} contatos pendentes`}
+              subvalue={`${rotuloValidacoes} • ${rotuloContatos}`}
               icon={Link2}
               variant={totalReconciliacao > 0 ? 'rose' : 'violet'}
             />

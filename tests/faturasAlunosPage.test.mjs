@@ -45,3 +45,10 @@ test('atalhos A+C usam a mesma URL canonica em Alunos, ficha e Comercial', () =>
   assert.match(ficha, /Ver faturas can[oô]nicas/i);
   assert.match(comercial, /Faturas de alunos/i);
 });
+
+test('cards financeiros flexionam pessoa, elegibilidade, validacao e contato como frases inteiras', () => {
+  const page = read('src/components/App/FaturasAlunos/FaturasAlunosPage.tsx');
+  assert.match(page, /pessoasD2 === 1 \? 'pessoa elegível' : 'pessoas elegíveis'/);
+  assert.match(page, /contactResolutionPendingCount === 1 \? 'contato pendente' : 'contatos pendentes'/);
+  assert.doesNotMatch(page, /elegíveleis/);
+});
