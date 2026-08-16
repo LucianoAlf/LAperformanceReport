@@ -209,7 +209,12 @@ begin
       count(*) filter (
         where la.source_missing is false
           and la.status = 'aberta'
-      )::integer as confirmed_count,
+          and la.tem_matricula_ativa is true
+          and la.identidade_invalida is false
+      )::integer as open_candidate_count,
+      count(*) filter (
+        where la.source_missing is false
+      )::integer as confirmed_observation_count,
       bool_or(la.identidade_invalida is true) as tem_identidade_invalida,
       bool_or(la.status_nao_suportado is true) as tem_status_nao_suportado,
       coalesce(
@@ -229,7 +234,7 @@ begin
       )
       and (
         gft.tem_source_missing is true
-        or gft.confirmed_count > 0
+        or gft.open_candidate_count > 0
         or gft.tem_identidade_invalida is true
         or (
           gft.tem_matricula_ativa is true
@@ -265,11 +270,14 @@ begin
     select
       gf.unidade_id,
       gf.canonical_fatura_id,
-      gf.confirmed_count,
+      gf.confirmed_observation_count as confirmed_count,
       gf.linhas
     from grupos_fatura gf
     where gf.tem_source_missing is false
-      and gf.confirmed_count > 1
+      and gf.tem_identidade_invalida is false
+      and gf.tem_status_nao_suportado is false
+      and gf.open_candidate_count > 0
+      and gf.confirmed_observation_count > 1
   ),
   grupos_status_nao_suportado as (
     select
@@ -356,7 +364,8 @@ begin
      and gf.canonical_fatura_id = lcr.canonical_fatura_id
     where lcr.rn = 1
       and gf.tem_source_missing is false
-      and gf.confirmed_count = 1
+      and gf.open_candidate_count = 1
+      and gf.confirmed_observation_count = 1
       and gf.tem_identidade_invalida is false
       and gf.tem_status_nao_suportado is false
   ),

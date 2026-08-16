@@ -274,6 +274,31 @@ function insertInvoices(container, values, label) {
   `, label);
 }
 
+function assertCanonicalConflictBlocked(result, canonicalId) {
+  assert.equal(result.status, 'incomplete');
+  assert.equal(result.operational.collection_allowed, false);
+  assert.equal(result.operational.collection_scope, 'blocked');
+  assert.deepEqual(result.operational.block_reasons, ['duplicate_confirmed_fatura']);
+  assert.deepEqual(result.items, []);
+  assert.deepEqual(result.totals, {
+    maior_atraso: 0,
+    total_faturas: 0,
+    total_matriculas: 0,
+    total_original: 0,
+    total_atualizado: 0,
+  });
+  assert.equal(result.reconciliation.status, 'pending');
+  assert.equal(result.reconciliation.source_missing_count, 0);
+  assert.equal(result.reconciliation.duplicate_fatura_count, 1);
+  assert.equal(result.reconciliation.invalid_identity_invoice_count, 0);
+  assert.deepEqual(result.reconciliation.duplicate_invoices, [{
+    unidade_id: UNIT_A,
+    canonical_fatura_id: canonicalId,
+    confirmed_count: 2,
+    linhas: 2,
+  }]);
+}
+
 test('fixture operacional v3 prova tipos e constraints reais antes das migrations canonicas', { timeout: 90_000 }, async (t) => {
   await withContainer(t, async (container) => {
     seed(container, fixtureSchema, 'schema operacional minimo');
@@ -472,6 +497,62 @@ test('v3 bloqueia duplicata quando fatura ativa confirmada colide com confirmada
     assert.equal(result.reconciliation.duplicate_fatura_count, 1);
     assert.equal(result.reconciliation.invalid_identity_invoice_count, 0);
     assert.deepEqual(result.reconciliation.duplicate_invoices.map((item) => item.canonical_fatura_id), [canonicalId]);
+  });
+});
+
+test('v3 bloqueia observacao antiga aberta quando a mesma fatura foi paga em competencia mais nova', { timeout: 90_000 }, async (t) => {
+  await withCanonicalFixture(t, async (container, asOfDate) => {
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
+    const previousMonth = `(${month} - interval '1 month')::date`;
+    insertAluno(container, 241, UNIT_A, '2241', { status: 'ativo' });
+    const olderRun = '00000000-0000-0000-0000-000000000241';
+    const newerRun = '00000000-0000-0000-0000-000000000242';
+    const canonicalId = '24000000-0000-0000-0000-000000000241';
+    seedRun(container, olderRun, previousMonth);
+    seedRun(container, newerRun, month);
+    insertInvoices(container, [
+      invoice(canonicalId, UNIT_A, olderRun, previousMonth, 2241, { fatura: 4241, status: 'aberta', value: 100 }),
+      invoice(canonicalId, UNIT_A, newerRun, month, 2241, { fatura: 4241, status: 'paga', value: 100 }),
+    ], 'mesma fatura aberta antiga e paga nova');
+
+    const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'aberta antiga versus paga nova');
+    assertCanonicalConflictBlocked(result, canonicalId);
+  });
+});
+
+test('v3 bloqueia aberta ativa contra paga inativa no mesmo snapshot canonico', { timeout: 90_000 }, async (t) => {
+  await withCanonicalFixture(t, async (container, asOfDate) => {
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
+    insertAluno(container, 251, UNIT_A, '2251', { status: 'ativo' });
+    insertAluno(container, 252, UNIT_A, '2252', { status: 'trancado' });
+    const run = '00000000-0000-0000-0000-000000000251';
+    const canonicalId = '25000000-0000-0000-0000-000000000251';
+    seedRun(container, run, month);
+    insertInvoices(container, [
+      invoice(canonicalId, UNIT_A, run, month, 2251, { status: 'aberta', value: 100 }),
+      invoice(canonicalId, UNIT_A, run, month, 2252, { status: 'paga', value: 100 }),
+    ], 'aberta ativa e paga inativa no mesmo snapshot');
+
+    const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'aberta ativa versus paga inativa');
+    assertCanonicalConflictBlocked(result, canonicalId);
+  });
+});
+
+test('v3 bloqueia aberta ativa contra cancelada inativa no mesmo snapshot canonico', { timeout: 90_000 }, async (t) => {
+  await withCanonicalFixture(t, async (container, asOfDate) => {
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
+    insertAluno(container, 261, UNIT_A, '2261', { status: 'ativo' });
+    insertAluno(container, 262, UNIT_A, '2262', { status: 'trancado' });
+    const run = '00000000-0000-0000-0000-000000000261';
+    const canonicalId = '26000000-0000-0000-0000-000000000261';
+    seedRun(container, run, month);
+    insertInvoices(container, [
+      invoice(canonicalId, UNIT_A, run, month, 2261, { status: 'aberta', value: 100 }),
+      invoice(canonicalId, UNIT_A, run, month, 2262, { status: 'cancelada', value: 100 }),
+    ], 'aberta ativa e cancelada inativa no mesmo snapshot');
+
+    const result = jsonFrom(callAs(container, 'authenticated', UNIT_A, asOfDate), 'aberta ativa versus cancelada inativa');
+    assertCanonicalConflictBlocked(result, canonicalId);
   });
 });
 

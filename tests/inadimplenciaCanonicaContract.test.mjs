@@ -77,6 +77,8 @@ test('canonical v3 reader is unit-scoped, strict about identity, and centralizes
   assert.match(source, /duplicate_confirmed_fatura/i);
   assert.match(source, /invalid_invoice_identity/i);
   assert.match(source, /grupos_fatura_todos/i);
+  assert.match(source, /open_candidate_count/i);
+  assert.match(source, /confirmed_observation_count/i);
   assert.match(source, /status_nao_suportado/i);
   assert.match(source, /unsupported_invoice_status/i);
   assert.match(source, /'error'\s*,\s*case[\s\S]*?then\s+'unsupported_invoice_status'/i);
