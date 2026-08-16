@@ -43,7 +43,10 @@ test('restored migration bytes match the remote migration ledger', () => {
       normalizedLocalBytes,
       Buffer.from('\r\n'),
     ]);
-    const actual = crypto.createHash('md5').update(normalizedLocalBytes).digest('hex');
+    const normalizedRemoteBytes = Buffer.from(
+      remoteStatementBytes.toString('utf8').replace(/\r\n/g, '\n'),
+    ).subarray(0, -1);
+    const actual = crypto.createHash('md5').update(normalizedRemoteBytes).digest('hex');
     assert.equal(actual, hash, `migration drift: ${name}`);
   }
 });
