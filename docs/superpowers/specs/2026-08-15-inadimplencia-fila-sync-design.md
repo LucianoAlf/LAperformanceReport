@@ -1,7 +1,7 @@
 # Fila única do sync financeiro Emusys
 
-Data: 15/08/2026  
-Projeto Supabase: `ouqwbbermlzqqvtqwlul`  
+Data: 15/08/2026
+Projeto Supabase: `ouqwbbermlzqqvtqwlul`
 Branch: `fix/inadimplencia-canonica-frescor`
 
 ## Decisão já aprovada

@@ -36,7 +36,7 @@ await assert.rejects(
 
 - [ ] **Step 2: executar o teste e confirmar a falha**
 
-Run: `node --test --test-isolation=none tests/faturasSyncColeta.test.mjs`  
+Run: `node --test --test-isolation=none tests/faturasSyncColeta.test.mjs`
 Expected: FAIL porque 429 ainda tenta cinco vezes e `matricula_id` inválido aborta.
 
 - [ ] **Step 3: implementar erros tipados e avisos de validação**
@@ -71,7 +71,7 @@ sleep/retry local.
 
 - [ ] **Step 4: executar e confirmar os testes verdes**
 
-Run: `node --test --test-isolation=none tests/faturasSyncColeta.test.mjs`  
+Run: `node --test --test-isolation=none tests/faturasSyncColeta.test.mjs`
 Expected: todos PASS.
 
 - [ ] **Step 5: commit**
@@ -110,7 +110,7 @@ somente paga; `authenticated` recebe `42501`.
 
 - [ ] **Step 2: executar e confirmar a falha por migration ausente**
 
-Run: `node --test --test-isolation=none tests/financeiroSyncQueueContract.test.mjs tests/financeiroSyncQueuePostgres.test.mjs`  
+Run: `node --test --test-isolation=none tests/financeiroSyncQueueContract.test.mjs tests/financeiroSyncQueuePostgres.test.mjs`
 Expected: FAIL porque a fila/RPCs não existem.
 
 - [ ] **Step 3: criar tabela, índices e RPCs privadas**
@@ -173,7 +173,7 @@ Não criar cron novo.
 
 - [ ] **Step 4: executar fixture, contrato e advisors locais**
 
-Run: `node --test --test-isolation=none tests/financeiroSyncQueueContract.test.mjs tests/financeiroSyncQueuePostgres.test.mjs`  
+Run: `node --test --test-isolation=none tests/financeiroSyncQueueContract.test.mjs tests/financeiroSyncQueuePostgres.test.mjs`
 Expected: PASS, incluindo backlog de junho e ACL.
 
 - [ ] **Step 5: commit**
@@ -211,7 +211,7 @@ segundos inteiros.
 
 - [ ] **Step 2: executar e confirmar a falha**
 
-Run: `node --test --test-isolation=none tests/faturasSyncFrescorContrato.test.mjs tests/financeiroSyncWorker.test.mjs`  
+Run: `node --test --test-isolation=none tests/faturasSyncFrescorContrato.test.mjs tests/financeiroSyncWorker.test.mjs`
 Expected: FAIL porque o endpoint ainda inicia runs diretamente.
 
 - [ ] **Step 3: implementar protocolo puro da fila**
@@ -263,7 +263,7 @@ Aceitar competências explícitas sem limite artificial de duas, ou
 
 - [ ] **Step 6: executar testes**
 
-Run: `node --test --test-isolation=none tests/faturasSyncColeta.test.mjs tests/faturasSyncFrescorContrato.test.mjs tests/financeiroSyncWorker.test.mjs`  
+Run: `node --test --test-isolation=none tests/faturasSyncColeta.test.mjs tests/faturasSyncFrescorContrato.test.mjs tests/financeiroSyncWorker.test.mjs`
 Expected: todos PASS.
 
 - [ ] **Step 7: commit**
@@ -294,7 +294,7 @@ Exigir `status='incomplete'`, `items=[]`,
 
 - [ ] **Step 2: executar e confirmar que a fatura ainda aparece em `items`**
 
-Run: `node --test --test-isolation=none tests/inadimplenciaCanonicaContract.test.mjs tests/inadimplenciaCanonicaPostgres.test.mjs`  
+Run: `node --test --test-isolation=none tests/inadimplenciaCanonicaContract.test.mjs tests/inadimplenciaCanonicaPostgres.test.mjs`
 Expected: FAIL no cenário de identidade.
 
 - [ ] **Step 3: substituir a função por versão que separa avisos**
@@ -313,7 +313,7 @@ ACL e fronteira da Sol.
 
 - [ ] **Step 4: executar testes e fixture**
 
-Run: `node --test --test-isolation=none tests/inadimplenciaCanonicaContract.test.mjs tests/inadimplenciaCanonicaPostgres.test.mjs`  
+Run: `node --test --test-isolation=none tests/inadimplenciaCanonicaContract.test.mjs tests/inadimplenciaCanonicaPostgres.test.mjs`
 Expected: PASS.
 
 - [ ] **Step 5: commit**
