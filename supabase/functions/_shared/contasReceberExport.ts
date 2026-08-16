@@ -212,6 +212,7 @@ export interface SyncRunManifestSource {
   completed_at: string;
   unidades_concluidas: number;
   snapshot_complete: boolean;
+  stale_after?: string | null;
 }
 
 export async function buildManifest(
@@ -221,6 +222,8 @@ export async function buildManifest(
   latestCompleteSyncRunId: string | null = run?.id ?? null,
 ) {
   const competencia = validateCompetencia(competenciaValue);
+  const staleAfter = run?.stale_after ?? null;
+  const staleAfterMs = staleAfter ? new Date(staleAfter).getTime() : Number.NaN;
   const ordered = [...rows].sort((left, right) => (
     String(left.la_report_unidade_id).localeCompare(String(right.la_report_unidade_id))
     || compareIdentifiers(left.emusys_fatura_id, right.emusys_fatura_id)
@@ -250,6 +253,8 @@ export async function buildManifest(
     sync_run_id: run?.id ?? null,
     latest_complete_sync_run_id: latestCompleteSyncRunId,
     sync_completed_at: run?.completed_at ?? null,
+    stale_after: staleAfter,
+    is_fresh: Number.isFinite(staleAfterMs) && Date.now() <= staleAfterMs,
     unidades_concluidas: run?.unidades_concluidas ?? null,
     snapshot_complete: run?.snapshot_complete ?? false,
     manifest_hash: await sha256({ competencia, rows: hashRows }),

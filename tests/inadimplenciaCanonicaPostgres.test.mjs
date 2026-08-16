@@ -10,6 +10,7 @@ const migrationPaths = [
   'supabase/migrations/20260816003732_inadimplencia_canonica_frescor.sql',
   'supabase/migrations/20260816004257_inadimplencia_canonica_dedupe_global.sql',
   'supabase/migrations/20260816020000_inadimplencia_canonica_quarentena_identidade.sql',
+  'supabase/migrations/20260816030000_financeiro_faturas_relatorios_canonicos.sql',
 ].map((migration) => path.join(root, migration));
 const UNIT_A = '11111111-1111-1111-1111-111111111111';
 const UNIT_B = '22222222-2222-2222-2222-222222222222';
@@ -91,6 +92,21 @@ function callAllAs(container, role, asOfDate) {
   `);
 }
 
+function callFinanceAs(container, role, unitId, asOfDate) {
+  const [year, month] = asOfDate.split('-').map(Number);
+  return psql(container, `
+    set role ${role};
+    set app.test_role = '${role}';
+    set app.test_uid = '${AUTH_UID}';
+    set app.test_unidade_id = '${unitId}';
+    select public.get_financeiro_faturas_emusys(
+      '${unitId}'::uuid,
+      ${year},
+      ${month}
+    )::text;
+  `);
+}
+
 const fixtureSchema = `
   create role anon nologin;
   create role authenticated nologin;
@@ -99,7 +115,31 @@ const fixtureSchema = `
 
   create table public.unidades (
     id uuid primary key,
+    nome text not null,
     ativo boolean not null default true
+  );
+
+  create table public.tipos_matricula (
+    id bigint primary key,
+    conta_como_pagante boolean not null default false,
+    entra_ticket_medio boolean not null default false
+  );
+
+  create table public.cursos (
+    id bigint primary key,
+    is_projeto_banda boolean not null default false
+  );
+
+  create table public.alunos (
+    id bigint primary key,
+    unidade_id uuid not null references public.unidades(id),
+    emusys_matricula_id text,
+    status text,
+    arquivado_em timestamptz,
+    tipo_matricula_id bigint references public.tipos_matricula(id),
+    curso_id bigint references public.cursos(id),
+    is_segundo_curso boolean,
+    data_saida date
   );
 
   create table public.sync_runs (
@@ -129,6 +169,9 @@ const fixtureSchema = `
     data_vencimento date not null,
     data_pagamento date,
     valor_original numeric(12, 2) not null,
+    valor_pago numeric(12, 2),
+    desconto_aplicado numeric(12, 2) not null default 0,
+    desconto_fixo numeric(12, 2) not null default 0,
     desconto_condicional numeric(12, 2),
     juros_e_multa numeric(12, 2),
     source_missing boolean not null default false,
@@ -167,9 +210,9 @@ const fixtureSchema = `
     where u.id = nullif(current_setting('app.test_unidade_id', true), '')::uuid;
   $$;
 
-  insert into public.unidades (id, ativo) values
-    ('${UNIT_A}'::uuid, true),
-    ('${UNIT_B}'::uuid, true);
+  insert into public.unidades (id, nome, ativo) values
+    ('${UNIT_A}'::uuid, 'Campo Grande', true),
+    ('${UNIT_B}'::uuid, 'Recreio', true);
 `;
 
 test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e autorizacao', {
@@ -618,6 +661,105 @@ test('Checkpoint 2: leitura canonica respeita frescor, reconciliacao, juros e au
     assert.equal(service.status, 'ok');
     assert.equal(service.items.length, 1);
     assert.equal(service.items[0].unidade_id, UNIT_B);
+
+    seed(container, `
+      delete from public.sync_run_items;
+      delete from public.sync_runs;
+      delete from public.alunos;
+      delete from public.tipos_matricula;
+      delete from public.cursos;
+
+      insert into public.tipos_matricula (id, conta_como_pagante, entra_ticket_medio)
+      values (1, true, true);
+      insert into public.cursos (id, is_projeto_banda) values (1, false);
+      insert into public.alunos (
+        id, unidade_id, emusys_matricula_id, status, arquivado_em,
+        tipo_matricula_id, curso_id, is_segundo_curso
+      ) values (
+        1, '${UNIT_A}', '2901', 'ativo', null, 1, 1, false
+      );
+
+      insert into public.sync_runs (
+        id, competencia, run_type, status, snapshot_complete,
+        unidades_concluidas, completed_at, stale_after
+      ) values (
+        '00000000-0000-0000-0000-000000000009', ${month},
+        'live', 'succeeded', true, 3, now(), now() + interval '1 hour'
+      );
+
+      insert into public.sync_run_items (
+        canonical_fatura_id, unidade_id, unidade_codigo, competencia, run_id,
+        emusys_fatura_id, emusys_matricula_id, emusys_student_id,
+        descricao, status, data_vencimento, data_pagamento,
+        valor_original, valor_pago, juros_e_multa, desconto_aplicado,
+        desconto_fixo, desconto_condicional, source_missing, payload
+      ) values
+        (
+          '90000000-0000-0000-0000-000000000001', '${UNIT_A}', 'CG', ${month},
+          '00000000-0000-0000-0000-000000000009',
+          1901, 2901, 4901, 'Parcela 1', 'paga', ${day} - 10, ${day} - 9,
+          100, 100, 0, 0, 0, 0, false, '{}'::jsonb
+        ),
+        (
+          '90000000-0000-0000-0000-000000000002', '${UNIT_A}', 'CG', ${month},
+          '00000000-0000-0000-0000-000000000009',
+          1902, 2901, 4901, 'Parcela 2', 'aberta', ${day} - 5, null,
+          200, null, 0, 0, 0, 0, false, '{}'::jsonb
+        ),
+        (
+          '90000000-0000-0000-0000-000000000003', '${UNIT_A}', 'CG', ${month},
+          '00000000-0000-0000-0000-000000000009',
+          1903, 2901, 4901, 'Parcela 3', 'cancelada', ${day} - 5, null,
+          300, null, 0, 0, 0, 0, false, '{}'::jsonb
+        );
+    `, 'cenario 7: relatorio financeiro por snapshot imutavel fresco');
+
+    const finance = jsonFrom(
+      callFinanceAs(container, 'authenticated', UNIT_A, asOfDate),
+      'cenario 7: relatorio financeiro fresco',
+    );
+    assert.equal(finance.status, 'ok');
+    assert.equal(finance.fonte, 'sync_run_items');
+    assert.equal(finance.freshness.is_fresh, true);
+    assert.equal(finance.tem_dados, true);
+    assert.equal(finance.totais.faturas_parcela, 3);
+    assert.equal(finance.totais.faturas_parcela_pagas, 1);
+    assert.equal(finance.totais.faturas_parcela_abertas, 1);
+    assert.equal(finance.totais.mrr_atual, 100);
+    assert.equal(finance.totais.faturamento_previsto, 300);
+    assert.equal(finance.totais.valor_aberto_parcelas, 200);
+    assert.equal(finance.inadimplencia_canonica.status, 'ok');
+
+    seed(container, `
+      update public.sync_runs
+      set stale_after = now() - interval '1 minute'
+      where id = '00000000-0000-0000-0000-000000000009';
+    `, 'cenario 8: relatorio stale');
+    const staleFinance = jsonFrom(
+      callFinanceAs(container, 'authenticated', UNIT_A, asOfDate),
+      'cenario 8: relatorio bloqueado por frescor',
+    );
+    assert.equal(staleFinance.status, 'stale');
+    assert.equal(staleFinance.tem_dados, false);
+    assert.deepEqual(staleFinance.por_unidade, []);
+
+    seed(container, `
+      update public.sync_runs
+      set stale_after = now() + interval '1 hour'
+      where id = '00000000-0000-0000-0000-000000000009';
+      update public.sync_run_items
+      set source_missing = true,
+          source_missing_reason = 'nao confirmada na origem'
+      where canonical_fatura_id = '90000000-0000-0000-0000-000000000002';
+    `, 'cenario 9: relatorio com source_missing');
+    const incompleteFinance = jsonFrom(
+      callFinanceAs(container, 'authenticated', UNIT_A, asOfDate),
+      'cenario 9: source_missing nao vira pagamento',
+    );
+    assert.equal(incompleteFinance.status, 'incomplete');
+    assert.equal(incompleteFinance.tem_dados, false);
+    assert.equal(incompleteFinance.integrity.source_missing_count, 1);
+    assert.deepEqual(incompleteFinance.por_unidade, []);
   } finally {
     docker(['rm', '--force', container]);
   }

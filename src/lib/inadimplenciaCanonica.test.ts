@@ -3,6 +3,7 @@
 import { assertEquals } from 'jsr:@std/assert@1';
 import {
   indexarInadimplenciaPorMatricula,
+  montarAlertasInadimplenciaCanonica,
   normalizarInadimplenciaCanonica,
 } from './inadimplenciaCanonica.ts';
 
@@ -101,4 +102,83 @@ Deno.test('resposta incompleta preserva apenas os itens explicitamente confirmad
   assertEquals(result.status, 'incomplete');
   assertEquals(result.sourceMissingCount, 1);
   assertEquals(result.items.length, 1);
+});
+
+Deno.test('alerta operacional agrega faturas e escolhe um unico vinculo ativo por matricula', () => {
+  const state = normalizarInadimplenciaCanonica(payload({
+    totals: {
+      total_faturas: 2,
+      total_matriculas: 1,
+      total_original: 150,
+      total_atualizado: 153.27,
+      maior_atraso: 7,
+    },
+    items: [
+      item(),
+      item({
+        canonical_fatura_id: '10000000-0000-0000-0000-000000000002',
+        emusys_fatura_id: '1002',
+        valor_original: 50,
+        valor_atualizado: 51.1,
+        dias_atraso: 7,
+      }),
+    ],
+  }));
+
+  const resultado = montarAlertasInadimplenciaCanonica(state, [
+    {
+      id: 20,
+      nome: 'Aluno Curso Extra',
+      unidade_id: '11111111-1111-1111-1111-111111111111',
+      emusys_matricula_id: '2001',
+      status: 'ativo',
+      arquivado_em: null,
+      is_segundo_curso: true,
+      whatsapp: '5521999999999',
+      telefone: null,
+      professor: { id: 8, nome: 'Professor Extra' },
+      curso: { nome: 'Canto' },
+    },
+    {
+      id: 10,
+      nome: 'Aluno Principal',
+      unidade_id: '11111111-1111-1111-1111-111111111111',
+      emusys_matricula_id: '2001',
+      status: 'ativo',
+      arquivado_em: null,
+      is_segundo_curso: false,
+      whatsapp: null,
+      telefone: '5521888888888',
+      professor: { id: 7, nome: 'Professor Principal' },
+      curso: { nome: 'Piano' },
+    },
+  ]);
+
+  assertEquals(resultado.semCadastroAtivo, 0);
+  assertEquals(resultado.totalAtivos, 1);
+  assertEquals(resultado.alertas, [{
+    aluno_id: 10,
+    aluno_nome: 'Aluno Principal',
+    whatsapp: '5521888888888',
+    unidade_id: '11111111-1111-1111-1111-111111111111',
+    emusys_matricula_id: '2001',
+    valor_atualizado: 153.27,
+    total_faturas: 2,
+    professor_id: 7,
+    professor_nome: 'Professor Principal',
+    instrumento: 'Piano',
+    dias_atraso: 7,
+    ultimo_sync: '2026-08-15T18:00:00Z',
+  }]);
+});
+
+Deno.test('alerta operacional falha fechado e conta matricula sem cadastro ativo', () => {
+  const stale = normalizarInadimplenciaCanonica(payload({ status: 'stale' }));
+  assertEquals(montarAlertasInadimplenciaCanonica(stale, []).alertas, []);
+
+  const fresh = normalizarInadimplenciaCanonica(payload());
+  const resultado = montarAlertasInadimplenciaCanonica(fresh, []);
+  assertEquals(resultado.alertas, []);
+  assertEquals(resultado.totalAtivos, 0);
+  assertEquals(resultado.semCadastroAtivo, 1);
 });

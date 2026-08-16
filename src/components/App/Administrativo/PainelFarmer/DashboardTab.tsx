@@ -52,6 +52,19 @@ interface DashboardTabProps {
   onOpenRotinaModal?: () => void;
 }
 
+function formatarFrescorFinanceiro(value: string | null) {
+  if (!value) return 'horário do sync indisponível';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'horário do sync indisponível';
+  return `sync ${date.toLocaleString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`;
+}
+
 export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps) {
   // Passar unidadeId para o hook respeitar o filtro global
   const { colaborador, loading: loadingColaborador } = useColaboradorAtual(unidadeId);
@@ -71,6 +84,8 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
     novosMatriculados, 
     renovacoes, 
     resumo,
+    inadimplenciaCanonica,
+    inadimplenciaSemCadastroAtivo,
     loading: loadingAlertas 
   } = useAlertas(unidadeId);
   const { 
@@ -486,13 +501,37 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
               />
             )}
 
+            {inadimplenciaCanonica.status !== 'ok' && inadimplenciaCanonica.status !== 'loading' && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-400" />
+                  <div>
+                    <p className="font-medium">Cobrança financeira temporariamente indisponível</p>
+                    <p className="mt-0.5 text-xs text-amber-200/80">
+                      {inadimplenciaCanonica.status === 'stale'
+                        ? 'O snapshot do Emusys venceu. A lista fica bloqueada até uma sincronização completa e fresca.'
+                        : inadimplenciaCanonica.status === 'incomplete'
+                          ? 'Há faturas aguardando reconciliação. Nenhuma cobrança é liberada com leitura parcial.'
+                          : 'Não foi possível validar a leitura canônica de inadimplência.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {inadimplenciaCanonica.status === 'ok' && inadimplenciaSemCadastroAtivo > 0 && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+                {inadimplenciaSemCadastroAtivo} matrícula(s) inadimplente(s) sem vínculo local ativo. A cobrança foi bloqueada para esses casos.
+              </div>
+            )}
+
             {/* Alerta: Inadimplentes */}
             {inadimplentes.length > 0 && (
               <AlertaItem
                 icon="💰"
                 count={inadimplentes.length}
                 title="Inadimplentes"
-                subtitle="Precisam de cobrança"
+                subtitle={`Valores corrigidos • ${formatarFrescorFinanceiro(inadimplenciaCanonica.ultimoSyncMaisAntigo)}`}
                 variant="warning"
                 expanded={expandedAlerts.has('inadimplentes')}
                 onToggle={() => toggleAlert('inadimplentes')}
@@ -501,10 +540,10 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
                   <AlertaListItem
                     key={item.aluno_id}
                     nome={item.aluno_nome}
-                    detalhe={`R$ ${item.valor_parcela?.toFixed(2)} • ${item.dias_atraso > 0 ? `${item.dias_atraso} dias atraso` : 'Pendente'}`}
+                    detalhe={`R$ ${item.valor_atualizado.toFixed(2)} • ${item.total_faturas} pendência(s) • ${item.dias_atraso} dias de atraso`}
                     whatsapp={item.whatsapp}
                     actionLabel="Cobrar"
-                    mensagemTemplate={`Olá ${item.aluno_nome.split(' ')[0]}! Identificamos que sua mensalidade (R$ ${item.valor_parcela?.toFixed(2)}) está pendente. Podemos ajudar com alguma condição especial? Responda essa mensagem!`}
+                    mensagemTemplate={`Olá ${item.aluno_nome.split(' ')[0]}! Identificamos ${item.total_faturas} pendência(s), que hoje somam R$ ${item.valor_atualizado.toFixed(2)}. Podemos ajudar com alguma condição especial? Responda esta mensagem.`}
                   />
                 )}
               />

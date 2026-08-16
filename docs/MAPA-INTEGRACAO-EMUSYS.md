@@ -22,7 +22,7 @@
    (pull)       └───────────────────────────────────────────────┘
         GET /v1/aulas/       → sync-presenca-emusys    (presença diária + metadados a cada 15 min)
         GET /v1/professores  → sync-professores-emusys (cron semanal)
-        GET /v1/faturas      → sync-faturas-emusys      (cron atual+anterior / refresh interno)
+        GET /v1/faturas      → financeiro_sync_queue → sync-faturas-emusys
 
                 ┌───────────────────────────────────────────────┐
    UPSTREAM     │  Mila SDR (produto SEPARADO) alimenta o Emusys │
@@ -244,7 +244,7 @@ Quem é: os 3 agentes Mila SDR (CG `aHD4kJdzByLwFXA1`, Recreio `gSHJHYMOYDQZqleW
 | 6 | ➡ sai | `GET /v1/aulas/` | sync-presenca-emusys (presença fixa + metadados 15 min) | Aulas, roster, presença, agenda e confirmação de experimentais |
 | 7 | ➡ sai | `GET /v1/professores` | sync-professores-emusys (semanal) | Sync professores |
 | 8 | ➡ sai | `GET /v1/matriculas` | sync-matriculas-emusys | Estado atual completo e jornada canônica |
-| 9 | ➡ sai | `GET /v1/faturas` | sync-faturas-emusys (atual+anterior / sob demanda) | Espelho atual + snapshot financeiro auditável |
+| 9 | ➡ sai | `GET /v1/faturas` | fila única → sync-faturas-emusys | Espelho atual + snapshot financeiro auditável, inclusive competências antigas ainda abertas |
 | — | upstream | Mila → Emusys (cadastro/experimental) | fora do sistema | Origina os webhooks (ver seção 3) |
 
 ---
@@ -294,11 +294,13 @@ Detalhes em `pendencias-emusys.md`. Resumo atualizado:
 
 ## 10. Exportação de faturas para o Super Folha
 
-`refresh-contas-receber` recebe uma competência explícita (`YYYY-MM-01`), executa o sync completo das 3 unidades e devolve `sync_run_id`. Para o cron, a mesma Edge resolve `atual` e `anterior` em BRT e executa os dois em sequência. O segredo dedicado vem do Vault e não expõe credenciais do banco.
+`refresh-contas-receber` é o orquestrador da fila única `financeiro_sync_queue`. Ele enfileira mês atual, anterior, seguinte e toda competência cujo último snapshot ainda tenha fatura `aberta` ou `source_missing`. O worker faz claim com lease e processa uma competência por vez; nenhum caminho paralelo deve disputar o mesmo rate limit do Emusys.
 
-`sync-faturas-emusys` cria o run `running` antes da coleta, usa mutex global no banco, limita chamadas a 50/min e só publica depois de validar paginação, IDs, datas e completude das 3 unidades. A publicação atômica atualiza `emusys_faturas` como espelho canônico atual e grava `sync_run_items` imutáveis, eventos e tombstones por competência. Baseline legado compara ausências, mas não prova frescor.
+`sync-faturas-emusys` cria o run `running` antes da coleta, limita chamadas a 50/min e só publica depois de validar paginação, IDs, datas e completude das 3 unidades. HTTP 429 respeita `Retry-After` e grava backoff exponencial na fila, sem rajada de tentativas dentro da mesma invocação. `matricula_id`, contrato e aluno são identidades opcionais: valor inválido não derruba a fatura; fica em `payload._la_report.validation_issues` e põe os consumidores em quarentena `incomplete`. A publicação atômica mantém o dual-write (`emusys_faturas` mutável + `sync_run_items` imutável), eventos e tombstones por competência. Baseline e `source_missing` ajudam a reconciliar ausência, mas nenhum dos dois prova pagamento.
 
-`export-contas-receber` lê somente snapshots live completos. Com `sync_run_id`, exporta o run exato; com `require_latest=true`, também exige que ele seja o último completo. Sem ID, seleciona o último completo da competência para o fallback read-only. O manifesto informa `sync_run_id` e `latest_complete_sync_run_id`. O exportador cruza aluno/curso por `(unidade_id, emusys_matricula_id)` e usa o UUID estável de `emusys_faturas` como `la_report_fatura_id`. `row_source_hash` e `manifest_hash` excluem IDs técnicos de run/item e timestamps operacionais.
+`export-contas-receber` tem dois contratos. `modo='inadimplencia'` chama `get_inadimplencia_canonica` e só exporta com `status='ok'`, já com `valor_atualizado` (multa 2% + mora 1%/mês pro rata) e `fresh_until`. O modo `snapshot` lê runs live completos; `require_fresh` é `true` por padrão e stale retorna conflito. Uso histórico exige `require_fresh=false` explícito e o manifesto continua com `is_fresh=false`, `stale_after`, `sync_run_id` e `latest_complete_sync_run_id`. O cruzamento local é sempre `(unidade_id, emusys_matricula_id)`.
+
+`get_financeiro_faturas_emusys` também lê o último `sync_run_items` completo, nunca o espelho mutável. Stale, `source_missing`, identidade inválida, status desconhecido ou fatura canônica duplicada retornam `tem_dados=false`. O período aberto pode consumir esse bloco; competências fechadas preservam o snapshot mensal. A fila existe sem cron de cobrança: qualquer automação externa permanece bloqueada até o probe controlado de uma unidade/competência ser comparado item a item com a tela do Emusys.
 
 O plano de contas e a auditoria da classificação continuam no projeto Super Folha.
 

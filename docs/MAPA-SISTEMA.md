@@ -271,10 +271,11 @@ Planilha operacional (`Retencao/PlanilhaRetencao.tsx`) + dashboard analítico (`
 `Administrativo/AdministrativoPage.tsx`; abas Lançamentos (renovações, não-renovação, avisos, cancelamentos, trancamentos, alunos novos), **Contratos** (2ª posição), Fideliza, Lojinha, Farmer, Caixa Financeiro, Caixa de Entrada.
 - **Contratos (`TabContratosVencendo.tsx`):** hook `useContratosVencendo`. Replica a aba "Matrículas Vencendo" do Emusys. **RPC:** nenhuma — leitura direta da view. **View:** `vw_contratos_vencendo` (join `vw_jornada_aluno_atual` + `alunos` por `unidade_id, emusys_matricula_id`).
 - **Hooks (demais abas):** `useCompetenciaFiltro`, `useFidelizaPrograma`, `fetchKPIsAlunosCanonicos`, PainelFarmer (`useRotinas`, `useChecklists`, `useChecklistDetail`, `useDashboardStats`, `useAlertas`, `useFeedbackPendente`, `useSucessoAlunoAlertas`), CaixaEntrada (`useAdminConversas`, `useAdminMensagens`)
+- **Inadimplência do Farmer (16/08/2026):** `useAlertas` não consulta mais `vw_farmer_inadimplentes`; chama `get_inadimplencia_canonica`, cruza por `(unidade_id, emusys_matricula_id)` e agrega faturas por um único vínculo ativo. Somente `status='ok'` habilita o botão manual de cobrança. `stale`, `incomplete` e erro exibem bloqueio explícito; nenhuma automação ou envio nasce desse hook.
 - **Ciclo atual:** `get_kpis_alunos_admin_operacional` separa **Ativos agora**
   de **Trancados agora**. A aba de movimentações mantém **Trancamentos no
   período** como evento histórico distinto.
-- **RPCs:** `get_resumo_renovacoes_proximas`, `toggle_relatorio_cron`, `get_relatorio_gerencial_canonico_v1`, `get_dados_retencao_ia`, `vincular_alunos_checklist`, `get_historico_rotinas`, `get_checklist_detail`, `marcar_checklist_item`, `get_checklists_farmer`, `criar_checklist_from_template`, `get_rotinas_do_dia`, `get_progresso_rotinas_hoje`, `marcar_rotina_concluida`
+- **RPCs:** `get_inadimplencia_canonica`, `get_financeiro_faturas_emusys`, `get_resumo_renovacoes_proximas`, `toggle_relatorio_cron`, `get_relatorio_gerencial_canonico_v1`, `get_dados_retencao_ia`, `vincular_alunos_checklist`, `get_historico_rotinas`, `get_checklist_detail`, `marcar_checklist_item`, `get_checklists_farmer`, `criar_checklist_from_template`, `get_rotinas_do_dia`, `get_progresso_rotinas_hoje`, `marcar_rotina_concluida`
 - **Edge functions:** `gemini-relatorio-gerencial`, `relatorio-admin-whatsapp`, `gemini-insights-retencao`, `enviar-pesquisa-pos-primeira-aula`, `buscar-foto-perfil`, `deletar-mensagem-admin`, `editar-mensagem-admin`
 
 ## Metas (`/app/metas`)
@@ -344,6 +345,13 @@ durante a leitura; consome os snapshots fechados produzidos pelos syncs. A
 ausência de uma linha no lote corrente é um estado de cobertura a auditar, não
 uma autorização para apagar dados históricos.
 
+No período aberto, `get_financeiro_faturas_emusys` seleciona o último run live
+completo da competência e só publica números quando `now() <= stale_after` e a
+integridade está limpa. O payload expõe `sync_run_id`, `sync_completed_at`,
+`stale_after`, `is_fresh` e anexa `inadimplencia_canonica`. O modal bloqueia o
+relatório vivo quando o estado não é `ok`; períodos anteriores usam o snapshot
+mensal fechado, sem sobreposição por dados vivos tardios.
+
 ---
 
 ## Apêndice — Edge functions por categoria (uso no frontend)
@@ -352,7 +360,7 @@ uma autorização para apagar dados históricos.
 - **WhatsApp UAZAPI:** `enviar-mensagem-lead`, `enviar-mensagem-admin`, `whatsapp-status`, `whatsapp-connect`, `listar-instancias-uazapi`, `configurar-webhook-caixa`, `buscar-foto-perfil`, `deletar-mensagem-admin`, `editar-mensagem-admin`, `relatorio-admin-whatsapp`, `professor-360-whatsapp`, `relatorio-coordenacao-whatsapp`, `projeto-alertas-whatsapp`
 - **WhatsApp Meta (Campanhas):** `enviar-campanha`, `controle-campanha`, `enviar-mensagem-meta`, `gerenciar-templates`, `sincronizar-templates`
 - **Pesquisas:** `enviar-pesquisa-pos-primeira-aula`, `enviar-pesquisa-evasao`, `processar-resposta-pesquisa`
-- **Emusys/dados:** `sync-presenca-emusys`, `marcos-jornada`, `auditor-divergencias-emusys`, `sync-feriados`. O contrato puro `_shared/experimental-snapshot.ts` pagina `/aulas` até o fim e normaliza o snapshot de experimentais por `unidade + aula Emusys + participante externo + execução`, sem conciliar por nome/telefone. A aplicação no banco é uma única transação: atualiza/insere vigentes, inativa ausentes do mesmo intervalo e só então registra a execução como completa. No modo `metadados`, a mesma lista de aulas obtida uma vez alimenta tanto o upsert de `aulas_emusys` quanto o snapshot; falha de qualquer unidade encerra a chamada sem resposta parcial de sucesso.
+- **Emusys/dados:** `sync-presenca-emusys`, `sync-faturas-emusys`, `refresh-contas-receber`, `export-contas-receber`, `marcos-jornada`, `auditor-divergencias-emusys`, `sync-feriados`. Faturas passam pela fila durável `financeiro_sync_queue`; o export operacional consome `get_inadimplencia_canonica` e o snapshot bruto exige frescor por padrão. O contrato puro `_shared/experimental-snapshot.ts` pagina `/aulas` até o fim e normaliza o snapshot de experimentais por `unidade + aula Emusys + participante externo + execução`, sem conciliar por nome/telefone. A aplicação no banco é uma única transação: atualiza/insere vigentes, inativa ausentes do mesmo intervalo e só então registra a execução como completa. No modo `metadados`, a mesma lista de aulas obtida uma vez alimenta tanto o upsert de `aulas_emusys` quanto o snapshot; falha de qualquer unidade encerra a chamada sem resposta parcial de sucesso.
 - **Admin/usuários:** `admin-create-user`, `admin-update-email`, `admin-update-password`, `validar-token-feedback`
 
 > Lista de edge functions **disparada pelo frontend**. Edges de webhook/cron (ex: `processar-matricula-emusys`, `sync-matriculas-emusys`, `enviar-boas-vindas-matricula`, `meta-webhook-campanhas`) não aparecem aqui — ver `.claude/memory/integracao-infra.md`.

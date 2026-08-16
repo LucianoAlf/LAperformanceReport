@@ -5,6 +5,7 @@ import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supa
 import {
   buildExportRows,
   buildManifest,
+  sha256,
   validateCompetencia,
   type AlunoSource,
   type CursoSource,
@@ -15,6 +16,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const INTERNAL_SECRET = Deno.env.get('SUPER_FOLHA_CONTAS_RECEBER_SECRET')?.trim() ?? '';
 const PAGE_SIZE = 500;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -95,7 +97,7 @@ async function fetchCursos(client: SupabaseClient, alunos: AlunoSource[]) {
 async function fetchRun(client: SupabaseClient, competencia: string, syncRunId: string) {
   const { data, error } = await client
     .from('sync_runs')
-    .select('id,competencia,run_type,status,completed_at,unidades_concluidas,snapshot_complete')
+    .select('id,competencia,run_type,status,completed_at,stale_after,unidades_concluidas,snapshot_complete')
     .eq('id', syncRunId)
     .maybeSingle();
   if (error) throw error;
@@ -116,7 +118,7 @@ async function fetchRun(client: SupabaseClient, competencia: string, syncRunId: 
 async function fetchLatestCompleteRun(client: SupabaseClient, competencia: string) {
   const { data, error } = await client
     .from('sync_runs')
-    .select('id,competencia,run_type,status,completed_at,unidades_concluidas,snapshot_complete')
+    .select('id,competencia,run_type,status,completed_at,stale_after,unidades_concluidas,snapshot_complete')
     .eq('competencia', competencia)
     .eq('run_type', 'live')
     .eq('status', 'succeeded')
@@ -137,11 +139,17 @@ async function readSnapshot(
   competencia: string,
   syncRunId: string | null,
   requireLatest: boolean,
+  requireFresh: boolean,
 ) {
   const latestRun = await fetchLatestCompleteRun(client, competencia);
   const run = syncRunId ? await fetchRun(client, competencia, syncRunId) : latestRun;
   if (requireLatest && run.id !== latestRun.id) {
     throw new Error('run solicitado nao e o ultimo snapshot completo');
+  }
+  const staleAfterMs = run.stale_after ? new Date(run.stale_after).getTime() : Number.NaN;
+  const isFresh = Number.isFinite(staleAfterMs) && Date.now() <= staleAfterMs;
+  if (requireFresh && !isFresh) {
+    throw new Error('snapshot stale: sincronize a competencia antes de exportar');
   }
 
   const faturas = await fetchFaturas(client, competencia, run.id);
@@ -153,7 +161,110 @@ async function readSnapshot(
     throw new Error('run solicitado nao e o ultimo snapshot completo');
   }
   const manifesto = await buildManifest(competencia, itens, run, latestAfterRead.id);
+  if (requireFresh && manifesto.is_fresh !== true) {
+    throw new Error('snapshot stale: expirou durante a exportacao');
+  }
   return { itens, manifesto };
+}
+
+const nullableString = (value: unknown) => {
+  const normalized = String(value ?? '').trim();
+  return normalized || null;
+};
+
+function validateDate(value: unknown, field: string) {
+  const normalized = nullableString(value);
+  if (!normalized) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) throw new Error(`${field} deve usar YYYY-MM-DD`);
+  const parsed = new Date(`${normalized}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== normalized) {
+    throw new Error(`${field} invalida`);
+  }
+  return normalized;
+}
+
+async function readCanonicalDelinquency(
+  client: SupabaseClient,
+  unidadeId: string | null,
+  asOfDate: string | null,
+) {
+  const { data, error } = await client.rpc('get_inadimplencia_canonica', {
+    p_unidade_id: unidadeId,
+    ...(asOfDate ? { p_as_of_date: asOfDate } : {}),
+  });
+  if (error) throw error;
+
+  const payload = typeof data === 'string' ? JSON.parse(data) : data;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('leitura canonica retornou payload invalido');
+  }
+  const canonical = payload as Record<string, unknown>;
+  const status = String(canonical.status ?? 'error');
+  if (status !== 'ok') {
+    throw new Error(`leitura canonica indisponivel: status ${status}`);
+  }
+
+  const freshness = canonical.freshness && typeof canonical.freshness === 'object'
+    ? canonical.freshness as Record<string, unknown>
+    : {};
+  const items = Array.isArray(canonical.items)
+    ? canonical.items.map((value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('leitura canonica retornou item invalido');
+      }
+      const item = value as Record<string, unknown>;
+      return {
+        canonical_fatura_id: nullableString(item.canonical_fatura_id),
+        unidade_id: nullableString(item.unidade_id),
+        unidade_codigo: nullableString(item.unidade_codigo),
+        competencia: nullableString(item.competencia),
+        emusys_fatura_id: nullableString(item.emusys_fatura_id),
+        emusys_matricula_id: nullableString(item.emusys_matricula_id),
+        emusys_student_id: nullableString(item.emusys_student_id),
+        descricao: nullableString(item.descricao),
+        status: 'aberta',
+        source_missing: false,
+        data_vencimento: nullableString(item.data_vencimento),
+        dias_atraso: Number(item.dias_atraso ?? 0),
+        valor_original: Number(item.valor_original ?? 0),
+        valor_atualizado: Number(item.valor_atualizado ?? 0),
+        multa_pct: Number(item.multa_pct ?? 0.02),
+        mora_pct_mes: Number(item.mora_pct_mes ?? 0.01),
+        sync_completed_at: nullableString(item.sync_completed_at),
+        sync_fresh_until: nullableString(item.sync_fresh_until),
+      };
+    }).sort((left, right) => String(left.canonical_fatura_id ?? '')
+      .localeCompare(String(right.canonical_fatura_id ?? '')))
+    : [];
+  const freshUntil = nullableString(freshness.fresh_until);
+  if (freshUntil) {
+    const freshUntilMs = new Date(freshUntil).getTime();
+    if (!Number.isFinite(freshUntilMs) || Date.now() > freshUntilMs) {
+      throw new Error('leitura canonica indisponivel: frescor expirou durante a exportacao');
+    }
+  }
+
+  return {
+    itens: items,
+    manifesto: {
+      modo: 'inadimplencia',
+      schema_version: canonical.schema_version ?? null,
+      fonte: canonical.fonte ?? 'sync_run_items',
+      unidade_id: unidadeId,
+      as_of_date: canonical.as_of_date ?? asOfDate,
+      avaliado_em: canonical.avaliado_em ?? null,
+      fresh_until: freshUntil,
+      is_fresh: true,
+      totals: canonical.totals ?? {},
+      manifest_hash: await sha256({
+        schema_version: canonical.schema_version ?? null,
+        unidade_id: unidadeId,
+        as_of_date: canonical.as_of_date ?? asOfDate,
+        fresh_until: freshUntil,
+        items,
+      }),
+    },
+  };
 }
 
 serve(async (request) => {
@@ -166,31 +277,50 @@ serve(async (request) => {
 
   try {
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    const modo = String(body.modo ?? 'snapshot').trim().toLowerCase();
+    if (!['snapshot', 'inadimplencia'].includes(modo)) {
+      return json({ success: false, erro: 'modo deve ser snapshot ou inadimplencia' }, 400);
+    }
+    const client = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    if (modo === 'inadimplencia') {
+      const unidadeId = nullableString(body.unidade_id);
+      if (unidadeId && !UUID_PATTERN.test(unidadeId)) {
+        return json({ success: false, erro: 'unidade_id deve ser UUID quando informada' }, 400);
+      }
+      const asOfDate = validateDate(body.as_of_date, 'as_of_date');
+      const canonical = await readCanonicalDelinquency(client, unidadeId, asOfDate);
+      return json({ success: true, manifesto: canonical.manifesto, itens: canonical.itens });
+    }
+
     const competencia = validateCompetencia(body.competencia);
     const rawSyncRunId = String(body.sync_run_id ?? '').trim();
     const syncRunId = rawSyncRunId || null;
-    if (syncRunId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(syncRunId)) {
+    if (syncRunId && !UUID_PATTERN.test(syncRunId)) {
       return json({ success: false, erro: 'sync_run_id deve ser UUID quando informado' }, 400);
     }
     if (body.require_latest != null && typeof body.require_latest !== 'boolean') {
       return json({ success: false, erro: 'require_latest deve ser boolean' }, 400);
     }
+    if (body.require_fresh != null && typeof body.require_fresh !== 'boolean') {
+      return json({ success: false, erro: 'require_fresh deve ser boolean' }, 400);
+    }
     const requireLatest = body.require_latest === true;
-    const client = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const snapshot = await readSnapshot(client, competencia, syncRunId, requireLatest);
+    const requireFresh = body.require_fresh !== false;
+    const snapshot = await readSnapshot(client, competencia, syncRunId, requireLatest, requireFresh);
     return json({ success: true, manifesto: snapshot.manifesto, itens: snapshot.itens });
   } catch (error) {
     console.error('[export-contas-receber]', error);
     const message = error instanceof Error
       ? error.message
       : (error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error));
-    const status = /competencia|UUID quando informado|require_latest deve/i.test(message)
+    const status = /competencia|UUID quando informad|require_latest deve|require_fresh deve|modo deve|as_of_date/i.test(message)
       ? 400
       : (/nao encontrado|nenhum snapshot/i.test(message)
         ? 404
-        : (/snapshot live completo|ultimo snapshot completo/i.test(message) ? 409 : 500));
+        : (/snapshot live completo|ultimo snapshot completo|snapshot stale|leitura canonica indisponivel/i.test(message) ? 409 : 500));
     return json({ success: false, erro: message }, status);
   }
 });

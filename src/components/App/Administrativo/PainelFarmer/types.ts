@@ -260,13 +260,14 @@ export interface AlertaInadimplente {
   aluno_nome: string;
   whatsapp: string | null;
   unidade_id: string;
-  valor_parcela: number;
-  status_pagamento: string;
-  dia_vencimento: number | null;
+  emusys_matricula_id: string;
+  valor_atualizado: number;
+  total_faturas: number;
   professor_id: number | null;
   professor_nome: string | null;
   instrumento: string | null;
   dias_atraso: number;
+  ultimo_sync: string | null;
 }
 
 export interface AlertaNovoMatriculado {

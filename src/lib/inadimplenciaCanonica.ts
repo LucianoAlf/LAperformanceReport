@@ -44,6 +44,41 @@ export interface InadimplenciaPorMatricula {
   ultimoSync: string | null;
 }
 
+export interface AlunoInadimplenciaCanonicaSource {
+  id: number;
+  nome: string;
+  unidade_id: string;
+  emusys_matricula_id: string | number | null;
+  status?: string | null;
+  arquivado_em?: string | null;
+  is_segundo_curso?: boolean | null;
+  whatsapp?: string | null;
+  telefone?: string | null;
+  professor?: { id?: number | null; nome?: string | null } | null;
+  curso?: { nome?: string | null } | null;
+}
+
+export interface AlertaInadimplenciaCanonica {
+  aluno_id: number;
+  aluno_nome: string;
+  whatsapp: string | null;
+  unidade_id: string;
+  emusys_matricula_id: string;
+  valor_atualizado: number;
+  total_faturas: number;
+  professor_id: number | null;
+  professor_nome: string | null;
+  instrumento: string | null;
+  dias_atraso: number;
+  ultimo_sync: string | null;
+}
+
+export interface AlertasInadimplenciaCanonicaResult {
+  alertas: AlertaInadimplenciaCanonica[];
+  totalAtivos: number;
+  semCadastroAtivo: number;
+}
+
 export const INADIMPLENCIA_CANONICA_LOADING: InadimplenciaCanonicaState = {
   status: 'loading',
   schemaVersion: 0,
@@ -190,4 +225,79 @@ export function indexarInadimplenciaPorMatricula(state: InadimplenciaCanonicaSta
     index.set(key, current);
   }
   return index;
+}
+
+/**
+ * Converte a leitura financeira em alertas operacionais sem misturar vinculos.
+ * Somente o estado `ok` habilita cobranca: stale, incomplete e erro falham fechados.
+ */
+export function montarAlertasInadimplenciaCanonica(
+  state: InadimplenciaCanonicaState,
+  alunos: AlunoInadimplenciaCanonicaSource[],
+): AlertasInadimplenciaCanonicaResult {
+  if (state.status !== 'ok') {
+    return { alertas: [], totalAtivos: 0, semCadastroAtivo: 0 };
+  }
+
+  const inadimplenciaPorMatricula = indexarInadimplenciaPorMatricula(state);
+  const alunosPorMatricula = new Map<string, AlunoInadimplenciaCanonicaSource[]>();
+
+  for (const aluno of alunos) {
+    const matricula = nullableString(aluno.emusys_matricula_id);
+    if (
+      !matricula
+      || aluno.status !== 'ativo'
+      || aluno.arquivado_em != null
+    ) continue;
+
+    const key = chaveInadimplenciaMatricula(aluno.unidade_id, matricula);
+    const candidatos = alunosPorMatricula.get(key) ?? [];
+    candidatos.push(aluno);
+    alunosPorMatricula.set(key, candidatos);
+  }
+
+  const alertas: AlertaInadimplenciaCanonica[] = [];
+  let semCadastroAtivo = 0;
+
+  for (const [key, inadimplencia] of inadimplenciaPorMatricula) {
+    const candidatos = [...(alunosPorMatricula.get(key) ?? [])].sort((left, right) => (
+      Number(left.is_segundo_curso === true) - Number(right.is_segundo_curso === true)
+      || left.id - right.id
+    ));
+    const aluno = candidatos[0];
+    if (!aluno) {
+      semCadastroAtivo += 1;
+      continue;
+    }
+
+    const matricula = nullableString(aluno.emusys_matricula_id);
+    if (!matricula) continue;
+    alertas.push({
+      aluno_id: aluno.id,
+      aluno_nome: aluno.nome,
+      whatsapp: nullableString(aluno.whatsapp) ?? nullableString(aluno.telefone),
+      unidade_id: aluno.unidade_id,
+      emusys_matricula_id: matricula,
+      valor_atualizado: inadimplencia.valorAtualizado,
+      total_faturas: inadimplencia.faturas,
+      professor_id: aluno.professor?.id ?? null,
+      professor_nome: nullableString(aluno.professor?.nome),
+      instrumento: nullableString(aluno.curso?.nome),
+      dias_atraso: inadimplencia.maiorAtraso,
+      ultimo_sync: inadimplencia.ultimoSync,
+    });
+  }
+
+  alertas.sort((left, right) => (
+    right.dias_atraso - left.dias_atraso
+    || right.valor_atualizado - left.valor_atualizado
+    || left.aluno_nome.localeCompare(right.aluno_nome, 'pt-BR')
+    || left.aluno_id - right.aluno_id
+  ));
+
+  return {
+    alertas,
+    totalAtivos: alertas.length,
+    semCadastroAtivo,
+  };
 }

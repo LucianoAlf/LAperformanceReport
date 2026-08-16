@@ -119,6 +119,16 @@ type FinanceiroFaturasRelatorio = {
   alunos_locais_com_parcela_paga: number;
   alunos_emusys_com_parcela_paga: number;
   matriculas_sem_match: number;
+  sync_run_id: string | null;
+  sync_completed_at: string | null;
+  stale_after: string | null;
+};
+
+type FinanceiroFaturasRelatorioResultado = {
+  status: string;
+  itens: Map<string, FinanceiroFaturasRelatorio>;
+  sync_completed_at: string | null;
+  stale_after: string | null;
 };
 
 function n(value: unknown): number {
@@ -145,7 +155,7 @@ async function fetchFinanceiroFaturasEmusysRelatorio({
   unidadeId?: string | 'todos' | null;
   ano: number;
   mes: number;
-}): Promise<Map<string, FinanceiroFaturasRelatorio>> {
+}): Promise<FinanceiroFaturasRelatorioResultado> {
   const unidadeFiltro = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
   const { data, error } = await supabase.rpc('get_financeiro_faturas_emusys', {
     p_unidade_id: unidadeFiltro,
@@ -155,15 +165,33 @@ async function fetchFinanceiroFaturasEmusysRelatorio({
 
   if (error) {
     console.warn('[ModalRelatorio] financeiro faturas Emusys indisponivel:', error.message);
-    return new Map();
+    return { status: 'error', itens: new Map(), sync_completed_at: null, stale_after: null };
   }
 
-  if (!data?.tem_dados || !Array.isArray(data.por_unidade)) {
-    return new Map();
+  const syncCompletedAt = data?.freshness?.sync_completed_at == null
+    ? null
+    : String(data.freshness.sync_completed_at);
+  const staleAfter = data?.freshness?.stale_after == null
+    ? null
+    : String(data.freshness.stale_after);
+  if (data?.status !== 'ok') {
+    return {
+      status: String(data?.status || 'unavailable'),
+      itens: new Map(),
+      sync_completed_at: syncCompletedAt,
+      stale_after: staleAfter,
+    };
   }
 
-  return new Map(
-    data.por_unidade.map((row: any) => [
+  if (!data.tem_dados || !Array.isArray(data.por_unidade)) {
+    return { status: 'ok', itens: new Map(), sync_completed_at: syncCompletedAt, stale_after: staleAfter };
+  }
+
+  return {
+    status: 'ok',
+    sync_completed_at: syncCompletedAt,
+    stale_after: staleAfter,
+    itens: new Map(data.por_unidade.map((row: any) => [
       String(row.unidade_id),
       {
         unidade_id: String(row.unidade_id),
@@ -177,9 +205,12 @@ async function fetchFinanceiroFaturasEmusysRelatorio({
         alunos_locais_com_parcela_paga: n(row.alunos_locais_com_parcela_paga),
         alunos_emusys_com_parcela_paga: n(row.alunos_emusys_com_parcela_paga),
         matriculas_sem_match: n(row.matriculas_sem_match),
+        sync_run_id: data.freshness?.sync_run_id == null ? null : String(data.freshness.sync_run_id),
+        sync_completed_at: syncCompletedAt,
+        stale_after: staleAfter,
       },
-    ])
-  );
+    ])),
+  };
 }
 
 function labelTipoEvasao(tipo: string): string {
@@ -567,11 +598,25 @@ export function ModalRelatorio({
       throw new Error(`Snapshot indisponivel para ${String(mesRelatorio).padStart(2, '0')}/${anoRelatorio}.`);
     }
 
-    const financeiroFaturas = await fetchFinanceiroFaturasEmusysRelatorio({
-      unidadeId: unidade,
-      ano: anoRelatorio,
-      mes: mesRelatorio,
-    });
+    // Competencia historica usa o snapshot mensal fechado e imutavel. Somente o
+    // periodo vivo recebe sobreposicao do snapshot financeiro fresco do Emusys.
+    const financeiroFaturasResultado = isPeriodoAtual
+      ? await fetchFinanceiroFaturasEmusysRelatorio({
+        unidadeId: unidade,
+        ano: anoRelatorio,
+        mes: mesRelatorio,
+      })
+      : null;
+
+    if (financeiroFaturasResultado && financeiroFaturasResultado.status !== 'ok') {
+      const ultimaSincronizacao = financeiroFaturasResultado.sync_completed_at
+        ? ` Último sync: ${financeiroFaturasResultado.sync_completed_at}.`
+        : '';
+      throw new Error(
+        `Financeiro Emusys indisponível (${financeiroFaturasResultado.status}).${ultimaSincronizacao}`,
+      );
+    }
+    const financeiroFaturas = financeiroFaturasResultado?.itens ?? new Map<string, FinanceiroFaturasRelatorio>();
 
     if (financeiroFaturas.size > 0) {
       kpisData = kpisData.map((row: any) => {
