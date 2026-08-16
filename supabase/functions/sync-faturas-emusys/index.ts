@@ -374,8 +374,9 @@ serve(async (req) => {
       return json({ ok: true, probe: true, ...(await executarProbe(competencias[0], unidadeCodigo)) });
     }
 
-    if (mode === 'worker' && !access.isServiceRole) {
-      return json({ ok: false, erro: 'worker exige service_role' }, 403);
+    const workerAuthorized = access.isServiceRole || access.requestedBy === 'sync_admin_token';
+    if (mode === 'worker' && !workerAuthorized) {
+      return json({ ok: false, erro: 'worker exige service_role ou token tecnico' }, 403);
     }
     if (body.unidade && String(body.unidade).toLowerCase() !== 'todos') {
       return json({ ok: false, erro: 'sync publicado exige sempre as 3 unidades' }, 400);
