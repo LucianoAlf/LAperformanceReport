@@ -147,6 +147,11 @@ test('canonical reader combines exact invoice enrollment with current active-or-
     1,
     'data_saida deve existir somente no fallback sem raw',
   );
+  assert.doesNotMatch(
+    source,
+    /\bis_ex_aluno\b/i,
+    'rotulo local de ex-aluno nao pode participar da autorizacao canonica de cobranca',
+  );
   assert.match(currentPeopleSql, /a\.id\s+as\s+aluno_id/i);
   assert.match(
     currentPeopleSql,

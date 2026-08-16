@@ -147,7 +147,7 @@ Forma resumida:
 ```json
 {
   "schema_version": 3,
-  "status": "ok | partial | stale | incomplete",
+  "status": "ok | partial | stale | incomplete | error",
   "fonte": "sync_run_items",
   "unidade_id": "uuid | null",
   "as_of_date": "YYYY-MM-DD",
@@ -259,6 +259,13 @@ valor_atualizado = valor_original ×
   campos como evidência da origem, mas a régua contratual acima continua sendo
   o único cálculo canônico; o gate de produção compara os dois e explica toda
   divergência por item.
+
+Resultado do gate de 16/08/2026: embora a OpenAPI descreva esses campos como
+dinâmicos, o payload vivo das três faturas vencidas de Campo Grande em agosto
+retornou explicitamente `juros_e_multa=0` e `desconto_aplicado=0`. A fórmula
+contratual calculou R$ 10,58 por fatura de R$ 447 vencida há 11 dias. Portanto,
+os campos da API ficam preservados como evidência, mas não substituem o cálculo
+canônico enquanto essa divergência existir.
 
 ## Consumidores
 
