@@ -12,9 +12,11 @@ import {
   type FinanceiroQueueJob,
   syncErrorMessage,
 } from '../_shared/financeiroSyncQueue.ts';
+import { isServiceRoleJwtForProject } from '../_shared/financeiroSyncAuthorization.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const SUPABASE_PROJECT_REF = new URL(SUPABASE_URL).hostname.split('.')[0] ?? '';
 const EMUSYS_API = 'https://api.emusys.com.br/v1';
 
 const requiredEnv = (name: string) => {
@@ -99,7 +101,14 @@ async function validarAcessoSync(req: Request): Promise<AccessResult> {
       requestedBy: 'anonymous',
     };
   }
-  if (token === SUPABASE_SERVICE_ROLE_KEY) {
+  // O gateway valida a assinatura porque verify_jwt=true. A igualdade literal
+  // continua como caminho rapido, mas chaves legacy podem divergir da geracao
+  // injetada em SUPABASE_SERVICE_ROLE_KEY; nesse caso confiamos nos claims ja
+  // validados e ainda exigimos o ref deste projeto.
+  if (
+    token === SUPABASE_SERVICE_ROLE_KEY
+    || isServiceRoleJwtForProject(token, SUPABASE_PROJECT_REF)
+  ) {
     return { isServiceRole: true, requestedBy: 'service_role' };
   }
 
