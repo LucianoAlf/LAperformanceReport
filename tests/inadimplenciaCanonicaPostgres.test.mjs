@@ -454,6 +454,9 @@ test('v3 libera somente faturas confirmadas quando a reconciliacao parcial e fre
     assert.equal(result.operational.collection_scope, 'confirmed_only');
     assert.deepEqual(result.operational.block_reasons, []);
     assert.deepEqual(result.items.map((item) => item.canonical_fatura_id), [F1]);
+    assert.equal(typeof result.items[0].emusys_fatura_id, 'string');
+    assert.equal(typeof result.items[0].emusys_matricula_id, 'string');
+    assert.equal(typeof result.items[0].emusys_contrato_id, 'string');
     assert.equal(result.totals.total_faturas, 1);
     assert.equal(result.totals.total_original, 100);
     assert.equal(result.reconciliation.source_missing_count, 2);

@@ -605,7 +605,7 @@ begin
           'sync_fresh_until', ic.sync_fresh_until,
           'emusys_fatura_id', ic.emusys_fatura_id::text,
           'emusys_matricula_id', ic.emusys_matricula_id::text,
-          'emusys_contrato_id', ic.emusys_contrato_id,
+          'emusys_contrato_id', ic.emusys_contrato_id::text,
           'aluno_id_canonico', ic.aluno_id_canonico,
           'contact_resolution_status', ic.contact_resolution_status,
           'descricao', ic.descricao,

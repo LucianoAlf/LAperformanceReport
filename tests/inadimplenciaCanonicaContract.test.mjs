@@ -172,6 +172,7 @@ test('canonical reader combines exact invoice enrollment with current active-or-
   assert.match(source, /'contact_resolution_status'\s*,\s*ic\.contact_resolution_status/i);
   assert.match(source, /'emusys_fatura_id'\s*,\s*ic\.emusys_fatura_id::text/i);
   assert.match(source, /'emusys_matricula_id'\s*,\s*ic\.emusys_matricula_id::text/i);
+  assert.match(source, /'emusys_contrato_id'\s*,\s*ic\.emusys_contrato_id::text/i);
   assert.match(
     source,
     /'contact_resolution_pending_count'\s*,\s*\w+\.contact_resolution_pending_count/i,
