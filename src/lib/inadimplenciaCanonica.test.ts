@@ -19,6 +19,8 @@ const item = (overrides: Record<string, unknown> = {}) => ({
   unidade_id: unidadeA,
   emusys_fatura_id: '1001',
   emusys_matricula_id: '2001',
+  aluno_id_canonico: 10,
+  contact_resolution_status: 'resolved',
   data_vencimento: '2026-08-10',
   dias_atraso: 5,
   valor_original: 100,
@@ -26,6 +28,12 @@ const item = (overrides: Record<string, unknown> = {}) => ({
   sync_completed_at: '2026-08-15T18:00:00Z',
   ...overrides,
 });
+
+const legacyItem = (overrides: Record<string, unknown> = {}) => {
+  const row = item(overrides);
+  const { aluno_id_canonico: _alunoId, contact_resolution_status: _contactStatus, ...legacy } = row;
+  return legacy;
+};
 
 const zeroTotals = {
   total_faturas: 0,
@@ -50,6 +58,7 @@ const cleanReconciliation = {
   duplicate_fatura_count: 0,
   invalid_identity_invoice_count: 0,
   validation_issue_count: 0,
+  contact_resolution_pending_count: 0,
 };
 
 const partialReconciliation = {
@@ -72,7 +81,7 @@ const payloadV2 = (overrides: Record<string, unknown> = {}) => ({
   freshness: fresh(),
   reconciliation: cleanReconciliation,
   totals: oneItemTotals,
-  items: [item()],
+  items: [legacyItem()],
   ...overrides,
 });
 
@@ -443,11 +452,20 @@ Deno.test('v3 valida totais e reconciliacao contra itens e fontes antes de liber
 
 Deno.test('v2 conserva apenas snapshots internamente coerentes e bloqueados limpos', () => {
   const ok = normalizarInadimplenciaCanonica(payloadV2());
+  const v2ComCamposV3NaoConfiaveis = normalizarInadimplenciaCanonica(payloadV2({
+    items: [item()],
+  }));
   const stale = normalizarInadimplenciaCanonica(blockedV2('stale'));
   const incomplete = normalizarInadimplenciaCanonica(blockedV2('incomplete'));
   const error = normalizarInadimplenciaCanonica(blockedV2('error'));
 
-  assertEquals([ok.status, ok.collectionAllowed, ok.collectionScope], ['ok', true, 'confirmed_only']);
+  assertEquals([
+    ok.status,
+    ok.collectionAllowed,
+    ok.collectionScope,
+    ok.contactResolutionPendingCount,
+    ok.items[0]?.contact_resolution_status,
+  ], ['partial', true, 'confirmed_only', 1, 'missing']);
   assertEquals([
     ok.delinquencyRule,
     ok.collectionGraceDays,
@@ -458,6 +476,15 @@ Deno.test('v2 conserva apenas snapshots internamente coerentes e bloqueados limp
   assertEquals([error.status, error.erro, error.items, error.totalFaturas], [
     'error', 'unsupported_invoice_status', [], 0,
   ]);
+  assertEquals(montarAlertasInadimplenciaCanonica(ok, [], new Date('2026-08-15T18:30:00Z')), {
+    alertas: [],
+    totalAtivos: 0,
+    semCadastroAtivo: 0,
+  });
+  assertEquals([
+    v2ComCamposV3NaoConfiaveis.items[0]?.contact_resolution_status,
+    v2ComCamposV3NaoConfiaveis.items[0]?.aluno_id_canonico,
+  ], ['missing', null]);
 
   assertLocalError(blockedV2('stale', { totals: oneItemTotals }));
   assertLocalError(blockedV2('incomplete', { items: [item()] }));
@@ -582,6 +609,7 @@ Deno.test('D+1 permanece na consulta financeira D+0, mas somente D+2 entra nos a
     canonical_fatura_id: '10000000-0000-0000-0000-000000000002',
     emusys_fatura_id: '1002',
     emusys_matricula_id: '2002',
+    aluno_id_canonico: 20,
     dias_atraso: 2,
     data_vencimento: '2026-08-13',
     valor_original: 50,
@@ -604,19 +632,12 @@ Deno.test('D+1 permanece na consulta financeira D+0, mas somente D+2 entra nos a
     id: 10,
     nome: 'Aluno D+1',
     unidade_id: unidadeA,
-    emusys_matricula_id: '2001',
-    status: 'ativo',
   }, {
     id: 20,
     nome: 'Aluno D+2',
     unidade_id: unidadeA,
-    emusys_matricula_id: '2002',
-    status: 'inativo',
     telefone: '5521888888888',
-  }], {
-    agora,
-    collectionGraceDays: state.collectionGraceDays,
-  });
+  }], { agora });
 
   assertEquals(consultaD0.size, 2);
   assertEquals(consultaD0.has(`${unidadeA}|2001`), true);
@@ -627,6 +648,7 @@ Deno.test('D+1 permanece na consulta financeira D+0, mas somente D+2 entra nos a
       whatsapp: '5521888888888',
       unidade_id: unidadeA,
       emusys_matricula_id: '2002',
+      emusys_matricula_ids: ['2002'],
       valor_atualizado: 51.1,
       total_faturas: 1,
       professor_id: null,
@@ -640,7 +662,7 @@ Deno.test('D+1 permanece na consulta financeira D+0, mas somente D+2 entra nos a
   });
 });
 
-Deno.test('indice escolhe sync mais recente por epoch e alerta preserva a chave unidade matricula', () => {
+Deno.test('indice escolhe sync mais recente por epoch e alerta usa somente o aluno_id canonico resolvido', () => {
   const second = item({
     canonical_fatura_id: '10000000-0000-0000-0000-000000000002',
     emusys_fatura_id: '1002',
@@ -673,9 +695,6 @@ Deno.test('indice escolhe sync mais recente por epoch e alerta preserva a chave 
     id: 10,
     nome: 'Aluno Principal',
     unidade_id: unidadeA,
-    emusys_matricula_id: '2001',
-    status: 'ativo',
-    arquivado_em: null,
     telefone: '5521888888888',
     professor: { id: 7, nome: 'Professor Principal' },
     curso: { nome: 'Piano' },
@@ -683,10 +702,6 @@ Deno.test('indice escolhe sync mais recente por epoch e alerta preserva a chave 
     id: 20,
     nome: 'Aluno Curso Extra',
     unidade_id: unidadeA,
-    emusys_matricula_id: '2001',
-    status: 'ativo',
-    arquivado_em: null,
-    is_segundo_curso: true,
     professor: { id: 8, nome: 'Professor Extra' },
     curso: { nome: 'Canto' },
   }], agora);
@@ -694,5 +709,116 @@ Deno.test('indice escolhe sync mais recente por epoch e alerta preserva a chave 
   assertEquals(alertas.alertas[0]?.ultimo_sync, '2026-08-15T17:30:00Z');
   assertEquals(alertas.alertas[0]?.unidade_id, unidadeA);
   assertEquals(alertas.alertas[0]?.aluno_id, 10);
+  assertEquals(alertas.alertas[0]?.emusys_matricula_ids, ['2001']);
   assert(alertas.totalAtivos === 1);
+});
+
+Deno.test('contato ambiguo permanece no total financeiro mas nao entra na fila operacional', () => {
+  const state = normalizarInadimplenciaCanonica(payloadV3({
+    items: [item({
+      aluno_id_canonico: null,
+      contact_resolution_status: 'ambiguous',
+    })],
+    reconciliation: {
+      ...partialReconciliation,
+      contact_resolution_pending_count: 1,
+    },
+  }));
+
+  assertEquals([state.status, state.totalFaturas, state.contactResolutionPendingCount], [
+    'partial', 1, 1,
+  ]);
+  assertEquals(montarAlertasInadimplenciaCanonica(state, [{
+    id: 10,
+    nome: 'Cadastro A',
+    unidade_id: unidadeA,
+  }, {
+    id: 20,
+    nome: 'Cadastro B',
+    unidade_id: unidadeA,
+  }], new Date('2026-08-15T18:30:00Z')), {
+    alertas: [],
+    totalAtivos: 0,
+    semCadastroAtivo: 0,
+  });
+});
+
+Deno.test('contato resolvido busca por aluno_id canonico e rejeita cadastro de outra unidade', () => {
+  const state = normalizarInadimplenciaCanonica(payloadV3());
+  const result = montarAlertasInadimplenciaCanonica(state, [{
+    id: 10,
+    nome: 'Contato de outra unidade',
+    unidade_id: unidadeB,
+  }], new Date('2026-08-15T18:30:00Z'));
+
+  assertEquals(result, {
+    alertas: [],
+    totalAtivos: 0,
+    semCadastroAtivo: 1,
+  });
+});
+
+Deno.test('carencia D+2 vem apenas do contrato canonico e nao aceita override do consumidor', () => {
+  const state = normalizarInadimplenciaCanonica(payloadV3({
+    items: [item({ dias_atraso: 1 })],
+    totals: { ...oneItemTotals, maior_atraso: 1 },
+  }));
+
+  assertEquals(montarAlertasInadimplenciaCanonica(state, [{
+    id: 10,
+    nome: 'Aluno D+1',
+    unidade_id: unidadeA,
+  }], { agora: new Date('2026-08-15T18:30:00Z') }), {
+    alertas: [],
+    totalAtivos: 0,
+    semCadastroAtivo: 0,
+  });
+});
+
+Deno.test('duas matriculas da mesma pessoa geram uma unica acao de contato', () => {
+  const state = normalizarInadimplenciaCanonica(payloadV3({
+    status: 'ok',
+    reconciliation: cleanReconciliation,
+    items: [item(), item({
+      canonical_fatura_id: '10000000-0000-0000-0000-000000000002',
+      emusys_fatura_id: '1002',
+      emusys_matricula_id: '2002',
+      valor_original: 50,
+      valor_atualizado: 51.1,
+    })],
+    totals: {
+      total_faturas: 2,
+      total_matriculas: 2,
+      total_original: 150,
+      total_atualizado: 153.27,
+      maior_atraso: 5,
+    },
+  }));
+
+  const result = montarAlertasInadimplenciaCanonica(state, [{
+    id: 10,
+    nome: 'Aluno Reingresso',
+    unidade_id: unidadeA,
+    telefone: '5521999999999',
+  }], new Date('2026-08-15T18:30:00Z'));
+
+  assertEquals(result, {
+    alertas: [{
+      aluno_id: 10,
+      aluno_nome: 'Aluno Reingresso',
+      whatsapp: '5521999999999',
+      unidade_id: unidadeA,
+      emusys_matricula_id: '2001',
+      emusys_matricula_ids: ['2001', '2002'],
+      valor_atualizado: 153.27,
+      total_faturas: 2,
+      professor_id: null,
+      professor_nome: null,
+      instrumento: null,
+      dias_atraso: 5,
+      ultimo_sync: '2026-08-15T18:00:00Z',
+    }],
+    totalAtivos: 1,
+    semCadastroAtivo: 0,
+  });
 });

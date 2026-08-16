@@ -128,39 +128,38 @@ export function useAlertas(unidadeId: string) {
 
       let alertasCanonicos: AlertaInadimplente[] = [];
       let semCadastroAtivo = 0;
-      const itensElegiveisCobrancaAmigavel = estadoCanonico.items.filter(
-        (item) => item.dias_atraso >= estadoCanonico.collectionGraceDays,
-      );
-      if (gateCanonicoValido && itensElegiveisCobrancaAmigavel.length > 0) {
-        const matriculas = [...new Set(itensElegiveisCobrancaAmigavel
-          .map((item) => item.emusys_matricula_id)
-          .filter((id): id is string => Boolean(id)))];
-        const unidades = [...new Set(itensElegiveisCobrancaAmigavel.map((item) => item.unidade_id))];
+      if (gateCanonicoValido && estadoCanonico.items.length > 0) {
+        const alunoIdsCanonicos = [...new Set(estadoCanonico.items
+          .filter((item) => item.contact_resolution_status === 'resolved')
+          .map((item) => item.aluno_id_canonico)
+          .filter((id): id is number => id !== null))];
+        const unidades = [...new Set(estadoCanonico.items.map((item) => item.unidade_id))];
 
-        const alunosQuery = supabase
-          .from('alunos')
-          .select(`
-            id, nome, unidade_id, emusys_matricula_id,
-            is_segundo_curso, whatsapp, telefone,
-            professores:professor_atual_id(id, nome),
-            cursos:curso_id(nome)
-          `)
-          .in('emusys_matricula_id', matriculas)
-          .in('unidade_id', unidades);
+        let alunosData: any[] = [];
+        if (alunoIdsCanonicos.length > 0) {
+          const alunosQuery = supabase
+            .from('alunos')
+            .select(`
+              id, nome, unidade_id, whatsapp, telefone,
+              professores:professor_atual_id(id, nome),
+              cursos:curso_id(nome)
+            `)
+            .in('id', alunoIdsCanonicos)
+            .in('unidade_id', unidades);
 
-        const { data: alunosData, error: alunosError } = await alunosQuery;
-        if (alunosError) throw alunosError;
+          const alunosResult = await alunosQuery;
+          if (alunosResult.error) throw alunosResult.error;
+          alunosData = alunosResult.data ?? [];
+        }
 
-        const alunosCanonicos = (alunosData ?? []).map((row: any): AlunoInadimplenciaCanonicaSource => ({
+        const alunosCanonicos = alunosData.map((row: any): AlunoInadimplenciaCanonicaSource => ({
           ...row,
-          // A view canônica já delimitou o universo financeiro ativo. A tabela local
-          // apenas enriquece contato pela identidade exata unidade + matrícula.
+          // A RPC publicou o único aluno_id atual apto a fornecer contato. A tabela
+          // local apenas enriquece esse ID e nunca desempata cadastros duplicados.
           professor: Array.isArray(row.professores) ? row.professores[0] ?? null : row.professores,
           curso: Array.isArray(row.cursos) ? row.cursos[0] ?? null : row.cursos,
         }));
-        const alertas = montarAlertasInadimplenciaCanonica(estadoCanonico, alunosCanonicos, {
-          collectionGraceDays: estadoCanonico.collectionGraceDays,
-        });
+        const alertas = montarAlertasInadimplenciaCanonica(estadoCanonico, alunosCanonicos);
         alertasCanonicos = alertas.alertas;
         semCadastroAtivo = alertas.semCadastroAtivo;
       }

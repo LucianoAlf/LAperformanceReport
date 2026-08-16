@@ -344,6 +344,7 @@ export function TabelaAlunos({
     sourceMissingCount: inadimplenciaCanonica.sourceMissingCount,
     invalidIdentityInvoiceCount: inadimplenciaCanonica.invalidIdentityInvoiceCount,
     validationIssueCount: inadimplenciaCanonica.validationIssueCount,
+    contactResolutionPendingCount: inadimplenciaCanonica.contactResolutionPendingCount,
   };
   const inadimplenciaInfoCanonica = {
     total: inadimplenciaConfirmada.totalMatriculas,
@@ -361,6 +362,7 @@ export function TabelaAlunos({
         || inadimplenciaCanonica.sourceMissingCount > 0
         || inadimplenciaCanonica.invalidIdentityInvoiceCount > 0
         || inadimplenciaCanonica.validationIssueCount > 0
+        || inadimplenciaCanonica.contactResolutionPendingCount > 0
       ),
   };
   const tituloBloqueioInadimplencia = (() => {
@@ -1994,15 +1996,18 @@ export function TabelaAlunos({
       {inadimplenciaInfoCanonica.mostrar && !alertaInadimplenciaDismissed && (
         <div
           className="flex items-start gap-3 rounded-xl border border-slate-700/80 bg-slate-900/70 px-4 py-3 text-sm"
-          role="status"
-          aria-live="polite"
         >
           <AlertTriangle aria-hidden="true" className={`mt-0.5 h-5 w-5 flex-shrink-0 ${
             leituraFinanceiraDisponivel
               ? inadimplenciaInfoCanonica.total > 0 ? 'text-cyan-400' : 'text-amber-300'
               : 'text-red-400'
           }`} />
-          <div className="min-w-0 flex-1 space-y-2">
+          <div
+            className="min-w-0 flex-1 space-y-2"
+            data-financial-alert-live-region
+            role={leituraFinanceiraDisponivel ? 'status' : 'alert'}
+            aria-live={leituraFinanceiraDisponivel ? 'polite' : 'assertive'}
+          >
             {leituraFinanceiraDisponivel && inadimplenciaInfoCanonica.total > 0 && (
               <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-cyan-200">
                 <strong className="text-cyan-100">
@@ -2038,6 +2043,19 @@ export function TabelaAlunos({
               </div>
             )}
 
+            {leituraFinanceiraDisponivel
+              && inadimplenciaInfoCanonica.status === 'partial'
+              && reconciliacaoPendente.contactResolutionPendingCount > 0 && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-200">
+                <strong className="text-amber-100">
+                  {reconciliacaoPendente.contactResolutionPendingCount} fatura(s) confirmada(s) sem contato local unívoco
+                </strong>
+                <span className="mt-1 block text-xs text-amber-200/80">
+                  Permanecem nos totais financeiros D+0, mas não entram na fila operacional até a conciliação do cadastro.
+                </span>
+              </div>
+            )}
+
             {!leituraFinanceiraDisponivel && (
               <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-red-200">
                 <strong className="text-red-100">{tituloBloqueioInadimplencia}</strong>
@@ -2052,29 +2070,32 @@ export function TabelaAlunos({
               </div>
             )}
           </div>
-          {leituraFinanceiraDisponivel && inadimplenciaInfoCanonica.total > 0 && (
+          {/* financial-alert-live-region:end */}
+          <div className="flex items-center gap-2" data-financial-alert-actions>
+            {leituraFinanceiraDisponivel && inadimplenciaInfoCanonica.total > 0 && (
+              <button
+                onClick={() => setFiltros(prev => ({ ...prev, inadimplente_emusys_live: true }))}
+                className="whitespace-nowrap rounded-lg border border-cyan-500/30 bg-cyan-500/20 px-3 py-1 text-xs font-medium text-cyan-100 transition-colors hover:bg-cyan-500/30 focus-visible:ring-2 focus-visible:ring-cyan-300/70"
+              >
+                Filtrar inadimplentes confirmados (D+0)
+              </button>
+            )}
             <button
-              onClick={() => setFiltros(prev => ({ ...prev, inadimplente_emusys_live: true }))}
-              className="whitespace-nowrap rounded-lg border border-cyan-500/30 bg-cyan-500/20 px-3 py-1 text-xs font-medium text-cyan-100 transition-colors hover:bg-cyan-500/30 focus-visible:ring-2 focus-visible:ring-cyan-300/70"
+              onClick={atualizarInadimplenciaAgora}
+              disabled={atualizandoInadimplencia}
+              className="px-3 py-1 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap bg-slate-700/40 hover:bg-slate-700/60 border-slate-600 text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Filtrar inadimplentes confirmados (D+0)
+              {atualizandoInadimplencia ? 'Atualizando...' : 'Atualizar agora'}
             </button>
-          )}
-          <button
-            onClick={atualizarInadimplenciaAgora}
-            disabled={atualizandoInadimplencia}
-            className="px-3 py-1 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap bg-slate-700/40 hover:bg-slate-700/60 border-slate-600 text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {atualizandoInadimplencia ? 'Atualizando...' : 'Atualizar agora'}
-          </button>
-          <button
-            onClick={() => setAlertaInadimplenciaDismissed(true)}
-            className="p-1 hover:bg-white/10 rounded transition-colors focus-visible:ring-2 focus-visible:ring-slate-300/70"
-            title="Dispensar alerta"
-            aria-label="Dispensar alerta financeiro"
-          >
-            <X aria-hidden="true" className={`h-4 w-4 ${leituraFinanceiraDisponivel ? 'text-slate-400' : 'text-red-400'}`} />
-          </button>
+            <button
+              onClick={() => setAlertaInadimplenciaDismissed(true)}
+              className="p-1 hover:bg-white/10 rounded transition-colors focus-visible:ring-2 focus-visible:ring-slate-300/70"
+              title="Dispensar alerta"
+              aria-label="Dispensar alerta financeiro"
+            >
+              <X aria-hidden="true" className={`h-4 w-4 ${leituraFinanceiraDisponivel ? 'text-slate-400' : 'text-red-400'}`} />
+            </button>
+          </div>
         </div>
       )}
 

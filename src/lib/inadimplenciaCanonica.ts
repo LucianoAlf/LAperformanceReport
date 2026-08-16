@@ -8,6 +8,7 @@ export type InadimplenciaCanonicaStatus =
 
 export type InadimplenciaCollectionScope = 'confirmed_only' | 'blocked';
 export type InadimplenciaDelinquencyRule = 'd_plus_0';
+export type InadimplenciaContactResolutionStatus = 'resolved' | 'missing' | 'ambiguous';
 
 export const COBRANCA_AMIGAVEL_CARENCIA_DIAS = 2;
 
@@ -21,6 +22,8 @@ export interface InadimplenciaCanonicaItem {
   unidade_id: string;
   emusys_fatura_id: string;
   emusys_matricula_id: string;
+  aluno_id_canonico: number | null;
+  contact_resolution_status: InadimplenciaContactResolutionStatus;
   data_vencimento: string;
   dias_atraso: number;
   valor_original: number;
@@ -49,6 +52,7 @@ export interface InadimplenciaCanonicaState {
   duplicateFaturaCount: number;
   invalidIdentityInvoiceCount: number;
   validationIssueCount: number;
+  contactResolutionPendingCount: number;
   collectionAllowed: boolean;
   collectionScope: InadimplenciaCollectionScope;
   blockReasons: InadimplenciaBlockReason[];
@@ -67,10 +71,6 @@ export interface AlunoInadimplenciaCanonicaSource {
   id: number;
   nome: string;
   unidade_id: string;
-  emusys_matricula_id: string | number | null;
-  status?: string | null;
-  arquivado_em?: string | null;
-  is_segundo_curso?: boolean | null;
   whatsapp?: string | null;
   telefone?: string | null;
   professor?: { id?: number | null; nome?: string | null } | null;
@@ -83,6 +83,7 @@ export interface AlertaInadimplenciaCanonica {
   whatsapp: string | null;
   unidade_id: string;
   emusys_matricula_id: string;
+  emusys_matricula_ids: string[];
   valor_atualizado: number;
   total_faturas: number;
   professor_id: number | null;
@@ -100,7 +101,6 @@ export interface AlertasInadimplenciaCanonicaResult {
 
 export interface MontarAlertasInadimplenciaCanonicaOptions {
   agora?: Date;
-  collectionGraceDays?: number;
 }
 
 export const INADIMPLENCIA_CANONICA_LOADING: InadimplenciaCanonicaState = {
@@ -124,6 +124,7 @@ export const INADIMPLENCIA_CANONICA_LOADING: InadimplenciaCanonicaState = {
   duplicateFaturaCount: 0,
   invalidIdentityInvoiceCount: 0,
   validationIssueCount: 0,
+  contactResolutionPendingCount: 0,
   collectionAllowed: false,
   collectionScope: 'blocked',
   blockReasons: [],
@@ -146,6 +147,7 @@ interface Reconciliation {
   duplicateFaturaCount: number;
   invalidIdentityInvoiceCount: number;
   validationIssueCount: number;
+  contactResolutionPendingCount: number;
 }
 
 interface Freshness {
@@ -182,18 +184,16 @@ const nullableText = (value: unknown): string | null => (
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 );
 
-const sourceMatricula = (value: unknown): string | null => {
-  const text = nullableText(value);
-  if (text) return text;
-  return typeof value === 'number' && Number.isFinite(value) ? String(value) : null;
-};
-
 const nonNegativeNumber = (value: unknown): value is number => (
   typeof value === 'number' && Number.isFinite(value) && value >= 0
 );
 
 const nonNegativeInteger = (value: unknown): value is number => (
   nonNegativeNumber(value) && Number.isInteger(value)
+);
+
+const positiveSafeInteger = (value: unknown): value is number => (
+  typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 );
 
 const parseAbsoluteTimestamp = (value: unknown): string | null => (
@@ -240,7 +240,10 @@ const errorState = (erro = INVALID_RESPONSE): InadimplenciaCanonicaState => ({
   erro,
 });
 
-function parseItem(value: unknown): InadimplenciaCanonicaItem | null {
+function parseItem(
+  value: unknown,
+  requireContactResolution = true,
+): InadimplenciaCanonicaItem | null {
   const row = asRecord(value);
   if (!row) return null;
   const canonicalFaturaId = nonEmptyString(row.canonical_fatura_id);
@@ -248,6 +251,12 @@ function parseItem(value: unknown): InadimplenciaCanonicaItem | null {
   const faturaId = nonEmptyString(row.emusys_fatura_id);
   const matriculaId = nonEmptyString(row.emusys_matricula_id);
   const sync = row.sync_completed_at === null ? null : parseAbsoluteTimestamp(row.sync_completed_at);
+  const contactStatus = requireContactResolution
+    ? row.contact_resolution_status
+    : 'missing';
+  const alunoIdCanonico = requireContactResolution
+    ? row.aluno_id_canonico
+    : null;
 
   if (
     !canonicalFaturaId || !UUID.test(canonicalFaturaId)
@@ -259,6 +268,9 @@ function parseItem(value: unknown): InadimplenciaCanonicaItem | null {
     || !validMoney(row.valor_original)
     || !validMoney(row.valor_atualizado)
     || (row.sync_completed_at !== null && !sync)
+    || (contactStatus !== 'resolved' && contactStatus !== 'missing' && contactStatus !== 'ambiguous')
+    || (contactStatus === 'resolved' && !positiveSafeInteger(alunoIdCanonico))
+    || (contactStatus !== 'resolved' && alunoIdCanonico !== null)
   ) return null;
 
   return {
@@ -266,6 +278,8 @@ function parseItem(value: unknown): InadimplenciaCanonicaItem | null {
     unidade_id: unidadeId,
     emusys_fatura_id: faturaId,
     emusys_matricula_id: matriculaId,
+    aluno_id_canonico: contactStatus === 'resolved' ? alunoIdCanonico as number : null,
+    contact_resolution_status: contactStatus,
     data_vencimento: row.data_vencimento,
     dias_atraso: row.dias_atraso,
     valor_original: row.valor_original,
@@ -274,9 +288,12 @@ function parseItem(value: unknown): InadimplenciaCanonicaItem | null {
   };
 }
 
-function parseItems(value: unknown): InadimplenciaCanonicaItem[] | null {
+function parseItems(
+  value: unknown,
+  requireContactResolution = true,
+): InadimplenciaCanonicaItem[] | null {
   if (!Array.isArray(value)) return null;
-  const items = value.map(parseItem);
+  const items = value.map((item) => parseItem(item, requireContactResolution));
   return items.every((item): item is InadimplenciaCanonicaItem => item != null) ? items : null;
 }
 
@@ -310,6 +327,7 @@ function parseReconciliation(value: unknown): Reconciliation | null {
     || !nonNegativeInteger(reconciliation.duplicate_fatura_count)
     || !nonNegativeInteger(reconciliation.invalid_identity_invoice_count)
     || !nonNegativeInteger(reconciliation.validation_issue_count)
+    || !nonNegativeInteger(reconciliation.contact_resolution_pending_count)
   ) return null;
 
   const result = {
@@ -319,6 +337,7 @@ function parseReconciliation(value: unknown): Reconciliation | null {
     duplicateFaturaCount: reconciliation.duplicate_fatura_count,
     invalidIdentityInvoiceCount: reconciliation.invalid_identity_invoice_count,
     validationIssueCount: reconciliation.validation_issue_count,
+    contactResolutionPendingCount: reconciliation.contact_resolution_pending_count,
   };
   return result.sourceMissingOpenCount + result.sourceMissingOtherCount === result.sourceMissingCount
     && (result.validationIssueCount === 0 || result.invalidIdentityInvoiceCount > 0)
@@ -335,6 +354,7 @@ function parseV2Reconciliation(value: unknown): Reconciliation | null {
       duplicateFaturaCount: 0,
       invalidIdentityInvoiceCount: 0,
       validationIssueCount: 0,
+      contactResolutionPendingCount: 0,
     };
   }
   const reconciliation = asRecord(value);
@@ -347,7 +367,10 @@ function parseV2Reconciliation(value: unknown): Reconciliation | null {
   ) return null;
 
   if (hasOwn(reconciliation, 'source_missing_open_count') || hasOwn(reconciliation, 'source_missing_other_count')) {
-    return parseReconciliation(reconciliation);
+    return parseReconciliation({
+      ...reconciliation,
+      contact_resolution_pending_count: reconciliation.contact_resolution_pending_count ?? 0,
+    });
   }
   if (
     reconciliation.validation_issue_count > 0
@@ -360,6 +383,7 @@ function parseV2Reconciliation(value: unknown): Reconciliation | null {
     duplicateFaturaCount: reconciliation.duplicate_fatura_count,
     invalidIdentityInvoiceCount: reconciliation.invalid_identity_invoice_count,
     validationIssueCount: reconciliation.validation_issue_count,
+    contactResolutionPendingCount: 0,
   };
 }
 
@@ -492,6 +516,7 @@ function stateFrom(
     duplicateFaturaCount: reconciliation.duplicateFaturaCount,
     invalidIdentityInvoiceCount: reconciliation.invalidIdentityInvoiceCount,
     validationIssueCount: reconciliation.validationIssueCount,
+    contactResolutionPendingCount: reconciliation.contactResolutionPendingCount,
     collectionAllowed,
     collectionScope,
     blockReasons,
@@ -544,11 +569,15 @@ function normalizeV3(root: Record<string, unknown>): InadimplenciaCanonicaState 
     : reconciliation.sourceMissingCount > 0
       || reconciliation.invalidIdentityInvoiceCount > 0
       || reconciliation.validationIssueCount > 0
+      || reconciliation.contactResolutionPendingCount > 0
     ? 'partial'
     : 'ok';
   const reasons = expectedReasons(freshness, reconciliation);
   const collectionAllowed = status === 'ok' || status === 'partial';
   const zeroDebtOk = status === 'ok' && items.length === 0 && totalsAreZero(totals)
+  const unresolvedContactItems = items.filter(
+    (item) => item.contact_resolution_status !== 'resolved',
+  ).length;
 
   if (
     status !== derivedStatus
@@ -559,6 +588,7 @@ function normalizeV3(root: Record<string, unknown>): InadimplenciaCanonicaState 
       || operational.collection_scope !== 'confirmed_only'
       || reasons.length !== 0
       || !totalsMatchItems(totals, items)
+      || reconciliation.contactResolutionPendingCount !== unresolvedContactItems
     ))
     || (!collectionAllowed && (
       operational.collection_allowed !== false
@@ -598,12 +628,13 @@ function normalizeV2(root: Record<string, unknown>): InadimplenciaCanonicaState 
   ) return errorState();
 
   if (status === 'ok') {
-    const items = parseItems(root.items);
+    const items = parseItems(root.items, false);
     const zeroDebt = items?.length === 0 && totalsAreZero(totals);
     const reconciliationClear = reconciliation.sourceMissingCount === 0
       && reconciliation.duplicateFaturaCount === 0
       && reconciliation.invalidIdentityInvoiceCount === 0
-      && reconciliation.validationIssueCount === 0;
+      && reconciliation.validationIssueCount === 0
+      && reconciliation.contactResolutionPendingCount === 0;
     if (
       !items
       || !totalsMatchItems(totals, items)
@@ -611,12 +642,16 @@ function normalizeV2(root: Record<string, unknown>): InadimplenciaCanonicaState 
       || !reconciliationClear
       || (freshness.freshUntil === null && !zeroDebt)
     ) return errorState();
+    const reconciliationWithContactQuarantine: Reconciliation = {
+      ...reconciliation,
+      contactResolutionPendingCount: items.length,
+    };
     return stateFrom(
       2,
-      'ok',
+      items.length > 0 ? 'partial' : 'ok',
       totals,
       freshness,
-      reconciliation,
+      reconciliationWithContactQuarantine,
       true,
       'confirmed_only',
       [],
@@ -716,60 +751,119 @@ export function montarAlertasInadimplenciaCanonica(
   options: Date | MontarAlertasInadimplenciaCanonicaOptions = {},
 ): AlertasInadimplenciaCanonicaResult {
   const agora = options instanceof Date ? options : options.agora ?? new Date();
-  const collectionGraceDays = options instanceof Date
-    ? state.collectionGraceDays
-    : options.collectionGraceDays ?? state.collectionGraceDays;
-  if (!nonNegativeInteger(collectionGraceDays)) {
+  if (!nonNegativeInteger(state.collectionGraceDays)) {
     return { alertas: [], totalAtivos: 0, semCadastroAtivo: 0 };
   }
   if (!podeCobrarInadimplenciaCanonica(state, agora)) {
     return { alertas: [], totalAtivos: 0, semCadastroAtivo: 0 };
   }
 
-  const stateElegivel = {
-    ...state,
-    items: state.items.filter((item) => item.dias_atraso >= collectionGraceDays),
-  };
-  const inadimplenciaPorMatricula = indexarInadimplenciaPorMatricula(stateElegivel, agora);
-  const alunosPorMatricula = new Map<string, AlunoInadimplenciaCanonicaSource[]>();
+  const itensElegiveis = state.items.filter(
+    (item) => item.dias_atraso >= state.collectionGraceDays,
+  );
+  const alunosPorId = new Map<number, AlunoInadimplenciaCanonicaSource[]>();
 
   for (const aluno of alunos) {
-    const matricula = sourceMatricula(aluno.emusys_matricula_id);
-    if (!matricula) continue;
-    const key = chaveInadimplenciaMatricula(aluno.unidade_id, matricula);
-    const candidatos = alunosPorMatricula.get(key) ?? [];
+    if (!positiveSafeInteger(aluno.id)) continue;
+    const candidatos = alunosPorId.get(aluno.id) ?? [];
     candidatos.push(aluno);
-    alunosPorMatricula.set(key, candidatos);
+    alunosPorId.set(aluno.id, candidatos);
+  }
+
+  const resolucoesPorMatricula = new Map<string, {
+    unidadeId: string;
+    matriculaId: string;
+    statuses: Set<InadimplenciaContactResolutionStatus>;
+    alunoIds: Set<number>;
+  }>();
+  for (const item of itensElegiveis) {
+    const key = chaveInadimplenciaMatricula(item.unidade_id, item.emusys_matricula_id);
+    const resolucao = resolucoesPorMatricula.get(key) ?? {
+      unidadeId: item.unidade_id,
+      matriculaId: item.emusys_matricula_id,
+      statuses: new Set<InadimplenciaContactResolutionStatus>(),
+      alunoIds: new Set<number>(),
+    };
+    resolucao.statuses.add(item.contact_resolution_status);
+    if (item.aluno_id_canonico !== null) resolucao.alunoIds.add(item.aluno_id_canonico);
+    resolucoesPorMatricula.set(key, resolucao);
+  }
+
+  const alunoIdResolvidoPorMatricula = new Map<string, number>();
+  let semCadastroAtivo = 0;
+  for (const [key, resolucao] of resolucoesPorMatricula) {
+    const somenteResolvidos = resolucao.statuses.size === 1
+      && resolucao.statuses.has('resolved');
+    if (!somenteResolvidos) continue;
+    if (resolucao.alunoIds.size !== 1) {
+      semCadastroAtivo += 1;
+      continue;
+    }
+    alunoIdResolvidoPorMatricula.set(key, [...resolucao.alunoIds][0]);
+  }
+
+  const contatosPorAluno = new Map<string, {
+    unidadeId: string;
+    alunoId: number;
+    matriculas: Set<string>;
+    faturas: number;
+    valorAtualizado: number;
+    maiorAtraso: number;
+    ultimoSync: string | null;
+  }>();
+  for (const item of itensElegiveis) {
+    const matriculaKey = chaveInadimplenciaMatricula(item.unidade_id, item.emusys_matricula_id);
+    const alunoId = alunoIdResolvidoPorMatricula.get(matriculaKey);
+    if (alunoId === undefined) continue;
+    const contatoKey = `${item.unidade_id}|${alunoId}`;
+    const contato = contatosPorAluno.get(contatoKey) ?? {
+      unidadeId: item.unidade_id,
+      alunoId,
+      matriculas: new Set<string>(),
+      faturas: 0,
+      valorAtualizado: 0,
+      maiorAtraso: 0,
+      ultimoSync: null,
+    };
+    contato.matriculas.add(item.emusys_matricula_id);
+    contato.faturas += 1;
+    contato.valorAtualizado = Number((contato.valorAtualizado + item.valor_atualizado).toFixed(2));
+    contato.maiorAtraso = Math.max(contato.maiorAtraso, item.dias_atraso);
+    const currentEpoch = contato.ultimoSync ? Date.parse(contato.ultimoSync) : Number.NaN;
+    const itemEpoch = item.sync_completed_at ? Date.parse(item.sync_completed_at) : Number.NaN;
+    if (Number.isFinite(itemEpoch) && (!Number.isFinite(currentEpoch) || itemEpoch > currentEpoch)) {
+      contato.ultimoSync = item.sync_completed_at;
+    }
+    contatosPorAluno.set(contatoKey, contato);
   }
 
   const alertas: AlertaInadimplenciaCanonica[] = [];
-  let semCadastroAtivo = 0;
-  for (const [key, inadimplencia] of inadimplenciaPorMatricula) {
-    const candidatos = [...(alunosPorMatricula.get(key) ?? [])].sort((left, right) => (
-      Number(left.is_segundo_curso === true) - Number(right.is_segundo_curso === true)
-      || left.id - right.id
-    ));
-    const aluno = candidatos[0];
-    if (!aluno) {
+  for (const contato of contatosPorAluno.values()) {
+    const candidatos = alunosPorId.get(contato.alunoId) ?? [];
+    const aluno = candidatos.length === 1 ? candidatos[0] : null;
+    if (!aluno || aluno.unidade_id !== contato.unidadeId) {
       semCadastroAtivo += 1;
       continue;
     }
 
-    const matricula = sourceMatricula(aluno.emusys_matricula_id);
-    if (!matricula) continue;
+    const matriculas = [...contato.matriculas].sort((left, right) => (
+      left.localeCompare(right, 'pt-BR', { numeric: true })
+    ));
+
     alertas.push({
       aluno_id: aluno.id,
       aluno_nome: aluno.nome,
       whatsapp: nullableText(aluno.whatsapp) ?? nullableText(aluno.telefone),
       unidade_id: aluno.unidade_id,
-      emusys_matricula_id: matricula,
-      valor_atualizado: inadimplencia.valorAtualizado,
-      total_faturas: inadimplencia.faturas,
+      emusys_matricula_id: matriculas[0],
+      emusys_matricula_ids: matriculas,
+      valor_atualizado: contato.valorAtualizado,
+      total_faturas: contato.faturas,
       professor_id: aluno.professor?.id ?? null,
       professor_nome: nullableText(aluno.professor?.nome),
       instrumento: nullableText(aluno.curso?.nome),
-      dias_atraso: inadimplencia.maiorAtraso,
-      ultimo_sync: inadimplencia.ultimoSync,
+      dias_atraso: contato.maiorAtraso,
+      ultimo_sync: contato.ultimoSync,
     });
   }
 

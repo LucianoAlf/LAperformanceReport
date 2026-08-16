@@ -560,9 +560,23 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
               </div>
             )}
 
+            {gateCanonicoValido
+              && inadimplenciaCanonica.status === 'partial'
+              && inadimplenciaCanonica.contactResolutionPendingCount > 0 && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100" role="status">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-400" />
+                  <p>
+                    <strong>{inadimplenciaCanonica.contactResolutionPendingCount} fatura(s) confirmada(s) sem contato local unívoco</strong>
+                    <span className="mt-0.5 block text-xs text-amber-200/80">O valor permanece no financeiro D+0; o contato fica fora da carteira D+2 até conciliação.</span>
+                  </p>
+                </div>
+              </div>
+            )}
+
             {gateCanonicoValido && inadimplenciaSemCadastroAtivo > 0 && (
               <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
-                {inadimplenciaSemCadastroAtivo} matrícula(s) confirmada(s) sem vínculo local para contato. Nenhuma associação foi feita por nome ou ID de aluno.
+                {inadimplenciaSemCadastroAtivo} contato(s) com ID canônico não puderam ser enriquecidos com segurança. Nenhuma associação foi feita por nome ou student_id.
               </div>
             )}
 
@@ -579,7 +593,7 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
                 items={inadimplentes}
                 renderItem={(item: AlertaInadimplente) => (
                   <AlertaListItem
-                    key={item.aluno_id}
+                    key={`${item.unidade_id}:${item.aluno_id}`}
                     nome={item.aluno_nome}
                     detalhe={`R$ ${item.valor_atualizado.toFixed(2)} • ${item.total_faturas} pendência(s) • ${item.dias_atraso} dias de atraso`}
                     whatsapp={item.whatsapp}

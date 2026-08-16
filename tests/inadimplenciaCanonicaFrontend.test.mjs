@@ -69,6 +69,8 @@ test('banner separa leitura financeira D+0 e quarentenas sem contaminar totais',
   assert.match(tabelaAlunos, /faturas aguardando reconciliação — não incluídas nos totais confirmados/u);
   assert.match(tabelaAlunos, /invalidIdentityInvoiceCount/);
   assert.match(tabelaAlunos, /validationIssueCount/);
+  assert.match(tabelaAlunos, /contactResolutionPendingCount/);
+  assert.match(tabelaAlunos, /fatura\(s\) confirmada\(s\) sem contato local unívoco/u);
   assert.match(tabelaAlunos, /fatura\(s\) com identidade inválida aguardando conciliação — não incluída\(s\) nos totais confirmados/u);
   assert.doesNotMatch(tabelaAlunos, /inadimplências confirmadas[^\n]*cobrança liberada/iu);
 
@@ -124,6 +126,19 @@ test('contrato v3 exige politica D+0, carencia D+2 e aplicacao obrigatoria no co
   assert.match(canonicalClient, /policy\.delinquency_rule\s*!==\s*['"]d_plus_0['"]/);
   assert.match(canonicalClient, /policy\.collection_grace_days\s*!==\s*COBRANCA_AMIGAVEL_CARENCIA_DIAS/);
   assert.match(canonicalClient, /operational\.consumer_must_apply_collection_grace\s*!==\s*true/);
+});
+
+test('banner limita live region ao texto e usa alerta assertivo quando bloqueado', () => {
+  assert.match(tabelaAlunos, /role=\{leituraFinanceiraDisponivel\s*\?\s*['"]status['"]\s*:\s*['"]alert['"]\}/);
+  assert.match(tabelaAlunos, /aria-live=\{leituraFinanceiraDisponivel\s*\?\s*['"]polite['"]\s*:\s*['"]assertive['"]\}/);
+  assert.match(tabelaAlunos, /data-financial-alert-live-region/);
+  assert.match(tabelaAlunos, /financial-alert-live-region:end/);
+  assert.match(tabelaAlunos, /data-financial-alert-actions/);
+  const liveStart = tabelaAlunos.indexOf('data-financial-alert-live-region');
+  const liveEnd = tabelaAlunos.indexOf('financial-alert-live-region:end', liveStart);
+  const liveRegion = tabelaAlunos.slice(liveStart, liveEnd);
+  assert.ok(liveRegion, 'regiao viva textual ausente');
+  assert.doesNotMatch(liveRegion, /<button/);
 });
 
 test('expiracao limpa flags e filtro, recarrega uma vez e sempre limpa o timer', () => {

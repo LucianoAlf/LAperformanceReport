@@ -11,6 +11,7 @@ const farmerDashboard = readFileSync(
   'src/components/App/Administrativo/PainelFarmer/DashboardTab.tsx',
   'utf8',
 );
+const canonicalClient = readFileSync('src/lib/inadimplenciaCanonica.ts', 'utf8');
 const financeiroClient = readFileSync('src/lib/financeiroFaturasEmusys.ts', 'utf8');
 const modalRelatorio = readFileSync('src/components/App/Administrativo/ModalRelatorio.tsx', 'utf8');
 const migrationPath = 'supabase/migrations/20260816013512_financeiro_faturas_relatorios_canonicos.sql';
@@ -38,8 +39,8 @@ test('painel farmer usa a leitura canonica, valor corrigido e estado de frescor'
   assert.match(farmerHook, /\.rpc\(\s*['"]get_inadimplencia_canonica['"]/);
   assert.doesNotMatch(farmerHook, /\.from\(\s*['"]vw_farmer_inadimplentes['"]/);
   assert.match(farmerHook, /montarAlertasInadimplenciaCanonica/);
-  assert.match(farmerHook, /collectionGraceDays:\s*estadoCanonico\.collectionGraceDays/);
-  assert.match(farmerHook, /item\.dias_atraso\s*>=\s*estadoCanonico\.collectionGraceDays/);
+  assert.doesNotMatch(farmerHook, /collectionGraceDays:/);
+  assert.doesNotMatch(farmerHook, /item\.dias_atraso\s*>=/);
   assert.match(farmerDashboard, /inadimplenciaCanonica\.status/);
   assert.match(farmerDashboard, /valor_atualizado/);
   assert.doesNotMatch(farmerDashboard, /item\.valor_parcela/);
@@ -82,8 +83,9 @@ test('farmer usa helper para liberar partial confirmado sem decisao local de sta
   assert.match(farmerHook, /podeCobrarInadimplenciaCanonica\(estadoCanonico\)/);
   assert.doesNotMatch(farmerHook, /estadoCanonico\.status\s*===\s*['"]ok['"]/);
   assert.doesNotMatch(farmerHook, /\.eq\(\s*['"]status['"]\s*,\s*['"]ativo['"]\s*\)/);
-  assert.match(farmerHook, /\.in\(\s*['"]emusys_matricula_id['"]\s*,\s*matriculas\s*\)/);
+  assert.match(farmerHook, /\.in\(\s*['"]id['"]\s*,\s*alunoIdsCanonicos\s*\)/);
   assert.match(farmerHook, /\.in\(\s*['"]unidade_id['"]\s*,\s*unidades\s*\)/);
+  assert.doesNotMatch(farmerHook, /is_segundo_curso/);
   assert.doesNotMatch(farmerHook, /emusys_student_id/);
 });
 
@@ -105,6 +107,8 @@ test('dashboard mostra partial acionavel e reconciliacao separada sem misturar d
   assert.match(farmerDashboard, /sourceMissingCount/);
   assert.match(farmerDashboard, /invalidIdentityInvoiceCount/);
   assert.match(farmerDashboard, /validationIssueCount/);
+  assert.match(farmerDashboard, /contactResolutionPendingCount/);
+  assert.match(farmerDashboard, /sem contato local unívoco/u);
   assert.match(farmerDashboard, /variant="success"/);
 
   const reconciliationNotice = farmerDashboard.match(/sourceMissingCount\s*>\s*0[\s\S]*?<\/div>\s*\)}/)?.[0] ?? '';
@@ -116,9 +120,20 @@ test('dashboard mostra partial acionavel e reconciliacao separada sem misturar d
 });
 
 test('farmer aplica a carencia publicada pelo estado e nao um limiar local ambiguo', () => {
-  assert.match(farmerHook, /estadoCanonico\.collectionGraceDays/);
+  assert.match(farmerHook, /montarAlertasInadimplenciaCanonica\(estadoCanonico/);
   assert.doesNotMatch(farmerHook, /dias_atraso\s*>=\s*2/);
   assert.doesNotMatch(farmerHook, /COBRANCA_AMIGAVEL_CARENCIA_DIAS/);
+  assert.doesNotMatch(farmerHook, /collectionGraceDays:/);
+});
+
+test('farmer enriquece contato apenas pelo aluno_id canonico publicado pela RPC', () => {
+  assert.match(farmerHook, /item\.aluno_id_canonico/);
+  assert.match(farmerHook, /contact_resolution_status\s*===\s*['"]resolved['"]/);
+  assert.match(farmerHook, /\.in\(\s*['"]id['"]\s*,\s*alunoIdsCanonicos\s*\)/);
+  assert.doesNotMatch(farmerHook, /candidatos\[0\]|is_segundo_curso/);
+  assert.match(canonicalClient, /contatosPorAluno/);
+  assert.match(canonicalClient, /emusys_matricula_ids/);
+  assert.match(farmerDashboard, /key=\{`\$\{item\.unidade_id\}:\$\{item\.aluno_id\}`\}/);
 });
 
 test('dashboard mantem stale incomplete e error bloqueados e distintos', () => {

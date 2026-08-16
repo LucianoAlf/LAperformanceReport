@@ -261,6 +261,7 @@ export interface AlertaInadimplente {
   whatsapp: string | null;
   unidade_id: string;
   emusys_matricula_id: string;
+  emusys_matricula_ids: string[];
   valor_atualizado: number;
   total_faturas: number;
   professor_id: number | null;
