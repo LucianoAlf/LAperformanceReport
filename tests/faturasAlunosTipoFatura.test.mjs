@@ -92,3 +92,16 @@ test('casamento em lote usa somente o ultimo run completo da competencia', () =>
   assert.match(migration, /sr\.snapshot_complete\s+is\s+true/i);
   assert.match(migration, /i\.run_id\s*=\s*ur\.id/i);
 });
+
+test('lista financeira deixa matrícula na rastreabilidade e mantém detalhes acessíveis', () => {
+  const page = read('src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx');
+  const tabela = page.slice(
+    page.indexOf('function InvoicesTable'),
+    page.indexOf('function ReconciliationPanelV2'),
+  );
+
+  assert.doesNotMatch(tabela, />Matrícula<\/th>/i);
+  assert.match(tabela, /Ver detalhes/);
+  assert.match(tabela, /sticky right-0/);
+  assert.match(page, /\['Matrícula Emusys', item\.emusys_matricula_id/);
+});

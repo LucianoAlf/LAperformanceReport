@@ -706,8 +706,8 @@ function InvoicesTable({ items, dataCorte, unidadeNome, onDetail }: {
   }
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-[1640px] w-full text-left text-sm">
-        <thead className="border-b border-slate-700/70 bg-slate-950/45 text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3 font-medium">Aluno / curso</th><th className="px-3 py-3 font-medium">Tipo da fatura</th><th className="px-3 py-3 font-medium">Situação</th><th className="px-3 py-3 font-medium">Vencimento</th><th className="px-3 py-3 font-medium">Forma de pagamento</th><th className="px-3 py-3 text-right font-medium">Valor base</th><th className="px-3 py-3 text-right font-medium">Sem desconto condicional</th><th className="px-3 py-3 text-right font-medium">Valor atualizado / pago</th><th className="px-3 py-3 font-medium">Matrícula</th><th className="px-4 py-3 text-right font-medium">Detalhe</th></tr></thead>
+      <table className="min-w-[1480px] w-full text-left text-sm">
+        <thead className="border-b border-slate-700/70 bg-slate-950/45 text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3 font-medium">Aluno / curso</th><th className="px-3 py-3 font-medium">Tipo da fatura</th><th className="px-3 py-3 font-medium">Situação</th><th className="px-3 py-3 font-medium">Vencimento</th><th className="px-3 py-3 font-medium">Forma de pagamento</th><th className="px-3 py-3 text-right font-medium">Valor base</th><th className="px-3 py-3 text-right font-medium">Sem desconto condicional</th><th className="px-3 py-3 text-right font-medium">Valor atualizado / pago</th><th className="sticky right-0 z-10 bg-slate-950 px-4 py-3 text-right font-medium">Detalhe</th></tr></thead>
         <tbody className="divide-y divide-slate-800">
           {items.map((item) => {
             const valorPrincipal = item.status === 'paga' ? item.valores.valor_pago : item.valores.valor_hoje;
@@ -723,8 +723,7 @@ function InvoicesTable({ items, dataCorte, unidadeNome, onDetail }: {
                 <td className="px-3 py-3.5 text-right tabular-nums text-slate-300"><p>{moeda(item.valores.valor_com_desconto)}</p><p className="mt-0.5 text-[10px] text-slate-500">{parcela ? 'Valor com desconto' : 'Valor da fatura'}</p></td>
                 <td className="px-3 py-3.5 text-right tabular-nums text-slate-400"><p>{parcela ? moeda(item.valores.valor_sem_desconto_condicional) : '—'}</p><p className="mt-0.5 text-[10px] text-slate-500">{parcela ? 'Sem desconto condicional' : 'Não se aplica'}</p></td>
                 <td className="px-3 py-3.5 text-right"><p className={cn('font-semibold tabular-nums', item.status === 'paga' ? 'text-emerald-300' : 'text-cyan-200')}>{valorPrincipal == null ? '—' : moeda(valorPrincipal)}</p><p className="mt-0.5 text-[10px] text-slate-500">{item.status === 'paga' ? 'Valor pago' : 'Valor atualizado • calculado pelo contrato'}</p></td>
-                <td className="px-3 py-3.5 font-mono text-xs text-slate-400">{item.emusys_matricula_id ?? '—'}</td>
-                <td className="px-4 py-3.5 text-right"><button type="button" onClick={() => onDetail(item)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:border-cyan-500/35 hover:text-cyan-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50">Ver detalhes <ChevronRight className="h-3.5 w-3.5" /></button></td>
+                <td className="sticky right-0 z-10 bg-slate-950 px-4 py-3.5 text-right shadow-[-12px_0_18px_-16px_rgba(0,0,0,0.9)] transition group-hover:bg-slate-900"><button type="button" onClick={() => onDetail(item)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:border-cyan-500/35 hover:text-cyan-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50">Ver detalhes <ChevronRight className="h-3.5 w-3.5" /></button></td>
               </tr>
             );
           })}
