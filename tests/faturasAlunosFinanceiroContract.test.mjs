@@ -97,3 +97,16 @@ test('reconciliacao cruza identidade pela visao canonica e so usa fallback de al
   assert.match(source, /i\.emusys_matricula_id\s+is\s+null\s+and\s+la\.aluno_count\s*=\s*1/i);
   assert.match(source, /vinculo_local_fonte/i);
 });
+
+test('wrapper publico preserva o contrato monetario de canceladas apos a reconciliacao', () => {
+  const migrationName = fs.readdirSync(migrationsDir)
+    .filter((name) => /_financeiro_faturas_canceladas_valor_explicito\.sql$/u.test(name))
+    .sort()
+    .at(-1);
+  assert.ok(migrationName, 'migration do wrapper publico de canceladas ausente');
+  const source = fs.readFileSync(path.join(migrationsDir, migrationName), 'utf8');
+
+  assert.match(source, /rename\s+to\s+get_faturas_alunos_financeiro_v1_canonica_20260817/i);
+  assert.match(source, /\{totais,canceladas,valor\}/i);
+  assert.match(source, /to_jsonb\(0::numeric\)/i);
+});
