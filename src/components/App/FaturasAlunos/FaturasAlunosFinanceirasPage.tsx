@@ -158,7 +158,7 @@ const FATURA_TIPO_LABELS: Record<FaturaFinanceiraTipo, string> = {
   parcela: 'Parcela',
   passaporte_taxa_matricula: 'Passaporte/Taxa de matrícula',
   lojinha_produto: 'Lojinha/Produto',
-  venda_ingressos: 'Venda de ingressos',
+  venda_ingressos: 'Venda de Ingressos',
   avulsa_outro: 'Avulsa/Outro',
 };
 

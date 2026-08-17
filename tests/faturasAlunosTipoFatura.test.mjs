@@ -39,7 +39,7 @@ test('adaptador e página tratam tipo de fatura separado da forma de pagamento',
   assert.match(page, /Tipo da fatura/);
   assert.match(page, /Passaporte\/Taxa de matrícula/);
   assert.match(page, /Lojinha\/Produto/);
-  assert.match(page, /Venda de ingressos/);
+  assert.match(page, /Venda de Ingressos/);
   assert.match(page, /Avulsa\/Outro/);
   assert.match(page, /forma_pagamento/);
 });
