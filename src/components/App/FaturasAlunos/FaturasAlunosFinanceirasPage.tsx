@@ -2,20 +2,24 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
+  Barcode,
   BadgeCheck,
   Banknote,
   CalendarClock,
   CheckCircle2,
   ChevronRight,
+  CircleHelp,
   CircleDollarSign,
   Clock3,
   CreditCard,
+  FileCheck2,
   FileQuestion,
   FileWarning,
   Landmark,
   Loader2,
   ReceiptText,
   RefreshCw,
+  QrCode,
   RotateCcw,
   Search,
   ShieldAlert,
@@ -25,10 +29,14 @@ import {
 import { toast } from 'sonner';
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
+import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
+import { useAuth } from '@/contexts/AuthContext';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
+import type { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { useUnidades } from '@/hooks/useSupabase';
 import {
   carregarFaturasAlunosFinanceiras,
@@ -81,14 +89,6 @@ function competenciaValida(value: string | null) {
   if (!value || !/^\d{4}-(0[1-9]|1[0-2])-01$/u.test(value)) return null;
   const [year, month] = value.split('-').map(Number);
   return { year, month, value };
-}
-
-function competenciasParaFiltro() {
-  const atual = competenciaAtual();
-  return Array.from({ length: 12 }, (_, index) => {
-    const date = new Date(Date.UTC(atual.year, atual.month - 1 - index, 1));
-    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-01`;
-  });
 }
 
 function diasAtraso(dataVencimento: string, dataCorte: string) {
@@ -175,10 +175,8 @@ function MetricCard({
   );
 }
 
-function LeituraNotice({ state, onRefresh, refreshing }: {
+function LeituraNotice({ state }: {
   state: FaturasFinanceirasState;
-  onRefresh: () => void;
-  refreshing: boolean;
 }) {
   const info = state.status === 'ok'
     ? {
@@ -210,24 +208,20 @@ function LeituraNotice({ state, onRefresh, refreshing }: {
           <p className="mt-0.5 text-xs opacity-75">{info.description}</p>
         </div>
       </div>
-      <div className="flex items-center gap-3">
-        <div className="hidden text-right text-[11px] leading-5 text-slate-400 sm:block">
+      <div className="text-right text-[11px] leading-5 text-slate-400">
           <p>Sync mais antigo: <span className="text-slate-200">{formatarDataHora(state.freshness.syncMaisAntigo)}</span></p>
           <p>Válido até: <span className="text-slate-200">{formatarDataHora(state.freshness.validoAte)}</span></p>
-        </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={refreshing}
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-current/25 bg-slate-950/25 px-3 text-sm font-medium transition hover:bg-slate-950/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/50 disabled:cursor-wait disabled:opacity-60"
-        >
-          {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          {refreshing ? 'Na fila...' : 'Atualizar agora'}
-        </button>
       </div>
     </section>
   );
 }
+
+type FaturasOutletContext = {
+  filtroAtivo: string | null;
+  unidadeSelecionada: UnidadeId;
+  setUnidadeSelecionada?: (value: string | null) => void;
+  competencia?: ReturnType<typeof useCompetenciaFiltro>;
+};
 
 export function FaturasAlunosFinanceirasPage() {
   useSetPageTitle({
@@ -238,7 +232,8 @@ export function FaturasAlunosFinanceirasPage() {
     iconeWrapperCor: 'bg-gradient-to-br from-cyan-500 to-emerald-500',
   });
 
-  const context = useOutletContext<{ unidadeSelecionada: UnidadeId }>();
+  const context = useOutletContext<FaturasOutletContext>();
+  const { isAdmin, unidadeId, loading: authLoading } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: unidades = [] } = useUnidades();
   const [state, setState] = useState<FaturasFinanceirasState>(FATURAS_FINANCEIRAS_LOADING);
@@ -246,18 +241,22 @@ export function FaturasAlunosFinanceirasPage() {
   const [faturaSelecionada, setFaturaSelecionada] = useState<FaturaFinanceiraItem | null>(null);
   const dataCorte = useMemo(hojeBrasilia, []);
 
-  const unidadeContexto = context?.unidadeSelecionada ?? 'todos';
   const unidadeParam = searchParams.get('unidade');
-  const unidadeConsulta = unidadeParam === 'todos'
+  const unidadeDeepLink = isAdmin && unidadeParam === 'todos'
     ? 'todos'
-    : unidadeParam && UUID.test(unidadeParam)
+    : isAdmin && unidadeParam && UUID.test(unidadeParam)
       ? unidadeParam
-      : unidadeContexto;
+      : null;
+  const unidadeConsulta = isAdmin
+    ? (unidadeDeepLink ?? context?.filtroAtivo ?? 'todos')
+    : unidadeId;
+  const unidadePronta = !authLoading && (isAdmin || Boolean(unidadeConsulta));
+  const competenciaGlobal = context?.competencia;
   const competenciaParam = competenciaValida(searchParams.get('competencia'));
   const competenciaPadrao = competenciaAtual();
-  const ano = competenciaParam?.year ?? competenciaPadrao.year;
-  const mes = competenciaParam?.month ?? competenciaPadrao.month;
-  const modoPeriodo = competenciaParam ? 'competencia' : 'janela_3';
+  const ano = competenciaParam?.year ?? competenciaGlobal?.filtro.ano ?? competenciaPadrao.year;
+  const mes = competenciaParam?.month ?? competenciaGlobal?.filtro.mes ?? competenciaPadrao.month;
+  const modoPeriodo = 'competencia' as const;
   const situacao = normalizarSituacaoFaturasFinanceiras(searchParams.get('situacao'));
   const busca = searchParams.get('busca') ?? '';
   const curso = searchParams.get('curso') ?? 'todos';
@@ -274,8 +273,41 @@ export function FaturasAlunosFinanceirasPage() {
     }, { replace: true });
   }, [setSearchParams]);
 
+  useEffect(() => {
+    if (!unidadeParam) return;
+    if (isAdmin) {
+      const unidadeInicial = unidadeParam === 'todos'
+        ? null
+        : UUID.test(unidadeParam)
+          ? unidadeParam
+          : undefined;
+      if (unidadeInicial !== undefined) context?.setUnidadeSelecionada?.(unidadeInicial);
+    }
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete('unidade');
+      return next;
+    }, { replace: true });
+  }, [context, isAdmin, setSearchParams, unidadeParam]);
+
+  useEffect(() => {
+    if (!competenciaGlobal) return;
+    if (competenciaGlobal.filtro.tipo !== 'mensal') competenciaGlobal.setTipo('mensal');
+    if (!competenciaParam) return;
+    if (competenciaGlobal.filtro.ano !== competenciaParam.year) competenciaGlobal.setAno(competenciaParam.year);
+    if (competenciaGlobal.filtro.mes !== competenciaParam.month) competenciaGlobal.setMes(competenciaParam.month);
+  }, [competenciaGlobal, competenciaParam]);
+
+  const selecionarCompetencia = useCallback((nextAno: number, nextMes: number) => {
+    competenciaGlobal?.setTipo('mensal');
+    competenciaGlobal?.setAno(nextAno);
+    competenciaGlobal?.setMes(nextMes);
+    setFiltro('competencia', `${nextAno}-${String(nextMes).padStart(2, '0')}-01`);
+  }, [competenciaGlobal, setFiltro]);
+
   const carregar = useCallback(async () => {
     setState(FATURAS_FINANCEIRAS_LOADING);
+    if (!unidadePronta) return;
     const next = await carregarFaturasAlunosFinanceiras(financeiroRpcClient, {
       unidadeId: unidadeConsulta,
       ano,
@@ -285,16 +317,14 @@ export function FaturasAlunosFinanceirasPage() {
       asOfDate: dataCorte,
     });
     setState(next);
-  }, [ano, dataCorte, mes, modoPeriodo, situacao, unidadeConsulta]);
+  }, [ano, dataCorte, mes, modoPeriodo, situacao, unidadeConsulta, unidadePronta]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 
   const refreshNow = useCallback(async () => {
     setRefreshing(true);
     try {
-      const competencia = modoPeriodo === 'competencia'
-        ? `${ano}-${String(mes).padStart(2, '0')}-01`
-        : undefined;
+      const competencia = `${ano}-${String(mes).padStart(2, '0')}-01`;
       const { data, error } = await supabase.functions.invoke('atualizar-inadimplencia-emusys', {
         body: { competencia, include_backlog: true },
       });
@@ -308,7 +338,7 @@ export function FaturasAlunosFinanceirasPage() {
     } finally {
       setRefreshing(false);
     }
-  }, [ano, carregar, mes, modoPeriodo]);
+  }, [ano, carregar, mes]);
 
   const cursos = useMemo(() => [...new Set(state.items
     .map((item) => item.aluno.curso_nome)
@@ -323,7 +353,6 @@ export function FaturasAlunosFinanceirasPage() {
     alunoId,
     matriculaId,
   }), [alunoId, busca, curso, matriculaId, pagamento, state.items]);
-  const competencias = useMemo(competenciasParaFiltro, []);
   const unidadesPorId = useMemo(() => new Map(unidades.map((unidade) => [unidade.id, unidade.nome])), [unidades]);
 
   const tabs: PageTab<FaturasFinanceirasSituacao>[] = [
@@ -358,16 +387,44 @@ export function FaturasAlunosFinanceirasPage() {
   const limparFiltros = () => {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
-      for (const key of ['busca', 'curso', 'pagamento', 'aluno', 'matricula', 'situacao', 'competencia']) next.delete(key);
+      for (const key of ['busca', 'curso', 'pagamento', 'aluno', 'matricula', 'situacao', 'unidade']) next.delete(key);
       return next;
     }, { replace: true });
   };
 
   const carregando = state.status === 'loading';
   const mostrarReconciliacao = situacao === 'reconciliacao';
+  const filtroCompetencia = competenciaGlobal
+    ? { ...competenciaGlobal.filtro, tipo: 'mensal' as const, ano, mes }
+    : null;
 
   return (
     <div className="mx-auto max-w-[1800px] space-y-5 pb-8">
+      {competenciaGlobal && filtroCompetencia && (
+        <PageFilterBar className="flex-wrap gap-3">
+          <CompetenciaFilter
+            filtro={filtroCompetencia}
+            range={competenciaGlobal.range}
+            anosDisponiveis={competenciaGlobal.anosDisponiveis}
+            tiposPermitidos={['mensal']}
+            onTipoChange={() => competenciaGlobal.setTipo('mensal')}
+            onAnoChange={(nextAno) => selecionarCompetencia(nextAno, mes)}
+            onMesChange={(nextMes) => selecionarCompetencia(ano, nextMes)}
+            onTrimestreChange={competenciaGlobal.setTrimestre}
+            onSemestreChange={competenciaGlobal.setSemestre}
+          />
+          <button
+            type="button"
+            onClick={refreshNow}
+            disabled={refreshing}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3.5 text-sm font-medium text-cyan-100 transition hover:bg-cyan-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 disabled:cursor-wait disabled:opacity-60"
+          >
+            {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            {refreshing ? 'Na fila...' : 'Atualizar agora'}
+          </button>
+        </PageFilterBar>
+      )}
+
       <section className="overflow-hidden rounded-2xl border border-cyan-500/20 bg-slate-900/70 shadow-2xl shadow-slate-950/25">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-[radial-gradient(circle_at_top_right,rgba(6,182,212,0.12),transparent_34%),linear-gradient(110deg,rgba(15,23,42,0.95),rgba(2,6,23,0.85))] px-5 py-3.5">
           <div className="flex items-center gap-2 text-xs text-slate-400">
@@ -385,7 +442,7 @@ export function FaturasAlunosFinanceirasPage() {
           <p className="text-sm text-slate-300">
             Corte em <span className="font-semibold text-slate-100">{formatarData(dataCorte)}</span>
             <span className="mx-2 text-slate-600">•</span>
-            {modoPeriodo === 'janela_3' ? 'janela de 3 competências' : `competência ${formatarCompetencia(`${ano}-${String(mes).padStart(2, '0')}-01`)}`}
+            competência {formatarCompetencia(`${ano}-${String(mes).padStart(2, '0')}-01`)}
           </p>
           <p className="text-xs text-slate-500">Fonte: {state.source ?? 'aguardando leitura'}</p>
         </div>
@@ -397,7 +454,7 @@ export function FaturasAlunosFinanceirasPage() {
         </section>
       ) : (
         <>
-          <LeituraNotice state={state} onRefresh={refreshNow} refreshing={refreshing} />
+          <LeituraNotice state={state} />
 
           <PageTabs
             tabs={tabs}
@@ -433,20 +490,6 @@ export function FaturasAlunosFinanceirasPage() {
                       className="h-10 w-full rounded-xl border border-slate-700 bg-slate-950/70 pl-9 pr-3 text-sm text-slate-100 placeholder:text-slate-600 focus-visible:border-cyan-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/20"
                     />
                   </label>
-                  <Select value={unidadeConsulta || 'todos'} onValueChange={(value) => setFiltro('unidade', value)}>
-                    <SelectTrigger className="w-[170px] bg-slate-950/70"><SelectValue placeholder="Unidade" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todos">Todas as unidades</SelectItem>
-                      {unidades.map((unidade) => <SelectItem key={unidade.id} value={unidade.id}>{unidade.nome}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  <Select value={competenciaParam?.value ?? 'janela_3'} onValueChange={(value) => setFiltro('competencia', value === 'janela_3' ? null : value)}>
-                    <SelectTrigger className="w-[176px] bg-slate-950/70"><SelectValue placeholder="Competência" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="janela_3">Últimas 3 competências</SelectItem>
-                      {competencias.map((competencia) => <SelectItem key={competencia} value={competencia}>{formatarCompetencia(competencia)}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
                   <Select value={curso} onValueChange={(value) => setFiltro('curso', value)}>
                     <SelectTrigger className="w-[160px] bg-slate-950/70"><SelectValue placeholder="Curso" /></SelectTrigger>
                     <SelectContent>
