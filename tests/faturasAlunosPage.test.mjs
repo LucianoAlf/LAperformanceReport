@@ -66,3 +66,14 @@ test('tabela financeira mostra forma e os tres valores contratuais', () => {
   assert.match(page, /Forma prevista/);
   assert.doesNotMatch(page, /format="currency"/);
 });
+
+test('pagina financeira herda unidade e competencia do layout autenticado', () => {
+  const layout = read('src/components/App/Layout/AppLayout.tsx');
+  const page = read('src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx');
+
+  assert.match(layout, /setUnidadeSelecionada/);
+  assert.match(layout, /<Outlet context=\{\{/);
+  assert.match(page, /filtroAtivo/);
+  assert.match(page, /competencia/);
+  assert.match(page, /authLoading|loading:\s*authLoading/);
+});

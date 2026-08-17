@@ -65,3 +65,21 @@ test('reconciliacao financeira fica na pagina dedicada e D+2 respeita o gate can
   assert.match(page, /identidadeInvalida/);
   assert.doesNotMatch(page, /\/app\/alunos\?tab=conciliacao/);
 });
+
+test('faturas usa a competencia mensal do layout e nunca nasce em janela de tres meses', () => {
+  const page = read('src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx');
+
+  assert.match(page, /modoPeriodo\s*=\s*['"]competencia['"]/);
+  assert.match(page, /context\?\.competencia/);
+  assert.doesNotMatch(page, /value=\{competenciaParam\?\.value\s*\?\?\s*['"]janela_3['"]\}/);
+  assert.doesNotMatch(page, /Últimas 3 competências/);
+});
+
+test('unidade vem do escopo autenticado e nao existe seletor local duplicado', () => {
+  const page = read('src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx');
+
+  assert.match(page, /useAuth\(\)/);
+  assert.match(page, /isAdmin/);
+  assert.match(page, /unidadeId/);
+  assert.doesNotMatch(page, /<SelectItem value="todos">Todas as unidades<\/SelectItem>/);
+});
