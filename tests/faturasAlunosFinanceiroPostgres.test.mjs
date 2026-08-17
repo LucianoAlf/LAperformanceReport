@@ -34,6 +34,15 @@ function reconciliacaoTotaisPatchSource() {
   return fs.readFileSync(path.join(migrationsDir, migrationName), 'utf8');
 }
 
+function reconciliacaoClassificacaoSource() {
+  const migrationName = fs.readdirSync(migrationsDir)
+    .filter((name) => /_financeiro_faturas_reconciliacao_classificacao_origem\.sql$/u.test(name))
+    .sort()
+    .at(-1);
+  assert.ok(migrationName, 'migration da classificacao de origem financeira ausente');
+  return fs.readFileSync(path.join(migrationsDir, migrationName), 'utf8');
+}
+
 function carteiraAtivaMigrationSource() {
   const migrationName = fs.readdirSync(migrationsDir)
     .filter((name) => /_inadimplencia_canonica_carteira_ativa_d2_v1\.sql$/u.test(name))
@@ -313,6 +322,15 @@ function bootstrapSql() {
         '11111111-1111-1111-1111-111111111111', 'REC',
         1005, 9999, 9002, 999, 'Sem identidade local', 'aberta', date '2026-08-09', null,
         410, null, 0, 0, 0, '{}'::jsonb, false, null
+      ),
+      (
+        '30000000-0000-0000-0000-000000000006', '22222222-2222-2222-2222-222222222222',
+        'ffffffff-ffff-ffff-ffff-ffffffffffff', date '2026-08-01',
+        '11111111-1111-1111-1111-111111111111', 'REC',
+        1006, null, null, 1, 'Ingresso L.A. Session #4', 'paga', date '2026-08-12', date '2026-08-12',
+        100, 100, 0, 0, 0,
+        '{"_la_report":{"validation_issues":[{"code":"invalid_optional_identifier","field":"matricula_id","raw_value":"0"}]}}'::jsonb,
+        false, null
       );
   `;
 }
@@ -421,6 +439,8 @@ test('leitura global separa historico financeiro, D+2 e reconciliacao sem totali
     assert.equal(carteiraAtivaV4Aplicada.status, 0, carteiraAtivaV4Aplicada.stderr || carteiraAtivaV4Aplicada.stdout);
     const canceladasPatchAplicado = psql(container, canceladasPatch);
     assert.equal(canceladasPatchAplicado.status, 0, canceladasPatchAplicado.stderr || canceladasPatchAplicado.stdout);
+    const classificacaoAplicada = psql(container, reconciliacaoClassificacaoSource());
+    assert.equal(classificacaoAplicada.status, 0, classificacaoAplicada.stderr || classificacaoAplicada.stdout);
 
     const carteiraCanonica = psql(container, `
       select public.get_inadimplencia_canonica(
@@ -463,9 +483,15 @@ test('leitura global separa historico financeiro, D+2 e reconciliacao sem totali
     assert.deepEqual(leitura.totais.em_atraso_d0, { quantidade: 2, valor: 879.06 });
     assert.deepEqual(leitura.totais.cobranca_d2, { quantidade: 1, valor: 459.9 });
     assert.deepEqual(leitura.totais.canceladas, { quantidade: 0, valor: 0 });
-    assert.equal(leitura.totais.todas.quantidade, 4);
+    assert.equal(leitura.totais.todas.quantidade, 5);
     assert.equal(leitura.reconciliation.source_missing, 1);
     assert.equal(leitura.reconciliation.identidade_invalida, 1);
+    assert.equal(leitura.reconciliation.validacoes_origem, 1);
+
+    const origemSemAluno = leitura.reconciliation.items.find((item) => item.emusys_fatura_id === '1006');
+    assert.ok(origemSemAluno);
+    assert.ok(origemSemAluno.motivos.includes('registro_nao_aluno'));
+    assert.ok(!origemSemAluno.motivos.includes('identidade_invalida'));
 
     const aberta = leitura.items.find((item) => item.emusys_fatura_id === '1001');
     assert.equal(aberta.forma_pagamento.rotulo, 'Forma prevista');

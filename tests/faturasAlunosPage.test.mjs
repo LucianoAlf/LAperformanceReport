@@ -47,6 +47,15 @@ test('reconciliacao diferencia fatura em aberto de fatura em atraso', () => {
   assert.match(page, /comparaData\(item\.data_vencimento, dataCorte\) < 0\) return 'border-rose-500\/25 bg-rose-500\/10 text-rose-200'/);
 });
 
+test('reconciliacao identifica lancamento sem aluno e historico de ex-aluno sem chamar de vinculo quebrado', () => {
+  const page = read('src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx');
+
+  assert.match(page, /registro_nao_aluno/);
+  assert.match(page, /historico_ex_aluno/);
+  assert.match(page, /Lançamento financeiro sem aluno|LanÃ§amento financeiro sem aluno/);
+  assert.match(page, /Histórico de ex-aluno|HistÃ³rico de ex-aluno/);
+});
+
 test('atalhos A+C usam a mesma URL canonica em Alunos, ficha e Comercial', () => {
   const alunos = read('src/components/App/Alunos/AlunosPage.tsx');
   const tabela = read('src/components/App/Alunos/TabelaAlunos.tsx');

@@ -118,6 +118,8 @@ function motivoReconciliacao(motivo: string) {
     validacao_origem: 'Metadado inválido recebido da origem',
     forma_pagamento_ausente: 'Forma de pagamento não informada',
     contato_pendente: 'Contato local ainda não resolvido',
+    registro_nao_aluno: 'Lançamento financeiro sem aluno',
+    historico_ex_aluno: 'Histórico de ex-aluno',
   };
   return labels[motivo] ?? motivo.replaceAll('_', ' ');
 }
@@ -652,17 +654,19 @@ function ReconciliationPanelV2({ state, unidadeNome }: { state: FaturasFinanceir
         const semVinculo = item.aluno.id == null;
         const descricaoOrigem = item.descricao?.trim() || null;
         const isRateio = descricaoOrigem?.toLocaleLowerCase('pt-BR').includes('rateio entre unidades') ?? false;
+        const isRegistroNaoAluno = item.motivos.includes('registro_nao_aluno');
+        const isHistoricoExAluno = item.motivos.includes('historico_ex_aluno');
         const origemAusente = item.motivos.includes('source_missing');
         const valorSecundario = item.status === 'paga' ? item.valores.valor_pago : item.valores.valor_hoje;
         return <div key={`${item.unidade_id}|${item.canonical_fatura_id}`} className="flex flex-wrap items-start justify-between gap-5 px-5 py-4">
           <div className="min-w-[260px] flex-1">
-            <div className="flex flex-wrap items-center gap-2"><p className="font-medium text-slate-100">{semVinculo ? (isRateio ? 'Lançamento interno — rateio entre unidades' : 'Registro sem vínculo local') : item.aluno.nome}</p><span className={cn('rounded-full border px-2 py-0.5 text-[11px] font-medium', item.status === 'paga' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : item.status === 'aberta' ? 'border-amber-500/25 bg-amber-500/10 text-amber-200' : 'border-slate-600 bg-slate-700/35 text-slate-300')}>{item.status === 'paga' ? 'Paga' : item.status === 'aberta' ? 'Em aberto' : item.status === 'cancelada' ? 'Cancelada' : 'Status não reconhecido'}</span></div>
+            <div className="flex flex-wrap items-center gap-2"><p className="font-medium text-slate-100">{isRegistroNaoAluno ? 'Lançamento financeiro sem aluno' : isHistoricoExAluno ? 'Histórico de ex-aluno' : semVinculo ? (isRateio ? 'Lançamento interno — rateio entre unidades' : 'Registro sem vínculo local') : item.aluno.nome}</p><span className={cn('rounded-full border px-2 py-0.5 text-[11px] font-medium', item.status === 'paga' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : item.status === 'aberta' ? 'border-amber-500/25 bg-amber-500/10 text-amber-200' : 'border-slate-600 bg-slate-700/35 text-slate-300')}>{item.status === 'paga' ? 'Paga' : item.status === 'aberta' ? 'Em aberto' : item.status === 'cancelada' ? 'Cancelada' : 'Status não reconhecido'}</span></div>
             <p className="mt-1 text-xs text-slate-500">{unidadeNome.get(item.unidade_id) ?? item.unidade_codigo ?? 'Unidade'} • fatura Emusys {item.emusys_fatura_id} • venc. {formatarData(item.data_vencimento)}{item.data_pagamento ? ` • pago em ${formatarData(item.data_pagamento)}` : ''}</p>
             <p className="mt-1 text-[11px] text-slate-500">Matrícula Emusys: <span className="font-mono text-slate-300">{item.emusys_matricula_id ?? 'não informada'}</span> • aluno: <span className="font-mono text-slate-300">{item.emusys_student_id ?? 'não informado'}</span>{item.emusys_contrato_id ? <> • contrato: <span className="font-mono text-slate-300">{item.emusys_contrato_id}</span></> : null}</p>
             {item.aluno.vinculo_local_fonte ? <p className="mt-1 text-[11px] text-emerald-300/80">Vínculo local confirmado por {item.aluno.vinculo_local_fonte === 'aluno_unico_canonico' ? 'aluno único na visão canônica' : 'matrícula canônica sincronizada'}</p> : null}
             <p className="mt-1 text-[11px] text-slate-400"><span className="text-slate-500">Referência da origem:</span> {descricaoOrigem ?? 'sem descrição informada pelo Emusys'}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">{item.motivos.map((motivo) => <span key={motivo} className="rounded-md border border-amber-500/20 bg-amber-500/[0.07] px-2 py-1 text-[11px] text-amber-200">{motivoReconciliacao(motivo)}</span>)}</div>
-            <p className="mt-2 text-[11px] text-slate-500">{origemAusente ? 'A origem não confirmou esta fatura neste snapshot.' : semVinculo ? 'O Emusys trouxe IDs e descrição, mas não um nome; falta vínculo local exato.' : 'Origem confirmada; falta completar o cadastro financeiro.'}</p>
+            <p className="mt-2 text-[11px] text-slate-500">{origemAusente ? 'A origem não confirmou esta fatura neste snapshot.' : isRegistroNaoAluno ? 'Lançamento financeiro da origem sem matrícula de aluno; não entra na cobrança de alunos.' : isHistoricoExAluno ? 'Matrícula inativa/evadida; permanece apenas no histórico e fora da cobrança operacional.' : semVinculo ? 'O Emusys trouxe IDs e descrição, mas não um nome; falta vínculo local exato.' : 'Origem confirmada; falta completar o cadastro financeiro.'}</p>
           </div>
           <div className="min-w-[150px] text-right text-xs text-slate-400"><p>Original: <span className="font-semibold tabular-nums text-slate-200">{moeda(item.valores.valor_original)}</span></p><p className="mt-1">{item.status === 'paga' ? 'Pago' : 'Atualizado'}: <span className="font-semibold tabular-nums text-cyan-200">{valorSecundario == null ? '—' : moeda(valorSecundario)}</span></p><p className="mt-2 text-[11px] text-slate-600">Sync: {formatarDataHora(item.sync_completed_at)}</p></div>
         </div>;
