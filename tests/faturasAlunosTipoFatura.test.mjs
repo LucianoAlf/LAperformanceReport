@@ -55,3 +55,40 @@ test('enriquecimento de tipo é set-based e não consulta uma fatura por chamada
   assert.match(migration, /jsonb_array_elements\((?:coalesce\()?p_items/);
   assert.doesNotMatch(migration, /financeiro_enriquecer_tipo_fatura_v1\(value\)/);
 });
+
+test('enriquecimento em lote tem indice para o casamento pela fatura canonica', () => {
+  const filename = readdirSync('supabase/migrations')
+    .filter((name) => name.endsWith('_financeiro_faturas_tipo_canonico_performance.sql'))
+    .sort()
+    .at(-1);
+  assert.ok(filename, 'migration de performance do tipo de fatura ainda nao foi criada');
+  const migration = read(`supabase/migrations/${filename}`);
+  assert.match(
+    migration,
+    /create\s+index\s+if\s+not\s+exists\s+[^;]*sync_run_items[^;]*canonical_fatura_id/is,
+  );
+});
+
+test('casamento em lote restringe o snapshot pela unidade e competencia da fatura', () => {
+  const filename = readdirSync('supabase/migrations')
+    .filter((name) => name.endsWith('_financeiro_faturas_tipo_canonico_scope.sql'))
+    .sort()
+    .at(-1);
+  assert.ok(filename, 'migration de escopo do tipo de fatura ainda nao foi criada');
+  const migration = read(`supabase/migrations/${filename}`);
+  assert.match(migration, /value->>'competencia'/i);
+  assert.match(migration, /i\.unidade_id\s*=\s*itens\.unidade_id/i);
+  assert.match(migration, /i\.competencia\s*=\s*itens\.competencia/i);
+});
+
+test('casamento em lote usa somente o ultimo run completo da competencia', () => {
+  const filename = readdirSync('supabase/migrations')
+    .filter((name) => name.endsWith('_financeiro_faturas_tipo_canonico_latest_run.sql'))
+    .sort()
+    .at(-1);
+  assert.ok(filename, 'migration de ultimo run do tipo de fatura ainda nao foi criada');
+  const migration = read(`supabase/migrations/${filename}`);
+  assert.match(migration, /from\s+public\.sync_runs\s+sr/i);
+  assert.match(migration, /sr\.snapshot_complete\s+is\s+true/i);
+  assert.match(migration, /i\.run_id\s*=\s*ur\.id/i);
+});
