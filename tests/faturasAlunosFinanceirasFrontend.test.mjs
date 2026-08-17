@@ -83,3 +83,13 @@ test('unidade vem do escopo autenticado e nao existe seletor local duplicado', (
   assert.match(page, /unidadeId/);
   assert.doesNotMatch(page, /<SelectItem value="todos">Todas as unidades<\/SelectItem>/);
 });
+
+test('cards sao os filtros principais e acoes operacionais ficam separadas', () => {
+  const page = read('src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx');
+
+  assert.doesNotMatch(page, /<PageTabs/);
+  assert.match(page, /aria-pressed=\{active\}/);
+  assert.match(page, /Cobrar agora D\+2/);
+  assert.match(page, /Reconciliação financeira/);
+  assert.match(page, /Canceladas/);
+});

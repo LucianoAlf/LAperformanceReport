@@ -5,15 +5,11 @@ import {
   Barcode,
   BadgeCheck,
   Banknote,
-  CalendarClock,
-  CheckCircle2,
   ChevronRight,
   CircleHelp,
-  CircleDollarSign,
   Clock3,
   CreditCard,
   FileCheck2,
-  FileQuestion,
   FileWarning,
   Landmark,
   Loader2,
@@ -31,7 +27,6 @@ import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
-import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { useAuth } from '@/contexts/AuthContext';
@@ -139,12 +134,16 @@ function MetricCard({
   count,
   value,
   tone,
+  active = false,
+  disabled = false,
   onClick,
 }: {
   label: string;
   count: number;
   value: number;
   tone: 'cyan' | 'emerald' | 'amber' | 'rose' | 'slate';
+  active?: boolean;
+  disabled?: boolean;
   onClick?: () => void;
 }) {
   const tones = {
@@ -168,9 +167,60 @@ function MetricCard({
     <button
       type="button"
       onClick={onClick}
-      className={cn('rounded-2xl border bg-gradient-to-br p-4 text-left shadow-lg shadow-slate-950/15 transition hover:-translate-y-0.5 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60', tones[tone])}
+      disabled={disabled}
+      aria-pressed={active}
+      className={cn(
+        'rounded-2xl border bg-gradient-to-br p-4 text-left shadow-lg shadow-slate-950/15 transition hover:-translate-y-0.5 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60 disabled:cursor-not-allowed disabled:opacity-50',
+        tones[tone],
+        active && 'ring-2 ring-cyan-300/65 shadow-cyan-500/10',
+      )}
     >
       {content}
+    </button>
+  );
+}
+
+function OperationalViewButton({
+  label,
+  count,
+  description,
+  Icon,
+  active,
+  disabled = false,
+  tone,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  description: string;
+  Icon: typeof Banknote;
+  active: boolean;
+  disabled?: boolean;
+  tone: 'amber' | 'rose' | 'slate';
+  onClick: () => void;
+}) {
+  const styles = {
+    amber: 'border-amber-500/25 bg-amber-500/[0.08] text-amber-100 hover:bg-amber-500/[0.14] focus-visible:ring-amber-400/60',
+    rose: 'border-rose-500/25 bg-rose-500/[0.08] text-rose-100 hover:bg-rose-500/[0.14] focus-visible:ring-rose-400/60',
+    slate: 'border-slate-700 bg-slate-800/45 text-slate-200 hover:bg-slate-800/75 focus-visible:ring-slate-400/60',
+  } as const;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      className={cn(
+        'group flex min-w-[210px] flex-1 items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-45',
+        styles[tone],
+        active && 'ring-2 ring-current/35',
+      )}
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-950/35"><Icon className="h-4 w-4" /></span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center justify-between gap-3 text-sm font-semibold"><span>{label}</span><span className="tabular-nums">{count}</span></span>
+        <span className="mt-0.5 block truncate text-[11px] opacity-65">{description}</span>
+      </span>
     </button>
   );
 }
@@ -355,31 +405,6 @@ export function FaturasAlunosFinanceirasPage() {
   }), [alunoId, busca, curso, matriculaId, pagamento, state.items]);
   const unidadesPorId = useMemo(() => new Map(unidades.map((unidade) => [unidade.id, unidade.nome])), [unidades]);
 
-  const tabs: PageTab<FaturasFinanceirasSituacao>[] = [
-    { id: 'todas', label: 'Todas as faturas', count: state.totals.todas.quantidade, icon: ReceiptText },
-    { id: 'pagas', label: 'Pagas', count: state.totals.pagas.quantidade, icon: CheckCircle2 },
-    { id: 'em_aberto', label: 'Em aberto', count: state.totals.em_aberto.quantidade, icon: CircleDollarSign },
-    { id: 'em_atraso_d0', label: 'Em atraso D+0', count: state.totals.em_atraso_d0.quantidade, icon: AlertCircle },
-    { id: 'a_vencer', label: 'A vencer', count: state.totals.a_vencer.quantidade, icon: CalendarClock },
-    { id: 'canceladas', label: 'Canceladas', count: state.totals.canceladas.quantidade, icon: FileQuestion },
-    {
-      id: 'cobranca_d2',
-      label: 'Cobrar agora D+2',
-      count: state.totals.cobranca_d2.quantidade,
-      icon: Banknote,
-      disabled: state.status !== 'loading' && !state.collectionAllowed,
-      disabledTitle: 'A carteira D+2 exige snapshot canônico fresco.',
-      activeGradient: 'from-amber-500 to-orange-500',
-    },
-    {
-      id: 'reconciliacao',
-      label: 'Reconciliação',
-      count: state.reconciliation.total,
-      icon: FileWarning,
-      activeGradient: 'from-rose-500 to-pink-500',
-    },
-  ];
-
   const selecionarSituacao = (next: FaturasFinanceirasSituacao) => {
     setFiltro('situacao', next === 'todas' ? null : next);
   };
@@ -456,21 +481,43 @@ export function FaturasAlunosFinanceirasPage() {
         <>
           <LeituraNotice state={state} />
 
-          <PageTabs
-            tabs={tabs}
-            activeTab={situacao}
-            onTabChange={selecionarSituacao}
-            variant="gradient"
-            activeGradient="from-cyan-500 to-emerald-500"
-            activeShadow="shadow-cyan-500/20"
-          />
-
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <MetricCard label="Todas" count={state.totals.todas.quantidade} value={state.totals.todas.valor} tone="cyan" onClick={() => selecionarSituacao('todas')} />
-            <MetricCard label="Pagas" count={state.totals.pagas.quantidade} value={state.totals.pagas.valor} tone="emerald" onClick={() => selecionarSituacao('pagas')} />
-            <MetricCard label="Em aberto" count={state.totals.em_aberto.quantidade} value={state.totals.em_aberto.valor} tone="amber" onClick={() => selecionarSituacao('em_aberto')} />
-            <MetricCard label="Em atraso D+0" count={state.totals.em_atraso_d0.quantidade} value={state.totals.em_atraso_d0.valor} tone="rose" onClick={() => selecionarSituacao('em_atraso_d0')} />
-            <MetricCard label="A vencer" count={state.totals.a_vencer.quantidade} value={state.totals.a_vencer.valor} tone="slate" onClick={() => selecionarSituacao('a_vencer')} />
+            <MetricCard label="Todas as faturas" count={state.totals.todas.quantidade} value={state.totals.todas.valor} tone="cyan" active={situacao === 'todas'} onClick={() => selecionarSituacao('todas')} />
+            <MetricCard label="Pagas" count={state.totals.pagas.quantidade} value={state.totals.pagas.valor} tone="emerald" active={situacao === 'pagas'} onClick={() => selecionarSituacao('pagas')} />
+            <MetricCard label="Em aberto" count={state.totals.em_aberto.quantidade} value={state.totals.em_aberto.valor} tone="amber" active={situacao === 'em_aberto'} onClick={() => selecionarSituacao('em_aberto')} />
+            <MetricCard label="Em atraso D+0" count={state.totals.em_atraso_d0.quantidade} value={state.totals.em_atraso_d0.valor} tone="rose" active={situacao === 'em_atraso_d0'} onClick={() => selecionarSituacao('em_atraso_d0')} />
+            <MetricCard label="A vencer" count={state.totals.a_vencer.quantidade} value={state.totals.a_vencer.valor} tone="slate" active={situacao === 'a_vencer'} onClick={() => selecionarSituacao('a_vencer')} />
+          </section>
+
+          <section aria-label="Visões operacionais de faturas" className="flex flex-wrap gap-2.5 rounded-2xl border border-slate-800 bg-slate-900/45 p-3">
+            <OperationalViewButton
+              label="Cobrar agora D+2"
+              count={state.totals.cobranca_d2.quantidade}
+              description="Carteira confirmada para abordagem"
+              Icon={Banknote}
+              active={situacao === 'cobranca_d2'}
+              disabled={!state.collectionAllowed}
+              tone="amber"
+              onClick={() => selecionarSituacao('cobranca_d2')}
+            />
+            <OperationalViewButton
+              label="Reconciliação financeira"
+              count={state.reconciliation.total}
+              description="Pendências isoladas dos totais"
+              Icon={FileWarning}
+              active={situacao === 'reconciliacao'}
+              tone="rose"
+              onClick={() => selecionarSituacao('reconciliacao')}
+            />
+            <OperationalViewButton
+              label="Canceladas"
+              count={state.totals.canceladas.quantidade}
+              description="Histórico da competência"
+              Icon={ReceiptText}
+              active={situacao === 'canceladas'}
+              tone="slate"
+              onClick={() => selecionarSituacao('canceladas')}
+            />
           </section>
 
           {mostrarReconciliacao ? (
