@@ -6,8 +6,11 @@ export type InadimplenciaCanonicaStatus =
   | 'incomplete'
   | 'error';
 
-export type InadimplenciaCollectionScope = 'confirmed_only' | 'blocked';
-export type InadimplenciaDelinquencyRule = 'd_plus_0';
+export type InadimplenciaCollectionScope =
+  | 'confirmed_only'
+  | 'confirmed_active_d2_3_competencias'
+  | 'blocked';
+export type InadimplenciaDelinquencyRule = 'd_plus_0' | 'd_plus_2';
 export type InadimplenciaContactResolutionStatus = 'resolved' | 'missing' | 'ambiguous';
 
 export const COBRANCA_AMIGAVEL_CARENCIA_DIAS = 2;
@@ -170,6 +173,8 @@ const BLOCK_REASON_ORDER: InadimplenciaBlockReason[] = [
   'duplicate_confirmed_fatura',
   'invalid_invoice_identity',
 ];
+const ACTIVE_D2_COLLECTION_SCOPE = 'confirmed_active_d2_3_competencias';
+const ACTIVE_D2_STUDENT_SCOPE = 'exact_invoice_enrollment + aluno_ativo_atual; trancado, evadido e arquivado fora da carteira D+2';
 
 const asRecord = (value: unknown): Record<string, unknown> | null => (
   value != null && typeof value === 'object' && !Array.isArray(value)
@@ -515,13 +520,20 @@ function stateFrom(
   items: InadimplenciaCanonicaItem[],
   avaliadoEm: string | null,
   erro: string | null = null,
+  contract: {
+    delinquencyRule: InadimplenciaDelinquencyRule;
+    consumerMustApplyCollectionGrace: boolean;
+  } = {
+    delinquencyRule: 'd_plus_0',
+    consumerMustApplyCollectionGrace: true,
+  },
 ): InadimplenciaCanonicaState {
   return {
     status,
     schemaVersion,
-    delinquencyRule: 'd_plus_0',
+    delinquencyRule: contract.delinquencyRule,
     collectionGraceDays: COBRANCA_AMIGAVEL_CARENCIA_DIAS,
-    consumerMustApplyCollectionGrace: true,
+    consumerMustApplyCollectionGrace: contract.consumerMustApplyCollectionGrace,
     totalFaturas: totals.totalFaturas,
     totalMatriculas: totals.totalMatriculas,
     totalOriginal: totals.totalOriginal,
@@ -635,6 +647,100 @@ function normalizeV3(root: Record<string, unknown>): InadimplenciaCanonicaState 
   );
 }
 
+function normalizeV4(root: Record<string, unknown>): InadimplenciaCanonicaState {
+  const status = root.status;
+  const policy = asRecord(root.policy);
+  const operational = asRecord(root.operational);
+  const items = parseItems(root.items);
+  const totals = parseTotals(root.totals);
+  const freshness = parseFreshness(root.freshness);
+  const reconciliation = parseReconciliation(root.reconciliation);
+  if (
+    typeof status !== 'string'
+    || !['ok', 'partial', 'stale', 'incomplete', 'error'].includes(status)
+    || !policy
+    || policy.delinquency_rule !== 'd_plus_2'
+    || policy.collection_grace_days !== COBRANCA_AMIGAVEL_CARENCIA_DIAS
+    || policy.student_scope !== ACTIVE_D2_STUDENT_SCOPE
+    || !operational
+    || typeof operational.collection_allowed !== 'boolean'
+    || operational.consumer_must_apply_collection_grace !== false
+    || (operational.collection_scope !== ACTIVE_D2_COLLECTION_SCOPE && operational.collection_scope !== 'blocked')
+    || !Array.isArray(operational.block_reasons)
+    || !operational.block_reasons.every((reason) => BLOCK_REASON_ORDER.includes(reason as InadimplenciaBlockReason))
+    || new Set(operational.block_reasons).size !== operational.block_reasons.length
+    || !items
+    || !totals
+    || !freshness
+    || !reconciliation
+  ) return errorState();
+
+  const hasError = hasOwn(root, 'error');
+  const scalarError = typeof root.error === 'string' ? root.error.trim() : null;
+  const knownSqlError = scalarError === 'unsupported_invoice_status';
+  if (
+    (status === 'error' && !knownSqlError)
+    || (status === 'stale' && hasError && root.error !== null && !knownSqlError)
+    || (status !== 'error' && status !== 'stale' && hasError && root.error !== null)
+  ) return errorState();
+
+  const derivedStatus: InadimplenciaCanonicaStatus = freshness.competenciasStale > 0
+    ? 'stale'
+    : scalarError ? 'error'
+    : reconciliation.duplicateFaturaCount > 0
+    ? 'incomplete'
+    : reconciliation.sourceMissingCount > 0
+      || reconciliation.invalidIdentityInvoiceCount > 0
+      || reconciliation.validationIssueCount > 0
+      || reconciliation.contactResolutionPendingCount > 0
+    ? 'partial'
+    : 'ok';
+  const reasons = expectedReasons(freshness, reconciliation);
+  const collectionAllowed = status === 'ok' || status === 'partial';
+  const zeroDebtOk = status === 'ok' && items.length === 0 && totalsAreZero(totals);
+  const onlyD2ActiveInvoiceShape = items.every((item) => (
+    item.status === 'aberta' && item.dias_atraso >= COBRANCA_AMIGAVEL_CARENCIA_DIAS
+  ));
+
+  if (
+    status !== derivedStatus
+    || !equalReasons(operational.block_reasons, reasons)
+    || (freshness.freshUntil === null && !zeroDebtOk)
+    || !onlyD2ActiveInvoiceShape
+    || (collectionAllowed && (
+      operational.collection_allowed !== true
+      || operational.collection_scope !== ACTIVE_D2_COLLECTION_SCOPE
+      || reasons.length !== 0
+      || !totalsMatchItems(totals, items)
+    ))
+    || (!collectionAllowed && (
+      operational.collection_allowed !== false
+      || operational.collection_scope !== 'blocked'
+      || items.length !== 0
+      || !totalsAreZero(totals)
+    ))
+  ) return errorState();
+
+  if (status === 'error') return errorState(scalarError);
+  return stateFrom(
+    4,
+    status,
+    totals,
+    freshness,
+    reconciliation,
+    collectionAllowed,
+    collectionAllowed ? ACTIVE_D2_COLLECTION_SCOPE : 'blocked',
+    collectionAllowed ? [] : reasons,
+    collectionAllowed ? items : [],
+    nullableText(root.avaliado_em),
+    status === 'stale' && knownSqlError ? scalarError : null,
+    {
+      delinquencyRule: 'd_plus_2',
+      consumerMustApplyCollectionGrace: false,
+    },
+  );
+}
+
 function normalizeV2(root: Record<string, unknown>): InadimplenciaCanonicaState {
   const status = root.status;
   const totals = parseTotals(root.totals);
@@ -717,6 +823,7 @@ export function normalizarInadimplenciaCanonica(
 
   const root = asRecord(parsedPayload);
   if (!root) return errorState();
+  if (root.schema_version === 4) return normalizeV4(root);
   if (root.schema_version === 3) return normalizeV3(root);
   if (root.schema_version === 2) return normalizeV2(root);
   return errorState();

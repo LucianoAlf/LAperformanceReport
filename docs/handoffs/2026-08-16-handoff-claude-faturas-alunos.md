@@ -1,5 +1,9 @@
 # Handoff para o Claude — Faturas de Alunos concluída
 
+> **Histórico, substituído.** A página e a regra de negócio evoluíram para a
+> leitura global de faturas e o contrato v4. Use o
+> [handoff vigente](2026-08-17-contrato-canonico-faturas-sol-claude.md).
+
 Data: 16/08/2026
 Supabase: `ouqwbbermlzqqvtqwlul`
 Backend canônico: `2cd9147e`

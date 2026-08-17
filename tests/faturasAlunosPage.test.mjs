@@ -59,7 +59,8 @@ test('tabela financeira mostra forma e os tres valores contratuais', () => {
   assert.match(page, /const moeda\s*=\s*\(value: number\)\s*=>\s*formatCurrency\(value, 2\)/);
   assert.match(page, /Valor com desconto/);
   assert.match(page, /Sem desconto condicional/);
-  assert.match(page, /Valor hoje/);
+  assert.match(page, /Valor atualizado/);
+  assert.doesNotMatch(page, /Valor hoje/);
   assert.match(page, /rotuloFormaPagamento/);
   assert.match(page, /Pago via/);
   assert.match(page, /Forma prevista/);

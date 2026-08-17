@@ -3,6 +3,8 @@ import { sha256 } from './contasReceberExport.ts';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const COMPETENCIA = /^\d{4}-\d{2}-01$/;
+const ACTIVE_D2_SCOPE = 'confirmed_active_d2_3_competencias';
+const ACTIVE_D2_STUDENT_SCOPE = 'exact_invoice_enrollment + aluno_ativo_atual; trancado, evadido e arquivado fora da carteira D+2';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -137,11 +139,27 @@ function parseItem(value: unknown, asOfDate: string, contextUnit: string | null)
   }
 
   const valorOriginal = money(row.valor_original, 'valor_original');
+  const valorComDesconto = money(row.valor_com_desconto, 'valor_com_desconto');
+  const valorSemDescontoCondicional = money(
+    row.valor_sem_desconto_condicional,
+    'valor_sem_desconto_condicional',
+  );
+  const multa = money(row.multa, 'multa');
+  const mora = money(row.mora, 'mora');
   const valorAtualizado = money(row.valor_atualizado, 'valor_atualizado');
-  const descontoPerdido = money(row.desconto_condicional_perdido, 'desconto_condicional_perdido');
-  if (row.multa_pct !== 0.02 || row.mora_pct_mes !== 0.01) fail('politica de juros invalida');
-  const expectedUpdated = roundedMoney(valorOriginal * (1 + 0.02 + (0.01 * diasAtraso / 30)));
-  if (cents(valorAtualizado) !== cents(expectedUpdated)) fail('valor_atualizado inconsistente');
+  if (cents(valorComDesconto) > cents(valorSemDescontoCondicional)
+    || cents(valorSemDescontoCondicional) > cents(valorOriginal)) {
+    fail('descontos contratuais inconsistentes');
+  }
+  const expectedMulta = roundedMoney(valorSemDescontoCondicional * 0.02);
+  const expectedMora = roundedMoney(valorSemDescontoCondicional * 0.01 * diasAtraso / 30);
+  const expectedUpdated = roundedMoney(valorSemDescontoCondicional + expectedMulta + expectedMora);
+  if (
+    cents(multa) !== cents(expectedMulta)
+    || cents(mora) !== cents(expectedMora)
+    || cents(valorAtualizado) !== cents(expectedUpdated)
+  ) fail('valor_atualizado inconsistente');
+  if (diasAtraso < 2) fail('item fora da carteira d_plus_2');
 
   const contactStatus = row.contact_resolution_status;
   if (contactStatus !== 'resolved' && contactStatus !== 'missing' && contactStatus !== 'ambiguous') {
@@ -173,9 +191,10 @@ function parseItem(value: unknown, asOfDate: string, contextUnit: string | null)
     data_pagamento: null,
     dias_atraso: diasAtraso,
     valor_original: valorOriginal,
-    desconto_condicional_perdido: descontoPerdido,
-    multa_pct: 0.02,
-    mora_pct_mes: 0.01,
+    valor_com_desconto: valorComDesconto,
+    valor_sem_desconto_condicional: valorSemDescontoCondicional,
+    multa,
+    mora,
     valor_atualizado: valorAtualizado,
     source_missing: false,
   };
@@ -186,7 +205,7 @@ export async function prepararExportacaoInadimplenciaCanonica(
   contexto: InadimplenciaExportContext,
 ): Promise<InadimplenciaExportResult> {
   const root = asRecord(payload);
-  if (!root || root.schema_version !== 3) fail('schema_version deve ser 3');
+  if (!root || root.schema_version !== 4) fail('schema_version deve ser 4');
   if (root.status !== 'ok' && root.status !== 'partial') fail(`status ${String(root.status ?? 'error')}`);
   if (root.fonte !== 'sync_run_items') fail('fonte invalida');
 
@@ -203,15 +222,20 @@ export async function prepararExportacaoInadimplenciaCanonica(
   const avaliadoEm = validTimestamp(root.avaliado_em, 'avaliado_em');
 
   const policy = asRecord(root.policy);
-  if (!policy || policy.delinquency_rule !== 'd_plus_0' || policy.collection_grace_days !== 2) {
+  if (
+    !policy
+    || policy.delinquency_rule !== 'd_plus_2'
+    || policy.collection_grace_days !== 2
+    || policy.student_scope !== ACTIVE_D2_STUDENT_SCOPE
+  ) {
     fail('politica canonica invalida');
   }
   const operational = asRecord(root.operational);
   if (
     !operational
     || operational.collection_allowed !== true
-    || operational.collection_scope !== 'confirmed_only'
-    || operational.consumer_must_apply_collection_grace !== true
+    || operational.collection_scope !== ACTIVE_D2_SCOPE
+    || operational.consumer_must_apply_collection_grace !== false
     || !Array.isArray(operational.block_reasons)
     || operational.block_reasons.length !== 0
   ) fail('gate operacional bloqueado');
@@ -284,7 +308,7 @@ export async function prepararExportacaoInadimplenciaCanonica(
   const unresolvedContacts = itens.filter(
     (item) => item.contact_resolution_status !== 'resolved',
   ).length;
-  if (unresolvedContacts !== contactResolutionPendingCount) {
+  if (unresolvedContacts > contactResolutionPendingCount) {
     fail('contagem de contato inconsistente');
   }
 
@@ -323,18 +347,18 @@ export async function prepararExportacaoInadimplenciaCanonica(
 
   const manifestoBase = {
     modo: 'inadimplencia',
-    schema_version: 3,
+    schema_version: 4,
     status: root.status,
     fonte: 'sync_run_items',
     unidade_id: contextUnit,
     as_of_date: asOfDate,
     avaliado_em: avaliadoEm,
     collection_allowed: true,
-    collection_scope: 'confirmed_only',
+    collection_scope: ACTIVE_D2_SCOPE,
     fresh_until: freshUntil,
-    delinquency_rule: 'd_plus_0',
+    delinquency_rule: 'd_plus_2',
     collection_grace_days: 2,
-    collection_grace_applied: false,
+    collection_grace_applied: true,
     confirmed_invoice_count: itens.length,
     source_missing_count: sourceMissingCount,
     invalid_identity_invoice_count: invalidIdentityInvoiceCount,

@@ -35,12 +35,14 @@ test('pagina usa selects do design system e apresenta o ciclo inteiro da fatura'
     'Reconcilia',
     'Valor com desconto',
     'Sem desconto condicional',
-    'Valor hoje',
+    'Valor atualizado',
+    'Calculado pelo contrato',
     'Forma prevista',
     'Pago via',
   ]) {
     assert.match(page, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
   }
+  assert.doesNotMatch(page, /Valor hoje/i);
 });
 
 test('cartoes de resumo mapeiam quantidade e valor retornados pela leitura canonica', () => {

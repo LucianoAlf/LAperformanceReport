@@ -71,9 +71,9 @@ export async function carregarLeituraFaturasAlunos(
     p_as_of_date: options.asOfDate,
   });
   const state = normalizarInadimplenciaCanonica(data, error);
-  if (state.status === 'error' || state.schemaVersion === 3) return state;
+  if (state.status === 'error' || state.schemaVersion === 3 || state.schemaVersion === 4) return state;
   return normalizarInadimplenciaCanonica(null, {
-    message: 'A pagina de faturas exige o contrato canonico v3.',
+    message: 'A pagina de faturas exige o contrato canonico v3 ou v4.',
   });
 }
 

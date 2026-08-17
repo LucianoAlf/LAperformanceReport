@@ -1,5 +1,9 @@
 # Handoff final — inadimplência canônica para a Sol
 
+> **Histórico, substituído.** Não use este contrato v3 nem
+> `sol_caixa_inadimplentes` em integrações novas. A versão vigente é o
+> [contrato canônico v4](2026-08-17-contrato-canonico-faturas-sol-claude.md).
+
 Data: 16/08/2026
 Projeto Supabase: `ouqwbbermlzqqvtqwlul`
 Backend publicado: `2cd9147e`

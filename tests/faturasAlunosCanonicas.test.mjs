@@ -69,6 +69,28 @@ const payloadV3 = () => ({
   items: [item()],
 });
 
+const payloadV4 = () => ({
+  ...payloadV3(),
+  schema_version: 4,
+  policy: {
+    delinquency_rule: 'd_plus_2',
+    collection_grace_days: 2,
+    student_scope: 'exact_invoice_enrollment + aluno_ativo_atual; trancado, evadido e arquivado fora da carteira D+2',
+  },
+  operational: {
+    collection_allowed: true,
+    collection_scope: 'confirmed_active_d2_3_competencias',
+    block_reasons: [],
+    consumer_must_apply_collection_grace: false,
+  },
+  items: [item({
+    valor_com_desconto: 400,
+    valor_sem_desconto_condicional: 447,
+    multa: 8.94,
+    mora: 1.64,
+  })],
+});
+
 test('adaptador consulta somente a RPC canonica v3 e preserva partial confirmado', async () => {
   const chamadas = [];
   const client = {
@@ -105,6 +127,25 @@ test('adaptador consulta somente a RPC canonica v3 e preserva partial confirmado
     descricao: 'Parcela 08/2026',
     status: 'aberta',
   });
+});
+
+test('adaptador de compatibilidade aceita o contrato canonico v4 D+2 ativo', async () => {
+  const client = {
+    async rpc() {
+      return { data: payloadV4(), error: null };
+    },
+  };
+
+  const state = await carregarLeituraFaturasAlunos(client, {
+    unidadeId: UNIDADE_A,
+    asOfDate: '2026-08-16',
+  });
+
+  assert.equal(state.schemaVersion, 4);
+  assert.equal(state.status, 'partial');
+  assert.equal(state.collectionAllowed, true);
+  assert.equal(state.collectionScope, 'confirmed_active_d2_3_competencias');
+  assert.equal(state.consumerMustApplyCollectionGrace, false);
 });
 
 test('chave da linha usa unidade, matricula e fatura canonica', () => {

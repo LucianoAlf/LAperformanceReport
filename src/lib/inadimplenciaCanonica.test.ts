@@ -106,6 +106,29 @@ const payloadV3 = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const payloadV4 = (overrides: Record<string, unknown> = {}) => payloadV3({
+  schema_version: 4,
+  policy: {
+    delinquency_rule: 'd_plus_2',
+    collection_grace_days: 2,
+    student_scope: 'exact_invoice_enrollment + aluno_ativo_atual; trancado, evadido e arquivado fora da carteira D+2',
+  },
+  operational: {
+    collection_allowed: true,
+    collection_scope: 'confirmed_active_d2_3_competencias',
+    block_reasons: [],
+    consumer_must_apply_collection_grace: false,
+  },
+  items: [item({
+    status: 'aberta',
+    valor_com_desconto: 90,
+    valor_sem_desconto_condicional: 100,
+    multa: 2,
+    mora: 0.17,
+  })],
+  ...overrides,
+});
+
 const blockedV3 = (
   status: 'stale' | 'incomplete' | 'error',
   overrides: Record<string, unknown> = {},
@@ -194,6 +217,29 @@ Deno.test('v3 partial fresco preserva somente itens confirmados e libera leitura
   ], ['d_plus_0', 2, true]);
   assertEquals(result.items.length, 1);
   assertEquals([result.sourceMissingCount, result.sourceMissingOpenCount, result.sourceMissingOtherCount], [1, 1, 0]);
+  assertEquals(podeCobrarInadimplenciaCanonica(result, new Date('2026-08-15T18:30:00Z')), true);
+});
+
+Deno.test('v4 aceita a carteira D+2 ativa sem reaplicar a carencia no consumidor', () => {
+  const result = normalizarInadimplenciaCanonica(payloadV4());
+
+  assertEquals([
+    result.schemaVersion,
+    result.status,
+    result.delinquencyRule,
+    result.collectionGraceDays,
+    result.consumerMustApplyCollectionGrace,
+    result.collectionScope,
+    result.items.length,
+  ], [
+    4,
+    'partial',
+    'd_plus_2',
+    2,
+    false,
+    'confirmed_active_d2_3_competencias',
+    1,
+  ]);
   assertEquals(podeCobrarInadimplenciaCanonica(result, new Date('2026-08-15T18:30:00Z')), true);
 });
 

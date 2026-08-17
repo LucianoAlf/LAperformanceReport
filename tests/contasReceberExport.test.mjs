@@ -202,17 +202,21 @@ test('hash canonico ignora ids tecnicos de run/item e reage ao estado de ausenci
 test('exportacao canonica rejeita source_missing em vez de transforma-lo em cobranca', async () => {
   const freshUntil = '2026-08-16T13:00:00.000Z';
   const canonical = {
-    schema_version: 3,
+    schema_version: 4,
     status: 'partial',
     fonte: 'sync_run_items',
     avaliado_em: '2026-08-16T11:31:00.000Z',
     unidade_id: UNIDADE_CG,
     as_of_date: '2026-08-16',
-    policy: { delinquency_rule: 'd_plus_0', collection_grace_days: 2 },
+    policy: {
+      delinquency_rule: 'd_plus_2',
+      collection_grace_days: 2,
+      student_scope: 'exact_invoice_enrollment + aluno_ativo_atual; trancado, evadido e arquivado fora da carteira D+2',
+    },
     operational: {
       collection_allowed: true,
-      collection_scope: 'confirmed_only',
-      consumer_must_apply_collection_grace: true,
+      collection_scope: 'confirmed_active_d2_3_competencias',
+      consumer_must_apply_collection_grace: false,
       block_reasons: [],
     },
     freshness: {
@@ -257,9 +261,10 @@ test('exportacao canonica rejeita source_missing em vez de transforma-lo em cobr
       data_pagamento: null,
       dias_atraso: 11,
       valor_original: 447,
-      desconto_condicional_perdido: 40,
-      multa_pct: 0.02,
-      mora_pct_mes: 0.01,
+      valor_com_desconto: 407,
+      valor_sem_desconto_condicional: 447,
+      multa: 8.94,
+      mora: 1.64,
       valor_atualizado: 457.58,
       source_missing: true,
     }],

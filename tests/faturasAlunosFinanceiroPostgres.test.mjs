@@ -16,6 +16,24 @@ function migrationSource() {
   return fs.readFileSync(path.join(migrationsDir, migrationName), 'utf8');
 }
 
+function carteiraAtivaMigrationSource() {
+  const migrationName = fs.readdirSync(migrationsDir)
+    .filter((name) => /_inadimplencia_canonica_carteira_ativa_d2_v1\.sql$/u.test(name))
+    .sort()
+    .at(-1);
+  assert.ok(migrationName, 'migration da carteira ativa D+2 ausente');
+  return fs.readFileSync(path.join(migrationsDir, migrationName), 'utf8');
+}
+
+function carteiraAtivaV4MigrationSource() {
+  const migrationName = fs.readdirSync(migrationsDir)
+    .filter((name) => /_inadimplencia_canonica_v4_carteira_ativa_d2\.sql$/u.test(name))
+    .sort()
+    .at(-1);
+  assert.ok(migrationName, 'migration do contrato canonico v4 ausente');
+  return fs.readFileSync(path.join(migrationsDir, migrationName), 'utf8');
+}
+
 function helperSql(source) {
   const match = source.match(
     /create\s+or\s+replace\s+function\s+public\.calcular_valores_fatura_financeiro_v1[\s\S]*?\$function\$\s*;/i,
@@ -115,17 +133,74 @@ function bootstrapSql() {
           'collection_allowed', true,
           'collection_scope', 'confirmed_only'
         ),
-        'items', jsonb_build_array(jsonb_build_object(
-          'canonical_fatura_id', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-          'unidade_id', '11111111-1111-1111-1111-111111111111',
-          'emusys_fatura_id', '1001',
-          'competencia', '2026-08-01',
-          'status', 'aberta',
-          'data_vencimento', '2026-08-10',
-          'valor_original', 500,
-          'desconto_condicional_perdido', 30,
-          'dias_atraso', 6
-        )),
+        'items', jsonb_build_array(
+          jsonb_build_object(
+            'canonical_fatura_id', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+            'unidade_id', '11111111-1111-1111-1111-111111111111',
+            'emusys_fatura_id', '1001',
+            'emusys_matricula_id', '1435',
+            'run_id', '22222222-2222-2222-2222-222222222222',
+            'competencia', '2026-08-01',
+            'status', 'aberta',
+            'data_vencimento', '2026-08-10',
+            'valor_original', 500,
+            'desconto_condicional_perdido', 30,
+            'dias_atraso', 6,
+            'aluno_id_canonico', 10
+          ),
+          jsonb_build_object(
+            'canonical_fatura_id', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+            'unidade_id', '11111111-1111-1111-1111-111111111111',
+            'emusys_fatura_id', '1006',
+            'emusys_matricula_id', '1436',
+            'competencia', '2026-08-01',
+            'status', 'aberta',
+            'data_vencimento', '2026-08-10',
+            'valor_original', 500,
+            'desconto_condicional_perdido', 0,
+            'dias_atraso', 6,
+            'aluno_id_canonico', 11
+          ),
+          jsonb_build_object(
+            'canonical_fatura_id', 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+            'unidade_id', '11111111-1111-1111-1111-111111111111',
+            'emusys_fatura_id', '1007',
+            'emusys_matricula_id', '1437',
+            'competencia', '2026-08-01',
+            'status', 'aberta',
+            'data_vencimento', '2026-08-10',
+            'valor_original', 500,
+            'desconto_condicional_perdido', 0,
+            'dias_atraso', 6,
+            'aluno_id_canonico', 12
+          ),
+          jsonb_build_object(
+            'canonical_fatura_id', 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+            'unidade_id', '11111111-1111-1111-1111-111111111111',
+            'emusys_fatura_id', '1008',
+            'emusys_matricula_id', '1438',
+            'competencia', '2026-08-01',
+            'status', 'aberta',
+            'data_vencimento', '2026-08-15',
+            'valor_original', 500,
+            'desconto_condicional_perdido', 0,
+            'dias_atraso', 1,
+            'aluno_id_canonico', 13
+          ),
+          jsonb_build_object(
+            'canonical_fatura_id', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+            'unidade_id', '11111111-1111-1111-1111-111111111111',
+            'emusys_fatura_id', '1009',
+            'emusys_matricula_id', '1439',
+            'competencia', '2026-05-01',
+            'status', 'aberta',
+            'data_vencimento', '2026-05-10',
+            'valor_original', 500,
+            'desconto_condicional_perdido', 0,
+            'dias_atraso', 98,
+            'aluno_id_canonico', 14
+          )
+        ),
         'totals', jsonb_build_object('total_atualizado', 0)
       )
     $$;
@@ -141,11 +216,22 @@ function bootstrapSql() {
       10, '11111111-1111-1111-1111-111111111111', 'Ana Financeira', '1435', '501',
       1, 1, 'ativo'
     );
+    insert into public.alunos (
+      id, unidade_id, nome, emusys_matricula_id, emusys_student_id,
+      curso_id, forma_pagamento_id, status
+    ) values
+      (11, '11111111-1111-1111-1111-111111111111', 'Beatriz Trancada', '1436', '502', 1, 1, 'trancado'),
+      (12, '11111111-1111-1111-1111-111111111111', 'Caio Evasao', '1437', '503', 1, 1, 'evadido'),
+      (13, '11111111-1111-1111-1111-111111111111', 'Dora D0', '1438', '504', 1, 1, 'ativo'),
+      (14, '11111111-1111-1111-1111-111111111111', 'Enzo Historico', '1439', '505', 1, 1, 'ativo');
     insert into public.vw_alunos_estado_operacional_v131 (
       aluno_id, unidade_id, entra_financeiro_ativo, eh_trancamento_atual, status_operacional
-    ) values (
-      10, '11111111-1111-1111-1111-111111111111', true, false, 'ativo'
-    );
+    ) values
+      (10, '11111111-1111-1111-1111-111111111111', true, false, 'ativo'),
+      (11, '11111111-1111-1111-1111-111111111111', false, true, 'trancado'),
+      (12, '11111111-1111-1111-1111-111111111111', false, false, 'evadido'),
+      (13, '11111111-1111-1111-1111-111111111111', true, false, 'ativo'),
+      (14, '11111111-1111-1111-1111-111111111111', true, false, 'ativo');
     insert into public.sync_runs (
       id, competencia, run_type, status, completed_at, stale_after, snapshot_complete, unidades_concluidas
     ) values (
@@ -283,12 +369,18 @@ test('formula financeira preserva desconto fixo e perde somente o condicional no
 
 test('leitura global separa historico financeiro, D+2 e reconciliacao sem totalizar source_missing', { timeout: 90_000 }, async (t) => {
   const source = migrationSource();
+  const carteiraAtivaSource = carteiraAtivaMigrationSource();
+  const carteiraAtivaV4Source = carteiraAtivaV4MigrationSource();
   await withPostgres(t, async (container) => {
     const bootstrapped = psql(container, bootstrapSql());
     assert.equal(bootstrapped.status, 0, bootstrapped.stderr || bootstrapped.stdout);
 
     const applied = psql(container, source);
     assert.equal(applied.status, 0, applied.stderr || applied.stdout);
+    const carteiraAtivaAplicada = psql(container, carteiraAtivaSource);
+    assert.equal(carteiraAtivaAplicada.status, 0, carteiraAtivaAplicada.stderr || carteiraAtivaAplicada.stdout);
+    const carteiraAtivaV4Aplicada = psql(container, carteiraAtivaV4Source);
+    assert.equal(carteiraAtivaV4Aplicada.status, 0, carteiraAtivaV4Aplicada.stderr || carteiraAtivaV4Aplicada.stdout);
 
     const carteiraCanonica = psql(container, `
       select public.get_inadimplencia_canonica(
@@ -298,6 +390,17 @@ test('leitura global separa historico financeiro, D+2 e reconciliacao sem totali
     `);
     assert.equal(carteiraCanonica.status, 0, carteiraCanonica.stderr || carteiraCanonica.stdout);
     const canonica = JSON.parse(carteiraCanonica.stdout.trim());
+    assert.equal(canonica.schema_version, 4);
+    assert.deepEqual(canonica.items.map((item) => item.emusys_fatura_id), ['1001']);
+    assert.equal(canonica.operational.collection_scope, 'confirmed_active_d2_3_competencias');
+    assert.equal(canonica.operational.consumer_must_apply_collection_grace, false);
+    assert.deepEqual(canonica.totals, {
+      total_faturas: 1,
+      total_matriculas: 1,
+      total_original: 500,
+      total_atualizado: 459.9,
+      maior_atraso: 6,
+    });
     assert.equal(canonica.items[0].valor_com_desconto, 420);
     assert.equal(canonica.items[0].valor_sem_desconto_condicional, 450);
     assert.equal(canonica.items[0].valor_atualizado, 459.9);

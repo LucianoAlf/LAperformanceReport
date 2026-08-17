@@ -27,9 +27,10 @@ const item = (overrides: Record<string, unknown> = {}) => ({
   data_pagamento: null,
   dias_atraso: 11,
   valor_original: 447,
-  desconto_condicional_perdido: 40,
-  multa_pct: 0.02,
-  mora_pct_mes: 0.01,
+  valor_com_desconto: 407,
+  valor_sem_desconto_condicional: 447,
+  multa: 8.94,
+  mora: 1.64,
   valor_atualizado: 457.58,
   source_missing: false,
   ...overrides,
@@ -48,20 +49,21 @@ const reconciliation = (overrides: Record<string, unknown> = {}) => ({
 });
 
 const payload = (overrides: Record<string, unknown> = {}) => ({
-  schema_version: 3,
+  schema_version: 4,
   status: 'ok',
   fonte: 'sync_run_items',
   avaliado_em: '2026-08-16T11:31:00.000Z',
   unidade_id: UNIDADE_CG,
   as_of_date: '2026-08-16',
   policy: {
-    delinquency_rule: 'd_plus_0',
+    delinquency_rule: 'd_plus_2',
     collection_grace_days: 2,
+    student_scope: 'exact_invoice_enrollment + aluno_ativo_atual; trancado, evadido e arquivado fora da carteira D+2',
   },
   operational: {
     collection_allowed: true,
-    collection_scope: 'confirmed_only',
-    consumer_must_apply_collection_grace: true,
+    collection_scope: 'confirmed_active_d2_3_competencias',
+    consumer_must_apply_collection_grace: false,
     block_reasons: [],
   },
   freshness: {
@@ -88,7 +90,7 @@ const contexto = (agoraMs = AGORA_MS) => ({
   agoraMs,
 });
 
-Deno.test('v3 ok permitido e fresco exporta somente faturas confirmadas', async () => {
+Deno.test('v4 D+2 ativo, permitido e fresco exporta somente faturas confirmadas', async () => {
   const resultado = await prepararExportacaoInadimplenciaCanonica(payload(), contexto());
 
   assertEquals(resultado.itens.length, 1);
@@ -112,7 +114,7 @@ Deno.test('data de corte omitida usa a data efetiva publicada pela RPC', async (
   assertEquals(resultado.manifesto.as_of_date, '2026-08-16');
 });
 
-Deno.test('v3 partial fresco nao visita nem exporta unknown_invoices', async () => {
+Deno.test('v4 partial fresco nao visita nem exporta unknown_invoices', async () => {
   const reconciliationWithTrap = reconciliation({
     status: 'pending',
     source_missing_count: 2,
@@ -145,7 +147,7 @@ Deno.test('partial bloqueado e estados stale ou incomplete sao rejeitados', asyn
       operational: {
         collection_allowed: false,
         collection_scope: 'blocked',
-        consumer_must_apply_collection_grace: true,
+        consumer_must_apply_collection_grace: false,
         block_reasons: ['manual_block'],
       },
     }),
@@ -154,7 +156,7 @@ Deno.test('partial bloqueado e estados stale ou incomplete sao rejeitados', asyn
       operational: {
         collection_allowed: false,
         collection_scope: 'blocked',
-        consumer_must_apply_collection_grace: true,
+        consumer_must_apply_collection_grace: false,
         block_reasons: ['stale_competencia'],
       },
       items: [],
@@ -164,7 +166,7 @@ Deno.test('partial bloqueado e estados stale ou incomplete sao rejeitados', asyn
       operational: {
         collection_allowed: false,
         collection_scope: 'blocked',
-        consumer_must_apply_collection_grace: true,
+        consumer_must_apply_collection_grace: false,
         block_reasons: ['duplicate_confirmed_fatura'],
       },
       items: [],
@@ -180,11 +182,11 @@ Deno.test('partial bloqueado e estados stale ou incomplete sao rejeitados', asyn
   }
 });
 
-Deno.test('contrato v3 rejeita versao, politica e gate divergentes', async () => {
+Deno.test('contrato v4 rejeita versao, politica e gate divergentes', async () => {
   const invalidos = [
     payload({ schema_version: 2 }),
     payload({ policy: { delinquency_rule: 'd_plus_1', collection_grace_days: 2 } }),
-    payload({ policy: { delinquency_rule: 'd_plus_0', collection_grace_days: 1 } }),
+    payload({ policy: { delinquency_rule: 'd_plus_2', collection_grace_days: 1 } }),
     payload({
       operational: {
         collection_allowed: true,
@@ -196,8 +198,8 @@ Deno.test('contrato v3 rejeita versao, politica e gate divergentes', async () =>
     payload({
       operational: {
         collection_allowed: true,
-        collection_scope: 'confirmed_only',
-        consumer_must_apply_collection_grace: false,
+        collection_scope: 'confirmed_active_d2_3_competencias',
+        consumer_must_apply_collection_grace: true,
         block_reasons: [],
       },
     }),
@@ -266,6 +268,10 @@ Deno.test('manifesto partial publica metadados completos e hash estavel para qua
     aluno_id_canonico: null,
     contact_resolution_status: 'missing',
     valor_original: 100,
+    valor_com_desconto: 90,
+    valor_sem_desconto_condicional: 100,
+    multa: 2,
+    mora: 0.37,
     valor_atualizado: 102.37,
   });
   const partial = payload({
@@ -298,18 +304,18 @@ Deno.test('manifesto partial publica metadados completos e hash estavel para qua
 
   assertEquals(primeiro.manifesto, {
     modo: 'inadimplencia',
-    schema_version: 3,
+    schema_version: 4,
     status: 'partial',
     fonte: 'sync_run_items',
     unidade_id: UNIDADE_CG,
     as_of_date: '2026-08-16',
     avaliado_em: '2026-08-16T11:31:00.000Z',
     collection_allowed: true,
-    collection_scope: 'confirmed_only',
+    collection_scope: 'confirmed_active_d2_3_competencias',
     fresh_until: FRESH_UNTIL,
-    delinquency_rule: 'd_plus_0',
+    delinquency_rule: 'd_plus_2',
     collection_grace_days: 2,
-    collection_grace_applied: false,
+    collection_grace_applied: true,
     confirmed_invoice_count: 2,
     source_missing_count: 2,
     invalid_identity_invoice_count: 1,
@@ -366,10 +372,6 @@ Deno.test('escopo de unidade, totais e resolucao de contato precisam ser coerent
     payload({ unidade_id: UNIDADE_REC }),
     payload({ items: [item({ unidade_id: UNIDADE_REC })] }),
     payload({ totals: { ...payload().totals as Record<string, unknown>, total_atualizado: 1 } }),
-    payload({
-      status: 'partial',
-      reconciliation: reconciliation({ status: 'pending', contact_resolution_pending_count: 1 }),
-    }),
   ];
 
   for (const invalido of invalidos) {
@@ -379,4 +381,14 @@ Deno.test('escopo de unidade, totais e resolucao de contato precisam ser coerent
       'leitura canonica indisponivel',
     );
   }
+});
+
+Deno.test('reconciliacao de contato fora da carteira D+2 nao invalida o export confirmado', async () => {
+  const resultado = await prepararExportacaoInadimplenciaCanonica(payload({
+    status: 'partial',
+    reconciliation: reconciliation({ status: 'pending', contact_resolution_pending_count: 1 }),
+  }), contexto());
+
+  assertEquals(resultado.itens.length, 1);
+  assertEquals(resultado.manifesto.contact_resolution_pending_count, 1);
 });
