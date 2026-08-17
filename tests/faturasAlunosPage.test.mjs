@@ -40,6 +40,13 @@ test('estados partial e stale separam consulta, reconciliacao e cobranca', () =>
   assert.doesNotMatch(page, /source_missing[^\n]{0,80}(?:paga|pago)/i);
 });
 
+test('reconciliacao diferencia fatura em aberto de fatura em atraso', () => {
+  const page = read('src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx');
+
+  assert.match(page, /item\.status === 'aberta' \? 'border-amber-500\/25 bg-amber-500\/10 text-amber-200'/);
+  assert.match(page, /comparaData\(item\.data_vencimento, dataCorte\) < 0\) return 'border-rose-500\/25 bg-rose-500\/10 text-rose-200'/);
+});
+
 test('atalhos A+C usam a mesma URL canonica em Alunos, ficha e Comercial', () => {
   const alunos = read('src/components/App/Alunos/AlunosPage.tsx');
   const tabela = read('src/components/App/Alunos/TabelaAlunos.tsx');

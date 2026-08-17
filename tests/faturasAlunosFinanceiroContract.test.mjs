@@ -82,3 +82,18 @@ test('reconciliacao versionada distingue fatura confirmada de identidade local p
   assert.match(source, /identidade_invalida/);
   assert.match(source, /cobranca_d2[\s\S]{0,260}identidade_invalida/i);
 });
+
+test('reconciliacao cruza identidade pela visao canonica e so usa fallback de aluno unico', () => {
+  const migrationName = fs.readdirSync(migrationsDir)
+    .filter((name) => /_financeiro_faturas_reconciliacao_totais_v1\.sql$/u.test(name))
+    .sort()
+    .at(-1);
+  assert.ok(migrationName, 'migration de reconciliacao financeira ausente');
+  const source = fs.readFileSync(path.join(migrationsDir, migrationName), 'utf8');
+
+  assert.match(source, /vw_aluno_estado_operacional_canonico/i);
+  assert.match(source, /left\s+join\s+public\.alunos\s+a\s+on\s+a\.id\s*=\s*e\.aluno_id/i);
+  assert.match(source, /local_por_aluno/i);
+  assert.match(source, /i\.emusys_matricula_id\s+is\s+null\s+and\s+la\.aluno_count\s*=\s*1/i);
+  assert.match(source, /vinculo_local_fonte/i);
+});

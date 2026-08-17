@@ -93,6 +93,23 @@ function bootstrapSql() {
       data_saida date,
       status text
     );
+    -- Fixture mínimo da fonte canônica consumida pela RPC de reconciliação.
+    -- Em produção esta é a view derivada de emusys_matriculas_estado_atual;
+    -- aqui ela projeta os mesmos campos a partir do cadastro controlado do teste.
+    create view public.vw_aluno_estado_operacional_canonico as
+    select
+      a.unidade_id,
+      a.emusys_matricula_id,
+      a.emusys_student_id as emusys_aluno_id,
+      a.id as aluno_id,
+      a.nome as aluno_nome,
+      case
+        when a.status = 'trancado' then 'trancada'
+        when a.status = 'evadido' then 'inativa'
+        when a.status = 'ativo' then 'ativa'
+        else a.status
+      end as status_emusys
+    from public.alunos a;
     create table public.vw_alunos_estado_operacional_v131 (
       aluno_id integer primary key,
       unidade_id uuid not null,
