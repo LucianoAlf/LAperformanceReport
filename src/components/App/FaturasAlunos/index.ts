@@ -1,1 +1,4 @@
-export { FaturasAlunosPage as default, FaturasAlunosPage } from './FaturasAlunosPage';
+export {
+  FaturasAlunosFinanceirasPage as default,
+  FaturasAlunosFinanceirasPage as FaturasAlunosPage,
+} from './FaturasAlunosFinanceirasPage';

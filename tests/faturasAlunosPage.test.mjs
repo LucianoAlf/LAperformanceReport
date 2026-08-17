@@ -4,33 +4,40 @@ import test from 'node:test';
 
 const read = (path) => readFileSync(path, 'utf8');
 
-test('rota e menu operacional publicam Faturas de Alunos com prefetch', () => {
+test('rota e menu operacional publicam a tela financeira de Faturas', () => {
   const router = read('src/router.tsx');
   const sidebar = read('src/components/App/Layout/AppSidebar.tsx');
+  const entrypoint = read('src/components/App/FaturasAlunos/index.ts');
+  const compatibility = read('src/components/App/FaturasAlunos/FaturasAlunosPage.tsx');
+
   assert.match(router, /FaturasAlunosPage/);
   assert.match(router, /path:\s*['"]faturas['"]/);
   assert.match(sidebar, /['"]\/app\/faturas['"]/);
   assert.match(sidebar, /label:\s*['"]Faturas['"]/);
   assert.match(sidebar, /components\/App\/FaturasAlunos/);
+  assert.match(entrypoint, /FaturasAlunosFinanceirasPage/);
+  assert.match(compatibility, /FaturasAlunosFinanceirasPage/);
 });
 
-test('pagina consome o adaptador canonico e nunca acessa espelhos financeiros', () => {
-  const page = read('src/components/App/FaturasAlunos/FaturasAlunosPage.tsx');
-  assert.match(page, /carregarLeituraFaturasAlunos/);
+test('pagina publicada consome o adaptador financeiro e nunca acessa espelhos', () => {
+  const page = read('src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx');
+
+  assert.match(page, /carregarFaturasAlunosFinanceiras/);
   assert.match(page, /collectionAllowed/);
-  assert.match(page, /get_inadimplencia_canonica|carregarLeituraFaturasAlunos/);
+  assert.match(page, /get_faturas_alunos_financeiro_v1|carregarFaturasAlunosFinanceiras/);
   assert.doesNotMatch(page, /sync_run_items|emusys_faturas|service_role|inadimplente_emusys/);
   assert.doesNotMatch(page, /0\.02|0\.01\s*\*/);
 });
 
-test('estados partial e bloqueados separam confirmados de reconciliacao', () => {
-  const page = read('src/components/App/FaturasAlunos/FaturasAlunosPage.tsx');
+test('estados partial e stale separam consulta, reconciliacao e cobranca', () => {
+  const page = read('src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx');
+
   assert.match(page, /Leitura parcial/);
-  assert.match(page, /aguardando confirma[cç][aã]o na origem/i);
+  assert.match(page, /Reconcilia/);
   assert.match(page, /Snapshot expirado/);
-  assert.match(page, /Leitura incompleta/);
-  assert.match(page, /Falha na leitura financeira/);
-  assert.match(page, /Nenhuma fatura confirmada no recorte/);
+  assert.match(page, /histórico em consulta/i);
+  assert.match(page, /Cobrar agora D\+2/);
+  assert.match(page, /!state\.collectionAllowed/);
   assert.doesNotMatch(page, /source_missing[^\n]{0,80}(?:paga|pago)/i);
 });
 
@@ -46,16 +53,15 @@ test('atalhos A+C usam a mesma URL canonica em Alunos, ficha e Comercial', () =>
   assert.match(comercial, /Faturas de alunos/i);
 });
 
-test('cards financeiros flexionam pessoa, elegibilidade, validacao e contato como frases inteiras', () => {
-  const page = read('src/components/App/FaturasAlunos/FaturasAlunosPage.tsx');
-  assert.match(page, /pessoasD2 === 1 \? 'pessoa elegível' : 'pessoas elegíveis'/);
-  assert.match(page, /contactResolutionPendingCount === 1 \? 'contato pendente' : 'contatos pendentes'/);
-  assert.doesNotMatch(page, /elegíveleis/);
-});
+test('tabela financeira mostra forma e os tres valores contratuais', () => {
+  const page = read('src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx');
 
-test('valores financeiros preservam duas casas decimais em cards, tabela e detalhe', () => {
-  const page = read('src/components/App/FaturasAlunos/FaturasAlunosPage.tsx');
-  assert.match(page, /formatarMoedaFinanceira\s*=\s*\(value: number\).*formatCurrency\(value, 2\)/);
-  assert.match(page, /value=\{formatarMoedaFinanceira\(state\.totalAtualizado\)\}/);
-  assert.doesNotMatch(page, /format=\"currency\"/);
+  assert.match(page, /const moeda\s*=\s*\(value: number\)\s*=>\s*formatCurrency\(value, 2\)/);
+  assert.match(page, /Valor com desconto/);
+  assert.match(page, /Sem desconto condicional/);
+  assert.match(page, /Valor hoje/);
+  assert.match(page, /rotuloFormaPagamento/);
+  assert.match(page, /Pago via/);
+  assert.match(page, /Forma prevista/);
+  assert.doesNotMatch(page, /format="currency"/);
 });
