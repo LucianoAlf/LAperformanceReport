@@ -50,3 +50,13 @@ test('prioridades preservam refresh manual a frente da rotina e backlog', () => 
   assert.match(source, /return\s+100/i);
   assert.match(source, /return\s+150/i);
 });
+
+test('prazo de frescor acompanha a cadencia de cada produtor da fila', () => {
+  const source = fs.readFileSync(syncUrl, 'utf8');
+
+  assert.match(source, /function\s+staleTimeoutSecondsForFinanceiroTrigger/i);
+  assert.match(source, /case\s+'cron_financeiro_current_15m':[\s\S]{0,120}return\s+1800/i);
+  assert.match(source, /case\s+'cron_financeiro_previous_60m':[\s\S]{0,120}return\s+4500/i);
+  assert.match(source, /case\s+'cron_financeiro_backlog_2h':[\s\S]{0,120}return\s+7200/i);
+  assert.match(source, /p_stale_timeout_seconds\s*:\s*staleTimeoutSecondsForFinanceiroTrigger\(job\.trigger_source\)/i);
+});

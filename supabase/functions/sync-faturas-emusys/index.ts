@@ -174,6 +174,24 @@ function priorityForFinanceiroTrigger(triggerSource: string) {
   }
 }
 
+// `sync_runs.stale_after` e o contrato de frescor consumido pelas leituras
+// canonicas. O prazo precisa ser maior que a cadencia do produtor que criou o
+// run; usar 30 min para todos fazia junho/julho expirarem antes do proximo
+// ciclo horario, mesmo com a fila saudavel.
+function staleTimeoutSecondsForFinanceiroTrigger(triggerSource: string) {
+  switch (triggerSource) {
+    case 'cron_financeiro_previous_60m':
+      return 4500;
+    case 'cron_financeiro_backlog_2h':
+      return 7200;
+    case 'manual':
+    case 'internal_refresh':
+    case 'cron_financeiro_current_15m':
+    default:
+      return 1800;
+  }
+}
+
 async function rpcOrThrow<T>(
   supabase: ServiceClient,
   functionName: string,
@@ -243,7 +261,7 @@ async function processarQueueJob(
       p_competencia: job.competencia,
       p_trigger_source: job.trigger_source,
       p_requested_by: job.requested_by ?? 'queue_worker',
-      p_stale_timeout_seconds: 1800,
+      p_stale_timeout_seconds: staleTimeoutSecondsForFinanceiroTrigger(job.trigger_source),
     }));
 
     const limiter = new GlobalRateLimiter();
