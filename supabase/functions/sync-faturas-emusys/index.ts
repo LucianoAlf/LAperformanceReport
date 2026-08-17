@@ -155,6 +155,25 @@ function parseCompetencias(body: Record<string, unknown>) {
   return [...new Set(values.map(validateCompetencia))].sort();
 }
 
+// Menor numero significa maior prioridade na fila. O refresh manual nao pode
+// ficar atras de uma rotina; os jobs cron continuam serializados pela mesma
+// fila e o backlog fica sempre por ultimo.
+function priorityForFinanceiroTrigger(triggerSource: string) {
+  switch (triggerSource) {
+    case 'manual':
+    case 'internal_refresh':
+      return 50;
+    case 'cron_financeiro_current_15m':
+      return 100;
+    case 'cron_financeiro_previous_60m':
+      return 150;
+    case 'cron_financeiro_backlog_2h':
+      return 300;
+    default:
+      return 100;
+  }
+}
+
 async function rpcOrThrow<T>(
   supabase: ServiceClient,
   functionName: string,
@@ -411,7 +430,7 @@ serve(async (req) => {
             p_competencias: competencias,
             p_trigger_source: triggerSource,
             p_requested_by: access.requestedBy,
-            p_priority: 50,
+            p_priority: priorityForFinanceiroTrigger(triggerSource),
           },
         ));
       }
