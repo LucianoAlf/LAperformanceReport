@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useOutletContext, useSearchParams } from 'react-router-dom';
 import {
-  AlertCircle,
   Barcode,
   BadgeCheck,
   Banknote,
@@ -127,6 +126,24 @@ function rotuloFormaPagamento(item: FaturaFinanceiraItem) {
   if (item.forma_pagamento.fonte === 'transacao') return 'Pago via';
   if (item.forma_pagamento.fonte === 'matricula') return 'Forma prevista';
   return 'Forma não informada';
+}
+
+function normalizarFormaPagamento(value: string | null) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function iconeFormaPagamento(value: string | null) {
+  const nome = normalizarFormaPagamento(value);
+  if (nome.includes('pix')) return QrCode;
+  if (nome.includes('cartao') || nome.includes('recorrente') || nome.includes('cobranca automatica')) return CreditCard;
+  if (nome.includes('boleto')) return Barcode;
+  if (nome.includes('cheque')) return FileCheck2;
+  if (nome.includes('dinheiro') || nome.includes('especie')) return Banknote;
+  if (nome.includes('transfer') || nome.includes('ted') || nome.includes('doc')) return Landmark;
+  return CircleHelp;
 }
 
 function MetricCard({
@@ -600,12 +617,13 @@ function InvoicesTable({ items, dataCorte, unidadeNome, onDetail }: {
         <tbody className="divide-y divide-slate-800">
           {items.map((item) => {
             const valorPrincipal = item.status === 'paga' ? item.valores.valor_pago : item.valores.valor_hoje;
+            const FormaPagamentoIcon = iconeFormaPagamento(item.forma_pagamento.nome);
             return (
               <tr key={`${item.unidade_id}|${item.canonical_fatura_id}`} className="group bg-slate-900/15 transition hover:bg-cyan-500/[0.035]">
                 <td className="px-4 py-3.5"><div className="flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-800 text-slate-400 group-hover:bg-cyan-500/10 group-hover:text-cyan-300"><UserRound className="h-4 w-4" /></div><div><p className="max-w-[260px] break-words font-medium text-slate-100">{item.aluno.nome}</p><p className="mt-0.5 text-[11px] text-slate-500">{unidadeNome.get(item.unidade_id) ?? item.unidade_codigo ?? 'Unidade'} • {item.aluno.curso_nome ?? 'Curso não informado'}</p></div></div></td>
                 <td className="px-3 py-3.5"><span className={cn('inline-flex whitespace-nowrap rounded-full border px-2 py-1 text-xs font-medium', statusTone(item, dataCorte))}>{rotuloStatus(item, dataCorte)}</span></td>
                 <td className="px-3 py-3.5"><p className="text-slate-200">{formatarData(item.data_vencimento)}</p><p className="mt-0.5 text-[11px] capitalize text-slate-500">{formatarCompetencia(item.competencia)}</p></td>
-                <td className="px-3 py-3.5"><span className={cn('inline-flex max-w-[180px] items-center gap-1.5 truncate rounded-lg border px-2 py-1 text-xs', item.forma_pagamento.fonte === 'ausente' ? 'border-rose-500/25 bg-rose-500/10 text-rose-200' : item.forma_pagamento.fonte === 'transacao' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : 'border-cyan-500/25 bg-cyan-500/10 text-cyan-200')}><CreditCard className="h-3.5 w-3.5 shrink-0" />{item.forma_pagamento.nome ?? 'Forma não informada'}</span><p className="mt-1 text-[10px] text-slate-500">{rotuloFormaPagamento(item)}</p></td>
+                <td className="px-3 py-3.5"><span className={cn('inline-flex max-w-[180px] items-center gap-1.5 truncate rounded-lg border px-2 py-1 text-xs', item.forma_pagamento.fonte === 'ausente' ? 'border-rose-500/25 bg-rose-500/10 text-rose-200' : item.forma_pagamento.fonte === 'transacao' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : 'border-cyan-500/25 bg-cyan-500/10 text-cyan-200')}><FormaPagamentoIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />{item.forma_pagamento.nome ?? 'Forma não informada'}</span><p className="mt-1 text-[10px] text-slate-500">{rotuloFormaPagamento(item)}</p></td>
                 <td className="px-3 py-3.5 text-right tabular-nums text-slate-300">{moeda(item.valores.valor_com_desconto)}</td>
                 <td className="px-3 py-3.5 text-right tabular-nums text-slate-400">{moeda(item.valores.valor_sem_desconto_condicional)}</td>
                 <td className="px-3 py-3.5 text-right"><p className={cn('font-semibold tabular-nums', item.status === 'paga' ? 'text-emerald-300' : 'text-cyan-200')}>{valorPrincipal == null ? '—' : moeda(valorPrincipal)}</p><p className="mt-0.5 text-[10px] text-slate-500">{item.status === 'paga' ? 'Valor pago' : 'Calculado pelo contrato'}</p></td>

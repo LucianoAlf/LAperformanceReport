@@ -93,3 +93,13 @@ test('cards sao os filtros principais e acoes operacionais ficam separadas', () 
   assert.match(page, /Reconciliação financeira/);
   assert.match(page, /Canceladas/);
 });
+
+test('formas de pagamento possuem icones semanticamente distintos', () => {
+  const page = read('src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx');
+
+  for (const icon of ['QrCode', 'CreditCard', 'Barcode', 'FileCheck2', 'Banknote', 'Landmark', 'CircleHelp']) {
+    assert.match(page, new RegExp(icon));
+  }
+  assert.match(page, /normalizarFormaPagamento/);
+  assert.match(page, /iconeFormaPagamento/);
+});
