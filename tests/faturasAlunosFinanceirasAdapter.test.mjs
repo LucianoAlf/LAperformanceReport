@@ -157,3 +157,35 @@ test('adaptador bloqueia reconciliacao que chega com data invalida', () => {
   assert.equal(state.status, 'error');
   assert.equal(state.reconciliation.items.length, 0);
 });
+
+test('adaptador aceita forma prevista pela matricula Emusys e separa itens fora da operacao', () => {
+  const pending = item({
+    forma_pagamento: { rotulo: 'Forma prevista', nome: 'Pix Automático', fonte: 'emusys_matricula' },
+    valores: { ...item().valores, valor_original: 450 },
+    motivos: ['forma_pagamento_ausente'],
+  });
+  const state = normalizarFaturasAlunosFinanceiras(payload({
+    items: [],
+    reconciliation: {
+      source_missing: 0,
+      identidade_invalida: 0,
+      status_desconhecido: 0,
+      validacoes_origem: 0,
+      forma_pagamento_ausente: 0,
+      contato_pendente: 0,
+      total: 1,
+      resolvidas_manualmente: 2,
+      fora_operacao: { historico_ex_aluno: 3, registro_nao_aluno: 4, total: 7 },
+      items: [pending],
+    },
+  }));
+
+  assert.equal(state.status, 'ok');
+  assert.equal(state.reconciliation.items[0].forma_pagamento.fonte, 'emusys_matricula');
+  assert.equal(state.reconciliation.resolvidasManualmente, 2);
+  assert.deepEqual(state.reconciliation.foraOperacao, {
+    historicoExAluno: 3,
+    registroNaoAluno: 4,
+    total: 7,
+  });
+});

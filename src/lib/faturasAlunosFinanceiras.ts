@@ -31,9 +31,9 @@ export interface FaturaFinanceiraItem {
     vinculo_local_fonte: 'matricula_canonica' | 'aluno_unico_canonico' | null;
   };
   forma_pagamento: {
-    rotulo: 'Pago via' | 'Forma prevista' | 'Forma nao informada';
+    rotulo: 'Pago via' | 'Forma prevista' | 'Forma informada' | 'Forma nao informada';
     nome: string | null;
-    fonte: 'transacao' | 'matricula' | 'ausente';
+    fonte: 'transacao' | 'matricula' | 'emusys_matricula' | 'manual' | 'ausente';
   };
   valores: {
     valor_com_desconto: number;
@@ -121,6 +121,12 @@ export interface FaturasFinanceirasState {
     formaPagamentoAusente: number;
     contatoPendente: number;
     total: number;
+    resolvidasManualmente: number;
+    foraOperacao: {
+      historicoExAluno: number;
+      registroNaoAluno: number;
+      total: number;
+    };
     items: FaturaFinanceiraReconciliacaoItem[];
   };
 }
@@ -204,6 +210,12 @@ const emptyState = (status: FaturasFinanceirasStatusLeitura, error: string | nul
     formaPagamentoAusente: 0,
     contatoPendente: 0,
     total: 0,
+    resolvidasManualmente: 0,
+    foraOperacao: {
+      historicoExAluno: 0,
+      registroNaoAluno: 0,
+      total: 0,
+    },
     items: [],
   },
 });
@@ -307,12 +319,14 @@ function parseItem(value: unknown): FaturaFinanceiraItem | null {
   const rotulo = asText(forma.rotulo);
   const fonte = asText(forma.fonte);
   if (
-    (rotulo !== 'Pago via' && rotulo !== 'Forma prevista' && rotulo !== 'Forma nao informada')
-    || (fonte !== 'transacao' && fonte !== 'matricula' && fonte !== 'ausente')
+    (rotulo !== 'Pago via' && rotulo !== 'Forma prevista' && rotulo !== 'Forma informada' && rotulo !== 'Forma nao informada')
+    || (fonte !== 'transacao' && fonte !== 'matricula' && fonte !== 'emusys_matricula' && fonte !== 'manual' && fonte !== 'ausente')
   ) return null;
   if (
     (fonte === 'transacao' && (rotulo !== 'Pago via' || !asText(forma.nome)))
     || (fonte === 'matricula' && (rotulo !== 'Forma prevista' || !asText(forma.nome)))
+    || (fonte === 'emusys_matricula' && (rotulo !== 'Forma prevista' || !asText(forma.nome)))
+    || (fonte === 'manual' && (rotulo !== 'Forma informada' || !asText(forma.nome)))
     || (fonte === 'ausente' && rotulo !== 'Forma nao informada')
   ) return null;
   const dataPagamento = asText(row.data_pagamento);
@@ -382,12 +396,14 @@ function parseReconciliationItem(value: unknown): FaturaFinanceiraReconciliacaoI
   const rotulo = asText(forma.rotulo);
   const fonte = asText(forma.fonte);
   if (
-    (rotulo !== 'Pago via' && rotulo !== 'Forma prevista' && rotulo !== 'Forma nao informada')
-    || (fonte !== 'transacao' && fonte !== 'matricula' && fonte !== 'ausente')
+    (rotulo !== 'Pago via' && rotulo !== 'Forma prevista' && rotulo !== 'Forma informada' && rotulo !== 'Forma nao informada')
+    || (fonte !== 'transacao' && fonte !== 'matricula' && fonte !== 'emusys_matricula' && fonte !== 'manual' && fonte !== 'ausente')
   ) return null;
   if (
     (fonte === 'transacao' && (rotulo !== 'Pago via' || !asText(forma.nome)))
     || (fonte === 'matricula' && (rotulo !== 'Forma prevista' || !asText(forma.nome)))
+    || (fonte === 'emusys_matricula' && (rotulo !== 'Forma prevista' || !asText(forma.nome)))
+    || (fonte === 'manual' && (rotulo !== 'Forma informada' || !asText(forma.nome)))
     || (fonte === 'ausente' && rotulo !== 'Forma nao informada')
   ) return null;
   const valorOriginal = asFiniteNumberOrNull(valores.valor_original);
@@ -540,6 +556,10 @@ export function normalizarFaturasAlunosFinanceiras(payload: unknown, error?: { m
     return emptyState('error', 'Os totais de reconciliacao vieram invalidos.');
   }
   const collectionAllowed = status !== 'stale' && operational.collection_allowed;
+  const resolvidasManualmente = asFiniteNumberOrNull(reconciliation.resolvidas_manualmente) ?? 0;
+  const foraOperacao = asRecord(reconciliation.fora_operacao);
+  const foraHistorico = asFiniteNumberOrNull(foraOperacao?.historico_ex_aluno) ?? 0;
+  const foraAvulso = asFiniteNumberOrNull(foraOperacao?.registro_nao_aluno) ?? 0;
 
   return {
     schemaVersion: 1,
@@ -583,6 +603,12 @@ export function normalizarFaturasAlunosFinanceiras(payload: unknown, error?: { m
       formaPagamentoAusente: reconciliationCounts[4],
       contatoPendente: reconciliationCounts[5],
       total: reconciliationCounts[6],
+      resolvidasManualmente,
+      foraOperacao: {
+        historicoExAluno: foraHistorico,
+        registroNaoAluno: foraAvulso,
+        total: asFiniteNumberOrNull(foraOperacao?.total) ?? foraHistorico + foraAvulso,
+      },
       items: parsedReconciliationItems,
     },
   };

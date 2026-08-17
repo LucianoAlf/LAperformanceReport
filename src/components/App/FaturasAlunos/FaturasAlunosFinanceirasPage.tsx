@@ -23,10 +23,12 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
@@ -37,11 +39,13 @@ import {
   FATURAS_FINANCEIRAS_LOADING,
   filtrarFaturasFinanceirasLocais,
   normalizarSituacaoFaturasFinanceiras,
+  type FaturaFinanceiraReconciliacaoItem,
   type FaturaFinanceiraItem,
   type FaturasFinanceirasSituacao,
   type FaturasFinanceirasState,
   type FinanceiroRpcClient,
 } from '@/lib/faturasAlunosFinanceiras';
+import { getReconciliationGuidance, type ReconciliationDecisionType } from '@/lib/faturasAlunosReconciliacao';
 import { supabase } from '@/lib/supabase';
 import { cn, formatCurrency } from '@/lib/utils';
 
@@ -126,7 +130,8 @@ function motivoReconciliacao(motivo: string) {
 
 function rotuloFormaPagamento(item: FaturaFinanceiraItem) {
   if (item.forma_pagamento.fonte === 'transacao') return 'Pago via';
-  if (item.forma_pagamento.fonte === 'matricula') return 'Forma prevista';
+  if (item.forma_pagamento.fonte === 'matricula' || item.forma_pagamento.fonte === 'emusys_matricula') return 'Forma prevista';
+  if (item.forma_pagamento.fonte === 'manual') return 'Forma informada';
   return 'Forma não informada';
 }
 
@@ -308,6 +313,8 @@ export function FaturasAlunosFinanceirasPage() {
   const [state, setState] = useState<FaturasFinanceirasState>(FATURAS_FINANCEIRAS_LOADING);
   const [refreshing, setRefreshing] = useState(false);
   const [faturaSelecionada, setFaturaSelecionada] = useState<FaturaFinanceiraItem | null>(null);
+  const [formasPagamento, setFormasPagamento] = useState<Array<{ id: number; nome: string; sigla: string | null }>>([]);
+  const [resolvendoReconciliacao, setResolvendoReconciliacao] = useState<string | null>(null);
   const dataCorte = useMemo(hojeBrasilia, []);
 
   const unidadeParam = searchParams.get('unidade');
@@ -389,6 +396,58 @@ export function FaturasAlunosFinanceirasPage() {
   }, [ano, dataCorte, mes, modoPeriodo, situacao, unidadeConsulta, unidadePronta]);
 
   useEffect(() => { void carregar(); }, [carregar]);
+
+  useEffect(() => {
+    let mounted = true;
+    void supabase
+      .from('formas_pagamento')
+      .select('id, nome, sigla')
+      .eq('ativo', true)
+      .order('nome')
+      .then(({ data, error }) => {
+        if (error) {
+          toast.error('Não foi possível carregar as formas de pagamento.');
+          return;
+        }
+        if (mounted) setFormasPagamento((data ?? []) as Array<{ id: number; nome: string; sigla: string | null }>);
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  const resolverReconciliacao = useCallback(async (
+    item: FaturaFinanceiraReconciliacaoItem,
+    tipoDecisao: ReconciliationDecisionType | 'forma_pagamento_manual',
+    observacao: string,
+    formaPagamentoId?: number,
+  ) => {
+    const chave = `${item.unidade_id}|${item.canonical_fatura_id}`;
+    if (!observacao.trim()) {
+      toast.error('Descreva o que foi conferido antes de registrar.');
+      return;
+    }
+    setResolvendoReconciliacao(chave);
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const { error } = await supabase.rpc('resolver_reconciliacao_fatura', {
+        p_unidade_id: item.unidade_id,
+        p_emusys_fatura_id: Number(item.emusys_fatura_id),
+        p_tipo_decisao: tipoDecisao,
+        p_observacao: observacao.trim(),
+        p_canonical_fatura_id: item.canonical_fatura_id,
+        p_emusys_matricula_id: item.emusys_matricula_id ? Number(item.emusys_matricula_id) : null,
+        p_emusys_student_id: item.emusys_student_id ? Number(item.emusys_student_id) : null,
+        p_forma_pagamento_id: formaPagamentoId ?? null,
+        p_decidido_por: authData.user?.email ?? 'usuario_app',
+      });
+      if (error) throw error;
+      toast.success('Conciliação registrada no LA Report.');
+      await carregar();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível registrar a conciliação.');
+    } finally {
+      setResolvendoReconciliacao(null);
+    }
+  }, [carregar]);
 
   const refreshNow = useCallback(async () => {
     setRefreshing(true);
@@ -531,7 +590,13 @@ export function FaturasAlunosFinanceirasPage() {
           </section>
 
           {mostrarReconciliacao ? (
-            <ReconciliationPanelV2 state={state} unidadeNome={unidadesPorId} />
+            <ReconciliationPanelV2
+              state={state}
+              unidadeNome={unidadesPorId}
+              formasPagamento={formasPagamento}
+              resolvendo={resolvendoReconciliacao}
+              onResolve={resolverReconciliacao}
+            />
           ) : (
             <section className="overflow-hidden rounded-2xl border border-slate-700/75 bg-slate-900/55 shadow-xl shadow-slate-950/20">
               <div className="border-b border-slate-800 bg-slate-900/80 p-4">
@@ -631,46 +696,94 @@ function InvoicesTable({ items, dataCorte, unidadeNome, onDetail }: {
   );
 }
 
-function ReconciliationPanelV2({ state, unidadeNome }: { state: FaturasFinanceirasState; unidadeNome: ReadonlyMap<string, string> }) {
+function ReconciliationPanelV2({
+  state,
+  unidadeNome,
+  formasPagamento,
+  resolvendo,
+  onResolve,
+}: {
+  state: FaturasFinanceirasState;
+  unidadeNome: ReadonlyMap<string, string>;
+  formasPagamento: Array<{ id: number; nome: string; sigla: string | null }>;
+  resolvendo: string | null;
+  onResolve: (
+    item: FaturaFinanceiraReconciliacaoItem,
+    tipoDecisao: ReconciliationDecisionType | 'forma_pagamento_manual',
+    observacao: string,
+    formaPagamentoId?: number,
+  ) => Promise<void>;
+}) {
+  const [decisoes, setDecisoes] = useState<Record<string, ReconciliationDecisionType>>({});
+  const [observacoes, setObservacoes] = useState<Record<string, string>>({});
+  const [formas, setFormas] = useState<Record<string, string>>({});
   const cards = [
-    ['Faturas não observadas', state.reconciliation.sourceMissing, 'Não assumir pagamento; aguardar novo snapshot'],
-    ['Vínculo local pendente', state.reconciliation.identidadeInvalida, 'Pode entrar nos totais, nunca na cobrança'],
-    ['Dados da origem', state.reconciliation.validacoesOrigem, 'IDs opcionais inválidos ou incompletos'],
-    ['Forma de pagamento', state.reconciliation.formaPagamentoAusente, 'Metadado ausente; conferir cadastro'],
+    ['Faturas não observadas', state.reconciliation.sourceMissing, 'Confirme o caso informado pela unidade'],
+    ['Vínculo local', state.reconciliation.identidadeInvalida, 'Requer vínculo exato por unidade e matrícula'],
+    ['Dados da origem', state.reconciliation.validacoesOrigem, 'Metadado recebido incompleto'],
+    ['Forma de pagamento', state.reconciliation.formaPagamentoAusente, 'Escolha a forma usada pelo aluno'],
     ['Contato local', state.reconciliation.contatoPendente, 'Contato único ainda não resolvido'],
   ];
+
   return (
     <section className="overflow-hidden rounded-2xl border border-amber-500/25 bg-slate-900/55 shadow-xl shadow-slate-950/20">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-amber-500/20 bg-amber-500/[0.045] px-5 py-4">
         <div>
-          <p className="font-semibold text-amber-100">Conciliação financeira</p>
-          <p className="mt-1 max-w-3xl text-sm text-slate-300">{state.reconciliation.total} faturas precisam de conferência. Esta lista não é uma fila de cobrança: use a matrícula e os IDs Emusys, nunca o nome isolado.</p>
+          <p className="font-semibold text-amber-100">Reconciliação financeira operacional</p>
+          <p className="mt-1 max-w-3xl text-sm text-slate-300">
+            {state.reconciliation.total > 0
+              ? 'Confira cada nome e resolva o que a equipe já confirmou. A decisão fica auditada no LA Report e não altera o status da fatura no Emusys.'
+              : 'Tudo conciliado neste recorte. Histórico de ex-alunos e lançamentos avulsos ficam fora da cobrança operacional.'}
+          </p>
         </div>
         <span className="rounded-full border border-amber-500/25 bg-slate-950/35 px-3 py-1 text-sm font-semibold text-amber-100">{state.reconciliation.total} pendências</span>
       </div>
       <div className="grid gap-px bg-slate-800 sm:grid-cols-2 xl:grid-cols-5">{cards.map(([label, count, description]) => <div key={String(label)} className="bg-slate-900/90 p-4"><p className="text-xs uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold text-slate-100">{count}</p><p className="mt-1 text-xs text-slate-500">{description}</p></div>)}</div>
-      <div className="border-b border-slate-800 bg-slate-950/25 px-5 py-3 text-xs text-slate-400"><span className="font-medium text-slate-200">Regra de leitura:</span> fatura confirmada na origem permanece nos totais financeiros, mas fica fora da cobrança enquanto o vínculo local não for resolvido. <span className="font-medium text-amber-200">Fatura não observada na origem não é prova de pagamento.</span></div>
-      {state.reconciliation.items.length === 0 ? <div className="p-8 text-center text-sm text-slate-500">Nenhuma pendência no recorte atual.</div> : <div className="divide-y divide-slate-800">{state.reconciliation.items.map((item) => {
-        const semVinculo = item.aluno.id == null;
-        const descricaoOrigem = item.descricao?.trim() || null;
-        const isRateio = descricaoOrigem?.toLocaleLowerCase('pt-BR').includes('rateio entre unidades') ?? false;
-        const isRegistroNaoAluno = item.motivos.includes('registro_nao_aluno');
-        const isHistoricoExAluno = item.motivos.includes('historico_ex_aluno');
-        const origemAusente = item.motivos.includes('source_missing');
-        const valorSecundario = item.status === 'paga' ? item.valores.valor_pago : item.valores.valor_hoje;
-        return <div key={`${item.unidade_id}|${item.canonical_fatura_id}`} className="flex flex-wrap items-start justify-between gap-5 px-5 py-4">
-          <div className="min-w-[260px] flex-1">
-            <div className="flex flex-wrap items-center gap-2"><p className="font-medium text-slate-100">{isRegistroNaoAluno ? 'Lançamento financeiro sem aluno' : isHistoricoExAluno ? 'Histórico de ex-aluno' : semVinculo ? (isRateio ? 'Lançamento interno — rateio entre unidades' : 'Registro sem vínculo local') : item.aluno.nome}</p><span className={cn('rounded-full border px-2 py-0.5 text-[11px] font-medium', item.status === 'paga' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : item.status === 'aberta' ? 'border-amber-500/25 bg-amber-500/10 text-amber-200' : 'border-slate-600 bg-slate-700/35 text-slate-300')}>{item.status === 'paga' ? 'Paga' : item.status === 'aberta' ? 'Em aberto' : item.status === 'cancelada' ? 'Cancelada' : 'Status não reconhecido'}</span></div>
-            <p className="mt-1 text-xs text-slate-500">{unidadeNome.get(item.unidade_id) ?? item.unidade_codigo ?? 'Unidade'} • fatura Emusys {item.emusys_fatura_id} • venc. {formatarData(item.data_vencimento)}{item.data_pagamento ? ` • pago em ${formatarData(item.data_pagamento)}` : ''}</p>
-            <p className="mt-1 text-[11px] text-slate-500">Matrícula Emusys: <span className="font-mono text-slate-300">{item.emusys_matricula_id ?? 'não informada'}</span> • aluno: <span className="font-mono text-slate-300">{item.emusys_student_id ?? 'não informado'}</span>{item.emusys_contrato_id ? <> • contrato: <span className="font-mono text-slate-300">{item.emusys_contrato_id}</span></> : null}</p>
-            {item.aluno.vinculo_local_fonte ? <p className="mt-1 text-[11px] text-emerald-300/80">Vínculo local confirmado por {item.aluno.vinculo_local_fonte === 'aluno_unico_canonico' ? 'aluno único na visão canônica' : 'matrícula canônica sincronizada'}</p> : null}
-            <p className="mt-1 text-[11px] text-slate-400"><span className="text-slate-500">Referência da origem:</span> {descricaoOrigem ?? 'sem descrição informada pelo Emusys'}</p>
-            <div className="mt-2 flex flex-wrap gap-1.5">{item.motivos.map((motivo) => <span key={motivo} className="rounded-md border border-amber-500/20 bg-amber-500/[0.07] px-2 py-1 text-[11px] text-amber-200">{motivoReconciliacao(motivo)}</span>)}</div>
-            <p className="mt-2 text-[11px] text-slate-500">{origemAusente ? 'A origem não confirmou esta fatura neste snapshot.' : isRegistroNaoAluno ? 'Lançamento financeiro da origem sem matrícula de aluno; não entra na cobrança de alunos.' : isHistoricoExAluno ? 'Matrícula inativa/evadida; permanece apenas no histórico e fora da cobrança operacional.' : semVinculo ? 'O Emusys trouxe IDs e descrição, mas não um nome; falta vínculo local exato.' : 'Origem confirmada; falta completar o cadastro financeiro.'}</p>
-          </div>
-          <div className="min-w-[150px] text-right text-xs text-slate-400"><p>Original: <span className="font-semibold tabular-nums text-slate-200">{moeda(item.valores.valor_original)}</span></p><p className="mt-1">{item.status === 'paga' ? 'Pago' : 'Atualizado'}: <span className="font-semibold tabular-nums text-cyan-200">{valorSecundario == null ? '—' : moeda(valorSecundario)}</span></p><p className="mt-2 text-[11px] text-slate-600">Sync: {formatarDataHora(item.sync_completed_at)}</p></div>
-        </div>;
-      })}</div>}
+      <div className="flex flex-wrap gap-3 border-b border-slate-800 bg-slate-950/25 px-5 py-3 text-xs text-slate-400">
+        <span><span className="font-semibold text-slate-200">Fora da operação:</span> {state.reconciliation.foraOperacao.total} histórico/avulso</span>
+        <span><span className="font-semibold text-emerald-200">Resolvidas aqui:</span> {state.reconciliation.resolvidasManualmente}</span>
+        <span className="text-amber-200">Uma decisão manual não confirma pagamento no Emusys.</span>
+      </div>
+      {state.reconciliation.items.length === 0 ? (
+        <div className="p-8 text-center">
+          <ShieldCheck className="mx-auto h-8 w-8 text-emerald-300" />
+          <p className="mt-3 font-medium text-slate-200">Nenhuma pendência operacional no recorte atual.</p>
+          <p className="mt-1 text-sm text-slate-500">Os registros antigos continuam no histórico, sem bloquear a equipe de cobrança.</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-slate-800">{state.reconciliation.items.map((item) => {
+          const key = `${item.unidade_id}|${item.canonical_fatura_id}`;
+          const guidance = getReconciliationGuidance(item);
+          const formaSelecionada = formas[key] ?? '';
+          const forma = formasPagamento.find((option) => String(option.id) === formaSelecionada);
+          const decisao = decisoes[key] ?? '';
+          const observacao = observacoes[key] ?? '';
+          const salvando = resolvendo === key;
+          const statusLabel = item.status === 'paga' ? 'Paga' : item.status === 'aberta' ? 'Em aberto' : item.status === 'cancelada' ? 'Cancelada' : 'Status não reconhecido';
+          return <article key={key} className="px-5 py-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-[260px] flex-1">
+                <div className="flex flex-wrap items-center gap-2"><p className="font-medium text-slate-100">{item.aluno.nome}</p><span className={cn('rounded-full border px-2 py-0.5 text-[11px] font-medium', item.status === 'paga' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : item.status === 'aberta' ? 'border-amber-500/25 bg-amber-500/10 text-amber-200' : 'border-slate-600 bg-slate-700/35 text-slate-300')}>{statusLabel}</span></div>
+                <p className="mt-1 text-xs text-slate-500">{unidadeNome.get(item.unidade_id) ?? item.unidade_codigo ?? 'Unidade'} • {formatarCompetencia(item.competencia)} • vencimento {formatarData(item.data_vencimento)}</p>
+                <p className="mt-2 text-sm text-slate-300">{guidance.title}</p>
+                <p className="mt-1 text-xs text-slate-500">{guidance.instruction}</p>
+                {item.descricao ? <p className="mt-2 text-[11px] text-slate-400"><span className="text-slate-500">Referência:</span> {item.descricao}</p> : null}
+                <div className="mt-2 flex flex-wrap gap-1.5">{item.motivos.map((motivo) => <span key={motivo} className="rounded-md border border-amber-500/20 bg-amber-500/[0.07] px-2 py-1 text-[11px] text-amber-200">{motivoReconciliacao(motivo)}</span>)}</div>
+              </div>
+              <div className="min-w-[170px] text-right text-xs text-slate-400"><p>Original: <span className="font-semibold tabular-nums text-slate-200">{moeda(item.valores.valor_original)}</span></p><p className="mt-1">{item.status === 'paga' ? 'Pago' : 'Atualizado'}: <span className="font-semibold tabular-nums text-cyan-200">{(item.status === 'paga' ? item.valores.valor_pago : item.valores.valor_hoje) == null ? '—' : moeda((item.status === 'paga' ? item.valores.valor_pago : item.valores.valor_hoje) ?? 0)}</span></p></div>
+            </div>
+            {guidance.kind === 'payment_method' && <div className="mt-4 grid gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+              <div><label className="mb-1.5 block text-xs font-medium text-cyan-100" htmlFor={`forma-${key}`}>Forma usada pelo aluno</label><Select value={formaSelecionada} onValueChange={(value) => setFormas((current) => ({ ...current, [key]: value }))}><SelectTrigger id={`forma-${key}`} className="bg-slate-950/60"><SelectValue placeholder="Selecione a forma de pagamento" /></SelectTrigger><SelectContent>{formasPagamento.map((option) => <SelectItem key={option.id} value={String(option.id)}>{option.nome}{option.sigla ? ` (${option.sigla})` : ''}</SelectItem>)}</SelectContent></Select></div>
+              <Button type="button" size="sm" disabled={!forma || salvando} onClick={() => forma && void onResolve(item, 'forma_pagamento_manual', `Forma de pagamento conferida pela equipe: ${forma.nome}.`, forma.id)}>{salvando ? <Loader2 className="animate-spin" /> : <BadgeCheck />} Salvar forma</Button>
+            </div>}
+            {guidance.kind === 'decision' && <div className="mt-4 space-y-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4">
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]"><div><label className="mb-1.5 block text-xs font-medium text-amber-100" htmlFor={`decisao-${key}`}>O que foi conferido?</label><Select value={decisao} onValueChange={(value) => setDecisoes((current) => ({ ...current, [key]: value as ReconciliationDecisionType }))}><SelectTrigger id={`decisao-${key}`} className="bg-slate-950/60"><SelectValue placeholder="Selecione a decisão" /></SelectTrigger><SelectContent>{guidance.options.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></div><div><label className="mb-1.5 block text-xs font-medium text-amber-100" htmlFor={`observacao-${key}`}>Observação da equipe</label><Textarea id={`observacao-${key}`} value={observacao} onChange={(event) => setObservacoes((current) => ({ ...current, [key]: event.target.value }))} placeholder="Ex.: aluno pagou via Pix; renovação alterou a primeira parcela..." className="min-h-10 bg-slate-950/60" /></div></div>
+              <div className="flex justify-end"><Button type="button" size="sm" disabled={!decisao || !observacao.trim() || salvando} onClick={() => decisao && void onResolve(item, decisao as ReconciliationDecisionType, observacao)}>{salvando ? <Loader2 className="animate-spin" /> : <BadgeCheck />} Registrar decisão</Button></div>
+            </div>}
+            {guidance.kind === 'review' && <div className="mt-4 rounded-xl border border-rose-500/20 bg-rose-500/[0.04] p-4 text-xs text-rose-100/80">A equipe precisa completar o vínculo na origem ou no cadastro canônico antes de concluir este caso. Nenhuma cobrança será liberada por aproximação de nome.</div>}
+          </article>;
+        })}</div>
+      )}
     </section>
   );
 }
