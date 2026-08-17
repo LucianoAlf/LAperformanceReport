@@ -88,3 +88,17 @@ test('pagina oferece decisão manual e seleção do design system para forma de 
   assert.match(page, /<SelectTrigger/);
   assert.doesNotMatch(page, /<select\b/);
 });
+
+test('migration remove motivo antigo de forma ausente quando o enriquecimento encontra a forma', () => {
+  const migrationName = fs.readdirSync(path.join(root, 'supabase', 'migrations'))
+    .filter((name) => /financeiro_faturas_reconciliacao_(decisoes|remove_motivo_stale)/u.test(name))
+    .sort()
+    .at(-1);
+  assert.ok(migrationName, 'migration de decisÃµes de reconciliaÃ§Ã£o ausente');
+  const source = fs.readFileSync(path.join(root, 'supabase', 'migrations', migrationName), 'utf8');
+
+  assert.match(
+    source,
+    /v_enriched\s+#>>\s+'\{forma_pagamento,nome\}'[\s\S]{0,500}motivo\s*<>\s*'forma_pagamento_ausente'/i,
+  );
+});
