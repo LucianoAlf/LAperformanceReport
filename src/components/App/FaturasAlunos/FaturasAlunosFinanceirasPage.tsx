@@ -41,6 +41,7 @@ import {
   normalizarSituacaoFaturasFinanceiras,
   type FaturaFinanceiraReconciliacaoItem,
   type FaturaFinanceiraItem,
+  type FaturaFinanceiraTipo,
   type FaturasFinanceirasSituacao,
   type FaturasFinanceirasState,
   type FinanceiroRpcClient,
@@ -151,6 +152,30 @@ function iconeFormaPagamento(value: string | null) {
   if (nome.includes('dinheiro') || nome.includes('especie')) return Banknote;
   if (nome.includes('transfer') || nome.includes('ted') || nome.includes('doc')) return Landmark;
   return CircleHelp;
+}
+
+const FATURA_TIPO_LABELS: Record<FaturaFinanceiraTipo, string> = {
+  parcela: 'Parcela',
+  passaporte_taxa_matricula: 'Passaporte/Taxa de matrícula',
+  lojinha_produto: 'Lojinha/Produto',
+  venda_ingressos: 'Venda de ingressos',
+  avulsa_outro: 'Avulsa/Outro',
+};
+
+const FATURA_TIPO_TONES: Record<FaturaFinanceiraTipo, string> = {
+  parcela: 'border-slate-700 bg-slate-800/55 text-slate-200',
+  passaporte_taxa_matricula: 'border-cyan-500/25 bg-cyan-500/10 text-cyan-200',
+  lojinha_produto: 'border-violet-500/25 bg-violet-500/10 text-violet-200',
+  venda_ingressos: 'border-amber-500/25 bg-amber-500/10 text-amber-200',
+  avulsa_outro: 'border-slate-600 bg-slate-700/35 text-slate-300',
+};
+
+function rotuloTipoFatura(tipo: FaturaFinanceiraTipo) {
+  return FATURA_TIPO_LABELS[tipo];
+}
+
+function TipoFaturaBadge({ tipo }: { tipo: FaturaFinanceiraTipo }) {
+  return <span className={cn('inline-flex max-w-[190px] whitespace-normal rounded-lg border px-2 py-1 text-xs font-medium leading-tight', FATURA_TIPO_TONES[tipo])}>{rotuloTipoFatura(tipo)}</span>;
 }
 
 function MetricCard({
@@ -336,6 +361,7 @@ export function FaturasAlunosFinanceirasPage() {
   const situacao = normalizarSituacaoFaturasFinanceiras(searchParams.get('situacao'));
   const busca = searchParams.get('busca') ?? '';
   const curso = searchParams.get('curso') ?? 'todos';
+  const tipoFatura = searchParams.get('tipo') ?? 'todos';
   const pagamento = searchParams.get('pagamento') ?? 'todos';
   const alunoId = Number(searchParams.get('aluno')) || null;
   const matriculaId = searchParams.get('matricula');
@@ -474,13 +500,16 @@ export function FaturasAlunosFinanceirasPage() {
   const pagamentos = useMemo(() => [...new Set(state.items
     .map((item) => item.forma_pagamento.nome)
     .filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, 'pt-BR')), [state.items]);
+  const tiposFatura = useMemo(() => [...new Set(state.items.map((item) => item.tipo_fatura))]
+    .sort((a, b) => rotuloTipoFatura(a).localeCompare(rotuloTipoFatura(b), 'pt-BR')), [state.items]);
   const itemsFiltrados = useMemo(() => filtrarFaturasFinanceirasLocais(state.items, {
     busca,
     curso: curso === 'todos' ? null : curso,
+    tipoFatura: tipoFatura === 'todos' ? null : tipoFatura as FaturaFinanceiraTipo,
     pagamento: pagamento === 'todos' ? null : pagamento,
     alunoId,
     matriculaId,
-  }), [alunoId, busca, curso, matriculaId, pagamento, state.items]);
+  }), [alunoId, busca, curso, matriculaId, pagamento, state.items, tipoFatura]);
   const unidadesPorId = useMemo(() => new Map(unidades.map((unidade) => [unidade.id, unidade.nome])), [unidades]);
 
   const selecionarSituacao = (next: FaturasFinanceirasSituacao) => {
@@ -490,7 +519,7 @@ export function FaturasAlunosFinanceirasPage() {
   const limparFiltros = () => {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
-      for (const key of ['busca', 'curso', 'pagamento', 'aluno', 'matricula', 'situacao', 'unidade']) next.delete(key);
+      for (const key of ['busca', 'curso', 'tipo', 'pagamento', 'aluno', 'matricula', 'situacao', 'unidade']) next.delete(key);
       return next;
     }, { replace: true });
   };
@@ -619,6 +648,13 @@ export function FaturasAlunosFinanceirasPage() {
                       {cursos.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                  <Select value={tipoFatura} onValueChange={(value) => setFiltro('tipo', value)}>
+                    <SelectTrigger className="w-[220px] bg-slate-950/70"><SelectValue placeholder="Tipo da fatura" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todos os tipos</SelectItem>
+                      {tiposFatura.map((tipo) => <SelectItem key={tipo} value={tipo}>{rotuloTipoFatura(tipo)}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                   <Select value={pagamento} onValueChange={(value) => setFiltro('pagamento', value)}>
                     <SelectTrigger className="w-[190px] bg-slate-950/70"><SelectValue placeholder="Forma de pagamento" /></SelectTrigger>
                     <SelectContent>
@@ -670,21 +706,23 @@ function InvoicesTable({ items, dataCorte, unidadeNome, onDetail }: {
   }
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-[1450px] w-full text-left text-sm">
-        <thead className="border-b border-slate-700/70 bg-slate-950/45 text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3 font-medium">Aluno / curso</th><th className="px-3 py-3 font-medium">Situação</th><th className="px-3 py-3 font-medium">Vencimento</th><th className="px-3 py-3 font-medium">Forma de pagamento</th><th className="px-3 py-3 text-right font-medium">Valor com desconto</th><th className="px-3 py-3 text-right font-medium">Sem desconto condicional</th><th className="px-3 py-3 text-right font-medium">Valor atualizado</th><th className="px-3 py-3 font-medium">Matrícula</th><th className="px-4 py-3 text-right font-medium">Detalhe</th></tr></thead>
+      <table className="min-w-[1640px] w-full text-left text-sm">
+        <thead className="border-b border-slate-700/70 bg-slate-950/45 text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3 font-medium">Aluno / curso</th><th className="px-3 py-3 font-medium">Tipo da fatura</th><th className="px-3 py-3 font-medium">Situação</th><th className="px-3 py-3 font-medium">Vencimento</th><th className="px-3 py-3 font-medium">Forma de pagamento</th><th className="px-3 py-3 text-right font-medium">Valor base</th><th className="px-3 py-3 text-right font-medium">Sem desconto condicional</th><th className="px-3 py-3 text-right font-medium">Valor atualizado / pago</th><th className="px-3 py-3 font-medium">Matrícula</th><th className="px-4 py-3 text-right font-medium">Detalhe</th></tr></thead>
         <tbody className="divide-y divide-slate-800">
           {items.map((item) => {
             const valorPrincipal = item.status === 'paga' ? item.valores.valor_pago : item.valores.valor_hoje;
             const FormaPagamentoIcon = iconeFormaPagamento(item.forma_pagamento.nome);
+            const parcela = item.tipo_fatura === 'parcela';
             return (
               <tr key={`${item.unidade_id}|${item.canonical_fatura_id}`} className="group bg-slate-900/15 transition hover:bg-cyan-500/[0.035]">
                 <td className="px-4 py-3.5"><div className="flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-800 text-slate-400 group-hover:bg-cyan-500/10 group-hover:text-cyan-300"><UserRound className="h-4 w-4" /></div><div><p className="max-w-[260px] break-words font-medium text-slate-100">{item.aluno.nome}</p><p className="mt-0.5 text-[11px] text-slate-500">{unidadeNome.get(item.unidade_id) ?? item.unidade_codigo ?? 'Unidade'} • {item.aluno.curso_nome ?? 'Curso não informado'}</p></div></div></td>
+                <td className="px-3 py-3.5"><TipoFaturaBadge tipo={item.tipo_fatura} />{parcela ? <p className="mt-1 text-[10px] text-slate-500">Parcela {item.numero_parcela}/{item.total_parcelas_contrato ?? '—'}</p> : <p className="mt-1 max-w-[190px] truncate text-[10px] text-slate-500">{item.descricao ?? 'Lançamento não parcelado'}</p>}</td>
                 <td className="px-3 py-3.5"><span className={cn('inline-flex whitespace-nowrap rounded-full border px-2 py-1 text-xs font-medium', statusTone(item, dataCorte))}>{rotuloStatus(item, dataCorte)}</span></td>
                 <td className="px-3 py-3.5"><p className="text-slate-200">{formatarData(item.data_vencimento)}</p><p className="mt-0.5 text-[11px] capitalize text-slate-500">{formatarCompetencia(item.competencia)}</p></td>
                 <td className="px-3 py-3.5"><span className={cn('inline-flex max-w-[180px] items-center gap-1.5 truncate rounded-lg border px-2 py-1 text-xs', item.forma_pagamento.fonte === 'ausente' ? 'border-rose-500/25 bg-rose-500/10 text-rose-200' : item.forma_pagamento.fonte === 'transacao' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : 'border-cyan-500/25 bg-cyan-500/10 text-cyan-200')}><FormaPagamentoIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />{item.forma_pagamento.nome ?? 'Forma não informada'}</span><p className="mt-1 text-[10px] text-slate-500">{rotuloFormaPagamento(item)}</p></td>
-                <td className="px-3 py-3.5 text-right tabular-nums text-slate-300">{moeda(item.valores.valor_com_desconto)}</td>
-                <td className="px-3 py-3.5 text-right tabular-nums text-slate-400">{moeda(item.valores.valor_sem_desconto_condicional)}</td>
-                <td className="px-3 py-3.5 text-right"><p className={cn('font-semibold tabular-nums', item.status === 'paga' ? 'text-emerald-300' : 'text-cyan-200')}>{valorPrincipal == null ? '—' : moeda(valorPrincipal)}</p><p className="mt-0.5 text-[10px] text-slate-500">{item.status === 'paga' ? 'Valor pago' : 'Calculado pelo contrato'}</p></td>
+                <td className="px-3 py-3.5 text-right tabular-nums text-slate-300"><p>{moeda(item.valores.valor_com_desconto)}</p><p className="mt-0.5 text-[10px] text-slate-500">{parcela ? 'Valor com desconto' : 'Valor da fatura'}</p></td>
+                <td className="px-3 py-3.5 text-right tabular-nums text-slate-400"><p>{parcela ? moeda(item.valores.valor_sem_desconto_condicional) : '—'}</p><p className="mt-0.5 text-[10px] text-slate-500">{parcela ? 'Sem desconto condicional' : 'Não se aplica'}</p></td>
+                <td className="px-3 py-3.5 text-right"><p className={cn('font-semibold tabular-nums', item.status === 'paga' ? 'text-emerald-300' : 'text-cyan-200')}>{valorPrincipal == null ? '—' : moeda(valorPrincipal)}</p><p className="mt-0.5 text-[10px] text-slate-500">{item.status === 'paga' ? 'Valor pago' : 'Valor atualizado • calculado pelo contrato'}</p></td>
                 <td className="px-3 py-3.5 font-mono text-xs text-slate-400">{item.emusys_matricula_id ?? '—'}</td>
                 <td className="px-4 py-3.5 text-right"><button type="button" onClick={() => onDetail(item)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:border-cyan-500/35 hover:text-cyan-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50">Ver detalhes <ChevronRight className="h-3.5 w-3.5" /></button></td>
               </tr>
@@ -805,6 +843,14 @@ function ReconciliationPanel({ state, unidadeNome }: { state: FaturasFinanceiras
   );
 }
 
+function FaturaValoresDetalhe({ item }: { item: FaturaFinanceiraItem }) {
+  const parcela = item.tipo_fatura === 'parcela';
+  if (!parcela) {
+    return <div className="grid gap-3 sm:grid-cols-2"><ValueBox label="Valor da fatura" value={moeda(item.valores.valor_com_desconto)} tone="slate" /><ValueBox label={item.status === 'paga' ? 'Valor pago' : 'Valor atualizado'} value={item.status === 'paga' ? moeda(item.valores.valor_pago ?? 0) : moeda(item.valores.valor_hoje ?? 0)} tone="cyan" /></div>;
+  }
+  return <div className="grid gap-3 sm:grid-cols-3"><ValueBox label="Valor com desconto" value={moeda(item.valores.valor_com_desconto)} tone="slate" /><ValueBox label="Sem desconto condicional" value={moeda(item.valores.valor_sem_desconto_condicional)} tone="amber" /><ValueBox label={item.status === 'paga' ? 'Valor pago' : 'Valor atualizado'} value={item.status === 'paga' ? moeda(item.valores.valor_pago ?? 0) : moeda(item.valores.valor_hoje ?? 0)} tone="cyan" /></div>;
+}
+
 function FaturaDetailDialogV2({ item, dataCorte, unidadeNome, onClose }: { item: FaturaFinanceiraItem | null; dataCorte: string; unidadeNome: string | null; onClose: () => void }) {
   return (
     <Dialog open={Boolean(item)} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -816,17 +862,16 @@ function FaturaDetailDialogV2({ item, dataCorte, unidadeNome, onClose }: { item:
             <DialogDescription>{unidadeNome ?? item.unidade_codigo ?? 'Unidade'} • {item.aluno.curso_nome ?? 'Curso não informado'}</DialogDescription>
           </DialogHeader>
           <div className="space-y-5 p-6">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <ValueBox label="Valor com desconto" value={moeda(item.valores.valor_com_desconto)} tone="slate" />
-              <ValueBox label="Sem desconto condicional" value={moeda(item.valores.valor_sem_desconto_condicional)} tone="amber" />
-              <ValueBox label={item.status === 'paga' ? 'Valor pago' : 'Valor atualizado'} value={item.status === 'paga' ? moeda(item.valores.valor_pago ?? 0) : moeda(item.valores.valor_hoje ?? 0)} tone="cyan" />
-            </div>
+            <div className="flex flex-wrap items-center gap-2"><TipoFaturaBadge tipo={item.tipo_fatura} />{item.tipo_fatura === 'parcela' && <span className="text-xs text-slate-500">Parcela {item.numero_parcela}/{item.total_parcelas_contrato ?? '—'}</span>}</div>
+            <FaturaValoresDetalhe item={item} />
             <div className="grid gap-3 sm:grid-cols-2">
               <DetailGroup title="Fatura" lines={[
                 ['Situação', rotuloStatus(item, dataCorte)],
                 ['Competência', formatarCompetencia(item.competencia)],
                 ['Vencimento', formatarData(item.data_vencimento)],
                 ['Pagamento', formatarData(item.data_pagamento)],
+                ['Tipo da fatura', rotuloTipoFatura(item.tipo_fatura)],
+                ['Parcela contratual', item.tipo_fatura === 'parcela' ? `${item.numero_parcela}/${item.total_parcelas_contrato ?? '—'}` : 'Não se aplica'],
                 ['Descrição', item.descricao ?? '—'],
                 ['Forma de pagamento', `${rotuloFormaPagamento(item)}: ${item.forma_pagamento.nome ?? 'não informada'}`],
               ]} />

@@ -10,6 +10,13 @@ export type FaturasFinanceirasSituacao =
 
 export type FaturasFinanceirasStatusLeitura = 'loading' | 'ok' | 'partial' | 'stale' | 'error';
 
+export type FaturaFinanceiraTipo =
+  | 'parcela'
+  | 'passaporte_taxa_matricula'
+  | 'lojinha_produto'
+  | 'venda_ingressos'
+  | 'avulsa_outro';
+
 export interface FaturaFinanceiraItem {
   canonical_fatura_id: string;
   unidade_id: string;
@@ -20,6 +27,9 @@ export interface FaturaFinanceiraItem {
   emusys_contrato_id: string | null;
   emusys_student_id: string | null;
   descricao: string | null;
+  tipo_fatura: FaturaFinanceiraTipo;
+  numero_parcela: number | null;
+  total_parcelas_contrato: number | null;
   status: 'aberta' | 'paga' | 'cancelada';
   data_vencimento: string;
   data_pagamento: string | null;
@@ -63,6 +73,9 @@ export interface FaturaFinanceiraReconciliacaoItem {
   emusys_contrato_id: string | null;
   emusys_student_id: string | null;
   descricao: string | null;
+  tipo_fatura: FaturaFinanceiraTipo;
+  numero_parcela: number | null;
+  total_parcelas_contrato: number | null;
   status: string;
   data_vencimento: string;
   data_pagamento: string | null;
@@ -158,6 +171,7 @@ export interface FaturasFinanceirasFiltrosLocais {
   busca?: string | null;
   curso?: string | null;
   pagamento?: string | null;
+  tipoFatura?: FaturaFinanceiraTipo | null;
   alunoId?: number | null;
   matriculaId?: string | null;
 }
@@ -272,6 +286,25 @@ const asIntegerOrNull = (value: unknown): number | null => (
   typeof value === 'number' && Number.isInteger(value) ? value : null
 );
 
+const TIPOS_FATURA = new Set<FaturaFinanceiraTipo>([
+  'parcela',
+  'passaporte_taxa_matricula',
+  'lojinha_produto',
+  'venda_ingressos',
+  'avulsa_outro',
+]);
+
+const parseTipoFatura = (value: unknown): FaturaFinanceiraTipo | null => (
+  typeof value === 'string' && TIPOS_FATURA.has(value as FaturaFinanceiraTipo)
+    ? value as FaturaFinanceiraTipo
+    : null
+);
+
+const parsePositiveIntegerOrNull = (value: unknown): number | null => {
+  const parsed = asIntegerOrNull(value);
+  return parsed == null || parsed < 1 ? null : parsed;
+};
+
 const asBoolean = (value: unknown): boolean => value === true;
 
 function parseTotals(value: unknown): FaturasFinanceirasTotals | null {
@@ -298,7 +331,11 @@ function parseItem(value: unknown): FaturaFinanceiraItem | null {
   const competencia = asText(row.competencia);
   const vencimento = asText(row.data_vencimento);
   const faturaId = asText(row.emusys_fatura_id);
-  if (!id || !unidadeId || !competencia || !vencimento || !faturaId || !aluno || !forma || !valores || !cobranca) return null;
+  const tipoFatura = parseTipoFatura(row.tipo_fatura);
+  const numeroParcela = parsePositiveIntegerOrNull(row.numero_parcela);
+  const totalParcelasContrato = parsePositiveIntegerOrNull(row.total_parcelas_contrato);
+  if (!id || !unidadeId || !competencia || !vencimento || !faturaId || !aluno || !forma || !valores || !cobranca || !tipoFatura) return null;
+  if ((tipoFatura === 'parcela' && numeroParcela == null) || (tipoFatura !== 'parcela' && numeroParcela != null)) return null;
   if (status !== 'aberta' && status !== 'paga' && status !== 'cancelada') return null;
   if (!isIsoDate(competencia) || !isIsoDate(vencimento)) return null;
 
@@ -346,6 +383,9 @@ function parseItem(value: unknown): FaturaFinanceiraItem | null {
     emusys_contrato_id: asText(row.emusys_contrato_id),
     emusys_student_id: asText(row.emusys_student_id),
     descricao: asText(row.descricao),
+    tipo_fatura: tipoFatura,
+    numero_parcela: numeroParcela,
+    total_parcelas_contrato: totalParcelasContrato,
     status,
     data_vencimento: vencimento,
     data_pagamento: dataPagamento,
@@ -391,7 +431,11 @@ function parseReconciliationItem(value: unknown): FaturaFinanceiraReconciliacaoI
   const competencia = asText(row.competencia);
   const vencimento = asText(row.data_vencimento);
   const faturaId = asText(row.emusys_fatura_id);
-  if (!id || !unidadeId || !competencia || !vencimento || !faturaId || !aluno || !forma || !valores) return null;
+  const tipoFatura = parseTipoFatura(row.tipo_fatura);
+  const numeroParcela = parsePositiveIntegerOrNull(row.numero_parcela);
+  const totalParcelasContrato = parsePositiveIntegerOrNull(row.total_parcelas_contrato);
+  if (!id || !unidadeId || !competencia || !vencimento || !faturaId || !aluno || !forma || !valores || !tipoFatura) return null;
+  if ((tipoFatura === 'parcela' && numeroParcela == null) || (tipoFatura !== 'parcela' && numeroParcela != null)) return null;
   if (!isIsoDate(competencia) || !isIsoDate(vencimento)) return null;
   const rotulo = asText(forma.rotulo);
   const fonte = asText(forma.fonte);
@@ -431,6 +475,9 @@ function parseReconciliationItem(value: unknown): FaturaFinanceiraReconciliacaoI
     emusys_contrato_id: asText(row.emusys_contrato_id),
     emusys_student_id: asText(row.emusys_student_id),
     descricao: asText(row.descricao),
+    tipo_fatura: tipoFatura,
+    numero_parcela: numeroParcela,
+    total_parcelas_contrato: totalParcelasContrato,
     status: asText(row.status) ?? 'desconhecido',
     data_vencimento: vencimento,
     data_pagamento: dataPagamento,
@@ -645,12 +692,14 @@ export function filtrarFaturasFinanceirasLocais(
   const busca = normalizarTexto(filtros.busca);
   const curso = normalizarTexto(filtros.curso);
   const pagamento = normalizarTexto(filtros.pagamento);
+  const tipoFatura = filtros.tipoFatura ?? null;
   const matricula = filtros.matriculaId?.trim() ?? '';
   return items.filter((item) => {
     if (filtros.alunoId != null && item.aluno.id !== filtros.alunoId) return false;
     if (matricula && item.emusys_matricula_id !== matricula) return false;
     if (curso && normalizarTexto(item.aluno.curso_nome) !== curso) return false;
     if (pagamento && normalizarTexto(item.forma_pagamento.nome) !== pagamento) return false;
+    if (tipoFatura && item.tipo_fatura !== tipoFatura) return false;
     if (!busca) return true;
     return normalizarTexto([
       item.aluno.nome,

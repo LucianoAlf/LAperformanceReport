@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   carregarFaturasAlunosFinanceiras,
+  filtrarFaturasFinanceirasLocais,
   normalizarFaturasAlunosFinanceiras,
 } from '../src/lib/faturasAlunosFinanceiras.ts';
 
@@ -18,6 +19,9 @@ const item = (overrides = {}) => ({
   emusys_contrato_id: '3001',
   emusys_student_id: '4001',
   descricao: 'Parcela 08/2026',
+  tipo_fatura: 'parcela',
+  numero_parcela: 8,
+  total_parcelas_contrato: 12,
   status: 'aberta',
   data_vencimento: '2026-08-05',
   data_pagamento: null,
@@ -188,4 +192,25 @@ test('adaptador aceita forma prevista pela matricula Emusys e separa itens fora 
     registroNaoAluno: 4,
     total: 7,
   });
+});
+
+test('filtro de tipo separa passaporte de parcela sem misturar forma de pagamento', () => {
+  const passaporte = item({
+    emusys_fatura_id: '1002',
+    descricao: 'Passaporte promocional do curso de Canto',
+    tipo_fatura: 'passaporte_taxa_matricula',
+    numero_parcela: null,
+    forma_pagamento: { rotulo: 'Pago via', nome: 'Cartão de Crédito Mastercard', fonte: 'transacao' },
+    status: 'paga',
+    data_pagamento: '2026-07-30',
+    valores: { ...item().valores, valor_hoje: null, valor_pago: 400 },
+  });
+
+  const result = filtrarFaturasFinanceirasLocais([item(), passaporte], {
+    tipoFatura: 'passaporte_taxa_matricula',
+    pagamento: 'Cartão de Crédito Mastercard',
+  });
+
+  assert.deepEqual(result.map((row) => row.emusys_fatura_id), ['1002']);
+  assert.equal(result[0].valores.valor_pago, 400);
 });
