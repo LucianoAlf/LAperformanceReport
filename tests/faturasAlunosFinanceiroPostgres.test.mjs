@@ -16,6 +16,15 @@ function migrationSource() {
   return fs.readFileSync(path.join(migrationsDir, migrationName), 'utf8');
 }
 
+function canceladasValorPatchSource() {
+  const migrationName = fs.readdirSync(migrationsDir)
+    .filter((name) => /_financeiro_faturas_canceladas_valor_explicito\.sql$/u.test(name))
+    .sort()
+    .at(-1);
+  assert.ok(migrationName, 'migration do valor explicito de canceladas ausente');
+  return fs.readFileSync(path.join(migrationsDir, migrationName), 'utf8');
+}
+
 function carteiraAtivaMigrationSource() {
   const migrationName = fs.readdirSync(migrationsDir)
     .filter((name) => /_inadimplencia_canonica_carteira_ativa_d2_v1\.sql$/u.test(name))
@@ -369,6 +378,7 @@ test('formula financeira preserva desconto fixo e perde somente o condicional no
 
 test('leitura global separa historico financeiro, D+2 e reconciliacao sem totalizar source_missing', { timeout: 90_000 }, async (t) => {
   const source = migrationSource();
+  const canceladasPatch = canceladasValorPatchSource();
   const carteiraAtivaSource = carteiraAtivaMigrationSource();
   const carteiraAtivaV4Source = carteiraAtivaV4MigrationSource();
   await withPostgres(t, async (container) => {
@@ -381,6 +391,8 @@ test('leitura global separa historico financeiro, D+2 e reconciliacao sem totali
     assert.equal(carteiraAtivaAplicada.status, 0, carteiraAtivaAplicada.stderr || carteiraAtivaAplicada.stdout);
     const carteiraAtivaV4Aplicada = psql(container, carteiraAtivaV4Source);
     assert.equal(carteiraAtivaV4Aplicada.status, 0, carteiraAtivaV4Aplicada.stderr || carteiraAtivaV4Aplicada.stdout);
+    const canceladasPatchAplicado = psql(container, canceladasPatch);
+    assert.equal(canceladasPatchAplicado.status, 0, canceladasPatchAplicado.stderr || canceladasPatchAplicado.stdout);
 
     const carteiraCanonica = psql(container, `
       select public.get_inadimplencia_canonica(
@@ -422,6 +434,7 @@ test('leitura global separa historico financeiro, D+2 e reconciliacao sem totali
     assert.equal(leitura.status, 'partial');
     assert.deepEqual(leitura.totais.em_atraso_d0, { quantidade: 1, valor: 459.9 });
     assert.deepEqual(leitura.totais.cobranca_d2, { quantidade: 1, valor: 459.9 });
+    assert.deepEqual(leitura.totais.canceladas, { quantidade: 0, valor: 0 });
     assert.equal(leitura.totais.todas.quantidade, 3);
     assert.equal(leitura.reconciliation.source_missing, 1);
     assert.equal(leitura.reconciliation.identidade_invalida, 1);
