@@ -14,6 +14,7 @@ interface CompetenciaFilterProps {
   onSemestreChange: (semestre: 1 | 2) => void;
   onDataInicioChange?: (data: Date | undefined) => void;
   onDataFimChange?: (data: Date | undefined) => void;
+  tiposPermitidos?: TipoCompetencia[];
   className?: string;
 }
 
@@ -65,14 +66,20 @@ export function CompetenciaFilter({
   onSemestreChange,
   onDataInicioChange,
   onDataFimChange,
+  tiposPermitidos,
   className,
 }: CompetenciaFilterProps) {
+  const tiposVisiveis = tiposPermitidos?.length
+    ? TIPOS.filter((tipo) => tiposPermitidos.includes(tipo.id))
+    : TIPOS;
+
   return (
     <div className={cn("flex items-center gap-3", className)}>
       {/* Seletor de Tipo */}
-      <div className="bg-slate-800/50 p-1 rounded-lg inline-flex gap-1">
-        {TIPOS.map((tipo) => (
+      {tiposVisiveis.length > 1 && <div className="bg-slate-800/50 p-1 rounded-lg inline-flex gap-1">
+        {tiposVisiveis.map((tipo) => (
           <button
+            type="button"
             key={tipo.id}
             onClick={() => onTipoChange(tipo.id)}
             className={cn(
@@ -85,7 +92,7 @@ export function CompetenciaFilter({
             {tipo.shortLabel}
           </button>
         ))}
-      </div>
+      </div>}
 
       {/* Seletores de Período Personalizado */}
       {filtro.tipo === 'personalizado' && (

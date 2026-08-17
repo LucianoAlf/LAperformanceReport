@@ -71,7 +71,7 @@ export function AppLayout() {
             periodoLabel={periodoLabelOverride || competencia.range.label}
           />
           <main className="p-6">
-            <Outlet context={{ filtroAtivo, unidadeSelecionada, competencia, setPeriodoLabel }} />
+            <Outlet context={{ filtroAtivo, unidadeSelecionada, setUnidadeSelecionada, competencia, setPeriodoLabel }} />
             <BottomSentinel />
           </main>
         </div>
