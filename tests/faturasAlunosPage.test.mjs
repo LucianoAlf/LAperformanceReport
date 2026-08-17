@@ -23,7 +23,6 @@ test('pagina publicada consome o adaptador financeiro e nunca acessa espelhos', 
   const page = read('src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx');
 
   assert.match(page, /carregarFaturasAlunosFinanceiras/);
-  assert.match(page, /collectionAllowed/);
   assert.match(page, /get_faturas_alunos_financeiro_v1|carregarFaturasAlunosFinanceiras/);
   assert.doesNotMatch(page, /sync_run_items|emusys_faturas|service_role|inadimplente_emusys/);
   assert.doesNotMatch(page, /0\.02|0\.01\s*\*/);
@@ -32,12 +31,12 @@ test('pagina publicada consome o adaptador financeiro e nunca acessa espelhos', 
 test('estados partial e stale separam consulta, reconciliacao e cobranca', () => {
   const page = read('src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx');
 
-  assert.match(page, /Leitura parcial/);
+  assert.match(page, /Conciliação pendente/);
   assert.match(page, /Reconcilia/);
   assert.match(page, /Snapshot expirado/);
-  assert.match(page, /histórico em consulta/i);
-  assert.match(page, /Cobrar agora D\+2/);
-  assert.match(page, /!state\.collectionAllowed/);
+  assert.match(page, /atualização necessária/i);
+  assert.doesNotMatch(page, /Cobrar agora D\+2/);
+  assert.doesNotMatch(page, /!state\.collectionAllowed/);
   assert.doesNotMatch(page, /source_missing[^\n]{0,80}(?:paga|pago)/i);
 });
 

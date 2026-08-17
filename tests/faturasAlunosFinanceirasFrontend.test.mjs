@@ -28,10 +28,9 @@ test('pagina usa selects do design system e apresenta o ciclo inteiro da fatura'
     'Todas as faturas',
     'Pagas',
     'Em aberto',
-    'Em atraso D+0',
+    'Em atraso',
     'A vencer',
     'Canceladas',
-    'Cobrar agora D+2',
     'Reconcilia',
     'Valor com desconto',
     'Sem desconto condicional',
@@ -42,6 +41,8 @@ test('pagina usa selects do design system e apresenta o ciclo inteiro da fatura'
   ]) {
     assert.match(page, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
   }
+  assert.doesNotMatch(page, /Cobrar agora D\+2/);
+  assert.doesNotMatch(page, /Em atraso D\+0/);
   assert.doesNotMatch(page, /Valor hoje/i);
 });
 
@@ -56,13 +57,14 @@ test('cartoes de resumo mapeiam quantidade e valor retornados pela leitura canon
   }
 });
 
-test('reconciliacao financeira fica na pagina dedicada e D+2 respeita o gate canonico', () => {
+test('reconciliacao financeira fica na pagina dedicada e D+2 permanece fora desta tela', () => {
   const page = read('src/components/App/FaturasAlunos/FaturasAlunosFinanceirasPage.tsx');
 
   assert.match(page, /Reconcilia[cç][aã]o financeira/i);
-  assert.match(page, /collectionAllowed/);
   assert.match(page, /sourceMissing/);
   assert.match(page, /identidadeInvalida/);
+  assert.match(page, /source_missing|nao observada na origem/i);
+  assert.doesNotMatch(page, /Cobrar agora D\+2/);
   assert.doesNotMatch(page, /\/app\/alunos\?tab=conciliacao/);
 });
 
@@ -89,7 +91,6 @@ test('cards sao os filtros principais e acoes operacionais ficam separadas', () 
 
   assert.doesNotMatch(page, /<PageTabs/);
   assert.match(page, /aria-pressed=\{active\}/);
-  assert.match(page, /Cobrar agora D\+2/);
   assert.match(page, /Reconciliação financeira/);
   assert.match(page, /Canceladas/);
 });

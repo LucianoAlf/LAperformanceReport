@@ -67,3 +67,18 @@ test('carteira D+2 continua consumindo a mesma formula financeira compartilhada'
   assert.match(source, /calcular_valores_fatura_financeiro_v1\s*\(/i);
   assert.match(source, /\{totals,total_atualizado\}/i);
 });
+
+test('reconciliacao versionada distingue fatura confirmada de identidade local pendente', () => {
+  const migrationName = fs.readdirSync(migrationsDir)
+    .filter((name) => /_financeiro_faturas_reconciliacao_totais_v1\.sql$/u.test(name))
+    .sort()
+    .at(-1);
+  assert.ok(migrationName, 'migration de reconciliacao financeira ausente');
+  const source = fs.readFileSync(path.join(migrationsDir, migrationName), 'utf8');
+
+  assert.match(source, /not c\.source_missing[\s\S]{0,180}status_normalizado in \('aberta', 'paga', 'cancelada'\)/i);
+  assert.match(source, /emusys_student_id/);
+  assert.match(source, /valor_hoje/);
+  assert.match(source, /identidade_invalida/);
+  assert.match(source, /cobranca_d2[\s\S]{0,260}identidade_invalida/i);
+});

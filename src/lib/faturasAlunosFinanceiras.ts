@@ -59,11 +59,24 @@ export interface FaturaFinanceiraReconciliacaoItem {
   competencia: string;
   emusys_fatura_id: string;
   emusys_matricula_id: string | null;
+  emusys_contrato_id: string | null;
+  emusys_student_id: string | null;
   descricao: string | null;
   status: string;
   data_vencimento: string;
+  data_pagamento: string | null;
   aluno: FaturaFinanceiraItem['aluno'];
   forma_pagamento: FaturaFinanceiraItem['forma_pagamento'];
+  valores: {
+    valor_original: number;
+    valor_com_desconto: number;
+    valor_sem_desconto_condicional: number;
+    multa: number;
+    mora: number;
+    valor_hoje: number | null;
+    valor_pago: number | null;
+    juros_e_multa_snapshot: number;
+  };
   motivos: string[];
   validation_issues: unknown[];
   source_missing_reason: string | null;
@@ -356,12 +369,13 @@ function parseReconciliationItem(value: unknown): FaturaFinanceiraReconciliacaoI
   if (!row) return null;
   const aluno = asRecord(row.aluno);
   const forma = asRecord(row.forma_pagamento);
+  const valores = asRecord(row.valores);
   const id = asText(row.canonical_fatura_id);
   const unidadeId = asText(row.unidade_id);
   const competencia = asText(row.competencia);
   const vencimento = asText(row.data_vencimento);
   const faturaId = asText(row.emusys_fatura_id);
-  if (!id || !unidadeId || !competencia || !vencimento || !faturaId || !aluno || !forma) return null;
+  if (!id || !unidadeId || !competencia || !vencimento || !faturaId || !aluno || !forma || !valores) return null;
   if (!isIsoDate(competencia) || !isIsoDate(vencimento)) return null;
   const rotulo = asText(forma.rotulo);
   const fonte = asText(forma.fonte);
@@ -374,6 +388,19 @@ function parseReconciliationItem(value: unknown): FaturaFinanceiraReconciliacaoI
     || (fonte === 'matricula' && (rotulo !== 'Forma prevista' || !asText(forma.nome)))
     || (fonte === 'ausente' && rotulo !== 'Forma nao informada')
   ) return null;
+  const valorOriginal = asFiniteNumberOrNull(valores.valor_original);
+  const valorComDesconto = asFiniteNumberOrNull(valores.valor_com_desconto);
+  const valorSemDescontoCondicional = asFiniteNumberOrNull(valores.valor_sem_desconto_condicional);
+  const multa = asFiniteNumberOrNull(valores.multa);
+  const mora = asFiniteNumberOrNull(valores.mora);
+  const jurosEMultaSnapshot = asFiniteNumberOrNull(valores.juros_e_multa_snapshot);
+  const valorHoje = valores.valor_hoje == null ? null : asFiniteNumberOrNull(valores.valor_hoje);
+  const valorPago = valores.valor_pago == null ? null : asFiniteNumberOrNull(valores.valor_pago);
+  if (![valorOriginal, valorComDesconto, valorSemDescontoCondicional, multa, mora, jurosEMultaSnapshot].every(isNonNegative)) return null;
+  if (valorHoje !== null && !isNonNegative(valorHoje)) return null;
+  if (valorPago !== null && !isNonNegative(valorPago)) return null;
+  const dataPagamento = asText(row.data_pagamento);
+  if (dataPagamento && !isIsoDate(dataPagamento)) return null;
   const syncCompletedAt = asText(row.sync_completed_at);
   if (syncCompletedAt && !isIsoTimestamp(syncCompletedAt)) return null;
   return {
@@ -383,9 +410,12 @@ function parseReconciliationItem(value: unknown): FaturaFinanceiraReconciliacaoI
     competencia,
     emusys_fatura_id: faturaId,
     emusys_matricula_id: asText(row.emusys_matricula_id),
+    emusys_contrato_id: asText(row.emusys_contrato_id),
+    emusys_student_id: asText(row.emusys_student_id),
     descricao: asText(row.descricao),
     status: asText(row.status) ?? 'desconhecido',
     data_vencimento: vencimento,
+    data_pagamento: dataPagamento,
     aluno: {
       id: asIntegerOrNull(aluno.id),
       nome: asText(aluno.nome) ?? 'Aluno nao vinculado',
@@ -396,6 +426,16 @@ function parseReconciliationItem(value: unknown): FaturaFinanceiraReconciliacaoI
       rotulo,
       nome: asText(forma.nome),
       fonte,
+    },
+    valores: {
+      valor_original: valorOriginal,
+      valor_com_desconto: valorComDesconto,
+      valor_sem_desconto_condicional: valorSemDescontoCondicional,
+      multa,
+      mora,
+      valor_hoje: valorHoje,
+      valor_pago: valorPago,
+      juros_e_multa_snapshot: jurosEMultaSnapshot,
     },
     motivos: Array.isArray(row.motivos)
       ? row.motivos.flatMap((motivo) => asText(motivo) ? [asText(motivo) as string] : [])

@@ -25,6 +25,15 @@ function canceladasValorPatchSource() {
   return fs.readFileSync(path.join(migrationsDir, migrationName), 'utf8');
 }
 
+function reconciliacaoTotaisPatchSource() {
+  const migrationName = fs.readdirSync(migrationsDir)
+    .filter((name) => /_financeiro_faturas_reconciliacao_totais_v1\.sql$/u.test(name))
+    .sort()
+    .at(-1);
+  assert.ok(migrationName, 'migration de reconciliacao financeira ausente');
+  return fs.readFileSync(path.join(migrationsDir, migrationName), 'utf8');
+}
+
 function carteiraAtivaMigrationSource() {
   const migrationName = fs.readdirSync(migrationsDir)
     .filter((name) => /_inadimplencia_canonica_carteira_ativa_d2_v1\.sql$/u.test(name))
@@ -387,6 +396,8 @@ test('leitura global separa historico financeiro, D+2 e reconciliacao sem totali
 
     const applied = psql(container, source);
     assert.equal(applied.status, 0, applied.stderr || applied.stdout);
+    const reconciliacaoTotaisPatch = psql(container, reconciliacaoTotaisPatchSource());
+    assert.equal(reconciliacaoTotaisPatch.status, 0, reconciliacaoTotaisPatch.stderr || reconciliacaoTotaisPatch.stdout);
     const carteiraAtivaAplicada = psql(container, carteiraAtivaSource);
     assert.equal(carteiraAtivaAplicada.status, 0, carteiraAtivaAplicada.stderr || carteiraAtivaAplicada.stdout);
     const carteiraAtivaV4Aplicada = psql(container, carteiraAtivaV4Source);
@@ -432,10 +443,10 @@ test('leitura global separa historico financeiro, D+2 e reconciliacao sem totali
 
     assert.equal(leitura.fonte, 'sync_run_items');
     assert.equal(leitura.status, 'partial');
-    assert.deepEqual(leitura.totais.em_atraso_d0, { quantidade: 1, valor: 459.9 });
+    assert.deepEqual(leitura.totais.em_atraso_d0, { quantidade: 2, valor: 879.06 });
     assert.deepEqual(leitura.totais.cobranca_d2, { quantidade: 1, valor: 459.9 });
     assert.deepEqual(leitura.totais.canceladas, { quantidade: 0, valor: 0 });
-    assert.equal(leitura.totais.todas.quantidade, 3);
+    assert.equal(leitura.totais.todas.quantidade, 4);
     assert.equal(leitura.reconciliation.source_missing, 1);
     assert.equal(leitura.reconciliation.identidade_invalida, 1);
 
@@ -458,6 +469,24 @@ test('leitura global separa historico financeiro, D+2 e reconciliacao sem totali
     assert.equal(paga.forma_pagamento.nome, 'PIX automatico');
     assert.equal(paga.valores.valor_hoje, null);
     assert.equal(paga.valores.valor_pago, 480);
+
+    const pendente = leitura.items.find((item) => item.emusys_fatura_id === '1005');
+    assert.equal(pendente.status, 'aberta');
+    assert.equal(pendente.cobranca.d2_elegivel, false);
+    const pendencia = leitura.reconciliation.items.find((item) => item.emusys_fatura_id === '1005');
+    assert.equal(pendencia.aluno.nome, 'Aluno nao vinculado');
+    assert.equal(pendencia.emusys_matricula_id, '9999');
+    assert.equal(pendencia.emusys_student_id, '999');
+    assert.deepEqual(pendencia.valores, {
+      valor_original: 410,
+      valor_com_desconto: 410,
+      valor_sem_desconto_condicional: 410,
+      multa: 8.2,
+      mora: 0.96,
+      valor_hoje: 419.16,
+      valor_pago: null,
+      juros_e_multa_snapshot: 0,
+    });
 
     const d2 = psql(container, `
       select public.get_faturas_alunos_financeiro_v1(

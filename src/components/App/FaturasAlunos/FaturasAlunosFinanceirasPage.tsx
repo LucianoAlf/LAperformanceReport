@@ -255,15 +255,15 @@ function LeituraNotice({ state }: {
     : state.status === 'partial'
       ? {
         Icon: FileWarning,
-        className: 'border-amber-500/30 bg-amber-500/[0.08] text-amber-100',
-        title: 'Leitura parcial — faturas confirmadas disponíveis',
-        description: 'Pendências estão isoladas em Reconciliação financeira e não entram nos totais nem na cobrança.',
+        className: 'border-amber-500/20 bg-slate-900/65 text-amber-100',
+        title: 'Conciliação pendente — leitura financeira disponível',
+        description: 'Confira os itens em Reconciliação financeira. Faturas confirmadas na origem entram nos totais; as não observadas ficam fora e não devem ser tratadas como pagas.',
       }
       : {
         Icon: Clock3,
         className: 'border-rose-500/35 bg-rose-500/[0.08] text-rose-100',
-        title: 'Snapshot expirado — histórico em consulta',
-        description: 'Você pode revisar as faturas; “Cobrar agora D+2” permanece bloqueado até existir snapshot fresco.',
+        title: 'Snapshot expirado — atualização necessária',
+        description: 'Você pode revisar o histórico, mas confirme a atualização antes de tomar decisão operacional sobre os valores.',
       };
   const Icon = info.Icon;
   return (
@@ -502,34 +502,25 @@ export function FaturasAlunosFinanceirasPage() {
             <MetricCard label="Todas as faturas" count={state.totals.todas.quantidade} value={state.totals.todas.valor} tone="cyan" active={situacao === 'todas'} onClick={() => selecionarSituacao('todas')} />
             <MetricCard label="Pagas" count={state.totals.pagas.quantidade} value={state.totals.pagas.valor} tone="emerald" active={situacao === 'pagas'} onClick={() => selecionarSituacao('pagas')} />
             <MetricCard label="Em aberto" count={state.totals.em_aberto.quantidade} value={state.totals.em_aberto.valor} tone="amber" active={situacao === 'em_aberto'} onClick={() => selecionarSituacao('em_aberto')} />
-            <MetricCard label="Em atraso D+0" count={state.totals.em_atraso_d0.quantidade} value={state.totals.em_atraso_d0.valor} tone="rose" active={situacao === 'em_atraso_d0'} onClick={() => selecionarSituacao('em_atraso_d0')} />
+            <MetricCard label="Em atraso" count={state.totals.em_atraso_d0.quantidade} value={state.totals.em_atraso_d0.valor} tone="rose" active={situacao === 'em_atraso_d0'} onClick={() => selecionarSituacao('em_atraso_d0')} />
             <MetricCard label="A vencer" count={state.totals.a_vencer.quantidade} value={state.totals.a_vencer.valor} tone="slate" active={situacao === 'a_vencer'} onClick={() => selecionarSituacao('a_vencer')} />
           </section>
+          <p className="-mt-2 text-xs text-slate-500">Leitura dos valores: faturas pagas usam o valor efetivamente pago; faturas em aberto usam o valor atualizado hoje, sem desconto condicional e com multa/mora do contrato. Por isso o total pode diferir do resumo original do Emusys.</p>
 
           <section aria-label="Visões operacionais de faturas" className="flex flex-wrap gap-2.5 rounded-2xl border border-slate-800 bg-slate-900/45 p-3">
             <OperationalViewButton
-              label="Cobrar agora D+2"
-              count={state.totals.cobranca_d2.quantidade}
-              description="Carteira confirmada para abordagem"
-              Icon={Banknote}
-              active={situacao === 'cobranca_d2'}
-              disabled={!state.collectionAllowed}
-              tone="amber"
-              onClick={() => selecionarSituacao('cobranca_d2')}
-            />
-            <OperationalViewButton
               label="Reconciliação financeira"
               count={state.reconciliation.total}
-              description="Pendências isoladas dos totais"
+              description="Conferir vínculos e metadados"
               Icon={FileWarning}
               active={situacao === 'reconciliacao'}
-              tone="rose"
+              tone="amber"
               onClick={() => selecionarSituacao('reconciliacao')}
             />
             <OperationalViewButton
-              label="Canceladas"
+              label="Canceladas — histórico"
               count={state.totals.canceladas.quantidade}
-              description="Histórico da competência"
+              description="Fora dos totais desta competência"
               Icon={ReceiptText}
               active={situacao === 'canceladas'}
               tone="slate"
@@ -538,7 +529,7 @@ export function FaturasAlunosFinanceirasPage() {
           </section>
 
           {mostrarReconciliacao ? (
-            <ReconciliationPanel state={state} unidadeNome={unidadesPorId} />
+            <ReconciliationPanelV2 state={state} unidadeNome={unidadesPorId} />
           ) : (
             <section className="overflow-hidden rounded-2xl border border-slate-700/75 bg-slate-900/55 shadow-xl shadow-slate-950/20">
               <div className="border-b border-slate-800 bg-slate-900/80 p-4">
@@ -572,7 +563,7 @@ export function FaturasAlunosFinanceirasPage() {
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
                   <span>{itemsFiltrados.length} faturas nesta visão</span>
-                  <span>{state.collectionAllowed ? 'D+2 liberado para carteira confirmada' : 'D+2 aguardando leitura canônica fresca'}</span>
+                  <span>Valores e status vêm do snapshot da competência selecionada</span>
                 </div>
               </div>
               <InvoicesTable
@@ -586,7 +577,7 @@ export function FaturasAlunosFinanceirasPage() {
         </>
       )}
 
-      <FaturaDetailDialog item={faturaSelecionada} dataCorte={dataCorte} unidadeNome={faturaSelecionada ? unidadesPorId.get(faturaSelecionada.unidade_id) ?? null : null} onClose={() => setFaturaSelecionada(null)} />
+      <FaturaDetailDialogV2 item={faturaSelecionada} dataCorte={dataCorte} unidadeNome={faturaSelecionada ? unidadesPorId.get(faturaSelecionada.unidade_id) ?? null : null} onClose={() => setFaturaSelecionada(null)} />
     </div>
   );
 }
@@ -638,6 +629,47 @@ function InvoicesTable({ items, dataCorte, unidadeNome, onDetail }: {
   );
 }
 
+function ReconciliationPanelV2({ state, unidadeNome }: { state: FaturasFinanceirasState; unidadeNome: ReadonlyMap<string, string> }) {
+  const cards = [
+    ['Faturas não observadas', state.reconciliation.sourceMissing, 'Não assumir pagamento; aguardar novo snapshot'],
+    ['Vínculo local pendente', state.reconciliation.identidadeInvalida, 'Pode entrar nos totais, nunca na cobrança'],
+    ['Dados da origem', state.reconciliation.validacoesOrigem, 'IDs opcionais inválidos ou incompletos'],
+    ['Forma de pagamento', state.reconciliation.formaPagamentoAusente, 'Metadado ausente; conferir cadastro'],
+    ['Contato local', state.reconciliation.contatoPendente, 'Contato único ainda não resolvido'],
+  ];
+  return (
+    <section className="overflow-hidden rounded-2xl border border-amber-500/25 bg-slate-900/55 shadow-xl shadow-slate-950/20">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-amber-500/20 bg-amber-500/[0.045] px-5 py-4">
+        <div>
+          <p className="font-semibold text-amber-100">Conciliação financeira</p>
+          <p className="mt-1 max-w-3xl text-sm text-slate-300">{state.reconciliation.total} faturas precisam de conferência. Esta lista não é uma fila de cobrança: use a matrícula e os IDs Emusys, nunca o nome isolado.</p>
+        </div>
+        <span className="rounded-full border border-amber-500/25 bg-slate-950/35 px-3 py-1 text-sm font-semibold text-amber-100">{state.reconciliation.total} pendências</span>
+      </div>
+      <div className="grid gap-px bg-slate-800 sm:grid-cols-2 xl:grid-cols-5">{cards.map(([label, count, description]) => <div key={String(label)} className="bg-slate-900/90 p-4"><p className="text-xs uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold text-slate-100">{count}</p><p className="mt-1 text-xs text-slate-500">{description}</p></div>)}</div>
+      <div className="border-b border-slate-800 bg-slate-950/25 px-5 py-3 text-xs text-slate-400"><span className="font-medium text-slate-200">Regra de leitura:</span> fatura confirmada na origem permanece nos totais financeiros, mas fica fora da cobrança enquanto o vínculo local não for resolvido. <span className="font-medium text-amber-200">Fatura não observada na origem não é prova de pagamento.</span></div>
+      {state.reconciliation.items.length === 0 ? <div className="p-8 text-center text-sm text-slate-500">Nenhuma pendência no recorte atual.</div> : <div className="divide-y divide-slate-800">{state.reconciliation.items.map((item) => {
+        const semVinculo = item.aluno.id == null;
+        const descricaoOrigem = item.descricao?.trim() || null;
+        const isRateio = descricaoOrigem?.toLocaleLowerCase('pt-BR').includes('rateio entre unidades') ?? false;
+        const origemAusente = item.motivos.includes('source_missing');
+        const valorSecundario = item.status === 'paga' ? item.valores.valor_pago : item.valores.valor_hoje;
+        return <div key={`${item.unidade_id}|${item.canonical_fatura_id}`} className="flex flex-wrap items-start justify-between gap-5 px-5 py-4">
+          <div className="min-w-[260px] flex-1">
+            <div className="flex flex-wrap items-center gap-2"><p className="font-medium text-slate-100">{semVinculo ? (isRateio ? 'Lançamento interno — rateio entre unidades' : 'Registro sem vínculo local') : item.aluno.nome}</p><span className={cn('rounded-full border px-2 py-0.5 text-[11px] font-medium', item.status === 'paga' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200' : item.status === 'aberta' ? 'border-rose-500/25 bg-rose-500/10 text-rose-200' : 'border-slate-600 bg-slate-700/35 text-slate-300')}>{item.status === 'paga' ? 'Paga' : item.status === 'aberta' ? 'Em aberto' : item.status === 'cancelada' ? 'Cancelada' : 'Status não reconhecido'}</span></div>
+            <p className="mt-1 text-xs text-slate-500">{unidadeNome.get(item.unidade_id) ?? item.unidade_codigo ?? 'Unidade'} • fatura Emusys {item.emusys_fatura_id} • venc. {formatarData(item.data_vencimento)}{item.data_pagamento ? ` • pago em ${formatarData(item.data_pagamento)}` : ''}</p>
+            <p className="mt-1 text-[11px] text-slate-500">Matrícula Emusys: <span className="font-mono text-slate-300">{item.emusys_matricula_id ?? 'não informada'}</span> • aluno: <span className="font-mono text-slate-300">{item.emusys_student_id ?? 'não informado'}</span>{item.emusys_contrato_id ? <> • contrato: <span className="font-mono text-slate-300">{item.emusys_contrato_id}</span></> : null}</p>
+            <p className="mt-1 text-[11px] text-slate-400"><span className="text-slate-500">Referência da origem:</span> {descricaoOrigem ?? 'sem descrição informada pelo Emusys'}</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">{item.motivos.map((motivo) => <span key={motivo} className="rounded-md border border-amber-500/20 bg-amber-500/[0.07] px-2 py-1 text-[11px] text-amber-200">{motivoReconciliacao(motivo)}</span>)}</div>
+            <p className="mt-2 text-[11px] text-slate-500">{origemAusente ? 'A origem não confirmou esta fatura neste snapshot.' : semVinculo ? 'O Emusys trouxe IDs e descrição, mas não um nome; falta vínculo local exato.' : 'Origem confirmada; falta completar o cadastro financeiro.'}</p>
+          </div>
+          <div className="min-w-[150px] text-right text-xs text-slate-400"><p>Original: <span className="font-semibold tabular-nums text-slate-200">{moeda(item.valores.valor_original)}</span></p><p className="mt-1">{item.status === 'paga' ? 'Pago' : 'Atualizado'}: <span className="font-semibold tabular-nums text-cyan-200">{valorSecundario == null ? '—' : moeda(valorSecundario)}</span></p><p className="mt-2 text-[11px] text-slate-600">Sync: {formatarDataHora(item.sync_completed_at)}</p></div>
+        </div>;
+      })}</div>}
+    </section>
+  );
+}
+
 function ReconciliationPanel({ state, unidadeNome }: { state: FaturasFinanceirasState; unidadeNome: ReadonlyMap<string, string> }) {
   const cards = [
     ['Faturas na origem', state.reconciliation.sourceMissing, 'Aguardando observação em novo snapshot'],
@@ -652,6 +684,57 @@ function ReconciliationPanel({ state, unidadeNome }: { state: FaturasFinanceiras
       <div className="grid gap-px bg-slate-800 sm:grid-cols-2 xl:grid-cols-5">{cards.map(([label, count, description]) => <div key={String(label)} className="bg-slate-900/90 p-4"><p className="text-xs uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-2xl font-semibold text-slate-100">{count}</p><p className="mt-1 text-xs text-slate-500">{description}</p></div>)}</div>
       {state.reconciliation.items.length === 0 ? <div className="p-8 text-center text-sm text-slate-500">Nenhuma pendência no recorte atual.</div> : <div className="divide-y divide-slate-800">{state.reconciliation.items.map((item) => <div key={`${item.unidade_id}|${item.canonical_fatura_id}`} className="flex flex-wrap items-center justify-between gap-4 px-5 py-4"><div><p className="font-medium text-slate-100">{item.aluno.nome}</p><p className="mt-0.5 text-xs text-slate-500">{unidadeNome.get(item.unidade_id) ?? item.unidade_codigo ?? 'Unidade'} • fatura {item.emusys_fatura_id} • venc. {formatarData(item.data_vencimento)}</p><div className="mt-2 flex flex-wrap gap-1.5">{item.motivos.map((motivo) => <span key={motivo} className="rounded-md border border-rose-500/20 bg-rose-500/[0.08] px-2 py-1 text-[11px] text-rose-200">{motivoReconciliacao(motivo)}</span>)}</div></div><div className="text-right text-xs text-slate-500"><p>{item.forma_pagamento.nome ?? 'Forma não informada'}</p><p className="mt-1">Sync: {formatarDataHora(item.sync_completed_at)}</p></div></div>)}</div>}
     </section>
+  );
+}
+
+function FaturaDetailDialogV2({ item, dataCorte, unidadeNome, onClose }: { item: FaturaFinanceiraItem | null; dataCorte: string; unidadeNome: string | null; onClose: () => void }) {
+  return (
+    <Dialog open={Boolean(item)} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto p-0">
+        {item && <>
+          <DialogHeader className="border-b border-slate-800 bg-[radial-gradient(circle_at_top_right,rgba(6,182,212,0.16),transparent_48%)] p-6 pr-12">
+            <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/15 text-cyan-200"><ReceiptText className="h-5 w-5" /></div>
+            <DialogTitle>{item.aluno.nome}</DialogTitle>
+            <DialogDescription>{unidadeNome ?? item.unidade_codigo ?? 'Unidade'} • {item.aluno.curso_nome ?? 'Curso não informado'}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5 p-6">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <ValueBox label="Valor com desconto" value={moeda(item.valores.valor_com_desconto)} tone="slate" />
+              <ValueBox label="Sem desconto condicional" value={moeda(item.valores.valor_sem_desconto_condicional)} tone="amber" />
+              <ValueBox label={item.status === 'paga' ? 'Valor pago' : 'Valor atualizado'} value={item.status === 'paga' ? moeda(item.valores.valor_pago ?? 0) : moeda(item.valores.valor_hoje ?? 0)} tone="cyan" />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <DetailGroup title="Fatura" lines={[
+                ['Situação', rotuloStatus(item, dataCorte)],
+                ['Competência', formatarCompetencia(item.competencia)],
+                ['Vencimento', formatarData(item.data_vencimento)],
+                ['Pagamento', formatarData(item.data_pagamento)],
+                ['Descrição', item.descricao ?? '—'],
+                ['Forma de pagamento', `${rotuloFormaPagamento(item)}: ${item.forma_pagamento.nome ?? 'não informada'}`],
+              ]} />
+              <DetailGroup title="Valores e atualização" lines={[
+                ['Multa contratual (2%)', moeda(item.valores.multa)],
+                ['Mora pro rata', moeda(item.valores.mora)],
+                ['Situação de atraso', item.cobranca.d0 ? 'Em atraso' : 'Não está em atraso'],
+                ['Último sync', formatarDataHora(item.sync_completed_at)],
+                ['Válido até', formatarDataHora(item.sync_fresh_until)],
+              ]} />
+            </div>
+            <DetailGroup title="Rastreabilidade" mono lines={[
+              ['Fatura canônica', item.canonical_fatura_id],
+              ['Fatura Emusys', item.emusys_fatura_id],
+              ['Matrícula Emusys', item.emusys_matricula_id ?? '—'],
+              ['Contrato Emusys', item.emusys_contrato_id ?? '—'],
+              ['Aluno Emusys', item.emusys_student_id ?? '—'],
+            ]} />
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] p-4 text-xs text-cyan-100/75">
+              <span className="inline-flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-cyan-300" /> Consulta somente leitura: não altera fatura nem envia cobrança.</span>
+              {item.aluno.id != null && <Link to={`/app/alunos?aluno=${item.aluno.id}`} className="inline-flex items-center gap-1 text-cyan-200 hover:text-cyan-100">Abrir ficha do aluno <ChevronRight className="h-3.5 w-3.5" /></Link>}
+            </div>
+          </div>
+        </>}
+      </DialogContent>
+    </Dialog>
   );
 }
 
