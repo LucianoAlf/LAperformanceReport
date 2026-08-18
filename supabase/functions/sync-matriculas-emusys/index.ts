@@ -27,9 +27,9 @@
 //   A4. Grava a fotografia crua ............ emusys_matriculas_estado_atual
 //   A5. Jornada canônica .......... aluno_jornada_matricula_disciplina
 //   A6. Sincroniza cadastro direto, fecha pendências que viraram histórico;
-//       no operacional, reconcilia ausentes e segue para a fila de grade
+//       A6b: no operacional, reconcilia estados ausentes e segue para a fila de grade
 //
-// FASE B — roda nos dois escopos usando a fotografia já buscada:
+// FASE B — roda nos dois escopos usando a fotografia já buscada (não chama a API):
 //   B2. Decisões canônicas de matrícula
 //   B3. Régua de classificação (tipos_matricula)
 //   B4. Lead ID .................................. alunos.emusys_lead_id
@@ -37,9 +37,10 @@
 //       e conversão de renovação pendente em não-renovação (movimentacoes_admin)
 //   B6. Limpeza de alertas obsoletos + varredura reversa (contratos órfãos)
 //
-// ⚠️ No escopo operacional, ausência no payload não é ausência no Emusys: ele
-//    traz somente matrículas ativas/trancadas. Por isso, a fase B pula a linha
-//    vinculada que não veio e nunca a fecha nem a religa por nome nessa rodada.
+// ⚠️ O escopo operacional não pode inferir ausência: ele traz somente matrículas
+//    ativas/trancadas. A fase B processa os registros presentes, mas pula a linha
+//    vinculada que não veio e nunca a fecha, religa por nome ou limpa sua pendência.
+//    `ausente_api` e não-renovação por ausência permanecem exclusivos do completo.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -1309,7 +1310,7 @@ serve(async (req) => {
   // dry-run: alunos cujo upd seria aplicado (prévia do que o sync faria em produção)
   const previewAlunoIds: number[] = [];
   // A matrícula vinculada fora do snapshot operacional não foi avaliada; suas
-  // pendências permanecem para o próximo sync completo.
+  // pendências ficam fora de toda limpeza por rodada até o próximo sync completo.
   const alunosForaDoPayloadOperacional = new Set<number>();
 
   let syncExecucaoId: string | null = null;
@@ -1512,8 +1513,8 @@ serve(async (req) => {
     resumo.pendencias_fora_escopo = pendenciasForaEscopo || resumo.pendencias_fora_escopo;
 
     // ─── A6b. Reconciliação de ausentes (só no operacional) ───────────────────
-    // A fase B continua depois daqui: ela trabalha no `porId` já obtido, sem nova
-    // chamada à API. Só a lógica por ausência fica exclusiva do escopo completo.
+    // A fase B continua depois daqui com o `porId` já obtido. O escopo operacional
+    // não infere ausência; essa semântica fica exclusiva da fotografia completa.
     if (escopo === 'operacional') {
       const sincronizadoEm = new Date().toISOString();
       const linhasInativadas = await reconciliarEstadosOperacionaisAusentes(
@@ -1798,6 +1799,8 @@ serve(async (req) => {
         for (const dv of r.divergencias) {
           if (dv.tipo === 'auto_preview') {
             if (jaDecididoCampo.has(`${a.id}|auto_preview|${dv.campo || ''}`) && !dv.reabrir) continue;
+            // O modo sugestão chega por `r.divergencias`, não por `r.upd`. Preservar
+            // estes IDs impede a limpeza final de fechar a fila recém-criada sem decisão.
             previewAlunoIds.push(a.id);
             resumo.auto++;
           } else if (jaDecidido.has(`${a.id}|${dv.tipo}`) && !dv.reabrir) {
@@ -1866,6 +1869,7 @@ serve(async (req) => {
         .eq('unidade_id', u.id)
         .eq('tipo_divergencia', 'auto_preview')
         .eq('resolvido', false);
+      // Aluno fora do payload operacional não foi avaliado; a pendência fica intacta.
       if (alunosForaDoPayloadOperacional.size) {
         wipe = wipe.not('aluno_id', 'in', `(${[...alunosForaDoPayloadOperacional].join(',')})`);
       }
@@ -1885,6 +1889,7 @@ serve(async (req) => {
       const TIPOS_COM_LIMPEZA_POR_RODADA = ['ambiguo', 'status_divergente', 'valor_divergente', 'classificacao_divergente', 'disciplina_nao_mapeada'];
       const idsProcessados = alunosParaReconciliar
         .map((a: any) => a.id)
+        // Fora do payload operacional = não avaliado nesta rodada; não limpar.
         .filter((id: number) => !alunosForaDoPayloadOperacional.has(id));
       for (const tipo of TIPOS_COM_LIMPEZA_POR_RODADA) {
         const alunosComTipo = new Set(divs.filter((d: any) => d.tipo_divergencia === tipo).map((d: any) => d.aluno_id));
@@ -2155,6 +2160,7 @@ function reconciliar(
   depara: Map<number, number | null>, profMap: Map<number, number>, banda: Set<number>, fixados: Set<string>,
   tipoCodigo: string | null, idsVinculados: Set<number> = new Set(),
   decisoesCanonicasPorMatricula: Map<string, any> = new Map(),
+  // false = escopo operacional: ausência no payload não é sinal e não gera `ausente_api`.
   detectarAusencias = true,
 ): any {
   const upd: Record<string, any> = {};
@@ -2164,6 +2170,7 @@ function reconciliar(
   if (a.emusys_matricula_id && porId.has(Number(a.emusys_matricula_id))) {
     mat = porId.get(Number(a.emusys_matricula_id));
   } else if (!detectarAusencias && a.emusys_matricula_id) {
+    // Sem a fotografia completa, não procurar outro homônimo nem inferir ausência.
     return { upd, divergencias, fora_do_payload_operacional: true };
   } else {
     const candTodasRaw = (ativasPorNome.get(normalizarNome(a.nome)) || [])
