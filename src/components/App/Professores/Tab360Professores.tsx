@@ -167,21 +167,6 @@ export function Tab360Professores({
       const criterio = criterios.find(c => c.id === parseInt(data.criterio_id));
       const unidade = professor?.unidades?.find((u: any) => u.id === data.unidade_id || u.unidade_id === data.unidade_id);
       
-      // Buscar nome do colaborador que registrou (IDs devem corresponder ao Modal360Ocorrencia)
-      const COLABORADORES = [
-        { id: 'luciano', nome: 'Luciano Alf' },
-        { id: 'gabriela', nome: 'Gabriela' },
-        { id: 'jhonatan', nome: 'Jhonatan' },
-        { id: 'fernanda', nome: 'Fernanda' },
-        { id: 'daiana', nome: 'Daiana' },
-        { id: 'vitoria_andrade', nome: 'Vitória Andrade' },
-        { id: 'eduarda', nome: 'Eduarda' },
-        { id: 'arthur', nome: 'Arthur' },
-        { id: 'vitoria', nome: 'Vitória' },
-        { id: 'clayton', nome: 'Clayton' },
-        { id: 'kailane', nome: 'Kailane' },
-      ];
-      const colaborador = COLABORADORES.find(c => c.id === data.registrado_por);
       
       await createOcorrencia(data, undefined, unidadesProf);
       
@@ -191,7 +176,7 @@ export function Tab360Professores({
       const tipoOcorrencia = criterio?.nome || '';
       const dataOcorrencia = data.data_ocorrencia;
       const unidadeNome = unidade?.nome || unidade?.unidade_nome || '';
-      const registradoPor = colaborador?.nome || '';
+      const registradoPor = data.registrado_por || '';
       const descricao = data.descricao;
       const toleranciaInfo = data.tolerancia_info;
       const minutosAtraso = data.minutos_atraso;

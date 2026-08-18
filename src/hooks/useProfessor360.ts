@@ -95,6 +95,8 @@ export interface OcorrenciaFormData {
   criterio_id: number;
   data_ocorrencia: string;
   descricao?: string;
+  /** Nome de quem registrou, escolhido na modal. Gravado cru (a UI exibe o texto). */
+  registrado_por?: string;
   escopo?: 'unidade' | 'todas';
   notificado?: boolean;
   observacoes?: string;
@@ -313,6 +315,11 @@ export function useOcorrencias360(competencia: string, unidadeId?: string) {
     userId?: string,
     professorUnidades?: string[]
   ) => {
+    // `registrado_por` vem do formulário (quem a pessoa declarou ser na modal).
+    // Até 18/08/2026 a chave `registrado_por: userId` vinha DEPOIS do spread e
+    // sobrescrevia esse valor com `undefined` — a chamada em Tab360Professores
+    // passa `userId` vazio —, e as 201 ocorrências existentes ficaram com o
+    // campo obrigatório em NULL. O `??` preserva a escolha do formulário.
     // Remover campos que não existem no banco (são apenas para UI/WhatsApp)
     const { atraso_grave, tolerancia_info, ...dadosBanco } = data as any;
     
@@ -322,7 +329,7 @@ export function useOcorrencias360(competencia: string, unidadeId?: string) {
         ...dadosBanco,
         unidade_id: unidadeId,
         competencia,
-        registrado_por: userId,
+        registrado_por: dadosBanco.registrado_por ?? userId ?? null,
       }));
 
       const { error } = await supabase
@@ -336,7 +343,7 @@ export function useOcorrencias360(competencia: string, unidadeId?: string) {
         .insert({
           ...dadosBanco,
           competencia,
-          registrado_por: userId,
+          registrado_por: dadosBanco.registrado_por ?? userId ?? null,
         });
 
       if (error) throw error;
