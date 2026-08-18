@@ -116,11 +116,20 @@ Critérios que **não** podem ser mudados:
   Se a pergunta for "quantos contratos venceram e não renovaram", use `vw_renovacao_ciclos`
   (denominador = contratos que terminam na competência), não a taxa.
 
-🔴 **Divergência real encontrada:** a edge do relatório lê `movimentacoes_admin` **crua**, sem
-filtrar `anulado` (a palavra não aparece no código). Existem **46 linhas anuladas** no banco.
-Em ago/2026 na Barra são 0, então hoje os números batem — **por sorte, não por construção**.
-A Sol deve usar a view `..._vigentes`; se der diferente do relatório, é o relatório que está
-contando duplicata anulada. Reportar, não "corrigir" o próprio número para bater.
+✅ **Corrigido em 2026-08-18 (edge v107).** A edge do relatório lia `movimentacoes_admin`
+**crua**, sem filtrar `anulado` — e isso **não era dano latente, estava ativo**: o relatório
+do Recreio dizia **36 renovações** em ago/2026 onde o correto é **32** (4 duplicatas anuladas
+sendo contadas), além de inflar a taxa de renovação. Set/2026 já tinha mais 3 esperando.
+Hoje a edge lê `movimentacoes_admin_vigentes` nos dois pontos (retenção e aviso prévio).
+
+⚠️ **As 46 anuladas são TODAS `tipo='renovacao'`.** Por isso quem filtra só
+`evasao`/`nao_renovacao`/`aviso_previo` não é afetado hoje — mas é exposição latente, porque
+nada impede anular outro tipo.
+
+🔴 **O frontend ainda lê a tabela crua** em ~20 pontos, e **nenhum** usa a view — inclusive
+telas que contam renovação (`ModalRelatorio`, `RelatorioDiario`, `ModalDetalhesRetencao`,
+`TabelaAlunos`, `ModalFichaAluno`). Então a **tela pode discordar do relatório diário** até
+essa frente ser feita. Se a Sol divergir da tela, provavelmente é a tela que está inflada.
 
 ---
 

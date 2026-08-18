@@ -705,8 +705,11 @@ async function gerarRelatorioDiario(
   const alunosCoral = kpisAlunos.alunosCoral;
 
   // Movimentacoes do mes para retencao operacional viva.
+  // Le a VIEW ..._vigentes (= tabela WHERE NOT anulado), nunca a tabela crua: registro
+  // anulado e duplicata comprovada de renovacao e nao pode entrar na contagem. Lendo cru,
+  // o relatorio do Recreio dava 36 renovacoes em ago/2026 onde o correto e 32.
   const { data: movData, error: movError } = await supabase
-    .from('movimentacoes_admin')
+    .from('movimentacoes_admin_vigentes')
     .select('*')
     .eq('unidade_id', unidadeId)
     .or(`and(data.gte.${primeiroDiaMes},data.lte.${hoje}),and(competencia_referencia.gte.${primeiroDiaMes},competencia_referencia.lte.${ultimoDiaMes})`)
@@ -766,8 +769,10 @@ async function gerarRelatorioDiario(
   const evasoesHoje = evasoes.filter((e: any) => e.data === hoje);
 
   // Avisos prévios (mes_saida do mês seguinte — mesma lógica do fix no frontend)
+  // Tambem pela view vigente: hoje nao ha aviso_previo anulado, mas a tabela crua nao
+  // garante isso e o custo de ler a view e zero.
   const { data: avisosData, error: avisosError } = await supabase
-    .from('movimentacoes_admin')
+    .from('movimentacoes_admin_vigentes')
     .select('*')
     .eq('unidade_id', unidadeId)
     .eq('tipo', 'aviso_previo')
