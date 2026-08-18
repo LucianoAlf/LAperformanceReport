@@ -20,8 +20,8 @@ test('sync separa a fila operacional do processamento historico da matricula', (
   );
   assert.match(
     source,
-    /status\s*===\s*'ativo'[\s\S]*status\s*===\s*'trancado'[\s\S]*status\s*===\s*'aviso_previo'/,
-    'ativo, trancado e aviso previo devem permanecer elegiveis para a fila',
+    /return\s+aluno\?\.is_ex_aluno\s*!==\s*true\s*&&\s*!\['inativo',\s*'evadido'\]\.includes\(status\);/,
+    'status nulo ou novo deve continuar elegivel; so historico confirmado sai da fila',
   );
   assert.match(
     source,

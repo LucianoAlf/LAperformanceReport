@@ -100,6 +100,11 @@ verify_jwt = false
 # Publicacao financeira aceita somente JWT tecnico ou service_role validado pelo gateway.
 verify_jwt = true
 
+[functions.sync-matriculas-emusys]
+# Cadastro de alunos: gateway e codigo exigem JWT tecnico ou service_role.
+# Declarado para que um deploy futuro nao altere a protecao vigente por omissao.
+verify_jwt = true
+
 [functions.sync-professor-disciplinas-emusys]
 # Cron usa segredo dedicado; navegador valida JWT e permissao dentro da funcao.
 verify_jwt = false

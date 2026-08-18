@@ -7,6 +7,8 @@
 // Processa UMA unidade por invocação (?u=cg|barra|recreio) — o cron chama as 3 defasadas,
 // para caber no idle timeout de 150s do Supabase apesar do throttle do rate limit (60/min).
 //
+// Cadastro direto do Emusys: telefone, e-mail e responsavel atualizam `alunos`
+//   por unidade + matricula, salvo escolha local protegida em campos_fixados.
 // Trilha SUGESTÃO (antigo AUTO): status, data_fim, curso_id, professor_atual_id, valor LIMPO.
 //   Nunca aplica automaticamente — registra como `auto_preview` na fila para aprovação humana.
 // Trilha FILA (matriculas_divergencias): ambiguo, ausente_api, disciplina_nao_mapeada,
@@ -24,8 +26,8 @@
 //   A3. Monta de-para de curso, professor e aluno↔matrícula
 //   A4. Grava a fotografia crua ............ emusys_matriculas_estado_atual
 //   A5. Jornada canônica .......... aluno_jornada_matricula_disciplina
-//   A6. Fecha pendências que viraram histórico; no operacional, reconcilia
-//       ausentes, registra execução e RETORNA
+//   A6. Sincroniza cadastro direto, fecha pendências que viraram histórico;
+//       no operacional, reconcilia ausentes, registra execução e RETORNA
 //
 // FASE B — só o escopo 'completo' alcança (ver o return do escopo operacional):
 //   B2. Decisões canônicas de matrícula
@@ -203,6 +205,20 @@ function temValor(v: any): boolean {
   return v !== null && v !== undefined && String(v).trim() !== '';
 }
 
+function descreverErroSync(erro: unknown): string {
+  if (erro instanceof Error) return erro.message;
+  if (erro && typeof erro === 'object') {
+    const estruturado = erro as Record<string, unknown>;
+    const partes = ['code', 'message', 'details', 'hint']
+      .map((campo) => estruturado[campo])
+      .filter((valor) => temValor(valor))
+      .map((valor) => String(valor).trim());
+    if (partes.length) return partes.join(' | ').slice(0, 500);
+    return Object.prototype.toString.call(erro);
+  }
+  return String(erro);
+}
+
 /**
  * A conciliação é uma fila de trabalho atual, não um inventário histórico.
  * A linha de aluno continua sendo processada no sync completo para manter
@@ -211,8 +227,7 @@ function temValor(v: any): boolean {
  */
 function alunoEntraNaFilaOperacional(aluno: any): boolean {
   const status = String(aluno?.status || '').trim().toLowerCase();
-  if (aluno?.is_ex_aluno === true) return false;
-  return status === 'ativo' || status === 'trancado' || status === 'aviso_previo';
+  return aluno?.is_ex_aluno !== true && !['inativo', 'evadido'].includes(status);
 }
 
 function normalizarTextoValor(v: any): string {
@@ -362,58 +377,185 @@ function resolverFormaPagamentoId(formaEmusys: string | null, formasPagamento: M
   return null;
 }
 
-function setCampoVazioConfiavel(
+/**
+ * Campos cadastrais correntes do GET /matriculas. A API e a fonte
+ * operacional desses quatro campos: quando o valor mudou no Emusys, o
+ * cadastro local acompanha a mudanca; a unica excecao e uma escolha local
+ * explicitamente protegida em matriculas_campos_fixados.
+ */
+function setCampoEmusysAutoritativo(
   patch: Record<string, any>,
   diffs: Record<string, any>,
   campo: string,
-  valorNovo: any,
-  valorAtual: any,
+  valorEmusys: any,
+  valorLocal: any,
   fixados: Set<string>,
+  normalizar: (valor: any) => string,
 ) {
-  if (fixados.has(campo) || !temValor(valorNovo) || temValor(valorAtual)) return;
-  patch[campo] = valorNovo;
-  diffs[campo] = { de: valorAtual ?? null, para: valorNovo };
+  if (fixados.has(campo) || !temValor(valorEmusys)) return;
+  if (normalizar(valorEmusys) === normalizar(valorLocal)) return;
+  patch[campo] = String(valorEmusys).trim();
+  diffs[campo] = { de: valorLocal ?? null, para: String(valorEmusys).trim() };
 }
 
-function gerarPatchAtributosVaziosConfiaveis(
-  a: any,
-  mat: any,
-  formasPagamento: Map<number, any>,
-  fixados: Set<string>,
-) {
+function gerarPatchCadastroCanonicoEmusys(a: any, mat: any, fixados: Set<string>) {
   const patch: Record<string, any> = {};
   const diffs: Record<string, any> = {};
-
-  const fotoEmusys = extrairFotoAluno(mat);
-  if (!temValor(a.foto_url) && !temValor(a.photo_url)) {
-    setCampoVazioConfiavel(patch, diffs, 'foto_url', fotoEmusys, a.foto_url, fixados);
-  }
-
-  const instagramEmusys = extrairInstagramAluno(mat);
-  if (!a.instagram_nao_possui && !textoIndicaSemInstagramEmusys(instagramEmusys)) {
-    setCampoVazioConfiavel(patch, diffs, 'instagram', instagramEmusys, a.instagram, fixados);
-  }
-  setCampoVazioConfiavel(patch, diffs, 'telefone', mat?.aluno?.telefone, a.telefone || a.whatsapp, fixados);
-  setCampoVazioConfiavel(patch, diffs, 'email', mat?.aluno?.email, a.email, fixados);
-
   const responsavel = mat?.responsavel || {};
-  setCampoVazioConfiavel(patch, diffs, 'responsavel_nome', responsavel.nome, a.responsavel_nome, fixados);
-  setCampoVazioConfiavel(patch, diffs, 'responsavel_telefone', responsavel.telefone, a.responsavel_telefone, fixados);
 
-  const aguardandoRenovacaoEmusys = extrairAguardandoRenovacaoEmusys(mat);
-  if (!fixados.has('aguardando_renovacao') && aguardandoRenovacaoEmusys !== null && a.aguardando_renovacao == null) {
-    patch.aguardando_renovacao = aguardandoRenovacaoEmusys;
-    diffs.aguardando_renovacao = { de: a.aguardando_renovacao ?? null, para: aguardandoRenovacaoEmusys };
-  }
-
-  const formaEmusys = extrairFormaPagamentoEmusys(mat);
-  const formaId = resolverFormaPagamentoId(formaEmusys, formasPagamento);
-  if (!fixados.has('forma_pagamento_id') && !temValor(a.forma_pagamento_id) && formaId) {
-    patch.forma_pagamento_id = formaId;
-    diffs.forma_pagamento_id = { de: a.forma_pagamento_id ?? null, para: formaId, forma_pagamento: formaEmusys };
-  }
+  setCampoEmusysAutoritativo(patch, diffs, 'telefone', mat?.aluno?.telefone, a.telefone, fixados, normalizarTelefoneValor);
+  setCampoEmusysAutoritativo(patch, diffs, 'email', mat?.aluno?.email, a.email, fixados, normalizarTextoValor);
+  setCampoEmusysAutoritativo(patch, diffs, 'responsavel_nome', responsavel.nome, a.responsavel_nome, fixados, normalizarTextoValor);
+  setCampoEmusysAutoritativo(patch, diffs, 'responsavel_telefone', responsavel.telefone, a.responsavel_telefone, fixados, normalizarTelefoneValor);
 
   return { patch, diffs };
+}
+
+async function aplicarPatchAtributosEmusys(
+  supabase: any,
+  unidadeId: string,
+  aluno: any,
+  patch: Record<string, any>,
+) {
+  if (!Object.keys(patch).length) return { aplicado: false, camposAplicados: [] as string[], aluno };
+
+  // A função do banco protege contra a corrida entre a leitura de
+  // matriculas_campos_fixados e a escrita: ela trava o aluno, reconsulta os
+  // campos fixados e devolve exatamente quais campos foram aplicados.
+  const { data, error } = await supabase.rpc('aplicar_cadastro_emusys_canonico', {
+    p_unidade_id: unidadeId,
+    p_aluno_id: aluno.id,
+    // A identidade externa e revalidada dentro do lock do banco. Se a
+    // matricula for religada enquanto este sync estiver em voo, o patch nao
+    // pode cair no cadastro que passou a representar outra matricula Emusys.
+    p_emusys_matricula_id: String(aluno.emusys_matricula_id ?? '').trim(),
+    p_patch: patch,
+  });
+  if (error) throw error;
+  const resultado = Array.isArray(data) ? data[0] : data;
+  if (!resultado || Number(resultado.aluno_id) !== Number(aluno.id)) {
+    throw new Error('ALUNO_NAO_ENCONTRADO_PARA_PATCH_EMUSYS');
+  }
+
+  const camposAplicados = Array.isArray(resultado.campos_aplicados)
+    ? resultado.campos_aplicados.map((campo: any) => String(campo))
+    : [];
+  const patchAplicado = Object.fromEntries(
+    camposAplicados
+      .filter((campo: string) => Object.prototype.hasOwnProperty.call(patch, campo))
+      .map((campo: string) => [campo, patch[campo]]),
+  );
+
+  return {
+    aplicado: camposAplicados.length > 0,
+    camposAplicados,
+    aluno: { ...aluno, ...patchAplicado },
+  };
+}
+
+async function resolverDivergenciasAtributosSincronizadas(
+  supabase: any,
+  unidadeId: string,
+  alunoId: number,
+  campos: string[],
+) {
+  if (!campos.length) return;
+  const agora = new Date().toISOString();
+  const { error } = await supabase
+    .from('alunos_emusys_atributos_divergencias')
+    .update({
+      resolvido: true,
+      decisao: 'sincronizado_emusys',
+      decidido_por: 'sync-matriculas-emusys',
+      decidido_em: agora,
+      updated_at: agora,
+    })
+    .eq('unidade_id', unidadeId)
+    .eq('aluno_id', alunoId)
+    .eq('fonte', 'emusys_matriculas')
+    .eq('resolvido', false)
+    .in('campo', campos);
+  if (error) throw error;
+}
+
+/**
+ * Esta rotina roda nos dois escopos, antes do retorno do cron operacional.
+ * Ela usa somente a identidade segura (unidade + matricula Emusys), nunca
+ * nome como fallback, e atualiza apenas os campos que a API afirma hoje.
+ */
+async function sincronizarAtributosCadastraisEmusys(
+  supabase: any,
+  unidade: { id: string; nome: string },
+  alunos: any[],
+  porId: Map<number, any>,
+  fixadosMap: Map<number, Set<string>>,
+  logs: any[],
+  resumo: any,
+) {
+  const atualizados = new Map<number, any>();
+  for (const aluno of alunos || []) {
+    if (!alunoEntraNaFilaOperacional(aluno)) continue;
+    const matriculaId = numeroFinitoOuNull(aluno.emusys_matricula_id);
+    if (matriculaId == null) continue;
+    const mat = porId.get(matriculaId);
+    if (!mat) continue;
+
+    const fixados = fixadosMap.get(aluno.id) || new Set<string>();
+    const cadastroCanonico = gerarPatchCadastroCanonicoEmusys(aluno, mat, fixados);
+    const patch = cadastroCanonico.patch;
+    if (!Object.keys(patch).length) continue;
+
+    try {
+      const resultado = await aplicarPatchAtributosEmusys(supabase, unidade.id, aluno, patch);
+      if (!resultado.aplicado) continue;
+
+      atualizados.set(aluno.id, resultado.aluno);
+      resumo.atributos_sincronizados = (resumo.atributos_sincronizados || 0) + resultado.camposAplicados.length;
+      logs.push({
+        aluno_nome: aluno.nome,
+        aluno_id: aluno.id,
+        unidade_nome: unidade.nome,
+        evento: 'sync_matriculas_atributos',
+        acao: 'atualizados_do_emusys',
+        detalhes: {
+          unidade_id: unidade.id,
+          emusys_matricula_id: matriculaId,
+          campos: resultado.camposAplicados.sort(),
+        },
+        workflow_id: 'sync-matriculas-emusys',
+        execution_id: new Date().toISOString(),
+      });
+
+      try {
+        await resolverDivergenciasAtributosSincronizadas(supabase, unidade.id, aluno.id, resultado.camposAplicados);
+      } catch (erroResolucao) {
+        resumo.atributos_sincronizacao_erros = (resumo.atributos_sincronizacao_erros || 0) + 1;
+        logs.push({
+          aluno_nome: aluno.nome,
+          aluno_id: aluno.id,
+          unidade_nome: unidade.nome,
+          evento: 'sync_matriculas_atributos',
+          acao: 'falha_ao_resolver_fila',
+          detalhes: { unidade_id: unidade.id, emusys_matricula_id: matriculaId, campos: resultado.camposAplicados.sort(), erro: descreverErroSync(erroResolucao).slice(0, 160) },
+          workflow_id: 'sync-matriculas-emusys',
+          execution_id: new Date().toISOString(),
+        });
+      }
+    } catch (erroAtualizacao) {
+      resumo.atributos_sincronizacao_erros = (resumo.atributos_sincronizacao_erros || 0) + 1;
+      logs.push({
+        aluno_nome: aluno.nome,
+        aluno_id: aluno.id,
+        unidade_nome: unidade.nome,
+        evento: 'sync_matriculas_atributos',
+        acao: 'falha_ao_atualizar_cadastro',
+        detalhes: { unidade_id: unidade.id, emusys_matricula_id: matriculaId, campos: Object.keys(patch).sort(), erro: descreverErroSync(erroAtualizacao).slice(0, 160) },
+        workflow_id: 'sync-matriculas-emusys',
+        execution_id: new Date().toISOString(),
+      });
+    }
+  }
+  return atualizados;
 }
 
 const TIPOS_DECISAO_IGNORA_SYNC = new Set([
@@ -1221,7 +1363,7 @@ serve(async (req) => {
     const formasPagamentoMap = new Map<number, any>((formasPagamento || []).map((f: any) => [f.id, f]));
 
     const { data: alunos } = await supabase.from('alunos')
-      .select('id, unidade_id, nome, curso_id, professor_atual_id, emusys_matricula_id, emusys_student_id, emusys_lead_id, status, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id, dia_aula, horario_aula, telefone, whatsapp, email, responsavel_nome, responsavel_telefone, foto_url, photo_url, instagram, instagram_nao_possui, status_pagamento, forma_pagamento_id, anamnese_preenchida, aguardando_renovacao')
+      .select('id, unidade_id, nome, curso_id, professor_atual_id, emusys_matricula_id, emusys_student_id, emusys_lead_id, status, is_ex_aluno, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id, dia_aula, horario_aula, telefone, whatsapp, email, responsavel_nome, responsavel_telefone, foto_url, photo_url, instagram, instagram_nao_possui, status_pagamento, forma_pagamento_id, anamnese_preenchida, aguardando_renovacao')
       .eq('unidade_id', u.id)
       .is('arquivado_em', null);
 
@@ -1246,8 +1388,24 @@ serve(async (req) => {
     const alunosComStatusCanonico = new Set<number>();
 
     const alunosParaReconciliar = (alunos || []).filter((a: any) => {
-      return a.status === 'ativo' || temValor(a.emusys_matricula_id);
+      const status = String(a.status || '').trim().toLowerCase();
+      return !['inativo', 'evadido'].includes(status) || temValor(a.emusys_matricula_id);
     });
+
+    // Uma decisao local explicita protege o campo contra a fonte externa.
+    const idsAlunos = (alunos || []).map((a: any) => Number(a.id)).filter(Number.isFinite);
+    const fixadosMap = new Map<number, Set<string>>();
+    if (idsAlunos.length) {
+      const { data: camposFixados, error: camposFixadosError } = await supabase
+        .from('matriculas_campos_fixados')
+        .select('aluno_id, campo')
+        .in('aluno_id', idsAlunos);
+      if (camposFixadosError) throw camposFixadosError;
+      for (const campoFixado of camposFixados || []) {
+        if (!fixadosMap.has(campoFixado.aluno_id)) fixadosMap.set(campoFixado.aluno_id, new Set());
+        fixadosMap.get(campoFixado.aluno_id)!.add(campoFixado.campo);
+      }
+    }
 
     const alunoIdPorMatriculaEmusys = new Map<number, number>();
     const alunoIdPorAlunoEmusys = new Map<number, number>();
@@ -1317,6 +1475,18 @@ serve(async (req) => {
     // A fotografia diária também é responsável por fechar itens que já viraram
     // histórico local. Isso não apaga a divergência: só a fecha com motivo
     // auditável para ela não voltar à fila operacional.
+    // Cadastro atual vem diretamente da matricula Emusys. Esta etapa fica
+    // antes do retorno operacional porque e esse escopo que roda diariamente.
+    const atributosSincronizados = await sincronizarAtributosCadastraisEmusys(
+      supabase,
+      u,
+      alunos || [],
+      porId,
+      fixadosMap,
+      logs,
+      resumo,
+    );
+
     const { data: pendenciasForaEscopo, error: pendenciasForaEscopoError } = await supabase.rpc(
       'resolver_pendencias_conciliacao_fora_escopo_operacional',
       { p_unidade_id: u.id },
@@ -1342,6 +1512,10 @@ serve(async (req) => {
         sincronizadoEm,
       );
       resumo.estados_atual.linhas_inativadas = linhasInativadas;
+      if (logs.length) {
+        const { error: logsError } = await supabase.from('automacao_log').insert(logs);
+        if (logsError) throw logsError;
+      }
       resumo.status = 'succeeded';
       const { error: finalizacaoError } = await supabase
         .from('emusys_matriculas_sync_execucoes')
@@ -1389,16 +1563,10 @@ serve(async (req) => {
     );
 
     const ids = alunosParaReconciliar.map((a: any) => a.id);
-    const fixadosMap = new Map<number, Set<string>>();
     // dedup: (aluno_id|tipo) que o usuário já decidiu — não reenfileirar (respeita a decisão humana)
     const jaDecidido = new Set<string>();
     const jaDecididoCampo = new Set<string>();
     if (ids.length) {
-      const { data: fx } = await supabase.from('matriculas_campos_fixados').select('aluno_id, campo').in('aluno_id', ids);
-      for (const f of fx || []) {
-        if (!fixadosMap.has(f.aluno_id)) fixadosMap.set(f.aluno_id, new Set());
-        fixadosMap.get(f.aluno_id)!.add(f.campo);
-      }
       const { data: decididas } = await supabase
         .from('matriculas_divergencias_decisoes')
         .select('aluno_id, matriculas_divergencias!inner(tipo_divergencia,campo)')
@@ -1619,15 +1787,10 @@ serve(async (req) => {
             fixadosBase,
             camposBloqueadosPorDecisaoCanonica(decisaoAtributos),
           );
-          const autoAtributos = gerarPatchAtributosVaziosConfiaveis(a, matAtributos, formasPagamentoMap, fixadosAtributos);
-          if (Object.keys(autoAtributos.patch).length) {
-            r.upd = { ...r.upd, ...autoAtributos.patch };
-            r.detalhes = r.detalhes || { emusys_matricula_id: matAtributos.id, status_api: matAtributos.status, diffs: {} };
-            r.detalhes.diffs = { ...(r.detalhes.diffs || {}), ...autoAtributos.diffs };
-            resumo.auto_atributos = (resumo.auto_atributos || 0) + Object.keys(autoAtributos.patch).length;
-          }
-
-          const alunoPosAuto = { ...a, ...r.upd };
+          // O enriquecimento direto ja foi aplicado antes da fase B, apenas
+          // por unidade + matricula. Nao misturar esses campos no auto_preview:
+          // sugestoes de grade/valor continuam humanas, cadastro atual nao.
+          const alunoPosAuto = atributosSincronizados.get(a.id) || a;
           const formaPagamentoPosAuto = alunoPosAuto.forma_pagamento_id
             ? formasPagamentoMap.get(Number(alunoPosAuto.forma_pagamento_id))
             : formaPagamentoLocal;
@@ -1682,11 +1845,39 @@ serve(async (req) => {
     if (logs.length) await supabase.from('automacao_log').insert(logs);
     await persistirDivergenciasAtributos(supabase, u.id, attrDivs);
     if (alunosComStatusCanonico.size) {
+      const agora = new Date().toISOString();
+      const { data: divergenciasStatus, error: divergenciasStatusError } = await supabase
+        .from('matriculas_divergencias')
+        .select('id, aluno_id')
+        .in('aluno_id', [...alunosComStatusCanonico])
+        .eq('unidade_id', u.id)
+        .eq('tipo_divergencia', 'status_divergente')
+        .eq('resolvido', false);
+      if (divergenciasStatusError) throw divergenciasStatusError;
+
+      if ((divergenciasStatus || []).length) {
+        const { error: decisoesStatusError } = await supabase
+          .from('matriculas_divergencias_decisoes')
+          .upsert(
+            (divergenciasStatus || []).map((divergencia: any) => ({
+              divergencia_id: divergencia.id,
+              aluno_id: divergencia.aluno_id,
+              decisao: 'status_canonico_confirmado',
+              valor_escolhido: { resolvido: true },
+              motivo: 'Nao renovacao canonica registrada para a mesma matricula Emusys.',
+              decidido_por: 'sync-matriculas-emusys',
+              decidido_em: agora,
+              metadata: { regra: 'nao_renovacao_canonica' },
+            })),
+            { onConflict: 'divergencia_id', ignoreDuplicates: true },
+          );
+        if (decisoesStatusError) throw decisoesStatusError;
+      }
+
       await supabase.from('matriculas_divergencias')
         .update({
           resolvido: true,
-          updated_at: new Date().toISOString(),
-          analise_sol: 'Resolvida: nao renovacao canonica registrada para a mesma matricula Emusys.',
+          updated_at: agora,
         })
         .in('aluno_id', [...alunosComStatusCanonico])
         .eq('unidade_id', u.id)
@@ -1917,7 +2108,7 @@ serve(async (req) => {
       })
       .eq('id', syncExecucaoId);
   } catch (e) {
-    resumo.erro_unidade = String(e);
+    resumo.erro_unidade = descreverErroSync(e);
     resumo.status = 'failed';
     if (syncExecucaoId) {
       await supabase
@@ -1925,7 +2116,7 @@ serve(async (req) => {
         .update({
           status: 'failed',
           completed_at: new Date().toISOString(),
-          erro: String(e),
+          erro: descreverErroSync(e),
           metadados: {
             estados_atual: resumo.estados_atual,
             linhas_recebidas: resumo.linhas_recebidas ?? 0,
