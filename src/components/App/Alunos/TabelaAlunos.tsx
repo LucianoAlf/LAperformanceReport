@@ -50,9 +50,8 @@ import {
 import { ContatoPopover } from './ContatoPopover';
 import type { Aluno, Filtros } from './AlunosPage';
 import {
-  podeCobrarInadimplenciaCanonica,
-  type InadimplenciaCanonicaState,
-} from '@/lib/inadimplenciaCanonica';
+  type FaturasFinanceirasState,
+} from '@/lib/faturasAlunosFinanceiras';
 import {
   analisarMudancaParaSemParcela,
   buscarContextosStatusPagamento,
@@ -67,7 +66,8 @@ import {
 interface TabelaAlunosProps {
   alunos: Aluno[];
   todosAlunos: Aluno[]; // Todos os alunos sem filtro para contagem fixa
-  inadimplenciaCanonica: InadimplenciaCanonicaState;
+  faturasFinanceiras: FaturasFinanceirasState;
+  onAbrirFaturasInadimplentes: () => void;
   filtros: Filtros;
   setFiltros: React.Dispatch<React.SetStateAction<Filtros>>;
   limparFiltros: () => void;
@@ -161,7 +161,8 @@ function calcularParcelaComercialCanonica(
 export function TabelaAlunos({
   alunos: alunosProp,
   todosAlunos,
-  inadimplenciaCanonica,
+  faturasFinanceiras,
+  onAbrirFaturasInadimplentes,
   filtros,
   setFiltros,
   limparFiltros,
@@ -356,35 +357,38 @@ export function TabelaAlunos({
     }
   }
 
-  const leituraFinanceiraDisponivel = podeCobrarInadimplenciaCanonica(inadimplenciaCanonica);
+  const leituraFinanceiraDisponivel = faturasFinanceiras.status === 'ok' || faturasFinanceiras.status === 'partial';
+  const faturasEmAtraso = faturasFinanceiras.totals.em_atraso_d0;
+  const alunosEmAtraso = new Set(
+    faturasFinanceiras.items.map((item) => [
+      item.unidade_id,
+      item.aluno.id ?? item.emusys_matricula_id ?? item.canonical_fatura_id,
+    ].join('|')),
+  ).size;
   const inadimplenciaConfirmada = {
-    totalMatriculas: inadimplenciaCanonica.totalMatriculas,
-    totalFaturas: inadimplenciaCanonica.totalFaturas,
-    totalAtualizado: inadimplenciaCanonica.totalAtualizado,
+    totalMatriculas: alunosEmAtraso,
+    totalFaturas: faturasEmAtraso.quantidade,
+    totalAtualizado: faturasEmAtraso.valor,
   };
   const reconciliacaoPendente = {
-    sourceMissingCount: inadimplenciaCanonica.sourceMissingCount,
-    invalidIdentityInvoiceCount: inadimplenciaCanonica.invalidIdentityInvoiceCount,
-    validationIssueCount: inadimplenciaCanonica.validationIssueCount,
-    contactResolutionPendingCount: inadimplenciaCanonica.contactResolutionPendingCount,
+    sourceMissingCount: faturasFinanceiras.reconciliation.sourceMissing,
+    invalidIdentityInvoiceCount: faturasFinanceiras.reconciliation.identidadeInvalida,
+    validationIssueCount: faturasFinanceiras.reconciliation.validacoesOrigem,
+    contactResolutionPendingCount: faturasFinanceiras.reconciliation.contatoPendente,
   };
   const inadimplenciaInfoCanonica = {
     total: inadimplenciaConfirmada.totalMatriculas,
     totalFaturas: inadimplenciaConfirmada.totalFaturas,
     valor: inadimplenciaConfirmada.totalAtualizado,
-    atualizadoEm: inadimplenciaCanonica.ultimoSyncMaisAntigo,
-    status: inadimplenciaCanonica.status,
+    atualizadoEm: faturasFinanceiras.freshness.syncMaisAntigo,
+    status: faturasFinanceiras.status,
     sourceMissing: reconciliacaoPendente.sourceMissingCount,
-    validationIssues: inadimplenciaCanonica.validationIssueCount,
-    blockReasons: inadimplenciaCanonica.blockReasons,
-    mostrar: inadimplenciaCanonica.status !== 'loading'
+    validationIssues: reconciliacaoPendente.validationIssueCount,
+    mostrar: faturasFinanceiras.status !== 'loading'
       && (
         !leituraFinanceiraDisponivel
-        || inadimplenciaCanonica.totalFaturas > 0
-        || inadimplenciaCanonica.sourceMissingCount > 0
-        || inadimplenciaCanonica.invalidIdentityInvoiceCount > 0
-        || inadimplenciaCanonica.validationIssueCount > 0
-        || inadimplenciaCanonica.contactResolutionPendingCount > 0
+        || faturasFinanceiras.reconciliation.total > 0
+        || faturasEmAtraso.quantidade > 0
       ),
   };
   const tituloBloqueioInadimplencia = (() => {
@@ -399,11 +403,11 @@ export function TabelaAlunos({
     }
     return 'Cobrança financeira bloqueada';
   })();
-  const motivosBloqueioAmigaveis = inadimplenciaInfoCanonica.blockReasons.map((reason) => {
-    if (reason === 'stale_competencia') return 'Há competências fora da janela de frescor.';
-    if (reason === 'duplicate_confirmed_fatura') return 'Foram encontradas faturas confirmadas duplicadas.';
-    return 'Há faturas com identidade inválida aguardando correção.';
-  });
+  const motivosBloqueioAmigaveis = inadimplenciaInfoCanonica.status === 'stale'
+    ? ['O snapshot financeiro desta competência precisa ser atualizado.']
+    : inadimplenciaInfoCanonica.status === 'error'
+      ? ['A página de Faturas não confirmou uma leitura financeira válida.']
+      : [];
 
   function formatarTempoDecorrido(iso: string | null): string {
     if (!iso) return 'nunca sincronizado';
@@ -2033,9 +2037,9 @@ export function TabelaAlunos({
             {leituraFinanceiraDisponivel && inadimplenciaInfoCanonica.total > 0 && (
               <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-cyan-200">
                 <strong className="text-cyan-100">
-                  {inadimplenciaConfirmada.totalMatriculas} inadimplências confirmadas (D+0) — leitura financeira disponível
+                  {inadimplenciaConfirmada.totalFaturas} faturas em atraso (D+0) — leitura financeira disponível
                 </strong>
-                {' — '}{inadimplenciaConfirmada.totalFaturas} fatura(s), R$ {inadimplenciaConfirmada.totalAtualizado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} corrigidos
+                {' — '}{inadimplenciaConfirmada.totalMatriculas} aluno(s), R$ {inadimplenciaConfirmada.totalAtualizado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} corrigidos
                 {' · '}
                 <span className="text-cyan-200/70">snapshot mais antigo atualizado {formatarTempoDecorrido(inadimplenciaInfoCanonica.atualizadoEm)}</span>
                 <span className="mt-1 block text-xs text-cyan-200/80">
@@ -2096,10 +2100,10 @@ export function TabelaAlunos({
           <div className="flex items-center gap-2" data-financial-alert-actions>
             {leituraFinanceiraDisponivel && inadimplenciaInfoCanonica.total > 0 && (
               <button
-                onClick={() => setFiltros(prev => ({ ...prev, inadimplente_emusys_live: true }))}
+                onClick={onAbrirFaturasInadimplentes}
                 className="whitespace-nowrap rounded-lg border border-cyan-500/30 bg-cyan-500/20 px-3 py-1 text-xs font-medium text-cyan-100 transition-colors hover:bg-cyan-500/30 focus-visible:ring-2 focus-visible:ring-cyan-300/70"
               >
-                Filtrar inadimplentes confirmados (D+0)
+                Abrir faturas em atraso
               </button>
             )}
             <button

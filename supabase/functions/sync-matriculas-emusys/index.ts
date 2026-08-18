@@ -24,7 +24,8 @@
 //   A3. Monta de-para de curso, professor e aluno↔matrícula
 //   A4. Grava a fotografia crua ............ emusys_matriculas_estado_atual
 //   A5. Jornada canônica .......... aluno_jornada_matricula_disciplina
-//   A6. (só operacional) reconcilia ausentes, registra execução e RETORNA
+//   A6. Fecha pendências que viraram histórico; no operacional, reconcilia
+//       ausentes, registra execução e RETORNA
 //
 // FASE B — só o escopo 'completo' alcança (ver o return do escopo operacional):
 //   B2. Decisões canônicas de matrícula
@@ -34,12 +35,12 @@
 //       e conversão de renovação pendente em não-renovação (movimentacoes_admin)
 //   B6. Limpeza de alertas obsoletos + varredura reversa (contratos órfãos)
 //
-// ⚠️ O cron diário chama com escopo=operacional, então NADA da fase B roda
+// ⚠️ O cron diário chama com escopo=operacional, então a fase B não roda
 //    automaticamente desde 2026-08-11 (migration 20260811210319). A jornada estava
 //    nesse grupo e voltou para a fase A em 2026-08-12, porque Contratos Vencendo e
 //    Cobertura de Renovação liam dado congelado sem nenhum erro aparecer. Segue
-//    parada a fase B, incluindo a fila da aba Conciliação (B5). A fase B NÃO chama
-//    a API do Emusys — ela trabalha sobre os dados já carregados na fase A.
+//    parada a geração da fila da aba Conciliação (B5). A exceção é a higiene de
+//    itens fora do escopo operacional, feita antes do retorno e sem chamar a API.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -200,6 +201,18 @@ function autoPreviewCampo(upd: Record<string, any>): string {
 
 function temValor(v: any): boolean {
   return v !== null && v !== undefined && String(v).trim() !== '';
+}
+
+/**
+ * A conciliação é uma fila de trabalho atual, não um inventário histórico.
+ * A linha de aluno continua sendo processada no sync completo para manter
+ * estado, jornada e movimentações auditáveis; só sugestão/pendência manual
+ * fica restrita a quem ainda está na operação.
+ */
+function alunoEntraNaFilaOperacional(aluno: any): boolean {
+  const status = String(aluno?.status || '').trim().toLowerCase();
+  if (aluno?.is_ex_aluno === true) return false;
+  return status === 'ativo' || status === 'trancado' || status === 'aviso_previo';
 }
 
 function normalizarTextoValor(v: any): string {
@@ -1118,6 +1131,7 @@ serve(async (req) => {
     auto: 0,
     fila: {},
     atributos: {},
+    pendencias_fora_escopo: { atributos: 0, matriculas: 0 },
     jornadas: { atualizadas: 0, puladas: 0, erros: 0 },
     lead_id: {
       preenchidos: 0,
@@ -1299,6 +1313,16 @@ serve(async (req) => {
     if (jornadas.mensagens.length) {
       resumo.jornadas.mensagens = jornadas.mensagens;
     }
+
+    // A fotografia diária também é responsável por fechar itens que já viraram
+    // histórico local. Isso não apaga a divergência: só a fecha com motivo
+    // auditável para ela não voltar à fila operacional.
+    const { data: pendenciasForaEscopo, error: pendenciasForaEscopoError } = await supabase.rpc(
+      'resolver_pendencias_conciliacao_fora_escopo_operacional',
+      { p_unidade_id: u.id },
+    );
+    if (pendenciasForaEscopoError) throw pendenciasForaEscopoError;
+    resumo.pendencias_fora_escopo = pendenciasForaEscopo || resumo.pendencias_fora_escopo;
 
     // ─── A6. Saída do escopo operacional ──────────────────────────────────────
     // ⚠️ ATENÇÃO: este `return` encerra a invocação. TODA a fase B abaixo (decisões
@@ -1579,6 +1603,13 @@ serve(async (req) => {
         ) {
           r.divergencias = r.divergencias.filter((dv: any) => dv.tipo !== 'status_divergente');
           alunosComStatusCanonico.add(Number(a.id));
+        }
+
+        // Estado/movimentação histórica acima segue sendo reconciliado. A partir
+        // daqui só são produzidas tarefas para a equipe; aluno evadido/inativo
+        // nunca deve voltar para a fila por ainda carregar um ID Emusys.
+        if (!alunoEntraNaFilaOperacional(a)) {
+          continue;
         }
 
         if (matAtributos && !r.detalhes?.sync_ignorado_por_decisao_canonica) {
