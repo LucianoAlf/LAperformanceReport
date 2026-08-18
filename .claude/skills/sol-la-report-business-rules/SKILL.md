@@ -82,6 +82,10 @@ Quando a tarefa envolver banco, primeiro gerar/rodar apenas **SELECT-only** e re
 
 Leia conforme a tarefa:
 
+- **`references/mapa-de-fontes.md` — LER PRIMEIRO em qualquer pergunta de número.**
+  Diz qual RPC/view canônica chamar, com parâmetros e colunas-chave, para contagem de
+  alunos, retenção, faturas, inadimplência, cadastro e custos de caixa. **A Sol chama a
+  RPC — não monta SELECT em cima de `alunos`/`movimentacoes_admin`/`emusys_faturas`.**
 - `references/regras-canonicas.md` — regras validadas e status atual.
 - `references/pendencias-bloqueadores.md` — pontos ainda não fechados.
 - `references/p8-p11-snapshot.md` — `dados_mensais`, congelamento, audit trail, SELECT-only.
@@ -129,6 +133,14 @@ Ainda não fechar como canônico final sem nova validação:
 > Consolidação completa e validada contra o banco: **`docs/REGRAS-DE-NEGOCIO.md`** (2026-08-08).
 
 ---
+
+## Antes de responder qualquer número
+
+1. Abrir `references/mapa-de-fontes.md` e usar a RPC/view de lá.
+2. Se a RPC negar acesso (`42501`), **dizer que negou** e qual é — nunca substituir por
+   SQL próprio "equivalente". Não existe equivalente: contar linha de `alunos` dá 271 onde
+   o canônico dá 246.
+3. Informar sempre a **competência** e o **frescor do sync** junto do número.
 
 ## Comportamento esperado da Sol
 
