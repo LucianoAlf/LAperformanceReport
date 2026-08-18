@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const read = (file) => readFileSync(file, 'utf8');
@@ -103,4 +103,15 @@ test('formas de pagamento possuem icones semanticamente distintos', () => {
   }
   assert.match(page, /normalizarFormaPagamento/);
   assert.match(page, /iconeFormaPagamento/);
+});
+
+test('contrato financeiro expõe foto atual do aluno e fallback legado', () => {
+  const migrationPath = 'supabase/migrations/20260817221354_financeiro_faturas_aluno_fotos.sql';
+  assert.ok(existsSync(migrationPath), 'a migration de fotos da fatura precisa existir');
+  const migration = read(migrationPath);
+
+  assert.match(migration, /financeiro_enriquecer_fatura_item/);
+  assert.match(migration, /'foto_url'/);
+  assert.match(migration, /'photo_url'/);
+  assert.match(migration, /unidade_id/);
 });
