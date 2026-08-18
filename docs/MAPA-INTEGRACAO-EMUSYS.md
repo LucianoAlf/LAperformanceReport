@@ -195,6 +195,14 @@ A edge faz `switch(evento)`:
 - **Segurança temporal:** o GET reconcilia estado atual e jornada, mas não
   inventa a data histórica de evasão, conclusão ou trancamento. Movimentos
   históricos só nascem de evento com data real.
+- **Cadastro e grade:** pelo mesmo par de identidade, o sync atualiza
+  diretamente telefone, e-mail, responsável, telefone do responsável, foto e
+  Instagram no cadastro canônico, respeitando `matriculas_campos_fixados`.
+  `auto_preview` é emitido somente para curso, professor, dia e horário; forma
+  e status de pagamento vão para atributos financeiros e valores/contrato para
+  divergências próprias. Uma forma de pagamento decidida no LA Report fica
+  fixada e não é reaberta por ausência ou metadado incompleto no Emusys.
+  O payload anterior reclassificado permanece auditável.
 
 #### Identidade e reconciliação usadas pelo relatório gerencial
 

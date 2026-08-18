@@ -39,7 +39,7 @@ test('guarda cadastral revalida identidade e restauracao de decisao humana', () 
     /from public\.alunos[\s\S]*?for update[\s\S]*?from public\.alunos_emusys_atributos_divergencias[\s\S]*?for update/i,
     'a decisao humana deve travar primeiro o aluno e depois a divergencia',
   );
-  for (const campo of ['telefone', 'email', 'responsavel_nome', 'responsavel_telefone']) {
+  for (const campo of ['telefone', 'email', 'responsavel_nome', 'responsavel_telefone', 'foto_url', 'instagram']) {
     assert.match(
       sql,
       new RegExp(`when '${campo}' then[\\s\\S]*?set ${campo} =`, 'iu'),

@@ -7,10 +7,10 @@
 // Processa UMA unidade por invocação (?u=cg|barra|recreio) — o cron chama as 3 defasadas,
 // para caber no idle timeout de 150s do Supabase apesar do throttle do rate limit (60/min).
 //
-// Cadastro direto do Emusys: telefone, e-mail e responsavel atualizam `alunos`
-//   por unidade + matricula, salvo escolha local protegida em campos_fixados.
-// Trilha SUGESTÃO (antigo AUTO): status, data_fim, curso_id, professor_atual_id, valor LIMPO.
-//   Nunca aplica automaticamente — registra como `auto_preview` na fila para aprovação humana.
+// Cadastro direto do Emusys: telefone, e-mail, responsável, foto e Instagram
+//   atualizam `alunos` por unidade + matrícula, salvo campo local fixado.
+// Trilha SUGESTÃO: `auto_preview` é exclusivamente curso/professor/dia/horário.
+//   Contrato, valores e financeiro têm filas próprias e nunca viram Sync grade.
 // Trilha FILA (matriculas_divergencias): ambiguo, ausente_api, disciplina_nao_mapeada,
 //   valor_divergente (parcela comercial divergente), classificacao_divergente (bolsa x tipo).
 // Dedup: (aluno|tipo) já com decisão humana não é reenfileirado.
@@ -54,6 +54,7 @@ import {
 import { resolveEmusysMatriculaLifecycle } from '../_shared/emusys-matricula-lifecycle.ts';
 import { deveConverterFinalizadaEmNaoRenovacao } from '../_shared/nao-renovacao-canonica.ts';
 import { decidirLeadId } from '../_shared/lead-id-reconciliacao.ts';
+import { separarPatchConciliacaoMatricula } from '../_shared/conciliacao-matricula-dominios.mjs';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -234,6 +235,10 @@ function normalizarTextoValor(v: any): string {
   return normalizarNome(String(v ?? '')).replace(/[^\w\s@.-]/g, '').trim();
 }
 
+function normalizarUrlValor(v: any): string {
+  return String(v ?? '').trim().replace(/\/+$/, '');
+}
+
 function normalizarTelefoneValor(v: any): string {
   let digits = String(v ?? '').replace(/\D/g, '');
   while (digits.startsWith('55') && digits.length > 11) {
@@ -407,6 +412,18 @@ function gerarPatchCadastroCanonicoEmusys(a: any, mat: any, fixados: Set<string>
   setCampoEmusysAutoritativo(patch, diffs, 'email', mat?.aluno?.email, a.email, fixados, normalizarTextoValor);
   setCampoEmusysAutoritativo(patch, diffs, 'responsavel_nome', responsavel.nome, a.responsavel_nome, fixados, normalizarTextoValor);
   setCampoEmusysAutoritativo(patch, diffs, 'responsavel_telefone', responsavel.telefone, a.responsavel_telefone, fixados, normalizarTelefoneValor);
+
+  // Foto e Instagram também são dados cadastrais da matrícula. A fonte é o
+  // Emusys enquanto não houver um campo fixado local; assim eles não viram
+  // pseudo-divergência de grade nem dependem de decisão manual recorrente.
+  const fotoEmusys = extrairFotoAluno(mat);
+  const fotoLocal = temValor(a.foto_url) ? a.foto_url : a.photo_url;
+  setCampoEmusysAutoritativo(patch, diffs, 'foto_url', fotoEmusys, fotoLocal, fixados, normalizarUrlValor);
+
+  const instagramEmusys = extrairInstagramAluno(mat);
+  if (a.instagram_nao_possui !== true && !textoIndicaSemInstagramEmusys(instagramEmusys)) {
+    setCampoEmusysAutoritativo(patch, diffs, 'instagram', instagramEmusys, a.instagram, fixados, normalizarInstagramValor);
+  }
 
   return { patch, diffs };
 }
@@ -1801,29 +1818,12 @@ serve(async (req) => {
           }
         }
 
-        // SUGESTÃO: nunca aplica automaticamente — sempre registra como `auto_preview` na fila
-        // para aprovação humana na aba de Conciliação.
-        if (Object.keys(r.upd).length) {
-          resumo.auto++;
-          const campoPreview = autoPreviewCampo(r.upd);
-          if (!jaDecididoCampo.has(`${a.id}|auto_preview|${campoPreview}`)) {
-            previewAlunoIds.push(a.id);
-            divs.push({
-              aluno_id: a.id, emusys_matricula_id: a.emusys_matricula_id, unidade_id: u.id,
-              tipo_divergencia: 'auto_preview', campo: campoPreview, fonte: 'sync',
-              valor_nosso: { nome: a.nome },
-              // `patch` = o que o "Aprovar" da tela vai gravar
-              valor_api: { diffs: r.detalhes?.diffs ?? {}, patch: r.upd, status_api: r.detalhes?.status_api },
-              sugestao: null, severidade: 'baixa',
-              resolvido: false, updated_at: new Date().toISOString(),
-            });
-          }
-        }
-
         // FILA: cada divergência vira uma linha (respeitando dedup de decisões humanas)
         for (const dv of r.divergencias) {
           if (dv.tipo === 'auto_preview') {
             if (jaDecididoCampo.has(`${a.id}|auto_preview|${dv.campo || ''}`) && !dv.reabrir) continue;
+            previewAlunoIds.push(a.id);
+            resumo.auto++;
           } else if (jaDecidido.has(`${a.id}|${dv.tipo}`) && !dv.reabrir) {
             continue;
           }
@@ -2162,7 +2162,7 @@ function parseHorarioDeTurma(nomeTurma: string): string | null {
 
 // Pura (sem I/O): decide o que fazer com o aluno.
 // Retorna { upd, detalhes, divergencias: [{tipo, campo, valorApi, severidade, sugestao}] }.
-// `upd` = mudanças AUTO seguras; `divergencias` = casos de fila (decisão humana). Podem coexistir.
+// `auto_preview` é reservado à grade; cadastro e financeiro têm filas próprias.
 function reconciliar(
   a: any, u: any, porId: Map<number, any>, ativasPorNome: Map<string, any[]>,
   depara: Map<number, number | null>, profMap: Map<number, number>, banda: Set<number>, fixados: Set<string>,
@@ -2273,9 +2273,6 @@ function reconciliar(
   )
     ? (c.data_original_ultima_aula || c.data_ultima_aula || null)
     : null;
-  const statusFinanceiroEmusys = financeiro.statusPagamentoCanonico ?? extrairStatusFinanceiroEmusys(mat);
-  const fotoEmusys = extrairFotoAluno(mat);
-
   const diffs: Record<string, any> = {};
   const patchRevisao: Record<string, any> = {};
   const diffsRevisao: Record<string, any> = {};
@@ -2330,13 +2327,6 @@ function reconciliar(
   if (dataFim && statusAlvo && statusAlvo !== 'ativo' && statusAlvo !== 'trancado') {
     sugerirCampoRevisao('data_fim_contrato', dataFim, a.data_fim_contrato);
   }
-  if (String(a.status || '').toLowerCase() === 'ativo') {
-    sugerirCampoRevisao('status_pagamento', statusFinanceiroEmusys, a.status_pagamento);
-  }
-  if (!temValor(a.foto_url) && !temValor(a.photo_url)) {
-    setCampo('foto_url', fotoEmusys, a.foto_url);
-  }
-
   // Regua de VALOR: contrato Emusys e a fonte da parcela comercial.
   if (cheio != null) {
     if (!financeiro.bloqueiaValorAutomatico && parcelaComercial != null && parcelaComercial >= 0) {
@@ -2431,12 +2421,66 @@ function reconciliar(
     if (horasSet.size === 1) sugerirCampoRevisao('horario_aula', [...horasSet][0] as string, a.horario_aula);
   }
 
-  if (Object.keys(patchRevisao).length) {
+  const dominiosPatch = separarPatchConciliacaoMatricula(patchRevisao);
+  const diffsPorCampo = (campos: Record<string, any>) => Object.fromEntries(
+    Object.keys(campos).map((campo) => [campo, diffsRevisao[campo]]),
+  );
+
+  const patchValor = Object.fromEntries(
+    Object.entries(dominiosPatch.valoresContrato)
+      .filter(([campo]) => ['valor_cheio', 'desconto_fixo', 'desconto_condicional', 'valor_parcela'].includes(campo)),
+  );
+  if (Object.keys(patchValor).length) {
+    divergencias.push({
+      tipo: 'valor_divergente',
+      campo: 'valor_parcela',
+      severidade: 'media',
+      valorApi: {
+        cheio,
+        fixo,
+        cond,
+        parcela_comercial: parcelaComercial,
+        parcela_tabela: financeiro.parcelaTabela,
+        liquido_financeiro: liquidoFinanceiro,
+        bolsa,
+        nr_faturas: financeiro.nrFaturas,
+        valor_total: financeiro.valorTotal,
+        diffs: diffsPorCampo(patchValor),
+        patch: patchValor,
+      },
+      sugestao: patchValor.valor_parcela ?? null,
+    });
+  }
+
+  const patchContrato = Object.fromEntries(
+    Object.entries(dominiosPatch.valoresContrato)
+      .filter(([campo]) => ['data_fim_contrato', 'status', 'data_saida'].includes(campo)),
+  );
+  if (Object.keys(patchContrato).length) {
+    divergencias.push({
+      tipo: 'status_divergente',
+      campo: 'data_fim_contrato',
+      severidade: 'alta',
+      valorApi: {
+        motivo: 'contrato_emusys_divergente',
+        emusys_matricula_id: mat.id,
+        diffs: diffsPorCampo(patchContrato),
+        patch: patchContrato,
+      },
+      sugestao: patchContrato.data_fim_contrato ?? null,
+    });
+  }
+
+  if (Object.keys(dominiosPatch.grade).length) {
     divergencias.push({
       tipo: 'auto_preview',
-      campo: autoPreviewCampo(patchRevisao),
+      campo: autoPreviewCampo(dominiosPatch.grade),
       severidade: 'media',
-      valorApi: { diffs: diffsRevisao, patch: patchRevisao, status_api: mat.status },
+      valorApi: {
+        diffs: diffsPorCampo(dominiosPatch.grade),
+        patch: dominiosPatch.grade,
+        status_api: mat.status,
+      },
       sugestao: null,
     });
   }

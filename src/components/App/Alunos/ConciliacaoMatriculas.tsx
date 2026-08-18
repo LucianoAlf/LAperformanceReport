@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ConciliacaoPresencas } from './ConciliacaoPresencas';
+import { separarPatchConciliacaoMatricula } from '../../../../supabase/functions/_shared/conciliacao-matricula-dominios.mjs';
 
 interface ConciliacaoItem {
   id: number;
@@ -522,6 +523,11 @@ function temCampoAltoRisco(item: ConciliacaoItem): boolean {
   return camposDoItem(item).some(campo => CAMPOS_ALTO_RISCO.has(campo));
 }
 
+function previewEhSomenteGrade(item: ConciliacaoItem): boolean {
+  return item.tipo_divergencia === 'auto_preview'
+    && separarPatchConciliacaoMatricula(item.valor_api?.patch || {}).ehSomenteGrade;
+}
+
 function limparPatchGuardado(patch: Record<string, any> = {}): Record<string, any> {
   return Object.fromEntries(
     Object.entries(patch).filter(([campo, valor]) => !CAMPOS_DERIVADOS.has(campo) && valor !== undefined)
@@ -537,7 +543,7 @@ function patchAtualDoPreview(item: ConciliacaoItem): Record<string, any> {
 }
 
 function temPatchSeguroAplicavel(item: ConciliacaoItem): boolean {
-  if (item.tipo_divergencia !== 'auto_preview' || temCampoAltoRisco(item)) return false;
+  if (item.tipo_divergencia !== 'auto_preview' || !previewEhSomenteGrade(item) || temCampoAltoRisco(item)) return false;
   return Object.keys(limparPatchGuardado(item.valor_api?.patch || {})).length > 0;
 }
 
@@ -1199,8 +1205,9 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const totalAberto = itemsFiltrados.length;
   const mostrarFiltroUnidade = (!unidadeId || unidadeId === 'todos') && unidades.length > 1;
 
-  // separa sugestoes de sync/grade dos tipos que pedem decisão humana
-  const previewQtd = dados.resumo?.auto_preview || 0;
+  // Só curso/professor/dia/horário são grade. Se um registro legado vier fora
+  // desse contrato, ele nunca recebe rótulo ou ação de Sync grade.
+  const previewQtd = (dados.items || []).filter(previewEhSomenteGrade).length;
   const decisaoEntries = Object.entries(dados.resumo || {}).filter(([t]) => t !== 'auto_preview');
   const previewAtivo = filtroTipo === 'auto_preview';
   const totalPreviewFiltrado = itemsFiltrados.filter(i => i.tipo_divergencia === 'auto_preview').length;
@@ -1361,11 +1368,14 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
               </thead>
               <tbody className="divide-y divide-slate-700/60">
                 {itemsPagina.map((item) => {
-                  const meta = TIPO_META[item.tipo_divergencia] || { label: item.tipo_divergencia, cor: 'amber' };
                   const emProgresso = salvando.has(item.id);
                   const aplicavel = temSugestaoAplicavel(item);
                   const isPreview = item.tipo_divergencia === 'auto_preview';
-                  const isPreviewAltoRisco = isPreview && temCampoAltoRisco(item);
+                  const isPreviewGrade = isPreview && previewEhSomenteGrade(item);
+                  const meta = isPreview && !isPreviewGrade
+                    ? { label: 'Registro fora da fila de grade', cor: 'amber' }
+                    : (TIPO_META[item.tipo_divergencia] || { label: item.tipo_divergencia, cor: 'amber' });
+                  const isPreviewAltoRisco = isPreviewGrade && temCampoAltoRisco(item);
                   const isPreviewAplicavel = temPatchSeguroAplicavel(item);
                   const candidatos: any[] = item.tipo_divergencia === 'ambiguo' && Array.isArray(item.valor_api?.candidatos) ? item.valor_api.candidatos : [];
                   const homonimo = new Set(candidatos.map(c => c.aluno_id)).size > 1;
@@ -1379,11 +1389,11 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                       <td className="px-4 py-3 text-slate-400">{item.unidade_nome || '—'}</td>
                       <td className="px-4 py-3">
                         <span className={cn('inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium', COR_CLASSES[meta.cor])}>
-                          {isPreview && <Zap className="w-3 h-3 shrink-0" />}
-                          {isPreview ? 'Sync grade' : meta.label}
+                          {isPreviewGrade && <Zap className="w-3 h-3 shrink-0" />}
+                          {isPreviewGrade ? 'Sync grade' : meta.label}
                         </span>
                       </td>
-                      {isPreview ? (
+                      {isPreviewGrade ? (
                         <td colSpan={2} className="px-4 py-2">
                           <div className="flex flex-wrap gap-x-5 gap-y-1">
                             {Object.entries(item.valor_api?.diffs || {}).map(([campo, d]: [string, any]) => (
@@ -1444,7 +1454,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                   </DropdownMenuItem>
                                 )}
                                 {!isOrfao && (
-                                  <DropdownMenuItem onClick={() => executarRPC(item, 'manter', isPreview ? patchAtualDoPreview(item) : {})}
+                                  <DropdownMenuItem onClick={() => executarRPC(item, 'manter', isPreviewGrade ? patchAtualDoPreview(item) : {})}
                                     className="cursor-pointer text-slate-300">
                                     <Check className="w-4 h-4 mr-2" /> Manter LA Report
                                   </DropdownMenuItem>

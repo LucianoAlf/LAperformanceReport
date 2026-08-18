@@ -182,6 +182,13 @@ Disparo de templates Meta (WhatsApp Cloud API) + conversas + agentes IA. `Campan
 - **Estado vivo:** `vw_alunos_estado_operacional_v131`. Somente `ativa` entra
   em ativos, pagantes, carteira, presença, Health Score e churn atual.
   `trancada` aparece separada em **Trancados agora**.
+- **Conciliação Emusys:** `ConciliacaoMatriculas` separa domínios por
+  `(unidade_id, emusys_matricula_id)`. `sync-matriculas-emusys` atualiza direto
+  no cadastro canônico telefone, e-mail, responsável, foto e Instagram quando
+  não houver campo local fixado; `auto_preview` fica exclusivo para curso,
+  professor, dia e horário. Forma/status de pagamento seguem a fila financeira
+  de atributos; valor e contrato seguem seus tipos próprios. Decisões manuais
+  permanecem auditadas e forma de pagamento escolhida no LA Report é fixada.
 - **Edge functions:** `gerar-relatorio-pedagogico` (Gemini 3 Flash; gera o relatório pedagógico a partir das anotações e persiste em `relatorios_pedagogicos`). Auditoria IA usa `execute_bi_query_lamusic` via RPC.
 - **Tabelas:** `relatorios_pedagogicos` (histórico de relatórios pedagógicos gerados por IA; RLS por unidade padrão `metas`).
 
