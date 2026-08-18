@@ -15,6 +15,7 @@ import { Plus, Clock, UserX, Building2, Calendar, Sparkles, Shirt, Monitor, User
 import { Criterio360 } from '@/hooks/useProfessor360';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
+import { useColaboradoresOcorrencia } from '@/hooks/useColaboradoresOcorrencia';
 
 interface Modal360OcorrenciaProps {
   open: boolean;
@@ -38,20 +39,6 @@ const CRITERIO_ICONS: Record<string, React.ReactNode> = {
   videos_renovacao: <Smartphone className="h-4 w-4" />,
 };
 
-// Lista de colaboradores que podem registrar ocorrências
-const COLABORADORES = [
-  { id: 'luciano', nome: 'Luciano Alf', cargo: 'Gerente' },
-  { id: 'gabriela', nome: 'Gabriela', cargo: 'Farmer - CG' },
-  { id: 'jhonatan', nome: 'Jhonatan', cargo: 'Farmer - CG' },
-  { id: 'fernanda', nome: 'Fernanda', cargo: 'Farmer - REC' },
-  { id: 'daiana', nome: 'Daiana', cargo: 'Farmer - REC' },
-  { id: 'vitoria_andrade', nome: 'Vitória Andrade', cargo: 'Farmer - REC' },
-  { id: 'eduarda', nome: 'Eduarda', cargo: 'Farmer - BARRA' },
-  { id: 'arthur', nome: 'Arthur', cargo: 'Farmer - BARRA' },
-  { id: 'vitoria', nome: 'Vitória', cargo: 'Hunter - CG' },
-  { id: 'clayton', nome: 'Clayton', cargo: 'Hunter - REC' },
-  { id: 'kailane', nome: 'Kailane', cargo: 'Hunter - BARRA' },
-];
 
 export function Modal360Ocorrencia({
   open,
@@ -70,6 +57,7 @@ export function Modal360Ocorrencia({
   const [registradoPor, setRegistradoPor] = useState<string>('');
   const [minutosAtraso, setMinutosAtraso] = useState<string>('');
   const [saving, setSaving] = useState(false);
+  const { colaboradores, loading: loadingColaboradores } = useColaboradoresOcorrencia();
   
   // Estado para tolerância
   const [toleranciaInfo, setToleranciaInfo] = useState<{
@@ -163,9 +151,6 @@ export function Modal360Ocorrencia({
   // Para pontualidade, minutos de atraso é obrigatório
   const formValido = professorId && unidadeId && criterioId && registradoPor && 
     (!isPontualidade || (isPontualidade && minutosAtraso));
-
-  // Colaborador selecionado
-  const colaboradorAtual = COLABORADORES.find(c => c.id === registradoPor);
 
   const handleSubmit = async () => {
     if (!formValido) return;
@@ -409,13 +394,13 @@ export function Modal360Ocorrencia({
               <UserCircle className="h-4 w-4" />
               Registrado por <span className="text-rose-400">*</span>
             </Label>
-            <Select value={registradoPor} onValueChange={setRegistradoPor}>
+            <Select value={registradoPor} onValueChange={setRegistradoPor} disabled={loadingColaboradores}>
               <SelectTrigger className={!registradoPor ? 'border-rose-500/50' : ''}>
-                <SelectValue placeholder="Quem está registrando?" />
+                <SelectValue placeholder={loadingColaboradores ? 'Carregando...' : 'Quem está registrando?'} />
               </SelectTrigger>
               <SelectContent>
-                {COLABORADORES.map(colab => (
-                  <SelectItem key={colab.id} value={colab.id}>
+                {colaboradores.map(colab => (
+                  <SelectItem key={colab.nome} value={colab.nome}>
                     {colab.nome} <span className="text-slate-500">({colab.cargo})</span>
                   </SelectItem>
                 ))}
