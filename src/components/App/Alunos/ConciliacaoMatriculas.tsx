@@ -103,8 +103,8 @@ const COR_CLASSES: Record<string, string> = {
 
 const ATRIBUTO_GRUPOS: Record<string, { label: string; descricao: string; icon: typeof Link2; cor: string; tipos: string[] }> = {
   cadastro: {
-    label: 'Dados a completar',
-    descricao: 'Responsavel, telefone e email para completar ou revisar. Contagem em campos, nao em alunos.',
+    label: 'Dados de cadastro',
+    descricao: 'Telefone, e-mail e responsavel sao sincronizados do Emusys. So aparece excecao protegida ou sem fonte confiavel.',
     icon: Phone,
     cor: 'sky',
     tipos: ['contato_divergente', 'responsavel_divergente'],
@@ -143,8 +143,8 @@ const ATRIBUTO_TIPO_META: Record<string, { label: string; grupo: string; cor: st
   foto_ausente: { label: 'Foto ausente', grupo: 'imagem', cor: 'violet', icon: ImageIcon },
   instagram_ausente: { label: 'Instagram ausente', grupo: 'imagem', cor: 'violet', icon: AtSign },
   instagram_divergente: { label: 'Instagram diverge', grupo: 'imagem', cor: 'violet', icon: AtSign },
-  contato_divergente: { label: 'Contato diverge', grupo: 'cadastro', cor: 'sky', icon: Phone },
-  responsavel_divergente: { label: 'Responsavel diverge', grupo: 'cadastro', cor: 'sky', icon: Phone },
+  contato_divergente: { label: 'Contato do cadastro', grupo: 'cadastro', cor: 'sky', icon: Phone },
+  responsavel_divergente: { label: 'Responsavel do cadastro', grupo: 'cadastro', cor: 'sky', icon: Phone },
   status_financeiro_divergente: { label: 'Status financeiro', grupo: 'financeiro', cor: 'orange', icon: CreditCard },
   forma_pagamento_divergente: { label: 'Forma de pagamento', grupo: 'financeiro', cor: 'orange', icon: CreditCard },
   aguardando_renovacao_divergente: { label: 'Aguardando renovacao', grupo: 'financeiro', cor: 'orange', icon: CreditCard },
@@ -199,13 +199,56 @@ const EMAILS_SYNC_TECNICO = new Set([
     .filter(Boolean)),
 ]);
 
-const ATRIBUTO_LIMITES_CARREGAMENTO: Record<string, number> = {
-  criticas: 1000,
-  financeiro: 1000,
-  imagem: 1000,
-  cadastro: 1000,
-  contrato: 1000,
-};
+const ATRIBUTO_TAMANHO_LOTE = 500;
+const ATRIBUTO_ALUNOS_TAMANHO_LOTE = 500;
+
+interface AtributoAlunoContexto {
+  nome: string;
+  instagram_nao_possui: boolean;
+  status_operacional: string | null;
+  is_ex_aluno: boolean;
+}
+
+async function carregarTodasAsLinhasAtributos(
+  baseRowsQuery: () => any,
+  aplicarFiltroGrupo: (query: any, grupo: string) => any,
+  grupo: string,
+): Promise<AtributoDivergencia[]> {
+  const rows: AtributoDivergencia[] = [];
+  let inicio = 0;
+
+  while (true) {
+    const { data, error } = await aplicarFiltroGrupo(baseRowsQuery(), grupo)
+      .range(inicio, inicio + ATRIBUTO_TAMANHO_LOTE - 1);
+    if (error) throw error;
+    const lote = (data || []) as AtributoDivergencia[];
+    rows.push(...lote);
+    if (lote.length < ATRIBUTO_TAMANHO_LOTE) return rows;
+    inicio += ATRIBUTO_TAMANHO_LOTE;
+  }
+}
+
+async function carregarAlunosDosAtributos(alunoIds: number[]): Promise<Map<number, AtributoAlunoContexto>> {
+  const alunoMap = new Map<number, AtributoAlunoContexto>();
+
+  for (let inicio = 0; inicio < alunoIds.length; inicio += ATRIBUTO_ALUNOS_TAMANHO_LOTE) {
+    const loteIds = alunoIds.slice(inicio, inicio + ATRIBUTO_ALUNOS_TAMANHO_LOTE);
+    const { data, error } = await supabase
+      .from('alunos')
+      .select('id, nome, instagram_nao_possui, status, is_ex_aluno')
+      .in('id', loteIds);
+    if (error) throw error;
+
+    (data || []).forEach((aluno: any) => alunoMap.set(aluno.id, {
+      nome: aluno.nome,
+      instagram_nao_possui: aluno.instagram_nao_possui === true,
+      status_operacional: aluno.status || null,
+      is_ex_aluno: aluno.is_ex_aluno === true,
+    }));
+  }
+
+  return alunoMap;
+}
 
 function fmtBRL(v: any): string {
   const n = Number(v);
@@ -681,12 +724,9 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
         return [grupo, count || 0] as const;
       }));
 
-      const lotes = await Promise.all(grupos.map(async grupo => {
-        const limite = ATRIBUTO_LIMITES_CARREGAMENTO[grupo] || 100;
-        const { data, error } = await aplicarFiltroGrupo(baseRowsQuery(), grupo).limit(limite);
-        if (error) throw error;
-        return (data || []) as AtributoDivergencia[];
-      }));
+      const lotes = await Promise.all(
+        grupos.map(grupo => carregarTodasAsLinhasAtributos(baseRowsQuery, aplicarFiltroGrupo, grupo)),
+      );
 
       const dedup = new Map<number, AtributoDivergencia>();
       lotes.flat().forEach(row => dedup.set(row.id, row));
@@ -700,25 +740,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
       });
 
       const alunoIds = [...new Set(rows.map(r => r.aluno_id).filter(Boolean))] as number[];
-      const alunoMap = new Map<number, {
-        nome: string;
-        instagram_nao_possui: boolean;
-        status_operacional: string | null;
-        is_ex_aluno: boolean;
-      }>();
-      if (alunoIds.length) {
-        const { data: alunosData, error: alunosError } = await supabase
-          .from('alunos')
-          .select('id, nome, instagram_nao_possui, status, is_ex_aluno')
-          .in('id', alunoIds);
-        if (alunosError) throw alunosError;
-        (alunosData || []).forEach((a: any) => alunoMap.set(a.id, {
-          nome: a.nome,
-          instagram_nao_possui: a.instagram_nao_possui === true,
-          status_operacional: a.status || null,
-          is_ex_aluno: a.is_ex_aluno === true,
-        }));
-      }
+      const alunoMap = await carregarAlunosDosAtributos(alunoIds);
 
       const rowsComAluno = rows.map(row => {
         const aluno = row.aluno_id ? alunoMap.get(row.aluno_id) : null;
