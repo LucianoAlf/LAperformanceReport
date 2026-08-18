@@ -42,6 +42,12 @@ export interface FaturaFinanceiraItem {
     foto_url: string | null;
     photo_url: string | null;
   };
+  // Professor da LINHA DE MATRICULA do item, resolvido pela RPC canonica no mesmo join
+  // que resolve o aluno (local_por_matricula -> alunos.professor_atual_id). Aluno com
+  // 2 cursos tem 2 linhas de matricula com professores proprios — cada fatura recebe o
+  // professor do SEU curso. Trancado mantem o professor. null = fatura sem vinculo de
+  // matricula (ingresso/evento/rateio) ou linha sem professor no cadastro.
+  professor: { id: number; nome: string } | null;
   forma_pagamento: {
     rotulo: 'Pago via' | 'Forma prevista' | 'Forma informada' | 'Forma nao informada';
     nome: string | null;
@@ -176,6 +182,8 @@ export interface FaturasFinanceirasFiltrosLocais {
   tipoFatura?: FaturaFinanceiraTipo | null;
   alunoId?: number | null;
   matriculaId?: string | null;
+  // id do professor, ou 'sem' para faturas sem professor vinculado (item.professor null)
+  professorId?: number | 'sem' | null;
 }
 
 const SITUACOES = new Set<FaturasFinanceirasSituacao>([
@@ -400,6 +408,13 @@ function parseItem(value: unknown): FaturaFinanceiraItem | null {
       foto_url: asText(aluno.foto_url),
       photo_url: asText(aluno.photo_url),
     },
+    // Professor da linha de matricula, resolvido pela propria RPC canonica
+    // (migration 20260818: local_por_matricula -> alunos.professor_atual_id).
+    professor: (() => {
+      const professorId = asIntegerOrNull(aluno.professor_id);
+      const professorNome = asText(aluno.professor_nome);
+      return professorId != null && professorNome ? { id: professorId, nome: professorNome } : null;
+    })(),
     forma_pagamento: {
       rotulo,
       nome: asText(forma.nome),
@@ -700,16 +715,23 @@ export function filtrarFaturasFinanceirasLocais(
   const pagamento = normalizarTexto(filtros.pagamento);
   const tipoFatura = filtros.tipoFatura ?? null;
   const matricula = filtros.matriculaId?.trim() ?? '';
+  const professorId = filtros.professorId ?? null;
   return items.filter((item) => {
     if (filtros.alunoId != null && item.aluno.id !== filtros.alunoId) return false;
     if (matricula && item.emusys_matricula_id !== matricula) return false;
     if (curso && normalizarTexto(item.aluno.curso_nome) !== curso) return false;
     if (pagamento && normalizarTexto(item.forma_pagamento.nome) !== pagamento) return false;
     if (tipoFatura && item.tipo_fatura !== tipoFatura) return false;
+    if (professorId === 'sem') {
+      if (item.professor != null) return false;
+    } else if (professorId != null && item.professor?.id !== professorId) {
+      return false;
+    }
     if (!busca) return true;
     return normalizarTexto([
       item.aluno.nome,
       item.aluno.curso_nome,
+      item.professor?.nome ?? null,
       item.emusys_matricula_id,
       item.emusys_fatura_id,
       item.descricao,
