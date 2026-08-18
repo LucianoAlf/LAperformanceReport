@@ -119,6 +119,16 @@ Fonte canônica: `vw_alunos_estado_operacional_v131`, resolvida por `unidade_id 
 
 Só matrícula resolvida como `ativa` entra nos denominadores de base viva, carteira, presença, Health Score e churn. **Exceção financeira explícita:** o radar de faturas vencidas inclui a pessoa com matrícula atual `ativa` ou `trancada`, porque o trancamento temporário mantém a parcela do mês (§4.6 e cláusula contratual 6.1).
 
+### 3.1.1 Conciliação de matrícula: domínio certo, decisão auditável ✅
+
+A chave de identidade é sempre `unidade_id + emusys_matricula_id`; nome, telefone e curso nunca escolhem um aluno por aproximação.
+
+- O sync atualiza diretamente no cadastro canônico, quando o campo não foi fixado por decisão humana: telefone, e-mail, responsável, telefone do responsável, foto e Instagram.
+- `auto_preview`/“Sync grade” é reservado exclusivamente para divergências reais de **curso, professor, dia ou horário**. A sugestão não altera a grade sem decisão humana.
+- Forma/status de pagamento pertencem à conciliação financeira; valores e situação contratual têm seus próprios tipos de divergência. Nenhum deles pode reaparecer como sugestão de grade.
+- Ao informar a forma de pagamento no LA Report, a decisão fica fixada e auditada. Um sync posterior incompleto do Emusys não a sobrescreve nem reabre a pendência.
+- Reclassificações preservam o payload original e a decisão em auditoria; a plataforma não apaga histórico para “limpar” a fila.
+
 ### 3.2 Aluno ativo ✅
 
 **Pessoa** com pelo menos uma matrícula que satisfaça, ao mesmo tempo:
