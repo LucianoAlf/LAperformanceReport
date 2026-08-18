@@ -27,9 +27,9 @@
 //   A4. Grava a fotografia crua ............ emusys_matriculas_estado_atual
 //   A5. Jornada canônica .......... aluno_jornada_matricula_disciplina
 //   A6. Sincroniza cadastro direto, fecha pendências que viraram histórico;
-//       no operacional, reconcilia ausentes, registra execução e RETORNA
+//       A6b: no operacional, reconcilia estados ausentes (NÃO retorna mais)
 //
-// FASE B — só o escopo 'completo' alcança (ver o return do escopo operacional):
+// FASE B — roda nos DOIS escopos desde 2026-08-18 (não chama a API; só processa porId):
 //   B2. Decisões canônicas de matrícula
 //   B3. Régua de classificação (tipos_matricula)
 //   B4. Lead ID .................................. alunos.emusys_lead_id
@@ -37,12 +37,18 @@
 //       e conversão de renovação pendente em não-renovação (movimentacoes_admin)
 //   B6. Limpeza de alertas obsoletos + varredura reversa (contratos órfãos)
 //
-// ⚠️ O cron diário chama com escopo=operacional, então a fase B não roda
-//    automaticamente desde 2026-08-11 (migration 20260811210319). A jornada estava
-//    nesse grupo e voltou para a fase A em 2026-08-12, porque Contratos Vencendo e
-//    Cobertura de Renovação liam dado congelado sem nenhum erro aparecer. Segue
-//    parada a geração da fila da aba Conciliação (B5). A exceção é a higiene de
-//    itens fora do escopo operacional, feita antes do retorno e sem chamar a API.
+// ⚠️ HISTÓRICO: de 2026-08-11 (migration 20260811210319) a 2026-08-18 o escopo
+//    operacional RETORNAVA antes da fase B, e o cron diário parou de gerar a fila da
+//    Conciliação — troca de professor no Emusys não virava nem sugestão (caso
+//    Bernardo/Isabela Bolzani, jornada com a professora nova e `alunos` com o antigo).
+//    A jornada teve o mesmo problema em 11–12/08.
+// ⚠️ O que o escopo operacional NÃO faz na fase B (semântica de AUSÊNCIA, exclusiva
+//    do completo, porque "finalizada" some do payload operacional sem ter sumido do
+//    Emusys): (1) 'ausente_api'; (2) matching por nome de aluno vinculado cuja
+//    matrícula não veio (flag detectarAusencias de reconciliar()); (3) conversão de
+//    não-renovação (auto-protegida: exige status finalizada/concluida no payload).
+//    Alunos pulados por (2) ficam fora de TODAS as limpezas por rodada — senão o
+//    "processado sem regenerar" apagaria pendências legítimas do escopo completo.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -1294,6 +1300,10 @@ serve(async (req) => {
   const attrDivs: any[] = [];
   // dry-run: alunos cujo upd seria aplicado (prévia do que o sync faria em produção)
   const previewAlunoIds: number[] = [];
+  // Escopo operacional: alunos vinculados cuja matrícula NÃO veio no payload (provavelmente
+  // finalizada). reconciliar() os pula, e eles ficam FORA de toda limpeza por rodada — senão
+  // o "processado sem regenerar" apagaria pendências legítimas criadas pelo escopo completo.
+  const alunosForaDoPayloadOperacional = new Set<number>();
 
   let syncExecucaoId: string | null = null;
 
@@ -1494,15 +1504,17 @@ serve(async (req) => {
     if (pendenciasForaEscopoError) throw pendenciasForaEscopoError;
     resumo.pendencias_fora_escopo = pendenciasForaEscopo || resumo.pendencias_fora_escopo;
 
-    // ─── A6. Saída do escopo operacional ──────────────────────────────────────
-    // ⚠️ ATENÇÃO: este `return` encerra a invocação. TODA a fase B abaixo (decisões
-    // canônicas, classificação, lead_id, fila de divergências, conversão de
-    // não-renovação, varredura reversa) fica de fora quando escopo=operacional
-    // — que é o que o cron diário usa. Nenhum daqueles blocos chama a API do
-    // Emusys: eles só processam o que já está em `porId`, então o custo de incluí-los
-    // aqui é de banco, não de rede. Antes de mover qualquer coisa para cá, confira
-    // que as dependências (depara, profMapJornada, alunoIdPor*) já estão montadas
-    // acima — elas estão, porque buildEstadoAtualRows também precisa delas.
+    // ─── A6b. Reconciliação de ausentes (só o escopo operacional) ─────────────
+    // Desde 2026-08-18 o escopo operacional NÃO retorna mais aqui: a fase B roda nos
+    // dois escopos. O `return` que existia neste ponto (11/08–18/08) matou a geração
+    // da fila de Conciliação no cron diário — troca de professor no Emusys parou de
+    // virar sugestão e o cadastro ficou defasado em silêncio (caso Bernardo/Isabela
+    // Bolzani: jornada com a professora nova, `alunos` com o antigo). A fase B não
+    // chama a API do Emusys — só processa o `porId` já buscado —, então o custo é de
+    // banco, não de rede. O que o escopo operacional NÃO faz na fase B: raciocínio
+    // por AUSÊNCIA (ausente_api e pulo de aluno vinculado sem payload — flag
+    // `detectarAusencias` de reconciliar()) e conversão de não-renovação (exige
+    // status finalizada/concluida, que este payload não traz por construção).
     if (escopo === 'operacional') {
       const sincronizadoEm = new Date().toISOString();
       const linhasInativadas = await reconciliarEstadosOperacionaisAusentes(
@@ -1512,32 +1524,6 @@ serve(async (req) => {
         sincronizadoEm,
       );
       resumo.estados_atual.linhas_inativadas = linhasInativadas;
-      if (logs.length) {
-        const { error: logsError } = await supabase.from('automacao_log').insert(logs);
-        if (logsError) throw logsError;
-      }
-      resumo.status = 'succeeded';
-      const { error: finalizacaoError } = await supabase
-        .from('emusys_matriculas_sync_execucoes')
-        .update({
-          status: 'succeeded',
-          completed_at: sincronizadoEm,
-          linhas_recebidas: linhasRecebidas,
-          linhas_ativas: linhasAtivas,
-          linhas_trancadas: linhasTrancadas,
-          linhas_inativadas: linhasInativadas,
-          metadados: {
-            snapshot_completo: snapshotCompleto,
-            estados_gravados: resumo.estados_atual.gravadas,
-            estados_rejeitados: resumo.estados_atual.rejeitadas,
-          },
-        })
-        .eq('id', syncExecucaoId);
-      if (finalizacaoError) throw finalizacaoError;
-
-      return new Response(JSON.stringify(resumo, null, 2), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
     }
 
     // ─── B2. Decisões canônicas ───────────────────────────────────────────────
@@ -1688,7 +1674,11 @@ serve(async (req) => {
       try {
         const tipoCodigo = a.tipo_matricula_id ? tipoCodigoMap.get(a.tipo_matricula_id) || null : null;
         const fixadosBase = fixadosMap.get(a.id) || new Set();
-        const r = reconciliar(a, u, porId, ativasPorNome, depara, profMap, banda, fixadosBase, tipoCodigo, idsVinculadosAtivos, decisoesCanonicasPorMatricula);
+        const r = reconciliar(a, u, porId, ativasPorNome, depara, profMap, banda, fixadosBase, tipoCodigo, idsVinculadosAtivos, decisoesCanonicasPorMatricula, escopo === 'completo');
+        if (r.fora_do_payload_operacional) {
+          alunosForaDoPayloadOperacional.add(a.id);
+          continue;
+        }
         const matAtributos = r.detalhes?.emusys_matricula_id
           ? porId.get(Number(r.detalhes.emusys_matricula_id))
           : (a.emusys_matricula_id ? porId.get(Number(a.emusys_matricula_id)) : null);
@@ -1824,6 +1814,14 @@ serve(async (req) => {
         for (const dv of r.divergencias) {
           if (dv.tipo === 'auto_preview') {
             if (jaDecididoCampo.has(`${a.id}|auto_preview|${dv.campo || ''}`) && !dv.reabrir) continue;
+            // ⚠️ Fix 2026-08-18: no modo SUGESTÃO o auto_preview chega por AQUI (r.divergencias),
+            // não por r.upd — mas previewAlunoIds só era populado pelo caminho de r.upd (relíquia
+            // do modo AUTO antigo, que sempre fica vazio hoje). Resultado: a limpeza de
+            // "auto_preview obsoletos" no fim do run não preservava NINGUÉM e resolvia a fila
+            // inteira RECÉM-CRIADA, no mesmo run, sem decisão humana. Era por isso que sugestões
+            // legítimas (ex.: troca de professor Bernardo/Isabela Bolzani, 6→53) nasciam e
+            // morriam invisíveis — a aba nunca as mostrava.
+            previewAlunoIds.push(a.id);
           } else if (jaDecidido.has(`${a.id}|${dv.tipo}`) && !dv.reabrir) {
             continue;
           }
@@ -1884,11 +1882,18 @@ serve(async (req) => {
         .eq('tipo_divergencia', 'status_divergente')
         .eq('resolvido', false);
     }
-    await supabase.from('matriculas_divergencias')
-      .update({ resolvido: true, updated_at: new Date().toISOString() })
-      .eq('unidade_id', u.id)
-      .eq('tipo_divergencia', 'auto_preview')
-      .eq('resolvido', false);
+    {
+      let wipe = supabase.from('matriculas_divergencias')
+        .update({ resolvido: true, updated_at: new Date().toISOString() })
+        .eq('unidade_id', u.id)
+        .eq('tipo_divergencia', 'auto_preview')
+        .eq('resolvido', false);
+      // aluno fora do payload operacional não foi avaliado — a pendência dele fica intacta
+      if (alunosForaDoPayloadOperacional.size) {
+        wipe = wipe.not('aluno_id', 'in', `(${[...alunosForaDoPayloadOperacional].join(',')})`);
+      }
+      await wipe;
+    }
     if (divs.length) await supabase.from('matriculas_divergencias').upsert(divs, { onConflict: 'aluno_id,tipo_divergencia,campo' });
 
     // Limpa alertas obsoletos: alunos processados nesta rodada que não geraram o mesmo tipo
@@ -1901,7 +1906,11 @@ serve(async (req) => {
     // mesmo id, e a sync nunca soube que o alerta antigo de 'evadido' já não fazia sentido).
     {
       const TIPOS_COM_LIMPEZA_POR_RODADA = ['ambiguo', 'status_divergente', 'valor_divergente', 'classificacao_divergente', 'disciplina_nao_mapeada'];
-      const idsProcessados = alunosParaReconciliar.map((a: any) => a.id);
+      const idsProcessados = alunosParaReconciliar
+        .map((a: any) => a.id)
+        // fora do payload operacional = não avaliado nesta rodada; limpar seria apagar
+        // pendência legítima criada pelo escopo completo
+        .filter((id: number) => !alunosForaDoPayloadOperacional.has(id));
       for (const tipo of TIPOS_COM_LIMPEZA_POR_RODADA) {
         const alunosComTipo = new Set(divs.filter((d: any) => d.tipo_divergencia === tipo).map((d: any) => d.aluno_id));
         const alunosSemTipo = idsProcessados.filter((id: number) => !alunosComTipo.has(id));
@@ -2084,7 +2093,8 @@ serve(async (req) => {
         .eq('unidade_id', u.id)
         .eq('tipo_divergencia', 'auto_preview')
         .eq('resolvido', false);
-      if (previewAlunoIds.length) q = q.not('aluno_id', 'in', `(${previewAlunoIds.join(',')})`);
+      const preservar = [...new Set([...previewAlunoIds, ...alunosForaDoPayloadOperacional])];
+      if (preservar.length) q = q.not('aluno_id', 'in', `(${preservar.join(',')})`);
       await q;
     }
 
@@ -2098,12 +2108,14 @@ serve(async (req) => {
         linhas_recebidas: linhasRecebidas,
         linhas_ativas: linhasAtivas,
         linhas_trancadas: linhasTrancadas,
-        linhas_inativadas: 0,
+        linhas_inativadas: resumo.estados_atual.linhas_inativadas ?? 0,
         metadados: {
           snapshot_completo: snapshotCompleto,
           estados_gravados: resumo.estados_atual.gravadas,
           estados_rejeitados: resumo.estados_atual.rejeitadas,
           jornadas_atualizadas: resumo.jornadas.atualizadas,
+          escopo,
+          alunos_fora_do_payload_operacional: alunosForaDoPayloadOperacional.size,
         },
       })
       .eq('id', syncExecucaoId);
@@ -2168,6 +2180,11 @@ function reconciliar(
   depara: Map<number, number | null>, profMap: Map<number, number>, banda: Set<number>, fixados: Set<string>,
   tipoCodigo: string | null, idsVinculados: Set<number> = new Set(),
   decisoesCanonicasPorMatricula: Map<string, any> = new Map(),
+  // false = escopo operacional: o payload traz só ativa+trancada, então AUSÊNCIA não é
+  // sinal ("finalizada" some do payload sem ter sumido do Emusys). Nesse modo, aluno já
+  // vinculado cuja matrícula não veio é pulado em silêncio, e 'ausente_api' não é gerado —
+  // esses dois raciocínios por ausência ficam exclusivos do escopo completo.
+  detectarAusencias = true,
 ): any {
   const upd: Record<string, any> = {};
   const divergencias: any[] = [];
@@ -2175,6 +2192,11 @@ function reconciliar(
   let mat: any = null;
   if (a.emusys_matricula_id && porId.has(Number(a.emusys_matricula_id))) {
     mat = porId.get(Number(a.emusys_matricula_id));
+  } else if (!detectarAusencias && a.emusys_matricula_id) {
+    // Operacional: matrícula vinculada fora do payload = provavelmente finalizada.
+    // Sem o universo completo, o matching por nome abaixo poderia "vincular" o aluno
+    // a OUTRA matrícula presente (ex.: o 2º curso dele) — fora do escopo diário.
+    return { upd, divergencias, fora_do_payload_operacional: true };
   } else {
     const candTodasRaw = (ativasPorNome.get(normalizarNome(a.nome)) || [])
       .filter((m: any) => !idsVinculados.has(Number(m.id)));
@@ -2232,8 +2254,13 @@ function reconciliar(
       divergencias.push({ tipo: 'ambiguo', campo: '', severidade: 'media', valorApi: { candidatos: cand.map(candidatosMeta) } });
       return { upd, divergencias };
     } else {
-      divergencias.push({ tipo: 'ausente_api', campo: '', severidade: 'alta', valorApi: { nome: a.nome } });
-      return { upd, divergencias };
+      // 'ausente_api' só faz sentido contra o universo COMPLETO — no operacional,
+      // não estar no payload não significa não estar no Emusys.
+      if (detectarAusencias) {
+        divergencias.push({ tipo: 'ausente_api', campo: '', severidade: 'alta', valorApi: { nome: a.nome } });
+        return { upd, divergencias };
+      }
+      return { upd, divergencias, fora_do_payload_operacional: true };
     }
   }
 
