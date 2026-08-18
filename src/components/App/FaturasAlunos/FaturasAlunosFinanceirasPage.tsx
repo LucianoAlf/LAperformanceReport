@@ -363,6 +363,7 @@ export function FaturasAlunosFinanceirasPage() {
   const curso = searchParams.get('curso') ?? 'todos';
   const tipoFatura = searchParams.get('tipo') ?? 'todos';
   const pagamento = searchParams.get('pagamento') ?? 'todos';
+  const professor = searchParams.get('professor') ?? 'todos';
   const alunoId = Number(searchParams.get('aluno')) || null;
   const matriculaId = searchParams.get('matricula');
 
@@ -502,14 +503,30 @@ export function FaturasAlunosFinanceirasPage() {
     .filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, 'pt-BR')), [state.items]);
   const tiposFatura = useMemo(() => [...new Set(state.items.map((item) => item.tipo_fatura))]
     .sort((a, b) => rotuloTipoFatura(a).localeCompare(rotuloTipoFatura(b), 'pt-BR')), [state.items]);
+  // Professor vem da propria RPC canonica (professor da LINHA DE MATRICULA — aluno com
+  // 2 cursos tem professor proprio em cada fatura; trancado segue sob o professor dele).
+  const professores = useMemo(() => {
+    const vistos = new Map<number, string>();
+    for (const item of state.items) {
+      if (item.professor) vistos.set(item.professor.id, item.professor.nome);
+    }
+    return [...vistos.entries()]
+      .map(([id, nome]) => ({ id, nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [state.items]);
+  const temFaturaSemProfessor = useMemo(
+    () => professores.length > 0 && state.items.some((item) => item.professor == null),
+    [professores, state.items],
+  );
   const itemsFiltrados = useMemo(() => filtrarFaturasFinanceirasLocais(state.items, {
     busca,
     curso: curso === 'todos' ? null : curso,
     tipoFatura: tipoFatura === 'todos' ? null : tipoFatura as FaturaFinanceiraTipo,
     pagamento: pagamento === 'todos' ? null : pagamento,
+    professorId: professor === 'todos' ? null : professor === 'sem' ? 'sem' : Number(professor) || null,
     alunoId,
     matriculaId,
-  }), [alunoId, busca, curso, matriculaId, pagamento, state.items, tipoFatura]);
+  }), [alunoId, busca, curso, matriculaId, pagamento, professor, state.items, tipoFatura]);
   const unidadesPorId = useMemo(() => new Map(unidades.map((unidade) => [unidade.id, unidade.nome])), [unidades]);
 
   const selecionarSituacao = (next: FaturasFinanceirasSituacao) => {
@@ -519,7 +536,7 @@ export function FaturasAlunosFinanceirasPage() {
   const limparFiltros = () => {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
-      for (const key of ['busca', 'curso', 'tipo', 'pagamento', 'aluno', 'matricula', 'situacao', 'unidade']) next.delete(key);
+      for (const key of ['busca', 'curso', 'tipo', 'pagamento', 'professor', 'aluno', 'matricula', 'situacao', 'unidade']) next.delete(key);
       return next;
     }, { replace: true });
   };
@@ -660,6 +677,18 @@ export function FaturasAlunosFinanceirasPage() {
                     <SelectContent>
                       <SelectItem value="todos">Todas as formas</SelectItem>
                       {pagamentos.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Select value={professor} onValueChange={(value) => setFiltro('professor', value)}>
+                    <SelectTrigger className="w-[200px] bg-slate-950/70"><SelectValue placeholder="Professor" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todos os professores</SelectItem>
+                      {professores.map((item) => (
+                        <SelectItem key={item.id} value={String(item.id)}>{item.nome}</SelectItem>
+                      ))}
+                      {temFaturaSemProfessor && (
+                        <SelectItem value="sem">Sem professor vinculado</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                   <button type="button" onClick={limparFiltros} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-700 px-3 text-sm text-slate-400 transition hover:bg-slate-800 hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"><RotateCcw className="h-4 w-4" /> Limpar</button>
