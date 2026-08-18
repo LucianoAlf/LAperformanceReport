@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { abreviarNomesSemColisao } from '@/lib/nomeExibicao.mjs';
 
 export interface ColaboradorOcorrencia {
   /** Valor gravado em professor_360_ocorrencias.registrado_por (coluna text, exibida crua na UI). */
@@ -29,6 +30,12 @@ const GERENTE: ColaboradorOcorrencia = { nome: 'Luciano Alf', cargo: 'Gerente' }
  * Fora da lista: professores (sao os avaliados) e os cadastros de teste.
  * Dentro: `situacao = 'candidato'`, que e como entra quem acabou de ser
  * contratado e ainda nao teve a ficha fechada.
+ *
+ * Nome longo e abreviado para os dois primeiros nomes (ver `nomeExibicao.mjs`).
+ * A abreviacao acontece AQUI, na origem, e nao so no texto da tela: o valor
+ * exibido e o mesmo que vai para `registrado_por` e para a mensagem enviada ao
+ * professor. Truncar apenas a exibicao faria a tela mostrar "Mayra Alves" e o
+ * banco gravar o nome inteiro do cadastro.
  */
 export function useColaboradoresOcorrencia() {
   const [colaboradores, setColaboradores] = useState<ColaboradorOcorrencia[]>([GERENTE]);
@@ -54,11 +61,15 @@ export function useColaboradoresOcorrencia() {
         if (queryError) throw queryError;
         if (cancelado) return;
 
-        const lista = (data || []).map((row: any) => {
+        // Linha sem nome quebraria o Select do Radix, que proibe value="".
+        const linhas = (data || []).filter((row: any) => String(row?.nome ?? '').trim());
+        const nomesCurtos = abreviarNomesSemColisao(linhas.map((row: any) => row.nome));
+
+        const lista = linhas.map((row: any, i: number) => {
           const tipo = LABEL_POR_TIPO[row.tipo] || row.tipo;
           const codigo = row.unidades?.codigo;
           return {
-            nome: row.nome as string,
+            nome: nomesCurtos[i] as string,
             cargo: codigo ? `${tipo} - ${codigo}` : tipo,
           };
         });
