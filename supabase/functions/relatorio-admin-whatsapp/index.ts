@@ -705,11 +705,16 @@ async function gerarRelatorioDiario(
   const alunosCoral = kpisAlunos.alunosCoral;
 
   // Movimentacoes do mes para retencao operacional viva.
-  // Le a VIEW ..._vigentes (= tabela WHERE NOT anulado), nunca a tabela crua: registro
-  // anulado e duplicata comprovada de renovacao e nao pode entrar na contagem. Lendo cru,
-  // o relatorio do Recreio dava 36 renovacoes em ago/2026 onde o correto e 32.
+  // ⚠️ REVERTIDO em 2026-08-18 (decisao do Alf): a correcao para a view
+  // movimentacoes_admin_vigentes (que exclui anulado) mudaria o relatorio do Recreio de
+  // 39->35 realizadas / 78,0%->76,1% SEM AVISO — a equipe validou o numero de ontem e
+  // leria a queda como relatorio quebrado. A troca para a view so entra depois que a
+  // equipe do Recreio confirmar as 4 duplicatas anuladas de ago/2026 (Arthur de Carvalho,
+  // Joao Francisco, Sofia Goncalves, Noah Pincelli — 3 delas aparecem em dobro no proprio
+  // relatorio: contadas no total de agosto E listadas como antecipadas de setembro).
+  // O numero atual esta INFLADO de proposito ate essa confirmacao.
   const { data: movData, error: movError } = await supabase
-    .from('movimentacoes_admin_vigentes')
+    .from('movimentacoes_admin')
     .select('*')
     .eq('unidade_id', unidadeId)
     .or(`and(data.gte.${primeiroDiaMes},data.lte.${hoje}),and(competencia_referencia.gte.${primeiroDiaMes},competencia_referencia.lte.${ultimoDiaMes})`)
@@ -769,10 +774,11 @@ async function gerarRelatorioDiario(
   const evasoesHoje = evasoes.filter((e: any) => e.data === hoje);
 
   // Avisos prévios (mes_saida do mês seguinte — mesma lógica do fix no frontend)
-  // Tambem pela view vigente: hoje nao ha aviso_previo anulado, mas a tabela crua nao
-  // garante isso e o custo de ler a view e zero.
+  // ⚠️ REVERTIDO junto com a query acima (2026-08-18) para manter o relatorio
+  // byte-a-byte identico ao de ontem ate a equipe confirmar. Hoje nao ha aviso_previo
+  // anulado, entao aqui o efeito e zero — reverteu por coerencia, nao por necessidade.
   const { data: avisosData, error: avisosError } = await supabase
-    .from('movimentacoes_admin_vigentes')
+    .from('movimentacoes_admin')
     .select('*')
     .eq('unidade_id', unidadeId)
     .eq('tipo', 'aviso_previo')

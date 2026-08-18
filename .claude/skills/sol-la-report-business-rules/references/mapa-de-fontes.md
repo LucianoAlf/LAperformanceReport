@@ -116,8 +116,9 @@ Critérios que **não** podem ser mudados:
   Se a pergunta for "quantos contratos venceram e não renovaram", use `vw_renovacao_ciclos`
   (denominador = contratos que terminam na competência), não a taxa.
 
-✅ **Corrigido em 2026-08-18 (edge v107).** A edge do relatório lia `movimentacoes_admin`
-**crua**, sem filtrar `anulado` — e isso **não era dano latente, estava ativo**. Reproduzindo a
+⏸️ **Corrigido na v107 e REVERTIDO na v108 no mesmo dia (2026-08-18), por decisão do Alf.**
+A edge lia `movimentacoes_admin` **crua**, sem filtrar `anulado` — e isso **não era dano
+latente, estava ativo**. Reproduzindo a
 lógica exata da edge contra o relatório de 17/08 (que bateu nas 3 unidades):
 
 | Unidade | Realizadas | Previsto | Taxa |
@@ -127,8 +128,18 @@ lógica exata da edge contra o relatório de 17/08 (que bateu nas 3 unidades):
 | Campo Grande | 29 (sem efeito) | 35 | 82,9% |
 
 As 4 anuladas do Recreio entravam como realizadas **e** no previsto. Set/2026 já tinha
-mais 3 esperando. Barra e CG não tinham anulada em agosto — por isso não mudaram.
-Hoje a edge lê `movimentacoes_admin_vigentes` nos dois pontos (retenção e aviso prévio).
+mais 3 esperando. Barra e CG não tinham anulada em agosto — por isso não mudariam.
+
+**Por que reverteu:** a equipe validou o relatório de 17/08 com 39/50/78,0%. Se o de 18/08
+saísse 35/46/76,1% sem aviso, a queda seria lida como "relatório quebrado" — número certo
+que aparece sem explicação vira número errado na prática. O fix só volta depois que a
+equipe do Recreio confirmar as 4 duplicatas de agosto. Evidência forte para a conversa:
+**3 das 4 (Arthur de Carvalho, João Francisco e Sofia Gonçalves) aparecem em DOBRO no
+próprio relatório de 17/08** — contadas no total de agosto E listadas como "Renovações
+Antecipadas" de setembro. A 4ª é Noah Pincelli (registro idêntico ao mantido, aluno com
+matrícula única). ⚠️ **Enquanto a v108 estiver no ar, o relatório do Recreio está
+inflado DE PROPÓSITO** — a Sol, que lê a view `_vigentes`, vai divergir dele em -4
+realizadas / -4 previsto, e nesse caso é a SOL que está certa.
 
 ⚠️ **As 46 anuladas são TODAS `tipo='renovacao'`.** Por isso quem filtra só
 `evasao`/`nao_renovacao`/`aviso_previo` não é afetado hoje — mas é exposição latente, porque
