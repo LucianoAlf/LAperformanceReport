@@ -39,6 +39,8 @@ export interface FaturaFinanceiraItem {
     curso_nome: string | null;
     estado_operacional: string | null;
     vinculo_local_fonte: 'matricula_canonica' | 'aluno_unico_canonico' | null;
+    foto_url: string | null;
+    photo_url: string | null;
   };
   forma_pagamento: {
     rotulo: 'Pago via' | 'Forma prevista' | 'Forma informada' | 'Forma nao informada';
@@ -395,6 +397,8 @@ function parseItem(value: unknown): FaturaFinanceiraItem | null {
       curso_nome: asText(aluno.curso_nome),
       estado_operacional: asText(aluno.estado_operacional),
       vinculo_local_fonte: asText(aluno.vinculo_local_fonte) as FaturaFinanceiraItem['aluno']['vinculo_local_fonte'],
+      foto_url: asText(aluno.foto_url),
+      photo_url: asText(aluno.photo_url),
     },
     forma_pagamento: {
       rotulo,
@@ -487,6 +491,8 @@ function parseReconciliationItem(value: unknown): FaturaFinanceiraReconciliacaoI
       curso_nome: asText(aluno.curso_nome),
       estado_operacional: asText(aluno.estado_operacional),
       vinculo_local_fonte: asText(aluno.vinculo_local_fonte) as FaturaFinanceiraItem['aluno']['vinculo_local_fonte'],
+      foto_url: asText(aluno.foto_url),
+      photo_url: asText(aluno.photo_url),
     },
     forma_pagamento: {
       rotulo,

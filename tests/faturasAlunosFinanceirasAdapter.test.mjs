@@ -214,3 +214,21 @@ test('filtro de tipo separa passaporte de parcela sem misturar forma de pagament
   assert.deepEqual(result.map((row) => row.emusys_fatura_id), ['1002']);
   assert.equal(result[0].valores.valor_pago, 400);
 });
+
+test('adaptador preserva a foto canônica do aluno e o fallback legado', () => {
+  const fotoAtual = 'https://cdn.example/alunos/10-atual.jpg';
+  const fotoLegada = 'https://cdn.example/alunos/10-legada.jpg';
+  const state = normalizarFaturasAlunosFinanceiras(payload({
+    items: [item({
+      aluno: {
+        ...item().aluno,
+        foto_url: fotoAtual,
+        photo_url: fotoLegada,
+      },
+    })],
+  }));
+
+  assert.equal(state.status, 'ok');
+  assert.equal(state.items[0].aluno.foto_url, fotoAtual);
+  assert.equal(state.items[0].aluno.photo_url, fotoLegada);
+});
