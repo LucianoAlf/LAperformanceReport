@@ -199,13 +199,6 @@ function valoresIguaisParaCampo(campo: string, vNovo: any, vAtual: any): boolean
   return String(vNovo) === String(vAtual ?? '');
 }
 
-function autoPreviewCampo(upd: Record<string, any>): string {
-  const partes = Object.entries(upd)
-    .filter(([, valor]) => valor !== undefined && valor !== null)
-    .map(([campo, valor]) => `${campo}=${String(valor).slice(0, 80)}`)
-    .sort();
-  return partes.length ? `auto:${partes.join('|')}` : 'auto:vazio';
-}
 
 function temValor(v: any): boolean {
   return v !== null && v !== undefined && String(v).trim() !== '';
@@ -1272,11 +1265,13 @@ serve(async (req) => {
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   const resumo: any = {
-    modo: 'sugestao',
+    // 'aplicacao_direta' desde 2026-08-18: fato do Emusys entra no cadastro sem fila.
+    modo: 'aplicacao_direta',
     unidade: u.nome,
     escopo,
     sync_execucao_id: null,
-    auto: 0,
+    aplicados: 0,
+    aplicados_por_campo: {},
     fila: {},
     atributos: {},
     pendencias_fora_escopo: { atributos: 0, matriculas: 0 },
@@ -1298,8 +1293,6 @@ serve(async (req) => {
   const logs: any[] = [];
   const divs: any[] = [];
   const attrDivs: any[] = [];
-  // dry-run: alunos cujo upd seria aplicado (prévia do que o sync faria em produção)
-  const previewAlunoIds: number[] = [];
   // Escopo operacional: alunos vinculados cuja matrícula NÃO veio no payload (provavelmente
   // finalizada). reconciliar() os pula, e eles ficam FORA de toda limpeza por rodada — senão
   // o "processado sem regenerar" apagaria pendências legítimas criadas pelo escopo completo.
@@ -1791,38 +1784,55 @@ serve(async (req) => {
           }
         }
 
-        // SUGESTÃO: nunca aplica automaticamente — sempre registra como `auto_preview` na fila
-        // para aprovação humana na aba de Conciliação.
-        if (Object.keys(r.upd).length) {
-          resumo.auto++;
-          const campoPreview = autoPreviewCampo(r.upd);
-          if (!jaDecididoCampo.has(`${a.id}|auto_preview|${campoPreview}`)) {
-            previewAlunoIds.push(a.id);
-            divs.push({
-              aluno_id: a.id, emusys_matricula_id: a.emusys_matricula_id, unidade_id: u.id,
-              tipo_divergencia: 'auto_preview', campo: campoPreview, fonte: 'sync',
-              valor_nosso: { nome: a.nome },
-              // `patch` = o que o "Aprovar" da tela vai gravar
-              valor_api: { diffs: r.detalhes?.diffs ?? {}, patch: r.upd, status_api: r.detalhes?.status_api },
-              sugestao: null, severidade: 'baixa',
-              resolvido: false, updated_at: new Date().toISOString(),
+        // ⚠️ 2026-08-18 (decisão do Alf): o que está no Emusys é aplicado DIRETO em `alunos`.
+        // Antes isto virava `auto_preview` na fila e esperava alguém aprovar item a item —
+        // o que fazia a tela divergir do Emusys por dias (caso Bernardo/Isabela Bolzani:
+        // trocaram de professor no Emusys e o cadastro aqui seguiu apontando o antigo).
+        // Fila é para dúvida; troca de professor/turma não é dúvida, é fato já decidido lá.
+        const patchEmusys = { ...(r.aplicar || {}), ...r.upd };
+        if (Object.keys(patchEmusys).length) {
+          const { error: aplicarError } = await supabase
+            .from('alunos')
+            .update({ ...patchEmusys, updated_at: new Date().toISOString() })
+            .eq('id', a.id)
+            .eq('unidade_id', u.id);
+          if (aplicarError) {
+            resumo.erros++;
+            logs.push({
+              aluno_id: a.id, unidade_nome: u.nome,
+              evento: 'sync_matriculas_aplicacao_direta', acao: 'erro',
+              detalhes: { patch: patchEmusys, erro: aplicarError.message },
+              workflow_id: 'sync-matriculas-emusys', execution_id: new Date().toISOString(),
             });
+          } else {
+            resumo.aplicados++;
+            for (const campo of Object.keys(patchEmusys)) {
+              resumo.aplicados_por_campo[campo] = (resumo.aplicados_por_campo[campo] || 0) + 1;
+            }
+            // trilha de auditoria: o que mudou, de que valor para qual
+            logs.push({
+              aluno_id: a.id, unidade_nome: u.nome,
+              evento: 'sync_matriculas_aplicacao_direta', acao: 'aplicado',
+              detalhes: {
+                emusys_matricula_id: a.emusys_matricula_id,
+                patch: patchEmusys,
+                diffs: { ...(r.diffsAplicar || {}), ...(r.detalhes?.diffs ?? {}) },
+              },
+              workflow_id: 'sync-matriculas-emusys', execution_id: new Date().toISOString(),
+            });
+            // o objeto local ficou velho: a detecção de atributos logo abaixo compara
+            // contra `alunoPosAuto` e reabriria divergência do valor que acabamos de gravar
+            Object.assign(a, patchEmusys);
+            const jaSincronizado = atributosSincronizados.get(a.id);
+            if (jaSincronizado) Object.assign(jaSincronizado, patchEmusys);
           }
         }
 
         // FILA: cada divergência vira uma linha (respeitando dedup de decisões humanas)
         for (const dv of r.divergencias) {
-          if (dv.tipo === 'auto_preview') {
-            if (jaDecididoCampo.has(`${a.id}|auto_preview|${dv.campo || ''}`) && !dv.reabrir) continue;
-            // ⚠️ Fix 2026-08-18: no modo SUGESTÃO o auto_preview chega por AQUI (r.divergencias),
-            // não por r.upd — mas previewAlunoIds só era populado pelo caminho de r.upd (relíquia
-            // do modo AUTO antigo, que sempre fica vazio hoje). Resultado: a limpeza de
-            // "auto_preview obsoletos" no fim do run não preservava NINGUÉM e resolvia a fila
-            // inteira RECÉM-CRIADA, no mesmo run, sem decisão humana. Era por isso que sugestões
-            // legítimas (ex.: troca de professor Bernardo/Isabela Bolzani, 6→53) nasciam e
-            // morriam invisíveis — a aba nunca as mostrava.
-            previewAlunoIds.push(a.id);
-          } else if (jaDecidido.has(`${a.id}|${dv.tipo}`) && !dv.reabrir) {
+          // auto_preview não é mais gerado: virou aplicação direta acima.
+          if (dv.tipo === 'auto_preview') continue;
+          if (jaDecidido.has(`${a.id}|${dv.tipo}`) && !dv.reabrir) {
             continue;
           }
           resumo.fila[dv.tipo] = (resumo.fila[dv.tipo] || 0) + 1;
@@ -1882,18 +1892,14 @@ serve(async (req) => {
         .eq('tipo_divergencia', 'status_divergente')
         .eq('resolvido', false);
     }
-    {
-      let wipe = supabase.from('matriculas_divergencias')
-        .update({ resolvido: true, updated_at: new Date().toISOString() })
-        .eq('unidade_id', u.id)
-        .eq('tipo_divergencia', 'auto_preview')
-        .eq('resolvido', false);
-      // aluno fora do payload operacional não foi avaliado — a pendência dele fica intacta
-      if (alunosForaDoPayloadOperacional.size) {
-        wipe = wipe.not('aluno_id', 'in', `(${[...alunosForaDoPayloadOperacional].join(',')})`);
-      }
-      await wipe;
-    }
+    // auto_preview foi aposentado (aplicação direta): fecha o que sobrou da fila antiga.
+    // Sem exceção por payload operacional — a sugestão não existe mais como conceito, e
+    // o que ela pediria já é aplicado a cada rodada.
+    await supabase.from('matriculas_divergencias')
+      .update({ resolvido: true, updated_at: new Date().toISOString() })
+      .eq('unidade_id', u.id)
+      .eq('tipo_divergencia', 'auto_preview')
+      .eq('resolvido', false);
     if (divs.length) await supabase.from('matriculas_divergencias').upsert(divs, { onConflict: 'aluno_id,tipo_divergencia,campo' });
 
     // Limpa alertas obsoletos: alunos processados nesta rodada que não geraram o mesmo tipo
@@ -2085,18 +2091,7 @@ serve(async (req) => {
         .eq('resolvido', false);
     }
 
-    // limpa auto_preview obsoletos: alunos desta unidade que NÃO teriam mais mudança
-    // auto nesta rodada (ou TODOS, quando em produção — lá o upd é aplicado, não previsto).
-    {
-      let q = supabase.from('matriculas_divergencias')
-        .update({ resolvido: true, updated_at: new Date().toISOString() })
-        .eq('unidade_id', u.id)
-        .eq('tipo_divergencia', 'auto_preview')
-        .eq('resolvido', false);
-      const preservar = [...new Set([...previewAlunoIds, ...alunosForaDoPayloadOperacional])];
-      if (preservar.length) q = q.not('aluno_id', 'in', `(${preservar.join(',')})`);
-      await q;
-    }
+    // (auto_preview não é mais gerado — a limpeza dele ficou no bloco acima, junto do upsert)
 
     const finalizacaoCompletaEm = new Date().toISOString();
     resumo.status = 'succeeded';
@@ -2188,6 +2183,10 @@ function reconciliar(
 ): any {
   const upd: Record<string, any> = {};
   const divergencias: any[] = [];
+  // `aplicar` = o que vai direto para `alunos` nesta rodada (fato do Emusys, já filtrado
+  // por campos fixados e pelas guardas de valor). `diffsAplicar` é só a trilha de auditoria.
+  const aplicar: Record<string, any> = {};
+  const diffsAplicar: Record<string, any> = {};
 
   let mat: any = null;
   if (a.emusys_matricula_id && porId.has(Number(a.emusys_matricula_id))) {
@@ -2196,7 +2195,7 @@ function reconciliar(
     // Operacional: matrícula vinculada fora do payload = provavelmente finalizada.
     // Sem o universo completo, o matching por nome abaixo poderia "vincular" o aluno
     // a OUTRA matrícula presente (ex.: o 2º curso dele) — fora do escopo diário.
-    return { upd, divergencias, fora_do_payload_operacional: true };
+    return { upd, divergencias, aplicar, diffsAplicar, fora_do_payload_operacional: true };
   } else {
     const candTodasRaw = (ativasPorNome.get(normalizarNome(a.nome)) || [])
       .filter((m: any) => !idsVinculados.has(Number(m.id)));
@@ -2241,7 +2240,7 @@ function reconciliar(
           candidatos: candTodasRaw.map(candidatosMeta),
         },
       });
-      return { upd, divergencias };
+      return { upd, divergencias, aplicar, diffsAplicar };
     }
     // prefere ativas; só cai para qualquer status se não há ativa (ex: trancada no Emusys, ativo no nosso)
     const candAtivas = candTodas.filter((m: any) => m.status === 'ativa');
@@ -2252,15 +2251,15 @@ function reconciliar(
       // caso 2x/semana some). Marca `sugerido_por_turma` no que bate com o dia_aula, e
       // enriquece cada um com curso/professor/valor/dia pra tela mostrar e o humano vincular.
       divergencias.push({ tipo: 'ambiguo', campo: '', severidade: 'media', valorApi: { candidatos: cand.map(candidatosMeta) } });
-      return { upd, divergencias };
+      return { upd, divergencias, aplicar, diffsAplicar };
     } else {
       // 'ausente_api' só faz sentido contra o universo COMPLETO — no operacional,
       // não estar no payload não significa não estar no Emusys.
       if (detectarAusencias) {
         divergencias.push({ tipo: 'ausente_api', campo: '', severidade: 'alta', valorApi: { nome: a.nome } });
-        return { upd, divergencias };
+        return { upd, divergencias, aplicar, diffsAplicar };
       }
-      return { upd, divergencias, fora_do_payload_operacional: true };
+      return { upd, divergencias, aplicar, diffsAplicar, fora_do_payload_operacional: true };
     }
   }
 
@@ -2458,15 +2457,19 @@ function reconciliar(
     if (horasSet.size === 1) sugerirCampoRevisao('horario_aula', [...horasSet][0] as string, a.horario_aula);
   }
 
-  if (Object.keys(patchRevisao).length) {
-    divergencias.push({
-      tipo: 'auto_preview',
-      campo: autoPreviewCampo(patchRevisao),
-      severidade: 'media',
-      valorApi: { diffs: diffsRevisao, patch: patchRevisao, status_api: mat.status },
-      sugestao: null,
-    });
-  }
+  // ⚠️ 2026-08-18 (decisão do Alf): o que está no Emusys é aplicado DIRETO, sem fila.
+  // Este patch só contém fato objetivo do Emusys — professor, curso, dia, horário,
+  // data_fim e valor —, e cada campo já passou por duas guardas antes de chegar aqui:
+  //   1. `fixadosEfetivos` — se alguém clicou "Manter LA Report", virou trava em
+  //      matriculas_campos_fixados e o campo NUNCA entra no patch (sugerirCampoRevisao);
+  //   2. valor só entra quando o payload é sadio (`!bloqueiaValorAutomatico` e parcela >= 0);
+  //      payload corrompido (a API às vezes embute desconto_fixo no valor) vira
+  //      `valor_divergente` na fila humana, não patch.
+  // O que continua humano é só o que o sistema NÃO SABE responder: `ambiguo` (não se sabe
+  // qual matrícula Emusys é a do aluno — aplicar vincularia a pessoa errada) e as réguas de
+  // valor/classificação acima. Fila é para dúvida, não para dado que já existe no Emusys.
+  Object.assign(aplicar, patchRevisao);
+  Object.assign(diffsAplicar, diffsRevisao);
 
-  return { upd, divergencias, detalhes: { emusys_matricula_id: mat.id, status_api: mat.status, diffs } };
+  return { upd, divergencias, aplicar, diffsAplicar, detalhes: { emusys_matricula_id: mat.id, status_api: mat.status, diffs } };
 }
