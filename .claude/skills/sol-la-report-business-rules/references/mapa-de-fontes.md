@@ -117,9 +117,17 @@ Critérios que **não** podem ser mudados:
   (denominador = contratos que terminam na competência), não a taxa.
 
 ✅ **Corrigido em 2026-08-18 (edge v107).** A edge do relatório lia `movimentacoes_admin`
-**crua**, sem filtrar `anulado` — e isso **não era dano latente, estava ativo**: o relatório
-do Recreio dizia **36 renovações** em ago/2026 onde o correto é **32** (4 duplicatas anuladas
-sendo contadas), além de inflar a taxa de renovação. Set/2026 já tinha mais 3 esperando.
+**crua**, sem filtrar `anulado` — e isso **não era dano latente, estava ativo**. Reproduzindo a
+lógica exata da edge contra o relatório de 17/08 (que bateu nas 3 unidades):
+
+| Unidade | Realizadas | Previsto | Taxa |
+|---|---|---|---|
+| Recreio | 39 → **35** | 50 → **46** | 78,0% → **76,1%** |
+| Barra | 12 (sem efeito) | 12 | 100,0% |
+| Campo Grande | 29 (sem efeito) | 35 | 82,9% |
+
+As 4 anuladas do Recreio entravam como realizadas **e** no previsto. Set/2026 já tinha
+mais 3 esperando. Barra e CG não tinham anulada em agosto — por isso não mudaram.
 Hoje a edge lê `movimentacoes_admin_vigentes` nos dois pontos (retenção e aviso prévio).
 
 ⚠️ **As 46 anuladas são TODAS `tipo='renovacao'`.** Por isso quem filtra só
