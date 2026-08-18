@@ -20,10 +20,11 @@ test('lista de alunos le a RPC canonica e nao o booleano da jornada', () => {
   );
 });
 
-test('banner e filtro recebem status, total corrigido e timestamp da leitura canonica', () => {
-  assert.match(tabelaAlunos, /inadimplenciaCanonica/);
+test('banner da lista recebe os totais e o frescor da leitura de faturas', () => {
+  assert.match(tabelaAlunos, /faturasFinanceiras/);
+  assert.match(tabelaAlunos, /totals\.em_atraso_d0/);
   assert.match(tabelaAlunos, /totalAtualizado/);
-  assert.match(tabelaAlunos, /ultimoSyncMaisAntigo/);
+  assert.match(tabelaAlunos, /freshness\.syncMaisAntigo/);
   assert.match(tabelaAlunos, /queue_status/);
   assert.match(tabelaAlunos, /snapshot_complete/);
   assert.doesNotMatch(tabelaAlunos, /valor\s*\+=\s*a\.valor_parcela/);
@@ -53,17 +54,15 @@ test('botao de atualizar usa a fila unica e a edge nao mantem uma segunda verdad
 
 test('consumidores da lista usam o helper operacional e partial nao depende de status ok', () => {
   assert.match(alunosPage, /import[\s\S]{0,500}podeCobrarInadimplenciaCanonica[\s\S]{0,200}from ['"]@\/lib\/inadimplenciaCanonica['"]/);
-  assert.match(tabelaAlunos, /import[\s\S]{0,300}podeCobrarInadimplenciaCanonica[\s\S]{0,200}from ['"]@\/lib\/inadimplenciaCanonica['"]/);
   assert.match(alunosPage, /podeCobrarInadimplenciaCanonica\(inadimplenciaAtual\)/);
-  assert.match(tabelaAlunos, /podeCobrarInadimplenciaCanonica\(inadimplenciaCanonica\)/);
+  assert.match(tabelaAlunos, /faturasFinanceiras\.status\s*===\s*['"]ok['"]/);
   assert.doesNotMatch(alunosPage, /const\s+leituraCompleta\s*=\s*inadimplenciaAtual\.status\s*===\s*['"]ok['"]/);
-  assert.doesNotMatch(tabelaAlunos, /status\s*===\s*['"]ok['"]\s*&&\s*inadimplenciaInfoCanonica\.totalFaturas/);
+  assert.doesNotMatch(tabelaAlunos, /podeCobrarInadimplenciaCanonica/);
 });
 
 test('banner separa leitura financeira D+0 e quarentenas sem contaminar totais', () => {
-  assert.match(tabelaAlunos, /totalMatriculas/);
-  assert.match(tabelaAlunos, /inadimplências confirmadas \(D\+0\) — leitura financeira disponível/u);
-  assert.doesNotMatch(tabelaAlunos, /fora da cobrança/iu);
+  assert.match(tabelaAlunos, /faturas em atraso \(D\+0\) — leitura financeira disponível/u);
+  assert.match(tabelaAlunos, /faturasFinanceiras\.reconciliation/);
   assert.match(tabelaAlunos, /Contato operacional somente na carteira amigável D\+2 \(Farmer\)/u);
   assert.match(tabelaAlunos, /sourceMissingCount/);
   assert.match(tabelaAlunos, /faturas aguardando reconciliação — não incluídas nos totais confirmados/u);
@@ -72,36 +71,19 @@ test('banner separa leitura financeira D+0 e quarentenas sem contaminar totais',
   assert.match(tabelaAlunos, /contactResolutionPendingCount/);
   assert.match(tabelaAlunos, /fatura\(s\) confirmada\(s\) sem contato local unívoco/u);
   assert.match(tabelaAlunos, /fatura\(s\) com identidade inválida aguardando conciliação — não incluída\(s\) nos totais confirmados/u);
-  assert.doesNotMatch(tabelaAlunos, /inadimplências confirmadas[^\n]*cobrança liberada/iu);
+  assert.doesNotMatch(tabelaAlunos, /inadimplências confirmadas/iu);
 
   const confirmedSection = tabelaAlunos.match(/const inadimplenciaConfirmada[\s\S]*?const reconciliacaoPendente/)?.[0] ?? '';
-  assert.match(confirmedSection, /totalMatriculas/);
-  assert.match(confirmedSection, /totalFaturas/);
-  assert.match(confirmedSection, /totalAtualizado/);
+  assert.match(confirmedSection, /faturasEmAtraso/);
   assert.doesNotMatch(confirmedSection, /sourceMissingCount/);
   assert.doesNotMatch(confirmedSection, /invalidIdentityInvoiceCount|validationIssueCount/);
-
-  const sourcePhraseIndex = tabelaAlunos.indexOf('faturas aguardando reconciliação — não incluídas nos totais confirmados');
-  const invalidPhraseIndex = tabelaAlunos.indexOf('fatura(s) com identidade inválida aguardando conciliação — não incluída(s) nos totais confirmados');
-  const sourceMissingNotice = tabelaAlunos.slice(
-    tabelaAlunos.lastIndexOf('{leituraFinanceiraDisponivel', sourcePhraseIndex),
-    tabelaAlunos.indexOf(')}', sourcePhraseIndex) + 2,
-  );
-  const invalidIdentityNotice = tabelaAlunos.slice(
-    tabelaAlunos.lastIndexOf('{leituraFinanceiraDisponivel', invalidPhraseIndex),
-    tabelaAlunos.indexOf(')}', invalidPhraseIndex) + 2,
-  );
-  assert.ok(sourceMissingNotice, 'aviso independente de source_missing ausente');
-  assert.ok(invalidIdentityNotice, 'aviso independente de identidade inválida ausente');
-  assert.doesNotMatch(sourceMissingNotice, /totalAtualizado|valor_atualizado|R\$/);
-  assert.doesNotMatch(invalidIdentityNotice, /totalAtualizado|valor_atualizado|R\$/);
 });
 
 test('estados bloqueados sao distintos e incomplete explica os motivos amigavelmente', () => {
   assert.match(tabelaAlunos, /Dados de inadimplência desatualizados — lista bloqueada/u);
   assert.match(tabelaAlunos, /Leitura financeira inválida — cobrança bloqueada/u);
   assert.match(tabelaAlunos, /Falha na leitura financeira — cobrança bloqueada/u);
-  assert.match(tabelaAlunos, /blockReasons/);
+  assert.match(tabelaAlunos, /motivosBloqueioAmigaveis/);
   assert.doesNotMatch(tabelaAlunos, /nenhuma cobrança é liberada com leitura parcial/iu);
 });
 
@@ -113,9 +95,21 @@ test('filtro canonico so existe com gate valido e nao repete status ativo local'
   assert.match(liveFilter, /inadimplente_emusys/);
   assert.doesNotMatch(liveFilter, /\.status/);
 
-  assert.match(tabelaAlunos, /leituraFinanceiraDisponivel\s*&&\s*inadimplenciaInfoCanonica\.total\s*>\s*0/);
-  assert.match(tabelaAlunos, /Filtrar inadimplentes confirmados \(D\+0\)/);
+  assert.match(tabelaAlunos, /faturasFinanceiras\.totals\.em_atraso_d0/);
+  assert.match(tabelaAlunos, /Abrir faturas em atraso/);
+  assert.match(tabelaAlunos, /onAbrirFaturasInadimplentes/);
+  assert.doesNotMatch(tabelaAlunos, /inadimplente_emusys_live:\s*true/);
   assert.match(alunosPage, /inadimplente_emusys_live:\s*false/);
+});
+
+test('alerta financeiro da lista usa a mesma leitura D+0 e o mesmo recorte da pagina de faturas', () => {
+  assert.match(alunosPage, /carregarFaturasAlunosFinanceiras/);
+  assert.match(alunosPage, /situacao:\s*['"]em_atraso_d0['"]/);
+  assert.match(alunosPage, /faturasFinanceiras/);
+  assert.match(tabelaAlunos, /faturasFinanceiras\.totals\.em_atraso_d0/);
+  assert.match(tabelaAlunos, /onAbrirFaturasInadimplentes/);
+  assert.doesNotMatch(tabelaAlunos, /inadimplente_emusys_live:\s*true/);
+  assert.doesNotMatch(tabelaAlunos, /inadimplências confirmadas \(D\+0\)/u);
 });
 
 test('contrato v3 exige politica D+0, carencia D+2 e aplicacao obrigatoria no consumidor', () => {

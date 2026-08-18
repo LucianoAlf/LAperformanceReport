@@ -52,6 +52,26 @@ import {
   type InadimplenciaCanonicaState,
 } from '@/lib/inadimplenciaCanonica';
 import { criarUrlFaturasAlunos } from '@/lib/faturasAlunosCanonicas';
+import {
+  carregarFaturasAlunosFinanceiras,
+  FATURAS_FINANCEIRAS_LOADING,
+  type FinanceiroRpcClient,
+  type FaturasFinanceirasState,
+} from '@/lib/faturasAlunosFinanceiras';
+
+const financeiroRpcClient: FinanceiroRpcClient = {
+  async rpc(name, args) {
+    const { data, error } = await supabase.rpc(name, args);
+    return { data, error };
+  },
+};
+
+const hojeBrasilia = () => new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Sao_Paulo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+}).format(new Date());
 // Interfaces
 export interface Aluno {
   id: number;
@@ -310,6 +330,11 @@ export function AlunosPage() {
   const [inadimplenciaCanonica, setInadimplenciaCanonica] = useState<InadimplenciaCanonicaState>(
     INADIMPLENCIA_CANONICA_LOADING,
   );
+  // O alerta financeiro da lista precisa consumir exatamente o mesmo contrato
+  // da pagina de Faturas, na competência selecionada e em D+0.
+  const [faturasFinanceiras, setFaturasFinanceiras] = useState<FaturasFinanceirasState>(
+    FATURAS_FINANCEIRAS_LOADING,
+  );
   const carregarDadosRef = useRef<() => Promise<void>>(async () => undefined);
   const [turmas, setTurmas] = useState<Turma[]>([]);
 
@@ -559,6 +584,7 @@ export function AlunosPage() {
   // Carregar dados iniciais e invalidar imediatamente qualquer leitura da unidade anterior.
   useEffect(() => {
     setInadimplenciaCanonica(INADIMPLENCIA_CANONICA_LOADING);
+    setFaturasFinanceiras(FATURAS_FINANCEIRAS_LOADING);
     limparInadimplenciaDerivada();
     void carregarDadosRef.current();
   }, [
@@ -703,6 +729,7 @@ export function AlunosPage() {
       kpisTurmasR,
       anotacoesR,
       inadimplenciaR,
+      faturasFinanceirasR,
       ...outrosResults
     ] = await Promise.all([
       fetchAllAlunos(buildMainQuery),
@@ -717,6 +744,18 @@ export function AlunosPage() {
       supabase.rpc('get_inadimplencia_canonica', {
         p_unidade_id: unidadeAtual && unidadeAtual !== 'todos' ? unidadeAtual : null,
       }),
+      carregarFaturasAlunosFinanceiras(financeiroRpcClient, {
+        unidadeId: unidadeAtual,
+        ano: competenciaFiltro.ano,
+        mes: competenciaFiltro.mes,
+        modoPeriodo: 'competencia',
+        situacao: 'em_atraso_d0',
+        asOfDate: hojeBrasilia(),
+      }).catch((error) => ({
+        ...FATURAS_FINANCEIRAS_LOADING,
+        status: 'error' as const,
+        error: error instanceof Error ? error.message : 'Falha ao consultar faturas financeiras.',
+      })),
       // Turmas explícitas
       carregarTurmasExplicitas(),
       // Opções (selects)
@@ -736,6 +775,7 @@ export function AlunosPage() {
       inadimplenciaR.data,
       inadimplenciaR.error,
     );
+    setFaturasFinanceiras(faturasFinanceirasR);
     const leituraFinanceiraDisponivel = podeCobrarInadimplenciaCanonica(inadimplenciaAtual);
     const leituraExpirada = inadimplenciaAtual.collectionAllowed && !leituraFinanceiraDisponivel;
     setInadimplenciaCanonica(
@@ -1829,6 +1869,15 @@ export function AlunosPage() {
     );
   }
 
+  const competenciaFinanceira = `${competenciaFiltro.ano}-${String(competenciaFiltro.mes).padStart(2, '0')}-01`;
+  const abrirFaturasInadimplentes = useCallback(() => {
+    navigate(criarUrlFaturasAlunos({
+      unidadeId: unidadeAtual,
+      competencia: competenciaFinanceira,
+      situacao: 'confirmadas',
+    }));
+  }, [competenciaFinanceira, navigate, unidadeAtual]);
+
   const mesFormatado = format(new Date(), 'MMM/yyyy', { locale: ptBR });
 
   if (loading) {
@@ -1918,7 +1967,7 @@ export function AlunosPage() {
           type="button"
           onClick={() => navigate(criarUrlFaturasAlunos({
             unidadeId: unidadeAtual,
-            situacao: 'confirmadas',
+            competencia: competenciaFinanceira,
           }))}
           className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
         >
@@ -2037,7 +2086,8 @@ export function AlunosPage() {
             <TabelaAlunos
               alunos={alunosComTurma}
               todosAlunos={alunos}
-              inadimplenciaCanonica={inadimplenciaCanonica}
+              faturasFinanceiras={faturasFinanceiras}
+              onAbrirFaturasInadimplentes={abrirFaturasInadimplentes}
               filtros={filtros}
               setFiltros={setFiltros}
               limparFiltros={limparFiltros}

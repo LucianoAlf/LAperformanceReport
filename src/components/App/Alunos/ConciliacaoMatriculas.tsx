@@ -53,6 +53,8 @@ interface AtributoDivergencia {
   severidade: 'baixa' | 'media' | 'alta' | string;
   detectado_em: string | null;
   instagram_nao_possui?: boolean;
+  status_operacional?: string | null;
+  is_ex_aluno?: boolean;
 }
 
 interface AtributoTotais {
@@ -288,6 +290,11 @@ function atributoInstagramNaoSeAplica(item: AtributoDivergencia): boolean {
     || textoIndicaSemInstagramUI(item.valor_emusys?.instagram)
     || textoIndicaSemInstagramUI(item.sugestao?.instagram)
     || textoIndicaSemInstagramUI(item.valor_nosso?.instagram);
+}
+
+function atributoForaEscopoOperacional(item: AtributoDivergencia): boolean {
+  const status = String(item.status_operacional || '').trim().toLowerCase();
+  return item.is_ex_aluno === true || status === 'inativo' || status === 'evadido';
 }
 
 // "tipo aplicável" = divergência com sugestão que dá pra aplicar direto da API
@@ -693,16 +700,23 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
       });
 
       const alunoIds = [...new Set(rows.map(r => r.aluno_id).filter(Boolean))] as number[];
-      const alunoMap = new Map<number, { nome: string; instagram_nao_possui: boolean }>();
+      const alunoMap = new Map<number, {
+        nome: string;
+        instagram_nao_possui: boolean;
+        status_operacional: string | null;
+        is_ex_aluno: boolean;
+      }>();
       if (alunoIds.length) {
         const { data: alunosData, error: alunosError } = await supabase
           .from('alunos')
-          .select('id, nome, instagram_nao_possui')
+          .select('id, nome, instagram_nao_possui, status, is_ex_aluno')
           .in('id', alunoIds);
         if (alunosError) throw alunosError;
         (alunosData || []).forEach((a: any) => alunoMap.set(a.id, {
           nome: a.nome,
           instagram_nao_possui: a.instagram_nao_possui === true,
+          status_operacional: a.status || null,
+          is_ex_aluno: a.is_ex_aluno === true,
         }));
       }
 
@@ -712,10 +726,12 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
           ...row,
           aluno_nome: aluno?.nome || null,
           instagram_nao_possui: aluno?.instagram_nao_possui === true,
+          status_operacional: aluno?.status_operacional || null,
+          is_ex_aluno: aluno?.is_ex_aluno === true,
         };
       });
-      const rowsVisiveis = rowsComAluno.filter(row => !atributoInstagramNaoSeAplica(row));
-      const ocultos = rowsComAluno.filter(row => atributoInstagramNaoSeAplica(row));
+      const rowsVisiveis = rowsComAluno.filter(row => !atributoInstagramNaoSeAplica(row) && !atributoForaEscopoOperacional(row));
+      const ocultos = rowsComAluno.filter(row => atributoInstagramNaoSeAplica(row) || atributoForaEscopoOperacional(row));
       const ocultosPorGrupo = ocultos.reduce<Record<string, number>>((acc, row) => {
         const grupo = grupoAtributo(row);
         acc[grupo] = (acc[grupo] || 0) + 1;
