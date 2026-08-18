@@ -196,6 +196,7 @@ Topo do payload: `items`, `totais`, `periodo`, `status`, `as_of_date`, `fonte`,
 | `tipo_fatura` | ⚠️ **mensalidade vs `passaporte_taxa_matricula` vs evento** |
 | `numero_parcela`, `total_parcelas_contrato` | |
 | `forma_pagamento.{nome,fonte,rotulo}` | |
+| `aluno.professor_id` / `aluno.professor_nome` | professor **da linha de matrícula** (2º curso tem o seu; NULL = ingresso/evento/sem matrícula). Desde 2026-08-18. |
 | `cobranca.{d0, d2_elegivel, motivo_nao_elegivel}` | fila de cobrança |
 | `emusys_fatura_id`, `emusys_matricula_id`, `emusys_student_id`, `emusys_contrato_id`, `canonical_fatura_id` | |
 | `sync_completed_at`, `sync_fresh_until` | frescor do dado |
