@@ -27,9 +27,9 @@
 //   A4. Grava a fotografia crua ............ emusys_matriculas_estado_atual
 //   A5. Jornada canônica .......... aluno_jornada_matricula_disciplina
 //   A6. Sincroniza cadastro direto, fecha pendências que viraram histórico;
-//       no operacional, reconcilia ausentes, registra execução e RETORNA
+//       no operacional, reconcilia ausentes e segue para a fila de grade
 //
-// FASE B — só o escopo 'completo' alcança (ver o return do escopo operacional):
+// FASE B — roda nos dois escopos usando a fotografia já buscada:
 //   B2. Decisões canônicas de matrícula
 //   B3. Régua de classificação (tipos_matricula)
 //   B4. Lead ID .................................. alunos.emusys_lead_id
@@ -37,12 +37,9 @@
 //       e conversão de renovação pendente em não-renovação (movimentacoes_admin)
 //   B6. Limpeza de alertas obsoletos + varredura reversa (contratos órfãos)
 //
-// ⚠️ O cron diário chama com escopo=operacional, então a fase B não roda
-//    automaticamente desde 2026-08-11 (migration 20260811210319). A jornada estava
-//    nesse grupo e voltou para a fase A em 2026-08-12, porque Contratos Vencendo e
-//    Cobertura de Renovação liam dado congelado sem nenhum erro aparecer. Segue
-//    parada a geração da fila da aba Conciliação (B5). A exceção é a higiene de
-//    itens fora do escopo operacional, feita antes do retorno e sem chamar a API.
+// ⚠️ No escopo operacional, ausência no payload não é ausência no Emusys: ele
+//    traz somente matrículas ativas/trancadas. Por isso, a fase B pula a linha
+//    vinculada que não veio e nunca a fecha nem a religa por nome nessa rodada.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -1311,6 +1308,9 @@ serve(async (req) => {
   const attrDivs: any[] = [];
   // dry-run: alunos cujo upd seria aplicado (prévia do que o sync faria em produção)
   const previewAlunoIds: number[] = [];
+  // A matrícula vinculada fora do snapshot operacional não foi avaliada; suas
+  // pendências permanecem para o próximo sync completo.
+  const alunosForaDoPayloadOperacional = new Set<number>();
 
   let syncExecucaoId: string | null = null;
 
@@ -1511,15 +1511,9 @@ serve(async (req) => {
     if (pendenciasForaEscopoError) throw pendenciasForaEscopoError;
     resumo.pendencias_fora_escopo = pendenciasForaEscopo || resumo.pendencias_fora_escopo;
 
-    // ─── A6. Saída do escopo operacional ──────────────────────────────────────
-    // ⚠️ ATENÇÃO: este `return` encerra a invocação. TODA a fase B abaixo (decisões
-    // canônicas, classificação, lead_id, fila de divergências, conversão de
-    // não-renovação, varredura reversa) fica de fora quando escopo=operacional
-    // — que é o que o cron diário usa. Nenhum daqueles blocos chama a API do
-    // Emusys: eles só processam o que já está em `porId`, então o custo de incluí-los
-    // aqui é de banco, não de rede. Antes de mover qualquer coisa para cá, confira
-    // que as dependências (depara, profMapJornada, alunoIdPor*) já estão montadas
-    // acima — elas estão, porque buildEstadoAtualRows também precisa delas.
+    // ─── A6b. Reconciliação de ausentes (só no operacional) ───────────────────
+    // A fase B continua depois daqui: ela trabalha no `porId` já obtido, sem nova
+    // chamada à API. Só a lógica por ausência fica exclusiva do escopo completo.
     if (escopo === 'operacional') {
       const sincronizadoEm = new Date().toISOString();
       const linhasInativadas = await reconciliarEstadosOperacionaisAusentes(
@@ -1529,32 +1523,6 @@ serve(async (req) => {
         sincronizadoEm,
       );
       resumo.estados_atual.linhas_inativadas = linhasInativadas;
-      if (logs.length) {
-        const { error: logsError } = await supabase.from('automacao_log').insert(logs);
-        if (logsError) throw logsError;
-      }
-      resumo.status = 'succeeded';
-      const { error: finalizacaoError } = await supabase
-        .from('emusys_matriculas_sync_execucoes')
-        .update({
-          status: 'succeeded',
-          completed_at: sincronizadoEm,
-          linhas_recebidas: linhasRecebidas,
-          linhas_ativas: linhasAtivas,
-          linhas_trancadas: linhasTrancadas,
-          linhas_inativadas: linhasInativadas,
-          metadados: {
-            snapshot_completo: snapshotCompleto,
-            estados_gravados: resumo.estados_atual.gravadas,
-            estados_rejeitados: resumo.estados_atual.rejeitadas,
-          },
-        })
-        .eq('id', syncExecucaoId);
-      if (finalizacaoError) throw finalizacaoError;
-
-      return new Response(JSON.stringify(resumo, null, 2), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
     }
 
     // ─── B2. Decisões canônicas ───────────────────────────────────────────────
@@ -1705,7 +1673,15 @@ serve(async (req) => {
       try {
         const tipoCodigo = a.tipo_matricula_id ? tipoCodigoMap.get(a.tipo_matricula_id) || null : null;
         const fixadosBase = fixadosMap.get(a.id) || new Set();
-        const r = reconciliar(a, u, porId, ativasPorNome, depara, profMap, banda, fixadosBase, tipoCodigo, idsVinculadosAtivos, decisoesCanonicasPorMatricula);
+        const r = reconciliar(
+          a, u, porId, ativasPorNome, depara, profMap, banda, fixadosBase,
+          tipoCodigo, idsVinculadosAtivos, decisoesCanonicasPorMatricula,
+          escopo === 'completo',
+        );
+        if (r.fora_do_payload_operacional) {
+          alunosForaDoPayloadOperacional.add(a.id);
+          continue;
+        }
         const matAtributos = r.detalhes?.emusys_matricula_id
           ? porId.get(Number(r.detalhes.emusys_matricula_id))
           : (a.emusys_matricula_id ? porId.get(Number(a.emusys_matricula_id)) : null);
@@ -1884,11 +1860,17 @@ serve(async (req) => {
         .eq('tipo_divergencia', 'status_divergente')
         .eq('resolvido', false);
     }
-    await supabase.from('matriculas_divergencias')
-      .update({ resolvido: true, updated_at: new Date().toISOString() })
-      .eq('unidade_id', u.id)
-      .eq('tipo_divergencia', 'auto_preview')
-      .eq('resolvido', false);
+    {
+      let wipe = supabase.from('matriculas_divergencias')
+        .update({ resolvido: true, updated_at: new Date().toISOString() })
+        .eq('unidade_id', u.id)
+        .eq('tipo_divergencia', 'auto_preview')
+        .eq('resolvido', false);
+      if (alunosForaDoPayloadOperacional.size) {
+        wipe = wipe.not('aluno_id', 'in', `(${[...alunosForaDoPayloadOperacional].join(',')})`);
+      }
+      await wipe;
+    }
     if (divs.length) await supabase.from('matriculas_divergencias').upsert(divs, { onConflict: 'aluno_id,tipo_divergencia,campo' });
 
     // Limpa alertas obsoletos: alunos processados nesta rodada que não geraram o mesmo tipo
@@ -1901,7 +1883,9 @@ serve(async (req) => {
     // mesmo id, e a sync nunca soube que o alerta antigo de 'evadido' já não fazia sentido).
     {
       const TIPOS_COM_LIMPEZA_POR_RODADA = ['ambiguo', 'status_divergente', 'valor_divergente', 'classificacao_divergente', 'disciplina_nao_mapeada'];
-      const idsProcessados = alunosParaReconciliar.map((a: any) => a.id);
+      const idsProcessados = alunosParaReconciliar
+        .map((a: any) => a.id)
+        .filter((id: number) => !alunosForaDoPayloadOperacional.has(id));
       for (const tipo of TIPOS_COM_LIMPEZA_POR_RODADA) {
         const alunosComTipo = new Set(divs.filter((d: any) => d.tipo_divergencia === tipo).map((d: any) => d.aluno_id));
         const alunosSemTipo = idsProcessados.filter((id: number) => !alunosComTipo.has(id));
@@ -2084,7 +2068,8 @@ serve(async (req) => {
         .eq('unidade_id', u.id)
         .eq('tipo_divergencia', 'auto_preview')
         .eq('resolvido', false);
-      if (previewAlunoIds.length) q = q.not('aluno_id', 'in', `(${previewAlunoIds.join(',')})`);
+      const preservar = [...new Set([...previewAlunoIds, ...alunosForaDoPayloadOperacional])];
+      if (preservar.length) q = q.not('aluno_id', 'in', `(${preservar.join(',')})`);
       await q;
     }
 
@@ -2098,12 +2083,14 @@ serve(async (req) => {
         linhas_recebidas: linhasRecebidas,
         linhas_ativas: linhasAtivas,
         linhas_trancadas: linhasTrancadas,
-        linhas_inativadas: 0,
+        linhas_inativadas: resumo.estados_atual.linhas_inativadas ?? 0,
         metadados: {
           snapshot_completo: snapshotCompleto,
           estados_gravados: resumo.estados_atual.gravadas,
           estados_rejeitados: resumo.estados_atual.rejeitadas,
           jornadas_atualizadas: resumo.jornadas.atualizadas,
+          escopo,
+          alunos_fora_do_payload_operacional: alunosForaDoPayloadOperacional.size,
         },
       })
       .eq('id', syncExecucaoId);
@@ -2168,6 +2155,7 @@ function reconciliar(
   depara: Map<number, number | null>, profMap: Map<number, number>, banda: Set<number>, fixados: Set<string>,
   tipoCodigo: string | null, idsVinculados: Set<number> = new Set(),
   decisoesCanonicasPorMatricula: Map<string, any> = new Map(),
+  detectarAusencias = true,
 ): any {
   const upd: Record<string, any> = {};
   const divergencias: any[] = [];
@@ -2175,6 +2163,8 @@ function reconciliar(
   let mat: any = null;
   if (a.emusys_matricula_id && porId.has(Number(a.emusys_matricula_id))) {
     mat = porId.get(Number(a.emusys_matricula_id));
+  } else if (!detectarAusencias && a.emusys_matricula_id) {
+    return { upd, divergencias, fora_do_payload_operacional: true };
   } else {
     const candTodasRaw = (ativasPorNome.get(normalizarNome(a.nome)) || [])
       .filter((m: any) => !idsVinculados.has(Number(m.id)));
@@ -2231,10 +2221,11 @@ function reconciliar(
       // enriquece cada um com curso/professor/valor/dia pra tela mostrar e o humano vincular.
       divergencias.push({ tipo: 'ambiguo', campo: '', severidade: 'media', valorApi: { candidatos: cand.map(candidatosMeta) } });
       return { upd, divergencias };
-    } else {
+    } else if (detectarAusencias) {
       divergencias.push({ tipo: 'ausente_api', campo: '', severidade: 'alta', valorApi: { nome: a.nome } });
       return { upd, divergencias };
     }
+    return { upd, divergencias, fora_do_payload_operacional: true };
   }
 
   const decisaoCanonica = decisoesCanonicasPorMatricula.get(String(mat.id)) || null;

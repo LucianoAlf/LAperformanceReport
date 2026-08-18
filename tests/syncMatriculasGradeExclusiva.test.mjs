@@ -29,3 +29,18 @@ test('foto e Instagram usam o sync cadastral canônico, sem virar pendência de 
   assert.match(gerador, /'instagram'/);
   assert.match(gerador, /instagram_nao_possui/);
 });
+
+test('o sync operacional também executa a reconciliação de grade sem inferir ausência', () => {
+  assert.match(fonte, /const alunosForaDoPayloadOperacional = new Set<number>\(\);/);
+  assert.match(
+    fonte,
+    /reconciliar\([\s\S]*?decisoesCanonicasPorMatricula,[\s\S]*?escopo === 'completo',[\s\S]*?\)/,
+  );
+
+  const inicioOperacional = fonte.indexOf('// ─── A6b. Reconciliação de ausentes');
+  const inicioFaseB = fonte.indexOf('// ─── B2. Decisões canônicas');
+  const blocoOperacional = inicioOperacional >= 0 && inicioFaseB > inicioOperacional
+    ? fonte.slice(inicioOperacional, inicioFaseB)
+    : '';
+  assert.doesNotMatch(blocoOperacional, /return new Response/);
+});

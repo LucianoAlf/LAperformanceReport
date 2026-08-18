@@ -203,6 +203,12 @@ A edge faz `switch(evento)`:
   divergências próprias. Uma forma de pagamento decidida no LA Report fica
   fixada e não é reaberta por ausência ou metadado incompleto no Emusys.
   O payload anterior reclassificado permanece auditável.
+- **Escopo operacional:** como essa coleta recebe somente matrículas ativas ou
+  trancadas, uma matrícula local vinculada que não veio no payload não é
+  tratada como ausente. O sync continua a produzir apenas a fila canônica de
+  grade para os registros presentes; inferência de ausência fica restrita ao
+  escopo completo. Assim telefone, foto, pagamento, valores ou status jamais
+  voltam a aparecer como “Sync grade”.
 
 #### Identidade e reconciliação usadas pelo relatório gerencial
 

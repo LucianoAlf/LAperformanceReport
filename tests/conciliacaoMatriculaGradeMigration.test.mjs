@@ -12,6 +12,13 @@ const migrationPath = path.join(
   '20260818190000_conciliacao_matricula_grade_separa_dominios.sql',
 );
 const migration = await readFile(migrationPath, 'utf8');
+const migrationReintroducaoPath = path.join(
+  raiz,
+  'supabase',
+  'migrations',
+  '20260818194337_conciliacao_auto_preview_reclassifica_reintroducao.sql',
+);
+const migrationReintroducao = await readFile(migrationReintroducaoPath, 'utf8');
 
 test('a migration conserva auditoria e retira campos não-grade da fila auto_preview', () => {
   assert.match(migration, /matriculas_divergencias_decisoes/i);
@@ -38,4 +45,12 @@ test('a guarda de cadastro aceita foto e Instagram, mas continua fora do domíni
     migration.slice(migration.indexOf('create or replace function public.aplicar_cadastro_emusys_canonico')),
     /forma_pagamento_id\s*=\s*case/i,
   );
+});
+
+test('a limpeza de reintroduções lê o patch legado e nunca deixa financeiro ou valor em Sync grade', () => {
+  assert.match(migrationReintroducao, /valor_api\s*->\s*'patch'/i);
+  assert.match(migrationReintroducao, /status_financeiro_divergente/i);
+  assert.match(migrationReintroducao, /valor_divergente/i);
+  assert.match(migrationReintroducao, /reclassificado_por_dominio_reintroducao/i);
+  assert.match(migrationReintroducao, /resolvido\s*=\s*true/i);
 });
