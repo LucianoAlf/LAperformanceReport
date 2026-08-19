@@ -506,9 +506,17 @@ test('v3 libera somente faturas confirmadas quando a reconciliacao parcial e fre
 });
 
 test('patch operacional exclui trancado e repara aluno por matricula unica', { timeout: 90_000 }, async (t) => {
-  await withCanonicalFixture(t, async (container) => {
-    const month = "date '2026-08-01'";
-    const asOfDate = '2026-08-16';
+  await withCanonicalFixture(t, async (container, asOfDate) => {
+    // ⚠️ `asOfDate` e `month` vêm do fixture (data real de hoje), como nos outros
+    // 10 testes deste arquivo. Este era o único que fixava `asOfDate = '2026-08-16'`
+    // e `month = date '2026-08-01'` enquanto o vencimento padrão de `invoice()`
+    // continuava relativo (`current_date - 3`) — as duas pontas se afastavam a cada
+    // dia e o teste quebrou SOZINHO em 19/08/2026, sem ninguém tocar no código:
+    // `current_date - 3` virou 16/08, e a regra de vencimento é estrita
+    // (`data_vencimento < p_as_of_date`), então 16/08 < 16/08 é falso e a fatura
+    // saía do resultado. Manter ancorado no fixture — nunca misturar data de corte
+    // fixa com vencimento relativo.
+    const month = `date_trunc('month', date '${asOfDate}')::date`;
     insertAluno(container, 701, UNIT_A, '2701', { student: null, status: 'ativo' });
     insertOperationalState(container, UNIT_A, '2701', 701, 'ativo', 'ativa');
     insertAluno(container, 702, UNIT_A, '2702', { status: 'trancado' });
