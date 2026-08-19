@@ -151,8 +151,12 @@ AND é matrícula acadêmica     (NÃO é banda, NÃO é coral)
 
 - `is_segundo_curso = true`. Mesma pessoa, **curso diferente** do principal. Cada linha tem `curso_id`, professor, turma e presenças próprios.
 - A linha principal (`is_segundo_curso = false`) é única por pessoa.
-- **Duas linhas com o MESMO `curso_id` da mesma pessoa = duplicata**, não segundo curso.
-  - ✅ **Exceção validada (Alf, 2026-06-07):** aluno que faz **dois tempos/horários reais do mesmo curso** e **paga separadamente por cada tempo** tem dois vínculos legítimos. Ex.: Vitória da Silva Nobre, dois tempos individuais seguidos, R$ 650 cada. Não arquivar como duplicata automática.
+- **Duas linhas com o MESMO `curso_id` da mesma pessoa NÃO são duplicata por si só.**
+  - ✅ **Critério canônico (Alf, 2026-06-07; refinado em 2026-08-19):** só é duplicata quando coincidem **curso + professor + horário**. Se qualquer um dos três difere, são vínculos legítimos e pagos separadamente.
+  - Casos legítimos medidos em 2026-08-19: **Vitória da Silva Nobre** (Canto IND, mesmo professor, Quarta 15h **e** Quinta 16h), **Vicente Pereira Costard** (Musicalização Prep., mesmo professor, Segunda 09h **e** 10h) e **Vinícius Lopa** (três Power Kids na Terça 17h com **três professores diferentes** = três bandas).
+  - ✅ **Banda/Power Kids (Alf, 2026-08-19):** o aluno **pode** ter duas matrículas de Power Kids — "Power Kids é a banda e ele pode tocar em duas bandas diferentes". Turma e professor distintos bastam.
+  - ⚠️ **A chave no banco é `idx_alunos_duplicata_matricula_unique`** `(unidade_id, nome, curso_id, professor_atual_id, horario_aula)` parcial em linha viva. Substituiu `idx_alunos_telefone_unidade_nome_curso_unique`, que usava **telefone** na chave e por isso **barrava o caso legítimo** — a mesma pessoa repete o telefone nas duas linhas, então o telefone vindo do Emusys era recusado pelo banco. Auditado em 19/08: **zero** duplicata ativa pelo critério real.
+  - ⚠️ **Antes de chamar algo de duplicata, conferir dia/horário ATUALIZADOS.** Em 19/08 o único grupo que parecia duplicata (Gabriel Teixeira Nogueira, Guitarra) tinha as duas linhas com "Segunda 18h" por defasagem local; o Emusys mostrava turmas `G_Ter_14` e `G_Seg_17` — duas aulas reais.
 - Segundo curso **não duplica a pessoa** em alunos ativos nem no denominador de pagantes/ticket.
 - Segundo curso **entra** no numerador de MRR e de ticket médio (§4.4).
 
