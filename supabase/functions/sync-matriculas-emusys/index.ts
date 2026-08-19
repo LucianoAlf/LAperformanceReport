@@ -1374,7 +1374,14 @@ serve(async (req) => {
     const formasPagamentoMap = new Map<number, any>((formasPagamento || []).map((f: any) => [f.id, f]));
 
     const { data: alunos } = await supabase.from('alunos')
-      .select('id, unidade_id, nome, curso_id, professor_atual_id, emusys_matricula_id, emusys_student_id, emusys_lead_id, status, is_ex_aluno, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id, dia_aula, horario_aula, telefone, whatsapp, email, responsavel_nome, responsavel_telefone, foto_url, photo_url, instagram, instagram_nao_possui, status_pagamento, forma_pagamento_id, anamnese_preenchida, aguardando_renovacao')
+      // ⚠️ `data_nascimento` FALTAVA aqui até 2026-08-19 e isso gerava 1.184 tarefas FALSAS
+      // por rodada: a detecção comparava o campo do Emusys contra `a.data_nascimento`, que
+      // vinha sempre `undefined` por não ter sido selecionado. Toda data virava "nosso está
+      // vazio" mesmo depois de preenchida — a fila se recriava sozinha todo dia. Medido em
+      // 19/08: 690 alertas novos onde nosso e Emusys eram idênticos (ex.: Mateus Plácido
+      // Coimbra, 2011-07-03 dos dois lados). Ao mexer na detecção de atributos, conferir
+      // que TODO campo comparado está nesta lista.
+      .select('id, unidade_id, nome, curso_id, professor_atual_id, emusys_matricula_id, emusys_student_id, emusys_lead_id, status, is_ex_aluno, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id, dia_aula, horario_aula, telefone, whatsapp, email, responsavel_nome, responsavel_telefone, foto_url, photo_url, instagram, instagram_nao_possui, status_pagamento, forma_pagamento_id, anamnese_preenchida, aguardando_renovacao, data_nascimento')
       .eq('unidade_id', u.id)
       .is('arquivado_em', null);
 
