@@ -119,7 +119,32 @@ Casos reais que **não** são duplicata:
 Já aconteceu de duas linhas parecerem iguais só porque o horário no nosso
 cadastro estava velho — no Emusys eram Terça 14h e Segunda 17h.
 
-### 2.4 Kids e School
+### 2.4 Desmembramento cadastral (separar duas pessoas de um cadastro só)
+
+Acontece quando o cadastro antigo juntava **duas pessoas sob um nome só** — normalmente
+por acordo de nota fiscal — e a gente separa.
+
+> **Separar não é matrícula nova e não é evasão.** A pessoa já era da casa.
+
+| O que fazer | Como |
+|---|---|
+| Data de matrícula | A data **real** em que ela começou o curso, não a data do ajuste |
+| Matrícula nova no comercial | ❌ Não conta — não houve venda |
+| Passaporte | Fica **zero** — já é da casa, não paga de novo |
+| A saída da linha antiga | ❌ Não é evasão — precisa ser arquivada |
+| Alunos ativos | ✅ **Sobe 1** — agora são duas pessoas. Está certo |
+| Mensalidade / faturamento | **Não muda nada** — mesmo valor, mesmo curso |
+| Tempo de casa | Conta desde o início **real** |
+
+> **Caso real (Recreio, ago/2026):** o Marcelo estudava Violão desde 2020, mas estava
+> registrado no nome da filha. Ao separar, ele entrou como "venda do mês" (derrubando o
+> ticket) e a filha apareceu como "evadida" do Violão que nunca foi dela. Nenhuma das
+> duas coisas aconteceu de verdade.
+
+**Se você separar um cadastro assim, avise a gestão** — precisa de ajuste no sistema no
+mesmo mês, antes do fechamento.
+
+### 2.5 Kids e School
 
 Pela **idade**, sobre os alunos ativos:
 
