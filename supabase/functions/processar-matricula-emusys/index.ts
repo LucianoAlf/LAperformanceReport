@@ -130,6 +130,15 @@ import {
   resolveEmusysMatriculaLifecycle,
   type EmusysMatriculaLifecycleResolution,
 } from '../_shared/emusys-matricula-lifecycle.ts';
+// Regra ÚNICA de derivação do cadastro, compartilhada com o sync-matriculas-emusys.
+// Ver o cabeçalho do módulo: existe para não haver duas fontes de escrita com regras
+// diferentes para os mesmos campos de `alunos`.
+import {
+  carregarCamposFixados,
+  carregarMapasCadastro,
+  derivarCamposCadastro,
+  montarPatchCadastro,
+} from '../_shared/emusys-cadastro-canonico.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -2391,10 +2400,117 @@ async function reconciliarGradeDoAluno(p: Payload): Promise<void> {
   }
 }
 
+/**
+ * Aplica no cadastro `alunos` a alteração que o Emusys acabou de anunciar.
+ *
+ * POR QUE (2026-08-19, decisão do Alf): até aqui `matricula_alterada` só reconciliava a
+ * grade e registrava a passagem de bastão — não escrevia UMA LINHA em `alunos`. O evento
+ * é literalmente "a matrícula mudou" e o payload traz curso, turma, professor, dia e
+ * horário, mas o cadastro só era atualizado na varredura das 23h. Uma troca de horário
+ * feita ao meio-dia ficava até 24h errada na tela, na Agenda e na carteira do professor.
+ *
+ * ⚠️ A derivação NÃO mora aqui: vem de `_shared/emusys-cadastro-canonico.ts`, o mesmo
+ * módulo que o `sync-matriculas-emusys` usa. Duas fontes de escrita com regras próprias
+ * para o mesmo campo já produziu estrago neste projeto (competência da renovação) — e o
+ * sintoma já existia aqui: `handleMatriculaNova` grava `dia_aula` a partir de
+ * `agendamentos.dia_da_semana_nome` ("Quarta-feira") enquanto o sync grava do
+ * `nome_turma` ("Quarta"), e em 19/08 havia 35 alunos ativos na forma longa contra 1.144
+ * na curta. Por isso aqui se deriva do `nome_turma`, como o sync.
+ *
+ * ⚠️ NÃO escreve valor/desconto. A régua financeira precisa de `valor_mensalidade`,
+ * `desconto_fixo`, `desconto_condicional`, `nr_faturas` e do flag de bolsa; o webhook
+ * traz só um `valor` agregado de semântica ambígua (a API às vezes já embute o desconto).
+ * Derivar MRR e ticket daí é risco desproporcional — financeiro segue só no sync.
+ *
+ * NUNCA derruba o webhook: erro aqui é logado e engolido. A varredura das 23h continua
+ * sendo a rede de segurança.
+ */
+async function aplicarAlteracaoNoCadastro(supabase: any, p: Payload) {
+  const resultado: Record<string, unknown> = { aplicado: false };
+  if (!p.matriculaIdEmusys || !p.unidadeId) {
+    resultado.motivo = 'sem_matricula_ou_unidade';
+    return resultado;
+  }
+
+  try {
+    const disciplinas = p.rawPayload?.matricula?.disciplinas;
+    if (!Array.isArray(disciplinas) || disciplinas.length === 0) {
+      resultado.motivo = 'payload_sem_disciplinas';
+      return resultado;
+    }
+
+    const { data: aluno, error: alunoError } = await supabase
+      .from('alunos')
+      .select('id, nome, status, curso_id, professor_atual_id, dia_aula, horario_aula')
+      .eq('emusys_matricula_id', p.matriculaIdEmusys)
+      .eq('unidade_id', p.unidadeId)
+      .is('arquivado_em', null)
+      .maybeSingle();
+    if (alunoError) throw alunoError;
+
+    if (!aluno) {
+      // Matrícula ainda não vinculada a uma linha de `alunos` (aluno novo cujo
+      // matricula_nova não chegou, ou vínculo pendente na Conciliação).
+      resultado.motivo = 'aluno_nao_vinculado';
+      return resultado;
+    }
+
+    // Aluno fora da operação não recebe escrita automática: reativar cadastro de
+    // evadido/inativo por um webhook de alteração seria efeito colateral silencioso.
+    if (['evadido', 'inativo'].includes(String(aluno.status || '').toLowerCase())) {
+      resultado.motivo = 'aluno_fora_da_operacao';
+      resultado.status_aluno = aluno.status;
+      return resultado;
+    }
+
+    const [mapas, camposFixados] = await Promise.all([
+      carregarMapasCadastro(supabase, p.unidadeId),
+      carregarCamposFixados(supabase, Number(aluno.id)),
+    ]);
+
+    const derivados = derivarCamposCadastro({
+      disciplinas,
+      deparaCurso: mapas.depara,
+      cursosBanda: mapas.banda,
+      professorPorEmusysId: mapas.profMap,
+      cursoAtualAluno: aluno.curso_id,
+    });
+
+    const { patch, diffs } = montarPatchCadastro(derivados, aluno, camposFixados);
+    if (Object.keys(patch).length === 0) {
+      resultado.motivo = 'nada_a_alterar';
+      resultado.derivados = derivados;
+      return resultado;
+    }
+
+    const { error: updateError } = await supabase
+      .from('alunos')
+      .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq('id', aluno.id)
+      .eq('unidade_id', p.unidadeId);
+    if (updateError) throw updateError;
+
+    resultado.aplicado = true;
+    resultado.aluno_id = aluno.id;
+    resultado.patch = patch;
+    resultado.diffs = diffs;
+    if (camposFixados.size) resultado.campos_fixados_ignorados = [...camposFixados];
+    return resultado;
+  } catch (erro: any) {
+    const mensagem = erro?.message ?? String(erro);
+    console.error(`[${VERSAO}] aplicarAlteracaoNoCadastro falhou:`, mensagem);
+    resultado.erro = mensagem;
+    return resultado;
+  }
+}
+
 async function handleMatriculaAlterada(supabase: any, p: Payload) {
+  const cadastro = await aplicarAlteracaoNoCadastro(supabase, p);
+
   const result = {
     action: 'jornada_matricula_alterada_recebida',
     emusys_matricula_id: p.matriculaIdEmusys,
+    cadastro,
   };
 
   await reconciliarGradeDoAluno(p);

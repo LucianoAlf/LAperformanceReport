@@ -52,6 +52,17 @@ import {
 import { resolveEmusysMatriculaLifecycle } from '../_shared/emusys-matricula-lifecycle.ts';
 import { deveConverterFinalizadaEmNaoRenovacao } from '../_shared/nao-renovacao-canonica.ts';
 import { decidirLeadId } from '../_shared/lead-id-reconciliacao.ts';
+// Regra ÚNICA de derivação do cadastro, compartilhada com o webhook
+// `matricula_alterada` (processar-matricula-emusys) desde 2026-08-19.
+import {
+  carregarMapasCadastro,
+  devePreservarCursoBase,
+  parseDiaDeTurma,
+  parseHorarioDeTurma,
+  resolverCursoDasDisciplinas,
+  resolverProfessorDasDisciplinas,
+  valoresIguaisParaCampo,
+} from '../_shared/emusys-cadastro-canonico.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -161,35 +172,12 @@ function normalizarNome(s: string): string {
   return (s || '').normalize('NFKD').replace(/[^\x00-\x7f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-function normalizarDiaParaComparacao(v: any): string {
-  const s = normalizarNome(String(v ?? ''));
-  const semFeira = s.replace(/\s*-\s*feira$/, '').replace(/\s+feira$/, '');
-  const mapa: Record<string, string> = {
-    segunda: 'segunda',
-    seg: 'segunda',
-    terca: 'terca',
-    ter: 'terca',
-    quarta: 'quarta',
-    qua: 'quarta',
-    quinta: 'quinta',
-    qui: 'quinta',
-    sexta: 'sexta',
-    sex: 'sexta',
-    sabado: 'sabado',
-    sab: 'sabado',
-  };
-  return mapa[semFeira] || semFeira;
-}
-
-function valoresIguaisParaCampo(campo: string, vNovo: any, vAtual: any): boolean {
-  if (campo === 'dia_aula') {
-    return normalizarDiaParaComparacao(vNovo) === normalizarDiaParaComparacao(vAtual);
-  }
-  if (campo === 'horario_aula') {
-    return String(vNovo ?? '').slice(0, 5) === String(vAtual ?? '').slice(0, 5);
-  }
-  return String(vNovo) === String(vAtual ?? '');
-}
+// ⚠️ `normalizarDiaParaComparacao`, `valoresIguaisParaCampo`, `parseDiaDeTurma`,
+// `parseHorarioDeTurma`, `resolverCursoDasDisciplinas`, `devePreservarCursoBase` e
+// `resolverProfessorDasDisciplinas` vêm de `_shared/emusys-cadastro-canonico.ts` desde
+// 2026-08-19. Tinham cópia local aqui, e o webhook `matricula_alterada` passou a
+// escrever nos mesmos campos — duas implementações da mesma regra é o padrão que
+// causou as duplicatas de renovação neste projeto. Não reintroduzir cópia local.
 
 
 function temValor(v: any): boolean {
@@ -1162,22 +1150,11 @@ async function reconciliarEstadosOperacionaisAusentes(
   return (data || []).length;
 }
 
+// Wrapper fino: extrai a lista de disciplinas do formato da API e delega a regra ao
+// modulo compartilhado. O webhook `matricula_alterada` chama a MESMA funcao passando
+// `matricula.disciplinas` (formato dele). Nao reimplementar a regra aqui.
 function resolverCursoContrato(mat: any, depara: Map<number, number | null>, banda: Set<number>) {
-  const cursos: number[] = [];
-  const cursosBanda: number[] = [];
-  let naoMapeada: number | null = null;
-  for (const d of (mat.contrato_atual?.disciplinas || [])) {
-    const did = Number(d.disciplina_id);
-    if (!depara.has(did)) { naoMapeada = did; continue; }
-    const cid = depara.get(did);
-    if (cid == null) continue;
-    if (banda.has(cid)) {
-      if (!cursosBanda.includes(cid)) cursosBanda.push(cid);
-      continue;
-    }
-    if (!cursos.includes(cid)) cursos.push(cid);
-  }
-  return { cursos, cursosBanda, naoMapeada };
+  return resolverCursoDasDisciplinas(mat?.contrato_atual?.disciplinas || [], depara, banda);
 }
 
 function matriculaCompativelComLinha(
@@ -1198,21 +1175,9 @@ function matriculaCompativelComLinha(
   return emusysTemRegular || !emusysTemBanda;
 }
 
-const CURSO_MUSICALIZACAO_PREPARATORIA_ID = 40;
-
-function devePreservarCursoBase(a: any, cursoSugerido: number) {
-  // /matriculas expõe disciplinas/turmas internas. Em Musicalizacao Preparatoria,
-  // a disciplina pode ser Teclado/Piano/Bateria, mas o curso comercial segue MP.
-  return Number(a.curso_id) === CURSO_MUSICALIZACAO_PREPARATORIA_ID
-    && Number(cursoSugerido) !== CURSO_MUSICALIZACAO_PREPARATORIA_ID;
-}
-
+// Wrapper fino sobre o modulo compartilhado — ver comentario de resolverCursoContrato.
 function resolverProfessorContrato(mat: any, profMap: Map<number, number>) {
-  for (const d of (mat.contrato_atual?.disciplinas || [])) {
-    const eid = Number(d.id_professor);
-    if (profMap.has(eid)) return profMap.get(eid)!;
-  }
-  return null;
+  return resolverProfessorDasDisciplinas(mat?.contrato_atual?.disciplinas || [], profMap);
 }
 
 function encontrarRenovacaoPendenteDaMesmaMatricula(
@@ -2199,34 +2164,6 @@ serve(async (req) => {
   });
 });
 
-// Extrai o dia da semana do nome da turma (ex: "G_Ter_14" → "Terça", "BT_Seg_18" → "Segunda").
-// Retorna null se o formato não for reconhecido.
-function parseDiaDeTurma(nomeTurma: string): string | null {
-  const partes = (nomeTurma || '').split('_');
-  if (partes.length < 3) return null;
-  const abrev = partes[partes.length - 2];
-  const mapa: Record<string, string> = {
-    Seg: 'Segunda', Ter: 'Terça', Qua: 'Quarta',
-    Qui: 'Quinta', Sex: 'Sexta', Sab: 'Sábado',
-  };
-  return mapa[abrev] || null;
-}
-
-// Extrai o horário da aula do nome da turma (último segmento numérico).
-// "G_Ter_14" → "14:00:00", "G_Seg_18" → "18:00:00", "X_Qua_1430" → "14:30:00".
-// Retorna null se o sufixo não for um horário reconhecível.
-function parseHorarioDeTurma(nomeTurma: string): string | null {
-  const partes = (nomeTurma || '').split('_');
-  if (partes.length < 3) return null;
-  const ult = partes[partes.length - 1];
-  if (!/^\d{1,4}$/.test(ult)) return null;
-  let h: number, m = 0;
-  if (ult.length <= 2) { h = parseInt(ult, 10); }
-  else { h = parseInt(ult.slice(0, ult.length - 2), 10); m = parseInt(ult.slice(-2), 10); }
-  if (h > 23 || m > 59) return null;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
-}
-
 // Pura (sem I/O): decide o que fazer com o aluno.
 // Retorna { upd, detalhes, divergencias: [{tipo, campo, valorApi, severidade, sugestao}] }.
 // `auto_preview` é reservado à grade; cadastro e financeiro têm filas próprias.
@@ -2484,7 +2421,7 @@ function reconciliar(
     if (naoMapeada != null && cursos.length === 0) {
       divergencias.push({ tipo: 'disciplina_nao_mapeada', campo: '', severidade: 'media', valorApi: { disciplina_id: naoMapeada } });
     } else if (cursos.length === 1) {
-      if (!devePreservarCursoBase(a, cursos[0])) sugerirCampoRevisao('curso_id', cursos[0], a.curso_id);
+      if (!devePreservarCursoBase(a.curso_id, cursos[0])) sugerirCampoRevisao('curso_id', cursos[0], a.curso_id);
     } else if (cursos.length > 1 && !cursos.includes(a.curso_id)) {
       divergencias.push({ tipo: 'ambiguo', campo: '', severidade: 'media', valorApi: { motivo: 'multiplos_cursos', cursos } });
     }
