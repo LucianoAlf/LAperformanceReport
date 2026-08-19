@@ -226,6 +226,45 @@ Por **idade**, sobre a mesma base de alunos ativos:
 - **Tirar a linha de `alunos` é o único jeito de parar o sync de presença** — o sync casa aula↔aluno por nome+curso e **ignora `status`**. Soft-delete via status é leaky.
 - 🚫 **A operação inclui `DELETE FROM alunos`. Não executar sem autorização explícita do Alf.**
 
+### 3.9.1 Desmembramento cadastral ✅ NOVA (Alf, 2026-08-19)
+
+**Separar em duas linhas duas pessoas que estavam registradas sob um único nome não é
+matrícula nova nem evasão.** É ajuste de cadastro; a relação com a escola já existia.
+
+Como tratar:
+
+| Item | Regra |
+|---|---|
+| `data_matricula` da pessoa desmembrada | **data real do início do curso dela**, não a data do ajuste |
+| Matrícula nova (funil comercial) | ❌ **não conta** — não houve venda |
+| Passaporte | **mantém zero** — já é aluno da casa, não paga de novo |
+| Saída da linha antiga | ❌ **não é evasão** → `arquivar_movimentacao_admin` com motivo |
+| Alunos ativos / pagantes | ✅ **aumenta 1** — passam a ser duas pessoas, e isso está certo |
+| Matrículas ativas | **não muda** — os vínculos já existiam |
+| Permanência / LTV | conta desde o **início real**, preservando o tempo de casa |
+| Financeiro (MRR, faturamento, ticket da base) | **não muda** — mesmo valor, curso, unidade e professor |
+
+⚠️ **Arquivar, não anular**, a movimentação de saída: 25 funções vivas ainda leem
+`movimentacoes_admin` crua, onde a flag `anulado` não surte efeito (§15.4).
+
+⚠️ **Corrigir com a competência ABERTA.** Depois do fechamento vira retificação de
+snapshot, procedimento bem mais caro.
+
+> **Caso de referência — Marcelo Dornellas Machado (Recreio, 19/08/2026).** Em 2018 a
+> gestão da época registrou pai e filha sob o nome da filha, por acordo de nota fiscal:
+> parecia que Beatriz Souto Machado fazia Teclado + Violão, quando o Violão sempre foi do
+> pai. Desfeito em 15/08/2026 com aval das duas partes. O Emusys criou pessoa e matrícula
+> novas para o Marcelo — correto do lado dele —, mas do nosso lado entrou como **venda do
+> mês** (ticket comercial caiu de R$ 401,54 para R$ 399,97, com passaporte zero) e a saída
+> do Violão da filha virou **evasão** (inflando o churn de agosto). Corrigido pondo a
+> `data_matricula` dele em **14/03/2020** (data que o próprio Emusys guarda na matrícula
+> antiga) e arquivando a evasão. Resultado no Recreio/ago: matrículas novas 14 → 13,
+> evasões 24 → 23, ticket comercial de volta a R$ 401,54; alunos ativos, pagantes,
+> matrículas ativas e todo o financeiro **inalterados**.
+>
+> ⚠️ O acordo "da época da Rose" pode ter mais casos. Ao encontrar um, aplicar esta regra
+> — não tratar como exceção pontual.
+
 ### 3.10 Telefone do aluno 📋
 
 `telefone_aluno` no Emusys costuma ser `null` para kids. Fallback obrigatório:
