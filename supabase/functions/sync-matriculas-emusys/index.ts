@@ -1309,11 +1309,61 @@ serve(async (req) => {
   let syncExecucaoId: string | null = null;
 
   try {
+    // ⚠️ 2026-08-19: cada disparo do cron chega aqui como 2-4 execucoes. Medido:
+    // pg_cron roda 1x (20 execucoes em 20 min nos jobs de 1 min) e o pg_net manda
+    // 1 request (4 crons/min -> 4 respostas/min; teste isolado 1->1), mas esta
+    // tabela recebe 3 linhas por janela, com ids e horarios distintos. A
+    // multiplicacao esta entre o pg_net e a execucao, fora do nosso alcance.
+    //
+    // Sem trava, as 3 varrem `GET /matriculas` da MESMA unidade ao mesmo tempo e
+    // o Emusys derruba por rate limit: em 19/08 o CG (1o do rodizio, maior
+    // volume) falhou nas 3 tentativas com "API 429 (ativa) apos 5 tentativas" e
+    // nao sincronizou.
+    //
+    // O INSERT abaixo virou a TOMADA DE VEZ: o indice unico parcial
+    // `uq_sync_matriculas_execucao_viva_por_unidade` (migration 20260819150000)
+    // deixa passar so uma execucao viva por unidade. A 2a e a 3a batem em 23505
+    // e saem aqui, sem tocar na API. Nao da para trocar por "SELECT antes do
+    // INSERT": as 3 chegam em ~0,6s e as 3 leriam "nada rodando" antes de
+    // qualquer gravacao (check-then-act). A trava e POR UNIDADE — CG nunca
+    // bloqueia Barra/Recreio.
+    //
+    // Mesmo principio ja usado por `processarFilaAgente` em
+    // `processar-mensagens-agendadas` (UPDATE ... WHERE processando = false).
+
+    // Guarda de execucao travada: sem isto, uma linha presa em 'running' (crash,
+    // timeout do runtime, deploy no meio do run) bloquearia a unidade para
+    // sempre — o indice nao sabe de tempo. Best-effort: falha aqui nao derruba o
+    // sync, so deixa a trava mais conservadora.
+    try {
+      const { error: liberacaoError } = await supabase
+        .rpc('liberar_sync_matriculas_travado', { p_unidade_id: u.id });
+      if (liberacaoError) {
+        console.error(`[sync-matriculas] liberar_sync_matriculas_travado falhou: ${liberacaoError.message}`);
+      }
+    } catch (erroLiberacao: any) {
+      console.error(`[sync-matriculas] liberar_sync_matriculas_travado excecao: ${erroLiberacao?.message ?? erroLiberacao}`);
+    }
+
     const { data: execucao, error: execucaoError } = await supabase
       .from('emusys_matriculas_sync_execucoes')
       .insert({ unidade_id: u.id, escopo, status: 'running' })
       .select('id')
       .single();
+
+    // 23505 = unique_violation. Nao e erro: e outra execucao da mesma janela ja
+    // trabalhando. Responde 200 para o cron nao registrar falha, e sai ANTES de
+    // qualquer chamada ao Emusys.
+    if (execucaoError?.code === '23505') {
+      return new Response(JSON.stringify({
+        ...resumo,
+        status: 'ignorado_concorrencia',
+        motivo: 'ja existe execucao viva para esta unidade; invocacao duplicada saiu sem chamar a API',
+      }, null, 2), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     if (execucaoError) throw execucaoError;
     syncExecucaoId = execucao.id;
     resumo.sync_execucao_id = syncExecucaoId;
