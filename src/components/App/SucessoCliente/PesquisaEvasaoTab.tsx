@@ -57,6 +57,8 @@ interface StatsPesquisa {
 
 interface Props {
   unidadeAtual: UnidadeId;
+  /** Leva para a Caixa de Entrada do Sucesso do Aluno, na conversa daquele aluno. */
+  onAbrirConversa?: (alunoId: number) => void;
 }
 
 interface StatusPesquisaInterpretado {
@@ -108,7 +110,7 @@ async function extrairMensagemErro(
   return fallback;
 }
 
-export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
+export function PesquisaEvasaoTab({ unidadeAtual, onAbrirConversa }: Props) {
   const toast = useToast();
   const sentinelRef = useWidgetOverlapSentinel();
   const [searchParams] = useSearchParams();
@@ -688,6 +690,7 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
         mes={filtroMes}
         filtroInicial={abrirFollowupPendente ? 'followup_pendente' : 'todos'}
         onAlteracao={carregarDados}
+        onAbrirConversa={onAbrirConversa}
       />
 
       {/* Filtros */}

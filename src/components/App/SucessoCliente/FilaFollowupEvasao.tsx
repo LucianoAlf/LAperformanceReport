@@ -9,6 +9,7 @@ import {
   ChevronUp,
   Clock3,
   Loader2,
+  MessagesSquare,
   Search,
   UserRoundCheck,
   XCircle,
@@ -39,6 +40,12 @@ interface Props {
   mes: number | null;
   filtroInicial: PesquisaEvasaoFollowupFiltro;
   onAlteracao?: () => void;
+  /**
+   * Leva para a Caixa de Entrada do Sucesso do Aluno, na conversa daquele aluno.
+   * O painel "Ver conversa" mostra so o que a familia RESPONDEU — quando ninguem
+   * respondeu ele fica vazio, e vazio nao distingue "nao respondeu" de "quebrou".
+   */
+  onAbrirConversa?: (alunoId: number) => void;
 }
 
 const ROTULOS_ESTADO: Record<string, string> = {
@@ -80,6 +87,7 @@ export function FilaFollowupEvasao({
   mes,
   filtroInicial,
   onAlteracao,
+  onAbrirConversa,
 }: Props) {
   const toast = useToast();
   const [estado, setEstado] = useState<PesquisaEvasaoFollowupFiltro>(filtroInicial);
@@ -264,8 +272,25 @@ export function FilaFollowupEvasao({
                       onClick={() => setExpandida(expandida === item.pesquisa_id ? null : item.pesquisa_id)}
                     >
                       {expandida === item.pesquisa_id ? <ChevronUp className="mr-1 h-4 w-4" /> : <ChevronDown className="mr-1 h-4 w-4" />}
-                      Ver conversa
+                      Ver resposta
                     </Button>
+                    {onAbrirConversa && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-sky-300 hover:text-sky-200 disabled:text-slate-600"
+                        disabled={!item.aluno_id}
+                        title={
+                          item.aluno_id
+                            ? 'Abrir a conversa completa na Caixa de Entrada'
+                            : 'Saída lançada sem vínculo com o cadastro — não há conversa para abrir'
+                        }
+                        onClick={() => item.aluno_id && onAbrirConversa(item.aluno_id)}
+                      >
+                        <MessagesSquare className="mr-1 h-4 w-4" />
+                        Ir para a conversa
+                      </Button>
+                    )}
                   </div>
                 </div>
 
