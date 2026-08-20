@@ -168,6 +168,8 @@ export interface PesquisaEvasaoFollowupItem {
    */
   aluno_id: number | null;
   aluno_nome: string;
+  /** Número para onde a pesquisa foi; casa a conversa quando ela não tem `aluno_id`. */
+  telefone_destino: string | null;
   unidade_id: string;
   unidade_nome: string;
   enviado_em: string;

@@ -9,7 +9,7 @@ type SubAba = 'pos_primeira_aula' | 'evasao' | 'respostas';
 
 interface Props {
   unidadeAtual: UnidadeId;
-  onAbrirConversa?: (alunoId: number) => void;
+  onAbrirConversa?: (alunoId: number | null, telefone?: string | null) => void;
   abrirEvasao?: boolean;
 }
 

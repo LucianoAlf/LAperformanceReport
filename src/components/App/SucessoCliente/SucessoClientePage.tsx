@@ -31,9 +31,12 @@ export function SucessoClientePage() {
 
   const [aba, setAba] = useState<AbaModulo>(abrirPesquisaEvasao ? 'acompanhamento' : 'caixa');
   const [alunoParaCaixa, setAlunoParaCaixa] = useState<number | null>(null);
+  // O telefone vem junto porque conversa aberta por automação costuma não ter `aluno_id`.
+  const [telefoneParaCaixa, setTelefoneParaCaixa] = useState<string | null>(null);
 
-  const abrirConversaAluno = (alunoId: number) => {
+  const abrirConversaAluno = (alunoId: number | null, telefone?: string | null) => {
     setAlunoParaCaixa(alunoId);
+    setTelefoneParaCaixa(telefone ?? null);
     setAba('caixa');
   };
 
@@ -53,6 +56,7 @@ export function SucessoClientePage() {
           departamento="sucesso_aluno"
           multiUnidade
           alunoIdInicial={alunoParaCaixa}
+          telefoneInicial={telefoneParaCaixa}
         />
       ) : (
         <TabSucessoAluno

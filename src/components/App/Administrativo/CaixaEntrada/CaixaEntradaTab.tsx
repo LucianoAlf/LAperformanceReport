@@ -8,6 +8,7 @@ import { useAdminMensagens } from './hooks/useAdminMensagens';
 import { AdminInboxList } from './AdminInboxList';
 import { AdminChatPanel } from './AdminChatPanel';
 import { NovaConversaModal } from './NovaConversaModal';
+import { mesmoTelefone } from '@/lib/normalizarTelefone';
 import type { AdminConversa, AlunoInbox, FiltroAdminInbox } from './types';
 import type { ContatoInbox } from './NovaConversaModal';
 
@@ -27,9 +28,15 @@ interface CaixaEntradaTabProps {
   multiUnidade?: boolean;
   /** Quando informado, pré-seleciona a conversa deste aluno assim que as conversas carregam (deep-link). */
   alunoIdInicial?: number | null;
+  /**
+   * Telefone do contato, usado como rede quando a conversa não tem `aluno_id`.
+   * Conversa aberta por automação (a pesquisa de evasão, por exemplo) nasce só com o
+   * número — casar apenas por aluno deixava o deep-link cair na lista sem selecionar nada.
+   */
+  telefoneInicial?: string | null;
 }
 
-export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', multiUnidade = false, alunoIdInicial = null }: CaixaEntradaTabProps) {
+export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', multiUnidade = false, alunoIdInicial = null, telefoneInicial = null }: CaixaEntradaTabProps) {
   const { usuario } = useAuth();
   const sentinelRef = useWidgetOverlapSentinel();
   const [conversaSelecionada, setConversaSelecionada] = useState<AdminConversa | null>(null);
@@ -39,7 +46,7 @@ export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', mu
   const [busca, setBusca] = useState('');
   const [modalNovaConversa, setModalNovaConversa] = useState(false);
   const [toasts, setToasts] = useState<NotificacaoToast[]>([]);
-  const ultimoAlunoDeepLink = useRef<number | null>(null);
+  const ultimoAlunoDeepLink = useRef<string | null>(null);
 
   const { conversas, loading: loadingConversas, totalNaoLidas, irmaosPorNumero, marcarComoLida, refetch } = useAdminConversas({
     unidadeId,
@@ -64,15 +71,22 @@ export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', mu
   }, [marcarComoLida]);
 
   useEffect(() => {
-    if (!alunoIdInicial) return;
-    if (ultimoAlunoDeepLink.current === alunoIdInicial) return; // já tratado este deep-link
-    const conv = conversas.find((c) => c.aluno_id === alunoIdInicial);
+    if (!alunoIdInicial && !telefoneInicial) return;
+    const chaveDeepLink = `${alunoIdInicial ?? ''}|${telefoneInicial ?? ''}`;
+    if (ultimoAlunoDeepLink.current === chaveDeepLink) return; // já tratado este deep-link
+
+    // Vínculo primeiro; telefone como rede. Conversa criada por automação costuma vir
+    // sem `aluno_id` (só o número), e só por aluno o deep-link não achava nada.
+    const conv =
+      (alunoIdInicial ? conversas.find((c) => c.aluno_id === alunoIdInicial) : undefined) ??
+      (telefoneInicial ? conversas.find((c) => mesmoTelefone(c.whatsapp_jid, telefoneInicial) || mesmoTelefone(c.telefone_externo, telefoneInicial)) : undefined);
+
     if (conv) {
-      ultimoAlunoDeepLink.current = alunoIdInicial;
+      ultimoAlunoDeepLink.current = chaveDeepLink;
       setConversaSelecionada(conv);
       if (conv.nao_lidas > 0) marcarComoLida(conv.id);
     }
-  }, [alunoIdInicial, conversas, marcarComoLida]);
+  }, [alunoIdInicial, telefoneInicial, conversas, marcarComoLida]);
 
   const handleNovaConversaCriada = useCallback((contato: ContatoInbox) => {
     refetch().then(() => {
