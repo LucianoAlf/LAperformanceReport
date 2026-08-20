@@ -162,6 +162,11 @@ export interface PesquisaEvasaoFollowupItem {
   total_count: number;
   pesquisa_id: string;
   evasao_id: number;
+  /**
+   * Vem da movimentação, não da pesquisa: saída lançada à mão sem selecionar o
+   * aluno da lista fica sem vínculo, e aí não há para onde levar o operador.
+   */
+  aluno_id: number | null;
   aluno_nome: string;
   unidade_id: string;
   unidade_nome: string;

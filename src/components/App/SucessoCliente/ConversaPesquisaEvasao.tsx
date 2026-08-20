@@ -121,7 +121,16 @@ export function ConversaPesquisaEvasao({ pesquisaId, onAlteracao }: Props) {
         </p>
       </div>
     ) : (
-      <p className="py-3 text-sm text-slate-500">Nenhuma mensagem recebida.</p>
+      // Vazio aqui e ambiguo: o painel so lista o que a familia RESPONDEU (a mensagem
+      // enviada nao e gravada em pesquisa_evasao_mensagens), entao "sem nada" parecia
+      // bug. O texto diz o que aconteceu e para onde ir conferir.
+      <div className="py-3">
+        <p className="text-sm text-slate-400">Nenhuma resposta até agora.</p>
+        <p className="mt-1 text-xs text-slate-500">
+          Este painel mostra apenas o que a família respondeu. Para ver a mensagem que
+          saiu e o restante do histórico, use “Ir para a conversa”.
+        </p>
+      </div>
     );
   }
 

@@ -45,7 +45,9 @@ export function PesquisasTab({ unidadeAtual, onAbrirConversa, abrirEvasao = fals
       </div>
 
       {subAba === 'pos_primeira_aula' && <PesquisaPrimeiraAulaTab unidadeAtual={unidadeAtual} />}
-      {subAba === 'evasao' && <PesquisaEvasaoTab unidadeAtual={unidadeAtual} />}
+      {subAba === 'evasao' && (
+        <PesquisaEvasaoTab unidadeAtual={unidadeAtual} onAbrirConversa={onAbrirConversa} />
+      )}
       {subAba === 'respostas' && (
         <RespostasPesquisaTab unidadeAtual={unidadeAtual} onAbrirConversa={onAbrirConversa} />
       )}
