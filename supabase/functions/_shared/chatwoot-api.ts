@@ -195,6 +195,41 @@ export async function toggleStatusConversa(config: ChatwootConfig, conversationI
   })
 }
 
+/**
+ * Atribui a conversa a um agente do Chatwoot.
+ *
+ * Existe porque o token da integração é de usuário ADMIN: sem atribuição
+ * explícita, toda conversa criada pela transferência fica no nome dele, e a
+ * consultora não a vê ao filtrar "atribuídas a mim". Trocar o token pelo dela
+ * não serve — é um só para as três unidades, e ainda perderia permissão de
+ * criar label (operação de conta) e assinaria a nota privada como se fosse ela.
+ *
+ * Silencioso de propósito: a transferência não pode cair porque a atribuição
+ * falhou — o que não pode faltar é o aviso ao consultor.
+ */
+export async function atribuirConversa(
+  config: ChatwootConfig,
+  conversationId: number,
+  assigneeId: number | string | null | undefined,
+): Promise<void> {
+  const id = typeof assigneeId === 'string' ? Number(assigneeId) : assigneeId
+  // Unidade sem assignee_id configurado mantém o comportamento antigo em vez
+  // de mandar `assignee_id: null`, que DESATRIBUI a conversa no Chatwoot.
+  if (id == null || !Number.isFinite(id) || id <= 0) return
+
+  const url = `${config.apiUrl}/api/v1/accounts/${config.accountId}/conversations/${conversationId}/assignments`
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', api_access_token: config.apiToken },
+      body: JSON.stringify({ assignee_id: id }),
+    })
+    if (!res.ok) console.error(`atribuirConversa: ${res.status} conversa ${conversationId} -> agente ${id}`)
+  } catch (e) {
+    console.error('atribuirConversa falhou:', (e as Error).message)
+  }
+}
+
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
 export async function garantirContatoEConversa(

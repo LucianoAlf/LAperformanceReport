@@ -48,6 +48,11 @@ export interface TransferUnit {
   inbox_id: string
   consultant_phone?: string
   consultant_name?: string
+  /**
+   * Agente do Chatwoot que recebe a conversa (`assignee_id`). Sem ele a
+   * conversa fica com o dono do token — que é admin, não a consultora.
+   */
+  assignee_id?: number | string
 }
 
 // ─── Redirecionar atendimento tool types ─────────────────────────────────────

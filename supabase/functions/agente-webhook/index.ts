@@ -18,7 +18,7 @@ import {
 import {
   buscarContato, criarContato, criarConversa, enviarNotaPrivada, enviarMensagem,
   buscarLabelsContato, atualizarLabelsContato, buscarLabelsConversa,
-  atualizarLabelsConversa, toggleStatusConversa, garantirLabelsExistem,
+  atualizarLabelsConversa, toggleStatusConversa, garantirLabelsExistem, atribuirConversa,
 } from '../_shared/chatwoot-api.ts'
 import type { ChatwootConfig } from '../_shared/chatwoot-api.ts'
 
@@ -693,6 +693,12 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
 
       // 4d. Garantir status open
       await toggleStatusConversa(cwCfg, conversa.id, 'open')
+
+      // 4d-bis. Atribuir à consultora da unidade. O token da integração é de
+      // admin, então sem isto a conversa nasce no nome dele e some do filtro
+      // "atribuídas a mim" da consultora (caso Lene/Vitória, 20/08). A função
+      // engole a própria falha: atribuição não pode derrubar a transferência.
+      await atribuirConversa(cwCfg, conversa.id, matchedUnit.assignee_id)
 
       // 4e. Etiquetar conversa
       const existingConvLabels = await buscarLabelsConversa(cwCfg, conversa.id)
