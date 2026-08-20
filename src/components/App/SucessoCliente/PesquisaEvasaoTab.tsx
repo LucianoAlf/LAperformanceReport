@@ -1,7 +1,7 @@
 import { Fragment, useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
@@ -844,7 +844,10 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                         <div>
                           <p className="font-medium text-white">{evadido.nome}</p>
                           <p className="text-xs text-slate-500">
-                            {format(new Date(evadido.data_evasao), 'dd/MM/yyyy', { locale: ptBR })}
+                            {/* parseISO, e nao new Date(): `data_evasao` e um `date` puro
+                                ("2026-08-14") e o construtor o le como meia-noite UTC — em BRT
+                                (-3h) a tela mostrava o dia ANTERIOR em toda a coluna. */}
+                            {format(parseISO(evadido.data_evasao), 'dd/MM/yyyy', { locale: ptBR })}
                           </p>
                         </div>
                       </td>
