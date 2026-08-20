@@ -138,3 +138,10 @@ verify_jwt = false
 # nao para impedir que o MCP resete para true, e sim para que ninguem "corrija" para false por
 # analogia com as outras funcoes de webhook do Emusys.
 verify_jwt = true
+
+[functions.base-conhecimento]
+# Chamada pelo no `bd_conhecimento` dos agentes SDR Mila no n8n, que faz GET
+# simples e NAO manda header. A autenticacao e um token dedicado na query
+# string, validado DENTRO da funcao contra `integracao_tokens`.
+# Sem esta linha o gateway devolve 401 antes do codigo rodar.
+verify_jwt = false
