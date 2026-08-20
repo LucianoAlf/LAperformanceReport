@@ -8,6 +8,7 @@ import { useConversasCampanha, useMensagensCampanha, type MensagemCampanha } fro
 import { useNumerosMeta } from '../hooks/useNumerosMeta'
 import { ChatInfoPanel } from '../components/ChatInfoPanel'
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao'
+import { formatarPreviaConversa } from '@/lib/previaConversa.mjs'
 
 // ─── ConversasTab ─────────────────────────────────────────────────────────────
 
@@ -82,21 +83,32 @@ export function ConversasTab({ unidadeId }: { unidadeId: string | null }) {
                 onClick={() => setConversaAtiva(c.id)}
                 className={cn('w-full text-left px-4 py-3 border-b border-slate-700/30 transition-colors', conversaAtiva === c.id ? 'bg-amber-500/10' : 'hover:bg-slate-700/30')}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-white text-sm font-medium truncate">{c.nome_contato || formatarTelefone(c.telefone)}</span>
-                  {c.nao_lidas > 0 && (
-                    <span className="w-5 h-5 rounded-full bg-amber-500 text-black text-xs flex items-center justify-center font-bold flex-shrink-0">{c.nao_lidas}</span>
-                  )}
-                </div>
-                <div className="flex items-center justify-between mt-0.5">
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-xs text-gray-500 truncate">{c.nome_contato ? formatarTelefone(c.telefone) : ''}</span>
+                    <span className="text-white text-sm font-medium truncate">{c.nome_contato || formatarTelefone(c.telefone)}</span>
                     {numeros.length > 1 && c.numero_meta_id && (
                       <span className="text-[9px] text-gray-600 bg-slate-800 px-1.5 py-0.5 rounded flex-shrink-0">
                         {numeros.find(n => n.id === c.numero_meta_id)?.nome?.split(' ')[0] ?? ''}
                       </span>
                     )}
                   </div>
+                  {c.nao_lidas > 0 && (
+                    <span className="w-5 h-5 rounded-full bg-amber-500 text-black text-xs flex items-center justify-center font-bold flex-shrink-0">{c.nao_lidas}</span>
+                  )}
+                </div>
+                <div className="flex items-center justify-between gap-2 mt-0.5">
+                  {(() => {
+                    // Prévia da última mensagem, como no WhatsApp: o prefixo diz
+                    // quem falou por último (bot, equipe ou disparo), que é a
+                    // pergunta de quem varre esta lista.
+                    const { prefixo, texto } = formatarPreviaConversa(c)
+                    return (
+                      <span className="text-xs text-gray-500 truncate min-w-0">
+                        {prefixo && <span className="text-gray-600">{prefixo} </span>}
+                        {texto}
+                      </span>
+                    )
+                  })()}
                   {c.ultima_mensagem_em && <span className="text-xs text-gray-600 flex-shrink-0">{formatarHora(c.ultima_mensagem_em)}</span>}
                 </div>
               </button>

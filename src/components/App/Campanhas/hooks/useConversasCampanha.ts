@@ -11,6 +11,12 @@ export interface ConversaCampanha {
   nao_lidas: number
   status: string
   created_at: string
+  // Prévia da última mensagem — vem da RPC get_conversas_campanha_lista.
+  previa_texto?: string | null
+  previa_tipo?: string | null
+  previa_direcao?: 'inbound' | 'outbound' | null
+  previa_agente_id?: string | null
+  previa_campanha_id?: string | null
 }
 
 export interface MensagemCampanha {
@@ -54,11 +60,10 @@ export function useConversasCampanha(unidadeId?: string | null) {
   const fetchConversas = useCallback(async () => {
     setLoading(true)
     try {
-      const { data } = await supabase
-        .from('conversas_campanha')
-        .select('*')
-        .order('ultima_mensagem_em', { ascending: false })
-        .limit(500)
+      // RPC em vez de select direto: ela traz a última mensagem de cada conversa
+      // por LATERAL (16 ms) — ler as mensagens no cliente exigiria uma query por
+      // conversa, e um DISTINCT ON varreria a tabela inteira (631 ms hoje).
+      const { data } = await supabase.rpc('get_conversas_campanha_lista', { p_limit: 500 })
       setConversas(deduplicarPorTelefone(data ?? []))
     } finally {
       setLoading(false)
@@ -67,15 +72,23 @@ export function useConversasCampanha(unidadeId?: string | null) {
 
   useEffect(() => { fetchConversas() }, [fetchConversas])
 
-  // Realtime
+  // Realtime — com debounce. Durante um disparo chegam centenas de eventos por
+  // minuto (cada mensagem mexe em `ultima_mensagem_em`), e sem isso a lista
+  // inteira era refeita uma vez por evento: banco trabalhando à toa e a tela
+  // piscando enquanto a equipe acompanha as respostas.
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
     const channel = supabase
       .channel('conversas_campanha_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversas_campanha' }, () => {
-        fetchConversas()
+        if (timer) clearTimeout(timer)
+        timer = setTimeout(() => { timer = null; fetchConversas() }, 400)
       })
       .subscribe()
-    return () => { supabase.removeChannel(channel) }
+    return () => {
+      if (timer) clearTimeout(timer)
+      supabase.removeChannel(channel)
+    }
   }, [fetchConversas])
 
   // Busca server-side — complementa a lista local com resultados do banco
@@ -83,13 +96,9 @@ export function useConversasCampanha(unidadeId?: string | null) {
     if (termo.length < 3) { setResultadosBusca([]); return }
     setBuscando(true)
     try {
-      const termoLike = `%${termo}%`
-      const { data } = await supabase
-        .from('conversas_campanha')
-        .select('*')
-        .or(`telefone.ilike.${termoLike},nome_contato.ilike.${termoLike}`)
-        .order('ultima_mensagem_em', { ascending: false })
-        .limit(50)
+      // Mesma RPC da lista: buscar pela tabela devolveria linhas sem prévia, e a
+      // lista misturaria cartão com e sem a última mensagem.
+      const { data } = await supabase.rpc('get_conversas_campanha_lista', { p_limit: 50, p_busca: termo })
       setResultadosBusca(deduplicarPorTelefone(data ?? []))
     } finally {
       setBuscando(false)
