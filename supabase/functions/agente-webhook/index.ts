@@ -10,7 +10,11 @@ import { enviarMensagemTexto, enviarMensagemBotoes, enviarMensagemLista } from '
 import type { BotaoResposta, SecaoLista } from '../_shared/whatsapp-meta-api.ts'
 import { chatCompletion, transcreverAudio } from '../_shared/ai-client.ts'
 import type { ChatMessage, AIConfig } from '../_shared/ai-client.ts'
-import type { AgentToolDefinition, ToolCall, ToolResult, AIResponse, TransferToolConfig, TransferUnit } from '../_shared/tool-types.ts'
+import type { AgentToolDefinition, ToolCall, ToolResult, AIResponse, TransferToolConfig, TransferUnit, RedirecionarAtendimentoConfig } from '../_shared/tool-types.ts'
+import {
+  instrucaoModoPassivo, marcarRedirecionamento,
+  montarMensagemRedirecionamento, podeEnviarRedirecionamento,
+} from '../_shared/redirecionamento-atendimento.ts'
 import {
   buscarContato, criarContato, criarConversa, enviarNotaPrivada, enviarMensagem,
   buscarLabelsContato, atualizarLabelsContato, buscarLabelsConversa,
@@ -327,6 +331,13 @@ Deno.serve(async (req) => {
       systemPrompt += `\n\n## Dados já coletados nesta conversa\n${dadosConhecidos.join('\n')}\nIMPORTANTE: NÃO pergunte novamente dados que já foram coletados acima. Prossiga para coletar os dados faltantes.`
     }
 
+    // Quem já foi redirecionado para a secretaria não volta a receber oferta por
+    // iniciativa do bot. Vai como FATO no contexto, não como regra genérica de
+    // prompt: o do Feirão já mandava recuar com lead desinteressado e o modelo
+    // insistiu assim mesmo.
+    const modoPassivo = instrucaoModoPassivo(sd)
+    if (modoPassivo) systemPrompt += `\n\n${modoPassivo}`
+
     const chatMessages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
     ]
@@ -360,6 +371,7 @@ Deno.serve(async (req) => {
     let lastResponse: AIResponse | null = null
     let transferRealizada = false
     let interativoEnviado = false
+    let redirecionamentoEnviado = false
     let toolMessages: ChatMessage[] = []
     let iaFalhou = false
     const dadosColetados: Record<string, string> = {}
@@ -393,6 +405,7 @@ Deno.serve(async (req) => {
           const resultado = await executarTool(tc, { supabase, conversa, agente, unidade_id, telefone, agora, metaConfig })
           if (tc.name === 'transfer' && !resultado.content.startsWith('TRANSFERÊNCIA BLOQUEADA')) transferRealizada = true
           if (tc.name === 'send_buttons' || tc.name === 'send_list') interativoEnviado = true
+          if (resultado.redirecionamentoEnviado) redirecionamentoEnviado = true
           // Capturar dados coletados das tool calls
           if (tc.name === 'transfer' || tc.name === 'save_lead_data') {
             if (tc.arguments?.lead_name || tc.arguments?.nome) dadosColetados.lead_name = (tc.arguments.lead_name ?? tc.arguments.nome) as string
@@ -405,6 +418,10 @@ Deno.serve(async (req) => {
 
         // Alguma tool terminal rodou (ex: send_buttons) — a resposta já foi
         // enviada, não há necessidade de perguntar à IA de novo.
+        // `redirecionar_atendimento` é terminal APENAS quando de fato enviou:
+        // em debounce ela devolve a vez ao modelo, senão o loop quebraria sem
+        // nada a dizer e o contato receberia o fallback genérico.
+        if (redirecionamentoEnviado) break
         if (lastResponse.tool_calls.some(tc => TOOLS_TERMINAIS.includes(tc.name))) break
       }
     }
@@ -421,7 +438,10 @@ Deno.serve(async (req) => {
     }
 
     // Se mensagem interativa já foi enviada pela tool, não enviar texto adicional
-    if (interativoEnviado) {
+    if (redirecionamentoEnviado) {
+      // Os canais de atendimento já saíram pela tool e são a resposta inteira —
+      // qualquer texto extra aqui seria a insistência que a tool veio cortar.
+    } else if (interativoEnviado) {
       if (respostaTexto) {
         const compRes = await enviarMensagemTexto(metaConfig, telefone, respostaTexto)
         await salvarMensagemSaida(supabase, unidade_id, metaConfig, telefone, respostaTexto, agente_id, agente.numero_meta_id, compRes?.messages?.[0]?.id)
@@ -433,10 +453,19 @@ Deno.serve(async (req) => {
     }
 
     // 12. Atualizar agente_conversas com dados coletados
+    // A marca de redirecionamento é gravada aqui, e não dentro da tool, porque
+    // este update sobrescreve o `session_data` com a cópia em memória — escrever
+    // lá seria perdido alguns milissegundos depois.
+    let sessionData: Record<string, unknown> = {
+      ...(conversa.session_data ?? {}), ...dadosColetados,
+      last_ai_response_at: agora.toISOString(), transfer: transferRealizada,
+    }
+    if (redirecionamentoEnviado) sessionData = marcarRedirecionamento(sessionData, agora.toISOString())
+
     await supabase.from('agente_conversas').update({
       ultima_mensagem_em: agora.toISOString(),
       total_mensagens: (conversa.total_mensagens ?? 0) + msgsAcumuladas.length + 1,
-      session_data: { ...(conversa.session_data ?? {}), ...dadosColetados, last_ai_response_at: agora.toISOString(), transfer: transferRealizada },
+      session_data: sessionData,
     }).eq('id', conversa.id)
 
     // 13. Limpar fila
@@ -451,13 +480,18 @@ Deno.serve(async (req) => {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// `auto_reply_message` vem junto para a tool `redirecionar_atendimento` não
+// precisar de outra query — e para que os canais sejam sempre os mesmos que a
+// caixa já responde quando não há agente (fonte única, editável na tela).
+const CAMPOS_NUMERO_META = 'id, phone_number_id, access_token, auto_reply_message'
+
 async function getNumeroMeta(supabase: any, agente: any) {
   if (agente.numero_meta_id) {
-    const { data } = await supabase.from('numeros_meta').select('id, phone_number_id, access_token').eq('id', agente.numero_meta_id).single()
-    return data ? { id: data.id, phone_number_id: data.phone_number_id, access_token: data.access_token } : null
+    const { data } = await supabase.from('numeros_meta').select(CAMPOS_NUMERO_META).eq('id', agente.numero_meta_id).single()
+    return data ? { id: data.id, phone_number_id: data.phone_number_id, access_token: data.access_token, auto_reply_message: data.auto_reply_message } : null
   }
-  const { data } = await supabase.from('numeros_meta').select('id, phone_number_id, access_token').eq('unidade_id', agente.unidade_id).eq('is_default', true).single()
-  return data ? { id: data.id, phone_number_id: data.phone_number_id, access_token: data.access_token } : null
+  const { data } = await supabase.from('numeros_meta').select(CAMPOS_NUMERO_META).eq('unidade_id', agente.unidade_id).eq('is_default', true).single()
+  return data ? { id: data.id, phone_number_id: data.phone_number_id, access_token: data.access_token, auto_reply_message: data.auto_reply_message } : null
 }
 
 async function salvarMensagemSaida(supabase: any, unidadeId: string, metaConfig: any, telefone: string, texto: string, agenteId: string, numeroMetaId?: string, waMessageId?: string) {
@@ -496,7 +530,7 @@ async function salvarMensagemSaida(supabase: any, unidadeId: string, metaConfig:
 interface ToolContext {
   supabase: any; conversa: any; agente: any
   unidade_id: string; telefone: string; agora: Date
-  metaConfig: { phone_number_id: string; access_token: string }
+  metaConfig: { id?: string; phone_number_id: string; access_token: string; auto_reply_message?: string | null }
 }
 
 async function executarTool(tc: ToolCall, ctx: ToolContext): Promise<ToolResult> {
@@ -505,6 +539,7 @@ async function executarTool(tc: ToolCall, ctx: ToolContext): Promise<ToolResult>
   if (tc.name === 'send_buttons') return executarSendButtons(tc, ctx)
   if (tc.name === 'send_list') return executarSendList(tc, ctx)
   if (tc.name === 'save_lead_data') return { tool_call_id: tc.id, content: 'Dados do lead salvos com sucesso. Continue a conversa normalmente.' }
+  if (tc.name === 'redirecionar_atendimento') return executarRedirecionarAtendimento(tc, ctx)
   return { tool_call_id: tc.id, content: `Ferramenta "${tc.name}" não encontrada.` }
 }
 
@@ -721,6 +756,68 @@ async function executarTransfer(tc: ToolCall, ctx: ToolContext): Promise<ToolRes
   }
 
   return { tool_call_id: tc.id, content: 'Transferência realizada com sucesso. Bot desativado. Envie uma mensagem de despedida ao lead informando que um consultor entrará em contato em breve.' }
+}
+
+/**
+ * Manda os canais oficiais de atendimento e tira a conversa do funil de vendas.
+ *
+ * O texto dos telefones é o `auto_reply_message` da própria caixa — o mesmo que
+ * o `meta-webhook-campanhas` usa quando NÃO há agente. Ali ele é um `else if`,
+ * então com agente ativo ficava inalcançável: quem já era aluno recebia oferta
+ * de matrícula (caso 18/08, aluna pedindo para falar com a consultora).
+ */
+async function executarRedirecionarAtendimento(tc: ToolCall, ctx: ToolContext): Promise<ToolResult> {
+  const agoraIso = ctx.agora.toISOString()
+  const ultimoEnvio = (ctx.conversa.session_data ?? {})?.redirecionado_em as string | undefined
+
+  // O bot segue ativo depois de redirecionar, então quem insiste receberia a
+  // lista de telefones a cada mensagem. Aqui NÃO é terminal: sem mensagem a
+  // enviar, quebrar o loop deixaria o contato com o fallback genérico.
+  if (!podeEnviarRedirecionamento({ ultimoEnvioIso: ultimoEnvio, agoraIso })) {
+    return {
+      tool_call_id: tc.id,
+      content: 'Você já enviou os canais de atendimento a esta pessoa há poucos minutos. NÃO envie os telefones de novo: responda em uma frase curta, lembrando que a secretaria da unidade resolve isso.',
+    }
+  }
+
+  const config = (((ctx.agente.tools as AgentToolDefinition[]) ?? [])
+    .find(t => t.name === 'redirecionar_atendimento')?.config ?? {}) as RedirecionarAtendimentoConfig
+
+  const mensagem = montarMensagemRedirecionamento({
+    intro: tc.arguments?.intro as string | undefined,
+    canais: ctx.metaConfig.auto_reply_message,
+    fecho: config.mensagem_retomada,
+  })
+
+  if (!mensagem) {
+    console.error('redirecionar_atendimento: caixa sem auto_reply_message', ctx.metaConfig.id)
+    return {
+      tool_call_id: tc.id,
+      content: 'Não há canais de atendimento configurados nesta caixa. Responda por texto orientando a pessoa a procurar a secretaria da unidade dela, SEM inventar telefone, e não siga com o funil de vendas.',
+    }
+  }
+
+  try {
+    const res = await enviarMensagemTexto(ctx.metaConfig, ctx.telefone, mensagem)
+    await salvarMensagemSaida(
+      ctx.supabase, ctx.unidade_id, ctx.metaConfig, ctx.telefone, mensagem,
+      ctx.agente.id, ctx.agente.numero_meta_id, res?.messages?.[0]?.id,
+    )
+  } catch (e) {
+    console.error('redirecionar_atendimento error:', e)
+    return {
+      tool_call_id: tc.id,
+      content: 'Falha ao enviar os canais de atendimento. Responda por texto pedindo desculpas e oriente a procurar a secretaria da unidade.',
+    }
+  }
+
+  console.log(`redirecionar_atendimento: ${ctx.telefone} — motivo: ${tc.arguments?.motivo ?? 'não informado'}`)
+
+  return {
+    tool_call_id: tc.id,
+    content: 'Canais de atendimento enviados ao contato. NÃO escreva mais nada agora.',
+    redirecionamentoEnviado: true,
+  }
 }
 
 async function executarSendButtons(tc: ToolCall, ctx: ToolContext): Promise<ToolResult> {

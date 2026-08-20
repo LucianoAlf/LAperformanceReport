@@ -27,6 +27,12 @@ export interface ToolCall {
 export interface ToolResult {
   tool_call_id: string
   content: string
+  /**
+   * A tool já mandou os canais de atendimento ao contato. Quem orquestra usa
+   * isso para parar o loop (a mensagem já saiu) e marcar a conversa como
+   * redirecionada — em vez de inferir pelo texto do `content`.
+   */
+  redirecionamentoEnviado?: boolean
 }
 
 export interface AIResponse {
@@ -42,6 +48,17 @@ export interface TransferUnit {
   inbox_id: string
   consultant_phone?: string
   consultant_name?: string
+}
+
+// ─── Redirecionar atendimento tool types ─────────────────────────────────────
+
+export interface RedirecionarAtendimentoConfig {
+  /**
+   * Frase fixa no fim da mensagem, depois dos telefones. Fica aqui e não no
+   * `auto_reply_message` da caixa porque aquele campo é compartilhado com a
+   * caixa sem agente, que não tem campanha nenhuma a oferecer.
+   */
+  mensagem_retomada?: string
 }
 
 export interface TransferToolConfig {
@@ -75,6 +92,16 @@ export const BUILTIN_TOOLS: AgentToolDefinition[] = [
       { name: 'thought', type: 'string', description: 'Seu raciocínio interno', required: true },
     ],
     enabled: true,
+  },
+  {
+    name: 'redirecionar_atendimento',
+    description: 'Envia os canais oficiais de atendimento (secretaria de cada unidade) e SAI do funil de vendas. Use quando a mensagem NÃO for de alguém buscando matrícula nova: a pessoa já é aluno ou responsável por aluno, quer falar com uma pessoa específica da equipe (consultora, professor, secretaria, coordenação) ou trata de assunto da secretaria — falta, reposição, horário de aula, boleto, mensalidade, cancelamento, atestado, material. NÃO use com quem quer se matricular ou saber da campanha: aluno que quer um SEGUNDO curso é matrícula nova, use transfer. IMPORTANTE: quando usar esta tool, NÃO envie texto adicional — a mensagem já é a resposta.',
+    parameters: [
+      { name: 'motivo', type: 'string', description: 'Por que está redirecionando, em poucas palavras (ex: "quer falar com a consultora", "já é aluno, dúvida de reposição")', required: true },
+      { name: 'intro', type: 'string', description: 'Frase curta de abertura, reagindo ao que a pessoa disse, que vem ANTES dos telefones. Ex: "Ah, entendi! Aqui eu só falo do Feirão — quem resolve isso é a secretaria da sua unidade 😊"', required: false },
+    ],
+    enabled: true,
+    config: {},
   },
   {
     name: 'send_buttons',

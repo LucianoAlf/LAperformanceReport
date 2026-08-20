@@ -44,6 +44,14 @@ const BUILTIN_TOOLS: AgentToolDefinition[] = [
     enabled: true,
   },
   {
+    name: 'redirecionar_atendimento', description: 'Manda os canais de atendimento da secretaria quando o contato não é lead (já é aluno, quer falar com alguém da equipe, assunto de secretaria).',
+    parameters: [
+      { name: 'motivo', type: 'string', description: 'Por que está redirecionando', required: true },
+      { name: 'intro', type: 'string', description: 'Frase de abertura antes dos telefones', required: false },
+    ],
+    enabled: true, config: {},
+  },
+  {
     name: 'send_buttons', description: 'Envia mensagem com botões de resposta rápida (máx 3 botões).',
     parameters: [
       { name: 'body', type: 'string', description: 'Texto principal', required: true },
@@ -290,7 +298,7 @@ function AbaTools({ form, set }: { form: AgenteForm; set: <K extends keyof Agent
     <div className="space-y-4">
       <p className="text-sm text-gray-400">Configure as ferramentas que o agente pode usar.</p>
       {tools.map((tool, idx) => {
-        const isBuiltin = tool.name === 'transfer' || tool.name === 'think'
+        const isBuiltin = ['transfer', 'think', 'redirecionar_atendimento'].includes(tool.name)
         return (
           <div key={idx} className={cn('bg-slate-800/50 rounded-lg p-4 border', tool.enabled ? 'border-slate-700/50' : 'border-slate-700/30 opacity-50')}>
             <div className="flex items-center justify-between mb-2">
@@ -370,10 +378,13 @@ function AbaToolConfig({ form, set }: { form: AgenteForm; set: <K extends keyof 
             {tool.name === 'send_list' && (
               <SendListConfig config={getToolConfig('send_list')} onChange={c => updateToolConfig('send_list', c)} />
             )}
+            {tool.name === 'redirecionar_atendimento' && (
+              <RedirecionarAtendimentoConfigCampos config={getToolConfig('redirecionar_atendimento')} onChange={c => updateToolConfig('redirecionar_atendimento', c)} />
+            )}
             {tool.name === 'think' && (
               <p className="text-xs text-gray-500">Sem configuração necessária. O agente usa raciocínio interno automaticamente.</p>
             )}
-            {!['transfer', 'send_buttons', 'send_list', 'think'].includes(tool.name) && (
+            {!['transfer', 'send_buttons', 'send_list', 'think', 'redirecionar_atendimento'].includes(tool.name) && (
               <div className="space-y-2">
                 <Campo label="Config JSON (avançado)">
                   <textarea
@@ -500,6 +511,30 @@ function SendButtonsConfig({ config, onChange }: { config: Record<string, unknow
         </Campo>
       </div>
       <p className="text-xs text-gray-500">O agente decide automaticamente quando usar botões com base no contexto da conversa.</p>
+    </div>
+  )
+}
+
+// ─── Redirecionar Atendimento Config ──────────────────────────────────────────
+
+function RedirecionarAtendimentoConfigCampos({ config, onChange }: { config: Record<string, unknown>; onChange: (c: Record<string, unknown>) => void }) {
+  const mensagemRetomada = (config.mensagem_retomada as string) ?? ''
+
+  return (
+    <div className="space-y-3">
+      <Campo label="Frase final (depois dos telefones)">
+        <input
+          value={mensagemRetomada}
+          onChange={e => onChange({ ...config, mensagem_retomada: e.target.value })}
+          placeholder="Ex: Se quiser saber do Feirão depois, é só me chamar por aqui!"
+          className={cn(inputCls, 'text-xs')}
+        />
+      </Campo>
+      <p className="text-xs text-gray-500">
+        Os telefones vêm da resposta automática da caixa (Config → Número Meta) — os mesmos que a
+        caixa envia quando não há agente. Depois de redirecionar, o agente para de oferecer a campanha
+        por conta própria, mas continua respondendo se a pessoa perguntar.
+      </p>
     </div>
   )
 }
