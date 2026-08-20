@@ -279,7 +279,16 @@ function normalizarFormaPagamentoValor(v: any): string {
   if (s.includes('dinheiro')) return 'dinheiro';
   if (s.includes('boleto')) return 'boleto';
   if (s.includes('link')) return 'link';
+  // ⚠️ debito ANTES de credito: "Cartao de Debito Visa" tem as duas palavras? nao — mas a
+  // ordem protege contra variacoes futuras do Emusys.
   if (s.includes('debito')) return 'cartao_debito';
+  // ⚠️ O Emusys manda a BANDEIRA junto: "Cartao de Credito Mastercard", "Cartao de Credito
+  // Visa". Sem esta regra, a string caia no `return s` e nao casava com "Cartao de Credito"
+  // do nosso cadastro — 3 alunos de CG (Aila e Sofia Campos, Arthur Passos) ficaram sem
+  // forma mesmo com a fatura paga trazendo o dado.
+  if (s.includes('credito')) return 'cartao_credito';
+  // "Transferencia" / "TED" / "DOC" nao tem equivalente no nosso cadastro hoje; deixa
+  // passar cru para nao inventar mapeamento.
   return s;
 }
 
@@ -343,10 +352,22 @@ function extrairAguardandoRenovacaoEmusys(mat: any): boolean | null {
 }
 
 function extrairFormaPagamentoEmusys(mat: any): string | null {
-  const valor = mat?.contrato_atual?.forma_pagamento
-    ?? mat?.cobranca_automatica?.forma_pagamento
-    ?? mat?.forma_pagamento;
-  return temValor(valor) ? String(valor).trim() : null;
+  // ⚠️ Aqui era `??` e isso ANULAVA a funcao inteira. `??` so pula null/undefined — nao
+  // pula string VAZIA. E `contrato_atual.forma_pagamento` vem `""` na esmagadora maioria
+  // dos contratos (484 de 484 conferidos em CG), entao a expressao parava no `""` e nunca
+  // alcancava `cobranca_automatica.forma_pagamento`, que e onde o Emusys realmente guarda
+  // o dado. Resultado: 249 de 485 alunos ativos de CG sem forma de pagamento, alimentando
+  // a fila de reconciliacao financeira todo mes.
+  // A ordem de precedencia continua a mesma; o que muda e pular o vazio junto com o nulo.
+  const candidatos = [
+    mat?.contrato_atual?.forma_pagamento,
+    mat?.cobranca_automatica?.forma_pagamento,
+    mat?.forma_pagamento,
+  ];
+  for (const valor of candidatos) {
+    if (temValor(valor)) return String(valor).trim();
+  }
+  return null;
 }
 
 function resolverFormaPagamentoId(formaEmusys: string | null, formasPagamento: Map<number, any>): number | null {
@@ -381,7 +402,7 @@ function setCampoEmusysAutoritativo(
   diffs[campo] = { de: valorLocal ?? null, para: String(valorEmusys).trim() };
 }
 
-function gerarPatchCadastroCanonicoEmusys(a: any, mat: any, fixados: Set<string>) {
+function gerarPatchCadastroCanonicoEmusys(a: any, mat: any, fixados: Set<string>, formasPagamento?: Map<number, any>) {
   const patch: Record<string, any> = {};
   const diffs: Record<string, any> = {};
   const responsavel = mat?.responsavel || {};
@@ -401,6 +422,31 @@ function gerarPatchCadastroCanonicoEmusys(a: any, mat: any, fixados: Set<string>
   const instagramEmusys = extrairInstagramAluno(mat);
   if (a.instagram_nao_possui !== true && !textoIndicaSemInstagramEmusys(instagramEmusys)) {
     setCampoEmusysAutoritativo(patch, diffs, 'instagram', instagramEmusys, a.instagram, fixados, normalizarInstagramValor);
+  }
+
+  // Forma de pagamento: dado do Emusys, aplicado direto como os demais cadastrais.
+  // ⚠️ Ate 2026-08-20 este campo so virava `forma_pagamento_divergente` na fila e nunca
+  // era gravado — 251 dos 485 alunos ativos de Campo Grande (58%) ficaram sem forma, e
+  // isso realimentava a fila de reconciliacao financeira todo mes, quando as faturas do
+  // mes abrem sem "forma prevista".
+  // ⚠️ A fonte primaria e `cobranca_automatica.forma_pagamento` (raiz do payload), NAO
+  // `contrato_atual.forma_pagamento`, que vem string vazia na esmagadora maioria.
+  // `normalizarFormaPagamentoValor` ja resolve os apelidos do Emusys: "Boleto Bancario"
+  // -> boleto, "Pix Automatico" -> pix, "Cartao de Credito Visa" -> cartao de credito.
+  // ⚠️ DUAS fontes, nesta ordem (a 2a entra por `formaFatura`, resolvida pelo chamador):
+  //   1. cadastro do contrato — `cobranca_automatica.forma_pagamento`, o combinado;
+  //   2. ultima fatura PAGA da PESSOA — a forma que ela de fato usou.
+  // A 2a e indispensavel: a fatura ABERTA vem sempre com forma nula (o Emusys so sabe
+  // depois que paga) e, quando o aluno renova, o Emusys abre matricula nova — as faturas
+  // antigas ficam na matricula ANTERIOR. Por isso a busca e por `emusys_student_id`
+  // (pessoa) e nao por matricula: em CG isso levou de 115 para 157 dos 181 resolvidos.
+  if (formasPagamento && !fixados.has('forma_pagamento_id')) {
+    const formaEmusys = extrairFormaPagamentoEmusys(mat) ?? (a.__forma_fatura_emusys ?? null);
+    const formaId = resolverFormaPagamentoId(formaEmusys, formasPagamento);
+    if (formaId != null && Number(a.forma_pagamento_id) !== formaId) {
+      patch.forma_pagamento_id = formaId;
+      diffs.forma_pagamento_id = { de: a.forma_pagamento_id ?? null, para: formaId };
+    }
   }
 
   return { patch, diffs };
@@ -486,17 +532,39 @@ async function sincronizarAtributosCadastraisEmusys(
   fixadosMap: Map<number, Set<string>>,
   logs: any[],
   resumo: any,
+  formasPagamento?: Map<number, any>,
 ) {
   const atualizados = new Map<number, any>();
+
+  // Forma da ultima fatura PAGA por PESSOA (emusys_student_id) — 2a fonte da forma de
+  // pagamento. Uma consulta por unidade, nao uma por aluno.
+  const formaFaturaPorPessoa = new Map<string, string>();
+  try {
+    const { data: formasFatura } = await supabase.rpc('forma_pagamento_ultima_fatura_por_pessoa', {
+      p_unidade_id: unidade.id,
+    });
+    for (const linha of formasFatura || []) {
+      const pessoa = String(linha.emusys_student_id ?? '').trim();
+      const forma = String(linha.forma_pagamento ?? '').trim();
+      if (pessoa && forma) formaFaturaPorPessoa.set(pessoa, forma);
+    }
+  } catch (e: any) {
+    console.error('[sync] falha ao carregar forma da fatura por pessoa:', e?.message ?? e);
+  }
+
   for (const aluno of alunos || []) {
     if (!alunoEntraNaFilaOperacional(aluno)) continue;
+    const pessoaKey = String(aluno.emusys_student_id ?? '').trim();
+    if (pessoaKey && formaFaturaPorPessoa.has(pessoaKey)) {
+      aluno.__forma_fatura_emusys = formaFaturaPorPessoa.get(pessoaKey);
+    }
     const matriculaId = numeroFinitoOuNull(aluno.emusys_matricula_id);
     if (matriculaId == null) continue;
     const mat = porId.get(matriculaId);
     if (!mat) continue;
 
     const fixados = fixadosMap.get(aluno.id) || new Set<string>();
-    const cadastroCanonico = gerarPatchCadastroCanonicoEmusys(aluno, mat, fixados);
+    const cadastroCanonico = gerarPatchCadastroCanonicoEmusys(aluno, mat, fixados, formasPagamento);
     const patch = cadastroCanonico.patch;
     if (!Object.keys(patch).length) continue;
 
@@ -1518,6 +1586,7 @@ serve(async (req) => {
       fixadosMap,
       logs,
       resumo,
+      formasPagamentoMap,
     );
 
     const { data: pendenciasForaEscopo, error: pendenciasForaEscopoError } = await supabase.rpc(
@@ -2349,7 +2418,13 @@ function reconciliar(
     sugerirCampoRevisao('data_fim_contrato', dataFim, a.data_fim_contrato);
   }
   // Regua de VALOR: contrato Emusys e a fonte da parcela comercial.
-  if (cheio != null) {
+  // ⚠️ Atividade extra (banda, Power Kids, coral) NAO tem mensalidade por regra de negocio
+  // (REGRAS-DE-NEGOCIO 3.5) — o contrato dela vem com nr_faturas = 0 e sem cobranca
+  // automatica, o que caia direto no `bloqueiaValorAutomatico` e virava `valor_divergente`
+  // na fila TODA NOITE, para uma pergunta que a regra ja responde: nao cobra. Medido em
+  // 20/08: 4 pendencias recorrentes, todas Power Kids de Campo Grande, com valor ja zerado
+  // no cadastro. A regua inteira de valor nao se aplica a esses cursos.
+  if (cheio != null && !banda.has(Number(a.curso_id))) {
     if (!financeiro.bloqueiaValorAutomatico && parcelaComercial != null && parcelaComercial >= 0) {
       sugerirCampoRevisao('valor_cheio', cheio, a.valor_cheio);
       sugerirCampoRevisao('desconto_fixo', fixo, a.desconto_fixo);
