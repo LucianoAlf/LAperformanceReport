@@ -45,7 +45,7 @@ interface Props {
    * O painel "Ver conversa" mostra so o que a familia RESPONDEU — quando ninguem
    * respondeu ele fica vazio, e vazio nao distingue "nao respondeu" de "quebrou".
    */
-  onAbrirConversa?: (alunoId: number) => void;
+  onAbrirConversa?: (alunoId: number | null, telefone?: string | null) => void;
 }
 
 const ROTULOS_ESTADO: Record<string, string> = {
@@ -279,13 +279,16 @@ export function FilaFollowupEvasao({
                         size="sm"
                         variant="ghost"
                         className="text-sky-300 hover:text-sky-200 disabled:text-slate-600"
-                        disabled={!item.aluno_id}
+                        disabled={!item.aluno_id && !item.telefone_destino}
                         title={
-                          item.aluno_id
+                          item.aluno_id || item.telefone_destino
                             ? 'Abrir a conversa completa na Caixa de Entrada'
-                            : 'Saída lançada sem vínculo com o cadastro — não há conversa para abrir'
+                            : 'Sem vínculo com o cadastro e sem telefone — não há conversa para abrir'
                         }
-                        onClick={() => item.aluno_id && onAbrirConversa(item.aluno_id)}
+                        onClick={() =>
+                          (item.aluno_id || item.telefone_destino) &&
+                          onAbrirConversa(item.aluno_id, item.telefone_destino)
+                        }
                       >
                         <MessagesSquare className="mr-1 h-4 w-4" />
                         Ir para a conversa

@@ -58,7 +58,7 @@ interface StatsPesquisa {
 interface Props {
   unidadeAtual: UnidadeId;
   /** Leva para a Caixa de Entrada do Sucesso do Aluno, na conversa daquele aluno. */
-  onAbrirConversa?: (alunoId: number) => void;
+  onAbrirConversa?: (alunoId: number | null, telefone?: string | null) => void;
 }
 
 interface StatusPesquisaInterpretado {
