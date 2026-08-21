@@ -1,0 +1,248 @@
+{
+  "info": {
+    "_postman_id": "b7f1a2c4-9d3e-4a11-8c5e-2f6a1e0d4b90",
+    "name": "Emusys — Faturas",
+    "description": "GET /faturas da API Emusys (v1.4.1).\n\n**Antes de rodar:** preencha a variável `token` com o token da unidade. O token é POR UNIDADE — não existe filtro de unidade no endpoint, quem define a escola é o header.\n\n### Armadilhas verificadas ao vivo (21/08/2026)\n\n- **O header `token` é case-sensitive.** `token:` funciona; `Token:` devolve `HTTP 400 {\"status\":\"erro\",\"msg\":\"token invalido!\"}`. Quebra em client que normaliza header (o `urllib` do Python capitaliza e derruba a chamada). No Postman, digite minúsculo.\n- **A API não valida parâmetro desconhecido.** `?xpto_id=999` devolve 200 com a página inteira, idêntica à query sem filtro. Nunca conclua que um filtro existe só porque veio 200 com dados — compare com a query SEM o filtro (a request \"Controle\" está aqui pra isso).\n- **Rate limit: 120 req / 60 s por IP.** Estourar devolve `HTTP 429` com `Retry-After`. Paginação em loop sem pausa derruba a varredura inteira.\n- **`limite` aceita 1 a 50.** Fora disso é `HTTP 400` com mensagem explícita.\n- **Não existe filtro por `data_pagamento`** — só por vencimento. Para \"o que entrou no mês\", puxe por vencimento e agrupe no cliente.\n- **`matricula_id: 0` / `contrato_id: 0` não é bug.** São cobranças que não pertencem a matrícula: ingresso de evento, passaporte, rateio, locação, produto de estoque. Em ago/2026 eram 5,3% das faturas.\n- **`aluno_id` sozinho não serve pra checar mensalidade.** Casa passaporte e ingresso também, e faz aluno sem mensalidade parecer em dia. Filtre a descrição por `^Parcela MM/AAAA`.\n- **`data_pagamento` pode vir `\"0000-00-00\"`** em registro antigo — tratar como não pago.\n- **Sem dados de cancelamento/estorno.** O Emusys não registra isso de forma estruturada na maioria dos meios de pagamento.\n- **Fatura excluída simplesmente some da resposta.** Não há flag de cancelada nem tombstone: quem espelha com upsert e nunca remove fica com parcela fantasma.\n\n### O que é null enquanto a fatura está aberta\n\nMedido em 21/08/2026 — a doc oficial diz que os cinco campos da v1.3.2 são null enquanto aberta, mas **só três são**:\n\n| campo | aberta | paga |\n|---|---|---|\n| `numero_parcela` | **preenchido** | preenchido |\n| `total_parcelas_contrato` | **preenchido** | preenchido |\n| `forma_pagamento_transacao` | null | preenchido |\n| `tarifa_meio_pagamento` | null | preenchido |\n| `valor_liquido_recebido` | null | preenchido |\n\n`numero_parcela` é null em **taxa de matrícula e fatura avulsa** (não é mensalidade regular), e é numerado em relação ao **contrato**, não à matrícula — uma matrícula acumula vários contratos ao longo das renovações.\n\n### Paginação\n\n`paginacao.proximo_cursor` é base64 de `{\"id\":N}`. O teste da collection grava o cursor na variável `cursor`; a request \"Próxima página\" consome. `tem_mais: false` encerra.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      { "key": "key", "value": "token", "type": "string" },
+      { "key": "value", "value": "{{token}}", "type": "string" },
+      { "key": "in", "value": "header", "type": "string" }
+    ]
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Roda em TODA request da collection.",
+          "let body = null;",
+          "try { body = pm.response.json(); } catch (e) { body = null; }",
+          "",
+          "pm.test('nao bateu no rate limit (120/60s)', function () {",
+          "  if (pm.response.code === 429) {",
+          "    throw new Error('429 — Retry-After: ' + pm.response.headers.get('Retry-After'));",
+          "  }",
+          "});",
+          "",
+          "// O Emusys ora devolve 200 com {status:'erro'}, ora 400. Cobrir os dois.",
+          "pm.test('sem erro de aplicacao', function () {",
+          "  if (body && body.status === 'erro') {",
+          "    throw new Error('API respondeu erro: ' + body.msg);",
+          "  }",
+          "  pm.expect(pm.response.code, 'HTTP').to.eql(200);",
+          "});",
+          "",
+          "if (body && Array.isArray(body.items)) {",
+          "  const pg = body.paginacao || {};",
+          "  console.log(body.items.length + ' itens | tem_mais=' + pg.tem_mais);",
+          "  pm.collectionVariables.set('cursor', pg.proximo_cursor || '');",
+          "  console.log(pg.proximo_cursor ? 'cursor gravado em {{cursor}}' : 'fim da paginacao');",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "base_url", "value": "https://api.emusys.com.br/v1", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "aluno_id", "value": "1198", "type": "string" },
+    { "key": "matricula_id", "value": "803", "type": "string" },
+    { "key": "contrato_id", "value": "1167", "type": "string" },
+    { "key": "venc_inicio", "value": "2026-08-01", "type": "string" },
+    { "key": "venc_fim", "value": "2026-08-31", "type": "string" },
+    { "key": "cursor", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "1. Listar faturas (baseline)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/faturas?limite=50",
+          "host": ["{{base_url}}"],
+          "path": ["faturas"],
+          "query": [
+            { "key": "limite", "value": "50", "description": "1 a 50. Fora disso: HTTP 400." },
+            { "key": "status", "value": "todas", "disabled": true }
+          ]
+        },
+        "description": "Sem filtro nenhum. Serve de **linha de base**: qualquer request com filtro deve devolver um conjunto DIFERENTE deste. Se vier igual, o filtro não existe e está sendo ignorado em silêncio.\n\nOrdenação é por `id` crescente, então a primeira página traz as faturas mais antigas da escola."
+      },
+      "response": []
+    },
+    {
+      "name": "2. Inadimplência — em aberto e já vencidas",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/faturas?status=aberta&data_vencimento_final={{venc_fim}}&limite=50",
+          "host": ["{{base_url}}"],
+          "path": ["faturas"],
+          "query": [
+            { "key": "status", "value": "aberta" },
+            { "key": "data_vencimento_final", "value": "{{venc_fim}}", "description": "Use HOJE para pegar só o que já venceu." },
+            { "key": "data_vencimento_inicial", "value": "{{venc_inicio}}", "disabled": true },
+            { "key": "limite", "value": "50" }
+          ]
+        },
+        "description": "**A via direta pra inadimplência real** — valor devido fatura a fatura, não o booleano `contrato_atual.inadimplente` de `/matriculas`.\n\nPara \"o que está atrasado hoje\", ponha `data_vencimento_final` = hoje. Sem esse recorte você traz também as parcelas futuras, que estão abertas por serem futuras, não por calote.\n\n⚠️ Vem junto taxa de matrícula, ingresso e passaporte. Se quer só mensalidade, filtre `descricao` por `^Parcela MM/AAAA` no cliente."
+      },
+      "response": []
+    },
+    {
+      "name": "3. Em aberto por competência",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/faturas?status=aberta&data_vencimento_inicial={{venc_inicio}}&data_vencimento_final={{venc_fim}}&limite=50",
+          "host": ["{{base_url}}"],
+          "path": ["faturas"],
+          "query": [
+            { "key": "status", "value": "aberta" },
+            { "key": "data_vencimento_inicial", "value": "{{venc_inicio}}" },
+            { "key": "data_vencimento_final", "value": "{{venc_fim}}" },
+            { "key": "limite", "value": "50" }
+          ]
+        },
+        "description": "Filtros combinam entre si — verificado: `status` + intervalo de vencimento devolveu só `aberta` dentro da janela (11 itens na Barra em ago/2026).\n\nResponde \"quanto ainda falta entrar deste mês\"."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Pagas por vencimento",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/faturas?status=paga&data_vencimento_inicial={{venc_inicio}}&data_vencimento_final={{venc_fim}}&limite=50",
+          "host": ["{{base_url}}"],
+          "path": ["faturas"],
+          "query": [
+            { "key": "status", "value": "paga" },
+            { "key": "data_vencimento_inicial", "value": "{{venc_inicio}}" },
+            { "key": "data_vencimento_final", "value": "{{venc_fim}}" },
+            { "key": "limite", "value": "50" }
+          ]
+        },
+        "description": "⚠️ **Isto NÃO é \"recebido no mês\".** O recorte é por **vencimento**, não por pagamento — não existe filtro por `data_pagamento`.\n\nParcela que venceu em julho e foi paga em agosto aparece na janela de **julho**. Para caixa por data de pagamento, puxe uma janela larga de vencimento e agrupe por `data_pagamento` no cliente.\n\nAqui os campos de transação vêm preenchidos: `forma_pagamento_transacao` (meio efetivamente usado, ≠ o preferencial do contrato), `tarifa_meio_pagamento` e `valor_liquido_recebido` (= `valor_pago` − tarifa)."
+      },
+      "response": []
+    },
+    {
+      "name": "5. Por aluno",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/faturas?aluno_id={{aluno_id}}&status=todas&limite=50",
+          "host": ["{{base_url}}"],
+          "path": ["faturas"],
+          "query": [
+            { "key": "aluno_id", "value": "{{aluno_id}}", "description": "ID da PESSOA no Emusys, namespaced por unidade." },
+            { "key": "status", "value": "todas" },
+            { "key": "limite", "value": "50" }
+          ]
+        },
+        "description": "Ficha financeira completa do aluno. **É a forma mais rápida de auditar um caso concreto** — traz todas as parcelas de todos os contratos dele, então dá pra ver a régua inteira de uma vez.\n\n⚠️ `aluno_id` é o ID da pessoa **dentro daquela unidade**. O mesmo número aponta pra pessoas diferentes em escolas diferentes — sempre cruze com o token que está usando.\n\n💡 Foi com esta request que se descobriu, em 21/08/2026, que a parcela 07/2026 do Daniel Victor tinha sido excluída no Emusys e continuava viva no nosso espelho, sendo cobrada com mora."
+      },
+      "response": []
+    },
+    {
+      "name": "6. Por matrícula",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/faturas?matricula_id={{matricula_id}}&status=todas&limite=50",
+          "host": ["{{base_url}}"],
+          "path": ["faturas"],
+          "query": [
+            { "key": "matricula_id", "value": "{{matricula_id}}" },
+            { "key": "status", "value": "todas" },
+            { "key": "limite", "value": "50" }
+          ]
+        },
+        "description": "Todas as parcelas da matrícula, **atravessando renovações** — uma matrícula acumula vários `contrato_id` ao longo do tempo.\n\nÉ por isso que `numero_parcela` é numerado por contrato e não por matrícula: numerar pela matrícula seria ambíguo depois da primeira renovação."
+      },
+      "response": []
+    },
+    {
+      "name": "7. Por contrato (um ciclo só)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/faturas?contrato_id={{contrato_id}}&status=todas&limite=50",
+          "host": ["{{base_url}}"],
+          "path": ["faturas"],
+          "query": [
+            { "key": "contrato_id", "value": "{{contrato_id}}" },
+            { "key": "status", "value": "todas" },
+            { "key": "limite", "value": "50" }
+          ]
+        },
+        "description": "Recorta **um ciclo** contratual. Como o Emusys abre um `contrato_id` novo a cada renovação, contar contratos que estreiam no ano é a forma correta de contar renovações — e é aqui que você confere isso parcela a parcela.\n\n⚠️ Não infira renovação pelo **valor** da parcela: renovação sem reajuste não gera degrau, juros e multa inflam o `valor_pago` criando degrau falso, e parcela dividida vira duas linhas na mesma competência."
+      },
+      "response": []
+    },
+    {
+      "name": "8. Próxima página (usa {{cursor}})",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/faturas?limite=50&cursor={{cursor}}",
+          "host": ["{{base_url}}"],
+          "path": ["faturas"],
+          "query": [
+            { "key": "limite", "value": "50" },
+            { "key": "cursor", "value": "{{cursor}}", "description": "Preenchido pelo teste da request anterior." }
+          ]
+        },
+        "description": "Rode qualquer request acima e depois esta: o script de teste grava `paginacao.proximo_cursor` em `{{cursor}}`, e aqui ela é consumida.\n\n⚠️ **Repita os mesmos filtros da request original** ao paginar. O cursor é só uma posição (`{\"id\":N}` em base64) — ele não carrega o filtro junto. Paginar sem repetir o `status`/intervalo devolve o conjunto errado.\n\n⚠️ Ao paginar em loop, **pause entre chamadas**. São 120 req/min por IP."
+      },
+      "response": []
+    },
+    {
+      "name": "9. Controle — parâmetro inventado (deve ser IGUAL à baseline)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/faturas?limite=50&xpto_id=999",
+          "host": ["{{base_url}}"],
+          "path": ["faturas"],
+          "query": [
+            { "key": "limite", "value": "50" },
+            { "key": "xpto_id", "value": "999", "description": "Parâmetro que não existe." }
+          ]
+        },
+        "description": "**Não apague esta request.** Ela é o controle negativo.\n\nA API Emusys aceita qualquer parâmetro e ignora o que não conhece, devolvendo 200 com a página completa. Foi assim que se descobriu, em 03/08/2026, que `/matriculas` **não** tem filtro por responsável: `responsavel_id` respondia 200 com dados e parecia funcionar.\n\nSempre que for usar um filtro novo do Emusys, rode esta request e compare. Se o \"filtro\" devolver o mesmo que aqui, ele não existe."
+      },
+      "response": []
+    },
+    {
+      "name": "10. Limites — limite=51 (deve dar 400)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/faturas?limite=51",
+          "host": ["{{base_url}}"],
+          "path": ["faturas"],
+          "query": [{ "key": "limite", "value": "51" }]
+        },
+        "description": "Confirma o teto. Resposta esperada: `HTTP 400 {\"status\":\"erro\",\"msg\":\"limite não pode ser maior que 50\"}`. `limite=0` devolve `\"limite não pode ser menor que 1\"`.\n\n⚠️ O teste da collection vai **falhar** nesta request de propósito — é o comportamento correto.\n\nDiferente de `/aulas` e `/crm/aniversariantes`, que aceitam até 100."
+      },
+      "response": []
+    }
+  ]
+}
