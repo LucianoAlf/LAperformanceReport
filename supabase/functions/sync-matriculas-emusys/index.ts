@@ -56,6 +56,7 @@ import {
   decidirDestinos,
   planejarConsultas,
 } from '../_shared/reconciliacao-ausentes-operacional.ts';
+import { montarWebhookFinalizacao } from '../_shared/nao-renovacao-por-pull.ts';
 // Regra ÚNICA de derivação do cadastro, compartilhada com o webhook
 // `matricula_alterada` (processar-matricula-emusys) desde 2026-08-19.
 import {
@@ -70,6 +71,7 @@ import {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 
 const EMAILS_SYNC_TECNICO = new Set(
   (Deno.env.get('SYNC_MATRICULAS_ALLOWED_EMAILS') ?? 'lucianoalf.la@gmail.com,hugo@lamusic.com.br')
@@ -1260,6 +1262,7 @@ async function reconciliarEstadosOperacionaisAusentes(
     sem_chave_de_consulta: 0,
     consultas_com_falha: 0,
     linhas_inativadas: 0,
+    nao_renovacoes: { tentadas: 0, criadas: 0, falhas: 0 },
   };
 
   let selectAusentes = supabase
@@ -1333,6 +1336,13 @@ async function reconciliarEstadosOperacionaisAusentes(
         `Falha ao reidratar ${upsert.erros} estados de matricula ausente: ${upsert.mensagens.join('; ')}`,
       );
     }
+
+    // Contrato que chegou ao fim vira NÃO-RENOVAÇÃO. Só depois do upsert: se o estado
+    // não gravou, a movimentação não deve existir.
+    resultado.nao_renovacoes = await notificarContratosConcluidos(
+      matriculasParaReidratar,
+      unidadeId,
+    );
   }
 
   if (idsParaConfirmar.length) {
@@ -1345,6 +1355,68 @@ async function reconciliarEstadosOperacionaisAusentes(
   }
 
   resultado.linhas_inativadas = resultado.confirmadas;
+  return resultado;
+}
+
+/**
+ * Contrato que chegou ao fim vira não-renovação — usando a regra que JÁ EXISTE.
+ *
+ * `handleNaoRenovacao`, em `processar-matricula-emusys`, grava a movimentação, marca
+ * `alunos.status='inativo'` com `data_saida`, registra a passagem em `alunos_historico`,
+ * tem chave de idempotência, log e invariantes. Ela nunca disparava porque depende do
+ * webhook `matricula_finalizacao`, e o Emusys não manda webhook quando o contrato apenas
+ * chega ao fim — não renovar é um NÃO-EVENTO (medido: 16 não-renovações no período, ZERO
+ * via webhook; 99 conclusões em 2026 contra 51 lançamentos).
+ *
+ * Por isso aqui só há TRADUÇÃO de formato e uma chamada. Reimplementar a regra criaria a
+ * segunda fonte de escrita que produziu as duplicatas de renovação neste projeto.
+ *
+ * ⚠️ Forward-only e uma vez só, por construção: isto roda no caminho de ausentes, que só
+ * seleciona linhas ainda `ativa`/`trancada` no espelho. Depois da reidratação a linha vira
+ * `inativa` e nunca mais é selecionada — sem backfill dos 408 `concluida` históricos e sem
+ * disparo repetido a cada noite.
+ *
+ * ⚠️ Falha aqui NÃO derruba o sync. O estado já foi gravado corretamente; a movimentação
+ * pode ser lançada à mão, e o log diz quais ficaram faltando.
+ */
+async function notificarContratosConcluidos(
+  matriculas: any[],
+  unidadeId: string,
+) {
+  const resultado = { tentadas: 0, criadas: 0, falhas: 0 };
+
+  for (const matricula of matriculas) {
+    const corpo = montarWebhookFinalizacao(matricula, unidadeId);
+    if (!corpo) continue;
+
+    resultado.tentadas++;
+    try {
+      // ⚠️ ANON, não service role. `processar-matricula-emusys` tem `verify_jwt = true` e o
+      // gateway NÃO aceita a service key opaca usada entre Edges — o mesmo motivo pelo qual
+      // `reconciliar-grade-aluno` teve de ficar com `verify_jwt = false` (ver config.toml).
+      // Medido: com a anon o gateway passa e a função responde; com a service key, 401 antes
+      // do código rodar, e a falha ficaria invisível porque este bloco engole erro.
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/processar-matricula-emusys`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify(corpo),
+      });
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
+      resultado.criadas++;
+    } catch (erro) {
+      resultado.falhas++;
+      console.error('[nao-renovacao] falha ao registrar contrato concluido', {
+        emusys_matricula_id: matricula?.id,
+        unidade_id: unidadeId,
+        erro: String(erro),
+      });
+    }
+  }
+
   return resultado;
 }
 
