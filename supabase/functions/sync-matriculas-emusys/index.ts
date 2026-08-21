@@ -52,6 +52,10 @@ import {
 import { resolveEmusysMatriculaLifecycle } from '../_shared/emusys-matricula-lifecycle.ts';
 import { deveConverterFinalizadaEmNaoRenovacao } from '../_shared/nao-renovacao-canonica.ts';
 import { decidirLeadId } from '../_shared/lead-id-reconciliacao.ts';
+import {
+  decidirDestinos,
+  planejarConsultas,
+} from '../_shared/reconciliacao-ausentes-operacional.ts';
 // Regra ÚNICA de derivação do cadastro, compartilhada com o webhook
 // `matricula_alterada` (processar-matricula-emusys) desde 2026-08-19.
 import {
@@ -96,6 +100,14 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const EMUSYS_PAGE_THROTTLE_MS = 1500;
 const EMUSYS_429_MAX_RETRIES = 4;
+
+// Teto de consultas de recuperação por rodada. Em operação normal são 2 a 6 ausentes
+// por dia; um número muito acima disso é sinal de foto anômala, não de gente concluindo
+// contrato em massa — e sair consultando estouraria o idle timeout de 150s que o escopo
+// operacional existe para respeitar (roda em 42–54s hoje). O excedente fica para a
+// próxima rodada, que é idempotente.
+const AUSENTES_TETO_CONSULTAS_POR_RODADA = 25;
+const AUSENTES_ORCAMENTO_MS = 25_000;
 
 /**
  * O Emusys aplica rate limit por IP compartilhado entre as Edge Functions.
@@ -1177,13 +1189,172 @@ async function upsertEstadosAtuaisEmLote(supabase: any, u: { id: string }, rows:
   return result;
 }
 
+/**
+ * Consulta direta de uma pessoa no Emusys, com `status=todas`.
+ *
+ * `/matriculas` NÃO aceita filtro por `matricula_id` — só por `aluno_id` —, então a
+ * pergunta é sempre "me dê todas as matrículas desta pessoa" e o casamento é feito
+ * pelo `id` de cada item. Uma pessoa tem poucas matrículas, mas paginamos mesmo assim
+ * porque quem faz vários cursos há anos acumula mais do que cabe numa página.
+ */
+async function fetchMatriculasDoAluno(token: string, emusysAlunoId: number) {
+  const itens: any[] = [];
+  let cursor = '';
+
+  for (let pagina = 0; pagina < 5; pagina++) {
+    const url = `${EMUSYS_API}/matriculas?aluno_id=${emusysAlunoId}&status=todas&limite=50`
+      + (cursor ? `&cursor=${cursor}` : '');
+    const resp = await fetchEmusysMatriculas(url, token, 'todas');
+    if (!resp.ok) throw new Error(`API ${resp.status} (aluno ${emusysAlunoId})`);
+
+    const json = await resp.json();
+    for (const item of json.items || []) itens.push(item);
+
+    if (!json.paginacao?.tem_mais || !json.paginacao?.proximo_cursor) break;
+    cursor = json.paginacao.proximo_cursor;
+    await sleep(EMUSYS_PAGE_THROTTLE_MS);
+  }
+
+  return itens;
+}
+
+/**
+ * Matrícula que some do payload operacional: perguntar antes de concluir.
+ *
+ * O escopo operacional pede ao Emusys só `status=ativa` e `status=trancada`, então
+ * quem acabou de encerrar deixa de aparecer — por definição. Até 21/08/2026 a ausência
+ * era tratada como o fato: a linha virava `inativa` com `motivo_inativa = NULL`, e com
+ * isso se perdia justamente a distinção entre "concluiu o contrato" e "abandonou", que
+ * é o que a API expõe desde a v1.3.1.
+ *
+ * Sem o motivo, `status_local_resolvido` fica NULL e a `vw_alunos_estado_operacional_v131`
+ * resolve `desconhecido`: o aluno sai dos KPIs canônicos mas continua contado na Lista
+ * de Alunos, que lê `alunos.status` cru. Foi o caso da Gabriela da Costa (Barra,
+ * matrícula 647, contrato concluído em 18/08/2026).
+ *
+ * Agora cada ausente é consultada em `/matriculas?aluno_id=...&status=todas` e o estado
+ * é reidratado pelo MESMO caminho do fluxo normal (`buildEstadoAtualRows` +
+ * `upsertEstadosAtuaisEmLote`) — a derivação continua tendo uma fonte só. Só quem a API
+ * também não devolve é marcado como ausente, e aí o rótulo diz a verdade.
+ *
+ * ⚠️ Falha de consulta NÃO marca ausente: sem resposta não há informação nova, e marcar
+ * produziria exatamente o limbo que isto veio consertar. A linha fica para a próxima
+ * rodada, que é idempotente.
+ */
 async function reconciliarEstadosOperacionaisAusentes(
   supabase: any,
   unidadeId: string,
   idsOperacionais: number[],
   sincronizadoEm: string,
+  opcoes: {
+    token: string;
+    alunoIdPorMatriculaEmusys: Map<number, number>;
+    alunoIdPorAlunoEmusys: Map<number, number>;
+  },
 ) {
-  let query = supabase
+  const resultado = {
+    ausentes: 0,
+    reidratadas: 0,
+    confirmadas: 0,
+    adiadas: 0,
+    sem_chave_de_consulta: 0,
+    consultas_com_falha: 0,
+    linhas_inativadas: 0,
+  };
+
+  let selectAusentes = supabase
+    .from('emusys_matriculas_estado_atual')
+    .select('emusys_matricula_id, emusys_aluno_id')
+    .eq('unidade_id', unidadeId)
+    .in('status_emusys', ['ativa', 'trancada']);
+
+  if (idsOperacionais.length > 0) {
+    selectAusentes = selectAusentes.not(
+      'emusys_matricula_id',
+      'in',
+      `(${idsOperacionais.join(',')})`,
+    );
+  }
+
+  const { data: ausentes, error: ausentesError } = await selectAusentes;
+  if (ausentesError) throw ausentesError;
+  if (!ausentes?.length) return resultado;
+
+  resultado.ausentes = ausentes.length;
+
+  const plano = planejarConsultas(ausentes, AUSENTES_TETO_CONSULTAS_POR_RODADA);
+  resultado.adiadas = plano.adiadas.length;
+  resultado.sem_chave_de_consulta = plano.semChaveDeConsulta.length;
+
+  const prazo = Date.now() + AUSENTES_ORCAMENTO_MS;
+  const matriculasParaReidratar: any[] = [];
+  // Sem chave de consulta não há pergunta possível: mantemos o comportamento antigo,
+  // que ao menos tira a linha do conjunto ativo.
+  const idsParaConfirmar: number[] = [...plano.semChaveDeConsulta];
+
+  for (const grupo of plano.consultar) {
+    if (Date.now() > prazo) {
+      resultado.adiadas += grupo.matriculas.length;
+      continue;
+    }
+
+    let itens: any[];
+    try {
+      itens = await fetchMatriculasDoAluno(opcoes.token, grupo.emusys_aluno_id);
+    } catch (erro) {
+      // Não vira `confirmar_ausente`: falha de rede não é informação sobre a matrícula.
+      resultado.consultas_com_falha++;
+      console.error('[ausentes] consulta falhou, linha preservada', {
+        emusys_aluno_id: grupo.emusys_aluno_id,
+        matriculas: grupo.matriculas,
+        erro: String(erro),
+      });
+      continue;
+    }
+
+    for (const destino of decidirDestinos(grupo, itens)) {
+      if (destino.acao === 'reidratar') matriculasParaReidratar.push(destino.matricula);
+      else idsParaConfirmar.push(destino.emusysMatriculaId);
+    }
+
+    await sleep(EMUSYS_PAGE_THROTTLE_MS);
+  }
+
+  if (matriculasParaReidratar.length) {
+    const linhas = buildEstadoAtualRows(
+      matriculasParaReidratar,
+      opcoes.alunoIdPorMatriculaEmusys,
+      opcoes.alunoIdPorAlunoEmusys,
+    );
+    const upsert = await upsertEstadosAtuaisEmLote(supabase, { id: unidadeId }, linhas);
+    resultado.reidratadas = upsert.gravadas;
+    if (upsert.erros > 0) {
+      throw new Error(
+        `Falha ao reidratar ${upsert.erros} estados de matricula ausente: ${upsert.mensagens.join('; ')}`,
+      );
+    }
+  }
+
+  if (idsParaConfirmar.length) {
+    resultado.confirmadas = await marcarAusentesConfirmadas(
+      supabase,
+      unidadeId,
+      idsParaConfirmar,
+      sincronizadoEm,
+    );
+  }
+
+  resultado.linhas_inativadas = resultado.confirmadas;
+  return resultado;
+}
+
+async function marcarAusentesConfirmadas(
+  supabase: any,
+  unidadeId: string,
+  emusysMatriculaIds: number[],
+  sincronizadoEm: string,
+) {
+  const query = supabase
     .from('emusys_matriculas_estado_atual')
     .update({
       status_emusys: 'inativa',
@@ -1203,15 +1374,11 @@ async function reconciliarEstadosOperacionaisAusentes(
       updated_at: sincronizadoEm,
     })
     .eq('unidade_id', unidadeId)
-    .in('status_emusys', ['ativa', 'trancada']);
-
-  if (idsOperacionais.length > 0) {
-    query = query.not(
-      'emusys_matricula_id',
-      'in',
-      `(${idsOperacionais.join(',')})`,
-    );
-  }
+    .in('status_emusys', ['ativa', 'trancada'])
+    // Escopo explícito: só as matrículas que a consulta direta confirmou ausentes.
+    // O UPDATE largo de antes atingia tudo que faltasse na foto, inclusive quem
+    // apenas tinha encerrado e cujo motivo agora sabemos ler.
+    .in('emusys_matricula_id', emusysMatriculaIds);
 
   const { data, error } = await query.select('emusys_matricula_id');
   if (error) throw error;
@@ -1327,6 +1494,10 @@ serve(async (req) => {
       erros: 0,
     },
     estados_atual: { recebidas: 0, gravadas: 0, rejeitadas: 0, erros: 0 },
+    // Observabilidade da recuperação de ausentes: `reidratadas` alto e `confirmadas`
+    // baixo é o esperado (contrato que encerrou, não matrícula que sumiu de verdade).
+    // `consultas_com_falha` recorrente significa que o motivo voltou a se perder.
+    ausentes_operacionais: null as null | Record<string, number>,
     nao_renovacoes_convertidas: 0,
     nao_renovacoes_erros: [],
     erros: 0,
@@ -1599,15 +1770,23 @@ serve(async (req) => {
     // ─── A6b. Reconciliação de ausentes (só no operacional) ───────────────────
     // A fase B continua depois daqui com o `porId` já obtido. O escopo operacional
     // não infere ausência; essa semântica fica exclusiva da fotografia completa.
+    // Desde 21/08/2026 quem some é CONSULTADO na API antes de virar ausente — é assim
+    // que o `motivo_inativa='concluida'` deixa de se perder (ver a função).
     if (escopo === 'operacional') {
       const sincronizadoEm = new Date().toISOString();
-      const linhasInativadas = await reconciliarEstadosOperacionaisAusentes(
+      const ausentes = await reconciliarEstadosOperacionaisAusentes(
         supabase,
         u.id,
         [...porId.keys()],
         sincronizadoEm,
+        {
+          token: u.token,
+          alunoIdPorMatriculaEmusys,
+          alunoIdPorAlunoEmusys,
+        },
       );
-      resumo.estados_atual.linhas_inativadas = linhasInativadas;
+      resumo.estados_atual.linhas_inativadas = ausentes.linhas_inativadas;
+      resumo.ausentes_operacionais = ausentes;
     }
 
     // ─── B2. Decisões canônicas ───────────────────────────────────────────────
