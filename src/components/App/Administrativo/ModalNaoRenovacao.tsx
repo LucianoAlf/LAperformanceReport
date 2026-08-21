@@ -160,6 +160,8 @@ export function ModalNaoRenovacao({ open, onOpenChange, onSave, editingItem, pro
               }}
               unidadeId={unidadeId}
               placeholder="Digite o nome do aluno..."
+              // Quem não renovou já saiu — buscar só na base ativa esconde o alvo.
+              apenasAtivos={false}
             />
           </div>
 

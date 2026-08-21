@@ -281,6 +281,18 @@ export function AutocompleteAluno({
                         {aluno.unidades.codigo}
                       </span>
                     )}
+                    {/* Só aparece fora do caso comum: com `apenasAtivos={false}` a lista
+                        mistura quem saiu com quem está na base, e esta base tem homônimo
+                        e aluno com várias passagens. */}
+                    {aluno.status && aluno.status !== 'ativo' && (
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        aluno.status === 'trancado'
+                          ? 'bg-amber-500/20 text-amber-400'
+                          : 'bg-rose-500/20 text-rose-400'
+                      }`}>
+                        {aluno.status}
+                      </span>
+                    )}
                   </div>
                   <div className="flex flex-col gap-0.5 mt-1">
                     {aluno.valor_parcela && (
