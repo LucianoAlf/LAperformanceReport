@@ -3,7 +3,9 @@ export type ReconciliationDecisionType =
   | 'renovacao'
   | 'trancamento'
   | 'ultima_parcela_aviso_previo'
-  | 'conferido_sem_cobranca';
+  | 'parcela_remarcada'
+  | 'conferido_sem_cobranca'
+  | 'outro';
 
 export type ReconciliationGuidance =
   | {
@@ -49,7 +51,13 @@ const DECISION_OPTIONS: Array<{ value: ReconciliationDecisionType; label: string
   { value: 'renovacao', label: 'Renovação / primeira parcela em nova data' },
   { value: 'trancamento', label: 'Trancamento' },
   { value: 'ultima_parcela_aviso_previo', label: 'Última parcela / aviso prévio' },
+  // Cobre tanto a parcela recriada em outra data (Daniel Victor: julho -> 20/03/2027)
+  // quanto a que só mudou de mês (Davi Lima Quintarelli: julho -> agosto). Sem este
+  // rótulo, os dois caíam em 'conferido_sem_cobranca', que diz "não cobrar" e omite
+  // que a cobrança continua existindo mais à frente.
+  { value: 'parcela_remarcada', label: 'Parcela remarcada para outra data' },
   { value: 'conferido_sem_cobranca', label: 'Conferido — não cobrar nesta competência' },
+  { value: 'outro', label: 'Outro — descreva na observação' },
 ];
 
 export function getReconciliationGuidance(item: ReconciliationGuidanceInput): ReconciliationGuidance {
