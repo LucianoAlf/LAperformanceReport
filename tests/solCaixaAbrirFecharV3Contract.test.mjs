@@ -13,6 +13,8 @@ test('Caixa V3: composto usa envelope canônico e falha fechado na ambiguidade',
   assert.match(sql, /composicao_ambigua/i);
   assert.match(sql, /composicao_exige_duas_faturas/i);
   assert.match(sql, /'aluno_id'.*'canonical_fatura_id'/is);
+  assert.match(sql, /tipo_fatura[^\n]+in \('parcela','passaporte_taxa_matricula','matricula'\)/i);
+  assert.doesNotMatch(sql, /else 'parcela'/i);
 });
 
 test('Caixa V3: abrir/fechar somente consome approval após revalidar snapshot', () => {
@@ -21,9 +23,13 @@ test('Caixa V3: abrir/fechar somente consome approval após revalidar snapshot',
   assert.match(execution, /sol_caixa_validar_abertura_fechamento_v1/i);
   assert.match(execution, /sol_caixa_snapshot_abertura_fechamento_v3/i);
   assert.ok(execution.indexOf('v_atual := public.sol_caixa_snapshot_abertura_fechamento_v3') < execution.indexOf('insert into public.sol_caixa_v3_approval_consumos_v1'));
+  assert.ok(execution.indexOf('update public.caixas_diarios') < execution.indexOf('insert into public.sol_caixa_v3_approval_consumos_v1'));
+  assert.match(execution, /on conflict \(unidade_id,data_caixa\) do nothing/i);
   assert.match(sql, /movimentos_por_ambiente/i);
   assert.match(sql, /interval '4 hours'/i);
   assert.match(sql, /America\/Sao_Paulo/i);
+  assert.match(sql, /extensions\.digest\(/i);
+  assert.doesNotMatch(sql, /(?<![\w.])digest\(/i);
 });
 
 test('Caixa V3: escopo de reabertura e grants seguem fail-closed', () => {
@@ -41,4 +47,5 @@ test('Caixa V3: harness SQL é transacional e cobre os contratos críticos', () 
   for (const scenario of ['duas parcelas', 'pagador/responsável', 'parcela+passaporte', 'ambíguo', 'João/Pedro', 'Abrir/fechar']) {
     assert.ok(harness.toLowerCase().includes(scenario.toLowerCase()), `harness sem cenário ${scenario}`);
   }
+  assert.match(harness, /corrida queimou approval sem mutação/i);
 });

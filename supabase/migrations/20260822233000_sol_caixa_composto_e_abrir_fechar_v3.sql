@@ -137,6 +137,9 @@ begin
     where nullif(x->'aluno'->>'id','')::integer = v_aluno_id
       and coalesce(x->>'status','') <> 'cancelada'
       and (v_competencia is null or to_char((x->>'competencia')::date, 'MM/YYYY') = v_competencia)
+      -- Composto V3 só conhece as categorias que o lote/snapshot consegue consumir.
+      -- Lojinha e qualquer tipo novo vão para conferência humana, nunca viram "parcela".
+      and coalesce(x->>'tipo_fatura','') in ('parcela','passaporte_taxa_matricula','matricula')
       and coalesce(
         case when x->>'status' = 'paga' then nullif(x->'valores'->>'valor_pago','')::numeric end,
         nullif(x->'valores'->>'valor_hoje','')::numeric,
@@ -201,7 +204,11 @@ begin
     'aluno_nome', v_aluno_nome,
     'responsavel_financeiro', nullif(v_responsavel->>'responsavel_nome',''),
     'competencia', to_char((x->>'competencia')::date, 'MM/YYYY'),
-    'categoria', case when coalesce(x->>'tipo_fatura','') in ('passaporte_taxa_matricula','matricula') then 'passaporte' else 'parcela' end,
+    'categoria', case
+      when x->>'tipo_fatura' = 'parcela' then 'parcela'
+      when x->>'tipo_fatura' in ('passaporte_taxa_matricula','matricula') then 'passaporte'
+      else null
+    end,
     'valor', coalesce(
       case when x->>'status' = 'paga' then nullif(x->'valores'->>'valor_pago','')::numeric end,
       nullif(x->'valores'->>'valor_hoje','')::numeric,
@@ -321,7 +328,7 @@ begin
   v_res := public.sol_caixa_snapshot_abertura_fechamento_v3(nullif(p_payload->>'unidade_id','')::uuid, coalesce(nullif(p_payload->>'data_caixa','')::date,(now() at time zone 'America/Sao_Paulo')::date), 'abrir_caixa');
   if not coalesce((v_res->>'ok')::boolean,false) then return v_res; end if;
   v_snapshot := v_res->'snapshot';
-  return v_res || jsonb_build_object('snapshot_hash', encode(digest(v_snapshot::text,'sha256'),'hex'));
+  return v_res || jsonb_build_object('snapshot_hash', encode(extensions.digest(v_snapshot::text,'sha256'),'hex'));
 end $function$;
 
 create or replace function public.sol_caixa_resolver_fechamento_v3(p_payload jsonb)
@@ -331,7 +338,7 @@ begin
   v_res := public.sol_caixa_snapshot_abertura_fechamento_v3(nullif(p_payload->>'unidade_id','')::uuid, coalesce(nullif(p_payload->>'data_caixa','')::date,(now() at time zone 'America/Sao_Paulo')::date), 'fechar_caixa');
   if not coalesce((v_res->>'ok')::boolean,false) then return v_res; end if;
   v_snapshot := v_res->'snapshot';
-  return v_res || jsonb_build_object('snapshot_hash', encode(digest(v_snapshot::text,'sha256'),'hex'));
+  return v_res || jsonb_build_object('snapshot_hash', encode(extensions.digest(v_snapshot::text,'sha256'),'hex'));
 end $function$;
 
 -- Valida tudo, mas NÃO consome approval. Os executores somente consomem depois do
@@ -380,7 +387,7 @@ begin
   if lower(coalesce(v_preview.forma,'')) <> 'nao_aplicavel' then return jsonb_build_object('ok',false,'motivo','preview_forma_invalida_v3'); end if;
 
   v_snapshot := v_preview.preview_json->'snapshot';
-  if v_snapshot is null or encode(digest(v_snapshot::text,'sha256'),'hex') is distinct from v_snapshot_hash then return jsonb_build_object('ok',false,'motivo','snapshot_hash_divergente_v3'); end if;
+  if v_snapshot is null or encode(extensions.digest(v_snapshot::text,'sha256'),'hex') is distinct from v_snapshot_hash then return jsonb_build_object('ok',false,'motivo','snapshot_hash_divergente_v3'); end if;
   return jsonb_build_object('ok',true,'preview_id',v_preview.id,'approval_id',v_approval.id,'snapshot',v_snapshot,'snapshot_hash',v_snapshot_hash);
 end $function$;
 
@@ -419,12 +426,12 @@ begin
     return jsonb_build_object('ok',false,'motivo',coalesce(v_atual->>'motivo',case when v_op='abrir_caixa' then 'snapshot_saldo_inicial_mudou' else 'snapshot_caixa_divergente' end));
   end if;
 
-  insert into public.sol_caixa_v3_approval_consumos_v1(approval_id,preview_id,unidade_id,operacao,idempotency_key,payload_hash)
-  values((v_valid->>'approval_id')::uuid,(v_valid->>'preview_id')::uuid,v_unidade,v_op,v_key,md5(p_payload::text));
-
   if v_op='abrir_caixa' then
     insert into public.caixas_diarios(unidade_id,data_caixa,status,saldo_inicial_cofre,saldo_final_calculado,aberto_por)
-    values(v_unidade,v_data,'aberto',(v_snapshot->>'saldo_inicial_proposto')::numeric,(v_snapshot->>'saldo_inicial_proposto')::numeric,coalesce(nullif(p_payload->>'conferido_por',''),'Sol')) returning id into v_caixa;
+    values(v_unidade,v_data,'aberto',(v_snapshot->>'saldo_inicial_proposto')::numeric,(v_snapshot->>'saldo_inicial_proposto')::numeric,coalesce(nullif(p_payload->>'conferido_por',''),'Sol'))
+    on conflict (unidade_id,data_caixa) do nothing
+    returning id into v_caixa;
+    if v_caixa is null then return jsonb_build_object('ok',false,'motivo','snapshot_caixa_ja_existe'); end if;
     v_result := jsonb_build_object('ok',true,'operacao',v_op,'caixa_diario_id',v_caixa,'saldo_inicial',(v_snapshot->>'saldo_inicial_proposto')::numeric);
   else
     v_caixa := (v_snapshot->>'caixa_diario_id')::uuid;
@@ -432,6 +439,11 @@ begin
     if not found then return jsonb_build_object('ok',false,'motivo','snapshot_caixa_nao_aberto'); end if;
     v_result := jsonb_build_object('ok',true,'operacao',v_op,'caixa_diario_id',v_caixa,'saldo_final',(v_snapshot->>'saldo_final_calculado')::numeric);
   end if;
+
+  -- Consumo só nasce depois da mutação efetiva. Se uma corrida legada impedir
+  -- abrir/fechar, os retornos acima preservam o "pode" para um preview novo.
+  insert into public.sol_caixa_v3_approval_consumos_v1(approval_id,preview_id,unidade_id,operacao,idempotency_key,payload_hash)
+  values((v_valid->>'approval_id')::uuid,(v_valid->>'preview_id')::uuid,v_unidade,v_op,v_key,md5(p_payload::text));
 
   insert into public.sol_caixa_v3_caixa_operacoes_v1(unidade_id,data_caixa,operacao,caixa_diario_id,preview_id,approval_id,idempotency_key,snapshot_hash,resultado)
   values(v_unidade,v_data,v_op,v_caixa,(v_valid->>'preview_id')::uuid,(v_valid->>'approval_id')::uuid,v_key,v_valid->>'snapshot_hash',v_result);

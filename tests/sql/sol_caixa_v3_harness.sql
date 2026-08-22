@@ -111,7 +111,7 @@ begin
   values(e,'preview-abertura',u,'abrir_caixa','abertura_caixa',0,'nao_aplicavel','awaiting_approval',jsonb_build_object('snapshot',s)) returning id into p;
   insert into public.sol_caixa_shadow_approvals_v1(preview_id,approval_event_hash,actor_id_hash,decision)
   values(p,'approval-abertura','ator-hash','approved') returning id into a;
-  payload := jsonb_build_object('unidade_id',u,'data_caixa',d,'grupo_jid',g,'ator_numero','5521999999999','ator_papel','harness','conferido_por','Harness','idempotency_key','harness:abrir','v3_preview_id',p,'v3_preview_hash','preview-abertura','v3_approval_id',a,'v3_approval_event_hash','approval-abertura','v3_actor_id_hash','ator-hash','snapshot_hash',encode(digest(s::text,'sha256'),'hex'));
+  payload := jsonb_build_object('unidade_id',u,'data_caixa',d,'grupo_jid',g,'ator_numero','5521999999999','ator_papel','harness','conferido_por','Harness','idempotency_key','harness:abrir','v3_preview_id',p,'v3_preview_hash','preview-abertura','v3_approval_id',a,'v3_approval_event_hash','approval-abertura','v3_actor_id_hash','ator-hash','snapshot_hash',encode(extensions.digest(s::text,'sha256'),'hex'));
   r := public.sol_caixa_abrir_v3(payload);
   if not coalesce((r->>'ok')::boolean,false) then raise exception 'abertura v3 falhou: %',r; end if;
   c := (r->>'caixa_diario_id')::uuid;
@@ -127,10 +127,28 @@ begin
   values(p,'approval-fechar-antigo','ator-hash','approved') returning id into a;
   insert into public.caixa_movimentacoes(caixa_diario_id,unidade_id,ambiente,tipo,valor,data_movimento,forma_pagamento,categoria,descricao)
   values(c,u,'venda','entrada',10,d,'pix','outro','Pix depois do preview');
-  payload := jsonb_build_object('unidade_id',u,'data_caixa',d,'grupo_jid',g,'ator_numero','5521999999999','ator_papel','harness','conferido_por','Harness','idempotency_key','harness:fechar-antigo','v3_preview_id',p,'v3_preview_hash','preview-fechar-antigo','v3_approval_id',a,'v3_approval_event_hash','approval-fechar-antigo','v3_actor_id_hash','ator-hash','snapshot_hash',encode(digest(s::text,'sha256'),'hex'));
+  payload := jsonb_build_object('unidade_id',u,'data_caixa',d,'grupo_jid',g,'ator_numero','5521999999999','ator_papel','harness','conferido_por','Harness','idempotency_key','harness:fechar-antigo','v3_preview_id',p,'v3_preview_hash','preview-fechar-antigo','v3_approval_id',a,'v3_approval_event_hash','approval-fechar-antigo','v3_actor_id_hash','ator-hash','snapshot_hash',encode(extensions.digest(s::text,'sha256'),'hex'));
   r := public.sol_caixa_fechar_v3(payload);
   if coalesce((r->>'ok')::boolean,false) or r->>'motivo' <> 'snapshot_caixa_divergente' then raise exception 'Pix deveria invalidar fechamento: %',r; end if;
   if exists(select 1 from public.sol_caixa_v3_approval_consumos_v1 where approval_id=a) then raise exception 'snapshot recusado consumiu approval'; end if;
+
+  -- Corrida com o fechamento legado: a mutação não acha caixa aberto e o approval
+  -- não pode ser queimado. O trigger apenas simula a corrida dentro da transação.
+  r := public.sol_caixa_resolver_fechamento_v3(jsonb_build_object('unidade_id',u,'data_caixa',d));
+  s := r->'snapshot';
+  insert into public.sol_caixa_shadow_eventos_v1(chat_id_hash,unidade_id) values(md5(g),u) returning id into e;
+  insert into public.sol_caixa_shadow_previews_v1(evento_id,preview_hash,unidade_id,operacao,categoria,valor_centavos,forma,status,preview_json)
+  values(e,'preview-fechar-corrida',u,'fechar_caixa','fechamento_caixa',1000,'nao_aplicavel','awaiting_approval',jsonb_build_object('snapshot',s)) returning id into p;
+  insert into public.sol_caixa_shadow_approvals_v1(preview_id,approval_event_hash,actor_id_hash,decision)
+  values(p,'approval-fechar-corrida','ator-hash','approved') returning id into a;
+  execute 'create trigger sol_caixa_v3_harness_skip_close before update on public.caixas_diarios for each row execute function public.sol_caixa_v3_harness_skip_close()';
+  perform set_config('sol.caixa_v3_harness_skip_close','on',true);
+  payload := jsonb_build_object('unidade_id',u,'data_caixa',d,'grupo_jid',g,'ator_numero','5521999999999','ator_papel','harness','conferido_por','Harness','idempotency_key','harness:fechar-corrida','v3_preview_id',p,'v3_preview_hash','preview-fechar-corrida','v3_approval_id',a,'v3_approval_event_hash','approval-fechar-corrida','v3_actor_id_hash','ator-hash','snapshot_hash',encode(extensions.digest(s::text,'sha256'),'hex'));
+  r := public.sol_caixa_fechar_v3(payload);
+  if coalesce((r->>'ok')::boolean,false) or r->>'motivo' <> 'snapshot_caixa_nao_aberto' then raise exception 'corrida deveria preservar fechamento: %',r; end if;
+  if exists(select 1 from public.sol_caixa_v3_approval_consumos_v1 where approval_id=a) then raise exception 'corrida queimou approval sem mutação'; end if;
+  perform set_config('sol.caixa_v3_harness_skip_close','off',true);
+  execute 'drop trigger sol_caixa_v3_harness_skip_close on public.caixas_diarios';
 
   -- Novo preview fecha; replay da chave retorna o mesmo resultado.
   r := public.sol_caixa_resolver_fechamento_v3(jsonb_build_object('unidade_id',u,'data_caixa',d));
@@ -140,7 +158,7 @@ begin
   values(e,'preview-fechar-novo',u,'fechar_caixa','fechamento_caixa',1000,'nao_aplicavel','awaiting_approval',jsonb_build_object('snapshot',s)) returning id into p;
   insert into public.sol_caixa_shadow_approvals_v1(preview_id,approval_event_hash,actor_id_hash,decision)
   values(p,'approval-fechar-novo','ator-hash','approved') returning id into a;
-  payload := jsonb_build_object('unidade_id',u,'data_caixa',d,'grupo_jid',g,'ator_numero','5521999999999','ator_papel','harness','conferido_por','Harness','idempotency_key','harness:fechar-novo','v3_preview_id',p,'v3_preview_hash','preview-fechar-novo','v3_approval_id',a,'v3_approval_event_hash','approval-fechar-novo','v3_actor_id_hash','ator-hash','snapshot_hash',encode(digest(s::text,'sha256'),'hex'));
+  payload := jsonb_build_object('unidade_id',u,'data_caixa',d,'grupo_jid',g,'ator_numero','5521999999999','ator_papel','harness','conferido_por','Harness','idempotency_key','harness:fechar-novo','v3_preview_id',p,'v3_preview_hash','preview-fechar-novo','v3_approval_id',a,'v3_approval_event_hash','approval-fechar-novo','v3_actor_id_hash','ator-hash','snapshot_hash',encode(extensions.digest(s::text,'sha256'),'hex'));
   r := public.sol_caixa_fechar_v3(payload);
   if not coalesce((r->>'ok')::boolean,false) then raise exception 'fechamento v3 falhou: %',r; end if;
   if not coalesce((public.sol_caixa_fechar_v3(payload)->>'ja_processado')::boolean,false) then raise exception 'replay de fechamento não idempotente'; end if;

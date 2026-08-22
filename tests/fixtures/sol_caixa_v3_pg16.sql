@@ -1,5 +1,7 @@
 -- Fixture mínima para validar parsing/execution da migration Sol Caixa V3 em Postgres 16.
-create extension if not exists pgcrypto;
+-- Supabase instala pgcrypto em `extensions`; não mascarar search_path de produção.
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
 create extension if not exists pg_trgm;
 create extension if not exists unaccent;
 
@@ -59,3 +61,8 @@ create function public.sol_faturas_alunos_v1(uuid,integer,integer,text,text,date
 create function public.sol_caixa_responsavel_aluno(uuid,text) returns jsonb language sql as $$ select jsonb_build_object('ok',true) $$;
 create function public.sol_caixa_autorizar_payload_v1(uuid,jsonb,text) returns jsonb language sql as $$ select jsonb_build_object('ok',true,'autorizado',true) $$;
 create function public.sol_caixa_resolver_multi_aluno_v1(uuid,jsonb,numeric,date) returns jsonb language sql as $$ select jsonb_build_object('ok',true,'itens','[]'::jsonb) $$;
+create function public.sol_caixa_v3_harness_skip_close() returns trigger language plpgsql as $$
+begin
+  if current_setting('sol.caixa_v3_harness_skip_close', true) = 'on' then return null; end if;
+  return new;
+end $$;

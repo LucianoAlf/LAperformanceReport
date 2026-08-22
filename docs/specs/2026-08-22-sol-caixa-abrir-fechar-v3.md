@@ -128,6 +128,10 @@ Repetir a mesma requisição devolve o resultado previamente gravado; uma segund
 
 **Reabertura não entra nesta V3.** O fluxo humano já existente, registrado em `caixa_reaberturas_log`, continua fora de escopo. Enquanto não houver contrato próprio para reabertura, a V3 não cria uma segunda operação `abrir_caixa`/`fechar_caixa` no mesmo dia; o índice único preserva essa fronteira.
 
+## Autorização
+
+Esta entrega não cria seed de atores para `abrir_caixa`/`fechar_caixa` nem abre exceção de permissão. Cada execução continua obrigada a passar por `sol_caixa_autorizar_payload_v1`; a configuração de grupo financeiro oficial/matriz de autorizados é pré-requisito operacional da aplicação. Se a matriz não autorizar o ator, a V3 falha fechada antes de qualquer consumo ou mutação.
+
 ## RPCs propostas
 
 | RPC | Faz | Não faz |
