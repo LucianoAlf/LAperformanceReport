@@ -336,26 +336,29 @@ Estado medido no banco (read-only), para a fase de promoção do classificador:
 - Guard das canônicas **barra anon** (testado: `get_faturas_alunos_financeiro_v1`
   com claim anon → "papel nao autorizado").
 
-**⚠️ Pendências para fechar ANTES do STRICT=1 (correção coordenada — não
-revogar às cegas, o runtime Hermes pode estar chamando via PostgREST com a
-anon key):**
-1. **`sol_kpis_alunos_v1` devolve dados para `anon`** (testado: 4,3 KB de KPIs
-   sem login). O wrapper escala para service_role por dentro e não tem guard —
-   o EXECUTE de anon/authenticated precisa cair. Mesma família:
-   `sol_custo_seguranca_v1`.
-2. **`sol_hermes_caixa_enqueue`/`validate`/`report_*` executáveis por `anon`** —
-   escrita em fila por anônimo (spam/poluição de fila).
-3. `get_faturas_alunos_financeiro_v1` com EXECUTE para `anon` — o guard barra,
-   mas é defesa em profundidade furada; revogar por higiene.
-4. `sol_acesso_restrito` tem **SELECT em 421 tabelas** do public. Hoje inócuo
-   (302 têm RLS cujas policies não alcançam a role; as 15 sem RLS são
-   logs/auditoria/calendário), mas é superfície desnecessária — qualquer tabela
-   futura sem RLS nasce legível pela Sol. Reduzir ao mínimo (ela consulta via
-   RPC).
+**✅ Itens 1–3 FECHADOS em 22/08** (migration `20260822210000`, após Alfredo e
+Sol confirmarem no runtime vivo que o Hermes chama com service_role):
+- `sol_kpis_alunos_v1` e `sol_custo_seguranca_v1`: anon E authenticated fora
+  (vazavam dados sem guard; zero consumidor browser/edge).
+- Fila Hermes: anon fora em todas. ⚠️ **O mapa de consumidores corrigiu o
+  plano**: `caixa_validate`/`caixa_enqueue`/`report_enqueue` são chamadas PELO
+  BROWSER (CaixaWhatsAppPreview, ModalRelatorio, ComercialPage) — authenticated
+  FICA nelas; `report_error_retryavel`/`report_watchdog` perderam os dois.
+- `get_faturas_alunos_financeiro_v1`: anon fora (era via PUBLIC na ACL — o
+  revoke nominal de anon não bastava, precisou `revoke from public`);
+  authenticated fica (browser de /app/faturas). Higiene: `sol_caixa_ator_ok`,
+  `sol_tel_chave` (PUBLIC fora) e `sol_registrar_divergencia` (authenticated
+  fora).
 
-**Pergunta-chave para o Alfredo antes de aplicar os revokes 1–3:** com qual key
-o runtime Hermes chama as RPCs `sol_*` — service_role (backend) ou anon? Se
-service_role, os revokes são seguros já; se anon key, migrar a chamada primeiro.
+**⚠️ Gates ABERTOS pré-STRICT=1 (do Alfredo, endossados):**
+1. **Tirar a service_role do bridge da Sol.** Enquanto a key mora no processo,
+   a allowlist de 46 RPCs é convenção, não enforcement — e o Alfredo achou no
+   próprio `caixa-financeiro.cjs` caminhos legados de REST direto a `alunos` e
+   `emusys_faturas`, que contrariam a regra de RPC canônica. Saída: relay/edge
+   com allowlist OU credencial própria de `sol_acesso_restrito` (JWT com claim
+   dessa role — as 46 funções viram limite real).
+2. **Só depois** reduzir o SELECT amplo (421 tabelas) de `sol_acesso_restrito`
+   — antes disso a redução não protege o processo, que tem service_role.
 
 ## Fora desta etapa
 
