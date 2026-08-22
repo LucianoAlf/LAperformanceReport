@@ -134,6 +134,14 @@ Repetir a mesma requisição devolve o resultado previamente gravado; uma segund
 
 Os grants serão somente para o papel do runtime restrito/relay e `service_role` enquanto a migração de credencial não terminou; nunca `anon`/`authenticated`/`public`.
 
+## Pré-requisito da remoção de rabiolas
+
+Antes de implantar o runtime que remove as leituras REST diretas, a mesma frente do LA Report cria a RPC read-only `sol_caixa_resolver_composto_aluno_v1(jsonb)`.
+
+Entrada mínima: `unidade_id`, `aluno_nome`, `competencia` e `valor_total`. Ela consulta a fonte canônica por trás de `sol_faturas_alunos_v1`, devolve apenas um conjunto de duas ou mais faturas cuja soma fecha exatamente o total, com aluno canônico, competência e itens normalizados. Nenhum match único ou soma divergente vira preview: retorna `ok:false` com motivo classificável. O bridge nunca volta a ler `alunos` ou `emusys_faturas` por REST.
+
+O runtime também remove `sol_caixa_corrigir_forma_recebimento`: correção de forma passa exclusivamente por `sol_caixa_corrigir_movimento_v1` com preview/approval V3; se o ledger V3 não estiver disponível, falha fechado.
+
 ## Mudança mínima no runtime
 
 1. Comando de abrir/fechar chama resolver e publica o preview V3 persistido.
