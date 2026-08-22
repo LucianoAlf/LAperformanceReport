@@ -90,11 +90,15 @@ O resolver, em leitura, devolve e grava no preview:
   "saldo_inicial_cofre": 62.80,
   "cofre_entradas": 100.00,
   "cofre_saidas": 20.00,
-  "saldo_final_calculado": 142.80
+  "saldo_final_calculado": 142.80,
+  "movimentos_por_ambiente": {
+    "cofre": 3,
+    "venda": 7
+  }
 }
 ```
 
-Na execução, o banco bloqueia o `caixas_diarios` alvo, recompõe entradas/saídas em `caixa_movimentacoes` e compara **id, data, unidade, status e valores** com o snapshot. Qualquer movimento entre preview e `pode` força novo preview (`snapshot_caixa_nao_aberto`, `snapshot_caixa_divergente`, `snapshot_saldo_mudou`).
+Na execução, o banco bloqueia o `caixas_diarios` alvo, recompõe entradas/saídas e a **contagem de movimentos por ambiente** em `caixa_movimentacoes`, e compara **id, data, unidade, status, valores e contagens** com o snapshot. Qualquer movimento entre preview e `pode` — inclusive Pix/cartão em `venda`, que não altera o cofre — força novo preview (`snapshot_caixa_nao_aberto`, `snapshot_caixa_divergente`, `snapshot_saldo_mudou`).
 
 ## Hash, expiração e consumo
 
@@ -122,6 +126,12 @@ resultado, criado_em
 
 Repetir a mesma requisição devolve o resultado previamente gravado; uma segunda aprovação para a mesma abertura/fechamento devolve `ja_aberto`/`ja_fechado` sem nova mutação. Toda recusa e sucesso entra em `sol_caixa_lancamento_auditoria` com operação, preview e approval.
 
+**Reabertura não entra nesta V3.** O fluxo humano já existente, registrado em `caixa_reaberturas_log`, continua fora de escopo. Enquanto não houver contrato próprio para reabertura, a V3 não cria uma segunda operação `abrir_caixa`/`fechar_caixa` no mesmo dia; o índice único preserva essa fronteira.
+
+## Autorização
+
+Esta entrega não cria seed de atores para `abrir_caixa`/`fechar_caixa` nem abre exceção de permissão. Cada execução continua obrigada a passar por `sol_caixa_autorizar_payload_v1`; a configuração de grupo financeiro oficial/matriz de autorizados é pré-requisito operacional da aplicação. Se a matriz não autorizar o ator, a V3 falha fechada antes de qualquer consumo ou mutação.
+
 ## RPCs propostas
 
 | RPC | Faz | Não faz |
@@ -139,6 +149,8 @@ Os grants serão somente para o papel do runtime restrito/relay e `service_role`
 Antes de implantar o runtime que remove as leituras REST diretas, a mesma frente do LA Report cria a RPC read-only `sol_caixa_resolver_composto_aluno_v1(jsonb)`.
 
 Entrada mínima: `unidade_id`, `aluno_nome`, `competencia` e `valor_total`. Ela consulta a fonte canônica por trás de `sol_faturas_alunos_v1`, devolve apenas um conjunto de duas ou mais faturas cuja soma fecha exatamente o total, com aluno canônico, competência e itens normalizados. Nenhum match único ou soma divergente vira preview: retorna `ok:false` com motivo classificável. O bridge nunca volta a ler `alunos` ou `emusys_faturas` por REST.
+
+O retorno `itens[]` usa exatamente o shape consumido pelo multi-aluno: ao menos `ordem`, `aluno_id`, `aluno_nome`, `responsavel_financeiro`, `competencia`, `categoria`, `valor`, `canonical_fatura_id`, `descricao` e `fatura`. Assim lote, snapshot e runtime não precisam saber se a composição nasceu de itens explícitos ou do resolver composto. Se dois ou mais subconjuntos canônicos fecharem o mesmo total, o resultado é `ok:false`, `motivo:'composicao_ambigua'`: não escolhe por ordem, primeiro nome ou heurística.
 
 O runtime também remove `sol_caixa_corrigir_forma_recebimento`: correção de forma passa exclusivamente por `sol_caixa_corrigir_movimento_v1` com preview/approval V3; se o ledger V3 não estiver disponível, falha fechado.
 
@@ -159,7 +171,9 @@ O runtime também remove `sol_caixa_corrigir_forma_recebimento`: correção de f
 5. Caixa já aberto/fechado retorna resultado idempotente, sem segunda linha em `caixas_diarios` ou segunda auditoria de mutação.
 6. Grupo/unidade/ator/preview/hash/approval divergentes são recusados.
 7. `não abre`/`não fecha` não altera `caixas_diarios`, `caixa_movimentacoes` ou consumos.
-8. Matriz E2E real: uma abertura e um fechamento em cada grupo financeiro oficial, depois de canário autorizado.
+8. Composto: parcela dividida em dois comprovantes; pagador diferente do responsável; parcela + passaporte; João/Pedro; e dois subconjuntos válidos retornando `composicao_ambigua`.
+9. Fechamento: uma venda Pix/cartão entre preview e `pode` bloqueia por divergência de contagem, sem consumir approval.
+10. Matriz E2E real: uma abertura e um fechamento em cada grupo financeiro oficial, depois de canário autorizado.
 
 ## Gate de promoção
 

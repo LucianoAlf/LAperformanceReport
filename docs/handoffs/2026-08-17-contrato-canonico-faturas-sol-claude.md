@@ -181,6 +181,27 @@ o valor de até o vencimento é decisão humana (caso Amaia, 21/08, autorizado).
 No card, usar `valor_bate_como`: em vez de "difere — confere", dizer "pagou o
 valor de até o vencimento, mas está atrasada há N dias".
 
+**Composto canônico + abrir/fechar V3 (22/08, migration `20260822233000`, PR #203 —
+autoria Alfredo, spec `docs/specs/2026-08-22-sol-caixa-abrir-fechar-v3.md`):**
+- **`sol_caixa_resolver_composto_aluno_v1(jsonb)`** — recebe `{unidade_id,
+  aluno_nome, competencia?, valor_total}` e acha o subconjunto de 2+ faturas
+  canônicas que soma EXATO o total. Mata as leituras REST diretas de
+  `alunos`/`emusys_faturas` do runtime. Fail-closed em tudo: aluno ambíguo,
+  2+ subconjuntos válidos (`composicao_ambigua` — nunca escolhe por heurística),
+  >12 candidatas (`composicao_complexa_revisao_manual`), só
+  parcela/passaporte/matrícula. `itens[]` no MESMO shape do multi-aluno.
+- **Abrir/fechar V3**: `resolver_abertura_v3`/`resolver_fechamento_v3` (snapshot
+  + hash no banco via `extensions.digest`), `abrir_v3`/`fechar_v3` (validam
+  approval, revalidam snapshot, advisory xact lock, idempotência por
+  `sol_caixa_v3_caixa_operacoes_v1`), `v3_cancelar_preview_v1`. **Consumo do
+  "pode" só DEPOIS da mutação efetiva** — corrida que impede abrir/fechar
+  preserva o approval (provado no harness). Snapshot de fechamento inclui
+  contagem de movimentos POR AMBIENTE — pix/cartão entre preview e "pode"
+  força preview novo mesmo sem mexer no cofre. Expiração = min(4h, fim do dia
+  BRT). Reabertura fora de escopo (fluxo humano, `caixa_reaberturas_log`).
+- As RPCs legadas `sol_caixa_abrir`/`fechar` seguem vivas até o runtime migrar;
+  a trava de pendência vale nos dois trilhos.
+
 **Trava de fechamento pendente na abertura (22/08, migration `20260822230000`):**
 `sol_caixa_abrir` RECUSA abrir o dia quando o dia anterior está aberto —
 motivo `fechamento_pendente_dia_anterior` + payload `pendencia`
