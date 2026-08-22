@@ -1173,26 +1173,75 @@ async function reconciliarExperimentaisOrfas(
         }
       }
 
-      // Inserir já no estado final (lead puro).
-      const { error } = await supabase
-        .from('lead_experimentais')
-        .insert({
-          lead_id: leadId,
-          aluno_id: idAluno,
-          nome_aluno: nomeAluno,
-          unidade_id: exp.unidadeId,
-          data_experimental: exp.dataAula,
-          horario_experimental: exp.horarioBanco,
-          professor_experimental_id: exp.professorId,
-          curso_interesse_id: exp.cursoId,
-          emusys_aula_id: exp.emusysAulaId,
-          emusys_lead_id: idLead > 0 ? idLead : null,
-          status: novoStatus,
-          etapa_pipeline_id: presente ? 7 : 9,
-        });
+      // `emusys_aula_id` é a CHAVE NATURAL (1 linha por aula real — regra de 23/06).
+      // Se a aula já existe em QUALQUER status — inclusive 'cancelada', que os lookups
+      // acima ignoram de propósito — ATUALIZA em vez de inserir. Cancelada→presente é
+      // transição legítima: a aula foi reativada no Emusys e a pessoa compareceu.
+      // Sem isto, o INSERT batia no unique `uq_lead_exp_aula` (23505) e derrubava o
+      // snapshot inteiro da unidade — caso Julia Gomes/aula 749486, que matou o
+      // relatório comercial da CG de 18 a 22/08/2026.
+      let error: { code?: string; message?: string } | null = null;
+      if (exp.emusysAulaId != null) {
+        const { data: porAula, error: porAulaError } = await supabase
+          .from('lead_experimentais')
+          .select('id, status')
+          .eq('emusys_aula_id', exp.emusysAulaId)
+          .limit(1)
+          .maybeSingle();
+        if (somenteIdentidadesEstaveis && porAulaError) {
+          throw new Error(`FALHA_CONSULTAR_EXPERIMENTAL_POR_AULA_SNAPSHOT ${porAulaError.code || ''}`);
+        }
+        if (porAula) {
+          if (porAula.status !== novoStatus) {
+            const { error: atualizarPorAulaError } = await supabase
+              .from('lead_experimentais')
+              .update({
+                status: novoStatus,
+                etapa_pipeline_id: presente ? 7 : 9,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', porAula.id);
+            error = atualizarPorAulaError;
+            if (!atualizarPorAulaError) {
+              logs.push({
+                lead_id: leadId,
+                lead_nome: somenteIdentidadesEstaveis ? '' : nomeAluno,
+                unidade: unidadeNome,
+                data: exp.dataAula,
+                status: presente ? 'reconciliada_presente' : 'reconciliada_faltou',
+                motivo: `Aula ${exp.emusysAulaId} ja existia (${porAula.status}) e foi atualizada para ${novoStatus}`,
+              });
+              continue;
+            }
+          } else {
+            continue; // já está no estado certo — nada a fazer
+          }
+        }
+      }
+      if (!error) {
+        // Inserir já no estado final (lead puro).
+        ({ error } = await supabase
+          .from('lead_experimentais')
+          .insert({
+            lead_id: leadId,
+            aluno_id: idAluno,
+            nome_aluno: nomeAluno,
+            unidade_id: exp.unidadeId,
+            data_experimental: exp.dataAula,
+            horario_experimental: exp.horarioBanco,
+            professor_experimental_id: exp.professorId,
+            curso_interesse_id: exp.cursoId,
+            emusys_aula_id: exp.emusysAulaId,
+            emusys_lead_id: idLead > 0 ? idLead : null,
+            status: novoStatus,
+            etapa_pipeline_id: presente ? 7 : 9,
+          }));
+      }
 
       if (somenteIdentidadesEstaveis && error) {
-        throw new Error('FALHA_INSERIR_EXPERIMENTAL_SNAPSHOT');
+        // Inclui código+mensagem do Postgres: o rótulo seco escondeu por 5 dias qual
+        // constraint derrubava o snapshot da CG (22/08/2026).
+        throw new Error(`FALHA_INSERIR_EXPERIMENTAL_SNAPSHOT ${error.code || ''} ${String(error.message || '').slice(0, 150)} aulaId=${exp.emusysAulaId}`);
       }
       if (!error && leadId) {
         // Propagar para leads (não sobrescrever leads já convertidos/matriculados)

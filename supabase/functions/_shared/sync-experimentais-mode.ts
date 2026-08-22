@@ -602,5 +602,8 @@ export function classificarErroSnapshot(error: unknown): {
   if (error instanceof SnapshotUpstreamError) {
     return { status: 502, mensagem: "FALHA_UPSTREAM_EMUSYS" };
   }
-  return { status: 500, mensagem: "ERRO_INTERNO" };
+  // Carrega a mensagem real (sem stack/PII): "ERRO_INTERNO" seco escondeu por 5 dias a
+  // causa do 500 da CG no snapshot de experimentais do relatorio comercial (22/08/2026).
+  const detalhe = error instanceof Error ? error.message : String(error);
+  return { status: 500, mensagem: `ERRO_INTERNO: ${detalhe.slice(0, 200)}` };
 }

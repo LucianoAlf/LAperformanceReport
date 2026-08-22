@@ -1585,7 +1585,10 @@ async function atualizarSnapshotExperimentais(
           signal: AbortSignal.timeout(180_000),
         });
         if (!response.ok) {
-          throw new Error(`SNAPSHOT_EXPERIMENTAIS_HTTP_${response.status}`);
+          // Carrega o corpo do erro da sync-presenca: o código seco escondeu por 5 dias
+          // a causa real do 500 da CG (22/08/2026).
+          const corpoErro = await response.text().catch(() => '');
+          throw new Error(`SNAPSHOT_EXPERIMENTAIS_HTTP_${response.status}: ${corpoErro.slice(0, 300)}`);
         }
 
         let payload: Partial<SnapshotRefreshResponse>;
@@ -1677,6 +1680,33 @@ async function aguardarLeituraSnapshotComTimeout<T>(
     return await Promise.race([Promise.resolve(operacao), timeout]);
   } finally {
     if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
+// Retry de 1x quando o snapshot de experimentais é ATROPELADO no meio da geração.
+// Causa-raiz (22/08/2026, CG sem relatório comercial desde 18/08): os syncs de
+// metadados de 15 min (u0/u1/u2, defasados 5 min) criam execução NOVA de snapshot a
+// cada rodada; a confirmação pós-bundle compara o execucao_id vigente com o desta
+// geração e, se o cron rodou no meio, lança SNAPSHOT_EXPERIMENTAIS_INCOMPLETO → o
+// catch genérico respondia "Erro interno do servidor". CG colide quase sempre: é a
+// unidade mais lenta de gerar E roda nos minutos :00/:15/:30/:45 — provado ao vivo
+// (execução manual 16:29 com 44 linhas atropelada pelo cron u0 de 16:30). A 2ª
+// tentativa nasce alinhada à execução nova; colisão dupla exigiria o cron cair 2x
+// dentro da janela de poucos segundos entre criar e confirmar.
+async function gerarRelatorioComercialDiarioComRetry(
+  supabase: SupabaseClient,
+  unidadeId: string,
+  dataReferencia?: string,
+  instanteGeracao: Date = new Date(),
+  origemSnapshot: OrigemSnapshotRefresh = 'preview',
+): Promise<string> {
+  try {
+    return await gerarRelatorioComercialDiario(supabase, unidadeId, dataReferencia, instanteGeracao, origemSnapshot);
+  } catch (erro) {
+    const mensagem = erro instanceof Error ? erro.message : String(erro);
+    if (!mensagem.includes('SNAPSHOT_EXPERIMENTAIS_INCOMPLETO')) throw erro;
+    console.warn('[relatorio-comercial] snapshot atropelado por execucao concorrente; refazendo 1x', { unidadeId });
+    return await gerarRelatorioComercialDiario(supabase, unidadeId, dataReferencia, new Date(), origemSnapshot);
   }
 }
 
@@ -2060,7 +2090,7 @@ async function processarCron(
       }
 
       const instanteGeracaoComercial = new Date();
-      const texto = await gerarRelatorioComercialDiario(
+      const texto = await gerarRelatorioComercialDiarioComRetry(
         supabase,
         unidade.id,
         undefined,
@@ -2394,7 +2424,7 @@ serve(async (req) => {
         );
       }
 
-      const texto = await gerarRelatorioComercialDiario(
+      const texto = await gerarRelatorioComercialDiarioComRetry(
         supabase,
         payload.unidade,
         dataReferencia,
@@ -2541,8 +2571,12 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('[relatorio-admin-whatsapp] Erro:', error);
+    // `detalhe` carrega a MENSAGEM do erro (sem stack): "Erro interno do servidor" seco
+    // escondeu por 5 dias a causa real do relatório comercial da CG (22/08/2026) —
+    // e todos os chamadores deste endpoint são autenticados (usuário/cron com token).
+    const detalhe = error instanceof Error ? error.message : String(error);
     return new Response(
-      JSON.stringify({ success: false, error: 'Erro interno do servidor' }),
+      JSON.stringify({ success: false, error: 'Erro interno do servidor', detalhe }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
