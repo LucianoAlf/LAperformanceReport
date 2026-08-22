@@ -25,18 +25,26 @@ declare
 begin
   v_items := case v_case
     when 'duas_parcelas' then jsonb_build_array(
-      jsonb_build_object('canonical_fatura_id','11111111-1111-1111-1111-111111111111','competencia','2026-08-01','data_vencimento','2026-08-10','status','aberta','tipo_fatura','parcela','descricao','Parcela 1','aluno',jsonb_build_object('id',101,'nome','Ana Teste'),'valores',jsonb_build_object('valor_hoje',40,'valor_com_desconto',40)),
-      jsonb_build_object('canonical_fatura_id','22222222-2222-2222-2222-222222222222','competencia','2026-08-01','data_vencimento','2026-08-11','status','aberta','tipo_fatura','parcela','descricao','Parcela 2','aluno',jsonb_build_object('id',101,'nome','Ana Teste'),'valores',jsonb_build_object('valor_hoje',60,'valor_com_desconto',60))
+      jsonb_build_object('canonical_fatura_id','11111111-1111-1111-1111-111111111111','competencia','2026-08-01','data_vencimento','2026-08-10','status','aberta','tipo_fatura','parcela','descricao','Parcela 1','emusys_student_id','stu-ana','aluno',jsonb_build_object('id',101,'nome','Ana Teste'),'valores',jsonb_build_object('valor_hoje',40,'valor_com_desconto',40)),
+      jsonb_build_object('canonical_fatura_id','22222222-2222-2222-2222-222222222222','competencia','2026-08-01','data_vencimento','2026-08-11','status','aberta','tipo_fatura','parcela','descricao','Parcela 2','emusys_student_id','stu-ana','aluno',jsonb_build_object('id',101,'nome','Ana Teste'),'valores',jsonb_build_object('valor_hoje',60,'valor_com_desconto',60))
     )
     when 'parcela_passaporte' then jsonb_build_array(
-      jsonb_build_object('canonical_fatura_id','33333333-3333-3333-3333-333333333333','competencia','2026-08-01','data_vencimento','2026-08-10','status','aberta','tipo_fatura','parcela','descricao','Parcela agosto','aluno',jsonb_build_object('id',101,'nome','Ana Teste'),'valores',jsonb_build_object('valor_hoje',80,'valor_com_desconto',80)),
-      jsonb_build_object('canonical_fatura_id','44444444-4444-4444-4444-444444444444','competencia','2026-08-01','data_vencimento','2026-08-11','status','aberta','tipo_fatura','passaporte_taxa_matricula','descricao','Passaporte','aluno',jsonb_build_object('id',101,'nome','Ana Teste'),'valores',jsonb_build_object('valor_hoje',20,'valor_com_desconto',20))
+      jsonb_build_object('canonical_fatura_id','33333333-3333-3333-3333-333333333333','competencia','2026-08-01','data_vencimento','2026-08-10','status','aberta','tipo_fatura','parcela','descricao','Parcela agosto','emusys_student_id','stu-ana','aluno',jsonb_build_object('id',101,'nome','Ana Teste'),'valores',jsonb_build_object('valor_hoje',80,'valor_com_desconto',80)),
+      jsonb_build_object('canonical_fatura_id','44444444-4444-4444-4444-444444444444','competencia','2026-08-01','data_vencimento','2026-08-11','status','aberta','tipo_fatura','passaporte_taxa_matricula','descricao','Passaporte','emusys_student_id','stu-ana','aluno',jsonb_build_object('id',101,'nome','Ana Teste'),'valores',jsonb_build_object('valor_hoje',20,'valor_com_desconto',20))
     )
     when 'ambigua' then jsonb_build_array(
-      jsonb_build_object('canonical_fatura_id','55555555-5555-5555-5555-555555555555','competencia','2026-08-01','data_vencimento','2026-08-01','status','aberta','tipo_fatura','parcela','descricao','A','aluno',jsonb_build_object('id',101,'nome','Ana Teste'),'valores',jsonb_build_object('valor_hoje',30)),
-      jsonb_build_object('canonical_fatura_id','66666666-6666-6666-6666-666666666666','competencia','2026-08-01','data_vencimento','2026-08-02','status','aberta','tipo_fatura','parcela','descricao','B','aluno',jsonb_build_object('id',101,'nome','Ana Teste'),'valores',jsonb_build_object('valor_hoje',70)),
-      jsonb_build_object('canonical_fatura_id','77777777-7777-7777-7777-777777777777','competencia','2026-08-01','data_vencimento','2026-08-03','status','aberta','tipo_fatura','parcela','descricao','C','aluno',jsonb_build_object('id',101,'nome','Ana Teste'),'valores',jsonb_build_object('valor_hoje',40)),
-      jsonb_build_object('canonical_fatura_id','88888888-8888-8888-8888-888888888888','competencia','2026-08-01','data_vencimento','2026-08-04','status','aberta','tipo_fatura','parcela','descricao','D','aluno',jsonb_build_object('id',101,'nome','Ana Teste'),'valores',jsonb_build_object('valor_hoje',60))
+      jsonb_build_object('canonical_fatura_id','55555555-5555-5555-5555-555555555555','competencia','2026-08-01','data_vencimento','2026-08-01','status','aberta','tipo_fatura','parcela','descricao','A','emusys_student_id','stu-ana','aluno',jsonb_build_object('id',101,'nome','Ana Teste'),'valores',jsonb_build_object('valor_hoje',30)),
+      jsonb_build_object('canonical_fatura_id','66666666-6666-6666-6666-666666666666','competencia','2026-08-01','data_vencimento','2026-08-02','status','aberta','tipo_fatura','parcela','descricao','B','emusys_student_id','stu-ana','aluno',jsonb_build_object('id',101,'nome','Ana Teste'),'valores',jsonb_build_object('valor_hoje',70)),
+      jsonb_build_object('canonical_fatura_id','77777777-7777-7777-7777-777777777777','competencia','2026-08-01','data_vencimento','2026-08-03','status','aberta','tipo_fatura','parcela','descricao','C','emusys_student_id','stu-ana','aluno',jsonb_build_object('id',101,'nome','Ana Teste'),'valores',jsonb_build_object('valor_hoje',40)),
+      jsonb_build_object('canonical_fatura_id','88888888-8888-8888-8888-888888888888','competencia','2026-08-01','data_vencimento','2026-08-04','status','aberta','tipo_fatura','parcela','descricao','D','emusys_student_id','stu-ana','aluno',jsonb_build_object('id',101,'nome','Ana Teste'),'valores',jsonb_build_object('valor_hoje',60))
+    )
+    when 'matriculas_mesma_pessoa' then jsonb_build_array(
+      jsonb_build_object('canonical_fatura_id','99999999-9999-9999-9999-999999999991','competencia','2026-08-01','data_vencimento','2026-08-10','status','aberta','tipo_fatura','parcela','descricao','Curso A','emusys_student_id','stu-pessoa-multi','aluno',jsonb_build_object('id',701,'nome','Pessoa Multi'),'valores',jsonb_build_object('valor_hoje',400)),
+      jsonb_build_object('canonical_fatura_id','99999999-9999-9999-9999-999999999992','competencia','2026-08-01','data_vencimento','2026-08-11','status','aberta','tipo_fatura','parcela','descricao','Curso B','emusys_student_id','stu-pessoa-multi','aluno',jsonb_build_object('id',702,'nome','Pessoa Multi'),'valores',jsonb_build_object('valor_hoje',414.81))
+    )
+    when 'pessoas_ambiguas' then jsonb_build_array(
+      jsonb_build_object('canonical_fatura_id','99999999-9999-9999-9999-999999999993','competencia','2026-08-01','data_vencimento','2026-08-10','status','aberta','tipo_fatura','parcela','descricao','Pessoa A','emusys_student_id','stu-1','aluno',jsonb_build_object('id',703,'nome','Nome Igual'),'valores',jsonb_build_object('valor_hoje',50)),
+      jsonb_build_object('canonical_fatura_id','99999999-9999-9999-9999-999999999994','competencia','2026-08-01','data_vencimento','2026-08-11','status','aberta','tipo_fatura','parcela','descricao','Pessoa B','emusys_student_id','stu-2','aluno',jsonb_build_object('id',704,'nome','Nome Igual'),'valores',jsonb_build_object('valor_hoje',50))
     )
     else '[]'::jsonb
   end;
@@ -69,6 +77,23 @@ begin
   end if;
   if r #>> '{itens,0,responsavel_financeiro}' <> 'Responsável Diferente do Pagador' then
     raise exception 'pagador/responsável não preservado: %', r;
+  end if;
+
+  -- 1b. Uma pessoa com duas matrículas não é ambígua; cada item preserva sua matrícula.
+  perform set_config('sol.caixa_v3_harness_case','matriculas_mesma_pessoa',true);
+  r := public.sol_caixa_resolver_composto_aluno_v1(jsonb_build_object('unidade_id',u,'aluno_nome','Pessoa Multi','valor_total',814.81,'as_of','2026-08-22'));
+  if not coalesce((r->>'ok')::boolean,false)
+     or jsonb_array_length(r->'itens') <> 2
+     or (r #>> '{itens,0,aluno_id}')::integer <> 701
+     or (r #>> '{itens,1,aluno_id}')::integer <> 702 then
+    raise exception 'matrículas da mesma pessoa deveriam resolver por student_id: %', r;
+  end if;
+
+  -- 1c. Mesmo nome em pessoas distintas continua ambíguo e falha fechado.
+  perform set_config('sol.caixa_v3_harness_case','pessoas_ambiguas',true);
+  r := public.sol_caixa_resolver_composto_aluno_v1(jsonb_build_object('unidade_id',u,'aluno_nome','Nome Igual','valor_total',100,'as_of','2026-08-22'));
+  if coalesce((r->>'ok')::boolean,false) or r->>'motivo' <> 'aluno_ambiguo' then
+    raise exception 'pessoas distintas com mesmo nome deveriam bloquear: %', r;
   end if;
 
   -- 2. Parcela + passaporte mantém o mesmo shape do multi-aluno e categorias distintas.
