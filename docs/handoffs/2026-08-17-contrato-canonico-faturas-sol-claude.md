@@ -400,6 +400,12 @@ Sol confirmarem no runtime vivo que o Hermes chama com service_role):
 2. **Só depois** reduzir o SELECT amplo (421 tabelas) de `sol_acesso_restrito`
    — antes disso a redução não protege o processo, que tem service_role.
 
+> ✅ **RESOLVIDO em 22/08 ~14:45** (deploy `alfredo/remove-runtime-rabiolas`,
+> blob `0c9e11a4` = vivo, verificado): os 3 buracos abaixo morreram — REST
+> direto a `alunos`/`emusys_faturas` = 0 ocorrências no runtime vivo, correção
+> legada = 0 chamadas (usa `corrigir_movimento_v1`), composto via RPC canônica.
+> **A troca de credencial está DESBLOQUEADA** — falta só o dual-run no canário.
+
 **Mapa de não-regressão da troca de credencial (inventário do runtime vivo,
 22/08 — para a Sol NÃO parar de atender os grupos):** o `caixa-financeiro.cjs`
 chama 18 RPCs `sol_caixa_*`; **17 já estão cobertas** pelo grant de
