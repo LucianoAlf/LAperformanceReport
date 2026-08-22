@@ -18,6 +18,20 @@
 >    Contrato novo do retorno na seção "Fluxo de caixa" abaixo.
 > Migrations `20260822120000` e `20260822121500`, PR #191, testado como a Sol (sem JWT)
 > com os casos reais dos grupos de 21/08.
+>
+> **Atualização 22/08/2026 (2ª rodada):**
+> 3. `sol_caixa_inadimplentes` alinhada ao v4 (migration `20260822150000`): o gate era da
+>    era v3 (`confirmed_only` + `d_plus_0` + reaplicação de carência) e por isso SEMPRE
+>    saía em erro. Agora aceita o contrato v4, exige `schema_version=4` e **não reaplica
+>    D+2** (o canônico já cortou). Funciona pela primeira vez: CG devolveu 28 alunos /
+>    R$ 17.251,54, batendo com os `confirmados` da canônica.
+> 4. `caixa_movimentacoes` ganhou **`aluno_id` e `fatura_id`** (FK, ON DELETE SET NULL) e
+>    as duas funções de lançamento gravam o vínculo — a Sol deve mandar `aluno_id` e
+>    `fatura_id` no payload do unitário (ela já os recebe do `casar_parcela`); no lote o
+>    resolver preenche sozinho (ganhou `aluno_id` no retorno por item). Payload antigo
+>    continua válido (grava NULL). Migration `20260822151500`.
+> 5. Grants fechados: `corrigir_forma_recebimento` e `autorizar_payload_v1` →
+>    `sol_acesso_restrito`; `recalcular_cofre` fica **sem grant de propósito** (interna).
 
 ## Decisão de produto
 
@@ -64,10 +78,11 @@ public.get_inadimplencia_canonica(
 ) returns jsonb
 ~~~
 
-O retorno esperado é **schema v4**. Não usar sol_caixa_inadimplentes para
-consulta de carteira: desde 22/08 ela passa do guard de papel, mas segue
-incompatível com o v4 — exige `collection_scope = 'confirmed_only'` e o
-canônico publica `confirmed_active_d2_3_competencias`, então sai em erro.
+O retorno esperado é **schema v4**. Para a carteira em modo sombra a fonte é
+`sol_inadimplencia_v1` (envelope v4 puro, com gate deste documento aplicado
+pelo consumidor). `sol_caixa_inadimplentes` está alinhada ao v4 desde 22/08 e
+serve ao fluxo de CAIXA (resumo por aluno com faixas critico/atencao/normal
+para conversa de recebimento) — não substitui o gate da carteira.
 As RPCs de caixa abaixo permanecem fora do escopo **da Sol** (ela não as
 altera; mudanças são do LA Report, versionadas em migration):
 
@@ -146,11 +161,18 @@ o valor de até o vencimento é decisão humana (caso Amaia, 21/08, autorizado).
 No card, usar `valor_bate_como`: em vez de "difere — confere", dizer "pagou o
 valor de até o vencimento, mas está atrasada há N dias".
 
+**Vínculo estruturado no lançamento (22/08):** `caixa_movimentacoes` tem
+`aluno_id` e `fatura_id`. No lançamento unitário, mandar os dois no payload
+(`casar_parcela` devolve `aluno_id` e `parcela.fatura_id`); no lote o resolver
+preenche sozinho. Vínculo inválido vira NULL sem derrubar o lançamento — é
+metadado de reconciliação, não gate.
+
 ⚠️ Pagamento **parcial** (ex.: "restante do passaporte R$ 199") não tem fatura
 com esse valor para validar — segue conferência humana, sem match automático.
-⚠️ `sol_caixa_autorizar_payload_v1`, `sol_caixa_corrigir_forma_recebimento` e
-`sol_caixa_recalcular_cofre` estão **sem grant** para os papéis da Sol — item
-aberto da auditoria de 22/08.
+⚠️ Grants (fechado em 22/08): `corrigir_forma_recebimento` e
+`autorizar_payload_v1` têm EXECUTE para `sol_acesso_restrito`;
+`recalcular_cofre` fica **sem grant de propósito** — é utilitária interna de
+escrita, chamada por dentro de corrigir/estornar movimento.
 
 ## Regras e reconciliação
 
@@ -163,9 +185,11 @@ aberto da auditoria de 22/08.
   editar a parcela. Quando existe outra fatura da MESMA pessoa na MESMA
   competência, com id diferente e valor > 0, a antiga sai da fila de
   reconciliação do leitor de faturas (`get_faturas_alunos_financeiro_v1`).
-  ⚠️ A regra ainda NÃO existe em `get_inadimplencia_canonica` — por isso a
-  carteira pode seguir bloqueada por source_missing que o leitor já resolveu
-  (medido 22/08: 21 em CG). Extensão pendente de decisão do Alf.
+  ⚠️ A regra ainda NÃO existe em `get_inadimplencia_canonica` — o efeito é só
+  na contagem de `reconciliation` do envelope dela (21 source_missing em CG em
+  22/08, dos quais parte tem substituta viva). **Não bloqueia a carteira**: o
+  canônico publica `collection_allowed=true` com `block_reasons=[]` mesmo
+  assim (source_missing vai para reconciliação, nunca para cobrança).
 - Somente status=paga em sincronização válida confirma quitação.
 - source_missing, identidade inválida e contato pendente ficam na
   **Reconciliação financeira** de /app/faturas. Não bloqueiam o subconjunto
@@ -262,7 +286,10 @@ retorno de sol_caixa_casar_parcela, leia valor_bate_como: 'ate_vencimento' em
 atraso significa "pagou o valor de até o vencimento, mas está atrasada há N
 dias — com multa/mora seria R$ X"; não diga "difere" quando o valor casa com o
 de até o vencimento. Pagamento parcial (não casa com nenhuma fatura) é
-conferência humana.
+conferência humana. Ao lançar, inclua aluno_id e fatura_id no payload do
+sol_caixa_lancar_recebimento (vêm do casar_parcela); no lote o resolver
+preenche. Para o resumo de devedores na conversa de recebimento, use
+sol_caixa_inadimplentes (v4 desde 22/08).
 
 Mantenha modo sombra: pode listar, agrupar e auditar, mas não envia WhatsApp,
 não liga cron de cobrança e não efetua baixa sem aprovação humana posterior e
