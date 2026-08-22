@@ -1,9 +1,23 @@
 # Contrato canônico v4 — Faturas de Alunos, LA Report e Sol
 
-**Data:** 17/08/2026
+**Data:** 17/08/2026 · **Atualizado:** 22/08/2026 (auditoria completa do módulo de caixa + PR #191)
 **Projeto Supabase:** ouqwbbermlzqqvtqwlul
 **Fonte de verdade sincronizada:** Emusys → sync_run_items
 **Estado:** banco e exportador publicados. A prova visual autenticada da tela permanece pendente nesta data.
+
+> **Atualização 22/08/2026 — módulo de caixa (comprovantes nos grupos do financeiro):**
+> 1. `sol_caixa_parcela_canonica`, `sol_caixa_resolver_multi_aluno_v1` e
+>    `sol_caixa_inadimplentes` morriam com 42501 ("papel nao autorizado") em **100% das
+>    chamadas da Sol** — chamavam as canônicas direto, sem resolver o claim JWT. Corrigido:
+>    a chamada interna virou os wrappers `sol_faturas_alunos_v1`/`sol_inadimplencia_v1`.
+>    Isso destrava também `sol_caixa_lancar_recebimento_lote_v1` (chama o resolver por
+>    dentro) — o lançamento de 2+ alunos num comprovante só (irmãos) agora funciona.
+> 2. `sol_caixa_casar_parcela` **foi alterada** (decisão do Alf, 22/08 — a proibição da
+>    seção "Carteira da Sol" vale para o lado da Sol, não para o LA Report): o
+>    `valor_bate` deixou de comparar com o valor de TABELA e virou **date-aware**.
+>    Contrato novo do retorno na seção "Fluxo de caixa" abaixo.
+> Migrations `20260822120000` e `20260822121500`, PR #191, testado como a Sol (sem JWT)
+> com os casos reais dos grupos de 21/08.
 
 ## Decisão de produto
 
@@ -50,14 +64,17 @@ public.get_inadimplencia_canonica(
 ) returns jsonb
 ~~~
 
-O retorno esperado é **schema v4**. Não usar sol_caixa_inadimplentes; ela é
-histórica e não representa o novo fluxo. As RPCs de caixa abaixo permanecem
-fora do escopo e não podem ser alteradas:
+O retorno esperado é **schema v4**. Não usar sol_caixa_inadimplentes para
+consulta de carteira: desde 22/08 ela passa do guard de papel, mas segue
+incompatível com o v4 — exige `collection_scope = 'confirmed_only'` e o
+canônico publica `confirmed_active_d2_3_competencias`, então sai em erro.
+As RPCs de caixa abaixo permanecem fora do escopo **da Sol** (ela não as
+altera; mudanças são do LA Report, versionadas em migration):
 
 - sol_caixa_lancar_recebimento
 - sol_caixa_abrir
 - sol_caixa_fechar
-- sol_caixa_casar_parcela
+- sol_caixa_casar_parcela (alterada pelo LA Report em 22/08 — ver "Fluxo de caixa")
 
 ## Gate obrigatório da Sol
 
@@ -90,6 +107,51 @@ consumer_must_apply_collection_grace é false porque o canônico já fez o corte
 Antes de WhatsApp, a Sol usa somente contact_resolution_status=resolved,
 preserva IDs exatos de fatura, matrícula e contrato e nunca junta por nome.
 
+## Fluxo de caixa (comprovantes nos grupos) — contratos vigentes desde 22/08
+
+O fluxo é separado da carteira D+2: a equipe manda o comprovante no grupo do
+financeiro, a Sol casa aluno/responsável/fatura, pede autorização ("pode") e
+lança em caixa_movimentacoes. Funções e contratos:
+
+**`sol_caixa_parcela_canonica(p_unidade_id, p_aluno, p_valor, p_as_of)`** —
+funcionando desde 22/08 (antes: 42501 em toda chamada). Devolve os três
+valores da regra de pontualidade: `valor_da_parcela` (até o vencimento),
+`valor_sem_desconto_condicional` (cheio) e `valor_hoje` (com multa/mora, conta
+da canônica). É a fonte preferida do card de comprovante.
+
+**`sol_caixa_resolver_multi_aluno_v1(p_unidade_id, p_itens, p_valor_total)`** —
+funcionando desde 22/08. Recebe 2+ itens `{aluno_nome, categoria, valor,
+competencia?}`, valida cada um contra a fatura canônica e confere a soma com o
+total do comprovante. É o caminho para irmãos e pagamento composto do mesmo
+responsável (caso real: passaportes João Victor + Pedro Victor, R$ 360 + 360 =
+720). `sol_caixa_lancar_recebimento_lote_v1` usa este resolver por dentro.
+
+**`sol_caixa_casar_parcela(p_unidade_id, p_aluno, p_valor, p_competencia)`** —
+contrato de retorno NOVO em `parcela` (22/08):
+
+| Campo | Significado |
+|---|---|
+| valor | **líquido** (até o vencimento) — antes era o valor de tabela |
+| valor_tabela | valor_original do Emusys (todo CG = 447) |
+| valor_apos_vencimento | original − desconto fixo (sem multa/mora) |
+| atrasada / dias_atraso | hoje BRT × data_vencimento |
+| valor_bate | casa com líquido OU pós-vencimento |
+| valor_bate_como | 'ate_vencimento' \| 'apos_vencimento' \| null |
+
+Motivo: 722 de 1.040 faturas abertas (69%) têm desconto condicional de
+pontualidade (CG 96,6%) e o card saía contraditório ("Valor: R$ 377 / o
+comprovante de R$ 377 difere"). Regra do Alf: em dia paga o líquido; atrasado
+perde o condicional. **A comparação sinaliza, não recusa** — atrasado pagando
+o valor de até o vencimento é decisão humana (caso Amaia, 21/08, autorizado).
+No card, usar `valor_bate_como`: em vez de "difere — confere", dizer "pagou o
+valor de até o vencimento, mas está atrasada há N dias".
+
+⚠️ Pagamento **parcial** (ex.: "restante do passaporte R$ 199") não tem fatura
+com esse valor para validar — segue conferência humana, sem match automático.
+⚠️ `sol_caixa_autorizar_payload_v1`, `sol_caixa_corrigir_forma_recebimento` e
+`sol_caixa_recalcular_cofre` estão **sem grant** para os papéis da Sol — item
+aberto da auditoria de 22/08.
+
 ## Regras e reconciliação
 
 - Trancado temporário, evadido, inativo e ex-aluno ficam fora de Cobrar agora D+2.
@@ -97,6 +159,13 @@ preserva IDs exatos de fatura, matrícula e contrato e nunca junta por nome.
 - A janela é de três competências, não 90 dias corridos.
 - source_missing é “não observado na fotografia atual”; nunca é pagamento,
   não reduz saldo e não entra em cobrança ou total.
+- **Exceção da substituta viva (20/08):** o Emusys apaga e recria a fatura ao
+  editar a parcela. Quando existe outra fatura da MESMA pessoa na MESMA
+  competência, com id diferente e valor > 0, a antiga sai da fila de
+  reconciliação do leitor de faturas (`get_faturas_alunos_financeiro_v1`).
+  ⚠️ A regra ainda NÃO existe em `get_inadimplencia_canonica` — por isso a
+  carteira pode seguir bloqueada por source_missing que o leitor já resolveu
+  (medido 22/08: 21 em CG). Extensão pendente de decisão do Alf.
 - Somente status=paga em sincronização válida confirma quitação.
 - source_missing, identidade inválida e contato pendente ficam na
   **Reconciliação financeira** de /app/faturas. Não bloqueiam o subconjunto
@@ -183,6 +252,17 @@ de source_missing: é reconciliação, nunca cobrança.
 Exiba valor_com_desconto, valor_sem_desconto_condicional e valor_atualizado.
 Não recalcule juros na Sol. Não altere sol_caixa_lancar_recebimento,
 sol_caixa_abrir, sol_caixa_fechar ou sol_caixa_casar_parcela.
+
+No fluxo de caixa (comprovantes no grupo): use sol_caixa_parcela_canonica para
+o card (valor_da_parcela = até o vencimento; valor_sem_desconto_condicional =
+cheio; valor_hoje = com multa/mora). Para 2+ alunos no mesmo comprovante
+(irmãos, composto), use sol_caixa_resolver_multi_aluno_v1 e lance com
+sol_caixa_lancar_recebimento_lote_v1 — nunca lance o total num aluno só. No
+retorno de sol_caixa_casar_parcela, leia valor_bate_como: 'ate_vencimento' em
+atraso significa "pagou o valor de até o vencimento, mas está atrasada há N
+dias — com multa/mora seria R$ X"; não diga "difere" quando o valor casa com o
+de até o vencimento. Pagamento parcial (não casa com nenhuma fatura) é
+conferência humana.
 
 Mantenha modo sombra: pode listar, agrupar e auditar, mas não envia WhatsApp,
 não liga cron de cobrança e não efetua baixa sem aprovação humana posterior e
