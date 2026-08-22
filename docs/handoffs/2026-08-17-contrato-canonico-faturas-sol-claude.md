@@ -36,6 +36,14 @@
 >    (`20260821094101_..._disable_legacy_corrigir_forma_rpc_for_sol`, ledger
 >    `MIGRATIONS_APLICADAS.md`). Correção de forma passa pela `corrigir_movimento_v1`
 >    (V3, com approval). `recalcular_cofre` segue sem grant (interna).
+> 6. **Snapshot canônico do lote multi-aluno** (migration `20260822180000`, merge do
+>    draft do Alfredo com as mudanças de 22/08): preview resolve UMA vez
+>    (`resolver_multi_aluno_v1`); o approval valida os MESMOS `canonical_fatura_id`/
+>    valores via **`sol_caixa_validar_multi_aluno_snapshot_v1`** (nova) — nunca reescolhe
+>    fatura. Recusas ganham motivos específicos `snapshot_*` (fatura_nao_encontrada,
+>    valor_fatura_mudou, status_fatura_mudou, categoria_mudou, competencia_mudou,
+>    soma_divergente). O runtime da Sol de 22/08 (mensagens humanizadas) já pode ser
+>    implantado — a migration que ele espera está aplicada.
 
 ## Decisão de produto
 
@@ -143,7 +151,15 @@ funcionando desde 22/08. Recebe 2+ itens `{aluno_nome, categoria, valor,
 competencia?}`, valida cada um contra a fatura canônica e confere a soma com o
 total do comprovante. É o caminho para irmãos e pagamento composto do mesmo
 responsável (caso real: passaportes João Victor + Pedro Victor, R$ 360 + 360 =
-720). `sol_caixa_lancar_recebimento_lote_v1` usa este resolver por dentro.
+720). Cada item volta com `aluno_id` e `canonical_fatura_id`.
+
+**Fluxo snapshot do lote (desde 22/08, desenho do Alfredo):** o resolver roda
+**no preview**; o "pode" NÃO reescolhe fatura — `lancar_recebimento_lote_v1`
+chama `sol_caixa_validar_multi_aluno_snapshot_v1`, que confere que os MESMOS
+`canonical_fatura_id`/valores/status do preview continuam válidos na fonte
+canônica. Se algo mudou entre o preview e a autorização, recusa com motivo
+específico (`snapshot_valor_fatura_mudou`, `snapshot_fatura_nao_encontrada`,
+…) e **nada é lançado parcialmente**. O preview original fica preservado.
 
 **`sol_caixa_casar_parcela(p_unidade_id, p_aluno, p_valor, p_competencia)`** —
 contrato de retorno NOVO em `parcela` (22/08):
