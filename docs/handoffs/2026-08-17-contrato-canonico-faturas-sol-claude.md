@@ -190,6 +190,9 @@ autoria Alfredo, spec `docs/specs/2026-08-22-sol-caixa-abrir-fechar-v3.md`):**
   2+ subconjuntos válidos (`composicao_ambigua` — nunca escolhe por heurística),
   >12 candidatas (`composicao_complexa_revisao_manual`), só
   parcela/passaporte/matrícula. `itens[]` no MESMO shape do multi-aluno.
+  **Identidade:** `aluno.id` é matrícula, não pessoa; a resolução do nome agrupa
+  pelo `emusys_student_id` do envelope. Só há ambiguidade entre `student_id`s
+  distintos. Cada item devolve o `aluno_id` da sua própria fatura/matrícula.
 - **Abrir/fechar V3**: `resolver_abertura_v3`/`resolver_fechamento_v3` (snapshot
   + hash no banco via `extensions.digest`), `abrir_v3`/`fechar_v3` (validam
   approval, revalidam snapshot, advisory xact lock, idempotência por

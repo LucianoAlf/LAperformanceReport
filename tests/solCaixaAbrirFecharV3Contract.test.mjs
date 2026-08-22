@@ -5,6 +5,7 @@ import test from 'node:test';
 
 const root = path.resolve(import.meta.dirname, '..');
 const sql = fs.readFileSync(path.join(root, 'supabase/migrations/20260822233000_sol_caixa_composto_e_abrir_fechar_v3.sql'), 'utf8');
+const compostoPorPessoaSql = fs.readFileSync(path.join(root, 'supabase/migrations/20260822234500_sol_caixa_composto_por_pessoa_v1.sql'), 'utf8');
 const harness = fs.readFileSync(path.join(root, 'tests/sql/sol_caixa_v3_harness.sql'), 'utf8');
 
 test('Caixa V3: composto usa envelope canônico e falha fechado na ambiguidade', () => {
@@ -15,6 +16,15 @@ test('Caixa V3: composto usa envelope canônico e falha fechado na ambiguidade',
   assert.match(sql, /'aluno_id'.*'canonical_fatura_id'/is);
   assert.match(sql, /tipo_fatura[^\n]+in \('parcela','passaporte_taxa_matricula','matricula'\)/i);
   assert.doesNotMatch(sql, /else 'parcela'/i);
+});
+
+test('Caixa V3: composto resolve pessoa por student_id e preserva matrícula por item', () => {
+  assert.match(compostoPorPessoaSql, /emusys_student_id/i);
+  assert.match(compostoPorPessoaSql, /group by emusys_student_id/i);
+  assert.match(compostoPorPessoaSql, /'aluno_id',\s*\(x->'aluno'->>'id'\)::integer/is);
+  assert.doesNotMatch(compostoPorPessoaSql, /'aluno_id',\s*v_aluno_id/is);
+  assert.match(harness, /matrículas da mesma pessoa deveriam resolver por student_id/i);
+  assert.match(harness, /pessoas distintas com mesmo nome deveriam bloquear/i);
 });
 
 test('Caixa V3: abrir/fechar somente consome approval após revalidar snapshot', () => {
