@@ -181,6 +181,22 @@ o valor de até o vencimento é decisão humana (caso Amaia, 21/08, autorizado).
 No card, usar `valor_bate_como`: em vez de "difere — confere", dizer "pagou o
 valor de até o vencimento, mas está atrasada há N dias".
 
+**Trava de fechamento pendente na abertura (22/08, migration `20260822230000`):**
+`sol_caixa_abrir` RECUSA abrir o dia quando o dia anterior está aberto —
+motivo `fechamento_pendente_dia_anterior` + payload `pendencia`
+(`caixa_diario_id`, `data_caixa`, `saldo_final_calculado` recomputado dos
+movimentos). Nasceu do incidente da Barra (21-22/08): o preview de fechamento
+ficou sem "pode" (Arthur fora do horário), o dia ficou aberto, e a abertura
+seguinte fez carry-over do último FECHADO (20/08) — a retirada de R$ 950
+sumiu do saldo (1.012,80 em vez de 62,80). Corrigido retroativamente com
+rastro em `sol_caixa_lancamento_auditoria`. **Fluxo esperado da Sol ao receber
+o motivo novo: oferecer o fechamento de ontem com os números da `pendencia`,
+pedir um "pode" para fechar ontem, e só então abrir hoje.** Enquanto o runtime
+não tratar o motivo, ela simplesmente não abre — fail-closed, nunca mais abre
+com saldo errado. Regra organizacional que acompanha (Alf): fechamento é de
+quem está NA UNIDADE no horário (gerente organiza a escala); automatizar
+abrir/fechar sem "pode" foi recusado por ora.
+
 **Vínculo estruturado no lançamento (22/08):** `caixa_movimentacoes` tem
 `aluno_id` e `fatura_id`. No lançamento unitário, mandar os dois no payload
 (`casar_parcela` devolve `aluno_id` e `parcela.fatura_id`); no lote o resolver
