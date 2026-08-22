@@ -321,6 +321,42 @@ não liga cron de cobrança e não efetua baixa sem aprovação humana posterior
 comparação sombra verde nas três unidades.
 ~~~
 
+## Auditoria de permissões — item 8 do roadmap (executada em 22/08/2026)
+
+Estado medido no banco (read-only), para a fase de promoção do classificador:
+
+**✅ Aprovado:**
+- **Zero DML de tabela** para os papéis da Sol (`sol_acesso_restrito`,
+  `sol_caixa_readonly`, `sol_atendimento_externo`) — toda escrita passa por RPC.
+- 46 funções com grant nominal a `sol_acesso_restrito`, todas de negócio
+  autorizadas (caixa V3 + wrappers canônicos + KPIs); 15 a `sol_caixa_readonly`,
+  todas de leitura. Nenhuma fora do ledger.
+- Fail-closed das legadas preservado (`corrigir_forma`, `autorizar_payload`,
+  `recalcular_cofre` sem grant).
+- Guard das canônicas **barra anon** (testado: `get_faturas_alunos_financeiro_v1`
+  com claim anon → "papel nao autorizado").
+
+**⚠️ Pendências para fechar ANTES do STRICT=1 (correção coordenada — não
+revogar às cegas, o runtime Hermes pode estar chamando via PostgREST com a
+anon key):**
+1. **`sol_kpis_alunos_v1` devolve dados para `anon`** (testado: 4,3 KB de KPIs
+   sem login). O wrapper escala para service_role por dentro e não tem guard —
+   o EXECUTE de anon/authenticated precisa cair. Mesma família:
+   `sol_custo_seguranca_v1`.
+2. **`sol_hermes_caixa_enqueue`/`validate`/`report_*` executáveis por `anon`** —
+   escrita em fila por anônimo (spam/poluição de fila).
+3. `get_faturas_alunos_financeiro_v1` com EXECUTE para `anon` — o guard barra,
+   mas é defesa em profundidade furada; revogar por higiene.
+4. `sol_acesso_restrito` tem **SELECT em 421 tabelas** do public. Hoje inócuo
+   (302 têm RLS cujas policies não alcançam a role; as 15 sem RLS são
+   logs/auditoria/calendário), mas é superfície desnecessária — qualquer tabela
+   futura sem RLS nasce legível pela Sol. Reduzir ao mínimo (ela consulta via
+   RPC).
+
+**Pergunta-chave para o Alfredo antes de aplicar os revokes 1–3:** com qual key
+o runtime Hermes chama as RPCs `sol_*` — service_role (backend) ou anon? Se
+service_role, os revokes são seguros já; se anon key, migrar a chamada primeiro.
+
 ## Fora desta etapa
 
 - Cobrança de ex-alunos ou débitos fora das três competências: fluxo histórico
