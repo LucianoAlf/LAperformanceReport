@@ -30,8 +30,12 @@
 >    `fatura_id` no payload do unitário (ela já os recebe do `casar_parcela`); no lote o
 >    resolver preenche sozinho (ganhou `aluno_id` no retorno por item). Payload antigo
 >    continua válido (grava NULL). Migration `20260822151500`.
-> 5. Grants fechados: `corrigir_forma_recebimento` e `autorizar_payload_v1` →
->    `sol_acesso_restrito`; `recalcular_cofre` fica **sem grant de propósito** (interna).
+> 5. ~~Grants: `corrigir_forma_recebimento` e `autorizar_payload_v1` → `sol_acesso_restrito`~~
+>    **REVERTIDO no mesmo dia** (migration `20260822170000`): a auditoria do repo da Sol
+>    mostrou que a ausência era DELIBERADA — hardening fail-closed do V3
+>    (`20260821094101_..._disable_legacy_corrigir_forma_rpc_for_sol`, ledger
+>    `MIGRATIONS_APLICADAS.md`). Correção de forma passa pela `corrigir_movimento_v1`
+>    (V3, com approval). `recalcular_cofre` segue sem grant (interna).
 
 ## Decisão de produto
 
@@ -169,10 +173,15 @@ metadado de reconciliação, não gate.
 
 ⚠️ Pagamento **parcial** (ex.: "restante do passaporte R$ 199") não tem fatura
 com esse valor para validar — segue conferência humana, sem match automático.
-⚠️ Grants (fechado em 22/08): `corrigir_forma_recebimento` e
-`autorizar_payload_v1` têm EXECUTE para `sol_acesso_restrito`;
-`recalcular_cofre` fica **sem grant de propósito** — é utilitária interna de
-escrita, chamada por dentro de corrigir/estornar movimento.
+⚠️ **Grants seguem o fail-closed do V3, que é DELIBERADO:**
+`corrigir_forma_recebimento` (legada, sem approval) e `autorizar_payload_v1`
+(interna das 4 mutadoras) **não** têm EXECUTE para os papéis da Sol — revogado
+em `20260821094101` (ledger V3) e re-revogado em `20260822170000` depois que a
+auditoria concedeu por engano. Correção de forma = `corrigir_movimento_v1`
+(V3, com approval). `recalcular_cofre` idem, interna.
+**Regra: antes de conceder EXECUTE em `sol_caixa_*`, conferir o ledger
+`MIGRATIONS_APLICADAS.md` e o STATUS mais recente no repo da Sol
+(github.com/LucianoAlf/sol-openclaw-backup) — grant ausente pode ser decisão.**
 
 ## Regras e reconciliação
 
