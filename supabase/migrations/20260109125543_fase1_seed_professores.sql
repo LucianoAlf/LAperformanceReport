@@ -1,0 +1,50 @@
+-- [RECUPERADA DO HISTORICO 2026-08-22, issue #201] Migration aplicada em producao
+-- (via CLI/MCP) sem arquivo versionado. SQL extraido de supabase_migrations.
+-- schema_migrations (statements como aplicados). NAO REAPLICAR: ja esta no
+-- schema_migrations com esta mesma version.
+
+-- SEED: PROFESSORES (42 registros)
+INSERT INTO professores (nome) VALUES
+('Antonio Marcos'),
+('Caio Tenório'),
+('Daiana Pacífico'),
+('Elliabh Henrique'),
+('Felipe Gevezier'),
+('Gabriel Antony'),
+('Gabriel Barbosa'),
+('Gabriel Leão'),
+('Guilherme Ovídio'),
+('Isaque Mendes'),
+('Israel Rocha'),
+('Jeyson Gaia'),
+('Joel de Salles'),
+('Jordan Barbosa'),
+('Kaio Felipe'),
+('Larissa Bheattriz'),
+('Leticia Fernandes'),
+('Leticia Palmeira'),
+('Léo Castro'),
+('Lohana Leopoldo'),
+('Lucas Guimarães'),
+('Lucas Lisboa'),
+('Marcos Saturnino'),
+('Mariana Carneiro'),
+('Matheus Felipe'),
+('Matheus Lana'),
+('Matheus Santos'),
+('Matheus Sterque'),
+('Miqueias de Oliveira'),
+('Pedro Sérgio'),
+('Peterson Biancamano'),
+('Rafael Akeem'),
+('Ramon Pina'),
+('Renam Amorim'),
+('Rodrigo Pinheiro'),
+('Valdo Delfino'),
+('Vicente Pinheiro'),
+('Vinicius Pinheiro'),
+('Wellerson de Lima'),
+('Willer Arruda'),
+('Willian de Andrade'),
+('Willian Ribeiro')
+ON CONFLICT (nome_normalizado) DO NOTHING;
