@@ -205,6 +205,20 @@ autoria Alfredo, spec `docs/specs/2026-08-22-sol-caixa-abrir-fechar-v3.md`):**
 - As RPCs legadas `sol_caixa_abrir`/`fechar` seguem vivas até o runtime migrar;
   a trava de pendência vale nos dois trilhos.
 
+**Reabertura do caixa do dia (22/08 ~16h, migration `20260822250000`, PR #209):**
+`sol_caixa_reabrir_caixa_v1(jsonb)` — nasceu de incidente real (Arthur fechou
+15:30 com expediente aberto; comprovantes represados; a Sol corretamente
+recusou contornar com SQL). **Política do Alf: qualquer membro do grupo
+financeiro oficial autoriza reabrir** (mesmo caminho grupo+policy do
+abrir/fechar). Guardas: motivo obrigatório, SÓ o dia corrente BRT (dia
+anterior = manual/admin), lock, log completo em `caixa_reaberturas_log`
+(com snapshots) + auditoria. Fluxo esperado da Sol: "Sol, reabre o caixa"
++ motivo → RPC → confirma no grupo → time reenvia comprovantes → fechamento
+normal depois. ⚠️ **Runtime precisa apontar o intent de reabertura para esta
+RPC** (a rotina interna antiga dá permission denied). ⚠️ **Nota V3:**
+pós-reabertura, `fechar_v3` bateria na idempotência do UNIQUE
+(unidade,data,operacao) — tratar antes do deploy do runtime V3 de abrir/fechar.
+
 **Trava de fechamento pendente na abertura (22/08, migration `20260822230000`):**
 `sol_caixa_abrir` RECUSA abrir o dia quando o dia anterior está aberto —
 motivo `fechamento_pendente_dia_anterior` + payload `pendencia`
