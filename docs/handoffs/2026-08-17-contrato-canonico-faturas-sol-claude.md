@@ -360,6 +360,26 @@ Sol confirmarem no runtime vivo que o Hermes chama com service_role):
 2. **Só depois** reduzir o SELECT amplo (421 tabelas) de `sol_acesso_restrito`
    — antes disso a redução não protege o processo, que tem service_role.
 
+**Mapa de não-regressão da troca de credencial (inventário do runtime vivo,
+22/08 — para a Sol NÃO parar de atender os grupos):** o `caixa-financeiro.cjs`
+chama 18 RPCs `sol_caixa_*`; **17 já estão cobertas** pelo grant de
+`sol_acesso_restrito`. Os 3 buracos que quebrariam o atendimento se a troca
+fosse feita hoje, e que precisam fechar ANTES dela:
+1. **`sol_caixa_corrigir_forma_recebimento`** — o runtime AINDA chama a RPC
+   legada, que hoje só funciona porque a service_role atropela o próprio
+   fail-closed do V3. Com credencial restrita → 42501 no fluxo "era cartão,
+   não pix". Fix: rotear a correção de forma para `corrigir_movimento_v1`
+   (V3) no runtime — já está na lista de rabiolas do Alfredo.
+2. **REST direto a `alunos`** — com credencial restrita, a RLS de `alunos`
+   não tem policy para a role → **0 linhas em silêncio** (o match por
+   responsável degrada sem erro). Trocar por RPC.
+3. **REST direto a `emusys_faturas`** — idem (policy só de service_role).
+   Trocar por RPC (`parcela_canonica`/`sol_faturas_alunos_v1`).
+Protocolo da troca: dual-run com a credencial nova num grupo canário
+comparando com a atual, janela fora do horário de caixa, rollback = voltar a
+env var, e monitorar `caixa.log` + `sol_caixa_lancamento_auditoria` (pico de
+recusas) por 48h.
+
 ## Fora desta etapa
 
 - Cobrança de ex-alunos ou débitos fora das três competências: fluxo histórico
