@@ -1,0 +1,10 @@
+-- [RECUPERADA DO HISTORICO 2026-08-22, issue #201] Migration aplicada em producao
+-- (via CLI/MCP) sem arquivo versionado. SQL extraido de supabase_migrations.
+-- schema_migrations (statements como aplicados). NAO REAPLICAR: ja esta no
+-- schema_migrations com esta mesma version.
+
+
+-- Corrigir os 3 alunos evadidos restantes com Flauta Transversa → Canto T
+UPDATE alunos
+SET curso_id = 6  -- Canto T
+WHERE curso_id = 37  -- Flauta Transversa;

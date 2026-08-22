@@ -1,0 +1,105 @@
+-- [RECUPERADA DO HISTORICO 2026-08-22, issue #201] Migration aplicada em producao
+-- (via CLI/MCP) sem arquivo versionado. SQL extraido de supabase_migrations.
+-- schema_migrations (statements como aplicados). NAO REAPLICAR: ja esta no
+-- schema_migrations com esta mesma version.
+
+-- O texto que vai pro prontuario passa a ser composto pelo BANCO (fn_compor_texto_prontuario),
+-- a partir dos campos estruturados. O texto_consolidado do LLM vira fallback.
+create or replace function public.app_confirmar_registro(p_registro_id uuid, p_modo text default 'novo')
+returns jsonb
+language plpgsql security definer set search_path to 'public'
+as $function$
+declare
+  v_prof     integer := public.fn_professor_do_usuario();
+  v_reg      public.fabio_registros_aula%rowtype;
+  v_fatia    record;
+  v_user_id  integer;
+  v_gravadas integer := 0;
+  v_puladas  integer := 0;
+  v_pend     jsonb := '[]'::jsonb;
+  v_alvo     integer;
+  v_texto    text;
+begin
+  if v_prof is null then raise exception 'Usuário sem professor vinculado'; end if;
+  if p_modo not in ('novo','substituir','complementar') then
+    raise exception 'Modo inválido: %', p_modo;
+  end if;
+  select u.id into v_user_id from public.usuarios u where u.auth_user_id = auth.uid();
+
+  select * into v_reg from public.fabio_registros_aula
+   where id = p_registro_id and parent_id is null;
+  if not found then raise exception 'Registro % não encontrado', p_registro_id; end if;
+  if v_reg.professor_id is distinct from v_prof then
+    raise exception 'Registro não pertence a este professor';
+  end if;
+  if v_reg.status not in ('rascunho','aguardando_confirmacao') then
+    raise exception 'Status % não permite confirmação', v_reg.status;
+  end if;
+
+  if v_reg.aluno_id is not null then
+    -- aula de 1 aluno so: o proprio tronco e a fatia
+    v_texto := coalesce(
+      public.fn_compor_texto_prontuario(v_reg.campos, v_reg.campos),
+      nullif(btrim(v_reg.texto_consolidado),''));
+    if v_texto is null then raise exception 'Registro sem conteúdo'; end if;
+
+    v_alvo := public.fn_aula_individual_do_aluno(v_reg.aula_id, v_reg.aluno_id);
+    perform public.registrar_aula_fabio(
+      p_aula_id => v_alvo, p_texto => v_texto,
+      p_origem => case when v_reg.origem in ('audio','texto') then v_reg.origem else 'audio' end,
+      p_professor_id => v_reg.professor_id, p_modo => p_modo);
+    v_gravadas := 1;
+    update public.fabio_registros_aula
+       set status='gravado_emusys', confirmado_em=now(), confirmado_por=v_user_id
+     where id = p_registro_id;
+  else
+    for v_fatia in select * from public.fabio_registros_aula where parent_id = p_registro_id
+    loop
+      -- TEXTO NORMALIZADO: tronco + fatia, campos vazios NAO viram linha
+      v_texto := coalesce(
+        public.fn_compor_texto_prontuario(v_reg.campos, v_fatia.campos),
+        nullif(btrim(v_fatia.texto_consolidado),''));
+
+      if coalesce(v_fatia.campos->>'presenca','presente') = 'ausente' then
+        v_puladas := v_puladas + 1;
+        update public.fabio_registros_aula
+           set status='confirmado', confirmado_em=now(), confirmado_por=v_user_id
+         where id = v_fatia.id;
+      elsif v_fatia.aula_id is null or v_fatia.aluno_id is null or v_texto is null then
+        v_pend := v_pend || jsonb_build_object(
+          'fatia_id', v_fatia.id, 'aluno_id', v_fatia.aluno_id,
+          'motivo', case when v_fatia.aula_id is null then 'sem aula vinculada'
+                         when v_fatia.aluno_id is null then 'sem aluno vinculado'
+                         else 'sem conteúdo' end);
+      else
+        v_alvo := public.fn_aula_individual_do_aluno(v_fatia.aula_id, v_fatia.aluno_id);
+        perform public.registrar_aula_fabio(
+          p_aula_id => v_alvo, p_texto => v_texto,
+          p_origem => case when v_fatia.origem in ('audio','texto') then v_fatia.origem else 'audio' end,
+          p_professor_id => v_reg.professor_id, p_modo => p_modo);
+        v_gravadas := v_gravadas + 1;
+        update public.fabio_registros_aula
+           set status='gravado_emusys', confirmado_em=now(), confirmado_por=v_user_id,
+               aula_id = v_alvo,
+               campos = campos || jsonb_build_object('aula_alvo_resolvida', v_alvo)
+         where id = v_fatia.id;
+      end if;
+    end loop;
+
+    if v_gravadas = 0 then
+      raise exception 'Nada gravável neste registro. Pendências: %', v_pend::text;
+    end if;
+
+    update public.fabio_registros_aula
+       set status = case when jsonb_array_length(v_pend) = 0 then 'gravado_emusys' else 'confirmado' end,
+           confirmado_em = now(), confirmado_por = v_user_id
+     where id = p_registro_id;
+  end if;
+
+  return jsonb_build_object('registro_id', p_registro_id, 'modo', p_modo,
+                            'gravadas', v_gravadas, 'ausentes_puladas', v_puladas, 'pendencias', v_pend);
+end
+$function$;
+
+revoke all on function public.app_confirmar_registro(uuid, text) from public, anon;
+grant execute on function public.app_confirmar_registro(uuid, text) to authenticated;
