@@ -107,6 +107,7 @@ há apenas `dados_mensais` (~12 campos).
 | `/app/pre-atendimento` | Pré-Atendimento (CRM/WhatsApp) | [#pré-atendimento](#pré-atendimento-apppre-atendimento) |
 | `/app/campanhas` | Campanhas (Meta) | [#campanhas](#campanhas-appcampanhas) |
 | `/app/alunos` | Alunos | [#alunos](#alunos-appalunos) |
+| `/app/bandas` | Bandas | [#bandas](#bandas-appbandas) |
 | `/app/sucesso-aluno` | Sucesso do Aluno | [#sucesso-do-aluno](#sucesso-do-aluno-appsucesso-aluno) |
 | `/app/professores` | Professores | [#professores](#professores-appprofessores) |
 | `/app/agenda` | Agenda (grade do dia) | [#agenda](#agenda-appagenda) |
@@ -191,6 +192,12 @@ Disparo de templates Meta (WhatsApp Cloud API) + conversas + agentes IA. `Campan
   permanecem auditadas e forma de pagamento escolhida no LA Report é fixada.
 - **Edge functions:** `gerar-relatorio-pedagogico` (Gemini 3 Flash; gera o relatório pedagógico a partir das anotações e persiste em `relatorios_pedagogicos`). Auditoria IA usa `execute_bi_query_lamusic` via RPC.
 - **Tabelas:** `relatorios_pedagogicos` (histórico de relatórios pedagógicos gerados por IA; RLS por unidade padrão `metas`).
+
+## Bandas (`/app/bandas`)
+- **Componentes:** `Bandas/BandasPage.tsx` — abas: **Bandas** (`ListaBandasTab`, cards com produtor/dia/horário/integrantes/próximo evento + badge "Revisar nome"), **Eventos** (`EventosTab` + `ModalEventoBanda`, ensaio/show multi-banda com local/sala/orçamento), **Dashboard** (`DashboardBandasTab`, KPICards + Donut + BarChart por unidade), **Garimpar** (`GarimparTab`, bandas com poucos integrantes + candidato via `AutocompleteAluno`), **Conciliação** (`ConciliacaoTab`, fila da Jéssica). Detalhe em `BandaDetalheDialog` (identidade/logo via `ModalIdentidadeBanda`, integrantes via `ModalIntegranteBanda`, repertório via `ModalRepertorioBanda`). Sidebar: seção Operacional, logo abaixo de Alunos.
+- **Hooks:** `useBandas` (`src/hooks/useBandas.ts` — tipos do contrato + todos os hooks de leitura e funções de escrita).
+- **RPCs (única porta de acesso — tabelas `banda_*` têm RLS fail-closed, sem policy; grants só `authenticated`/`service_role`):** `bandas_listar`, `banda_detalhe`, `banda_integrantes`, `bandas_kpis`, `bandas_para_garimpar`, `banda_eventos_listar`, `banda_evento_participantes`, `banda_conciliacao_roster` (leitura); `banda_atualizar_identidade`, `banda_definir_status`, `banda_integrante_upsert/desativar/remover`, `banda_repertorio_adicionar/atualizar/remover`, `banda_evento_criar/atualizar/cancelar/remover/definir_bandas` (escrita); `banda_reconciliar_turmas` (manutenção, idempotente). Helpers internos: `banda_aluno_ativo` (roster = `status='ativo'` canônico), `banda_chave_turma`.
+- **Modelo:** `banda` ancora identidade na `turma_chave` (`unidade|curso|dia|horário|prof`); roster vivo deriva de `alunos` (cursos de banda curados em `banda_curso_depara`: Power Kids, Minha Banda, GarageBand); `banda_integrante` é só overlay (instrumento/função). Enums travados por CHECK: banda `ativa|inativa`, evento `ensaio|show` + `agendado|realizado|cancelado`, repertório `ensaiando|pronta|tocada`. Migration consolidada: `supabase/migrations/20260824_modulo_bandas.sql`. Auditoria pré-implementação: `docs/auditorias/2026-08-24-auditoria-backend-modulo-bandas.md`. Pendências backend: `banda_repertorio_importar_cifraclub` (edge, fase 2), cron de `banda_reconciliar_turmas`, comportamento na troca de produtor (hoje cria banda nova).
 
 ## Sucesso do Aluno (`/app/sucesso-aluno`)
 `SucessoCliente/SucessoClientePage.tsx`. Abas: **Caixa de Entrada** (`CaixaEntradaTab`, departamento `sucesso_aluno`) e **Acompanhamento** (`TabSucessoAluno` → tabela, jornada, pesquisa, presença, faltas, marcos, análise, **cartões**). Subaba **Cartões** = `CartoesContatoTab` (hook `useVcardsUnidade`, `VcardPreview`) → CRUD de `vcards_unidade` + envio de teste via edge `enviar-vcard` (UAZAPI `/send/contact`, caixa id 3).
