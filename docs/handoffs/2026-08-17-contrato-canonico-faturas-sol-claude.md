@@ -235,11 +235,34 @@ com saldo errado. Regra organizacional que acompanha (Alf): fechamento é de
 quem está NA UNIDADE no horário (gerente organiza a escala); automatizar
 abrir/fechar sem "pode" foi recusado por ora.
 
-**Vínculo estruturado no lançamento (22/08):** `caixa_movimentacoes` tem
-`aluno_id` e `fatura_id`. No lançamento unitário, mandar os dois no payload
-(`casar_parcela` devolve `aluno_id` e `parcela.fatura_id`); no lote o resolver
-preenche sozinho. Vínculo inválido vira NULL sem derrubar o lançamento — é
-metadado de reconciliação, não gate.
+**Vínculo estruturado no lançamento (22/08, corrigido em 24/08):**
+`caixa_movimentacoes` tem `aluno_id` e `fatura_id`. O lote preenche desde 22/08;
+o lançamento **unitário** passou a preencher em 24/08 (o runtime nunca mandava os
+campos — medido no caixa da Barra: o lote Thiago+Matheus gravou 2351/2352 com
+fatura, e os avulsos do mesmo dia ficaram nulos). Vínculo inválido vira NULL sem
+derrubar o lançamento — é metadado de reconciliação, não gate.
+
+🔴 **`aluno_id` vem da FATURA escolhida, NUNCA do match por nome.** A instrução
+anterior aqui — "`casar_parcela` devolve `aluno_id`" — estava **errada** e teria
+gravado vínculo mentiroso: `alunos` é matrícula, não pessoa, e aquele campo sai de
+um `word_similarity` com `limit 1` sobre linhas de nome idêntico. Prova medida
+(Recreio, 24/08): Valentina Mendes Rodrigues Aleixo tem 3 matrículas — 697 Canto,
+1099 Teclado, 1542 Power Kids — e a RPC devolveu `aluno_id: 1542` (**Power Kids,
+curso sem uma única fatura na janela**) junto com a fatura de **Canto**. O elo
+autoritativo é `emusys_faturas.emusys_matricula_id` → `alunos.emusys_matricula_id`,
+que carrega o curso; hoje ele mora **dentro** de `fatura`/`parcela` nas RPCs
+(`sol_caixa_aluno_da_fatura_v1`, migration `20260824190000`). O `aluno_id` de topo
+continua existindo e continua sendo o palpite por nome — não usar para vínculo.
+
+⚠️ **Composto não vincula fatura** (são N faturas num pagamento só) e só vincula
+`aluno_id` quando todas as partes são da **mesma** matrícula — na Valentina são
+Canto + Teclado, logo fica nulo. ⚠️ **Passaporte de aluno novo** só vincula quando
+a pessoa tem UMA matrícula ativa na unidade; com 2+ cursos a
+`sol_caixa_identificar_aluno_novo_v1` devolve `aluno_id: null` +
+`motivo_sem_vinculo: 'multiplas_matriculas'` de propósito. **Melhor movimento sem
+vínculo do que vínculo errado — ninguém reconcilia por cima de dado mentiroso.**
+Travado por `tests/sol-runtime/vinculo-lancamento-e2e.cjs`, que falha explicitamente
+se alguém voltar a ler o `aluno_id` de topo.
 
 ⚠️ Pagamento **parcial** (ex.: "restante do passaporte R$ 199") não tem fatura
 com esse valor para validar — segue conferência humana, sem match automático.
