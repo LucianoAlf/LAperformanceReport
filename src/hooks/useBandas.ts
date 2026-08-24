@@ -65,6 +65,8 @@ export interface IntegranteBanda {
   responsavel_nome: string | null;
   responsavel_telefone: string | null;
   whatsapp: string | null;
+  /** foto_url da tabela alunos, buscada em lote pelo hook (a RPC banda_integrantes ainda não retorna) */
+  foto_url: string | null;
 }
 
 export interface KpiBandaUnidade {
@@ -253,7 +255,22 @@ export function useBandaDetalhe(bandaId: number | null) {
     if (intRes.error) console.error('Erro ao carregar integrantes:', intRes.error);
     if (repRes.error) console.error('Erro ao carregar repertório:', repRes.error);
     setDetalhe((detRes.data as BandaDetalhe[] | null)?.[0] || null);
-    setIntegrantes((intRes.data as IntegranteBanda[]) || []);
+    const roster = (intRes.data as Omit<IntegranteBanda, 'foto_url'>[]) || [];
+
+    // Fotos: a RPC banda_integrantes não retorna foto_url ainda — busca em lote
+    // na tabela alunos (leitura canônica, mesma fonte da Agenda/Chamada)
+    let integrantesComFoto: IntegranteBanda[] = roster.map((i) => ({ ...i, foto_url: null }));
+    const ids = roster.map((i) => i.aluno_id);
+    if (ids.length > 0) {
+      const { data: fotos, error: fotosError } = await supabase
+        .from('alunos')
+        .select('id, foto_url')
+        .in('id', ids);
+      if (fotosError) console.error('Erro ao carregar fotos dos integrantes:', fotosError);
+      const fotoPorId = new Map((fotos || []).map((f) => [f.id, f.foto_url]));
+      integrantesComFoto = roster.map((i) => ({ ...i, foto_url: fotoPorId.get(i.aluno_id) ?? null }));
+    }
+    setIntegrantes(integrantesComFoto);
     setRepertorio((repRes.data as RepertorioItem[]) || []);
     setLoading(false);
   }, [bandaId]);

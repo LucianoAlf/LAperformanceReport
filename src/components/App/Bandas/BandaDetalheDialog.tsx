@@ -20,6 +20,7 @@ import {
 import { ModalIntegranteBanda } from './ModalIntegranteBanda';
 import { ModalRepertorioBanda } from './ModalRepertorioBanda';
 import { ModalIdentidadeBanda } from './ModalIdentidadeBanda';
+import { iniciaisDoNome } from '@/lib/agenda';
 
 const STATUS_REP_LABEL: Record<RepertorioStatus, string> = {
   ensaiando: 'Ensaiando',
@@ -204,6 +205,20 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
                           key={int.aluno_id}
                           className="flex items-center gap-3 bg-slate-800/40 border border-slate-700/40 rounded-xl px-3 py-2"
                         >
+                          {int.foto_url ? (
+                            <img
+                              src={int.foto_url}
+                              alt={int.nome}
+                              className="h-10 w-10 shrink-0 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div
+                              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 text-sm font-bold text-white"
+                              aria-hidden="true"
+                            >
+                              {iniciaisDoNome(int.nome)}
+                            </div>
+                          )}
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium text-white truncate">{int.nome}</p>
                             <p className="text-xs text-slate-400">
