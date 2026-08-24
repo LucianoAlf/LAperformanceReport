@@ -6,9 +6,21 @@ com `sendFn` e `lancarFn` fakes: **não** mandam WhatsApp e **não** gravam no c
 ```bash
 scp tests/sol-runtime/*.cjs lahq:/tmp/
 ssh lahq 'cd /home/sol/.hermes/profiles/sol/caixa-ingestao && \
-  SOL_CAIXA_V3_LEDGER_MODE=production SOL_CAIXA_V3_LEDGER_STRICT=0 \
-  node /tmp/forma-incerta-e2e.cjs && node /tmp/gate-regressao-e2e.cjs'
+  export SOL_CAIXA_V3_LEDGER_MODE=production SOL_CAIXA_V3_LEDGER_STRICT=0 && \
+  for t in detector-multi-aluno.test gate-regressao-e2e forma-incerta-e2e \
+           aluno-novo-passaporte-e2e vinculo-lancamento-e2e; do \
+    echo "## $t"; node /tmp/$t.cjs || echo "FALHOU: $t"; done'
 ```
+
+⚠️ **O runtime vive num processo de longa duração.** A bridge do WhatsApp
+(`whatsapp-bridge/bridge.js`, porta 3000) faz `require` do módulo **no start**,
+então editar o arquivo não muda o comportamento até ela reiniciar. Os crons de
+abrir/fechar (`caixa-cron.cjs`) são processos novos a cada execução e pegam a
+mudança na hora — daí a assimetria enganosa "o cron já usa o código novo e o
+grupo não". Reiniciar: `kill <pid da bridge>`; o `hermes-gateway-sol.service`
+(supervisor, `Restart=always`) respawna em ~5s. Conferir depois:
+`✅ WhatsApp connected!` no `bridge.log` e **zero** linhas
+`[caixa-financeiro] init falhou`.
 
 ⚠️ **Rodar sempre com `SOL_CAIXA_V3_LEDGER_MODE=production`.** Sem isso o ledger V3
 fica desligado e o teste passa por um caminho que não existe em produção — foi assim
@@ -41,3 +53,17 @@ Armadilhas cobertas: `12 parcelas aluna Luiza` (plural de PARCELA, 1 aluno) e
 `Parcela 07/26 + 08/26 aluno Arthur` (o `+` liga DATAS, não nomes).
 Baseline em 24/08: **5 dos 9 casos multi passavam batido** — inclusive
 `Passaporte aluno Thiago Fernandes E Matheus Fernandes 350,00 cada`.
+
+## vinculo-lancamento-e2e.cjs
+Prova que o lançamento SIMPLES grava `aluno_id`/`fatura_id` — e que o `aluno_id` sai
+da **fatura**, não do match por nome. 3 casos contra o banco real:
+1. **Parcela de aluna com 3 cursos** (Valentina/Recreio: 697 Canto, 1099 Teclado,
+   1542 Power Kids). O teste **falha explicitamente** se o vínculo vier 1542 — o id
+   que `sol_caixa_casar_parcela` devolve no topo, de um curso sem fatura nenhuma.
+2. **Passaporte de matrícula única** → vincula.
+3. **Composto Canto+Teclado** → não vincula nada: são matrículas diferentes, e um
+   movimento não pode apontar duas.
+
+⚠️ Este é o único que **não** stuba `canonicaFn` — é o ponto do teste. Ele stuba
+`duplicataFn` porque a Valentina já foi lançada de verdade hoje e a trava mataria
+o teste por um motivo que não é o medido.
