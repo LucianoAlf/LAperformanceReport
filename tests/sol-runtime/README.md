@@ -25,3 +25,11 @@ Caso Giovanna/Recreio (24/08): cupom de maquininha ilegível (OCR timeout + vis�
 ## gate-regressao-e2e.cjs
 Prova que o gate não afrouxou: (1) `pode` seco sem forma NÃO lança; (2) preview completo
 com falha real de V3 continua bloqueado com aviso de preview inseguro.
+
+## aluno-novo-passaporte-e2e.cjs
+Caso Giovanna/Recreio (24/08): passaporte de aluno NOVO com cupom ilegível.
+Prova que o card **identifica pelo funil** (experimental/lead) em vez de duvidar,
+e que o lançamento sai certo depois do `pode, cartão`.
+⚠️ Este teste consulta o BANCO REAL na identificação do aluno (RPC
+`sol_caixa_identificar_aluno_novo_v1`) — depende da Giovanna existir em
+`lead_experimentais` do Recreio.
