@@ -33,3 +33,11 @@ e que o lançamento sai certo depois do `pode, cartão`.
 ⚠️ Este teste consulta o BANCO REAL na identificação do aluno (RPC
 `sol_caixa_identificar_aluno_novo_v1`) — depende da Giovanna existir em
 `lead_experimentais` do Recreio.
+
+## detector-multi-aluno.test.cjs
+18 legendas REAIS (extraídas dos lançamentos do caixa) contra
+`detectarContextoMultiAluno`. 9 devem rotear para o fluxo multi-aluno, 9 NÃO podem.
+Armadilhas cobertas: `12 parcelas aluna Luiza` (plural de PARCELA, 1 aluno) e
+`Parcela 07/26 + 08/26 aluno Arthur` (o `+` liga DATAS, não nomes).
+Baseline em 24/08: **5 dos 9 casos multi passavam batido** — inclusive
+`Passaporte aluno Thiago Fernandes E Matheus Fernandes 350,00 cada`.
