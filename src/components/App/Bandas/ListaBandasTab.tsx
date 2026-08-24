@@ -1,14 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import {
   Guitar, Users, Clock, Calendar, Search, AlertTriangle, Pencil, Archive, ArchiveRestore,
+  Table, LayoutGrid,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/Tooltip';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -44,6 +46,16 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
   const [bandaEditando, setBandaEditando] = useState<BandaResumo | null>(null);
   const [bandaStatusConfirm, setBandaStatusConfirm] = useState<BandaResumo | null>(null);
   const [processandoStatus, setProcessandoStatus] = useState(false);
+
+  // Estado de visualização (com persistência no localStorage) — mesmo padrão de Professores
+  const [visualizacao, setVisualizacao] = useState<'cards' | 'tabela'>(() => {
+    const saved = localStorage.getItem('bandas_visualizacao');
+    return (saved === 'tabela' || saved === 'cards') ? saved : 'cards';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('bandas_visualizacao', visualizacao);
+  }, [visualizacao]);
 
   const { bandas, loading, recarregar } = useBandasListar(
     unidadeAtual,
@@ -103,6 +115,30 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
             <SelectItem value="todas">Todas</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Toggle Tabela/Cards — mesmo padrão de Professores */}
+        <div className="flex items-center gap-1 bg-slate-700/30 rounded-lg p-1 self-start sm:self-auto">
+          <Tooltip content="Visualização em cards" side="top">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-8 w-8 p-0 ${visualizacao === 'cards' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
+              onClick={() => setVisualizacao('cards')}
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </Button>
+          </Tooltip>
+          <Tooltip content="Visualização em tabela" side="top">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-8 w-8 p-0 ${visualizacao === 'tabela' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
+              onClick={() => setVisualizacao('tabela')}
+            >
+              <Table className="w-4 h-4" />
+            </Button>
+          </Tooltip>
+        </div>
       </div>
 
       {/* Lista */}
@@ -117,6 +153,106 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
               ? 'Tente ajustar a busca.'
               : 'As bandas são criadas automaticamente a partir das turmas de Power Kids, Minha Banda e GarageBand.'}
           </p>
+        </div>
+      ) : visualizacao === 'tabela' ? (
+        <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-700">
+                  <th className="text-left p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Banda</th>
+                  <th className="text-left p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Projeto</th>
+                  <th className="text-left p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Unidade</th>
+                  <th className="text-left p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Produtor</th>
+                  <th className="text-left p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Dia · Horário</th>
+                  <th className="text-center p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Integrantes</th>
+                  <th className="text-left p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Próximo evento</th>
+                  <th className="text-center p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Status</th>
+                  <th className="text-center p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/50">
+                {bandasPagina.map((banda) => {
+                  const proximoEvento = formatarProximoEvento(banda.proximo_evento);
+                  return (
+                    <tr
+                      key={banda.banda_id}
+                      className={cn(
+                        'hover:bg-slate-700/30 transition-colors cursor-pointer',
+                        banda.status === 'inativa' && 'opacity-60',
+                      )}
+                      onClick={() => setBandaDetalheId(banda.banda_id)}
+                    >
+                      <td className="p-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-white">{banda.nome}</span>
+                          {banda.precisa_revisar_nome && banda.status === 'ativa' && (
+                            <Badge variant="warning" className="flex-shrink-0 gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              Revisar nome
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-4 text-sm text-slate-300">{banda.curso_nome || '—'}</td>
+                      <td className="p-4 text-sm text-slate-300">{banda.unidade_nome || '—'}</td>
+                      <td className="p-4 text-sm text-slate-300">{banda.produtor_nome || 'Sem produtor'}</td>
+                      <td className="p-4 text-sm text-slate-300 whitespace-nowrap">
+                        {banda.dia_semana || '—'} · {formatarHorario(banda.horario)}
+                      </td>
+                      <td className="p-4 text-center text-sm text-slate-300">{banda.integrantes}</td>
+                      <td className="p-4 text-sm whitespace-nowrap">
+                        {proximoEvento ? (
+                          <span className="text-cyan-400">{proximoEvento}</span>
+                        ) : (
+                          <span className="text-slate-500">—</span>
+                        )}
+                      </td>
+                      <td className="p-4 text-center">
+                        {banda.status === 'inativa' ? (
+                          <Badge variant="secondary">Arquivada</Badge>
+                        ) : (
+                          <Badge variant="success">Ativa</Badge>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={(e) => { e.stopPropagation(); setBandaEditando(banda); }}
+                          >
+                            <Pencil className="w-3.5 h-3.5 mr-1" />
+                            Identidade
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={(e) => { e.stopPropagation(); setBandaStatusConfirm(banda); }}
+                          >
+                            {banda.status === 'ativa' ? (
+                              <><Archive className="w-3.5 h-3.5 mr-1" />Arquivar</>
+                            ) : (
+                              <><ArchiveRestore className="w-3.5 h-3.5 mr-1" />Reativar</>
+                            )}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <Paginacao
+            paginaAtual={pagina}
+            totalItens={bandasFiltradas.length}
+            onMudarPagina={setPagina}
+            itensPorPagina={itensPorPagina}
+            rotuloItens="bandas"
+          />
         </div>
       ) : (
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">

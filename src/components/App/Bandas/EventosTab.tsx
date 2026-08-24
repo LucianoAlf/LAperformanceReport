@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -35,10 +35,13 @@ interface EventosTabProps {
 
 export function EventosTab({ unidadeAtual }: EventosTabProps) {
   const [mostrarPassados, setMostrarPassados] = useState(false);
-  const { eventos, loading, recarregar } = useBandaEventos(
-    unidadeAtual,
-    mostrarPassados ? null : new Date().toISOString(),
+  // Memoizado: um novo Date().toISOString() a cada render mudaria a referência
+  // do parâmetro e re-dispararia o hook em loop (tela piscando)
+  const desde = useMemo(
+    () => (mostrarPassados ? null : new Date().toISOString()),
+    [mostrarPassados],
   );
+  const { eventos, loading, recarregar } = useBandaEventos(unidadeAtual, desde);
   // Bandas ativas da unidade para o seletor de participantes
   const { bandas } = useBandasListar(unidadeAtual, 'ativa');
 
