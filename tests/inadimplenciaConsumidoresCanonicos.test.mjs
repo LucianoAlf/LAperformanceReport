@@ -22,7 +22,21 @@ const migrationPath = 'supabase/migrations/20260816013512_financeiro_faturas_rel
 const solInadimplenciaMigrations = readdirSync('supabase/migrations')
   .filter((name) => /^\d+_sol_caixa_inadimplentes.*\.sql$/u.test(name))
   .sort();
-const latestSolInadimplenciaMigration = solInadimplenciaMigrations.at(-1);
+// A guarda vale sobre a migration que DEFINE a função por inteiro, não sobre a última do
+// assunto. Migration incremental (que só faz replace() num trecho) não repete o corpo, e
+// exigir o contrato inteiro dela reprova código correto — foi o que aconteceu com
+// `20260822150000_sol_caixa_inadimplentes_gate_v4.sql`, que só realinhou o gate ao v4.
+const definemAFuncao = solInadimplenciaMigrations.filter((name) =>
+  /create\s+or\s+replace\s+function\s+public\.sol_caixa_inadimplentes/i.test(
+    readFileSync(`supabase/migrations/${name}`, 'utf8'),
+  ),
+);
+const latestSolInadimplenciaMigration = definemAFuncao.at(-1);
+// As incrementais aplicadas DEPOIS dela continuam sob guarda: não podem reintroduzir
+// leitura crua nem sumir com a fonte canônica.
+const incrementaisPosteriores = solInadimplenciaMigrations.filter(
+  (name) => name > latestSolInadimplenciaMigration,
+);
 
 test('exportacao de inadimplencia consome a RPC canonica e bloqueia leitura nao confiavel', () => {
   assert.match(exportador, /modo\s*===\s*['"]inadimplencia['"]/);
@@ -102,6 +116,23 @@ test('a lista da Sol consome a leitura canonica e nao replica o sync de faturas'
     'sol_caixa_casar_parcela',
   ]) {
     assert.doesNotMatch(sql, new RegExp(protectedRpc, 'i'));
+  }
+});
+
+test('migration incremental da inadimplencia da Sol nao reintroduz leitura crua', () => {
+  for (const nome of incrementaisPosteriores) {
+    const sql = readFileSync(`supabase/migrations/${nome}`, 'utf8');
+    // O corpo inteiro não está aqui (é replace() num trecho), então só se cobra o que
+    // uma incremental PODE estragar: voltar a ler a fonte crua por fora da canônica.
+    assert.doesNotMatch(sql, /from\s+(?:public\.)?sync_run_items/i, nome);
+    assert.doesNotMatch(sql, /from\s+(?:public\.)?emusys_faturas/i, nome);
+    assert.doesNotMatch(sql, /inadimplente_emusys/i, nome);
+    // E não pode trocar a fonte canônica por outra coisa: se ela aparece, tem de ser a
+    // canônica ou o wrapper `sol_inadimplencia_v1`, que só envolve a chamada com o claim
+    // de service_role para atravessar o guard de JWT (ver 20260822120000).
+    if (/get_inadimplencia|sol_inadimplencia/i.test(sql)) {
+      assert.match(sql, /get_inadimplencia_canonica|sol_inadimplencia_v1/i, nome);
+    }
   }
 });
 
