@@ -92,3 +92,13 @@ aluno está errado mas é um nome plausível.
 ⚠️ A trava que impede o vazamento mora na **bridge**, não aqui:
 `_patch-bridge-caixa-nao-vaza-pro-llm.cjs`. Com pendência aberta, `acao: 'nada'` vira
 "não entendi" em vez de virar conversa livre sobre dinheiro.
+
+## descarte-e-conversa-e2e.cjs
+Cascata de 25/08 no grupo de CG. 🔴 A causa foi um **texto meu**: a guarda de pendência
+oferecia "*não* para descartar" e o runtime **nunca tratou "não"** — só existia `casarPode`.
+A pendência ficava órfã, e a legenda seguinte era lida como correção dela (o card da Aurora
+saiu com o valor do comprovante do Rafael, R$ 300,00).
+
+Cobre: `casarNao` descarta de fato; **"nao e a parcela" NÃO é descarte** (é correção, e quem
+trata é o fluxo de nome/valor); `ehConversaSemComando` reconhece "Certinho"/"valeu" e a
+guarda segue calada, sem mandar pro LLM.
