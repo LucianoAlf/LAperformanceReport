@@ -14,18 +14,18 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
-import { AutocompleteAluno, type Aluno } from '@/components/ui/AutocompleteAluno';
 import {
   useBandaDetalhe, removerRepertorio, atualizarRepertorio, removerIntegranteBanda,
-  desativarIntegranteBanda, upsertIntegranteBanda,
+  desativarIntegranteBanda, upsertIntegranteBanda, removerBanda,
   REPERTORIO_STATUS,
   type BandaResumo, type IntegranteBanda, type RepertorioItem, type RepertorioStatus,
-  type FrequenciaBanda,
+  type FrequenciaBanda, type AlunoBanda,
 } from '@/hooks/useBandas';
 import { ModalIntegranteBanda } from './ModalIntegranteBanda';
 import { ModalRepertorioBanda } from './ModalRepertorioBanda';
 import { ModalIdentidadeBanda } from './ModalIdentidadeBanda';
 import { ModalBandaAvulsa, FREQUENCIA_LABEL, MODELO_FINANCEIRO_LABEL } from './ModalBandaAvulsa';
+import { AutocompleteAlunoBanda } from './AutocompleteAlunoBanda';
 import { formatCurrency } from '@/lib/utils';
 import { iniciaisDoNome } from '@/lib/agenda';
 
@@ -66,9 +66,10 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
 
   // Adicionar integrante (só banda avulsa — roster manual)
   const [buscaAluno, setBuscaAluno] = useState('');
-  const [alunoSelecionado, setAlunoSelecionado] = useState<Aluno | null>(null);
+  const [alunoSelecionado, setAlunoSelecionado] = useState<AlunoBanda | null>(null);
   const [novoInstrumento, setNovoInstrumento] = useState('');
   const [novaFuncao, setNovaFuncao] = useState('');
+  const [excluindoBanda, setExcluindoBanda] = useState(false);
 
   const isAvulsa = detalhe?.tipo === 'avulsa';
 
@@ -89,14 +90,14 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
       toast.error('Escolha um aluno da lista para adicionar.');
       return;
     }
-    if (integrantes.some((i) => i.aluno_id === alunoSelecionado.id)) {
+    if (integrantes.some((i) => i.aluno_id === alunoSelecionado.aluno_id)) {
       toast.error('Este aluno já está na banda.');
       return;
     }
     setProcessando(true);
     const { error } = await upsertIntegranteBanda({
       bandaId,
-      alunoId: alunoSelecionado.id,
+      alunoId: alunoSelecionado.aluno_id,
       instrumento: novoInstrumento.trim() || null,
       funcao: novaFuncao.trim() || null,
     });
@@ -111,6 +112,21 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
     setNovoInstrumento('');
     setNovaFuncao('');
     recarregar();
+    onAlterado();
+  }
+
+  async function confirmarExclusaoBanda() {
+    if (!bandaId) return;
+    setProcessando(true);
+    const { error } = await removerBanda(bandaId);
+    setProcessando(false);
+    if (error) {
+      toast.error('Erro ao excluir banda', { description: error.message });
+      return;
+    }
+    toast.success('Banda excluída', { description: detalhe?.nome });
+    setExcluindoBanda(false);
+    fechar();
     onAlterado();
   }
 
@@ -234,10 +250,21 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {isAvulsa && (
-                      <Button variant="outline" size="sm" onClick={() => setEditandoBanda(true)}>
-                        <Pencil className="w-3.5 h-3.5 mr-1" />
-                        Editar banda
-                      </Button>
+                      <>
+                        <Button variant="outline" size="sm" onClick={() => setEditandoBanda(true)}>
+                          <Pencil className="w-3.5 h-3.5 mr-1" />
+                          Editar banda
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-rose-400 hover:text-rose-300"
+                          onClick={() => setExcluindoBanda(true)}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 mr-1" />
+                          Excluir
+                        </Button>
+                      </>
                     )}
                     <Button variant="outline" size="sm" onClick={() => setEditandoIdentidade(true)}>
                       <Guitar className="w-3.5 h-3.5 mr-1" />
@@ -306,14 +333,13 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
                   <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_110px_auto] gap-2 items-end mb-3 bg-slate-800/30 border border-slate-700/40 rounded-xl p-3">
                     <div className="space-y-1">
                       <span className="text-xs text-slate-400">Aluno</span>
-                      <AutocompleteAluno
+                      <AutocompleteAlunoBanda
                         value={buscaAluno}
                         onChange={(nomeAluno, aluno) => {
                           setBuscaAluno(nomeAluno);
                           setAlunoSelecionado(aluno || null);
                         }}
                         unidadeId={detalhe.unidade_id}
-                        placeholder="Digite o nome do aluno..."
                       />
                     </div>
                     <div className="space-y-1">
@@ -534,6 +560,16 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
             unidadeAtual={detalhe.unidade_id}
             onClose={() => setEditandoBanda(false)}
             onSalvo={() => { setEditandoBanda(false); recarregar(); onAlterado(); }}
+          />
+          <ModalConfirmacao
+            aberto={excluindoBanda}
+            onClose={() => setExcluindoBanda(false)}
+            onConfirmar={confirmarExclusaoBanda}
+            titulo="Excluir banda"
+            mensagem={`Excluir "${detalhe.nome}" de vez? Integrantes, repertório e vínculos com eventos serão apagados. Esta ação não pode ser desfeita — prefira arquivar se quiser manter o histórico.`}
+            tipo="danger"
+            textoConfirmar="Excluir de vez"
+            carregando={processando}
           />
           <ModalConfirmacao
             aberto={!!integranteRemovendo}

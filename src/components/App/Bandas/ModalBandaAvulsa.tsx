@@ -12,14 +12,15 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { TimePicker24h } from '@/components/ui/time-picker-24h';
-import { AutocompleteAluno, type Aluno } from '@/components/ui/AutocompleteAluno';
+import { AutocompleteAlunoBanda } from './AutocompleteAlunoBanda';
 import { supabase } from '@/lib/supabase';
 import { iniciaisDoNome } from '@/lib/agenda';
 import { cn } from '@/lib/utils';
 import {
-  criarBanda, atualizarBandaAvulsa, upsertIntegranteBanda,
+  criarBanda, atualizarBandaAvulsa, upsertIntegranteBanda, fetchProfessoresBanda,
   DIAS_SEMANA, FREQUENCIAS, MODELOS_FINANCEIRO,
   type BandaDetalhe, type ModeloFinanceiro, type FrequenciaBanda,
+  type ProfessorBanda, type AlunoBanda,
 } from '@/hooks/useBandas';
 
 export const MODELO_FINANCEIRO_LABEL: Record<ModeloFinanceiro, string> = {
@@ -41,7 +42,7 @@ interface Sala {
 }
 
 interface IntegranteForm {
-  aluno: Aluno;
+  aluno: AlunoBanda;
   instrumento: string;
   funcao: string;
 }
@@ -90,25 +91,43 @@ export function ModalBandaAvulsa({ aberto, banda, unidadeAtual, onClose, onSalvo
   // Integrantes (só na criação; na edição o detalhe da banda gerencia o roster)
   const [integrantes, setIntegrantes] = useState<IntegranteForm[]>([]);
   const [buscaAluno, setBuscaAluno] = useState('');
-  const [alunoSelecionado, setAlunoSelecionado] = useState<Aluno | null>(null);
+  const [alunoSelecionado, setAlunoSelecionado] = useState<AlunoBanda | null>(null);
   const [instrumento, setInstrumento] = useState('');
   const [funcao, setFuncao] = useState('');
 
-  const [professores, setProfessores] = useState<{ id: number; nome: string }[]>([]);
+  const [professores, setProfessores] = useState<ProfessorBanda[]>([]);
   const [salas, setSalas] = useState<Sala[]>([]);
   const [unidades, setUnidades] = useState<{ id: string; nome: string }[]>([]);
   const [salvando, setSalvando] = useState(false);
 
-  // Carregar professores, salas e unidades (mesmas fontes canônicas do resto do app)
+  // Salas e unidades (mesmas fontes canônicas do resto do app)
   useEffect(() => {
     if (!aberto) return;
-    supabase.from('professores').select('id, nome').eq('ativo', true).order('nome')
-      .then(({ data }) => setProfessores(data || []));
     supabase.from('salas').select('id, nome, unidade_id').eq('ativo', true).order('nome')
       .then(({ data }) => setSalas((data as Sala[]) || []));
     supabase.from('unidades').select('id, nome').eq('ativo', true).order('nome')
       .then(({ data }) => setUnidades(data || []));
   }, [aberto]);
+
+  // Produtores escopados pela unidade do form (RPC banda_professores_da_unidade).
+  // Sem unidade → select vazio/desabilitado; unidade mudou → recarrega e limpa escolha.
+  useEffect(() => {
+    if (!aberto) return;
+    if (!unidadeId) {
+      setProfessores([]);
+      return;
+    }
+    fetchProfessoresBanda(unidadeId).then(setProfessores);
+  }, [aberto, unidadeId]);
+
+  function trocarUnidade(novaUnidade: string) {
+    setUnidadeId(novaUnidade);
+    setProdutorId('');
+    setSalaId('');
+    setBuscaAluno('');
+    setAlunoSelecionado(null);
+    setIntegrantes([]);
+  }
 
   // Preencher formulário (edição) ou limpar (criação)
   useEffect(() => {
@@ -138,7 +157,7 @@ export function ModalBandaAvulsa({ aberto, banda, unidadeAtual, onClose, onSalvo
       toast.error('Escolha um aluno da lista para adicionar.');
       return;
     }
-    if (integrantes.some((i) => i.aluno.id === alunoSelecionado.id)) {
+    if (integrantes.some((i) => i.aluno.aluno_id === alunoSelecionado.aluno_id)) {
       toast.error('Este aluno já está na lista.');
       return;
     }
@@ -206,7 +225,7 @@ export function ModalBandaAvulsa({ aberto, banda, unidadeAtual, onClose, onSalvo
     for (const int of integrantes) {
       const { error: erroInt } = await upsertIntegranteBanda({
         bandaId: Number(bandaId),
-        alunoId: int.aluno.id,
+        alunoId: int.aluno.aluno_id,
         instrumento: int.instrumento || null,
         funcao: int.funcao || null,
       });
@@ -253,7 +272,7 @@ export function ModalBandaAvulsa({ aberto, banda, unidadeAtual, onClose, onSalvo
               {!isEdicao && (
                 <div className="space-y-2">
                   <Label>Unidade *</Label>
-                  <Select value={unidadeId} onValueChange={setUnidadeId}>
+                  <Select value={unidadeId} onValueChange={trocarUnidade}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
                       {unidades.map((u) => (
@@ -265,11 +284,13 @@ export function ModalBandaAvulsa({ aberto, banda, unidadeAtual, onClose, onSalvo
               )}
               <div className="space-y-2">
                 <Label>Professor responsável (produtor)</Label>
-                <Select value={produtorId} onValueChange={setProdutorId}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <Select value={produtorId} onValueChange={setProdutorId} disabled={!unidadeId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={unidadeId ? 'Selecione' : 'Escolha a unidade primeiro'} />
+                  </SelectTrigger>
                   <SelectContent>
                     {professores.map((p) => (
-                      <SelectItem key={p.id} value={String(p.id)}>{p.nome}</SelectItem>
+                      <SelectItem key={p.professor_id} value={String(p.professor_id)}>{p.nome}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -412,14 +433,13 @@ export function ModalBandaAvulsa({ aberto, banda, unidadeAtual, onClose, onSalvo
               <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px_130px_auto] gap-2 items-end">
                 <div className="space-y-2">
                   <Label>Aluno</Label>
-                  <AutocompleteAluno
+                  <AutocompleteAlunoBanda
                     value={buscaAluno}
                     onChange={(nomeAluno, aluno) => {
                       setBuscaAluno(nomeAluno);
                       setAlunoSelecionado(aluno || null);
                     }}
                     unidadeId={unidadeId || null}
-                    placeholder="Digite o nome do aluno..."
                   />
                 </div>
                 <div className="space-y-2">
@@ -450,12 +470,12 @@ export function ModalBandaAvulsa({ aberto, banda, unidadeAtual, onClose, onSalvo
                 <div className="space-y-2">
                   {integrantes.map((int) => (
                     <div
-                      key={int.aluno.id}
+                      key={int.aluno.aluno_id}
                       className="flex items-center gap-3 bg-slate-800/40 border border-slate-700/40 rounded-xl px-3 py-2"
                     >
-                      {(int.aluno as Aluno & { foto_url?: string | null }).foto_url ? (
+                      {int.aluno.foto_url ? (
                         <img
-                          src={(int.aluno as Aluno & { foto_url?: string | null }).foto_url!}
+                          src={int.aluno.foto_url}
                           alt={int.aluno.nome}
                           className="h-8 w-8 shrink-0 rounded-full object-cover"
                         />
@@ -478,7 +498,7 @@ export function ModalBandaAvulsa({ aberto, banda, unidadeAtual, onClose, onSalvo
                         variant="ghost"
                         size="sm"
                         className="h-7 text-xs text-rose-400 hover:text-rose-300"
-                        onClick={() => setIntegrantes((prev) => prev.filter((i) => i.aluno.id !== int.aluno.id))}
+                        onClick={() => setIntegrantes((prev) => prev.filter((i) => i.aluno.aluno_id !== int.aluno.aluno_id))}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>

@@ -4,7 +4,7 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import {
   Guitar, Users, Clock, Calendar, Search, AlertTriangle, Pencil, Archive, ArchiveRestore,
-  Table, LayoutGrid, Plus,
+  Table, LayoutGrid, Plus, Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +17,7 @@ import {
 import { Paginacao } from '@/components/ui/Paginacao';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import {
-  useBandasListar, definirStatusBanda,
+  useBandasListar, definirStatusBanda, removerBanda,
   type BandaResumo, type BandaStatus,
 } from '@/hooks/useBandas';
 import { BandaDetalheDialog } from './BandaDetalheDialog';
@@ -48,6 +48,8 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
   const [bandaStatusConfirm, setBandaStatusConfirm] = useState<BandaResumo | null>(null);
   const [processandoStatus, setProcessandoStatus] = useState(false);
   const [modalNovaBanda, setModalNovaBanda] = useState(false);
+  const [bandaExcluindo, setBandaExcluindo] = useState<BandaResumo | null>(null);
+  const [processandoExclusao, setProcessandoExclusao] = useState(false);
 
   // Estado de visualização (com persistência no localStorage) — mesmo padrão de Professores
   const [visualizacao, setVisualizacao] = useState<'cards' | 'tabela'>(() => {
@@ -91,6 +93,20 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
       description: bandaStatusConfirm.nome,
     });
     setBandaStatusConfirm(null);
+    recarregar();
+  }
+
+  async function confirmarExclusaoBanda() {
+    if (!bandaExcluindo) return;
+    setProcessandoExclusao(true);
+    const { error } = await removerBanda(bandaExcluindo.banda_id);
+    setProcessandoExclusao(false);
+    if (error) {
+      toast.error('Erro ao excluir banda', { description: error.message });
+      return;
+    }
+    toast.success('Banda excluída', { description: bandaExcluindo.nome });
+    setBandaExcluindo(null);
     recarregar();
   }
 
@@ -238,18 +254,30 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
                             <Pencil className="w-3.5 h-3.5 mr-1" />
                             Identidade
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={(e) => { e.stopPropagation(); setBandaStatusConfirm(banda); }}
-                          >
-                            {banda.status === 'ativa' ? (
-                              <><Archive className="w-3.5 h-3.5 mr-1" />Arquivar</>
-                            ) : (
-                              <><ArchiveRestore className="w-3.5 h-3.5 mr-1" />Reativar</>
-                            )}
-                          </Button>
+                          {banda.tipo === 'avulsa' ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-rose-400 hover:text-rose-300"
+                              onClick={(e) => { e.stopPropagation(); setBandaExcluindo(banda); }}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 mr-1" />
+                              Excluir
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={(e) => { e.stopPropagation(); setBandaStatusConfirm(banda); }}
+                            >
+                              {banda.status === 'ativa' ? (
+                                <><Archive className="w-3.5 h-3.5 mr-1" />Arquivar</>
+                              ) : (
+                                <><ArchiveRestore className="w-3.5 h-3.5 mr-1" />Reativar</>
+                              )}
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -337,18 +365,30 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
                       <Pencil className="w-3.5 h-3.5 mr-1" />
                       Identidade
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs ml-auto"
-                      onClick={(e) => { e.stopPropagation(); setBandaStatusConfirm(banda); }}
-                    >
-                      {banda.status === 'ativa' ? (
-                        <><Archive className="w-3.5 h-3.5 mr-1" />Arquivar</>
-                      ) : (
-                        <><ArchiveRestore className="w-3.5 h-3.5 mr-1" />Reativar</>
-                      )}
-                    </Button>
+                    {banda.tipo === 'avulsa' ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs ml-auto text-rose-400 hover:text-rose-300"
+                        onClick={(e) => { e.stopPropagation(); setBandaExcluindo(banda); }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mr-1" />
+                        Excluir
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs ml-auto"
+                        onClick={(e) => { e.stopPropagation(); setBandaStatusConfirm(banda); }}
+                      >
+                        {banda.status === 'ativa' ? (
+                          <><Archive className="w-3.5 h-3.5 mr-1" />Arquivar</>
+                        ) : (
+                          <><ArchiveRestore className="w-3.5 h-3.5 mr-1" />Reativar</>
+                        )}
+                      </Button>
+                    )}
                   </div>
                 </div>
               );
@@ -401,6 +441,18 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
         tipo={bandaStatusConfirm?.status === 'ativa' ? 'warning' : 'success'}
         textoConfirmar={bandaStatusConfirm?.status === 'ativa' ? 'Arquivar' : 'Reativar'}
         carregando={processandoStatus}
+      />
+
+      {/* Confirmar exclusão (só banda avulsa) */}
+      <ModalConfirmacao
+        aberto={!!bandaExcluindo}
+        onClose={() => setBandaExcluindo(null)}
+        onConfirmar={confirmarExclusaoBanda}
+        titulo="Excluir banda"
+        mensagem={`Excluir "${bandaExcluindo?.nome}" de vez? Integrantes, repertório e vínculos com eventos serão apagados. Esta ação não pode ser desfeita.`}
+        tipo="danger"
+        textoConfirmar="Excluir de vez"
+        carregando={processandoExclusao}
       />
     </div>
   );

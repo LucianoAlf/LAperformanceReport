@@ -146,6 +146,19 @@ export interface ConciliacaoItem {
   problema: 'aluno inexistente' | 'saiu da escola' | 'nao esta mais nesta turma';
 }
 
+/** Professor elegível a produtor (banda_professores_da_unidade) */
+export interface ProfessorBanda {
+  professor_id: number;
+  nome: string;
+}
+
+/** Aluno elegível a integrante avulso (banda_alunos_da_unidade — dedup por pessoa, só ativos) */
+export interface AlunoBanda {
+  aluno_id: number;
+  nome: string;
+  foto_url: string | null;
+}
+
 /** 'todos' vira NULL no banco (todas as unidades) */
 function unidadeParam(unidadeId: string | null | undefined): string | null {
   return unidadeId && unidadeId !== 'todos' ? unidadeId : null;
@@ -292,6 +305,29 @@ export async function fetchParticipantesEvento(eventoId: number): Promise<Partic
   return (data as ParticipanteEvento[]) || [];
 }
 
+/** Produtores elegíveis da unidade (para o select do form de banda avulsa) */
+export async function fetchProfessoresBanda(unidadeId: string): Promise<ProfessorBanda[]> {
+  const { data, error } = await supabase.rpc('banda_professores_da_unidade', { p_unidade_id: unidadeId });
+  if (error) {
+    console.error('Erro ao listar professores da unidade:', error);
+    return [];
+  }
+  return (data as ProfessorBanda[]) || [];
+}
+
+/** Alunos ativos da unidade (dedup por pessoa) para o autocomplete de integrantes */
+export async function fetchAlunosBanda(unidadeId: string, busca?: string): Promise<AlunoBanda[]> {
+  const { data, error } = await supabase.rpc('banda_alunos_da_unidade', {
+    p_unidade_id: unidadeId,
+    p_busca: busca?.trim() || null,
+  });
+  if (error) {
+    console.error('Erro ao buscar alunos da unidade:', error);
+    return [];
+  }
+  return (data as AlunoBanda[]) || [];
+}
+
 // =============================================================================
 // ESCRITA — cada função retorna `error` para o chamador decidir o toast
 // =============================================================================
@@ -314,6 +350,11 @@ export async function atualizarIdentidadeBanda(params: {
 
 export async function definirStatusBanda(bandaId: number, status: BandaStatus) {
   return supabase.rpc('banda_definir_status', { p_banda_id: bandaId, p_status: status });
+}
+
+/** Exclui a banda de vez — SÓ para tipo='avulsa' (turma não se exclui, só arquiva) */
+export async function removerBanda(bandaId: number) {
+  return supabase.rpc('banda_remover', { p_banda_id: bandaId });
 }
 
 /** Dados da banda avulsa (criação e edição compartilham o mesmo shape) */
