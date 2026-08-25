@@ -12,11 +12,20 @@ export const BANDA_STATUS = ['ativa', 'inativa'] as const;
 export const EVENTO_TIPOS = ['ensaio', 'show'] as const;
 export const EVENTO_STATUS = ['agendado', 'realizado', 'cancelado'] as const;
 export const REPERTORIO_STATUS = ['ensaiando', 'pronta', 'tocada'] as const;
+export const BANDA_TIPOS = ['turma', 'avulsa'] as const;
+export const MODELOS_FINANCEIRO = ['percentual', 'fixo_ensaio', 'fixo_mensal'] as const;
+
+// Domínios de formulário da banda avulsa (sem CHECK no banco — convenção do módulo)
+export const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'] as const;
+export const FREQUENCIAS = ['semanal', 'quinzenal', 'mensal'] as const;
 
 export type BandaStatus = typeof BANDA_STATUS[number];
 export type EventoTipo = typeof EVENTO_TIPOS[number];
 export type EventoStatus = typeof EVENTO_STATUS[number];
 export type RepertorioStatus = typeof REPERTORIO_STATUS[number];
+export type BandaTipo = typeof BANDA_TIPOS[number];
+export type ModeloFinanceiro = typeof MODELOS_FINANCEIRO[number];
+export type FrequenciaBanda = typeof FREQUENCIAS[number];
 
 export interface BandaResumo {
   banda_id: number;
@@ -32,6 +41,7 @@ export interface BandaResumo {
   precisa_revisar_nome: boolean;
   status: BandaStatus;
   proximo_evento: string | null;
+  tipo: BandaTipo;
 }
 
 export interface BandaDetalhe {
@@ -39,16 +49,25 @@ export interface BandaDetalhe {
   nome: string;
   unidade_id: string;
   unidade_nome: string | null;
-  curso_id: number;
+  curso_id: number | null;
   curso_nome: string | null;
   dia_semana: string | null;
   horario: string | null;
+  horario_fim: string | null;
+  frequencia: string | null;
+  sala_id: number | null;
+  sala_nome: string | null;
+  produtor_professor_id: number | null;
   produtor_nome: string | null;
   genero: string | null;
   descricao: string | null;
   logo_url: string | null;
   status: BandaStatus;
   precisa_revisar_nome: boolean;
+  tipo: BandaTipo;
+  modelo_financeiro: ModeloFinanceiro | null;
+  valor_mensal_aluno: number | null;
+  valor_repasse: number | null;
   integrantes: number;
   musicas: number;
   proximos_eventos: number;
@@ -57,6 +76,7 @@ export interface BandaDetalhe {
 export interface IntegranteBanda {
   aluno_id: number;
   nome: string;
+  foto_url: string | null;
   instrumento: string | null;
   funcao: string | null;
   status_aluno: string;
@@ -65,8 +85,6 @@ export interface IntegranteBanda {
   responsavel_nome: string | null;
   responsavel_telefone: string | null;
   whatsapp: string | null;
-  /** foto_url da tabela alunos, buscada em lote pelo hook (a RPC banda_integrantes ainda não retorna) */
-  foto_url: string | null;
 }
 
 export interface KpiBandaUnidade {
@@ -255,22 +273,7 @@ export function useBandaDetalhe(bandaId: number | null) {
     if (intRes.error) console.error('Erro ao carregar integrantes:', intRes.error);
     if (repRes.error) console.error('Erro ao carregar repertório:', repRes.error);
     setDetalhe((detRes.data as BandaDetalhe[] | null)?.[0] || null);
-    const roster = (intRes.data as Omit<IntegranteBanda, 'foto_url'>[]) || [];
-
-    // Fotos: a RPC banda_integrantes não retorna foto_url ainda — busca em lote
-    // na tabela alunos (leitura canônica, mesma fonte da Agenda/Chamada)
-    let integrantesComFoto: IntegranteBanda[] = roster.map((i) => ({ ...i, foto_url: null }));
-    const ids = roster.map((i) => i.aluno_id);
-    if (ids.length > 0) {
-      const { data: fotos, error: fotosError } = await supabase
-        .from('alunos')
-        .select('id, foto_url')
-        .in('id', ids);
-      if (fotosError) console.error('Erro ao carregar fotos dos integrantes:', fotosError);
-      const fotoPorId = new Map((fotos || []).map((f) => [f.id, f.foto_url]));
-      integrantesComFoto = roster.map((i) => ({ ...i, foto_url: fotoPorId.get(i.aluno_id) ?? null }));
-    }
-    setIntegrantes(integrantesComFoto);
+    setIntegrantes((intRes.data as IntegranteBanda[]) || []);
     setRepertorio((repRes.data as RepertorioItem[]) || []);
     setLoading(false);
   }, [bandaId]);
@@ -311,6 +314,60 @@ export async function atualizarIdentidadeBanda(params: {
 
 export async function definirStatusBanda(bandaId: number, status: BandaStatus) {
   return supabase.rpc('banda_definir_status', { p_banda_id: bandaId, p_status: status });
+}
+
+/** Dados da banda avulsa (criação e edição compartilham o mesmo shape) */
+export interface BandaAvulsaDados {
+  nome: string;
+  produtorProfessorId?: number | null;
+  genero?: string | null;
+  descricao?: string | null;
+  diaSemana?: string | null;
+  horario?: string | null;
+  horarioFim?: string | null;
+  frequencia?: string | null;
+  salaId?: number | null;
+  modeloFinanceiro?: ModeloFinanceiro | null;
+  valorMensalAluno?: number | null;
+  valorRepasse?: number | null;
+}
+
+/** Cria banda avulsa (manual). Retorna o banda_id (bigint) em data. */
+export async function criarBanda(unidadeId: string, dados: BandaAvulsaDados) {
+  return supabase.rpc('banda_criar', {
+    p_unidade_id: unidadeId,
+    p_nome: dados.nome,
+    p_produtor_professor_id: dados.produtorProfessorId ?? null,
+    p_genero: dados.genero ?? null,
+    p_descricao: dados.descricao ?? null,
+    p_dia_semana: dados.diaSemana ?? null,
+    p_horario: dados.horario ?? null,
+    p_horario_fim: dados.horarioFim ?? null,
+    p_frequencia: dados.frequencia ?? null,
+    p_sala_id: dados.salaId ?? null,
+    p_modelo_financeiro: dados.modeloFinanceiro ?? null,
+    p_valor_mensal_aluno: dados.valorMensalAluno ?? null,
+    p_valor_repasse: dados.valorRepasse ?? null,
+  });
+}
+
+/** Edita banda avulsa — só vale para tipo='avulsa' (turma é read-only fora da identidade) */
+export async function atualizarBandaAvulsa(bandaId: number, dados: Partial<BandaAvulsaDados>) {
+  return supabase.rpc('banda_atualizar_avulsa', {
+    p_banda_id: bandaId,
+    p_nome: dados.nome ?? null,
+    p_produtor_professor_id: dados.produtorProfessorId ?? null,
+    p_genero: dados.genero ?? null,
+    p_descricao: dados.descricao ?? null,
+    p_dia_semana: dados.diaSemana ?? null,
+    p_horario: dados.horario ?? null,
+    p_horario_fim: dados.horarioFim ?? null,
+    p_frequencia: dados.frequencia ?? null,
+    p_sala_id: dados.salaId ?? null,
+    p_modelo_financeiro: dados.modeloFinanceiro ?? null,
+    p_valor_mensal_aluno: dados.valorMensalAluno ?? null,
+    p_valor_repasse: dados.valorRepasse ?? null,
+  });
 }
 
 export async function upsertIntegranteBanda(params: {

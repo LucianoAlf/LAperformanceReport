@@ -4,7 +4,7 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import {
   Guitar, Users, Clock, Calendar, Search, AlertTriangle, Pencil, Archive, ArchiveRestore,
-  Table, LayoutGrid,
+  Table, LayoutGrid, Plus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,7 @@ import {
 } from '@/hooks/useBandas';
 import { BandaDetalheDialog } from './BandaDetalheDialog';
 import { ModalIdentidadeBanda } from './ModalIdentidadeBanda';
+import { ModalBandaAvulsa } from './ModalBandaAvulsa';
 
 function formatarHorario(horario: string | null): string {
   if (!horario) return '—';
@@ -46,6 +47,7 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
   const [bandaEditando, setBandaEditando] = useState<BandaResumo | null>(null);
   const [bandaStatusConfirm, setBandaStatusConfirm] = useState<BandaResumo | null>(null);
   const [processandoStatus, setProcessandoStatus] = useState(false);
+  const [modalNovaBanda, setModalNovaBanda] = useState(false);
 
   // Estado de visualização (com persistência no localStorage) — mesmo padrão de Professores
   const [visualizacao, setVisualizacao] = useState<'cards' | 'tabela'>(() => {
@@ -139,6 +141,11 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
             </Button>
           </Tooltip>
         </div>
+
+        <Button onClick={() => setModalNovaBanda(true)} className="sm:ml-auto">
+          <Plus className="w-4 h-4 mr-2" />
+          Nova Banda
+        </Button>
       </div>
 
       {/* Lista */}
@@ -184,8 +191,13 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
                       onClick={() => setBandaDetalheId(banda.banda_id)}
                     >
                       <td className="p-4">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-white">{banda.nome}</span>
+                          {banda.tipo === 'avulsa' ? (
+                            <Badge variant="default" className="flex-shrink-0">Avulsa</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="flex-shrink-0">Turma</Badge>
+                          )}
                           {banda.precisa_revisar_nome && banda.status === 'ativa' && (
                             <Badge variant="warning" className="flex-shrink-0 gap-1">
                               <AlertTriangle className="w-3 h-3" />
@@ -271,11 +283,16 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
                 >
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <div className="min-w-0">
-                      <p className="font-semibold text-white truncate" title={banda.nome}>
-                        {banda.nome}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-white truncate" title={banda.nome}>
+                          {banda.nome}
+                        </p>
+                        {banda.tipo === 'avulsa' && (
+                          <Badge variant="default" className="flex-shrink-0">Avulsa</Badge>
+                        )}
+                      </div>
                       <p className="text-xs text-slate-400 truncate">
-                        {banda.curso_nome} · {banda.unidade_nome}
+                        {banda.curso_nome || 'Banda avulsa'} · {banda.unidade_nome}
                       </p>
                     </div>
                     {banda.precisa_revisar_nome && banda.status === 'ativa' && (
@@ -359,6 +376,15 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
         banda={bandaEditando}
         onClose={() => setBandaEditando(null)}
         onSalvo={() => { setBandaEditando(null); recarregar(); }}
+      />
+
+      {/* Nova banda avulsa */}
+      <ModalBandaAvulsa
+        aberto={modalNovaBanda}
+        banda={null}
+        unidadeAtual={unidadeAtual}
+        onClose={() => setModalNovaBanda(false)}
+        onSalvo={() => { setModalNovaBanda(false); recarregar(); }}
       />
 
       {/* Confirmar arquivar/reativar */}

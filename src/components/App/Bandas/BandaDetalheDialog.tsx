@@ -2,24 +2,31 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import {
   Guitar, Users, Music2, Calendar, Pencil, Phone, ExternalLink, Plus, Trash2, Clock,
+  Repeat, DoorOpen, UserPlus,
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
+import { AutocompleteAluno, type Aluno } from '@/components/ui/AutocompleteAluno';
 import {
   useBandaDetalhe, removerRepertorio, atualizarRepertorio, removerIntegranteBanda,
+  desativarIntegranteBanda, upsertIntegranteBanda,
   REPERTORIO_STATUS,
   type BandaResumo, type IntegranteBanda, type RepertorioItem, type RepertorioStatus,
+  type FrequenciaBanda,
 } from '@/hooks/useBandas';
 import { ModalIntegranteBanda } from './ModalIntegranteBanda';
 import { ModalRepertorioBanda } from './ModalRepertorioBanda';
 import { ModalIdentidadeBanda } from './ModalIdentidadeBanda';
+import { ModalBandaAvulsa, FREQUENCIA_LABEL, MODELO_FINANCEIRO_LABEL } from './ModalBandaAvulsa';
+import { formatCurrency } from '@/lib/utils';
 import { iniciaisDoNome } from '@/lib/agenda';
 
 const STATUS_REP_LABEL: Record<RepertorioStatus, string> = {
@@ -54,27 +61,78 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
   const [musicaEditando, setMusicaEditando] = useState<RepertorioItem | null>(null);
   const [musicaRemovendo, setMusicaRemovendo] = useState<RepertorioItem | null>(null);
   const [editandoIdentidade, setEditandoIdentidade] = useState(false);
+  const [editandoBanda, setEditandoBanda] = useState(false);
   const [processando, setProcessando] = useState(false);
+
+  // Adicionar integrante (só banda avulsa — roster manual)
+  const [buscaAluno, setBuscaAluno] = useState('');
+  const [alunoSelecionado, setAlunoSelecionado] = useState<Aluno | null>(null);
+  const [novoInstrumento, setNovoInstrumento] = useState('');
+  const [novaFuncao, setNovaFuncao] = useState('');
+
+  const isAvulsa = detalhe?.tipo === 'avulsa';
 
   function fechar() {
     setIntegranteEditando(null);
     setMusicaEditando(null);
     setEditandoIdentidade(false);
+    setEditandoBanda(false);
+    setBuscaAluno('');
+    setAlunoSelecionado(null);
+    setNovoInstrumento('');
+    setNovaFuncao('');
     onClose();
+  }
+
+  async function adicionarIntegrante() {
+    if (!bandaId || !alunoSelecionado) {
+      toast.error('Escolha um aluno da lista para adicionar.');
+      return;
+    }
+    if (integrantes.some((i) => i.aluno_id === alunoSelecionado.id)) {
+      toast.error('Este aluno já está na banda.');
+      return;
+    }
+    setProcessando(true);
+    const { error } = await upsertIntegranteBanda({
+      bandaId,
+      alunoId: alunoSelecionado.id,
+      instrumento: novoInstrumento.trim() || null,
+      funcao: novaFuncao.trim() || null,
+    });
+    setProcessando(false);
+    if (error) {
+      toast.error('Erro ao adicionar integrante', { description: error.message });
+      return;
+    }
+    toast.success('Integrante adicionado', { description: alunoSelecionado.nome });
+    setBuscaAluno('');
+    setAlunoSelecionado(null);
+    setNovoInstrumento('');
+    setNovaFuncao('');
+    recarregar();
+    onAlterado();
   }
 
   async function confirmarRemocaoIntegrante() {
     if (!integranteRemovendo || !bandaId) return;
     setProcessando(true);
-    const { error } = await removerIntegranteBanda(bandaId, integranteRemovendo.aluno_id);
+    // Avulsa: desativar mantém histórico (o aluno faz parte do roster de fato).
+    // Turma: o registro é só overlay (instrumento/função) — remover apaga o overlay.
+    const { error } = isAvulsa
+      ? await desativarIntegranteBanda(bandaId, integranteRemovendo.aluno_id)
+      : await removerIntegranteBanda(bandaId, integranteRemovendo.aluno_id);
     setProcessando(false);
     if (error) {
-      toast.error('Erro ao remover registro', { description: error.message });
+      toast.error('Erro ao remover integrante', { description: error.message });
       return;
     }
-    toast.success('Registro de integrante removido', { description: integranteRemovendo.nome });
+    toast.success(isAvulsa ? 'Integrante removido da banda' : 'Registro de integrante removido', {
+      description: integranteRemovendo.nome,
+    });
     setIntegranteRemovendo(null);
     recarregar();
+    onAlterado();
   }
 
   async function confirmarRemocaoMusica() {
@@ -108,7 +166,7 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
         nome: detalhe.nome,
         unidade_id: detalhe.unidade_id,
         unidade_nome: detalhe.unidade_nome,
-        curso_id: detalhe.curso_id,
+        curso_id: detalhe.curso_id ?? 0,
         curso_nome: detalhe.curso_nome,
         dia_semana: detalhe.dia_semana,
         horario: detalhe.horario,
@@ -117,6 +175,7 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
         precisa_revisar_nome: detalhe.precisa_revisar_nome,
         status: detalhe.status,
         proximo_evento: null,
+        tipo: detalhe.tipo,
       }
     : null;
 
@@ -142,18 +201,49 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
-                    <DialogTitle className="text-xl leading-tight">{detalhe.nome}</DialogTitle>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <DialogTitle className="text-xl leading-tight">{detalhe.nome}</DialogTitle>
+                      {detalhe.tipo === 'avulsa' ? (
+                        <Badge variant="default">Avulsa</Badge>
+                      ) : (
+                        <Badge variant="secondary">Turma</Badge>
+                      )}
+                    </div>
                     <p className="text-sm text-slate-400 mt-1">
-                      {detalhe.curso_nome} · {detalhe.unidade_nome} · {detalhe.dia_semana} {formatarHorario(detalhe.horario)}
+                      {detalhe.curso_nome ? `${detalhe.curso_nome} · ` : ''}{detalhe.unidade_nome}
+                      {detalhe.dia_semana && ` · ${detalhe.dia_semana} ${formatarHorario(detalhe.horario)}`}
+                      {detalhe.horario_fim && ` – ${formatarHorario(detalhe.horario_fim)}`}
                     </p>
-                    {detalhe.genero && (
-                      <Badge variant="secondary" className="mt-2">{detalhe.genero}</Badge>
-                    )}
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      {detalhe.genero && (
+                        <Badge variant="secondary">{detalhe.genero}</Badge>
+                      )}
+                      {detalhe.frequencia && (
+                        <Badge variant="outline" className="gap-1">
+                          <Repeat className="w-3 h-3" />
+                          {FREQUENCIA_LABEL[detalhe.frequencia as FrequenciaBanda] || detalhe.frequencia}
+                        </Badge>
+                      )}
+                      {detalhe.sala_nome && (
+                        <Badge variant="outline" className="gap-1">
+                          <DoorOpen className="w-3 h-3" />
+                          {detalhe.sala_nome}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => setEditandoIdentidade(true)}>
-                    <Pencil className="w-3.5 h-3.5 mr-1" />
-                    Identidade
-                  </Button>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {isAvulsa && (
+                      <Button variant="outline" size="sm" onClick={() => setEditandoBanda(true)}>
+                        <Pencil className="w-3.5 h-3.5 mr-1" />
+                        Editar banda
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" onClick={() => setEditandoIdentidade(true)}>
+                      <Guitar className="w-3.5 h-3.5 mr-1" />
+                      Identidade
+                    </Button>
+                  </div>
                 </div>
               </DialogHeader>
 
@@ -186,15 +276,74 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
                 Produtor: <span className="text-slate-200">{detalhe.produtor_nome || '—'}</span>
               </p>
 
+              {detalhe.modelo_financeiro && (
+                <p className="text-sm text-slate-400">
+                  Financeiro:{' '}
+                  <span className="text-slate-200">
+                    {MODELO_FINANCEIRO_LABEL[detalhe.modelo_financeiro]}
+                    {detalhe.valor_mensal_aluno != null && ` · ${formatCurrency(Number(detalhe.valor_mensal_aluno))}/aluno`}
+                    {detalhe.valor_repasse != null &&
+                      ` · repasse ${detalhe.modelo_financeiro === 'percentual'
+                        ? `${Number(detalhe.valor_repasse)}%`
+                        : formatCurrency(Number(detalhe.valor_repasse))}`}
+                  </span>
+                </p>
+              )}
+
               {/* Integrantes */}
               <section>
-                <h3 className="text-sm font-semibold text-white mb-2 flex items-center gap-2">
-                  <Users className="w-4 h-4 text-cyan-400" />
-                  Integrantes
-                </h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <Users className="w-4 h-4 text-cyan-400" />
+                    Integrantes
+                  </h3>
+                  {isAvulsa && (
+                    <span className="text-xs text-slate-500">Roster manual — adicione e remova à vontade</span>
+                  )}
+                </div>
+
+                {isAvulsa && (
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_110px_auto] gap-2 items-end mb-3 bg-slate-800/30 border border-slate-700/40 rounded-xl p-3">
+                    <div className="space-y-1">
+                      <span className="text-xs text-slate-400">Aluno</span>
+                      <AutocompleteAluno
+                        value={buscaAluno}
+                        onChange={(nomeAluno, aluno) => {
+                          setBuscaAluno(nomeAluno);
+                          setAlunoSelecionado(aluno || null);
+                        }}
+                        unidadeId={detalhe.unidade_id}
+                        placeholder="Digite o nome do aluno..."
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-xs text-slate-400">Instrumento</span>
+                      <Input
+                        value={novoInstrumento}
+                        onChange={(e) => setNovoInstrumento(e.target.value)}
+                        placeholder="Ex.: Guitarra"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-xs text-slate-400">Função</span>
+                      <Input
+                        value={novaFuncao}
+                        onChange={(e) => setNovaFuncao(e.target.value)}
+                        placeholder="Opcional"
+                      />
+                    </div>
+                    <Button type="button" variant="outline" onClick={adicionarIntegrante} disabled={processando}>
+                      <UserPlus className="w-4 h-4 mr-1" />
+                      Adicionar
+                    </Button>
+                  </div>
+                )}
+
                 {integrantes.length === 0 ? (
                   <p className="text-sm text-slate-500 bg-slate-800/40 rounded-xl p-4">
-                    Nenhum aluno ativo nesta turma de banda no momento.
+                    {isAvulsa
+                      ? 'Nenhum integrante ainda — adicione o primeiro acima.'
+                      : 'Nenhum aluno ativo nesta turma de banda no momento.'}
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -245,7 +394,7 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
                             <Pencil className="w-3.5 h-3.5 mr-1" />
                             {temOverlay ? 'Editar' : 'Definir'}
                           </Button>
-                          {temOverlay && (
+                          {(isAvulsa || temOverlay) && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -379,12 +528,23 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
             onClose={() => setEditandoIdentidade(false)}
             onSalvo={() => { setEditandoIdentidade(false); recarregar(); onAlterado(); }}
           />
+          <ModalBandaAvulsa
+            aberto={editandoBanda}
+            banda={detalhe}
+            unidadeAtual={detalhe.unidade_id}
+            onClose={() => setEditandoBanda(false)}
+            onSalvo={() => { setEditandoBanda(false); recarregar(); onAlterado(); }}
+          />
           <ModalConfirmacao
             aberto={!!integranteRemovendo}
             onClose={() => setIntegranteRemovendo(null)}
             onConfirmar={confirmarRemocaoIntegrante}
-            titulo="Remover registro de integrante"
-            mensagem={`Remover o registro de "${integranteRemovendo?.nome}" desta banda? O aluno continua na turma — isso só limpa instrumento/função gravados.`}
+            titulo={isAvulsa ? 'Remover integrante da banda' : 'Remover registro de integrante'}
+            mensagem={
+              isAvulsa
+                ? `Remover "${integranteRemovendo?.nome}" desta banda? O histórico de participação é mantido.`
+                : `Remover o registro de "${integranteRemovendo?.nome}" desta banda? O aluno continua na turma — isso só limpa instrumento/função gravados.`
+            }
             tipo="danger"
             textoConfirmar="Remover"
             carregando={processando}
