@@ -7,6 +7,7 @@ import {
   Table, LayoutGrid, Plus, Trash2, MoreVertical,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { abreviarNome } from '@/lib/nomeExibicao.mjs';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -38,10 +39,11 @@ function formatarProximoEvento(iso: string | null): string | null {
   return format(new Date(iso), "dd/MM 'às' HH'h'", { locale: ptBR });
 }
 
-/** Primeiro + segundo nome — nome completo ocupa espaço demais na tabela */
+/** Primeiro + segundo nome significativo — regra canônica de listas (nomeExibicao.mjs):
+ *  conectivos ("de", "da"...) não contam, senão "Willian De Andrade" virava "Willian De" */
 function nomeCurto(nome: string | null): string {
   if (!nome) return 'Sem produtor';
-  return nome.trim().split(/\s+/).slice(0, 2).join(' ');
+  return abreviarNome(nome, 2);
 }
 
 interface ListaBandasTabProps {
