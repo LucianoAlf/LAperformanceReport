@@ -67,3 +67,15 @@ da **fatura**, não do match por nome. 3 casos contra o banco real:
 ⚠️ Este é o único que **não** stuba `canonicaFn` — é o ponto do teste. Ele stuba
 `duplicataFn` porque a Valentina já foi lançada de verdade hoje e a trava mataria
 o teste por um motivo que não é o medido.
+
+## saida-operacional-e2e.cjs
+Caso Mayra/CG (25/08): "Sol, teve uma saída em dinheiro - PG segurança semana 25/08
+R$100,00" virou **RECEBIMENTO** pedindo aluno; a correção dela ("Sol, foi saída") foi
+gravada como **nome do aluno**.
+
+⚠️ A lógica sempre acertou — o log já dizia `saida_texto_preview_enviado`. Quem errava era
+o CARD: `montarPreview` só sabia escrever recebimento. Ao pedir aluno numa saída, induziu
+a correção que o fluxo de nome-tardio engoliu.
+
+Cobre: card diz "Saída de caixa"/"PAGAMENTO (saída)", **não** mostra seção ALUNO, a frase
+de correção não vira nome, e o `pode` cai em `lancarSaidaFn` (nunca em `lancarFn`).
