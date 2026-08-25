@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -18,6 +18,13 @@ test('modal aceita data inicial apenas na criação e edição prevalece', () =>
 
 const calendarioPath = 'src/components/App/Bandas/CalendarioEventosBandas.tsx';
 const calendario = existsSync(path.join(root, calendarioPath)) ? read(calendarioPath) : '';
+
+test('arquivos do calendário têm nomes distintos em filesystem case-insensitive', () => {
+  const arquivos = readdirSync(path.join(root, 'src/components/App/Bandas'))
+    .filter((arquivo) => arquivo.toLowerCase().startsWith('calendarioeventosbandas.'));
+  const bases = arquivos.map((arquivo) => path.parse(arquivo).name.toLowerCase());
+  assert.equal(new Set(bases).size, bases.length, arquivos.join(', '));
+});
 
 test('calendário mensal oferece navegação, hoje, grade e painel do dia', () => {
   assert.match(calendario, /subMonths\(mesAtual, 1\)/);
@@ -44,4 +51,29 @@ test('painel expõe as ações existentes para eventos agendados', () => {
 test('calendário não introduz cores hexadecimais', () => {
   assert.ok(calendario, 'o componente de calendário precisa existir');
   assert.doesNotMatch(calendario, /#[\da-f]{3,8}/i);
+});
+
+const eventosTab = read('src/components/App/Bandas/EventosTab.tsx');
+
+test('aba abre em calendário, persiste o toggle e busca toda a história uma vez', () => {
+  assert.match(eventosTab, /bandas_eventos_visualizacao/);
+  assert.match(eventosTab, /return saved === 'lista' \? 'lista' : 'calendario'/);
+  assert.match(eventosTab, /useBandaEventos\(unidadeAtual, null\)/);
+  assert.match(
+    eventosTab,
+    /filtrarEventosDaLista\(eventos, mostrarPassados, agoraReferencia\)/,
+  );
+});
+
+test('switch de passados fica exclusivo da lista e calendário recebe os callbacks atuais', () => {
+  assert.match(eventosTab, /visualizacao === 'lista'[\s\S]*?mostrar-passados/);
+  assert.match(eventosTab, /<CalendarioEventosBandas/);
+  assert.match(eventosTab, /onCancelarEvento=\{setEventoCancelando\}/);
+  assert.match(eventosTab, /onRemoverEvento=\{setEventoRemovendo\}/);
+});
+
+test('criação por dia e Novo evento não compartilham data residual', () => {
+  assert.match(eventosTab, /setDataInicial\(data \? new Date\(data\) : null\)/);
+  assert.match(eventosTab, /dataInicial=\{dataInicial\}/);
+  assert.match(eventosTab, /setDataInicial\(null\)/);
 });

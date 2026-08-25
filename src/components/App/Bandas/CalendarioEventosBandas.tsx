@@ -34,7 +34,7 @@ import {
   chaveDiaLocal,
   construirGradeMes,
   limitarEventosDoDia,
-} from './calendarioEventosBandas.mjs';
+} from './eventosBandasCalendario.mjs';
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 

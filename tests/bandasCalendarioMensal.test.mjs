@@ -5,7 +5,7 @@ import {
   construirGradeMes,
   filtrarEventosDaLista,
   limitarEventosDoDia,
-} from '../src/components/App/Bandas/calendarioEventosBandas.mjs';
+} from '../src/components/App/Bandas/eventosBandasCalendario.mjs';
 
 const evento = (id, data_inicio) => ({ evento_id: id, data_inicio });
 

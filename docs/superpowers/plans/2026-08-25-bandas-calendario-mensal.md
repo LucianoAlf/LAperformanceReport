@@ -12,7 +12,7 @@
 
 ## Estrutura de arquivos
 
-- Create `src/components/App/Bandas/calendarioEventosBandas.mjs`: regras puras de data e coleção.
+- Create `src/components/App/Bandas/eventosBandasCalendario.mjs`: regras puras de data e coleção.
 - Create `src/components/App/Bandas/CalendarioEventosBandas.tsx`: grade mensal e painel do dia.
 - Modify `src/components/App/Bandas/EventosTab.tsx`: toggle, fonte única, filtro local e callbacks.
 - Modify `src/components/App/Bandas/ModalEventoBanda.tsx`: data inicial opcional na criação.
@@ -23,7 +23,7 @@
 
 **Files:**
 - Create: `tests/bandasCalendarioMensal.test.mjs`
-- Create: `src/components/App/Bandas/calendarioEventosBandas.mjs`
+- Create: `src/components/App/Bandas/eventosBandasCalendario.mjs`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -37,7 +37,7 @@ import {
   construirGradeMes,
   filtrarEventosDaLista,
   limitarEventosDoDia,
-} from '../src/components/App/Bandas/calendarioEventosBandas.mjs';
+} from '../src/components/App/Bandas/eventosBandasCalendario.mjs';
 
 const evento = (id, data_inicio) => ({ evento_id: id, data_inicio });
 
@@ -95,7 +95,7 @@ Expected: FAIL with `ERR_MODULE_NOT_FOUND` because the calendar module does not 
 
 - [ ] **Step 3: Write minimal implementation**
 
-Criar `src/components/App/Bandas/calendarioEventosBandas.mjs`:
+Criar `src/components/App/Bandas/eventosBandasCalendario.mjs`:
 
 ```js
 import {
@@ -163,7 +163,7 @@ Expected: 4 tests pass, 0 fail.
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add tests/bandasCalendarioMensal.test.mjs src/components/App/Bandas/calendarioEventosBandas.mjs
+git add tests/bandasCalendarioMensal.test.mjs src/components/App/Bandas/eventosBandasCalendario.mjs
 git commit -m "test(bandas): define regras do calendário mensal"
 ```
 

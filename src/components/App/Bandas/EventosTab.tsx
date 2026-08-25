@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
-  Calendar, MapPin, Plus, Guitar, DollarSign, Pencil, Ban, Trash2, DoorOpen,
+  Calendar, CalendarDays, MapPin, Plus, Guitar, DollarSign, Pencil, Ban, Trash2,
+  DoorOpen, List,
 } from 'lucide-react';
 import { cn, formatCurrency } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +16,8 @@ import {
   useBandaEventos, useBandasListar, cancelarEventoBanda, removerEventoBanda,
   type EventoBanda, type EventoStatus,
 } from '@/hooks/useBandas';
+import { CalendarioEventosBandas } from './CalendarioEventosBandas';
+import { filtrarEventosDaLista } from './eventosBandasCalendario.mjs';
 import { ModalEventoBanda, EVENTO_TIPO_LABEL } from './ModalEventoBanda';
 
 const STATUS_LABEL: Record<EventoStatus, string> = {
@@ -33,23 +36,51 @@ interface EventosTabProps {
   unidadeAtual: string;
 }
 
+type VisualizacaoEventos = 'lista' | 'calendario';
+
 export function EventosTab({ unidadeAtual }: EventosTabProps) {
   const [mostrarPassados, setMostrarPassados] = useState(false);
-  // Memoizado: um novo Date().toISOString() a cada render mudaria a referência
-  // do parâmetro e re-dispararia o hook em loop (tela piscando)
-  const desde = useMemo(
-    () => (mostrarPassados ? null : new Date().toISOString()),
-    [mostrarPassados],
+  const [visualizacao, setVisualizacao] = useState<VisualizacaoEventos>(() => {
+    const saved = localStorage.getItem('bandas_eventos_visualizacao');
+    return saved === 'lista' ? 'lista' : 'calendario';
+  });
+  const [agoraReferencia] = useState(() => new Date());
+  const { eventos, loading, recarregar } = useBandaEventos(unidadeAtual, null);
+  const eventosLista = useMemo(
+    () => filtrarEventosDaLista(eventos, mostrarPassados, agoraReferencia) as EventoBanda[],
+    [eventos, mostrarPassados, agoraReferencia],
   );
-  const { eventos, loading, recarregar } = useBandaEventos(unidadeAtual, desde);
   // Bandas ativas da unidade para o seletor de participantes
   const { bandas } = useBandasListar(unidadeAtual, 'ativa');
 
   const [modalAberto, setModalAberto] = useState(false);
   const [eventoEditando, setEventoEditando] = useState<EventoBanda | null>(null);
+  const [dataInicial, setDataInicial] = useState<Date | null>(null);
   const [eventoCancelando, setEventoCancelando] = useState<EventoBanda | null>(null);
   const [eventoRemovendo, setEventoRemovendo] = useState<EventoBanda | null>(null);
   const [processando, setProcessando] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('bandas_eventos_visualizacao', visualizacao);
+  }, [visualizacao]);
+
+  function abrirCriacao(data?: Date) {
+    setEventoEditando(null);
+    setDataInicial(data ? new Date(data) : null);
+    setModalAberto(true);
+  }
+
+  function abrirEdicao(evento: EventoBanda) {
+    setDataInicial(null);
+    setEventoEditando(evento);
+    setModalAberto(true);
+  }
+
+  function fecharModal() {
+    setModalAberto(false);
+    setEventoEditando(null);
+    setDataInicial(null);
+  }
 
   async function confirmarCancelamento() {
     if (!eventoCancelando) return;
@@ -81,18 +112,57 @@ export function EventosTab({ unidadeAtual }: EventosTabProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-        <div className="flex items-center gap-2">
-          <Switch
-            id="mostrar-passados"
-            checked={mostrarPassados}
-            onCheckedChange={setMostrarPassados}
-          />
-          <Label htmlFor="mostrar-passados" className="text-sm text-slate-300 cursor-pointer">
-            Mostrar eventos passados
-          </Label>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <div
+            className="flex items-center gap-1 rounded-lg bg-slate-700/30 p-1"
+            role="group"
+            aria-label="Visualização dos eventos"
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-pressed={visualizacao === 'lista'}
+              onClick={() => setVisualizacao('lista')}
+              className={cn(
+                'h-8 px-2.5 text-xs text-slate-400 hover:text-white',
+                visualizacao === 'lista' && 'bg-violet-600 text-white hover:bg-violet-600',
+              )}
+            >
+              <List className="h-4 w-4" />
+              Lista
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-pressed={visualizacao === 'calendario'}
+              onClick={() => setVisualizacao('calendario')}
+              className={cn(
+                'h-8 px-2.5 text-xs text-slate-400 hover:text-white',
+                visualizacao === 'calendario' && 'bg-violet-600 text-white hover:bg-violet-600',
+              )}
+            >
+              <CalendarDays className="h-4 w-4" />
+              Calendário
+            </Button>
+          </div>
+
+          {visualizacao === 'lista' && (
+            <div className="flex items-center gap-2">
+              <Switch
+                id="mostrar-passados"
+                checked={mostrarPassados}
+                onCheckedChange={setMostrarPassados}
+              />
+              <Label htmlFor="mostrar-passados" className="cursor-pointer text-sm text-slate-300">
+                Mostrar eventos passados
+              </Label>
+            </div>
+          )}
         </div>
-        <Button onClick={() => { setEventoEditando(null); setModalAberto(true); }}>
+        <Button onClick={() => abrirCriacao()}>
           <Plus className="w-4 h-4 mr-2" />
           Novo evento
         </Button>
@@ -100,7 +170,15 @@ export function EventosTab({ unidadeAtual }: EventosTabProps) {
 
       {loading ? (
         <div className="flex items-center justify-center py-16 text-slate-400">Carregando eventos...</div>
-      ) : eventos.length === 0 ? (
+      ) : visualizacao === 'calendario' ? (
+        <CalendarioEventosBandas
+          eventos={eventos}
+          onCriarEvento={abrirCriacao}
+          onAbrirEvento={abrirEdicao}
+          onCancelarEvento={setEventoCancelando}
+          onRemoverEvento={setEventoRemovendo}
+        />
+      ) : eventosLista.length === 0 ? (
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-10 text-center">
           <Calendar className="w-10 h-10 text-slate-600 mx-auto mb-3" />
           <p className="text-slate-300 font-medium">Nenhum evento por aqui</p>
@@ -110,7 +188,7 @@ export function EventosTab({ unidadeAtual }: EventosTabProps) {
         </div>
       ) : (
         <div className="space-y-3">
-          {eventos.map((evento) => (
+          {eventosLista.map((evento) => (
             <div
               key={evento.evento_id}
               className={cn(
@@ -167,7 +245,7 @@ export function EventosTab({ unidadeAtual }: EventosTabProps) {
                       variant="ghost"
                       size="sm"
                       className="h-8 text-xs"
-                      onClick={() => { setEventoEditando(evento); setModalAberto(true); }}
+                      onClick={() => abrirEdicao(evento)}
                     >
                       <Pencil className="w-3.5 h-3.5 mr-1" />
                       Editar
@@ -200,10 +278,11 @@ export function EventosTab({ unidadeAtual }: EventosTabProps) {
       <ModalEventoBanda
         aberto={modalAberto}
         evento={eventoEditando}
+        dataInicial={dataInicial}
         unidadeAtual={unidadeAtual}
         bandas={bandas}
-        onClose={() => setModalAberto(false)}
-        onSalvo={() => { setModalAberto(false); recarregar(); }}
+        onClose={fecharModal}
+        onSalvo={() => { fecharModal(); recarregar(); }}
       />
 
       <ModalConfirmacao
