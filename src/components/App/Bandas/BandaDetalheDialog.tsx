@@ -219,10 +219,8 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <DialogTitle className="text-xl leading-tight">{detalhe.nome}</DialogTitle>
-                      {detalhe.tipo === 'avulsa' ? (
+                      {detalhe.tipo === 'avulsa' && (
                         <Badge variant="default">Avulsa</Badge>
-                      ) : (
-                        <Badge variant="secondary">Turma</Badge>
                       )}
                     </div>
                     <p className="text-sm text-slate-400 mt-1">

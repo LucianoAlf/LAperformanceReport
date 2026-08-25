@@ -224,10 +224,8 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
                       <td className="p-4">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-white">{banda.nome}</span>
-                          {banda.tipo === 'avulsa' ? (
+                          {banda.tipo === 'avulsa' && (
                             <Badge variant="default" className="flex-shrink-0">Avulsa</Badge>
-                          ) : (
-                            <Badge variant="secondary" className="flex-shrink-0">Turma</Badge>
                           )}
                           {banda.precisa_revisar_nome && banda.status === 'ativa' && (
                             <Badge variant="warning" className="flex-shrink-0 gap-1">
