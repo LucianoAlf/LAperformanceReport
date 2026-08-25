@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { useMemo } from 'react';
 import {
   addMonths,
   format,
@@ -57,6 +57,10 @@ const TIPO_VARIANT: Record<EventoTipo, 'secondary' | 'success'> = {
 
 interface CalendarioEventosBandasProps {
   eventos: EventoBanda[];
+  mesAtual: Date;
+  diaSelecionado: Date;
+  onMesAtualChange: (mes: Date) => void;
+  onDiaSelecionadoChange: (dia: Date) => void;
   onCriarEvento: (data: Date) => void;
   onAbrirEvento: (evento: EventoBanda) => void;
   onCancelarEvento: (evento: EventoBanda) => void;
@@ -84,14 +88,15 @@ function EstadoIcone({ status }: { status: EventoStatus }) {
 
 export function CalendarioEventosBandas({
   eventos,
+  mesAtual,
+  diaSelecionado,
+  onMesAtualChange,
+  onDiaSelecionadoChange,
   onCriarEvento,
   onAbrirEvento,
   onCancelarEvento,
   onRemoverEvento,
 }: CalendarioEventosBandasProps) {
-  const [mesAtual, setMesAtual] = useState(() => startOfMonth(new Date()));
-  const [diaSelecionado, setDiaSelecionado] = useState(() => new Date());
-
   const eventosPorDia = useMemo<Map<string, EventoBanda[]>>(
     () => agruparEventosPorDia(eventos),
     [eventos],
@@ -101,8 +106,8 @@ export function CalendarioEventosBandas({
 
   function navegarParaMes(data: Date) {
     const inicio = startOfMonth(data);
-    setMesAtual(inicio);
-    setDiaSelecionado(inicio);
+    onMesAtualChange(inicio);
+    onDiaSelecionadoChange(inicio);
   }
 
   function irParaMesAnterior() {
@@ -115,21 +120,8 @@ export function CalendarioEventosBandas({
 
   function irParaHoje() {
     const hoje = new Date();
-    setMesAtual(startOfMonth(hoje));
-    setDiaSelecionado(hoje);
-  }
-
-  function selecionarDia(event: MouseEvent, dia: Date) {
-    event.stopPropagation();
-    setDiaSelecionado(dia);
-  }
-
-  function criarComTeclado(event: KeyboardEvent<HTMLDivElement>, dia: Date) {
-    if (event.target !== event.currentTarget) return;
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      onCriarEvento(dia);
-    }
+    onMesAtualChange(startOfMonth(hoje));
+    onDiaSelecionadoChange(hoje);
   }
 
   return (
@@ -204,14 +196,8 @@ export function CalendarioEventosBandas({
                 return (
                   <div
                     key={chave}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Agendar evento em ${formatarDiaCompleto(dia)}`}
-                    onClick={() => onCriarEvento(dia)}
-                    onKeyDown={(event) => criarComTeclado(event, dia)}
                     className={cn(
-                      'group relative min-h-[118px] border-b border-r border-slate-800/70 p-2 text-left outline-none transition-colors',
-                      'hover:bg-slate-800/35 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-inset',
+                      'group relative min-h-[118px] border-b border-r border-slate-800/70 p-2 text-left transition-colors',
                       !pertenceAoMes && 'bg-slate-950/25 text-slate-600',
                       isToday(dia) && 'bg-emerald-500/[0.07]',
                       selecionado && 'ring-1 ring-inset ring-violet-500/80',
@@ -219,17 +205,25 @@ export function CalendarioEventosBandas({
                   >
                     <button
                       type="button"
-                      onClick={(event) => selecionarDia(event, dia)}
-                      aria-label={`Ver eventos de ${formatarDiaCompleto(dia)}`}
-                      aria-pressed={selecionado}
-                      className={cn(
-                        'mb-1.5 flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors',
-                        pertenceAoMes ? 'text-slate-300 hover:bg-slate-700' : 'text-slate-600 hover:bg-slate-800',
-                        isToday(dia) && 'bg-emerald-500 text-white shadow-sm shadow-emerald-950/40 hover:bg-emerald-500',
-                      )}
-                    >
-                      {format(dia, 'd')}
-                    </button>
+                      aria-label={`Agendar evento em ${formatarDiaCompleto(dia)}`}
+                      onClick={() => onCriarEvento(dia)}
+                      className="absolute inset-0 z-0 text-left outline-none transition-colors hover:bg-slate-800/35 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500"
+                    />
+
+                    <div className="pointer-events-none relative z-10">
+                      <button
+                        type="button"
+                        onClick={() => onDiaSelecionadoChange(dia)}
+                        aria-label={`Ver eventos de ${formatarDiaCompleto(dia)}`}
+                        aria-pressed={selecionado}
+                        className={cn(
+                          'pointer-events-auto mb-1.5 flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors',
+                          pertenceAoMes ? 'text-slate-300 hover:bg-slate-700' : 'text-slate-600 hover:bg-slate-800',
+                          isToday(dia) && 'bg-emerald-500 text-white shadow-sm shadow-emerald-950/40 hover:bg-emerald-500',
+                        )}
+                      >
+                        {format(dia, 'd')}
+                      </button>
 
                     <div className="space-y-1">
                       {visiveis.map((evento) => (
@@ -242,7 +236,7 @@ export function CalendarioEventosBandas({
                           }}
                           title={`${EVENTO_TIPO_LABEL[evento.tipo]} · ${STATUS_LABEL[evento.status]} · ${evento.titulo}`}
                           className={cn(
-                            'flex w-full items-center gap-1 rounded-md border px-1.5 py-1 text-left text-[10px] leading-none transition-colors',
+                            'pointer-events-auto flex w-full items-center gap-1 rounded-md border px-1.5 py-1 text-left text-[10px] leading-none transition-colors',
                             evento.tipo === 'show'
                               ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20'
                               : 'border-violet-500/25 bg-violet-500/10 text-violet-200 hover:bg-violet-500/20',
@@ -265,16 +259,17 @@ export function CalendarioEventosBandas({
                       {restantes > 0 && (
                         <button
                           type="button"
-                          onClick={(event) => selecionarDia(event, dia)}
-                          className="flex h-5 items-center rounded px-1.5 text-[10px] font-semibold text-violet-300 transition-colors hover:bg-violet-500/10 hover:text-violet-200"
+                          onClick={() => onDiaSelecionadoChange(dia)}
+                          className="pointer-events-auto flex h-5 items-center rounded px-1.5 text-[10px] font-semibold text-violet-300 transition-colors hover:bg-violet-500/10 hover:text-violet-200"
                           aria-label={`Ver mais ${restantes} eventos de ${formatarDiaCompleto(dia)}`}
                         >
                           +{restantes} {restantes === 1 ? 'evento' : 'eventos'}
                         </button>
                       )}
                     </div>
+                    </div>
 
-                    <span className="pointer-events-none absolute bottom-2 right-2 flex h-6 w-6 translate-y-1 items-center justify-center rounded-full border border-slate-700 bg-slate-800 text-slate-400 opacity-0 transition-all group-hover:translate-y-0 group-hover:opacity-100">
+                    <span className="pointer-events-none absolute bottom-2 right-2 z-10 flex h-6 w-6 translate-y-1 items-center justify-center rounded-full border border-slate-700 bg-slate-800 text-slate-400 opacity-0 transition-[transform,opacity] group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100 motion-reduce:transition-none">
                       <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                     </span>
                   </div>
@@ -340,10 +335,18 @@ export function CalendarioEventosBandas({
               <article
                 key={evento.evento_id}
                 className={cn(
-                  'rounded-xl border border-slate-800 bg-slate-800/25 p-3 transition-colors hover:bg-slate-800/40',
+                  'group relative rounded-xl border border-slate-800 bg-slate-800/25 p-3',
                   evento.status === 'cancelado' && 'opacity-65',
                 )}
               >
+                <button
+                  type="button"
+                  aria-label={`Abrir ${EVENTO_TIPO_LABEL[evento.tipo]}: ${evento.titulo}`}
+                  onClick={() => onAbrirEvento(evento)}
+                  className="absolute inset-0 z-0 rounded-xl outline-none transition-colors hover:bg-slate-800/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500"
+                />
+
+                <div className="pointer-events-none relative z-10">
                 <div className="flex items-start gap-3">
                   <div
                     className={cn(
@@ -357,16 +360,14 @@ export function CalendarioEventosBandas({
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <button
-                      type="button"
-                      onClick={() => onAbrirEvento(evento)}
+                    <p
                       className={cn(
-                        'block w-full truncate text-left text-sm font-semibold text-white hover:text-emerald-300',
+                        'w-full truncate text-left text-sm font-semibold text-white transition-colors group-hover:text-emerald-300',
                         evento.status === 'cancelado' && 'line-through',
                       )}
                     >
                       {evento.titulo}
-                    </button>
+                    </p>
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
                       <Badge variant={TIPO_VARIANT[evento.tipo]} className="px-2 py-0 text-[10px]">
                         {EVENTO_TIPO_LABEL[evento.tipo]}
@@ -410,7 +411,7 @@ export function CalendarioEventosBandas({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-7 px-2 text-xs"
+                      className="pointer-events-auto h-7 px-2 text-xs"
                       onClick={() => onAbrirEvento(evento)}
                     >
                       <Pencil className="h-3.5 w-3.5" /> Editar
@@ -419,7 +420,7 @@ export function CalendarioEventosBandas({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-7 px-2 text-xs text-amber-400 hover:text-amber-300"
+                      className="pointer-events-auto h-7 px-2 text-xs text-amber-400 hover:text-amber-300"
                       onClick={() => onCancelarEvento(evento)}
                     >
                       <Ban className="h-3.5 w-3.5" /> Cancelar
@@ -428,7 +429,7 @@ export function CalendarioEventosBandas({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-7 w-7 p-0 text-rose-400 hover:text-rose-300"
+                      className="pointer-events-auto h-7 w-7 p-0 text-rose-400 hover:text-rose-300"
                       onClick={() => onRemoverEvento(evento)}
                       aria-label={`Excluir ${evento.titulo}`}
                     >
@@ -436,6 +437,7 @@ export function CalendarioEventosBandas({
                     </Button>
                   </div>
                 )}
+                </div>
               </article>
             ))
           )}

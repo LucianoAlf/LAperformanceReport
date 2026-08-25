@@ -39,7 +39,18 @@ test('interações de dia e evento permanecem separadas', () => {
   assert.match(calendario, /event\.stopPropagation\(\)/);
   assert.match(calendario, /onAbrirEvento\(evento\)/);
   assert.match(calendario, /restantes > 0/);
-  assert.match(calendario, /setDiaSelecionado\(dia\)/);
+  assert.match(calendario, /onDiaSelecionadoChange\(dia\)/);
+});
+
+test('celula do dia nao aninha botoes em outro controle interativo', () => {
+  assert.doesNotMatch(
+    calendario,
+    /<div\s+key=\{chave\}[\s\S]{0,300}?role="button"/,
+  );
+  assert.match(
+    calendario,
+    /<button\s+type="button"\s+aria-label=\{`Agendar evento em/,
+  );
 });
 
 test('painel expõe as ações existentes para eventos agendados', () => {
@@ -48,12 +59,30 @@ test('painel expõe as ações existentes para eventos agendados', () => {
   assert.match(calendario, /evento\.status === 'agendado'/);
 });
 
+test('resumo inteiro do painel abre o evento e animacoes respeitam movimento reduzido', () => {
+  assert.match(
+    calendario,
+    /aria-label=\{`Abrir \$\{EVENTO_TIPO_LABEL\[evento\.tipo\]\}: \$\{evento\.titulo\}`\}/,
+  );
+  assert.doesNotMatch(calendario, /transition-all/);
+  assert.match(calendario, /motion-reduce:transition-none/);
+});
+
 test('calendário não introduz cores hexadecimais', () => {
   assert.ok(calendario, 'o componente de calendário precisa existir');
   assert.doesNotMatch(calendario, /#[\da-f]{3,8}/i);
 });
 
 const eventosTab = read('src/components/App/Bandas/EventosTab.tsx');
+
+test('estado de navegacao do calendario sobrevive aos refetches da aba', () => {
+  assert.match(eventosTab, /const \[mesCalendario, setMesCalendario\] = useState/);
+  assert.match(eventosTab, /mesAtual=\{mesCalendario\}/);
+  assert.match(eventosTab, /diaSelecionado=\{diaCalendario\}/);
+  assert.match(calendario, /mesAtual: Date/);
+  assert.match(calendario, /onMesAtualChange: \(mes: Date\) => void/);
+  assert.match(calendario, /onDiaSelecionadoChange: \(dia: Date\) => void/);
+});
 
 test('aba abre em calendário, persiste o toggle e busca toda a história uma vez', () => {
   assert.match(eventosTab, /bandas_eventos_visualizacao/);

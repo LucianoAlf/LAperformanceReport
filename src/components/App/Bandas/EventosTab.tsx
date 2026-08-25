@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { format, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   Calendar, CalendarDays, MapPin, Plus, Guitar, DollarSign, Pencil, Ban, Trash2,
@@ -44,6 +44,8 @@ export function EventosTab({ unidadeAtual }: EventosTabProps) {
     const saved = localStorage.getItem('bandas_eventos_visualizacao');
     return saved === 'lista' ? 'lista' : 'calendario';
   });
+  const [mesCalendario, setMesCalendario] = useState(() => startOfMonth(new Date()));
+  const [diaCalendario, setDiaCalendario] = useState(() => new Date());
   const [agoraReferencia] = useState(() => new Date());
   const { eventos, loading, recarregar } = useBandaEventos(unidadeAtual, null);
   const eventosLista = useMemo(
@@ -173,6 +175,10 @@ export function EventosTab({ unidadeAtual }: EventosTabProps) {
       ) : visualizacao === 'calendario' ? (
         <CalendarioEventosBandas
           eventos={eventos}
+          mesAtual={mesCalendario}
+          diaSelecionado={diaCalendario}
+          onMesAtualChange={setMesCalendario}
+          onDiaSelecionadoChange={setDiaCalendario}
           onCriarEvento={abrirCriacao}
           onAbrirEvento={abrirEdicao}
           onCancelarEvento={setEventoCancelando}
