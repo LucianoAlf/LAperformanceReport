@@ -38,6 +38,7 @@ interface ModalEventoBandaProps {
   aberto: boolean;
   /** null = criar; preenchido = editar */
   evento: EventoBanda | null;
+  dataInicial?: Date | null;
   unidadeAtual: string;
   bandas: BandaResumo[];
   onClose: () => void;
@@ -57,7 +58,15 @@ function isoParaHoraLocal(iso: string | null): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-export function ModalEventoBanda({ aberto, evento, unidadeAtual, bandas, onClose, onSalvo }: ModalEventoBandaProps) {
+export function ModalEventoBanda({
+  aberto,
+  evento,
+  dataInicial = null,
+  unidadeAtual,
+  bandas,
+  onClose,
+  onSalvo,
+}: ModalEventoBandaProps) {
   const isEdicao = !!evento;
   const [titulo, setTitulo] = useState('');
   const [tipo, setTipo] = useState<EventoTipo>('ensaio');
@@ -89,7 +98,13 @@ export function ModalEventoBanda({ aberto, evento, unidadeAtual, bandas, onClose
     setTitulo(evento?.titulo || '');
     setTipo(evento?.tipo || 'ensaio');
     setUnidadeId(unidadeAtual !== 'todos' ? unidadeAtual : '');
-    setData(evento ? new Date(evento.data_inicio) : undefined);
+    setData(
+      evento
+        ? new Date(evento.data_inicio)
+        : dataInicial
+          ? new Date(dataInicial)
+          : undefined,
+    );
     setHoraInicio(evento ? isoParaHoraLocal(evento.data_inicio) : '');
     setHoraFim(evento?.data_fim ? isoParaHoraLocal(evento.data_fim) : '');
     setLocal(evento?.local || '');
@@ -103,7 +118,7 @@ export function ModalEventoBanda({ aberto, evento, unidadeAtual, bandas, onClose
         setBandasSelecionadas(participantes.map((p) => p.banda_id));
       });
     }
-  }, [aberto, evento, unidadeAtual]);
+  }, [aberto, evento, unidadeAtual, dataInicial]);
 
   function alternarBanda(bandaId: number, marcada: boolean) {
     setBandasSelecionadas((prev) =>
