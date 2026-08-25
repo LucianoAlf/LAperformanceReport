@@ -397,7 +397,7 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
                             <p className="text-xs text-slate-400">
                               {int.instrumento || 'Instrumento não definido'}
                               {int.funcao ? ` · ${int.funcao}` : ''}
-                              {int.tempo_permanencia_meses != null && int.tempo_permanencia_meses > 0 && int.tempo_permanencia_meses < 99
+                              {int.tempo_permanencia_meses != null && int.tempo_permanencia_meses >= 0
                                 ? ` · ${int.tempo_permanencia_meses} ${int.tempo_permanencia_meses === 1 ? 'mês' : 'meses'} de escola`
                                 : ''}
                             </p>

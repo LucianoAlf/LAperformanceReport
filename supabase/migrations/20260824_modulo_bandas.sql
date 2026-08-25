@@ -593,7 +593,13 @@ AS $function$
   membros as (select distinct unidade_id, pessoa, perm from (select unidade_id, pessoa, perm from mt union all select unidade_id, pessoa, perm from ma) m),
   agg_turma as (select unidade_id, count(*)::int total, count(*) filter (where n < p_min_integrantes)::int com_vaga from bt group by unidade_id),
   agg_avulsa as (select unidade_id, count(*)::int total from ba group by unidade_id),
-  agg_membros as (select unidade_id, count(*)::int alunos, round(avg(perm) filter (where perm is not null and perm>0 and perm<99),1) perm_media from membros group by unidade_id)
+  -- Sem teto de 99 meses: era heranca do campo por-contrato (sentinela). Com a
+  -- permanencia canonica (MIN(data_matricula)), veteranos REAIS ficavam de fora
+  -- (Miguel e Lopa, 1a matricula mai/2018 = piso historico do Emusys, ~12 anos
+  -- de escola). Mantido: excluir null (sem data_matricula) e negativos (data
+  -- futura = erro de dado). Calouros (0 meses) contam, fiel a regra do usuario:
+  -- soma de todos os meses / quantidade de alunos distintos.
+  agg_membros as (select unidade_id, count(*)::int alunos, round(avg(perm) filter (where perm is not null and perm>=0),1) perm_media from membros group by unidade_id)
   select u.id, u.nome,
          (coalesce(at.total,0)+coalesce(aa.total,0))::int,
          coalesce(am.alunos,0),
