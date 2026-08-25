@@ -4,13 +4,16 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import {
   Guitar, Users, Clock, Calendar, Search, AlertTriangle, Pencil, Archive, ArchiveRestore,
-  Table, LayoutGrid, Plus, Trash2,
+  Table, LayoutGrid, Plus, Trash2, MoreVertical,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/Tooltip';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -33,6 +36,12 @@ function formatarHorario(horario: string | null): string {
 function formatarProximoEvento(iso: string | null): string | null {
   if (!iso) return null;
   return format(new Date(iso), "dd/MM 'às' HH'h'", { locale: ptBR });
+}
+
+/** Primeiro + segundo nome — nome completo ocupa espaço demais na tabela */
+function nomeCurto(nome: string | null): string {
+  if (!nome) return 'Sem produtor';
+  return nome.trim().split(/\s+/).slice(0, 2).join(' ');
 }
 
 interface ListaBandasTabProps {
@@ -78,6 +87,8 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
 
   const itensPorPagina = 24;
   const bandasPagina = bandasFiltradas.slice((pagina - 1) * itensPorPagina, pagina * itensPorPagina);
+  // Coluna Unidade só faz sentido no Consolidado — para usuário de unidade é redundante
+  const mostrarUnidade = unidadeAtual === 'todos';
 
   async function confirmarMudancaStatus() {
     if (!bandaStatusConfirm) return;
@@ -185,7 +196,9 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
                 <tr className="border-b border-slate-700">
                   <th className="text-left p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Banda</th>
                   <th className="text-left p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Projeto</th>
-                  <th className="text-left p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Unidade</th>
+                  {mostrarUnidade && (
+                    <th className="text-left p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Unidade</th>
+                  )}
                   <th className="text-left p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Produtor</th>
                   <th className="text-left p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Dia · Horário</th>
                   <th className="text-center p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Integrantes</th>
@@ -223,8 +236,12 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
                         </div>
                       </td>
                       <td className="p-4 text-sm text-slate-300">{banda.curso_nome || '—'}</td>
-                      <td className="p-4 text-sm text-slate-300">{banda.unidade_nome || '—'}</td>
-                      <td className="p-4 text-sm text-slate-300">{banda.produtor_nome || 'Sem produtor'}</td>
+                      {mostrarUnidade && (
+                        <td className="p-4 text-sm text-slate-300">{banda.unidade_nome || '—'}</td>
+                      )}
+                      <td className="p-4 text-sm text-slate-300" title={banda.produtor_nome || undefined}>
+                        {nomeCurto(banda.produtor_nome)}
+                      </td>
                       <td className="p-4 text-sm text-slate-300 whitespace-nowrap">
                         {banda.dia_semana || '—'} · {formatarHorario(banda.horario)}
                       </td>
@@ -244,40 +261,48 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
                         )}
                       </td>
                       <td className="p-4">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={(e) => { e.stopPropagation(); setBandaEditando(banda); }}
-                          >
-                            <Pencil className="w-3.5 h-3.5 mr-1" />
-                            Identidade
-                          </Button>
-                          {banda.tipo === 'avulsa' ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs text-rose-400 hover:text-rose-300"
-                              onClick={(e) => { e.stopPropagation(); setBandaExcluindo(banda); }}
-                            >
-                              <Trash2 className="w-3.5 h-3.5 mr-1" />
-                              Excluir
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={(e) => { e.stopPropagation(); setBandaStatusConfirm(banda); }}
-                            >
-                              {banda.status === 'ativa' ? (
-                                <><Archive className="w-3.5 h-3.5 mr-1" />Arquivar</>
-                              ) : (
-                                <><ArchiveRestore className="w-3.5 h-3.5 mr-1" />Reativar</>
+                        <div className="flex items-center justify-center">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                onClick={(e) => e.stopPropagation()}
+                                aria-label={`Ações da banda ${banda.nome}`}
+                              >
+                                <MoreVertical className="w-4 h-4 text-slate-400" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenuItem
+                                className="cursor-pointer"
+                                onClick={() => setBandaEditando(banda)}
+                              >
+                                <Pencil className="w-3.5 h-3.5 mr-2" />
+                                Identidade
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="cursor-pointer"
+                                onClick={() => setBandaStatusConfirm(banda)}
+                              >
+                                {banda.status === 'ativa' ? (
+                                  <><Archive className="w-3.5 h-3.5 mr-2" />Arquivar</>
+                                ) : (
+                                  <><ArchiveRestore className="w-3.5 h-3.5 mr-2" />Reativar</>
+                                )}
+                              </DropdownMenuItem>
+                              {banda.tipo === 'avulsa' && (
+                                <DropdownMenuItem
+                                  className="cursor-pointer text-rose-400 hover:text-rose-300"
+                                  onClick={() => setBandaExcluindo(banda)}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 mr-2" />
+                                  Excluir
+                                </DropdownMenuItem>
                               )}
-                            </Button>
-                          )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </td>
                     </tr>
@@ -365,7 +390,7 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
                       <Pencil className="w-3.5 h-3.5 mr-1" />
                       Identidade
                     </Button>
-                    {banda.tipo === 'avulsa' ? (
+                    {banda.tipo === 'avulsa' && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -375,20 +400,19 @@ export function ListaBandasTab({ unidadeAtual }: ListaBandasTabProps) {
                         <Trash2 className="w-3.5 h-3.5 mr-1" />
                         Excluir
                       </Button>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs ml-auto"
-                        onClick={(e) => { e.stopPropagation(); setBandaStatusConfirm(banda); }}
-                      >
-                        {banda.status === 'ativa' ? (
-                          <><Archive className="w-3.5 h-3.5 mr-1" />Arquivar</>
-                        ) : (
-                          <><ArchiveRestore className="w-3.5 h-3.5 mr-1" />Reativar</>
-                        )}
-                      </Button>
                     )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn('h-7 text-xs', banda.tipo !== 'avulsa' && 'ml-auto')}
+                      onClick={(e) => { e.stopPropagation(); setBandaStatusConfirm(banda); }}
+                    >
+                      {banda.status === 'ativa' ? (
+                        <><Archive className="w-3.5 h-3.5 mr-1" />Arquivar</>
+                      ) : (
+                        <><ArchiveRestore className="w-3.5 h-3.5 mr-1" />Reativar</>
+                      )}
+                    </Button>
                   </div>
                 </div>
               );

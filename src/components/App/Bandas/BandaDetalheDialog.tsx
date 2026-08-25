@@ -532,8 +532,9 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
         </DialogContent>
       </Dialog>
 
-      {/* Sub-modais (z acima do detalhe) */}
-      {bandaId && (
+      {/* Sub-modais (z acima do detalhe) — só com detalhe carregado:
+          ModalBandaAvulsa e a confirmação de exclusão leem campos de `detalhe` */}
+      {bandaId && detalhe && (
         <>
           <ModalIntegranteBanda
             bandaId={bandaId}
