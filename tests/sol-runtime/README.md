@@ -79,3 +79,16 @@ a correção que o fluxo de nome-tardio engoliu.
 
 Cobre: card diz "Saída de caixa"/"PAGAMENTO (saída)", **não** mostra seção ALUNO, a frase
 de correção não vira nome, e o `pode` cai em `lancarSaidaFn` (nunca em `lancarFn`).
+
+## rotulo-humano-e2e.cjs
+Caso Jhon/CG (25/08): legenda rotulava `aluno: Rafael Magalhães Barbosa`, a Sol montou o
+card com **Marcos Gabriel Fonseca Santo** (deduzido do pagador do PIX), e a correção do
+humano vazou para o LLM — que respondeu **"R$ 53,00"**, valor que não existe em lugar nenhum.
+
+Cobre: (1) rótulo humano ganha do pagador mesmo quando a fatura canônica não confirma o
+nome (aluno novo não TEM fatura); (2) correção **citando** o card alcança pendência cujo
+aluno está errado mas é um nome plausível.
+
+⚠️ A trava que impede o vazamento mora na **bridge**, não aqui:
+`_patch-bridge-caixa-nao-vaza-pro-llm.cjs`. Com pendência aberta, `acao: 'nada'` vira
+"não entendi" em vez de virar conversa livre sobre dinheiro.
