@@ -32,7 +32,7 @@ export function BandasPage() {
   const [tabAtiva, setTabAtiva] = useState<TabAtiva>(() =>
     ['lista', 'eventos', 'dashboard', 'garimpar', 'conciliacao'].includes(tabUrl || '')
       ? (tabUrl as TabAtiva)
-      : 'lista',
+      : 'dashboard',
   );
 
   useEffect(() => {
@@ -44,7 +44,7 @@ export function BandasPage() {
   const alterarTab = (tab: TabAtiva) => {
     setTabAtiva(tab);
     const next = new URLSearchParams(searchParams);
-    if (tab === 'lista') next.delete('tab'); else next.set('tab', tab);
+    if (tab === 'dashboard') next.delete('tab'); else next.set('tab', tab);
     setSearchParams(next, { replace: true });
   };
 
@@ -52,9 +52,9 @@ export function BandasPage() {
   const { itens: conciliacao, recarregar: recarregarConciliacao } = useConciliacaoRoster(unidadeAtual);
 
   const tabs: PageTab<TabAtiva>[] = [
+    { id: 'dashboard', label: 'Dashboard', shortLabel: 'KPIs', icon: BarChart3 },
     { id: 'lista', label: 'Bandas', shortLabel: 'Bandas', icon: Guitar },
     { id: 'eventos', label: 'Eventos', shortLabel: 'Eventos', icon: Calendar },
-    { id: 'dashboard', label: 'Dashboard', shortLabel: 'KPIs', icon: BarChart3 },
     { id: 'garimpar', label: 'Garimpar', shortLabel: 'Garimpar', icon: UserSearch },
     {
       id: 'conciliacao',
@@ -70,9 +70,9 @@ export function BandasPage() {
       <PageFilterBar />
       <PageTabs tabs={tabs} activeTab={tabAtiva} onTabChange={alterarTab} />
 
+      {tabAtiva === 'dashboard' && <DashboardBandasTab unidadeAtual={unidadeAtual} />}
       {tabAtiva === 'lista' && <ListaBandasTab unidadeAtual={unidadeAtual} />}
       {tabAtiva === 'eventos' && <EventosTab unidadeAtual={unidadeAtual} />}
-      {tabAtiva === 'dashboard' && <DashboardBandasTab unidadeAtual={unidadeAtual} />}
       {tabAtiva === 'garimpar' && <GarimparTab unidadeAtual={unidadeAtual} />}
       {tabAtiva === 'conciliacao' && (
         <ConciliacaoTab unidadeAtual={unidadeAtual} itens={conciliacao} onResolvido={recarregarConciliacao} />
