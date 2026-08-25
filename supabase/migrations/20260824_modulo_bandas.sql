@@ -325,13 +325,31 @@ AS $function$
   where b.id=p_banda_id;
 $function$;
 
+-- Permanência CANÔNICA: tempo de ESCOLA da pessoa desde a 1ª matrícula
+-- (MIN(data_matricula) por pessoa, mesma chave de dedup do módulo).
+-- alunos.tempo_permanencia_meses é POR CONTRATO e zera na renovação — não usar em Bandas.
+CREATE OR REPLACE FUNCTION public.banda_permanencia_meses(p_aluno_id integer)
+ RETURNS integer
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select round((current_date - min(a2.data_matricula))::numeric / 30.44)::int
+  from public.alunos a2
+  where a2.data_matricula is not null
+    and coalesce(nullif(a2.emusys_student_id,''),'id:'||a2.id::text) = (
+      select coalesce(nullif(al.emusys_student_id,''),'id:'||al.id::text)
+      from public.alunos al where al.id = p_aluno_id
+    )
+$function$;
+
 CREATE OR REPLACE FUNCTION public.banda_integrantes(p_banda_id bigint)
  RETURNS TABLE(aluno_id integer, nome text, foto_url text, instrumento text, funcao text, status_aluno text, tempo_permanencia_meses integer, saiu_da_escola boolean, responsavel_nome text, responsavel_telefone text, whatsapp text)
  LANGUAGE sql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-  select al.id, al.nome, coalesce(al.foto_url, al.photo_url), i.instrumento_na_banda, i.funcao, al.status, al.tempo_permanencia_meses,
+  select al.id, al.nome, coalesce(al.foto_url, al.photo_url), i.instrumento_na_banda, i.funcao, al.status, public.banda_permanencia_meses(al.id),
          coalesce(al.is_ex_aluno,false), al.responsavel_nome, al.responsavel_telefone, al.whatsapp
   from public.banda b
   join public.alunos al on public.banda_aluno_ativo(al.status, al.is_ex_aluno)
@@ -339,7 +357,7 @@ AS $function$
   left join public.banda_integrante i on i.banda_id=b.id and i.aluno_id=al.id
   where b.id=p_banda_id and b.turma_chave is not null
   union all
-  select al.id, al.nome, coalesce(al.foto_url, al.photo_url), i.instrumento_na_banda, i.funcao, al.status, al.tempo_permanencia_meses,
+  select al.id, al.nome, coalesce(al.foto_url, al.photo_url), i.instrumento_na_banda, i.funcao, al.status, public.banda_permanencia_meses(al.id),
          coalesce(al.is_ex_aluno,false), al.responsavel_nome, al.responsavel_telefone, al.whatsapp
   from public.banda b
   join public.banda_integrante i on i.banda_id=b.id and i.ativo
@@ -558,7 +576,7 @@ CREATE OR REPLACE FUNCTION public.bandas_kpis(p_unidade_id uuid DEFAULT NULL::uu
  SET search_path TO 'public'
 AS $function$
   with alu as (
-    select al.unidade_id, coalesce(nullif(al.emusys_student_id,''),'id:'||al.id::text) as pessoa, al.tempo_permanencia_meses as perm,
+    select al.unidade_id, coalesce(nullif(al.emusys_student_id,''),'id:'||al.id::text) as pessoa, public.banda_permanencia_meses(al.id) as perm,
            public.banda_chave_turma(al.unidade_id, al.curso_id, al.dia_aula, al.horario_aula, al.professor_atual_id) as tc
     from public.alunos al
     where public.banda_aluno_ativo(al.status, al.is_ex_aluno) and al.curso_id in (select curso_id from public.banda_curso_depara where ativo)
@@ -568,7 +586,7 @@ AS $function$
   bt as (select b.unidade_id, r.n from public.banda b join reais r on r.tc=b.turma_chave where b.status='ativa' and b.turma_chave is not null),
   ba as (select b.unidade_id, (select count(*)::int from public.banda_integrante i where i.banda_id=b.id and i.ativo) as n from public.banda b where b.status='ativa' and b.turma_chave is null),
   mt as (select a.unidade_id, a.pessoa, a.perm from alu a join reais r on r.tc=a.tc),
-  ma as (select b.unidade_id, coalesce(nullif(al.emusys_student_id,''),'id:'||al.id::text) pessoa, al.tempo_permanencia_meses perm
+  ma as (select b.unidade_id, coalesce(nullif(al.emusys_student_id,''),'id:'||al.id::text) pessoa, public.banda_permanencia_meses(al.id) perm
          from public.banda b join public.banda_integrante i on i.banda_id=b.id and i.ativo join public.alunos al on al.id=i.aluno_id
          where b.status='ativa' and b.turma_chave is null),
   membros as (select unidade_id, pessoa, perm from mt union all select unidade_id, pessoa, perm from ma),

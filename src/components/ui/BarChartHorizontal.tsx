@@ -79,7 +79,7 @@ export function BarChartHorizontal({
               tick={{ fill: '#94a3b8', fontSize: 11 }}
               width={75}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'transparent' }} />
             <Bar 
               dataKey="value" 
               radius={[0, 4, 4, 0]}

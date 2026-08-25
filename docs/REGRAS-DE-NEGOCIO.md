@@ -525,6 +525,8 @@ LTV = ticket_medio × tempo_permanencia_meses
 - Passagens anuladas (`anulado = true`) saem da tela e das estatísticas, mas ficam no banco (soft delete reversível, motivo obrigatório).
 - Idempotência: UNIQUE `(aluno_id, data_saida) WHERE anulado = false`.
 
+⚠️ **`alunos.tempo_permanencia_meses` é POR CONTRATO/matrícula — zera a cada renovação** (renovação abre contrato novo). Para "tempo de escola" da pessoa (aluno VIVO), a fonte canônica é `MIN(data_matricula)` de todas as matrículas da pessoa. No módulo **Bandas**, `banda_integrantes` e `bandas_kpis` usam a helper `banda_permanencia_meses(aluno_id)` (2026-08-24), que calcula exatamente isso — usar `tempo_permanencia_meses` cru ali mostrava ~6 meses quando a real é 30+.
+
 ### 5.10 Taxa de retorno 📋
 
 ```
