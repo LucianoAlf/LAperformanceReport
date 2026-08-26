@@ -102,3 +102,24 @@ saiu com o valor do comprovante do Rafael, R$ 300,00).
 Cobre: `casarNao` descarta de fato; **"nao e a parcela" NÃO é descarte** (é correção, e quem
 trata é o fluxo de nome/valor); `ehConversaSemComando` reconhece "Certinho"/"valeu" e a
 guarda segue calada, sem mandar pro LLM.
+
+## multi-aluno-reenvio-e2e.cjs
+Caso Arthur/Barra (26/08 13:34-13:49): OCR travou 45s duas vezes, ele reenviou o MESMO
+comprovante, e isso criou **duas** pendências `manual_review_multi_student` com o mesmo
+valor. Quando ele mandou a correção EXATA que a Sol pediu ("Nome — R$ valor" para os dois
+alunos), o código só resolve correção quando há **uma** candidata ambígua — com duas, a
+mensagem caía em silêncio (`acao: 'nada'`), sem sequer chamar o interpretador de nomes.
+
+E a guarda "não vaza pro LLM" (25/08) interceptava esse `nada` sem checar se a mensagem
+tinha qualquer relação com a Sol — inclusive um aside do Luciano ("Vou ver o que
+aconteceu ok?") levou "Não entendi essa..." minutos depois.
+
+Cobre: (1) reenviar o mesmo comprovante (mesmo valor, janela de 15 min) substitui a
+pendência em vez de empilhar; (2) a correção "Nome — R$ valor" citada corretamente chega
+ao interpretador e abre o preview; (3) `pareceChamarSol`/`citaAlgumaPendencia` continuam
+falsos para mensagem não-relacionada, e verdadeiros quando a mensagem menciona "Sol".
+
+⚠️ Depende de `ocrFn` devolver `{ text, status }` (chave em inglês) e do evento carregar
+`mediaUrls: [...]` — sem isso o runtime nunca aciona OCR/visão e `valor` fica null,
+mascarando o cenário real (motivo vira `itens_incompletos` em vez de
+`alocacao_nao_derivavel`, que é o que a Sol respondeu de verdade).
