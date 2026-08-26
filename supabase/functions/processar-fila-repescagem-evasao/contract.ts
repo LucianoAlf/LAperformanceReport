@@ -5,6 +5,11 @@ export interface EstadoAntesDoEnvio {
   // pesquisa_evasao_mensagens nao tem coluna de toque: isto conta qualquer
   // saida ja registrada para a pesquisa, nao especificamente a deste toque.
   jaExisteSaidaNaPesquisa: boolean;
+  // A RPC de enfileiramento ja recusa isso na entrada da fila, mas a espera
+  // entre enfileirar e disparar pode ser de horas: outro aluno no MESMO
+  // telefone (caso real: dois irmaos) pode ter respondido nesse meio tempo.
+  // Mandar a repescagem mesmo assim e o pior desfecho possivel.
+  telefoneCompartilhadoJaRespondeu: boolean;
 }
 
 export type DecisaoEnvio =
@@ -22,6 +27,9 @@ export function decidirEnvioRepescagem(estado: EstadoAntesDoEnvio): DecisaoEnvio
   }
   if (estado.jaExisteSaidaNaPesquisa) {
     return { acao: "cancelar", motivo: "ja_enviada" };
+  }
+  if (estado.telefoneCompartilhadoJaRespondeu) {
+    return { acao: "cancelar", motivo: "telefone_ja_respondeu" };
   }
   if (estado.respostaStatus !== "sem_resposta") {
     return { acao: "cancelar", motivo: "respondeu_durante_a_espera" };

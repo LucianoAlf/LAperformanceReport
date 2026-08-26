@@ -138,6 +138,18 @@ test('cancelar so age em linha pendente e so por usuario interno', () => {
   assert.match(source, /REPESCAGEM_CANCELAMENTO_INVALIDO/);
 });
 
+test('item 2 do review: existe RPC dedicada para revalidar telefone compartilhado no disparo, exclusiva de service_role', () => {
+  const source = workerSql();
+  assert.match(source, /create or replace function public\.existe_telefone_compartilhado_respondido/i);
+  assert.match(source, /right\(regexp_replace\([\s\S]{0,120}, 8\)/i);
+  assert.match(source, /outra\.resposta_status <> 'sem_resposta'/i);
+  assert.match(source, /revoke all on function public\.existe_telefone_compartilhado_respondido\(uuid\)/i);
+  assert.doesNotMatch(
+    source,
+    /grant execute on function public\.existe_telefone_compartilhado_respondido[^;]*authenticated/i,
+  );
+});
+
 test('rpcs de worker sao exclusivas de service_role e nunca de anon', () => {
   const source = workerSql();
   assert.match(source, /auth\.role\(\) is distinct from 'service_role'/i);

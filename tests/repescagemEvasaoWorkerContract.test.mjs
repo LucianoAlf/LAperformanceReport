@@ -7,6 +7,7 @@ const base = {
   envioStatus: 'enviado',
   optOutEm: null,
   jaExisteSaidaNaPesquisa: false,
+  telefoneCompartilhadoJaRespondeu: false,
 };
 
 test('envia quando nada mudou desde o enfileiramento', () => {
@@ -31,5 +32,12 @@ test('cancela se ja existe mensagem de saida na pesquisa', () => {
   assert.deepEqual(
     decidirEnvioRepescagem({ ...base, jaExisteSaidaNaPesquisa: true }),
     { acao: 'cancelar', motivo: 'ja_enviada' },
+  );
+});
+
+test('cancela quando o telefone compartilhado ja respondeu (caso dos irmaos)', () => {
+  assert.deepEqual(
+    decidirEnvioRepescagem({ ...base, telefoneCompartilhadoJaRespondeu: true }),
+    { acao: 'cancelar', motivo: 'telefone_ja_respondeu' },
   );
 });

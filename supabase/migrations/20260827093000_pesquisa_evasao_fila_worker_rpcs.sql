@@ -163,6 +163,51 @@ begin
 end;
 $function$;
 
+-- Item 2 do review final: a guarda de telefone compartilhado (dois irmaos no
+-- mesmo numero, um responde e o outro nao) so era checada por
+-- `enfileirar_repescagem_evasao` NA ENTRADA da fila. Entre enfileirar e
+-- disparar pode passar horas -- a mae pode ter respondido nesse meio tempo --
+-- e o worker nao revalidava isso antes de mandar o 2o toque. Mesma comparacao
+-- da RPC de enfileiramento (8 ultimos digitos), agora tambem no disparo.
+create or replace function public.existe_telefone_compartilhado_respondido(
+  p_pesquisa_id uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $function$
+declare
+  v_tel_digitos text;
+  v_existe boolean;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'REPESCAGEM_FORBIDDEN: service_role obrigatoria' using errcode = '42501';
+  end if;
+
+  select regexp_replace(coalesce(p.telefone_destino_snapshot, ''), '\D', '', 'g')
+    into v_tel_digitos
+    from public.pesquisa_evasao p
+   where p.id = p_pesquisa_id;
+
+  if v_tel_digitos is null or v_tel_digitos = '' then
+    return false;
+  end if;
+
+  select exists (
+    select 1
+      from public.pesquisa_evasao outra
+     where outra.id <> p_pesquisa_id
+       and outra.modo_teste = false
+       and right(regexp_replace(coalesce(outra.telefone_destino_snapshot, ''), '\D', '', 'g'), 8)
+           = right(v_tel_digitos, 8)
+       and outra.resposta_status <> 'sem_resposta'
+  ) into v_existe;
+
+  return coalesce(v_existe, false);
+end;
+$function$;
+
 revoke all on function public.claim_repescagem_evasao_job(uuid, integer)
   from public, anon, authenticated;
 revoke all on function public.concluir_repescagem_evasao_job(uuid, uuid, text)
@@ -171,8 +216,11 @@ revoke all on function public.falhar_repescagem_evasao_job(uuid, uuid, text, boo
   from public, anon, authenticated;
 revoke all on function public.cancelar_repescagem_evasao(uuid, text)
   from public, anon, authenticated;
+revoke all on function public.existe_telefone_compartilhado_respondido(uuid)
+  from public, anon, authenticated;
 
 grant execute on function public.claim_repescagem_evasao_job(uuid, integer) to service_role;
 grant execute on function public.concluir_repescagem_evasao_job(uuid, uuid, text) to service_role;
 grant execute on function public.falhar_repescagem_evasao_job(uuid, uuid, text, boolean) to service_role;
 grant execute on function public.cancelar_repescagem_evasao(uuid, text) to authenticated, service_role;
+grant execute on function public.existe_telefone_compartilhado_respondido(uuid) to service_role;
