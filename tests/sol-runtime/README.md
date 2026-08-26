@@ -123,3 +123,27 @@ falsos para mensagem não-relacionada, e verdadeiros quando a mensagem menciona 
 `mediaUrls: [...]` — sem isso o runtime nunca aciona OCR/visão e `valor` fica null,
 mascarando o cenário real (motivo vira `itens_incompletos` em vez de
 `alocacao_nao_derivavel`, que é o que a Sol respondeu de verdade).
+
+## ocr-concorrencia-e2e.cjs
+A raiz do que deixava a Sol 1-2 minutos calada depois de um comprovante (caso Arthur/Barra
+26/08, mas sistêmico — vinha degradando desde 21/08: 0% de timeout de OCR até 20/08, 100%
+em 26/08, nas três unidades).
+
+CAUSA: tesseract 5.x usa OpenMP e, sem limite, cada processo tenta usar TODAS as CPUs
+visíveis (4 nesta máquina). `ocrLocal` já roda PSM 6 e PSM 4 **em paralelo** por imagem —
+e essa paralelização, sem limite de thread, faz os dois processos disputarem as CPUs e
+**travarem de verdade** (deadlock, não lentidão): nem depois de 50s nenhum dos dois fecha
+o stdout, o timeout de 45s do Node mata os dois, e o fallback de visão assume — daí a
+demora de 1-2 minutos por comprovante, todo santo dia.
+
+Prova isolada (26/08, fora do bridge e do Node): tesseract via bash na imagem real do
+Arthur, 1,07s. 2 tesseract concorrentes sem limite, via Node: **nunca fecham** (>50s). Os
+mesmos 2, com `OMP_THREAD_LIMIT=1`: <1s cada.
+
+Roda a função REAL `ocrLocal` (gera a própria imagem de teste via `python3`/PIL — pula se
+indisponível) sozinha e depois em 2 chamadas concorrentes (4 processos tesseract ao mesmo
+tempo). Falha se qualquer uma passar de 10s (bem abaixo do timeout de 45s) ou der timeout —
+sinal de que o oversubscription do OpenMP voltou.
+
+⚠️ Roda fora do padrão dos outros testes desta pasta: não simula mensagem/handler, mede
+tempo de execução da função de OCR isolada. É teste de infraestrutura, não de fluxo.
