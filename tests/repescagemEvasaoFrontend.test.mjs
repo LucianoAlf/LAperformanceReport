@@ -27,3 +27,11 @@ test('tela oferece repescar, repescar todos e cancelar', () => {
   assert.match(tela, /useRepescagemEvasao/);
   assert.match(tela, /cancelar/i);
 });
+
+test('item 6 do review: cancelamento legitimo (respondeu na espera / opt-out / ja enviada) nao aparece como falha vermelha', () => {
+  // os 3 motivos precisam ter rotulo neutro proprio, distinto do vermelho de falha
+  assert.match(tela, /respondeu_durante_a_espera/);
+  assert.match(tela, /opt_out/);
+  assert.match(tela, /ja_enviada/);
+  assert.match(tela, /classeBadgeRepescagem/);
+});

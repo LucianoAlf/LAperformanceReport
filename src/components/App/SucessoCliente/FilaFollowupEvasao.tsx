@@ -116,9 +116,23 @@ function formatarDiaMesBRT(valor: string) {
   }).format(data);
 }
 
+// Item 6 do review final: o worker fecha a linha como 'falhou' com um destes
+// motivos quando o desfecho e o DESEJADO -- a pessoa respondeu na espera, ou
+// pediu para nao receber mais, ou a repescagem ja saiu por outra execucao
+// concorrente. Nao e falha, e apresentacao (a tela e a unica coisa que muda
+// aqui; nenhum estado novo entra no banco).
+const MOTIVOS_ENCERRAMENTO_NORMAL: Record<string, string> = {
+  respondeu_durante_a_espera: 'respondeu antes da repescagem',
+  opt_out: 'pediu para não receber mais',
+  ja_enviada: 'repescagem já enviada',
+};
+
 /** Rótulo do badge de repescagem (2º toque) por linha — status vem direto de `pesquisa_evasao_envios_fila`. */
 function rotuloBadgeRepescagem(estado: RepescagemEstado | undefined): string | null {
   if (!estado) return null;
+  if (estado.status === 'falhou' && estado.ultimo_erro && MOTIVOS_ENCERRAMENTO_NORMAL[estado.ultimo_erro]) {
+    return MOTIVOS_ENCERRAMENTO_NORMAL[estado.ultimo_erro];
+  }
   switch (estado.status) {
     case 'pendente':
       return `na fila · sai ${formatarHoraBRT(estado.agendada_para)}`;
@@ -142,6 +156,14 @@ const CLASSES_BADGE_REPESCAGEM: Record<RepescagemEstado['status'], string> = {
   falhou: 'border-rose-400/30 bg-rose-400/10 text-rose-200',
   cancelada: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
 };
+
+/** Cor do badge — encerramento normal usa a MESMA classe neutra de 'cancelada', nunca o vermelho de falha. */
+function classeBadgeRepescagem(estado: RepescagemEstado): string {
+  if (estado.status === 'falhou' && estado.ultimo_erro && MOTIVOS_ENCERRAMENTO_NORMAL[estado.ultimo_erro]) {
+    return CLASSES_BADGE_REPESCAGEM.cancelada;
+  }
+  return CLASSES_BADGE_REPESCAGEM[estado.status];
+}
 
 export function FilaFollowupEvasao({
   unidadeAtual,
@@ -384,7 +406,7 @@ export function FilaFollowupEvasao({
                       if (!rotulo) return null;
                       return (
                         <div className="mt-2 flex items-center gap-2">
-                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${CLASSES_BADGE_REPESCAGEM[estadoRepescagem!.status]}`}>
+                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${classeBadgeRepescagem(estadoRepescagem!)}`}>
                             Repescagem: {rotulo}
                           </span>
                           {estadoRepescagem!.status === 'pendente' && (
