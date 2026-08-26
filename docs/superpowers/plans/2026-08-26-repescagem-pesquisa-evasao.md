@@ -484,12 +484,19 @@ begin
       continue;
     end if;
 
-    v_publico := case
-      when v_p.aluno_telefone is not null
-       and right(regexp_replace(coalesce(v_p.aluno_telefone,''), '\D', '', 'g'), 8)
-           = right(v_p.tel_digitos, 8)
-      then 'direto' else 'responsavel'
-    end;
+    -- O publico do 2o toque e o MESMO do 1o: quem falou continua falando com
+    -- quem recebeu. Nao recalcular por idade (duplicaria a regra de
+    -- resolverPublicoPesquisa e depende de data_nascimento, que pode faltar) e
+    -- nunca deduzir por telefone (o telefone do responsavel tambem e o do aluno
+    -- em varios cadastros). Medido em 26/08: 37 de 37 pesquisas tem template_id.
+    select t.publico into v_publico
+      from public.pesquisa_evasao_templates t
+     where t.id = v_p.template_id;
+
+    if v_publico is null then
+      v_recusadas := v_recusadas || jsonb_build_object('pesquisa_id', v_id, 'motivo', 'publico_indeterminado');
+      continue;
+    end if;
 
     select t.id, t.versao into v_template
       from public.pesquisa_evasao_templates t
@@ -881,7 +888,7 @@ git commit -m "refactor(pesquisa-evasao): move provider para _shared sem mudar c
 - Modify: `supabase/config.toml`
 
 **Interfaces:**
-- Consumes: `claim_repescagem_evasao_job`, `concluir_repescagem_evasao_job`, `falhar_repescagem_evasao_job` (Task 4); `enviarMensagemComCredenciaisExatas` (Task 5); `resolverPublicoPesquisa` de `enviar-pesquisa-evasao/publico.ts`
+- Consumes: `claim_repescagem_evasao_job`, `concluir_repescagem_evasao_job`, `falhar_repescagem_evasao_job` (Task 4); `enviarMensagemComCredenciaisExatas` (Task 5); `renderizarMensagem` e `tratamentoGramatical.ts` de `enviar-pesquisa-evasao/`
 - Produces: `decidirEnvioRepescagem(estado): { acao: 'enviar' | 'cancelar', motivo?: string }` — função pura, testável sem rede
 
 - [ ] **Step 1: Escrever o teste da decisão pura (falha)**
@@ -1007,7 +1014,6 @@ import {
   extrairProviderMessageId,
   sanitizarErroProvider,
 } from "../_shared/pesquisa-evasao-provider.ts";
-import { resolverPublicoPesquisa } from "../enviar-pesquisa-evasao/publico.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -1084,16 +1090,18 @@ serve(async (req: Request) => {
   // 4. Renderiza o template do toque pelo publico do destino.
   const { data: template } = await supabase
     .from("pesquisa_evasao_templates")
-    .select("corpo")
+    .select("corpo, publico")
     .eq("id", job.template_id)
     .maybeSingle();
 
   const telefoneDestino = String(pesquisa.telefone_destino_snapshot ?? "");
   const soDigitos = (valor: string) => valor.replace(/\D/g, "");
-  const publico = soDigitos(String(pesquisa.aluno_telefone ?? "")).slice(-8) ===
-      soDigitos(telefoneDestino).slice(-8)
-    ? "direto"
-    : "responsavel";
+
+  // O publico ja foi decidido no 1o toque e viaja no template escolhido pela
+  // RPC de enfileiramento (`job.template_id`). O worker nao recalcula publico:
+  // nem por idade (regra de resolverPublicoPesquisa, que exige data_nascimento),
+  // nem por telefone (o numero do responsavel costuma ser o do aluno).
+  const publico = String(template?.publico ?? "");
 
   // A assinatura e a MESMA do 1o toque: o texto diz "aqui e a Fulana de novo".
   const assinatura = String(pesquisa.assinatura_nome_snapshot ?? "");
