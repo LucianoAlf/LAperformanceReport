@@ -102,37 +102,36 @@ language plpgsql
 security definer
 set search_path = pg_catalog, public
 as $function$
-declare
-  v_tentativas integer;
-  v_max integer;
 begin
   if auth.role() is distinct from 'service_role' then
     raise exception 'REPESCAGEM_FORBIDDEN: service_role obrigatoria' using errcode = '42501';
   end if;
 
-  select tentativas, max_tentativas into v_tentativas, v_max
-    from public.pesquisa_evasao_envios_fila
-   where id = p_id and worker_id = p_worker_id and status = 'enviando';
-
-  if not found then
-    raise exception 'REPESCAGEM_FALHA_INVALIDA: job nao esta com este worker';
-  end if;
-
-  update public.pesquisa_evasao_envios_fila
+  -- Guard de posse vive no proprio UPDATE (nao num SELECT antes): entre ler e
+  -- escrever a linha pode ter mudado de dono/estado (ex.: a limpeza de lease
+  -- do claim acabou de fechar como 'falhou'), e um UPDATE so por id reviveria
+  -- essa linha para 'pendente' com base em variaveis ja obsoletas.
+  update public.pesquisa_evasao_envios_fila f
      set status = case
-           when p_terminal or v_tentativas >= v_max then 'falhou'
+           when p_terminal or f.tentativas >= f.max_tentativas then 'falhou'
            else 'pendente'
          end,
-         -- backoff simples: 5 min por tentativa
+         -- backoff simples: 5 min por tentativa ja feita
          agendada_para = case
-           when p_terminal or v_tentativas >= v_max then agendada_para
+           when p_terminal or f.tentativas >= f.max_tentativas then f.agendada_para
            else public.proximo_horario_envio_repescagem(
-                  now() + make_interval(mins => 5 * v_tentativas))
+                  now() + make_interval(mins => 5 * f.tentativas))
          end,
          ultimo_erro = left(coalesce(p_erro, 'erro desconhecido'), 500),
          worker_id = null,
          lease_expires_at = null
-   where id = p_id;
+   where f.id = p_id
+     and f.worker_id = p_worker_id
+     and f.status = 'enviando';
+
+  if not found then
+    raise exception 'REPESCAGEM_FALHA_INVALIDA: job nao esta com este worker';
+  end if;
 end;
 $function$;
 

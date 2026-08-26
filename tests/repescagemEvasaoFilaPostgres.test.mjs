@@ -121,6 +121,16 @@ test('conclusao e falha exigem o worker dono da linha', () => {
   assert.match(source, /REPESCAGEM_FALHA_INVALIDA/);
 });
 
+test('falhar escreve com o guard de posse no proprio UPDATE, sem SELECT-entao-UPDATE', () => {
+  const source = workerSql();
+  const inicio = source.indexOf('function public.falhar_repescagem_evasao_job');
+  const corpo = source.slice(inicio, source.indexOf('$function$;', inicio));
+  assert.match(corpo, /where f\.id = p_id\s*\n\s*and f\.worker_id = p_worker_id\s*\n\s*and f\.status = 'enviando'/i);
+  assert.doesNotMatch(corpo, /select tentativas, max_tentativas into/i);
+  // o CASE le a coluna da linha, nao uma variavel lida antes
+  assert.match(corpo, /f\.tentativas >= f\.max_tentativas/);
+});
+
 test('cancelar so age em linha pendente e so por usuario interno', () => {
   const source = workerSql();
   assert.match(source, /fn_pesquisa_evasao_usuario_interno_ativo\(\)/);
