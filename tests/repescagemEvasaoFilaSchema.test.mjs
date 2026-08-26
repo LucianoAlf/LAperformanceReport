@@ -36,3 +36,22 @@ test('tabela nasce fechada e so abre select escopado para authenticated', () => 
   assert.match(source, /\(\s*select public\.is_admin\(\)\s*\)/i);
   assert.match(source, /\(\s*select public\.get_user_unidade_ids\(\)\s*\)/i);
 });
+
+const templateUrl = new URL(
+  '../supabase/migrations/20260827091000_pesquisa_evasao_template_repescagem.sql',
+  import.meta.url,
+);
+
+test('templates de repescagem existem nos dois publicos e nao citam o aluno', () => {
+  assert.ok(existsSync(templateUrl), 'migration do template deve existir');
+  const source = readFileSync(templateUrl, 'utf8');
+
+  assert.match(source, /'evasao_repescagem'/);
+  assert.match(source, /'direto'/);
+  assert.match(source, /'responsavel'/);
+  assert.match(source, /\{\{aluno_primeiro_nome\}\}/);
+  assert.match(source, /\{\{responsavel_primeiro_nome\}\}/);
+  assert.match(source, /\{\{assinatura_com_artigo\}\}/);
+  // o texto aprovado nao menciona o aluno na versao do responsavel
+  assert.doesNotMatch(source, /\{\{aluno_com_preposicao\}\}/);
+});
