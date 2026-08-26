@@ -61,6 +61,13 @@ begin
       using errcode = '42501';
   end if;
 
+  -- Serializa chamadas concorrentes: sem isso, duas operadoras enfileirando ao
+  -- mesmo tempo podem ambas contar o teto diario abaixo de 30 antes de
+  -- qualquer insert e estourar o limite juntas (padrao de corrida ja visto
+  -- neste repo). xact, nao sessao: via PostgREST a conexao volta ao pool com
+  -- o lock pendurado.
+  perform pg_advisory_xact_lock(hashtext('repescagem_evasao_enfileiramento'));
+
   select u.id into v_usuario_id
   from public.usuarios u
   where u.auth_user_id = auth.uid()
@@ -96,7 +103,11 @@ begin
        where f.pesquisa_id = v_id and f.toque = 2
     ) then
       v_motivo := 'ja_enfileirada';
-    elsif v_p.tel_digitos <> '' and exists (
+    elsif v_p.tel_digitos = '' then
+      -- Sem telefone a linha nunca seria entregue: falha silenciosa mais
+      -- adiante, na fila, se deixarmos passar.
+      v_motivo := 'telefone_ausente';
+    elsif exists (
       -- Caso real: o mesmo telefone atende dois irmaos. A mae respondeu uma vez,
       -- fechou a pesquisa de um e a do outro seguiu "sem resposta". Cobrar de
       -- novo quem acabou de responder e o pior desfecho possivel.
@@ -154,17 +165,25 @@ begin
       );
     end loop;
 
-    insert into public.pesquisa_evasao_envios_fila (
-      pesquisa_id, unidade_id, toque, template_id, template_versao,
-      status, agendada_para, enfileirada_por_usuario_id
-    ) values (
-      v_id, v_p.unidade_id, 2, v_template.id, v_template.versao,
-      'pendente', v_cursor, v_usuario_id
-    );
+    begin
+      insert into public.pesquisa_evasao_envios_fila (
+        pesquisa_id, unidade_id, toque, template_id, template_versao,
+        status, agendada_para, enfileirada_por_usuario_id
+      ) values (
+        v_id, v_p.unidade_id, 2, v_template.id, v_template.versao,
+        'pendente', v_cursor, v_usuario_id
+      );
 
-    v_enfileiradas := v_enfileiradas || jsonb_build_object(
-      'pesquisa_id', v_id, 'agendada_para', v_cursor
-    );
+      v_enfileiradas := v_enfileiradas || jsonb_build_object(
+        'pesquisa_id', v_id, 'agendada_para', v_cursor
+      );
+    exception when others then
+      -- Um item ruim (ex.: violar o indice de "vivo" da fila) nao pode
+      -- derrubar o lote inteiro; registra o erro real e segue para o proximo.
+      v_recusadas := v_recusadas || jsonb_build_object(
+        'pesquisa_id', v_id, 'motivo', 'erro_ao_enfileirar', 'erro', sqlerrm
+      );
+    end;
 
     -- Intervalo aleatorio entre 90 e 240 segundos.
     v_cursor := public.proximo_horario_envio_repescagem(

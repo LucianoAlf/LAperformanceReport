@@ -40,8 +40,10 @@ test('todas as guardas de recusa estao presentes com motivo proprio', () => {
     'muito_cedo',
     'ja_enfileirada',
     'telefone_ja_respondeu',
+    'telefone_ausente',
     'publico_indeterminado',
     'template_ausente',
+    'erro_ao_enfileirar',
   ]) {
     assert.match(source, new RegExp(`'${motivo}'`), `motivo ${motivo} deve existir`);
   }
@@ -77,4 +79,10 @@ test('funcoes nao ficam executaveis por anon', () => {
   const source = sql();
   assert.match(source, /revoke all on function public\.enfileirar_repescagem_evasao\(uuid\[\]\)\s*\n?\s*from public, anon, authenticated/i);
   assert.match(source, /revoke all on function public\.proximo_horario_envio_repescagem\(timestamptz\)\s*\n?\s*from public, anon, authenticated/i);
+});
+
+test('enfileiramento serializa concorrentes com advisory lock de transacao', () => {
+  const source = sql();
+  assert.match(source, /pg_advisory_xact_lock/);
+  assert.doesNotMatch(source, /pg_advisory_lock\s*\(/);
 });
