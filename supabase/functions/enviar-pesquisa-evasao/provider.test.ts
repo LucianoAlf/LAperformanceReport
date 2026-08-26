@@ -11,7 +11,7 @@ import {
   extrairProviderMessageId,
   providerSuportaChaveIdempotente,
   sanitizarErroProvider,
-} from "./provider.ts";
+} from "../_shared/pesquisa-evasao-provider.ts";
 
 Deno.test("extrai message id das formas conhecidas sem inventar identificador", () => {
   assertEquals(extrairProviderMessageId({ id: "uaz-1" }), "uaz-1");
@@ -75,7 +75,7 @@ Deno.test("2xx sem comprovante fica incerto, nunca falha retryable", () => {
 });
 
 Deno.test("fetch do provider expira e faz uma unica tentativa", async () => {
-  const modulo = await import("./provider.ts") as unknown as {
+  const modulo = await import("../_shared/pesquisa-evasao-provider.ts") as unknown as {
     fetchProviderComTimeout?: (
       input: string,
       init: RequestInit,
@@ -115,7 +115,7 @@ Deno.test("fetch do provider expira e faz uma unica tentativa", async () => {
 });
 
 Deno.test("excecao de transporte propaga sem retry", async () => {
-  const modulo = await import("./provider.ts") as unknown as {
+  const modulo = await import("../_shared/pesquisa-evasao-provider.ts") as unknown as {
     fetchProviderComTimeout?: (
       input: string,
       init: RequestInit,

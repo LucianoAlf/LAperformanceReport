@@ -33,7 +33,7 @@ import {
   ErroConfiguracaoProvider,
   type EstadoEnvioPersistido,
   sanitizarErroProvider,
-} from "./provider.ts";
+} from "../_shared/pesquisa-evasao-provider.ts";
 import { resolverPublicoPesquisa } from "./publico.ts";
 import {
   alunoComPreposicao,
