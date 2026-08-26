@@ -86,3 +86,58 @@ test('enfileiramento serializa concorrentes com advisory lock de transacao', () 
   assert.match(source, /pg_advisory_xact_lock/);
   assert.doesNotMatch(source, /pg_advisory_lock\s*\(/);
 });
+
+const workerUrl = new URL(
+  '../supabase/migrations/20260827093000_pesquisa_evasao_fila_worker_rpcs.sql',
+  import.meta.url,
+);
+const workerSql = () => (existsSync(workerUrl) ? readFileSync(workerUrl, 'utf8') : '');
+
+test('claim toma a vez de forma atomica, sem SELECT-entao-UPDATE', () => {
+  assert.ok(existsSync(workerUrl), 'migration do worker deve existir');
+  const source = workerSql();
+  assert.match(source, /update public\.pesquisa_evasao_envios_fila f\s*\n\s*set\s*\n?\s*status = 'enviando'/i);
+  assert.match(source, /for update skip locked/i);
+  assert.match(source, /returning f\.\* into v_job/i);
+});
+
+test('lease vencido vira falhou e NUNCA volta para pendente', () => {
+  const source = workerSql();
+  const bloco = source.slice(
+    source.indexOf('lease_expires_at <= now()') - 700,
+    source.indexOf('lease_expires_at <= now()') + 60,
+  );
+  assert.match(bloco, /set status = 'falhou'/i);
+  assert.match(bloco, /LEASE_EXPIRADO/);
+  assert.doesNotMatch(bloco, /set status = 'pendente'/i);
+  assert.doesNotMatch(bloco, /retry_wait/i);
+});
+
+test('conclusao e falha exigem o worker dono da linha', () => {
+  const source = workerSql();
+  const ocorrencias = source.match(/worker_id = p_worker_id and status = 'enviando'/gi) ?? [];
+  assert.ok(ocorrencias.length >= 1, 'conclusao deve casar worker e status');
+  assert.match(source, /REPESCAGEM_CONCLUSAO_INVALIDA/);
+  assert.match(source, /REPESCAGEM_FALHA_INVALIDA/);
+});
+
+test('cancelar so age em linha pendente e so por usuario interno', () => {
+  const source = workerSql();
+  assert.match(source, /fn_pesquisa_evasao_usuario_interno_ativo\(\)/);
+  assert.match(source, /and status = 'pendente'/i);
+  assert.match(source, /REPESCAGEM_CANCELAMENTO_INVALIDO/);
+});
+
+test('rpcs de worker sao exclusivas de service_role e nunca de anon', () => {
+  const source = workerSql();
+  assert.match(source, /auth\.role\(\) is distinct from 'service_role'/i);
+  for (const fn of [
+    'claim_repescagem_evasao_job',
+    'concluir_repescagem_evasao_job',
+    'falhar_repescagem_evasao_job',
+    'cancelar_repescagem_evasao',
+  ]) {
+    assert.match(source, new RegExp(`revoke all on function public\\.${fn}`, 'i'));
+  }
+  assert.doesNotMatch(source, /grant execute on function public\.claim_repescagem_evasao_job[^;]*authenticated/i);
+});
