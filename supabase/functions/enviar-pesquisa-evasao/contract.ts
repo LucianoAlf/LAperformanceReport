@@ -26,10 +26,12 @@ export function validarMensagemFinal(valor: unknown): string {
   return valor;
 }
 
-export interface RenderInput {
-  template: string;
-  valores: Record<string, string | null | undefined>;
-}
+// RenderInput, PLACEHOLDERS_PERMITIDOS e renderizarMensagem foram extraidos
+// para _shared/pesquisa-evasao-render.ts na Task 6 (fix round 1), para que o
+// worker de repescagem os consuma sem importar de dentro desta pasta de
+// funcao. Reexportados aqui para nao quebrar nenhum consumidor/teste
+// existente desta edge.
+export type { RenderInput } from "../_shared/pesquisa-evasao-render.ts";
 
 export interface PreviewSnapshot {
   evasaoId: number;
@@ -274,41 +276,7 @@ export function resolverDestinoPesquisaPorPublico(
   return destino;
 }
 
-const PLACEHOLDERS_PERMITIDOS = new Set([
-  "aluno_primeiro_nome",
-  "responsavel_primeiro_nome",
-  "assinatura_nome",
-  "assinatura_com_artigo",
-  "aluno_com_preposicao",
-]);
-
-export function renderizarMensagem(input: RenderInput): string {
-  if (typeof input.template !== "string" || input.template.length === 0) {
-    throw new Error("Template invalido");
-  }
-
-  const renderizada = input.template.replace(
-    /{{\s*([a-z][a-z0-9_]*)\s*}}/gi,
-    (_placeholder, nome: string) => {
-      if (!PLACEHOLDERS_PERMITIDOS.has(nome)) {
-        throw new Error(`Placeholder invalido: ${nome}`);
-      }
-
-      const valor = input.valores[nome];
-      if (typeof valor !== "string" || valor.trim().length === 0) {
-        throw new Error(`Placeholder ausente: ${nome}`);
-      }
-
-      return valor;
-    },
-  );
-
-  if (renderizada.includes("{{") || renderizada.includes("}}")) {
-    throw new Error("Placeholder invalido no template");
-  }
-
-  return renderizada;
-}
+export { renderizarMensagem } from "../_shared/pesquisa-evasao-render.ts";
 
 function snapshotInvalido(campo: keyof PreviewSnapshot | "objeto"): never {
   throw new Error(`Snapshot invalido: ${campo}`);

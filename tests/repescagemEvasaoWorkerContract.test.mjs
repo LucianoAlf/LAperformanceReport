@@ -6,7 +6,7 @@ const base = {
   respostaStatus: 'sem_resposta',
   envioStatus: 'enviado',
   optOutEm: null,
-  jaExisteSaidaDoToque: false,
+  jaExisteSaidaNaPesquisa: false,
 };
 
 test('envia quando nada mudou desde o enfileiramento', () => {
@@ -27,9 +27,9 @@ test('cancela apos opt-out', () => {
   );
 });
 
-test('cancela se ja existe mensagem de saida deste toque', () => {
+test('cancela se ja existe mensagem de saida na pesquisa', () => {
   assert.deepEqual(
-    decidirEnvioRepescagem({ ...base, jaExisteSaidaDoToque: true }),
+    decidirEnvioRepescagem({ ...base, jaExisteSaidaNaPesquisa: true }),
     { acao: 'cancelar', motivo: 'ja_enviada' },
   );
 });

@@ -38,7 +38,7 @@ import { resolverPublicoPesquisa } from "./publico.ts";
 import {
   alunoComPreposicao,
   assinaturaComArtigo,
-} from "./tratamentoGramatical.ts";
+} from "../_shared/pesquisa-evasao-tratamento-gramatical.ts";
 
 const CAIXA_SUCESSO_ID = 3;
 const PREVIEW_TTL_MS = 10 * 60 * 1000;

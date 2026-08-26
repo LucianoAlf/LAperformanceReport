@@ -53,7 +53,7 @@ test('edge resolve artigo e preposicao no servidor', () => {
 
   assert.match(
     edge,
-    /import\s*\{[\s\S]*alunoComPreposicao[\s\S]*assinaturaComArtigo[\s\S]*\}\s*from\s*["']\.\/tratamentoGramatical\.ts["']/,
+    /import\s*\{[\s\S]*alunoComPreposicao[\s\S]*assinaturaComArtigo[\s\S]*\}\s*from\s*["']\.\.\/_shared\/pesquisa-evasao-tratamento-gramatical\.ts["']/,
   );
   assert.match(
     edge,

@@ -16,11 +16,11 @@ import {
   autenticarWorkerInterno,
   decidirEnvioRepescagem,
 } from "./contract.ts";
-import { renderizarMensagem } from "../enviar-pesquisa-evasao/contract.ts";
+import { renderizarMensagem } from "../_shared/pesquisa-evasao-render.ts";
 import {
   alunoComPreposicao,
   assinaturaComArtigo,
-} from "../enviar-pesquisa-evasao/tratamentoGramatical.ts";
+} from "../_shared/pesquisa-evasao-tratamento-gramatical.ts";
 import {
   classificarRespostaProvider,
   enviarMensagemComCredenciaisExatas,
@@ -45,6 +45,48 @@ function primeiroNome(nome: string): string {
   return String(nome ?? "").trim().split(/\s+/)[0] ?? "";
 }
 
+// As duas RPCs de transicao da fila levantam excecao no banco quando o guard
+// de posse nao bate (worker perdeu o lease, linha ja foi movida por outra
+// execucao concorrente etc). Sem capturar o erro, isso voltava como
+// {error} silencioso e nunca aparecia nos logs da edge.
+async function falharJob(
+  supabase,
+  params: {
+    p_id: string;
+    p_worker_id: string;
+    p_erro: string;
+    p_terminal: boolean;
+  },
+): Promise<void> {
+  const { error } = await supabase.rpc("falhar_repescagem_evasao_job", params);
+  if (error) {
+    console.error(
+      "processar-fila-repescagem-evasao: falhar_repescagem_evasao_job falhou",
+      { ...params, erroRpc: error.message },
+    );
+  }
+}
+
+async function concluirJob(
+  supabase,
+  params: {
+    p_id: string;
+    p_worker_id: string;
+    p_provider_message_id: string | null;
+  },
+): Promise<void> {
+  const { error } = await supabase.rpc(
+    "concluir_repescagem_evasao_job",
+    params,
+  );
+  if (error) {
+    console.error(
+      "processar-fila-repescagem-evasao: concluir_repescagem_evasao_job falhou",
+      { ...params, erroRpc: error.message },
+    );
+  }
+}
+
 serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "metodo_nao_permitido" }, 405);
   if (!autenticarWorkerInterno(req.headers.get("x-sync-token"), WORKER_TOKEN)) {
@@ -59,7 +101,13 @@ serve(async (req: Request) => {
     "claim_repescagem_evasao_job",
     { p_worker_id: workerId, p_lease_seconds: 120 },
   );
-  if (erroClaim) return json({ error: "claim_indisponivel" }, 503);
+  if (erroClaim) {
+    console.error(
+      "processar-fila-repescagem-evasao: claim_repescagem_evasao_job falhou",
+      { erroRpc: erroClaim.message },
+    );
+    return json({ error: "claim_indisponivel" }, 503);
+  }
   if (!job) return json({ ok: true, processado: 0 });
 
   // 2. Le o estado atual da pesquisa e revalida.
@@ -67,13 +115,14 @@ serve(async (req: Request) => {
     .from("pesquisa_evasao")
     .select(
       "id, aluno_nome, aluno_telefone, telefone_destino_snapshot, caixa_id, " +
-        "resposta_status, envio_status, opt_out_em, assinatura_nome_snapshot",
+        "preview_id, resposta_status, envio_status, opt_out_em, " +
+        "assinatura_nome_snapshot",
     )
     .eq("id", job.pesquisa_id)
     .maybeSingle();
 
   if (erroPesquisa || !pesquisa) {
-    await supabase.rpc("falhar_repescagem_evasao_job", {
+    await falharJob(supabase, {
       p_id: job.id,
       p_worker_id: workerId,
       p_erro: "pesquisa_nao_encontrada",
@@ -82,22 +131,39 @@ serve(async (req: Request) => {
     return json({ ok: true, processado: 0, motivo: "pesquisa_nao_encontrada" });
   }
 
-  const { count: saidasDoToque } = await supabase
+  // Guard anti-duplicata: se a propria consulta falhar, NAO assumir "sem
+  // saida" (isso enviaria de novo por engano, o pior desfecho possivel).
+  // Nada foi para a rede ainda, entao adiar (nao terminal) e seguro.
+  const { count: saidasNaPesquisa, error: erroSaidas } = await supabase
     .from("pesquisa_evasao_mensagens")
     .select("id", { count: "exact", head: true })
     .eq("pesquisa_id", job.pesquisa_id)
     .eq("direcao", "saida");
 
+  if (erroSaidas) {
+    await falharJob(supabase, {
+      p_id: job.id,
+      p_worker_id: workerId,
+      p_erro: "verificacao_saida_indisponivel",
+      p_terminal: false,
+    });
+    return json({
+      ok: true,
+      processado: 0,
+      motivo: "verificacao_saida_indisponivel",
+    });
+  }
+
   const decisao = decidirEnvioRepescagem({
     respostaStatus: String(pesquisa.resposta_status),
     envioStatus: String(pesquisa.envio_status),
     optOutEm: pesquisa.opt_out_em ?? null,
-    jaExisteSaidaDoToque: (saidasDoToque ?? 0) > 0,
+    jaExisteSaidaNaPesquisa: (saidasNaPesquisa ?? 0) > 0,
   });
 
   // 3. Cancelar encerra a rodada sem enviar nada.
   if (decisao.acao === "cancelar") {
-    await supabase.rpc("falhar_repescagem_evasao_job", {
+    await falharJob(supabase, {
       p_id: job.id,
       p_worker_id: workerId,
       p_erro: decisao.motivo,
@@ -122,10 +188,44 @@ serve(async (req: Request) => {
   // nem por telefone (o numero do responsavel costuma ser o do aluno).
   const publico = String(template?.publico ?? "");
 
+  // O nome de quem RECEBEU o 1o toque no publico "responsavel" (mae, pai,
+  // outro responsavel) mora no snapshot do preview daquele envio, nunca no
+  // cadastro do aluno: o numero do responsavel pode nao ter nenhum parentesco
+  // textual com o nome do aluno, e o texto da repescagem depende de
+  // reconhecer a conversa anterior ("Oi, {{nome}}! Aqui e a Fulana DE NOVO").
+  // Usar aluno_nome aqui mandaria o nome errado para quem recebeu o 1o toque.
+  let destinatarioNomeSnapshot: string | null = null;
+  if (pesquisa.preview_id) {
+    const { data: preview, error: erroPreview } = await supabase
+      .from("pesquisa_evasao_previews")
+      .select("destinatario_nome_snapshot")
+      .eq("id", pesquisa.preview_id)
+      .maybeSingle();
+    if (!erroPreview) {
+      destinatarioNomeSnapshot = preview?.destinatario_nome_snapshot ?? null;
+    }
+  }
+
+  // Sem esse nome no publico responsavel, nao ha como saber a quem se
+  // dirigir: mandar errado (ex.: nome do aluno) e pior do que nao mandar.
+  if (publico === "responsavel" && !destinatarioNomeSnapshot?.trim()) {
+    await falharJob(supabase, {
+      p_id: job.id,
+      p_worker_id: workerId,
+      p_erro: "destinatario_indeterminado",
+      p_terminal: true,
+    });
+    return json({
+      ok: true,
+      processado: 0,
+      motivo: "destinatario_indeterminado",
+    });
+  }
+
   // A assinatura e a MESMA do 1o toque: o texto diz "aqui e a Fulana de novo".
   const assinatura = String(pesquisa.assinatura_nome_snapshot ?? "");
   if (!template?.corpo || !assinatura || !telefoneDestino) {
-    await supabase.rpc("falhar_repescagem_evasao_job", {
+    await falharJob(supabase, {
       p_id: job.id,
       p_worker_id: workerId,
       p_erro: "dados_insuficientes_para_render",
@@ -140,7 +240,9 @@ serve(async (req: Request) => {
       template: String(template.corpo),
       valores: {
         aluno_primeiro_nome: primeiroNome(String(pesquisa.aluno_nome)),
-        responsavel_primeiro_nome: primeiroNome(String(pesquisa.aluno_nome)),
+        responsavel_primeiro_nome: publico === "responsavel"
+          ? primeiroNome(String(destinatarioNomeSnapshot))
+          : primeiroNome(String(pesquisa.aluno_nome)),
         assinatura_nome: assinatura,
         assinatura_com_artigo: assinaturaComArtigo(assinatura),
         aluno_com_preposicao: alunoComPreposicao(
@@ -149,7 +251,7 @@ serve(async (req: Request) => {
       },
     });
   } catch (erro) {
-    await supabase.rpc("falhar_repescagem_evasao_job", {
+    await falharJob(supabase, {
       p_id: job.id,
       p_worker_id: workerId,
       p_erro: erro instanceof Error ? erro.message : "render_falhou",
@@ -192,7 +294,7 @@ serve(async (req: Request) => {
     // mesma incerteza que classificarRespostaProvider chama de "incerto": nao
     // sabemos se a mensagem chegou ao provider, e por isso e terminal.
     const erroDeConfiguracao = erro instanceof ErroConfiguracaoProvider;
-    await supabase.rpc("falhar_repescagem_evasao_job", {
+    await falharJob(supabase, {
       p_id: job.id,
       p_worker_id: workerId,
       p_erro: erro instanceof Error ? erro.message : "provider_indisponivel",
@@ -213,12 +315,18 @@ serve(async (req: Request) => {
   );
 
   // "incerto" e TERMINAL: nao se sabe se chegou, e repetir e o unico erro
-  // que nao da para desfazer com um ex-aluno.
+  // que nao da para desfazer com um ex-aluno. O motivo gravado precisa
+  // deixar isso explicito -- "falha conhecida" (sanitizarErroProvider) e o
+  // caso OPOSTO, onde sabemos com certeza que nao deu certo.
   if (classificacao.tipo !== "sucesso") {
-    await supabase.rpc("falhar_repescagem_evasao_job", {
+    const erroClassificacao = classificacao.tipo === "incerto"
+      ? "incerto: resposta sem confirmacao do provedor (HTTP " +
+        resultado.statusHttp + ")"
+      : sanitizarErroProvider(classificacao.statusHttp);
+    await falharJob(supabase, {
       p_id: job.id,
       p_worker_id: workerId,
-      p_erro: sanitizarErroProvider(resultado.statusHttp),
+      p_erro: erroClassificacao,
       p_terminal: classificacao.tipo === "incerto",
     });
     return json({ ok: true, processado: 0, motivo: classificacao.tipo });
@@ -247,7 +355,7 @@ serve(async (req: Request) => {
     );
   }
 
-  await supabase.rpc("concluir_repescagem_evasao_job", {
+  await concluirJob(supabase, {
     p_id: job.id,
     p_worker_id: workerId,
     p_provider_message_id: providerMessageId,

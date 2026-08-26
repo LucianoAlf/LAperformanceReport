@@ -2,7 +2,9 @@ export interface EstadoAntesDoEnvio {
   respostaStatus: string;
   envioStatus: string;
   optOutEm: string | null;
-  jaExisteSaidaDoToque: boolean;
+  // pesquisa_evasao_mensagens nao tem coluna de toque: isto conta qualquer
+  // saida ja registrada para a pesquisa, nao especificamente a deste toque.
+  jaExisteSaidaNaPesquisa: boolean;
 }
 
 export type DecisaoEnvio =
@@ -18,7 +20,7 @@ export function decidirEnvioRepescagem(estado: EstadoAntesDoEnvio): DecisaoEnvio
   if (estado.optOutEm !== null) {
     return { acao: "cancelar", motivo: "opt_out" };
   }
-  if (estado.jaExisteSaidaDoToque) {
+  if (estado.jaExisteSaidaNaPesquisa) {
     return { acao: "cancelar", motivo: "ja_enviada" };
   }
   if (estado.respostaStatus !== "sem_resposta") {
