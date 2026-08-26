@@ -30,6 +30,14 @@ test('teto diario de 30 empurra o excedente para o proximo dia util', () => {
   assert.match(source, /agendada_para at time zone 'America\/Sao_Paulo'\)::date/i);
 });
 
+test('item 3 do review: teto diario conta tudo que ocupa o dia, so exclui cancelada (nao so pendente/enviando)', () => {
+  const source = sql();
+  const inicio = source.indexOf('Teto diario');
+  const bloco = source.slice(inicio, source.indexOf('exit when v_no_dia', inicio) + 40);
+  assert.match(bloco, /f\.status\s*<>\s*'cancelada'/i);
+  assert.doesNotMatch(bloco, /f\.status in \('pendente','enviando'\)/i);
+});
+
 test('todas as guardas de recusa estao presentes com motivo proprio', () => {
   const source = sql();
   for (const motivo of [

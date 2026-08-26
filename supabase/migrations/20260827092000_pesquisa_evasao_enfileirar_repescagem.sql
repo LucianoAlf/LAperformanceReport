@@ -152,12 +152,17 @@ begin
       continue;
     end if;
 
-    -- Teto diario: 30 linhas por dia de agenda.
+    -- Teto diario: 30 linhas por dia de agenda. Conta TUDO que ocupa aquele
+    -- dia -- pendente, enviando E enviada -- e so exclui cancelada. Contar so
+    -- pendente/enviando deixava a linha ja enviada sair da conta: enfileirar
+    -- 25 de manha, deixar drenar e enfileirar mais 25 a tarde produzia 50
+    -- mensagens no mesmo dia pelo mesmo numero, sem uma unica recusa. O teto
+    -- existe para proteger o numero, nao a fila.
     loop
       v_dia := (v_cursor at time zone 'America/Sao_Paulo')::date;
       select count(*) into v_no_dia
         from public.pesquisa_evasao_envios_fila f
-       where f.status in ('pendente','enviando')
+       where f.status <> 'cancelada'
          and (f.agendada_para at time zone 'America/Sao_Paulo')::date = v_dia;
       exit when v_no_dia < 30;
       v_cursor := public.proximo_horario_envio_repescagem(
