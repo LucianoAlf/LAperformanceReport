@@ -11,7 +11,7 @@ const edgePath = resolve(
 );
 const providerPath = resolve(
   repoRoot,
-  'supabase/functions/enviar-pesquisa-evasao/provider.ts',
+  'supabase/functions/_shared/pesquisa-evasao-provider.ts',
 );
 const flowPath = resolve(
   repoRoot,
