@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import {
+  Ban,
   BellRing,
   CheckCircle2,
   ChevronDown,
@@ -10,11 +11,20 @@ import {
   Clock3,
   Loader2,
   MessagesSquare,
+  RefreshCw,
   Search,
   UserRoundCheck,
   XCircle,
 } from 'lucide-react';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -28,10 +38,14 @@ import { useToast } from '@/hooks/useToast';
 import { ConversaPesquisaEvasao } from './ConversaPesquisaEvasao';
 import { ModalRegistrarFollowupEvasao } from './ModalRegistrarFollowupEvasao';
 import { useFollowupsEvasao } from './hooks/useFollowupsEvasao';
-import type {
-  PesquisaEvasaoFollowupAcao,
-  PesquisaEvasaoFollowupFiltro,
-  PesquisaEvasaoFollowupItem,
+import { useRepescagemEvasao } from './hooks/useRepescagemEvasao';
+import {
+  rotuloMotivoRecusaRepescagem,
+  type PesquisaEvasaoFollowupAcao,
+  type PesquisaEvasaoFollowupFiltro,
+  type PesquisaEvasaoFollowupItem,
+  type RepescagemEnfileiramentoResultado,
+  type RepescagemEstado,
 } from './pesquisaEvasao.types';
 
 interface Props {
@@ -81,6 +95,54 @@ function formatarData(valor: string) {
   return Number.isNaN(data.getTime()) ? 'Data indisponível' : format(data, 'dd/MM HH:mm');
 }
 
+function formatarHoraBRT(valor: string) {
+  const data = new Date(valor);
+  if (Number.isNaN(data.getTime())) return '--:--';
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(data);
+}
+
+function formatarDiaMesBRT(valor: string) {
+  const data = new Date(valor);
+  if (Number.isNaN(data.getTime())) return '--/--';
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+  }).format(data);
+}
+
+/** Rótulo do badge de repescagem (2º toque) por linha — status vem direto de `pesquisa_evasao_envios_fila`. */
+function rotuloBadgeRepescagem(estado: RepescagemEstado | undefined): string | null {
+  if (!estado) return null;
+  switch (estado.status) {
+    case 'pendente':
+      return `na fila · sai ${formatarHoraBRT(estado.agendada_para)}`;
+    case 'enviando':
+      return 'enviando';
+    case 'enviada':
+      return `repescada ${formatarDiaMesBRT(estado.enviada_em ?? estado.agendada_para)}`;
+    case 'falhou':
+      return `falhou${estado.ultimo_erro ? ` · ${estado.ultimo_erro}` : ''}`;
+    case 'cancelada':
+      return 'cancelada';
+    default:
+      return null;
+  }
+}
+
+const CLASSES_BADGE_REPESCAGEM: Record<RepescagemEstado['status'], string> = {
+  pendente: 'border-sky-400/30 bg-sky-400/10 text-sky-200',
+  enviando: 'border-violet-400/30 bg-violet-400/10 text-violet-200',
+  enviada: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
+  falhou: 'border-rose-400/30 bg-rose-400/10 text-rose-200',
+  cancelada: 'border-slate-500/30 bg-slate-500/10 text-slate-300',
+};
+
 export function FilaFollowupEvasao({
   unidadeAtual,
   ano,
@@ -117,6 +179,61 @@ export function FilaFollowupEvasao({
     recarregar,
     registrarAcao,
   } = useFollowupsEvasao({ unidadeAtual, ano, mes, busca, estado, pagina });
+
+  const pesquisaIds = useMemo(() => itens.map((item) => item.pesquisa_id), [itens]);
+  const nomePorPesquisa = useMemo(
+    () => Object.fromEntries(itens.map((item) => [item.pesquisa_id, item.aluno_nome])),
+    [itens],
+  );
+  const {
+    estadoPorPesquisa,
+    enfileirar: enfileirarRepescagem,
+    cancelar: cancelarRepescagem,
+  } = useRepescagemEvasao(pesquisaIds);
+
+  const [alvoRepescagem, setAlvoRepescagem] = useState<string[] | null>(null);
+  const [resultadoRepescagem, setResultadoRepescagem] = useState<RepescagemEnfileiramentoResultado | null>(null);
+  const [processandoRepescagem, setProcessandoRepescagem] = useState(false);
+  const [cancelandoRepescagemId, setCancelandoRepescagemId] = useState<string | null>(null);
+
+  const abrirConfirmacaoRepescagem = (ids: string[]) => {
+    if (ids.length === 0) return;
+    setResultadoRepescagem(null);
+    setAlvoRepescagem(ids);
+  };
+
+  const fecharModalRepescagem = () => {
+    setAlvoRepescagem(null);
+    setResultadoRepescagem(null);
+  };
+
+  const confirmarRepescagem = async () => {
+    if (!alvoRepescagem) return;
+    setProcessandoRepescagem(true);
+    try {
+      const resultado = await enfileirarRepescagem(alvoRepescagem);
+      setResultadoRepescagem(resultado);
+    } catch (error) {
+      console.error('Erro ao enfileirar repescagem:', error);
+      toast.error('Não foi possível enfileirar a repescagem');
+      setAlvoRepescagem(null);
+    } finally {
+      setProcessandoRepescagem(false);
+    }
+  };
+
+  const cancelarEnvioRepescagem = async (pesquisaId: string) => {
+    setCancelandoRepescagemId(pesquisaId);
+    try {
+      await cancelarRepescagem(pesquisaId);
+      toast.success('Repescagem cancelada');
+    } catch (error) {
+      console.error('Erro ao cancelar repescagem:', error);
+      toast.error('Não foi possível cancelar a repescagem');
+    } finally {
+      setCancelandoRepescagemId(null);
+    }
+  };
 
   const totalPaginas = Math.max(1, Math.ceil(total / tamanhoPagina));
   const intervalo = useMemo(() => {
@@ -169,6 +286,17 @@ export function FilaFollowupEvasao({
               </p>
             </div>
           </div>
+          {itens.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-sky-400/30 text-sky-200 hover:bg-sky-400/10"
+              onClick={() => abrirConfirmacaoRepescagem(pesquisaIds)}
+            >
+              <RefreshCw className="mr-1.5 h-4 w-4" />
+              Repescar todos ({itens.length})
+            </Button>
+          )}
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-[minmax(220px,1fr)_220px]">
@@ -250,9 +378,42 @@ export function FilaFollowupEvasao({
                         {item.acao_canal ? ` · ${item.acao_canal}` : ''}
                       </p>
                     )}
+                    {(() => {
+                      const estadoRepescagem = estadoPorPesquisa[item.pesquisa_id];
+                      const rotulo = rotuloBadgeRepescagem(estadoRepescagem);
+                      if (!rotulo) return null;
+                      return (
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${CLASSES_BADGE_REPESCAGEM[estadoRepescagem!.status]}`}>
+                            Repescagem: {rotulo}
+                          </span>
+                          {estadoRepescagem!.status === 'pendente' && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-2 text-[11px] text-slate-400 hover:text-rose-300"
+                              disabled={cancelandoRepescagemId === item.pesquisa_id}
+                              onClick={() => void cancelarEnvioRepescagem(item.pesquisa_id)}
+                            >
+                              <Ban className="mr-1 h-3 w-3" />
+                              Cancelar
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-sky-500/30 text-sky-200 hover:bg-sky-400/10"
+                      onClick={() => abrirConfirmacaoRepescagem([item.pesquisa_id])}
+                    >
+                      <RefreshCw className="mr-1.5 h-4 w-4" />
+                      Repescar
+                    </Button>
                     {item.followup_pendente && !item.acao && (
                       <>
                         <Button size="sm" className="bg-emerald-600 text-white hover:bg-emerald-500" onClick={() => abrirModal(item, 'realizado')}>
@@ -333,6 +494,63 @@ export function FilaFollowupEvasao({
         }}
         onConfirmar={(dados) => void confirmarAcao(dados)}
       />
+
+      <AlertDialog
+        open={alvoRepescagem !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) fecharModalRepescagem();
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {resultadoRepescagem ? 'Resultado da repescagem' : 'Confirmar repescagem'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {resultadoRepescagem
+                ? `${resultadoRepescagem.enfileiradas.length} enfileirada${resultadoRepescagem.enfileiradas.length === 1 ? '' : 's'} · ${resultadoRepescagem.recusadas.length} recusada${resultadoRepescagem.recusadas.length === 1 ? '' : 's'}.`
+                : `Enviar repescagem (2º toque) para ${alvoRepescagem?.length ?? 0} pessoa${(alvoRepescagem?.length ?? 0) === 1 ? '' : 's'}? Quem já respondeu, pediu para não receber mais ou não é elegível por qualquer outro motivo é recusado automaticamente pelo banco.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {resultadoRepescagem && resultadoRepescagem.recusadas.length > 0 && (
+            <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-700/60 bg-slate-950/40 p-3">
+              <ul className="space-y-1.5 text-xs text-slate-300">
+                {resultadoRepescagem.recusadas.map((recusa) => (
+                  <li key={recusa.pesquisa_id} className="flex flex-wrap justify-between gap-2">
+                    <span className="font-medium text-slate-200">
+                      {nomePorPesquisa[recusa.pesquisa_id] ?? recusa.pesquisa_id}
+                    </span>
+                    <span className="text-rose-200/90">{rotuloMotivoRecusaRepescagem(recusa.motivo)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <AlertDialogFooter>
+            {resultadoRepescagem ? (
+              <Button onClick={fecharModalRepescagem}>Fechar</Button>
+            ) : (
+              <>
+                <Button variant="outline" disabled={processandoRepescagem} onClick={fecharModalRepescagem}>
+                  Cancelar
+                </Button>
+                <Button disabled={processandoRepescagem} onClick={() => void confirmarRepescagem()}>
+                  {processandoRepescagem ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    'Confirmar'
+                  )}
+                </Button>
+              </>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

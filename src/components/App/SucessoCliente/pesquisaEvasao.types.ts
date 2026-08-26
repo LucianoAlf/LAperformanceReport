@@ -253,6 +253,69 @@ export interface PesquisaEvasaoAcao {
   concluida_em: string | null;
 }
 
+export type RepescagemStatus = 'pendente' | 'enviando' | 'enviada' | 'falhou' | 'cancelada';
+
+export interface RepescagemEstado {
+  pesquisa_id: string;
+  status: RepescagemStatus;
+  agendada_para: string;
+  enviada_em: string | null;
+  ultimo_erro: string | null;
+}
+
+export type RepescagemMotivoRecusa =
+  | 'pesquisa_inexistente'
+  | 'opt_out'
+  | 'primeiro_toque_nao_confirmado'
+  | 'ja_respondeu'
+  | 'muito_cedo'
+  | 'ja_enfileirada'
+  | 'telefone_ausente'
+  | 'telefone_ja_respondeu'
+  | 'publico_indeterminado'
+  | 'template_ausente'
+  | 'erro_ao_enfileirar';
+
+export interface RepescagemRecusa {
+  pesquisa_id: string;
+  motivo: RepescagemMotivoRecusa | string;
+  erro?: string;
+}
+
+export interface RepescagemEnfileirada {
+  pesquisa_id: string;
+  agendada_para: string;
+}
+
+export interface RepescagemEnfileiramentoResultado {
+  enfileiradas: RepescagemEnfileirada[];
+  recusadas: RepescagemRecusa[];
+}
+
+/**
+ * As 11 recusas reais devolvidas por `enfileirar_repescagem_evasao`
+ * (migration `20260827092000_pesquisa_evasao_enfileirar_repescagem.sql`).
+ * Todo motivo precisa de texto legível aqui — nenhum pode cair num
+ * "motivo desconhecido" (ver task-8-brief).
+ */
+export const MOTIVOS_RECUSA_REPESCAGEM: Record<RepescagemMotivoRecusa, string> = {
+  pesquisa_inexistente: 'pesquisa não encontrada',
+  opt_out: 'pediu para não receber mais',
+  primeiro_toque_nao_confirmado: 'o 1º envio não teve confirmação de entrega',
+  ja_respondeu: 'já respondeu',
+  muito_cedo: 'menos de 3 dias desde o 1º envio',
+  ja_enfileirada: 'já está na fila de repescagem',
+  telefone_ausente: 'sem telefone para enviar',
+  telefone_ja_respondeu: 'esse telefone já respondeu por outro aluno',
+  publico_indeterminado: 'não foi possível determinar o público (aluno/responsável)',
+  template_ausente: 'template de repescagem não encontrado para esse público',
+  erro_ao_enfileirar: 'erro inesperado ao colocar na fila',
+};
+
+export function rotuloMotivoRecusaRepescagem(motivo: string): string {
+  return MOTIVOS_RECUSA_REPESCAGEM[motivo as RepescagemMotivoRecusa] ?? `motivo não catalogado (${motivo})`;
+}
+
 export interface PesquisaEvasaoClassificacaoDados {
   pesquisa_id: string;
   motivo_cadastrado: string | null;
