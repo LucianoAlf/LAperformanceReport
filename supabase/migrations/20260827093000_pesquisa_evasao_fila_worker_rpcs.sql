@@ -42,6 +42,17 @@ begin
        from public.pesquisa_evasao_envios_fila c
       where c.status = 'pendente'
         and c.agendada_para <= now()
+        -- Item 4 do review final: o claim so exigia agendada_para <= now(),
+        -- sem impor espacamento entre envios. Com o cron nascendo desligado
+        -- (por desenho), quem enfileira um lote e liga o cron depois faz
+        -- todas as linhas vencidas saírem em poucos minutos -- a rajada que a
+        -- feature existe para evitar. Nenhuma outra linha pode ter sido
+        -- enviada nos ultimos 60 segundos.
+        and not exists (
+          select 1 from public.pesquisa_evasao_envios_fila r
+           where r.status = 'enviada'
+             and r.enviada_em > now() - interval '60 seconds'
+        )
       order by c.agendada_para
       for update skip locked
       limit 1

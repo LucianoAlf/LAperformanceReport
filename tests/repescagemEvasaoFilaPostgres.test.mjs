@@ -109,6 +109,15 @@ test('claim toma a vez de forma atomica, sem SELECT-entao-UPDATE', () => {
   assert.match(source, /returning f\.\* into v_job/i);
 });
 
+test('item 4 do review: claim impoe espacamento de 60s entre envios, senao um backlog vira rajada', () => {
+  const source = workerSql();
+  const inicio = source.indexOf('function public.claim_repescagem_evasao_job');
+  const corpo = source.slice(inicio, source.indexOf('$function$;', inicio));
+  assert.match(corpo, /not exists\s*\(\s*select 1 from public\.pesquisa_evasao_envios_fila r/i);
+  assert.match(corpo, /r\.status\s*=\s*'enviada'/i);
+  assert.match(corpo, /r\.enviada_em\s*>\s*now\(\)\s*-\s*interval\s*'60 seconds'/i);
+});
+
 test('lease vencido vira falhou e NUNCA volta para pendente', () => {
   const source = workerSql();
   const bloco = source.slice(
