@@ -626,9 +626,15 @@ async function previsualizar(
     throw new ErroHttp(422, "Destinatario da pesquisa nao encontrado");
   }
 
+  // A unicidade do template ativo agora e por (chave, publico) -- desde a
+  // repescagem existem DUAS chaves vivas ao mesmo tempo (`evasao_aberta` para
+  // este 1o toque e `evasao_repescagem` para o 2o). Sem filtrar por chave, a
+  // consulta devolveria as duas linhas ativas do mesmo publico e a exigencia
+  // de "exatamente 1" abaixo passaria a falhar sempre.
   const { data: templatesData, error: templatesError } = await supabase
     .from("pesquisa_evasao_templates")
     .select("id, versao, publico, corpo")
+    .eq("chave", "evasao_aberta")
     .eq("publico", publico)
     .eq("ativo", true)
     .limit(2);

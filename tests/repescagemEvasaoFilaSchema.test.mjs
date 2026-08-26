@@ -55,3 +55,54 @@ test('templates de repescagem existem nos dois publicos e nao citam o aluno', ()
   // o texto aprovado nao menciona o aluno na versao do responsavel
   assert.doesNotMatch(source, /\{\{aluno_com_preposicao\}\}/);
 });
+
+const unicidadeUrl = new URL(
+  '../supabase/migrations/20260827090500_pesquisa_evasao_templates_unicidade_por_chave.sql',
+  import.meta.url,
+);
+
+test('BLOQUEANTE: unicidade de template ativo passa a ser por (chave, publico), antes da insercao dos templates', () => {
+  assert.ok(
+    existsSync(unicidadeUrl),
+    'migration de unicidade por chave deve existir, com timestamp anterior a de insercao dos templates',
+  );
+  const source = readFileSync(unicidadeUrl, 'utf8');
+
+  assert.match(source, /drop index if exists public\.pesquisa_evasao_templates_publico_ativo_uidx/i);
+  assert.match(
+    source,
+    /create unique index pesquisa_evasao_templates_chave_publico_ativo_uidx[\s\S]+on public\.pesquisa_evasao_templates\s*\(\s*chave\s*,\s*publico\s*\)[\s\S]+where ativo/i,
+  );
+
+  // precisa rodar ANTES de 20260827091000 (insercao dos templates de repescagem)
+  const nomeArquivo = unicidadeUrl.pathname.split('/').pop();
+  const timestampUnicidade = nomeArquivo.slice(0, 14);
+  const timestampTemplates = '20260827091000';
+  assert.ok(
+    timestampUnicidade < timestampTemplates,
+    'a migration de unicidade precisa rodar antes da insercao dos templates de repescagem',
+  );
+
+  // item 5 do review: unica funcao de trigger da branch sem revoke de anon
+  assert.match(
+    source,
+    /revoke execute on function public\.fn_pesquisa_evasao_envios_fila_touch\(\)\s*\n?\s*from public, anon, authenticated/i,
+  );
+});
+
+const enviarPesquisaEvasaoIndexUrl = new URL(
+  '../supabase/functions/enviar-pesquisa-evasao/index.ts',
+  import.meta.url,
+);
+
+test('BLOQUEANTE: edge do 1o toque filtra template ativo por chave, nao so por publico', () => {
+  const source = readFileSync(enviarPesquisaEvasaoIndexUrl, 'utf8');
+  const inicio = source.indexOf('from("pesquisa_evasao_templates")');
+  assert.ok(inicio >= 0, 'consulta de template deve existir em enviar-pesquisa-evasao/index.ts');
+  const trecho = source.slice(inicio, inicio + 300);
+  assert.match(
+    trecho,
+    /\.eq\(\s*"chave",\s*"evasao_aberta"\s*\)/,
+    'a consulta precisa filtrar chave=evasao_aberta, senao a exigencia de "exatamente 1 template" passa a falhar sempre com duas chaves ativas',
+  );
+});
