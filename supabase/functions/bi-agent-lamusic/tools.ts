@@ -130,8 +130,23 @@ export const TOOLS_SCHEMA = [
   {
     type: 'function' as const,
     function: {
+      name: 'get_presenca_canonica',
+      description: 'Consulta presença canônica agregada por unidade e data. Sempre retorna período, universo, regra, estado de publicação e frescor; dados inseguros ficam Em auditoria.',
+      parameters: {
+        type: 'object',
+        properties: {
+          unidade_nome: { type: 'string', description: 'Nome da unidade. Para não-admins, a unidade autenticada prevalece.' },
+          data: { type: 'string', description: 'Data de referência (YYYY-MM-DD).' },
+        },
+        required: ['data'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'consultar_banco',
-      description: 'Executa SQL SELECT genérico. Use quando nenhuma outra tool atende. APENAS SELECT permitido, limite 200 linhas. O filtro de unidade é aplicado automaticamente para não-admins.',
+      description: 'Executa SQL SELECT genérico. Use quando nenhuma outra tool atende. APENAS SELECT permitido, limite 200 linhas. Presença só pode usar vw_presenca_ocorrencia_canonica_v2; prefira get_presenca_canonica. O filtro de unidade é aplicado automaticamente para não-admins.',
       parameters: {
         type: 'object',
         properties: {
@@ -198,6 +213,41 @@ async function resolverUnidadeEfetiva(
   if (!ctx.isAdmin && ctx.unidadeId) return ctx.unidadeId;
   if (nomeArg) return await resolverUnidadeId(supabase, nomeArg);
   return null;
+}
+
+function normalizarContextoPresenca(data: any, args: any, erro?: string) {
+  const contexto = (Array.isArray(data) ? data[0] : data) || {};
+  const dadosStatus = contexto.dados_status ?? 'indisponivel';
+  const sincronizadoEm = contexto.sincronizado_em ?? null;
+  const estadoPublicacao = contexto.estado_publicacao ?? 'bloqueado';
+  const publicavelSeguro = dadosStatus === 'atualizados'
+    && estadoPublicacao === 'publicavel'
+    && Number(contexto.conflitos ?? 0) === 0
+    && Number(contexto.revisoes_estruturais ?? 0) === 0;
+
+  return {
+    fonte: 'get_presenca_contexto_agente_v1',
+    contrato_detalhe: 'vw_presenca_ocorrencia_canonica_v2',
+    erro,
+    periodo: contexto.periodo ?? { inicio: args.data ?? null, fim: args.data ?? null },
+    universo_eventos: contexto.universo_eventos ?? null,
+    presentes: contexto.presentes ?? null,
+    faltas_confirmadas: contexto.faltas_confirmadas ?? null,
+    indeterminados: contexto.indeterminados ?? null,
+    conflitos: contexto.conflitos ?? null,
+    revisoes_estruturais: contexto.revisoes_estruturais ?? null,
+    regra_versao: contexto.regra_versao ?? null,
+    dados_status: dadosStatus,
+    sincronizado_em: sincronizadoEm,
+    estado_publicacao: estadoPublicacao,
+    frescor: {
+      dados_status: dadosStatus,
+      sincronizado_em: sincronizadoEm,
+    },
+    aviso: publicavelSeguro
+      ? undefined
+      : 'Em auditoria: não concluir falta nem atribuir culpa operacional.',
+  };
 }
 
 async function toolGetUnidades(supabase: any): Promise<string> {
@@ -391,6 +441,25 @@ async function toolGetFunilLeads(supabase: any, args: any, ctx: AgentContext): P
   });
 }
 
+async function toolGetPresencaCanonica(supabase: any, args: any, ctx: AgentContext): Promise<string> {
+  const uid = await resolverUnidadeEfetiva(supabase, ctx, args.unidade_nome);
+  if (!uid) {
+    return JSON.stringify(normalizarContextoPresenca(
+      null,
+      args,
+      `Unidade "${args.unidade_nome || ''}" não encontrada.`,
+    ));
+  }
+
+  const { data, error } = await supabase.rpc('get_presenca_contexto_agente_v1', {
+    p_unidade_id: uid,
+    p_data: args.data,
+    p_escopo: 'bi',
+  });
+
+  return JSON.stringify(normalizarContextoPresenca(data, args, error?.message));
+}
+
 async function toolConsultarBanco(supabase: any, args: any, ctx: AgentContext): Promise<string> {
   const { validateSQL } = await import('./sql-validator.ts');
   const validation = validateSQL(args.sql_query);
@@ -414,6 +483,22 @@ const TABELAS_INTERNAS = [
   'usuario_onboarding', 'perfil_permissoes',
 ];
 
+const TABELAS_PRESENCA_LEGADAS = [
+  'aluno_presenca',
+  'vw_aluno_presenca_semantica_v1',
+  'vw_aluno_frequencia_canonica_v1',
+  'vw_absenteismo_aluno',
+];
+const TABELAS_PRESENCA_CANONICAS = ['vw_presenca_ocorrencia_canonica_v2'];
+const MARCADOR_TABELA_PRESENCA = /(?:presenca|frequencia|absenteismo)/iu;
+
+function isTabelaAnaliticaPermitida(nome: string): boolean {
+  const normalizado = nome.trim().toLowerCase().replace(/^public\./u, '');
+  if (TABELAS_INTERNAS.includes(normalizado) || TABELAS_PRESENCA_LEGADAS.includes(normalizado)) return false;
+  if (MARCADOR_TABELA_PRESENCA.test(normalizado)) return TABELAS_PRESENCA_CANONICAS.includes(normalizado);
+  return true;
+}
+
 async function toolListarTabelas(supabase: any): Promise<string> {
   const { data, error } = await supabase.rpc('execute_bi_query_lamusic', {
     query_text: `SELECT t.table_name, pg_stat_user_tables.n_live_tup as linhas_estimadas
@@ -428,7 +513,7 @@ async function toolListarTabelas(supabase: any): Promise<string> {
   if (!data || data.error) return JSON.stringify({ erro: data?.error || 'Erro ao listar tabelas' });
 
   const tabelas = (Array.isArray(data) ? data : [])
-    .filter((t: any) => !TABELAS_INTERNAS.includes(t.table_name))
+    .filter((t: any) => isTabelaAnaliticaPermitida(t.table_name))
     .map((t: any) => ({ tabela: t.table_name, linhas: t.linhas_estimadas || 0 }));
 
   return JSON.stringify({ tabelas, total: tabelas.length });
@@ -440,6 +525,12 @@ async function toolDescobrirSchema(supabase: any, args: any): Promise<string> {
   if (tabelasArg) {
     // Modo detalhado: colunas de tabelas específicas
     const tableNames = tabelasArg.split(',').map((t: string) => t.trim());
+    const bloqueadas = tableNames.filter((tableName: string) => !isTabelaAnaliticaPermitida(tableName));
+    if (bloqueadas.length > 0) {
+      return JSON.stringify({
+        erro: `Relação analítica não permitida: ${bloqueadas.join(', ')}. Para presença use vw_presenca_ocorrencia_canonica_v2 ou get_presenca_canonica.`,
+      });
+    }
     const { data } = await supabase.rpc('introspect_schema_lamusic', { table_names: tableNames });
     return JSON.stringify({ schema: data || [], tabelas_consultadas: tableNames });
   }
@@ -468,7 +559,7 @@ async function toolDescobrirSchema(supabase: any, args: any): Promise<string> {
   if (!data || data.error) return JSON.stringify({ erro: data?.error || 'Erro ao buscar schema' });
 
   const tabelas = (Array.isArray(data) ? data : [])
-    .filter((t: any) => !TABELAS_INTERNAS.includes(t.table_name));
+    .filter((t: any) => isTabelaAnaliticaPermitida(t.table_name));
 
   // Para cada tabela encontrada, buscar colunas
   const tableNames = tabelas.map((t: any) => t.table_name);
@@ -512,6 +603,16 @@ async function toolCompararArquivoComBanco(supabase: any, args: any, ctx: AgentC
   const tabelasPermitidas = ['alunos', 'leads', 'professores', 'cursos', 'turmas', 'movimentacoes_admin'];
   if (!tabelasPermitidas.includes(tabela_banco)) {
     return JSON.stringify({ erro: `Tabela "${tabela_banco}" não permitida. Use: ${tabelasPermitidas.join(', ')}` });
+  }
+  if (
+    !isTabelaAnaliticaPermitida(tabela_banco)
+    || /\bpercentual_presenca\b/iu.test(coluna_banco)
+    || /\bpercentual_presenca\b/iu.test(filtros_banco || '')
+    || /\baluno_presenca\b/iu.test(filtros_banco || '')
+  ) {
+    return JSON.stringify({
+      erro: 'Porta analítica legada de presença bloqueada. Use get_presenca_canonica.',
+    });
   }
 
   // Buscar dados do banco em blocos (contornar limite de IN clause)
@@ -583,6 +684,7 @@ export async function executeTool(supabase: any, toolName: string, argsJson: str
       case 'search_leads': return await toolSearchLeads(supabase, args, ctx);
       case 'get_leads_hoje': return await toolGetLeadsHoje(supabase, args, ctx);
       case 'get_funil_leads': return await toolGetFunilLeads(supabase, args, ctx);
+      case 'get_presenca_canonica': return await toolGetPresencaCanonica(supabase, args, ctx);
       case 'consultar_banco': return await toolConsultarBanco(supabase, args, ctx);
       case 'listar_tabelas': return await toolListarTabelas(supabase);
       case 'descobrir_schema': return await toolDescobrirSchema(supabase, args);

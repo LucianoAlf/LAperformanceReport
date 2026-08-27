@@ -2,11 +2,22 @@ import { type AlunoNaAulaEmusys, criarAlunoChave } from "./emusys-aulas.ts";
 
 export interface AulaSnapshotGradeFonte {
   id: number;
-  alunos?: AlunoNaAulaEmusys[];
+  alunos?: AlunoNaAulaEmusys[] | null;
+  qtd_alunos?: number | null;
+  cancelada?: boolean | null;
 }
+
+export type EstadoRosterSnapshot =
+  | "completo"
+  | "vazio_confirmado"
+  | "incompleto"
+  | "ambiguo";
 
 export interface AulaSnapshotGrade {
   emusys_id: number;
+  estado: EstadoRosterSnapshot;
+  qtd_esperada: number;
+  qtd_recebida: number;
   aluno_chaves: string[];
 }
 
@@ -16,6 +27,8 @@ export interface ResultadoReconciliacaoGradeSnapshot {
   alteracoes_aplicadas?: number;
   aulas_canceladas?: number;
   vinculos_removidos?: number;
+  vinculos_inativados?: number;
+  vinculos_reativados?: number;
   detalhe?: unknown;
 }
 
@@ -79,26 +92,49 @@ export function montarSnapshotGradeEmusys(
   aulas: AulaSnapshotGradeFonte[],
   normalizarNome: (nome: string) => string,
 ): AulaSnapshotGrade[] {
-  const chavesPorAula = new Map<number, Set<string>>();
+  type Acumulador = {
+    chaves: Set<string>;
+    quantidadesDeclaradas: Set<number>;
+    incompleto: boolean;
+    ambiguo: boolean;
+  };
+  const porAula = new Map<number, Acumulador>();
 
   for (const aula of aulas) {
     if (!Number.isInteger(aula.id) || aula.id <= 0) {
       throw new Error("EMUSYS_SNAPSHOT_AULA_INVALIDA");
     }
-    if (!Array.isArray(aula.alunos)) {
-      throw new Error("EMUSYS_SNAPSHOT_ROSTER_AUSENTE");
+
+    const acumulador = porAula.get(aula.id) ?? {
+      chaves: new Set<string>(),
+      quantidadesDeclaradas: new Set<number>(),
+      incompleto: false,
+      ambiguo: false,
+    };
+    porAula.set(aula.id, acumulador);
+
+    if (aula.qtd_alunos !== undefined && aula.qtd_alunos !== null) {
+      if (!Number.isSafeInteger(aula.qtd_alunos) || aula.qtd_alunos < 0) {
+        acumulador.incompleto = true;
+      } else {
+        acumulador.quantidadesDeclaradas.add(aula.qtd_alunos);
+      }
     }
 
-    const chaves = chavesPorAula.get(aula.id) ?? new Set<string>();
-    chavesPorAula.set(aula.id, chaves);
+    if (!Array.isArray(aula.alunos)) {
+      acumulador.incompleto = true;
+      continue;
+    }
 
     for (const aluno of aula.alunos) {
       const nome = aluno.nome_aluno?.trim();
       const temIdEmusys = Number.isInteger(aluno.id_aluno) && aluno.id_aluno > 0;
       if (!temIdEmusys && !nome) {
-        throw new Error("EMUSYS_SNAPSHOT_ALUNO_SEM_IDENTIDADE");
+        acumulador.incompleto = true;
+        continue;
       }
-      chaves.add(
+      if (!temIdEmusys) acumulador.ambiguo = true;
+      acumulador.chaves.add(
         criarAlunoChave(
           { ...aluno, nome_aluno: nome },
           undefined,
@@ -108,12 +144,33 @@ export function montarSnapshotGradeEmusys(
     }
   }
 
-  return [...chavesPorAula.entries()]
+  return [...porAula.entries()]
     .sort(([a], [b]) => a - b)
-    .map(([emusys_id, alunoChaves]) => ({
-      emusys_id,
-      aluno_chaves: [...alunoChaves].sort(),
-    }));
+    .map(([emusys_id, acumulador]) => {
+      const alunoChaves = [...acumulador.chaves].sort();
+      const qtdRecebida = alunoChaves.length;
+      const [qtdDeclarada] = acumulador.quantidadesDeclaradas;
+      const qtdEsperada = acumulador.quantidadesDeclaradas.size === 1
+        ? qtdDeclarada
+        : qtdRecebida;
+      const contagemIncoerente = acumulador.quantidadesDeclaradas.size > 1
+        || qtdEsperada !== qtdRecebida;
+      const estado: EstadoRosterSnapshot = acumulador.incompleto || contagemIncoerente
+        ? "incompleto"
+        : acumulador.ambiguo
+        ? "ambiguo"
+        : qtdRecebida === 0
+        ? "vazio_confirmado"
+        : "completo";
+
+      return {
+        emusys_id,
+        estado,
+        qtd_esperada: qtdEsperada,
+        qtd_recebida: qtdRecebida,
+        aluno_chaves: alunoChaves,
+      };
+    });
 }
 
 /** Chama a única decisão de escrita da grade após a fotografia estar íntegra. */

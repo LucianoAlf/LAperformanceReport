@@ -1,3 +1,5 @@
+/// <reference lib="deno.ns" />
+
 // Edge Function: gerar-plano-aluno
 // Gera plano de ação inteligente para o aluno usando Gemini
 // verify_jwt: false (chamado internamente)
@@ -8,6 +10,70 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+interface PresencaContextoCanonico {
+  fonte?: 'get_presenca_contexto_agente_v1' | 'vw_presenca_ocorrencia_canonica_v2';
+  periodo: { inicio: string | null; fim: string | null } | string | null;
+  universo_eventos: number | null;
+  presentes: number | null;
+  faltas_confirmadas: number | null;
+  indeterminados: number | null;
+  conflitos: number | null;
+  revisoes_estruturais: number | null;
+  regra_versao: string | null;
+  dados_status: string;
+  sincronizado_em: string | null;
+  estado_publicacao: string;
+}
+
+function normalizarPresencaContexto(
+  contexto?: Partial<PresencaContextoCanonico> | null,
+): PresencaContextoCanonico | null {
+  if (!contexto) return null;
+  return {
+    fonte: contexto.fonte,
+    periodo: contexto.periodo ?? null,
+    universo_eventos: contexto.universo_eventos ?? null,
+    presentes: contexto.presentes ?? null,
+    faltas_confirmadas: contexto.faltas_confirmadas ?? null,
+    indeterminados: contexto.indeterminados ?? null,
+    conflitos: contexto.conflitos ?? null,
+    revisoes_estruturais: contexto.revisoes_estruturais ?? null,
+    regra_versao: contexto.regra_versao ?? null,
+    dados_status: contexto.dados_status ?? 'indisponivel',
+    sincronizado_em: contexto.sincronizado_em ?? null,
+    estado_publicacao: contexto.estado_publicacao ?? 'bloqueado',
+  };
+}
+
+function formatarPeriodo(periodo: PresencaContextoCanonico['periodo']): string {
+  if (!periodo) return 'não informado';
+  if (typeof periodo === 'string') return periodo;
+  return `${periodo.inicio ?? '?'} a ${periodo.fim ?? '?'}`;
+}
+
+function formatarPresencaCanonica(contexto: PresencaContextoCanonico | null): string {
+  if (!contexto) return '';
+  const publicavel = contexto.dados_status === 'atualizados'
+    && contexto.estado_publicacao === 'publicavel'
+    && (contexto.conflitos ?? 0) === 0
+    && (contexto.revisoes_estruturais ?? 0) === 0;
+  const taxa = publicavel
+    && contexto.universo_eventos != null
+    && contexto.universo_eventos > 0
+    && contexto.presentes != null
+      ? `${((contexto.presentes / contexto.universo_eventos) * 100).toFixed(1)}%`
+      : 'Em auditoria (presenca_desatualizada)';
+
+  return [
+    `PRESENÇA CANÔNICA: ${taxa}`,
+    `PERÍODO: ${formatarPeriodo(contexto.periodo)}`,
+    `UNIVERSO: ${contexto.universo_eventos ?? 'não publicável'} eventos`,
+    `REGRA: ${contexto.regra_versao ?? 'não informada'}`,
+    `FRESCOR: ${contexto.dados_status}; sincronizado_em=${contexto.sincronizado_em ?? 'não informado'}`,
+    `PUBLICAÇÃO: ${contexto.estado_publicacao}; conflitos=${contexto.conflitos ?? 'não informado'}; revisoes_estruturais=${contexto.revisoes_estruturais ?? 'não informado'}`,
+  ].join('\n');
+}
 
 interface PlanoAlunoRequest {
   aluno: {
@@ -22,7 +88,7 @@ interface PlanoAlunoRequest {
     health_status: string | null;
     status_pagamento: string | null;
     valor_parcela: number | null;
-    percentual_presenca: number | null;
+    presenca_contexto?: Partial<PresencaContextoCanonico> | null;
     dia_aula: string | null;
     horario_aula: string | null;
     ultimo_feedback: string | null;
@@ -47,6 +113,8 @@ Deno.serve(async (req) => {
     const { aluno, metas, acoes } = payload;
 
     const healthScore = aluno.health_score_numerico || 0;
+    const presencaContexto = normalizarPresencaContexto(aluno.presenca_contexto);
+    const blocoPresenca = formatarPresencaCanonica(presencaContexto);
 
     // Prompt para a IA
     const systemPrompt = `Você é um consultor de sucesso do cliente de uma escola de música.
@@ -59,8 +127,7 @@ FASE DA JORNADA: ${aluno.fase_jornada}
 HEALTH SCORE: ${healthScore}
 STATUS: ${aluno.health_status}
 PAGAMENTO: ${aluno.status_pagamento}
-PRESENÇA: ${aluno.percentual_presenca || 'Não informado'}%
-FEEDBACK PROFESSOR: ${aluno.ultimo_feedback || 'Sem feedback'}
+${blocoPresenca ? `${blocoPresenca}\n` : ''}FEEDBACK PROFESSOR: ${aluno.ultimo_feedback || 'Sem feedback'}
 TEMPO DE CASA: ${aluno.tempo_permanencia_meses || 0} meses
 
 CONTEXTO DAS FASES:
@@ -82,6 +149,9 @@ REGRAS:
 - Cada ação deve ser específica e acionável
 - Considere a fase da jornada para priorizar ações
 - Priorize ações de alto impacto para alunos críticos
+- Use presença somente quando PRESENÇA CANÔNICA estiver presente e publicável
+- Se a presença estiver Em auditoria, não conclua falta, desengajamento ou culpa operacional
+- Se o contexto canônico estiver ausente, não infira presença pelo Health Score
 
 Responda EXATAMENTE neste formato JSON:
 {
@@ -108,7 +178,7 @@ Responda EXATAMENTE neste formato JSON:
       tempo_permanencia_meses: aluno.tempo_permanencia_meses,
       fase_jornada: aluno.fase_jornada,
       status_pagamento: aluno.status_pagamento,
-      percentual_presenca: aluno.percentual_presenca,
+      presenca_contexto: presencaContexto,
       ultimo_feedback: aluno.ultimo_feedback,
       metas_ativas: metas?.length || 0,
       acoes_pendentes: acoes?.filter((a: any) => a.status === 'pendente')?.length || 0,
@@ -166,7 +236,11 @@ Responda EXATAMENTE neste formato JSON:
     }
 
     return new Response(
-      JSON.stringify({ success: true, plano }),
+      JSON.stringify({
+        success: true,
+        plano,
+        ...(presencaContexto ? { presenca_contexto: presencaContexto } : {}),
+      }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200 

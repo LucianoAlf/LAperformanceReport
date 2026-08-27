@@ -325,7 +325,8 @@ serve(async (req: Request) => {
         reconciliacao_grade: {
           status: reconciliacao.status,
           aulas_canceladas: reconciliacao.aulas_canceladas ?? 0,
-          vinculos_removidos: reconciliacao.vinculos_removidos ?? 0,
+          vinculos_inativados: reconciliacao.vinculos_inativados ?? 0,
+          vinculos_reativados: reconciliacao.vinculos_reativados ?? 0,
         },
         vinculos_gravados: resultado.gravados,
         vinculos_com_erro: resultado.erros.length,

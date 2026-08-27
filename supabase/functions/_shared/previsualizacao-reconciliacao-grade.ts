@@ -116,8 +116,11 @@ export function previsualizarReconciliacaoGrade(params: {
   vinculos: VinculoLocalParaPrevisualizacao[];
   presencas: PresencaParaPrevisualizacao[];
 }): ResultadoPrevisualizacaoReconciliacaoGrade {
-  const snapshotPorAula = new Map<number, Set<string>>(
-    params.snapshot.map((aula) => [aula.emusys_id, new Set(aula.aluno_chaves)]),
+  const snapshotPorAula = new Map(
+    params.snapshot.map((aula) => [aula.emusys_id, {
+      estado: aula.estado,
+      alunoChaves: new Set(aula.aluno_chaves),
+    }]),
   );
   const presencasQueFecham = params.presencas.filter(presencaFechaChamada);
   const aulaComMarcacaoFechada = new Set(
@@ -146,8 +149,8 @@ export function previsualizarReconciliacaoGrade(params: {
   };
 
   for (const aula of [...params.aulas].sort((a, b) => a.id - b.id)) {
-    const alunoChavesFonte = snapshotPorAula.get(aula.emusys_id);
-    if (!alunoChavesFonte) {
+    const snapshotFonte = snapshotPorAula.get(aula.emusys_id);
+    if (!snapshotFonte) {
       const item = itemTecnico(aula, null);
       if (aulaComMarcacaoFechada.has(aula.id)) {
         resultado.protegidas.marcacao_fechada_aula.push(item);
@@ -156,6 +159,7 @@ export function previsualizarReconciliacaoGrade(params: {
       }
       continue;
     }
+    const alunoChavesFonte = snapshotFonte.alunoChaves;
 
     for (
       const vinculo of [...(vinculosPorAula.get(aula.id) ?? [])]
@@ -165,6 +169,7 @@ export function previsualizarReconciliacaoGrade(params: {
 
       const item = itemTecnico(aula, vinculo.id);
       if (
+        snapshotFonte.estado !== "completo" ||
         !fonteTemSomenteIdentidadesEstaveis(alunoChavesFonte) ||
         vinculo.aluno_id === null ||
         vinculo.aluno_emusys_id === null

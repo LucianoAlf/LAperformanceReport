@@ -1,3 +1,5 @@
+/// <reference lib="deno.ns" />
+
 // Edge Function: gerar-relatorio-aluno
 // Gera relatório individual do aluno usando Gemini para análise
 // verify_jwt: false (chamado internamente)
@@ -8,6 +10,70 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+interface PresencaContextoCanonico {
+  fonte?: 'get_presenca_contexto_agente_v1' | 'vw_presenca_ocorrencia_canonica_v2';
+  periodo: { inicio: string | null; fim: string | null } | string | null;
+  universo_eventos: number | null;
+  presentes: number | null;
+  faltas_confirmadas: number | null;
+  indeterminados: number | null;
+  conflitos: number | null;
+  revisoes_estruturais: number | null;
+  regra_versao: string | null;
+  dados_status: string;
+  sincronizado_em: string | null;
+  estado_publicacao: string;
+}
+
+function normalizarPresencaContexto(
+  contexto?: Partial<PresencaContextoCanonico> | null,
+): PresencaContextoCanonico | null {
+  if (!contexto) return null;
+  return {
+    fonte: contexto.fonte,
+    periodo: contexto.periodo ?? null,
+    universo_eventos: contexto.universo_eventos ?? null,
+    presentes: contexto.presentes ?? null,
+    faltas_confirmadas: contexto.faltas_confirmadas ?? null,
+    indeterminados: contexto.indeterminados ?? null,
+    conflitos: contexto.conflitos ?? null,
+    revisoes_estruturais: contexto.revisoes_estruturais ?? null,
+    regra_versao: contexto.regra_versao ?? null,
+    dados_status: contexto.dados_status ?? 'indisponivel',
+    sincronizado_em: contexto.sincronizado_em ?? null,
+    estado_publicacao: contexto.estado_publicacao ?? 'bloqueado',
+  };
+}
+
+function formatarPeriodo(periodo: PresencaContextoCanonico['periodo']): string {
+  if (!periodo) return 'não informado';
+  if (typeof periodo === 'string') return periodo;
+  return `${periodo.inicio ?? '?'} a ${periodo.fim ?? '?'}`;
+}
+
+function linhasPresencaCanonica(contexto: PresencaContextoCanonico | null): string[] {
+  if (!contexto) return [];
+  const publicavel = contexto.dados_status === 'atualizados'
+    && contexto.estado_publicacao === 'publicavel'
+    && (contexto.conflitos ?? 0) === 0
+    && (contexto.revisoes_estruturais ?? 0) === 0;
+  const taxa = publicavel
+    && contexto.universo_eventos != null
+    && contexto.universo_eventos > 0
+    && contexto.presentes != null
+      ? `${((contexto.presentes / contexto.universo_eventos) * 100).toFixed(1)}%`
+      : 'Em auditoria (presenca_desatualizada)';
+
+  return [
+    `- Presença canônica: ${taxa}`,
+    `  Período: ${formatarPeriodo(contexto.periodo)}`,
+    `  Universo: ${contexto.universo_eventos ?? 'não publicável'} eventos`,
+    `  Regra: ${contexto.regra_versao ?? 'não informada'}`,
+    `  Frescor: ${contexto.dados_status}; sincronizado_em=${contexto.sincronizado_em ?? 'não informado'}`,
+    `  Publicação: ${contexto.estado_publicacao}; conflitos=${contexto.conflitos ?? 'não informado'}; revisoes_estruturais=${contexto.revisoes_estruturais ?? 'não informado'}`,
+  ];
+}
 
 interface RelatorioAlunoRequest {
   aluno: {
@@ -22,7 +88,7 @@ interface RelatorioAlunoRequest {
     health_status: string | null;
     status_pagamento: string | null;
     valor_parcela: number | null;
-    percentual_presenca: number | null;
+    presenca_contexto?: Partial<PresencaContextoCanonico> | null;
     dia_aula: string | null;
     horario_aula: string | null;
     ultimo_feedback: string | null;
@@ -92,6 +158,7 @@ Deno.serve(async (req) => {
 
     // Determinar status geral
     const healthScore = aluno.health_score_numerico || 0;
+    const presencaContexto = normalizarPresencaContexto(aluno.presenca_contexto);
     const statusEmoji = aluno.health_status === 'saudavel' ? '🟢' : 
                         aluno.health_status === 'atencao' ? '🟡' : '🔴';
     const statusTexto = aluno.health_status === 'saudavel' ? 'SAUDÁVEL' : 
@@ -122,7 +189,7 @@ Deno.serve(async (req) => {
     relatorio += `- Professor: ${aluno.professor_nome || 'Não informado'}\n`;
     relatorio += `- Fase: ${getFaseLabel(aluno.fase_jornada)} (${aluno.tempo_permanencia_meses || 0} meses)\n`;
     relatorio += `- Pagamento: ${getPagamentoLabel(aluno.status_pagamento)} (R$ ${aluno.valor_parcela?.toFixed(0) || '-'})\n`;
-    relatorio += `- Presença: ${aluno.percentual_presenca ? aluno.percentual_presenca.toFixed(0) + '%' : '—'}\n`;
+    for (const linha of linhasPresencaCanonica(presencaContexto)) relatorio += `${linha}\n`;
     relatorio += `- Feedback Professor: ${getFeedbackLabel(aluno.ultimo_feedback)}\n`;
 
     // Seções da IA
@@ -156,6 +223,9 @@ REGRAS:
 - Use linguagem profissional e acolhedora
 - Mencione o aluno pelo primeiro nome
 - Sugira ações práticas e específicas
+- Use presença somente quando o contexto canônico estiver presente e publicável
+- Se a presença estiver Em auditoria, não conclua falta, desengajamento ou culpa operacional
+- Se o contexto canônico estiver ausente, não infira presença pelo Health Score
 
 Responda EXATAMENTE neste formato JSON:
 {
@@ -174,7 +244,7 @@ Responda EXATAMENTE neste formato JSON:
       tempo_permanencia_meses: aluno.tempo_permanencia_meses,
       fase_jornada: aluno.fase_jornada,
       status_pagamento: aluno.status_pagamento,
-      percentual_presenca: aluno.percentual_presenca,
+      presenca_contexto: presencaContexto,
       ultimo_feedback: aluno.ultimo_feedback,
       metas_ativas: metas?.length || 0,
       acoes_recentes: acoes?.length || 0,
@@ -230,7 +300,11 @@ Responda EXATAMENTE neste formato JSON:
       .replace('[SUGESTOES_IA]', (iaData.sugestoes || []).map((s: string) => `- ${s}`).join('\n'));
 
     return new Response(
-      JSON.stringify({ success: true, relatorio: relatorioFinal }),
+      JSON.stringify({
+        success: true,
+        relatorio: relatorioFinal,
+        ...(presencaContexto ? { presenca_contexto: presencaContexto } : {}),
+      }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200 

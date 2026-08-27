@@ -9,7 +9,13 @@ import { previsualizarReconciliacaoGrade } from "./previsualizacao-reconciliacao
 Deno.test("previsualizacao classifica somente candidatos seguros e omite chaves de aluno", () => {
   const resultado = previsualizarReconciliacaoGrade({
     snapshot: [
-      { emusys_id: 100, aluno_chaves: ["emusys:10", "emusys:14"] },
+      {
+        emusys_id: 100,
+        estado: "completo",
+        qtd_esperada: 2,
+        qtd_recebida: 2,
+        aluno_chaves: ["emusys:10", "emusys:14"],
+      },
     ],
     aulas: [
       { id: 1, emusys_id: 100 },
@@ -124,6 +130,9 @@ Deno.test("previsualizacao preserva roster quando a origem ainda depende de nome
     snapshot: [
       {
         emusys_id: 500,
+        estado: "ambiguo",
+        qtd_esperada: 1,
+        qtd_recebida: 1,
         aluno_chaves: ["nome:identidade-nao-estavel:2000-01-01"],
       },
     ],
@@ -148,7 +157,13 @@ Deno.test("previsualizacao preserva roster quando a origem ainda depende de nome
 
 Deno.test("previsualizacao preserva roster quando a origem nao trouxe participantes", () => {
   const resultado = previsualizarReconciliacaoGrade({
-    snapshot: [{ emusys_id: 600, aluno_chaves: [] }],
+    snapshot: [{
+      emusys_id: 600,
+      estado: "vazio_confirmado",
+      qtd_esperada: 0,
+      qtd_recebida: 0,
+      aluno_chaves: [],
+    }],
     aulas: [{ id: 60, emusys_id: 600 }],
     vinculos: [
       {
@@ -165,5 +180,31 @@ Deno.test("previsualizacao preserva roster quando a origem nao trouxe participan
   assertEquals(resultado.candidatas.vinculos_remover, []);
   assertEquals(resultado.protegidas.identidade_ambigua, [
     { aula_local_id: 60, emusys_aula_id: 600, vinculo_id: 601 },
+  ]);
+});
+
+Deno.test("previsualizacao nunca remove vinculo de snapshot incompleto", () => {
+  const resultado = previsualizarReconciliacaoGrade({
+    snapshot: [{
+      emusys_id: 700,
+      estado: "incompleto",
+      qtd_esperada: 2,
+      qtd_recebida: 1,
+      aluno_chaves: ["emusys:701"],
+    }],
+    aulas: [{ id: 70, emusys_id: 700 }],
+    vinculos: [{
+      id: 702,
+      aula_emusys_id: 70,
+      aluno_id: 92,
+      aluno_emusys_id: 702,
+      aluno_chave: "emusys:702",
+    }],
+    presencas: [],
+  });
+
+  assertEquals(resultado.candidatas.vinculos_remover, []);
+  assertEquals(resultado.protegidas.identidade_ambigua, [
+    { aula_local_id: 70, emusys_aula_id: 700, vinculo_id: 702 },
   ]);
 });

@@ -5,13 +5,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 import {
   CAIXA_LIA_ID,
-  extrairServiceRoleToken,
-  processarUmAlerta,
-  validarPedidoDispatcher,
   type CaixaLia,
   type ClaimAlerta,
   type CodigoFalhaProvider,
+  type ContextoPresencaLia,
   type DispatcherAdapters,
+  extrairServiceRoleToken,
+  processarUmAlerta,
+  templateDependeFrequencia,
+  validarPedidoDispatcher,
 } from "./dispatcher.ts";
 
 const PROJECT_REF = "ouqwbbermlzqqvtqwlul";
@@ -21,6 +23,29 @@ function json(body: unknown, status = 200) {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function dataBrt(iso: string | null): string | null {
+  if (!iso) return null;
+  const instante = new Date(iso);
+  if (Number.isNaN(instante.getTime())) return null;
+
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(instante);
+  const valor = (tipo: Intl.DateTimeFormatPartTypes) =>
+    partes.find((parte) => parte.type === tipo)?.value;
+  const ano = valor("year");
+  const mes = valor("month");
+  const dia = valor("day");
+  return ano && mes && dia ? `${ano}-${mes}-${dia}` : null;
+}
+
+function numeroOuNull(valor: unknown): number | null {
+  return typeof valor === "number" && Number.isFinite(valor) ? valor : null;
 }
 
 serve(async (req) => {
@@ -78,6 +103,94 @@ serve(async (req) => {
       if (error) throw new Error("claim_indisponivel");
       const linha = Array.isArray(data) ? data[0] : null;
       return linha ? linha as ClaimAlerta : null;
+    },
+
+    async buscarRequisitoPresenca(claim) {
+      const { data: alerta, error: alertaError } = await supabase
+        .from("lia_alertas_privados")
+        .select("template_codigo, evento_id, criado_em")
+        .eq("id", claim.alerta_id)
+        .eq("claim_token", claim.claim_token)
+        .eq("status", "processando")
+        .maybeSingle();
+      if (alertaError || !alerta) {
+        return { dependeFrequencia: true, unidadeId: null, data: null };
+      }
+      if (!templateDependeFrequencia(alerta.template_codigo)) {
+        return { dependeFrequencia: false };
+      }
+      if (!alerta.evento_id) {
+        return {
+          dependeFrequencia: true,
+          unidadeId: null,
+          data: dataBrt(alerta.criado_em),
+        };
+      }
+
+      const { data: evento, error: eventoError } = await supabase
+        .from("lia_pesquisa_eventos")
+        .select("unidade_id, ocorrido_em")
+        .eq("id", alerta.evento_id)
+        .maybeSingle();
+      if (eventoError || !evento) {
+        return { dependeFrequencia: true, unidadeId: null, data: null };
+      }
+      return {
+        dependeFrequencia: true,
+        unidadeId: typeof evento.unidade_id === "string"
+          ? evento.unidade_id
+          : null,
+        data: dataBrt(evento.ocorrido_em),
+      };
+    },
+
+    async buscarContextoPresenca(unidadeId, data) {
+      const { data: retorno, error } = await supabase.rpc(
+        "get_presenca_contexto_agente_v1",
+        {
+          p_unidade_id: unidadeId,
+          p_data: data,
+          p_escopo: "lia",
+        },
+      );
+      if (error) throw new Error("contexto_presenca_indisponivel");
+      const linha = (Array.isArray(retorno) ? retorno[0] : retorno) as
+        | Record<string, unknown>
+        | null;
+      if (!linha) throw new Error("contexto_presenca_indisponivel");
+
+      const contexto: ContextoPresencaLia = {
+        dados_status: typeof linha.dados_status === "string"
+          ? linha.dados_status
+          : null,
+        estado_publicacao: typeof linha.estado_publicacao === "string"
+          ? linha.estado_publicacao
+          : null,
+        universo_eventos: numeroOuNull(linha.universo_eventos),
+      };
+      if (Object.hasOwn(linha, "denominador")) {
+        contexto.denominador = numeroOuNull(linha.denominador);
+      }
+      return contexto;
+    },
+
+    async adiar(alertaId, claimToken, motivo) {
+      const { data, error } = await supabase
+        .from("lia_alertas_privados")
+        .update({
+          status: "fila_administrativa",
+          motivo_pendencia: motivo,
+          worker_id: null,
+          claim_token: null,
+          claimed_em: null,
+          atualizado_em: new Date().toISOString(),
+        })
+        .eq("id", alertaId)
+        .eq("claim_token", claimToken)
+        .eq("status", "processando")
+        .select("id");
+      if (error) throw new Error("adiamento_indisponivel");
+      return Array.isArray(data) && data.length === 1;
     },
 
     async buscarCaixaExata(caixaId) {

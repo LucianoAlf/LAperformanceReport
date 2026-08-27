@@ -85,8 +85,42 @@ export type CodigoFalhaProvider =
   | "provider_configuracao"
   | "provider_interno";
 
+export type RequisitoPresencaAlerta =
+  | { dependeFrequencia: false }
+  | {
+    dependeFrequencia: true;
+    unidadeId: string | null;
+    data: string | null;
+  };
+
+export type ContextoPresencaLia = {
+  dados_status: string | null;
+  estado_publicacao: string | null;
+  universo_eventos: number | null;
+  denominador?: number | null;
+};
+
+export function templateDependeFrequencia(
+  templateCodigo: string | null | undefined,
+): boolean {
+  return typeof templateCodigo === "string" &&
+    /(?:^|_)(?:presenca|frequencia)(?:_|$)/i.test(templateCodigo);
+}
+
 export type DispatcherAdapters = {
   claim(workerId: string, alertaId: string | null): Promise<ClaimAlerta | null>;
+  buscarRequisitoPresenca?(
+    claim: ClaimAlerta,
+  ): Promise<RequisitoPresencaAlerta>;
+  buscarContextoPresenca?(
+    unidadeId: string,
+    data: string,
+  ): Promise<ContextoPresencaLia>;
+  adiar?(
+    alertaId: string,
+    claimToken: string,
+    motivo: "presenca_desatualizada",
+  ): Promise<boolean>;
   buscarCaixaExata(caixaId: number): Promise<CaixaLia | null>;
   fetchProvider(url: string, init: RequestInit): Promise<Response>;
   concluir(
@@ -107,6 +141,11 @@ export type DispatcherAdapters = {
 export type ResultadoDispatcher =
   | { status: "sem_pendencia" }
   | {
+    status: "adiado";
+    alerta_id: string;
+    motivo: "presenca_desatualizada";
+  }
+  | {
     status: "enviado";
     alerta_id: string;
     provider_message_id: string;
@@ -116,6 +155,34 @@ export type ResultadoDispatcher =
     alerta_id: string;
     erro_codigo: CodigoFalhaProvider;
   };
+
+async function adiarPorPresencaDesatualizada(
+  adapters: DispatcherAdapters,
+  claim: ClaimAlerta,
+  inicio: number,
+): Promise<ResultadoDispatcher> {
+  const adiado = await adapters.adiar?.(
+    claim.alerta_id,
+    claim.claim_token,
+    "presenca_desatualizada",
+  );
+  if (adiado !== true) {
+    throw new Error("claim_desfecho_nao_reconhecido");
+  }
+
+  logSanitizado(adapters, inicio, {
+    alerta_id: claim.alerta_id,
+    evento_tipo: claim.evento_tipo,
+    ambiente: claim.ambiente,
+    status: "adiado",
+    motivo: "presenca_desatualizada",
+  });
+  return {
+    status: "adiado",
+    alerta_id: claim.alerta_id,
+    motivo: "presenca_desatualizada",
+  };
+}
 
 function validarCaixa(caixa: CaixaLia | null): CaixaLia {
   if (
@@ -230,6 +297,39 @@ export async function processarUmAlerta(
       "provider_configuracao",
       false,
     );
+  }
+
+  const requisitoPresenca = await adapters.buscarRequisitoPresenca?.(claim) ??
+    { dependeFrequencia: false };
+  if (requisitoPresenca.dependeFrequencia) {
+    let contexto: ContextoPresencaLia | null = null;
+    if (
+      requisitoPresenca.unidadeId &&
+      requisitoPresenca.data &&
+      adapters.buscarContextoPresenca
+    ) {
+      try {
+        contexto = await adapters.buscarContextoPresenca(
+          requisitoPresenca.unidadeId,
+          requisitoPresenca.data,
+        );
+      } catch {
+        contexto = null;
+      }
+    }
+
+    const denominador = contexto && "denominador" in contexto
+      ? contexto.denominador
+      : contexto?.universo_eventos;
+    const contextoPublicavel = contexto?.dados_status === "atualizados" &&
+      contexto.estado_publicacao === "publicavel" &&
+      typeof denominador === "number" &&
+      Number.isFinite(denominador) &&
+      denominador > 0;
+
+    if (!contextoPublicavel) {
+      return await adiarPorPresencaDesatualizada(adapters, claim, inicio);
+    }
   }
 
   let caixa: CaixaLia;

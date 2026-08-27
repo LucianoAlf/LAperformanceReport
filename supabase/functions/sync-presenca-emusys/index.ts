@@ -57,6 +57,12 @@ import {
   type CorpoSyncPresenca,
   type ModoSyncPresenca,
 } from '../_shared/sync-presenca-authorization.ts';
+import {
+  executarSyncPresencaComLease,
+  ordenarDatasSync,
+  redigirErroCodigo,
+  type ContagensPresencaSync,
+} from '../_shared/presenca-sync-run.ts';
 import { selecionarCandidatoExperimental } from '../_shared/experimental-reconciliacao.ts';
 import {
   resolverAlunoLocal,
@@ -215,10 +221,15 @@ function podeMaterializarFalta(aula: AulaEmusys, agora = new Date()): boolean {
 // _shared/matcher-presenca.ts, importado no topo deste arquivo.
 
 // Buscar todas as aulas de um dia no Emusys (com paginação)
-async function fetchAulasDia(token: string, data: string): Promise<AulaEmusys[]> {
+async function fetchAulasDia(
+  token: string,
+  data: string,
+  onPagina?: (contagens: ContagensPresencaSync) => Promise<void>,
+): Promise<AulaEmusys[]> {
   // Uma pagina ausente nao e prova de que a aula saiu da grade. O coletor
   // compartilhado falha fechado em HTTP, cursor ausente ou cursor repetido.
-  return fetchAulasRange(token, data, data);
+  if (!onPagina) return fetchAulasRange(token, data, data);
+  return fetchAulasRange(token, data, data, undefined, onPagina);
 }
 
 async function fetchAulasRange(
@@ -226,20 +237,37 @@ async function fetchAulasRange(
   dataInicio: string,
   dataFim: string,
   signal?: AbortSignal,
+  onPagina?: (contagens: ContagensPresencaSync) => Promise<void>,
 ): Promise<AulaEmusys[]> {
+  let paginasLidas = 0;
+  let aulasLidas = 0;
+  let presencasLidas = 0;
   try {
     const aulas = await buscarTodasAulas({
       dataInicio,
       dataFim,
-      fetchPage: ({ cursor, limite }) =>
-        buscarPaginaAulasEmusys<AulaEmusys>({
+      fetchPage: async ({ cursor, limite }) => {
+        const pagina = await buscarPaginaAulasEmusys<AulaEmusys>({
           token,
           dataInicio,
           dataFim,
           cursor,
           limite,
           signal,
-        }),
+        });
+        paginasLidas += 1;
+        aulasLidas += pagina.items.length;
+        presencasLidas += pagina.items.reduce(
+          (total, aula) => total + (aula.alunos?.length ?? 0),
+          0,
+        );
+        await onPagina?.({
+          paginas_lidas: paginasLidas,
+          aulas_lidas: aulasLidas,
+          presencas_lidas: presencasLidas,
+        });
+        return pagina;
+      },
     });
     return aulas as AulaEmusys[];
   } catch {
@@ -282,7 +310,8 @@ async function sincronizarMetadadosAulas(
   unidades: readonly UnidadeEmusys[],
   dataInicio: string,
   dataFim: string
-) {  const resultados: Array<Record<string, unknown>> = [];
+) {
+  const resultados: Array<Record<string, unknown>> = [];
   const aulasPorUnidade: Array<{
     unidade: UnidadeEmusys;
     dataInicio: string;
@@ -433,7 +462,8 @@ async function sincronizarMetadadosAulas(
       reconciliacao_grade: {
         status: reconciliacaoGrade.status,
         aulas_canceladas: reconciliacaoGrade.aulas_canceladas ?? 0,
-        vinculos_removidos: reconciliacaoGrade.vinculos_removidos ?? 0,
+        vinculos_inativados: reconciliacaoGrade.vinculos_inativados ?? 0,
+        vinculos_reativados: reconciliacaoGrade.vinculos_reativados ?? 0,
       },
     });
     aulasPorUnidade.push({ unidade, dataInicio, dataFim, aulas });
@@ -1700,14 +1730,19 @@ serve(async (req: Request) => {
       }
     }
 
-    console.log(`[sync-presenca] Modo ${modo}: ${datasProcessar[0]} a ${datasProcessar.at(-1)}, unidade: ${solicitacao.alvoExato ? unidadesProcessar[0].nome : 'todas'}`);
+    const datasCronologicas = [...datasProcessar].sort();
+    const dataInicioJanela = datasCronologicas[0];
+    const dataFimJanela = datasCronologicas.at(-1)!;
+    const datasOrdenadas = ordenarDatasSync(datasProcessar, dataAtualBrt());
+    datasProcessar.splice(0, datasProcessar.length, ...datasOrdenadas);
 
+    console.log(`[sync-presenca] Modo ${modo}: ${dataInicioJanela} a ${dataFimJanela}, unidade: ${solicitacao.alvoExato ? unidadesProcessar[0].nome : 'todas'}`);
     if (modo === 'metadados') {
       const metadados = await sincronizarMetadadosAulas(
         supabase,
         unidadesProcessar,
-        datasProcessar[0],
-        datasProcessar.at(-1)!
+        dataInicioJanela,
+        dataFimJanela,
       );
       const dependenciasSnapshot = criarDependenciasSnapshot(
         supabase,
@@ -1727,14 +1762,16 @@ serve(async (req: Request) => {
           success: true,
           modo,
           dias,
-          data_inicio: datasProcessar[0],
-          data_fim: datasProcessar.at(-1),
+          data_inicio: dataInicioJanela,
+          data_fim: dataFimJanela,
           resultados: metadados.resultados,
           snapshots,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const requestIdSync = crypto.randomUUID();
 
     // População viva canônica: trancados e estados ambíguos não entram no denominador.
     const { data: alunosCanonicos, error: alunosCanonicosError } = await supabase
@@ -1877,8 +1914,29 @@ serve(async (req: Request) => {
       for (const unidade of unidadesProcessar) {
         console.log(`[sync-presenca] ${dataAlvo} - ${unidade.nome}...`);
 
+        const execucao = await executarSyncPresencaComLease({
+          cliente: supabase,
+          unidadeId: unidade.id,
+          modo,
+          dataAlvo,
+          requestId: requestIdSync,
+          trabalho: async ({ heartbeat }) => {
+            let contagensColeta: ContagensPresencaSync = {
+              paginas_lidas: 0,
+              aulas_lidas: 0,
+              presencas_lidas: 0,
+            };
+
         // 1. Buscar aulas do dia no Emusys
-        const aulas = await fetchAulasDia(unidade.token, dataAlvo);
+        const heartbeatPagina = async (contagens: ContagensPresencaSync) => {
+          contagensColeta = contagens;
+          await heartbeat(contagens);
+        };
+        const aulas = await fetchAulasDia(
+          unidade.token,
+          dataAlvo,
+          heartbeatPagina,
+        );
         const mapaProfessores = mapasProfessoresPorUnidade.get(unidade.id) ?? new Map();
         const cancelamentosHumanos = await carregarCancelamentosHumanos(supabase, unidade.id, dataAlvo, dataAlvo);
 
@@ -2212,8 +2270,10 @@ serve(async (req: Request) => {
           }
         }
 
-        const hojeReconciliacao = dataAtualBrt();
-        const reconciliacaoGrade: ResultadoReconciliacaoGradeSnapshot = dataAlvo >= hojeReconciliacao && !gradeIncompleta
+        // A reconciliacao v2 do roster e nao destrutiva: o backlog pode atualizar
+        // o estado operacional de dias passados sem apagar o vinculo nem a
+        // presenca humana historica.
+        const reconciliacaoGrade: ResultadoReconciliacaoGradeSnapshot = !gradeIncompleta
           ? await reconciliarGradeSnapshotEmusys(supabase, {
               unidadeId: unidade.id,
               dataInicio: dataAlvo,
@@ -2229,7 +2289,7 @@ serve(async (req: Request) => {
           : {
               status: gradeIncompleta
                 ? 'grade_incompleta_preservada'
-                : 'fora_da_janela_operacional',
+                : 'roster_nao_reconciliado',
             };
 
         // 3. Log
@@ -2246,7 +2306,7 @@ serve(async (req: Request) => {
           nomes_nao_encontrados: nomesNaoEncontrados,
         });
 
-        resultados.push({
+        const resultadoUnidadeData = {
           data: dataAlvo,
           unidade: unidade.nome,
           aulas: aulasProcessadas,
@@ -2260,9 +2320,41 @@ serve(async (req: Request) => {
           reconciliacao_grade: {
             status: reconciliacaoGrade.status,
             aulas_canceladas: reconciliacaoGrade.aulas_canceladas ?? 0,
-            vinculos_removidos: reconciliacaoGrade.vinculos_removidos ?? 0,
+            vinculos_inativados: reconciliacaoGrade.vinculos_inativados ?? 0,
+            vinculos_reativados: reconciliacaoGrade.vinculos_reativados ?? 0,
+          },
+        };
+
+        return {
+          valor: resultadoUnidadeData,
+          contagens: contagensColeta,
+          snapshot: {
+            unidade_id: unidade.id,
+            data: dataAlvo,
+            modo,
+            aulas: aulasProcessadas,
+            registros_presenca: totalPresencas,
+            matched,
+            nao_encontrados: naoEncontrados,
+            presentes,
+            ausentes,
+            roster_sincronizados: rosterSincronizados,
+            reconciliacao_grade: resultadoUnidadeData.reconciliacao_grade,
+          },
+        };
           },
         });
+
+        if (execucao.status === 'deduplicada') {
+          resultados.push({
+            data: dataAlvo,
+            unidade: unidade.nome,
+            status: 'deduplicada',
+            motivo: execucao.motivo,
+          });
+          continue;
+        }
+        resultados.push(execucao.valor);
       }
     }
 
@@ -2272,8 +2364,8 @@ serve(async (req: Request) => {
           success: true,
           modo,
           dias: diasFuturos,
-          data_inicio: datasProcessar[0],
-          data_fim: datasProcessar.at(-1),
+          data_inicio: dataInicioJanela,
+          data_fim: dataFimJanela,
           resultados,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -2307,7 +2399,7 @@ serve(async (req: Request) => {
     console.log(`[sync-presenca] Experimentais processadas: ${logsExperimentais.length}`);
 
     return new Response(
-      JSON.stringify({ success: true, modo, dias, data_inicio: datasProcessar[0], data_fim: datasProcessar.at(-1), resultados, experimentais_reconciliadas: logsReconciliacao, experimentais_confirmadas: logsExperimentais }),
+      JSON.stringify({ success: true, modo, dias, data_inicio: dataInicioJanela, data_fim: dataFimJanela, resultados, experimentais_reconciliadas: logsReconciliacao, experimentais_confirmadas: logsExperimentais }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
@@ -2317,9 +2409,7 @@ serve(async (req: Request) => {
       ? error.message
       : modo === 'experimentais' || modo === 'metadados'
         ? classificacao.mensagem
-        : error instanceof Error
-          ? error.message
-          : 'Erro interno';
+        : redigirErroCodigo(error);
     console.error(`[sync-presenca] Falha no modo ${modo}: ${mensagemPublica}`);
     return new Response(
       JSON.stringify({ error: mensagemPublica }),

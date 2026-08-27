@@ -156,3 +156,35 @@ test('preserva o bypass vigente e rejeita apenas WIPs SQL exatos', () => {
     .map(({ name }) => name);
   assert.deepEqual(realWipFiles, []);
 });
+
+test('as fontes Edge publicadas estão versionadas e o WIP não vazou', () => {
+  const required = [
+    'supabase/functions/_shared/presenca-sync-run.ts',
+    'supabase/functions/_shared/previsualizacao-reconciliacao-grade.ts',
+    'supabase/functions/_shared/reconciliacao-grade-snapshot.ts',
+    'supabase/functions/bi-agent-lamusic/schema.ts',
+    'supabase/functions/bi-agent-lamusic/sql-validator.ts',
+    'supabase/functions/bi-agent-lamusic/tools.ts',
+    'supabase/functions/gerar-plano-aluno/index.ts',
+    'supabase/functions/gerar-relatorio-aluno/index.ts',
+    'supabase/functions/processar-alertas-lia/dispatcher.ts',
+    'supabase/functions/processar-alertas-lia/index.ts',
+    'supabase/functions/relatorio-admin-whatsapp/index.ts',
+    'supabase/functions/sync-grade-futura-emusys/index.ts',
+    'supabase/functions/sync-presenca-emusys/index.ts',
+  ];
+
+  for (const relativePath of required) {
+    assert.equal(
+      statSync(path.join(repositoryRoot, relativePath)).isFile(),
+      true,
+      `NOT_REGULAR_FILE: ${relativePath}`,
+    );
+  }
+
+  const syncPresencaSource = readFileSync(
+    path.join(repositoryRoot, 'supabase/functions/sync-presenca-emusys/index.ts'),
+    'utf8',
+  );
+  assert.doesNotMatch(syncPresencaSource, /reconciliar_grade_snapshot_emusys_v2/);
+});
