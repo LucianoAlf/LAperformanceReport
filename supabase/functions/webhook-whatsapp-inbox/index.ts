@@ -1145,8 +1145,26 @@ serve(async (req: Request) => {
             'evasao',
             'accepted',
           );
-          processadas++;
-          continue;
+          // NAO dar `continue` aqui. Ate 27/08/2026 dava, e a mensagem era
+          // DESVIADA: virava resposta da pesquisa e nunca chegava a Caixa de
+          // Entrada. Quem escreve para a caixa da Lia enquanto tem pesquisa
+          // aberta nem sempre esta respondendo a pesquisa -- o caso concreto e
+          // a mae com dois filhos, um que saiu (a pesquisa) e outro que
+          // continua ("meu filho nao vai a aula hoje, tem consulta"). Esse
+          // aviso sumia: a secretaria nunca via, ninguem respondia, e a mae
+          // achava que tinha avisado. E o *silent drop* classico de caixa
+          // compartilhada -- toda mensagem recebida precisa ficar registrada e
+          // ter um dono, mesmo quando outro fluxo tambem a consome.
+          //
+          // Seguir o fluxo normal e seguro nesta caixa: a 3 (Lia) tem
+          // `funcao='administrativo'`, entao cai em `handleAdminInboxMessage`,
+          // que grava em admin_conversas/admin_mensagens com guarda de
+          // duplicata por `whatsapp_message_id` -- e caixa administrativa
+          // NUNCA alimenta o fluxo de CRM/Mila, ou seja, nenhum bot vai
+          // responder a mensagem por engano.
+          //
+          // A pesquisa ja consumiu a mensagem em `handleRespostaEvasao` acima;
+          // daqui em diante ela e apenas mais uma mensagem da conversa.
         }
 
         // ========== EDIÇÃO DE MENSAGEM ==========
