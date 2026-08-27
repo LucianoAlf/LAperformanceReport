@@ -185,39 +185,11 @@ serve(async (req: Request) => {
     });
   }
 
-  // Guard de telefone compartilhado, revalidado NA HORA DO DISPARO (a RPC de
-  // enfileiramento so checa isso na entrada da fila, e a espera entre
-  // enfileirar e disparar pode ser de horas). Caso real: dois irmaos no mesmo
-  // telefone -- a mae responde pelo primeiro, e mandar a repescagem do
-  // segundo mesmo assim e o pior desfecho possivel. Falha na consulta e
-  // fail-closed, mesmo tratamento (nao terminal, nada foi enviado ainda).
-  const {
-    data: telefoneCompartilhadoJaRespondeu,
-    error: erroTelefoneCompartilhado,
-  } = await supabase.rpc("existe_telefone_compartilhado_respondido", {
-    p_pesquisa_id: job.pesquisa_id,
-  });
-
-  if (erroTelefoneCompartilhado) {
-    await falharJob(supabase, {
-      p_id: job.id,
-      p_worker_id: workerId,
-      p_erro: "verificacao_telefone_compartilhado_indisponivel",
-      p_terminal: false,
-    });
-    return json({
-      ok: true,
-      processado: 0,
-      motivo: "verificacao_telefone_compartilhado_indisponivel",
-    });
-  }
-
   const decisao = decidirEnvioRepescagem({
     respostaStatus: String(pesquisa.resposta_status),
     envioStatus: String(pesquisa.envio_status),
     optOutEm: pesquisa.opt_out_em ?? null,
     jaExisteSaidaNaPesquisa: (saidasNaPesquisa ?? 0) > 0,
-    telefoneCompartilhadoJaRespondeu: Boolean(telefoneCompartilhadoJaRespondeu),
   });
 
   // 3. Cancelar encerra a rodada sem enviar nada.

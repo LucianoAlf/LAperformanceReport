@@ -35,9 +35,26 @@ test('cancela se ja existe mensagem de saida na pesquisa', () => {
   );
 });
 
-test('cancela quando o telefone compartilhado ja respondeu (caso dos irmaos)', () => {
+test('irmao no mesmo telefone NAO impede a repescagem', () => {
+  // A pesquisa e por ALUNO. Dois irmaos que evadiram tem duas pesquisas, sobre
+  // experiencias distintas -- caso real de 05/08/2026: Miguel (prof. Pedro) e
+  // Heitor (prof. Willian), mesmo telefone, e o pai respondeu as duas.
+  // A guarda antiga (`telefoneCompartilhadoJaRespondeu`) recusava justamente o
+  // irmao que ainda nao respondeu, que e quem precisa da repescagem: foi ela a
+  // unica recusa no teste do 1o lote real. Campo removido do contrato.
+  assert.deepEqual(decidirEnvioRepescagem({ ...base }), { acao: 'enviar' });
+
+  // Um campo desconhecido nao pode reintroduzir o bloqueio por acidente.
   assert.deepEqual(
     decidirEnvioRepescagem({ ...base, telefoneCompartilhadoJaRespondeu: true }),
-    { acao: 'cancelar', motivo: 'telefone_ja_respondeu' },
+    { acao: 'enviar' },
+  );
+});
+
+test('a propria pesquisa respondida continua bloqueando', () => {
+  // O que impede cobrar a MESMA pessoa duas vezes.
+  assert.deepEqual(
+    decidirEnvioRepescagem({ ...base, respostaStatus: 'revisada' }),
+    { acao: 'cancelar', motivo: 'respondeu_durante_a_espera' },
   );
 });

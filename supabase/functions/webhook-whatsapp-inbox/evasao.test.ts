@@ -177,6 +177,56 @@ Deno.test("zero candidato vira sem_pesquisa e dois viram ambigua", async () => {
   assertEquals((await resolverPesquisa(evento(), duplo)).status, "ambigua");
 });
 
+Deno.test("irmaos no mesmo telefone: vence quem ainda aguarda resposta", async () => {
+  // Caso real de 05/08/2026. Miguel (prof. Pedro) respondeu em 04/08 e sua
+  // pesquisa ja estava `revisada`; Heitor (prof. Willian) recebeu a dele em
+  // 05/08 10:33 e o pai respondeu 10:35 -- "o professor Wil foi...". Como
+  // STATUS_ABERTOS inclui `revisada`, as duas concorriam, a resolucao dava
+  // `ambigua` e a resposta do Heitor virou orfa: a pesquisa segue
+  // `sem_resposta` ate hoje.
+  const repo = new FakeRepository();
+  repo.abertas = [
+    pesquisa({ id: "miguel", respostaStatus: "revisada" }),
+    pesquisa({ id: "heitor", respostaStatus: "sem_resposta" }),
+  ];
+
+  const resolucao = await resolverPesquisa(evento(), repo);
+
+  assertEquals(resolucao.status, "resolvida");
+  if (resolucao.status === "resolvida") {
+    assertEquals(resolucao.pesquisa.id, "heitor");
+    assertEquals(resolucao.criterio, "unica_aguardando");
+  }
+});
+
+Deno.test("duas aguardando de verdade continuam ambiguas -- nao chutar", async () => {
+  const repo = new FakeRepository();
+  repo.abertas = [
+    pesquisa({ id: "irmao-a", respostaStatus: "sem_resposta" }),
+    pesquisa({ id: "irmao-b", respostaStatus: "sem_resposta" }),
+  ];
+
+  assertEquals((await resolverPesquisa(evento(), repo)).status, "ambigua");
+});
+
+Deno.test("citacao continua ganhando de tudo, inclusive do desempate", async () => {
+  // A mensagem citada e prova; o desempate por "unica aguardando" e inferencia.
+  const repo = new FakeRepository();
+  repo.citada = pesquisa({ id: "citada", respostaStatus: "revisada" });
+  repo.abertas = [pesquisa({ id: "aguardando", respostaStatus: "sem_resposta" })];
+
+  const resolucao = await resolverPesquisa(
+    evento({ quotedProviderMessageId: "abc" }),
+    repo,
+  );
+
+  assertEquals(resolucao.status, "resolvida");
+  if (resolucao.status === "resolvida") {
+    assertEquals(resolucao.pesquisa.id, "citada");
+    assertEquals(resolucao.criterio, "mensagem_citada");
+  }
+});
+
 Deno.test("unica V2 prevalece sobre pesquisas legadas abertas no mesmo telefone", async () => {
   const repo = new FakeRepository();
   repo.abertas = [

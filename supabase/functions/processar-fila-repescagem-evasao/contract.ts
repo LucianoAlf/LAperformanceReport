@@ -5,11 +5,6 @@ export interface EstadoAntesDoEnvio {
   // pesquisa_evasao_mensagens nao tem coluna de toque: isto conta qualquer
   // saida ja registrada para a pesquisa, nao especificamente a deste toque.
   jaExisteSaidaNaPesquisa: boolean;
-  // A RPC de enfileiramento ja recusa isso na entrada da fila, mas a espera
-  // entre enfileirar e disparar pode ser de horas: outro aluno no MESMO
-  // telefone (caso real: dois irmaos) pode ter respondido nesse meio tempo.
-  // Mandar a repescagem mesmo assim e o pior desfecho possivel.
-  telefoneCompartilhadoJaRespondeu: boolean;
 }
 
 export type DecisaoEnvio =
@@ -28,9 +23,14 @@ export function decidirEnvioRepescagem(estado: EstadoAntesDoEnvio): DecisaoEnvio
   if (estado.jaExisteSaidaNaPesquisa) {
     return { acao: "cancelar", motivo: "ja_enviada" };
   }
-  if (estado.telefoneCompartilhadoJaRespondeu) {
-    return { acao: "cancelar", motivo: "telefone_ja_respondeu" };
-  }
+  // NAO existe mais guarda de "outro aluno no mesmo telefone ja respondeu".
+  // A pesquisa e por ALUNO: dois irmaos que evadiram tem duas pesquisas, sobre
+  // experiencias distintas -- no caso real de 05/08/2026, professores
+  // diferentes (Miguel/Pedro e Heitor/Willian), e o pai respondeu as duas.
+  // A guarda antiga recusava a repescagem do irmao que AINDA NAO respondeu, que
+  // e exatamente quem precisa dela: foi ela a unica recusa no teste do lote.
+  // Quem impede cobrar a mesma pessoa duas vezes e o check de respostaStatus
+  // abaixo, que olha a PROPRIA pesquisa.
   if (estado.respostaStatus !== "sem_resposta") {
     return { acao: "cancelar", motivo: "respondeu_durante_a_espera" };
   }

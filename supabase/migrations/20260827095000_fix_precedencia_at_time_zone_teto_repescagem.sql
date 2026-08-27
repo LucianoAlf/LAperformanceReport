@@ -1,0 +1,14 @@
+-- Registro da correcao aplicada em producao como migration propria.
+-- AT TIME ZONE liga mais forte que +, entao
+--   (v_dia + 1)::timestamp + time '09:00' at time zone 'America/Sao_Paulo'
+-- era lido como timestamp + (time AT TIME ZONE ...) -- operador inexistente
+-- (42883). So estourava ao atingir o teto de 30/dia, ou seja, no lote grande
+-- que a fila existe para atender, e derrubava o lote inteiro (o erro acontece
+-- fora do begin/exception do insert).
+--
+-- O corpo corrigido de enfileirar_repescagem_evasao ja esta em
+-- 20260827092000_pesquisa_evasao_enfileirar_repescagem.sql (o arquivo foi
+-- corrigido junto). Esta migration existe para o historico do banco bater com
+-- o do repositorio; aplicar as duas em ordem produz o mesmo estado final.
+-- Nenhuma acao adicional necessaria.
+select 1;

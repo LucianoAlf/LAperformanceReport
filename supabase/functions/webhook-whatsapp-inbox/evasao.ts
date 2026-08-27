@@ -37,7 +37,7 @@ export interface PesquisaCandidata {
 export type ResolucaoPesquisa =
   | {
     status: "resolvida";
-    criterio: "mensagem_citada" | "telefone_caixa";
+    criterio: "mensagem_citada" | "telefone_caixa" | "unica_aguardando";
     pesquisa: PesquisaCandidata;
   }
   | { status: "sem_pesquisa" }
@@ -222,6 +222,29 @@ export async function resolverPesquisa(
     };
   }
   if (multipartes.length > 1) {
+    // Irmaos no mesmo telefone: a pesquisa e por ALUNO, entao duas pesquisas
+    // do mesmo numero sao perguntas diferentes -- sobre professores
+    // diferentes, inclusive. Caso real (05/08/2026): Miguel (prof. Pedro) e
+    // Heitor (prof. Willian). O pai respondeu as duas, mas a do Heitor caiu
+    // como `ambigua` e ficou `sem_resposta` ate hoje, porque a do Miguel --
+    // ja respondida E revisada no dia anterior -- continuava concorrendo:
+    // STATUS_ABERTOS inclui `revisada` (de proposito, para permitir
+    // complemento depois).
+    //
+    // Uma pesquisa ja respondida nao deve disputar em pe de igualdade com uma
+    // que ainda espera resposta. Se apenas UMA das candidatas esta aguardando,
+    // e ela -- sem adivinhacao e sem LLM.
+    const aguardando = multipartes.filter(
+      (item) => item.respostaStatus === "sem_resposta",
+    );
+    if (aguardando.length === 1) {
+      return {
+        status: "resolvida",
+        criterio: "unica_aguardando",
+        pesquisa: aguardando[0],
+      };
+    }
+    // Duas ou mais aguardando de verdade: continua ambiguo. Nao chutar.
     return {
       status: "ambigua",
       candidatos: multipartes.map((item) => item.id),
