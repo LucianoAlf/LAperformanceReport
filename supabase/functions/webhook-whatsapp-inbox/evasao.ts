@@ -65,7 +65,10 @@ export interface MensagemPersistida {
 
 export interface AtualizacaoCabecalho {
   pesquisaId: string;
-  respostaStatus: "coletando";
+  // "coletando" quando chega conteudo de verdade; qualquer outro valor aqui e
+  // a preservacao do status atual (adiamento/saudacao nao mudam o estado da
+  // pesquisa -- ver o comentario em ingerirEvento).
+  respostaStatus: string;
   primeiraInteracaoEm: string;
   ultimaInteracaoEm: string | null;
   respostaTipoCompatibilidade: TipoEventoEvasao;
@@ -338,9 +341,26 @@ export async function ingerirEvento(
   }
 
   const ehSubstantivo = substantividade === "conteudo_substantivo";
+  // So conteudo de verdade tira a pesquisa de `sem_resposta`.
+  //
+  // Antes isto era "coletando" incondicional -- adiamento e saudacao mudavam o
+  // status igual. E `sem_resposta` e exatamente o filtro da REPESCAGEM: quem
+  // dissesse "respondo amanha" saia da fila de reenvio na hora, para sempre,
+  // mesmo sem nunca ter respondido. Ou seja, quem demonstrou interesse virava
+  // a unica pessoa que o sistema nunca mais cobrava -- e se sumisse de vez, a
+  // pesquisa ainda expirava em 7 dias, tambem fora de `sem_resposta`.
+  //
+  // Caso real (Joachim, 05/08/2026): prometeu, cumpriu 21 dias depois, e nunca
+  // foi repescado. Com a correcao do reconhecimento de adiamento este buraco
+  // ficaria MAIS visivel, nao menos: mais gente reconhecida = mais gente
+  // silenciosamente fora da fila.
+  //
+  // Mantendo `sem_resposta`, o encadeamento se resolve sozinho: cumpriu em ate
+  // 3 dias, e capturado; sumiu, vira candidata a repescagem -- e "po, nao
+  // esquece da gente nao" e exatamente a mensagem certa para quem prometeu.
   await repository.atualizarCabecalho({
     pesquisaId: pesquisa.id,
-    respostaStatus: "coletando",
+    respostaStatus: ehSubstantivo ? "coletando" : pesquisa.respostaStatus,
     primeiraInteracaoEm: pesquisa.primeiraInteracaoEm ?? evento.recebidoEm,
     ultimaInteracaoEm: ehSubstantivo ? evento.recebidoEm : null,
     respostaTipoCompatibilidade: evento.tipo,
