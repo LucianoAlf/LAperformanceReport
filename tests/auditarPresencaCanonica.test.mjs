@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import zlib from 'node:zlib';
 
@@ -13,6 +14,8 @@ import {
   parseAuditArgs,
   validateAuditCoverage,
 } from '../scripts/auditar-presenca-canonica.mjs';
+
+const AUDIT_SCRIPT = readFileSync('scripts/auditar-presenca-canonica.mjs', 'utf8');
 
 const CAMPOS = [
   'sync_completo',
@@ -96,6 +99,13 @@ test('saida normalizada contem somente contagens, unidade, data e hashes', () =>
     'unidade',
   ].sort());
   assert.equal(JSON.stringify(row).includes('aluno'), false);
+});
+
+test('resultado agregado declara ausencia de PII e guard usa a raiz real do repositorio', () => {
+  assert.match(AUDIT_SCRIPT, /pii_no_output:\s*true/u);
+  assert.match(AUDIT_SCRIPT, /fileURLToPath\(import\.meta\.url\)/u);
+  assert.match(AUDIT_SCRIPT, /REPO_ROOT/u);
+  assert.doesNotMatch(AUDIT_SCRIPT, /path\.resolve\(process\.cwd\(\)\)/u);
 });
 
 test('cobertura exige exatamente um recorte por unidade e dia solicitado', () => {

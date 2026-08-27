@@ -101,7 +101,7 @@ async function main() {
   const integrity = preview.integridade_decisoes_humanas;
   if (!integrity || integrity.alteracao_prevista !== false
       || !sameJson(integrity.antes, integrity.depois)) {
-    throw new Error('dry-run alteraria contagem ou hash de decisoes humanas');
+    throw new Error('dry-run alteraria contagem ou estado semantico de decisoes humanas');
   }
 
   const totals = shadow.reduce((acc, row) => {
@@ -125,7 +125,7 @@ async function main() {
     gate: {
       aprovado: totals.sem_explicacao === 0,
       sem_explicacao: totals.sem_explicacao,
-      decisoes_humanas_byte_identical: true,
+      decisoes_humanas_semantica_preservada: true,
       cutover_executado: false,
     },
     totais: totals,

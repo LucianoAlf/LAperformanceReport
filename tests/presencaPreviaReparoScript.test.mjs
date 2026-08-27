@@ -9,7 +9,9 @@ test('script de previa usa somente as duas RPCs read-only e quatro categorias pe
   const source = readFileSync(scriptPath, 'utf8');
   assert.match(source, /get_presenca_shadow_comparacao_v2/u);
   assert.match(source, /get_presenca_previa_reparo_v2/u);
-  assert.match(source, /decisoes_humanas_byte_identical/u);
+  assert.match(source, /decisoes_humanas_semantica_preservada/u);
+  assert.doesNotMatch(source, /decisoes_humanas_byte_identical/u);
+  assert.doesNotMatch(source, /byte-level|byte identical|byte-identical/iu);
   assert.match(source, /cutover_executado: false/u);
   assert.doesNotMatch(source, /\.from\s*\(/u);
   assert.doesNotMatch(source, /\.(?:insert|update|delete|upsert)\s*\(/u);

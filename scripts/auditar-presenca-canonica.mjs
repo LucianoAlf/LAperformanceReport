@@ -2,10 +2,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import zlib from 'node:zlib';
 
 const UNIDADES_PERMITIDAS = ['Barra', 'Recreio', 'Campo Grande'];
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CAMPOS_CONTAGEM = [
   'aulas_reais',
   'eventos_presente',
@@ -586,7 +587,9 @@ async function lerStdin() {
 
 function escreverResultadoForaDoRepo(output, json) {
   const destino = path.resolve(output);
-  const repo = `${path.resolve(process.cwd())}${path.sep}`.toLowerCase();
+  // --output grava deliberadamente fora da raiz real deste repositorio; o
+  // arquivo novo usa wx para impedir sobrescrita e preservar o contrato.
+  const repo = `${REPO_ROOT}${path.sep}`.toLowerCase();
   if (`${destino}${path.sep}`.toLowerCase().startsWith(repo)) {
     throw new Error('OUTPUT_DEVE_FICAR_FORA_DO_REPO');
   }
@@ -626,7 +629,7 @@ async function main() {
   const resultado = {
     meta: {
       consulta: 'somente_leitura',
-      pii_no_output: false,
+      pii_no_output: true,
       fonte: 'baseline_v1_antes_da_projecao_canonica_v2',
       inicio: args.inicio,
       fim: args.fim,
