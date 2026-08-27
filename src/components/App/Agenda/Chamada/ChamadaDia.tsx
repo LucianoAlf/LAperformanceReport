@@ -68,19 +68,45 @@ export function ChamadaDia({
     const unidadeId = context?.unidadeSelecionada;
     if (!unidadeId) return;
 
-    const rpc = presente ? 'app_registrar_presenca_professor_dia' : 'app_remover_presenca_professor_dia';
+    const { chaveDoPedido, encerrarPedido, interpretarRecibo, requestIdDoPedido } = await import(
+      '@/lib/presencaRecibo'
+    );
     let sucessos = 0;
     let erros = 0;
 
     for (const [professorId] of aulasPorProfessor) {
+      // Um pedido por professor: cada linha tem desfecho próprio no ledger.
+      const chave = chaveDoPedido('professor_dia', {
+        professorId,
+        data,
+        unidadeId,
+        ausente: !presente,
+      });
       try {
-        const { error } = await supabase.rpc(rpc, {
-          p_professor_id: professorId,
-          p_data: data,
-          p_unidade_id: unidadeId,
-        });
-        if (error) erros++;
-        else sucessos++;
+        const { data: recibo, error } = presente
+          ? await supabase.rpc('app_registrar_presenca_professor_dia', {
+              p_professor_id: professorId,
+              p_data: data,
+              p_unidade_id: unidadeId,
+              p_hora_chegada: null,
+              p_hora_saida: null,
+              p_request_id: requestIdDoPedido(chave),
+            })
+          : await supabase.rpc('app_remover_presenca_professor_dia', {
+              p_professor_id: professorId,
+              p_data: data,
+              p_unidade_id: unidadeId,
+              p_request_id: requestIdDoPedido(chave),
+            });
+        if (error) {
+          erros++;
+          continue;
+        }
+        encerrarPedido(chave);
+        // Sem recibo aplicado não houve alteração — contar como sucesso aqui
+        // faria a tela anunciar "N professores atualizados" sem ter atualizado.
+        if (interpretarRecibo(recibo).aplicados > 0) sucessos++;
+        else erros++;
       } catch {
         erros++;
       }
