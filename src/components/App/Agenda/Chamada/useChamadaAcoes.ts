@@ -1,11 +1,23 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
+import {
+  chaveDoPedido,
+  descreverErrosDoRecibo,
+  encerrarPedido,
+  interpretarRecibo,
+  mensagemDeErro,
+  requestIdDoPedido,
+} from '@/lib/presencaRecibo';
 
 /**
  * Acoes da chamada (Fase 2, spec 2026-08-11). Todas passam pelas RPCs
  * security definer que validam a permissao `agenda.chamada` por unidade.
  * Nada aqui escreve direto em tabela.
+ *
+ * Desde 27/08 a chamada leva `p_request_id` e o banco devolve um RECIBO
+ * (Checkpoint 4 do rollout de presenca canonica): quem pediu fica gravado e
+ * cada aluno tem desfecho proprio. Ver `@/lib/presencaRecibo`.
  */
 
 export interface ItemChamada {
@@ -15,23 +27,6 @@ export interface ItemChamada {
   motivo?: string;
   evidencia_path?: string;
 }
-
-interface ResultadoChamada {
-  inseridos: number;
-  atualizados: number;
-  retificados: number;
-  erros: Array<{ aluno_id: number; erro: string }>;
-}
-
-const MENSAGENS_ERRO: Record<string, string> = {
-  aula_nao_encontrada: 'aula não encontrada',
-  sem_permissao_unidade: 'sem permissão nesta unidade',
-  aula_cancelada: 'aula cancelada',
-  status_invalido: 'status inválido',
-  motivo_obrigatorio_justificada: 'justificativa exige motivo',
-  aluno_fora_do_roster: 'aluno fora do roster da aula',
-  experimental_nao_encontrada: 'aula experimental não encontrada',
-};
 
 /** Upload de evidencia (atestado, comunicado) no bucket privado. */
 export async function uploadEvidencia(arquivo: File, aulaId: number, alunoId?: number): Promise<string> {
@@ -54,29 +49,32 @@ export function useChamadaAcoes(aoConcluir: () => void) {
     async (itens: ItemChamada[]): Promise<boolean> => {
       if (itens.length === 0) return true;
       setSalvando(true);
+      // Mesma intenção => mesmo id enquanto o banco não responder, para o
+      // retry do usuário não virar uma segunda chamada aos olhos do ledger.
+      const chave = chaveDoPedido('chamada', itens);
       try {
         const { data, error } = await supabase.rpc('app_registrar_chamada_agenda', {
           p_itens: itens,
+          p_request_id: requestIdDoPedido(chave),
         });
         if (error) throw error;
 
-        const resultado = data as ResultadoChamada;
-        const erros = resultado?.erros ?? [];
-        const gravados = (resultado?.inseridos ?? 0) + (resultado?.atualizados ?? 0) + (resultado?.retificados ?? 0);
-        if (erros.length > 0 && gravados === 0) {
+        // O banco decidiu — do próximo clique em diante é uma nova intenção.
+        encerrarPedido(chave);
+        const recibo = interpretarRecibo(data);
+
+        if (recibo.status === 'falhou' || recibo.aplicados === 0) {
           // NADA gravou: erro vermelho, não warning — warning amarelo passava
           // por sucesso e a equipe achava que tinha registrado (caso 12/08).
-          const detalhes = erros
-            .map((e) => MENSAGENS_ERRO[e.erro] ?? e.erro)
-            .join('; ');
-          toast.error('Não foi possível registrar', { description: detalhes });
+          toast.error('Não foi possível registrar', {
+            description: descreverErrosDoRecibo(recibo),
+          });
           return false;
         }
-        if (erros.length > 0) {
-          const detalhes = erros
-            .map((e) => `aluno ${e.aluno_id}: ${MENSAGENS_ERRO[e.erro] ?? e.erro}`)
-            .join('; ');
-          toast.warning(`Chamada parcialmente registrada`, { description: detalhes });
+        if (recibo.status === 'parcial') {
+          toast.warning('Chamada parcialmente registrada', {
+            description: descreverErrosDoRecibo(recibo, { comAluno: true }),
+          });
         } else {
           // Quando todos os itens são 'indeterminado', a operação é um
           // "desmarcar" (toggle) — não faz sentido dizer "Chamada registrada".
@@ -84,10 +82,12 @@ export function useChamadaAcoes(aoConcluir: () => void) {
           toast.success(todosIndeterminado ? 'Marcação removida' : 'Chamada registrada');
         }
         aoConcluir();
-        return erros.length === 0;
+        return recibo.rejeitados === 0;
       } catch (e) {
+        // Não encerra o pedido: pode ter chegado ao banco e a resposta é que
+        // se perdeu. O retry reusa o id e o recibo anterior é devolvido.
         toast.error('Não foi possível registrar a chamada', {
-          description: e instanceof Error ? e.message : String(e),
+          description: mensagemDeErro(e),
         });
         return false;
       } finally {
@@ -124,7 +124,7 @@ export function useChamadaAcoes(aoConcluir: () => void) {
         return true;
       } catch (e) {
         toast.error('Não foi possível cancelar', {
-          description: e instanceof Error ? e.message : String(e),
+          description: mensagemDeErro(e),
         });
         return false;
       } finally {
@@ -148,7 +148,7 @@ export function useChamadaAcoes(aoConcluir: () => void) {
         return true;
       } catch (e) {
         toast.error('Não foi possível registrar', {
-          description: e instanceof Error ? e.message : String(e),
+          description: mensagemDeErro(e),
         });
         return false;
       } finally {
