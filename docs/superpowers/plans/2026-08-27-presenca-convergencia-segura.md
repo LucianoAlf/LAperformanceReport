@@ -134,7 +134,7 @@ npm test
 npm run build
 ```
 
-Expected: 41/41 Deno, 9/9 pretest Node, 413/413 suite principal e build Vite com exit code `0`. Warnings preexistentes devem ser registrados, não mascarados.
+Expected: 41/41 Deno, 9/9 pretest Node, 414/414 suite principal e build Vite com exit code `0`. Warnings preexistentes devem ser registrados, não mascarados.
 
 - [ ] **Step 4: Registrar baseline no artefato de execução**
 
@@ -147,7 +147,7 @@ Create `docs/audits/2026-08-27-presenca-convergencia-execucao.md` with:
 
 - base revalidada da especificação: 779c360493c6d9a5ae1ad209e763128d6de87f15
 - Hugo 08dca49c é ancestral: sim
-- npm test: 41/41 + 9/9 + 413/413
+- npm test: 41/41 + 9/9 + 414/414
 - npm run build: aprovado
 - writes remotos nesta etapa: nenhum
 ```
