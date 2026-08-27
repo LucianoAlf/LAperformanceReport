@@ -23,7 +23,7 @@ test('hook nao reimplementa elegibilidade no cliente', () => {
 });
 
 test('tela oferece repescar, repescar todos e cancelar', () => {
-  assert.match(tela, /Repescar/);
+  assert.match(tela, /Reenviar/);
   assert.match(tela, /useRepescagemEvasao/);
   assert.match(tela, /cancelar/i);
 });

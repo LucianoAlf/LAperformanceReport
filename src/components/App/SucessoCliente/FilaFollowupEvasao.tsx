@@ -122,9 +122,9 @@ function formatarDiaMesBRT(valor: string) {
 // concorrente. Nao e falha, e apresentacao (a tela e a unica coisa que muda
 // aqui; nenhum estado novo entra no banco).
 const MOTIVOS_ENCERRAMENTO_NORMAL: Record<string, string> = {
-  respondeu_durante_a_espera: 'respondeu antes da repescagem',
+  respondeu_durante_a_espera: 'respondeu antes do reenvio',
   opt_out: 'pediu para não receber mais',
-  ja_enviada: 'repescagem já enviada',
+  ja_enviada: 'reenvio já feito',
   telefone_ja_respondeu: 'irmão(ã) já respondeu',
 };
 
@@ -140,7 +140,7 @@ function rotuloBadgeRepescagem(estado: RepescagemEstado | undefined): string | n
     case 'enviando':
       return 'enviando';
     case 'enviada':
-      return `repescada ${formatarDiaMesBRT(estado.enviada_em ?? estado.agendada_para)}`;
+      return `reenviada ${formatarDiaMesBRT(estado.enviada_em ?? estado.agendada_para)}`;
     case 'falhou':
       return `falhou${estado.ultimo_erro ? ` · ${estado.ultimo_erro}` : ''}`;
     case 'cancelada':
@@ -238,7 +238,7 @@ export function FilaFollowupEvasao({
       setResultadoRepescagem(resultado);
     } catch (error) {
       console.error('Erro ao enfileirar repescagem:', error);
-      toast.error('Não foi possível enfileirar a repescagem');
+      toast.error('Não foi possível enfileirar o reenvio');
       setAlvoRepescagem(null);
     } finally {
       setProcessandoRepescagem(false);
@@ -252,7 +252,7 @@ export function FilaFollowupEvasao({
       toast.success('Repescagem cancelada');
     } catch (error) {
       console.error('Erro ao cancelar repescagem:', error);
-      toast.error('Não foi possível cancelar a repescagem');
+      toast.error('Não foi possível cancelar o reenvio');
     } finally {
       setCancelandoRepescagemId(null);
     }
@@ -317,7 +317,7 @@ export function FilaFollowupEvasao({
               onClick={() => abrirConfirmacaoRepescagem(pesquisaIds)}
             >
               <RefreshCw className="mr-1.5 h-4 w-4" />
-              Repescar todos ({itens.length})
+              Reenviar para todos ({itens.length})
             </Button>
           )}
         </div>
@@ -435,7 +435,7 @@ export function FilaFollowupEvasao({
                       onClick={() => abrirConfirmacaoRepescagem([item.pesquisa_id])}
                     >
                       <RefreshCw className="mr-1.5 h-4 w-4" />
-                      Repescar
+                      Reenviar
                     </Button>
                     {item.followup_pendente && !item.acao && (
                       <>
@@ -527,12 +527,12 @@ export function FilaFollowupEvasao({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {resultadoRepescagem ? 'Resultado da repescagem' : 'Confirmar repescagem'}
+              {resultadoRepescagem ? 'Resultado do reenvio' : 'Confirmar reenvio'}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {resultadoRepescagem
                 ? `${resultadoRepescagem.enfileiradas.length} enfileirada${resultadoRepescagem.enfileiradas.length === 1 ? '' : 's'} · ${resultadoRepescagem.recusadas.length} recusada${resultadoRepescagem.recusadas.length === 1 ? '' : 's'}.`
-                : `Enviar repescagem (2º toque) para ${alvoRepescagem?.length ?? 0} pessoa${(alvoRepescagem?.length ?? 0) === 1 ? '' : 's'}? Quem já respondeu, pediu para não receber mais ou não é elegível por qualquer outro motivo é recusado automaticamente pelo banco.`}
+                : `Reenviar a pesquisa para ${alvoRepescagem?.length ?? 0} pessoa${(alvoRepescagem?.length ?? 0) === 1 ? '' : 's'}? Sai um por vez, entre 9h e 19h em dia útil. Quem já respondeu, pediu para não receber mais ou não é elegível por outro motivo é recusado automaticamente.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
