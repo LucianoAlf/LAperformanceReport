@@ -101,7 +101,7 @@ async function main() {
   const integrity = preview.integridade_decisoes_humanas;
   if (!integrity || integrity.alteracao_prevista !== false
       || !sameJson(integrity.antes, integrity.depois)) {
-    throw new Error('dry-run alteraria contagem ou estado semantico de decisoes humanas');
+    throw new Error('RPC dry-run retornou marcadores internos inconsistentes');
   }
 
   const totals = shadow.reduce((acc, row) => {
@@ -123,9 +123,11 @@ async function main() {
     unidade_id: args.unidade,
     periodo: { inicio: args.inicio, fim: args.fim },
     gate: {
-      aprovado: totals.sem_explicacao === 0,
+      shadow_classificacao_aprovada: totals.sem_explicacao === 0,
       sem_explicacao: totals.sem_explicacao,
-      decisoes_humanas_semantica_preservada: true,
+      previa_read_only_sem_mutacao_executada: true,
+      decisoes_humanas_pos_reparo_verificadas: false,
+      reparo_aprovado: false,
       cutover_executado: false,
     },
     totais: totals,
@@ -133,7 +135,7 @@ async function main() {
     previa_reparo: preview,
   };
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-  if (!report.gate.aprovado) process.exitCode = 2;
+  if (!report.gate.shadow_classificacao_aprovada) process.exitCode = 2;
 }
 
 main().catch((error) => {

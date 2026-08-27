@@ -7,6 +7,10 @@ import zlib from 'node:zlib';
 
 const UNIDADES_PERMITIDAS = ['Barra', 'Recreio', 'Campo Grande'];
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const REPO_ROOT_REAL = fs.realpathSync.native(REPO_ROOT);
+const SYNC_COMPLETO_MOTIVOS_PERMITIDOS = new Set([
+  'sem_ledger_por_unidade_data_no_v1',
+]);
 const CAMPOS_CONTAGEM = [
   'aulas_reais',
   'eventos_presente',
@@ -494,12 +498,16 @@ export function normalizeAuditRows(rows) {
     validarDataIso(row.data);
     if (typeof row.sync_completo !== 'boolean') throw new Error('SYNC_COMPLETO_INVALIDO');
     if (!/^[a-f0-9]{32}$/u.test(row.recorte_hash ?? '')) throw new Error('HASH_INVALIDO');
+    const syncCompletoMotivo = String(row.sync_completo_motivo ?? '');
+    if (!SYNC_COMPLETO_MOTIVOS_PERMITIDOS.has(syncCompletoMotivo)) {
+      throw new Error('SYNC_COMPLETO_MOTIVO_INVALIDO');
+    }
 
     const normalized = {
       unidade: row.unidade,
       data: row.data,
       sync_completo: row.sync_completo,
-      sync_completo_motivo: String(row.sync_completo_motivo ?? ''),
+      sync_completo_motivo: syncCompletoMotivo,
     };
     for (const campo of CAMPOS_CONTAGEM) {
       const numero = Number(row[campo]);
@@ -585,14 +593,35 @@ async function lerStdin() {
   return conteudo;
 }
 
+function resolverDestinoCanonico(destino) {
+  const partesAusentes = [path.basename(destino)];
+  let ancestral = path.dirname(destino);
+
+  while (!fs.existsSync(ancestral)) {
+    const pai = path.dirname(ancestral);
+    if (pai === ancestral) break;
+    partesAusentes.unshift(path.basename(ancestral));
+    ancestral = pai;
+  }
+
+  return path.resolve(fs.realpathSync.native(ancestral), ...partesAusentes);
+}
+
+function estaDentroDaRaiz(raiz, destino) {
+  const relativo = path.relative(raiz, destino);
+  return relativo === ''
+    || (!path.isAbsolute(relativo) && relativo !== '..' && !relativo.startsWith(`..${path.sep}`));
+}
+
 function escreverResultadoForaDoRepo(output, json) {
   const destino = path.resolve(output);
+  const destinoCanonico = resolverDestinoCanonico(destino);
   // --output grava deliberadamente fora da raiz real deste repositorio; o
   // arquivo novo usa wx para impedir sobrescrita e preservar o contrato.
-  const repo = `${REPO_ROOT}${path.sep}`.toLowerCase();
-  if (`${destino}${path.sep}`.toLowerCase().startsWith(repo)) {
+  if (estaDentroDaRaiz(REPO_ROOT_REAL, destinoCanonico)) {
     throw new Error('OUTPUT_DEVE_FICAR_FORA_DO_REPO');
   }
+  if (fs.existsSync(destino)) throw new Error('OUTPUT_JA_EXISTE');
   fs.mkdirSync(path.dirname(destino), { recursive: true });
   fs.writeFileSync(destino, `${json}\n`, { encoding: 'utf8', flag: 'wx' });
   return destino;

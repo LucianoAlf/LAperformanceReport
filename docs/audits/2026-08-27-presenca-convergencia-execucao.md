@@ -20,11 +20,14 @@
 - migrations versionadas: 24/24; ledger remoto: 24/24 versões, nomes, contagens e hashes conferidos
 - snapshot Edge do gate: 8/8 funções e 35/35 arquivos remotos iguais às fontes locais normalizadas, selados por versão, `verify_jwt`, SHA-256 LF e tamanho em `docs/audits/2026-08-27-presenca-edge-manifest.json`; deploy executado: não
 - rechecagem Edge em `2026-08-27T18:41:35.1559589-03:00`: 7/8 bundles permaneciam idênticos; `relatorio-admin-whatsapp` avançou depois do snapshot de v112 (`97463bd2…`) para v113 (`3fc1ae96…`) por mudança concorrente, com diferença apenas no entrypoint entre os 35 arquivos conferidos; essa deriva não foi sobrescrita nem atribuída ao pacote de presença
-- evidência de integridade humana corrigida para o contrato efetivamente provado: estado semântico preservado, sem alegação de identidade byte a byte; saída agregada marcada `pii_no_output=true` e guard de arquivo baseado na raiz real do repositório
+- evidência da prévia rebaixada ao contrato efetivamente provado: RPC read-only sem mutação executada; somente a classificação shadow pode ser aprovada, `reparo_aprovado=false` e `decisoes_humanas_pos_reparo_verificadas=false`
+- o comentário histórico “byte-estável” permanece nos bytes imutáveis da migration já publicada `20260827031500`; ele não é aceito como evidência por nenhum script do gate e deverá ser corrigido por migration sucessora antes de qualquer reparo/cutover
+- saída agregada mantém `pii_no_output=true` porque `sync_completo_motivo` passou a aceitar somente o valor canônico gerado pelo SQL; texto livre é rejeitado antes da serialização
+- guard de arquivo usa a raiz física do repositório, resolve o ancestral existente contra junction/symlink, recusa sobrescrita e foi exercitado a partir de outro `cwd`
 - runtime Vite alterado na Fase 1: não (`SRC_DIFF_COUNT=0`)
 - locks `package-lock.json` e `deno.lock`: sem diff
-- verificação backend após os ajustes de qualidade: Deno 4/4 e Node 76/76
-- paridade e semântica com Node 22.23.2: 15/15, incluindo manifesto Edge reproduzível, guard da raiz real e integridade humana sem alegação byte a byte
+- verificação backend após a segunda rodada de qualidade: Deno 4/4 e Node 78/78
+- RED→GREEN da segunda rodada com Node 22.23.2: 3 falhas reproduzidas; depois 14/14 nos testes focados e 17/17 no gate combinado de paridade, prévia, PII e proteção de arquivo
 - suíte integral: Deno 43/43; pretest Node 9/9; suíte principal com Node 22.23.2: duas confirmações finais consecutivas 430/430, sem skips
 - variância observada: uma execução intermediária terminou 422/430, com 1 falha e 7 skips sem bloco de erro preservado; a causa não foi confirmada e as duas repetições imediatas passaram 430/430 e 430/430
 - build direto na linha de corte com Node 22.23.2 e Vite 6.4.1: 4.832 módulos, aprovado em 14,46 s

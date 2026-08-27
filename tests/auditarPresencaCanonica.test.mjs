@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 
 import {
@@ -16,6 +26,8 @@ import {
 } from '../scripts/auditar-presenca-canonica.mjs';
 
 const AUDIT_SCRIPT = readFileSync('scripts/auditar-presenca-canonica.mjs', 'utf8');
+const REPOSITORY_ROOT = fileURLToPath(new URL('../', import.meta.url));
+const AUDIT_SCRIPT_PATH = path.join(REPOSITORY_ROOT, 'scripts/auditar-presenca-canonica.mjs');
 
 const CAMPOS = [
   'sync_completo',
@@ -33,6 +45,45 @@ const CAMPOS = [
   'politica_temporal',
   'sem_explicacao',
 ];
+
+function aggregatedRow(overrides = {}) {
+  return {
+    unidade: 'Barra',
+    data: '2026-08-25',
+    sync_completo: false,
+    sync_completo_motivo: 'sem_ledger_por_unidade_data_no_v1',
+    aulas_reais: 0,
+    eventos_presente: 0,
+    eventos_falta: 0,
+    eventos_indeterminados: 0,
+    conflitos: 0,
+    rosters_ambiguos: 0,
+    pendencias_agenda: 0,
+    pendencias_relatorio: 0,
+    duplicidade_emusys: 0,
+    colisao_curso: 0,
+    precedencia_humana: 0,
+    politica_temporal: 0,
+    sem_explicacao: 0,
+    recorte_hash: '0123456789abcdef0123456789abcdef',
+    ...overrides,
+  };
+}
+
+function runAuditFrom(cwd, output) {
+  const rowsBase64 = Buffer.from(JSON.stringify([aggregatedRow()]), 'utf8').toString('base64');
+  return spawnSync(process.execPath, [
+    AUDIT_SCRIPT_PATH,
+    '--inicio', '2026-08-25',
+    '--fim', '2026-08-25',
+    '--unidades', 'Barra',
+    '--output', output,
+  ], {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, AUDIT_ROWS_BASE64: rowsBase64 },
+  });
+}
 
 test('SQL de baseline e somente leitura e cobre os dois calculos de pendencia', () => {
   const sql = buildAuditSql({
@@ -106,6 +157,54 @@ test('resultado agregado declara ausencia de PII e guard usa a raiz real do repo
   assert.match(AUDIT_SCRIPT, /fileURLToPath\(import\.meta\.url\)/u);
   assert.match(AUDIT_SCRIPT, /REPO_ROOT/u);
   assert.doesNotMatch(AUDIT_SCRIPT, /path\.resolve\(process\.cwd\(\)\)/u);
+});
+
+test('motivo de sync rejeita texto livre antes de declarar saida sem PII', () => {
+  assert.throws(
+    () => normalizeAuditRows([aggregatedRow({
+      sync_completo_motivo: 'aluna Maria CPF 123.456.789-00',
+    })]),
+    /SYNC_COMPLETO_MOTIVO_INVALIDO/u,
+  );
+});
+
+test('output usa raiz real, recusa sobrescrita e bloqueia junction para dentro do repo', () => {
+  const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'presenca-audit-'));
+  const outsideOutput = path.join(temporaryRoot, 'resultado.json');
+  const repositoryTarget = path.join(
+    REPOSITORY_ROOT,
+    'docs/audits/2026-08-27-presenca-convergencia-execucao.md',
+  );
+  const linkPath = path.join(temporaryRoot, 'repo-link');
+
+  try {
+    const firstWrite = runAuditFrom(temporaryRoot, outsideOutput);
+    assert.equal(firstWrite.status, 0, firstWrite.stderr);
+    assert.match(readFileSync(outsideOutput, 'utf8'), /"pii_no_output": true/u);
+
+    const overwrite = runAuditFrom(temporaryRoot, outsideOutput);
+    assert.equal(overwrite.status, 1, overwrite.stdout);
+    assert.match(overwrite.stderr, /OUTPUT_JA_EXISTE/u);
+
+    const insideRepository = runAuditFrom(temporaryRoot, repositoryTarget);
+    assert.equal(insideRepository.status, 1, insideRepository.stdout);
+    assert.match(insideRepository.stderr, /OUTPUT_DEVE_FICAR_FORA_DO_REPO/u);
+
+    symlinkSync(REPOSITORY_ROOT, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
+    const throughLink = runAuditFrom(
+      temporaryRoot,
+      path.join(linkPath, 'docs/audits/2026-08-27-presenca-convergencia-execucao.md'),
+    );
+    assert.equal(throughLink.status, 1, throughLink.stdout);
+    assert.match(throughLink.stderr, /OUTPUT_DEVE_FICAR_FORA_DO_REPO/u);
+  } finally {
+    try {
+      unlinkSync(linkPath);
+    } catch {
+      // O link pode nao ter sido criado se a plataforma negar symlink/junction.
+    }
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
 });
 
 test('cobertura exige exatamente um recorte por unidade e dia solicitado', () => {
