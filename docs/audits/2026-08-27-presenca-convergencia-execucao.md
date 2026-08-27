@@ -14,7 +14,7 @@
 ## Fase 1 — paridade
 
 - `main` local em fast-forward com `origin/main` no checkpoint: sim; o avanço executado foi atômico de `779c3604` para `e24175f7`, sem trocar nem tocar o checkout ativo do Hugo
-- linha de corte da branch após rebases limpos: `c4906775`; os commits remotos posteriores `c0581e4e` e `3a9292f8` chegaram durante a revisão, foram inspecionados como retenção/pesquisa de evasão e ficam para a integração final sobre a `main` mais recente
+- linha de corte da branch após rebases limpos: `c4906775`; os commits remotos posteriores `c0581e4e`, `3a9292f8` e `2098304d` chegaram durante a revisão, foram inspecionados como retenção/pesquisa de evasão e ficam para a integração final sobre a `main` mais recente
 - documentos locais preservados byte a byte durante esse avanço; SHA-256 medidos antes/depois: `D67ABD320AB6E39049F327CFF95CF8D863ED07ADE32D6BBBA2F2DBAE37C46992` e `985FA052BB2D7592AF2ED963760A29D97DC2D47B6F59F3A434B0BA9B4714AA5C`
 - WIP isolado em `codex/presenca-hardening-wip-preservado`, commit `ef05e3ac`, não publicado
 - migrations versionadas: 24/24; ledger remoto: 24/24 versões, nomes, contagens e hashes conferidos
