@@ -112,25 +112,108 @@ const PREFIXO_PEDIDO = 'la-report:presenca:pedidos:v2:';
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const pedidosEmVoo = new Map<string, string>();
 
-function requestIdValido(requestId: unknown): requestId is string {
-  return typeof requestId === 'string' && UUID_V4.test(requestId);
+type JsonCanonico = null | boolean | number | string | JsonCanonico[] | { [chave: string]: JsonCanonico };
+
+function normalizarRequestId(requestId: unknown): string | null {
+  return typeof requestId === 'string' && UUID_V4.test(requestId)
+    ? requestId.toLowerCase()
+    : null;
 }
 
 function storagePadrao(): ArmazenamentoPedidos | null {
-  try {
-    return typeof window === 'undefined' ? null : window.sessionStorage;
-  } catch {
-    return null;
-  }
+  return typeof window === 'undefined' ? null : window.sessionStorage;
 }
 
 function chaveStorage(chave: string): string {
   return `${PREFIXO_PEDIDO}${chave}`;
 }
 
+function falharPayloadNaoSeguro(): never {
+  throw new Error('Payload de presença não é JSON seguro');
+}
+
+function canonizarJson(valor: unknown, ativos = new WeakSet<object>()): JsonCanonico {
+  if (valor === null) return null;
+  if (typeof valor === 'string' || typeof valor === 'boolean') return valor;
+  if (typeof valor === 'number') {
+    if (!Number.isFinite(valor)) return falharPayloadNaoSeguro();
+    return valor;
+  }
+  if (typeof valor !== 'object') return falharPayloadNaoSeguro();
+
+  if (ativos.has(valor)) return falharPayloadNaoSeguro();
+  ativos.add(valor);
+
+  if (Array.isArray(valor)) {
+    if (Object.getOwnPropertySymbols(valor).length > 0) return falharPayloadNaoSeguro();
+    const possuiPropriedadeExtra = Object.getOwnPropertyNames(valor).some((chave) => {
+      if (chave === 'length') return false;
+      const indice = Number(chave);
+      return !Number.isInteger(indice)
+        || indice < 0
+        || indice >= valor.length
+        || String(indice) !== chave;
+    });
+    if (possuiPropriedadeExtra) return falharPayloadNaoSeguro();
+    const resultado: JsonCanonico[] = [];
+    for (let indice = 0; indice < valor.length; indice += 1) {
+      if (!Object.prototype.hasOwnProperty.call(valor, indice)) return falharPayloadNaoSeguro();
+      resultado.push(canonizarJson(valor[indice], ativos));
+    }
+    ativos.delete(valor);
+    return resultado;
+  }
+
+  const prototipo = Object.getPrototypeOf(valor);
+  if (prototipo !== Object.prototype && prototipo !== null) return falharPayloadNaoSeguro();
+  if (Object.getOwnPropertySymbols(valor).length > 0) return falharPayloadNaoSeguro();
+
+  const origem = valor as Record<string, unknown>;
+  const resultado = Object.create(null) as Record<string, JsonCanonico>;
+  for (const chave of Object.keys(origem).sort()) {
+    if (origem[chave] === undefined) continue;
+    resultado[chave] = canonizarJson(origem[chave], ativos);
+  }
+  ativos.delete(valor);
+  return resultado;
+}
+
+function garantirStorageNoBrowser(storage: ArmazenamentoPedidos | null): void {
+  if (storage === null && typeof window !== 'undefined') {
+    throw new Error('sessionStorage indisponível para registrar presença');
+  }
+}
+
+function lerRequestIdPersistido(storage: ArmazenamentoPedidos, chave: string): string | null {
+  const persistida = chaveStorage(chave);
+  const bruto = storage.getItem(persistida);
+  if (!bruto) return null;
+
+  let salvo: unknown;
+  try {
+    salvo = JSON.parse(bruto);
+  } catch {
+    storage.removeItem(persistida);
+    return null;
+  }
+
+  const requestIdBruto = typeof salvo === 'object' && salvo !== null && !Array.isArray(salvo)
+    ? (salvo as Record<string, unknown>).requestId
+    : undefined;
+  const requestId = normalizarRequestId(requestIdBruto);
+  if (!requestId) {
+    storage.removeItem(persistida);
+    return null;
+  }
+  if (requestIdBruto !== requestId) {
+    storage.setItem(persistida, JSON.stringify({ requestId }));
+  }
+  return requestId;
+}
+
 export function chaveDoPedido(usuarioId: string, escopo: string, payload: unknown): string {
   if (!usuarioId) throw new Error('Usuário autenticado obrigatório para registrar presença');
-  return `${usuarioId}:${escopo}:${JSON.stringify(payload)}`;
+  return JSON.stringify(canonizarJson([usuarioId, escopo, payload]));
 }
 
 export function requestIdDoPedido(
@@ -138,33 +221,34 @@ export function requestIdDoPedido(
   storage: ArmazenamentoPedidos | null = storagePadrao(),
   memoria: Map<string, string> = pedidosEmVoo,
 ): string {
+  garantirStorageNoBrowser(storage);
   const emMemoria = memoria.get(chave);
-  if (emMemoria) return emMemoria;
-
-  try {
-    const bruto = storage?.getItem(chaveStorage(chave));
-    if (bruto) {
-      const salvo = JSON.parse(bruto) as { requestId?: unknown };
-      if (requestIdValido(salvo.requestId)) {
-        memoria.set(chave, salvo.requestId);
-        return salvo.requestId;
-      }
-      storage?.removeItem(chaveStorage(chave));
+  if (emMemoria) {
+    const canonico = normalizarRequestId(emMemoria);
+    if (!canonico) {
+      memoria.delete(chave);
+      throw new Error('request_id inválido na memória de presença');
     }
-  } catch {
-    try {
-      storage?.removeItem(chaveStorage(chave));
-    } catch {
-      // A memória segue disponível mesmo se o storage estiver indisponível.
-    }
+    if (canonico !== emMemoria) memoria.set(chave, canonico);
+    return canonico;
   }
 
-  const requestId = novoRequestId();
+  const persistido = storage ? lerRequestIdPersistido(storage, chave) : null;
+  if (persistido) {
+    memoria.set(chave, persistido);
+    return persistido;
+  }
+
+  const requestId = normalizarRequestId(novoRequestId());
+  if (!requestId) throw new Error('Não foi possível gerar request_id válido para presença');
   memoria.set(chave, requestId);
-  try {
-    storage?.setItem(chaveStorage(chave), JSON.stringify({ requestId }));
-  } catch {
-    // Persistência de sessão é best effort; a memória mantém a intenção.
+  if (storage) {
+    try {
+      storage.setItem(chaveStorage(chave), JSON.stringify({ requestId }));
+    } catch (erro) {
+      if (memoria.get(chave) === requestId) memoria.delete(chave);
+      throw erro;
+    }
   }
   return requestId;
 }
@@ -178,12 +262,58 @@ export function encerrarPedido(
   chave: string,
   storage: ArmazenamentoPedidos | null = storagePadrao(),
   memoria: Map<string, string> = pedidosEmVoo,
+  requestIdEsperado?: string,
 ): void {
-  memoria.delete(chave);
-  try {
-    storage?.removeItem(chaveStorage(chave));
-  } catch {
-    // A limpeza em memória já ocorreu.
+  garantirStorageNoBrowser(storage);
+  const emMemoriaBruto = memoria.get(chave);
+  const emMemoria = emMemoriaBruto === undefined ? null : normalizarRequestId(emMemoriaBruto);
+  if (emMemoriaBruto !== undefined && !emMemoria) {
+    throw new Error('request_id inválido na memória de presença');
+  }
+  const persistido = storage ? lerRequestIdPersistido(storage, chave) : null;
+  const esperado = requestIdEsperado === undefined
+    ? (emMemoria ?? persistido)
+    : normalizarRequestId(requestIdEsperado);
+  if (requestIdEsperado !== undefined && !esperado) {
+    throw new Error('request_id esperado inválido para encerrar presença');
+  }
+  if (!esperado) return;
+
+  if (storage && persistido === esperado) storage.removeItem(chaveStorage(chave));
+  if (emMemoria === esperado) memoria.delete(chave);
+}
+
+function inteiroNaoNegativo(valor: unknown): valor is number {
+  return typeof valor === 'number' && Number.isInteger(valor) && valor >= 0;
+}
+
+function erroReciboValido(erro: unknown): erro is ErroRecibo {
+  if (typeof erro !== 'object' || erro === null || Array.isArray(erro)) return false;
+  const item = erro as Record<string, unknown>;
+  if (typeof item.codigo !== 'string' || item.codigo.trim().length === 0) return false;
+  for (const campo of ['aluno_id', 'professor_id'] as const) {
+    if (Object.prototype.hasOwnProperty.call(item, campo) && !inteiroNaoNegativo(item[campo])) return false;
+  }
+  return true;
+}
+
+function invariantesReciboValidas(
+  status: StatusRecibo,
+  aplicados: number,
+  rejeitados: number,
+  erros: ErroRecibo[],
+): boolean {
+  switch (status) {
+    case 'nao_recebido':
+    case 'recebido':
+    case 'processando':
+      return aplicados === 0 && rejeitados === 0 && erros.length === 0;
+    case 'concluido':
+      return rejeitados === 0 && erros.length === 0;
+    case 'parcial':
+      return aplicados > 0 && rejeitados > 0 && erros.length === rejeitados;
+    case 'falhou':
+      return aplicados === 0 && rejeitados > 0 && erros.length === rejeitados;
   }
 }
 
@@ -213,22 +343,23 @@ export function interpretarRecibo(data: unknown): ReciboPresenca {
     throw new Error('Resposta inesperada do banco: erros inválidos');
   }
 
-  const erros = bruto.erros;
+  if (!bruto.erros.every(erroReciboValido)) {
+    throw new Error('Resposta inesperada do banco: erros inválidos');
+  }
+  const erros = bruto.erros.map((erro) => ({
+    ...(Object.prototype.hasOwnProperty.call(erro, 'aluno_id') ? { aluno_id: erro.aluno_id } : {}),
+    ...(Object.prototype.hasOwnProperty.call(erro, 'professor_id') ? { professor_id: erro.professor_id } : {}),
+    codigo: erro.codigo.trim(),
+  }));
+  if (!invariantesReciboValidas(status, aplicados, rejeitados, erros)) {
+    throw new Error('Resposta inesperada do banco: invariantes inválidas');
+  }
   return {
-    request_id: typeof bruto.request_id === 'string' ? bruto.request_id : undefined,
+    request_id: typeof bruto.request_id === 'string' ? bruto.request_id.toLowerCase() : undefined,
     status,
     aplicados,
     rejeitados,
-    erros: erros.map((erro) => {
-      const e = typeof erro === 'object' && erro !== null
-        ? (erro as Record<string, unknown>)
-        : {};
-      return {
-        aluno_id: typeof e.aluno_id === 'number' ? e.aluno_id : undefined,
-        professor_id: typeof e.professor_id === 'number' ? e.professor_id : undefined,
-        codigo: String(e.codigo ?? 'erro_desconhecido'),
-      };
-    }),
+    erros,
   };
 }
 
@@ -240,10 +371,15 @@ export function interpretarEEncerrarPedido(
   memoria: Map<string, string> = pedidosEmVoo,
 ): ReciboPresenca {
   const recibo = interpretarRecibo(data);
-  if (recibo.request_id !== requestIdEsperado) {
+  const requestIdCanonico = normalizarRequestId(recibo.request_id);
+  const esperadoCanonico = normalizarRequestId(requestIdEsperado);
+  if (!requestIdCanonico || !esperadoCanonico || requestIdCanonico !== esperadoCanonico) {
     throw new Error('Resposta inesperada do banco: request_id divergente');
   }
-  if (STATUS_RESOLVIDO.has(recibo.status)) encerrarPedido(chave, storage, memoria);
+  recibo.request_id = requestIdCanonico;
+  if (STATUS_RESOLVIDO.has(recibo.status)) {
+    encerrarPedido(chave, storage, memoria, esperadoCanonico);
+  }
   return recibo;
 }
 

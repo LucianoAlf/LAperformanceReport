@@ -24,13 +24,38 @@ class SessionStorageMemoria {
   }
 }
 
-const recibo = (requestId, status = 'concluido') => ({
-  request_id: requestId,
-  status,
-  aplicados: status === 'falhou' || status === 'nao_recebido' ? 0 : 1,
-  rejeitados: status === 'falhou' ? 1 : 0,
-  erros: status === 'falhou' ? [{ codigo: 'status_invalido' }] : [],
-});
+class SessionStorageComFalhas extends SessionStorageMemoria {
+  falharSetItem = false;
+  falharRemoveItem = false;
+
+  setItem(chave, valor) {
+    if (this.falharSetItem) throw new Error('setItem bloqueado');
+    super.setItem(chave, valor);
+  }
+
+  removeItem(chave) {
+    if (this.falharRemoveItem) throw new Error('removeItem bloqueado');
+    super.removeItem(chave);
+  }
+}
+
+const recibo = (requestId, status = 'concluido', alteracoes = {}) => {
+  const erro = { codigo: 'status_invalido' };
+  const porStatus = {
+    nao_recebido: { aplicados: 0, rejeitados: 0, erros: [] },
+    recebido: { aplicados: 0, rejeitados: 0, erros: [] },
+    processando: { aplicados: 0, rejeitados: 0, erros: [] },
+    concluido: { aplicados: 1, rejeitados: 0, erros: [] },
+    parcial: { aplicados: 1, rejeitados: 1, erros: [erro] },
+    falhou: { aplicados: 0, rejeitados: 1, erros: [erro] },
+  };
+  return {
+    request_id: requestId,
+    status,
+    ...(porStatus[status] ?? { aplicados: 0, rejeitados: 0, erros: [] }),
+    ...alteracoes,
+  };
+};
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
@@ -87,6 +112,76 @@ test('request id não-UUID no storage é descartado e substituído sem ficar pre
   assert.notEqual(requestId, 'request-id-invalido');
   assert.equal(requestIdDoPedido(chave, storage, new Map()), requestId);
   encerrarPedido(chave, storage);
+});
+
+test('UUID maiúsculo do storage é normalizado, persistido e comparado canonicamente', () => {
+  const storage = new SessionStorageMemoria();
+  const memoria = new Map();
+  const chave = chaveDoPedido('user-a', 'uuid_canonico', { aula_id: 31 });
+  const requestIdMaiusculo = 'ABCDEFAB-CDEF-4ABC-8DEF-ABCDEFABCDEF';
+  const requestIdCanonico = requestIdMaiusculo.toLowerCase();
+  const chavePersistida = `la-report:presenca:pedidos:v2:${chave}`;
+  storage.setItem(chavePersistida, JSON.stringify({ requestId: requestIdMaiusculo }));
+
+  const recuperado = requestIdDoPedido(chave, storage, memoria);
+  assert.equal(recuperado, requestIdCanonico);
+  assert.equal(JSON.parse(storage.getItem(chavePersistida)).requestId, requestIdCanonico);
+
+  const resultado = interpretarEEncerrarPedido(
+    chave,
+    requestIdCanonico,
+    recibo(requestIdMaiusculo),
+    storage,
+    memoria,
+  );
+  assert.equal(resultado.request_id, requestIdCanonico);
+  assert.notEqual(requestIdDoPedido(chave, storage, memoria), requestIdCanonico);
+  encerrarPedido(chave, storage, memoria);
+});
+
+test('setItem falhando remove a memória nova e impede devolver request id', () => {
+  const storage = new SessionStorageComFalhas();
+  const memoria = new Map();
+  const chave = chaveDoPedido('user-a', 'storage_set_fail_closed', { aula_id: 32 });
+  storage.falharSetItem = true;
+
+  assert.throws(
+    () => requestIdDoPedido(chave, storage, memoria),
+    /setItem bloqueado/,
+  );
+  assert.equal(memoria.has(chave), false);
+  assert.equal(storage.valores.size, 0);
+});
+
+test('sessionStorage bloqueado no browser lança sem cair para memória', () => {
+  const descritorAnterior = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const memoria = new Map();
+  const chave = chaveDoPedido('user-a', 'storage_browser_bloqueado', { aula_id: 33 });
+  const janela = {};
+  Object.defineProperty(janela, 'sessionStorage', {
+    configurable: true,
+    get() {
+      throw new Error('sessionStorage bloqueado');
+    },
+  });
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: janela,
+  });
+
+  try {
+    assert.throws(
+      () => requestIdDoPedido(chave, undefined, memoria),
+      /sessionStorage bloqueado/,
+    );
+    assert.equal(memoria.has(chave), false);
+  } finally {
+    if (descritorAnterior) {
+      Object.defineProperty(globalThis, 'window', descritorAnterior);
+    } else {
+      delete globalThis.window;
+    }
+  }
 });
 
 test('resposta 200 malformada preserva request id', () => {
@@ -170,6 +265,74 @@ test('recibo resolvido encerra também a memória injetada', () => {
   assert.match(proximo, UUID_V4);
   assert.notEqual(proximo, primeiro);
   encerrarPedido(chave, storage, memoria);
+});
+
+test('compare-and-delete preserva B quando uma segunda resposta de A chega atrasada', () => {
+  const storage = new SessionStorageMemoria();
+  const memoria = new Map();
+  const chave = chaveDoPedido('user-a', 'compare_and_delete', { aula_id: 13 });
+
+  const requestA = requestIdDoPedido(chave, storage, memoria);
+  interpretarEEncerrarPedido(chave, requestA, recibo(requestA), storage, memoria);
+
+  const requestB = requestIdDoPedido(chave, storage, memoria);
+  assert.notEqual(requestB, requestA);
+
+  interpretarEEncerrarPedido(chave, requestA, recibo(requestA), storage, memoria);
+
+  assert.equal(requestIdDoPedido(chave, storage, memoria), requestB);
+  encerrarPedido(chave, storage, memoria);
+});
+
+test('removeItem falhando preserva o ID e o retry do mesmo recibo consegue limpar', () => {
+  const storage = new SessionStorageComFalhas();
+  const memoria = new Map();
+  const chave = chaveDoPedido('user-a', 'storage_remove_fail_closed', { aula_id: 14 });
+  const requestId = requestIdDoPedido(chave, storage, memoria);
+  storage.falharRemoveItem = true;
+
+  assert.throws(
+    () => interpretarEEncerrarPedido(chave, requestId, recibo(requestId), storage, memoria),
+    /removeItem bloqueado/,
+  );
+  assert.equal(memoria.get(chave), requestId);
+  assert.equal(requestIdDoPedido(chave, storage, memoria), requestId);
+
+  storage.falharRemoveItem = false;
+  interpretarEEncerrarPedido(chave, requestId, recibo(requestId), storage, memoria);
+  const proximo = requestIdDoPedido(chave, storage, memoria);
+  assert.notEqual(proximo, requestId);
+  encerrarPedido(chave, storage, memoria);
+});
+
+test('recibos impossíveis e erros null falham sem encerrar a intenção', () => {
+  const casos = [
+    (requestId) => recibo(requestId, 'concluido', {
+      rejeitados: 1,
+      erros: [{ codigo: 'STATUS_INVALIDO' }],
+    }),
+    (requestId) => recibo(requestId, 'parcial', { erros: [null] }),
+  ];
+
+  for (const [indice, criarRecibo] of casos.entries()) {
+    const storage = new SessionStorageMemoria();
+    const memoria = new Map();
+    const chave = chaveDoPedido('user-a', `recibo_impossivel_${indice}`, { aula_id: 15 });
+    const requestId = requestIdDoPedido(chave, storage, memoria);
+
+    assert.throws(
+      () => interpretarEEncerrarPedido(
+        chave,
+        requestId,
+        criarRecibo(requestId),
+        storage,
+        memoria,
+      ),
+      /invariantes inválidas|erros inválidos/,
+    );
+    assert.equal(requestIdDoPedido(chave, storage, memoria), requestId);
+    encerrarPedido(chave, storage, memoria);
+  }
 });
 
 test('recebido e processando mantêm a intenção pendente', () => {

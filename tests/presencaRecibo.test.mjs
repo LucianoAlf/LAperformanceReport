@@ -96,6 +96,84 @@ test('erros fora de array sao recusados em vez de descartados', () => {
   );
 });
 
+test('matriz SQL aceita somente recibos diretos possíveis', () => {
+  const request_id = '7bbab83c-91ef-4cb9-a30c-72972228ef16';
+  const erro = { codigo: 'STATUS_INVALIDO', aluno_id: 0, professor_id: 2 };
+  const validos = [
+    { status: 'nao_recebido', aplicados: 0, rejeitados: 0, erros: [] },
+    { status: 'recebido', aplicados: 0, rejeitados: 0, erros: [] },
+    { status: 'processando', aplicados: 0, rejeitados: 0, erros: [] },
+    { status: 'concluido', aplicados: 0, rejeitados: 0, erros: [] },
+    { status: 'concluido', aplicados: 3, rejeitados: 0, erros: [] },
+    { status: 'parcial', aplicados: 2, rejeitados: 1, erros: [erro] },
+    { status: 'falhou', aplicados: 0, rejeitados: 1, erros: [erro] },
+  ];
+
+  for (const esperado of validos) {
+    const resultado = interpretarRecibo({ request_id, ...esperado });
+    assert.equal(resultado.status, esperado.status);
+    assert.equal(resultado.aplicados, esperado.aplicados);
+    assert.equal(resultado.rejeitados, esperado.rejeitados);
+    assert.equal(resultado.erros.length, esperado.erros.length);
+  }
+});
+
+test('invariantes SQL impossíveis são recusadas', () => {
+  const request_id = '7bbab83c-91ef-4cb9-a30c-72972228ef16';
+  const erro = { codigo: 'STATUS_INVALIDO' };
+  const impossiveis = [
+    { status: 'nao_recebido', aplicados: 1, rejeitados: 0, erros: [] },
+    { status: 'recebido', aplicados: 0, rejeitados: 1, erros: [erro] },
+    { status: 'processando', aplicados: 0, rejeitados: 0, erros: [erro] },
+    { status: 'concluido', aplicados: 1, rejeitados: 1, erros: [erro] },
+    { status: 'concluido', aplicados: 1, rejeitados: 0, erros: [erro] },
+    { status: 'parcial', aplicados: 0, rejeitados: 1, erros: [erro] },
+    { status: 'parcial', aplicados: 1, rejeitados: 0, erros: [] },
+    { status: 'parcial', aplicados: 1, rejeitados: 2, erros: [erro] },
+    { status: 'falhou', aplicados: 1, rejeitados: 1, erros: [erro] },
+    { status: 'falhou', aplicados: 0, rejeitados: 0, erros: [] },
+    { status: 'falhou', aplicados: 0, rejeitados: 2, erros: [erro] },
+  ];
+
+  for (const recibo of impossiveis) {
+    assert.throws(
+      () => interpretarRecibo({ request_id, ...recibo }),
+      /invariantes inválidas/,
+      JSON.stringify(recibo),
+    );
+  }
+});
+
+test('objetos de erro malformados são recusados', () => {
+  const request_id = '7bbab83c-91ef-4cb9-a30c-72972228ef16';
+  const errosInvalidos = [
+    null,
+    [],
+    'STATUS_INVALIDO',
+    { codigo: '' },
+    { codigo: '   ' },
+    { codigo: 123 },
+    { codigo: 'STATUS_INVALIDO', aluno_id: -1 },
+    { codigo: 'STATUS_INVALIDO', aluno_id: 1.5 },
+    { codigo: 'STATUS_INVALIDO', professor_id: -1 },
+    { codigo: 'STATUS_INVALIDO', professor_id: 2.5 },
+  ];
+
+  for (const erro of errosInvalidos) {
+    assert.throws(
+      () => interpretarRecibo({
+        request_id,
+        status: 'falhou',
+        aplicados: 0,
+        rejeitados: 1,
+        erros: [erro],
+      }),
+      /erros inválidos/,
+      JSON.stringify(erro),
+    );
+  }
+});
+
 test('mesma intencao reusa o request_id ate o banco responder', () => {
   const chave = chaveDoPedido('usuario-teste', 'chamada', [
     { aula_emusys_id: 1, aluno_id: 2, status: 'presente' },
@@ -116,6 +194,85 @@ test('payload diferente = pedido diferente (o banco recusa id reutilizado)', () 
   assert.notEqual(requestIdDoPedido(a), requestIdDoPedido(b));
   encerrarPedido(a);
   encerrarPedido(b);
+});
+
+test('chave canônica não colide quando usuário e escopo contêm dois-pontos', () => {
+  const payload = { aula_id: 1 };
+  const a = chaveDoPedido('a:b', 'c', payload);
+  const b = chaveDoPedido('a', 'b:c', payload);
+  assert.notEqual(a, b);
+});
+
+test('chave canônica independe da ordem das propriedades', () => {
+  const a = chaveDoPedido('user-a', 'chamada', {
+    aula_id: 1,
+    aluno: { id: 2, status: 'presente' },
+  });
+  const b = chaveDoPedido('user-a', 'chamada', {
+    aluno: { status: 'presente', id: 2 },
+    aula_id: 1,
+  });
+  assert.equal(a, b);
+});
+
+test('propriedade undefined é omitida canonicamente como no ItemChamada real', () => {
+  const comUndefined = chaveDoPedido('user-a', 'chamada', [{
+    aula_emusys_id: 1,
+    aluno_id: 2,
+    status: 'falta_justificada',
+    motivo: 'atestado',
+    evidencia_path: undefined,
+  }]);
+  const semPropriedade = chaveDoPedido('user-a', 'chamada', [{
+    aula_emusys_id: 1,
+    aluno_id: 2,
+    status: 'falta_justificada',
+    motivo: 'atestado',
+  }]);
+  assert.equal(comUndefined, semPropriedade);
+});
+
+test('payload JSON-safe rejeita valores ambíguos ou não planos', () => {
+  const ciclo = { aula_id: 1 };
+  ciclo.proprio = ciclo;
+  const arrayComSimbolo = [];
+  arrayComSimbolo[Symbol('extra')] = 'ignorado pelo JSON';
+  const arrayComFuncaoExtra = [];
+  arrayComFuncaoExtra.extra = () => {};
+  class PayloadDeClasse {
+    aula_id = 1;
+  }
+  const invalidos = [
+    undefined,
+    [undefined],
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+    () => {},
+    Symbol('presenca'),
+    1n,
+    ciclo,
+    new Date('2026-08-27T00:00:00Z'),
+    new Map([['aula_id', 1]]),
+    new PayloadDeClasse(),
+    arrayComSimbolo,
+    arrayComFuncaoExtra,
+  ];
+
+  for (const payload of invalidos) {
+    assert.throws(
+      () => chaveDoPedido('user-a', 'chamada', payload),
+      /Payload de presença não é JSON seguro/,
+    );
+  }
+
+  const chaveNull = chaveDoPedido('user-a', 'chamada', null);
+  assert.equal(typeof chaveNull, 'string');
+  assert.throws(
+    () => chaveDoPedido('user-a', 'chamada', Number.NaN),
+    /Payload de presença não é JSON seguro/,
+    'NaN não pode colidir com null',
+  );
 });
 
 test('novoRequestId gera uuid v4 valido', () => {
