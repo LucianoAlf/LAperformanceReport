@@ -524,6 +524,9 @@ Snapshots fechados e configurações ativas permanecem imutáveis.
 ### Evasão (contagem e MRR perdido)
 `movimentacoes_admin.tipo ∈ {evasao, nao_renovacao}` — **sem** `aviso_previo` nem `trancamento`.
 Movimentações de **atividade extra** (banda, canto coral, power kids, minha banda, garageband, percussion kids) ficam fora, via `is_movimentacao_admin_retencao_valida` → `is_atividade_extra_curso`.
+**Bolsista e matrícula de banda também ficam fora** desde 27/08/2026 (`BOLSISTA_INT`/`BOLSISTA_PARC`/`BANDA`, REGRAS §3.6/§3.7): predicado **`movimentacao_conta_no_churn_v1(curso_id, tipo_matricula_id)`**, usado por `get_kpis_alunos_canonicos_base_p01q` (número vivo) e `recalcular_dados_mensais_unguarded` (snapshot histórico) — as duas fontes precisam concordar. No front: `contaNoChurn`/`filtrarEvasoesCanonicas`/`filtrarMovimentacoesRetencaoKpi` em `src/lib/atividadesExtras.ts`.
+⚠️ **O filtro por curso sozinho não bastava** — bolsista em curso REGULAR (ex.: Musicalização para Bebês) passava batido, e o churn somava bolsista no numerador tendo `alunos_pagantes` no denominador.
+⚠️ **Fail-open:** sem `aluno_id` ou com tipo desconhecido, a saída **conta**.
 **Transferência interna entre unidades não é evasão nem churn global.**
 ⚠️ **Aviso prévio** cobre o mês vigente do aviso + o seguinte (2 meses); a evasão entra na competência da **saída real**.
 - `DashboardPage.tsx:238`, `TabGestao.tsx:842`, `TabProfessoresNew.tsx:284` (MRR perdido = soma `valor_parcela`).
