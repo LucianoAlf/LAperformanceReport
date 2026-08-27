@@ -203,6 +203,8 @@ export function FilaFollowupEvasao({
     registrarAcao,
   } = useFollowupsEvasao({ unidadeAtual, ano, mes, busca, estado, pagina });
 
+  // Todos os ids da pagina: e o que o hook precisa consultar para saber o
+  // estado da repescagem de cada linha (inclusive das ja reenviadas).
   const pesquisaIds = useMemo(() => itens.map((item) => item.pesquisa_id), [itens]);
   const nomePorPesquisa = useMemo(
     () => Object.fromEntries(itens.map((item) => [item.pesquisa_id, item.aluno_nome])),
@@ -213,6 +215,19 @@ export function FilaFollowupEvasao({
     enfileirar: enfileirarRepescagem,
     cancelar: cancelarRepescagem,
   } = useRepescagemEvasao(pesquisaIds);
+
+  // Quem JA tem linha de repescagem -- em QUALQUER status, inclusive cancelada
+  // e falhou -- nao pode ser reenviado: a RPC recusa com `ja_enfileirada`,
+  // porque a trava e a existencia da linha do toque 2, nao o status dela.
+  // Sem este recorte a operadora clicaria so para receber recusa, e o contador
+  // do botao mentiria sobre quantas mensagens sairiam de fato.
+  // ⚠️ Derivado DEPOIS de `useRepescagemEvasao`, nunca antes: `pesquisaIds` e a
+  // entrada do hook e `estadoPorPesquisa` e a saida -- calcular um a partir do
+  // outro fecharia um ciclo (e leria a variavel antes da declaracao).
+  const pesquisaIdsElegiveis = useMemo(
+    () => pesquisaIds.filter((id) => !estadoPorPesquisa[id]),
+    [pesquisaIds, estadoPorPesquisa],
+  );
 
   const [alvoRepescagem, setAlvoRepescagem] = useState<string[] | null>(null);
   const [resultadoRepescagem, setResultadoRepescagem] = useState<RepescagemEnfileiramentoResultado | null>(null);
@@ -309,15 +324,15 @@ export function FilaFollowupEvasao({
               </p>
             </div>
           </div>
-          {itens.length > 0 && (
+          {pesquisaIdsElegiveis.length > 0 && (
             <Button
               size="sm"
               variant="outline"
               className="border-sky-400/30 text-sky-200 hover:bg-sky-400/10"
-              onClick={() => abrirConfirmacaoRepescagem(pesquisaIds)}
+              onClick={() => abrirConfirmacaoRepescagem(pesquisaIdsElegiveis)}
             >
               <RefreshCw className="mr-1.5 h-4 w-4" />
-              Reenviar para todos ({itens.length})
+              Reenviar para todos ({pesquisaIdsElegiveis.length})
             </Button>
           )}
         </div>
@@ -428,15 +443,30 @@ export function FilaFollowupEvasao({
                   </div>
 
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-sky-500/30 text-sky-200 hover:bg-sky-400/10"
-                      onClick={() => abrirConfirmacaoRepescagem([item.pesquisa_id])}
-                    >
-                      <RefreshCw className="mr-1.5 h-4 w-4" />
-                      Reenviar
-                    </Button>
+                    {(() => {
+                      const jaTeveRepescagem = Boolean(estadoPorPesquisa[item.pesquisa_id]);
+                      return (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={jaTeveRepescagem}
+                          title={
+                            jaTeveRepescagem
+                              ? 'Esta pesquisa já foi reenviada. A régua é de dois toques.'
+                              : undefined
+                          }
+                          className={
+                            jaTeveRepescagem
+                              ? 'border-slate-700/60 text-slate-500'
+                              : 'border-sky-500/30 text-sky-200 hover:bg-sky-400/10'
+                          }
+                          onClick={() => abrirConfirmacaoRepescagem([item.pesquisa_id])}
+                        >
+                          <RefreshCw className="mr-1.5 h-4 w-4" />
+                          {jaTeveRepescagem ? 'Reenviada' : 'Reenviar'}
+                        </Button>
+                      );
+                    })()}
                     {item.followup_pendente && !item.acao && (
                       <>
                         <Button size="sm" className="bg-emerald-600 text-white hover:bg-emerald-500" onClick={() => abrirModal(item, 'realizado')}>

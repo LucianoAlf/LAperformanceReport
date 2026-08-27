@@ -35,3 +35,26 @@ test('item 6 do review: cancelamento legitimo (respondeu na espera / opt-out / j
   assert.match(tela, /ja_enviada/);
   assert.match(tela, /classeBadgeRepescagem/);
 });
+
+test('botao de reenvio fica desabilitado depois que a repescagem ja saiu', () => {
+  const fonte = tela;
+
+  // O botao individual vira "Reenviada" e nao clicavel.
+  assert.match(fonte, /jaTeveRepescagem = Boolean\(estadoPorPesquisa\[item\.pesquisa_id\]\)/);
+  assert.match(fonte, /disabled=\{jaTeveRepescagem\}/);
+  assert.match(fonte, /jaTeveRepescagem \? 'Reenviada' : 'Reenviar'/);
+
+  // O "Reenviar para todos" conta so quem ainda pode receber -- senao o numero
+  // mente sobre quantas mensagens sairiam e a operadora clica para receber
+  // recusa `ja_enfileirada`.
+  assert.match(fonte, /Reenviar para todos \(\{pesquisaIdsElegiveis\.length\}\)/);
+  assert.doesNotMatch(fonte, /Reenviar para todos \(\{itens\.length\}\)/);
+
+  // ⚠️ Ordem obrigatoria: pesquisaIds e ENTRADA do hook, estadoPorPesquisa e
+  // saida. Derivar a lista de elegiveis antes da chamada fecharia um ciclo e
+  // leria a variavel antes da declaracao (ReferenceError em runtime).
+  const posHook = fonte.indexOf('useRepescagemEvasao(pesquisaIds)');
+  const posElegiveis = fonte.indexOf('const pesquisaIdsElegiveis');
+  assert.ok(posHook > 0 && posElegiveis > posHook,
+    'pesquisaIdsElegiveis precisa ser derivado DEPOIS de useRepescagemEvasao');
+});
