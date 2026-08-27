@@ -1,6 +1,11 @@
 {
   "project_ref": "ouqwbbermlzqqvtqwlul",
   "captured_at": "2026-08-27",
+  "hugo_bypass": {
+    "version": "20260827151832",
+    "name": "agenda_chamada_volta_do_fechamento_de_bypass",
+    "local_file_md5": "296048cedc3b46b80ae0cce8c3e16cf9"
+  },
   "migrations": [
     {"version":"20260827030000","name":"presenca_funcoes_vivas_baseline","statement_count":8,"local_file_md5":"69839d1566921ef82f446858851c6709","remote_statements_md5":"3d3bbd0d4264c5832ba7677689e8b2e1"},
     {"version":"20260827030100","name":"presenca_ocorrencia_canonica_v2","statement_count":8,"local_file_md5":"41eba8456db1c09515578c3d0dd9483a","remote_statements_md5":"2bb10a6c9d0eee37904769a769a7cc63"},
