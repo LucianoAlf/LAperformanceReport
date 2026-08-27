@@ -47,11 +47,14 @@ begin
         -- (por desenho), quem enfileira um lote e liga o cron depois faz
         -- todas as linhas vencidas saírem em poucos minutos -- a rajada que a
         -- feature existe para evitar. Nenhuma outra linha pode ter sido
-        -- enviada nos ultimos 60 segundos.
+        -- enviada nos ultimos 60 segundos OU estar sendo enviada com lease
+        -- ainda valido.
         and not exists (
           select 1 from public.pesquisa_evasao_envios_fila r
-           where r.status = 'enviada'
-             and r.enviada_em > now() - interval '60 seconds'
+           where (
+                   (r.status = 'enviada' and r.enviada_em > now() - interval '60 seconds')
+                   or (r.status = 'enviando' and r.lease_expires_at > now())
+                 )
         )
       order by c.agendada_para
       for update skip locked
