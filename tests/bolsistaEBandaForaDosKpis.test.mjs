@@ -161,6 +161,20 @@ test('o banco carrega a mesma regra, e nao reescrita a mao', () => {
   assert.match(migration2, /movimentacao_conta_nos_kpis_v1/);
   assert.match(migration2, /create or replace function public\.is_movimentacao_admin_retencao_valida/i);
   assert.match(migration2, /drop function if exists public\.movimentacao_conta_no_churn_v1/i);
+
+  // As 3 funcoes que chamavam is_atividade_extra_curso DIRETO nunca passaram pelo
+  // helper — ficaram de fora da migration acima e precisaram de uma terceira.
+  const migration3 = readFileSync(
+    'supabase/migrations/20260827220000_fideliza_e_retificacao_gerencial_excluem_bolsista.sql',
+    'utf8',
+  );
+  assert.match(migration3, /get_programa_fideliza_dados/);
+  assert.match(migration3, /aplicar_retificacao_relatorio_gerencial_retencao_v1/);
+  // A guarda precisa declarar QUANTAS ocorrencias espera: a retificacao tem 2 (a CTE
+  // se repete) e aplicar so uma deixaria metade da correcao pra tras em silencio.
+  assert.match(migration3, /esperava % ocorrencia\(s\)/);
+  // O trigger de preenchimento fica de fora de proposito (grava campo, nao conta KPI).
+  assert.doesNotMatch(migration3, /create or replace function public\.preencher_campos_retencao/i);
   assert.match(migration, /'BOLSISTA_INT',\s*'BOLSISTA_PARC',\s*'BANDA'/);
   // Guarda de âncora: sem ela o replace poderia aplicar um corpo não revisado.
   assert.match(migration, /esperava 1 ocorrencia/);
