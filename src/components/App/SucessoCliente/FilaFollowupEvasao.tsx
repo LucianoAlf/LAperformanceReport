@@ -128,6 +128,13 @@ const MOTIVOS_ENCERRAMENTO_NORMAL: Record<string, string> = {
   telefone_ja_respondeu: 'irmão(ã) já respondeu',
 };
 
+/**
+ * Estados em que a repescagem impede um novo reenvio: a mensagem está a caminho
+ * (`pendente`/`enviando`) ou já saiu (`enviada`). `cancelada` e `falhou` ficam
+ * de fora de propósito — cancelar desfaz, não consome o toque.
+ */
+const REPESCAGEM_BLOQUEIA_REENVIO = new Set(['pendente', 'enviando', 'enviada']);
+
 /** Rótulo do badge de repescagem (2º toque) por linha — status vem direto de `pesquisa_evasao_envios_fila`. */
 function rotuloBadgeRepescagem(estado: RepescagemEstado | undefined): string | null {
   if (!estado) return null;
@@ -216,16 +223,20 @@ export function FilaFollowupEvasao({
     cancelar: cancelarRepescagem,
   } = useRepescagemEvasao(pesquisaIds);
 
-  // Quem JA tem linha de repescagem -- em QUALQUER status, inclusive cancelada
-  // e falhou -- nao pode ser reenviado: a RPC recusa com `ja_enfileirada`,
-  // porque a trava e a existencia da linha do toque 2, nao o status dela.
-  // Sem este recorte a operadora clicaria so para receber recusa, e o contador
-  // do botao mentiria sobre quantas mensagens sairiam de fato.
+  // So linha VIVA (`pendente`/`enviando`) ou ja CONCLUIDA (`enviada`) bloqueia
+  // um novo reenvio -- nessas a mensagem esta a caminho ou ja saiu.
+  // `cancelada` e `falhou` NAO bloqueiam: cancelar e desfazer, nao gastar o
+  // toque. Bloquear tirava a pessoa da repescagem para sempre por causa de um
+  // clique errado -- o oposto do que cancelar significa. A RPC reativa a linha
+  // (o unique de (pesquisa_id, toque) impede criar uma segunda).
+  // Sem este recorte o contador do botao mentiria sobre quantas sairiam.
   // ⚠️ Derivado DEPOIS de `useRepescagemEvasao`, nunca antes: `pesquisaIds` e a
   // entrada do hook e `estadoPorPesquisa` e a saida -- calcular um a partir do
   // outro fecharia um ciclo (e leria a variavel antes da declaracao).
   const pesquisaIdsElegiveis = useMemo(
-    () => pesquisaIds.filter((id) => !estadoPorPesquisa[id]),
+    () => pesquisaIds.filter((id) => !REPESCAGEM_BLOQUEIA_REENVIO.has(
+      estadoPorPesquisa[id]?.status ?? '',
+    )),
     [pesquisaIds, estadoPorPesquisa],
   );
 
@@ -444,7 +455,9 @@ export function FilaFollowupEvasao({
 
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     {(() => {
-                      const jaTeveRepescagem = Boolean(estadoPorPesquisa[item.pesquisa_id]);
+                      const jaTeveRepescagem = REPESCAGEM_BLOQUEIA_REENVIO.has(
+                        estadoPorPesquisa[item.pesquisa_id]?.status ?? '',
+                      );
                       return (
                         <Button
                           size="sm"
@@ -452,7 +465,7 @@ export function FilaFollowupEvasao({
                           disabled={jaTeveRepescagem}
                           title={
                             jaTeveRepescagem
-                              ? 'Esta pesquisa já foi reenviada. A régua é de dois toques.'
+                              ? 'A repescagem desta pesquisa já saiu ou está a caminho. A régua é de dois toques.'
                               : undefined
                           }
                           className={

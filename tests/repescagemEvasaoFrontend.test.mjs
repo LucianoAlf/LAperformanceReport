@@ -40,8 +40,19 @@ test('botao de reenvio fica desabilitado depois que a repescagem ja saiu', () =>
   const fonte = tela;
 
   // O botao individual vira "Reenviada" e nao clicavel.
-  assert.match(fonte, /jaTeveRepescagem = Boolean\(estadoPorPesquisa\[item\.pesquisa_id\]\)/);
   assert.match(fonte, /disabled=\{jaTeveRepescagem\}/);
+
+  // ⚠️ So estado VIVO ou CONCLUIDO bloqueia. `cancelada` e `falhou` ficam de
+  // fora: cancelar e desfazer, nao gastar o toque -- bloquear tirava a pessoa
+  // da repescagem para sempre por um clique errado. A RPC casa com isto
+  // (reativa a linha, porque o unique de (pesquisa_id, toque) impede criar
+  // outra).
+  assert.match(
+    fonte,
+    /REPESCAGEM_BLOQUEIA_REENVIO = new Set\(\['pendente', 'enviando', 'enviada'\]\)/,
+  );
+  assert.doesNotMatch(fonte, /'cancelada'.*REPESCAGEM_BLOQUEIA/);
+  assert.match(fonte, /jaTeveRepescagem = REPESCAGEM_BLOQUEIA_REENVIO\.has\(/);
   assert.match(fonte, /jaTeveRepescagem \? 'Reenviada' : 'Reenviar'/);
 
   // O "Reenviar para todos" conta so quem ainda pode receber -- senao o numero
