@@ -13,7 +13,33 @@
  * protegeria de nada — o recibo viraria so mais uma linha de log.
  */
 
-export type StatusRecibo = 'concluido' | 'parcial' | 'falhou' | 'nao_recebido';
+export type StatusRecibo =
+  | 'nao_recebido'
+  | 'recebido'
+  | 'processando'
+  | 'concluido'
+  | 'parcial'
+  | 'falhou';
+
+const STATUS_RECIBO: ReadonlySet<string> = new Set<StatusRecibo>([
+  'nao_recebido',
+  'recebido',
+  'processando',
+  'concluido',
+  'parcial',
+  'falhou',
+]);
+
+const STATUS_RESOLVIDO = new Set<StatusRecibo>([
+  'nao_recebido',
+  'concluido',
+  'parcial',
+  'falhou',
+]);
+
+function statusReciboValido(status: string): status is StatusRecibo {
+  return STATUS_RECIBO.has(status);
+}
 
 export interface ErroRecibo {
   aluno_id?: number;
@@ -27,6 +53,12 @@ export interface ReciboPresenca {
   aplicados: number;
   rejeitados: number;
   erros: ErroRecibo[];
+}
+
+export interface ArmazenamentoPedidos {
+  getItem(chave: string): string | null;
+  setItem(chave: string, valor: string): void;
+  removeItem(chave: string): void;
 }
 
 /**
@@ -76,18 +108,60 @@ export function novoRequestId(): string {
  * reaplicar; repetir com conteudo diferente e recusado pelo banco
  * (`request_id_reutilizado`), por isso a chave inclui o payload.
  */
+const PREFIXO_PEDIDO = 'la-report:presenca:pedidos:v2:';
 const pedidosEmVoo = new Map<string, string>();
 
-export function chaveDoPedido(escopo: string, payload: unknown): string {
-  return `${escopo}:${JSON.stringify(payload)}`;
+function storagePadrao(): ArmazenamentoPedidos | null {
+  try {
+    return typeof window === 'undefined' ? null : window.sessionStorage;
+  } catch {
+    return null;
+  }
 }
 
-export function requestIdDoPedido(chave: string): string {
-  const existente = pedidosEmVoo.get(chave);
-  if (existente) return existente;
-  const novo = novoRequestId();
-  pedidosEmVoo.set(chave, novo);
-  return novo;
+function chaveStorage(chave: string): string {
+  return `${PREFIXO_PEDIDO}${chave}`;
+}
+
+export function chaveDoPedido(usuarioId: string, escopo: string, payload: unknown): string {
+  if (!usuarioId) throw new Error('Usuário autenticado obrigatório para registrar presença');
+  return `${usuarioId}:${escopo}:${JSON.stringify(payload)}`;
+}
+
+export function requestIdDoPedido(
+  chave: string,
+  storage: ArmazenamentoPedidos | null = storagePadrao(),
+  memoria: Map<string, string> = pedidosEmVoo,
+): string {
+  const emMemoria = memoria.get(chave);
+  if (emMemoria) return emMemoria;
+
+  try {
+    const bruto = storage?.getItem(chaveStorage(chave));
+    if (bruto) {
+      const salvo = JSON.parse(bruto) as { requestId?: unknown };
+      if (typeof salvo.requestId === 'string') {
+        memoria.set(chave, salvo.requestId);
+        return salvo.requestId;
+      }
+      storage?.removeItem(chaveStorage(chave));
+    }
+  } catch {
+    try {
+      storage?.removeItem(chaveStorage(chave));
+    } catch {
+      // A memória segue disponível mesmo se o storage estiver indisponível.
+    }
+  }
+
+  const requestId = novoRequestId();
+  memoria.set(chave, requestId);
+  try {
+    storage?.setItem(chaveStorage(chave), JSON.stringify({ requestId }));
+  } catch {
+    // Persistência de sessão é best effort; a memória mantém a intenção.
+  }
+  return requestId;
 }
 
 /**
@@ -95,8 +169,17 @@ export function requestIdDoPedido(chave: string): string {
  * um novo clique e uma nova intencao. Falha de rede NAO encerra: e exatamente
  * o caso em que nao se sabe se chegou, e o retry precisa do mesmo id.
  */
-export function encerrarPedido(chave: string): void {
-  pedidosEmVoo.delete(chave);
+export function encerrarPedido(
+  chave: string,
+  storage: ArmazenamentoPedidos | null = storagePadrao(),
+  memoria: Map<string, string> = pedidosEmVoo,
+): void {
+  memoria.delete(chave);
+  try {
+    storage?.removeItem(chaveStorage(chave));
+  } catch {
+    // A limpeza em memória já ocorreu.
+  }
 }
 
 export function interpretarRecibo(data: unknown): ReciboPresenca {
@@ -105,18 +188,57 @@ export function interpretarRecibo(data: unknown): ReciboPresenca {
   if (typeof status !== 'string') {
     throw new Error('Resposta inesperada do banco: recibo sem status');
   }
-  const erros = Array.isArray(bruto.erros) ? (bruto.erros as Record<string, unknown>[]) : [];
+  if (!statusReciboValido(status)) {
+    throw new Error('Resposta inesperada do banco: status desconhecido');
+  }
+
+  const aplicados = bruto.aplicados;
+  const rejeitados = bruto.rejeitados;
+  if (
+    typeof aplicados !== 'number'
+    || !Number.isInteger(aplicados)
+    || aplicados < 0
+    || typeof rejeitados !== 'number'
+    || !Number.isInteger(rejeitados)
+    || rejeitados < 0
+  ) {
+    throw new Error('Resposta inesperada do banco: contadores inválidos');
+  }
+  if (!Array.isArray(bruto.erros)) {
+    throw new Error('Resposta inesperada do banco: erros inválidos');
+  }
+
+  const erros = bruto.erros;
   return {
     request_id: typeof bruto.request_id === 'string' ? bruto.request_id : undefined,
-    status: status as StatusRecibo,
-    aplicados: Number(bruto.aplicados ?? 0),
-    rejeitados: Number(bruto.rejeitados ?? 0),
-    erros: erros.map((e) => ({
-      aluno_id: typeof e.aluno_id === 'number' ? e.aluno_id : undefined,
-      professor_id: typeof e.professor_id === 'number' ? e.professor_id : undefined,
-      codigo: String(e.codigo ?? 'erro_desconhecido'),
-    })),
+    status,
+    aplicados,
+    rejeitados,
+    erros: erros.map((erro) => {
+      const e = typeof erro === 'object' && erro !== null
+        ? (erro as Record<string, unknown>)
+        : {};
+      return {
+        aluno_id: typeof e.aluno_id === 'number' ? e.aluno_id : undefined,
+        professor_id: typeof e.professor_id === 'number' ? e.professor_id : undefined,
+        codigo: String(e.codigo ?? 'erro_desconhecido'),
+      };
+    }),
   };
+}
+
+export function interpretarEEncerrarPedido(
+  chave: string,
+  requestIdEsperado: string,
+  data: unknown,
+  storage: ArmazenamentoPedidos | null = storagePadrao(),
+): ReciboPresenca {
+  const recibo = interpretarRecibo(data);
+  if (recibo.request_id && recibo.request_id !== requestIdEsperado) {
+    throw new Error('Resposta inesperada do banco: request_id divergente');
+  }
+  if (STATUS_RESOLVIDO.has(recibo.status)) encerrarPedido(chave, storage);
+  return recibo;
 }
 
 export function descreverErrosDoRecibo(recibo: ReciboPresenca, opcoes?: { comAluno?: boolean }): string {

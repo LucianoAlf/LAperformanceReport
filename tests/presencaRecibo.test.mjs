@@ -51,8 +51,55 @@ test('resposta sem status e recusada — nao pode passar por sucesso', () => {
   );
 });
 
+test('status desconhecido e recusado sem promover resposta futura a sucesso', () => {
+  assert.throws(
+    () => interpretarRecibo({
+      status: 'status_futuro',
+      aplicados: 1,
+      rejeitados: 0,
+      erros: [],
+    }),
+    /status desconhecido/,
+  );
+});
+
+test('contadores invalidos sao recusados em vez de sofrer coercao', () => {
+  assert.throws(
+    () => interpretarRecibo({
+      status: 'concluido',
+      aplicados: -1,
+      rejeitados: 0,
+      erros: [],
+    }),
+    /contadores inválidos/,
+  );
+  assert.throws(
+    () => interpretarRecibo({
+      status: 'concluido',
+      aplicados: 1,
+      rejeitados: 0.5,
+      erros: [],
+    }),
+    /contadores inválidos/,
+  );
+});
+
+test('erros fora de array sao recusados em vez de descartados', () => {
+  assert.throws(
+    () => interpretarRecibo({
+      status: 'concluido',
+      aplicados: 1,
+      rejeitados: 0,
+      erros: { codigo: 'status_invalido' },
+    }),
+    /erros inválidos/,
+  );
+});
+
 test('mesma intencao reusa o request_id ate o banco responder', () => {
-  const chave = chaveDoPedido('chamada', [{ aula_emusys_id: 1, aluno_id: 2, status: 'presente' }]);
+  const chave = chaveDoPedido('usuario-teste', 'chamada', [
+    { aula_emusys_id: 1, aluno_id: 2, status: 'presente' },
+  ]);
   const primeiro = requestIdDoPedido(chave);
   const retry = requestIdDoPedido(chave);
   assert.equal(retry, primeiro, 'o retry precisa levar o MESMO id, senao a idempotencia nao protege');
@@ -63,8 +110,8 @@ test('mesma intencao reusa o request_id ate o banco responder', () => {
 });
 
 test('payload diferente = pedido diferente (o banco recusa id reutilizado)', () => {
-  const a = chaveDoPedido('chamada', [{ aluno_id: 1, status: 'presente' }]);
-  const b = chaveDoPedido('chamada', [{ aluno_id: 1, status: 'falta' }]);
+  const a = chaveDoPedido('usuario-teste', 'chamada', [{ aluno_id: 1, status: 'presente' }]);
+  const b = chaveDoPedido('usuario-teste', 'chamada', [{ aluno_id: 1, status: 'falta' }]);
   assert.notEqual(a, b);
   assert.notEqual(requestIdDoPedido(a), requestIdDoPedido(b));
   encerrarPedido(a);
