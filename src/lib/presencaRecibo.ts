@@ -279,7 +279,19 @@ export function encerrarPedido(
   }
   if (!esperado) return;
 
-  if (storage && persistido === esperado) storage.removeItem(chaveStorage(chave));
+  if (storage && persistido === esperado) {
+    try {
+      storage.removeItem(chaveStorage(chave));
+    } catch (erro) {
+      // Web Storage não oferece transação: uma implementação pode efetivar a
+      // remoção e ainda assim lançar. Releia de forma síncrona para distinguir
+      // "não removeu" de "removeu e falhou ao responder". Só o primeiro caso
+      // mantém a intenção pendente; no segundo, o recibo terminal já encerrou o
+      // pedido e deixar o ID apenas na memória quebraria a regra após reload.
+      const depoisDaFalha = lerRequestIdPersistido(storage, chave);
+      if (depoisDaFalha === esperado) throw erro;
+    }
+  }
   if (emMemoria === esperado) memoria.delete(chave);
 }
 

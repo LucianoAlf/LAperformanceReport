@@ -27,6 +27,7 @@ class SessionStorageMemoria {
 class SessionStorageComFalhas extends SessionStorageMemoria {
   falharSetItem = false;
   falharRemoveItem = false;
+  falharRemoveItemDepoisDeApagar = false;
 
   setItem(chave, valor) {
     if (this.falharSetItem) throw new Error('setItem bloqueado');
@@ -36,6 +37,7 @@ class SessionStorageComFalhas extends SessionStorageMemoria {
   removeItem(chave) {
     if (this.falharRemoveItem) throw new Error('removeItem bloqueado');
     super.removeItem(chave);
+    if (this.falharRemoveItemDepoisDeApagar) throw new Error('removeItem falhou depois de apagar');
   }
 }
 
@@ -302,6 +304,23 @@ test('removeItem falhando preserva o ID e o retry do mesmo recibo consegue limpa
   interpretarEEncerrarPedido(chave, requestId, recibo(requestId), storage, memoria);
   const proximo = requestIdDoPedido(chave, storage, memoria);
   assert.notEqual(proximo, requestId);
+  encerrarPedido(chave, storage, memoria);
+});
+
+test('removeItem que apaga e depois lança confirma o encerramento sem deixar ID só na memória', () => {
+  const storage = new SessionStorageComFalhas();
+  const memoria = new Map();
+  const chave = chaveDoPedido('user-a', 'storage_remove_pos_efeito', { aula_id: 141 });
+  const requestId = requestIdDoPedido(chave, storage, memoria);
+  storage.falharRemoveItemDepoisDeApagar = true;
+
+  const resultado = interpretarEEncerrarPedido(chave, requestId, recibo(requestId), storage, memoria);
+
+  assert.equal(resultado.status, 'concluido');
+  assert.equal(memoria.has(chave), false);
+  storage.falharRemoveItemDepoisDeApagar = false;
+  const proximoAposReload = requestIdDoPedido(chave, storage, new Map());
+  assert.notEqual(proximoAposReload, requestId, 'recibo terminal confirmado permite uma nova intenção após reload');
   encerrarPedido(chave, storage, memoria);
 });
 
