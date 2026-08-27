@@ -33,6 +33,10 @@ import {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// Mesmo TTL do 1o toque (`enviar-pesquisa-evasao`): a janela de captura da
+// resposta precisa ser a mesma nos dois toques, senao a repescagem passa a
+// ter regra propria para o mesmo campo.
+const CONVERSA_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const WORKER_TOKEN = Deno.env.get("SYNC_PRESENCA_EDGE_TOKEN")?.trim() || "";
 
 function json(body: unknown, status = 200): Response {
@@ -141,8 +145,8 @@ serve(async (req: Request) => {
   const { data: pesquisa, error: erroPesquisa } = await supabase
     .from("pesquisa_evasao")
     .select(
-      "id, aluno_nome, aluno_telefone, telefone_destino_snapshot, caixa_id, " +
-        "preview_id, resposta_status, envio_status, opt_out_em, " +
+      "id, evasao_id, aluno_nome, aluno_telefone, telefone_destino_snapshot, " +
+        "caixa_id, preview_id, resposta_status, envio_status, opt_out_em, " +
         "assinatura_nome_snapshot",
     )
     .eq("id", job.pesquisa_id)
@@ -313,6 +317,56 @@ serve(async (req: Request) => {
       p_terminal: true,
     });
     return json({ ok: true, processado: 0, motivo: "render_falhou" });
+  }
+
+  // 4b. Reabre a janela de captura da resposta -- ANTES de enviar.
+  //
+  // `webhook-whatsapp-inbox` so casa uma mensagem recebida com a pesquisa
+  // enquanto existir linha em `conversa_estado_whatsapp` com estado
+  // 'aguardando_resposta_evasao' e `expira_em > now()`. Fora dessa janela ele
+  // devolve `handled: false` e a resposta cai na Caixa como mensagem solta:
+  // a pesquisa segue "sem resposta", nao entra na analise, e continua
+  // elegivel a uma proxima repescagem.
+  //
+  // O 1o toque abre a janela por 7 dias e a repescagem so fica elegivel a
+  // partir de 3 -- ou seja, ela costuma sair com a janela JA FECHADA. Medido
+  // nas 5 primeiras linhas reais da fila: 1o toque em 03/08, janela expirada
+  // desde 10/08, repescagem enfileirada em 27/08. Sem este passo, as 5
+  // pessoas seriam cobradas de novo e a resposta de quem voltasse seria
+  // descartada em silencio -- o pior desfecho possivel para quem se deu ao
+  // trabalho de responder.
+  //
+  // ANTES do envio, nunca depois: uma resposta rapida chegaria antes da
+  // janela existir. E fail-closed (nao terminal): sem poder capturar a
+  // resposta, nao ha motivo para cobrar de novo -- mesma logica do resto
+  // desta edge, onde a duvida sempre resolve por NAO mandar.
+  const { error: erroJanela } = await supabase
+    .from("conversa_estado_whatsapp")
+    .upsert(
+      {
+        whatsapp_numero: telefoneDestino,
+        estado: "aguardando_resposta_evasao",
+        contexto: {
+          pesquisa_id: job.pesquisa_id,
+          evasao_id: pesquisa.evasao_id ?? null,
+        },
+        expira_em: new Date(Date.now() + CONVERSA_TTL_MS).toISOString(),
+      },
+      { onConflict: "whatsapp_numero" },
+    );
+
+  if (erroJanela) {
+    await falharJob(supabase, {
+      p_id: job.id,
+      p_worker_id: workerId,
+      p_erro: "janela_captura_indisponivel: " + erroJanela.message,
+      p_terminal: false,
+    });
+    return json({
+      ok: true,
+      processado: 0,
+      motivo: "janela_captura_indisponivel",
+    });
   }
 
   // 5. Envia pelo provider unico.
