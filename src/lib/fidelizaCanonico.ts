@@ -1,5 +1,6 @@
 import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
 import { supabase } from '@/lib/supabase';
+import { contaNosKpis } from '@/lib/atividadesExtras';
 import {
   aplicarFallbacksRetencao,
   calcularReajusteMedioCanonico,
@@ -130,7 +131,12 @@ async function fetchMovimentacoesTrimestre(
       curso_nome: curso?.nome || null,
       cursos: curso ? { nome: curso.nome, is_projeto_banda: curso.is_projeto_banda } : null,
     });
-  });
+  })
+    // ⚠️ O enriquecimento de curso e tipo_matricula acima já era carregado, e nunca
+    // era usado para filtrar: banda e bolsista entravam no churn e na taxa de
+    // renovação do Programa Fideliza. Buscar o dado e não aplicar a regra é o
+    // mesmo defeito da aba Cancelamentos, noutro arquivo.
+    .filter(contaNosKpis);
 }
 
 function media(values: number[]) {

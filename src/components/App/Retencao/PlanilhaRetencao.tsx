@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Plus, Trash2, Save, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
-import { filtrarMovimentacoesRetencaoKpi } from '@/lib/atividadesExtras';
+import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 import { useAuth } from '../../../contexts/AuthContext';
 import { cn } from '../../../lib/utils';
 import { EditableCell, DropdownCell, AutocompleteCell } from '../Spreadsheet';
@@ -118,8 +118,9 @@ export function PlanilhaRetencao() {
         .from('movimentacoes_admin')
         .select(`
           id, unidade_id, data, aluno_id, valor_parcela_anterior, valor_parcela_novo,
-          tipo, renovacao_status, motivo_saida_id, agente_comercial, observacoes,
-          alunos(nome)
+          tipo, renovacao_status, motivo_saida_id, agente_comercial, observacoes, curso_id,
+          cursos(nome, is_projeto_banda),
+          alunos(nome, tipo_matricula_id, curso_id, cursos(nome, is_projeto_banda))
         `)
         .eq('tipo', 'renovacao')
         .order('data', { ascending: false });
@@ -137,7 +138,7 @@ export function PlanilhaRetencao() {
       // esta tela é a leitura operacional das saídas, não um extrato de tudo que foi
       // lançado. Aviso prévio atravessa o filtro de bolsista de propósito.
       if (evasoesRes.data) {
-        filtrarMovimentacoesRetencaoKpi(evasoesRes.data).forEach((e: any) => {
+        filtrarRetencaoCanonica(evasoesRes.data).forEach((e: any) => {
           allRows.push({
             id: e.id,
             tipo: e.tipo,
@@ -160,9 +161,9 @@ export function PlanilhaRetencao() {
         });
       }
 
-      // Processar renovações
+      // Processar renovações — mesmo recorte das saídas: banda e bolsista fora.
       if (renovacoesRes.data) {
-        renovacoesRes.data.forEach((r: any) => {
+        filtrarRetencaoCanonica(renovacoesRes.data).forEach((r: any) => {
           const status = ['confirmada', 'antecipada_confirmada'].includes(r.renovacao_status) ? 'renovado' : 'pendente';
           const percentualReajuste = r.valor_parcela_anterior > 0
             ? Math.round(((r.valor_parcela_novo / r.valor_parcela_anterior) - 1) * 100 * 10) / 10

@@ -524,7 +524,7 @@ Snapshots fechados e configurações ativas permanecem imutáveis.
 ### Evasão (contagem e MRR perdido)
 `movimentacoes_admin.tipo ∈ {evasao, nao_renovacao}` — **sem** `aviso_previo` nem `trancamento`.
 Movimentações de **atividade extra** (banda, canto coral, power kids, minha banda, garageband, percussion kids) ficam fora, via `is_movimentacao_admin_retencao_valida` → `is_atividade_extra_curso`.
-**Bolsista e matrícula de banda também ficam fora** desde 27/08/2026 (`BOLSISTA_INT`/`BOLSISTA_PARC`/`BANDA`, REGRAS §3.6/§3.7): predicado **`movimentacao_conta_no_churn_v1(curso_id, tipo_matricula_id)`**, usado por `get_kpis_alunos_canonicos_base_p01q` (número vivo) e `recalcular_dados_mensais_unguarded` (snapshot histórico) — as duas fontes precisam concordar. No front: `contaNoChurn`/`filtrarEvasoesCanonicas`/`filtrarMovimentacoesRetencaoKpi` em `src/lib/atividadesExtras.ts`.
+**Bolsista e matrícula de banda também ficam fora** desde 27/08/2026 (`BOLSISTA_INT`/`BOLSISTA_PARC`/`BANDA`, REGRAS §3.6/§3.7) — e **em todos os tipos de movimentação, inclusive renovação**. Predicado único **`movimentacao_conta_nos_kpis_v1(curso_id, tipo_matricula_id)`**; `is_movimentacao_admin_retencao_valida(id)` delega a ele, então os **17 consumidores** (relatórios admin/gerencial/coordenação, KPIs e score de professor, fideliza, retenção IA) herdam a regra. No front: `contaNosKpis`/`filtrarRetencaoCanonica` em `src/lib/atividadesExtras.ts`; cópia espelhada na edge `relatorio-admin-whatsapp`.
 ⚠️ **O filtro por curso sozinho não bastava** — bolsista em curso REGULAR (ex.: Musicalização para Bebês) passava batido, e o churn somava bolsista no numerador tendo `alunos_pagantes` no denominador.
 ⚠️ **Fail-open:** sem `aluno_id` ou com tipo desconhecido, a saída **conta**.
 **Transferência interna entre unidades não é evasão nem churn global.**
@@ -535,6 +535,7 @@ Movimentações de **atividade extra** (banda, canto coral, power kids, minha ba
 ✅ **Canônica (confirmada com o Alf em 2026-08-08):** `renovacoes / (renovacoes + nao_renovacoes) × 100`.
 **Aviso prévio NÃO entra no denominador** — aviso prévio e taxa de renovação são indicadores distintos.
 Renovação só conta se **confirmada** (`isRenovacaoConfirmadaOperacional`, exclui `pendente_validacao`). Renovação antecipada: `renovacao_antecipada=true` ou status `antecipada_*`.
+⚠️ **Bolsista e banda ficam fora dos dois lados desde 27/08/2026** — antes inflavam a taxa (CG/jul-26: 81,8% → 77,8%, cruzando a meta de 80%). Ver REGRAS §5.4.
 - `AdministrativoPage.tsx:508/617`, `TabPerformanceProfessores.tsx:325`.
 - Por professor: `renovacoes / contratos_a_vencer × 100` (`useProfessoresPerformance.ts:140`).
 
