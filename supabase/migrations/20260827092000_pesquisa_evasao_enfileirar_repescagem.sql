@@ -4,7 +4,7 @@ create or replace function public.proximo_horario_envio_repescagem(
 )
 returns timestamptz
 language plpgsql
-immutable
+stable
 set search_path = pg_catalog, public
 as $function$
 declare
@@ -166,7 +166,10 @@ begin
          and (f.agendada_para at time zone 'America/Sao_Paulo')::date = v_dia;
       exit when v_no_dia < 30;
       v_cursor := public.proximo_horario_envio_repescagem(
-        (v_dia + 1)::timestamp + time '09:00' at time zone 'America/Sao_Paulo'
+        -- Parenteses obrigatorios: AT TIME ZONE liga mais forte que +, e sem
+        -- eles o Postgres le `timestamp + (time AT TIME ZONE ...)`, operador que
+        -- nao existe (42883). Quebrava o lote inteiro quando o teto estourava.
+        (((v_dia + 1)::timestamp + time '09:00') at time zone 'America/Sao_Paulo')
       );
     end loop;
 

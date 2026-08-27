@@ -11,7 +11,10 @@
 // mensagem chegou) e TERMINAL: entre mandar duas vezes para um ex-aluno e nao
 // mandar, o sistema nao manda.
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  createClient,
+  type SupabaseClient,
+} from "https://esm.sh/@supabase/supabase-js@2";
 import {
   autenticarWorkerInterno,
   decidirEnvioRepescagem,
@@ -87,13 +90,37 @@ async function concluirJob(
   }
 }
 
+// O token do cron vive no VAULT (`sync_presenca_edge_token`), nao no env das
+// edge functions -- e o mesmo par que `sync-presenca-emusys` usa. Copiar o
+// segredo para um secret de funcao criaria uma segunda fonte de verdade que
+// diverge em silencio na primeira rotacao (o cron passa a mandar um valor e a
+// edge a esperar outro, e o pg_cron marca `succeeded` no 401). Por isso a
+// comparacao acontece NO BANCO, pela RPC restrita a service_role.
+// O caminho por env continua valendo quando SYNC_PRESENCA_EDGE_TOKEN existir,
+// para nao exigir ida ao banco em ambiente de teste.
+async function autorizado(
+  supabase: SupabaseClient,
+  recebido: string | null,
+): Promise<boolean> {
+  if (WORKER_TOKEN && autenticarWorkerInterno(recebido, WORKER_TOKEN)) {
+    return true;
+  }
+  if (!recebido) return false;
+  const { data, error } = await supabase.rpc(
+    "validar_token_sync_presenca_interno_v1",
+    { p_token: recebido },
+  );
+  return !error && data === true;
+}
+
 serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "metodo_nao_permitido" }, 405);
-  if (!autenticarWorkerInterno(req.headers.get("x-sync-token"), WORKER_TOKEN)) {
+
+  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+  if (!await autorizado(supabase, req.headers.get("x-sync-token"))) {
     return json({ error: "nao_autorizado" }, 401);
   }
 
-  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
   const workerId = crypto.randomUUID();
 
   // 1. Toma UMA linha. As demais execucoes do mesmo disparo recebem null aqui.
