@@ -23,8 +23,8 @@
 - evidência de integridade humana corrigida para o contrato efetivamente provado: estado semântico preservado, sem alegação de identidade byte a byte; saída agregada marcada `pii_no_output=true` e guard de arquivo baseado na raiz real do repositório
 - runtime Vite alterado na Fase 1: não (`SRC_DIFF_COUNT=0`)
 - locks `package-lock.json` e `deno.lock`: sem diff
-- testes backend: Deno 4/4 e Node 75/75
-- paridade com Node 22.23.2: 3/3, incluindo manifesto Edge reproduzível
+- verificação backend após os ajustes de qualidade: Deno 4/4 e Node 76/76
+- paridade e semântica com Node 22.23.2: 15/15, incluindo manifesto Edge reproduzível, guard da raiz real e integridade humana sem alegação byte a byte
 - suíte integral: Deno 43/43; pretest Node 9/9; suíte principal com Node 22.23.2: duas confirmações finais consecutivas 430/430, sem skips
 - variância observada: uma execução intermediária terminou 422/430, com 1 falha e 7 skips sem bloco de erro preservado; a causa não foi confirmada e as duas repetições imediatas passaram 430/430 e 430/430
 - build direto na linha de corte com Node 22.23.2 e Vite 6.4.1: 4.832 módulos, aprovado em 14,46 s
