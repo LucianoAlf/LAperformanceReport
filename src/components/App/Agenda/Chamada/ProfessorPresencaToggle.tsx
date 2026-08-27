@@ -9,6 +9,28 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import type { AulaAgenda } from '@/hooks/useAgendaDia';
+import {
+  chaveDoPedido,
+  descreverErrosDoRecibo,
+  encerrarPedido,
+  interpretarRecibo,
+  mensagemDeErro,
+  requestIdDoPedido,
+} from '@/lib/presencaRecibo';
+
+/**
+ * As RPCs de presenca do professor tambem passaram a exigir `p_request_id`
+ * (Checkpoint 4). Elas devolvem o mesmo recibo da chamada, entao aqui o
+ * sucesso so e anunciado quando algo de fato foi aplicado — antes, um dia sem
+ * aulas alvo respondia sem erro e a tela dizia "marcado como presente".
+ */
+function conferirRecibo(data: unknown): { ok: boolean; detalhe: string } {
+  const recibo = interpretarRecibo(data);
+  return {
+    ok: recibo.status !== 'falhou' && recibo.aplicados > 0,
+    detalhe: descreverErrosDoRecibo(recibo),
+  };
+}
 
 interface Props {
   professorId: number;
@@ -48,28 +70,41 @@ export function ProfessorPresencaToggle({
   async function toggleDia() {
     if (salvando) return;
     setSalvando(true);
+    const virandoParaAusente = presente === true;
+    const chave = chaveDoPedido('professor_dia', {
+      professorId,
+      data,
+      unidadeId,
+      ausente: virandoParaAusente,
+    });
     try {
-      if (presente === true) {
-        const { error } = await supabase.rpc('app_remover_presenca_professor_dia', {
-          p_professor_id: professorId,
-          p_data: data,
-          p_unidade_id: unidadeId,
-        });
-        if (error) throw error;
-        toast.success(`${professorNome} marcado como ausente`);
-      } else {
-        const { error } = await supabase.rpc('app_registrar_presenca_professor_dia', {
-          p_professor_id: professorId,
-          p_data: data,
-          p_unidade_id: unidadeId,
-        });
-        if (error) throw error;
-        toast.success(`${professorNome} marcado como presente`);
+      const { data: recibo, error } = virandoParaAusente
+        ? await supabase.rpc('app_remover_presenca_professor_dia', {
+            p_professor_id: professorId,
+            p_data: data,
+            p_unidade_id: unidadeId,
+            p_request_id: requestIdDoPedido(chave),
+          })
+        : await supabase.rpc('app_registrar_presenca_professor_dia', {
+            p_professor_id: professorId,
+            p_data: data,
+            p_unidade_id: unidadeId,
+            p_hora_chegada: null,
+            p_hora_saida: null,
+            p_request_id: requestIdDoPedido(chave),
+          });
+      if (error) throw error;
+      encerrarPedido(chave);
+
+      const { ok, detalhe } = conferirRecibo(recibo);
+      if (!ok) {
+        toast.error('Nao foi possivel alterar', { description: detalhe });
+        return;
       }
+      toast.success(`${professorNome} marcado como ${virandoParaAusente ? 'ausente' : 'presente'}`);
       onMudou();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : typeof e === 'object' && e !== null && 'message' in e ? String((e as Record<string, unknown>).message) : String(e);
-      toast.error('Nao foi possivel alterar', { description: msg });
+      toast.error('Nao foi possivel alterar', { description: mensagemDeErro(e) });
     } finally {
       setSalvando(false);
     }
@@ -80,19 +115,27 @@ export function ProfessorPresencaToggle({
     const aulaId = aula.aula_ids[0];
     if (!aulaId) return;
     setSalvandoAula(aulaId);
+    const novoPresente = aula.professor_presenca !== 'presente';
+    const chave = chaveDoPedido('professor_aula', { aulaId, novoPresente });
     try {
-      const novoPresente = aula.professor_presenca !== 'presente';
       // RPC security definer — UPDATE direto falhava por RLS (aulas_emusys so tem SELECT)
-      const { error } = await supabase.rpc('app_marcar_presenca_professor_aula', {
+      const { data: recibo, error } = await supabase.rpc('app_marcar_presenca_professor_aula', {
         p_aula_emusys_id: aulaId,
         p_presente: novoPresente,
+        p_request_id: requestIdDoPedido(chave),
       });
       if (error) throw error;
+      encerrarPedido(chave);
+
+      const { ok, detalhe } = conferirRecibo(recibo);
+      if (!ok) {
+        toast.error('Nao foi possivel alterar', { description: detalhe });
+        return;
+      }
       toast.success(`${professorNome} ${novoPresente ? 'presente' : 'ausente'} na aula das ${aula.hora_inicio}`);
       onMudou();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : typeof e === 'object' && e !== null && 'message' in e ? String((e as Record<string, unknown>).message) : String(e);
-      toast.error('Nao foi possivel alterar', { description: msg });
+      toast.error('Nao foi possivel alterar', { description: mensagemDeErro(e) });
     } finally {
       setSalvandoAula(null);
     }
@@ -100,19 +143,40 @@ export function ProfessorPresencaToggle({
 
   async function marcarTodasAulas(presenteAula: boolean) {
     setSalvando(true);
+    const chave = chaveDoPedido('professor_dia', {
+      professorId,
+      data,
+      unidadeId,
+      ausente: !presenteAula,
+    });
     try {
-      const rpc = presenteAula ? 'app_registrar_presenca_professor_dia' : 'app_remover_presenca_professor_dia';
-      const { error } = await supabase.rpc(rpc, {
-        p_professor_id: professorId,
-        p_data: data,
-        p_unidade_id: unidadeId,
-      });
+      const { data: recibo, error } = presenteAula
+        ? await supabase.rpc('app_registrar_presenca_professor_dia', {
+            p_professor_id: professorId,
+            p_data: data,
+            p_unidade_id: unidadeId,
+            p_hora_chegada: null,
+            p_hora_saida: null,
+            p_request_id: requestIdDoPedido(chave),
+          })
+        : await supabase.rpc('app_remover_presenca_professor_dia', {
+            p_professor_id: professorId,
+            p_data: data,
+            p_unidade_id: unidadeId,
+            p_request_id: requestIdDoPedido(chave),
+          });
       if (error) throw error;
+      encerrarPedido(chave);
+
+      const { ok, detalhe } = conferirRecibo(recibo);
+      if (!ok) {
+        toast.error('Nao foi possivel alterar', { description: detalhe });
+        return;
+      }
       toast.success(`${professorNome} — todas as aulas ${presenteAula ? 'presentes' : 'ausentes'}`);
       onMudou();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : typeof e === 'object' && e !== null && 'message' in e ? String((e as Record<string, unknown>).message) : String(e);
-      toast.error('Nao foi possivel alterar', { description: msg });
+      toast.error('Nao foi possivel alterar', { description: mensagemDeErro(e) });
     } finally {
       setSalvando(false);
     }
