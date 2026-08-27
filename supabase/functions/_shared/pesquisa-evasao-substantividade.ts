@@ -21,10 +21,35 @@ export function classificarSubstantividade(
   if (!texto?.trim()) return "indeterminado";
   const normalizado = normalizarParaClassificacao(texto);
 
+  // Adiamento = a pessoa promete responder depois. Nao e resposta, e nao pode
+  // fechar a pesquisa -- ela continua esperando.
+  //
+  // A versao anterior exigia o verbo ANTES do tempo e acertava 5 de 15 formas
+  // comuns. Falhava por duas razoes distintas:
+  //   vocabulario -- "MANDO mais tarde", "envio depois", "depois te RETORNO";
+  //   ordem       -- "DAQUI A POUCO eu respondo" (o verbo estava na lista!).
+  // Caso real (Joachim, 05/08/2026): "Mando mais tarde" virou a resposta
+  // oficial da pesquisa, que fechou com isso; o feedback de verdade chegou 21
+  // dias depois e nunca entrou.
+  //
+  // Agora os dois lados sao listas e a ordem entre eles e livre, com a
+  // distancia limitada para nao casar frase inteira por acidente. Continua
+  // sendo peneira barata, nao entendedor de linguagem: o caso dificil e do
+  // classificador semantico.
+  const VERBOS =
+    "respondo|responder|responderei|mando|mandar|envio|enviar|retorno|" +
+    "retornar|falo|falar|falamos|vejo|olho|olhar";
+  const MARCADORES =
+    "amanha|depois|mais tarde|daqui a pouco|ja ja|hoje a noite|a noite|" +
+    "com calma|assim que puder|quando der|na segunda|semana que vem";
+
   if (
-    /\b(respondo|responder|falo|falamos)\b.*\b(amanha|depois|mais tarde|daqui a pouco)\b/
+    new RegExp(`\\b(${VERBOS})\\b.{0,25}?\\b(${MARCADORES})\\b`)
       .test(normalizado) ||
-    /\b(agora nao|depois eu respondo)\b/.test(normalizado)
+    new RegExp(`\\b(${MARCADORES})\\b.{0,25}?\\b(${VERBOS})\\b`)
+      .test(normalizado) ||
+    /\b(agora nao|agora nao posso|sem tempo agora|to sem tempo|estou sem tempo|nao posso agora)\b/
+      .test(normalizado)
   ) {
     return "adiamento";
   }

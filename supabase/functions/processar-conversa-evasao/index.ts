@@ -83,6 +83,31 @@ serve(async (req: Request) => {
         continue;
       }
 
+      // O prazo de expiracao conta a partir do ULTIMO toque, nao do primeiro.
+      // `pesquisa_evasao.enviado_em` e sempre o 1o toque; a repescagem (2o
+      // toque) so e elegivel a partir de 3 dias e sai bem depois -- no 1o lote
+      // real, 24 dias depois. Usando so `enviado_em`, o prazo de 7 dias ja
+      // estava vencido no instante em que a repescagem saiu, e uma resposta
+      // CURTA ao 2o toque ("muito caro", 2 palavras) cairia no ramo `expirar`
+      // em vez de ser registrada -- marcando a pesquisa como expirada logo
+      // depois de a pessoa finalmente ter respondido.
+      // A saida da repescagem ja fica gravada em `pesquisa_evasao_mensagens`
+      // com direcao='saida', entao o ultimo toque sai dali, sem coluna nova.
+      const { data: saidas, error: saidasError } = await supabase
+        .from("pesquisa_evasao_mensagens")
+        .select("criado_em")
+        .eq("pesquisa_id", pesquisaId)
+        .eq("direcao", "saida")
+        .order("criado_em", { ascending: false })
+        .limit(1);
+      if (saidasError) throw new Error("saidas_indisponiveis");
+      const ultimaSaidaEm = saidas?.[0]?.criado_em ?? null;
+      const referenciaEnvio =
+        ultimaSaidaEm && Date.parse(ultimaSaidaEm) >
+            Date.parse(pesquisa.enviado_em)
+          ? ultimaSaidaEm
+          : pesquisa.enviado_em;
+
       const analises = analisesResult.data ?? [];
       const rascunhos = analises.filter((item) => item.status === "rascunho");
       const ultimaVersao = analises.at(-1)?.versao ?? 0;
@@ -131,7 +156,7 @@ serve(async (req: Request) => {
         );
         const conversa: ConversaParaConsolidar = {
           pesquisaId,
-          enviadoEm: pesquisa.enviado_em,
+          enviadoEm: referenciaEnvio,
           respostaStatus: pesquisa.resposta_status,
           ultimaAnalise: { versao: analise.versao, status: analise.status },
           mensagens: mensagensContrato,

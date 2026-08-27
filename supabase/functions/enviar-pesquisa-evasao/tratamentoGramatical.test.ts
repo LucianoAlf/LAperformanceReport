@@ -5,7 +5,7 @@ import {
   alunoComPreposicao,
   assinaturaComArtigo,
   resolverTratamentoGramatical,
-} from "./tratamentoGramatical.ts";
+} from "../_shared/pesquisa-evasao-tratamento-gramatical.ts";
 import {
   assertEquals,
   assertThrows,

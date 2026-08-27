@@ -177,6 +177,56 @@ Deno.test("zero candidato vira sem_pesquisa e dois viram ambigua", async () => {
   assertEquals((await resolverPesquisa(evento(), duplo)).status, "ambigua");
 });
 
+Deno.test("irmaos no mesmo telefone: vence quem ainda aguarda resposta", async () => {
+  // Caso real de 05/08/2026. Miguel (prof. Pedro) respondeu em 04/08 e sua
+  // pesquisa ja estava `revisada`; Heitor (prof. Willian) recebeu a dele em
+  // 05/08 10:33 e o pai respondeu 10:35 -- "o professor Wil foi...". Como
+  // STATUS_ABERTOS inclui `revisada`, as duas concorriam, a resolucao dava
+  // `ambigua` e a resposta do Heitor virou orfa: a pesquisa segue
+  // `sem_resposta` ate hoje.
+  const repo = new FakeRepository();
+  repo.abertas = [
+    pesquisa({ id: "miguel", respostaStatus: "revisada" }),
+    pesquisa({ id: "heitor", respostaStatus: "sem_resposta" }),
+  ];
+
+  const resolucao = await resolverPesquisa(evento(), repo);
+
+  assertEquals(resolucao.status, "resolvida");
+  if (resolucao.status === "resolvida") {
+    assertEquals(resolucao.pesquisa.id, "heitor");
+    assertEquals(resolucao.criterio, "unica_aguardando");
+  }
+});
+
+Deno.test("duas aguardando de verdade continuam ambiguas -- nao chutar", async () => {
+  const repo = new FakeRepository();
+  repo.abertas = [
+    pesquisa({ id: "irmao-a", respostaStatus: "sem_resposta" }),
+    pesquisa({ id: "irmao-b", respostaStatus: "sem_resposta" }),
+  ];
+
+  assertEquals((await resolverPesquisa(evento(), repo)).status, "ambigua");
+});
+
+Deno.test("citacao continua ganhando de tudo, inclusive do desempate", async () => {
+  // A mensagem citada e prova; o desempate por "unica aguardando" e inferencia.
+  const repo = new FakeRepository();
+  repo.citada = pesquisa({ id: "citada", respostaStatus: "revisada" });
+  repo.abertas = [pesquisa({ id: "aguardando", respostaStatus: "sem_resposta" })];
+
+  const resolucao = await resolverPesquisa(
+    evento({ quotedProviderMessageId: "abc" }),
+    repo,
+  );
+
+  assertEquals(resolucao.status, "resolvida");
+  if (resolucao.status === "resolvida") {
+    assertEquals(resolucao.pesquisa.id, "citada");
+    assertEquals(resolucao.criterio, "mensagem_citada");
+  }
+});
+
 Deno.test("unica V2 prevalece sobre pesquisas legadas abertas no mesmo telefone", async () => {
   const repo = new FakeRepository();
   repo.abertas = [
@@ -343,6 +393,28 @@ Deno.test("fromMe não cria evento e evento sem pesquisa fica disponível para t
 
 Deno.test("adiamento e abertura não atualizam última interação substantiva", async () => {
   assertEquals(classificarSubstantividade("vou responder amanhã"), "adiamento");
+  // Formas que a versao anterior classificava como conteudo substantivo e
+  // fechavam a pesquisa com a promessa no lugar da resposta.
+  assertEquals(classificarSubstantividade("Mando mais tarde"), "adiamento");
+  assertEquals(classificarSubstantividade("te mando amanhã"), "adiamento");
+  assertEquals(classificarSubstantividade("envio mais tarde"), "adiamento");
+  assertEquals(classificarSubstantividade("depois te retorno"), "adiamento");
+  // Ordem invertida: o tempo vem antes do verbo (o verbo ja estava na lista).
+  assertEquals(classificarSubstantividade("daqui a pouco eu respondo"), "adiamento");
+  assertEquals(classificarSubstantividade("amanhã eu mando"), "adiamento");
+  // Respostas REAIS ja registradas nao podem virar adiamento por engano.
+  assertEquals(
+    classificarSubstantividade(
+      "Por isso ficou mais interessante para nós sair da escola, considerando que o valor pago não valia o que realmente era consumido por nós.",
+    ),
+    "conteudo_substantivo",
+  );
+  assertEquals(
+    classificarSubstantividade(
+      "Boa dia, Jéssica! Respondo o mesmo que anteriormente. Não mudaria nada. O professor Wil foi muito bom",
+    ),
+    "conteudo_substantivo",
+  );
   assertEquals(classificarSubstantividade("Olá"), "abertura");
   assertEquals(
     classificarSubstantividade("Olha, deixa eu te falar uma coisa"),
@@ -376,7 +448,11 @@ Deno.test("adiamento e abertura não atualizam última interação substantiva",
   );
 
   assertEquals(repo.cabecalhos[0].ultimaInteracaoEm, null);
-  assertEquals(repo.cabecalhos[0].respostaStatus, "coletando");
+  // Adiamento NAO tira a pesquisa de `sem_resposta`. Esse status e o filtro da
+  // repescagem: com "coletando" aqui, quem prometia responder saia da fila de
+  // reenvio na hora e nunca mais era cobrado -- justamente quem demonstrou
+  // interesse. Caso real: Joachim prometeu em 05/08 e cumpriu 21 dias depois.
+  assertEquals(repo.cabecalhos[0].respostaStatus, "sem_resposta");
 
   await ingerirEvento(
     evento({
