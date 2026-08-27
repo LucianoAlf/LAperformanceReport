@@ -150,3 +150,8 @@ verify_jwt = true
 # string, validado DENTRO da funcao contra `integracao_tokens`.
 # Sem esta linha o gateway devolve 401 antes do codigo rodar.
 verify_jwt = false
+
+[functions.classificar-resposta-evasao]
+# Chamada interna (worker/manual). Autentica no codigo por x-sync-token
+# validado NO BANCO; o gateway nao pode exigir JWT que o cron nao tem.
+verify_jwt = false
