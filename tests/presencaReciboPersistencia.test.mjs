@@ -32,6 +32,8 @@ const recibo = (requestId, status = 'concluido') => ({
   erros: status === 'falhou' ? [{ codigo: 'status_invalido' }] : [],
 });
 
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
 test('reload recupera o mesmo request id da sessão', () => {
   const storage = new SessionStorageMemoria();
   const chave = chaveDoPedido('user-a', 'chamada', [{ aluno_id: 1, status: 'presente' }]);
@@ -68,7 +70,22 @@ test('conteúdo inválido no storage é ignorado sem derrubar a chamada', () => 
   const storage = new SessionStorageMemoria();
   const chave = chaveDoPedido('user-a', 'chamada', [{ aluno_id: 3, status: 'falta' }]);
   storage.setItem(`la-report:presenca:pedidos:v2:${chave}`, '{invalido');
-  assert.match(requestIdDoPedido(chave, storage), /^[0-9a-f-]{36}$/u);
+  assert.match(requestIdDoPedido(chave, storage), UUID_V4);
+  encerrarPedido(chave, storage);
+});
+
+test('request id não-UUID no storage é descartado e substituído sem ficar preso', () => {
+  const storage = new SessionStorageMemoria();
+  const chave = chaveDoPedido('user-a', 'chamada', [{ aluno_id: 30, status: 'falta' }]);
+  storage.setItem(
+    `la-report:presenca:pedidos:v2:${chave}`,
+    JSON.stringify({ requestId: 'request-id-invalido' }),
+  );
+
+  const requestId = requestIdDoPedido(chave, storage, new Map());
+  assert.match(requestId, UUID_V4);
+  assert.notEqual(requestId, 'request-id-invalido');
+  assert.equal(requestIdDoPedido(chave, storage, new Map()), requestId);
   encerrarPedido(chave, storage);
 });
 
@@ -111,6 +128,48 @@ test('status desconhecido e request id divergente preservam a intenção', () =>
   );
   assert.equal(requestIdDoPedido(chave, storage, new Map()), requestId);
   encerrarPedido(chave, storage);
+});
+
+test('recibo terminal sem request id exato lança erro e preserva a intenção', () => {
+  const casos = [
+    { nome: 'ausente', requestId: undefined },
+    { nome: 'vazio', requestId: '' },
+    { nome: 'divergente', requestId: '00000000-0000-4000-8000-000000000099' },
+  ];
+
+  for (const caso of casos) {
+    const storage = new SessionStorageMemoria();
+    const memoria = new Map();
+    const chave = chaveDoPedido('user-a', `terminal_${caso.nome}`, { aula_id: 11 });
+    const requestIdEsperado = requestIdDoPedido(chave, storage, memoria);
+
+    assert.throws(
+      () => interpretarEEncerrarPedido(
+        chave,
+        requestIdEsperado,
+        recibo(caso.requestId, 'concluido'),
+        storage,
+        memoria,
+      ),
+      /request_id divergente/,
+    );
+    assert.equal(requestIdDoPedido(chave, storage, memoria), requestIdEsperado);
+    encerrarPedido(chave, storage, memoria);
+  }
+});
+
+test('recibo resolvido encerra também a memória injetada', () => {
+  const storage = new SessionStorageMemoria();
+  const memoria = new Map();
+  const chave = chaveDoPedido('user-a', 'memoria_injetada', { aula_id: 12 });
+  const primeiro = requestIdDoPedido(chave, storage, memoria);
+
+  interpretarEEncerrarPedido(chave, primeiro, recibo(primeiro), storage, memoria);
+
+  const proximo = requestIdDoPedido(chave, storage, memoria);
+  assert.match(proximo, UUID_V4);
+  assert.notEqual(proximo, primeiro);
+  encerrarPedido(chave, storage, memoria);
 });
 
 test('recebido e processando mantêm a intenção pendente', () => {

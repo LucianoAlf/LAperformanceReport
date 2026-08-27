@@ -109,7 +109,12 @@ export function novoRequestId(): string {
  * (`request_id_reutilizado`), por isso a chave inclui o payload.
  */
 const PREFIXO_PEDIDO = 'la-report:presenca:pedidos:v2:';
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const pedidosEmVoo = new Map<string, string>();
+
+function requestIdValido(requestId: unknown): requestId is string {
+  return typeof requestId === 'string' && UUID_V4.test(requestId);
+}
 
 function storagePadrao(): ArmazenamentoPedidos | null {
   try {
@@ -140,7 +145,7 @@ export function requestIdDoPedido(
     const bruto = storage?.getItem(chaveStorage(chave));
     if (bruto) {
       const salvo = JSON.parse(bruto) as { requestId?: unknown };
-      if (typeof salvo.requestId === 'string') {
+      if (requestIdValido(salvo.requestId)) {
         memoria.set(chave, salvo.requestId);
         return salvo.requestId;
       }
@@ -232,12 +237,13 @@ export function interpretarEEncerrarPedido(
   requestIdEsperado: string,
   data: unknown,
   storage: ArmazenamentoPedidos | null = storagePadrao(),
+  memoria: Map<string, string> = pedidosEmVoo,
 ): ReciboPresenca {
   const recibo = interpretarRecibo(data);
-  if (recibo.request_id && recibo.request_id !== requestIdEsperado) {
+  if (recibo.request_id !== requestIdEsperado) {
     throw new Error('Resposta inesperada do banco: request_id divergente');
   }
-  if (STATUS_RESOLVIDO.has(recibo.status)) encerrarPedido(chave, storage);
+  if (STATUS_RESOLVIDO.has(recibo.status)) encerrarPedido(chave, storage, memoria);
   return recibo;
 }
 
