@@ -18,11 +18,13 @@
 - documentos locais preservados byte a byte durante esse avanço; SHA-256 medidos antes/depois: `D67ABD320AB6E39049F327CFF95CF8D863ED07ADE32D6BBBA2F2DBAE37C46992` e `985FA052BB2D7592AF2ED963760A29D97DC2D47B6F59F3A434B0BA9B4714AA5C`
 - WIP isolado em `codex/presenca-hardening-wip-preservado`, commit `ef05e3ac`, não publicado
 - migrations versionadas: 24/24; ledger remoto: 24/24 versões, nomes, contagens e hashes conferidos
-- Edge sources: 8/8 funções e 35/35 arquivos remotos iguais às fontes locais normalizadas; deploy executado: não
+- snapshot Edge do gate: 8/8 funções e 35/35 arquivos remotos iguais às fontes locais normalizadas, selados por versão, `verify_jwt`, SHA-256 LF e tamanho em `docs/audits/2026-08-27-presenca-edge-manifest.json`; deploy executado: não
+- rechecagem Edge em `2026-08-27T18:41:35.1559589-03:00`: 7/8 bundles permaneciam idênticos; `relatorio-admin-whatsapp` avançou depois do snapshot de v112 (`97463bd2…`) para v113 (`3fc1ae96…`) por mudança concorrente, com diferença apenas no entrypoint entre os 35 arquivos conferidos; essa deriva não foi sobrescrita nem atribuída ao pacote de presença
+- evidência de integridade humana corrigida para o contrato efetivamente provado: estado semântico preservado, sem alegação de identidade byte a byte; saída agregada marcada `pii_no_output=true` e guard de arquivo baseado na raiz real do repositório
 - runtime Vite alterado na Fase 1: não (`SRC_DIFF_COUNT=0`)
 - locks `package-lock.json` e `deno.lock`: sem diff
 - testes backend: Deno 4/4 e Node 75/75
-- paridade com Node 22.23.2: 3/3
+- paridade com Node 22.23.2: 3/3, incluindo manifesto Edge reproduzível
 - suíte integral: Deno 43/43; pretest Node 9/9; suíte principal com Node 22.23.2: duas confirmações finais consecutivas 430/430, sem skips
 - variância observada: uma execução intermediária terminou 422/430, com 1 falha e 7 skips sem bloco de erro preservado; a causa não foi confirmada e as duas repetições imediatas passaram 430/430 e 430/430
 - build direto na linha de corte com Node 22.23.2 e Vite 6.4.1: 4.832 módulos, aprovado em 14,46 s
