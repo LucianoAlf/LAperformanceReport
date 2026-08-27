@@ -15,7 +15,7 @@ const syncPresenca = readFileSync(
   'utf8',
 );
 const migration = readFileSync(
-  new URL('../supabase/migrations/20260815171333_reconciliacao_grade_snapshot_completo.sql', import.meta.url),
+  new URL('../supabase/migrations/20260827030500_presenca_roster_operacional.sql', import.meta.url),
   'utf8',
 );
 
@@ -57,8 +57,8 @@ test('syncs delegam a remoção de grade à reconciliação protegida por fotogr
     /from\(["']aula_alunos_emusys["']\)\s*\.delete\(\)/u,
     'o sync de presença não pode apagar roster sem a trava de presença da RPC',
   );
-  assert.match(helper, /EMUSYS_SNAPSHOT_ROSTER_AUSENTE/u);
-  assert.match(helper, /EMUSYS_SNAPSHOT_ALUNO_SEM_IDENTIDADE/u);
+  assert.match(helper, /"incompleto"/u);
+  assert.match(helper, /"ambiguo"/u);
   assert.match(syncGrade, /status: ["']upsert_aulas_incompleto_preservado["']/u);
   assert.match(syncGrade, /status: ["']roster_incompleto_preservado["']/u);
   assert.match(syncPresenca, /status: ["']roster_incompleto_preservado["']/u);
@@ -74,14 +74,14 @@ test('syncs delegam a remoção de grade à reconciliação protegida por fotogr
   );
   assert.match(
     migration,
-    /when not s\.participantes_com_identidade_estavel\s+then 'preservar_identidade_ambigua'/u,
+    /when v_estado in \('incompleto', 'ambiguo'\) then 'revisao_estrutural'/u,
     'a RPC deve preservar o roster quando a fotografia depender de nome',
   );
   assert.match(syncPresenca, /gradeIncompleta = true/u);
-  assert.match(
+  assert.doesNotMatch(
     migration,
-    /coalesce\(\s*ap\.status_presenca,\s*case ap\.status/u,
-    'a decisão legada deve passar pelo mesmo resolvedor canônico',
+    /delete\s+from\s+public\.aula_alunos_emusys/iu,
+    'presença histórica e vínculo histórico devem sobreviver à reconciliação',
   );
   assert.doesNotMatch(
     migration,

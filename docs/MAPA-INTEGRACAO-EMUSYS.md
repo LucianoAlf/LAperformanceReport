@@ -398,3 +398,20 @@ mesmo professor/unidade/curso/intervalo, `fn_aula_operacional_id` seleciona o
 evento utilizável para agenda, pendências e áudio. O evento descartado da UI
 permanece auditável em `aulas_emusys` e pode reaparecer como alerta se deixar de
 existir uma concorrente válida.
+
+### Cobertura e idempotência da presença v2 (candidata em 26/08/2026)
+
+Cada sync é identificado por `request_id`, unidade, modo e data. Uma lease por
+alvo impede escritores concorrentes; heartbeat registra progresso e somente
+execução `concluida` com hash de snapshot torna a cobertura publicável. Retry
+com o mesmo request é deduplicado e uma lease expirada é encerrada antes de nova
+tentativa. Resposta 200 da Edge ou cron concluído, isoladamente, não prova
+cobertura.
+
+O agendamento candidato fecha o dia anterior após meia-noite, executa backlog
+isolado, faz catch-up matinal apenas onde houver aula sem cobertura e bloqueia o
+relatório das 9h enquanto qualquer unidade aplicável estiver incompleta.
+Ausência bruta do Emusys não apaga roster, presença humana ou retificação e não
+vira falta terminal sem identidade e cobertura. O contrato ainda não foi
+publicado em produção. Procedimentos e horários completos estão em
+[`docs/runbooks/presenca-canonica.md`](./runbooks/presenca-canonica.md).

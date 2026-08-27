@@ -555,6 +555,7 @@ remains empty/null; no student names are printed.
 - Restore: `src/components/GestaoMensal/TabProfessoresNew.tsx`
 - Restore: `src/hooks/useSaudeCrons.ts`
 - Restore: `src/lib/professoresKpisCanonicos.ts`
+- Restore: `tests/presencaSyncSaudeOperacional.test.mjs`
 - Modify: `package.json`
 
 - [ ] **Step 1: Restaurar o grupo de leitura numérica**
@@ -572,7 +573,8 @@ git restore --source b263741c -- `
   src/components/App/SucessoCliente/hooks/useFaltasPeriodo.ts `
   src/components/GestaoMensal/TabProfessoresNew.tsx `
   src/hooks/useSaudeCrons.ts `
-  src/lib/professoresKpisCanonicos.ts
+  src/lib/professoresKpisCanonicos.ts `
+  tests/presencaSyncSaudeOperacional.test.mjs
 ```
 
 - [ ] **Step 2: Adicionar o script canônico isolado**
@@ -580,7 +582,7 @@ git restore --source b263741c -- `
 Add this exact `package.json` script, preserving the Fase 1 script:
 
 ```json
-"test:presenca-canonica": "deno test src/lib/presencaCanonica.test.ts tests/presencaAgentesAnaliticosCanonicos.test.ts && node --test tests/liaPresencaCanonicaDispatcher.test.mjs tests/presencaAgentesAnaliticosContrato.test.mjs tests/presencaAgentesCanonicos.test.mjs tests/presencaCheckpoint63PublicacaoFrontend.test.mjs tests/presencaCheckpoint6InterfacesCanonicas.test.mjs tests/presencaComandoAgendaFrontend.test.mjs tests/presencaConsumidoresCanonicosV2.test.mjs tests/presencaInterfacesConsultaV2Postgres.test.mjs tests/presencaKpisCanonicosV2.test.mjs tests/presencaKpisCanonicosV2Postgres.test.mjs tests/presencaKpisCanonicosV2ProducersPostgres.test.mjs tests/presencaKpisFrontendCanonicosV2.test.mjs tests/presencaLaTeacherCanonicaV2Postgres.test.mjs tests/presencaMigrationReleaseOrder.test.mjs tests/presencaPendenciasAgendaFrontend.test.mjs tests/presencaPreviaReparoScript.test.mjs tests/presencaProfessorComandoFrontend.test.mjs tests/presencaRolloutAdaptersPostgres.test.mjs tests/presencaRolloutConfigPostgres.test.mjs tests/presencaRolloutDetalhesPostgres.test.mjs tests/presencaRolloutFabioPeriodoPostgres.test.mjs tests/presencaRolloutKpisPostgres.test.mjs tests/presencaRosterConciliacaoFrontend.test.mjs tests/presencaSegurancaFuncoesInternasPostgres.test.mjs tests/presencaShadowComparacaoPostgres.test.mjs tests/presencaAusenciaBrutaFailClosedPostgres.test.mjs"
+"test:presenca-canonica": "deno test src/lib/presencaCanonica.test.ts tests/presencaAgentesAnaliticosCanonicos.test.ts && node --test tests/liaPresencaCanonicaDispatcher.test.mjs tests/presencaAgentesAnaliticosContrato.test.mjs tests/presencaAgentesCanonicos.test.mjs tests/presencaCheckpoint63PublicacaoFrontend.test.mjs tests/presencaCheckpoint6InterfacesCanonicas.test.mjs tests/presencaComandoAgendaFrontend.test.mjs tests/presencaConsumidoresCanonicosV2.test.mjs tests/presencaInterfacesConsultaV2Postgres.test.mjs tests/presencaKpisCanonicosV2.test.mjs tests/presencaKpisCanonicosV2Postgres.test.mjs tests/presencaKpisCanonicosV2ProducersPostgres.test.mjs tests/presencaKpisFrontendCanonicosV2.test.mjs tests/presencaLaTeacherCanonicaV2Postgres.test.mjs tests/presencaMigrationReleaseOrder.test.mjs tests/presencaPendenciasAgendaFrontend.test.mjs tests/presencaPreviaReparoScript.test.mjs tests/presencaProfessorComandoFrontend.test.mjs tests/presencaRolloutAdaptersPostgres.test.mjs tests/presencaRolloutConfigPostgres.test.mjs tests/presencaRolloutDetalhesPostgres.test.mjs tests/presencaRolloutFabioPeriodoPostgres.test.mjs tests/presencaRolloutKpisPostgres.test.mjs tests/presencaRosterConciliacaoFrontend.test.mjs tests/presencaSegurancaFuncoesInternasPostgres.test.mjs tests/presencaShadowComparacaoPostgres.test.mjs tests/presencaSyncSaudeOperacional.test.mjs tests/presencaAusenciaBrutaFailClosedPostgres.test.mjs"
 ```
 
 - [ ] **Step 3: Provar equação, universo e nulos fail-closed**

@@ -1,0 +1,258 @@
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+import test from 'node:test';
+
+const helperPath = 'supabase/functions/_shared/presenca-sync-run.ts';
+const edgePath = 'supabase/functions/sync-presenca-emusys/index.ts';
+
+async function carregarHelper() {
+  assert.ok(existsSync(helperPath), `helper ausente: ${helperPath}`);
+  return import(`../${helperPath}?t=${Date.now()}`);
+}
+
+function criarClienteRpc(iniciar) {
+  const chamadas = [];
+  const cliente = {
+    rpc: async (nome, parametros) => {
+      chamadas.push({ nome, parametros });
+      if (nome === 'presenca_sync_iniciar_v1') {
+        return { data: iniciar(parametros), error: null };
+      }
+      if (nome === 'presenca_sync_heartbeat_v1') {
+        return { data: { ok: true, ...parametros.p_contagens }, error: null };
+      }
+      if (nome === 'presenca_sync_finalizar_v1') {
+        return {
+          data: { ok: true, status: parametros.p_status },
+          error: null,
+        };
+      }
+      throw new Error(`RPC inesperada: ${nome}`);
+    },
+  };
+  return { chamadas, cliente };
+}
+
+const base = {
+  unidadeId: '368d47f5-2d88-4475-bc14-ba084a9a348e',
+  modo: 'presenca',
+  dataAlvo: '2026-08-26',
+  requestId: '20000000-0000-4000-8000-000000000001',
+  leaseSegundos: 180,
+};
+
+test('ordenarDatasSync prioriza hoje, ordena historico desc e remove duplicatas', async () => {
+  const { ordenarDatasSync } = await carregarHelper();
+
+  assert.deepEqual(
+    ordenarDatasSync(
+      ['2026-08-24', '2026-08-26', '2026-08-25', '2026-08-26', '2026-08-23'],
+      '2026-08-26',
+    ),
+    ['2026-08-26', '2026-08-25', '2026-08-24', '2026-08-23'],
+  );
+});
+
+test('adquire lease por unidade e data antes de iniciar qualquer acesso a API', async () => {
+  const { executarSyncPresencaComLease } = await carregarHelper();
+  const eventos = [];
+  const { cliente } = criarClienteRpc(() => {
+    eventos.push('lease');
+    return { adquirida: true, run_id: '30000000-0000-4000-8000-000000000001' };
+  });
+
+  await executarSyncPresencaComLease({
+    ...base,
+    cliente,
+    trabalho: async () => {
+      eventos.push('api');
+      return {
+        valor: 'ok',
+        contagens: { paginas_lidas: 1, aulas_lidas: 2, presencas_lidas: 3 },
+        snapshot: { aulas: 2, presencas: 3 },
+      };
+    },
+  });
+
+  assert.deepEqual(eventos, ['lease', 'api']);
+});
+
+test('execucao concorrente sem lease termina deduplicada e nao aplica linhas', async () => {
+  const { executarSyncPresencaComLease } = await carregarHelper();
+  let tentativas = 0;
+  let aplicacoes = 0;
+  const { cliente } = criarClienteRpc(() => {
+    tentativas += 1;
+    return tentativas === 1
+      ? { adquirida: true, run_id: '30000000-0000-4000-8000-000000000001' }
+      : { adquirida: false, motivo: 'lease_ativo' };
+  });
+  const trabalho = async () => {
+    aplicacoes += 1;
+    return {
+      valor: aplicacoes,
+      contagens: { paginas_lidas: 1, aulas_lidas: 1, presencas_lidas: 1 },
+      snapshot: { aplicacoes },
+    };
+  };
+
+  const [primeira, segunda] = await Promise.all([
+    executarSyncPresencaComLease({
+      ...base,
+      cliente,
+      trabalho,
+    }),
+    executarSyncPresencaComLease({
+      ...base,
+      requestId: '20000000-0000-4000-8000-000000000002',
+      cliente,
+      trabalho,
+    }),
+  ]);
+
+  assert.equal(primeira.status, 'concluida');
+  assert.deepEqual(segunda, { status: 'deduplicada', motivo: 'lease_ativo' });
+  assert.equal(aplicacoes, 1);
+});
+
+test('heartbeat acontece depois de cada pagina e conclusao somente depois do trabalho e hash', async () => {
+  const { executarSyncPresencaComLease } = await carregarHelper();
+  const eventos = [];
+  const { cliente, chamadas } = criarClienteRpc(() => ({
+    adquirida: true,
+    run_id: '30000000-0000-4000-8000-000000000001',
+  }));
+  const rpcOriginal = cliente.rpc;
+  cliente.rpc = async (nome, parametros) => {
+    if (nome === 'presenca_sync_heartbeat_v1') eventos.push('heartbeat');
+    if (nome === 'presenca_sync_finalizar_v1') eventos.push('finalizar');
+    return rpcOriginal(nome, parametros);
+  };
+
+  const resultado = await executarSyncPresencaComLease({
+    ...base,
+    cliente,
+    trabalho: async ({ heartbeat }) => {
+      eventos.push('pagina-1');
+      await heartbeat({ paginas_lidas: 1, aulas_lidas: 2, presencas_lidas: 4 });
+      eventos.push('pagina-2');
+      await heartbeat({ paginas_lidas: 2, aulas_lidas: 5, presencas_lidas: 9 });
+      eventos.push('upserts');
+      eventos.push('roster');
+      return {
+        valor: { aplicado: true },
+        contagens: { paginas_lidas: 2, aulas_lidas: 5, presencas_lidas: 9 },
+        snapshot: { paginas: 2, aulas: 5, presencas: 9 },
+      };
+    },
+  });
+
+  assert.deepEqual(eventos, [
+    'pagina-1',
+    'heartbeat',
+    'pagina-2',
+    'heartbeat',
+    'upserts',
+    'roster',
+    'heartbeat',
+    'finalizar',
+  ]);
+  assert.equal(resultado.status, 'concluida');
+  const finalizacao = chamadas.find(({ nome }) =>
+    nome === 'presenca_sync_finalizar_v1'
+  );
+  assert.equal(finalizacao.parametros.p_status, 'concluida');
+  assert.match(finalizacao.parametros.p_snapshot_hash, /^[a-f0-9]{64}$/u);
+  assert.deepEqual(finalizacao.parametros.p_contagens, {
+    paginas_lidas: 2,
+    aulas_lidas: 5,
+    presencas_lidas: 9,
+  });
+  assert.equal(finalizacao.parametros.p_erro_codigo, null);
+  assert.equal(
+    chamadas.filter(({ nome }) => nome === 'presenca_sync_heartbeat_v1').length,
+    3,
+  );
+});
+
+test('falha finaliza com codigo redigido sem token, payload ou PII', async () => {
+  const { executarSyncPresencaComLease } = await carregarHelper();
+  const { cliente, chamadas } = criarClienteRpc(() => ({
+    adquirida: true,
+    run_id: '30000000-0000-4000-8000-000000000001',
+  }));
+  const segredo = 'token-super-secreto';
+  const pii = 'Aluno Teste +55 21 99999-0000';
+
+  await assert.rejects(
+    executarSyncPresencaComLease({
+      ...base,
+      cliente,
+      trabalho: async ({ heartbeat }) => {
+        await heartbeat({ paginas_lidas: 1, aulas_lidas: 10, presencas_lidas: 0 });
+        throw new Error(`payload=${pii}; token=${segredo}`);
+      },
+    }),
+    /payload=/u,
+  );
+
+  const finalizacao = chamadas.find(({ nome }) =>
+    nome === 'presenca_sync_finalizar_v1'
+  );
+  assert.equal(finalizacao.parametros.p_status, 'falhou');
+  assert.equal(finalizacao.parametros.p_snapshot_hash, null);
+  assert.equal(finalizacao.parametros.p_erro_codigo, 'SYNC_FALHA_INTERNA');
+  const serializado = JSON.stringify(finalizacao.parametros);
+  assert.doesNotMatch(serializado, /token-super-secreto|Aluno Teste|99999-0000|payload=/u);
+});
+
+test('Edge nao devolve nem registra a mensagem interna potencialmente sensivel', () => {
+  const edge = readFileSync(edgePath, 'utf8');
+  const catchExterno = edge.slice(edge.lastIndexOf('} catch (error)'));
+
+  assert.match(edge, /redigirErroCodigo/u);
+  assert.match(catchExterno, /redigirErroCodigo\(error\)/u);
+  assert.doesNotMatch(
+    catchExterno,
+    /error instanceof Error\s*\?\s*error\.message/u,
+  );
+});
+
+test('Edge integra ordenacao, lease antes da API e heartbeat por pagina sem trocar autorizacao', () => {
+  const edge = readFileSync(edgePath, 'utf8');
+  const helper = readFileSync(helperPath, 'utf8');
+
+  assert.match(edge, /prepararExecucaoSyncPresenca/);
+  assert.match(edge, /ordenarDatasSync\(datasProcessar,\s*dataAtualBrt\(\)\)/u);
+  assert.match(edge, /executarSyncPresencaComLease\(\{/u);
+  assert.match(edge, /fetchAulasDia\([^)]*heartbeat/u);
+  assert.match(
+    edge,
+    /buscarPaginaAulasEmusys[\s\S]{0,500}await\s+onPagina\?\./u,
+  );
+  assert.match(helper, /presenca_sync_iniciar_v1/u);
+  assert.match(helper, /presenca_sync_heartbeat_v1/u);
+  assert.match(helper, /presenca_sync_finalizar_v1/u);
+  assert.ok(
+    edge.indexOf('prepararExecucaoSyncPresenca(')
+      < edge.indexOf('executarSyncPresencaComLease({'),
+    'autorizacao deve continuar antes do lease e dos sinks',
+  );
+});
+
+test('prioridade de execucao nao inverte a janela cronologica de metadados', () => {
+  const edge = readFileSync(edgePath, 'utf8');
+
+  assert.match(
+    edge,
+    /const datasCronologicas = \[\.\.\.datasProcessar\]\.sort\(\);[\s\S]{0,180}const dataInicioJanela = datasCronologicas\[0\];[\s\S]{0,120}const dataFimJanela = datasCronologicas\.at\(-1\)!;/u,
+  );
+  assert.match(
+    edge,
+    /data_inicio:\s*dataInicioJanela,[\s\S]{0,100}data_fim:\s*dataFimJanela/u,
+  );
+  assert.match(
+    edge,
+    /sincronizarMetadadosAulas\(\s*supabase,\s*unidadesProcessar,\s*dataInicioJanela,\s*dataFimJanela,?\s*\)/u,
+  );
+});

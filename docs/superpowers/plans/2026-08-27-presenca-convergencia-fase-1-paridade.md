@@ -480,16 +480,17 @@ git restore --source b263741c -- `
   tests/presencaSyncCoberturaPostgres.test.mjs `
   tests/presencaSyncCronContrato.test.mjs `
   tests/presencaSyncOrquestracao.test.mjs `
-  tests/presencaSyncSaudeOperacional.test.mjs `
   tests/reconciliacaoGradeSnapshotContrato.test.mjs
 ```
+
+> `tests/presencaSyncSaudeOperacional.test.mjs` foi adiado para a Fase 3, Task 6: ele lê `useSaudeCrons` e `TabSaudeCrons`, portanto não é backend-only.
 
 - [ ] **Step 3: Adicionar um script backend isolado**
 
 Modify `package.json` scripts by adding exactly:
 
 ```json
-"test:presenca-backend": "deno test tests/presencaAgentesAnaliticosCanonicos.test.ts && node --test tests/auditarPresencaCanonica.test.mjs tests/liaPresencaCanonicaDispatcher.test.mjs tests/presencaAgentesAnaliticosContrato.test.mjs tests/presencaAgentesCanonicos.test.mjs tests/presencaComandoAuditoriaPostgres.test.mjs tests/presencaComandoFabioContrato.test.mjs tests/presencaInterfacesConsultaV2Postgres.test.mjs tests/presencaKpisCanonicosV2.test.mjs tests/presencaKpisCanonicosV2Postgres.test.mjs tests/presencaKpisCanonicosV2ProducersPostgres.test.mjs tests/presencaLaTeacherCanonicaV2Postgres.test.mjs tests/presencaMigrationReleaseOrder.test.mjs tests/presencaOcorrenciaCanonicaV2Postgres.test.mjs tests/presencaPendenciasCanonicasV2Postgres.test.mjs tests/presencaPreviaReparoScript.test.mjs tests/presencaProfessorComandoAuditoriaPostgres.test.mjs tests/presencaRelatorioFrescorPostgres.test.mjs tests/presencaRolloutAdaptersPostgres.test.mjs tests/presencaRolloutConfigPostgres.test.mjs tests/presencaRolloutDetalhesPostgres.test.mjs tests/presencaRolloutFabioPeriodoPostgres.test.mjs tests/presencaRolloutKpisPostgres.test.mjs tests/presencaRosterOperacionalPostgres.test.mjs tests/presencaSegurancaFuncoesInternasPostgres.test.mjs tests/presencaShadowComparacaoPostgres.test.mjs tests/presencaSyncCoberturaPostgres.test.mjs tests/presencaSyncCronContrato.test.mjs tests/presencaSyncOrquestracao.test.mjs tests/presencaSyncSaudeOperacional.test.mjs tests/reconciliacaoGradeSnapshotContrato.test.mjs"
+"test:presenca-backend": "deno test tests/presencaAgentesAnaliticosCanonicos.test.ts && node --test tests/auditarPresencaCanonica.test.mjs tests/liaPresencaCanonicaDispatcher.test.mjs tests/presencaAgentesAnaliticosContrato.test.mjs tests/presencaAgentesCanonicos.test.mjs tests/presencaComandoAuditoriaPostgres.test.mjs tests/presencaComandoFabioContrato.test.mjs tests/presencaInterfacesConsultaV2Postgres.test.mjs tests/presencaKpisCanonicosV2.test.mjs tests/presencaKpisCanonicosV2Postgres.test.mjs tests/presencaKpisCanonicosV2ProducersPostgres.test.mjs tests/presencaLaTeacherCanonicaV2Postgres.test.mjs tests/presencaMigrationReleaseOrder.test.mjs tests/presencaOcorrenciaCanonicaV2Postgres.test.mjs tests/presencaPendenciasCanonicasV2Postgres.test.mjs tests/presencaPreviaReparoScript.test.mjs tests/presencaProfessorComandoAuditoriaPostgres.test.mjs tests/presencaRelatorioFrescorPostgres.test.mjs tests/presencaRolloutAdaptersPostgres.test.mjs tests/presencaRolloutConfigPostgres.test.mjs tests/presencaRolloutDetalhesPostgres.test.mjs tests/presencaRolloutFabioPeriodoPostgres.test.mjs tests/presencaRolloutKpisPostgres.test.mjs tests/presencaRosterOperacionalPostgres.test.mjs tests/presencaSegurancaFuncoesInternasPostgres.test.mjs tests/presencaShadowComparacaoPostgres.test.mjs tests/presencaSyncCoberturaPostgres.test.mjs tests/presencaSyncCronContrato.test.mjs tests/presencaSyncOrquestracao.test.mjs tests/reconciliacaoGradeSnapshotContrato.test.mjs"
 ```
 
 - [ ] **Step 4: Rodar testes focados**
