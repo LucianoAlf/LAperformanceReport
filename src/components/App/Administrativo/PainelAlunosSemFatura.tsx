@@ -34,22 +34,54 @@ function formatarMoeda(valor: number | null): string {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+/**
+ * Vencimento da última parcela, com quanto tempo faz que venceu.
+ *
+ * É a leitura que o painel devia dar de cara: contrato com a parcela vencida há
+ * meses e aula acontecendo é cobrança parada, não pendência do mês. A cor é de
+ * EXCEÇÃO — cinza é o normal, âmbar é "está acabando", rose é "já passou".
+ *
+ * Um único `estado` (nunca condições independentes) porque as classes conflitam
+ * entre si e a última venceria — o bug que já apareceu nos cards da Agenda.
+ */
+function cobrancaVencida(dias: number | null) {
+  if (dias == null) return { classe: 'text-gray-500', nota: null as string | null };
+  if (dias < 0) {
+    const n = Math.abs(dias);
+    return {
+      classe: 'text-rose-300',
+      nota: `venceu há ${n} ${n === 1 ? 'dia' : 'dias'}`,
+    };
+  }
+  if (dias <= 30) return { classe: 'text-amber-300', nota: `vence em ${dias} ${dias === 1 ? 'dia' : 'dias'}` };
+  return { classe: 'text-gray-300', nota: null };
+}
+
 const VALOR_ORDENACAO: Record<string, (a: AlunoSemFatura) => string | number | null> = {
   aluno: (a) => a.aluno_nome,
   curso: (a) => a.curso_nome,
   primeira_aula: (a) => a.data_primeira_aula,
   ultima_aula: (a) => a.data_ultima_aula,
+  primeira_parcela: (a) => a.data_primeira_fatura,
+  venc_fatura: (a) => a.venc_ultima_fatura,
   parcelas: (a) => a.nr_faturas,
   valor: (a) => a.valor_parcela,
   situacao: (a) => a.status_matricula,
 };
+
+/**
+ * Abre pelo vencimento mais antigo: quem está há mais tempo tendo aula sem
+ * cobrança emitida sobe para o topo. Contrato sem parcelas (`venc` nulo) cai para
+ * o fim sozinho — `compararParaOrdenacao` manda nulo para baixo nas duas direções.
+ */
+const ORDENACAO_INICIAL: SortConfig = { key: 'venc_fatura', direction: 'asc' };
 
 export function PainelAlunosSemFatura({ unidadeId }: { unidadeId: string }) {
   const competencias = useMemo(() => competenciasDisponiveis(), []);
   // Abre no mês corrente, que é o do meio das três — mesmo padrão da tela do Emusys.
   const [competencia, setCompetencia] = useState(competencias[1]);
   const [busca, setBusca] = useState('');
-  const [sortConfig, setSortConfig] = useState<SortConfig>(null);
+  const [sortConfig, setSortConfig] = useState<SortConfig>(ORDENACAO_INICIAL);
 
   const { alunos, loading, erro, ultimoSync } = useAlunosSemFatura({ unidadeId, competencia });
 
@@ -128,7 +160,9 @@ export function PainelAlunosSemFatura({ unidadeId }: { unidadeId: string }) {
           <b className="font-semibold text-gray-100">Tem aula em {rotuloCompetencia(competencia)} e não tem mensalidade emitida.</b>{' '}
           Conta apenas mensalidade — taxa de matrícula e cobrança avulsa não valem. Inclui quem já
           saiu (evadiu devendo é o caso que mais interessa cobrar) e exclui trancados e atividades
-          extras, igual à tela do Emusys.
+          extras, igual à tela do Emusys. A coluna <b className="font-semibold text-gray-100">Venc. últ. fatura</b>{' '}
+          diz quando a última parcela do contrato venceu — no vermelho, as parcelas acabaram e a
+          aula continuou (a contagem de dias é sempre a partir de hoje, mesmo olhando outro mês).
           {possiveisAVista > 0 && (
             <>
               {' '}⚠️ {possiveisAVista}{' '}
@@ -162,6 +196,8 @@ export function PainelAlunosSemFatura({ unidadeId }: { unidadeId: string }) {
                 <SortableHeader label="Curso" sortKey="curso" sortConfig={sortConfig} onSort={ordenarPor} className="text-left" />
                 <SortableHeader label="1ª aula" sortKey="primeira_aula" sortConfig={sortConfig} onSort={ordenarPor} className="text-left" />
                 <SortableHeader label="Última aula" sortKey="ultima_aula" sortConfig={sortConfig} onSort={ordenarPor} className="text-left" />
+                <SortableHeader label="1ª parcela" sortKey="primeira_parcela" sortConfig={sortConfig} onSort={ordenarPor} className="text-left" />
+                <SortableHeader label="Venc. últ. fatura" sortKey="venc_fatura" sortConfig={sortConfig} onSort={ordenarPor} className="text-left" />
                 <SortableHeader label="Parcelas" sortKey="parcelas" sortConfig={sortConfig} onSort={ordenarPor} className="text-right" />
                 <SortableHeader label="Valor" sortKey="valor" sortConfig={sortConfig} onSort={ordenarPor} className="text-right" />
                 <SortableHeader label="Situação" sortKey="situacao" sortConfig={sortConfig} onSort={ordenarPor} className="text-left" />
@@ -182,6 +218,24 @@ export function PainelAlunosSemFatura({ unidadeId }: { unidadeId: string }) {
                   <td className="px-4 py-3">{a.curso_nome ?? '—'}</td>
                   <td className="px-4 py-3">{formatarDataISO(a.data_primeira_aula)}</td>
                   <td className="px-4 py-3">{formatarDataISO(a.data_ultima_aula)}</td>
+                  <td className="px-4 py-3">{formatarDataISO(a.data_primeira_fatura)}</td>
+                  <td className="px-4 py-3">
+                    {a.venc_ultima_fatura == null ? (
+                      <span className="text-xs text-gray-500" title="Contrato sem parcelas no Emusys — não há vencimento a derivar">
+                        sem parcelas
+                      </span>
+                    ) : (
+                      (() => {
+                        const c = cobrancaVencida(a.dias_ate_venc_fatura);
+                        return (
+                          <span className={c.classe}>
+                            {formatarDataISO(a.venc_ultima_fatura)}
+                            {c.nota && <span className="ml-2 text-xs opacity-80">{c.nota}</span>}
+                          </span>
+                        );
+                      })()
+                    )}
+                  </td>
                   <td
                     className="px-4 py-3 text-right tabular-nums"
                     title={(a.nr_faturas ?? 0) === 1 ? 'Uma parcela só: pode ser pagamento à vista' : undefined}

@@ -24,6 +24,17 @@ export type AlunoSemFatura = {
   status_matricula: string | null;
   /** Parcelas do contrato. 1 com muitas aulas costuma ser pagamento à vista, não cobrança parada. */
   nr_faturas: number | null;
+  /** Vencimento da 1ª parcela do contrato vigente — desde quando esse contrato cobra. */
+  data_primeira_fatura: string | null;
+  /**
+   * Vencimento da ÚLTIMA parcela, derivado do contrato (mesma fórmula da aba de
+   * contratos vencendo — conferido, 0 divergências em 139 contratos que aparecem
+   * nas duas listas). No passado = as parcelas acabaram e a aula continuou.
+   * NULL quando o contrato não tem parcelas (`nr_faturas <= 0`).
+   */
+  venc_ultima_fatura: string | null;
+  /** Dias até `venc_ultima_fatura`, relativo a HOJE (negativo = já venceu). */
+  dias_ate_venc_fatura: number | null;
   valor_parcela: number | null;
   telefone: string | null;
   whatsapp: string | null;
@@ -63,6 +74,9 @@ export function useAlunosSemFatura({ unidadeId, competencia, ativo = true }: Par
     setLoading(true);
     setErro(null);
 
+    // Ordem do servidor é só o fallback: a tela abre ordenada pelo vencimento mais
+    // antigo (ver `ORDENACAO_INICIAL`), que é a fila de cobrança que o painel existe
+    // para produzir.
     let query = supabase
       .from('vw_alunos_sem_fatura_mes')
       .select('*')
