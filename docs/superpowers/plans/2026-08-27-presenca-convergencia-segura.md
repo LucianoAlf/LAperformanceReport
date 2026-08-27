@@ -20,7 +20,7 @@ Implementar somente de acordo com:
 ## Base e referências imutáveis
 
 - branch de execução: `codex/presenca-convergencia-segura`;
-- base aprovada no início do plano: `origin/main@2e292fe0bc9fef2b29c0dcc8cbcab854a9bfd11a`;
+- base revalidada antes da execução: `origin/main@779c360493c6d9a5ae1ad209e763128d6de87f15`;
 - correção operacional preservada: `08dca49c`;
 - implementação candidata: `b263741c`;
 - worktree candidata com WIP: `D:\2026\LA-performance-report\.worktrees\presenca-canonica-raiz`;
@@ -145,7 +145,7 @@ Create `docs/audits/2026-08-27-presenca-convergencia-execucao.md` with:
 
 ## Baseline
 
-- base aprovada da especificação: 2e292fe0bc9fef2b29c0dcc8cbcab854a9bfd11a
+- base revalidada da especificação: 779c360493c6d9a5ae1ad209e763128d6de87f15
 - Hugo 08dca49c é ancestral: sim
 - npm test: 41/41 + 9/9 + 413/413
 - npm run build: aprovado

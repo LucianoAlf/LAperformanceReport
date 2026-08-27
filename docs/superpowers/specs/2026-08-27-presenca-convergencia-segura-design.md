@@ -1,9 +1,9 @@
 # Convergência segura da presença canônica
 
 **Data:** 27/08/2026  
-**Status:** desenho aprovado; implementação ainda não iniciada  
+**Status:** desenho aprovado; execução autorizada e baseline em revalidação
 **Repositório:** LA Performance Report  
-**Base da convergência:** `origin/main` em `2e292fe0`  
+**Base da convergência:** `origin/main` em `779c3604`
 **Correção operacional preservada:** `08dca49c` (Hugo, PR #239)  
 **Projeto Supabase compartilhado:** `ouqwbbermlzqqvtqwlul`
 

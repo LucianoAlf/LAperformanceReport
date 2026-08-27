@@ -186,9 +186,10 @@ npx supabase migration new --help
 npx supabase migration list
 ```
 
-Expected: CLI responds; latest remote migration includes
-`20260827151832_agenda_chamada_volta_do_fechamento_de_bypass`. Stop if a newer
-remote version is not represented locally.
+Expected: CLI responds; the remote ledger includes Hugo's
+`20260827151832_agenda_chamada_volta_do_fechamento_de_bypass` and its current
+tip `20260827180000_repescagem_irmaos_guarda_e_texto`. Stop if a newer remote
+version is not represented locally.
 
 - [ ] **Step 2: Gerar o nome pelo CLI e capturar o caminho real**
 
@@ -198,12 +199,12 @@ Run:
 npx supabase migration new presenca_ausencia_bruta_fail_closed
 $migrationFile = (Get-ChildItem 'supabase/migrations/*_presenca_ausencia_bruta_fail_closed.sql' | Sort-Object Name | Select-Object -Last 1).FullName
 $migrationVersion = [IO.Path]::GetFileName($migrationFile).Split('_')[0]
-if ([Int64]$migrationVersion -le 20260827151832) { throw 'migration nova não ficou posterior ao Hugo' }
+if ([Int64]$migrationVersion -le 20260827180000) { throw 'migration nova não ficou posterior ao ledger remoto revalidado' }
 $migrationFile
 ```
 
 Expected: one CLI-generated file whose numeric prefix is greater than
-`20260827151832`.
+`20260827180000`.
 
 - [ ] **Step 3: Definir novamente somente o envelope legado**
 

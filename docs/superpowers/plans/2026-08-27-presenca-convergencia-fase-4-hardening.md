@@ -168,7 +168,7 @@ const files = suffixes.map((suffix) => migrations.find((name) => name.endsWith(s
 assert.equal(files.every(Boolean), true, `migrations ausentes: ${files}`);
 const versions = files.map((name) => Number(name.split('_')[0]));
 assert.deepEqual([...versions].sort((a, b) => a - b), versions);
-assert.equal(versions.every((version) => version > 20260827151832), true);
+assert.equal(versions.every((version) => version > 20260827180000), true);
 for (const forbidden of ['20260827143000', '20260827143100', '20260827143200', '20260827143300']) {
   assert.equal(migrations.some((name) => name.startsWith(forbidden)), false);
 }
