@@ -125,6 +125,7 @@ const MOTIVOS_ENCERRAMENTO_NORMAL: Record<string, string> = {
   respondeu_durante_a_espera: 'respondeu antes da repescagem',
   opt_out: 'pediu para não receber mais',
   ja_enviada: 'repescagem já enviada',
+  telefone_ja_respondeu: 'irmão(ã) já respondeu',
 };
 
 /** Rótulo do badge de repescagem (2º toque) por linha — status vem direto de `pesquisa_evasao_envios_fila`. */
