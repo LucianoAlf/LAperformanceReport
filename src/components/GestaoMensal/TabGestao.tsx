@@ -25,7 +25,7 @@ import {
   pagantesMapFromKPIsCanonicos,
   unidadesFromKPIsCanonicos,
 } from '@/lib/retencaoOperacionalCanonica';
-import { filtrarMovimentacoesRetencaoKpi } from '@/lib/atividadesExtras';
+import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 
 interface TabGestaoProps {
   ano: number;
@@ -494,7 +494,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           retencaoData = calcularRetencaoOperacionalCanonica({
             // Banda/coral fora de todos os tipos; bolsista/banda fora so das saidas.
             // Sem isto, "Total Evasoes" desta aba contava banda e bolsista.
-            movimentacoes: filtrarMovimentacoesRetencaoKpi(movimentacoesRetencaoEnriquecidas),
+            movimentacoes: filtrarRetencaoCanonica(movimentacoesRetencaoEnriquecidas),
             unidades: unidadesFromKPIsCanonicos(kpisAlunosCanonicosAtual.porUnidade),
             alunosPagantesPorUnidade: pagantesMapFromKPIsCanonicos(kpisAlunosCanonicosAtual.porUnidade),
             ano,
@@ -969,7 +969,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           const motivosCancelMap = new Map<string, number>();
           // Mesmo recorte do KPI: banda/coral e bolsista fora. O aluno precisa estar
           // resolvido ANTES do filtro, senao a regra nao enxerga curso nem tipo.
-          const evasoesParaKpi = filtrarMovimentacoesRetencaoKpi(
+          const evasoesParaKpi = filtrarRetencaoCanonica(
             (evasoesData || []).map((e: any) => ({ ...e, alunos: alunoMap.get(e.aluno_id) || null })),
           );
           evasoesParaKpi.forEach((e: any) => {

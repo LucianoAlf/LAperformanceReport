@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { DadosAtuais, DadosHistoricos } from '@/lib/simulador/tipos';
 import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
 import { isRenovacaoConfirmadaOperacional } from '@/lib/retencaoOperacionalCanonica';
+import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 import { fetchComercialOperacionalResumoV2 } from '@/hooks/useComercialOperacionalResumoV2';
 
 interface UseDadosHistoricosResult {
@@ -56,12 +57,14 @@ export function useDadosHistoricos(
           const fimMes = `${ano}-${String(mes).padStart(2, '0')}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}`;
           const { data: movimentosRenovacao } = await supabase
             .from('movimentacoes_admin')
-            .select('tipo, data, competencia_referencia, renovacao_status, renovacao_antecipada, valor_parcela_anterior, valor_parcela_novo, forma_pagamento_id, agente_comercial')
+            .select('tipo, data, competencia_referencia, renovacao_status, renovacao_antecipada, valor_parcela_anterior, valor_parcela_novo, forma_pagamento_id, agente_comercial, curso_id, cursos!left(nome, is_projeto_banda), alunos!left(tipo_matricula_id, curso_id, cursos!left(nome, is_projeto_banda))')
             .eq('unidade_id', unidadeId)
             .in('tipo', ['renovacao', 'nao_renovacao'])
             .or(`and(data.gte.${inicioMes},data.lte.${fimMes}),and(competencia_referencia.gte.${inicioMes},competencia_referencia.lte.${fimMes})`);
 
-          const movimentosDaCompetencia = (movimentosRenovacao || []).filter((mov: any) => {
+          // Banda e bolsista fora — sem isto a taxa do simulador de metas divergia
+          // da do Administrativo para a mesma competência.
+          const movimentosDaCompetencia = filtrarRetencaoCanonica(movimentosRenovacao).filter((mov: any) => {
             const competencia = String(mov.competencia_referencia || mov.data || '').slice(0, 7);
             return competencia === inicioMes.slice(0, 7);
           });

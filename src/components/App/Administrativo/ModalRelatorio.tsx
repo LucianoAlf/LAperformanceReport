@@ -513,7 +513,7 @@ export function ModalRelatorio({
     if (alunosIds.length > 0) {
       const { data: alunosData } = await supabase
         .from('alunos')
-        .select('id, classificacao, valor_parcela, data_matricula, data_saida, tipo_matricula_id, is_segundo_curso')
+        .select('id, classificacao, valor_parcela, data_matricula, data_saida, tipo_matricula_id, is_segundo_curso, curso_id, cursos!left(nome, is_projeto_banda)')
         .in('id', alunosIds);
       alunosMap = new Map((alunosData || []).map((a: any) => [String(a.id), a]));
     }
@@ -714,15 +714,19 @@ export function ModalRelatorio({
 
     const movRetencaoCanonicas = filtrarRetencaoCanonica(movDataComAlunos)
       .filter(isMovimentoBaseAlunosParaRetencao);
-    const trancamentos = movimentacoesEnriquecidas.filter(m => m.tipo === 'trancamento');
-    const renovacoesDaCompetencia = movimentacoesEnriquecidas.filter(m =>
+    // ⚠️ Estas listas saiam de `movimentacoesEnriquecidas` CRU — o mesmo defeito da
+    // aba Cancelamentos: o filtro existia acima e nao alcancava o que era contado.
+    // Banda e bolsista nao contam em retencao nenhuma (regra do Alf, 27/08).
+    const movEnriquecidasCanonicas = filtrarRetencaoCanonica(movimentacoesEnriquecidas);
+    const trancamentos = movEnriquecidasCanonicas.filter(m => m.tipo === 'trancamento');
+    const renovacoesDaCompetencia = movEnriquecidasCanonicas.filter(m =>
       m.tipo === 'renovacao' && isCompetenciaNoPeriodo(m, dataInicioMes, dataFimMes)
     );
     const renovacoes = renovacoesDaCompetencia.filter(isRenovacaoConfirmadaOperacional);
     const renovacoesPendentesConfirmacao = renovacoesDaCompetencia.filter(m => !isRenovacaoConfirmadaOperacional(m));
-    const naoRenovacoes = movimentacoesEnriquecidas.filter(m => m.tipo === 'nao_renovacao');
-    const avisosPrevios = movimentacoesEnriquecidas.filter(m => m.tipo === 'aviso_previo');
-    const evasoes = movimentacoesEnriquecidas.filter(m => m.tipo === 'evasao');
+    const naoRenovacoes = movEnriquecidasCanonicas.filter(m => m.tipo === 'nao_renovacao');
+    const avisosPrevios = movEnriquecidasCanonicas.filter(m => m.tipo === 'aviso_previo');
+    const evasoes = movEnriquecidasCanonicas.filter(m => m.tipo === 'evasao');
 
     let novosAlunosQuery = supabase
       .from('alunos')

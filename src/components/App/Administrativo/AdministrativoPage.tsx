@@ -64,7 +64,7 @@ import {
   isCompetenciaNoPeriodo,
   isRenovacaoAntecipada,
 } from '@/lib/renovacoesAntecipadas';
-import { filtrarRetencaoCanonica, filtrarEvasoesCanonicas } from '@/lib/atividadesExtras';
+import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 import { fetchAlunosAtivosAtuaisCanonicos } from '@/lib/estadoOperacionalAlunos';
 import {
   codigoTipoMatriculaAdministrativo,
@@ -634,13 +634,11 @@ export function AdministrativoPage() {
       const movRetencaoCanonicas = filtrarRetencaoCanonica(movDataComAlunos);
       const renovacoesTodas = movRetencaoCanonicas?.filter(m => m.tipo === 'renovacao') || [];
       const renovacoes = renovacoesTodas.filter(isRenovacaoConfirmadaOperacional);
-      // ⚠️ Evasão e não renovação usam filtrarEvasoesCanonicas (atividade extra +
-      // bolsista/banda por tipo de matrícula, §3.6/§3.7). Renovação e aviso prévio
-      // seguem só na canônica de retenção — a §5.4 não exclui bolsista da taxa de
-      // renovação, e mudar isso alteraria um indicador que ninguém pediu.
-      const naoRenovacoes = filtrarEvasoesCanonicas(movRetencaoCanonicas)?.filter(m => m.tipo === 'nao_renovacao') || [];
+      // `filtrarRetencaoCanonica` já tira atividade extra E bolsista/banda de TODOS
+      // os tipos — inclusive renovação, que é o que impedia o número de inflar.
+      const naoRenovacoes = movRetencaoCanonicas?.filter(m => m.tipo === 'nao_renovacao') || [];
       const avisosPrevios = movRetencaoCanonicas?.filter(m => m.tipo === 'aviso_previo') || [];
-      const evasoes = filtrarEvasoesCanonicas(movRetencaoCanonicas)?.filter(m => m.tipo === 'evasao') || [];
+      const evasoes = movRetencaoCanonicas?.filter(m => m.tipo === 'evasao') || [];
       const trancamentos = movDataComAlunos?.filter(m => m.tipo === 'trancamento') || [];
 
       // Enriquecer movimentações com nomes
@@ -1264,15 +1262,20 @@ export function AdministrativoPage() {
     m.tipo === 'renovacao' && isCompetenciaNoPeriodo(m, startDate, endDate)
   );
 
-  // Filtrar movimentações por tipo
-  const renovacoesDaCompetencia = movimentacoes.filter(isRenovacaoDaCompetencia);
+  // Filtrar movimentações por tipo.
+  // ⚠️ TUDO parte de `movimentacoesCanonicas`: banda e bolsista não contam em
+  // retenção nenhuma — nem em evasão, nem em renovação (regra do Alf, 27/08/2026:
+  // "não conta em nada, em nada... senão isso infla o programa deles"). Derivar de
+  // `movimentacoes` cru é o defeito que fez a aba Cancelamentos mostrar banda.
+  const movimentacoesCanonicas = filtrarRetencaoCanonica(movimentacoes);
+  const renovacoesDaCompetencia = movimentacoesCanonicas.filter(isRenovacaoDaCompetencia);
   const renovacoes = renovacoesDaCompetencia.filter(m => isRenovacaoConfirmadaOperacional(m));
   const renovacoesPendentesConfirmacao = renovacoesDaCompetencia.filter(m => !isRenovacaoConfirmadaOperacional(m));
-  const renovacoesAntecipadas = movimentacoes
+  const renovacoesAntecipadas = movimentacoesCanonicas
     .filter(m => m.tipo === 'renovacao')
     .filter(isLancadaNoPeriodo)
     .filter(m => isRenovacaoAntecipada(m) && competenciaReferenciaMovimento(m) > endDate);
-  const avisosPrevios = filtrarRetencaoCanonica(movimentacoes).filter(m => m.tipo === 'aviso_previo');
+  const avisosPrevios = movimentacoesCanonicas.filter(m => m.tipo === 'aviso_previo');
   // 🔴 Estas duas listas alimentam a ABA Cancelamentos e o contador dela — e eram as
   // ÚNICAS que saíam de `movimentacoes` CRU. O filtro de atividade extra existe desde
   // 16/06 (commit d1ae5052), mas só foi aplicado ao `resumo` calculado no fetch; a
@@ -1280,8 +1283,8 @@ export function AdministrativoPage() {
   // saída de banda lançada — até agosto/26, quando as ADMs encerraram os ciclos de
   // banda em lote (15 saídas de banda no mês, contra 0-6 nos meses anteriores) e o
   // Jhon (ADM CG) viu banda e bolsista dentro da lista de evasões.
-  const evasoes = filtrarEvasoesCanonicas(movimentacoes).filter(m => m.tipo === 'evasao');
-  const naoRenovacoes = filtrarEvasoesCanonicas(movimentacoes).filter(m => m.tipo === 'nao_renovacao');
+  const evasoes = movimentacoesCanonicas.filter(m => m.tipo === 'evasao');
+  const naoRenovacoes = movimentacoesCanonicas.filter(m => m.tipo === 'nao_renovacao');
   const trancamentos = movimentacoes.filter(m => m.tipo === 'trancamento');
   const transferencias = transferenciasAdministrativas;
   const transferenciasRecebidas = unidade === 'todos'

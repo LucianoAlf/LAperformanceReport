@@ -438,7 +438,7 @@ Evasão = movimentacoes_admin.tipo IN ('evasao', 'nao_renovacao')
   - Predicado canônico: **`movimentacao_conta_no_churn_v1(curso_id, tipo_matricula_id)`** (banco) e `contaNoChurn`/`filtrarMovimentacoesRetencaoKpi` em `src/lib/atividadesExtras.ts` (front). Mudou num, muda no outro.
   - ⚠️ **Não confundir com `is_movimentacao_admin_retencao_valida`**, que responde *"é evento real de retenção?"* e tem 17 consumidores — entre eles `criar_pesquisa_evasao` e `listar_evadidos_para_pesquisa`. Bolsista que sai **continua recebendo pesquisa de evasão**: são perguntas diferentes.
   - ⚠️ **Fail-open:** movimentação sem `aluno_id` (40 linhas em 2026, lançamento manual antigo) ou com tipo desconhecido **conta**. Sumir com evasão real em silêncio é pior que o defeito corrigido.
-  - ⚠️ **A taxa de renovação (§5.4) NÃO foi alterada** — bolsista que renova segue contando, porque a §5.4 não o exclui. A regra de churn vale só para `evasao`/`nao_renovacao`; atividade extra continua fora de **todos** os tipos.
+  - ⚠️ **Vale para TODOS os tipos de movimentação, inclusive renovação** (Alf, 27/08/2026: *"não conta em nada, em nada... senão isso infla o programa deles"*). E inflava mesmo — ver §5.4.
 - 🚫 Movimentação por nome, sem vínculo confiável por `aluno_id` / `matricula_id` / `emusys_matricula_id`, **não autoriza** classificar evasão.
 - 🚫 Não usar `evasoes_v2`. 🚫 As tabelas `evasoes` e `renovacoes` **não existem mais** — foram aposentadas.
 
@@ -471,6 +471,17 @@ taxa_renovacao = renovações / (renovações + não renovações) × 100
 - **Aviso prévio NÃO entra no denominador.**
 - Renovação só conta se **confirmada** (exclui `pendente_validacao`).
 - Movimentações de atividade extra ficam fora.
+- **Bolsista e matrícula de banda ficam fora dos DOIS lados** (numerador e denominador), desde 27/08/2026. Antes contavam, e a taxa saía inflada:
+
+| Unidade | Mês | Antes | Depois |
+|---|---|---:|---:|
+| CG | jul/26 | 81,8% | **77,8%** |
+| CG | ago/26 | 88,1% | **86,4%** |
+| REC | ago/26 | 89,3% | **87,2%** |
+| CG | jun/26 | 92,7% | **91,4%** |
+| BARRA | ago/26 | 93,3% | **92,3%** |
+
+  ⚠️ CG/jul cruzava a meta de 80% **por cima** só por causa disso — o indicador dizia "meta batida" onde a base real estava abaixo.
 - Meta: **≥ 80%**.
 - **Por professor:** `renovações / contratos_a_vencer × 100`.
 - 🚫 `renovacoes / total_alunos` ou `/ total_contratos` (no sentido de base inteira) é legado.
