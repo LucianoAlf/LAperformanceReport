@@ -19,6 +19,8 @@ const manifest = JSON.parse(
 
 const expectedProjectRef = 'ouqwbbermlzqqvtqwlul';
 const expectedCapturedAt = '2026-08-27';
+const expectedRemoteLedgerSha256 =
+  'faef4111b8b03b62ed99ccb57cfba3c887755a54b7749945353e5a40e5573fe9';
 const expectedHugoBypass = {
   version: '20260827151832',
   name: 'agenda_chamada_volta_do_fechamento_de_bypass',
@@ -43,6 +45,14 @@ function canonicalMd5(filePath) {
 
 function migrationFileName(item) {
   return `${item.version}_${item.name}.sql`;
+}
+
+function remoteLedgerSha256(migrations) {
+  const snapshot = migrations.map(
+    ({ version, name, statement_count, remote_statements_md5 }) =>
+      [version, name, statement_count, remote_statements_md5],
+  );
+  return createHash('sha256').update(JSON.stringify(snapshot), 'utf8').digest('hex');
 }
 
 function assertManifest(candidate) {
@@ -79,12 +89,12 @@ function assertManifest(candidate) {
   }
 
   const versions = candidate.migrations.map(({ version }) => version);
-  const names = candidate.migrations.map(({ name }) => name);
-  const fileNames = candidate.migrations.map(migrationFileName);
   assert.deepEqual(versions, expectedVersions, 'MANIFEST_VERSIONS_INVALID');
-  assert.equal(new Set(versions).size, 24, 'MANIFEST_VERSION_DUPLICATE');
-  assert.equal(new Set(names).size, 24, 'MANIFEST_NAME_DUPLICATE');
-  assert.equal(new Set(fileNames).size, 24, 'MANIFEST_FILENAME_DUPLICATE');
+  assert.equal(
+    remoteLedgerSha256(candidate.migrations),
+    expectedRemoteLedgerSha256,
+    'MANIFEST_REMOTE_LEDGER_SNAPSHOT_INVALID',
+  );
 }
 
 function assertRegularFileWithMd5(fileName, expectedMd5) {
@@ -120,6 +130,8 @@ test('as migrations publicadas mantêm paridade com o manifesto', () => {
     [/MANIFEST_CAPTURED_AT_INVALID/, (item) => { item.captured_at = '2026-08-28'; }],
     [/MANIFEST_STATEMENT_COUNT_INVALID/, (item) => { item.migrations[0].statement_count = 1.5; }],
     [/MANIFEST_HASH_INVALID/, (item) => { item.migrations[0].local_file_md5 = 'A'.repeat(32); }],
+    [/MANIFEST_REMOTE_LEDGER_SNAPSHOT_INVALID/, (item) => { item.migrations[0].statement_count += 1; }],
+    [/MANIFEST_REMOTE_LEDGER_SNAPSHOT_INVALID/, (item) => { item.migrations[0].remote_statements_md5 = '0'.repeat(32); }],
   ];
   for (const [expectedError, mutate] of mutations) {
     const candidate = cloneManifest();
