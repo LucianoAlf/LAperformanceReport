@@ -1,6 +1,6 @@
 # Contrato canônico v4 — Faturas de Alunos, LA Report e Sol
 
-**Data:** 17/08/2026 · **Atualizado:** 22/08/2026 (auditoria completa do módulo de caixa + PR #191)
+**Data:** 17/08/2026 · **Atualizado:** 26/08/2026 (runtime WhatsApp: PRs #229–#236, ver seção "Runtime da Sol no WhatsApp")
 **Projeto Supabase:** ouqwbbermlzqqvtqwlul
 **Fonte de verdade sincronizada:** Emusys → sync_run_items
 **Estado:** banco e exportador publicados. A prova visual autenticada da tela permanece pendente nesta data.
@@ -275,6 +275,127 @@ auditoria concedeu por engano. Correção de forma = `corrigir_movimento_v1`
 **Regra: antes de conceder EXECUTE em `sol_caixa_*`, conferir o ledger
 `MIGRATIONS_APLICADAS.md` e o STATUS mais recente no repo da Sol
 (github.com/LucianoAlf/sol-openclaw-backup) — grant ausente pode ser decisão.**
+
+## Runtime da Sol no WhatsApp — correções de 23 a 26/08 (PRs #229–#236)
+
+Esta seção é sobre o **runtime que fala com os grupos do financeiro**
+(`/home/sol/.hermes/profiles/sol/caixa-ingestao/caixa-financeiro.cjs` +
+`whatsapp-bridge/bridge.js` + `group-engagement.cjs`, todos na VPS **la-hq**),
+não sobre RPC/migration — é a camada que decide se a Sol fala, o que ela
+entende de uma legenda, e como ela monta o card antes do "pode". Cada item
+abaixo nasceu de um caso real reportado pelo Luciano com print do grupo, foi
+reproduzido em teste (`tests/sol-runtime/*.cjs`, roda contra o runtime vivo
+com `sendFn`/`lancarFn` fake — não manda WhatsApp nem grava caixa) e aplicado
+via patch idempotente na VPS antes de virar migration/PR versionado.
+
+**#229 — saída de caixa deixava de se apresentar como saída** (caso Mayra/CG,
+25/08). "Sol, teve uma saída em dinheiro — PG segurança R$100" virava card de
+**RECEBIMENTO** pedindo aluno; a correção dela ("Sol, foi saída") era lida
+como **nome do aluno**. A lógica de categorização sempre acertava
+(`saida_texto_preview_enviado` no log) — o card é que só sabia escrever
+"recebimento". Corrigido: card mostra "Saída de caixa"/"PAGAMENTO (saída)",
+nunca pergunta aluno numa saída, e o "pode" cai em `lancarSaidaFn` (nunca em
+`lancarFn`). Teste: `saida-operacional-e2e.cjs`.
+
+**#230 — rótulo humano manda, correção citada é tratada, caixa não vaza pro
+LLM** (caso Jhon/CG, 25/08). Legenda rotulava `aluno: Rafael Magalhães
+Barbosa`, a Sol montou o card com **Marcos Gabriel Fonseca Santo** (deduzido
+do pagador do PIX), e a correção humana **vazou pro LLM** — que respondeu
+"R$ 53,00", valor que não existe em lugar nenhum. Três correções juntas: (1)
+rótulo humano explícito na legenda ganha do pagador extraído mesmo sem a
+fatura canônica confirmar (aluno novo não TEM fatura); (2) correção que CITA
+o card alcança a pendência certa mesmo com nome plausível mas errado; (3)
+nasceu aqui a **guarda "não vaza pro LLM"**: pendência aberta + mensagem sem
+comando reconhecido (`acao:'nada'`) vira "Não entendi essa 🤔..." em vez de
+virar conversa livre sobre dinheiro. Teste: `rotulo-humano-e2e.cjs`.
+⚠️ Esta guarda, na forma como nasceu aqui, é a origem dos dois bugs seguintes
+(#231 e #235) — ela falava em cima de qualquer coisa enquanto havia pendência
+aberta, sem checar se a mensagem tinha relação com a Sol.
+
+**#231 — "não" passou a descartar de verdade; a guarda para de falar em cima
+de conversa normal** (caso Jhon/Aurora, CG, 25/08). 🔴 Causa: um texto MEU —
+a guarda de #230 oferecia "*não* para descartar" e **o runtime nunca tratou
+"não"**. A pendência ficava órfã e a legenda seguinte (comprovante da Aurora)
+era lida como correção dela — o card saiu com valor de OUTRO comprovante
+(R$ 300 do Rafael). Corrigido: `casarNao` descarta de fato (frase curta e
+inequívoca — "não e a parcela" **não é** descarte, é correção, tratada por
+outro fluxo); `ehConversaSemComando` reconhece "Certinho"/"valeu"/"obrigada"
+e a guarda fica calada em vez de responder "não entendi" a um elogio. Teste:
+`descarte-e-conversa-e2e.cjs`.
+
+**#232 — "puxa/manda o fechamento" vale como pedido; lojinha não pede aluno**
+(caso Vitória/Recreio, 25/08). O fechamento automático das 20:50 foi montado
+ANTES do lançamento da lojinha (R$142 entrou 20:50:16) e saiu sem ele; ela
+pediu duas vezes ("puxa o fechamento de caixa novamente", "manda o fechamento
+do caixa por favor") e a Sol ficou muda — `pedidoDiretoFechar` só reconhecia
+o VERBO "fechar/fecha/feche o caixa", não o SUBSTANTIVO com outro verbo. O
+caixa do Recreio ficou aberto. Corrigido: substantivo "fechamento" com verbo
+de pedido (puxa/manda/envia/gera/refaz/roda/atualiza/repete/reenvia) também
+conta. No mesmo caso, o card de venda de lojinha trazia "*ALUNO* · Venda
+bolsa de violino é pacote de Clips · ⚠️ Não tenho certeza de qual aluno é" —
+o "aluno" extraído era a própria descrição do produto. Lojinha sem comprador
+identificado deixa de mostrar a seção ALUNO (lojinha com comprador de verdade
+continua mostrando).
+
+**#233 — agradecimento ganha resposta antes de a Sol encerrar o turno** (caso
+Vitória/Recreio, 25/08 21:04). Depois do fechamento sair certo, ela escreveu
+"Obrigada sol 😊" e a Sol não respondeu nada — "Sol tá achando que o
+expediente acabou 😂". Não é bug de guarda (disparou 0 vezes); é a regra
+`encerraTurnoDaSol` do gate de conversa, que testa ANTES de `mencionaSol` e
+tem "obrigada" na lista de sinais de fim de turno. A intenção da regra
+continua certa (evitar a Sol tagarelando depois que o assunto acabou, cada
+mensagem que passa custa uma chamada de LLM) — o problema era o SILÊNCIO
+TOTAL. Corrigido sem remover a regra: agradecimento dirigido à Sol
+(`mencionaSol` verdadeiro) ganha "De nada! 🌻" curto e determinístico (sem
+LLM, custo zero) antes do turno fechar; despedida/dispensa ("tchau",
+"resolvido", "não precisa") continua calando, porque ali o silêncio é a
+resposta certa.
+
+**#235 — reenvio do comprovante não duplica mais a pendência; a guarda só
+fala quando a mensagem é pra Sol** (caso Arthur/Barra, 26/08 13:34-13:49). O
+OCR travou 45s duas vezes seguidas (ver #236 — é a mesma causa raiz), Arthur
+reenviou o MESMO comprovante, e isso criou **duas** pendências
+`manual_review_multi_student` com o mesmo valor. Quando ele mandou a correção
+EXATA que a Sol pediu ("Nome — R$ valor" para os dois alunos), o código só
+resolve correção quando há **uma** candidata ambígua — com duas, a mensagem
+caía em silêncio (`acao:'nada'`) sem sequer chamar o interpretador de nomes.
+E a guarda "não vaza pro LLM" (#230) interceptava esse `'nada'` sem checar
+relação com a Sol — um aside do Luciano no grupo ("Vou ver o que aconteceu
+ok?") levou "Não entendi essa..." minutos depois. Duas correções: (1)
+reenviar o mesmo comprovante (mesmo valor, tolerância 0.01, janela 15 min)
+**substitui** a pendência existente em vez de empilhar; (2) a guarda só
+dispara quando a mensagem plausivelmente se dirige à Sol —
+`groupEngagement.pareceChamarSol(texto)` (menciona o nome dela) OU
+`citaAlgumaPendencia(chatId, quotedMessageId)` (cita o card pendente, função
+nova). Teste: `multi-aluno-reenvio-e2e.cjs`.
+
+**#236 — OCR não trava mais quando roda em paralelo (raiz sistêmica da
+demora de 1-2 min por comprovante)**. Causa real do #235 e do padrão "Sol
+demora minutos pra responder" observado desde 21/08 (0% de timeout de OCR até
+20/08, medido em **100%** nas três unidades em 26/08). tesseract 5.x usa
+OpenMP e, sem limite, cada processo tenta usar TODAS as CPUs visíveis (4 na
+VPS). `ocrLocal` já roda PSM 6 e PSM 4 **em paralelo** por imagem — sem
+limite de thread os dois processos disputam as CPUs e **travam de verdade**
+(deadlock, não lentidão: nem depois de 50s nenhum fecha o stdout). O timeout
+de 45s do Node mata os dois e o fallback de visão assume — daí o atraso.
+Prova isolada na VPS: tesseract via bash na imagem real do Arthur = 1,07s; 2
+tesseract concorrentes sem limite via Node = nunca fecham (>50s); os mesmos 2
+com `OMP_THREAD_LIMIT=1` = <1s cada. Fix de uma linha: env
+`OMP_THREAD_LIMIT=1`/`OMP_NUM_THREADS=1` nas duas invocações de tesseract em
+`ocrLocal` (fallback de PDF via `spawnSync` e o par PSM 6/PSM 4 via
+`execFile`). Confirmado em produção na madrugada de 26→27/08: `caixa.log` só
+com `status:"ok"`/`"ok_parcial"`, durações 45-494ms, `ocr_timed_out:false`,
+nas duas unidades, sem um timeout sequer. Teste: `ocr-concorrencia-e2e.cjs`
+(gera a própria imagem via python3/PIL, roda a função REAL `ocrLocal`
+sozinha e depois em 2 chamadas concorrentes, falha se qualquer uma passar de
+10s).
+
+**Estado do runtime após #236:** bridge reiniciada 26/08 21:45:37 BRT, zero
+`init falhou` desde então; 10 testes em `tests/sol-runtime/` (mais os
+`_patch-*.cjs`/README documentando cada caso). Nenhuma destas correções mexeu
+em RPC/migration — são todas na camada de interpretação de mensagem/card do
+runtime; os contratos de `sol_caixa_*` descritos no resto deste documento
+continuam valendo como estavam em 22/08.
 
 ## Regras e reconciliação
 
