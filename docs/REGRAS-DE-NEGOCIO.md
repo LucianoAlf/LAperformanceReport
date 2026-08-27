@@ -434,6 +434,11 @@ Evasão = movimentacoes_admin.tipo IN ('evasao', 'nao_renovacao')
 - **Transferência interna entre unidades NÃO é evasão nem churn global da LA Music.** Para análise por unidade pode aparecer como saída da origem e entrada no destino, mas separada de evasão.
 - **Deduplicação:** `DISTINCT ON (lower(trim(aluno_nome)), unidade_id, ano, mês)`.
 - Movimentações de **atividade extra** (banda/coral) são excluídas via `is_movimentacao_admin_retencao_valida`.
+- **Bolsista e matrícula de banda também não contam** (§3.6: `BOLSISTA_INT`, `BOLSISTA_PARC` e `BANDA` têm "Churn ✘"; §3.7). Não é regra nova — mas até 27/08/2026 nenhuma implementação a aplicava, porque todas filtravam só por **curso** e bolsista em curso regular passava batido. O churn ficava aritmeticamente incoerente: `evasoes / alunos_pagantes`, com bolsista no numerador e fora do denominador por definição (`conta_como_pagante = false`).
+  - Predicado canônico: **`movimentacao_conta_no_churn_v1(curso_id, tipo_matricula_id)`** (banco) e `contaNoChurn`/`filtrarMovimentacoesRetencaoKpi` em `src/lib/atividadesExtras.ts` (front). Mudou num, muda no outro.
+  - ⚠️ **Não confundir com `is_movimentacao_admin_retencao_valida`**, que responde *"é evento real de retenção?"* e tem 17 consumidores — entre eles `criar_pesquisa_evasao` e `listar_evadidos_para_pesquisa`. Bolsista que sai **continua recebendo pesquisa de evasão**: são perguntas diferentes.
+  - ⚠️ **Fail-open:** movimentação sem `aluno_id` (40 linhas em 2026, lançamento manual antigo) ou com tipo desconhecido **conta**. Sumir com evasão real em silêncio é pior que o defeito corrigido.
+  - ⚠️ **A taxa de renovação (§5.4) NÃO foi alterada** — bolsista que renova segue contando, porque a §5.4 não o exclui. A regra de churn vale só para `evasao`/`nao_renovacao`; atividade extra continua fora de **todos** os tipos.
 - 🚫 Movimentação por nome, sem vínculo confiável por `aluno_id` / `matricula_id` / `emusys_matricula_id`, **não autoriza** classificar evasão.
 - 🚫 Não usar `evasoes_v2`. 🚫 As tabelas `evasoes` e `renovacoes` **não existem mais** — foram aposentadas.
 

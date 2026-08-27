@@ -25,6 +25,7 @@ import {
   pagantesMapFromKPIsCanonicos,
   unidadesFromKPIsCanonicos,
 } from '@/lib/retencaoOperacionalCanonica';
+import { filtrarMovimentacoesRetencaoKpi } from '@/lib/atividadesExtras';
 
 interface TabGestaoProps {
   ano: number;
@@ -427,7 +428,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           const avisoSaidaStartDate = `${avisoSaidaAno}-${String(avisoSaidaMes).padStart(2, '0')}-01`;
           const avisoSaidaEndDate = `${avisoSaidaAno}-${String(avisoSaidaMes).padStart(2, '0')}-${String(new Date(avisoSaidaAno, avisoSaidaMes, 0).getDate()).padStart(2, '0')}`;
           const selectRetencao = `
-            id, aluno_id, aluno_nome, unidade_id, tipo, data, mes_saida,
+            id, aluno_id, aluno_nome, unidade_id, tipo, data, mes_saida, curso_id,
             valor_parcela_evasao, valor_parcela_anterior, valor_parcela_novo,
             tempo_permanencia_meses,
             forma_pagamento_id, agente_comercial,
@@ -476,7 +477,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           if (alunoIdsRetencao.length > 0) {
             const { data: alunosRetencaoData, error: alunosRetencaoError } = await supabase
               .from('alunos')
-              .select('id, valor_parcela, data_matricula, data_saida, tipo_matricula_id, is_segundo_curso')
+              .select('id, valor_parcela, data_matricula, data_saida, tipo_matricula_id, is_segundo_curso, curso_id, cursos!left(nome, is_projeto_banda)')
               .in('id', alunoIdsRetencao);
             if (alunosRetencaoError) throw alunosRetencaoError;
 
@@ -491,7 +492,9 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           }));
 
           retencaoData = calcularRetencaoOperacionalCanonica({
-            movimentacoes: movimentacoesRetencaoEnriquecidas,
+            // Banda/coral fora de todos os tipos; bolsista/banda fora so das saidas.
+            // Sem isto, "Total Evasoes" desta aba contava banda e bolsista.
+            movimentacoes: filtrarMovimentacoesRetencaoKpi(movimentacoesRetencaoEnriquecidas),
             unidades: unidadesFromKPIsCanonicos(kpisAlunosCanonicosAtual.porUnidade),
             alunosPagantesPorUnidade: pagantesMapFromKPIsCanonicos(kpisAlunosCanonicosAtual.porUnidade),
             ano,
@@ -931,7 +934,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           let evasoesQuery = supabase
             .from('movimentacoes_admin')
             .select(`
-              id, aluno_id, professor_id, motivo_saida_id, tipo, unidade_id,
+              id, aluno_id, professor_id, motivo_saida_id, tipo, unidade_id, curso_id,
               motivos_saida!left(nome)
             `)
             .gte('data', startDate)
@@ -950,7 +953,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
 
           const [alunosRes, profsRes] = await Promise.all([
             alunoIds.length > 0
-              ? supabase.from('alunos').select('id, curso_id, cursos!left(nome)').in('id', alunoIds)
+              ? supabase.from('alunos').select('id, curso_id, tipo_matricula_id, cursos!left(nome, is_projeto_banda)').in('id', alunoIds)
               : { data: [] },
             profIds.length > 0
               ? supabase.from('professores').select('id, nome').in('id', profIds)
@@ -964,7 +967,12 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           const profEvasaoMap = new Map<string, { id: number; count: number }>();
           const motivosNaoRenovMap = new Map<string, number>();
           const motivosCancelMap = new Map<string, number>();
-          evasoesData?.forEach((e: any) => {
+          // Mesmo recorte do KPI: banda/coral e bolsista fora. O aluno precisa estar
+          // resolvido ANTES do filtro, senao a regra nao enxerga curso nem tipo.
+          const evasoesParaKpi = filtrarMovimentacoesRetencaoKpi(
+            (evasoesData || []).map((e: any) => ({ ...e, alunos: alunoMap.get(e.aluno_id) || null })),
+          );
+          evasoesParaKpi.forEach((e: any) => {
             // Curso via aluno
             const aluno = alunoMap.get(e.aluno_id);
             const cursoNome = aluno?.cursos?.nome || 'Não informado';

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Plus, Trash2, Save, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
+import { filtrarMovimentacoesRetencaoKpi } from '@/lib/atividadesExtras';
 import { useAuth } from '../../../contexts/AuthContext';
 import { cn } from '../../../lib/utils';
 import { EditableCell, DropdownCell, AutocompleteCell } from '../Spreadsheet';
@@ -101,8 +102,9 @@ export function PlanilhaRetencao() {
         .from('movimentacoes_admin')
         .select(`
           id, unidade_id, data, aluno_id, aluno_nome, professor_id, valor_parcela_evasao, valor_parcela_anterior,
-          tipo, tipo_evasao, motivo_saida_id, situacao_pagamento, data_prevista_saida, observacoes,
-          alunos(nome)
+          tipo, tipo_evasao, motivo_saida_id, situacao_pagamento, data_prevista_saida, observacoes, curso_id,
+          cursos(nome, is_projeto_banda),
+          alunos(nome, tipo_matricula_id, curso_id, cursos(nome, is_projeto_banda))
         `)
         .in('tipo', ['evasao', 'nao_renovacao', 'aviso_previo'])
         .order('data', { ascending: false });
@@ -131,8 +133,11 @@ export function PlanilhaRetencao() {
       const allRows: RetencaoRow[] = [];
 
       // Processar evasões
+      // Banda/coral e bolsista ficam fora da planilha de retenção (§3.5/§3.6/§3.7):
+      // esta tela é a leitura operacional das saídas, não um extrato de tudo que foi
+      // lançado. Aviso prévio atravessa o filtro de bolsista de propósito.
       if (evasoesRes.data) {
-        evasoesRes.data.forEach((e: any) => {
+        filtrarMovimentacoesRetencaoKpi(evasoesRes.data).forEach((e: any) => {
           allRows.push({
             id: e.id,
             tipo: e.tipo,
