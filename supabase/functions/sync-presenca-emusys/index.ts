@@ -58,6 +58,7 @@ import {
   type ModoSyncPresenca,
 } from '../_shared/sync-presenca-authorization.ts';
 import {
+  dataAlvoSyncNaJanela,
   executarSyncPresencaComLease,
   ordenarDatasSync,
   redigirErroCodigo,
@@ -494,7 +495,7 @@ async function sincronizarMetadadosAulas(
       cliente: supabase,
       unidadeId: unidade.id,
       modo: 'metadados',
-      dataAlvo: dataAtualBrt(),
+      dataAlvo: dataAlvoSyncNaJanela(dataInicio, dataFim, dataAtualBrt()),
       requestId: requestIdSync,
       leaseSegundos: 900,
       trabalho: async ({ heartbeat, syncRunId }) => {

@@ -58,6 +58,18 @@ test('ordenarDatasSync prioriza hoje, ordena historico desc e remove duplicatas'
   );
 });
 
+test('data da lease permanece dentro da janela reconciliada', async () => {
+  const { dataAlvoSyncNaJanela } = await carregarHelper();
+
+  assert.equal(dataAlvoSyncNaJanela('2026-08-20', '2026-08-30', '2026-08-27'), '2026-08-27');
+  assert.equal(dataAlvoSyncNaJanela('2026-09-01', '2026-09-10', '2026-08-27'), '2026-09-01');
+  assert.equal(dataAlvoSyncNaJanela('2026-07-01', '2026-07-10', '2026-08-27'), '2026-07-10');
+  assert.throws(
+    () => dataAlvoSyncNaJanela('2026-08-30', '2026-08-20', '2026-08-27'),
+    /janela de sync invalida/u,
+  );
+});
+
 test('adquire lease por unidade e data antes de iniciar qualquer acesso a API', async () => {
   const { executarSyncPresencaComLease } = await carregarHelper();
   const eventos = [];

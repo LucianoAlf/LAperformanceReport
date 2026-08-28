@@ -104,6 +104,17 @@ export function ordenarDatasSync(datas: string[], hoje: string): string[] {
   });
 }
 
+export function dataAlvoSyncNaJanela(
+  dataInicio: string,
+  dataFim: string,
+  referencia: string,
+): string {
+  if (dataInicio > dataFim) throw new Error('janela de sync invalida');
+  if (referencia < dataInicio) return dataInicio;
+  if (referencia > dataFim) return dataFim;
+  return referencia;
+}
+
 export function redigirErroCodigo(error: unknown): string {
   if (error instanceof DOMException && error.name === 'AbortError') {
     return 'SYNC_TIMEOUT';
