@@ -1,4 +1,8 @@
 import { type AlunoNaAulaEmusys, criarAlunoChave } from "./emusys-aulas.ts";
+import {
+  executarComRetrySqlPresenca,
+  type OpcoesRetry,
+} from "./presenca-db-retry.ts";
 
 export interface AulaSnapshotGradeFonte {
   id: number;
@@ -212,19 +216,28 @@ export function montarSnapshotGradeEmusys(
 export async function reconciliarGradeSnapshotEmusysV1(
   supabase: ClienteRpc,
   params: ParametrosReconciliacaoGrade,
+  opcoesRetry: OpcoesRetry = {},
 ): Promise<ResultadoReconciliacaoGradeSnapshot> {
-  const { data, error } = await supabase.rpc(
-    "reconciliar_grade_snapshot_emusys_v1",
-    {
-      p_unidade_id: params.unidadeId,
-      p_data_inicio: params.dataInicio,
-      p_data_fim: params.dataFim,
-      p_snapshot: params.snapshot,
-      p_dry_run: params.dryRun ?? false,
-    },
+  const tentativa = await executarComRetrySqlPresenca(
+    () =>
+      supabase.rpc(
+        "reconciliar_grade_snapshot_emusys_v1",
+        {
+          p_unidade_id: params.unidadeId,
+          p_data_inicio: params.dataInicio,
+          p_data_fim: params.dataFim,
+          p_snapshot: params.snapshot,
+          p_dry_run: params.dryRun ?? false,
+        },
+      ),
+    opcoesRetry,
   );
+  const { data, error } = tentativa.resultado;
 
   if (error) {
+    if (tentativa.transitorioEsgotado) {
+      throw new Error("PRESENCA_SYNC_CONCORRENCIA_ESGOTADA");
+    }
     throw new Error("PRESENCA_SYNC_RECONCILIACAO_ROSTER_FALHOU");
   }
 
@@ -239,18 +252,24 @@ export async function reconciliarGradeSnapshotEmusysV1(
 export async function reconciliarGradeSnapshotEmusys(
   supabase: ClienteRpc,
   params: ParametrosReconciliacaoGrade & { syncRunId: string },
+  opcoesRetry: OpcoesRetry = {},
 ): Promise<ResultadoReconciliacaoDual> {
-  const { data, error } = await supabase.rpc(
-    "reconciliar_grade_snapshot_emusys_v2",
-    {
-      p_sync_run_id: params.syncRunId,
-      p_unidade_id: params.unidadeId,
-      p_data_inicio: params.dataInicio,
-      p_data_fim: params.dataFim,
-      p_snapshot: params.snapshot,
-      p_dry_run: params.dryRun ?? false,
-    },
+  const tentativa = await executarComRetrySqlPresenca(
+    () =>
+      supabase.rpc(
+        "reconciliar_grade_snapshot_emusys_v2",
+        {
+          p_sync_run_id: params.syncRunId,
+          p_unidade_id: params.unidadeId,
+          p_data_inicio: params.dataInicio,
+          p_data_fim: params.dataFim,
+          p_snapshot: params.snapshot,
+          p_dry_run: params.dryRun ?? false,
+        },
+      ),
+    opcoesRetry,
   );
+  const { data, error } = tentativa.resultado;
 
   if (!error) {
     return {
@@ -260,11 +279,18 @@ export async function reconciliarGradeSnapshotEmusys(
   }
 
   if (!erroIndicaFuncaoAusente(error)) {
+    if (tentativa.transitorioEsgotado) {
+      throw new Error("PRESENCA_SYNC_CONCORRENCIA_ESGOTADA");
+    }
     throw new Error("PRESENCA_SYNC_RECONCILIACAO_ROSTER_FALHOU");
   }
 
   return {
     contrato: "v1_fallback",
-    resultado: await reconciliarGradeSnapshotEmusysV1(supabase, params),
+    resultado: await reconciliarGradeSnapshotEmusysV1(
+      supabase,
+      params,
+      opcoesRetry,
+    ),
   };
 }

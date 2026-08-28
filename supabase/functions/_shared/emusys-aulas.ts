@@ -1,3 +1,5 @@
+import { executarComRetrySqlPresenca } from './presenca-db-retry.ts';
+
 export const EMUSYS_API_BASE = "https://api.emusys.com.br/v1";
 
 export interface EmusysPaginacao {
@@ -263,15 +265,23 @@ export async function gravarVinculosAulaAlunos(
   for (let offset = 0; offset < vinculos.length; offset += tamanhoLote) {
     const lote = vinculos.slice(offset, offset + tamanhoLote);
 
-    const { error } = await supabase
-      .from("aula_alunos_emusys")
-      .upsert(lote, {
-        onConflict: "aula_emusys_id,aluno_chave",
-        ignoreDuplicates: false,
-      });
+    const tentativa = await executarComRetrySqlPresenca(() =>
+      supabase
+        .from("aula_alunos_emusys")
+        .upsert(lote, {
+          onConflict: "aula_emusys_id,aluno_chave",
+          ignoreDuplicates: false,
+        })
+    );
+    const { error } = tentativa.resultado;
 
-    if (error) erros.push(error.message);
-    else gravados += lote.length;
+    if (error) {
+      erros.push(
+        tentativa.transitorioEsgotado
+          ? 'PRESENCA_SYNC_CONCORRENCIA_ESGOTADA'
+          : 'PRESENCA_SYNC_ROSTER_GRAVACAO_FALHOU',
+      );
+    } else gravados += lote.length;
   }
 
   return { gravados, erros };

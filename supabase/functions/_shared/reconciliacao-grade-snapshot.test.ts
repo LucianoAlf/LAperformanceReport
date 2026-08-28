@@ -315,8 +315,6 @@ Deno.test("validacao autorizacao timeout assinatura e rede nunca acionam fallbac
   const erros = [
     { code: "22023", message: "snapshot invalido" },
     { code: "42501", message: "sem autorizacao" },
-    { code: "57014", message: "statement timeout" },
-    { code: "40001", message: "run substituida" },
     { code: "PGRST203", message: "assinatura ambigua" },
     { message: "Could not find function sem codigo confiavel" },
   ];
@@ -336,6 +334,39 @@ Deno.test("validacao autorizacao timeout assinatura e rede nunca acionam fallbac
       "PRESENCA_SYNC_RECONCILIACAO_ROSTER_FALHOU",
     );
     assertEquals(chamadas, ["reconciliar_grade_snapshot_emusys_v2"]);
+  }
+
+  for (const error of [
+    { code: "57014", message: "statement timeout" },
+    { code: "40001", message: "serializacao concorrente" },
+  ]) {
+    const chamadas: string[] = [];
+    const cliente = {
+      rpc: async (nome: string) => {
+        chamadas.push(nome);
+        return { data: null, error };
+      },
+    };
+
+    await assertRejects(
+      () =>
+        reconciliarGradeSnapshotEmusys(
+          cliente,
+          PARAMS_RECONCILIACAO,
+          {
+            maxTentativas: 2,
+            atrasoBaseMs: 1,
+            atrasoMaximoMs: 1,
+            dormir: async () => {},
+          },
+        ),
+      Error,
+      "PRESENCA_SYNC_CONCORRENCIA_ESGOTADA",
+    );
+    assertEquals(chamadas, [
+      "reconciliar_grade_snapshot_emusys_v2",
+      "reconciliar_grade_snapshot_emusys_v2",
+    ]);
   }
 
   const chamadasRede: string[] = [];

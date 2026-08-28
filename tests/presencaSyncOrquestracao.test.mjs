@@ -132,6 +132,69 @@ test('execucao concorrente sem lease termina deduplicada e nao aplica linhas', a
   assert.equal(aplicacoes, 1);
 });
 
+test('lease de outro modo espera e adquire sem descartar o alvo', async () => {
+  const { executarSyncPresencaComLease } = await carregarHelper();
+  let tentativas = 0;
+  let aplicacoes = 0;
+  const esperas = [];
+  const { cliente } = criarClienteRpc(() => {
+    tentativas += 1;
+    return tentativas < 3
+      ? { adquirida: false, motivo: 'lease_unidade_ativo' }
+      : { adquirida: true, run_id: '30000000-0000-4000-8000-000000000009' };
+  });
+
+  const resultado = await executarSyncPresencaComLease({
+    ...base,
+    cliente,
+    maxTentativasLeaseUnidade: 4,
+    atrasoLeaseUnidadeMs: 25,
+    dormirLeaseUnidade: async (ms) => { esperas.push(ms); },
+    trabalho: async () => {
+      aplicacoes += 1;
+      return {
+        valor: 'feito',
+        contagens: { paginas_lidas: 1, aulas_lidas: 1, presencas_lidas: 1 },
+        snapshot: { feito: true },
+      };
+    },
+  });
+
+  assert.equal(resultado.status, 'concluida');
+  assert.equal(tentativas, 3);
+  assert.deepEqual(esperas, [25, 25]);
+  assert.equal(aplicacoes, 1);
+});
+
+test('lease de outro modo esgotada falha fechada e nunca declara deduplicacao', async () => {
+  const { executarSyncPresencaComLease, redigirErroCodigo } = await carregarHelper();
+  let aplicacoes = 0;
+  const { cliente } = criarClienteRpc(() => ({
+    adquirida: false,
+    motivo: 'lease_unidade_ativo',
+  }));
+
+  await assert.rejects(
+    executarSyncPresencaComLease({
+      ...base,
+      cliente,
+      maxTentativasLeaseUnidade: 3,
+      atrasoLeaseUnidadeMs: 1,
+      dormirLeaseUnidade: async () => {},
+      trabalho: async () => {
+        aplicacoes += 1;
+        throw new Error('nao deveria executar');
+      },
+    }),
+    (error) => {
+      assert.equal(error.message, 'PRESENCA_SYNC_UNIDADE_OCUPADA');
+      assert.equal(redigirErroCodigo(error), 'PRESENCA_SYNC_UNIDADE_OCUPADA');
+      return true;
+    },
+  );
+  assert.equal(aplicacoes, 0);
+});
+
 test('heartbeat e finalizacao acontecem somente depois da reconciliacao com o mesmo run', async () => {
   const { executarSyncPresencaComLease } = await carregarHelper();
   const eventos = [];

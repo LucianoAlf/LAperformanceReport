@@ -30,6 +30,7 @@ import {
   redigirErroCodigo,
   type ContagensPresencaSync,
 } from '../_shared/presenca-sync-run.ts';
+import { executarComRetrySqlPresenca } from '../_shared/presenca-db-retry.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -233,12 +234,20 @@ serve(async (req: Request) => {
           const idPorEmusysId = new Map<number, number>();
           for (let offset = 0; offset < linhas.length; offset += chunkSize) {
             const lote = linhas.slice(offset, offset + chunkSize);
-            const { data: loteGravado, error } = await supabase
-              .from('aulas_emusys')
-              .upsert(lote, { onConflict: 'emusys_id,unidade_id', ignoreDuplicates: false })
-              .select('id, emusys_id');
+            const tentativaAulas = await executarComRetrySqlPresenca<
+              Array<{ id: number; emusys_id: number }> | null
+            >(() =>
+              supabase
+                .from('aulas_emusys')
+                .upsert(lote, { onConflict: 'emusys_id,unidade_id', ignoreDuplicates: false })
+                .select('id, emusys_id')
+            );
+            const { data: loteGravado, error } = tentativaAulas.resultado;
             if (error) {
               console.error('[sync-grade-futura] Upsert de aula falhou; reconciliacao preservada');
+              if (tentativaAulas.transitorioEsgotado) {
+                throw new Error('PRESENCA_SYNC_CONCORRENCIA_ESGOTADA');
+              }
               throw new Error('PRESENCA_SYNC_AULA_GRAVACAO_FALHOU');
             }
             gravadas += lote.length;
@@ -261,6 +270,9 @@ serve(async (req: Request) => {
           const resultado = await gravarVinculosAulaAlunos(supabase, vinculos, chunkSize);
           if (resultado.erros.length > 0) {
             console.error('[sync-grade-futura] Upsert de roster falhou; reconciliacao preservada');
+            if (resultado.erros.includes('PRESENCA_SYNC_CONCORRENCIA_ESGOTADA')) {
+              throw new Error('PRESENCA_SYNC_CONCORRENCIA_ESGOTADA');
+            }
             throw new Error('PRESENCA_SYNC_ROSTER_GRAVACAO_FALHOU');
           }
 
