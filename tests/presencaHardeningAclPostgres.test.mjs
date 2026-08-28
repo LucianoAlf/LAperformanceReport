@@ -549,6 +549,10 @@ test('retry existente chega ao apply e ganha recibo terminal quando o roster dei
   assert.equal(recibo.status, 'falhou');
   assert.equal(recibo.aplicados, 0);
   assert.equal(recibo.rejeitados, 2);
+  assert.deepEqual(recibo.erros, [
+    { aluno_id: 101, codigo: 'ROSTER_NAO_CONFIRMADO' },
+    { aluno_id: 102, codigo: 'ROSTER_NAO_CONFIRMADO' },
+  ]);
   assert.equal(
     psql(`select status from public.presenca_comandos where request_id='${requestId}';`),
     'falhou',

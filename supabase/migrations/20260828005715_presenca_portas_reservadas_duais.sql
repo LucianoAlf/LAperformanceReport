@@ -131,7 +131,7 @@ begin
           and roster.aluno_id = ausente.aluno_id
      )
   ) then
-    raise exception 'aluno_ausente_fora_do_roster_v2' using errcode = '22023';
+    raise exception 'aluno_ausente_fora_do_roster' using errcode = '22023';
   end if;
 
   select jsonb_agg(
@@ -148,7 +148,7 @@ begin
    where roster.aula_emusys_id = v_aula.id;
 
   if v_itens is null then
-    raise exception 'roster_v2_nao_publicado' using errcode = '23514';
+    raise exception 'roster_nao_confirmado' using errcode = '23514';
   end if;
 
   return public.fn_criar_comando_presenca_core_v2(
@@ -295,7 +295,7 @@ begin
           and roster.aluno_id = ausente.aluno_id
      )
   ) then
-    raise exception 'aluno_ausente_fora_do_roster_v2' using errcode = '22023';
+    raise exception 'aluno_ausente_fora_do_roster' using errcode = '22023';
   end if;
 
   select jsonb_agg(
@@ -312,7 +312,7 @@ begin
    where roster.aula_emusys_id = v_aula.id;
 
   if v_itens is null then
-    raise exception 'roster_v2_nao_publicado' using errcode = '23514';
+    raise exception 'roster_nao_confirmado' using errcode = '23514';
   end if;
 
   return public.fn_criar_comando_presenca_core_v2(
@@ -339,6 +339,8 @@ declare
   v_evento_seq integer;
   v_rejeitados integer := 0;
   v_sqlstate text;
+  v_mensagem text;
+  v_erro_codigo text;
 begin
   if coalesce(auth.role(), '') not in ('authenticated', 'service_role') then
     raise exception 'papel_nao_autorizado' using errcode = '42501';
@@ -370,7 +372,19 @@ begin
       or sqlstate '23505'
       or sqlstate '23514'
       or sqlstate '42501' then
-      get stacked diagnostics v_sqlstate = returned_sqlstate;
+      get stacked diagnostics
+        v_sqlstate = returned_sqlstate,
+        v_mensagem = message_text;
+      v_erro_codigo := case
+        when v_mensagem in (
+          'roster_v2_nao_publicado',
+          'roster_v2_identidade_duplicada',
+          'payload_diverge_do_roster_v2',
+          'item_fora_do_roster_v2'
+        ) then 'ROSTER_NAO_CONFIRMADO'
+        when v_mensagem = 'slot_cancelado_ou_justificado' then 'AULA_CANCELADA'
+        else v_sqlstate
+      end;
 
       select coalesce(max(e.sequencia), 0)::integer
         into v_evento_seq
@@ -405,7 +419,7 @@ begin
           v_comando.unidade_id,
           v_item.aula_id,
           v_item.aluno_id,
-          v_sqlstate
+          v_erro_codigo
         );
         v_rejeitados := v_rejeitados + 1;
       end loop;
@@ -439,7 +453,7 @@ begin
         v_comando.usuario_id,
         v_comando.unidade_id,
         v_comando.aula_id,
-        v_sqlstate
+        v_erro_codigo
       );
 
       return public.app_status_comando_presenca_v1(p_request_id);
