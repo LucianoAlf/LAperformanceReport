@@ -215,3 +215,30 @@ pode nascer do que a PESSOA escreveu, nunca do OCR") e do rótulo humano do #230
 "2 alunos") continua roteando para revisão; **sem rótulo na legenda, o OCR ainda
 protege** (o teste cobre os dois). A trava contra dividir dinheiro sozinha fica
 intacta — ela só deixa de ser acionada por nome de terceiro impresso no recibo.
+
+## legenda-reenvio-e-valor-ocr-e2e.cjs
+Round 2 dos refrigerantes (Recreio, 28/08 16:48-16:50) — três bugs encadeados:
+
+1. **R$ 5,01 no lugar de R$ 34.** `extrairValorOcr` delegava a `extrairValor`, que pega
+   o primeiro "R$ <número>" do texto. No OCR real: "Subtotal R$ **y** 34,00" (ruído),
+   "Valor Total R$" (número perdido na quebra de linha) — e o primeiro R$ LIMPO era
+   **"Federal R$ 5,01"**, a linha de tributos da Lei da Transparência, presente em TODO
+   cupom fiscal do país. Agora: linhas de tributo saem antes, e o total rotulado é
+   procurado com tolerância a ruído entre o rótulo e o número.
+2. **Sequestro da legenda.** `anexarTextoAoLote` é o ÚLTIMO recurso do handler; a
+   correção-de-tipo rodava antes e roubava a legenda do reenvio (imagem e texto chegam
+   como DOIS eventos, 260ms). Agora a correção respeita lote de mídia aberto.
+3. **Correção mantinha valor/forma velhos.** "2 refrigerantes R$34 ... dinheiro"
+   convertia a pendência mas ficava com o 5,01 herdado. Agora a frase corrige os dois.
+
+⚠️ **A lição de teste que este arquivo carrega:** o teste anterior mandava UM evento
+fundido (imagem+legenda juntas) — e a bridge real entrega DOIS handle() concorrentes.
+Este teste reproduz a entrega real (media sem await + texto 250ms depois) e é por isso
+que pega o que o outro não pegava. Simular o formato real da entrega não é opcional.
+
+## vinculo-lancamento-e2e — SKIP declarado quando a fonte canônica está stale
+Os casos 2/3 dependem do frescor do sync de faturas EM TEMPO REAL. Com o sync caído
+(28/08: `statement timeout` em série na competência de agosto), o V3 **corretamente**
+recusa o "pode" ("fonte oficial indisponível" / "não vou lançar com pode") — runtime
+certo, ambiente quebrado. O teste agora imprime `⚠️ SKIP` com o motivo em vez de falhar:
+vermelho por dependência externa ensina a equipe a ignorar a suíte.
