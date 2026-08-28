@@ -147,3 +147,46 @@ sinal de que o oversubscription do OpenMP voltou.
 
 ⚠️ Roda fora do padrão dos outros testes desta pasta: não simula mensagem/handler, mede
 tempo de execução da função de OCR isolada. É teste de infraestrutura, não de fluxo.
+
+## saida-despesa-compra-e2e.cjs
+Caso Rose+Vitória/Recreio (28/08, R$ 34,00 de 2 refrigerantes). Três tentativas, nenhuma
+funcionou — e não era falta de jeito da equipe: **não existia palavra que resolvesse**.
+
+🔴 CAUSA: nenhuma categoria de saída além de `seguranca` era alcançável pela legenda.
+`_categoriaFromCaption` e `_categoriaExplicitaFromCaption` não tinham **uma única regra**
+que devolvesse `despesa`/`retirada`/`troco` — e a primeira ainda cai em `parcela` por
+padrão. `categoriaEhSaida` aceita os quatro valores, mas ninguém produzia três deles.
+Comprar refrigerante, material, lanche ou pagar um Uber era impossível de lançar.
+
+Agravante: a categoria do LLM (`lojinha` na 1ª tentativa, `outro` na 3ª) era o valor
+inicial e a legenda humana só entrava como **fallback**, então mesmo escrevendo
+"Despesa (saída)" o palpite do modelo vencia. Agora a legenda é override.
+
+⚠️ A detecção sai da **legenda**, nunca do OCR: o cupom fiscal tem "COMPRA", "PAGAMENTO"
+e "TROCO" no corpo (o teste prova que o cupom sozinho classificaria como saída). Mesma
+armadilha do "Chave de segurança" no rodapé do PDF do Santander (24/08).
+
+Cobre: legenda de compra vira "Saída de caixa"/"PAGAMENTO (saída)"; não mostra ALUNO; o
+`pode` cai em `lancarSaidaFn` com `categoria: despesa`; parcela normal **continua**
+recebimento; e o nome tardio recusa frase de comando ("descrição é refrigerantes Pode"
+virava nome de aluno no caso real).
+
+## Dois bugs achados enquanto se testava isto
+
+**`nsu` sem fronteira em `SINAL_CARTAO`.** "Nota Fiscal de Co**nsu**midor Eletronica" —
+que está em TODO cupom de NFC-e — casava, e `extrairCartao` **sobrescreve** a forma. O
+cupom dizia "FORMA DE PAGAMENTO DINHEIRO" e a Sol registrava **cartão crédito**.
+"consumo" e "re**visa**o" idem. Grave porque saída de cofre exige dinheiro.
+
+**Correção tardia de TIPO não existia.** Dava para corrigir nome, valor e forma, mas não
+para dizer "isso é saída, não recebimento" — a Vitória escreveu a frase mais explícita
+possível e levou "Não entendi essa". Agora converte a pendência e zera o aluno, que era
+justamente o campo que vinha recebendo lixo.
+
+⚠️ Ao ensinar o fluxo de texto puro a reconhecer despesa, ele passou a capturar a **frase
+de correção** que vem depois de um card e reabria um caso sem valor — regressão real,
+pega pelo `saida-operacional-e2e`. Por isso o fluxo de texto só abre caso novo **quando
+não há pendência aberta**. Com card na mesa, frase de saída é correção.
+
+⚠️ `saida-operacional-e2e.cjs` **não tem asserção e nunca envia "pode"** — é diagnóstico.
+A última linha dele é sempre `lancou SAIDA? nao`. Julgar a suíte por **exit code**.
