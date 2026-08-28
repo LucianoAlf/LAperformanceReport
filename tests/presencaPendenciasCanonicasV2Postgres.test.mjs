@@ -9,6 +9,7 @@ const IMAGE = process.env.PRESENCA_PENDENCIAS_V2_POSTGRES_IMAGE || 'postgres:17-
 const ocorrenciaMigration = join(ROOT, 'supabase', 'migrations', '20260827030100_presenca_ocorrencia_canonica_v2.sql');
 const pendenciasMigration = join(ROOT, 'supabase', 'migrations', '20260827031000_presenca_pendencias_canonicas_v2.sql');
 const agentesMigration = join(ROOT, 'supabase', 'migrations', '20260827031200_presenca_contexto_agentes_v1.sql');
+const pendenciasEscopoMigration = join(ROOT, 'supabase', 'migrations', '20260828085000_presenca_pendencias_view_escopo.sql');
 const U_A = '11111111-1111-1111-1111-111111111111';
 const U_B = '22222222-2222-2222-2222-222222222222';
 const U_C = '33333333-3333-3333-3333-333333333333';
@@ -46,6 +47,9 @@ const schema = String.raw`
   create schema auth;
   create function auth.uid() returns uuid language sql stable as $$
     select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid
+  $$;
+  create function auth.role() returns text language sql stable as $$
+    select nullif(current_setting('request.jwt.claim.role',true),'')
   $$;
   create table public.unidades(id uuid primary key, nome text not null);
   create table public.professores(id integer primary key, nome text not null);
@@ -200,6 +204,17 @@ test('Agenda e Sol compartilham membros e bloqueiam roster ou sync inseguros', (
     psql(container, readFileSync(ocorrenciaMigration, 'utf8'));
     psql(container, readFileSync(pendenciasMigration, 'utf8'));
     psql(container, readFileSync(agentesMigration, 'utf8'));
+    psql(container, readFileSync(pendenciasEscopoMigration, 'utf8'));
+
+    const pendenciasDef = psql(container, String.raw`
+      select pg_get_functiondef(
+        'public.fn_presenca_pendencias_do_dia_v2(uuid,date)'::regprocedure
+      );
+    `);
+    assert.match(
+      pendenciasDef,
+      /o\.slot_key\s*=\s*p\.slot_key[\s\S]*o\.unidade_id\s*=\s*p\.unidade_id[\s\S]*o\.data_aula\s*=\s*p_data/iu,
+    );
 
     const a = lastJson(psql(container, `select public.fn_presenca_pendencias_do_dia_v2('${U_A}','2026-08-25');`));
     assert.equal(a.dados_status, 'atualizados');
