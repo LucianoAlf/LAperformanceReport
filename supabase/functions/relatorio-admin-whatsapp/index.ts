@@ -127,8 +127,31 @@ function isAtividadeExtraAcademica(row: any): boolean {
   );
 }
 
+// ⚠️ Espelho de `src/lib/atividadesExtras.ts`. Esta cópia existe porque a edge é
+// self-contained (Deno, sem alias `@/`). Mudou lá, muda aqui — foi por divergirem
+// que o relatório do WhatsApp contava banda/bolsista depois do front já não contar.
+const TIPOS_MATRICULA_FORA_DOS_KPIS = new Set(['BOLSISTA_INT', 'BOLSISTA_PARC', 'BANDA']);
+const TIPOS_MATRICULA_FORA_DOS_KPIS_IDS = new Set([3, 4, 5]);
+
+function isBolsistaOuBandaMatricula(row: any): boolean {
+  const aluno = firstRelation<any>(row?.alunos) || row;
+
+  const codigo = normalizarTexto(
+    firstRelation<any>(aluno?.tipos_matricula)?.codigo ?? aluno?.tipo_matricula_codigo,
+  ).toUpperCase();
+  if (codigo) return TIPOS_MATRICULA_FORA_DOS_KPIS.has(codigo);
+
+  const id = Number(aluno?.tipo_matricula_id);
+  if (Number.isFinite(id) && id > 0) return TIPOS_MATRICULA_FORA_DOS_KPIS_IDS.has(id);
+
+  // Fail-open: sem saber o tipo, a movimentação conta.
+  return false;
+}
+
+// Bolsista e banda não contam em KPI nenhum — nem saída, nem renovação
+// (regra do Alf, 27/08/2026). Vale para todos os tipos de movimentação.
 function filtrarRetencaoCanonica<T extends any>(rows: T[] | null | undefined): T[] {
-  return (rows || []).filter(row => !isAtividadeExtraAcademica(row));
+  return (rows || []).filter(row => !isAtividadeExtraAcademica(row) && !isBolsistaOuBandaMatricula(row));
 }
 
 async function anexarCursosMovimentacoes(supabase: any, rows: any[] | null | undefined): Promise<any[]> {

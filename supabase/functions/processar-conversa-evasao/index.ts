@@ -214,6 +214,45 @@ serve(async (req: Request) => {
           throw new Error("analise_falhou");
         }
 
+        // Classificacao semantica -- so quando a resposta FECHOU.
+        //
+        // Aqui, e nao na chegada de cada mensagem: o classificador julga o
+        // texto CONSOLIDADO. Um fragmento isolado ("era isso") nao parece
+        // resposta, o conjunto e -- foi o caso do Ricardo, 3 mensagens em 48s
+        // cujo motivo real da evasao so aparece na terceira.
+        //
+        // Fire-and-forget de proposito: ele e OBSERVADOR, sem veto sobre o
+        // registro. Se a chamada falhar, a resposta ja foi registrada do mesmo
+        // jeito -- o que se perde e a opiniao dele, nao o feedback. Por isso o
+        // erro e logado (nunca engolido em silencio) mas nao derruba a rodada.
+        if (pronta) {
+          try {
+            const { error: erroClassificacao } = await supabase.functions.invoke(
+              "classificar-resposta-evasao",
+              {
+                body: {
+                  pesquisa_id: pesquisaId,
+                  analise_versao: analise.versao,
+                  texto: decisao.textoConsolidado,
+                  registrado_como_resposta: true,
+                },
+                headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
+              },
+            );
+            if (erroClassificacao) {
+              console.error("processar-conversa-evasao: classificacao falhou", {
+                pesquisaId,
+                erro: erroClassificacao.message,
+              });
+            }
+          } catch (erro) {
+            console.error("processar-conversa-evasao: classificacao indisponivel", {
+              pesquisaId,
+              erro: erro instanceof Error ? erro.message : "desconhecido",
+            });
+          }
+        }
+
         if (analise.versao === ultimaVersao) {
           const agoraIso = new Date().toISOString();
           const patch: Record<string, unknown> = {

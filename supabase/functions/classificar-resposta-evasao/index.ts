@@ -148,13 +148,21 @@ serve(async (req: Request) => {
   // Mesmo padrão da fila de repescagem: o token vive no vault e é validado no
   // banco, nunca em env var (env inexistente = 401 silencioso com o pg_cron
   // marcando `succeeded`).
+  // Dois chamadores legitimos, duas formas:
+  //   `x-sync-token` -> chamada manual/cron (validado NO BANCO, nunca em env);
+  //   service_role no Authorization -> `functions.invoke` de outra edge, que e
+  //   como `processar-conversa-evasao` ja chama `transcrever-mensagem-evasao`.
   const token = req.headers.get("x-sync-token");
-  if (!token) return json({ error: "nao_autorizado" }, 401);
-  const { data: tokenOk, error: erroToken } = await supabase.rpc(
-    "validar_token_sync_presenca_interno_v1",
-    { p_token: token },
-  );
-  if (erroToken || tokenOk !== true) return json({ error: "nao_autorizado" }, 401);
+  const bearer = (req.headers.get("authorization") ?? "").replace(/^Bearer /i, "");
+  let autorizado = bearer !== "" && bearer === SERVICE_ROLE_KEY;
+  if (!autorizado && token) {
+    const { data: tokenOk, error: erroToken } = await supabase.rpc(
+      "validar_token_sync_presenca_interno_v1",
+      { p_token: token },
+    );
+    autorizado = !erroToken && tokenOk === true;
+  }
+  if (!autorizado) return json({ error: "nao_autorizado" }, 401);
 
   let corpo: Record<string, unknown>;
   try {
