@@ -269,6 +269,37 @@ test('falha finaliza com codigo redigido sem token, payload ou PII', async () =>
   assert.doesNotMatch(serializado, /token-super-secreto|Aluno Teste|99999-0000|payload=/u);
 });
 
+test('falha upstream do Emusys fica distinguivel sem expor detalhe da origem', async () => {
+  const { executarSyncPresencaComLease } = await carregarHelper();
+  const { cliente, chamadas } = criarClienteRpc(() => ({
+    adquirida: true,
+    run_id: '30000000-0000-4000-8000-000000000001',
+  }));
+  const upstream = new Error('FALHA_UPSTREAM_EMUSYS');
+  upstream.name = 'SnapshotUpstreamError';
+
+  await assert.rejects(
+    executarSyncPresencaComLease({
+      ...base,
+      cliente,
+      trabalho: async () => {
+        throw upstream;
+      },
+    }),
+    /FALHA_UPSTREAM_EMUSYS/u,
+  );
+
+  const finalizacao = chamadas.find(({ nome }) =>
+    nome === 'presenca_sync_finalizar_v1'
+  );
+  assert.equal(finalizacao.parametros.p_status, 'falhou');
+  assert.equal(finalizacao.parametros.p_erro_codigo, 'EMUSYS_HTTP_FALHOU');
+  assert.doesNotMatch(
+    JSON.stringify(finalizacao.parametros),
+    /FALHA_UPSTREAM_EMUSYS|SnapshotUpstreamError/u,
+  );
+});
+
 test('falha de sink autoritativo nunca finaliza cobertura como concluida', async () => {
   const { executarSyncPresencaComLease } = await carregarHelper();
   const { cliente, chamadas } = criarClienteRpc(() => ({
