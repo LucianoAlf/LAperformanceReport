@@ -126,3 +126,20 @@ test('migrations da Fase 4 nao reconstroem funcoes por introspeccao ou captura g
     }
   }
 });
+
+test('helpers privados do LA Teacher sao marcados internos sem abrir ACL', () => {
+  const [name] = filesForSuffixes(['presenca_la_teacher_helpers_internos.sql']);
+  const sql = readFileSync(`supabase/migrations/${name}`, 'utf8');
+
+  for (const signature of [
+    /comment\s+on\s+function\s+public\.app_minha_agenda_sessao_publicacao_legado_v1\s*\(\s*date\s*\)\s+is\s+'\[interna\]/iu,
+    /comment\s+on\s+function\s+public\.app_registrar_presencas_aula_canonica_v2_interno\s*\(\s*uuid\s*,\s*integer\s*,\s*integer\[\]\s*\)\s+is\s+'\[interna\]/iu,
+    /comment\s+on\s+function\s+public\.app_registrar_presencas_aula_publicacao_legado_v1\s*\(\s*integer\s*,\s*integer\[\]\s*,\s*uuid\s*\)\s+is\s+'\[interna\]/iu,
+  ]) {
+    assert.match(sql, signature);
+  }
+
+  assert.doesNotMatch(sql, /grant\s+execute[\s\S]*authenticated/iu);
+  assert.doesNotMatch(sql, /create\s+(?:or\s+replace\s+)?function/iu);
+  assert.doesNotMatch(sql, /\b(?:insert|update|delete)\b/iu);
+});
