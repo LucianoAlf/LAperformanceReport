@@ -122,6 +122,13 @@ export function redigirErroCodigo(error: unknown): string {
   if (isRecord(error) && error.name === 'TimeoutError') {
     return 'SYNC_TIMEOUT';
   }
+  if (
+    error instanceof Error &&
+    error.name === 'SnapshotUpstreamError' &&
+    error.message === 'FALHA_UPSTREAM_EMUSYS'
+  ) {
+    return 'EMUSYS_HTTP_FALHOU';
+  }
   if (error instanceof Error && CODIGOS_SEGUROS.has(error.message)) {
     return error.message;
   }
