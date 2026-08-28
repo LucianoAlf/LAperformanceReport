@@ -1,17 +1,15 @@
-import { useMemo, useState, useCallback as useCb } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CalendarX, Check, Clock, FileText, X, XCircle } from 'lucide-react';
 import { useAgendaSemana } from '@/hooks/useAgendaSemana';
-import type { AulaAgenda, AlunoAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
+import type { AulaAgenda, AlunoAgenda, LeadExperimentalAgenda, PresencaEnvelopeAgenda } from '@/hooks/useAgendaDia';
 import { aulaJaOcorreu } from '@/lib/agenda';
 import {
-  alunoSemDestino,
-  chamadaCompleta,
-  estadoDoAluno,
-  leadExperimentalSemDestino,
-  type EstadoChamada,
-} from './chamadaUtils';
+  adaptarPresencaCanonica,
+  resumirAulaPresencaCanonica,
+  type PresencaCanonicaEstado,
+} from '@/lib/presencaCanonica';
 import type { ItemChamada } from './useChamadaAcoes';
 import { cn } from '@/lib/utils';
 
@@ -25,8 +23,9 @@ interface Props {
   onCancelarAula: (aula: AulaAgenda) => void;
   onReagendarAula: (aula: AulaAgenda) => void;
   onAbrirDia: (data: string) => void;
-  onAbrirDrawer: (aula: AulaAgenda, data: string) => void;
+  onAbrirDrawer: (aula: AulaAgenda, data: string, presenca: PresencaEnvelopeAgenda) => void;
   onAbrirDrawerLead: (lead: LeadExperimentalAgenda, aula: AulaAgenda) => void;
+  refreshToken: number;
 }
 
 /**
@@ -35,9 +34,8 @@ interface Props {
  * mostram os alunos com os mesmos 3 botoes (Presente/Falta/Justif.) da visao
  * Dia, para que a equipe possa fazer a chamada sem trocar de aba.
  *
- * Apos cada acao (registrar/cancelar/reagendar), as colunas sao remontadas
- * via `contadorRecarga` para buscar dados frescos — o `recarregar` do
- * ChamadaView so recarrega o dia selecionado, nao as colunas da semana.
+ * A semana busca dados frescos somente quando o orquestrador confirma que uma
+ * acao aplicou alteracao; pendencia ou falha nao dispara leitura prematura.
  */
 export function ChamadaSemana({
   data,
@@ -51,66 +49,40 @@ export function ChamadaSemana({
   onAbrirDia,
   onAbrirDrawer,
   onAbrirDrawerLead,
+  refreshToken,
 }: Props) {
   // Uma unica chamada RPC para a semana inteira (seg-sab).
   // Antes: 6 useAgendaDia separados, 6 chamadas RPC, 6x mais lento.
-  const { aulasDoDia, dias, carregando } = useAgendaSemana({ data, unidadeId });
+  const { aulasDoDia, presencaDoDia, dias, carregando, recarregar: recarregarSemana } = useAgendaSemana({ data, unidadeId });
 
   const hoje = format(new Date(), 'yyyy-MM-dd');
+  const ultimoRefreshAplicado = useRef(refreshToken);
 
-  // Contador de recarga: incrementa apos cada acao para forcar a remontagem
-  // das ColunaDia (que faz fetch fresco sem cache stale).
-  const [contadorRecarga, setContadorRecarga] = useState(0);
-  const forcarRecarga = useCb(() => setContadorRecarga((c) => c + 1), []);
-
-  // Wrappers que chamam a acao e depois forcam recarga da semana inteira.
-  const registrarERecarregar = useCb(
-    (itens: ItemChamada[]) => {
-      onRegistrar(itens);
-      forcarRecarga();
-    },
-    [onRegistrar, forcarRecarga],
-  );
-  const justificarERecarregar = useCb(
-    (aluno: AlunoAgenda, aula: AulaAgenda) => {
-      onJustificar(aluno, aula);
-      forcarRecarga();
-    },
-    [onJustificar, forcarRecarga],
-  );
-  const cancelarERecarregar = useCb(
-    (aula: AulaAgenda) => {
-      onCancelarAula(aula);
-      forcarRecarga();
-    },
-    [onCancelarAula, forcarRecarga],
-  );
-  const reagendarERecarregar = useCb(
-    (aula: AulaAgenda) => {
-      onReagendarAula(aula);
-      forcarRecarga();
-    },
-    [onReagendarAula, forcarRecarga],
-  );
+  useEffect(() => {
+    if (refreshToken === ultimoRefreshAplicado.current) return;
+    ultimoRefreshAplicado.current = refreshToken;
+    void recarregarSemana();
+  }, [recarregarSemana, refreshToken]);
 
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
       {dias.map((dia) => (
         <ColunaDia
-          key={`${dia}-${contadorRecarga}`}
+          key={dia}
           dia={dia}
           aulas={aulasDoDia(dia)}
+          presenca={presencaDoDia(dia)}
           carregando={carregando}
           ehHoje={dia === hoje}
           ehSelecionado={dia === data}
           salvando={salvando}
-          onRegistrar={registrarERecarregar}
+          onRegistrar={onRegistrar}
           onRegistrarExperimental={onRegistrarExperimental}
-          onJustificar={justificarERecarregar}
-          onCancelarAula={cancelarERecarregar}
-          onReagendarAula={reagendarERecarregar}
+          onJustificar={onJustificar}
+          onCancelarAula={onCancelarAula}
+          onReagendarAula={onReagendarAula}
           onAbrirDia={() => onAbrirDia(dia)}
-          onAbrirDrawer={(aula) => onAbrirDrawer(aula, dia)}
+          onAbrirDrawer={(aula) => onAbrirDrawer(aula, dia, presencaDoDia(dia))}
           onAbrirDrawerLead={onAbrirDrawerLead}
         />
       ))}
@@ -121,6 +93,7 @@ export function ChamadaSemana({
 function ColunaDia({
   dia,
   aulas,
+  presenca,
   carregando,
   ehHoje,
   ehSelecionado,
@@ -136,6 +109,7 @@ function ColunaDia({
 }: {
   dia: string;
   aulas: AulaAgenda[];
+  presenca: PresencaEnvelopeAgenda;
   carregando: boolean;
   ehHoje: boolean;
   ehSelecionado: boolean;
@@ -153,21 +127,13 @@ function ColunaDia({
   const dataObj = parseISO(dia);
 
   const totalAulas = aulas.length;
-  const concluidas = aulas.filter((a) => chamadaCompleta(a, dia, agora)).length;
-  const pendencias = useMemo(() => {
-    let count = 0;
-    for (const aula of aulas) {
-      if (aula.cancelada) continue;
-      if (!aulaJaOcorreu(dia, aula.hora_fim, agora)) continue;
-      for (const aluno of aula.alunos) {
-        if (aluno.aluno_id != null && alunoSemDestino(aula, aluno, dia, agora)) count++;
-      }
-      for (const lead of aula.experimental_leads ?? []) {
-        if (leadExperimentalSemDestino(aula, lead, dia, agora)) count++;
-      }
-    }
-    return count;
-  }, [aulas, dia, agora]);
+  const resumos = useMemo(() => aulas.map((aula) => resumirAulaPresencaCanonica({
+    aula,
+    envelope: presenca,
+    ocorrida: aulaJaOcorreu(dia, aula.hora_fim, agora),
+  })), [aulas, dia, agora, presenca]);
+  const concluidas = resumos.filter((resumo) => resumo.completa).length;
+  const pendencias = resumos.reduce((total, resumo) => total + resumo.pendencias, 0);
 
   const rotuloDia = format(dataObj, 'EEE', { locale: ptBR }).replace('-feira', '');
   const numDia = format(dataObj, 'd');
@@ -220,6 +186,7 @@ function ColunaDia({
                 aula={aula}
                 dia={dia}
                 agora={agora}
+                presenca={presenca}
                 salvando={salvando}
                 onRegistrar={onRegistrar}
                 onRegistrarExperimental={onRegistrarExperimental}
@@ -255,6 +222,7 @@ function CardAulaSemana({
   aula,
   dia,
   agora,
+  presenca,
   salvando,
   onRegistrar,
   onRegistrarExperimental,
@@ -267,6 +235,7 @@ function CardAulaSemana({
   aula: AulaAgenda;
   dia: string;
   agora: Date;
+  presenca: PresencaEnvelopeAgenda;
   salvando: boolean;
   onRegistrar: (itens: ItemChamada[]) => void;
   onRegistrarExperimental: (experimentalId: number, status: 'experimental_realizada' | 'experimental_faltou') => void;
@@ -277,17 +246,14 @@ function CardAulaSemana({
   onAbrirDrawerLead: (lead: LeadExperimentalAgenda, aula: AulaAgenda) => void;
 }) {
   const vinculados = aula.alunos.filter((a) => a.aluno_id != null);
-  const contagens = vinculados.reduce(
-    (acc, a) => {
-      acc[estadoDoAluno(a)] += 1;
-      return acc;
-    },
-    { presente: 0, falta: 0, falta_justificada: 0, indeterminado: 0 } as Record<string, number>,
-  );
-  const completa = chamadaCompleta(aula, dia, agora);
   const ocorrida = aulaJaOcorreu(dia, aula.hora_fim, agora);
+  const resumo = resumirAulaPresencaCanonica({ aula, envelope: presenca, ocorrida });
+  const contagens = resumo;
+  const completa = resumo.completa;
   const leads = aula.experimental_leads ?? [];
-  const podeOperar = !aula.cancelada && (vinculados.length > 0 || leads.length > 0);
+  const podeOperar = presenca.dados_status === 'atualizados'
+    && !aula.cancelada
+    && (vinculados.length > 0 || leads.length > 0);
   const total = vinculados.length;
 
   const marcar = (aluno: AlunoAgenda, status: 'presente' | 'falta' | 'indeterminado') => {
@@ -299,7 +265,12 @@ function CardAulaSemana({
     if (!podeOperar) return;
     onRegistrar(
       vinculados
-        .filter((a) => a.aula_emusys_id && a.aluno_id)
+        .filter((a) => a.aula_emusys_id && a.aluno_id && adaptarPresencaCanonica({
+          alunoId: a.aluno_id,
+          aulaEmusysId: a.aula_emusys_id,
+          emusysPresencaBruta: a.emusys_presenca_bruta,
+          envelope: presenca,
+        }).estado !== 'presente')
         .map((a) => ({ aula_emusys_id: a.aula_emusys_id!, aluno_id: a.aluno_id!, status: 'presente' as const })),
     );
   };
@@ -310,7 +281,9 @@ function CardAulaSemana({
         'rounded-xl border px-2.5 py-2 transition-all hover:-translate-y-px',
         aula.cancelada
           ? 'border-rose-500/30 bg-rose-500/5 opacity-70'
-          : contagens.indeterminado > 0 && ocorrida
+          : resumo.estrutural
+            ? 'border-amber-500/40 bg-amber-500/5'
+            : contagens.indeterminado > 0 && ocorrida
             ? 'border-amber-500/40 bg-amber-500/5'
             : completa && total > 0
               ? 'border-emerald-500/30 bg-emerald-500/5'
@@ -387,8 +360,14 @@ function CardAulaSemana({
       {(total > 0 || (aula.experimental_leads ?? []).length > 0) && !aula.cancelada && (
         <ul className="mt-1.5 space-y-1">
           {vinculados.map((aluno) => {
-            const estado = estadoDoAluno(aluno);
+            const estado = adaptarPresencaCanonica({
+              alunoId: aluno.aluno_id,
+              aulaEmusysId: aluno.aula_emusys_id,
+              emusysPresencaBruta: aluno.emusys_presenca_bruta,
+              envelope: presenca,
+            }).estado;
             const semVinculo = !aluno.aula_emusys_id || !aluno.aluno_id;
+            const bloqueado = estado === 'dados_desatualizados' || estado === 'roster_em_revisao';
             return (
               <li key={`${aluno.aula_emusys_id}-${aluno.aluno_id}`} className="space-y-0.5">
                 <button
@@ -404,7 +383,7 @@ function CardAulaSemana({
                     <BotaoSemana
                       estado={estado}
                       alvo="presente"
-                      disabled={salvando}
+                      disabled={salvando || bloqueado}
                       onClick={() => marcar(aluno, estado === 'presente' ? 'indeterminado' : 'presente')}
                     >
                       <Check className="inline h-2.5 w-2.5" />P
@@ -412,7 +391,7 @@ function CardAulaSemana({
                     <BotaoSemana
                       estado={estado}
                       alvo="falta"
-                      disabled={salvando}
+                      disabled={salvando || bloqueado}
                       onClick={() => marcar(aluno, estado === 'falta' ? 'indeterminado' : 'falta')}
                     >
                       <X className="inline h-2.5 w-2.5" />F
@@ -420,7 +399,7 @@ function CardAulaSemana({
                     <BotaoSemana
                       estado={estado}
                       alvo="justif"
-                      disabled={salvando}
+                      disabled={salvando || bloqueado}
                       onClick={() => {
                         if (estado === 'falta_justificada') {
                           marcar(aluno, 'indeterminado');
@@ -512,7 +491,7 @@ function BotaoSemana({
   onClick,
   children,
 }: {
-  estado: EstadoChamada;
+  estado: PresencaCanonicaEstado;
   alvo: 'presente' | 'falta' | 'justif';
   disabled: boolean;
   onClick: () => void;

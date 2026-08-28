@@ -4,6 +4,11 @@
 // Envia relatórios administrativos via WhatsApp para grupos das Farmers
 // Suporta modo manual (texto pronto) e modo cron (gera + envia automaticamente)
 // Suporta UAZAPI e WAHA (detectado via campo provedor em whatsapp_caixas)
+// CONTRATO PRESENCA V2: este endpoint nao calcula pendencias de chamada. O
+// relatorio diario da Sol nasce na fila SQL por
+// get_presenca_contexto_agente_v1(escopo=sol) -> fn_texto_relatorio_presenca.
+// Manter essa fronteira evita uma segunda regra baseada em aluno_presenca ou no
+// ausente cru; esta Edge apenas transporta o texto canônico enfileirado no SQL.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';

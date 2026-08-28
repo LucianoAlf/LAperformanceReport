@@ -1091,3 +1091,24 @@ evento vazio concorrente é preservado no raw, mas não vira agenda, pendência 
 destino de áudio.
 
 *Documento antigo divergente = legado. Código divergente = possível bug. Regra validada pelo Alf = canônica.*
+
+---
+
+## Presença canônica v2 (candidata em 26/08/2026)
+
+A ocorrência de presença é resolvida uma única vez por unidade, data/horário,
+aula operacional e pessoa. Emusys, Agenda e LA Teacher/Fábio fornecem
+evidências com proveniência; não são três fontes autorizadas a decidir de forma
+independente. Presença humana terminal e retificação prevalecem sobre sync
+posterior. `Emusys: ausente` só vira ausência publicável quando cobertura,
+identidade e roster estão concluídos; caso contrário o estado é pendente ou em
+auditoria, nunca falta presumida.
+
+Agenda, Sol, LA Teacher/Fábio, Lia, Mila, relatórios e KPIs devem consumir o
+mesmo contrato. O percentual é `presentes / eventos confirmados` no universo e
+período declarados. Dado incompleto retorna valor nulo mais estado de
+publicação; snapshots fechados não são recalculados. A ativação é reversível por
+unidade e superfície nos modos `legado`, `sombra` e `canonico_v2`.
+
+O pacote permanece local e em sombra planejada, sem publicação produtiva nesta
+data. Operação, alarmes e rollback: [`docs/runbooks/presenca-canonica.md`](./runbooks/presenca-canonica.md).

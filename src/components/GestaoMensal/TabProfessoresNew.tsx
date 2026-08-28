@@ -92,6 +92,10 @@ interface DadosProfessores {
   mrr_perdido_total: number;
   nps_medio: number;
   presenca_media: number | null;
+  presenca_eventos_confirmados: number;
+  presenca_eventos_incertos: number;
+  presenca_regra_versao: string;
+  estado_publicacao: 'publicado' | 'em_auditoria';
   ticket_medio_geral: number;
   professores: ProfessorKPI[];
 }
@@ -113,6 +117,12 @@ function montarDados(
     carteiraTotal > 0
       ? professores.reduce((soma, p) => soma + p[campo] * p.carteira_alunos, 0) / carteiraTotal
       : 0;
+  const presencaPublicavel = linhas.length > 0
+    && linhas.every((linha) => linha.presenca_publicavel)
+    && totais.mediaPresenca !== null;
+  const regrasPresenca = Array.from(new Set(
+    linhas.map((linha) => linha.presenca_regra_versao).filter(Boolean),
+  ));
 
   return {
     total_professores: professores.length,
@@ -128,7 +138,11 @@ function montarDados(
     evasoes_total: totais.evasoes,
     mrr_perdido_total: totais.mrrPerdido,
     nps_medio: mediaPonderada('nps_medio'),
-    presenca_media: totais.mediaPresenca,
+    presenca_media: presencaPublicavel ? totais.mediaPresenca : null,
+    presenca_eventos_confirmados: totais.presencaEventosConfirmados,
+    presenca_eventos_incertos: totais.presencaEventosIncertos,
+    presenca_regra_versao: regrasPresenca.join(' + ') || 'presenca-v2-sem-base',
+    estado_publicacao: presencaPublicavel ? 'publicado' : 'em_auditoria',
     ticket_medio_geral: mediaPonderada('ticket_medio'),
     professores: professores.map((p) => ({
       id: p.professor_id,
@@ -165,6 +179,8 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState<DadosProfessores | null>(null);
   const mesFinal = mesFim || mes;
+  const periodoInicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
+  const periodoFim = dataFinal(ano, mesFinal);
   const healthReferenceMonth = mes;
   const healthPeriod = useMemo(
     () => getHealthScoreV3Period(ano, healthReferenceMonth, healthPeriodicity),
@@ -190,22 +206,20 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
     async function fetchDados() {
       setLoading(true);
       try {
-        const dataInicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
-        const dataFim = dataFinal(ano, mesFinal);
         const [linhas, kpisTurmas, professoresResult, vinculosResult] = await Promise.all([
           buscarKpisProfessoresCanonicos({
             ano,
             mes,
             unidadeId: unidade,
-            dataInicio,
-            dataFim,
+            dataInicio: periodoInicio,
+            dataFim: periodoFim,
           }),
           buscarKpisTurmasCanonicos({
             ano,
             mes,
             unidadeId: unidade,
-            dataInicio,
-            dataFim,
+            dataInicio: periodoInicio,
+            dataFim: periodoFim,
           }).catch((error) => {
             console.error('Erro ao buscar média canônica de alunos por turma no Analytics:', error);
             return null;
@@ -251,7 +265,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
 
     fetchDados();
     return () => { ativo = false; };
-  }, [ano, mes, mesFinal, unidade]);
+  }, [ano, mes, periodoFim, periodoInicio, unidade]);
 
   if (loading || healthLoading) {
     return <div className="flex h-64 items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-b-2 border-violet-500" /></div>;
@@ -373,7 +387,13 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         <div className="space-y-6">
           <div className="inline-flex max-w-full items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-200">
             <BarChart3 className="h-3.5 w-3.5" />
-            <span>Fonte canônica por competência</span>
+            <span>
+              Presença canônica v2 · {periodoInicio.split('-').reverse().join('/')} a {periodoFim.split('-').reverse().join('/')}
+              {' · '}{dados.presenca_eventos_confirmados} eventos confirmados
+              {dados.presenca_eventos_incertos > 0 ? ` · ${dados.presenca_eventos_incertos} em auditoria` : ''}
+              {' · '}{dados.estado_publicacao === 'publicado' ? 'Publicado' : 'Em auditoria'}
+              {' · '}{dados.presenca_regra_versao}
+            </span>
           </div>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
             <KPICard icon={Users} label="Total Professores" value={dados.total_professores} variant="violet" />
@@ -397,6 +417,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               label="Presença Média"
               value={dados.presenca_media === null ? 'Em auditoria' : `${dados.presenca_media.toFixed(1)}%`}
               variant="emerald"
+              tooltip={`Equação: presentes / eventos confirmados. Universo: ${dados.presenca_eventos_confirmados} confirmados e ${dados.presenca_eventos_incertos} incertos. Estado: ${dados.estado_publicacao}. Regra: ${dados.presenca_regra_versao}.`}
             />
           </div>
           {rankingHabilitado ? (

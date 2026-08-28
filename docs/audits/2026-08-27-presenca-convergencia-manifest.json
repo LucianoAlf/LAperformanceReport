@@ -1,0 +1,35 @@
+{
+  "project_ref": "ouqwbbermlzqqvtqwlul",
+  "captured_at": "2026-08-27",
+  "hugo_bypass": {
+    "version": "20260827151832",
+    "name": "agenda_chamada_volta_do_fechamento_de_bypass",
+    "local_file_md5": "296048cedc3b46b80ae0cce8c3e16cf9"
+  },
+  "migrations": [
+    {"version":"20260827030000","name":"presenca_funcoes_vivas_baseline","statement_count":8,"local_file_md5":"69839d1566921ef82f446858851c6709","remote_statements_md5":"3d3bbd0d4264c5832ba7677689e8b2e1"},
+    {"version":"20260827030100","name":"presenca_ocorrencia_canonica_v2","statement_count":8,"local_file_md5":"41eba8456db1c09515578c3d0dd9483a","remote_statements_md5":"2bb10a6c9d0eee37904769a769a7cc63"},
+    {"version":"20260827030200","name":"presenca_sync_cobertura_idempotente","statement_count":30,"local_file_md5":"60e5bb3c78435805aaaa27d88f83b1c1","remote_statements_md5":"8ac99e8199c0bc876333f2b72d6db8e6"},
+    {"version":"20260827030300","name":"presenca_sync_crons_operacional_e_backlog","statement_count":12,"local_file_md5":"10a0619f4f4d5ee7d81347b14fbbc8a6","remote_statements_md5":"d071df3b9319a145615d892499dfbe98"},
+    {"version":"20260827030400","name":"presenca_sync_saude_operacional","statement_count":4,"local_file_md5":"29ef46a340c2716dc75db6904d150d23","remote_statements_md5":"73fafdc0b489e1061ec56264ffebb9a3"},
+    {"version":"20260827030500","name":"presenca_roster_operacional","statement_count":21,"local_file_md5":"b371273aca677dfe262077d9d3a0ffaf","remote_statements_md5":"9b34780e130cfdd819658f5189774a35"},
+    {"version":"20260827030600","name":"presenca_comando_auditoria","statement_count":27,"local_file_md5":"9b279a1cce4c6dcc4e87474794beb604","remote_statements_md5":"1d6982d5f763f31860d46e36fdbe0e84"},
+    {"version":"20260827030700","name":"presenca_comando_porta_professor","statement_count":7,"local_file_md5":"a7789a27a9bc836c8cd9958320da451d","remote_statements_md5":"9619a24b0405d5124b9cb6982036bcd0"},
+    {"version":"20260827030800","name":"presenca_comando_portas_fabio","statement_count":9,"local_file_md5":"a0cfca6711588cddd227d68694d75a33","remote_statements_md5":"ac8c52cf17db45e1567a2580401f8441"},
+    {"version":"20260827030900","name":"presenca_comando_overloads_compatibilidade","statement_count":23,"local_file_md5":"54a1abcb48581ea2677dc310d5d03bfe","remote_statements_md5":"585a9bb95278c8cc24e798422287353f"},
+    {"version":"20260827031000","name":"presenca_pendencias_canonicas_v2","statement_count":31,"local_file_md5":"492683cbd2a3a79a38e82d3e2db05051","remote_statements_md5":"358d33f70172e50bfeefb281e2e1ec59"},
+    {"version":"20260827031100","name":"la_teacher_presenca_canonica_v2","statement_count":6,"local_file_md5":"da206546751f6ed2067e5653b2ec028c","remote_statements_md5":"57f8bc10f473ebdad128b8e288a24f86"},
+    {"version":"20260827031200","name":"presenca_contexto_agentes_v1","statement_count":8,"local_file_md5":"d8008b76c783282898c270fa48ac57e3","remote_statements_md5":"f811ec08fa666a4864bd641be1c83ef4"},
+    {"version":"20260827031300","name":"presenca_consumidores_numericos_v2","statement_count":36,"local_file_md5":"c91f5f8f9b8fed439a0edb6d3882e39e","remote_statements_md5":"939314b10e79858e1927f80b30502d31"},
+    {"version":"20260827031400","name":"presenca_interfaces_consulta_v2","statement_count":6,"local_file_md5":"5ae3135dc19c640f639f9f4be2246c6e","remote_statements_md5":"b181348d6712d69b64f684c4e210932a"},
+    {"version":"20260827031500","name":"presenca_shadow_comparacao_v2","statement_count":8,"local_file_md5":"82e417e4fb73775636702e569c71be4f","remote_statements_md5":"26da7e0ba96fa29d5d65424328bc8359"},
+    {"version":"20260827031600","name":"presenca_rollout_config","statement_count":22,"local_file_md5":"927441cb4309d9ed487e184bf007cb3b","remote_statements_md5":"bb70270365603f7f3d2ce909f0127e4e"},
+    {"version":"20260827031700","name":"presenca_rollout_adapters","statement_count":25,"local_file_md5":"bd61bbffe11dcb7baf9c37487e87dcc6","remote_statements_md5":"a1e6cb9ea5da9bd0bcfba85a2f73c624"},
+    {"version":"20260827031800","name":"presenca_rollout_kpis","statement_count":26,"local_file_md5":"2cb01d956e59081afd36cd5a061894ea","remote_statements_md5":"d95a52246b6a0fb20db1ff36cda57298"},
+    {"version":"20260827031900","name":"presenca_hardening_funcoes_internas","statement_count":12,"local_file_md5":"d217cc65ae53ef6c536bc82618c5bc3d","remote_statements_md5":"d1d32355fb4da10018dcc211b680fa99"},
+    {"version":"20260827032000","name":"presenca_rollout_detalhes","statement_count":8,"local_file_md5":"9420f3356dd94b4f0d80f1bbcd69ad16","remote_statements_md5":"164b916448e6e155f7f7a8ec245f7ff2"},
+    {"version":"20260827032100","name":"presenca_rollout_fabio_periodo","statement_count":8,"local_file_md5":"ab4e0f865cde208690315cae977ef9a7","remote_statements_md5":"7edb82fa9f990e2a9be4302af8d1cdf4"},
+    {"version":"20260827032200","name":"presenca_sync_saude_tipo_nome_hotfix","statement_count":4,"local_file_md5":"0636ab48f1a9cf4ee7650e8a878fa030","remote_statements_md5":"416758cd584987764cb629a7f2478d4c"},
+    {"version":"20260827032300","name":"presenca_relatorio_rollout_proveniencia_hotfix","statement_count":12,"local_file_md5":"681e038fc08d43e678e6b8b4e58c85d8","remote_statements_md5":"ad8c8c1832f058d9f4f7041fd6ee6293"}
+  ]
+}

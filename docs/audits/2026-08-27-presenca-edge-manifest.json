@@ -1,0 +1,287 @@
+{
+  "schema_version": 1,
+  "project_ref": "ouqwbbermlzqqvtqwlul",
+  "captured_at": "2026-08-27",
+  "bundle_file_count": 35,
+  "functions": [
+    {
+      "slug": "bi-agent-lamusic",
+      "version": 49,
+      "status": "ACTIVE",
+      "verify_jwt": false,
+      "ezbr_sha256": "045baedb9c45d8d9fa87cda16eedde70d7c727b560b8c8e92c99891f4bce0d7d",
+      "bundle_file_count": 5,
+      "files": [
+        {
+          "path": "supabase/functions/bi-agent-lamusic/index.ts",
+          "sha256_lf": "8c3994a25a687cc79599091a900cf7dc70dc2937a7a50580db8c4ad479ccc686",
+          "bytes_lf": 24962
+        },
+        {
+          "path": "supabase/functions/bi-agent-lamusic/schema.ts",
+          "sha256_lf": "eae15decc27e507aceb189f4416ef23488bd46dd799485f1d66aeb605a98c872",
+          "bytes_lf": 8726
+        },
+        {
+          "path": "supabase/functions/bi-agent-lamusic/sql-validator.ts",
+          "sha256_lf": "f407115e8b29a5111ef21089b21e849a802caa12c927830a4a23c8e2e2cd094e",
+          "bytes_lf": 3765
+        },
+        {
+          "path": "supabase/functions/bi-agent-lamusic/tools.ts",
+          "sha256_lf": "cfc07f57977e2a6c0142d6680fcb4d703906f23ab5bddba6eaafe64eaa48face",
+          "bytes_lf": 30367
+        },
+        {
+          "path": "supabase/functions/bi-agent-lamusic/utils.ts",
+          "sha256_lf": "7f262a36e42ccc86ef2ad4f083fc3ee2101230a5a16e8bfb350935a2b65f124e",
+          "bytes_lf": 4234
+        }
+      ]
+    },
+    {
+      "slug": "gerar-plano-aluno",
+      "version": 39,
+      "status": "ACTIVE",
+      "verify_jwt": false,
+      "ezbr_sha256": "ca6c8ce819bebc3003c3a14b678b0b777e53b5779e13404ab55d4bee5ba9d44f",
+      "bundle_file_count": 1,
+      "files": [
+        {
+          "path": "supabase/functions/gerar-plano-aluno/index.ts",
+          "sha256_lf": "dc49fe4f0e36cb1cf5549317f22c7787eef1a60dac37358ef2ff476b50d53281",
+          "bytes_lf": 9572
+        }
+      ]
+    },
+    {
+      "slug": "gerar-relatorio-aluno",
+      "version": 40,
+      "status": "ACTIVE",
+      "verify_jwt": false,
+      "ezbr_sha256": "7b6d794afae81ff57dbe523f77f38e2314e4bae2566e1886c5fab7ee2a3d9c22",
+      "bundle_file_count": 1,
+      "files": [
+        {
+          "path": "supabase/functions/gerar-relatorio-aluno/index.ts",
+          "sha256_lf": "759f0eda47103b5bc13b5b97af2f538985799e4b7d0f5bbe69f0f32be1626a52",
+          "bytes_lf": 12586
+        }
+      ]
+    },
+    {
+      "slug": "previsualizar-reconciliacao-grade-emusys",
+      "version": 5,
+      "status": "ACTIVE",
+      "verify_jwt": false,
+      "ezbr_sha256": "3957da9fd890b10e4a984409933edf20e4edff06bff3d18ed8bb4d80fefeb20f",
+      "bundle_file_count": 4,
+      "files": [
+        {
+          "path": "supabase/functions/_shared/emusys-aulas.ts",
+          "sha256_lf": "27fe7928773437e55346e6a677fb70ea05db518719134f2958ca99c8f40fce03",
+          "bytes_lf": 8632
+        },
+        {
+          "path": "supabase/functions/_shared/previsualizacao-reconciliacao-grade.ts",
+          "sha256_lf": "5e3597967cae5f927f8324d0bf63ae6a006c552f631fa99e3a56d0c8671b0c1f",
+          "bytes_lf": 6013
+        },
+        {
+          "path": "supabase/functions/_shared/reconciliacao-grade-snapshot.ts",
+          "sha256_lf": "a5e895b9d9d435caff68cdcceda75b8bc7b3a45b5c0bfc33bedad725b510da85",
+          "bytes_lf": 5895
+        },
+        {
+          "path": "supabase/functions/previsualizar-reconciliacao-grade-emusys/index.ts",
+          "sha256_lf": "52114cd794970f5b4b9e36b901a75c803d85da3dca439a0ad294252491d6b044",
+          "bytes_lf": 16703
+        }
+      ]
+    },
+    {
+      "slug": "processar-alertas-lia",
+      "version": 13,
+      "status": "ACTIVE",
+      "verify_jwt": true,
+      "ezbr_sha256": "9c687575abdbc2b3965ccb4ec660061d9ee104a2a2425b14b438ce3cf6ffad5e",
+      "bundle_file_count": 2,
+      "files": [
+        {
+          "path": "supabase/functions/processar-alertas-lia/dispatcher.ts",
+          "sha256_lf": "21e57721cf10fa3b0d3128f3abaac2662fe483571b7b39d4bf1ea74c1d2f2fac",
+          "bytes_lf": 10603
+        },
+        {
+          "path": "supabase/functions/processar-alertas-lia/index.ts",
+          "sha256_lf": "c007f3e2cf4034d130fd8ab4ffa3bc0a424c827ee62c5c511266bc36061ad368",
+          "bytes_lf": 7799
+        }
+      ]
+    },
+    {
+      "slug": "relatorio-admin-whatsapp",
+      "version": 112,
+      "status": "ACTIVE",
+      "verify_jwt": false,
+      "ezbr_sha256": "97463bd2783d77804133e6aacadeac8ba223788538c6ea1dde8ba452cf8950dd",
+      "bundle_file_count": 6,
+      "files": [
+        {
+          "path": "supabase/functions/_shared/relatorio-admin-canonico.ts",
+          "sha256_lf": "9b7fe398737be5e184670d1cf0eb3a81d99f8ac0b72d80d5c2145b1acc2597a2",
+          "bytes_lf": 5377
+        },
+        {
+          "path": "supabase/functions/_shared/relatorio-comercial.ts",
+          "sha256_lf": "d517d40290f2ac037dce8c44fac98ced8cfb088cbc29fc70318a48b8de0b0916",
+          "bytes_lf": 28729
+        },
+        {
+          "path": "supabase/functions/_shared/relatorio-publico.ts",
+          "sha256_lf": "80ee1e19a5e519c53bd2b0603c686dba1a72c08fc061e2526cc762bc697cb5d1",
+          "bytes_lf": 1765
+        },
+        {
+          "path": "supabase/functions/_shared/relatorios-mensais-canonicos.ts",
+          "sha256_lf": "8d2d37d01197fe76dc580ce3bb95381565383c105be2058319f4e7a54b6dbd34",
+          "bytes_lf": 23796
+        },
+        {
+          "path": "supabase/functions/_shared/snapshot-refresh-admission.ts",
+          "sha256_lf": "c7d6c00b25e8ffb83c699b7baaff445c4391d4be4987c5d090853cbeda893844",
+          "bytes_lf": 5570
+        },
+        {
+          "path": "supabase/functions/relatorio-admin-whatsapp/index.ts",
+          "sha256_lf": "f52854f4674be05beb0d3c31542593ffc4b1c1fe27dca2e8331e8e955fbce888",
+          "bytes_lf": 109777
+        }
+      ]
+    },
+    {
+      "slug": "sync-grade-futura-emusys",
+      "version": 34,
+      "status": "ACTIVE",
+      "verify_jwt": true,
+      "ezbr_sha256": "643081aafae9a08a28bbd2a776888ff921c6eeec47272ebed5ccf7e726c08037",
+      "bundle_file_count": 6,
+      "files": [
+        {
+          "path": "supabase/functions/_shared/emusys-aulas.ts",
+          "sha256_lf": "27fe7928773437e55346e6a677fb70ea05db518719134f2958ca99c8f40fce03",
+          "bytes_lf": 8632
+        },
+        {
+          "path": "supabase/functions/_shared/professor-emusys.ts",
+          "sha256_lf": "e385cc424fb1fc55dfafa18bffc360abc85e1df44ae81273d4751fe224ad808a",
+          "bytes_lf": 2612
+        },
+        {
+          "path": "supabase/functions/_shared/reconciliacao-grade-snapshot.ts",
+          "sha256_lf": "a5e895b9d9d435caff68cdcceda75b8bc7b3a45b5c0bfc33bedad725b510da85",
+          "bytes_lf": 5895
+        },
+        {
+          "path": "supabase/functions/_shared/sync-grade-authorization.ts",
+          "sha256_lf": "a3b78c7de7dfdeebd4922deae1794b21d19f4e57a7eb0c77b54aeb288204ec51",
+          "bytes_lf": 1394
+        },
+        {
+          "path": "supabase/functions/_shared/sync-presenca-authorization.ts",
+          "sha256_lf": "b08e8f5e515bb1624013f2b0f7380a2a3d74eb583867f54a86efb76448d954cc",
+          "bytes_lf": 7751
+        },
+        {
+          "path": "supabase/functions/sync-grade-futura-emusys/index.ts",
+          "sha256_lf": "b52a26dbe6fbf5775f7eae48d716ca4f210c3b63da08f9a6a33c5cb4c709179e",
+          "bytes_lf": 12669
+        }
+      ]
+    },
+    {
+      "slug": "sync-presenca-emusys",
+      "version": 102,
+      "status": "ACTIVE",
+      "verify_jwt": false,
+      "ezbr_sha256": "578dd5232f3d0e927158f5e9ca16bcaaa7ed592916e4768d4c495b2c1dad7736",
+      "bundle_file_count": 10,
+      "files": [
+        {
+          "path": "supabase/functions/_shared/emusys-aulas.ts",
+          "sha256_lf": "27fe7928773437e55346e6a677fb70ea05db518719134f2958ca99c8f40fce03",
+          "bytes_lf": 8632
+        },
+        {
+          "path": "supabase/functions/_shared/experimental-reconciliacao.ts",
+          "sha256_lf": "b4b9e9bbf39c2fc3891fc08335e614e63067374b24153885354d35e8b4cfac23",
+          "bytes_lf": 3531
+        },
+        {
+          "path": "supabase/functions/_shared/experimental-snapshot.ts",
+          "sha256_lf": "ac40416342ffe55e74c28233f3f4fcd91198a77449dfbcac8e332ce4f52ae7da",
+          "bytes_lf": 10559
+        },
+        {
+          "path": "supabase/functions/_shared/matcher-presenca.ts",
+          "sha256_lf": "13fc16b3d39884cfa2142ac76aa844024b74e7fac98b593202c1da43503c0808",
+          "bytes_lf": 6060
+        },
+        {
+          "path": "supabase/functions/_shared/presenca-sync-run.ts",
+          "sha256_lf": "b0509e6230718bdfb5048376287642f351af1fbd99b1270980adf8e2e4817cbf",
+          "bytes_lf": 5526
+        },
+        {
+          "path": "supabase/functions/_shared/professor-emusys.ts",
+          "sha256_lf": "e385cc424fb1fc55dfafa18bffc360abc85e1df44ae81273d4751fe224ad808a",
+          "bytes_lf": 2612
+        },
+        {
+          "path": "supabase/functions/_shared/reconciliacao-grade-snapshot.ts",
+          "sha256_lf": "a5e895b9d9d435caff68cdcceda75b8bc7b3a45b5c0bfc33bedad725b510da85",
+          "bytes_lf": 5895
+        },
+        {
+          "path": "supabase/functions/_shared/sync-experimentais-mode.ts",
+          "sha256_lf": "204278cba4760de1b0c7459401ae0d5ed7d8fbfae4c4e4d9f64fbed1dada94bf",
+          "bytes_lf": 18309
+        },
+        {
+          "path": "supabase/functions/_shared/sync-presenca-authorization.ts",
+          "sha256_lf": "b08e8f5e515bb1624013f2b0f7380a2a3d74eb583867f54a86efb76448d954cc",
+          "bytes_lf": 7751
+        },
+        {
+          "path": "supabase/functions/sync-presenca-emusys/index.ts",
+          "sha256_lf": "89a4b1efa8e1aad7a72ca05bb0f72f3f3c62a38fd4066b493cdec53808bcf8b4",
+          "bytes_lf": 96281
+        }
+      ]
+    }
+  ],
+  "live_recheck": {
+    "captured_at": "2026-08-27T18:41:35.1559589-03:00",
+    "unchanged_slugs": [
+      "bi-agent-lamusic",
+      "gerar-plano-aluno",
+      "gerar-relatorio-aluno",
+      "previsualizar-reconciliacao-grade-emusys",
+      "processar-alertas-lia",
+      "sync-grade-futura-emusys",
+      "sync-presenca-emusys"
+    ],
+    "drift": [
+      {
+        "slug": "relatorio-admin-whatsapp",
+        "baseline_version": 112,
+        "observed_version": 113,
+        "baseline_ezbr_sha256": "97463bd2783d77804133e6aacadeac8ba223788538c6ea1dde8ba452cf8950dd",
+        "observed_ezbr_sha256": "3fc1ae9632ba71fa941102181eb9c5edd7fbc5588488edd2c92db339b812f1f9",
+        "baseline_entrypoint_sha256_lf": "f52854f4674be05beb0d3c31542593ffc4b1c1fe27dca2e8331e8e955fbce888",
+        "observed_entrypoint_sha256_lf": "ddf02fe99ba2b1ee979c04bd90980ae7c376f2408577d7db72b0b4e7b4cf030a",
+        "reason": "mudanca_concorrente_pos_snapshot_presenca"
+      }
+    ]
+  }
+}

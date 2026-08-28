@@ -6,6 +6,19 @@ import { supabase } from '@/lib/supabase';
 // que para jobs net.http_post só reflete o enfileiramento do POST, não o resultado.
 export type SyncStatusReal = 'ok' | 'atrasado' | 'nunca' | 'sem_cron' | 'falhou';
 
+export type CoberturaPresenca = {
+  unidade_id: string;
+  unidade_nome: string;
+  data_coberta: string;
+  status: 'iniciada' | 'concluida' | 'falhou' | 'abortada' | 'sem_cobertura';
+  publicavel: boolean;
+  ultima_conclusao: string | null;
+  heartbeat_em: string | null;
+  lease_expirada: boolean;
+  tentativas_deduplicadas: number;
+  relatorio_bloqueado: boolean;
+};
+
 type SaudeSyncRow = {
   sync_tipo: string;
   unidade_id: string | null;
@@ -79,14 +92,16 @@ function chaveSync(tipo: string, codigo: string | null): string {
 
 export function useSaudeCrons() {
   const [jobs, setJobs] = useState<CronJob[]>([]);
+  const [coberturaPresenca, setCoberturaPresenca] = useState<CoberturaPresenca[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
   const buscar = useCallback(async () => {
     setErro(null);
-    const [cronRes, syncRes] = await Promise.all([
+    const [cronRes, syncRes, coberturaRes] = await Promise.all([
       supabase.rpc('get_cron_health'),
       supabase.rpc('get_saude_syncs_emusys'),
+      supabase.rpc('get_saude_cobertura_presenca_v1'),
     ]);
 
     if (cronRes.error) {
@@ -119,6 +134,11 @@ export function useSaudeCrons() {
     });
 
     setJobs(jobsAnotados);
+    setCoberturaPresenca(
+      !coberturaRes.error && Array.isArray(coberturaRes.data)
+        ? coberturaRes.data as CoberturaPresenca[]
+        : [],
+    );
     setLoading(false);
   }, []);
 
@@ -128,5 +148,5 @@ export function useSaudeCrons() {
     return () => clearInterval(intervalo);
   }, [buscar]);
 
-  return { jobs, loading, erro, refetch: buscar };
+  return { jobs, coberturaPresenca, loading, erro, refetch: buscar };
 }

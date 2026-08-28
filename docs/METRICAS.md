@@ -732,3 +732,19 @@ quantidade de linhas em `aula_alunos_emusys`; turma no empate; ID mais recente
 no empate final. Isso impede que uma turma vazia esconda uma reposição
 individual ou receba um áudio, sem alterar denominadores históricos baseados no
 espelho bruto.
+
+### Presença canônica v2 — equação e publicação (candidata em 26/08/2026)
+
+Fonte métrica: `vw_presenca_ocorrencia_metrica_v2`, derivada da ocorrência
+canônica por unidade, data/horário, aula operacional e pessoa. A taxa é
+`100 × presentes / eventos_confirmados`; falta justificada não entra como
+presença e carrega sua semântica própria. Numerador e denominador são somados no
+mesmo universo antes da divisão — percentuais parciais não são promediados.
+
+Toda resposta informa período, universo, `sincronizado_em` e
+`estado_publicacao`. `sem_base`, `bloqueado_roster`, `bloqueado_frescor` e
+`em_auditoria` retornam percentual nulo e ficam fora de ranking. Ciclos abertos
+podem incorporar novas ocorrências; snapshots fechados permanecem imutáveis.
+`kpis` e `relatorios` têm rollout reversível por unidade. O pacote ainda não
+está ativo em produção; a paridade real de dia, mês aberto e mês fechado integra
+o gate pós-publicação em sombra.

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { formatarFrescor } from '@/lib/agenda';
+import type { PresencaOcorrenciaAgenda } from '@/lib/presencaCanonica';
 
 export interface AlunoAgenda {
   // integer no banco (alunos.id), nao uuid. Null quando o participante e lead.
@@ -14,7 +15,7 @@ export interface AlunoAgenda {
   status_presenca: string | null;
   // Campos da chamada (Fase 2, 11/08/2026):
   // aula_emusys_id = a linha DESTE aluno em aulas_emusys (em turma, cada
-  // contrato tem a sua) — e o alvo da app_registrar_chamada_agenda.
+  // contrato tem a sua) e o alvo do item enviado ao protocolo canonico.
   aula_emusys_id: number | null;
   respondido_por: string | null;
   // Evidencia bruta do Emusys; quando diverge do status final (humano), a tela
@@ -107,6 +108,67 @@ export interface AulaAgenda {
   experimental_leads: LeadExperimentalAgenda[];
 }
 
+export interface PresencaPendenciaCanonica {
+  slot_key: string;
+  aula_emusys_id: number;
+  aluno_id: number;
+  aluno_nome: string;
+  professor_id: number | null;
+  professor_nome: string;
+  curso_nome: string;
+  turma_nome: string | null;
+  hora: string;
+  motivo: 'sem_resposta' | 'divergencia';
+  resultado_canonico: string;
+  fonte_decisao: string;
+  decidido_em?: string | null;
+  detalhe?: string | null;
+}
+
+export interface PresencaRevisaoEstrutural {
+  aula_emusys_id: number;
+  estado: 'incompleto' | 'ambiguo' | 'sem_fotografia' | 'roster_desatualizado';
+  qtd_esperada: number | null;
+  qtd_recebida: number | null;
+  sincronizado_em: string | null;
+}
+
+export interface PresencaEnvelopeAgenda {
+  dados_status: 'atualizados' | 'dados_desatualizados' | 'roster_em_revisao';
+  sincronizado_em: string | null;
+  regra_versao: 'presenca-v2';
+  pendencias: PresencaPendenciaCanonica[];
+  conflitos: PresencaPendenciaCanonica[];
+  revisoes_estruturais: PresencaRevisaoEstrutural[];
+  ocorrencias: PresencaOcorrenciaAgenda[];
+  professores_ocorrencias: ProfessorPresencaOcorrenciaAgenda[];
+}
+
+export interface ProfessorPresencaOcorrenciaAgenda {
+  aula_emusys_id: number;
+  professor_id: number;
+  estado: 'presente' | 'ausente' | 'indeterminado';
+  fonte: string;
+  decidido_em: string | null;
+  request_id: string | null;
+  recibo_status: string | null;
+}
+
+export interface AgendaDiaV2 extends PresencaEnvelopeAgenda {
+  aulas: AulaAgenda[];
+}
+
+export const presencaInicial: PresencaEnvelopeAgenda = {
+  dados_status: 'dados_desatualizados',
+  sincronizado_em: null,
+  regra_versao: 'presenca-v2',
+  pendencias: [],
+  conflitos: [],
+  revisoes_estruturais: [],
+  ocorrencias: [],
+  professores_ocorrencias: [],
+};
+
 interface Params {
   data: string;
   unidadeId: string | null;
@@ -123,11 +185,12 @@ function chaveDoCache(data: string, unidadeId: string | null): string {
 }
 
 export function useAgendaDia({ data, unidadeId }: Params) {
-  const cacheRef = useRef(new Map<string, AulaAgenda[]>());
+  const cacheRef = useRef(new Map<string, AgendaDiaV2>());
   const chave = chaveDoCache(data, unidadeId);
   const emCache = cacheRef.current.get(chave);
 
-  const [aulas, setAulas] = useState<AulaAgenda[]>(emCache ?? []);
+  const [aulas, setAulas] = useState<AulaAgenda[]>(emCache?.aulas ?? []);
+  const [presenca, setPresenca] = useState<PresencaEnvelopeAgenda>(emCache ?? presencaInicial);
   const [carregando, setCarregando] = useState(emCache === undefined);
   const [erro, setErro] = useState<string | null>(null);
   const [frescor, setFrescor] = useState('sem dado de sincronizacao');
@@ -151,11 +214,19 @@ export function useAgendaDia({ data, unidadeId }: Params) {
     // Ja visto: mostra na hora e revalida em silencio (sem estado de carga, pra
     // nao piscar). Inedito: mantem o que estava na tela e sinaliza carregando.
     const doCache = cacheRef.current.get(chaveDaBusca);
-    if (doCache) setAulas(doCache);
+    if (doCache) {
+      setAulas(doCache.aulas);
+      setPresenca(doCache);
+    } else {
+      // O cabecalho ja aponta para o novo dia/unidade. Nao mantenha nomes do
+      // contexto anterior enquanto o escopo atual ainda nao foi validado.
+      setAulas([]);
+      setPresenca(presencaInicial);
+    }
     setCarregando(doCache === undefined);
     setErro(null);
 
-    const { data: linhas, error } = await supabase.rpc('get_agenda_dia', {
+    const { data: resposta, error } = await supabase.rpc('get_agenda_dia_v2', {
       p_data: dataDaBusca,
       p_unidade_id: unidadeIdDaBusca,
     });
@@ -165,35 +236,23 @@ export function useAgendaDia({ data, unidadeId }: Params) {
     if (error) {
       setErro(error.message);
       setAulas([]);
+      setPresenca(presencaInicial);
       setCarregando(false);
       return;
     }
 
-    const resultado = (linhas || []) as unknown as AulaAgenda[];
-    cacheRef.current.set(chaveDaBusca, resultado);
-    setAulas(resultado);
-
-    // Frescor: ultima linha inserida em aulas_emusys para o escopo atual.
-    let q = supabase
-      .from('aulas_emusys')
-      .select('created_at')
-      .order('created_at', { ascending: false })
-      .limit(1);
-    if (unidadeIdDaBusca) q = q.eq('unidade_id', unidadeIdDaBusca);
-    const { data: ultima, error: erroFrescor } = await q;
-
-    if (!aindaValida()) return;
-
-    if (erroFrescor) {
-      // Frescor e informacao acessoria: falha aqui nao deve derrubar a tela
-      // nem se misturar com `erro` (que e da RPC principal). So loga p/ diagnostico.
-      console.error('[useAgendaDia] falha ao consultar frescor (aulas_emusys):', {
-        unidadeId: unidadeIdDaBusca,
-        error: erroFrescor,
-      });
+    const resultado = resposta as unknown as AgendaDiaV2;
+    if (!resultado || !Array.isArray(resultado.aulas)) {
+      setErro('Contrato inválido da Agenda v2');
+      setAulas([]);
+      setPresenca(presencaInicial);
+      setCarregando(false);
+      return;
     }
-
-    setFrescor(formatarFrescor(ultima?.[0]?.created_at ?? null, new Date()));
+    cacheRef.current.set(chaveDaBusca, resultado);
+    setAulas(resultado.aulas);
+    setPresenca(resultado);
+    setFrescor(formatarFrescor(resultado.sincronizado_em, new Date()));
     setCarregando(false);
   }, [data, unidadeId]);
 
@@ -213,16 +272,18 @@ export function useAgendaDia({ data, unidadeId }: Params) {
       const chaveAlvo = chaveDoCache(dataAlvo, unidadeId);
       if (cacheRef.current.has(chaveAlvo)) return;
 
-      const { data: linhas, error } = await supabase.rpc('get_agenda_dia', {
+      const { data: resposta, error } = await supabase.rpc('get_agenda_dia_v2', {
         p_data: dataAlvo,
         p_unidade_id: unidadeId,
       });
       if (error) return;
 
-      cacheRef.current.set(chaveAlvo, (linhas || []) as unknown as AulaAgenda[]);
+      const resultado = resposta as unknown as AgendaDiaV2;
+      if (!resultado || !Array.isArray(resultado.aulas)) return;
+      cacheRef.current.set(chaveAlvo, resultado);
     },
     [unidadeId],
   );
 
-  return { aulas, carregando, erro, frescor, recarregar: buscar, prefetch };
+  return { aulas, presenca, carregando, erro, frescor, recarregar: buscar, prefetch };
 }

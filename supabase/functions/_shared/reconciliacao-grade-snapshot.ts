@@ -2,21 +2,43 @@ import { type AlunoNaAulaEmusys, criarAlunoChave } from "./emusys-aulas.ts";
 
 export interface AulaSnapshotGradeFonte {
   id: number;
-  alunos?: AlunoNaAulaEmusys[];
+  alunos?: AlunoNaAulaEmusys[] | null;
+  qtd_alunos?: number | null;
+  cancelada?: boolean | null;
 }
+
+export type EstadoRosterSnapshot =
+  | "completo"
+  | "vazio_confirmado"
+  | "incompleto"
+  | "ambiguo";
 
 export interface AulaSnapshotGrade {
   emusys_id: number;
+  estado: EstadoRosterSnapshot;
+  qtd_esperada: number;
+  qtd_recebida: number;
   aluno_chaves: string[];
 }
 
-export interface ResultadoReconciliacaoGradeSnapshot {
+export interface ResultadoReconciliacaoGradeSnapshot
+  extends Record<string, unknown> {
   status: string;
   dry_run?: boolean;
   alteracoes_aplicadas?: number;
+  estados_gravados?: number;
   aulas_canceladas?: number;
   vinculos_removidos?: number;
+  vinculos_inativados?: number;
+  vinculos_reativados?: number;
   detalhe?: unknown;
+}
+
+export type ReconciliacaoContrato = "v2" | "v1_fallback";
+
+export interface ResultadoReconciliacaoDual {
+  contrato: ReconciliacaoContrato;
+  resultado: Record<string, unknown>;
 }
 
 export interface ResultadoIntegridadeMapaAulas {
@@ -30,7 +52,31 @@ interface ClienteRpc {
   rpc: (
     nome: string,
     parametros: Record<string, unknown>,
-  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  ) => PromiseLike<{ data: unknown; error: unknown }>;
+}
+
+interface ParametrosReconciliacaoGrade {
+  unidadeId: string;
+  dataInicio: string;
+  dataFim: string;
+  snapshot: AulaSnapshotGrade[];
+  dryRun?: boolean;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizarResultadoRpc(
+  data: unknown,
+): ResultadoReconciliacaoGradeSnapshot {
+  return isRecord(data)
+    ? data as ResultadoReconciliacaoGradeSnapshot
+    : { status: "sem_resposta" };
+}
+
+function erroIndicaFuncaoAusente(error: unknown): boolean {
+  return isRecord(error) && error.code === "PGRST202";
 }
 
 /**
@@ -79,26 +125,50 @@ export function montarSnapshotGradeEmusys(
   aulas: AulaSnapshotGradeFonte[],
   normalizarNome: (nome: string) => string,
 ): AulaSnapshotGrade[] {
-  const chavesPorAula = new Map<number, Set<string>>();
+  type Acumulador = {
+    chaves: Set<string>;
+    quantidadesDeclaradas: Set<number>;
+    incompleto: boolean;
+    ambiguo: boolean;
+  };
+  const porAula = new Map<number, Acumulador>();
 
   for (const aula of aulas) {
     if (!Number.isInteger(aula.id) || aula.id <= 0) {
       throw new Error("EMUSYS_SNAPSHOT_AULA_INVALIDA");
     }
-    if (!Array.isArray(aula.alunos)) {
-      throw new Error("EMUSYS_SNAPSHOT_ROSTER_AUSENTE");
+
+    const acumulador = porAula.get(aula.id) ?? {
+      chaves: new Set<string>(),
+      quantidadesDeclaradas: new Set<number>(),
+      incompleto: false,
+      ambiguo: false,
+    };
+    porAula.set(aula.id, acumulador);
+
+    if (aula.qtd_alunos !== undefined && aula.qtd_alunos !== null) {
+      if (!Number.isSafeInteger(aula.qtd_alunos) || aula.qtd_alunos < 0) {
+        acumulador.incompleto = true;
+      } else {
+        acumulador.quantidadesDeclaradas.add(aula.qtd_alunos);
+      }
     }
 
-    const chaves = chavesPorAula.get(aula.id) ?? new Set<string>();
-    chavesPorAula.set(aula.id, chaves);
+    if (!Array.isArray(aula.alunos)) {
+      acumulador.incompleto = true;
+      continue;
+    }
 
     for (const aluno of aula.alunos) {
       const nome = aluno.nome_aluno?.trim();
-      const temIdEmusys = Number.isInteger(aluno.id_aluno) && aluno.id_aluno > 0;
+      const temIdEmusys = Number.isInteger(aluno.id_aluno) &&
+        aluno.id_aluno > 0;
       if (!temIdEmusys && !nome) {
-        throw new Error("EMUSYS_SNAPSHOT_ALUNO_SEM_IDENTIDADE");
+        acumulador.incompleto = true;
+        continue;
       }
-      chaves.add(
+      if (!temIdEmusys) acumulador.ambiguo = true;
+      acumulador.chaves.add(
         criarAlunoChave(
           { ...aluno, nome_aluno: nome },
           undefined,
@@ -108,24 +178,40 @@ export function montarSnapshotGradeEmusys(
     }
   }
 
-  return [...chavesPorAula.entries()]
+  return [...porAula.entries()]
     .sort(([a], [b]) => a - b)
-    .map(([emusys_id, alunoChaves]) => ({
-      emusys_id,
-      aluno_chaves: [...alunoChaves].sort(),
-    }));
+    .map(([emusys_id, acumulador]) => {
+      const alunoChaves = [...acumulador.chaves].sort();
+      const qtdRecebida = alunoChaves.length;
+      const [qtdDeclarada] = acumulador.quantidadesDeclaradas;
+      const qtdEsperada = acumulador.quantidadesDeclaradas.size === 1
+        ? qtdDeclarada
+        : qtdRecebida;
+      const contagemIncoerente = acumulador.quantidadesDeclaradas.size > 1 ||
+        qtdEsperada !== qtdRecebida;
+      const estado: EstadoRosterSnapshot =
+        acumulador.incompleto || contagemIncoerente
+          ? "incompleto"
+          : acumulador.ambiguo
+          ? "ambiguo"
+          : qtdRecebida === 0
+          ? "vazio_confirmado"
+          : "completo";
+
+      return {
+        emusys_id,
+        estado,
+        qtd_esperada: qtdEsperada,
+        qtd_recebida: qtdRecebida,
+        aluno_chaves: alunoChaves,
+      };
+    });
 }
 
-/** Chama a única decisão de escrita da grade após a fotografia estar íntegra. */
-export async function reconciliarGradeSnapshotEmusys(
+/** Preserva o contrato v1 para Edges ainda não atualizadas durante a expansão. */
+export async function reconciliarGradeSnapshotEmusysV1(
   supabase: ClienteRpc,
-  params: {
-    unidadeId: string;
-    dataInicio: string;
-    dataFim: string;
-    snapshot: AulaSnapshotGrade[];
-    dryRun?: boolean;
-  },
+  params: ParametrosReconciliacaoGrade,
 ): Promise<ResultadoReconciliacaoGradeSnapshot> {
   const { data, error } = await supabase.rpc(
     "reconciliar_grade_snapshot_emusys_v1",
@@ -139,11 +225,46 @@ export async function reconciliarGradeSnapshotEmusys(
   );
 
   if (error) {
-    throw new Error(
-      `RPC reconciliar_grade_snapshot_emusys_v1: ${error.message}`,
-    );
+    throw new Error("PRESENCA_SYNC_RECONCILIACAO_ROSTER_FALHOU");
   }
 
-  return (data ??
-    { status: "sem_resposta" }) as ResultadoReconciliacaoGradeSnapshot;
+  return normalizarResultadoRpc(data);
+}
+
+/**
+ * Tenta a RPC v2 associada ao run de cobertura. Durante o rollout, recua uma
+ * única vez para v1 apenas quando o PostgREST comprova que a assinatura v2 não
+ * existe no schema cache (PGRST202). Qualquer outra falha permanece terminal.
+ */
+export async function reconciliarGradeSnapshotEmusys(
+  supabase: ClienteRpc,
+  params: ParametrosReconciliacaoGrade & { syncRunId: string },
+): Promise<ResultadoReconciliacaoDual> {
+  const { data, error } = await supabase.rpc(
+    "reconciliar_grade_snapshot_emusys_v2",
+    {
+      p_sync_run_id: params.syncRunId,
+      p_unidade_id: params.unidadeId,
+      p_data_inicio: params.dataInicio,
+      p_data_fim: params.dataFim,
+      p_snapshot: params.snapshot,
+      p_dry_run: params.dryRun ?? false,
+    },
+  );
+
+  if (!error) {
+    return {
+      contrato: "v2",
+      resultado: normalizarResultadoRpc(data),
+    };
+  }
+
+  if (!erroIndicaFuncaoAusente(error)) {
+    throw new Error("PRESENCA_SYNC_RECONCILIACAO_ROSTER_FALHOU");
+  }
+
+  return {
+    contrato: "v1_fallback",
+    resultado: await reconciliarGradeSnapshotEmusysV1(supabase, params),
+  };
 }

@@ -18,8 +18,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
-type Competencia = '2026-06' | '2026-07';
+type Competencia = '2026-06' | '2026-07' | '2026-08';
 type FiltroStatus = 'pendente' | 'todas';
+type FiltroEstrutural = 'vazio_confirmado' | 'incompleto' | 'ambiguo';
 
 interface PresencaConciliacaoAluno {
   aluno_presenca_id: string;
@@ -60,6 +61,31 @@ interface PresencaConciliacaoPayload {
   aulas: PresencaConciliacaoAula[];
 }
 
+interface RosterConciliacaoRevisao {
+  aula_id: number;
+  unidade_id: string;
+  unidade_nome: string;
+  emusys_id: number;
+  data_aula: string;
+  data_hora_inicio: string | null;
+  curso_nome: string;
+  turma_nome: string;
+  estado: FiltroEstrutural;
+  qtd_esperada: number;
+  qtd_recebida: number;
+  sincronizado_em: string;
+}
+
+interface RosterConciliacaoPayload {
+  resumo: {
+    total: number;
+    vazios_confirmados: number;
+    incompletos: number;
+    ambiguos: number;
+  };
+  revisoes: RosterConciliacaoRevisao[];
+}
+
 interface CorrecaoSelecionada {
   aluno: PresencaConciliacaoAluno;
   aula: PresencaConciliacaoAula;
@@ -78,9 +104,21 @@ const PAYLOAD_VAZIO: PresencaConciliacaoPayload = {
   aulas: [],
 };
 
+const ROSTER_PAYLOAD_VAZIO: RosterConciliacaoPayload = {
+  resumo: { total: 0, vazios_confirmados: 0, incompletos: 0, ambiguos: 0 },
+  revisoes: [],
+};
+
+const FILTROS_ESTRUTURAIS: Array<{ value: FiltroEstrutural; label: string }> = [
+  { value: 'vazio_confirmado', label: 'Roster vazio confirmado' },
+  { value: 'incompleto', label: 'Roster incompleto' },
+  { value: 'ambiguo', label: 'Identidade ambígua' },
+];
+
 const COMPETENCIAS: Array<{ value: Competencia; label: string; inicio: string; fim: string }> = [
   { value: '2026-06', label: 'Jun/2026', inicio: '2026-06-01', fim: '2026-06-30' },
   { value: '2026-07', label: 'Jul/2026', inicio: '2026-07-01', fim: '2026-07-31' },
+  { value: '2026-08', label: 'Ago/2026', inicio: '2026-08-01', fim: '2026-08-31' },
 ];
 
 function chaveAula(aula: PresencaConciliacaoAula): string {
@@ -109,6 +147,22 @@ function formatarHora(horario: string | null, dataHora: string | null): string {
   }).format(new Date(dataHora));
 }
 
+function formatarDataHora(dataHora: string | null): string {
+  if (!dataHora) return '-';
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date(dataHora));
+}
+
+function rotuloEstadoRoster(estado: FiltroEstrutural): string {
+  return FILTROS_ESTRUTURAIS.find(item => item.value === estado)?.label ?? estado;
+}
+
 function statusAluno(status: PresencaConciliacaoAluno['status']): { label: string; classe: string } {
   if (status === 'corrigida') {
     return { label: 'Corrigida para presente', classe: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300' };
@@ -120,8 +174,9 @@ function statusAluno(status: PresencaConciliacaoAluno['status']): { label: strin
 }
 
 export function ConciliacaoPresencas({ unidadeId }: { unidadeId?: string | null }) {
-  const [competencia, setCompetencia] = useState<Competencia>('2026-07');
+  const [competencia, setCompetencia] = useState<Competencia>('2026-08');
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('pendente');
+  const [filtroEstrutural, setFiltroEstrutural] = useState<FiltroEstrutural | null>(null);
   const [busca, setBusca] = useState('');
   const [buscaAplicada, setBuscaAplicada] = useState('');
   const [pagina, setPagina] = useState(0);
@@ -133,9 +188,14 @@ export function ConciliacaoPresencas({ unidadeId }: { unidadeId?: string | null 
   const [correcao, setCorrecao] = useState<CorrecaoSelecionada | null>(null);
   const [motivo, setMotivo] = useState('');
   const [corrigindo, setCorrigindo] = useState(false);
+  const [paginaRoster, setPaginaRoster] = useState(0);
+  const [dadosRoster, setDadosRoster] = useState<RosterConciliacaoPayload>(ROSTER_PAYLOAD_VAZIO);
+  const [loadingRoster, setLoadingRoster] = useState(false);
+  const [erroRoster, setErroRoster] = useState<string | null>(null);
+  const [reprocessandoRoster, setReprocessandoRoster] = useState<number | null>(null);
 
   const periodo = useMemo(
-    () => COMPETENCIAS.find(item => item.value === competencia) ?? COMPETENCIAS[1],
+    () => COMPETENCIAS.find(item => item.value === competencia) ?? COMPETENCIAS[2],
     [competencia],
   );
 
@@ -175,8 +235,54 @@ export function ConciliacaoPresencas({ unidadeId }: { unidadeId?: string | null 
     void carregar();
   }, [carregar]);
 
+  const carregarRoster = useCallback(async () => {
+    if (!filtroEstrutural) return;
+    setLoadingRoster(true);
+    setErroRoster(null);
+    try {
+      const { data, error } = await supabase.rpc('get_conciliacao_roster_operacional_v1', {
+        p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+        p_data_inicio: periodo.inicio,
+        p_data_fim: periodo.fim,
+        p_estado: filtroEstrutural,
+        p_limite: PAGE_SIZE,
+        p_offset: paginaRoster * PAGE_SIZE,
+      });
+      if (error) throw error;
+      setDadosRoster((data as RosterConciliacaoPayload) ?? ROSTER_PAYLOAD_VAZIO);
+    } catch (error: any) {
+      setErroRoster(error?.message || 'Não foi possível carregar a conciliação estrutural.');
+      setDadosRoster(ROSTER_PAYLOAD_VAZIO);
+    } finally {
+      setLoadingRoster(false);
+    }
+  }, [filtroEstrutural, paginaRoster, periodo.fim, periodo.inicio, unidadeId]);
+
+  useEffect(() => {
+    void carregarRoster();
+  }, [carregarRoster]);
+
   const totalPaginas = Math.max(1, Math.ceil(dados.resumo.total_grupos / PAGE_SIZE));
   const temPendencias = dados.resumo.total_alunos_pendentes > 0;
+  const metadadosPublicacao = useMemo(() => ({
+    denominador: filtroEstrutural
+      ? dadosRoster.resumo.total
+      : dados.resumo.total_alunos_pendentes + dados.resumo.total_revisados,
+    fonte: filtroEstrutural
+      ? 'roster operacional do Emusys'
+      : 'Emusys + revisão administrativa',
+    periodo: `${formatarData(periodo.inicio)} a ${formatarData(periodo.fim)}`,
+    regra_versao: filtroEstrutural ? 'roster-operacional-v1' : 'presenca-semantica-v1.2',
+    estado_publicacao: filtroEstrutural || temPendencias ? 'em_revisão' : 'operacional',
+  }), [
+    dados.resumo.total_alunos_pendentes,
+    dados.resumo.total_revisados,
+    dadosRoster.resumo.total,
+    filtroEstrutural,
+    periodo.fim,
+    periodo.inicio,
+    temPendencias,
+  ]);
 
   const alternarAula = (aula: PresencaConciliacaoAula) => {
     const chave = chaveAula(aula);
@@ -209,6 +315,27 @@ export function ConciliacaoPresencas({ unidadeId }: { unidadeId?: string | null 
       toast.error(error?.message || 'Não foi possível confirmar a chamada.');
     } finally {
       setConfirmandoAula(null);
+    }
+  };
+
+  const reprocessarRoster = async (revisao: RosterConciliacaoRevisao) => {
+    setReprocessandoRoster(revisao.aula_id);
+    try {
+      const { error } = await supabase.functions.invoke('sync-presenca-emusys', {
+        body: {
+          modo: 'presenca',
+          unidade_id: revisao.unidade_id,
+          data: revisao.data_aula,
+          dias: 1,
+        },
+      });
+      if (error) throw error;
+      toast.success('Reprocessamento solicitado ao Emusys.');
+      await carregarRoster();
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível reprocessar esta aula.');
+    } finally {
+      setReprocessandoRoster(null);
     }
   };
 
@@ -259,23 +386,39 @@ export function ConciliacaoPresencas({ unidadeId }: { unidadeId?: string | null 
           <ClipboardCheck className="h-5 w-5" />
         </div>
         <div className="min-w-0">
-          <h4 className="text-sm font-semibold text-slate-100">Presenças a confirmar</h4>
-          <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-slate-400">
-            <span><strong className="text-2xl font-bold tabular-nums text-slate-100">{dados.resumo.total_alunos_pendentes}</strong> registros</span>
-            <span><strong className="font-semibold text-slate-200">{dados.resumo.total_aulas_pendentes}</strong> aulas</span>
-            {dados.resumo.total_revisados > 0 && <span>{dados.resumo.total_revisados} revisados</span>}
-          </div>
+          <h4 className="text-sm font-semibold text-slate-100">
+            {filtroEstrutural ? 'Revisão estrutural do roster' : 'Presenças a confirmar'}
+          </h4>
+          {filtroEstrutural ? (
+            <div className="mt-1 text-xs text-slate-400">
+              <span><strong className="text-2xl font-bold tabular-nums text-slate-100">{dadosRoster.resumo.total}</strong> aulas</span>
+            </div>
+          ) : (
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-slate-400">
+              <span><strong className="text-2xl font-bold tabular-nums text-slate-100">{dados.resumo.total_alunos_pendentes}</strong> registros</span>
+              <span><strong className="font-semibold text-slate-200">{dados.resumo.total_aulas_pendentes}</strong> aulas</span>
+              {dados.resumo.total_revisados > 0 && <span>{dados.resumo.total_revisados} revisados</span>}
+            </div>
+          )}
         </div>
         <button
           type="button"
-          onClick={() => void carregar()}
-          disabled={loading}
+          onClick={() => void (filtroEstrutural ? carregarRoster() : carregar())}
+          disabled={filtroEstrutural ? loadingRoster : loading}
           title="Atualizar presenças"
           className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-600 text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
         >
-          <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+          <RefreshCw className={cn('h-4 w-4', (filtroEstrutural ? loadingRoster : loading) && 'animate-spin')} />
           <span className="sr-only">Atualizar</span>
         </button>
+      </div>
+
+      <div className="flex flex-wrap gap-x-5 gap-y-1 border-b border-slate-700/70 bg-slate-950/20 px-4 py-2 text-[11px] text-slate-400">
+        <span>Denominador: <strong className="font-medium text-slate-200">{metadadosPublicacao.denominador} registros do recorte</strong></span>
+        <span>Fonte: <strong className="font-medium text-slate-200">{metadadosPublicacao.fonte}</strong></span>
+        <span>Período: <strong className="font-medium text-slate-200">{metadadosPublicacao.periodo}</strong></span>
+        <span>regra_versao: <strong className="font-medium text-slate-200">{metadadosPublicacao.regra_versao}</strong></span>
+        <span>estado_publicacao: <strong className="font-medium text-slate-200">{metadadosPublicacao.estado_publicacao}</strong></span>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-700/70 px-4 py-3">
@@ -309,6 +452,7 @@ export function ConciliacaoPresencas({ unidadeId }: { unidadeId?: string | null 
               type="button"
               onClick={() => {
                 setFiltroStatus(value);
+                setFiltroEstrutural(null);
                 setPagina(0);
               }}
               className={cn(
@@ -322,18 +466,109 @@ export function ConciliacaoPresencas({ unidadeId }: { unidadeId?: string | null 
             </button>
           ))}
         </div>
-        <div className="relative min-w-[210px] flex-1 sm:max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-          <input
-            value={busca}
-            onChange={event => setBusca(event.target.value)}
-            placeholder="Buscar aluno, professor ou curso"
-            className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950/35 pl-9 pr-3 text-sm text-slate-200 outline-none placeholder:text-slate-500 focus:border-cyan-500/70"
-          />
+        <div className="inline-flex min-h-9 flex-wrap items-center rounded-lg border border-slate-700 bg-slate-950/30 p-1">
+          {FILTROS_ESTRUTURAIS.map(item => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => {
+                setFiltroEstrutural(item.value);
+                setPaginaRoster(0);
+              }}
+              className={cn(
+                'h-7 rounded-md px-3 text-xs font-medium transition',
+                filtroEstrutural === item.value
+                  ? 'bg-violet-500/20 text-violet-200'
+                  : 'text-slate-400 hover:text-slate-200',
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
+        {!filtroEstrutural && (
+          <div className="relative min-w-[210px] flex-1 sm:max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              value={busca}
+              onChange={event => setBusca(event.target.value)}
+              placeholder="Buscar aluno, professor ou curso"
+              className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950/35 pl-9 pr-3 text-sm text-slate-200 outline-none placeholder:text-slate-500 focus:border-cyan-500/70"
+            />
+          </div>
+        )}
       </div>
 
-      {erro ? (
+      {filtroEstrutural ? (
+        erroRoster ? (
+          <div className="flex items-center gap-2 px-4 py-5 text-sm text-red-300">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{erroRoster}</span>
+            <button type="button" onClick={() => void carregarRoster()} className="ml-auto text-cyan-300 hover:text-cyan-200">
+              Tentar novamente
+            </button>
+          </div>
+        ) : loadingRoster ? (
+          <div className="flex items-center justify-center px-4 py-10 text-sm text-slate-400">
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Carregando revisão estrutural...
+          </div>
+        ) : dadosRoster.revisoes.length === 0 ? (
+          <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-emerald-300">
+            <Check className="h-4 w-4" /> Nenhuma divergência estrutural neste recorte.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1050px] text-left text-xs">
+              <thead className="border-b border-slate-700/70 bg-slate-950/25 text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Unidade</th>
+                  <th className="px-4 py-3 font-medium">Aula / Emusys</th>
+                  <th className="px-4 py-3 font-medium">Curso</th>
+                  <th className="px-4 py-3 font-medium">Turma</th>
+                  <th className="px-4 py-3 font-medium">Data / hora</th>
+                  <th className="px-4 py-3 font-medium">Estado</th>
+                  <th className="px-4 py-3 font-medium">Esperada / recebida</th>
+                  <th className="px-4 py-3 font-medium">Última foto</th>
+                  <th className="px-4 py-3 text-right font-medium">Ação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/60">
+                {dadosRoster.revisoes.map(revisao => (
+                  <tr key={revisao.aula_id} className="bg-slate-950/10 text-slate-300">
+                    <td className="px-4 py-3">{revisao.unidade_nome}</td>
+                    <td className="px-4 py-3 tabular-nums">{revisao.aula_id} / {revisao.emusys_id}</td>
+                    <td className="max-w-[180px] truncate px-4 py-3">{revisao.curso_nome}</td>
+                    <td className="max-w-[180px] truncate px-4 py-3">{revisao.turma_nome}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {formatarData(revisao.data_aula)} · {formatarDataHora(revisao.data_hora_inicio)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-[11px] font-medium text-violet-200">
+                        {rotuloEstadoRoster(revisao.estado)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center tabular-nums">
+                      {revisao.qtd_esperada} / {revisao.qtd_recebida}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3">{formatarDataHora(revisao.sincronizado_em)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => void reprocessarRoster(revisao)}
+                        disabled={reprocessandoRoster === revisao.aula_id}
+                        className="inline-flex h-8 items-center justify-center gap-2 rounded-lg border border-cyan-500/35 px-3 font-medium text-cyan-300 transition hover:bg-cyan-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {reprocessandoRoster === revisao.aula_id && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        Reprocessar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : erro ? (
         <div className="flex items-center gap-2 px-4 py-5 text-sm text-red-300">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>{erro}</span>
@@ -420,7 +655,31 @@ export function ConciliacaoPresencas({ unidadeId }: { unidadeId?: string | null 
         </div>
       )}
 
-      {!loading && !erro && dados.resumo.total_grupos > PAGE_SIZE && (
+      {filtroEstrutural && !loadingRoster && !erroRoster && dadosRoster.resumo.total > PAGE_SIZE && (
+        <div className="flex items-center justify-end gap-2 border-t border-slate-700/70 px-4 py-3 text-xs text-slate-400">
+          <button
+            type="button"
+            onClick={() => setPaginaRoster(atual => Math.max(0, atual - 1))}
+            disabled={paginaRoster === 0}
+            title="Página anterior"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 hover:bg-slate-800 disabled:opacity-40"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span>Página {paginaRoster + 1} de {Math.ceil(dadosRoster.resumo.total / PAGE_SIZE)}</span>
+          <button
+            type="button"
+            onClick={() => setPaginaRoster(atual => Math.min(Math.ceil(dadosRoster.resumo.total / PAGE_SIZE) - 1, atual + 1))}
+            disabled={paginaRoster + 1 >= Math.ceil(dadosRoster.resumo.total / PAGE_SIZE)}
+            title="Próxima página"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 hover:bg-slate-800 disabled:opacity-40"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {!filtroEstrutural && !loading && !erro && dados.resumo.total_grupos > PAGE_SIZE && (
         <div className="flex items-center justify-end gap-2 border-t border-slate-700/70 px-4 py-3 text-xs text-slate-400">
           <button
             type="button"

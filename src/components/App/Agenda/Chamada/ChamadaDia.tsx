@@ -1,15 +1,20 @@
 import { useMemo, useState } from 'react';
 import { CalendarX, User } from 'lucide-react';
-import type { AulaAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
+import type { AulaAgenda, LeadExperimentalAgenda, PresencaEnvelopeAgenda } from '@/hooks/useAgendaDia';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOutletContext } from 'react-router-dom';
-import { chamadaCompleta, estadoDoAluno } from './chamadaUtils';
+import { aulaJaOcorreu } from '@/lib/agenda';
 import { ChamadaAulaBloco } from './ChamadaAulaBloco';
 import { AlertaPendencias } from './AlertaPendencias';
 import { ProfessorPresencaToggle } from './ProfessorPresencaToggle';
 import type { ItemChamada } from './useChamadaAcoes';
 import type { AlunoAgenda } from '@/hooks/useAgendaDia';
 import { cn } from '@/lib/utils';
+import {
+  adaptarPresencaCanonica,
+  adaptarPresencaProfessorCanonica,
+  resumirAulaPresencaCanonica,
+} from '@/lib/presencaCanonica';
 
 interface OutletContext {
   unidadeSelecionada: string | null;
@@ -18,6 +23,7 @@ interface OutletContext {
 interface Props {
   data: string;
   aulas: AulaAgenda[];
+  presenca: PresencaEnvelopeAgenda;
   salvando: boolean;
   onRegistrar: (itens: ItemChamada[]) => void;
   onRegistrarExperimental: (experimentalId: number, status: 'experimental_realizada' | 'experimental_faltou') => void;
@@ -39,6 +45,7 @@ interface Props {
 export function ChamadaDia({
   data,
   aulas,
+  presenca,
   salvando,
   onRegistrar,
   onRegistrarExperimental,
@@ -49,12 +56,14 @@ export function ChamadaDia({
   onAbrirDrawerLead,
   recarregar,
 }: Props) {
-  const { hasPermission } = useAuth();
-  const podeOperar = hasPermission('agenda.chamada');
+  const { hasPermission, user } = useAuth();
+  const presencaBloqueada = presenca.dados_status !== 'atualizados';
+  const podeOperar = hasPermission('agenda.chamada') && !presencaBloqueada;
   const agora = useMemo(() => new Date(), []);
   const context = useOutletContext<OutletContext | undefined>();
   const consolidado = !context?.unidadeSelecionada;
   const [filtroExperimental, setFiltroExperimental] = useState<'todas' | 'regulares' | 'experimentais'>('todas');
+  const [processandoProfessores, setProcessandoProfessores] = useState(false);
 
   const ordenadas = useMemo(
     () => [...aulas].sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio)),
@@ -63,61 +72,299 @@ export function ChamadaDia({
 
   // Marca todos os professores como presentes ou ausentes de uma vez
   async function marcarTodosProfessores(presente: boolean) {
+    if (processandoProfessores) return;
     const { supabase } = await import('@/lib/supabase');
     const { toast } = await import('sonner');
     const unidadeId = context?.unidadeSelecionada;
     if (!unidadeId) return;
-
-    const { chaveDoPedido, encerrarPedido, interpretarRecibo, requestIdDoPedido } = await import(
-      '@/lib/presencaRecibo'
-    );
-    let sucessos = 0;
-    let erros = 0;
-
-    for (const [professorId] of aulasPorProfessor) {
-      // Um pedido por professor: cada linha tem desfecho próprio no ledger.
-      const chave = chaveDoPedido('professor_dia', {
-        professorId,
-        data,
-        unidadeId,
-        ausente: !presente,
+    if (!user?.id) {
+      toast.error('Sessão inválida', {
+        description: 'Entre novamente para registrar a chamada.',
       });
+      return;
+    }
+
+    const {
+      adquirirTravaPresenca,
+      chaveDoPedido,
+      chaveTravaProfessorDia,
+      descreverErrosDoRecibo,
+      encerrarIntencaoProfessorPendente,
+      falhaEhRespostaInvalida,
+      interpretarEEncerrarPedido,
+      listarIntencoesProfessorPendentes,
+      mensagemDeErro,
+      reconciliarIntencoesPendentes,
+      reciboAplicouAlteracao,
+      reservarIntencaoProfessorPendente,
+      requestIdDoPedido,
+    } = await import('@/lib/presencaRecibo');
+
+    let chaveTrava: string;
+    let liberarTrava: (() => void) | null;
+    try {
+      chaveTrava = chaveTravaProfessorDia(user.id, unidadeId, data);
+      liberarTrava = adquirirTravaPresenca(chaveTrava);
+    } catch (e) {
+      toast.error('Não foi possível preparar o pedido.', { description: mensagemDeErro(e) });
+      return;
+    }
+    if (!liberarTrava) {
+      toast.info('Outra alteração de presença de professor está em andamento; aguarde.');
+      return;
+    }
+
+    setProcessandoProfessores(true);
+    try {
+      let resumoPendente;
       try {
-        const { data: recibo, error } = presente
-          ? await supabase.rpc('app_registrar_presenca_professor_dia', {
-              p_professor_id: professorId,
-              p_data: data,
-              p_unidade_id: unidadeId,
-              p_hora_chegada: null,
-              p_hora_saida: null,
-              p_request_id: requestIdDoPedido(chave),
-            })
-          : await supabase.rpc('app_remover_presenca_professor_dia', {
-              p_professor_id: professorId,
-              p_data: data,
-              p_unidade_id: unidadeId,
-              p_request_id: requestIdDoPedido(chave),
-            });
-        if (error) {
-          erros++;
+        resumoPendente = await reconciliarIntencoesPendentes(
+          listarIntencoesProfessorPendentes(chaveTrava),
+          (requestId) => supabase.rpc('app_status_comando_presenca_v1', {
+            p_request_id: requestId,
+          }),
+          (intencao) => encerrarIntencaoProfessorPendente(
+            chaveTrava,
+            intencao.chavePedido,
+            intencao.requestId,
+          ),
+        );
+      } catch (e) {
+        toast.error('Não foi possível consultar o resultado; tente novamente.', {
+          description: mensagemDeErro(e),
+        });
+        return;
+      }
+      if (resumoPendente.aplicados > 0) {
+        toast.info('Uma marcação anterior foi confirmada.', {
+          description: resumoPendente.falhas.length > 0
+            ? 'Os dados aplicados foram atualizados; outro pedido ainda não pôde ser consultado.'
+            : 'Os dados foram atualizados. Revise o estado antes de alterar novamente.',
+        });
+        recarregar?.();
+        return;
+      }
+      if (resumoPendente.falhas.length > 0) {
+        toast.error('Não foi possível consultar o resultado; tente novamente.', {
+          description: resumoPendente.falhas.map((falha) => falha.mensagem).join('; '),
+        });
+        return;
+      }
+      if (resumoPendente.pendentes > 0) {
+        toast.info('Pedido recebido; aguardando confirmação.', {
+          description: `${resumoPendente.pendentes} pedido(s) ainda em processamento.`,
+        });
+        return;
+      }
+
+      let sucessos = 0;
+      let semAlteracao = 0;
+      let aplicadosConcluidos = 0;
+      let rejeitadosConcluidos = 0;
+      let parciais = 0;
+      let aplicadosParciais = 0;
+      let rejeitadosParciais = 0;
+      let errosTerminais = 0;
+      let rejeitadosTerminais = 0;
+      let naoRecebidos = 0;
+      let pendentes = 0;
+      let falhasPreparacao = 0;
+      let falhasConsulta = 0;
+      let respostasInvalidas = 0;
+      let conflitosPendentes = 0;
+      const detalhesParciais: string[] = [];
+      const detalhesTerminais: string[] = [];
+      const detalhesPreparacao: string[] = [];
+      const detalhesConsulta: string[] = [];
+      const detalhesInvalidos: string[] = [];
+      const detalhesConflitos: string[] = [];
+      const direcao = presente ? 'presente' : 'ausente';
+
+      for (const [professorId, { nome }] of aulasPorProfessor) {
+        // Um pedido por professor: cada linha tem desfecho próprio no ledger.
+        const payload = {
+          professorId,
+          data,
+          unidadeId,
+          ausente: !presente,
+        };
+
+        let pedido: { chave: string; requestId: string };
+        try {
+          const chave = chaveDoPedido(user.id, 'professor_dia', payload);
+          const requestId = requestIdDoPedido(chave);
+          const reserva = reservarIntencaoProfessorPendente(
+            chaveTrava,
+            chave,
+            requestId,
+            direcao,
+          );
+          if (reserva.ok === false) {
+            conflitosPendentes++;
+            detalhesConflitos.push(
+              `${nome}: existe marcação como ${reserva.direcaoPendente} aguardando confirmação`,
+            );
+            break;
+          }
+          pedido = { chave, requestId };
+        } catch (e) {
+          falhasPreparacao++;
+          detalhesPreparacao.push(`${nome}: ${mensagemDeErro(e)}`);
           continue;
         }
-        encerrarPedido(chave);
-        // Sem recibo aplicado não houve alteração — contar como sucesso aqui
-        // faria a tela anunciar "N professores atualizados" sem ter atualizado.
-        if (interpretarRecibo(recibo).aplicados > 0) sucessos++;
-        else erros++;
-      } catch {
-        erros++;
-      }
-    }
 
-    if (erros > 0) {
-      toast.warning(`${sucessos} professores atualizados, ${erros} com erro`);
-    } else {
-      toast.success(`${sucessos} professores marcados como ${presente ? 'presentes' : 'ausentes'}`);
+        const { chave, requestId } = pedido;
+        let recibo: unknown;
+        try {
+          const resposta = presente
+            ? await supabase.rpc('app_registrar_presenca_professor_dia', {
+                p_professor_id: professorId,
+                p_data: data,
+                p_unidade_id: unidadeId,
+                p_hora_chegada: null,
+                p_hora_saida: null,
+                p_request_id: requestId,
+              })
+            : await supabase.rpc('app_remover_presenca_professor_dia', {
+                p_professor_id: professorId,
+                p_data: data,
+                p_unidade_id: unidadeId,
+                p_request_id: requestId,
+              });
+          if (resposta.error) throw resposta.error;
+          recibo = resposta.data;
+        } catch (e) {
+          falhasConsulta++;
+          detalhesConsulta.push(`${nome}: ${mensagemDeErro(e)}`);
+          continue;
+        }
+
+        let resultado;
+        try {
+          resultado = interpretarEEncerrarPedido(chave, requestId, recibo);
+          if (resultado.status !== 'recebido' && resultado.status !== 'processando') {
+            encerrarIntencaoProfessorPendente(chaveTrava, chave, requestId);
+          }
+        } catch (e) {
+          if (falhaEhRespostaInvalida(e)) {
+            respostasInvalidas++;
+            detalhesInvalidos.push(`${nome}: ${mensagemDeErro(e)}`);
+          } else {
+            falhasConsulta++;
+            detalhesConsulta.push(`${nome}: ${mensagemDeErro(e)}`);
+          }
+          continue;
+        }
+
+        if (resultado.status === 'concluido') {
+          if (!reciboAplicouAlteracao(resultado)) {
+            semAlteracao++;
+            continue;
+          }
+          sucessos++;
+          aplicadosConcluidos += resultado.aplicados;
+          rejeitadosConcluidos += resultado.rejeitados;
+          continue;
+        }
+
+        if (resultado.status === 'parcial') {
+          parciais++;
+          aplicadosParciais += resultado.aplicados;
+          rejeitadosParciais += resultado.rejeitados;
+          const codigos = resultado.erros.map((erro) => erro.codigo).join(', ');
+          detalhesParciais.push(`${nome}: ${codigos} — ${descreverErrosDoRecibo(resultado)}`);
+          continue;
+        }
+
+        if (resultado.status === 'falhou') {
+          errosTerminais++;
+          rejeitadosTerminais += resultado.rejeitados;
+          const codigos = resultado.erros.map((erro) => erro.codigo).join(', ');
+          detalhesTerminais.push(`${nome}: ${codigos} — ${descreverErrosDoRecibo(resultado)}`);
+          continue;
+        }
+
+        if (resultado.status === 'nao_recebido') {
+          naoRecebidos++;
+          continue;
+        }
+
+        if (resultado.status === 'recebido' || resultado.status === 'processando') {
+          pendentes++;
+        }
+      }
+
+      if (sucessos > 0) {
+        toast.success(`${sucessos} pedido(s) concluído(s)`, {
+          description: `${aplicadosConcluidos} aplicado(s), ${rejeitadosConcluidos} rejeitado(s).`,
+        });
+      }
+      if (semAlteracao > 0) {
+        toast.warning('Pedido concluído sem alteração.', {
+          description: `${semAlteracao} professor(es) sem presença aplicada.`,
+        });
+      }
+      if (parciais > 0) {
+        toast.warning(`${parciais} pedido(s) parcialmente concluído(s)`, {
+          description: `${aplicadosParciais} aplicado(s), ${rejeitadosParciais} rejeitado(s): ${detalhesParciais.join('; ')}`,
+        });
+      }
+      if (errosTerminais > 0) {
+        toast.error(`${errosTerminais} pedido(s) com falha canônica`, {
+          description: `${rejeitadosTerminais} rejeitado(s): ${detalhesTerminais.join('; ')}`,
+        });
+      }
+      if (naoRecebidos > 0) {
+        toast.warning('Pedido não recebido; tente novamente.', {
+          description: `${naoRecebidos} professor(es) sem pedido recebido.`,
+        });
+      }
+      if (pendentes > 0) {
+        toast.info('Pedido recebido; aguardando confirmação.', {
+          description: `${pendentes} professor(es) ainda em processamento.`,
+        });
+      }
+      if (falhasPreparacao > 0) {
+        toast.error('Não foi possível preparar o pedido.', {
+          description: `${falhasPreparacao} professor(es); nenhuma RPC enviada: ${detalhesPreparacao.join('; ')}`,
+        });
+      }
+      if (falhasConsulta > 0) {
+        toast.error('Não foi possível consultar o resultado; tente novamente.', {
+          description: `${falhasConsulta} professor(es): ${detalhesConsulta.join('; ')}`,
+        });
+      }
+      if (respostasInvalidas > 0) {
+        toast.error('Resposta inválida; pedido preservado para nova tentativa.', {
+          description: `${respostasInvalidas} professor(es): ${detalhesInvalidos.join('; ')}`,
+        });
+      }
+      if (conflitosPendentes > 0) {
+        toast.warning('Existe uma alteração oposta aguardando confirmação.', {
+          description: detalhesConflitos.join('; '),
+        });
+      }
+
+      toast.info('Resumo do lote de professores', {
+        description: [
+          `${sucessos} concluído(s) com aplicação`,
+          `${semAlteracao} concluído(s) sem alteração`,
+          `${parciais} parcial(is)`,
+          `${errosTerminais} falha(s) terminal(is)`,
+          `${naoRecebidos} não recebido(s)`,
+          `${pendentes} pendente(s)`,
+          `${falhasPreparacao} falha(s) de preparação`,
+          `${falhasConsulta} falha(s) de consulta`,
+          `${respostasInvalidas} resposta(s) inválida(s)`,
+          `${conflitosPendentes} conflito(s) pendente(s)`,
+        ].join(', '),
+      });
+
+      if (sucessos > 0 || parciais > 0) recarregar?.();
+    } finally {
+      setProcessandoProfessores(false);
+      liberarTrava();
     }
-    recarregar?.();
   }
 
   // Filtro: separar experimental de regular
@@ -128,7 +375,11 @@ export function ChamadaDia({
   }, [ordenadas, filtroExperimental]);
 
   const totalAulas = filtradas.length;
-  const aulasConcluidas = filtradas.filter((a) => chamadaCompleta(a, data, agora)).length;
+  const aulasConcluidas = filtradas.filter((aula) => resumirAulaPresencaCanonica({
+    aula,
+    envelope: presenca,
+    ocorrida: aulaJaOcorreu(data, aula.hora_fim, agora),
+  }).completa).length;
 
   // Agrupa aulas por professor para o toggle de presenca.
   // Aula cancelada NAO entra: a RPC de presenca pula canceladas, e ler o
@@ -140,29 +391,35 @@ export function ChamadaDia({
     for (const aula of filtradas) {
       if (aula.professor_id == null) continue;
       if (aula.cancelada) continue;
+      const decisao = adaptarPresencaProfessorCanonica({
+        professorId: aula.professor_id,
+        aulaIds: aula.aula_ids,
+        envelope: presenca,
+      });
+      const presenteAula = decisao.estado === 'presente'
+        ? true
+        : decisao.estado === 'ausente'
+          ? false
+          : null;
       const existente = mapa.get(aula.professor_id);
       if (existente) {
         existente.aulas.push(aula);
         if (aula.hora_inicio < existente.primeira) existente.primeira = aula.hora_inicio;
         if (aula.hora_fim > existente.ultima) existente.ultima = aula.hora_fim;
+        if (existente.presente !== presenteAula) existente.presente = null;
       } else {
-        const presente = aula.professor_presenca === 'presente'
-          ? true
-          : aula.professor_presenca === 'ausente'
-            ? false
-            : null;
         mapa.set(aula.professor_id, {
           nome: aula.professor_nome ?? 'Professor',
           fotoUrl: aula.professor_foto_url ?? null,
           aulas: [aula],
-          presente,
+          presente: presenteAula,
           primeira: aula.hora_inicio,
           ultima: aula.hora_fim,
         });
       }
     }
     return Array.from(mapa.entries()).sort((a, b) => a[1].nome.localeCompare(b[1].nome));
-  }, [filtradas]);
+  }, [filtradas, presenca]);
 
   if (ordenadas.length === 0) {
     return (
@@ -179,6 +436,7 @@ export function ChamadaDia({
       <AlertaPendencias
         data={data}
         aulas={ordenadas}
+        presenca={presenca}
         consolidado={consolidado}
         unidadeId={context?.unidadeSelecionada ?? null}
         onAbrirDrawer={onAbrirDrawer}
@@ -193,14 +451,16 @@ export function ChamadaDia({
               <button
                 type="button"
                 onClick={() => marcarTodosProfessores(true)}
-                className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-500/20"
+                disabled={processandoProfessores}
+                className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
               >
                 Todos presentes
               </button>
               <button
                 type="button"
                 onClick={() => marcarTodosProfessores(false)}
-                className="rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-300 hover:bg-rose-500/20"
+                disabled={processandoProfessores}
+                className="rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
               >
                 Todos ausentes
               </button>
@@ -219,6 +479,7 @@ export function ChamadaDia({
                 primeiraAula={primeira}
                 ultimaAula={ultima}
                 presente={presente}
+                presenca={presenca}
                 onMudou={() => recarregar?.()}
               />
             ))}
@@ -275,6 +536,7 @@ export function ChamadaDia({
           <ChamadaAulaBloco
             key={aula.chave}
             aula={aula}
+            presenca={presenca}
             data={data}
             podeOperar={podeOperar}
             salvando={salvando}
@@ -289,7 +551,7 @@ export function ChamadaDia({
             }
             onMarcarExperimental={onRegistrarExperimental}
             onJustificar={(aluno) => onJustificar(aluno, aula)}
-            onTodosPresentes={(a) => onRegistrarTodosPresentes(a, onRegistrar)}
+            onTodosPresentes={(a) => onRegistrarTodosPresentes(a, presenca, onRegistrar)}
             onCancelarAula={onCancelarAula}
             onReagendarAula={onReagendarAula}
             onAbrirDrawer={onAbrirDrawer}
@@ -302,9 +564,20 @@ export function ChamadaDia({
 }
 
 /** Marca todos os alunos vinculados como presentes em um unico lote. */
-function onRegistrarTodosPresentes(aula: AulaAgenda, onRegistrar: (itens: ItemChamada[]) => void) {
+function onRegistrarTodosPresentes(
+  aula: AulaAgenda,
+  presenca: PresencaEnvelopeAgenda,
+  onRegistrar: (itens: ItemChamada[]) => void,
+) {
   const itens: ItemChamada[] = aula.alunos
-    .filter((a) => a.aluno_id != null && a.aula_emusys_id != null && estadoDoAluno(a) !== 'presente')
+    .filter((aluno) => aluno.aluno_id != null
+      && aluno.aula_emusys_id != null
+      && adaptarPresencaCanonica({
+        alunoId: aluno.aluno_id,
+        aulaEmusysId: aluno.aula_emusys_id,
+        emusysPresencaBruta: aluno.emusys_presenca_bruta,
+        envelope: presenca,
+      }).estado !== 'presente')
     .map((a) => ({
       aula_emusys_id: a.aula_emusys_id!,
       aluno_id: a.aluno_id!,

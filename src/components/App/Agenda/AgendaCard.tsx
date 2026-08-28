@@ -1,7 +1,12 @@
 import { AlertTriangle, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip } from '@/components/ui/Tooltip';
-import type { AulaAgenda } from '@/hooks/useAgendaDia';
+import type { AulaAgenda, PresencaEnvelopeAgenda } from '@/hooks/useAgendaDia';
+import {
+  adaptarPresencaCanonica,
+  adaptarPresencaProfessorCanonica,
+  rotuloPresencaFonte,
+} from '@/lib/presencaCanonica';
 
 interface Props {
   aula: AulaAgenda;
@@ -16,6 +21,7 @@ interface Props {
   emAndamento?: boolean;
   // A aula ja terminou. Portao para exibir PRESENCA — ver ResumoDaAula.
   jaOcorreu?: boolean;
+  presenca: PresencaEnvelopeAgenda;
 }
 
 /**
@@ -23,18 +29,13 @@ interface Props {
  * do bruto do Emusys. Nao e falta nem presenca — e a divergencia que a
  * secretaria precisa ver para retificar. Ver `temConflito` em chamadaUtils.
  */
-function temConflitoAula(aula: AulaAgenda): boolean {
-  for (const a of aula.alunos) {
-    if (!a.emusys_presenca_bruta || !a.respondido_por) continue;
-    const humanas = new Set([
-      'professor_la_teacher', 'professor_whatsapp', 'manual', 'fabio_audio', 'agenda_secretaria',
-    ]);
-    if (!humanas.has(a.respondido_por)) continue;
-    const humanoPresente = a.status_presenca === 'presente';
-    const emusysPresente = a.emusys_presenca_bruta === 'presente';
-    if (humanoPresente !== emusysPresente) return true;
-  }
-  return false;
+function temConflitoAula(aula: AulaAgenda, presenca: PresencaEnvelopeAgenda): boolean {
+  return aula.alunos.some((aluno) => adaptarPresencaCanonica({
+    alunoId: aluno.aluno_id,
+    aulaEmusysId: aluno.aula_emusys_id,
+    emusysPresencaBruta: aluno.emusys_presenca_bruta,
+    envelope: presenca,
+  }).conflito);
 }
 
 /** Soma de creditos de reposicao pendentes entre os alunos da aula. */
@@ -116,8 +117,26 @@ function rotuloModalidade(tipo: string | null): string | null {
  * linhas de aula FUTURA ja marcadas como 'falta' — poucas, e erradas o
  * bastante para valer o mesmo portao.
  */
-function ResumoPresenca({ aula }: { aula: AulaAgenda }) {
-  const comStatus = aula.alunos.filter((a) => a.status_presenca);
+function ResumoPresenca({ aula, presenca }: { aula: AulaAgenda; presenca: PresencaEnvelopeAgenda }) {
+  if (presenca.dados_status !== 'atualizados') {
+    return (
+      <div className="mt-0.5 border-t border-slate-700 pt-1.5 text-[11px] text-amber-300">
+        Em auditoria · {presenca.dados_status === 'roster_em_revisao' ? 'roster em revisão' : 'dados desatualizados'}
+      </div>
+    );
+  }
+  const decisoes = aula.alunos.map((aluno) => adaptarPresencaCanonica({
+    alunoId: aluno.aluno_id,
+    aulaEmusysId: aluno.aula_emusys_id,
+    emusysPresencaBruta: aluno.emusys_presenca_bruta,
+    envelope: presenca,
+  }));
+  const decididos = decisoes.filter((decisao) => ['presente', 'falta', 'falta_justificada'].includes(decisao.estado));
+  const professor = aula.professor_id == null ? null : adaptarPresencaProfessorCanonica({
+    professorId: aula.professor_id,
+    aulaIds: aula.aula_ids,
+    envelope: presenca,
+  });
 
   // A presenca chega pelo sync (a cada 15 min, com defasagem de horas), nao em
   // tempo real: numa aula que acabou de terminar ela normalmente AINDA nao
@@ -125,7 +144,7 @@ function ResumoPresenca({ aula }: { aula: AulaAgenda }) {
   // proprio dia tinha 2,7%. Sumir em silencio faz o usuario procurar um recurso
   // que esta la — foi a primeira pergunta que ele fez. Entao diz que falta
   // sincronizar, em vez de nao dizer nada.
-  if (!aula.professor_presenca && comStatus.length === 0) {
+  if ((!professor || professor.estado === 'indeterminado') && decididos.length === 0) {
     if (aula.alunos.length === 0) return null;
     return (
       <div className="mt-0.5 border-t border-slate-700 pt-1.5 text-[11px] text-slate-500">
@@ -134,21 +153,21 @@ function ResumoPresenca({ aula }: { aula: AulaAgenda }) {
     );
   }
 
-  const presentes = comStatus.filter((a) => a.status_presenca === 'presente').length;
-  const faltas = comStatus.length - presentes;
+  const presentes = decididos.filter((decisao) => decisao.estado === 'presente').length;
+  const faltas = decididos.length - presentes;
 
   return (
     <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-700 pt-1.5 text-[11px]">
-      {aula.professor_presenca && (
+      {professor && (professor.estado === 'presente' || professor.estado === 'ausente') && (
         <span
           className={cn(
-            aula.professor_presenca === 'presente' ? 'text-emerald-300' : 'text-rose-300',
+            professor.estado === 'presente' ? 'text-emerald-300' : 'text-rose-300',
           )}
         >
-          Professor {aula.professor_presenca === 'presente' ? 'presente' : 'ausente'}
+          Professor {professor.estado === 'presente' ? 'presente' : 'ausente'} · {rotuloPresencaFonte(professor.fonte)}
         </span>
       )}
-      {comStatus.length > 0 && (
+      {decididos.length > 0 && (
         <span className="text-slate-400">
           {presentes > 0 && <span className="text-emerald-300">{presentes} presente{presentes > 1 ? 's' : ''}</span>}
           {presentes > 0 && faltas > 0 && ' · '}
@@ -163,10 +182,12 @@ function ResumoDaAula({
   aula,
   estado,
   jaOcorreu,
+  presenca,
 }: {
   aula: AulaAgenda;
   estado: EstadoAula;
   jaOcorreu: boolean;
+  presenca: PresencaEnvelopeAgenda;
 }) {
   const rotuloEstado = ROTULO_ESTADO[estado];
   const modalidade = rotuloModalidade(aula.tipo);
@@ -258,25 +279,33 @@ function ResumoDaAula({
 
       {aula.alunos.length > 0 && (
         <ul className="mt-0.5 flex flex-col gap-0.5 border-t border-slate-700 pt-1.5">
-          {aula.alunos.slice(0, MAX_ALUNOS_NO_RESUMO).map((a, i) => (
+          {aula.alunos.slice(0, MAX_ALUNOS_NO_RESUMO).map((a, i) => {
+            const decisao = adaptarPresencaCanonica({
+              alunoId: a.aluno_id,
+              aulaEmusysId: a.aula_emusys_id,
+              emusysPresencaBruta: a.emusys_presenca_bruta,
+              envelope: presenca,
+            });
+            const terminal = ['presente', 'falta', 'falta_justificada'].includes(decisao.estado);
+            return (
             <li key={`${a.aluno_id ?? a.nome}-${i}`} className="flex items-baseline gap-1.5 text-[12px]">
               {/* Presenca do ALUNO, aluno a aluno. Mesmo portao do agregado
                   abaixo: so depois que a aula terminou. */}
-              {jaOcorreu && a.status_presenca && (
+              {jaOcorreu && terminal && (
                 <span
                   aria-hidden="true"
                   className={cn(
                     'shrink-0 text-[11px] leading-none',
-                    a.status_presenca === 'presente' ? 'text-emerald-400' : 'text-rose-400',
+                    decisao.estado === 'presente' ? 'text-emerald-400' : 'text-rose-400',
                   )}
                 >
-                  {a.status_presenca === 'presente' ? '✓' : '✕'}
+                  {decisao.estado === 'presente' ? '✓' : '✕'}
                 </span>
               )}
               <span className="min-w-0 flex-1 text-slate-100">{a.nome}</span>
-              {jaOcorreu && a.status_presenca && (
+              {jaOcorreu && terminal && (
                 <span className="sr-only">
-                  {a.status_presenca === 'presente' ? 'presente' : 'faltou'}
+                  {decisao.estado === 'presente' ? 'presente' : 'faltou'}
                 </span>
               )}
               {a.aluno_novo && <span className="shrink-0 text-[10px] text-amber-300">★ novo</span>}
@@ -287,7 +316,8 @@ function ResumoDaAula({
                 </span>
               )}
             </li>
-          ))}
+            );
+          })}
           {aula.alunos.length > MAX_ALUNOS_NO_RESUMO && (
             <li className="text-[11px] text-slate-500">
               +{aula.alunos.length - MAX_ALUNOS_NO_RESUMO} — abrir para ver todos
@@ -314,7 +344,7 @@ function ResumoDaAula({
         </ul>
       )}
 
-      {jaOcorreu && <ResumoPresenca aula={aula} />}
+      {jaOcorreu && <ResumoPresenca aula={aula} presenca={presenca} />}
 
       {observacoes.length > 0 && (
         <div className="mt-0.5 border-t border-slate-700 pt-1.5">
@@ -340,6 +370,7 @@ export function AgendaCard({
   amplo = false,
   emAndamento = false,
   jaOcorreu = false,
+  presenca,
 }: Props) {
   const estado = estadoDaAula(aula, emAndamento);
   const nomeDoAluno = (nome: string) => (amplo ? nome : primeiroENome(nome));
@@ -379,13 +410,13 @@ export function AgendaCard({
   const calouros = aula.alunos.filter((a) => a.aluno_novo).length;
   // Sinais da chamada (Fase 2): conflito Emusys x humano e reposicoes pendentes.
   // So fazem sentido em aula que tem aluno e nao esta cancelada.
-  const conflito = estado !== 'cancelada' && temConflitoAula(aula);
+  const conflito = estado !== 'cancelada' && temConflitoAula(aula, presenca);
   const reposicoes = estado !== 'cancelada' ? reposicoesPendentesAula(aula) : 0;
   // Sinal de aluno nao faz sentido em aula cancelada: ninguem vai estar la.
   const mostrarSinais = estado !== 'cancelada';
 
   return (
-    <Tooltip side="top" content={<ResumoDaAula aula={aula} estado={estado} jaOcorreu={jaOcorreu} />}>
+    <Tooltip side="top" content={<ResumoDaAula aula={aula} estado={estado} jaOcorreu={jaOcorreu} presenca={presenca} />}>
       <button
         type="button"
         style={estilo}

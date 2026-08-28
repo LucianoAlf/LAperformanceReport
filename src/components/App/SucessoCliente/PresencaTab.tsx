@@ -1,6 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchAlunosAtivosAtuaisCanonicos } from '@/lib/estadoOperacionalAlunos';
+import {
+  avaliarPublicacaoOcorrencias,
+  filtrarOcorrenciasConfirmadas,
+} from '@/lib/presencaPublicacao';
 import { format, parseISO, startOfWeek, addDays, addWeeks, subWeeks } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
@@ -34,6 +38,9 @@ interface PresencaDia {
   tipo: string | null;
   nr_da_aula: number | null;
   qtd_alunos: number | null;
+  estado_publicacao: EstadoPublicacaoPresenca;
+  regra_versao: string;
+  fonte: string;
 }
 
 interface PresencaAula {
@@ -50,6 +57,9 @@ interface PresencaAula {
   tipo: string | null;
   nr_da_aula: number | null;
   qtd_alunos: number | null;
+  estado_publicacao: EstadoPublicacaoPresenca;
+  regra_versao: string;
+  fonte: string;
 }
 
 interface SyncLog {
@@ -75,6 +85,74 @@ interface Props {
 const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 const LOGS_POR_PAGINA = 10;
 const PRESENCA_POR_PAGINA = 30;
+type EstadoPublicacaoPresenca = 'em_auditoria' | 'publicado';
+
+function calcularPercentualPublicavel(
+  numerador: number,
+  denominador: number,
+  estadoPublicacao: EstadoPublicacaoPresenca,
+): number | null {
+  if (estadoPublicacao !== 'publicado' || denominador <= 0) return null;
+  return Math.round((numerador / denominador) * 1000) / 10;
+}
+
+function formatarPercentualPublicavel(
+  percentual: number | null,
+  denominador: number,
+  estadoPublicacao: EstadoPublicacaoPresenca,
+): string {
+  if (estadoPublicacao !== 'publicado' || denominador <= 0 || percentual === null) {
+    return 'Em auditoria';
+  }
+  return `${percentual.toFixed(1)}%`;
+}
+
+function classePercentual(percentual: number | null): string {
+  if (percentual === null) return 'text-amber-400';
+  return percentual >= 80 ? 'text-green-400' : percentual >= 60 ? 'text-yellow-400' : 'text-red-400';
+}
+
+function normalizarOcorrencia(linha: any, experimental = false) {
+  const resultado = String(linha.resultado_canonico ?? linha.resultado ?? 'indeterminado');
+  return {
+    aluno_id: Number(linha.aluno_id),
+    aluno_nome: String(linha.aluno_nome || 'Aluno sem nome'),
+    data_aula: String(linha.data_aula),
+    status: resultado === 'presente'
+      ? 'presente'
+      : resultado === 'falta' || resultado === 'falta_justificada'
+        ? 'ausente'
+        : 'em_auditoria',
+    horario_aula: linha.horario_aula ? String(linha.horario_aula) : null,
+    curso_nome: linha.curso_nome ? String(linha.curso_nome) : null,
+    turma_nome: linha.turma_nome ? String(linha.turma_nome) : null,
+    sala_nome: linha.sala_nome ? String(linha.sala_nome) : null,
+    professor_nome: linha.professor_nome ? String(linha.professor_nome) : null,
+    anotacoes: linha.anotacoes ? String(linha.anotacoes) : null,
+    duracao_minutos: linha.duracao_minutos === null ? null : Number(linha.duracao_minutos),
+    tipo: linha.tipo ? String(linha.tipo) : null,
+    nr_da_aula: linha.nr_da_aula === null ? null : Number(linha.nr_da_aula),
+    qtd_alunos: linha.qtd_alunos === null ? null : Number(linha.qtd_alunos),
+    estado_publicacao: experimental
+      ? 'em_auditoria' as const
+      : linha.estado_publicacao === 'publicado' ? 'publicado' as const : 'em_auditoria' as const,
+    regra_versao: String(linha.regra_versao || (experimental ? 'presenca-experimental-v1.1' : 'presenca-interface-v2.1')),
+    fonte: experimental ? 'presenca-experimental' : 'get_presenca_ocorrencias_periodo_v2',
+  };
+}
+
+async function buscarUltimaExperimental(aluno: AlunoSimples): Promise<string | null> {
+  const { data } = await supabase.rpc('get_presenca_experimental_aluno_periodo_v1', {
+    p_unidade_id: aluno.unidade_id,
+    p_data_inicio: null,
+    p_data_fim: null,
+    p_aluno_id: aluno.id,
+  });
+  return (data || []).reduce<string | null>((ultima, linha: any) => {
+    const dataAula = String(linha.data_aula || '');
+    return !ultima || dataAula > ultima ? dataAula : ultima;
+  }, null);
+}
 
 export function PresencaTab({ unidadeAtual }: Props) {
   const sentinelRef = useWidgetOverlapSentinel();
@@ -162,35 +240,15 @@ export function PresencaTab({ unidadeAtual }: Props) {
     if (!filtroData) { setPresencasDoDia([]); return; }
     const fetchDia = async () => {
       setLoadingDia(true);
-      let query = supabase
-        .from('aluno_presenca')
-        .select('aluno_id, alunos(nome), status, horario_aula, curso_nome, turma_nome, sala_nome, aulas_emusys(professor_nome, anotacoes, duracao_minutos, tipo, nr_da_aula, qtd_alunos)')
-        .eq('data_aula', filtroData)
-        .in('status', ['presente', 'ausente'])
-        .order('horario_aula');
-
-      if (unidadeAtual !== 'todos') {
-        query = query.eq('unidade_id', unidadeAtual);
-      }
-
-      const { data } = await query;
-      setPresencasDoDia(
-        (data || []).map((p: any) => ({
-          aluno_id: p.aluno_id,
-          aluno_nome: p.alunos?.nome || '???',
-          status: p.status,
-          horario_aula: p.horario_aula,
-          curso_nome: p.curso_nome,
-          turma_nome: p.turma_nome,
-          sala_nome: p.sala_nome,
-          professor_nome: p.aulas_emusys?.professor_nome || null,
-          anotacoes: p.aulas_emusys?.anotacoes || null,
-          duracao_minutos: p.aulas_emusys?.duracao_minutos || null,
-          tipo: p.aulas_emusys?.tipo || null,
-          nr_da_aula: p.aulas_emusys?.nr_da_aula || null,
-          qtd_alunos: p.aulas_emusys?.qtd_alunos || null,
-        }))
-      );
+      const { data } = await supabase.rpc('get_presenca_ocorrencias_periodo_v2', {
+        p_unidade_id: unidadeAtual === 'todos' ? null : unidadeAtual,
+        p_data_inicio: filtroData,
+        p_data_fim: filtroData,
+        p_professor_id: null,
+        p_aluno_id: null,
+      });
+      setPresencasDoDia((data || [])
+        .map((linha: any) => normalizarOcorrencia(linha)));
       setLoadingDia(false);
     };
     fetchDia();
@@ -204,39 +262,24 @@ export function PresencaTab({ unidadeAtual }: Props) {
     const inicio = format(semanaInicio, 'yyyy-MM-dd');
     const fim = format(addDays(semanaInicio, 5), 'yyyy-MM-dd');
 
-    let query = supabase
-      .from('aluno_presenca')
-      .select('data_aula, status, horario_aula, curso_nome, turma_nome, sala_nome, aulas_emusys!inner(professor_nome, anotacoes, duracao_minutos, tipo, nr_da_aula, qtd_alunos, categoria)')
-      .eq('aluno_id', alunoSelecionado.id)
-      .gte('data_aula', inicio)
-      .lte('data_aula', fim)
-      .in('status', ['presente', 'ausente'])
-      .order('data_aula')
-      .order('horario_aula');
+    const experimental = filtroTipoAula === 'experimental';
+    const resultado = experimental
+      ? await supabase.rpc('get_presenca_experimental_aluno_periodo_v1', {
+        p_unidade_id: alunoSelecionado.unidade_id,
+        p_data_inicio: inicio,
+        p_data_fim: fim,
+        p_aluno_id: alunoSelecionado.id,
+      })
+      : await supabase.rpc('get_presenca_ocorrencias_periodo_v2', {
+        p_unidade_id: alunoSelecionado.unidade_id,
+        p_data_inicio: inicio,
+        p_data_fim: fim,
+        p_professor_id: null,
+        p_aluno_id: alunoSelecionado.id,
+      });
 
-    if (filtroTipoAula === 'experimental') {
-      query = query.eq('aulas_emusys.categoria', 'experimental');
-    }
-
-    const { data } = await query;
-
-    // Flatten join data
-    setPresencas(
-      (data || []).map((p: any) => ({
-        data_aula: p.data_aula,
-        status: p.status,
-        horario_aula: p.horario_aula,
-        curso_nome: p.curso_nome,
-        turma_nome: p.turma_nome,
-        sala_nome: p.sala_nome,
-        professor_nome: p.aulas_emusys?.professor_nome || null,
-        anotacoes: p.aulas_emusys?.anotacoes || null,
-        duracao_minutos: p.aulas_emusys?.duracao_minutos || null,
-        tipo: p.aulas_emusys?.tipo || null,
-        nr_da_aula: p.aulas_emusys?.nr_da_aula || null,
-        qtd_alunos: p.aulas_emusys?.qtd_alunos || null,
-      }))
-    );
+    setPresencas((resultado.data || [])
+      .map((linha: any) => normalizarOcorrencia(linha, experimental)));
     setLoadingPresenca(false);
   }, [alunoSelecionado, semanaInicio, filtroTipoAula]);
 
@@ -261,16 +304,9 @@ export function PresencaTab({ unidadeAtual }: Props) {
     if (!alunoSelecionado) return;
     if (filtroTipoAula === 'experimental') {
       (async () => {
-        const { data } = await supabase
-          .from('aluno_presenca')
-          .select('data_aula, aulas_emusys!inner(categoria)')
-          .eq('aluno_id', alunoSelecionado.id)
-          .eq('aulas_emusys.categoria', 'experimental')
-          .in('status', ['presente', 'ausente'])
-          .order('data_aula', { ascending: false })
-          .limit(1);
-        if (data?.length) {
-          setSemanaInicio(startOfWeek(parseISO(data[0].data_aula), { weekStartsOn: 1 }));
+        const ultima = await buscarUltimaExperimental(alunoSelecionado);
+        if (ultima) {
+          setSemanaInicio(startOfWeek(parseISO(ultima), { weekStartsOn: 1 }));
         }
       })();
     } else {
@@ -280,7 +316,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
 
   // Filtrar presenças do dia por tipo de registro
   const presencasDoDiaFiltradas = useMemo(() => {
-    let resultado = presencasDoDia;
+    let resultado = filtrarOcorrenciasConfirmadas(presencasDoDia);
     if (filtroTipoRegistro !== 'todas') {
       resultado = resultado.filter(p => p.tipo === filtroTipoRegistro);
     }
@@ -307,8 +343,9 @@ export function PresencaTab({ unidadeAtual }: Props) {
 
   // Filtrar presenças da semana por tipo de registro
   const presencasFiltradas = useMemo(() => {
-    if (filtroTipoRegistro === 'todas') return presencas;
-    return presencas.filter(p => p.tipo === filtroTipoRegistro);
+    const confirmadas = filtrarOcorrenciasConfirmadas(presencas);
+    if (filtroTipoRegistro === 'todas') return confirmadas;
+    return confirmadas.filter(p => p.tipo === filtroTipoRegistro);
   }, [presencas, filtroTipoRegistro]);
 
   // Agrupar presença por dia
@@ -326,9 +363,13 @@ export function PresencaTab({ unidadeAtual }: Props) {
   const resumoSemana = useMemo(() => {
     const total = presencasFiltradas.length;
     const pres = presencasFiltradas.filter(p => p.status === 'presente').length;
-    const pct = total > 0 ? Math.round((pres / total) * 100) : 0;
+    const estado = avaliarPublicacaoOcorrencias(
+      presencas,
+      filtroTipoAula === 'experimental',
+    ).estado_publicacao;
+    const pct = calcularPercentualPublicavel(pres, total, estado);
     return { total, presentes: pres, pct };
-  }, [presencasFiltradas]);
+  }, [filtroTipoAula, presencas, presencasFiltradas]);
 
   // Filtrar alunos para busca
   const alunosFiltrados = useMemo(() => {
@@ -344,17 +385,9 @@ export function PresencaTab({ unidadeAtual }: Props) {
 
     // Se filtro é experimental, navegar para a semana da experimental mais recente
     if (filtroTipoAula === 'experimental') {
-      const { data: ultimaExp } = await supabase
-        .from('aluno_presenca')
-        .select('data_aula, aulas_emusys!inner(categoria)')
-        .eq('aluno_id', aluno.id)
-        .eq('aulas_emusys.categoria', 'experimental')
-        .in('status', ['presente', 'ausente'])
-        .order('data_aula', { ascending: false })
-        .limit(1);
-
-      if (ultimaExp?.length) {
-        setSemanaInicio(startOfWeek(parseISO(ultimaExp[0].data_aula), { weekStartsOn: 1 }));
+      const ultimaExp = await buscarUltimaExperimental(aluno);
+      if (ultimaExp) {
+        setSemanaInicio(startOfWeek(parseISO(ultimaExp), { weekStartsOn: 1 }));
       }
     }
   };
@@ -378,6 +411,23 @@ export function PresencaTab({ unidadeAtual }: Props) {
     }
     return nomesSet.size;
   }, [logs]);
+
+  const publicacaoPresenca = useMemo(() => {
+    const inicio = filtroData || format(semanaInicio, 'yyyy-MM-dd');
+    const fim = filtroData || format(addDays(semanaInicio, 5), 'yyyy-MM-dd');
+    const linhas = filtroData ? presencasDoDia : presencas;
+    const avaliacao = avaliarPublicacaoOcorrencias(
+      linhas,
+      filtroTipoAula === 'experimental',
+    );
+    return {
+      denominador: avaliacao.denominador,
+      fonte: [...new Set(linhas.map(linha => linha.fonte))].join(', ') || 'get_presenca_ocorrencias_periodo_v2',
+      periodo: `${format(parseISO(inicio), 'dd/MM/yyyy')} a ${format(parseISO(fim), 'dd/MM/yyyy')}`,
+      regra_versao: [...new Set(linhas.map(linha => linha.regra_versao))].join(', ') || 'presenca-interface-v2.1',
+      estado_publicacao: avaliacao.estado_publicacao,
+    };
+  }, [filtroData, filtroTipoAula, presencasDoDia, presencas, semanaInicio]);
 
   return (
     <div className="space-y-6">
@@ -477,6 +527,15 @@ export function PresencaTab({ unidadeAtual }: Props) {
           )}
         </div>
 
+        <div className="mb-4 flex flex-wrap gap-x-5 gap-y-1 rounded-lg border border-slate-700/60 bg-slate-900/35 px-3 py-2 text-[11px] text-slate-400">
+          <span>Universo: <strong className="font-medium text-slate-200">{publicacaoPresenca.denominador === null ? 'Em auditoria' : `${publicacaoPresenca.denominador} eventos confirmados`}</strong></span>
+          <span>Fonte: <strong className="font-medium text-slate-200">{publicacaoPresenca.fonte}</strong></span>
+          <span>Período: <strong className="font-medium text-slate-200">{publicacaoPresenca.periodo}</strong></span>
+          <span>Equação: <strong className="font-medium text-slate-200">presentes / eventos confirmados</strong></span>
+          <span>regra_versao: <strong className="font-medium text-slate-200">{publicacaoPresenca.regra_versao}</strong></span>
+          <span>estado_publicacao: <strong className={publicacaoPresenca.estado_publicacao === 'publicado' ? 'font-medium text-emerald-300' : 'font-medium text-amber-300'}>{publicacaoPresenca.estado_publicacao}</strong></span>
+        </div>
+
         {/* Conteúdo: filtro por data OU busca de aluno */}
         {filtroData ? (
           /* === MODO DATA: todos os alunos do dia === */
@@ -501,7 +560,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
                 {(() => {
                   const presentes = presencasDoDiaFiltradas.filter(p => p.status === 'presente').length;
                   const total = presencasDoDiaFiltradas.length;
-                  const pct = total > 0 ? Math.round((presentes / total) * 100) : 0;
+                  const pct = calcularPercentualPublicavel(presentes, total, publicacaoPresenca.estado_publicacao);
                   return (
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
@@ -510,10 +569,8 @@ export function PresencaTab({ unidadeAtual }: Props) {
                         </span>
                         <span className="text-xs text-slate-400">
                           {presentes} presentes / {total - presentes} ausentes
-                          <span className={`ml-1 font-bold ${
-                            pct >= 80 ? 'text-green-400' : pct >= 60 ? 'text-yellow-400' : 'text-red-400'
-                          }`}>
-                            ({pct}%)
+                          <span className={`ml-1 font-bold ${classePercentual(pct)}`}>
+                            ({formatarPercentualPublicavel(pct, total, publicacaoPresenca.estado_publicacao)})
                           </span>
                         </span>
                         <span className="text-xs text-slate-500">
@@ -967,12 +1024,12 @@ export function PresencaTab({ unidadeAtual }: Props) {
                     <p className="text-sm text-slate-300">
                       <span className="font-medium text-white">{resumoSemana.presentes}</span> presenças /{' '}
                       <span className="font-medium text-white">{resumoSemana.total}</span> aulas{' '}
-                      <span className={`font-bold ${
-                        resumoSemana.pct >= 80 ? 'text-green-400' :
-                        resumoSemana.pct >= 60 ? 'text-yellow-400' :
-                        'text-red-400'
-                      }`}>
-                        ({resumoSemana.pct}%)
+                      <span className={`font-bold ${classePercentual(resumoSemana.pct)}`}>
+                        ({formatarPercentualPublicavel(
+                          resumoSemana.pct,
+                          resumoSemana.total,
+                          publicacaoPresenca.estado_publicacao,
+                        )})
                       </span>
                     </p>
                   )}

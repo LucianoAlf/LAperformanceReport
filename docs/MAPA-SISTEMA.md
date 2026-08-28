@@ -389,3 +389,18 @@ intervalo, o evento com maior roster. `app_minha_agenda_sessao`,
 `fn_enfileirar_audio_core` consomem o mesmo ID. Assim LA Teacher, LA Report e
 Fábio não divergem quando o Emusys mantém uma turma antiga vazia ao lado do
 evento atual.
+
+### Pipeline de presença canônica v2 (candidato em 26/08/2026)
+
+`sync-presenca-emusys` passa a registrar execução, lease, heartbeat, hash e
+cobertura por unidade/modo/data antes de liberar consumo. O raw do Emusys e o
+roster continuam auditáveis; `vw_presenca_ocorrencia_canonica_v2` resolve a
+ocorrência e as RPCs de frescor, pendência, contexto de agente, métricas e
+detalhes distribuem o mesmo resultado.
+
+As superfícies governadas são `agenda`, `sol`, `la_teacher`, `lia`, `mila`,
+`relatorios` e `kpis`. Cada uma pode operar em `legado`, `sombra` ou
+`canonico_v2`, permitindo publicação técnica sem cutover e rollback sem DDL.
+Escritas de Agenda/professor/Fábio usam comando idempotente e recibo append-only.
+O contrato está validado localmente, mas ainda não foi publicado em produção.
+Ver [`docs/runbooks/presenca-canonica.md`](./runbooks/presenca-canonica.md).

@@ -9,7 +9,7 @@ export interface AlunoCritico {
   unidade_nome: string | null;
   health_score: number;
   health_status: 'critico' | 'atencao' | 'saudavel';
-  percentual_presenca: number;
+  percentual_presenca: number | null;
   status_pagamento: string;
   telefone_responsavel: string | null;
 }
@@ -33,7 +33,7 @@ export function useSucessoAlunoAlertas(unidadeId: string): UseSucessoAlunoAlerta
         
         // Buscar alunos ativos com health score crítico
         let query = supabase
-          .from('alunos')
+          .from('vw_aluno_sucesso_lista')
           .select(`
             id,
             nome,
@@ -41,10 +41,10 @@ export function useSucessoAlunoAlertas(unidadeId: string): UseSucessoAlunoAlerta
             health_status,
             percentual_presenca,
             status_pagamento,
-            telefone_responsavel,
-            curso:cursos(nome),
-            professor:professores(nome),
-            unidade:unidades(nome)
+            responsavel_telefone,
+            curso_nome,
+            professor_nome,
+            unidade_nome
           `)
           .eq('status', 'ativo')
           .eq('health_status', 'critico')
@@ -64,14 +64,14 @@ export function useSucessoAlunoAlertas(unidadeId: string): UseSucessoAlunoAlerta
         const formatted: AlunoCritico[] = (data || []).map((a: any) => ({
           id: a.id,
           nome: a.nome,
-          curso_nome: a.curso?.nome || null,
-          professor_nome: a.professor?.nome || null,
-          unidade_nome: a.unidade?.nome || null,
+          curso_nome: a.curso_nome || null,
+          professor_nome: a.professor_nome || null,
+          unidade_nome: a.unidade_nome || null,
           health_score: a.health_score_numerico || 0,
           health_status: a.health_status || 'critico',
-          percentual_presenca: a.percentual_presenca || 0,
+          percentual_presenca: a.percentual_presenca == null ? null : Number(a.percentual_presenca),
           status_pagamento: a.status_pagamento || 'em_dia',
-          telefone_responsavel: a.telefone_responsavel,
+          telefone_responsavel: a.responsavel_telefone,
         }));
         
         setAlunosCriticos(formatted);

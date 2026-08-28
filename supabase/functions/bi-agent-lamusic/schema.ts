@@ -9,10 +9,17 @@ UNIDADES (escolas):
   Relação: quase todas tabelas têm unidade_id → unidades.id
 
 ALUNOS:
-- alunos: id (int PK), nome, unidade_id (uuid FK), professor_atual_id (int FK → professores), curso_id (int FK → cursos), tipo_matricula_id (int FK → tipos_matricula), status ('ativo','inativo','trancado','evadido','aviso_previo'), data_matricula (date), data_saida (date NULL), valor_parcela (numeric), classificacao ('LAMK'=kids,'EMLA'=adultos), dia_aula, horario_aula, modalidade ('individual','turma'), tempo_permanencia_meses, is_segundo_curso (bool), is_ex_aluno (bool), forma_pagamento_id (int FK), telefone, whatsapp, responsavel_telefone, percentual_presenca (int 0-100)
+- alunos: id (int PK), nome, unidade_id (uuid FK), professor_atual_id (int FK → professores), curso_id (int FK → cursos), tipo_matricula_id (int FK → tipos_matricula), status ('ativo','inativo','trancado','evadido','aviso_previo'), data_matricula (date), data_saida (date NULL), valor_parcela (numeric), classificacao ('LAMK'=kids,'EMLA'=adultos), dia_aula, horario_aula, modalidade ('individual','turma'), tempo_permanencia_meses, is_segundo_curso (bool), is_ex_aluno (bool), forma_pagamento_id (int FK), telefone, whatsapp, responsavel_telefone
   Regras: aluno ATIVO = está frequentando. INATIVO/EVADIDO = saiu. data_saida preenchida = aluno que saiu.
   Contagem pagantes: somente tipos_matricula com conta_como_pagante = true
   Ticket médio: somente tipos_matricula com entra_ticket_medio = true
+
+PRESENÇA CANÔNICA V2:
+- Para respostas analíticas use a tool get_presenca_canonica, que chama get_presenca_contexto_agente_v1 com escopo 'bi'.
+- Para detalhe técnico autorizado, a única view de presença permitida é vw_presenca_ocorrencia_canonica_v2.
+- Toda resposta sobre presença deve informar: periodo, universo_eventos, regra_versao, dados_status, sincronizado_em e estado_publicacao.
+- Se dados_status não for 'atualizados', ou se houver conflito/roster em revisão, informe "Em auditoria". Não calcule percentual, não conclua falta e não atribua culpa operacional.
+- Nunca use snapshots de cadastro ou tabelas brutas para responder sobre presença.
 
 PROFESSORES:
 - professores: id (int PK), nome, ativo (bool), nps_medio, media_alunos_turma, data_admissao, telefone_whatsapp, foto_url
