@@ -5,6 +5,8 @@ import test from 'node:test';
 
 const MIGRATION =
   'supabase/migrations/20260828005722_presenca_roster_v2_publicacao_gatada.sql';
+const INTERNAL_HELPERS_MIGRATION =
+  'supabase/migrations/20260828051500_presenca_la_teacher_helpers_internos.sql';
 const ROOT = process.cwd();
 const IMAGE = process.env.PRESENCA_PUBLICACAO_POSTGRES_IMAGE || 'postgres:17-alpine';
 const CONTAINER = `la-presenca-publicacao-${process.pid}`;
@@ -69,14 +71,27 @@ function psql(sql) {
 }
 
 function waitForPostgres() {
+  let stableProbes = 0;
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const probe = execute('docker', [
+    const readyProbe = execute('docker', [
       'exec', CONTAINER, 'pg_isready', '-U', 'postgres', '-d', 'postgres',
     ]);
-    if (probe.status === 0) return;
+    const sqlProbe = readyProbe.status === 0
+      ? execute('docker', [
+          'exec', CONTAINER, 'psql', '--no-psqlrc', '-U', 'postgres', '-d', 'postgres',
+          '-tA', '-c', 'select 1',
+        ])
+      : null;
+
+    if (readyProbe.status === 0 && sqlProbe?.status === 0 && sqlProbe.stdout.trim() === '1') {
+      stableProbes += 1;
+      if (stableProbes === 3) return;
+    } else {
+      stableProbes = 0;
+    }
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
   }
-  assert.fail('PostgreSQL 17 descartavel nao ficou pronto');
+  assert.fail('PostgreSQL 17 descartavel nao sustentou tres probes SQL consecutivos');
 }
 
 function json(output) {
@@ -677,6 +692,7 @@ test.before(() => {
   );
   dataBefore = stateSnapshot();
   psql(readFileSync(MIGRATION, 'utf8'));
+  psql(readFileSync(INTERNAL_HELPERS_MIGRATION, 'utf8'));
 });
 
 test.after(() => {
@@ -691,6 +707,77 @@ test('migration aplica depois da Task 5 sem cutover ou mutacao de dados', () => 
   assert.equal(after.presencas, 0);
   assert.equal(after.comandos, 0);
   assert.equal(after.eventos, 0);
+});
+
+test('helpers privados do LA Teacher se declaram internos para a auditoria de portas', () => {
+  const helpers = json(psql(String.raw`
+    select jsonb_agg(jsonb_build_object(
+      'assinatura', assinatura,
+      'interna', coalesce(obj_description(to_regprocedure(assinatura), 'pg_proc'), '') like '%[interna]%',
+      'anon_execute', has_function_privilege('anon', assinatura, 'execute'),
+      'authenticated_execute', has_function_privilege('authenticated', assinatura, 'execute'),
+      'service_role_execute', has_function_privilege('service_role', assinatura, 'execute')
+    ) order by assinatura)
+    from unnest(array[
+      'public.app_minha_agenda_sessao_publicacao_legado_v1(date)',
+      'public.app_registrar_presencas_aula_canonica_v2_interno(uuid,integer,integer[])',
+      'public.app_registrar_presencas_aula_publicacao_legado_v1(integer,integer[],uuid)'
+    ]) as assinatura;
+  `));
+
+  assert.equal(helpers.length, 3);
+  for (const helper of helpers) {
+    assert.equal(helper.interna, true, `${helper.assinatura}: marcador [interna] ausente`);
+    for (const role of ['anon', 'authenticated', 'service_role']) {
+      assert.equal(
+        helper[`${role}_execute`],
+        false,
+        `${helper.assinatura}: helper interno nao pode abrir execute para ${role}`,
+      );
+    }
+  }
+});
+
+test('auditoria de helpers internos detecta abertura acidental exclusiva para anon', () => {
+  const probe = json(psql(String.raw`
+    create temp table _auditoria_helper_acl(resultado jsonb);
+
+    grant execute on function public.app_minha_agenda_sessao_publicacao_legado_v1(date)
+      to anon;
+
+    insert into _auditoria_helper_acl(resultado)
+    select jsonb_build_object('violacoes', count(*))
+      from unnest(array[
+        'public.app_minha_agenda_sessao_publicacao_legado_v1(date)',
+        'public.app_registrar_presencas_aula_canonica_v2_interno(uuid,integer,integer[])',
+        'public.app_registrar_presencas_aula_publicacao_legado_v1(integer,integer[],uuid)'
+      ]) as assinatura
+     where coalesce(obj_description(to_regprocedure(assinatura), 'pg_proc'), '') like '%[interna]%'
+       and (
+         has_function_privilege('anon', assinatura, 'execute')
+         or has_function_privilege('authenticated', assinatura, 'execute')
+         or has_function_privilege('service_role', assinatura, 'execute')
+       );
+
+    revoke execute on function public.app_minha_agenda_sessao_publicacao_legado_v1(date)
+      from anon;
+
+    select resultado from _auditoria_helper_acl;
+  `));
+
+  assert.equal(probe.violacoes, 1, 'abertura exclusiva para anon precisa ser detectada');
+
+  assert.equal(
+    psql(String.raw`
+      select has_function_privilege(
+        'anon',
+        'public.app_minha_agenda_sessao_publicacao_legado_v1(date)',
+        'execute'
+      );
+    `),
+    'f',
+    'contraprova deve restaurar a ACL privada',
+  );
 });
 
 test('rename preserva corpos e atributos legados; aliases ficam privados', () => {
