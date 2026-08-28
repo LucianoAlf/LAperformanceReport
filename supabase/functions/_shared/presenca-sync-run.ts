@@ -60,6 +60,8 @@ const CODIGOS_SEGUROS = new Set([
   'PRESENCA_SYNC_RECONCILIACAO_ROSTER_FALHOU',
   'PRESENCA_SYNC_LOG_GRAVACAO_FALHOU',
   'PRESENCA_SYNC_MAPA_AULAS_INCOMPLETO',
+  'PRESENCA_SYNC_CONCORRENCIA_ESGOTADA',
+  'PRESENCA_SYNC_UNIDADE_OCUPADA',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -149,28 +151,60 @@ export async function executarSyncPresencaComLease<T>(input: {
   dataAlvo: string;
   requestId: string;
   leaseSegundos?: number;
+  maxTentativasLeaseUnidade?: number;
+  atrasoLeaseUnidadeMs?: number;
+  dormirLeaseUnidade?: (ms: number) => Promise<void>;
   trabalho: (contexto: ContextoTrabalho) => Promise<ResultadoTrabalho<T>>;
 }): Promise<ExecucaoAdquirida<T> | ExecucaoDeduplicada> {
-  const inicio = await chamarRpc(
-    input.cliente,
-    'presenca_sync_iniciar_v1',
-    {
-      p_unidade_id: input.unidadeId,
-      p_modo: input.modo,
-      p_data_alvo: input.dataAlvo,
-      p_request_id: input.requestId,
-      p_lease_segundos: input.leaseSegundos ?? 180,
-    },
-  );
+  const maxTentativasLeaseUnidade = Number.isSafeInteger(
+      input.maxTentativasLeaseUnidade,
+    ) && Number(input.maxTentativasLeaseUnidade) > 0
+    ? Number(input.maxTentativasLeaseUnidade)
+    : 31;
+  const atrasoLeaseUnidadeMs = Number.isSafeInteger(input.atrasoLeaseUnidadeMs) &&
+      Number(input.atrasoLeaseUnidadeMs) > 0
+    ? Number(input.atrasoLeaseUnidadeMs)
+    : 1_000;
+  const dormirLeaseUnidade = input.dormirLeaseUnidade ??
+    ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  let inicio: unknown;
 
-  if (!isRecord(inicio) || typeof inicio.adquirida !== 'boolean') {
-    throw new Error('PRESENCA_SYNC_INICIO_INVALIDO');
+  for (
+    let tentativaLease = 1;
+    tentativaLease <= maxTentativasLeaseUnidade;
+    tentativaLease += 1
+  ) {
+    inicio = await chamarRpc(
+      input.cliente,
+      'presenca_sync_iniciar_v1',
+      {
+        p_unidade_id: input.unidadeId,
+        p_modo: input.modo,
+        p_data_alvo: input.dataAlvo,
+        p_request_id: input.requestId,
+        p_lease_segundos: input.leaseSegundos ?? 180,
+      },
+    );
+
+    if (!isRecord(inicio) || typeof inicio.adquirida !== 'boolean') {
+      throw new Error('PRESENCA_SYNC_INICIO_INVALIDO');
+    }
+    if (inicio.adquirida) break;
+
+    const motivo = typeof inicio.motivo === 'string'
+      ? inicio.motivo
+      : 'lease_ativo';
+    if (motivo !== 'lease_unidade_ativo') {
+      return { status: 'deduplicada', motivo };
+    }
+    if (tentativaLease === maxTentativasLeaseUnidade) {
+      throw new Error('PRESENCA_SYNC_UNIDADE_OCUPADA');
+    }
+    await dormirLeaseUnidade(atrasoLeaseUnidadeMs);
   }
-  if (!inicio.adquirida) {
-    return {
-      status: 'deduplicada',
-      motivo: typeof inicio.motivo === 'string' ? inicio.motivo : 'lease_ativo',
-    };
+
+  if (!isRecord(inicio) || inicio.adquirida !== true) {
+    throw new Error('PRESENCA_SYNC_INICIO_INVALIDO');
   }
   if (typeof inicio.run_id !== 'string' || inicio.run_id.length === 0) {
     throw new Error('PRESENCA_SYNC_RUN_ID_INVALIDO');

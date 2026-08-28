@@ -64,6 +64,7 @@ import {
   redigirErroCodigo,
   type ContagensPresencaSync,
 } from '../_shared/presenca-sync-run.ts';
+import { executarComRetrySqlPresenca } from '../_shared/presenca-db-retry.ts';
 import { selecionarCandidatoExperimental } from '../_shared/experimental-reconciliacao.ts';
 import {
   resolverAlunoLocal,
@@ -381,12 +382,20 @@ async function sincronizarMetadadosAulasNoRun(
     const idPorEmusysId = new Map<number, number>();
     for (let offset = 0; offset < linhas.length; offset += chunkSize) {
       const lote = linhas.slice(offset, offset + chunkSize);
-      const { data: loteGravado, error } = await supabase
-        .from('aulas_emusys')
-        .upsert(lote, { onConflict: 'emusys_id,unidade_id', ignoreDuplicates: false })
-        .select('id, emusys_id');
+      const tentativaAulas = await executarComRetrySqlPresenca<
+        Array<{ id: number; emusys_id: number }> | null
+      >(() =>
+        supabase
+          .from('aulas_emusys')
+          .upsert(lote, { onConflict: 'emusys_id,unidade_id', ignoreDuplicates: false })
+          .select('id, emusys_id')
+      );
+      const { data: loteGravado, error } = tentativaAulas.resultado;
       if (error) {
         console.error('[sync-presenca] Falha ao gravar lote de aulas em metadados');
+        if (tentativaAulas.transitorioEsgotado) {
+          throw new Error('PRESENCA_SYNC_CONCORRENCIA_ESGOTADA');
+        }
         throw new Error('PRESENCA_SYNC_AULA_GRAVACAO_FALHOU');
       }
       gravadas += lote.length;
@@ -410,6 +419,9 @@ async function sincronizarMetadadosAulasNoRun(
     const resultadoVinculos = await gravarVinculosAulaAlunos(supabase, vinculos);
     if (resultadoVinculos.erros.length > 0) {
       console.error('[sync-presenca] Upsert de roster em metadados falhou');
+      if (resultadoVinculos.erros.includes('PRESENCA_SYNC_CONCORRENCIA_ESGOTADA')) {
+        throw new Error('PRESENCA_SYNC_CONCORRENCIA_ESGOTADA');
+      }
       throw new Error('PRESENCA_SYNC_ROSTER_GRAVACAO_FALHOU');
     }
 
@@ -2075,9 +2087,12 @@ serve(async (req: Request) => {
               execution_id: new Date().toISOString(),
             });
           }
-          const { data: aulaDB, error: aulaError } = await supabase
-            .from('aulas_emusys')
-            .upsert(
+          const tentativaAula = await executarComRetrySqlPresenca<
+            { id: number } | null
+          >(() =>
+            supabase
+              .from('aulas_emusys')
+              .upsert(
               {
                 emusys_id: aula.id,
                 unidade_id: unidade.id,
@@ -2109,12 +2124,20 @@ serve(async (req: Request) => {
                 anotacoes: aula.anotacoes || null,
               },
               { onConflict: 'emusys_id,unidade_id', ignoreDuplicates: false }
-            )
-            .select('id')
-            .single();
+              )
+              .select('id')
+              .single()
+          );
+          const { data: aulaDB, error: aulaError } = tentativaAula.resultado;
 
           if (aulaError) {
             console.error('[sync-presenca] Falha ao gravar aula');
+            if (tentativaAula.transitorioEsgotado) {
+              throw new Error('PRESENCA_SYNC_CONCORRENCIA_ESGOTADA');
+            }
+            throw new Error('PRESENCA_SYNC_AULA_GRAVACAO_FALHOU');
+          }
+          if (!aulaDB) {
             throw new Error('PRESENCA_SYNC_AULA_GRAVACAO_FALHOU');
           }
 
@@ -2147,9 +2170,10 @@ serve(async (req: Request) => {
             );
             const sincronizadoEm = new Date().toISOString();
 
-            const { error: rosterError } = await supabase
-              .from('aula_alunos_emusys')
-              .upsert(
+            const tentativaRoster = await executarComRetrySqlPresenca(() =>
+              supabase
+                .from('aula_alunos_emusys')
+                .upsert(
                 {
                   aula_emusys_id: aulaLocalId,
                   unidade_id: unidade.id,
@@ -2172,10 +2196,15 @@ serve(async (req: Request) => {
                   onConflict: 'aula_emusys_id,aluno_chave',
                   ignoreDuplicates: false,
                 }
-              );
+                )
+            );
+            const { error: rosterError } = tentativaRoster.resultado;
 
             if (rosterError) {
               console.error('[sync-presenca] Falha ao gravar roster');
+              if (tentativaRoster.transitorioEsgotado) {
+                throw new Error('PRESENCA_SYNC_CONCORRENCIA_ESGOTADA');
+              }
               throw new Error('PRESENCA_SYNC_ROSTER_GRAVACAO_FALHOU');
             } else {
               rosterSincronizados++;
