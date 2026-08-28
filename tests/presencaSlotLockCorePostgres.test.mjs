@@ -323,6 +323,65 @@ test('request id e idempotente, rejeita payload diferente e aplica uma unica vez
   `)), { 101: 'presente', 102: 'falta' });
 });
 
+test('recibo distingue escrita real de decisao forte ja igual e preserva a distincao no replay', () => {
+  psql(String.raw`
+    delete from public.aluno_presenca;
+    insert into public.aluno_presenca(
+      aluno_id, aula_emusys_id, professor_id, unidade_id, data_aula,
+      horario_aula, status, status_presenca, respondido_por, respondido_em
+    ) values (
+      101, 10, 7, '${UNIDADE}', current_date, current_time,
+      'presente', 'presente', 'agenda_secretaria', clock_timestamp()
+    );
+  `);
+
+  const requestId = '10000000-0000-4000-8000-000000000250';
+  psql(criar(requestId));
+  const aplicado = json(psql(aplicar(requestId)));
+  assert.equal(aplicado.status, 'parcial');
+  assert.equal(aplicado.aplicados, 1);
+  assert.equal(aplicado.rejeitados, 1);
+  assert.deepEqual(aplicado.erros, [{ aluno_id: 101, codigo: 'PRESENCA_JA_REGISTRADA' }]);
+
+  const eventos = json(psql(String.raw`
+    select jsonb_build_object(
+      'gravados', count(*) filter (where tipo = 'item_aplicado'),
+      'ja_existentes', count(*) filter (
+        where tipo = 'item_rejeitado' and erro_codigo = 'PRESENCA_JA_REGISTRADA'
+      ),
+      'conflitos', count(*) filter (
+        where tipo = 'item_rejeitado' and erro_codigo = 'DECISAO_FORTE_PRESERVADA'
+      )
+    )
+      from public.presenca_acao_eventos
+     where request_id = '${requestId}';
+  `));
+  assert.deepEqual(eventos, { gravados: 1, ja_existentes: 1, conflitos: 0 });
+
+  const quantidadeEventos = psql(
+    `select count(*) from public.presenca_acao_eventos where request_id='${requestId}';`,
+  );
+  const repetido = json(psql(aplicar(requestId)));
+  assert.deepEqual(
+    {
+      status: repetido.status,
+      aplicados: repetido.aplicados,
+      rejeitados: repetido.rejeitados,
+      erros: repetido.erros,
+    },
+    {
+      status: aplicado.status,
+      aplicados: aplicado.aplicados,
+      rejeitados: aplicado.rejeitados,
+      erros: aplicado.erros,
+    },
+  );
+  assert.equal(
+    psql(`select count(*) from public.presenca_acao_eventos where request_id='${requestId}';`),
+    quantidadeEventos,
+  );
+});
+
 test('payload parcial e gemea cancelada ou justificada bloqueiam antes da escrita', () => {
   psql('delete from public.aluno_presenca;');
   const parcial = '10000000-0000-4000-8000-000000000002';

@@ -451,6 +451,7 @@ declare
   v_evento_seq integer := 0;
   v_status_efetivo text;
   v_gemeos integer;
+  v_gravados_alunos integer[] := '{}'::integer[];
 begin
   if p_request_id is null then
     raise exception 'request_id_obrigatorio' using errcode = '22023';
@@ -483,37 +484,43 @@ begin
          atualizado_em = clock_timestamp()
    where c.request_id = p_request_id;
 
-  insert into public.aluno_presenca(
-    aluno_id, aula_emusys_id, professor_id, unidade_id, data_aula,
-    horario_aula, status, status_presenca, curso_nome, turma_nome,
-    sala_nome, respondido_por, respondido_em
+  with gravados as (
+    insert into public.aluno_presenca(
+      aluno_id, aula_emusys_id, professor_id, unidade_id, data_aula,
+      horario_aula, status, status_presenca, curso_nome, turma_nome,
+      sala_nome, respondido_por, respondido_em
+    )
+    select
+      r.aluno_id,
+      v_aula.id,
+      v_comando.professor_id,
+      v_aula.unidade_id,
+      v_aula.data_aula,
+      (v_aula.data_hora_inicio at time zone 'America/Sao_Paulo')::time,
+      case when i.status_solicitado = 'falta' then 'ausente' else 'presente' end,
+      i.status_solicitado,
+      v_aula.curso_nome,
+      v_aula.turma_nome,
+      v_aula.sala_nome,
+      v_comando.fonte,
+      clock_timestamp()
+    from public.vw_aula_roster_operacional_v2 r
+    join public.presenca_comando_itens i
+      on i.request_id = p_request_id
+     and i.aula_id = r.aula_emusys_id
+     and i.aluno_id = r.aluno_id
+    where r.aula_emusys_id = v_aula.id
+    on conflict (aluno_id, aula_emusys_id) do update set
+      status = excluded.status,
+      status_presenca = excluded.status_presenca,
+      respondido_por = excluded.respondido_por,
+      respondido_em = excluded.respondido_em
+    where not public.fn_presenca_e_forte(aluno_presenca.respondido_por)
+    returning aluno_id
   )
-  select
-    r.aluno_id,
-    v_aula.id,
-    v_comando.professor_id,
-    v_aula.unidade_id,
-    v_aula.data_aula,
-    (v_aula.data_hora_inicio at time zone 'America/Sao_Paulo')::time,
-    case when i.status_solicitado = 'falta' then 'ausente' else 'presente' end,
-    i.status_solicitado,
-    v_aula.curso_nome,
-    v_aula.turma_nome,
-    v_aula.sala_nome,
-    v_comando.fonte,
-    clock_timestamp()
-  from public.vw_aula_roster_operacional_v2 r
-  join public.presenca_comando_itens i
-    on i.request_id = p_request_id
-   and i.aula_id = r.aula_emusys_id
-   and i.aluno_id = r.aluno_id
-  where r.aula_emusys_id = v_aula.id
-  on conflict (aluno_id, aula_emusys_id) do update set
-    status = excluded.status,
-    status_presenca = excluded.status_presenca,
-    respondido_por = excluded.respondido_por,
-    respondido_em = excluded.respondido_em
-  where not public.fn_presenca_e_forte(aluno_presenca.respondido_por);
+  select coalesce(array_agg(g.aluno_id order by g.aluno_id), '{}'::integer[])
+    into v_gravados_alunos
+    from gravados g;
 
   v_gemeos := public.fn_sincronizar_gemeos_presenca(v_aula.id);
 
@@ -536,7 +543,8 @@ begin
      where ap.aula_emusys_id = v_item.aula_id
        and ap.aluno_id = v_item.aluno_id;
 
-    if v_status_efetivo is not distinct from v_item.status_solicitado then
+    if v_status_efetivo is not distinct from v_item.status_solicitado
+       and v_item.aluno_id = any(v_gravados_alunos) then
       insert into public.presenca_acao_eventos(
         request_id, sequencia, tipo, fonte, auth_user_id, usuario_id,
         unidade_id, aula_id, aluno_id, status_novo
@@ -555,7 +563,12 @@ begin
         p_request_id, v_evento_seq, 'item_rejeitado', v_comando.fonte,
         v_comando.auth_user_id, v_comando.usuario_id, v_comando.unidade_id,
         v_item.aula_id, v_item.aluno_id, v_status_efetivo,
-        v_item.status_solicitado, 'DECISAO_FORTE_PRESERVADA'
+        v_item.status_solicitado,
+        case
+          when v_status_efetivo is not distinct from v_item.status_solicitado
+            then 'PRESENCA_JA_REGISTRADA'
+          else 'DECISAO_FORTE_PRESERVADA'
+        end
       );
       v_rejeitados := v_rejeitados + 1;
     end if;
