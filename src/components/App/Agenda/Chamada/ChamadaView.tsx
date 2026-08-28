@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { CalendarDays, List, LayoutGrid } from 'lucide-react';
-import type { AulaAgenda, AlunoAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
+import type { AulaAgenda, AlunoAgenda, LeadExperimentalAgenda, PresencaEnvelopeAgenda } from '@/hooks/useAgendaDia';
 import { useChamadaAcoes, type ItemChamada } from './useChamadaAcoes';
 import { ChamadaDia } from './ChamadaDia';
 import { ChamadaSemana } from './ChamadaSemana';
@@ -18,6 +18,7 @@ interface Props {
   data: string;
   unidadeId: string | null;
   aulas: AulaAgenda[];
+  presenca: PresencaEnvelopeAgenda;
   recarregar: () => void;
   onIrParaDia: (data: string) => void;
   onSubVisaoChange?: (subVisao: SubVisao) => void;
@@ -31,7 +32,7 @@ interface Props {
  * `onSubVisaoChange` notifica a AgendaPage quando a sub-visao muda, para
  * que as setas de navegacao e o rotulo do topo se adaptem (semana vs dia).
  */
-export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, onSubVisaoChange }: Props) {
+export function ChamadaView({ data, unidadeId, aulas, presenca, recarregar, onIrParaDia, onSubVisaoChange }: Props) {
   const [subVisao, setSubVisao] = useState<SubVisao>('dia');
   const [versaoChamada, setVersaoChamada] = useState(0);
 
@@ -52,6 +53,7 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
   // a data junto. Na dia/lista, e sempre a data atual.
   const [drawerAula, setDrawerAula] = useState<AulaAgenda | null>(null);
   const [drawerData, setDrawerData] = useState<string>(data);
+  const [drawerPresenca, setDrawerPresenca] = useState<PresencaEnvelopeAgenda>(presenca);
   // Drawer do lead experimental (separado do drawer da aula).
   const [drawerLead, setDrawerLead] = useState<{ lead: LeadExperimentalAgenda; aula: AulaAgenda } | null>(null);
 
@@ -62,10 +64,11 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
 
   const { salvando, registrar, cancelarAula, registrarPresencaExperimental } = useChamadaAcoes(aoConcluir);
 
-  const abrirDrawer = useCallback((aula: AulaAgenda, dia?: string) => {
+  const abrirDrawer = useCallback((aula: AulaAgenda, dia?: string, envelope?: PresencaEnvelopeAgenda) => {
     setDrawerAula(aula);
     setDrawerData(dia ?? data);
-  }, [data]);
+    setDrawerPresenca(envelope ?? presenca);
+  }, [data, presenca]);
 
   const abrirDrawerLead = useCallback((lead: LeadExperimentalAgenda, aula: AulaAgenda) => {
     setDrawerLead({ lead, aula });
@@ -134,6 +137,7 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
         <ChamadaDia
           data={data}
           aulas={aulas}
+          presenca={presenca}
           salvando={salvando}
           onRegistrar={registrar}
           onRegistrarExperimental={registrarPresencaExperimental}
@@ -157,7 +161,7 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
           onCancelarAula={setAulaCancelar}
           onReagendarAula={setAulaReagendar}
           onAbrirDia={onIrParaDia}
-          onAbrirDrawer={(a, dia) => abrirDrawer(a, dia)}
+          onAbrirDrawer={(a, dia, envelope) => abrirDrawer(a, dia, envelope)}
           onAbrirDrawerLead={abrirDrawerLead}
           refreshToken={versaoChamada}
         />
@@ -167,6 +171,7 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
         <ChamadaLista
           data={data}
           aulas={aulas}
+          presenca={presenca}
           onAbrirDrawer={(a) => abrirDrawer(a)}
         />
       )}
@@ -199,6 +204,7 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
       <ChamadaDrawer
         aula={drawerAula}
         data={drawerData}
+        presenca={drawerPresenca}
         salvando={salvando}
         onRegistrar={registrar}
         onJustificar={(aluno, aula) => setAlunoJustificar({ aluno, aula })}

@@ -2,14 +2,20 @@ import { useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { AlertTriangle, Filter, Paperclip, RotateCcw, User } from 'lucide-react';
-import type { AulaAgenda, AlunoAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
+import type { AulaAgenda, AlunoAgenda, LeadExperimentalAgenda, PresencaEnvelopeAgenda } from '@/hooks/useAgendaDia';
 import { aulaJaOcorreu } from '@/lib/agenda';
-import { estadoDoAluno, rotuloOrigem, temConflito, type EstadoChamada } from './chamadaUtils';
+import {
+  adaptarPresencaCanonica,
+  rotuloPresencaFonte,
+  type PresencaCanonicaEstado,
+  type PresencaCanonicaVisual,
+} from '@/lib/presencaCanonica';
 import { cn } from '@/lib/utils';
 
 interface Props {
   data: string;
   aulas: AulaAgenda[];
+  presenca: PresencaEnvelopeAgenda;
   onAbrirDrawer: (aula: AulaAgenda) => void;
 }
 
@@ -29,7 +35,8 @@ interface LinhaLista {
   aula: AulaAgenda;
   aluno: AlunoAgenda | null;
   lead?: LeadExperimentalAgenda | null;
-  estado: EstadoChamada | 'cancelada' | 'experimental';
+  estado: PresencaCanonicaEstado | 'cancelada' | 'experimental';
+  visual?: PresencaCanonicaVisual | null;
 }
 
 /**
@@ -37,7 +44,7 @@ interface LinhaLista {
  * aula cancelada (sem aluno). Filtros por estado. Origem e conflito aparecem
  * como colunas — e a visao que a equipe usa para fechar o dia.
  */
-export function ChamadaLista({ data, aulas, onAbrirDrawer }: Props) {
+export function ChamadaLista({ data, aulas, presenca, onAbrirDrawer }: Props) {
   const [filtro, setFiltro] = useState<FiltroLista>('todos');
   const agora = useMemo(() => new Date(), []);
 
@@ -51,7 +58,13 @@ export function ChamadaLista({ data, aulas, onAbrirDrawer }: Props) {
       // Alunos matriculados
       for (const aluno of aula.alunos) {
         if (aluno.aluno_id == null) continue;
-        out.push({ aula, aluno, estado: estadoDoAluno(aluno) });
+        const visual = adaptarPresencaCanonica({
+          alunoId: aluno.aluno_id,
+          aulaEmusysId: aluno.aula_emusys_id,
+          emusysPresencaBruta: aluno.emusys_presenca_bruta,
+          envelope: presenca,
+        });
+        out.push({ aula, aluno, estado: visual.estado, visual });
       }
       // Leads experimentais
       for (const lead of aula.experimental_leads ?? []) {
@@ -64,7 +77,7 @@ export function ChamadaLista({ data, aulas, onAbrirDrawer }: Props) {
       }
     }
     return out;
-  }, [aulas]);
+  }, [aulas, presenca]);
 
   const filtradas = useMemo(() => {
     if (filtro === 'todos') return linhas;
@@ -154,12 +167,13 @@ export function ChamadaLista({ data, aulas, onAbrirDrawer }: Props) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {filtradas.map(({ aula, aluno, estado }) => (
+              {filtradas.map(({ aula, aluno, estado, visual }) => (
                 <LinhaTabela
                   key={`${aula.chave}-${aluno?.aluno_id ?? 'cancelada'}`}
                   aula={aula}
                   aluno={aluno}
                   estado={estado}
+                  visual={visual}
                   data={data}
                   onAbrir={() => onAbrirDrawer(aula)}
                 />
@@ -177,17 +191,19 @@ function LinhaTabela({
   aluno,
   lead,
   estado,
+  visual,
   data,
   onAbrir,
 }: {
   aula: AulaAgenda;
   aluno: AlunoAgenda | null;
   lead?: LeadExperimentalAgenda | null;
-  estado: EstadoChamada | 'cancelada' | 'experimental';
+  estado: PresencaCanonicaEstado | 'cancelada' | 'experimental';
+  visual?: PresencaCanonicaVisual | null;
   data: string;
   onAbrir: () => void;
 }) {
-  const conflito = aluno ? temConflito(aluno) : false;
+  const conflito = visual?.conflito ?? false;
   // `aula.chave` e um hash MD5, nao uma data — usar a prop `data` (yyyy-MM-dd).
   const rotuloData = format(parseISO(data), 'dd/MM', { locale: ptBR });
 
@@ -232,10 +248,15 @@ function LinhaTabela({
       <td className="px-3 py-2">
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] text-slate-500">
-            {lead ? 'Emusys' : aluno ? rotuloOrigem(aluno.respondido_por) : aula.cancelada_origem ?? '—'}
+            {lead ? 'Emusys' : aluno ? rotuloPresencaFonte(visual?.fonte ?? null) : aula.cancelada_origem ?? '—'}
           </span>
           {conflito && (
             <AlertTriangle className="h-3 w-3 text-amber-400" aria-label="conflito com Emusys" />
+          )}
+          {visual?.requestId && (
+            <span className="font-mono text-[9px] text-slate-600" title={visual.requestId}>
+              {visual.requestId.slice(0, 8)}
+            </span>
           )}
         </div>
       </td>
@@ -248,15 +269,17 @@ function BadgeEstado({
   motivo,
   evidencia,
 }: {
-  estado: EstadoChamada | 'cancelada' | 'experimental';
+  estado: PresencaCanonicaEstado | 'cancelada' | 'experimental';
   motivo: string | null;
   evidencia: string | null;
 }) {
-  const map: Record<EstadoChamada | 'cancelada' | 'experimental', { rotulo: string; classe: string }> = {
+  const map: Record<PresencaCanonicaEstado | 'cancelada' | 'experimental', { rotulo: string; classe: string }> = {
     presente: { rotulo: 'Presente', classe: 'bg-emerald-500/15 text-emerald-300' },
     falta: { rotulo: 'Falta', classe: 'bg-rose-500/15 text-rose-300' },
     falta_justificada: { rotulo: 'Falta justificada', classe: 'bg-amber-500/15 text-amber-300' },
-    indeterminado: { rotulo: 'Sem destino', classe: 'bg-slate-700/40 text-slate-400' },
+    indeterminado: { rotulo: 'A confirmar', classe: 'bg-slate-700/40 text-slate-400' },
+    roster_em_revisao: { rotulo: 'Roster em revisão', classe: 'bg-amber-500/15 text-amber-300' },
+    dados_desatualizados: { rotulo: 'Dado desatualizado', classe: 'bg-sky-500/15 text-sky-300' },
     cancelada: { rotulo: 'Cancelada', classe: 'bg-rose-500/15 text-rose-300' },
     experimental: { rotulo: 'Aguardando', classe: 'bg-violet-500/15 text-violet-300' },
   };

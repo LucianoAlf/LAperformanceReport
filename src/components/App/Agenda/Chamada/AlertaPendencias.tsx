@@ -1,56 +1,49 @@
 import { useEffect, useMemo, useState } from 'react';
-import { formatDistanceToNowStrict, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { AlertTriangle, CheckCircle2, Clock, ChevronRight, PartyPopper, User } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Clock, PartyPopper } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import type { AulaAgenda, AlunoAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
+import type {
+  AulaAgenda,
+  PresencaEnvelopeAgenda,
+  PresencaPendenciaCanonica,
+} from '@/hooks/useAgendaDia';
 import { aulaJaOcorreu } from '@/lib/agenda';
-import { alunoSemDestino, leadExperimentalSemDestino } from './chamadaUtils';
 import { cn } from '@/lib/utils';
 
-interface Pendencia {
-  aula: AulaAgenda;
-  aluno?: AlunoAgenda;
-  lead?: LeadExperimentalAgenda;
-  /** Minutos desde que a aula terminou */
+interface PendenciaRenderizada {
+  item: PresencaPendenciaCanonica;
+  aula: AulaAgenda | null;
   minutosDesdeFim: number;
-  /** Emusys marcou ausente — a equipe precisa confirmar se e falta ou nao */
-  emusysAusente?: boolean;
+  conflito: boolean;
 }
 
 interface Props {
   data: string;
   aulas: AulaAgenda[];
-  /** Se true, agrupa por unidade (consolidado). Se false, mostra flat. */
+  presenca: PresencaEnvelopeAgenda;
   consolidado: boolean;
-  /** ID da unidade selecionada (null = consolidado). Usado para buscar a equipe. */
   unidadeId: string | null;
   onAbrirDrawer: (aula: AulaAgenda) => void;
 }
 
-/**
- * Alerta de pendências da chamada: alunos sem destino em aulas que já
- * ocorreram. Separa "hoje" de "ontem" (o digest é enviado na manhã seguinte,
- * então o que a equipe precisa ver de manhã é o que ficou em aberto ontem).
- *
- * Cores por volume:
- *   - 0 pendências: verde (tudo fechado)
- *   - 1-5: amarelo (atenção)
- *   - 6+: vermelho (urgente)
- *
- * Cada item é clicável: abre o drawer da aula para a equipe agir na hora.
- */
-export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirDrawer }: Props) {
+export function AlertaPendencias({
+  data,
+  aulas,
+  presenca,
+  consolidado,
+  unidadeId,
+  onAbrirDrawer,
+}: Props) {
   const agora = useMemo(() => new Date(), []);
   const hoje = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [nomesEquipe, setNomesEquipe] = useState<string[]>([]);
 
-  // Busca os nomes da equipe da unidade (para o parabéns personalizado).
-  // Filtra usuarios genéricos (Equipe X, testes, etc.) — so pega nomes reais.
   useEffect(() => {
-    if (!unidadeId) { setNomesEquipe([]); return; }
+    if (!unidadeId) {
+      setNomesEquipe([]);
+      return;
+    }
     let cancelado = false;
-    (async () => {
+    void (async () => {
       const { data: rows } = await supabase
         .from('usuarios')
         .select('nome')
@@ -58,84 +51,88 @@ export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirD
         .eq('ativo', true)
         .order('nome');
       if (cancelado) return;
-      const nomes = (rows ?? [])
-        .map((r: { nome: string }) => r.nome)
-        .filter((n: string) => n && !n.toLowerCase().includes('equipe') && !n.toLowerCase().includes('teste'));
-      setNomesEquipe(nomes);
+      setNomesEquipe((rows ?? [])
+        .map((row: { nome: string }) => row.nome)
+        .filter((nome: string) => nome
+          && !nome.toLowerCase().includes('equipe')
+          && !nome.toLowerCase().includes('teste')));
     })();
     return () => { cancelado = true; };
   }, [unidadeId]);
 
   const pendentes = useMemo(() => {
-    const lista: Pendencia[] = [];
-    for (const aula of aulas) {
-      if (aula.cancelada) continue;
-      if (!aulaJaOcorreu(data, aula.hora_fim, agora)) continue;
-      const [h, m] = aula.hora_fim.split(':').map(Number);
-      const fim = new Date(`${data}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`);
-      const minutos = Math.max(0, Math.round((agora.getTime() - fim.getTime()) / 60000));
+    const montar = (
+      item: PresencaPendenciaCanonica,
+      conflito: boolean,
+    ): PendenciaRenderizada => {
+      const aula = aulas.find((candidata) =>
+        candidata.aula_ids.includes(item.aula_emusys_id)
+        || candidata.alunos.some((aluno) =>
+          aluno.aluno_id === item.aluno_id
+          && aluno.aula_emusys_id === item.aula_emusys_id),
+      ) ?? null;
+      if (!aula) return { item, aula: null, minutosDesdeFim: 0, conflito };
+      const [horas, minutos] = aula.hora_fim.split(':').map(Number);
+      const fim = new Date(
+        `${data}T${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}:00`,
+      );
+      return {
+        item,
+        aula,
+        conflito,
+        minutosDesdeFim: Math.max(0, Math.round((agora.getTime() - fim.getTime()) / 60_000)),
+      };
+    };
+    return [
+      ...presenca.pendencias.map((item) => montar(item, false)),
+      ...presenca.conflitos.map((item) => montar(item, true)),
+    ];
+  }, [agora, aulas, data, presenca.conflitos, presenca.pendencias]);
 
-      // Alunos sem destino
-      for (const aluno of aula.alunos) {
-        if (aluno.aluno_id == null) continue;
-        if (alunoSemDestino(aula, aluno, data, agora)) {
-          lista.push({
-            aula,
-            aluno,
-            minutosDesdeFim: minutos,
-            emusysAusente: aluno.emusys_presenca_bruta === 'ausente',
-          });
-        }
-      }
-
-      // Leads experimentais sem destino (aguardando presença/falta)
-      for (const lead of aula.experimental_leads ?? []) {
-        if (leadExperimentalSemDestino(aula, lead, data, agora)) {
-          lista.push({ aula, lead, minutosDesdeFim: minutos });
-        }
-      }
-    }
-    return lista;
-  }, [aulas, data, agora]);
-
-  // Separa hoje vs ontem
-  const pendentesHoje = pendentes.filter((p) => data === hoje);
-  const pendentesOntem = pendentes.filter((p) => data !== hoje);
-
-  // Separa "Emusys marcou ausente" (revisao) de "sem destino" (ninguem marcou)
-  const emusysAusentes = pendentes.filter((p) => p.emusysAusente);
-  const semDestinoReal = pendentes.filter((p) => !p.emusysAusente);
-
-  // Quantas aulas do dia já terminaram (para saber se o parabéns é merecido)
-  const aulasQueJaOcorreram = aulas.filter(
-    (a) => !a.cancelada && aulaJaOcorreu(data, a.hora_fim, agora),
+  const conflitos = pendentes.filter((item) => item.conflito);
+  const semResposta = pendentes.filter((item) => !item.conflito);
+  const aulasEncerradas = aulas.filter(
+    (aula) => !aula.cancelada && aulaJaOcorreu(data, aula.hora_fim, agora),
   ).length;
 
-  // Se não tem pendências MAS também nenhuma aula ocorreu ainda, mostra
-  // mensagem neutra em vez de parabéns — as aulas nem começaram.
-  if (pendentes.length === 0 && aulasQueJaOcorreram === 0) {
+  if (presenca.dados_status !== 'atualizados') {
+    const roster = presenca.dados_status === 'roster_em_revisao';
     return (
-      <div className="flex items-center gap-3 rounded-2xl border border-slate-700/50 bg-slate-800/20 p-4">
-        <Clock className="h-5 w-5 shrink-0 text-slate-500" />
+      <div
+        className="flex items-start gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4"
+        role="status"
+      >
+        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
         <div>
-          <p className="text-sm font-semibold text-slate-300">
-            As aulas de hoje ainda não começaram.
+          <p className="text-sm font-semibold text-amber-200">
+            {roster ? 'Roster em revisão estrutural' : 'Dados de presença ainda não publicáveis'}
           </p>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Quando a primeira aula terminar, a ficha de chamada aparece aqui.
+          <p className="mt-0.5 text-xs text-amber-300/80">
+            {roster
+              ? 'A fotografia de alunos está incompleta, ambígua ou desatualizada.'
+              : 'A sincronização do Emusys ainda não cobriu todas as aulas encerradas.'}
+            {' '}Nenhuma pendência foi atribuída à equipe.
           </p>
         </div>
       </div>
     );
   }
 
-  // Se não tem pendências e aulas já ocorreram, mostra parabéns (verde) com os nomes da equipe
+  if (pendentes.length === 0 && aulasEncerradas === 0) {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl border border-slate-700/50 bg-slate-800/20 p-4">
+        <Clock className="h-5 w-5 shrink-0 text-slate-500" />
+        <p className="text-sm font-semibold text-slate-300">As aulas de hoje ainda não começaram.</p>
+      </div>
+    );
+  }
+
   if (pendentes.length === 0) {
-    const nomes = nomesEquipe.length > 0
-      ? nomesEquipe.length === 1
-        ? nomesEquipe[0]
-        : `${nomesEquipe.slice(0, -1).join(', ')} e ${nomesEquipe.at(-1)}`
-      : null;
+    const nomes = nomesEquipe.length === 1
+      ? nomesEquipe[0]
+      : nomesEquipe.length > 1
+        ? `${nomesEquipe.slice(0, -1).join(', ')} e ${nomesEquipe.at(-1)}`
+        : null;
     return (
       <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4">
         <PartyPopper className="h-5 w-5 shrink-0 text-emerald-400" />
@@ -144,112 +141,68 @@ export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirD
             {nomes ? `Parabéns, ${nomes}!` : 'Parabéns!'} Tudo fechado na ficha de chamada.
           </p>
           <p className="mt-0.5 text-xs text-emerald-400/70">
-            O lembrete de presenças do WhatsApp não vai precisar aparecer amanhã no grupo.
+            Dados sincronizados e nenhuma pendência canônica neste dia.
           </p>
         </div>
       </div>
     );
   }
 
-  const total = pendentes.length;
-  const urgente = total > 10;
-
-  const corFundo = urgente
-    ? 'border-rose-500/40 bg-rose-500/10'
-    : 'border-amber-500/40 bg-amber-500/10';
-  const corIcone = urgente ? 'text-rose-400' : 'text-amber-400';
-  const corTitulo = urgente ? 'text-rose-200' : 'text-amber-200';
-  const corTexto = urgente ? 'text-rose-300/80' : 'text-amber-300/80';
-  const corItem = urgente ? 'text-rose-200/90' : 'text-amber-200/90';
-  const corHover = urgente ? 'hover:bg-rose-500/10' : 'hover:bg-amber-500/10';
+  const urgente = pendentes.length > 10;
 
   function formatarTempo(minutos: number): string {
     if (minutos < 60) return `há ${minutos} min`;
     const horas = Math.floor(minutos / 60);
-    const mins = minutos % 60;
-    if (mins === 0) return `há ${horas}h`;
-    return `há ${horas}h${mins}min`;
+    const resto = minutos % 60;
+    return resto === 0 ? `há ${horas}h` : `há ${horas}h${resto}min`;
   }
 
-  function ItemPendencia({ p }: { p: Pendencia }) {
-    const ehLead = p.lead != null;
-    const nome = ehLead ? p.lead!.nome : p.aluno!.nome;
-    const curso = ehLead ? (p.lead!.curso ?? 'Experimental') : p.aula.curso_nome;
+  function Item({ pendencia }: { pendencia: PendenciaRenderizada }) {
     return (
       <button
         type="button"
-        onClick={() => onAbrirDrawer(p.aula)}
-        className={cn(
-          'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors',
-          corItem,
-          corHover,
-        )}
+        onClick={() => pendencia.aula && onAbrirDrawer(pendencia.aula)}
+        disabled={!pendencia.aula}
+        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-amber-100 transition-colors hover:bg-amber-500/10 disabled:cursor-default"
       >
-        {ehLead ? (
-          <User className="h-3 w-3 shrink-0 text-violet-400" />
-        ) : (
-          <Clock className="h-3 w-3 shrink-0 opacity-60" />
-        )}
-        <span className="font-mono text-[11px] opacity-70">{p.aula.hora_inicio}</span>
+        <Clock className="h-3 w-3 shrink-0 opacity-60" />
+        <span className="font-mono text-[11px] opacity-70">{pendencia.item.hora}</span>
         <span className="min-w-0 flex-1 truncate font-medium">
-          {nome}
-          {ehLead && <span className="ml-1 text-[9px] font-bold uppercase text-violet-400">lead</span>}
-          {p.emusysAusente && (
-            <span className="ml-1 rounded bg-slate-600/40 px-1 py-px text-[9px] font-semibold text-slate-400">
-              Emusys: ausente
+          {pendencia.item.aluno_nome}
+          {pendencia.conflito && (
+            <span className="ml-1 rounded bg-rose-500/20 px-1 py-px text-[9px] font-semibold text-rose-300">
+              conflito
             </span>
           )}
         </span>
         <span className="truncate text-[10px] opacity-60">
-          {p.aula.professor_nome?.split(' ')[0] ?? ''} · {curso}
+          {pendencia.item.professor_nome.split(' ')[0]} · {pendencia.item.curso_nome}
         </span>
-        <span className="shrink-0 text-[10px] opacity-50">{formatarTempo(p.minutosDesdeFim)}</span>
-        <ChevronRight className="h-3 w-3 shrink-0 opacity-40" />
+        <span className="shrink-0 text-[10px] opacity-50">
+          {formatarTempo(pendencia.minutosDesdeFim)}
+        </span>
+        {pendencia.aula && <ChevronRight className="h-3 w-3 shrink-0 opacity-40" />}
       </button>
     );
   }
 
-  function Secao({ titulo, itens }: { titulo: string; itens: Pendencia[] }) {
+  function Secao({ titulo, itens }: { titulo: string; itens: PendenciaRenderizada[] }) {
     if (itens.length === 0) return null;
-    return (
-      <div>
-        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide opacity-60">
-          {titulo} ({itens.length})
-        </p>
-        <ul className="space-y-0.5">
-          {itens.map((p) => (
-            <li key={p.lead ? `lead-${p.lead.experimental_id}` : `${p.aula.chave}-${p.aluno!.aluno_id}`}>
-              <ItemPendencia p={p} />
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
-
-  // Agrupa por unidade quando consolidado
-  function SecaoComUnidade({ titulo, itens }: { titulo: string; itens: Pendencia[] }) {
-    if (itens.length === 0) return null;
-    const porUnidade = new Map<string, Pendencia[]>();
-    for (const p of itens) {
-      const unidade = p.aula.unidade_nome;
-      if (!porUnidade.has(unidade)) porUnidade.set(unidade, []);
-      porUnidade.get(unidade)!.push(p);
+    const grupos = new Map<string, PendenciaRenderizada[]>();
+    for (const item of itens) {
+      const unidade = consolidado ? (item.aula?.unidade_nome ?? 'Unidade') : '';
+      grupos.set(unidade, [...(grupos.get(unidade) ?? []), item]);
     }
     return (
       <div>
         <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide opacity-60">
           {titulo} ({itens.length})
         </p>
-        {Array.from(porUnidade.entries()).map(([unidade, lista]) => (
-          <div key={unidade} className="mb-2 last:mb-0">
-            <p className="mb-0.5 text-[10px] font-semibold opacity-50">{unidade}</p>
+        {[...grupos.entries()].map(([unidade, lista]) => (
+          <div key={unidade || titulo} className="mb-2 last:mb-0">
+            {unidade && <p className="mb-0.5 text-[10px] font-semibold opacity-50">{unidade}</p>}
             <ul className="space-y-0.5">
-              {lista.map((p) => (
-                <li key={p.lead ? `lead-${p.lead.experimental_id}` : `${p.aula.chave}-${p.aluno!.aluno_id}`}>
-                  <ItemPendencia p={p} />
-                </li>
-              ))}
+              {lista.map((item) => <li key={item.item.slot_key}><Item pendencia={item} /></li>)}
             </ul>
           </div>
         ))}
@@ -257,50 +210,25 @@ export function AlertaPendencias({ data, aulas, consolidado, unidadeId, onAbrirD
     );
   }
 
+  const cor = urgente
+    ? 'border-rose-500/40 bg-rose-500/10'
+    : 'border-amber-500/40 bg-amber-500/10';
   return (
-    <div className={cn('rounded-2xl border p-4', corFundo)}>
-      {/* Cabeçalho do alerta */}
+    <div className={cn('rounded-2xl border p-4', cor)}>
       <div className="flex items-start gap-3">
-        <AlertTriangle className={cn('mt-0.5 h-5 w-5 shrink-0', corIcone)} />
-        <div className="min-w-0 flex-1">
-          <p className={cn('text-sm font-semibold', corTitulo)}>
-            {semDestinoReal.length > 0 && (
-              <>{semDestinoReal.length} {semDestinoReal.length === 1 ? 'aluno sem destino' : 'alunos sem destino'}</>
-            )}
-            {semDestinoReal.length > 0 && emusysAusentes.length > 0 && ' · '}
-            {emusysAusentes.length > 0 && (
-              <>{emusysAusentes.length} {emusysAusentes.length === 1 ? 'ausente' : 'ausentes'} no Emusys</>
-            )}
-            {' '}em aulas que já ocorreram
+        <AlertTriangle className={cn('mt-0.5 h-5 w-5 shrink-0', urgente ? 'text-rose-400' : 'text-amber-400')} />
+        <div>
+          <p className="text-sm font-semibold text-amber-100">
+            {semResposta.length} sem resposta · {conflitos.length} conflitos em aulas encerradas
           </p>
-          <p className={cn('mt-0.5 text-xs', corTexto)}>
-            {emusysAusentes.length > 0 && semDestinoReal.length === 0
-              ? 'O Emusys marcou ausente. Confirme se é falta ou ajuste.'
-              : semDestinoReal.length > 0 && emusysAusentes.length === 0
-                ? 'Ninguém registrou presença, falta ou justificativa.'
-                : 'Confirme os ausentes do Emusys e dê destino aos que faltam.'}
-            {' '}Esses alunos entram no lembrete de presenças diárias do grupo do WhatsApp.
+          <p className="mt-0.5 text-xs text-amber-200/70">
+            Esta é a mesma lista canônica enviada no relatório diário da Sol.
           </p>
         </div>
       </div>
-
-      {/* Lista de pendências — separada por tipo, hoje/ontem e unidade */}
       <div className="mt-3 space-y-3">
-        {consolidado ? (
-          <>
-            <SecaoComUnidade titulo="Ausentes no Emusys" itens={emusysAusentes.filter((p) => data === hoje)} />
-            <SecaoComUnidade titulo="Sem destino" itens={semDestinoReal.filter((p) => data === hoje)} />
-            <SecaoComUnidade titulo="Ontem — Ausentes no Emusys" itens={emusysAusentes.filter((p) => data !== hoje)} />
-            <SecaoComUnidade titulo="Ontem — Sem destino" itens={semDestinoReal.filter((p) => data !== hoje)} />
-          </>
-        ) : (
-          <>
-            <Secao titulo="Ausentes no Emusys" itens={emusysAusentes.filter((p) => data === hoje)} />
-            <Secao titulo="Sem destino" itens={semDestinoReal.filter((p) => data === hoje)} />
-            <Secao titulo="Ontem — Ausentes no Emusys" itens={emusysAusentes.filter((p) => data !== hoje)} />
-            <Secao titulo="Ontem — Sem destino" itens={semDestinoReal.filter((p) => data !== hoje)} />
-          </>
-        )}
+        <Secao titulo={data === hoje ? 'Conflitos' : 'Ontem — Conflitos'} itens={conflitos} />
+        <Secao titulo={data === hoje ? 'Sem resposta' : 'Ontem — Sem resposta'} itens={semResposta} />
       </div>
     </div>
   );

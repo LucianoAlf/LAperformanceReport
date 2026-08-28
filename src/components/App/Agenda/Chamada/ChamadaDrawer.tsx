@@ -21,15 +21,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
-import type { AulaAgenda, AlunoAgenda } from '@/hooks/useAgendaDia';
+import type { AulaAgenda, AlunoAgenda, PresencaEnvelopeAgenda } from '@/hooks/useAgendaDia';
 import { aulaJaOcorreu } from '@/lib/agenda';
-import { estadoDoAluno, rotuloOrigem, temConflito, type EstadoChamada } from './chamadaUtils';
+import { adaptarPresencaCanonica, rotuloPresencaFonte, type PresencaCanonicaEstado } from '@/lib/presencaCanonica';
 import type { ItemChamada } from './useChamadaAcoes';
 import { cn } from '@/lib/utils';
 
 interface Props {
   aula: AulaAgenda | null;
   data: string;
+  presenca: PresencaEnvelopeAgenda;
   salvando: boolean;
   onRegistrar: (itens: ItemChamada[]) => void;
   onJustificar: (aluno: AlunoAgenda, aula: AulaAgenda) => void;
@@ -52,7 +53,7 @@ interface Retificacao {
  * que e papel do AgendaDrawer na visao Professores/Salas). Mostra tudo da
  * aula + histórico de retificações para auditoria.
  */
-export function ChamadaDrawer({ aula, data, salvando, onRegistrar, onJustificar, onCancelarAula, onReagendarAula, onFechar }: Props) {
+export function ChamadaDrawer({ aula, data, presenca, salvando, onRegistrar, onJustificar, onCancelarAula, onReagendarAula, onFechar }: Props) {
   return (
     <Dialog open={aula != null} onOpenChange={(o) => !o && onFechar()}>
       <DialogContent
@@ -64,6 +65,7 @@ export function ChamadaDrawer({ aula, data, salvando, onRegistrar, onJustificar,
           <ConteudoDrawer
             aula={aula}
             data={data}
+            presenca={presenca}
             salvando={salvando}
             onRegistrar={onRegistrar}
             onJustificar={onJustificar}
@@ -80,6 +82,7 @@ export function ChamadaDrawer({ aula, data, salvando, onRegistrar, onJustificar,
 function ConteudoDrawer({
   aula,
   data,
+  presenca,
   salvando,
   onRegistrar,
   onJustificar,
@@ -89,6 +92,7 @@ function ConteudoDrawer({
 }: {
   aula: AulaAgenda;
   data: string;
+  presenca: PresencaEnvelopeAgenda;
   salvando: boolean;
   onRegistrar: (itens: ItemChamada[]) => void;
   onJustificar: (aluno: AlunoAgenda, aula: AulaAgenda) => void;
@@ -219,6 +223,7 @@ function ConteudoDrawer({
                   key={`${aluno.aula_emusys_id}-${aluno.aluno_id}`}
                   aluno={aluno}
                   aula={aula}
+                  presenca={presenca}
                   salvando={salvando}
                   podeOperar={!aula.cancelada && jaOcorreu}
                   onMarcar={(al, status) => {
@@ -275,6 +280,7 @@ function ConteudoDrawer({
 function LinhaAlunoDrawer({
   aluno,
   aula,
+  presenca,
   salvando,
   podeOperar,
   onMarcar,
@@ -282,33 +288,46 @@ function LinhaAlunoDrawer({
 }: {
   aluno: AlunoAgenda;
   aula: AulaAgenda;
+  presenca: PresencaEnvelopeAgenda;
   salvando: boolean;
   podeOperar: boolean;
   onMarcar: (aluno: AlunoAgenda, status: 'presente' | 'falta' | 'indeterminado') => void;
   onJustificar: (aluno: AlunoAgenda) => void;
 }) {
-  const estado = estadoDoAluno(aluno);
-  const conflito = temConflito(aluno);
+  const visual = adaptarPresencaCanonica({
+    alunoId: aluno.aluno_id,
+    aulaEmusysId: aluno.aula_emusys_id,
+    emusysPresencaBruta: aluno.emusys_presenca_bruta,
+    envelope: presenca,
+  });
+  const estado = visual.estado;
+  const conflito = visual.conflito;
   const semVinculo = !aluno.aula_emusys_id || !aluno.aluno_id;
-  const cor: Record<EstadoChamada, string> = {
+  const cor: Record<PresencaCanonicaEstado, string> = {
     presente: 'text-emerald-400',
     falta: 'text-rose-400',
     falta_justificada: 'text-amber-400',
     indeterminado: 'text-slate-500',
+    roster_em_revisao: 'text-amber-300',
+    dados_desatualizados: 'text-sky-300',
   };
-  const rotulo: Record<EstadoChamada, string> = {
+  const rotulo: Record<PresencaCanonicaEstado, string> = {
     presente: 'Presente',
     falta: 'Falta',
     falta_justificada: 'Falta justificada',
-    indeterminado: 'Sem destino',
+    indeterminado: 'A confirmar',
+    roster_em_revisao: 'Roster em revisão',
+    dados_desatualizados: 'Dado desatualizado',
   };
   // Borda e fundo coloridos por estado — o card inteiro comunica o destino
   // sem precisar ler o rótulo.
-  const bordaPorEstado: Record<EstadoChamada, string> = {
+  const bordaPorEstado: Record<PresencaCanonicaEstado, string> = {
     presente: 'border-emerald-500/40 bg-emerald-500/5',
     falta: 'border-rose-500/40 bg-rose-500/5',
     falta_justificada: 'border-amber-500/40 bg-amber-500/5',
     indeterminado: 'border-dashed border-slate-500/60 bg-slate-700/10',
+    roster_em_revisao: 'border-dashed border-amber-500/50 bg-amber-500/5',
+    dados_desatualizados: 'border-dashed border-sky-500/40 bg-sky-500/5',
   };
 
   return (
@@ -329,7 +348,7 @@ function LinhaAlunoDrawer({
       {/* Botoes de chamada — grandes, com borda e icone. Toggle: clicar no
           estado ativo desmarca (volta para indeterminado). So em aula que ja
           ocorreu e nao esta cancelada, e quando o aluno tem vinculo real. */}
-      {podeOperar && !semVinculo && (
+      {podeOperar && presenca.dados_status === 'atualizados' && !semVinculo && (
         <div className="mt-3 flex gap-1.5" role="group" aria-label={`Destino de ${aluno.nome}`}>
           <button
             type="button"
@@ -380,7 +399,13 @@ function LinhaAlunoDrawer({
       )}
 
       <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-500">
-        <span>Origem: {rotuloOrigem(aluno.respondido_por)}</span>
+        <span>Fonte: {rotuloPresencaFonte(visual.fonte)}</span>
+        {visual.decididoEm && <span>Decidido às {new Date(visual.decididoEm).toLocaleString('pt-BR')}</span>}
+        {visual.requestId && (
+          <span className="font-mono" title={visual.requestId}>
+            Recibo {visual.requestId.slice(0, 8)} · {visual.reciboStatus ?? 'recebido'}
+          </span>
+        )}
         {aluno.emusys_presenca_bruta && (
           <span>Emusys: {aluno.emusys_presenca_bruta}</span>
         )}
@@ -411,7 +436,7 @@ function LinhaAlunoDrawer({
       {conflito && (
         <p className="mt-2 flex items-center gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5 text-[10px] text-amber-400">
           <AlertTriangle className="h-3 w-3 shrink-0" />
-          Conflito: Emusys registrou “{aluno.emusys_presenca_bruta}”; resposta humana prevalece.
+          Conflito preservado: Emusys registrou “{aluno.emusys_presenca_bruta}”; decisão canônica mantida.
         </p>
       )}
     </li>

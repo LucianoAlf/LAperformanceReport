@@ -1,7 +1,12 @@
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { AlunoAgenda, AulaAgenda } from '@/hooks/useAgendaDia';
+import type { AlunoAgenda, AulaAgenda, PresencaEnvelopeAgenda } from '@/hooks/useAgendaDia';
 import { aulaJaOcorreu, formatarDataCalculo, riscoDesatualizado } from '@/lib/agenda';
+import {
+  adaptarPresencaCanonica,
+  adaptarPresencaProfessorCanonica,
+  rotuloPresencaFonte,
+} from '@/lib/presencaCanonica';
 
 function corRisco(v: number): string {
   if (v >= 60) return 'text-rose-400';
@@ -27,6 +32,7 @@ function notaClampada(nota: number): number {
 export function AgendaDrawer({
   aula,
   data,
+  presenca,
   onFechar,
   mostrarUnidade = false,
 }: {
@@ -34,6 +40,7 @@ export function AgendaDrawer({
   // Dia exibido ('yyyy-MM-dd'), para saber se a aula ja aconteceu — o que
   // decide se `professor_presenca` pode ser mostrado (ver aulaJaOcorreu).
   data: string;
+  presenca: PresencaEnvelopeAgenda;
   onFechar: () => void;
   // Na agenda consolidada o painel tambem precisa dizer de qual escola e a
   // aula: o rotulo do trilho pode ter ficado fora da viewport apos rolagem
@@ -48,6 +55,17 @@ export function AgendaDrawer({
   const aluno: AlunoAgenda | null = aula.alunos.length === 1 ? aula.alunos[0] : null;
   const riscoVelho = aluno ? riscoDesatualizado(aluno.risco_calculado_em, new Date()) : false;
   const jaOcorreu = aulaJaOcorreu(data, aula.hora_fim, new Date());
+  const decisaoProfessor = aula.professor_id == null ? null : adaptarPresencaProfessorCanonica({
+    professorId: aula.professor_id,
+    aulaIds: aula.aula_ids,
+    envelope: presenca,
+  });
+  const decisaoAluno = aluno ? adaptarPresencaCanonica({
+    alunoId: aluno.aluno_id,
+    aulaEmusysId: aluno.aula_emusys_id,
+    emusysPresencaBruta: aluno.emusys_presenca_bruta,
+    envelope: presenca,
+  }) : null;
 
   // Frescor do risco na lista de turma. Usa o calculo mais recente entre os
   // alunos (todos sao pontuados no mesmo lote, entao normalmente coincidem).
@@ -132,15 +150,28 @@ export function AgendaDrawer({
       )}
 
       {/* So depois da aula: antes disso o Emusys manda 'ausente' por default. */}
-      {jaOcorreu && aula.professor_presenca && (
-        <div className="flex items-center justify-between text-[12.5px]">
+      {jaOcorreu && decisaoProfessor && (
+        <div className="flex items-start justify-between gap-3 text-[12.5px]">
           <span className="text-slate-300">Professor</span>
           <span
-            className={
-              aula.professor_presenca === 'presente' ? 'text-emerald-400' : 'text-rose-400'
-            }
+            className={cn(
+              'text-right',
+              decisaoProfessor.estado === 'presente' && 'text-emerald-400',
+              decisaoProfessor.estado === 'ausente' && 'text-rose-400',
+              !['presente', 'ausente'].includes(decisaoProfessor.estado) && 'text-amber-300',
+            )}
           >
-            {aula.professor_presenca === 'presente' ? 'Presente' : 'Ausente'}
+            {decisaoProfessor.estado === 'presente'
+              ? 'Presente'
+              : decisaoProfessor.estado === 'ausente'
+                ? 'Ausente'
+                : 'Em auditoria'}
+            <small className="block text-[10px] text-slate-500">
+              {rotuloPresencaFonte(decisaoProfessor.fonte)}
+              {decisaoProfessor.decididoEm
+                ? ` · ${new Date(decisaoProfessor.decididoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+                : ''}
+            </small>
           </span>
         </div>
       )}
@@ -151,7 +182,14 @@ export function AgendaDrawer({
             {aluno.idade !== null && <Linha rotulo="Idade" valor={`${aluno.idade} anos`} />}
             {aluno.responsavel_nome && <Linha rotulo="Responsável" valor={aluno.responsavel_nome} />}
             {aluno.responsavel_telefone && <Linha rotulo="Contato" valor={aluno.responsavel_telefone} />}
-            {aluno.status_presenca && <Linha rotulo="Presença" valor={aluno.status_presenca} />}
+            {decisaoAluno && (
+              <Linha
+                rotulo="Presença"
+                valor={['dados_desatualizados', 'roster_em_revisao'].includes(decisaoAluno.estado)
+                  ? 'Em auditoria'
+                  : decisaoAluno.estado}
+              />
+            )}
           </dl>
 
           <p className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">
@@ -218,7 +256,14 @@ export function AgendaDrawer({
             </p>
           )}
           <ul className="flex flex-col gap-1 text-[12.5px]">
-            {aula.alunos.map((a, indice) => (
+            {aula.alunos.map((a, indice) => {
+              const decisao = adaptarPresencaCanonica({
+                alunoId: a.aluno_id,
+                aulaEmusysId: a.aula_emusys_id,
+                emusysPresencaBruta: a.emusys_presenca_bruta,
+                envelope: presenca,
+              });
+              return (
               <li
                 key={a.aluno_id ?? `${a.nome}-${indice}`}
                 className="flex flex-col gap-0.5"
@@ -249,9 +294,9 @@ export function AgendaDrawer({
                     {a.qtd_aulas_contrato ? `${a.nr_da_aula}/${a.qtd_aulas_contrato}` : a.nr_da_aula}
                   </span>
                 )}
-                {a.status_presenca && (
+                {!['indeterminado', 'dados_desatualizados', 'roster_em_revisao'].includes(decisao.estado) && (
                   <span className="shrink-0 text-[10.5px] uppercase text-slate-500">
-                    {a.status_presenca}
+                    {decisao.estado}
                   </span>
                 )}
                 {a.risco_pct !== null && (
@@ -274,7 +319,8 @@ export function AgendaDrawer({
                   </div>
                 ) : null}
               </li>
-            ))}
+              );
+            })}
           </ul>
         </>
       )}

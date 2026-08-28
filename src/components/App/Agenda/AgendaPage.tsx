@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { useAgendaDia, type AulaAgenda } from '@/hooks/useAgendaDia';
-import { alunoSemDestino, estadoDoAluno, leadExperimentalSemDestino } from './Chamada/chamadaUtils';
+import { adaptarPresencaCanonica } from '@/lib/presencaCanonica';
 import {
   aulaJaOcorreu,
   contarEmAulaAgora,
@@ -146,7 +146,7 @@ export default function AgendaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inicio, fim, hoje]);
 
-  const { aulas: todasAsAulas, carregando, erro, frescor, recarregar, prefetch } = useAgendaDia({
+  const { aulas: todasAsAulas, presenca, carregando, erro, frescor, recarregar, prefetch } = useAgendaDia({
     data,
     unidadeId,
   });
@@ -175,9 +175,8 @@ export default function AgendaPage() {
   const aulas = useMemo(() => filtrarAulas(todasAsAulas, filtros), [todasAsAulas, filtros]);
   const filtrando = filtroAtivo(filtros);
 
-  // Distinguir a PRIMEIRA carga (nao ha nada na tela, entao "Carregando" e a
-  // unica coisa honesta a mostrar) de uma RECARGA por troca de dia/unidade, em
-  // que o dia anterior continua valido como imagem enquanto o novo chega.
+  // Ao trocar dia/unidade sem cache, o hook limpa o contexto anterior para que
+  // nomes antigos nunca aparecam sob o novo cabecalho.
   const primeiraCarga = carregando && todasAsAulas.length === 0;
   const recarregando = carregando && !primeiraCarga;
 
@@ -249,30 +248,21 @@ export default function AgendaPage() {
     for (const aula of aulas) {
       if (aula.cancelada) continue;
       for (const aluno of aula.alunos) {
-        if (aluno.aluno_id != null && estadoDoAluno(aluno) === 'falta') count++;
+        if (aluno.aluno_id != null && adaptarPresencaCanonica({
+          alunoId: aluno.aluno_id,
+          aulaEmusysId: aluno.aula_emusys_id,
+          emusysPresencaBruta: aluno.emusys_presenca_bruta,
+          envelope: presenca,
+        }).estado === 'falta') count++;
       }
     }
     return count;
-  }, [aulas]);
+  }, [aulas, presenca]);
 
-  // Pendencias da chamada: alunos em aulas JA OCORRIDAS sem destino humano
-  // (presente/falta/justificada/cancelamento). E o que o digest diario cobra.
-  // Mostrar aqui faz a equipe saltar para a visao Chamada antes do digest.
-  const pendenciasChamada = useMemo(() => {
-    let count = 0;
-    const agora = new Date();
-    for (const aula of aulas) {
-      if (aula.cancelada) continue;
-      if (!aulaJaOcorreu(data, aula.hora_fim, agora)) continue;
-      for (const aluno of aula.alunos) {
-        if (aluno.aluno_id != null && alunoSemDestino(aula, aluno, data, agora)) count++;
-      }
-      for (const lead of aula.experimental_leads ?? []) {
-        if (leadExperimentalSemDestino(aula, lead, data, agora)) count++;
-      }
-    }
-    return count;
-  }, [aulas, data]);
+  // Mesma lista regular usada pela Sol. Experimentais possuem contrato proprio
+  // e nao entram nesta contagem. Estado inseguro nunca vira zero conclusivo.
+  const presencaPublicavel = presenca.dados_status === 'atualizados';
+  const pendenciasChamada = presencaPublicavel ? presenca.pendencias.length : null;
 
   // Trocar de unidade no header troca o conjunto de aulas: a selecao antiga
   // sumiu da timeline, mas o drawer continuaria mostrando ela. Mesmo motivo
@@ -452,7 +442,29 @@ export default function AgendaPage() {
           ocorreram. Aparece em TODAS as visoes (Professores/Salas/Chamada) para
           cobrar acao da equipe antes do digest diario. Clicar leva a visao
           Chamada, onde o banner detalha aluno a aluno. */}
-      {pendenciasChamada > 0 && !ehChamada && !ehCalendario && (
+      {!presencaPublicavel && !ehChamada && !ehCalendario && (
+        <button
+          type="button"
+          onClick={() => setVisao('chamada')}
+          className="flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-left transition-colors hover:bg-amber-500/15"
+        >
+          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-400" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-amber-200">Presenças em auditoria</p>
+            <p className="text-xs text-amber-300/80">
+              {presenca.dados_status === 'roster_em_revisao'
+                ? 'A fotografia de alunos precisa de revisão estrutural.'
+                : 'A sincronização ainda não tornou este dia publicável.'}
+              {' '}Nenhuma pendência foi atribuída à equipe.
+            </p>
+          </div>
+          <span className="shrink-0 rounded-md border border-amber-500/40 px-2.5 py-1 text-xs font-semibold text-amber-300">
+            Ver Chamada
+          </span>
+        </button>
+      )}
+
+      {pendenciasChamada !== null && pendenciasChamada > 0 && !ehChamada && !ehCalendario && (
         <button
           type="button"
           onClick={() => setVisao('chamada')}
@@ -535,9 +547,11 @@ export default function AgendaPage() {
         <KPICard
           label="Sem destino"
           icon={XCircle}
-          value={pendenciasChamada}
-          variant={pendenciasChamada > 0 ? 'amber' : 'emerald'}
-          subvalue={pendenciasChamada > 0 ? 'chamada pendente' : 'tudo resolvido'}
+          value={pendenciasChamada ?? 'Em auditoria'}
+          variant={!presencaPublicavel || (pendenciasChamada ?? 0) > 0 ? 'amber' : 'emerald'}
+          subvalue={!presencaPublicavel
+            ? 'dado ainda não publicável'
+            : (pendenciasChamada ?? 0) > 0 ? 'chamada pendente' : 'tudo resolvido'}
           size="sm"
         />
       </div>
@@ -560,6 +574,7 @@ export default function AgendaPage() {
           data={data}
           unidadeId={unidadeId}
           aulas={aulas}
+          presenca={presenca}
           recarregar={recarregar}
           onIrParaDia={irPara}
           onSubVisaoChange={setSubVisaoChamada}
@@ -577,6 +592,7 @@ export default function AgendaPage() {
               onSelecionar={setSelecionada}
               ehHoje={data === hoje}
               mostrarUnidade={unidadeId === null}
+              presenca={presenca}
             />
           </div>
           {/* Montado so quando ha selecao: sem aula escolhida ele nao ocupa os
@@ -585,6 +601,7 @@ export default function AgendaPage() {
             <AgendaDrawer
               aula={selecionada}
               data={data}
+              presenca={presenca}
               onFechar={() => setSelecionada(null)}
               mostrarUnidade={unidadeId === null}
             />

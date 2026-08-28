@@ -8,8 +8,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import type { AulaAgenda } from '@/hooks/useAgendaDia';
+import type { AulaAgenda, PresencaEnvelopeAgenda } from '@/hooks/useAgendaDia';
 import { useAuth } from '@/contexts/AuthContext';
+import { adaptarPresencaProfessorCanonica, rotuloPresencaFonte } from '@/lib/presencaCanonica';
 import {
   adquirirTravaPresenca,
   chaveDoPedido,
@@ -116,6 +117,7 @@ interface Props {
   primeiraAula: string;
   ultimaAula: string;
   presente: boolean | null;
+  presenca: PresencaEnvelopeAgenda;
   onMudou: () => void;
 }
 
@@ -133,6 +135,7 @@ export function ProfessorPresencaToggle({
   primeiraAula,
   ultimaAula,
   presente,
+  presenca,
   onMudou,
 }: Props) {
   const { user } = useAuth();
@@ -141,6 +144,20 @@ export function ProfessorPresencaToggle({
   const [salvandoAula, setSalvandoAula] = useState<number | null>(null);
 
   const totalAulas = aulas.length;
+  const presencaBloqueada = presenca.dados_status !== 'atualizados';
+  const decisaoDia = adaptarPresencaProfessorCanonica({
+    professorId,
+    aulaIds: aulas.flatMap((aula) => aula.aula_ids),
+    envelope: presenca,
+  });
+  const horarioDecisao = decisaoDia.decididoEm
+    ? new Date(decisaoDia.decididoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    : null;
+  const estadoAuditoria = decisaoDia.estado === 'dados_desatualizados'
+    ? 'Dados desatualizados'
+    : decisaoDia.estado === 'indeterminado' || decisaoDia.estado === 'roster_em_revisao'
+      ? 'Em auditoria'
+      : null;
 
   function adquirirTravaDoDia(usuarioId: string): { chave: string; liberar: () => void } | null {
     try {
@@ -199,7 +216,7 @@ export function ProfessorPresencaToggle({
   }
 
   async function toggleDia() {
-    if (salvando) return;
+    if (salvando || presencaBloqueada) return;
     if (!user?.id) {
       toast.error('Sessão inválida', {
         description: 'Entre novamente para registrar a chamada.',
@@ -278,7 +295,7 @@ export function ProfessorPresencaToggle({
   }
 
   async function toggleAula(aula: AulaAgenda) {
-    if (salvandoAula) return;
+    if (salvandoAula || presencaBloqueada) return;
     if (!user?.id) {
       toast.error('Sessão inválida', {
         description: 'Entre novamente para registrar a chamada.',
@@ -290,7 +307,12 @@ export function ProfessorPresencaToggle({
     const trava = adquirirTravaDoDia(user.id);
     if (!trava) return;
     setSalvandoAula(aulaId);
-    const novoPresente = aula.professor_presenca !== 'presente';
+    const decisaoAtual = adaptarPresencaProfessorCanonica({
+      professorId,
+      aulaIds: aula.aula_ids,
+      envelope: presenca,
+    });
+    const novoPresente = decisaoAtual.estado !== 'presente';
     try {
       if (!(await reconciliarPendenciasDoDia(trava.chave))) return;
       const payload = { aulaId, novoPresente };
@@ -343,7 +365,7 @@ export function ProfessorPresencaToggle({
   }
 
   async function marcarTodasAulas(presenteAula: boolean) {
-    if (salvando) return;
+    if (salvando || presencaBloqueada) return;
     if (!user?.id) {
       toast.error('Sessão inválida', {
         description: 'Entre novamente para registrar a chamada.',
@@ -468,13 +490,21 @@ export function ProfessorPresencaToggle({
           <p className="text-[11px] text-slate-400">
             {primeiraAula} — {ultimaAula} · {totalAulas} {totalAulas === 1 ? 'aula' : 'aulas'}
           </p>
+          <p className="mt-0.5 truncate text-[10px] text-slate-500">
+            {estadoAuditoria ?? rotuloPresencaFonte(decisaoDia.fonte)}
+            {horarioDecisao ? ` · ${horarioDecisao}` : ''}
+            {decisaoDia.requestId ? ` · recibo ${decisaoDia.reciboStatus ?? 'recebido'}` : ''}
+          </p>
+          <p className="truncate text-[9px] text-slate-600">
+            Regra {decisaoDia.regraVersao} · sincronizado {decisaoDia.sincronizadoEm ?? 'sem horário'}
+          </p>
         </div>
 
         {/* Toggle do dia — stopPropagation para nao abrir modal */}
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); toggleDia(); }}
-          disabled={salvando}
+          disabled={salvando || presencaBloqueada}
           className={cn(
             'flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all',
             presente === true
@@ -482,7 +512,7 @@ export function ProfessorPresencaToggle({
               : presente === false
                 ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30'
                 : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700/70',
-            salvando && 'opacity-50',
+            (salvando || presencaBloqueada) && 'opacity-50',
           )}
         >
           {salvando ? (
@@ -536,7 +566,7 @@ export function ProfessorPresencaToggle({
                   <button
                     type="button"
                     onClick={() => marcarTodasAulas(true)}
-                    disabled={salvando}
+                    disabled={salvando || presencaBloqueada}
                     className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
                   >
                     Todas presentes
@@ -544,7 +574,7 @@ export function ProfessorPresencaToggle({
                   <button
                     type="button"
                     onClick={() => marcarTodasAulas(false)}
-                    disabled={salvando}
+                    disabled={salvando || presencaBloqueada}
                     className="rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
                   >
                     Todas ausentes
@@ -554,37 +584,62 @@ export function ProfessorPresencaToggle({
               <div className="space-y-2">
                 {aulas.map((aula) => {
                   const aulaId = aula.aula_ids[0];
-                  const presenteAula = aula.professor_presenca === 'presente';
+                  const decisaoAula = adaptarPresencaProfessorCanonica({
+                    professorId,
+                    aulaIds: aula.aula_ids,
+                    envelope: presenca,
+                  });
+                  const presenteAula = decisaoAula.estado === 'presente';
+                  const ausenteAula = decisaoAula.estado === 'ausente';
+                  const horarioAula = decisaoAula.decididoEm
+                    ? new Date(decisaoAula.decididoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                    : null;
+                  const rotuloEstadoAula = decisaoAula.estado === 'dados_desatualizados'
+                    ? 'Dados desatualizados'
+                    : decisaoAula.estado === 'indeterminado' || decisaoAula.estado === 'roster_em_revisao'
+                      ? 'Em auditoria'
+                      : rotuloPresencaFonte(decisaoAula.fonte);
                   return (
                     <div
                       key={aula.chave}
                       className="flex items-center justify-between rounded-lg border border-slate-700/40 bg-slate-800/30 px-3 py-2.5"
                     >
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="font-mono text-slate-400">{aula.hora_inicio}</span>
-                        <span className="font-medium text-slate-200">{aula.curso_nome}</span>
-                        <span className="text-slate-500">{aula.sala_nome}</span>
+                      <div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="font-mono text-slate-400">{aula.hora_inicio}</span>
+                          <span className="font-medium text-slate-200">{aula.curso_nome}</span>
+                          <span className="text-slate-500">{aula.sala_nome}</span>
+                        </div>
+                        <p className="mt-0.5 text-[10px] text-slate-500">
+                          {rotuloEstadoAula}
+                          {horarioAula ? ` · ${horarioAula}` : ''}
+                          {decisaoAula.requestId ? ` · recibo ${decisaoAula.reciboStatus ?? 'recebido'}` : ''}
+                        </p>
                       </div>
                       <button
                         type="button"
                         onClick={() => toggleAula(aula)}
-                        disabled={salvandoAula === aulaId}
+                        disabled={salvandoAula === aulaId || presencaBloqueada}
                         className={cn(
                           'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors',
                           presenteAula
                             ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
-                            : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700/70',
-                          salvandoAula === aulaId && 'opacity-50',
+                            : ausenteAula
+                              ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30'
+                              : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700/70',
+                          (salvandoAula === aulaId || presencaBloqueada) && 'opacity-50',
                         )}
                       >
                         {salvandoAula === aulaId ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : presenteAula ? (
                           <CheckCircle2 className="h-3.5 w-3.5" />
-                        ) : (
+                        ) : ausenteAula ? (
                           <XCircle className="h-3.5 w-3.5" />
+                        ) : (
+                          <CheckCircle2 className="h-3.5 w-3.5" />
                         )}
-                        {presenteAula ? 'Presente' : 'Ausente'}
+                        {presenteAula ? 'Presente' : ausenteAula ? 'Ausente' : rotuloEstadoAula}
                       </button>
                     </div>
                   );

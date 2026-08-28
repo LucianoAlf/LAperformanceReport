@@ -1,28 +1,37 @@
 import { AlertTriangle, Check, FileText, Paperclip, RotateCcw, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { AlunoAgenda } from '@/hooks/useAgendaDia';
-import { estadoDoAluno, rotuloOrigem, temConflito, type EstadoChamada } from './chamadaUtils';
+import type { AlunoAgenda, PresencaEnvelopeAgenda } from '@/hooks/useAgendaDia';
+import {
+  adaptarPresencaCanonica,
+  rotuloPresencaFonte,
+  type PresencaCanonicaEstado,
+} from '@/lib/presencaCanonica';
 
 interface Props {
   aluno: AlunoAgenda;
+  presenca: PresencaEnvelopeAgenda;
   podeOperar: boolean;
   salvando: boolean;
   onMarcar: (aluno: AlunoAgenda, status: 'presente' | 'falta' | 'indeterminado') => void;
   onJustificar: (aluno: AlunoAgenda) => void;
 }
 
-const ESTILO_CARD: Record<EstadoChamada, string> = {
+const ESTILO_CARD: Record<PresencaCanonicaEstado, string> = {
   presente: 'border-emerald-500/40 bg-emerald-500/5',
   falta: 'border-rose-500/40 bg-rose-500/5',
   falta_justificada: 'border-amber-500/40 bg-amber-500/5',
   indeterminado: 'border-dashed border-slate-500/60 bg-slate-700/10',
+  roster_em_revisao: 'border-dashed border-amber-500/50 bg-amber-500/5',
+  dados_desatualizados: 'border-dashed border-sky-500/40 bg-sky-500/5',
 };
 
-const GRADIENTE_AVATAR: Record<EstadoChamada, string> = {
+const GRADIENTE_AVATAR: Record<PresencaCanonicaEstado, string> = {
   presente: 'from-emerald-500 to-teal-600',
   falta: 'from-rose-500 to-orange-600',
   falta_justificada: 'from-amber-500 to-yellow-600',
   indeterminado: 'from-slate-500 to-slate-600',
+  roster_em_revisao: 'from-amber-500 to-orange-600',
+  dados_desatualizados: 'from-sky-500 to-slate-600',
 };
 
 function iniciais(nome: string): string {
@@ -37,10 +46,18 @@ function iniciais(nome: string): string {
  * 1 clique; justificada abre modal (motivo obrigatorio + evidencia) — o
  * atrito fica so onde a operacao pediu rastreabilidade.
  */
-export function ChamadaAlunoCard({ aluno, podeOperar, salvando, onMarcar, onJustificar }: Props) {
-  const estado = estadoDoAluno(aluno);
-  const conflito = temConflito(aluno);
+export function ChamadaAlunoCard({ aluno, presenca, podeOperar, salvando, onMarcar, onJustificar }: Props) {
+  const visual = adaptarPresencaCanonica({
+    alunoId: aluno.aluno_id,
+    aulaEmusysId: aluno.aula_emusys_id,
+    emusysPresencaBruta: aluno.emusys_presenca_bruta,
+    envelope: presenca,
+  });
+  const estado = visual.estado;
+  const conflito = visual.conflito;
   const semVinculo = aluno.aluno_id == null || aluno.aula_emusys_id == null;
+  const estadoTerminal = estado === 'presente' || estado === 'falta' || estado === 'falta_justificada';
+  const operacaoPublicavel = estado !== 'roster_em_revisao' && estado !== 'dados_desatualizados';
 
   return (
     <div className={cn('rounded-xl border p-3 transition-colors', ESTILO_CARD[estado])}>
@@ -76,7 +93,7 @@ export function ChamadaAlunoCard({ aluno, podeOperar, salvando, onMarcar, onJust
         </div>
       </div>
 
-      {podeOperar && !semVinculo && (
+      {podeOperar && operacaoPublicavel && !semVinculo && (
         <div className="flex gap-1" role="group" aria-label={`Destino de ${aluno.nome}`}>
           <button
             type="button"
@@ -143,15 +160,24 @@ export function ChamadaAlunoCard({ aluno, podeOperar, salvando, onMarcar, onJust
             title={`O Emusys registrou "${aluno.emusys_presenca_bruta}"; a resposta humana prevalece.`}
           >
             <AlertTriangle className="h-3 w-3 shrink-0" />
-            Emusys: {aluno.emusys_presenca_bruta} · humano confirmou
+            Conflito preservado · decisão canônica mantida
+          </p>
+        )}
+        {estado === 'roster_em_revisao' && (
+          <p className="flex items-center gap-1 text-[10px] text-amber-300">
+            <AlertTriangle className="h-3 w-3" />Roster em revisão · sem atribuição nominal
+          </p>
+        )}
+        {estado === 'dados_desatualizados' && (
+          <p className="flex items-center gap-1 text-[10px] text-sky-300">
+            <AlertTriangle className="h-3 w-3" />Dado desatualizado · aguarde a sincronização
           </p>
         )}
         {estado === 'indeterminado' && (
           <p className="flex items-center gap-1 text-[10px] text-slate-500">
             <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
-            {aluno.emusys_presenca_bruta === 'ausente'
-              ? 'Emusys marcou ausente — confirme ou ajuste'
-              : 'Sem destino — entra no lembrete do WhatsApp'}
+            A confirmar · sem decisão canônica
+            {aluno.emusys_presenca_bruta === 'ausente' && ' · Emusys: ausente (evidência)'}
           </p>
         )}
         {(aluno.reposicoes_pendentes ?? 0) > 0 && estado !== 'falta_justificada' && (
@@ -160,10 +186,16 @@ export function ChamadaAlunoCard({ aluno, podeOperar, salvando, onMarcar, onJust
             {aluno.reposicoes_pendentes} reposição(ões) pendente(s)
           </p>
         )}
-        {estado !== 'indeterminado' && (
+        {estadoTerminal && visual.fonte && (
           <p className="flex items-center gap-1 text-[10px] text-slate-500">
-            <span className={cn('h-1.5 w-1.5 rounded-full', aluno.respondido_por === 'agenda_secretaria' ? 'bg-emerald-400' : 'bg-violet-400')} />
-            {rotuloOrigem(aluno.respondido_por)}
+            <span className={cn('h-1.5 w-1.5 rounded-full', visual.fonte === 'agenda_secretaria' ? 'bg-emerald-400' : 'bg-violet-400')} />
+            {rotuloPresencaFonte(visual.fonte)}
+            {visual.decididoEm && ` · ${new Date(visual.decididoEm).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
+          </p>
+        )}
+        {visual.requestId && (
+          <p className="font-mono text-[9px] text-slate-600" title={visual.requestId}>
+            Recibo {visual.requestId.slice(0, 8)} · {visual.reciboStatus ?? 'recebido'}
           </p>
         )}
       </div>

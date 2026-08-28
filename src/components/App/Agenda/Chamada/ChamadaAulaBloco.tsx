@@ -1,11 +1,12 @@
 import { Check, RotateCcw, XCircle } from 'lucide-react';
-import type { AlunoAgenda, AulaAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
-import { estadoDoAluno } from './chamadaUtils';
+import type { AlunoAgenda, AulaAgenda, LeadExperimentalAgenda, PresencaEnvelopeAgenda } from '@/hooks/useAgendaDia';
+import { adaptarPresencaCanonica } from '@/lib/presencaCanonica';
 import { ChamadaAlunoCard } from './ChamadaAlunoCard';
 import { ChamadaLeadCard } from './ChamadaLeadCard';
 
 interface Props {
   aula: AulaAgenda;
+  presenca: PresencaEnvelopeAgenda;
   data: string;
   podeOperar: boolean;
   salvando: boolean;
@@ -26,6 +27,7 @@ interface Props {
  */
 export function ChamadaAulaBloco({
   aula,
+  presenca,
   data,
   podeOperar,
   salvando,
@@ -41,12 +43,22 @@ export function ChamadaAulaBloco({
   const vinculados = aula.alunos.filter((a) => a.aluno_id != null);
   const leads = aula.experimental_leads ?? [];
   const totalPessoas = vinculados.length + leads.length;
-  const contagens = vinculados.reduce(
-    (acc, a) => {
-      acc[estadoDoAluno(a)] += 1;
+  const visuais = vinculados.map((aluno) => adaptarPresencaCanonica({
+    alunoId: aluno.aluno_id,
+    aulaEmusysId: aluno.aula_emusys_id,
+    emusysPresencaBruta: aluno.emusys_presenca_bruta,
+    envelope: presenca,
+  }));
+  const contagens = visuais.reduce(
+    (acc, visual) => {
+      acc[visual.estado] += 1;
+      if (visual.conflito) acc.conflitos += 1;
       return acc;
     },
-    { presente: 0, falta: 0, falta_justificada: 0, indeterminado: 0 } as Record<string, number>,
+    {
+      presente: 0, falta: 0, falta_justificada: 0, indeterminado: 0,
+      roster_em_revisao: 0, dados_desatualizados: 0, conflitos: 0,
+    } as Record<string, number>,
   );
 
   if (aula.cancelada) {
@@ -96,12 +108,17 @@ export function ChamadaAulaBloco({
         </button>
         <div className="flex items-center gap-2">
           <span className="mr-1 text-xs text-slate-400">
-            <b className="text-emerald-400">{contagens.presente}</b> presenças ·{' '}
-            <b className="text-rose-400">{contagens.falta}</b> falta ·{' '}
-            <b className="text-amber-400">{contagens.falta_justificada}</b> justificada ·{' '}
-            <b className="text-slate-500">{contagens.indeterminado}</b> pendente
+            {presenca.dados_status === 'atualizados' ? (
+              <>
+                <b className="text-emerald-400">{contagens.presente}</b> presenças ·{' '}
+                <b className="text-rose-400">{contagens.falta}</b> falta ·{' '}
+                <b className="text-amber-400">{contagens.falta_justificada}</b> justificada ·{' '}
+                <b className="text-slate-500">{contagens.indeterminado}</b> a confirmar
+                {contagens.conflitos > 0 && <> · <b className="text-violet-300">{contagens.conflitos}</b> conflito</>}
+              </>
+            ) : <b className="text-amber-300">Em auditoria</b>}
           </span>
-          {podeOperar && (
+          {podeOperar && presenca.dados_status === 'atualizados' && (
             <>
               <button
                 type="button"
@@ -143,6 +160,7 @@ export function ChamadaAulaBloco({
             <ChamadaAlunoCard
               key={`${aluno.aula_emusys_id}-${aluno.aluno_id}`}
               aluno={aluno}
+              presenca={presenca}
               podeOperar={podeOperar}
               salvando={salvando}
               onMarcar={onMarcar}

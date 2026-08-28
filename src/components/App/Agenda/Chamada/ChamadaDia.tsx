@@ -1,15 +1,20 @@
 import { useMemo, useState } from 'react';
 import { CalendarX, User } from 'lucide-react';
-import type { AulaAgenda, LeadExperimentalAgenda } from '@/hooks/useAgendaDia';
+import type { AulaAgenda, LeadExperimentalAgenda, PresencaEnvelopeAgenda } from '@/hooks/useAgendaDia';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOutletContext } from 'react-router-dom';
-import { chamadaCompleta, estadoDoAluno } from './chamadaUtils';
+import { aulaJaOcorreu } from '@/lib/agenda';
 import { ChamadaAulaBloco } from './ChamadaAulaBloco';
 import { AlertaPendencias } from './AlertaPendencias';
 import { ProfessorPresencaToggle } from './ProfessorPresencaToggle';
 import type { ItemChamada } from './useChamadaAcoes';
 import type { AlunoAgenda } from '@/hooks/useAgendaDia';
 import { cn } from '@/lib/utils';
+import {
+  adaptarPresencaCanonica,
+  adaptarPresencaProfessorCanonica,
+  resumirAulaPresencaCanonica,
+} from '@/lib/presencaCanonica';
 
 interface OutletContext {
   unidadeSelecionada: string | null;
@@ -18,6 +23,7 @@ interface OutletContext {
 interface Props {
   data: string;
   aulas: AulaAgenda[];
+  presenca: PresencaEnvelopeAgenda;
   salvando: boolean;
   onRegistrar: (itens: ItemChamada[]) => void;
   onRegistrarExperimental: (experimentalId: number, status: 'experimental_realizada' | 'experimental_faltou') => void;
@@ -39,6 +45,7 @@ interface Props {
 export function ChamadaDia({
   data,
   aulas,
+  presenca,
   salvando,
   onRegistrar,
   onRegistrarExperimental,
@@ -50,7 +57,8 @@ export function ChamadaDia({
   recarregar,
 }: Props) {
   const { hasPermission, user } = useAuth();
-  const podeOperar = hasPermission('agenda.chamada');
+  const presencaBloqueada = presenca.dados_status !== 'atualizados';
+  const podeOperar = hasPermission('agenda.chamada') && !presencaBloqueada;
   const agora = useMemo(() => new Date(), []);
   const context = useOutletContext<OutletContext | undefined>();
   const consolidado = !context?.unidadeSelecionada;
@@ -367,7 +375,11 @@ export function ChamadaDia({
   }, [ordenadas, filtroExperimental]);
 
   const totalAulas = filtradas.length;
-  const aulasConcluidas = filtradas.filter((a) => chamadaCompleta(a, data, agora)).length;
+  const aulasConcluidas = filtradas.filter((aula) => resumirAulaPresencaCanonica({
+    aula,
+    envelope: presenca,
+    ocorrida: aulaJaOcorreu(data, aula.hora_fim, agora),
+  }).completa).length;
 
   // Agrupa aulas por professor para o toggle de presenca.
   // Aula cancelada NAO entra: a RPC de presenca pula canceladas, e ler o
@@ -379,29 +391,35 @@ export function ChamadaDia({
     for (const aula of filtradas) {
       if (aula.professor_id == null) continue;
       if (aula.cancelada) continue;
+      const decisao = adaptarPresencaProfessorCanonica({
+        professorId: aula.professor_id,
+        aulaIds: aula.aula_ids,
+        envelope: presenca,
+      });
+      const presenteAula = decisao.estado === 'presente'
+        ? true
+        : decisao.estado === 'ausente'
+          ? false
+          : null;
       const existente = mapa.get(aula.professor_id);
       if (existente) {
         existente.aulas.push(aula);
         if (aula.hora_inicio < existente.primeira) existente.primeira = aula.hora_inicio;
         if (aula.hora_fim > existente.ultima) existente.ultima = aula.hora_fim;
+        if (existente.presente !== presenteAula) existente.presente = null;
       } else {
-        const presente = aula.professor_presenca === 'presente'
-          ? true
-          : aula.professor_presenca === 'ausente'
-            ? false
-            : null;
         mapa.set(aula.professor_id, {
           nome: aula.professor_nome ?? 'Professor',
           fotoUrl: aula.professor_foto_url ?? null,
           aulas: [aula],
-          presente,
+          presente: presenteAula,
           primeira: aula.hora_inicio,
           ultima: aula.hora_fim,
         });
       }
     }
     return Array.from(mapa.entries()).sort((a, b) => a[1].nome.localeCompare(b[1].nome));
-  }, [filtradas]);
+  }, [filtradas, presenca]);
 
   if (ordenadas.length === 0) {
     return (
@@ -418,6 +436,7 @@ export function ChamadaDia({
       <AlertaPendencias
         data={data}
         aulas={ordenadas}
+        presenca={presenca}
         consolidado={consolidado}
         unidadeId={context?.unidadeSelecionada ?? null}
         onAbrirDrawer={onAbrirDrawer}
@@ -460,6 +479,7 @@ export function ChamadaDia({
                 primeiraAula={primeira}
                 ultimaAula={ultima}
                 presente={presente}
+                presenca={presenca}
                 onMudou={() => recarregar?.()}
               />
             ))}
@@ -516,6 +536,7 @@ export function ChamadaDia({
           <ChamadaAulaBloco
             key={aula.chave}
             aula={aula}
+            presenca={presenca}
             data={data}
             podeOperar={podeOperar}
             salvando={salvando}
@@ -530,7 +551,7 @@ export function ChamadaDia({
             }
             onMarcarExperimental={onRegistrarExperimental}
             onJustificar={(aluno) => onJustificar(aluno, aula)}
-            onTodosPresentes={(a) => onRegistrarTodosPresentes(a, onRegistrar)}
+            onTodosPresentes={(a) => onRegistrarTodosPresentes(a, presenca, onRegistrar)}
             onCancelarAula={onCancelarAula}
             onReagendarAula={onReagendarAula}
             onAbrirDrawer={onAbrirDrawer}
@@ -543,9 +564,20 @@ export function ChamadaDia({
 }
 
 /** Marca todos os alunos vinculados como presentes em um unico lote. */
-function onRegistrarTodosPresentes(aula: AulaAgenda, onRegistrar: (itens: ItemChamada[]) => void) {
+function onRegistrarTodosPresentes(
+  aula: AulaAgenda,
+  presenca: PresencaEnvelopeAgenda,
+  onRegistrar: (itens: ItemChamada[]) => void,
+) {
   const itens: ItemChamada[] = aula.alunos
-    .filter((a) => a.aluno_id != null && a.aula_emusys_id != null && estadoDoAluno(a) !== 'presente')
+    .filter((aluno) => aluno.aluno_id != null
+      && aluno.aula_emusys_id != null
+      && adaptarPresencaCanonica({
+        alunoId: aluno.aluno_id,
+        aulaEmusysId: aluno.aula_emusys_id,
+        emusysPresencaBruta: aluno.emusys_presenca_bruta,
+        envelope: presenca,
+      }).estado !== 'presente')
     .map((a) => ({
       aula_emusys_id: a.aula_emusys_id!,
       aluno_id: a.aluno_id!,

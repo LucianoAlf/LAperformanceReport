@@ -21,7 +21,7 @@ import {
   resumoSobreposicao,
   segundosAgora,
 } from '@/lib/agenda';
-import type { AulaAgenda } from '@/hooks/useAgendaDia';
+import type { AulaAgenda, PresencaEnvelopeAgenda } from '@/hooks/useAgendaDia';
 import { AgendaCard } from './AgendaCard';
 
 const PADDING_TRILHO = 7;
@@ -46,6 +46,7 @@ interface Props {
   // aula ja aconteceu: com ele falso, o dia pode ser passado OU futuro — e a
   // presenca so pode ser exibida no primeiro caso.
   data: string;
+  presenca: PresencaEnvelopeAgenda;
 }
 
 export function AgendaTimeline({
@@ -56,6 +57,7 @@ export function AgendaTimeline({
   mostrarUnidade = false,
   ehHoje = false,
   data,
+  presenca,
 }: Props) {
   // Relogio proprio, de segundo em segundo, isolado neste componente: a regua
   // e a unica coisa que precisa dessa resolucao, e re-renderizar a pagina
@@ -326,6 +328,7 @@ export function AgendaTimeline({
                       amplo={cardAmplo}
                       emAndamento={aulaEmAndamento(aula, minutosAgoraOuNulo)}
                       jaOcorreu={aulaJaOcorreu(data, aula.hora_fim, new Date())}
+                      presenca={presenca}
                       estilo={{
                         left: posicaoPx(aula.hora_inicio, larguraHora, janela.inicio),
                         width: Math.max(46, larguraPx(aula.duracao_minutos, larguraHora) - 4),

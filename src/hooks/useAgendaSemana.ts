@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { format, addDays, parseISO, startOfWeek } from 'date-fns';
 import { supabase } from '@/lib/supabase';
-import type { AulaAgenda } from './useAgendaDia';
+import { presencaInicial, type AgendaDiaV2, type AulaAgenda, type PresencaEnvelopeAgenda } from './useAgendaDia';
 
 interface Params {
   /** Qualquer dia da semana — o hook resolve para a segunda-feira */
@@ -20,11 +20,11 @@ export function useAgendaSemana({ data, unidadeId }: Params) {
     return format(startOfWeek(d, { weekStartsOn: 1 }), 'yyyy-MM-dd');
   }, [data]);
 
-  const cacheRef = useRef(new Map<string, Map<string, AulaAgenda[]>>());
+  const cacheRef = useRef(new Map<string, Map<string, AgendaDiaV2>>());
   const chaveCache = `${unidadeId ?? 'todas'}|${inicioSemana}`;
   const emCache = cacheRef.current.get(chaveCache);
 
-  const [aulasPorDia, setAulasPorDia] = useState<Map<string, AulaAgenda[]>>(emCache ?? new Map());
+  const [agendaPorDia, setAgendaPorDia] = useState<Map<string, AgendaDiaV2>>(emCache ?? new Map());
   const [carregando, setCarregando] = useState(emCache === undefined);
   const [erro, setErro] = useState<string | null>(null);
   const idRequisicaoRef = useRef(0);
@@ -37,11 +37,12 @@ export function useAgendaSemana({ data, unidadeId }: Params) {
     const aindaValida = () => idRequisicaoRef.current === minhaRequisicaoId;
 
     const doCache = cacheRef.current.get(chaveDaBusca);
-    if (doCache) setAulasPorDia(doCache);
+    if (doCache) setAgendaPorDia(doCache);
+    else setAgendaPorDia(new Map());
     setCarregando(doCache === undefined);
     setErro(null);
 
-    const { data: linhas, error } = await supabase.rpc('get_agenda_semana', {
+    const { data: resposta, error } = await supabase.rpc('get_agenda_semana_v2', {
       p_data_inicio: inicioDaBusca,
       p_unidade_id: unidadeIdDaBusca,
     });
@@ -50,21 +51,24 @@ export function useAgendaSemana({ data, unidadeId }: Params) {
 
     if (error) {
       setErro(error.message);
-      setAulasPorDia(new Map());
+      setAgendaPorDia(new Map());
       setCarregando(false);
       return;
     }
 
-    // Distribui as linhas por dia usando o campo data_aula
-    const mapa = new Map<string, AulaAgenda[]>();
-    for (const linha of (linhas || []) as unknown as Array<AulaAgenda & { data_aula: string }>) {
-      const dia = linha.data_aula;
-      if (!mapa.has(dia)) mapa.set(dia, []);
-      mapa.get(dia)!.push(linha);
+    const mapa = new Map<string, AgendaDiaV2>();
+    for (const [dia, envelope] of Object.entries((resposta ?? {}) as Record<string, AgendaDiaV2>)) {
+      if (!envelope || !Array.isArray(envelope.aulas) || !Array.isArray(envelope.ocorrencias)) {
+        setErro(`Contrato invalido da Agenda semanal v2 em ${dia}`);
+        setAgendaPorDia(new Map());
+        setCarregando(false);
+        return;
+      }
+      mapa.set(dia, envelope);
     }
 
     cacheRef.current.set(chaveDaBusca, mapa);
-    setAulasPorDia(mapa);
+    setAgendaPorDia(mapa);
     setCarregando(false);
   }, [inicioSemana, unidadeId]);
 
@@ -74,8 +78,13 @@ export function useAgendaSemana({ data, unidadeId }: Params) {
 
   /** Retorna as aulas de um dia especifico da semana */
   const aulasDoDia = useCallback(
-    (dia: string): AulaAgenda[] => aulasPorDia.get(dia) ?? [],
-    [aulasPorDia],
+    (dia: string): AulaAgenda[] => agendaPorDia.get(dia)?.aulas ?? [],
+    [agendaPorDia],
+  );
+
+  const presencaDoDia = useCallback(
+    (dia: string): PresencaEnvelopeAgenda => agendaPorDia.get(dia) ?? presencaInicial,
+    [agendaPorDia],
   );
 
   /** Lista dos 6 dias da semana (seg-sab) */
@@ -84,5 +93,5 @@ export function useAgendaSemana({ data, unidadeId }: Params) {
     [inicioSemana],
   );
 
-  return { aulasPorDia, aulasDoDia, dias, carregando, erro, recarregar: buscar };
+  return { agendaPorDia, aulasDoDia, presencaDoDia, dias, carregando, erro, recarregar: buscar };
 }
