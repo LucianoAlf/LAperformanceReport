@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
@@ -36,6 +36,14 @@ function waitForPostgres(container) {
 }
 function lastJson(output) { return JSON.parse(output.split(/\r?\n/u).at(-1)); }
 
+function conflictSemanticsMigration() {
+  const migrationsDir = join(ROOT, 'supabase', 'migrations');
+  const matches = readdirSync(migrationsDir)
+    .filter((name) => /^\d+_presenca_conflitos_gemeos_sem_ruido\.sql$/u.test(name));
+  assert.ok(matches.length <= 1, `mais de uma migration do hotfix encontrada: ${matches.join(', ')}`);
+  return matches.length === 1 ? join(migrationsDir, matches[0]) : null;
+}
+
 const schema = String.raw`
   create extension if not exists unaccent;
   create role anon nologin;
@@ -68,7 +76,8 @@ const schema = String.raw`
     data_aula date not null, horario_aula time, status text, respondido_por text,
     respondido_em timestamptz, created_at timestamptz default now(),
     aula_emusys_id integer references public.aulas_emusys(id), curso_nome text,
-    status_presenca text, emusys_presenca_bruta text, sincronizado_emusys_em timestamptz
+    status_presenca text, emusys_presenca_bruta text, sincronizado_emusys_em timestamptz,
+    constraint uq_presenca_aluno_aula unique (aluno_id, aula_emusys_id)
   );
   create table public.presenca_politicas_confiabilidade(
     id uuid primary key, unidade_id uuid not null, data_inicio date not null, data_fim date not null,
@@ -138,7 +147,8 @@ const schema = String.raw`
   insert into public.unidades values ('${U_A}','Barra'),('${U_B}','Recreio'),('${U_C}','Campo Grande');
   insert into public.professores values (1,'Professor A'),(2,'Professor B'),(3,'Professor C');
   insert into public.alunos values
-    (101,'Aluno Regular'),(102,'Aluno Conflito'),(103,'Aluno Fantasma'),
+    (101,'Aluno Regular'),(102,'Aluno Presenca Humana'),(103,'Aluno Fantasma'),
+    (104,'Aluno Conflito Real'),
     (201,'Aluno Incompleto'),(301,'Aluno Sem Cobertura');
   insert into public.presenca_politicas_confiabilidade values
     ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','${U_A}','2026-01-01','2026-12-31','nao_conclusivo',true,
@@ -154,13 +164,14 @@ const schema = String.raw`
     (30,3030,'${U_C}','2026-08-25','2026-08-25 10:00-03','2026-08-25 11:00-03','individual','normal','Violao','Sem cobertura','Sala 1',3,6001);
   insert into public.aula_alunos_emusys(aula_emusys_id,unidade_id,aluno_id,aluno_emusys_id,aluno_chave,aluno_nome) values
     (10,'${U_A}',101,10001,'emusys:10001','Aluno Regular'),(11,'${U_A}',101,10001,'emusys:10001','Aluno Regular'),
-    (12,'${U_A}',103,10003,'emusys:10003','Aluno Fantasma'),(13,'${U_A}',102,10002,'emusys:10002','Aluno Conflito'),
+    (12,'${U_A}',103,10003,'emusys:10003','Aluno Fantasma'),(13,'${U_A}',102,10002,'emusys:10002','Aluno Presenca Humana'),
+    (13,'${U_A}',104,10004,'emusys:10004','Aluno Conflito Real'),
     (20,'${U_B}',201,20001,'emusys:20001','Aluno Incompleto'),(30,'${U_C}',301,30001,'emusys:30001','Aluno Sem Cobertura');
   insert into public.aula_roster_sync_estado(aula_id,run_id,estado,qtd_esperada,qtd_recebida,snapshot_hash,sincronizado_em) values
     (10,'10000000-0000-0000-0000-000000000010','completo',1,1,'h10','2026-08-26 08:00-03'),
     (11,'10000000-0000-0000-0000-000000000011','completo',1,1,'h11','2026-08-26 08:00-03'),
     (12,'10000000-0000-0000-0000-000000000012','vazio_confirmado',0,0,'h12','2026-08-26 08:00-03'),
-    (13,'10000000-0000-0000-0000-000000000013','completo',1,1,'h13','2026-08-26 08:00-03'),
+    (13,'10000000-0000-0000-0000-000000000013','completo',2,2,'h13','2026-08-26 08:00-03'),
     (20,'20000000-0000-0000-0000-000000000020','incompleto',2,1,'h20','2026-08-26 08:00-03'),
     (30,'30000000-0000-0000-0000-000000000030','completo',1,1,'h30','2026-08-26 08:00-03');
   insert into public.presenca_sync_cobertura
@@ -174,7 +185,7 @@ const schema = String.raw`
   values
     ('50000000-0000-0000-0000-000000000001',101,1,'${U_A}','2026-08-25','10:00','presente','emusys',null,11,'Piano',null,'presente','2026-08-26 08:30-03'),
     ('50000000-0000-0000-0000-000000000002',102,1,'${U_A}','2026-08-25','13:00','presente','agenda_secretaria','2026-08-25 14:01-03',13,'Canto','presente','ausente','2026-08-26 08:30-03'),
-    ('50000000-0000-0000-0000-000000000003',102,1,'${U_A}','2026-08-25','13:00','ausente','emusys',null,13,'Canto',null,'ausente','2026-08-26 08:30-03');
+    ('50000000-0000-0000-0000-000000000004',104,1,'${U_A}','2026-08-25','13:00','ausente','agenda_secretaria','2026-08-25 14:03-03',13,'Canto','falta','presente','2026-08-26 08:30-03');
   insert into public.presenca_comandos values
     ('60000000-0000-0000-0000-000000000001','concluido','agenda_chamada','agenda_secretaria','${U_A}',null,'2026-08-25'),
     ('60000000-0000-0000-0000-000000000002','concluido','professor_aula','agenda_secretaria','${U_A}',1,'2026-08-25');
@@ -182,6 +193,7 @@ const schema = String.raw`
     (request_id,tipo,aluno_id,aula_id,professor_id,status_novo,fonte,criado_em)
   values
     ('60000000-0000-0000-0000-000000000001','item_aplicado',102,13,null,'presente','agenda_secretaria','2026-08-25 14:01:20-03'),
+    ('60000000-0000-0000-0000-000000000001','item_aplicado',104,13,null,'falta','agenda_secretaria','2026-08-25 14:03:20-03'),
     ('60000000-0000-0000-0000-000000000002','item_aplicado',null,13,1,'presente','agenda_secretaria','2026-08-25 14:02:20-03');
   update public.aulas_emusys
      set professor_presenca='ausente', professor_presenca_origem=null
@@ -207,6 +219,10 @@ test('Agenda e Sol compartilham membros e bloqueiam roster ou sync inseguros', (
     psql(container, readFileSync(agentesMigration, 'utf8'));
     psql(container, readFileSync(pendenciasEscopoMigration, 'utf8'));
     psql(container, readFileSync(pendenciasMaterializadaMigration, 'utf8'));
+    const conflictHotfix = conflictSemanticsMigration();
+    if (conflictHotfix && existsSync(conflictHotfix)) {
+      psql(container, readFileSync(conflictHotfix, 'utf8'));
+    }
 
     const pendenciasDef = psql(container, String.raw`
       select pg_get_functiondef(
@@ -226,7 +242,8 @@ test('Agenda e Sol compartilham membros e bloqueiam roster ou sync inseguros', (
     assert.equal(a.dados_status, 'atualizados');
     assert.equal(a.regra_versao, 'presenca-v2');
     assert.deepEqual(a.pendencias.map((x)=>[x.aluno_nome,x.curso_nome]), [['Aluno Regular','Piano']]);
-    assert.deepEqual(a.conflitos.map((x)=>[x.aluno_nome,x.curso_nome]), [['Aluno Conflito','Canto']]);
+    assert.deepEqual(a.conflitos.map((x)=>[x.aluno_nome,x.curso_nome]), [['Aluno Conflito Real','Canto']]);
+    assert.equal(JSON.stringify(a).includes('Aluno Presenca Humana'), false);
     assert.equal(JSON.stringify(a).includes('Aluno Fantasma'), false);
     assert.equal(JSON.stringify(a).includes('Experimental'), false);
 
@@ -236,8 +253,8 @@ test('Agenda e Sol compartilham membros e bloqueiam roster ou sync inseguros', (
     assert.equal(contextoSol.regra_versao, 'presenca-agentes-v1+presenca-v2');
     assert.equal(contextoSol.pendencias.length, 1);
     assert.equal(contextoSol.conflitos_detalhes.length, 1);
-    assert.equal(contextoSol.universo_eventos, 2);
-    assert.equal(contextoSol.presentes, 0);
+    assert.equal(contextoSol.universo_eventos, 3);
+    assert.equal(contextoSol.presentes, 1);
     assert.equal(contextoSol.faltas_confirmadas, 0);
     assert.equal(contextoSol.indeterminados, 1);
     assert.equal(contextoSol.conflitos, 1);
@@ -263,7 +280,10 @@ test('Agenda e Sol compartilham membros e bloqueiam roster ou sync inseguros', (
     assert.equal(agenda.aulas.length, 1);
     assert.deepEqual(
       agenda.ocorrencias.map((x)=>[x.aluno_id,x.resultado_canonico,x.fonte_decisao,x.possui_conflito]),
-      [[102,'presente','agenda_secretaria',true]],
+      [
+        [102,'presente','agenda_secretaria',false],
+        [104,'falta','agenda_secretaria',true],
+      ],
     );
     assert.equal(agenda.ocorrencias.find((x)=>x.aluno_id===102).request_id, '60000000-0000-0000-0000-000000000001');
     assert.equal(agenda.ocorrencias.find((x)=>x.aluno_id===102).recibo_status, 'concluido');
@@ -289,16 +309,17 @@ test('Agenda e Sol compartilham membros e bloqueiam roster ou sync inseguros', (
     assert.equal(consolidadoSomenteExperimental.dados_status, 'atualizados');
     assert.deepEqual(consolidadoSomenteExperimental.pendencias, []);
 
-    const legado = JSON.parse(psql(container, `select coalesce(json_agg(json_build_object('motivo',motivo,'aluno',aluno_nome,'curso',curso_nome) order by motivo,aluno_nome),'[]'::json) from public.fn_presenca_pendencias_do_dia('${U_A}','2026-08-25');`));
-    assert.deepEqual(legado, [
-      { motivo:'divergencia', aluno:'Aluno Conflito', curso:'Canto' },
+    const compatibilidadeV2 = JSON.parse(psql(container, `select coalesce(json_agg(json_build_object('motivo',motivo,'aluno',aluno_nome,'curso',curso_nome) order by motivo,aluno_nome),'[]'::json) from public.fn_presenca_pendencias_do_dia('${U_A}','2026-08-25');`));
+    assert.deepEqual(compatibilidadeV2, [
+      { motivo:'divergencia', aluno:'Aluno Conflito Real', curso:'Canto' },
       { motivo:'sem_resposta', aluno:'Aluno Regular', curso:'Piano' },
     ]);
 
     const textoA = psql(container, `select public.fn_texto_relatorio_presenca('${U_A}','2026-08-25');`);
     assert.match(textoA, /Dados sincronizados às 08:30/u);
     assert.match(textoA, /Aluno Regular \(Piano\)/u);
-    assert.match(textoA, /Aluno Conflito \(Canto\)/u);
+    assert.match(textoA, /Aluno Conflito Real \(Canto\)/u);
+    assert.doesNotMatch(textoA, /Aluno Presenca Humana/u);
     assert.doesNotMatch(textoA, /Experimental|Aluno Fantasma/u);
 
     psql(container, `update public.presenca_sync_cobertura set finalizada_em='2026-08-25 09:00-03' where unidade_id='${U_A}' and data_alvo='2026-08-25';`);

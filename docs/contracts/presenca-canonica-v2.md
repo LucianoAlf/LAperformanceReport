@@ -44,9 +44,12 @@ A política temporal define a classificação da ausência mesmo quando exige re
 posterior; `exige_revisao_operacional` não transforma a evidência em decisão
 humana e, portanto, a ausência continua sem fechar a chamada.
 
-`possui_conflito=true` quando decisões humanas terminais divergem, quando humano
-e Emusys discordam, ou quando as linhas gêmeas do Emusys discordam entre si. O
-resultado eleito permanece disponível, mas o conflito nunca é silencioso.
+`possui_conflito=true` quando decisões humanas terminais divergem ou quando uma
+falta humana (`falta`/`falta_justificada`) contradiz uma presença positiva do
+Emusys. `Emusys: ausente` é bruto e não terminal: não contradiz presença humana
+e não cria conflito contra uma gêmea `Emusys: presente`; nesse par, a presença
+positiva vence sem apagar as duas proveniências. O resultado eleito permanece
+disponível, e contradições terminais continuam explícitas.
 Cancelamento/justificativa vale para o slot inteiro; presença registrada nesse
 slot conserva `possui_conflito=true`, mas não entra como frequência.
 

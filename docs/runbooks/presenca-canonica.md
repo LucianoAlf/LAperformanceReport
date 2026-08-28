@@ -10,6 +10,7 @@ Princípios:
 
 - presença humana terminal e retificação não são sobrescritas por um sync posterior;
 - `Emusys: ausente` é evidência bruta, não falta terminal, enquanto cobertura ou roster estiverem inseguros;
+- uma gêmea `Emusys: presente` vence outra gêmea bruta `ausente` sem gerar conflito; falta humana contra presença Emusys continua exigindo conciliação;
 - gêmeas, duas matrículas e eventos concorrentes convergem para uma ocorrência sem apagar o raw;
 - dado incompleto retorna estado de publicação e valor nulo, nunca zero silencioso;
 - snapshots fechados permanecem imutáveis.
@@ -97,9 +98,10 @@ Alarme é acionável quando houver sync incompleto sem bloqueio de publicação,
 1. Confirme unidade, data da aula, slot canônico e estado de cobertura.
 2. Consulte proveniência e recibo; diferencie Emusys raw, humano, retificação e Fábio.
 3. Verifique roster operacional e identidade. Nome não é chave de escrita.
-4. Se o raw estiver incompleto, reexecute o sync pela rota normal com novo request; não fabrique presença/falta.
-5. Se houver decisão humana terminal, preserve-a e registre a divergência para conciliação.
-6. Reparação de roster é sempre dry-run, aprovação por unidade e soft-inativação; presença histórica não é apagada.
+4. Se houver apenas `ausente + presente` entre gêmeas do Emusys, preserve os raws e considere a ocorrência presente; não atribua tarefa à unidade.
+5. Se o raw estiver incompleto, reexecute o sync pela rota normal com novo request; não fabrique presença/falta.
+6. Se falta humana contradizer presença Emusys, preserve a decisão humana e registre a divergência para conciliação.
+7. Reparação de roster é sempre dry-run, aprovação por unidade e soft-inativação; presença histórica não é apagada.
 
 ## 8. Rollout e rollback
 

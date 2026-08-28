@@ -65,6 +65,13 @@ function optimizationMigrations() {
   ].map((name) => join(MIGRATIONS, name));
 }
 
+function conflictSemanticsMigration() {
+  const matches = readdirSync(MIGRATIONS)
+    .filter((name) => /^\d+_presenca_conflitos_gemeos_sem_ruido\.sql$/u.test(name));
+  assert.ok(matches.length <= 1, `mais de uma migration do hotfix encontrada: ${matches.join(', ')}`);
+  return matches.length === 1 ? join(MIGRATIONS, matches[0]) : null;
+}
+
 const schema = String.raw`
 create extension if not exists unaccent;
 create role anon nologin;
@@ -114,7 +121,8 @@ create table public.aluno_presenca (
   curso_nome text,
   status_presenca text,
   emusys_presenca_bruta text,
-  sincronizado_emusys_em timestamptz
+  sincronizado_emusys_em timestamptz,
+  constraint uq_presenca_aluno_aula unique (aluno_id, aula_emusys_id)
 );
 
 create table public.presenca_politicas_confiabilidade (
@@ -223,7 +231,7 @@ insert into public.aluno_presenca
    emusys_presenca_bruta, sincronizado_emusys_em)
 values
   ('00000000-0000-0000-0000-000000000001', 101, 501, '10000000-0000-0000-0000-000000000001', '2026-08-25', '10:00', 'presente', 'emusys', null, 1, 'Piano', null, 'presente', '2026-08-25 11:10-03'),
-  ('00000000-0000-0000-0000-000000000002', 101, 501, '10000000-0000-0000-0000-000000000001', '2026-08-25', '10:00', 'presente', 'emusys', null, 2, ' Piano ', null, 'presente', '2026-08-25 11:11-03'),
+  ('00000000-0000-0000-0000-000000000002', 101, 501, '10000000-0000-0000-0000-000000000001', '2026-08-25', '10:00', 'ausente', 'emusys', null, 2, ' Piano ', null, 'ausente', '2026-08-25 11:11-03'),
   ('00000000-0000-0000-0000-000000000003', 101, 501, '10000000-0000-0000-0000-000000000001', '2026-08-25', '10:00', 'presente', 'emusys', null, 3, 'PIANO', null, 'presente', '2026-08-25 11:12-03'),
   ('00000000-0000-0000-0000-000000000004', 102, 502, '10000000-0000-0000-0000-000000000001', '2026-08-25', '12:00', 'ausente', 'professor_la_teacher', null, 4, 'Violao', null, 'ausente', '2026-08-25 13:10-03'),
   ('00000000-0000-0000-0000-000000000005', 102, 502, '10000000-0000-0000-0000-000000000001', '2026-08-25', '12:00', 'presente', 'emusys', null, 5, 'Experimental', null, 'presente', '2026-08-25 13:10-03'),
@@ -231,8 +239,8 @@ values
   ('00000000-0000-0000-0000-000000000007', 104, 504, '10000000-0000-0000-0000-000000000001', '2026-08-25', '15:00', 'presente', 'fabio_audio', '2026-08-25 16:01-03', 7, 'Canto', 'presente', null, null),
   ('00000000-0000-0000-0000-000000000008', 105, 505, '10000000-0000-0000-0000-000000000001', '2026-08-25', '16:00', 'presente', 'emusys', null, 8, 'Teclado', null, 'presente', '2026-08-25 17:02-03'),
   ('00000000-0000-0000-0000-000000000009', 106, 506, '10000000-0000-0000-0000-000000000001', '2026-08-25', '17:00', 'ausente', 'emusys', null, 9, 'Guitarra', null, 'ausente', '2026-08-25 18:02-03'),
-  ('00000000-0000-0000-0000-000000000010', 107, 507, '10000000-0000-0000-0000-000000000001', '2026-08-25', '18:00', 'ausente', 'agenda_secretaria', '2026-08-25 19:01-03', 10, 'Baixo', 'falta', 'ausente', '2026-08-25 19:10-03'),
-  ('00000000-0000-0000-0000-000000000011', 108, 508, '10000000-0000-0000-0000-000000000001', '2026-08-25', '19:00', 'ausente', 'agenda_secretaria', '2026-08-25 20:01-03', 11, 'Sax', 'falta_justificada', 'ausente', '2026-08-25 20:10-03'),
+  ('00000000-0000-0000-0000-000000000010', 107, 507, '10000000-0000-0000-0000-000000000001', '2026-08-25', '18:00', 'ausente', 'agenda_secretaria', '2026-08-25 19:01-03', 10, 'Baixo', 'falta', 'presente', '2026-08-25 19:10-03'),
+  ('00000000-0000-0000-0000-000000000011', 108, 508, '10000000-0000-0000-0000-000000000001', '2026-08-25', '19:00', 'ausente', 'agenda_secretaria', '2026-08-25 20:01-03', 11, 'Sax', 'falta_justificada', 'presente', '2026-08-25 20:10-03'),
   ('00000000-0000-0000-0000-000000000012', 109, 509, '10000000-0000-0000-0000-000000000001', '2026-08-25', '20:00', null, 'professor_la_teacher', null, 12, 'Flauta', null, null, null),
   ('00000000-0000-0000-0000-000000000013', 110, 510, '10000000-0000-0000-0000-000000000001', '2026-08-25', '21:00', 'presente', 'emusys', null, 13, 'Percussao', null, 'presente', '2026-08-25 22:05-03'),
   ('00000000-0000-0000-0000-000000000014', 110, 510, '20000000-0000-0000-0000-000000000002', '2026-08-25', '21:00', 'presente', 'emusys', null, 14, 'Percussao', null, 'presente', '2026-08-25 22:05-03'),
@@ -253,7 +261,7 @@ values
   ('00000000-0000-0000-0000-000000000023', 120, 516, '10000000-0000-0000-0000-000000000001', '2026-08-25', '05:00', 'presente', 'emusys', null, 21, 'Piano', null, 'presente', '2026-08-25 06:05-03'),
   ('00000000-0000-0000-0000-000000000024', 121, 516, '10000000-0000-0000-0000-000000000001', '2026-08-25', '05:00', 'presente', 'emusys', null, 22, 'Piano', null, 'presente', '2026-08-25 06:05-03'),
   ('00000000-0000-0000-0000-000000000025', 122, 517, '10000000-0000-0000-0000-000000000001', '2026-08-24', '04:00', 'presente', 'emusys', null, 23, 'Data resolvida', null, 'presente', '2026-08-25 05:05-03'),
-  ('00000000-0000-0000-0000-000000000026', 124, 518, '10000000-0000-0000-0000-000000000001', '2026-08-25', '03:00', 'presente', 'emusys', null, 24, 'Slot multidata', null, 'presente', '2026-08-25 04:05-03'),
+  ('00000000-0000-0000-0000-000000000026', 124, 518, '10000000-0000-0000-0000-000000000001', '2026-08-25', '03:00', 'ausente', 'emusys', null, 24, 'Slot multidata', null, 'ausente', '2026-08-25 04:05-03'),
   ('00000000-0000-0000-0000-000000000027', 124, 518, '10000000-0000-0000-0000-000000000001', '2026-08-26', '03:00', 'presente', 'emusys', null, 25, 'Slot multidata', null, 'presente', '2026-08-25 04:06-03'),
   ('00000000-0000-0000-0000-000000000028', 123, 501, '20000000-0000-0000-0000-000000000002', '2026-08-26', '10:00', 'presente', 'agenda_secretaria', '2026-08-26 11:00-03', 1, 'Piano', 'presente', null, null);
 `;
@@ -397,13 +405,24 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
       where r.posicao = 1;
     `);
 
-    const rows = JSON.parse(psql(container, String.raw`
+    let rows = JSON.parse(psql(container, String.raw`
       select coalesce(json_agg(to_jsonb(v) order by
         v.unidade_id, v.data_aula, v.data_hora_inicio, v.aluno_id, v.curso_nome, v.slot_key
       ), '[]'::json)
         from public.vw_presenca_ocorrencia_canonica_v2 v;
     `));
     assert.deepEqual(rows, baselineRows, 'otimizacao deve ser semanticamente identica a v2.1');
+
+    const conflictHotfix = conflictSemanticsMigration();
+    if (conflictHotfix && existsSync(conflictHotfix)) {
+      psql(container, readFileSync(conflictHotfix, 'utf8'));
+    }
+    rows = JSON.parse(psql(container, String.raw`
+      select coalesce(json_agg(to_jsonb(v) order by
+        v.unidade_id, v.data_aula, v.data_hora_inicio, v.aluno_id, v.curso_nome, v.slot_key
+      ), '[]'::json)
+        from public.vw_presenca_ocorrencia_canonica_v2 v;
+    `));
 
     const boundedPlanRaw = psql(container, String.raw`
       set enable_seqscan = off;
@@ -464,6 +483,9 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
     const byAluno = (id) => rows.filter((row) => row.aluno_id === id);
     assert.equal(byAluno(101).length, 1, 'duas/tres gemeas viram uma ocorrencia');
     assert.deepEqual(byAluno(101)[0].ids_aulas_emusys, [1, 2, 3]);
+    assert.equal(byAluno(101)[0].resultado_canonico, 'presente');
+    assert.equal(byAluno(101)[0].possui_conflito, false, 'presente vence ausencia bruta entre gemeas Emusys');
+    assert.match(byAluno(101)[0].regra_versao, /presenca-ocorrencia-canonica-v2\.2/u);
     assert.equal(byAluno(102).length, 2, 'dois cursos do mesmo aluno permanecem dois slots');
     assert.equal(byAluno(102).find((row) => row.curso_nome === 'Violao').resultado_canonico, 'indeterminado');
     assert.equal(byAluno(102).find((row) => row.curso_nome === 'Experimental').resultado_canonico, 'presente');
@@ -472,7 +494,7 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
     assert.equal(agendaVsEmusys.resultado_canonico, 'presente');
     assert.equal(agendaVsEmusys.fecha_chamada, true);
     assert.equal(agendaVsEmusys.fonte_decisao, 'agenda_secretaria');
-    assert.equal(agendaVsEmusys.possui_conflito, true);
+    assert.equal(agendaVsEmusys.possui_conflito, false, 'ausencia bruta nao contradiz decisao humana terminal');
 
     assert.equal(byAluno(104)[0].resultado_canonico, 'presente');
     assert.equal(byAluno(104)[0].fonte_decisao, 'fabio_audio');
@@ -482,8 +504,10 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
     assert.equal(byAluno(106)[0].fecha_chamada, false);
     assert.equal(byAluno(107)[0].resultado_canonico, 'falta');
     assert.equal(byAluno(107)[0].fecha_chamada, true);
+    assert.equal(byAluno(107)[0].possui_conflito, true, 'falta humana continua conflitante com presenca Emusys');
     assert.equal(byAluno(108)[0].resultado_canonico, 'falta_justificada');
     assert.equal(byAluno(108)[0].fecha_chamada, true);
+    assert.equal(byAluno(108)[0].possui_conflito, true, 'falta justificada humana continua conflitante com presenca Emusys');
     assert.equal(byAluno(109)[0].resultado_canonico, 'indeterminado');
     assert.equal(byAluno(109)[0].fecha_chamada, false);
 
@@ -503,6 +527,8 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
     assert.equal(byAluno(123)[0].fonte_decisao, 'identidade_incompleta');
     assert.equal(byAluno(124).length, 1, 'data redundante nao altera o grao historico do slot');
     assert.deepEqual(byAluno(124)[0].ids_aulas_emusys, [24, 25]);
+    assert.equal(byAluno(124)[0].resultado_canonico, 'presente');
+    assert.equal(byAluno(124)[0].possui_conflito, false, 'presente vence ausencia bruta tambem no ramo multidata');
 
     assert.equal(byAluno(111)[0].resultado_canonico, 'falta');
     assert.equal(byAluno(111)[0].fecha_chamada, false, 'ausencia Emusys nao fecha chamada sozinha');

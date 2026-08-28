@@ -45,15 +45,16 @@ function ultimoJson(output) {
 }
 
 function extrairDefinicaoFuncao(sql, nome) {
-  const inicio = sql.indexOf(`CREATE OR REPLACE FUNCTION public.${nome}(`);
+  const normalizado = sql.replace(/\r\n/gu, '\n');
+  const inicio = normalizado.indexOf(`CREATE OR REPLACE FUNCTION public.${nome}(`);
   assert.notEqual(inicio, -1, `definicao de ${nome} ausente`);
   const proximos = [
-    sql.indexOf('\n\nCREATE OR REPLACE FUNCTION ', inicio + 1),
-    sql.indexOf('\n\nCREATE OR REPLACE VIEW ', inicio + 1),
-    sql.indexOf('\n\nCOMMENT ON FUNCTION ', inicio + 1),
+    normalizado.indexOf('\n\nCREATE OR REPLACE FUNCTION ', inicio + 1),
+    normalizado.indexOf('\n\nCREATE OR REPLACE VIEW ', inicio + 1),
+    normalizado.indexOf('\n\nCOMMENT ON FUNCTION ', inicio + 1),
   ].filter((indice) => indice > inicio);
-  const fim = proximos.length > 0 ? Math.min(...proximos) : sql.length;
-  return sql.slice(inicio, fim).trim();
+  const fim = proximos.length > 0 ? Math.min(...proximos) : normalizado.length;
+  return normalizado.slice(inicio, fim).trim();
 }
 
 async function waitForPostgres(container) {
