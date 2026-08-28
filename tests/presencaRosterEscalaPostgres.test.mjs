@@ -8,6 +8,8 @@ const ROOT = process.cwd();
 const IMAGE = process.env.PRESENCA_ROSTER_ESCALA_POSTGRES_IMAGE || 'postgres:17-alpine';
 const MIGRATION =
   'supabase/migrations/20260828043000_presenca_roster_reconciliacao_linear.sql';
+const SET_BASED_MIGRATION =
+  'supabase/migrations/20260828053000_presenca_roster_reconciliacao_set_based.sql';
 const UNIDADE = '44444444-4444-4444-8444-444444444444';
 const RUN = '44444444-4444-4444-8444-444444444401';
 
@@ -16,6 +18,7 @@ const migrations = [
   'supabase/migrations/20260827030500_presenca_roster_operacional.sql',
   'supabase/migrations/20260828005703_presenca_roster_v2_expansao_aditiva.sql',
   MIGRATION,
+  SET_BASED_MIGRATION,
 ];
 
 function execute(command, args, options = {}) {
@@ -110,6 +113,20 @@ test('migration elimina os dois caminhos quadraticos do reconciliador', () => {
   assert.match(sql, /jsonb_array_elements\(p_snapshot\)\s+with\s+ordinality/iu);
   assert.match(sql, /emusys_id\s*=\s*any\s*\(v_snapshot_emusys_ids\)/iu);
   assert.doesNotMatch(sql, /from\s+jsonb_array_elements\(p_snapshot\)\s+with\s+ordinality[\s\S]*left\s+join\s+public\.aulas_emusys/iu);
+});
+
+test('migration final elimina o loop por aula e o remapeamento duplo de run', () => {
+  assert.equal(existsSync(SET_BASED_MIGRATION), true, 'migration set-based ausente');
+  const sql = readFileSync(SET_BASED_MIGRATION, 'utf8');
+
+  assert.match(sql, /create\s+or\s+replace\s+function\s+public\.reconciliar_grade_snapshot_emusys_core_v3/iu);
+  assert.match(sql, /insert\s+into\s+public\.aula_roster_sync_estado[\s\S]*select/iu);
+  assert.match(sql, /update\s+public\.aula_alunos_emusys\s+aa[\s\S]*from\s+snapshot_itens/iu);
+  assert.doesNotMatch(sql, /for\s+v_indice\s+in/iu);
+  assert.doesNotMatch(sql, /set\s+run_id\s*=\s*p_sync_run_id/iu);
+  assert.doesNotMatch(sql, /set\s+ultimo_run_visto\s*=\s*p_sync_run_id\s+where\s+aa\.ultimo_run_visto/iu);
+  assert.doesNotMatch(sql, /set\s+(?:local\s+)?statement_timeout/iu);
+  assert.doesNotMatch(sql, /execute\s+format\s*\(/iu);
 });
 
 test('reconciliacao v2 fecha fotografia acima da escala real dentro do teto PostgREST', {
@@ -241,6 +258,54 @@ test('reconciliacao v2 fecha fotografia acima da escala real dentro do teto Post
       );
       analyze public.aulas_emusys;
       analyze public.aula_alunos_emusys;
+
+      -- Reproduz o custo dominante dos triggers vivos: cada escrita consulta
+      -- o slot e tenta novamente os dois advisory locks ja adquiridos pelo v2.
+      create function public.test_roster_lock_vivo()
+      returns trigger language plpgsql as $$
+      declare
+        v_roster bigint;
+        v_slot bigint;
+      begin
+        v_roster := public.fn_presenca_roster_lock_key_v2(new.aula_emusys_id);
+        select public.fn_presenca_slot_lock_key_v2(
+          a.unidade_id, a.professor_id, a.data_hora_inicio,
+          a.data_hora_fim, a.curso_nome
+        ) into v_slot
+          from public.aulas_emusys a where a.id = new.aula_emusys_id;
+        if not pg_try_advisory_xact_lock(v_roster)
+           or not pg_try_advisory_xact_lock(v_slot) then
+          raise exception 'lock ocupado' using errcode = '55P03';
+        end if;
+        return new;
+      end
+      $$;
+      create trigger test_roster_lock_vivo
+      before update on public.aula_alunos_emusys
+      for each row execute function public.test_roster_lock_vivo();
+
+      create function public.test_estado_lock_vivo()
+      returns trigger language plpgsql as $$
+      declare
+        v_roster bigint;
+        v_slot bigint;
+      begin
+        v_roster := public.fn_presenca_roster_lock_key_v2(new.aula_id);
+        select public.fn_presenca_slot_lock_key_v2(
+          a.unidade_id, a.professor_id, a.data_hora_inicio,
+          a.data_hora_fim, a.curso_nome
+        ) into v_slot
+          from public.aulas_emusys a where a.id = new.aula_id;
+        if not pg_try_advisory_xact_lock(v_roster)
+           or not pg_try_advisory_xact_lock(v_slot) then
+          raise exception 'lock ocupado' using errcode = '55P03';
+        end if;
+        return new;
+      end
+      $$;
+      create trigger test_estado_lock_vivo
+      before insert or update on public.aula_roster_sync_estado
+      for each row execute function public.test_estado_lock_vivo();
     `);
 
     const resultado = json(psql(container, String.raw`
@@ -314,7 +379,7 @@ test('reconciliacao v2 fecha fotografia acima da escala real dentro do teto Post
             'qtd_recebida', 0,
             'aluno_chaves', '[]'::jsonb
           )
-        ), true
+        ), false
       );
     `, 'roster_scale_call');
     await waitForActivity(container, 'roster_scale_call', 'Lock');
@@ -328,6 +393,15 @@ test('reconciliacao v2 fecha fotografia acima da escala real dentro do teto Post
         (current_date + 8)::timestamp + interval '12 hours',
         (current_date + 8)::timestamp + interval '12 hours 50 minutes',
         'normal', 'Curso concorrente', 'Turma concorrente'
+      );
+      insert into public.aulas_emusys(
+        id, emusys_id, unidade_id, professor_id, data_aula,
+        data_hora_inicio, data_hora_fim, categoria, curso_nome, turma_nome
+      ) values (
+        999002, 999002, '${UNIDADE}', 998, current_date + 8,
+        (current_date + 8)::timestamp + interval '13 hours',
+        (current_date + 8)::timestamp + interval '13 hours 50 minutes',
+        'normal', 'Curso novo fora da fotografia', 'Turma nova fora da fotografia'
       );
     `);
 
@@ -344,6 +418,11 @@ test('reconciliacao v2 fecha fotografia acima da escala real dentro do teto Post
       estado: 'incompleto',
       acao: 'revisao_estrutural',
     });
+    assert.equal(
+      psql(container, 'select cancelada from public.aulas_emusys where id = 999002;'),
+      'f',
+      'aula criada depois da captura nao pode ser cancelada pela fotografia anterior',
+    );
   } finally {
     execute('docker', ['rm', '-f', container]);
   }

@@ -67,6 +67,10 @@ function migrationRosterLinear() {
   return join(MIGRATIONS, '20260828043000_presenca_roster_reconciliacao_linear.sql');
 }
 
+function migrationRosterSetBased() {
+  return join(MIGRATIONS, '20260828053000_presenca_roster_reconciliacao_set_based.sql');
+}
+
 function jsonUltimaLinha(output) {
   return JSON.parse(output.split(/\r?\n/u).at(-1));
 }
@@ -165,6 +169,7 @@ test('roster completo inativa logicamente e estados inseguros nunca viram penden
     psql(container, readFileSync(migrationRoster(), 'utf8'));
     psql(container, readFileSync(migrationRosterV2(), 'utf8'));
     psql(container, readFileSync(migrationRosterLinear(), 'utf8'));
+    psql(container, readFileSync(migrationRosterSetBased(), 'utf8'));
     psql(container, String.raw`
       insert into public.aula_alunos_emusys(
         aula_emusys_id, unidade_id, aluno_chave, aluno_emusys_id, aluno_id, aluno_nome
@@ -242,6 +247,9 @@ test('roster completo inativa logicamente e estados inseguros nunca viram penden
         'anon_rpc', has_function_privilege('anon', 'public.reconciliar_grade_snapshot_emusys_v1(uuid,date,date,jsonb,boolean)', 'execute'),
         'auth_rpc', has_function_privilege('authenticated', 'public.reconciliar_grade_snapshot_emusys_v1(uuid,date,date,jsonb,boolean)', 'execute'),
         'service_rpc', has_function_privilege('service_role', 'public.reconciliar_grade_snapshot_emusys_v1(uuid,date,date,jsonb,boolean)', 'execute'),
+        'anon_core', has_function_privilege('anon', 'public.reconciliar_grade_snapshot_emusys_core_v3(uuid,uuid,date,date,jsonb,boolean)', 'execute'),
+        'auth_core', has_function_privilege('authenticated', 'public.reconciliar_grade_snapshot_emusys_core_v3(uuid,uuid,date,date,jsonb,boolean)', 'execute'),
+        'service_core', has_function_privilege('service_role', 'public.reconciliar_grade_snapshot_emusys_core_v3(uuid,uuid,date,date,jsonb,boolean)', 'execute'),
         'anon_fila', has_function_privilege('anon', 'public.get_conciliacao_roster_operacional_v1(uuid,date,date,text,integer,integer)', 'execute'),
         'auth_fila', has_function_privilege('authenticated', 'public.get_conciliacao_roster_operacional_v1(uuid,date,date,text,integer,integer)', 'execute'),
         'auth_estado_select', has_table_privilege('authenticated', 'public.aula_roster_sync_estado', 'select'),
@@ -253,12 +261,26 @@ test('roster completo inativa logicamente e estados inseguros nunca viram penden
       anon_rpc: false,
       auth_rpc: false,
       service_rpc: true,
+      anon_core: false,
+      auth_core: false,
+      service_core: false,
       anon_fila: false,
       auth_fila: true,
       auth_estado_select: false,
       auth_view_select: false,
       view_security_invoker: true,
     });
+
+    assert.throws(
+      () => psql(container, String.raw`
+        set role service_role;
+        select public.reconciliar_grade_snapshot_emusys_core_v3(
+          gen_random_uuid(), '${UNIDADE}', current_date, current_date,
+          '${snapshotInicial}'::jsonb, true
+        );
+      `),
+      /permission denied for function reconciliar_grade_snapshot_emusys_core_v3/iu,
+    );
   } finally {
     spawnSync('docker', ['rm', '-f', container], { encoding: 'utf8' });
   }
