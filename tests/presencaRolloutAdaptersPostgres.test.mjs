@@ -125,7 +125,7 @@ test('sombra calcula sem expor, canonico ativa e legado reverte sem migration de
             )), array[10]::integer[]),
           ('slot-legado-barra'::text, '${UNIT_2}'::uuid, 8, 'ausente'::text,
             jsonb_build_array(jsonb_build_object(
-              'aluno_id',102,'aula_emusys_id',11,'status_presenca','falta'
+              'aluno_id',102,'aula_emusys_id',11,'status_presenca','ausente'
             )), array[11]::integer[])
         ) as v(chave, unidade_id, professor_id, professor_presenca, alunos, aula_ids)
         where p_unidade_id is null or v.unidade_id = p_unidade_id
@@ -210,6 +210,14 @@ test('sombra calcula sem expor, canonico ativa e legado reverte sem migration de
     assert.deepEqual(
       agendaConsolidada.pendencias.map((item) => item.aluno_id).sort((a, b) => a - b),
       [202, 303],
+    );
+    assert.equal(
+      agendaConsolidada.ocorrencias.find((item) => item.aluno_id === 102)?.resultado_canonico,
+      'indeterminado',
+    );
+    assert.equal(
+      agendaConsolidada.professores_ocorrencias.find((item) => item.professor_id === 8)?.estado,
+      'indeterminado',
     );
 
     const agendaDaPropriaUnidade = ultimoJson(psql(container, String.raw`

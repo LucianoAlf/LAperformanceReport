@@ -4,6 +4,8 @@
 -- chamava fn_presenca_pendencias_do_dia uma unica vez com NULL. Essa funcao e
 -- intencionalmente fail-closed e exige unidade, portanto o filtro Consolidado
 -- recebia UNIDADE_E_DATA_OBRIGATORIAS e zerava a tela.
+-- A redefinicao preserva ainda a regra ja publicada: ausencia bruta nunca vira
+-- falta nem ausencia terminal; somente decisoes humanas/canonicas fecham estado.
 --
 -- O escopo abaixo vem das proprias aulas que a porta legada ja devolvera. Assim
 -- nao consultamos um catalogo mais amplo nem acrescentamos unidades ao universo
@@ -38,7 +40,7 @@ begin
     'resultado_canonico', case lower(coalesce(aluno ->> 'status_presenca', ''))
       when 'presente' then 'presente'
       when 'falta' then 'falta'
-      when 'ausente' then 'falta'
+      when 'ausente' then 'indeterminado'
       when 'falta_justificada' then 'falta_justificada'
       when 'justificada' then 'falta_justificada'
       else 'indeterminado'
@@ -60,7 +62,7 @@ begin
     'professor_id', (aula ->> 'professor_id')::integer,
     'estado', case lower(coalesce(aula ->> 'professor_presenca', ''))
       when 'presente' then 'presente'
-      when 'ausente' then 'ausente'
+      when 'ausente' then 'indeterminado'
       else 'indeterminado'
     end,
     'fonte', 'legado',
