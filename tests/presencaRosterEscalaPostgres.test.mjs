@@ -10,8 +10,11 @@ const MIGRATION =
   'supabase/migrations/20260828043000_presenca_roster_reconciliacao_linear.sql';
 const SET_BASED_MIGRATION =
   'supabase/migrations/20260828053000_presenca_roster_reconciliacao_set_based.sql';
+const EMPTY_SNAPSHOT_MIGRATION =
+  'supabase/migrations/20260828072000_presenca_roster_fotografia_vazia_segura.sql';
 const UNIDADE = '44444444-4444-4444-8444-444444444444';
 const RUN = '44444444-4444-4444-8444-444444444401';
+const RUN_VAZIO = '44444444-4444-4444-8444-444444444402';
 
 const migrations = [
   'supabase/migrations/20260827030200_presenca_sync_cobertura_idempotente.sql',
@@ -19,6 +22,7 @@ const migrations = [
   'supabase/migrations/20260828005703_presenca_roster_v2_expansao_aditiva.sql',
   MIGRATION,
   SET_BASED_MIGRATION,
+  EMPTY_SNAPSHOT_MIGRATION,
 ];
 
 function execute(command, args, options = {}) {
@@ -129,6 +133,25 @@ test('migration final elimina o loop por aula e o remapeamento duplo de run', ()
   assert.doesNotMatch(sql, /execute\s+format\s*\(/iu);
 });
 
+test('fotografia vazia conclui somente quando a base local tambem esta vazia', () => {
+  assert.equal(
+    existsSync(EMPTY_SNAPSHOT_MIGRATION),
+    true,
+    'migration de fotografia vazia segura ausente',
+  );
+  const sql = readFileSync(EMPTY_SNAPSHOT_MIGRATION, 'utf8');
+
+  assert.match(sql, /reconciliar_grade_snapshot_emusys_core_v4/iu);
+  assert.match(sql, /jsonb_array_length\(p_snapshot\)\s*>\s*0/iu);
+  assert.match(sql, /from\s+public\.aulas_emusys[\s\S]*data_aula\s+between/iu);
+  assert.match(sql, /fotografia_vazia_com_base_local/iu);
+  assert.match(sql, /'status',\s*'ok'[\s\S]*'estados_gravados',\s*0/iu);
+  assert.match(
+    sql,
+    /reconciliar_grade_snapshot_emusys_v2[\s\S]*reconciliar_grade_snapshot_emusys_core_v4/iu,
+  );
+});
+
 test('reconciliacao v2 fecha fotografia acima da escala real dentro do teto PostgREST', {
   timeout: 120_000,
 }, async (t) => {
@@ -205,6 +228,46 @@ test('reconciliacao v2 fecha fotografia acima da escala real dentro do teto Post
     for (const migration of migrations) {
       psql(container, readFileSync(migration, 'utf8'));
     }
+
+    const vazioSemBase = json(psql(container, String.raw`
+      select public.reconciliar_grade_snapshot_emusys_v1(
+        '${UNIDADE}', current_date - 10, current_date - 10,
+        '[]'::jsonb, false
+      );
+    `));
+    assert.equal(vazioSemBase.status, 'ok');
+    assert.equal(vazioSemBase.estados_gravados, 0);
+    assert.equal(vazioSemBase.alteracoes_aplicadas, 0);
+    assert.equal(vazioSemBase.motivo, 'fotografia_vazia_sem_base_local');
+
+    psql(container, String.raw`
+      insert into public.presenca_sync_execucoes(
+        id, request_id, unidade_id, modo, data_alvo, status,
+        paginas_lidas, aulas_lidas, presencas_lidas, lease_segundos, heartbeat_em
+      ) values (
+        '${RUN_VAZIO}', extensions.gen_random_uuid(), '${UNIDADE}', 'metadados',
+        current_date - 10, 'iniciada', 1, 0, 0, 300, clock_timestamp()
+      );
+      insert into public.presenca_sync_cobertura(
+        unidade_id, modo, data_alvo, run_id, status, lease_ate, heartbeat_em,
+        paginas_lidas, aulas_lidas, presencas_lidas, iniciada_em
+      ) values (
+        '${UNIDADE}', 'metadados', current_date - 10, '${RUN_VAZIO}', 'iniciada',
+        clock_timestamp() + interval '5 minutes', clock_timestamp(),
+        1, 0, 0, clock_timestamp()
+      );
+    `);
+    const vazioSemBaseV2 = json(psql(container, String.raw`
+      select public.reconciliar_grade_snapshot_emusys_v2(
+        '${RUN_VAZIO}', '${UNIDADE}', current_date - 10, current_date - 10,
+        '[]'::jsonb, false
+      );
+    `));
+    assert.equal(vazioSemBaseV2.status, 'ok');
+    assert.equal(vazioSemBaseV2.contrato, 'roster_v2');
+    assert.equal(vazioSemBaseV2.estados_gravados, 0);
+    assert.equal(vazioSemBaseV2.alteracoes_aplicadas, 0);
+    assert.equal(vazioSemBaseV2.motivo, 'fotografia_vazia_sem_base_local');
 
     psql(container, String.raw`
       insert into public.aulas_emusys(
@@ -307,6 +370,17 @@ test('reconciliacao v2 fecha fotografia acima da escala real dentro do teto Post
       before insert or update on public.aula_roster_sync_estado
       for each row execute function public.test_estado_lock_vivo();
     `);
+
+    const vazioComBase = json(psql(container, String.raw`
+      select public.reconciliar_grade_snapshot_emusys_v2(
+        '${RUN}', '${UNIDADE}', current_date + 1, current_date + 1,
+        '[]'::jsonb, false
+      );
+    `));
+    assert.equal(vazioComBase.status, 'abortado');
+    assert.equal(vazioComBase.contrato, 'roster_v2');
+    assert.equal(vazioComBase.motivo, 'fotografia_vazia_com_base_local');
+    assert.equal(vazioComBase.alteracoes_aplicadas, 0);
 
     const resultado = json(psql(container, String.raw`
       set statement_timeout = '5s';
