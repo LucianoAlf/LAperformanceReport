@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback as useCb } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CalendarX, Check, Clock, FileText, X, XCircle } from 'lucide-react';
@@ -27,6 +27,7 @@ interface Props {
   onAbrirDia: (data: string) => void;
   onAbrirDrawer: (aula: AulaAgenda, data: string) => void;
   onAbrirDrawerLead: (lead: LeadExperimentalAgenda, aula: AulaAgenda) => void;
+  refreshToken: number;
 }
 
 /**
@@ -35,9 +36,8 @@ interface Props {
  * mostram os alunos com os mesmos 3 botoes (Presente/Falta/Justif.) da visao
  * Dia, para que a equipe possa fazer a chamada sem trocar de aba.
  *
- * Apos cada acao (registrar/cancelar/reagendar), as colunas sao remontadas
- * via `contadorRecarga` para buscar dados frescos — o `recarregar` do
- * ChamadaView so recarrega o dia selecionado, nao as colunas da semana.
+ * A semana busca dados frescos somente quando o orquestrador confirma que uma
+ * acao aplicou alteracao; pendencia ou falha nao dispara leitura prematura.
  */
 export function ChamadaSemana({
   data,
@@ -51,64 +51,37 @@ export function ChamadaSemana({
   onAbrirDia,
   onAbrirDrawer,
   onAbrirDrawerLead,
+  refreshToken,
 }: Props) {
   // Uma unica chamada RPC para a semana inteira (seg-sab).
   // Antes: 6 useAgendaDia separados, 6 chamadas RPC, 6x mais lento.
-  const { aulasDoDia, dias, carregando } = useAgendaSemana({ data, unidadeId });
+  const { aulasDoDia, dias, carregando, recarregar: recarregarSemana } = useAgendaSemana({ data, unidadeId });
 
   const hoje = format(new Date(), 'yyyy-MM-dd');
+  const ultimoRefreshAplicado = useRef(refreshToken);
 
-  // Contador de recarga: incrementa apos cada acao para forcar a remontagem
-  // das ColunaDia (que faz fetch fresco sem cache stale).
-  const [contadorRecarga, setContadorRecarga] = useState(0);
-  const forcarRecarga = useCb(() => setContadorRecarga((c) => c + 1), []);
-
-  // Wrappers que chamam a acao e depois forcam recarga da semana inteira.
-  const registrarERecarregar = useCb(
-    (itens: ItemChamada[]) => {
-      onRegistrar(itens);
-      forcarRecarga();
-    },
-    [onRegistrar, forcarRecarga],
-  );
-  const justificarERecarregar = useCb(
-    (aluno: AlunoAgenda, aula: AulaAgenda) => {
-      onJustificar(aluno, aula);
-      forcarRecarga();
-    },
-    [onJustificar, forcarRecarga],
-  );
-  const cancelarERecarregar = useCb(
-    (aula: AulaAgenda) => {
-      onCancelarAula(aula);
-      forcarRecarga();
-    },
-    [onCancelarAula, forcarRecarga],
-  );
-  const reagendarERecarregar = useCb(
-    (aula: AulaAgenda) => {
-      onReagendarAula(aula);
-      forcarRecarga();
-    },
-    [onReagendarAula, forcarRecarga],
-  );
+  useEffect(() => {
+    if (refreshToken === ultimoRefreshAplicado.current) return;
+    ultimoRefreshAplicado.current = refreshToken;
+    void recarregarSemana();
+  }, [recarregarSemana, refreshToken]);
 
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
       {dias.map((dia) => (
         <ColunaDia
-          key={`${dia}-${contadorRecarga}`}
+          key={dia}
           dia={dia}
           aulas={aulasDoDia(dia)}
           carregando={carregando}
           ehHoje={dia === hoje}
           ehSelecionado={dia === data}
           salvando={salvando}
-          onRegistrar={registrarERecarregar}
+          onRegistrar={onRegistrar}
           onRegistrarExperimental={onRegistrarExperimental}
-          onJustificar={justificarERecarregar}
-          onCancelarAula={cancelarERecarregar}
-          onReagendarAula={reagendarERecarregar}
+          onJustificar={onJustificar}
+          onCancelarAula={onCancelarAula}
+          onReagendarAula={onReagendarAula}
           onAbrirDia={() => onAbrirDia(dia)}
           onAbrirDrawer={(aula) => onAbrirDrawer(aula, dia)}
           onAbrirDrawerLead={onAbrirDrawerLead}

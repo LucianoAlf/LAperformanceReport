@@ -61,9 +61,54 @@ export interface ArmazenamentoPedidos {
   removeItem(chave: string): void;
 }
 
+export type DirecaoPresencaProfessor = 'presente' | 'ausente';
+
+export type ResultadoReservaProfessor =
+  | { ok: true }
+  | { ok: false; direcaoPendente: DirecaoPresencaProfessor };
+
+export type ResultadoReservaAlunos =
+  | { ok: true }
+  | { ok: false; alvosEmConflito: number };
+
+export interface IntencaoPendentePresenca {
+  chavePedido: string;
+  requestId: string;
+}
+
+export interface ResumoReconciliacaoPendentes {
+  terminais: number;
+  pendentes: number;
+  aplicados: number;
+  rejeitados: number;
+  falhas: Array<{ requestId: string; mensagem: string }>;
+}
+
+interface PedidoProfessorPendente {
+  chavePedido: string;
+  requestId: string;
+}
+
+interface EstadoProfessorPendente {
+  versao: 1;
+  direcao: DirecaoPresencaProfessor;
+  pedidos: PedidoProfessorPendente[];
+}
+
+interface PedidoAlunoPendente {
+  alvo: string;
+  chavePedido: string;
+  requestId: string;
+}
+
+interface EstadoAlunosPendente {
+  versao: 1;
+  pedidos: PedidoAlunoPendente[];
+}
+
 /**
- * O banco devolve os codigos em MAIUSCULO (`app_aplicar_comando_presenca_v1`
- * normaliza com `upper()`), mas as regras internas os produzem em minusculo.
+ * O banco devolve os codigos em MAIUSCULO (normalizados com `upper()`), mas as
+ * regras internas os produzem em minusculo.
  * A busca aqui e case-insensitive para nao depender de qual camada respondeu.
  */
 const MENSAGENS_ERRO: Record<string, string> = {
@@ -109,8 +154,11 @@ export function novoRequestId(): string {
  * (`request_id_reutilizado`), por isso a chave inclui o payload.
  */
 const PREFIXO_PEDIDO = 'la-report:presenca:pedidos:v2:';
+const PREFIXO_PROFESSOR_PENDENTE = 'la-report:presenca:professor-pendente:v1:';
+const PREFIXO_ALUNOS_PENDENTE = 'la-report:presenca:alunos-pendente:v1:';
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const pedidosEmVoo = new Map<string, string>();
+const travasPresenca = new Map<string, symbol>();
 
 type JsonCanonico = null | boolean | number | string | JsonCanonico[] | { [chave: string]: JsonCanonico };
 
@@ -214,6 +262,340 @@ function lerRequestIdPersistido(storage: ArmazenamentoPedidos, chave: string): s
 export function chaveDoPedido(usuarioId: string, escopo: string, payload: unknown): string {
   if (!usuarioId) throw new Error('Usuário autenticado obrigatório para registrar presença');
   return JSON.stringify(canonizarJson([usuarioId, escopo, payload]));
+}
+
+export function chaveTravaProfessorDia(usuarioId: string, unidadeId: string, data: string): string {
+  if (!usuarioId || !unidadeId || !data) {
+    throw new Error('Usuário, unidade e data obrigatórios para alterar presença de professor');
+  }
+  return JSON.stringify(canonizarJson(['professor_dia', usuarioId, unidadeId, data]));
+}
+
+export function chaveTravaChamadaAlunos(usuarioId: string): string {
+  if (!usuarioId) throw new Error('Usuário obrigatório para alterar presença de aluno');
+  return JSON.stringify(canonizarJson(['chamada_alunos', usuarioId]));
+}
+
+/**
+ * Serializa mudanças de professor que atingem o mesmo dia na mesma aba.
+ * O token impede uma liberação atrasada de soltar a trava de uma operação nova.
+ */
+export function adquirirTravaPresenca(chave: string): (() => void) | null {
+  if (!chave) throw new Error('Chave de trava obrigatória para alterar presença');
+  if (travasPresenca.has(chave)) return null;
+
+  const token = Symbol(chave);
+  travasPresenca.set(chave, token);
+  return () => {
+    if (travasPresenca.get(chave) === token) travasPresenca.delete(chave);
+  };
+}
+
+function chaveStorageProfessorPendente(chaveTrava: string): string {
+  return `${PREFIXO_PROFESSOR_PENDENTE}${chaveTrava}`;
+}
+
+function direcaoProfessorValida(valor: unknown): valor is DirecaoPresencaProfessor {
+  return valor === 'presente' || valor === 'ausente';
+}
+
+function exigirStorageDuravel(storage: ArmazenamentoPedidos | null): ArmazenamentoPedidos {
+  garantirStorageNoBrowser(storage);
+  if (!storage) throw new Error('Armazenamento durável indisponível para presença');
+  return storage;
+}
+
+function lerEstadoProfessorPendente(
+  chaveTrava: string,
+  storage: ArmazenamentoPedidos,
+): EstadoProfessorPendente | null {
+  const bruto = storage.getItem(chaveStorageProfessorPendente(chaveTrava));
+  if (!bruto) return null;
+
+  let valor: unknown;
+  try {
+    valor = JSON.parse(bruto);
+  } catch {
+    throw new Error('Estado pendente inválido para presença de professor');
+  }
+  if (typeof valor !== 'object' || valor === null || Array.isArray(valor)) {
+    throw new Error('Estado pendente inválido para presença de professor');
+  }
+
+  const estado = valor as Record<string, unknown>;
+  if (estado.versao !== 1 || !direcaoProfessorValida(estado.direcao) || !Array.isArray(estado.pedidos)) {
+    throw new Error('Estado pendente inválido para presença de professor');
+  }
+
+  const chaves = new Set<string>();
+  const ids = new Set<string>();
+  const pedidos: PedidoProfessorPendente[] = [];
+  for (const item of estado.pedidos) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      throw new Error('Estado pendente inválido para presença de professor');
+    }
+    const pedido = item as Record<string, unknown>;
+    const requestId = normalizarRequestId(pedido.requestId);
+    if (typeof pedido.chavePedido !== 'string' || pedido.chavePedido.length === 0 || !requestId) {
+      throw new Error('Estado pendente inválido para presença de professor');
+    }
+    if (chaves.has(pedido.chavePedido) || ids.has(requestId)) {
+      throw new Error('Estado pendente inválido para presença de professor');
+    }
+    chaves.add(pedido.chavePedido);
+    ids.add(requestId);
+    pedidos.push({ chavePedido: pedido.chavePedido, requestId });
+  }
+  if (pedidos.length === 0) throw new Error('Estado pendente inválido para presença de professor');
+
+  return { versao: 1, direcao: estado.direcao, pedidos };
+}
+
+export function listarIntencoesProfessorPendentes(
+  chaveTrava: string,
+  storage: ArmazenamentoPedidos | null = storagePadrao(),
+): IntencaoPendentePresenca[] {
+  if (!chaveTrava) throw new Error('Chave de professor obrigatória para reconciliar presença');
+  const atual = lerEstadoProfessorPendente(chaveTrava, exigirStorageDuravel(storage));
+  return atual?.pedidos.map((pedido) => ({ ...pedido })) ?? [];
+}
+
+/**
+ * Persiste a direção ainda não confirmada. Retries da mesma direção continuam
+ * possíveis; a direção oposta falha fechada até todos os recibos terminarem.
+ */
+export function reservarIntencaoProfessorPendente(
+  chaveTrava: string,
+  chavePedido: string,
+  requestId: string,
+  direcao: DirecaoPresencaProfessor,
+  storage: ArmazenamentoPedidos | null = storagePadrao(),
+): ResultadoReservaProfessor {
+  if (!chaveTrava || !chavePedido || !direcaoProfessorValida(direcao)) {
+    throw new Error('Intenção inválida para presença de professor');
+  }
+  const idCanonico = normalizarRequestId(requestId);
+  if (!idCanonico) throw new Error('request_id inválido para presença de professor');
+
+  const armazenamento = exigirStorageDuravel(storage);
+  const atual = lerEstadoProfessorPendente(chaveTrava, armazenamento);
+  if (atual && atual.direcao !== direcao) {
+    return { ok: false, direcaoPendente: atual.direcao };
+  }
+
+  const pedidos = atual ? [...atual.pedidos] : [];
+  const indiceDaChave = pedidos.findIndex((pedido) => pedido.chavePedido === chavePedido);
+  const indiceDoId = pedidos.findIndex((pedido) => pedido.requestId === idCanonico);
+  if (indiceDoId >= 0 && indiceDoId !== indiceDaChave) {
+    throw new Error('request_id já reservado para outra intenção de professor');
+  }
+  if (indiceDaChave >= 0) {
+    // Um ID diferente só aparece depois que a carteira principal encerrou a
+    // intenção anterior; substituí-lo também recupera uma limpeza interrompida.
+    pedidos[indiceDaChave] = { chavePedido, requestId: idCanonico };
+  } else {
+    pedidos.push({ chavePedido, requestId: idCanonico });
+  }
+
+  const estado: EstadoProfessorPendente = { versao: 1, direcao, pedidos };
+  armazenamento.setItem(chaveStorageProfessorPendente(chaveTrava), JSON.stringify(estado));
+  return { ok: true };
+}
+
+export function encerrarIntencaoProfessorPendente(
+  chaveTrava: string,
+  chavePedido: string,
+  requestId: string,
+  storage: ArmazenamentoPedidos | null = storagePadrao(),
+): void {
+  const idCanonico = normalizarRequestId(requestId);
+  if (!chaveTrava || !chavePedido || !idCanonico) {
+    throw new Error('Intenção inválida para encerrar presença de professor');
+  }
+
+  const armazenamento = exigirStorageDuravel(storage);
+  const atual = lerEstadoProfessorPendente(chaveTrava, armazenamento);
+  if (!atual) return;
+  const pedidos = atual.pedidos.filter(
+    (pedido) => pedido.chavePedido !== chavePedido || pedido.requestId !== idCanonico,
+  );
+  if (pedidos.length === atual.pedidos.length) return;
+
+  const chaveStorage = chaveStorageProfessorPendente(chaveTrava);
+  if (pedidos.length > 0) {
+    armazenamento.setItem(chaveStorage, JSON.stringify({ ...atual, pedidos }));
+    return;
+  }
+
+  try {
+    armazenamento.removeItem(chaveStorage);
+  } catch (erro) {
+    // Mesmo cuidado da carteira principal: Web Storage pode efetivar a
+    // remoção e lançar depois. Só propagamos quando a intenção ainda existe.
+    if (lerEstadoProfessorPendente(chaveTrava, armazenamento) !== null) throw erro;
+  }
+}
+
+function chaveStorageAlunosPendente(usuarioId: string): string {
+  return `${PREFIXO_ALUNOS_PENDENTE}${JSON.stringify(canonizarJson([usuarioId]))}`;
+}
+
+function alvosDosItensDeAluno(
+  itens: ReadonlyArray<{ aula_emusys_id: number; aluno_id: number }>,
+): string[] {
+  if (!Array.isArray(itens) || itens.length === 0) {
+    throw new Error('Itens obrigatórios para reservar presença de aluno');
+  }
+  const alvos = new Set<string>();
+  for (const item of itens) {
+    if (
+      typeof item !== 'object'
+      || item === null
+      || !Number.isInteger(item.aula_emusys_id)
+      || item.aula_emusys_id <= 0
+      || !Number.isInteger(item.aluno_id)
+      || item.aluno_id <= 0
+    ) {
+      throw new Error('Alvo inválido para presença de aluno');
+    }
+    alvos.add(JSON.stringify(canonizarJson([item.aula_emusys_id, item.aluno_id])));
+  }
+  return [...alvos];
+}
+
+function lerEstadoAlunosPendente(
+  usuarioId: string,
+  storage: ArmazenamentoPedidos,
+): EstadoAlunosPendente | null {
+  const bruto = storage.getItem(chaveStorageAlunosPendente(usuarioId));
+  if (!bruto) return null;
+
+  let valor: unknown;
+  try {
+    valor = JSON.parse(bruto);
+  } catch {
+    throw new Error('Estado pendente inválido para presença de aluno');
+  }
+  if (typeof valor !== 'object' || valor === null || Array.isArray(valor)) {
+    throw new Error('Estado pendente inválido para presença de aluno');
+  }
+  const estado = valor as Record<string, unknown>;
+  if (estado.versao !== 1 || !Array.isArray(estado.pedidos)) {
+    throw new Error('Estado pendente inválido para presença de aluno');
+  }
+
+  const alvos = new Set<string>();
+  const pedidos: PedidoAlunoPendente[] = [];
+  for (const item of estado.pedidos) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      throw new Error('Estado pendente inválido para presença de aluno');
+    }
+    const pedido = item as Record<string, unknown>;
+    const requestId = normalizarRequestId(pedido.requestId);
+    if (
+      typeof pedido.alvo !== 'string'
+      || pedido.alvo.length === 0
+      || typeof pedido.chavePedido !== 'string'
+      || pedido.chavePedido.length === 0
+      || !requestId
+      || alvos.has(pedido.alvo)
+    ) {
+      throw new Error('Estado pendente inválido para presença de aluno');
+    }
+    alvos.add(pedido.alvo);
+    pedidos.push({ alvo: pedido.alvo, chavePedido: pedido.chavePedido, requestId });
+  }
+  if (pedidos.length === 0) throw new Error('Estado pendente inválido para presença de aluno');
+  return { versao: 1, pedidos };
+}
+
+export function listarIntencoesAlunosPendentes(
+  usuarioId: string,
+  itens: ReadonlyArray<{ aula_emusys_id: number; aluno_id: number }>,
+  storage: ArmazenamentoPedidos | null = storagePadrao(),
+): IntencaoPendentePresenca[] {
+  if (!usuarioId) throw new Error('Usuário obrigatório para reconciliar presença de aluno');
+  const alvos = new Set(alvosDosItensDeAluno(itens));
+  const atual = lerEstadoAlunosPendente(usuarioId, exigirStorageDuravel(storage));
+  if (!atual) return [];
+
+  const unicas = new Map<string, IntencaoPendentePresenca>();
+  for (const pedido of atual.pedidos) {
+    if (!alvos.has(pedido.alvo)) continue;
+    const existente = unicas.get(pedido.requestId);
+    if (existente && existente.chavePedido !== pedido.chavePedido) {
+      throw new Error('Estado pendente inválido para presença de aluno');
+    }
+    unicas.set(pedido.requestId, {
+      chavePedido: pedido.chavePedido,
+      requestId: pedido.requestId,
+    });
+  }
+  return [...unicas.values()];
+}
+
+/** Reserva atomicamente todos os pares aula/aluno tocados por uma chamada. */
+export function reservarIntencaoAlunosPendente(
+  usuarioId: string,
+  itens: ReadonlyArray<{ aula_emusys_id: number; aluno_id: number }>,
+  chavePedido: string,
+  requestId: string,
+  storage: ArmazenamentoPedidos | null = storagePadrao(),
+): ResultadoReservaAlunos {
+  if (!usuarioId || !chavePedido) throw new Error('Intenção inválida para presença de aluno');
+  const idCanonico = normalizarRequestId(requestId);
+  if (!idCanonico) throw new Error('request_id inválido para presença de aluno');
+  const alvos = alvosDosItensDeAluno(itens);
+  const conjuntoAlvos = new Set(alvos);
+  const armazenamento = exigirStorageDuravel(storage);
+  const atual = lerEstadoAlunosPendente(usuarioId, armazenamento);
+
+  const conflitos = atual?.pedidos.filter(
+    (pedido) => conjuntoAlvos.has(pedido.alvo)
+      && pedido.chavePedido !== chavePedido,
+  ).length ?? 0;
+  if (conflitos > 0) return { ok: false, alvosEmConflito: conflitos };
+
+  const preservados = atual?.pedidos.filter((pedido) => pedido.chavePedido !== chavePedido) ?? [];
+  const pedidos = [
+    ...preservados,
+    ...alvos.map((alvo) => ({ alvo, chavePedido, requestId: idCanonico })),
+  ];
+  armazenamento.setItem(
+    chaveStorageAlunosPendente(usuarioId),
+    JSON.stringify({ versao: 1, pedidos } satisfies EstadoAlunosPendente),
+  );
+  return { ok: true };
+}
+
+export function encerrarIntencaoAlunosPendente(
+  usuarioId: string,
+  chavePedido: string,
+  requestId: string,
+  storage: ArmazenamentoPedidos | null = storagePadrao(),
+): void {
+  const idCanonico = normalizarRequestId(requestId);
+  if (!usuarioId || !chavePedido || !idCanonico) {
+    throw new Error('Intenção inválida para encerrar presença de aluno');
+  }
+  const armazenamento = exigirStorageDuravel(storage);
+  const atual = lerEstadoAlunosPendente(usuarioId, armazenamento);
+  if (!atual) return;
+  const pedidos = atual.pedidos.filter(
+    (pedido) => pedido.chavePedido !== chavePedido || pedido.requestId !== idCanonico,
+  );
+  if (pedidos.length === atual.pedidos.length) return;
+
+  const chaveStorage = chaveStorageAlunosPendente(usuarioId);
+  if (pedidos.length > 0) {
+    armazenamento.setItem(chaveStorage, JSON.stringify({ versao: 1, pedidos } satisfies EstadoAlunosPendente));
+    return;
+  }
+  try {
+    armazenamento.removeItem(chaveStorage);
+  } catch (erro) {
+    if (lerEstadoAlunosPendente(usuarioId, armazenamento) !== null) throw erro;
+  }
 }
 
 export function requestIdDoPedido(
@@ -395,6 +777,73 @@ export function interpretarEEncerrarPedido(
   return recibo;
 }
 
+/**
+ * Consulta o ledger antes de uma nova escrita. Um terminal perdido na rede é
+ * limpo sem exigir que a UI ainda consiga reproduzir o clique original.
+ */
+export async function reconciliarIntencoesPendentes(
+  intencoes: ReadonlyArray<IntencaoPendentePresenca>,
+  consultarStatus: (
+    requestId: string,
+  ) => PromiseLike<{ data: unknown; error: unknown }>,
+  aoTerminal: (intencao: IntencaoPendentePresenca, recibo: ReciboPresenca) => void,
+  storage: ArmazenamentoPedidos | null = storagePadrao(),
+  memoria: Map<string, string> = pedidosEmVoo,
+): Promise<ResumoReconciliacaoPendentes> {
+  const porRequestId = new Map<string, IntencaoPendentePresenca>();
+  for (const intencao of intencoes) {
+    const requestId = normalizarRequestId(intencao.requestId);
+    if (!requestId || !intencao.chavePedido) {
+      throw new Error('Intenção pendente inválida para reconciliar presença');
+    }
+    const existente = porRequestId.get(requestId);
+    if (existente && existente.chavePedido !== intencao.chavePedido) {
+      throw new Error('request_id pendente associado a intenções diferentes');
+    }
+    porRequestId.set(requestId, { chavePedido: intencao.chavePedido, requestId });
+  }
+
+  const resumo: ResumoReconciliacaoPendentes = {
+    terminais: 0,
+    pendentes: 0,
+    aplicados: 0,
+    rejeitados: 0,
+    falhas: [],
+  };
+  for (const intencao of porRequestId.values()) {
+    try {
+      const resposta = await consultarStatus(intencao.requestId);
+      if (resposta.error) throw resposta.error;
+      const recibo = interpretarEEncerrarPedido(
+        intencao.chavePedido,
+        intencao.requestId,
+        resposta.data,
+        storage,
+        memoria,
+      );
+      if (STATUS_RESOLVIDO.has(recibo.status)) {
+        resumo.terminais += 1;
+        resumo.aplicados += recibo.aplicados;
+        resumo.rejeitados += recibo.rejeitados;
+        try {
+          aoTerminal(intencao, recibo);
+        } catch (e) {
+          resumo.falhas.push({ requestId: intencao.requestId, mensagem: mensagemDeErro(e) });
+        }
+      } else {
+        resumo.pendentes += 1;
+      }
+    } catch (e) {
+      resumo.falhas.push({ requestId: intencao.requestId, mensagem: mensagemDeErro(e) });
+    }
+  }
+  return resumo;
+}
+
+export function reciboAplicouAlteracao(recibo: ReciboPresenca): boolean {
+  return (recibo.status === 'concluido' || recibo.status === 'parcial') && recibo.aplicados > 0;
+}
+
 export function descreverErrosDoRecibo(recibo: ReciboPresenca, opcoes?: { comAluno?: boolean }): string {
   if (recibo.erros.length === 0) return '';
   return recibo.erros
@@ -413,4 +862,8 @@ export function mensagemDeErro(e: unknown): string {
     return String((e as Record<string, unknown>).message);
   }
   return String(e);
+}
+
+export function falhaEhRespostaInvalida(e: unknown): boolean {
+  return mensagemDeErro(e).startsWith('Resposta inesperada do banco:');
 }

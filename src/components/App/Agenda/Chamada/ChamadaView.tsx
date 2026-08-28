@@ -33,6 +33,7 @@ interface Props {
  */
 export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, onSubVisaoChange }: Props) {
   const [subVisao, setSubVisao] = useState<SubVisao>('dia');
+  const [versaoChamada, setVersaoChamada] = useState(0);
 
   const trocarSubVisao = useCallback(
     (nova: SubVisao) => {
@@ -54,7 +55,12 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
   // Drawer do lead experimental (separado do drawer da aula).
   const [drawerLead, setDrawerLead] = useState<{ lead: LeadExperimentalAgenda; aula: AulaAgenda } | null>(null);
 
-  const { salvando, registrar, cancelarAula, registrarPresencaExperimental } = useChamadaAcoes(recarregar);
+  const aoConcluir = useCallback(() => {
+    recarregar();
+    setVersaoChamada((versao) => versao + 1);
+  }, [recarregar]);
+
+  const { salvando, registrar, cancelarAula, registrarPresencaExperimental } = useChamadaAcoes(aoConcluir);
 
   const abrirDrawer = useCallback((aula: AulaAgenda, dia?: string) => {
     setDrawerAula(aula);
@@ -153,6 +159,7 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
           onAbrirDia={onIrParaDia}
           onAbrirDrawer={(a, dia) => abrirDrawer(a, dia)}
           onAbrirDrawerLead={abrirDrawerLead}
+          refreshToken={versaoChamada}
         />
       )}
 
@@ -208,7 +215,7 @@ export function ChamadaView({ data, unidadeId, aulas, recarregar, onIrParaDia, o
         salvando={salvando}
         onMarcar={registrarPresencaExperimental}
         onFechar={() => setDrawerLead(null)}
-        onSalvo={() => { setDrawerLead(null); recarregar(); }}
+        onSalvo={() => { setDrawerLead(null); aoConcluir(); }}
       />
     </div>
   );
