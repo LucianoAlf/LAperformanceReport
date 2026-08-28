@@ -24,6 +24,9 @@ const migrations = [
   'supabase/migrations/20260828005709_presenca_slot_lock_core.sql',
 ];
 const portMigration = 'supabase/migrations/20260828005715_presenca_portas_reservadas_duais.sql';
+const rolloutMigration = 'supabase/migrations/20260827031600_presenca_rollout_config.sql';
+const publicationMigration =
+  'supabase/migrations/20260828005722_presenca_roster_v2_publicacao_gatada.sql';
 
 let legacyBefore;
 
@@ -723,4 +726,129 @@ test('apply do owner e do service role usa somente o core v2 e e idempotente', (
     select public.app_aplicar_comando_presenca_v2('${serviceRequest}');
   `)));
   assert.equal(serviceApply.status, 'concluido');
+});
+
+test('publicacao gatada integra Teacher e Fabio aos cores reais sem dubles', () => {
+  psql(String.raw`
+    create or replace function public.app_minha_agenda_sessao(p_data date default current_date)
+    returns jsonb language sql stable security definer
+    set search_path = pg_catalog, public as $$
+      select jsonb_build_object('fonte', 'legado', 'data', p_data)
+    $$;
+    create or replace function public.fabio_confirmar_chamada_acao(
+      p_acao_id uuid, p_professor_id integer, p_wa_message_id text
+    ) returns jsonb language sql security definer
+    set search_path = pg_catalog, public as $$
+      select jsonb_build_object('codigo', 'legado')
+    $$;
+    create or replace function public.fabio_emitir_presenca_por_registro(p_registro_id uuid)
+    returns jsonb language sql security definer
+    set search_path = pg_catalog, public as $$
+      select jsonb_build_object('status', 'legado')
+    $$;
+  `);
+  psql(readFileSync(rolloutMigration, 'utf8'));
+  psql(readFileSync(publicationMigration, 'utf8'));
+
+  const shadowRequest = '73000000-0000-4000-8000-000000000001';
+  const shadow = json(psql(asAuthenticated(AUTH_A, String.raw`
+    select public.app_registrar_presencas_aula(
+      10, array[102], '${shadowRequest}'
+    );
+  `)));
+  assert.equal(shadow.status, 'concluido');
+  assert.equal(
+    psql(`select tipo from public.presenca_comandos where request_id='${shadowRequest}';`),
+    'la_teacher_aula',
+  );
+
+  psql(String.raw`
+    update public.presenca_rollout_config
+       set modo='canonico_v2'
+     where unidade_id='${UNIDADE}' and superficie='la_teacher';
+    delete from public.aluno_presenca;
+  `);
+
+  const teacherRequest = '73000000-0000-4000-8000-000000000002';
+  const teacher = json(psql(asAuthenticated(AUTH_A, String.raw`
+    select public.app_registrar_presencas_aula(
+      10, array[102], '${teacherRequest}'
+    );
+  `)));
+  assert.equal(teacher.status, 'concluido');
+  assert.equal(
+    psql(`select tipo from public.presenca_comandos where request_id='${teacherRequest}';`),
+    'la_teacher_aula',
+  );
+  assert.deepEqual(json(psql(String.raw`
+    select jsonb_object_agg(aluno_id, status_presenca order by aluno_id)
+      from public.aluno_presenca where aula_emusys_id=10;
+  `)), { 101: 'presente', 102: 'falta' });
+
+  const retryRequest = '73000000-0000-4000-8000-000000000003';
+  psql(appCreate(AUTH_A, retryRequest, [101]));
+  psql(String.raw`
+    update public.presenca_sync_cobertura
+       set status='falhou', snapshot_hash=null
+     where run_id='${RUN}';
+  `);
+  const retryable = json(psql(asAuthenticated(AUTH_A, String.raw`
+    select public.app_registrar_presencas_aula(
+      10, array[101], '${retryRequest}'
+    );
+  `)));
+  assert.equal(retryable.status, 'recebido');
+  assert.equal(retryable.retryable, true);
+  assert.equal(retryable.erro_codigo, '40001');
+  psql(String.raw`
+    update public.presenca_sync_cobertura
+       set status='concluida', snapshot_hash='${HASH}'
+     where run_id='${RUN}';
+  `);
+  assert.equal(json(psql(asAuthenticated(AUTH_A, String.raw`
+    select public.app_registrar_presencas_aula(
+      10, array[101], '${retryRequest}'
+    );
+  `))).status, 'concluido');
+
+  const actionId = '74000000-0000-4000-8000-000000000001';
+  psql(String.raw`
+    insert into public.fabio_acoes_pendentes(
+      id, professor_id, tipo, estado, expira_em, aula_id, candidatas, payload
+    ) values (
+      '${actionId}', 7, 'confirmar_chamada', 'aberta',
+      now() + interval '1 day', 10, array[10],
+      jsonb_build_object('alunos_ausentes', jsonb_build_array(102))
+    );
+  `);
+  const action = json(psql(asService(String.raw`
+    select public.fabio_confirmar_chamada_acao(
+      '${actionId}', 7, 'wa-integrado-1'
+    );
+  `)));
+  assert.equal(action.codigo, 'chamada_confirmada');
+  assert.equal(action.escrita.status, 'concluido');
+  assert.equal(
+    psql(`select estado from public.fabio_acoes_pendentes where id='${actionId}';`),
+    'resolvida',
+  );
+
+  const parentId = '75000000-0000-4000-8000-000000000001';
+  psql(String.raw`
+    insert into public.fabio_registros_aula(
+      id, parent_id, modo_entrada, aula_id, aluno_id, professor_id, campos
+    ) values
+      ('${parentId}', null, 'manual', 10, null, 7, '{}'::jsonb),
+      ('75000000-0000-4000-8000-000000000002', '${parentId}', 'manual',
+       10, 101, 7, jsonb_build_object('presenca', 'presente'));
+  `);
+  const record = json(psql(asService(String.raw`
+    select public.fabio_emitir_presenca_por_registro('${parentId}');
+  `)));
+  assert.equal(record.status, 'concluido');
+  assert.equal(record.fonte, 'professor_la_teacher');
+  assert.equal(psql(String.raw`
+    select coalesce((campos ->> 'presenca_emitida')::boolean, false)::text
+      from public.fabio_registros_aula where id='${parentId}';
+  `), 'true');
 });
