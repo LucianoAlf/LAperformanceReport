@@ -60,8 +60,8 @@ function migrationV2() {
 
 function optimizationMigrations() {
   return [
-    '20260828081000_presenca_ocorrencia_canonica_v2_indices.sql',
-    '20260828081500_presenca_ocorrencia_canonica_v2_otimizada.sql',
+    '20260828083539_presenca_ocorrencia_canonica_v2_indices.sql',
+    '20260828083733_presenca_ocorrencia_canonica_v2_otimizada.sql',
   ].map((name) => join(MIGRATIONS, name));
 }
 

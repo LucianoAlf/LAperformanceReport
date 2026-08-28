@@ -1,5 +1,5 @@
--- Materializa uma unica vez a fatia unidade/dia da ocorrencia canonica.
--- Evita que o planner reexecute a view para cada candidato de pendencia.
+-- Torna explicito o escopo ja garantido pela slot_key para que o planner
+-- limite a view canonica antes do join de pendencias. Sem mudanca de retorno.
 
 CREATE OR REPLACE FUNCTION public.fn_presenca_pendencias_do_dia_v2(p_unidade_id uuid, p_data date)
  RETURNS jsonb
@@ -104,21 +104,7 @@ begin
   ) x;
 
   if v_status = 'atualizados' then
-    with ocorrencias as materialized (
-      select
-        slot_key,
-        unidade_id,
-        data_aula,
-        resultado_canonico,
-        fecha_chamada,
-        fonte_decisao,
-        decidido_em,
-        possui_conflito,
-        regra_versao
-      from public.vw_presenca_ocorrencia_canonica_v2
-      where unidade_id = p_unidade_id
-        and data_aula = p_data
-    ), candidatos as (
+    with candidatos as (
       select
         public.fn_presenca_slot_key_v2(
           r.aluno_id,
@@ -186,7 +172,7 @@ begin
       from pares p
       join public.alunos al on al.id = p.aluno_id
       left join public.professores pr on pr.id = p.professor_id
-      left join ocorrencias o
+      left join public.vw_presenca_ocorrencia_canonica_v2 o
         on o.slot_key = p.slot_key
        and o.unidade_id = p.unidade_id
        and o.data_aula = p_data
@@ -240,4 +226,3 @@ begin
   );
 end;
 $function$;
-

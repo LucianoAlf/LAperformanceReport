@@ -5,9 +5,9 @@ import test from 'node:test';
 const migrationPath =
   'supabase/migrations/20260827031300_presenca_consumidores_numericos_v2.sql';
 const performanceMigrationPath =
-  'supabase/migrations/20260828093000_presenca_consumidores_periodo_materializados.sql';
+  'supabase/migrations/20260828091909_presenca_consumidores_periodo_materializados.sql';
 const agentAclMigrationPath =
-  'supabase/migrations/20260828093500_presenca_metrica_acl_agentes.sql';
+  'supabase/migrations/20260828092831_presenca_metrica_acl_agentes.sql';
 
 function migration() {
   assert.ok(existsSync(migrationPath), `migration ausente: ${migrationPath}`);
