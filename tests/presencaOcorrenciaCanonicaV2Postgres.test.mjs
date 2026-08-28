@@ -72,6 +72,13 @@ function conflictSemanticsMigration() {
   return matches.length === 1 ? join(MIGRATIONS, matches[0]) : null;
 }
 
+function snapshotCoerenteMigration() {
+  const matches = readdirSync(MIGRATIONS)
+    .filter((name) => /^\d+_presenca_snapshot_coerente\.sql$/u.test(name));
+  assert.ok(matches.length <= 1, `mais de uma migration de snapshot encontrada: ${matches.join(', ')}`);
+  return matches.length === 1 ? join(MIGRATIONS, matches[0]) : null;
+}
+
 const schema = String.raw`
 create extension if not exists unaccent;
 create role anon nologin;
@@ -150,7 +157,18 @@ create table public.aula_alunos_emusys (
   unidade_id uuid not null,
   aula_emusys_id integer not null,
   aluno_id integer,
-  aluno_chave text
+  aluno_chave text,
+  ultimo_run_visto uuid,
+  updated_at timestamptz default now()
+);
+
+create table public.presenca_sync_execucoes (
+  id uuid primary key,
+  unidade_id uuid not null,
+  data_alvo date not null,
+  status text not null,
+  criada_em timestamptz not null,
+  finalizada_em timestamptz
 );
 
 create or replace function public.fn_presenca_e_forte(p_fonte text)
@@ -211,11 +229,32 @@ values
   (22, 1022, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 05:00-03', '2026-08-25 06:00-03', 'turma', 'normal', 'Piano', 516),
   (23, 1023, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 04:00-03', '2026-08-25 05:00-03', 'individual', 'normal', 'Data resolvida', 517),
   (24, 1024, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 03:00-03', '2026-08-25 04:00-03', 'individual', 'normal', 'Slot multidata', 518),
-  (25, 1025, '10000000-0000-0000-0000-000000000001', '2026-08-26', '2026-08-25 03:00-03', '2026-08-25 04:00-03', 'individual', 'normal', 'Slot multidata', 518);
+  (25, 1025, '10000000-0000-0000-0000-000000000001', '2026-08-26', '2026-08-25 03:00-03', '2026-08-25 04:00-03', 'individual', 'normal', 'Slot multidata', 518),
+  (26, 1026, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 02:00-03', '2026-08-25 03:00-03', 'turma', 'normal', 'Snapshot coerente', 519),
+  (27, 1027, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 02:00-03', '2026-08-25 03:00-03', 'individual', 'normal', 'Snapshot coerente', 519);
 
 update public.aulas_emusys set cancelada = true where id = 16;
 update public.aulas_emusys set justificada = true where id = 17;
 update public.aulas_emusys set justificada = true where id = 20;
+
+insert into public.presenca_sync_execucoes
+  (id, unidade_id, data_alvo, status, criada_em, finalizada_em)
+values
+  ('40000000-0000-0000-0000-000000000001',
+   '10000000-0000-0000-0000-000000000001', '2026-08-25', 'concluida',
+   '2026-08-25 03:00:00-03', '2026-08-25 03:02:00-03');
+
+insert into public.aula_alunos_emusys
+  (id, unidade_id, aula_emusys_id, aluno_id, ultimo_run_visto, updated_at)
+values
+  (26, '10000000-0000-0000-0000-000000000001', 26, 126,
+   '40000000-0000-0000-0000-000000000001', '2026-08-25 03:02:00-03'),
+  (27, '10000000-0000-0000-0000-000000000001', 27, 126,
+   '40000000-0000-0000-0000-000000000001', '2026-08-25 03:02:00-03'),
+  (28, '10000000-0000-0000-0000-000000000001', 26, 127,
+   '40000000-0000-0000-0000-000000000001', '2026-08-25 03:02:00-03'),
+  (29, '10000000-0000-0000-0000-000000000001', 27, 127,
+   '40000000-0000-0000-0000-000000000001', '2026-08-25 03:02:00-03');
 
 insert into public.presenca_politicas_confiabilidade values
   ('30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001',
@@ -263,7 +302,11 @@ values
   ('00000000-0000-0000-0000-000000000025', 122, 517, '10000000-0000-0000-0000-000000000001', '2026-08-24', '04:00', 'presente', 'emusys', null, 23, 'Data resolvida', null, 'presente', '2026-08-25 05:05-03'),
   ('00000000-0000-0000-0000-000000000026', 124, 518, '10000000-0000-0000-0000-000000000001', '2026-08-25', '03:00', 'ausente', 'emusys', null, 24, 'Slot multidata', null, 'ausente', '2026-08-25 04:05-03'),
   ('00000000-0000-0000-0000-000000000027', 124, 518, '10000000-0000-0000-0000-000000000001', '2026-08-26', '03:00', 'presente', 'emusys', null, 25, 'Slot multidata', null, 'presente', '2026-08-25 04:06-03'),
-  ('00000000-0000-0000-0000-000000000028', 123, 501, '20000000-0000-0000-0000-000000000002', '2026-08-26', '10:00', 'presente', 'agenda_secretaria', '2026-08-26 11:00-03', 1, 'Piano', 'presente', null, null);
+  ('00000000-0000-0000-0000-000000000028', 123, 501, '20000000-0000-0000-0000-000000000002', '2026-08-26', '10:00', 'presente', 'agenda_secretaria', '2026-08-26 11:00-03', 1, 'Piano', 'presente', null, null),
+  ('00000000-0000-0000-0000-000000000029', 126, 519, '10000000-0000-0000-0000-000000000001', '2026-08-25', '02:00', 'ausente', 'agenda_secretaria', '2026-08-25 03:01-03', 26, 'Snapshot coerente', 'falta', 'presente', '2026-08-25 03:00:10-03'),
+  ('00000000-0000-0000-0000-000000000030', 126, 519, '10000000-0000-0000-0000-000000000001', '2026-08-25', '02:00', 'ausente', 'agenda_secretaria', '2026-08-25 03:01-03', 27, 'Snapshot coerente', 'falta', 'ausente', '2026-08-25 03:00:11-03'),
+  ('00000000-0000-0000-0000-000000000031', 127, 519, '10000000-0000-0000-0000-000000000001', '2026-08-25', '02:00', 'ausente', 'agenda_secretaria', '2026-08-25 03:01-03', 26, 'Snapshot coerente', 'falta', 'presente', '2026-08-25 03:00:10-03'),
+  ('00000000-0000-0000-0000-000000000032', 127, 519, '10000000-0000-0000-0000-000000000001', '2026-08-25', '02:00', 'ausente', 'agenda_secretaria', '2026-08-25 03:01-03', 27, 'Snapshot coerente', 'falta', 'presente', '2026-08-25 03:00:11-03');
 `;
 
 test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () => {
@@ -417,6 +460,9 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
     if (conflictHotfix && existsSync(conflictHotfix)) {
       psql(container, readFileSync(conflictHotfix, 'utf8'));
     }
+    const snapshotCoerente = snapshotCoerenteMigration();
+    assert.ok(snapshotCoerente, 'migration de snapshot coerente ausente');
+    psql(container, readFileSync(snapshotCoerente, 'utf8'));
     rows = JSON.parse(psql(container, String.raw`
       select coalesce(json_agg(to_jsonb(v) order by
         v.unidade_id, v.data_aula, v.data_hora_inicio, v.aluno_id, v.curso_nome, v.slot_key
@@ -485,7 +531,7 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
     assert.deepEqual(byAluno(101)[0].ids_aulas_emusys, [1, 2, 3]);
     assert.equal(byAluno(101)[0].resultado_canonico, 'presente');
     assert.equal(byAluno(101)[0].possui_conflito, false, 'presente vence ausencia bruta entre gemeas Emusys');
-    assert.match(byAluno(101)[0].regra_versao, /presenca-ocorrencia-canonica-v2\.2/u);
+    assert.match(byAluno(101)[0].regra_versao, /presenca-ocorrencia-canonica-v2\.3/u);
     assert.equal(byAluno(102).length, 2, 'dois cursos do mesmo aluno permanecem dois slots');
     assert.equal(byAluno(102).find((row) => row.curso_nome === 'Violao').resultado_canonico, 'indeterminado');
     assert.equal(byAluno(102).find((row) => row.curso_nome === 'Experimental').resultado_canonico, 'presente');
@@ -529,6 +575,19 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
     assert.deepEqual(byAluno(124)[0].ids_aulas_emusys, [24, 25]);
     assert.equal(byAluno(124)[0].resultado_canonico, 'presente');
     assert.equal(byAluno(124)[0].possui_conflito, false, 'presente vence ausencia bruta tambem no ramo multidata');
+
+    assert.equal(byAluno(126).length, 1);
+    assert.equal(
+      byAluno(126)[0].possui_conflito,
+      false,
+      'presenca e ausencia gêmeas no mesmo snapshot nao podem gerar conflito operacional',
+    );
+    assert.equal(byAluno(127).length, 1);
+    assert.equal(
+      byAluno(127)[0].possui_conflito,
+      true,
+      'duas presencas gêmeas no mesmo snapshot continuam sendo contradicao real',
+    );
 
     assert.equal(byAluno(111)[0].resultado_canonico, 'falta');
     assert.equal(byAluno(111)[0].fecha_chamada, false, 'ausencia Emusys nao fecha chamada sozinha');
