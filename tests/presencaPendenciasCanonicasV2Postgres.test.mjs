@@ -10,6 +10,7 @@ const ocorrenciaMigration = join(ROOT, 'supabase', 'migrations', '20260827030100
 const pendenciasMigration = join(ROOT, 'supabase', 'migrations', '20260827031000_presenca_pendencias_canonicas_v2.sql');
 const agentesMigration = join(ROOT, 'supabase', 'migrations', '20260827031200_presenca_contexto_agentes_v1.sql');
 const pendenciasEscopoMigration = join(ROOT, 'supabase', 'migrations', '20260828085000_presenca_pendencias_view_escopo.sql');
+const pendenciasMaterializadaMigration = join(ROOT, 'supabase', 'migrations', '20260828090000_presenca_pendencias_view_materializada.sql');
 const U_A = '11111111-1111-1111-1111-111111111111';
 const U_B = '22222222-2222-2222-2222-222222222222';
 const U_C = '33333333-3333-3333-3333-333333333333';
@@ -205,6 +206,7 @@ test('Agenda e Sol compartilham membros e bloqueiam roster ou sync inseguros', (
     psql(container, readFileSync(pendenciasMigration, 'utf8'));
     psql(container, readFileSync(agentesMigration, 'utf8'));
     psql(container, readFileSync(pendenciasEscopoMigration, 'utf8'));
+    psql(container, readFileSync(pendenciasMaterializadaMigration, 'utf8'));
 
     const pendenciasDef = psql(container, String.raw`
       select pg_get_functiondef(
@@ -214,6 +216,10 @@ test('Agenda e Sol compartilham membros e bloqueiam roster ou sync inseguros', (
     assert.match(
       pendenciasDef,
       /o\.slot_key\s*=\s*p\.slot_key[\s\S]*o\.unidade_id\s*=\s*p\.unidade_id[\s\S]*o\.data_aula\s*=\s*p_data/iu,
+    );
+    assert.match(
+      pendenciasDef,
+      /with\s+ocorrencias\s+as\s+materialized\s*\([\s\S]*where\s+unidade_id\s*=\s*p_unidade_id[\s\S]*data_aula\s*=\s*p_data/iu,
     );
 
     const a = lastJson(psql(container, `select public.fn_presenca_pendencias_do_dia_v2('${U_A}','2026-08-25');`));
