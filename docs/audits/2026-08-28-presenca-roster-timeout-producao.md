@@ -38,9 +38,10 @@ sete dias e não deve ser antecipada por migration ou alteração direta.
 | A view de saúde juntava confirmações somente por `aula_id` e tratava `sync_ausente_emusys` como origem humana | Reagendamentos corretamente invalidados apareciam como três presenças e dois cancelamentos “revertidos” no Recreio | A migration `20260828095344` retirou o falso positivo inicial e separou cancelamento humano de sync |
 | Escritores de ponto atualizavam status e horário da resposta, mas podiam manter data/unidade da ocorrência antiga; o LA Teacher também bloqueava uma nova resposta pelo `first_write_wins` | Após reagendamento, uma confirmação nova podia ficar invisível para a saúde ou uma confirmação antiga podia creditar o ponto da ocorrência nova | A migration `20260828101455` canonicaliza a ocorrência, invalida a antiga nas duas views e fecha o kernel; `20260828102034` serializa a resposta do LA Teacher contra o reagendamento e torna a fronteira auditada fail-closed |
 
-O fluxo convergido entrou em `main` nos PRs #246–#265. As migrations
-`20260828101455` e `20260828102034` fecham os bloqueios encontrados na revisão
-posterior do PR #265.
+O fluxo convergido entrou em `main` nos PRs #246–#265. O PR #266 leva ao
+repositório as migrations `20260828101455` e `20260828102034`, que fecham os
+bloqueios encontrados na revisão posterior do PR #265 e já foram aplicadas no
+banco compartilhado durante a correção do incidente.
 
 ## Objetos publicados
 
