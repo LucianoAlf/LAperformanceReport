@@ -451,6 +451,9 @@ Prove in disposable Postgres:
 legado returns pre-existing roster path
 sombra returns the same operational payload and skips discarded heavy query
 canonico_v2 reads vw_aula_roster_operacional_v2
+LA Teacher three-argument writer stays on v1 in sombra and routes to v2 only in canonico_v2
+Fabio record/action writers stay on v1 in sombra and route to v2 only in canonico_v2
+writer routing preserves the existing signatures, return shapes and ACLs
 rollback changes no roster row and deletes no event
 all 21 rollout rows remain sombra after migration
 ```
@@ -460,6 +463,11 @@ all 21 rollout rows remain sombra after migration
 Create private canonical functions reading v2 and update only the
 `canonico_v2` branch of adapters. Preserve Hugo's optimization: LA Teacher
 `sombra` returns legacy directly and does not calculate/discard canonical JSON.
+Add governed writer adapters for the existing LA Teacher three-argument RPC and
+the committed Fabio record/action entrypoints: `legado`/`sombra` delegate to the
+unchanged v1 bodies, while `canonico_v2` delegates only to the reserved v2
+ports. Keep function identity arguments, result contracts and ACLs unchanged;
+do not route cached clients globally and do not redefine the generic v1 cores.
 Do not update any `presenca_rollout_config.modo`.
 
 - [ ] **Step 3: Run GREEN and commit**
