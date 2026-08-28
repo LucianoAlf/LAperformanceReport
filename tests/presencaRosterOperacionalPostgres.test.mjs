@@ -63,6 +63,10 @@ function migrationRosterV2() {
   return join(MIGRATIONS, nomes[0]);
 }
 
+function migrationRosterLinear() {
+  return join(MIGRATIONS, '20260828043000_presenca_roster_reconciliacao_linear.sql');
+}
+
 function jsonUltimaLinha(output) {
   return JSON.parse(output.split(/\r?\n/u).at(-1));
 }
@@ -160,6 +164,7 @@ test('roster completo inativa logicamente e estados inseguros nunca viram penden
     psql(container, readFileSync(migrationSyncCobertura(), 'utf8'));
     psql(container, readFileSync(migrationRoster(), 'utf8'));
     psql(container, readFileSync(migrationRosterV2(), 'utf8'));
+    psql(container, readFileSync(migrationRosterLinear(), 'utf8'));
     psql(container, String.raw`
       insert into public.aula_alunos_emusys(
         aula_emusys_id, unidade_id, aluno_chave, aluno_emusys_id, aluno_id, aluno_nome
