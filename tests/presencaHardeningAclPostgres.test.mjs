@@ -19,6 +19,7 @@ const migrations = [
   'supabase/migrations/20260827030700_presenca_comando_porta_professor.sql',
   'supabase/migrations/20260827030800_presenca_comando_portas_fabio.sql',
   'supabase/migrations/20260827030900_presenca_comando_overloads_compatibilidade.sql',
+  'supabase/migrations/20260827223000_presenca_request_id_arbitragem.sql',
   'supabase/migrations/20260828005703_presenca_roster_v2_expansao_aditiva.sql',
   'supabase/migrations/20260828005709_presenca_slot_lock_core.sql',
 ];
@@ -517,7 +518,7 @@ test('A-B-A usa tres UUIDs e retry do primeiro nao duplica linhas ou eventos', (
   assert.match(conflito, /request_id_reutilizado/u);
 });
 
-test('retry existente chega ao apply e ganha recibo terminal quando o roster deixa de ser publicavel', () => {
+test('roster temporariamente oculto preserva o request para retry sem recibo terminal falso', () => {
   const requestId = '30000000-0000-4000-8000-000000000010';
   const criado = json(psql(appCreate(AUTH_A, requestId, [102])));
   assert.equal(criado.status, 'recebido');
@@ -529,13 +530,12 @@ test('retry existente chega ao apply e ganha recibo terminal quando o roster dei
   `);
 
   let repetido;
-  let recibo;
   let falha;
   try {
     repetido = json(psql(appCreate(AUTH_A, requestId, [102])));
-    recibo = json(psql(appApply(AUTH_A, requestId)));
+    psql(appApply(AUTH_A, requestId));
   } catch (error) {
-    falha = error;
+    falha = String(error);
   } finally {
     psql(String.raw`
       update public.presenca_sync_cobertura
@@ -544,22 +544,54 @@ test('retry existente chega ao apply e ganha recibo terminal quando o roster dei
     `);
   }
 
-  assert.ifError(falha);
   assert.equal(repetido.status, 'recebido');
-  assert.equal(recibo.status, 'falhou');
-  assert.equal(recibo.aplicados, 0);
-  assert.equal(recibo.rejeitados, 2);
-  assert.deepEqual(recibo.erros, [
-    { aluno_id: 101, codigo: 'ROSTER_NAO_CONFIRMADO' },
-    { aluno_id: 102, codigo: 'ROSTER_NAO_CONFIRMADO' },
-  ]);
+  assert.match(falha, /40001/u);
   assert.equal(
     psql(`select status from public.presenca_comandos where request_id='${requestId}';`),
-    'falhou',
+    'recebido',
   );
+  assert.equal(psql(String.raw`
+    select count(*) from public.presenca_acao_eventos
+     where request_id='${requestId}' and tipo in ('concluido','falhou');
+  `), '0');
+
+  const retry = json(psql(appApply(AUTH_A, requestId)));
+  assert.notEqual(retry.status, 'recebido');
 });
 
-test('porta monta o roster mantendo os locks ate o core concluir a criacao', async () => {
+test('apply v2 rejeita comando v1 sem terminalizar ou consumir o recibo legado', () => {
+  const requestId = '30000000-0000-4000-8000-000000000099';
+  psql(String.raw`
+    insert into public.presenca_comandos(
+      request_id, tipo, fonte, auth_user_id, usuario_id, unidade_id,
+      aula_id, professor_id, data_referencia, payload_hash, itens_total
+    ) values (
+      '${requestId}', 'professor_aula', 'professor_la_teacher', '${AUTH_A}',
+      1, '${UNIDADE}', 10, 7, current_date, repeat('f', 64), 0
+    );
+    insert into public.presenca_acao_eventos(
+      request_id, sequencia, tipo, fonte, auth_user_id, usuario_id,
+      unidade_id, aula_id
+    ) values (
+      '${requestId}', 0, 'recebido', 'professor_la_teacher', '${AUTH_A}',
+      1, '${UNIDADE}', 10
+    );
+  `);
+
+  const falha = psqlFailure(appApply(AUTH_A, requestId));
+  assert.match(falha, /22023/u);
+  assert.match(falha, /comando_nao_pertence_a_porta_v2/u);
+  assert.equal(
+    psql(`select status from public.presenca_comandos where request_id='${requestId}';`),
+    'recebido',
+  );
+  assert.equal(psql(String.raw`
+    select count(*) from public.presenca_acao_eventos
+     where request_id='${requestId}' and tipo in ('concluido','falhou');
+  `), '0');
+});
+
+test('porta monta o roster sob lock e escritor desconhecido falha rapido com 55P03', async () => {
   psql(String.raw`
     create or replace function public.teste_presenca_atrasar_criacao_v2()
     returns trigger language plpgsql as $$
@@ -581,15 +613,19 @@ test('porta monta o roster mantendo os locks ate o core concluir a criacao', asy
        set updated_at = clock_timestamp()
      where aula_emusys_id = 10 and aluno_id = 102
     returning aluno_id;
-  `);
+  `).then(
+    (output) => ({ ok: true, output }),
+    (error) => ({ ok: false, error: String(error) }),
+  );
   const estadoEm300ms = await Promise.race([
     mutacao.then(() => 'concluida'),
     delay(300).then(() => 'bloqueada'),
   ]);
-  assert.equal(estadoEm300ms, 'bloqueada');
+  assert.equal(estadoEm300ms, 'concluida');
   const [resultadoCriacao, resultadoMutacao] = await Promise.all([criacao, mutacao]);
   assert.equal(json(resultadoCriacao).status, 'recebido');
-  assert.match(resultadoMutacao, /102/u);
+  assert.equal(resultadoMutacao.ok, false);
+  assert.match(resultadoMutacao.error, /55P03/u);
 
   psql(String.raw`
     drop trigger trg_teste_presenca_atrasar_criacao_v2 on public.presenca_comandos;

@@ -18,7 +18,6 @@ declare
   v_aula public.aulas_emusys%rowtype;
   v_professor_id integer;
   v_ausentes integer[] := coalesce(p_alunos_ausentes, '{}'::integer[]);
-  v_roster_key bigint;
   v_slot_key bigint;
   v_slot_key_atual bigint;
   v_itens jsonb;
@@ -86,20 +85,7 @@ begin
     raise exception 'aula_nao_pertence_ao_professor' using errcode = '42501';
   end if;
 
-  v_roster_key := public.fn_presenca_roster_lock_key_v2(v_aula.id);
-  v_slot_key := public.fn_presenca_slot_lock_key_v2(
-    v_aula.unidade_id,
-    v_aula.professor_id,
-    v_aula.data_hora_inicio,
-    v_aula.data_hora_fim,
-    v_aula.curso_nome
-  );
-  if v_roster_key = v_slot_key then
-    perform pg_advisory_xact_lock(v_roster_key);
-  else
-    perform pg_advisory_xact_lock(least(v_roster_key, v_slot_key));
-    perform pg_advisory_xact_lock(greatest(v_roster_key, v_slot_key));
-  end if;
+  v_slot_key := public.fn_presenca_bloquear_slot_rosters_v2(v_aula.id);
 
   select * into v_aula
     from public.aulas_emusys a
@@ -176,7 +162,6 @@ as $function$
 declare
   v_aula public.aulas_emusys%rowtype;
   v_ausentes integer[] := coalesce(p_alunos_ausentes, '{}'::integer[]);
-  v_roster_key bigint;
   v_slot_key bigint;
   v_slot_key_atual bigint;
   v_itens jsonb;
@@ -250,20 +235,7 @@ begin
     raise exception 'aula_nao_pertence_ao_professor' using errcode = '42501';
   end if;
 
-  v_roster_key := public.fn_presenca_roster_lock_key_v2(v_aula.id);
-  v_slot_key := public.fn_presenca_slot_lock_key_v2(
-    v_aula.unidade_id,
-    v_aula.professor_id,
-    v_aula.data_hora_inicio,
-    v_aula.data_hora_fim,
-    v_aula.curso_nome
-  );
-  if v_roster_key = v_slot_key then
-    perform pg_advisory_xact_lock(v_roster_key);
-  else
-    perform pg_advisory_xact_lock(least(v_roster_key, v_slot_key));
-    perform pg_advisory_xact_lock(greatest(v_roster_key, v_slot_key));
-  end if;
+  v_slot_key := public.fn_presenca_bloquear_slot_rosters_v2(v_aula.id);
 
   select * into v_aula
     from public.aulas_emusys a
@@ -360,6 +332,11 @@ begin
      and v_comando.auth_user_id is distinct from auth.uid() then
     raise exception 'sem_permissao_comando' using errcode = '42501';
   end if;
+  if v_comando.tipo not in (
+    'la_teacher_aula', 'fabio_aula', 'fabio_audio_aula', 'fabio_manual_aula'
+  ) then
+    raise exception 'comando_nao_pertence_a_porta_v2' using errcode = '22023';
+  end if;
   if v_comando.status in ('concluido', 'parcial', 'falhou') then
     return public.app_status_comando_presenca_v1(p_request_id);
   end if;
@@ -383,6 +360,10 @@ begin
           'item_fora_do_roster_v2'
         ) then 'ROSTER_NAO_CONFIRMADO'
         when v_mensagem = 'slot_cancelado_ou_justificado' then 'AULA_CANCELADA'
+        when v_mensagem = 'chamada_ainda_nao_disponivel' then
+          'CHAMADA_AINDA_NAO_DISPONIVEL'
+        when v_mensagem = 'janela_de_chamada_encerrada' then
+          'JANELA_DE_CHAMADA_ENCERRADA'
         else v_sqlstate
       end;
 

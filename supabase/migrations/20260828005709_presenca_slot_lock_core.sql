@@ -42,6 +42,98 @@ as $function$
   )
 $function$;
 
+create or replace function public.fn_presenca_bloquear_slot_rosters_v2(
+  p_aula_id integer
+)
+returns bigint
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $function$
+declare
+  v_aula public.aulas_emusys%rowtype;
+  v_aula_depois public.aulas_emusys%rowtype;
+  v_keys bigint[];
+  v_keys_depois bigint[];
+  v_key bigint;
+  v_slot_key bigint;
+begin
+  select * into v_aula
+    from public.aulas_emusys a
+   where a.id = p_aula_id;
+  if not found then
+    raise exception 'aula_nao_encontrada' using errcode = '23503';
+  end if;
+
+  select array_agg(distinct locks.lock_key order by locks.lock_key)
+    into v_keys
+    from (
+      select public.fn_presenca_slot_lock_key_v2(
+        v_aula.unidade_id,
+        v_aula.professor_id,
+        v_aula.data_hora_inicio,
+        v_aula.data_hora_fim,
+        v_aula.curso_nome
+      ) as lock_key
+      union all
+      select public.fn_presenca_roster_lock_key_v2(g.id)
+        from public.aulas_emusys g
+       where g.unidade_id is not distinct from v_aula.unidade_id
+         and g.professor_id is not distinct from v_aula.professor_id
+         and g.data_hora_inicio is not distinct from v_aula.data_hora_inicio
+         and g.data_hora_fim is not distinct from v_aula.data_hora_fim
+         and lower(btrim(coalesce(g.curso_nome, '')))
+             = lower(btrim(coalesce(v_aula.curso_nome, '')))
+    ) locks;
+
+  foreach v_key in array v_keys
+  loop
+    perform pg_advisory_xact_lock(v_key);
+  end loop;
+
+  select * into v_aula_depois
+    from public.aulas_emusys a
+   where a.id = p_aula_id;
+  if not found then
+    raise exception 'aula_removida_durante_lock' using errcode = '40001';
+  end if;
+
+  select array_agg(distinct locks.lock_key order by locks.lock_key)
+    into v_keys_depois
+    from (
+      select public.fn_presenca_slot_lock_key_v2(
+        v_aula_depois.unidade_id,
+        v_aula_depois.professor_id,
+        v_aula_depois.data_hora_inicio,
+        v_aula_depois.data_hora_fim,
+        v_aula_depois.curso_nome
+      ) as lock_key
+      union all
+      select public.fn_presenca_roster_lock_key_v2(g.id)
+        from public.aulas_emusys g
+       where g.unidade_id is not distinct from v_aula_depois.unidade_id
+         and g.professor_id is not distinct from v_aula_depois.professor_id
+         and g.data_hora_inicio is not distinct from v_aula_depois.data_hora_inicio
+         and g.data_hora_fim is not distinct from v_aula_depois.data_hora_fim
+         and lower(btrim(coalesce(g.curso_nome, '')))
+             = lower(btrim(coalesce(v_aula_depois.curso_nome, '')))
+    ) locks;
+
+  if v_keys_depois is distinct from v_keys then
+    raise exception 'slot_alterado_durante_lock' using errcode = '40001';
+  end if;
+
+  v_slot_key := public.fn_presenca_slot_lock_key_v2(
+    v_aula_depois.unidade_id,
+    v_aula_depois.professor_id,
+    v_aula_depois.data_hora_inicio,
+    v_aula_depois.data_hora_fim,
+    v_aula_depois.curso_nome
+  );
+  return v_slot_key;
+end
+$function$;
+
 create or replace function public.fn_presenca_roster_lock_trigger_v2()
 returns trigger
 language plpgsql
@@ -82,7 +174,11 @@ begin
      where chave.valor is not null
      order by chave.valor
   loop
-    perform pg_advisory_xact_lock(v_key);
+    if not pg_try_advisory_xact_lock(v_key) then
+      raise exception using
+        errcode = '55P03',
+        message = 'presenca_roster_lock_ocupado';
+    end if;
   end loop;
 
   if tg_op = 'DELETE' then return old; end if;
@@ -126,7 +222,63 @@ begin
      where chave.valor is not null
      order by chave.valor
   loop
-    perform pg_advisory_xact_lock(v_key);
+    if not pg_try_advisory_xact_lock(v_key) then
+      raise exception using
+        errcode = '55P03',
+        message = 'presenca_slot_lock_ocupado';
+    end if;
+  end loop;
+
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end
+$function$;
+
+create or replace function public.fn_presenca_estado_roster_lock_trigger_v2()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $function$
+declare
+  v_old_roster_key bigint;
+  v_new_roster_key bigint;
+  v_old_slot_key bigint;
+  v_new_slot_key bigint;
+  v_key bigint;
+begin
+  if tg_op in ('UPDATE', 'DELETE') then
+    v_old_roster_key := public.fn_presenca_roster_lock_key_v2(old.aula_id);
+    select public.fn_presenca_slot_lock_key_v2(
+      a.unidade_id, a.professor_id, a.data_hora_inicio,
+      a.data_hora_fim, a.curso_nome
+    ) into v_old_slot_key
+      from public.aulas_emusys a
+     where a.id = old.aula_id;
+  end if;
+  if tg_op in ('INSERT', 'UPDATE') then
+    v_new_roster_key := public.fn_presenca_roster_lock_key_v2(new.aula_id);
+    select public.fn_presenca_slot_lock_key_v2(
+      a.unidade_id, a.professor_id, a.data_hora_inicio,
+      a.data_hora_fim, a.curso_nome
+    ) into v_new_slot_key
+      from public.aulas_emusys a
+     where a.id = new.aula_id;
+  end if;
+
+  for v_key in
+    select distinct chave.valor
+      from unnest(array[
+        v_old_roster_key, v_old_slot_key, v_new_roster_key, v_new_slot_key
+      ]::bigint[]) chave(valor)
+     where chave.valor is not null
+     order by chave.valor
+  loop
+    if not pg_try_advisory_xact_lock(v_key) then
+      raise exception using
+        errcode = '55P03',
+        message = 'presenca_estado_roster_lock_ocupado';
+    end if;
   end loop;
 
   if tg_op = 'DELETE' then return old; end if;
@@ -145,6 +297,52 @@ drop trigger if exists trg_presenca_slot_lock_v2
 create trigger trg_presenca_slot_lock_v2
 before insert or update or delete on public.aulas_emusys
 for each row execute function public.fn_presenca_slot_lock_trigger_v2();
+
+drop trigger if exists trg_presenca_estado_roster_lock_v2
+  on public.aula_roster_sync_estado;
+create trigger trg_presenca_estado_roster_lock_v2
+before insert or update or delete on public.aula_roster_sync_estado
+for each row execute function public.fn_presenca_estado_roster_lock_trigger_v2();
+
+-- A escrita v2 propaga apenas para gemeas validadas pelo mesmo slot/run. O
+-- trigger legado continua intacto para as portas v1, mas nao pode executar em
+-- paralelo com a propagacao transacional abaixo.
+create or replace function public.trg_sincronizar_gemeos_presenca()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $function$
+declare
+  v_status_novo text;
+begin
+  if current_setting('app.presenca_v2_em_execucao', true) = 'on' then
+    return new;
+  end if;
+
+  v_status_novo := coalesce(
+    new.status_presenca,
+    case new.status
+      when 'presente' then 'presente'
+      when 'ausente' then 'falta'
+    end
+  );
+
+  if new.espelhado_de_presenca_id is null
+     and public.fn_presenca_e_forte(new.respondido_por)
+     and public.fn_presenca_fecha_chamada(v_status_novo, new.respondido_por)
+     and (
+       tg_op = 'INSERT'
+       or old.status is distinct from new.status
+       or old.status_presenca is distinct from new.status_presenca
+       or old.respondido_por is distinct from new.respondido_por
+       or old.espelhado_de_presenca_id is distinct from new.espelhado_de_presenca_id
+     ) then
+    perform public.fn_sincronizar_gemeos_presenca(new.aula_emusys_id);
+  end if;
+  return new;
+end
+$function$;
 
 create or replace function public.fn_criar_comando_presenca_core_v2(
   p_request_id uuid,
@@ -174,7 +372,7 @@ begin
   if p_request_id is null then
     raise exception 'request_id_obrigatorio' using errcode = '22023';
   end if;
-  if p_tipo not in (
+  if p_tipo is null or p_tipo not in (
     'la_teacher_aula', 'fabio_aula', 'fabio_audio_aula', 'fabio_manual_aula'
   ) then
     raise exception 'tipo_comando_v2_invalido' using errcode = '22023';
@@ -182,7 +380,9 @@ begin
   if p_aula_id is null then
     raise exception 'aula_obrigatoria' using errcode = '22023';
   end if;
-  if jsonb_typeof(p_itens) <> 'array' or jsonb_array_length(p_itens) = 0 then
+  if p_itens is null
+     or jsonb_typeof(p_itens) <> 'array'
+     or jsonb_array_length(p_itens) = 0 then
     raise exception 'itens_obrigatorios' using errcode = '22023';
   end if;
 
@@ -296,7 +496,7 @@ $function$;
 create or replace function public.fn_validar_comando_roster_reservado_v2(
   p_request_id uuid
 )
-returns void
+returns uuid
 language plpgsql
 security definer
 set search_path = pg_catalog, public
@@ -304,9 +504,12 @@ as $function$
 declare
   v_comando public.presenca_comandos%rowtype;
   v_aula public.aulas_emusys%rowtype;
-  v_roster_key bigint;
+  v_estado public.aula_roster_sync_estado%rowtype;
+  v_exec public.presenca_sync_execucoes%rowtype;
+  v_cobertura public.presenca_sync_cobertura%rowtype;
   v_slot_key bigint;
   v_slot_key_atual bigint;
+  v_run_id uuid;
   v_roster_total integer;
   v_roster_distintos integer;
   v_itens_total integer;
@@ -334,17 +537,7 @@ begin
     raise exception 'aula_nao_encontrada' using errcode = '23503';
   end if;
 
-  v_roster_key := public.fn_presenca_roster_lock_key_v2(v_aula.id);
-  v_slot_key := public.fn_presenca_slot_lock_key_v2(
-    v_aula.unidade_id, v_aula.professor_id, v_aula.data_hora_inicio,
-    v_aula.data_hora_fim, v_aula.curso_nome
-  );
-  if v_roster_key = v_slot_key then
-    perform pg_advisory_xact_lock(v_roster_key);
-  else
-    perform pg_advisory_xact_lock(least(v_roster_key, v_slot_key));
-    perform pg_advisory_xact_lock(greatest(v_roster_key, v_slot_key));
-  end if;
+  v_slot_key := public.fn_presenca_bloquear_slot_rosters_v2(v_aula.id);
 
   select * into v_aula
     from public.aulas_emusys a
@@ -380,14 +573,67 @@ begin
     raise exception 'slot_cancelado_ou_justificado' using errcode = '23514';
   end if;
 
+  select e.* into v_estado
+    from public.aula_roster_sync_estado e
+   where e.aula_id = v_aula.id
+   for share;
+  if not found then
+    raise exception 'roster_v2_temporariamente_indisponivel'
+      using errcode = '40001';
+  end if;
+  if v_estado.unidade_id is distinct from v_aula.unidade_id then
+    raise exception 'roster_v2_identidade_divergente' using errcode = '23514';
+  end if;
+  if v_estado.estado <> 'completo' then
+    raise exception 'roster_v2_temporariamente_indisponivel'
+      using errcode = '40001';
+  end if;
+  if v_estado.qtd_esperada is distinct from v_estado.qtd_recebida
+     or v_estado.qtd_recebida <= 0 then
+    raise exception 'roster_v2_contagem_invalida' using errcode = '23514';
+  end if;
+
+  v_run_id := v_estado.run_id;
+  select x.* into v_exec
+    from public.presenca_sync_execucoes x
+   where x.id = v_run_id
+   for share;
+  if not found
+     or v_exec.unidade_id is distinct from v_estado.unidade_id
+     or v_exec.status <> 'concluida'
+     or v_exec.snapshot_hash is null then
+    raise exception 'roster_v2_temporariamente_indisponivel'
+      using errcode = '40001';
+  end if;
+
+  select c.* into v_cobertura
+    from public.presenca_sync_cobertura c
+   where c.unidade_id = v_exec.unidade_id
+     and c.modo = v_exec.modo
+     and c.data_alvo = v_exec.data_alvo
+   for share;
+  if not found
+     or v_cobertura.run_id is distinct from v_run_id
+     or v_cobertura.status <> 'concluida'
+     or v_cobertura.snapshot_hash is distinct from v_exec.snapshot_hash
+     or v_cobertura.paginas_lidas is distinct from v_exec.paginas_lidas
+     or v_cobertura.aulas_lidas is distinct from v_exec.aulas_lidas
+     or v_cobertura.presencas_lidas is distinct from v_exec.presencas_lidas then
+    raise exception 'roster_v2_temporariamente_indisponivel'
+      using errcode = '40001';
+  end if;
+
   select count(*)::integer, count(distinct r.aluno_id)::integer
     into v_roster_total, v_roster_distintos
     from public.vw_aula_roster_operacional_v2 r
-   where r.aula_emusys_id = v_aula.id;
+   where r.aula_emusys_id = v_aula.id
+     and r.run_id = v_run_id;
   if v_roster_total = 0 then
-    raise exception 'roster_v2_nao_publicado' using errcode = '23514';
+    raise exception 'roster_v2_temporariamente_indisponivel'
+      using errcode = '40001';
   end if;
-  if v_roster_total is distinct from v_roster_distintos then
+  if v_roster_total is distinct from v_roster_distintos
+     or v_roster_total is distinct from v_estado.qtd_recebida then
     raise exception 'roster_v2_identidade_duplicada' using errcode = '23514';
   end if;
 
@@ -416,6 +662,7 @@ begin
     select 1
       from public.vw_aula_roster_operacional_v2 r
      where r.aula_emusys_id = v_aula.id
+       and r.run_id = v_run_id
        and not exists (
          select 1 from public.presenca_comando_itens i
           where i.request_id = p_request_id and i.aluno_id = r.aluno_id
@@ -426,11 +673,14 @@ begin
      where i.request_id = p_request_id
        and not exists (
          select 1 from public.vw_aula_roster_operacional_v2 r
-          where r.aula_emusys_id = v_aula.id and r.aluno_id = i.aluno_id
+          where r.aula_emusys_id = v_aula.id
+            and r.run_id = v_run_id
+            and r.aluno_id = i.aluno_id
        )
   ) then
     raise exception 'payload_diverge_do_roster_v2' using errcode = '23514';
   end if;
+  return v_run_id;
 end
 $function$;
 
@@ -450,7 +700,8 @@ declare
   v_rejeitados integer := 0;
   v_evento_seq integer := 0;
   v_status_efetivo text;
-  v_gemeos integer;
+  v_gemeos integer := 0;
+  v_roster_run_id uuid;
   v_gravados_alunos integer[] := '{}'::integer[];
 begin
   if p_request_id is null then
@@ -472,17 +723,47 @@ begin
     return public.app_status_comando_presenca_v1(p_request_id);
   end if;
 
-  perform public.fn_validar_comando_roster_reservado_v2(p_request_id);
+  v_roster_run_id := public.fn_validar_comando_roster_reservado_v2(p_request_id);
 
   select * into strict v_aula
     from public.aulas_emusys a
    where a.id = v_comando.aula_id;
+
+  if v_aula.data_hora_inicio > now() + interval '15 minutes' then
+    raise exception 'chamada_ainda_nao_disponivel' using errcode = '22023';
+  end if;
+  if coalesce(v_aula.data_hora_fim, v_aula.data_hora_inicio)
+       < now() - (public.fn_janela_registro_dias() || ' days')::interval then
+    raise exception 'janela_de_chamada_encerrada' using errcode = '22023';
+  end if;
 
   update public.presenca_comandos c
      set status = 'processando',
          iniciado_em = coalesce(c.iniciado_em, clock_timestamp()),
          atualizado_em = clock_timestamp()
    where c.request_id = p_request_id;
+
+  if (select count(*)::integer
+        from public.vw_aula_roster_operacional_v2 r
+       where r.aula_emusys_id = v_aula.id
+         and r.run_id = v_roster_run_id) is distinct from v_comando.itens_total
+     or exists (
+       select 1
+         from public.presenca_comando_itens i
+        where i.request_id = p_request_id
+          and not exists (
+            select 1
+              from public.vw_aula_roster_operacional_v2 r
+             where r.aula_emusys_id = v_aula.id
+               and r.run_id = v_roster_run_id
+               and r.aluno_id = i.aluno_id
+          )
+     ) then
+    raise exception 'roster_v2_alterado_durante_aplicacao'
+      using errcode = '40001';
+  end if;
+
+  perform set_config('app.presenca_v2_em_execucao', 'on', true);
 
   with gravados as (
     insert into public.aluno_presenca(
@@ -510,6 +791,7 @@ begin
      and i.aula_id = r.aula_emusys_id
      and i.aluno_id = r.aluno_id
     where r.aula_emusys_id = v_aula.id
+      and r.run_id = v_roster_run_id
     on conflict (aluno_id, aula_emusys_id) do update set
       status = excluded.status,
       status_presenca = excluded.status_presenca,
@@ -522,7 +804,51 @@ begin
     into v_gravados_alunos
     from gravados g;
 
-  v_gemeos := public.fn_sincronizar_gemeos_presenca(v_aula.id);
+  with gravados_gemeos as (
+    insert into public.aluno_presenca(
+      aluno_id, aula_emusys_id, professor_id, unidade_id, data_aula,
+      horario_aula, status, status_presenca, curso_nome, turma_nome,
+      sala_nome, respondido_por, respondido_em
+    )
+    select
+      r.aluno_id,
+      g.id,
+      g.professor_id,
+      g.unidade_id,
+      g.data_aula,
+      (g.data_hora_inicio at time zone 'America/Sao_Paulo')::time,
+      case when i.status_solicitado = 'falta' then 'ausente' else 'presente' end,
+      i.status_solicitado,
+      g.curso_nome,
+      g.turma_nome,
+      g.sala_nome,
+      v_comando.fonte,
+      clock_timestamp()
+    from public.aulas_emusys g
+    join public.vw_aula_roster_operacional_v2 r
+      on r.aula_emusys_id = g.id
+     and r.run_id = v_roster_run_id
+    join public.presenca_comando_itens i
+      on i.request_id = p_request_id
+     and i.aluno_id = r.aluno_id
+    where g.id <> v_aula.id
+      and g.unidade_id is not distinct from v_aula.unidade_id
+      and g.professor_id is not distinct from v_aula.professor_id
+      and g.data_hora_inicio is not distinct from v_aula.data_hora_inicio
+      and g.data_hora_fim is not distinct from v_aula.data_hora_fim
+      and lower(btrim(coalesce(g.curso_nome, '')))
+          = lower(btrim(coalesce(v_aula.curso_nome, '')))
+      and not coalesce(g.cancelada, false)
+      and not coalesce(g.justificada, false)
+    on conflict (aluno_id, aula_emusys_id) do update set
+      status = excluded.status,
+      status_presenca = excluded.status_presenca,
+      respondido_por = excluded.respondido_por,
+      respondido_em = excluded.respondido_em
+    where not public.fn_presenca_e_forte(aluno_presenca.respondido_por)
+    returning aula_emusys_id
+  )
+  select count(*)::integer into v_gemeos from gravados_gemeos;
 
   select coalesce(max(e.sequencia), 0)::integer
     into v_evento_seq
@@ -612,9 +938,15 @@ revoke all on function public.fn_presenca_roster_lock_key_v2(integer)
 revoke all on function public.fn_presenca_slot_lock_key_v2(
   uuid, integer, timestamptz, timestamptz, text
 ) from public, anon, authenticated, service_role;
+revoke all on function public.fn_presenca_bloquear_slot_rosters_v2(integer)
+  from public, anon, authenticated, service_role;
 revoke all on function public.fn_presenca_roster_lock_trigger_v2()
   from public, anon, authenticated, service_role;
 revoke all on function public.fn_presenca_slot_lock_trigger_v2()
+  from public, anon, authenticated, service_role;
+revoke all on function public.fn_presenca_estado_roster_lock_trigger_v2()
+  from public, anon, authenticated, service_role;
+revoke all on function public.trg_sincronizar_gemeos_presenca()
   from public, anon, authenticated, service_role;
 revoke all on function public.fn_criar_comando_presenca_core_v2(
   uuid, text, uuid, integer, jsonb

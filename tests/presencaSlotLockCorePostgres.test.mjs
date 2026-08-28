@@ -16,6 +16,7 @@ const migrations = [
   'supabase/migrations/20260827030500_presenca_roster_operacional.sql',
   'supabase/migrations/20260827030600_presenca_comando_auditoria.sql',
   'supabase/migrations/20260827030700_presenca_comando_porta_professor.sql',
+  'supabase/migrations/20260827223000_presenca_request_id_arbitragem.sql',
   'supabase/migrations/20260828005703_presenca_roster_v2_expansao_aditiva.sql',
   'supabase/migrations/20260828005709_presenca_slot_lock_core.sql',
 ];
@@ -142,6 +143,17 @@ async function waitForSleep(requestId) {
   throw new Error('aplicacao nao entrou no ponto de concorrencia controlada');
 }
 
+async function waitForAnySleep() {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const count = Number(psql(String.raw`
+      select count(*) from pg_stat_activity where wait_event = 'PgSleep';
+    `));
+    if (count > 0) return;
+    await delay(100);
+  }
+  throw new Error('reconciliador nao entrou no ponto de concorrencia controlada');
+}
+
 test.before(() => {
   assert.match(IMAGE, /^postgres:17(?:[-.][a-z0-9.-]+)?$/iu);
   docker(['run', '--rm', '--name', CONTAINER, '-e', 'POSTGRES_PASSWORD=postgres', '-d', IMAGE]);
@@ -221,6 +233,7 @@ test.before(() => {
       sala_nome text,
       respondido_por text,
       respondido_em timestamptz,
+      espelhado_de_presenca_id uuid,
       unique(aluno_id, aula_emusys_id)
     );
 
@@ -234,8 +247,43 @@ test.before(() => {
     returns boolean language sql stable as $$
       select $1 in ('agenda_secretaria','professor_la_teacher','professor_whatsapp','fabio_audio')
     $$;
+    create function public.fn_presenca_fecha_chamada(text, text)
+    returns boolean language sql stable as $$ select true $$;
     create function public.fn_sincronizar_gemeos_presenca(integer)
-    returns integer language sql as $$ select 0 $$;
+    returns integer language plpgsql as $$
+    begin
+      if current_setting('teste.proibir_resolvedor_legado', true) = 'on' then
+        raise exception 'resolvedor_gemeos_legado_chamado';
+      end if;
+      return 0;
+    end
+    $$;
+    create function public.reconciliar_grade_snapshot_emusys_v1(
+      p_unidade_id uuid, p_data_inicio date, p_data_fim date,
+      p_snapshot jsonb, p_dry_run boolean default true
+    ) returns jsonb language plpgsql as $$
+    begin
+      if current_setting('teste.reconciliador_atrasar', true) = 'on' then
+        update public.aula_alunos_emusys
+           set updated_at = clock_timestamp()
+         where aula_emusys_id = 10 and aluno_id = 102;
+        perform pg_sleep(2);
+        return jsonb_build_object('status', 'teste_concorrencia');
+      end if;
+      return jsonb_build_object('status', 'teste_sem_escrita');
+    end
+    $$;
+    create function public.trg_sincronizar_gemeos_presenca()
+    returns trigger language plpgsql as $$
+    begin
+      perform public.fn_sincronizar_gemeos_presenca(new.aula_emusys_id);
+      return new;
+    end
+    $$;
+    create trigger trg_sincronizar_gemeos_presenca
+    after insert or update of status, status_presenca, respondido_por,
+      espelhado_de_presenca_id on public.aluno_presenca
+    for each row execute function public.trg_sincronizar_gemeos_presenca();
     create function public.app_registrar_chamada_agenda(jsonb)
     returns jsonb language sql as $$ select jsonb_build_object('erros','[]'::jsonb) $$;
     create function public.app_registrar_presencas_aula(integer, integer[])
@@ -292,6 +340,24 @@ test.before(() => {
   for (const migration of migrations.slice(2)) {
     psql(readFileSync(migration, 'utf8'));
   }
+
+  psql(String.raw`
+    create or replace function public.reconciliar_grade_snapshot_emusys_v1(
+      p_unidade_id uuid, p_data_inicio date, p_data_fim date,
+      p_snapshot jsonb, p_dry_run boolean default true
+    ) returns jsonb language plpgsql as $$
+    begin
+      if current_setting('teste.reconciliador_atrasar', true) = 'on' then
+        update public.aula_alunos_emusys
+           set updated_at = clock_timestamp()
+         where aula_emusys_id = 10 and aluno_id = 102;
+        perform pg_sleep(2);
+        return jsonb_build_object('status', 'teste_concorrencia');
+      end if;
+      return jsonb_build_object('status', 'teste_sem_escrita');
+    end
+    $$;
+  `);
 });
 
 test.after(() => {
@@ -321,6 +387,65 @@ test('request id e idempotente, rejeita payload diferente e aplica uma unica vez
     select jsonb_object_agg(aluno_id, status_presenca order by aluno_id)
       from public.aluno_presenca where aula_emusys_id=10;
   `)), { 101: 'presente', 102: 'falta' });
+});
+
+test('parametros SQL nulos falham como contrato 22023 antes de ownership ou constraint', () => {
+  const requestTipoNulo = '10000000-0000-4000-8000-000000000240';
+  const tipoNulo = psqlFailure(auth(String.raw`
+    select public.fn_criar_comando_presenca_core_v2(
+      '${requestTipoNulo}', null, '${UNIDADE}', 10, '${itens()}'::jsonb
+    );
+  `));
+  assert.match(tipoNulo, /22023/u);
+  assert.match(tipoNulo, /tipo_comando_v2_invalido/u);
+
+  const requestItensNulos = '10000000-0000-4000-8000-000000000241';
+  const itensNulos = psqlFailure(auth(String.raw`
+    select public.fn_criar_comando_presenca_core_v2(
+      '${requestItensNulos}', 'la_teacher_aula', '${UNIDADE}', 10, null
+    );
+  `));
+  assert.match(itensNulos, /22023/u);
+  assert.match(itensNulos, /itens_obrigatorios/u);
+});
+
+test('core v2 preserva as janelas futura e historica da porta v1 sob os locks', () => {
+  psql('delete from public.aluno_presenca;');
+  const futuro = '10000000-0000-4000-8000-000000000242';
+  psql(String.raw`
+    update public.aulas_emusys
+       set data_aula = current_date,
+           data_hora_inicio = now() + interval '30 minutes',
+           data_hora_fim = now() + interval '90 minutes'
+     where id = 10;
+  `);
+  psql(criar(futuro));
+  const erroFuturo = psqlFailure(aplicar(futuro));
+  assert.match(erroFuturo, /22023/u);
+  assert.match(erroFuturo, /chamada_ainda_nao_disponivel/u);
+  assert.equal(psql(`select status from public.presenca_comandos where request_id='${futuro}';`), 'recebido');
+
+  const historico = '10000000-0000-4000-8000-000000000243';
+  psql(String.raw`
+    update public.aulas_emusys
+       set data_aula = current_date - 10,
+           data_hora_inicio = now() - interval '10 days',
+           data_hora_fim = now() - interval '10 days' + interval '1 hour'
+     where id = 10;
+  `);
+  psql(criar(historico));
+  const erroHistorico = psqlFailure(aplicar(historico));
+  assert.match(erroHistorico, /22023/u);
+  assert.match(erroHistorico, /janela_de_chamada_encerrada/u);
+  assert.equal(psql(`select status from public.presenca_comandos where request_id='${historico}';`), 'recebido');
+
+  psql(String.raw`
+    update public.aulas_emusys
+       set data_aula = current_date,
+           data_hora_inicio = now() - interval '1 hour',
+           data_hora_fim = now()
+     where id = 10;
+  `);
 });
 
 test('recibo distingue escrita real de decisao forte ja igual e preserva a distincao no replay', () => {
@@ -453,7 +578,65 @@ test('40001, 40P01, 55P03 e 57014 escapam e deixam comando nao terminal', () => 
   `);
 });
 
-test('mutacao de roster espera o lock mantido pela aplicacao reservada', async () => {
+test('gemeos usam o mesmo slot estrito e roster v2 sem chamar o resolvedor legado', () => {
+  psql(String.raw`
+    delete from public.aluno_presenca;
+    insert into public.aulas_emusys(
+      id, emusys_id, unidade_id, professor_id, data_aula, data_hora_inicio,
+      data_hora_fim, curso_nome, turma_nome, sala_nome, cancelada, justificada, tipo
+    )
+    select 21, 201, unidade_id, professor_id, data_aula, data_hora_inicio,
+      data_hora_fim, curso_nome, 'Gemea exata', sala_nome, false, false, 'individual'
+      from public.aulas_emusys where id=10
+    union all
+    select 22, 202, unidade_id, professor_id, data_aula, data_hora_inicio,
+      data_hora_fim + interval '5 minutes', curso_nome, 'Fora do slot', sala_nome,
+      false, false, 'individual'
+      from public.aulas_emusys where id=10;
+
+    insert into public.aula_alunos_emusys(
+      aula_emusys_id, unidade_id, aluno_chave, aluno_emusys_id, aluno_id, aluno_nome
+    ) values
+      (21, '${UNIDADE}', 'emusys:101', 101, 101, 'Aluno Um'),
+      (22, '${UNIDADE}', 'emusys:101', 101, 101, 'Aluno Um');
+
+    insert into public.aula_roster_sync_estado(
+      aula_id, unidade_id, run_id, estado, qtd_esperada, qtd_recebida, snapshot_hash
+    ) values
+      (21, '${UNIDADE}', '${RUN}', 'completo', 1, 1, repeat('c', 32)),
+      (22, '${UNIDADE}', '${RUN}', 'completo', 1, 1, repeat('d', 32));
+    update public.aula_alunos_emusys
+       set ativo_operacional=true, ultimo_run_visto='${RUN}'
+     where aula_emusys_id in (21,22);
+  `);
+
+  const requestId = '10000000-0000-4000-8000-000000000190';
+  psql(criar(requestId));
+  const aplicado = json(psql(auth(String.raw`
+    select set_config('teste.proibir_resolvedor_legado', 'on', false);
+    select public.fn_aplicar_comando_presenca_core_v2('${requestId}');
+  `)));
+  assert.equal(aplicado.status, 'concluido');
+  assert.equal(aplicado.gemeos_sincronizados, 1);
+  assert.deepEqual(json(psql(String.raw`
+    select jsonb_object_agg(aula_emusys_id::text, total order by aula_emusys_id)
+      from (
+        select aula_emusys_id, count(*)::integer as total
+          from public.aluno_presenca
+         where aula_emusys_id in (10,21,22)
+         group by aula_emusys_id
+      ) x;
+  `)), { 10: 2, 21: 1 });
+
+  psql(String.raw`
+    delete from public.aluno_presenca where aula_emusys_id in (10,21,22);
+    delete from public.aula_roster_sync_estado where aula_id in (21,22);
+    delete from public.aula_alunos_emusys where aula_emusys_id in (21,22);
+    delete from public.aulas_emusys where id in (21,22);
+  `);
+});
+
+test('writer desconhecido falha rapido com 55P03 em vez de inverter tuple e advisory lock', async () => {
   psql('delete from public.aluno_presenca;');
   psql(String.raw`
     create or replace function public.teste_presenca_atrasar_primeiro_item()
@@ -473,23 +656,136 @@ test('mutacao de roster espera o lock mantido pela aplicacao reservada', async (
   const aplicacao = psqlAsync(aplicar(requestId));
   await waitForSleep(requestId);
   const mutacao = psqlAsync(String.raw`
+    begin;
+    select id from public.aulas_emusys where id=10 for update;
     update public.aula_alunos_emusys
        set updated_at = clock_timestamp()
      where aula_emusys_id=10 and aluno_id=102
     returning aluno_id;
-  `);
+    commit;
+  `).then(
+    (output) => ({ ok: true, output }),
+    (error) => ({ ok: false, error: String(error) }),
+  );
   const estadoEm300ms = await Promise.race([
-    mutacao.then(() => 'concluida'),
+    mutacao.then(() => 'terminou'),
     delay(300).then(() => 'bloqueada'),
   ]);
-  assert.equal(estadoEm300ms, 'bloqueada');
   const [resultadoAplicacao, resultadoMutacao] = await Promise.all([aplicacao, mutacao]);
+  assert.equal(estadoEm300ms, 'terminou');
   assert.equal(json(resultadoAplicacao).status, 'concluido');
-  assert.match(resultadoMutacao, /102/u);
+  assert.equal(resultadoMutacao.ok, false);
+  assert.match(resultadoMutacao.error, /55P03/u);
 
   psql(String.raw`
     drop trigger trg_teste_presenca_atrasar_primeiro_item on public.aluno_presenca;
     drop function public.teste_presenca_atrasar_primeiro_item();
+  `);
+});
+
+test('apply pina cobertura publicada ate o ultimo DML do recibo', async () => {
+  psql('delete from public.aluno_presenca;');
+  psql(String.raw`
+    create or replace function public.teste_presenca_atrasar_publicacao_pinada()
+    returns trigger language plpgsql as $$
+    begin
+      if new.aluno_id = 101 then perform pg_sleep(2); end if;
+      return new;
+    end
+    $$;
+    create trigger trg_teste_presenca_atrasar_publicacao_pinada
+    before insert or update on public.aluno_presenca
+    for each row execute function public.teste_presenca_atrasar_publicacao_pinada();
+  `);
+
+  const requestId = '10000000-0000-4000-8000-000000000201';
+  psql(criar(requestId));
+  const aplicacao = psqlAsync(aplicar(requestId));
+  await waitForSleep(requestId);
+  const trocaCobertura = psqlAsync(String.raw`
+    update public.presenca_sync_cobertura
+       set atualizada_em = clock_timestamp()
+     where run_id='${RUN}'
+    returning run_id;
+  `);
+  const estadoEm300ms = await Promise.race([
+    trocaCobertura.then(() => 'concluida'),
+    delay(300).then(() => 'bloqueada'),
+  ]);
+  const [resultadoAplicacao, resultadoCobertura] = await Promise.all([aplicacao, trocaCobertura]);
+  assert.equal(estadoEm300ms, 'bloqueada');
+  assert.equal(json(resultadoAplicacao).status, 'concluido');
+  assert.match(resultadoCobertura, new RegExp(RUN, 'u'));
+
+  psql(String.raw`
+    drop trigger trg_teste_presenca_atrasar_publicacao_pinada on public.aluno_presenca;
+    drop function public.teste_presenca_atrasar_publicacao_pinada();
+  `);
+});
+
+test('reconciliador v2 e apply concorrem sem deadlock nem inversao de locks', async () => {
+  const runConcorrente = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const requestId = '10000000-0000-4000-8000-000000000202';
+  psql(String.raw`
+    delete from public.aluno_presenca;
+    insert into public.presenca_sync_execucoes(
+      id, request_id, unidade_id, modo, data_alvo, status,
+      paginas_lidas, aulas_lidas, presencas_lidas, lease_segundos,
+      heartbeat_em
+    ) values (
+      '${runConcorrente}', gen_random_uuid(), '${UNIDADE}', 'metadados',
+      current_date, 'iniciada', 1, 1, 2, 300, clock_timestamp()
+    );
+    insert into public.presenca_sync_cobertura(
+      unidade_id, modo, data_alvo, run_id, status, lease_ate,
+      heartbeat_em, paginas_lidas, aulas_lidas, presencas_lidas,
+      iniciada_em
+    ) values (
+      '${UNIDADE}', 'metadados', current_date, '${runConcorrente}',
+      'iniciada', clock_timestamp() + interval '5 minutes', clock_timestamp(),
+      1, 1, 2, clock_timestamp()
+    );
+  `);
+  psql(criar(requestId));
+
+  const reconciliacao = psqlAsync(String.raw`
+    select set_config('request.jwt.claim.role', 'service_role', false);
+    select set_config('teste.reconciliador_atrasar', 'on', false);
+    select public.reconciliar_grade_snapshot_emusys_v2(
+      '${runConcorrente}', '${UNIDADE}', current_date, current_date,
+      '[]'::jsonb, false
+    );
+  `).then(
+    (output) => ({ ok: true, output }),
+    (error) => ({ ok: false, error: String(error) }),
+  );
+  const inicioReconciliacao = await Promise.race([
+    reconciliacao,
+    delay(300).then(() => ({ pending: true })),
+  ]);
+  if (!('pending' in inicioReconciliacao)) {
+    assert.fail(`reconciliador terminou antes da concorrencia: ${JSON.stringify(inicioReconciliacao)}`);
+  }
+  await waitForAnySleep();
+
+  const aplicacao = psqlAsync(aplicar(requestId));
+  const estadoEm300ms = await Promise.race([
+    aplicacao.then(() => 'concluida'),
+    delay(300).then(() => 'bloqueada'),
+  ]);
+  const [resultadoReconciliacao, resultadoAplicacao] = await Promise.all([
+    reconciliacao,
+    aplicacao,
+  ]);
+
+  assert.equal(estadoEm300ms, 'bloqueada');
+  assert.equal(resultadoReconciliacao.ok, true);
+  assert.match(resultadoReconciliacao.output, /teste_concorrencia/u);
+  assert.equal(json(resultadoAplicacao).status, 'concluido');
+
+  psql(String.raw`
+    delete from public.presenca_sync_cobertura where run_id='${runConcorrente}';
+    delete from public.presenca_sync_execucoes where id='${runConcorrente}';
   `);
 });
 
@@ -502,8 +798,11 @@ test('cores e triggers permanecem privados inclusive para service_role', () => {
       'service_apply', has_function_privilege('service_role', 'public.fn_aplicar_comando_presenca_core_v2(uuid)', 'execute'),
       'auth_validate', has_function_privilege('authenticated', 'public.fn_validar_comando_roster_reservado_v2(uuid)', 'execute'),
       'service_validate', has_function_privilege('service_role', 'public.fn_validar_comando_roster_reservado_v2(uuid)', 'execute'),
+      'service_lock_helper', has_function_privilege('service_role', 'public.fn_presenca_bloquear_slot_rosters_v2(integer)', 'execute'),
       'auth_roster_trigger', has_function_privilege('authenticated', 'public.fn_presenca_roster_lock_trigger_v2()', 'execute'),
-      'service_slot_trigger', has_function_privilege('service_role', 'public.fn_presenca_slot_lock_trigger_v2()', 'execute')
+      'service_slot_trigger', has_function_privilege('service_role', 'public.fn_presenca_slot_lock_trigger_v2()', 'execute'),
+      'service_estado_trigger', has_function_privilege('service_role', 'public.fn_presenca_estado_roster_lock_trigger_v2()', 'execute'),
+      'service_gemeos_trigger', has_function_privilege('service_role', 'public.trg_sincronizar_gemeos_presenca()', 'execute')
     );
   `));
   assert.deepEqual(acl, {
@@ -513,7 +812,10 @@ test('cores e triggers permanecem privados inclusive para service_role', () => {
     service_apply: false,
     auth_validate: false,
     service_validate: false,
+    service_lock_helper: false,
     auth_roster_trigger: false,
     service_slot_trigger: false,
+    service_estado_trigger: false,
+    service_gemeos_trigger: false,
   });
 });

@@ -2,6 +2,51 @@
 -- A reconciliacao continua delegada ao corpo v1, mas a publicacao v2 fica
 -- vinculada ao run externo que governa lease, cobertura, hash e contagens.
 
+create or replace function public.fn_presenca_roster_lock_key_v2(
+  p_aula_emusys_id integer
+)
+returns bigint
+language sql
+immutable
+parallel safe
+set search_path = pg_catalog, public
+as $function$
+  select hashtextextended(
+    'presenca_roster_aula:' || coalesce(p_aula_emusys_id::text, '<null>'),
+    20260828005709
+  )
+$function$;
+
+create or replace function public.fn_presenca_slot_lock_key_v2(
+  p_unidade_id uuid,
+  p_professor_id integer,
+  p_data_hora_inicio timestamptz,
+  p_data_hora_fim timestamptz,
+  p_curso_nome text
+)
+returns bigint
+language sql
+immutable
+parallel safe
+set search_path = pg_catalog, public
+as $function$
+  select hashtextextended(
+    'presenca_slot:'
+      || coalesce(p_unidade_id::text, '<null>') || '|'
+      || coalesce(p_professor_id::text, '<null>') || '|'
+      || coalesce(extract(epoch from p_data_hora_inicio)::text, '<null>') || '|'
+      || coalesce(extract(epoch from p_data_hora_fim)::text, '<null>') || '|'
+      || lower(btrim(coalesce(p_curso_nome, ''))),
+    20260828005709
+  )
+$function$;
+
+revoke all on function public.fn_presenca_roster_lock_key_v2(integer)
+  from public, anon, authenticated, service_role;
+revoke all on function public.fn_presenca_slot_lock_key_v2(
+  uuid, integer, timestamptz, timestamptz, text
+) from public, anon, authenticated, service_role;
+
 create or replace function public.reconciliar_grade_snapshot_emusys_v2(
   p_sync_run_id uuid,
   p_unidade_id uuid,
@@ -26,6 +71,7 @@ declare
   v_vinculos_esperados integer;
   v_vinculos_encontrados integer;
   v_vinculos_trocados integer;
+  v_lock_key bigint;
 begin
   if p_sync_run_id is null
      or p_unidade_id is null
@@ -36,6 +82,37 @@ begin
     raise exception using
       errcode = '22023',
       message = 'sync_run_incompativel';
+  end if;
+
+  if not p_dry_run then
+    for v_lock_key in
+      select distinct locks.lock_key
+        from (
+          select hashtextextended(
+            'presenca_roster_aula:' || coalesce(a.id::text, '<null>'),
+            20260828005709
+          ) as lock_key
+            from public.aulas_emusys a
+           where a.unidade_id = p_unidade_id
+             and a.data_aula between p_data_inicio and p_data_fim
+          union all
+          select hashtextextended(
+            'presenca_slot:'
+              || coalesce(a.unidade_id::text, '<null>') || '|'
+              || coalesce(a.professor_id::text, '<null>') || '|'
+              || coalesce(extract(epoch from a.data_hora_inicio)::text, '<null>') || '|'
+              || coalesce(extract(epoch from a.data_hora_fim)::text, '<null>') || '|'
+              || lower(btrim(coalesce(a.curso_nome, ''))),
+            20260828005709
+          ) as lock_key
+            from public.aulas_emusys a
+           where a.unidade_id = p_unidade_id
+             and a.data_aula between p_data_inicio and p_data_fim
+        ) locks
+       order by locks.lock_key
+    loop
+      perform pg_advisory_xact_lock(v_lock_key);
+    end loop;
   end if;
 
   select x.*
