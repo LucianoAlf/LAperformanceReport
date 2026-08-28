@@ -79,6 +79,34 @@ function snapshotCoerenteMigration() {
   return matches.length === 1 ? join(MIGRATIONS, matches[0]) : null;
 }
 
+function snapshotPublicavelMigration() {
+  const matches = readdirSync(MIGRATIONS)
+    .filter((name) => /^\d+_presenca_snapshot_publicavel\.sql$/u.test(name));
+  assert.ok(matches.length <= 1, `mais de uma migration de snapshot publicavel encontrada: ${matches.join(', ')}`);
+  return matches.length === 1 ? join(MIGRATIONS, matches[0]) : null;
+}
+
+function snapshotRosterCompletoMigration() {
+  const matches = readdirSync(MIGRATIONS)
+    .filter((name) => /^\d+_presenca_roster_completo\.sql$/u.test(name));
+  assert.ok(matches.length <= 1, `mais de uma migration de roster completo encontrada: ${matches.join(', ')}`);
+  return matches.length === 1 ? join(MIGRATIONS, matches[0]) : null;
+}
+
+function snapshotRosterCompletoOtimizadoMigration() {
+  const matches = readdirSync(MIGRATIONS)
+    .filter((name) => /^\d+_presenca_roster_completo_otimizado\.sql$/u.test(name));
+  assert.ok(matches.length <= 1, `mais de uma migration otimizada de roster completo encontrada: ${matches.join(', ')}`);
+  return matches.length === 1 ? join(MIGRATIONS, matches[0]) : null;
+}
+
+function snapshotRosterRunConsistenteMigration() {
+  const matches = readdirSync(MIGRATIONS)
+    .filter((name) => /^\d+_presenca_roster_completo_run_consistente\.sql$/u.test(name));
+  assert.ok(matches.length <= 1, `mais de uma migration de run consistente encontrada: ${matches.join(', ')}`);
+  return matches.length === 1 ? join(MIGRATIONS, matches[0]) : null;
+}
+
 const schema = String.raw`
 create extension if not exists unaccent;
 create role anon nologin;
@@ -158,6 +186,7 @@ create table public.aula_alunos_emusys (
   aula_emusys_id integer not null,
   aluno_id integer,
   aluno_chave text,
+  ativo_operacional boolean not null default true,
   ultimo_run_visto uuid,
   updated_at timestamptz default now()
 );
@@ -166,9 +195,22 @@ create table public.presenca_sync_execucoes (
   id uuid primary key,
   unidade_id uuid not null,
   data_alvo date not null,
+  modo text not null,
   status text not null,
+  snapshot_hash text,
   criada_em timestamptz not null,
   finalizada_em timestamptz
+);
+
+create table public.presenca_sync_cobertura (
+  unidade_id uuid not null,
+  modo text not null,
+  data_alvo date not null,
+  run_id uuid not null,
+  status text not null,
+  snapshot_hash text,
+  finalizada_em timestamptz,
+  primary key (unidade_id, modo, data_alvo)
 );
 
 create or replace function public.fn_presenca_e_forte(p_fonte text)
@@ -231,18 +273,51 @@ values
   (24, 1024, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 03:00-03', '2026-08-25 04:00-03', 'individual', 'normal', 'Slot multidata', 518),
   (25, 1025, '10000000-0000-0000-0000-000000000001', '2026-08-26', '2026-08-25 03:00-03', '2026-08-25 04:00-03', 'individual', 'normal', 'Slot multidata', 518),
   (26, 1026, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 02:00-03', '2026-08-25 03:00-03', 'turma', 'normal', 'Snapshot coerente', 519),
-  (27, 1027, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 02:00-03', '2026-08-25 03:00-03', 'individual', 'normal', 'Snapshot coerente', 519);
+  (27, 1027, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 02:00-03', '2026-08-25 03:00-03', 'individual', 'normal', 'Snapshot coerente', 519),
+  (28, 1028, '10000000-0000-0000-0000-000000000001', '2026-08-26', '2026-08-26 02:00-03', '2026-08-26 03:00-03', 'turma', 'normal', 'Snapshot incompleto', 519),
+  (29, 1029, '10000000-0000-0000-0000-000000000001', '2026-08-26', '2026-08-26 02:00-03', '2026-08-26 03:00-03', 'individual', 'normal', 'Snapshot incompleto', 519);
 
 update public.aulas_emusys set cancelada = true where id = 16;
 update public.aulas_emusys set justificada = true where id = 17;
 update public.aulas_emusys set justificada = true where id = 20;
 
 insert into public.presenca_sync_execucoes
-  (id, unidade_id, data_alvo, status, criada_em, finalizada_em)
+  (id, unidade_id, data_alvo, modo, status, snapshot_hash, criada_em, finalizada_em)
 values
   ('40000000-0000-0000-0000-000000000001',
-   '10000000-0000-0000-0000-000000000001', '2026-08-25', 'concluida',
-   '2026-08-25 03:00:00-03', '2026-08-25 03:02:00-03');
+   '10000000-0000-0000-0000-000000000001', '2026-08-25', 'presenca', 'concluida', repeat('a', 64),
+   '2026-08-25 03:00:00-03', '2026-08-25 03:02:00-03'),
+  ('40000000-0000-0000-0000-000000000002',
+   '10000000-0000-0000-0000-000000000001', '2026-08-25', 'presenca', 'iniciada', repeat('b', 64),
+   '2026-08-25 03:00:00-03', null),
+  ('40000000-0000-0000-0000-000000000003',
+   '10000000-0000-0000-0000-000000000001', '2026-08-25', 'presenca', 'falhou', repeat('c', 64),
+   '2026-08-25 03:00:00-03', '2026-08-25 03:02:00-03'),
+  ('40000000-0000-0000-0000-000000000004',
+   '10000000-0000-0000-0000-000000000001', '2026-08-25', 'agenda', 'concluida', repeat('d', 64),
+   '2026-08-25 03:00:00-03', '2026-08-25 03:02:00-03'),
+  ('40000000-0000-0000-0000-000000000005',
+   '10000000-0000-0000-0000-000000000001', '2026-08-25', 'presenca', 'concluida', null,
+   '2026-08-25 03:00:00-03', '2026-08-25 03:02:00-03'),
+  ('40000000-0000-0000-0000-000000000006',
+   '10000000-0000-0000-0000-000000000001', '2026-08-25', 'presenca', 'concluida', repeat('f', 64),
+   '2026-08-25 03:00:00-03', '2026-08-25 03:02:00-03'),
+  ('40000000-0000-0000-0000-00000000000b',
+   '10000000-0000-0000-0000-000000000001', '2026-08-26', 'presenca', 'concluida', repeat('b', 64),
+   '2026-08-26 03:00:00-03', '2026-08-26 03:02:00-03'),
+  ('40000000-0000-0000-0000-00000000000a',
+   '10000000-0000-0000-0000-000000000001', '2026-08-25', 'agenda', 'concluida', repeat('e', 64),
+   '2026-08-25 03:03:00-03', '2026-08-25 03:04:00-03');
+
+insert into public.presenca_sync_cobertura
+  (unidade_id, modo, data_alvo, run_id, status, snapshot_hash, finalizada_em)
+values
+  ('10000000-0000-0000-0000-000000000001', 'presenca', '2026-08-25',
+   '40000000-0000-0000-0000-000000000001', 'concluida', repeat('a', 64),
+   '2026-08-25 03:02:00-03'),
+  ('10000000-0000-0000-0000-000000000001', 'presenca', '2026-08-26',
+   '40000000-0000-0000-0000-00000000000b', 'concluida', repeat('b', 64),
+   '2026-08-26 03:02:00-03');
 
 insert into public.aula_alunos_emusys
   (id, unidade_id, aula_emusys_id, aluno_id, ultimo_run_visto, updated_at)
@@ -307,6 +382,73 @@ values
   ('00000000-0000-0000-0000-000000000030', 126, 519, '10000000-0000-0000-0000-000000000001', '2026-08-25', '02:00', 'ausente', 'agenda_secretaria', '2026-08-25 03:01-03', 27, 'Snapshot coerente', 'falta', 'ausente', '2026-08-25 03:00:11-03'),
   ('00000000-0000-0000-0000-000000000031', 127, 519, '10000000-0000-0000-0000-000000000001', '2026-08-25', '02:00', 'ausente', 'agenda_secretaria', '2026-08-25 03:01-03', 26, 'Snapshot coerente', 'falta', 'presente', '2026-08-25 03:00:10-03'),
   ('00000000-0000-0000-0000-000000000032', 127, 519, '10000000-0000-0000-0000-000000000001', '2026-08-25', '02:00', 'ausente', 'agenda_secretaria', '2026-08-25 03:01-03', 27, 'Snapshot coerente', 'falta', 'presente', '2026-08-25 03:00:11-03');
+
+with casos(aluno_id, run_id, ativo_operacional, sincronizado_emusys_em) as (
+  values
+    (128, '40000000-0000-0000-0000-000000000002'::uuid, true,  '2026-08-25 03:00:10-03'::timestamptz),
+    (129, '40000000-0000-0000-0000-000000000003'::uuid, true,  '2026-08-25 03:00:10-03'::timestamptz),
+    (130, '40000000-0000-0000-0000-000000000004'::uuid, true,  '2026-08-25 03:00:10-03'::timestamptz),
+    (131, '40000000-0000-0000-0000-000000000005'::uuid, true,  '2026-08-25 03:00:10-03'::timestamptz),
+    (132, '40000000-0000-0000-0000-000000000006'::uuid, true,  '2026-08-25 03:00:10-03'::timestamptz),
+    (133, '40000000-0000-0000-0000-000000000001'::uuid, false, '2026-08-25 03:00:10-03'::timestamptz),
+    (134, '40000000-0000-0000-0000-000000000001'::uuid, true,  '2026-08-25 02:59:59-03'::timestamptz)
+), vinculos as (
+  select
+    30 + row_number() over (order by c.aluno_id, a.aula_id) as id,
+    c.aluno_id, c.run_id, c.ativo_operacional, a.aula_id
+  from casos c
+  cross join (values (26), (27)) a(aula_id)
+)
+insert into public.aula_alunos_emusys
+  (id, unidade_id, aula_emusys_id, aluno_id, aluno_chave, ativo_operacional, ultimo_run_visto, updated_at)
+select
+  v.id, '10000000-0000-0000-0000-000000000001', v.aula_id, v.aluno_id,
+  'emusys:' || v.aluno_id, v.ativo_operacional, v.run_id, '2026-08-25 03:02:00-03'
+from vinculos v;
+
+with casos(aluno_id, sincronizado_emusys_em) as (
+  values
+    (128, '2026-08-25 03:00:10-03'::timestamptz),
+    (129, '2026-08-25 03:00:10-03'::timestamptz),
+    (130, '2026-08-25 03:00:10-03'::timestamptz),
+    (131, '2026-08-25 03:00:10-03'::timestamptz),
+    (132, '2026-08-25 03:00:10-03'::timestamptz),
+    (133, '2026-08-25 03:00:10-03'::timestamptz),
+    (134, '2026-08-25 02:59:59-03'::timestamptz)
+), linhas as (
+  select
+    ('00000000-0000-0000-0000-' || lpad((100 + row_number() over (order by c.aluno_id, a.aula_id))::text, 12, '0'))::uuid as id,
+    c.aluno_id, a.aula_id, c.sincronizado_emusys_em
+  from casos c
+  cross join (values (26), (27)) a(aula_id)
+)
+insert into public.aluno_presenca
+  (id, aluno_id, professor_id, unidade_id, data_aula, horario_aula, status,
+   respondido_por, respondido_em, aula_emusys_id, curso_nome, status_presenca,
+   emusys_presenca_bruta, sincronizado_emusys_em)
+select
+  l.id, l.aluno_id, 519, '10000000-0000-0000-0000-000000000001', '2026-08-25', '02:00',
+  'ausente', 'agenda_secretaria', '2026-08-25 03:01:00-03', l.aula_id,
+  'Snapshot coerente', 'falta', 'presente', l.sincronizado_emusys_em
+from linhas l;
+
+insert into public.aula_alunos_emusys
+  (id, unidade_id, aula_emusys_id, aluno_id, aluno_chave, ativo_operacional, ultimo_run_visto, updated_at)
+values
+  (45, '10000000-0000-0000-0000-000000000001', 28, 135, 'emusys:135', true,
+   '40000000-0000-0000-0000-00000000000b', '2026-08-26 03:02:00-03'),
+  (46, '10000000-0000-0000-0000-000000000001', 29, 135, 'emusys:135', true,
+   '40000000-0000-0000-0000-00000000000b', '2026-08-26 03:02:00-03');
+
+insert into public.aluno_presenca
+  (id, aluno_id, professor_id, unidade_id, data_aula, horario_aula, status,
+   respondido_por, respondido_em, aula_emusys_id, curso_nome, status_presenca,
+   emusys_presenca_bruta, sincronizado_emusys_em)
+values
+  ('00000000-0000-0000-0000-000000000140', 135, 519,
+   '10000000-0000-0000-0000-000000000001', '2026-08-26', '02:00', 'ausente',
+   'agenda_secretaria', '2026-08-26 03:01:00-03', 28, 'Snapshot incompleto',
+   'falta', 'presente', '2026-08-26 03:00:10-03');
 `;
 
 test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () => {
@@ -463,6 +605,30 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
     const snapshotCoerente = snapshotCoerenteMigration();
     assert.ok(snapshotCoerente, 'migration de snapshot coerente ausente');
     psql(container, readFileSync(snapshotCoerente, 'utf8'));
+    const snapshotPublicavel = snapshotPublicavelMigration();
+    assert.ok(snapshotPublicavel, 'migration de snapshot publicavel ausente');
+    psql(container, readFileSync(snapshotPublicavel, 'utf8'));
+    const snapshotRosterCompleto = snapshotRosterCompletoMigration();
+    assert.ok(snapshotRosterCompleto, 'migration de roster completo ausente');
+    psql(container, readFileSync(snapshotRosterCompleto, 'utf8'));
+    const snapshotRosterCompletoOtimizado = snapshotRosterCompletoOtimizadoMigration();
+    assert.ok(snapshotRosterCompletoOtimizado, 'migration otimizada de roster completo ausente');
+    const snapshotRosterCompletoOtimizadoSql = readFileSync(snapshotRosterCompletoOtimizado, 'utf8');
+    assert.match(
+      snapshotRosterCompletoOtimizadoSql,
+      /aa2\.ultimo_run_visto\s*=\s*n\.emusys_snapshot_run_id/iu,
+      'vínculo ativo de outro run precisa bloquear publicação de conflito',
+    );
+    psql(container, snapshotRosterCompletoOtimizadoSql);
+    const snapshotRosterRunConsistente = snapshotRosterRunConsistenteMigration();
+    assert.ok(snapshotRosterRunConsistente, 'migration de run consistente ausente');
+    const snapshotRosterRunConsistenteSql = readFileSync(snapshotRosterRunConsistente, 'utf8');
+    assert.match(
+      snapshotRosterRunConsistenteSql,
+      /aa2\.ultimo_run_visto\s+is\s+distinct\s+from\s+n\.emusys_snapshot_run_id/iu,
+      'vinculo ativo de outro run precisa bloquear publicacao de conflito',
+    );
+    psql(container, snapshotRosterRunConsistenteSql);
     rows = JSON.parse(psql(container, String.raw`
       select coalesce(json_agg(to_jsonb(v) order by
         v.unidade_id, v.data_aula, v.data_hora_inicio, v.aluno_id, v.curso_nome, v.slot_key
@@ -531,7 +697,7 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
     assert.deepEqual(byAluno(101)[0].ids_aulas_emusys, [1, 2, 3]);
     assert.equal(byAluno(101)[0].resultado_canonico, 'presente');
     assert.equal(byAluno(101)[0].possui_conflito, false, 'presente vence ausencia bruta entre gemeas Emusys');
-    assert.match(byAluno(101)[0].regra_versao, /presenca-ocorrencia-canonica-v2\.3/u);
+    assert.match(byAluno(101)[0].regra_versao, /presenca-ocorrencia-canonica-v2\.7/u);
     assert.equal(byAluno(102).length, 2, 'dois cursos do mesmo aluno permanecem dois slots');
     assert.equal(byAluno(102).find((row) => row.curso_nome === 'Violao').resultado_canonico, 'indeterminado');
     assert.equal(byAluno(102).find((row) => row.curso_nome === 'Experimental').resultado_canonico, 'presente');
@@ -550,10 +716,10 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
     assert.equal(byAluno(106)[0].fecha_chamada, false);
     assert.equal(byAluno(107)[0].resultado_canonico, 'falta');
     assert.equal(byAluno(107)[0].fecha_chamada, true);
-    assert.equal(byAluno(107)[0].possui_conflito, true, 'falta humana continua conflitante com presenca Emusys');
+    assert.equal(byAluno(107)[0].possui_conflito, false, 'presenca sem snapshot publicavel nao contradiz falta humana');
     assert.equal(byAluno(108)[0].resultado_canonico, 'falta_justificada');
     assert.equal(byAluno(108)[0].fecha_chamada, true);
-    assert.equal(byAluno(108)[0].possui_conflito, true, 'falta justificada humana continua conflitante com presenca Emusys');
+    assert.equal(byAluno(108)[0].possui_conflito, false, 'falta justificada sem snapshot publicavel nao contradiz presenca Emusys');
     assert.equal(byAluno(109)[0].resultado_canonico, 'indeterminado');
     assert.equal(byAluno(109)[0].fecha_chamada, false);
 
@@ -588,6 +754,14 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
       true,
       'duas presencas gêmeas no mesmo snapshot continuam sendo contradicao real',
     );
+
+    for (const id of [128, 129, 130, 131, 132, 133, 134, 135]) {
+      assert.equal(
+        byAluno(id)[0].possui_conflito,
+        false,
+        `caso ${id} sem snapshot publicavel nao pode virar conflito operacional`,
+      );
+    }
 
     assert.equal(byAluno(111)[0].resultado_canonico, 'falta');
     assert.equal(byAluno(111)[0].fecha_chamada, false, 'ausencia Emusys nao fecha chamada sozinha');
