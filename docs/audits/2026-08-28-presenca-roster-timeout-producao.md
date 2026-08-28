@@ -35,10 +35,12 @@ sete dias e não deve ser antecipada por migration ou alteração direta.
 | Views por período expandiam o universo antes de escopar unidade e data | Agenda, métricas mensais e Health Score podiam exceder 30–45 s | PRs #259–#262 adicionaram índices, escopo precoce, materialização diária e helper por unidade/data |
 | Default privileges históricos concediam a view métrica aos papéis dos agentes | Sol, Lia, Mila e Fábio poderiam contornar a RPC de finalidade | PR #263 revogou o acesso direto; somente adapters governados ou `service_role` alcançam o kernel |
 | Ausência bruta do Emusys era ambígua para consumidores | Um “ausente” da origem podia ser apresentado como falta sem decisão terminal | A ocorrência v2 preserva a evidência bruta, mas só publica falta terminal; falta de linha e sync incompleto permanecem indeterminados |
-| A view de saúde juntava confirmações somente por `aula_id` e tratava `sync_ausente_emusys` como origem humana | Reagendamentos corretamente invalidados apareciam como três presenças e dois cancelamentos “revertidos” no Recreio | A migration `20260828095344` casa professor, data e aula da ocorrência atual, ignora limpeza posterior auditada e conta cancelamento humano somente quando a origem é `agenda_secretaria` |
+| A view de saúde juntava confirmações somente por `aula_id` e tratava `sync_ausente_emusys` como origem humana | Reagendamentos corretamente invalidados apareciam como três presenças e dois cancelamentos “revertidos” no Recreio | A migration `20260828095344` retirou o falso positivo inicial e separou cancelamento humano de sync |
+| Escritores de ponto atualizavam status e horário da resposta, mas podiam manter data/unidade da ocorrência antiga; o LA Teacher também bloqueava uma nova resposta pelo `first_write_wins` | Após reagendamento, uma confirmação nova podia ficar invisível para a saúde ou uma confirmação antiga podia creditar o ponto da ocorrência nova | A migration `20260828101455` canonicaliza a ocorrência, invalida a antiga nas duas views e fecha o kernel; `20260828102034` serializa a resposta do LA Teacher contra o reagendamento e torna a fronteira auditada fail-closed |
 
-O fluxo convergido entrou em `main` nos PRs #246–#264. A correção final da
-observabilidade e este fechamento seguem no PR #265.
+O fluxo convergido entrou em `main` nos PRs #246–#265. As migrations
+`20260828101455` e `20260828102034` fecham os bloqueios encontrados na revisão
+posterior do PR #265.
 
 ## Objetos publicados
 
@@ -54,7 +56,9 @@ observabilidade e este fechamento seguem no PR #265.
 - `20260828085519_presenca_pendencias_view_materializada`;
 - `20260828091909_presenca_consumidores_periodo_materializados`;
 - `20260828092831_presenca_metrica_acl_agentes`;
-- `20260828095344_presenca_saude_professor_reagendamento`.
+- `20260828095344_presenca_saude_professor_reagendamento`;
+- `20260828101455_presenca_professor_ocorrencia_vigente`;
+- `20260828102034_presenca_professor_reagendamento_fail_closed`.
 
 Edge Functions ativas:
 
@@ -91,11 +95,12 @@ Emusys, precedência humana, política temporal, colisão de curso ou roster
 fantasma. `sync_incompleto=0`.
 
 A contraprova da proteção de decisões humanas inicialmente encontrou três
-contagens de presença e duas de cancelamento no Recreio. A inspeção por
-ocorrência mostrou apenas duas aulas locais: ambas tinham confirmação anterior
-a uma limpeza auditada por reagendamento; uma também carregava
-`cancelada_origem=sync_ausente_emusys`, que não é cancelamento humano. Após a
-correção da observabilidade, a janela real de sete dias ficou:
+contagens de presença e duas de cancelamento no Recreio. Não eram cinco aulas:
+eram duas aulas locais, e a view antiga multiplicava uma delas por duas
+confirmações. Ambas tinham confirmação anterior a uma limpeza auditada por
+reagendamento; uma também carregava `cancelada_origem=sync_ausente_emusys`, que
+não é cancelamento humano. Após a correção da ocorrência e da observabilidade,
+a janela real de sete dias ficou:
 
 | Unidade | Marcações humanas | Revertidas | Cancelamentos humanos desfeitos | Sem procedência |
 |---|---:|---:|---:|---:|
@@ -104,9 +109,11 @@ correção da observabilidade, a janela real de sete dias ficou:
 | Recreio | 272 | 0 | 0 | 0 |
 
 O índice parcial do evento de limpeza foi criado e a view continua sinalizando
-uma sobrescrita genuína: o fixture PostgreSQL mantém deliberadamente um caso
-sem evento de reagendamento e exige `revertidas=1`. O `EXPLAIN ANALYZE` da
-view real retornou três unidades em 8,55 ms, sem spill para disco.
+uma sobrescrita genuína. O fixture PostgreSQL reproduz os `ON CONFLICT` da
+Agenda e do LA Teacher, a remoção por ocorrência, o `first_write_wins`, um
+reagendamento no mesmo dia sem alunos e uma sobrescrita real. O banco real
+fechou paridade de 2.134/2.134 confirmações vigentes no ponto; o
+`EXPLAIN ANALYZE` da saúde retornou três unidades em 9,63 ms, sem spill.
 
 ### Escritores reais, sem fixture em produção
 
@@ -208,8 +215,9 @@ novo pacote, supressão de warning ou atalho de bundling neste release.
 
 ## Gate operacional restante
 
-O sistema está publicado e tecnicamente pronto para o expediente. O que resta
-é evidência operacional, não implementação:
+A implementação está publicada e apta à observação operacional. A aceitação
+final ainda depende de evidência real: a primeira escrita posterior ao deploy e
+a janela aprovada de sete dias. Não há outra implementação prevista neste gate:
 
 1. observar a primeira chamada real posterior ao deploy e confirmar recibo
    terminal no ledger;
