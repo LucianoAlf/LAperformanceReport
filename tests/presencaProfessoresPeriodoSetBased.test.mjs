@@ -7,6 +7,9 @@ const scopedSuffix = '_presenca_ocorrencia_canonica_escopada.sql';
 const publishSuffix = '_presenca_ocorrencia_canonica_escopada_publicacao.sql';
 const parametersSuffix = '_presenca_ocorrencia_canonica_escopada_parametros.sql';
 const literalPlanSuffix = '_presenca_ocorrencia_canonica_escopada_plano_literal.sql';
+const materializedAggregatesSuffix = '_presenca_ocorrencia_agregados_materializados.sql';
+const setBasedPublicationStateSuffix = '_presenca_estado_periodo_set_based.sql';
+const singleSliceMetricsSuffix = '_presenca_metricas_recorte_unico.sql';
 
 function migration() {
   const files = readdirSync('supabase/migrations').filter((name) => name.endsWith(suffix));
@@ -44,6 +47,27 @@ function parametersMigration() {
 function literalPlanMigration() {
   const files = readdirSync('supabase/migrations').filter((name) => name.endsWith(literalPlanSuffix));
   assert.equal(files.length, 1, `esperava uma migration *${literalPlanSuffix}`);
+  return readFileSync(`supabase/migrations/${files[0]}`, 'utf8');
+}
+
+function materializedAggregatesMigration() {
+  const files = readdirSync('supabase/migrations')
+    .filter((name) => name.endsWith(materializedAggregatesSuffix));
+  assert.equal(files.length, 1, `esperava uma migration *${materializedAggregatesSuffix}`);
+  return readFileSync(`supabase/migrations/${files[0]}`, 'utf8');
+}
+
+function setBasedPublicationStateMigration() {
+  const files = readdirSync('supabase/migrations')
+    .filter((name) => name.endsWith(setBasedPublicationStateSuffix));
+  assert.equal(files.length, 1, `esperava uma migration *${setBasedPublicationStateSuffix}`);
+  return readFileSync(`supabase/migrations/${files[0]}`, 'utf8');
+}
+
+function singleSliceMetricsMigration() {
+  const files = readdirSync('supabase/migrations')
+    .filter((name) => name.endsWith(singleSliceMetricsSuffix));
+  assert.equal(files.length, 1, `esperava uma migration *${singleSliceMetricsSuffix}`);
   return readFileSync(`supabase/migrations/${files[0]}`, 'utf8');
 }
 
@@ -106,5 +130,42 @@ test('recorte publica o kernel escopado sem reescrever a view compartilhada', ()
   assert.match(wrapper, /vw_presenca_ocorrencia_metrica_v2/iu);
   assert.match(wrapper, /fn_presenca_ocorrencia_canonica_escopada_v2/iu);
   assert.match(sql, /set\s+plan_cache_mode\s*=\s*'force_custom_plan'/iu);
+  assert.doesNotMatch(sql, /(?:insert\s+into|update|delete\s+from|truncate)\s+public\./iu);
+});
+
+test('agregados canonicos sao calculados uma vez por recorte', () => {
+  const sql = materializedAggregatesMigration();
+  const fn = definition(sql, 'fn_presenca_ocorrencia_canonica_escopada_v2');
+
+  assert.match(fn, /agregada_regular\s+as\s+materialized\s*\(/iu);
+  assert.match(fn, /agregada_multidata\s+as\s+materialized\s*\(/iu);
+  assert.doesNotMatch(sql, /create\s+or\s+replace\s+view/iu);
+  assert.doesNotMatch(sql, /(?:insert\s+into|update|delete\s+from|truncate)\s+public\./iu);
+});
+
+test('estado de publicacao do periodo deixa de recalcular cada dia', () => {
+  const sql = setBasedPublicationStateMigration();
+  const fn = definition(sql, 'fn_presenca_estado_publicacao_periodo_v2');
+
+  assert.doesNotMatch(fn, /fn_presenca_pendencias_do_dia_v2/iu);
+  assert.match(fn, /fn_presenca_ocorrencias_escopo_interno_v2\s*\([\s\S]*p_data_inicio[\s\S]*p_data_fim/iu);
+  assert.match(fn, /dias_operacionais\s+as\s+materialized/iu);
+  assert.match(fn, /respostas_por_dia\s+as\s+materialized/iu);
+  assert.match(sql, /grant\s+execute[\s\S]*fn_presenca_estado_publicacao_periodo_v2[\s\S]*to\s+authenticated\s*,\s*service_role/iu);
+  assert.doesNotMatch(sql, /(?:insert\s+into|update|delete\s+from|truncate)\s+public\./iu);
+});
+
+test('metricas e publicacao compartilham o mesmo recorte canonico', () => {
+  const sql = singleSliceMetricsMigration();
+  const fn = definition(sql, 'get_presenca_metricas_canonicas_v2');
+  const chamadas = fn.match(/fn_presenca_ocorrencias_escopo_interno_v2\s*\(/giu) ?? [];
+
+  assert.equal(chamadas.length, 1);
+  assert.doesNotMatch(fn, /fn_presenca_estado_publicacao_periodo_v2/iu);
+  assert.match(fn, /ocorrencias\s+as\s+materialized/iu);
+  assert.match(fn, /observada\s+as\s+materialized/iu);
+  assert.match(fn, /respostas_por_dia\s+as\s+materialized/iu);
+  assert.match(sql, /grant\s+execute[\s\S]*get_presenca_metricas_canonicas_v2[\s\S]*to\s+service_role/iu);
+  assert.doesNotMatch(sql, /grant\s+execute[\s\S]*get_presenca_metricas_canonicas_v2[\s\S]*to\s+(?:anon|authenticated)/iu);
   assert.doesNotMatch(sql, /(?:insert\s+into|update|delete\s+from|truncate)\s+public\./iu);
 });
