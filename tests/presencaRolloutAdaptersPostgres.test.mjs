@@ -7,6 +7,7 @@ const CONFIG = 'supabase/migrations/20260827031600_presenca_rollout_config.sql';
 const ADAPTERS = 'supabase/migrations/20260827031700_presenca_rollout_adapters.sql';
 const BASELINE = 'supabase/migrations/20260827030000_presenca_funcoes_vivas_baseline.sql';
 const CONSOLIDATED_AGENDA_FIX = 'supabase/migrations/20260828025700_agenda_consolidada_rollout_legado.sql';
+const AGENDA_AUTH_ROLE_FIX = 'supabase/migrations/20260828034000_presenca_auth_role_canonico.sql';
 const REPORT_PROVENANCE_HOTFIX = 'supabase/migrations/20260827032300_presenca_relatorio_rollout_proveniencia_hotfix.sql';
 const UNIT = '91000000-0000-0000-0000-000000000001';
 const UNIT_2 = '91000000-0000-0000-0000-000000000002';
@@ -43,6 +44,18 @@ function ultimoJson(output) {
   return JSON.parse(linhas.at(-1));
 }
 
+function extrairDefinicaoFuncao(sql, nome) {
+  const inicio = sql.indexOf(`CREATE OR REPLACE FUNCTION public.${nome}(`);
+  assert.notEqual(inicio, -1, `definicao de ${nome} ausente`);
+  const proximos = [
+    sql.indexOf('\n\nCREATE OR REPLACE FUNCTION ', inicio + 1),
+    sql.indexOf('\n\nCREATE OR REPLACE VIEW ', inicio + 1),
+    sql.indexOf('\n\nCOMMENT ON FUNCTION ', inicio + 1),
+  ].filter((indice) => indice > inicio);
+  const fim = proximos.length > 0 ? Math.min(...proximos) : sql.length;
+  return sql.slice(inicio, fim).trim();
+}
+
 async function waitForPostgres(container) {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     if (docker([
@@ -57,9 +70,11 @@ async function waitForPostgres(container) {
 test('baseline preserva o texto legado e adapters governam todas as superficies vivas', () => {
   assert.equal(existsSync(ADAPTERS), true, 'migration de adapters ausente');
   assert.equal(existsSync(CONSOLIDATED_AGENDA_FIX), true, 'hotfix da Agenda consolidada ausente');
+  assert.equal(existsSync(AGENDA_AUTH_ROLE_FIX), true, 'hotfix do claim JWT real ausente');
   assert.equal(existsSync(REPORT_PROVENANCE_HOTFIX), true, 'hotfix de proveniencia do relatorio ausente');
   const baseline = readFileSync(BASELINE, 'utf8');
   const adapters = readFileSync(ADAPTERS, 'utf8');
+  const authRoleFix = readFileSync(AGENDA_AUTH_ROLE_FIX, 'utf8');
   assert.match(baseline, /fn_texto_relatorio_presenca_legado_v1/iu);
   for (const name of [
     'get_agenda_dia_canonica_v2',
@@ -74,6 +89,18 @@ test('baseline preserva o texto legado e adapters governam todas as superficies 
   assert.match(adapters, /(?:if|when)\s+v_modo\s*=\s*'canonico_v2'/iu);
   assert.match(adapters, /exception\s+when others/iu);
   assert.doesNotMatch(adapters, /delete\s+from|truncate\s+/iu);
+  assert.equal((authRoleFix.match(/^CREATE OR REPLACE FUNCTION public\./gmu) ?? []).length, 20);
+  assert.equal((authRoleFix.match(/^CREATE OR REPLACE VIEW public\./gmu) ?? []).length, 2);
+  assert.doesNotMatch(authRoleFix, /request\.jwt\.claim\.role/iu);
+  assert.match(authRoleFix, /auth\.role\(\)/u);
+  for (const nome of [
+    'get_agenda_dia_v2',
+    'fn_presenca_pendencias_do_dia_v2',
+    'presenca_sync_iniciar_v1',
+    'presenca_sync_heartbeat_v1',
+    'presenca_sync_finalizar_v1',
+    'get_presenca_contexto_agente_canonico_v1',
+  ]) assert.match(authRoleFix, new RegExp(`FUNCTION public\\.${nome}\\(`, 'u'));
 });
 
 test('sombra calcula sem expor, canonico ativa e legado reverte sem migration destrutiva', { timeout: 120_000 }, async (t) => {
@@ -99,6 +126,9 @@ test('sombra calcula sem expor, canonico ativa e legado reverte sem migration de
       grant authenticated to authenticator;
       create schema auth;
       create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+      create function auth.role() returns text language sql stable as $$
+        select nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role'
+      $$;
       create function public.is_admin() returns boolean language sql stable as $$
         select coalesce(current_setting('app.test_admin', true), 'false') = 'true'
       $$;
@@ -182,6 +212,10 @@ test('sombra calcula sem expor, canonico ativa e legado reverte sem migration de
     psql(container, readFileSync(CONFIG, 'utf8'));
     psql(container, readFileSync(ADAPTERS, 'utf8'));
     psql(container, readFileSync(CONSOLIDATED_AGENDA_FIX, 'utf8'));
+    psql(container, extrairDefinicaoFuncao(
+      readFileSync(AGENDA_AUTH_ROLE_FIX, 'utf8'),
+      'get_agenda_dia_v2',
+    ));
     psql(container, readFileSync(REPORT_PROVENANCE_HOTFIX, 'utf8'));
 
     const shadow = JSON.parse(psql(container, String.raw`
@@ -223,7 +257,7 @@ test('sombra calcula sem expor, canonico ativa e legado reverte sem migration de
     const agendaDaPropriaUnidade = ultimoJson(psql(container, String.raw`
       set session authorization authenticator;
       set role authenticated;
-      select set_config('request.jwt.claim.role', 'authenticated', false);
+      select set_config('request.jwt.claims', '{"role":"authenticated"}', false);
       select set_config('app.test_admin', 'false', false);
       select public.get_agenda_dia_v2('2026-08-26', '${UNIT}');
     `));
@@ -232,7 +266,7 @@ test('sombra calcula sem expor, canonico ativa e legado reverte sem migration de
     assert.match(psqlFalha(container, String.raw`
       set session authorization authenticator;
       set role authenticated;
-      select set_config('request.jwt.claim.role', 'authenticated', false);
+      select set_config('request.jwt.claims', '{"role":"authenticated"}', false);
       select set_config('app.test_admin', 'false', false);
       select public.get_agenda_dia_v2('2026-08-26', '${UNIT_2}');
     `), /UNIDADE_NAO_AUTORIZADA/u);
@@ -240,7 +274,7 @@ test('sombra calcula sem expor, canonico ativa e legado reverte sem migration de
     assert.match(psqlFalha(container, String.raw`
       set session authorization authenticator;
       set role authenticated;
-      select set_config('request.jwt.claim.role', 'authenticated', false);
+      select set_config('request.jwt.claims', '{"role":"authenticated"}', false);
       select set_config('app.test_admin', 'false', false);
       select public.get_agenda_dia_v2('2026-08-26', null);
     `), /CONSOLIDADO_REQUER_ADMIN/u);
@@ -248,7 +282,7 @@ test('sombra calcula sem expor, canonico ativa e legado reverte sem migration de
     const agendaConsolidadaAdmin = ultimoJson(psql(container, String.raw`
       set session authorization authenticator;
       set role authenticated;
-      select set_config('request.jwt.claim.role', 'authenticated', false);
+      select set_config('request.jwt.claims', '{"role":"authenticated"}', false);
       select set_config('app.test_admin', 'true', false);
       select public.get_agenda_dia_v2('2026-08-26', null);
     `));
