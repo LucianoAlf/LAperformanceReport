@@ -11,7 +11,7 @@ const MIGRATION =
 const SET_BASED_MIGRATION =
   'supabase/migrations/20260828053000_presenca_roster_reconciliacao_set_based.sql';
 const EMPTY_SNAPSHOT_MIGRATION =
-  'supabase/migrations/20260828072000_presenca_roster_fotografia_vazia_segura.sql';
+  'supabase/migrations/20260828072309_presenca_roster_fotografia_vazia_segura.sql';
 const UNIDADE = '44444444-4444-4444-8444-444444444444';
 const RUN = '44444444-4444-4444-8444-444444444401';
 const RUN_VAZIO = '44444444-4444-4444-8444-444444444402';
