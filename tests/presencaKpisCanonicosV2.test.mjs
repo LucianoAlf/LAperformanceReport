@@ -6,6 +6,8 @@ const migrationPath =
   'supabase/migrations/20260827031300_presenca_consumidores_numericos_v2.sql';
 const performanceMigrationPath =
   'supabase/migrations/20260828093000_presenca_consumidores_periodo_materializados.sql';
+const agentAclMigrationPath =
+  'supabase/migrations/20260828093500_presenca_metrica_acl_agentes.sql';
 
 function migration() {
   assert.ok(existsSync(migrationPath), `migration ausente: ${migrationPath}`);
@@ -26,6 +28,14 @@ function performanceMigration() {
     `migration ausente: ${performanceMigrationPath}`,
   );
   return readFileSync(performanceMigrationPath, 'utf8');
+}
+
+function agentAclMigration() {
+  assert.ok(
+    existsSync(agentAclMigrationPath),
+    `migration ausente: ${agentAclMigrationPath}`,
+  );
+  return readFileSync(agentAclMigrationPath, 'utf8');
 }
 
 test('camada numerica nasce exclusivamente da ocorrencia canonica v2', () => {
@@ -202,4 +212,19 @@ test('consumidores de periodo materializam cada recorte canonico uma unica vez',
   assert.match(sql, /get_health_score_professor_v3_presenca_periodo_v2[\s\S]*unidades_permitidas\s+as\s+materialized[\s\S]*estado_unidade\s+as\s+materialized[\s\S]*observada\s+as\s+materialized[\s\S]*fn_presenca_ocorrencias_escopo_interno_v2/iu);
   assert.match(sql, /revoke\s+all[\s\S]*fn_presenca_ocorrencias_escopo_interno_v2[\s\S]*from\s+public\s*,\s*anon\s*,\s*authenticated\s*,\s*service_role/iu);
   assert.doesNotMatch(sql, /pg_get_functiondef|execute\s+format|information_schema/iu);
+});
+
+test('kernel metrico permanece service-only apesar dos default grants legados', () => {
+  const sql = agentAclMigration();
+
+  for (const role of [
+    'sol_acesso_restrito',
+    'lia_acesso_restrito',
+    'mila_acesso_restrito',
+    'fabio_agent',
+  ]) {
+    assert.match(sql, new RegExp(`'${role}'`, 'u'));
+  }
+  assert.match(sql, /revoke\s+select\s+on\s+public\.vw_presenca_ocorrencia_metrica_v2\s+from\s+%I/iu);
+  assert.doesNotMatch(sql, /(?:insert\s+into|update|delete\s+from|truncate)\s+public\./iu);
 });
