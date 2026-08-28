@@ -64,6 +64,11 @@ create role anon nologin;
 create role authenticated nologin;
 create role service_role nologin bypassrls;
 
+create table public.alunos (
+  id integer primary key,
+  nome text not null
+);
+
 create table public.aulas_emusys (
   id integer primary key,
   emusys_id integer not null,
@@ -152,6 +157,10 @@ insert into public.unidades values
   ('10000000-0000-0000-0000-000000000001', 'Barra'),
   ('20000000-0000-0000-0000-000000000002', 'Recreio');
 
+insert into public.alunos values
+  (120, 'Aluno Homônimo'),
+  (121, 'Aluno Homônimo');
+
 insert into public.aulas_emusys
   (id, emusys_id, unidade_id, data_aula, data_hora_inicio, data_hora_fim,
    tipo, categoria, curso_nome, professor_id)
@@ -175,7 +184,9 @@ values
   (17, 1017, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 07:00-03', '2026-08-25 08:00-03', 'individual', 'normal', 'Bateria', 513),
   (18, 1018, '10000000-0000-0000-0000-000000000001', '2026-08-27', '2026-08-27 09:00-03', '2026-08-27 10:00-03', 'individual', 'normal', 'Canto', 514),
   (19, 1019, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 06:00-03', '2026-08-25 07:00-03', 'turma', 'normal', 'Violino', 515),
-  (20, 1020, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 06:00-03', '2026-08-25 07:00-03', 'individual', 'normal', 'Violino', 515);
+  (20, 1020, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 06:00-03', '2026-08-25 07:00-03', 'individual', 'normal', 'Violino', 515),
+  (21, 1021, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 05:00-03', '2026-08-25 06:00-03', 'turma', 'normal', 'Piano', 516),
+  (22, 1022, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 05:00-03', '2026-08-25 06:00-03', 'turma', 'normal', 'Piano', 516);
 
 update public.aulas_emusys set cancelada = true where id = 16;
 update public.aulas_emusys set justificada = true where id = 17;
@@ -221,7 +232,9 @@ insert into public.aluno_presenca
    emusys_presenca_bruta, sincronizado_emusys_em)
 values
   ('00000000-0000-0000-0000-000000000021', 116, 515, '10000000-0000-0000-0000-000000000001', '2026-08-25', '06:00', 'presente', 'emusys', null, 19, 'Violino', null, 'presente', '2026-08-25 07:05-03'),
-  ('00000000-0000-0000-0000-000000000022', 116, 515, '10000000-0000-0000-0000-000000000001', '2026-08-25', '06:00', 'presente', 'emusys', null, 20, 'Violino', null, 'presente', '2026-08-25 07:06-03');
+  ('00000000-0000-0000-0000-000000000022', 116, 515, '10000000-0000-0000-0000-000000000001', '2026-08-25', '06:00', 'presente', 'emusys', null, 20, 'Violino', null, 'presente', '2026-08-25 07:06-03'),
+  ('00000000-0000-0000-0000-000000000023', 120, 516, '10000000-0000-0000-0000-000000000001', '2026-08-25', '05:00', 'presente', 'emusys', null, 21, 'Piano', null, 'presente', '2026-08-25 06:05-03'),
+  ('00000000-0000-0000-0000-000000000024', 121, 516, '10000000-0000-0000-0000-000000000001', '2026-08-25', '05:00', 'presente', 'emusys', null, 22, 'Piano', null, 'presente', '2026-08-25 06:05-03');
 `;
 
 test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () => {
@@ -355,7 +368,7 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
     const byAluno = (id) => rows.filter((row) => row.aluno_id === id);
     assert.equal(byAluno(101).length, 1, 'duas/tres gemeas viram uma ocorrencia');
     assert.deepEqual(byAluno(101)[0].ids_aulas_emusys, [1, 2, 3]);
-    assert.equal(byAluno(102).length, 2, 'cursos distintos nao colidem');
+    assert.equal(byAluno(102).length, 2, 'dois cursos do mesmo aluno permanecem dois slots');
     assert.equal(byAluno(102).find((row) => row.curso_nome === 'Violao').resultado_canonico, 'indeterminado');
     assert.equal(byAluno(102).find((row) => row.curso_nome === 'Experimental').resultado_canonico, 'presente');
 
@@ -380,6 +393,11 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
 
     assert.equal(byAluno(110).length, 2, 'mesmo ID Emusys em unidades distintas nao colide');
     assert.notEqual(byAluno(110)[0].slot_key, byAluno(110)[1].slot_key);
+    assert.deepEqual(
+      [byAluno(120).length, byAluno(121).length],
+      [1, 1],
+      'dois alunos homônimos permanecem separados por aluno_id',
+    );
 
     assert.equal(byAluno(111)[0].resultado_canonico, 'falta');
     assert.equal(byAluno(111)[0].fecha_chamada, false, 'ausencia Emusys nao fecha chamada sozinha');
