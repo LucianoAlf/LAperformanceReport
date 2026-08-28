@@ -64,7 +64,8 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
   const [editandoBanda, setEditandoBanda] = useState(false);
   const [processando, setProcessando] = useState(false);
 
-  // Adicionar integrante (só banda avulsa — roster manual)
+  // Adicionar integrante: vale para avulsa (roster manual) e para turma
+  // (quem toca na banda sem estar matriculado naquela turma no Emusys)
   const [buscaAluno, setBuscaAluno] = useState('');
   const [alunoSelecionado, setAlunoSelecionado] = useState<AlunoBanda | null>(null);
   const [novoInstrumento, setNovoInstrumento] = useState('');
@@ -90,10 +91,8 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
       toast.error('Escolha um aluno da lista para adicionar.');
       return;
     }
-    if (integrantes.some((i) => i.aluno_id === alunoSelecionado.aluno_id)) {
-      toast.error('Este aluno já está na banda.');
-      return;
-    }
+    // Já estar na lista não é erro: o upsert vira definição/edição do instrumento (overlay).
+    const jaNaBanda = integrantes.some((i) => i.aluno_id === alunoSelecionado.aluno_id);
     setProcessando(true);
     const { error } = await upsertIntegranteBanda({
       bandaId,
@@ -106,7 +105,9 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
       toast.error('Erro ao adicionar integrante', { description: error.message });
       return;
     }
-    toast.success('Integrante adicionado', { description: alunoSelecionado.nome });
+    toast.success(jaNaBanda ? 'Instrumento atualizado' : 'Integrante adicionado', {
+      description: alunoSelecionado.nome,
+    });
     setBuscaAluno('');
     setAlunoSelecionado(null);
     setNovoInstrumento('');
@@ -134,7 +135,7 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
     if (!integranteRemovendo || !bandaId) return;
     setProcessando(true);
     // Avulsa: desativar mantém histórico (o aluno faz parte do roster de fato).
-    // Turma: o registro é só overlay (instrumento/função) — remover apaga o overlay.
+    // Turma: só integrante MANUAL chega aqui — quem vem do Emusys não tem botão remover.
     const { error } = isAvulsa
       ? await desativarIntegranteBanda(bandaId, integranteRemovendo.aluno_id)
       : await removerIntegranteBanda(bandaId, integranteRemovendo.aluno_id);
@@ -143,9 +144,7 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
       toast.error('Erro ao remover integrante', { description: error.message });
       return;
     }
-    toast.success(isAvulsa ? 'Integrante removido da banda' : 'Registro de integrante removido', {
-      description: integranteRemovendo.nome,
-    });
+    toast.success('Integrante removido da banda', { description: integranteRemovendo.nome });
     setIntegranteRemovendo(null);
     recarregar();
     onAlterado();
@@ -322,46 +321,46 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
                     <Users className="w-4 h-4 text-cyan-400" />
                     Integrantes
                   </h3>
-                  {isAvulsa && (
-                    <span className="text-xs text-slate-500">Roster manual — adicione e remova à vontade</span>
-                  )}
+                  <span className="text-xs text-slate-500">
+                    {isAvulsa
+                      ? 'Roster manual — adicione e remova à vontade'
+                      : 'Roster do Emusys — dá para incluir quem toca sem estar na turma'}
+                  </span>
                 </div>
 
-                {isAvulsa && (
-                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_110px_auto] gap-2 items-end mb-3 bg-slate-800/30 border border-slate-700/40 rounded-xl p-3">
-                    <div className="space-y-1">
-                      <span className="text-xs text-slate-400">Aluno</span>
-                      <AutocompleteAlunoBanda
-                        value={buscaAluno}
-                        onChange={(nomeAluno, aluno) => {
-                          setBuscaAluno(nomeAluno);
-                          setAlunoSelecionado(aluno || null);
-                        }}
-                        unidadeId={detalhe.unidade_id}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-xs text-slate-400">Instrumento</span>
-                      <Input
-                        value={novoInstrumento}
-                        onChange={(e) => setNovoInstrumento(e.target.value)}
-                        placeholder="Ex.: Guitarra"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-xs text-slate-400">Função</span>
-                      <Input
-                        value={novaFuncao}
-                        onChange={(e) => setNovaFuncao(e.target.value)}
-                        placeholder="Opcional"
-                      />
-                    </div>
-                    <Button type="button" variant="outline" onClick={adicionarIntegrante} disabled={processando}>
-                      <UserPlus className="w-4 h-4 mr-1" />
-                      Adicionar
-                    </Button>
+                <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_110px_auto] gap-2 items-end mb-3 bg-slate-800/30 border border-slate-700/40 rounded-xl p-3">
+                  <div className="space-y-1">
+                    <span className="text-xs text-slate-400">Aluno</span>
+                    <AutocompleteAlunoBanda
+                      value={buscaAluno}
+                      onChange={(nomeAluno, aluno) => {
+                        setBuscaAluno(nomeAluno);
+                        setAlunoSelecionado(aluno || null);
+                      }}
+                      unidadeId={detalhe.unidade_id}
+                    />
                   </div>
-                )}
+                  <div className="space-y-1">
+                    <span className="text-xs text-slate-400">Instrumento</span>
+                    <Input
+                      value={novoInstrumento}
+                      onChange={(e) => setNovoInstrumento(e.target.value)}
+                      placeholder="Ex.: Guitarra"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs text-slate-400">Função</span>
+                    <Input
+                      value={novaFuncao}
+                      onChange={(e) => setNovaFuncao(e.target.value)}
+                      placeholder="Opcional"
+                    />
+                  </div>
+                  <Button type="button" variant="outline" onClick={adicionarIntegrante} disabled={processando}>
+                    <UserPlus className="w-4 h-4 mr-1" />
+                    Adicionar
+                  </Button>
+                </div>
 
                 {integrantes.length === 0 ? (
                   <p className="text-sm text-slate-500 bg-slate-800/40 rounded-xl p-4">
@@ -393,7 +392,18 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
                             </div>
                           )}
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-white truncate">{int.nome}</p>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <p className="text-sm font-medium text-white truncate">{int.nome}</p>
+                              {!isAvulsa && int.fonte === 'manual' && (
+                                <Badge
+                                  variant="outline"
+                                  className="flex-shrink-0 px-1.5 py-0 text-[10px] font-normal"
+                                  title="Toca na banda, mas não está matriculado nesta turma no Emusys"
+                                >
+                                  fora do Emusys
+                                </Badge>
+                              )}
+                            </div>
                             <p className="text-xs text-slate-400">
                               {int.instrumento || 'Instrumento não definido'}
                               {int.funcao ? ` · ${int.funcao}` : ''}
@@ -418,7 +428,7 @@ export function BandaDetalheDialog({ bandaId, onClose, onAlterado }: BandaDetalh
                             <Pencil className="w-3.5 h-3.5 mr-1" />
                             {temOverlay ? 'Editar' : 'Definir'}
                           </Button>
-                          {(isAvulsa || temOverlay) && (
+                          {(isAvulsa || int.fonte === 'manual') && (
                             <Button
                               variant="ghost"
                               size="sm"

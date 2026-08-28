@@ -10,16 +10,15 @@ import {
   type ConciliacaoItem,
 } from '@/hooks/useBandas';
 
+// A RPC foi re-ancorada no roster vivo do Emusys (28/08/2026) e só devolve um problema.
+// Os rótulos antigos ('aluno inexistente', 'saiu da escola') vinham da versão derivada
+// de `alunos`, que comparava formatos de turma_chave incompatíveis e acusava todo mundo.
 const PROBLEMA_LABEL: Record<ConciliacaoItem['problema'], string> = {
-  'aluno inexistente': 'Aluno inexistente',
-  'saiu da escola': 'Saiu da escola',
-  'nao esta mais nesta turma': 'Não está mais nesta turma',
+  'fora do Emusys (adicionado manualmente ou saiu do Emusys)': 'Fora do Emusys',
 };
 
 const PROBLEMA_VARIANT: Record<ConciliacaoItem['problema'], 'error' | 'warning'> = {
-  'aluno inexistente': 'error',
-  'saiu da escola': 'error',
-  'nao esta mais nesta turma': 'warning',
+  'fora do Emusys (adicionado manualmente ou saiu do Emusys)': 'warning',
 };
 
 interface ConciliacaoTabProps {
@@ -29,9 +28,12 @@ interface ConciliacaoTabProps {
 }
 
 /**
- * Fila da Jéssica: integrantes com overlay ativo cujo aluno saiu da escola,
- * trocou de turma ou não existe mais. Resolver = desativar (mantém histórico
- * com data_saida) ou remover o registro.
+ * Fila da Jéssica: integrantes com overlay ativo que saíram do roster vivo da turma
+ * no Emusys. Resolver = desativar (mantém histórico com data_saida) ou remover o registro.
+ *
+ * PENDENTE (decisão do Alf, 28/08/2026): esta aba passa a ser a tela da FILA DE BATISMO
+ * — trocar a fonte de `banda_conciliacao_roster` por `banda_turmas_a_confirmar` e
+ * expor `banda_confirmar` / `banda_descartar`, hoje sem tela em lugar nenhum.
  */
 export function ConciliacaoTab({ unidadeAtual, itens, onResolvido }: ConciliacaoTabProps) {
   const [itemDesativando, setItemDesativando] = useState<ConciliacaoItem | null>(null);
