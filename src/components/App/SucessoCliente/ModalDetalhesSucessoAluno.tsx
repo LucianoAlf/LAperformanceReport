@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import {
@@ -160,7 +160,7 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
               unidade_nome: aluno.unidade_codigo,
               health_score_numerico: aluno.health_score_numerico || 0,
               health_status: aluno.health_status,
-              percentual_presenca: aluno.percentual_presenca || 0,
+              percentual_presenca: aluno.percentual_presenca,
               status_pagamento: aluno.status_pagamento,
               tempo_permanencia_meses: aluno.tempo_permanencia_meses || 0,
               fase_jornada: aluno.fase_jornada,
@@ -232,7 +232,7 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
               unidade_nome: aluno.unidade_codigo,
               health_score_numerico: aluno.health_score_numerico || 0,
               health_status: aluno.health_status,
-              percentual_presenca: aluno.percentual_presenca || 0,
+              percentual_presenca: aluno.percentual_presenca,
               status_pagamento: aluno.status_pagamento,
               tempo_permanencia_meses: aluno.tempo_permanencia_meses || 0,
               fase_jornada: aluno.fase_jornada,
@@ -265,13 +265,17 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
 
   const carregarPresenca = async () => {
     if (!aluno) return;
-    const { data: presencaData, error } = await supabase
-      .from('aluno_presenca')
-      .select('data_aula, status, horario_aula, curso_nome, turma_nome, sala_nome, professores(nome)')
-      .eq('aluno_id', aluno.id)
-      .in('status', ['presente', 'ausente'])
-      .order('data_aula', { ascending: false })
-      .limit(100);
+    const hoje = new Date();
+    const { data: presencaData, error } = await supabase.rpc(
+      'get_presenca_ocorrencias_periodo_v2',
+      {
+        p_unidade_id: aluno.unidade_id,
+        p_data_inicio: format(subDays(hoje, 369), 'yyyy-MM-dd'),
+        p_data_fim: format(hoje, 'yyyy-MM-dd'),
+        p_professor_id: null,
+        p_aluno_id: aluno.id,
+      },
+    );
 
     if (error) {
       console.error('Erro ao carregar presença:', error);
@@ -279,11 +283,15 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
     }
 
     setPresencas(
-      (presencaData || []).map((p: any) => ({
+      (presencaData || [])
+        .filter((p: any) => ['presente', 'falta', 'falta_justificada'].includes(p.resultado_canonico))
+        .sort((a: any, b: any) => String(b.data_aula).localeCompare(String(a.data_aula)))
+        .slice(0, 100)
+        .map((p: any) => ({
         data_aula: p.data_aula,
-        status: p.status,
+        status: p.resultado_canonico === 'presente' ? 'presente' : 'ausente',
         horario_aula: p.horario_aula,
-        professor_nome: p.professores?.nome || null,
+        professor_nome: p.professor_nome || null,
         curso_nome: p.curso_nome || null,
         turma_nome: p.turma_nome || null,
         sala_nome: p.sala_nome || null,
@@ -500,8 +508,8 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
             {/* Métricas em Grid - 3 colunas x 2 linhas */}
             <div className="flex-1 grid grid-cols-3 gap-3">
               <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                <p className={`text-xl font-bold ${(aluno.percentual_presenca || 0) >= 80 ? 'text-green-400' : (aluno.percentual_presenca || 0) >= 60 ? 'text-yellow-400' : 'text-red-400'}`}>
-                  {aluno.percentual_presenca ? `${aluno.percentual_presenca.toFixed(0)}%` : '—'}
+                <p className={`text-xl font-bold ${aluno.percentual_presenca == null ? 'text-amber-400' : aluno.percentual_presenca >= 80 ? 'text-green-400' : aluno.percentual_presenca >= 60 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {aluno.percentual_presenca == null ? 'Em auditoria' : `${aluno.percentual_presenca.toFixed(0)}%`}
                 </p>
                 <p className="text-xs text-slate-400">Presença</p>
                 {aluno.dias_sem_presenca != null && (
@@ -658,11 +666,12 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
               Histórico de Presença
               {presencas.length > 0 && (
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                  (aluno.percentual_presenca || 0) >= 80 ? 'bg-green-500/20 text-green-400' :
-                  (aluno.percentual_presenca || 0) >= 60 ? 'bg-yellow-500/20 text-yellow-400' :
+                  aluno.percentual_presenca == null ? 'bg-amber-500/20 text-amber-400' :
+                  aluno.percentual_presenca >= 80 ? 'bg-green-500/20 text-green-400' :
+                  aluno.percentual_presenca >= 60 ? 'bg-yellow-500/20 text-yellow-400' :
                   'bg-red-500/20 text-red-400'
                 }`}>
-                  {aluno.percentual_presenca ? `${aluno.percentual_presenca.toFixed(0)}%` : '—'}
+                  {aluno.percentual_presenca == null ? 'Em auditoria' : `${aluno.percentual_presenca.toFixed(0)}%`}
                 </span>
               )}
             </h3>

@@ -48,7 +48,8 @@ export function FaltasMesSection({ unidadeAtual }: Props) {
     };
   }, [mes]);
 
-  const { faltas, loading } = useFaltasPeriodo({ unidadeId: unidadeAtual, dataInicio, dataFim });
+  const { faltas, publicacao, loading, error } = useFaltasPeriodo({ unidadeId: unidadeAtual, dataInicio, dataFim });
+  const publicado = publicacao.estado_publicacao === 'publicado';
 
   const mostrarUnidade = unidadeAtual === 'todos';
 
@@ -110,6 +111,15 @@ export function FaltasMesSection({ unidadeAtual }: Props) {
         </div>
       </div>
 
+      <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 rounded-lg border border-slate-700/60 bg-slate-900/30 px-3 py-2 text-[11px] text-slate-400">
+        <span>Período: <strong className="text-slate-200">{dataInicio} a {dataFim}</strong></span>
+        <span>Universo: <strong className="text-slate-200">{publicacao.denominador} eventos confirmados</strong></span>
+        <span>Equação: <strong className="text-slate-200">presentes / eventos confirmados</strong></span>
+        <span>Fonte: <strong className="text-slate-200">{publicacao.fonte}</strong></span>
+        <span>Regra: <strong className="text-slate-200">{publicacao.regra_versao}</strong></span>
+        <span>Estado: <strong className={publicado ? 'text-emerald-300' : 'text-amber-300'}>{publicado ? 'Publicado' : 'Em auditoria'}</strong></span>
+      </div>
+
       {/* KPIs por faixa (clicáveis: setam o filtro mínimo) */}
       <div className="grid grid-cols-3 gap-3 mb-4">
         {[
@@ -127,7 +137,7 @@ export function FaltasMesSection({ unidadeAtual }: Props) {
           >
             <span className="text-xl">{k.emoji}</span>
             <div className="text-left">
-              <p className="font-bold text-lg leading-none">{k.qtd}</p>
+              <p className="font-bold text-lg leading-none">{publicado ? k.qtd : '—'}</p>
               <p className="text-xs opacity-80 mt-0.5">{k.n}+ faltas</p>
             </div>
           </button>
@@ -159,6 +169,12 @@ export function FaltasMesSection({ unidadeAtual }: Props) {
       {loading ? (
         <div className="flex items-center justify-center h-40">
           <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+        </div>
+      ) : error || !publicado ? (
+        <div className="flex flex-col items-center justify-center py-12 text-amber-300" role="status">
+          <UserX className="w-10 h-10 mb-2 opacity-40" />
+          <p className="text-sm">Em auditoria: este período não participa de ranking.</p>
+          {error && <p className="mt-1 text-xs text-slate-500">{error}</p>}
         </div>
       ) : filtrados.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-slate-500">

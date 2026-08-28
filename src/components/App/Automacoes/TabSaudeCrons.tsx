@@ -221,7 +221,7 @@ function SortIcon({ col, sortCol, sortDir }: { col: SortCol; sortCol: SortCol; s
 }
 
 export function TabSaudeCrons({ filtros }: { filtros?: Filtros }) {
-  const { jobs, loading, erro, refetch } = useSaudeCrons();
+  const { jobs, coberturaPresenca, loading, erro, refetch } = useSaudeCrons();
   const [sortCol, setSortCol] = useState<SortCol>('jobname');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [pagina, setPagina] = useState(1);
@@ -291,6 +291,55 @@ export function TabSaudeCrons({ filtros }: { filtros?: Filtros }) {
 
   return (
     <div className="space-y-3">
+      {coberturaPresenca.length > 0 && (
+        <section className="rounded-lg border border-slate-800 bg-slate-900/40 p-3" aria-labelledby="cobertura-presenca-titulo">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h3 id="cobertura-presenca-titulo" className="text-sm font-medium text-gray-200">
+                Cobertura canônica de presença
+              </h3>
+              <p className="text-xs text-gray-500">Execução real do Emusys por unidade; cron disparado sozinho não libera relatório.</p>
+            </div>
+            <span className="text-xs text-gray-500">{coberturaPresenca[0]?.data_coberta}</span>
+          </div>
+          <div className="grid gap-2 md:grid-cols-3">
+            {coberturaPresenca.map((cobertura) => {
+              const ok = cobertura.publicavel;
+              const problemaLease = cobertura.lease_expirada;
+              return (
+                <article key={cobertura.unidade_id} className="rounded-md border border-slate-800 bg-slate-950/50 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-gray-200">{cobertura.unidade_nome}</span>
+                    <span className={`text-xs ${ok ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {ok ? 'concluída' : cobertura.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <div className="mt-2 space-y-1 text-xs text-gray-500">
+                    <div className="flex justify-between gap-2">
+                      <span>Última conclusão</span>
+                      <UltimaExecucao iso={cobertura.ultima_conclusao} />
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <span>Tentativa deduplicada</span>
+                      <span className="text-gray-300">{cobertura.tentativas_deduplicadas}</span>
+                    </div>
+                    {(problemaLease || cobertura.relatorio_bloqueado) && (
+                      <div className="flex flex-wrap gap-1 pt-1">
+                        {problemaLease && (
+                          <span className="rounded bg-rose-500/10 px-1.5 py-0.5 text-rose-400">Lease expirado</span>
+                        )}
+                        {cobertura.relatorio_bloqueado && (
+                          <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-amber-400">Relatório bloqueado</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-400">

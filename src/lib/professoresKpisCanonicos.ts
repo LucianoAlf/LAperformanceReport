@@ -229,11 +229,13 @@ export function consolidarKpisProfessoresCanonicos(
     const mediaPonderadaCarteira = (campo: keyof KPIProfessorCanonico) => carteira > 0
       ? grupo.reduce((total, linha) => total + numero(linha[campo]) * linha.carteira_alunos, 0) / carteira
       : 0;
-    const linhasPresencaPublicavel = grupo.filter(
+    const presencaPublicavel = grupo.length > 0
+      && grupo.every((linha) => linha.presenca_publicavel);
+    const linhasPresencaPublicavel = presencaPublicavel ? grupo.filter(
       (linha) => linha.presenca_publicavel
         && linha.media_presenca !== null
         && linha.presenca_eventos_confirmados > 0,
-    );
+    ) : [];
     const eventosPresencaConfirmados = linhasPresencaPublicavel.reduce(
       (total, linha) => total + linha.presenca_eventos_confirmados,
       0,
@@ -244,7 +246,7 @@ export function consolidarKpisProfessoresCanonicos(
     );
     const mediaPresenca = calcularPresencaMediaConfirmada(linhasPresencaPublicavel);
     const taxaFaltas = mediaPresenca === null ? null : 100 - mediaPresenca;
-    const presencaPublicavel = mediaPresenca !== null;
+    const presencaPublicavelComBase = presencaPublicavel && mediaPresenca !== null;
     const coberturaPresenca = eventosPresencaConfirmados + eventosPresencaIncertos > 0
       ? eventosPresencaConfirmados / (eventosPresencaConfirmados + eventosPresencaIncertos)
       : 0;
@@ -283,7 +285,7 @@ export function consolidarKpisProfessoresCanonicos(
       total_turmas: soma('total_turmas'),
       alunos_via_turmas: ocupacoes,
       turmas_elegiveis_media: turmasElegiveis,
-      presenca_publicavel: presencaPublicavel,
+      presenca_publicavel: presencaPublicavelComBase,
       presenca_cobertura: coberturaPresenca,
       presenca_confianca: presencaConfianca,
       presenca_eventos_confirmados: eventosPresencaConfirmados,
@@ -329,11 +331,13 @@ export function calcularTotaisKpisProfessoresCanonicos(
   const matriculasPosExp = total('matriculas_pos_exp');
   const renovacoes = total('renovacoes');
   const naoRenovacoes = total('nao_renovacoes');
-  const linhasPresencaPublicavel = linhas.filter(
+  const presencaPublicavelGlobal = linhas.length > 0
+    && linhas.every((linha) => linha.presenca_publicavel);
+  const linhasPresencaPublicavel = presencaPublicavelGlobal ? linhas.filter(
     (linha) => linha.presenca_publicavel
       && linha.media_presenca !== null
       && linha.presenca_eventos_confirmados > 0,
-  );
+  ) : [];
   const mediaPresenca = calcularPresencaMediaConfirmada(linhasPresencaPublicavel);
   const presencaEventosConfirmados = linhasPresencaPublicavel.reduce(
     (soma, linha) => soma + linha.presenca_eventos_confirmados,
