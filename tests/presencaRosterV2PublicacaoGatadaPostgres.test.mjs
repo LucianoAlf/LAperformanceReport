@@ -370,7 +370,9 @@ test.before(() => {
       (20, 200, '${UNIDADE}', 7, current_date, now()-interval '8 hours', now()-interval '7 hours', 'Violao', 'Fabio acao sombra', 'Sala', 'turma'),
       (21, 210, '${UNIDADE}', 7, current_date, now()-interval '6 hours', now()-interval '5 hours', 'Violao', 'Fabio acao canonico', 'Sala', 'turma'),
       (30, 300, '${UNIDADE}', 7, current_date, now()-interval '4 hours', now()-interval '3 hours', 'Canto', 'Fabio registro sombra', 'Sala', 'individual'),
-      (31, 310, '${UNIDADE}', 7, current_date, now()-interval '2 hours', now()-interval '1 hour', 'Canto', 'Fabio registro canonico', 'Sala', 'individual');
+      (31, 310, '${UNIDADE}', 7, current_date, now()-interval '2 hours', now()-interval '1 hour', 'Canto', 'Fabio registro canonico', 'Sala', 'individual'),
+      (40, 400, '${UNIDADE}', 7, current_date, now()-interval '14 hours', now()-interval '13 hours', 'Piano', 'Curso simultaneo piano', 'Sala 1', 'turma'),
+      (41, 410, '${UNIDADE}', 7, current_date, now()-interval '14 hours', now()-interval '13 hours', 'Violao', 'Curso simultaneo violao', 'Sala 2', 'turma');
 
     insert into public.aula_alunos_emusys(
       aula_emusys_id, unidade_id, aluno_chave, aluno_emusys_id, aluno_id, aluno_nome
@@ -384,7 +386,9 @@ test.before(() => {
       (21, '${UNIDADE}', 'emusys:211', 211, 211, 'Aluno 211'),
       (21, '${UNIDADE}', 'emusys:212', 212, 212, 'Aluno 212'),
       (30, '${UNIDADE}', 'emusys:301', 301, 301, 'Aluno 301'),
-      (31, '${UNIDADE}', 'emusys:311', 311, 311, 'Aluno 311');
+      (31, '${UNIDADE}', 'emusys:311', 311, 311, 'Aluno 311'),
+      (40, '${UNIDADE}', 'emusys:401', 401, 401, 'Aluno Piano'),
+      (41, '${UNIDADE}', 'emusys:411', 411, 411, 'Aluno Violao');
   `);
 
   for (const migration of PRE_ROSTER_MIGRATIONS) {
@@ -415,7 +419,9 @@ test.before(() => {
       (20, '${UNIDADE}', '${RUN}', 'completo', 2, 2, repeat('b', 32)),
       (21, '${UNIDADE}', '${RUN}', 'completo', 2, 2, repeat('b', 32)),
       (30, '${UNIDADE}', '${RUN}', 'completo', 1, 1, repeat('b', 32)),
-      (31, '${UNIDADE}', '${RUN}', 'completo', 1, 1, repeat('b', 32));
+      (31, '${UNIDADE}', '${RUN}', 'completo', 1, 1, repeat('b', 32)),
+      (40, '${UNIDADE}', '${RUN}', 'completo', 1, 1, repeat('b', 32)),
+      (41, '${UNIDADE}', '${RUN}', 'completo', 1, 1, repeat('b', 32));
     update public.aula_alunos_emusys
        set ativo_operacional = true,
            ultimo_run_visto = '${RUN}';
@@ -553,6 +559,7 @@ test.before(() => {
     create table public.vw_presenca_slot_canonica_v1(
       aluno_presenca_id uuid,
       aluno_id integer,
+      unidade_id uuid,
       professor_id integer,
       data_hora_inicio timestamptz,
       data_hora_fim timestamptz,
@@ -577,7 +584,7 @@ test.before(() => {
 
     insert into public.vw_presenca_slot_canonica_v1
     select
-      gen_random_uuid(), r.aluno_id, a.professor_id,
+      gen_random_uuid(), r.aluno_id, a.unidade_id, a.professor_id,
       a.data_hora_inicio, a.data_hora_fim, a.curso_nome,
       'presente', 'professor_la_teacher', 'presente', true
       from public.vw_aula_roster_operacional_v2 r
@@ -894,6 +901,31 @@ test('canonico le roster v2 e roteia Teacher e os dois writers Fabio', () => {
   assert.equal(record.fonte, 'professor_la_teacher');
   assert.equal(portCalls('fabio_create_v2'), 2);
   assert.equal(portCalls('apply_v2'), 3);
+});
+
+test('agenda canonica preserva cursos distintos no mesmo horario', () => {
+  psql(String.raw`
+    update public.presenca_rollout_config
+       set modo = 'canonico_v2'
+     where unidade_id = '${UNIDADE}' and superficie = 'la_teacher';
+  `);
+
+  const agenda = json(psql(asAuthenticated(String.raw`
+    select public.app_minha_agenda_sessao(current_date);
+  `)));
+  const simultaneas = agenda.sessoes.filter((sessao) => [40, 41].includes(sessao.aula_id_ancora));
+
+  assert.deepEqual(
+    simultaneas.map((sessao) => ({
+      aula: sessao.aula_id_ancora,
+      curso: sessao.curso,
+      alunos: sessao.alunos.map((aluno) => aluno.aluno_id),
+    })),
+    [
+      { aula: 40, curso: 'Piano', alunos: [401] },
+      { aula: 41, curso: 'Violao', alunos: [411] },
+    ],
+  );
 });
 
 test('40001 e 55P03 voltam como retryable sem terminalizar o request', () => {

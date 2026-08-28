@@ -66,12 +66,18 @@ begin
          and not coalesce(ae.cancelada, false)
     ), slots as (
       select
+        unidade_id,
         data_hora_inicio,
         data_hora_fim,
+        lower(btrim(coalesce(curso_nome, ''))) as curso_normalizado,
         (array_agg(id order by case when tipo = 'turma' then 0 else 1 end, id))[1]
           as aula_id_ancora
         from aulas_dia
-       group by data_hora_inicio, data_hora_fim
+       group by
+         unidade_id,
+         data_hora_inicio,
+         data_hora_fim,
+         lower(btrim(coalesce(curso_nome, '')))
     ), ancoras as (
       select ae.*
         from slots s
@@ -150,9 +156,12 @@ begin
               c.chamada_fechada
               from public.vw_presenca_slot_canonica_v1 c
              where c.aluno_id = r.aluno_id
+               and c.unidade_id is not distinct from ae.unidade_id
                and c.professor_id = ae.professor_id
                and c.data_hora_inicio = ae.data_hora_inicio
                and c.data_hora_fim is not distinct from ae.data_hora_fim
+               and lower(btrim(coalesce(c.curso_nome, '')))
+                   = lower(btrim(coalesce(ae.curso_nome, '')))
              order by
                (c.curso_nome is not distinct from ae.curso_nome) desc,
                c.chamada_fechada desc,
@@ -168,10 +177,13 @@ begin
               join public.vw_aula_roster_operacional_v2 alvo_roster
                 on alvo_roster.aula_emusys_id = alvo.id
                and alvo_roster.aluno_id = r.aluno_id
-             where alvo.professor_id = v_professor_id
-               and alvo.data_aula = p_data
-               and alvo.data_hora_inicio = ae.data_hora_inicio
-               and alvo.data_hora_fim is not distinct from ae.data_hora_fim
+              where alvo.professor_id = v_professor_id
+                and alvo.unidade_id is not distinct from ae.unidade_id
+                and alvo.data_aula = p_data
+                and alvo.data_hora_inicio = ae.data_hora_inicio
+                and alvo.data_hora_fim is not distinct from ae.data_hora_fim
+                and lower(btrim(coalesce(alvo.curso_nome, '')))
+                    = lower(btrim(coalesce(ae.curso_nome, '')))
                and not coalesce(alvo.cancelada, false)
                and coalesce(alvo.tipo, '') <> 'turma'
              order by alvo.id
