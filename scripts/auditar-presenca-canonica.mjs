@@ -26,6 +26,13 @@ const CAMPOS_CONTAGEM = [
   'politica_temporal',
   'sem_explicacao',
 ];
+const CAMPOS_COBERTURA_AGENTES = [
+  'cobertura_sol_eventos',
+  'cobertura_lia_eventos',
+  'cobertura_mila_eventos_experimentais',
+  'cobertura_fabio_eventos',
+  'cobertura_bi_eventos',
+];
 
 export function buildShadowClassificationCase(alias = 'j') {
   if (!/^[a-z_][a-z0-9_]*$/iu.test(alias)) throw new Error('ALIAS_SQL_INVALIDO');
@@ -258,6 +265,7 @@ with parametros as (
       extract(epoch from v2.data_hora_fim)::numeric
     )::text) as slot_sem_curso_key,
     v2.unidade_id,
+    v2.professor_id,
     v2.data_aula as data,
     lower(btrim(coalesce(v2.curso_nome, ''))) as curso_normalizado,
     v2.resultado_canonico,
@@ -439,6 +447,38 @@ with parametros as (
        )
      )
    group by d.unidade_id, d.data
+), mila_contagem as (
+  select ae.unidade_id,
+         ae.data_aula as data,
+         nullif(count(distinct coalesce(
+           aae.aluno_chave,
+           'roster:' || aae.id::text
+         )), 0)::bigint
+           as cobertura_mila_eventos_experimentais
+    from public.aulas_emusys ae
+    join public.aula_alunos_emusys aae
+      on aae.unidade_id = ae.unidade_id
+     and aae.aula_emusys_id = ae.id
+    join unidades_alvo u on u.id = ae.unidade_id
+   cross join parametros p
+   where ae.data_aula between p.inicio and p.fim
+     and coalesce(ae.categoria, 'normal') = 'experimental'
+     and not coalesce(ae.cancelada, false)
+   group by ae.unidade_id, ae.data_aula
+-- Cobertura mede ocorrencias disponiveis no shadow; nao e denominador
+-- publicavel. Frescor/publicacao continuam governados pelo contexto do agente.
+), agente_regular_contagem as (
+  select v2.unidade_id,
+         v2.data,
+         nullif(count(*) filter (
+           where v2.resultado_canonico not in ('aula_cancelada', 'aula_justificada')
+         ), 0)::bigint as cobertura_eventos_regulares,
+         nullif(count(*) filter (
+           where v2.professor_id is not null
+             and v2.resultado_canonico not in ('aula_cancelada', 'aula_justificada')
+         ), 0)::bigint as cobertura_fabio_eventos
+    from v2_shadow v2
+   group by v2.unidade_id, v2.data
 ), relatorio_contagem as (
   select d.unidade_id,
          d.data,
@@ -464,12 +504,19 @@ with parametros as (
          coalesce(sc.colisao_curso, 0)::bigint as colisao_curso,
          coalesce(sc.precedencia_humana, 0)::bigint as precedencia_humana,
          coalesce(sc.politica_temporal, 0)::bigint as politica_temporal,
-         coalesce(sc.sem_explicacao, 0)::bigint as sem_explicacao
+         coalesce(sc.sem_explicacao, 0)::bigint as sem_explicacao,
+         arc.cobertura_eventos_regulares as cobertura_sol_eventos,
+         arc.cobertura_eventos_regulares as cobertura_lia_eventos,
+         mc.cobertura_mila_eventos_experimentais,
+         arc.cobertura_fabio_eventos,
+         arc.cobertura_eventos_regulares as cobertura_bi_eventos
     from dias d
     left join aulas_contagem a using (unidade_id, data)
     left join presenca_contagem pc using (unidade_id, data)
     left join roster_contagem rc using (unidade_id, data)
     left join agenda_contagem ac using (unidade_id, data)
+    left join mila_contagem mc using (unidade_id, data)
+    left join agente_regular_contagem arc using (unidade_id, data)
     left join relatorio_contagem rel using (unidade_id, data)
     left join shadow_contagem sc using (unidade_id, data)
 )
@@ -482,7 +529,12 @@ select m.*,
          m.pendencias_agenda::text, m.pendencias_relatorio::text,
          m.duplicidade_emusys::text, m.colisao_curso::text,
          m.precedencia_humana::text, m.politica_temporal::text,
-         m.sem_explicacao::text
+         m.sem_explicacao::text,
+         coalesce(m.cobertura_sol_eventos::text, 'null'),
+         coalesce(m.cobertura_lia_eventos::text, 'null'),
+         coalesce(m.cobertura_mila_eventos_experimentais::text, 'null'),
+         coalesce(m.cobertura_fabio_eventos::text, 'null'),
+         coalesce(m.cobertura_bi_eventos::text, 'null')
        )) as recorte_hash
   from medidas m
  order by m.data, m.unidade;
@@ -493,6 +545,23 @@ select m.*,
 
 export function normalizeAuditRows(rows) {
   if (!Array.isArray(rows)) throw new Error('RESPOSTA_NAO_E_LISTA');
+  const normalizarContagem = (row, campo, nullable) => {
+    if (!(campo in row)) throw new Error(`CONTAGEM_AUSENTE:${campo}`);
+    const valor = row[campo];
+    if (nullable && valor === null) return null;
+
+    let numero;
+    if (typeof valor === 'number') {
+      numero = valor;
+    } else if (typeof valor === 'string' && /^(0|[1-9][0-9]*)$/u.test(valor)) {
+      numero = Number(valor);
+    } else {
+      throw new Error(`CONTAGEM_INVALIDA:${campo}`);
+    }
+    if (!Number.isSafeInteger(numero) || numero < 0) throw new Error(`CONTAGEM_INVALIDA:${campo}`);
+    return numero;
+  };
+
   return rows.map((row) => {
     if (!UNIDADES_PERMITIDAS.includes(row.unidade)) throw new Error(`UNIDADE_INESPERADA:${row.unidade}`);
     validarDataIso(row.data);
@@ -510,9 +579,10 @@ export function normalizeAuditRows(rows) {
       sync_completo_motivo: syncCompletoMotivo,
     };
     for (const campo of CAMPOS_CONTAGEM) {
-      const numero = Number(row[campo]);
-      if (!Number.isSafeInteger(numero) || numero < 0) throw new Error(`CONTAGEM_INVALIDA:${campo}`);
-      normalized[campo] = numero;
+      normalized[campo] = normalizarContagem(row, campo, false);
+    }
+    for (const campo of CAMPOS_COBERTURA_AGENTES) {
+      normalized[campo] = normalizarContagem(row, campo, true);
     }
     normalized.recorte_hash = row.recorte_hash;
     return normalized;
@@ -659,7 +729,8 @@ async function main() {
     meta: {
       consulta: 'somente_leitura',
       pii_no_output: true,
-      fonte: 'baseline_v1_antes_da_projecao_canonica_v2',
+      fonte: 'baseline_v1_e_cobertura_canonica_v2_em_sombra',
+      cobertura_agentes: 'contagem_shadow_nao_publicavel',
       inicio: args.inicio,
       fim: args.fim,
       unidades: args.unidades,

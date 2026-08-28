@@ -46,6 +46,14 @@ const CAMPOS = [
   'sem_explicacao',
 ];
 
+const CAMPOS_COBERTURA_AGENTES = [
+  'cobertura_sol_eventos',
+  'cobertura_lia_eventos',
+  'cobertura_mila_eventos_experimentais',
+  'cobertura_fabio_eventos',
+  'cobertura_bi_eventos',
+];
+
 function aggregatedRow(overrides = {}) {
   return {
     unidade: 'Barra',
@@ -65,6 +73,11 @@ function aggregatedRow(overrides = {}) {
     precedencia_humana: 0,
     politica_temporal: 0,
     sem_explicacao: 0,
+    cobertura_sol_eventos: null,
+    cobertura_lia_eventos: null,
+    cobertura_mila_eventos_experimentais: null,
+    cobertura_fabio_eventos: null,
+    cobertura_bi_eventos: null,
     recorte_hash: '0123456789abcdef0123456789abcdef',
     ...overrides,
   };
@@ -98,6 +111,13 @@ test('SQL de baseline e somente leitura e cobre os dois calculos de pendencia', 
   assert.match(sql, /vw_presenca_slot_canonica_v1/iu);
   assert.match(sql, /aula_alunos_emusys/iu);
   for (const campo of CAMPOS) assert.match(sql, new RegExp(`\\b${campo}\\b`, 'u'));
+  for (const campo of CAMPOS_COBERTURA_AGENTES) {
+    assert.match(sql, new RegExp(`\\b${campo}\\b`, 'u'));
+  }
+  assert.match(sql, /vw_presenca_ocorrencia_canonica_v2[\s\S]*cobertura_eventos_regulares/iu);
+  assert.match(sql, /professor_id[\s\S]*as cobertura_fabio_eventos/iu);
+  assert.match(sql, /categoria[\s\S]*experimental[\s\S]*cobertura_mila_eventos_experimentais/iu);
+  assert.doesNotMatch(sql, /experimental_leads|get_presenca_contexto_agente_canonico_v1/iu);
 });
 
 test('argumentos aceitam somente periodo ISO e as tres unidades operacionais', () => {
@@ -138,12 +158,20 @@ test('saida normalizada contem somente contagens, unidade, data e hashes', () =>
     precedencia_humana: '1',
     politica_temporal: '2',
     sem_explicacao: '0',
+    cobertura_sol_eventos: '10',
+    cobertura_lia_eventos: '10',
+    cobertura_mila_eventos_experimentais: null,
+    cobertura_fabio_eventos: '8',
+    cobertura_bi_eventos: '10',
     recorte_hash: '0123456789abcdef0123456789abcdef',
   }]);
 
   assert.equal(row.aulas_reais, 10);
+  assert.equal(row.cobertura_sol_eventos, 10);
+  assert.equal(row.cobertura_mila_eventos_experimentais, null);
   assert.deepEqual(Object.keys(row).sort(), [
     ...CAMPOS,
+    ...CAMPOS_COBERTURA_AGENTES,
     'data',
     'recorte_hash',
     'sync_completo_motivo',
@@ -152,8 +180,44 @@ test('saida normalizada contem somente contagens, unidade, data e hashes', () =>
   assert.equal(JSON.stringify(row).includes('aluno'), false);
 });
 
+test('cobertura de agentes preserva vazio como null e rejeita contagem inventada', () => {
+  const [row] = normalizeAuditRows([aggregatedRow({
+    cobertura_sol_eventos: 0,
+    cobertura_lia_eventos: '0',
+    cobertura_mila_eventos_experimentais: null,
+    cobertura_fabio_eventos: 9,
+    cobertura_bi_eventos: 12,
+  })]);
+  assert.equal(row.cobertura_sol_eventos, 0);
+  assert.equal(row.cobertura_lia_eventos, 0);
+  assert.equal(row.cobertura_mila_eventos_experimentais, null);
+  for (const valor of [undefined, '', ' ', false, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, 'desconhecido']) {
+    assert.throws(
+      () => normalizeAuditRows([aggregatedRow({ cobertura_fabio_eventos: valor })]),
+      /CONTAGEM_INVALIDA:cobertura_fabio_eventos/u,
+      String(valor),
+    );
+  }
+
+  const semCampo = aggregatedRow();
+  delete semCampo.cobertura_bi_eventos;
+  assert.throws(() => normalizeAuditRows([semCampo]), /CONTAGEM_AUSENTE:cobertura_bi_eventos/u);
+});
+
+test('contagens obrigatorias nao coagem booleano ou texto vazio para zero', () => {
+  for (const valor of [undefined, '', ' ', false, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(
+      () => normalizeAuditRows([aggregatedRow({ aulas_reais: valor })]),
+      /CONTAGEM_INVALIDA:aulas_reais/u,
+      String(valor),
+    );
+  }
+});
+
 test('resultado agregado declara ausencia de PII e guard usa a raiz real do repositorio', () => {
   assert.match(AUDIT_SCRIPT, /pii_no_output:\s*true/u);
+  assert.match(AUDIT_SCRIPT, /baseline_v1_e_cobertura_canonica_v2_em_sombra/u);
+  assert.match(AUDIT_SCRIPT, /contagem_shadow_nao_publicavel/u);
   assert.match(AUDIT_SCRIPT, /fileURLToPath\(import\.meta\.url\)/u);
   assert.match(AUDIT_SCRIPT, /REPO_ROOT/u);
   assert.doesNotMatch(AUDIT_SCRIPT, /path\.resolve\(process\.cwd\(\)\)/u);
@@ -226,6 +290,11 @@ test('cobertura exige exatamente um recorte por unidade e dia solicitado', () =>
     precedencia_humana: 0,
     politica_temporal: 0,
     sem_explicacao: 0,
+    cobertura_sol_eventos: null,
+    cobertura_lia_eventos: null,
+    cobertura_mila_eventos_experimentais: null,
+    cobertura_fabio_eventos: null,
+    cobertura_bi_eventos: null,
     recorte_hash: '0123456789abcdef0123456789abcdef',
   });
   const args = {
