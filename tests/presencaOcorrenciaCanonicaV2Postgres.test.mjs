@@ -58,11 +58,22 @@ function migrationV2() {
   return matches.length === 1 ? join(MIGRATIONS, matches[0]) : null;
 }
 
+function optimizationMigrations() {
+  return [
+    '20260828081000_presenca_ocorrencia_canonica_v2_indices.sql',
+    '20260828081500_presenca_ocorrencia_canonica_v2_otimizada.sql',
+  ].map((name) => join(MIGRATIONS, name));
+}
+
 const schema = String.raw`
 create extension if not exists unaccent;
 create role anon nologin;
 create role authenticated nologin;
 create role service_role nologin bypassrls;
+create role sol_acesso_restrito nologin;
+create role lia_acesso_restrito nologin;
+create role mila_acesso_restrito nologin;
+create role fabio_agent nologin;
 
 create table public.alunos (
   id integer primary key,
@@ -84,6 +95,9 @@ create table public.aulas_emusys (
   cancelada boolean default false,
   justificada boolean default false
 );
+
+create index idx_aulas_emusys_data
+  on public.aulas_emusys (unidade_id, data_aula);
 
 create table public.aluno_presenca (
   id uuid primary key,
@@ -186,7 +200,10 @@ values
   (19, 1019, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 06:00-03', '2026-08-25 07:00-03', 'turma', 'normal', 'Violino', 515),
   (20, 1020, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 06:00-03', '2026-08-25 07:00-03', 'individual', 'normal', 'Violino', 515),
   (21, 1021, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 05:00-03', '2026-08-25 06:00-03', 'turma', 'normal', 'Piano', 516),
-  (22, 1022, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 05:00-03', '2026-08-25 06:00-03', 'turma', 'normal', 'Piano', 516);
+  (22, 1022, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 05:00-03', '2026-08-25 06:00-03', 'turma', 'normal', 'Piano', 516),
+  (23, 1023, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 04:00-03', '2026-08-25 05:00-03', 'individual', 'normal', 'Data resolvida', 517),
+  (24, 1024, '10000000-0000-0000-0000-000000000001', '2026-08-25', '2026-08-25 03:00-03', '2026-08-25 04:00-03', 'individual', 'normal', 'Slot multidata', 518),
+  (25, 1025, '10000000-0000-0000-0000-000000000001', '2026-08-26', '2026-08-25 03:00-03', '2026-08-25 04:00-03', 'individual', 'normal', 'Slot multidata', 518);
 
 update public.aulas_emusys set cancelada = true where id = 16;
 update public.aulas_emusys set justificada = true where id = 17;
@@ -234,7 +251,11 @@ values
   ('00000000-0000-0000-0000-000000000021', 116, 515, '10000000-0000-0000-0000-000000000001', '2026-08-25', '06:00', 'presente', 'emusys', null, 19, 'Violino', null, 'presente', '2026-08-25 07:05-03'),
   ('00000000-0000-0000-0000-000000000022', 116, 515, '10000000-0000-0000-0000-000000000001', '2026-08-25', '06:00', 'presente', 'emusys', null, 20, 'Violino', null, 'presente', '2026-08-25 07:06-03'),
   ('00000000-0000-0000-0000-000000000023', 120, 516, '10000000-0000-0000-0000-000000000001', '2026-08-25', '05:00', 'presente', 'emusys', null, 21, 'Piano', null, 'presente', '2026-08-25 06:05-03'),
-  ('00000000-0000-0000-0000-000000000024', 121, 516, '10000000-0000-0000-0000-000000000001', '2026-08-25', '05:00', 'presente', 'emusys', null, 22, 'Piano', null, 'presente', '2026-08-25 06:05-03');
+  ('00000000-0000-0000-0000-000000000024', 121, 516, '10000000-0000-0000-0000-000000000001', '2026-08-25', '05:00', 'presente', 'emusys', null, 22, 'Piano', null, 'presente', '2026-08-25 06:05-03'),
+  ('00000000-0000-0000-0000-000000000025', 122, 517, '10000000-0000-0000-0000-000000000001', '2026-08-24', '04:00', 'presente', 'emusys', null, 23, 'Data resolvida', null, 'presente', '2026-08-25 05:05-03'),
+  ('00000000-0000-0000-0000-000000000026', 124, 518, '10000000-0000-0000-0000-000000000001', '2026-08-25', '03:00', 'presente', 'emusys', null, 24, 'Slot multidata', null, 'presente', '2026-08-25 04:05-03'),
+  ('00000000-0000-0000-0000-000000000027', 124, 518, '10000000-0000-0000-0000-000000000001', '2026-08-26', '03:00', 'presente', 'emusys', null, 25, 'Slot multidata', null, 'presente', '2026-08-25 04:06-03'),
+  ('00000000-0000-0000-0000-000000000028', 123, 501, '20000000-0000-0000-0000-000000000002', '2026-08-26', '10:00', 'presente', 'agenda_secretaria', '2026-08-26 11:00-03', 1, 'Piano', 'presente', null, null);
 `;
 
 test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () => {
@@ -247,6 +268,22 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
     const migration = migrationV2();
     if (migration && existsSync(migration)) psql(container, readFileSync(migration, 'utf8'));
     psql(container, fixtures);
+
+    const baselineRows = JSON.parse(psql(container, String.raw`
+      select coalesce(json_agg(to_jsonb(v) order by
+        v.unidade_id, v.data_aula, v.data_hora_inicio, v.aluno_id, v.curso_nome, v.slot_key
+      ), '[]'::json)
+        from public.vw_presenca_ocorrencia_canonica_v2 v;
+    `));
+    psql(container, String.raw`
+      grant select on public.vw_presenca_ocorrencia_canonica_v2
+        to sol_acesso_restrito, lia_acesso_restrito, mila_acesso_restrito, fabio_agent;
+    `);
+    const optimizations = optimizationMigrations();
+    for (const optimization of optimizations) {
+      assert.ok(existsSync(optimization), `migration de otimizacao ausente: ${optimization}`);
+      psql(container, readFileSync(optimization, 'utf8'));
+    }
 
     psql(container, String.raw`
       create view public.vw_presenca_slot_canonica_v1 as
@@ -361,9 +398,68 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
     `);
 
     const rows = JSON.parse(psql(container, String.raw`
-      select coalesce(json_agg(to_jsonb(v) order by v.aluno_id, v.curso_nome), '[]'::json)
+      select coalesce(json_agg(to_jsonb(v) order by
+        v.unidade_id, v.data_aula, v.data_hora_inicio, v.aluno_id, v.curso_nome, v.slot_key
+      ), '[]'::json)
         from public.vw_presenca_ocorrencia_canonica_v2 v;
     `));
+    assert.deepEqual(rows, baselineRows, 'otimizacao deve ser semanticamente identica a v2.1');
+
+    const boundedPlanRaw = psql(container, String.raw`
+      set enable_seqscan = off;
+      explain (format json, costs off)
+      select count(*)
+        from public.vw_presenca_ocorrencia_canonica_v2
+       where unidade_id = '10000000-0000-0000-0000-000000000001'
+         and data_aula = date '2026-08-25';
+    `);
+    const boundedPlan = JSON.parse(
+      boundedPlanRaw.slice(boundedPlanRaw.indexOf('['), boundedPlanRaw.lastIndexOf(']') + 1),
+    );
+    const planNodes = [];
+    const visitPlan = (node) => {
+      if (!node || typeof node !== 'object') return;
+      if (node['Node Type']) planNodes.push(node);
+      for (const child of node.Plans ?? []) visitPlan(child);
+    };
+    visitPlan(boundedPlan[0].Plan);
+    const scans = planNodes.filter((node) => node['Relation Name']);
+    const hasIndexedCondition = (indexName, relationName, terms) => scans.some((node) => (
+      node['Index Name'] === indexName
+      && node['Relation Name'] === relationName
+      && terms.every((term) => String(node['Index Cond'] ?? '').includes(term))
+    ));
+    assert.ok(
+      hasIndexedCondition('idx_aulas_emusys_data', 'aulas_emusys', ['unidade_id', 'data_aula']),
+      JSON.stringify(scans, null, 2),
+    );
+    assert.ok(
+      hasIndexedCondition(
+        'idx_aluno_presenca_unidade_data_v2',
+        'aluno_presenca',
+        ['unidade_id', 'data_aula'],
+      ),
+      JSON.stringify(scans, null, 2),
+    );
+    assert.ok(
+      scans.some((node) => node['Index Name'] === 'idx_aulas_emusys_slot_data_divergente_v2'),
+      JSON.stringify(scans, null, 2),
+    );
+
+    const linkedLookupRaw = psql(container, String.raw`
+      drop index public.idx_aluno_presenca_unidade_data_v2;
+      set enable_seqscan = off;
+      explain (format json, costs off)
+      select id
+        from public.aluno_presenca
+       where aula_emusys_id = 1
+         and unidade_id = '10000000-0000-0000-0000-000000000001';
+    `);
+    const linkedLookup = JSON.parse(
+      linkedLookupRaw.slice(linkedLookupRaw.indexOf('['), linkedLookupRaw.lastIndexOf(']') + 1),
+    )[0].Plan;
+    assert.equal(linkedLookup['Index Name'], 'idx_aluno_presenca_aula_emusys_unidade_v2');
+    assert.match(linkedLookup['Index Cond'], /aula_emusys_id.*unidade_id|unidade_id.*aula_emusys_id/iu);
 
     const byAluno = (id) => rows.filter((row) => row.aluno_id === id);
     assert.equal(byAluno(101).length, 1, 'duas/tres gemeas viram uma ocorrencia');
@@ -398,6 +494,15 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
       [1, 1],
       'dois alunos homônimos permanecem separados por aluno_id',
     );
+    assert.equal(
+      byAluno(122)[0].data_aula,
+      '2026-08-25',
+      'data da aula Emusys continua prevalecendo sobre a data redundante divergente',
+    );
+    assert.equal(byAluno(123).length, 1, 'vinculo com unidade divergente permanece evidencia orfa');
+    assert.equal(byAluno(123)[0].fonte_decisao, 'identidade_incompleta');
+    assert.equal(byAluno(124).length, 1, 'data redundante nao altera o grao historico do slot');
+    assert.deepEqual(byAluno(124)[0].ids_aulas_emusys, [24, 25]);
 
     assert.equal(byAluno(111)[0].resultado_canonico, 'falta');
     assert.equal(byAluno(111)[0].fecha_chamada, false, 'ausencia Emusys nao fecha chamada sozinha');
@@ -433,6 +538,10 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
         'security_invoker', coalesce(c.reloptions @> array['security_invoker=true'], false),
         'anon', has_table_privilege('anon', 'public.vw_presenca_ocorrencia_canonica_v2', 'select'),
         'authenticated', has_table_privilege('authenticated', 'public.vw_presenca_ocorrencia_canonica_v2', 'select'),
+        'sol', has_table_privilege('sol_acesso_restrito', 'public.vw_presenca_ocorrencia_canonica_v2', 'select'),
+        'lia', has_table_privilege('lia_acesso_restrito', 'public.vw_presenca_ocorrencia_canonica_v2', 'select'),
+        'mila', has_table_privilege('mila_acesso_restrito', 'public.vw_presenca_ocorrencia_canonica_v2', 'select'),
+        'fabio', has_table_privilege('fabio_agent', 'public.vw_presenca_ocorrencia_canonica_v2', 'select'),
         'service_role', has_table_privilege('service_role', 'public.vw_presenca_ocorrencia_canonica_v2', 'select')
       )
       from pg_class c
@@ -442,6 +551,10 @@ test('ocorrencia canonica v2 resolve grao, precedencia, politica e escopo', () =
       security_invoker: true,
       anon: false,
       authenticated: false,
+      sol: false,
+      lia: false,
+      mila: false,
+      fabio: false,
       service_role: true,
     });
 
