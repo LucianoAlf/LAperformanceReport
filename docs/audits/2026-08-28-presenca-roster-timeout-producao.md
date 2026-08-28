@@ -37,8 +37,8 @@ sete dias e não deve ser antecipada por migration ou alteração direta.
 | Ausência bruta do Emusys era ambígua para consumidores | Um “ausente” da origem podia ser apresentado como falta sem decisão terminal | A ocorrência v2 preserva a evidência bruta, mas só publica falta terminal; falta de linha e sync incompleto permanecem indeterminados |
 | A view de saúde juntava confirmações somente por `aula_id` e tratava `sync_ausente_emusys` como origem humana | Reagendamentos corretamente invalidados apareciam como três presenças e dois cancelamentos “revertidos” no Recreio | A migration `20260828095344` casa professor, data e aula da ocorrência atual, ignora limpeza posterior auditada e conta cancelamento humano somente quando a origem é `agenda_secretaria` |
 
-O fluxo convergido entrou em `main` nos PRs #246–#264. O último merge antes
-deste relatório foi `a7dad4b0` (PR #264).
+O fluxo convergido entrou em `main` nos PRs #246–#264. A correção final da
+observabilidade e este fechamento seguem no PR #265.
 
 ## Objetos publicados
 
@@ -105,7 +105,8 @@ correção da observabilidade, a janela real de sete dias ficou:
 
 O índice parcial do evento de limpeza foi criado e a view continua sinalizando
 uma sobrescrita genuína: o fixture PostgreSQL mantém deliberadamente um caso
-sem evento de reagendamento e exige `revertidas=1`.
+sem evento de reagendamento e exige `revertidas=1`. O `EXPLAIN ANALYZE` da
+view real retornou três unidades em 8,55 ms, sem spill para disco.
 
 ### Escritores reais, sem fixture em produção
 
@@ -189,7 +190,7 @@ Nenhum botão que grava presença/falta foi acionado durante essa prova.
 | Projeto | Verificação | Resultado |
 |---|---|---|
 | LA Report | `npm run test:presenca-backend` | 104/104 |
-| LA Report | `npm test` | suíte completa verde, incluindo fixtures PostgreSQL |
+| LA Report | `npm test` | 458/458, além dos pretests PostgreSQL |
 | LA Report | `npm run build` | verde |
 | LA Teacher | `npm run test:unit` | 52 arquivos, 366/366 |
 | LA Teacher | `npm run build` | verde |
