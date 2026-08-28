@@ -9,6 +9,10 @@ const canonical = join(migrationsDir, '20260827030100_presenca_ocorrencia_canoni
 const correctionName = readdirSync(migrationsDir)
   .filter((name) => /_presenca_ausencia_bruta_fail_closed\.sql$/u.test(name))
   .at(-1);
+const consolidatedAgendaFix = join(
+  migrationsDir,
+  '20260828025700_agenda_consolidada_rollout_legado.sql',
+);
 const UNIT = '91000000-0000-0000-0000-000000000001';
 
 function docker(args, input) {
@@ -39,16 +43,20 @@ async function waitForPostgres(container) {
 
 test('correção não hardcode política e mantém a projeção temporal versionada', () => {
   assert.ok(correctionName, 'migration presenca_ausencia_bruta_fail_closed ausente');
+  assert.equal(existsSync(consolidatedAgendaFix), true, 'hotfix posterior da Agenda ausente');
   const correction = readFileSync(join(migrationsDir, correctionName), 'utf8');
+  const consolidatedFix = readFileSync(consolidatedAgendaFix, 'utf8');
   const canonicalSql = readFileSync(canonical, 'utf8');
   assert.equal((correction.match(/when\s+'ausente'\s+then\s+'indeterminado'/giu) ?? []).length, 2);
+  assert.equal((consolidatedFix.match(/when\s+'ausente'\s+then\s+'indeterminado'/giu) ?? []).length, 2);
+  assert.doesNotMatch(consolidatedFix, /when\s+'ausente'\s+then\s+'(?:falta|ausente)'/iu);
   assert.doesNotMatch(correction, /Barra|Recreio|Campo Grande|2026-06-01|2026-07-31/iu);
   assert.match(canonicalSql, /presenca_politicas_confiabilidade/iu);
   assert.match(canonicalSql, /ausencia_emusys_resultado\s*=\s*'falta_confirmada'/iu);
 });
 
-test('aluno e professor ausentes brutos ficam indeterminados no envelope legado', { timeout: 120_000 }, async (t) => {
-  if (!correctionName || !existsSync(canonical) || docker(['info']).status !== 0) {
+test('migration posterior preserva aluno e professor ausentes brutos como indeterminados', { timeout: 120_000 }, async (t) => {
+  if (!correctionName || !existsSync(canonical) || !existsSync(consolidatedAgendaFix) || docker(['info']).status !== 0) {
     t.skip('Docker ou migration indisponível');
     return;
   }
@@ -81,6 +89,7 @@ test('aluno e professor ausentes brutos ficam indeterminados no envelope legado'
       $$;
     `);
     psql(container, readFileSync(join(migrationsDir, correctionName), 'utf8'));
+    psql(container, readFileSync(consolidatedAgendaFix, 'utf8'));
     const result = JSON.parse(psql(container, `
       select public.fn_agenda_dia_legado_envelope_v1('2026-08-27', '${UNIT}');
     `));

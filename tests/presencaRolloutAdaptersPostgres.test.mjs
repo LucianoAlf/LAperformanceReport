@@ -6,8 +6,10 @@ import test from 'node:test';
 const CONFIG = 'supabase/migrations/20260827031600_presenca_rollout_config.sql';
 const ADAPTERS = 'supabase/migrations/20260827031700_presenca_rollout_adapters.sql';
 const BASELINE = 'supabase/migrations/20260827030000_presenca_funcoes_vivas_baseline.sql';
+const CONSOLIDATED_AGENDA_FIX = 'supabase/migrations/20260828025700_agenda_consolidada_rollout_legado.sql';
 const REPORT_PROVENANCE_HOTFIX = 'supabase/migrations/20260827032300_presenca_relatorio_rollout_proveniencia_hotfix.sql';
 const UNIT = '91000000-0000-0000-0000-000000000001';
+const UNIT_2 = '91000000-0000-0000-0000-000000000002';
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -27,6 +29,20 @@ function psql(container, sql) {
   return result.stdout.trim();
 }
 
+function psqlFalha(container, sql) {
+  const result = docker([
+    'exec', '-i', container, 'psql', '-v', 'ON_ERROR_STOP=1',
+    '-h', '127.0.0.1', '-U', 'postgres', '-d', 'postgres', '-At',
+  ], sql);
+  assert.notEqual(result.status, 0, 'SQL deveria falhar fechado');
+  return `${result.stdout}\n${result.stderr}`;
+}
+
+function ultimoJson(output) {
+  const linhas = output.split(/\r?\n/u).map((linha) => linha.trim()).filter(Boolean);
+  return JSON.parse(linhas.at(-1));
+}
+
 async function waitForPostgres(container) {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     if (docker([
@@ -40,6 +56,7 @@ async function waitForPostgres(container) {
 
 test('baseline preserva o texto legado e adapters governam todas as superficies vivas', () => {
   assert.equal(existsSync(ADAPTERS), true, 'migration de adapters ausente');
+  assert.equal(existsSync(CONSOLIDATED_AGENDA_FIX), true, 'hotfix da Agenda consolidada ausente');
   assert.equal(existsSync(REPORT_PROVENANCE_HOTFIX), true, 'hotfix de proveniencia do relatorio ausente');
   const baseline = readFileSync(BASELINE, 'utf8');
   const adapters = readFileSync(ADAPTERS, 'utf8');
@@ -78,11 +95,20 @@ test('sombra calcula sem expor, canonico ativa e legado reverte sem migration de
       create role anon nologin;
       create role authenticated nologin;
       create role service_role nologin bypassrls;
+      create role authenticator nologin;
+      grant authenticated to authenticator;
       create schema auth;
       create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
-      create function public.is_admin() returns boolean language sql stable as $$ select true $$;
+      create function public.is_admin() returns boolean language sql stable as $$
+        select coalesce(current_setting('app.test_admin', true), 'false') = 'true'
+      $$;
+      create function public.get_user_unidade_ids() returns setof uuid language sql stable as $$
+        select '${UNIT}'::uuid
+      $$;
       create table public.unidades(id uuid primary key, nome text, ativa boolean);
-      insert into public.unidades values ('${UNIT}', 'Recreio', true);
+      insert into public.unidades values
+        ('${UNIT}', 'Recreio', true),
+        ('${UNIT_2}', 'Barra', true);
 
       create type public.agenda_fixture as (
         chave text, unidade_id uuid, professor_id integer, professor_presenca text,
@@ -90,18 +116,33 @@ test('sombra calcula sem expor, canonico ativa e legado reverte sem migration de
       );
       create function public.get_agenda_dia(p_data date, p_unidade_id uuid default null)
       returns setof public.agenda_fixture language sql stable security definer as $$
-        select ('slot-legado','${UNIT}',7,'presente',
-          jsonb_build_array(jsonb_build_object(
-            'aluno_id',101,'aula_emusys_id',10,'status_presenca','presente'
-          )), array[10])::public.agenda_fixture
+        select v.chave, v.unidade_id, v.professor_id, v.professor_presenca,
+               v.alunos, v.aula_ids
+        from (values
+          ('slot-legado'::text, '${UNIT}'::uuid, 7, 'presente'::text,
+            jsonb_build_array(jsonb_build_object(
+              'aluno_id',101,'aula_emusys_id',10,'status_presenca','presente'
+            )), array[10]::integer[]),
+          ('slot-legado-barra'::text, '${UNIT_2}'::uuid, 8, 'ausente'::text,
+            jsonb_build_array(jsonb_build_object(
+              'aluno_id',102,'aula_emusys_id',11,'status_presenca','ausente'
+            )), array[11]::integer[])
+        ) as v(chave, unidade_id, professor_id, professor_presenca, alunos, aula_ids)
+        where p_unidade_id is null or v.unidade_id = p_unidade_id
       $$;
       create function public.get_agenda_dia_v2(p_data date, p_unidade_id uuid default null)
       returns jsonb language sql stable security definer as $$
         select jsonb_build_object('fonte','agenda-canonica','aulas','[]'::jsonb)
       $$;
-      create function public.fn_presenca_pendencias_do_dia(uuid, date)
-      returns table(motivo text, aluno_id integer) language sql stable as $$
-        select 'sem_resposta'::text, 202
+      create function public.fn_presenca_pendencias_do_dia(p_unidade_id uuid, p_data date)
+      returns table(motivo text, aluno_id integer) language plpgsql stable as $$
+      begin
+        if p_unidade_id is null or p_data is null then
+          raise exception 'UNIDADE_E_DATA_OBRIGATORIAS' using errcode = '22023';
+        end if;
+        return query select 'sem_resposta'::text,
+          case when p_unidade_id = '${UNIT}'::uuid then 202 else 303 end;
+      end
       $$;
 
       create function public.fn_texto_relatorio_presenca_legado_v1(p_unidade_id uuid, p_data date)
@@ -140,6 +181,7 @@ test('sombra calcula sem expor, canonico ativa e legado reverte sem migration de
     `);
     psql(container, readFileSync(CONFIG, 'utf8'));
     psql(container, readFileSync(ADAPTERS, 'utf8'));
+    psql(container, readFileSync(CONSOLIDATED_AGENDA_FIX, 'utf8'));
     psql(container, readFileSync(REPORT_PROVENANCE_HOTFIX, 'utf8'));
 
     const shadow = JSON.parse(psql(container, String.raw`
@@ -157,6 +199,61 @@ test('sombra calcula sem expor, canonico ativa e legado reverte sem migration de
     assert.equal(shadow.teacher[0].fonte, 'teacher-legado');
     assert.equal(shadow.lia.estado_publicacao, 'legado');
     assert.notEqual(shadow.lia.fonte, 'agente-canonico');
+
+    const agendaConsolidada = JSON.parse(psql(container, String.raw`
+      select public.get_agenda_dia_v2('2026-08-26', null);
+    `));
+    assert.equal(agendaConsolidada.rollout_modo, 'sombra');
+    assert.equal(agendaConsolidada.fonte, 'agenda-legado');
+    assert.equal(agendaConsolidada.aulas.length, 2);
+    assert.equal(agendaConsolidada.pendencias.length, 2);
+    assert.deepEqual(
+      agendaConsolidada.pendencias.map((item) => item.aluno_id).sort((a, b) => a - b),
+      [202, 303],
+    );
+    assert.equal(
+      agendaConsolidada.ocorrencias.find((item) => item.aluno_id === 102)?.resultado_canonico,
+      'indeterminado',
+    );
+    assert.equal(
+      agendaConsolidada.professores_ocorrencias.find((item) => item.professor_id === 8)?.estado,
+      'indeterminado',
+    );
+
+    const agendaDaPropriaUnidade = ultimoJson(psql(container, String.raw`
+      set session authorization authenticator;
+      set role authenticated;
+      select set_config('request.jwt.claim.role', 'authenticated', false);
+      select set_config('app.test_admin', 'false', false);
+      select public.get_agenda_dia_v2('2026-08-26', '${UNIT}');
+    `));
+    assert.equal(agendaDaPropriaUnidade.aulas.length, 1);
+
+    assert.match(psqlFalha(container, String.raw`
+      set session authorization authenticator;
+      set role authenticated;
+      select set_config('request.jwt.claim.role', 'authenticated', false);
+      select set_config('app.test_admin', 'false', false);
+      select public.get_agenda_dia_v2('2026-08-26', '${UNIT_2}');
+    `), /UNIDADE_NAO_AUTORIZADA/u);
+
+    assert.match(psqlFalha(container, String.raw`
+      set session authorization authenticator;
+      set role authenticated;
+      select set_config('request.jwt.claim.role', 'authenticated', false);
+      select set_config('app.test_admin', 'false', false);
+      select public.get_agenda_dia_v2('2026-08-26', null);
+    `), /CONSOLIDADO_REQUER_ADMIN/u);
+
+    const agendaConsolidadaAdmin = ultimoJson(psql(container, String.raw`
+      set session authorization authenticator;
+      set role authenticated;
+      select set_config('request.jwt.claim.role', 'authenticated', false);
+      select set_config('app.test_admin', 'true', false);
+      select public.get_agenda_dia_v2('2026-08-26', null);
+    `));
+    assert.equal(agendaConsolidadaAdmin.aulas.length, 2);
+
     assert.match(psql(container, "select public.fn_texto_relatorio_presenca_consolidado('2026-08-26');"), /sol-legado/u);
     const provenanceShadow = psql(container, `
       insert into public.fila_relatorios_sol_hermes(tipo_relatorio,unidade_id,metadata)
