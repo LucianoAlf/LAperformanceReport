@@ -207,20 +207,38 @@ const liveDefinitions = [
   },
   {
     object: 'app_minha_agenda_sessao',
-    latestMutationFile: '20260827031700_presenca_rollout_adapters.sql',
+    latestMutationFile: '20260828005722_presenca_roster_v2_publicacao_gatada.sql',
     files: [
       { name: '20260812172432_presenca_canonica_resolvedor_conflitos.sql', contains: ['create or replace function public.app_minha_agenda_sessao', 'fn_presenca_fecha_chamada'] },
       { name: '20260824231632_la_teacher_presenca_pela_canonica_do_slot.sql', contains: ['app_minha_agenda_sessao', 'vw_presenca_slot_canonica_v1'] },
       { name: '20260827031100_la_teacher_presenca_canonica_v2.sql', contains: ['app_minha_agenda_sessao', 'vw_presenca_ocorrencia_canonica_v2', 'fn_presenca_dados_frescos_interno_v1', 'presenca_estado_v2'] },
       { name: '20260827031700_presenca_rollout_adapters.sql', contains: ['create or replace function public.app_minha_agenda_sessao', 'app_minha_agenda_sessao_base_v1', "'la_teacher'"] },
+      { name: '20260828005722_presenca_roster_v2_publicacao_gatada.sql', contains: ['create or replace function public.app_minha_agenda_sessao', 'app_minha_agenda_sessao_publicacao_legado_v1', 'app_minha_agenda_sessao_canonica_v2'] },
     ],
   },
   {
     object: 'app_registrar_presencas_aula',
-    latestMutationFile: '20260827030900_presenca_comando_overloads_compatibilidade.sql',
+    latestMutationFile: '20260828005722_presenca_roster_v2_publicacao_gatada.sql',
     files: [
       { name: '20260815112104_reverte_precedencia_secretaria_prevalece.sql', contains: ['create or replace function public.app_registrar_presencas_aula', 'professor_la_teacher'] },
       { name: '20260827030900_presenca_comando_overloads_compatibilidade.sql', contains: ['create or replace function public.app_registrar_presencas_aula', 'app_criar_comando_chamada_professor_v1', 'p_request_id uuid'] },
+      { name: '20260828005722_presenca_roster_v2_publicacao_gatada.sql', contains: ['create or replace function public.app_registrar_presencas_aula', 'app_registrar_presencas_aula_publicacao_legado_v1', 'app_registrar_presencas_aula_canonica_v2_interno'] },
+    ],
+  },
+  {
+    object: 'fabio_confirmar_chamada_acao',
+    latestMutationFile: '20260828005722_presenca_roster_v2_publicacao_gatada.sql',
+    files: [
+      { name: '20260827030800_presenca_comando_portas_fabio.sql', contains: ['create or replace function public.fabio_confirmar_chamada_acao', 'fabio_criar_comando_chamada_v1'] },
+      { name: '20260828005722_presenca_roster_v2_publicacao_gatada.sql', contains: ['create or replace function public.fabio_confirmar_chamada_acao', 'fabio_confirmar_chamada_acao_publicacao_legado_v1', 'fabio_confirmar_chamada_acao_canonica_v2_interno'] },
+    ],
+  },
+  {
+    object: 'fabio_emitir_presenca_por_registro',
+    latestMutationFile: '20260828005722_presenca_roster_v2_publicacao_gatada.sql',
+    files: [
+      { name: '20260827030800_presenca_comando_portas_fabio.sql', contains: ['create or replace function public.fabio_emitir_presenca_por_registro', 'fabio_criar_comando_chamada_v1'] },
+      { name: '20260828005722_presenca_roster_v2_publicacao_gatada.sql', contains: ['create or replace function public.fabio_emitir_presenca_por_registro', 'fabio_emitir_presenca_por_registro_publicacao_legado_v1', 'fabio_emitir_presenca_registro_canonica_v2_interno'] },
     ],
   },
   {
