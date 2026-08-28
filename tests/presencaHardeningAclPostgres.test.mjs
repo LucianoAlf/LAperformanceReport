@@ -456,6 +456,19 @@ test('Fábio exige service role e contexto professor/aula coerente', () => {
     );
   `)));
   assert.equal(ok.status, 'recebido');
+
+  psql(`update public.presenca_sync_cobertura set status='falhou', snapshot_hash=null where run_id='${RUN}';`);
+  let replay;
+  try {
+    replay = json(psql(asService(String.raw`
+      select public.fabio_criar_comando_chamada_v2(
+        '20000000-0000-4000-8000-000000000003', 7, 10, array[102], 'professor_whatsapp'
+      );
+    `)));
+  } finally {
+    psql(`update public.presenca_sync_cobertura set status='concluida', snapshot_hash='${HASH}' where run_id='${RUN}';`);
+  }
+  assert.equal(replay.status, 'recebido');
 });
 
 test('A-B-A usa tres UUIDs e retry do primeiro nao duplica linhas ou eventos', () => {
@@ -502,6 +515,44 @@ test('A-B-A usa tres UUIDs e retry do primeiro nao duplica linhas ou eventos', (
   const conflito = psqlFailure(appCreate(AUTH_A, ids[0], [102]));
   assert.match(conflito, /23505/u);
   assert.match(conflito, /request_id_reutilizado/u);
+});
+
+test('retry existente chega ao apply e ganha recibo terminal quando o roster deixa de ser publicavel', () => {
+  const requestId = '30000000-0000-4000-8000-000000000010';
+  const criado = json(psql(appCreate(AUTH_A, requestId, [102])));
+  assert.equal(criado.status, 'recebido');
+
+  psql(String.raw`
+    update public.presenca_sync_cobertura
+       set status = 'falhou', snapshot_hash = null
+     where run_id = '${RUN}';
+  `);
+
+  let repetido;
+  let recibo;
+  let falha;
+  try {
+    repetido = json(psql(appCreate(AUTH_A, requestId, [102])));
+    recibo = json(psql(appApply(AUTH_A, requestId)));
+  } catch (error) {
+    falha = error;
+  } finally {
+    psql(String.raw`
+      update public.presenca_sync_cobertura
+         set status = 'concluida', snapshot_hash = '${HASH}'
+       where run_id = '${RUN}';
+    `);
+  }
+
+  assert.ifError(falha);
+  assert.equal(repetido.status, 'recebido');
+  assert.equal(recibo.status, 'falhou');
+  assert.equal(recibo.aplicados, 0);
+  assert.equal(recibo.rejeitados, 2);
+  assert.equal(
+    psql(`select status from public.presenca_comandos where request_id='${requestId}';`),
+    'falhou',
+  );
 });
 
 test('porta monta o roster mantendo os locks ate o core concluir a criacao', async () => {

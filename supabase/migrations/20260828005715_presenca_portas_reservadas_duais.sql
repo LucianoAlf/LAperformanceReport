@@ -22,6 +22,8 @@ declare
   v_slot_key bigint;
   v_slot_key_atual bigint;
   v_itens jsonb;
+  v_existente public.presenca_comandos%rowtype;
+  v_ausentes_existentes integer[];
 begin
   if coalesce(auth.role(), '') <> 'authenticated' then
     raise exception 'authenticated_obrigatorio' using errcode = '42501';
@@ -45,6 +47,33 @@ begin
   v_professor_id := public.fn_professor_do_usuario();
   if v_professor_id is null then
     raise exception 'sem_professor_vinculado' using errcode = '42501';
+  end if;
+
+  select coalesce(array_agg(a.aluno_id order by a.aluno_id), '{}'::integer[])
+    into v_ausentes
+    from unnest(v_ausentes) a(aluno_id);
+
+  select * into v_existente
+    from public.presenca_comandos c
+   where c.request_id = p_request_id;
+  if found then
+    select coalesce(
+      array_agg(i.aluno_id order by i.aluno_id)
+        filter (where i.status_solicitado = 'falta'),
+      '{}'::integer[]
+    )
+      into v_ausentes_existentes
+      from public.presenca_comando_itens i
+     where i.request_id = p_request_id;
+    if v_existente.tipo is distinct from 'la_teacher_aula'
+       or v_existente.fonte is distinct from 'professor_la_teacher'
+       or v_existente.auth_user_id is distinct from auth.uid()
+       or v_existente.aula_id is distinct from p_aula_emusys_id
+       or v_existente.professor_id is distinct from v_professor_id
+       or v_ausentes_existentes is distinct from v_ausentes then
+      raise exception 'request_id_reutilizado' using errcode = '23505';
+    end if;
+    return public.app_status_comando_presenca_v1(p_request_id);
   end if;
 
   select * into v_aula
@@ -152,6 +181,8 @@ declare
   v_slot_key_atual bigint;
   v_itens jsonb;
   v_tipo text;
+  v_existente public.presenca_comandos%rowtype;
+  v_ausentes_existentes integer[];
 begin
   if coalesce(auth.role(), '') <> 'service_role' then
     raise exception 'service_role_obrigatorio' using errcode = '42501';
@@ -175,6 +206,38 @@ begin
       from unnest(v_ausentes) ausente(aluno_id)
   ) then
     raise exception 'alunos_ausentes_invalidos' using errcode = '22023';
+  end if;
+
+  select coalesce(array_agg(a.aluno_id order by a.aluno_id), '{}'::integer[])
+    into v_ausentes
+    from unnest(v_ausentes) a(aluno_id);
+
+  v_tipo := case p_fonte
+    when 'fabio_audio' then 'fabio_audio_aula'
+    when 'professor_la_teacher' then 'fabio_manual_aula'
+    else 'fabio_aula'
+  end;
+
+  select * into v_existente
+    from public.presenca_comandos c
+   where c.request_id = p_request_id;
+  if found then
+    select coalesce(
+      array_agg(i.aluno_id order by i.aluno_id)
+        filter (where i.status_solicitado = 'falta'),
+      '{}'::integer[]
+    )
+      into v_ausentes_existentes
+      from public.presenca_comando_itens i
+     where i.request_id = p_request_id;
+    if v_existente.tipo is distinct from v_tipo
+       or v_existente.fonte is distinct from p_fonte
+       or v_existente.aula_id is distinct from p_aula_emusys_id
+       or v_existente.professor_id is distinct from p_professor_id
+       or v_ausentes_existentes is distinct from v_ausentes then
+      raise exception 'request_id_reutilizado' using errcode = '23505';
+    end if;
+    return public.app_status_comando_presenca_v1(p_request_id);
   end if;
 
   select * into v_aula
@@ -251,12 +314,6 @@ begin
   if v_itens is null then
     raise exception 'roster_v2_nao_publicado' using errcode = '23514';
   end if;
-
-  v_tipo := case p_fonte
-    when 'fabio_audio' then 'fabio_audio_aula'
-    when 'professor_la_teacher' then 'fabio_manual_aula'
-    else 'fabio_aula'
-  end;
 
   return public.fn_criar_comando_presenca_core_v2(
     p_request_id,
