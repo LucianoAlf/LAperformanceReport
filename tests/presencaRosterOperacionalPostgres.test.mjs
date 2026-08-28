@@ -52,6 +52,17 @@ function migrationRoster() {
   return join(MIGRATIONS, nomes[0]);
 }
 
+function migrationSyncCobertura() {
+  return join(MIGRATIONS, '20260827030200_presenca_sync_cobertura_idempotente.sql');
+}
+
+function migrationRosterV2() {
+  const nomes = readdirSync(MIGRATIONS)
+    .filter((nome) => /^\d+_presenca_roster_v2_expansao_aditiva\.sql$/u.test(nome));
+  assert.equal(nomes.length, 1, 'migration de expansao aditiva do roster v2 ausente ou duplicada');
+  return join(MIGRATIONS, nomes[0]);
+}
+
 function jsonUltimaLinha(output) {
   return JSON.parse(output.split(/\r?\n/u).at(-1));
 }
@@ -146,7 +157,9 @@ test('roster completo inativa logicamente e estados inseguros nunca viram penden
       values (10, 1002, 'presente', 'agenda_secretaria');
     `);
 
+    psql(container, readFileSync(migrationSyncCobertura(), 'utf8'));
     psql(container, readFileSync(migrationRoster(), 'utf8'));
+    psql(container, readFileSync(migrationRosterV2(), 'utf8'));
     psql(container, String.raw`
       insert into public.aula_alunos_emusys(
         aula_emusys_id, unidade_id, aluno_chave, aluno_emusys_id, aluno_id, aluno_nome
