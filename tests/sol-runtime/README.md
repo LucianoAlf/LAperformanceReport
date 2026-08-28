@@ -190,3 +190,28 @@ não há pendência aberta**. Com card na mesa, frase de saída é correção.
 
 ⚠️ `saida-operacional-e2e.cjs` **não tem asserção e nunca envia "pode"** — é diagnóstico.
 A última linha dele é sempre `lancou SAIDA? nao`. Julgar a suíte por **exit code**.
+
+## multi-aluno-falso-positivo-ocr-e2e.cjs
+Caso Mayra/CG (28/08 16:43): PIX de R$ 380,00 com a legenda `PG pix parcela 08/2026
+aluno Arthur de Jesus Lindo Braga - Kids CG R$380,00` — **um** aluno, rotulado com
+todas as letras. A Sol respondeu *"Entendi que este comprovante é de mais de um
+aluno... Manda cada aluno com seu valor"* e ficou presa repetindo o pedido.
+
+CAUSA: `detectarContextoMultiAluno` roda sobre **legenda + OCR**. A regra NOMES_LIGADOS
+procura dois grupos de nomes próprios unidos por "e"/"+"/"&" — e **todo comprovante PIX
+traz o nome do PAGADOR**, que quase nunca é o do aluno. Basta uma linha do recibo casar
+(medido: `"SELMA DE MATTOS LINDO BRAGA e LA MUSIK KIDS"` → `true`) para o comprovante
+inteiro virar multi-aluno. A legenda sozinha dá `false`.
+
+⚠️ **Não era regressão das mudanças de 28/08** — `detectarContextoMultiAluno` estava
+byte a byte idêntico antes e depois (md5 conferido nas duas versões). Defeito antigo,
+exposto naquele dia.
+
+CORREÇÃO: quando a legenda rotula UM aluno e ela própria não tem sinal de multi, o
+humano já respondeu — o OCR não contradiz. Mesma doutrina da categoria de saída ("só
+pode nascer do que a PESSOA escreveu, nunca do OCR") e do rótulo humano do #230.
+
+⚠️ O que **não** muda: legenda com multi de verdade ("Thiago e Matheus", "350 cada",
+"2 alunos") continua roteando para revisão; **sem rótulo na legenda, o OCR ainda
+protege** (o teste cobre os dois). A trava contra dividir dinheiro sozinha fica
+intacta — ela só deixa de ser acionada por nome de terceiro impresso no recibo.
