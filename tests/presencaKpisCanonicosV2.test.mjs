@@ -4,6 +4,8 @@ import test from 'node:test';
 
 const migrationPath =
   'supabase/migrations/20260827031300_presenca_consumidores_numericos_v2.sql';
+const performanceMigrationPath =
+  'supabase/migrations/20260828093000_presenca_consumidores_periodo_materializados.sql';
 
 function migration() {
   assert.ok(existsSync(migrationPath), `migration ausente: ${migrationPath}`);
@@ -16,6 +18,14 @@ function migrationCorpus() {
     .filter((name) => !name.startsWith('20260827031300_'))
     .map((name) => readFileSync(`supabase/migrations/${name}`, 'utf8'))
     .join('\n');
+}
+
+function performanceMigration() {
+  assert.ok(
+    existsSync(performanceMigrationPath),
+    `migration ausente: ${performanceMigrationPath}`,
+  );
+  return readFileSync(performanceMigrationPath, 'utf8');
 }
 
 test('camada numerica nasce exclusivamente da ocorrencia canonica v2', () => {
@@ -180,4 +190,16 @@ test('ACL da camada v2 e explicita e nao libera anon', () => {
   assert.doesNotMatch(sql, /grant\s+select\s+on\s+public\.vw_presenca_ocorrencia_metrica_v2\s+to\s+authenticated/iu);
   assert.match(sql, /revoke\s+all[\s\S]*get_presenca_metricas_canonicas_v2[\s\S]*from\s+public\s*,\s*anon\s*,\s*authenticated/iu);
   assert.match(sql, /grant\s+execute[\s\S]*get_presenca_metricas_canonicas_v2[\s\S]*to\s+service_role/iu);
+});
+
+test('consumidores de periodo materializam cada recorte canonico uma unica vez', () => {
+  const sql = performanceMigration();
+
+  assert.match(sql, /fn_presenca_estado_publicacao_periodo_v2[\s\S]*dias_operacionais\s+as\s+materialized[\s\S]*pendencias_por_dia\s+as\s+materialized/iu);
+  assert.match(sql, /fn_presenca_ocorrencias_escopo_interno_v2[\s\S]*for\s+v_data[\s\S]*vw_presenca_ocorrencia_metrica_v2[\s\S]*o\.data_aula\s*=\s*v_data/iu);
+  assert.match(sql, /get_presenca_metricas_canonicas_v2[\s\S]*observada\s+as\s+materialized[\s\S]*fn_presenca_ocorrencias_escopo_interno_v2[\s\S]*frescor\s+as\s+materialized/iu);
+  assert.match(sql, /get_presenca_ocorrencias_periodo_canonico_v2[\s\S]*unidades_permitidas\s+as\s+materialized[\s\S]*permitida\s+as\s+materialized[\s\S]*fn_presenca_ocorrencias_escopo_interno_v2[\s\S]*frescor\s+as\s+materialized/iu);
+  assert.match(sql, /get_health_score_professor_v3_presenca_periodo_v2[\s\S]*unidades_permitidas\s+as\s+materialized[\s\S]*estado_unidade\s+as\s+materialized[\s\S]*observada\s+as\s+materialized[\s\S]*fn_presenca_ocorrencias_escopo_interno_v2/iu);
+  assert.match(sql, /revoke\s+all[\s\S]*fn_presenca_ocorrencias_escopo_interno_v2[\s\S]*from\s+public\s*,\s*anon\s*,\s*authenticated\s*,\s*service_role/iu);
+  assert.doesNotMatch(sql, /pg_get_functiondef|execute\s+format|information_schema/iu);
 });
