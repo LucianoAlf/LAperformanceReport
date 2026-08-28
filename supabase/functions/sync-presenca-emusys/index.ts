@@ -305,11 +305,12 @@ async function carregarCancelamentosHumanos(
   return new Set((data || []).map((r: { emusys_id: number }) => r.emusys_id));
 }
 
-async function sincronizarMetadadosAulas(
+async function sincronizarMetadadosAulasNoRun(
   supabase: any,
   unidades: readonly UnidadeEmusys[],
   dataInicio: string,
-  dataFim: string
+  dataFim: string,
+  syncRunId: string,
 ) {
   const resultados: Array<Record<string, unknown>> = [];
   const aulasPorUnidade: Array<{
@@ -384,9 +385,8 @@ async function sincronizarMetadadosAulas(
         .upsert(lote, { onConflict: 'emusys_id,unidade_id', ignoreDuplicates: false })
         .select('id, emusys_id');
       if (error) {
-        throw new Error(
-          `Erro no lote ${offset} de ${unidade.nome}: ${error.message}`
-        );
+        console.error('[sync-presenca] Falha ao gravar lote de aulas em metadados');
+        throw new Error('PRESENCA_SYNC_AULA_GRAVACAO_FALHOU');
       }
       gravadas += lote.length;
       for (const linhaGravada of loteGravado || []) {
@@ -397,18 +397,9 @@ async function sincronizarMetadadosAulas(
     const integridadeMapaAulas = verificarIntegridadeMapaAulas(linhas, idPorEmusysId);
     if (!integridadeMapaAulas.completo) {
       console.error(
-        `[sync-presenca] ${unidade.nome}: mapa de aulas incompleto; roster e reconciliação preservados (esperadas=${integridadeMapaAulas.aulas_esperadas}, mapeadas=${integridadeMapaAulas.aulas_mapeadas}, ausentes=${integridadeMapaAulas.emusys_ids_ausentes.length})`,
+        `[sync-presenca] Mapa de aulas incompleto em metadados (esperadas=${integridadeMapaAulas.aulas_esperadas}, mapeadas=${integridadeMapaAulas.aulas_mapeadas}, ausentes=${integridadeMapaAulas.emusys_ids_ausentes.length})`,
       );
-      resultados.push({
-        unidade: unidade.nome,
-        status: 'upsert_aulas_incompleto_preservado',
-        aulas_recebidas: aulas.length,
-        aulas_gravadas: gravadas,
-        aulas_esperadas: integridadeMapaAulas.aulas_esperadas,
-        aulas_mapeadas: integridadeMapaAulas.aulas_mapeadas,
-      });
-      aulasPorUnidade.push({ unidade, dataInicio, dataFim, aulas });
-      continue;
+      throw new Error('PRESENCA_SYNC_MAPA_AULAS_INCOMPLETO');
     }
 
     // Casa os vinculos aluno-aula tambem no sync de 15 min: sem isso, um
@@ -417,17 +408,8 @@ async function sincronizarMetadadosAulas(
     const vinculos = montarVinculosAulaAlunos(aulas, idPorEmusysId, unidade.id, normalizarNome);
     const resultadoVinculos = await gravarVinculosAulaAlunos(supabase, vinculos);
     if (resultadoVinculos.erros.length > 0) {
-      console.error(`[sync-presenca] ${unidade.nome}: upsert de roster falhou; reconciliação preservada`);
-      resultados.push({
-        unidade: unidade.nome,
-        status: 'roster_incompleto_preservado',
-        aulas_recebidas: aulas.length,
-        aulas_gravadas: gravadas,
-        vinculos_gravados: resultadoVinculos.gravados,
-        vinculos_com_erro: resultadoVinculos.erros.length,
-      });
-      aulasPorUnidade.push({ unidade, dataInicio, dataFim, aulas });
-      continue;
+      console.error('[sync-presenca] Upsert de roster em metadados falhou');
+      throw new Error('PRESENCA_SYNC_ROSTER_GRAVACAO_FALHOU');
     }
 
     // O modo de metadados ja recebe a foto paginada da janela inteira. So a
@@ -437,21 +419,40 @@ async function sincronizarMetadadosAulas(
     const inicioReconciliacao = dataInicio < hojeReconciliacao
       ? hojeReconciliacao
       : dataInicio;
-    const reconciliacaoGrade: ResultadoReconciliacaoGradeSnapshot = inicioReconciliacao <= dataFim
-      ? await reconciliarGradeSnapshotEmusys(supabase, {
-          unidadeId: unidade.id,
-          dataInicio: inicioReconciliacao,
-          dataFim,
-          snapshot: montarSnapshotGradeEmusys(
-            aulas.filter((aula) =>
-              aula.categoria === 'normal'
-              && aula.data_hora_inicio.split(' ')[0] >= inicioReconciliacao
-              && aula.data_hora_inicio.split(' ')[0] <= dataFim
-            ),
-            normalizarNome,
+    const snapshotGrade = inicioReconciliacao <= dataFim
+      ? montarSnapshotGradeEmusys(
+          aulas.filter((aula) =>
+            aula.categoria === 'normal'
+            && aula.data_hora_inicio.split(' ')[0] >= inicioReconciliacao
+            && aula.data_hora_inicio.split(' ')[0] <= dataFim
           ),
-        })
-      : { status: 'fora_da_janela_operacional' };
+          normalizarNome,
+        )
+      : [];
+    let reconciliacaoGrade: ResultadoReconciliacaoGradeSnapshot = {
+      status: 'fora_da_janela_operacional',
+    };
+    let contratoReconciliacao: 'v2' | 'v1_fallback' | null = null;
+    if (inicioReconciliacao <= dataFim) {
+      const reconciliacaoDual = await reconciliarGradeSnapshotEmusys(supabase, {
+        syncRunId,
+        unidadeId: unidade.id,
+        dataInicio: inicioReconciliacao,
+        dataFim,
+        snapshot: snapshotGrade,
+      });
+      contratoReconciliacao = reconciliacaoDual.contrato;
+      reconciliacaoGrade = reconciliacaoDual.resultado as ResultadoReconciliacaoGradeSnapshot;
+      if (
+        reconciliacaoGrade.status !== 'ok'
+        || reconciliacaoGrade.estados_gravados !== snapshotGrade.length
+      ) {
+        throw new Error('PRESENCA_SYNC_RECONCILIACAO_ROSTER_FALHOU');
+      }
+      console.log(
+        `[sync-presenca] reconciliacao_grade unidade_id=${unidade.id} data_inicio=${inicioReconciliacao} data_fim=${dataFim} sync_run_id=${syncRunId} contrato=${reconciliacaoDual.contrato} aulas_snapshot=${snapshotGrade.length} estados_gravados=${reconciliacaoGrade.estados_gravados}`,
+      );
+    }
 
     resultados.push({
       unidade: unidade.nome,
@@ -460,6 +461,7 @@ async function sincronizarMetadadosAulas(
       vinculos_gravados: resultadoVinculos.gravados,
       vinculos_com_erro: resultadoVinculos.erros.length,
       reconciliacao_grade: {
+        contrato: contratoReconciliacao,
         status: reconciliacaoGrade.status,
         aulas_canceladas: reconciliacaoGrade.aulas_canceladas ?? 0,
         vinculos_inativados: reconciliacaoGrade.vinculos_inativados ?? 0,
@@ -467,6 +469,73 @@ async function sincronizarMetadadosAulas(
       },
     });
     aulasPorUnidade.push({ unidade, dataInicio, dataFim, aulas });
+  }
+
+  return { resultados, aulasPorUnidade };
+}
+
+async function sincronizarMetadadosAulas(
+  supabase: any,
+  unidades: readonly UnidadeEmusys[],
+  dataInicio: string,
+  dataFim: string,
+  requestIdSync: string,
+) {
+  const resultados: Array<Record<string, unknown>> = [];
+  const aulasPorUnidade: Array<{
+    unidade: UnidadeEmusys;
+    dataInicio: string;
+    dataFim: string;
+    aulas: AulaEmusys[];
+  }> = [];
+
+  for (const unidade of unidades) {
+    const execucao = await executarSyncPresencaComLease({
+      cliente: supabase,
+      unidadeId: unidade.id,
+      modo: 'metadados',
+      dataAlvo: dataAtualBrt(),
+      requestId: requestIdSync,
+      leaseSegundos: 900,
+      trabalho: async ({ heartbeat, syncRunId }) => {
+        const parcial = await sincronizarMetadadosAulasNoRun(
+          supabase,
+          [unidade],
+          dataInicio,
+          dataFim,
+          syncRunId,
+        );
+        const aulas = parcial.aulasPorUnidade[0]?.aulas ?? [];
+        const contagens: ContagensPresencaSync = {
+          paginas_lidas: Math.max(1, Math.ceil(aulas.length / 100)),
+          aulas_lidas: aulas.length,
+          presencas_lidas: 0,
+        };
+        await heartbeat(contagens);
+        return {
+          valor: parcial,
+          contagens,
+          snapshot: {
+            unidade_id: unidade.id,
+            modo: 'metadados',
+            data_inicio: dataInicio,
+            data_fim: dataFim,
+            reconciliacao_grade: parcial.resultados[0]?.reconciliacao_grade ?? null,
+          },
+        };
+      },
+    });
+
+    if (execucao.status === 'deduplicada') {
+      resultados.push({
+        unidade: unidade.nome,
+        status: 'deduplicada',
+        motivo: execucao.motivo,
+      });
+      continue;
+    }
+    resultados.push(...execucao.valor.resultados);
+    aulasPorUnidade.push(...execucao.valor.aulasPorUnidade);
   }
 
   return { resultados, aulasPorUnidade };
@@ -683,7 +752,8 @@ async function upsertExperimentalRaw(
     );
 
   if (error) {
-    console.error(`[sync-presenca] Upsert experimental raw ${nome} aula ${params.aula.id}:`, error.message);
+    console.error('[sync-presenca] Falha ao gravar evidencia experimental raw');
+    throw new Error('PRESENCA_SYNC_EXPERIMENTAL_RAW_GRAVACAO_FALHOU');
   }
 }
 
@@ -1737,12 +1807,14 @@ serve(async (req: Request) => {
     datasProcessar.splice(0, datasProcessar.length, ...datasOrdenadas);
 
     console.log(`[sync-presenca] Modo ${modo}: ${dataInicioJanela} a ${dataFimJanela}, unidade: ${solicitacao.alvoExato ? unidadesProcessar[0].nome : 'todas'}`);
+    const requestIdSync = crypto.randomUUID();
     if (modo === 'metadados') {
       const metadados = await sincronizarMetadadosAulas(
         supabase,
         unidadesProcessar,
         dataInicioJanela,
         dataFimJanela,
+        requestIdSync,
       );
       const dependenciasSnapshot = criarDependenciasSnapshot(
         supabase,
@@ -1770,8 +1842,6 @@ serve(async (req: Request) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const requestIdSync = crypto.randomUUID();
 
     // População viva canônica: trancados e estados ambíguos não entram no denominador.
     const { data: alunosCanonicos, error: alunosCanonicosError } = await supabase
@@ -1920,7 +1990,7 @@ serve(async (req: Request) => {
           modo,
           dataAlvo,
           requestId: requestIdSync,
-          trabalho: async ({ heartbeat }) => {
+          trabalho: async ({ heartbeat, syncRunId }) => {
             let contagensColeta: ContagensPresencaSync = {
               paginas_lidas: 0,
               aulas_lidas: 0,
@@ -1954,7 +2024,6 @@ serve(async (req: Request) => {
         let faltasAguardandoMaturidade = 0;
         let rosterSincronizados = 0;
         let aulasProcessadas = 0;
-        let gradeIncompleta = false;
 
         // 2. Processar aula por aula (não mais agrupado por dia)
         for (const aula of aulas) {
@@ -2044,9 +2113,8 @@ serve(async (req: Request) => {
             .single();
 
           if (aulaError) {
-            console.error(`[sync-presenca] Aula ${aula.id} não foi gravada; reconciliação preservada`);
-            gradeIncompleta = true;
-            continue;
+            console.error('[sync-presenca] Falha ao gravar aula');
+            throw new Error('PRESENCA_SYNC_AULA_GRAVACAO_FALHOU');
           }
 
           const aulaLocalId = aulaDB.id;
@@ -2106,8 +2174,8 @@ serve(async (req: Request) => {
               );
 
             if (rosterError) {
-              console.error(`[sync-presenca] Roster aula ${aula.id} falhou; reconciliação preservada`);
-              gradeIncompleta = true;
+              console.error('[sync-presenca] Falha ao gravar roster');
+              throw new Error('PRESENCA_SYNC_ROSTER_GRAVACAO_FALHOU');
             } else {
               rosterSincronizados++;
             }
@@ -2132,7 +2200,8 @@ serve(async (req: Request) => {
                 );
 
               if (administrativoError) {
-                console.error(`[sync-presenca] Administrativo ${nome} aula ${aula.id}:`, administrativoError.message);
+                console.error('[sync-presenca] Falha ao gravar presenca administrativa');
+                throw new Error('PRESENCA_SYNC_ADMINISTRATIVO_GRAVACAO_FALHOU');
               }
             }
           }
@@ -2262,7 +2331,8 @@ serve(async (req: Request) => {
               });
 
             if (upsertError) {
-              console.error(`[sync-presenca] Upsert presença ${nome} aula ${aula.id}:`, upsertError.message);
+              console.error('[sync-presenca] Falha ao gravar evidencia bruta de presenca');
+              throw new Error('PRESENCA_SYNC_RAW_GRAVACAO_FALHOU');
             }
             // O calculo de dia_aula/horario_aula foi movido para a funcao SQL
             // sincronizar_grade_horaria_alunos (deriva por pessoa+curso a partir de
@@ -2273,27 +2343,34 @@ serve(async (req: Request) => {
         // A reconciliacao v2 do roster e nao destrutiva: o backlog pode atualizar
         // o estado operacional de dias passados sem apagar o vinculo nem a
         // presenca humana historica.
-        const reconciliacaoGrade: ResultadoReconciliacaoGradeSnapshot = !gradeIncompleta
-          ? await reconciliarGradeSnapshotEmusys(supabase, {
-              unidadeId: unidade.id,
-              dataInicio: dataAlvo,
-              dataFim: dataAlvo,
-              snapshot: montarSnapshotGradeEmusys(
-                aulas.filter((aula) =>
-                  aula.categoria === 'normal'
-                  && aula.data_hora_inicio.split(' ')[0] === dataAlvo
-                ),
-                normalizarNome,
-              ),
-            })
-          : {
-              status: gradeIncompleta
-                ? 'grade_incompleta_preservada'
-                : 'roster_nao_reconciliado',
-            };
+        const snapshotGrade = montarSnapshotGradeEmusys(
+          aulas.filter((aula) =>
+            aula.categoria === 'normal'
+            && aula.data_hora_inicio.split(' ')[0] === dataAlvo
+          ),
+          normalizarNome,
+        );
+        const reconciliacaoDual = await reconciliarGradeSnapshotEmusys(supabase, {
+          syncRunId,
+          unidadeId: unidade.id,
+          dataInicio: dataAlvo,
+          dataFim: dataAlvo,
+          snapshot: snapshotGrade,
+        });
+        const reconciliacaoGrade = reconciliacaoDual.resultado as ResultadoReconciliacaoGradeSnapshot;
+        if (
+          reconciliacaoGrade.status !== 'ok'
+          || reconciliacaoGrade.estados_gravados !== snapshotGrade.length
+        ) {
+          console.error('[sync-presenca] Reconciliacao de roster incompleta');
+          throw new Error('PRESENCA_SYNC_RECONCILIACAO_ROSTER_FALHOU');
+        }
+        console.log(
+          `[sync-presenca] reconciliacao_grade unidade_id=${unidade.id} data_inicio=${dataAlvo} data_fim=${dataAlvo} sync_run_id=${syncRunId} contrato=${reconciliacaoDual.contrato} aulas_snapshot=${snapshotGrade.length} estados_gravados=${reconciliacaoGrade.estados_gravados}`,
+        );
 
         // 3. Log
-        await supabase.from('emusys_sync_log').insert({
+        const { error: syncLogError } = await supabase.from('emusys_sync_log').insert({
           unidade_id: unidade.id,
           unidade_nome: unidade.nome,
           data_sync: dataAlvo,
@@ -2305,6 +2382,10 @@ serve(async (req: Request) => {
           alunos_nao_encontrados: naoEncontrados,
           nomes_nao_encontrados: nomesNaoEncontrados,
         });
+        if (syncLogError) {
+          console.error('[sync-presenca] Falha ao gravar log operacional do sync');
+          throw new Error('PRESENCA_SYNC_LOG_GRAVACAO_FALHOU');
+        }
 
         const resultadoUnidadeData = {
           data: dataAlvo,
@@ -2318,6 +2399,7 @@ serve(async (req: Request) => {
           faltas_aguardando_maturidade: faltasAguardandoMaturidade,
           roster_sincronizados: rosterSincronizados,
           reconciliacao_grade: {
+            contrato: reconciliacaoDual.contrato,
             status: reconciliacaoGrade.status,
             aulas_canceladas: reconciliacaoGrade.aulas_canceladas ?? 0,
             vinculos_inativados: reconciliacaoGrade.vinculos_inativados ?? 0,

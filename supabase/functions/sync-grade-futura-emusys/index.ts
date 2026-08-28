@@ -22,8 +22,14 @@ import {
   montarSnapshotGradeEmusys,
   reconciliarGradeSnapshotEmusys,
   verificarIntegridadeMapaAulas,
+  type ResultadoReconciliacaoGradeSnapshot,
 } from '../_shared/reconciliacao-grade-snapshot.ts';
 import { prepararExecucaoSyncGrade } from '../_shared/sync-grade-authorization.ts';
+import {
+  executarSyncPresencaComLease,
+  redigirErroCodigo,
+  type ContagensPresencaSync,
+} from '../_shared/presenca-sync-run.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -163,174 +169,175 @@ serve(async (req: Request) => {
     const unidades = unidadeIndex !== null ? [UNIDADES[unidadeIndex]] : UNIDADES;
 
     const resultados: Array<Record<string, unknown>> = [];
+    const requestIdSync = crypto.randomUUID();
 
     for (const unidade of unidades) {
-      const mapaProfessores = await carregarMapaProfessoresEmusys(supabase, unidade.id);
-      let aulas: AulaEmusys[];
-      try {
-        aulas = await fetchAulasRange(unidade.token, hoje, dataFim);
-      } catch (error) {
-        const mensagem = error instanceof Error ? error.message : String(error);
-        console.error(`[sync-grade-futura] ${unidade.nome}: fetch falhou, unidade preservada - ${mensagem}`);
-        resultados.push({ unidade: unidade.nome, status: 'fetch_falhou_preservado', erro: mensagem });
-        continue;
-      }
+      const execucao = await executarSyncPresencaComLease({
+        cliente: supabase,
+        unidadeId: unidade.id,
+        modo: 'metadados',
+        dataAlvo: hoje,
+        requestId: requestIdSync,
+        leaseSegundos: 1200,
+        trabalho: async ({ heartbeat, syncRunId }) => {
+          const mapaProfessores = await carregarMapaProfessoresEmusys(supabase, unidade.id);
+          let aulas: AulaEmusys[];
+          try {
+            aulas = await fetchAulasRange(unidade.token, hoje, dataFim);
+          } catch (error) {
+            console.error('[sync-grade-futura] Falha ao buscar fotografia completa do Emusys');
+            throw error;
+          }
 
-      const linhas: Record<string, unknown>[] = [];
+          const linhas: Record<string, unknown>[] = [];
+          for (const aula of aulas) {
+            const dataAula = aula.data_hora_inicio?.split(' ')[0] || hoje;
+            if (dataAula < hoje) continue;
 
-      for (const aula of aulas) {
-        const dataAula = aula.data_hora_inicio?.split(' ')[0] || hoje;
-        if (dataAula < hoje) continue;
+            const profNome = aula.professores?.[0]?.nome || null;
+            const professor = resolverProfessorDaAula(aula.professores, mapaProfessores);
+            linhas.push({
+              emusys_id: aula.id,
+              unidade_id: unidade.id,
+              data_aula: dataAula,
+              data_hora_inicio: parseDataHoraEmusys(aula.data_hora_inicio),
+              data_hora_inicio_original: aula.data_hora_inicio_original
+                ? parseDataHoraEmusys(aula.data_hora_inicio_original)
+                : null,
+              data_hora_fim: aula.data_hora_fim
+                ? parseDataHoraEmusys(aula.data_hora_fim)
+                : null,
+              duracao_minutos: aula.duracao_minutos,
+              tipo: aula.tipo,
+              categoria: aula.categoria,
+              turma_nome: aula.turma_nome,
+              curso_emusys_id: aula.curso_id,
+              curso_nome: aula.curso_nome,
+              sala_nome: aula.sala_nome,
+              professor_nome: profNome,
+              emusys_professor_id: professor.emusysProfessorId,
+              professor_id: professor.professorId,
+              sem_acompanhamento: professor.semAcompanhamento,
+              cancelada: aula.cancelada === true,
+              reagendada: aula.reagendada === true,
+              justificada: aula.justificada === true,
+              professor_presenca: aula.professores?.[0]?.presenca ?? null,
+              nr_da_aula: aula.nr_da_aula,
+              qtd_alunos: aula.alunos?.length || 0,
+              anotacoes: aula.anotacoes || null,
+            });
+          }
 
-        const profNome = aula.professores?.[0]?.nome || null;
-        const professor = resolverProfessorDaAula(aula.professores, mapaProfessores);
+          let gravadas = 0;
+          const chunkSize = 500;
+          const idPorEmusysId = new Map<number, number>();
+          for (let offset = 0; offset < linhas.length; offset += chunkSize) {
+            const lote = linhas.slice(offset, offset + chunkSize);
+            const { data: loteGravado, error } = await supabase
+              .from('aulas_emusys')
+              .upsert(lote, { onConflict: 'emusys_id,unidade_id', ignoreDuplicates: false })
+              .select('id, emusys_id');
+            if (error) {
+              console.error('[sync-grade-futura] Upsert de aula falhou; reconciliacao preservada');
+              throw new Error('PRESENCA_SYNC_AULA_GRAVACAO_FALHOU');
+            }
+            gravadas += lote.length;
+            for (const linhaGravada of loteGravado || []) {
+              idPorEmusysId.set(linhaGravada.emusys_id as number, linhaGravada.id as number);
+            }
+          }
 
-        linhas.push({
-          emusys_id: aula.id,
-          unidade_id: unidade.id,
-          data_aula: dataAula,
-          data_hora_inicio: parseDataHoraEmusys(aula.data_hora_inicio),
-          data_hora_inicio_original: aula.data_hora_inicio_original
-            ? parseDataHoraEmusys(aula.data_hora_inicio_original)
-            : null,
-          data_hora_fim: aula.data_hora_fim
-            ? parseDataHoraEmusys(aula.data_hora_fim)
-            : null,
-          duracao_minutos: aula.duracao_minutos,
-          tipo: aula.tipo,
-          categoria: aula.categoria,
-          turma_nome: aula.turma_nome,
-          curso_emusys_id: aula.curso_id,
-          curso_nome: aula.curso_nome,
-          sala_nome: aula.sala_nome,
-          professor_nome: profNome,
-          emusys_professor_id: professor.emusysProfessorId,
-          professor_id: professor.professorId,
-          sem_acompanhamento: professor.semAcompanhamento,
-          cancelada: aula.cancelada === true,
-          reagendada: aula.reagendada === true,
-          justificada: aula.justificada === true,
-          professor_presenca: aula.professores?.[0]?.presenca ?? null,
-          nr_da_aula: aula.nr_da_aula,
-          qtd_alunos: aula.alunos?.length || 0,
-          anotacoes: aula.anotacoes || null,
-        });
-      }
+          const integridadeMapaAulas = verificarIntegridadeMapaAulas(linhas, idPorEmusysId);
+          if (!integridadeMapaAulas.completo) {
+            throw new Error('PRESENCA_SYNC_MAPA_AULAS_INCOMPLETO');
+          }
 
-      // idPorEmusysId e construido a partir do retorno do proprio upsert
-      // (.select() no upsert), nao de um SELECT separado: um SELECT sem
-      // paginacao na tabela inteira da janela (3000+ linhas) estoura o teto
-      // padrao de 1000 linhas do PostgREST e trunca o mapa silenciosamente
-      // (aula fora do mapa = vinculo descartado sem erro, sem log). Usar o
-      // retorno do upsert elimina essa classe de bug e evita a ida extra ao banco.
-      let gravadas = 0;
-      // IMPORTANTE: chunkSize precisa ficar < 1000. O retorno de cada upsert
-      // (.select() abaixo) alimenta idPorEmusysId; se o lote crescer para
-      // 1000+ o PostgREST corta a resposta e reintroduz o truncamento
-      // silencioso que ja causou vinculos descartados sem erro/log uma vez.
-      const chunkSize = 500;
-      const idPorEmusysId = new Map<number, number>();
-      let upsertAulasIncompleto = false;
-      for (let offset = 0; offset < linhas.length; offset += chunkSize) {
-        const lote = linhas.slice(offset, offset + chunkSize);
-        const { data: loteGravado, error } = await supabase
-          .from('aulas_emusys')
-          .upsert(lote, { onConflict: 'emusys_id,unidade_id', ignoreDuplicates: false })
-          .select('id, emusys_id');
-        if (error) {
-          console.error(`[sync-grade-futura] ${unidade.nome}: upsert de aula falhou; reconciliação preservada`);
-          upsertAulasIncompleto = true;
-          break;
-        }
-        gravadas += lote.length;
-        for (const linhaGravada of loteGravado || []) {
-          idPorEmusysId.set(linhaGravada.emusys_id as number, linhaGravada.id as number);
-        }
-      }
+          const vinculos = montarVinculosAulaAlunos(
+            aulas,
+            idPorEmusysId,
+            unidade.id,
+            normalizarNome,
+          );
+          const resultado = await gravarVinculosAulaAlunos(supabase, vinculos, chunkSize);
+          if (resultado.erros.length > 0) {
+            console.error('[sync-grade-futura] Upsert de roster falhou; reconciliacao preservada');
+            throw new Error('PRESENCA_SYNC_ROSTER_GRAVACAO_FALHOU');
+          }
 
-      const integridadeMapaAulas = verificarIntegridadeMapaAulas(linhas, idPorEmusysId);
-      if (!integridadeMapaAulas.completo) {
-        upsertAulasIncompleto = true;
-      }
-      if (upsertAulasIncompleto) {
-        resultados.push({
-          unidade: unidade.nome,
-          status: 'upsert_aulas_incompleto_preservado',
-          janela: { inicio: hoje, fim: dataFim, dias: janelaDias },
-          aulas_recebidas: aulas.length,
-          aulas_gravadas: gravadas,
-        });
-        continue;
-      }
-
-      // Persiste o alunos[] que a resposta ja traz. Sem isso a grade futura
-      // sabe curso/turma/sala mas nao sabe de quem e a aula.
-
-      const vinculos = montarVinculosAulaAlunos(aulas, idPorEmusysId, unidade.id, normalizarNome);
-      const resultado = await gravarVinculosAulaAlunos(supabase, vinculos, chunkSize);
-      if (resultado.erros.length > 0) {
-        console.error(`[sync-grade-futura] ${unidade.nome}: upsert de roster falhou; reconciliação preservada`);
-        resultados.push({
-          unidade: unidade.nome,
-          status: 'roster_incompleto_preservado',
-          janela: { inicio: hoje, fim: dataFim, dias: janelaDias },
-          aulas_recebidas: aulas.length,
-          aulas_gravadas: gravadas,
-          vinculos_gravados: resultado.gravados,
-          vinculos_com_erro: resultado.erros.length,
-        });
-        continue;
-      }
-      console.log(
-        `[sync-grade-futura] ${unidade.nome}: ${resultado.gravados} vinculos aluno-aula`,
-      );
-
-      // A reconciliacao recebe a foto COMPLETA da API e concentra a regra de
-      // seguranca: so hoje/futuro, sem apagar historico e sem tocar em aula ou
-      // vinculo que ja tenha decisao terminal de presenca.
-      let reconciliacao;
-      try {
-        reconciliacao = await reconciliarGradeSnapshotEmusys(supabase, {
-          unidadeId: unidade.id,
-          dataInicio: hoje,
-          dataFim,
-          snapshot: montarSnapshotGradeEmusys(
+          const snapshotGrade = montarSnapshotGradeEmusys(
             aulas.filter((aula) =>
               aula.categoria === 'normal'
               && aula.data_hora_inicio.split(' ')[0] >= hoje
               && aula.data_hora_inicio.split(' ')[0] <= dataFim
             ),
             normalizarNome,
-          ),
-        });
-      } catch {
-        console.error(`[sync-grade-futura] ${unidade.nome}: fotografia inválida; reconciliação preservada`);
+          );
+          const reconciliacaoDual = await reconciliarGradeSnapshotEmusys(supabase, {
+            syncRunId,
+            unidadeId: unidade.id,
+            dataInicio: hoje,
+            dataFim,
+            snapshot: snapshotGrade,
+          });
+          const reconciliacao = reconciliacaoDual.resultado as ResultadoReconciliacaoGradeSnapshot;
+          if (
+            reconciliacao.status !== 'ok'
+            || reconciliacao.estados_gravados !== snapshotGrade.length
+          ) {
+            throw new Error('PRESENCA_SYNC_RECONCILIACAO_ROSTER_FALHOU');
+          }
+          console.log(
+            `[sync-grade-futura] reconciliacao_grade unidade_id=${unidade.id} data_inicio=${hoje} data_fim=${dataFim} sync_run_id=${syncRunId} contrato=${reconciliacaoDual.contrato} aulas_snapshot=${snapshotGrade.length} estados_gravados=${reconciliacao.estados_gravados}`,
+          );
+
+          const valor = {
+            unidade: unidade.nome,
+            status: 'ok',
+            janela: { inicio: hoje, fim: dataFim, dias: janelaDias },
+            aulas_recebidas: aulas.length,
+            aulas_gravadas: gravadas,
+            reconciliacao_grade: {
+              contrato: reconciliacaoDual.contrato,
+              status: reconciliacao.status,
+              aulas_canceladas: reconciliacao.aulas_canceladas ?? 0,
+              vinculos_inativados: reconciliacao.vinculos_inativados ?? 0,
+              vinculos_reativados: reconciliacao.vinculos_reativados ?? 0,
+            },
+            vinculos_gravados: resultado.gravados,
+            vinculos_com_erro: resultado.erros.length,
+          };
+          const contagens: ContagensPresencaSync = {
+            paginas_lidas: Math.max(1, Math.ceil(aulas.length / 100)),
+            aulas_lidas: aulas.length,
+            presencas_lidas: 0,
+          };
+          await heartbeat(contagens);
+          return {
+            valor,
+            contagens,
+            snapshot: {
+              unidade_id: unidade.id,
+              data_inicio: hoje,
+              data_fim: dataFim,
+              contrato_reconciliacao: reconciliacaoDual.contrato,
+              aulas_recebidas: aulas.length,
+              aulas_gravadas: gravadas,
+              vinculos_gravados: resultado.gravados,
+              estados_gravados: reconciliacao.estados_gravados,
+            },
+          };
+        },
+      });
+
+      if (execucao.status === 'deduplicada') {
         resultados.push({
           unidade: unidade.nome,
-          status: 'fotografia_invalida_preservada',
-          janela: { inicio: hoje, fim: dataFim, dias: janelaDias },
-          aulas_recebidas: aulas.length,
-          aulas_gravadas: gravadas,
-          vinculos_gravados: resultado.gravados,
+          status: 'deduplicada',
+          motivo: execucao.motivo,
         });
         continue;
       }
-
-      resultados.push({
-        unidade: unidade.nome,
-        status: 'ok',
-        janela: { inicio: hoje, fim: dataFim, dias: janelaDias },
-        aulas_recebidas: aulas.length,
-        aulas_gravadas: gravadas,
-        reconciliacao_grade: {
-          status: reconciliacao.status,
-          aulas_canceladas: reconciliacao.aulas_canceladas ?? 0,
-          vinculos_inativados: reconciliacao.vinculos_inativados ?? 0,
-          vinculos_reativados: reconciliacao.vinculos_reativados ?? 0,
-        },
-        vinculos_gravados: resultado.gravados,
-        vinculos_com_erro: resultado.erros.length,
-      });
+      resultados.push(execucao.valor);
     }
 
     return new Response(
@@ -338,9 +345,10 @@ serve(async (req: Request) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (error) {
-    console.error('[sync-grade-futura] Erro geral:', error);
+    const codigo = redigirErroCodigo(error);
+    console.error(`[sync-grade-futura] Erro geral: ${codigo}`);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Erro interno' }),
+      JSON.stringify({ error: codigo }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   }

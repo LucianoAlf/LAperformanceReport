@@ -25,6 +25,7 @@ type ResultadoTrabalho<T> = {
 };
 
 type ContextoTrabalho = {
+  syncRunId: string;
   heartbeat: (contagens: ContagensPresencaSync) => Promise<void>;
 };
 
@@ -32,6 +33,7 @@ type ExecucaoAdquirida<T> = {
   status: 'concluida';
   valor: T;
   snapshotHash: string;
+  publicavel: true;
 };
 
 type ExecucaoDeduplicada = {
@@ -50,6 +52,14 @@ const CODIGOS_SEGUROS = new Set([
   'EMUSYS_AULAS_CURSOR_REPETIDO',
   'EMUSYS_AULAS_JSON_INVALIDO',
   'EMUSYS_AULAS_PAYLOAD_INVALIDO',
+  'PRESENCA_SYNC_AULA_GRAVACAO_FALHOU',
+  'PRESENCA_SYNC_ROSTER_GRAVACAO_FALHOU',
+  'PRESENCA_SYNC_ADMINISTRATIVO_GRAVACAO_FALHOU',
+  'PRESENCA_SYNC_RAW_GRAVACAO_FALHOU',
+  'PRESENCA_SYNC_EXPERIMENTAL_RAW_GRAVACAO_FALHOU',
+  'PRESENCA_SYNC_RECONCILIACAO_ROSTER_FALHOU',
+  'PRESENCA_SYNC_LOG_GRAVACAO_FALHOU',
+  'PRESENCA_SYNC_MAPA_AULAS_INCOMPLETO',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -105,9 +115,9 @@ export function redigirErroCodigo(error: unknown): string {
     return error.message;
   }
   if (
-    isRecord(error)
-    && typeof error.status === 'number'
-    && Number.isInteger(error.status)
+    isRecord(error) &&
+    typeof error.status === 'number' &&
+    Number.isInteger(error.status)
   ) {
     return 'EMUSYS_HTTP_FALHOU';
   }
@@ -163,7 +173,10 @@ export async function executarSyncPresencaComLease<T>(input: {
   };
 
   try {
-    const resultado = await input.trabalho({ heartbeat });
+    const resultado = await input.trabalho({
+      heartbeat,
+      syncRunId: runId,
+    });
     await heartbeat(resultado.contagens);
     const snapshotHash = await sha256Hex(resultado.snapshot);
     const finalizacao = await chamarRpc(
@@ -177,10 +190,20 @@ export async function executarSyncPresencaComLease<T>(input: {
         p_erro_codigo: null,
       },
     );
-    if (!isRecord(finalizacao) || finalizacao.ok !== true) {
+    if (
+      !isRecord(finalizacao) ||
+      finalizacao.ok !== true ||
+      finalizacao.status !== 'concluida' ||
+      finalizacao.publicavel !== true
+    ) {
       throw new Error('PRESENCA_SYNC_FINALIZACAO_REJEITADA');
     }
-    return { status: 'concluida', valor: resultado.valor, snapshotHash };
+    return {
+      status: 'concluida',
+      valor: resultado.valor,
+      snapshotHash,
+      publicavel: true,
+    };
   } catch (error) {
     try {
       await chamarRpc(

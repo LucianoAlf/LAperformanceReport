@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const helperPath = 'supabase/functions/_shared/presenca-sync-run.ts';
 const edgePath = 'supabase/functions/sync-presenca-emusys/index.ts';
+const gradeEdgePath = 'supabase/functions/sync-grade-futura-emusys/index.ts';
 
 async function carregarHelper() {
   assert.ok(existsSync(helperPath), `helper ausente: ${helperPath}`);
@@ -23,7 +24,11 @@ function criarClienteRpc(iniciar) {
       }
       if (nome === 'presenca_sync_finalizar_v1') {
         return {
-          data: { ok: true, status: parametros.p_status },
+          data: {
+            ok: true,
+            status: parametros.p_status,
+            publicavel: parametros.p_status === 'concluida',
+          },
           error: null,
         };
       }
@@ -115,7 +120,7 @@ test('execucao concorrente sem lease termina deduplicada e nao aplica linhas', a
   assert.equal(aplicacoes, 1);
 });
 
-test('heartbeat acontece depois de cada pagina e conclusao somente depois do trabalho e hash', async () => {
+test('heartbeat e finalizacao acontecem somente depois da reconciliacao com o mesmo run', async () => {
   const { executarSyncPresencaComLease } = await carregarHelper();
   const eventos = [];
   const { cliente, chamadas } = criarClienteRpc(() => ({
@@ -132,13 +137,15 @@ test('heartbeat acontece depois de cada pagina e conclusao somente depois do tra
   const resultado = await executarSyncPresencaComLease({
     ...base,
     cliente,
-    trabalho: async ({ heartbeat }) => {
+    trabalho: async ({ heartbeat, syncRunId }) => {
+      assert.equal(syncRunId, '30000000-0000-4000-8000-000000000001');
       eventos.push('pagina-1');
       await heartbeat({ paginas_lidas: 1, aulas_lidas: 2, presencas_lidas: 4 });
       eventos.push('pagina-2');
       await heartbeat({ paginas_lidas: 2, aulas_lidas: 5, presencas_lidas: 9 });
       eventos.push('upserts');
       eventos.push('roster');
+      eventos.push('reconciliacao-v2');
       return {
         valor: { aplicado: true },
         contagens: { paginas_lidas: 2, aulas_lidas: 5, presencas_lidas: 9 },
@@ -154,10 +161,12 @@ test('heartbeat acontece depois de cada pagina e conclusao somente depois do tra
     'heartbeat',
     'upserts',
     'roster',
+    'reconciliacao-v2',
     'heartbeat',
     'finalizar',
   ]);
   assert.equal(resultado.status, 'concluida');
+  assert.equal(resultado.publicavel, true);
   const finalizacao = chamadas.find(({ nome }) =>
     nome === 'presenca_sync_finalizar_v1'
   );
@@ -172,6 +181,48 @@ test('heartbeat acontece depois de cada pagina e conclusao somente depois do tra
   assert.equal(
     chamadas.filter(({ nome }) => nome === 'presenca_sync_heartbeat_v1').length,
     3,
+  );
+});
+
+test('run substituida rejeita a conclusao e nunca retorna publicavel true', async () => {
+  const { executarSyncPresencaComLease } = await carregarHelper();
+  const respostasFinalizacao = [];
+  const { cliente } = criarClienteRpc(() => ({
+    adquirida: true,
+    run_id: '30000000-0000-4000-8000-000000000001',
+  }));
+  const rpcOriginal = cliente.rpc;
+  cliente.rpc = async (nome, parametros) => {
+    if (nome === 'presenca_sync_finalizar_v1') {
+      const data = parametros.p_status === 'concluida'
+        ? {
+            ok: false,
+            motivo: 'run_substituida',
+            status: 'iniciada',
+            publicavel: false,
+          }
+        : { ok: true, status: 'falhou', publicavel: false };
+      respostasFinalizacao.push(data);
+      return { data, error: null };
+    }
+    return rpcOriginal(nome, parametros);
+  };
+
+  await assert.rejects(
+    executarSyncPresencaComLease({
+      ...base,
+      cliente,
+      trabalho: async ({ syncRunId }) => ({
+        valor: { syncRunId },
+        contagens: { paginas_lidas: 1, aulas_lidas: 1, presencas_lidas: 0 },
+        snapshot: { aulas: 1 },
+      }),
+    }),
+    /PRESENCA_SYNC_FINALIZACAO_REJEITADA/u,
+  );
+  assert.equal(
+    respostasFinalizacao.some(({ publicavel }) => publicavel === true),
+    false,
   );
 });
 
@@ -206,6 +257,82 @@ test('falha finaliza com codigo redigido sem token, payload ou PII', async () =>
   assert.doesNotMatch(serializado, /token-super-secreto|Aluno Teste|99999-0000|payload=/u);
 });
 
+test('falha de sink autoritativo nunca finaliza cobertura como concluida', async () => {
+  const { executarSyncPresencaComLease } = await carregarHelper();
+  const { cliente, chamadas } = criarClienteRpc(() => ({
+    adquirida: true,
+    run_id: '30000000-0000-4000-8000-000000000001',
+  }));
+
+  await assert.rejects(
+    executarSyncPresencaComLease({
+      ...base,
+      cliente,
+      trabalho: async ({ heartbeat }) => {
+        await heartbeat({ paginas_lidas: 1, aulas_lidas: 2, presencas_lidas: 3 });
+        throw new Error('PRESENCA_SYNC_ROSTER_GRAVACAO_FALHOU');
+      },
+    }),
+    /PRESENCA_SYNC_ROSTER_GRAVACAO_FALHOU/u,
+  );
+
+  const finalizacoes = chamadas.filter(({ nome }) =>
+    nome === 'presenca_sync_finalizar_v1'
+  );
+  assert.equal(finalizacoes.length, 1);
+  assert.equal(finalizacoes[0].parametros.p_status, 'falhou');
+  assert.equal(finalizacoes[0].parametros.p_snapshot_hash, null);
+  assert.equal(
+    finalizacoes[0].parametros.p_erro_codigo,
+    'PRESENCA_SYNC_ROSTER_GRAVACAO_FALHOU',
+  );
+  assert.equal(
+    finalizacoes.some(({ parametros }) => parametros.p_status === 'concluida'),
+    false,
+  );
+});
+
+test('Edge falha fechada nos sinks e valida a reconciliacao antes do hash', () => {
+  const edge = readFileSync(edgePath, 'utf8');
+  const exigencias = [
+    ['aulaError', 'PRESENCA_SYNC_AULA_GRAVACAO_FALHOU'],
+    ['rosterError', 'PRESENCA_SYNC_ROSTER_GRAVACAO_FALHOU'],
+    ['administrativoError', 'PRESENCA_SYNC_ADMINISTRATIVO_GRAVACAO_FALHOU'],
+    ['upsertError', 'PRESENCA_SYNC_RAW_GRAVACAO_FALHOU'],
+  ];
+
+  for (const [variavel, codigo] of exigencias) {
+    const inicio = edge.indexOf(`if (${variavel})`);
+    assert.ok(inicio >= 0, `tratamento ausente para ${variavel}`);
+    assert.match(
+      edge.slice(inicio, inicio + 320),
+      new RegExp(`throw new Error\\(\\s*["']${codigo}["'],?\\s*\\)`),
+    );
+    if (variavel === 'administrativoError' || variavel === 'upsertError') {
+      assert.doesNotMatch(
+        edge.slice(inicio, inicio + 320),
+        /\$\{nome\}|\.message/u,
+      );
+    }
+  }
+
+  const experimental = edge.indexOf(
+    'if (error) {',
+    edge.indexOf('async function upsertExperimentalRaw'),
+  );
+  assert.ok(experimental >= 0, 'tratamento do raw experimental ausente');
+  assert.match(
+    edge.slice(experimental, experimental + 320),
+    /throw new Error\(\s*["']PRESENCA_SYNC_EXPERIMENTAL_RAW_GRAVACAO_FALHOU["'],?\s*\)/u,
+  );
+  assert.match(edge, /reconciliacaoGrade\.status !== ["']ok["']/u);
+  assert.match(
+    edge,
+    /reconciliacaoGrade\.estados_gravados !== snapshotGrade\.length/u,
+  );
+  assert.match(edge, /PRESENCA_SYNC_RECONCILIACAO_ROSTER_FALHOU/u);
+});
+
 test('Edge nao devolve nem registra a mensagem interna potencialmente sensivel', () => {
   const edge = readFileSync(edgePath, 'utf8');
   const catchExterno = edge.slice(edge.lastIndexOf('} catch (error)'));
@@ -220,11 +347,18 @@ test('Edge nao devolve nem registra a mensagem interna potencialmente sensivel',
 
 test('Edge integra ordenacao, lease antes da API e heartbeat por pagina sem trocar autorizacao', () => {
   const edge = readFileSync(edgePath, 'utf8');
+  const grade = readFileSync(gradeEdgePath, 'utf8');
   const helper = readFileSync(helperPath, 'utf8');
+  const handler = edge.slice(edge.indexOf('serve(async'));
 
   assert.match(edge, /prepararExecucaoSyncPresenca/);
   assert.match(edge, /ordenarDatasSync\(datasProcessar,\s*dataAtualBrt\(\)\)/u);
   assert.match(edge, /executarSyncPresencaComLease\(\{/u);
+  assert.match(grade, /executarSyncPresencaComLease\(\{/u);
+  assert.match(edge, /trabalho:\s*async\s*\(\{\s*heartbeat,\s*syncRunId\s*\}\)/u);
+  assert.match(grade, /trabalho:\s*async\s*\(\{\s*heartbeat,\s*syncRunId\s*\}\)/u);
+  assert.match(edge, /syncRunId,\s*\n\s*unidadeId:/u);
+  assert.match(grade, /syncRunId,\s*\n\s*unidadeId:/u);
   assert.match(edge, /fetchAulasDia\([^)]*heartbeat/u);
   assert.match(
     edge,
@@ -233,9 +367,13 @@ test('Edge integra ordenacao, lease antes da API e heartbeat por pagina sem troc
   assert.match(helper, /presenca_sync_iniciar_v1/u);
   assert.match(helper, /presenca_sync_heartbeat_v1/u);
   assert.match(helper, /presenca_sync_finalizar_v1/u);
+  assert.match(
+    helper,
+    /input\.trabalho\(\{\s*heartbeat,\s*syncRunId:\s*runId,?\s*\}\)/u,
+  );
   assert.ok(
-    edge.indexOf('prepararExecucaoSyncPresenca(')
-      < edge.indexOf('executarSyncPresencaComLease({'),
+    handler.indexOf('prepararExecucaoSyncPresenca(')
+      < handler.indexOf('executarSyncPresencaComLease({'),
     'autorizacao deve continuar antes do lease e dos sinks',
   );
 });
@@ -253,6 +391,6 @@ test('prioridade de execucao nao inverte a janela cronologica de metadados', () 
   );
   assert.match(
     edge,
-    /sincronizarMetadadosAulas\(\s*supabase,\s*unidadesProcessar,\s*dataInicioJanela,\s*dataFimJanela,?\s*\)/u,
+    /sincronizarMetadadosAulas\(\s*supabase,\s*unidadesProcessar,\s*dataInicioJanela,\s*dataFimJanela,\s*requestIdSync,?\s*\)/u,
   );
 });

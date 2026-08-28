@@ -21,15 +21,24 @@ export interface AulaSnapshotGrade {
   aluno_chaves: string[];
 }
 
-export interface ResultadoReconciliacaoGradeSnapshot {
+export interface ResultadoReconciliacaoGradeSnapshot
+  extends Record<string, unknown> {
   status: string;
   dry_run?: boolean;
   alteracoes_aplicadas?: number;
+  estados_gravados?: number;
   aulas_canceladas?: number;
   vinculos_removidos?: number;
   vinculos_inativados?: number;
   vinculos_reativados?: number;
   detalhe?: unknown;
+}
+
+export type ReconciliacaoContrato = "v2" | "v1_fallback";
+
+export interface ResultadoReconciliacaoDual {
+  contrato: ReconciliacaoContrato;
+  resultado: Record<string, unknown>;
 }
 
 export interface ResultadoIntegridadeMapaAulas {
@@ -43,7 +52,31 @@ interface ClienteRpc {
   rpc: (
     nome: string,
     parametros: Record<string, unknown>,
-  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  ) => PromiseLike<{ data: unknown; error: unknown }>;
+}
+
+interface ParametrosReconciliacaoGrade {
+  unidadeId: string;
+  dataInicio: string;
+  dataFim: string;
+  snapshot: AulaSnapshotGrade[];
+  dryRun?: boolean;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizarResultadoRpc(
+  data: unknown,
+): ResultadoReconciliacaoGradeSnapshot {
+  return isRecord(data)
+    ? data as ResultadoReconciliacaoGradeSnapshot
+    : { status: "sem_resposta" };
+}
+
+function erroIndicaFuncaoAusente(error: unknown): boolean {
+  return isRecord(error) && error.code === "PGRST202";
 }
 
 /**
@@ -128,7 +161,8 @@ export function montarSnapshotGradeEmusys(
 
     for (const aluno of aula.alunos) {
       const nome = aluno.nome_aluno?.trim();
-      const temIdEmusys = Number.isInteger(aluno.id_aluno) && aluno.id_aluno > 0;
+      const temIdEmusys = Number.isInteger(aluno.id_aluno) &&
+        aluno.id_aluno > 0;
       if (!temIdEmusys && !nome) {
         acumulador.incompleto = true;
         continue;
@@ -153,15 +187,16 @@ export function montarSnapshotGradeEmusys(
       const qtdEsperada = acumulador.quantidadesDeclaradas.size === 1
         ? qtdDeclarada
         : qtdRecebida;
-      const contagemIncoerente = acumulador.quantidadesDeclaradas.size > 1
-        || qtdEsperada !== qtdRecebida;
-      const estado: EstadoRosterSnapshot = acumulador.incompleto || contagemIncoerente
-        ? "incompleto"
-        : acumulador.ambiguo
-        ? "ambiguo"
-        : qtdRecebida === 0
-        ? "vazio_confirmado"
-        : "completo";
+      const contagemIncoerente = acumulador.quantidadesDeclaradas.size > 1 ||
+        qtdEsperada !== qtdRecebida;
+      const estado: EstadoRosterSnapshot =
+        acumulador.incompleto || contagemIncoerente
+          ? "incompleto"
+          : acumulador.ambiguo
+          ? "ambiguo"
+          : qtdRecebida === 0
+          ? "vazio_confirmado"
+          : "completo";
 
       return {
         emusys_id,
@@ -173,16 +208,10 @@ export function montarSnapshotGradeEmusys(
     });
 }
 
-/** Chama a única decisão de escrita da grade após a fotografia estar íntegra. */
-export async function reconciliarGradeSnapshotEmusys(
+/** Preserva o contrato v1 para Edges ainda não atualizadas durante a expansão. */
+export async function reconciliarGradeSnapshotEmusysV1(
   supabase: ClienteRpc,
-  params: {
-    unidadeId: string;
-    dataInicio: string;
-    dataFim: string;
-    snapshot: AulaSnapshotGrade[];
-    dryRun?: boolean;
-  },
+  params: ParametrosReconciliacaoGrade,
 ): Promise<ResultadoReconciliacaoGradeSnapshot> {
   const { data, error } = await supabase.rpc(
     "reconciliar_grade_snapshot_emusys_v1",
@@ -196,11 +225,46 @@ export async function reconciliarGradeSnapshotEmusys(
   );
 
   if (error) {
-    throw new Error(
-      `RPC reconciliar_grade_snapshot_emusys_v1: ${error.message}`,
-    );
+    throw new Error("PRESENCA_SYNC_RECONCILIACAO_ROSTER_FALHOU");
   }
 
-  return (data ??
-    { status: "sem_resposta" }) as ResultadoReconciliacaoGradeSnapshot;
+  return normalizarResultadoRpc(data);
+}
+
+/**
+ * Tenta a RPC v2 associada ao run de cobertura. Durante o rollout, recua uma
+ * única vez para v1 apenas quando o PostgREST comprova que a assinatura v2 não
+ * existe no schema cache (PGRST202). Qualquer outra falha permanece terminal.
+ */
+export async function reconciliarGradeSnapshotEmusys(
+  supabase: ClienteRpc,
+  params: ParametrosReconciliacaoGrade & { syncRunId: string },
+): Promise<ResultadoReconciliacaoDual> {
+  const { data, error } = await supabase.rpc(
+    "reconciliar_grade_snapshot_emusys_v2",
+    {
+      p_sync_run_id: params.syncRunId,
+      p_unidade_id: params.unidadeId,
+      p_data_inicio: params.dataInicio,
+      p_data_fim: params.dataFim,
+      p_snapshot: params.snapshot,
+      p_dry_run: params.dryRun ?? false,
+    },
+  );
+
+  if (!error) {
+    return {
+      contrato: "v2",
+      resultado: normalizarResultadoRpc(data),
+    };
+  }
+
+  if (!erroIndicaFuncaoAusente(error)) {
+    throw new Error("PRESENCA_SYNC_RECONCILIACAO_ROSTER_FALHOU");
+  }
+
+  return {
+    contrato: "v1_fallback",
+    resultado: await reconciliarGradeSnapshotEmusysV1(supabase, params),
+  };
 }
