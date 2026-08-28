@@ -144,7 +144,6 @@ test('matriz SQL aceita somente recibos diretos possíveis', () => {
     { status: 'nao_recebido', aplicados: 0, rejeitados: 0, erros: [] },
     { status: 'recebido', aplicados: 0, rejeitados: 0, erros: [] },
     { status: 'processando', aplicados: 0, rejeitados: 0, erros: [] },
-    { status: 'concluido', aplicados: 0, rejeitados: 0, erros: [] },
     { status: 'concluido', aplicados: 3, rejeitados: 0, erros: [] },
     { status: 'parcial', aplicados: 2, rejeitados: 1, erros: [erro] },
     { status: 'falhou', aplicados: 0, rejeitados: 1, erros: [erro] },
@@ -166,6 +165,7 @@ test('invariantes SQL impossíveis são recusadas', () => {
     { status: 'nao_recebido', aplicados: 1, rejeitados: 0, erros: [] },
     { status: 'recebido', aplicados: 0, rejeitados: 1, erros: [erro] },
     { status: 'processando', aplicados: 0, rejeitados: 0, erros: [erro] },
+    { status: 'concluido', aplicados: 0, rejeitados: 0, erros: [] },
     { status: 'concluido', aplicados: 1, rejeitados: 1, erros: [erro] },
     { status: 'concluido', aplicados: 1, rejeitados: 0, erros: [erro] },
     { status: 'parcial', aplicados: 0, rejeitados: 1, erros: [erro] },
@@ -336,7 +336,7 @@ test('recibo só autoriza recarga quando houve aplicação terminal positiva', (
     erros,
   });
 
-  assert.equal(reciboAplicouAlteracao(criar('concluido', 0, 0)), false);
+  assert.throws(() => criar('concluido', 0, 0), /invariantes inválidas/);
   assert.equal(reciboAplicouAlteracao(criar('concluido', 1, 0)), true);
   assert.equal(reciboAplicouAlteracao(criar('parcial', 1, 1, [{ codigo: 'STATUS_INVALIDO' }])), true);
   assert.equal(reciboAplicouAlteracao(criar('falhou', 0, 1, [{ codigo: 'STATUS_INVALIDO' }])), false);

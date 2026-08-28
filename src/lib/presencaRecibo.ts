@@ -612,6 +612,19 @@ export function requestIdDoPedido(
       throw new Error('request_id inválido na memória de presença');
     }
     if (canonico !== emMemoria) memoria.set(chave, canonico);
+    if (storage) {
+      const persistido = lerRequestIdPersistido(storage, chave);
+      if (persistido && persistido !== canonico) {
+        memoria.set(chave, persistido);
+        return persistido;
+      }
+      if (!persistido) {
+        // A memória acelera chamadas na mesma página, mas não é recibo
+        // durável. Se o espelho sumiu, restaure o mesmo ID antes de permitir
+        // novo envio; trocar o UUID aqui duplicaria uma mutação já recebida.
+        storage.setItem(chaveStorage(chave), JSON.stringify({ requestId: canonico }));
+      }
+    }
     return canonico;
   }
 
@@ -703,7 +716,7 @@ function invariantesReciboValidas(
     case 'processando':
       return aplicados === 0 && rejeitados === 0 && erros.length === 0;
     case 'concluido':
-      return rejeitados === 0 && erros.length === 0;
+      return aplicados > 0 && rejeitados === 0 && erros.length === 0;
     case 'parcial':
       return aplicados > 0 && rejeitados > 0 && erros.length === rejeitados;
     case 'falhou':

@@ -141,6 +141,49 @@ test('UUID maiúsculo do storage é normalizado, persistido e comparado canonica
   encerrarPedido(chave, storage, memoria);
 });
 
+test('memória sem espelho restaura o mesmo request id antes de permitir novo envio', () => {
+  const storage = new SessionStorageMemoria();
+  const memoria = new Map();
+  const chave = chaveDoPedido('user-a', 'reparar_espelho', { aula_id: 311 });
+  const requestId = requestIdDoPedido(chave, storage, memoria);
+  const chavePersistida = `la-report:presenca:pedidos:v2:${chave}`;
+
+  storage.removeItem(chavePersistida);
+
+  assert.equal(requestIdDoPedido(chave, storage, memoria), requestId);
+  assert.equal(JSON.parse(storage.getItem(chavePersistida)).requestId, requestId);
+  assert.equal(requestIdDoPedido(chave, storage, new Map()), requestId);
+  encerrarPedido(chave, storage, memoria, requestId);
+});
+
+test('storage durável vence memória obsoleta para impedir dois ids após reload', () => {
+  const storage = new SessionStorageMemoria();
+  const memoria = new Map();
+  const chave = chaveDoPedido('user-a', 'storage_fonte_verdade', { aula_id: 312 });
+  const persistido = requestIdDoPedido(chave, storage, new Map());
+  memoria.set(chave, 'abcdefab-cdef-4abc-8def-abcdefabcdef');
+
+  assert.equal(requestIdDoPedido(chave, storage, memoria), persistido);
+  assert.equal(memoria.get(chave), persistido);
+  encerrarPedido(chave, storage, memoria, persistido);
+});
+
+test('falha ao reparar espelho não troca o id já usado em memória', () => {
+  const storage = new SessionStorageComFalhas();
+  const memoria = new Map();
+  const chave = chaveDoPedido('user-a', 'reparar_espelho_falha', { aula_id: 313 });
+  const requestId = requestIdDoPedido(chave, storage, memoria);
+  storage.removeItem(`la-report:presenca:pedidos:v2:${chave}`);
+  storage.falharSetItem = true;
+
+  assert.throws(() => requestIdDoPedido(chave, storage, memoria), /setItem bloqueado/);
+  assert.equal(memoria.get(chave), requestId);
+
+  storage.falharSetItem = false;
+  assert.equal(requestIdDoPedido(chave, storage, memoria), requestId);
+  encerrarPedido(chave, storage, memoria, requestId);
+});
+
 test('setItem falhando remove a memória nova e impede devolver request id', () => {
   const storage = new SessionStorageComFalhas();
   const memoria = new Map();
