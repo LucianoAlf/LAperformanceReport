@@ -59,6 +59,10 @@ export function ChamadaDia({
   const { hasPermission, user } = useAuth();
   const presencaBloqueada = presenca.dados_status !== 'atualizados';
   const podeOperar = hasPermission('agenda.chamada') && !presencaBloqueada;
+  // A presença do professor é uma escrita escopada pela própria RPC e não
+  // depende do roster dos alunos estar publicável. O estado canônico continua
+  // sendo exibido, mas não bloqueia uma marcação operacional válida.
+  const podeOperarProfessores = hasPermission('agenda.chamada');
   const agora = useMemo(() => new Date(), []);
   const context = useOutletContext<OutletContext | undefined>();
   const consolidado = !context?.unidadeSelecionada;
@@ -374,6 +378,19 @@ export function ChamadaDia({
     return ordenadas;
   }, [ordenadas, filtroExperimental]);
 
+  // As RPCs de presença do professor operam apenas aulas regulares. Misturar
+  // experimentais aqui deixava o dia como indeterminado mesmo depois de todas
+  // as aulas regulares terem sido marcadas. A lista também exige participante
+  // vigente; get_agenda_dia remove os vínculos históricos inativos.
+  const aulasProfessorOperacionais = useMemo(
+    () => ordenadas.filter((aula) => (
+      !aula.cancelada
+      && aula.categoria !== 'experimental'
+      && aula.alunos.length > 0
+    )),
+    [ordenadas],
+  );
+
   const totalAulas = filtradas.length;
   const aulasConcluidas = filtradas.filter((aula) => resumirAulaPresencaCanonica({
     aula,
@@ -388,9 +405,8 @@ export function ChamadaDia({
   // real do Pedro em 12/08 (aula das 17:00 cancelada escondia o presente).
   const aulasPorProfessor = useMemo(() => {
     const mapa = new Map<number, { nome: string; fotoUrl: string | null; aulas: AulaAgenda[]; presente: boolean | null; primeira: string; ultima: string }>();
-    for (const aula of filtradas) {
+    for (const aula of aulasProfessorOperacionais) {
       if (aula.professor_id == null) continue;
-      if (aula.cancelada) continue;
       const decisao = adaptarPresencaProfessorCanonica({
         professorId: aula.professor_id,
         aulaIds: aula.aula_ids,
@@ -419,7 +435,7 @@ export function ChamadaDia({
       }
     }
     return Array.from(mapa.entries()).sort((a, b) => a[1].nome.localeCompare(b[1].nome));
-  }, [filtradas, presenca]);
+  }, [aulasProfessorOperacionais, presenca]);
 
   if (ordenadas.length === 0) {
     return (
@@ -443,7 +459,7 @@ export function ChamadaDia({
       />
 
       {/* Presenca dos professores — toggle por professor para o dia inteiro */}
-      {podeOperar && aulasPorProfessor.length > 0 && (
+      {podeOperarProfessores && aulasPorProfessor.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Presença dos professores</p>

@@ -49,8 +49,8 @@ test('professor exibe fonte, horário, regra, frescor e recibo', () => {
   assert.match(professor, /reciboStatus/u);
   assert.match(professor, /regraVersao/u);
   assert.match(professor, /sincronizadoEm/u);
-  assert.match(professor, /Em auditoria/u);
-  assert.match(professor, /Dados desatualizados/u);
+  assert.match(professor, /Não marcado/u);
+  assert.match(professor, /Dados de leitura desatualizados/u);
   assert.match(professor, /type="button"/u);
 });
 

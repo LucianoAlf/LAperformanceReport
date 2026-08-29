@@ -11,6 +11,11 @@ const migrationPath = fs.readdirSync(path.join(root, 'supabase/migrations'))
   .map((file) => path.join(root, 'supabase/migrations', file))
   .sort()
   .at(-1);
+const rosterOperacionalMigrationPath = fs.readdirSync(path.join(root, 'supabase/migrations'))
+  .filter((file) => file.endsWith('_agenda_roster_operacional_professor.sql'))
+  .map((file) => path.join(root, 'supabase/migrations', file))
+  .sort()
+  .at(-1);
 
 function docker(args, input) {
   return spawnSync('docker', args, {
@@ -135,7 +140,8 @@ const fixture = String.raw`
     aula_emusys_id integer,
     aluno_id integer,
     aluno_nome text,
-    aluno_nome_normalizado text
+    aluno_nome_normalizado text,
+    ativo_operacional boolean not null default true
   );
   create table public.aluno_presenca (
     aula_emusys_id integer,
@@ -270,6 +276,17 @@ const fixture = String.raw`
      'turma', 'normal', 'T_Sa_18', 15, 'Teclado T', 'Sala 5', 'Restrita', 7, false, 1, 1,
      0, 40, false, false, null, null, false);
 
+  insert into public.alunos (id, nome, status)
+  values
+    (501, 'Roster Ativo', 'ativo'),
+    (502, 'Roster Inativo', 'ativo');
+
+  insert into public.aula_alunos_emusys (
+    aula_emusys_id, aluno_id, aluno_nome, aluno_nome_normalizado, ativo_operacional
+  ) values
+    (105, 501, 'Roster Ativo', 'roster ativo', true),
+    (105, 502, 'Roster Inativo', 'roster inativo', false);
+
   create function public.get_agenda_dia(
     p_data date,
     p_unidade_id uuid default null
@@ -381,6 +398,7 @@ const snapshotSql = String.raw`
 
 test('get_agenda_dia filtra stale antes da agregacao sem ampliar ACL ou RLS', async (t) => {
   assert.ok(migrationPath, 'falta migration get_agenda_dia_oculta_ausente_emusys');
+  assert.ok(rosterOperacionalMigrationPath, 'falta migration agenda_roster_operacional_professor');
 
   if (docker(['info']).status !== 0) {
     t.skip('Docker indisponivel para fixture PostgreSQL');
@@ -409,6 +427,12 @@ test('get_agenda_dia filtra stale antes da agregacao sem ampliar ACL ou RLS', as
     const remigrated = psql(container, migrationSql);
     assert.equal(remigrated.status, 0, remigrated.stderr || remigrated.stdout);
 
+    const rosterOperacionalMigrationSql = fs.readFileSync(rosterOperacionalMigrationPath, 'utf8');
+    const rosterMigrated = psql(container, rosterOperacionalMigrationSql);
+    assert.equal(rosterMigrated.status, 0, rosterMigrated.stderr || rosterMigrated.stdout);
+    const rosterRemigrated = psql(container, rosterOperacionalMigrationSql);
+    assert.equal(rosterRemigrated.status, 0, rosterRemigrated.stderr || rosterRemigrated.stdout);
+
     const after = psql(container, snapshotSql);
     assert.equal(after.status, 0, after.stderr || after.stdout);
     assert.equal(after.stdout, before.stdout, 'a migration nao pode alterar historico bruto');
@@ -420,6 +444,10 @@ test('get_agenda_dia filtra stale antes da agregacao sem ampliar ACL ou RLS', as
         ',' order by professor_nome
       )
       from public.get_agenda_dia('2026-08-15', '11111111-1111-1111-1111-111111111111');
+      select string_agg(aluno->>'nome', ',' order by aluno->>'nome')
+      from public.get_agenda_dia('2026-08-15', '11111111-1111-1111-1111-111111111111') agenda,
+           lateral jsonb_array_elements(agenda.alunos) aluno
+      where agenda.professor_nome = 'Ativa';
       reset role;
       select
         (not prosecdef)::text || '|' ||
@@ -434,6 +462,7 @@ test('get_agenda_dia filtra stale antes da agregacao sem ampliar ACL ou RLS', as
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.deepEqual(result.stdout.trim().split(/\r?\n/u), [
       'Agenda Secretaria|agenda_secretaria|103,Ativa|<null>|105,Emusys Real|emusys|104,Grupo Misto|<null>|102,Reativada|sync_ausente_emusys|106',
+      'Roster Ativo',
       'true|true|true|false|true',
       'TABLE(chave text, unidade_id uuid, unidade_nome text, professor_nome text, professor_id integer, professor_foto_url text, sala_nome text, curso_nome text, turma_nome text, hora_inicio text, hora_fim text, duracao_minutos integer, categoria text, tipo text, cancelada boolean, justificada boolean, reagendada boolean, hora_original text, nr_da_aula integer, qtd_aulas_contrato integer, qtd_alunos integer, anotacoes text, anotacoes_fabio text, professor_presenca text, alunos jsonb, aula_ids integer[], cancelada_motivo text, cancelada_origem text, experimental_leads jsonb)',
     ]);

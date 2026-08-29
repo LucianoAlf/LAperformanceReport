@@ -23,12 +23,13 @@ test('professor reconcilia ledger e não usa transporte concorrente', () => {
   }
 });
 
-test('controles de professor recebem envelope canônico e falham fechados', () => {
+test('controles de professor recebem envelope canônico sem bloquear a escrita operacional', () => {
   assert.match(toggle, /adaptarPresencaProfessorCanonica/u);
-  assert.match(toggle, /presenca\.dados_status\s*!==\s*'atualizados'/u);
-  assert.match(toggle, /Em auditoria/u);
-  assert.match(toggle, /Dados desatualizados/u);
+  assert.doesNotMatch(toggle, /presencaBloqueada/u);
+  assert.match(toggle, /Não marcado/u);
+  assert.match(toggle, /Dados de leitura desatualizados/u);
   assert.match(dia, /adaptarPresencaProfessorCanonica/u);
   assert.match(dia, /presenca\.dados_status\s*!==\s*'atualizados'/u);
+  assert.match(dia, /podeOperarProfessores/u);
 });
 

@@ -122,8 +122,8 @@ interface Props {
 }
 
 /**
- * Card compacto de presenca do professor. Clica para abrir modal com ajuste
- * fino por aula. O botao de status faz toggle do dia inteiro.
+ * Card compacto de presenca do professor. A identificacao abre o ajuste fino
+ * por aula; Presente e Ausente sao comandos explicitos para o dia inteiro.
  */
 export function ProfessorPresencaToggle({
   professorId,
@@ -144,7 +144,6 @@ export function ProfessorPresencaToggle({
   const [salvandoAula, setSalvandoAula] = useState<number | null>(null);
 
   const totalAulas = aulas.length;
-  const presencaBloqueada = presenca.dados_status !== 'atualizados';
   const decisaoDia = adaptarPresencaProfessorCanonica({
     professorId,
     aulaIds: aulas.flatMap((aula) => aula.aula_ids),
@@ -153,11 +152,13 @@ export function ProfessorPresencaToggle({
   const horarioDecisao = decisaoDia.decididoEm
     ? new Date(decisaoDia.decididoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     : null;
-  const estadoAuditoria = decisaoDia.estado === 'dados_desatualizados'
-    ? 'Dados desatualizados'
-    : decisaoDia.estado === 'indeterminado' || decisaoDia.estado === 'roster_em_revisao'
-      ? 'Em auditoria'
-      : null;
+  const estadoLeitura = decisaoDia.estado === 'dados_desatualizados'
+    ? 'Dados de leitura desatualizados'
+    : decisaoDia.estado === 'roster_em_revisao'
+      ? 'Roster em revisão'
+      : decisaoDia.estado === 'indeterminado'
+        ? 'Não marcado'
+        : null;
 
   function adquirirTravaDoDia(usuarioId: string): { chave: string; liberar: () => void } | null {
     try {
@@ -215,8 +216,8 @@ export function ProfessorPresencaToggle({
     }
   }
 
-  async function toggleDia() {
-    if (salvando || presencaBloqueada) return;
+  async function marcarDia(novoPresente: boolean) {
+    if (salvando) return;
     if (!user?.id) {
       toast.error('Sessão inválida', {
         description: 'Entre novamente para registrar a chamada.',
@@ -226,7 +227,7 @@ export function ProfessorPresencaToggle({
     const trava = adquirirTravaDoDia(user.id);
     if (!trava) return;
     setSalvando(true);
-    const virandoParaAusente = presente === true;
+    const virandoParaAusente = !novoPresente;
     try {
       if (!(await reconciliarPendenciasDoDia(trava.chave))) return;
       const payload = {
@@ -294,8 +295,8 @@ export function ProfessorPresencaToggle({
     }
   }
 
-  async function toggleAula(aula: AulaAgenda) {
-    if (salvandoAula || presencaBloqueada) return;
+  async function marcarAula(aula: AulaAgenda, novoPresente: boolean) {
+    if (salvandoAula) return;
     if (!user?.id) {
       toast.error('Sessão inválida', {
         description: 'Entre novamente para registrar a chamada.',
@@ -307,12 +308,6 @@ export function ProfessorPresencaToggle({
     const trava = adquirirTravaDoDia(user.id);
     if (!trava) return;
     setSalvandoAula(aulaId);
-    const decisaoAtual = adaptarPresencaProfessorCanonica({
-      professorId,
-      aulaIds: aula.aula_ids,
-      envelope: presenca,
-    });
-    const novoPresente = decisaoAtual.estado !== 'presente';
     try {
       if (!(await reconciliarPendenciasDoDia(trava.chave))) return;
       const payload = { aulaId, novoPresente };
@@ -365,7 +360,7 @@ export function ProfessorPresencaToggle({
   }
 
   async function marcarTodasAulas(presenteAula: boolean) {
-    if (salvando || presencaBloqueada) return;
+    if (salvando) return;
     if (!user?.id) {
       toast.error('Sessão inválida', {
         description: 'Entre novamente para registrar a chamada.',
@@ -451,14 +446,10 @@ export function ProfessorPresencaToggle({
 
   return (
     <>
-      {/* Card compacto — clicavel para abrir modal */}
+      {/* Card compacto com navegacao e comandos independentes. */}
       <div
-        role="button"
-        tabIndex={0}
-        onClick={() => setModalAberto(true)}
-        onKeyDown={(e) => { if (e.key === 'Enter') setModalAberto(true); }}
         className={cn(
-          'flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-all',
+          'flex items-center gap-3 rounded-xl border p-3 transition-all',
           presente === true
             ? 'border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/15'
             : presente === false
@@ -466,66 +457,82 @@ export function ProfessorPresencaToggle({
               : 'border-slate-700 bg-slate-800/40 hover:border-slate-600 hover:bg-slate-800/60',
         )}
       >
-        {/* Foto */}
-        {fotoUrl ? (
-          <img
-            src={fotoUrl}
-            alt={professorNome}
-            className="h-10 w-10 shrink-0 rounded-full border-2 border-slate-600 object-cover"
-          />
-        ) : (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-slate-600 bg-slate-700 text-xs font-bold text-slate-300">
-            {inicial}
-          </div>
-        )}
-
-        {/* Nome + grade */}
-        <div className="min-w-0 flex-1">
-          <p className={cn(
-            'truncate text-sm font-semibold',
-            presente === true ? 'text-emerald-200' : presente === false ? 'text-rose-200' : 'text-slate-200',
-          )}>
-            {professorNome}
-          </p>
-          <p className="text-[11px] text-slate-400">
-            {primeiraAula} — {ultimaAula} · {totalAulas} {totalAulas === 1 ? 'aula' : 'aulas'}
-          </p>
-          <p className="mt-0.5 truncate text-[10px] text-slate-500">
-            {estadoAuditoria ?? rotuloPresencaFonte(decisaoDia.fonte)}
-            {horarioDecisao ? ` · ${horarioDecisao}` : ''}
-            {decisaoDia.requestId ? ` · recibo ${decisaoDia.reciboStatus ?? 'recebido'}` : ''}
-          </p>
-          <p className="truncate text-[9px] text-slate-600">
-            Regra {decisaoDia.regraVersao} · sincronizado {decisaoDia.sincronizadoEm ?? 'sem horário'}
-          </p>
-        </div>
-
-        {/* Toggle do dia — stopPropagation para nao abrir modal */}
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); toggleDia(); }}
-          disabled={salvando || presencaBloqueada}
-          className={cn(
-            'flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all',
-            presente === true
-              ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
-              : presente === false
-                ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30'
-                : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700/70',
-            (salvando || presencaBloqueada) && 'opacity-50',
-          )}
+          onClick={() => setModalAberto(true)}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+          aria-label={`Abrir ajuste por aula de ${professorNome}`}
         >
-          {salvando ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : presente === true ? (
-            <CheckCircle2 className="h-4 w-4" />
-          ) : presente === false ? (
-            <XCircle className="h-4 w-4" />
+          {/* Foto */}
+          {fotoUrl ? (
+            <img
+              src={fotoUrl}
+              alt=""
+              className="h-10 w-10 shrink-0 rounded-full border-2 border-slate-600 object-cover"
+            />
           ) : (
-            <CheckCircle2 className="h-4 w-4" />
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-slate-600 bg-slate-700 text-xs font-bold text-slate-300">
+              {inicial}
+            </span>
           )}
-          {presente === true ? 'Presente' : presente === false ? 'Ausente' : 'Marcar'}
+
+          {/* Nome + grade */}
+          <span className="min-w-0 flex-1">
+            <span className={cn(
+              'block truncate text-sm font-semibold',
+              presente === true ? 'text-emerald-200' : presente === false ? 'text-rose-200' : 'text-slate-200',
+            )}>
+              {professorNome}
+            </span>
+            <span className="block text-[11px] text-slate-400">
+              {primeiraAula} — {ultimaAula} · {totalAulas} {totalAulas === 1 ? 'aula' : 'aulas'}
+            </span>
+            <span className="mt-0.5 block truncate text-[10px] text-slate-500">
+              {estadoLeitura ?? rotuloPresencaFonte(decisaoDia.fonte)}
+              {horarioDecisao ? ` · ${horarioDecisao}` : ''}
+              {decisaoDia.requestId ? ` · recibo ${decisaoDia.reciboStatus ?? 'recebido'}` : ''}
+            </span>
+            <span className="block truncate text-[9px] text-slate-600">
+              Regra {decisaoDia.regraVersao} · sincronizado {decisaoDia.sincronizadoEm ?? 'sem horário'}
+            </span>
+          </span>
         </button>
+
+        {/* Ações explícitas do dia — nenhuma leitura ambígua vira toggle. */}
+        <div className="flex shrink-0 flex-col gap-1" role="group" aria-label={`Presença de ${professorNome} no dia`}>
+          <button
+            type="button"
+            aria-pressed={presente === true}
+            onClick={(e) => { e.stopPropagation(); marcarDia(true); }}
+            disabled={salvando}
+            className={cn(
+              'flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-[10px] font-bold transition-colors',
+              presente === true
+                ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-300'
+                : 'border-slate-700 bg-slate-800/60 text-slate-400 hover:border-emerald-500/40 hover:text-emerald-300',
+              salvando && 'opacity-50',
+            )}
+          >
+            {salvando ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+            Presente
+          </button>
+          <button
+            type="button"
+            aria-pressed={presente === false}
+            onClick={(e) => { e.stopPropagation(); marcarDia(false); }}
+            disabled={salvando}
+            className={cn(
+              'flex items-center justify-center gap-1 rounded-md border px-2 py-1 text-[10px] font-bold transition-colors',
+              presente === false
+                ? 'border-rose-500/50 bg-rose-500/20 text-rose-300'
+                : 'border-slate-700 bg-slate-800/60 text-slate-400 hover:border-rose-500/40 hover:text-rose-300',
+              salvando && 'opacity-50',
+            )}
+          >
+            <XCircle className="h-3 w-3" />
+            Ausente
+          </button>
+        </div>
       </div>
 
       {/* Modal com ajuste fino por aula */}
@@ -566,7 +573,7 @@ export function ProfessorPresencaToggle({
                   <button
                     type="button"
                     onClick={() => marcarTodasAulas(true)}
-                    disabled={salvando || presencaBloqueada}
+                    disabled={salvando}
                     className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
                   >
                     Todas presentes
@@ -574,7 +581,7 @@ export function ProfessorPresencaToggle({
                   <button
                     type="button"
                     onClick={() => marcarTodasAulas(false)}
-                    disabled={salvando || presencaBloqueada}
+                    disabled={salvando}
                     className="rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
                   >
                     Todas ausentes
@@ -595,10 +602,12 @@ export function ProfessorPresencaToggle({
                     ? new Date(decisaoAula.decididoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
                     : null;
                   const rotuloEstadoAula = decisaoAula.estado === 'dados_desatualizados'
-                    ? 'Dados desatualizados'
-                    : decisaoAula.estado === 'indeterminado' || decisaoAula.estado === 'roster_em_revisao'
-                      ? 'Em auditoria'
-                      : rotuloPresencaFonte(decisaoAula.fonte);
+                    ? 'Dados de leitura desatualizados'
+                    : decisaoAula.estado === 'roster_em_revisao'
+                      ? 'Roster em revisão'
+                      : decisaoAula.estado === 'indeterminado'
+                        ? 'Não marcado'
+                        : rotuloPresencaFonte(decisaoAula.fonte);
                   return (
                     <div
                       key={aula.chave}
@@ -616,31 +625,46 @@ export function ProfessorPresencaToggle({
                           {decisaoAula.requestId ? ` · recibo ${decisaoAula.reciboStatus ?? 'recebido'}` : ''}
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => toggleAula(aula)}
-                        disabled={salvandoAula === aulaId || presencaBloqueada}
-                        className={cn(
-                          'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors',
-                          presenteAula
-                            ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
-                            : ausenteAula
-                              ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30'
-                              : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700/70',
-                          (salvandoAula === aulaId || presencaBloqueada) && 'opacity-50',
-                        )}
+                      <div
+                        className="flex items-center gap-1.5"
+                        role="group"
+                        aria-label={`Presença na aula das ${aula.hora_inicio}`}
                       >
-                        {salvandoAula === aulaId ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : presenteAula ? (
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                        ) : ausenteAula ? (
+                        <button
+                          type="button"
+                          aria-pressed={presenteAula}
+                          onClick={() => marcarAula(aula, true)}
+                          disabled={salvandoAula === aulaId}
+                          className={cn(
+                            'flex items-center gap-1 rounded-md border px-2 py-1.5 text-[11px] font-semibold transition-colors',
+                            presenteAula
+                              ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-300'
+                              : 'border-slate-700 bg-slate-800/60 text-slate-400 hover:border-emerald-500/40 hover:text-emerald-300',
+                            salvandoAula === aulaId && 'opacity-50',
+                          )}
+                        >
+                          {salvandoAula === aulaId
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            : <CheckCircle2 className="h-3.5 w-3.5" />}
+                          Presente
+                        </button>
+                        <button
+                          type="button"
+                          aria-pressed={ausenteAula}
+                          onClick={() => marcarAula(aula, false)}
+                          disabled={salvandoAula === aulaId}
+                          className={cn(
+                            'flex items-center gap-1 rounded-md border px-2 py-1.5 text-[11px] font-semibold transition-colors',
+                            ausenteAula
+                              ? 'border-rose-500/50 bg-rose-500/20 text-rose-300'
+                              : 'border-slate-700 bg-slate-800/60 text-slate-400 hover:border-rose-500/40 hover:text-rose-300',
+                            salvandoAula === aulaId && 'opacity-50',
+                          )}
+                        >
                           <XCircle className="h-3.5 w-3.5" />
-                        ) : (
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                        )}
-                        {presenteAula ? 'Presente' : ausenteAula ? 'Ausente' : rotuloEstadoAula}
-                      </button>
+                          Ausente
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
