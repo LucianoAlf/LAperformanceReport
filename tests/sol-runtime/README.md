@@ -242,3 +242,32 @@ Os casos 2/3 dependem do frescor do sync de faturas EM TEMPO REAL. Com o sync ca
 recusa o "pode" ("fonte oficial indisponível" / "não vou lançar com pode") — runtime
 certo, ambiente quebrado. O teste agora imprime `⚠️ SKIP` com o motivo em vez de falhar:
 vermelho por dependência externa ensina a equipe a ignorar a suíte.
+
+## colisao-dois-comprovantes-e2e.cjs
+Replay da manhã de 29/08 no Recreio: Fernanda mandou o comprovante da Lívia (R$100,
+legenda chegando ANTES do documento), Daiana o do Vicente (R$400). Resultado real:
+**4 pendências abertas, ZERO lançamentos** — a equipe desistiu.
+
+Quatro defeitos, um por cena:
+1. **"valor não identificado" com o valor escrito na legenda.** A legenda-irmã chegou
+   43ms antes do documento; o fluxo gastou 45s em OCR+visão procurando valor e SÓ
+   DEPOIS anexou a legenda — que alimentou aluno/categoria mas nunca o valor. Fix:
+   backfill de valor/forma no momento do anexo.
+2. **Citar a resposta da Sol não valia.** Fernanda citou "Beleza, Fê: R$100 em pix.
+   Posso lançar? Responde pode" — a mensagem que a própria Sol mandou — e caiu na
+   guarda de ambiguidade, porque só o card (previewId) contava. Fix: `msgIds` na
+   pendência — toda mensagem da Sol sobre ela vale como citação (e o comprovante
+   original também).
+3. **"Pode" seco com 2 cards era enigma.** Fix (pedido explícito do Luciano):
+   resolve por QUEM fala — autor do comprovante ou último a interagir com o card
+   (telefone/lid), toque mais recente ganha. Quem não tem card próprio recebe a
+   lista numerada em vez de "responde no comprovante certo".
+4. **Reenviar o mesmo arquivo empilhava card novo.** Fix: `file_bytes` idêntico no
+   mesmo grupo substitui a pendência antiga (log `pendencia_substituida_reenvio`).
+
+E o F6: depois de lançar com card ainda aberto, a Sol avisa o que falta — "antes de
+lançar veja se tem algum sem lançar" vira trabalho dela, não da equipe.
+
+⚠️ A resolução por autor pode lançar o card do PRÓPRIO autor quando a intenção era
+o do colega — trade-off aceito conscientemente: a confirmação é explícita e existe
+fluxo de correção/estorno. O caso salvo (cada um aprova o seu) é o cotidiano.
