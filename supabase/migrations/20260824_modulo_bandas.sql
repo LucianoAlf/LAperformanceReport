@@ -241,6 +241,8 @@ AS $function$
   select b.id, b.nome, b.unidade_id, u.nome, b.curso_id, c.nome, b.dia_semana, b.horario, p.nome,
     case when b.turma_nome is not null
          then (select count(*)::int from public.banda_roster_turma(b.unidade_id, b.turma_nome))
+            + (select count(*)::int from public.banda_integrante i where i.banda_id=b.id and i.ativo
+                 and not exists (select 1 from public.banda_roster_turma(b.unidade_id,b.turma_nome) r where r.aluno_id=i.aluno_id))
          else (select count(*)::int from public.banda_integrante i where i.banda_id=b.id and i.ativo) end,
     b.precisa_revisar_nome, b.status,
     (select min(e.data_inicio) from public.banda_evento e join public.banda_evento_participante ep on ep.evento_id=e.id where ep.banda_id=b.id and e.data_inicio>=now()),
@@ -270,6 +272,8 @@ AS $function$
     b.modelo_financeiro, b.valor_mensal_aluno, b.valor_repasse,
     case when b.turma_nome is not null
          then (select count(*)::int from public.banda_roster_turma(b.unidade_id, b.turma_nome))
+            + (select count(*)::int from public.banda_integrante i where i.banda_id=b.id and i.ativo
+                 and not exists (select 1 from public.banda_roster_turma(b.unidade_id,b.turma_nome) r where r.aluno_id=i.aluno_id))
          else (select count(*)::int from public.banda_integrante i where i.banda_id=b.id and i.ativo) end,
     (select count(*)::int from public.banda_repertorio r where r.banda_id=b.id),
     (select count(*)::int from public.banda_evento e join public.banda_evento_participante ep on ep.evento_id=e.id where ep.banda_id=b.id and e.data_inicio>=now())
@@ -282,23 +286,35 @@ AS $function$
 $function$;
 
 CREATE OR REPLACE FUNCTION public.banda_integrantes(p_banda_id bigint)
- RETURNS TABLE(aluno_id integer, nome text, foto_url text, instrumento text, funcao text, status_aluno text, tempo_permanencia_meses integer, saiu_da_escola boolean, responsavel_nome text, responsavel_telefone text, whatsapp text)
+ RETURNS TABLE(aluno_id integer, nome text, foto_url text, instrumento text, funcao text, status_aluno text, tempo_permanencia_meses integer, saiu_da_escola boolean, responsavel_nome text, responsavel_telefone text, whatsapp text, fonte text)
  LANGUAGE sql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
+  -- turma: roster vivo do Emusys
   select r.aluno_id, r.nome, r.foto_url, i.instrumento_na_banda, i.funcao,
-         al.status, al.tempo_permanencia_meses, coalesce(al.is_ex_aluno,false),
-         al.responsavel_nome, al.responsavel_telefone, al.whatsapp
+         al.status, public.banda_permanencia_meses(al.id), coalesce(al.is_ex_aluno,false),
+         al.responsavel_nome, al.responsavel_telefone, al.whatsapp, 'emusys'::text
   from public.banda b
   cross join lateral public.banda_roster_turma(b.unidade_id, b.turma_nome) r
   left join public.alunos al on al.id=r.aluno_id
   left join public.banda_integrante i on i.banda_id=b.id and i.aluno_id=r.aluno_id
   where b.id=p_banda_id and b.turma_nome is not null
   union all
+  -- turma: adicionados manualmente que NAO estao no roster do Emusys
   select al.id, al.nome, coalesce(al.foto_url, al.photo_url), i.instrumento_na_banda, i.funcao,
-         al.status, al.tempo_permanencia_meses, coalesce(al.is_ex_aluno,false),
-         al.responsavel_nome, al.responsavel_telefone, al.whatsapp
+         al.status, public.banda_permanencia_meses(al.id), coalesce(al.is_ex_aluno,false),
+         al.responsavel_nome, al.responsavel_telefone, al.whatsapp, 'manual'::text
+  from public.banda b
+  join public.banda_integrante i on i.banda_id=b.id and i.ativo
+  join public.alunos al on al.id=i.aluno_id
+  where b.id=p_banda_id and b.turma_nome is not null
+    and not exists (select 1 from public.banda_roster_turma(b.unidade_id,b.turma_nome) r where r.aluno_id=i.aluno_id)
+  union all
+  -- avulsa: roster 100% manual
+  select al.id, al.nome, coalesce(al.foto_url, al.photo_url), i.instrumento_na_banda, i.funcao,
+         al.status, public.banda_permanencia_meses(al.id), coalesce(al.is_ex_aluno,false),
+         al.responsavel_nome, al.responsavel_telefone, al.whatsapp, 'manual'::text
   from public.banda b
   join public.banda_integrante i on i.banda_id=b.id and i.ativo
   join public.alunos al on al.id=i.aluno_id
@@ -313,38 +329,46 @@ CREATE OR REPLACE FUNCTION public.bandas_kpis(p_unidade_id uuid DEFAULT NULL::uu
  SET search_path TO 'public'
 AS $function$
   with membros as (
-    select b.unidade_id, r.aluno_emusys_id::text as pessoa, al.tempo_permanencia_meses as perm
+    select b.id as banda_id, b.unidade_id, r.aluno_emusys_id::text as pessoa, public.banda_permanencia_meses(al.id) as perm
     from public.banda b
     cross join lateral public.banda_roster_turma(b.unidade_id, b.turma_nome) r
     left join public.alunos al on al.id=r.aluno_id
     where b.turma_nome is not null and b.confirmada and b.status='ativa' and not coalesce(b.descartada,false)
     union all
-    select b.unidade_id, coalesce(nullif(al.emusys_student_id,''),'id:'||al.id::text), al.tempo_permanencia_meses
+    select b.id, b.unidade_id, coalesce(nullif(al.emusys_student_id,''),'id:'||al.id::text), public.banda_permanencia_meses(al.id)
+    from public.banda b
+    join public.banda_integrante i on i.banda_id=b.id and i.ativo
+    join public.alunos al on al.id=i.aluno_id
+    where b.turma_nome is not null and b.confirmada and b.status='ativa' and not coalesce(b.descartada,false)
+      and not exists (select 1 from public.banda_roster_turma(b.unidade_id,b.turma_nome) r where r.aluno_id=i.aluno_id)
+    union all
+    select b.id, b.unidade_id, coalesce(nullif(al.emusys_student_id,''),'id:'||al.id::text), public.banda_permanencia_meses(al.id)
     from public.banda b
     join public.banda_integrante i on i.banda_id=b.id and i.ativo
     join public.alunos al on al.id=i.aluno_id
     where b.turma_nome is null and b.status='ativa'
   ),
+  por_banda as (select unidade_id, banda_id, count(distinct pessoa) as n from membros group by unidade_id, banda_id),
   bandas_ct as (
-    select unidade_id, count(*)::int total from public.banda
-    where status='ativa' and not coalesce(descartada,false) and ((turma_nome is not null and confirmada) or turma_chave is null)
-    group by unidade_id
-  ),
-  vaga as (
-    select b.unidade_id, count(*)::int com_vaga
+    select b.unidade_id, count(*)::int total,
+           count(*) filter (where coalesce(pb.n,0) < p_min_integrantes)::int com_vaga
     from public.banda b
-    where b.status='ativa' and b.turma_nome is not null and b.confirmada and not coalesce(b.descartada,false)
-      and (select count(*) from public.banda_roster_turma(b.unidade_id,b.turma_nome)) < p_min_integrantes
+    left join por_banda pb on pb.banda_id=b.id
+    where b.status='ativa' and not coalesce(b.descartada,false)
+      and ((b.turma_nome is not null and b.confirmada) or b.turma_chave is null)
     group by b.unidade_id
   ),
+  -- uma linha por PESSOA: aluno em 2 bandas não pesa 2x na média
+  membros_pessoa as (select distinct unidade_id, pessoa, perm from membros),
   agg as (
-    select unidade_id, count(distinct pessoa)::int alunos, round(avg(perm) filter (where perm is not null and perm>0 and perm<99),1) perm_media
-    from membros group by unidade_id
+    -- sem teto de 99 meses: era herança da sentinela do campo por-contrato e cortava
+    -- veterano real (piso histórico do Emusys é 2018). perm>=0 inclui calouro.
+    select unidade_id, count(*)::int alunos, round(avg(perm) filter (where perm is not null and perm>=0),1) perm_media
+    from membros_pessoa group by unidade_id
   )
-  select u.id, u.nome, coalesce(bc.total,0), coalesce(a.alunos,0), a.perm_media, coalesce(v.com_vaga,0)
+  select u.id, u.nome, coalesce(bc.total,0), coalesce(a.alunos,0), a.perm_media, coalesce(bc.com_vaga,0)
   from public.unidades u
   left join bandas_ct bc on bc.unidade_id=u.id
-  left join vaga v on v.unidade_id=u.id
   left join agg a on a.unidade_id=u.id
   where (p_unidade_id is null or u.id=p_unidade_id)
   order by u.nome;
@@ -399,16 +423,13 @@ CREATE OR REPLACE FUNCTION public.banda_conciliacao_roster(p_unidade_id uuid DEF
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-  select b.id, b.nome, i.aluno_id, al.nome, 'nao esta mais no roster da turma'::text
+  select b.id, b.nome, i.aluno_id, al.nome, 'fora do Emusys (adicionado manualmente ou saiu do Emusys)'::text
   from public.banda_integrante i
   join public.banda b on b.id=i.banda_id and b.turma_nome is not null and b.status='ativa'
   left join public.alunos al on al.id=i.aluno_id
   where i.ativo
     and (p_unidade_id is null or b.unidade_id=p_unidade_id)
-    and not exists (
-      select 1 from public.banda_roster_turma(b.unidade_id, b.turma_nome) r
-      where r.aluno_id = i.aluno_id
-    )
+    and not exists (select 1 from public.banda_roster_turma(b.unidade_id,b.turma_nome) r where r.aluno_id=i.aluno_id)
   order by b.nome;
 $function$;
 

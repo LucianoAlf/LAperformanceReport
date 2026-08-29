@@ -73,6 +73,13 @@ export interface BandaDetalhe {
   proximos_eventos: number;
 }
 
+/**
+ * De onde veio o integrante:
+ * - 'emusys': está no roster da turma no Emusys (não dá para remover pela tela)
+ * - 'manual': adicionado à mão — toca na banda sem estar matriculado naquela turma
+ */
+export type FonteIntegrante = 'emusys' | 'manual';
+
 export interface IntegranteBanda {
   aluno_id: number;
   nome: string;
@@ -80,11 +87,13 @@ export interface IntegranteBanda {
   instrumento: string | null;
   funcao: string | null;
   status_aluno: string;
+  /** Tempo de ESCOLA da pessoa (1ª matrícula), não do contrato atual — ver banda_permanencia_meses. */
   tempo_permanencia_meses: number | null;
   saiu_da_escola: boolean;
   responsavel_nome: string | null;
   responsavel_telefone: string | null;
   whatsapp: string | null;
+  fonte: FonteIntegrante;
 }
 
 export interface KpiBandaUnidade {
@@ -143,7 +152,8 @@ export interface ConciliacaoItem {
   banda_nome: string;
   aluno_id: number;
   aluno_nome: string | null;
-  problema: 'aluno inexistente' | 'saiu da escola' | 'nao esta mais nesta turma';
+  /** Re-ancorada no roster vivo do Emusys (banda_roster_turma) em 28/08/2026. */
+  problema: 'fora do Emusys (adicionado manualmente ou saiu do Emusys)';
 }
 
 /** Professor elegível a produtor (banda_professores_da_unidade) */
