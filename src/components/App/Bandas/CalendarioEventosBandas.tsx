@@ -23,6 +23,7 @@ import {
   Pencil,
   Plus,
   Trash2,
+  UserRound,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -54,6 +55,21 @@ const TIPO_VARIANT: Record<EventoTipo, 'secondary' | 'success'> = {
   ensaio: 'secondary',
   show: 'success',
 };
+
+/**
+ * A ocorrência de ensaio recorrente é sintética (projetada de banda.dia_semana/horario)
+ * e carrega campos que banda_eventos_listar não devolve. `evento_id` negativo é a marca:
+ * ela NÃO existe em banda_evento, então não pode ser cancelada nem excluída.
+ */
+type EventoNaAgenda = EventoBanda & {
+  produtor_nome?: string | null;
+  banda_id?: number;
+};
+
+/** Ocorrência projetada de ensaio: não existe em banda_evento. */
+function ehRecorrente(evento: EventoNaAgenda) {
+  return evento.evento_id < 0;
+}
 
 interface CalendarioEventosBandasProps {
   eventos: EventoBanda[];
@@ -397,7 +413,14 @@ export function CalendarioEventosBandas({
                       <span className="truncate">{evento.sala_nome}</span>
                     </div>
                   )}
-                  {evento.bandas && (
+                  {(evento as EventoNaAgenda).produtor_nome && (
+                    <div className="flex items-center gap-1.5">
+                      <UserRound className="h-3.5 w-3.5 text-slate-500" />
+                      <span className="truncate">{(evento as EventoNaAgenda).produtor_nome}</span>
+                    </div>
+                  )}
+                  {/* No ensaio recorrente o título JÁ é o nome da banda — repetir vira ruído. */}
+                  {evento.bandas && evento.bandas !== evento.titulo && (
                     <div className="flex items-start gap-1.5">
                       <Guitar className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
                       <span className="line-clamp-2">{evento.bandas}</span>
@@ -414,27 +437,34 @@ export function CalendarioEventosBandas({
                       className="pointer-events-auto h-7 px-2 text-xs"
                       onClick={() => onAbrirEvento(evento)}
                     >
-                      <Pencil className="h-3.5 w-3.5" /> Editar
+                      <Pencil className="h-3.5 w-3.5" />
+                      {ehRecorrente(evento) ? 'Ver banda' : 'Editar'}
                     </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="pointer-events-auto h-7 px-2 text-xs text-amber-400 hover:text-amber-300"
-                      onClick={() => onCancelarEvento(evento)}
-                    >
-                      <Ban className="h-3.5 w-3.5" /> Cancelar
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="pointer-events-auto h-7 w-7 p-0 text-rose-400 hover:text-rose-300"
-                      onClick={() => onRemoverEvento(evento)}
-                      aria-label={`Excluir ${evento.titulo}`}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    {/* Ensaio recorrente não existe em banda_evento: cancelar/excluir rodariam
+                        contra um id inexistente — zero linhas, sem erro e com toast de sucesso. */}
+                    {!ehRecorrente(evento) && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="pointer-events-auto h-7 px-2 text-xs text-amber-400 hover:text-amber-300"
+                          onClick={() => onCancelarEvento(evento)}
+                        >
+                          <Ban className="h-3.5 w-3.5" /> Cancelar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="pointer-events-auto h-7 w-7 p-0 text-rose-400 hover:text-rose-300"
+                          onClick={() => onRemoverEvento(evento)}
+                          aria-label={`Excluir ${evento.titulo}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 )}
                 </div>
