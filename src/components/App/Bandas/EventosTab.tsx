@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { format, startOfMonth } from 'date-fns';
+import { endOfMonth, format, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   Calendar, CalendarDays, MapPin, Plus, Guitar, DollarSign, Pencil, Ban, Trash2,
-  DoorOpen, List,
+  DoorOpen, List, Mic, CalendarClock,
 } from 'lucide-react';
 import { cn, formatCurrency } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +17,10 @@ import {
   type EventoBanda, type EventoStatus,
 } from '@/hooks/useBandas';
 import { CalendarioEventosBandas } from './CalendarioEventosBandas';
+import { GradeEnsaiosBandas } from './GradeEnsaiosBandas';
+import { BandaDetalheDialog } from './BandaDetalheDialog';
 import { filtrarEventosDaLista } from './eventosBandasCalendario.mjs';
+import { projetarEnsaiosNoIntervalo } from './ensaiosBandas.mjs';
 import { ModalEventoBanda, EVENTO_TIPO_LABEL } from './ModalEventoBanda';
 
 const STATUS_LABEL: Record<EventoStatus, string> = {
@@ -37,6 +40,12 @@ interface EventosTabProps {
 }
 
 type VisualizacaoEventos = 'lista' | 'calendario';
+/**
+ * Duas dimensões INDEPENDENTES: a agenda (o quê) e a visualização (como).
+ * Show e ensaio moravam juntos em "Eventos" e se escondiam um no outro — a agenda de
+ * shows é esporádica, a de ensaios é a rotina semanal de 27 bandas.
+ */
+type AgendaBandas = 'shows' | 'ensaios';
 
 export function EventosTab({ unidadeAtual }: EventosTabProps) {
   const [mostrarPassados, setMostrarPassados] = useState(false);
@@ -44,16 +53,36 @@ export function EventosTab({ unidadeAtual }: EventosTabProps) {
     const saved = localStorage.getItem('bandas_eventos_visualizacao');
     return saved === 'lista' ? 'lista' : 'calendario';
   });
+  const [agenda, setAgenda] = useState<AgendaBandas>(() => {
+    const saved = localStorage.getItem('bandas_agenda');
+    return saved === 'shows' ? 'shows' : 'ensaios';
+  });
+  const [bandaAberta, setBandaAberta] = useState<number | null>(null);
   const [mesCalendario, setMesCalendario] = useState(() => startOfMonth(new Date()));
   const [diaCalendario, setDiaCalendario] = useState(() => new Date());
   const [agoraReferencia] = useState(() => new Date());
   const { eventos, loading, recarregar } = useBandaEventos(unidadeAtual, null);
-  const eventosLista = useMemo(
-    () => filtrarEventosDaLista(eventos, mostrarPassados, agoraReferencia) as EventoBanda[],
-    [eventos, mostrarPassados, agoraReferencia],
-  );
-  // Bandas ativas da unidade para o seletor de participantes
+  // Bandas ativas da unidade: seletor de participantes E fonte da grade fixa de ensaios
   const { bandas } = useBandasListar(unidadeAtual, 'ativa');
+
+  const eventosDaAgenda = useMemo(
+    () => eventos.filter((e) => (agenda === 'shows' ? e.tipo === 'show' : e.tipo === 'ensaio')),
+    [eventos, agenda],
+  );
+  const eventosLista = useMemo(
+    () => filtrarEventosDaLista(eventosDaAgenda, mostrarPassados, agoraReferencia) as EventoBanda[],
+    [eventosDaAgenda, mostrarPassados, agoraReferencia],
+  );
+
+  // No calendário de ensaios, a grade fixa das bandas entra projetada como ocorrência
+  // sintética (evento_id negativo) ao lado dos ensaios extras que existem em banda_evento.
+  const eventosDoCalendario = useMemo(() => {
+    if (agenda === 'shows') return eventosDaAgenda;
+    const projetados = projetarEnsaiosNoIntervalo(
+      bandas, startOfMonth(mesCalendario), endOfMonth(mesCalendario),
+    ) as EventoBanda[];
+    return [...projetados, ...eventosDaAgenda];
+  }, [agenda, eventosDaAgenda, bandas, mesCalendario]);
 
   const [modalAberto, setModalAberto] = useState(false);
   const [eventoEditando, setEventoEditando] = useState<EventoBanda | null>(null);
@@ -65,6 +94,20 @@ export function EventosTab({ unidadeAtual }: EventosTabProps) {
   useEffect(() => {
     localStorage.setItem('bandas_eventos_visualizacao', visualizacao);
   }, [visualizacao]);
+
+  useEffect(() => {
+    localStorage.setItem('bandas_agenda', agenda);
+  }, [agenda]);
+
+  // Ocorrência projetada não existe em banda_evento: abrir a BANDA, nunca o modal de evento.
+  function abrirDoCalendario(evento: EventoBanda) {
+    const bandaId = (evento as EventoBanda & { banda_id?: number }).banda_id;
+    if (evento.evento_id < 0 && bandaId) {
+      setBandaAberta(bandaId);
+      return;
+    }
+    abrirEdicao(evento);
+  }
 
   function abrirCriacao(data?: Date) {
     setEventoEditando(null);
@@ -119,7 +162,42 @@ export function EventosTab({ unidadeAtual }: EventosTabProps) {
           <div
             className="flex items-center gap-1 rounded-lg bg-slate-700/30 p-1"
             role="group"
-            aria-label="Visualização dos eventos"
+            aria-label="Agenda"
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-pressed={agenda === 'ensaios'}
+              onClick={() => setAgenda('ensaios')}
+              className={cn(
+                'h-8 px-2.5 text-xs text-slate-400 hover:text-white',
+                agenda === 'ensaios' && 'bg-cyan-600 text-white hover:bg-cyan-600',
+              )}
+            >
+              <CalendarClock className="h-4 w-4" />
+              Ensaios
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-pressed={agenda === 'shows'}
+              onClick={() => setAgenda('shows')}
+              className={cn(
+                'h-8 px-2.5 text-xs text-slate-400 hover:text-white',
+                agenda === 'shows' && 'bg-emerald-600 text-white hover:bg-emerald-600',
+              )}
+            >
+              <Mic className="h-4 w-4" />
+              Shows
+            </Button>
+          </div>
+
+          <div
+            className="flex items-center gap-1 rounded-lg bg-slate-700/30 p-1"
+            role="group"
+            aria-label="Visualização"
           >
             <Button
               type="button"
@@ -151,7 +229,7 @@ export function EventosTab({ unidadeAtual }: EventosTabProps) {
             </Button>
           </div>
 
-          {visualizacao === 'lista' && (
+          {visualizacao === 'lista' && agenda === 'shows' && (
             <div className="flex items-center gap-2">
               <Switch
                 id="mostrar-passados"
@@ -166,30 +244,38 @@ export function EventosTab({ unidadeAtual }: EventosTabProps) {
         </div>
         <Button onClick={() => abrirCriacao()}>
           <Plus className="w-4 h-4 mr-2" />
-          Novo evento
+          {agenda === 'shows' ? 'Novo show' : 'Novo ensaio'}
         </Button>
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-16 text-slate-400">Carregando eventos...</div>
+      ) : visualizacao === 'lista' && agenda === 'ensaios' ? (
+        <GradeEnsaiosBandas
+          bandas={bandas}
+          ensaiosPontuais={eventosLista}
+          unidadeAtual={unidadeAtual}
+          onAbrirBanda={setBandaAberta}
+          onAbrirEvento={abrirEdicao}
+        />
       ) : visualizacao === 'calendario' ? (
         <CalendarioEventosBandas
-          eventos={eventos}
+          eventos={eventosDoCalendario}
           mesAtual={mesCalendario}
           diaSelecionado={diaCalendario}
           onMesAtualChange={setMesCalendario}
           onDiaSelecionadoChange={setDiaCalendario}
           onCriarEvento={abrirCriacao}
-          onAbrirEvento={abrirEdicao}
+          onAbrirEvento={abrirDoCalendario}
           onCancelarEvento={setEventoCancelando}
           onRemoverEvento={setEventoRemovendo}
         />
       ) : eventosLista.length === 0 ? (
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-10 text-center">
           <Calendar className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-          <p className="text-slate-300 font-medium">Nenhum evento por aqui</p>
+          <p className="text-slate-300 font-medium">Nenhum show por aqui</p>
           <p className="text-slate-500 text-sm mt-1">
-            Crie o primeiro ensaio ou show para as bandas {unidadeAtual === 'todos' ? 'da rede' : 'da unidade'}.
+            Agende o primeiro show para as bandas {unidadeAtual === 'todos' ? 'da rede' : 'da unidade'}.
           </p>
         </div>
       ) : (
@@ -279,6 +365,14 @@ export function EventosTab({ unidadeAtual }: EventosTabProps) {
             </div>
           ))}
         </div>
+      )}
+
+      {bandaAberta !== null && (
+        <BandaDetalheDialog
+          bandaId={bandaAberta}
+          onClose={() => setBandaAberta(null)}
+          onAlterado={recarregar}
+        />
       )}
 
       <ModalEventoBanda
