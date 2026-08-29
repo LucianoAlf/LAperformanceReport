@@ -367,3 +367,34 @@ enriquecimento rejeitado por inteiro** (nem nome, nem fatura, nem responsável):
   `.parcela`) — shape errado acusou falha falsa na cena 2.
 - `pagadorFn` deve ser mockado — sem isso a cena 1 bate no banco real e o resultado
   depende do cadastro do dia.
+
+## auditoria-rabiolas-29ago.test.cjs
+Auditoria pós-fluxo Soraia + fechamento de CG (29/08 15:00-15:03). O fluxo principal
+funcionou (guardas R1-R7 confirmadas no log: 3 rejeições da Laura, pagador ambíguo
+ignorado, Soraia via lead do funil; fechamento preview→pode→final com soma conferida:
+476+200+200+100+976 = 1.952). Duas rabiolas ficaram:
+
+**R8 — responsável da família errada.** O card saiu com "Resp. financeiro: Rayanne do
+Nascimento Sobreira" — responsável da **Laura** (conferido no banco; a Soraia está SEM
+responsável). A RPC `sol_caixa_responsavel_aluno` busca por word_similarity **só entre
+ativos** (a Soraia é lead → melhor ativo parecido = Laura), e o runtime usava o
+responsável **ignorando o campo `aluno_nome` que a própria RPC devolve** dizendo com
+quem casou. O dado sujo foi até o lançamento ("resp. Rayanne" no fechamento). Fix nos
+2 pontos que chamam `responsavelFn`: `aluno_nome` divergente ⇒ responsável rejeitado.
+
+**G1+G2 — "(Response formatting failed, plain text:)" ×2 no grupo.** Cadeia: "Fechado
+pessoal"/"Bom final de semana" → LLM → resposta VAZIA → bridge recusa ("chatId and
+message are required") → fallback do gateway posta o prefixo de erro cru. Dois fixes:
+- G1 (`gateway/platforms/base.py`, `_send_with_retry`): content vazio ⇒ suprime o
+  envio (vazio = silêncio do agente) e o fallback nunca posta artefato sem conteúdo.
+  ⚠️ base.py é o gateway PYTHON — só recarrega com restart do serviço
+  (`systemctl --user restart hermes-gateway-sol`, como o user `sol`; derruba e
+  respawna a bridge junto, ~45s).
+- G2 (`group-engagement.cjs`): despedidas ("bom final/fim de semana", "boa semana",
+  "bom descanso", "até segunda", "até amanhã", "bom feriado") entram em
+  `encerraTurnoDaSol` — nem chegam ao LLM.
+
+⚠️ Dado sujo já gravado: o movimento da Soraia no caixa de 29/08 carrega
+"resp. Rayanne do Nascimento Sobreira" no descritivo. Valor/aluno corretos; só o
+rótulo de responsável está errado. Correção é decisão humana (não mexemos em
+lançamento feito).
