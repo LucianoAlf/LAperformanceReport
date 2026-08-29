@@ -93,15 +93,18 @@ const ultimo = (a) => String(a[a.length - 1] || '');
     checar(mod.detectarContextoMultiAluno(c) === true, `legenda multi deveria continuar acusando: "${c}"`);
   }
 
-  // ── 4. REGRESSAO: sem rotulo na legenda, o OCR ainda protege ───────────────
-  // Comprovante sem legenda util nao pode ser lancado num aluno so por conta propria.
+  // ── 4. sem legenda util, o OCR NAO decide multi (revisado em 29/08) ─────────
+  // A versao de 28/08 deste teste esperava manual_review aqui. Caiu de proposito:
+  // o OCR carrega pagador/estabelecimento/conectivos e produziu MAIS um multi falso
+  // no dia seguinte (camisa PagBank, Arthur/Barra). Sem legenda util o fluxo single
+  // cuida — card sem aluno pergunta o nome, sem armadilha de "manda os dois".
   const B = novo();
   const rB = await B.h.handle({
     chatId: CHAT, senderPhone: '5521988887777', messageId: 'P2',
     body: 'segue o comprovante', hasMedia: true, mediaType: 'image', mediaUrls: ['fake://pix.jpg'],
   });
-  checar(rB && rB.acao === 'manual_review_multi_student',
-    `sem rotulo na legenda a protecao deve continuar; veio "${rB && rB.acao}"`);
+  checar(rB && rB.acao !== 'manual_review_multi_student',
+    `OCR sozinho nao pode decidir multi; veio "${rB && rB.acao}"`);
 
   console.log('');
   if (falhas.length) {
