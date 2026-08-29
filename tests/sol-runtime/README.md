@@ -271,3 +271,27 @@ lançar veja se tem algum sem lançar" vira trabalho dela, não da equipe.
 ⚠️ A resolução por autor pode lançar o card do PRÓPRIO autor quando a intenção era
 o do colega — trade-off aceito conscientemente: a confirmação é explícita e existe
 fluxo de correção/estorno. O caso salvo (cada um aprova o seu) é o cotidiano.
+
+## camisa-um-aluno-multi-trap-e2e.cjs
+Caso Arthur/Barra (29/08 10:33-10:39): venda de UMA camisa (R$65, cartão) virou
+"comprovante de mais de um aluno" — e quando ele explicou com todas as letras
+("venda de camisa para o aluno Theo de bem, 65 reais"), o fluxo multi exigiu
+"manda os dois" **para sempre**. Não existia saída da armadilha. O log mostra o
+interpretador acertando lojinha e nada disso importando.
+
+Três correções:
+- **E1: multi-aluno só nasce da LEGENDA, nunca do OCR.** Terceiro falso positivo
+  do OCR em dois dias (PIX 28/08, PagBank 29/08) — recibo carrega pagador,
+  estabelecimento e conectivos "e"; não é lista de alunos. A guarda de 28/08
+  (rótulo único na legenda) era estreita demais: legenda de lojinha nem tem aluno.
+  ⚠️ Isso REVERTEU a cena 4 do `multi-aluno-falso-positivo-ocr-e2e` de propósito:
+  sem legenda útil, o fluxo single cuida (card sem aluno pergunta o nome), que é
+  UX melhor que exigir uma divisão que não existe.
+- **E2: "é um aluno só" tem saída.** Correção que declara UM aluno converte a
+  revisão multi em lançamento single (`multi_convertido_para_single`) — o humano
+  manda.
+- **E3: "camisa" é produto de lojinha** (só havia "camiseta" no vocabulário).
+
+⚠️ Artefato de mock aprendido na 1ª rodada: a cena dos irmãos (R$700) não pode
+reusar o OCR da camisa (R$65) — a validação de soma (350+350≠65) recusa
+CORRETAMENTE e o teste acusa regressão falsa. O `ocrFn` do teste é sensível à URL.
