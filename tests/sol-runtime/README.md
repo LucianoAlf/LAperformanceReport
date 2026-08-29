@@ -318,3 +318,22 @@ Três guardas, da mais forte para a mais fraca:
 ⚠️ `_mesmaPessoa` usa `_normConf` — o arquivo não tem `normalizarTexto` (a 1ª versão do
 patch quebrou nisso). Casa "Arthur" com "Arthur Ferreira", mas **não** "Maria Silva" com
 "Maria Souza".
+
+## visao-por-forma-ausente-e2e.cjs
+Caso Arthur/Barra (29/08 12:08): cupom PagBank **"VENDA CREDITO MASTERCARD"**
+fotografado torto num sofá escuro. Card saiu `R$ 65,00 · ❓ forma não identificada`,
+travado pedindo "pode, pix / pode, dinheiro / pode, cartão".
+
+CAUSA: o gate da visão era `!valor || ocrText.length < 20`. O OCR da foto ruim
+devolve **452 chars de ruído** (medido: `DAR o ple ias CAE / th És Pisa Eidos...`) —
+passa do limiar de 20 sem ter **um** sinal de cartão. E a legenda trazia
+`Valor: R$ 65,00`, então `!valor` era falso. A visão — que **sabe ler a forma**
+(`if (!forma && visao.forma)`) — nunca foi chamada.
+
+⚠️ **Incentivo invertido, que é o pior deste bug:** às 11:27 a MESMA foto, com legenda
+SEM valor, disparou a visão e saiu "cartão crédito" certinho. Às 12:08 o Arthur
+caprichou e escreveu o valor — e a Sol soube MENOS. O teste trava esse par: dar mais
+informação não pode piorar o resultado.
+
+FIX: a visão passa a rodar também por `!forma`. ⚠️ **Não** passa a rodar sempre — o
+teste prova que OCR completo (valor + forma) gasta **zero** chamadas de visão.
